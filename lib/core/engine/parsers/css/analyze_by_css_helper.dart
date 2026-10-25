@@ -1,5 +1,7 @@
 import 'package:html/dom.dart';
 
+import 'package:night_reader/core/engine/parsers/jsoup_text.dart';
+
 import 'analyze_by_css_base.dart';
 import 'analyze_by_css_support.dart';
 
@@ -25,9 +27,11 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
     }
 
     switch (lastRule) {
+      // text、ownText 照 Jsoup（Legado）：區塊之間與 <br> 處留一個空格，
+      // <script>、<style> 的內容不算。
       case 'text':
         for (final el in elements) {
-          final t = el.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+          final t = jsoupText(el);
           if (t.isNotEmpty) textS.add(t);
         }
         break;
@@ -45,11 +49,7 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
         break;
       case 'ownText':
         for (final el in elements) {
-          final t = el.nodes
-              .where((n) => n.nodeType == Node.TEXT_NODE)
-              .map((n) => n.text?.trim() ?? '')
-              .where((t) => t.isNotEmpty)
-              .join(' ');
+          final t = jsoupOwnText(el);
           if (t.isNotEmpty) textS.add(t);
         }
         break;

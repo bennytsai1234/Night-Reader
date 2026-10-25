@@ -43,8 +43,6 @@ class JsEngine {
   }
 
   dynamic _ruleContext;
-  final Map<int, dom.Element> _bridgedElements = <int, dom.Element>{};
-  int _nextBridgeElementId = 0;
   String? _loadedSourceJsLibKey;
   static final Map<String, String> _resolvedJsLibCache = <String, String>{};
   static final Map<String, Future<String>> _pendingJsLibCache =
@@ -101,11 +99,21 @@ class JsEngine {
       );
     }
 
-    _injectContext(context);
-    _ensureSourceJsLibLoadedSync();
-    final result = _evaluateRuleScript(normalizedJs);
-    return _decodeContextValue(_runtime!.dartValueOf(result));
+    _activeRules++;
+    try {
+      _injectContext(context);
+      _ensureSourceJsLibLoadedSync();
+      final result = _evaluateRuleScript(normalizedJs);
+      return _decodeContextValue(_runtime!.dartValueOf(result));
+    } finally {
+      _activeRules--;
+    }
   }
+
+  /// 正在跑的規則數。規則 JS 裡呼叫 `java.getString` 這類會再跑別的規則；
+  /// 交給 JS 的 Jsoup 元素只在沒有規則在跑時才清掉，外層規則手上的元素
+  /// 不會在巢狀執行時失效。
+  int _activeRules = 0;
 
   /// Execute rule JS that may invoke async `java.*` / `cache.*` / `source.*`
   /// methods. Always awaits their underlying Futures and returns the rule's
@@ -132,54 +140,59 @@ class JsEngine {
       return evaluate(normalizedJs, context: context);
     }
 
-    _injectContext(context);
-    await _ensureSourceJsLibLoadedAsync();
-    _throwIfDisposed();
-    final asyncFriendlyJs = _normalizeLegacySyncIifeForAsync(normalizedJs);
-    final rewritten = AsyncJsRewriter.rewrite(asyncFriendlyJs);
-    final (callId, future) = _extensions!.registerRuleCall();
-    // 非同步規則在 await 之後才跑完，進入在這段腳本開頭、清除等它結束。
-    final wrapped =
-        '__lrEnterRule();\n${JsRuleAsyncWrapper.wrap(rewritten, callId)}';
-
+    _activeRules++;
     try {
-      final res = _runtime!.evaluate(wrapped);
-      if (res.isError) {
-        _extensions!.cancelRuleCall(
-          callId,
-          StateError('rule JS evaluate error: ${res.stringResult}'),
-        );
-      } else {
-        // 重要：同步 evaluate 完成後，async IIFE 已經被排進 microtask queue，
-        // 需 pump 才能讓第一層 await 真正開始執行。
-        _runtime!.executePendingJob();
-      }
-    } catch (e) {
-      _extensions!.cancelRuleCall(callId, e);
-      rethrow;
-    }
+      _injectContext(context);
+      await _ensureSourceJsLibLoadedAsync();
+      _throwIfDisposed();
+      final asyncFriendlyJs = _normalizeLegacySyncIifeForAsync(normalizedJs);
+      final rewritten = AsyncJsRewriter.rewrite(asyncFriendlyJs);
+      final (callId, future) = _extensions!.registerRuleCall();
+      // 非同步規則在 await 之後才跑完，進入在這段腳本開頭、清除等它結束。
+      final wrapped =
+          '__lrEnterRule();\n${JsRuleAsyncWrapper.wrap(rewritten, callId)}';
 
-    return future
-        .then(_decodeContextValue)
-        .timeout(
-          const Duration(seconds: 20),
-          onTimeout: () {
-            _extensions!.cancelRuleCall(
-              callId,
-              TimeoutException(
+      try {
+        final res = _runtime!.evaluate(wrapped);
+        if (res.isError) {
+          _extensions!.cancelRuleCall(
+            callId,
+            StateError('rule JS evaluate error: ${res.stringResult}'),
+          );
+        } else {
+          // 重要：同步 evaluate 完成後，async IIFE 已經被排進 microtask
+          // queue，需 pump 才能讓第一層 await 真正開始執行。
+          _runtime!.executePendingJob();
+        }
+      } catch (e) {
+        _extensions!.cancelRuleCall(callId, e);
+        rethrow;
+      }
+
+      return await future
+          .then(_decodeContextValue)
+          .timeout(
+            const Duration(seconds: 20),
+            onTimeout: () {
+              _extensions!.cancelRuleCall(
+                callId,
+                TimeoutException(
+                  'JS rule timed out after 20s',
+                  const Duration(seconds: 20),
+                ),
+              );
+              throw TimeoutException(
                 'JS rule timed out after 20s',
                 const Duration(seconds: 20),
-              ),
-            );
-            throw TimeoutException(
-              'JS rule timed out after 20s',
-              const Duration(seconds: 20),
-            );
-          },
-        )
-        .whenComplete(() {
-          if (!_isDisposed) _runtime?.evaluate('__lrExitRule()');
-        });
+              );
+            },
+          )
+          .whenComplete(() {
+            if (!_isDisposed) _runtime?.evaluate('__lrExitRule()');
+          });
+    } finally {
+      _activeRules--;
+    }
   }
 
   String _normalizeLegacySyncIifeForAsync(String jsCode) {
@@ -438,9 +451,15 @@ globalThis.__lrRunRule = function (run) {
   /// 時，每次都要多付十幾次跨 FFI 的解析與執行。
   void _injectContext(Map<String, dynamic>? context) {
     if (context == null) return;
-    _bridgedElements.clear();
-    _nextBridgeElementId = 0;
     final statements = <String>[];
+    // 只剩這一條規則在跑（不是巢狀執行）：上一條規則交給 JS 的 Jsoup 元素
+    // 不會再用，清掉。
+    final jsoup = _extensions?.jsoup;
+    if (_activeRules == 1 && jsoup != null && !jsoup.isEmpty) {
+      jsoup.clear();
+      statements.add('__lrJsoupForget();');
+    }
+    _contextBaseUrl = context['baseUrl']?.toString();
     context.forEach((key, value) {
       switch (key) {
         case 'java':
@@ -605,34 +624,14 @@ var __lrScopedObject = function(scope, seed) {
     return '__lrScopedObject(${jsonEncode(scopeName)}, $payload)';
   }
 
+  /// 這次執行的頁面網址，交給 JS 的元素用它算 `abs:` 屬性。
+  String? _contextBaseUrl;
+
+  /// 元素交給 JS 時是真的 Jsoup 元素（`JsoupBridge`），和 `java.getElements`
+  /// 拿到的一樣。
   String _encodeElement(dom.Element element) {
-    final bridgeId = _nextBridgeElementId++;
-    _bridgedElements[bridgeId] = element;
-    final payload = jsonEncode(<String, dynamic>{
-      '__lrElementId': bridgeId,
-      'text': element.text,
-      'html': element.innerHtml,
-      'outerHtml': element.outerHtml,
-      'attributes': element.attributes,
-    });
-    return '''
-(function() {
-  var e = $payload;
-  return {
-    __lrElementId: e.__lrElementId,
-    text: function() { return e.text || ''; },
-    html: function() { return e.html || ''; },
-    outerHtml: function() { return e.outerHtml || ''; },
-    attr: function(name) {
-      var attrs = e.attributes || {};
-      return attrs[name] || '';
-    },
-    toString: function() {
-      return e.outerHtml || e.html || e.text || '';
-    }
-  };
-})()
-''';
+    final jsoup = _extensions!.jsoup..setBaseUri(element, _contextBaseUrl);
+    return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(element))})';
   }
 
   dynamic _decodeContextValue(dynamic value) {
@@ -642,7 +641,7 @@ var __lrScopedObject = function(scope, seed) {
     if (value is Map) {
       final elementId = value['__lrElementId'];
       if (elementId is num) {
-        return _bridgedElements[elementId.toInt()] ?? value;
+        return _extensions?.jsoup.node(elementId.toInt()) ?? value;
       }
       final decoded = <dynamic, dynamic>{};
       value.forEach((key, entry) {

@@ -1,3 +1,4 @@
+import 'package:night_reader/core/engine/parsers/jsoup_text.dart';
 import 'package:html/dom.dart';
 
 final Map<String, List<_SelectorSegment>> _selectorSegmentsCache = {};
@@ -81,6 +82,15 @@ bool _shouldIncludeRootMatch(Element root, String selector) {
 bool _needsCompatSelector(String selector) {
   return selector.contains(':contains(') ||
       selector.contains(':containsOwn(') ||
+      selector.contains(':containsData(') ||
+      selector.contains(':matches(') ||
+      selector.contains(':matchesOwn(') ||
+      selector.contains(':lt(') ||
+      selector.contains(':gt(') ||
+      selector.contains(':only-child') ||
+      selector.contains(':only-of-type') ||
+      selector.contains(':empty') ||
+      selector.contains(':root') ||
       selector.contains(':has(') ||
       _hasRegexAttributeSelector(selector) ||
       _hasExactAttributeSelector(selector) ||
@@ -205,20 +215,58 @@ bool _matchesCompoundSelector(Element element, String compound) {
     }
   }
 
-  final text = element.text;
-  final ownText = element.nodes
-      .where((node) => node.nodeType == Node.TEXT_NODE)
-      .map((node) => node.text ?? '')
-      .join();
-  if (!parsed.containsValues.every(text.contains)) {
-    return false;
+  // Jsoup：:contains 不分大小寫、比對空白整理過的文字；:matches 用正規式
+  // 在同樣的文字裡找。
+  if (parsed.containsValues.isNotEmpty || parsed.matchesPatterns.isNotEmpty) {
+    final text = jsoupText(element);
+    final lower = text.toLowerCase();
+    if (!parsed.containsValues.every(
+      (value) => lower.contains(value.toLowerCase()),
+    )) {
+      return false;
+    }
+    if (!parsed.matchesPatterns.every((pattern) => pattern.hasMatch(text))) {
+      return false;
+    }
   }
-  if (!parsed.containsOwnValues.every(ownText.contains)) {
-    return false;
+  if (parsed.containsOwnValues.isNotEmpty ||
+      parsed.matchesOwnPatterns.isNotEmpty) {
+    final ownText = jsoupOwnText(element);
+    final lower = ownText.toLowerCase();
+    if (!parsed.containsOwnValues.every(
+      (value) => lower.contains(value.toLowerCase()),
+    )) {
+      return false;
+    }
+    if (!parsed.matchesOwnPatterns.every(
+      (pattern) => pattern.hasMatch(ownText),
+    )) {
+      return false;
+    }
+  }
+  if (parsed.containsDataValues.isNotEmpty) {
+    final data = _elementData(element).toLowerCase();
+    if (!parsed.containsDataValues.every(
+      (value) => data.contains(value.toLowerCase()),
+    )) {
+      return false;
+    }
   }
   for (final hasSelector in parsed.hasSelectors) {
-    if (hasSelector.trim().isEmpty) return false;
-    if (querySelectorAllCompat(element, hasSelector).isEmpty) {
+    final trimmed = hasSelector.trim();
+    if (trimmed.isEmpty) return false;
+    if (trimmed.startsWith('>')) {
+      // Jsoup 的 :has(> 子元素)：只有一段時看直接的子元素；更長的鏈照子孫找。
+      final rest = trimmed.substring(1).trim();
+      final matched = RegExp(r'[\s>+~]').hasMatch(rest)
+          ? querySelectorAllCompat(element, rest).isNotEmpty
+          : element.children.any(
+              (child) => _matchesCompoundSelector(child, rest),
+            );
+      if (!matched) return false;
+      continue;
+    }
+    if (querySelectorAllCompat(element, trimmed).isEmpty) {
       return false;
     }
   }
@@ -436,6 +484,9 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
   final base = StringBuffer();
   final containsValues = <String>[];
   final containsOwnValues = <String>[];
+  final containsDataValues = <String>[];
+  final matchesPatterns = <RegExp>[];
+  final matchesOwnPatterns = <RegExp>[];
   final hasSelectors = <String>[];
   final notSelectors = <String>[];
   final structuralPseudos = <_StructuralPseudo>[];
@@ -443,10 +494,15 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
   for (var i = 0; i < compound.length; i++) {
     final pseudo =
         _matchPseudo(compound, i, ':containsOwn(') ??
+        _matchPseudo(compound, i, ':containsData(') ??
         _matchPseudo(compound, i, ':contains(') ??
+        _matchPseudo(compound, i, ':matchesOwn(') ??
+        _matchPseudo(compound, i, ':matches(') ??
         _matchPseudo(compound, i, ':has(') ??
         _matchPseudo(compound, i, ':not(') ??
         _matchPseudo(compound, i, ':eq(') ??
+        _matchPseudo(compound, i, ':lt(') ??
+        _matchPseudo(compound, i, ':gt(') ??
         _matchPseudo(compound, i, ':nth-last-of-type(') ??
         _matchPseudo(compound, i, ':nth-of-type(') ??
         _matchPseudo(compound, i, ':nth-last-child(') ??
@@ -456,7 +512,11 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
           _matchSimplePseudo(compound, i, ':first-child') ??
           _matchSimplePseudo(compound, i, ':last-child') ??
           _matchSimplePseudo(compound, i, ':first-of-type') ??
-          _matchSimplePseudo(compound, i, ':last-of-type');
+          _matchSimplePseudo(compound, i, ':last-of-type') ??
+          _matchSimplePseudo(compound, i, ':only-child') ??
+          _matchSimplePseudo(compound, i, ':only-of-type') ??
+          _matchSimplePseudo(compound, i, ':empty') ??
+          _matchSimplePseudo(compound, i, ':root');
       if (simplePseudo != null) {
         structuralPseudos.add(_StructuralPseudo(simplePseudo.name));
         i = simplePseudo.endIndex;
@@ -472,6 +532,17 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
     } else if (pseudo.name == ':containsOwn') {
       final value = _normalizeContainsNeedle(pseudo.argument);
       if (value.isNotEmpty) containsOwnValues.add(value);
+    } else if (pseudo.name == ':containsData') {
+      final value = _normalizeContainsNeedle(pseudo.argument);
+      if (value.isNotEmpty) containsDataValues.add(value);
+    } else if (pseudo.name == ':matches') {
+      matchesPatterns.add(RegExp(_normalizeContainsNeedle(pseudo.argument)));
+    } else if (pseudo.name == ':matchesOwn') {
+      matchesOwnPatterns.add(RegExp(_normalizeContainsNeedle(pseudo.argument)));
+    } else if (pseudo.name == ':lt' || pseudo.name == ':gt') {
+      structuralPseudos.add(
+        _StructuralPseudo.withArgument(pseudo.name, pseudo.argument.trim()),
+      );
     } else if (pseudo.name == ':has') {
       if (pseudo.argument.trim().isNotEmpty) {
         hasSelectors.add(pseudo.argument.trim());
@@ -507,6 +578,9 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
     attributeRegexes: extracted.attributeRegexes,
     containsValues: containsValues,
     containsOwnValues: containsOwnValues,
+    containsDataValues: containsDataValues,
+    matchesPatterns: matchesPatterns,
+    matchesOwnPatterns: matchesOwnPatterns,
     hasSelectors: hasSelectors,
     notSelectors: notSelectors,
     structuralPseudos: structuralPseudos,
@@ -628,16 +702,20 @@ bool _isEscaped(String input, int index) {
   return backslashes.isOdd;
 }
 
+/// Jsoup 的屬性值可以不加引號（`a[href^=/book/]`），CSS 不行：`=`、`^=`、
+/// `$=`、`*=`、`|=` 後面沒有引號的值補上引號。`~=` 在 Jsoup 是正規式，
+/// 另外處理。
 String normalizeCssSelectorCompat(String selector) {
   return selector.replaceAllMapped(
-    RegExp(r'\[([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]'),
+    RegExp(r'\[([^\s~\^\$\*\|=\]]+)\s*([\^\$\*\|]?=)\s*([^\]]+)\]'),
     (match) {
       final attr = match.group(1)!.trim();
-      final value = match.group(2)!.trim();
+      final operator = match.group(2)!;
+      final value = match.group(3)!.trim();
       if (value.startsWith('"') || value.startsWith("'")) {
         return match.group(0)!;
       }
-      return '[$attr="$value"]';
+      return '[$attr$operator"$value"]';
     },
   );
 }
@@ -766,6 +844,9 @@ class _ParsedCompoundSelector {
   final List<_AttributeRegexSelector> attributeRegexes;
   final List<String> containsValues;
   final List<String> containsOwnValues;
+  final List<String> containsDataValues;
+  final List<RegExp> matchesPatterns;
+  final List<RegExp> matchesOwnPatterns;
   final List<String> hasSelectors;
   final List<String> notSelectors;
   final List<_StructuralPseudo> structuralPseudos;
@@ -775,6 +856,9 @@ class _ParsedCompoundSelector {
     required this.attributeRegexes,
     required this.containsValues,
     required this.containsOwnValues,
+    required this.containsDataValues,
+    required this.matchesPatterns,
+    required this.matchesOwnPatterns,
     required this.hasSelectors,
     required this.notSelectors,
     required this.structuralPseudos,
@@ -821,6 +905,7 @@ class _StructuralPseudo {
   const _StructuralPseudo(this.name) : argument = null;
 
   const _StructuralPseudo.eq(this.argument) : name = ':eq';
+  const _StructuralPseudo.withArgument(this.name, this.argument);
   const _StructuralPseudo.nthChild(this.argument) : name = ':nth-child';
   const _StructuralPseudo.nthLastChild(this.argument)
     : name = ':nth-last-child';
@@ -842,6 +927,23 @@ bool _matchesStructuralPseudo(Element element, _StructuralPseudo pseudo) {
     case ':eq':
       final index = int.tryParse(pseudo.argument ?? '');
       return index != null && _elementIndex(element) == index;
+    case ':lt':
+      final index = int.tryParse(pseudo.argument ?? '');
+      return index != null && _elementIndex(element) < index;
+    case ':gt':
+      final index = int.tryParse(pseudo.argument ?? '');
+      return index != null && _elementIndex(element) > index;
+    case ':only-child':
+      return (element.parent?.children.length ?? 1) == 1;
+    case ':only-of-type':
+      return _sameTypeSiblings(element).length == 1;
+    case ':root':
+      return element.parent == null || element.localName == 'html';
+    case ':empty':
+      // Jsoup：沒有元素、也沒有非空白文字（註解不算）。
+      return element.nodes.every(
+        (node) => node is Comment || (node is Text && node.data.trim().isEmpty),
+      );
     case ':nth-child':
       return _matchesNthExpression(_elementIndex(element) + 1, pseudo.argument);
     case ':nth-last-child':
@@ -1243,4 +1345,15 @@ class Triple {
   final int? second;
   final int third;
   Triple(this.first, this.second, this.third);
+}
+
+/// Jsoup 的 `Element.data()`：`<script>`、`<style>` 這類的內容。
+String _elementData(Element element) {
+  if (element.localName == 'script' || element.localName == 'style') {
+    return element.text;
+  }
+  return element
+      .querySelectorAll('script, style')
+      .map((node) => node.text)
+      .join();
 }

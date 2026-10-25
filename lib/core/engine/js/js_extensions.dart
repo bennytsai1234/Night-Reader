@@ -3,9 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
-import 'package:html/parser.dart' as html_parser;
+import 'package:xpath_selector/xpath_selector.dart' show XPathNode;
 import 'package:night_reader/core/engine/analyze_rule/analyze_rule_support.dart';
-import 'package:night_reader/core/engine/parsers/css/analyze_by_css_support.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -20,6 +19,7 @@ import 'extensions/js_string_extensions.dart';
 import 'extensions/js_file_extensions.dart';
 import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_object.dart';
+import 'extensions/js_jsoup_extensions.dart';
 import 'js_encode_utils.dart';
 
 import 'package:night_reader/core/services/http_client.dart';
@@ -49,6 +49,8 @@ class JsExtensions extends JsExtensionsBase {
     injectStringExtensions();
     injectFileExtensions();
     injectFontExtensions();
+    // Jsoup 在 java 物件之前：java.getElements 與 Packages.org 要用到它。
+    injectJsoupExtensions();
     injectJavaObjectJs();
   }
 
@@ -115,6 +117,8 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
+    // java.getElement(s)：HTML 的結果是真的 Jsoup 元素（JsoupBridge），
+    // JSON 這類規則的結果照原樣。
     runtime.onMessage('ruleGetElement', (args) {
       final rule = args.toString();
       if (ruleContext != null) {
@@ -128,7 +132,7 @@ class JsExtensions extends JsExtensionsBase {
       final rule = args.toString();
       if (ruleContext != null) {
         try {
-          final values = ruleContext.getElements(rule);
+          final values = ruleContext.getElements(rule) as List;
           return values.map(_toJsRuleValue).toList();
         } catch (_) {}
       }
@@ -153,75 +157,6 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('toast', (args) {
       debugPrint('JS_TOAST: ${_compactJsBridgeLog(args)}');
       return null;
-    });
-    runtime.onMessage('htmlSelectText', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _selectHtmlText(payload[0].toString(), payload[1].toString());
-      }
-      return '';
-    });
-    runtime.onMessage('htmlSelectHtml', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _selectHtmlHtml(payload[0].toString(), payload[1].toString());
-      }
-      return '';
-    });
-    runtime.onMessage('htmlSelectAttr', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 3) {
-        return _selectHtmlAttr(
-          payload[0].toString(),
-          payload[1].toString(),
-          payload[2].toString(),
-        );
-      }
-      return '';
-    });
-    runtime.onMessage('htmlSelectData', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _selectHtmlData(payload[0].toString(), payload[1].toString());
-      }
-      return '';
-    });
-    runtime.onMessage('htmlSelectAttributes', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _selectHtmlAttributes(
-          payload[0].toString(),
-          payload[1].toString(),
-        );
-      }
-      return const <String>[];
-    });
-    runtime.onMessage('htmlSelectCount', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _selectHtmlElements(
-          payload[0].toString(),
-          payload[1].toString(),
-        ).length;
-      }
-      return 0;
-    });
-    runtime.onMessage('htmlSelectTextList', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _selectHtmlElements(
-          payload[0].toString(),
-          payload[1].toString(),
-        ).map((element) => element.text.trim()).toList();
-      }
-      return const <String>[];
-    });
-    runtime.onMessage('htmlRemove', (args) {
-      final payload = args;
-      if (payload is List && payload.length >= 2) {
-        return _removeHtml(payload[0].toString(), payload[1].toString());
-      }
-      return '';
     });
     runtime.onMessage('scopedObjectGetVariable', (args) {
       final payload = args;
@@ -535,373 +470,6 @@ class JsExtensions extends JsExtensionsBase {
     }
   }
 
-  List<dom.Element> _selectHtmlElements(String html, String selector) {
-    final doc = html_parser.parse(html);
-    return _selectHtmlElementsFromDocument(doc, selector);
-  }
-
-  List<dom.Element> _selectHtmlElementsFromDocument(
-    dom.Document document,
-    String selector,
-  ) {
-    final normalizedSelector = _normalizeJsoupSelectorCompat(selector);
-    try {
-      return _selectHtmlElementsFromDocumentInternal(
-        document,
-        normalizedSelector,
-      );
-    } catch (_) {
-      final compatFallback = _selectHtmlElementsWithCompatFallback(
-        document,
-        normalizedSelector,
-      );
-      if (compatFallback.isNotEmpty) {
-        return compatFallback;
-      }
-      final pseudoFallback = _selectHtmlElementsWithPseudoFallback(
-        document,
-        normalizedSelector,
-      );
-      if (pseudoFallback.isNotEmpty) {
-        return pseudoFallback;
-      }
-      final simplified = _simplifyUnsupportedSelector(normalizedSelector);
-      if (simplified.isEmpty || simplified == normalizedSelector) {
-        return const <dom.Element>[];
-      }
-      return _selectHtmlElementsFromDocumentInternal(document, simplified);
-    }
-  }
-
-  List<dom.Element> _selectHtmlElementsWithCompatFallback(
-    dom.Document document,
-    String selector,
-  ) {
-    final root = document.documentElement;
-    if (root == null) {
-      return const <dom.Element>[];
-    }
-    try {
-      return querySelectorAllCompat(root, selector);
-    } catch (_) {
-      return const <dom.Element>[];
-    }
-  }
-
-  List<dom.Element> _selectHtmlElementsFromDocumentInternal(
-    dom.Document document,
-    String selector,
-  ) {
-    final eqMatch = RegExp(r'^(.*):eq\((-?\d+)\)\s*$').firstMatch(selector);
-    if (eqMatch != null) {
-      final baseSelector = eqMatch.group(1)!.trim();
-      final index = int.tryParse(eqMatch.group(2)!) ?? 0;
-      final items = document.querySelectorAll(baseSelector);
-      if (items.isEmpty) return const <dom.Element>[];
-      final resolvedIndex = index < 0 ? items.length + index : index;
-      if (resolvedIndex < 0 || resolvedIndex >= items.length) {
-        return const <dom.Element>[];
-      }
-      return <dom.Element>[items[resolvedIndex]];
-    }
-    return document.querySelectorAll(selector);
-  }
-
-  List<dom.Element> _selectHtmlElementsWithPseudoFallback(
-    dom.Document document,
-    String selector,
-  ) {
-    final selectors = selector
-        .split(',')
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList();
-    final results = <dom.Element>[];
-    final seen = <dom.Element>{};
-
-    for (final part in selectors) {
-      final matched = _selectHtmlElementsForSinglePseudoSelector(
-        document,
-        part,
-      );
-      for (final element in matched) {
-        if (seen.add(element)) {
-          results.add(element);
-        }
-      }
-    }
-    return results;
-  }
-
-  List<dom.Element> _selectHtmlElementsForSinglePseudoSelector(
-    dom.Document document,
-    String selector,
-  ) {
-    final nthChildMatch = RegExp(r'^(.*):nth-child\((\d+)\)\s*$')
-        .firstMatch(selector);
-    if (nthChildMatch != null) {
-      final baseSelector = nthChildMatch.group(1)!.trim();
-      final targetIndex = int.parse(nthChildMatch.group(2)!);
-      final candidates = document.querySelectorAll(baseSelector);
-      return candidates.where((element) {
-        final siblings = element.parent?.children ?? const <dom.Element>[];
-        return siblings.indexOf(element) + 1 == targetIndex;
-      }).toList();
-    }
-
-    final nthLastChildMatch = RegExp(r'^(.*):nth-last-child\((\d+)\)\s*$')
-        .firstMatch(selector);
-    if (nthLastChildMatch != null) {
-      final baseSelector = nthLastChildMatch.group(1)!.trim();
-      final targetIndex = int.parse(nthLastChildMatch.group(2)!);
-      final candidates = document.querySelectorAll(baseSelector);
-      return candidates.where((element) {
-        final siblings = element.parent?.children ?? const <dom.Element>[];
-        final reverseIndex = siblings.length - siblings.indexOf(element);
-        return reverseIndex == targetIndex;
-      }).toList();
-    }
-
-    final firstChildMatch = RegExp(r'^(.*):first-child\s*$')
-        .firstMatch(selector);
-    if (firstChildMatch != null) {
-      final baseSelector = firstChildMatch.group(1)!.trim();
-      final candidates = document.querySelectorAll(baseSelector);
-      return candidates.where((element) {
-        final siblings = element.parent?.children ?? const <dom.Element>[];
-        return siblings.isNotEmpty && identical(siblings.first, element);
-      }).toList();
-    }
-
-    final lastChildMatch = RegExp(r'^(.*):last-child\s*$').firstMatch(selector);
-    if (lastChildMatch != null) {
-      final baseSelector = lastChildMatch.group(1)!.trim();
-      final candidates = document.querySelectorAll(baseSelector);
-      return candidates.where((element) {
-        final siblings = element.parent?.children ?? const <dom.Element>[];
-        return siblings.isNotEmpty && identical(siblings.last, element);
-      }).toList();
-    }
-
-    return const <dom.Element>[];
-  }
-
-  String _simplifyUnsupportedSelector(String selector) {
-    return selector
-        .replaceAll(RegExp(r':nth-last-child\([^)]*\)'), '')
-        .replaceAll(RegExp(r':nth-child\([^)]*\)'), '')
-        .replaceAll(RegExp(r':first-child\b'), '')
-        .replaceAll(RegExp(r':last-child\b'), '')
-        .replaceAll(RegExp(r':not\([^)]*\)'), '')
-        .replaceAll(RegExp(r'\s{2,}'), ' ')
-        .replaceAll(RegExp(r'\s*,\s*'), ',')
-        .trim();
-  }
-
-  String _normalizeJsoupSelectorCompat(String selector) {
-    var normalized = selector.trim();
-    if (normalized.isEmpty) {
-      return normalized;
-    }
-    normalized = normalized.replaceAllMapped(
-      RegExp(r'\[([^\]=~\^\$\*\|\s]+)~=(.+?)\]'),
-      (match) {
-        final attr = match.group(1)!.trim();
-        final rawPattern = match.group(2)!.trim();
-        final converted = _convertRegexAttributeSelector(rawPattern);
-        return '[$attr$converted]';
-      },
-    );
-    normalized = normalized.replaceAllMapped(
-      RegExp(r':matchesOwn\(([^()]*)\)'),
-      (match) => _convertMatchesPseudo(
-        rawPattern: match.group(1)!.trim(),
-        pseudoName: ':containsOwn',
-      ),
-    );
-    normalized = normalized.replaceAllMapped(
-      RegExp(r':matches\(([^()]*)\)'),
-      (match) => _convertMatchesPseudo(
-        rawPattern: match.group(1)!.trim(),
-        pseudoName: ':contains',
-      ),
-    );
-    normalized = normalized.replaceAllMapped(
-      RegExp(r':has\(\s*>\s*'),
-      (_) => ':has(',
-    );
-    return normalized;
-  }
-
-  String _convertRegexAttributeSelector(String rawPattern) {
-    final trimmed = _stripSelectorQuotes(rawPattern).trim();
-    if (trimmed.isEmpty ||
-        trimmed == r'\S' ||
-        trimmed == r'\\S' ||
-        trimmed == '.+' ||
-        trimmed == '.*') {
-      return '';
-    }
-
-    final normalized = trimmed.replaceAll(r'\\', r'\');
-    final literal = _tryExtractAnchoredLiteral(normalized);
-    if (literal != null) {
-      return '="$literal"';
-    }
-
-    final startsWithLiteral = _tryExtractPrefixLiteral(normalized);
-    if (startsWithLiteral != null) {
-      return '^="$startsWithLiteral"';
-    }
-
-    final endsWithLiteral = _tryExtractSuffixLiteral(normalized);
-    if (endsWithLiteral != null) {
-      return '\$="$endsWithLiteral"';
-    }
-
-    final plainLiteral = _tryExtractPlainLiteral(normalized);
-    if (plainLiteral != null) {
-      return '*="$plainLiteral"';
-    }
-
-    return '';
-  }
-
-  String _convertMatchesPseudo({
-    required String rawPattern,
-    required String pseudoName,
-  }) {
-    final normalized = _stripSelectorQuotes(rawPattern).replaceAll(r'\\', r'\');
-    if (normalized.isEmpty ||
-        normalized == r'\S' ||
-        normalized == r'\\S' ||
-        normalized == '^\\S' ||
-        normalized == r'^\S' ||
-        normalized == '.+' ||
-        normalized == '.*') {
-      return '';
-    }
-
-    final literal =
-        _tryExtractAnchoredLiteral(normalized) ??
-        _tryExtractPlainLiteral(normalized);
-    if (literal == null || literal.isEmpty) {
-      return '';
-    }
-    final escaped = literal.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
-    return '$pseudoName("$escaped")';
-  }
-
-  String _stripSelectorQuotes(String value) {
-    final trimmed = value.trim();
-    if (trimmed.length >= 2 &&
-        ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-            (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
-      return trimmed.substring(1, trimmed.length - 1);
-    }
-    return trimmed;
-  }
-
-  String? _tryExtractAnchoredLiteral(String pattern) {
-    final match = RegExp(r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$')
-        .firstMatch(pattern);
-    return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
-  }
-
-  String? _tryExtractPrefixLiteral(String pattern) {
-    final match = RegExp(r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)$')
-        .firstMatch(pattern);
-    return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
-  }
-
-  String? _tryExtractSuffixLiteral(String pattern) {
-    final match = RegExp(r'^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$')
-        .firstMatch(pattern);
-    return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
-  }
-
-  String? _tryExtractPlainLiteral(String pattern) {
-    if (RegExp(r'[\\^$.*+?()[\]{}|]').hasMatch(pattern)) {
-      return null;
-    }
-    return pattern;
-  }
-
-  String _unescapeSelectorLiteral(String value) {
-    return value.replaceAllMapped(RegExp(r'\\(.)'), (match) => match.group(1)!);
-  }
-
-  String _selectHtmlText(String html, String selector) {
-    final elements = _selectHtmlElements(html, selector);
-    return elements
-        .map((element) => element.text.trim())
-        .where((text) => text.isNotEmpty)
-        .join(' ');
-  }
-
-  String _selectHtmlHtml(String html, String selector) {
-    final elements = _selectHtmlElements(html, selector);
-    return elements.map((element) => element.outerHtml).join();
-  }
-
-  String _selectHtmlAttr(String html, String selector, String attr) {
-    final elements = _selectHtmlElements(html, selector);
-    for (final element in elements) {
-      final value = element.attributes[attr]?.trim();
-      if (value != null && value.isNotEmpty) {
-        return value;
-      }
-    }
-    return '';
-  }
-
-  String _selectHtmlData(String html, String selector) {
-    if (selector == 'html') {
-      final document = html_parser.parse(html);
-      final contentElements = document
-          .querySelectorAll('*')
-          .where(
-            (element) =>
-                element.localName != 'html' &&
-                element.localName != 'head' &&
-                element.localName != 'body',
-          )
-          .toList();
-      if (contentElements.length == 1) {
-        return contentElements.first.innerHtml;
-      }
-    }
-    final elements = _selectHtmlElements(html, selector);
-    return elements.map((element) => element.innerHtml).join();
-  }
-
-  List<String> _selectHtmlAttributes(String html, String selector) {
-    final elements = _selectHtmlElements(html, selector);
-    if (elements.isEmpty) {
-      return const <String>[];
-    }
-    return elements.first.attributes.entries
-        .map((entry) => '${entry.key}="${entry.value}"')
-        .toList();
-  }
-
-  String _removeHtml(String html, String selector) {
-    final document = html_parser.parse(html);
-    final targets = _selectHtmlElementsFromDocument(document, selector);
-    if (targets.isEmpty) {
-      return html;
-    }
-
-    for (final target in targets) {
-      target.remove();
-    }
-
-    if (html.contains('<html') || html.contains('<!DOCTYPE')) {
-      return document.outerHtml;
-    }
-    return document.body?.innerHtml ?? html;
-  }
-
   /// 下載到快取資料夾並回傳內容；目前僅 Dart 內部呼叫 (非 JS 路徑)
   Future<String> cacheFile(String url, int saveTime) async {
     final key = JsEncodeUtils.md5Encode16(url);
@@ -923,6 +491,15 @@ class JsExtensions extends JsExtensionsBase {
   dynamic _toJsRuleValue(dynamic value) {
     if (value == null || value is String || value is num || value is bool) {
       return value;
+    }
+    final node = value is XPathNode ? value.node : value;
+    if (node is dom.Node) {
+      final context = ruleContext;
+      final baseUrl = context == null
+          ? null
+          : (context.redirectUrl ?? context.baseUrl) as String?;
+      jsoup.setBaseUri(node, baseUrl);
+      return jsoup.toJs(node);
     }
     if (value is Map) {
       return value.map(
