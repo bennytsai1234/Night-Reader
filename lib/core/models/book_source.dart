@@ -1,3 +1,4 @@
+import 'json_read.dart';
 import 'source/book_source_base.dart';
 import 'source/book_source_rules.dart';
 import 'source/book_source_serialization.dart';
@@ -74,27 +75,23 @@ class BookSource extends BookSourceBase {
     this.ruleReview = ruleReview;
   }
 
+  /// 書源的開關沒寫時預設打開；寫了看不懂的值（例如 `"disabled"`）當成關，
+  /// 和 Legado（Gson）一樣。
+  static bool _readSwitch(dynamic value) =>
+      readJsonBool(value, fallback: value == null);
+
   factory BookSource.fromJson(Map<String, dynamic> json) {
     return BookSource(
       bookSourceUrl: json['bookSourceUrl'] ?? '',
       bookSourceName: json['bookSourceName'] ?? '',
       bookSourceGroup: json['bookSourceGroup'],
-      bookSourceType: json['bookSourceType'] ?? 0,
+      bookSourceType: readJsonInt(json['bookSourceType'], fallback: 0),
       bookUrlPattern: json['bookUrlPattern'],
-      customOrder: json['customOrder'] ?? 0,
-      enabled:
-          json['enabled'] == null ||
-          json['enabled'] == 1 ||
-          json['enabled'] == true,
-      enabledExplore:
-          json['enabledExplore'] == null ||
-          json['enabledExplore'] == 1 ||
-          json['enabledExplore'] == true,
+      customOrder: readJsonInt(json['customOrder'], fallback: 0),
+      enabled: _readSwitch(json['enabled']),
+      enabledExplore: _readSwitch(json['enabledExplore']),
       jsLib: json['jsLib'],
-      enabledCookieJar:
-          json['enabledCookieJar'] == null ||
-          json['enabledCookieJar'] == 1 ||
-          json['enabledCookieJar'] == true,
+      enabledCookieJar: _readSwitch(json['enabledCookieJar']),
       concurrentRate: json['concurrentRate']?.toString(),
       header: json['header'],
       loginUrl: json['loginUrl'],
@@ -103,9 +100,9 @@ class BookSource extends BookSourceBase {
       coverDecodeJs: json['coverDecodeJs'],
       bookSourceComment: json['bookSourceComment'],
       variableComment: json['variableComment'],
-      lastUpdateTime: json['lastUpdateTime'] ?? 0,
-      respondTime: json['respondTime'] ?? 180000,
-      weight: json['weight'] ?? 0,
+      lastUpdateTime: readJsonInt(json['lastUpdateTime'], fallback: 0),
+      respondTime: readJsonInt(json['respondTime'], fallback: 180000),
+      weight: readJsonInt(json['weight'], fallback: 0),
       exploreUrl: json['exploreUrl'],
       exploreScreen: json['exploreScreen'],
       ruleExplore: json['ruleExplore'] != null
