@@ -20,7 +20,7 @@ extension AnalyzeByCssCore on AnalyzeByCssBase {
       for (var ruleStr in ruleStrS) {
         ruleStr = ruleStr.trim();
         if (ruleStr.isEmpty) continue;
-        final tempS = querySelectorAllCompat(element, ruleStr);
+        final tempS = selectWithSelfCompat(element, ruleStr);
         elementsList.add(tempS);
         if (tempS.isNotEmpty && ruleAnalyzes.elementsType == '||') break;
       }
@@ -96,14 +96,11 @@ extension AnalyzeByCssCore on AnalyzeByCssBase {
           final cssSelector = ruleStrX.substring(0, lastIndex);
           final attr = ruleStrX.substring(lastIndex + 1);
           temp = getResultLast(
-            querySelectorAllCompat(element, cssSelector),
+            selectWithSelfCompat(element, cssSelector),
             attr,
           );
         } else {
-          temp = getResultLast(
-            querySelectorAllCompat(element, ruleStrX),
-            'text',
-          );
+          temp = getResultLast(selectWithSelfCompat(element, ruleStrX), 'text');
         }
       } else {
         temp = getResultList(ruleStrX);

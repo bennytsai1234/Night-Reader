@@ -1,9 +1,55 @@
+import 'dart:async';
+
+import 'package:night_reader/core/engine/parsers/jsoup_text.dart';
 import 'package:html/dom.dart';
 
 final Map<String, List<_SelectorSegment>> _selectorSegmentsCache = {};
 final Map<String, _ParsedCompoundSelector> _compoundSelectorCache = {};
 
-List<Element> querySelectorAllCompat(Element root, String selector) {
+/// 這次選取從哪個元素開始，給 Jsoup 的 `:root` 用（`:has` 裡換成被檢查
+/// 的那個元素，和 Jsoup 一樣）。
+final Object _selectRootKey = Object();
+
+Element? get _selectRoot => Zone.current[_selectRootKey] as Element?;
+
+List<Element> querySelectorAllCompat(Element root, String selector) => runZoned(
+  () => _querySelectorAllCompat(root, selector),
+  zoneValues: {_selectRootKey: root},
+);
+
+/// Jsoup 的 `select`：範圍包含 [root] 自己（Legado 的 `@css:` 規則與規則
+/// JS 裡的 `select` 都是）。
+List<Element> selectWithSelfCompat(Element root, String selector) {
+  final found = querySelectorAllCompat(root, selector);
+  if (found.isNotEmpty && identical(found.first, root)) return found;
+  if (!elementMatchesSelectorCompat(root, selector, root: root)) return found;
+  return [root, ...found];
+}
+
+/// [element] 本身符不符合 [selector]（逗號分開的任一組）；不需要父節點，
+/// 複製出來、還沒放進文件的元素也能比對。給 Jsoup 的 `is()` 與「選取包含
+/// 起點自己」用。`:root` 是 [root]，沒給就是整棵樹的頂端（Jsoup 的 `is()`）。
+bool elementMatchesSelectorCompat(
+  Element element,
+  String selector, {
+  Element? root,
+}) {
+  final normalized = normalizeCssSelectorCompat(selector);
+  var top = element;
+  while (root == null && top.parent != null) {
+    top = top.parent!;
+  }
+  return runZoned(
+    () => _splitSelectorList(normalized).any(
+      (group) =>
+          group.trim().isNotEmpty &&
+          _matchesSelectorAgainstElement(element, group.trim()),
+    ),
+    zoneValues: {_selectRootKey: root ?? top},
+  );
+}
+
+List<Element> _querySelectorAllCompat(Element root, String selector) {
   final normalizedSelector = normalizeCssSelectorCompat(selector);
   if (_needsCompatSelector(normalizedSelector)) {
     return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
@@ -81,6 +127,15 @@ bool _shouldIncludeRootMatch(Element root, String selector) {
 bool _needsCompatSelector(String selector) {
   return selector.contains(':contains(') ||
       selector.contains(':containsOwn(') ||
+      selector.contains(':containsData(') ||
+      selector.contains(':matches(') ||
+      selector.contains(':matchesOwn(') ||
+      selector.contains(':lt(') ||
+      selector.contains(':gt(') ||
+      selector.contains(':only-child') ||
+      selector.contains(':only-of-type') ||
+      selector.contains(':empty') ||
+      selector.contains(':root') ||
       selector.contains(':has(') ||
       _hasRegexAttributeSelector(selector) ||
       _hasExactAttributeSelector(selector) ||
@@ -205,20 +260,61 @@ bool _matchesCompoundSelector(Element element, String compound) {
     }
   }
 
-  final text = element.text;
-  final ownText = element.nodes
-      .where((node) => node.nodeType == Node.TEXT_NODE)
-      .map((node) => node.text ?? '')
-      .join();
-  if (!parsed.containsValues.every(text.contains)) {
-    return false;
+  // Jsoup：:contains 不分大小寫、比對空白整理過的文字；:matches 用正規式
+  // 在同樣的文字裡找。
+  if (parsed.containsValues.isNotEmpty || parsed.matchesPatterns.isNotEmpty) {
+    final text = jsoupText(element);
+    final lower = text.toLowerCase();
+    if (!parsed.containsValues.every(
+      (value) => lower.contains(value.toLowerCase()),
+    )) {
+      return false;
+    }
+    if (!parsed.matchesPatterns.every((pattern) => pattern.hasMatch(text))) {
+      return false;
+    }
   }
-  if (!parsed.containsOwnValues.every(ownText.contains)) {
-    return false;
+  if (parsed.containsOwnValues.isNotEmpty ||
+      parsed.matchesOwnPatterns.isNotEmpty) {
+    final ownText = jsoupOwnText(element);
+    final lower = ownText.toLowerCase();
+    if (!parsed.containsOwnValues.every(
+      (value) => lower.contains(value.toLowerCase()),
+    )) {
+      return false;
+    }
+    if (!parsed.matchesOwnPatterns.every(
+      (pattern) => pattern.hasMatch(ownText),
+    )) {
+      return false;
+    }
+  }
+  if (parsed.containsDataValues.isNotEmpty) {
+    final data = _elementData(element).toLowerCase();
+    if (!parsed.containsDataValues.every(
+      (value) => data.contains(value.toLowerCase()),
+    )) {
+      return false;
+    }
   }
   for (final hasSelector in parsed.hasSelectors) {
-    if (hasSelector.trim().isEmpty) return false;
-    if (querySelectorAllCompat(element, hasSelector).isEmpty) {
+    final trimmed = hasSelector.trim();
+    if (trimmed.isEmpty) return false;
+    final relative = RegExp(r'^([>+~])\s*').firstMatch(trimmed);
+    if (relative != null) {
+      // Jsoup 的相對選擇器：:has(> p a) 是「直接子元素 p 裡有 a」。
+      final matched = runZoned(
+        () => _hasRelative(
+          element,
+          relative.group(1)!,
+          trimmed.substring(relative.end),
+        ),
+        zoneValues: {_selectRootKey: element},
+      );
+      if (!matched) return false;
+      continue;
+    }
+    if (querySelectorAllCompat(element, trimmed).isEmpty) {
       return false;
     }
   }
@@ -436,6 +532,9 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
   final base = StringBuffer();
   final containsValues = <String>[];
   final containsOwnValues = <String>[];
+  final containsDataValues = <String>[];
+  final matchesPatterns = <RegExp>[];
+  final matchesOwnPatterns = <RegExp>[];
   final hasSelectors = <String>[];
   final notSelectors = <String>[];
   final structuralPseudos = <_StructuralPseudo>[];
@@ -443,10 +542,15 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
   for (var i = 0; i < compound.length; i++) {
     final pseudo =
         _matchPseudo(compound, i, ':containsOwn(') ??
+        _matchPseudo(compound, i, ':containsData(') ??
         _matchPseudo(compound, i, ':contains(') ??
+        _matchPseudo(compound, i, ':matchesOwn(') ??
+        _matchPseudo(compound, i, ':matches(') ??
         _matchPseudo(compound, i, ':has(') ??
         _matchPseudo(compound, i, ':not(') ??
         _matchPseudo(compound, i, ':eq(') ??
+        _matchPseudo(compound, i, ':lt(') ??
+        _matchPseudo(compound, i, ':gt(') ??
         _matchPseudo(compound, i, ':nth-last-of-type(') ??
         _matchPseudo(compound, i, ':nth-of-type(') ??
         _matchPseudo(compound, i, ':nth-last-child(') ??
@@ -456,7 +560,11 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
           _matchSimplePseudo(compound, i, ':first-child') ??
           _matchSimplePseudo(compound, i, ':last-child') ??
           _matchSimplePseudo(compound, i, ':first-of-type') ??
-          _matchSimplePseudo(compound, i, ':last-of-type');
+          _matchSimplePseudo(compound, i, ':last-of-type') ??
+          _matchSimplePseudo(compound, i, ':only-child') ??
+          _matchSimplePseudo(compound, i, ':only-of-type') ??
+          _matchSimplePseudo(compound, i, ':empty') ??
+          _matchSimplePseudo(compound, i, ':root');
       if (simplePseudo != null) {
         structuralPseudos.add(_StructuralPseudo(simplePseudo.name));
         i = simplePseudo.endIndex;
@@ -472,6 +580,21 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
     } else if (pseudo.name == ':containsOwn') {
       final value = _normalizeContainsNeedle(pseudo.argument);
       if (value.isNotEmpty) containsOwnValues.add(value);
+    } else if (pseudo.name == ':containsData') {
+      final value = _normalizeContainsNeedle(pseudo.argument);
+      if (value.isNotEmpty) containsDataValues.add(value);
+    } else if (pseudo.name == ':matches') {
+      matchesPatterns.add(
+        javaRegExp(_normalizeContainsNeedle(pseudo.argument)),
+      );
+    } else if (pseudo.name == ':matchesOwn') {
+      matchesOwnPatterns.add(
+        javaRegExp(_normalizeContainsNeedle(pseudo.argument)),
+      );
+    } else if (pseudo.name == ':lt' || pseudo.name == ':gt') {
+      structuralPseudos.add(
+        _StructuralPseudo.withArgument(pseudo.name, pseudo.argument.trim()),
+      );
     } else if (pseudo.name == ':has') {
       if (pseudo.argument.trim().isNotEmpty) {
         hasSelectors.add(pseudo.argument.trim());
@@ -507,6 +630,9 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
     attributeRegexes: extracted.attributeRegexes,
     containsValues: containsValues,
     containsOwnValues: containsOwnValues,
+    containsDataValues: containsDataValues,
+    matchesPatterns: matchesPatterns,
+    matchesOwnPatterns: matchesOwnPatterns,
     hasSelectors: hasSelectors,
     notSelectors: notSelectors,
     structuralPseudos: structuralPseudos,
@@ -628,16 +754,20 @@ bool _isEscaped(String input, int index) {
   return backslashes.isOdd;
 }
 
+/// Jsoup 的屬性值可以不加引號（`a[href^=/book/]`），CSS 不行：`=`、`^=`、
+/// `$=`、`*=`、`|=` 後面沒有引號的值補上引號。`~=` 在 Jsoup 是正規式，
+/// 另外處理。
 String normalizeCssSelectorCompat(String selector) {
   return selector.replaceAllMapped(
-    RegExp(r'\[([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]'),
+    RegExp(r'\[([^\s~\^\$\*\|=\]]+)\s*([\^\$\*\|]?=)\s*([^\]]+)\]'),
     (match) {
       final attr = match.group(1)!.trim();
-      final value = match.group(2)!.trim();
+      final operator = match.group(2)!;
+      final value = match.group(3)!.trim();
       if (value.startsWith('"') || value.startsWith("'")) {
         return match.group(0)!;
       }
-      return '[$attr="$value"]';
+      return '[$attr$operator"$value"]';
     },
   );
 }
@@ -766,6 +896,9 @@ class _ParsedCompoundSelector {
   final List<_AttributeRegexSelector> attributeRegexes;
   final List<String> containsValues;
   final List<String> containsOwnValues;
+  final List<String> containsDataValues;
+  final List<RegExp> matchesPatterns;
+  final List<RegExp> matchesOwnPatterns;
   final List<String> hasSelectors;
   final List<String> notSelectors;
   final List<_StructuralPseudo> structuralPseudos;
@@ -775,6 +908,9 @@ class _ParsedCompoundSelector {
     required this.attributeRegexes,
     required this.containsValues,
     required this.containsOwnValues,
+    required this.containsDataValues,
+    required this.matchesPatterns,
+    required this.matchesOwnPatterns,
     required this.hasSelectors,
     required this.notSelectors,
     required this.structuralPseudos,
@@ -821,6 +957,7 @@ class _StructuralPseudo {
   const _StructuralPseudo(this.name) : argument = null;
 
   const _StructuralPseudo.eq(this.argument) : name = ':eq';
+  const _StructuralPseudo.withArgument(this.name, this.argument);
   const _StructuralPseudo.nthChild(this.argument) : name = ':nth-child';
   const _StructuralPseudo.nthLastChild(this.argument)
     : name = ':nth-last-child';
@@ -842,6 +979,26 @@ bool _matchesStructuralPseudo(Element element, _StructuralPseudo pseudo) {
     case ':eq':
       final index = int.tryParse(pseudo.argument ?? '');
       return index != null && _elementIndex(element) == index;
+    case ':lt':
+      final index = int.tryParse(pseudo.argument ?? '');
+      return index != null && _elementIndex(element) < index;
+    case ':gt':
+      final index = int.tryParse(pseudo.argument ?? '');
+      return index != null && _elementIndex(element) > index;
+    case ':only-child':
+      return (element.parent?.children.length ?? 1) == 1;
+    case ':only-of-type':
+      return _sameTypeSiblings(element).length == 1;
+    case ':root':
+      // Jsoup：這次選取的起點（從文件選是 <html>）。
+      final root = _selectRoot;
+      if (root == null) {
+        return element.parent == null || element.localName == 'html';
+      }
+      return identical(element, root);
+    case ':empty':
+      // Jsoup 1.15：只有註解才算空；只有空白的文字也算內容。
+      return element.nodes.every((node) => node is Comment);
     case ':nth-child':
       return _matchesNthExpression(_elementIndex(element) + 1, pseudo.argument);
     case ':nth-last-child':
@@ -1243,4 +1400,99 @@ class Triple {
   final int? second;
   final int third;
   Triple(this.first, this.second, this.third);
+}
+
+/// Jsoup 的 `Element.data()`：`<script>`、`<style>` 這類的內容。
+String _elementData(Element element) {
+  if (element.localName == 'script' || element.localName == 'style') {
+    return element.text;
+  }
+  return element
+      .querySelectorAll('script, style')
+      .map((node) => node.text)
+      .join();
+}
+
+/// `:has(> …)`、`:has(+ …)`、`:has(~ …)`：[selector] 的第一段要和 [anchor]
+/// 有 [combinator] 的關係，後面照一般的鏈比對。
+bool _hasRelative(Element anchor, String combinator, String selector) {
+  final segments = _selectorSegmentsFor(selector);
+  if (segments.isEmpty) return false;
+  final Iterable<Element> candidates = switch (combinator) {
+    '>' => anchor.querySelectorAll('*'),
+    _ => _followingSiblingsAndDescendants(anchor),
+  };
+  return candidates.any(
+    (candidate) => _matchesAnchoredPath(
+      candidate,
+      segments,
+      segments.length - 1,
+      anchor,
+      combinator,
+    ),
+  );
+}
+
+bool _matchesAnchoredPath(
+  Element element,
+  List<_SelectorSegment> segments,
+  int index,
+  Element anchor,
+  String anchorCombinator,
+) {
+  if (!_matchesCompoundSelector(element, segments[index].compound)) {
+    return false;
+  }
+  if (index == 0) {
+    return switch (anchorCombinator) {
+      '>' => identical(element.parent, anchor),
+      '+' => identical(element.previousElementSibling, anchor),
+      _ => _isFollowingSibling(element, anchor),
+    };
+  }
+  final combinator = segments[index].combinator ?? ' ';
+  for (final previous in _relatedElementsForCombinator(element, combinator)) {
+    if (_matchesAnchoredPath(
+      previous,
+      segments,
+      index - 1,
+      anchor,
+      anchorCombinator,
+    )) {
+      return true;
+    }
+  }
+  return false;
+}
+
+Iterable<Element> _followingSiblingsAndDescendants(Element anchor) sync* {
+  var sibling = anchor.nextElementSibling;
+  while (sibling != null) {
+    yield sibling;
+    yield* sibling.querySelectorAll('*');
+    sibling = sibling.nextElementSibling;
+  }
+}
+
+bool _isFollowingSibling(Element element, Element anchor) {
+  var previous = element.previousElementSibling;
+  while (previous != null) {
+    if (identical(previous, anchor)) return true;
+    previous = previous.previousElementSibling;
+  }
+  return false;
+}
+
+/// Jsoup 用 Java 的正規式：開頭的 `(?i)`、`(?s)`、`(?m)`、`(?u)` 這類旗標
+/// Dart 不認得，換成 RegExp 的選項。
+RegExp javaRegExp(String pattern) {
+  final flags = RegExp(r'^\(\?([imsux]+)\)').firstMatch(pattern);
+  final options = flags?.group(1) ?? '';
+  return RegExp(
+    flags == null ? pattern : pattern.substring(flags.end),
+    caseSensitive: !options.contains('i'),
+    multiLine: options.contains('m'),
+    dotAll: options.contains('s'),
+    unicode: options.contains('u'),
+  );
 }

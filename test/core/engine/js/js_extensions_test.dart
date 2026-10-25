@@ -600,10 +600,12 @@ void main() {
       final result = runtime!.evaluate(r'''
         importClass(org.jsoup.Jsoup);
         var doc = Jsoup.parse('<div class="introduce">简介</div><div class="text-row">标签1</div><div class="text-row">标签2</div>');
-        doc.select('.introduce').text() + '|' + doc.select('.text-row:eq(0)').text();
+        doc.select('.introduce').text() + '|' + doc.select('.text-row:eq(1)').text() + '|' + doc.select('.text-row:eq(0)').size();
       ''');
 
-      expect(result.stringResult, '简介|标签1');
+      // Jsoup 的 :eq(n) 是「在兄弟元素裡排第 n 個」，不是「符合的第 n 個」：
+      // 第一個 .text-row 排第 1。
+      expect(result.stringResult, '简介|标签1|0');
     });
 
     test('Jsoup shim supports select().first().attr()', () {

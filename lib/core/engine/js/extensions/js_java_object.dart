@@ -64,6 +64,14 @@ extension JsJavaObject on JsExtensionsBase {
         if (typeof value.html === 'function' && typeof value.select === 'function') {
           return { __html: String(value.html() || '') };
         }
+        if (Object.getPrototypeOf(value) === Object.prototype &&
+            value.toString === Object.prototype.toString) {
+          var normalizedObject = {};
+          Object.keys(value).forEach(function(key) {
+            normalizedObject[key] = __lrNormalizeRuleResult(value[key]);
+          });
+          return normalizedObject;
+        }
         if (typeof value.toString === 'function') {
           var text = String(value.toString());
           if (/<[a-z][\s\S]*>/i.test(text)) {
@@ -473,8 +481,11 @@ extension JsJavaObject on JsExtensionsBase {
             sendMessage('ruleGetStringList', JSON.stringify(rule))
           );
         },
-        getElement: function(rule) { return sendMessage('ruleGetElement', JSON.stringify(rule)); },
-        getElements: function(rule) { return sendMessage('ruleGetElements', JSON.stringify(rule)); },
+        getElement: function(rule) { return __lrJsoupDecode(sendMessage('ruleGetElement', JSON.stringify(String(rule)))); },
+        getElements: function(rule) {
+          var found = __lrJsoupDecode(sendMessage('ruleGetElements', JSON.stringify(String(rule))));
+          return Array.isArray(found) ? __lrJsoupElements(found) : found;
+        },
         setContent: function(content, baseUrl) {
           sendMessage('ruleSetContent', JSON.stringify([content, baseUrl || null]));
           return null;
@@ -544,7 +555,23 @@ extension JsJavaObject on JsExtensionsBase {
       source.put = function(key, value) { sendMessage('sourcePut', JSON.stringify([key, value])); };
       source.get = function(key) { return __asyncCall('sourceGet', key); };
 
-      function importClass(clazz) { return clazz; }
+      /// Rhino 的 importClass／importPackage：把類別照名稱放進全域。
+      function importClass(clazz) {
+        if (clazz == null) return clazz;
+        var name = clazz.__lrClassName || (typeof clazz === 'function' ? clazz.name : null);
+        if (name) globalThis[name] = clazz;
+        return clazz;
+      }
+      function importPackage(pkg) {
+        for (var i = 0; i < arguments.length; i++) {
+          var current = arguments[i] || {};
+          for (var key in current) {
+            if (Object.prototype.hasOwnProperty.call(current, key)) {
+              globalThis[key] = current[key];
+            }
+          }
+        }
+      }
 
       function JavaImporter() {
         this.importPackage = function() {
@@ -894,125 +921,8 @@ extension JsJavaObject on JsExtensionsBase {
         }
       };
 
-      var Jsoup = {
-        parse: function(html) {
-          function createSelection(docRef, selector) {
-            return {
-              text: function() {
-                return sendMessage('htmlSelectText', JSON.stringify([docRef.__html, selector]));
-              },
-              html: function() {
-                return sendMessage('htmlSelectHtml', JSON.stringify([docRef.__html, selector]));
-              },
-              data: function() {
-                return sendMessage('htmlSelectData', JSON.stringify([docRef.__html, selector]));
-              },
-              attr: function(name) {
-                return sendMessage('htmlSelectAttr', JSON.stringify([docRef.__html, selector, name]));
-              },
-              attributes: function() {
-                return __lrJavaList(
-                  sendMessage(
-                    'htmlSelectAttributes',
-                    JSON.stringify([docRef.__html, selector])
-                  )
-                );
-              },
-              size: function() {
-                return Number(
-                  sendMessage('htmlSelectCount', JSON.stringify([docRef.__html, selector]))
-                ) || 0;
-              },
-              eachText: function() {
-                return __lrJavaList(
-                  sendMessage('htmlSelectTextList', JSON.stringify([docRef.__html, selector]))
-                );
-              },
-              select: function(childSelector) {
-                return createSelection(
-                  docRef,
-                  selector + ' ' + String(childSelector || '')
-                );
-              },
-              selectFirst: function(childSelector) {
-                return Jsoup.parse(
-                  sendMessage(
-                    'htmlSelectHtml',
-                    JSON.stringify([docRef.__html, selector + ' ' + childSelector + ':eq(0)'])
-                  )
-                );
-              },
-              remove: function() {
-                docRef.__html = sendMessage('htmlRemove', JSON.stringify([docRef.__html, selector]));
-                return docRef;
-              },
-              first: function() {
-                return Jsoup.parse(
-                  sendMessage('htmlSelectHtml', JSON.stringify([docRef.__html, selector + ':eq(0)']))
-                );
-              },
-              get: function(index) {
-                return Jsoup.parse(
-                  sendMessage('htmlSelectHtml', JSON.stringify([docRef.__html, selector + ':eq(' + index + ')']))
-                );
-              },
-              toArray: function() {
-                var items = [];
-                var count = this.size();
-                for (var i = 0; i < count; i++) {
-                  items.push(this.get(i));
-                }
-                return items;
-              },
-              toString: function() {
-                return this.html();
-              }
-            };
-          }
-          var doc = {
-            __html: String(html || ''),
-            select: function(selector) {
-              return createSelection(this, selector);
-            },
-            selectFirst: function(selector) {
-              return Jsoup.parse(
-                sendMessage('htmlSelectHtml', JSON.stringify([this.__html, selector + ':eq(0)']))
-              );
-            },
-            text: function() {
-              return sendMessage('htmlSelectText', JSON.stringify([this.__html, 'html']));
-            },
-            data: function() {
-              return sendMessage('htmlSelectData', JSON.stringify([this.__html, 'html']));
-            },
-            attr: function(name) {
-              return sendMessage(
-                'htmlSelectAttr',
-                JSON.stringify([this.__html, 'body > *:eq(0)', name])
-              );
-            },
-            attributes: function() {
-              return sendMessage(
-                'htmlSelectAttributes',
-                JSON.stringify([this.__html, 'body > *:eq(0)'])
-              );
-            },
-            html: function() {
-              return this.__html;
-            },
-            toString: function() {
-              return this.__html;
-            }
-          };
-          return doc;
-        }
-      };
-
-      var org = org || {};
-      org.jsoup = org.jsoup || {};
-      org.jsoup.Jsoup = Jsoup;
-
       var Packages = {
+        org: globalThis.org,
         java: {
           lang: {
             String: function(value) { return new JavaString(value); },

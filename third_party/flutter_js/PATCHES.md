@@ -78,3 +78,11 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
 - Reason: Night Reader runs book-source rules in a background isolate, which
   has no `ServicesBinding` and therefore no `rootBundle`. The root isolate
   reads the asset once and hands the text over.
+
+## Patch `nightreader.5`: QuickJS dispose releases its channels
+
+- `QuickJsRuntime2.dispose()` removes the runtime's entry from
+  `channelFunctionsRegistered`, as `JavascriptCoreRuntime` already does.
+  Upstream kept the `onMessage` handlers of every disposed runtime in that
+  static map, and with them everything the handlers captured (Night Reader's
+  extensions and the Jsoup node table of each rule engine).

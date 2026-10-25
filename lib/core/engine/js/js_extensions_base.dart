@@ -7,6 +7,7 @@ import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
+import 'jsoup/jsoup_bridge.dart';
 import 'query_ttf.dart';
 
 /// JsExtensions 的基礎狀態與共用緩存
@@ -31,6 +32,9 @@ abstract class JsExtensionsBase {
   dynamic ruleContext;
   final CookieStore cookieStore = CookieStore();
   final CacheManager cacheManager = CacheManager();
+
+  /// 交給規則 JS 的 Jsoup 節點（[JsoupBridge]）。
+  final JsoupBridge jsoup = JsoupBridge();
 
   static final Map<String, QueryTTF> ttfCache = {};
   static final Map<String, String> fontReplaceCache = {};
@@ -173,6 +177,7 @@ abstract class JsExtensionsBase {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
+    jsoup.clear();
     final pending = _pendingRuleCalls.values.toList(growable: false);
     _pendingRuleCalls.clear();
     for (final completer in pending) {
