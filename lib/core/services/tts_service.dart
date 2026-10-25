@@ -154,7 +154,18 @@ class TTSService extends ChangeNotifier {
     }
   }
 
-  /// 啟動後初始化 TTS；不得讓可選的 TTS 能力阻塞 App 首畫面。
+  /// 從偏好設定還原語速與音調，不碰朗讀引擎；開 App 時呼叫，閱讀器的朗讀
+  /// 面板與設定頁一打開就是保存的值。重複呼叫回傳同一個。
+  Future<void> restoreSavedParams() =>
+      _paramsRestored ??= _loadSavedSpeechParams().then((_) {
+        notifyListeners();
+      });
+  Future<void>? _paramsRestored;
+
+  /// 開朗讀引擎（系統通知欄的播放控制與 flutter_tts）：第一次朗讀或打開
+  /// 「朗讀與語音」設定頁時才開，開 App 時不開。這些呼叫在 Android 主執行
+  /// 緒上執行，和 Flutter 畫畫面的主執行緒是同一條；開 App 時開，會在骨架
+  /// 長出的後半段把畫面卡住約 0.2 秒（2026-10-25 在使用者的手機上量到）。
   Future<void> init() {
     if (_isInitialized) return Future<void>.value();
     final pending = _initializationFuture;
@@ -166,8 +177,7 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
-    await _loadSavedSpeechParams();
-    notifyListeners();
+    await restoreSavedParams();
     try {
       await _ensureAudioHandler();
       await _initTts();
@@ -319,6 +329,8 @@ class TTSService extends ChangeNotifier {
   Future<void> stop() async {
     await _speechCoordinator.stop(
       stop: () async {
+        // 引擎還沒開就沒有在念的東西；不為了停止去開它。
+        if (!_isInitialized) return;
         try {
           // 保留 stop() 的 platform call 契約；沒有可用 TTS engine 時，
           // 只記錄降級，不讓清理動作冒出未處理例外。

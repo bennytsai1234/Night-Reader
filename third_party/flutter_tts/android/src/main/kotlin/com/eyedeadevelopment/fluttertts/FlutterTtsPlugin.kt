@@ -71,7 +71,11 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         methodChannel!!.setMethodCallHandler(this)
         handler = Handler(Looper.getMainLooper())
         bundle = Bundle()
-        tts = TextToSpeech(context, onInitListenerWithoutCallback)
+        // Night Reader: TextToSpeech is created on the first method call
+        // (onMethodCall), not here. Created here, the engine connects about a
+        // second after launch and onInit reads the whole voice list on the
+        // main thread, which is also Flutter's UI thread, stalling the launch
+        // animation (see PATCHES.md).
     }
 
     /** Android Plugin APIs  */
@@ -80,8 +84,10 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        stop()
-        tts!!.shutdown()
+        if (tts != null) {
+            stop()
+            tts!!.shutdown()
+        }
         context = null
         methodChannel!!.setMethodCallHandler(null)
         methodChannel = null
@@ -276,6 +282,9 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     override fun onMethodCall(call: MethodCall, result: Result) {
         // If TTS is still loading
         synchronized(this@FlutterTtsPlugin) {
+            if (tts == null) {
+                tts = TextToSpeech(context, onInitListenerWithoutCallback)
+            }
             if (ttsStatus == null) {
                 // Suspend method call until the TTS engine is ready
                 val suspendedCall = Runnable { onMethodCall(call, result) }

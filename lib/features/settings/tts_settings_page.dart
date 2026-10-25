@@ -7,8 +7,20 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
-class TtsSettingsPage extends StatelessWidget {
+class TtsSettingsPage extends StatefulWidget {
   const TtsSettingsPage({super.key});
+
+  @override
+  State<TtsSettingsPage> createState() => _TtsSettingsPageState();
+}
+
+class _TtsSettingsPageState extends State<TtsSettingsPage> {
+  @override
+  void initState() {
+    super.initState();
+    // 引擎、音色清單要開了朗讀引擎才拿得到；開 App 時不開（TTSService.init）。
+    unawaited(TTSService().init());
+  }
 
   @override
   Widget build(BuildContext context) {

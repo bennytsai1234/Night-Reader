@@ -20,7 +20,14 @@
   built-in Kotlin toolchain.
 - `pubspec.yaml` adds Night Reader build metadata so dependency reports identify
   the patched package.
-- Dart and native runtime sources are unchanged from the published archive.
+- `FlutterTtsPlugin.kt` creates `TextToSpeech` on the first method call instead
+  of in `onAttachedToEngine`; `onDetachedFromEngine` skips `stop()` and
+  `shutdown()` when it was never created. Upstream creates it when the plugin is
+  registered at engine start, so the engine connects about a second after launch
+  and `onInit` reads `defaultVoice` (the whole voice list over binder) on the
+  Android main thread, which is also Flutter's UI thread. On the user's phone
+  that stalled the launch animation for about 60 ms (2026-10-25, ADR 0018).
+- Dart runtime sources are unchanged from the published archive.
 
 ## Reason and tracking
 
