@@ -12,14 +12,14 @@ import 'snapshot_sweep.dart';
 
 /// 開 App 的進場（ADR 0025）：系統啟動畫面只有底色，Flutter 第一幀也只畫
 /// 底色；開 App 的準備工作（[prepared]）做完、畫面畫完，先清掉開 App 留下
-/// 的記憶體（[_collectStartupGarbage]），再隔 [LaunchEntranceMotion.idle]，
+/// 的記憶體（[_collectGarbage]），再隔 [LaunchEntranceMotion.idle]，
 /// 整個畫面才照骨架換場（[SkeletonReveal]）的方式與時長長出骨架：書架、頁首
 /// 的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。長出時骨架
 /// 不呼吸、長到最深，長完再停 [LaunchEntranceMotion.idle] 才由左而右呼吸一口
 /// （[Skeleton] 底下的呼吸看這裡的 [LaunchEntranceMotion.breathing]）；呼吸
 /// 時底下不做事。呼完收住、停在最深，在靜止的畫面上一次準備好書架與封面，
-/// 把骨架畫面與換好的畫面各畫成一張圖，拍好再隔 [LaunchEntranceMotion.idle]
-/// 才換場：換場的 0.6 秒只把兩張圖照每個像素的橫向位置混合
+/// 把骨架畫面與換好的畫面各畫成一張圖，拍好、清掉建書架留下的記憶體，再隔
+/// [LaunchEntranceMotion.idle] 才換場：換場的 0.6 秒只把兩張圖照每個像素的橫向位置混合
 /// （[SnapshotSweep]，ADR 0031），頁首、分頁列與書架照同一條曲線由左而右
 /// 換過去。動畫在動的每一格，主執行緒都不做別的事。
 ///
@@ -141,6 +141,10 @@ class LaunchEntranceMotion {
       duration: duration,
       sweep: sweep,
       gap: idle,
+      // 換場前畫面停著時清掉建書架留下的記憶體：不清的話，換場開始後約
+      // 0.15 秒 Dart 趁兩格之間的空檔回收一次，手機上一次 12～13ms，超過
+      // 一格（120Hz 是 8.3ms），換場途中掉一格（2026-10-25 量到）。
+      settle: _collectGarbage,
       change: () {
         change();
         if (!_disposed) _revealed.value = true;
@@ -190,7 +194,9 @@ class LaunchEntranceMotion {
   }
 }
 
-/// 開 App 留下的記憶體先清掉：故意產生一批用完即丟的小物件，讓 Dart 的
+/// 趁畫面靜止時清掉記憶體，不讓回收落在接下來的動畫裡：長骨架前清開 App
+/// 留下的，書架換場前清建書架留下的（[SnapshotSweepController.play] 的
+/// settle）。故意產生一批用完即丟的小物件，讓 Dart 的
 /// 記憶體回收在還沒開始動畫時跑幾次。開 App 建好的畫面與讀進來的資料都還
 /// 在新生區，第一次回收要把它們整批搬走，最貴；不先清，這次回收會落在
 /// 呼吸開始後約 0.18 秒（呼吸每格重畫骨架會產生物件，新生區很快就滿），
@@ -201,7 +207,7 @@ class LaunchEntranceMotion {
 /// 也剛好清夠。小實驗：回收 2 次（約 17MB）時呼吸還剩一格 7～10ms，
 /// 4 次（約 50MB，電腦 debug 約 40ms）時呼吸每格都在 5ms 內。[maxBytes]
 /// 只是保險，正常不會到。
-void _collectStartupGarbage({int collections = 4, int maxBytes = 256 << 20}) {
+void _collectGarbage({int collections = 4, int maxBytes = 256 << 20}) {
   const perCheck = 16 * 1024; // 每個 4 格的 List 約 64 位元組，一次約 1MB
   final ring = List<Object?>.filled(1024, null);
   var probe = WeakReference(Object());
@@ -286,7 +292,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       // 資料回來排的那次重建：等它畫完。
       await SchedulerBinding.instance.endOfFrame;
       if (!mounted) return;
-      _collectStartupGarbage();
+      _collectGarbage();
       _timer = Timer(LaunchEntranceMotion.idle, () {
         if (mounted) _controller.forward();
       });
