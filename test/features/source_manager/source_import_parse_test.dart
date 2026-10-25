@@ -35,6 +35,24 @@ void main() {
     expect(source.enabledExplore, isFalse);
   });
 
+  test('source switches default on only when missing', () {
+    const json = '''
+[{"bookSourceName": "a", "bookSourceUrl": "https://a.test",
+  "enabled": "disabled", "enabledExplore": "", "enabledCookieJar": "1"},
+ {"bookSourceName": "b", "bookSourceUrl": "https://b.test"}]
+''';
+
+    final sources = SourceImportService(dao: _UnusedDao())
+        .parseSourcesDetailed(json)
+        .importableSources;
+
+    expect(sources[0].enabled, isFalse);
+    expect(sources[0].enabledExplore, isFalse);
+    expect(sources[0].enabledCookieJar, isTrue);
+    expect(sources[1].enabled, isTrue);
+    expect(sources[1].enabledExplore, isTrue);
+  });
+
   test('novel categories named after anime or films do not mark a novel '
       'site as non-novel', () {
     const json = '''

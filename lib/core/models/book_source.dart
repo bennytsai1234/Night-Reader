@@ -75,6 +75,11 @@ class BookSource extends BookSourceBase {
     this.ruleReview = ruleReview;
   }
 
+  /// 書源的開關沒寫時預設打開；寫了看不懂的值（例如 `"disabled"`）當成關，
+  /// 和 Legado（Gson）一樣。
+  static bool _readSwitch(dynamic value) =>
+      readJsonBool(value, fallback: value == null);
+
   factory BookSource.fromJson(Map<String, dynamic> json) {
     return BookSource(
       bookSourceUrl: json['bookSourceUrl'] ?? '',
@@ -83,10 +88,10 @@ class BookSource extends BookSourceBase {
       bookSourceType: readJsonInt(json['bookSourceType'], fallback: 0),
       bookUrlPattern: json['bookUrlPattern'],
       customOrder: readJsonInt(json['customOrder'], fallback: 0),
-      enabled: readJsonBool(json['enabled'], fallback: true),
-      enabledExplore: readJsonBool(json['enabledExplore'], fallback: true),
+      enabled: _readSwitch(json['enabled']),
+      enabledExplore: _readSwitch(json['enabledExplore']),
       jsLib: json['jsLib'],
-      enabledCookieJar: readJsonBool(json['enabledCookieJar'], fallback: true),
+      enabledCookieJar: _readSwitch(json['enabledCookieJar']),
       concurrentRate: json['concurrentRate']?.toString(),
       header: json['header'],
       loginUrl: json['loginUrl'],
