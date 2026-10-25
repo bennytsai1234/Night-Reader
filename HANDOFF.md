@@ -1,8 +1,8 @@
 # 交接（2026-10-25）
 
-## 等使用者決定
+## 進行中
 
-- 源倉庫書源的 JS 相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：七貓、紙間用 `Packages.java.*`（Rhino 才有的 Java 類別），輕小說文庫用 `cookie.getKey`，魔丸用 `data:` 網址，搬山人的正文 JS 失敗；另有幾個搜尋或目錄是空的還沒查。要不要補，等使用者決定。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑。
+- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊，包括 Rhino 才有的 Java 類別（七貓、紙間的 `Packages.java.*`）、`cookie.getKey`（輕小說文庫）、`data:` 網址（魔丸）、搬山人正文 JS、幾個搜尋或目錄是空的，以及原本 ADR 0013 不做的登入與 Cloudflare 驗證。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑。
 
 ## 先不做
 
