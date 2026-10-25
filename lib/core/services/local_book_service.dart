@@ -48,14 +48,13 @@ class LocalBookService {
 
   /// 把 [path] 複製進 App 自己的本地書資料夾，回傳複製後的路徑。
   ///
-  /// 選檔器與分享給的檔案在暫存區，系統清暫存後書就打不開。同名同大小的
+  /// 選檔器與分享給的檔案在暫存區，系統清暫存後書就打不開。同名同內容的
   /// 檔案視為同一本、不再複製；同名不同內容的另取「書名 (2)」。
   Future<String> storeInLibrary(String path) async {
     final dir = await AppStoragePaths.localBooksDir(ensureExists: true);
     if (p.equals(p.dirname(path), dir.path)) return path;
 
     final source = File(path);
-    final length = await source.length();
     final name = p.basenameWithoutExtension(path);
     final extension = p.extension(path);
     for (var copy = 1; ; copy++) {
@@ -67,7 +66,25 @@ class LocalBookService {
         await source.copy(target.path);
         return target.path;
       }
-      if (await target.length() == length) return target.path;
+      if (await _sameContent(source, target)) return target.path;
+    }
+  }
+
+  static Future<bool> _sameContent(File a, File b) async {
+    if (await a.length() != await b.length()) return false;
+    final left = await a.open();
+    final right = await b.open();
+    try {
+      const chunk = 1 << 16;
+      while (true) {
+        final x = await left.read(chunk);
+        final y = await right.read(chunk);
+        if (!listEquals(x, y)) return false;
+        if (x.isEmpty) return true;
+      }
+    } finally {
+      await left.close();
+      await right.close();
     }
   }
 

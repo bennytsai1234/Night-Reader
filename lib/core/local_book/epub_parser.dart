@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
@@ -251,7 +252,8 @@ class _Package {
     required this.spine,
     required this.toc,
     required this.coverPath,
-  }) : _spineIndex = {
+  }) : _spineIndex = {for (var i = spine.length - 1; i >= 0; i--) spine[i]: i},
+       _spineIndexIgnoringCase = {
          for (var i = spine.length - 1; i >= 0; i--) spine[i].toLowerCase(): i,
        };
 
@@ -261,8 +263,11 @@ class _Package {
   final List<_TocEntry> toc;
   final String? coverPath;
   final Map<String, int> _spineIndex;
+  final Map<String, int> _spineIndexIgnoringCase;
 
-  int? spineIndexOf(String path) => _spineIndex[path.toLowerCase()];
+  /// 先比完整路徑；目錄的大小寫寫錯時才不分大小寫找。
+  int? spineIndexOf(String path) =>
+      _spineIndex[path] ?? _spineIndexIgnoringCase[path.toLowerCase()];
 
   static _Package read(_Archive archive) {
     final container = archive.xml('META-INF/container.xml');
@@ -491,7 +496,8 @@ class _EpubText {
 
   String range(_Range range) {
     final buffer = StringBuffer();
-    final last = range.endSpine.clamp(0, _package.spine.length - 1);
+    // 結束在開始之前是空範圍（卷名和第一章指向同一個檔案），不讀。
+    final last = math.min(range.endSpine, _package.spine.length - 1);
     for (var spine = range.startSpine; spine <= last; spine++) {
       final body = _document(spine)?.body;
       if (body == null) continue;
@@ -638,6 +644,19 @@ final _xmlEncoding = RegExp(
 );
 
 String _decode(Uint8List data) {
+  // UTF-16 看 BOM，沒有 BOM 時看 `<?` 兩個字的位元組順序（XML 規格附錄 F）。
+  if (data.length >= 2) {
+    final (a, b) = (data[0], data[1]);
+    final littleEndian = (a == 0xFF && b == 0xFE) || (a == 0x3C && b == 0x00);
+    final bigEndian = (a == 0xFE && b == 0xFF) || (a == 0x00 && b == 0x3C);
+    if (littleEndian || bigEndian) {
+      final hasBom = a == 0xFF || a == 0xFE;
+      return EncodingDetect.decodeWithCharset(
+        hasBom ? Uint8List.sublistView(data, 2) : data,
+        littleEndian ? 'UTF-16LE' : 'UTF-16BE',
+      );
+    }
+  }
   final head = latin1.decode(
     data.length > 200 ? Uint8List.sublistView(data, 0, 200) : data,
   );
@@ -664,7 +683,10 @@ dom.Document _parseHtml(Uint8List data) {
   return html_parser.parse(source);
 }
 
-final _selfClosing = RegExp(r'<([A-Za-z][\w:.-]*)(\s[^<>]*?)?\s*/>');
+/// 屬性值放在引號裡，裡面可以有 `>`（`data-note="1 > 0"`）。
+final _selfClosing = RegExp(
+  r'''<([A-Za-z][\w:.-]*)((?:\s+[^\s=/>"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*/>''',
+);
 
 const _voidTags = {
   'area',

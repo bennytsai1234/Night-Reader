@@ -159,6 +159,41 @@ Map<String, Object> _coarseToc() {
   };
 }
 
+/// 閱讀順序就是 [docs] 的順序，目錄（NCX）是 [toc] 的（章名, href）。
+Map<String, Object> _simple(
+  Map<String, Object> docs,
+  List<(String, String)> toc,
+) {
+  final ids = [for (var i = 0; i < docs.length; i++) 'd$i'];
+  final hrefs = docs.keys.toList();
+  return {
+    'mimetype': 'application/epub+zip',
+    'META-INF/container.xml': _container,
+    'OEBPS/content.opf':
+        '''<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <metadata/>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    ${[for (var i = 0; i < ids.length; i++) '<item id="${ids[i]}" href="${hrefs[i]}" media-type="application/xhtml+xml"/>'].join('\n')}
+  </manifest>
+  <spine toc="ncx">${ids.map((id) => '<itemref idref="$id"/>').join()}</spine>
+</package>''',
+    'OEBPS/toc.ncx':
+        '''<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap>
+${[for (final (title, href) in toc) '<navPoint><navLabel><text>$title</text></navLabel><content src="$href"/></navPoint>'].join('\n')}
+</navMap></ncx>''',
+    for (final MapEntry(:key, :value) in docs.entries) 'OEBPS/$key': value,
+  };
+}
+
+List<int> _utf16le(String text) => [
+  0xFF,
+  0xFE,
+  for (final unit in text.codeUnits) ...[unit & 0xFF, unit >> 8],
+];
+
 class _DirPathProvider extends PathProviderPlatform {
   _DirPathProvider(this.path);
 
@@ -241,6 +276,54 @@ void main() {
     expect(info.coverExtension, '.jpg');
     expect(info.chapters.map((c) => c.title), ['第一卷', '第一章']);
     expect(texts, ['第一卷', '第一章\n正文。']);
+  });
+
+  test('卷名和第一章指向同一個檔案時，正文只出現一次', () async {
+    final (info, texts) = await convert(
+      await write(
+        'volume.epub',
+        _simple(
+          {'c1.xhtml': _xhtml('<p>甲</p>')},
+          [('第一卷', 'c1.xhtml'), ('第一章', 'c1.xhtml')],
+        ),
+      ),
+    );
+
+    expect(info.chapters.map((c) => c.title), ['第一章']);
+    expect(texts, ['甲']);
+  });
+
+  test('只差大小寫的兩個檔案各是各的', () async {
+    final (_, texts) = await convert(
+      await write(
+        'case.epub',
+        _simple(
+          {'x.xhtml': _xhtml('<p>甲</p>'), 'X.xhtml': _xhtml('<p>乙</p>')},
+          [('一', 'x.xhtml'), ('二', 'X.xhtml')],
+        ),
+      ),
+    );
+
+    expect(texts, ['甲', '乙']);
+  });
+
+  test('UTF-16 的檔案、屬性值裡有 > 的自閉標籤照樣讀出正文', () async {
+    final (_, texts) = await convert(
+      await write(
+        'utf16.epub',
+        _simple(
+          {
+            'c1.xhtml': _utf16le(
+              _xhtml('<script src="a.js" data-note="1 > 0"/><p>甲</p>')
+                  .replaceFirst('encoding="utf-8"', 'encoding="UTF-16"'),
+            ),
+          },
+          [('一', 'c1.xhtml')],
+        ),
+      ),
+    );
+
+    expect(texts, ['甲']);
   });
 
   test('沒有目錄時一個檔案一章，章名取第一個標題', () async {

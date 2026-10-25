@@ -49,7 +49,7 @@ void main() {
     expect(await File(stored).readAsString(), '第一章\n內容');
   });
 
-  test('同名同大小視為同一本，同名不同內容另取名字', () async {
+  test('同名同內容視為同一本，同名不同內容（大小一樣也算）另取名字', () async {
     final first = await LocalBookService().storeInLibrary(
       await pick('書.txt', '甲'),
     );
@@ -57,12 +57,12 @@ void main() {
       await pick('書.txt', '甲'),
     );
     final other = await LocalBookService().storeInLibrary(
-      await pick('書.txt', '乙乙'),
+      await pick('書.txt', '乙'),
     );
 
     expect(again, first);
     expect(p.basename(other), '書 (2).txt');
-    expect(await File(other).readAsString(), '乙乙');
+    expect(await File(other).readAsString(), '乙');
     expect(await LocalBookService().storeInLibrary(other), other);
   });
 }

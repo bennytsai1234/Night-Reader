@@ -31,8 +31,11 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
             extension: result.coverExtension ?? '',
           );
         }
-        await bookDao.upsert(result.book);
-        await chapterDao.insertChapters(result.chapters);
+        // 書與章節一起寫：章節寫不進去時書也不留，下面才能放心刪掉複本。
+        await bookDao.transaction(() async {
+          await bookDao.upsert(result.book);
+          await chapterDao.insertChapters(result.chapters);
+        });
         await loadBooks();
         return true;
       }
