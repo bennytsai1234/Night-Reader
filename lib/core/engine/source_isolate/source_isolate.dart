@@ -133,6 +133,10 @@ final class SourceWorker {
   int _nextTaskId = 0;
   bool _killed = false;
 
+  /// 這個 worker 借走、還沒交回的限流紀錄；結束 worker 時一併交回，否則
+  /// 固定間隔限流的書源之後的請求會一直排隊。
+  final Set<int> _tickets = {};
+
   /// 活著的 worker；主 isolate 的記憶體寫入轉送給它們。
   static final Set<SourceWorker> _live = {};
 
@@ -179,7 +183,7 @@ final class SourceWorker {
     late final SourceWorker worker;
     channel = IsolateChannel(
       await remote.future,
-      onRequest: _answerWorker,
+      onRequest: (request) => _answerWorker(worker, request),
       onNotice: (notice) => _onWorkerNotice(worker, notice),
     );
     worker = SourceWorker._(isolate, channel, inbox, errors);
@@ -230,6 +234,10 @@ final class SourceWorker {
     _killed = true;
     _live.remove(this);
     if (_live.isEmpty) _uninstallMainMirrors();
+    for (final ticket in _tickets) {
+      ConcurrentRateLimiter.release(_rateTickets.remove(ticket));
+    }
+    _tickets.clear();
     _channel.close(error);
     _isolate.kill(priority: Isolate.immediate);
     _inbox.close();
@@ -277,7 +285,10 @@ final class SourceWorker {
 
   // ── 主 isolate 替 worker 做的事 ────────────────────────────────────
 
-  static Future<Object?> _answerWorker(Object request) async {
+  static Future<Object?> _answerWorker(
+    SourceWorker from,
+    Object request,
+  ) async {
     switch (request) {
       case final _RenderHtml render:
         return HeadlessWebViewService().getRenderedHtml(
@@ -291,6 +302,9 @@ final class SourceWorker {
         return webView.getStrResponse();
       case _Clearance(:final uri):
         return CloudflareClearance.clear(uri);
+      case _ClearanceRejected(:final uri):
+        await CloudflareClearance.markRejected(uri);
+        return null;
       case _CookieJarLoad(:final uri):
         return NetworkService().cookieJar.loadForRequest(uri);
       case _CookieJarSave(:final uri, :final cookies):
@@ -306,8 +320,14 @@ final class SourceWorker {
         return null;
       case _RateAcquire(:final key, :final concurrentRate):
         final record = await ConcurrentRateLimiter.acquire(key, concurrentRate);
+        if (from._killed) {
+          // 排隊時 worker 已經結束，沒有人會交回。
+          ConcurrentRateLimiter.release(record);
+          throw StateError('書源 worker 已結束');
+        }
         final ticket = _nextRateTicket++;
         _rateTickets[ticket] = record;
+        from._tickets.add(ticket);
         return ticket;
     }
     throw UnsupportedError('Unknown source worker request: $request');
@@ -325,6 +345,7 @@ final class SourceWorker {
           toast: toast,
         );
       case _RateRelease(:final ticket):
+        from._tickets.remove(ticket);
         ConcurrentRateLimiter.release(_rateTickets.remove(ticket));
       case _CacheWrite(:final key, :final value, :final deadline):
         CacheManager().applyMirroredWrite(key, value, deadline);
@@ -468,6 +489,8 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
       (await channel.request(request) as Map).cast<String, dynamic>();
   CloudflareClearance.delegate = (uri) async =>
       await channel.request(_Clearance(uri)) as ClearanceResult;
+  CloudflareClearance.rejectedDelegate = (uri) =>
+      channel.request(_ClearanceRejected(uri));
   WebViewUserAgent.value = init.webViewUserAgent;
   ConcurrentRateLimiter.delegate = _MainRateLimits(channel);
   CacheManager.onMemoryWrite = (key, value, deadline) =>
@@ -591,6 +614,12 @@ final class _RenderHtml {
 
 final class _Clearance {
   const _Clearance(this.uri);
+
+  final Uri uri;
+}
+
+final class _ClearanceRejected {
+  const _ClearanceRejected(this.uri);
 
   final Uri uri;
 }

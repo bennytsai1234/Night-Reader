@@ -108,8 +108,10 @@ abstract final class CloudflareClearance {
   /// 主 isolate 的瀏覽器（App 啟動時設定）；測試換成假的。
   static CloudflareSolver? solver;
 
-  /// worker isolate 設定：交給主 isolate 做。
+  /// worker isolate 設定：交給主 isolate 做，閱讀與各個校驗共用同一份
+  /// 紀錄。
   static Future<ClearanceResult> Function(Uri uri)? delegate;
+  static Future<void> Function(Uri uri)? rejectedDelegate;
 
   /// 通不過的網站多久之內不再試。一次檢查最多要等半分鐘，閱讀、下載與搜尋
   /// 會對同一個網站連發好幾十個請求；十分鐘內網站的判定通常不會變，過了
@@ -157,6 +159,17 @@ abstract final class CloudflareClearance {
       // 移除的就是這一次自己，不能等它。
       _inFlight.remove(host)?.ignore();
     }
+  }
+
+  /// 瀏覽器通過了，帶著通行 Cookie 重送卻還是被擋（網站不接受夜讀的請求）：
+  /// 和通不過一樣記下來。
+  static Future<void> markRejected(Uri uri) async {
+    final delegate = rejectedDelegate;
+    if (delegate != null) return delegate(uri);
+    _recentFailures[uri.host] = (
+      DateTime.now(),
+      const ClearanceResult.failed(),
+    );
   }
 
   /// 測試用：忘掉進行中與記下的結果。

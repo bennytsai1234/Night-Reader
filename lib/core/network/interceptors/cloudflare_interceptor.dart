@@ -51,7 +51,9 @@ class CloudflareInterceptor extends Interceptor {
         handler.next(_wrap(err, SiteBlockedException()));
       case BlockedPage.challenge:
         if (err.requestOptions.extra[_retriedKey] == true) {
-          // 通過了檢查，重送還是被擋：通行 Cookie 沒被網站接受。
+          // 通過了檢查，重送還是被擋：通行 Cookie 沒被網站接受。記下來，
+          // 下一章不必再開瀏覽器等一次。
+          await CloudflareClearance.markRejected(err.requestOptions.uri);
           handler.next(_wrap(err, ChallengeNotPassedException()));
           return;
         }
@@ -143,15 +145,22 @@ class CloudflareInterceptor extends Interceptor {
     }
   }
 
-  static List<Cookie> _parseCookies(String cookies) => cookies
-      .split(';')
-      .map((pair) => pair.trim())
-      .where((pair) => pair.contains('='))
-      .map(
-        (pair) => parseSetCookieValueLenient(pair, ignoreInvalidCookies: true),
-      )
-      .whereType<Cookie>()
-      .toList();
+  /// 瀏覽器只交出 `名稱=值`，沒有路徑；不指定的話 Cookie 檔會照觸發檢查
+  /// 的網址目錄（例如 `/book/`）存，換到 `/search` 就拿不到。Cloudflare 的
+  /// Cookie 都對整個網站（`/`）有效，只存這些；網站自己的 Cookie 照舊由
+  /// 回應的 Set-Cookie 存。
+  static List<Cookie> _parseCookies(String cookies) => [
+    for (final pair in cookies.split(';'))
+      if (parseSetCookieValueLenient(pair.trim(), ignoreInvalidCookies: true)
+          case final cookie? when _isCloudflareCookie(cookie.name))
+        cookie..path = '/',
+  ];
+
+  static bool _isCloudflareCookie(String name) =>
+      name == 'cf_clearance' ||
+      name == '_cfuvid' ||
+      name.startsWith('__cf') ||
+      name.startsWith('cf_chl');
 
   static String _mergeCookieHeader(
     Map<String, dynamic> headers,

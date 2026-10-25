@@ -161,7 +161,10 @@ JSON.stringify({
 
 /// 把 [WebViewCloudflareSolver] 正在用的瀏覽器接到畫面上，但看不到、也
 /// 點不到：瀏覽器要接在畫面上，網頁的計時器與動畫幀才照常跑，Cloudflare
-/// 的檢查程式才會跑完。沒有在檢查時不加任何東西。
+/// 的檢查程式才會跑完。
+///
+/// [child]（整個 App 的頁面）一直在同一個位置，瀏覽器出現與收起只改上面
+/// 那一層，頁面不會因此重建（ADR 0029）。
 class HiddenWebViews extends StatelessWidget {
   const HiddenWebViews({super.key, required this.child});
 
@@ -169,34 +172,36 @@ class HiddenWebViews extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<WebViewController>>(
-      valueListenable: WebViewCloudflareSolver.attached,
-      child: child,
-      builder: (context, controllers, child) {
-        if (controllers.isEmpty) return child!;
-        return Stack(
-          textDirection: TextDirection.ltr,
-          children: [
-            child!,
-            for (final controller in controllers)
-              Positioned(
-                left: 0,
-                top: 0,
-                // 手機直式的大小，網頁照一般手機排版。
-                width: 400,
-                height: 800,
-                child: IgnorePointer(
-                  child: ExcludeSemantics(
-                    child: Opacity(
-                      opacity: 0,
-                      child: WebViewWidget(controller: controller),
+    return Stack(
+      textDirection: TextDirection.ltr,
+      fit: StackFit.expand,
+      children: [
+        child,
+        IgnorePointer(
+          child: ExcludeSemantics(
+            child: ValueListenableBuilder<List<WebViewController>>(
+              valueListenable: WebViewCloudflareSolver.attached,
+              builder: (context, controllers, _) => Stack(
+                textDirection: TextDirection.ltr,
+                children: [
+                  for (final controller in controllers)
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      // 手機直式的大小，網頁照一般手機排版。
+                      width: 400,
+                      height: 800,
+                      child: Opacity(
+                        opacity: 0,
+                        child: WebViewWidget(controller: controller),
+                      ),
                     ),
-                  ),
-                ),
+                ],
               ),
-          ],
-        );
-      },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

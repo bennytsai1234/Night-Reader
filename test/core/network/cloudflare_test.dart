@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -12,8 +13,10 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _MinimalServicesBinding extends BindingBase
@@ -48,6 +51,12 @@ class _FakeSolver implements CloudflareSolver {
   }
 }
 
+/// 在 worker 裡借一個固定間隔限流的名額，然後一直不做完。
+Future<void> Function(CancelToken) _holdRateSlot(String key) =>
+    (_) => ConcurrentRateLimiter(
+      BookSource(bookSourceUrl: key, concurrentRate: '10'),
+    ).withLimit(() => Completer<void>().future);
+
 /// 在 worker 裡抓網頁；只捕捉網址（`CODING_STANDARDS.md`）。
 Future<String> Function(CancelToken) _fetchTask(String url) =>
     (_) async => (await NetworkService().dio.get<String>(url)).data ?? '';
@@ -70,6 +79,11 @@ void main() {
       switch (request.uri.path) {
         // 像 Cloudflare 保護的網站：要通行 Cookie，而且瀏覽器標識要和通過
         // 檢查的瀏覽器一樣。
+        // 網站不接受夜讀的請求：通過檢查也一樣被擋。
+        case '/always-challenged':
+          response.statusCode = HttpStatus.forbidden;
+          response.headers.set('cf-mitigated', 'challenge');
+          response.write('<script>window._cf_chl_opt={};</script>');
         case final path when path.startsWith('/protected'):
           if (cookie.contains('cf_clearance=ok') &&
               userAgent == _webViewUserAgent) {
@@ -123,6 +137,30 @@ void main() {
     // 之後的請求自動帶通行 Cookie 與瀏覽器標識，不再檢查。
     final next = await NetworkService().dio.get<String>('$baseUrl/protected/2');
     expect(next.data, '<p>正文</p>');
+    expect(solver.calls, 1);
+  });
+
+  test('the clearance covers the whole site, not just the page that was '
+      'checked', () async {
+    await NetworkService().dio.get<String>('$baseUrl/protected/book/1');
+    final search = await NetworkService().dio.get<String>(
+      '$baseUrl/protected/search',
+    );
+
+    expect(search.data, '<p>正文</p>');
+    expect(solver.calls, 1);
+  });
+
+  test('a site that still blocks after the check is not checked again for '
+      'a while', () async {
+    for (var i = 0; i < 2; i++) {
+      try {
+        await NetworkService().dio.get<String>('$baseUrl/always-challenged');
+        fail('should stay blocked');
+      } on DioException catch (e) {
+        expect(e.error, isA<ChallengeNotPassedException>());
+      }
+    }
     expect(solver.calls, 1);
   });
 
@@ -208,6 +246,24 @@ void main() {
       await db.close();
       await databaseIsolate.shutdownAll();
       await GetIt.instance.reset();
+    });
+
+    test('a killed worker gives back the rate slots it held', () async {
+      const key = 'https://rate-limited.example';
+      final held = await SourceWorker.spawn(
+        debugName: 'RateHolder',
+        withDictionaries: false,
+        database: Future.value(databaseIsolate),
+      );
+      unawaited(held.run(_holdRateSlot(key)).catchError((_) {}));
+      // 等 worker 借到名額。
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      held.kill(StateError('timed out'));
+
+      final next = await ConcurrentRateLimiter(
+        BookSource(bookSourceUrl: key, concurrentRate: '10'),
+      ).withLimit(() async => 'ok').timeout(const Duration(seconds: 2));
+      expect(next, 'ok');
     });
 
     test('the check is passed by the main isolate and its cookies are '

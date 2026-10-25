@@ -792,10 +792,10 @@ class SourceChecker {
     // 截掉它。標記後帶回主線程，由主線程過濾寫進崩潰日誌。
     _log('§DIAG§ [$stage] $error');
 
-    // 網站要真人勾選或封鎖了目前的網路（CloudflareInterceptor）：夜讀不替
-    // 使用者勾選，當成暫時不能用的書源，換網路或網站改設定後再校驗就會恢復。
-    if (normalized.contains(HumanVerificationRequiredException().message) ||
-        normalized.contains(SiteBlockedException().message)) {
+    // 網站要真人勾選、封鎖了目前的網路或瀏覽器檢查沒過（CloudflareInterceptor）：
+    // 夜讀不替使用者勾選，當成暫時不能用的書源，換網路或網站改設定後再校驗
+    // 就會恢復。
+    if (_blockedBySite(error, normalized)) {
       return _IssueData(
         stage: 'upstream',
         message: message,
@@ -1415,6 +1415,22 @@ String _stageLabel(String stage) {
     default:
       return stage;
   }
+}
+
+/// 網站擋下了夜讀（`CloudflareInterceptor` 判斷的那幾種）。先看錯誤本身的
+/// 種類；包進解析錯誤後只剩文字時，比對它們的訊息。
+bool _blockedBySite(Object error, String normalized) {
+  final inner = error is DioException ? error.error : error;
+  if (inner is HumanVerificationRequiredException ||
+      inner is SiteBlockedException ||
+      inner is ChallengeNotPassedException) {
+    return true;
+  }
+  return [
+    HumanVerificationRequiredException().message,
+    SiteBlockedException().message,
+    ChallengeNotPassedException().message,
+  ].any(normalized.contains);
 }
 
 String _compactMessage(String input) {
