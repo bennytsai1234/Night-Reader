@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'encode/encode_utils_base.dart';
 import 'encode/encode_utils_hash.dart';
 import 'encode/encode_utils_base64.dart';
-import 'encode/encode_utils_crypto.dart';
 
+export 'encode/charsets.dart';
 export 'encode/encode_utils_base.dart';
 export 'encode/encode_utils_hash.dart';
 export 'encode/encode_utils_base64.dart';
@@ -44,25 +44,6 @@ class JsEncodeUtils extends EncodeUtilsBase {
   /// 字串轉十六進位
   static String hexEncodeToString(String str) =>
       EncodeUtilsBase64.hexEncodeToString(str);
-
-  /// 對稱加密/解密
-  static dynamic symmetricCrypto(
-    String action,
-    String transformation,
-    dynamic key,
-    dynamic iv,
-    dynamic data, {
-    String outputFormat = 'base64',
-    String charset = 'UTF-8',
-  }) => EncodeUtilsCrypto.symmetricCrypto(
-    action,
-    transformation,
-    key,
-    iv,
-    data,
-    outputFormat: outputFormat,
-    charset: charset,
-  );
 
   // === HMAC ===
   static String hmacHex(String data, String algorithm, String key) =>

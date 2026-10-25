@@ -125,6 +125,94 @@ void main() {
     );
   });
 
+  test('feedback sizes Java rejects are rejected instead of looping', () {
+    for (final mode in ['CFB0', 'CFB9', 'OFB4', 'CBC8', 'CFB136']) {
+      expect(
+        () => _encrypt('AES/$mode/NoPadding', iv: _iv16),
+        throwsA(isA<UnsupportedError>()),
+        reason: mode,
+      );
+    }
+  });
+
+  test('modes that need an IV refuse to decrypt without one', () {
+    expect(
+      () => _decrypt('AES/CBC/PKCS5Padding', 'nRmiA4tZ9RKopqLxKpPmO18B'),
+      throwsA(predicate((Object e) => e.toString().contains('需要 IV'))),
+    );
+  });
+
+  test('GCM honours a 96-bit tag', () {
+    // Python cryptography：完整標籤取前 12 個位元組。
+    const expected = 'L3GBPnOASdSnZOZ+Yl8+';
+    String run(String action, Object data) => EncodeUtilsCrypto.symmetricCrypto(
+      action,
+      'AES/GCM/NoPadding',
+      _key16,
+      _iv16.substring(0, 12),
+      data,
+      outputFormat: action == 'encrypt' ? 'base64' : 'string',
+      tagBits: 96,
+    ) as String;
+    expect(run('encrypt', 'abc'), expected);
+    expect(run('decrypt', expected), 'abc');
+  });
+
+  test('text is converted with the given charset', () {
+    expect(
+      EncodeUtilsCrypto.symmetricCrypto(
+        'encrypt',
+        'AES/CBC/PKCS5Padding',
+        _key16,
+        _iv16,
+        '中文',
+        outputFormat: 'hex',
+        charset: 'GBK',
+      ),
+      'bfec277b493795b146ab5a09604a44c0',
+    );
+    final encrypted = EncodeUtilsCrypto.symmetricCrypto(
+      'encrypt',
+      'AES/ECB/PKCS5Padding',
+      _key16,
+      null,
+      [65, 0, 66, 0],
+    );
+    expect(
+      EncodeUtilsCrypto.symmetricCrypto(
+        'decrypt',
+        'AES/ECB/PKCS5Padding',
+        _key16,
+        null,
+        encrypted,
+        outputFormat: 'string',
+        charset: 'UTF-16LE',
+      ),
+      'AB',
+    );
+  });
+
+  test('broken ISO paddings are rejected', () {
+    // 先不填充地加密，再當成某種填充解密：尾巴不合規定就要丟錯。
+    String rawEncrypt(List<int> block) => EncodeUtilsCrypto.symmetricCrypto(
+      'encrypt',
+      'AES/ECB/NoPadding',
+      _key16,
+      null,
+      block,
+    ) as String;
+    final iso7816 = rawEncrypt([65, 0x80, ...List.filled(14, 7)]);
+    expect(
+      () => _decrypt('AES/ECB/ISO7816-4Padding', iso7816),
+      throwsA(predicate((Object e) => e.toString().contains('填充不對'))),
+    );
+    final iso10126 = rawEncrypt([...List.filled(31, 1), 17]);
+    expect(
+      () => _decrypt('AES/ECB/ISO10126Padding', iso10126),
+      throwsA(predicate((Object e) => e.toString().contains('填充不對'))),
+    );
+  });
+
   test('digests and HMAC accept Java names', () {
     expect(
       EncodeUtilsHash.digest(_plain, 'SHA-512'),
