@@ -52,6 +52,7 @@ class JsEncodeUtils extends EncodeUtilsBase {
     dynamic iv,
     dynamic data, {
     String outputFormat = 'base64',
+    String charset = 'UTF-8',
   }) => EncodeUtilsCrypto.symmetricCrypto(
     action,
     transformation,
@@ -59,37 +60,7 @@ class JsEncodeUtils extends EncodeUtilsBase {
     iv,
     data,
     outputFormat: outputFormat,
-  );
-
-  // === AES Variants ===
-  static dynamic aesEncode(
-    String data,
-    String key,
-    String transformation,
-    String iv, {
-    String format = 'base64',
-  }) => symmetricCrypto(
-    'encrypt',
-    transformation,
-    key,
-    iv,
-    data,
-    outputFormat: format,
-  );
-
-  static dynamic aesDecode(
-    String data,
-    String key,
-    String transformation,
-    String iv, {
-    String format = 'string',
-  }) => symmetricCrypto(
-    'decrypt',
-    transformation,
-    key,
-    iv,
-    data,
-    outputFormat: format,
+    charset: charset,
   );
 
   // === HMAC ===

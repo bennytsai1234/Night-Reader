@@ -18,15 +18,22 @@ extension JsCryptoExtensions on JsExtensions {
       final iv = payload[3];
       final data = payload[4];
       final outputFormat = payload[5].toString();
+      final charset = payload.length > 6 && payload[6] != null
+          ? payload[6].toString()
+          : 'UTF-8';
 
-      return JsEncodeUtils.symmetricCrypto(
+      final result = JsEncodeUtils.symmetricCrypto(
         action,
         transformation,
         key,
         iv,
         data,
         outputFormat: outputFormat,
+        charset: charset,
       );
+      // 位元組陣列直接傳回 JS 會變成空陣列，和其他傳位元組的橋接一樣改傳
+      // JSON，由 JS 端的 normalizeByteArray 轉回陣列。
+      return result is List<int> ? jsonEncode(result.toList()) : result;
     });
 
     // 注入輔助函式
@@ -61,25 +68,13 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
-    runtime.onMessage('_desEncodeToBase64String', (dynamic args) {
+    runtime.onMessage('_hmacBase64', (dynamic args) {
       final payload = _decodeArgs(args);
-      if (payload is List && payload.length >= 2) {
-        final data = payload[0];
-        final key = payload[1];
-        final transformation =
-            payload.length > 2 &&
-                payload[2] != null &&
-                payload[2].toString().isNotEmpty
-            ? payload[2].toString()
-            : 'DES/ECB/PKCS5Padding';
-        final iv = payload.length > 3 ? payload[3] : null;
-        return JsEncodeUtils.symmetricCrypto(
-          'encrypt',
-          transformation,
-          key,
-          iv,
-          data,
-          outputFormat: 'base64',
+      if (payload is List && payload.length >= 3) {
+        return EncodeUtilsHash.hmacBase64(
+          payload[0].toString(),
+          payload[1].toString(),
+          payload[2].toString(),
         );
       }
       return '';
@@ -110,6 +105,10 @@ extension JsCryptoExtensions on JsExtensions {
     runtime.onMessage(
       '_hexDecode',
       (dynamic args) => utf8.decode(hex.decode(args.toString())),
+    );
+    runtime.onMessage(
+      '_hexDecodeToBytes',
+      (dynamic args) => jsonEncode(hex.decode(_decodeArgs(args).toString())),
     );
     runtime.onMessage('_randomUUID', (dynamic args) => const Uuid().v4());
     runtime.onMessage('_gunzipBytes', (dynamic args) {

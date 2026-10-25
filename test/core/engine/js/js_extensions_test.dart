@@ -50,6 +50,99 @@ void main() {
       runtime?.dispose();
     });
 
+    test('legacy crypto helpers and javax.crypto.Cipher match Legado', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      String eval(String code) {
+        final result = runtime!.evaluate(code);
+        expect(result.isError, isFalse, reason: result.stringResult);
+        return result.stringResult;
+      }
+
+      // 對照答案由 Python cryptography（OpenSSL）算出。
+      const cbc =
+          'nRmiA4tZ9RKopqLxKpPmO18Bciqi8K22kaHQ23wdE9KeHjBn8HnHegQ5vh6k7lT4';
+      const plain = '夜讀 Night Reader 第一章：山雨欲來';
+      expect(
+        eval(
+          "java.aesEncodeToBase64String('$plain', '0123456789abcdef', "
+          "'AES/CBC/PKCS5Padding', 'fedcba9876543210')",
+        ),
+        cbc,
+      );
+      expect(
+        eval(
+          "java.aesBase64DecodeToString('$cbc', '0123456789abcdef', "
+          "'AES/CBC/PKCS5Padding', 'fedcba9876543210')",
+        ),
+        plain,
+      );
+      // Legado 的 aesEncodeToString 其實是解密。
+      expect(
+        eval(
+          "java.aesEncodeToString('$cbc', '0123456789abcdef', "
+          "'AES/CBC/PKCS5Padding', 'fedcba9876543210')",
+        ),
+        plain,
+      );
+      expect(
+        eval(
+          "java.tripleDESEncodeBase64Str('$plain', 'OW84U8Eerdb99rtsTXWSILDO', "
+          "'CBC', 'PKCS5Padding', 'SK8bncVu')",
+        ),
+        'AWZH676WJU1IwCwkL1g3Lngc/0+N94zXR9LT2zIDrLv+I3lqvuaWfbwYsT8kIj36',
+      );
+      expect(
+        eval(
+          "String(java.HMacBase64('$plain', 'HmacSHA1', '0123456789abcdef'))",
+        ),
+        'RcIthmJ4naPxIEkdIjawBlLrfws=',
+      );
+
+      // 豆瓣閱讀的正文解密：金鑰是 cookie 的 SHA-256（十六進位轉成位元組），
+      // IV 從密文尾巴切出來，對位元組陣列解密。
+      expect(
+        eval('''
+          (function() {
+            var t = '9TERedZ1x3kgj4SvkOcZ2TVt964UiyNqg/fpvE3c7cIxBXJ/jy6NBFXoUpbySOhPMDEyMzQ1Njc4OWFiY2RlZlRUVFRUVFRUVFRUVFQ=';
+            var decodedBytes = java.base64DecodeToByteArray(t);
+            var ivStart = decodedBytes.length - 16 - 13;
+            var cipher = java.createSymmetricCrypto('AES/CBC/PKCS5Padding',
+              java.hexDecodeToByteArray(java.digestHex('bid=abc123', 'SHA-256')),
+              decodedBytes.slice(ivStart, ivStart + 16));
+            var text = cipher.decryptStr(decodedBytes.slice(0, ivStart));
+            return JSON.parse(text).posts[0].contents;
+          })()
+        '''),
+        '第一章 正文',
+      );
+
+      // 零點文學的寫法：Cipher 加密後交給 Base64.getEncoder()。
+      expect(
+        eval('''
+          (function() {
+            var Cipher = Packages.javax.crypto.Cipher;
+            var JString = Packages.java.lang.String;
+            var key = new Packages.javax.crypto.spec.SecretKeySpec(
+              new JString('0123456789abcdef').getBytes('UTF-8'), 'AES');
+            var iv = new Packages.javax.crypto.spec.IvParameterSpec(
+              new JString('fedcba9876543210').getBytes('UTF-8'));
+            var cipher = Cipher.getInstance('AES/CBC/PKCS5Padding');
+            cipher.init(Cipher.ENCRYPT_MODE, key, iv);
+            var bytes = cipher.doFinal(new JString('$plain').getBytes('UTF-8'));
+            var encoded = java.base64Encode(bytes);
+            cipher.init(Cipher.DECRYPT_MODE, key, iv);
+            var back = cipher.doFinal(java.base64DecodeToByteArray(encoded));
+            return encoded + '|' + String(new JString(back));
+          })()
+        '''),
+        '$cbc|$plain',
+      );
+    }, skip: quickJsSkip);
+
     test('java bridge exposes missing helper methods', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
