@@ -154,18 +154,21 @@ class TTSService extends ChangeNotifier {
     }
   }
 
-  /// 從偏好設定還原語速與音調，不碰朗讀引擎；開 App 時呼叫，閱讀器的朗讀
-  /// 面板與設定頁一打開就是保存的值。重複呼叫回傳同一個。
-  Future<void> restoreSavedParams() =>
-      _paramsRestored ??= _loadSavedSpeechParams().then((_) {
-        notifyListeners();
-      });
-  Future<void>? _paramsRestored;
+  /// 開 App 的進場在底色時等這個（`LaunchEntrance.prepared`）：朗讀引擎開
+  /// 好、設定套完，最多等 [launchWait]。開引擎的呼叫在 Android 主執行緒上
+  /// 執行，和 Flutter 畫畫面的主執行緒是同一條；系統的朗讀服務連上後還會在
+  /// 這條執行緒讀整份音色清單。不等的話，這些工作落在骨架長出的後半段，
+  /// 畫面停約 0.2 秒（2026-10-25 在使用者的手機上量到）；等第一次朗讀或打開
+  /// 設定頁才開，就變成之後某個隨機的時間點頓一下。
+  Future<void> ready() => init().timeout(launchWait, onTimeout: () {});
 
-  /// 開朗讀引擎（系統通知欄的播放控制與 flutter_tts）：第一次朗讀或打開
-  /// 「朗讀與語音」設定頁時才開，開 App 時不開。這些呼叫在 Android 主執行
-  /// 緒上執行，和 Flutter 畫畫面的主執行緒是同一條；開 App 時開，會在骨架
-  /// 長出的後半段把畫面卡住約 0.2 秒（2026-10-25 在使用者的手機上量到）。
+  /// 開 App 最多等朗讀引擎多久：使用者的手機上從開始連線到系統回應約 1.1
+  /// 秒，留一倍餘裕。沒有朗讀引擎或系統一直不回應的手機，超過就照常進場，
+  /// 引擎之後自己開好。
+  static const Duration launchWait = Duration(seconds: 2);
+
+  /// 開朗讀引擎（系統通知欄的播放控制與 flutter_tts）。開 App 時就開始
+  /// （`configureDependencies`），進場等它（[ready]）。
   Future<void> init() {
     if (_isInitialized) return Future<void>.value();
     final pending = _initializationFuture;
@@ -177,11 +180,14 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
-    await restoreSavedParams();
+    await _loadSavedSpeechParams();
+    notifyListeners();
     try {
       await _ensureAudioHandler();
       await _initTts();
       _isInitialized = true;
+      // 引擎、音色清單與保存的選擇都載好了：設定頁跟著更新。
+      notifyListeners();
     } catch (e, stackTrace) {
       // Android 沒有可用 TTS engine 或 platform channel 異常時，
       // 朗讀功能降級，但書架與閱讀器仍可正常啟動。

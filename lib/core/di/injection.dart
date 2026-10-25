@@ -59,7 +59,7 @@ Future<void> configureDependencies() async {
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
 
-  // 4. 初始化啟動所需服務。朗讀引擎不在這裡開（[TTSService.init]）。
+  // 4. 初始化啟動所需服務。
   await Future.wait([
     CrashHandler.init(),
     getIt<NetworkService>().init(),
@@ -70,7 +70,9 @@ Future<void> configureDependencies() async {
   // [SourceIsolate.enabled]）；不等它開好，第一個書源工作才會等。
   SourceIsolate.start();
 
-  unawaited(getIt<TTSService>().restoreSavedParams());
+  // 朗讀引擎現在就開始開，和讀書架、載字典同時進行；開 App 的進場在底色
+  // 時等它開好（[TTSService.ready]）。
+  unawaited(getIt<TTSService>().init());
 }
 
 /// 註冊資料庫與所有 DAO。主 isolate 與書源 isolate（連到同一個資料庫）共用。
