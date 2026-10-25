@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:html/parser.dart' as html_parser;
-import 'package:fast_gbk/fast_gbk.dart';
 
+import '../encode/charsets.dart';
 import '../js_extensions.dart';
 
 import 'package:night_reader/core/services/chinese_utils.dart';
@@ -104,35 +104,27 @@ extension JsStringExtensions on JsExtensions {
 
     // 實作 java.strToBytes
     runtime.onMessage('strToBytes', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       final str = payload is List && payload.isNotEmpty
           ? payload[0].toString()
           : payload.toString();
       final charset = payload is List && payload.length > 1
-          ? payload[1].toString()
-          : 'UTF-8';
-      if (charset.toUpperCase().contains('GBK') ||
-          charset.toUpperCase().contains('GB2312')) {
-        return jsonEncode(gbk.encode(str));
-      }
-      return jsonEncode(utf8.encode(str));
+          ? payload[1]?.toString()
+          : null;
+      return jsonEncode(Charsets.encode(str, charset).toList());
     });
 
     // 實作 java.bytesToStr
     runtime.onMessage('bytesToStr', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       final bytesSource = payload is List && payload.isNotEmpty
           ? payload[0]
           : payload;
       final bytes = List<int>.from(bytesSource as List);
       final charset = payload is List && payload.length > 1
-          ? payload[1].toString()
-          : 'UTF-8';
-      if (charset.toUpperCase().contains('GBK') ||
-          charset.toUpperCase().contains('GB2312')) {
-        return gbk.decode(bytes);
-      }
-      return utf8.decode(bytes);
+          ? payload[1]?.toString()
+          : null;
+      return Charsets.decode(bytes, charset);
     });
 
     runtime.onMessage('_timeFormat', (dynamic args) {
@@ -166,17 +158,6 @@ extension JsStringExtensions on JsExtensions {
       }
       return s;
     });
-  }
-
-  dynamic _decodeArgs(dynamic args) {
-    if (args is String) {
-      try {
-        return jsonDecode(args);
-      } catch (_) {
-        return args;
-      }
-    }
-    return args;
   }
 
   /// 中文數字轉整數 (深度還原 Android chineseNumToInt)

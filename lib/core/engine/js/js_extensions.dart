@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -56,7 +55,7 @@ class JsExtensions extends JsExtensionsBase {
   void _injectCoreHandlers() {
     // ─── 純同步 (sharedScope / log / toast) ─────────────────────
     runtime.onMessage('scopePut', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         final key = payload[0].toString();
         final value = payload[1];
@@ -79,7 +78,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
     runtime.onMessage('scopeGet', (args) {
-      final key = _decodeSyncArgs(args).toString();
+      final key = args.toString();
       if (ruleContext != null) {
         try {
           final value = ruleContext.get(key);
@@ -99,7 +98,7 @@ class JsExtensions extends JsExtensionsBase {
       return value == null ? '' : value.toString();
     });
     runtime.onMessage('ruleGetString', (args) {
-      final rule = _decodeSyncArgs(args).toString();
+      final rule = args.toString();
       if (ruleContext != null) {
         try {
           return ruleContext.getString(rule);
@@ -108,7 +107,7 @@ class JsExtensions extends JsExtensionsBase {
       return '';
     });
     runtime.onMessage('ruleGetStringList', (args) {
-      final rule = _decodeSyncArgs(args).toString();
+      final rule = args.toString();
       if (ruleContext != null) {
         try {
           return ruleContext.getStringList(rule);
@@ -117,7 +116,7 @@ class JsExtensions extends JsExtensionsBase {
       return const <String>[];
     });
     runtime.onMessage('ruleGetElement', (args) {
-      final rule = _decodeSyncArgs(args).toString();
+      final rule = args.toString();
       if (ruleContext != null) {
         try {
           return _toJsRuleValue(ruleContext.getElement(rule));
@@ -126,7 +125,7 @@ class JsExtensions extends JsExtensionsBase {
       return '';
     });
     runtime.onMessage('ruleGetElements', (args) {
-      final rule = _decodeSyncArgs(args).toString();
+      final rule = args.toString();
       if (ruleContext != null) {
         try {
           final values = ruleContext.getElements(rule);
@@ -136,7 +135,7 @@ class JsExtensions extends JsExtensionsBase {
       return const <dynamic>[];
     });
     runtime.onMessage('ruleSetContent', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.isNotEmpty && ruleContext != null) {
         try {
           final nextBaseUrl = payload.length > 1
@@ -149,28 +148,28 @@ class JsExtensions extends JsExtensionsBase {
     });
     runtime.onMessage('log', (args) {
       debugPrint('JS_LOG: ${_compactJsBridgeLog(args)}');
-      return _decodeSyncArgs(args);
+      return args;
     });
     runtime.onMessage('toast', (args) {
       debugPrint('JS_TOAST: ${_compactJsBridgeLog(args)}');
       return null;
     });
     runtime.onMessage('htmlSelectText', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _selectHtmlText(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
     runtime.onMessage('htmlSelectHtml', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _selectHtmlHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
     runtime.onMessage('htmlSelectAttr', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 3) {
         return _selectHtmlAttr(
           payload[0].toString(),
@@ -181,14 +180,14 @@ class JsExtensions extends JsExtensionsBase {
       return '';
     });
     runtime.onMessage('htmlSelectData', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _selectHtmlData(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
     runtime.onMessage('htmlSelectAttributes', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _selectHtmlAttributes(
           payload[0].toString(),
@@ -198,7 +197,7 @@ class JsExtensions extends JsExtensionsBase {
       return const <String>[];
     });
     runtime.onMessage('htmlSelectCount', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _selectHtmlElements(
           payload[0].toString(),
@@ -208,7 +207,7 @@ class JsExtensions extends JsExtensionsBase {
       return 0;
     });
     runtime.onMessage('htmlSelectTextList', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _selectHtmlElements(
           payload[0].toString(),
@@ -218,14 +217,14 @@ class JsExtensions extends JsExtensionsBase {
       return const <String>[];
     });
     runtime.onMessage('htmlRemove', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _removeHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
     runtime.onMessage('scopedObjectGetVariable', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _getScopedObjectVariable(
           payload[0].toString(),
@@ -235,7 +234,7 @@ class JsExtensions extends JsExtensionsBase {
       return '';
     });
     runtime.onMessage('scopedObjectPutVariable', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         _putScopedObjectVariable(
           payload[0].toString(),
@@ -246,7 +245,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
     runtime.onMessage('scopedObjectGetField', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         return _getScopedObjectField(
           payload[0].toString(),
@@ -256,7 +255,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
     runtime.onMessage('scopedObjectSetField', (args) {
-      final payload = _decodeSyncArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 3) {
         _setScopedObjectField(
           payload[0].toString(),
@@ -312,16 +311,14 @@ class JsExtensions extends JsExtensionsBase {
     });
     runtime.onMessage('sourceSetVariable', (args) {
       if (source != null) {
-        final decoded = _decodeSyncArgs(args);
+        final decoded = args;
         source!.setVariableSync(decoded?.toString());
       }
       return null;
     });
     runtime.onMessage('sourceGetHeaderMap', (args) {
       if (source == null) return <String, String>{};
-      final includeLoginHeader = _decodeSyncArgs(args) is bool
-          ? _decodeSyncArgs(args) as bool
-          : true;
+      final includeLoginHeader = args is bool ? args : true;
       return source!.getHeaderMapSync(hasLoginHeader: includeLoginHeader);
     });
 
@@ -470,17 +467,6 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-  }
-
-  dynamic _decodeSyncArgs(dynamic args) {
-    if (args is String) {
-      try {
-        return jsonDecode(args);
-      } catch (_) {
-        return args;
-      }
-    }
-    return args;
   }
 
   String _compactJsBridgeLog(dynamic args) {

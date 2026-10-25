@@ -3,12 +3,13 @@ import 'dart:typed_data';
 import 'encode/encode_utils_base.dart';
 import 'encode/encode_utils_hash.dart';
 import 'encode/encode_utils_base64.dart';
-import 'encode/encode_utils_crypto.dart';
 
+export 'encode/charsets.dart';
 export 'encode/encode_utils_base.dart';
 export 'encode/encode_utils_hash.dart';
 export 'encode/encode_utils_base64.dart';
 export 'encode/encode_utils_crypto.dart';
+export 'encode/encode_utils_rsa.dart';
 
 /// JsEncodeUtils - JS 加解密工具類 (重構後)
 /// (原 Android help/JsEncodeUtils.kt)
@@ -43,54 +44,6 @@ class JsEncodeUtils extends EncodeUtilsBase {
   /// 字串轉十六進位
   static String hexEncodeToString(String str) =>
       EncodeUtilsBase64.hexEncodeToString(str);
-
-  /// 對稱加密/解密
-  static dynamic symmetricCrypto(
-    String action,
-    String transformation,
-    dynamic key,
-    dynamic iv,
-    dynamic data, {
-    String outputFormat = 'base64',
-  }) => EncodeUtilsCrypto.symmetricCrypto(
-    action,
-    transformation,
-    key,
-    iv,
-    data,
-    outputFormat: outputFormat,
-  );
-
-  // === AES Variants ===
-  static dynamic aesEncode(
-    String data,
-    String key,
-    String transformation,
-    String iv, {
-    String format = 'base64',
-  }) => symmetricCrypto(
-    'encrypt',
-    transformation,
-    key,
-    iv,
-    data,
-    outputFormat: format,
-  );
-
-  static dynamic aesDecode(
-    String data,
-    String key,
-    String transformation,
-    String iv, {
-    String format = 'string',
-  }) => symmetricCrypto(
-    'decrypt',
-    transformation,
-    key,
-    iv,
-    data,
-    outputFormat: format,
-  );
 
   // === HMAC ===
   static String hmacHex(String data, String algorithm, String key) =>

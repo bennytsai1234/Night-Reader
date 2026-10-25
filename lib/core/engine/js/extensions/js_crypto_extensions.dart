@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:io' show gzip;
 import 'dart:convert';
 
@@ -11,22 +12,50 @@ extension JsCryptoExtensions on JsExtensions {
   void injectCryptoExtensions() {
     // 實作 java.createSymmetricCrypto
     runtime.onMessage('symmetricCrypto', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       final action = payload[0].toString();
       final transformation = payload[1].toString();
       final key = payload[2];
       final iv = payload[3];
       final data = payload[4];
       final outputFormat = payload[5].toString();
+      final charset = payload.length > 6 && payload[6] != null
+          ? payload[6].toString()
+          : 'UTF-8';
+      final tagBits = payload.length > 7 && payload[7] is num
+          ? (payload[7] as num).toInt()
+          : 128;
 
-      return JsEncodeUtils.symmetricCrypto(
+      final result = EncodeUtilsCrypto.symmetricCrypto(
         action,
         transformation,
         key,
         iv,
         data,
         outputFormat: outputFormat,
+        charset: charset,
+        tagBits: tagBits,
       );
+      // 位元組陣列直接傳回 JS 會變成空陣列，和其他傳位元組的橋接一樣改傳
+      // JSON，由 JS 端的 normalizeByteArray 轉回陣列。
+      return result is List<int> ? jsonEncode(result.toList()) : result;
+    });
+
+    // 加密沒給 IV、沒給金鑰時照 Java／Hutool 用隨機的。
+    runtime.onMessage('_randomBytes', (dynamic args) {
+      final random = Random.secure();
+      final count = args is num ? args.toInt() : int.parse(args.toString());
+      return jsonEncode(List.generate(count, (_) => random.nextInt(256)));
+    });
+
+    runtime.onMessage('rsaGenerateKeyPair', (dynamic args) {
+      final pair = EncodeUtilsRsa.generateKeyPair(
+        args is num ? args.toInt() : 1024,
+      );
+      return jsonEncode({
+        'publicKey': pair.publicKey.toList(),
+        'privateKey': pair.privateKey.toList(),
+      });
     });
 
     // 注入輔助函式
@@ -39,7 +68,7 @@ extension JsCryptoExtensions on JsExtensions {
       (dynamic args) => JsEncodeUtils.md5Encode16(args.toString()),
     );
     runtime.onMessage('_digest', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 2) {
         final data = payload[0].toString();
         final algorithm = payload[1].toString();
@@ -51,7 +80,7 @@ extension JsCryptoExtensions on JsExtensions {
       return '';
     });
     runtime.onMessage('_hmacHex', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       if (payload is List && payload.length >= 3) {
         return JsEncodeUtils.hmacHex(
           payload[0].toString(),
@@ -61,35 +90,62 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
-    runtime.onMessage('_desEncodeToBase64String', (dynamic args) {
-      final payload = _decodeArgs(args);
-      if (payload is List && payload.length >= 2) {
-        final data = payload[0];
-        final key = payload[1];
-        final transformation =
-            payload.length > 2 &&
-                payload[2] != null &&
-                payload[2].toString().isNotEmpty
-            ? payload[2].toString()
-            : 'DES/ECB/PKCS5Padding';
-        final iv = payload.length > 3 ? payload[3] : null;
-        return JsEncodeUtils.symmetricCrypto(
-          'encrypt',
-          transformation,
-          key,
-          iv,
-          data,
-          outputFormat: 'base64',
+    // java.createAsymmetricCrypto：[轉換, 加密?, 用公鑰?, 公鑰, 私鑰, 資料, 輸出]
+    runtime.onMessage('asymmetricCrypto', (dynamic args) {
+      final payload = args as List;
+      final bytes = EncodeUtilsRsa.process(
+        transformation: payload[0].toString(),
+        encrypt: payload[1] == true,
+        usePublicKey: payload[2] != false,
+        publicKey: payload[3],
+        privateKey: payload[4],
+        data: payload[5],
+      );
+      return switch (payload[6].toString()) {
+        'string' => utf8.decode(bytes, allowMalformed: true),
+        'hex' => hex.encode(bytes),
+        'base64' => base64.encode(bytes),
+        _ => jsonEncode(bytes.toList()),
+      };
+    });
+
+    // java.createSign：[演算法, 'sign' 或 'verify', 公鑰, 私鑰, 資料, 簽章, 輸出]
+    runtime.onMessage('rsaSign', (dynamic args) {
+      final payload = args as List;
+      final algorithm = payload[0].toString();
+      if (payload[1] == 'verify') {
+        return EncodeUtilsRsa.verify(
+          algorithm,
+          payload[2],
+          payload[4],
+          payload[5],
+        );
+      }
+      final bytes = EncodeUtilsRsa.sign(algorithm, payload[3], payload[4]);
+      return switch (payload[6].toString()) {
+        'hex' => hex.encode(bytes),
+        'base64' => base64.encode(bytes),
+        _ => jsonEncode(bytes.toList()),
+      };
+    });
+
+    runtime.onMessage('_hmacBase64', (dynamic args) {
+      final payload = args;
+      if (payload is List && payload.length >= 3) {
+        return EncodeUtilsHash.hmacBase64(
+          payload[0].toString(),
+          payload[1].toString(),
+          payload[2].toString(),
         );
       }
       return '';
     });
     runtime.onMessage('_base64Encode', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       return JsEncodeUtils.base64Encode(payload);
     });
     runtime.onMessage('_base64Decode', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       final str = payload is List ? payload[0].toString() : payload.toString();
       final charset = payload is List && payload.length > 1
           ? payload[1].toString()
@@ -97,7 +153,7 @@ extension JsCryptoExtensions on JsExtensions {
       return JsEncodeUtils.base64Decode(str, charset: charset);
     });
     runtime.onMessage('_base64DecodeToBytes', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       final str = payload is List
           ? payload.first.toString()
           : payload.toString();
@@ -111,9 +167,13 @@ extension JsCryptoExtensions on JsExtensions {
       '_hexDecode',
       (dynamic args) => utf8.decode(hex.decode(args.toString())),
     );
+    runtime.onMessage(
+      '_hexDecodeToBytes',
+      (dynamic args) => jsonEncode(hex.decode(args.toString())),
+    );
     runtime.onMessage('_randomUUID', (dynamic args) => const Uuid().v4());
     runtime.onMessage('_gunzipBytes', (dynamic args) {
-      final payload = _decodeArgs(args);
+      final payload = args;
       final bytesSource =
           payload is List && payload.every((item) => item is num)
           ? payload
@@ -121,16 +181,5 @@ extension JsCryptoExtensions on JsExtensions {
       final bytes = List<int>.from(bytesSource as List);
       return jsonEncode(gzip.decode(bytes));
     });
-  }
-
-  dynamic _decodeArgs(dynamic args) {
-    if (args is String) {
-      try {
-        return jsonDecode(args);
-      } catch (_) {
-        return args;
-      }
-    }
-    return args;
   }
 }

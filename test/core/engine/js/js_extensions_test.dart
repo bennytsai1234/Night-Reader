@@ -50,6 +50,215 @@ void main() {
       runtime?.dispose();
     });
 
+    test('legacy crypto helpers and javax.crypto.Cipher match Legado', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      String eval(String code) {
+        final result = runtime!.evaluate(code);
+        expect(result.isError, isFalse, reason: result.stringResult);
+        return result.stringResult;
+      }
+
+      // 對照答案由 Python cryptography（OpenSSL）算出。
+      const cbc =
+          'nRmiA4tZ9RKopqLxKpPmO18Bciqi8K22kaHQ23wdE9KeHjBn8HnHegQ5vh6k7lT4';
+      const plain = '夜讀 Night Reader 第一章：山雨欲來';
+      expect(
+        eval(
+          "java.aesEncodeToBase64String('$plain', '0123456789abcdef', "
+          "'AES/CBC/PKCS5Padding', 'fedcba9876543210')",
+        ),
+        cbc,
+      );
+      expect(
+        eval(
+          "java.aesBase64DecodeToString('$cbc', '0123456789abcdef', "
+          "'AES/CBC/PKCS5Padding', 'fedcba9876543210')",
+        ),
+        plain,
+      );
+      // Legado 的 aesEncodeToString 其實是解密。
+      expect(
+        eval(
+          "java.aesEncodeToString('$cbc', '0123456789abcdef', "
+          "'AES/CBC/PKCS5Padding', 'fedcba9876543210')",
+        ),
+        plain,
+      );
+      expect(
+        eval(
+          "java.tripleDESEncodeBase64Str('$plain', 'OW84U8Eerdb99rtsTXWSILDO', "
+          "'CBC', 'PKCS5Padding', 'SK8bncVu')",
+        ),
+        'AWZH676WJU1IwCwkL1g3Lngc/0+N94zXR9LT2zIDrLv+I3lqvuaWfbwYsT8kIj36',
+      );
+      expect(
+        eval(
+          "String(java.HMacBase64('$plain', 'HmacSHA1', '0123456789abcdef'))",
+        ),
+        'RcIthmJ4naPxIEkdIjawBlLrfws=',
+      );
+
+      // 豆瓣閱讀的正文解密：金鑰是 cookie 的 SHA-256（十六進位轉成位元組），
+      // IV 從密文尾巴切出來，對位元組陣列解密。
+      expect(
+        eval('''
+          (function() {
+            var t = '9TERedZ1x3kgj4SvkOcZ2TVt964UiyNqg/fpvE3c7cIxBXJ/jy6NBFXoUpbySOhPMDEyMzQ1Njc4OWFiY2RlZlRUVFRUVFRUVFRUVFQ=';
+            var decodedBytes = java.base64DecodeToByteArray(t);
+            var ivStart = decodedBytes.length - 16 - 13;
+            var cipher = java.createSymmetricCrypto('AES/CBC/PKCS5Padding',
+              java.hexDecodeToByteArray(java.digestHex('bid=abc123', 'SHA-256')),
+              decodedBytes.slice(ivStart, ivStart + 16));
+            var text = cipher.decryptStr(decodedBytes.slice(0, ivStart));
+            return JSON.parse(text).posts[0].contents;
+          })()
+        '''),
+        '第一章 正文',
+      );
+
+      // 愛麗絲書屋的寫法：RSA 私鑰（PKCS#8 位元組）解出 AES 金鑰。金鑰與
+      // 密文、簽章由 Python cryptography 產生。
+      const rsaPrivate =
+          'MIICeAIBADANBgkqhkiG9w0BAQEFAASCAmIwggJeAgEAAoGBALZIWkQpX1LDg3r+NkruJ+nAEDMS2lpzVL6wazQlHwpjhVwFsJR4WyFlAXV69KjmMvICn47hRqB9HiiW7+bmVe0qFFYqOaOEKYn9t5GZKAsNVo39KXrezIHI6Zq19e8EhObuy2+3iYdIxZ6fN4ZUsH8qTBfOXK5quCzzhAdim1IBAgMBAAECgYBp9vGSgkKJyGKckz9Ym83UEvTX2/PXdQgkukX30ESVM3mJHz2hcb34UdFhTBMCRKAFFAVReCAol9N6YRQhNHFqLEMMxMGqfNlyYaFGbSPgloasGj+m85mffBAhZz49gwRuzbj0IPP3r89DR7K424MnKFt+snWSWZ4J+fkUAc8byQJBANwJvzoGBq/jyqaPEaNXRPPXVuSzxcHP2DoEfgCmuijAQpafDmvQRYbMzwNV43kY8C23DUIHgeywrb/aLxWhZ0cCQQDUEvEWrLQMYX2hPIYLmR/o7uqKaTN8RAsMB0A35hhD5OImQy/lAi+oJi/u8q/B9rc9ZOwizsPBBSy2ho3ekTB3AkEAyRyvh10Sp5jQFEQXnu+YujZL2WTmjyplO0H32KiK5cw0EG74Q1ps8bQoUagi7P/6Jg51M7Cg87DYXc4R0vde6QJBAMweuywO6HFuOIRDg+WP6bXCl77HCQYXW+ak5/ulnT9kAwO+8U9j7kjTEJnVvrNbav1NsTbDeojDGUlJcy2A43sCQQCEZjJ25tbBDS0KUFfU0plI5Fnbj03KTWC7Kfsvt4gutIERe3x4kVC5nehEOz0yP7KwlrOJcpYDA9bxKdHdcmgr';
+      const rsaPublic =
+          'MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2SFpEKV9Sw4N6/jZK7ifpwBAzEtpac1S+sGs0JR8KY4VcBbCUeFshZQF1evSo5jLyAp+O4UagfR4olu/m5lXtKhRWKjmjhCmJ/beRmSgLDVaN/Sl63syByOmatfXvBITm7stvt4mHSMWenzeGVLB/KkwXzlyuargs84QHYptSAQIDAQAB';
+      expect(
+        eval('''
+          (function() {
+            var rsa = java.createAsymmetricCrypto('RSA/ECB/PKCS1Padding');
+            rsa.setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'));
+            return rsa.decryptStr('r4oIz6Snp1U4MUcQdWvmJhOl9/cMaU1dT2WnHC89/cDfDawRpxunS3k2tPXEuYzt7v8KtQ75V17Odr9QM8n818/u+U+RAlEhhl8g8CLh/1urQiO60IiJ+1GaOWwSLhgPdFmcRi0eyHPUIP59yMCASgU66JoPZ/WcAbmCMNQOCDg=', false);
+          })()
+        '''),
+        'QUVTLWtleS1iYXNlNjQtMTIzNDU2Nzg5MA==',
+      );
+      expect(
+        eval('''
+          (function() {
+            var rsa = java.createAsymmetricCrypto('RSA/ECB/PKCS1Padding')
+              .setPublicKey(java.base64DecodeToByteArray('$rsaPublic'))
+              .setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'));
+            var long = new Array(30).join('夜讀長資料要分塊加密。');
+            return rsa.decryptStr(rsa.encryptBase64(long), false) === long;
+          })()
+        '''),
+        'true',
+      );
+      expect(
+        eval(
+          "java.createSign('SHA256withRSA')"
+          ".setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'))"
+          ".signHex('第一章')",
+        ),
+        '4197120d3ac569e2446800172658efb2813df8fcd2b7edc67b33d046e644ef49'
+        'f1b9589b6ceb66be653509d164a969bf8900fe8e2bb38f4e1141b3f4c2edbf0a'
+        '5e1604bb50898100b3c16c00480c4a5221fa51aa9c3d738bddff95d85b2ca867'
+        '703a771ac22a7902fd790810e701ae3eedeae7f925dd229441621823880d3104',
+      );
+
+      // OAEP 照轉換字串的摘要（MGF1 用同一個，和 Android 一樣）。
+      expect(
+        eval('''
+          java.createAsymmetricCrypto('RSA/ECB/OAEPWithSHA-256AndMGF1Padding')
+            .setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'))
+            .decryptStr('Kl4Gzyh0LER2F1GdP4w/OJIrjkM8+nXhr3zwNvT/kN5G1UMr5mskdIYpFV5kj4PxVirfmM9eaX4UmBgd1rJ4Yzr6veGwwtD2BbJTDLNzf4ryZy/8YxlnIzKwr4wJvg+L4Ni6+1BlxbT1mZi4spj0CEG1EzsfzSnytCwSAdhHE/I=', false)
+        '''),
+        'abc',
+      );
+      // 不填充：一塊 128 位元組，前面的 0 不能丟；空資料也加密成一塊。
+      expect(
+        eval('''
+          (function() {
+            var rsa = java.createAsymmetricCrypto('RSA/ECB/NoPadding')
+              .setPublicKey(java.base64DecodeToByteArray('$rsaPublic'))
+              .setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'));
+            var input = []; for (var i = 0; i < 127; i++) input.push(0); input.push(1);
+            var encrypted = rsa.encrypt(input);
+            var back = rsa.decrypt(encrypted, false);
+            var pkcs1 = java.createAsymmetricCrypto('RSA/ECB/PKCS1Padding')
+              .setPublicKey(java.base64DecodeToByteArray('$rsaPublic'))
+              .setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'));
+            var empty = pkcs1.encrypt('');
+            return [encrypted.length, back.length, back[127], back[0],
+              empty.length, pkcs1.decryptStr(empty, false) === ''].join(',');
+          })()
+        '''),
+        '128,128,1,0,128,true',
+      );
+      // 沒設定金鑰時照 Hutool 自動產生一組。
+      expect(
+        eval('''
+          (function() {
+            var rsa = java.createAsymmetricCrypto('RSA');
+            var ok = rsa.decryptStr(rsa.encryptBase64('自己的金鑰'), false) === '自己的金鑰';
+            var sign = java.createSign('SHA256withRSA');
+            return ok + ',' + sign.verify('第一章', sign.sign('第一章')) + ',' +
+              (rsa.getPublicKeyBase64().length > 100);
+          })()
+        '''),
+        'true,true,true',
+      );
+      // 需要 IV 的模式加密時沒給 IV：照 Java 用隨機 IV，留著給解密用。
+      expect(
+        eval('''
+          (function() {
+            var a = java.createSymmetricCrypto('AES/GCM/NoPadding', '0123456789abcdef');
+            var first = a.encryptBase64('同一段');
+            var second = java.createSymmetricCrypto('AES/GCM/NoPadding', '0123456789abcdef')
+              .encryptBase64('同一段');
+            var back = java.createSymmetricCrypto('AES/GCM/NoPadding', '0123456789abcdef', a.getIV())
+              .decryptStr(first);
+            return [a.getIV().length, first !== second, back].join(',');
+          })()
+        '''),
+        '12,true,同一段',
+      );
+      expect(
+        eval("JSON.stringify(java.hexDecodeToByteArray('1e10'))"),
+        '[30,16]',
+      );
+      expect(
+        eval(
+          "String(java.digestBase64Str(new Packages.java.lang.String('abc'), 'SHA-256'))",
+        ),
+        'ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=',
+      );
+      // Legado 的 String(位元組) 遇到不合法的 UTF-8 換成替代字元，不丟錯。
+      expect(
+        eval(
+          "typeof java.desEncodeToString('hello', '12345678', "
+          "'DES/ECB/PKCS5Padding', '')",
+        ),
+        'string',
+      );
+
+      // 零點文學的寫法：Cipher 加密後交給 Base64.getEncoder()。
+      expect(
+        eval('''
+          (function() {
+            var Cipher = Packages.javax.crypto.Cipher;
+            var JString = Packages.java.lang.String;
+            var key = new Packages.javax.crypto.spec.SecretKeySpec(
+              new JString('0123456789abcdef').getBytes('UTF-8'), 'AES');
+            var iv = new Packages.javax.crypto.spec.IvParameterSpec(
+              new JString('fedcba9876543210').getBytes('UTF-8'));
+            var cipher = Cipher.getInstance('AES/CBC/PKCS5Padding');
+            cipher.init(Cipher.ENCRYPT_MODE, key, iv);
+            var bytes = cipher.doFinal(new JString('$plain').getBytes('UTF-8'));
+            var encoded = java.base64Encode(bytes);
+            cipher.init(Cipher.DECRYPT_MODE, key, iv);
+            var back = cipher.doFinal(java.base64DecodeToByteArray(encoded));
+            return encoded + '|' + String(new JString(back));
+          })()
+        '''),
+        '$cbc|$plain',
+      );
+    }, skip: quickJsSkip);
+
     test('java bridge exposes missing helper methods', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);

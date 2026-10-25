@@ -256,28 +256,152 @@ extension JsJavaObject on JsExtensionsBase {
 
         // ─── sync: crypto / encoding ─────────────────────────────
         createSymmetricCrypto: function(transformation, key, iv) {
-          return {
-            decrypt: function(data) { return sendMessage('symmetricCrypto', JSON.stringify(['decrypt', transformation, key, iv, data, 'bytes'])); },
-            decryptStr: function(data) { return sendMessage('symmetricCrypto', JSON.stringify(['decrypt', transformation, key, iv, data, 'string'])); },
-            encrypt: function(data) { return sendMessage('symmetricCrypto', JSON.stringify(['encrypt', transformation, key, iv, data, 'bytes'])); },
-            encryptBase64: function(data) { return sendMessage('symmetricCrypto', JSON.stringify(['encrypt', transformation, key, iv, data, 'base64'])); },
-            encryptHex: function(data) { return sendMessage('symmetricCrypto', JSON.stringify(['encrypt', transformation, key, iv, data, 'hex'])); }
-          };
+          return __lrSymmetricCrypto(transformation, key, iv);
         },
-        md5Encode: function(str) { return new JavaString(sendMessage('_md5Encode', JSON.stringify(str))); },
-        md5Encode16: function(str) { return new JavaString(sendMessage('_md5Encode16', JSON.stringify(str))); },
-        digestHex: function(str, algorithm) {
-          return new JavaString(sendMessage('_digest', JSON.stringify([str, algorithm, true])));
+        // Legado help/crypto/AsymmetricCrypto.kt：第二個參數 true（預設）用
+        // 公鑰，false 用私鑰。
+        createAsymmetricCrypto: function(transformation) {
+          var state = __lrKeyPairState();
+          function call(encrypt, data, usePublicKey, format) {
+            state.ensure();
+            return sendMessage('asymmetricCrypto', JSON.stringify([
+              String(transformation), encrypt, usePublicKey !== false,
+              state.publicKey, state.privateKey, __lrCryptoArg(data), format
+            ]));
+          }
+          var crypto = state.accessors({
+            setPublicKey: function(key) { state.publicKey = __lrCryptoArg(key); return crypto; },
+            setPrivateKey: function(key) { state.privateKey = __lrCryptoArg(key); return crypto; },
+            decrypt: function(data, usePublicKey) { return normalizeByteArray(call(false, data, usePublicKey, 'bytes')); },
+            decryptStr: function(data, usePublicKey) { return call(false, data, usePublicKey, 'string'); },
+            encrypt: function(data, usePublicKey) { return normalizeByteArray(call(true, data, usePublicKey, 'bytes')); },
+            encryptHex: function(data, usePublicKey) { return call(true, data, usePublicKey, 'hex'); },
+            encryptBase64: function(data, usePublicKey) { return call(true, data, usePublicKey, 'base64'); }
+          });
+          return crypto;
         },
-        base64Encode: function(str) { return sendMessage('_base64Encode', JSON.stringify(str)); },
-        base64Decode: function(str) { return sendMessage('_base64Decode', JSON.stringify(str)); },
-        base64DecodeToByteArray: function(str) {
-          return normalizeByteArray(
-            sendMessage('_base64DecodeToBytes', JSON.stringify(str))
+        createSign: function(algorithm) {
+          var state = __lrKeyPairState();
+          function call(action, data, signature, format) {
+            state.ensure();
+            return sendMessage('rsaSign', JSON.stringify([
+              String(algorithm), action, state.publicKey, state.privateKey,
+              __lrCryptoArg(data), __lrCryptoArg(signature), format
+            ]));
+          }
+          var signer = state.accessors({
+            setPublicKey: function(key) { state.publicKey = __lrCryptoArg(key); return signer; },
+            setPrivateKey: function(key) { state.privateKey = __lrCryptoArg(key); return signer; },
+            sign: function(data) { return normalizeByteArray(call('sign', data, null, 'bytes')); },
+            signHex: function(data) { return call('sign', data, null, 'hex'); },
+            signBase64: function(data) { return call('sign', data, null, 'base64'); },
+            verify: function(data, signature) { return call('verify', data, signature, '') === true; }
+          });
+          return signer;
+        },
+        // 舊的加解密函式，照 Legado JsEncodeUtils.kt 一個一個對應過來，連它
+        // 的怪處也照做（例如 aesEncodeToString 其實是解密）。
+        aesDecodeToByteArray: function(str, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decrypt(str);
+        },
+        aesDecodeToString: function(str, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decryptStr(str);
+        },
+        aesDecodeArgsBase64Str: function(data, key, mode, padding, iv) {
+          return __lrSymmetricCrypto(
+            'AES/' + mode + '/' + padding,
+            java.base64DecodeToByteArray(key),
+            java.base64DecodeToByteArray(iv)
+          ).decryptStr(data);
+        },
+        aesBase64DecodeToByteArray: function(str, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decrypt(str);
+        },
+        aesBase64DecodeToString: function(str, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decryptStr(str);
+        },
+        aesEncodeToByteArray: function(data, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).encrypt(data);
+        },
+        aesEncodeToString: function(data, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decryptStr(data);
+        },
+        aesEncodeToBase64ByteArray: function(data, key, transformation, iv) {
+          return java.strToBytes(
+            __lrSymmetricCrypto(transformation, key, iv).encryptBase64(data)
           );
         },
-        hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(str)); },
-        hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(hex)); },
+        aesEncodeToBase64String: function(data, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).encryptBase64(data);
+        },
+        aesEncodeArgsBase64Str: function(data, key, mode, padding, iv) {
+          return __lrSymmetricCrypto('AES/' + mode + '/' + padding, key, iv)
+            .encryptBase64(data);
+        },
+        desDecodeToString: function(data, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decryptStr(data);
+        },
+        desBase64DecodeToString: function(data, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).decryptStr(data);
+        },
+        desEncodeToString: function(data, key, transformation, iv) {
+          return java.bytesToStr(
+            __lrSymmetricCrypto(transformation, key, iv).encrypt(data),
+            'UTF-8'
+          );
+        },
+        desEncodeToBase64String: function(data, key, transformation, iv) {
+          return __lrSymmetricCrypto(transformation, key, iv).encryptBase64(data);
+        },
+        tripleDESDecodeStr: function(data, key, mode, padding, iv) {
+          return __lrSymmetricCrypto('DESede/' + mode + '/' + padding, key, iv)
+            .decryptStr(data);
+        },
+        tripleDESDecodeArgsBase64Str: function(data, key, mode, padding, iv) {
+          return __lrSymmetricCrypto(
+            'DESede/' + mode + '/' + padding,
+            java.base64DecodeToByteArray(key),
+            iv
+          ).decryptStr(data);
+        },
+        tripleDESEncodeBase64Str: function(data, key, mode, padding, iv) {
+          return __lrSymmetricCrypto('DESede/' + mode + '/' + padding, key, iv)
+            .encryptBase64(data);
+        },
+        tripleDESEncodeArgsBase64Str: function(data, key, mode, padding, iv) {
+          return __lrSymmetricCrypto(
+            'DESede/' + mode + '/' + padding,
+            java.base64DecodeToByteArray(key),
+            iv
+          ).encryptBase64(data);
+        },
+        digestBase64Str: function(str, algorithm) {
+          return new JavaString(sendMessage('_digest', JSON.stringify([__lrCryptoArg(str), __lrCryptoArg(algorithm), false])));
+        },
+        HMacBase64: function(data, algorithm, key) {
+          return new JavaString(
+            sendMessage('_hmacBase64', JSON.stringify([__lrCryptoArg(data), __lrCryptoArg(algorithm), __lrCryptoArg(key)]))
+          );
+        },
+        md5Encode: function(str) { return new JavaString(sendMessage('_md5Encode', JSON.stringify(__lrCryptoArg(str)))); },
+        md5Encode16: function(str) { return new JavaString(sendMessage('_md5Encode16', JSON.stringify(__lrCryptoArg(str)))); },
+        digestHex: function(str, algorithm) {
+          return new JavaString(sendMessage('_digest', JSON.stringify([__lrCryptoArg(str), __lrCryptoArg(algorithm), true])));
+        },
+        base64Encode: function(str) { return sendMessage('_base64Encode', JSON.stringify(__lrCryptoArg(str))); },
+        base64Decode: function(str) { return sendMessage('_base64Decode', JSON.stringify(__lrCryptoArg(str))); },
+        base64DecodeToByteArray: function(str) {
+          return normalizeByteArray(
+            sendMessage('_base64DecodeToBytes', JSON.stringify(__lrCryptoArg(str)))
+          );
+        },
+        hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(__lrCryptoArg(str))); },
+        hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(__lrCryptoArg(hex))); },
+        hexDecodeToByteArray: function(hex) {
+          return normalizeByteArray(
+            sendMessage('_hexDecodeToBytes', JSON.stringify(String(hex)))
+          );
+        },
         randomUUID: function() {
           if (
             typeof globalThis.crypto === 'object' &&
@@ -321,20 +445,9 @@ extension JsJavaObject on JsExtensionsBase {
             JSON.stringify([normalizeByteArray(bytes), charset])
           );
         },
-        aesBase64DecodeToString: function(data, key, transformation, iv) {
-          return sendMessage('symmetricCrypto', JSON.stringify(['decrypt', transformation, key, iv, data, 'string']));
-        },
         HMacHex: function(data, algorithm, key) {
           return new JavaString(
-            sendMessage('_hmacHex', JSON.stringify([data, algorithm, key]))
-          );
-        },
-        desEncodeToBase64String: function(data, key, transformation, iv) {
-          return new JavaString(
-            sendMessage(
-              '_desEncodeToBase64String',
-              JSON.stringify([data, key, transformation, iv])
-            )
+            sendMessage('_hmacHex', JSON.stringify([__lrCryptoArg(data), __lrCryptoArg(algorithm), __lrCryptoArg(key)]))
           );
         },
         gzipToString: function(bytes, charset) {
@@ -631,33 +744,151 @@ extension JsJavaObject on JsExtensionsBase {
         this.bytes = normalizeByteArray(bytes);
       }
 
-      function CipherInstance(transformation) {
-        this._transformation = transformation || 'AES/CBC/PKCS5Padding';
-        this._mode = 2;
-        this._key = [];
-        this._iv = [];
+      function GCMParameterSpec(tagBits, iv) {
+        if (!(this instanceof GCMParameterSpec)) {
+          return new GCMParameterSpec(tagBits, iv);
+        }
+        this.tagBits = Number(tagBits);
+        this.bytes = normalizeByteArray(iv);
       }
-      CipherInstance.prototype.init = function(mode, key, iv) {
+      GCMParameterSpec.prototype.getTLen = function() { return this.tagBits; };
+      GCMParameterSpec.prototype.getIV = function() { return this.bytes; };
+
+      /// 規則 JS 的加解密參數：位元組陣列照原樣，其他（含 java.lang.String）
+      /// 轉成字串，由 Dart 照 UTF-8 轉成位元組。
+      function __lrCryptoArg(value) {
+        if (value == null) return null;
+        if (typeof value === 'string') return value;
+        if (Array.isArray(value) ||
+            (typeof value === 'object' && typeof value.length === 'number')) {
+          return normalizeByteArray(value);
+        }
+        return String(value);
+      }
+
+      /// 空字串與空陣列當成沒給（Legado 不設空的 IV）。
+      function __lrEmptyToNull(value) {
+        if (value == null) return null;
+        if ((typeof value === 'string' || Array.isArray(value)) && value.length === 0) {
+          return null;
+        }
+        return value;
+      }
+
+      /// RSA 與簽章物件的金鑰：兩個都沒設定時照 Hutool 產生一組 1024 位元
+      /// 的金鑰（第一次用到時才產生）。
+      function __lrKeyPairState() {
+        var state = {
+          publicKey: null,
+          privateKey: null,
+          ensure: function() {
+            if (state.publicKey != null || state.privateKey != null) return;
+            var pair = JSON.parse(sendMessage('rsaGenerateKeyPair', JSON.stringify(1024)));
+            state.publicKey = pair.publicKey;
+            state.privateKey = pair.privateKey;
+          },
+          accessors: function(target) {
+            function bytes(key) {
+              return typeof key === 'string' ? java.base64DecodeToByteArray(key) : key;
+            }
+            target.getPublicKeyBase64 = function() { state.ensure(); return java.base64Encode(bytes(state.publicKey)); };
+            target.getPrivateKeyBase64 = function() { state.ensure(); return java.base64Encode(bytes(state.privateKey)); };
+            target.getPublicKey = function() { state.ensure(); var b = bytes(state.publicKey); return { getEncoded: function() { return b; } }; };
+            target.getPrivateKey = function() { state.ensure(); var b = bytes(state.privateKey); return { getEncoded: function() { return b; } }; };
+            return target;
+          }
+        };
+        return state;
+      }
+
+      function __lrRandomBytes(count) {
+        return normalizeByteArray(sendMessage('_randomBytes', JSON.stringify(count)));
+      }
+
+      /// Hutool 的 SymmetricCrypto（java.createSymmetricCrypto 傳回的物件）。
+      /// 和 Java 一樣：沒給金鑰時產生隨機金鑰；需要 IV 的模式加密時沒給 IV，
+      /// 產生隨機 IV 並留著（getIV 取得），解密沒有 IV 則丟錯。
+      function __lrSymmetricCrypto(transformation, key, iv, tagBits) {
+        var parts = String(transformation).split('/');
+        var algorithm = parts[0].trim().toUpperCase();
+        var mode = (parts[1] || 'ECB').trim().toUpperCase().replace(/\d+$/, '');
+        var blockSize = algorithm === 'AES' ? 16 : 8;
+        var state = {
+          transformation: String(transformation),
+          key: __lrEmptyToNull(__lrCryptoArg(key)),
+          iv: __lrEmptyToNull(__lrCryptoArg(iv)),
+          tagBits: tagBits || 128
+        };
+        if (state.key == null) {
+          state.key = __lrRandomBytes(
+            algorithm === 'AES' ? 16 : algorithm === 'DES' ? 8 : 24
+          );
+        }
+        function call(action, data, format, charset) {
+          if (action === 'encrypt' && state.iv == null && mode !== 'ECB') {
+            state.iv = __lrRandomBytes(mode === 'GCM' ? 12 : blockSize);
+          }
+          return sendMessage('symmetricCrypto', JSON.stringify([
+            action, state.transformation, state.key, state.iv,
+            __lrCryptoArg(data), format, charset ? String(charset) : 'UTF-8',
+            state.tagBits
+          ]));
+        }
+        var crypto = {
+          setIv: function(value) { state.iv = __lrEmptyToNull(__lrCryptoArg(value)); return crypto; },
+          getIV: function() { return state.iv; },
+          getSecretKey: function() {
+            return {
+              getEncoded: function() {
+                return typeof state.key === 'string' ? java.strToBytes(state.key) : state.key;
+              },
+              getAlgorithm: function() { return algorithm; }
+            };
+          },
+          decrypt: function(data) { return normalizeByteArray(call('decrypt', data, 'bytes')); },
+          decryptStr: function(data, charset) { return call('decrypt', data, 'string', charset); },
+          encrypt: function(data, charset) { return normalizeByteArray(call('encrypt', data, 'bytes', charset)); },
+          encryptBase64: function(data, charset) { return call('encrypt', data, 'base64', charset); },
+          encryptHex: function(data, charset) { return call('encrypt', data, 'hex', charset); }
+        };
+        return crypto;
+      }
+
+      /// javax.crypto.Cipher：輸入輸出都是位元組，和 Java 一樣。
+      function CipherInstance(transformation) {
+        this._transformation = transformation || 'AES/ECB/PKCS5Padding';
+        this._mode = 1;
+        this._crypto = null;
+        this._buffer = [];
+      }
+      CipherInstance.prototype.init = function(mode, key, spec) {
         this._mode = mode;
-        this._key = key && key.bytes ? normalizeByteArray(key.bytes) : normalizeByteArray(key);
-        this._iv = iv && iv.bytes ? normalizeByteArray(iv.bytes) : normalizeByteArray(iv);
+        this._crypto = __lrSymmetricCrypto(
+          this._transformation,
+          key && key.bytes ? key.bytes : key,
+          spec && spec.bytes ? spec.bytes : null,
+          spec && spec.tagBits ? spec.tagBits : 128
+        );
+        this._buffer = [];
+      };
+      CipherInstance.prototype.update = function(data) {
+        var bytes = typeof data === 'string' ? java.strToBytes(data) : normalizeByteArray(data);
+        for (var i = 0; i < bytes.length; i++) this._buffer.push(bytes[i]);
+        return [];
       };
       CipherInstance.prototype.doFinal = function(data) {
-        var crypto = java.createSymmetricCrypto(
-          this._transformation,
-          this._key,
-          this._iv
-        );
-        if (this._mode === 1) {
-          return normalizeByteArray(crypto.encrypt(data));
-        }
-        if (Array.isArray(data) || (data && typeof data === 'object' && typeof data.length === 'number')) {
-          return crypto.decryptStr(java.base64Encode(normalizeByteArray(data)));
-        }
-        return crypto.decryptStr(data);
+        if (data != null) this.update(data);
+        var input = this._buffer;
+        this._buffer = [];
+        return this._mode === 1 ? this._crypto.encrypt(input) : this._crypto.decrypt(input);
+      };
+      CipherInstance.prototype.getIV = function() {
+        return this._crypto ? this._crypto.getIV() : null;
       };
 
       var Cipher = {
+        ENCRYPT_MODE: 1,
+        DECRYPT_MODE: 2,
         getInstance: function(transformation) {
           return new CipherInstance(transformation);
         }
@@ -804,7 +1035,8 @@ extension JsJavaObject on JsExtensionsBase {
             Cipher: Cipher,
             spec: {
               SecretKeySpec: SecretKeySpec,
-              IvParameterSpec: IvParameterSpec
+              IvParameterSpec: IvParameterSpec,
+              GCMParameterSpec: GCMParameterSpec
             }
           }
         }
