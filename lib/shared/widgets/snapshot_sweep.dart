@@ -234,12 +234,21 @@ class _SnapshotSweepState extends State<SnapshotSweep>
       _phase = _Phase.playing;
     });
     // 停住的畫面畫完才做 settle、才開始算 gap：settle 落在靜止的畫面上，
-    // 做得再久，換場前也照樣停滿 gap。
-    SchedulerBinding.instance.endOfFrame.then((_) {
-      if (!mounted || !identical(_run, run)) return;
-      _settle?.call();
-      _hold = Timer(_gap, () => _start(run));
-    });
+    // 做得再久，換場前也照樣停滿 gap。等的是下一格（[_afterFrame]），不用
+    // endOfFrame：這一格裡別人先要過的話，拿到的是這一格的結束。
+    _afterFrame(() => _settleThenHold(run));
+  }
+
+  void _settleThenHold(Completer<void> run) {
+    bool current() =>
+        mounted && identical(_run, run) && _phase == _Phase.playing;
+    if (!current()) return;
+    final settle = _settle;
+    _settle = null;
+    settle?.call();
+    // settle 裡可能結束或換掉了這一次換場。
+    if (!current()) return;
+    _hold = Timer(_gap, () => _start(run));
   }
 
   /// 兩張圖都拍好、也停滿 gap 時開始換場。
@@ -262,7 +271,9 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   void _end({bool rebuild = true}) {
     final run = _run;
     _run = null;
+    _settle = null;
     _hold?.cancel();
+    _hold = null;
     _progress.stop();
     final before = _before, after = _after;
     void reset() {
