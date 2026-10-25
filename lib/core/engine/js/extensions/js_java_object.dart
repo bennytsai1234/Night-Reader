@@ -258,6 +258,45 @@ extension JsJavaObject on JsExtensionsBase {
         createSymmetricCrypto: function(transformation, key, iv) {
           return __lrSymmetricCrypto(transformation, key, iv);
         },
+        // Legado help/crypto/AsymmetricCrypto.kt：第二個參數 true（預設）用
+        // 公鑰，false 用私鑰。
+        createAsymmetricCrypto: function(transformation) {
+          var state = { publicKey: null, privateKey: null };
+          function call(encrypt, data, usePublicKey, format) {
+            return sendMessage('asymmetricCrypto', JSON.stringify([
+              String(transformation), encrypt, usePublicKey !== false,
+              state.publicKey, state.privateKey, __lrCryptoArg(data), format
+            ]));
+          }
+          var crypto = {
+            setPublicKey: function(key) { state.publicKey = __lrCryptoArg(key); return crypto; },
+            setPrivateKey: function(key) { state.privateKey = __lrCryptoArg(key); return crypto; },
+            decrypt: function(data, usePublicKey) { return normalizeByteArray(call(false, data, usePublicKey, 'bytes')); },
+            decryptStr: function(data, usePublicKey) { return call(false, data, usePublicKey, 'string'); },
+            encrypt: function(data, usePublicKey) { return normalizeByteArray(call(true, data, usePublicKey, 'bytes')); },
+            encryptHex: function(data, usePublicKey) { return call(true, data, usePublicKey, 'hex'); },
+            encryptBase64: function(data, usePublicKey) { return call(true, data, usePublicKey, 'base64'); }
+          };
+          return crypto;
+        },
+        createSign: function(algorithm) {
+          var state = { publicKey: null, privateKey: null };
+          function call(action, data, signature, format) {
+            return sendMessage('rsaSign', JSON.stringify([
+              String(algorithm), action, state.publicKey, state.privateKey,
+              __lrCryptoArg(data), __lrCryptoArg(signature), format
+            ]));
+          }
+          var signer = {
+            setPublicKey: function(key) { state.publicKey = __lrCryptoArg(key); return signer; },
+            setPrivateKey: function(key) { state.privateKey = __lrCryptoArg(key); return signer; },
+            sign: function(data) { return normalizeByteArray(call('sign', data, null, 'bytes')); },
+            signHex: function(data) { return call('sign', data, null, 'hex'); },
+            signBase64: function(data) { return call('sign', data, null, 'base64'); },
+            verify: function(data, signature) { return call('verify', data, signature, '') === true; }
+          };
+          return signer;
+        },
         // 舊的加解密函式，照 Legado JsEncodeUtils.kt 一個一個對應過來，連它
         // 的怪處也照做（例如 aesEncodeToString 其實是解密）。
         aesDecodeToByteArray: function(str, key, transformation, iv) {

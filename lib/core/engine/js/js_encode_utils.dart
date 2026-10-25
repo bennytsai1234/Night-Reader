@@ -9,6 +9,7 @@ export 'encode/encode_utils_base.dart';
 export 'encode/encode_utils_hash.dart';
 export 'encode/encode_utils_base64.dart';
 export 'encode/encode_utils_crypto.dart';
+export 'encode/encode_utils_rsa.dart';
 
 /// JsEncodeUtils - JS 加解密工具類 (重構後)
 /// (原 Android help/JsEncodeUtils.kt)

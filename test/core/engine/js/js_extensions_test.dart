@@ -120,6 +120,46 @@ void main() {
         '第一章 正文',
       );
 
+      // 愛麗絲書屋的寫法：RSA 私鑰（PKCS#8 位元組）解出 AES 金鑰。金鑰與
+      // 密文、簽章由 Python cryptography 產生。
+      const rsaPrivate =
+          'MIICeAIBADANBgkqhkiG9w0BAQEFAASCAmIwggJeAgEAAoGBALZIWkQpX1LDg3r+NkruJ+nAEDMS2lpzVL6wazQlHwpjhVwFsJR4WyFlAXV69KjmMvICn47hRqB9HiiW7+bmVe0qFFYqOaOEKYn9t5GZKAsNVo39KXrezIHI6Zq19e8EhObuy2+3iYdIxZ6fN4ZUsH8qTBfOXK5quCzzhAdim1IBAgMBAAECgYBp9vGSgkKJyGKckz9Ym83UEvTX2/PXdQgkukX30ESVM3mJHz2hcb34UdFhTBMCRKAFFAVReCAol9N6YRQhNHFqLEMMxMGqfNlyYaFGbSPgloasGj+m85mffBAhZz49gwRuzbj0IPP3r89DR7K424MnKFt+snWSWZ4J+fkUAc8byQJBANwJvzoGBq/jyqaPEaNXRPPXVuSzxcHP2DoEfgCmuijAQpafDmvQRYbMzwNV43kY8C23DUIHgeywrb/aLxWhZ0cCQQDUEvEWrLQMYX2hPIYLmR/o7uqKaTN8RAsMB0A35hhD5OImQy/lAi+oJi/u8q/B9rc9ZOwizsPBBSy2ho3ekTB3AkEAyRyvh10Sp5jQFEQXnu+YujZL2WTmjyplO0H32KiK5cw0EG74Q1ps8bQoUagi7P/6Jg51M7Cg87DYXc4R0vde6QJBAMweuywO6HFuOIRDg+WP6bXCl77HCQYXW+ak5/ulnT9kAwO+8U9j7kjTEJnVvrNbav1NsTbDeojDGUlJcy2A43sCQQCEZjJ25tbBDS0KUFfU0plI5Fnbj03KTWC7Kfsvt4gutIERe3x4kVC5nehEOz0yP7KwlrOJcpYDA9bxKdHdcmgr';
+      const rsaPublic =
+          'MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2SFpEKV9Sw4N6/jZK7ifpwBAzEtpac1S+sGs0JR8KY4VcBbCUeFshZQF1evSo5jLyAp+O4UagfR4olu/m5lXtKhRWKjmjhCmJ/beRmSgLDVaN/Sl63syByOmatfXvBITm7stvt4mHSMWenzeGVLB/KkwXzlyuargs84QHYptSAQIDAQAB';
+      expect(
+        eval('''
+          (function() {
+            var rsa = java.createAsymmetricCrypto('RSA/ECB/PKCS1Padding');
+            rsa.setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'));
+            return rsa.decryptStr('r4oIz6Snp1U4MUcQdWvmJhOl9/cMaU1dT2WnHC89/cDfDawRpxunS3k2tPXEuYzt7v8KtQ75V17Odr9QM8n818/u+U+RAlEhhl8g8CLh/1urQiO60IiJ+1GaOWwSLhgPdFmcRi0eyHPUIP59yMCASgU66JoPZ/WcAbmCMNQOCDg=', false);
+          })()
+        '''),
+        'QUVTLWtleS1iYXNlNjQtMTIzNDU2Nzg5MA==',
+      );
+      expect(
+        eval('''
+          (function() {
+            var rsa = java.createAsymmetricCrypto('RSA/ECB/PKCS1Padding')
+              .setPublicKey(java.base64DecodeToByteArray('$rsaPublic'))
+              .setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'));
+            var long = new Array(30).join('夜讀長資料要分塊加密。');
+            return rsa.decryptStr(rsa.encryptBase64(long), false) === long;
+          })()
+        '''),
+        'true',
+      );
+      expect(
+        eval(
+          "java.createSign('SHA256withRSA')"
+          ".setPrivateKey(java.base64DecodeToByteArray('$rsaPrivate'))"
+          ".signHex('第一章')",
+        ),
+        '4197120d3ac569e2446800172658efb2813df8fcd2b7edc67b33d046e644ef49'
+        'f1b9589b6ceb66be653509d164a969bf8900fe8e2bb38f4e1141b3f4c2edbf0a'
+        '5e1604bb50898100b3c16c00480c4a5221fa51aa9c3d738bddff95d85b2ca867'
+        '703a771ac22a7902fd790810e701ae3eedeae7f925dd229441621823880d3104',
+      );
+
       // 零點文學的寫法：Cipher 加密後交給 Base64.getEncoder()。
       expect(
         eval('''

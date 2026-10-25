@@ -68,6 +68,45 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
+    // java.createAsymmetricCrypto：[轉換, 加密?, 用公鑰?, 公鑰, 私鑰, 資料, 輸出]
+    runtime.onMessage('asymmetricCrypto', (dynamic args) {
+      final payload = _decodeArgs(args) as List;
+      final bytes = EncodeUtilsRsa.process(
+        transformation: payload[0].toString(),
+        encrypt: payload[1] == true,
+        usePublicKey: payload[2] != false,
+        publicKey: payload[3],
+        privateKey: payload[4],
+        data: payload[5],
+      );
+      return switch (payload[6].toString()) {
+        'string' => utf8.decode(bytes, allowMalformed: true),
+        'hex' => hex.encode(bytes),
+        'base64' => base64.encode(bytes),
+        _ => jsonEncode(bytes.toList()),
+      };
+    });
+
+    // java.createSign：[演算法, 'sign' 或 'verify', 公鑰, 私鑰, 資料, 簽章, 輸出]
+    runtime.onMessage('rsaSign', (dynamic args) {
+      final payload = _decodeArgs(args) as List;
+      final algorithm = payload[0].toString();
+      if (payload[1] == 'verify') {
+        return EncodeUtilsRsa.verify(
+          algorithm,
+          payload[2],
+          payload[4],
+          payload[5],
+        );
+      }
+      final bytes = EncodeUtilsRsa.sign(algorithm, payload[3], payload[4]);
+      return switch (payload[6].toString()) {
+        'hex' => hex.encode(bytes),
+        'base64' => base64.encode(bytes),
+        _ => jsonEncode(bytes.toList()),
+      };
+    });
+
     runtime.onMessage('_hmacBase64', (dynamic args) {
       final payload = _decodeArgs(args);
       if (payload is List && payload.length >= 3) {
