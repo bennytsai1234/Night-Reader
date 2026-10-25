@@ -38,6 +38,16 @@ class AppStoragePaths {
     );
   }
 
+  /// 加入書架的本地書原檔（TXT、EPUB）。選檔器給的是會被系統清掉的暫存
+  /// 副本，一律複製到這裡再匯入。
+  static Future<Directory> localBooksDir({bool ensureExists = false}) async {
+    return _subdirectory(
+      await documentsDir(),
+      'InkpageBooks',
+      ensureExists: ensureExists,
+    );
+  }
+
   static Future<Directory> imageCacheDir({bool ensureExists = false}) async {
     return _subdirectory(
       await temporaryDir(),

@@ -32,6 +32,23 @@ class BookCoverStorageService {
     }
   }
 
+  /// 書檔裡自帶的封面（EPUB）。存不下時照樣匯入，書架畫預設封面。
+  Future<void> storeEmbeddedCover(
+    Book book,
+    Uint8List bytes, {
+    required String extension,
+  }) async {
+    try {
+      book.coverLocalPath = await _writeCover(
+        book,
+        'cover-embedded$extension',
+        bytes,
+      );
+    } catch (e, stack) {
+      AppLog.e('保存本地封面失敗: $e', error: e, stackTrace: stack);
+    }
+  }
+
   Future<void> ensureCustomCoverStored(Book book) async {
     final source = book.customCoverUrl?.trim();
     if (source == null || source.isEmpty) {
@@ -142,23 +159,33 @@ class BookCoverStorageService {
       final bytes = await _readCoverBytes(source);
       if (bytes == null || bytes.isEmpty) return null;
 
-      final dir = await AppStoragePaths.bookAssetDir(
-        bookStorageKey(book),
-        ensureExists: true,
-      );
       final sourceHash = sha1.convert(utf8.encode(source)).toString();
-      final file = File(
-        p.join(dir.path, '$prefix-$sourceHash${_extensionForSource(source)}'),
+      return await _writeCover(
+        book,
+        '$prefix-$sourceHash${_extensionForSource(source)}',
+        bytes,
       );
-      if (await file.exists() && await file.length() == bytes.length) {
-        return file.path;
-      }
-      await file.writeAsBytes(bytes, flush: true);
-      return file.path;
     } catch (e, stack) {
       AppLog.e('保存本地封面失敗: $e', error: e, stackTrace: stack);
       return null;
     }
+  }
+
+  Future<String> _writeCover(
+    Book book,
+    String fileName,
+    List<int> bytes,
+  ) async {
+    final dir = await AppStoragePaths.bookAssetDir(
+      bookStorageKey(book),
+      ensureExists: true,
+    );
+    final file = File(p.join(dir.path, fileName));
+    if (await file.exists() && await file.length() == bytes.length) {
+      return file.path;
+    }
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
   }
 
   Future<Uint8List?> _readCoverBytes(String source) async {

@@ -33,6 +33,11 @@ class EmptyFileException extends AppException {
   EmptyFileException(super.message);
 }
 
+/// EpubFormatException - EPUB 讀不出書名、章節或文字
+class EpubFormatException extends AppException {
+  EpubFormatException(super.message);
+}
+
 /// NoBooksDirException - 找不到書籍目錄 (對標 NoBooksDirException.kt)
 class NoBooksDirException extends AppException {
   NoBooksDirException(super.message);

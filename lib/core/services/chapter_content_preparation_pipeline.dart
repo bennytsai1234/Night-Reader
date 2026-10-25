@@ -258,8 +258,8 @@ class ChapterContentPreparationPipeline {
         trimmed.startsWith('本地書籍檔案不存在') ||
         trimmed.startsWith('無法讀取本地書籍內容') ||
         trimmed.startsWith('檔案不存在:') ||
-        trimmed.startsWith('本地 TXT 索引缺失') ||
-        trimmed.startsWith('本地 TXT 索引無效') ||
+        trimmed.startsWith('本地書索引缺失') ||
+        trimmed.startsWith('本地書索引無效') ||
         trimmed.startsWith('不支援的本地格式:');
   }
 }

@@ -18,7 +18,9 @@ class AppFileSelectionService {
 
   final AppPickFiles? _picker;
 
-  static const _localBook = _FileSelectionSpec(allowedExtensions: ['txt']);
+  static const _localBook = _FileSelectionSpec(
+    allowedExtensions: ['txt', 'epub'],
+  );
 
   static const _bookshelfImport = _FileSelectionSpec(
     allowedExtensions: ['json'],

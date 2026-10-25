@@ -377,7 +377,7 @@ void main() {
           predicate((Object error) => error.toString().contains('不支援互動驗證')),
         ),
       );
-      // 不需要互動的網頁渲染（java.webView）在校驗裡照常執行（ADR 0032）。
+      // 不需要互動的網頁渲染（java.webView）在校驗裡照常執行（ADR 0033）。
     });
 
     test('Jsoup shim supports importClass and select text helpers', () {
