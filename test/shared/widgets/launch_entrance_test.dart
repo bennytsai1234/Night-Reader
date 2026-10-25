@@ -372,6 +372,9 @@ void main() {
 
     await tester.pumpWidget(host(loading: false));
     await tester.pumpAndSettle();
+    // 兩張圖拍好、停住的畫面畫完才開始算換場前的停頓，這段沒有要畫的格。
+    await tester.pump(LaunchEntranceMotion.idle);
+    await tester.pumpAndSettle();
     expect(finished, 1);
 
     // 重新載入時骨架一直呼吸，用固定時間走完換回骨架。

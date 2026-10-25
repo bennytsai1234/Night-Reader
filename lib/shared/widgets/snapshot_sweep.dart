@@ -46,7 +46,8 @@ class SnapshotSweepController {
   /// [SkeletonReveal.incomingOpacityAt]），否則整片淡換。換場播完、換回真的
   /// 畫面時完成。
   ///
-  /// 拍圖的這幾格畫面停著不動；兩張都拍好後再停 [gap] 才開始換場：拍圖是
+  /// 拍圖的這幾格畫面停著不動；兩張都拍好、停住的畫面畫完後，先做
+  /// [settle]（給呼叫端趁畫面靜止時做的事），再停 [gap] 才開始換場：拍圖是
   /// 這段最重的主執行緒工作，手機拍得再慢，換場也不會緊接在拍完的那一格
   /// 開始（ADR 0025）。
   ///
@@ -56,13 +57,14 @@ class SnapshotSweepController {
     required Duration duration,
     bool sweep = true,
     Duration gap = Duration.zero,
+    VoidCallback? settle,
   }) {
     final state = _state;
     if (state == null || !state.mounted) {
       change();
       return Future<void>.value();
     }
-    return state._play(change, duration, sweep, gap);
+    return state._play(change, duration, sweep, gap, settle);
   }
 
   /// 換場還沒播完就換回真的畫面（底下已經換好），完成這一次換場。建畫面
@@ -152,6 +154,10 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   /// 兩張都拍好後要再停多久（[SnapshotSweepController.play] 的 gap）。
   Duration _gap = Duration.zero;
 
+  /// 兩張都拍好、停住的畫面畫完後做的事（[SnapshotSweepController.play] 的
+  /// settle）。
+  VoidCallback? _settle;
+
   /// 拍好後停的計時器；結束才開始換場。
   Timer? _hold;
 
@@ -160,6 +166,7 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     Duration duration,
     bool sweep,
     Duration gap,
+    VoidCallback? settle,
   ) {
     _end();
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -169,6 +176,7 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     final run = _run = Completer<void>();
     _sweep = sweep;
     _gap = gap;
+    _settle = settle;
     _progress.duration = duration;
     _afterFrame(() => _captureBefore(run, change));
     return run.future;
@@ -225,6 +233,21 @@ class _SnapshotSweepState extends State<SnapshotSweep>
       _after = after;
       _phase = _Phase.playing;
     });
+    // 停住的畫面畫完才做 settle、才開始算 gap：settle 落在靜止的畫面上，
+    // 做得再久，換場前也照樣停滿 gap。等的是下一格（[_afterFrame]），不用
+    // endOfFrame：這一格裡別人先要過的話，拿到的是這一格的結束。
+    _afterFrame(() => _settleThenHold(run));
+  }
+
+  void _settleThenHold(Completer<void> run) {
+    bool current() =>
+        mounted && identical(_run, run) && _phase == _Phase.playing;
+    if (!current()) return;
+    final settle = _settle;
+    _settle = null;
+    settle?.call();
+    // settle 裡可能結束或換掉了這一次換場。
+    if (!current()) return;
     _hold = Timer(_gap, () => _start(run));
   }
 
@@ -248,7 +271,9 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   void _end({bool rebuild = true}) {
     final run = _run;
     _run = null;
+    _settle = null;
     _hold?.cancel();
+    _hold = null;
     _progress.stop();
     final before = _before, after = _after;
     void reset() {
