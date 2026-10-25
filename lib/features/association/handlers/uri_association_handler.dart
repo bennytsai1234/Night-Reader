@@ -12,7 +12,7 @@ import 'association_base.dart';
 ///
 /// yuedu:// 格式 (舊版相容):
 ///   yuedu://booksource/importonline?src={url}  — 匯入書源
-///   yuedu://rsssource/importonline?src={url}   — 匯入 RSS (不支援，忽略)
+///   yuedu://rsssource/importonline?src={url}   — 訂閱源（不支援，只告知）
 ///   yuedu://replace/importonline?src={url}     — 匯入替換規則
 mixin UriAssociationHandler on AssociationBase {
   void handleUri(
@@ -45,6 +45,7 @@ mixin UriAssociationHandler on AssociationBase {
       // /bookSource, /replaceRule, /addToBookshelf
       final mappedType = switch (type) {
         'bookSource' => 'bookSource',
+        'rssSource' => 'rssSource',
         'replaceRule' => 'replaceRule',
         'addToBookshelf' => 'book',
         _ => 'auto',
@@ -69,6 +70,7 @@ mixin UriAssociationHandler on AssociationBase {
     final host = uri.host.toLowerCase();
     final type = switch (host) {
       'booksource' => 'bookSource',
+      'rsssource' => 'rssSource',
       'replace' => 'replaceRule',
       _ => 'auto',
     };

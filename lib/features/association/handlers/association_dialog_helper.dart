@@ -87,8 +87,18 @@ mixin AssociationDialogHelper on AssociationBase {
           final parsed = await service.parseSourcesDetailedAsync(text);
           final count = await service.importSources(parsed.allSources);
           if (!context.mounted) return;
+          // 和書源管理的匯入同一套說法：非文字小說的書源會匯入但停用。
+          final unsupportedCount = parsed.unsupportedSources.length;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(count > 0 ? '成功匯入 $count 個書源' : '未匯入有效書源')),
+            SnackBar(
+              content: Text(
+                count == 0
+                    ? '未匯入有效書源'
+                    : unsupportedCount > 0
+                    ? '成功匯入 $count 個書源，其中 $unsupportedCount 個已標記為不支援並停用'
+                    : '成功匯入 $count 個書源',
+              ),
+            ),
           );
         case _ImportKind.bookshelf:
           if (isFile) {
@@ -175,6 +185,7 @@ mixin AssociationDialogHelper on AssociationBase {
       'bookSource' => '辨識為書源資料',
       'replaceRule' => '辨識為替換規則',
       'book' => '辨識為書架資料',
+      'rssSource' => '這是訂閱源，夜讀只支援書源，無法匯入',
       'theme' => '辨識為閱讀主題，但目前沒有可用的主題匯入流程',
       _ => '無法自動判斷類型，請選擇要使用的匯入方式',
     };
