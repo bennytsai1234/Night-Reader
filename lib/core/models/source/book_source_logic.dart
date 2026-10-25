@@ -232,15 +232,18 @@ extension BookSourceLogic on BookSourceBase {
     return null;
   }
 
-  /// 發現、搜尋範圍與書源管理每次重建都會對每個書源問一次，發現網址與搜尋
-  /// 網址常是整段 JS，所以結果依書源記下來，欄位內容變了才重算。
+  /// 發現、搜尋範圍與書源管理每次重建都會對每個書源問一次，搜尋網址常是
+  /// 整段 JS，所以結果依書源記下來，欄位內容變了才重算。
+  ///
+  /// 不看發現網址：小說站的分類清單本來就有「动漫衍生」「影视剧本」這類小說
+  /// 分類，番茄、起點會因此被當成非小說停用；漫畫、聽書、影音書源靠書源類型
+  /// 與名稱、分組、網址就認得出來。
   String? get detectedNonNovelMarker {
     final fields = <String?>[
       bookSourceName,
       bookSourceGroup,
       bookSourceComment,
       bookSourceUrl,
-      exploreUrl,
       searchUrl,
     ];
     final cached = _nonNovelMarkerCache[bookSourceUrl];

@@ -33,7 +33,8 @@ class AssociationHandlerService extends AssociationBase
   }) {
     appLinks = AppLinks();
 
-    // 1. Deep Link (legado://)
+    // 1. Deep Link (legado://、yuedu://)：app_links 6 起這個串流也會送出開啟
+    // App 的那個連結，不另外呼叫 getInitialLink()，否則冷啟動會跳兩次匯入。
     linkSubscription = appLinks.uriLinkStream.listen((uri) {
       if (context.mounted) handleUri(context, uri, showImportDialog);
     });
@@ -71,21 +72,6 @@ class AssociationHandlerService extends AssociationBase
       onError: (Object error, StackTrace stackTrace) {
         AppLog.e(
           'Initial sharing intent failed: $error',
-          error: error,
-          stackTrace: stackTrace,
-        );
-      },
-    );
-
-    appLinks.getInitialLink().then(
-      (uri) {
-        if (uri != null && context.mounted) {
-          handleUri(context, uri, showImportDialog);
-        }
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        AppLog.e(
-          'Initial deep link failed: $error',
           error: error,
           stackTrace: stackTrace,
         );
