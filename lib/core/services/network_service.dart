@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/network/interceptors/cloudflare_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 
 /// NetworkService - 專業網路伺服 (具備反爬蟲對應能力)
@@ -51,6 +52,10 @@ class NetworkService {
     );
 
     _dio.interceptors.add(LenientCookieManager(_cookieJar));
+    // 在 Cookie 管理器之後：看得到載入的通行 Cookie，也先存下檢查頁的 Cookie。
+    _dio.interceptors.add(
+      CloudflareInterceptor(_dio, _cookieJar.saveFromResponse),
+    );
     _dio.interceptors.add(AppInterceptor());
 
     _isInitialized = true;

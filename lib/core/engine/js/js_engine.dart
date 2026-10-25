@@ -9,7 +9,6 @@ import 'package:xpath_selector/xpath_selector.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/http_client.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
 
 import 'async_js_rewriter.dart';
 import 'js_extensions.dart';
@@ -61,14 +60,9 @@ class JsEngine {
 
   JsEngine({this.source, dynamic ruleContext}) : _ruleContext = ruleContext {
     try {
-      // 背景 isolate（書源批量校驗）沒有 ServicesBinding，flutter_js 的
-      // enableFetch() 會用 rootBundle 載入 fetch.js polyfill，存取
-      // ServicesBinding.instance 時觸發 null check 崩潰，導致整個 JS 引擎
-      // 不可用、所有 JS 書源校驗失敗。校驗只用 java.* 橋接，不需要瀏覽器
-      // fetch/XHR，故在非互動校驗時關閉 xhr；主線程閱讀路徑維持開啟。
-      _runtime = getJavascriptRuntime(
-        xhr: !SourceValidationContext.isNonInteractive,
-      );
+      // 書源 worker（含書源校驗）沒有 rootBundle，fetch.js 用主 isolate
+      // 讀好的那一份（`fetchPolyfillSource`）。
+      _runtime = getJavascriptRuntime();
       _isAvailable = true;
       _extensions = JsExtensions(
         _runtime!,

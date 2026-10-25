@@ -1,5 +1,20 @@
 import Flutter
 import UIKit
+import WebKit
+
+// WKWebView 的瀏覽器標識只能從網頁裡讀；讀完前要留住這個 WebView。
+private enum UserAgentReader {
+  private static var webView: WKWebView?
+
+  static func read(_ completion: @escaping (String?) -> Void) {
+    let webView = WKWebView(frame: .zero)
+    self.webView = webView
+    webView.evaluateJavaScript("navigator.userAgent") { value, _ in
+      completion(value as? String)
+      self.webView = nil
+    }
+  }
+}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -27,6 +42,32 @@ import UIKit
           return
         }
         result(wordAt(text, offset))
+      }
+    // 背景瀏覽器通過 Cloudflare 檢查後，夜讀要帶著同樣的 Cookie 與瀏覽器標識
+    // 去抓網頁。通行 Cookie 設成網頁程式讀不到（HttpOnly），只能從 WebKit 的
+    // Cookie 存放處讀。
+    FlutterMethodChannel(name: "night_reader/webview", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        switch call.method {
+        case "getCookies":
+          guard let url = call.arguments as? String, let host = URL(string: url)?.host else {
+            result(FlutterError(code: "bad_args", message: "url is required", details: nil))
+            return
+          }
+          WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+            let matched = cookies.filter { cookie in
+              let domain = cookie.domain.hasPrefix(".")
+                ? String(cookie.domain.dropFirst()) : cookie.domain
+              return host == domain || host.hasSuffix("." + domain)
+            }
+            result(matched.isEmpty ? nil : matched.map { "\($0.name)=\($0.value)" }
+              .joined(separator: "; "))
+          }
+        case "defaultUserAgent":
+          UserAgentReader.read { result($0) }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
       }
     FlutterEventChannel(name: "night_reader/battery", binaryMessenger: messenger)
       .setStreamHandler(BatteryStreamHandler())

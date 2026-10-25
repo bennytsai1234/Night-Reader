@@ -294,6 +294,7 @@ extension JsJavaObject on JsExtensionsBase {
         },
         timeFormat: function(time) { return sendMessage('_timeFormat', JSON.stringify(time)); },
         timeFormatUTC: function(time, format, sh) { return sendMessage('timeFormatUTC', JSON.stringify([time, format, sh])); },
+        getWebViewUA: function() { return String(sendMessage('getWebViewUA', '""')); },
         toNumChapter: function(text) { return sendMessage('_toNumChapter', JSON.stringify(text)); },
         t2s: function(text) { return sendMessage('t2s', JSON.stringify(text)); },
         s2t: function(text) { return sendMessage('s2t', JSON.stringify(text)); },

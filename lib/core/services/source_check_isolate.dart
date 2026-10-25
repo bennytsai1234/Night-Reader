@@ -1,16 +1,17 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/network/cloudflare.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
-import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -106,113 +107,78 @@ class SourceCheckIsolateHandle {
 //  Public API
 // ═══════════════════════════════════════════════════════════════════
 
-/// Spawns a background [Isolate] that runs a full source check.
-/// The [timeout] kills the isolate if it hasn't finished in time.
-/// Returns null on timeout, cancel, or spawn failure — caller treats null as
-/// a timeout/abnormal result.
+/// 開一個書源 worker（[SourceWorker]）校驗 [source]：和閱讀時一樣的環境，
+/// 網頁渲染、Cloudflare 檢查、Cookie 與資料庫都交給主 isolate。到了
+/// [timeout] 還沒做完就結束 worker，卡在同步規則 JS 裡也停得下來。
+/// 逾時、取消或開不起來時結果是 null，呼叫端當成逾時或異常。
 Future<SourceCheckIsolateHandle> spawnSourceCheck(
   BookSource source,
   IsolateCheckConfig config,
   Duration timeout,
 ) async {
-  final receivePort = ReceivePort();
-  final completer = Completer<SourceCheckIsolateResult?>();
-
-  late final Isolate isolate;
-  late final Timer timer;
-
-  void abort() {
-    if (completer.isCompleted) return;
-    timer.cancel();
-    receivePort.close();
-    isolate.kill(priority: Isolate.immediate);
-    completer.complete(null);
-  }
-
+  final SourceWorker worker;
   try {
-    isolate = await Isolate.spawn(
-      _sourceCheckIsolateEntry,
-      <String, dynamic>{
-        'sendPort': receivePort.sendPort,
-        'sourceJson': source.toJson(),
-        'configJson': config.toMap(),
-        'rootToken': RootIsolateToken.instance,
-      },
-      errorsAreFatal: false,
-      onError: receivePort.sendPort,
+    worker = await SourceWorker.spawn(
+      debugName: 'SourceCheck',
+      withDictionaries: false,
     );
-  } catch (_) {
-    receivePort.close();
+  } catch (e, stack) {
+    AppLog.e('書源校驗 worker 開不起來: $e', error: e, stackTrace: stack);
     return SourceCheckIsolateHandle(
       result: Future<SourceCheckIsolateResult?>.value(null),
       abort: () {},
     );
   }
 
-  timer = Timer(timeout, abort);
+  final completer = Completer<SourceCheckIsolateResult?>();
+  late final Timer timer;
 
-  receivePort.listen((message) {
+  void finish(SourceCheckIsolateResult? result) {
     if (completer.isCompleted) return;
     timer.cancel();
-    receivePort.close();
-    if (message is Map) {
-      try {
-        completer.complete(
-          SourceCheckIsolateResult.fromMap(Map<String, dynamic>.from(message)),
-        );
-        return;
-      } catch (_) {}
-    }
-    // message is List (isolate uncaught error / 內部捕捉錯誤) 或其他非預期型別。
-    // 先把真實錯誤寫進 app 內置崩潰日誌，再以 null 收尾，避免被誤判為「整體校驗超時」。
-    if (message is List) {
-      final err = message.isNotEmpty ? message[0]?.toString() ?? '' : '';
-      final stack = message.length > 1 ? message[1]?.toString() : null;
-      CrashHandler.recordError(
-        '書源校驗 isolate 失敗 [${source.bookSourceName}] '
-        '(${source.bookSourceUrl}): $err',
-        (stack == null || stack.isEmpty) ? null : StackTrace.fromString(stack),
-      );
-    }
-    completer.complete(null);
-  });
-
-  return SourceCheckIsolateHandle(result: completer.future, abort: abort);
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Isolate entry (must be top-level)
-// ═══════════════════════════════════════════════════════════════════
-
-void _sourceCheckIsolateEntry(Map<String, dynamic> args) {
-  final sendPort = args['sendPort'] as SendPort;
-  final rootToken = args['rootToken'] as RootIsolateToken?;
-  // 讓背景 isolate 能使用 platform channel（例如書源 JS 檔案 API 走的
-  // path_provider）。get_it 仍為空，DAO 類依賴另以記憶體模式退化處理。
-  if (rootToken != null) {
-    BackgroundIsolateBinaryMessenger.ensureInitialized(rootToken);
+    worker.kill(StateError('書源校驗已結束'));
+    completer.complete(result);
   }
-  final sourceJson = Map<String, dynamic>.from(args['sourceJson'] as Map);
-  final configJson = Map<String, dynamic>.from(args['configJson'] as Map);
 
-  SourceValidationContext.runNonInteractive(() async {
-    try {
-      // isolate 為全新記憶體空間，主 isolate 的 NetworkService.init() 不跨
-      // isolate 生效，需在此自行初始化。用 ephemeral 記憶體 cookie jar，
-      // 避開 path_provider 與多個校驗 isolate 的檔案競爭。
-      await NetworkService().init(ephemeral: true);
-      final source = BookSource.fromJson(sourceJson);
-      final config = IsolateCheckConfig.fromMap(configJson);
-      final checker = SourceChecker(source: source, config: config);
-      final result = await checker.run();
-      sendPort.send(result.toMap());
-    } catch (e, st) {
-      // 把 isolate 內捕捉到的真實錯誤以 List 形式送回主線程（與 onError 同型別），
-      // 由主線程寫進崩潰日誌；不再靜默吞錯造成「整體校驗超時」的假象。
-      sendPort.send(<String>['SourceCheckIsolate caught: $e', st.toString()]);
-    }
-  });
+  timer = Timer(timeout, () => finish(null));
+  unawaited(
+    worker
+        .run(_checkTask(source.toJson(), config.toMap()))
+        .then(
+          (map) => finish(SourceCheckIsolateResult.fromMap(map)),
+          onError: (Object error, StackTrace stack) {
+            // 先把真實錯誤寫進崩潰日誌，再以 null 收尾，避免被誤判為「整體校驗
+            // 超時」；結束 worker 的那一次不算。
+            if (!completer.isCompleted) {
+              CrashHandler.recordError(
+                '書源校驗失敗 [${source.bookSourceName}] '
+                '(${source.bookSourceUrl}): $error',
+                stack,
+              );
+            }
+            finish(null);
+          },
+        ),
+  );
+
+  return SourceCheckIsolateHandle(
+    result: completer.future,
+    abort: () => finish(null),
+  );
 }
+
+/// 在 worker 裡跑的校驗；只捕捉書源與設定的資料（`CODING_STANDARDS.md`）。
+Future<Map<String, dynamic>> Function(CancelToken) _checkTask(
+  Map<String, dynamic> sourceJson,
+  Map<String, dynamic> configMap,
+) =>
+    (_) => SourceValidationContext.runNonInteractive(() async {
+      final checker = SourceChecker(
+        source: BookSource.fromJson(sourceJson),
+        config: IsolateCheckConfig.fromMap(configMap),
+      );
+      return (await checker.run()).toMap();
+    });
 
 // ═══════════════════════════════════════════════════════════════════
 //  Private enums / types used inside the isolate
@@ -825,6 +791,25 @@ class SourceChecker {
     // originalError（真正的 JS/解析失敗原因），但 _compactMessage 只取首行會
     // 截掉它。標記後帶回主線程，由主線程過濾寫進崩潰日誌。
     _log('§DIAG§ [$stage] $error');
+
+    // 網站要真人勾選或封鎖了目前的網路（CloudflareInterceptor）：夜讀不替
+    // 使用者勾選，當成暫時不能用的書源，換網路或網站改設定後再校驗就會恢復。
+    if (normalized.contains(HumanVerificationRequiredException().message) ||
+        normalized.contains(SiteBlockedException().message)) {
+      return _IssueData(
+        stage: 'upstream',
+        message: message,
+        health: const SourceRuntimeHealth(
+          category: SourceHealthCategory.upstreamUnstable,
+          label: quarantineSourceGroupTag,
+          description: '網站擋下了夜讀，來源先隔離但不視為永久失效',
+          allowsSearch: false,
+          allowsReading: false,
+          cleanupCandidate: false,
+          quarantined: true,
+        ),
+      );
+    }
 
     if (error is SourceInteractionBlockedException ||
         _looksLikeInteractiveVerificationBlock(normalized)) {
