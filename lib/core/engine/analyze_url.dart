@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
 import 'package:fast_gbk/fast_gbk.dart';
@@ -10,7 +11,6 @@ import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -480,11 +480,6 @@ class AnalyzeUrl {
 
       // 如果開啟了 WebView 抓取模式
       if (useWebView) {
-        if (SourceValidationContext.isNonInteractive) {
-          throw const SourceInteractionBlockedException(
-            '批量校驗不執行 WebView 載入或互動驗證',
-          );
-        }
         // WebView 渲染沒辦法中途停下；取消時不再等它，結果丟掉。
         final finalBody = await untilCancelled(
           HeadlessWebViewService().getRenderedHtml(
@@ -583,8 +578,9 @@ class AnalyzeUrl {
       case DioExceptionType.connectionError:
         return true;
       case DioExceptionType.unknown:
-        // Socket 層級故障也算暫時性
-        return e.error != null;
+        // Socket 層級故障也算暫時性；網站擋下來（Cloudflare、封鎖網路）
+        // 這類已經判斷過的原因再試也一樣。
+        return e.error != null && e.error is! AppException;
       case DioExceptionType.cancel:
       case DioExceptionType.badCertificate:
       case DioExceptionType.badResponse:

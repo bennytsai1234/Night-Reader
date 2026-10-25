@@ -12,6 +12,8 @@ import android.os.Bundle
 import android.view.RoundedCorner
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.webkit.CookieManager
+import android.webkit.WebSettings
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -78,6 +80,29 @@ class MainActivity : AudioServiceActivity() {
             }
             setLaunchTheme(call.argument<String>("style"), call.argument<String>("mode"))
             result.success(null)
+        }
+        // 背景瀏覽器通過 Cloudflare 檢查後，夜讀要帶著同樣的 Cookie 與瀏覽器
+        // 標識去抓網頁。通行 Cookie 設成網頁程式讀不到（HttpOnly），只能從
+        // 系統的 CookieManager 讀。
+        MethodChannel(messenger, "night_reader/webview").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getCookies" -> {
+                    val url = call.arguments as? String
+                    if (url == null) {
+                        result.error("bad_args", "url is required", null)
+                    } else {
+                        result.success(CookieManager.getInstance().getCookie(url))
+                    }
+                }
+                "defaultUserAgent" -> result.success(
+                    try {
+                        WebSettings.getDefaultUserAgent(applicationContext)
+                    } catch (_: Exception) {
+                        null
+                    },
+                )
+                else -> result.notImplemented()
+            }
         }
         EventChannel(messenger, "night_reader/battery")
             .setStreamHandler(BatteryStreamHandler(applicationContext))

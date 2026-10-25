@@ -31,6 +31,8 @@ import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/engine/source_isolate/source_isolate.dart';
+import 'core/network/cloudflare.dart';
+import 'core/services/webview_cloudflare_solver.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
@@ -100,6 +102,8 @@ Future<void> _startApp() async {
   // 書源工作都在書源 isolate 執行。背景下載的 Workmanager 入口不開，維持
   // 原地執行。
   SourceIsolate.enabled = true;
+  // Cloudflare 的瀏覽器檢查交給看不到的瀏覽器通過（[HiddenWebViews]）。
+  CloudflareClearance.solver = WebViewCloudflareSolver();
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
@@ -234,6 +238,12 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
   unawaited(_pruneReaderLayoutCaches());
+  // 第一次讀會載入系統的瀏覽器元件，放到進場之後。
+  unawaited(
+    WebViewNative.defaultUserAgent().then(
+      (userAgent) => WebViewUserAgent.value = userAgent,
+    ),
+  );
 }
 
 /// 刪掉資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
@@ -326,7 +336,9 @@ class ReaderApp extends StatelessWidget {
               child: StatusBarStableInset(
                 child: BackdropGroup(
                   child: ChineseDisplayScope(
-                    child: child ?? const SizedBox.shrink(),
+                    child: HiddenWebViews(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ),

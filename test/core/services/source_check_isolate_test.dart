@@ -6,6 +6,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
@@ -150,6 +151,31 @@ void main() {
     expect(checked.groupTags, contains(searchBrokenSourceGroupTag));
     expect(checked.runtimeHealth.allowsSearch, isFalse);
     expect(checked.runtimeHealth.allowsReading, isTrue);
+  });
+
+  test('a site that blocks Night Reader quarantines the source', () async {
+    for (final reason in [
+      ChallengeNotPassedException(),
+      HumanVerificationRequiredException(),
+      SiteBlockedException(),
+    ]) {
+      final (result, checked) = await _check(
+        _FakeBookSourceService(
+          search: () => Future.error(
+            DioException(
+              requestOptions: RequestOptions(path: 'https://site.example'),
+              type: DioExceptionType.unknown,
+              error: reason,
+              message: reason.message,
+            ),
+          ),
+        ),
+      );
+
+      expect(checked.isQuarantined, isTrue, reason: reason.message);
+      expect(checked.runtimeHealth.allowsReading, isFalse);
+      expect(result.message, contains(reason.message));
+    }
   });
 
   test('a search timeout quarantines the source', () async {

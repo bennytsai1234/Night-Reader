@@ -7,7 +7,7 @@ class AppInterceptor extends Interceptor {
   static const String _desktopUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
-  static const String _mobileUserAgent =
+  static const String mobileUserAgent =
       'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
   static const String manualRedirectCountKey = '_manualRedirectCount';
@@ -41,7 +41,7 @@ class AppInterceptor extends Interceptor {
   String _defaultUserAgentFor(Uri uri) {
     final host = uri.host.toLowerCase();
     if (host.startsWith('m.')) {
-      return _mobileUserAgent;
+      return mobileUserAgent;
     }
     return _desktopUserAgent;
   }

@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cancellation.dart';
+import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
@@ -28,14 +29,6 @@ import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 ///
 /// 純同步 handler 例如 [timeFormatUTC] 則保留同步 return，直接回傳字串。
 extension JsNetworkExtensions on JsExtensions {
-  bool _rejectNonInteractiveValidation(int callId, String message) {
-    if (!SourceValidationContext.isNonInteractive) {
-      return false;
-    }
-    rejectJsPending(callId, SourceInteractionBlockedException(message));
-    return true;
-  }
-
   List<String> _redirectsForResponse(Response response) {
     final nativeRedirects = response.redirects
         .map((record) => record.location.toString())
@@ -300,12 +293,6 @@ extension JsNetworkExtensions on JsExtensions {
     // ─── java.webView(html, url, js) ─────────────────────────────
     runtime.onMessage('webView', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      if (_rejectNonInteractiveValidation(
-        parsed.callId,
-        '批量校驗不執行 WebView 載入或互動驗證',
-      )) {
-        return null;
-      }
       final payload = parsed.payload;
       if (payload is! List) {
         resolveJsPending(parsed.callId, '');
@@ -336,12 +323,6 @@ extension JsNetworkExtensions on JsExtensions {
 
     runtime.onMessage('webViewGetSource', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      if (_rejectNonInteractiveValidation(
-        parsed.callId,
-        '批量校驗不執行 WebView 載入或互動驗證',
-      )) {
-        return null;
-      }
       final payload = parsed.payload;
       if (payload is! List) {
         resolveJsPending(parsed.callId, '');
@@ -374,12 +355,6 @@ extension JsNetworkExtensions on JsExtensions {
 
     runtime.onMessage('webViewGetOverrideUrl', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      if (_rejectNonInteractiveValidation(
-        parsed.callId,
-        '批量校驗不執行 WebView 載入或互動驗證',
-      )) {
-        return null;
-      }
       final payload = parsed.payload;
       if (payload is! List) {
         resolveJsPending(parsed.callId, '');
@@ -462,6 +437,12 @@ extension JsNetworkExtensions on JsExtensions {
       }();
       return null;
     });
+
+    // ─── java.getWebViewUA — 手機內建瀏覽器的標識，還沒讀到時用預設 ──
+    runtime.onMessage(
+      'getWebViewUA',
+      (dynamic _) => WebViewUserAgent.value ?? AppInterceptor.mobileUserAgent,
+    );
 
     // ─── java.timeFormatUTC — 真正同步 ───────────────────────────
     runtime.onMessage('timeFormatUTC', (dynamic args) {
