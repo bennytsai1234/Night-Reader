@@ -28,6 +28,13 @@ extension JsJavaObject on JsExtensionsBase {
         if (type !== 'object') {
           return value;
         }
+        // 規則在回應物件上加了自己的欄位（`r.name = …`）時，要的是那些欄位，
+        // 照一般物件交回。
+        if (value.__lrResponse && Object.keys(value).every(function(key) {
+          return typeof value[key] === 'function';
+        })) {
+          return { __lrResponse: value.__lrResponse };
+        }
         if (typeof value.size === 'function' && typeof value.get === 'function') {
           var normalizedItems = [];
           var size = Number(value.size()) || 0;
@@ -181,29 +188,93 @@ extension JsJavaObject on JsExtensionsBase {
             toString: function() { return responseUrl(); }
           };
         }
+        // 同 OkHttp 的 Headers（Legado 的 `headers()`）：`get` 不分大小寫、
+        // 取最後一個值。原本的 `headers()['content-type']` 寫法照用。
+        var headers = null;
+        function buildHeaders() {
+          if (headers) return headers;
+          var source = res && res.headers ? res.headers : {};
+          headers = {};
+          Object.keys(source).forEach(function(key) { headers[key] = source[key]; });
+          function valuesOf(name) {
+            var target = String(name).toLowerCase();
+            var found = [];
+            Object.keys(source).forEach(function(key) {
+              if (String(key).toLowerCase() !== target) return;
+              var value = source[key];
+              (Array.isArray(value) ? value : [value]).forEach(function(item) {
+                if (item != null) found.push(String(item));
+              });
+            });
+            return found;
+          }
+          var methods = {
+            get: function(name) {
+              var found = valuesOf(name);
+              return found.length ? found[found.length - 1] : null;
+            },
+            values: function(name) { return __lrJavaList(valuesOf(name)); },
+            names: function() {
+              return __lrJavaList(Object.keys(source).map(function(key) {
+                return String(key).toLowerCase();
+              }));
+            },
+            size: function() {
+              return Object.keys(source).reduce(function(count, key) {
+                return count + valuesOf(key).length;
+              }, 0);
+            },
+            toMultimap: function() {
+              var map = {};
+              Object.keys(source).forEach(function(key) {
+                map[String(key).toLowerCase()] = valuesOf(key);
+              });
+              return map;
+            }
+          };
+          Object.keys(methods).forEach(function(name) {
+            Object.defineProperty(headers, name, { value: methods[name], enumerable: false });
+          });
+          return headers;
+        }
         function buildRawResponse() {
           return {
             request: function() { return buildRawRequest(); },
             url: function() { return responseUrl(); },
-            headers: function() { return res && res.headers ? res.headers : {}; },
+            headers: function() { return buildHeaders(); },
             code: function() { return responseCode(); },
             message: function() { return responseMessage(); },
             isSuccessful: function() { return isSuccessfulStatus(); },
             toString: function() { return responseUrl(); }
           };
         }
-        return {
+        var response = {
           body: function() { return res.body; },
           url: function() { return responseUrl(); },
           code: function() { return responseCode(); },
           statusCode: function() { return responseCode(); },
           message: function() { return responseMessage(); },
           isSuccessful: function() { return isSuccessfulStatus(); },
-          headers: function() { return res.headers; },
+          headers: function() { return buildHeaders(); },
           header: function(name) { return getHeader(name); },
+          // Legado 只在請求失敗時有 errorBody（內文放在這裡，不在 body）。
+          errorBody: function() {
+            if (isSuccessfulStatus()) return null;
+            var text = String(res && res.body != null ? res.body : '');
+            return {
+              string: function() { return text; },
+              toString: function() { return text; }
+            };
+          },
           raw: function() { return buildRawResponse(); },
           toString: function() { return responseUrl(); }
         };
+        // 規則原樣傳回回應物件時（例如登入檢查），交回 Dart 換成 StrResponse。
+        Object.defineProperty(response, '__lrResponse', {
+          value: res || {},
+          enumerable: false
+        });
+        return response;
       }
 
       var java = {
