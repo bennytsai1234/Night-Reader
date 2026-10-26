@@ -493,6 +493,16 @@ void main() {
       expect(found.map((b) => (b.name, b.author)), [('夜讀', '作者')]);
     });
 
+    test('the URLs a task sent come back for source debugging', () async {
+      final urls = <String>[];
+      await withSourceRequestLog(
+        urls.add,
+        () => BookSourceService().searchBooks(source, '夜讀'),
+      );
+
+      expect(urls, ['$baseUrl/search']);
+    });
+
     test('explore kinds and explore pages', () async {
       final service = BookSourceService();
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart' as dio_cookie;
+import 'package:night_reader/core/network/redirects.dart';
 
 final _setCookieReg = RegExp('(?<=)(,)(?=[^;]+?=)');
 
@@ -146,9 +147,7 @@ class LenientCookieManager extends Interceptor {
         .whereType<Cookie>()
         .toList();
 
-    final originalUri = response.requestOptions.uri;
-    final realUri = originalUri.resolveUri(response.realUri);
-    await cookieJar.saveFromResponse(realUri, cookies);
+    await cookieJar.saveFromResponse(response.finalUri, cookies);
   }
 
   Iterable<String> _cookieHeaderValues(Map<String, dynamic> headers) sync* {
