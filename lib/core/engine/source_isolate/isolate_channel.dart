@@ -130,6 +130,8 @@ DioException? _sendableDioException(Object error) {
             requestOptions: options,
             statusCode: response.statusCode,
             statusMessage: response.statusMessage,
+            // 留著轉址紀錄，才換算得出最後抓的網址（`finalUri`）。
+            redirects: response.redirects,
           ),
     type: error.type,
     error: switch (inner) {

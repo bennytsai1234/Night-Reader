@@ -7,7 +7,6 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
-import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -17,6 +16,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
@@ -310,8 +310,11 @@ Future<R> _runOnSource<R>(
   BookChapter? chapter,
   CancelToken? cancelToken,
 }) async {
-  final onRequest =
-      Zone.current[_requestLogZoneKey] as void Function(String url)?;
+  // 原地執行時，書源工作裡又叫回來的工作（規則 JS 這類）的請求記進外層
+  // 工作的清單，照送出的順序列。
+  final onRequest = isRecordingRequestUrls
+      ? null
+      : Zone.current[_requestLogZoneKey] as void Function(String url)?;
   final ran = await SourceIsolate.run(
     _tracked(work, book, chapter, recordRequests: onRequest != null),
     cancelToken: cancelToken,

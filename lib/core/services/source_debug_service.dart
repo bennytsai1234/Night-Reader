@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'book_source_service.dart';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -102,7 +103,9 @@ class SourceDebugService {
       if (!_runFailed) log('︽解析完成', state: 1000);
     } on DioException catch (e) {
       log('❌ 發生錯誤: ${userErrorReason(e)}', state: -1);
-      log('  出錯的請求: ${e.requestOptions.uri.removeFragment()}');
+      // 轉址之後才失敗的，出錯的是轉址到的網址。
+      final uri = e.response?.finalUri ?? e.requestOptions.uri;
+      log('  出錯的請求: ${uri.removeFragment()}');
     } catch (e) {
       log('❌ 發生錯誤: $e', state: -1);
     }

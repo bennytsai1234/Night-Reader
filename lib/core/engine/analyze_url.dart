@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -13,19 +12,10 @@ import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
+import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cancellation.dart';
-
-/// 書源除錯要看實際送出的網址：在 [body] 裡經由 [AnalyzeUrl.getStrResponse]
-/// 發出的請求（含規則 JS 自己發的）依序記進 [urls]。
-Future<T> recordRequestUrls<T>(List<String> urls, Future<T> Function() body) =>
-    runZoned(body, zoneValues: {_requestUrlsZoneKey: urls});
-
-final Object _requestUrlsZoneKey = Object();
-
-void _recordRequestUrl(String url) =>
-    (Zone.current[_requestUrlsZoneKey] as List<String>?)?.add(url);
 
 /// AnalyzeUrl - URL 規則解析與請求建構 (原 Android AnalyzeUrl.kt)
 class AnalyzeUrl {
@@ -491,7 +481,6 @@ class AnalyzeUrl {
 
       // 如果開啟了 WebView 抓取模式
       if (useWebView) {
-        _recordRequestUrl(url);
         // WebView 渲染沒辦法中途停下；取消時不再等它，結果丟掉。
         final finalBody = await untilCancelled(
           HeadlessWebViewService().getRenderedHtml(
@@ -531,9 +520,6 @@ class AnalyzeUrl {
         headers: _buildRequestHeaders(),
         responseType: ResponseType.bytes,
       );
-      // 網址的 `#` 後面不會送出（例如 searchUrl 是 `#` 的書源抓的是首頁）。
-      final sentUrl = Uri.tryParse(url)?.removeFragment().toString() ?? url;
-      _recordRequestUrl(method == 'POST' ? 'POST $sentUrl' : sentUrl);
 
       // 網路連線類錯誤重試：最多 3 次 (初次 + 2 retries)，退避 300ms / 1200ms
       // 對標 Android OkHttp RetryAndFollowUpInterceptor 行為
@@ -574,7 +560,7 @@ class AnalyzeUrl {
       final decodedBody = _decodeResponseBody(responseBytes, rawResponse);
 
       return StrResponse(
-        url: rawResponse.realUri.toString(),
+        url: rawResponse.finalUri.toString(),
         body: decodedBody,
         headers: rawResponse.headers.map,
         raw: rawResponse,

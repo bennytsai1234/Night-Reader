@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
 class HeadlessWebViewService {
@@ -37,6 +38,7 @@ class HeadlessWebViewService {
     String? js,
     int delayTime = 0,
   }) async {
+    if (Uri.tryParse(url) case final uri?) recordRequestUrl('GET', uri);
     final delegate = HeadlessWebViewService.delegate;
     if (delegate != null) {
       return delegate(

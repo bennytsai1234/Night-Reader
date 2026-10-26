@@ -1,10 +1,12 @@
-import 'dart:io';
+import 'dart:io' hide HttpClient;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 
@@ -39,6 +41,12 @@ void main() {
           // Cloudflare 連不到網站主機時回的 521。
           request.response.statusCode = 521;
           request.response.write('error code: 521');
+        case '/moved':
+          request.response.statusCode = HttpStatus.found;
+          request.response.headers.set(HttpHeaders.locationHeader, '/');
+        case '/moved-down':
+          request.response.statusCode = HttpStatus.found;
+          request.response.headers.set(HttpHeaders.locationHeader, '/down');
         default:
           request.response.statusCode = HttpStatus.notFound;
       }
@@ -90,6 +98,48 @@ void main() {
       messages,
       contains('  出錯的請求: $baseUrl/down?q=${Uri.encodeQueryComponent('關鍵字')}'),
     );
+  });
+
+  test('redirects are logged hop by hop', () async {
+    final messages = await debug(
+      BookSource(
+        bookSourceUrl: baseUrl,
+        bookSourceName: '搬家了',
+        searchUrl: '/moved',
+        ruleSearch: SearchRule(bookList: '.item', name: 'b@text'),
+      ),
+    );
+
+    final requests = messages.where((m) => m.startsWith('  實際請求: '));
+    expect(requests.take(2), [
+      '  實際請求: $baseUrl/moved',
+      '  實際請求: $baseUrl/（轉址）',
+    ]);
+  });
+
+  test('a failure after a redirect shows the URL it was sent to', () async {
+    final messages = await debug(
+      BookSource(
+        bookSourceUrl: baseUrl,
+        bookSourceName: '搬去的地方掛了',
+        searchUrl: '/moved-down',
+        ruleSearch: SearchRule(bookList: '.item', name: 'b@text'),
+      ),
+    );
+
+    expect(messages, contains('❌ 發生錯誤: 伺服器回應錯誤（521）'));
+    expect(messages, contains('  出錯的請求: $baseUrl/down'));
+  });
+
+  test('requests sent straight through Dio are recorded', () async {
+    // 規則 JS 的 `java.get`、`java.post` 不經過 AnalyzeUrl，直接用 Dio 送。
+    final urls = <String>[];
+    await recordRequestUrls(
+      urls,
+      () => HttpClient().client.post<String>('$baseUrl/'),
+    );
+
+    expect(urls, ['POST $baseUrl/']);
   });
 
   test('logs from a cancelled run never reach the next run', () async {
