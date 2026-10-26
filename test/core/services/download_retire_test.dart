@@ -167,51 +167,46 @@ void main() {
     expect(elapsed, lessThan(const Duration(seconds: 2)));
   });
 
-  for (final isolated in [false, true]) {
-    test(
-      'a request the rule JS made itself stops too '
-      '(source isolate ${isolated ? 'on' : 'off'})',
-      skip: quickJsSkip,
-      () async {
-        if (isolated) {
-          SourceIsolate.enabled = true;
-          SourceIsolate.start(database: Future.value(databaseIsolate));
-          addTearDown(() async {
-            await SourceIsolate.stop();
-            SourceIsolate.enabled = false;
-          });
-        }
-        final id = isolated ? 'on' : 'off';
-        final book = Book(
-          bookUrl: '$base/book/js-$id',
-          origin: '$base/source/js-$id',
-          name: '規則自己抓正文的書',
-          isInBookshelf: true,
-        );
+  // 規則 JS 要等的呼叫只在書源 isolate 裡能用（ADR 0034）。
+  test(
+    'a request the rule JS made itself stops too',
+    skip: quickJsSkip,
+    () async {
+      SourceIsolate.enabled = true;
+      SourceIsolate.start(database: Future.value(databaseIsolate));
+      addTearDown(() async {
+        await SourceIsolate.stop();
+        SourceIsolate.enabled = false;
+      });
+      final book = Book(
+        bookUrl: '$base/book/js',
+        origin: '$base/source/js',
+        name: '規則自己抓正文的書',
+        isInBookshelf: true,
+      );
 
-        // 外層頁面立刻回來，規則 JS 再用 java.ajax 抓真正的正文，卡住。
-        final elapsed = await retireWhileStalled(
-          book: book,
-          source: BookSource.fromJson({
-            'bookSourceName': '規則 JS',
-            'bookSourceUrl': book.origin,
-            'ruleContent': {'content': "@js:java.ajax('$base/ajax/$id')"},
-          }),
-          chapters: [
-            BookChapter(
-              url: '$base/outer/$id',
-              title: '正文',
-              index: 0,
-              bookUrl: book.bookUrl,
-            ),
-          ],
-          held: ['/ajax/$id'],
-        );
+      // 外層頁面立刻回來，規則 JS 再用 java.ajax 抓真正的正文，卡住。
+      final elapsed = await retireWhileStalled(
+        book: book,
+        source: BookSource.fromJson({
+          'bookSourceName': '規則 JS',
+          'bookSourceUrl': book.origin,
+          'ruleContent': {'content': "@js:java.ajax('$base/ajax/js')"},
+        }),
+        chapters: [
+          BookChapter(
+            url: '$base/outer/js',
+            title: '正文',
+            index: 0,
+            bookUrl: book.bookUrl,
+          ),
+        ],
+        held: ['/ajax/js'],
+      );
 
-        expect(elapsed, lessThan(const Duration(seconds: 2)));
-      },
-    );
-  }
+      expect(elapsed, lessThan(const Duration(seconds: 2)));
+    },
+  );
 
   test('a chapter waiting to retry stops when cancelled', () async {
     final book = Book(

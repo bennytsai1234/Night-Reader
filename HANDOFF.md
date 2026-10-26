@@ -2,9 +2,7 @@
 
 ## 進行中
 
-- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）。還沒做，照源倉庫 803 個文字書源的用量排：登入（`loginUrl` 242、`loginUi` 107 個書源）、`startBrowser(Await)`（148，可在看不到的瀏覽器裡載入、不跳畫面）、`data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫）、`longToast`、`androidId` 等。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
-- 等使用者決定：148 個書源（18%）把 `java.ajax` 這類要等網路的呼叫寫在自己的函式裡，現在拿到的是還沒完成的結果。A：做成真的同步等待（和 Legado 一樣，建議）；B：把自動補 `await` 做得更聰明。
-- 同一個 JS 引擎同時跑兩條非同步規則會共用 `result` 這類全域變數；現在的呼叫都逐條 await，遇不到，改成平行時要先隔離。
+- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）。還沒做，照源倉庫 803 個文字書源的用量排：登入（`loginUrl` 242、`loginUi` 107 個書源）、`startBrowser(Await)`（148，可在看不到的瀏覽器裡載入、不跳畫面）、`data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫）、`longToast`、`androidId` 等。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
 
 ## 先不做
 

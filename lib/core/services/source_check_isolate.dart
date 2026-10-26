@@ -426,7 +426,6 @@ class SourceChecker {
       final kinds = await ExploreUrlParser.parseAsync(
         exploreUrl,
         source: _source,
-        jsTimeout: _config.timeoutDuration,
       ).timeout(_config.timeoutDuration);
 
       String? targetUrl;

@@ -4,9 +4,27 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+/// 文件、支援與暫存三個根目錄的路徑（[AppStoragePaths.roots]）。
+typedef StorageRoots = ({String documents, String support, String temporary});
+
 /// Centralizes app-owned filesystem locations so features don't hardcode paths.
 class AppStoragePaths {
+  /// 背景 isolate 用主 isolate 問好的三個根目錄（[useRoots]），不再每次經
+  /// 平台頻道問：書源 isolate 讀一次快取就要問一次，網路 isolate 替停住的
+  /// 書源 isolate 做事時也不必等平台回覆。
+  static StorageRoots? _roots;
+
+  /// 這個 isolate 的三個根目錄，給 [useRoots] 傳到背景 isolate。
+  static Future<StorageRoots> roots() async => (
+    documents: (await documentsDir()).path,
+    support: (await supportDir()).path,
+    temporary: (await temporaryDir()).path,
+  );
+
+  static void useRoots(StorageRoots roots) => _roots = roots;
+
   static Future<Directory> documentsDir() async {
+    if (_roots case final roots?) return Directory(roots.documents);
     try {
       return await getApplicationDocumentsDirectory();
     } on MissingPluginException {
@@ -15,6 +33,7 @@ class AppStoragePaths {
   }
 
   static Future<Directory> supportDir() async {
+    if (_roots case final roots?) return Directory(roots.support);
     try {
       return await getApplicationSupportDirectory();
     } on MissingPluginException {
@@ -23,6 +42,7 @@ class AppStoragePaths {
   }
 
   static Future<Directory> temporaryDir() async {
+    if (_roots case final roots?) return Directory(roots.temporary);
     try {
       return await getTemporaryDirectory();
     } on MissingPluginException {

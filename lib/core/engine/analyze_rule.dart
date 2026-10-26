@@ -68,16 +68,12 @@ class AnalyzeRule extends AnalyzeRuleBase
     return AnalyzeRuleScript(this).evalJS(jsStr, result);
   }
 
-  @override
-  Future<dynamic> evalJSAsync(String jsStr, dynamic result) {
-    return AnalyzeRuleScript(this).evalJSAsync(jsStr, result);
-  }
-
-  Future<void> preUpdateToc() async {
+  /// 執行目錄的預整理 JS（`ruleToc.preUpdateJs`）。
+  void preUpdateToc() {
     if (source is! BookSource) return;
     final js = (source as BookSource).ruleToc?.preUpdateJs;
     if (js != null && js.isNotEmpty) {
-      await evalJSAsync(js, null);
+      evalJS(js, null);
     }
   }
 

@@ -183,38 +183,6 @@ class SourceRule {
     return buffer.toString();
   }
 
-  Future<String> makeUpRuleAsync(dynamic result, dynamic analyzer) async {
-    if (!isDynamic) return rule;
-    final buffer = StringBuffer();
-    for (var i = 0; i < ruleType.length; i++) {
-      final type = ruleType[i];
-      final param = ruleParam[i];
-      if (type == defaultRuleType) {
-        buffer.write(param);
-      } else if (type == jsRuleType) {
-        final trimmed = param.trimLeft();
-        if (trimmed.startsWith('@') ||
-            trimmed.startsWith(r'$.') ||
-            trimmed.startsWith(r'$[') ||
-            trimmed.startsWith('//')) {
-          buffer.write(await analyzer.getStringAsync(trimmed));
-        } else {
-          buffer.write(await analyzer.evalJSAsync(param, result) ?? '');
-        }
-      } else if (type == getRuleType) {
-        buffer.write(analyzer.get(param));
-      } else if (type == jsonPartRuleType) {
-        final val = getAnalyzeByJSonPath(analyzer, result).getString(param);
-        buffer.write(val);
-      } else {
-        if (result is List && type > 0 && type < result.length) {
-          buffer.write(result[type]?.toString() ?? '');
-        }
-      }
-    }
-    return buffer.toString();
-  }
-
   int get paramSize => ruleParam.length;
 
   // 延遲載入解析器

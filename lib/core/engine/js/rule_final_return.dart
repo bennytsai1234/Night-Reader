@@ -1,47 +1,13 @@
-import 'dart:convert' show LineSplitter;
-
-/// 將 rule JS 原始碼包成 async IIFE，並透過 `__ruleDone` sentinel 把結果
-/// 回送給 Dart 側 [JsExtensionsBase] 中的 pending Completer。
-///
-/// 典型 rule JS 是「最後一行表達式即為回傳值」的 Rhino/QuickJS 語意：
+/// 規則 JS 是「最後一行表達式就是結果」的 Rhino 語意：
 ///
 /// ```
 /// var url = baseUrl + "/api";
 /// java.ajax(url)
 /// ```
 ///
-/// 我們透過 [injectFinalReturn] 在最後一個 top-level statement 前補上 `return`，
-/// 再包進 async IIFE 以便內部可以對 rewriter 產生的 `(await ...)` 正確等待。
-///
-/// 失敗處理：任何 JS 端例外都透過 sentinel 第 3 欄 (errMsg) 回傳，Dart 端
-/// Completer 會 completeError。
-class JsRuleAsyncWrapper {
-  JsRuleAsyncWrapper._();
-
-  /// 包裝已經經過 AsyncJsRewriter 處理的 JS 原始碼為 async IIFE。
-  ///
-  /// [callId] 對應 [JsExtensionsBase.registerRuleCall] 配到的 id。
-  static String wrap(String rewrittenSource, int callId) {
-    final body = injectFinalReturn(rewrittenSource);
-    return '''
-(async function() {
-  try {
-    var __lrRuleRes = await (async function() {
-${_indent(body, '      ')}
-    })();
-    var __lrNormalizedRuleRes =
-      typeof __lrNormalizeRuleResult === 'function'
-        ? __lrNormalizeRuleResult(__lrRuleRes)
-        : __lrRuleRes;
-    sendMessage('__ruleDone', JSON.stringify([$callId, __lrNormalizedRuleRes === undefined ? null : __lrNormalizedRuleRes, null]));
-  } catch (__lrErr) {
-    var __lrMsg = (__lrErr && __lrErr.message) ? String(__lrErr.message) : String(__lrErr);
-    sendMessage('__ruleDone', JSON.stringify([$callId, null, __lrMsg]));
-  }
-})();
-''';
-  }
-
+/// 少數舊規則用 `eval` 執行時 QuickJS 判成語法錯誤，改包成函式執行，這時
+/// 用 [inject] 在最後一個 top-level statement 前補上 `return`。
+abstract final class RuleFinalReturn {
   /// 對 JS source 注入 `return`，使最後一個 top-level statement 的結果被回傳。
   ///
   /// 若最後一個 statement 已經以 `return` / `throw` 開頭，或是以變數宣告、
@@ -49,7 +15,7 @@ ${_indent(body, '      ')}
   ///
   /// 對包含在字串字面量、註解、巢狀括號內部的 `;` / `}` 不會誤判為 statement
   /// 邊界。
-  static String injectFinalReturn(String code) {
+  static String inject(String code) {
     final stmtStart = _findLastTopLevelStatementStart(code);
     // 取得從 stmtStart 到結尾的「尾段」，扣除尾端空白
     var end = code.length;
@@ -220,7 +186,7 @@ ${_indent(body, '      ')}
       return null;
     }
     final inner = block.substring(1, end);
-    final injected = injectFinalReturn(inner);
+    final injected = inject(inner);
     return '{${injected.isEmpty ? inner : injected}}';
   }
 
@@ -649,11 +615,6 @@ ${_indent(body, '      ')}
       i++;
     }
     return n;
-  }
-
-  static String _indent(String code, String prefix) {
-    final lines = const LineSplitter().convert(code);
-    return lines.map((l) => l.isEmpty ? l : '$prefix$l').join('\n');
   }
 
   static bool _isWhitespace(int cu) =>

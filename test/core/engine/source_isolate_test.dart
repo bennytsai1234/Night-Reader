@@ -14,6 +14,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
@@ -29,6 +30,7 @@ import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/http_client.dart' as app_http;
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/features/search/search_model.dart';
@@ -113,6 +115,74 @@ Future<String> _evaluateJs(String code) => SourceIsolate.run((_) async {
   }
 });
 
+/// 在書源 isolate 用帶著 [jsLib] 的書源跑一段規則 JS。
+Future<String> _evaluateSourceJs(String code, {String? jsLib}) =>
+    SourceIsolate.run((_) async {
+      final engine = JsEngine(
+        source: BookSource(
+          bookSourceUrl: 'https://jslib.test',
+          bookSourceName: 'jsLib',
+          jsLib: jsLib,
+        ),
+      );
+      try {
+        return '${engine.evaluate(code)}';
+      } finally {
+        engine.dispose();
+      }
+    });
+
+/// 停住書源 isolate，交給網路 isolate 抓 [url]（[BlockingCall]）。
+Future<Object?> _blockOn(
+  String url, {
+  String? affinity,
+  CancelToken? cancelToken,
+}) => SourceIsolate.run(
+  (_) async => BlockingCall.run(_fetchBody(url)),
+  affinity: affinity,
+  cancelToken: cancelToken,
+);
+
+Future<Object?> Function() _fetchBody(String url) =>
+    () async => (await app_http.HttpClient().client.get<String>(
+      url,
+      cancelToken: currentSourceCancelToken,
+    )).data;
+
+Future<Object?> _blockOnFailure() => SourceIsolate.run(
+  (_) async => BlockingCall.run(() async => throw StateError('網站壞了')),
+);
+
+/// [source] 限流下抓 [url]：在書源 isolate 自己抓（[block] 為 false），或
+/// 停住交給網路 isolate 抓。
+Future<Object?> _limitedFetch(
+  BookSource source,
+  String url, {
+  required String affinity,
+  bool block = false,
+}) => SourceIsolate.run((_) async {
+  final fetch = _limitedFetchTask(source, url);
+  return block ? BlockingCall.run(fetch) : fetch();
+}, affinity: affinity);
+
+Future<Object?> Function() _limitedFetchTask(BookSource source, String url) =>
+    () => ConcurrentRateLimiter(source).withLimit(
+      () async => (await app_http.HttpClient().client.get<String>(url)).data,
+    );
+
+Future<String?> _isolateNameOn(String affinity) => SourceIsolate.run(
+  (_) async => Isolate.current.debugName,
+  affinity: affinity,
+);
+
+/// 送到兩條不同書源 isolate 的兩個 affinity。
+(String, String) _affinitiesOnDifferentWorkers() {
+  int slot(String key) => key.hashCode % SourceIsolate.workerCount;
+  for (var i = 1; ; i++) {
+    if (slot('w$i') != slot('w0')) return ('w0', 'w$i');
+  }
+}
+
 Book _book(String url) =>
     Book(bookUrl: url, origin: 'local', name: url, author: '作者');
 
@@ -138,6 +208,8 @@ void main() {
   // `/held/<名稱>` 的正文：請求到了就記下（[arrived]），等測試放行
   // （[released]）才回。
   final arrived = <String, Completer<void>>{};
+  // `/count` 收到的請求數。
+  var counted = 0;
   final released = <String, Completer<void>>{};
   Completer<void> gate(Map<String, Completer<void>> gates, String name) =>
       gates.putIfAbsent(name, Completer<void>.new);
@@ -174,6 +246,9 @@ void main() {
           request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
         case '/c/2':
           request.response.write('<p>第二章的正文，夜裡讀起來剛好。</p>');
+        case '/count':
+          counted++;
+          request.response.write('數到了');
         case final path when path.startsWith('/held/'):
           final name = path.substring('/held/'.length);
           gate(arrived, name).complete();
@@ -199,7 +274,94 @@ void main() {
   });
 
   test('work runs in the source isolate', () async {
-    expect(await _isolateName(), 'SourceIsolate');
+    expect(await _isolateName(), startsWith('SourceIsolate '));
+  });
+
+  test('work with the same affinity runs on the same source isolate', () async {
+    final names = {for (var i = 0; i < 8; i++) await _isolateNameOn('同一個')};
+    expect(names, hasLength(1));
+  });
+
+  group('blocking calls', () {
+    test('wait for the network isolate and get its result', () async {
+      expect(await _blockOn('$baseUrl/c/1'), contains('第一章的正文'));
+    });
+
+    test('pass the error back', () async {
+      await expectLater(
+        _blockOnFailure(),
+        throwsA(
+          isA<BlockingCallError>().having(
+            (e) => e.message,
+            'message',
+            contains('網站壞了'),
+          ),
+        ),
+      );
+    });
+
+    test('stop only their own source isolate', () async {
+      final (frozen, other) = _affinitiesOnDifferentWorkers();
+      final blocked = _blockOn('$baseUrl/held/frozen', affinity: frozen);
+      await gate(arrived, 'frozen').future;
+
+      expect(await _isolateNameOn(other), startsWith('SourceIsolate '));
+
+      gate(released, 'frozen').complete();
+      expect(await blocked, contains('frozen 的正文'));
+    });
+
+    test(
+      'do not wait for a rate limit held by their own frozen request',
+      () async {
+        final source = BookSource.fromJson({
+          'bookSourceUrl': 'https://frozen-limit.test',
+          'bookSourceName': '限流',
+          'concurrentRate': '200',
+        });
+        // 同一條上，一個請求拿著這個書源的名額等回應；另一個工作停住，要同
+        // 一個書源的名額。停住的那條醒不來，拿著的名額就永遠交不回。
+        final holding = _limitedFetch(
+          source,
+          '$baseUrl/held/holding',
+          affinity: 'frozen-limit',
+        );
+        await gate(arrived, 'holding').future;
+
+        final blocked = _limitedFetch(
+          source,
+          '$baseUrl/c/2',
+          affinity: 'frozen-limit',
+          block: true,
+        );
+        expect(await blocked, contains('第二章的正文'));
+
+        gate(released, 'holding').complete();
+        expect(await holding, contains('holding 的正文'));
+      },
+    );
+
+    test('are cancelled with the work they stopped in', () async {
+      final cancelToken = CancelToken();
+      final work = _blockOn(
+        '$baseUrl/held/cancelled',
+        cancelToken: cancelToken,
+      );
+      await gate(arrived, 'cancelled').future;
+      cancelToken.cancel();
+
+      await expectLater(
+        work,
+        throwsA(
+          isA<BlockingCallError>().having(
+            (e) => e.cancelled,
+            'cancelled',
+            true,
+          ),
+        ),
+      );
+      gate(released, 'cancelled').complete();
+    });
   });
 
   group('errors', () {
@@ -376,6 +538,71 @@ void main() {
     expect(await _evaluateJs('[1, 2, 3].map((n) => n * 2).join(",")'), '2,4,6');
   }, skip: quickJsUnavailableReason());
 
+  // 規則 JS 要等的呼叫拿到的是結果本身，不論寫在哪裡（ADR 0034）。原本只有
+  // 寫在最外層的會被補上 await，包進書源自己的函式、jsLib 或回呼就拿到還沒
+  // 完成的結果。
+  group('rule JavaScript gets what it waits for', () {
+    test('inside its own function', () async {
+      expect(
+        await _evaluateJs('''
+          function getPage(u) { return java.ajax(u); }
+          getPage("$baseUrl/c/1")
+        '''),
+        contains('第一章的正文'),
+      );
+    });
+
+    test('inside a jsLib function', () async {
+      expect(
+        await _evaluateSourceJs(
+          'fetchBody("$baseUrl/c/2")',
+          jsLib: 'function fetchBody(u) { return java.ajax(u); }',
+        ),
+        contains('第二章的正文'),
+      );
+    });
+
+    test('inside a callback', () async {
+      expect(
+        await _evaluateJs('''
+          ["$baseUrl/c/1", "$baseUrl/c/2"]
+            .map(function (u) { return java.get(u, {}).body(); })
+            .map(function (html) { return html.indexOf("正文") >= 0; })
+            .join(",")
+        '''),
+        'true,true',
+      );
+    });
+
+    // 出錯的規則照失敗處理（錯誤訊息不會被當成結果），也不會整段重跑；
+    // `JSON.parse` 讀到壞掉的 JSON 也是 SyntaxError，但規則已經開始執行。
+    for (final failure in ['throw new Error("壞了")', 'JSON.parse("{")']) {
+      test('once: a rule that fails halfway with $failure fails and is not '
+          'run again', () async {
+        counted = 0;
+        await expectLater(
+          _evaluateJs('java.ajax("$baseUrl/count"); $failure;'),
+          throwsA(isA<RuleJsException>()),
+        );
+        expect(counted, 1);
+      });
+    }
+
+    test(
+      'from the cache, and null when nothing is cached like Legado',
+      () async {
+        expect(
+          await _evaluateJs('''
+          cache.put("blocking-key", "存好的");
+          var missing = cache.getFile("blocking-missing");
+          cache.get("blocking-key") + "|" + (missing == null ? "null" : missing)
+        '''),
+          '存好的|null',
+        );
+      },
+    );
+  }, skip: quickJsUnavailableReason());
+
   test('a search runs through the source isolate', () async {
     final source = BookSource.fromJson({
       'bookSourceUrl': baseUrl,
@@ -474,6 +701,44 @@ void main() {
       expect(logs.where((m) => m.contains('送不進書源 isolate')), isEmpty);
     });
 
+    // 錯誤訊息不能被當成正文、存成讀得到的章節。
+    test(
+      'content whose rule JS fails is a failure, not the error text',
+      () async {
+        source.ruleContent!.content =
+            '@js:java.ajax("$baseUrl/c/2"); throw new Error("正文解析失敗")';
+        final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+
+        await expectLater(
+          BookSourceService().getContent(
+            source,
+            book,
+            BookChapter(
+              title: '第一章',
+              url: '$baseUrl/c/1',
+              bookUrl: book.bookUrl,
+            ),
+          ),
+          throwsA(predicate((Object e) => e.toString().contains('正文解析失敗'))),
+        );
+      },
+      skip: quickJsUnavailableReason(),
+    );
+
+    test('content from a rule that fetches through its jsLib', () async {
+      source.jsLib = 'function realContent(u) { return java.ajax(u); }';
+      source.ruleContent!.content = '@js:realContent("$baseUrl/c/2")';
+      final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+
+      final content = await BookSourceService().getContent(
+        source,
+        book,
+        BookChapter(title: '第一章', url: '$baseUrl/c/1', bookUrl: book.bookUrl),
+      );
+
+      expect(content, contains('第二章的正文'));
+    }, skip: quickJsUnavailableReason());
+
     test('book info, chapter list and content', () async {
       final service = BookSourceService();
       final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
@@ -502,6 +767,24 @@ void main() {
 
       expect(urls, ['$baseUrl/search']);
     });
+
+    // 規則 JS 自己的請求在網路 isolate 送出（ADR 0034），網址跟著結果回來。
+    test('the URLs rule JS sent are listed too', () async {
+      source.ruleContent!.content = '@js:java.ajax("$baseUrl/c/2")';
+      final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+      final urls = <String>[];
+
+      await withSourceRequestLog(
+        urls.add,
+        () => BookSourceService().getContent(
+          source,
+          book,
+          BookChapter(title: '第一章', url: '$baseUrl/c/1', bookUrl: book.bookUrl),
+        ),
+      );
+
+      expect(urls, ['$baseUrl/c/1', '$baseUrl/c/2']);
+    }, skip: quickJsUnavailableReason());
 
     test('explore kinds and explore pages', () async {
       final service = BookSourceService();
@@ -599,13 +882,14 @@ void main() {
       // 依序抓：第二章開始時第一章的規則已經寫進書了。
       for (final chapter in plan.missing) {
         final result = await downloadChapterInSourceIsolate(
+          bookUrl: book.bookUrl,
           run: plan.run,
           chapterUrl: chapter.url,
           maxAttempts: 1,
         );
         expect(result.success, isTrue, reason: chapter.title);
       }
-      await finishDownloadRunInSourceIsolate(plan.run);
+      await finishDownloadRunInSourceIsolate(book.bookUrl, plan.run);
 
       final second = await getIt<ReaderChapterContentDao>().getEntry(
         contentKey: ReaderChapterContentDao.contentKey(

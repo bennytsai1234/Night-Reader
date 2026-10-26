@@ -98,7 +98,10 @@ class BookUpdateService {
 /// 目錄不必複製回畫面執行緒，比對與寫入也不在畫面執行緒上做。工作會送進
 /// 書源 isolate，所以在頂層函式裡建立，只捕捉書與時間。
 Future<int?> _refreshInSourceIsolate(Book book, int checkedAt) =>
-    SourceIsolate.run((cancelToken) => _refreshFromSource(book, checkedAt));
+    SourceIsolate.run(
+      (cancelToken) => _refreshFromSource(book, checkedAt),
+      affinity: book.origin,
+    );
 
 /// 寫回資料庫並回傳新章節數；檢查期間書被移出書架或換了書源時不寫，回傳
 /// null。

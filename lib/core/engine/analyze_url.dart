@@ -37,17 +37,12 @@ class AnalyzeUrl {
   bool useWebView = false;
   String? webJs;
   int webViewDelayTime = 0;
-  String? _prefetchedResponseBody;
-  String? _prefetchedResponseUrl;
-  String? _prefetchedResponseRequestUrl;
-  String? _prefetchedResponseRedirectUrl;
 
-  /// **注意**：這個同步建構子只能處理純同步的 rule JS（不含
-  /// `java.ajax` / `cache.get` 等 async 呼叫）。書源實務上若規則內含 async
-  /// `@js:` 片段，請改用 [create] async factory。
+  /// 組好網址：書源 header、網址裡的 `@js:`／`<js>`、`{{}}`、網址選項。裡面
+  /// 的 JS 同步執行，要等網路的呼叫在書源 isolate 停住等（ADR 0034）。
   ///
-  /// 保留同步版本是為了兼容 JS handler 內部用 plain URL 字串建構
-  /// `AnalyzeUrl` 的路徑——那些呼叫沒有 rule JS 可以執行，不需要 bridge。
+  /// 組好之後只剩資料，可以整個送到網路 isolate 發請求（規則 JS 的
+  /// `java.ajax` 就是這樣）。
   AnalyzeUrl(
     this.rawUrl, {
     this.key,
@@ -61,49 +56,6 @@ class AnalyzeUrl {
     _init();
   }
 
-  /// 不跑 JS 初始化的私有建構子；供 [create] factory 使用。
-  AnalyzeUrl._bare(
-    this.rawUrl, {
-    this.key,
-    this.page,
-    this.speakText,
-    this.speakSpeed,
-    this.baseUrl = '',
-    this.source,
-    this.ruleData,
-  });
-
-  /// 以 async pipeline 建構 AnalyzeUrl。支援 rule JS 內的 `java.ajax`/
-  /// `cache.get` 等 Promise bridge 方法。
-  ///
-  /// 呼叫路徑：
-  /// 1. 建立 bare 實例（僅儲存欄位）
-  /// 2. 執行 `_initAsync` → 注入 source headers → await `@js:`/`<js>` 評估
-  ///    → await `{{js}}` 表達式替換 → 解析 URL options
-  static Future<AnalyzeUrl> create(
-    String rawUrl, {
-    String? key,
-    int? page,
-    String? speakText,
-    int? speakSpeed,
-    String baseUrl = '',
-    BaseSource? source,
-    dynamic ruleData,
-  }) async {
-    final instance = AnalyzeUrl._bare(
-      rawUrl,
-      key: key,
-      page: page,
-      speakText: speakText,
-      speakSpeed: speakSpeed,
-      baseUrl: baseUrl,
-      source: source,
-      ruleData: ruleData,
-    );
-    await instance._initAsync();
-    return instance;
-  }
-
   void _init() {
     try {
       // 0. 注入 BookSource.header
@@ -114,18 +66,6 @@ class AnalyzeUrl {
       // 2. 替換 {{js}} 和 <page,page>
       _replaceKeyPageJs();
       // 3. 解析 URL 選項 (如 ,{"method": "POST"})
-      _analyzeUrlOptions();
-    } finally {
-      _releaseJsRule();
-    }
-  }
-
-  Future<void> _initAsync() async {
-    try {
-      _initSourceHeaders();
-      ruleUrl = rawUrl;
-      await _analyzeJsAsync();
-      await _replaceKeyPageJsAsync();
       _analyzeUrlOptions();
     } finally {
       _releaseJsRule();
@@ -229,87 +169,12 @@ class AnalyzeUrl {
     }
   }
 
-  /// async 版本的 [_analyzeJs] — 支援 rule JS 內含 `java.ajax` 等 Promise
-  /// bridge 方法。邏輯與同步版本一致，只是改用 [AnalyzeRule.evalJSAsync]。
-  Future<void> _analyzeJsAsync() async {
-    final jsRegex = RegExp(
-      r'@js:([\s\S]*?)$|<js>([\s\S]*?)</js>',
-      caseSensitive: false,
-    );
-    var result = ruleUrl;
-    final matches = jsRegex.allMatches(ruleUrl).toList();
-    if (matches.isEmpty) return;
-
-    for (final match in matches) {
-      final jsStr = match.group(1) ?? match.group(2) ?? '';
-      final rule = _jsRule();
-      final jsInput = _jsInputForMatch(match.start, result);
-      final evalRes = await rule.evalJSAsync(jsStr, jsInput);
-      _capturePrefetchedResponse(rule);
-      result = evalRes?.toString() ?? '';
-    }
-    ruleUrl = result;
-  }
-
-  void _capturePrefetchedResponse(AnalyzeRule rule) {
-    final body = rule.get('_lastHttpResponseBody');
-    if (body.isEmpty) return;
-    _prefetchedResponseBody = body;
-    _prefetchedResponseUrl = rule.get('_lastHttpResponseUrl');
-    _prefetchedResponseRequestUrl = rule.get('_lastHttpResponseRequestUrl');
-    _prefetchedResponseRedirectUrl = rule.get('_lastHttpResponseRedirectUrl');
-  }
-
   String _jsInputForMatch(int matchStart, String currentValue) {
     if (matchStart <= 0) {
       return currentValue;
     }
     final clampedStart = matchStart.clamp(0, currentValue.length);
     return currentValue.substring(0, clampedStart).trimRight();
-  }
-
-  /// async 版本的 [_replaceKeyPageJs] — `{{js}}` 表達式改走 [AnalyzeRule.evalJSAsync]。
-  Future<void> _replaceKeyPageJsAsync() async {
-    if (key != null) {
-      ruleUrl = ruleUrl.replaceAll('{{key}}', _encodeKey(key!));
-    }
-    if (page != null) {
-      ruleUrl = ruleUrl.replaceAll('{{page}}', page.toString());
-    }
-    if (speakText != null) {
-      ruleUrl = ruleUrl.replaceAll('{{speakText}}', speakText!);
-    }
-    if (speakSpeed != null) {
-      ruleUrl = ruleUrl.replaceAll('{{speakSpeed}}', speakSpeed!.toString());
-    }
-
-    // `replaceAllMapped` 不支援 async mapper，手動用 StringBuffer 處理
-    final innerJsRegex = RegExp(r'\{\{([\s\S]*?)\}\}');
-    final matches = innerJsRegex.allMatches(ruleUrl).toList();
-    if (matches.isNotEmpty) {
-      final sb = StringBuffer();
-      var lastEnd = 0;
-      for (final m in matches) {
-        sb.write(ruleUrl.substring(lastEnd, m.start));
-        final jsStr = m.group(1)!;
-        final v = await _jsRule().evalJSAsync(jsStr, null);
-        sb.write(v?.toString() ?? '');
-        lastEnd = m.end;
-      }
-      sb.write(ruleUrl.substring(lastEnd));
-      ruleUrl = sb.toString();
-    }
-
-    if (page != null) {
-      final pageRegex = RegExp(r'<(.*?)>');
-      ruleUrl = ruleUrl.replaceAllMapped(pageRegex, (match) {
-        final pages = match.group(1)!.split(',');
-        if (page! <= pages.length) {
-          return pages[page! - 1].trim();
-        }
-        return pages.last.trim();
-      });
-    }
   }
 
   /// 根據 charset 對搜尋關鍵字做 URL 編碼
@@ -503,18 +368,6 @@ class AnalyzeUrl {
       }
 
       final httpClient = HttpClient();
-      final prefetchedBody = _consumePrefetchedResponseBody();
-      if (prefetchedBody != null) {
-        return StrResponse(
-          url: url,
-          body: prefetchedBody,
-          headers: const <String, List<String>>{},
-          raw: Response(
-            requestOptions: RequestOptions(path: url),
-            data: prefetchedBody,
-          ),
-        );
-      }
       final options = Options(
         method: method,
         headers: _buildRequestHeaders(),
@@ -694,79 +547,6 @@ class AnalyzeUrl {
           : 'application/x-www-form-urlencoded; charset=utf-8';
     }
     return headers;
-  }
-
-  String? _consumePrefetchedResponseBody() {
-    final body = _prefetchedResponseBody;
-    if (body == null || body.isEmpty) {
-      return null;
-    }
-    if (!_matchesPrefetchedResponseUrl()) {
-      return null;
-    }
-    _prefetchedResponseBody = null;
-    return body;
-  }
-
-  bool _matchesPrefetchedResponseUrl() {
-    final current = Uri.tryParse(url);
-    if (current == null) {
-      return false;
-    }
-    for (final candidate in <String?>[
-      _prefetchedResponseUrl,
-      _prefetchedResponseRedirectUrl,
-      _prefetchedResponseRequestUrl,
-    ]) {
-      if (candidate == null || candidate.isEmpty) continue;
-      final candidateUri = _resolveCandidateUri(candidate);
-      if (candidateUri == null) continue;
-      if (_isSameOrSupersetUrl(candidateUri, current)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Uri? _resolveCandidateUri(String candidate) {
-    try {
-      final direct = Uri.tryParse(candidate);
-      if (direct != null && direct.hasScheme) {
-        return direct;
-      }
-      final baseCandidates = <String>[
-        if (_prefetchedResponseRequestUrl != null &&
-            _prefetchedResponseRequestUrl!.isNotEmpty)
-          _prefetchedResponseRequestUrl!,
-        _resolveRelativeBaseUrl(),
-      ];
-      for (final base in baseCandidates) {
-        if (base.isEmpty) continue;
-        final baseUri = Uri.tryParse(base);
-        if (baseUri == null || !baseUri.hasScheme) continue;
-        return baseUri.resolve(candidate);
-      }
-      return direct;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  bool _isSameOrSupersetUrl(Uri candidate, Uri current) {
-    if (candidate == current) {
-      return true;
-    }
-    if (candidate.scheme != current.scheme ||
-        candidate.host != current.host ||
-        candidate.path != current.path) {
-      return false;
-    }
-    if (candidate.queryParameters.isEmpty) {
-      return true;
-    }
-    return candidate.queryParameters.entries.every(
-      (entry) => current.queryParameters[entry.key] == entry.value,
-    );
   }
 
   bool _hasContentType(Map<String, String> headers) {

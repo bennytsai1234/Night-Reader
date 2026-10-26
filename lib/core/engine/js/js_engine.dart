@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,25 +5,22 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:xpath_selector/xpath_selector.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/http_client.dart';
 
-import 'async_js_rewriter.dart';
 import 'js_extensions.dart';
-import 'js_rule_async_wrapper.dart';
+import 'legacy_js_syntax.dart';
+import 'rule_final_return.dart';
 
 /// JsEngine - JavaScript 執行引擎
 /// (原 Android Rhino) JS Engine (modules/rhino)
 ///
-/// 使用 flutter_js 套件在 Dart 中執行 JavaScript
-///
-/// 兩條執行路徑：
-/// - [evaluate] — 純同步 JS。若規則本身不含 async `java.*` 呼叫，仍走最快路徑。
-/// - [evaluateAsync] — 會先以 [AsyncJsRewriter] 插入 `(await ...)` 包裝，
-///   再用 [JsRuleAsyncWrapper] 包成 async IIFE，透過 `__ruleDone` sentinel
-///   在 Dart 側 await Completer 完成。這是為了解決 flutter_js 同步 onMessage
-///   回傳值限制所引入的 Promise bridge。
+/// 使用 flutter_js 套件在 Dart 中執行 JavaScript。規則 JS 一律同步執行：
+/// `java.ajax` 這類要等的呼叫在書源 isolate 停住等結果（[BlockingCall]，
+/// ADR 0034），和 Legado 的 Rhino 一樣。
 class JsEngine {
   JavascriptRuntime? _runtime;
   bool _isAvailable = false;
@@ -45,15 +41,11 @@ class JsEngine {
   dynamic _ruleContext;
   String? _loadedSourceJsLibKey;
   static final Map<String, String> _resolvedJsLibCache = <String, String>{};
-  static final Map<String, Future<String>> _pendingJsLibCache =
-      <String, Future<String>>{};
   bool _isDisposed = false;
 
   /// 清除 session 級別的靜態快取，在批次校驗結束後呼叫以釋放記憶體。
   static void clearCaches() {
     _resolvedJsLibCache.clear();
-    // _pendingJsLibCache 的 Future 完成後會自行移除；強制清除不影響正確性。
-    _pendingJsLibCache.clear();
   }
 
   JsEngine({this.source, dynamic ruleContext}) : _ruleContext = ruleContext {
@@ -76,11 +68,8 @@ class JsEngine {
     }
   }
 
-  /// Execute JavaScript code and return result synchronously.
-  ///
-  /// **不支援 async `java.*` 呼叫**。若 [jsCode] 中偵測到 async 呼叫，會印出
-  /// warning 並仍按原字串執行（結果通常為 Promise 物件，rule 端會拿不到實值）。
-  /// 呼叫端請優先使用 [evaluateAsync]。
+  /// 執行規則 JS，傳回最後一個表達式的值。規則丟出、自己沒接住的錯誤以
+  /// [RuleJsException] 丟出，和 Legado 一樣照規則失敗處理。
   dynamic evaluate(String jsCode, {Map<String, dynamic>? context}) {
     if (_isDisposed) {
       throw StateError('JsEngine has been disposed');
@@ -89,21 +78,14 @@ class JsEngine {
       return _mockEvaluate(jsCode, context);
     }
 
-    final normalizedJs = AsyncJsRewriter.normalizeLegacyTemplateEscapes(jsCode);
-
-    if (AsyncJsRewriter.needsAsync(normalizedJs)) {
-      AppLog.e(
-        'JsEngine.evaluate() called with async JS; '
-        'switch caller to evaluateAsync(). Source prefix: '
-        '${normalizedJs.substring(0, normalizedJs.length.clamp(0, 120))}',
-      );
-    }
+    final normalizedJs = LegacyJsSyntax.normalize(jsCode);
 
     _activeRules++;
     try {
       _injectContext(context);
-      _ensureSourceJsLibLoadedSync();
+      _ensureSourceJsLibLoaded();
       final result = _evaluateRuleScript(normalizedJs);
+      if (result.isError) throw RuleJsException(result.stringResult);
       return _decodeContextValue(_runtime!.dartValueOf(result));
     } finally {
       _activeRules--;
@@ -114,99 +96,6 @@ class JsEngine {
   /// 交給 JS 的 Jsoup 元素只在沒有規則在跑時才清掉，外層規則手上的元素
   /// 不會在巢狀執行時失效。
   int _activeRules = 0;
-
-  /// Execute rule JS that may invoke async `java.*` / `cache.*` / `source.*`
-  /// methods. Always awaits their underlying Futures and returns the rule's
-  /// final expression value.
-  ///
-  /// 若 [jsCode] 經 [AsyncJsRewriter.needsAsync] 判定不需 async，會走同步
-  /// fast path 直接回傳 [evaluate] 的結果 (避免不必要的 Promise bridge 開銷)。
-  Future<dynamic> evaluateAsync(
-    String jsCode, {
-    Map<String, dynamic>? context,
-  }) async {
-    if (_isDisposed) {
-      throw StateError('JsEngine has been disposed');
-    }
-    if (!_isAvailable) {
-      return _mockEvaluate(jsCode, context);
-    }
-
-    final normalizedJs = AsyncJsRewriter.normalizeLegacyTemplateEscapes(jsCode);
-
-    // Sync-only 規則不需要 Promise bridge。直接走同步路徑可避免額外包裝
-    // 干擾原本就合法的 searchUrl / tocUrl 組裝腳本。
-    if (!AsyncJsRewriter.needsAsync(normalizedJs)) {
-      return evaluate(normalizedJs, context: context);
-    }
-
-    _activeRules++;
-    try {
-      _injectContext(context);
-      await _ensureSourceJsLibLoadedAsync();
-      _throwIfDisposed();
-      final asyncFriendlyJs = _normalizeLegacySyncIifeForAsync(normalizedJs);
-      final rewritten = AsyncJsRewriter.rewrite(asyncFriendlyJs);
-      final (callId, future) = _extensions!.registerRuleCall();
-      // 非同步規則在 await 之後才跑完，進入在這段腳本開頭、清除等它結束。
-      final wrapped =
-          '__lrEnterRule();\n${JsRuleAsyncWrapper.wrap(rewritten, callId)}';
-
-      try {
-        final res = _runtime!.evaluate(wrapped);
-        if (res.isError) {
-          _extensions!.cancelRuleCall(
-            callId,
-            StateError('rule JS evaluate error: ${res.stringResult}'),
-          );
-        } else {
-          // 重要：同步 evaluate 完成後，async IIFE 已經被排進 microtask
-          // queue，需 pump 才能讓第一層 await 真正開始執行。
-          _runtime!.executePendingJob();
-        }
-      } catch (e) {
-        _extensions!.cancelRuleCall(callId, e);
-        rethrow;
-      }
-
-      return await future
-          .then(_decodeContextValue)
-          .timeout(
-            const Duration(seconds: 20),
-            onTimeout: () {
-              _extensions!.cancelRuleCall(
-                callId,
-                TimeoutException(
-                  'JS rule timed out after 20s',
-                  const Duration(seconds: 20),
-                ),
-              );
-              throw TimeoutException(
-                'JS rule timed out after 20s',
-                const Duration(seconds: 20),
-              );
-            },
-          )
-          .whenComplete(() {
-            if (!_isDisposed) _runtime?.evaluate('__lrExitRule()');
-          });
-    } finally {
-      _activeRules--;
-    }
-  }
-
-  String _normalizeLegacySyncIifeForAsync(String jsCode) {
-    var normalized = jsCode;
-    normalized = normalized.replaceFirstMapped(
-      RegExp(r'^(\s*)\(\s*\(\s*\)\s*=>'),
-      (match) => '${match.group(1)}(async () =>',
-    );
-    normalized = normalized.replaceFirstMapped(
-      RegExp(r'^(\s*)\(\s*function\b'),
-      (match) => '${match.group(1)}(async function',
-    );
-    return normalized;
-  }
 
   String? _extractSourceJsLib() {
     if (source is! BaseSource) {
@@ -219,44 +108,26 @@ class JsEngine {
     return jsLib;
   }
 
-  void _ensureSourceJsLibLoadedSync() {
+  void _ensureSourceJsLibLoaded() {
     final jsLib = _extractSourceJsLib();
     if (jsLib == null || jsLib == _loadedSourceJsLibKey) {
       return;
     }
-    final resolved = _resolveSourceJsLibSync(jsLib);
+    final resolved = _resolveSourceJsLib(jsLib);
     if (resolved == null || resolved.trim().isEmpty) {
       return;
     }
     final result = _runtime!.evaluate(resolved);
     if (result.isError) {
-      AppLog.e('JsEngine source jsLib sync load error: ${result.stringResult}');
+      AppLog.e('JsEngine source jsLib load error: ${result.stringResult}');
       return;
     }
     _loadedSourceJsLibKey = jsLib;
   }
 
-  Future<void> _ensureSourceJsLibLoadedAsync() async {
-    final jsLib = _extractSourceJsLib();
-    if (jsLib == null || jsLib == _loadedSourceJsLibKey) {
-      return;
-    }
-    final resolved = await _resolveSourceJsLibAsync(jsLib);
-    _throwIfDisposed();
-    if (resolved.trim().isEmpty) {
-      return;
-    }
-    final result = _runtime!.evaluate(resolved);
-    if (result.isError) {
-      AppLog.e(
-        'JsEngine source jsLib async load error: ${result.stringResult}',
-      );
-      return;
-    }
-    _loadedSourceJsLibKey = jsLib;
-  }
-
-  String? _resolveSourceJsLibSync(String jsLib) {
+  /// 書源的 jsLib：一段 JS，或 `{名稱: 片段}`，片段是 JS、檔案路徑或網址。
+  /// 有片段抓不到時傳回 null，這次不載入，下次執行再試。
+  String? _resolveSourceJsLib(String jsLib) {
     final cached = _resolvedJsLibCache[jsLib];
     if (cached != null) {
       return cached;
@@ -268,7 +139,7 @@ class JsEngine {
 
     final buffers = <String>[];
     for (final value in libMap.values) {
-      final resolved = _resolveJsLibFragmentSync(value);
+      final resolved = _resolveJsLibFragment(value);
       if (resolved == null) {
         return null;
       }
@@ -281,44 +152,6 @@ class JsEngine {
       _resolvedJsLibCache[jsLib] = merged;
     }
     return merged;
-  }
-
-  Future<String> _resolveSourceJsLibAsync(String jsLib) async {
-    final cached = _resolvedJsLibCache[jsLib];
-    if (cached != null) {
-      return cached;
-    }
-    final pending = _pendingJsLibCache[jsLib];
-    if (pending != null) {
-      return pending;
-    }
-
-    final future = () async {
-      final libMap = _decodeJsLibMap(jsLib);
-      if (libMap == null) {
-        return jsLib;
-      }
-
-      final buffers = <String>[];
-      for (final value in libMap.values) {
-        final resolved = await _resolveJsLibFragmentAsync(value);
-        if (resolved.trim().isNotEmpty) {
-          buffers.add(resolved);
-        }
-      }
-      return buffers.join('\n');
-    }();
-
-    _pendingJsLibCache[jsLib] = future;
-    try {
-      final resolved = await future;
-      if (resolved.isNotEmpty) {
-        _resolvedJsLibCache[jsLib] = resolved;
-      }
-      return resolved;
-    } finally {
-      unawaited(_pendingJsLibCache.remove(jsLib));
-    }
   }
 
   Map<String, String>? _decodeJsLibMap(String jsLib) {
@@ -339,7 +172,7 @@ class JsEngine {
     }
   }
 
-  String? _resolveJsLibFragmentSync(String raw) {
+  String? _resolveJsLibFragment(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
       return '';
@@ -356,42 +189,14 @@ class JsEngine {
     }
     final uri = Uri.tryParse(trimmed);
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      return null;
-    }
-    return trimmed;
-  }
-
-  Future<String> _resolveJsLibFragmentAsync(String raw) async {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-    final cached = _resolvedJsLibCache[trimmed];
-    if (cached != null) {
-      return cached;
-    }
-    final file = File(trimmed);
-    if (await file.exists()) {
-      final content = await file.readAsString();
-      _resolvedJsLibCache[trimmed] = content;
-      return content;
-    }
-    final uri = Uri.tryParse(trimmed);
-    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      final response = await HttpClient().client.get<List<int>>(
-        trimmed,
-        options: Options(
-          responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(seconds: 10),
-          sendTimeout: const Duration(seconds: 10),
-        ),
-      );
-      final content = utf8.decode(
-        response.data ?? const <int>[],
-        allowMalformed: true,
-      );
-      _resolvedJsLibCache[trimmed] = content;
-      return content;
+      try {
+        final content = BlockingCall.run(_jsLibDownload(trimmed)) as String;
+        _resolvedJsLibCache[trimmed] = content;
+        return content;
+      } catch (e) {
+        AppLog.e('JsEngine source jsLib fetch error ($trimmed): $e');
+        return null;
+      }
     }
     return trimmed;
   }
@@ -416,31 +221,45 @@ globalThis.__lrRunRule = function (run) {
   __lrEnterRule();
   try { return run(); } finally { __lrExitRule(); }
 };
+globalThis.__lrStartedRule = -1;
 ''';
+
+  /// 這個引擎下一次執行規則的編號，見 [_evaluateRuleScript]。
+  int _nextRuleRun = 0;
 
   /// 規則 JS 包在函式裡用直接 eval 執行：規則裡 `var` 宣告的變數留在這次
   /// 執行，不會掛到全域讓下一次（下一章、下一筆結果）看到，與 Legado 每次
-  /// 執行一個新作用域相同；非同步規則的 async IIFE 本來就是這樣。沒宣告就
-  /// 賦值的變數由 `__lrRunRule` 在結束後清掉（見 [_ruleGlobalsHelpers]）。
+  /// 執行一個新作用域相同。沒宣告就賦值的變數由 `__lrRunRule` 在結束後清掉
+  /// （見 [_ruleGlobalsHelpers]）。
   JsEvalResult _evaluateRuleScript(String jsCode) {
+    // eval 先讀完整段、語法沒問題才開始執行，所以開頭這句跑到了就表示規則
+    // 已經開始執行。`void 0` 讓結尾只有宣告的規則照樣得到 undefined。
+    final run = _nextRuleRun++;
+    final marked = jsonEncode('__lrStartedRule=$run;void 0;$jsCode');
     final wrapped =
         '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
-        '? __lrNormalizeRuleResult(eval(${jsonEncode(jsCode)})) '
-        ': eval(${jsonEncode(jsCode)}); })';
+        '? __lrNormalizeRuleResult(eval($marked)) '
+        ': eval($marked); })';
     final result = _runtime!.evaluate(wrapped);
-    if (!result.isError) {
-      return result;
-    }
     // 某些 legacy rule 在 eval(...) 路徑會被 QuickJS 誤判語法，
     // 改走 IIFE + final-return 注入，既保留最後表達式結果，也讓 normalize
-    // 邏輯繼續生效。
-    final fallbackBody = JsRuleAsyncWrapper.injectFinalReturn(jsCode);
+    // 邏輯繼續生效。只在還沒開始執行時改走：執行到一半出錯（包括
+    // `JSON.parse` 這類執行時才發生的 SyntaxError）再跑一次，請求與
+    // `java.put` 這類動作會做兩次。執行中巢狀跑的規則編號比這次大，外層
+    // 要先開始才跑得到，所以用「大於等於」判斷。
+    if (!result.isError || _ruleStarted(run)) {
+      return result;
+    }
+    final fallbackBody = RuleFinalReturn.inject(jsCode);
     final fallbackWrapped =
         '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult((function() {\n$fallbackBody\n})()) '
         ': (function() {\n$fallbackBody\n})(); })';
     return _runtime!.evaluate(fallbackWrapped);
   }
+
+  bool _ruleStarted(int run) =>
+      _runtime!.evaluate('__lrStartedRule >= $run').stringResult == 'true';
 
   /// 這個引擎的 JS 全域已經有 `source`。引擎只服務一個書源（[source]），
   /// 注入一次之後呼叫端可以省略，見 `AnalyzeRuleScript`。
@@ -668,12 +487,6 @@ var __lrScopedObject = function(scope, seed) {
     return 'JS_ERROR: Library not available';
   }
 
-  void _throwIfDisposed() {
-    if (_isDisposed) {
-      throw StateError('JsEngine has been disposed');
-    }
-  }
-
   /// Dispose the JS runtime
   void dispose() {
     if (_isDisposed) return;
@@ -685,3 +498,17 @@ var __lrScopedObject = function(scope, seed) {
     _isAvailable = false;
   }
 }
+
+/// 網路 isolate 抓網址形式的 jsLib 片段（[BlockingCall]）。
+Future<Object?> Function() _jsLibDownload(String url) => () async {
+  final response = await HttpClient().client.get<List<int>>(
+    url,
+    options: Options(
+      responseType: ResponseType.bytes,
+      receiveTimeout: const Duration(seconds: 10),
+      sendTimeout: const Duration(seconds: 10),
+    ),
+    cancelToken: currentSourceCancelToken,
+  );
+  return utf8.decode(response.data ?? const <int>[], allowMalformed: true);
+};

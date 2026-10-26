@@ -13,6 +13,7 @@ import 'package:night_reader/core/models/rule_data_interface.dart';
 import 'package:night_reader/core/models/search_book.dart';
 
 import 'js_extensions_base.dart';
+import 'extensions/js_blocking_tasks.dart';
 import 'extensions/js_network_extensions.dart';
 import 'extensions/js_crypto_extensions.dart';
 import 'extensions/js_string_extensions.dart';
@@ -20,9 +21,7 @@ import 'extensions/js_file_extensions.dart';
 import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_object.dart';
 import 'extensions/js_jsoup_extensions.dart';
-import 'js_encode_utils.dart';
 
-import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 
 export 'js_extensions_base.dart';
@@ -39,10 +38,10 @@ class JsExtensions extends JsExtensionsBase {
 
   /// 注入完整 JS 環境
   ///
-  /// 順序重要：`setupPromiseBridge` 必須在任何會用到 `__asyncCall` 的 shim
+  /// 順序重要：`installBlockingCalls` 必須在任何會用到 `__lrWait` 的 shim
   /// (`injectJavaObjectJs` / `injectNetworkExtensions` / ...) 之前。
   void inject() {
-    setupPromiseBridge();
+    installBlockingCalls();
     _injectCoreHandlers();
     injectNetworkExtensions();
     injectCryptoExtensions();
@@ -257,152 +256,61 @@ class JsExtensions extends JsExtensionsBase {
       return source!.getHeaderMapSync(hasLoginHeader: includeLoginHeader);
     });
 
-    // ─── Promise bridge: async with return value ────────────────
-    runtime.onMessage('getCache', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      final key = parsed.payload.toString();
-      cacheManager
-          .get(key)
-          .then((v) {
-            resolveJsPending(parsed.callId, v);
-          })
-          .catchError((e) {
-            rejectJsPending(parsed.callId, e);
-          });
-      return null;
-    });
+    // ─── 要等的：快取、Cookie、書源變數（讀資料庫與檔案） ─────────
+    onBlocking('getCache', (key) => cached('$key'));
 
-    runtime.onMessage('cacheTextFile', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      final payload = parsed.payload;
+    onBlocking('cacheTextFile', (payload) {
       final url = payload is List && payload.isNotEmpty
           ? payload[0].toString()
           : payload.toString();
       final saveTime = payload is List && payload.length > 1
           ? int.tryParse(payload[1].toString()) ?? 0
           : 0;
-      cacheFile(url, saveTime)
-          .then((content) {
-            resolveJsPending(parsed.callId, content);
-          })
-          .catchError((e) {
-            rejectJsPending(parsed.callId, e);
-          });
-      return null;
+      return BlockingCall.run(cachedText(url, saveTime));
     });
 
-    runtime.onMessage('importScript', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      final path = parsed.payload.toString();
-      () async {
-        try {
-          if (path.startsWith('http')) {
-            final content = await cacheFile(path, 0);
-            if (content.trim().isEmpty) {
-              throw Exception('$path 內容獲取失敗或者為空');
-            }
-            resolveJsPending(parsed.callId, _wrapImportedScript(content));
-            return;
-          }
-          final file = File(path);
-          if (!await file.exists()) {
-            throw Exception('$path 內容獲取失敗或者為空');
-          }
-          final content = await file.readAsString();
-          if (content.trim().isEmpty) {
-            throw Exception('$path 內容獲取失敗或者為空');
-          }
-          resolveJsPending(parsed.callId, _wrapImportedScript(content));
-        } catch (e) {
-          rejectJsPending(parsed.callId, e);
-        }
-      }();
-      return null;
-    });
-
-    runtime.onMessage('sourceGet', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      if (source == null) {
-        resolveJsPending(parsed.callId, '');
-        return null;
+    onBlocking('importScript', (payload) {
+      final path = payload.toString();
+      final content = path.startsWith('http')
+          ? BlockingCall.run(cachedText(path, 0)) as String
+          : (File(path).existsSync() ? File(path).readAsStringSync() : '');
+      if (content.trim().isEmpty) {
+        throw Exception('$path 內容獲取失敗或者為空');
       }
-      final key = parsed.payload.toString();
-      cacheManager
-          .get('v_${source!.getKey()}_$key')
-          .then((v) {
-            resolveJsPending(parsed.callId, v ?? '');
-          })
-          .catchError((e) {
-            rejectJsPending(parsed.callId, e);
-          });
-      return null;
+      return _wrapImportedScript(content);
     });
 
-    runtime.onMessage('sourceGetLoginInfo', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      if (source == null) {
-        resolveJsPending(parsed.callId, '');
-        return null;
-      }
-      source!
-          .getLoginInfo()
-          .then((v) {
-            resolveJsPending(parsed.callId, v ?? '');
-          })
-          .catchError((e) {
-            rejectJsPending(parsed.callId, e);
-          });
-      return null;
+    onBlocking('sourceGet', (key) {
+      if (source == null) return '';
+      return cached('v_${source!.getKey()}_$key') ?? '';
     });
 
-    runtime.onMessage('sourceGetVariable', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      if (source == null) {
-        resolveJsPending(parsed.callId, '');
-        return null;
-      }
-      source!
-          .getVariable()
-          .then((v) {
-            resolveJsPending(parsed.callId, v);
-          })
-          .catchError((e) {
-            rejectJsPending(parsed.callId, e);
-          });
-      return null;
+    onBlocking('sourceGetLoginInfo', (_) {
+      if (source == null) return '';
+      return cached(source!.loginInfoCacheKey) ?? '';
     });
 
-    runtime.onMessage('cookieGet', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      final url = parsed.payload.toString();
-      CookieStore()
-          .getCookie(url)
-          .then((v) {
-            resolveJsPending(parsed.callId, v);
-          })
-          .catchError((e) {
-            rejectJsPending(parsed.callId, e);
-          });
-      return null;
+    onBlocking('sourceGetVariable', (_) {
+      if (source == null) return '';
+      return cached(source!.variableCacheKey) ?? '';
     });
 
-    runtime.onMessage('allCookies', (args) {
-      final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-      // CookieStore 目前沒有 allCookies API，回傳空字串維持既有行為
-      resolveJsPending(parsed.callId, '');
-      return null;
-    });
+    onBlocking('cookieGet', (url) => siteCookie('$url'));
 
-    // cacheFile 供 Dart 端內部使用 (例如 font cache)
-    runtime.onMessage('cacheFile', (args) {
-      // 歷史上是同步呼叫，但底層是 async HTTP。維持原行為：fire-and-forget
-      // 並回傳空字串。若 rule JS 實際需要讀結果，應改用 java.get(...).body()。
-      if (args is List && args.isNotEmpty) {
-        cacheFile(args[0].toString(), args.length > 1 ? args[1] as int : 0);
-      }
-      return '';
-    });
+    // CookieStore 目前沒有 allCookies API，回傳空字串維持既有行為
+    onBlocking('allCookies', (_) => '');
   }
+
+  /// 快取裡的 [key]：這個 isolate 的記憶體有就直接用，否則停住交給網路
+  /// isolate 讀資料庫與檔案。
+  String? cached(String key) =>
+      cacheManager.getMemoryText(key) ??
+      BlockingCall.run(cacheRead(key)) as String?;
+
+  /// [url] 的站點 Cookie，和 [cached] 一樣先看記憶體。
+  String siteCookie(String url) =>
+      cookieStore.getMemoryCookie(url) ??
+      BlockingCall.run(cookieRead(url)) as String;
 
   String _compactJsBridgeLog(dynamic args) {
     final text = args.toString();
@@ -467,24 +375,6 @@ class JsExtensions extends JsExtensionsBase {
         searchBookRuleFields[fieldName]?.write(book, value);
       case final BookChapter chapter:
         chapterRuleFields[fieldName]?.write(chapter, value);
-    }
-  }
-
-  /// 下載到快取資料夾並回傳內容；目前僅 Dart 內部呼叫 (非 JS 路徑)
-  Future<String> cacheFile(String url, int saveTime) async {
-    final key = JsEncodeUtils.md5Encode16(url);
-    final cached = await cacheManager.get(key);
-    if (cached != null) return cached;
-    try {
-      final response = await HttpClient().client.get(
-        url,
-        cancelToken: currentSourceCancelToken,
-      );
-      final content = response.data.toString();
-      if (content.isNotEmpty) await cacheManager.put(key, content);
-      return content;
-    } catch (_) {
-      return '';
     }
   }
 

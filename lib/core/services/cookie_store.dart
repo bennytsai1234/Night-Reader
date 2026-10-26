@@ -67,6 +67,9 @@ class CookieStore {
     await _cookieDao?.upsert(Cookie(url: domain, cookie: cookie));
   }
 
+  /// 記憶體裡 [url] 的 Cookie；沒有時是 null，要連資料庫一起找用 [getCookie]。
+  String? getMemoryCookie(String url) => _memoryCache[getSubDomain(url)];
+
   /// 獲取 Cookie
   Future<String> getCookie(String url) async {
     final domain = getSubDomain(url);

@@ -3,7 +3,8 @@ import 'dart:async';
 /// 書源除錯要看實際送出的網址：在 [body] 裡送出的請求依序記進 [urls]。
 ///
 /// 記錄點在所有請求都會經過的地方：Dio 的 `AppInterceptor`（含轉址的每
-/// 一跳，規則 JS 的 `java.ajax`、`java.get` 這類也走這裡）與兩種 WebView
+/// 一跳，規則 JS 的 `java.ajax`、`java.get` 這類也走這裡：它們在網路 isolate
+/// 送出，記下的網址由 `BlockingCall` 帶回來）與兩種 WebView
 /// 的入口。不在 [body] 裡時什麼都不記。
 Future<T> recordRequestUrls<T>(List<String> urls, Future<T> Function() body) =>
     runZoned(body, zoneValues: {_requestUrlsZoneKey: urls});
@@ -21,6 +22,13 @@ void recordRequestUrl(String method, Uri uri, {bool redirect = false}) {
     '${upper == 'GET' ? '' : '$upper '}${uri.removeFragment()}'
     '${redirect ? '（轉址）' : ''}',
   );
+}
+
+/// 接上在別的 isolate 記下的 [urls]（規則 JS 要等的請求在網路 isolate 送出，
+/// ADR 0034）。不在 [recordRequestUrls] 裡時什麼都不做。
+void recordRequestedUrls(List<String> urls) {
+  if (urls.isEmpty) return;
+  (Zone.current[_requestUrlsZoneKey] as List<String>?)?.addAll(urls);
 }
 
 final Object _requestUrlsZoneKey = Object();

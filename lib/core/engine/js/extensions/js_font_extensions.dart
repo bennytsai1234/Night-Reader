@@ -3,18 +3,19 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 
 import '../js_extensions_base.dart';
 import '../query_ttf.dart';
+import 'js_blocking_tasks.dart';
 
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/services/http_client.dart';
 
 /// JsExtensions 的字體處理擴展
 extension JsFontExtensions on JsExtensionsBase {
   void injectFontExtensions() {
-    runtime.onMessage('queryTTF', (dynamic args) async {
+    // 網址的字型停住交給網路 isolate 下載（[BlockingCall]）；原本這裡傳回
+    // Future，JS 拿到的是還沒完成的結果。
+    runtime.onMessage('queryTTF', (dynamic args) {
       try {
         final dataStr = args[0].toString();
         final useCache = args.length > 1 ? args[1] as bool : true;
@@ -23,28 +24,13 @@ extension JsFontExtensions on JsExtensionsBase {
             : '';
         if (useCache && JsExtensionsBase.ttfCache.containsKey(key)) return key;
 
-        Uint8List? buffer;
-        if (dataStr.startsWith('http')) {
-          final response = await HttpClient().client.get<List<int>>(
-            dataStr,
-            options: Options(responseType: ResponseType.bytes),
-            cancelToken: currentSourceCancelToken,
-          );
-          buffer = response.data != null
-              ? Uint8List.fromList(response.data!)
-              : null;
-        } else {
-          buffer = base64Decode(dataStr);
-        }
-
-        if (buffer != null) {
-          final qTTF = QueryTTF(buffer);
-          final cacheKey = key.isNotEmpty
-              ? key
-              : md5.convert(buffer).toString();
-          JsExtensionsBase.ttfCache[cacheKey] = qTTF;
-          return cacheKey;
-        }
+        final buffer = dataStr.startsWith('http')
+            ? BlockingCall.run(plainBytes(dataStr)) as Uint8List
+            : base64Decode(dataStr);
+        final qTTF = QueryTTF(buffer);
+        final cacheKey = key.isNotEmpty ? key : md5.convert(buffer).toString();
+        JsExtensionsBase.ttfCache[cacheKey] = qTTF;
+        return cacheKey;
       } catch (e) {
         AppLog.e('queryTTF error: $e', error: e);
       }

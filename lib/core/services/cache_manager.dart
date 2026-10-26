@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -137,10 +138,13 @@ class CacheManager {
       key.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 
   /// 讀取快取文本 (優先從記憶體，再從磁碟資料庫，最後從檔案系統)
+  ///
+  /// 過期的刪掉但不等它寫完：網路 isolate 替停住的書源 isolate 讀時，寫入
+  /// 可能要等那條手上的交易，讀取不能跟著等（ADR 0034）。
   Future<String?> get(String key) async {
     // 1. 記憶體
     if (_isMemoryExpired(key)) {
-      await delete(key);
+      unawaited(delete(key));
       return null;
     }
     final mem = getFromMemory(key);
@@ -156,7 +160,7 @@ class CacheManager {
           _putMemory(key, cache.value, deadline: cache.deadline);
           return cache.value;
         } else {
-          await delete(key); // 已過期，清理
+          unawaited(delete(key)); // 已過期，清理
           return null;
         }
       }
@@ -207,6 +211,14 @@ class CacheManager {
   }
 
   dynamic getFromMemory(String key) => _memoryCache.get(key);
+
+  /// 記憶體裡還沒過期的文字；沒有時是 null，要連資料庫與檔案一起找用 [get]。
+  String? getMemoryText(String key) {
+    if (_isMemoryExpired(key)) return null;
+    final value = _memoryCache.get(key);
+    return value is String ? value : null;
+  }
+
   void deleteMemory(String key) {
     _deleteMemory(key);
     onMemoryWrite?.call(key, null, 0);

@@ -87,6 +87,12 @@ class ParsingException extends AppException {
   }
 }
 
+/// 規則 JS 執行出錯、規則自己沒接住（對標 Rhino 丟出的錯誤）。規則照失敗
+/// 處理，錯誤訊息不會被當成正文、網址或分類。
+class RuleJsException extends AppException {
+  RuleJsException(super.message);
+}
+
 /// LoginCheckException - 書源登入驗證失敗
 class LoginCheckException extends AppException {
   final String? sourceUrl;

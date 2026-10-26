@@ -2,7 +2,6 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
-import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
 
 /// 目錄解析結果
 class ChapterListResult {
@@ -57,7 +56,6 @@ class ChapterListParser {
       ruleData: book,
     ).setContent(body, baseUrl: baseUrl);
     try {
-      final listRuleNeedsAsync = _ruleNeedsAsync(listRule);
       final chapterNameRule = tocRule.chapterName ?? '';
       final chapterUrlRule = tocRule.chapterUrl ?? '';
       final updateTimeRule = tocRule.updateTime ?? '';
@@ -65,16 +63,7 @@ class ChapterListParser {
       final isVipRule = tocRule.isVip ?? '';
       final isPayRule = tocRule.isPay ?? '';
       final nextTocUrlRule = tocRule.nextTocUrl ?? '';
-      final chapterNameRuleNeedsAsync = _ruleNeedsAsync(chapterNameRule);
-      final chapterUrlRuleNeedsAsync = _ruleNeedsAsync(chapterUrlRule);
-      final updateTimeRuleNeedsAsync = _ruleNeedsAsync(updateTimeRule);
-      final isVolumeRuleNeedsAsync = _ruleNeedsAsync(isVolumeRule);
-      final isVipRuleNeedsAsync = _ruleNeedsAsync(isVipRule);
-      final isPayRuleNeedsAsync = _ruleNeedsAsync(isPayRule);
-      final nextTocUrlRuleNeedsAsync = _ruleNeedsAsync(nextTocUrlRule);
-      final elements = listRuleNeedsAsync
-          ? await rule.getElementsAsync(listRule)
-          : rule.getElements(listRule);
+      final elements = rule.getElements(listRule);
 
       final chapters = <BookChapter>[];
       for (var i = 0; i < elements.length; i++) {
@@ -90,31 +79,12 @@ class ChapterListParser {
         itemRule.setChapter(chapter);
 
         try {
-          chapter.title = await _readString(
-            itemRule,
-            chapterNameRule,
-            needsAsync: chapterNameRuleNeedsAsync,
-          );
+          chapter.title = _readString(itemRule, chapterNameRule);
           if (chapter.title.isEmpty) continue;
 
-          chapter.url = await _readString(
-            itemRule,
-            chapterUrlRule,
-            needsAsync: chapterUrlRuleNeedsAsync,
-            isUrl: true,
-          );
-          chapter.tag = await _readString(
-            itemRule,
-            updateTimeRule,
-            needsAsync: updateTimeRuleNeedsAsync,
-          );
-          chapter.isVolume = _isTrue(
-            await _readString(
-              itemRule,
-              isVolumeRule,
-              needsAsync: isVolumeRuleNeedsAsync,
-            ),
-          );
+          chapter.url = _readString(itemRule, chapterUrlRule, isUrl: true);
+          chapter.tag = _readString(itemRule, updateTimeRule);
+          chapter.isVolume = _isTrue(_readString(itemRule, isVolumeRule));
 
           if (chapter.url.isEmpty) {
             if (chapter.isVolume) {
@@ -124,20 +94,8 @@ class ChapterListParser {
             }
           }
 
-          chapter.isVip = _isTrue(
-            await _readString(
-              itemRule,
-              isVipRule,
-              needsAsync: isVipRuleNeedsAsync,
-            ),
-          );
-          chapter.isPay = _isTrue(
-            await _readString(
-              itemRule,
-              isPayRule,
-              needsAsync: isPayRuleNeedsAsync,
-            ),
-          );
+          chapter.isVip = _isTrue(_readString(itemRule, isVipRule));
+          chapter.isPay = _isTrue(_readString(itemRule, isPayRule));
 
           chapters.add(chapter);
           if (maxChapters != null && chapters.length >= maxChapters) {
@@ -154,9 +112,7 @@ class ChapterListParser {
 
       final nextUrls = <String>[];
       if (nextTocUrlRule.isNotEmpty) {
-        final list = nextTocUrlRuleNeedsAsync
-            ? await rule.getStringListAsync(nextTocUrlRule, isUrl: true)
-            : rule.getStringList(nextTocUrlRule, isUrl: true);
+        final list = rule.getStringList(nextTocUrlRule, isUrl: true);
         for (final u in list) {
           if (u.isNotEmpty && u != baseUrl) nextUrls.add(u);
         }
@@ -180,22 +136,12 @@ class ChapterListParser {
     return lower == 'true' || lower == 'yes' || lower == '1' || lower == '是';
   }
 
-  static bool _ruleNeedsAsync(String rule) {
-    final trimmed = rule.trim();
-    if (trimmed.isEmpty) return false;
-    return AsyncJsRewriter.needsAsync(trimmed);
-  }
-
-  static Future<String> _readString(
+  static String _readString(
     AnalyzeRule rule,
     String ruleText, {
-    required bool needsAsync,
     bool isUrl = false,
-  }) async {
+  }) {
     if (ruleText.isEmpty) return '';
-    if (needsAsync) {
-      return rule.getStringAsync(ruleText, isUrl: isUrl);
-    }
     return rule.getString(ruleText, isUrl: isUrl);
   }
 }

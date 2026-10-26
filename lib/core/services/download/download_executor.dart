@@ -69,7 +69,8 @@ class DownloadPlan {
   });
 
   /// 這一輪下載在書源 isolate 的編號：逐章抓取共用同一份書與章節，跑完
-  /// 交給 [finishDownloadRunInSourceIsolate] 放掉。
+  /// 交給 [finishDownloadRunInSourceIsolate] 放掉。只在規劃它的那一條書源
+  /// isolate 有效，之後的呼叫都帶同一本書的網址，送到同一條。
   final int run;
 
   /// 範圍裡要下載的章數（已下載的也算）。
@@ -92,24 +93,31 @@ Future<DownloadPlan> planDownloadInSourceIsolate(
   CancelToken? cancelToken,
 }) => SourceIsolate.run(
   (cancelToken) => _planDownload(task, cancelToken),
+  affinity: task.bookUrl,
   cancelToken: cancelToken,
 );
 
-/// 抓第 [run] 輪的一章正文寫進資料庫；已經有正文就不抓。[cancelToken]
-/// 取消時請求與重試跟著停，什麼都不寫。
+/// 抓 [bookUrl] 第 [run] 輪的一章正文寫進資料庫；已經有正文就不抓。
+/// [cancelToken] 取消時請求與重試跟著停，什麼都不寫。
 Future<DownloadChapterResult> downloadChapterInSourceIsolate({
+  required String bookUrl,
   required int run,
   required String chapterUrl,
   required int maxAttempts,
   CancelToken? cancelToken,
 }) => SourceIsolate.run(
   (cancelToken) => _downloadChapter(run, chapterUrl, maxAttempts, cancelToken),
+  affinity: bookUrl,
   cancelToken: cancelToken,
 );
 
-/// 第 [run] 輪下載結束（跑完、失敗、暫停或退役），放掉它的書與章節。
-Future<void> finishDownloadRunInSourceIsolate(int run) =>
-    SourceIsolate.run((_) async => _downloadRuns.remove(run));
+/// [bookUrl] 第 [run] 輪下載結束（跑完、失敗、暫停或退役），放掉它的書與
+/// 章節。
+Future<void> finishDownloadRunInSourceIsolate(String bookUrl, int run) =>
+    SourceIsolate.run(
+      (_) async => _downloadRuns.remove(run),
+      affinity: bookUrl,
+    );
 
 /// 書源 isolate 裡進行中的每一輪下載：整輪共用同一份書、書源與章節，和
 /// 原本在主 isolate 時一樣。規則在抓目錄或某一章時寫進書與章節的變數
@@ -346,6 +354,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
             String rawFailure;
             try {
               result = await downloadChapterInSourceIsolate(
+                bookUrl: task.bookUrl,
                 run: plan.run,
                 chapterUrl: chapter.url,
                 maxAttempts: _maxRetries,
@@ -426,7 +435,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       // 已經開抓的章節在開始時就拿到了書與章節，放掉不影響它們跑完。
       if (run != null) {
         unawaited(
-          finishDownloadRunInSourceIsolate(run).catchError((Object error) {
+          finishDownloadRunInSourceIsolate(task.bookUrl, run).catchError((
+            Object error,
+          ) {
             AppLog.w('下載結束時放掉書源 isolate 的狀態失敗: $error');
           }),
         );

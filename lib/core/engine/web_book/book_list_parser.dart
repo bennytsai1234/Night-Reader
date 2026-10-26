@@ -2,7 +2,6 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
-import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -58,7 +57,6 @@ class BookListParser {
       if (listRule == null) return [];
 
       String ruleList = listRule.bookList ?? '';
-      final listRuleNeedsAsync = _ruleNeedsAsync(ruleList);
       var isReverse = false;
       if (ruleList.startsWith('-')) {
         isReverse = true;
@@ -68,9 +66,7 @@ class BookListParser {
         ruleList = ruleList.substring(1);
       }
 
-      var elements = listRuleNeedsAsync
-          ? await rule.getElementsAsync(ruleList)
-          : rule.getElements(ruleList);
+      var elements = rule.getElements(ruleList);
 
       if (!isSearch &&
           elements.isEmpty &&
@@ -79,7 +75,6 @@ class BookListParser {
         if (fallbackRule != null) {
           listRule = fallbackRule;
           ruleList = fallbackRule.bookList ?? '';
-          final fallbackNeedsAsync = _ruleNeedsAsync(ruleList);
           isReverse = false;
           if (ruleList.startsWith('-')) {
             isReverse = true;
@@ -88,9 +83,7 @@ class BookListParser {
           if (ruleList.startsWith('+')) {
             ruleList = ruleList.substring(1);
           }
-          elements = fallbackNeedsAsync
-              ? await rule.getElementsAsync(ruleList)
-              : rule.getElements(ruleList);
+          elements = rule.getElements(ruleList);
         }
       }
 
@@ -117,14 +110,6 @@ class BookListParser {
       final introRule = listRule.intro ?? '';
       final latestChapterRule = listRule.lastChapter ?? '';
       final wordCountRule = listRule.wordCount ?? '';
-      final nameRuleNeedsAsync = _ruleNeedsAsync(nameRule);
-      final bookUrlRuleNeedsAsync = _ruleNeedsAsync(bookUrlRule);
-      final authorRuleNeedsAsync = _ruleNeedsAsync(authorRule);
-      final kindRuleNeedsAsync = _ruleNeedsAsync(kindRule);
-      final coverUrlRuleNeedsAsync = _ruleNeedsAsync(coverUrlRule);
-      final introRuleNeedsAsync = _ruleNeedsAsync(introRule);
-      final latestChapterRuleNeedsAsync = _ruleNeedsAsync(latestChapterRule);
-      final wordCountRuleNeedsAsync = _ruleNeedsAsync(wordCountRule);
       // 以 (name, author, bookUrl) 作為去重鍵，對標 Android LinkedHashSet<SearchBook>
       final seen = <(String, String, String)>{};
 
@@ -145,77 +130,34 @@ class BookListParser {
         ).setContent(element, baseUrl: baseUrl)..jsEngineOwner = rule;
 
         try {
-          final name = BookHelp.formatBookName(
-            await _readString(
-              itemRule,
-              nameRule,
-              needsAsync: nameRuleNeedsAsync,
-            ),
-          );
+          final name = BookHelp.formatBookName(_readString(itemRule, nameRule));
           if (name.isEmpty) continue;
 
           searchBook.name = name;
           searchBook.author = BookHelp.formatBookAuthor(
-            await _safeString(
-              () => _readString(
-                itemRule,
-                authorRule,
-                needsAsync: authorRuleNeedsAsync,
-              ),
-            ),
+            _safeString(() => _readString(itemRule, authorRule)),
           );
           if (filter != null && !filter(name, searchBook.author ?? '')) {
             continue;
           }
-          searchBook.kind = (await _safeStringList(
-            () => _readStringList(
-              itemRule,
-              kindRule,
-              needsAsync: kindRuleNeedsAsync,
-            ),
-          )).join(',');
+          searchBook.kind = _safeStringList(
+            () => _readStringList(itemRule, kindRule),
+          ).join(',');
           searchBook.coverUrl = BookInfoParser.coverUrlFrom(
-            await _safeString(
-              () => _readString(
-                itemRule,
-                coverUrlRule,
-                needsAsync: coverUrlRuleNeedsAsync,
-              ),
-            ),
+            _safeString(() => _readString(itemRule, coverUrlRule)),
             baseUrl,
           );
           searchBook.intro = HtmlFormatter.format(
-            await _safeString(() {
-              return _readString(
-                itemRule,
-                introRule,
-                needsAsync: introRuleNeedsAsync,
-              );
-            }),
+            _safeString(() => _readString(itemRule, introRule)),
           );
-          searchBook.latestChapterTitle = await _safeString(
-            () => _readString(
-              itemRule,
-              latestChapterRule,
-              needsAsync: latestChapterRuleNeedsAsync,
-            ),
+          searchBook.latestChapterTitle = _safeString(
+            () => _readString(itemRule, latestChapterRule),
           );
           searchBook.wordCount = StringUtils.wordCountFormat(
-            await _safeString(
-              () => _readString(
-                itemRule,
-                wordCountRule,
-                needsAsync: wordCountRuleNeedsAsync,
-              ),
-            ),
+            _safeString(() => _readString(itemRule, wordCountRule)),
           );
 
-          var bookUrl = await _readString(
-            itemRule,
-            bookUrlRule,
-            needsAsync: bookUrlRuleNeedsAsync,
-            isUrl: true,
-          );
+          var bookUrl = _readString(itemRule, bookUrlRule, isUrl: true);
           // 空 bookUrl fallback 為 baseUrl (對標 Android BookList 邏輯)
           if (bookUrl.isEmpty) bookUrl = baseUrl;
           searchBook.bookUrl = bookUrl;
@@ -279,54 +221,34 @@ class BookListParser {
     return null;
   }
 
-  static Future<String> _safeString(Future<String> Function() reader) async {
+  static String _safeString(String Function() reader) {
     try {
-      return await reader();
+      return reader();
     } catch (_) {
       return '';
     }
   }
 
-  static Future<List<String>> _safeStringList(
-    Future<List<String>> Function() reader,
-  ) async {
+  static List<String> _safeStringList(List<String> Function() reader) {
     try {
-      return await reader();
+      return reader();
     } catch (_) {
       return const <String>[];
     }
   }
 
-  static bool _ruleNeedsAsync(String rule) {
-    final trimmed = rule.trim();
-    if (trimmed.isEmpty) return false;
-    return AsyncJsRewriter.needsAsync(trimmed);
-  }
-
-  static Future<String> _readString(
+  static String _readString(
     AnalyzeRule rule,
     String ruleText, {
-    required bool needsAsync,
     bool isUrl = false,
-  }) async {
+  }) {
     if (ruleText.isEmpty) return '';
-    if (needsAsync) {
-      return rule.getStringAsync(ruleText, isUrl: isUrl);
-    }
     return rule.getString(ruleText, isUrl: isUrl);
   }
 
-  static Future<List<String>> _readStringList(
-    AnalyzeRule rule,
-    String ruleText, {
-    required bool needsAsync,
-    bool isUrl = false,
-  }) async {
+  static List<String> _readStringList(AnalyzeRule rule, String ruleText) {
     if (ruleText.isEmpty) return const <String>[];
-    if (needsAsync) {
-      return rule.getStringListAsync(ruleText, isUrl: isUrl);
-    }
-    return rule.getStringList(ruleText, isUrl: isUrl);
+    return rule.getStringList(ruleText);
   }
 
   static dynamic _resolveExploreRule(BookSource source) {
