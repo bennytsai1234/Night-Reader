@@ -31,8 +31,19 @@ abstract final class BlockingCall {
     if (channel == null || replies == null) {
       throw const BlockingCallUnavailable();
     }
-    channel.notify(_Block(Zone.current[_taskIdZoneKey] as int?, task));
-    return _Outcome.decode(replies.take());
+    channel.notify(
+      _Block(
+        Zone.current[_taskIdZoneKey] as int?,
+        task,
+        recordRequests: isRecordingRequestUrls,
+      ),
+    );
+    final outcome = _Outcome.decode(replies.take());
+    // 書源除錯要列出規則 JS 自己送的請求；它們在網路 isolate 送出，記下的
+    // 網址跟著結果回來，照順序接進這裡的清單。
+    recordRequestedUrls(outcome.requestUrls);
+    if (outcome.error case final error?) throw error;
+    return outcome.value;
   }
 }
 
@@ -57,19 +68,28 @@ final class BlockingCallError implements Exception {
   String toString() => message;
 }
 
-/// 停住的 worker 從信箱拿到的結果：第一個位元組是種類，後面是內容。信箱
-/// 只能放位元組，結果在網路 isolate 編好，在 worker 解開。
-abstract final class _Outcome {
+/// 停住的 worker 從信箱拿到的結果。信箱只能放位元組，結果在網路 isolate
+/// 編好，在 worker 解開：第一個位元組是種類，接著四個位元組是送出的請求
+/// 網址（JSON）的長度、網址，最後是內容。
+final class _Outcome {
+  const _Outcome(this.value, this.error, this.requestUrls);
+
+  final Object? value;
+  final BlockingCallError? error;
+  final List<String> requestUrls;
+
   static const int _json = 0;
   static const int _bytes = 1;
   static const int _error = 2;
 
-  static Uint8List success(Object? value) => value is Uint8List
-      ? _tagged(_bytes, value)
-      : _tagged(_json, utf8.encode(jsonEncode(value)));
+  static Uint8List success(Object? value, List<String> requestUrls) =>
+      value is Uint8List
+      ? _encode(_bytes, requestUrls, value)
+      : _encode(_json, requestUrls, utf8.encode(jsonEncode(value)));
 
-  static Uint8List failure(Object error) => _tagged(
+  static Uint8List failure(Object error, List<String> requestUrls) => _encode(
     _error,
+    requestUrls,
     utf8.encode(
       jsonEncode({
         'message': '$error',
@@ -79,24 +99,45 @@ abstract final class _Outcome {
     ),
   );
 
-  static Object? decode(Uint8List outcome) {
-    final content = Uint8List.sublistView(outcome, 1);
+  static _Outcome decode(Uint8List outcome) {
+    final urlsLength = ByteData.sublistView(
+      outcome,
+      1,
+      5,
+    ).getUint32(0, Endian.little);
+    final requestUrls = (jsonDecode(
+      utf8.decode(Uint8List.sublistView(outcome, 5, 5 + urlsLength)),
+    ) as List).cast<String>();
+    final content = Uint8List.sublistView(outcome, 5 + urlsLength);
     switch (outcome[0]) {
       case _json:
-        return jsonDecode(utf8.decode(content));
+        return _Outcome(jsonDecode(utf8.decode(content)), null, requestUrls);
       case _bytes:
-        return content;
+        return _Outcome(content, null, requestUrls);
       default:
         final error = jsonDecode(utf8.decode(content)) as Map;
-        throw BlockingCallError(
-          '${error['message']}',
-          cancelled: error['cancelled'] == true,
+        return _Outcome(
+          null,
+          BlockingCallError(
+            '${error['message']}',
+            cancelled: error['cancelled'] == true,
+          ),
+          requestUrls,
         );
     }
   }
 
-  static Uint8List _tagged(int tag, List<int> content) =>
-      Uint8List(content.length + 1)
-        ..[0] = tag
-        ..setRange(1, content.length + 1, content);
+  static Uint8List _encode(
+    int tag,
+    List<String> requestUrls,
+    List<int> content,
+  ) {
+    final urls = utf8.encode(jsonEncode(requestUrls));
+    final out = Uint8List(5 + urls.length + content.length);
+    out[0] = tag;
+    ByteData.sublistView(out, 1, 5).setUint32(0, urls.length, Endian.little);
+    out.setRange(5, 5 + urls.length, urls);
+    out.setRange(5 + urls.length, out.length, content);
+    return out;
+  }
 }

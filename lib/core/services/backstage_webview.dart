@@ -8,6 +8,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'dart:convert';
 
 import 'package:html_unescape/html_unescape.dart';
+import 'package:night_reader/core/network/request_log.dart';
 
 class BackstageWebView {
   final String? url;
@@ -53,6 +54,10 @@ class BackstageWebView {
   }
 
   Future<Map<String, dynamic>> getStrResponse() async {
+    // 給了 HTML 時網址只當基準網址，沒有載入。
+    if ((html ?? '').isEmpty && (url ?? '').isNotEmpty) {
+      if (Uri.tryParse(url!) case final uri?) recordRequestUrl('GET', uri);
+    }
     final delegate = BackstageWebView.delegate;
     if (delegate != null) return delegate(this);
     final completer = Completer<Map<String, dynamic>>();

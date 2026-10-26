@@ -12,6 +12,7 @@ import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
+import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cancellation.dart';
@@ -412,7 +413,7 @@ class AnalyzeUrl {
       final decodedBody = _decodeResponseBody(responseBytes, rawResponse);
 
       return StrResponse(
-        url: rawResponse.realUri.toString(),
+        url: rawResponse.finalUri.toString(),
         body: decodedBody,
         headers: rawResponse.headers.map,
         raw: rawResponse,

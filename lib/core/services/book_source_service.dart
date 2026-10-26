@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -14,6 +16,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
@@ -276,12 +279,30 @@ _Work<List<ExploreKind>> _exploreKindsTask(
 typedef _Change = (Object? before, Object? after);
 
 final class _Ran<R> {
-  const _Ran(this.result, this.bookChanges, this.chapterChanges);
+  const _Ran(
+    this.result,
+    this.bookChanges,
+    this.chapterChanges,
+    this.requestUrls,
+  );
 
   final R result;
   final Map<String, _Change> bookChanges;
   final Map<String, _Change> chapterChanges;
+
+  /// 工作實際送出的請求網址；只有 [withSourceRequestLog] 裡才記。
+  final List<String> requestUrls;
 }
+
+/// 書源除錯用：[body] 裡經由 [BookSourceService] 跑的書源工作，跑完後把
+/// 實際送出的請求網址依序交給 [onRequest]。工作失敗時不交，出錯的那個網址
+/// 在錯誤（[DioException.requestOptions]）裡。
+Future<T> withSourceRequestLog<T>(
+  void Function(String url) onRequest,
+  Future<T> Function() body,
+) => runZoned(body, zoneValues: {_requestLogZoneKey: onRequest});
+
+final Object _requestLogZoneKey = Object();
 
 /// 在書源 isolate 執行 [work]，把規則在 [book]、[chapter] 上改的欄位
 /// （[bookRuleFields]、[chapterRuleFields]）抄回傳入的物件。
@@ -297,36 +318,49 @@ Future<R> _runOnSource<R>(
   BookChapter? chapter,
   CancelToken? cancelToken,
 }) async {
+  // 原地執行時，書源工作裡又叫回來的工作（規則 JS 這類）的請求記進外層
+  // 工作的清單，照送出的順序列。
+  final onRequest = isRecordingRequestUrls
+      ? null
+      : Zone.current[_requestLogZoneKey] as void Function(String url)?;
   final ran = await SourceIsolate.run(
-    _tracked(work, book, chapter),
+    _tracked(work, book, chapter, recordRequests: onRequest != null),
     affinity: source?.bookSourceUrl,
     cancelToken: cancelToken,
   );
   if (book != null) _apply(bookRuleFields, ran.bookChanges, book);
   if (chapter != null) _apply(chapterRuleFields, ran.chapterChanges, chapter);
+  if (onRequest != null) ran.requestUrls.forEach(onRequest);
   return ran.result;
 }
 
 /// 包住 [work]：在執行它的 isolate 裡，開始前與結束後各讀一次 [book]、
 /// [chapter] 的規則欄位，只傳回有變的。[book]、[chapter] 和 [work] 捕捉的是
-/// 同一份（同一則訊息複製過去的物件仍是同一個）。
-_Work<_Ran<R>> _tracked<R>(_Work<R> work, Book? book, BookChapter? chapter) =>
-    (cancelToken) async {
-      final bookBefore = book == null
-          ? null
-          : _readFields(bookRuleFields, book);
-      final chapterBefore = chapter == null
-          ? null
-          : _readFields(chapterRuleFields, chapter);
-      final result = await work(cancelToken);
-      return _Ran(
-        result,
-        book == null ? const {} : _changes(bookRuleFields, bookBefore!, book),
-        chapter == null
-            ? const {}
-            : _changes(chapterRuleFields, chapterBefore!, chapter),
-      );
-    };
+/// 同一份（同一則訊息複製過去的物件仍是同一個）。[recordRequests] 時一併
+/// 傳回實際送出的請求網址。
+_Work<_Ran<R>> _tracked<R>(
+  _Work<R> work,
+  Book? book,
+  BookChapter? chapter, {
+  required bool recordRequests,
+}) => (cancelToken) async {
+  final bookBefore = book == null ? null : _readFields(bookRuleFields, book);
+  final chapterBefore = chapter == null
+      ? null
+      : _readFields(chapterRuleFields, chapter);
+  final requestUrls = <String>[];
+  final result = recordRequests
+      ? await recordRequestUrls(requestUrls, () => work(cancelToken))
+      : await work(cancelToken);
+  return _Ran(
+    result,
+    book == null ? const {} : _changes(bookRuleFields, bookBefore!, book),
+    chapter == null
+        ? const {}
+        : _changes(chapterRuleFields, chapterBefore!, chapter),
+    requestUrls,
+  );
+};
 
 Map<String, Object?> _readFields<T>(
   Map<String, RuleDataField<T>> fields,

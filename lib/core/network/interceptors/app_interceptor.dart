@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/network/redirects.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
 
@@ -35,7 +37,22 @@ class AppInterceptor extends Interceptor {
     }
 
     AppLog.i('Network Request: [${options.method}] ${options.uri}');
+    recordRequestUrl(
+      options.method,
+      options.uri,
+      redirect: options.extra.containsKey(manualRedirectCountKey),
+    );
     super.onRequest(options, handler);
+  }
+
+  /// HTTP 套件自己跟著走的轉址（GET 的 301、302 這類）不會再經過
+  /// [onRequest]，從回應的轉址紀錄補上。
+  void _recordRedirects(Response<dynamic>? response) {
+    if (response == null) return;
+    final uris = response.redirectedUris;
+    for (final (i, redirect) in response.redirects.indexed) {
+      recordRequestUrl(redirect.method, uris[i], redirect: true);
+    }
   }
 
   String _defaultUserAgentFor(Uri uri) {
@@ -53,12 +70,13 @@ class AppInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    // 這裡可以處理特殊的內容編碼或自動修正
+    _recordRedirects(response);
     super.onResponse(response, handler);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    _recordRedirects(err.response);
     try {
       final redirected = await _tryFollowRedirect(err);
       if (redirected != null) {

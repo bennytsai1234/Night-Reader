@@ -87,6 +87,32 @@ void main() {
   });
 
   test(
+    'AnalyzeUrl reports the full URL after relative GET redirects',
+    () async {
+      // HTTP 套件自己走的轉址，Location 是相對網址；第二跳要以第一跳為準。
+      requestHandler = (request) async {
+        final location = switch (request.uri.path) {
+          '/a/start' => '/b/next',
+          '/b/next' => 'end',
+          _ => null,
+        };
+        if (location != null) {
+          request.response.statusCode = HttpStatus.found;
+          request.response.headers.set(HttpHeaders.locationHeader, location);
+        } else {
+          request.response.write('page=${request.uri.path}');
+        }
+        await request.response.close();
+      };
+
+      final response = await AnalyzeUrl('$baseUrl/a/start').getStrResponse();
+
+      expect(response.body, 'page=/b/end');
+      expect(response.url, '$baseUrl/b/end');
+    },
+  );
+
+  test(
     'HttpClient follows POST 302 redirect and exposes redirect chain',
     () async {
       final requests = <String>[];

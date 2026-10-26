@@ -730,6 +730,34 @@ void main() {
       expect(found.map((b) => (b.name, b.author)), [('夜讀', '作者')]);
     });
 
+    test('the URLs a task sent come back for source debugging', () async {
+      final urls = <String>[];
+      await withSourceRequestLog(
+        urls.add,
+        () => BookSourceService().searchBooks(source, '夜讀'),
+      );
+
+      expect(urls, ['$baseUrl/search']);
+    });
+
+    // 規則 JS 自己的請求在網路 isolate 送出（ADR 0034），網址跟著結果回來。
+    test('the URLs rule JS sent are listed too', () async {
+      source.ruleContent!.content = '@js:java.ajax("$baseUrl/c/2")';
+      final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+      final urls = <String>[];
+
+      await withSourceRequestLog(
+        urls.add,
+        () => BookSourceService().getContent(
+          source,
+          book,
+          BookChapter(title: '第一章', url: '$baseUrl/c/1', bookUrl: book.bookUrl),
+        ),
+      );
+
+      expect(urls, ['$baseUrl/c/1', '$baseUrl/c/2']);
+    }, skip: quickJsUnavailableReason());
+
     test('explore kinds and explore pages', () async {
       final service = BookSourceService();
 

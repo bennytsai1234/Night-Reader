@@ -14,6 +14,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
@@ -421,10 +422,12 @@ final class SourceWorker {
       // 開網路 isolate 的這段時間裡被取消了。
       if (call.cancelled) throw _cancelled();
       call.io = io;
-      final reply = await io._channel.request(_Perform(call.id, block.task));
+      final reply = await io._channel.request(
+        _Perform(call.id, block.task, recordRequests: block.recordRequests),
+      );
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
     } catch (error) {
-      outcome = _Outcome.failure(error);
+      outcome = _Outcome.failure(error, const []);
     }
     _blocked = null;
     if (_killed) return;
@@ -651,12 +654,12 @@ void _main(SendPort mainPort) {
           } finally {
             tasks.remove(id);
           }
-        case _Perform(:final id, :final task):
+        case _Perform(:final id, :final task, :final recordRequests):
           final cancelToken = CancelToken();
           performs[id] = cancelToken;
           try {
             return TransferableTypedData.fromList([
-              await _perform(task, cancelToken),
+              await _perform(task, cancelToken, recordRequests: recordRequests),
             ]);
           } finally {
             performs.remove(id);
@@ -761,12 +764,18 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
 /// （[_Outcome]）。取消時 [task] 裡的請求跟著停。
 Future<Uint8List> _perform(
   Future<Object?> Function() task,
-  CancelToken cancelToken,
-) async {
+  CancelToken cancelToken, {
+  required bool recordRequests,
+}) async {
+  final requestUrls = <String>[];
   try {
-    return _Outcome.success(await _runCancellable((_) => task(), cancelToken));
+    final value = await _runCancellable(
+      (_) => recordRequests ? recordRequestUrls(requestUrls, task) : task(),
+      cancelToken,
+    );
+    return _Outcome.success(value, requestUrls);
   } catch (error) {
-    return _Outcome.failure(error);
+    return _Outcome.failure(error, requestUrls);
   }
 }
 
@@ -855,18 +864,22 @@ final class _CancelTask {
 /// worker 停住了，請主 isolate 交給網路 isolate 做 [task]。[taskId] 是它
 /// 停在哪一個書源工作裡。
 final class _Block {
-  const _Block(this.taskId, this.task);
+  const _Block(this.taskId, this.task, {required this.recordRequests});
 
   final int? taskId;
   final Future<Object?> Function() task;
+
+  /// 書源除錯正在記這個工作送出的請求網址（`recordRequestUrls`）。
+  final bool recordRequests;
 }
 
 /// 主 isolate 請網路 isolate 做停住的 worker 交來的 [task]。
 final class _Perform {
-  const _Perform(this.id, this.task);
+  const _Perform(this.id, this.task, {required this.recordRequests});
 
   final int id;
   final Future<Object?> Function() task;
+  final bool recordRequests;
 }
 
 final class _CancelPerform {
