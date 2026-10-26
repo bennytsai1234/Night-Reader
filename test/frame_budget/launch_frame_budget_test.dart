@@ -45,20 +45,22 @@ void main() {
       final costs = await recordFrames(
         tester,
         realAsync: true,
-        // 書架換場（兩張定格畫面，ADR 0031）只貼兩張圖的那幾格：骨架已經
-        // 換掉，頁面上有玻璃，但畫面上沒有在畫的背景模糊。
-        // 骨架還在時分成長出與呼吸：骨架長完、等換場的那段，底下在建書卡、
-        // 解碼封面。
+        // 骨架長完、還沒呼吸的那段（長完停）在底下建書卡、解碼封面、拍兩張
+        // 定格畫面（ADR 0035）。書架換場（ADR 0031）只貼兩張圖的那幾格：
+        // 頁首與分頁列已經換成真的，但畫面上沒有在畫的背景模糊。
         note: () {
-          if (find.byType(SkeletonBox).evaluate().isNotEmpty) {
-            final shelf = find.byType(BookshelfPage).evaluate();
-            final entrance = shelf.isEmpty
-                ? null
-                : LaunchEntrance.maybeOf(shelf.first);
-            return entrance?.skeleton.isCompleted ?? false ? '骨架呼吸' : '骨架長出';
+          final shelf = find.byType(BookshelfPage).evaluate();
+          final entrance = shelf.isEmpty
+              ? null
+              : LaunchEntrance.maybeOf(shelf.first);
+          if (entrance != null &&
+              entrance.revealed.value &&
+              !entrance.isFinished) {
+            return _paintsBlur(tester) ? null : '換場中';
           }
-          if (find.byType(BackdropFilter).evaluate().isEmpty) return null;
-          return _paintsBlur(tester) ? null : '換場中';
+          if (find.byType(SkeletonBox).evaluate().isEmpty) return null;
+          if (!(entrance?.skeleton.isCompleted ?? false)) return '骨架長出';
+          return entrance!.breathing.value ? '骨架呼吸' : '長完停';
         },
         // 骨架出現過、又全部換成內容，就是整段進場播完；之後再看一秒，開
         // App 的背景工作從這時開始。
@@ -71,31 +73,27 @@ void main() {
       );
       // ignore: avoid_print
       print(describeFrames(label, costs));
-      // 拍圖兩格在只貼兩張圖的換場之前：拍下骨架畫面的那一格（拍在它畫完
-      // 之後），與下一格（底下換成內容、畫好後拍下來；螢幕上蓋著骨架那張）。
+      // 長完停（建書架、拍圖）與骨架呼吸的每一格各列一段，對照表才看得到
+      // 這兩段；換場中只列中位數與最大。
       String ms(int us) => (us / 1000).toStringAsFixed(1);
-      final first = costs.indexWhere((cost) => cost.note == '換場中');
-      // 骨架呼吸的每一格（不含拍下骨架畫面的那一格）單獨列一行，對照表
-      // 才看得到這一段。
-      final breathing = [
-        for (final cost in costs)
-          if (cost.note == '骨架呼吸' && (first < 2 || cost.index < first - 2))
-            cost,
-      ];
-      if (breathing.isNotEmpty) {
+      for (final segment in ['長完停', '骨架呼吸']) {
+        final frames = [
+          for (final cost in costs)
+            if (cost.note == segment) cost,
+        ];
+        if (frames.isEmpty) continue;
         // ignore: avoid_print
-        print(describeFrames('$label：骨架呼吸', breathing));
+        print(describeFrames('$label：$segment', frames));
       }
-      if (first >= 2) {
-        final mixing = [
-          for (final cost in costs.skip(first))
-            if (cost.note == '換場中') cost.total,
-        ]..sort();
+      final mixing = [
+        for (final cost in costs)
+          if (cost.note == '換場中') cost.total,
+      ]..sort();
+      if (mixing.isNotEmpty) {
         // ignore: avoid_print
         print(
-          '  拍圖兩格 ${ms(costs[first - 2].total)}、'
-          '${ms(costs[first - 1].total)}ms；換場中 ${mixing.length} 格，'
-          '中位數 ${ms(mixing[mixing.length ~/ 2])}ms，最大 ${ms(mixing.last)}ms',
+          '  換場中 ${mixing.length} 格，中位數 ${ms(mixing[mixing.length ~/ 2])}ms，'
+          '最大 ${ms(mixing.last)}ms',
         );
       }
       expect(sawSkeleton, isTrue);

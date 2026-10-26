@@ -22,7 +22,8 @@ import 'skeleton_reveal.dart';
 /// 結束換場、換回真的畫面。
 ///
 /// 包在要換場的範圍外面（例如整個主頁面）；要換場的地方用 [controller] 的
-/// [SnapshotSweepController.play]。
+/// [SnapshotSweepController.play]，可以先 [SnapshotSweepController.capture]
+/// 趁畫面靜止時拍好兩張圖、畫面照常，之後才播（ADR 0035）。
 class SnapshotSweep extends StatefulWidget {
   const SnapshotSweep({
     super.key,
@@ -41,15 +42,32 @@ class SnapshotSweep extends StatefulWidget {
 class SnapshotSweepController {
   _SnapshotSweepState? _state;
 
-  /// 拍下現在的畫面，呼叫 [change] 把底下換成換好的樣子，下一格畫好後拍下
-  /// 來，再花 [duration] 把之前換成之後：[sweep] 時由左而右（同
+  /// 先拍好兩張圖、畫面照常（開 App 時骨架接著呼吸），之後才 [play]：拍下
+  /// 現在的畫面，呼叫 [change] 把底下換成換好的樣子，畫好後拍下來，再呼叫
+  /// [restore] 換回原本的樣子；換回的那一格畫完時完成。拍圖這幾格螢幕上蓋著
+  /// 「之前」那張圖，看起來不動；換回後的畫面要和「之前」一樣。
+  ///
+  /// 拍好到 [play] 之間底下又變了（網路封面到了、換深淺色）時照舊用拍好的
+  /// 圖，播完才一次換到最新的樣子。不在 [SnapshotSweep] 底下或系統要求減少
+  /// 動態時不拍，[play] 照常處理。
+  Future<void> capture({
+    required VoidCallback change,
+    required VoidCallback restore,
+  }) {
+    final state = _state;
+    if (state == null || !state.mounted) return Future<void>.value();
+    return state._capture(change, restore);
+  }
+
+  /// 花 [duration] 把「之前」換成「之後」：[sweep] 時由左而右（同
   /// [SkeletonReveal.incomingOpacityAt]），否則整片淡換。換場播完、換回真的
   /// 畫面時完成。
   ///
-  /// 拍圖的這幾格畫面停著不動；兩張都拍好、停住的畫面畫完後，先做
-  /// [settle]（給呼叫端趁畫面靜止時做的事），再停 [gap] 才開始換場：拍圖是
-  /// 這段最重的主執行緒工作，手機拍得再慢，換場也不會緊接在拍完的那一格
-  /// 開始（ADR 0025）。
+  /// 已經 [capture] 好時，[change] 與螢幕換上「之前」那張圖在同一格；還沒拍
+  /// 時先拍下現在的畫面、[change]、畫好後拍下換好的。之後停住的畫面畫完，
+  /// 先做 [settle]（給呼叫端趁畫面靜止時做的事），再停 [gap] 才開始換場：
+  /// 拍圖是這段最重的主執行緒工作，手機拍得再慢，換場也不會緊接在拍完的
+  /// 那一格開始（ADR 0025）。
   ///
   /// 不在 [SnapshotSweep] 底下，或系統要求減少動態時，直接 [change]。
   Future<void> play({
@@ -67,19 +85,26 @@ class SnapshotSweepController {
     return state._play(change, duration, sweep, gap, settle);
   }
 
-  /// 換場還沒播完就換回真的畫面（底下已經換好），完成這一次換場。建畫面
-  /// 途中呼叫時（例如底下的元件在 didUpdateWidget 裡）等這一幀畫完再換。
+  /// 兩張圖已經 [capture] 好、還沒開始 [play]。
+  bool get captured => _state?._phase == _Phase.captured;
+
+  /// 螢幕上只貼兩張圖、底下不畫：換場中，或拍好後開始掃之前停住的那幾格。
+  bool get playing => _state?._phase == _Phase.playing;
+
+  /// 拍到一半、拍好還沒播，或換場還沒播完時，換回真的畫面（底下已經換好）、
+  /// 放掉圖，完成這一次換場。建畫面途中呼叫時（例如底下的元件在
+  /// didUpdateWidget 裡）等這一幀畫完再換。
   void finish() {
     final state = _state;
-    final run = state?._run;
-    if (state == null || run == null) return;
+    final session = state?._session;
+    if (state == null || session == null) return;
     final scheduler = SchedulerBinding.instance;
     if (scheduler.schedulerPhase != SchedulerPhase.persistentCallbacks) {
       state._end();
       return;
     }
     scheduler.addPostFrameCallback((_) {
-      if (state.mounted && identical(state._run, run)) state._end();
+      if (state.mounted && identical(state._session, session)) state._end();
     });
   }
 }
@@ -91,6 +116,10 @@ enum _Phase {
   /// 已經拍好「之前」、底下換成了換好的樣子：螢幕上蓋著「之前」那張圖，
   /// 等底下畫好拍「之後」。
   holding,
+
+  /// 兩張圖都拍好、底下換回原本的樣子（[SnapshotSweepController.capture]），
+  /// 畫真的畫面，等 [SnapshotSweepController.play]。
+  captured,
 
   /// 兩張圖混合中，底下不畫。
   playing,
@@ -106,7 +135,13 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   ui.Image? _after;
   bool _sweep = true;
 
-  /// 這一次換場；換場被下一次蓋過或結束時換掉。
+  /// 這一輪（拍圖到換場播完）；結束或被下一輪蓋過時換掉。
+  Object? _session;
+
+  /// [SnapshotSweepController.capture] 拍好、換回原本的樣子時完成。
+  Completer<void>? _captured;
+
+  /// [SnapshotSweepController.play] 換場播完時完成。
   Completer<void>? _run;
 
   @override
@@ -161,6 +196,33 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   /// 拍好後停的計時器；結束才開始換場。
   Timer? _hold;
 
+  bool _current(Object session) => mounted && identical(_session, session);
+
+  Future<void> _capture(VoidCallback change, VoidCallback restore) {
+    _end();
+    if (MediaQuery.disableAnimationsOf(context)) return Future<void>.value();
+    final session = _session = Object();
+    final captured = _captured = Completer<void>();
+    _afterFrame(
+      () => _captureBefore(
+        session,
+        change,
+        // 沒有畫面可拍：不拍，[play] 時照常處理。
+        onMissing: _end,
+        then: () {
+          restore();
+          setState(() => _phase = _Phase.captured);
+          _afterFrame(() {
+            if (!_current(session)) return;
+            _captured = null;
+            captured.complete();
+          });
+        },
+      ),
+    );
+    return captured.future;
+  }
+
   Future<void> _play(
     VoidCallback change,
     Duration duration,
@@ -168,7 +230,9 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     Duration gap,
     VoidCallback? settle,
   ) {
-    _end();
+    final session = _session;
+    final ready = session != null && _phase == _Phase.captured;
+    if (!ready || MediaQuery.disableAnimationsOf(context)) _end();
     if (MediaQuery.disableAnimationsOf(context)) {
       change();
       return Future<void>.value();
@@ -178,8 +242,37 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     _gap = gap;
     _settle = settle;
     _progress.duration = duration;
-    _afterFrame(() => _captureBefore(run, change));
+    if (ready) {
+      // 兩張圖已經拍好：螢幕換上「之前」那張圖，底下同一格換成換好的樣子
+      // （螢幕上看不到，換回真的畫面時已經好了）。
+      change();
+      _showBefore(session);
+      return run.future;
+    }
+    final fresh = _session = Object();
+    _afterFrame(
+      () => _captureBefore(
+        fresh,
+        change,
+        // 還沒畫出來（或已經拆掉）：沒有「之前」可拍，直接換。
+        onMissing: () {
+          _end();
+          change();
+        },
+        then: () => _showBefore(fresh),
+      ),
+    );
     return run.future;
+  }
+
+  /// 開始畫兩張圖的混合（換場進度 0，就是「之前」那張圖）；這一格畫完才做
+  /// settle、才開始算 gap：settle 落在靜止的畫面上，做得再久，換場前也照樣
+  /// 停滿 gap。等的是下一格（[_afterFrame]），不用 endOfFrame：這一格裡別人
+  /// 先要過的話，拿到的是這一格的結束。
+  void _showBefore(Object session) {
+    _progress.value = 0;
+    setState(() => _phase = _Phase.playing);
+    _afterFrame(() => _settleThenHold(session));
   }
 
   /// 下一格畫完時做 [action]（[action] 自己判斷能不能做，不能就再等一格）。
@@ -189,72 +282,88 @@ class _SnapshotSweepState extends State<SnapshotSweep>
       ..ensureVisualUpdate();
   }
 
-  void _captureBefore(Completer<void> run, VoidCallback change) {
-    if (!mounted || !identical(_run, run)) return;
+  /// 照一般畫畫面的方式把底下畫成圖。不用 toImageSync：它走另一條畫法，
+  /// 半透明的地方（玻璃、細進度線的底）和螢幕上差 1 階，換場結束換回真的
+  /// 畫面那一格，這些地方整片跳一下（2026-10-26 量到，一般的畫法和螢幕上
+  /// 一模一樣）。圖要等一下才拿得到，這段時間畫面停著。
+  Future<ui.Image> _toImage(RenderRepaintBoundary boundary) =>
+      boundary.toImage(pixelRatio: _pixelRatio);
+
+  /// 拍下「之前」，[change] 換成換好的樣子（螢幕上蓋著「之前」），畫好後拍下
+  /// 「之後」，再 [then]。沒有畫面可拍時 [onMissing]。
+  void _captureBefore(
+    Object session,
+    VoidCallback change, {
+    required VoidCallback onMissing,
+    required VoidCallback then,
+  }) {
+    if (!_current(session)) return;
     final boundary = _boundary;
     if (boundary == null) {
-      // 還沒畫出來（或已經拆掉）：沒有「之前」可拍，直接換。
-      _run = null;
-      change();
-      run.complete();
+      onMissing();
       return;
     }
     if (!_readyToCapture(boundary)) {
-      _afterFrame(() => _captureBefore(run, change));
+      _afterFrame(
+        () => _captureBefore(session, change, onMissing: onMissing, then: then),
+      );
       return;
     }
-    final before = boundary.toImageSync(pixelRatio: _pixelRatio);
-    // 換成換好的樣子；這一格（與拍「之後」之前的每一格）螢幕上蓋著「之前」，
-    // 底下重建得再久也看不出來。
-    change();
-    setState(() {
-      _before = before;
-      _phase = _Phase.holding;
-    });
-    _afterFrame(() => _captureAfter(run));
+    unawaited(
+      _toImage(boundary).then((before) {
+        if (!_current(session)) {
+          before.dispose();
+          return;
+        }
+        // 換成換好的樣子；這一格（與拍「之後」之前的每一格）螢幕上蓋著
+        // 「之前」，底下重建得再久也看不出來。
+        change();
+        setState(() {
+          _before = before;
+          _phase = _Phase.holding;
+        });
+        _afterFrame(() => _captureAfter(session, then));
+      }),
+    );
   }
 
-  void _captureAfter(Completer<void> run) {
-    if (!mounted || !identical(_run, run)) return;
+  void _captureAfter(Object session, VoidCallback then) {
+    if (!_current(session)) return;
     final boundary = _boundary;
     if (boundary == null) {
       _end();
       return;
     }
     if (!_readyToCapture(boundary)) {
-      _afterFrame(() => _captureAfter(run));
+      _afterFrame(() => _captureAfter(session, then));
       return;
     }
-    final after = boundary.toImageSync(pixelRatio: _pixelRatio);
-    // 停到換場開始前畫的是「之前」那張圖（換場進度 0），和停住的畫面一樣，
-    // 底下不再畫。
-    _progress.value = 0;
-    setState(() {
-      _after = after;
-      _phase = _Phase.playing;
-    });
-    // 停住的畫面畫完才做 settle、才開始算 gap：settle 落在靜止的畫面上，
-    // 做得再久，換場前也照樣停滿 gap。等的是下一格（[_afterFrame]），不用
-    // endOfFrame：這一格裡別人先要過的話，拿到的是這一格的結束。
-    _afterFrame(() => _settleThenHold(run));
+    unawaited(
+      _toImage(boundary).then((after) {
+        if (!_current(session)) {
+          after.dispose();
+          return;
+        }
+        _after = after;
+        then();
+      }),
+    );
   }
 
-  void _settleThenHold(Completer<void> run) {
-    bool current() =>
-        mounted && identical(_run, run) && _phase == _Phase.playing;
+  void _settleThenHold(Object session) {
+    bool current() => _current(session) && _phase == _Phase.playing;
     if (!current()) return;
     final settle = _settle;
     _settle = null;
     settle?.call();
     // settle 裡可能結束或換掉了這一次換場。
     if (!current()) return;
-    _hold = Timer(_gap, () => _start(run));
+    _hold = Timer(_gap, () => _start(session));
   }
 
   /// 兩張圖都拍好、也停滿 gap 時開始換場。
-  void _start(Completer<void> run) {
-    if (!mounted ||
-        !identical(_run, run) ||
+  void _start(Object session) {
+    if (!_current(session) ||
         _phase != _Phase.playing ||
         _progress.isAnimating) {
       return;
@@ -262,15 +371,18 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     // 從下一格開始計時：拍圖這幾格多花的時間不吃掉換場的開頭。
     unawaited(
       _progress.forward(from: 0).whenComplete(() {
-        if (identical(_run, run)) _end();
+        if (identical(_session, session)) _end();
       }),
     );
   }
 
-  /// 換回真的畫面、放掉兩張圖，完成這一次換場。
+  /// 換回真的畫面、放掉兩張圖，完成這一次換場（拍到一半或拍好還沒播的也
+  /// 一起結束）。
   void _end({bool rebuild = true}) {
-    final run = _run;
+    final run = _run, captured = _captured;
     _run = null;
+    _captured = null;
+    _session = null;
     _settle = null;
     _hold?.cancel();
     _hold = null;
@@ -291,6 +403,7 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     before?.dispose();
     after?.dispose();
     run?.complete();
+    captured?.complete();
   }
 
   double get _pixelRatio => MediaQuery.devicePixelRatioOf(context);
@@ -424,7 +537,7 @@ class _RenderSnapshotSweep extends RenderProxyBox {
   /// 換場中不接點擊與捲動：底下的畫面沒有畫出來，點到的會是看不到的東西。
   @override
   bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    if (_phase == _Phase.live) {
+    if (_phase == _Phase.live || _phase == _Phase.captured) {
       return super.hitTest(result, position: position);
     }
     if (!size.contains(position)) return false;
@@ -440,6 +553,7 @@ class _RenderSnapshotSweep extends RenderProxyBox {
     final after = _after;
     switch (_phase) {
       case _Phase.live:
+      case _Phase.captured:
         super.paint(context, offset);
       case _Phase.holding:
         // 底下畫的是換好的樣子（為了拍下來），上面蓋著「之前」。
