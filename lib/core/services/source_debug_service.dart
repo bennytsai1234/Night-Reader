@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 
 import 'book_source_service.dart';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -64,7 +66,13 @@ class SourceDebugService {
   Future<void> startDebug(BookSource source, String key) {
     final runId = ++_runId;
     _runFailed = false;
-    return runZoned(() => _runDebug(source, key), zoneValues: {_runKey: runId});
+    return runZoned(
+      () => withSourceRequestLog(
+        (url) => log('  實際請求: $url'),
+        () => _runDebug(source, key),
+      ),
+      zoneValues: {_runKey: runId},
+    );
   }
 
   Future<void> _runDebug(BookSource source, String key) async {
@@ -92,6 +100,9 @@ class SourceDebugService {
       }
       // 途中已記錄失敗（例如搜尋沒找到書）時，不再接一行成功的「解析完成」。
       if (!_runFailed) log('︽解析完成', state: 1000);
+    } on DioException catch (e) {
+      log('❌ 發生錯誤: ${userErrorReason(e)}', state: -1);
+      log('  出錯的請求: ${e.requestOptions.uri.removeFragment()}');
     } catch (e) {
       log('❌ 發生錯誤: $e', state: -1);
     }
