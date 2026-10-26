@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>夜讀 Night Reader — 把長夜，留給長篇｜開源小說閱讀器</title>
   <meta name="description" content="夜讀（夜读）是一款開源小說閱讀器，相容 Legado（閱讀）書源：自主書源、精細中文排版、TTS 語音朗讀、離線快取與一鍵備份。無廣告、無追蹤，GPL-3.0 釋出。" />
-  <meta name="keywords" content="夜讀, 夜读, Night Reader, 小說閱讀器, 小说阅读器, 書源, 书源, Legado, 閱讀, 阅读, 開源閱讀, 开源阅读, 網路小說, 网络小说, TXT 閱讀器, TXT 阅读器, TTS 朗讀, 听书" />
+  <meta name="keywords" content="夜讀, 夜读, Night Reader, 小說閱讀器, 小说阅读器, 書源, 书源, Legado, 閱讀, 阅读, 開源閱讀, 开源阅读, 網路小說, 网络小说, TXT 閱讀器, TXT 阅读器, EPUB 閱讀器, EPUB 阅读器, TTS 朗讀, 听书" />
   <link rel="canonical" href="https://bennytsai1234.github.io/Night-Reader/" />
   <link rel="icon" type="image/png" href="app-icon.png" />
   <meta name="theme-color" content="#0b0e16" />
@@ -32,11 +32,11 @@
     "@type": "SoftwareApplication",
     "name": "夜讀 Night Reader",
     "alternateName": ["夜讀", "夜读", "Night Reader", "夜讀小說閱讀器", "夜读小说阅读器"],
-    "description": "開源小說閱讀器，相容 Legado（閱讀）書源，支援本地 TXT、TTS 語音朗讀、離線下載與備份。開源小说阅读器，兼容 Legado（阅读）书源。",
+    "description": "開源小說閱讀器，相容 Legado（閱讀）書源，支援本地 TXT 與 EPUB、TTS 語音朗讀、離線下載與備份。開源小说阅读器，兼容 Legado（阅读）书源。",
     "operatingSystem": "Android, iOS",
     "applicationCategory": "ReferenceApplication",
     "inLanguage": "zh-Hant",
-    "keywords": "小說閱讀器, 小说阅读器, 書源, 书源, Legado, 網路小說, 网络小说, TXT, TTS",
+    "keywords": "小說閱讀器, 小说阅读器, 書源, 书源, Legado, 網路小說, 网络小说, TXT, EPUB, TTS",
     "license": "https://www.gnu.org/licenses/gpl-3.0.html",
     "url": "https://bennytsai1234.github.io/Night-Reader/",
     "downloadUrl": "https://github.com/bennytsai1234/Night-Reader/releases/latest",
@@ -1246,7 +1246,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </div>
             <h3>書源管理</h3>
-            <p>匯入、匯出、批次有效性校驗與規則偵錯工具，一應俱全。</p>
+            <p>匯入、匯出、批次有效性校驗與規則偵錯工具，一應俱全；偵錯時列出實際抓取的網址與出錯原因。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 120ms">
@@ -1270,7 +1270,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             </div>
             <h3>一鍵備份還原</h3>
-            <p>書架、書源、替換規則、進度與設定一次打包，換機重裝照樣還原；本地 TXT 要另外保存原檔、還原後重新匯入。</p>
+            <p>書架、書源、替換規則、進度與設定一次打包，換機重裝照樣還原；本地 TXT 與 EPUB 要另外保存原檔、還原後重新匯入。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 120ms">
@@ -1278,7 +1278,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
             <h3>本地電子書</h3>
-            <p>匯入 TXT 檔案，自動解析章節，沒有網路也能讀完整本。</p>
+            <p>匯入 TXT 或 EPUB，自動解析章節，沒有網路也能讀完整本；EPUB 的書名、作者與封面取自書裡，插圖先略過、只讀文字。</p>
           </div>
 
           <div class="cell reveal">
@@ -1404,7 +1404,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>是的，夜讀是純工具型的閱讀器，不內建、不提供任何小說書籍。在初次安裝後，您需要前往「我的」→「書源管理」頁面，自行匯入您信任且具備合法授權的書源才能開始搜尋和閱讀。</p>
+              <p>是的，夜讀是純工具型的閱讀器，不內建、不提供任何小說書籍。在初次安裝後，您需要前往「我的」→「書源管理」頁面，自行匯入您信任且具備合法授權的書源才能開始搜尋網路小說。手邊的 TXT 或 EPUB 不需要書源，在書架選「加入本地書籍」就能直接讀。</p>
             </div>
           </div>
 
@@ -1414,7 +1414,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>目前支援 <code>TXT</code> 格式。您可以直接將本機的文字書檔案匯入 App 中，系統將會自動解析書籍目錄並生成精美的排版內文。</p>
+              <p>目前支援 <code>TXT</code> 與 <code>EPUB</code>。在書架選「加入本地書籍」，或從其他 App 分享給夜讀，系統將會自動解析書籍目錄並生成精美的排版內文。EPUB 的書名、作者與封面取自書裡，章節照書裡的目錄分；書裡的插圖先略過，只讀文字。加入的書會複製一份到夜讀自己的資料夾，手機清理暫存之後照樣打得開。</p>
             </div>
           </div>
 
@@ -1424,7 +1424,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>目前不支援需要瀏覽器驗證碼、圖形驗證或複雜登入互動的書源。這類來源在背景校驗時會被移到「已隔離」分組，或標上「需要登入」，建議您改為使用不需要互動驗證的開放式書源。</p>
+              <p>網站出現 Cloudflare 的「請稍候」檢查時，夜讀會在背景自動通過，不用您操作；搜尋、閱讀、背景下載與書源校驗都一樣。需要真人勾選、輸入驗證碼或操作登入的書源目前仍不支援，這類來源在背景校驗時會被移到「已隔離」分組，或標上「需要登入」；網站封鎖了您目前的網路時，也會直接寫出原因。建議您改為使用不需要互動驗證的開放式書源。</p>
             </div>
           </div>
 
@@ -1444,7 +1444,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>不會。夜讀提供了非常便利的「一鍵備份還原」功能。您可以在舊手機上將書架、匯入的書源、替換規則、歷史進度及偏好設定一次性打包備份，並將備份檔移轉至新手機匯入還原，即可無縫繼續您的閱讀之旅。匯入的本地 TXT 不在備份裡，請另外保存原檔，還原後重新匯入。</p>
+              <p>不會。夜讀提供了非常便利的「一鍵備份還原」功能。您可以在舊手機上將書架、匯入的書源、替換規則、歷史進度及偏好設定一次性打包備份，並將備份檔移轉至新手機匯入還原，即可無縫繼續您的閱讀之旅。匯入的本地 TXT 與 EPUB 不在備份裡，請另外保存原檔，還原後重新匯入。</p>
             </div>
           </div>
         </div>
