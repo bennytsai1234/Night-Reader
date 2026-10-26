@@ -98,6 +98,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **`download_service_test` 的「`_dio` 尚未初始化」日誌**不是警告：測試沒準備網路層，只檢查排隊與範圍。
 - **Codex 審查的暫存** `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時擋掉 Codex 最後一次連線，`codex exec` 回非零但報告通常已經寫好；先看報告檔再決定要不要重跑。
 - **Windows 上用 Python 寫檔**要給 `newline='\n'`，不然會寫成 CRLF。
+- **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
 - **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 - **使用者的手機不拿來量測**（2026-10-14 定的）。若使用者日後同意：profile 建置用一個不提交的入口（`main()` 之後把 `developer.Service.getInfo()` 的 ws 位址寫進 `getExternalStorageDirectory()`，vivo 會把 logcat 裡的位址遮掉、intent 參數也不生效），電腦用 `vm_service` 連上後 `setFlag('profiler','true')`，收 `Flutter.Frame` 與 `getCpuSamples`，把 UI isolate 連續忙碌超過 8 ms 的區段依堆疊歸類；vivo 用 adb 安裝會跳確認頁。
 
