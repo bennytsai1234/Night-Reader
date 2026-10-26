@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
 
 /// 回應在規則 JS 裡的資料（`buildHttpResponse` 包成有 `body()`、`code()`、
@@ -13,6 +14,10 @@ Map<String, Object?> responseToJs(StrResponse response, {String? requestUrl}) =>
       'message': response.raw.statusMessage ?? '',
       'headers': response.headers,
       'redirects': response.redirectChain,
+      // HTTP 套件自己跟著走的轉址；換回 StrResponse 時還原，`isRedirect` 照舊。
+      'autoRedirects': [
+        for (final uri in response.raw.redirectedUris) uri.toString(),
+      ],
     };
 
 /// 規則 JS 傳回的回應物件（[responseToJs] 的資料）換回 [StrResponse]。
@@ -35,6 +40,11 @@ StrResponse responseFromJs(Map<dynamic, dynamic> data) {
       statusCode: (data['code'] as num?)?.toInt(),
       statusMessage: data['message']?.toString(),
       headers: Headers.fromMap(headers),
+      // 原本每一跳的狀態碼沒帶過來，只留下走到的網址。
+      redirects: [
+        for (final item in (data['autoRedirects'] as List?) ?? const [])
+          RedirectRecord(302, 'GET', Uri.parse(item.toString())),
+      ],
       extra: {
         '_manualRedirectChain': [
           for (final item in (data['redirects'] as List?) ?? const [])

@@ -361,6 +361,16 @@ globalThis.__lrStartedRule = -1;
     try {
       return jsonEncode(value);
     } on JsonUnsupportedObjectError {
+      // 裡面包著要換成 JS 物件的值（例如上一條規則傳回的 `{reply: 回應}`），
+      // 和 [_decodeContextValue] 一樣逐項處理。
+      if (value is Map) {
+        final entries = value.entries.map(
+          (e) =>
+              '${jsonEncode(e.key.toString())}:'
+              '${_encodeContextValue(e.value)}',
+        );
+        return '({${entries.join(',')}})';
+      }
       // 轉成文字，規則 JS 拿到的就不是它要的物件（`result.body()` 這類
       // 呼叫會失敗）；新的型別要像上面一樣給它對應的 JS 物件。
       assert(false, '交給規則 JS 的 ${value.runtimeType} 沒有對應的 JS 物件');
