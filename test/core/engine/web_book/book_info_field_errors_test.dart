@@ -57,6 +57,13 @@ void main() {
     skip: quickJsUnavailableReason(),
   );
 
+  test('a word count too long to be one is skipped', () async {
+    final book = await parse({'wordCount': '.author@text##.*##${'9' * 400}'});
+
+    expect(book.name, '我的世界');
+    expect(book.wordCount, isNull);
+  });
+
   test('a failing name rule still fails the whole page', () async {
     await expectLater(
       parse({'name': '@js:undefinedFunction()'}),

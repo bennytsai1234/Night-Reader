@@ -50,6 +50,13 @@ void main() {
       expect(StringUtils.wordCountFormat('12.3 萬字'), '12.3萬字');
       expect(StringUtils.wordCountFormat('约50万+'), '50萬字');
     });
+
+    test('一長串數字不是字數，不顯示也不出錯', () {
+      expect(StringUtils.wordCountFormat('9' * 400), '');
+      expect(StringUtils.wordCountFormat('9' * 20), '');
+      expect(StringUtils.wordCountFormat(double.infinity), '');
+      expect(StringUtils.wordCountFormat(double.nan), '');
+    });
   });
 
   group('kindLabels', () {
