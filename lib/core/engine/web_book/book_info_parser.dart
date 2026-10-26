@@ -2,6 +2,8 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
@@ -38,15 +40,24 @@ class BookInfoParser {
       final author = _format(rule.getString(infoRule.author ?? ''));
 
       final tocUrl = rule.getString(infoRule.tocUrl ?? '', isUrl: true);
-      final kind = (rule.getStringList(infoRule.kind ?? '')).join(',');
-      final coverUrl = coverUrlFrom(
-        rule.getString(infoRule.coverUrl ?? ''),
-        baseUrl,
+      final kind = _optional(
+        '分類',
+        () => rule.getStringList(infoRule.kind ?? '').join(','),
       );
-      final intro = rule.getString(infoRule.intro ?? '');
-      final latestChapterTitle = rule.getString(infoRule.lastChapter ?? '');
-      final wordCount = StringUtils.wordCountFormat(
-        rule.getString(infoRule.wordCount ?? ''),
+      final coverUrl = _optional(
+        '封面',
+        () => coverUrlFrom(rule.getString(infoRule.coverUrl ?? ''), baseUrl),
+      );
+      final intro = _optional('簡介', () => rule.getString(infoRule.intro ?? ''));
+      final latestChapterTitle = _optional(
+        '最新章節',
+        () => rule.getString(infoRule.lastChapter ?? ''),
+      );
+      final wordCount = _optional(
+        '字數',
+        () => StringUtils.wordCountFormat(
+          rule.getString(infoRule.wordCount ?? ''),
+        ),
       );
       final normalizedTocUrl = _resolveFallbackTocUrl(
         tocUrl: tocUrl,
@@ -84,6 +95,17 @@ class BookInfoParser {
   }
 
   static String _format(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// 讀一個附帶的欄位；規則出錯時這一欄留空（沿用書上原有的值），詳情頁照常
+  /// 讀完。書名、作者、目錄網址出錯仍整頁失敗。同 Legado（BookInfo.kt）。
+  static String _optional(String field, String Function() read) {
+    try {
+      return read();
+    } on ParsingException catch (error, stackTrace) {
+      AppLog.e('詳情頁的$field規則解析失敗，這一欄留空', error: error, stackTrace: stackTrace);
+      return '';
+    }
+  }
 
   /// 封面規則的結果（不帶 `isUrl` 讀出）補成完整網址；抓到好幾個時取第一
   /// 個，沒抓到時是空的。不帶 `isUrl`：那會在沒抓到時改回傳頁面網址（書籍
