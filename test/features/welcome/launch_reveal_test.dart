@@ -128,8 +128,8 @@ final int _span =
     (SkeletonReveal.defaultDuration.inMicroseconds / _frame.inMicroseconds)
         .ceil();
 
-/// 換場前靜止的格數：骨架在拍「之前」那一格就離開元件樹，兩張拍好後畫面
-/// 還靜止 idle 才開始掃（[LaunchEntranceMotion.idle]）。
+/// 骨架離開元件樹後多錄幾格：骨架層留到換場播完才拿掉（ADR 0035），之後
+/// 再錄 idle 的格數，確定換場後的畫面不再變。
 final int _idleFrames =
     (LaunchEntranceMotion.idle.inMicroseconds / _frame.inMicroseconds).ceil();
 
@@ -280,9 +280,8 @@ void main() {
 
       // 骨架完全長出來之後才可能開始換成內容。
       final first = shots.indexWhere((shot) => shot.entered);
-      // 骨架在拍「之前」那一格就離開元件樹，之後還靜止一段才掃：起點在
-      // 骨架最後出現之後，一路找到錄影結束前一段換場；換場之後的靜止畫面
-      // 已經接近最後畫面，下面照距離排除。
+      // 骨架長完之後，一路找到錄影結束前一段換場；換場之後的靜止畫面已經
+      // 接近最後畫面，下面照距離排除。
       final last = shots.length - _span - 1;
       expect(last, greaterThan(lastSkeleton));
       expect(first, inInclusiveRange(0, last));
@@ -309,17 +308,13 @@ void main() {
       }
       expect(start, greaterThanOrEqualTo(0), reason: '換場前要有靜止的畫面');
 
-      // 換場前畫面靜止至少 idle：呼吸收住了才拍圖，拍圖那幾格與之後的間隔
-      // 都落在靜止的畫面裡（LaunchEntranceMotion.rest、idle）。
+      // 兩張圖呼吸前就拍好（ADR 0035）：呼吸收住後換上骨架那張圖、底下
+      // 換成書架的那一格也是靜止的，下一格才開始掃。
       var stillFrom = start;
       while (stillFrom > 0 && same(stillFrom - 1, start)) {
         stillFrom--;
       }
-      expect(
-        (start - stillFrom) * _frame.inMicroseconds,
-        greaterThanOrEqualTo(LaunchEntranceMotion.idle.inMicroseconds),
-        reason: '換場前靜止了 ${start - stillFrom} 格',
-      );
+      expect(start - stillFrom, greaterThanOrEqualTo(2));
 
       // 靜止前呼吸已經收住：左中右三本書的封面骨架都停在呼吸最深的那一刻
       // （離底色最遠），不是呼吸到一半定住、只是多停一會兒。
@@ -369,6 +364,14 @@ void main() {
         for (final MapEntry(key: name, value: (diff, k)) in worst.entries)
           if (diff > 2) name: '差 $diff/255（換場第 ${k - start} 格）',
       };
+
+      // 換場播完換回真的畫面時一個像素都不變：定格畫面照一般的畫法拍，和
+      // 螢幕上一模一樣（toImageSync 拍的半透明處會差 1 階，ADR 0035）。
+      final jumps = [
+        for (var k = start + _span; k < start + _span + 4; k++)
+          if (!same(k, k + 1)) '第 ${k + 1 - start} 格',
+      ];
+      expect(jumps, isEmpty, reason: '換場播完後畫面又變了');
 
       // 換場每一格的合成負擔不比換完之後靜止的畫面多。
       final rest = shots[start + _span + 4].load;

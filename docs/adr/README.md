@@ -19,7 +19,8 @@
 |---|---|
 | [0017](0017-launch-straight-to-shelf.md) | 開 App 不放開場畫面，系統啟動畫面只有書架底色 |
 | [0025](0025-launch-entrance-and-skeletons-grow-in.md) | 開 App 先只有底色再進場；骨架出現也照骨架換場 |
-| [0031](0031-launch-reveal-crossfades-two-still-pictures.md) | 開 App 書架換場是兩張定格畫面的交叉淡換：用時間與記憶體換流暢與穩定 |
+| [0031](0031-launch-reveal-crossfades-two-still-pictures.md) | 開 App 書架換場是兩張定格畫面的交叉淡換：用時間與記憶體換流暢與穩定（準備書架的時機已由 0035 改到呼吸前） |
+| [0035](0035-launch-prepares-shelf-before-breathing.md) | 開 App 在骨架長完、呼吸之前就建好書架並拍好兩張定格畫面；定格畫面用一般的畫法拍 |
 | [0024](0024-skeleton-drawn-from-last-screen.md) | 骨架照上次的畫面畫，骨架換場由左而右 |
 | [0016](0016-reader-skeleton-from-the-real-page.md) | 閱讀器的正文骨架照一頁真正的行畫 |
 
