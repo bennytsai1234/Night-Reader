@@ -22,6 +22,7 @@ import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 import 'isolate_channel.dart';
 
@@ -342,6 +343,7 @@ final class SourceWorker {
           rootToken: RootIsolateToken.instance,
           dictionaries: withDictionaries ? await _dictionaries() : null,
           fetchPolyfill: await _fetchPolyfill(),
+          storageRoots: await AppStoragePaths.roots(),
           webViewUserAgent: WebViewUserAgent.value,
         ),
       );
@@ -369,13 +371,23 @@ final class SourceWorker {
       cancelToken?.whenCancel.then((_) {
         if (_killed) return;
         _channel.notify(_CancelTask(id));
-        // 停住的 worker 收不到取消，替它把等的那一次也取消。
+        // 停住的 worker 收不到取消，替它把等的那一次也取消；它醒來後同一個
+        // 工作再發的也直接以取消結束（[_serveBlock]）。
+        _cancelledTasks.add(id);
         final blocked = _blocked;
         if (blocked != null && blocked.taskId == id) blocked.cancel();
       }),
     );
-    return await result as R;
+    try {
+      return await result as R;
+    } finally {
+      _cancelledTasks.remove(id);
+    }
   }
+
+  /// 已經取消、還沒跑完的工作。worker 從停住醒來時還沒收到取消的通知
+  /// （它在停住時排在後面），接著同步再發的要等的呼叫由這裡擋下。
+  final Set<int> _cancelledTasks = {};
 
   /// 立刻結束 worker；還在等的工作以 [error] 結束。
   void kill(Object error) {
@@ -404,9 +416,11 @@ final class SourceWorker {
     _releaseTicketsWhileBlocked();
     Uint8List outcome;
     try {
+      if (_cancelledTasks.contains(block.taskId)) throw _cancelled();
       final io = await SourceIo.worker;
+      // 開網路 isolate 的這段時間裡被取消了。
+      if (call.cancelled) throw _cancelled();
       call.io = io;
-      if (call.cancelled) io._channel.notify(_CancelPerform(call.id));
       final reply = await io._channel.request(_Perform(call.id, block.task));
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
     } catch (error) {
@@ -416,6 +430,12 @@ final class SourceWorker {
     if (_killed) return;
     _replies.put(outcome);
   }
+
+  static DioException _cancelled() => DioException(
+    requestOptions: RequestOptions(),
+    type: DioExceptionType.cancel,
+    error: '已取消',
+  );
 
   /// 停住的 worker 手上的限流名額先交回：它在等的請求可能正是同一個書源，
   /// 名額卻被它自己凍住的另一個請求佔著，網路 isolate 永遠借不到。被凍住
@@ -713,6 +733,7 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
   // 規則的 fetch／XHR：沒有 rootBundle，用主 isolate 讀好的 polyfill；讀不到
   // 時給空字串，fetch 不能用，但不會去碰 rootBundle。
   fetchPolyfillSource = init.fetchPolyfill ?? '';
+  AppStoragePaths.useRoots(init.storageRoots);
   final dictionaries = init.dictionaries;
   if (dictionaries != null) {
     ChineseUtils.initializeFromDictionaryData(dictionaries);
@@ -803,6 +824,7 @@ final class _Initialize {
     required this.rootToken,
     required this.dictionaries,
     required this.fetchPolyfill,
+    required this.storageRoots,
     required this.webViewUserAgent,
   });
 
@@ -813,6 +835,7 @@ final class _Initialize {
   final RootIsolateToken? rootToken;
   final List<String>? dictionaries;
   final String? fetchPolyfill;
+  final StorageRoots storageRoots;
   final String? webViewUserAgent;
 }
 

@@ -142,11 +142,7 @@ abstract class AnalyzeRuleBase {
     return val ?? '';
   }
 
+  /// 執行書源規則 JS。`java.ajax` 這類要等的呼叫在書源 isolate 停住等，
+  /// 傳回的就是結果（ADR 0034）。
   dynamic evalJS(String jsStr, dynamic result);
-
-  /// 以 Promise bridge 執行 rule JS；支援 `java.ajax` 等 async 呼叫。
-  ///
-  /// 呼叫端應使用本方法執行書源規則 JS；只有當 JS 純同步且呼叫鏈已是
-  /// sync context（例如建構子內部）時才退而求其次使用 [evalJS]。
-  Future<dynamic> evalJSAsync(String jsStr, dynamic result);
 }

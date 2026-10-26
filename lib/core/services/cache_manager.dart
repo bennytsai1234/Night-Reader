@@ -211,6 +211,14 @@ class CacheManager {
   }
 
   dynamic getFromMemory(String key) => _memoryCache.get(key);
+
+  /// 記憶體裡還沒過期的文字；沒有時是 null，要連資料庫與檔案一起找用 [get]。
+  String? getMemoryText(String key) {
+    if (_isMemoryExpired(key)) return null;
+    final value = _memoryCache.get(key);
+    return value is String ? value : null;
+  }
+
   void deleteMemory(String key) {
     _deleteMemory(key);
     onMemoryWrite?.call(key, null, 0);

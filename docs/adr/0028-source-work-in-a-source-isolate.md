@@ -1,5 +1,7 @@
 # 書源工作在常駐的書源 isolate 執行；Cookie 與限流留在主 isolate
 
+（2026-10-26 起書源 isolate 改成四條、規則 JS 等網路時整條停住，見 ADR 0034；下面「一條」「網路等待時照常輪流」的部分由它取代，其他照舊。）
+
 書源的抓取與解析（含規則 JS）改在一個常駐的背景 isolate 執行，叫「書源 isolate」（`SourceIsolate`），主 isolate 只收結果。所有書源工作都經過 `BookSourceService`（詳情、目錄、正文、搜尋、發現與發現分類），由它把工作送進書源 isolate，所以閱讀器抓正文、背景下載、搜尋、換源、換封面、發現、匯出與書源除錯裡「呼叫 `BookSourceService`」的那一段不在主 isolate 跑。呼叫端自己的流程（讀整本目錄、逐章比對、寫入與進度）不會因此跟著搬過去，要像檢查更新與背景下載那樣整段寫成書源 isolate 的工作才算（2026-10-19 下載就是漏在這裡，見 ADR 0018）。檢查更新（書架與書籍詳情共用 `BookUpdateService`）整段在書源 isolate 跑，連目錄比對與寫回也在那邊。
 
 起因是 ADR 0018：帶 JS 的書源在主執行緒一口氣解析，是剩下唯一會把動畫卡掉、又切不開的工作。`ParseWorker` 已經把只做計算的解析搬走，剩下用到 `java.ajax`、Cookie、快取的規則 JS 與 TLS 握手還在主執行緒，使用者手機上最長一幀 27ms（`docs/research/source-engine-off-main-isolate.md`）。

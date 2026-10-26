@@ -1,19 +1,12 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'analyze_rule_base.dart';
 import '../js/js_engine.dart';
 
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
-import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/models/base_source.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/utils/ttf_parser.dart';
 
-/// AnalyzeRule 的腳本執行與異步擴展 (原 Android AnalyzeRule.kt & JsExtensions.kt)
+/// AnalyzeRule 的腳本執行 (原 Android AnalyzeRule.kt)。JS 結果取決於
+/// source / book / chapter / page / baseUrl 與外部狀態，不快取執行結果。
 extension AnalyzeRuleScript on AnalyzeRuleBase {
   dynamic evalJS(String jsStr, dynamic result) {
     final engine = _jsEngineForEval();
@@ -25,40 +18,6 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
     } finally {
       engine.ruleContext = previous;
     }
-  }
-
-  /// Promise bridge 版本的 evalJS — 支援 rule JS 中的 `java.ajax` 等 async 呼叫。
-  ///
-  /// JS 結果取決於 source / book / chapter / page / baseUrl 與外部狀態，
-  /// 因此同步與非同步路徑都不快取執行結果。
-  Future<dynamic> evalJSAsync(String jsStr, dynamic result) async {
-    final engine = _jsEngineForEval();
-    final context = _buildJsContext(result, engine);
-    final previous = engine.ruleContext;
-    engine.ruleContext = this;
-    try {
-      return await engine.evaluateAsync(jsStr, context: context);
-    } on TimeoutException {
-      // 逾時的規則還在引擎裡等它的非同步呼叫，晚到時會寫進當時的 `book`、
-      // `java`。引擎在清單逐項間共用，那時已經換成後面的項目，所以整個引擎
-      // 丟掉，下一次執行重建；晚到的回呼碰到已釋放的引擎就被擋下。
-      _discardJsEngine(engine);
-      rethrow;
-    } finally {
-      engine.ruleContext = previous;
-    }
-  }
-
-  void _discardJsEngine(JsEngine engine) {
-    final owner = jsEngineOwner;
-    if (owner != null && identical(owner.jsEngine, engine)) {
-      owner.jsEngine = null;
-    } else if (identical(jsEngine, engine)) {
-      jsEngine = null;
-    } else {
-      return;
-    }
-    engine.dispose();
   }
 
   /// 自己的引擎，或借用 [jsEngineOwner] 的（見該欄位說明）。
@@ -121,62 +80,6 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       'page': page,
       'src': content,
     };
-  }
-
-  /// 供 JS 調用的 TTF 解析 (原 Android JsExtensions.queryTTF)
-  TtfParser? queryTTF(dynamic data) {
-    if (data == null) return null;
-    try {
-      Uint8List? buffer;
-      if (data is String) {
-        if (data.startsWith('http')) {
-          // 異步下載需處理，這裡暫作同步佔位
-          return null;
-        } else {
-          // 嘗試 Base64 解碼
-          buffer = base64Decode(data);
-        }
-      } else if (data is Uint8List) {
-        buffer = data;
-      }
-
-      if (buffer != null) {
-        return TtfParser(buffer);
-      }
-    } catch (e) {
-      log('  ❌ queryTTF 失敗: $e');
-    }
-    return null;
-  }
-
-  /// 供 JS 調用的 Base64 TTF 解析
-  TtfParser? queryBase64TTF(String? data) => queryTTF(data);
-
-  /// 供 JS 調用的異步請求
-  Future<String?> ajax(dynamic url) async {
-    final urlStr = url is List ? url.first.toString() : url.toString();
-    log('  ◇ JS 調用 ajax: $urlStr');
-    try {
-      final response = await HttpClient().client.get(
-        urlStr,
-        cancelToken: currentSourceCancelToken,
-      );
-      return response.data?.toString();
-    } catch (e) {
-      log('  ❌ ajax 失敗: $e');
-      return null;
-    }
-  }
-
-  /// 執行目錄預整理 JS
-  Future<void> preUpdateToc() async {
-    final js = source is BookSource
-        ? (source as BookSource).ruleToc?.preUpdateJs
-        : null;
-    if (js != null && js.isNotEmpty) {
-      log('⇒ 執行 preUpdateJs');
-      evalJS(js, null);
-    }
   }
 
   void dispose() {

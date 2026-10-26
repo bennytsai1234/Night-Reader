@@ -1,24 +1,10 @@
 import '../js_extensions_base.dart';
 
-/// 注入 rule JS 可見的全域物件：`java` / `cookie` / `cache` / `source`
+/// 注入 rule JS 可見的全域物件：`java` / `cookie` / `cache` / `source`。
 ///
-/// 設計上分兩類方法：
-///
-/// **A. 同步方法** — Dart 端 onMessage handler 必須同步回傳值，JS 端直接拿到
-/// 字串/物件結果。例如 `md5Encode` / `base64Encode` / `hexEncode` / `put` 系列等。
-///
-/// **B. 非同步方法** — 透過 `__asyncCall(channel, payload)` 回傳一個 Promise：
-///   - JS 分配 id 並在 `__lr.pendingResolvers[id]` 存放 resolver
-///   - `sendMessage(channel, JSON.stringify([id, payload]))` 同步送往 Dart
-///   - Dart handler 接到 `[id, payload]`，執行 async 工作後透過
-///     `resolveJsPending(id, result)` / `rejectJsPending(id, err)` 重入 JS
-///     resolve 該 Promise
-///
-/// 配合 [AnalyzeRule.evalJSAsync] 將使用者 rule JS 包在 async IIFE 內執行，
-/// 並由 [AsyncJsRewriter] 自動在 `java.ajax(...)` 等呼叫前注入 `await`。
-///
-/// 白名單必須與 `lib/core/engine/js/async_js_rewriter.dart`
-/// 的 `asyncMethodsByOwner` 保持同步。
+/// 每個方法都同步拿到結果，和 Legado 一樣：`sendMessage` 直接回傳；要等
+/// 網路、資料庫的經 `__lrWait`（[JsExtensionsBase.onBlocking]），在書源
+/// isolate 停住等（ADR 0034）。
 extension JsJavaObject on JsExtensionsBase {
   void injectJavaObjectJs() {
     runtime.evaluate(r'''
@@ -221,46 +207,46 @@ extension JsJavaObject on JsExtensionsBase {
       }
 
       var java = {
-        // ─── async: HTTP ─────────────────────────────────────────
-        ajax: function(url) { return __asyncCall('ajax', url); },
-        ajaxAll: function(urlList) { return __asyncCall('ajaxAll', urlList); },
-        cacheFile: function(url, saveTime) { return __asyncCall('cacheTextFile', [url, saveTime || 0]); },
+        // ─── 要等的：HTTP ────────────────────────────────────────
+        ajax: function(url) { return __lrWait('ajax', url); },
+        ajaxAll: function(urlList) { return __lrWait('ajaxAll', urlList); },
+        cacheFile: function(url, saveTime) { return __lrWait('cacheTextFile', [url, saveTime || 0]); },
         connect: function(url, header) {
-          return __asyncCall(
+          return buildHttpResponse(__lrWait(
             'connect',
             arguments.length > 1 ? [url, header || null] : url
-          ).then(buildHttpResponse);
+          ));
         },
         get: function(url, headers) {
           if (arguments.length <= 1) {
             return sendMessage('scopeGet', JSON.stringify(url));
           }
-          return __asyncCall('get', [url, headers || {}]).then(buildHttpResponse);
+          return buildHttpResponse(__lrWait('get', [url, headers || {}]));
         },
         post: function(url, body, headers) {
-          return __asyncCall('post', [url, body, headers || {}]).then(buildHttpResponse);
+          return buildHttpResponse(__lrWait('post', [url, body, headers || {}]));
         },
         head: function(url, headers) {
-          return __asyncCall('head', [url, headers || {}]).then(buildHttpResponse);
+          return buildHttpResponse(__lrWait('head', [url, headers || {}]));
         },
 
-        // ─── async: WebView / I/O ────────────────────────────────
-        webView: function(html, url, js) { return __asyncCall('webView', [html, url, js]); },
+        // ─── 要等的：WebView / I/O ───────────────────────────────
+        webView: function(html, url, js) { return __lrWait('webView', [html, url, js]); },
         webViewGetSource: function(html, url, js, sourceRegex) {
-          return __asyncCall('webViewGetSource', [html, url, js, sourceRegex]);
+          return __lrWait('webViewGetSource', [html, url, js, sourceRegex]);
         },
         webViewGetOverrideUrl: function(html, url, js, overrideUrlRegex) {
-          return __asyncCall('webViewGetOverrideUrl', [html, url, js, overrideUrlRegex]);
+          return __lrWait('webViewGetOverrideUrl', [html, url, js, overrideUrlRegex]);
         },
-        startBrowserAwait: function(url, title) { return __asyncCall('startBrowserAwait', [url, title]); },
-        getVerificationCode: function(imageUrl) { return __asyncCall('getVerificationCode', imageUrl); },
-        downloadFile: function(url) { return __asyncCall('downloadFile', url); },
-        importScript: function(path) { return __asyncCall('importScript', path); },
-        readFile: function(path) { return __asyncCall('readFile', path); },
-        readTxtFile: function(path, charset) { return __asyncCall('readTxtFile', [path, charset]); },
-        getZipByteArrayContent: function(url, innerPath) { return __asyncCall('getZipByteArrayContent', [url, innerPath]); },
-        unArchiveFile: function(zipPath) { return __asyncCall('unArchiveFile', zipPath); },
-        getTxtInFolder: function(relPath) { return __asyncCall('getTxtInFolder', relPath); },
+        startBrowserAwait: function(url, title) { return __lrWait('startBrowserAwait', [url, title]); },
+        getVerificationCode: function(imageUrl) { return __lrWait('getVerificationCode', imageUrl); },
+        downloadFile: function(url) { return __lrWait('downloadFile', url); },
+        importScript: function(path) { return __lrWait('importScript', path); },
+        readFile: function(path) { return __lrWait('readFile', path); },
+        readTxtFile: function(path, charset) { return __lrWait('readTxtFile', [path, charset]); },
+        getZipByteArrayContent: function(url, innerPath) { return __lrWait('getZipByteArrayContent', [url, innerPath]); },
+        unArchiveFile: function(zipPath) { return __lrWait('unArchiveFile', zipPath); },
+        getTxtInFolder: function(relPath) { return __lrWait('getTxtInFolder', relPath); },
 
         // ─── sync: crypto / encoding ─────────────────────────────
         createSymmetricCrypto: function(transformation, key, iv) {
@@ -501,26 +487,26 @@ extension JsJavaObject on JsExtensionsBase {
         }
       };
 
-      // ─── async: java.getCookie → 獨立 channel ─────────────────
+      // ─── java.getCookie → 獨立 channel ───────────────────────
       //
       // 提醒：rule JS 裡的 `java.getCookie(tag, key)` 與 `cookie.get(url)`
-      // 走不同 Dart handler。前者是站點 Cookie 字串查詢，後者是單一 cookie。
-      java.getCookie = function(tag, key) { return __asyncCall('getCookie', [tag, key || null]); };
+      // 走不同 Dart handler。前者可以只取其中一個 Cookie 的值。
+      java.getCookie = function(tag, key) { return __lrWait('getCookie', [tag, key || null]); };
 
       // ─── cookie / cache / source 全域物件 ────────────────────
       var cookie = {
-        get: function(url) { return __asyncCall('cookieGet', url); },
-        getCookie: function(url) { return __asyncCall('cookieGet', url); },
+        get: function(url) { return __lrWait('cookieGet', url); },
+        getCookie: function(url) { return __lrWait('cookieGet', url); },
         set: function(url, value) { sendMessage('setCookie', JSON.stringify([url, value])); },
         setCookie: function(url, value) { sendMessage('setCookie', JSON.stringify([url, value])); },
         remove: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
         removeCookie: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
-        all: function() { return __asyncCall('allCookies', ''); }
+        all: function() { return __lrWait('allCookies', ''); }
       };
 
       var cache = {
-        get: function(key) { return __asyncCall('getCache', key); },
-        getFile: function(key) { return __asyncCall('getCache', key); },
+        get: function(key) { return __lrWait('getCache', key); },
+        getFile: function(key) { return __lrWait('getCache', key); },
         put: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
         putFile: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
         delete: function(key) { sendMessage('deleteCache', JSON.stringify(key)); }
@@ -531,7 +517,7 @@ extension JsJavaObject on JsExtensionsBase {
       source.getTag = function() {
         return String(source.tag || source.bookSourceName || '');
       };
-      source.getVariable = function() { return __asyncCall('sourceGetVariable', ''); };
+      source.getVariable = function() { return __lrWait('sourceGetVariable', ''); };
       source.setVariable = function(value) {
         sendMessage('sourceSetVariable', JSON.stringify(value == null ? null : String(value)));
         return value;
@@ -545,15 +531,13 @@ extension JsJavaObject on JsExtensionsBase {
         }
         return headerMap;
       };
-      source.getLoginInfo = function() { return __asyncCall('sourceGetLoginInfo', ''); };
+      source.getLoginInfo = function() { return __lrWait('sourceGetLoginInfo', ''); };
       source.putLoginInfo = function(info) { sendMessage('sourcePutLoginInfo', JSON.stringify(info)); };
       source.getLoginInfoMap = function() {
-        return source.getLoginInfo().then(function(info) {
-          try { return JSON.parse(info); } catch(e) { return {}; }
-        });
+        try { return JSON.parse(source.getLoginInfo()); } catch(e) { return {}; }
       };
       source.put = function(key, value) { sendMessage('sourcePut', JSON.stringify([key, value])); };
-      source.get = function(key) { return __asyncCall('sourceGet', key); };
+      source.get = function(key) { return __lrWait('sourceGet', key); };
 
       /// Rhino 的 importClass／importPackage：把類別照名稱放進全域。
       function importClass(clazz) {

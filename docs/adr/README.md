@@ -47,7 +47,8 @@
 | ADR | 一句話 |
 |---|---|
 | [0032](0032-epub-read-as-text-converted-on-import.md) | EPUB 只讀文字，匯入時轉成純文字，之後照 TXT 讀；目錄太粗時照 TXT 的章名規則再切 |
-| [0028](0028-source-work-in-a-source-isolate.md) | 書源工作在常駐的書源 isolate 執行；Cookie 與限流留在主 isolate |
+| [0028](0028-source-work-in-a-source-isolate.md) | 書源工作在常駐的書源 isolate 執行；Cookie 與限流留在主 isolate（條數已由 0034 改成四條） |
+| [0034](0034-rule-js-waits-synchronously.md) | 規則 JS 等網路時整條書源 isolate 停住、拿到的就是結果，和 Legado 一樣；書源 isolate 開四條，網路 isolate 替它們做要等的事 |
 | [0008](0008-shelf-books-download-whole-book.md) | 書架上的網路書整本下載，不限網路、沒有開關 |
 | [0013](0013-no-source-login-or-interactive-verification.md) | 書源不支援登入與互動驗證 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |

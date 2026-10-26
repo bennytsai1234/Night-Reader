@@ -114,6 +114,23 @@ Future<String> _evaluateJs(String code) => SourceIsolate.run((_) async {
   }
 });
 
+/// 在書源 isolate 用帶著 [jsLib] 的書源跑一段規則 JS。
+Future<String> _evaluateSourceJs(String code, {String? jsLib}) =>
+    SourceIsolate.run((_) async {
+      final engine = JsEngine(
+        source: BookSource(
+          bookSourceUrl: 'https://jslib.test',
+          bookSourceName: 'jsLib',
+          jsLib: jsLib,
+        ),
+      );
+      try {
+        return '${engine.evaluate(code)}';
+      } finally {
+        engine.dispose();
+      }
+    });
+
 /// 停住書源 isolate，交給網路 isolate 抓 [url]（[BlockingCall]）。
 Future<Object?> _blockOn(
   String url, {
@@ -190,6 +207,8 @@ void main() {
   // `/held/<名稱>` 的正文：請求到了就記下（[arrived]），等測試放行
   // （[released]）才回。
   final arrived = <String, Completer<void>>{};
+  // `/count` 收到的請求數。
+  var counted = 0;
   final released = <String, Completer<void>>{};
   Completer<void> gate(Map<String, Completer<void>> gates, String name) =>
       gates.putIfAbsent(name, Completer<void>.new);
@@ -226,6 +245,9 @@ void main() {
           request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
         case '/c/2':
           request.response.write('<p>第二章的正文，夜裡讀起來剛好。</p>');
+        case '/count':
+          counted++;
+          request.response.write('數到了');
         case final path when path.startsWith('/held/'):
           final name = path.substring('/held/'.length);
           gate(arrived, name).complete();
@@ -515,6 +537,68 @@ void main() {
     expect(await _evaluateJs('[1, 2, 3].map((n) => n * 2).join(",")'), '2,4,6');
   }, skip: quickJsUnavailableReason());
 
+  // 規則 JS 要等的呼叫拿到的是結果本身，不論寫在哪裡（ADR 0034）。原本只有
+  // 寫在最外層的會被補上 await，包進書源自己的函式、jsLib 或回呼就拿到還沒
+  // 完成的結果。
+  group('rule JavaScript gets what it waits for', () {
+    test('inside its own function', () async {
+      expect(
+        await _evaluateJs('''
+          function getPage(u) { return java.ajax(u); }
+          getPage("$baseUrl/c/1")
+        '''),
+        contains('第一章的正文'),
+      );
+    });
+
+    test('inside a jsLib function', () async {
+      expect(
+        await _evaluateSourceJs(
+          'fetchBody("$baseUrl/c/2")',
+          jsLib: 'function fetchBody(u) { return java.ajax(u); }',
+        ),
+        contains('第二章的正文'),
+      );
+    });
+
+    test('inside a callback', () async {
+      expect(
+        await _evaluateJs('''
+          ["$baseUrl/c/1", "$baseUrl/c/2"]
+            .map(function (u) { return java.get(u, {}).body(); })
+            .map(function (html) { return html.indexOf("正文") >= 0; })
+            .join(",")
+        '''),
+        'true,true',
+      );
+    });
+
+    test('once: a rule that fails halfway is not run again', () async {
+      counted = 0;
+      expect(
+        await _evaluateJs(
+          'java.ajax("$baseUrl/count"); throw new Error("壞了");',
+        ),
+        contains('壞了'),
+      );
+      expect(counted, 1);
+    });
+
+    test(
+      'from the cache, and null when nothing is cached like Legado',
+      () async {
+        expect(
+          await _evaluateJs('''
+          cache.put("blocking-key", "存好的");
+          var missing = cache.getFile("blocking-missing");
+          cache.get("blocking-key") + "|" + (missing == null ? "null" : missing)
+        '''),
+          '存好的|null',
+        );
+      },
+    );
+  }, skip: quickJsUnavailableReason());
+
   test('a search runs through the source isolate', () async {
     final source = BookSource.fromJson({
       'bookSourceUrl': baseUrl,
@@ -612,6 +696,20 @@ void main() {
       // 送不進書源 isolate 時會改在主 isolate 執行並記下來，結果照樣對。
       expect(logs.where((m) => m.contains('送不進書源 isolate')), isEmpty);
     });
+
+    test('content from a rule that fetches through its jsLib', () async {
+      source.jsLib = 'function realContent(u) { return java.ajax(u); }';
+      source.ruleContent!.content = '@js:realContent("$baseUrl/c/2")';
+      final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+
+      final content = await BookSourceService().getContent(
+        source,
+        book,
+        BookChapter(title: '第一章', url: '$baseUrl/c/1', bookUrl: book.bookUrl),
+      );
+
+      expect(content, contains('第二章的正文'));
+    }, skip: quickJsUnavailableReason());
 
     test('book info, chapter list and content', () async {
       final service = BookSourceService();

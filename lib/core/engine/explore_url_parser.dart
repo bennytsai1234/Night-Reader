@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:night_reader/core/engine/analyze_rule.dart';
@@ -11,9 +10,8 @@ import 'package:night_reader/core/utils/encoder_utils.dart';
 /// ExploreUrlParser - 發現規則解析器 (對標 Android BookSource.getExploreKinds)
 class ExploreUrlParser {
   static const String _cacheName = 'explore';
-  static Future<void> _pendingJsExploreResolution = Future<void>.value();
 
-  /// 同步版本，僅適用於純同步 JS 或靜態 exploreUrl。
+  /// 解析發現規則，不讀寫快取。
   static List<ExploreKind> parse(String? exploreUrl, {BookSource? source}) {
     if (exploreUrl == null || exploreUrl.isEmpty) return [];
 
@@ -26,13 +24,11 @@ class ExploreUrlParser {
     }
   }
 
-  /// 非同步版本，支援 `<js>` / `@js:` 規則內使用 `java.ajax(...)`
-  /// 等 Promise bridge 方法。
+  /// 解析發現規則；JS 規則算出的分類存進快取，下次直接用（對標 Legado
+  /// 的 exploreKinds 快取）。
   static Future<List<ExploreKind>> parseAsync(
     String? exploreUrl, {
     BookSource? source,
-    Future<dynamic> Function(String jsSource)? jsExecutor,
-    Duration? jsTimeout,
   }) async {
     if (exploreUrl == null || exploreUrl.isEmpty) return [];
 
@@ -47,64 +43,19 @@ class ExploreUrlParser {
     }
 
     try {
-      final resolved = useJsRuntime
-          ? await _runSerializedJsResolution(
-              () => _resolveAsync(
-                normalizedExploreUrl,
-                source: source,
-                jsExecutor: jsExecutor,
-                jsTimeout: jsTimeout,
-              ),
-            )
-          : await _resolveAsync(
-              normalizedExploreUrl,
-              source: source,
-              jsExecutor: jsExecutor,
-              jsTimeout: jsTimeout,
-            );
+      final resolved = _resolveSync(normalizedExploreUrl, source: source);
       if (_looksLikeJsError(resolved)) {
-        return cachedKinds.isNotEmpty
-            ? cachedKinds
-            : _buildErrorKinds(resolved.toString());
+        return _buildErrorKinds(resolved.toString());
       }
 
       final kinds = _parseResolvedValue(resolved);
       if (useJsRuntime && _canPersistResolvedValue(resolved, kinds)) {
         await _writeCachedResolved(source, normalizedExploreUrl, resolved);
       }
-      if (kinds.isNotEmpty) {
-        return kinds;
-      }
-      return cachedKinds;
+      return kinds;
     } catch (e) {
-      AppLog.e('ExploreUrl 非同步解析失敗: $e', error: e);
-      if (useJsRuntime) {
-        return cachedKinds.isNotEmpty
-            ? cachedKinds
-            : _buildErrorKinds(e.toString());
-      }
-      try {
-        final fallback = _resolveSync(normalizedExploreUrl, source: source);
-        if (_looksLikeJsError(fallback)) {
-          return cachedKinds.isNotEmpty
-              ? cachedKinds
-              : _buildErrorKinds(fallback.toString());
-        }
-        final fallbackKinds = _parseResolvedValue(fallback);
-        if (useJsRuntime && _canPersistResolvedValue(fallback, fallbackKinds)) {
-          await _writeCachedResolved(source, normalizedExploreUrl, fallback);
-        }
-        if (fallbackKinds.isNotEmpty) {
-          return fallbackKinds;
-        }
-      } catch (_) {
-        return cachedKinds.isNotEmpty
-            ? cachedKinds
-            : _buildErrorKinds(e.toString());
-      }
-      return cachedKinds.isNotEmpty
-          ? cachedKinds
-          : _buildErrorKinds(e.toString());
+      AppLog.e('ExploreUrl 解析失敗: $e', error: e);
+      return _buildErrorKinds(e.toString());
     }
   }
 
@@ -137,60 +88,6 @@ class ExploreUrlParser {
     } finally {
       rule.dispose();
     }
-  }
-
-  static Future<dynamic> _resolveAsync(
-    String exploreUrl, {
-    BookSource? source,
-    Future<dynamic> Function(String jsSource)? jsExecutor,
-    Duration? jsTimeout,
-  }) async {
-    if (!_isJsExploreUrl(exploreUrl)) {
-      return exploreUrl;
-    }
-
-    final jsSource = _extractJsBody(exploreUrl);
-    AnalyzeRule? rule;
-    Future<dynamic> evaluation;
-    if (jsExecutor != null) {
-      evaluation = jsExecutor(jsSource);
-    } else {
-      if (source == null) {
-        return '';
-      }
-      rule = AnalyzeRule(source: source);
-      evaluation = rule.evalJSAsync(jsSource, null);
-    }
-
-    try {
-      if (jsTimeout == null) {
-        return await evaluation;
-      }
-      return await evaluation.timeout(
-        jsTimeout,
-        onTimeout: () {
-          rule?.dispose();
-          throw TimeoutException('ExploreUrl JS resolve timed out', jsTimeout);
-        },
-      );
-    } finally {
-      rule?.dispose();
-    }
-  }
-
-  static Future<T> _runSerializedJsResolution<T>(Future<T> Function() action) {
-    final completer = Completer<T>();
-    final scheduled = _pendingJsExploreResolution.catchError((_) {}).then((
-      _,
-    ) async {
-      try {
-        completer.complete(await action());
-      } catch (error, stackTrace) {
-        completer.completeError(error, stackTrace);
-      }
-    });
-    _pendingJsExploreResolution = scheduled;
-    return completer.future;
   }
 
   static bool _isJsExploreUrl(String exploreUrl) {

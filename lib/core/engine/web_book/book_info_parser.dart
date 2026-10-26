@@ -24,7 +24,7 @@ class BookInfoParser {
       // 執行 init 規則 (對標 Android BookInfoRule.init)
       // init 規則用於頁面預處理，例如 Ajax 載入或 JS 解密
       if (infoRule.init != null && infoRule.init!.isNotEmpty) {
-        final initResult = await rule.getElementAsync(infoRule.init!);
+        final initResult = rule.getElement(infoRule.init!);
         final hasInitResult =
             initResult != null &&
             (initResult is! String || initResult.trim().isNotEmpty);
@@ -34,25 +34,19 @@ class BookInfoParser {
         }
       }
 
-      final name = _format(await rule.getStringAsync(infoRule.name ?? ''));
-      final author = _format(await rule.getStringAsync(infoRule.author ?? ''));
+      final name = _format(rule.getString(infoRule.name ?? ''));
+      final author = _format(rule.getString(infoRule.author ?? ''));
 
-      final tocUrl = await rule.getStringAsync(
-        infoRule.tocUrl ?? '',
-        isUrl: true,
-      );
-      final kind = (await rule.getStringListAsync(infoRule.kind ?? ''))
-          .join(',');
+      final tocUrl = rule.getString(infoRule.tocUrl ?? '', isUrl: true);
+      final kind = (rule.getStringList(infoRule.kind ?? '')).join(',');
       final coverUrl = coverUrlFrom(
-        await rule.getStringAsync(infoRule.coverUrl ?? ''),
+        rule.getString(infoRule.coverUrl ?? ''),
         baseUrl,
       );
-      final intro = await rule.getStringAsync(infoRule.intro ?? '');
-      final latestChapterTitle = await rule.getStringAsync(
-        infoRule.lastChapter ?? '',
-      );
+      final intro = rule.getString(infoRule.intro ?? '');
+      final latestChapterTitle = rule.getString(infoRule.lastChapter ?? '');
       final wordCount = StringUtils.wordCountFormat(
-        await rule.getStringAsync(infoRule.wordCount ?? ''),
+        rule.getString(infoRule.wordCount ?? ''),
       );
       final normalizedTocUrl = _resolveFallbackTocUrl(
         tocUrl: tocUrl,

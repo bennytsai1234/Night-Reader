@@ -40,12 +40,16 @@ abstract class BaseSource {
     return null;
   }
 
+  /// 登入資訊與書源變數存在快取（[CacheManager]）裡的鍵。
+  String get loginInfoCacheKey => 'userInfo_${getKey()}';
+  String get variableCacheKey => 'sourceVariable_${getKey()}';
+
   Future<void> putLoginInfo(String info) {
-    return CacheManager().put('userInfo_${getKey()}', info);
+    return CacheManager().put(loginInfoCacheKey, info);
   }
 
   Future<String?> getLoginInfo() {
-    return CacheManager().get('userInfo_${getKey()}');
+    return CacheManager().get(loginInfoCacheKey);
   }
 
   Future<Map<String, String>?> getLoginInfoMap() async {
@@ -65,7 +69,7 @@ abstract class BaseSource {
   }
 
   Future<void> removeLoginInfo() {
-    return CacheManager().delete('userInfo_${getKey()}');
+    return CacheManager().delete(loginInfoCacheKey);
   }
 
   Future<void> putLoginHeader(String header) async {
@@ -91,18 +95,18 @@ abstract class BaseSource {
 
   Future<void> setVariable(String? variable) {
     if (variable == null) {
-      return CacheManager().delete('sourceVariable_${getKey()}');
+      return CacheManager().delete(variableCacheKey);
     }
-    return CacheManager().put('sourceVariable_${getKey()}', variable);
+    return CacheManager().put(variableCacheKey, variable);
   }
 
   Future<String> getVariable() async {
-    return await CacheManager().get('sourceVariable_${getKey()}') ?? '';
+    return await CacheManager().get(variableCacheKey) ?? '';
   }
 
   void setVariableSync(String? variable) {
     final cacheManager = CacheManager();
-    final cacheKey = 'sourceVariable_${getKey()}';
+    final cacheKey = variableCacheKey;
     if (variable == null) {
       cacheManager.deleteMemory(cacheKey);
       unawaited(cacheManager.delete(cacheKey));
@@ -113,10 +117,7 @@ abstract class BaseSource {
   }
 
   String getVariableSync() {
-    return CacheManager()
-            .getFromMemory('sourceVariable_${getKey()}')
-            ?.toString() ??
-        '';
+    return CacheManager().getFromMemory(variableCacheKey)?.toString() ?? '';
   }
 
   Map<String, String> getHeaderMapSync({bool hasLoginHeader = true}) {

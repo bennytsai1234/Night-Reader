@@ -93,11 +93,7 @@ final class CompleteContentFetcher {
     String? nextChapterUrl,
     CancelToken? cancelToken,
   }) async {
-    final analyzeUrl = await AnalyzeUrl.create(
-      url,
-      source: source,
-      ruleData: book,
-    );
+    final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
     var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     response = _runLoginCheckJs(source, response, ruleData: book);
     _checkLoginRequired(response);

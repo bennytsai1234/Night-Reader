@@ -24,11 +24,11 @@ void main() {
   final skip = quickJsUnavailableReason();
 
   /// 用 AnalyzeRule 跑一段規則 JS，`result` 是頁面。
-  Future<dynamic> run(String js) {
+  Future<dynamic> run(String js) async {
     final rule = AnalyzeRule(
       source: BookSource(bookSourceUrl: 'https://site.test'),
     )..setContent(_page, baseUrl: 'https://site.test/book/');
-    return rule.evalJSAsync(js, _page);
+    return rule.evalJS(js, _page);
   }
 
   test('Jsoup.parse gives a real document', () async {

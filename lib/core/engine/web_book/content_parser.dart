@@ -40,10 +40,7 @@ class ContentParser {
       final contentRule = source.ruleContent;
       if (contentRule == null) return const ContentResult(content: '');
 
-      var content = await rule.getStringAsync(
-        contentRule.content ?? '',
-        unescape: false,
-      );
+      var content = rule.getString(contentRule.content ?? '', unescape: false);
 
       if (content.contains('&')) {
         content = AnalyzeRuleBase.htmlUnescape.convert(content);
@@ -53,7 +50,7 @@ class ContentParser {
       final nextUrls = <String>[];
       if (contentRule.nextContentUrl != null &&
           contentRule.nextContentUrl!.isNotEmpty) {
-        final list = await rule.getStringListAsync(
+        final list = rule.getStringList(
           contentRule.nextContentUrl!,
           isUrl: true,
         );
@@ -78,7 +75,7 @@ class ContentParser {
   }
 
   /// 多頁正文合併後的最終替換清理 (對標 Android BookContent.analyzeContent 尾段)
-  /// replaceRegex 走 AnalyzeRule.getStringAsync 以支援內嵌 @js: / {{js}} 等表達式
+  /// replaceRegex 走 AnalyzeRule.getString，內嵌的 @js: / {{js}} 照樣執行
   static Future<String> finalizeContent({
     required BookSource source,
     Book? book,
@@ -102,7 +99,7 @@ class ContentParser {
         ruleData: book,
       ).setContent(str, baseUrl: baseUrl).setChapter(chapter);
       try {
-        str = await rule.getStringAsync(replaceRegex);
+        str = rule.getString(replaceRegex);
       } finally {
         rule.dispose();
       }

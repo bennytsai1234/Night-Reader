@@ -49,7 +49,7 @@ class WebBook {
       throw SourceException('搜尋 URL 不能為空', sourceUrl: source.bookSourceUrl);
     }
 
-    final analyzeUrl = await AnalyzeUrl.create(
+    final analyzeUrl = AnalyzeUrl(
       searchUrl,
       source: source,
       key: key,
@@ -80,7 +80,7 @@ class WebBook {
     int? page = 1,
     CancelToken? cancelToken,
   }) async {
-    final analyzeUrl = await AnalyzeUrl.create(url, source: source, page: page);
+    final analyzeUrl = AnalyzeUrl(url, source: source, page: page);
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res);
     _checkRedirect(source, res);
@@ -115,11 +115,7 @@ class WebBook {
       return parsed;
     }
 
-    final analyzeUrl = await AnalyzeUrl.create(
-      book.bookUrl,
-      source: source,
-      ruleData: book,
-    );
+    final analyzeUrl = AnalyzeUrl(book.bookUrl, source: source, ruleData: book);
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);
@@ -154,7 +150,7 @@ class WebBook {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final rule = AnalyzeRule(source: source, ruleData: book);
     try {
-      await rule.preUpdateToc();
+      rule.preUpdateToc();
 
       final allChapters = <BookChapter>[];
       final visitedUrls = <String>{};
@@ -230,7 +226,7 @@ class WebBook {
             }
             if (!visitedUrls.add(currentUrl)) break;
 
-            final analyzeUrl = await AnalyzeUrl.create(
+            final analyzeUrl = AnalyzeUrl(
               currentUrl,
               source: source,
               ruleData: book,
@@ -292,7 +288,7 @@ class WebBook {
               ruleData: book,
             ).setChapter(ch);
             fmtRule.page = i + 1;
-            final newTitle = await fmtRule.evalJSAsync(formatJs, ch.title);
+            final newTitle = fmtRule.evalJS(formatJs, ch.title);
             if (newTitle != null && newTitle.toString().isNotEmpty) {
               deduped[i] = ch.copyWith(title: newTitle.toString());
             }
@@ -355,7 +351,7 @@ class WebBook {
 
     // 1. 抓取首頁正文
     visitedUrls.add(chapter.url);
-    final firstAnalyzeUrl = await AnalyzeUrl.create(
+    final firstAnalyzeUrl = AnalyzeUrl(
       chapter.url,
       source: source,
       ruleData: book,
@@ -423,7 +419,7 @@ class WebBook {
       ) {
         if (!visitedUrls.add(currentUrl)) break;
 
-        final analyzeUrl = await AnalyzeUrl.create(
+        final analyzeUrl = AnalyzeUrl(
           currentUrl,
           source: source,
           ruleData: book,
@@ -522,11 +518,7 @@ class WebBook {
     final futures = urls.map((url) async {
       await sem.acquire();
       try {
-        final analyzeUrl = await AnalyzeUrl.create(
-          url,
-          source: source,
-          ruleData: book,
-        );
+        final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
         res = _runLoginCheckJs(source, res, ruleData: book);
         _checkRedirect(source, res);
@@ -589,11 +581,7 @@ class WebBook {
       );
     }
 
-    final analyzeUrl = await AnalyzeUrl.create(
-      initialUrl,
-      source: source,
-      ruleData: book,
-    );
+    final analyzeUrl = AnalyzeUrl(initialUrl, source: source, ruleData: book);
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);

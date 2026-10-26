@@ -4,9 +4,8 @@ import 'dart:io' show Directory, File, gzip;
 import 'package:archive/archive.dart';
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
-import 'package:night_reader/core/engine/js/js_rule_async_wrapper.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:path/path.dart' as p;
@@ -397,27 +396,18 @@ void main() {
       );
     });
 
-    test('cache.getFile returns null on cache miss like Legado', () async {
+    // 主 isolate 不能停住：要等網路的呼叫直接失敗，不會卡住（ADR 0034）。
+    test('waiting calls fail at once outside a source isolate', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;
       }
-      final ext = JsExtensions(runtime!);
-      ext.inject();
+      JsExtensions(runtime!).inject();
 
-      final rewritten = AsyncJsRewriter.rewrite(r'''
-        var cached = cache.getFile("missing-key");
-        cached == null ? "null" : String(cached);
-      ''');
-      final (callId, future) = ext.registerRuleCall();
-      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+      final result = runtime!.evaluate('java.ajax("http://127.0.0.1:9/never")');
 
-      final evalResult = runtime!.evaluate(wrapped);
-      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-      runtime!.executePendingJob();
-
-      final resolved = await future;
-      expect(resolved, 'null');
+      expect(result.isError, isTrue);
+      expect(result.stringResult, contains('只能在書源 isolate'));
     });
 
     test('java.readTxtFile honors UTF-16LE charset', () async {
@@ -440,19 +430,15 @@ void main() {
       });
       final ext = JsExtensions(runtime!);
       ext.inject();
-      final rewritten = AsyncJsRewriter.rewrite(
+      final evalResult = runtime!.evaluate(
         'java.readTxtFile(${jsonEncode(file.path)}, "UTF-16LE")',
       );
-      final (callId, future) = ext.registerRuleCall();
-      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
-
-      final evalResult = runtime!.evaluate(wrapped);
       expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-      runtime!.executePendingJob();
-
-      expect(await future, '夜讀文字');
+      expect(evalResult.stringResult, '夜讀文字');
     });
 
+    // java.unArchiveFile 在網路 isolate 做（要問平台暫存資料夾在哪）；這裡
+    // 直接跑它交出去的那件事。
     test('java.unArchiveFile keeps entries inside its output folder', () async {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
@@ -482,19 +468,7 @@ void main() {
       await File(p.join(documents.path, 'archive.zip'))
           .writeAsBytes(zipBytes, flush: true);
 
-      final ext = JsExtensions(runtime!);
-      ext.inject();
-      final rewritten = AsyncJsRewriter.rewrite(
-        'java.unArchiveFile("archive.zip")',
-      );
-      final (callId, future) = ext.registerRuleCall();
-      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
-
-      final evalResult = runtime!.evaluate(wrapped);
-      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-      runtime!.executePendingJob();
-
-      final relativeOutputPath = (await future).toString();
+      final relativeOutputPath = (await unArchive('archive.zip')()).toString();
       expect(
         await File(p.join(temporary.path, relativeOutputPath, 'safe.txt'))
             .readAsString(),
@@ -562,30 +536,19 @@ void main() {
       );
       ext.inject();
 
-      Future<dynamic> runRule(String source) {
-        return SourceValidationContext.runNonInteractive(() async {
-          final rewritten = AsyncJsRewriter.rewrite(source);
-          final (callId, future) = ext.registerRuleCall();
-          final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
-          final evalResult = runtime!.evaluate(wrapped);
-          expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-          runtime!.executePendingJob();
-          return future;
-        });
-      }
+      Future<JsEvalResult> runRule(String source) =>
+          SourceValidationContext.runNonInteractive(
+            () async => runtime!.evaluate(source),
+          );
 
-      await expectLater(
-        runRule('java.startBrowserAwait("https://example.com/captcha", "驗證")'),
-        throwsA(
-          predicate((Object error) => error.toString().contains('不支援互動驗證')),
-        ),
-      );
-      await expectLater(
-        runRule('java.getVerificationCode("https://example.com/code.png")'),
-        throwsA(
-          predicate((Object error) => error.toString().contains('不支援互動驗證')),
-        ),
-      );
+      for (final call in [
+        'java.startBrowserAwait("https://example.com/captcha", "驗證")',
+        'java.getVerificationCode("https://example.com/code.png")',
+      ]) {
+        final result = await runRule(call);
+        expect(result.isError, isTrue, reason: call);
+        expect(result.stringResult, contains('不支援互動驗證'), reason: call);
+      }
       // 不需要互動的網頁渲染（java.webView）在校驗裡照常執行（ADR 0033）。
     });
 
@@ -1126,39 +1089,29 @@ void main() {
       expect(result.stringResult, '第12章 归来');
     });
 
-    test(
-      'async java.ajax results support chained Java-style replaceAll rules',
-      () async {
-        if (runtime == null) {
-          expect(runtimeError, isNotNull);
-          return;
-        }
-        final ext = JsExtensions(runtime!);
-        ext.inject();
-        runtime!.evaluate(
-          'java.ajax = function() { '
-          '  return Promise.resolve(\'<style>gone</style><p>正文</p>\'); '
-          '}; '
-          'var baseUrl = "https://fqbook.cc/read-61918.html"; '
-          'var result = \'<script>var url="_getcontent.php?id=61918&v=test-token"</script>\';',
-        );
+    test('java.ajax results support chained Java-style replaceAll rules', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+      runtime!.evaluate(
+        'java.ajax = function() { '
+        '  return \'<style>gone</style><p>正文</p>\'; '
+        '}; '
+        'var baseUrl = "https://fqbook.cc/read-61918.html"; '
+        'var result = \'<script>var url="_getcontent.php?id=61918&v=test-token"</script>\';',
+      );
 
-        final rewritten = AsyncJsRewriter.rewrite(r'''
+      final evalResult = runtime!.evaluate(r'''
 java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' + result.match(/&v=(.*?)"/)[1])).replaceAll('<style.*style>','').replaceAll('<([^<]*?)class(.*?)</(.*?)>','')
 ''');
-        final (callId, future) = ext.registerRuleCall();
-        final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      expect(evalResult.stringResult, '<p>正文</p>');
+    });
 
-        final evalResult = runtime!.evaluate(wrapped);
-        expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-        runtime!.executePendingJob();
-
-        final resolved = await future;
-        expect(resolved, '<p>正文</p>');
-      },
-    );
-
-    test('java.connect wraps responses with raw request url parity', () async {
+    test('java.connect wraps responses with raw request url parity', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;
@@ -1166,11 +1119,11 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
       final ext = JsExtensions(runtime!);
       ext.inject();
       runtime!.evaluate(r'''
-        __asyncCall = function(channel, payload) {
+        __lrWait = function(channel, payload) {
           if (channel !== 'connect') {
-            return Promise.reject(new Error('unexpected channel: ' + channel));
+            throw new Error('unexpected channel: ' + channel);
           }
-          return Promise.resolve({
+          return {
             body: 'OK',
             url: 'https://canonical.example/e/search/result/index.php?searchid=42',
             requestUrl: 'http://m.666biquge.com',
@@ -1178,11 +1131,11 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
             message: 'OK',
             headers: {},
             redirects: ['https://canonical.example/e/search/result/index.php?searchid=42']
-          });
+          };
         };
       ''');
 
-      final rewritten = AsyncJsRewriter.rewrite(r'''
+      final evalResult = runtime!.evaluate(r'''
         var res = java.connect("http://m.666biquge.com");
         [
           res.raw().request().url(),
@@ -1192,37 +1145,28 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
           String(res.isSuccessful())
         ].join("|")
       ''');
-      final (callId, future) = ext.registerRuleCall();
-      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
-
-      final evalResult = runtime!.evaluate(wrapped);
       expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-      runtime!.executePendingJob();
-
-      final resolved = await future;
       expect(
-        resolved,
+        evalResult.stringResult,
         'https://canonical.example/e/search/result/index.php?searchid=42|'
         'https://canonical.example/e/search/result/index.php?searchid=42|'
         '200|200|true',
       );
     });
 
-    test(
-      'java.connect normalizes bare-origin raw request urls with slash',
-      () async {
-        if (runtime == null) {
-          expect(runtimeError, isNotNull);
-          return;
-        }
-        final ext = JsExtensions(runtime!);
-        ext.inject();
-        runtime!.evaluate(r'''
-        __asyncCall = function(channel, payload) {
+    test('java.connect normalizes bare-origin raw request urls with slash', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+      runtime!.evaluate(r'''
+        __lrWait = function(channel, payload) {
           if (channel !== 'connect') {
-            return Promise.reject(new Error('unexpected channel: ' + channel));
+            throw new Error('unexpected channel: ' + channel);
           }
-          return Promise.resolve({
+          return {
             body: '',
             url: 'http://m.666biquge.com',
             requestUrl: 'http://m.666biquge.com',
@@ -1230,23 +1174,18 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
             message: 'OK',
             headers: {},
             redirects: []
-          });
+          };
         };
       ''');
 
-        final rewritten = AsyncJsRewriter.rewrite(r'''
+      final evalResult = runtime!.evaluate(r'''
         java.connect("http://m.666biquge.com").raw().request().url() + "modules/article/waps.php"
       ''');
-        final (callId, future) = ext.registerRuleCall();
-        final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
-
-        final evalResult = runtime!.evaluate(wrapped);
-        expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-        runtime!.executePendingJob();
-
-        final resolved = await future;
-        expect(resolved, 'http://m.666biquge.com/modules/article/waps.php');
-      },
-    );
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      expect(
+        evalResult.stringResult,
+        'http://m.666biquge.com/modules/article/waps.php',
+      );
+    });
   }, skip: quickJsSkip);
 }

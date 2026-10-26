@@ -1,28 +1,18 @@
-import 'dart:async';
-import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_js/flutter_js.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
 
 import 'jsoup/jsoup_bridge.dart';
 import 'query_ttf.dart';
 
-/// JsExtensions 的基礎狀態與共用緩存
+/// JsExtensions 的基礎狀態與共用緩存。
 ///
-/// 同時負責 **Dart ↔ JS Promise bridge** 的基礎設施：
-///
-/// 1. **async java/cache/source/cookie 方法** — JS 端呼叫時會經由 `__asyncCall(channel, [id, payload])`
-///    注冊一個 pending Promise；Dart 端 handler 完成 async 工作後透過
-///    [resolveJsPending] / [rejectJsPending] 跨越 flutter_js 的同步 onMessage 限制
-///    重新進入 JS runloop 來 resolve 該 Promise。
-///
-/// 2. **rule-level 整段 JS 執行** — `AnalyzeRule.evalJSAsync` 會把使用者 JS
-///    包在 async IIFE 內並以唯一 ruleCallId 註冊 [registerRuleCall]，最終 JS 會
-///    `sendMessage('__ruleDone', [id, value, error])` 通知 Dart 側 [_pendingRuleCalls]
-///    中對應的 Completer 完成。
+/// 規則 JS 呼叫 Dart 一律同步拿到結果：要等的（網路、資料庫裡的快取、
+/// Cookie）由 [onBlocking] 註冊，在書源 isolate 停住等（[BlockingCall]，
+/// ADR 0034）。
 abstract class JsExtensionsBase {
   final JavascriptRuntime runtime;
   final BaseSource? source;
@@ -52,166 +42,39 @@ abstract class JsExtensionsBase {
     sharedScope.clear();
   }
 
-  // ─── Promise bridge state ───────────────────────────────────────────
-  /// 下一個 rule-level 執行的 id
-  int _nextRuleCallId = 0;
-
-  /// rule-level JS 執行的 pending Completer，鍵為 ruleCallId
-  final Map<int, Completer<dynamic>> _pendingRuleCalls = {};
-  bool _isDisposed = false;
-
-  /// bridge 是否已經初始化 (防重複 inject)
-  bool _bridgeInitialised = false;
-
   JsExtensionsBase(this.runtime, {this.source, this.ruleContext});
 
-  /// 安裝 Dart↔JS Promise bridge 的 JS 端基礎設施與對應 onMessage handler
-  ///
-  /// 必須在任何一個會用到 `__asyncCall` 的 extension 之前呼叫。
-  /// JsExtensions.inject() 會負責調用此方法。
-  void setupPromiseBridge() {
-    if (_bridgeInitialised) return;
-    _bridgeInitialised = true;
-
+  /// 安裝 JS 端的 `__lrWait`：[onBlocking] 註冊的呼叫經由它拿結果。
+  void installBlockingCalls() {
     runtime.evaluate(r'''
-      var __lr = __lr || {};
-      __lr.nextAsyncId = 0;
-      __lr.pendingResolvers = {};
-      __lr.pendingRejecters = {};
-
-      // JS 側 async 呼叫入口：分配 id、註冊 resolver/rejecter、同步
-      // sendMessage 到 Dart。Dart handler 處理完 async 工作後，會從外部
-      // 呼叫 __resolvePending / __rejectPending 完成該 Promise。
-      function __asyncCall(channel, payload) {
-        var id = ++__lr.nextAsyncId;
-        return new Promise(function(resolve, reject) {
-          __lr.pendingResolvers[id] = resolve;
-          __lr.pendingRejecters[id] = reject;
-          sendMessage(channel, JSON.stringify([id, payload]));
-        });
-      }
-
-      function __resolvePending(id, value) {
-        var r = __lr.pendingResolvers[id];
-        delete __lr.pendingResolvers[id];
-        delete __lr.pendingRejecters[id];
-        if (r) r(value);
-      }
-
-      function __rejectPending(id, errMsg) {
-        var r = __lr.pendingRejecters[id];
-        delete __lr.pendingResolvers[id];
-        delete __lr.pendingRejecters[id];
-        if (r) r(new Error(errMsg == null ? 'unknown error' : String(errMsg)));
+      // 要等的呼叫：Dart 那邊停住書源 isolate 等到結果（ADR 0034），回傳
+      // {value} 或 {error}。錯誤不直接丟過 FFI 的橋，JavaScriptCore 接不住。
+      function __lrWait(channel, payload) {
+        var reply = sendMessage(channel, JSON.stringify(payload));
+        if (reply == null) return null;
+        if (reply.error !== undefined && reply.error !== null) {
+          throw new Error(String(reply.error));
+        }
+        return reply.value === undefined ? null : reply.value;
       }
     ''');
+  }
 
-    // rule-level 完成通知：args = [ruleCallId, resultJson, errorMsg]
-    runtime.onMessage('__ruleDone', (dynamic args) {
+  /// 註冊規則 JS 經 `__lrWait(channel, payload)` 呼叫的 [handler]。它同步做
+  /// 完，要等的部分交給 [BlockingCall]；結果包成 `{value}`、丟出的錯誤包成
+  /// `{error}`。位元組照 JS 陣列傳回，和 Legado 的 Java byte[] 一樣能逐一讀取。
+  void onBlocking(String channel, Object? Function(dynamic payload) handler) {
+    runtime.onMessage(channel, (dynamic payload) {
       try {
-        final list = args is List ? args : jsonDecode(args.toString()) as List;
-        final id = (list[0] as num).toInt();
-        final value = list[1];
-        final err = list.length > 2 ? list[2] : null;
-        final completer = _pendingRuleCalls.remove(id);
-        if (completer == null || completer.isCompleted) return null;
-        if (err != null && err != '') {
-          completer.completeError(_RuleJsError(err.toString()));
-        } else {
-          completer.complete(value);
-        }
-      } catch (e) {
-        AppLog.e('__ruleDone handler error: $e');
+        final value = handler(payload);
+        return {'value': value is Uint8List ? List<int>.of(value) : value};
+      } catch (error) {
+        return {'error': '$error'};
       }
-      return null;
     });
   }
 
-  /// 註冊一個 rule-level JS 執行，回傳唯一 id 與綁定的 Completer
-  ///
-  /// 呼叫端應在 `runtime.evaluate(...)` 包好的 async IIFE 之前取得 id，
-  /// 然後 await 回傳的 future。Completer 會在 JS 端 `sendMessage('__ruleDone', ...)`
-  /// 觸發時完成。
-  (int, Future<dynamic>) registerRuleCall() {
-    if (_isDisposed) {
-      throw StateError('JS extensions have been disposed');
-    }
-    final id = _nextRuleCallId++;
-    final completer = Completer<dynamic>();
-    _pendingRuleCalls[id] = completer;
-    return (id, completer.future);
-  }
-
-  /// 主動清除一個 pending rule call（timeout 或 abort 時使用）
-  void cancelRuleCall(int id, Object error) {
-    final c = _pendingRuleCalls.remove(id);
-    if (c != null && !c.isCompleted) {
-      c.completeError(error);
-    }
-  }
-
-  /// 從 Dart 主動 resolve 一個 JS 側 pending Promise
-  ///
-  /// [callId] 是 JS 側 `__asyncCall` 分配並透過 sendMessage payload 第 0 欄
-  /// 傳來的 id（儲存於 `__lr.pendingResolvers[id]`）。
-  /// [value] 必須是 JSON-safe 的 Dart 物件（string / num / bool / List / Map / null）。
-  ///
-  /// 呼叫本方法後會立刻 pump QuickJS microtask queue，讓等待中的 await
-  /// 繼續往下執行。
-  void resolveJsPending(int callId, dynamic value) {
-    if (_isDisposed) return;
-    final payload = _safeJsonEncode(value);
-    runtime.evaluate('__resolvePending($callId, $payload);');
-    runtime.executePendingJob();
-  }
-
-  /// 從 Dart 主動 reject 一個 JS 側 pending Promise
-  void rejectJsPending(int callId, Object error) {
-    if (_isDisposed) return;
-    final msg = _safeJsonEncode(error.toString());
-    runtime.evaluate('__rejectPending($callId, $msg);');
-    runtime.executePendingJob();
-  }
-
-  /// 結束 bridge 生命週期，讓所有等待中的 rule Future 立即失敗。
   void dispose() {
-    if (_isDisposed) return;
-    _isDisposed = true;
     jsoup.clear();
-    final pending = _pendingRuleCalls.values.toList(growable: false);
-    _pendingRuleCalls.clear();
-    for (final completer in pending) {
-      if (!completer.isCompleted) {
-        completer.completeError(StateError('JS runtime has been disposed'));
-      }
-    }
   }
-
-  /// 從 onMessage handler 收到的 args 中解析出 `[callId, payload]`
-  ///
-  /// 便於各個 extension handler 統一從 `[id, ...]` 格式提取 id 與實際參數。
-  static ({int callId, dynamic payload}) parseAsyncCallArgs(dynamic args) {
-    if (args is List && args.length >= 2) {
-      final id = (args[0] as num).toInt();
-      return (callId: id, payload: args[1]);
-    }
-    throw ArgumentError('async call args malformed: $args');
-  }
-
-  /// JSON-encode 並保證不會炸掉：若值無法序列化則退化為 toString
-  static String _safeJsonEncode(dynamic value) {
-    try {
-      return jsonEncode(value);
-    } catch (_) {
-      return jsonEncode(value.toString());
-    }
-  }
-}
-
-/// 由 rule-level JS 執行拋出的錯誤包裝
-class _RuleJsError implements Exception {
-  _RuleJsError(this.message);
-  final String message;
-  @override
-  String toString() => 'RuleJsError: $message';
 }

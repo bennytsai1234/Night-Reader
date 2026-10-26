@@ -39,7 +39,10 @@ _Avoid_: demo、mockup
 _Avoid_: 來源、站點、source（不指明時）
 
 **書源 isolate**：
-常駐的背景 isolate，書源的抓取與解析（含規則 JS）都在這裡跑，主 isolate 只收結果（`SourceIsolate`，ADR 0028）；閱讀器抓正文、下載、搜尋、檢查更新、換源、發現與書源除錯都經過它。資料庫和主 isolate 連同一個；Cookie 檔、限流與 WebView 由主 isolate 擁有，經代理使用。
+常駐的背景 isolate，書源的抓取與解析（含規則 JS）都在這裡跑，主 isolate 只收結果（`SourceIsolate`，ADR 0028）；閱讀器抓正文、下載、搜尋、檢查更新、換源、發現與書源除錯都經過它。共四條，同一個書源的工作送到同一條；規則 JS 等網路時那一條整條停住（ADR 0034）。資料庫和主 isolate 連同一個；Cookie 檔、限流與 WebView 由主 isolate 擁有，經代理使用。
+
+**網路 isolate**：
+替停住的書源 isolate 做要等的事——發請求、讀資料庫裡的快取與 Cookie、問平台資料夾在哪（`SourceIo`，ADR 0034）。它自己從不停住、不跑規則 JS，資料庫另開一條直接連到檔案的連線。
 _Avoid_: 背景執行緒、worker、動作閘門（2026-10-19 拿掉的舊機制：背景工作等動畫播完）
 
 **書架自動下載**：
