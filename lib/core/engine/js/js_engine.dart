@@ -10,8 +10,10 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/http_client.dart';
+import 'package:night_reader/core/network/str_response.dart';
 
 import 'js_extensions.dart';
+import 'js_response.dart';
 import 'legacy_js_syntax.dart';
 import 'rule_final_return.dart';
 
@@ -88,7 +90,7 @@ class JsEngine {
       if (result.isError) throw RuleJsException(result.stringResult);
       return _decodeContextValue(_runtime!.dartValueOf(result));
     } finally {
-      _activeRules--;
+      if (--_activeRules == 0) _contextResponses.clear();
     }
   }
 
@@ -329,6 +331,12 @@ globalThis.__lrStartedRule = -1;
       }
       return jsonEncode(value.text ?? '');
     }
+    if (value is StrResponse) {
+      final id = _nextResponseId++;
+      _contextResponses[id] = value;
+      final data = {...responseToJs(value), _responseIdKey: id};
+      return 'buildHttpResponse(${jsonEncode(data)})';
+    }
     if (value is Iterable) {
       final encodedItems = value.map(_encodeContextValue).join(',');
       return '''
@@ -351,11 +359,20 @@ globalThis.__lrStartedRule = -1;
 ''';
     }
     try {
-      return _encodeJsonContextValue(value);
-    } catch (_) {
+      return jsonEncode(value);
+    } on JsonUnsupportedObjectError {
+      // 轉成文字，規則 JS 拿到的就不是它要的物件（`result.body()` 這類
+      // 呼叫會失敗）；新的型別要像上面一樣給它對應的 JS 物件。
+      assert(false, '交給規則 JS 的 ${value.runtimeType} 沒有對應的 JS 物件');
       return jsonEncode(value.toString());
     }
   }
+
+  /// 這次規則執行交給 JS 的回應。規則原樣傳回時換回同一個，保留跳轉紀錄
+  /// 這些 JS 看不到的資料；最外層的規則結束時清掉。
+  final _contextResponses = <int, StrResponse>{};
+  int _nextResponseId = 0;
+  static const _responseIdKey = '__lrResponseId';
 
   String _encodeJsonContextValue(dynamic value) {
     try {
@@ -458,6 +475,11 @@ var __lrScopedObject = function(scope, seed) {
       return value.map(_decodeContextValue).toList();
     }
     if (value is Map) {
+      final response = value['__lrResponse'];
+      if (response is Map) {
+        final id = (response[_responseIdKey] as num?)?.toInt();
+        return _contextResponses[id] ?? responseFromJs(response);
+      }
       final elementId = value['__lrElementId'];
       if (elementId is num) {
         final node = _extensions?.jsoup.node(elementId.toInt());

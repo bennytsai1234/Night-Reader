@@ -28,6 +28,9 @@ extension JsJavaObject on JsExtensionsBase {
         if (type !== 'object') {
           return value;
         }
+        if (value.__lrResponse) {
+          return { __lrResponse: value.__lrResponse };
+        }
         if (typeof value.size === 'function' && typeof value.get === 'function') {
           var normalizedItems = [];
           var size = Number(value.size()) || 0;
@@ -192,7 +195,7 @@ extension JsJavaObject on JsExtensionsBase {
             toString: function() { return responseUrl(); }
           };
         }
-        return {
+        var response = {
           body: function() { return res.body; },
           url: function() { return responseUrl(); },
           code: function() { return responseCode(); },
@@ -204,6 +207,12 @@ extension JsJavaObject on JsExtensionsBase {
           raw: function() { return buildRawResponse(); },
           toString: function() { return responseUrl(); }
         };
+        // 規則傳回回應物件時（例如登入檢查），交回 Dart 換成 StrResponse。
+        Object.defineProperty(response, '__lrResponse', {
+          value: res || {},
+          enumerable: false
+        });
+        return response;
       }
 
       var java = {
