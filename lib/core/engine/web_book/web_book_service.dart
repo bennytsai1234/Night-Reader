@@ -15,6 +15,7 @@ import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
+import 'package:night_reader/core/engine/web_book/login_check.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
 
@@ -57,7 +58,7 @@ class WebBook {
     );
 
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-    res = _runLoginCheckJs(source, res);
+    res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'search');
 
@@ -82,7 +83,7 @@ class WebBook {
   }) async {
     final analyzeUrl = AnalyzeUrl(url, source: source, page: page);
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-    res = _runLoginCheckJs(source, res);
+    res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'explore');
 
@@ -117,7 +118,7 @@ class WebBook {
 
     final analyzeUrl = AnalyzeUrl(book.bookUrl, source: source, ruleData: book);
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-    res = _runLoginCheckJs(source, res, ruleData: book);
+    res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'detail');
 
@@ -232,7 +233,7 @@ class WebBook {
               ruleData: book,
             );
             var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-            res = _runLoginCheckJs(source, res, ruleData: book);
+            res = runLoginCheckJs(analyzeUrl, res);
             _checkRedirect(source, res);
             _checkLoginRequired(res, stage: 'toc');
 
@@ -359,7 +360,7 @@ class WebBook {
     var firstRes = await firstAnalyzeUrl.getStrResponse(
       cancelToken: cancelToken,
     );
-    firstRes = _runLoginCheckJs(source, firstRes, ruleData: book);
+    firstRes = runLoginCheckJs(firstAnalyzeUrl, firstRes);
     _checkRedirect(source, firstRes);
     _checkLoginRequired(firstRes, stage: 'content');
 
@@ -425,7 +426,7 @@ class WebBook {
           ruleData: book,
         );
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-        res = _runLoginCheckJs(source, res, ruleData: book);
+        res = runLoginCheckJs(analyzeUrl, res);
         _checkRedirect(source, res);
         _checkLoginRequired(res, stage: 'content');
 
@@ -454,27 +455,6 @@ class WebBook {
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
-  }
-
-  /// 執行登入檢查 JS Hook (統一抽取)
-  static StrResponse _runLoginCheckJs(
-    BookSource source,
-    StrResponse res, {
-    dynamic ruleData,
-  }) {
-    final checkJs = source.loginCheckJs;
-    if (checkJs != null && checkJs.isNotEmpty) {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        final evalRes = rule.evalJS(checkJs, res);
-        if (evalRes is StrResponse) {
-          return evalRes;
-        }
-      } finally {
-        rule.dispose();
-      }
-    }
-    return res;
   }
 
   /// 重定向檢查 (對標 Android WebBook.checkRedirect)
@@ -520,7 +500,7 @@ class WebBook {
       try {
         final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-        res = _runLoginCheckJs(source, res, ruleData: book);
+        res = runLoginCheckJs(analyzeUrl, res);
         _checkRedirect(source, res);
         _checkLoginRequired(res, stage: stage);
         return res;
@@ -583,7 +563,7 @@ class WebBook {
 
     final analyzeUrl = AnalyzeUrl(initialUrl, source: source, ruleData: book);
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-    res = _runLoginCheckJs(source, res, ruleData: book);
+    res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'toc');
     return res;

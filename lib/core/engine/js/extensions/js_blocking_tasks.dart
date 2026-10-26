@@ -18,6 +18,7 @@ import 'package:path/path.dart' as p;
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 import '../js_encode_utils.dart';
+import '../js_response.dart';
 
 /// 規則 JS 要等的呼叫交給網路 isolate 做的事（[BlockingCall]，ADR 0034）。
 /// 工作連同捕捉的變數會送到網路 isolate，所以都在這裡的頂層函式建立，只
@@ -50,16 +51,7 @@ BlockingTask responseBodies(List<AnalyzeUrl> urls) =>
 /// 訊息，不丟出，和原本一樣。
 BlockingTask connectResponse(AnalyzeUrl url) => () async {
   try {
-    final response = await url.getStrResponse();
-    return {
-      'body': response.body,
-      'url': response.url,
-      'requestUrl': url.url,
-      'code': response.raw.statusCode ?? 200,
-      'message': response.raw.statusMessage ?? '',
-      'headers': response.headers,
-      'redirects': response.redirectChain,
-    };
+    return responseToJs(await url.getStrResponse(), requestUrl: url.url);
   } catch (e) {
     AppLog.e('java.connect failed: $e');
     return failedResponse(url.url, e);

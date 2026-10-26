@@ -2,9 +2,9 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
-import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
+import 'package:night_reader/core/engine/web_book/login_check.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -95,7 +95,7 @@ final class CompleteContentFetcher {
   }) async {
     final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
     var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-    response = _runLoginCheckJs(source, response, ruleData: book);
+    response = runLoginCheckJs(analyzeUrl, response);
     _checkLoginRequired(response);
 
     final result = await ContentParser.parse(
@@ -111,22 +111,6 @@ final class CompleteContentFetcher {
       nextUrls: result.nextUrls,
       baseUrl: response.url,
     );
-  }
-
-  static StrResponse _runLoginCheckJs(
-    BookSource source,
-    StrResponse response, {
-    dynamic ruleData,
-  }) {
-    final checkJs = source.loginCheckJs;
-    if (checkJs == null || checkJs.isEmpty) return response;
-    final rule = AnalyzeRule(source: source, ruleData: ruleData);
-    try {
-      final evaluated = rule.evalJS(checkJs, response);
-      return evaluated is StrResponse ? evaluated : response;
-    } finally {
-      rule.dispose();
-    }
   }
 
   static void _checkLoginRequired(StrResponse response) {
