@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:xpath_selector/xpath_selector.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/http_client.dart';
@@ -67,7 +68,8 @@ class JsEngine {
     }
   }
 
-  /// 執行規則 JS，傳回最後一個表達式的值。
+  /// 執行規則 JS，傳回最後一個表達式的值。規則丟出、自己沒接住的錯誤以
+  /// [RuleJsException] 丟出，和 Legado 一樣照規則失敗處理。
   dynamic evaluate(String jsCode, {Map<String, dynamic>? context}) {
     if (_isDisposed) {
       throw StateError('JsEngine has been disposed');
@@ -83,6 +85,7 @@ class JsEngine {
       _injectContext(context);
       _ensureSourceJsLibLoaded();
       final result = _evaluateRuleScript(normalizedJs);
+      if (result.isError) throw RuleJsException(result.stringResult);
       return _decodeContextValue(_runtime!.dartValueOf(result));
     } finally {
       _activeRules--;
@@ -218,23 +221,33 @@ globalThis.__lrRunRule = function (run) {
   __lrEnterRule();
   try { return run(); } finally { __lrExitRule(); }
 };
+globalThis.__lrStartedRule = -1;
 ''';
+
+  /// 這個引擎下一次執行規則的編號，見 [_evaluateRuleScript]。
+  int _nextRuleRun = 0;
 
   /// 規則 JS 包在函式裡用直接 eval 執行：規則裡 `var` 宣告的變數留在這次
   /// 執行，不會掛到全域讓下一次（下一章、下一筆結果）看到，與 Legado 每次
   /// 執行一個新作用域相同。沒宣告就賦值的變數由 `__lrRunRule` 在結束後清掉
   /// （見 [_ruleGlobalsHelpers]）。
   JsEvalResult _evaluateRuleScript(String jsCode) {
+    // eval 先讀完整段、語法沒問題才開始執行，所以開頭這句跑到了就表示規則
+    // 已經開始執行。`void 0` 讓結尾只有宣告的規則照樣得到 undefined。
+    final run = _nextRuleRun++;
+    final marked = jsonEncode('__lrStartedRule=$run;void 0;$jsCode');
     final wrapped =
         '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
-        '? __lrNormalizeRuleResult(eval(${jsonEncode(jsCode)})) '
-        ': eval(${jsonEncode(jsCode)}); })';
+        '? __lrNormalizeRuleResult(eval($marked)) '
+        ': eval($marked); })';
     final result = _runtime!.evaluate(wrapped);
     // 某些 legacy rule 在 eval(...) 路徑會被 QuickJS 誤判語法，
     // 改走 IIFE + final-return 注入，既保留最後表達式結果，也讓 normalize
-    // 邏輯繼續生效。只在語法錯誤時改走：執行到一半出錯的規則再跑一次，
-    // 請求與 `java.put` 這類動作會做兩次（被取消的請求也會再發一次）。
-    if (!result.isError || !result.stringResult.contains('SyntaxError')) {
+    // 邏輯繼續生效。只在還沒開始執行時改走：執行到一半出錯（包括
+    // `JSON.parse` 這類執行時才發生的 SyntaxError）再跑一次，請求與
+    // `java.put` 這類動作會做兩次。執行中巢狀跑的規則編號比這次大，外層
+    // 要先開始才跑得到，所以用「大於等於」判斷。
+    if (!result.isError || _ruleStarted(run)) {
       return result;
     }
     final fallbackBody = RuleFinalReturn.inject(jsCode);
@@ -244,6 +257,9 @@ globalThis.__lrRunRule = function (run) {
         ': (function() {\n$fallbackBody\n})(); })';
     return _runtime!.evaluate(fallbackWrapped);
   }
+
+  bool _ruleStarted(int run) =>
+      _runtime!.evaluate('__lrStartedRule >= $run').stringResult == 'true';
 
   /// 這個引擎的 JS 全域已經有 `source`。引擎只服務一個書源（[source]），
   /// 注入一次之後呼叫端可以省略，見 `AnalyzeRuleScript`。

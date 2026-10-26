@@ -344,7 +344,7 @@ final class SourceWorker {
           rootToken: RootIsolateToken.instance,
           dictionaries: withDictionaries ? await _dictionaries() : null,
           fetchPolyfill: await _fetchPolyfill(),
-          storageRoots: await AppStoragePaths.roots(),
+          storageRoots: await _storageRoots(),
           webViewUserAgent: WebViewUserAgent.value,
         ),
       );
@@ -454,6 +454,11 @@ final class SourceWorker {
 
   static Future<List<String>?>? _dictionariesFuture;
   static Future<String?>? _fetchPolyfillFuture;
+  static Future<StorageRoots>? _storageRootsFuture;
+
+  /// 路徑不會變，問一次就好：書源校驗每個書源開一個 worker。
+  static Future<StorageRoots> _storageRoots() =>
+      _storageRootsFuture ??= AppStoragePaths.roots();
 
   static Future<List<String>?> _dictionaries() =>
       _dictionariesFuture ??= _loadOrNull(

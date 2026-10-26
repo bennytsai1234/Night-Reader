@@ -14,6 +14,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
@@ -573,16 +574,19 @@ void main() {
       );
     });
 
-    test('once: a rule that fails halfway is not run again', () async {
-      counted = 0;
-      expect(
-        await _evaluateJs(
-          'java.ajax("$baseUrl/count"); throw new Error("壞了");',
-        ),
-        contains('壞了'),
-      );
-      expect(counted, 1);
-    });
+    // 出錯的規則照失敗處理（錯誤訊息不會被當成結果），也不會整段重跑；
+    // `JSON.parse` 讀到壞掉的 JSON 也是 SyntaxError，但規則已經開始執行。
+    for (final failure in ['throw new Error("壞了")', 'JSON.parse("{")']) {
+      test('once: a rule that fails halfway with $failure fails and is not '
+          'run again', () async {
+        counted = 0;
+        await expectLater(
+          _evaluateJs('java.ajax("$baseUrl/count"); $failure;'),
+          throwsA(isA<RuleJsException>()),
+        );
+        expect(counted, 1);
+      });
+    }
 
     test(
       'from the cache, and null when nothing is cached like Legado',
@@ -696,6 +700,30 @@ void main() {
       // 送不進書源 isolate 時會改在主 isolate 執行並記下來，結果照樣對。
       expect(logs.where((m) => m.contains('送不進書源 isolate')), isEmpty);
     });
+
+    // 錯誤訊息不能被當成正文、存成讀得到的章節。
+    test(
+      'content whose rule JS fails is a failure, not the error text',
+      () async {
+        source.ruleContent!.content =
+            '@js:java.ajax("$baseUrl/c/2"); throw new Error("正文解析失敗")';
+        final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+
+        await expectLater(
+          BookSourceService().getContent(
+            source,
+            book,
+            BookChapter(
+              title: '第一章',
+              url: '$baseUrl/c/1',
+              bookUrl: book.bookUrl,
+            ),
+          ),
+          throwsA(predicate((Object e) => e.toString().contains('正文解析失敗'))),
+        );
+      },
+      skip: quickJsUnavailableReason(),
+    );
 
     test('content from a rule that fetches through its jsLib', () async {
       source.jsLib = 'function realContent(u) { return java.ajax(u); }';
