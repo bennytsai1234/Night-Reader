@@ -158,18 +158,23 @@ class LaunchEntranceMotion {
     required VoidCallback change,
     required VoidCallback restore,
   }) async {
+    var shown = false;
     try {
       await screen.capture(
         change: () {
           change();
+          shown = true;
           if (!_disposed) _revealed.value = true;
         },
         restore: () {
           restore();
+          shown = false;
           if (!_disposed) _revealed.value = false;
         },
       );
     } finally {
+      // 拍到一半就放棄（書架又回到載入中、被拆掉）：頁首與分頁列換回骨架。
+      if (shown && !_disposed) _revealed.value = false;
       donePreparing();
     }
   }
@@ -310,6 +315,8 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     );
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
+      // 沒有長出與呼吸，也就沒有呼吸前的準備：書架到了直接換成內容。
+      motion._breathScheduled = true;
       motion._breathing.value = true;
       motion._pauseOver.complete();
       return;

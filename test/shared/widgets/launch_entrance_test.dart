@@ -584,4 +584,94 @@ void main() {
       expect(finished, 1);
     });
   });
+
+  group('preparation that cannot go on', () {
+    /// 頁首一顆按鈕骨架加上書架；[reduce] 是系統要求減少動態，[shelf] 為
+    /// false 時拆掉書架、留下進場與頁首。
+    Widget bare({
+      required bool loading,
+      bool reduce = false,
+      bool shelf = true,
+    }) => MaterialApp(
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: reduce),
+          child: LaunchEntrance(
+            onFinished: () => finished++,
+            child: Column(
+              children: [
+                const LaunchSkeleton(child: SizedBox(width: 40, height: 40)),
+                Expanded(
+                  child: shelf
+                      ? Builder(
+                          builder: (context) => SkeletonSwitcher(
+                            loading: loading,
+                            entrance: LaunchEntrance.maybeOf(context),
+                            waitForCovers: CoverWait.onDevice,
+                            skeleton: const SkeletonBox(width: 40, height: 40),
+                            builder: (_) => const Text('內容'),
+                          ),
+                        )
+                      : const SizedBox(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    LaunchEntranceMotion motionIn(WidgetTester tester) =>
+        LaunchEntrance.maybeOf(tester.element(find.byType(LaunchSkeleton)))!;
+
+    /// 推進到呼吸前拍圖拍到一半：頁首已經暫時換成真的、還沒換回骨架。
+    Future<void> pumpUntilHalfCaptured(WidgetTester tester) async {
+      final motion = motionIn(tester);
+      for (var i = 0; i < 200; i++) {
+        await frame(tester);
+        if (motion.revealed.value && !motion.revealStarted) return;
+      }
+      fail('沒有拍到一半的時候');
+    }
+
+    testWidgets('reduced motion with the books arriving later still turns '
+        'into content and finishes once', (tester) async {
+      await tester.pumpWidget(bare(loading: true, reduce: true));
+      await tester.pumpWidget(bare(loading: false, reduce: true));
+      for (var i = 0; i < 150; i++) {
+        await frame(tester);
+      }
+      expect(find.text('內容'), findsOneWidget);
+      expect(finished, 1);
+    });
+
+    testWidgets('a reload halfway through the pictures turns the header back '
+        'into a skeleton and the breath still starts', (tester) async {
+      await tester.pumpWidget(bare(loading: false));
+      await pumpUntilHalfCaptured(tester);
+      final motion = motionIn(tester);
+      expect(motion.breathing.value, isFalse);
+      await tester.pumpWidget(bare(loading: true));
+      for (var i = 0; i < 30; i++) {
+        await frame(tester);
+      }
+      expect(motion.breathing.value, isTrue);
+      expect(motion.revealed.value, isFalse, reason: '頁首換回骨架');
+      expect(motion.screen.captured, isFalse);
+    });
+
+    testWidgets('removing the shelf halfway through the pictures drops them '
+        'and the breath still starts', (tester) async {
+      await tester.pumpWidget(bare(loading: false));
+      await pumpUntilHalfCaptured(tester);
+      final motion = motionIn(tester);
+      await tester.pumpWidget(bare(loading: false, shelf: false));
+      for (var i = 0; i < 30; i++) {
+        await frame(tester);
+      }
+      expect(motion.screen.captured, isFalse, reason: '兩張圖放掉');
+      expect(motion.revealed.value, isFalse);
+      expect(motion.breathing.value, isTrue);
+    });
+  });
 }

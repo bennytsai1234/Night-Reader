@@ -1072,6 +1072,9 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   @override
   void dispose() {
     widget.entrance?.skeleton.removeStatusListener(_onEntranceStatus);
+    // 拍到一半、拍好還沒播或換場中就被拆掉：結束這一輪、放掉圖，骨架照常
+    // 呼吸（換場由這個元件接著播，拆掉就沒有人播了）。
+    _snapshotting?.finish();
     widget.entrance?.donePreparing();
     _controller.dispose();
     super.dispose();
