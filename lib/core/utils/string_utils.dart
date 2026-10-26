@@ -156,8 +156,10 @@ class StringUtils {
   /// 把更新時間或章數放在字數欄）時回傳空字串，不把別的資訊當成字數顯示。
   static String wordCountFormat(dynamic words) {
     if (words == null) return '';
-    if (words is num) return _formatIntWordCount(words.round());
-    return _formatIntWordCount(_parseWordCount(words.toString()) ?? 0);
+    final count = words is num
+        ? _wordCountOrNull(words.toDouble())
+        : _parseWordCount(words.toString());
+    return _formatIntWordCount(count ?? 0);
   }
 
   /// 一整段就是一個字數：可有「字數：」「共」「約」這類前綴，數字可帶小數，
@@ -180,6 +182,9 @@ class StringUtils {
     'k': 1000,
   };
 
+  /// 一兆字：沒有小說這麼長。
+  static const _maxWordCount = 1e12;
+
   /// 數字裡的千分位逗號（後面剛好三位數）。
   static final _thousandsSeparator = RegExp(r'(?<=\d),(?=\d{3}(?!\d))');
 
@@ -189,8 +194,14 @@ class StringUtils {
     if (match == null) return null;
     final number = double.parse(match.group(1)!);
     final unit = match.group(2)?.toLowerCase();
-    return (number * (unit == null ? 1 : _wordCountUnits[unit]!)).round();
+    return _wordCountOrNull(
+      number * (unit == null ? 1 : _wordCountUnits[unit]!),
+    );
   }
+
+  /// 一長串數字（甚至算成無限大）不是字數；上限也讓後面換算萬、千時不溢位。
+  static int? _wordCountOrNull(double words) =>
+      words < _maxWordCount ? words.round() : null;
 
   static String _formatIntWordCount(int words) {
     if (words <= 0) return '';
