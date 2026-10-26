@@ -104,6 +104,8 @@ dependencies:
   get_it: ^9.3.0
   logger: ^2.8.0
   permission_handler: ^13.0.2
+  # 規則 JS 停住等網路 isolate（ADR 0034）：跨 isolate 的同步信箱。
+  native_synchronization: ^0.3.1
 
 dev_dependencies:
   flutter_test:

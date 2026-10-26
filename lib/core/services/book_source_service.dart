@@ -30,6 +30,7 @@ class BookSourceService {
     CancelToken? cancelToken,
   }) => _runOnSource(
     _bookInfoTask(source, book),
+    source: source,
     book: book,
     cancelToken: cancelToken,
   );
@@ -43,6 +44,7 @@ class BookSourceService {
     CancelToken? cancelToken,
   }) => _runOnSource(
     _coverAndWordCountTask(source, book),
+    source: source,
     cancelToken: cancelToken,
   );
 
@@ -62,6 +64,7 @@ class BookSourceService {
       pageConcurrency: pageConcurrency,
       requireComplete: requireComplete,
     ),
+    source: source,
     book: book,
     cancelToken: cancelToken,
   );
@@ -85,6 +88,7 @@ class BookSourceService {
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
     ),
+    source: source,
     book: book,
     chapter: chapter,
     cancelToken: cancelToken,
@@ -109,6 +113,7 @@ class BookSourceService {
       filter: filter,
       shouldBreak: shouldBreak,
     ),
+    source: source,
     cancelToken: cancelToken,
   );
 
@@ -120,6 +125,7 @@ class BookSourceService {
     CancelToken? cancelToken,
   }) => _runOnSource(
     _exploreTask(source, url, page: page),
+    source: source,
     cancelToken: cancelToken,
   );
 
@@ -128,7 +134,7 @@ class BookSourceService {
   Future<List<ExploreKind>> exploreKinds(
     String? exploreUrl, {
     BookSource? source,
-  }) => _runOnSource(_exploreKindsTask(exploreUrl, source));
+  }) => _runOnSource(_exploreKindsTask(exploreUrl, source), source: source);
 
   /// 精確搜尋：書名與作者都相同的第一本。
   Future<List<SearchBook>> preciseSearch(
@@ -282,15 +288,18 @@ final class _Ran<R> {
 ///
 /// 改了什麼由工作本身在開始與結束時比對（[_tracked]），所以送出前排隊的
 /// 這段時間、以及執行期間畫面執行緒改了這本書（例如閱讀進度），都不會被當
-/// 成規則的改動、被複本的舊值蓋掉。
+/// 成規則的改動、被複本的舊值蓋掉。同一個 [source] 的工作送到同一條書源
+/// isolate（[SourceIsolate.run] 的 `affinity`）。
 Future<R> _runOnSource<R>(
   _Work<R> work, {
+  BookSource? source,
   Book? book,
   BookChapter? chapter,
   CancelToken? cancelToken,
 }) async {
   final ran = await SourceIsolate.run(
     _tracked(work, book, chapter),
+    affinity: source?.bookSourceUrl,
     cancelToken: cancelToken,
   );
   if (book != null) _apply(bookRuleFields, ran.bookChanges, book);

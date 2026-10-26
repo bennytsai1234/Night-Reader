@@ -99,6 +99,18 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.connected(DatabaseConnection super.connection);
   AppDatabase.forTesting(super.executor);
 
+  /// 不經過 drift isolate、直接連到 [path] 的另一條連線。只給網路 isolate
+  /// 用（`SourceIo`）：drift isolate 有交易進行時其他查詢都要排隊，它替停住
+  /// 的書源 isolate 讀資料庫時不能排在那段交易後面。這條連線的寫入不會更新
+  /// 別人的 `watch()`。
+  AppDatabase.separateConnection(String path)
+    : _separateConnection = true,
+      super(DatabaseConnection(_openFile(path)));
+
+  /// [AppDatabase.separateConnection]：打開時不做要寫入的整理
+  /// （`PRAGMA optimize`），停住的書源 isolate 手上有交易時那會等到逾時。
+  bool _separateConnection = false;
+
   /// 執行查詢的 drift isolate。主 isolate 與書源 isolate 都連到它；兩邊各自
   /// 開連線的話，一邊的寫入不會更新另一邊的 `watch()`（drift 文件 Isolates）。
   static Future<DriftIsolate> get sharedIsolate => _sharedIsolate.future;
@@ -106,6 +118,10 @@ class AppDatabase extends _$AppDatabase {
       Completer<DriftIsolate>()
         // 開不起來時錯誤由查詢那一端回報；沒有人等這個 isolate 時不另外報錯。
         ..future.ignore();
+
+  /// [sharedIsolate] 開的資料庫檔案。
+  static Future<String?> get sharedFile => _sharedFile.future;
+  static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
   int get schemaVersion => 7;
@@ -161,6 +177,7 @@ class AppDatabase extends _$AppDatabase {
       }
     },
     beforeOpen: (_) async {
+      if (_separateConnection) return;
       await customStatement('PRAGMA optimize');
     },
   );
@@ -280,11 +297,16 @@ DatabaseConnection _openConnection() {
   return DatabaseConnection.delayed(
     Future(() async {
       try {
-        final isolate = await _spawnDatabaseIsolate(await _databasePath());
+        final path = await _databasePath();
+        final isolate = await spawnDatabaseIsolate(path);
         AppDatabase._sharedIsolate.complete(isolate);
+        AppDatabase._sharedFile.complete(path);
         return await isolate.connect();
       } catch (error, stackTrace) {
         AppDatabase._sharedIsolate.completeError(error, stackTrace);
+        if (!AppDatabase._sharedFile.isCompleted) {
+          AppDatabase._sharedFile.complete(null);
+        }
         rethrow;
       }
     }),
@@ -308,6 +330,19 @@ Future<String> _databasePath() async {
   return file.path;
 }
 
+/// 開一個執行 [path] 查詢的 drift isolate（[AppDatabase.sharedIsolate]）。
 /// 開資料庫的函式會送進新的 isolate，所以在這裡建立，只捕捉檔案路徑。
-Future<DriftIsolate> _spawnDatabaseIsolate(String path) =>
-    DriftIsolate.spawn(() => NativeDatabase(File(path)));
+Future<DriftIsolate> spawnDatabaseIsolate(String path) =>
+    DriftIsolate.spawn(() => _openFile(path));
+
+/// 資料庫檔案用 WAL：drift isolate 與網路 isolate 各有一條連線
+/// （[AppDatabase.separateConnection]），讀和寫可以同時進行，讀的一方不會
+/// 讓另一條連線的交易提交失敗（ADR 0034）。兩條連線同時寫才要等，等的上限
+/// 遠長於最長的寫入（換掉整本目錄）。
+QueryExecutor _openFile(String path) => NativeDatabase(
+  File(path),
+  setup: (database) {
+    database.execute('PRAGMA journal_mode = WAL');
+    database.execute('PRAGMA busy_timeout = 5000');
+  },
+);

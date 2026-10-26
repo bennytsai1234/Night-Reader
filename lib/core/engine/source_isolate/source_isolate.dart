@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:cookie_jar/cookie_jar.dart';
@@ -7,6 +8,8 @@ import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
+import 'package:native_synchronization/mailbox.dart';
+import 'package:native_synchronization/sendable.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
@@ -22,51 +25,92 @@ import 'package:night_reader/core/services/rate_limiter.dart';
 
 import 'isolate_channel.dart';
 
+part 'blocking_call.dart';
+
 /// 書源 isolate：常駐的背景 isolate，書源的抓取與解析（含規則 JS）在這裡
-/// 跑，主 isolate 只收結果，畫面不會被解析卡住（ADR 0028）。它是一個
-/// [SourceWorker]。
+/// 跑，主 isolate 只收結果，畫面不會被解析卡住（ADR 0028）。共有
+/// [workerCount] 條，每條是一個 [SourceWorker]；規則 JS 等網路時那一條整條
+/// 停住（[BlockingCall]，ADR 0034），其他條照常跑。
 abstract final class SourceIsolate {
   /// 只在 App 的主 isolate 開（`main.dart`）。測試與 Workmanager 不開，
   /// [run] 原地執行。
   static bool enabled = false;
 
-  static Future<SourceWorker?>? _worker;
+  /// 書源 isolate 的條數。規則 JS 等網路時整條停住，一條的話一個書源在等，
+  /// 其他書源全部排隊；搜尋一次上百個書源，等的時間會疊起來。每條約多
+  /// 8MB（幾乎都是繁簡字典）。手機多半八核，畫面、繪製、資料庫、網路
+  /// （[SourceIo]）各佔一條，留四條給書源。
+  static const int workerCount = 4;
+
+  static List<Future<SourceWorker?>>? _workers;
+  static int _nextUnkeyed = 0;
 
   /// 開始開書源 isolate（[enabled] 時），不等它開好，[run] 會等。開不起來
-  /// 時記下原因，書源工作改回主 isolate 執行。[database] 預設為主 isolate
-  /// 的資料庫。
-  static void start({Future<DriftIsolate>? database}) {
-    if (!enabled || _worker != null) return;
-    _worker =
-        SourceWorker.spawn(
-          debugName: 'SourceIsolate',
-          withDictionaries: true,
-          database: database,
-        ).then<SourceWorker?>(
-          (worker) => worker,
-          onError: (Object error, StackTrace stackTrace) {
-            AppLog.e(
-              '書源 isolate 開不起來，書源工作改在主 isolate 執行: $error',
-              error: error,
-              stackTrace: stackTrace,
-            );
-            return null;
-          },
-        );
+  /// 的那一條記下原因，送到那一條的工作改回主 isolate 執行。[database]
+  /// 預設為主 isolate 的資料庫；[databaseFile] 是它的檔案，網路 isolate
+  /// 用它另開一條連線（見 [SourceIo]），沒給時（例如測試的記憶體資料庫）
+  /// 改連同一個。給了 [database] 的，要先開過（查詢過一次）再呼叫。
+  static void start({
+    Future<DriftIsolate>? database,
+    Future<String?>? databaseFile,
+  }) {
+    if (!enabled || _workers != null) return;
+    SourceIo.configure(
+      database: database,
+      databaseFile:
+          databaseFile ?? (database == null ? AppDatabase.sharedFile : null),
+    );
+    // 先在主 isolate 把資料庫開好：版本升級（migration）跑完，網路 isolate
+    // 另開的連線才不會碰到升級到一半的資料庫，也不必先經過 drift isolate
+    // 確認（那會排在書源 isolate 的交易後面，見 [SourceIo]）。
+    final opened = database == null
+        ? AppDatabase().customSelect('SELECT 1').get()
+        : Future<void>.value();
+    _workers = [
+      for (var i = 1; i <= workerCount; i++)
+        opened
+            .then(
+              (_) => SourceWorker.spawn(
+                debugName: 'SourceIsolate $i',
+                withDictionaries: true,
+                database: database,
+              ),
+            )
+            .then<SourceWorker?>(
+              (worker) => worker,
+              onError: (Object error, StackTrace stackTrace) {
+                AppLog.e(
+                  '第 $i 條書源 isolate 開不起來，送到這條的書源工作改在主 isolate '
+                  '執行: $error',
+                  error: error,
+                  stackTrace: stackTrace,
+                );
+                return null;
+              },
+            ),
+    ];
   }
 
   /// 在書源 isolate 執行 [task] 並傳回結果；沒開時原地執行。[task] 拿到的
   /// [CancelToken] 屬於執行它的 isolate，[cancelToken] 取消時跟著取消。
   /// 錯誤照原樣丟出（送不回來時見 [IsolateTaskError]）。
   ///
+  /// [affinity] 相同的工作送到同一條：同一個書源的工作共用那條的 jsLib 與
+  /// 規則引擎快取；下載一輪的書與章節只存在規劃它的那一條。沒給時輪流送。
+  ///
   /// [task] 連同它捕捉的變數會複製到書源 isolate，要在只捕捉書源、書籍與
   /// 字串這類資料的地方建立（例如頂層函式），不能捕捉頁面、回呼或資料庫
   /// 連線。
   static Future<R> run<R>(
     Future<R> Function(CancelToken cancelToken) task, {
+    String? affinity,
     CancelToken? cancelToken,
   }) async {
-    final worker = await _worker;
+    final workers = _workers;
+    final worker = workers == null
+        ? null
+        : await workers[(affinity?.hashCode ?? _nextUnkeyed++) %
+              workers.length];
     if (worker == null) {
       // 測試多半不開書源 isolate；照樣試送一次，捕捉了送不出去的東西時
       // 在測試裡就失敗，不等到 App 裡才改回主 isolate。
@@ -82,12 +126,66 @@ abstract final class SourceIsolate {
     }
   }
 
-  /// 測試用：結束書源 isolate，回到原地執行。
+  /// 測試用：結束書源 isolate 與網路 isolate，回到原地執行。
   @visibleForTesting
   static Future<void> stop() async {
-    final worker = await _worker;
-    worker?.kill(StateError('書源 isolate 已結束'));
+    final workers = _workers;
+    _workers = null;
+    for (final worker in await Future.wait(
+      workers ?? const <Future<SourceWorker?>>[],
+    )) {
+      worker?.kill(StateError('書源 isolate 已結束'));
+    }
+    await SourceIo.stop();
+  }
+}
+
+/// 網路 isolate：替停住的書源 isolate 做要等的事（[BlockingCall]）——網路、
+/// 快取與 Cookie 的資料庫讀取、平台的檔案路徑。它自己從不停住，也不跑規則
+/// JS，所以停住的那一條等得到它（ADR 0034）。
+///
+/// 資料庫另開一條連線（[_databaseFile]）：drift 的交易進行中，同一個 drift
+/// isolate 的其他查詢都要等它結束；停住的書源 isolate 手上若有一段交易，
+/// 它等的讀取又排在這段交易後面，兩邊就互相等死。
+abstract final class SourceIo {
+  static Future<DriftIsolate>? _database;
+  static Future<String?>? _databaseFile;
+  static Future<SourceWorker>? _worker;
+
+  static void configure({
+    Future<DriftIsolate>? database,
+    Future<String?>? databaseFile,
+  }) {
+    _database = database;
+    _databaseFile = databaseFile;
+  }
+
+  /// 第一次有書源 isolate 停住時才開；結束了（例如當掉）下一次再開。
+  static Future<SourceWorker> get worker => _worker ??= () async {
+    try {
+      final worker = await SourceWorker._spawn(
+        debugName: 'SourceIo',
+        role: _Role.io,
+        withDictionaries: false,
+        database: _database,
+        databaseFile: await _databaseFile,
+      );
+      worker._onExit = () => _worker = null;
+      return worker;
+    } catch (_) {
+      _worker = null;
+      rethrow;
+    }
+  }();
+
+  static Future<void> stop() async {
+    final worker = _worker;
     _worker = null;
+    try {
+      (await worker)?.kill(StateError('網路 isolate 已結束'));
+    } catch (_) {
+      // 本來就沒開起來。
+    }
   }
 }
 
@@ -121,10 +219,19 @@ bool _sendable(Object task) {
 /// - 快取與 Cookie 的記憶體層：每個 isolate 各一份，寫入轉送給其他所有
 ///   isolate。
 ///
-/// 書源 isolate 是一個常駐的 worker；書源校驗每個書源開一個，逾時就直接
+/// - 規則 JS 要等的呼叫：worker 整條停住，交給網路 isolate（[SourceIo]）
+///   做，結果由主 isolate 放進 worker 的 [_replies]（[BlockingCall]）。
+///
+/// 書源 isolate 是常駐的 worker；書源校驗每個書源開一個，逾時就直接
 /// 結束它，卡住的同步規則 JS 也停得下來。
 final class SourceWorker {
-  SourceWorker._(this._isolate, this._channel, this._inbox, this._errors);
+  SourceWorker._(
+    this._isolate,
+    this._channel,
+    this._inbox,
+    this._errors,
+    this._replies,
+  );
 
   final Isolate _isolate;
   final IsolateChannel _channel;
@@ -133,6 +240,17 @@ final class SourceWorker {
   int _nextTaskId = 0;
   bool _killed = false;
 
+  /// 停住的 worker 從這裡拿回結果。由主 isolate 建立與擁有：worker 被結束
+  /// 時網路 isolate 可能還在做它的事，信箱的記憶體不能跟著 worker 釋放。
+  final Mailbox _replies;
+
+  /// worker 現在停住等的那一次呼叫。停住的 worker 不會再發，所以同時只有
+  /// 一次。
+  _Blocked? _blocked;
+
+  /// isolate 結束（當掉或被結束）時呼叫一次。
+  void Function()? _onExit;
+
   /// 這個 worker 借走、還沒交回的限流紀錄；結束 worker 時一併交回，否則
   /// 固定間隔限流的書源之後的請求會一直排隊。
   final Set<int> _tickets = {};
@@ -140,9 +258,11 @@ final class SourceWorker {
   /// 活著的 worker；主 isolate 的記憶體寫入轉送給它們。
   static final Set<SourceWorker> _live = {};
 
-  /// worker 借走、還沒交回的限流紀錄。
+  /// worker 借走、還沒交回的限流紀錄。worker 停住時它的紀錄提早交回，
+  /// 這裡留著 null，之後真的交回時什麼都不做。
   static final Map<int, ConcurrentRecord?> _rateTickets = {};
   static int _nextRateTicket = 0;
+  static int _nextBlockedCall = 0;
 
   /// 開一個 worker，等它連上資料庫、網路設定好才傳回。[withDictionaries]
   /// 為 false 時不載入繁簡字典（校驗用，省下每個書源解析一次字典），
@@ -151,9 +271,25 @@ final class SourceWorker {
     required String debugName,
     required bool withDictionaries,
     Future<DriftIsolate>? database,
+  }) => _spawn(
+    debugName: debugName,
+    role: _Role.source,
+    withDictionaries: withDictionaries,
+    database: database,
+  );
+
+  /// [databaseFile] 只給網路 isolate：另開一條連到這個檔案的連線，不排在
+  /// drift isolate 的交易後面（見 [SourceIo]）。
+  static Future<SourceWorker> _spawn({
+    required String debugName,
+    required _Role role,
+    required bool withDictionaries,
+    Future<DriftIsolate>? database,
+    String? databaseFile,
   }) async {
     final inbox = ReceivePort('$debugName main');
     final errors = ReceivePort('$debugName errors');
+    final exit = ReceivePort('$debugName exit');
     errors.listen(_recordUncaughtError);
     final remote = Completer<SendPort>();
     IsolateChannel? channel;
@@ -174,10 +310,12 @@ final class SourceWorker {
         // 都等不到回覆。
         errorsAreFatal: false,
         onError: errors.sendPort,
+        onExit: exit.sendPort,
       );
     } catch (_) {
       inbox.close();
       errors.close();
+      exit.close();
       rethrow;
     }
     late final SourceWorker worker;
@@ -186,14 +324,21 @@ final class SourceWorker {
       onRequest: (request) => _answerWorker(worker, request),
       onNotice: (notice) => _onWorkerNotice(worker, notice),
     );
-    worker = SourceWorker._(isolate, channel, inbox, errors);
+    worker = SourceWorker._(isolate, channel, inbox, errors, Mailbox());
+    exit.listen((_) {
+      exit.close();
+      worker.kill(StateError('$debugName 已結束'));
+    });
     _live.add(worker);
     _installMainMirrors();
     try {
       await channel.request(
         _Initialize(
+          role: role,
           databasePort:
               (await (database ?? AppDatabase.sharedIsolate)).connectPort,
+          databaseFile: databaseFile,
+          replies: role == _Role.source ? worker._replies.asSendable : null,
           rootToken: RootIsolateToken.instance,
           dictionaries: withDictionaries ? await _dictionaries() : null,
           fetchPolyfill: await _fetchPolyfill(),
@@ -222,7 +367,11 @@ final class SourceWorker {
     }
     unawaited(
       cancelToken?.whenCancel.then((_) {
-        if (!_killed) _channel.notify(_CancelTask(id));
+        if (_killed) return;
+        _channel.notify(_CancelTask(id));
+        // 停住的 worker 收不到取消，替它把等的那一次也取消。
+        final blocked = _blocked;
+        if (blocked != null && blocked.taskId == id) blocked.cancel();
       }),
     );
     return await result as R;
@@ -238,10 +387,44 @@ final class SourceWorker {
       ConcurrentRateLimiter.release(_rateTickets.remove(ticket));
     }
     _tickets.clear();
+    _blocked?.cancel();
+    // 停在原生的等待裡時 isolate 結束不了；關掉信箱叫醒它。
+    _replies.close();
     _channel.close(error);
     _isolate.kill(priority: Isolate.immediate);
     _inbox.close();
     _errors.close();
+    _onExit?.call();
+  }
+
+  /// worker 停住了：交給網路 isolate 做 [block]，把結果放進 [_replies]。
+  Future<void> _serveBlock(_Block block) async {
+    final call = _Blocked(block.taskId, _nextBlockedCall++);
+    _blocked = call;
+    _releaseTicketsWhileBlocked();
+    Uint8List outcome;
+    try {
+      final io = await SourceIo.worker;
+      call.io = io;
+      if (call.cancelled) io._channel.notify(_CancelPerform(call.id));
+      final reply = await io._channel.request(_Perform(call.id, block.task));
+      outcome = (reply as TransferableTypedData).materialize().asUint8List();
+    } catch (error) {
+      outcome = _Outcome.failure(error);
+    }
+    _blocked = null;
+    if (_killed) return;
+    _replies.put(outcome);
+  }
+
+  /// 停住的 worker 手上的限流名額先交回：它在等的請求可能正是同一個書源，
+  /// 名額卻被它自己凍住的另一個請求佔著，網路 isolate 永遠借不到。被凍住
+  /// 的那些請求多半已經送出，回應躺在 worker 的連線裡等它醒來。
+  void _releaseTicketsWhileBlocked() {
+    for (final ticket in _tickets) {
+      ConcurrentRateLimiter.release(_rateTickets[ticket]);
+      _rateTickets[ticket] = null;
+    }
   }
 
   // ── 主 isolate 一次讀好、給每個 worker 的資源 ──────────────────────
@@ -326,8 +509,14 @@ final class SourceWorker {
           throw StateError('書源 worker 已結束');
         }
         final ticket = _nextRateTicket++;
-        _rateTickets[ticket] = record;
         from._tickets.add(ticket);
+        // 排到時 worker 停住了：它收不到這張票，名額照停住的規則先交回。
+        if (from._blocked != null) {
+          ConcurrentRateLimiter.release(record);
+          _rateTickets[ticket] = null;
+        } else {
+          _rateTickets[ticket] = record;
+        }
         return ticket;
     }
     throw UnsupportedError('Unknown source worker request: $request');
@@ -335,6 +524,8 @@ final class SourceWorker {
 
   static void _onWorkerNotice(SourceWorker from, Object notice) {
     switch (notice) {
+      case final _Block block:
+        unawaited(from._serveBlock(block));
       case _Log(:final message, :final error, :final stackTrace, :final toast):
         AppLog.put(
           message,
@@ -394,14 +585,22 @@ CancelToken? get currentSourceCancelToken =>
 
 final Object _cancelTokenZoneKey = Object();
 
+/// worker 上正在執行的工作在主 isolate 的編號；停住時主 isolate 用它把
+/// 那一次呼叫跟著工作一起取消。
+final Object _taskIdZoneKey = Object();
+
 /// 在記著 [cancelToken] 的 Zone 裡執行 [task]。沒給時沿用外層工作的：書源
 /// 工作裡又叫 [SourceIsolate.run] 的（原地執行），跟著外層一起取消。
 Future<R> _runCancellable<R>(
   Future<R> Function(CancelToken cancelToken) task,
-  CancelToken? cancelToken,
-) {
+  CancelToken? cancelToken, {
+  int? taskId,
+}) {
   final token = cancelToken ?? currentSourceCancelToken ?? CancelToken();
-  return runZoned(() => task(token), zoneValues: {_cancelTokenZoneKey: token});
+  return runZoned(
+    () => task(token),
+    zoneValues: {_cancelTokenZoneKey: token, _taskIdZoneKey: ?taskId},
+  );
 }
 
 /// 快取裡存的值理論上都是字串；送不過去的不同步，只記下來。
@@ -418,6 +617,7 @@ void _tryNotify(IsolateChannel channel, Object notice) {
 void _main(SendPort mainPort) {
   final inbox = ReceivePort('SourceWorker');
   final tasks = <int, CancelToken>{};
+  final performs = <int, CancelToken>{};
   late final IsolateChannel channel;
   channel = IsolateChannel(
     mainPort,
@@ -427,9 +627,19 @@ void _main(SendPort mainPort) {
           final cancelToken = CancelToken();
           tasks[id] = cancelToken;
           try {
-            return await _runCancellable(task, cancelToken);
+            return await _runCancellable(task, cancelToken, taskId: id);
           } finally {
             tasks.remove(id);
+          }
+        case _Perform(:final id, :final task):
+          final cancelToken = CancelToken();
+          performs[id] = cancelToken;
+          try {
+            return TransferableTypedData.fromList([
+              await _perform(task, cancelToken),
+            ]);
+          } finally {
+            performs.remove(id);
           }
         case final _Initialize init:
           await _initialize(init, channel);
@@ -441,6 +651,8 @@ void _main(SendPort mainPort) {
       switch (notice) {
         case _CancelTask(:final id):
           tasks[id]?.cancel('已取消');
+        case _CancelPerform(:final id):
+          performs[id]?.cancel('已取消');
         case _CacheWrite(:final key, :final value, :final deadline):
           CacheManager().applyMirroredWrite(key, value, deadline);
         case _CookieWrite(:final domain, :final cookie):
@@ -506,10 +718,35 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
     ChineseUtils.initializeFromDictionaryData(dictionaries);
   }
 
-  final connection = await DriftIsolate.fromConnectPort(init.databasePort)
-      .connect();
-  registerDatabase(AppDatabase.connected(connection));
+  final databaseFile = init.databaseFile;
+  // 另開的連線不經過 drift isolate：開書源 isolate 之前主 isolate 已經把
+  // 資料庫開好（[SourceIsolate.start]），版本升級（migration）跑完了。
+  registerDatabase(
+    databaseFile == null
+        ? AppDatabase.connected(
+            await DriftIsolate.fromConnectPort(init.databasePort).connect(),
+          )
+        : AppDatabase.separateConnection(databaseFile),
+  );
   await NetworkService().init(cookieJar: _MainCookieJar(channel));
+
+  final replies = init.replies;
+  if (init.role == _Role.source && replies != null) {
+    BlockingCall._install(channel, replies.materialize());
+  }
+}
+
+/// 網路 isolate 做停住的 worker 交來的 [task]，結果編成一段位元組
+/// （[_Outcome]）。取消時 [task] 裡的請求跟著停。
+Future<Uint8List> _perform(
+  Future<Object?> Function() task,
+  CancelToken cancelToken,
+) async {
+  try {
+    return _Outcome.success(await _runCancellable((_) => task(), cancelToken));
+  } catch (error) {
+    return _Outcome.failure(error);
+  }
 }
 
 /// Cookie 檔在主 isolate：載入與寫入都交給它。
@@ -553,16 +790,26 @@ final class _MainRateLimits implements ConcurrentRateDelegate {
 
 // ── 訊息 ────────────────────────────────────────────────────────────
 
+/// 書源 isolate 跑書源工作、可以停住等；網路 isolate 替它們做要等的事，
+/// 自己從不停住（[SourceIo]）。
+enum _Role { source, io }
+
 final class _Initialize {
   const _Initialize({
+    required this.role,
     required this.databasePort,
+    required this.databaseFile,
+    required this.replies,
     required this.rootToken,
     required this.dictionaries,
     required this.fetchPolyfill,
     required this.webViewUserAgent,
   });
 
+  final _Role role;
   final SendPort databasePort;
+  final String? databaseFile;
+  final Sendable<Mailbox>? replies;
   final RootIsolateToken? rootToken;
   final List<String>? dictionaries;
   final String? fetchPolyfill;
@@ -580,6 +827,46 @@ final class _CancelTask {
   const _CancelTask(this.id);
 
   final int id;
+}
+
+/// worker 停住了，請主 isolate 交給網路 isolate 做 [task]。[taskId] 是它
+/// 停在哪一個書源工作裡。
+final class _Block {
+  const _Block(this.taskId, this.task);
+
+  final int? taskId;
+  final Future<Object?> Function() task;
+}
+
+/// 主 isolate 請網路 isolate 做停住的 worker 交來的 [task]。
+final class _Perform {
+  const _Perform(this.id, this.task);
+
+  final int id;
+  final Future<Object?> Function() task;
+}
+
+final class _CancelPerform {
+  const _CancelPerform(this.id);
+
+  final int id;
+}
+
+/// 主 isolate 這邊記著的、某個 worker 停住等的那一次呼叫。
+final class _Blocked {
+  _Blocked(this.taskId, this.id);
+
+  final int? taskId;
+  final int id;
+
+  /// 做這件事的網路 isolate；還在開時是 null，開好後看 [cancelled]。
+  SourceWorker? io;
+  bool cancelled = false;
+
+  void cancel() {
+    cancelled = true;
+    io?._channel.notify(_CancelPerform(id));
+  }
 }
 
 final class _Log {
