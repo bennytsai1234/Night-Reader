@@ -1,5 +1,4 @@
-// 逐格錄影：動畫的候選給使用者在對話裡逐格比較（AGENTS.md「視覺由使用者在
-// 圖上選」）。一格一格推進（16ms），每格記下畫面、這格在哪一段、主執行緒花了
+// 逐格錄影：做成動畫儀表板放進對話（`animation-dashboard` 技能）。一格一格推進（16ms），每格記下畫面、這格在哪一段、主執行緒花了
 // 多久（同 `frame_budget.dart`），之後用 `tool/frame_viewer/build.py` 做成
 // 頁面。
 //
@@ -73,10 +72,26 @@ Future<void> recordAnimation(
           box = box.parent!;
         }
         final layer = box.debugLayer! as OffsetLayer;
-        // 根節點的範圍是實體像素：縮回手機的邏輯尺寸。
+        // 根節點的範圍是實體像素：先照實體像素畫，再縮成手機的邏輯尺寸。
+        // 直接用縮小的比例畫，定格換場那種貼上去的圖（照裝置像素比拍的）會
+        // 被縮小，直接畫的文字與形狀卻是照小尺寸重畫，兩者邊緣不一樣：換上
+        // 圖、換回真畫面的那一格整片都在變，畫面其實沒動。
         final ratio = 1 / tester.view.devicePixelRatio;
         await tester.runAsync(() async {
-          final image = await layer.toImage(box.paintBounds, pixelRatio: ratio);
+          final full = await layer.toImage(box.paintBounds);
+          final w = (full.width * ratio).round();
+          final h = (full.height * ratio).round();
+          final recorder = ui.PictureRecorder();
+          Canvas(recorder).drawImageRect(
+            full,
+            Offset.zero & Size(full.width.toDouble(), full.height.toDouble()),
+            Offset.zero & Size(w.toDouble(), h.toDouble()),
+            Paint()..filterQuality = FilterQuality.medium,
+          );
+          final picture = recorder.endRecording();
+          final image = await picture.toImage(w, h);
+          picture.dispose();
+          full.dispose();
           final bytes = await image.toByteData(
             format: ui.ImageByteFormat.rawRgba,
           );
