@@ -7,6 +7,10 @@
   - 被刪節號截掉的長章名：比骨架的條高 0.6。放大截圖看，字和條的相對位置跟一般章名一樣，可能是刪節號讓量法偏掉，還沒證實。
 - 細節檢查之後要接書架、書籍詳情、發現等其他骨架頁，等使用者說要不要做；全部清乾淨後再拿掉 `dart_test.yaml` 的跳過，讓它擋推送。
 
+- 全 App 動畫儀表板探索（半成品在 `wip/animation-survey`，不合併）：把每個開關、按鈕、滑動錄成動畫儀表板，找**動畫播放中**主執行緒超過 8ms 的格子；畫面靜止時的尖峰不算問題（使用者 2026-10-27 定的）。11 區腳本已寫好、乾跑過，但只正式錄了換分頁、開 App、書架淺色。使用者確認開 App 那頁的看法與量法對，總覽頁還在照尖峰排序，要改成「動畫中超過 8ms 的格數」。照全域指示，先拿一個操作（建議書架切換列表／網格）做出新版頁面給使用者看，同意了才一區一區擴大；上次沒先給使用者看就整批開跑，白跑。錄影一段約 80MB，要放 D 槽；量時間時不能有別的 `flutter test` 同時跑。
+- 開 App 書架 6 本時，呼吸中第 65 格每次都 14–21ms（深色、不錄影也有；26 本沒有），時間全在「幀前」，這一格沒有元件重建。已排除：計時器與非同步回呼（每個都 <3ms）、新生區回收、老年區大回收（落點每次不同，第 65 格不變），所以不是靠提前回收能解的。剩下每格開頭推動畫的回呼（ticker 監聽器）沒量，下一步逐個計時；探針在分支的 `test/_screens/survey/launch_probe_test.dart`。
+- 搜尋結果的篩選面板（`lib/features/search/search_page.dart` 約 739 行）用 `Provider.value` 包 `SearchProvider`：debug 會丟例外，正式版面板裡切換篩選時面板本身不更新；改成 `ChangeNotifierProvider.value`。失敗書源面板（約 651 行）同樣寫法，但外面有 `ListenableBuilder` 會跟著更新。
+
 - 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）。還沒做，照源倉庫 803 個文字書源的用量排：登入（`loginUrl` 242、`loginUi` 107 個書源）、`startBrowser(Await)`（148，可在看不到的瀏覽器裡載入、不跳畫面）、`data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫）、`longToast`、`androidId` 等。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
 
 ## 先不做
