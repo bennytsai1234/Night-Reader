@@ -396,6 +396,48 @@ void main() {
     expect(provider.isSearching, isFalse);
   });
 
+  testWidgets('the filter sheet updates as filters are toggled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+    provider.onSearchStart();
+    provider.onSearchSuccess([
+      SearchBook(
+        bookUrl: 'https://b.example/甲書',
+        name: '甲書',
+        author: '作者',
+        origin: 'https://s.example',
+        originName: '甲源',
+      ),
+    ]);
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('篩選'));
+    await tester.pumpAndSettle();
+    final sheet = find
+        .ancestor(of: find.text('篩選搜尋結果'), matching: find.byType(SafeArea))
+        .first;
+    Finder check() =>
+        find.descendant(of: sheet, matching: find.byIcon(Icons.check_rounded));
+    expect(check(), findsNothing);
+
+    await tester.tap(find.descendant(of: sheet, matching: find.text('甲源')));
+    await tester.pumpAndSettle();
+    expect(provider.sourceFilters, contains('甲源'));
+    expect(check(), findsOneWidget);
+  });
+
   testWidgets('relevance order names each tier above its first book', (
     tester,
   ) async {
