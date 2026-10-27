@@ -1,7 +1,6 @@
 // 臨時：全 App 下載區的動畫儀表板探索（每個使用者操作一步）。
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/download_service.dart';

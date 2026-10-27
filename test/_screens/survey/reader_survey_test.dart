@@ -96,8 +96,6 @@ bool _drawerOpen() {
   return box.localToGlobal(Offset.zero).dx.abs() < 0.5;
 }
 
-bool _drawerGone() => find.byType(Drawer).evaluate().isEmpty;
-
 Finder get _drawerList => find.descendant(
   of: find.byType(ReaderV2ChaptersDrawer),
   matching: find.byType(ListView),
