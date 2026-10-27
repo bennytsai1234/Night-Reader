@@ -712,12 +712,16 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // 章內進度與目前章各自是小訊號，資訊列自己聽，捲動途中不重建閱讀頁。
     final progressListenable = shell.progressListenable;
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        progressListenable,
-        shell.navigation.current,
-      ]),
-      builder: (context, _) => _buildRow(context, progressListenable?.value),
+    // 和正文一樣不跟手機的字型大小放大：頁尾那一列（kReaderFooterRowHeight）
+    // 放不下放大後的字，會被螢幕底邊切掉（DESIGN.md「閱讀器」）。
+    return MediaQuery.withNoTextScaling(
+      child: ListenableBuilder(
+        listenable: Listenable.merge([
+          progressListenable,
+          shell.navigation.current,
+        ]),
+        builder: (context, _) => _buildRow(context, progressListenable?.value),
+      ),
     );
   }
 
