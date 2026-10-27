@@ -144,33 +144,40 @@ List<Rect> _lines(RenderParagraph paragraph) {
   final fontSize = paragraph.textScaler.scale(
     paragraph.text.style?.fontSize ?? 14,
   );
-  final lines = <Rect>[];
+  // 每一行：左右取所有字的範圍，上下取最寬的那一段字。一行裡換了字型的
+  // 那一小段（例如刪節號「…」來自另一個字型）字框比較高，併進去會把整行
+  // 的中線拉偏，但畫面上的字並沒有跟著動。
+  final lines = <({Rect all, Rect widest})>[];
   for (final box in paragraph.getBoxesForSelection(
     TextSelection(baseOffset: 0, extentOffset: text.length),
   )) {
     final rect = box.toRect();
     if (rect.top >= paragraph.size.height || rect.width <= 0) continue;
     final index = lines.indexWhere(
-      (line) => (line.center.dy - rect.center.dy).abs() < rect.height / 2,
+      (line) => (line.all.center.dy - rect.center.dy).abs() < rect.height / 2,
     );
     if (index < 0) {
-      lines.add(rect);
+      lines.add((all: rect, widest: rect));
     } else {
-      lines[index] = lines[index].expandToInclude(rect);
+      final line = lines[index];
+      lines[index] = (
+        all: line.all.expandToInclude(rect),
+        widest: rect.width > line.widest.width ? rect : line.widest,
+      );
     }
   }
   final transform = paragraph.getTransformTo(null);
   return [
-    for (final line in lines)
+    for (final (:all, :widest) in lines)
       MatrixUtils.transformRect(transform, () {
-        final height = math.min(fontSize, line.height);
+        final height = math.min(fontSize, widest.height);
         final width = math.min(
-          math.max(line.width, height),
+          math.max(all.width, height),
           paragraph.size.width,
         );
         return Rect.fromLTWH(
-          line.left,
-          line.center.dy - height / 2,
+          all.left,
+          widest.center.dy - height / 2,
           width,
           height,
         );
