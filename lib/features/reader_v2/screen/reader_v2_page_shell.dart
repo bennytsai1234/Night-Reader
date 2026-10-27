@@ -773,6 +773,9 @@ class _InfoRow extends StatelessWidget {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            // 被刪節號截掉的章名，寬度照截完的字算，不是整欄：載入時的骨架
+            // 照它量，才會和字一樣長。
+            textWidthBasis: TextWidthBasis.longestLine,
             child: SizedBox(
               height: rowHeight,
               child: Row(

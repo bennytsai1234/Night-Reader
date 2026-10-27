@@ -157,6 +157,35 @@ void main() {
     },
   );
 
+  test('a step still waiting when the reader closes leaves it alone', () async {
+    final pending = Completer<bool>();
+    viewport
+      ..continuousScrollBy = ((_) => pending.future)
+      ..scrollBy = ((_) async => false)
+      ..moveToNextPage = (() async => false);
+    // 另開一個，拆掉它不影響 tearDown 拆共用的那個。
+    final closing = ReaderV2AutoPageController(
+      runtime: runtime,
+      viewportController: viewport,
+      viewportExtent: () => 600,
+      frameSource: (callback) {
+        onFrame = callback;
+        primed = false;
+        return () {
+          if (identical(onFrame, callback)) onFrame = null;
+        };
+      },
+    )..start();
+    tick();
+    closing.dispose();
+
+    // 拆掉後那一步才做完：不能再回頭停下（通知）已經拆掉的控制器。
+    pending.complete(false);
+    await pumpEventQueue();
+
+    expect(closing.isRunning, isFalse);
+  });
+
   test('an old step cannot stop a run started after it', () async {
     final pending = Completer<bool>();
     viewport

@@ -161,6 +161,7 @@ Future<int?> _refreshFromSource(Book book, int checkedAt) async {
     info.customTag = current.customTag;
     info.readConfig = current.readConfig;
     final toc = (await tocReplacer.replace(info, chapters)).chapters;
+    info.fillChapterTitle(toc);
     final oldTotal = current.totalChapterNum > 0
         ? current.totalChapterNum
         : toc.length;
