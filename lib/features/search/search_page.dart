@@ -648,80 +648,77 @@ class _SearchViewState extends State<SearchView> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetContext) => Provider.value(
-        value: searchProvider,
-        child: ListenableBuilder(
-          listenable: Listenable.merge([
-            searchProvider,
-            searchProvider.progressUpdates,
-          ]),
-          builder: (context, _) {
-            final provider = searchProvider;
-            final failures = provider.sourceFailures;
-            return SafeArea(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.7,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SheetHeader(
-                      title: '失敗書源',
-                      trailing: failures.isNotEmpty
-                          ? PlainTextAction(
-                              label: '重試失敗',
-                              onPressed: provider.retryFailedSources,
-                            )
-                          : null,
-                    ),
-                    if (failures.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.xxl,
-                        ),
-                        child: Text(
-                          '沒有可查看的失敗明細',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            color: AppChrome.of(context).sectionText,
-                          ),
-                        ),
-                      )
-                    else
-                      Flexible(
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.only(
-                            top: AppSpacing.sm,
-                            bottom: AppSpacing.xl,
-                          ),
-                          itemCount: failures.length,
-                          itemBuilder: (context, index) {
-                            final failure = failures[index];
-                            return GroupedSliceItem(
-                              index: index,
-                              count: failures.length,
-                              child: GroupedRow(
-                                title: failure.source.bookSourceName,
-                                subtitle: failure.message,
-                                onTap: () => _showTextDialog(
-                                  context,
-                                  title: failure.source.bookSourceName,
-                                  text: failure.message,
-                                ),
-                              ),
-                            );
-                          },
+      builder: (sheetContext) => ListenableBuilder(
+        listenable: Listenable.merge([
+          searchProvider,
+          searchProvider.progressUpdates,
+        ]),
+        builder: (context, _) {
+          final provider = searchProvider;
+          final failures = provider.sourceFailures;
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SheetHeader(
+                    title: '失敗書源',
+                    trailing: failures.isNotEmpty
+                        ? PlainTextAction(
+                            label: '重試失敗',
+                            onPressed: provider.retryFailedSources,
+                          )
+                        : null,
+                  ),
+                  if (failures.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.xxl,
+                      ),
+                      child: Text(
+                        '沒有可查看的失敗明細',
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.bodyBase.copyWith(
+                          color: AppChrome.of(context).sectionText,
                         ),
                       ),
-                  ],
-                ),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.only(
+                          top: AppSpacing.sm,
+                          bottom: AppSpacing.xl,
+                        ),
+                        itemCount: failures.length,
+                        itemBuilder: (context, index) {
+                          final failure = failures[index];
+                          return GroupedSliceItem(
+                            index: index,
+                            count: failures.length,
+                            child: GroupedRow(
+                              title: failure.source.bookSourceName,
+                              subtitle: failure.message,
+                              onTap: () => _showTextDialog(
+                                context,
+                                title: failure.source.bookSourceName,
+                                text: failure.message,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -736,7 +733,9 @@ class _SearchViewState extends State<SearchView> {
       // 輸入框控制器由面板擁有，退場動畫結束後才釋放。
       builder: (sheetContext) => TextControllersScope(
         initialTexts: [provider.authorFilter],
-        builder: (_, fields) => Provider.value(
+        // 面板在另一條路由上，拿不到頁面的 provider；用會跟著通知重建的
+        // ChangeNotifierProvider.value 接過來，不是 Provider.value。
+        builder: (_, fields) => ChangeNotifierProvider.value(
           value: provider,
           child: Consumer<SearchProvider>(
             builder: (context, p, _) {
