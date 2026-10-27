@@ -1,6 +1,8 @@
-# 交接（2026-10-26）
+# 交接（2026-10-27）
 
 ## 進行中
+
+- 細節檢查（`test/polish/`，總覽頁 `tool/polish_viewer/`）目前只檢查閱讀器頁首頁尾的骨架換場，23 種日常情境淺色深色都對得上。下一步是把書架、書籍詳情、發現等其他骨架頁接進同一套檢查，等使用者說要不要做；全部清乾淨後再拿掉 `dart_test.yaml` 的跳過，讓它擋推送。
 
 - 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）。還沒做，照源倉庫 803 個文字書源的用量排：登入（`loginUrl` 242、`loginUi` 107 個書源）、`startBrowser(Await)`（148，可在看不到的瀏覽器裡載入、不跳畫面）、`data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫）、`longToast`、`androidId` 等。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
 
