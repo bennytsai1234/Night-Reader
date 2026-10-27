@@ -98,6 +98,17 @@ Future<void> _openDetail(WidgetTester tester) async {
   await settle(tester, const Duration(milliseconds: 1500));
 }
 
+/// 書籍詳情的目錄捲到第六章（閱讀紀錄在第三章），停穩。
+Future<void> _detailTocToSixth(WidgetTester tester) async {
+  await _openDetail(tester);
+  await tester.scrollUntilVisible(
+    find.text(kChapterTitles[5]),
+    200,
+    scrollable: find.byType(Scrollable).last,
+  );
+  await settle(tester, const Duration(milliseconds: 800));
+}
+
 Future<void> _openMenu(WidgetTester tester) async {
   await openReader(tester);
   await showReaderMenu(tester);
@@ -176,6 +187,11 @@ final scenarios = <String, _Scenario>{
     '書籍詳情「繼續閱讀」（A 組欄位）',
     (t) => t.tap(find.text('繼續閱讀')),
     before: _openDetail,
+  ),
+  'detail-toc-a': _Scenario(
+    '書籍詳情的目錄點別的章（讀到第三章，點第六章；A 組欄位）',
+    (t) => t.tap(find.text(kChapterTitles[5]).last),
+    before: _detailTocToSixth,
   ),
   'next-a': _Scenario(
     '選單「下一章」（A 組欄位）',

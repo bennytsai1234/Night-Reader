@@ -120,7 +120,9 @@ class SkeletonHandoffWatch {
       if (layer.presence.value <= 0) continue;
       present.add(parent);
       slot.content = null;
-      final origin = _rectOf(element).topLeft;
+      // 骨架層和內容層都照兩層共同的容器量：容器跟著頁面滑動不算變化，兩層
+      // 之間的位移照樣量得到。
+      final origin = _rectOf(parent).topLeft;
       final bars = [
         for (final bar in _barsUnder(tester, element)) bar.shift(-origin),
       ];
@@ -156,7 +158,7 @@ class SkeletonHandoffWatch {
         slot.gone = true;
         continue;
       }
-      final origin = _rectOf(content).topLeft;
+      final origin = _rectOf(parent).topLeft;
       slot
         ..content = [
           for (final mark in _marksUnder(tester, content))
@@ -271,7 +273,7 @@ Future<SkeletonHandoffWatch> watchSkeletonHandoffs(
 }
 
 /// 每一條骨架和換上來的內容比：同一行、橫向有重疊的內容合起來算這一條要
-/// 換成的東西（例如電量的圖示加數字是一條），左右兩緣都要對齊。
+/// 換成的東西（例如電量的圖示加數字是一條），左右兩緣與上下的中線都要對齊。
 List<HandoffProblem> compareBars(List<Rect> bars, List<HandoffMark> content) {
   String span(Rect r) =>
       '${r.left.toStringAsFixed(1)}–${r.right.toStringAsFixed(1)}'
@@ -297,14 +299,21 @@ List<HandoffProblem> compareBars(List<Rect> bars, List<HandoffMark> content) {
     final real = covered
         .map((mark) => mark.rect)
         .reduce((a, b) => a.expandToInclude(b));
+    // 骨架的條比字矮，上下緣本來就不同，所以上下只比中線。
+    final dy = real.center.dy - bar.center.dy;
     if ((real.left - bar.left).abs() <= kHandoffTolerance &&
-        (real.right - bar.right).abs() <= kHandoffTolerance) {
+        (real.right - bar.right).abs() <= kHandoffTolerance &&
+        dy.abs() <= kHandoffTolerance) {
       continue;
     }
     final what = covered.map((mark) => mark.label).join('、');
     final diff = real.width - bar.width;
     final (kind, verdict) = diff.abs() <= kHandoffTolerance
-        ? ('shifted', '一樣長但位置差 ${(real.left - bar.left).toStringAsFixed(1)}')
+        ? (
+            'shifted',
+            '一樣長但位置差：橫向 ${(real.left - bar.left).toStringAsFixed(1)}、'
+                '直向 ${dy.toStringAsFixed(1)}',
+          )
         : diff > 0
         ? ('short', '骨架短了 ${diff.toStringAsFixed(1)}')
         : ('long', '骨架長了 ${(-diff).toStringAsFixed(1)}');

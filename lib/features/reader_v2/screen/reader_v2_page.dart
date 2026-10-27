@@ -232,9 +232,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
-      current:
-          runtime?.visibleChapterIndex ??
-          _NoChapterYet(widget.book.chapterIndex),
+      current: runtime?.visibleChapterIndex ?? _NoChapterYet(_openChapterIndex),
       scrub: menu.scrub,
       titleFor: _chapterTitleAt,
     );
@@ -921,14 +919,19 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return widget.book.durChapterTitle ?? '';
   }
 
+  /// 要開的那一章：指定了開哪裡（例如書籍詳情點某一章）就是它，否則是書的
+  /// 閱讀紀錄。和 Runtime 選開書位置的順序一樣。
+  int get _openChapterIndex =>
+      widget.openTarget?.location.chapterIndex ?? widget.book.chapterIndex;
+
   /// 載入期間頁首頁尾描述的位置（[ReaderV2InfoTarget]）：跳章時是要跳去
-  /// 的那一章，開書時是要開的位置（Runtime 建好前照書的閱讀紀錄）。目錄還
-  /// 沒載入時章數照書的紀錄。
+  /// 的那一章，開書時是要開的那一章（[_openChapterIndex]）。目錄還沒載入時
+  /// 章數照書的紀錄。
   ReaderV2InfoTarget _infoTargetOf(ReaderV2Runtime? runtime) {
     final chapterIndex =
         runtime?.pendingLocation?.chapterIndex ??
         runtime?.state.visibleLocation.chapterIndex ??
-        widget.book.chapterIndex;
+        _openChapterIndex;
     final loaded = runtime?.chapterCount ?? widget.initialChapters.length;
     return ReaderV2InfoTarget(
       chapterIndex: chapterIndex,
@@ -973,7 +976,7 @@ enum _ReaderMoreAction {
   globalSettings,
 }
 
-/// 第一幀還沒有 Runtime 時的目前章：要開的那一章（書的閱讀紀錄），不會變。
+/// 第一幀還沒有 Runtime 時的目前章：要開的那一章，不會變。
 /// Runtime 建好後開書會通知閱讀頁重建，改聽
 /// [ReaderV2Runtime.visibleChapterIndex]。
 class _NoChapterYet implements ValueListenable<int> {
