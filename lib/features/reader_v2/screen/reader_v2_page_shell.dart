@@ -118,6 +118,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.controlsVisible,
     required this.showReadTitleAddition,
     required this.infoState,
+    this.loadingTarget,
     required this.originName,
     this.progressListenable,
     required this.navigation,
@@ -176,6 +177,10 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueListenable<bool> controlsVisible;
   final bool showReadTitleAddition;
   final ReaderV2InfoState infoState;
+
+  /// [infoState] 是 [ReaderV2InfoState.loading] 時骨架照它排字；null 時照
+  /// 畫面上這一章。
+  final ReaderV2InfoTarget? loadingTarget;
   final String originName;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
 
@@ -485,6 +490,35 @@ enum ReaderV2InfoState {
   ready,
 }
 
+/// 載入期間頁首頁尾描述的位置：要開、要跳去的那一章。骨架照這一章的章名與
+/// 進度排字量寬度，換成資訊時字一樣長。正文排好前畫面上那一章（[ReaderV2ChapterNavigationState.current]）
+/// 還不是要開的那一章，進度也還沒算出來；照它們量，骨架會缺一條、照舊章或
+/// 照「…」量得太短。
+@immutable
+final class ReaderV2InfoTarget {
+  const ReaderV2InfoTarget({
+    required this.chapterIndex,
+    required this.chapterCount,
+    required this.title,
+  });
+
+  final int chapterIndex;
+  final int chapterCount;
+  final String title;
+
+  /// 這一章的進度：進度通道已經是這一章（例如開書時先放進去的上次進度）就
+  /// 用它，否則當作在章首。跳章跳到章首，數字和排好後一樣；開書沒有上次
+  /// 進度時章內百分比不知道，位數通常一樣。
+  HybridProgressSnapshot progressFrom(HybridProgressSnapshot? progress) =>
+      progress != null && progress.chapterIndex == chapterIndex
+      ? progress
+      : HybridProgressSnapshot(
+          chapterIndex: chapterIndex,
+          chapterCount: chapterCount,
+          chapterPercent: 0,
+        );
+}
+
 /// 資訊列在骨架與真正資訊之間交叉淡換：骨架照資訊的寬度畫在同一個位置，
 /// 看起來是文字變成長條、長條再變回文字。變成骨架、以及骨架換成資訊（和
 /// 正文一起）都照骨架換場（[SkeletonReveal]）的方式與時長，收起（取不到
@@ -687,7 +721,14 @@ class _InfoRow extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(BuildContext context, HybridProgressSnapshot? progress) {
+  Widget _buildRow(BuildContext context, HybridProgressSnapshot? live) {
+    // 載入中的骨架照要開的那一章排字（[ReaderV2InfoTarget]）；排好後骨架淡
+    // 出途中照真正的資訊，和底下淡入的字一樣。
+    final target = skeleton && shell.infoState == ReaderV2InfoState.loading
+        ? shell.loadingTarget
+        : null;
+    final progress = target?.progressFrom(live) ?? live;
+    final title = target?.title;
     final infoColor = shell.infoColor;
     final skeletonColor = skeleton
         ? Skeleton.tint(
@@ -702,17 +743,17 @@ class _InfoRow extends StatelessWidget {
         ? child
         : _InfoItemSkeleton(color: skeletonColor, child: child);
     final left = masked(
-      _itemWidget(context, slots.left, progress, TextAlign.left),
+      _itemWidget(context, slots.left, progress, title, TextAlign.left),
     );
     final right = masked(
-      _itemWidget(context, slots.right, progress, TextAlign.right),
+      _itemWidget(context, slots.right, progress, title, TextAlign.right),
     );
     final semantics = skeleton
         ? ''
         : [
             if (showAutoPage) '自動翻頁中',
-            ?_itemSemantics(context, slots.left, progress),
-            ?_itemSemantics(context, slots.right, progress),
+            ?_itemSemantics(context, slots.left, progress, title),
+            ?_itemSemantics(context, slots.right, progress, title),
           ].join('，');
     return Semantics(
       container: true,
@@ -780,10 +821,12 @@ class _InfoRow extends StatelessWidget {
     );
   }
 
+  /// [title] 是骨架照要開的那一章排字時的章名；null 時照畫面上這一章。
   Widget? _itemWidget(
     BuildContext context,
     ReaderV2InfoItem item,
     HybridProgressSnapshot? progress,
+    String? title,
     TextAlign align,
   ) {
     if (item == ReaderV2InfoItem.none) return null;
@@ -795,13 +838,17 @@ class _InfoRow extends StatelessWidget {
         iconColor: shell.infoColor,
       );
     }
-    return Text(_itemText(context, item, progress) ?? '', textAlign: align);
+    return Text(
+      _itemText(context, item, progress, title) ?? '',
+      textAlign: align,
+    );
   }
 
   String? _itemSemantics(
     BuildContext context,
     ReaderV2InfoItem item,
     HybridProgressSnapshot? progress,
+    String? title,
   ) {
     if (item == ReaderV2InfoItem.time) {
       return '時間 ${DateFormat('HH:mm').format(DateTime.now())}';
@@ -811,13 +858,14 @@ class _InfoRow extends StatelessWidget {
       final battery = ReaderV2DeviceChannel.latestBattery;
       return battery == null ? null : '電量 ${battery.percent}%';
     }
-    return _itemText(context, item, progress);
+    return _itemText(context, item, progress, title);
   }
 
   String? _itemText(
     BuildContext context,
     ReaderV2InfoItem item,
     HybridProgressSnapshot? progress,
+    String? title,
   ) {
     final navigation = shell.navigation;
     return switch (item) {
@@ -826,7 +874,7 @@ class _InfoRow extends StatelessWidget {
       ReaderV2InfoItem.battery ||
       ReaderV2InfoItem.batteryWithIcon => null,
       ReaderV2InfoItem.bookName => context.zh(shell.book.name),
-      ReaderV2InfoItem.chapterTitle => navigation.currentTitle,
+      ReaderV2InfoItem.chapterTitle => title ?? navigation.currentTitle,
       ReaderV2InfoItem.chapterIndex =>
         progress?.chapterIndexLabel ??
             (navigation.chapterCount > 0

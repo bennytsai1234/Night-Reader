@@ -232,7 +232,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
-      current: runtime?.visibleChapterIndex ?? const _NoChapterYet(),
+      current:
+          runtime?.visibleChapterIndex ??
+          _NoChapterYet(widget.book.chapterIndex),
       scrub: menu.scrub,
       titleFor: _chapterTitleAt,
     );
@@ -282,6 +284,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               controlsVisible: menu.controlsVisible,
               showReadTitleAddition: settings.showReadTitleAddition,
               infoState: _infoStateOf(runtime),
+              loadingTarget: _infoTargetOf(runtime),
               originName: widget.book.originName,
               progressListenable: _progress,
               navigation: navigation,
@@ -905,11 +908,33 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
+  /// 目錄還沒載入時（從書架開書，目錄在開書途中才從資料庫讀出），上次讀到
+  /// 的那一章用書的閱讀紀錄裡的章名：開書時頁首頁尾的骨架照它量。
   String _rawChapterTitleAt(int index) {
     final runtime = _host.runtime;
-    if (runtime != null) return runtime.titleFor(index);
-    if (index < 0 || index >= widget.initialChapters.length) return '';
-    return widget.initialChapters[index].title;
+    final title = runtime != null
+        ? runtime.titleFor(index)
+        : index >= 0 && index < widget.initialChapters.length
+        ? widget.initialChapters[index].title
+        : '';
+    if (title.isNotEmpty || index != widget.book.chapterIndex) return title;
+    return widget.book.durChapterTitle ?? '';
+  }
+
+  /// 載入期間頁首頁尾描述的位置（[ReaderV2InfoTarget]）：跳章時是要跳去
+  /// 的那一章，開書時是要開的位置（Runtime 建好前照書的閱讀紀錄）。目錄還
+  /// 沒載入時章數照書的紀錄。
+  ReaderV2InfoTarget _infoTargetOf(ReaderV2Runtime? runtime) {
+    final chapterIndex =
+        runtime?.pendingLocation?.chapterIndex ??
+        runtime?.state.visibleLocation.chapterIndex ??
+        widget.book.chapterIndex;
+    final loaded = runtime?.chapterCount ?? widget.initialChapters.length;
+    return ReaderV2InfoTarget(
+      chapterIndex: chapterIndex,
+      chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
+      title: _chapterTitleAt(chapterIndex),
+    );
   }
 
   String _chapterUrlAt(int index) {
@@ -948,13 +973,14 @@ enum _ReaderMoreAction {
   globalSettings,
 }
 
-/// 第一幀還沒有 Runtime 時的目前章：第 0 章，不會變。Runtime 建好後開書
-/// 會通知閱讀頁重建，改聽 [ReaderV2Runtime.visibleChapterIndex]。
+/// 第一幀還沒有 Runtime 時的目前章：要開的那一章（書的閱讀紀錄），不會變。
+/// Runtime 建好後開書會通知閱讀頁重建，改聽
+/// [ReaderV2Runtime.visibleChapterIndex]。
 class _NoChapterYet implements ValueListenable<int> {
-  const _NoChapterYet();
+  const _NoChapterYet(this.value);
 
   @override
-  int get value => 0;
+  final int value;
 
   @override
   void addListener(VoidCallback listener) {}
