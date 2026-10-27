@@ -453,8 +453,7 @@ bool _sameBars(List<Rect> a, List<Rect> b) {
   return true;
 }
 
-/// 手機回報電量：真的手機在閱讀器訂閱後才送第一筆，訂閱前 `latestBattery`
-/// 是空的。
+/// 手機回報電量：和手機上一樣，閱讀器一訂閱就送出目前的電量。
 void mockBattery({int percent = 82, bool charging = false}) {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockStreamHandler(

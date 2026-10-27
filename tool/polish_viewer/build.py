@@ -243,19 +243,33 @@ def main():
     for name, scenario in scenarios.items():
         sections = []
         for mode, run in scenario['runs'].items():
+            if run.get('error'):
+                cells[(name, mode)] = ('bad', '操作失敗')
+                sections.append(f'<p class="note">{MODES[mode]}：操作失敗：'
+                                f'{esc(run["error"])}</p>')
+                continue
             count = sum(len(problems_of(s)) for s in run['slots'])
             if not run['sawSkeleton']:
                 cells[(name, mode)] = ('none', '沒看到骨架')
+                # 留下的最後畫面：看得到那時畫面上是什麼。
+                if run.get('endImage'):
+                    src = crop(run['endImage'], 0, PHONE_HEIGHT, os.path.join(
+                        out_dir, f'{name}-{mode}-end.webp'))
+                    sections.append(
+                        f'<figure class="end"><img src="{esc(src)}">'
+                        f'<figcaption>{MODES[mode]}：沒看到骨架，這是最後的'
+                        f'畫面</figcaption></figure>')
             elif count == 0:
                 cells[(name, mode)] = ('ok', '全部對得上')
             else:
                 cells[(name, mode)] = ('bad', f'{count} 個問題')
         # 每處換場：淺色、深色結果一樣時並排畫一次，不一樣時各畫各的。
-        slot_count = max(len(r['slots']) for r in scenario['runs'].values())
+        slot_count = max(len(r.get('slots', []))
+                         for r in scenario['runs'].values())
         for index in range(slot_count):
             by_mode = {mode: run['slots'][index]
                        for mode, run in scenario['runs'].items()
-                       if index < len(run['slots'])
+                       if index < len(run.get('slots', []))
                        and problems_of(run['slots'][index])}
             if not by_mode:
                 continue
@@ -277,7 +291,7 @@ def main():
         tds = []
         for mode in modes:
             state, text = cells.get((name, mode), ('none', '沒跑'))
-            link = f' href="#{name}"' if state == 'bad' else ''
+            link = f' href="#{name}"' if state != 'ok' else ''
             tds.append(f'<td><a class="cell {state}"{link}>{text}</a></td>')
         rows.append(f'<tr><th class="name">{esc(scenario["title"])}</th>'
                     f'{"".join(tds)}</tr>')
