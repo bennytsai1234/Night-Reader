@@ -137,23 +137,26 @@ class _TempPathProvider extends PathProviderPlatform {
   Future<String?> getExternalStoragePath() async => _path;
 }
 
-/// 把 [of] 所在的畫面（預設整個畫面，含對話框）存成 `<name>.png`，回傳檔案。
+/// 把 [of] 所在的畫面（預設整個畫面，含對話框）存成 [dir]（預設
+/// [screenshotDir]）裡的 `<name>.png`，回傳檔案。
 Future<File> saveScreenshot(
   WidgetTester tester,
   String name, {
   Finder? of,
+  Directory? dir,
 }) async {
   var renderObject = tester.renderObject(of ?? find.byType(View).first);
   while (!renderObject.isRepaintBoundary) {
     renderObject = renderObject.parent!;
   }
   final layer = renderObject.debugLayer! as OffsetLayer;
-  final file = File('${screenshotDir.path}${Platform.pathSeparator}$name.png');
+  final folder = dir ?? screenshotDir;
+  final file = File('${folder.path}${Platform.pathSeparator}$name.png');
   await tester.runAsync(() async {
     final image = await layer.toImage(renderObject.paintBounds);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
-    await screenshotDir.create(recursive: true);
+    await folder.create(recursive: true);
     await file.writeAsBytes(bytes!.buffer.asUint8List());
   });
   return file;
