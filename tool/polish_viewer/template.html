@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<style>
+  /* 顏色取 T3 對話的主題變數，淺色、深色主題都看得清楚；直接用瀏覽器開時
+     退回下面的預設值。框線與問題種類的顏色固定，疊在 App 的截圖上。 */
+  body { margin: 0; padding: 4px 0 24px; font: 14px/1.6 var(--font-sans, system-ui, "Microsoft JhengHei", sans-serif); color: var(--foreground, #1f2937); }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  h3 { font-size: 15px; margin: 28px 0 8px; padding-top: 12px; border-top: 1px solid var(--border, #e5e7eb); }
+  h4 { font-size: 13px; margin: 12px 0 4px; color: var(--muted-foreground, #4b5563); font-weight: 600; }
+  h4 .modes { font-weight: 400; margin-left: 8px; }
+  .lead { color: var(--muted-foreground, #6b7280); margin: 0 0 12px; }
+  table { border-collapse: separate; border-spacing: 6px; margin-left: -6px; }
+  th { font-weight: 600; color: var(--muted-foreground, #4b5563); font-size: 13px; }
+  th.name { text-align: left; padding-right: 12px; font-weight: 500; color: var(--foreground, #1f2937); }
+  .cell { display: block; min-width: 110px; padding: 6px 10px; border-radius: var(--radius, 8px); text-align: center; text-decoration: none; font-size: 13px; }
+  .cell.ok { background: color-mix(in srgb, var(--success, #16a34a) 16%, transparent); color: var(--success, #166534); }
+  .cell.bad { background: var(--destructive-surface, #fee2e2); color: var(--destructive, #991b1b); cursor: pointer; font-weight: 600; }
+  .cell.bad:hover { outline: 1.5px solid var(--destructive, #991b1b); }
+  .cell.none { background: var(--secondary, #f3f4f6); color: var(--muted-foreground, #6b7280); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 14px 0 0; font-size: 12px; color: var(--muted-foreground, #4b5563); }
+  .legend i { display: inline-block; width: 18px; height: 10px; border: 1.5px solid; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.b { border: 1.5px dashed #2563eb; }
+  .legend i.c { border-color: #16a34a; }
+  .legend i.k-short { border-color: #ea580c; background: #ea580c33; }
+  .legend i.k-long { border-color: #7c3aed; background: #7c3aed33; }
+  .legend i.k-shifted { border-color: #0891b2; background: #0891b233; }
+  .legend i.k-missing { border-color: #dc2626; background: #dc262633; }
+  .legend i.k-extra { border-color: #6b7280; background: #6b728033; }
+  .slot { margin-bottom: 18px; }
+  .timeline { display: block; margin: 2px 0 8px; overflow: visible; }
+  .timeline rect { rx: 3px; }
+  .timeline rect.bad { fill: #dc2626; }
+  .timeline rect.good { fill: #16a34a; }
+  .timeline line { stroke: var(--foreground, #111); stroke-width: 2; }
+  .timeline .tl { font-size: 11px; fill: #fff; text-anchor: middle; pointer-events: none; }
+  .timeline .tlc { font-size: 11px; fill: var(--muted-foreground, #4b5563); }
+  .shot { margin: 0 0 14px; }
+  /* 頁首頁尾那一列很矮，淺色、深色上下排，每張都用全寬才看得清楚。 */
+  .panes { display: flex; flex-direction: column; gap: 4px; }
+  .pane { display: flex; align-items: center; gap: 8px; }
+  .mode { flex: none; width: 28px; font-size: 11px; color: var(--muted-foreground, #6b7280); }
+  .pane .frame { flex: 1; min-width: 0; }
+  .frame { position: relative; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--border, #d1d5db); }
+  .frame img { display: block; width: 100%; }
+  .frame svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .frame rect { stroke-width: 1.2; rx: 1.5px; fill: none; vector-effect: non-scaling-stroke; }
+  .frame rect.b { stroke: #2563eb; stroke-dasharray: 3 2; }
+  .frame rect.c { stroke: #16a34a; }
+  .frame rect.k-short { stroke: #ea580c; fill: #ea580c33; }
+  .frame rect.k-long { stroke: #7c3aed; fill: #7c3aed33; }
+  .frame rect.k-shifted { stroke: #0891b2; fill: #0891b233; }
+  .frame rect.k-missing { stroke: #dc2626; fill: #dc262633; }
+  .frame rect.k-extra { stroke: #6b7280; fill: #6b728033; }
+  figcaption { font-size: 12.5px; margin-top: 4px; }
+  figcaption ul { margin: 2px 0 0; padding-left: 0; list-style: none; }
+  figcaption li { margin: 1px 0; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.k-short { background: #ea580c; }
+  .dot.k-long { background: #7c3aed; }
+  .dot.k-shifted { background: #0891b2; }
+  .dot.k-missing { background: #dc2626; }
+  .dot.k-extra { background: #6b7280; }
+  .ok { color: var(--success, #166534); }
+  .note { color: var(--muted-foreground, #6b7280); }
+  figure.end { display: inline-block; margin: 0 12px 12px 0; }
+  figure.end img { display: block; width: 220px; border: 1px solid var(--border, #e5e7eb); }
+</style>
+</head>
+<body>
+<h2>細節檢查：骨架換成內容</h2>
+<p class="lead">照真的流程一格一格推進，比對骨架的每一條和換上來的字是不是一樣長、在同一個位置。紅色的格子點下去看是哪幾條。時間是測試裡推進的毫秒數，資料庫比手機慢，手機上每一段都短得多；看的是先後順序和哪幾條不對。</p>
+<table><tr><th></th><!--HEADER--></tr><!--ROWS--></table>
+<div class="legend"><!--LEGEND--></div>
+<!--DETAILS-->
+</body>
+</html>

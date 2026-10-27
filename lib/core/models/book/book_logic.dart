@@ -95,6 +95,19 @@ extension BookLogic on Book {
     return true;
   }
 
+  /// 閱讀紀錄還沒有章名（剛加入書架、還沒讀過）時，照目錄 [toc] 記下目前
+  /// 那一章的章名：開書時頁首頁尾的骨架照它量章名的長度，不用等目錄讀出來。
+  /// 已有章名就不動，那是讀的時候寫的。
+  void fillChapterTitle(List<BookChapter> toc) {
+    if (durChapterTitle?.isNotEmpty ?? false) return;
+    for (final chapter in toc) {
+      if (chapter.index == chapterIndex) {
+        durChapterTitle = chapter.title;
+        return;
+      }
+    }
+  }
+
   /// 同一章換了序號：錨點跟著換序號，章內位置不變。錨點不屬於目前進度時
   /// 本來就不會被採用，直接丟掉。
   String? _reindexedReaderAnchor(int newIndex) {

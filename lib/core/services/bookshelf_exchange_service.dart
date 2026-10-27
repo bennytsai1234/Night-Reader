@@ -181,12 +181,16 @@ class BookshelfExchangeService {
       await _sourceDao.upsert(source);
     }
     for (final book in books) {
-      final normalized = book.copyWith(
-        isInBookshelf: true,
-        syncTime: book.syncTime == 0
-            ? DateTime.now().millisecondsSinceEpoch
-            : book.syncTime,
-      );
+      final normalized =
+          book.copyWith(
+            isInBookshelf: true,
+            syncTime: book.syncTime == 0
+                ? DateTime.now().millisecondsSinceEpoch
+                : book.syncTime,
+          )..fillChapterTitle([
+            for (final chapter in chapters)
+              if (chapter.bookUrl == book.bookUrl) chapter,
+          ]);
       await _bookDao.upsert(normalized);
     }
     if (chapters.isNotEmpty) {

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
@@ -23,6 +24,7 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
         result.book.syncTime = result.book.syncTime == 0
             ? DateTime.now().millisecondsSinceEpoch
             : result.book.syncTime;
+        result.book.fillChapterTitle(result.chapters);
         final cover = result.cover;
         if (cover != null) {
           await BookCoverStorageService().storeEmbeddedCover(

@@ -178,6 +178,10 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   @override
   void dispose() {
+    // 正在做的那一步（例如等翻頁）做完時不再回頭停下已經拆掉的自己：這一輪
+    // 作廢，`_stepAsync` 的 `run == _run` 不成立。
+    _run += 1;
+    _running = false;
     _stopFrameSource();
     super.dispose();
   }

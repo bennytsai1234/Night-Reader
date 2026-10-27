@@ -690,6 +690,7 @@ class BookDetailProvider extends ChangeNotifier {
         if (_allChapters.isEmpty) {
           await _loadChapters();
         }
+        _book.fillChapterTitle(_allChapters);
         await _bookDao.upsert(_book);
         await _saveChapterMetadataIfPossible();
       } catch (e) {

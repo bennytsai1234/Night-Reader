@@ -7,3 +7,7 @@ tags:
   # flutter test --run-skipped -t frame_budget test/frame_budget
   frame_budget:
     skip: "量測用，平常不跑"
+  # 細節檢查（test/polish/），要找細節問題時才跑：
+  # flutter test --run-skipped -t polish test/polish
+  polish:
+    skip: "細節檢查，還沒清乾淨前不擋推送"
