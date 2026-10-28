@@ -21,7 +21,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 這些是使用者反覆講過、也反覆被漏掉的事，每一條都有過具體的糾正。
 
-- **做到好，不要問**：目標做完、驗證過、沒有要使用者決定的事，就直接合併並回報結果，不問「要不要合併」。途中看到的警告、同一原因的其他問題一起收掉。使用者的話：「幫我把事情做到好，像許願機一樣」。
+- **做到好，不要問**：目標做完、驗證過、沒有要使用者決定的事，就回報結果和分支，不問「要不要合併」；使用者說「合併」才合併（見「Git 流程」）。途中看到的警告、同一原因的其他問題一起收掉。使用者的話：「幫我把事情做到好，像許願機一樣」。
 - **寫給使用者的字全是繁體中文**：對話、PR 標題與說明、審查摘要、commit 說明的本文都是。#93 的 PR 說明寫成英文，是失誤。
 - **結果寫在對話裡**：使用者不看 PR 頁面與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」；PR 說明是留給之後讀歷史的 agent 看的。
 - **用使用者的詞，不丟代號**：用 `GLOSSARY.md` 的詞，第一次出現先解釋。不寫 P0／P2、`.g.dart`、pre-push 這類沒解釋的代號；不說「未驗證」「實機」。
@@ -62,7 +62,8 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 兩條長期分支：`beta` 是預設分支，日常的改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版，不在 `main` 上提交。
 - 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時，先 `git pull --ff-only`，直接在 `beta` 上改、提交、推上去，不開分支、不審。
 - 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在從 `beta` 開的分支上做，照下面的流程開 PR 合併進 `beta`；跟著功能一起改的文件放在同一個 PR。
-- 交代的目標做完、驗證過，也沒有等使用者決定的事，就是告一段落：直接合併，不問使用者要不要合併。合併照這個順序走，讓 CI 盡量只等一次（ADR 0014）：
+- 使用者說「合併」才開 PR、合併（ADR 0014）。在那之前，做完的事都疊在同一條分支上、推上去讓 CI 跑；每做完一件只回報結果和分支名稱，不開 PR，也不問要不要合併。還沒合併的分支寫進 `HANDOFF.md`。
+- 使用者說「合併」時照這個順序走，讓 CI 盡量只等一次：
   1. 把這次要合併的分支併成一條，`git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，開一個以 `beta` 為目標的 PR（PR 說明照 `pr` 技能寫，用繁體中文）。
   2. 改到 App 內容的 PR（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出）開 PR 就派 Codex 審整個 PR 一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的 PR 不審。
   3. 等審查時把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態（合併後不另外補交接）。核對屬實的問題修在同一個 PR，審查摘要（發現了什麼、核對結果、修了哪些、沒修的為什麼）用 `gh pr edit --body-file` 寫進 PR 說明的「審查」一段，不另貼留言。修正、交接一起推一次。
@@ -100,7 +101,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **Windows 上用 Python 寫檔**要給 `newline='\n'`，不然會寫成 CRLF。
 - **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
 - **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
-- **使用者的手機不拿來量測**（2026-10-14 定的）。若使用者日後同意：profile 建置用一個不提交的入口（`main()` 之後把 `developer.Service.getInfo()` 的 ws 位址寫進 `getExternalStorageDirectory()`，vivo 會把 logcat 裡的位址遮掉、intent 參數也不生效），電腦用 `vm_service` 連上後 `setFlag('profiler','true')`，收 `Flutter.Frame` 與 `getCpuSamples`，把 UI isolate 連續忙碌超過 8 ms 的區段依堆疊歸類；vivo 用 adb 安裝會跳確認頁。
+- **使用者的手機只在使用者主動提供時量**（2026-10-14 定的；2026-10-28 使用者開了無線偵錯讓 agent 量，跑通的做法如下）。`adb mdns services` 找得到手機，`adb connect` 就連上；Git Bash 裡傳給 adb 的手機路徑要先 `export MSYS_NO_PATHCONV=1`，不然會被改成 Windows 路徑。profile 建置的套件是 `com.inkpage.reader.debug`，和正式版分開、不動使用者的書；vivo 用 adb 安裝要使用者在手機上按繼續安裝。量測入口不提交：第一次開只放測試書就結束；之後每次開先把 `developer.Service.getInfo()` 的位址寫進 App 的外部資料夾，等電腦連上 `vm_service`、`setVMTimelineFlags(['GC'])` 並清空時間軸後才 `runApp`（時間軸是環狀的，全記的話開 App 前段會被蓋掉）；每幀的時間用 `addTimingsCallback` 的 `FrameTiming`，動畫各段的時刻由 App 自己用 `Timeline.now` 記，三者同一個時鐘。使用者手機開著 GKD 與隨選朗讀兩個無障礙服務，每幀都有無障礙資料的工作，這是實際使用的環境。判斷標準見 ADR 0036。
 
 ## Agent skills
 

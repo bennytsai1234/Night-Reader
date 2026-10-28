@@ -13,7 +13,11 @@
 （`variants`，例如兩種間隔；`fixed` 的候選不分變化），淺色、深色各錄一段，
 名稱是「<候選>-<變化>-<light|dark>」。頁面上的段落名稱、各段說明（可依候選
 不同，`{variant}` 換成變化的 value、`{欄位}` 換成候選的同名欄位）、要畫深淺
-的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。
+的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。`limitMs` 是電腦上動畫中一格的上限，
+不給時是 4.2（手機 8.3ms 照 2 倍換算，ADR 0029、0036）；主執行緒那排每格扣掉測試的
+資料庫時間（`db_clock.dart`，手機上不在主執行緒）再和它比。錄影時開了 `FRAME_GC=1`，
+頁面多一排「回收記憶體」；`gcPhoneRatio` 是手機上回收比電腦慢幾倍（ADR 0029 定 2 倍），
+照它畫出換算到手機會超過一格的線。
 
 需要 ffmpeg、numpy 與 Pillow。
 """
@@ -64,6 +68,10 @@ def measure(meta, frames, spots):
         'n': len(frames),
         'phases': meta['phases'][:len(frames)],
         'costs': meta['costs'][:len(frames)],
+        'db': meta.get('db', [])[:len(frames)],
+        'frameMs': meta.get('frameMs', 16),
+        'gcNew': meta.get('gcNew', [])[:len(frames)],
+        'gcOld': meta.get('gcOld', [])[:len(frames)],
         'frames': rows,
     }
 
@@ -120,13 +128,13 @@ def main():
     data_png = os.path.join(out_dir, 'data.png')
     encode_data(data, data_png)
     page_config = {k: config[k] for k in
-                   ('designs', 'variants', 'phases', 'notes', 'spots', 'jumps', 'end', 'limitMs', 'start')
+                   ('designs', 'variants', 'phases', 'notes', 'spots', 'jumps', 'end', 'limitMs', 'start', 'gcPhoneRatio')
                    if k in config}
     page_config['tile'] = tile
     with open(os.path.join(HERE, 'template.html'), encoding='utf-8') as f:
         html = f.read()
     for key, value in {
-        '/*TITLE*/': config.get('title', '逐格錄影'),
+        '/*TITLE*/': config.get('title', '動畫儀表板'),
         '/*CONFIG*/': json.dumps(page_config, ensure_ascii=False),
         '/*SPRITES*/': json.dumps(sprites, ensure_ascii=False, indent=0),
         '/*DATA_PNG*/': json.dumps(data_png.replace('\\', '/')),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -646,6 +647,118 @@ void main() {
       ),
     );
     expect(tester.hasRunningAnimations, isFalse);
+  });
+
+  // 骨架每一幀重用同一支畫筆（_breathingPaint）：上一筆留下的半透明顏色會
+  // 乘到漸層上，讓呼吸的骨架變淡（PR #150 審查時 Codex 重現的）。
+  group('the reused brush', () {
+    for (final dark in [false, true]) {
+      final label = dark ? 'dark' : 'light';
+      final background = dark ? Colors.black : Colors.white;
+
+      Future<List<int>> redAt(
+        WidgetTester tester,
+        GlobalKey boundary,
+        List<Offset> points,
+      ) async => (await tester.runAsync(() async {
+        final image =
+            await (boundary.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary)
+                .toImage();
+        final bytes = await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        image.dispose();
+        return [
+          for (final p in points)
+            bytes!.getUint8(((p.dy.toInt()) * 200 + p.dx.toInt()) * 4),
+        ];
+      }))!;
+
+      testWidgets('breathing after animations come back is as deep as a '
+          'fresh skeleton ($label)', (tester) async {
+        tester.view.physicalSize = const Size(200, 200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final boundary = GlobalKey();
+        Widget page({required bool still, required Key key}) => MaterialApp(
+          theme: ThemeData(
+            brightness: dark ? Brightness.dark : Brightness.light,
+          ),
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: const Size(200, 200),
+              disableAnimations: still,
+            ),
+            child: RepaintBoundary(
+              key: boundary,
+              child: ColoredBox(
+                color: background,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Skeleton(
+                    key: key,
+                    child: const SkeletonBox(width: 100, height: 20),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        // 減少動態時畫的是半透明的單色，接著換回呼吸。
+        await tester.pumpWidget(page(still: true, key: const ValueKey(1)));
+        await tester.pumpWidget(page(still: false, key: const ValueKey(1)));
+        final reused = await redAt(tester, boundary, const [Offset(10, 10)]);
+        await tester.pumpWidget(page(still: false, key: const ValueKey(2)));
+        final fresh = await redAt(tester, boundary, const [Offset(10, 10)]);
+        expect(reused, fresh);
+      });
+
+      testWidgets('a see-through filled shape does not fade the breathing '
+          'shape after it ($label)', (tester) async {
+        tester.view.physicalSize = const Size(200, 200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final boundary = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(
+              brightness: dark ? Brightness.dark : Brightness.light,
+            ),
+            home: RepaintBoundary(
+              key: boundary,
+              child: ColoredBox(
+                color: background,
+                child: Skeleton(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonShapes(
+                        height: 40,
+                        shapes: (_) => const [
+                          SkeletonShape(
+                            Rect.fromLTWH(0, 0, 100, 10),
+                            fill: Color(0x80000000),
+                          ),
+                          SkeletonShape(Rect.fromLTWH(0, 20, 100, 20)),
+                        ],
+                      ),
+                      // 同一個位置、自己一支畫筆的骨架當對照。
+                      const SkeletonBox(width: 100, height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final [shape, reference] = await redAt(tester, boundary, const [
+          Offset(10, 30),
+          Offset(10, 50),
+        ]);
+        expect(shape, reference);
+      });
+    }
   });
 }
 

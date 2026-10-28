@@ -120,6 +120,8 @@ dev_dependencies:
   # 測試換掉網路封面用的磁碟快取（CachedNetworkImageProvider.defaultCacheManager）。
   flutter_cache_manager: ^3.4.5
   file: ^7.0.1
+  # 量每一幀的記憶體回收（test/support/frame_budget.dart 的 FRAME_GC）。
+  vm_service: ^15.3.0
 
 # Adaptive launcher icon：深棕 #1A1612 底板 + 品牌圖前景，消除桌面/開啟動畫白板。
 flutter_launcher_icons:

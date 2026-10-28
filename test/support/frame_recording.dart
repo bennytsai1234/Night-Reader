@@ -1,4 +1,4 @@
-// 逐格錄影：做成動畫儀表板放進對話（`animation-dashboard` 技能）。一格一格推進（16ms），每格記下畫面、這格在哪一段、主執行緒花了
+// 逐格錄影：做成動畫儀表板放進對話（`animation-dashboard` 技能）。一格一格推進（預設 8.3ms，使用者手機 120Hz 的一格），每格記下畫面、這格在哪一段、主執行緒花了
 // 多久（同 `frame_budget.dart`），之後用 `tool/frame_viewer/build.py` 做成
 // 頁面。
 //
@@ -23,7 +23,10 @@
 // 尺寸）與 `meta.json`。量到的是電腦上 debug 模式的時間，看的是尖峰落在哪
 // 一段，不是手機上的毫秒數；存畫面時讓出了真實時間，資料庫回應落在哪一格
 // 會和只量成本時差一兩格。第一次開整個 App 含 debug 的編譯成本，先開一次
-// 暖身再錄。
+// 暖身再錄。加 `FRAME_GC=1` 與 `--enable-vmservice` 時另外記下每格裡回收
+// 記憶體停住多久（`frame_budget.dart` 的 FRAME_GC），頁面上多一排「回收記憶體」。
+// 每格裡測試的資料庫花的時間一律記下（`db_clock.dart`），頁面上那一格扣掉它
+// 再和上限比：手機上資料庫不在主執行緒。
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -50,6 +53,7 @@ Future<void> recordAnimation(
   int tailFrames = 30,
   bool realAsync = false,
   Future<void> Function(int frame)? onFrame,
+  Duration frameDuration = const Duration(microseconds: 8333),
 }) async {
   final dir = Directory(
     '${frameRecordingDir.path}${Platform.pathSeparator}$name',
@@ -65,6 +69,7 @@ Future<void> recordAnimation(
       tailFrames: tailFrames,
       realAsync: realAsync,
       onFrame: onFrame,
+      frameDuration: frameDuration,
       afterFrame: (_) async {
         phases.add(phase());
         var box = tester.renderObject(find.byType(View).first);
@@ -106,9 +111,18 @@ Future<void> recordAnimation(
       jsonEncode({
         'width': width,
         'height': height,
-        'frameMs': 16,
+        'frameMs': frameDuration.inMicroseconds / 1000,
         'phases': phases,
         'costs': [for (final cost in costs) (cost.total / 100).round() / 10],
+        'db': [for (final cost in costs) (cost.dbMicros / 100).round() / 10],
+        if (frameGc) ...{
+          'gcNew': [
+            for (final cost in costs) (cost.scavengeMicros / 100).round() / 10,
+          ],
+          'gcOld': [
+            for (final cost in costs) (cost.oldGcMicros / 100).round() / 10,
+          ],
+        },
       }),
     );
   } finally {

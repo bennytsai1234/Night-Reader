@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:drift/drift.dart' show ApplyInterceptor;
 import 'package:drift/native.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +43,7 @@ import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'db_clock.dart';
 import 'screenshot.dart';
 
 const kBookUrl = 'https://www.example.com/book/1024/';
@@ -81,10 +83,14 @@ final kChapterTitles = <String>[
 late AppDatabase _db;
 
 /// 註冊 App 的所有服務，資料庫換成記憶體。放在每個 testWidgets 開頭。
+/// 每次查詢的時間記在 [dbWork]，量動畫時算進那一幀（`db_clock.dart`）。
 Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   await getIt.reset();
   SharedPreferences.setMockInitialValues(<String, Object>{...prefs});
-  _db = AppDatabase.forTesting(NativeDatabase.memory());
+  dbWork.clear();
+  _db = AppDatabase.forTesting(
+    NativeDatabase.memory().interceptWith(DbClock()),
+  );
   getIt
     ..registerSingleton<Logger>(Logger(level: Level.off))
     ..registerSingleton<AppDatabase>(_db)
