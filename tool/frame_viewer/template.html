@@ -12,6 +12,7 @@
     --gap-soft: color-mix(in srgb, var(--chart-4) 30%, var(--background));
     --heavy: var(--warning);
     --gc: var(--chart-2);
+    --gc-old: var(--chart-5);
     color: var(--foreground); font-family: var(--font-sans); font-size: 13px;
   }
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
@@ -98,7 +99,11 @@ function button(label, onclick, on) {
   document.getElementById('controls').insertBefore(b, document.getElementById('clock'));
   return b;
 }
-const FRAME_MS = 16, COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 8;
+const FRAME_MS = Object.values(DATA)[0].frameMs || 16, COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 8;
+// 有記回收記憶體（FRAME_GC）時多一排；gcPhoneRatio 是手機上回收比電腦慢幾倍，
+// 照它畫出「換算到手機會超過一格（120Hz）」的線。
+const HAS_GC = Object.values(DATA).some(D => (D.gcNew || []).length);
+const GC_RATIO = CONFIG.gcPhoneRatio, PHONE_FRAME_MS = 1000 / 120;
 const PHASES = CONFIG.phases || {};
 const labelOf = raw => (PHASES[raw] && PHASES[raw].label) || raw;
 const kindOf = label => (Object.values(PHASES).find(p => p.label === label) || {}).kind || 'still';
@@ -114,7 +119,10 @@ function prepare() {
   for (const d of DESIGNS) {
     const D = DATA[baseOf(d)];
     d.n = D.n;
-    d.f = D.frames.map(([change, ...spots], i) => ({ change, spots, cost: D.costs[i] ?? 0, gc: (D.gc || [])[i] ?? 0 }));
+    d.f = D.frames.map(([change, ...spots], i) => {
+      const gcNew = (D.gcNew || [])[i] ?? 0, gcOld = (D.gcOld || [])[i] ?? 0;
+      return { change, spots, cost: D.costs[i] ?? 0, gcNew, gcOld, gc: gcNew + gcOld };
+    });
     d.phase = D.phases.map(labelOf);
     d.segs = [];
     d.phase.forEach((p, i) => {
@@ -168,15 +176,21 @@ legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"><
   + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
   + `<span><i class="box" style="background:var(--heavy)"></i>一格超過 ${LIMIT}ms</span>`
   + `<span><i class="box" style="background:var(--muted-foreground)"></i>一格在 ${LIMIT}ms 內</span>`
-  + (Object.values(DATA).some(D => (D.gc || []).length) ? '<span><i class="box" style="background:var(--gc)"></i>其中回收記憶體（圖底下的短線標出是哪幾格）</span>' : '');
+  + (HAS_GC ? '<span><i class="box" style="background:var(--gc)"></i>回收新生區</span>'
+    + '<span><i class="box" style="background:var(--gc-old)"></i>回收舊生區</span>'
+    + (GC_RATIO ? `<span><i class="sw" style="border-color:var(--heavy);border-top-style:dashed"></i>回收慢 ${GC_RATIO} 倍換算到手機會超過一格</span>` : '') : '');
 
 const svg = document.getElementById('chart');
 const X0 = 64, X1 = 724;
 const xs = i => X0 + (X1 - X0) * i / (N - 1);
 const band = { y: 0, h: 22 }, rowA = { y: 32, h: 56 }, rowB = { y: 100, h: 82 }, rowC = { y: 196, h: 70 };
+// 回收記憶體那排：自己的刻度（主執行緒那排到 100ms，幾 ms 的回收看不出來）。
+const rowD = { y: 282, h: 56 }, GC_CAP = 8;
+const bottom = HAS_GC ? rowD.y + rowD.h : rowC.y + rowC.h;
+svg.setAttribute('viewBox', `0 0 728 ${bottom + 34}`);
 const fixed = el(svg, 'g', {});
 const dyn = el(svg, 'g', {});
-for (const [r, label] of [[rowA, '畫面變化'], [rowB, SPOTS ? SPOTS.label : ''], [rowC, '主執行緒']]) {
+for (const [r, label] of [[rowA, '畫面變化'], [rowB, SPOTS ? SPOTS.label : ''], [rowC, '主執行緒'], ...(HAS_GC ? [[rowD, '回收記憶體']] : [])]) {
   el(fixed, 'text', { x: 0, y: r.y + r.h / 2 + 4, class: 't2', style: 'font-size:12px' }, label);
   el(fixed, 'line', { x1: X0, x2: X1, y1: r.y + r.h, y2: r.y + r.h, stroke: 'var(--grid)' });
 }
@@ -185,11 +199,11 @@ if (SPOTS) {
   el(fixed, 'text', { x: X0 - 6, y: rowB.y + rowB.h, 'text-anchor': 'end', class: 't2' }, '淺');
 }
 const ticks = el(svg, 'g', {});
-const head = el(svg, 'line', { y1: band.y, y2: rowC.y + rowC.h, stroke: 'var(--foreground)', 'stroke-width': 1.5 });
+const head = el(svg, 'line', { y1: band.y, y2: bottom, stroke: 'var(--foreground)', 'stroke-width': 1.5 });
 let sel = 0;
 function drawChart() {
   dyn.innerHTML = ''; ticks.innerHTML = '';
-  for (let s = 0; s * 1000 / FRAME_MS < N; s++) el(ticks, 'text', { x: xs(s * 1000 / FRAME_MS), y: 284, 'text-anchor': 'middle', class: 't2' }, `${s} 秒`);
+  for (let s = 0; s * 1000 / FRAME_MS < N; s++) el(ticks, 'text', { x: xs(s * 1000 / FRAME_MS), y: bottom + 18, 'text-anchor': 'middle', class: 't2' }, `${s} 秒`);
   const d = DESIGNS[sel], L = d.f;
   for (const [a, b, name] of d.segs) {
     const kind = kindOf(name);
@@ -218,17 +232,25 @@ function drawChart() {
   const bw = Math.max(1.5, (X1 - X0) / N - 0.6);
   L.forEach((f, i) => el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: rowC.y + rowC.h - yC(f.cost),
     fill: f.cost > LIMIT ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.cost > LIMIT ? 1 : 0.55 }));
-  // 回收記憶體的時間已經算在那一格裡，從底部疊上另一個顏色；通常只有幾 ms，
-  // 在 100ms 的刻度上看不出來，底下另外畫一道短線標出是哪一格。
-  L.forEach((f, i) => {
-    if (!(f.gc > 0)) return;
-    el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(Math.min(f.gc, f.cost)), width: bw,
-      height: rowC.y + rowC.h - yC(Math.min(f.gc, f.cost)), fill: 'var(--gc)' });
-    el(dyn, 'rect', { x: xs(i) - 1.5, y: rowC.y + rowC.h + 2, width: 3, height: 6, rx: 1, fill: 'var(--gc)' });
-  });
   el(dyn, 'line', { x1: X0, x2: X1, y1: yC(LIMIT), y2: yC(LIMIT), stroke: 'var(--muted-foreground)', 'stroke-dasharray': '3 3' });
   el(dyn, 'text', { x: X1, y: yC(LIMIT) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${LIMIT}ms`);
   el(dyn, 'text', { x: X0 + 2, y: rowC.y + 10, class: 't2' }, '（電腦上，超過 100ms 截斷）');
+  if (HAS_GC) {
+    // 回收的時間已經算在主執行緒那一格裡；這排單獨放大，新生區在下、舊生區疊在上面。
+    const yD = ms => rowD.y + rowD.h - Math.min(ms, GC_CAP) / GC_CAP * rowD.h;
+    const gw = Math.max(2, bw);
+    L.forEach((f, i) => {
+      if (f.gcNew > 0) el(dyn, 'rect', { x: xs(i) - gw / 2, y: yD(f.gcNew), width: gw, height: rowD.y + rowD.h - yD(f.gcNew), fill: 'var(--gc)' });
+      if (f.gcOld > 0) el(dyn, 'rect', { x: xs(i) - gw / 2, y: yD(f.gc), width: gw, height: yD(f.gcNew) - yD(f.gc), fill: 'var(--gc-old)' });
+      if (f.gc >= 1.5) el(dyn, 'text', { x: xs(i) + gw / 2 + 2, y: yD(f.gc) + 9, class: 'halo', style: 'font-size:10px' }, f.gc.toFixed(1));
+    });
+    if (GC_RATIO) {
+      const t = PHONE_FRAME_MS / GC_RATIO;
+      el(dyn, 'line', { x1: X0, x2: X1, y1: yD(t), y2: yD(t), stroke: 'var(--heavy)', 'stroke-dasharray': '3 3' });
+      el(dyn, 'text', { x: X1, y: yD(t) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${t.toFixed(1)}ms（×${GC_RATIO} 超過一格）`);
+    }
+    el(dyn, 'text', { x: X0 + 2, y: rowD.y + 10, class: 't2' }, `（電腦上，超過 ${GC_CAP}ms 截斷）`);
+  }
 }
 function select(i) {
   sel = i;
@@ -245,7 +267,8 @@ function show(i) {
   const d = DESIGNS[sel], f = frameOf(d, frame);
   document.getElementById('selname').textContent = d.name;
   document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`
-    + (f.gc > 0 ? `（其中回收記憶體 ${f.gc.toFixed(1)} ms）` : '');
+    + (f.gc > 0 ? `（其中回收記憶體 ${f.gc.toFixed(1)} ms`
+      + (GC_RATIO ? `，換算到手機約 ${(f.gc * GC_RATIO).toFixed(0)} ms` : '') + '）' : '');
   document.getElementById('diff').textContent = f.change === 0 ? '0（完全靜止）' : `${f.change.toLocaleString()} 個像素`;
   document.getElementById('note').innerHTML = noteOf(d, phaseOf(d, frame));
 }

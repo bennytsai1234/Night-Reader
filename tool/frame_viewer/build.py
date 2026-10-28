@@ -13,7 +13,9 @@
 （`variants`，例如兩種間隔；`fixed` 的候選不分變化），淺色、深色各錄一段，
 名稱是「<候選>-<變化>-<light|dark>」。頁面上的段落名稱、各段說明（可依候選
 不同，`{variant}` 換成變化的 value、`{欄位}` 換成候選的同名欄位）、要畫深淺
-的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。
+的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。錄影時開了 `FRAME_GC=1`，頁面多一排
+「回收記憶體」；`gcPhoneRatio` 是手機上回收比電腦慢幾倍（#130 那次同一次回收電腦約
+2ms、手機 12～13ms，約 6 倍），照它畫出換算到手機會超過一格的線。
 
 需要 ffmpeg、numpy 與 Pillow。
 """
@@ -64,7 +66,9 @@ def measure(meta, frames, spots):
         'n': len(frames),
         'phases': meta['phases'][:len(frames)],
         'costs': meta['costs'][:len(frames)],
-        'gc': meta.get('gc', [])[:len(frames)],
+        'frameMs': meta.get('frameMs', 16),
+        'gcNew': meta.get('gcNew', [])[:len(frames)],
+        'gcOld': meta.get('gcOld', [])[:len(frames)],
         'frames': rows,
     }
 
@@ -121,7 +125,7 @@ def main():
     data_png = os.path.join(out_dir, 'data.png')
     encode_data(data, data_png)
     page_config = {k: config[k] for k in
-                   ('designs', 'variants', 'phases', 'notes', 'spots', 'jumps', 'end', 'limitMs', 'start')
+                   ('designs', 'variants', 'phases', 'notes', 'spots', 'jumps', 'end', 'limitMs', 'start', 'gcPhoneRatio')
                    if k in config}
     page_config['tile'] = tile
     with open(os.path.join(HERE, 'template.html'), encoding='utf-8') as f:
