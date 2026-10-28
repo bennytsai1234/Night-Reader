@@ -277,19 +277,35 @@ class LaunchEntranceMotion {
 /// 骨架長出約第 30 幀、呼吸開始後幾幀，電腦上一次 5～14ms，改前四次量測
 /// 每次都有（2026-10-28）。所以接著也把舊生區清一次：一個物件先留著，
 /// 跟著新生區回收搬進舊生區後放手，再一次塞 1MB（大塊直接配在舊生區），
-/// 直到它被清掉，就是舊生區回收完一次。[maxOldBytes] 只是保險。
+/// 直到它被清掉，就是舊生區回收完一次；電腦 debug 塞約 55～80MB、20ms。
+/// 清完舊生區也小了，動畫途中 Dart 不會趁兩格之間的空檔再開始回收它。
+/// [maxOldBytes] 只是保險。
+///
+/// 探針的建立、兩段塞垃圾與檢查各自是一個不併進呼叫端的函式：全寫在同一
+/// 個函式裡時，探針在 App 裡一直清不掉（還被這個函式的暫存留著），每次都
+/// 塞滿 128MB，塞出來的垃圾反而讓 Dart 在動畫途中回收舊生區，一次 5～11ms
+/// （2026-10-28 量到）。
 void _collectGarbage({
   int collections = 4,
   int maxBytes = 256 << 20,
   int maxOldBytes = 128 << 20,
 }) {
+  final aging = List<Object?>.filled(1, null);
+  final old = _holdProbe(aging);
+  _churnNew(collections, maxBytes);
+  aging[0] = null;
+  _churnOld(old, maxOldBytes);
+}
+
+/// 塞小物件到新生區回收 [collections] 次（[_collectGarbage]）。
+@pragma('vm:never-inline')
+void _churnNew(int collections, int maxBytes) {
   const perCheck = 16 * 1024; // 每個 4 格的 List 約 64 位元組，一次約 1MB
   final ring = List<Object?>.filled(1024, null);
-  final aging = <Object>[Object()];
-  final old = WeakReference(aging.first);
   var probe = WeakReference(Object());
   var seen = 0;
-  for (var bytes = 0; seen < collections && bytes < maxBytes;) {
+  var bytes = 0;
+  while (seen < collections && bytes < maxBytes) {
     for (var i = 0; i < perCheck; i++) {
       ring[i & 1023] = List<int>.filled(4, i);
     }
@@ -299,14 +315,31 @@ void _collectGarbage({
       probe = WeakReference(Object());
     }
   }
-  aging.clear();
+}
+
+/// 塞大塊到舊生區，直到 [old] 被清掉（[_collectGarbage]）。
+@pragma('vm:never-inline')
+void _churnOld(WeakReference<Object> old, int maxBytes) {
   const chunk = 1 << 20;
-  for (var bytes = 0; old.target != null && bytes < maxOldBytes;) {
+  final ring = List<Object?>.filled(1, null);
+  var bytes = 0;
+  while (!_isGone(old) && bytes < maxBytes) {
     // 只留最後一塊，前一塊就成了舊生區的垃圾。
     ring[0] = Uint8List(chunk);
     bytes += chunk;
   }
 }
+
+/// 建一個只由 [holder] 留著的探針，回傳它的弱參照。
+@pragma('vm:never-inline')
+WeakReference<Object> _holdProbe(List<Object?> holder) {
+  final probe = Object();
+  holder[0] = probe;
+  return WeakReference(probe);
+}
+
+@pragma('vm:never-inline')
+bool _isGone(WeakReference<Object> probe) => probe.target == null;
 
 class _LaunchEntranceState extends State<LaunchEntrance>
     with SingleTickerProviderStateMixin {
