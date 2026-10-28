@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import sys
 
-ROOT = r'D:\nr-survey'
+ROOT = os.environ.get('NR_SURVEY_ROOT', r'D:\nr-survey')
 REC = os.path.join(ROOT, 'tmp', 'night-reader-frames')
 PAGES = os.path.join(ROOT, 'pages')
 BUILD = r'D:\Migrated\Desktop\Folder\product\Night-Reader\tool\frame_viewer\build.py'
@@ -91,7 +91,7 @@ def build_area(area, steps):
 
 def overview():
     rows = []
-    order = ['tabs', 'launch', 'shelf', 'book', 'reader', 'search', 'explore',
+    order = ['sample', 'tabs', 'launch', 'shelf', 'book', 'reader', 'search', 'explore',
              'download', 'sources', 'mine', 'mine2']
     pages = [p for p in os.listdir(PAGES)
              if os.path.isdir(os.path.join(PAGES, p)) and p.rsplit('-', 1)[-1].isdigit()]

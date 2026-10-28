@@ -2,9 +2,11 @@
 
     python overview.py
 
-每一步一列：淺色、深色各一條逐格的主執行緒長條（超過 8ms 的格子標紅，
-長條頂到 32ms 截掉、頂端標記），旁邊是最忙的一格與超過 8ms 的格數。最上面
-是全部步驟裡最忙的 20 步。
+只有畫面在動（換頁、換場、骨架、捲動、其他動畫）時主執行緒超過 8ms 才算問題，
+畫面靜止時的尖峰不算（使用者 2026-10-27 定的）。每一步一列：淺色、深色各一條
+逐格的主執行緒長條（動畫中超過 8ms 的格子標紅、靜止時超過的標灰，長條頂到
+32ms 截掉、頂端標記），旁邊是動畫中超過 8ms 的格數與動畫中最忙的一格。最上面
+是動畫中超過 8ms 格數最多的 20 步。
 """
 import json
 import math
@@ -12,10 +14,10 @@ import os
 
 from PIL import Image
 
-PAGES = r'D:\nr-survey\pages'
+PAGES = os.path.join(os.environ.get('NR_SURVEY_ROOT', r'D:\nr-survey'), 'pages')
 
 AREA_NAMES = {
-    'tabs': '換分頁', 'launch': '開 App 進場', 'shelf': '書架', 'book': '書籍詳情與目錄',
+    'sample': '樣本：書架切換列表／網格', 'tabs': '換分頁', 'launch': '開 App 進場', 'shelf': '書架', 'book': '書籍詳情與目錄',
     'reader': '閱讀器', 'search': '搜尋', 'explore': '發現', 'download': '下載',
     'sources': '書源管理', 'mine': '「我的」：外觀與主題', 'mine2': '「我的」：其他各頁',
 }
@@ -26,7 +28,7 @@ TEMPLATE = r'''<!doctype html>
 <style>
 :root{--surface:var(--card,#fcfcfb);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--muted:var(--muted-foreground,#898781);
 --grid:var(--border,#e1e0d9);--axis:var(--border,#c3c2b7);--ok:var(--chart-1,#86b6ef);--bar:var(--chart-1,#2a78d6);--crit:var(--destructive,#d03b3b);
---move:color-mix(in srgb,var(--chart-1,#2a78d6) 14%,transparent);}
+--move:color-mix(in srgb,var(--chart-1,#2a78d6) 14%,transparent);--still:var(--muted-foreground,#b5b3ab);--dark:var(--chart-2,#86b6ef);}
 body{margin:0;font-size:13px;line-height:1.5}
 .wrap{padding:0}
 h1{font-size:18px;margin:0 0 4px} h2{font-size:15px;margin:22px 0 6px}
@@ -46,12 +48,12 @@ svg{display:block} .hot{color:var(--crit);font-weight:600}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 </style></head><body><div class="wrap">
 <h1>全 App 主執行緒總覽</h1>
-<p class="sub">電腦上 debug 模式逐格量到的主執行緒時間，看的是尖峰落在哪個操作、哪一段，不是手機上的毫秒數。每格 16ms，8ms 是預算線。</p>
+<p class="sub">電腦上 debug 模式逐格量到的主執行緒時間，看的是問題落在哪個操作、哪一段，不是手機上的毫秒數。每格 16ms，8ms 是預算線；只算畫面在動的格子，畫面靜止時的尖峰不算。</p>
 <div class="tiles" id="tiles"></div>
-<h2>最忙的 20 步（淺色）</h2>
+<h2>動畫中超過 8ms 的格數最多的 20 步（<i class="sw" style="background:var(--bar)"></i>淺色＋<i class="sw" style="background:var(--dark)"></i>深色）</h2>
 <div class="card"><div id="top"></div></div>
 <h2>每一步逐格</h2>
-<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>8ms 以內</span><span><i class="sw" style="background:var(--crit)"></i>超過 8ms</span><span><i class="sw" style="background:var(--move)"></i>畫面在動（換頁、換場、捲動、動畫）</span><span>長條頂到 32ms 截掉，頂端加粗表示更高</span></div>
+<div class="legend"><span><i class="sw" style="background:var(--ok)"></i>8ms 以內</span><span><i class="sw" style="background:var(--crit)"></i>動畫中超過 8ms</span><span><i class="sw" style="background:var(--still)"></i>靜止時超過 8ms（不算）</span><span><i class="sw" style="background:var(--move)"></i>畫面在動（換頁、換場、骨架、捲動、動畫）</span><span>長條頂到 32ms 截掉，頂端加粗表示更高</span></div>
 <div id="areas"></div>
 </div><div id="tip"></div>
 <script>
@@ -75,35 +77,41 @@ const tip = document.getElementById('tip');
 function showTip(e, html){tip.innerHTML=html;tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';}
 function hideTip(){tip.style.display='none';}
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-function stats(m){ if(!m) return null; const c=m.costs; let peak=0,at=0; c.forEach((v,i)=>{if(v>peak){peak=v;at=i;}});
-  return {peak, at, over:c.filter(v=>v>8).length, n:c.length, phase:m.phases[at]}; }
+// 只看畫面在動的格子：over 是動畫中超過 8ms 的格數，peak 是動畫中最忙的一格。
+function stats(m){ if(!m) return null; const c=m.costs; let peak=0,at=-1,over=0;
+  c.forEach((v,i)=>{ if(STILL.has(m.phases[i])) return; if(v>8) over++; if(v>peak){peak=v;at=i;} });
+  return {peak, at, over, n:c.length, phase:at<0?null:m.phases[at]}; }
 DATA.forEach(r=>{for(const k of ['light','dark']) if(r[k]) r[k].phases=r[k].phases.flatMap(([p,n])=>Array(n).fill(p));
-  r.ls=stats(r.light); r.ds=stats(r.dark); r.area=r.page.replace(/-(\d+|錄影中)$/,'');});
+  r.ls=stats(r.light); r.ds=stats(r.dark); r.area=r.page.replace(/-(\d+|錄影中)$/,'');
+  r.over=(r.ls?r.ls.over:0)+(r.ds?r.ds.over:0);});
 const fmt = v => v>=100? v.toFixed(0) : v.toFixed(1);
 
 // 摘要
-const all = DATA.filter(r=>r.ls);
-const hot = all.filter(r=>r.ls.over>0).length;
-const worst = all.slice().sort((a,b)=>b.ls.peak-a.ls.peak)[0];
+const all = DATA.filter(r=>r.ls||r.ds);
+const hot = all.filter(r=>r.over>0).length;
+const worst = all.slice().sort((a,b)=>b.over-a.over)[0];
 document.getElementById('tiles').innerHTML =
   `<div class="tile"><b>${all.length}</b><span>個操作</span></div>`+
-  `<div class="tile"><b>${hot}</b><span>個有格子超過 8ms</span></div>`+
-  (worst?`<div class="tile"><b>${fmt(worst.ls.peak)} ms</b><span>最忙：${worst.label}</span></div>`:'');
+  `<div class="tile"><b>${hot}</b><span>個動畫中有格子超過 8ms</span></div>`+
+  (worst&&worst.over?`<div class="tile"><b>${worst.over} 格</b><span>最多：${worst.label}</span></div>`:'');
 
-// 最忙的 20 步：橫條，對數刻度（尖峰從幾 ms 到幾秒）
+// 動畫中超過 8ms 格數最多的 20 步：橫條，淺色、深色疊在一起
 (function(){
-  const rows = all.slice().sort((a,b)=>b.ls.peak-a.ls.peak).slice(0,20);
-  const W=690,L=260,R=64,H=22,top=18, h=top+rows.length*H+6;
-  const max=Math.max(...rows.map(r=>r.ls.peak),16);
-  const x=v=>L+(W-L-R)*Math.log10(Math.max(v,1))/Math.log10(max);
-  let s=`<svg width="${W}" height="${h}" role="img" aria-label="最忙的 20 步">`;
-  for(const t of [1,8,16,100,1000,10000]) if(t<=max){const xx=x(t);
-    s+=`<line x1="${xx}" x2="${xx}" y1="${top-4}" y2="${h-4}" stroke="${t===8?css('--crit'):css('--grid')}" stroke-width="1" ${t===8?'stroke-dasharray="3 3"':''}/>`+
-       `<text x="${xx}" y="10" font-size="10" fill="${css('--muted')}" text-anchor="middle">${t>=1000?t/1000+'s':t+'ms'}</text>`;}
-  rows.forEach((r,i)=>{const y=top+i*H;
+  const rows = all.filter(r=>r.over>0).sort((a,b)=>b.over-a.over).slice(0,20);
+  if(!rows.length){document.getElementById('top').innerHTML='<span class="key">沒有任何一步在動畫中超過 8ms。</span>';return;}
+  const W=690,L=260,R=90,H=22,top=18, h=top+rows.length*H+6;
+  const max=Math.max(...rows.map(r=>r.over),4);
+  const x=v=>L+(W-L-R)*v/max;
+  let s=`<svg width="${W}" height="${h}" role="img" aria-label="動畫中超過 8ms 格數最多的步驟">`;
+  const step=Math.max(1,Math.ceil(max/5));
+  for(let t=0;t<=max;t+=step){const xx=x(t);
+    s+=`<line x1="${xx}" x2="${xx}" y1="${top-4}" y2="${h-4}" stroke="${css('--grid')}" stroke-width="1"/>`+
+       `<text x="${xx}" y="10" font-size="10" fill="${css('--muted')}" text-anchor="middle">${t} 格</text>`;}
+  rows.forEach((r,i)=>{const y=top+i*H, lo=r.ls?r.ls.over:0, dk=r.ds?r.ds.over:0;
     s+=`<text x="${L-8}" y="${y+14}" font-size="12" fill="${css('--ink')}" text-anchor="end">${AREAS[r.area]||r.area}｜${r.label.slice(0,22)}</text>`+
-       `<rect x="${L}" y="${y+4}" width="${Math.max(2,x(r.ls.peak)-L)}" height="12" rx="3" fill="${css('--bar')}"/>`+
-       `<text x="${x(r.ls.peak)+6}" y="${y+14}" font-size="12" fill="${css('--ink2')}">${fmt(r.ls.peak)} ms</text>`;});
+       `<rect x="${L}" y="${y+4}" width="${Math.max(lo?2:0,x(lo)-L)}" height="12" rx="2" fill="${css('--bar')}"/>`+
+       `<rect x="${x(lo)+(lo?1:0)}" y="${y+4}" width="${Math.max(dk?2:0,x(dk)-L)}" height="12" rx="2" fill="${css('--dark')}"/>`+
+       `<text x="${x(r.over)+8}" y="${y+14}" font-size="12" fill="${css('--ink2')}">淺 ${lo}・深 ${dk}</text>`;});
   document.getElementById('top').innerHTML=s+'</svg>';
 })();
 
@@ -115,8 +123,9 @@ function strip(m, row, mode){
   let s=`<svg width="${W}" height="${H}" data-row="${row}" data-mode="${mode}" style="cursor:crosshair">`;
   c.forEach((v,i)=>{ if(!STILL.has(m.phases[i])) s+=`<rect x="${i*bw}" y="0" width="${bw}" height="${H}" fill="${css('--move')}"/>`; });
   s+=`<line x1="0" x2="${W}" y1="${y(8)}" y2="${y(8)}" stroke="${css('--crit')}" stroke-width="0.6" stroke-dasharray="2 2"/>`;
-  c.forEach((v,i)=>{ const yy=y(v); s+=`<rect x="${i*bw+0.25}" y="${yy}" width="${Math.max(0.5,bw-0.5)}" height="${H-2-yy}" fill="${v>8?css('--crit'):css('--ok')}"/>`;
-    if(v>cap) s+=`<rect x="${i*bw}" y="0" width="${bw}" height="3" fill="${css('--crit')}"/>`; });
+  c.forEach((v,i)=>{ const yy=y(v), still=STILL.has(m.phases[i]), col=v<=8?css('--ok'):still?css('--still'):css('--crit');
+    s+=`<rect x="${i*bw+0.25}" y="${yy}" width="${Math.max(0.5,bw-0.5)}" height="${H-2-yy}" fill="${col}"/>`;
+    if(v>cap) s+=`<rect x="${i*bw}" y="0" width="${bw}" height="3" fill="${col}"/>`; });
   s+=`<line x1="0" x2="${W}" y1="${H-1.5}" y2="${H-1.5}" stroke="${css('--axis')}"/></svg>`;
   return s;
 }
@@ -125,11 +134,11 @@ DATA.forEach((r,i)=>{(byArea[r.area]=byArea[r.area]||[]).push(i);});
 let html='';
 for(const [area, idx] of Object.entries(byArea)){
   const rows=idx.map(i=>DATA[i]);
-  const n=rows.filter(r=>r.ls&&r.ls.over>0).length;
-  html+=`<h2>${AREAS[area]||area}　<span class="key">${rows.length} 個操作，${n} 個有格子超過 8ms</span></h2><div class="card"><table>`+
-    `<tr><th>操作</th><th>淺色逐格</th><th class="num">最忙</th><th class="num">超過 8ms</th><th>深色逐格</th><th class="num">最忙</th><th class="num">超過 8ms</th></tr>`;
+  const n=rows.filter(r=>r.over>0).length;
+  html+=`<h2>${AREAS[area]||area}　<span class="key">${rows.length} 個操作，${n} 個動畫中有格子超過 8ms</span></h2><div class="card"><table>`+
+    `<tr><th>操作</th><th>淺色逐格</th><th class="num">動畫中超過 8ms</th><th class="num">動畫中最忙</th><th>深色逐格</th><th class="num">動畫中超過 8ms</th><th class="num">動畫中最忙</th></tr>`;
   for(const i of idx){const r=DATA[i];
-    const cell=(s)=> s?`<td class="num ${s.peak>8?'hot':''}">${fmt(s.peak)} ms</td><td class="num">${s.over} 格</td>`:'<td></td><td></td>';
+    const cell=(s)=> s?`<td class="num ${s.over?'hot':''}">${s.over} 格</td><td class="num">${s.at<0?'—':fmt(s.peak)+' ms'}</td>`:'<td></td><td></td>';
     html+=`<tr><td class="lbl">${r.label}<br><span class="key">${r.key}（${r.page} 頁）</span></td><td>${strip(r.light,i,'light')}</td>${cell(r.ls)}<td>${strip(r.dark,i,'dark')}</td>${cell(r.ds)}</tr>`;}
   html+='</table></div>';
 }

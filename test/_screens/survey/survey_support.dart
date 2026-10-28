@@ -17,6 +17,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
@@ -62,6 +63,7 @@ Future<void> runSurvey(
     await rest(tester);
     await steps();
     _warming = false;
+    await _pauseWarmupDownloads(tester);
     await tester.pumpWidget(const SizedBox.shrink());
     await settle(tester, const Duration(milliseconds: 300));
     await tester.runAsync(
@@ -72,6 +74,28 @@ Future<void> runSurvey(
   await rest(tester);
   await steps();
   await tearDownApp(tester);
+}
+
+/// 暖身那次開 App 後，書架補下載排的任務會一直跑進正式錄（每秒排程、抓
+/// 章節失敗、寫失敗紀錄），混進每一區的數字（開 App 呼吸中那格 17ms 就是
+/// 它，2026-10-27 查到）。全部暫停、等排程停下；暫停的任務正式錄那次開 App
+/// 也不會被書架補下載排回去（ADR 0008）。
+Future<void> _pauseWarmupDownloads(WidgetTester tester) async {
+  final downloads = DownloadService();
+  final tasks = [...downloads.tasks];
+  for (final task in tasks) {
+    downloads.pauseTask(task.bookUrl);
+  }
+  var waited = 0;
+  while (downloads.isDownloading && waited < 100) {
+    await settle(tester, const Duration(milliseconds: 100));
+    waited++;
+  }
+  // ignore: avoid_print
+  print(
+    'SURVEY 暖身留下的下載：${tasks.length} 個任務已暫停，'
+    '排程${downloads.isDownloading ? '還在跑' : '已停'}（等了 ${waited * 100}ms）',
+  );
 }
 
 bool _routeMoving() {
