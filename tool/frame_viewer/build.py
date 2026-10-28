@@ -64,6 +64,7 @@ def measure(meta, frames, spots):
         'n': len(frames),
         'phases': meta['phases'][:len(frames)],
         'costs': meta['costs'][:len(frames)],
+        'gc': meta.get('gc', [])[:len(frames)],
         'frames': rows,
     }
 

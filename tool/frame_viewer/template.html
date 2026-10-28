@@ -11,6 +11,7 @@
     --still-soft: color-mix(in srgb, var(--muted-foreground) 16%, var(--background));
     --gap-soft: color-mix(in srgb, var(--chart-4) 30%, var(--background));
     --heavy: var(--warning);
+    --gc: var(--chart-2);
     color: var(--foreground); font-family: var(--font-sans); font-size: 13px;
   }
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
@@ -113,7 +114,7 @@ function prepare() {
   for (const d of DESIGNS) {
     const D = DATA[baseOf(d)];
     d.n = D.n;
-    d.f = D.frames.map(([change, ...spots], i) => ({ change, spots, cost: D.costs[i] ?? 0 }));
+    d.f = D.frames.map(([change, ...spots], i) => ({ change, spots, cost: D.costs[i] ?? 0, gc: (D.gc || [])[i] ?? 0 }));
     d.phase = D.phases.map(labelOf);
     d.segs = [];
     d.phase.forEach((p, i) => {
@@ -166,7 +167,8 @@ legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"><
   + '<span><i class="sw" style="border-color:var(--muted-foreground);opacity:.45"></i>其他候選</span>'
   + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
   + `<span><i class="box" style="background:var(--heavy)"></i>一格超過 ${LIMIT}ms</span>`
-  + `<span><i class="box" style="background:var(--muted-foreground)"></i>一格在 ${LIMIT}ms 內</span>`;
+  + `<span><i class="box" style="background:var(--muted-foreground)"></i>一格在 ${LIMIT}ms 內</span>`
+  + (Object.values(DATA).some(D => (D.gc || []).length) ? '<span><i class="box" style="background:var(--gc)"></i>其中回收記憶體（圖底下的短線標出是哪幾格）</span>' : '');
 
 const svg = document.getElementById('chart');
 const X0 = 64, X1 = 724;
@@ -216,6 +218,14 @@ function drawChart() {
   const bw = Math.max(1.5, (X1 - X0) / N - 0.6);
   L.forEach((f, i) => el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: rowC.y + rowC.h - yC(f.cost),
     fill: f.cost > LIMIT ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.cost > LIMIT ? 1 : 0.55 }));
+  // 回收記憶體的時間已經算在那一格裡，從底部疊上另一個顏色；通常只有幾 ms，
+  // 在 100ms 的刻度上看不出來，底下另外畫一道短線標出是哪一格。
+  L.forEach((f, i) => {
+    if (!(f.gc > 0)) return;
+    el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(Math.min(f.gc, f.cost)), width: bw,
+      height: rowC.y + rowC.h - yC(Math.min(f.gc, f.cost)), fill: 'var(--gc)' });
+    el(dyn, 'rect', { x: xs(i) - 1.5, y: rowC.y + rowC.h + 2, width: 3, height: 6, rx: 1, fill: 'var(--gc)' });
+  });
   el(dyn, 'line', { x1: X0, x2: X1, y1: yC(LIMIT), y2: yC(LIMIT), stroke: 'var(--muted-foreground)', 'stroke-dasharray': '3 3' });
   el(dyn, 'text', { x: X1, y: yC(LIMIT) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${LIMIT}ms`);
   el(dyn, 'text', { x: X0 + 2, y: rowC.y + 10, class: 't2' }, '（電腦上，超過 100ms 截斷）');
@@ -234,7 +244,8 @@ function show(i) {
   document.getElementById('clock').textContent = `第 ${frame} 格 · ${(frame * FRAME_MS / 1000).toFixed(2)} 秒`;
   const d = DESIGNS[sel], f = frameOf(d, frame);
   document.getElementById('selname').textContent = d.name;
-  document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`;
+  document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`
+    + (f.gc > 0 ? `（其中回收記憶體 ${f.gc.toFixed(1)} ms）` : '');
   document.getElementById('diff').textContent = f.change === 0 ? '0（完全靜止）' : `${f.change.toLocaleString()} 個像素`;
   document.getElementById('note').innerHTML = noteOf(d, phaseOf(d, frame));
 }
