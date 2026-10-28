@@ -32,7 +32,9 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
@@ -177,6 +179,9 @@ Future<void> resetPrefs(Map<String, Object> values) async {
         await prefs.setString(key, '$value');
     }
   }
+  // App 開機時從偏好讀進記憶體的值也照新的設定（App 是 ChineseDisplay.start）：
+  // 前一個情境把繁簡轉換改掉的話，測試沒載字典，書架會一直等字典、停在骨架。
+  ChineseDisplay.mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
 }
 
 /// 書源、書架與一本有內容的書。
