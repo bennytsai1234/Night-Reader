@@ -41,5 +41,6 @@
     {"label": "跳到換場前", "phase": "靜止", "offset": -6}
   ],
   "end": {"phase": "書架", "label": "換成書架"},
-  "limitMs": 8
+  "limitMs": 8,
+  "gcPhoneRatio": 6
 }
