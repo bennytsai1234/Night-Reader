@@ -153,7 +153,8 @@ class DownloadService extends DownloadBase
     }
   }
 
-  /// 從資料庫恢復任務
+  /// 從資料庫恢復任務：上次關 App 時還在下載的改回排隊，先不開跑
+  /// （[resumeRestoredDownloads]）。
   Future<void> _loadTasks() async {
     final storedTasks = await downloadDao.getAll();
     for (final task in storedTasks.where((task) => task.isDownloading)) {
@@ -166,7 +167,14 @@ class DownloadService extends DownloadBase
     tasks.clear();
     tasks.addAll(storedTasks);
     update();
-    if (tasks.any((t) => t.isWaiting || t.isDownloading) && !isDownloading) {
+  }
+
+  /// 接著下載上次沒下載完的書。服務在開 App 建書架時就建立，建立時就開跑
+  /// 的話，抓目錄、收正文、寫入與每秒一次的排程都落在開 App 的進場動畫裡；
+  /// 改由主頁面等進場播完才呼叫（ADR 0018）。
+  Future<void> resumeRestoredDownloads() async {
+    await _initialization;
+    if (tasks.any((t) => t.isWaiting) && !isDownloading) {
       unawaited(startDownloads());
     }
   }

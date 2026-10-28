@@ -15,7 +15,9 @@ class AppProviders {
     ChangeNotifierProvider(create: (_) => BookshelfProvider()),
     ChangeNotifierProvider(create: (_) => SettingsProvider()),
     ChangeNotifierProvider(create: (_) => ThemeSettingsProvider()),
-    ChangeNotifierProvider<DownloadService>(create: (_) => DownloadService()),
+    // 單例不交給 Provider 管：用 create 的話整棵樹拆掉時會被 dispose，之後
+    // 還在跑的下載一通知就出錯。
+    ChangeNotifierProvider.value(value: DownloadService()),
     // TTSService 從 getIt 獲取單例，保持全域一致性
     ChangeNotifierProvider.value(value: getIt<TTSService>()),
     // ExploreProvider 提到 root 並 eager 建立,讓首次進入發現時 DB 訂閱已完成

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/default_data.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
@@ -150,11 +151,11 @@ class _MainPageState extends State<MainPage>
     }
   }
 
-  /// 開 App 的進場播完：啟動維護、書架補下載與檢查更新、App 更新檢查這時
-  /// 才開始。原本第一幀後就開始，書架讀完的那一刻正好是書架換場開始，
-  /// 這些工作留在主執行緒的部分全疊在換場上（ADR 0018）。
+  /// 開 App 的進場播完：啟動維護、書架補下載與檢查更新、接著上次沒下載完
+  /// 的書、App 更新檢查這時才開始。原本第一幀後就開始，書架讀完的那一刻
+  /// 正好是書架換場開始，這些工作留在主執行緒的部分全疊在換場上（ADR 0018）。
   ///
-  /// 四件工作依序開始，每件之間隔一格的時間（60Hz 一格約 16ms）：各自留在
+  /// 五件工作依序開始，每件之間隔一格的時間（60Hz 一格約 16ms）：各自留在
   /// 主執行緒的同步部分落在不同的格，不會全擠在換場結束的那一格（ADR
   /// 0029）。不用 [Priority.idle] 的閒置工作：只要畫面上還有動畫（別的
   /// 分頁的骨架呼吸）就一直輪不到，等這些工作的資料的骨架會永遠停著。
@@ -166,6 +167,9 @@ class _MainPageState extends State<MainPage>
     final tasks = <void Function()>[
       () => unawaited(_initDeferredStartupData()),
       _refreshShelfOnceLoaded,
+      () => unawaited(
+        context.read<DownloadService?>()?.resumeRestoredDownloads(),
+      ),
       () => unawaited(_runAutomaticUpdateCheck()),
       () => widget.onLaunchSettled?.call(),
     ];
