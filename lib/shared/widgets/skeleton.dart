@@ -580,12 +580,16 @@ class _RenderSkeletonBox extends RenderBox {
   @override
   Size computeDryLayout(BoxConstraints constraints) => constraints.smallest;
 
+  /// 每一幀重畫都用同一支畫筆（畫的當下就記下了），不每次新建。
+  final Paint _paint = Paint();
+
   @override
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
     context.canvas.drawRRect(
       _borderRadius.toRRect(offset & size),
       _breathingPaint(
+        _paint,
         this,
         offset,
         Offset.zero & size,
@@ -598,14 +602,21 @@ class _RenderSkeletonBox extends RenderBox {
   }
 }
 
-/// 佔位形狀在呼吸這一刻的畫筆。[local] 是形狀在 [box] 裡的位置，[offset]
-/// 是 [box] 這次畫在圖層上的位置。[toScreen] 是 [box] 到螢幕的轉換，一次
-/// 畫好幾個形狀時由呼叫端算一次傳進來；null 時這裡算。
+/// 佔位形狀在呼吸這一刻的畫筆：設好 [paint] 後回傳它。[local] 是形狀在
+/// [box] 裡的位置，[offset] 是 [box] 這次畫在圖層上的位置。[toScreen] 是
+/// [box] 到螢幕的轉換（[_screenTransform]），一次畫好幾個形狀時由呼叫端算
+/// 一次傳進來；null 時這裡算。
 ///
 /// 骨架呼吸時每一格每個形狀都要重畫，這裡是骨架本身每一格的成本：到螢幕
 /// 的轉換要沿著元件樹一路往上乘，一個形狀只算一次；曲線查表（[_breathTable]）
 /// 不在每個停點重解一次（ADR 0029「用時間換流暢」，留空間給底下準備內容）。
+/// 每一格也盡量不產生新的物件：開 App 的呼吸與換場加起來約 1.5 秒，呼吸前
+/// 清過記憶體（`_collectGarbage`），這段期間產生的東西撐不滿新生區，Dart 就
+/// 不會在動畫途中回收。原本每個形狀每一格都新建畫筆、停點清單與一份轉換
+/// （沿元件樹記下每一層），新生區約 20 幀就滿，呼吸 0.9 秒裡固定回收 5 次，
+/// 落到哪一幀、停多久看運氣（2026-10-28 量到）。
 Paint _breathingPaint(
+  Paint paint,
   RenderBox box,
   Offset offset,
   Rect local, {
@@ -615,7 +626,7 @@ Paint _breathingPaint(
   required double viewWidth,
   Matrix4? toScreen,
 }) {
-  final paint = Paint();
+  paint.shader = null;
   if (phase == null) {
     paint.color = color;
   } else if (breath.lag == 0 || viewWidth <= 0) {
@@ -623,7 +634,7 @@ Paint _breathingPaint(
   } else {
     // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
     // 骨架才會一樣深。
-    final transform = toScreen ?? box.getTransformTo(null);
+    final transform = toScreen ?? _screenTransform(box);
     final left =
         MatrixUtils.transformPoint(transform, local.topLeft).dx / viewWidth;
     final right =
@@ -632,21 +643,51 @@ Paint _breathingPaint(
     final rect = local.shift(offset);
     // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
     final count = math.max(2, (span.abs() * 32).ceil() + 1);
+    // 漸層建好時已經把顏色與停點抄走，清單可以每一格重用。
+    final colors = _gradientColors[count] ??= List<Color>.filled(count, color);
+    for (var i = 0; i < count; i++) {
+      colors[i] = color.withValues(
+        alpha: color.a * phase.depthAt(left + span * i / (count - 1), breath),
+      );
+    }
     paint.shader = ui.Gradient.linear(
       rect.centerLeft,
       rect.centerRight,
-      [
-        for (var i = 0; i < count; i++)
-          color.withValues(
-            alpha:
-                color.a * phase.depthAt(left + span * i / (count - 1), breath),
-          ),
-      ],
-      [for (var i = 0; i < count; i++) i / (count - 1)],
+      colors,
+      _gradientStops[count] ??= List<double>.unmodifiable([
+        for (var i = 0; i < count; i++) i / (count - 1),
+      ]),
     );
   }
   return paint;
 }
+
+/// [_breathingPaint] 每種停點數重用的顏色清單與停點。
+final Map<int, List<Color>> _gradientColors = {};
+final Map<int, List<double>> _gradientStops = {};
+
+/// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`，但不沿路
+/// 記下每一層、不新建矩陣：結果放在共用的 [_toScreen]，下一個形狀算的時候
+/// 就被蓋掉，拿到就要用掉。呼吸時每個骨架每一格都要算一次（[_breathingPaint]）。
+Matrix4 _screenTransform(RenderObject box) {
+  final root = box.owner?.rootNode;
+  _toScreen.setIdentity();
+  var child = box;
+  // 從自己往上，每一層的轉換乘在左邊；最上面那一層（整個畫面到裝置像素）
+  // 不算，和 getTransformTo(null) 一樣。
+  for (var parent = child.parent; parent != null && !identical(parent, root);) {
+    _step.setIdentity();
+    parent.applyPaintTransform(child, _step);
+    _step.multiply(_toScreen);
+    _toScreen.setFrom(_step);
+    child = parent;
+    parent = child.parent;
+  }
+  return _toScreen;
+}
+
+final Matrix4 _toScreen = Matrix4.identity();
+final Matrix4 _step = Matrix4.identity();
 
 /// [Skeleton.breathAt] 先算好的一張表：呼吸曲線只看一輪裡的位置，和相位、
 /// 橫向位置無關，開 App 時算一次（513 個點），畫骨架時查表內插，和直接算的
@@ -766,8 +807,11 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
       canvas.drawRRect(
         rrect,
         fill != null
-            ? (Paint()..color = fill)
+            ? (_paint
+                ..shader = null
+                ..color = fill)
             : _breathingPaint(
+                _paint,
                 this,
                 offset,
                 shape.rect,
@@ -777,7 +821,7 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
                 viewWidth: _viewWidth,
                 toScreen: _phase == null || _breath.lag == 0
                     ? null
-                    : toScreen ??= getTransformTo(null),
+                    : toScreen ??= _screenTransform(this),
               ),
       );
     }

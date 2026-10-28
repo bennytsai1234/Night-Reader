@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -271,9 +272,22 @@ class LaunchEntranceMotion {
 /// 也剛好清夠。小實驗：回收 2 次（約 17MB）時呼吸還剩一格 7～10ms，
 /// 4 次（約 50MB，電腦 debug 約 40ms）時呼吸每格都在 5ms 內。[maxBytes]
 /// 只是保險，正常不會到。
-void _collectGarbage({int collections = 4, int maxBytes = 256 << 20}) {
+///
+/// 新生區回收幾次後，還在用的東西都搬進了舊生區，舊生區變大，Dart 隨即
+/// 開始回收舊生區；只清新生區的話，這次回收的停頓落在接下來的動畫裡：
+/// 骨架長出約第 30 幀、呼吸開始後幾幀，電腦上一次 5～14ms，改前四次量測
+/// 每次都有（2026-10-28）。所以接著也把舊生區清一次：一個物件先留著，
+/// 跟著新生區回收搬進舊生區後放手，再一次塞 1MB（大塊直接配在舊生區），
+/// 直到它被清掉，就是舊生區回收完一次。[maxOldBytes] 只是保險。
+void _collectGarbage({
+  int collections = 4,
+  int maxBytes = 256 << 20,
+  int maxOldBytes = 128 << 20,
+}) {
   const perCheck = 16 * 1024; // 每個 4 格的 List 約 64 位元組，一次約 1MB
   final ring = List<Object?>.filled(1024, null);
+  final aging = <Object>[Object()];
+  final old = WeakReference(aging.first);
   var probe = WeakReference(Object());
   var seen = 0;
   for (var bytes = 0; seen < collections && bytes < maxBytes;) {
@@ -285,6 +299,13 @@ void _collectGarbage({int collections = 4, int maxBytes = 256 << 20}) {
       seen++;
       probe = WeakReference(Object());
     }
+  }
+  aging.clear();
+  const chunk = 1 << 20;
+  for (var bytes = 0; old.target != null && bytes < maxOldBytes;) {
+    // 只留最後一塊，前一塊就成了舊生區的垃圾。
+    ring[0] = Uint8List(chunk);
+    bytes += chunk;
   }
 }
 
