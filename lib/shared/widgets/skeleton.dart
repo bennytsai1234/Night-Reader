@@ -626,7 +626,11 @@ Paint _breathingPaint(
   required double viewWidth,
   Matrix4? toScreen,
 }) {
-  paint.shader = null;
+  // 重用的畫筆先回到新建時的樣子：畫漸層時畫筆的透明度會乘上去，上一筆
+  // 留下的半透明顏色（實色的形狀、減少動態時的單色）會讓漸層變淡。
+  paint
+    ..shader = null
+    ..color = const Color(0xFF000000);
   if (phase == null) {
     paint.color = color;
   } else if (breath.lag == 0 || viewWidth <= 0) {
