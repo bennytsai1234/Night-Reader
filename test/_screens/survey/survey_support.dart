@@ -103,9 +103,17 @@ bool _routeMoving() {
     final nav = (e as StatefulElement).state as NavigatorState;
     if (nav.userGestureInProgress) return true;
   }
-  for (final e in find.byType(ModalBarrier, skipOffstage: false).evaluate()) {
-    final route = ModalRoute.of(e);
-    if (route == null) continue;
+  // 換頁走 App 的轉場元件（私有類別，照名字找、用 dynamic 拿它的 route）。原本
+  // 拿 ModalBarrier 問 ModalRoute.of：遮罩在頁面範圍外，永遠問不到，換頁從沒
+  // 被認出來過（2026-10-28 查到）。
+  for (final e
+      in find
+          .byWidgetPredicate(
+            (w) => w.runtimeType.toString() == '_AppTransition',
+            skipOffstage: false,
+          )
+          .evaluate()) {
+    final route = (e.widget as dynamic).route as ModalRoute<Object?>;
     final a = route.animation;
     final s = route.secondaryAnimation;
     if ((a != null && a.isAnimating) || (s != null && s.isAnimating)) {
@@ -129,7 +137,8 @@ String? _veil() {
   for (final e in find.byType(LoadingVeil).evaluate()) {
     final veil = (e.widget as LoadingVeil).controller;
     if (veil.isRevealing) return '掀紙';
-    if (veil.isVisible) return '紙';
+    // 紙上有骨架時骨架在長出或呼吸，畫面在動；空白的紙才是靜止。
+    if (veil.isVisible) return veil.hasSkeleton ? '紙上骨架' : '紙';
   }
   return null;
 }
@@ -146,13 +155,14 @@ bool _scrolling() {
 String surveyPhase() {
   if (_routeMoving()) return '換頁';
   if (_tabSwitching()) return '換分頁';
+  // 空白的紙排在最後：紙蓋著時別的東西在動（紙淡入、換頁）就是動畫中。
   final veil = _veil();
-  if (veil != null) return veil;
+  if (veil != null && veil != '紙') return veil;
   if (_revealing()) return '換場';
   if (skeletonShown()) return '骨架';
   if (_scrolling()) return '捲動';
   if (SchedulerBinding.instance.transientCallbackCount > 0) return '動畫';
-  return '靜止';
+  return veil ?? '靜止';
 }
 
 /// 畫面停下來了：沒有換頁、骨架、紙、捲動，也沒有任何動畫在走（選單與
