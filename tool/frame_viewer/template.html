@@ -52,16 +52,16 @@
     <button id="play">▶ 播放</button>
     <button id="sp1" class="on">原速</button>
     <button id="sp4">慢 4 倍</button>
-    <button id="prev">◀ 一格</button>
-    <button id="next">一格 ▶</button>
+    <button id="prev">◀ 一幀</button>
+    <button id="next">一幀 ▶</button>
     <span class="clock" id="clock"></span>
   </div>
   <div class="phones" id="phones"></div>
   <div class="side">
-    <div class="row"><b id="selname"></b>：這一格主執行緒花了 <b id="cost"></b>，畫面和上一格差 <b id="diff"></b></div>
+    <div class="row"><b id="selname"></b>：這一幀主執行緒花了 <b id="cost"></b>，畫面和上一幀差 <b id="diff"></b></div>
     <div class="note" id="note"></div>
   </div>
-  <svg id="chart" viewBox="0 0 728 300" role="img" aria-label="所選候選每一格的畫面變化、深淺與主執行緒時間"></svg>
+  <svg id="chart" viewBox="0 0 728 300" role="img" aria-label="所選候選每一幀的畫面變化、深淺與主執行緒時間"></svg>
   <div class="legend" id="legend"></div>
 </div>
 
@@ -174,11 +174,11 @@ const legend = document.getElementById('legend');
 legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"></i>畫面變化：點選的那支</span>'
   + '<span><i class="sw" style="border-color:var(--muted-foreground);opacity:.45"></i>其他候選</span>'
   + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
-  + `<span><i class="box" style="background:var(--heavy)"></i>一格超過 ${LIMIT}ms</span>`
-  + `<span><i class="box" style="background:var(--muted-foreground)"></i>一格在 ${LIMIT}ms 內</span>`
+  + `<span><i class="box" style="background:var(--heavy)"></i>這一幀超過 ${LIMIT}ms</span>`
+  + `<span><i class="box" style="background:var(--muted-foreground)"></i>這一幀在 ${LIMIT}ms 內</span>`
   + (HAS_GC ? '<span><i class="box" style="background:var(--gc)"></i>回收新生區</span>'
     + '<span><i class="box" style="background:var(--gc-old)"></i>回收舊生區</span>'
-    + (GC_RATIO ? `<span><i class="sw" style="border-color:var(--heavy);border-top-style:dashed"></i>回收慢 ${GC_RATIO} 倍換算到手機會超過一格</span>` : '') : '');
+    + (GC_RATIO ? `<span><i class="sw" style="border-color:var(--heavy);border-top-style:dashed"></i>回收超過這條線，手機上（慢 ${GC_RATIO} 倍）會超過一幀</span>` : '') : '');
 
 const svg = document.getElementById('chart');
 const X0 = 64, X1 = 724;
@@ -247,7 +247,7 @@ function drawChart() {
     if (GC_RATIO) {
       const t = PHONE_FRAME_MS / GC_RATIO;
       el(dyn, 'line', { x1: X0, x2: X1, y1: yD(t), y2: yD(t), stroke: 'var(--heavy)', 'stroke-dasharray': '3 3' });
-      el(dyn, 'text', { x: X1, y: yD(t) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${t.toFixed(1)}ms（×${GC_RATIO} 超過一格）`);
+      el(dyn, 'text', { x: X1, y: yD(t) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${t.toFixed(1)}ms（×${GC_RATIO} 超過一幀）`);
     }
     el(dyn, 'text', { x: X0 + 2, y: rowD.y + 10, class: 't2' }, `（電腦上，超過 ${GC_CAP}ms 截斷）`);
   }
@@ -263,7 +263,7 @@ function show(i) {
   frame = Math.max(0, Math.min(N - 1, i));
   paintPhones(frame);
   head.setAttribute('x1', xs(frame)); head.setAttribute('x2', xs(frame));
-  document.getElementById('clock').textContent = `第 ${frame} 格 · ${(frame * FRAME_MS / 1000).toFixed(2)} 秒`;
+  document.getElementById('clock').textContent = `第 ${frame} 幀 · ${(frame * FRAME_MS / 1000).toFixed(2)} 秒`;
   const d = DESIGNS[sel], f = frameOf(d, frame);
   document.getElementById('selname').textContent = d.name;
   document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`
