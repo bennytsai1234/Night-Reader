@@ -25,6 +25,8 @@
 // 會和只量成本時差一兩格。第一次開整個 App 含 debug 的編譯成本，先開一次
 // 暖身再錄。加 `FRAME_GC=1` 與 `--enable-vmservice` 時另外記下每格裡回收
 // 記憶體停住多久（`frame_budget.dart` 的 FRAME_GC），頁面上多一排「回收記憶體」。
+// 每格裡測試的資料庫花的時間一律記下（`db_clock.dart`），頁面上那一格扣掉它
+// 再和上限比：手機上資料庫不在主執行緒。
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -112,6 +114,7 @@ Future<void> recordAnimation(
         'frameMs': frameDuration.inMicroseconds / 1000,
         'phases': phases,
         'costs': [for (final cost in costs) (cost.total / 100).round() / 10],
+        'db': [for (final cost in costs) (cost.dbMicros / 100).round() / 10],
         if (frameGc) ...{
           'gcNew': [
             for (final cost in costs) (cost.scavengeMicros / 100).round() / 10,
