@@ -196,6 +196,7 @@ Future<void> surveyStep(
   await action();
   final tapMs = clock.elapsedMicroseconds / 1000;
   List<double> costs;
+  List<String> phases;
   if (_warming) {
     await recordFrames(
       tester,
@@ -222,7 +223,8 @@ Future<void> surveyStep(
       tailFrames: tailFrames,
       realAsync: true,
     );
-    costs = [for (final c in result) c.total / 1000];
+    costs = [for (final c in result) c.app / 1000];
+    phases = [for (final c in result) c.note ?? ''];
     // ignore: avoid_print
     print(describeFrames('$area/$key', result));
   } else {
@@ -245,15 +247,27 @@ Future<void> surveyStep(
         '${Platform.pathSeparator}meta.json',
       ).readAsStringSync(),
     ) as Map<String, dynamic>;
-    costs = [for (final c in meta['costs'] as List) (c as num).toDouble()];
+    final db = meta['db'] as List? ?? const [];
+    costs = [
+      for (final (i, c) in (meta['costs'] as List).indexed)
+        (c as num).toDouble() - (i < db.length ? (db[i] as num).toDouble() : 0),
+    ];
+    phases = [for (final p in meta['phases'] as List) p as String];
   }
-  final peak = costs.fold<double>(0, (a, b) => a > b ? a : b);
-  final over = costs.where((c) => c > 8).length;
+  // 照 ADR 0036：只看畫面在動的格子，扣掉測試的資料庫時間後和 4.2ms 比。
+  const still = {'靜止', '紙'};
+  final limit = frameLimit.inMicroseconds / 1000;
+  final moving = [
+    for (final (i, c) in costs.indexed)
+      if (i < phases.length && !still.contains(phases[i])) c,
+  ];
+  final peak = moving.fold<double>(0, (a, b) => a > b ? a : b);
+  final over = moving.where((c) => c > limit).length;
   // ignore: avoid_print
   print(
     'SURVEY $area/$key 「$label」 $surveyMode 格數=${costs.length} '
-    '點下去=${tapMs.toStringAsFixed(1)}ms 最忙=${peak.toStringAsFixed(1)}ms '
-    '超過8ms=$over格${timedOut ? ' 停不下來' : ''}',
+    '點下去=${tapMs.toStringAsFixed(1)}ms 動畫中最忙=${peak.toStringAsFixed(1)}ms '
+    '動畫中超過${limit}ms=$over格${timedOut ? ' 停不下來' : ''}',
   );
   if (!surveyDry) {
     frameRecordingDir.createSync(recursive: true);

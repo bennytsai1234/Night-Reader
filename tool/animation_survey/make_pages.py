@@ -4,7 +4,7 @@
     python make_pages.py --overview          做總覽頁（讀已整理好的 meta.json）
 
 資料夾是 NR_SURVEY_ROOT（run_all.sh 會設好；沒設時有 D 槽用 D:\\nr-survey，
-沒有就用系統暫存區的 nr-survey）。錄影在 <資料夾>\\tmp\\night-reader-frames
+沒有就用系統暫存區的 night-reader-survey）。錄影在 <資料夾>\\tmp\\night-reader-frames
 （survey-manifest.jsonl 列出每一步），整理後搬到 <資料夾>\\pages\\<區>-<頁>\\，
 做完頁面就刪掉原始畫面 frames.rgba，只留 meta.json 與頁面用的圖。
 """
@@ -20,7 +20,7 @@ def survey_root():
     root = os.environ.get('NR_SURVEY_ROOT')
     if root:
         return root
-    return r'D:\nr-survey' if os.path.isdir('D:\\') else os.path.join(tempfile.gettempdir(), 'nr-survey')
+    return r'D:\nr-survey' if os.path.isdir('D:\\') else os.path.join(tempfile.gettempdir(), 'night-reader-survey')
 
 
 ROOT = survey_root()

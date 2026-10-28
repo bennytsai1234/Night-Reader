@@ -2,12 +2,12 @@
 # 依序錄每一區（淺色、深色），每區錄完就做成儀表板頁、刪掉原始畫面。
 # 用法：bash tool/animation_survey/run_all.sh [區 ...]（預設全部）
 # 錄影與頁面放在 NR_SURVEY_ROOT（沒設時有 D 槽用 D:/nr-survey，沒有就用系統暫存區的
-# nr-survey）；一段錄影約 80MB，錄完一區就只留頁面。
+# night-reader-survey）；一段錄影約 80MB，錄完一區就只留頁面。
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here/../.." || exit 1
 if [ -z "${NR_SURVEY_ROOT:-}" ]; then
-  if [ -d /d ]; then NR_SURVEY_ROOT='D:/nr-survey'; else NR_SURVEY_ROOT="$(cygpath -m "$TEMP")/nr-survey"; fi
+  if [ -d /d ]; then NR_SURVEY_ROOT='D:/nr-survey'; else NR_SURVEY_ROOT="$(cygpath -m "$TEMP")/night-reader-survey"; fi
 fi
 export NR_SURVEY_ROOT
 root=$(cygpath -u "$NR_SURVEY_ROOT")
