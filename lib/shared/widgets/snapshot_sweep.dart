@@ -547,6 +547,15 @@ class _RenderSnapshotSweep extends RenderProxyBox {
 
   static final Paint _exact = Paint()..filterQuality = FilterQuality.none;
 
+  /// 換場時每種透明度的畫筆（[_paintMix]），第一次用到才建、之後一直重用：
+  /// 換場每一格最多畫 254 段，每段新建一支畫筆的話，0.6 秒的換場裡新生區
+  /// 會滿兩次，Dart 在換場途中回收（2026-10-28 量到）。
+  static final List<Paint?> _faded = List<Paint?>.filled(255, null);
+
+  static Paint _fadedPaint(int alpha) => Paint()
+    ..filterQuality = FilterQuality.none
+    ..color = Color.fromARGB(alpha, 0, 0, 0);
+
   @override
   void paint(PaintingContext context, Offset offset) {
     final before = _before;
@@ -616,11 +625,7 @@ class _RenderSnapshotSweep extends RenderProxyBox {
         image,
         columns(from, to),
         onScreen(from, to),
-        alpha >= 255
-            ? _exact
-            : (Paint()
-                ..filterQuality = FilterQuality.none
-                ..color = Color.fromARGB(alpha, 0, 0, 0)),
+        alpha >= 255 ? _exact : _faded[alpha] ??= _fadedPaint(alpha),
       );
     }
 
