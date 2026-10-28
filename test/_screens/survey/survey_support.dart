@@ -7,8 +7,8 @@
 //   SURVEY_MODE=light|dark   淺色或深色（預設 light）
 //   SURVEY_DRY=1             不存畫面，只把流程跑過、印出每步的結果（寫腳本時用）
 //
-// 錄影寫在 %TEMP%\night-reader-frames\<步驟鍵>-<mode>\，跑的時候把 TEMP、TMP
-// 指到 D:\nr-survey\tmp。每步印一行 `SURVEY <鍵> ...`，並把步驟附加到
+// 錄影寫在 %TEMP%\night-reader-frames\<步驟鍵>-<mode>\；`tool/animation_survey/run_all.sh`
+// 會把 TEMP、TMP 指到 <NR_SURVEY_ROOT>\tmp。每步印一行 `SURVEY <鍵> ...`，並把步驟附加到
 // night-reader-frames\survey-manifest.jsonl。
 import 'dart:convert';
 import 'dart:io';

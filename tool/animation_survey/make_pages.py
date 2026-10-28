@@ -3,20 +3,30 @@
     python make_pages.py <區> [<區> ...]     做這幾區的儀表板（每頁 4 步）
     python make_pages.py --overview          做總覽頁（讀已整理好的 meta.json）
 
-錄影在 D:\\nr-survey\\tmp\\night-reader-frames（survey-manifest.jsonl 列出每一步），
-整理後搬到 D:\\nr-survey\\pages\\<區>-<頁>\\，做完頁面就刪掉原始畫面
-frames.rgba，只留 meta.json 與頁面用的圖。
+資料夾是 NR_SURVEY_ROOT（run_all.sh 會設好；沒設時有 D 槽用 D:\\nr-survey，
+沒有就用系統暫存區的 nr-survey）。錄影在 <資料夾>\\tmp\\night-reader-frames
+（survey-manifest.jsonl 列出每一步），整理後搬到 <資料夾>\\pages\\<區>-<頁>\\，
+做完頁面就刪掉原始畫面 frames.rgba，只留 meta.json 與頁面用的圖。
 """
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
-ROOT = os.environ.get('NR_SURVEY_ROOT', r'D:\nr-survey')
+
+def survey_root():
+    root = os.environ.get('NR_SURVEY_ROOT')
+    if root:
+        return root
+    return r'D:\nr-survey' if os.path.isdir('D:\\') else os.path.join(tempfile.gettempdir(), 'nr-survey')
+
+
+ROOT = survey_root()
 REC = os.path.join(ROOT, 'tmp', 'night-reader-frames')
 PAGES = os.path.join(ROOT, 'pages')
-BUILD = r'D:\Migrated\Desktop\Folder\product\Night-Reader\tool\frame_viewer\build.py'
+BUILD = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frame_viewer', 'build.py')
 PER_PAGE = 4
 
 PHASES = {
@@ -75,7 +85,8 @@ def build_area(area, steps):
             'designs': [{'key': s['key'], 'name': s['label']} for s in chunk],
             'phases': PHASES,
             'notes': NOTES,
-            'limitMs': 8,
+            'limitMs': 4.2,
+            'gcPhoneRatio': 2,
         }
         cfg = os.path.join(page, 'config.json')
         with open(cfg, 'w', encoding='utf-8', newline='\n') as f:
@@ -108,7 +119,7 @@ def overview():
                 if os.path.isfile(meta_path):
                     with open(meta_path, encoding='utf-8') as f:
                         meta = json.load(f)
-                    row[mode] = {'costs': meta['costs'], 'phases': meta['phases']}
+                    row[mode] = {'costs': meta['costs'], 'db': meta.get('db', []), 'phases': meta['phases']}
             rows.append(row)
     # 還在錄、還沒做成頁面的步驟（錄影資料夾裡的 meta.json）也列進來。
     done = {r['key'] for r in rows}
@@ -122,7 +133,7 @@ def overview():
                 if os.path.isfile(meta_path):
                     with open(meta_path, encoding='utf-8') as f:
                         meta = json.load(f)
-                    row[mode] = {'costs': meta['costs'], 'phases': meta['phases']}
+                    row[mode] = {'costs': meta['costs'], 'db': meta.get('db', []), 'phases': meta['phases']}
             rows.append(row)
     out = os.path.join(PAGES, 'overview.json')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
