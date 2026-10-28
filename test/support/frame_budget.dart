@@ -35,6 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vm_service/vm_service.dart' hide Isolate, Timeline;
 import 'package:vm_service/vm_service_io.dart';
 
+import 'db_clock.dart';
+
 /// 一幀的成本，單位微秒。
 class FrameCost {
   const FrameCost({
@@ -51,6 +53,7 @@ class FrameCost {
     this.scavengeMicros = 0,
     this.oldCollections = 0,
     this.oldGcMicros = 0,
+    this.dbMicros = 0,
   });
 
   final int index;
@@ -96,7 +99,15 @@ class FrameCost {
 
   int get gcMicros => scavengeMicros + oldGcMicros;
 
+  /// 這一幀裡測試的資料庫在主執行緒上花的時間（`db_clock.dart`）。手機上
+  /// 資料庫在自己的 isolate，不佔這一幀；只會少算、不會多算。
+  final int dbMicros;
+
   int get total => beforeFrame + frame + afterFrame + async;
+
+  /// 扣掉測試才有的資料庫時間，手機上這一幀主執行緒的工作（照 2 倍換算前）。
+  /// 判斷動畫中的幀有沒有超過 [frameLimit] 看這個（ADR 0036）。
+  int get app => total - dbMicros;
 
   FrameCost _withGc(Iterable<_GcPause> pauses) => FrameCost(
     index: index,
@@ -116,8 +127,12 @@ class FrameCost {
     oldGcMicros: pauses
         .where((p) => !p.young)
         .fold(0, (sum, p) => sum + p.micros),
+    dbMicros: dbMicros,
   );
 }
+
+/// 電腦上動畫中一幀的上限：手機 120Hz 一幀 8.3ms，照 2 倍換算（ADR 0029、0036）。
+const Duration frameLimit = Duration(microseconds: 4200);
 
 /// 環境變數 `FRAME_ATTRIBUTE=1` 時列出尖峰幀裡耗時最多的區塊。
 final bool frameAttribution = Platform.environment['FRAME_ATTRIBUTE'] == '1';
@@ -368,6 +383,7 @@ Future<List<FrameCost>> recordFrames(
         begin = end = stop;
         ticking = SchedulerBinding.instance.transientCallbackCount > 0;
       }
+      final (from, to) = windows.last;
       costs.add(
         FrameCost(
           index: index,
@@ -379,6 +395,9 @@ Future<List<FrameCost>> recordFrames(
           dirty: dirty,
           note: note?.call(),
           moving: moving,
+          dbMicros: dbWork
+              .where((w) => w.start >= from && w.start < to)
+              .fold(0, (sum, w) => sum + w.micros),
         ),
       );
       dirty = <String, int>{};
@@ -454,13 +473,16 @@ List<AggregatedTimedBlock> _exclusive(List<TimedBlock> blocks) {
     ..length = math.min(15, self.length);
 }
 
-/// 摘要：幀數、中位數、最大值，以及超過 [over] 的每一幀各段成本。
+/// 摘要：幀數、中位數、最大值，以及超過 [over] 的每一幀各段成本。動畫中
+/// 另外列出扣掉資料庫時間（[FrameCost.app]）後仍超過的幀數：那些才是手機上
+/// 也會超過的（ADR 0036）。
 String describeFrames(
   String label,
   List<FrameCost> costs, {
-  Duration over = const Duration(milliseconds: 8),
+  Duration over = frameLimit,
 }) {
   String ms(int us) => (us / 1000).toStringAsFixed(1);
+  final limit = ms(over.inMicroseconds);
   final totals = [for (final cost in costs) cost.total]..sort();
   final spikes = costs.where((c) => c.total > over.inMicroseconds);
   // 動畫中與靜止時各自最忙的一幀：重活該落在靜止的時候。
@@ -468,9 +490,11 @@ String describeFrames(
     final frames = costs.where((c) => c.moving == moving);
     if (frames.isEmpty) return ' 0 幀';
     final top = frames.reduce((a, b) => b.total > a.total ? b : a);
-    final over8 = frames.where((c) => c.total > over.inMicroseconds).length;
+    final overLimit = frames.where((c) => c.total > over.inMicroseconds).length;
+    final overApp = frames.where((c) => c.app > over.inMicroseconds).length;
     return ' ${frames.length} 幀，最大 ${ms(top.total)}ms（第 ${top.index} 幀）、'
-        '超過 ${over.inMilliseconds}ms 的 $over8 幀';
+        '超過 ${limit}ms 的 $overLimit 幀'
+        '${moving ? '（扣掉資料庫後 $overApp 幀）' : ''}';
   }
 
   String gc(FrameCost cost) => cost.gcMicros == 0
@@ -481,7 +505,7 @@ String describeFrames(
 
   final lines = [
     '$label：${costs.length} 幀，中位數 ${ms(totals[totals.length ~/ 2])}ms，'
-        '最大 ${ms(totals.last)}ms，超過 ${over.inMilliseconds}ms 的 ${spikes.length} 幀',
+        '最大 ${ms(totals.last)}ms，超過 ${limit}ms 的 ${spikes.length} 幀',
     '  動畫中${peak(true)}；靜止時${peak(false)}',
     if (frameGc)
       '  回收記憶體的 ${collected.length} 幀（動畫中 '
@@ -492,7 +516,8 @@ String describeFrames(
           '${cost.note == null ? '' : '（${cost.note}）'} '
           '${ms(cost.total)}ms：幀前 ${ms(cost.beforeFrame)}、'
           '幀 ${ms(cost.frame)}、幀後 ${ms(cost.afterFrame)}、'
-          '非同步 ${ms(cost.async)}${gc(cost)}',
+          '非同步 ${ms(cost.async)}${gc(cost)}'
+          '${cost.dbMicros == 0 ? '' : '，其中資料庫 ${ms(cost.dbMicros)}ms'}',
       if (cost.top.isNotEmpty)
         '    耗時：${cost.top.map((b) => '${b.name} ${(b.duration / 1000).toStringAsFixed(1)}×${b.count}').join('、')}',
       if (cost.dirty.isNotEmpty)
