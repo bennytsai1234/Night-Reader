@@ -131,7 +131,7 @@ def main():
     with open(os.path.join(HERE, 'template.html'), encoding='utf-8') as f:
         html = f.read()
     for key, value in {
-        '/*TITLE*/': config.get('title', '逐格錄影'),
+        '/*TITLE*/': config.get('title', '動畫儀表板'),
         '/*CONFIG*/': json.dumps(page_config, ensure_ascii=False),
         '/*SPRITES*/': json.dumps(sprites, ensure_ascii=False, indent=0),
         '/*DATA_PNG*/': json.dumps(data_png.replace('\\', '/')),
