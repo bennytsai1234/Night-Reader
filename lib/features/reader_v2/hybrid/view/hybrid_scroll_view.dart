@@ -98,29 +98,41 @@ final class HybridScrollView extends StatelessWidget {
         textColor: textColor,
         horizontalPadding: horizontalPadding,
       ),
-      itemExtentBuilder: (index, dimensions) {
-        final key = documentIndex.keyForSliverIndex(
-          beforeCenter: beforeCenter,
-          index: index,
-        );
-        if (key == null) {
-          return _fallbackItemExtent;
-        }
-        // extent 讀 DocumentIndex 的 admitted metrics，與 Fenwick 座標同源
-        // （I1/I3：admit 時已是精確量測且座標凍結）。不可讀 MeasurementStore
-        // ——epoch 換代或章節 invalidate 的過渡幀，store 可能已被清而 widget
-        // 還抱著舊 namespace closure，會出現座標與 extent 失同步。
-        final metrics = documentIndex.metricsFor(key);
-        final extent = metrics?.height;
-        // 這一支目前結構上不可達：`_metrics` 與兩側清單在每個可觀察點都
-        // 一致，且 BlockMetrics 保證 height > 0（兩個生產者都有 guard）。
-        // 保留是因為 itemExtentBuilder 被框架強制解包，必須是全函式。
-        if (extent == null || !extent.isFinite || extent <= 0) {
-          return _fallbackItemExtent;
-        }
-        return extent;
-      },
+      itemExtentBuilder: _extentBuilder(beforeCenter),
     );
+  }
+
+  /// 每份 [DocumentIndex]、每一側重用同一個 [ItemExtentBuilder]：框架照它是不是
+  /// 同一個函式決定要不要重新排版清單，每次重建都給新的函式的話，閱讀頁為了
+  /// 進度、資訊列重建時，整個正文清單也跟著重排一次（2026-10-29 量到）。
+  static final Expando<ItemExtentBuilder> _beforeExtents = Expando();
+  static final Expando<ItemExtentBuilder> _afterExtents = Expando();
+
+  ItemExtentBuilder _extentBuilder(bool beforeCenter) {
+    final cache = beforeCenter ? _beforeExtents : _afterExtents;
+    final documentIndex = this.documentIndex;
+    return cache[documentIndex] ??= (index, dimensions) {
+      final key = documentIndex.keyForSliverIndex(
+        beforeCenter: beforeCenter,
+        index: index,
+      );
+      if (key == null) {
+        return _fallbackItemExtent;
+      }
+      // extent 讀 DocumentIndex 的 admitted metrics，與 Fenwick 座標同源
+      // （I1/I3：admit 時已是精確量測且座標凍結）。不可讀 MeasurementStore
+      // ——epoch 換代或章節 invalidate 的過渡幀，store 可能已被清而 widget
+      // 還抱著舊 namespace closure，會出現座標與 extent 失同步。
+      final metrics = documentIndex.metricsFor(key);
+      final extent = metrics?.height;
+      // 這一支目前結構上不可達：`_metrics` 與兩側清單在每個可觀察點都
+      // 一致，且 BlockMetrics 保證 height > 0（兩個生產者都有 guard）。
+      // 保留是因為 itemExtentBuilder 被框架強制解包，必須是全函式。
+      if (extent == null || !extent.isFinite || extent <= 0) {
+        return _fallbackItemExtent;
+      }
+      return extent;
+    };
   }
 }
 

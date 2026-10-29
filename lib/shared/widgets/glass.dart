@@ -257,12 +257,18 @@ class GlassSlide extends StatefulWidget {
     required this.shown,
     required this.edge,
     this.gap = 0,
+    this.prepaint = false,
     required this.child,
   });
 
   final double shown;
   final AxisDirection edge;
   final double gap;
+
+  /// [shown] 還是 0、但下一格就要滑進來時照常畫（位置仍在畫面外，看不到）：
+  /// 剛建好的內容第一次排字、畫圖與整理讀屏資料落在這一格（點下去的那一格，
+  /// ADR 0036 第 1 條），不落在滑入的第一格。
+  final bool prepaint;
   final Widget child;
 
   @override
@@ -296,7 +302,7 @@ class _GlassSlideState extends State<GlassSlide> {
     // Visibility 要保留大小就得保留動畫（maintainSize 需要
     // maintainAnimation），停動畫另外包一層。
     return Visibility(
-      visible: shown > 0 && !_waking,
+      visible: (shown > 0 || widget.prepaint) && !_waking,
       maintainState: true,
       maintainAnimation: true,
       maintainSize: true,

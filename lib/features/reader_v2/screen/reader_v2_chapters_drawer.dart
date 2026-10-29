@@ -58,9 +58,11 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     widget.currentChapter.addListener(_handleCurrentChapterChanged);
   }
 
+  /// 目前章換了：只有打勾狀態改變的那兩列重建（[_CurrentChapterTile]），
+  /// 清單本身不重建。原本整份重建，跳章一開始目前章就換成目標章，正在
+  /// 收起的目錄約 30 列一起重建，落在跳章動畫的第一格（2026-10-29 量到）。
   void _handleCurrentChapterChanged() {
     if (!mounted) return;
-    setState(() {});
     _scheduleScrollToCurrentChapter();
   }
 
@@ -97,10 +99,17 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   /// Telegram 式平面列：固定高度（捲動定位依賴 [_tileExtent]），
   /// 目前章節以主色加粗並在右側打勾，付費還沒買的章節右側鎖頭，列間以
   /// 髮絲線分隔。
-  Widget _buildChapterTile(BuildContext context, int index) {
+  Widget _buildChapterTile(BuildContext context, int index) =>
+      _CurrentChapterTile(
+        index: index,
+        currentChapter: widget.currentChapter,
+        builder: (context, isCurrentChapter) =>
+            _chapterTile(context, index, isCurrentChapter),
+      );
+
+  Widget _chapterTile(BuildContext context, int index, bool isCurrentChapter) {
     final scheme = Theme.of(context).colorScheme;
     final chapterTitle = widget.titleFor(index);
-    final isCurrentChapter = _currentChapterIndex == index;
     final Widget? trailing = isCurrentChapter
         ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
         : index < widget.chapters.length && widget.chapters[index].isLocked
@@ -180,6 +189,10 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   void _scheduleScrollToCurrentChapter() {
     if (!mounted) return;
+    // 目錄正在收起（例如點了一章、跳章開始時目前章換成目標章）：不捲。
+    // 捲到遠處那一章，畫面上的列全部要新建，落在跳章動畫的第一格
+    // （2026-10-29 量到 25ms 以上）；下次打開會重建、照常捲到目前章。
+    if (!(Scaffold.maybeOf(context)?.isDrawerOpen ?? true)) return;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scrollToCurrentChapter(),
     );
@@ -246,15 +259,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                 padding: EdgeInsets.only(
                   bottom: MediaQuery.paddingOf(context).bottom,
                 ),
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.paddingOf(context).bottom,
-                  ),
-                  itemCount: widget.chapters.length,
-                  itemExtent: _tileExtent,
-                  itemBuilder: _buildChapterTile,
-                ),
+                child: _chapterList(context),
               ),
             ),
           ],
@@ -262,4 +267,82 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
       ),
     );
   }
+
+  /// 章節清單：畫的內容（章節、目前章、列高、標題、底部內距）都沒變時給
+  /// 同一個元件。`ListView.builder` 每次重建都把畫面上的列整批重建；閱讀頁
+  /// 為了跳章、載入整頁重建時，正在收起的目錄約 30 列跟著重建，落在跳章
+  /// 動畫的第一格（電腦上 30ms 以上，2026-10-29 量到）。
+  Widget _chapterList(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    final key = (
+      widget.chapters,
+      widget.chapters.length,
+      _tileExtent,
+      widget.titleFor,
+      bottom,
+    );
+    final cached = _list;
+    if (cached != null && key == _listKey) return cached;
+    _listKey = key;
+    return _list = ListView.builder(
+      controller: _scrollController,
+      padding: EdgeInsets.only(bottom: bottom),
+      itemCount: widget.chapters.length,
+      itemExtent: _tileExtent,
+      itemBuilder: _buildChapterTile,
+    );
+  }
+
+  Widget? _list;
+  Object? _listKey;
+}
+
+/// 目錄的一列：自己聽目前章，只在「是不是目前這一章」改變時重建。
+class _CurrentChapterTile extends StatefulWidget {
+  const _CurrentChapterTile({
+    required this.index,
+    required this.currentChapter,
+    required this.builder,
+  });
+
+  final int index;
+  final ValueListenable<int> currentChapter;
+  final Widget Function(BuildContext context, bool isCurrent) builder;
+
+  @override
+  State<_CurrentChapterTile> createState() => _CurrentChapterTileState();
+}
+
+class _CurrentChapterTileState extends State<_CurrentChapterTile> {
+  late bool _current = widget.currentChapter.value == widget.index;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.currentChapter.addListener(_onChanged);
+  }
+
+  @override
+  void didUpdateWidget(_CurrentChapterTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.currentChapter, widget.currentChapter)) {
+      oldWidget.currentChapter.removeListener(_onChanged);
+      widget.currentChapter.addListener(_onChanged);
+    }
+    _current = widget.currentChapter.value == widget.index;
+  }
+
+  void _onChanged() {
+    final current = widget.currentChapter.value == widget.index;
+    if (current != _current) setState(() => _current = current);
+  }
+
+  @override
+  void dispose() {
+    widget.currentChapter.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _current);
 }
