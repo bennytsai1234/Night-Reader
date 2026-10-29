@@ -26,7 +26,9 @@
 // 暖身再錄。加 `FRAME_GC=1` 與 `--enable-vmservice` 時另外記下每格裡回收
 // 記憶體停住多久（`frame_budget.dart` 的 FRAME_GC），頁面上多一排「回收記憶體」。
 // 每格裡測試的資料庫花的時間一律記下（`db_clock.dart`），頁面上那一格扣掉它
-// 再和上限比：手機上資料庫不在主執行緒。
+// 再和上限比：手機上資料庫不在主執行緒。每格存畫面要對整棵圖層重新組一次、
+// 多畫一張整個畫面，之後每一格量到的時間比只量時間（`test/frame_budget/`）
+// 多 0.3–0.5ms；貼著上限的格子要不要修，照 `test/frame_budget/` 的數字。
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -118,6 +120,9 @@ Future<void> recordAnimation(
         'slice': [
           for (final cost in costs) (cost.sliceMicros / 100).round() / 10,
         ],
+        // 畫面在變的幀（ADR 0037，`frame_budget.dart` 照圖層判斷），頁面只在
+        // 這些幀標出掉幀。
+        'moving': [for (final cost in costs) cost.moving],
         if (frameGc) ...{
           'gcNew': [
             for (final cost in costs) (cost.scavengeMicros / 100).round() / 10,

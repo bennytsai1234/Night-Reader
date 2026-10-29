@@ -129,6 +129,13 @@ function prepare() {
       const slice = Math.min(cost - db, (D.slice || [])[i] ?? 0);
       return { change, spots, cost, db, slice, app: cost - db - slice / 2, gcNew, gcOld, gc: gcNew + gcOld };
     });
+    // 掉幀（ADR 0037）：畫面在變（這一幀和前一幀或下一幀不同）時超過 LIMIT；第 0 幀是點下去
+    // 後的第一幀，可以重。moving 由錄影時的量測給，舊的錄影沒有時照畫面變化算。
+    d.f.forEach((f, i) => {
+      const moving = (D.moving || [])[i] ?? (f.change > 0 || (d.f[i + 1]?.change ?? 0) > 0);
+      f.dropped = i > 0 && moving && f.app > LIMIT;
+      f.stillOver = !f.dropped && f.app > LIMIT;
+    });
     d.phase = D.phases.map(labelOf);
     d.segs = [];
     d.phase.forEach((p, i) => {
@@ -180,8 +187,10 @@ const legend = document.getElementById('legend');
 legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"></i>畫面變化：點選的那支</span>'
   + '<span><i class="sw" style="border-color:var(--muted-foreground);opacity:.45"></i>其他候選</span>'
   + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
-  + `<span><i class="box" style="background:var(--heavy)"></i>扣掉資料庫、排版切片照實算後超過 ${LIMIT}ms</span>`
-  + `<span><i class="box" style="background:var(--muted-foreground)"></i>在 ${LIMIT}ms 內</span>`
+  + `<span><i class="box" style="background:var(--heavy)"></i>掉幀：畫面在變時，扣掉資料庫、排版切片照實算後超過 ${LIMIT}ms</span>`
+  + `<span><i class="box" style="background:var(--muted-foreground)"></i>畫面沒在變時超過（不算），或點下去那一幀</span>`
+  + `<span><i class="box" style="background:var(--muted-foreground);opacity:.55"></i>在 ${LIMIT}ms 內</span>`
+  + '<span>錄影每幀要存畫面，量到的時間比只量時間多 0.3–0.5ms；貼著上限的幀照幀預算的數字判斷</span>'
   + '<span><i class="box" style="background:var(--db)"></i>不算進判斷的部分：資料庫（測試才有，手機上不在主執行緒）與排版切片的一半（手機上不會變兩倍）</span>'
   + (HAS_GC ? '<span><i class="box" style="background:var(--gc)"></i>回收新生區</span>'
     + '<span><i class="box" style="background:var(--gc-old)"></i>回收舊生區</span>'
@@ -240,7 +249,7 @@ function drawChart() {
   const bw = Math.max(1.5, (X1 - X0) / N - 0.6);
   L.forEach((f, i) => {
     el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.app), width: bw, height: rowC.y + rowC.h - yC(f.app),
-      fill: f.app > LIMIT ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.app > LIMIT ? 1 : 0.55 });
+      fill: f.dropped ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.dropped || f.stillOver ? 1 : 0.55 });
     if (f.cost > f.app) el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: yC(f.app) - yC(f.cost), fill: 'var(--db)' });
   });
   el(dyn, 'line', { x1: X0, x2: X1, y1: yC(LIMIT), y2: yC(LIMIT), stroke: 'var(--muted-foreground)', 'stroke-dasharray': '3 3' });

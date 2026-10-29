@@ -8,7 +8,10 @@
 // 改前開在暫時的 worktree、兩邊各跑一次，並讓同一台電腦上的量測排隊。
 //
 // 量到的是電腦上 debug 模式的時間，判斷看動畫在動的每一幀有沒有超過
-// [frameLimit]（ADR 0036、0037）：最大一幀降了但還超過，一樣是掉幀。
+// [frameLimit]（ADR 0036、0037）：最大一幀降了但還超過，一樣是掉幀。畫面
+// 有沒有在變，是每一幀量完讀一次畫面的圖層（[_ScreenPrint]）和前一幀比，
+// 不拍畫面：拍畫面要對整棵圖層重新組一次、多畫一張整個畫面，之後每一幀
+// 都多花 0.3–0.5ms（2026-10-29 開書量測）。
 // FRAME_ATTRIBUTE=1 時另外列出尖峰幀裡自己耗時最多（扣掉包在
 // 裡面的）的 widget 與 render object，以及重建從哪些 widget 開始（誰呼叫了
 // setState）；打開這些紀錄本身會讓數字變大（每排一次重建就印一段堆疊，整棵
@@ -93,10 +96,11 @@ class FrameCost {
   /// 骨架、換場。
   final String? note;
 
-  /// 這一幀有動畫在走（上一幀結束時排著 ticker，例如換頁、骨架呼吸、換場、
-  /// 淡入）：這一幀晚了，畫面上看得到動作頓一下。沒有的是靜止的一幀，晚了
-  /// 只是畫面晚一點變（ADR 0031：重活放在畫面靜止的時候）。被一張定格畫面
-  /// 蓋住的動畫也算在走（開 App 拍「之後」那一格），看尖峰時對照 [note]。
+  /// 畫面在變（ADR 0037 掉幀的定義）：這一幀畫出來的畫面和前一幀或下一幀
+  /// 不同（[_ScreenPrint]）。這種幀超過上限，畫面上看得到頓一下；
+  /// 下一幀才開始動的那一幀也算，因為它晚了，動畫起步那一下會跳（所以預留
+  /// 停頓做完工作要再隔 0.1 秒才開始動）。前後都沒變的是靜止的一幀，再重
+  /// 也只是畫面晚一點變，有沒有計時器在跑都一樣。
   final bool moving;
 
   /// [frameGc] 開著時，這一幀裡回收新生區（新建的物件放的地方，回收時把
@@ -128,6 +132,25 @@ class FrameCost {
   /// 算、其他工作照 2 倍換算到手機，再折回電腦的尺度和 4.2ms 比，也就是
   /// 扣掉資料庫後再扣掉排版切片的一半。
   int get judged => app - sliceMicros ~/ 2;
+
+  FrameCost _withMoving(bool value) => FrameCost(
+    index: index,
+    beforeFrame: beforeFrame,
+    frame: frame,
+    afterFrame: afterFrame,
+    async: async,
+    top: top,
+    dirty: dirty,
+    note: note,
+    moving: value,
+    scavenges: scavenges,
+    scavengeMicros: scavengeMicros,
+    oldCollections: oldCollections,
+    oldGcMicros: oldGcMicros,
+    dbMicros: dbMicros,
+    sliceMicros: sliceMicros,
+    cpu: cpu,
+  );
 
   FrameCost _withCpu(List<String> lines) => FrameCost(
     index: index,
@@ -443,12 +466,97 @@ class _GcTimeline {
   }
 }
 
+/// 這一幀畫面的指紋：照圖層由上而下，記下每一張畫（[PictureLayer.picture]，
+/// 重畫了就是另一個物件）與每一層的位置、透明度、裁切、變形與濾鏡。兩幀的
+/// 指紋一樣，畫面就一樣。只讀圖層、不畫圖，不影響下一幀；內容重畫了但畫出
+/// 來一模一樣時也算變了，只會多算、不會漏算。
+class _ScreenPrint {
+  _ScreenPrint() {
+    for (final view in RendererBinding.instance.renderViews) {
+      final root = view.debugLayer;
+      if (root != null) _visit(root);
+    }
+  }
+
+  final List<Object?> _parts = [];
+
+  void _visit(Layer layer) {
+    _parts.add(layer.runtimeType);
+    switch (layer) {
+      case PictureLayer():
+        _parts.add(layer.picture);
+      case TextureLayer():
+        _parts
+          ..add(layer.textureId)
+          ..add(layer.rect);
+      case OpacityLayer():
+        _parts
+          ..add(layer.alpha)
+          ..add(layer.offset);
+      case TransformLayer():
+        _parts
+          ..add(layer.offset)
+          ..addAll(layer.transform?.storage ?? const <double>[]);
+      case ImageFilterLayer():
+        _parts
+          ..add(layer.imageFilter)
+          ..add(layer.offset);
+      case OffsetLayer():
+        _parts.add(layer.offset);
+      case ClipRectLayer():
+        _parts.add(layer.clipRect);
+      case ClipRRectLayer():
+        _parts.add(layer.clipRRect);
+      case ClipRSuperellipseLayer():
+        _parts.add(layer.clipRSuperellipse);
+      case ClipPathLayer():
+        _parts.add(layer.clipPath);
+      case ColorFilterLayer():
+        _parts.add(layer.colorFilter);
+      case ShaderMaskLayer():
+        _parts
+          ..add(layer.shader)
+          ..add(layer.maskRect)
+          ..add(layer.blendMode);
+      case BackdropFilterLayer():
+        _parts
+          ..add(layer.filter)
+          ..add(layer.blendMode);
+      case LeaderLayer():
+        _parts.add(layer.offset);
+      case FollowerLayer():
+        _parts.addAll(layer.getLastTransform()?.storage ?? const <double>[]);
+      default:
+    }
+    if (layer is ContainerLayer) {
+      for (
+        var child = layer.firstChild;
+        child != null;
+        child = child.nextSibling
+      ) {
+        _visit(child);
+      }
+      _parts.add(null); // 一層的孩子到這裡為止，換了階層也分得出來。
+    }
+  }
+
+  bool sameAs(_ScreenPrint other) {
+    if (_parts.length != other._parts.length) return false;
+    for (var i = 0; i < _parts.length; i++) {
+      if (_parts[i] != other._parts[i]) return false;
+    }
+    return true;
+  }
+}
+
 /// 一幀一幀推進（每幀 [frameDuration]），直到 [until] 成立後再多 [tailFrames]
 /// 幀，記下每一幀的成本。[realAsync] 時每幀之間讓出真實時間，給跑在真的
 /// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。[note] 在
 /// 每一幀畫完時記下畫面在哪一段，摘要裡跟著尖峰幀列出。[onFrame] 在每一幀
 /// 開始前呼叫（帶幀序號），拖動這類手勢一幀送一步；它花的時間算在幀前。
-/// [afterFrame] 在每一幀量完之後呼叫，不算進任何一幀（逐格錄影存畫面用）。
+/// 每一幀量完之後讀一次畫面的圖層（[_ScreenPrint]），和前一幀比，定出
+/// [FrameCost.moving]。[afterFrame] 在每一幀量完之後呼叫，不算進任何一幀
+/// （逐格錄影存畫面用）。
 Future<List<FrameCost>> recordFrames(
   WidgetTester tester, {
   required bool Function() until,
@@ -490,18 +598,21 @@ Future<List<FrameCost>> recordFrames(
     };
   }
   var costs = <FrameCost>[];
+  // 排版切片照實算（ADR 0036），每一段量測都要記；不靠各個測試自己記得開。
+  sliceWork.clear();
+  startSliceClock();
   var gc = frameGc ? await tester.runAsync(_GcTimeline.start) : null;
   final cpu = frameCpu ? await tester.runAsync(_CpuProfile.start) : null;
   // 每一幀從開始到量完的區間（[Timeline.now] 的時鐘），回收照開始時間歸到
   // 這些區間；afterFrame（存畫面）的回收不算進任何一幀。
   final windows = <(int, int)>[];
+  // 每一幀的畫面和前一幀比有沒有變；第 0 幀和開始量之前的畫面比。
+  final changed = <bool>[];
   final clock = Stopwatch()..start();
   try {
+    var previous = _ScreenPrint();
     var tail = -1;
-    // 排著的 ticker 會在下一幀走一步（第一步只記下起點，畫面還沒動）。
-    var ticking = SchedulerBinding.instance.transientCallbackCount > 0;
     for (var index = 0; index < maxFrames; index++) {
-      final moving = ticking;
       final windowStart = Timeline.now;
       var asyncCost = 0;
       if (realAsync) {
@@ -516,7 +627,6 @@ Future<List<FrameCost>> recordFrames(
       }, scheduleNewFrame: false);
       SchedulerBinding.instance.addPostFrameCallback((_) {
         end = clock.elapsedMicroseconds;
-        ticking = SchedulerBinding.instance.transientCallbackCount > 0;
       });
       if (frameAttribution || framePhases) FlutterTimeline.debugReset();
       final start = clock.elapsedMicroseconds;
@@ -527,12 +637,10 @@ Future<List<FrameCost>> recordFrames(
       final top = frameAttribution || framePhases
           ? _exclusive(FlutterTimeline.debugCollect().timedBlocks)
           : const <AggregatedTimedBlock>[];
-      // 沒有排到幀（畫面靜止）時整段都算在幀前。量時間的回呼沒跑到，先撤掉
-      // 再數 ticker，不然它自己會被當成還有動畫在走。
+      // 沒有排到幀（畫面靜止）時整段都算在幀前；量時間的回呼沒跑到，撤掉。
       if (begin < 0 || end < 0) {
         SchedulerBinding.instance.cancelFrameCallbackWithId(timing);
         begin = end = stop;
-        ticking = SchedulerBinding.instance.transientCallbackCount > 0;
       }
       final (from, to) = windows.last;
       costs.add(
@@ -545,7 +653,6 @@ Future<List<FrameCost>> recordFrames(
           top: top,
           dirty: dirty,
           note: note?.call(),
-          moving: moving,
           dbMicros: dbWork
               .where((w) => w.start >= from && w.start < to)
               .fold(0, (sum, w) => sum + w.micros),
@@ -555,11 +662,20 @@ Future<List<FrameCost>> recordFrames(
         ),
       );
       dirty = <String, int>{};
+      final screen = _ScreenPrint();
+      changed.add(!screen.sameAs(previous));
+      previous = screen;
       if (afterFrame != null) await afterFrame(index);
       if (gc != null && index % 30 == 29) await tester.runAsync(gc.drain);
       if (tail < 0 && until()) tail = 0;
       if (tail >= 0 && tail++ >= tailFrames) break;
     }
+    costs = [
+      for (final (i, cost) in costs.indexed)
+        cost._withMoving(
+          changed[i] || (i + 1 < changed.length && changed[i + 1]),
+        ),
+    ];
     if (gc != null) {
       final timeline = gc;
       gc = null; // stop 自己會斷線，失敗時 finally 不再斷一次。

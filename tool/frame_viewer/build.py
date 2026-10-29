@@ -71,6 +71,7 @@ def measure(meta, frames, spots):
         'costs': meta['costs'][:len(frames)],
         'db': meta.get('db', [])[:len(frames)],
         'slice': meta.get('slice', [])[:len(frames)],
+        'moving': meta.get('moving', [])[:len(frames)],
         'frameMs': meta.get('frameMs', 16),
         'gcNew': meta.get('gcNew', [])[:len(frames)],
         'gcOld': meta.get('gcOld', [])[:len(frames)],
