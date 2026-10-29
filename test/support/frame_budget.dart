@@ -11,7 +11,8 @@
 // 出現在哪一段。FRAME_ATTRIBUTE=1 時另外列出尖峰幀裡自己耗時最多（扣掉包在
 // 裡面的）的 widget 與 render object，以及重建從哪些 widget 開始（誰呼叫了
 // setState）；打開這些紀錄本身會讓數字變大（每排一次重建就印一段堆疊，整棵
-// 子樹被搬動、一次排上百個重建時會大上幾十倍），只拿來找是誰。測試環境
+// 子樹被搬動、一次排上百個重建時會大上幾十倍），只拿來找是誰。
+// FRAME_ATTRIBUTE=2 只列耗時、不記重建起點，數字接近實際。測試環境
 // 沒有開書源 isolate（`SourceIsolate.enabled`），書源工作在原地執行，會算進
 // 主執行緒。
 //
@@ -173,8 +174,15 @@ class FrameCost {
 /// 電腦上動畫中一幀的上限：手機 120Hz 一幀 8.3ms，照 2 倍換算（ADR 0029、0036）。
 const Duration frameLimit = Duration(microseconds: 4200);
 
-/// 環境變數 `FRAME_ATTRIBUTE=1` 時列出尖峰幀裡耗時最多的區塊。
-final bool frameAttribution = Platform.environment['FRAME_ATTRIBUTE'] == '1';
+/// 環境變數 `FRAME_ATTRIBUTE=1` 時列出尖峰幀裡耗時最多的區塊，以及重建從
+/// 哪裡開始；`FRAME_ATTRIBUTE=2` 只列耗時、不記重建從哪裡開始。記重建起點
+/// 要框架每排一次重建就印一段堆疊，排得多的幀（setState 很多、整棵子樹被
+/// 搬動）時間會被灌大好幾毫秒，看哪個元件自己花多少時用 2。
+final bool frameAttribution = const {
+  '1',
+  '2',
+}.contains(Platform.environment['FRAME_ATTRIBUTE']);
+final bool _rebuildStarts = Platform.environment['FRAME_ATTRIBUTE'] == '1';
 
 /// 環境變數 `FRAME_PHASES=1` 時只列尖峰幀各大階段（BUILD、LAYOUT、PAINT、
 /// COMPOSITING、SEMANTICS…）各花多久：不開逐個元件的紀錄，數字幾乎不變大，
@@ -466,6 +474,8 @@ Future<List<FrameCost>> recordFrames(
     debugProfileBuildsEnabled = true;
     debugProfileLayoutsEnabled = true;
     debugProfilePaintsEnabled = true;
+  }
+  if (_rebuildStarts) {
     // 框架每次排重建都印一段堆疊，只留第一行的 widget 名稱。
     debugPrintScheduleBuildForStacks = true;
     const prefix = 'scheduleBuildFor() called for ';
