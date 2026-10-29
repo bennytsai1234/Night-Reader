@@ -8,6 +8,8 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
+import 'package:night_reader/shared/widgets/press_ink.dart';
 
 import '../../book_detail/book_detail_page.dart';
 
@@ -60,7 +62,7 @@ class ExploreBookItem extends StatelessWidget {
         metaStyle.height!;
 
     return TransitionSource(
-      child: InkWell(
+      child: PressInk(
         onTap: () => _navigateToDetail(context),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -72,66 +74,76 @@ class ExploreBookItem extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _withExtras(
-                (book) => BookCoverWidget(
-                  coverUrl: book.coverUrl,
-                  bookName: context.zh(book.name),
-                  author: context.zh(book.author ?? ''),
+              // 封面與右邊的字各排一塊：骨架底下一幀建一塊時
+              // （[CoverReveal.paced]）分在不同幀建，一整列約 3ms，一幀放不下。
+              CoverRevealSlot(
+                placeholder: const SizedBox(
                   width: coverWidth,
                   height: coverHeight,
-                  borderRadius: AppRadius.cardXs,
+                ),
+                child: _withExtras(
+                  (book) => BookCoverWidget(
+                    coverUrl: book.coverUrl,
+                    bookName: context.zh(book.name),
+                    author: context.zh(book.author ?? ''),
+                    width: coverWidth,
+                    height: coverHeight,
+                    borderRadius: AppRadius.cardXs,
+                  ),
                 ),
               ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            context.zh(book.name),
-                            style: AppTextStyles.bodyBase.copyWith(
-                              height: 1.3,
-                              color: scheme.onSurface,
-                              fontWeight: FontWeight.w600,
+                child: CoverRevealSlot(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              context.zh(book.name),
+                              style: AppTextStyles.bodyBase.copyWith(
+                                height: 1.3,
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
+                          ),
+                          if (isInBookshelf) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            const InfoBadge(),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      SizedBox(
+                        width: double.infinity,
+                        height: metaLineHeight,
+                        child: _withExtras(
+                          (book) => Text(
+                            _meta(context, book),
+                            style: metaStyle,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (isInBookshelf) ...[
-                          const SizedBox(width: AppSpacing.sm),
-                          const InfoBadge(),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      width: double.infinity,
-                      height: metaLineHeight,
-                      child: _withExtras(
-                        (book) => Text(
-                          _meta(context, book),
+                      ),
+                      if (book.latestChapterTitle != null &&
+                          book.latestChapterTitle!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '最新：${context.zh(book.latestChapterTitle!)}',
                           style: metaStyle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ),
-                    if (book.latestChapterTitle != null &&
-                        book.latestChapterTitle!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        '最新：${context.zh(book.latestChapterTitle!)}',
-                        style: metaStyle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ],
