@@ -76,7 +76,7 @@ img.onerror = () => console.error('讀不到量測資料');
 img.src = /*DATA_PNG*/;
 function init(DATA){
 const AREAS = /*AREAS*/;
-const STILL = new Set(['靜止','紙']);
+const STILL = new Set(['靜止','紙','骨架停住']);
 const LIMIT = 4.2;
 const tip = document.getElementById('tip');
 function showTip(e, html){tip.innerHTML=html;tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';}

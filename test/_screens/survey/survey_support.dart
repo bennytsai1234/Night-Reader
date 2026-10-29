@@ -157,9 +157,12 @@ String surveyPhase() {
   if (_tabSwitching()) return '換分頁';
   // 空白的紙排在最後：紙蓋著時別的東西在動（紙淡入、換頁）就是動畫中。
   final veil = _veil();
+  // 骨架收住（停在最深、沒有動畫在走，例如閱讀器開書的開頭）時畫面靜止。
+  final ticking = SchedulerBinding.instance.transientCallbackCount > 0;
+  if (veil == '紙上骨架' && !ticking) return '骨架停住';
   if (veil != null && veil != '紙') return veil;
   if (_revealing()) return '換場';
-  if (skeletonShown()) return '骨架';
+  if (skeletonShown()) return ticking ? '骨架' : '骨架停住';
   if (_scrolling()) return '捲動';
   if (SchedulerBinding.instance.transientCallbackCount > 0) return '動畫';
   return veil ?? '靜止';
@@ -270,7 +273,7 @@ Future<void> surveyStep(
   }
   // 照 ADR 0036：只看畫面在動的格子，第 0 格（點下去後的第一格）可以重、
   // 不算；扣掉測試的資料庫時間、排版切片照實算後和 4.2ms 比。
-  const still = {'靜止', '紙'};
+  const still = {'靜止', '紙', '骨架停住'};
   final limit = frameLimit.inMicroseconds / 1000;
   final moving = [
     for (final (i, c) in costs.indexed)
