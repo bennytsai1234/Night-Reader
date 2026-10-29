@@ -83,14 +83,9 @@ class ExploreShowView extends StatelessWidget {
     );
   }
 
-  /// 書單讓出頁首與底部系統區。
-  EdgeInsets _listPadding(BuildContext context) {
-    final padding = MediaQuery.paddingOf(context);
-    return EdgeInsets.only(
-      top: padding.top,
-      bottom: padding.bottom + AppSpacing.xl,
-    );
-  }
+  /// 書單讓出頁首與底部系統區；與骨架同一個算法。
+  EdgeInsets _listPadding(BuildContext context) =>
+      ExploreBookListSkeleton.paddingOf(context);
 
   /// 第一頁載入時顯示書單骨架，書到了以淡入取代。書列在骨架底下一格建一
   /// 列（[CoverRevealSlot]）、畫面上的封面解碼好才換場：原本書單到的那一格
@@ -101,7 +96,7 @@ class ExploreShowView extends StatelessWidget {
       waitForCovers: CoverWait.brief,
       // 書單直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
       backdrop: Theme.of(context).scaffoldBackgroundColor,
-      skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),
+      skeleton: const ExploreBookListSkeleton(),
       // 用骨架換場底下的 context：書單要看得到這一輪等封面（[CoverRevealScope]）。
       builder: (contentContext) => _buildLoaded(contentContext, provider),
     );
