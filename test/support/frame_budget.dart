@@ -5,10 +5,11 @@
 //   FRAME_ATTRIBUTE=1 flutter test --run-skipped -t frame_budget test/frame_budget
 //
 // 比對改動前後用 `bash tool/frame_budget_compare.sh <改前的提交> <測試檔>`：它把
-// 改前開在暫時的 worktree、兩邊交錯各跑幾次，並讓同一台電腦上的量測排隊。
+// 改前開在暫時的 worktree、兩邊各跑一次，並讓同一台電腦上的量測排隊。
 //
-// 量到的是電腦上 debug 模式的時間，手機上會慢好幾倍，看的是相對大小與尖峰
-// 出現在哪一段。FRAME_ATTRIBUTE=1 時另外列出尖峰幀裡自己耗時最多（扣掉包在
+// 量到的是電腦上 debug 模式的時間，判斷看動畫在動的每一幀有沒有超過
+// [frameLimit]（ADR 0036、0037）：最大一幀降了但還超過，一樣是掉幀。
+// FRAME_ATTRIBUTE=1 時另外列出尖峰幀裡自己耗時最多（扣掉包在
 // 裡面的）的 widget 與 render object，以及重建從哪些 widget 開始（誰呼叫了
 // setState）；打開這些紀錄本身會讓數字變大（每排一次重建就印一段堆疊，整棵
 // 子樹被搬動、一次排上百個重建時會大上幾十倍），只拿來找是誰。

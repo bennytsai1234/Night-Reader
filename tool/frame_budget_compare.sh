@@ -1,74 +1,67 @@
 #!/usr/bin/env bash
 # 量改動前後每一幀的成本（ADR 0018、CODING_STANDARDS.md「動畫」）。
 #
-#   bash tool/frame_budget_compare.sh [-n 次數] <改前的提交> <test/frame_budget/ 的測試檔>...
+#   bash tool/frame_budget_compare.sh <改前的提交> <test/frame_budget/ 的測試檔>...
 #
 # 例：bash tool/frame_budget_compare.sh origin/beta test/frame_budget/reader_interactions_frame_budget_test.dart
 #
-# 把 <改前的提交> 開在暫時的 worktree，和目前的工作目錄（含還沒 commit 的改動）交錯各跑
-# n 次（預設 3），印出一張 Markdown 表：每個情境「最大一幀」與「中位數」在 n 次裡的中位數，
-# 括號裡是 n 次最大一幀的範圍。表可以直接貼進 commit message。測試檔路徑相對於 repo 根目錄；
-# 改前沒有的測試檔只跑改後。任何一次測試沒有全過就停下來，不印表。
+# 把 <改前的提交> 開在暫時的 worktree，和目前的工作目錄（含還沒 commit 的改動）各跑一次，
+# 印出一張 Markdown 表：每個情境動畫在動的時候，扣掉測試的資料庫、排版切片照實算後還超過
+# 上限（電腦 4.2ms）的幀數（ADR 0036）。點下去的那一幀與預留停頓不算；最大一幀降了但還
+# 超過，一樣是掉幀，表上不列。表可以直接貼進 commit message。測試檔路徑相對於 repo 根目錄；
+# 改前沒有的測試檔只跑改後，改前的量測工具還不會印這個數字時那一格是「—」。測試沒有全過
+# 就停下來，不印表。
+#
+# 只跑一次：數字有疑問時，打開完整輸出看那幾幀落在哪一段、在做什麼工作，不重跑。
 #
 # - 全機同時只跑一個量測：別的 session 正在用這支指令時排隊等它結束。電腦上還有其他
 #   flutter_tester 在跑（別人直接跑 flutter test）時只提醒，數字可能偏高；不結束任何程序。
 # - FRAME_ATTRIBUTE=1 照樣傳下去，但歸因本身會讓數字變大，只拿來找是誰，不拿來比前後。
-# - 每次的完整輸出留在最後印出的資料夾，看尖峰幀細節用；看完刪掉。
+# - 兩邊的完整輸出（base.log、head.log）留在最後印出的資料夾，看每一幀的細節用；看完刪掉。
 #
 #   bash tool/frame_budget_compare.sh summarize <資料夾>
-#     只重印那個資料夾裡 base-*.log、head-*.log 的對照表。
+#     只重印那個資料夾裡 base.log、head.log 的對照表。
 #
 # 測試：sh tool/frame_budget_compare_test.sh
 set -euo pipefail
 
-# 從 describeFrames 的摘要行（「<情境>：N 幀，中位數 Xms，最大 Yms，超過 Zms 的 K 幀」）
-# 收集兩邊每次的數字，印成對照表。
+# 從 describeFrames 的摘要（「<情境>：N 幀，…」與下一行「  動畫中…（扣掉資料庫、排版切片
+# 照實算後 K 幀）…」）收集兩邊的 K，印成對照表。
 summarize() {
-  local dir=$1 logs=()
+  local dir=$1 logs=() side
   # 改前沒有這些測試檔時只有改後的 log；一份都沒有時 awk 會改讀標準輸入，先擋下來。
-  shopt -s nullglob
-  logs=("$dir"/base-*.log "$dir"/head-*.log)
-  shopt -u nullglob
+  for side in base head; do
+    [ -f "$dir/$side.log" ] && logs+=("$dir/$side.log")
+  done
   if [ ${#logs[@]} -eq 0 ]; then
-    echo "$dir 裡沒有 base-*.log 或 head-*.log" >&2
+    echo "$dir 裡沒有 base.log 或 head.log" >&2
     return 1
   fi
   LC_ALL=C awk '
-    function median(list,    v, n, i, j, t) {
-      n = split(list, v, " ")
-      for (i = 2; i <= n; i++) for (j = i; j > 1 && v[j - 1] + 0 > v[j] + 0; j--) { t = v[j]; v[j] = v[j - 1]; v[j - 1] = t }
-      return n % 2 ? v[(n + 1) / 2] : (v[n / 2] + v[n / 2 + 1]) / 2
-    }
-    function range(list,    v, n, i, lo, hi) {
-      n = split(list, v, " ")
-      if (n < 2) return ""
-      lo = hi = v[1]
-      for (i = 2; i <= n; i++) { if (v[i] + 0 < lo + 0) lo = v[i]; if (v[i] + 0 > hi + 0) hi = v[i] }
-      return sprintf(" (%s–%s)", lo, hi)
-    }
-    function cell(side, label, what) {
-      if (!((side, label) in max)) return "—"
-      return what == "max" ? sprintf("%.1f%s", median(max[side, label]), range(max[side, label])) : sprintf("%.1f", median(med[side, label]))
-    }
-    FNR == 1 { side = FILENAME ~ /base-[0-9]+\.log$/ ? "base" : "head"; split("", occ) }
+    function cell(side, label) { return (side, label) in over ? over[side, label] : "—" }
+    FNR == 1 { side = FILENAME ~ /base\.log$/ ? "base" : "head"; split("", occ); label = "" }
     match($0, /：[0-9]+ 幀，中位數 [0-9.]+ms，最大 [0-9.]+ms，/) {
       label = substr($0, 1, RSTART - 1)
       # 同一次輸出裡同名的情境（例如來回兩次「發現→書架」）照出現順序分開。
       if (++occ[label] > 1) label = label "（第 " occ[label] " 次）"
-      rest = substr($0, RSTART)
-      gsub(/[^0-9.]+/, " ", rest)
-      split(rest, num, " ")
       if (!(label in seen)) { seen[label] = 1; order[++count] = label }
-      med[side, label] = med[side, label] " " num[2]
-      max[side, label] = max[side, label] " " num[3]
+      next
     }
+    label != "" && match($0, /扣掉資料庫、排版切片照實算後 [0-9]+ 幀/) {
+      rest = substr($0, RSTART, RLENGTH)
+      gsub(/[^0-9]+/, "", rest)
+      over[side, label] = rest
+      label = ""
+    }
+    # 整段沒有動畫在動的幀時，摘要只印「0 幀」。
+    label != "" && /^  動畫中（不含點下去後的第 0 幀） 0 幀；/ { over[side, label] = 0; label = "" }
     END {
       if (!count) { print "輸出裡沒有 describeFrames 的摘要行" > "/dev/stderr"; exit 1 }
-      print "| 情境 | 最大一幀 改前 → 改後（ms） | 中位數 改前 → 改後（ms） |"
-      print "|---|---|---|"
+      print "| 情境 | 動畫中超過 4.2ms 的幀 改前 → 改後 |"
+      print "|---|---|"
       for (i = 1; i <= count; i++) {
         l = order[i]
-        printf "| %s | %s → %s | %s → %s |\n", l, cell("base", l, "max"), cell("head", l, "max"), cell("base", l, "med"), cell("head", l, "med")
+        printf "| %s | %s → %s |\n", l, cell("base", l), cell("head", l)
       }
     }
   ' "${logs[@]}"
@@ -79,13 +72,8 @@ if [ "${1:-}" = summarize ]; then
   exit
 fi
 
-runs=3
-if [ "${1:-}" = -n ]; then
-  runs=$2
-  shift 2
-fi
 if [ $# -lt 2 ]; then
-  sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 ref=$1
@@ -167,36 +155,28 @@ others() {
 }
 
 run() {
-  local side=$1 i=$2 dir=$3 present=() f busy
+  local side=$1 name=$2 dir=$3 present=() f busy
   for f in "${files[@]}"; do
     [ -f "$dir/$f" ] && present+=("$f")
   done
   if [ ${#present[@]} -eq 0 ]; then
-    echo "  $side 第 $i 次：沒有這些測試檔，跳過" >&2
+    echo "  $name：沒有這些測試檔，跳過" >&2
     return
   fi
   busy=$(others)
   [ "${busy:-0}" -gt 0 ] && echo "  提醒：電腦上還有 $busy 個 flutter_tester 在跑，這次的數字可能偏高" >&2
-  echo "  $side 第 $i 次" >&2
+  echo "  $name" >&2
   # 摘要在測試的檢查之前印出，沒全過的那次數字可能是沒量完的，不算進表。
-  if ! (cd "$dir" && flutter test --run-skipped -t frame_budget "${present[@]}") > "$out/$side-$i.log" 2>&1; then
-    mv "$out/$side-$i.log" "$out/failed-$side-$i.log"
-    echo "  $side 第 $i 次測試沒有全過，停下來；看 $out/failed-$side-$i.log" >&2
+  if ! (cd "$dir" && flutter test --run-skipped -t frame_budget "${present[@]}") > "$out/$side.log" 2>&1; then
+    mv "$out/$side.log" "$out/failed-$side.log"
+    echo "  $name的測試沒有全過，停下來；看 $out/failed-$side.log" >&2
     exit 1
   fi
 }
 
-echo "改前 $(git log -1 --format='%h %s' "$base_commit")，改後是目前的工作目錄，各跑 $runs 次" >&2
-for i in $(seq 1 "$runs"); do
-  # 交錯順序，讓電腦變熱、背景工作這類隨時間變化的干擾平均落在兩邊。
-  if [ $((i % 2)) -eq 1 ]; then
-    run base "$i" "$base"
-    run head "$i" "$root"
-  else
-    run head "$i" "$root"
-    run base "$i" "$base"
-  fi
-done
+echo "改前 $(git log -1 --format='%h %s' "$base_commit")，改後是目前的工作目錄，各跑一次" >&2
+run base 改前 "$base"
+run head 改後 "$root"
 
 summarize "$out"
 echo "完整輸出：$out（看完刪掉）" >&2
