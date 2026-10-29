@@ -59,10 +59,11 @@ void main() {
 
   testWidgets('slides in over readerMenuIn without fading', (tester) async {
     await pumpEntrance(tester, visible: false);
-    expect(topOf(tester), hiddenTop);
-    expect(painted(tester), isFalse);
+    // 收起時不在元件樹裡（見 ReaderV2MenuEntrance）。
+    expect(find.byKey(menu), findsNothing);
 
     await pumpEntrance(tester, visible: true);
+    expect(topOf(tester), hiddenTop);
     await tester.pump(AppMotion.readerMenuIn ~/ 2);
     expect(topOf(tester), inExclusiveRange(hiddenTop, 0));
     expect(painted(tester), isTrue);
@@ -80,18 +81,22 @@ void main() {
     expect(topOf(tester), 0);
   });
 
-  testWidgets('opening and closing only moves the piece, never rebuilds it', (
-    tester,
-  ) async {
-    await pumpEntrance(tester, visible: false);
-    expect(childBuilds, 1);
-    for (final visible in [true, false, true]) {
-      await pumpEntrance(tester, visible: visible);
-      await tester.pumpAndSettle();
-    }
-    expect(topOf(tester), 0);
-    expect(childBuilds, 1);
-  });
+  testWidgets(
+    'builds the piece in the frame it starts to show, never while it moves, '
+    'and drops it once hidden',
+    (tester) async {
+      await pumpEntrance(tester, visible: false);
+      expect(childBuilds, 0);
+      for (final (visible, builds) in [(true, 1), (false, 1), (true, 2)]) {
+        await pumpEntrance(tester, visible: visible);
+        expect(childBuilds, builds);
+        await tester.pumpAndSettle();
+        expect(childBuilds, builds);
+        expect(find.byKey(menu), visible ? findsOneWidget : findsNothing);
+      }
+      expect(topOf(tester), 0);
+    },
+  );
 
   testWidgets('a delayed piece waits before it starts moving', (tester) async {
     await pumpEntrance(

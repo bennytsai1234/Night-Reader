@@ -150,8 +150,9 @@ class ReaderV2TtsController extends ChangeNotifier
     if (savedLanguage != null && savedLanguage.isNotEmpty) {
       await _tts.setLanguage(savedLanguage);
     }
+    // 定時器讀完自己通知；語言只交給朗讀引擎，畫面上沒有東西照它畫。這裡
+    // 再通知的話閱讀頁會整頁重建，開書時剛好落在換頁動畫的第二格（ADR 0036）。
     await sleepTimer.load();
-    notifyListeners();
   }
 
   @override

@@ -221,11 +221,19 @@ void main() {
     expect(awayOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
     expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
-    expect(awayOf(ReaderV2BottomMenu), 1);
+    // 收起播完就拿掉，不留在元件樹裡（見 ReaderV2MenuEntrance）。
+    expect(
+      find.descendant(
+        of: find.byType(ReaderV2BottomMenu),
+        matching: find.byType(FractionalTranslation),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('opening and closing the menus only moves them; buttons, titles, '
-      'the progress bar and the info rows are not rebuilt', (tester) async {
+      'the progress bar and the info rows are not rebuilt (the menus are '
+      'built once when they start to show)', (tester) async {
     final controls = ValueNotifier(false);
     addTearDown(controls.dispose);
     await pumpShell(
@@ -237,8 +245,11 @@ void main() {
 
     final rebuilds = <Type, int>{};
     final previous = debugOnRebuildDirtyWidget;
+    // 選單要出現時才建：新掛上的元件第一次建不算重建，原本就在的照算。
+    final seen = <Element>{...tester.allElements};
     debugOnRebuildDirtyWidget = (element, builtOnce) {
       previous?.call(element, builtOnce);
+      if (seen.add(element)) return;
       final type = element.widget.runtimeType;
       rebuilds[type] = (rebuilds[type] ?? 0) + 1;
     };

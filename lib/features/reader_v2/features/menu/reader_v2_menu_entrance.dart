@@ -9,8 +9,12 @@ import 'package:night_reader/shared/widgets/glass.dart';
 /// 玻璃，淡入時模糊到最後一幀才突然糊上去。[delay] 只用在進場，讓幾塊錯開
 /// 出發。
 ///
-/// 自己聽 [visible]，選單開關時只有滑動與擋點擊這兩層跟著變，[child]
-/// （按鈕、章名、進度條、亮度條）不重建（ADR 0029 做法 3）。收起時不接
+/// 自己聽 [visible]，選單滑動的每一格只有滑動那一層跟著變，[child]
+/// （按鈕、章名、進度條、亮度條）不重建（ADR 0029 做法 3）。完全收起後
+/// [child] 不在元件樹裡，要出現的那一幀（點下去的那一幀，ADR 0036 第 1 條）
+/// 才建：一直掛著的話，閱讀頁為了載入、換章這類別的事整頁重建時，看不到
+/// 的選單也整份跟著重建（按鈕的主題動畫、提示、無障礙資料），開書時這幾次
+/// 重建落在換頁、掀紙的動畫裡（2026-10-29 量到一格 15ms 以上）。收起時不接
 /// 點擊；系統關閉動畫時直接到位。
 class ReaderV2MenuEntrance extends StatefulWidget {
   const ReaderV2MenuEntrance({
@@ -76,8 +80,14 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
   }
 
   void _onStatus(AnimationStatus status) {
-    if (status.isDismissed) widget.onHidden?.call();
+    if (!status.isDismissed) return;
+    // 收起播完：拿掉內容（[_mounted]）。
+    if (mounted) setState(() {});
+    widget.onHidden?.call();
   }
+
+  /// 內容在元件樹裡：要出現、看得到或正在滑出。
+  bool get _mounted => widget.visible.value || !_controller.isDismissed;
 
   @override
   void didUpdateWidget(ReaderV2MenuEntrance oldWidget) {
@@ -90,6 +100,8 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
 
   void _onVisibleChanged() {
     final visible = widget.visible.value;
+    // 要出現時把內容建回來（收起時它不在元件樹裡）。
+    if (visible && _controller.isDismissed) setState(() {});
     if (_reduceMotion) {
       _controller.value = visible ? 1 : 0;
     } else if (visible) {
@@ -109,6 +121,7 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
 
   @override
   Widget build(BuildContext context) {
+    if (!_mounted) return const SizedBox.shrink();
     return ValueListenableBuilder<bool>(
       valueListenable: widget.visible,
       builder: (context, visible, child) =>

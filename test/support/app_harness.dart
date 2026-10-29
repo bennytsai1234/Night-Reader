@@ -47,6 +47,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'db_clock.dart';
 import 'screenshot.dart';
+import 'slice_clock.dart';
 
 const kBookUrl = 'https://www.example.com/book/1024/';
 const kOrigin = 'https://www.example.com';
@@ -85,11 +86,14 @@ final kChapterTitles = <String>[
 late AppDatabase _db;
 
 /// 註冊 App 的所有服務，資料庫換成記憶體。放在每個 testWidgets 開頭。
-/// 每次查詢的時間記在 [dbWork]，量動畫時算進那一幀（`db_clock.dart`）。
+/// 每次查詢的時間記在 [dbWork]、每一片排版記在 [sliceWork]，量動畫時算進
+/// 那一幀（`db_clock.dart`、`slice_clock.dart`）。
 Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   await getIt.reset();
   SharedPreferences.setMockInitialValues(<String, Object>{...prefs});
   dbWork.clear();
+  sliceWork.clear();
+  startSliceClock();
   _db = AppDatabase.forTesting(
     NativeDatabase.memory().interceptWith(DbClock()),
   );

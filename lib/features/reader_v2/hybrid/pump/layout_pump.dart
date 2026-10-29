@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:developer' show Timeline;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
@@ -44,6 +46,12 @@ final class LayoutPump implements HybridLayoutPump {
   int _discardedWorkCount = 0;
   bool _draining = false;
   bool _disposed = false;
+
+  /// 量測工具用：每做完一片排版，交出開始的時刻（[Timeline.now] 的時鐘）與
+  /// 花了多久。排版照時間切，每格做到預算就停，手機上一樣長，判斷卡不卡時
+  /// 照實算、不照電腦與手機的倍數換算（ADR 0036）。
+  @visibleForTesting
+  static void Function(int start, int micros)? debugOnSlice;
 
   int get queueDepth => _queue.length;
   int get discardedWorkCount => _discardedWorkCount;
@@ -196,6 +204,7 @@ final class LayoutPump implements HybridLayoutPump {
             : _governor.ballisticSliceBudget.inMicroseconds;
         if (_spentThisFrame > 0 && _spentThisFrame + predicted > budget) break;
         _queue.remove(work);
+        final sliceStart = debugOnSlice == null ? 0 : Timeline.now;
         final watch = Stopwatch()..start();
         bool done;
         try {
@@ -207,6 +216,7 @@ final class LayoutPump implements HybridLayoutPump {
           final elapsed = watch.elapsed;
           _spentThisFrame += math.max(1, elapsed.inMicroseconds);
           _governor.recordPumpWork(elapsed);
+          debugOnSlice?.call(sliceStart, elapsed.inMicroseconds);
         }
         if (done) {
           completed += 1;

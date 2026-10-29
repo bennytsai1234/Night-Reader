@@ -47,8 +47,7 @@ void main() {
         .evaluate()
         .every((e) => (e.widget as GlassSlide).shown == shown);
 
-    // 先開關一次：開書時目錄才讀好，收著的「上一章／下一章」從停用變成
-    // 可按的漸變停在畫面外，第一次滑出來時才播完（ADR 0022），和開關無關。
+    // 先開關一次，和下面量的開關無關。
     await tester.tapAt(centre);
     await rest(tester);
     await tester.tapAt(centre);
@@ -58,8 +57,12 @@ void main() {
     const menuParts = {GlassIconButton, TextButton, Slider, Text, Icon};
     final rebuilds = <Type, int>{};
     final previous = debugOnRebuildDirtyWidget;
+    // 選單收起後不在元件樹裡，要出現時才建：新掛上的元件第一次建不算重建，
+    // 原本就在的照算。
+    final seen = <Element>{...tester.allElements};
     debugOnRebuildDirtyWidget = (element, builtOnce) {
       previous?.call(element, builtOnce);
+      if (seen.add(element)) return;
       final type = element.widget.runtimeType;
       if (menuParts.contains(type) &&
           element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null &&

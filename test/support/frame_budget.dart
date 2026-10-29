@@ -16,6 +16,10 @@
 // 主執行緒。
 //
 //   FRAME_GC=1 flutter test --enable-vmservice …
+//   FRAME_CPU=1 flutter test --enable-vmservice …
+//
+// FRAME_CPU=1 時對動畫中超過上限的幀取 CPU 取樣，列出那一幀裡最花時間的
+// 函式（[frameCpu]），查「幀前」這類不在重建裡的工作。
 //
 // FRAME_GC=1 時另外記下每一幀裡 Dart 回收記憶體幾次、主執行緒因此停住多久：
 // 時間已經算在當時那一段裡，這裡標出多出來的是回收。測試是一幀接一幀直接
@@ -36,6 +40,7 @@ import 'package:vm_service/vm_service.dart' hide Isolate, Timeline;
 import 'package:vm_service/vm_service_io.dart';
 
 import 'db_clock.dart';
+import 'slice_clock.dart';
 
 /// 一幀的成本，單位微秒。
 class FrameCost {
@@ -54,9 +59,14 @@ class FrameCost {
     this.oldCollections = 0,
     this.oldGcMicros = 0,
     this.dbMicros = 0,
+    this.sliceMicros = 0,
+    this.cpu = const [],
   });
 
   final int index;
+
+  /// [frameCpu] 開著時，這一幀（動畫中超過上限的）CPU 取樣的摘要。
+  final List<String> cpu;
 
   /// 這一幀開始前的計時器與 microtask（資料工作多半在這裡）。
   final int beforeFrame;
@@ -103,11 +113,38 @@ class FrameCost {
   /// 資料庫在自己的 isolate，不佔這一幀；只會少算、不會多算。
   final int dbMicros;
 
+  /// 這一幀裡閱讀器排版照時間切的那幾片（`slice_clock.dart`）：每格做到
+  /// 預算就停，手機上一樣長，不照 2 倍換算（ADR 0036）。
+  final int sliceMicros;
+
   int get total => beforeFrame + frame + afterFrame + async;
 
   /// 扣掉測試才有的資料庫時間，手機上這一幀主執行緒的工作（照 2 倍換算前）。
-  /// 判斷動畫中的幀有沒有超過 [frameLimit] 看這個（ADR 0036）。
   int get app => total - dbMicros;
+
+  /// 判斷動畫中的幀有沒有超過 [frameLimit] 看這個（ADR 0036）：排版切片照實
+  /// 算、其他工作照 2 倍換算到手機，再折回電腦的尺度和 4.2ms 比，也就是
+  /// 扣掉資料庫後再扣掉排版切片的一半。
+  int get judged => app - sliceMicros ~/ 2;
+
+  FrameCost _withCpu(List<String> lines) => FrameCost(
+    index: index,
+    beforeFrame: beforeFrame,
+    frame: frame,
+    afterFrame: afterFrame,
+    async: async,
+    top: top,
+    dirty: dirty,
+    note: note,
+    moving: moving,
+    scavenges: scavenges,
+    scavengeMicros: scavengeMicros,
+    oldCollections: oldCollections,
+    oldGcMicros: oldGcMicros,
+    dbMicros: dbMicros,
+    sliceMicros: sliceMicros,
+    cpu: lines,
+  );
 
   FrameCost _withGc(Iterable<_GcPause> pauses) => FrameCost(
     index: index,
@@ -128,6 +165,8 @@ class FrameCost {
         .where((p) => !p.young)
         .fold(0, (sum, p) => sum + p.micros),
     dbMicros: dbMicros,
+    sliceMicros: sliceMicros,
+    cpu: cpu,
   );
 }
 
@@ -144,6 +183,88 @@ final bool framePhases = Platform.environment['FRAME_PHASES'] == '1';
 
 /// 環境變數 `FRAME_GC=1` 時記下每一幀的記憶體回收（要加 `--enable-vmservice`）。
 final bool frameGc = Platform.environment['FRAME_GC'] == '1';
+
+/// 環境變數 `FRAME_CPU=1` 時，對動畫中超過 [frameLimit] 的幀向 VM 取 CPU
+/// 取樣，列出那一幀裡自己花時間最多的函式，以及樣本落在 App 程式（`lib/`）
+/// 的哪個函式裡（要加 `--enable-vmservice`）。看「幀前」這類不在重建裡的
+/// 工作是誰。每 0.25ms 取一次樣，一幀幾毫秒只有十幾個樣本，看大宗不看細節。
+final bool frameCpu = Platform.environment['FRAME_CPU'] == '1';
+
+/// 連上這個測試自己的 VM service（[FRAME_GC]、[FRAME_CPU] 共用）。
+Future<(VmService, String)> _connectVm(String flag) async {
+  final http = (await Service.getInfo()).serverUri;
+  if (http == null) {
+    throw StateError(
+      '$flag=1 要加 --enable-vmservice：flutter test --enable-vmservice …',
+    );
+  }
+  final path = http.path.endsWith('/') ? http.path : '${http.path}/';
+  final vm = await vmServiceConnectUri(
+    http.replace(scheme: 'ws', path: '${path}ws').toString(),
+  );
+  return (vm, Service.getIsolateId(Isolate.current)!);
+}
+
+/// [frameCpu]：錄完後照每一幀的時間區間取回 CPU 取樣。
+class _CpuProfile {
+  _CpuProfile._(this._vm, this._isolate);
+
+  final VmService _vm;
+  final String _isolate;
+
+  static Future<_CpuProfile> start() async {
+    final (vm, isolate) = await _connectVm('FRAME_CPU');
+    await vm.setFlag('profile_period', '250');
+    await vm.clearCpuSamples(isolate);
+    return _CpuProfile._(vm, isolate);
+  }
+
+  /// [from] 到 [to]（[Timeline.now] 的時鐘）之間的樣本：自己花最多的前 6 個
+  /// 函式，與最靠近堆疊頂端的 App 函式前 6 個（各附樣本數）。
+  Future<List<String>> top(int from, int to) async {
+    final samples = await _vm.getCpuSamples(_isolate, from, to - from);
+    final functions = samples.functions ?? const <ProfileFunction>[];
+    String nameOf(int index) {
+      final function = functions[index].function;
+      final name = function is FuncRef
+          ? [
+              if (function.owner case ClassRef(:final name?)) name,
+              function.name,
+            ].join('.')
+          : (function is NativeFunction ? function.name : '$function');
+      return name ?? '?';
+    }
+
+    bool isApp(int index) =>
+        (functions[index].resolvedUrl ?? '').contains('night_reader/');
+    final self = <String, int>{};
+    final app = <String, int>{};
+    final list = samples.samples ?? const <CpuSample>[];
+    for (final sample in list) {
+      final stack = sample.stack ?? const <int>[];
+      if (stack.isEmpty) continue;
+      final top = nameOf(stack.first);
+      self[top] = (self[top] ?? 0) + 1;
+      final inApp = stack.where(isApp).firstOrNull;
+      if (inApp != null) {
+        final name = nameOf(inApp);
+        app[name] = (app[name] ?? 0) + 1;
+      }
+    }
+    String rank(Map<String, int> counts) {
+      final sorted = counts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      return sorted.take(6).map((e) => '${e.key}×${e.value}').join('、');
+    }
+
+    return [
+      if (self.isNotEmpty) '樣本 ${list.length}，自己花最多：${rank(self)}',
+      if (app.isNotEmpty) '落在 App 程式：${rank(app)}',
+    ];
+  }
+
+  Future<void> dispose() => _vm.dispose();
+}
 
 /// 一次讓主執行緒停住的回收：開始時間（[Timeline.now] 的時鐘）、多久、是
 /// 新生區還是舊生區。
@@ -193,17 +314,7 @@ class _GcTimeline {
   };
 
   static Future<_GcTimeline> start() async {
-    final http = (await Service.getInfo()).serverUri;
-    if (http == null) {
-      throw StateError(
-        'FRAME_GC=1 要加 --enable-vmservice：flutter test --enable-vmservice …',
-      );
-    }
-    final path = http.path.endsWith('/') ? http.path : '${http.path}/';
-    final vm = await vmServiceConnectUri(
-      http.replace(scheme: 'ws', path: '${path}ws').toString(),
-    );
-    final isolate = Service.getIsolateId(Isolate.current)!;
+    final (vm, isolate) = await _connectVm('FRAME_GC');
     await vm.setVMTimelineFlags(['GC']);
     final info = (await vm.getIsolate(isolate)).json!;
     final start = Timeline.now;
@@ -341,6 +452,7 @@ Future<List<FrameCost>> recordFrames(
   }
   var costs = <FrameCost>[];
   var gc = frameGc ? await tester.runAsync(_GcTimeline.start) : null;
+  final cpu = frameCpu ? await tester.runAsync(_CpuProfile.start) : null;
   // 每一幀從開始到量完的區間（[Timeline.now] 的時鐘），回收照開始時間歸到
   // 這些區間；afterFrame（存畫面）的回收不算進任何一幀。
   final windows = <(int, int)>[];
@@ -398,6 +510,9 @@ Future<List<FrameCost>> recordFrames(
           dbMicros: dbWork
               .where((w) => w.start >= from && w.start < to)
               .fold(0, (sum, w) => sum + w.micros),
+          sliceMicros: sliceWork
+              .where((w) => w.start >= from && w.start < to)
+              .fold(0, (sum, w) => sum + w.micros),
         ),
       );
       dirty = <String, int>{};
@@ -420,7 +535,17 @@ Future<List<FrameCost>> recordFrames(
           ),
       ];
     }
+    if (cpu != null) {
+      for (final (i, cost) in costs.indexed) {
+        if (!cost.moving || cost.judged <= frameLimit.inMicroseconds) continue;
+        final lines = await tester.runAsync(
+          () => cpu.top(windows[i].$1, windows[i].$2),
+        );
+        costs[i] = cost._withCpu(lines ?? const []);
+      }
+    }
   } finally {
+    if (cpu != null) await tester.runAsync(cpu.dispose);
     FlutterTimeline.debugCollectionEnabled = previous.$1;
     debugProfileBuildsEnabled = previous.$2;
     debugProfileLayoutsEnabled = previous.$3;
@@ -474,8 +599,8 @@ List<AggregatedTimedBlock> _exclusive(List<TimedBlock> blocks) {
 }
 
 /// 摘要：幀數、中位數、最大值，以及超過 [over] 的每一幀各段成本。動畫中
-/// 另外列出扣掉資料庫時間（[FrameCost.app]）後仍超過的幀數：那些才是手機上
-/// 也會超過的（ADR 0036）。
+/// 另外列出扣掉資料庫、排版切片照實算（[FrameCost.judged]）後仍超過的
+/// 幀數：那些才是手機上也會超過的（ADR 0036）。
 String describeFrames(
   String label,
   List<FrameCost> costs, {
@@ -487,14 +612,18 @@ String describeFrames(
   final spikes = costs.where((c) => c.total > over.inMicroseconds);
   // 動畫中與靜止時各自最忙的一幀：重活該落在靜止的時候。
   String peak(bool moving) {
-    final frames = costs.where((c) => c.moving == moving);
+    // 第 0 幀是點下去（或手指按下）後的第一幀，可以重（ADR 0036 第 1 條），
+    // 不算進動畫中。
+    final frames = costs.where(
+      (c) => moving ? c.moving && c.index > 0 : !c.moving,
+    );
     if (frames.isEmpty) return ' 0 幀';
     final top = frames.reduce((a, b) => b.total > a.total ? b : a);
     final overLimit = frames.where((c) => c.total > over.inMicroseconds).length;
-    final overApp = frames.where((c) => c.app > over.inMicroseconds).length;
+    final overApp = frames.where((c) => c.judged > over.inMicroseconds).length;
     return ' ${frames.length} 幀，最大 ${ms(top.total)}ms（第 ${top.index} 幀）、'
         '超過 ${limit}ms 的 $overLimit 幀'
-        '${moving ? '（扣掉資料庫後 $overApp 幀）' : ''}';
+        '${moving ? '（扣掉資料庫、排版切片照實算後 $overApp 幀）' : ''}';
   }
 
   String gc(FrameCost cost) => cost.gcMicros == 0
@@ -506,7 +635,7 @@ String describeFrames(
   final lines = [
     '$label：${costs.length} 幀，中位數 ${ms(totals[totals.length ~/ 2])}ms，'
         '最大 ${ms(totals.last)}ms，超過 ${limit}ms 的 ${spikes.length} 幀',
-    '  動畫中${peak(true)}；靜止時${peak(false)}',
+    '  動畫中（不含點下去後的第 0 幀）${peak(true)}；靜止時${peak(false)}',
     if (frameGc)
       '  回收記憶體的 ${collected.length} 幀（動畫中 '
           '${collected.where((c) => c.moving).length} 幀）：'
@@ -517,11 +646,14 @@ String describeFrames(
           '${ms(cost.total)}ms：幀前 ${ms(cost.beforeFrame)}、'
           '幀 ${ms(cost.frame)}、幀後 ${ms(cost.afterFrame)}、'
           '非同步 ${ms(cost.async)}${gc(cost)}'
-          '${cost.dbMicros == 0 ? '' : '，其中資料庫 ${ms(cost.dbMicros)}ms'}',
+          '${cost.dbMicros == 0 ? '' : '，其中資料庫 ${ms(cost.dbMicros)}ms'}'
+          '${cost.sliceMicros == 0 ? '' : '，其中排版切片 ${ms(cost.sliceMicros)}ms'}'
+          '${cost.dbMicros == 0 && cost.sliceMicros == 0 ? '' : '（判斷用 ${ms(cost.judged)}ms）'}',
       if (cost.top.isNotEmpty)
         '    耗時：${cost.top.map((b) => '${b.name} ${(b.duration / 1000).toStringAsFixed(1)}×${b.count}').join('、')}',
       if (cost.dirty.isNotEmpty)
         '    重建起點：${cost.dirty.entries.map((e) => '${e.key}×${e.value}').join('、')}',
+      for (final line in cost.cpu) '    CPU：$line',
     ],
   ];
   return lines.join('\n');
