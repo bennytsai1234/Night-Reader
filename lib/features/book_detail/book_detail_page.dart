@@ -187,6 +187,20 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
+  /// 這一輪載入的骨架；同一輪（同一本 [BookDetailProvider.skeletonBook]）
+  /// 沿用同一個元件。資料到了整頁重建時骨架還在換場，原本每次換一個新的，
+  /// 整片骨架（十幾列）跟著重建一次。
+  Widget _skeletonOf(Book book) {
+    if (!identical(book, _skeletonFor)) {
+      _skeletonFor = book;
+      _skeleton = BookDetailSkeleton(book: book);
+    }
+    return _skeleton!;
+  }
+
+  Book? _skeletonFor;
+  Widget? _skeleton;
+
   /// 有沒有封面氛圍；沒有時頁首維持實色。
   bool _hasAmbience(BookDetailProvider provider) =>
       BookCoverAmbience.supports(UnifiedCovers.coverOf(provider.book));
@@ -251,7 +265,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
           // 內容，再照骨架換場的設定換過去，骨架不跟著新資料變形。
           SliverSkeletonSwitcher(
             loading: loading,
-            skeleton: BookDetailSkeleton(book: provider.skeletonBook),
+            skeleton: _skeletonOf(provider.skeletonBook),
             builder: (context) => _buildLoadedSlivers(context, provider),
           ),
           // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。

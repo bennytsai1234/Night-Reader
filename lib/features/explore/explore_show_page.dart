@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -82,14 +83,9 @@ class ExploreShowView extends StatelessWidget {
     );
   }
 
-  /// 書單讓出頁首與底部系統區。
-  EdgeInsets _listPadding(BuildContext context) {
-    final padding = MediaQuery.paddingOf(context);
-    return EdgeInsets.only(
-      top: padding.top,
-      bottom: padding.bottom + AppSpacing.xl,
-    );
-  }
+  /// 書單讓出頁首與底部系統區；與骨架同一個算法。
+  EdgeInsets _listPadding(BuildContext context) =>
+      ExploreBookListSkeleton.paddingOf(context);
 
   /// 第一頁載入時顯示書單骨架，書到了以淡入取代。書列在骨架底下一格建一
   /// 列（[CoverRevealSlot]）、畫面上的封面解碼好才換場：原本書單到的那一格
@@ -100,8 +96,9 @@ class ExploreShowView extends StatelessWidget {
       waitForCovers: CoverWait.brief,
       // 書單直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
       backdrop: Theme.of(context).scaffoldBackgroundColor,
-      skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),
-      builder: (_) => _buildLoaded(context, provider),
+      skeleton: const ExploreBookListSkeleton(),
+      // 用骨架換場底下的 context：書單要看得到這一輪等封面（[CoverRevealScope]）。
+      builder: (contentContext) => _buildLoaded(contentContext, provider),
     );
   }
 
@@ -149,39 +146,60 @@ class ExploreShowView extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
-      edgeOffset: padding.top,
-      onRefresh: () => provider.refresh(),
-      child: ListView.separated(
-        padding: _listPadding(context),
-        itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
-        separatorBuilder: (_, _) =>
-            const InsetSeparator(indent: ExploreBookItem.textIndent),
-        itemBuilder: (context, index) {
-          if (index == provider.books.length) {
-            if (provider.errorMessage == null) {
-              // loadMore 會同步通知監聽者，不能在排版途中呼叫。
-              WidgetsBinding.instance.addPostFrameCallback(
-                (_) => provider.loadMore(),
-              );
+    // 骨架底下一幀建一塊時（[CoverReveal.paced]），清單本身另外排一塊，不和
+    // 頁面外框擠在書單到的那一格；還在等換場時只建畫面上的列，畫面外預先
+    // 建的列（cacheExtent）換場後捲動時再建。
+    final waiting = CoverRevealScope.waitingOf(context) != null;
+    return CoverRevealSlot(
+      child: RefreshIndicator(
+        edgeOffset: padding.top,
+        onRefresh: () => provider.refresh(),
+        // 分隔線接在每一列（第一列以外）的上緣，不另佔清單的一格：清單的每
+        // 一格都另外包一層（保留狀態、重畫邊界、讀屏序號），書單到的那一格
+        // 少建一半。
+        child: ListView.builder(
+          scrollCacheExtent: waiting ? const ScrollCacheExtent.pixels(0) : null,
+          padding: _listPadding(context),
+          itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            Widget separated(Widget child, {Key? key}) => index == 0
+                ? KeyedSubtree(key: key, child: child)
+                : Column(
+                    key: key,
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const InsetSeparator(indent: ExploreBookItem.textIndent),
+                      child,
+                    ],
+                  );
+            if (index == provider.books.length) {
+              if (provider.errorMessage == null) {
+                // loadMore 會同步通知監聽者，不能在排版途中呼叫。
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => provider.loadMore(),
+                );
+              }
+              return separated(_buildLoadMoreIndicator(context, provider));
             }
-            return _buildLoadMoreIndicator(context, provider);
-          }
-          final book = provider.books[index];
-          return CoverRevealSlot(
-            key: ValueKey(book.bookUrl),
-            placeholder: const SizedBox(
-              height: ExploreBookItem.coverHeight + AppSpacing.md * 2,
-            ),
-            child: _ExploreBookRow(
-              book: book,
-              details: provider.details,
-              source: provider.source,
-              isInBookshelf: provider.isInBookshelf(book),
-              sourceName: exploreName,
-            ),
-          );
-        },
+            final book = provider.books[index];
+            return separated(
+              key: ValueKey(book.bookUrl),
+              CoverRevealSlot(
+                placeholder: const SizedBox(
+                  height: ExploreBookItem.coverHeight + AppSpacing.md * 2,
+                ),
+                child: _ExploreBookRow(
+                  book: book,
+                  details: provider.details,
+                  source: provider.source,
+                  isInBookshelf: provider.isInBookshelf(book),
+                  sourceName: exploreName,
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

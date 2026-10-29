@@ -62,15 +62,25 @@ class ExploreSourceListSkeleton extends StatelessWidget {
 }
 
 /// 發現分類書單的骨架：與 [ExploreBookItem] 同樣的封面與文字位置。
+///
+/// 內距照書單自己算（讓出頁首與底部系統區），不由外面傳進來：可以寫成
+/// 常數，書單到了整頁重建時骨架不跟著重建。
 class ExploreBookListSkeleton extends StatelessWidget {
-  const ExploreBookListSkeleton({super.key, required this.padding});
+  const ExploreBookListSkeleton({super.key});
 
-  /// 與書單相同的內距。
-  final EdgeInsets padding;
+  /// 書單的內距：讓出頁首與底部系統區。
+  static EdgeInsets paddingOf(BuildContext context) {
+    final padding = MediaQuery.paddingOf(context);
+    return EdgeInsets.only(
+      top: padding.top,
+      bottom: padding.bottom + AppSpacing.xl,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     const rowHeight = ExploreBookItem.coverHeight + AppSpacing.md * 2;
+    final padding = paddingOf(context);
     return ExcludeSemantics(
       child: LayoutBuilder(
         builder: (context, constraints) {

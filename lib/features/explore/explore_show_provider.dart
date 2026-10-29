@@ -103,9 +103,13 @@ class ExploreShowProvider extends ChangeNotifier {
     if (_bookSource == null) return;
     final requestId = ++_requestSerial;
 
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+    // 第一次載入時本來就在載入中、沒有錯誤：畫面沒有變，不通知。原本照樣
+    // 通知，換頁剛播完那一格整頁連骨架清單重建一次（電腦上約 10ms）。
+    if (!_isLoading || _errorMessage != null) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     _cancelToken = CancelToken();
 
