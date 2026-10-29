@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -95,12 +96,22 @@ class ReaderV2ChapterRepository {
   // snapshot a fully committed or fully rolled-back world.
   Future<void> _reloadTail = Future<void>.value();
 
-  List<BookChapter> get chapters => List<BookChapter>.unmodifiable(_chapters);
+  /// 章節清單的唯讀檢視，[_chapters] 換掉時才換新的。原本每次讀都複製一份
+  /// 新清單：閱讀頁每次重建都拿到「不同」的章節清單，目錄跟著整份重建，
+  /// 跳章第一格多花 20ms 以上（2026-10-29 量到）。
+  List<BookChapter> get chapters =>
+      _chaptersView ??= UnmodifiableListView<BookChapter>(_chapters);
+  List<BookChapter>? _chaptersView;
   int get chapterCount => _chapters.length;
+
+  set _chapterList(List<BookChapter> value) {
+    _chapters = value;
+    _chaptersView = null;
+  }
 
   Future<List<BookChapter>> ensureChapters() async {
     if (_chapters.isNotEmpty) return chapters;
-    _chapters = await chapterDao.getByBook(book.bookUrl);
+    _chapterList = await chapterDao.getByBook(book.bookUrl);
     if (_chapters.isNotEmpty) return chapters;
     final source = await _ensureSource();
     if (source == null) {
@@ -118,7 +129,7 @@ class ReaderV2ChapterRepository {
       fetched[i].bookUrl = book.bookUrl;
     }
     await chapterDao.insertChapters(fetched);
-    _chapters = fetched;
+    _chapterList = fetched;
     return chapters;
   }
 
