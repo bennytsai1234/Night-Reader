@@ -219,11 +219,38 @@ class _CpuProfile {
     return _CpuProfile._(vm, isolate);
   }
 
-  /// [from] 到 [to]（[Timeline.now] 的時鐘）之間的樣本：自己花最多的前 6 個
-  /// 函式，與最靠近堆疊頂端的 App 函式前 6 個（各附樣本數）。
-  Future<List<String>> top(int from, int to) async {
-    final samples = await _vm.getCpuSamples(_isolate, from, to - from);
+  /// 每個 [windows]（[Timeline.now] 的時鐘的起訖）裡的樣本：自己花最多的前
+  /// 6 個函式，與最靠近堆疊頂端的 App 函式前 6 個（各附樣本數）。整段只向
+  /// VM 要一次：每要一次 VM 都要把整個 App 的函式表整理一遍，逐幀要的話
+  /// 幾十幀就要好幾分鐘。
+  Future<List<List<String>>> top(List<(int, int)> windows) async {
+    if (windows.isEmpty) return const [];
+    final from = windows.map((w) => w.$1).reduce(math.min);
+    final to = windows.map((w) => w.$2).reduce(math.max);
+    final samples = await _vm
+        .getCpuSamples(_isolate, from, to - from)
+        .timeout(
+          const Duration(minutes: 2),
+          onTimeout: () => throw StateError('FRAME_CPU：VM 兩分鐘內沒交回取樣'),
+        );
     final functions = samples.functions ?? const <ProfileFunction>[];
+    final all = samples.samples ?? const <CpuSample>[];
+    return [
+      for (final (start, end) in windows)
+        _summarize(
+          functions,
+          all.where((s) {
+            final t = s.timestamp ?? -1;
+            return t >= start && t < end;
+          }),
+        ),
+    ];
+  }
+
+  static List<String> _summarize(
+    List<ProfileFunction> functions,
+    Iterable<CpuSample> list,
+  ) {
     String nameOf(int index) {
       final function = functions[index].function;
       final name = function is FuncRef
@@ -239,8 +266,9 @@ class _CpuProfile {
         (functions[index].resolvedUrl ?? '').contains('night_reader/');
     final self = <String, int>{};
     final app = <String, int>{};
-    final list = samples.samples ?? const <CpuSample>[];
+    var count = 0;
     for (final sample in list) {
+      count++;
       final stack = sample.stack ?? const <int>[];
       if (stack.isEmpty) continue;
       final top = nameOf(stack.first);
@@ -258,7 +286,7 @@ class _CpuProfile {
     }
 
     return [
-      if (self.isNotEmpty) '樣本 ${list.length}，自己花最多：${rank(self)}',
+      if (self.isNotEmpty) '樣本 $count，自己花最多：${rank(self)}',
       if (app.isNotEmpty) '落在 App 程式：${rank(app)}',
     ];
   }
@@ -536,12 +564,15 @@ Future<List<FrameCost>> recordFrames(
       ];
     }
     if (cpu != null) {
-      for (final (i, cost) in costs.indexed) {
-        if (!cost.moving || cost.judged <= frameLimit.inMicroseconds) continue;
-        final lines = await tester.runAsync(
-          () => cpu.top(windows[i].$1, windows[i].$2),
-        );
-        costs[i] = cost._withCpu(lines ?? const []);
+      final over = [
+        for (final (i, cost) in costs.indexed)
+          if (cost.moving && cost.judged > frameLimit.inMicroseconds) i,
+      ];
+      final lines = await tester.runAsync(
+        () => cpu.top([for (final i in over) windows[i]]),
+      );
+      for (final (k, i) in over.indexed) {
+        costs[i] = costs[i]._withCpu(lines?[k] ?? const []);
       }
     }
   } finally {
