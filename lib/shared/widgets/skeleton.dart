@@ -145,8 +145,40 @@ class Skeleton extends StatefulWidget {
   /// 呼吸一輪的時長：由深到淺、再由淺到深各一段 [AppMotion.skeletonPulse]。
   static Duration get breathCycle => AppMotion.skeletonPulse * 2;
 
+  /// 所在 [Skeleton] 的呼吸深淺，給自己畫骨架的元件（閱讀器的紙）照它畫；
+  /// 不在 [Skeleton] 底下或不呼吸（減少動態）時為 null。收住呼吸
+  /// （[SkeletonRest]）時跟其他骨架一起停在最深。
+  static SkeletonDepth? depthOf(BuildContext context) =>
+      _SkeletonScope.maybeOf(context)?.phase;
+
   @override
   State<Skeleton> createState() => _SkeletonState();
+}
+
+/// 骨架呼吸的深淺（[Skeleton.depthOf]）：每一格變化時通知。
+abstract interface class SkeletonDepth implements Listenable {
+  /// 橫向位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例，乘在佔位底色的
+  /// 透明度上（1 最深）。
+  double depthAt(double u, SkeletonBreath breath);
+}
+
+/// 讓底下的 [Skeleton] 登記在 [rest]：不在開 App 進場裡的畫面（閱讀器開書）
+/// 也能收住、接著呼吸。開 App 進場裡照 [LaunchEntranceMotion.rest]。
+class SkeletonRestScope extends InheritedWidget {
+  const SkeletonRestScope({
+    super.key,
+    required this.rest,
+    required super.child,
+  });
+
+  final SkeletonRest rest;
+
+  static SkeletonRest? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SkeletonRestScope>()?.rest;
+
+  @override
+  bool updateShouldNotify(SkeletonRestScope oldWidget) =>
+      !identical(rest, oldWidget.rest);
 }
 
 class _SkeletonState extends State<Skeleton>
@@ -154,7 +186,8 @@ class _SkeletonState extends State<Skeleton>
   late final _BreathClock _clock = _BreathClock(this);
   bool _breathing = false;
 
-  /// 開 App 的進場收住呼吸時登記在這裡（[LaunchEntranceMotion.rest]）。
+  /// 收住呼吸時登記在這裡：開 App 的進場（[LaunchEntranceMotion.rest]），
+  /// 其他畫面照 [SkeletonRestScope]。
   SkeletonRest? _rest;
 
   /// 所在的開 App 進場；骨架開始呼吸前不呼吸（[_BreathClock.holdUntil]）。
@@ -169,7 +202,7 @@ class _SkeletonState extends State<Skeleton>
       ..allowed = _breathing
       ..visible = TickerMode.valuesOf(context).enabled;
     final entrance = LaunchEntrance.maybeOf(context);
-    final rest = entrance?.rest;
+    final rest = entrance?.rest ?? SkeletonRestScope.maybeOf(context);
     if (!identical(rest, _rest)) {
       _rest?._clocks.remove(_clock);
       _rest = rest?.._add(_clock);
@@ -234,7 +267,7 @@ class SkeletonRest {
 /// 一個 [Skeleton] 的呼吸：從開始呼吸起經過了幾輪（不折回 0）。收住時
 /// （[rest]）每個位置等到下一次最深就停在那裡：呼吸曲線在最深處的變化是
 /// 零，停下來接得上，不是動到一半定住。
-class _BreathClock extends ChangeNotifier {
+class _BreathClock extends ChangeNotifier implements SkeletonDepth {
   _BreathClock(TickerProvider vsync) {
     _ticker = vsync.createTicker(_tick);
   }
@@ -405,6 +438,7 @@ class _BreathClock extends ChangeNotifier {
 
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
   /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
+  @override
   double depthAt(double u, SkeletonBreath breath) {
     if (_hold != null) return 1;
     final phase = _phase;

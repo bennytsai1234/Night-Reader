@@ -30,10 +30,6 @@ class LoadingVeilController {
         vsync: vsync,
         duration: AppMotion.fade,
         reverseDuration: AppMotion.fade,
-      ),
-      _pulse = AnimationController(
-        vsync: vsync,
-        duration: Skeleton.breathCycle,
       ) {
     _cover.addStatusListener(_onCoverStatus);
   }
@@ -52,7 +48,10 @@ class LoadingVeilController {
 
   final AnimationController _cover;
   final AnimationController _skeleton;
-  final AnimationController _pulse;
+
+  /// 紙上畫著骨架、要呼吸（[LoadingVeil] 這時才掛上 [Skeleton]）：呼吸和頁首
+  /// 頁尾的骨架共用 [Skeleton] 的節奏，收住（[SkeletonRest]）時一起停在最深。
+  final ValueNotifier<bool> _breathing = ValueNotifier(false);
   int _attachedVeils = 0;
   bool _reduceMotion = false;
 
@@ -184,7 +183,7 @@ class LoadingVeilController {
     _settleCoverWaiters(covered: false);
     _cover.dispose();
     _skeleton.dispose();
-    _pulse.dispose();
+    _breathing.dispose();
   }
 
   void _onCoverStatus(AnimationStatus status) {
@@ -210,18 +209,11 @@ class LoadingVeilController {
   /// 呼吸只在骨架畫在畫面上時跑：載入失敗改顯示錯誤、或紙已淡出時都停，
   /// 不讓一個看不到的動畫持續要求重畫。
   void _syncPulse() {
-    final run =
+    _breathing.value =
         _attachedVeils > 0 &&
         !_reduceMotion &&
         !_cover.isDismissed &&
         (_skeleton.value > 0 || _skeleton.isAnimating);
-    if (run) {
-      if (!_pulse.isAnimating) unawaited(_pulse.repeat());
-    } else if (_pulse.isAnimating || _pulse.value != 0) {
-      _pulse
-        ..stop()
-        ..value = 0;
-    }
   }
 }
 
@@ -281,30 +273,45 @@ class _LoadingVeilState extends State<LoadingVeil> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final viewWidth = MediaQuery.maybeSizeOf(context)?.width ?? 0;
     return RepaintBoundary(
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: _LoadingVeilPainter(
-          cover: controller._cover,
-          skeleton: controller._skeleton,
-          pulse: controller._pulse,
-          look: SkeletonLook.of(context),
-          breathSpan: () {
-            final box = context.findRenderObject();
-            if (box is! RenderBox || !box.hasSize || viewWidth <= 0) {
-              return (0, 1);
-            }
-            return Skeleton.screenSpan(box, viewWidth);
-          },
-          sweep: () => controller._sweep,
-          skeletonSweep: () => controller._skeletonSweep,
-          spec: widget.spec,
-          lines: widget.lines,
-          titleLines: widget.titleLines,
-          backgroundColor: widget.backgroundColor,
-          textColor: widget.textColor,
-        ),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: controller._breathing,
+        builder: (context, breathing, _) => breathing
+            ? Skeleton(
+                child: Builder(
+                  builder: (context) =>
+                      _paint(context, Skeleton.depthOf(context)),
+                ),
+              )
+            : _paint(context, null),
+      ),
+    );
+  }
+
+  Widget _paint(BuildContext context, SkeletonDepth? depth) {
+    final controller = widget.controller;
+    final viewWidth = MediaQuery.maybeSizeOf(context)?.width ?? 0;
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _LoadingVeilPainter(
+        cover: controller._cover,
+        skeleton: controller._skeleton,
+        depth: depth,
+        look: SkeletonLook.of(context),
+        breathSpan: () {
+          final box = context.findRenderObject();
+          if (box is! RenderBox || !box.hasSize || viewWidth <= 0) {
+            return (0, 1);
+          }
+          return Skeleton.screenSpan(box, viewWidth);
+        },
+        sweep: () => controller._sweep,
+        skeletonSweep: () => controller._skeletonSweep,
+        spec: widget.spec,
+        lines: widget.lines,
+        titleLines: widget.titleLines,
+        backgroundColor: widget.backgroundColor,
+        textColor: widget.textColor,
       ),
     );
   }
@@ -314,7 +321,7 @@ class _LoadingVeilPainter extends CustomPainter {
   _LoadingVeilPainter({
     required this.cover,
     required this.skeleton,
-    required this.pulse,
+    required this.depth,
     required this.look,
     required this.breathSpan,
     required this.sweep,
@@ -324,15 +331,15 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.titleLines,
     required this.backgroundColor,
     required this.textColor,
-  }) : super(repaint: Listenable.merge([cover, skeleton, pulse]));
+  }) : super(repaint: Listenable.merge([cover, skeleton, ?depth]));
 
   /// 紙與骨架出現的進度：經過的時間比例，不套曲線。整頁淡時在這裡套
   /// [AppMotion.fadeCurve]，由左而右時交給 [SkeletonReveal] 每個位置各自套。
   final Animation<double> cover;
   final Animation<double> skeleton;
 
-  /// 呼吸一輪的進度（[Skeleton.breathAt]）；停著時骨架不呼吸。
-  final Animation<double> pulse;
+  /// 骨架呼吸的深淺（[Skeleton.depthOf]）；null 時骨架不呼吸。
+  final SkeletonDepth? depth;
   final SkeletonLook look;
 
   /// 紙的左右兩緣在螢幕上的位置（[Skeleton.screenSpan]）：呼吸照螢幕位置，
@@ -393,7 +400,8 @@ class _LoadingVeilPainter extends CustomPainter {
         ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
     final base = Skeleton.tint(textColor, dark: dark, strength: look.strength);
-    final breathing = pulse.isAnimating;
+    final depth = this.depth;
+    final breathing = depth != null;
     // 紙蓋著、骨架由左而右出現時，每個橫向位置照骨架換進來的濃度畫；掀紙
     // 途中照紙的漸層。
     final growing = !sweeping && skeletonSweep() && skeleton.value < 1;
@@ -413,8 +421,7 @@ class _LoadingVeilPainter extends CustomPainter {
         base.a *
         layerAt(u) *
         (breathing
-            ? Skeleton.breathAt(
-                pulse.value,
+            ? depth.depthAt(
                 screenLeft + (screenRight - screenLeft) * u,
                 look.breath,
               )
@@ -462,7 +469,7 @@ class _LoadingVeilPainter extends CustomPainter {
   bool shouldRepaint(_LoadingVeilPainter oldDelegate) =>
       oldDelegate.cover != cover ||
       oldDelegate.skeleton != skeleton ||
-      oldDelegate.pulse != pulse ||
+      !identical(oldDelegate.depth, depth) ||
       oldDelegate.look != look ||
       oldDelegate.spec != spec ||
       !identical(oldDelegate.lines, lines) ||

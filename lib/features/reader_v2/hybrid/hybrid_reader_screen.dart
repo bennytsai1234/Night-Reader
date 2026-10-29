@@ -344,6 +344,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _scrollController?.dispose();
     _selection.dispose();
     _veil.dispose();
+    _cacheFraction.dispose();
     super.dispose();
   }
 
@@ -355,8 +356,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _initialRestoreCompleted = completed;
     if (completed) {
       _veil.reveal(SkeletonReveal.of(context));
+      unawaited(_rampCacheExtent());
     } else {
       _coverUntilFirstPage();
+    }
+  }
+
+  /// 正文畫面預留（畫面外先建好）的範圍佔一屏的比例。正文剛建好、紙開始
+  /// 掀的那一格只建看得到的段落，接下來 [_cacheRampSteps] 格每格放大一點，
+  /// 一格只多建幾段：原本第一格就把上下各一屏的段落一起建，落在掀紙的
+  /// 第一格（電腦上 9～14ms，2026-10-29 量到）。
+  final ValueNotifier<double> _cacheFraction = ValueNotifier(1);
+  static const int _cacheRampSteps = 4;
+  int _cacheRamp = 0;
+
+  Future<void> _rampCacheExtent() async {
+    final ramp = ++_cacheRamp;
+    _cacheFraction.value = 0;
+    for (var step = 1; step <= _cacheRampSteps; step++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || ramp != _cacheRamp) return;
+      _cacheFraction.value = step / _cacheRampSteps;
     }
   }
 
@@ -1573,9 +1593,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return controller.position.isScrollingNotifier.value && _sawUserScroll;
   }
 
+  /// 紙從載入畫面搬到正文上面（正文建好時）仍是同一個元件：紙上骨架的
+  /// 呼吸（[Skeleton]）接著走，不從頭開始。
+  final GlobalKey _veilKey = GlobalKey();
+
   Widget _buildVeil(ReaderV2State state) {
     final page = _veilPage;
     return LoadingVeil(
+      key: _veilKey,
       controller: _veil,
       // 骨架照量那些行時的版面畫：版面變了也照原樣淡掉。
       spec: page?.spec ?? state.layoutSpec,
@@ -1842,24 +1867,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             : (_shownTextSpec = state.layoutSpec);
         final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,
-          child: HybridScrollView(
-            centerKey: _centerKey,
-            documentIndex: _documentIndex,
-            namespace: _pipeline.namespace,
-            measurementStore: _measurementStore,
-            paragraphCache: _pipeline.paragraphCache,
-            epoch: _pipeline.epoch,
-            controller: controller,
-            cacheExtent: _viewportSize.height,
-            textColor: widget.textColor,
-            horizontalPadding: EdgeInsets.only(
-              left: textSpec.textPaddingLeft,
-              right: textSpec.textPaddingRight,
+          child: ValueListenableBuilder<double>(
+            valueListenable: _cacheFraction,
+            builder: (context, cacheFraction, _) => HybridScrollView(
+              centerKey: _centerKey,
+              documentIndex: _documentIndex,
+              namespace: _pipeline.namespace,
+              measurementStore: _measurementStore,
+              paragraphCache: _pipeline.paragraphCache,
+              epoch: _pipeline.epoch,
+              controller: controller,
+              cacheExtent: _viewportSize.height * cacheFraction,
+              textColor: widget.textColor,
+              horizontalPadding: EdgeInsets.only(
+                left: textSpec.textPaddingLeft,
+                right: textSpec.textPaddingRight,
+              ),
+              physics: _physics,
+              // 跨在上下緣的段落畫到正文區外，閱讀頁框架只露出正文與頁首頁尾
+              // 之間那段空隙，並在那裡漸隱（ReaderV2PageShell）。
+              clipBehavior: Clip.none,
             ),
-            physics: _physics,
-            // 跨在上下緣的段落畫到正文區外，閱讀頁框架只露出正文與頁首頁尾
-            // 之間那段空隙，並在那裡漸隱（ReaderV2PageShell）。
-            clipBehavior: Clip.none,
           ),
         );
         final readerStack = Stack(

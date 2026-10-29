@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -42,6 +43,9 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
@@ -101,13 +105,22 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _host.menu,
   );
 
-  /// 只拿來計骨架淡入的時長（頁首頁尾骨架與照紀錄畫的正文骨架都是
-  /// [AppMotion.fade]）：開書時和這一頁的第一幀同時開始，從目錄跳章時和
-  /// 蓋紙同時開始。
+  /// 只拿來計骨架出現的時長：頁首頁尾骨架與照紀錄畫的正文骨架都照骨架換場
+  /// （[SkeletonReveal] 的時長，開始前照它設定），開書時和這一頁的第一幀
+  /// 同時開始，從目錄跳章時和蓋紙同時開始。原本照 [AppMotion.fade] 計，比
+  /// 骨架真正出現的時間短，開書的工作撞上還在淡入的頁首頁尾（2026-10-29）。
   late final AnimationController _skeletonFadeIn = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
   );
+
+  /// 開書時頁首頁尾與紙上骨架的呼吸先收住、停在最深（[SkeletonRestScope]）：
+  /// 換頁、骨架出現與開書最重的那段（讀目錄、按鈕變可按的整頁重建）都落在
+  /// 骨架靜止的畫面上，做完再停 [LaunchEntranceMotion.idle] 才開始呼吸
+  /// （使用者 2026-10-29 選的，ADR 0036 第 2 條）。
+  final SkeletonRest _openingRest = SkeletonRest();
+  bool _breathReleaseScheduled = false;
+  Timer? _breathRelease;
 
   @override
   void initState() {
@@ -133,6 +146,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     HardwareKeyboard.instance.addHandler(_handleVolumeKey);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
+    // 還沒有骨架登記，只是讓之後掛上的骨架一出現就停在最深。
+    unawaited(_openingRest.settle());
   }
 
   @override
@@ -147,6 +162,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 不和這兩段動畫搶同一幀。系統關閉動畫時骨架直接到位，只等換頁。
   Future<void> _awaitEntrance() async {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _skeletonFadeIn.duration = SkeletonReveal.of(context).duration;
     if (!reduceMotion) unawaited(_skeletonFadeIn.forward());
     await Future.wait([
       TransitionSettled.entered(context),
@@ -179,6 +195,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _progress.dispose();
     _host.dispose();
     _skeletonFadeIn.dispose();
+    _breathRelease?.cancel();
     super.dispose();
   }
 
@@ -186,6 +203,27 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
+    _releaseOpeningBreath();
+  }
+
+  /// 讀到目錄（或確定開不了書）後，閱讀頁照它整頁重建（[_scheduleRebuild]
+  /// 排在這一幀之後）：等那一幀畫完，再停 [LaunchEntranceMotion.idle] 才讓
+  /// 骨架開始呼吸（[_openingRest]）。
+  void _releaseOpeningBreath() {
+    if (_breathReleaseScheduled) return;
+    final runtime = _host.runtime;
+    if (runtime == null ||
+        (runtime.chapterCount <= 0 &&
+            runtime.state.lifecycle != ReaderV2Lifecycle.unavailable)) {
+      return;
+    }
+    _breathReleaseScheduled = true;
+    unawaited(() async {
+      await SchedulerBinding.instance.endOfFrame;
+      await SchedulerBinding.instance.endOfFrame;
+      if (!mounted) return;
+      _breathRelease = Timer(LaunchEntranceMotion.idle, _openingRest.release);
+    }());
   }
 
   /// 音量鍵翻頁。回傳 true 時這一下不會再交給系統調音量；選單開著、
@@ -227,8 +265,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final settings = _host.settings;
     final menu = _host.menu;
     final runtime = _host.runtime;
-    final palette = StylePalette.of(context);
-    final isDarkBackground = palette.brightness == Brightness.dark;
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
@@ -240,6 +276,22 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final customBrightness =
         !settings.brightnessAuto &&
         ReaderV2DeviceChannel.supportsWindowBrightness;
+    return SkeletonRestScope(
+      rest: _openingRest,
+      child: _buildPage(context, navigation, customBrightness),
+    );
+  }
+
+  Widget _buildPage(
+    BuildContext context,
+    ReaderV2ChapterNavigationState navigation,
+    bool customBrightness,
+  ) {
+    final settings = _host.settings;
+    final menu = _host.menu;
+    final runtime = _host.runtime;
+    final palette = StylePalette.of(context);
+    final isDarkBackground = palette.brightness == Brightness.dark;
     return StatusBarHidden(
       hidden: settings.hideStatusBar,
       child: AnnotatedRegion<SystemUiOverlayStyle>(
