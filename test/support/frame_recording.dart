@@ -115,6 +115,9 @@ Future<void> recordAnimation(
         'phases': phases,
         'costs': [for (final cost in costs) (cost.total / 100).round() / 10],
         'db': [for (final cost in costs) (cost.dbMicros / 100).round() / 10],
+        'slice': [
+          for (final cost in costs) (cost.sliceMicros / 100).round() / 10,
+        ],
         if (frameGc) ...{
           'gcNew': [
             for (final cost in costs) (cost.scavengeMicros / 100).round() / 10,
