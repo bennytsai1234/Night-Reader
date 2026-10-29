@@ -112,6 +112,24 @@ class _SearchViewState extends State<SearchView> {
   /// 畫面上的結果列；結果有變時先記下位置，重排後各自從舊位置滑過去。
   final _ResultMoves _moves = _ResultMoves();
 
+  /// 新進的列一幀只建一張（見 [_ArrivalSlot]）。
+  final _Arrivals _arrivals = _Arrivals();
+
+  /// 每一本書上次建的列與建它時用到的值（見 [_buildResults]）。
+  final Map<
+    String,
+    ({
+      SearchBook book,
+      String? coverUrl,
+      bool inBookshelf,
+      int? tier,
+      _RowShape shape,
+      bool animate,
+      Widget row,
+    })
+  >
+  _rows = {};
+
   void _trackArrivals(SearchProvider provider) {
     // 新一輪搜尋開始時會先清空結果。不看「是否搜尋中」：最後一批結果可能和
     // 搜尋完成在同一幀到，那一批也要淡入。
@@ -213,62 +231,58 @@ class _SearchViewState extends State<SearchView> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SearchProvider>(
-      builder: (context, provider, child) {
-        _trackArrivals(provider);
-        final showResults =
-            !(provider.results.isEmpty && !provider.isSearching);
-        return Scaffold(
-          extendBodyBehindAppBar: true,
-          backgroundColor: AppChrome.of(context).groupedBackground,
-          appBar: SearchAppBar(
-            controller: _controller,
-            focusNode: _inputFocus,
-            provider: provider,
-            onSearch: _onSearch,
-            onScopePressed: _openScopeSheet,
-            onCancel: () => Navigator.maybePop(context),
-          ),
-          // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
-          body: Builder(
-            builder: (bodyContext) {
-              final padding = MediaQuery.paddingOf(bodyContext);
-              _bodyPadding = padding;
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: showResults
-                        ? _buildResults(provider)
-                        : _buildEmptyOrHistory(provider),
-                  ),
-                  // 蓋在結果上面而不是換掉它，打完字取消時結果和捲動位置還在。
-                  Positioned.fill(child: _buildSuggestions(provider)),
-                  Positioned(
-                    // 進度條貼在玻璃頁首實色區的下緣。
-                    top: padding.top - AppGlass.headerFadeHeight,
-                    left: 0,
-                    right: 0,
-                    // 搜尋結束時停在最後的進度淡出，不在一幀內消失。
-                    child: _FadeSwap(
-                      child: provider.isSearching
-                          ? ListenableBuilder(
-                              key: const ValueKey('progress'),
-                              listenable: provider.progressUpdates,
-                              builder: (context, _) => LinearProgressIndicator(
-                                value: provider.progress,
-                                minHeight: 2,
-                                backgroundColor: Colors.transparent,
-                              ),
-                            )
-                          : const SizedBox(width: double.infinity, height: 2),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor: AppChrome.of(context).groupedBackground,
+      appBar: _SearchHeader(
+        controller: _controller,
+        focusNode: _inputFocus,
+        onSearch: _onSearch,
+        onScopePressed: _openScopeSheet,
+        onCancel: () => Navigator.maybePop(context),
+      ),
+      // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
+      // 結果每更新一次只重建這一塊，頁首（搜尋框）不跟著重建。
+      body: Consumer<SearchProvider>(
+        builder: (bodyContext, provider, child) {
+          _trackArrivals(provider);
+          final showResults =
+              !(provider.results.isEmpty && !provider.isSearching);
+          final padding = MediaQuery.paddingOf(bodyContext);
+          _bodyPadding = padding;
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: showResults
+                    ? _buildResults(provider)
+                    : _buildEmptyOrHistory(provider),
+              ),
+              // 蓋在結果上面而不是換掉它，打完字取消時結果和捲動位置還在。
+              Positioned.fill(child: _buildSuggestions(provider)),
+              Positioned(
+                // 進度條貼在玻璃頁首實色區的下緣。
+                top: padding.top - AppGlass.headerFadeHeight,
+                left: 0,
+                right: 0,
+                // 搜尋結束時停在最後的進度淡出，不在一幀內消失。
+                child: _FadeSwap(
+                  child: provider.isSearching
+                      ? ListenableBuilder(
+                          key: const ValueKey('progress'),
+                          listenable: provider.progressUpdates,
+                          builder: (context, _) => LinearProgressIndicator(
+                            value: provider.progress,
+                            minHeight: 2,
+                            backgroundColor: Colors.transparent,
+                          ),
+                        )
+                      : const SizedBox(width: double.infinity, height: 2),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -869,6 +883,7 @@ class _SearchViewState extends State<SearchView> {
     final indexByKey = <String, int>{
       for (var i = 0; i < results.length; i++) _resultKey(results[i]): i,
     };
+    _rows.removeWhere((key, _) => !indexByKey.containsKey(key));
     return NotificationListener<ScrollUpdateNotification>(
       // 使用者一開始捲，結果順序就固定，之後找到的書接在尾端。
       onNotification: (notification) {
@@ -901,40 +916,115 @@ class _SearchViewState extends State<SearchView> {
           final startsTier =
               tier != null &&
               (index == 0 || tier != p.relevanceTierOf(results[index - 1]));
-          return _ResultEntrance(
+          final animate = _arrivingResultKeys.contains(key) || _fadeUnseenRows;
+          final shape = startsTier
+              ? (index == 0 ? _RowShape.firstTier : _RowShape.tier)
+              : (index > 0 ? _RowShape.separated : _RowShape.plain);
+          final coverUrl = p.coverOf(book);
+          final inBookshelf = p.isInBookshelf(book);
+          // 結果每更新一次清單就重建一次；這一列用到的都沒變時沿用上次的
+          // widget，整列跳過，不必每一列都重跑一遍。
+          final cached = _rows[key];
+          if (cached != null &&
+              identical(cached.book, book) &&
+              cached.coverUrl == coverUrl &&
+              cached.inBookshelf == inBookshelf &&
+              cached.tier == tier &&
+              cached.shape == shape &&
+              cached.animate == animate) {
+            return cached.row;
+          }
+          final row = _ArrivalSlot(
             // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
             // 留在原本的位置。
             key: ValueKey(key),
-            animate: _arrivingResultKeys.contains(key) || _fadeUnseenRows,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (startsTier)
-                  _RelevanceTierHeader(tier: tier, first: index == 0)
-                else if (index > 0)
-                  const InsetSeparator(indent: ExploreBookItem.textIndent),
-                // 只有書卡滑動；段名與分隔線屬於清單的位置，照新版面。
-                _ResultMove(
-                  key: const ValueKey('book'),
-                  moves: _moves,
-                  child: SearchResultItem(
-                    result: AggregatedSearchBook(
-                      book: book,
-                      sources: book.sourceLabels.isNotEmpty
-                          ? book.sourceLabels
-                          : [book.originName ?? '未知來源'],
+            arrivals: _arrivals,
+            shape: shape,
+            defer: animate,
+            child: _ResultEntrance(
+              animate: animate,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (startsTier)
+                    _RelevanceTierHeader(tier: tier, first: index == 0)
+                  else if (index > 0)
+                    const InsetSeparator(indent: ExploreBookItem.textIndent),
+                  // 只有書卡滑動；段名與分隔線屬於清單的位置，照新版面。
+                  _ResultMove(
+                    key: const ValueKey('book'),
+                    moves: _moves,
+                    child: SearchResultItem(
+                      result: AggregatedSearchBook(
+                        book: book,
+                        sources: book.sourceLabels.isNotEmpty
+                            ? book.sourceLabels
+                            : [book.originName ?? '未知來源'],
+                      ),
+                      coverUrl: coverUrl,
+                      onOpen: () => p.rememberOpenedCard(book),
+                      isInBookshelf: inBookshelf,
                     ),
-                    coverUrl: p.coverOf(book),
-                    onOpen: () => p.rememberOpenedCard(book),
-                    isInBookshelf: p.isInBookshelf(book),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
+          _rows[key] = (
+            book: book,
+            coverUrl: coverUrl,
+            inBookshelf: inBookshelf,
+            tier: tier,
+            shape: shape,
+            animate: animate,
+            row: row,
+          );
+          return row;
         },
       ),
+    );
+  }
+}
+
+/// 搜尋頁首：只在它顯示的範圍、精準搜尋、搜尋中與否改變時重建，結果與
+/// 進度更新時不重建搜尋框。
+class _SearchHeader extends StatelessWidget implements PreferredSizeWidget {
+  const _SearchHeader({
+    required this.controller,
+    required this.focusNode,
+    required this.onSearch,
+    required this.onScopePressed,
+    required this.onCancel,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onSearch;
+  final VoidCallback onScopePressed;
+  final VoidCallback onCancel;
+
+  @override
+  Size get preferredSize => SearchAppBar.size;
+
+  @override
+  Widget build(BuildContext context) {
+    context.select<SearchProvider, (bool, String?, bool, bool, bool)>(
+      (p) => (
+        p.scopeLoaded,
+        p.scopeLoaded ? p.searchScope.display : null,
+        p.searchScope.isAll,
+        p.precisionSearch,
+        p.isSearching,
+      ),
+    );
+    return SearchAppBar(
+      controller: controller,
+      focusNode: focusNode,
+      provider: context.read<SearchProvider>(),
+      onSearch: onSearch,
+      onScopePressed: onScopePressed,
+      onCancel: onCancel,
     );
   }
 }
@@ -1163,6 +1253,109 @@ class _RenderResultMove extends RenderProxyBox {
   }
 }
 
+/// 一列上方接的是什麼；同一種列一樣高（書卡每行字都只排一行）。
+enum _RowShape { plain, separated, firstTier, tier }
+
+/// 新進的列這一幀還能建幾張，以及每一種列量到的高度。
+class _Arrivals {
+  /// 一張書卡（封面、三行字、點擊區）在電腦上建出來約 3ms，兩張就超過一幀
+  /// 的上限（ADR 0036）；結果一次回來十幾本時，一幀只建一張，其餘下一幀起
+  /// 依序建。
+  static const int perFrame = 1;
+
+  /// 這一種列還沒量過時佔的高度：一張書卡在系統字級下的高度（封面撐高）。
+  static const double cardExtent =
+      ExploreBookItem.coverHeight + 2 * AppSpacing.md;
+
+  final Map<_RowShape, double> _extents = {};
+  int _granted = 0;
+
+  bool _take() {
+    if (_granted >= perFrame) return false;
+    if (_granted++ == 0) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => _granted = 0);
+    }
+    return true;
+  }
+}
+
+/// 新進的列（要淡入的那種）輪到這一幀才建；還沒輪到時先佔一塊同種列量過的
+/// 高度、什麼都不畫，下一幀再試。淡入從真的建出來那一幀開始。佔位和真的列
+/// 一樣高，下面的列不會因為輪到它而再移動；這一種列還沒量過時先佔一張書卡
+/// 的高度（[_Arrivals.cardExtent]），差的只有分隔線或段名，下面也都是剛
+/// 進來、還沒畫出來的列。捲進畫面、不淡入的列照常馬上建。
+class _ArrivalSlot extends StatefulWidget {
+  const _ArrivalSlot({
+    super.key,
+    required this.arrivals,
+    required this.shape,
+    required this.defer,
+    required this.child,
+  });
+
+  final _Arrivals arrivals;
+  final _RowShape shape;
+  final bool defer;
+  final Widget child;
+
+  @override
+  State<_ArrivalSlot> createState() => _ArrivalSlotState();
+}
+
+class _ArrivalSlotState extends State<_ArrivalSlot> {
+  /// 要不要等在建立時就決定；建出來之後一直是真的列。
+  late bool _built = !widget.defer;
+
+  @override
+  Widget build(BuildContext context) {
+    final arrivals = widget.arrivals;
+    if (!_built && arrivals._take()) _built = true;
+    if (_built) {
+      return _ExtentReporter(
+        onLayout: (extent) => arrivals._extents[widget.shape] = extent,
+        child: widget.child,
+      );
+    }
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+    return SizedBox(
+      height: arrivals._extents[widget.shape] ?? _Arrivals.cardExtent,
+    );
+  }
+}
+
+/// 排版後回報自己的高度。
+class _ExtentReporter extends SingleChildRenderObjectWidget {
+  const _ExtentReporter({required this.onLayout, required super.child});
+
+  final ValueChanged<double> onLayout;
+
+  @override
+  _RenderExtentReporter createRenderObject(BuildContext context) =>
+      _RenderExtentReporter(onLayout);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderExtentReporter renderObject,
+  ) {
+    renderObject.onLayout = onLayout;
+  }
+}
+
+class _RenderExtentReporter extends RenderProxyBox {
+  _RenderExtentReporter(this.onLayout);
+
+  ValueChanged<double> onLayout;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    onLayout(size.height);
+  }
+}
+
 /// 相關度分段的段名，接在該段第一本書上方。
 class _RelevanceTierHeader extends StatelessWidget {
   const _RelevanceTierHeader({required this.tier, required this.first});
@@ -1189,11 +1382,7 @@ class _RelevanceTierHeader extends StatelessWidget {
 /// 要不要播在建立時就決定：同一列之後重建、或捲出畫面回收後再出現，都不再
 /// 播。播完後透明度為 1，不再多出圖層。
 class _ResultEntrance extends StatefulWidget {
-  const _ResultEntrance({
-    super.key,
-    required this.animate,
-    required this.child,
-  });
+  const _ResultEntrance({required this.animate, required this.child});
 
   final bool animate;
   final Widget child;

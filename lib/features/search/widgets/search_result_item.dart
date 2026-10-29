@@ -6,6 +6,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/press_ink.dart';
 
 import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
@@ -90,7 +91,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
   /// 每次結果發布都重算來源數，內容沒變時保留原子樹，只有標記訂閱數量。
   /// 主題與繁簡顯示仍由內容自己的 context 訂閱，不凍住外觀。
   late final Widget _view = TransitionSource(
-    child: InkWell(
+    child: PressInk(
       onTap: _open,
       child: ValueListenableBuilder<_ResultContent>(
         valueListenable: _content,

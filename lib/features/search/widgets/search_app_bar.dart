@@ -33,9 +33,12 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
 
-  @override
-  Size get preferredSize =>
+  /// 頁首的大小；不必先建出頁首就能取得。
+  static Size get size =>
       const GlassNavHeader(bottomHeight: _bottomHeight).preferredSize;
+
+  @override
+  Size get preferredSize => size;
 
   @override
   Widget build(BuildContext context) {
