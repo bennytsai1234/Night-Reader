@@ -121,7 +121,8 @@ def overview():
                 if os.path.isfile(meta_path):
                     with open(meta_path, encoding='utf-8') as f:
                         meta = json.load(f)
-                    row[mode] = {'costs': meta['costs'], 'db': meta.get('db', []), 'phases': meta['phases']}
+                    row[mode] = {'costs': meta['costs'], 'db': meta.get('db', []),
+                                 'slice': meta.get('slice', []), 'phases': meta['phases']}
             rows.append(row)
     # 還在錄、還沒做成頁面的步驟（錄影資料夾裡的 meta.json）也列進來。
     done = {r['key'] for r in rows}
@@ -135,9 +136,10 @@ def overview():
                 if os.path.isfile(meta_path):
                     with open(meta_path, encoding='utf-8') as f:
                         meta = json.load(f)
-                    row[mode] = {'costs': meta['costs'], 'db': meta.get('db', []), 'phases': meta['phases']}
+                    row[mode] = {'costs': meta['costs'], 'db': meta.get('db', []),
+                                 'slice': meta.get('slice', []), 'phases': meta['phases']}
             rows.append(row)
-    out = os.path.join(PAGES, 'overview.json')
+    out =os.path.join(PAGES, 'overview.json')
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         json.dump(rows, f, ensure_ascii=False)
     print('OVERVIEW', out, len(rows), 'steps')

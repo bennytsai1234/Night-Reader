@@ -233,7 +233,7 @@ Future<void> surveyStep(
       tailFrames: tailFrames,
       realAsync: true,
     );
-    costs = [for (final c in result) c.app / 1000];
+    costs = [for (final c in result) c.judged / 1000];
     phases = [for (final c in result) c.note ?? ''];
     // ignore: avoid_print
     print(describeFrames('$area/$key', result));
@@ -257,19 +257,24 @@ Future<void> surveyStep(
         '${Platform.pathSeparator}meta.json',
       ).readAsStringSync(),
     ) as Map<String, dynamic>;
+    // 扣掉測試的資料庫時間與排版切片的一半（照時間切、手機上一樣長，ADR 0036）。
     final db = meta['db'] as List? ?? const [];
+    final slice = meta['slice'] as List? ?? const [];
+    double at(List list, int i) =>
+        i < list.length ? (list[i] as num).toDouble() : 0;
     costs = [
       for (final (i, c) in (meta['costs'] as List).indexed)
-        (c as num).toDouble() - (i < db.length ? (db[i] as num).toDouble() : 0),
+        (c as num).toDouble() - at(db, i) - at(slice, i) / 2,
     ];
     phases = [for (final p in meta['phases'] as List) p as String];
   }
-  // 照 ADR 0036：只看畫面在動的格子，扣掉測試的資料庫時間後和 4.2ms 比。
+  // 照 ADR 0036：只看畫面在動的格子，第 0 格（點下去後的第一格）可以重、
+  // 不算；扣掉測試的資料庫時間、排版切片照實算後和 4.2ms 比。
   const still = {'靜止', '紙'};
   final limit = frameLimit.inMicroseconds / 1000;
   final moving = [
     for (final (i, c) in costs.indexed)
-      if (i < phases.length && !still.contains(phases[i])) c,
+      if (i > 0 && i < phases.length && !still.contains(phases[i])) c,
   ];
   final peak = moving.fold<double>(0, (a, b) => a > b ? a : b);
   final over = moving.where((c) => c > limit).length;

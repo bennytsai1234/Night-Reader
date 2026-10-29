@@ -84,7 +84,8 @@ function hideTip(){tip.style.display='none';}
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 // 只看畫面在動的格子：over 是動畫中超過 4.2ms 的格數，peak 是動畫中最忙的一格。
 function stats(m){ if(!m) return null; const c=m.costs; let peak=0,at=-1,over=0;
-  c.forEach((v,i)=>{ if(STILL.has(m.phases[i])) return; if(v>LIMIT) over++; if(v>peak){peak=v;at=i;} });
+  // 第 0 格是點下去後的第一格，可以重（ADR 0036 第 1 條），不算。
+  c.forEach((v,i)=>{ if(i===0||STILL.has(m.phases[i])) return; if(v>LIMIT) over++; if(v>peak){peak=v;at=i;} });
   return {peak, at, over, n:c.length, phase:at<0?null:m.phases[at]}; }
 DATA.forEach(r=>{for(const k of ['light','dark']) if(r[k]) r[k].phases=r[k].phases.flatMap(([p,n])=>Array(n).fill(p));
   r.ls=stats(r.light); r.ds=stats(r.dark); r.area=r.page.replace(/-(\d+|錄影中)$/,'');
@@ -168,9 +169,12 @@ def main():
             m = row.get(mode)
             if not m:
                 continue
-            # 每格扣掉測試的資料庫時間（手機上不在主執行緒，`db_clock.dart`）。
+            # 每格扣掉測試的資料庫時間（手機上不在主執行緒，`db_clock.dart`）與閱讀器
+            # 排版切片的一半（照時間切、手機上一樣長，`slice_clock.dart`，ADR 0036）。
             db = m.pop('db', None) or []
-            m['costs'] = [round(c - (db[i] if i < len(db) else 0), 1) for i, c in enumerate(m['costs'])]
+            sl = m.pop('slice', None) or []
+            at = lambda xs, i: xs[i] if i < len(xs) else 0  # noqa: E731
+            m['costs'] = [round(c - at(db, i) - at(sl, i) / 2, 1) for i, c in enumerate(m['costs'])]
             runs = []
             for p in m['phases']:
                 if runs and runs[-1][0] == p:
