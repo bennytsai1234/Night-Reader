@@ -133,6 +133,8 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
           shown: _progress.value,
           edge: widget.edge,
           gap: widget.gap,
+          // 剛建好、要滑進來的那一格先畫好（見 GlassSlide.prepaint）。
+          prepaint: _controller.status == AnimationStatus.forward,
           child: child!,
         ),
       ),
