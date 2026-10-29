@@ -4,8 +4,6 @@
 
 - 細節檢查（`test/polish/`，總覽頁 `tool/polish_viewer/`）目前只檢查閱讀器頁首頁尾的骨架換場，24 種日常情境淺色、深色都對得上。之後要接書架、書籍詳情、發現等其他骨架頁，等使用者說要不要做；全部清乾淨後再拿掉 `dart_test.yaml` 的跳過，讓它擋推送。
 
-- 量測工具的修正在 `test/frame-budget-tools`（從 `beta` 開，未合併，工作目錄 `%TEMP%\nr-fbtools`）：「動畫中」照畫面的圖層有沒有變判斷（ADR 0037）、排版切片照實算並由逐幀量測自己記、測試資料庫的時間扣掉、`FRAME_ATTRIBUTE=2` 與 `FRAME_CPU`、`tool/frame_budget_compare.sh` 各跑一次只列掉幀的幀數。不改 App 的行為，使用者說「合併」才合併。
-
 - 錄全 App 動畫的腳本留在遠端分支 `wip/animation-survey`（不合併）：`test/_screens/survey/` 與總覽頁 `tool/animation_survey/`，`bash tool/animation_survey/run_all.sh [區 ...]` 錄淺色、深色並做好頁面。這條分支也併進了已撤掉的 `perf/animations`，要用時先把 App 程式換回 `beta` 的。
 
 - 開 App 呼吸剛開始那一幀偶爾碰上舊生區回收（手機 14ms，6 次有 1 次）：使用者 2026-10-29 改成感覺得到才修時，指定開 App 的動畫仍要處理；試過的做法與代價寫在 ADR 0036「待處理」。

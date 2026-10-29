@@ -13,9 +13,12 @@
 （`variants`，例如兩種間隔；`fixed` 的候選不分變化），淺色、深色各錄一段，
 名稱是「<候選>-<變化>-<light|dark>」。頁面上的段落名稱、各段說明（可依候選
 不同，`{variant}` 換成變化的 value、`{欄位}` 換成候選的同名欄位）、要畫深淺
-的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。錄影時開了 `FRAME_GC=1`，頁面多一排
-「回收記憶體」；`gcPhoneRatio` 是手機上回收比電腦慢幾倍（#130 那次同一次回收電腦約
-2ms、手機 12～13ms，約 6 倍），照它畫出換算到手機會超過一格的線。
+的位置（手機邏輯座標）與跳轉按鈕都在設定檔裡。`limitMs` 是電腦上動畫中一格的上限，
+不給時是 4.2（手機 8.3ms 照 2 倍換算，ADR 0029、0036）；主執行緒那排每格扣掉測試的
+資料庫時間（`db_clock.dart`，手機上不在主執行緒）與閱讀器排版切片的一半（`slice_clock.dart`，
+照時間切、手機上一樣長）再和它比。錄影時開了 `FRAME_GC=1`，
+頁面多一排「回收記憶體」；`gcPhoneRatio` 是手機上回收比電腦慢幾倍（ADR 0029 定 2 倍），
+照它畫出換算到手機會超過一格的線。
 
 需要 ffmpeg、numpy 與 Pillow。
 """
@@ -66,6 +69,9 @@ def measure(meta, frames, spots):
         'n': len(frames),
         'phases': meta['phases'][:len(frames)],
         'costs': meta['costs'][:len(frames)],
+        'db': meta.get('db', [])[:len(frames)],
+        'slice': meta.get('slice', [])[:len(frames)],
+        'moving': meta.get('moving', [])[:len(frames)],
         'frameMs': meta.get('frameMs', 16),
         'gcNew': meta.get('gcNew', [])[:len(frames)],
         'gcOld': meta.get('gcOld', [])[:len(frames)],

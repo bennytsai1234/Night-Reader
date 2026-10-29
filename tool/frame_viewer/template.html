@@ -13,6 +13,7 @@
     --heavy: var(--warning);
     --gc: var(--chart-2);
     --gc-old: var(--chart-5);
+    --db: color-mix(in srgb, var(--chart-3) 55%, transparent);
     color: var(--foreground); font-family: var(--font-sans); font-size: 13px;
   }
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
@@ -99,7 +100,8 @@ function button(label, onclick, on) {
   document.getElementById('controls').insertBefore(b, document.getElementById('clock'));
   return b;
 }
-const FRAME_MS = Object.values(DATA)[0].frameMs || 16, COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 8;
+// LIMIT：電腦上動畫中一幀的上限，手機 8.3ms 照 2 倍換算（ADR 0029、0036）。
+const FRAME_MS = Object.values(DATA)[0].frameMs || 16, COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 4.2;
 // 有記回收記憶體（FRAME_GC）時多一排；gcPhoneRatio 是手機上回收比電腦慢幾倍，
 // 照它畫出「換算到手機會超過一格（120Hz）」的線。
 const HAS_GC = Object.values(DATA).some(D => (D.gcNew || []).length);
@@ -121,7 +123,18 @@ function prepare() {
     d.n = D.n;
     d.f = D.frames.map(([change, ...spots], i) => {
       const gcNew = (D.gcNew || [])[i] ?? 0, gcOld = (D.gcOld || [])[i] ?? 0;
-      return { change, spots, cost: D.costs[i] ?? 0, gcNew, gcOld, gc: gcNew + gcOld };
+      // db：測試的資料庫在主執行緒上花的時間，手機上不在主執行緒。slice：閱讀器排版照時間切的
+      // 那幾片，手機上一樣長、不照 2 倍換算。app 是扣掉資料庫、再扣掉排版切片一半的值，和 LIMIT 比（ADR 0036）。
+      const cost = D.costs[i] ?? 0, db = Math.min(cost, (D.db || [])[i] ?? 0);
+      const slice = Math.min(cost - db, (D.slice || [])[i] ?? 0);
+      return { change, spots, cost, db, slice, app: cost - db - slice / 2, gcNew, gcOld, gc: gcNew + gcOld };
+    });
+    // 掉幀（ADR 0037）：畫面在變（這一幀和前一幀或下一幀不同）時超過 LIMIT；第 0 幀是點下去
+    // 後的第一幀，可以重。moving 由錄影時的量測給，舊的錄影沒有時照畫面變化算。
+    d.f.forEach((f, i) => {
+      const moving = (D.moving || [])[i] ?? (f.change > 0 || (d.f[i + 1]?.change ?? 0) > 0);
+      f.dropped = i > 0 && moving && f.app > LIMIT;
+      f.stillOver = !f.dropped && f.app > LIMIT;
     });
     d.phase = D.phases.map(labelOf);
     d.segs = [];
@@ -174,8 +187,11 @@ const legend = document.getElementById('legend');
 legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"></i>畫面變化：點選的那支</span>'
   + '<span><i class="sw" style="border-color:var(--muted-foreground);opacity:.45"></i>其他候選</span>'
   + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
-  + `<span><i class="box" style="background:var(--heavy)"></i>這一幀超過 ${LIMIT}ms</span>`
-  + `<span><i class="box" style="background:var(--muted-foreground)"></i>這一幀在 ${LIMIT}ms 內</span>`
+  + `<span><i class="box" style="background:var(--heavy)"></i>掉幀：畫面在變時，扣掉資料庫、排版切片照實算後超過 ${LIMIT}ms</span>`
+  + `<span><i class="box" style="background:var(--muted-foreground)"></i>畫面沒在變時超過（不算），或點下去那一幀</span>`
+  + `<span><i class="box" style="background:var(--muted-foreground);opacity:.55"></i>在 ${LIMIT}ms 內</span>`
+  + '<span>錄影每幀要存畫面，量到的時間比只量時間多 0.3–0.5ms；貼著上限的幀照幀預算的數字判斷</span>'
+  + '<span><i class="box" style="background:var(--db)"></i>不算進判斷的部分：資料庫（測試才有，手機上不在主執行緒）與排版切片的一半（手機上不會變兩倍）</span>'
   + (HAS_GC ? '<span><i class="box" style="background:var(--gc)"></i>回收新生區</span>'
     + '<span><i class="box" style="background:var(--gc-old)"></i>回收舊生區</span>'
     + (GC_RATIO ? `<span><i class="sw" style="border-color:var(--heavy);border-top-style:dashed"></i>回收超過這條線，手機上（慢 ${GC_RATIO} 倍）會超過一幀</span>` : '') : '');
@@ -228,13 +244,17 @@ function drawChart() {
       el(dyn, 'path', { d: path, fill: 'none', stroke: SPOT_COLORS[s], 'stroke-width': 2, 'stroke-linejoin': 'round' });
     });
   }
-  const cap = 100, yC = ms => rowC.y + rowC.h - Math.min(ms, cap) / cap * rowC.h;
+  // 刻度到 20ms：上限只有幾毫秒，刻度太大看不出哪幾幀超過。
+  const cap = 20, yC = ms => rowC.y + rowC.h - Math.min(ms, cap) / cap * rowC.h;
   const bw = Math.max(1.5, (X1 - X0) / N - 0.6);
-  L.forEach((f, i) => el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: rowC.y + rowC.h - yC(f.cost),
-    fill: f.cost > LIMIT ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.cost > LIMIT ? 1 : 0.55 }));
+  L.forEach((f, i) => {
+    el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.app), width: bw, height: rowC.y + rowC.h - yC(f.app),
+      fill: f.dropped ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.dropped || f.stillOver ? 1 : 0.55 });
+    if (f.cost > f.app) el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: yC(f.app) - yC(f.cost), fill: 'var(--db)' });
+  });
   el(dyn, 'line', { x1: X0, x2: X1, y1: yC(LIMIT), y2: yC(LIMIT), stroke: 'var(--muted-foreground)', 'stroke-dasharray': '3 3' });
   el(dyn, 'text', { x: X1, y: yC(LIMIT) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${LIMIT}ms`);
-  el(dyn, 'text', { x: X0 + 2, y: rowC.y + 10, class: 't2' }, '（電腦上，超過 100ms 截斷）');
+  el(dyn, 'text', { x: X0 + 2, y: rowC.y + 10, class: 't2' }, `（電腦上，超過 ${cap}ms 截斷）`);
   if (HAS_GC) {
     // 回收的時間已經算在主執行緒那一格裡；這排單獨放大，新生區在下、舊生區疊在上面。
     const yD = ms => rowD.y + rowD.h - Math.min(ms, GC_CAP) / GC_CAP * rowD.h;
@@ -267,6 +287,9 @@ function show(i) {
   const d = DESIGNS[sel], f = frameOf(d, frame);
   document.getElementById('selname').textContent = d.name;
   document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`
+    + (f.db > 0 || f.slice > 0
+      ? `（${[f.db > 0 ? `其中資料庫 ${f.db.toFixed(1)} ms` : '', f.slice > 0 ? `排版切片 ${f.slice.toFixed(1)} ms` : ''].filter(Boolean).join('、')}，判斷用 ${f.app.toFixed(1)} ms）`
+      : '')
     + (f.gc > 0 ? `（其中回收記憶體 ${f.gc.toFixed(1)} ms`
       + (GC_RATIO ? `，換算到手機約 ${(f.gc * GC_RATIO).toFixed(0)} ms` : '') + '）' : '');
   document.getElementById('diff').textContent = f.change === 0 ? '0（完全靜止）' : `${f.change.toLocaleString()} 個像素`;

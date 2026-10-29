@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:drift/drift.dart' show ApplyInterceptor;
 import 'package:drift/native.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
@@ -31,7 +32,9 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
@@ -42,6 +45,7 @@ import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'db_clock.dart';
 import 'screenshot.dart';
 
 const kBookUrl = 'https://www.example.com/book/1024/';
@@ -81,10 +85,14 @@ final kChapterTitles = <String>[
 late AppDatabase _db;
 
 /// 註冊 App 的所有服務，資料庫換成記憶體。放在每個 testWidgets 開頭。
+/// 每次查詢的時間記在 [dbWork]，量動畫時算進那一幀（`db_clock.dart`）。
 Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   await getIt.reset();
   SharedPreferences.setMockInitialValues(<String, Object>{...prefs});
-  _db = AppDatabase.forTesting(NativeDatabase.memory());
+  dbWork.clear();
+  _db = AppDatabase.forTesting(
+    NativeDatabase.memory().interceptWith(DbClock()),
+  );
   getIt
     ..registerSingleton<Logger>(Logger(level: Level.off))
     ..registerSingleton<AppDatabase>(_db)
@@ -171,6 +179,9 @@ Future<void> resetPrefs(Map<String, Object> values) async {
         await prefs.setString(key, '$value');
     }
   }
+  // App 開機時從偏好讀進記憶體的值也照新的設定（App 是 ChineseDisplay.start）：
+  // 前一個情境把繁簡轉換改掉的話，測試沒載字典，書架會一直等字典、停在骨架。
+  ChineseDisplay.mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
 }
 
 /// 書源、書架與一本有內容的書。
