@@ -16,7 +16,7 @@
 
 - 玻璃（`GlassSurface`、`BackdropFilter`）不包在 `Opacity`、`FadeTransition` 或 `AnimatedOpacity` 裡：從畫面邊緣進出用 `GlassSlide`，原地出現要淡入時用 `GlassReveal`（ADR 0022）。玻璃進出場的測試在動畫途中呼叫 `expectNoGlassUnderFade`（`test/support/glass_motion.dart`），只量透明度數值看不出模糊在哪一幀生效。
 - 宣稱某段工作已離開主執行緒、拿掉一段等待，或改了骨架換場、開 App 進場、跳章的流程時，用 `bash tool/frame_budget_compare.sh <改前的提交> <test/frame_budget/ 的測試檔>` 比對改動前後每一幀的成本，它印出的表寫進 commit message（ADR 0018；看尖峰幀是誰造成的，用 `test/support/frame_budget.dart` 檔頭的歸因模式）。
-- 動畫播放期間的工作拆小、分攤到更多格去做，整體花更久沒關係（用時間換流暢，ADR 0029）；拆到 `test/frame_budget/` 量到的每一格（含兩段動畫之間的交接）都低於 8ms。
+- 修一段動畫前先照 ADR 0037 說它屬於哪種場景、用哪個流暢策略：點一下進頁、開面板、閱讀器原地重排的重工作放在畫面靜止時做完再開始動畫，不切碎攤進動畫；只有手指在動的時候與照時間切的工作才每幀限量。做到的標準是沒有掉幀：畫面在變的每一幀，扣掉測試的資料庫時間、閱讀器排版切片照實算後都低於 4.2ms（手機 8.3ms，ADR 0029、0036）；最重一幀降了但還超過不算修好。
 - 新增或修改轉場、骨架換場與換場之後才開始的背景工作時，照 ADR 0029 的六點做：先骨架後內容、後面是實色時給 `SkeletonSwitcher.backdrop` 只遮一層、會在動畫前後變動的小狀態用獨立的 `ValueListenable` 不通知整頁、換場後的工作依序隔一格啟動（不用 `Priority.idle`）、推入的頁面第一格只畫骨架（分組清單頁用 `GroupedListView` 就有）、量測涵蓋到骨架換完再多一秒。
 
 ## 給讀者看的說明

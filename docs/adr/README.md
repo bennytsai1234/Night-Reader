@@ -10,6 +10,7 @@
 | [0018](0018-animations-never-share-frames-with-heavy-work.md) | 動畫播放時不跑會佔住主執行緒的工作，寧可內容晚一點出現 |
 | [0029](0029-no-dropped-frames-in-transitions-and-reveals.md) | 轉場與骨架換場不掉幀：用時間換流暢、工作拆小分攤到更多格，與六個做法 |
 | [0036](0036-three-rules-for-smooth-animation.md) | 動畫流不流暢的三條標準：點下去那一幀可以重、預留停頓可以跑重工作、動畫中每一幀在 8.3ms 內（電腦 4.2ms） |
+| [0037](0037-smoothness-strategy-per-scene.md) | 每種場景用定好的流暢策略（靜止時準備、只播不做事、等靜止再放、每幀限量、只平移裁切）；掉幀是畫面在變時超過上限 |
 | [0022](0022-glass-moves-content-fades.md) | 一個元件的進出場只做一件事：玻璃只動、內容只淡，最後一幀等於靜止 |
 | [0009](0009-no-explanatory-copy-in-ui.md) | 介面不放解釋性文案 |
 | [0030](0030-settings-hierarchy-and-option-inventory.md) | 設定的分級規則與全部選項的去留 |
