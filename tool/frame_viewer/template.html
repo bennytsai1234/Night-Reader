@@ -123,9 +123,11 @@ function prepare() {
     d.n = D.n;
     d.f = D.frames.map(([change, ...spots], i) => {
       const gcNew = (D.gcNew || [])[i] ?? 0, gcOld = (D.gcOld || [])[i] ?? 0;
-      // db：測試的資料庫在主執行緒上花的時間，手機上不在主執行緒；app 是扣掉它的部分，和 LIMIT 比。
+      // db：測試的資料庫在主執行緒上花的時間，手機上不在主執行緒。slice：閱讀器排版照時間切的
+      // 那幾片，手機上一樣長、不照 2 倍換算。app 是扣掉資料庫、再扣掉排版切片一半的值，和 LIMIT 比（ADR 0036）。
       const cost = D.costs[i] ?? 0, db = Math.min(cost, (D.db || [])[i] ?? 0);
-      return { change, spots, cost, db, app: cost - db, gcNew, gcOld, gc: gcNew + gcOld };
+      const slice = Math.min(cost - db, (D.slice || [])[i] ?? 0);
+      return { change, spots, cost, db, slice, app: cost - db - slice / 2, gcNew, gcOld, gc: gcNew + gcOld };
     });
     d.phase = D.phases.map(labelOf);
     d.segs = [];
@@ -178,9 +180,9 @@ const legend = document.getElementById('legend');
 legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"></i>畫面變化：點選的那支</span>'
   + '<span><i class="sw" style="border-color:var(--muted-foreground);opacity:.45"></i>其他候選</span>'
   + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
-  + `<span><i class="box" style="background:var(--heavy)"></i>扣掉資料庫後超過 ${LIMIT}ms</span>`
+  + `<span><i class="box" style="background:var(--heavy)"></i>扣掉資料庫、排版切片照實算後超過 ${LIMIT}ms</span>`
   + `<span><i class="box" style="background:var(--muted-foreground)"></i>在 ${LIMIT}ms 內</span>`
-  + '<span><i class="box" style="background:var(--db)"></i>其中資料庫（測試才有，手機上不在主執行緒）</span>'
+  + '<span><i class="box" style="background:var(--db)"></i>不算進判斷的部分：資料庫（測試才有，手機上不在主執行緒）與排版切片的一半（手機上不會變兩倍）</span>'
   + (HAS_GC ? '<span><i class="box" style="background:var(--gc)"></i>回收新生區</span>'
     + '<span><i class="box" style="background:var(--gc-old)"></i>回收舊生區</span>'
     + (GC_RATIO ? `<span><i class="sw" style="border-color:var(--heavy);border-top-style:dashed"></i>回收超過這條線，手機上（慢 ${GC_RATIO} 倍）會超過一幀</span>` : '') : '');
@@ -239,7 +241,7 @@ function drawChart() {
   L.forEach((f, i) => {
     el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.app), width: bw, height: rowC.y + rowC.h - yC(f.app),
       fill: f.app > LIMIT ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.app > LIMIT ? 1 : 0.55 });
-    if (f.db > 0) el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: yC(f.app) - yC(f.cost), fill: 'var(--db)' });
+    if (f.cost > f.app) el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: yC(f.app) - yC(f.cost), fill: 'var(--db)' });
   });
   el(dyn, 'line', { x1: X0, x2: X1, y1: yC(LIMIT), y2: yC(LIMIT), stroke: 'var(--muted-foreground)', 'stroke-dasharray': '3 3' });
   el(dyn, 'text', { x: X1, y: yC(LIMIT) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${LIMIT}ms`);
@@ -276,7 +278,9 @@ function show(i) {
   const d = DESIGNS[sel], f = frameOf(d, frame);
   document.getElementById('selname').textContent = d.name;
   document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`
-    + (f.db > 0 ? `（其中資料庫 ${f.db.toFixed(1)} ms，扣掉後 ${f.app.toFixed(1)} ms）` : '')
+    + (f.db > 0 || f.slice > 0
+      ? `（${[f.db > 0 ? `其中資料庫 ${f.db.toFixed(1)} ms` : '', f.slice > 0 ? `排版切片 ${f.slice.toFixed(1)} ms` : ''].filter(Boolean).join('、')}，判斷用 ${f.app.toFixed(1)} ms）`
+      : '')
     + (f.gc > 0 ? `（其中回收記憶體 ${f.gc.toFixed(1)} ms`
       + (GC_RATIO ? `，換算到手機約 ${(f.gc * GC_RATIO).toFixed(0)} ms` : '') + '）' : '');
   document.getElementById('diff').textContent = f.change === 0 ? '0（完全靜止）' : `${f.change.toLocaleString()} 個像素`;
