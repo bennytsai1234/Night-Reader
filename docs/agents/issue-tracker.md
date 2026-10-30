@@ -14,6 +14,8 @@
 
 repo 由 `git remote -v` 推得；在 clone 內執行 `gh` 會自動判斷。
 
+標 `auto-audit` 的 issue 是 ChatGPT 排程巡檢開的，規則在 `docs/agents/auto-audit.md`。
+
 ## Pull request 當作 triage 來源
 
 **PRs as a request surface: no.**（若這個 repo 把外部 PR 當成功能請求，改成 `yes`；`/triage` 會讀這個旗標。）
