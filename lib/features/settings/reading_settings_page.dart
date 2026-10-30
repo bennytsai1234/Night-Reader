@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
@@ -60,7 +61,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
             _groups.autoPage(),
             _groups.chineseConvert(),
             _groups.clickActions(),
-            _groups.volumeKey(),
+            if (ReaderV2DeviceChannel.supportsVolumeKeys) _groups.volumeKey(),
           ],
         ),
       ),

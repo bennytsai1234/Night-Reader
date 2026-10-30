@@ -31,6 +31,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_she
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_volume_keys.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
@@ -94,6 +95,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 從目錄跳章時，等目錄收起的那一下；收到底、目錄從畫面上拿掉時完成。
   Completer<void>? _drawerClosed;
+
+  /// 目錄開著時音量鍵照常調音量。
+  final ValueNotifier<bool> _drawerOpen = ValueNotifier(false);
   bool _entranceWatched = false;
 
   /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
@@ -130,7 +134,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       showNotice: _showNotice,
     );
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
-    HardwareKeyboard.instance.addHandler(_handleVolumeKey);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
   }
@@ -172,7 +175,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    HardwareKeyboard.instance.removeHandler(_handleVolumeKey);
+    _drawerOpen.dispose();
     unawaited(_settingsSaveFailures?.cancel());
     _menuDeparture.dispose();
     _coordinator.dispose();
@@ -186,30 +189,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
-  }
-
-  /// 音量鍵翻頁。回傳 true 時這一下不會再交給系統調音量；選單開著、
-  /// 正在朗讀、上面蓋著別的頁面或面板，或設定關閉時照常調音量。
-  bool _handleVolumeKey(KeyEvent event) {
-    final forward = switch (event.logicalKey) {
-      LogicalKeyboardKey.audioVolumeDown => true,
-      LogicalKeyboardKey.audioVolumeUp => false,
-      _ => null,
-    };
-    if (forward == null) return false;
-    if (!mounted ||
-        !_host.settings.volumeKeyPage ||
-        _host.menu.controlsVisible.value ||
-        (_host.tts?.isPlaying ?? false) ||
-        !(pageRouteOf(context)?.isCurrent ?? false) ||
-        (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
-      return false;
-    }
-    // 按住不放的重複事件也翻頁；放開不做事，但一樣攔下，系統才不會調音量。
-    if (event is! KeyUpEvent) {
-      unawaited(_coordinator.movePage(forward: forward));
-    }
-    return true;
   }
 
   void _scheduleRebuild() {
@@ -260,98 +239,106 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           backlight: customBrightness
               ? ReaderV2Brightness.backlightFor(settings.brightness)
               : null,
-          child: _DimOverlay(
-            dim: customBrightness
-                ? ReaderV2Brightness.dimFor(settings.brightness)
-                : 0,
-            child: ReaderV2PageShell(
-              book: widget.book,
-              scaffoldKey: _scaffoldKey,
-              content: _buildContent(context),
-              drawer: ReaderV2ChaptersDrawer(
-                chapters: runtime?.chapters ?? widget.initialChapters,
-                currentChapter: navigation.current,
-                titleFor: _chapterTitleAt,
-                listenable: runtime,
-                onChapterTap: _jumpToChapterFromDrawer,
-                onClosed: _handleDrawerClosed,
-              ),
-              backgroundColor: palette.readerBackground,
-              infoColor: palette.readerInfo,
-              textColor: palette.readerText,
-              controlsVisible: menu.controlsVisible,
-              showReadTitleAddition: settings.showReadTitleAddition,
-              infoState: _infoStateOf(runtime),
-              loadingTarget: _infoTargetOf(runtime),
-              originName: widget.book.originName,
-              progressListenable: _progress,
-              navigation: navigation,
-              isAutoPaging: _host.autoPage?.isRunning ?? false,
-              hideStatusBar: settings.hideStatusBar,
-              headerInfo: settings.headerInfo,
-              footerInfo: settings.footerInfo,
-              paddingHorizontal: settings.paddingHorizontal,
-              paddingTop: settings.paddingTop,
-              paddingBottom: settings.paddingBottom,
-              footerOffset: settings.footerOffset,
-              topCutoutExtent: _topCutoutExtent,
-              dayNightIcon: isDarkBackground
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-              dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
-              onExitIntent: _handleExitIntent,
-              onSystemBack: _handleSystemBack,
-              onMore: () => unawaited(_showMore()),
-              onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-              onTts: () => _openPanel(_showTts),
-              onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
-              onInterface: () => _openPanel(
-                () => ReaderV2SettingsSheets.showInterfaceSettings(
-                  context,
-                  settings,
+          child: ReaderV2VolumeKeys(
+            enabled: settings.volumeKeyPage && !(_host.tts?.isPlaying ?? false),
+            blockers: [menu.controlsVisible, _drawerOpen],
+            onKey: (forward) =>
+                unawaited(_coordinator.movePage(forward: forward)),
+            child: _DimOverlay(
+              dim: customBrightness
+                  ? ReaderV2Brightness.dimFor(settings.brightness)
+                  : 0,
+              child: ReaderV2PageShell(
+                book: widget.book,
+                scaffoldKey: _scaffoldKey,
+                content: _buildContent(context),
+                drawer: ReaderV2ChaptersDrawer(
+                  chapters: runtime?.chapters ?? widget.initialChapters,
+                  currentChapter: navigation.current,
+                  titleFor: _chapterTitleAt,
+                  listenable: runtime,
+                  onChapterTap: _jumpToChapterFromDrawer,
+                  onClosed: _handleDrawerClosed,
                 ),
-              ),
-              onSettings: () => unawaited(_openReadingPreferences()),
-              onAutoPage: _coordinator.toggleAutoPage,
-              // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
-              onToggleDayNight: () => ThemeRevealScope.of(context).run(
-                change: () => context.read<SettingsProvider>().setThemeMode(
-                  isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+                backgroundColor: palette.readerBackground,
+                infoColor: palette.readerInfo,
+                textColor: palette.readerText,
+                controlsVisible: menu.controlsVisible,
+                showReadTitleAddition: settings.showReadTitleAddition,
+                infoState: _infoStateOf(runtime),
+                loadingTarget: _infoTargetOf(runtime),
+                originName: widget.book.originName,
+                progressListenable: _progress,
+                navigation: navigation,
+                isAutoPaging: _host.autoPage?.isRunning ?? false,
+                hideStatusBar: settings.hideStatusBar,
+                headerInfo: settings.headerInfo,
+                footerInfo: settings.footerInfo,
+                paddingHorizontal: settings.paddingHorizontal,
+                paddingTop: settings.paddingTop,
+                paddingBottom: settings.paddingBottom,
+                footerOffset: settings.footerOffset,
+                topCutoutExtent: _topCutoutExtent,
+                dayNightIcon: isDarkBackground
+                    ? Icons.light_mode_rounded
+                    : Icons.dark_mode_rounded,
+                dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
+                onExitIntent: _handleExitIntent,
+                onSystemBack: _handleSystemBack,
+                onMore: () => unawaited(_showMore()),
+                onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                onTts: () => _openPanel(_showTts),
+                onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
+                onInterface: () => _openPanel(
+                  () => ReaderV2SettingsSheets.showInterfaceSettings(
+                    context,
+                    settings,
+                  ),
                 ),
+                onSettings: () => unawaited(_openReadingPreferences()),
+                onAutoPage: _coordinator.toggleAutoPage,
+                // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
+                onToggleDayNight: () => ThemeRevealScope.of(context).run(
+                  change: () => context.read<SettingsProvider>().setThemeMode(
+                    isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+                  ),
+                ),
+                onReplaceRule: () =>
+                    _openPanel(() => _coordinator.openReplaceRule(context)),
+                onShowControls: menu.showControls,
+                onDismissControls: menu.dismissControls,
+                onPrevChapter: () =>
+                    unawaited(_coordinator.jumpRelativeChapter(-1)),
+                onNextChapter: () =>
+                    unawaited(_coordinator.jumpRelativeChapter(1)),
+                onScrubStart: menu.onScrubStart,
+                onScrubbing: (percent) {
+                  menu.onScrubbing(percent);
+                  _coordinator.previewChapterPercent(percent);
+                },
+                onScrubEnd: (percent) {
+                  menu.onScrubEnd(percent);
+                  unawaited(_coordinator.commitChapterPercent(percent));
+                },
+                brightnessControl:
+                    ReaderV2DeviceChannel.supportsWindowBrightness
+                    ? ReaderV2BrightnessBar(
+                        auto: settings.brightnessAuto,
+                        level: settings.brightness,
+                        onAutoChanged: settings.setBrightnessAuto,
+                        onChanged: (level) =>
+                            settings.setBrightness(level, persist: false),
+                        onChangeEnd: settings.setBrightness,
+                      )
+                    : null,
+                sleepTimer: _host.tts?.sleepTimer,
+                isTtsPlaying: _host.tts?.isPlaying ?? false,
+                showTts: true,
+                showAutoPage: true,
+                showReplaceRule: true,
+                onMenuHidden: _handleMenuHidden,
+                onDrawerChanged: (open) => _drawerOpen.value = open,
               ),
-              onReplaceRule: () =>
-                  _openPanel(() => _coordinator.openReplaceRule(context)),
-              onShowControls: menu.showControls,
-              onDismissControls: menu.dismissControls,
-              onPrevChapter: () =>
-                  unawaited(_coordinator.jumpRelativeChapter(-1)),
-              onNextChapter: () =>
-                  unawaited(_coordinator.jumpRelativeChapter(1)),
-              onScrubStart: menu.onScrubStart,
-              onScrubbing: (percent) {
-                menu.onScrubbing(percent);
-                _coordinator.previewChapterPercent(percent);
-              },
-              onScrubEnd: (percent) {
-                menu.onScrubEnd(percent);
-                unawaited(_coordinator.commitChapterPercent(percent));
-              },
-              brightnessControl: ReaderV2DeviceChannel.supportsWindowBrightness
-                  ? ReaderV2BrightnessBar(
-                      auto: settings.brightnessAuto,
-                      level: settings.brightness,
-                      onAutoChanged: settings.setBrightnessAuto,
-                      onChanged: (level) =>
-                          settings.setBrightness(level, persist: false),
-                      onChangeEnd: settings.setBrightness,
-                    )
-                  : null,
-              sleepTimer: _host.tts?.sleepTimer,
-              isTtsPlaying: _host.tts?.isPlaying ?? false,
-              showTts: true,
-              showAutoPage: true,
-              showReplaceRule: true,
-              onMenuHidden: _handleMenuHidden,
             ),
           ),
         ),

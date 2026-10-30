@@ -9,6 +9,16 @@ final class ReaderV2Battery {
   final bool charging;
 }
 
+/// `MainActivity` 攔下音量鍵時的通知對象，見 [ReaderV2DeviceChannel.volumeKeyListener]。
+abstract interface class ReaderV2VolumeKeyListener {
+  /// 攔下的音量鍵，參數 true 是音量下。
+  void onVolumeKey(bool forward);
+
+  /// `MainActivity` 重新建立、接上原本的 Flutter 引擎，攔不攔已回到不攔；
+  /// 要再告訴它一次。
+  void onVolumeKeyReset();
+}
+
 /// 閱讀頁需要、但 Flutter 沒有直接提供的 Android 裝置資訊。
 ///
 /// 原生端在 `MainActivity`；iOS 的 `AppDelegate` 只實作電量與螢幕常亮。
@@ -44,6 +54,35 @@ abstract final class ReaderV2DeviceChannel {
   /// iOS 只能改整台裝置的亮度、離開 App 也不會恢復，所以只在 Android 調。
   static bool get supportsWindowBrightness =>
       defaultTargetPlatform == TargetPlatform.android;
+
+  /// 開著時 `MainActivity` 攔下音量鍵、不讓系統調音量，改交給
+  /// [volumeKeyListener]；關掉時音量鍵照常調音量。
+  static Future<void> setVolumeKeyPaging(bool on) =>
+      _invokeIgnoringMissing('setVolumeKeyPaging', on);
+
+  /// iOS 不把音量鍵交給 App，音量鍵翻頁只在 Android。
+  static bool get supportsVolumeKeys =>
+      defaultTargetPlatform == TargetPlatform.android;
+
+  static ReaderV2VolumeKeyListener? _volumeKeyListener;
+
+  /// 收 `MainActivity` 的音量鍵通知；同一時間只有一個（目前的閱讀器）。
+  static ReaderV2VolumeKeyListener? get volumeKeyListener => _volumeKeyListener;
+  static set volumeKeyListener(ReaderV2VolumeKeyListener? listener) {
+    _volumeKeyListener = listener;
+    _device.setMethodCallHandler(
+      listener == null
+          ? null
+          : (call) async {
+              switch (call.method) {
+                case 'volumeKey':
+                  _volumeKeyListener?.onVolumeKey(call.arguments as bool);
+                case 'volumeKeyReset':
+                  _volumeKeyListener?.onVolumeKeyReset();
+              }
+            },
+    );
+  }
 
   static Future<void> _invokeIgnoringMissing(
     String method,
