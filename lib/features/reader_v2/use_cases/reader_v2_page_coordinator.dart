@@ -188,8 +188,11 @@ class ReaderV2PageCoordinator {
   void maybeFollowTtsHighlight() {
     // 拖進度條時畫面跟著拖動走，放開後朗讀改從新位置念。
     if (_host.menu.isScrubbing) return;
-    // 視窗只在換句時跟隨。
-    _ttsFollower.update(_host.tts?.currentHighlight);
+    // 視窗只在換句時跟隨；關掉「畫面跟著朗讀捲動」時不跟，再打開時從
+    // 正在念的那一句接上。
+    _ttsFollower.update(
+      _host.settings.ttsFollow ? _host.tts?.currentHighlight : null,
+    );
   }
 
   Future<void> openReplaceRule(BuildContext context) async {

@@ -221,6 +221,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         ReaderV2DeviceChannel.supportsWindowBrightness;
     return StatusBarHidden(
       hidden: settings.hideStatusBar,
+      hideNavigationBar: settings.hideNavigationBar,
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
@@ -236,17 +237,25 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               : Brightness.dark,
         ),
         child: ReaderV2WindowSettings(
+          keepScreenOn: settings.keepScreenOn,
           backlight: customBrightness
               ? ReaderV2Brightness.backlightFor(settings.brightness)
               : null,
+          orientation: settings.orientation,
           child: ReaderV2VolumeKeys(
             enabled: settings.volumeKeyPage && !(_host.tts?.isPlaying ?? false),
             blockers: [menu.controlsVisible, _drawerOpen],
-            onKey: (forward) =>
-                unawaited(_coordinator.movePage(forward: forward)),
+            onKey: (volumeDown) => unawaited(
+              _coordinator.movePage(
+                forward: volumeDown != settings.volumeKeyReversed,
+              ),
+            ),
             child: _DimOverlay(
               dim: customBrightness
-                  ? ReaderV2Brightness.dimFor(settings.brightness)
+                  ? ReaderV2Brightness.dimFor(
+                      settings.brightness,
+                      maxDim: settings.maxDim,
+                    )
                   : 0,
               child: ReaderV2PageShell(
                 book: widget.book,
@@ -278,6 +287,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 paddingTop: settings.paddingTop,
                 paddingBottom: settings.paddingBottom,
                 footerOffset: settings.footerOffset,
+                edgeFade: settings.edgeFade,
+                use24HourClock: settings.use24HourClock,
+                progressFractionDigits: settings.progressFractionDigits,
                 topCutoutExtent: _topCutoutExtent,
                 dayNightIcon: isDarkBackground
                     ? Icons.light_mode_rounded
@@ -386,6 +398,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
               skeletonPages: _host.dependencies.skeletonPages,
+              pageTurnOverlap: _host.settings.pageTurnOverlap,
+              pageTurnDuration: _host.settings.pageTurnSpeed.duration,
             ),
             if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable)
               Align(

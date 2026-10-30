@@ -13,12 +13,14 @@ void main() {
   ReaderV2LayoutStyle styleWith({
     double paragraphSpacing = 1.0,
     double chapterSpacing = 1.0,
+    double titleSpacing = 0.0,
   }) => ReaderV2LayoutStyle(
     fontSize: 20,
     lineHeight: 1.5,
     letterSpacing: 0,
     paragraphSpacing: paragraphSpacing,
     chapterSpacing: chapterSpacing,
+    titleSpacing: titleSpacing,
     paddingTop: 0,
     paddingBottom: 0,
     paddingLeft: 16,
@@ -42,6 +44,41 @@ void main() {
 
   test('a title-only chapter uses the same chapter gap', () {
     expect(chapterEnd(styleWith(), isTitle: true), lineExtent);
+  });
+
+  test(
+    'a title leaves the title spacing, independent of paragraph spacing',
+    () {
+      double afterTitle(ReaderV2LayoutStyle style) =>
+          readerV2BlockTrailingSpacing(
+            style,
+            isTitle: true,
+            isChapterEnd: false,
+          );
+      expect(afterTitle(styleWith(paragraphSpacing: 2)), 0);
+      expect(afterTitle(styleWith(titleSpacing: 1.5)), lineExtent * 1.5);
+      expect(
+        readerV2BlockTrailingSpacing(
+          styleWith(paragraphSpacing: 0.5, titleSpacing: 3),
+          isTitle: false,
+          isChapterEnd: false,
+        ),
+        lineExtent * 0.5,
+      );
+    },
+  );
+
+  test('title spacing is part of the text layout and cache identity', () {
+    ReaderV2LayoutSpec spec(double titleSpacing) =>
+        ReaderV2LayoutSpec.fromViewport(
+          viewportSize: const Size(400, 800),
+          style: styleWith(titleSpacing: titleSpacing),
+        );
+    expect(spec(1).layoutSignature, isNot(spec(0).layoutSignature));
+    expect(
+      StyleFingerprint.fromLayoutSpec(spec(1)),
+      isNot(StyleFingerprint.fromLayoutSpec(spec(0))),
+    );
   });
 
   test('chapter spacing is part of the text layout and cache identity', () {

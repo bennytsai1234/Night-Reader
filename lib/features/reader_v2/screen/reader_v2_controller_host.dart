@@ -426,6 +426,7 @@ class ReaderV2ControllerHost {
         bold: style.bold,
         textIndent: style.textIndent,
         titleFontSize: style.titleFontSize,
+        titleSpacing: style.titleSpacing,
       ),
     );
   }

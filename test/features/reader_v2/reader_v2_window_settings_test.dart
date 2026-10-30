@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
 
 void main() {
@@ -11,16 +12,25 @@ void main() {
 
   setUp(() {
     calls = [];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          calls.add('${call.method}(${call.arguments})');
-          return null;
-        });
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add('${call.method}(${call.arguments})');
+      return null;
+    });
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'SystemChrome.setPreferredOrientations') {
+        calls.add('orientations(${call.arguments})');
+      }
+      return null;
+    });
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, null);
+    messenger.setMockMethodCallHandler(SystemChannels.platform, null);
   });
 
   testWidgets('a full page on top restores the system; coming back reapplies', (
@@ -31,7 +41,9 @@ void main() {
       MaterialApp(
         navigatorKey: navigator,
         home: const ReaderV2WindowSettings(
+          keepScreenOn: true,
           backlight: 0.3,
+          orientation: ReaderV2Orientation.system,
           child: Scaffold(body: Text('reader')),
         ),
       ),
@@ -71,10 +83,73 @@ void main() {
   testWidgets('following the system never sends a brightness', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: ReaderV2WindowSettings(backlight: null, child: SizedBox()),
+        home: ReaderV2WindowSettings(
+          keepScreenOn: true,
+          backlight: null,
+          orientation: ReaderV2Orientation.system,
+          child: SizedBox(),
+        ),
       ),
     );
     await tester.pumpWidget(const SizedBox());
     expect(calls, ['setKeepScreenOn(true)', 'setKeepScreenOn(false)']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('keep-screen-on switched off leaves the screen to the system', (
+    tester,
+  ) async {
+    Widget reader({required bool keepScreenOn}) => MaterialApp(
+      home: ReaderV2WindowSettings(
+        keepScreenOn: keepScreenOn,
+        backlight: null,
+        orientation: ReaderV2Orientation.system,
+        child: const SizedBox(),
+      ),
+    );
+    await tester.pumpWidget(reader(keepScreenOn: false));
+    expect(calls, isEmpty);
+
+    await tester.pumpWidget(reader(keepScreenOn: true));
+    await tester.pumpWidget(reader(keepScreenOn: false));
+    expect(calls, ['setKeepScreenOn(true)', 'setKeepScreenOn(false)']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a locked orientation holds only while the reader shows', (
+    tester,
+  ) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: const ReaderV2WindowSettings(
+          keepScreenOn: false,
+          backlight: null,
+          orientation: ReaderV2Orientation.landscape,
+          child: Scaffold(body: Text('reader')),
+        ),
+      ),
+    );
+    const landscape =
+        'orientations([DeviceOrientation.landscapeLeft, '
+        'DeviceOrientation.landscapeRight])';
+    expect(calls, [landscape]);
+
+    calls.clear();
+    unawaited(
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const Scaffold()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(calls, ['orientations([])']);
+
+    calls.clear();
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(calls, [landscape]);
+
+    calls.clear();
+    await tester.pumpWidget(const SizedBox());
+    expect(calls, ['orientations([])']);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 }

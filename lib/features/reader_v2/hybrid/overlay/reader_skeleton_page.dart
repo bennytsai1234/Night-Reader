@@ -72,6 +72,7 @@ final class ReaderSkeletonPage {
       style.bold,
       style.textIndent,
       style.titleFontSize,
+      style.titleSpacing,
       kReaderV2CjkTypographyFeatureSignature,
     ]);
   }

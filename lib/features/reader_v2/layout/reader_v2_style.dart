@@ -19,6 +19,7 @@ class ReaderV2Style {
     this.bold = false,
     this.textIndent = 0,
     double? titleFontSize,
+    this.titleSpacing = 0.0,
   }) : titleFontSize =
            titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
 
@@ -43,6 +44,9 @@ class ReaderV2Style {
   /// 章節標題字號；未指定時比正文大 [kReaderV2DefaultTitleSizeDelta]。
   final double titleFontSize;
 
+  /// 章節標題與正文之間的空白（行）。
+  final double titleSpacing;
+
   double get effectiveLineHeight => normalizeLineHeight(lineHeight);
 
   static double normalizeLineHeight(double value) {
@@ -64,6 +68,7 @@ class ReaderV2Style {
     bool? bold,
     int? textIndent,
     double? titleFontSize,
+    double? titleSpacing,
   }) {
     return ReaderV2Style(
       fontSize: fontSize ?? this.fontSize,
@@ -79,6 +84,7 @@ class ReaderV2Style {
       bold: bold ?? this.bold,
       textIndent: textIndent ?? this.textIndent,
       titleFontSize: titleFontSize ?? this.titleFontSize,
+      titleSpacing: titleSpacing ?? this.titleSpacing,
     );
   }
 
@@ -97,7 +103,8 @@ class ReaderV2Style {
         other.justify == justify &&
         other.bold == bold &&
         other.textIndent == textIndent &&
-        other.titleFontSize == titleFontSize;
+        other.titleFontSize == titleFontSize &&
+        other.titleSpacing == titleSpacing;
   }
 
   @override
@@ -115,5 +122,6 @@ class ReaderV2Style {
     bold,
     textIndent,
     titleFontSize,
+    titleSpacing,
   );
 }

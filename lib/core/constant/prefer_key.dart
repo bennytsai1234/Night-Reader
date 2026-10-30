@@ -88,7 +88,6 @@ class PreferKey {
   static const String autoClearExpired = 'autoClearExpired';
   static const String importKeepName = 'importKeepName';
   static const String importKeepGroup = 'importKeepGroup';
-  static const String screenOrientation = 'screenOrientation';
   static const String syncBookProgress = 'syncBookProgress';
   static const String syncBookProgressPlus = 'syncBookProgressPlus';
   static const String cronet = 'Cronet';
@@ -136,8 +135,6 @@ class PreferKey {
   static const String sourceEditMaxLine = 'sourceEditMaxLine';
   static const String ttsTimer = 'ttsTimer';
   static const String ttsTimerCustomMinutes = 'ttsTimerCustomMinutes';
-  static const String audioPlayWakeLock = 'audioPlayWakeLock';
-  static const String readAloudWakeLock = 'readAloudWakeLock';
   static const String showLastUpdateTime = 'showLastUpdateTime';
   static const String showWaitUpCount = 'showWaitUpCount';
   static const String clearWebViewData = 'clearWebViewData';
@@ -200,6 +197,39 @@ class PreferKey {
   /// 閱讀器亮度條的位置（0–1，見 `ReaderV2Brightness`）。
   static const String readerBrightness = 'reader_brightness';
   static const String readerVolumeKeyPage = 'reader_volume_key_page';
+
+  /// 音量鍵翻頁方向對調：音量上是下一頁。
+  static const String readerVolumeKeyReversed = 'reader_volume_key_reversed';
+  static const String readerKeepScreenOn = 'reader_keep_screen_on';
+
+  /// 閱讀器的螢幕方向（`ReaderV2Orientation.name`）。
+  static const String readerOrientation = 'reader_orientation';
+
+  /// 隱藏狀態列時一起隱藏系統導覽列。
+  static const String readerHideNavigationBar = 'reader_hide_navigation_bar';
+
+  /// 章節標題與正文之間的空白（行）。
+  static const String readerTitleSpacing = 'reader_title_spacing';
+
+  /// 翻頁時上一屏留在畫面上的行數。
+  static const String readerPageTurnOverlap = 'reader_page_turn_overlap';
+
+  /// 翻頁捲動的快慢（`ReaderV2PageTurnSpeed.name`）。
+  static const String readerPageTurnSpeed = 'reader_page_turn_speed';
+  static const String readerUse24HourClock = 'reader_use_24_hour_clock';
+
+  /// 全書進度顯示到小數第幾位。
+  static const String readerProgressFractionDigits =
+      'reader_progress_fraction_digits';
+
+  /// 亮度條拉到底時疊上的黑色不透明度。
+  static const String readerMaxDim = 'reader_max_dim';
+
+  /// 正文上下緣漸隱的最大高度（px）。
+  static const String readerEdgeFade = 'reader_edge_fade';
+
+  /// 朗讀時畫面跟著念到的句子捲動。
+  static const String readerTtsFollow = 'reader_tts_follow';
 
   // Explore settings
   static const String exploreLastSource = 'explore_last_source';

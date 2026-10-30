@@ -7,8 +7,8 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
-/// 閱讀偏好：完整的排版、版面、頁首頁尾、自動翻頁、繁簡、點擊區域與音量鍵
-/// 設定。和閱讀器內「外觀與排版」面板（精簡版）用同一組區塊與同一個
+/// 閱讀偏好：完整的排版、版面、頁首頁尾、翻頁、自動翻頁、繁簡、點擊區域、
+/// 音量鍵、朗讀與螢幕設定。和閱讀器內「外觀與排版」面板（精簡版）用同一組區塊與同一個
 /// controller 型別，兩處設定的讀寫路徑一致。從閱讀器「外觀與排版 → 更多排版
 /// 設定」或下方選單的「進階」進來時，閱讀器等這一頁關掉才重讀設定。
 class ReadingSettingsPage extends StatefulWidget {
@@ -51,17 +51,23 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '閱讀偏好'),
       // 一組是清單的一項，進頁時只建畫面上看得到的組；每一列只聽自己的值。
-      // 「頁尾位置」這一列的有無跟著頁尾設定變，變了才重排各組（ADR 0029）。
-      body: ValueListenableBuilder<bool>(
+      // 跟著別的設定出現的列（例如「頁尾位置」）有無變了，才重排各組
+      // （ADR 0029）。
+      body: ValueListenableBuilder<Object>(
         valueListenable: _groups.shape,
         builder: (context, _, _) => GroupedListView(
           children: [
             _groups.typography(),
             ..._groups.pageLayout(),
+            _groups.pageTurn(),
             _groups.autoPage(),
             _groups.chineseConvert(),
             _groups.clickActions(),
             if (ReaderV2DeviceChannel.supportsVolumeKeys) _groups.volumeKey(),
+            _groups.tts(),
+            _groups.screen(
+              maxDim: ReaderV2DeviceChannel.supportsWindowBrightness,
+            ),
           ],
         ),
       ),

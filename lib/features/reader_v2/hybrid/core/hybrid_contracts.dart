@@ -94,7 +94,10 @@ final class HybridProgressSnapshot {
 
   String get chapterProgressLabel => '本章 $chapterSegment/10';
 
-  String get bookPercentLabel => '${bookPercent.toStringAsFixed(1)}%';
+  /// 全書進度顯示到小數第 [fractionDigits] 位；比較只看到第一位，再多
+  /// 一位不會跟著更新。
+  String bookPercentLabel(int fractionDigits) =>
+      '${bookPercent.toStringAsFixed(fractionDigits)}%';
 
   /// 目前章節已完成的十分段數；章節開始為 0/10，章節結束為 10/10。
   int get chapterSegment {

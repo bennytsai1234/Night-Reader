@@ -8,21 +8,35 @@ import 'package:flutter/widgets.dart';
 /// 掛在根 Navigator 的狀態列策略；見 [StatusBarPolicy]。
 final StatusBarPolicy statusBarPolicy = StatusBarPolicy();
 
+/// 系統列的顯示狀態。
+enum _SystemBars {
+  shown,
+
+  /// 收起狀態列，保留導覽列。
+  statusHidden,
+
+  /// 兩條都收起：Android 的沉浸模式，從邊緣滑動叫出、幾秒後自己收回。
+  allHidden,
+}
+
 /// 狀態列可見性跟著最前面的整頁頁面走。
 ///
-/// 最前面的不透明路由以 [StatusBarHidden] 要求隱藏時收起狀態列（保留導覽
-/// 列），其餘頁面一律顯示。底部面板、對話框與選單是透明路由，蓋在頁面上時
-/// 沿用底下頁面的決定。頁面推入或彈出的當下就重新決定，因此從閱讀頁返回
-/// 時，狀態列在返回動畫進行中就回來。
+/// 最前面的不透明路由以 [StatusBarHidden] 要求隱藏時收起狀態列（要求一起
+/// 隱藏導覽列時兩條都收），其餘頁面一律顯示。底部面板、對話框與選單是透明
+/// 路由，蓋在頁面上時沿用底下頁面的決定。頁面推入或彈出的當下就重新決定，
+/// 因此從閱讀頁返回時，狀態列在返回動畫進行中就回來。
 ///
 /// 頁面排版由 [StatusBarStableInset] 固定在狀態列原本的高度，狀態列收起或
 /// 出現都不會推動頁面。
 class StatusBarPolicy extends NavigatorObserver {
   final List<Route<dynamic>> _routes = <Route<dynamic>>[];
-  final Set<Route<dynamic>> _hidingRoutes = <Route<dynamic>>{};
 
-  /// App 啟動時狀態列是顯示的。
-  bool _appliedHidden = false;
+  /// 要求隱藏的路由，以及它要的隱藏方式。
+  final Map<Route<dynamic>, _SystemBars> _hidingRoutes =
+      <Route<dynamic>, _SystemBars>{};
+
+  /// App 啟動時系統列是顯示的。
+  _SystemBars _applied = _SystemBars.shown;
   bool _syncScheduled = false;
 
   @override
@@ -59,20 +73,21 @@ class StatusBarPolicy extends NavigatorObserver {
     _scheduleSync();
   }
 
-  void _setHiding(Route<dynamic> route, bool hiding) {
-    final changed = hiding
-        ? _hidingRoutes.add(route)
-        : _hidingRoutes.remove(route);
-    if (changed) _scheduleSync();
+  void _setHiding(Route<dynamic> route, _SystemBars bars) {
+    final previous = bars == _SystemBars.shown
+        ? _hidingRoutes.remove(route)
+        : _hidingRoutes[route];
+    if (bars != _SystemBars.shown) _hidingRoutes[route] = bars;
+    if ((previous ?? _SystemBars.shown) != bars) _scheduleSync();
   }
 
-  bool get _frontPageHides {
+  _SystemBars get _frontPageBars {
     for (final route in _routes.reversed) {
       if (route is TransitionRoute && route.opaque) {
-        return _hidingRoutes.contains(route);
+        return _hidingRoutes[route] ?? _SystemBars.shown;
       }
     }
-    return false;
+    return _SystemBars.shown;
   }
 
   void _scheduleSync() {
@@ -83,45 +98,63 @@ class StatusBarPolicy extends NavigatorObserver {
     SchedulerBinding.instance
       ..addPostFrameCallback((_) {
         _syncScheduled = false;
-        _apply(_frontPageHides);
+        _apply(_frontPageBars);
       })
       ..ensureVisualUpdate();
   }
 
-  void _apply(bool hidden) {
-    if (_appliedHidden == hidden) return;
-    _appliedHidden = hidden;
-    if (hidden) {
-      _hide();
-      SystemChrome.setSystemUIChangeCallback(_rehideAfterReveal);
-    } else {
+  void _apply(_SystemBars bars) {
+    if (_applied == bars) return;
+    _applied = bars;
+    if (bars == _SystemBars.shown) {
       SystemChrome.setSystemUIChangeCallback(null);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } else {
+      _hide(bars);
+      SystemChrome.setSystemUIChangeCallback(_rehideAfterReveal);
     }
   }
 
-  static Future<void> _hide() => SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.manual,
-    overlays: const [SystemUiOverlay.bottom],
-  );
+  /// 兩條都收時沒有留下任何系統列，Android 用沉浸模式：滑動叫出的系統列
+  /// 疊在畫面上、幾秒後自己收回。
+  static Future<void> _hide(_SystemBars bars) =>
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: bars == _SystemBars.allHidden
+            ? const <SystemUiOverlay>[]
+            : const [SystemUiOverlay.bottom],
+      );
 
   /// 使用者從頂端下滑叫出狀態列後，稍候再收回。
   Future<void> _rehideAfterReveal(bool systemOverlaysAreVisible) async {
     if (!systemOverlaysAreVisible) return;
     await Future<void>.delayed(const Duration(seconds: 3));
-    if (_appliedHidden) await _hide();
+    if (_applied != _SystemBars.shown) await _hide(_applied);
   }
 }
 
 /// 所在頁面位於最前面時要求隱藏狀態列；[hidden] 為 false 時不提出要求。
+/// [hideNavigationBar] 時連導覽列一起收（只在 [hidden] 時起作用）。
 ///
 /// 要求交給所在 Navigator 掛著的 [StatusBarPolicy]；Navigator 沒掛策略時
 /// 不起作用。
 class StatusBarHidden extends StatefulWidget {
-  const StatusBarHidden({super.key, required this.hidden, required this.child});
+  const StatusBarHidden({
+    super.key,
+    required this.hidden,
+    this.hideNavigationBar = false,
+    required this.child,
+  });
 
   final bool hidden;
+  final bool hideNavigationBar;
   final Widget child;
+
+  _SystemBars get _bars => !hidden
+      ? _SystemBars.shown
+      : hideNavigationBar
+      ? _SystemBars.allHidden
+      : _SystemBars.statusHidden;
 
   @override
   State<StatusBarHidden> createState() => _StatusBarHiddenState();
@@ -147,7 +180,7 @@ class _StatusBarHiddenState extends State<StatusBarHidden> {
   @override
   void didUpdateWidget(StatusBarHidden oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.hidden != widget.hidden) _submit();
+    if (oldWidget._bars != widget._bars) _submit();
   }
 
   @override
@@ -158,12 +191,12 @@ class _StatusBarHiddenState extends State<StatusBarHidden> {
 
   void _submit() {
     final route = _route;
-    if (route != null) _policy?._setHiding(route, widget.hidden);
+    if (route != null) _policy?._setHiding(route, widget._bars);
   }
 
   void _withdraw() {
     final route = _route;
-    if (route != null) _policy?._setHiding(route, false);
+    if (route != null) _policy?._setHiding(route, _SystemBars.shown);
   }
 
   @override

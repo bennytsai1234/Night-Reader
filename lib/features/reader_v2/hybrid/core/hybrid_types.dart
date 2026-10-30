@@ -103,6 +103,7 @@ final class StyleFingerprint {
     this.cellWidth,
     this.typographyFeatureSignature = kReaderV2CjkTypographyFeatureSignature,
     this.titleFontSize = 0,
+    this.titleSpacing = 0,
   });
 
   factory StyleFingerprint.fromLayoutSpec(
@@ -126,6 +127,7 @@ final class StyleFingerprint {
       fontFamilySignature: fontFamilySignature,
       platformFontSignature: platformFontSignature,
       titleFontSize: style.titleFontSize,
+      titleSpacing: style.titleSpacing,
     );
   }
 
@@ -152,6 +154,9 @@ final class StyleFingerprint {
   /// 標題 block 的量測高度取決於標題字號，必須進入快取鍵。
   final double titleFontSize;
 
+  /// 標題 block 的量測高度含標題間距，必須進入快取鍵。
+  final double titleSpacing;
+
   int get stableHash => Object.hash(
     contentWidth,
     cellWidth,
@@ -167,6 +172,7 @@ final class StyleFingerprint {
     platformFontSignature,
     typographyFeatureSignature,
     titleFontSize,
+    titleSpacing,
   );
 
   String get stableKey => jsonEncode(<Object?>[
@@ -184,6 +190,7 @@ final class StyleFingerprint {
     platformFontSignature,
     typographyFeatureSignature,
     titleFontSize,
+    titleSpacing,
   ]);
 
   @override
@@ -202,7 +209,8 @@ final class StyleFingerprint {
         other.fontFamilySignature == fontFamilySignature &&
         other.platformFontSignature == platformFontSignature &&
         other.typographyFeatureSignature == typographyFeatureSignature &&
-        other.titleFontSize == titleFontSize;
+        other.titleFontSize == titleFontSize &&
+        other.titleSpacing == titleSpacing;
   }
 
   @override

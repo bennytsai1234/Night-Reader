@@ -7,6 +7,8 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_page_turn_speed.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
@@ -21,7 +23,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     this._prefsRepository = const ReaderV2PrefsRepository(),
   }) {
     try {
-      _persisted = _prefsRepository.read(getIt<SharedPreferences>());
+      final prefs = getIt<SharedPreferences>();
+      _prefsRepository.migrate(prefs);
+      _persisted = _prefsRepository.read(prefs);
     } catch (error, stackTrace) {
       AppLog.e('閱讀設定讀取失敗: $error', error: error, stackTrace: stackTrace);
       _persisted = ReaderV2PrefsSnapshot.defaults();
@@ -43,6 +47,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
       ReaderV2PrefsRepository.minChapterSpacing;
   static const double maxChapterSpacing =
       ReaderV2PrefsRepository.maxChapterSpacing;
+  static const double minTitleSpacing = ReaderV2PrefsRepository.minTitleSpacing;
+  static const double maxTitleSpacing = ReaderV2PrefsRepository.maxTitleSpacing;
 
   final ReaderV2PrefsRepository _prefsRepository;
 
@@ -71,6 +77,21 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool brightnessAuto = ReaderV2PrefsSnapshot.defaults().brightnessAuto;
   double brightness = ReaderV2PrefsSnapshot.defaults().brightness;
   bool volumeKeyPage = ReaderV2PrefsSnapshot.defaults().volumeKeyPage;
+  bool volumeKeyReversed = ReaderV2PrefsSnapshot.defaults().volumeKeyReversed;
+  double titleSpacing = ReaderV2PrefsSnapshot.defaults().titleSpacing;
+  bool keepScreenOn = ReaderV2PrefsSnapshot.defaults().keepScreenOn;
+  ReaderV2Orientation orientation =
+      ReaderV2PrefsSnapshot.defaults().orientation;
+  bool hideNavigationBar = ReaderV2PrefsSnapshot.defaults().hideNavigationBar;
+  int pageTurnOverlap = ReaderV2PrefsSnapshot.defaults().pageTurnOverlap;
+  ReaderV2PageTurnSpeed pageTurnSpeed =
+      ReaderV2PrefsSnapshot.defaults().pageTurnSpeed;
+  bool use24HourClock = ReaderV2PrefsSnapshot.defaults().use24HourClock;
+  int progressFractionDigits =
+      ReaderV2PrefsSnapshot.defaults().progressFractionDigits;
+  double maxDim = ReaderV2PrefsSnapshot.defaults().maxDim;
+  double edgeFade = ReaderV2PrefsSnapshot.defaults().edgeFade;
+  bool ttsFollow = ReaderV2PrefsSnapshot.defaults().ttsFollow;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
@@ -130,6 +151,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
     brightnessAuto = snapshot.brightnessAuto;
     brightness = snapshot.brightness;
     volumeKeyPage = snapshot.volumeKeyPage;
+    volumeKeyReversed = snapshot.volumeKeyReversed;
+    titleSpacing = snapshot.titleSpacing;
+    keepScreenOn = snapshot.keepScreenOn;
+    orientation = snapshot.orientation;
+    hideNavigationBar = snapshot.hideNavigationBar;
+    pageTurnOverlap = snapshot.pageTurnOverlap;
+    pageTurnSpeed = snapshot.pageTurnSpeed;
+    use24HourClock = snapshot.use24HourClock;
+    progressFractionDigits = snapshot.progressFractionDigits;
+    maxDim = snapshot.maxDim;
+    edgeFade = snapshot.edgeFade;
+    ttsFollow = snapshot.ttsFollow;
   }
 
   @override
@@ -196,6 +229,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       bold: false,
       textIndent: textIndent,
       titleFontSize: titleFontSize,
+      titleSpacing: titleSpacing,
     );
   }
 
@@ -211,9 +245,35 @@ class ReaderV2SettingsController extends ChangeNotifier {
     double? lineHeight,
     double? paragraphSpacing,
     double? chapterSpacing,
+    double? titleSpacing,
     double? letterSpacing,
+    int? textIndent,
   }) {
     var changed = false;
+    if (titleSpacing != null) {
+      if (this.titleSpacing != titleSpacing) {
+        this.titleSpacing = titleSpacing;
+        changed = true;
+      }
+      _persist(
+        'titleSpacing',
+        () => _prefsRepository.saveTitleSpacing(titleSpacing),
+        onSaved: (p) => p.copyWith(titleSpacing: titleSpacing),
+        restore: (p) => this.titleSpacing = p.titleSpacing,
+      );
+    }
+    if (textIndent != null) {
+      if (this.textIndent != textIndent) {
+        this.textIndent = textIndent;
+        changed = true;
+      }
+      _persist(
+        'textIndent',
+        () => _prefsRepository.saveTextIndent(textIndent),
+        onSaved: (p) => p.copyWith(textIndent: textIndent),
+        restore: (p) => this.textIndent = p.textIndent,
+      );
+    }
     if (fontSize != null) {
       if (this.fontSize != fontSize) {
         this.fontSize = fontSize;
@@ -291,7 +351,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 將字號、行高、字距、段距、章節間距與首行縮排恢復為預設值。
+  /// 將字號、標題、行高、字距、段距、章節間距與首行縮排恢復為預設值。
   void resetTypography() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setTypography(
@@ -300,20 +360,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
       lineHeight: defaults.lineHeight,
       paragraphSpacing: defaults.paragraphSpacing,
       chapterSpacing: defaults.chapterSpacing,
+      titleSpacing: defaults.titleSpacing,
       letterSpacing: defaults.letterSpacing,
+      textIndent: defaults.textIndent,
     );
-    if (textIndent != defaults.textIndent) setTextIndent(defaults.textIndent);
-  }
-
-  void setTextIndent(int value) {
-    textIndent = value;
-    _persist(
-      'textIndent',
-      () => _prefsRepository.saveTextIndent(value),
-      onSaved: (p) => p.copyWith(textIndent: value),
-      restore: (p) => textIndent = p.textIndent,
-    );
-    notifyListeners();
   }
 
   void setAutoPageSpeed(double value) {
@@ -393,6 +443,144 @@ class ReaderV2SettingsController extends ChangeNotifier {
       () => _prefsRepository.saveVolumeKeyPage(value),
       onSaved: (p) => p.copyWith(volumeKeyPage: value),
       restore: (p) => volumeKeyPage = p.volumeKeyPage,
+    );
+    notifyListeners();
+  }
+
+  void setVolumeKeyReversed(bool value) {
+    if (volumeKeyReversed == value) return;
+    volumeKeyReversed = value;
+    _persist(
+      'volumeKeyReversed',
+      () => _prefsRepository.saveVolumeKeyReversed(value),
+      onSaved: (p) => p.copyWith(volumeKeyReversed: value),
+      restore: (p) => volumeKeyReversed = p.volumeKeyReversed,
+    );
+    notifyListeners();
+  }
+
+  void setKeepScreenOn(bool value) {
+    if (keepScreenOn == value) return;
+    keepScreenOn = value;
+    _persist(
+      'keepScreenOn',
+      () => _prefsRepository.saveKeepScreenOn(value),
+      onSaved: (p) => p.copyWith(keepScreenOn: value),
+      restore: (p) => keepScreenOn = p.keepScreenOn,
+    );
+    notifyListeners();
+  }
+
+  void setOrientation(ReaderV2Orientation value) {
+    if (orientation == value) return;
+    orientation = value;
+    _persist(
+      'orientation',
+      () => _prefsRepository.saveOrientation(value),
+      onSaved: (p) => p.copyWith(orientation: value),
+      restore: (p) => orientation = p.orientation,
+    );
+    notifyListeners();
+  }
+
+  void setHideNavigationBar(bool value) {
+    if (hideNavigationBar == value) return;
+    hideNavigationBar = value;
+    _persist(
+      'hideNavigationBar',
+      () => _prefsRepository.saveHideNavigationBar(value),
+      onSaved: (p) => p.copyWith(hideNavigationBar: value),
+      restore: (p) => hideNavigationBar = p.hideNavigationBar,
+    );
+    notifyListeners();
+  }
+
+  void setPageTurnOverlap(int value) {
+    final normalized = ReaderV2PrefsRepository.normalizePageTurnOverlap(value);
+    if (pageTurnOverlap == normalized) return;
+    pageTurnOverlap = normalized;
+    _persist(
+      'pageTurnOverlap',
+      () => _prefsRepository.savePageTurnOverlap(normalized),
+      onSaved: (p) => p.copyWith(pageTurnOverlap: normalized),
+      restore: (p) => pageTurnOverlap = p.pageTurnOverlap,
+    );
+    notifyListeners();
+  }
+
+  void setPageTurnSpeed(ReaderV2PageTurnSpeed value) {
+    if (pageTurnSpeed == value) return;
+    pageTurnSpeed = value;
+    _persist(
+      'pageTurnSpeed',
+      () => _prefsRepository.savePageTurnSpeed(value),
+      onSaved: (p) => p.copyWith(pageTurnSpeed: value),
+      restore: (p) => pageTurnSpeed = p.pageTurnSpeed,
+    );
+    notifyListeners();
+  }
+
+  void setUse24HourClock(bool value) {
+    if (use24HourClock == value) return;
+    use24HourClock = value;
+    _persist(
+      'use24HourClock',
+      () => _prefsRepository.saveUse24HourClock(value),
+      onSaved: (p) => p.copyWith(use24HourClock: value),
+      restore: (p) => use24HourClock = p.use24HourClock,
+    );
+    notifyListeners();
+  }
+
+  void setProgressFractionDigits(int value) {
+    final normalized = ReaderV2PrefsRepository.normalizeProgressFractionDigits(
+      value,
+    );
+    if (progressFractionDigits == normalized) return;
+    progressFractionDigits = normalized;
+    _persist(
+      'progressFractionDigits',
+      () => _prefsRepository.saveProgressFractionDigits(normalized),
+      onSaved: (p) => p.copyWith(progressFractionDigits: normalized),
+      restore: (p) => progressFractionDigits = p.progressFractionDigits,
+    );
+    notifyListeners();
+  }
+
+  void setMaxDim(double value) {
+    final normalized = ReaderV2Brightness.normalizeMaxDim(value);
+    if (maxDim == normalized) return;
+    maxDim = normalized;
+    _persist(
+      'maxDim',
+      () => _prefsRepository.saveMaxDim(normalized),
+      onSaved: (p) => p.copyWith(maxDim: normalized),
+      restore: (p) => maxDim = p.maxDim,
+    );
+    notifyListeners();
+  }
+
+  void setEdgeFade(double value) {
+    final normalized = ReaderV2PrefsRepository.normalizeEdgeFade(value);
+    if (edgeFade == normalized) return;
+    edgeFade = normalized;
+    _persist(
+      'edgeFade',
+      () => _prefsRepository.saveEdgeFade(normalized),
+      onSaved: (p) => p.copyWith(edgeFade: normalized),
+      restore: (p) => edgeFade = p.edgeFade,
+    );
+    notifyListeners();
+  }
+
+  void setTtsFollow(bool value) {
+    if (ttsFollow == value) return;
+    ttsFollow = value;
+    _persist(
+      'ttsFollow',
+      () => _prefsRepository.saveTtsFollow(value),
+      onSaved: (p) => p.copyWith(ttsFollow: value),
+      restore: (p) => ttsFollow = p.ttsFollow,
     );
     notifyListeners();
   }
@@ -506,7 +694,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 將邊距、左右對齊、頁尾位置、狀態列與頁首／頁尾恢復為預設值。
+  /// 將邊距、左右對齊、上下緣漸隱、頁尾位置、系統列與頁首／頁尾（含時間
+  /// 與進度的格式）恢復為預設值。
   void resetPageLayout() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setPagePadding(
@@ -515,10 +704,14 @@ class ReaderV2SettingsController extends ChangeNotifier {
       bottom: defaults.paddingBottom,
     );
     setJustifyText(defaults.justifyText);
+    setEdgeFade(defaults.edgeFade);
     setFooterOffset(defaults.footerOffset);
     setHideStatusBar(defaults.hideStatusBar);
+    setHideNavigationBar(defaults.hideNavigationBar);
     setHeaderInfo(defaults.headerInfo);
     setFooterInfo(defaults.footerInfo);
+    setUse24HourClock(defaults.use24HourClock);
+    setProgressFractionDigits(defaults.progressFractionDigits);
   }
 
   bool get isPageLayoutDefault {
@@ -527,10 +720,14 @@ class ReaderV2SettingsController extends ChangeNotifier {
         justifyText == defaults.justifyText &&
         paddingTop == defaults.paddingTop &&
         paddingBottom == defaults.paddingBottom &&
+        edgeFade == defaults.edgeFade &&
         footerOffset == defaults.footerOffset &&
         hideStatusBar == defaults.hideStatusBar &&
+        hideNavigationBar == defaults.hideNavigationBar &&
         headerInfo == defaults.headerInfo &&
-        footerInfo == defaults.footerInfo;
+        footerInfo == defaults.footerInfo &&
+        use24HourClock == defaults.use24HourClock &&
+        progressFractionDigits == defaults.progressFractionDigits;
   }
 
   void setHideStatusBar(bool value) {
