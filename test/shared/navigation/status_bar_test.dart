@@ -167,6 +167,48 @@ void main() {
       expect(statusBarHidden(), isFalse);
     });
 
+    testWidgets('一起隱藏導覽列時兩條系統列都收起；關掉後只收狀態列', (tester) async {
+      await pumpApp(tester);
+      var hideNavigationBar = true;
+      late StateSetter setPageState;
+      unawaited(
+        navigatorKey.currentState!.push(
+          readerRoute(
+            page: StatefulBuilder(
+              builder: (context, setState) {
+                setPageState = setState;
+                return StatusBarHidden(
+                  hidden: true,
+                  hideNavigationBar: hideNavigationBar,
+                  child: const Scaffold(body: Text('閱讀')),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // 沉浸模式：點畫面照常交給 App；manual 兩條都不留是點一下就叫出來的
+      // leanBack。
+      expect(
+        visibilityCalls.last.method,
+        'SystemChrome.setEnabledSystemUIMode',
+      );
+      expect(visibilityCalls.last.arguments, 'SystemUiMode.immersiveSticky');
+
+      setPageState(() => hideNavigationBar = false);
+      await tester.pump();
+      expect(
+        visibilityCalls.last.method,
+        'SystemChrome.setEnabledSystemUIOverlays',
+      );
+      expect(visibilityCalls.last.arguments, ['SystemUiOverlay.bottom']);
+
+      navigatorKey.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(statusBarHidden(), isFalse);
+    });
+
     testWidgets('下滑叫出狀態列後 3 秒收回；已離開閱讀頁則不收回', (tester) async {
       await pumpApp(tester);
       unawaited(navigatorKey.currentState!.push(readerRoute()));

@@ -130,6 +130,9 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.paddingTop,
     required this.paddingBottom,
     required this.footerOffset,
+    required this.edgeFade,
+    required this.use24HourClock,
+    required this.progressFractionDigits,
     this.topCutoutExtent,
     required this.dayNightIcon,
     required this.dayNightTooltip,
@@ -201,6 +204,13 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 頁尾資訊列底部到畫面底部的距離。
   final double footerOffset;
 
+  /// 正文上下緣漸隱的最大高度；0 是不漸隱。
+  final double edgeFade;
+
+  /// 頁首頁尾的時間用 24 小時制；全書進度顯示到小數第幾位。
+  final bool use24HourClock;
+  final int progressFractionDigits;
+
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；null 表示尚未取得。
   final double? topCutoutExtent;
   final IconData dayNightIcon;
@@ -256,15 +266,12 @@ class ReaderV2PageShell extends StatelessWidget {
       footerOffset: footerOffset,
     );
     final infoShown = infoState != ReaderV2InfoState.hidden;
-    // 正文與頁首、頁尾之間的空隙（上下邊距）裡的漸隱，最多 14（同 App 頁首
-    // 下緣）。邊距是 0 時沒有空隙，切口照舊。
-    final fadeTop = math.min(
-      layout.contentTop - layout.headerExtent,
-      AppGlass.headerFadeHeight,
-    );
+    // 正文與頁首、頁尾之間的空隙（上下邊距）裡的漸隱，最多 [edgeFade]。
+    // 邊距是 0 時沒有空隙，切口照舊。
+    final fadeTop = math.min(layout.contentTop - layout.headerExtent, edgeFade);
     final fadeBottom = math.min(
       layout.contentBottom - layout.footerExtent,
-      AppGlass.headerFadeHeight,
+      edgeFade,
     );
     // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
     final autoPageInFooter = layout.showFooterInfo;
@@ -842,7 +849,12 @@ class _InfoRow extends StatelessWidget {
     TextAlign align,
   ) {
     if (item == ReaderV2InfoItem.none) return null;
-    if (item == ReaderV2InfoItem.time) return _ReaderClock(textAlign: align);
+    if (item == ReaderV2InfoItem.time) {
+      return _ReaderClock(
+        format: _clockFormat(shell.use24HourClock),
+        textAlign: align,
+      );
+    }
     if (item == ReaderV2InfoItem.battery ||
         item == ReaderV2InfoItem.batteryWithIcon) {
       return _ReaderBattery(
@@ -863,7 +875,7 @@ class _InfoRow extends StatelessWidget {
     String? title,
   ) {
     if (item == ReaderV2InfoItem.time) {
-      return '時間 ${DateFormat('HH:mm').format(DateTime.now())}';
+      return '時間 ${_clockFormat(shell.use24HourClock).format(DateTime.now())}';
     }
     if (item == ReaderV2InfoItem.battery ||
         item == ReaderV2InfoItem.batteryWithIcon) {
@@ -894,7 +906,8 @@ class _InfoRow extends StatelessWidget {
                 : '…'),
       ReaderV2InfoItem.chapterProgress =>
         progress?.chapterProgressLabel ?? '本章 …',
-      ReaderV2InfoItem.bookProgress => progress?.bookPercentLabel ?? '…%',
+      ReaderV2InfoItem.bookProgress =>
+        progress?.bookPercentLabel(shell.progressFractionDigits) ?? '…%',
     };
   }
 }
@@ -993,9 +1006,16 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
 }
 
 /// 頁首／頁尾的時鐘；只在分鐘變化時重建。
-class _ReaderClock extends StatefulWidget {
-  const _ReaderClock({required this.textAlign});
+final DateFormat _clock24 = DateFormat('HH:mm');
+final DateFormat _clock12 = DateFormat('h:mm');
 
+DateFormat _clockFormat(bool use24HourClock) =>
+    use24HourClock ? _clock24 : _clock12;
+
+class _ReaderClock extends StatefulWidget {
+  const _ReaderClock({required this.format, required this.textAlign});
+
+  final DateFormat format;
   final TextAlign textAlign;
 
   @override
@@ -1003,7 +1023,6 @@ class _ReaderClock extends StatefulWidget {
 }
 
 class _ReaderClockState extends State<_ReaderClock> {
-  static final DateFormat _format = DateFormat('HH:mm');
   Timer? _timer;
   late DateTime _now;
 
@@ -1038,7 +1057,7 @@ class _ReaderClockState extends State<_ReaderClock> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(_format.format(_now), textAlign: widget.textAlign);
+    return Text(widget.format.format(_now), textAlign: widget.textAlign);
   }
 }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:night_reader/core/constant/app_pattern.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
@@ -1086,6 +1087,15 @@ class ReaderV2ContentTransformWorker {
       throw failure;
     }
   }
+
+  /// 停掉 worker，下一個請求在呼叫端所在的 zone 重新啟動。
+  ///
+  /// 啟動好的 worker 存成一個 future，future 在建立它的 zone 裡通知等的人：
+  /// 元件測試每個測試有自己的假時鐘，上一個測試啟動的 worker 會讓這個測試
+  /// 的請求排進已經沒人推動的假時鐘，正文永遠等不到。整套 App 的測試在每個
+  /// 測試開頭停掉它（`setUpApp`）。
+  @visibleForTesting
+  void stop() => _reset(const ReaderV2ContentTransformException('內容轉換程序已停止'));
 
   /// 丟掉目前的 worker；下一個請求會重新啟動。
   void _reset(ReaderV2ContentTransformException failure) {

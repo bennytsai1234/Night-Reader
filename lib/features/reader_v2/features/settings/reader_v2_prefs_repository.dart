@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_page_turn_speed.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,8 +58,36 @@ class ReaderV2PrefsSnapshot {
   /// 亮度條的位置（0–1），換算見 [ReaderV2Brightness]。
   final double brightness;
 
-  /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
+  /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁；[volumeKeyReversed] 時對調。
   final bool volumeKeyPage;
+  final bool volumeKeyReversed;
+
+  /// 章節標題與正文之間的空白（行）。
+  final double titleSpacing;
+
+  /// 閱讀器露在畫面上時螢幕保持常亮。
+  final bool keepScreenOn;
+  final ReaderV2Orientation orientation;
+
+  /// 隱藏狀態列時一起隱藏系統導覽列；[hideStatusBar] 關著時不起作用。
+  final bool hideNavigationBar;
+
+  /// 翻頁時上一屏留在畫面上的行數，與捲過一屏的快慢。
+  final int pageTurnOverlap;
+  final ReaderV2PageTurnSpeed pageTurnSpeed;
+
+  /// 頁首頁尾的時間用 24 小時制；全書進度顯示到小數第幾位。
+  final bool use24HourClock;
+  final int progressFractionDigits;
+
+  /// 亮度條拉到底時疊上的黑色不透明度。
+  final double maxDim;
+
+  /// 正文上下緣漸隱的最大高度（px）；0 是不漸隱。
+  final double edgeFade;
+
+  /// 朗讀時畫面跟著念到的句子捲動。
+  final bool ttsFollow;
 
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
@@ -81,6 +114,18 @@ class ReaderV2PrefsSnapshot {
     required this.brightnessAuto,
     required this.brightness,
     required this.volumeKeyPage,
+    required this.volumeKeyReversed,
+    required this.titleSpacing,
+    required this.keepScreenOn,
+    required this.orientation,
+    required this.hideNavigationBar,
+    required this.pageTurnOverlap,
+    required this.pageTurnSpeed,
+    required this.use24HourClock,
+    required this.progressFractionDigits,
+    required this.maxDim,
+    required this.edgeFade,
+    required this.ttsFollow,
   });
 
   factory ReaderV2PrefsSnapshot.defaults() {
@@ -118,6 +163,18 @@ class ReaderV2PrefsSnapshot {
       brightnessAuto: true,
       brightness: ReaderV2Brightness.defaultLevel,
       volumeKeyPage: false,
+      volumeKeyReversed: false,
+      titleSpacing: 0.0,
+      keepScreenOn: true,
+      orientation: ReaderV2Orientation.system,
+      hideNavigationBar: false,
+      pageTurnOverlap: 1,
+      pageTurnSpeed: ReaderV2PageTurnSpeed.normal,
+      use24HourClock: true,
+      progressFractionDigits: 1,
+      maxDim: ReaderV2Brightness.defaultMaxDim,
+      edgeFade: ReaderV2PrefsRepository.defaultEdgeFade,
+      ttsFollow: true,
     );
   }
 
@@ -146,6 +203,18 @@ class ReaderV2PrefsSnapshot {
     bool? brightnessAuto,
     double? brightness,
     bool? volumeKeyPage,
+    bool? volumeKeyReversed,
+    double? titleSpacing,
+    bool? keepScreenOn,
+    ReaderV2Orientation? orientation,
+    bool? hideNavigationBar,
+    int? pageTurnOverlap,
+    ReaderV2PageTurnSpeed? pageTurnSpeed,
+    bool? use24HourClock,
+    int? progressFractionDigits,
+    double? maxDim,
+    double? edgeFade,
+    bool? ttsFollow,
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
@@ -172,6 +241,19 @@ class ReaderV2PrefsSnapshot {
       brightnessAuto: brightnessAuto ?? this.brightnessAuto,
       brightness: brightness ?? this.brightness,
       volumeKeyPage: volumeKeyPage ?? this.volumeKeyPage,
+      volumeKeyReversed: volumeKeyReversed ?? this.volumeKeyReversed,
+      titleSpacing: titleSpacing ?? this.titleSpacing,
+      keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+      orientation: orientation ?? this.orientation,
+      hideNavigationBar: hideNavigationBar ?? this.hideNavigationBar,
+      pageTurnOverlap: pageTurnOverlap ?? this.pageTurnOverlap,
+      pageTurnSpeed: pageTurnSpeed ?? this.pageTurnSpeed,
+      use24HourClock: use24HourClock ?? this.use24HourClock,
+      progressFractionDigits:
+          progressFractionDigits ?? this.progressFractionDigits,
+      maxDim: maxDim ?? this.maxDim,
+      edgeFade: edgeFade ?? this.edgeFade,
+      ttsFollow: ttsFollow ?? this.ttsFollow,
     );
   }
 }
@@ -192,24 +274,53 @@ class ReaderV2PrefsRepository {
   static const double minChapterSpacing = 0.0;
   static const double maxChapterSpacing = 5.0;
 
+  /// 標題間距的合法範圍（行）。
+  static const double minTitleSpacing = 0.0;
+  static const double maxTitleSpacing = 3.0;
+
+  /// 翻頁保留行數的合法範圍。
+  static const int minPageTurnOverlap = 0;
+  static const int maxPageTurnOverlap = 3;
+
+  /// 全書進度最多顯示到小數第一位：進度快照只在千分之一的變化時通知，
+  /// 第二位不會跟著更新。
+  static const int maxProgressFractionDigits = 1;
+
+  /// 正文上下緣漸隱的合法範圍（px）；預設同 App 頁首下緣的漸隱。
+  static const double minEdgeFade = 0.0;
+  static const double maxEdgeFade = 24.0;
+  static const double defaultEdgeFade = 14.0;
+
   Future<ReaderV2PrefsSnapshot> load() async =>
       read(await SharedPreferences.getInstance());
+
+  /// 還沒有標題間距這個設定時，把從字號、行高與段距換算出的值存下來；之後
+  /// 改這三項，標題間距不會跟著變。[SharedPreferences] 的快取同步更新，
+  /// 接著的 [read] 就讀得到。
+  void migrate(SharedPreferences prefs) {
+    if (prefs.containsKey(PreferKey.readerTitleSpacing)) return;
+    unawaited(
+      prefs.setDouble(PreferKey.readerTitleSpacing, read(prefs).titleSpacing),
+    );
+  }
 
   /// 從已經取得的 [SharedPreferences] 同步讀出設定。
   ReaderV2PrefsSnapshot read(SharedPreferences prefs) {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     final fontSize =
         prefs.getDouble(PreferKey.readerFontSize) ?? defaults.fontSize;
+    final lineHeight =
+        prefs.getDouble(PreferKey.readerLineHeight) ?? defaults.lineHeight;
+    final paragraphSpacing =
+        prefs.getDouble(PreferKey.readerParagraphSpacing) ??
+        defaults.paragraphSpacing;
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize,
       titleFontSize:
           prefs.getDouble(PreferKey.readerTitleFontSize) ??
           fontSize + kReaderV2DefaultTitleSizeDelta,
-      lineHeight:
-          prefs.getDouble(PreferKey.readerLineHeight) ?? defaults.lineHeight,
-      paragraphSpacing:
-          prefs.getDouble(PreferKey.readerParagraphSpacing) ??
-          defaults.paragraphSpacing,
+      lineHeight: lineHeight,
+      paragraphSpacing: paragraphSpacing,
       chapterSpacing: _normalizeChapterSpacing(
         prefs.getDouble(PreferKey.readerChapterSpacing),
         defaults.chapterSpacing,
@@ -278,7 +389,74 @@ class ReaderV2PrefsRepository {
       volumeKeyPage:
           prefs.getBool(PreferKey.readerVolumeKeyPage) ??
           defaults.volumeKeyPage,
+      volumeKeyReversed:
+          prefs.getBool(PreferKey.readerVolumeKeyReversed) ??
+          defaults.volumeKeyReversed,
+      titleSpacing: _normalizeTitleSpacing(
+        prefs.getDouble(PreferKey.readerTitleSpacing) ??
+            _legacyTitleSpacing(
+              fontSize: fontSize,
+              lineHeight: lineHeight,
+              paragraphSpacing: paragraphSpacing,
+            ),
+      ),
+      keepScreenOn:
+          prefs.getBool(PreferKey.readerKeepScreenOn) ?? defaults.keepScreenOn,
+      orientation: ReaderV2Orientation.parse(
+        prefs.getString(PreferKey.readerOrientation),
+      ),
+      hideNavigationBar:
+          prefs.getBool(PreferKey.readerHideNavigationBar) ??
+          defaults.hideNavigationBar,
+      pageTurnOverlap: normalizePageTurnOverlap(
+        prefs.getInt(PreferKey.readerPageTurnOverlap) ??
+            defaults.pageTurnOverlap,
+      ),
+      pageTurnSpeed: ReaderV2PageTurnSpeed.parse(
+        prefs.getString(PreferKey.readerPageTurnSpeed),
+      ),
+      use24HourClock:
+          prefs.getBool(PreferKey.readerUse24HourClock) ??
+          defaults.use24HourClock,
+      progressFractionDigits: normalizeProgressFractionDigits(
+        prefs.getInt(PreferKey.readerProgressFractionDigits) ??
+            defaults.progressFractionDigits,
+      ),
+      maxDim: ReaderV2Brightness.normalizeMaxDim(
+        prefs.getDouble(PreferKey.readerMaxDim),
+      ),
+      edgeFade: normalizeEdgeFade(prefs.getDouble(PreferKey.readerEdgeFade)),
+      ttsFollow: prefs.getBool(PreferKey.readerTtsFollow) ?? defaults.ttsFollow,
     );
+  }
+
+  /// 還沒有標題間距這個設定時，標題下方留的是段距 × 8（px）；換算成行，
+  /// 升級後版面不變。存完整精度，不先對齊步進的 0.1 行（那會讓留白變多
+  /// 或變少，段距很小時甚至變成 0）；讀者動到這一欄時步進器才對齊格點。
+  static double _legacyTitleSpacing({
+    required double fontSize,
+    required double lineHeight,
+    required double paragraphSpacing,
+  }) {
+    final lineExtent = fontSize * ReaderV2Style.normalizeLineHeight(lineHeight);
+    if (!paragraphSpacing.isFinite || lineExtent <= 0) return 0.0;
+    return paragraphSpacing * 8 / lineExtent;
+  }
+
+  static double _normalizeTitleSpacing(double value) {
+    if (!value.isFinite) return ReaderV2PrefsSnapshot.defaults().titleSpacing;
+    return value.clamp(minTitleSpacing, maxTitleSpacing).toDouble();
+  }
+
+  static int normalizePageTurnOverlap(int value) =>
+      value.clamp(minPageTurnOverlap, maxPageTurnOverlap);
+
+  static int normalizeProgressFractionDigits(int value) =>
+      value.clamp(0, maxProgressFractionDigits);
+
+  static double normalizeEdgeFade(double? value) {
+    if (value == null || !value.isFinite) return defaultEdgeFade;
+    return value.clamp(minEdgeFade, maxEdgeFade).toDouble();
   }
 
   Future<void> saveFontSize(double value) {
@@ -385,6 +563,54 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveVolumeKeyPage(bool value) {
     return _setBool(PreferKey.readerVolumeKeyPage, value);
+  }
+
+  Future<void> saveVolumeKeyReversed(bool value) {
+    return _setBool(PreferKey.readerVolumeKeyReversed, value);
+  }
+
+  Future<void> saveTitleSpacing(double value) {
+    return _setDouble(PreferKey.readerTitleSpacing, value);
+  }
+
+  Future<void> saveKeepScreenOn(bool value) {
+    return _setBool(PreferKey.readerKeepScreenOn, value);
+  }
+
+  Future<void> saveOrientation(ReaderV2Orientation value) {
+    return _setString(PreferKey.readerOrientation, value.name);
+  }
+
+  Future<void> saveHideNavigationBar(bool value) {
+    return _setBool(PreferKey.readerHideNavigationBar, value);
+  }
+
+  Future<void> savePageTurnOverlap(int value) {
+    return _setInt(PreferKey.readerPageTurnOverlap, value);
+  }
+
+  Future<void> savePageTurnSpeed(ReaderV2PageTurnSpeed value) {
+    return _setString(PreferKey.readerPageTurnSpeed, value.name);
+  }
+
+  Future<void> saveUse24HourClock(bool value) {
+    return _setBool(PreferKey.readerUse24HourClock, value);
+  }
+
+  Future<void> saveProgressFractionDigits(int value) {
+    return _setInt(PreferKey.readerProgressFractionDigits, value);
+  }
+
+  Future<void> saveMaxDim(double value) {
+    return _setDouble(PreferKey.readerMaxDim, value);
+  }
+
+  Future<void> saveEdgeFade(double value) {
+    return _setDouble(PreferKey.readerEdgeFade, value);
+  }
+
+  Future<void> saveTtsFollow(bool value) {
+    return _setBool(PreferKey.readerTtsFollow, value);
   }
 
   List<int> parseClickActions(String? stored) {

@@ -4,18 +4,18 @@ import 'reader_v2_typography.dart';
 
 /// 一段正文（或標題）之後的留白高度，計入該 block 的量測高度。
 ///
-/// 章末改留 [ReaderV2LayoutStyle.chapterSpacing] 行（使用者設定的章節間距），
-/// 與段距分開計算、不疊加。空白屬於章末 block 自己的高度，捲動、定位與
-/// 進度都沿用同一份幾何，不需要另外的特例。
+/// 標題之後留 [ReaderV2LayoutStyle.titleSpacing] 行（標題間距），正文段落
+/// 之後留段距。章末改留 [ReaderV2LayoutStyle.chapterSpacing] 行（使用者設定的
+/// 章節間距），與段距分開計算、不疊加。空白屬於章末 block 自己的高度，捲動、
+/// 定位與進度都沿用同一份幾何，不需要另外的特例。
 double readerV2BlockTrailingSpacing(
   ReaderV2LayoutStyle style, {
   required bool isTitle,
   required bool isChapterEnd,
 }) {
   final lineExtent = style.fontSize * style.effectiveLineHeight;
-  final spacing = isTitle
-      ? style.paragraphSpacing * 8
-      : lineExtent * style.paragraphSpacing;
+  final spacing =
+      lineExtent * (isTitle ? style.titleSpacing : style.paragraphSpacing);
   if (!isChapterEnd) return spacing;
   return lineExtent * style.chapterSpacing;
 }
@@ -38,6 +38,7 @@ class ReaderV2LayoutStyle {
     this.bold = false,
     this.textIndent = 0,
     double? titleFontSize,
+    this.titleSpacing = 0.0,
   }) : titleFontSize =
            titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
 
@@ -55,6 +56,9 @@ class ReaderV2LayoutStyle {
   final bool bold;
   final int textIndent;
   final double titleFontSize;
+
+  /// 標題與正文之間的空白（行），計入標題 block 的量測高度。
+  final double titleSpacing;
 
   double get effectiveLineHeight => normalizeLineHeight(lineHeight);
 
@@ -262,6 +266,7 @@ class ReaderV2LayoutSpec {
             bold: style.bold,
             textIndent: style.textIndent,
             titleFontSize: style.titleFontSize,
+            titleSpacing: style.titleSpacing,
           );
     final effectiveCell =
         cellWidth != null && cellWidth.isFinite && cellWidth > 0
@@ -296,6 +301,7 @@ class ReaderV2LayoutSpec {
       style.textIndent,
       style.bold,
       style.titleFontSize,
+      style.titleSpacing,
       kReaderV2CjkTypographyFeatureSignature,
     );
   }

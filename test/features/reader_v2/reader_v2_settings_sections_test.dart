@@ -34,8 +34,9 @@ void main() {
         letterSpacing: 1.5,
         paragraphSpacing: 2.0,
         chapterSpacing: 3.5,
+        titleSpacing: 2.0,
+        textIndent: 4,
       );
-      settings.setTextIndent(4);
 
       settings.resetTypography();
       await pumpEventQueue();
@@ -47,7 +48,12 @@ void main() {
       expect(settings.paragraphSpacing, defaults.paragraphSpacing);
       expect(settings.chapterSpacing, defaults.chapterSpacing);
       expect(settings.textIndent, defaults.textIndent);
+      expect(settings.titleSpacing, defaults.titleSpacing);
       final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getDouble(PreferKey.readerTitleSpacing),
+        defaults.titleSpacing,
+      );
       expect(prefs.getDouble(PreferKey.readerFontSize), defaults.fontSize);
       expect(prefs.getInt(PreferKey.readerTextIndent), defaults.textIndent);
       expect(

@@ -61,6 +61,8 @@ class HybridReaderScreen extends StatefulWidget {
     this.preprocessor = const TextPreprocessor(),
     this.enableDiskCache = true,
     this.paragraphCacheCapacity = 512,
+    this.pageTurnOverlap = 1,
+    this.pageTurnDuration = const Duration(milliseconds: 260),
   });
 
   final ReaderV2Runtime runtime;
@@ -97,6 +99,10 @@ class HybridReaderScreen extends StatefulWidget {
   final HybridTextPreprocessor preprocessor;
   final bool enableDiskCache;
   final int paragraphCacheCapacity;
+
+  /// 翻頁時上一屏留在畫面上的行數，與捲過一屏要多久。
+  final int pageTurnOverlap;
+  final Duration pageTurnDuration;
 
   @override
   State<HybridReaderScreen> createState() => _HybridReaderScreenState();
@@ -1237,7 +1243,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final height = _viewportSize.height;
     if (height <= 0) return null;
     final style = widget.runtime.state.layoutSpec.style;
-    final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
+    final lines = widget.pageTurnOverlap;
+    // 留下的行至少 24，字很小時也認得出接續的位置；不留行時只留 8 的餘裕。
+    final overlap = lines <= 0
+        ? 0.0
+        : math.max(24.0, lines * style.fontSize * style.effectiveLineHeight);
     return math.max(height * 0.5, height - overlap - 8.0);
   }
 
@@ -1265,7 +1275,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       ..requestedDistance += distance
       ..animation = position.animatePageTo(
         target,
-        duration: _viewportMotionDuration,
+        duration: widget.pageTurnDuration,
         curve: Curves.easeOutCubic,
       );
     return true;
@@ -1313,7 +1323,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     try {
       turn.animation = position.animatePageTo(
         target,
-        duration: _viewportMotionDuration,
+        duration: widget.pageTurnDuration,
         curve: Curves.easeOutCubic,
       );
       // 連點會換掉 turn.animation；等到最後一段動畫結束才算翻完。

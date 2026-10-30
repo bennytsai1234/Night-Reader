@@ -39,6 +39,7 @@ import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
@@ -88,6 +89,11 @@ late AppDatabase _db;
 /// 每次查詢的時間記在 [dbWork]，量動畫時算進那一幀（`db_clock.dart`）。
 Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   await getIt.reset();
+  // 整個程式共用、存著 future 的東西，上一個測試留下的會在上一個測試的
+  // zone 裡通知等的人，那個假時鐘已經沒人推動，這個測試開書就一直等不到
+  // 正文：正文轉換的 worker，與 rootBundle 快取的字典字串。
+  ReaderV2ContentTransformWorker.instance.stop();
+  rootBundle.clear();
   SharedPreferences.setMockInitialValues(<String, Object>{...prefs});
   dbWork.clear();
   _db = AppDatabase.forTesting(

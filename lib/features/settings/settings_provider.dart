@@ -34,7 +34,6 @@ class SettingsProvider extends SettingsProviderBase {
   // --- 朗讀設定 ---
   bool ignoreAudioFocusAloud = false;
   bool pauseReadAloudWhilePhoneCalls = false;
-  bool readAloudWakeLock = false;
   bool systemMediaControlCompatibilityChange = false;
   bool mediaButtonPerNext = false;
   bool readAloudByPage = false;
@@ -128,7 +127,6 @@ class SettingsProvider extends SettingsProviderBase {
         prefs.getBool(PreferKey.ignoreAudioFocusAloud) ?? false;
     pauseReadAloudWhilePhoneCalls =
         prefs.getBool(PreferKey.pauseReadAloudWhilePhoneCalls) ?? false;
-    readAloudWakeLock = prefs.getBool(PreferKey.readAloudWakeLock) ?? false;
     readAloudByPage = prefs.getBool(PreferKey.readAloudByPage) ?? false;
     streamReadAloudAudio =
         prefs.getBool(PreferKey.streamReadAloudAudio) ?? false;

@@ -3,8 +3,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_page_turn_speed.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -49,10 +52,12 @@ class ReaderV2SettingsGroups {
         commit: (values) => settings.setTypography(
           fontSize: values[_TypographyField.fontSize],
           titleFontSize: values[_TypographyField.titleFontSize],
+          titleSpacing: values[_TypographyField.titleSpacing],
           lineHeight: values[_TypographyField.lineHeight],
           letterSpacing: values[_TypographyField.letterSpacing],
           paragraphSpacing: values[_TypographyField.paragraphSpacing],
           chapterSpacing: values[_TypographyField.chapterSpacing],
+          textIndent: values[_TypographyField.textIndent]?.round(),
         ),
       );
 
@@ -67,22 +72,28 @@ class ReaderV2SettingsGroups {
     ),
   );
 
-  /// 「頁尾位置」這一列在不在（頁尾兩欄都不顯示時拿掉）。列的有無跟著設定
-  /// 變時通知，所在頁面照它重建各組；列裡的值變了不通知。
-  ValueListenable<bool> get shape => _footerShown;
-  late final ValueNotifier<bool> _footerShown = ValueNotifier<bool>(
-    !settings.footerInfo.isEmpty,
+  /// 跟著別的設定出現的列在不在：「頁尾位置」（頁尾兩欄都不顯示時拿掉）、
+  /// 「一起隱藏導覽列」（隱藏狀態列時才有）與「反向」（音量鍵翻頁打開時
+  /// 才有）。列的有無跟著設定變時通知，所在頁面照它重建各組；列裡的值
+  /// 變了不通知。
+  ValueListenable<Object> get shape => _shape;
+  late final ValueNotifier<_Shape> _shape = ValueNotifier<_Shape>(_shapeNow);
+
+  _Shape get _shapeNow => (
+    footer: !settings.footerInfo.isEmpty,
+    statusBarHidden: settings.hideStatusBar,
+    volumeKey: settings.volumeKeyPage,
   );
 
   void _onSettingsChanged() {
-    _footerShown.value = !settings.footerInfo.isEmpty;
+    _shape.value = _shapeNow;
   }
 
   void dispose() {
     settings.removeListener(_onSettingsChanged);
     _typography.dispose();
     _padding.dispose();
-    _footerShown.dispose();
+    _shape.dispose();
   }
 
   // ---------- 排版 ----------
@@ -92,7 +103,7 @@ class ReaderV2SettingsGroups {
     for (final field in _TypographyField.values) {
       if (_typography.valueOf(field) != field.defaultIn(defaults)) return false;
     }
-    return settings.textIndent == defaults.textIndent;
+    return true;
   }
 
   void _resetTypography() {
@@ -101,7 +112,7 @@ class ReaderV2SettingsGroups {
     settings.resetTypography();
   }
 
-  /// 排版：字號、行高、字距、段距與縮排。[compact] 是閱讀器面板的精簡版：
+  /// 排版：字號、標題、行高、字距、段距與縮排。[compact] 是閱讀器面板的精簡版：
   /// 只放邊讀邊會調的字號、行高與段距；其他排版項目與「恢復預設」在閱讀
   /// 偏好頁（恢復預設會連看不到的項目一起重設）。
   GroupedSection typography({bool compact = false}) {
@@ -136,6 +147,17 @@ class ReaderV2SettingsGroups {
             min: 14,
             max: 48,
             step: 1,
+          ),
+        if (full)
+          _StagedStepper(
+            edits: _typography,
+            field: _TypographyField.titleSpacing,
+            label: '標題間距',
+            min: ReaderV2SettingsController.minTitleSpacing,
+            max: ReaderV2SettingsController.maxTitleSpacing,
+            step: 0.1,
+            fractionDigits: 1,
+            unit: '行',
           ),
         _StagedStepper(
           edits: _typography,
@@ -177,13 +199,14 @@ class ReaderV2SettingsGroups {
             unit: '行',
           ),
         if (full)
-          _Watch<int>(
-            listenable: settings,
-            select: () => settings.textIndent,
-            builder: (context, indent) => _TextIndentSelector(
-              value: indent,
-              onChanged: settings.setTextIndent,
-            ),
+          _StagedStepper(
+            edits: _typography,
+            field: _TypographyField.textIndent,
+            label: '首行縮排',
+            min: 0,
+            max: 4,
+            step: 1,
+            unit: '字',
           ),
       ],
     );
@@ -241,7 +264,22 @@ class ReaderV2SettingsGroups {
           ),
           _paddingStepper(_PaddingField.top, '上邊距'),
           _paddingStepper(_PaddingField.bottom, '下邊距'),
-          if (_footerShown.value)
+          // 漸隱畫在上下邊距的空隙裡，空隙比它窄時照空隙的高度。
+          _StepperRow(
+            _Watch<double>(
+              listenable: settings,
+              select: () => settings.edgeFade,
+              builder: (context, fade) => NumberStepperRow(
+                label: '上下緣漸隱',
+                value: fade,
+                min: ReaderV2PrefsRepository.minEdgeFade,
+                max: ReaderV2PrefsRepository.maxEdgeFade,
+                step: _paddingStep,
+                onChanged: settings.setEdgeFade,
+              ),
+            ),
+          ),
+          if (_shape.value.footer)
             _StepperRow(
               _Watch<double>(
                 listenable: settings,
@@ -270,6 +308,18 @@ class ReaderV2SettingsGroups {
               onChanged: settings.setHideStatusBar,
             ),
           ),
+          // 只藏導覽列時，Android 碰一下畫面就把它叫回來；和狀態列一起藏才
+          // 是滑動叫出、幾秒後自己收回的全螢幕。
+          if (_shape.value.statusBarHidden)
+            _Watch<bool>(
+              listenable: settings,
+              select: () => settings.hideNavigationBar,
+              builder: (context, hidden) => GroupedSwitchRow(
+                title: '一起隱藏導覽列',
+                value: hidden,
+                onChanged: settings.setHideNavigationBar,
+              ),
+            ),
         ],
       ),
       GroupedSection(
@@ -306,10 +356,136 @@ class ReaderV2SettingsGroups {
                 },
               ),
             ),
+          _Watch<bool>(
+            listenable: settings,
+            select: () => settings.use24HourClock,
+            builder: (context, use24) => _LabeledRow(
+              label: '時間',
+              child: GlassSegmented<bool>(
+                expand: false,
+                segments: const [
+                  GlassSegment(true, '24 小時制'),
+                  GlassSegment(false, '12 小時制'),
+                ],
+                selected: use24,
+                onChanged: settings.setUse24HourClock,
+              ),
+            ),
+          ),
+          _Watch<int>(
+            listenable: settings,
+            select: () => settings.progressFractionDigits,
+            builder: (context, digits) => _LabeledRow(
+              label: '全書進度',
+              child: GlassSegmented<int>(
+                expand: false,
+                segments: const [
+                  GlassSegment(0, '整數'),
+                  GlassSegment(1, '一位小數'),
+                ],
+                selected: digits,
+                onChanged: settings.setProgressFractionDigits,
+              ),
+            ),
+          ),
         ],
       ),
     ];
   }
+
+  // ---------- 翻頁 ----------
+
+  /// 點擊、音量鍵與選單翻頁：上一屏留幾行在畫面上、捲過一屏的快慢。
+  GroupedSection pageTurn() => GroupedSection(
+    margin: margin,
+    header: '翻頁',
+    children: [
+      _StepperRow(
+        _Watch<int>(
+          listenable: settings,
+          select: () => settings.pageTurnOverlap,
+          builder: (context, overlap) => NumberStepperRow(
+            label: '保留行數',
+            value: overlap.toDouble(),
+            min: ReaderV2PrefsRepository.minPageTurnOverlap.toDouble(),
+            max: ReaderV2PrefsRepository.maxPageTurnOverlap.toDouble(),
+            step: 1,
+            unit: '行',
+            onChanged: (value) => settings.setPageTurnOverlap(value.round()),
+          ),
+        ),
+      ),
+      _Watch<ReaderV2PageTurnSpeed>(
+        listenable: settings,
+        select: () => settings.pageTurnSpeed,
+        builder: (context, speed) => _LabeledRow(
+          label: '捲動速度',
+          child: GlassSegmented<ReaderV2PageTurnSpeed>(
+            expand: false,
+            segments: [
+              for (final option in ReaderV2PageTurnSpeed.values)
+                GlassSegment(option, option.label),
+            ],
+            selected: speed,
+            onChanged: settings.setPageTurnSpeed,
+          ),
+        ),
+      ),
+    ],
+  );
+
+  // ---------- 螢幕 ----------
+
+  /// 螢幕常亮、螢幕方向與最暗程度。[maxDim] 為 false 時不放最暗程度
+  /// （平台不能調閱讀器自己的亮度，亮度條不出現，也就沒有加暗段）。
+  GroupedSection screen({required bool maxDim}) => GroupedSection(
+    margin: margin,
+    header: '螢幕',
+    children: [
+      _Watch<bool>(
+        listenable: settings,
+        select: () => settings.keepScreenOn,
+        builder: (context, on) => GroupedSwitchRow(
+          title: '螢幕常亮',
+          value: on,
+          onChanged: settings.setKeepScreenOn,
+        ),
+      ),
+      _Watch<ReaderV2Orientation>(
+        listenable: settings,
+        select: () => settings.orientation,
+        builder: (context, orientation) => _LabeledRow(
+          label: '螢幕方向',
+          child: GlassSegmented<ReaderV2Orientation>(
+            expand: false,
+            segments: [
+              for (final option in ReaderV2Orientation.values)
+                GlassSegment(option, option.label),
+            ],
+            selected: orientation,
+            onChanged: settings.setOrientation,
+          ),
+        ),
+      ),
+      if (maxDim)
+        _StepperRow(
+          _Watch<double>(
+            listenable: settings,
+            select: () => settings.maxDim,
+            builder: (context, dim) => NumberStepperRow(
+              label: '最暗程度',
+              value: dim,
+              min: ReaderV2Brightness.minMaxDim,
+              max: ReaderV2Brightness.maxMaxDim,
+              step: 0.05,
+              displayScale: 100,
+              unit: '%',
+              onChanged: settings.setMaxDim,
+            ),
+          ),
+        ),
+    ],
+  );
 
   // ---------- 其他 ----------
 
@@ -394,7 +570,7 @@ class ReaderV2SettingsGroups {
     ],
   );
 
-  /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
+  /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁；打開「反向」時對調。
   GroupedSection volumeKey() => GroupedSection(
     margin: margin,
     children: [
@@ -407,34 +583,69 @@ class ReaderV2SettingsGroups {
           onChanged: settings.setVolumeKeyPage,
         ),
       ),
+      if (_shape.value.volumeKey)
+        _Watch<bool>(
+          listenable: settings,
+          select: () => settings.volumeKeyReversed,
+          builder: (context, reversed) => GroupedSwitchRow(
+            title: '反向：音量上翻到下一頁',
+            value: reversed,
+            onChanged: settings.setVolumeKeyReversed,
+          ),
+        ),
+    ],
+  );
+
+  /// 朗讀時畫面跟著念到的句子捲動。
+  GroupedSection tts() => GroupedSection(
+    margin: margin,
+    header: '朗讀',
+    children: [
+      _Watch<bool>(
+        listenable: settings,
+        select: () => settings.ttsFollow,
+        builder: (context, follow) => GroupedSwitchRow(
+          title: '畫面跟著朗讀捲動',
+          value: follow,
+          onChanged: settings.setTtsFollow,
+        ),
+      ),
     ],
   );
 }
 
+typedef _Shape = ({bool footer, bool statusBarHidden, bool volumeKey});
+
 enum _TypographyField {
   fontSize,
   titleFontSize,
+  titleSpacing,
   lineHeight,
   letterSpacing,
   paragraphSpacing,
-  chapterSpacing;
+  chapterSpacing,
+  textIndent;
 
   double read(ReaderV2SettingsController s) => switch (this) {
     fontSize => s.fontSize,
     titleFontSize => s.titleFontSize,
+    titleSpacing => s.titleSpacing,
     lineHeight => s.lineHeight,
     letterSpacing => s.letterSpacing,
     paragraphSpacing => s.paragraphSpacing,
     chapterSpacing => s.chapterSpacing,
+    textIndent => s.textIndent.toDouble(),
   };
 
   double defaultIn(ReaderV2PrefsSnapshot d) => switch (this) {
     fontSize => d.fontSize,
     titleFontSize => d.titleFontSize,
+    titleSpacing => d.titleSpacing,
     lineHeight => d.lineHeight,
     letterSpacing => d.letterSpacing,
     paragraphSpacing => d.paragraphSpacing,
     chapterSpacing => d.chapterSpacing,
+    textIndent => d.textIndent.toDouble(),
   };
 }
 
@@ -709,38 +920,6 @@ class _ResetButton extends StatelessWidget implements GroupedSkeletonItem {
       child: const Text(_label),
     );
   }
-}
-
-class _TextIndentSelector extends StatelessWidget
-    implements GroupedSkeletonItem {
-  const _TextIndentSelector({required this.value, required this.onChanged});
-
-  static const _options = [0, 1, 2, 4];
-
-  final int value;
-  final ValueChanged<int> onChanged;
-
-  _LabeledRow get _row => _LabeledRow(
-    label: '首行縮排',
-    // 舊版或外部寫入的非選項值仍需顯示，GlassSegmented 此時不選取任何分段。
-    child: GlassSegmented<int>(
-      expand: false,
-      segments: [
-        for (final option in _options) GlassSegment(option, '$option 字'),
-      ],
-      selected: value,
-      onChanged: onChanged,
-    ),
-  );
-
-  @override
-  GroupedItemShape skeletonShape(
-    BuildContext context, {
-    required double width,
-  }) => _row.skeletonShape(context, width: width);
-
-  @override
-  Widget build(BuildContext context) => _row;
 }
 
 /// 卡片內「左側標籤、右側控件」的一列。

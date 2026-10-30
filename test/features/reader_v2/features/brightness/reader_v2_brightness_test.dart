@@ -25,9 +25,18 @@ void main() {
         ReaderV2Brightness.backlightFor(0),
         ReaderV2Brightness.minBacklight,
       );
-      expect(ReaderV2Brightness.dimFor(0), ReaderV2Brightness.maxDim);
+      expect(ReaderV2Brightness.dimFor(0), ReaderV2Brightness.defaultMaxDim);
       final half = ReaderV2Brightness.dimFor(ReaderV2Brightness.dimZone / 2);
-      expect(half, closeTo(ReaderV2Brightness.maxDim / 2, 1e-9));
+      expect(half, closeTo(ReaderV2Brightness.defaultMaxDim / 2, 1e-9));
+    });
+
+    test('the bottom of the bar reaches the chosen darkest level', () {
+      expect(ReaderV2Brightness.dimFor(0, maxDim: 0.85), 0.85);
+      expect(
+        ReaderV2Brightness.dimFor(0, maxDim: 2),
+        ReaderV2Brightness.maxMaxDim,
+      );
+      expect(ReaderV2Brightness.dimFor(ReaderV2Brightness.dimZone), 0);
     });
 
     test('normalize clamps and falls back to the default', () {

@@ -72,6 +72,46 @@ void main() {
       settings.dispose();
     });
 
+    test('the title gap of an older version carries over in lines', () async {
+      // 舊版標題下方留段距 × 8（px）：段距 0.1 → 0.8px。字號 18、行高 1.4
+      // 的一行是 25.2px，換算出來不是 0.1 行的倍數，留白仍要剛好 0.8px。
+      await usePrefs(<String, Object>{
+        PreferKey.readerFontSize: 18.0,
+        PreferKey.readerLineHeight: 1.4,
+        PreferKey.readerParagraphSpacing: 0.1,
+      });
+      double gapPx(ReaderV2SettingsController s) => s.titleSpacing * 18 * 1.4;
+
+      final settings = ReaderV2SettingsController();
+      expect(gapPx(settings), closeTo(0.8, 1e-9));
+
+      // 換算的值當場存下來，之後改段距不會再帶著標題間距變。
+      settings.setTypography(paragraphSpacing: 0);
+      await pumpEventQueue();
+      final reopened = ReaderV2SettingsController();
+      expect(gapPx(reopened), closeTo(0.8, 1e-9));
+      settings.dispose();
+      reopened.dispose();
+    });
+
+    test('settings added later open as the reader looked before', () async {
+      final settings = ReaderV2SettingsController();
+      final readStyle = settings.readStyleFor(EdgeInsets.zero);
+
+      expect(readStyle.titleSpacing, 0);
+      expect(settings.keepScreenOn, isTrue);
+      expect(settings.pageTurnOverlap, 1);
+      expect(settings.pageTurnSpeed.duration.inMilliseconds, 260);
+      expect(settings.use24HourClock, isTrue);
+      expect(settings.progressFractionDigits, 1);
+      expect(settings.maxDim, 0.6);
+      expect(settings.edgeFade, 14);
+      expect(settings.ttsFollow, isTrue);
+      expect(settings.volumeKeyReversed, isFalse);
+      expect(settings.hideNavigationBar, isFalse);
+      settings.dispose();
+    });
+
     test('an unreadable saved value opens with the defaults', () async {
       await usePrefs(<String, Object>{PreferKey.readerFontSize: '24'});
 
