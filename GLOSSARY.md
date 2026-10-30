@@ -32,6 +32,10 @@ _Avoid_: 更新日誌、commit 標題
 為了讓使用者在幾個做法之間挑，用 `test/support/screenshot.dart` 畫出的候選圖，或 `prototype` 技能做的拋棄式分支。使用者選定後結果寫進 `DESIGN.md` 或 ADR 就固定，不做成設定（ADR 0030），原型分支刪掉。
 _Avoid_: demo、mockup
 
+**自動巡檢**：
+ChatGPT 照排程定期讀這個 repo 的一個區塊，把找到的問題開成 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。
+_Avoid_: 定期掃描、AI review、審查（那是合併前派 Codex 審 PR）
+
 ### 書源與書架
 
 **書源**：
