@@ -6,8 +6,35 @@ import 'package:night_reader/features/settings/reading_settings_page.dart';
 import '../../support/app_harness.dart';
 import '../../support/navigation_budget.dart';
 
+// 音量鍵由 MainActivity 攔下（見 reader_v2_volume_keys.dart）：測試記下閱讀器
+// 告訴原生端「現在攔不攔」，並代替原生端送來攔下的音量鍵。
 void main() {
-  testWidgets('從閱讀選單的「進階」打開音量鍵翻頁，返回後音量下翻頁、音量上翻回', (tester) async {
+  const channel = MethodChannel('night_reader/reader_device');
+  TestDefaultBinaryMessenger messenger() =>
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  final paging = <bool>[];
+
+  setUp(() {
+    paging.clear();
+    messenger().setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'setVolumeKeyPaging') {
+        paging.add(call.arguments as bool);
+      }
+      return null;
+    });
+  });
+  tearDown(() => messenger().setMockMethodCallHandler(channel, null));
+
+  Future<void> pressVolume(WidgetTester tester, {required bool down}) async {
+    await messenger().handlePlatformMessage(
+      channel.name,
+      channel.codec.encodeMethodCall(MethodCall('volumeKey', down)),
+      (_) {},
+    );
+    await rest(tester);
+  }
+
+  testWidgets('從閱讀選單的「進階」打開音量鍵翻頁，返回後音量下翻頁、音量上翻回；選單開著時不攔', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
       await setUpApp();
@@ -16,16 +43,14 @@ void main() {
     await pumpApp(tester);
     await openReader(tester);
     await rest(tester);
+    expect(paging, isNot(contains(true)), reason: '設定關著時音量鍵照常調音量');
 
     ScrollPosition position() =>
         tester.state<ScrollableState>(find.byType(Scrollable).first).position;
     final start = position().pixels;
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeDown);
-    await rest(tester);
-    expect(position().pixels, start, reason: '設定關著時音量鍵照常調音量');
-
-    await tester.tapAt(const Offset(196, 420));
+    const centre = Offset(196, 420);
+    await tester.tapAt(centre);
     await rest(tester);
     await tester.tap(find.text('進階'));
     await rest(tester);
@@ -44,21 +69,28 @@ void main() {
     await rest(tester);
     await tester.tap(toggle);
     await rest(tester);
+    expect(paging, isNot(contains(true)), reason: '閱讀偏好蓋著時不攔');
     Navigator.of(tester.element(find.byType(ReadingSettingsPage))).pop();
     await rest(tester);
-    // 返回後選單滑回來；收起選單才回到閱讀。
-    await tester.tapAt(const Offset(196, 420));
-    await rest(tester);
+    expect(paging, isNot(contains(true)), reason: '返回後選單滑回來，還不攔');
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeDown);
+    await tester.tapAt(centre);
     await rest(tester);
-    final afterDown = position().pixels;
-    expect(afterDown, greaterThan(start));
+    expect(paging.last, isTrue, reason: '選單收起後開始攔');
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeUp);
-    await rest(tester);
+    await pressVolume(tester, down: true);
+    expect(position().pixels, greaterThan(start));
+    await pressVolume(tester, down: false);
     expect(position().pixels, closeTo(start, 0.5));
 
+    await tester.tapAt(centre);
+    await rest(tester);
+    expect(paging.last, isFalse, reason: '選單開著時音量鍵照常調音量');
+    await tester.tapAt(centre);
+    await rest(tester);
+    expect(paging.last, isTrue);
+
     await tearDownApp(tester);
+    expect(paging.last, isFalse, reason: '離開閱讀器後不再攔');
   });
 }

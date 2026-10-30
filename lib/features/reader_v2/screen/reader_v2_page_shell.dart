@@ -158,6 +158,7 @@ class ReaderV2PageShell extends StatelessWidget {
     this.showAutoPage = true,
     this.showReplaceRule = true,
     this.onMenuHidden,
+    this.onDrawerChanged,
   });
 
   final Book book;
@@ -237,6 +238,9 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 上下選單與亮度條收完、完全移出畫面時呼叫。三塊同時出發、收起時長
   /// 相同，跟著下方選單的收起動畫。
   final VoidCallback? onMenuHidden;
+
+  /// 目錄打開（true）與收起（false）時呼叫。
+  final ValueChanged<bool>? onDrawerChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -440,6 +444,7 @@ class ReaderV2PageShell extends StatelessWidget {
           ),
         ),
         drawer: drawer,
+        onDrawerChanged: onDrawerChanged,
       ),
     );
   }

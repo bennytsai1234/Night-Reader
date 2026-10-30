@@ -45,6 +45,32 @@ abstract final class ReaderV2DeviceChannel {
   static bool get supportsWindowBrightness =>
       defaultTargetPlatform == TargetPlatform.android;
 
+  /// 開著時 `MainActivity` 攔下音量鍵、不讓系統調音量，改交給
+  /// [onVolumeKey]；關掉時音量鍵照常調音量。
+  static Future<void> setVolumeKeyPaging(bool on) =>
+      _invokeIgnoringMissing('setVolumeKeyPaging', on);
+
+  /// iOS 不把音量鍵交給 App，音量鍵翻頁只在 Android。
+  static bool get supportsVolumeKeys =>
+      defaultTargetPlatform == TargetPlatform.android;
+
+  static ValueChanged<bool>? _onVolumeKey;
+
+  /// 收 `MainActivity` 攔下的音量鍵，參數 true 是音量下。
+  static ValueChanged<bool>? get onVolumeKey => _onVolumeKey;
+  static set onVolumeKey(ValueChanged<bool>? handler) {
+    _onVolumeKey = handler;
+    _device.setMethodCallHandler(
+      handler == null
+          ? null
+          : (call) async {
+              if (call.method == 'volumeKey') {
+                _onVolumeKey?.call(call.arguments as bool);
+              }
+            },
+    );
+  }
+
   static Future<void> _invokeIgnoringMissing(
     String method,
     Object? arguments,

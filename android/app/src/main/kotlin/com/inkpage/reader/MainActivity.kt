@@ -9,6 +9,7 @@ import android.net.ConnectivityManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.RoundedCorner
 import android.view.WindowInsets
 import android.view.WindowManager
@@ -23,6 +24,10 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : AudioServiceActivity() {
+    // 音量鍵翻頁：由閱讀器在狀態變化時設定（reader_v2_volume_keys.dart）。
+    private var volumeKeyPaging = false
+    private var readerDevice: MethodChannel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestHighestRefreshRate()
@@ -31,8 +36,14 @@ class MainActivity : AudioServiceActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
-        MethodChannel(messenger, "night_reader/reader_device").setMethodCallHandler { call, result ->
+        val readerDevice = MethodChannel(messenger, "night_reader/reader_device")
+        this.readerDevice = readerDevice
+        readerDevice.setMethodCallHandler { call, result ->
             when (call.method) {
+                "setVolumeKeyPaging" -> {
+                    volumeKeyPaging = call.arguments as? Boolean ?: false
+                    result.success(null)
+                }
                 "topCutoutExtent" -> result.success(topCutoutExtent())
                 "setKeepScreenOn" -> {
                     setKeepScreenOn(call.arguments as? Boolean ?: false)
@@ -166,6 +177,22 @@ class MainActivity : AudioServiceActivity() {
         if (start == BreakIterator.DONE) return null
         if (status < BreakIterator.WORD_NONE_LIMIT) return null
         return listOf(start, end)
+    }
+
+    // 音量鍵翻頁在這裡攔：這是 App 最早拿到按鍵的地方，不看畫面上哪個元件
+    // 有焦點，也不經過 Flutter 的按鍵轉送。按住不放的重複事件也翻頁；放開
+    // 不做事，但一樣攔下，系統才不會調音量。
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val forward = when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> true
+            KeyEvent.KEYCODE_VOLUME_UP -> false
+            else -> return super.dispatchKeyEvent(event)
+        }
+        if (!volumeKeyPaging) return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            readerDevice?.invokeMethod("volumeKey", forward)
+        }
+        return true
     }
 
     // 多數 OEM 預設把未宣告偏好的 app 鎖在 60Hz；在不改變解析度的前提下
