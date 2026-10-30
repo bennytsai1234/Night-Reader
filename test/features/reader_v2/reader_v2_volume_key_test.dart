@@ -55,6 +55,8 @@ void main() {
     await tester.tap(find.text('進階'));
     await rest(tester);
     expect(find.byType(ReadingSettingsPage), findsOneWidget);
+    // 閱讀偏好的換頁動畫與骨架換場播完才接受拖曳。
+    await rest(tester);
     final toggle = find.text('音量鍵翻頁');
     await tester.scrollUntilVisible(
       toggle,

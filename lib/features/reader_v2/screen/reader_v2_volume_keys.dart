@@ -33,9 +33,13 @@ class ReaderV2VolumeKeys extends StatefulWidget {
   State<ReaderV2VolumeKeys> createState() => _ReaderV2VolumeKeysState();
 }
 
-class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys> {
+class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys>
+    implements ReaderV2VolumeKeyListener {
   bool _routeCurrent = false;
-  bool _sent = false;
+
+  /// 最後告訴原生端的值；null 是還沒告訴過，下一次不管攔不攔都要送：
+  /// 接手時原生端可能還是上一個閱讀器設的值。
+  bool? _sent;
 
   @override
   void initState() {
@@ -43,7 +47,7 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys> {
     for (final blocker in widget.blockers) {
       blocker.addListener(_sync);
     }
-    ReaderV2DeviceChannel.onVolumeKey = _handleKey;
+    ReaderV2DeviceChannel.volumeKeyListener = this;
   }
 
   @override
@@ -75,12 +79,12 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys> {
     // 換成另一個閱讀器時，新的那個先接手；舊的關掉時不能把它的設定收掉。
     if (_owner) {
       _send(false);
-      ReaderV2DeviceChannel.onVolumeKey = null;
+      ReaderV2DeviceChannel.volumeKeyListener = null;
     }
     super.dispose();
   }
 
-  bool get _owner => ReaderV2DeviceChannel.onVolumeKey == _handleKey;
+  bool get _owner => identical(ReaderV2DeviceChannel.volumeKeyListener, this);
 
   bool get _active =>
       widget.enabled &&
@@ -97,9 +101,16 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys> {
     unawaited(ReaderV2DeviceChannel.setVolumeKeyPaging(on));
   }
 
-  void _handleKey(bool forward) {
+  @override
+  void onVolumeKey(bool forward) {
     // 狀態剛變、原生端還沒收到就攔下的那一下：吃掉但不翻頁。
     if (mounted && _active) widget.onKey(forward);
+  }
+
+  @override
+  void onVolumeKeyReset() {
+    _sent = false;
+    _sync();
   }
 
   @override

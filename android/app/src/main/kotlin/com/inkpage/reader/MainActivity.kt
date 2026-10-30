@@ -24,7 +24,8 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : AudioServiceActivity() {
-    // 音量鍵翻頁：由閱讀器在狀態變化時設定（reader_v2_volume_keys.dart）。
+    // 音量鍵翻頁：由閱讀器在狀態變化時設定（reader_v2_volume_keys.dart）；
+    // 新的 Activity 從不攔開始。
     private var volumeKeyPaging = false
     private var readerDevice: MethodChannel? = null
 
@@ -56,6 +57,9 @@ class MainActivity : AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+        // 引擎由 audio_service 留著，Activity 重建時閱讀器還開著、以為已經
+        // 說過要攔；新的 Activity 從不攔開始，請它再說一次。
+        readerDevice.invokeMethod("volumeKeyReset", null)
         MethodChannel(messenger, "night_reader/system_bars").setMethodCallHandler { call, result ->
             when (call.method) {
                 "statusBarExtent" -> result.success(statusBarExtent())
