@@ -188,10 +188,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(visibilityCalls.last.arguments, isEmpty);
+      // 沉浸模式：點畫面照常交給 App；manual 兩條都不留是點一下就叫出來的
+      // leanBack。
+      expect(
+        visibilityCalls.last.method,
+        'SystemChrome.setEnabledSystemUIMode',
+      );
+      expect(visibilityCalls.last.arguments, 'SystemUiMode.immersiveSticky');
 
       setPageState(() => hideNavigationBar = false);
       await tester.pump();
+      expect(
+        visibilityCalls.last.method,
+        'SystemChrome.setEnabledSystemUIOverlays',
+      );
       expect(visibilityCalls.last.arguments, ['SystemUiOverlay.bottom']);
 
       navigatorKey.currentState!.pop();

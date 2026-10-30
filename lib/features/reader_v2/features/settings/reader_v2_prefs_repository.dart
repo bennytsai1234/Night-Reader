@@ -431,7 +431,8 @@ class ReaderV2PrefsRepository {
   }
 
   /// 還沒有標題間距這個設定時，標題下方留的是段距 × 8（px）；換算成行，
-  /// 升級後版面不變。
+  /// 升級後版面不變。存完整精度，不先對齊步進的 0.1 行（那會讓留白變多
+  /// 或變少，段距很小時甚至變成 0）；讀者動到這一欄時步進器才對齊格點。
   static double _legacyTitleSpacing({
     required double fontSize,
     required double lineHeight,
@@ -439,7 +440,7 @@ class ReaderV2PrefsRepository {
   }) {
     final lineExtent = fontSize * ReaderV2Style.normalizeLineHeight(lineHeight);
     if (!paragraphSpacing.isFinite || lineExtent <= 0) return 0.0;
-    return (paragraphSpacing * 8 / lineExtent * 10).round() / 10;
+    return paragraphSpacing * 8 / lineExtent;
   }
 
   static double _normalizeTitleSpacing(double value) {

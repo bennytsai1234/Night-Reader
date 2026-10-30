@@ -10,6 +10,10 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.
 ///
 /// 「蓋住」看 [TickerMode]：Overlay 會關掉被不透明頁面完全遮住的頁面的
 /// TickerMode；選單、底部面板與對話框不遮滿，不算離開閱讀器。
+///
+/// 整個 App 只有一個視窗：最後露出來的閱讀器擁有它，只有擁有者的設定送進
+/// 視窗。換源、從書籍詳情回來時新的閱讀頁取代舊的，舊頁在新頁套用之後才
+/// 被蓋住、拆掉，那時它已經不是擁有者，不會把新頁的設定蓋回系統設定。
 class ReaderV2WindowSettings extends StatefulWidget {
   const ReaderV2WindowSettings({
     super.key,
@@ -30,11 +34,33 @@ class ReaderV2WindowSettings extends StatefulWidget {
   State<ReaderV2WindowSettings> createState() => _ReaderV2WindowSettingsState();
 }
 
+typedef _Window = ({
+  bool keepScreenOn,
+  double? backlight,
+  ReaderV2Orientation orientation,
+});
+
+const _Window _system = (
+  keepScreenOn: false,
+  backlight: null,
+  orientation: ReaderV2Orientation.system,
+);
+
 class _ReaderV2WindowSettingsState extends State<ReaderV2WindowSettings> {
-  /// 最後一次送出的值；沒送過時等於系統設定（不常亮、跟隨系統）。
-  bool _sentKeepScreenOn = false;
-  double? _sentBacklight;
-  ReaderV2Orientation _sentOrientation = ReaderV2Orientation.system;
+  /// 露在畫面上的閱讀器，依露出的先後排；最後一個是擁有者。重建不改順序：
+  /// 換頁動畫中舊頁還露著、跟著重建，也不會把擁有權搶回去。
+  static final List<_ReaderV2WindowSettingsState> _shown = [];
+
+  /// 最後一次送給視窗的值；沒送過時等於系統設定。
+  static _Window _sent = _system;
+
+  _Window get _wanted => (
+    keepScreenOn: widget.keepScreenOn,
+    backlight: ReaderV2DeviceChannel.supportsWindowBrightness
+        ? widget.backlight
+        : null,
+    orientation: widget.orientation,
+  );
 
   @override
   void didChangeDependencies() {
@@ -50,48 +76,39 @@ class _ReaderV2WindowSettingsState extends State<ReaderV2WindowSettings> {
 
   @override
   void dispose() {
-    _apply(
-      keepScreenOn: false,
-      backlight: null,
-      orientation: ReaderV2Orientation.system,
-    );
+    _release();
     super.dispose();
   }
 
   void _sync() {
     if (!TickerMode.valuesOf(context).enabled) {
-      _apply(
-        keepScreenOn: false,
-        backlight: null,
-        orientation: ReaderV2Orientation.system,
-      );
+      _release();
       return;
     }
-    _apply(
-      keepScreenOn: widget.keepScreenOn,
-      backlight: ReaderV2DeviceChannel.supportsWindowBrightness
-          ? widget.backlight
-          : null,
-      orientation: widget.orientation,
-    );
+    if (!_shown.contains(this)) _shown.add(this);
+    if (identical(_shown.last, this)) _apply(_wanted);
   }
 
-  void _apply({
-    required bool keepScreenOn,
-    required double? backlight,
-    required ReaderV2Orientation orientation,
-  }) {
-    if (keepScreenOn != _sentKeepScreenOn) {
-      _sentKeepScreenOn = keepScreenOn;
-      unawaited(ReaderV2DeviceChannel.setKeepScreenOn(keepScreenOn));
+  /// 不再露出：擁有者交給前一個還露著的閱讀器，沒有就恢復系統設定。
+  void _release() {
+    final wasOwner = _shown.isNotEmpty && identical(_shown.last, this);
+    if (!_shown.remove(this) || !wasOwner) return;
+    _apply(_shown.isEmpty ? _system : _shown.last._wanted);
+  }
+
+  static void _apply(_Window next) {
+    final sent = _sent;
+    _sent = next;
+    if (next.keepScreenOn != sent.keepScreenOn) {
+      unawaited(ReaderV2DeviceChannel.setKeepScreenOn(next.keepScreenOn));
     }
-    if (backlight != _sentBacklight) {
-      _sentBacklight = backlight;
-      unawaited(ReaderV2DeviceChannel.setWindowBrightness(backlight));
+    if (next.backlight != sent.backlight) {
+      unawaited(ReaderV2DeviceChannel.setWindowBrightness(next.backlight));
     }
-    if (orientation != _sentOrientation) {
-      _sentOrientation = orientation;
-      unawaited(SystemChrome.setPreferredOrientations(orientation.preferred));
+    if (next.orientation != sent.orientation) {
+      unawaited(
+        SystemChrome.setPreferredOrientations(next.orientation.preferred),
+      );
     }
   }
 

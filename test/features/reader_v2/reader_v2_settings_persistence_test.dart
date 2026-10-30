@@ -73,22 +73,23 @@ void main() {
     });
 
     test('the title gap of an older version carries over in lines', () async {
-      // 舊版標題下方留段距 × 8（px）：段距 1.5 → 12px，字號 20、行高 1.5 的
-      // 一行是 30px，所以是 0.4 行。
+      // 舊版標題下方留段距 × 8（px）：段距 0.1 → 0.8px。字號 18、行高 1.4
+      // 的一行是 25.2px，換算出來不是 0.1 行的倍數，留白仍要剛好 0.8px。
       await usePrefs(<String, Object>{
-        PreferKey.readerFontSize: 20.0,
-        PreferKey.readerLineHeight: 1.5,
-        PreferKey.readerParagraphSpacing: 1.5,
+        PreferKey.readerFontSize: 18.0,
+        PreferKey.readerLineHeight: 1.4,
+        PreferKey.readerParagraphSpacing: 0.1,
       });
+      double gapPx(ReaderV2SettingsController s) => s.titleSpacing * 18 * 1.4;
 
       final settings = ReaderV2SettingsController();
-      expect(settings.titleSpacing, 0.4);
+      expect(gapPx(settings), closeTo(0.8, 1e-9));
 
       // 換算的值當場存下來，之後改段距不會再帶著標題間距變。
       settings.setTypography(paragraphSpacing: 0);
       await pumpEventQueue();
       final reopened = ReaderV2SettingsController();
-      expect(reopened.titleSpacing, 0.4);
+      expect(gapPx(reopened), closeTo(0.8, 1e-9));
       settings.dispose();
       reopened.dispose();
     });

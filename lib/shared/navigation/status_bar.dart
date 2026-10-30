@@ -115,15 +115,15 @@ class StatusBarPolicy extends NavigatorObserver {
     }
   }
 
-  /// 兩條都收時沒有留下任何系統列，Android 用沉浸模式：滑動叫出的系統列
-  /// 疊在畫面上、幾秒後自己收回。
-  static Future<void> _hide(_SystemBars bars) =>
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: bars == _SystemBars.allHidden
-            ? const <SystemUiOverlay>[]
-            : const [SystemUiOverlay.bottom],
-      );
+  /// 兩條都收時用沉浸模式：從邊緣滑動叫出的系統列疊在畫面上、幾秒後自己
+  /// 收回，點正文照常交給閱讀器。`manual` 兩條都不留等於 `leanBack`，點一
+  /// 下畫面就叫出系統列、那一下也不交給 App，翻頁會少一下。
+  static Future<void> _hide(_SystemBars bars) => bars == _SystemBars.allHidden
+      ? SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky)
+      : SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: const [SystemUiOverlay.bottom],
+        );
 
   /// 使用者從頂端下滑叫出狀態列後，稍候再收回。
   Future<void> _rehideAfterReveal(bool systemOverlaysAreVisible) async {

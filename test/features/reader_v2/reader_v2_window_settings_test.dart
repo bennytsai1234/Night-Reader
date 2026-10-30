@@ -114,6 +114,53 @@ void main() {
     expect(calls, ['setKeepScreenOn(true)', 'setKeepScreenOn(false)']);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+  testWidgets('a reader replacing another keeps its own window settings', (
+    tester,
+  ) async {
+    // 換源、從書籍詳情回來時新的閱讀頁取代舊的；舊頁蓋住、拆掉時不能把
+    // 新頁的設定恢復成系統設定。動畫中舊頁也會重建。
+    final navigator = GlobalKey<NavigatorState>();
+    var oldBacklight = 0.3;
+    late StateSetter setOld;
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            setOld = setState;
+            return ReaderV2WindowSettings(
+              keepScreenOn: true,
+              backlight: oldBacklight,
+              orientation: ReaderV2Orientation.landscape,
+              child: const Scaffold(body: Text('old')),
+            );
+          },
+        ),
+      ),
+    );
+    calls.clear();
+
+    unawaited(
+      navigator.currentState!.pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => const ReaderV2WindowSettings(
+            keepScreenOn: true,
+            backlight: 0.5,
+            orientation: ReaderV2Orientation.landscape,
+            child: Scaffold(body: Text('new')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    setOld(() => oldBacklight = 0.4);
+    await tester.pumpAndSettle();
+
+    expect(find.text('old'), findsNothing);
+    expect(calls, ['setWindowBrightness(0.5)']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('a locked orientation holds only while the reader shows', (
     tester,
   ) async {
