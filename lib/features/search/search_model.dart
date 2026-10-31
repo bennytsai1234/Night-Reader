@@ -46,6 +46,23 @@ String searchResultIdentity(SearchBook book) =>
     book.groupIdentity ??
     '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
 
+/// 書名 [name]、作者 [author] 的結果是不是《[bookName]》這本書：書名正規化後
+/// 相同；[checkAuthor] 時作者正規化後也要相同。正規化和搜尋合併卡
+/// （[searchResultIdentity]）同一套；換源與換封面都照這一條認同一本書。
+bool isSameBook(
+  String name,
+  String? author,
+  String bookName,
+  String? bookAuthor, {
+  required bool checkAuthor,
+}) {
+  if (normalizeSearchText(name) != normalizeSearchText(bookName)) {
+    return false;
+  }
+  return !checkAuthor ||
+      normalizeSearchText(author) == normalizeSearchText(bookAuthor);
+}
+
 bool matchesPrecisionSearch(SearchBook book, String key) {
   final keyword = normalizeSearchText(key);
   if (keyword.isEmpty) return false;
