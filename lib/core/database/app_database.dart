@@ -124,7 +124,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -175,6 +175,13 @@ class AppDatabase extends _$AppDatabase {
         // 所以這兩個數字從升級後開始算。
         await m.createTable(readDays);
       }
+      if (from < 8) {
+        // 章節的身分從章節網址改成書＋章節網址：不同書的同名分卷補出同一個
+        // 網址時，後存的那本會搶走前一本的那一章。舊表網址本來就不重複，
+        // 照原樣搬過去；重建表會丟掉章節的索引，重新建立。
+        await m.alterTable(TableMigration(chapters));
+        await customStatement(_chaptersIndexStatement);
+      }
     },
     beforeOpen: (_) async {
       if (_separateConnection) return;
@@ -188,6 +195,11 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  static const String _chaptersIndexStatement = '''
+    CREATE INDEX IF NOT EXISTS idx_chapters_book_index
+    ON chapters (bookUrl, "index")
+    ''';
+
   static const List<String> _performanceIndexStatements = [
     '''
     CREATE INDEX IF NOT EXISTS idx_books_bookshelf_recent
@@ -197,10 +209,7 @@ class AppDatabase extends _$AppDatabase {
     CREATE INDEX IF NOT EXISTS idx_books_bookshelf_group
     ON books (isInBookshelf, "group")
     ''',
-    '''
-    CREATE INDEX IF NOT EXISTS idx_chapters_book_index
-    ON chapters (bookUrl, "index")
-    ''',
+    _chaptersIndexStatement,
     '''
     CREATE INDEX IF NOT EXISTS idx_reader_content_book_status_index
     ON reader_chapter_contents (origin, bookUrl, status, chapterIndex)

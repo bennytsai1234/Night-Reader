@@ -211,6 +211,42 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.contentKey.equals(contentKey))).go();
   }
 
+  /// 書源換了網址（[from] → [to]）：已存的正文改記新網址，鍵（[contentKey]
+  /// 含書源網址）跟著重算，已下載的章節照樣讀得到。新鍵已經有一筆時以搬過去
+  /// 的這筆為準。
+  Future<void> moveOrigin(String from, String to) async {
+    final rows =
+        await (selectOnly(readerChapterContents)
+              ..addColumns([
+                readerChapterContents.contentKey,
+                readerChapterContents.bookUrl,
+                readerChapterContents.chapterUrl,
+              ])
+              ..where(readerChapterContents.origin.equals(from)))
+            .get();
+    if (rows.isEmpty) return;
+    await batch((b) {
+      for (final row in rows) {
+        b.customStatement(
+          'UPDATE OR REPLACE reader_chapter_contents '
+          'SET contentKey = ?, origin = ? WHERE contentKey = ?',
+          [
+            contentKey(
+              origin: to,
+              bookUrl: row.read(readerChapterContents.bookUrl)!,
+              chapterUrl: row.read(readerChapterContents.chapterUrl)!,
+            ),
+            to,
+            row.read(readerChapterContents.contentKey)!,
+          ],
+        );
+      }
+    });
+    notifyUpdates({
+      TableUpdate.onTable(readerChapterContents, kind: UpdateKind.update),
+    });
+  }
+
   Future<void> deleteByBook(String origin, String bookUrl) {
     return (delete(
       readerChapterContents,

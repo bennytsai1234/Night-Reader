@@ -22,4 +22,34 @@ void main() {
     expect(chapters.map((c) => c.index), [for (var i = 0; i < count; i++) i]);
     expect(chapters.map((c) => c.bookUrl).toSet(), {'book'});
   });
+
+  test(
+    'two books with the same chapter URL each keep their own chapter',
+    () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final dao = ChapterDao(db);
+      // 沒有連結的分卷由章名與序號補網址，兩本書的「第一卷」都是 `第一卷0`。
+      BookChapter volume(String book) => BookChapter(
+        url: '第一卷0',
+        title: '第一卷',
+        bookUrl: book,
+        index: 0,
+        isVolume: true,
+      );
+      await dao.insertChapters([volume('book-A')]);
+      await dao.replaceByBook('book-B', [volume('book-B')]);
+
+      await dao.updateFetchedChapter(
+        volume('book-B').copyWith(variable: '{"from":"B"}', index: 5),
+      );
+
+      final a = (await dao.getByBook('book-A')).single;
+      final b = (await dao.getByBook('book-B')).single;
+      expect(a.variable, isNull, reason: '另一本書的寫回不改這一本');
+      expect(b.variable, '{"from":"B"}');
+      expect(b.index, 0, reason: '序號沿用資料庫的');
+      expect((await dao.getByUrl('book-A', '第一卷0'))?.bookUrl, 'book-A');
+    },
+  );
 }

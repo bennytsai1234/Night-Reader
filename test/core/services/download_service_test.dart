@@ -55,6 +55,70 @@ void main() {
     expect(task.errorCount, 1);
   });
 
+  // 書源改網址時先停下這些書的下載（holdBooks），改完放行。
+  group('holding books while their source changes URL', () {
+    DownloadTask add(String bookUrl, int status) {
+      final service = DownloadService();
+      final task = DownloadTask(
+        bookUrl: bookUrl,
+        bookName: '書',
+        status: status,
+      );
+      service.tasks.add(task);
+      addTearDown(() async {
+        // 放行後排程照常開跑（沒有這本書，很快失敗收尾），等它停下再換下一個測試。
+        for (var i = 0; i < 100 && service.isDownloading; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        service.tasks.remove(task);
+      });
+      return task;
+    }
+
+    test('a task the user pauses while held stays paused', () async {
+      final service = DownloadService();
+      final task = add(
+        'https://held.example/paused',
+        DownloadTask.statusWaiting,
+      );
+
+      final release = await service.holdBooks([task.bookUrl]);
+      service.pauseTask(task.bookUrl);
+      release();
+
+      expect(task.status, DownloadTask.statusPaused);
+      expect(service.isTaskRetiring(task.bookUrl), isFalse);
+    });
+
+    test('a run the hold interrupted queues again', () async {
+      final service = DownloadService();
+      // 被停下的那一輪結束時狀態還是「下載中」。
+      final task = add(
+        'https://held.example/interrupted',
+        DownloadTask.statusDownloading,
+      );
+
+      final release = await service.holdBooks([task.bookUrl]);
+      expect(service.isTaskRetiring(task.bookUrl), isTrue, reason: '停住不開新的一輪');
+      release();
+
+      expect(task.isWaiting || task.isDownloading, isTrue);
+      expect(service.isTaskRetiring(task.bookUrl), isFalse);
+    });
+
+    test('a task added while held is picked up after the release', () async {
+      final service = DownloadService();
+      const bookUrl = 'https://held.example/added';
+
+      final release = await service.holdBooks([bookUrl]);
+      final task = add(bookUrl, DownloadTask.statusWaiting);
+      release();
+
+      expect(service.isDownloading, isTrue, reason: '放行時照當下的任務開排程');
+      expect(task.isWaiting || task.isDownloading, isTrue);
+    });
+  });
+
   group('shelf auto-download decision', () {
     const day = 24 * 60 * 60 * 1000;
     const now = 100 * day;

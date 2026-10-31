@@ -124,7 +124,7 @@ class ReaderChapterContentStore {
     Future<void> Function() save,
   ) {
     return chapterDao.transaction(() async {
-      final current = await chapterDao.getByUrl(chapter.url);
+      final current = await chapterDao.getByUrl(chapter.bookUrl, chapter.url);
       if ((current ?? chapter).isLocked) return;
       await save();
     });
