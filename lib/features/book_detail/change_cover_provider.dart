@@ -46,9 +46,12 @@ class ChangeCoverProvider extends ChangeNotifier {
     }
   }
 
+  ChangeCoverProvider({BookSourceService? service})
+    : _service = service ?? BookSourceService();
+
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
   final SearchBookDao _searchBookDao = getIt<SearchBookDao>();
-  final BookSourceService _service = BookSourceService();
+  final BookSourceService _service;
 
   List<AggregatedSearchBook> _covers = [];
   bool _isInitialized = false;
@@ -102,7 +105,9 @@ class ChangeCoverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final stored = await _addStoredCovers(name, author);
+      final stored = await _addStoredCovers(await _coverNames(name), author);
+      // 等的時候面板關了：不再開始搜尋。
+      if (_disposed) return;
       _isInitialized = true;
       notifyListeners();
 
@@ -119,7 +124,7 @@ class ChangeCoverProvider extends ChangeNotifier {
   }
 
   Future<void> search(String name, String author) async {
-    if (_isSearching) return;
+    if (_isSearching || _disposed) return;
     _isInitialized = true;
     _isSearching = true;
     _errorMessage = null;
@@ -129,7 +134,8 @@ class ChangeCoverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _addStoredCovers(name, author);
+      final names = await _coverNames(name);
+      await _addStoredCovers(names, author);
 
       final enabledSources = await _sourceDao.getEnabled();
       final coverSources = enabledSources
@@ -153,7 +159,7 @@ class ChangeCoverProvider extends ChangeNotifier {
         if (!_isSearching) break;
         tasks.add(
           coverPool.withResource(
-            () => _searchSingleSource(source, name, author),
+            () => _searchSingleSource(source, name, names, author),
           ),
         );
       }
@@ -170,31 +176,40 @@ class ChangeCoverProvider extends ChangeNotifier {
     }
   }
 
-  /// [result] 是不是《[name]》這本書的封面候選：照 [isSameBook] 認同一本書，
-  /// 任一邊沒寫作者時只比書名。搜尋時存進資料庫的與下次從資料庫讀回的照
-  /// 同一條判斷，存得進去就讀得回來。
-  static bool _isCoverOf(SearchBook result, String name, String author) =>
+  /// 封面候選的書名：原文與繁簡兩種寫法（[searchKeyVariants]）。網路結果與
+  /// 資料庫紀錄都只認這幾個書名，資料庫按書名撈得到的範圍就是網路會收的
+  /// 範圍，存得進去就讀得回來。
+  Future<Set<String>> _coverNames(String name) async {
+    try {
+      await ChineseUtils.initialize();
+    } catch (error) {
+      AppLog.w('繁簡字典載入失敗，這次換封面只用原文書名: $error');
+    }
+    return searchKeyVariants(name).toSet();
+  }
+
+  /// [result] 是不是這本書的封面候選：書名是 [names] 之一，作者照
+  /// [isSameBook] 的正規化比，任一邊沒寫作者時只比書名。搜尋時存進資料庫的
+  /// 與下次從資料庫讀回的照同一條判斷。
+  static bool _isCoverOf(SearchBook result, Set<String> names, String author) =>
+      names.contains(result.name) &&
       isSameBook(
         result.name,
         result.author,
-        name,
+        result.name,
         author,
         checkAuthor:
             normalizeSearchText(author).isNotEmpty &&
             normalizeSearchText(result.author).isNotEmpty,
       );
 
-  /// 把資料庫裡這本書的封面候選加進清單，回傳讀到幾個。書名用繁簡兩種
-  /// 寫法撈，作者照 [_isCoverOf] 過濾，和換源讀本地紀錄的做法一樣。
-  Future<int> _addStoredCovers(String name, String author) async {
-    try {
-      await ChineseUtils.initialize();
-    } catch (error) {
-      AppLog.w('繁簡字典載入失敗，這次換封面只用原文書名: $error');
-    }
-    final stored = (await _searchBookDao.getEnabledWithCoverByNames(
-      searchKeyVariants(name),
-    )).where((book) => _isCoverOf(book, name, author)).toList();
+  /// 把資料庫裡這本書的封面候選加進清單，回傳讀到幾個；面板已經關了時
+  /// 不加。
+  Future<int> _addStoredCovers(Set<String> names, String author) async {
+    final stored = (await _searchBookDao.getEnabledWithCoverByNames(names))
+        .where((book) => _isCoverOf(book, names, author))
+        .toList();
+    if (_disposed) return 0;
     for (final book in stored) {
       if (!_covers.any((cover) => cover.book.coverUrl == book.coverUrl)) {
         _covers.add(AggregatedSearchBook(book: book, sources: const ['本地記錄']));
@@ -206,13 +221,14 @@ class ChangeCoverProvider extends ChangeNotifier {
   Future<bool> _searchSingleSource(
     BookSource source,
     String name,
+    Set<String> names,
     String author,
   ) async {
     if (!_isSearching) return true;
     try {
       final books = await _service.searchBooks(source, name);
 
-      final filtered = books.where((book) => _isCoverOf(book, name, author));
+      final filtered = books.where((book) => _isCoverOf(book, names, author));
 
       for (final result in filtered) {
         if (!_isSearching) break;
