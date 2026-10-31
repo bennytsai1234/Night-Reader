@@ -8,6 +8,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
+import 'package:night_reader/core/services/cache_manager.dart';
 
 import '../../../test_helper.dart';
 
@@ -160,4 +161,102 @@ void main() {
       ),
     );
   }, skip: skip);
+
+  group('LoginWall', () {
+    StrResponse page(String body) => StrResponse(
+      url: 'https://www.site.test/book/1',
+      body: body,
+      headers: const {},
+      raw: Response(
+        requestOptions: RequestOptions(path: 'https://www.site.test/book/1'),
+        statusCode: 200,
+      ),
+    );
+    const headerLink = '<header><a href="/login">請先登錄</a></header>';
+
+    // 網站頁首的登入連結不讓解析得出內容的頁面失敗（ADR 0038）。
+    test('a login link on a page that parses is not a wall', () {
+      final wall = LoginWall()..note(page('$headerLink<ul><li>第一章</li></ul>'));
+
+      expect(() => wall.explainToc(empty: false), returnsNormally);
+      expect(() => wall.explainContent('第一章的正文' * 50), returnsNormally);
+    });
+
+    test('an empty result on a login page is a wall', () {
+      final wall = LoginWall()..note(page(headerLink));
+
+      expect(
+        () => wall.explainToc(empty: true),
+        throwsA(
+          isA<LoginCheckException>().having(
+            (e) => e.message,
+            'message',
+            '目錄需要登入後閱讀',
+          ),
+        ),
+      );
+      expect(
+        () => wall.explainContent(' '),
+        throwsA(isA<LoginCheckException>()),
+      );
+    });
+
+    test('an empty result elsewhere is not explained as a wall', () {
+      final wall = LoginWall()..note(page('<p>沒有這本書</p>'));
+
+      expect(() => wall.explainToc(empty: true), returnsNormally);
+      expect(() => wall.explainContent(''), returnsNormally);
+    });
+
+    // 付費或要登入的章節常在正文區塊只放一句登入提示。
+    test('content that is only a login prompt is a wall', () {
+      final wall = LoginWall()..note(page('<div id="content">請先登錄後閱讀</div>'));
+
+      expect(
+        () => wall.explainContent('請先登錄後閱讀'),
+        throwsA(
+          isA<LoginCheckException>().having(
+            (e) => LoginCheckException.describes(e.message),
+            'describes',
+            isTrue,
+          ),
+        ),
+      );
+    });
+  });
+
+  group('login header', () {
+    final source = BookSource(
+      bookSourceUrl: 'https://header.site.test',
+      loginUrl: '/login',
+      header: '{"User-Agent": "Reader", "Authorization": "none"}',
+    );
+    tearDown(() => CacheManager().deleteMemory(source.loginHeaderCacheKey));
+
+    // 同 Legado：登入標頭跟著每次請求送出，蓋過書源 header，網址選項再蓋過它。
+    test('goes with every request of a source that has login', () {
+      CacheManager().putMemory(
+        source.loginHeaderCacheKey,
+        '{"Authorization": "Bearer abc", "X-Token": "t"}',
+      );
+
+      final plain = AnalyzeUrl('/book/1', source: source);
+      expect(plain.headerMap['User-Agent'], 'Reader');
+      expect(plain.headerMap['Authorization'], 'Bearer abc');
+      expect(plain.headerMap['X-Token'], 't');
+
+      final withOption = AnalyzeUrl(
+        '/book/1,{"headers": {"X-Token": "from-url"}}',
+        source: source,
+      );
+      expect(withOption.headerMap['X-Token'], 'from-url');
+    }, skip: skip);
+
+    test('is not looked up for sources without login', () {
+      final noLogin = BookSource(bookSourceUrl: 'https://header.site.test');
+      CacheManager().putMemory(noLogin.loginHeaderCacheKey, '{"X-Token": "t"}');
+
+      expect(AnalyzeUrl('/book/1', source: noLogin).headerMap, isEmpty);
+    }, skip: skip);
+  });
 }

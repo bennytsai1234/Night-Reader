@@ -10,8 +10,9 @@ import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// 網路/WebView/I/O 相關 `java.*` 方法的 Dart 側 handler。
 ///
@@ -137,17 +138,53 @@ extension JsNetworkExtensions on JsExtensions {
       return _backstage(payload, overrideUrlRegex: _stringAt(payload, 3));
     });
 
-    // ─── java.startBrowserAwait / java.getVerificationCode ───────
-    // 驗證 UI 已移除；書源若呼叫這兩個方法一律快速拒絕，
-    // 使書源校驗能正確標記為「需要互動驗證」而非逾時。
-    onBlocking(
-      'startBrowserAwait',
-      (_) => throw const SourceInteractionBlockedException('不支援互動驗證'),
-    );
-    onBlocking(
-      'getVerificationCode',
-      (_) => throw const SourceInteractionBlockedException('不支援互動驗證'),
-    );
+    // ─── java.startBrowser／startBrowserAwait／getVerificationCode ──
+    // 要使用者操作的：只有登入頁按下的動作可以（[SourceInteraction]），其他
+    // 地方立刻失敗，背景工作不停下來等人（ADR 0038）。網址與標頭在這裡
+    // 組好，請求經網路 isolate 送到主 isolate 的登入頁，這條停住等使用者。
+    onBlocking('startBrowser', (payload) {
+      if (!SourceInteraction.allowed) {
+        // Legado 會開瀏覽器、不等結果；夜讀不從背景跳出畫面，照日誌記下。
+        AppLog.i('書源要開網頁，只有在登入頁才會開: ${_stringAt(payload, 0)}');
+        return null;
+      }
+      _browse(payload);
+      return null;
+    });
+    onBlocking('startBrowserAwait', (payload) {
+      final args = payload is List ? payload : [payload];
+      final url = _absoluteUrl(_stringAt(args, 0) ?? '');
+      final html = _browse(args);
+      if (html == null || html.isEmpty) throw Exception('驗證結果為空');
+      // 和 Legado 一樣預設用書源的標頭重抓一次網址，交出通過驗證後的網頁；
+      // 書源指定不重抓（第三個參數 false）時交出瀏覽器裡的網頁。
+      if (args.length > 2 && args[2] == false) {
+        return {
+          'body': html,
+          'url': url,
+          'requestUrl': url,
+          'code': 200,
+          'message': '',
+          'headers': const <String, Object?>{},
+          'redirects': const <String>[],
+          'autoRedirects': const <String>[],
+        };
+      }
+      return (BlockingCall.run(responses([_analyzeUrl(url)])) as List).first;
+    });
+    onBlocking('getVerificationCode', (payload) {
+      _requireInteraction();
+      final code = BlockingCall.run(
+        askUser(
+          SourceCodeRequest(
+            imageUrl: _absoluteUrl('$payload'),
+            headers: _sourceHeaders(),
+          ),
+        ),
+      ) as String?;
+      if (code == null || code.isEmpty) throw Exception('驗證結果為空');
+      return code;
+    });
 
     // ─── java.getZipByteArrayContent(url, innerPath) ─────────────
     onBlocking('getZipByteArrayContent', (payload) {
@@ -190,6 +227,38 @@ extension JsNetworkExtensions on JsExtensions {
   /// [url] 在這個書源下組好的請求；網址裡的 JS 在這裡跑完。
   AnalyzeUrl _analyzeUrl(String url) =>
       AnalyzeUrl(url, source: source as BookSource?);
+
+  /// 不是登入頁按下的動作時，要使用者操作的呼叫立刻失敗。
+  void _requireInteraction() {
+    if (!SourceInteraction.allowed) {
+      throw const SourceInteractionBlockedException('需要在網頁上驗證');
+    }
+  }
+
+  /// `[網址, 標題]`：開網頁讓使用者操作，停住等他按完成，傳回網頁內容；
+  /// 沒按完成就離開時是 null。
+  String? _browse(dynamic payload) {
+    _requireInteraction();
+    final args = payload is List ? payload : [payload];
+    return BlockingCall.run(
+      askUser(
+        SourceBrowseRequest(
+          url: _absoluteUrl(_stringAt(args, 0) ?? ''),
+          title: _stringAt(args, 1) ?? '',
+          headers: _sourceHeaders(),
+        ),
+      ),
+    ) as String?;
+  }
+
+  String _absoluteUrl(String url) {
+    final base = source?.getKey();
+    return base == null ? url : NetworkUtils.getAbsoluteURL(base, url);
+  }
+
+  /// 書源的標頭（含登入標頭）。
+  Map<String, String> _sourceHeaders() =>
+      source?.getHeaderMapSync() ?? const {};
 
   String _backstage(
     List<dynamic> payload, {

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -24,6 +24,20 @@ class _FakePathProvider extends PathProviderPlatform {
 
   @override
   Future<String?> getApplicationDocumentsPath() async => documentsPath;
+}
+
+/// 記下書源送到登入頁的訊息。
+class _RecordingHandler implements SourceInteractionHandler {
+  final List<SourceMessage> messages = [];
+
+  @override
+  Future<String?> browse(SourceBrowseRequest request) async => null;
+
+  @override
+  Future<String?> verificationCode(SourceCodeRequest request) async => null;
+
+  @override
+  void message(SourceMessage message) => messages.add(message);
 }
 
 void main() {
@@ -522,35 +536,87 @@ void main() {
       expect(runtime!.evaluate('typeof source.get').stringResult, 'function');
     });
 
-    test('non-interactive validation rejects interactive JS calls', () async {
+    test('interactive JS calls are refused outside the login page', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;
       }
-      final ext = JsExtensions(
+      JsExtensions(
         runtime!,
         source: BookSource(
           bookSourceUrl: 'https://example.com',
           bookSourceName: 'Example',
         ),
-      );
-      ext.inject();
+      ).inject();
 
-      Future<JsEvalResult> runRule(String source) =>
-          SourceValidationContext.runNonInteractive(
-            () async => runtime!.evaluate(source),
-          );
-
+      // 閱讀、下載、校驗、搜尋裡的書源程式要使用者操作：立刻失敗，不等人
+      // （ADR 0038）。
       for (final call in [
         'java.startBrowserAwait("https://example.com/captcha", "驗證")',
         'java.getVerificationCode("https://example.com/code.png")',
       ]) {
-        final result = await runRule(call);
+        final result = runtime!.evaluate(call);
         expect(result.isError, isTrue, reason: call);
-        expect(result.stringResult, contains('不支援互動驗證'), reason: call);
+        expect(result.stringResult, contains('需要在網頁上驗證'), reason: call);
       }
-      // 不需要互動的網頁渲染（java.webView）在校驗裡照常執行（ADR 0033）。
+      // 不等結果的開網頁不開、也不讓書源程式失敗。
+      expect(
+        runtime!
+            .evaluate('java.startBrowser("https://example.com", "x"); "ok"')
+            .stringResult,
+        'ok',
+      );
     });
+
+    test('toasts reach the login page only from its own actions', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      final handler = _RecordingHandler();
+      SourceInteraction.handler = handler;
+      addTearDown(() => SourceInteraction.handler = null);
+
+      runtime!.evaluate('java.toast("背景的訊息")');
+      await SourceInteraction.runInteractive(() async {
+        runtime!.evaluate('java.toast("已登入"); java.longToast("token 說明")');
+      });
+
+      expect(handler.messages.map((m) => (m.text, m.long)), [
+        ('已登入', false),
+        ('token 說明', true),
+      ]);
+    });
+
+    test(
+      'source login header functions read and write the login header',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final source = BookSource(
+          bookSourceUrl: 'https://login-header.example.com',
+          bookSourceName: 'Example',
+        );
+        JsExtensions(runtime!, source: source).inject();
+        addTearDown(source.clearLoginData);
+
+        final result = runtime!.evaluate(
+          'source.putLoginHeader(JSON.stringify({token: "abc"}));'
+          'source.getLoginHeaderMap().token',
+        );
+        expect(result.isError, isFalse, reason: result.stringResult);
+        expect(result.stringResult, 'abc');
+        await JsExtensions.settleWrites();
+        expect(await source.getLoginHeader(), '{"token":"abc"}');
+
+        runtime!.evaluate('source.removeLoginHeader()');
+        await JsExtensions.settleWrites();
+        expect(await source.getLoginHeader(), isNull);
+      },
+    );
 
     test('Jsoup shim supports importClass and select text helpers', () {
       if (runtime == null) {

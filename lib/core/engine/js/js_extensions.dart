@@ -22,7 +22,9 @@ import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_object.dart';
 import 'extensions/js_jsoup_extensions.dart';
 
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 
 export 'js_extensions_base.dart';
 export 'extensions/js_network_extensions.dart';
@@ -153,10 +155,8 @@ class JsExtensions extends JsExtensionsBase {
       debugPrint('JS_LOG: ${_compactJsBridgeLog(args)}');
       return args;
     });
-    runtime.onMessage('toast', (args) {
-      debugPrint('JS_TOAST: ${_compactJsBridgeLog(args)}');
-      return null;
-    });
+    runtime.onMessage('toast', (args) => _toast(args, long: false));
+    runtime.onMessage('longToast', (args) => _toast(args, long: true));
     runtime.onMessage('scopedObjectGetVariable', (args) {
       final payload = args;
       if (payload is List && payload.length >= 2) {
@@ -200,16 +200,17 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    // ─── Fire-and-forget async (JS 不讀回傳值) ──────────────────
-    // 直接啟動 Future，不 block handler；失敗寫 log 但不 reject JS
+    // ─── 寫入（JS 不讀回傳值） ─────────────────────────────────
+    // 記憶體當下就寫好，之後讀得到；資料庫在背景寫，記在 [pendingWrites]，
+    // 要確定寫完的地方用 [settleWrites] 等。
     runtime.onMessage('setCookie', (args) {
       if (args is List && args.length >= 2) {
-        CookieStore().setCookie(args[0].toString(), args[1].toString());
+        _track(CookieStore().setCookie(args[0].toString(), args[1].toString()));
       }
       return null;
     });
     runtime.onMessage('removeCookie', (args) {
-      CookieStore().removeCookie(args.toString());
+      _track(CookieStore().removeCookie(args.toString()));
       return null;
     });
     runtime.onMessage('putCache', (args) {
@@ -217,37 +218,46 @@ class JsExtensions extends JsExtensionsBase {
         final saveTime = args.length > 2
             ? int.tryParse(args[2].toString()) ?? 0
             : 0;
-        cacheManager.put(
-          args[0].toString(),
-          args[1].toString(),
-          saveTimeSeconds: saveTime,
+        _track(
+          cacheManager.put(
+            args[0].toString(),
+            args[1].toString(),
+            saveTimeSeconds: saveTime,
+          ),
         );
       }
       return null;
     });
     runtime.onMessage('deleteCache', (args) {
-      cacheManager.delete(args.toString());
+      _track(cacheManager.delete(args.toString()));
       return null;
     });
     runtime.onMessage('sourcePut', (args) {
       if (args is List && args.length >= 2 && source != null) {
         final key = args[0].toString();
         final value = args[1].toString();
-        cacheManager.put(source!.ruleVariableCacheKey(key), value);
+        _track(cacheManager.put(source!.ruleVariableCacheKey(key), value));
       }
       return null;
     });
     runtime.onMessage('sourcePutLoginInfo', (args) {
-      if (source != null) {
-        source!.putLoginInfo(args.toString());
-      }
+      if (source != null) _track(source!.putLoginInfo(args.toString()));
+      return null;
+    });
+    runtime.onMessage('sourceRemoveLoginInfo', (_) {
+      if (source != null) _track(source!.removeLoginInfo());
+      return null;
+    });
+    runtime.onMessage('sourcePutLoginHeader', (args) {
+      if (source != null) _track(source!.putLoginHeader(args.toString()));
+      return null;
+    });
+    runtime.onMessage('sourceRemoveLoginHeader', (_) {
+      if (source != null) _track(source!.removeLoginHeader());
       return null;
     });
     runtime.onMessage('sourceSetVariable', (args) {
-      if (source != null) {
-        final decoded = args;
-        source!.setVariableSync(decoded?.toString());
-      }
+      if (source != null) _track(source!.setVariable(args?.toString()));
       return null;
     });
     runtime.onMessage('sourceGetHeaderMap', (args) {
@@ -292,6 +302,11 @@ class JsExtensions extends JsExtensionsBase {
       return cached(source!.loginInfoCacheKey) ?? '';
     });
 
+    onBlocking('sourceGetLoginHeader', (_) {
+      if (source == null) return '';
+      return cached(source!.loginHeaderCacheKey) ?? '';
+    });
+
     onBlocking('sourceGetVariable', (_) {
       if (source == null) return '';
       return cached(source!.variableCacheKey) ?? '';
@@ -313,6 +328,44 @@ class JsExtensions extends JsExtensionsBase {
   String siteCookie(String url) =>
       cookieStore.getMemoryCookie(url) ??
       BlockingCall.run(cookieRead(url)) as String;
+
+  /// 規則 JS 觸發、資料庫還沒寫完的寫入（快取、Cookie、登入資料、書源
+  /// 變數）。規則 JS 不等它們；要確定寫完的地方（登入頁的動作結束前，
+  /// 之後就結束它的 isolate）用 [settleWrites]。
+  static final Set<Future<void>> pendingWrites = {};
+
+  static void _track(Future<void> write) {
+    pendingWrites.add(write);
+    write
+        .catchError(
+          (Object error, StackTrace stackTrace) => AppLog.e(
+            '規則 JS 的寫入失敗: $error',
+            error: error,
+            stackTrace: stackTrace,
+          ),
+        )
+        .whenComplete(() => pendingWrites.remove(write));
+  }
+
+  /// 等目前觸發的寫入都寫完（失敗的已經記在日誌）。
+  static Future<void> settleWrites() async {
+    while (pendingWrites.isNotEmpty) {
+      await Future.wait(
+        pendingWrites.toList().map((write) => write.catchError((_) {})),
+      );
+    }
+  }
+
+  /// `java.toast`／`longToast`：登入頁按下的動作送到登入頁顯示，其他地方
+  /// 只記在日誌（[SourceInteraction.show]）。
+  Object? _toast(dynamic args, {required bool long}) {
+    final text = '${args ?? ''}';
+    AppLog.d('書源訊息: ${_compactJsBridgeLog(text)}');
+    if (SourceInteraction.allowed && text.isNotEmpty) {
+      SourceInteraction.show(SourceMessage(text, long: long));
+    }
+    return null;
+  }
 
   String _compactJsBridgeLog(dynamic args) {
     final text = args.toString();

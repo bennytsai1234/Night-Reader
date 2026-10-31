@@ -93,10 +93,18 @@ class RuleJsException extends AppException {
   RuleJsException(super.message);
 }
 
-/// LoginCheckException - 書源登入驗證失敗
+/// 書源要登入才讀得到（目錄或正文被登入牆擋住，見 `LoginWall`）。訊息一律
+/// 含 [marker]：閱讀器與詳情頁拿到的失敗是存起來的文字，靠它認出要給
+/// 「登入」的路（[describes]）。
 class LoginCheckException extends AppException {
   final String? sourceUrl;
-  LoginCheckException(super.message, {this.sourceUrl});
+  LoginCheckException(super.message, {this.sourceUrl})
+    : assert(message.contains(marker));
+
+  static const String marker = '需要登入';
+
+  /// [message] 是因為要登入才失敗的。
+  static bool describes(String message) => message.contains(marker);
 }
 
 /// SourceException - 書源配置錯誤（缺少必要欄位等）

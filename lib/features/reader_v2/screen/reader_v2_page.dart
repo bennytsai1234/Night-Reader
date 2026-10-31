@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
@@ -36,6 +38,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_sett
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
@@ -416,16 +419,45 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
   Widget _buildReaderErrorActions(ReaderV2Runtime runtime) {
+    final message = runtime.state.unavailableMessage ?? '';
+    if (LoginCheckException.describes(message)) {
+      // 要登入才讀得到：「登入」排第一，登入完自動重開（ADR 0038）。
+      return FutureBuilder<BookSource?>(
+        future: _loginSource(),
+        builder: (context, snapshot) =>
+            _readerErrorActions(runtime, loginSource: snapshot.data),
+      );
+    }
+    return _readerErrorActions(runtime);
+  }
+
+  Widget _readerErrorActions(
+    ReaderV2Runtime runtime, {
+    BookSource? loginSource,
+  }) {
+    void retry() => unawaited(_retryReader(runtime));
     return Wrap(
       alignment: WrapAlignment.center,
       spacing: 8,
       runSpacing: 8,
       children: [
-        FilledButton.icon(
-          onPressed: () => unawaited(_retryReader(runtime)),
-          icon: const Icon(Icons.refresh),
-          label: const Text('重試'),
-        ),
+        if (loginSource != null) ...[
+          FilledButton.icon(
+            onPressed: () => unawaited(_login(loginSource)),
+            icon: const Icon(Icons.login_rounded),
+            label: const Text('登入'),
+          ),
+          OutlinedButton.icon(
+            onPressed: retry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('重試'),
+          ),
+        ] else
+          FilledButton.icon(
+            onPressed: retry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('重試'),
+          ),
         if (!widget.book.isLocal)
           OutlinedButton.icon(
             onPressed: _showChangeSource,
@@ -495,7 +527,67 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _drainRuntimeNotice() {
     final notice = _host.runtime?.takeUserNotice();
     if (!mounted || notice == null || notice.isEmpty) return;
-    _showNotice(notice);
+    if (!LoginCheckException.describes(notice)) {
+      _showNotice(notice);
+      return;
+    }
+    // 要登入才讀得到：提示旁給「登入」，登入完重抓這一章（ADR 0038）。
+    unawaited(
+      _loginSource().then((source) {
+        if (!mounted) return;
+        _showNotice(
+          notice,
+          action: source == null
+              ? null
+              : (label: '登入', onPressed: () => unawaited(_login(source))),
+        );
+      }),
+    );
+  }
+
+  /// 這本書的書源，有登入（ADR 0038）時才有；換源會換掉整個閱讀頁，所以
+  /// 一頁查一次。
+  Future<BookSource?> _loginSource() => _loginSourceLookup ??= () async {
+    if (widget.book.isLocal) return null;
+    final source = await _host.dependencies.sourceDao.getByUrl(
+      widget.book.origin,
+    );
+    return source != null && source.hasLogin ? source : null;
+  }();
+  Future<BookSource?>? _loginSourceLookup;
+
+  /// 開書源的登入；登入資料變了就重抓：開書失敗的重開，否則重抓這一章、
+  /// 停在原位。[ticket] 是從選單開的那一次：等選單滑出才推頁，回來後
+  /// 選單滑回來。
+  Future<void> _login(
+    BookSource source, {
+    ReaderV2MenuDepartureTicket? ticket,
+  }) async {
+    final changed = await openSourceLogin(
+      context,
+      source,
+      beforePush: ticket == null
+          ? null
+          : () async {
+              final ready =
+                  await ticket.menusGone &&
+                  mounted &&
+                  ticket.canDepart &&
+                  (pageRouteOf(context)?.isCurrent ?? false);
+              if (!ready && mounted) _host.releaseAutoPage();
+              return ready;
+            },
+    );
+    if (!mounted) return;
+    if (ticket != null) _restoreMenuWhenUncovered();
+    if (!changed) return;
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
+      await _retryReader(runtime);
+    } else {
+      await _refetchCurrentChapter();
+    }
   }
 
   void _showNotice(String message, {ReaderV2NoticeAction? action}) {
@@ -548,6 +640,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   Future<void> _showMore() async {
     final isLocal = widget.book.isLocal;
+    final loginSource = await _loginSource();
+    if (!mounted) return;
     final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,
       actions: [
@@ -563,6 +657,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             value: _ReaderMoreAction.refetchChapter,
           ),
         ],
+        if (loginSource != null)
+          const AppSheetAction(
+            label: '登入',
+            icon: Icons.login_rounded,
+            value: _ReaderMoreAction.login,
+          ),
         const AppSheetAction(
           label: '書籍詳情',
           icon: Icons.info_outline_rounded,
@@ -583,6 +683,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       case _ReaderMoreAction.refetchChapter:
         _host.menu.dismissControls();
         await _refetchCurrentChapter();
+      case _ReaderMoreAction.login:
+        if (loginSource != null) {
+          await _login(loginSource, ticket: _departMenu());
+        }
       case _ReaderMoreAction.bookDetail:
         await _showBookDetail();
       case _ReaderMoreAction.globalSettings:
@@ -973,6 +1077,7 @@ Future<({int index, List<BookChapter>? latest})?> resolveDetailChapter({
 enum _ReaderMoreAction {
   changeSource,
   refetchChapter,
+  login,
   bookDetail,
   globalSettings,
 }

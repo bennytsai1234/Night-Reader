@@ -11,7 +11,6 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/js/js_extensions_base.dart';
 
@@ -376,12 +375,10 @@ class CheckSourceService extends ChangeNotifier {
   Future<SourceCheckReport> check(List<String> urls) async {
     if (_isChecking) return _lastReport;
 
-    return SourceValidationContext.runNonInteractive(
-      () => _checkNonInteractive(urls),
-    );
+    return _checkAll(urls);
   }
 
-  Future<SourceCheckReport> _checkNonInteractive(List<String> urls) async {
+  Future<SourceCheckReport> _checkAll(List<String> urls) async {
     final normalizedUrls = LinkedHashSet<String>.from(
       urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
     ).toList(growable: false);

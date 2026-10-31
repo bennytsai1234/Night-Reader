@@ -92,6 +92,15 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       text: _editingSource.bookSourceComment,
     );
     _controllers['header'] = TextEditingController(text: _editingSource.header);
+    _controllers['loginUrl'] = TextEditingController(
+      text: _editingSource.loginUrl,
+    );
+    _controllers['loginUi'] = TextEditingController(
+      text: _editingSource.loginUi,
+    );
+    _controllers['loginCheckJs'] = TextEditingController(
+      text: _editingSource.loginCheckJs,
+    );
 
     _controllers['searchUrl'] = TextEditingController(
       text: _editingSource.searchUrl,
@@ -215,6 +224,11 @@ class _SourceEditorPageState extends State<SourceEditorPage>
 
     // 只改編輯器有的欄位；編輯器沒顯示的規則（例如 webJs、formatJs）原樣保留。
     String? text(String key) => _controllers[key]!.text._emptyToNull;
+
+    _editingSource
+      ..loginUrl = text('loginUrl')
+      ..loginUi = text('loginUi')
+      ..loginCheckJs = text('loginCheckJs');
 
     (_editingSource.ruleSearch ??= SearchRule())
       ..bookList = text('ruleSearchBookList')

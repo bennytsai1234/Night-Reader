@@ -14,6 +14,7 @@ import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/http_client.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:path/path.dart' as p;
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 
@@ -25,6 +26,11 @@ import '../js_response.dart';
 /// 捕捉網址、書源與字串這類資料（`CODING_STANDARDS.md` 背景執行）。網路
 /// isolate 不跑規則 JS：網址裡的 JS 在書源 isolate 組 [AnalyzeUrl] 時就跑完了。
 typedef BlockingTask = Future<Object?> Function();
+
+/// 請登入頁的使用者做 [request]（[SourceInteraction]）：網路 isolate 轉給
+/// 主 isolate，等使用者做完。
+BlockingTask askUser(SourceInteractionRequest request) =>
+    () => SourceInteraction.request(request);
 
 /// 快取裡的 [key]（資料庫與檔案）。
 BlockingTask cacheRead(String key) =>

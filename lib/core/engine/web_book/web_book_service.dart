@@ -60,7 +60,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'search');
 
     final results = await BookListParser.parse(
       source: source,
@@ -85,7 +84,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'explore');
 
     return BookListParser.parse(
       source: source,
@@ -120,7 +118,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'detail');
 
     final parsed = await BookInfoParser.parse(
       source: source,
@@ -155,6 +152,7 @@ class WebBook {
 
       final allChapters = <BookChapter>[];
       final visitedUrls = <String>{};
+      final wall = LoginWall();
       var isReverse = false;
       // tocUrl 為空時以 bookUrl 作為備用 (對標 Android 邏輯)
       final initialUrl = book.tocUrl.isNotEmpty ? book.tocUrl : book.bookUrl;
@@ -167,6 +165,7 @@ class WebBook {
         initialUrl: initialUrl,
         cancelToken: cancelToken,
       );
+      wall.note(firstRes);
 
       final firstResult = await ChapterListParser.parse(
         source: source,
@@ -189,7 +188,6 @@ class WebBook {
             pending,
             source,
             book,
-            stage: 'toc',
             allowPartial: !requireComplete,
             concurrency: effectivePageConcurrency,
             cancelToken: cancelToken,
@@ -235,7 +233,6 @@ class WebBook {
             var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
             res = runLoginCheckJs(analyzeUrl, res);
             _checkRedirect(source, res);
-            _checkLoginRequired(res, stage: 'toc');
 
             final result = await ChapterListParser.parse(
               source: source,
@@ -269,6 +266,7 @@ class WebBook {
       for (final c in allChapters) {
         if (seen.add(c.url)) deduped.add(c);
       }
+      wall.explainToc(empty: deduped.isEmpty);
 
       // A title is a label, not content identity. Different URLs remain
       // distinct until the source provides evidence that they are duplicates;
@@ -362,7 +360,7 @@ class WebBook {
     );
     firstRes = runLoginCheckJs(firstAnalyzeUrl, firstRes);
     _checkRedirect(source, firstRes);
-    _checkLoginRequired(firstRes, stage: 'content');
+    final wall = LoginWall()..note(firstRes);
 
     final firstResult = await ContentParser.parse(
       source: source,
@@ -387,7 +385,6 @@ class WebBook {
         pending,
         source,
         book,
-        stage: 'content',
         allowPartial: false,
         concurrency: effectivePageConcurrency,
         cancelToken: cancelToken,
@@ -428,7 +425,6 @@ class WebBook {
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
         res = runLoginCheckJs(analyzeUrl, res);
         _checkRedirect(source, res);
-        _checkLoginRequired(res, stage: 'content');
 
         final result = await ContentParser.parse(
           source: source,
@@ -448,13 +444,15 @@ class WebBook {
 
     // 合併並執行最終 replaceRegex 清理 (對標 Android BookContent 尾段)
     final joined = contentParts.join('\n');
-    return ContentParser.finalizeContent(
+    final content = await ContentParser.finalizeContent(
       source: source,
       book: book,
       chapter: chapter,
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
+    wall.explainContent(content);
+    return content;
   }
 
   /// 重定向檢查 (對標 Android WebBook.checkRedirect)
@@ -464,31 +462,12 @@ class WebBook {
     }
   }
 
-  static void _checkLoginRequired(StrResponse res, {required String stage}) {
-    if (!res.looksLikeLoginRequired) return;
-    throw LoginCheckException(_loginRequiredMessage(stage), sourceUrl: res.url);
-  }
-
-  static String _loginRequiredMessage(String stage) {
-    switch (stage) {
-      case 'content':
-        return '正文需要登入後閱讀';
-      case 'toc':
-        return '目錄需要登入後閱讀';
-      case 'detail':
-        return '詳情需要登入後閱讀';
-      default:
-        return '書源需要登入後使用';
-    }
-  }
-
   /// 以有上限的並發抓取多個 URL 並依輸入順序回傳 StrResponse
   /// (對標 Android flow.mapAsync(threadCount))
   static Future<List<StrResponse?>> _fetchParallel(
     List<String> urls,
     BookSource source,
     Book book, {
-    required String stage,
     required bool allowPartial,
     int concurrency = _pageConcurrency,
     CancelToken? cancelToken,
@@ -502,7 +481,6 @@ class WebBook {
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
         res = runLoginCheckJs(analyzeUrl, res);
         _checkRedirect(source, res);
-        _checkLoginRequired(res, stage: stage);
         return res;
       } on DioException catch (error, stackTrace) {
         if (CancelToken.isCancel(error)) rethrow;
@@ -565,7 +543,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'toc');
     return res;
   }
 

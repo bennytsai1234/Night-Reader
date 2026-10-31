@@ -109,6 +109,37 @@ class MainActivity : AudioServiceActivity() {
                         result.success(CookieManager.getInstance().getCookie(url))
                     }
                 }
+                // 單獨登出一個書源：CookieManager 沒有刪除單一網站的方法，
+                // 把這個網站的每個 Cookie 設成立刻過期（網站本身與各層上層
+                // 網域都設一次，帶 Domain 設的才清得掉）。
+                "clearCookies" -> {
+                    val url = call.arguments as? String
+                    val host = url?.let { android.net.Uri.parse(it).host }
+                    if (url == null || host == null) {
+                        result.error("bad_args", "url is required", null)
+                    } else {
+                        val manager = CookieManager.getInstance()
+                        val labels = host.split(".")
+                        val domains = (0..maxOf(0, labels.size - 2)).map {
+                            labels.drop(it).joinToString(".")
+                        }
+                        manager.getCookie(url)
+                            ?.split(";")
+                            ?.map { it.substringBefore("=").trim() }
+                            ?.filter { it.isNotEmpty() }
+                            ?.forEach { name ->
+                                manager.setCookie(url, "$name=; Max-Age=0; Path=/")
+                                for (domain in domains) {
+                                    manager.setCookie(
+                                        url,
+                                        "$name=; Max-Age=0; Path=/; Domain=.$domain",
+                                    )
+                                }
+                            }
+                        manager.flush()
+                        result.success(null)
+                    }
+                }
                 "defaultUserAgent" -> result.success(
                     try {
                         WebSettings.getDefaultUserAgent(applicationContext)

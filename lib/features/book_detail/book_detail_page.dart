@@ -19,6 +19,7 @@ import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 
@@ -302,6 +303,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     Icons.warning_amber_rounded,
                     tint: AppTint.tea,
                   ),
+                  // 要登入才讀得到：點了去登入，登入完重新載入（ADR 0038）。
+                  value: provider.loginRequired ? '登入' : null,
+                  onTap: provider.loginRequired
+                      ? () => unawaited(_login(context, provider))
+                      : null,
                 ),
               ],
             ),
@@ -843,6 +849,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
         ),
       ),
     );
+  }
+
+  /// 目錄要登入才讀得到：開書源的登入，登入資料變了就重新載入。
+  Future<void> _login(BuildContext context, BookDetailProvider provider) async {
+    final source = provider.currentSource;
+    if (source == null) return;
+    final changed = await openSourceLogin(context, source);
+    if (changed && context.mounted) await provider.retryInitialization();
   }
 
   Future<void> _showSourceOptions(BuildContext context, Book b) async {

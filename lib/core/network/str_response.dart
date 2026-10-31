@@ -21,10 +21,15 @@ class StrResponse {
 
   bool get isRedirect => raw.redirects.isNotEmpty || redirectChain.isNotEmpty;
 
-  /// 網址或內容帶有「需要登入」的字樣（不分大小寫）。每個書源回應都會檢查，
-  /// 整頁網頁可能上百 KB，所以直接比對原文，不先轉小寫再逐一搜尋。
+  /// 網址或內容帶有「需要登入」的字樣（不分大小寫）。只用來說明解析不出
+  /// 東西的原因（ADR 0038）。整頁網頁可能上百 KB，所以直接比對原文，不先
+  /// 轉小寫再逐一搜尋。
   bool get looksLikeLoginRequired =>
       _loginRequiredMarker.hasMatch(url) || _loginRequiredMarker.hasMatch(body);
+
+  /// [text] 裡有「需要登入」的字樣。
+  static bool mentionsLoginRequired(String text) =>
+      _loginRequiredMarker.hasMatch(text);
 
   static final RegExp _loginRequiredMarker = RegExp(
     'permissionlimit|loginrequired|需要你登录后阅读|需要你登入後閱讀|'

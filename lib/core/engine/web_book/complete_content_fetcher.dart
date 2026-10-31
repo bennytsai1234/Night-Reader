@@ -35,6 +35,7 @@ final class CompleteContentFetcher {
     final concurrency = math.max(1, pageConcurrency ?? _defaultPageConcurrency);
     String? lastBaseUrl;
     var fetchedPages = 0;
+    final wall = LoginWall();
 
     while (pendingUrls.isNotEmpty) {
       final remainingPages = _maxPages - fetchedPages;
@@ -65,6 +66,7 @@ final class CompleteContentFetcher {
         ),
       );
 
+      if (fetchedPages == 0) wall.note(pages.first.response);
       fetchedPages += pages.length;
       for (final page in pages) {
         if (page.content.isNotEmpty) contentParts.add(page.content);
@@ -76,13 +78,15 @@ final class CompleteContentFetcher {
     }
 
     final joined = contentParts.join('\n');
-    return ContentParser.finalizeContent(
+    final content = await ContentParser.finalizeContent(
       source: source,
       book: book,
       chapter: chapter,
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
+    wall.explainContent(content);
+    return content;
   }
 
   static Future<_FetchedContentPage> _fetchPage(
@@ -96,7 +100,6 @@ final class CompleteContentFetcher {
     final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
     var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     response = runLoginCheckJs(analyzeUrl, response);
-    _checkLoginRequired(response);
 
     final result = await ContentParser.parse(
       source: source,
@@ -109,14 +112,8 @@ final class CompleteContentFetcher {
     return _FetchedContentPage(
       content: result.content,
       nextUrls: result.nextUrls,
-      baseUrl: response.url,
+      response: response,
     );
-  }
-
-  static void _checkLoginRequired(StrResponse response) {
-    if (response.looksLikeLoginRequired) {
-      throw LoginCheckException('正文需要登入後閱讀', sourceUrl: response.url);
-    }
   }
 }
 
@@ -124,10 +121,12 @@ class _FetchedContentPage {
   const _FetchedContentPage({
     required this.content,
     required this.nextUrls,
-    required this.baseUrl,
+    required this.response,
   });
 
   final String content;
   final List<String> nextUrls;
-  final String baseUrl;
+  final StrResponse response;
+
+  String get baseUrl => response.url;
 }

@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart';
 
 import '../../constant/source_type.dart';
+import '../../models/base_source.dart';
 import '../../models/book_source.dart';
+import '../../services/app_log_service.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 import 'book_dao.dart';
@@ -81,16 +83,38 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
           .moveOrigin(previousUrl, to, toName: name);
       await ReaderChapterContentDao(attachedDatabase)
           .moveOrigin(previousUrl, to);
-      await deleteByUrl(previousUrl);
+      // 舊網址存的登入資訊與變數已經搬到新網址（存檔成功後才刪舊的），這裡
+      // 只刪書源那一列。
+      await _deleteRows([previousUrl]);
     });
   }
 
-  Future<void> deleteByUrl(String url) async {
-    await (delete(bookSources)..where((t) => t.bookSourceUrl.equals(url))).go();
-    forgetNonNovelMarkers([url]);
-  }
+  /// 刪掉書源，連同以它的身分存的登入資訊、登入標頭與變數
+  /// （[BaseSource.forgetCachedIdentity]）。
+  Future<void> deleteByUrl(String url) => deleteByUrls([url]);
 
   Future<void> deleteByUrls(List<String> urls) async {
+    await _deleteRows(urls);
+    final remaining = await (selectOnly(
+      bookSources,
+    )..addColumns([bookSources.bookSourceUrl])).get();
+    final otherKeys = [
+      for (final row in remaining) row.read(bookSources.bookSourceUrl)!,
+    ];
+    for (final url in urls) {
+      try {
+        await BaseSource.forgetCachedIdentity(url, otherKeys: otherKeys);
+      } catch (error, stackTrace) {
+        AppLog.e(
+          '書源刪掉了，它存的登入資訊與變數沒刪乾淨: $url',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRows(List<String> urls) async {
     await (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
     forgetNonNovelMarkers(urls);
   }

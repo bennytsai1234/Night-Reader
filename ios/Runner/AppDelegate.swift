@@ -63,6 +63,26 @@ private enum UserAgentReader {
             result(matched.isEmpty ? nil : matched.map { "\($0.name)=\($0.value)" }
               .joined(separator: "; "))
           }
+        // 單獨登出一個書源：刪掉送得到這個網站的 Cookie。
+        case "clearCookies":
+          guard let url = call.arguments as? String, let host = URL(string: url)?.host else {
+            result(FlutterError(code: "bad_args", message: "url is required", details: nil))
+            return
+          }
+          let store = WKWebsiteDataStore.default().httpCookieStore
+          store.getAllCookies { cookies in
+            let matched = cookies.filter { cookie in
+              let domain = cookie.domain.hasPrefix(".")
+                ? String(cookie.domain.dropFirst()) : cookie.domain
+              return host == domain || host.hasSuffix("." + domain)
+            }
+            let group = DispatchGroup()
+            for cookie in matched {
+              group.enter()
+              store.delete(cookie) { group.leave() }
+            }
+            group.notify(queue: .main) { result(nil) }
+          }
         case "defaultUserAgent":
           UserAgentReader.read { result($0) }
         default:

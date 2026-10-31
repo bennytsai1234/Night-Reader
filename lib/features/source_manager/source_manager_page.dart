@@ -31,6 +31,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
+import '../source_login/source_login_page.dart';
 import 'widgets/source_list_skeleton.dart';
 import 'widgets/source_batch_toolbar.dart';
 import 'widgets/source_check_status_bar.dart';
@@ -651,6 +652,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           label: '編輯書源',
           icon: Icons.edit_outlined,
         ),
+        if (s.hasLogin)
+          const GlassMenuItem(
+            value: 'login',
+            label: '登入',
+            icon: Icons.login_rounded,
+          ),
         const GlassMenuItem(
           value: 'debug',
           label: '除錯書源',
@@ -700,6 +707,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
         }
       case 'edit':
         await _openEditor(p, s.bookSourceUrl);
+      case 'login':
+        final full = await p.getFullSource(s.bookSourceUrl);
+        if (full != null && mounted) await openSourceLogin(context, full);
       case 'debug':
         final full = await p.getFullSource(s.bookSourceUrl);
         if (full != null && mounted) {

@@ -18,6 +18,19 @@ const String nonNovelSourceGroupTag = '非小說源';
 const String loginRequiredSourceGroupTag = '需要登入';
 const String abnormalSourceGroupTag = '異常';
 
+/// 「需要登入」是書源的狀態，不是壞掉（ADR 0038）：照樣參加搜尋（很多書源
+/// 搜尋不用登入）、照樣能開書，讀到要登入的地方再提示去登入；不列入清理。
+/// 登入成功後拿掉這個標記。
+const SourceRuntimeHealth loginRequiredSourceHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.loginRequired,
+  label: loginRequiredSourceGroupTag,
+  description: '需要登入後才能閱讀',
+  allowsSearch: true,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
 const List<String> sourceRuntimeStatusTags = <String>[
   abnormalSourceGroupTag,
   searchBrokenSourceGroupTag,
@@ -285,17 +298,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (tagged(loginRequiredSourceGroupTag)) {
-      return const SourceRuntimeHealth(
-        category: SourceHealthCategory.loginRequired,
-        label: loginRequiredSourceGroupTag,
-        description: '來源需要登入後才能使用',
-        allowsSearch: false,
-        allowsReading: false,
-        cleanupCandidate: true,
-        quarantined: false,
-      );
-    }
+    if (tagged(loginRequiredSourceGroupTag)) return loginRequiredSourceHealth;
 
     if (tagged(searchBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
