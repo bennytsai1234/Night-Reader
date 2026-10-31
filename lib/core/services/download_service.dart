@@ -104,8 +104,33 @@ class DownloadService extends DownloadBase
   Future<SourceSwitchOperationLease> quiesceForSourceSwitch(
     Book oldBook,
   ) async {
+    final (:bookUrl, :task, :previousStatus) = await _hold(oldBook.bookUrl);
+    return _DownloadSourceSwitchLease(
+      owner: this,
+      bookUrl: bookUrl,
+      task: task,
+      previousStatus: previousStatus,
+    );
+  }
+
+  /// 書的來源身分在別處改變時（書源改了網址），先停下 [bookUrls] 進行中的
+  /// 下載並等它們停住，改的途中也不排新的；改完呼叫回傳的函式，照原本的
+  /// 狀態接著下載。接著下載的那一輪重新從資料庫讀書，用的是新的書源網址。
+  Future<void Function()> holdBooks(Iterable<String> bookUrls) async {
+    final holds = [for (final bookUrl in bookUrls) await _hold(bookUrl)];
+    return () {
+      for (final (:bookUrl, :task, :previousStatus) in holds) {
+        _releaseHold(bookUrl, task, previousStatus);
+      }
+    };
+  }
+
+  /// 停下 [bookUrl] 的下載並等它停住；之後由 [_releaseHold] 恢復，或換源
+  /// 成功時由 [_commitSourceSwitchRetirement] 移除。
+  Future<({String bookUrl, DownloadTask? task, int? previousStatus})> _hold(
+    String bookUrl,
+  ) async {
     await _initialization;
-    final bookUrl = oldBook.bookUrl;
     markTaskRetiring(bookUrl);
 
     final task = tasks.cast<DownloadTask?>().firstWhere(
@@ -119,12 +144,7 @@ class DownloadService extends DownloadBase
     }
 
     await waitForTaskIdle(bookUrl);
-    return _DownloadSourceSwitchLease(
-      owner: this,
-      bookUrl: bookUrl,
-      task: task,
-      previousStatus: previousStatus,
-    );
+    return (bookUrl: bookUrl, task: task, previousStatus: previousStatus);
   }
 
   void _commitSourceSwitchRetirement(String bookUrl) {
@@ -133,11 +153,7 @@ class DownloadService extends DownloadBase
     update();
   }
 
-  void _rollbackSourceSwitchRetirement(
-    String bookUrl,
-    DownloadTask? task,
-    int? previousStatus,
-  ) {
+  void _releaseHold(String bookUrl, DownloadTask? task, int? previousStatus) {
     if (task != null && previousStatus != null) {
       task.status = previousStatus == DownloadTask.statusDownloading
           ? DownloadTask.statusWaiting
@@ -368,6 +384,6 @@ class _DownloadSourceSwitchLease implements SourceSwitchOperationLease {
   void rolledBack() {
     if (_finalized) return;
     _finalized = true;
-    owner._rollbackSourceSwitchRetirement(bookUrl, task, previousStatus);
+    owner._releaseHold(bookUrl, task, previousStatus);
   }
 }

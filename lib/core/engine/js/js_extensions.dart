@@ -71,7 +71,7 @@ class JsExtensions extends JsExtensionsBase {
           JsExtensionsBase.sharedScope[key] = stringValue;
         }
         if (source != null) {
-          final scopedKey = 'v_${source!.getKey()}_$key';
+          final scopedKey = source!.ruleVariableCacheKey(key);
           cacheManager.putMemory(scopedKey, stringValue);
           unawaited(cacheManager.put(scopedKey, stringValue));
         }
@@ -89,7 +89,7 @@ class JsExtensions extends JsExtensionsBase {
         } catch (_) {}
       }
       if (source != null) {
-        final scopedKey = 'v_${source!.getKey()}_$key';
+        final scopedKey = source!.ruleVariableCacheKey(key);
         final cached = cacheManager.getFromMemory(scopedKey);
         if (cached != null && cached.toString().isNotEmpty) {
           return cached.toString();
@@ -233,7 +233,7 @@ class JsExtensions extends JsExtensionsBase {
       if (args is List && args.length >= 2 && source != null) {
         final key = args[0].toString();
         final value = args[1].toString();
-        cacheManager.put('v_${source!.getKey()}_$key', value);
+        cacheManager.put(source!.ruleVariableCacheKey(key), value);
       }
       return null;
     });
@@ -282,7 +282,7 @@ class JsExtensions extends JsExtensionsBase {
 
     onBlocking('sourceGet', (key) {
       if (source == null) return '';
-      return cached('v_${source!.getKey()}_$key') ?? '';
+      return cached(source!.ruleVariableCacheKey(key)) ?? '';
     });
 
     onBlocking('sourceGetLoginInfo', (_) {

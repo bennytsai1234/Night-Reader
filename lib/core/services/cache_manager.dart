@@ -245,6 +245,31 @@ class CacheManager {
   }
 
   /// 刪除快取 (記憶體 + 資料庫 + 檔案)
+  /// 把 [from] 存的內容搬到 [to]（記憶體、資料庫與檔案），保留原本的期限；
+  /// [from] 之後就沒有了。沒有內容或已經過期時只刪掉 [from]。
+  Future<void> move(String from, String to) async {
+    final stored = await _cacheDao?.get(from);
+    final deadline = stored?.deadline ?? _memoryDeadlines[from] ?? 0;
+    final value = await get(from);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (value != null && (deadline == 0 || deadline > now)) {
+      await put(
+        to,
+        value,
+        saveTimeSeconds: deadline == 0 ? 0 : ((deadline - now) / 1000).ceil(),
+      );
+    }
+    await delete(from);
+  }
+
+  /// [move] 每個以 [from] 開頭的鍵，開頭換成 [to]。
+  Future<void> movePrefix(String from, String to) async {
+    final keys = await _cacheDao?.keysStartingWith(from) ?? const <String>[];
+    for (final key in keys) {
+      await move(key, '$to${key.substring(from.length)}');
+    }
+  }
+
   Future<void> delete(String key) async {
     deleteMemory(key);
     await _cacheDao?.deleteByKey(key);

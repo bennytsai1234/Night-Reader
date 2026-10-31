@@ -365,6 +365,14 @@ class BookDetailProvider extends ChangeNotifier {
   /// 帶入舊規則，存檔就蓋掉上一次的修改。
   Future<void> reloadSource() async {
     if (_disposed) return;
+    // 編輯頁可能改了書源網址：資料庫裡的書已經改記新網址，照它找書源。
+    final stored = await _bookDao.getByUrl(_book.bookUrl);
+    if (_disposed) return;
+    if (stored != null) {
+      _book
+        ..origin = stored.origin
+        ..originName = stored.originName;
+    }
     await _loadSource();
     if (!_disposed) notifyListeners();
   }

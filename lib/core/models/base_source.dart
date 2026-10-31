@@ -40,9 +40,29 @@ abstract class BaseSource {
     return null;
   }
 
-  /// 登入資訊與書源變數存在快取（[CacheManager]）裡的鍵。
-  String get loginInfoCacheKey => 'userInfo_${getKey()}';
-  String get variableCacheKey => 'sourceVariable_${getKey()}';
+  // 以書源身分（[getKey]）存在快取（[CacheManager]）裡的資料各自的鍵。
+  static String _loginInfoKey(String key) => 'userInfo_$key';
+  static String _variableKey(String key) => 'sourceVariable_$key';
+  static String _loginHeaderKey(String key) => 'loginHeader_$key';
+  static String _ruleVariablePrefix(String key) => 'v_${key}_';
+
+  String get loginInfoCacheKey => _loginInfoKey(getKey());
+  String get variableCacheKey => _variableKey(getKey());
+  String get loginHeaderCacheKey => _loginHeaderKey(getKey());
+
+  /// 規則 JS 用 `source.put`、`java.put` 存的變數 [name]。
+  String ruleVariableCacheKey(String name) =>
+      '${_ruleVariablePrefix(getKey())}$name';
+
+  /// 書源換了身分（[getKey] 從 [from] 變成 [to]，例如書源改了網址）：以舊身分
+  /// 存的登入資訊、登入標頭、書源變數與規則變數搬到新身分，不用重新登入。
+  static Future<void> moveCachedIdentity(String from, String to) async {
+    final cache = CacheManager();
+    for (final keyOf in [_loginInfoKey, _variableKey, _loginHeaderKey]) {
+      await cache.move(keyOf(from), keyOf(to));
+    }
+    await cache.movePrefix(_ruleVariablePrefix(from), _ruleVariablePrefix(to));
+  }
 
   Future<void> putLoginInfo(String info) {
     return CacheManager().put(loginInfoCacheKey, info);
@@ -73,7 +93,7 @@ abstract class BaseSource {
   }
 
   Future<void> putLoginHeader(String header) async {
-    await CacheManager().put('loginHeader_${getKey()}', header);
+    await CacheManager().put(loginHeaderCacheKey, header);
     try {
       final decoded = jsonDecode(header);
       if (decoded is Map) {
@@ -86,11 +106,11 @@ abstract class BaseSource {
   }
 
   Future<String?> getLoginHeader() {
-    return CacheManager().get('loginHeader_${getKey()}');
+    return CacheManager().get(loginHeaderCacheKey);
   }
 
   Future<void> removeLoginHeader() {
-    return CacheManager().delete('loginHeader_${getKey()}');
+    return CacheManager().delete(loginHeaderCacheKey);
   }
 
   Future<void> setVariable(String? variable) {
@@ -136,7 +156,7 @@ abstract class BaseSource {
 
     if (hasLoginHeader) {
       final loginHeaderRaw = CacheManager()
-          .getFromMemory('loginHeader_${getKey()}')
+          .getFromMemory(loginHeaderCacheKey)
           ?.toString();
       if (loginHeaderRaw != null && loginHeaderRaw.isNotEmpty) {
         try {
