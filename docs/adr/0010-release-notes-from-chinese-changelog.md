@@ -4,14 +4,14 @@ App 的更新視窗與「更新紀錄」顯示的是 GitHub Release 說明。原
 
 `android-release.yml` 發版時從 `CHANGELOG.md` 取 Release 說明：
 
-- 測試版用 `tool/changelog.sh added <上一個發布的 tag>`，只取 `## 未發布` 裡上一個發布還沒有的條列（改寫過的條列也算），不含介紹段落。沒有新條列時說明是空的（例如上一版之後只刪了條列），App 會顯示「沒有附更新說明」。
+- 測試版用 `tool/changelog.sh added <上一個發布的 tag>`，只取 `## 未發布` 裡上一個發布還沒有的條列（改寫過的條列也算），不含介紹段落。一條是 `- ` 開頭的頂層條列加上底下縮排的子條列，整條比對、整條取出：只改了子條列也算改寫，取出時連上面那一行一起（2026-10-31 以前只比 `- ` 開頭的那一行，子條列從來沒有進到測試版說明，v0.3.8-beta.37 只出現「「閱讀偏好」多了一批可以調的設定…：」一行）。沒有新條列時說明是空的（例如上一版之後只刪了條列），App 會顯示「沒有附更新說明」。
 - 正式版用 `tool/changelog.sh section` 取 `## X.Y.Z` 整段。版號 commit 要把 `## 未發布` 改名成 `## X.Y.Z`，並在上面留一個空的 `## 未發布`；段落不存在或是空的，workflow 在建置前就失敗。
 
 App 的更新視窗（`AppUpdateService.checkLatest`）顯示從目前版本更新上去會收到的說明：目前版本到新版之間每一版的說明，新的在前；目前版本和更早的版本已經列過的行不再重複。所以跳過幾個測試版不會漏，測試版更新到正式版時，正式版整段裡已經在測試版收過的條目也不再列一次；只收正式版的使用者看到的就是正式版整段。
 
 `## 未發布` 寫的是和上一個正式版相比的最後結果，不是逐次的流水帳：改到已經寫過的事（例如調整剛加的功能、推翻前一個做法），就改原本那一條，不另外加一條；被推翻的寫法直接刪掉。改寫過的條列會出現在下一個測試版的說明裡，測試的人看得到它又變了。
 
-要寫的時機是 PR 合併之前：改到 App 內容的 PR 在同一個 PR 裡把改動寫進 `## 未發布`。`tool/changelog.sh check <base> <head>` 判斷一段範圍有沒有改到 App 內容：不進 APK 的文件、網站、測試、`.githooks/`、`tool/`、`ci.yml` 與 `website-deploy.yml` 不算，建置 APK 的 `android-release.yml` 算。有改到 App 內容時，`## 未發布` 要有變動而且不是空的（只把原本的內容刪光不算寫了說明），或者是新增了 pubspec 版號的 `## X.Y.Z` 段落（正式版的版號 commit）。App 行為沒變的提交（例如只改註解）在 commit message 裡單獨一行寫 `Release-Notes: none`，檢查就不算它改到的檔案；不用 git 的 trailer 解析，因為 squash 合併的說明最後一段是「Generated with」那行，寫在前一段的這行會讀不到（2026-10-24 前大多數標記因此沒有生效）。`android-release.yml` 決定要不要發測試版也用同一個判斷（`tool/changelog.sh app-files`）：2026-10-24 以前它另有一份只排除文件、網站與測試的清單，只改推送前檢查的提交也發了一個沒有更新說明的測試版（v0.3.7-beta.2）。這個檢查在發測試版時執行：`android-release.yml` 以上一個發布的 tag 為 base、這次推上 `beta` 的提交為 head 呼叫它，沒寫就讓這次執行失敗（ADR 0027；2026-10-14 到 2026-10-19 是在 `main` 上手動發測試版時檢查，ADR 0014）。2026-10-14 以前測試版隨每次推上 `main` 發布，檢查由 `.githooks/pre-push` 與 `ci.yml` 在每次推往 `main` 時執行。
+要寫的時機是 PR 合併之前：改到 App 內容的 PR 在同一個 PR 裡把改動寫進 `## 未發布`。`tool/changelog.sh check <base> <head>` 判斷一段範圍有沒有改到 App 內容：不進 APK 的文件、網站、測試、`.githooks/`、`tool/`、`ci.yml` 與 `website-deploy.yml` 不算，建置 APK 的 `android-release.yml` 算。有改到 App 內容時，`## 未發布` 不能是空的（只把原本的內容刪光不算寫了說明），而且照 `added` 同一個條列定義要有新增或改寫的條列，或者只刪了條列；或者是新增了 pubspec 版號的 `## X.Y.Z` 段落（正式版的版號 commit）。只改介紹不算：測試版說明只取條列，只改介紹的測試版說明會是空的（#152）。App 行為沒變的提交（例如只改註解）在 commit message 裡單獨一行寫 `Release-Notes: none`，檢查就不算它改到的檔案；不用 git 的 trailer 解析，因為 squash 合併的說明最後一段是「Generated with」那行，寫在前一段的這行會讀不到（2026-10-24 前大多數標記因此沒有生效）。`android-release.yml` 決定要不要發測試版也用同一個判斷（`tool/changelog.sh app-files`）：2026-10-24 以前它另有一份只排除文件、網站與測試的清單，只改推送前檢查的提交也發了一個沒有更新說明的測試版（v0.3.7-beta.2）。這個檢查在發測試版時執行：`android-release.yml` 以上一個發布的 tag 為 base、這次推上 `beta` 的提交為 head 呼叫它，沒寫就讓這次執行失敗（ADR 0027；2026-10-14 到 2026-10-19 是在 `main` 上手動發測試版時檢查，ADR 0014）。2026-10-14 以前測試版隨每次推上 `main` 發布，檢查由 `.githooks/pre-push` 與 `ci.yml` 在每次推往 `main` 時執行。
 
 App 端的 `releaseNotesForDisplay` 只去掉 Markdown 符號、把條列前綴統一成「•」。原本專為 `--generate-notes` 格式寫的處理（去掉 `by @作者 in 連結`、`release:` 提交、Full Changelog 連結）一併拿掉，舊版 Release 的英文說明照原樣顯示。
 

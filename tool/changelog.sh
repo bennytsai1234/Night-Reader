@@ -7,9 +7,9 @@
 #     android-release.yml 用它取正式版的 GitHub Release 說明（「X.Y.Z」段落）。
 #
 #   sh tool/changelog.sh added <base> [檔案]
-#     印出「## 未發布」裡 <base> 那個提交還沒有的條列（以「- 」開頭的行，改寫過的也算），
-#     不含開頭的介紹段落。<base> 沒有這個段落時印出全部條列。
-#     android-release.yml 以上一個發布的 tag 為 base，取測試版的 Release 說明。
+#     印出「## 未發布」裡 <base> 那個提交還沒有的條列，改寫過的也算，不含開頭的介紹段落。
+#     一條是「- 」開頭的頂層條列加上底下縮排的子條列，整條比對、整條印出。<base> 沒有這個
+#     段落時印出全部條列。android-release.yml 以上一個發布的 tag 為 base，取測試版的 Release 說明。
 #
 #   sh tool/changelog.sh app-files <base> <head>
 #     印出 base..head 改到的 App 內容檔案，一行一個；沒有時不印。
@@ -18,7 +18,8 @@
 #
 #   sh tool/changelog.sh check <base> <head>
 #     base..head 改到 App 內容（照 app-files）時，確認 CHANGELOG.md 有跟著寫：「## 未發布」
-#     改過且不是空的，或新增了正式版的「## X.Y.Z」段落。沒寫時結束碼為 1。
+#     不是空的，而且照 added 的條列有新增或改寫（只刪條列也算），或新增了正式版的「## X.Y.Z」
+#     段落。只改介紹不算：測試版說明只取條列。沒寫時結束碼為 1。
 #     android-release.yml 發測試版時以上一個發布的 tag 為 base 呼叫（ADR 0027）。
 #
 # 測試：sh tool/changelog_test.sh
@@ -103,12 +104,43 @@ section_at() {
   git show "$1:CHANGELOG.md" 2>/dev/null | section "$2" -
 }
 
+# new_items <舊段落> <新段落>：印出新段落裡舊段落沒有的條列。一條是一行「- 」開頭的頂層條列，
+# 加上緊接在它下面、縮排開頭的行（子條列與續行）；整條比對，只改子條列也算改寫，整條印出。
+# 介紹段落與其他不在條列裡的行不算。
+new_items() {
+  OLD=$1 NEW=$2 awk '
+    function parse(text, items,   n, lines, i, line, item, k) {
+      n = split(text, lines, "\n")
+      k = 0
+      item = ""
+      for (i = 1; i <= n; i++) {
+        line = lines[i]
+        if (line ~ /^- /) {
+          if (item != "") items[++k] = item
+          item = line
+        } else if (item != "" && line ~ /^[ \t]+[^ \t]/) {
+          item = item "\n" line
+        } else {
+          if (item != "") items[++k] = item
+          item = ""
+        }
+      }
+      if (item != "") items[++k] = item
+      return k
+    }
+    BEGIN {
+      m = parse(ENVIRON["OLD"], olds)
+      for (i = 1; i <= m; i++) seen[olds[i]] = 1
+      n = parse(ENVIRON["NEW"], news)
+      for (i = 1; i <= n; i++) if (!(news[i] in seen)) print news[i]
+    }
+  '
+}
+
 added() {
   old=$(section_at "$1" "$UNRELEASED") || old=''
-  section "$UNRELEASED" "${2:-CHANGELOG.md}" | OLD=$old awk '
-    BEGIN { n = split(ENVIRON["OLD"], lines, "\n"); for (i = 1; i <= n; i++) seen[lines[i]] = 1 }
-    /^- / && !($0 in seen)
-  '
+  new=$(section "$UNRELEASED" "${2:-CHANGELOG.md}") || return 1
+  new_items "$old" "$new"
 }
 
 check() {
@@ -134,8 +166,11 @@ check() {
     return 1
   fi
   old=$(section_at "$base" "$UNRELEASED") || old=''
-  # 清空也算變化，但清空後測試版就沒有這次改動的說明，所以只有寫了內容才放行。
-  if [ "$new" != "$old" ] && [ -n "$new" ]; then
+  # 測試版的說明只取新增或改寫的條列（added），所以照同一個判斷放行：只改介紹，測試版
+  # 說明會是空的。只刪了條列（例如推翻剛加的功能）時沒有新條列，ADR 0010 允許。清空不算。
+  added=$(new_items "$old" "$new")
+  removed=$(new_items "$new" "$old")
+  if [ -n "$new" ] && { [ -n "$added" ] || [ -n "$removed" ]; }; then
     echo "changelog: 「## $UNRELEASED」已更新。"
     return 0
   fi
@@ -152,6 +187,8 @@ check() {
   {
     if [ -z "$new" ] && [ -n "$old" ]; then
       echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」被清空了，也沒有新增正式版的段落。"
+    elif [ "$new" != "$old" ]; then
+      echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」只改了介紹，沒有新增或改寫條列；測試版的說明只取新增或改寫的條列，會是空的。"
     else
       echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」沒有更新。"
     fi
