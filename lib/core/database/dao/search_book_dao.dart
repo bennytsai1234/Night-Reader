@@ -16,15 +16,20 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
     return (select(searchBooks)..where((t) => t.name.isIn(names))).get();
   }
 
-  Future<List<SearchBook>> getEnabledHasCover(String name, String author) {
+  /// 書名是 [names] 其中之一、有封面、書源啟用中的結果，照書源順序。作者
+  /// 不在這裡比：是不是同一本書由呼叫端照 `isSameBook` 判斷。
+  Future<List<SearchBook>> getEnabledWithCoverByNames(Iterable<String> names) {
+    final list = names.toSet().toList();
+    if (list.isEmpty) return Future.value(const []);
+    final placeholders = List.filled(list.length, '?').join(', ');
     return customSelect(
       '''
       SELECT t1.*, t2.customOrder as originOrder
       FROM search_books as t1 INNER JOIN book_sources as t2 ON t1.origin = t2.bookSourceUrl
-      WHERE t1.name = ? AND t1.author = ? AND t1.coverUrl IS NOT NULL AND t1.coverUrl <> '' AND t2.enabled = 1
+      WHERE t1.name IN ($placeholders) AND t1.coverUrl IS NOT NULL AND t1.coverUrl <> '' AND t2.enabled = 1
       ORDER BY t2.customOrder
       ''',
-      variables: [Variable.withString(name), Variable.withString(author)],
+      variables: [for (final name in list) Variable.withString(name)],
       readsFrom: {searchBooks, bookSources},
     ).map((row) => SearchBook.fromJson(row.data)).get();
   }

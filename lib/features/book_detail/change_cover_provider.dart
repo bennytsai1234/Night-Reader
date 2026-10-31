@@ -5,6 +5,8 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -100,18 +102,11 @@ class ChangeCoverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final stored = await _searchBookDao.getEnabledHasCover(name, author);
-      for (final book in stored) {
-        if (!_covers.any((cover) => cover.book.coverUrl == book.coverUrl)) {
-          _covers.add(
-            AggregatedSearchBook(book: book, sources: const ['本地記錄']),
-          );
-        }
-      }
+      final stored = await _addStoredCovers(name, author);
       _isInitialized = true;
       notifyListeners();
 
-      if (stored.isEmpty) {
+      if (stored == 0) {
         await search(name, author);
       }
     } catch (error) {
@@ -134,14 +129,7 @@ class ChangeCoverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final stored = await _searchBookDao.getEnabledHasCover(name, author);
-      for (final book in stored) {
-        if (!_covers.any((cover) => cover.book.coverUrl == book.coverUrl)) {
-          _covers.add(
-            AggregatedSearchBook(book: book, sources: const ['本地記錄']),
-          );
-        }
-      }
+      await _addStoredCovers(name, author);
 
       final enabledSources = await _sourceDao.getEnabled();
       final coverSources = enabledSources
@@ -182,6 +170,39 @@ class ChangeCoverProvider extends ChangeNotifier {
     }
   }
 
+  /// [result] 是不是《[name]》這本書的封面候選：照 [isSameBook] 認同一本書，
+  /// 任一邊沒寫作者時只比書名。搜尋時存進資料庫的與下次從資料庫讀回的照
+  /// 同一條判斷，存得進去就讀得回來。
+  static bool _isCoverOf(SearchBook result, String name, String author) =>
+      isSameBook(
+        result.name,
+        result.author,
+        name,
+        author,
+        checkAuthor:
+            normalizeSearchText(author).isNotEmpty &&
+            normalizeSearchText(result.author).isNotEmpty,
+      );
+
+  /// 把資料庫裡這本書的封面候選加進清單，回傳讀到幾個。書名用繁簡兩種
+  /// 寫法撈，作者照 [_isCoverOf] 過濾，和換源讀本地紀錄的做法一樣。
+  Future<int> _addStoredCovers(String name, String author) async {
+    try {
+      await ChineseUtils.initialize();
+    } catch (error) {
+      AppLog.w('繁簡字典載入失敗，這次換封面只用原文書名: $error');
+    }
+    final stored = (await _searchBookDao.getEnabledWithCoverByNames(
+      searchKeyVariants(name),
+    )).where((book) => _isCoverOf(book, name, author)).toList();
+    for (final book in stored) {
+      if (!_covers.any((cover) => cover.book.coverUrl == book.coverUrl)) {
+        _covers.add(AggregatedSearchBook(book: book, sources: const ['本地記錄']));
+      }
+    }
+    return stored.length;
+  }
+
   Future<bool> _searchSingleSource(
     BookSource source,
     String name,
@@ -191,13 +212,7 @@ class ChangeCoverProvider extends ChangeNotifier {
     try {
       final books = await _service.searchBooks(source, name);
 
-      final filtered = books.where(
-        (book) =>
-            book.name == name &&
-            (author.isEmpty ||
-                (book.author?.contains(author) ?? false) ||
-                author.contains(book.author ?? '')),
-      );
+      final filtered = books.where((book) => _isCoverOf(book, name, author));
 
       for (final result in filtered) {
         if (!_isSearching) break;
