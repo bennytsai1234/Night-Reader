@@ -73,15 +73,25 @@ class StringUtils {
     return buffer.toString();
   }
 
-  /// 中文大寫數字轉數字 (對標 chineseNumToInt)
+  /// 一段連續的中文數字，認得的字就是 [_chnMap] 裡的字：比對與換算用同一份
+  /// 對照表，不會有認得換算卻切不出來的字。
+  static final RegExp chineseNumberRun = RegExp('[${_chnMap.keys.join()}]+');
+
+  /// 只由個位數字組成（「一零二五」），逐字照寫成阿拉伯數字。
+  static final RegExp _digitsOnly = RegExp(
+    '^[${[for (final MapEntry(:key, :value) in _chnMap.entries)
+      if (value < 10) key].join()}]+\$',
+  );
+
+  /// 中文數字轉數字 (對標 Legado StringUtils.chineseNumToInt)：「一零二五」逐字
+  /// 照寫；「一千零二十五」照位數算，結尾省略單位的「一千五」是 1500。
   static int chineseNumToInt(String chNum) {
     var result = 0;
     var tmp = 0;
     var billion = 0;
 
     // 處理 "一零二五" 形式
-    if (chNum.length > 1 &&
-        RegExp(r'^[〇零一二三四五六七八九壹贰叁肆伍陆柒捌玖]+$').hasMatch(chNum)) {
+    if (chNum.length > 1 && _digitsOnly.hasMatch(chNum)) {
       final resBuffer = StringBuffer();
       for (var i = 0; i < chNum.length; i++) {
         resBuffer.write(_chnMap[chNum[i]] ?? 0);
@@ -89,7 +99,7 @@ class StringUtils {
       return int.tryParse(resBuffer.toString()) ?? -1;
     }
 
-    // 處理 "一千零二十五" 形式
+    // 處理 "一千零二十五"、"一千五" 形式
     try {
       for (var i = 0; i < chNum.length; i++) {
         final val = _chnMap[chNum[i]];
@@ -110,7 +120,10 @@ class StringUtils {
           result += val * tmp;
           tmp = 0;
         } else {
-          tmp = tmp * 10 + val;
+          final previous = i >= 1 ? _chnMap[chNum[i - 1]] ?? 0 : 0;
+          tmp = i >= 2 && i == chNum.length - 1 && previous > 10
+              ? val * previous ~/ 10
+              : tmp * 10 + val;
         }
       }
       return result + tmp + billion;

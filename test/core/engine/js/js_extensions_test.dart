@@ -1089,6 +1089,25 @@ void main() {
       expect(result.stringResult, '第12章 归来');
     });
 
+    test('java.toNumChapter reads 两、兩、万、亿 and spoken forms', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      JsExtensions(runtime!).inject();
+      String numbered(String title) =>
+          runtime!.evaluate('java.toNumChapter("$title")').stringResult;
+
+      expect(numbered('第两百章'), '第200章');
+      expect(numbered('第兩百章'), '第200章');
+      expect(numbered('第十二万三千章'), '第123000章');
+      expect(numbered('第十二萬三千章'), '第123000章');
+      expect(numbered('第一千五章'), '第1500章');
+      expect(numbered('第一零二五章'), '第1025章');
+      expect(numbered('第貳拾章 陸續'), '第20章 陸續');
+      expect(numbered('序章'), '序章');
+    });
+
     test('java.ajax results support chained Java-style replaceAll rules', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);

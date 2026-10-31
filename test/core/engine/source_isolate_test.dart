@@ -562,6 +562,45 @@ void main() {
       );
     });
 
+    // Legado 的 java.ajaxAll 傳回 StrResponse 陣列，規則用 `.body()` 讀。
+    test('java.ajaxAll returns responses in order like Legado', () async {
+      expect(
+        await _evaluateJs('''
+          var r = java.ajaxAll(["$baseUrl/c/1", "$baseUrl/c/2"]);
+          [r.length, r[0].code(), r[0].url().indexOf("/c/1") >= 0,
+            r[0].body().indexOf("第一章的正文") >= 0,
+            r[1].body().indexOf("第二章的正文") >= 0].join(",")
+        '''),
+        '2,200,true,true,true',
+      );
+      expect(await _evaluateJs('java.ajaxAll([]).length'), '0');
+    });
+
+    // Legado 的 java.importScript 原樣交出腳本，由書源自己 eval；腳本裡的函式
+    // 與變數之後的規則叫得到。
+    test(
+      'java.importScript hands the script over for the rule to eval',
+      () async {
+        final dir = await Directory.systemTemp.createTemp(
+          'night_reader_import_',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+        final file = File('${dir.path}/helper.js')
+          ..writeAsStringSync(
+            'function importedTitle() { return "第一章"; }\n'
+            'var importedPrefix = "第";\n',
+          );
+        final path = file.path.replaceAll(r'\', '/');
+        expect(
+          await _evaluateJs('''
+          eval(String(java.importScript("$path")));
+          importedTitle() + "|" + importedPrefix
+        '''),
+          '第一章|第',
+        );
+      },
+    );
+
     test('inside a callback', () async {
       expect(
         await _evaluateJs('''
