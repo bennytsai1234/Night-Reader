@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 /// 舊書源規則 JS 裡 Rhino 吃得下、QuickJS 當成語法錯誤的寫法，執行前改成
 /// 等價的寫法。
 abstract final class LegacyJsSyntax {
@@ -152,22 +154,33 @@ final class _Scanner {
 
   /// 從 [start] 掃程式碼。在 `${…}` 裡時掃到對應的 `}`（不含）為止，回傳它
   /// 的位置；否則掃到結尾。
+  ///
+  /// `/` 是除號還是正規表示式的開頭，看前一個語法單元：值（識別字、數字、
+  /// 字面量、`)`、`]`、後置的 `++`／`--`）後面是除號；運算子、開括號、
+  /// `return`、`typeof` 這類接運算式的關鍵字與開頭是正規表示式。
   int scanCode(int start, {required bool insideInterpolation}) {
     var depth = 0;
     var i = start;
+    var regexAllowed = true;
     while (i < _n) {
       final c = source.codeUnitAt(i);
-      if (c == _lbrace) {
-        depth++;
-      } else if (c == _rbrace) {
-        if (insideInterpolation && depth == 0) return i;
-        depth--;
+      if (_isWhitespace(c) || _isLineTerminator(c)) {
+        _add(_SpanKind.code, i, i + 1);
+        i++;
+        continue;
+      }
+      if (_isWordChar(c)) {
+        final end = _wordEnd(i);
+        final word = source.substring(i, end);
+        _add(_SpanKind.code, i, end);
+        regexAllowed = _expressionKeywords.contains(word);
+        i = end;
+        continue;
       }
       if (c == _slash && i + 1 < _n) {
         final next = source.codeUnitAt(i + 1);
         if (next == _slash) {
-          final end = source.indexOf('\n', i);
-          i = _literal(i, end == -1 ? _n : end);
+          i = _literal(i, _lineEnd(i));
           continue;
         }
         if (next == _star) {
@@ -175,23 +188,102 @@ final class _Scanner {
           i = _literal(i, end == -1 ? _n : end + 2);
           continue;
         }
-        if (_isRegexLiteralStart(i)) {
-          i = _literal(i, _skipRegexLiteral(i));
-          continue;
-        }
+      }
+      if (c == _slash && regexAllowed) {
+        i = _literal(i, _skipRegexLiteral(i));
+        regexAllowed = false;
+        continue;
       }
       if (c == _dquote || c == _squote) {
         i = _literal(i, _skipString(i, c));
+        regexAllowed = false;
         continue;
       }
       if (c == _backtick) {
         i = _scanTemplate(i);
+        regexAllowed = false;
+        continue;
+      }
+      if (c == _lbrace) {
+        depth++;
+      } else if (c == _rbrace) {
+        if (insideInterpolation && depth == 0) return i;
+        depth--;
+      }
+      if ((c == _plus || c == _minus) &&
+          i + 1 < _n &&
+          source.codeUnitAt(i + 1) == c) {
+        // 後置的 `++`／`--` 接在值後面；前置的後面接的是值，不會是 `/`。
+        _add(_SpanKind.code, i, i + 2);
+        regexAllowed = false;
+        i += 2;
         continue;
       }
       _add(_SpanKind.code, i, i + 1);
+      regexAllowed = c != _rparen && c != _rbracket;
       i++;
     }
     return _n;
+  }
+
+  /// 後面接運算式的關鍵字：之後的 `/` 是正規表示式的開頭。
+  static const Set<String> _expressionKeywords = {
+    'return',
+    'typeof',
+    'instanceof',
+    'in',
+    'of',
+    'new',
+    'delete',
+    'void',
+    'throw',
+    'case',
+    'do',
+    'else',
+    'yield',
+    'await',
+  };
+
+  static bool _isWordChar(int c) =>
+      (c >= _charLowerA && c <= _charLowerZ) ||
+      (c >= _charUpperA && c <= _charUpperZ) ||
+      (c >= _char0 && c <= _char9) ||
+      c == _underscore ||
+      c == _dollar ||
+      c >= 0x80 && !_isLineTerminator(c);
+
+  int _wordEnd(int start) {
+    var i = start;
+    while (i < _n && _isWordChar(source.codeUnitAt(i))) {
+      i++;
+    }
+    // 小數點與指數接在數字裡（`1.5`、`1e3`），不另算一個語法單元。
+    if (i < _n &&
+        source.codeUnitAt(i) == _dot &&
+        source.codeUnitAt(start) >= _char0 &&
+        source.codeUnitAt(start) <= _char9) {
+      return _wordEnd(i + 1);
+    }
+    return i;
+  }
+
+  /// 從 [start] 起第一個換行的位置（JavaScript 的四種換行），沒有時是結尾。
+  int _lineEnd(int start) {
+    var i = start;
+    while (i < _n && !_isLineTerminator(source.codeUnitAt(i))) {
+      i++;
+    }
+    return i;
+  }
+
+  /// 反斜線跳脫佔幾個字元：反斜線接 CRLF 是一組續行。
+  int _escapeLength(int backslashIdx) {
+    if (backslashIdx + 2 < _n &&
+        source.codeUnitAt(backslashIdx + 1) == _cr &&
+        source.codeUnitAt(backslashIdx + 2) == _lf) {
+      return 3;
+    }
+    return 2;
   }
 
   int _literal(int start, int end) {
@@ -206,7 +298,7 @@ final class _Scanner {
     while (i < _n) {
       final c = source.codeUnitAt(i);
       if (c == _backslash) {
-        final end = i + 2 > _n ? _n : i + 2;
+        final end = math.min(i + _escapeLength(i), _n);
         _add(_SpanKind.templateText, i, end);
         i = end;
         continue;
@@ -229,47 +321,21 @@ final class _Scanner {
     return _n;
   }
 
-  /// 從 [startIdx]（指向引號）跳過整個字串，回傳結束後下一個位置。
+  /// 從 [startIdx]（指向引號）跳過整個字串，回傳結束後下一個位置。沒跳脫的
+  /// 換行代表字串沒寫完（JavaScript 不允許），停在換行前。
   int _skipString(int startIdx, int quote) {
     var i = startIdx + 1;
     while (i < _n) {
       final c = source.codeUnitAt(i);
       if (c == _backslash) {
-        i += 2;
+        i += _escapeLength(i);
         continue;
       }
-      if (c == quote || c == _lf) return i + 1;
+      if (c == quote) return i + 1;
+      if (_isLineTerminator(c)) return i;
       i++;
     }
     return _n;
-  }
-
-  bool _isRegexLiteralStart(int slashIdx) {
-    var i = slashIdx - 1;
-    while (i >= 0 && _isWhitespace(source.codeUnitAt(i))) {
-      i--;
-    }
-    if (i < 0) return true;
-    final prev = source.codeUnitAt(i);
-    return prev == _lparen ||
-        prev == _lbrace ||
-        prev == _lbracket ||
-        prev == _equal ||
-        prev == _colon ||
-        prev == _comma ||
-        prev == _semicolon ||
-        prev == _bang ||
-        prev == _question ||
-        prev == _plus ||
-        prev == _minus ||
-        prev == _star ||
-        prev == _percent ||
-        prev == _ampersand ||
-        prev == _pipe ||
-        prev == _caret ||
-        prev == _tilde ||
-        prev == _lt ||
-        prev == _gt;
   }
 
   int _skipRegexLiteral(int startIdx) {
@@ -281,7 +347,7 @@ final class _Scanner {
         i += 2;
         continue;
       }
-      if (c == _lf) return i;
+      if (_isLineTerminator(c)) return i;
       if (c == _lbracket) {
         inCharClass = true;
       } else if (c == _rbracket && inCharClass) {
@@ -304,10 +370,18 @@ final class _Scanner {
     return _n;
   }
 
-  static bool _isWhitespace(int cu) {
-    return cu == _space || cu == _tab || cu == _lf || cu == _cr;
-  }
+  static bool _isWhitespace(int cu) =>
+      cu == _space ||
+      cu == _tab ||
+      cu == 0x0B ||
+      cu == 0x0C ||
+      cu == 0xA0 ||
+      cu == 0xFEFF;
 }
+
+/// JavaScript 的四種換行：LF、CR、U+2028、U+2029。
+bool _isLineTerminator(int cu) =>
+    cu == _lf || cu == _cr || cu == 0x2028 || cu == 0x2029;
 
 // ─── char code constants ─────────────────────────────────────────────
 const int _slash = 0x2F;
@@ -319,29 +393,19 @@ const int _backtick = 0x60;
 const int _dollar = 0x24;
 const int _lbrace = 0x7B;
 const int _rbrace = 0x7D;
-const int _lparen = 0x28;
+const int _rparen = 0x29;
 const int _lbracket = 0x5B;
 const int _rbracket = 0x5D;
-const int _comma = 0x2C;
-const int _equal = 0x3D;
-const int _colon = 0x3A;
-const int _semicolon = 0x3B;
-const int _bang = 0x21;
-const int _question = 0x3F;
 const int _plus = 0x2B;
 const int _minus = 0x2D;
-const int _percent = 0x25;
-const int _ampersand = 0x26;
-const int _pipe = 0x7C;
-const int _caret = 0x5E;
-const int _tilde = 0x7E;
-const int _lt = 0x3C;
-const int _gt = 0x3E;
+const int _dot = 0x2E;
+const int _underscore = 0x5F;
 const int _space = 0x20;
 const int _tab = 0x09;
 const int _lf = 0x0A;
 const int _cr = 0x0D;
 const int _char0 = 0x30;
+const int _char9 = 0x39;
 const int _charUpperA = 0x41;
 const int _charUpperU = 0x55;
 const int _charUpperX = 0x58;
