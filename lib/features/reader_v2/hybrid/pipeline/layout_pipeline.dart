@@ -368,8 +368,13 @@ final class HybridLayoutPipeline {
   }
 
   /// 等到下一個進展：還有排版工作就等一幀，否則等任一章取得完成。完全
-  /// 沒有工作在跑時代表呼叫端的等待永遠不會結束，直接丟出錯誤。
-  Future<MaterializationWait> waitForProgress(bool Function() isCurrent) async {
+  /// 沒有工作在跑時代表呼叫端的等待永遠不會結束，直接丟出錯誤。這一份
+  /// 不再是 Runtime 這一代（[isCurrentGeneration]）時和呼叫端作廢一樣，
+  /// 回傳 [MaterializationWait.cancelled]：它不會再排新的章節。
+  Future<MaterializationWait> waitForProgress(
+    bool Function() isCallerCurrent,
+  ) async {
+    bool isCurrent() => isCurrentGeneration && isCallerCurrent();
     if (!isCurrent()) return MaterializationWait.cancelled;
     if (_pump.queueDepth > 0) {
       await _nextFrame();

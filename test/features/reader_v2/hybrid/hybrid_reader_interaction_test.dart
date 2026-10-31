@@ -757,7 +757,77 @@ void main() {
       }
       expect(tester.takeException(), isNull);
       expect(runtime.state.contentGeneration, greaterThan(generation));
-      expect(runtime.state.hasStableWorld, isTrue);
+      expect(runtime.state.visibleLocation.chapterIndex, 0);
+      expect(runtime.stateMachine.currentOperation, isNull);
+      expect(find.byType(LoadingVeil), findsNothing, reason: '紙掀開了');
+      expect(find.byType(CustomScrollView), findsOneWidget);
+      expect(
+        (await runtime.repository.loadContent(0)).displayText,
+        contains('改過的第 0 章'),
+        reason: '排的是新的正文',
+      );
+    });
+
+    testWidgets('a page turn waiting for a chapter whose text changed '
+        'meanwhile is cancelled, not failed', (tester) async {
+      const chapterCount = 25;
+      final rewritten = Completer<String?>();
+      var holdChapter1 = false;
+      // 開在長長的第 0 章中間：開書不等相鄰的章，第 1 章在背景取，被擋住。
+      const paragraphs = 300;
+      final custom = _makeRuntime(
+        chapterCount: chapterCount,
+        paragraphs: paragraphs,
+        initialLocation: ReaderV2Location(
+          chapterIndex: 0,
+          charOffset: _chapter(0, paragraphs: paragraphs).content!.length ~/ 2,
+        ),
+        contentLoader: (index, chapter) => index == 1 && holdChapter1
+            ? rewritten.future
+            : Future.value(chapter.content),
+      );
+      // 先讀過第 1–24 章：第 1 章的正文記得是哪一份，但已經不在最近 20 章
+      // 的快取裡，再取時才發現正文換了。
+      for (var index = 1; index < chapterCount; index++) {
+        await custom.repository.loadContent(index);
+      }
+      holdChapter1 = true;
+      await pumpReader(tester, customRuntime: custom);
+      await settle(tester);
+      final generation = runtime.state.contentGeneration;
+
+      // 捲到已經排好的盡頭（第 0 章結尾），再翻下一頁就要等第 1 章。
+      final position = scrollPosition(tester);
+      for (var step = 0; step < 40; step++) {
+        final before = position.pixels;
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+        await settle(tester);
+        if (position.pixels == before) break;
+      }
+      expect(position.pixels, position.maxScrollExtent);
+      final turn = viewport.moveToNextPage!();
+      await settle(tester);
+      rewritten.complete('改過的第 1 章。\n只剩兩段。');
+      var turned = false;
+      var failed = false;
+      unawaited(
+        turn.then((_) => turned = true, onError: (Object _) => failed = true),
+      );
+      for (
+        var frame = 0;
+        frame < 2000 &&
+            (!turned ||
+                runtime.stateMachine.currentOperation != null ||
+                find.byType(LoadingVeil).evaluate().isNotEmpty);
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(failed, isFalse, reason: '翻頁作廢，不丟出錯誤');
+      expect(turned, isTrue);
+      expect(tester.takeException(), isNull);
+      expect(runtime.state.contentGeneration, greaterThan(generation));
+      expect(find.byType(LoadingVeil), findsNothing);
       expect(find.byType(CustomScrollView), findsOneWidget);
     });
   });

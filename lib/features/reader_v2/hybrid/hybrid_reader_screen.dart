@@ -1151,6 +1151,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         !runtime.disposed &&
         runtime.state.hasStableWorld &&
         identical(_pipeline, pipeline) &&
+        // Runtime 換代後這份管線只留著紙下的舊正文，命令在換代那一刻作廢，
+        // 不等紙蓋滿換掉管線。
+        pipeline.isCurrentGeneration &&
         revision == _runtimeLocationRevision &&
         identical(runtime.stateMachine.currentOperation, operation) &&
         !_sawUserScroll &&
