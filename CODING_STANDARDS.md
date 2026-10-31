@@ -29,7 +29,7 @@
 
 ## 網路與書源
 
-- 書源的 HTTP 一律經 `NetworkService` 與其攔截器。書源不支援登入與需要使用者互動的驗證，遇到就立即拒絕（ADR 0013）；不需要互動的網頁渲染（網址選項 `webView`、`java.webView`）照常在背景載入。
+- 書源的 HTTP 一律經 `NetworkService` 與其攔截器。書源程式要使用者操作（開網頁、驗證碼）只在登入頁按下的動作裡可以（`SourceInteraction.runInteractive`），其他地方立即拒絕，背景工作不等人（ADR 0038）；不需要互動的網頁渲染（網址選項 `webView`、`java.webView`）照常在背景載入。
 
 ## 背景執行
 

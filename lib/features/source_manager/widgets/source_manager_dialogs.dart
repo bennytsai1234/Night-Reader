@@ -315,7 +315,7 @@ class SourceManagerDialogs {
     final confirmed = await showAppConfirm(
       context: context,
       title: '清理建議刪除來源',
-      message: '會刪除目前標記為非小說、需要登入或下載站的來源。這些來源不會再參與搜尋或閱讀。',
+      message: '會刪除目前標記為非小說或下載站的來源。這些來源不會再參與搜尋或閱讀。',
       confirmLabel: '確定刪除',
       destructive: true,
     );

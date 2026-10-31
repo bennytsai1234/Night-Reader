@@ -317,7 +317,12 @@ extension JsJavaObject on JsExtensionsBase {
         webViewGetOverrideUrl: function(html, url, js, overrideUrlRegex) {
           return __lrWait('webViewGetOverrideUrl', [html, url, js, overrideUrlRegex]);
         },
-        startBrowserAwait: function(url, title) { return __lrWait('startBrowserAwait', [url, title]); },
+        startBrowser: function(url, title) { __lrWait('startBrowser', [url, title]); },
+        startBrowserAwait: function(url, title, refetchAfterSuccess) {
+          return buildHttpResponse(
+            __lrWait('startBrowserAwait', [url, title, refetchAfterSuccess !== false])
+          );
+        },
         getVerificationCode: function(imageUrl) { return __lrWait('getVerificationCode', imageUrl); },
         downloadFile: function(url) { return __lrWait('downloadFile', url); },
         importScript: function(path) { return __lrWait('importScript', path); },
@@ -534,7 +539,8 @@ extension JsJavaObject on JsExtensionsBase {
         // legado 的 java.log / java.put 會回傳原值，部分書源會把它們當成
         // branch completion value 來傳回正文或中間結果。
         log: function(msg) { return sendMessage('log', JSON.stringify(msg)); },
-        toast: function(msg) { sendMessage('toast', JSON.stringify(msg)); },
+        toast: function(msg) { sendMessage('toast', JSON.stringify(String(msg))); },
+        longToast: function(msg) { sendMessage('longToast', JSON.stringify(String(msg))); },
         put: function(key, value) {
           var normalized = value == null ? '' : String(value);
           sendMessage('scopePut', JSON.stringify([key, normalized]));
@@ -615,6 +621,15 @@ extension JsJavaObject on JsExtensionsBase {
       source.getLoginInfoMap = function() {
         try { return JSON.parse(source.getLoginInfo()); } catch(e) { return {}; }
       };
+      source.removeLoginInfo = function() { sendMessage('sourceRemoveLoginInfo', '""'); };
+      source.getLoginHeader = function() { return __lrWait('sourceGetLoginHeader', ''); };
+      source.getLoginHeaderMap = function() {
+        try { return JSON.parse(source.getLoginHeader()); } catch(e) { return {}; }
+      };
+      source.putLoginHeader = function(header) {
+        sendMessage('sourcePutLoginHeader', JSON.stringify(String(header)));
+      };
+      source.removeLoginHeader = function() { sendMessage('sourceRemoveLoginHeader', '""'); };
       source.put = function(key, value) { sendMessage('sourcePut', JSON.stringify([key, value])); };
       source.get = function(key) { return __lrWait('sourceGet', key); };
 

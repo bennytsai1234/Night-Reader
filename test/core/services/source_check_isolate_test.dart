@@ -9,7 +9,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 
 const _readable = '這是一段足夠長的正文內容，用來確認校驗會把它當成可以閱讀的章節。';
 
@@ -212,7 +212,11 @@ void main() {
     );
 
     expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
-    expect(checked.isCleanupCandidate, isTrue);
+    // 要登入是書源的狀態，不是壞掉：照樣參加搜尋、照樣能開書，不列入清理
+    // （ADR 0038）。
+    expect(checked.isCleanupCandidate, isFalse);
+    expect(checked.isSearchEnabledByRuntime, isTrue);
+    expect(checked.isReadingEnabledByRuntime, isTrue);
   });
 
   test(

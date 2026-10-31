@@ -12,7 +12,7 @@ import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
-import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 //  Public types
@@ -171,14 +171,13 @@ Future<SourceCheckIsolateHandle> spawnSourceCheck(
 Future<Map<String, dynamic>> Function(CancelToken) _checkTask(
   Map<String, dynamic> sourceJson,
   Map<String, dynamic> configMap,
-) =>
-    (_) => SourceValidationContext.runNonInteractive(() async {
-      final checker = SourceChecker(
-        source: BookSource.fromJson(sourceJson),
-        config: IsolateCheckConfig.fromMap(configMap),
-      );
-      return (await checker.run()).toMap();
-    });
+) => (_) async {
+  final checker = SourceChecker(
+    source: BookSource.fromJson(sourceJson),
+    config: IsolateCheckConfig.fromMap(configMap),
+  );
+  return (await checker.run()).toMap();
+};
 
 // ═══════════════════════════════════════════════════════════════════
 //  Private enums / types used inside the isolate
@@ -722,7 +721,7 @@ class SourceChecker {
             _IssueData(
               stage: _stageFor(mode, 'content'),
               message: '正文需要登入、VIP 或解鎖後閱讀',
-              health: _kLoginRequiredHealth,
+              health: loginRequiredSourceHealth,
             ),
           );
           return;
@@ -842,7 +841,7 @@ class SourceChecker {
       return const _IssueData(
         stage: 'content',
         message: '正文需要登入後閱讀',
-        health: _kLoginRequiredHealth,
+        health: loginRequiredSourceHealth,
       );
     }
 
@@ -1116,16 +1115,6 @@ class SourceChecker {
 //  Pure helper functions (private, duplicated from check logic)
 // ═══════════════════════════════════════════════════════════════════
 
-const _kLoginRequiredHealth = SourceRuntimeHealth(
-  category: SourceHealthCategory.loginRequired,
-  label: loginRequiredSourceGroupTag,
-  description: '來源需要登入、VIP 或解鎖後才能閱讀',
-  allowsSearch: false,
-  allowsReading: false,
-  cleanupCandidate: true,
-  quarantined: false,
-);
-
 String _stageFor(_CheckMode mode, String detailStage) =>
     mode == _CheckMode.search ? detailStage : 'discovery:$detailStage';
 
@@ -1205,7 +1194,7 @@ _IssueData _lockedChapterIssue(_CheckMode mode, BookChapter chapter) {
     message: title.isEmpty
         ? '章節疑似 VIP/鎖章，需要登入或付費'
         : '章節疑似 VIP/鎖章，需要登入或付費: $title',
-    health: _kLoginRequiredHealth,
+    health: loginRequiredSourceHealth,
   );
 }
 

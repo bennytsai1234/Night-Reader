@@ -45,6 +45,27 @@ class SourceEditBasic extends StatelessWidget {
             ),
           ],
         ),
+        // 同 Legado 的「登錄 URL」「登錄 UI」「登錄檢查 JS」（ADR 0038）。
+        GroupedSection(
+          header: '登入',
+          children: [
+            GroupedTextFieldRow(
+              controller: controllers['loginUrl']!,
+              hintText: '登入網址或登入程式',
+              maxLines: 3,
+            ),
+            GroupedTextFieldRow(
+              controller: controllers['loginUi']!,
+              hintText: '登入表單（JSON）',
+              maxLines: 3,
+            ),
+            GroupedTextFieldRow(
+              controller: controllers['loginCheckJs']!,
+              hintText: '登入檢查程式',
+              maxLines: 3,
+            ),
+          ],
+        ),
       ],
     );
   }

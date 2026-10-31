@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
@@ -58,8 +60,9 @@ class AnalyzeUrl {
 
   void _init() {
     try {
-      // 0. 注入 BookSource.header
+      // 0. 注入 BookSource.header 與登入標頭
       _initSourceHeaders();
+      _initLoginHeaders();
       ruleUrl = rawUrl;
       // 1. 執行 @js, <js>
       _analyzeJs();
@@ -92,6 +95,28 @@ class AnalyzeUrl {
   void _releaseJsRule() {
     _jsRuleInstance?.dispose();
     _jsRuleInstance = null;
+  }
+
+  /// 登入標頭（書源登入程式存的身分資料，例如 token）跟著每次請求送出，蓋過
+  /// 書源 header 的同名欄位，網址選項的標頭再蓋過它，同 Legado
+  /// （`getHeaderMap(true)`）。
+  ///
+  /// 只有有登入的書源才找：記憶體沒有時在書源 isolate 停住讀資料庫，讀到
+  /// 的（沒有就是空的）記在這條 isolate 的記憶體，之後不再讀。這筆不同步給
+  /// 其他 isolate：同一時間登入頁剛寫入的真標頭可能被讀到的舊值蓋掉；登入
+  /// 時寫入的經由記憶體同步過來，蓋過這裡記的。不能停住的 isolate（主
+  /// isolate）只看記憶體。
+  void _initLoginHeaders() {
+    final source = this.source;
+    if (source is! BaseSource || !source.hasLogin) return;
+    final key = source.loginHeaderCacheKey;
+    final cache = CacheManager();
+    var raw = cache.getMemoryText(key);
+    if (raw == null && BlockingCall.available) {
+      raw = BlockingCall.run(cacheRead(key)) as String? ?? '';
+      cache.applyMirroredWrite(key, raw, 0);
+    }
+    headerMap.addAll(BaseSource.decodeLoginHeader(raw));
   }
 
   /// 將 BookSource.header（JSON 格式）解析並注入 headerMap

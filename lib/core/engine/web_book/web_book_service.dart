@@ -60,7 +60,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'search');
 
     final results = await BookListParser.parse(
       source: source,
@@ -85,7 +84,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'explore');
 
     return BookListParser.parse(
       source: source,
@@ -120,7 +118,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'detail');
 
     final parsed = await BookInfoParser.parse(
       source: source,
@@ -175,6 +172,10 @@ class WebBook {
         baseUrl: firstRes.url,
         maxChapters: chapterLimit,
       );
+      LoginWall.checkToc(
+        firstRes,
+        empty: firstResult.chapters.isEmpty && firstResult.nextUrls.isEmpty,
+      );
       isReverse = firstResult.isReverse;
       allChapters.addAll(firstResult.chapters);
 
@@ -189,7 +190,6 @@ class WebBook {
             pending,
             source,
             book,
-            stage: 'toc',
             allowPartial: !requireComplete,
             concurrency: effectivePageConcurrency,
             cancelToken: cancelToken,
@@ -209,6 +209,11 @@ class WebBook {
                   ? null
                   : chapterLimit - allChapters.length,
             );
+            // 要整份目錄時，後面哪一頁被登入牆擋住就整份失敗；其他時候照
+            // 抓不到的頁略過，先給讀得到的部分。
+            if (requireComplete) {
+              LoginWall.checkToc(res, empty: pageResult.chapters.isEmpty);
+            }
             allChapters.addAll(pageResult.chapters);
             // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
           }
@@ -235,7 +240,6 @@ class WebBook {
             var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
             res = runLoginCheckJs(analyzeUrl, res);
             _checkRedirect(source, res);
-            _checkLoginRequired(res, stage: 'toc');
 
             final result = await ChapterListParser.parse(
               source: source,
@@ -246,6 +250,9 @@ class WebBook {
                   ? null
                   : (chapterLimit - allChapters.length),
             );
+            if (requireComplete) {
+              LoginWall.checkToc(res, empty: result.chapters.isEmpty);
+            }
             allChapters.addAll(result.chapters);
             currentUrl = result.nextUrls.isNotEmpty
                 ? result.nextUrls.first
@@ -362,7 +369,6 @@ class WebBook {
     );
     firstRes = runLoginCheckJs(firstAnalyzeUrl, firstRes);
     _checkRedirect(source, firstRes);
-    _checkLoginRequired(firstRes, stage: 'content');
 
     final firstResult = await ContentParser.parse(
       source: source,
@@ -372,6 +378,7 @@ class WebBook {
       baseUrl: firstRes.url,
       nextChapterUrl: nextChapterUrl,
     );
+    LoginWall.checkContent(firstRes, firstResult.content);
     if (firstResult.content.isNotEmpty) {
       contentParts.add(firstResult.content);
     }
@@ -387,7 +394,6 @@ class WebBook {
         pending,
         source,
         book,
-        stage: 'content',
         allowPartial: false,
         concurrency: effectivePageConcurrency,
         cancelToken: cancelToken,
@@ -403,6 +409,7 @@ class WebBook {
           baseUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
+        LoginWall.checkContent(res, pageResult.content);
         if (pageResult.content.isNotEmpty) {
           contentParts.add(pageResult.content);
         }
@@ -428,7 +435,6 @@ class WebBook {
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
         res = runLoginCheckJs(analyzeUrl, res);
         _checkRedirect(source, res);
-        _checkLoginRequired(res, stage: 'content');
 
         final result = await ContentParser.parse(
           source: source,
@@ -438,6 +444,7 @@ class WebBook {
           baseUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
+        LoginWall.checkContent(res, result.content);
         if (result.content.isNotEmpty) {
           contentParts.add(result.content);
         }
@@ -448,13 +455,16 @@ class WebBook {
 
     // 合併並執行最終 replaceRegex 清理 (對標 Android BookContent 尾段)
     final joined = contentParts.join('\n');
-    return ContentParser.finalizeContent(
+    final content = await ContentParser.finalizeContent(
       source: source,
       book: book,
       chapter: chapter,
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
+    // 每一頁都讀得到，套完替換規則卻只剩一句登入提示。
+    LoginWall.checkContent(null, content);
+    return content;
   }
 
   /// 重定向檢查 (對標 Android WebBook.checkRedirect)
@@ -464,31 +474,12 @@ class WebBook {
     }
   }
 
-  static void _checkLoginRequired(StrResponse res, {required String stage}) {
-    if (!res.looksLikeLoginRequired) return;
-    throw LoginCheckException(_loginRequiredMessage(stage), sourceUrl: res.url);
-  }
-
-  static String _loginRequiredMessage(String stage) {
-    switch (stage) {
-      case 'content':
-        return '正文需要登入後閱讀';
-      case 'toc':
-        return '目錄需要登入後閱讀';
-      case 'detail':
-        return '詳情需要登入後閱讀';
-      default:
-        return '書源需要登入後使用';
-    }
-  }
-
   /// 以有上限的並發抓取多個 URL 並依輸入順序回傳 StrResponse
   /// (對標 Android flow.mapAsync(threadCount))
   static Future<List<StrResponse?>> _fetchParallel(
     List<String> urls,
     BookSource source,
     Book book, {
-    required String stage,
     required bool allowPartial,
     int concurrency = _pageConcurrency,
     CancelToken? cancelToken,
@@ -502,7 +493,6 @@ class WebBook {
         var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
         res = runLoginCheckJs(analyzeUrl, res);
         _checkRedirect(source, res);
-        _checkLoginRequired(res, stage: stage);
         return res;
       } on DioException catch (error, stackTrace) {
         if (CancelToken.isCancel(error)) rethrow;
@@ -565,7 +555,6 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
-    _checkLoginRequired(res, stage: 'toc');
     return res;
   }
 

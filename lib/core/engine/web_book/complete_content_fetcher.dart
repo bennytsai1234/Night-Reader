@@ -9,7 +9,6 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/network/str_response.dart';
 
 /// 正文完整性優先的抓取器。
 ///
@@ -76,13 +75,15 @@ final class CompleteContentFetcher {
     }
 
     final joined = contentParts.join('\n');
-    return ContentParser.finalizeContent(
+    final content = await ContentParser.finalizeContent(
       source: source,
       book: book,
       chapter: chapter,
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
+    LoginWall.checkContent(null, content);
+    return content;
   }
 
   static Future<_FetchedContentPage> _fetchPage(
@@ -96,7 +97,6 @@ final class CompleteContentFetcher {
     final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
     var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     response = runLoginCheckJs(analyzeUrl, response);
-    _checkLoginRequired(response);
 
     final result = await ContentParser.parse(
       source: source,
@@ -106,17 +106,13 @@ final class CompleteContentFetcher {
       baseUrl: response.url,
       nextChapterUrl: nextChapterUrl,
     );
+    // 任何一頁被登入牆擋住，整章失敗，不存半章。
+    LoginWall.checkContent(response, result.content);
     return _FetchedContentPage(
       content: result.content,
       nextUrls: result.nextUrls,
       baseUrl: response.url,
     );
-  }
-
-  static void _checkLoginRequired(StrResponse response) {
-    if (response.looksLikeLoginRequired) {
-      throw LoginCheckException('正文需要登入後閱讀', sourceUrl: response.url);
-    }
   }
 }
 

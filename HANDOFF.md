@@ -14,7 +14,10 @@
 
 - 開 App 呼吸剛開始那一幀偶爾碰上舊生區回收（手機 14ms，6 次有 1 次）：使用者 2026-10-29 改成感覺得到才修時，指定開 App 的動畫仍要處理；試過的做法與代價寫在 ADR 0036「待處理」。
 
-- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）、`java.ajaxAll` 回應物件與 `java.importScript` 原樣交出、`java.toNumChapter` 的簡繁大寫數字（#166）。還沒做，照源倉庫 803 個文字書源的用量排：登入（`loginUrl` 242、`loginUi` 107 個書源）、`startBrowser(Await)`（148，可在看不到的瀏覽器裡載入、不跳畫面）、`data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫）、`longToast`、`androidId` 等。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
+- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）、`java.ajaxAll` 回應物件與 `java.importScript` 原樣交出、`java.toNumChapter` 的簡繁大寫數字（#166）、書源登入（ADR 0038：網頁登入、書源表單、`longToast`、登入標頭）。還沒做，照源倉庫 803 個文字書源的用量排：
+  - 閱讀中遇到書源要在網頁上驗證（`startBrowserAwait`，148 個書源）：2026-10-31 談定的設計是背景照舊立刻失敗，閱讀器的失敗提示附「前往驗證」，開書源要的那個網頁、關掉後重抓；登入頁的瀏覽器頁可以直接用。校驗遇到時目前照 ADR 0033 隔離，做這項時一起決定要不要改成和「需要登入」一樣只是提示。
+  - `data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫，登入程式也用了 25 次）、`androidId`、`java.refreshExplore` 等。
+  - 一些改版閱讀 App 的登入表單欄位（`toggle` 11、`select` 10 個）照 Legado 不顯示。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
 
 ## 先不做
 

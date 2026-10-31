@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -141,6 +142,11 @@ class BookDetailProvider extends ChangeNotifier {
   BookSource? get currentSource => _currentSource;
   String? _sourceIssueMessage;
   String? get sourceIssueMessage => _sourceIssueMessage;
+
+  /// 目錄要登入才讀得到，書源也有登入：[sourceIssueMessage] 那一列點了去
+  /// 登入（ADR 0038）。
+  bool _loginRequired = false;
+  bool get loginRequired => _loginRequired;
   BookDetailCacheStatus _cacheStatus = BookDetailCacheStatus.empty;
   bool _isCacheStatusLoading = false;
   bool _isCheckingUpdate = false;
@@ -434,8 +440,14 @@ class BookDetailProvider extends ChangeNotifier {
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
         await _chapterDao.insertChapters(_allChapters);
+        _loginRequired = false;
       } catch (e) {
-        _sourceIssueMessage = '目前來源目錄載入失敗，建議換源後再試';
+        _loginRequired =
+            _currentSource!.hasLogin &&
+            (e is LoginCheckException || LoginCheckException.describes('$e'));
+        _sourceIssueMessage = _loginRequired
+            ? '目錄需要登入後閱讀'
+            : '目前來源目錄載入失敗，建議換源後再試';
         AppLog.e('加載目錄失敗: $e', error: e);
       }
     }

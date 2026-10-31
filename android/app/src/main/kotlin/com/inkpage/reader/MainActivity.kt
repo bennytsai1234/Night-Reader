@@ -109,6 +109,48 @@ class MainActivity : AudioServiceActivity() {
                         result.success(CookieManager.getInstance().getCookie(url))
                     }
                 }
+                // 單獨登出一個書源：CookieManager 沒有刪除單一網站的方法，
+                // 也列不出 Cookie 的路徑。對每個網址，把送得到它的每個
+                // Cookie 設成立刻過期：網址路徑上的每一層（登入網頁常在
+                // /account/login，那裡設的 Cookie 從根目錄看不到）、網站
+                // 本身與各層上層網域（帶 Domain 設的才清得掉）都設一次。
+                "clearCookies" -> {
+                    val urls = (call.arguments as? List<*>)?.filterIsInstance<String>()
+                    if (urls.isNullOrEmpty()) {
+                        result.error("bad_args", "urls are required", null)
+                    } else {
+                        val manager = CookieManager.getInstance()
+                        for (url in urls) {
+                            val uri = android.net.Uri.parse(url)
+                            val host = uri.host ?: continue
+                            val labels = host.split(".")
+                            val domains = (0..maxOf(0, labels.size - 2)).map {
+                                labels.drop(it).joinToString(".")
+                            }
+                            val segments = uri.pathSegments ?: emptyList()
+                            val paths = listOf("/") + segments.indices.map {
+                                "/" + segments.take(it + 1).joinToString("/")
+                            }
+                            manager.getCookie(url)
+                                ?.split(";")
+                                ?.map { it.substringBefore("=").trim() }
+                                ?.filter { it.isNotEmpty() }
+                                ?.forEach { name ->
+                                    for (path in paths) {
+                                        manager.setCookie(url, "$name=; Max-Age=0; Path=$path")
+                                        for (domain in domains) {
+                                            manager.setCookie(
+                                                url,
+                                                "$name=; Max-Age=0; Path=$path; Domain=.$domain",
+                                            )
+                                        }
+                                    }
+                                }
+                        }
+                        manager.flush()
+                        result.success(null)
+                    }
+                }
                 "defaultUserAgent" -> result.success(
                     try {
                         WebSettings.getDefaultUserAgent(applicationContext)

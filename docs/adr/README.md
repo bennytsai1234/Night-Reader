@@ -53,7 +53,7 @@
 | [0028](0028-source-work-in-a-source-isolate.md) | 書源工作在常駐的書源 isolate 執行；Cookie 與限流留在主 isolate（條數已由 0034 改成四條） |
 | [0034](0034-rule-js-waits-synchronously.md) | 規則 JS 等網路時整條書源 isolate 停住、拿到的就是結果，和 Legado 一樣；書源 isolate 開四條，網路 isolate 替它們做要等的事 |
 | [0008](0008-shelf-books-download-whole-book.md) | 書架上的網路書整本下載，不限網路、沒有開關 |
-| [0013](0013-no-source-login-or-interactive-verification.md) | 書源不支援登入與互動驗證 |
+| [0038](0038-source-login-in-the-foreground.md) | 書源照 Legado 登入（網頁登入與書源的表單），只在使用者打開的登入頁裡進行，背景從不等人；「需要登入」是狀態不是壞掉，在失敗處給登入的路 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
 
 ## 工程與流程
@@ -72,4 +72,5 @@
 | ADR | 取代它的 |
 |---|---|
 | [0005](0005-no-kinsoku-line-breaking.md) 正文換行不做避頭尾 | 0026 |
+| [0013](0013-no-source-login-or-interactive-verification.md) 書源不支援登入與互動驗證 | 0038（背景工作不等人照本文） |
 | [0004](0004-beta-channel-from-every-main-merge.md) 每次合併到 main 自動發測試版 | 0014、0027（tag 與 versionCode 的算法照本文） |

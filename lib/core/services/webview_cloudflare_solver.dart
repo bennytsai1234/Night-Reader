@@ -16,6 +16,11 @@ abstract final class WebViewNative {
   static Future<String?> cookies(Uri uri) =>
       _call<String>('getCookies', uri.toString());
 
+  /// 清掉瀏覽器存的、[uris] 所在網站的 Cookie（單獨登出一個書源），每個
+  /// 網址路徑上的每一層都清。
+  static Future<void> clearCookies(List<Uri> uris) =>
+      _call<void>('clearCookies', [for (final uri in uris) uri.toString()]);
+
   static Future<String?> defaultUserAgent() =>
       _call<String>('defaultUserAgent', null);
 

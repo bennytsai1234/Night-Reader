@@ -23,6 +23,7 @@ import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 import 'isolate_channel.dart';
@@ -516,6 +517,8 @@ final class SourceWorker {
       case _ClearanceRejected(:final uri):
         await CloudflareClearance.markRejected(uri);
         return null;
+      case final SourceInteractionRequest interaction:
+        return SourceInteraction.serve(interaction);
       case _CookieJarLoad(:final uri):
         return NetworkService().cookieJar.loadForRequest(uri);
       case _CookieJarSave(:final uri, :final cookies):
@@ -566,6 +569,8 @@ final class SourceWorker {
       case _RateRelease(:final ticket):
         from._tickets.remove(ticket);
         ConcurrentRateLimiter.release(_rateTickets.remove(ticket));
+      case final SourceMessage message:
+        SourceInteraction.deliver(message);
       case _CacheWrite(:final key, :final value, :final deadline):
         CacheManager().applyMirroredWrite(key, value, deadline);
         _notifyWorkers(notice, except: from);
@@ -731,6 +736,10 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
       await channel.request(_Clearance(uri)) as ClearanceResult;
   CloudflareClearance.rejectedDelegate = (uri) =>
       channel.request(_ClearanceRejected(uri));
+  // 登入頁的書源要使用者操作：書源 isolate 停住，網路 isolate 把請求轉給
+  // 主 isolate 的登入頁；訊息不用等，書源 isolate 直接送過去。
+  SourceInteraction.delegate = channel.request;
+  SourceInteraction.messageDelegate = (message) => _tryNotify(channel, message);
   WebViewUserAgent.value = init.webViewUserAgent;
   ConcurrentRateLimiter.delegate = _MainRateLimits(channel);
   CacheManager.onMemoryWrite = (key, value, deadline) =>

@@ -52,7 +52,7 @@ App 開啟時會自動檢查新版，連著 Wi-Fi 會先在背景下載好再提
 
 書源是一份 JSON 規則，描述某個網站怎麼搜尋、怎麼取得詳情、目錄與正文。夜讀支援 Legado 書源常用的 CSS、XPath、JSONPath、Regex 與 JavaScript 規則。
 
-夜讀不支援書源登入，也不做驗證碼這類需要手動操作的驗證，需要這些的書源會被當成無法使用（見 [ADR 0013](docs/adr/0013-no-source-login-or-interactive-verification.md)）。網站改版或擋爬蟲時，書源也可能失效，可以用書源校驗找出來。
+要登入的書源照 Legado 的方式登入：沒有表單的在網頁上登入，有表單的照書源定義的欄位與按鈕操作。登入只在你打開的登入頁裡進行，背景的下載、檢查更新與書源校驗從不停下來等你（見 [ADR 0038](docs/adr/0038-source-login-in-the-foreground.md)）。網站改版或擋爬蟲時，書源也可能失效，可以用書源校驗找出來。
 
 ## 回報問題
 
