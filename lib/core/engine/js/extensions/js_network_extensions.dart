@@ -30,12 +30,12 @@ extension JsNetworkExtensions on JsExtensions {
       }
     });
 
-    // ─── java.ajaxAll(urlList) — 返回 body 字串陣列 ──────────────
+    // ─── java.ajaxAll(urlList) — 返回回應陣列（JS 端包成回應物件） ──
     onBlocking('ajaxAll', (payload) {
-      if (payload is! List) return const <String>[];
+      if (payload is! List) return const <Object?>[];
       try {
         return BlockingCall.run(
-          responseBodies([for (final url in payload) _analyzeUrl('$url')]),
+          responses([for (final url in payload) _analyzeUrl('$url')]),
         );
       } catch (e) {
         AppLog.e('java.ajaxAll failed: $e');

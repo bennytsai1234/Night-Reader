@@ -277,7 +277,9 @@ class JsExtensions extends JsExtensionsBase {
       if (content.trim().isEmpty) {
         throw Exception('$path 內容獲取失敗或者為空');
       }
-      return _wrapImportedScript(content);
+      // 和 Legado 一樣原樣交出，書源自己 `eval(String(...))`：裡面的函式與
+      // 變數就留在書源 eval 的地方，後面的規則叫得到。
+      return content;
     });
 
     onBlocking('sourceGet', (key) {
@@ -400,24 +402,5 @@ class JsExtensions extends JsExtensionsBase {
       return value.map(_toJsRuleValue).toList();
     }
     return stringifyRuleResult(value);
-  }
-
-  String _wrapImportedScript(String content) {
-    final indented = content
-        .split('\n')
-        .map((line) => line.isEmpty ? '' : '  $line')
-        .join('\n');
-    return '''
-(function(__lrGlobal) {
-  var exports = undefined;
-  var module = undefined;
-  var define = undefined;
-  var require = undefined;
-$indented
-}).call(
-  typeof globalThis !== "undefined" ? globalThis : this,
-  typeof globalThis !== "undefined" ? globalThis : this
-);
-''';
   }
 }

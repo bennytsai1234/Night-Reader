@@ -6,6 +6,7 @@ import '../encode/charsets.dart';
 import '../js_extensions.dart';
 
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 
 extension JsStringExtensions on JsExtensions {
   void injectStringExtensions() {
@@ -147,95 +148,15 @@ extension JsStringExtensions on JsExtensions {
       (dynamic args) => ChineseUtils.s2t(args.toString()),
     );
 
-    // 實作 java.toNumChapter ((原 Android ))
+    // java.toNumChapter：章名裡第一段中文數字換成阿拉伯數字，認得的字與
+    // 換算都照 [StringUtils]，簡體、繁體與大寫數字一樣。
     runtime.onMessage('_toNumChapter', (dynamic args) {
       final s = args.toString();
-      final regex = RegExp(r'(.*?)([〇零一二三四五六七八九十百千萬億壹貳叁肆伍陸柒捌玖拾佰仟]+)(.*)');
-      final match = regex.firstMatch(s);
-      if (match != null) {
-        final intStr = chineseNumToInt(match.group(2)!);
-        return '${match.group(1)}$intStr${match.group(3)}';
-      }
-      return s;
+      final match = StringUtils.chineseNumberRun.firstMatch(s);
+      if (match == null) return s;
+      final number = StringUtils.chineseNumToInt(match.group(0)!);
+      if (number < 0) return s;
+      return s.replaceRange(match.start, match.end, '$number');
     });
-  }
-
-  /// 中文數字轉整數 (深度還原 Android chineseNumToInt)
-  int chineseNumToInt(String chNum) {
-    final chnMap = {
-      '零': 0,
-      '〇': 0,
-      '一': 1,
-      '二': 2,
-      '两': 2,
-      '三': 3,
-      '四': 4,
-      '五': 5,
-      '六': 6,
-      '七': 7,
-      '八': 8,
-      '九': 9,
-      '十': 10,
-      '壹': 1,
-      '貳': 2,
-      '叁': 3,
-      '肆': 4,
-      '伍': 5,
-      '陸': 6,
-      '柒': 7,
-      '捌': 8,
-      '玖': 9,
-      '拾': 10,
-      '百': 100,
-      '佰': 100,
-      '千': 1000,
-      '仟': 1000,
-      '萬': 10000,
-      '億': 100000000,
-    };
-
-    if (chNum.length > 1 &&
-        RegExp(r'^[〇零一二三四五六七八九壹貳叁肆伍陸柒捌玖]+$').hasMatch(chNum)) {
-      var res = '';
-      for (var i = 0; i < chNum.length; i++) {
-        res += (chnMap[chNum[i]] ?? 0).toString();
-      }
-      return int.tryParse(res) ?? -1;
-    }
-
-    var result = 0;
-    var tmp = 0;
-    var billion = 0;
-
-    try {
-      for (var i = 0; i < chNum.length; i++) {
-        final val = chnMap[chNum[i]] ?? 0;
-        if (val == 100000000) {
-          result += tmp;
-          result *= val;
-          billion = billion * 100000000 + result;
-          result = 0;
-          tmp = 0;
-        } else if (val == 10000) {
-          result += tmp;
-          result *= val;
-          tmp = 0;
-        } else if (val >= 10) {
-          if (tmp == 0) tmp = 1;
-          result += val * tmp;
-          tmp = 0;
-        } else {
-          tmp =
-              (i >= 2 &&
-                  i == chNum.length - 1 &&
-                  (chnMap[chNum[i - 1]] ?? 0) > 10)
-              ? val * (chnMap[chNum[i - 1]] ?? 0) ~/ 10
-              : tmp * 10 + val;
-        }
-      }
-      return result + tmp + billion;
-    } catch (_) {
-      return -1;
-    }
   }
 }

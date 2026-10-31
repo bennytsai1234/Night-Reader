@@ -280,7 +280,15 @@ extension JsJavaObject on JsExtensionsBase {
       var java = {
         // ─── 要等的：HTTP ────────────────────────────────────────
         ajax: function(url) { return __lrWait('ajax', url); },
-        ajaxAll: function(urlList) { return __lrWait('ajaxAll', urlList); },
+        // Legado 傳回 StrResponse 陣列：每一個都是回應物件。
+        ajaxAll: function(urlList) {
+          var list = __lrWait('ajaxAll', urlList) || [];
+          var result = [];
+          for (var i = 0; i < list.length; i++) {
+            result.push(buildHttpResponse(list[i]));
+          }
+          return result;
+        },
         cacheFile: function(url, saveTime) { return __lrWait('cacheTextFile', [url, saveTime || 0]); },
         connect: function(url, header) {
           return buildHttpResponse(__lrWait(
