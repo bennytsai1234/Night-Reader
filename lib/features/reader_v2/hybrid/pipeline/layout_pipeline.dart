@@ -38,13 +38,17 @@ enum MaterializationWait {
 /// admission 依序放進文件索引。
 ///
 /// 一份只對應一個排版世代：字級、樣式或內容換代時丟掉整份換新的。
-/// [dispose] 後進行中的工作都作廢，結果不會再寫進共用的量測、文件索引
-/// 與 admission。換行計畫與段落尺寸會讀寫 [diskCache]，丟掉時把這個
+/// Runtime 發布新世代後（[isCurrentGeneration] 變成 false），這一份只留著
+/// 畫紙下的舊正文，等紙蓋滿才丟（ADR 0018）：樣式停在這一代最後的值，
+/// 不再開始排新的章節，進行中的章節作廢，不拿這一代的換行計畫配新一代的
+/// 正文。[dispose] 後進行中的工作都作廢，結果不會再寫進共用的量測、文件
+/// 索引與 admission。換行計畫與段落尺寸會讀寫 [diskCache]，丟掉時把這個
 /// 世代量到的尺寸存回去。
 final class HybridLayoutPipeline {
   HybridLayoutPipeline({
     required this._epoch,
-    required this._layoutSpec,
+    required ReaderV2LayoutSpec Function() layoutSpec,
+    required this._publishedEpoch,
     required this._measurementStore,
     required this._documentIndex,
     required this._admission,
@@ -56,10 +60,11 @@ final class HybridLayoutPipeline {
     required this._chapterCount,
     required this._textColor,
     required this._onProgress,
-  }) {
+  }) : _readLayoutSpec = layoutSpec,
+       _generationSpec = layoutSpec() {
     _namespace = MeasurementNamespace(
       epoch: _epoch,
-      fingerprint: _fingerprintFor(_layoutSpec()),
+      fingerprint: _fingerprintFor(_generationSpec),
     );
     _paragraphCache = ParagraphCache(capacity: paragraphCacheCapacity);
     _pump = LayoutPump(
@@ -73,7 +78,7 @@ final class HybridLayoutPipeline {
       epoch: _epoch,
       documentIndex: _documentIndex,
       blocksOf: blocksOf,
-      layoutSpec: _layoutSpec,
+      layoutSpec: () => this.layoutSpec,
     );
     _admission.reset(epoch: _epoch, chapterCount: _chapterCount());
     _admission.attach(_pump.completed);
@@ -85,7 +90,11 @@ final class HybridLayoutPipeline {
   }
 
   final LayoutEpoch _epoch;
-  final ReaderV2LayoutSpec Function() _layoutSpec;
+  final ReaderV2LayoutSpec Function() _readLayoutSpec;
+
+  /// Runtime 目前發布的世代。
+  final LayoutEpoch Function() _publishedEpoch;
+  ReaderV2LayoutSpec _generationSpec;
   final MeasurementStore _measurementStore;
   final DocumentIndex _documentIndex;
   final AdmissionController _admission;
@@ -111,6 +120,18 @@ final class HybridLayoutPipeline {
   bool _disposed = false;
 
   LayoutEpoch get epoch => _epoch;
+
+  /// Runtime 還在這一代：沒有發布新的排版或內容世代，這一份也還沒丟。
+  bool get isCurrentGeneration => !_disposed && _publishedEpoch() == _epoch;
+
+  /// 這一代的排版樣式。同一代裡 Runtime 仍可能換掉不影響換行的部分（例如
+  /// 內距），所以還在這一代時讀 Runtime 的；換代之後停在這一代最後的值，
+  /// 和紙下舊正文的換行計畫、段落與幾何是同一份。
+  ReaderV2LayoutSpec get layoutSpec {
+    if (isCurrentGeneration) _generationSpec = _readLayoutSpec();
+    return _generationSpec;
+  }
+
   MeasurementNamespace get namespace => _namespace;
   ParagraphCache get paragraphCache => _paragraphCache;
   HybridTextGeometry get geometry => _geometry;
@@ -120,13 +141,16 @@ final class HybridLayoutPipeline {
 
   /// 取得 [chapter] 並排出換行計畫。同一章同時只排一次，後到的請求共用
   /// 結果並可提高優先順序。取不到正文時丟出
-  /// [ReaderV2ContentUnavailableException]；世代作廢時回傳 null。
+  /// [ReaderV2ContentUnavailableException]；世代作廢（Runtime 換代或這一份
+  /// 丟了）時回傳 null：取正文的途中 Runtime 可能因為正文換了而換代，拿到
+  /// 的已經是新一代的正文。
   Future<ChapterBlocks?> ensureChapter(
     int chapter, {
     LayoutTaskPriority priority = LayoutTaskPriority.prefetch,
   }) {
     final cached = _blocks[chapter];
     if (cached != null) return Future.value(cached);
+    if (!isCurrentGeneration) return Future.value(null);
 
     final pending = _blocksInFlight[chapter];
     if (pending != null) {
@@ -142,7 +166,8 @@ final class HybridLayoutPipeline {
     );
     final materialization = _ChapterMaterialization(priority);
     bool current() =>
-        !_disposed && identical(_blocksInFlight[chapter], materialization);
+        isCurrentGeneration &&
+        identical(_blocksInFlight[chapter], materialization);
     late final Future<ChapterBlocks?> task;
     task = () async {
       final text = await repository.load(chapter);
@@ -154,7 +179,7 @@ final class HybridLayoutPipeline {
         _admission.registerChapter(restored);
         return restored;
       }
-      final spec = _layoutSpec();
+      final spec = layoutSpec;
       final fingerprint = _fingerprintFor(spec);
       final stored = await _diskCache?.readPlan(text, fingerprint);
       if (!current()) return null;
@@ -653,7 +678,7 @@ final class HybridLayoutPipeline {
     final head = group.first;
     final headKey = head.key;
     final last = group.last;
-    final spec = _layoutSpec();
+    final spec = layoutSpec;
     _pump.submit(
       LayoutTask(
         block: head,

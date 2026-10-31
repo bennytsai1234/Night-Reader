@@ -313,6 +313,46 @@ void main() {
         isNull,
       );
     });
+
+    testWidgets('leaving while a font change fades the paper in records the '
+        'old layout with the old lines', (tester) async {
+      await pumpReader(tester, skeletonPages: store, progress: progress);
+      await settleReveal(tester);
+      final oldSpec = runtime.state.layoutSpec;
+      final larger = ReaderV2LayoutSpec.fromViewport(
+        viewportSize: _viewport,
+        style: ReaderV2LayoutStyle(
+          fontSize: 26,
+          lineHeight: _style.lineHeight,
+          letterSpacing: _style.letterSpacing,
+          paragraphSpacing: _style.paragraphSpacing,
+          paddingTop: _style.paddingTop,
+          paddingBottom: _style.paddingBottom,
+          paddingLeft: _style.paddingLeft,
+          paddingRight: _style.paddingRight,
+          textIndent: _style.textIndent,
+        ),
+      );
+      unawaited(runtime.applyPresentation(spec: larger));
+      for (
+        var frame = 0;
+        frame < 200 && find.byType(LoadingVeil).evaluate().isEmpty;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final veil = tester.widget<LoadingVeil>(find.byType(LoadingVeil));
+      expect(veil.controller.isCovered, isFalse, reason: '紙還在淡入');
+      expect(runtime.state.layoutSpec.style.fontSize, 26);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      final page = store.read('http://interaction.test')!;
+      expect(
+        page.layout,
+        ReaderSkeletonPage.layoutKeyOf(oldSpec),
+        reason: '畫面上還是舊字級排的行，紀錄的版面也是舊的',
+      );
+    });
   });
 
   testWidgets('tapping to stop a fling only stops it', (tester) async {
@@ -657,6 +697,67 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(runtime.state.layoutSpec.style.fontSize, 26);
       expect(find.byType(LoadingVeil), findsNothing);
+      expect(find.byType(CustomScrollView), findsOneWidget);
+    });
+
+    testWidgets('scrolling back to a chapter whose text changed meanwhile '
+        'lays out the new text', (tester) async {
+      const chapterCount = 25;
+      var rewritten = false;
+      String? textOf(int index, BookChapter chapter) =>
+          index == 0 && rewritten ? '改過的第 0 章。\n只剩兩段。' : chapter.content;
+      await pumpReader(
+        tester,
+        customRuntime: _makeRuntime(
+          chapterCount: chapterCount,
+          paragraphs: 4,
+          contentLoader: (index, chapter) =>
+              Future.value(textOf(index, chapter)),
+        ),
+      );
+      await settle(tester);
+
+      // 讀到第 22 章：第 0 章離開閱讀器常駐的範圍，也離開最近 20 章的正文
+      // 快取，只剩它的換行計畫。
+      for (
+        var step = 0;
+        step < 400 && runtime.state.visibleLocation.chapterIndex < 22;
+        step++
+      ) {
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+        await settle(tester);
+      }
+      expect(runtime.state.visibleLocation.chapterIndex, 22);
+      final generation = runtime.state.contentGeneration;
+
+      // 下載把第 0 章換成新的正文，閱讀器沒有收到重新載入。
+      rewritten = true;
+      for (
+        var step = 0;
+        step < 400 &&
+            (runtime.state.visibleLocation.chapterIndex > 0 ||
+                runtime.state.contentGeneration == generation);
+        step++
+      ) {
+        if (runtime.state.hasStableWorld &&
+            find.byType(CustomScrollView).evaluate().isNotEmpty) {
+          await tester.drag(
+            find.byType(CustomScrollView),
+            const Offset(0, 500),
+          );
+        }
+        await settle(tester);
+      }
+      for (
+        var frame = 0;
+        frame < 2000 && find.byType(LoadingVeil).evaluate().isNotEmpty;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(tester.takeException(), isNull);
+      expect(runtime.state.contentGeneration, greaterThan(generation));
+      expect(runtime.state.hasStableWorld, isTrue);
       expect(find.byType(CustomScrollView), findsOneWidget);
     });
   });

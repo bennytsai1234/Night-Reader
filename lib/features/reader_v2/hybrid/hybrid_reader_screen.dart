@@ -199,10 +199,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 後完成；其他時候為 null（見 [_coverText]）。
   Future<void>? _covering;
 
-  /// 正文上一次照哪個版面畫：排版換代了、舊正文還在紙下時，照原本的左右
-  /// 邊距畫，不跟著新設定先跳一下。
-  ReaderV2LayoutSpec? _shownTextSpec;
-
   /// 開書的位置與版面都和上次記下的那一頁相同時，開書的紙照它畫骨架。
   ReaderSkeletonPage? _openingPage;
 
@@ -380,6 +376,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         contentGeneration: state.contentGeneration,
       ),
       layoutSpec: () => widget.runtime.state.layoutSpec,
+      publishedEpoch: () {
+        final state = widget.runtime.state;
+        return LayoutEpoch(
+          state.layoutGeneration,
+          contentGeneration: state.contentGeneration,
+        );
+      },
       measurementStore: _measurementStore,
       documentIndex: _documentIndex,
       admission: _admission,
@@ -486,8 +489,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final keepsOpeningPage =
           opening != null &&
           opening.contentHash == blocks.contentHash &&
-          opening.layout ==
-              ReaderSkeletonPage.layoutKeyOf(widget.runtime.state.layoutSpec);
+          opening.layout == ReaderSkeletonPage.layoutKeyOf(pipeline.layoutSpec);
       if (!keepsOpeningPage) _coverUntilFirstPage();
       pipeline.onScrollStateChanged(PumpState.loading);
       _scheduleRebuild();
@@ -1729,7 +1731,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return (
       lines: lines,
       titleLines: titleLines,
-      spec: widget.runtime.state.layoutSpec,
+      // 行是這份排版管線排的；改排版的紙還在淡入時，它還是舊的那一代。
+      spec: _pipeline.layoutSpec,
     );
   }
 
@@ -1769,7 +1772,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final offset = _effectiveScrollOffset();
     if (location == null || offset == null) return;
     final contentHash = _pipeline.blocksOf(location.chapterIndex)?.contentHash;
-    final (:lines, :titleLines, spec: _) = _pageLinesAt(offset);
+    final (:lines, :titleLines, :spec) = _pageLinesAt(offset);
     if (lines.isEmpty || contentHash == null) return;
     unawaited(
       store.write(
@@ -1778,9 +1781,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           chapterIndex: location.chapterIndex,
           charOffset: location.charOffset,
           visualOffsetPx: location.visualOffsetPx,
-          layout: ReaderSkeletonPage.layoutKeyOf(
-            widget.runtime.state.layoutSpec,
-          ),
+          // 版面和行取自同一代：改排版的紙還在淡入時離開，記下的是舊版面
+          // 與舊的行。
+          layout: ReaderSkeletonPage.layoutKeyOf(spec),
           contentHash: contentHash,
           lines: lines,
           titleLines: titleLines,
@@ -1847,9 +1850,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           keepScrollOffset: false,
         );
         final highlight = widget.ttsHighlight;
-        final textSpec = _textOutdated
-            ? _shownTextSpec ?? state.layoutSpec
-            : (_shownTextSpec = state.layoutSpec);
+        // 排版換代了、舊正文還在紙下時，照舊正文那一代的左右邊距畫，不跟著
+        // 新設定先跳一下。
+        final textSpec = _pipeline.layoutSpec;
         final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,
           child: HybridScrollView(
