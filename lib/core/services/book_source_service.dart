@@ -172,12 +172,19 @@ class BookSourceService {
       return sourceDao.saveEdited(source);
     }
     final books = await getIt<BookDao>().bookUrlsFromOrigin(previousUrl);
+    final otherSources = [
+      for (final other in await sourceDao.getAllPart()) other.bookSourceUrl,
+    ];
     final release = books.isEmpty
         ? null
         : await DownloadService().holdBooks(books);
     try {
-      await sourceDao.saveEdited(source, previousUrl: previousUrl);
-      await BaseSource.moveCachedIdentity(previousUrl, source.getKey());
+      await BaseSource.moveCachedIdentity(
+        previousUrl,
+        source.getKey(),
+        otherKeys: otherSources,
+        commit: () => sourceDao.saveEdited(source, previousUrl: previousUrl),
+      );
     } finally {
       release?.call();
     }

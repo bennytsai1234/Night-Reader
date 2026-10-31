@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 
@@ -56,12 +57,56 @@ abstract class BaseSource {
 
   /// 書源換了身分（[getKey] 從 [from] 變成 [to]，例如書源改了網址）：以舊身分
   /// 存的登入資訊、登入標頭、書源變數與規則變數搬到新身分，不用重新登入。
-  static Future<void> moveCachedIdentity(String from, String to) async {
+  ///
+  /// 快取和資料庫不在同一個交易裡，所以先複製到新身分，[commit]（存資料庫）
+  /// 成功才刪舊的：[commit] 失敗時刪掉複製的，舊身分的資料原封不動；刪舊的
+  /// 失敗只記下來，不算存檔失敗（舊身分已經沒有書源用它）。
+  ///
+  /// 規則變數的鍵是「`v_`＋身分＋`_`＋名稱」，另一個身分剛好以「[from]＋`_`」
+  /// 開頭時，它的變數也落在同一個開頭底下；[otherKeys]（其他書源的身分）的
+  /// 變數不搬。
+  static Future<void> moveCachedIdentity(
+    String from,
+    String to, {
+    required Future<void> Function() commit,
+    Iterable<String> otherKeys = const [],
+  }) async {
     final cache = CacheManager();
-    for (final keyOf in [_loginInfoKey, _variableKey, _loginHeaderKey]) {
-      await cache.move(keyOf(from), keyOf(to));
+    final fromPrefix = _ruleVariablePrefix(from);
+    final nested = [
+      for (final other in otherKeys)
+        if (other != from && other.startsWith('${from}_'))
+          _ruleVariablePrefix(other),
+    ];
+    final moves = <(String, String)>[
+      for (final keyOf in [_loginInfoKey, _variableKey, _loginHeaderKey])
+        (keyOf(from), keyOf(to)),
+      for (final key in await cache.keysStartingWith(fromPrefix))
+        if (!nested.any(key.startsWith))
+          (
+            key,
+            '${_ruleVariablePrefix(to)}${key.substring(fromPrefix.length)}',
+          ),
+    ];
+    final copied = <String>[];
+    try {
+      for (final (old, next) in moves) {
+        if (await cache.copy(old, next)) copied.add(next);
+      }
+      await commit();
+    } catch (_) {
+      for (final key in copied) {
+        await cache.delete(key);
+      }
+      rethrow;
     }
-    await cache.movePrefix(_ruleVariablePrefix(from), _ruleVariablePrefix(to));
+    for (final (old, _) in moves) {
+      try {
+        await cache.delete(old);
+      } catch (error) {
+        AppLog.w('書源換了網址，舊網址的快取 $old 沒刪掉: $error');
+      }
+    }
   }
 
   Future<void> putLoginInfo(String info) {

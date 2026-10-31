@@ -104,33 +104,8 @@ class DownloadService extends DownloadBase
   Future<SourceSwitchOperationLease> quiesceForSourceSwitch(
     Book oldBook,
   ) async {
-    final (:bookUrl, :task, :previousStatus) = await _hold(oldBook.bookUrl);
-    return _DownloadSourceSwitchLease(
-      owner: this,
-      bookUrl: bookUrl,
-      task: task,
-      previousStatus: previousStatus,
-    );
-  }
-
-  /// 書的來源身分在別處改變時（書源改了網址），先停下 [bookUrls] 進行中的
-  /// 下載並等它們停住，改的途中也不排新的；改完呼叫回傳的函式，照原本的
-  /// 狀態接著下載。接著下載的那一輪重新從資料庫讀書，用的是新的書源網址。
-  Future<void Function()> holdBooks(Iterable<String> bookUrls) async {
-    final holds = [for (final bookUrl in bookUrls) await _hold(bookUrl)];
-    return () {
-      for (final (:bookUrl, :task, :previousStatus) in holds) {
-        _releaseHold(bookUrl, task, previousStatus);
-      }
-    };
-  }
-
-  /// 停下 [bookUrl] 的下載並等它停住；之後由 [_releaseHold] 恢復，或換源
-  /// 成功時由 [_commitSourceSwitchRetirement] 移除。
-  Future<({String bookUrl, DownloadTask? task, int? previousStatus})> _hold(
-    String bookUrl,
-  ) async {
     await _initialization;
+    final bookUrl = oldBook.bookUrl;
     markTaskRetiring(bookUrl);
 
     final task = tasks.cast<DownloadTask?>().firstWhere(
@@ -144,7 +119,12 @@ class DownloadService extends DownloadBase
     }
 
     await waitForTaskIdle(bookUrl);
-    return (bookUrl: bookUrl, task: task, previousStatus: previousStatus);
+    return _DownloadSourceSwitchLease(
+      owner: this,
+      bookUrl: bookUrl,
+      task: task,
+      previousStatus: previousStatus,
+    );
   }
 
   void _commitSourceSwitchRetirement(String bookUrl) {
@@ -153,7 +133,11 @@ class DownloadService extends DownloadBase
     update();
   }
 
-  void _releaseHold(String bookUrl, DownloadTask? task, int? previousStatus) {
+  void _rollbackSourceSwitchRetirement(
+    String bookUrl,
+    DownloadTask? task,
+    int? previousStatus,
+  ) {
     if (task != null && previousStatus != null) {
       task.status = previousStatus == DownloadTask.statusDownloading
           ? DownloadTask.statusWaiting
@@ -183,6 +167,41 @@ class DownloadService extends DownloadBase
     tasks.clear();
     tasks.addAll(storedTasks);
     update();
+  }
+
+  /// 書的來源身分在別處改變時（書源改了網址），先停下 [bookUrls] 進行中的
+  /// 下載並等它們停住，改的途中也不開新的一輪；改完呼叫回傳的函式放行。
+  /// 任務狀態不在這裡拍快照、事後還原：被停下的那一輪（還是「下載中」）改回
+  /// 排隊重新開一輪，用的是新的書源網址；期間使用者暫停、移除或新加入的任務
+  /// 照當下的樣子（使用者暫停的不碰，ADR 0008）。
+  Future<void Function()> holdBooks(Iterable<String> bookUrls) async {
+    await _initialization;
+    final held = bookUrls.toSet();
+    for (final bookUrl in held) {
+      markTaskRetiring(bookUrl);
+    }
+    for (final bookUrl in held) {
+      await waitForTaskIdle(bookUrl);
+    }
+    return () {
+      for (final bookUrl in held) {
+        clearTaskRetiring(bookUrl);
+        for (final task in tasks.where((t) => t.bookUrl == bookUrl)) {
+          if (!task.isDownloading) continue;
+          task.status = DownloadTask.statusWaiting;
+          unawaited(
+            downloadDao.updateProgress(
+              bookUrl,
+              status: DownloadTask.statusWaiting,
+            ),
+          );
+        }
+      }
+      update();
+      if (tasks.any((t) => t.isWaiting) && !isDownloading) {
+        unawaited(startDownloads());
+      }
+    };
   }
 
   /// 接著下載上次沒下載完的書。服務在開 App 建書架時就建立，建立時就開跑
@@ -384,6 +403,6 @@ class _DownloadSourceSwitchLease implements SourceSwitchOperationLease {
   void rolledBack() {
     if (_finalized) return;
     _finalized = true;
-    owner._releaseHold(bookUrl, task, previousStatus);
+    owner._rollbackSourceSwitchRetirement(bookUrl, task, previousStatus);
   }
 }

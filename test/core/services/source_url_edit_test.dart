@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -95,6 +96,51 @@ void main() {
     expect(await cache.get('v_${newUrl}_token'), 'abc');
     expect(await cache.get('v_${oldUrl}_token'), isNull);
   });
+
+  test('rule variables of another source whose URL starts with this one are '
+      'left alone', () async {
+    const nested = '${oldUrl}_child';
+    for (final url in [oldUrl, nested]) {
+      await getIt<BookSourceDao>().upsert(
+        BookSource(bookSourceUrl: url, bookSourceName: url),
+      );
+    }
+    final cache = CacheManager();
+    await cache.put('v_${oldUrl}_token', '這個書源的');
+    await cache.put('v_${nested}_token', '另一個書源的');
+
+    await BookSourceService().saveEditedSource(
+      BookSource(bookSourceUrl: newUrl, bookSourceName: '新名'),
+      previousUrl: oldUrl,
+    );
+
+    expect(await cache.get('v_${newUrl}_token'), '這個書源的');
+    expect(await cache.get('v_${nested}_token'), '另一個書源的');
+    expect(await cache.get('v_${newUrl}_child_token'), isNull);
+  });
+
+  test(
+    'when saving to the database fails, the login stays where it was',
+    () async {
+      final cache = CacheManager();
+      await cache.put('userInfo_$oldUrl', '{"user":"讀者"}');
+      await cache.put('v_${oldUrl}_token', 'abc');
+
+      await expectLater(
+        BaseSource.moveCachedIdentity(
+          oldUrl,
+          newUrl,
+          commit: () async => throw StateError('資料庫寫不進去'),
+        ),
+        throwsStateError,
+      );
+
+      expect(await cache.get('userInfo_$oldUrl'), '{"user":"讀者"}');
+      expect(await cache.get('v_${oldUrl}_token'), 'abc');
+      expect(await cache.get('userInfo_$newUrl'), isNull, reason: '複製的刪掉');
+      expect(await cache.get('v_${newUrl}_token'), isNull);
+    },
+  );
 
   test('saving without changing the URL leaves the books alone', () async {
     await getIt<BookSourceDao>().upsert(
