@@ -50,6 +50,22 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     )..where((t) => t.bookUrl.equals(url))).getSingleOrNull();
   }
 
+  /// 書源是 [origin] 的書（書架上的與還沒加入的都算）。
+  Future<List<String>> bookUrlsFromOrigin(String origin) {
+    final query = selectOnly(books)
+      ..addColumns([books.bookUrl])
+      ..where(books.origin.equals(origin));
+    return query.map((row) => row.read(books.bookUrl)!).get();
+  }
+
+  /// 書源換了網址（[from] → [to]）：這些書改指新網址，書源名稱一起換成
+  /// [toName]。
+  Future<void> moveOrigin(String from, String to, {required String toName}) {
+    return (update(books)..where((t) => t.origin.equals(from))).write(
+      BooksCompanion(origin: Value(to), originName: Value(toName)),
+    );
+  }
+
   Future<void> upsert(Book book) =>
       into(books).insertOnConflictUpdate(BookToInsertable(book).toInsertable());
 

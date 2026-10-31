@@ -100,7 +100,10 @@ void main() {
       (await store.getContentEntry(book: book, chapter: snapshot))!.content,
       '免費時的正文',
     );
-    expect((await chapterDao.getByUrl(snapshot.url))!.isLocked, isTrue);
+    expect(
+      (await chapterDao.getByUrl(snapshot.bookUrl, snapshot.url))!.isLocked,
+      isTrue,
+    );
   });
 
   test('content stored while the chapter was free is kept', () async {

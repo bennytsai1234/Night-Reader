@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 
+import 'legacy_chapters_table.dart';
+
 void main() {
   test('a session past midnight is split between the two days', () {
     final days = ReadRecordDao.secondsByDay(
@@ -64,6 +66,7 @@ void main() {
             'INSERT INTO read_records (bookName, deviceId, readTime, lastRead) '
             "VALUES ('甲', '', 3600, 1)",
           );
+          raw.execute(legacyChaptersTable);
           raw.execute('PRAGMA user_version = 6');
         },
       ),

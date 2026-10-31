@@ -2,6 +2,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 
+import 'legacy_chapters_table.dart';
+
 /// 書源訂閱移除的遷移契約：舊版（schema 4）資料庫升級後，rule_subs 與更早
 /// 移除時留下的 source_subscriptions 連同索引都被刪除，資料庫仍可正常開啟。
 void main() {
@@ -42,6 +44,7 @@ void main() {
               addTime INTEGER NOT NULL DEFAULT 0,
               sortOrder INTEGER NOT NULL DEFAULT 0
             )''');
+          raw.execute(legacyChaptersTable);
           raw.execute('PRAGMA user_version = 4');
         },
       ),

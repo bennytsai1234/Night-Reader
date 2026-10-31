@@ -4,6 +4,9 @@ import '../../constant/source_type.dart';
 import '../../models/book_source.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
+import 'book_dao.dart';
+import 'reader_chapter_content_dao.dart';
+import 'search_book_dao.dart';
 
 part 'book_source_dao.g.dart';
 
@@ -63,13 +66,22 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// 儲存編輯後的書源；網址改過時在同一個交易裡移除原網址那筆。
+  /// 儲存編輯後的書源。網址改過時是同一個書源換了身分：在同一個交易裡移除
+  /// 原網址那筆，記著原網址的書、搜尋結果與已存的正文一起改記新網址，書架
+  /// 上的書照樣找得到書源、已下載的章節照樣在。登入資訊與書源變數存在快取
+  /// 裡，由 `BookSourceService.saveEditedSource` 搬。
   Future<void> saveEdited(BookSource source, {String? previousUrl}) {
     return transaction(() async {
       await upsert(source);
-      if (previousUrl != null && previousUrl != source.bookSourceUrl) {
-        await deleteByUrl(previousUrl);
-      }
+      if (previousUrl == null || previousUrl == source.bookSourceUrl) return;
+      final to = source.bookSourceUrl;
+      final name = source.bookSourceName;
+      await BookDao(attachedDatabase).moveOrigin(previousUrl, to, toName: name);
+      await SearchBookDao(attachedDatabase)
+          .moveOrigin(previousUrl, to, toName: name);
+      await ReaderChapterContentDao(attachedDatabase)
+          .moveOrigin(previousUrl, to);
+      await deleteByUrl(previousUrl);
     });
   }
 

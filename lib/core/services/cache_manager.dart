@@ -244,6 +244,26 @@ class CacheManager {
         deadline <= DateTime.now().millisecondsSinceEpoch;
   }
 
+  /// 把 [from] 存的內容複製到 [to]（記憶體、資料庫與檔案），保留原本的期限；
+  /// [from] 照舊。沒有內容或已經過期時不寫，回傳 false。
+  Future<bool> copy(String from, String to) async {
+    final stored = await _cacheDao?.get(from);
+    final deadline = stored?.deadline ?? _memoryDeadlines[from] ?? 0;
+    final value = await get(from);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (value == null || (deadline != 0 && deadline <= now)) return false;
+    await put(
+      to,
+      value,
+      saveTimeSeconds: deadline == 0 ? 0 : ((deadline - now) / 1000).ceil(),
+    );
+    return true;
+  }
+
+  /// 資料庫裡以 [prefix] 開頭的鍵。
+  Future<List<String>> keysStartingWith(String prefix) async =>
+      await _cacheDao?.keysStartingWith(prefix) ?? const <String>[];
+
   /// 刪除快取 (記憶體 + 資料庫 + 檔案)
   Future<void> delete(String key) async {
     deleteMemory(key);

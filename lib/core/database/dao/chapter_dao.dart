@@ -61,13 +61,12 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
   /// 資料庫的：那是目錄規則給的，快照可能是改付費之前的。
   Future<void> updateFetchedChapter(BookChapter chapter) {
     return transaction(() async {
-      final current = await getByUrl(chapter.url);
+      final current = await getByUrl(chapter.bookUrl, chapter.url);
       if (current == null) return;
       await into(chapters).insertOnConflictUpdate(
         BookChapterToInsertable(
           chapter.copyWith(
             index: current.index,
-            bookUrl: current.bookUrl,
             isVip: current.isVip,
             isPay: current.isPay,
           ),
@@ -76,10 +75,11 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
     });
   }
 
-  Future<BookChapter?> getByUrl(String url) {
-    return (select(
-      chapters,
-    )..where((t) => t.url.equals(url))).getSingleOrNull();
+  /// 這本書目錄裡網址是 [url] 的那一章。
+  Future<BookChapter?> getByUrl(String bookUrl, String url) {
+    return (select(chapters)
+          ..where((t) => t.bookUrl.equals(bookUrl) & t.url.equals(url)))
+        .getSingleOrNull();
   }
 
   Future<BookChapter?> getChapter(String bookUrl, int index) {
@@ -89,13 +89,8 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
   }
 
   /// 這本書目前的目錄裡這個網址的章節序號；目錄裡沒有這一章時回傳 null。
-  Future<int?> indexOfUrl(String bookUrl, String url) async {
-    final row =
-        await (select(chapters)
-              ..where((t) => t.bookUrl.equals(bookUrl) & t.url.equals(url)))
-            .getSingleOrNull();
-    return row?.index;
-  }
+  Future<int?> indexOfUrl(String bookUrl, String url) async =>
+      (await getByUrl(bookUrl, url))?.index;
 
   /// 整份換掉這本書的目錄，不留舊目錄的章節佔著序號。
   Future<void> replaceByBook(String bookUrl, List<BookChapter> chapterList) {

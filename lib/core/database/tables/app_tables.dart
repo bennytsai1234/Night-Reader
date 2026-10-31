@@ -252,8 +252,11 @@ class Chapters extends Table {
       text().named('startFragmentId').nullable()();
   TextColumn get endFragmentId => text().named('endFragmentId').nullable()();
   TextColumn get variable => text().nullable()();
+
+  /// 章節網址只在一本書裡唯一：沒有連結的分卷由章名與序號補網址
+  /// （`第一卷0`），不同書的同名分卷會補出同一個網址。
   @override
-  Set<Column> get primaryKey => {url};
+  Set<Column> get primaryKey => {bookUrl, url};
 }
 
 // ───────────── Reader chapter content store ─────────────

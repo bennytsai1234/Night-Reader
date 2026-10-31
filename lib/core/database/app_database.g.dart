@@ -1697,7 +1697,7 @@ class $ChaptersTable extends Chapters
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {url};
+  Set<GeneratedColumn> get $primaryKey => {bookUrl, url};
   @override
   BookChapter map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';

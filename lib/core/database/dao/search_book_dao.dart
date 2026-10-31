@@ -47,6 +47,14 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// 書源換了網址（[from] → [to]）：之前的搜尋結果改指新網址，換封面與換源
+  /// 讀本地紀錄時還找得到它們的書源。
+  Future<void> moveOrigin(String from, String to, {required String toName}) {
+    return (update(searchBooks)..where((t) => t.origin.equals(from))).write(
+      SearchBooksCompanion(origin: Value(to), originName: Value(toName)),
+    );
+  }
+
   Future<void> deleteByUrl(String url) =>
       (delete(searchBooks)..where((t) => t.bookUrl.equals(url))).go();
 

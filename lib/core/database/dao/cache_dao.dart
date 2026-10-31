@@ -16,6 +16,15 @@ class CacheDao extends DatabaseAccessor<AppDatabase> with _$CacheDaoMixin {
     )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
 
+  /// 以 [prefix] 開頭的鍵（逐字比對，[prefix] 裡的 `%`、`_` 不當萬用字元）。
+  Future<List<String>> keysStartingWith(String prefix) {
+    return customSelect(
+      'SELECT "key" FROM cache_table WHERE substr("key", 1, ?) = ?',
+      variables: [Variable.withInt(prefix.length), Variable.withString(prefix)],
+      readsFrom: {cacheTable},
+    ).map((row) => row.read<String>('key')).get();
+  }
+
   Future<void> upsert(Cache cache) =>
       into(cacheTable)
           .insertOnConflictUpdate(CacheToInsertable(cache).toInsertable());
