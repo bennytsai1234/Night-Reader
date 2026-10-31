@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -16,8 +17,9 @@ void main() {
   setUp(() async {
     await GetIt.instance.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    dao = BookSourceDao(db);
-    GetIt.instance.registerSingleton<BookSourceDao>(dao);
+    // 改網址時書、搜尋結果、正文與快取都跟著搬，整個資料庫都要在。
+    registerDatabase(db);
+    dao = GetIt.instance<BookSourceDao>();
   });
 
   tearDown(() async {
@@ -58,11 +60,19 @@ void main() {
 
   Finder field(int index) => find.byType(TextField).at(index);
 
+  /// 按儲存，等存檔做完：存好會關掉編輯頁，失敗會留在編輯頁並跳出提示。
   Future<void> save(WidgetTester tester) async {
     await tester.tap(find.text('儲存'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      if (find.byType(SourceEditorPage).evaluate().isEmpty ||
+          find.byType(SnackBar).evaluate().isNotEmpty) {
+        break;
+      }
+    }
     await tester.pumpAndSettle();
   }
 
