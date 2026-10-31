@@ -138,6 +138,40 @@ emptied=$(commit emptied "lib/main.dart=v2b" "CHANGELOG.md=$(changelog '')")
 expect_failure 'check: 改到 App 內容卻把「未發布」清空時擋下' check "$noted" "$emptied"
 g checkout -q -
 
+# 測試版說明只取新增或改寫的條列：只改介紹時說明會是空的，要擋下。
+g checkout -q -b intro_only "$noted"
+intro_only=$(commit intro "lib/main.dart=v2c" "CHANGELOG.md=$(changelog '新的介紹。
+
+- 新功能
+')")
+expect_failure 'check: 只改介紹、條列沒變時擋下' check "$noted" "$intro_only"
+g checkout -q -
+
+# 只刪了條列（推翻剛加的功能）時沒有新條列，照樣放行（ADR 0010）。
+g checkout -q -b removed_only "$noted"
+commit two "CHANGELOG.md=$(changelog '- 新功能
+- 要推翻的功能
+')" >/dev/null
+two=$(g rev-parse HEAD)
+removed_only=$(commit drop "lib/main.dart=v2d" "CHANGELOG.md=$(changelog '- 新功能
+')")
+expect_success 'check: 只刪條列時放行' check "$two" "$removed_only"
+g checkout -q -
+
+# 子條列算在上面那一條裡：只在既有條列底下加子條列也算改寫。
+g checkout -q -b nested "$noted"
+nested_base=$(commit parent "CHANGELOG.md=$(changelog '- 一批設定：
+  - 第一個
+- 另一項
+')")
+nested=$(commit child "lib/main.dart=v2e" "CHANGELOG.md=$(changelog '- 一批設定：
+  - 第一個
+  - 第二個
+- 另一項
+')")
+expect_success 'check: 只加子條列時放行' check "$nested_base" "$nested"
+g checkout -q -
+
 # 正式版：版號 commit 把「未發布」改名成「0.3.4」，上面留空的「未發布」。
 bump=$(commit 'release: bump version to 0.3.4' "pubspec.yaml=version: 0.3.4
 " "CHANGELOG.md=$(printf '# 更新說明\n\n## 未發布\n\n## 0.3.4\n\n- 新功能\n\n## 0.3.3\n\n- 上一版\n')")
@@ -208,6 +242,14 @@ commit reworded "CHANGELOG.md=$(changelog '- 新功能（改寫）
 - 第三項
 ')" >/dev/null
 expect_output 'added: 改寫過的條列也算新的' '- 新功能（改寫）' added "$more"
+g checkout -q -
+
+# 子條列跟著上面那一條：新的一條整條印出，只改了子條列也整條印出。
+g checkout -q nested
+expect_output 'added: 只改了子條列時整條印出' "$(printf -- '- 一批設定：\n  - 第一個\n  - 第二個')" \
+  added "$nested_base"
+expect_output 'added: 新的一條連子條列一起印出' "$(printf -- '- 一批設定：\n  - 第一個\n  - 第二個\n- 另一項')" \
+  added "$noted"
 g checkout -q -
 
 # ---- git 失敗 ----
