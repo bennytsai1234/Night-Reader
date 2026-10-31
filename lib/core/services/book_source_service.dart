@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -18,6 +19,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
@@ -157,9 +159,36 @@ class BookSourceService {
     return getIt<BookDao>().getInBookshelf();
   }
 
-  /// 儲存編輯後的書源；網址改過時一併移除原網址那筆。
-  Future<void> saveEditedSource(BookSource source, {String? previousUrl}) =>
-      getIt<BookSourceDao>().saveEdited(source, previousUrl: previousUrl);
+  /// 儲存編輯後的書源。網址改過時，以原網址記的一切跟著搬到新網址（書架上
+  /// 的書、搜尋結果、已下載的正文見 [BookSourceDao.saveEdited]，登入資訊與
+  /// 變數見 [BaseSource.moveCachedIdentity]）；搬的時候這些書的下載先停住，
+  /// 搬完照原本的狀態接著下載，不會有一輪用舊網址寫正文。
+  Future<void> saveEditedSource(
+    BookSource source, {
+    String? previousUrl,
+  }) async {
+    final sourceDao = getIt<BookSourceDao>();
+    if (previousUrl == null || previousUrl == source.bookSourceUrl) {
+      return sourceDao.saveEdited(source);
+    }
+    final books = await getIt<BookDao>().bookUrlsFromOrigin(previousUrl);
+    final otherSources = [
+      for (final other in await sourceDao.getAllPart()) other.bookSourceUrl,
+    ];
+    final release = books.isEmpty
+        ? null
+        : await DownloadService().holdBooks(books);
+    try {
+      await BaseSource.moveCachedIdentity(
+        previousUrl,
+        source.getKey(),
+        otherKeys: otherSources,
+        commit: () => sourceDao.saveEdited(source, previousUrl: previousUrl),
+      );
+    } finally {
+      release?.call();
+    }
+  }
 
   /// 依 URL 取得書源
   Future<BookSource?> getSourceByUrl(String url) =>

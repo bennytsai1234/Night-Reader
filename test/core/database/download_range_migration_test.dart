@@ -4,6 +4,8 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/download_task.dart';
 
+import 'legacy_chapters_table.dart';
+
 void main() {
   test('a schema 5 task with a chapter index range upgrades to the whole '
       'book and keeps its state', () async {
@@ -31,6 +33,7 @@ void main() {
             'successCount, addTime, sortOrder) '
             "VALUES ('a', 'A', 10, 20, 11, 2, 4, 123, 7)",
           );
+          raw.execute(legacyChaptersTable);
           raw.execute('PRAGMA user_version = 5');
         },
       ),

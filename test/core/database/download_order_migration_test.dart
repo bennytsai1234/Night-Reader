@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 
+import 'legacy_chapters_table.dart';
+
 void main() {
   test(
     'a schema 3 download queue upgrades in the order it was added',
@@ -30,6 +32,7 @@ void main() {
               "INSERT INTO download_tasks (bookUrl, bookName, addTime) "
               "VALUES ('a', 'A', 200), ('b', 'B', 100)",
             );
+            raw.execute(legacyChaptersTable);
             raw.execute('PRAGMA user_version = 3');
           },
         ),

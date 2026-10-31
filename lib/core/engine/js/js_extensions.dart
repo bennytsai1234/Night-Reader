@@ -71,7 +71,7 @@ class JsExtensions extends JsExtensionsBase {
           JsExtensionsBase.sharedScope[key] = stringValue;
         }
         if (source != null) {
-          final scopedKey = 'v_${source!.getKey()}_$key';
+          final scopedKey = source!.ruleVariableCacheKey(key);
           cacheManager.putMemory(scopedKey, stringValue);
           unawaited(cacheManager.put(scopedKey, stringValue));
         }
@@ -89,7 +89,7 @@ class JsExtensions extends JsExtensionsBase {
         } catch (_) {}
       }
       if (source != null) {
-        final scopedKey = 'v_${source!.getKey()}_$key';
+        final scopedKey = source!.ruleVariableCacheKey(key);
         final cached = cacheManager.getFromMemory(scopedKey);
         if (cached != null && cached.toString().isNotEmpty) {
           return cached.toString();
@@ -233,7 +233,7 @@ class JsExtensions extends JsExtensionsBase {
       if (args is List && args.length >= 2 && source != null) {
         final key = args[0].toString();
         final value = args[1].toString();
-        cacheManager.put('v_${source!.getKey()}_$key', value);
+        cacheManager.put(source!.ruleVariableCacheKey(key), value);
       }
       return null;
     });
@@ -277,12 +277,14 @@ class JsExtensions extends JsExtensionsBase {
       if (content.trim().isEmpty) {
         throw Exception('$path 內容獲取失敗或者為空');
       }
-      return _wrapImportedScript(content);
+      // 和 Legado 一樣原樣交出，書源自己 `eval(String(...))`：裡面的函式與
+      // 變數就留在書源 eval 的地方，後面的規則叫得到。
+      return content;
     });
 
     onBlocking('sourceGet', (key) {
       if (source == null) return '';
-      return cached('v_${source!.getKey()}_$key') ?? '';
+      return cached(source!.ruleVariableCacheKey(key)) ?? '';
     });
 
     onBlocking('sourceGetLoginInfo', (_) {
@@ -400,24 +402,5 @@ class JsExtensions extends JsExtensionsBase {
       return value.map(_toJsRuleValue).toList();
     }
     return stringifyRuleResult(value);
-  }
-
-  String _wrapImportedScript(String content) {
-    final indented = content
-        .split('\n')
-        .map((line) => line.isEmpty ? '' : '  $line')
-        .join('\n');
-    return '''
-(function(__lrGlobal) {
-  var exports = undefined;
-  var module = undefined;
-  var define = undefined;
-  var require = undefined;
-$indented
-}).call(
-  typeof globalThis !== "undefined" ? globalThis : this,
-  typeof globalThis !== "undefined" ? globalThis : this
-);
-''';
   }
 }
