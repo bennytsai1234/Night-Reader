@@ -38,13 +38,15 @@ BlockingTask cookieRead(String url) =>
 BlockingTask responseBody(AnalyzeUrl url) =>
     () async => (await url.getStrResponse()).body;
 
-/// 同時抓，照 [urls] 的順序傳回內文。
-BlockingTask responseBodies(List<AnalyzeUrl> urls) =>
+/// 同時抓，照 [urls] 的順序傳回每個回應（[responseToJs]）：`java.ajaxAll`
+/// 和 Legado 一樣給回應物件，規則用 `.body()`、`.code()` 讀。任一個失敗就
+/// 整批丟出，和 Legado 一樣。
+BlockingTask responses(List<AnalyzeUrl> urls) =>
     () async => [
-      for (final response in await Future.wait(
+      for (final (index, response) in (await Future.wait(
         urls.map((u) => u.getStrResponse()),
-      ))
-        response.body,
+      )).indexed)
+        responseToJs(response, requestUrl: urls[index].url),
     ];
 
 /// `java.connect` 的回應：內文、網址、狀態與標頭。失敗時傳回 500 與錯誤
