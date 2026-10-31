@@ -10,11 +10,13 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/source_login_ui.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/services/source_login_session.dart';
 import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -81,15 +83,31 @@ Future<bool> openSourceLogin(
   final after = await _loginSnapshot(source);
   final changed = after != before;
   if (changed && after.hasData) await _clearLoginRequiredTag(source);
+  // 呼叫端拿到結果就重抓、改畫面；等返回動畫播完再交出去，不和動畫疊在
+  // 一起（ADR 0018）。網頁登入的頁面一開始返回就交回結果，表單頁要等卸載。
+  if (context.mounted) await TransitionSettled.uncovered(context);
   return changed;
 }
 
-/// 清掉 [source] 的登入資料：表單內容、登入標頭、夜讀與手機瀏覽器裡這個
-/// 網站的 Cookie（單獨登出一個書源）。
+/// 清掉 [source] 的登入資料（單獨登出一個書源）：表單內容、登入標頭，以及
+/// 這個網站在三個地方的 Cookie——夜讀自己存的、HTTP 請求自動收存的、手機
+/// 瀏覽器裡的。瀏覽器照書源網址與登入網頁的每一層路徑清，登入網頁常在
+/// `/account/login` 這類路徑，那裡設的 Cookie 從網站根目錄看不到。
 Future<void> clearSourceLoginData(BookSource source) async {
   await source.clearLoginData();
-  final uri = Uri.tryParse(source.bookSourceUrl);
-  if (uri != null && uri.hasScheme) await WebViewNative.clearCookies(uri);
+  final loginUrl = source.loginUrl?.trim() ?? '';
+  final uris = [
+    for (final url in [
+      source.bookSourceUrl,
+      if (loginUrl.isNotEmpty && !_looksLikeScript(loginUrl))
+        NetworkUtils.getAbsoluteURL(source.bookSourceUrl, loginUrl),
+    ])
+      if (Uri.tryParse(url) case final uri? when uri.hasScheme) uri,
+  ];
+  for (final uri in uris) {
+    await NetworkService().cookieJar.delete(uri, true);
+  }
+  if (uris.isNotEmpty) await WebViewNative.clearCookies(uris);
 }
 
 bool _looksLikeScript(String loginUrl) =>
@@ -274,9 +292,14 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       final values = _formValues();
       final loggedIn = await session.submit(values, cancelToken: cancel);
       _initial.addAll(values);
+      // 登入程式跳出的說明先讓使用者讀完；提示框蓋在這一頁上面，不等它
+      // 關掉就返回，關掉的會是提示框。
+      while (mounted && _openMessages.isNotEmpty) {
+        await Future.wait(_openMessages.toList());
+      }
       if (!mounted) return;
       if (loggedIn) _showNotice('已登入「${widget.source.bookSourceName}」');
-      Navigator.of(context).pop();
+      _close();
     } catch (error, stackTrace) {
       if (mounted && !cancel.isCancelled) {
         _showNotice(failureMessage('登入', error, stackTrace));
@@ -372,9 +395,8 @@ class _SourceLoginPageState extends State<SourceLoginPage>
             children: [
               ClipRRect(
                 borderRadius: AppRadius.cardSm,
-                child: Image.network(
-                  request.imageUrl,
-                  headers: request.headers,
+                child: Image.memory(
+                  request.image,
                   height: 64,
                   fit: BoxFit.contain,
                   errorBuilder: (context, _, _) => const SizedBox(
@@ -405,17 +427,33 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     if (!mounted) return;
     final text = message.text.trim();
     if (message.long || text.contains('\n') || text.length > 40) {
-      unawaited(
-        showAppAlert<void>(
-          context: context,
-          message: text,
-          actions: const [
-            AppAlertAction(label: '好', value: null, isDefault: true),
-          ],
-        ),
+      final shown = showAppAlert<void>(
+        context: context,
+        message: text,
+        actions: const [
+          AppAlertAction(label: '好', value: null, isDefault: true),
+        ],
       );
+      _openMessages.add(shown);
+      unawaited(shown.whenComplete(() => _openMessages.remove(shown)));
     } else {
       _showNotice(text);
+    }
+  }
+
+  /// 開著的長訊息提示框。
+  final Set<Future<void>> _openMessages = {};
+
+  /// 關掉這一頁。上面還蓋著別的（例如使用者剛打開的選單）時直接拿掉這一頁，
+  /// 不去關上面那一層。
+  void _close() {
+    final route = ModalRoute.of(context);
+    if (route == null) return;
+    final navigator = Navigator.of(context);
+    if (route.isCurrent) {
+      navigator.pop();
+    } else {
+      navigator.removeRoute(route);
     }
   }
 

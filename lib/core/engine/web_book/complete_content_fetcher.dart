@@ -9,7 +9,6 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/network/str_response.dart';
 
 /// 正文完整性優先的抓取器。
 ///
@@ -35,7 +34,6 @@ final class CompleteContentFetcher {
     final concurrency = math.max(1, pageConcurrency ?? _defaultPageConcurrency);
     String? lastBaseUrl;
     var fetchedPages = 0;
-    final wall = LoginWall();
 
     while (pendingUrls.isNotEmpty) {
       final remainingPages = _maxPages - fetchedPages;
@@ -66,7 +64,6 @@ final class CompleteContentFetcher {
         ),
       );
 
-      if (fetchedPages == 0) wall.note(pages.first.response);
       fetchedPages += pages.length;
       for (final page in pages) {
         if (page.content.isNotEmpty) contentParts.add(page.content);
@@ -85,7 +82,7 @@ final class CompleteContentFetcher {
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
-    wall.explainContent(content);
+    LoginWall.checkContent(null, content);
     return content;
   }
 
@@ -109,10 +106,12 @@ final class CompleteContentFetcher {
       baseUrl: response.url,
       nextChapterUrl: nextChapterUrl,
     );
+    // 任何一頁被登入牆擋住，整章失敗，不存半章。
+    LoginWall.checkContent(response, result.content);
     return _FetchedContentPage(
       content: result.content,
       nextUrls: result.nextUrls,
-      response: response,
+      baseUrl: response.url,
     );
   }
 }
@@ -121,12 +120,10 @@ class _FetchedContentPage {
   const _FetchedContentPage({
     required this.content,
     required this.nextUrls,
-    required this.response,
+    required this.baseUrl,
   });
 
   final String content;
   final List<String> nextUrls;
-  final StrResponse response;
-
-  String get baseUrl => response.url;
+  final String baseUrl;
 }

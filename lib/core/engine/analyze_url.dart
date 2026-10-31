@@ -102,8 +102,10 @@ class AnalyzeUrl {
   /// （`getHeaderMap(true)`）。
   ///
   /// 只有有登入的書源才找：記憶體沒有時在書源 isolate 停住讀資料庫，讀到
-  /// 沒有就在記憶體記成空的，之後不再讀；登入時寫入的會經由記憶體同步蓋過
-  /// 它。不能停住的 isolate（主 isolate）只看記憶體。
+  /// 的（沒有就是空的）記在這條 isolate 的記憶體，之後不再讀。這筆不同步給
+  /// 其他 isolate：同一時間登入頁剛寫入的真標頭可能被讀到的舊值蓋掉；登入
+  /// 時寫入的經由記憶體同步過來，蓋過這裡記的。不能停住的 isolate（主
+  /// isolate）只看記憶體。
   void _initLoginHeaders() {
     final source = this.source;
     if (source is! BaseSource || !source.hasLogin) return;
@@ -112,7 +114,7 @@ class AnalyzeUrl {
     var raw = cache.getMemoryText(key);
     if (raw == null && BlockingCall.available) {
       raw = BlockingCall.run(cacheRead(key)) as String? ?? '';
-      if (raw.isEmpty) cache.putMemory(key, '');
+      cache.applyMirroredWrite(key, raw, 0);
     }
     headerMap.addAll(BaseSource.decodeLoginHeader(raw));
   }

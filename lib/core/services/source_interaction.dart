@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 /// 書源程式要使用者操作的事：開網頁讓人操作、看圖填驗證碼、顯示訊息。
 ///
@@ -93,12 +94,12 @@ final class SourceBrowseRequest extends SourceInteractionRequest {
   final Map<String, String> headers;
 }
 
-/// `java.getVerificationCode`：讓使用者看 [imageUrl] 的圖填驗證碼。
+/// `java.getVerificationCode`：讓使用者看 [image] 填驗證碼。圖片由書源
+/// isolate 照書源的請求抓好（同一個登入中的 Cookie），不由畫面另外下載。
 final class SourceCodeRequest extends SourceInteractionRequest {
-  const SourceCodeRequest({required this.imageUrl, required this.headers});
+  const SourceCodeRequest({required this.image});
 
-  final String imageUrl;
-  final Map<String, String> headers;
+  final Uint8List image;
 }
 
 /// `java.toast`／`java.longToast` 的訊息。

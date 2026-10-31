@@ -152,7 +152,6 @@ class WebBook {
 
       final allChapters = <BookChapter>[];
       final visitedUrls = <String>{};
-      final wall = LoginWall();
       var isReverse = false;
       // tocUrl 為空時以 bookUrl 作為備用 (對標 Android 邏輯)
       final initialUrl = book.tocUrl.isNotEmpty ? book.tocUrl : book.bookUrl;
@@ -165,7 +164,6 @@ class WebBook {
         initialUrl: initialUrl,
         cancelToken: cancelToken,
       );
-      wall.note(firstRes);
 
       final firstResult = await ChapterListParser.parse(
         source: source,
@@ -173,6 +171,10 @@ class WebBook {
         body: firstRes.body,
         baseUrl: firstRes.url,
         maxChapters: chapterLimit,
+      );
+      LoginWall.checkToc(
+        firstRes,
+        empty: firstResult.chapters.isEmpty && firstResult.nextUrls.isEmpty,
       );
       isReverse = firstResult.isReverse;
       allChapters.addAll(firstResult.chapters);
@@ -207,6 +209,11 @@ class WebBook {
                   ? null
                   : chapterLimit - allChapters.length,
             );
+            // 要整份目錄時，後面哪一頁被登入牆擋住就整份失敗；其他時候照
+            // 抓不到的頁略過，先給讀得到的部分。
+            if (requireComplete) {
+              LoginWall.checkToc(res, empty: pageResult.chapters.isEmpty);
+            }
             allChapters.addAll(pageResult.chapters);
             // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
           }
@@ -243,6 +250,9 @@ class WebBook {
                   ? null
                   : (chapterLimit - allChapters.length),
             );
+            if (requireComplete) {
+              LoginWall.checkToc(res, empty: result.chapters.isEmpty);
+            }
             allChapters.addAll(result.chapters);
             currentUrl = result.nextUrls.isNotEmpty
                 ? result.nextUrls.first
@@ -266,7 +276,6 @@ class WebBook {
       for (final c in allChapters) {
         if (seen.add(c.url)) deduped.add(c);
       }
-      wall.explainToc(empty: deduped.isEmpty);
 
       // A title is a label, not content identity. Different URLs remain
       // distinct until the source provides evidence that they are duplicates;
@@ -360,7 +369,6 @@ class WebBook {
     );
     firstRes = runLoginCheckJs(firstAnalyzeUrl, firstRes);
     _checkRedirect(source, firstRes);
-    final wall = LoginWall()..note(firstRes);
 
     final firstResult = await ContentParser.parse(
       source: source,
@@ -370,6 +378,7 @@ class WebBook {
       baseUrl: firstRes.url,
       nextChapterUrl: nextChapterUrl,
     );
+    LoginWall.checkContent(firstRes, firstResult.content);
     if (firstResult.content.isNotEmpty) {
       contentParts.add(firstResult.content);
     }
@@ -400,6 +409,7 @@ class WebBook {
           baseUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
+        LoginWall.checkContent(res, pageResult.content);
         if (pageResult.content.isNotEmpty) {
           contentParts.add(pageResult.content);
         }
@@ -434,6 +444,7 @@ class WebBook {
           baseUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
+        LoginWall.checkContent(res, result.content);
         if (result.content.isNotEmpty) {
           contentParts.add(result.content);
         }
@@ -451,7 +462,8 @@ class WebBook {
       contentStr: joined,
       baseUrl: lastBaseUrl,
     );
-    wall.explainContent(content);
+    // 每一頁都讀得到，套完替換規則卻只剩一句登入提示。
+    LoginWall.checkContent(null, content);
     return content;
   }
 

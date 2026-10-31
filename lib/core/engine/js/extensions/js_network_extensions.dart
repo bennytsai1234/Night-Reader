@@ -174,14 +174,13 @@ extension JsNetworkExtensions on JsExtensions {
     });
     onBlocking('getVerificationCode', (payload) {
       _requireInteraction();
-      final code = BlockingCall.run(
-        askUser(
-          SourceCodeRequest(
-            imageUrl: _absoluteUrl('$payload'),
-            headers: _sourceHeaders(),
-          ),
-        ),
-      ) as String?;
+      // 圖片照書源的請求抓（同一個登入中的 Cookie 與標頭，回應的 Cookie 也
+      // 存下來），驗證碼才對得上這次登入。
+      final image = BlockingCall.run(
+        responseBytes(_analyzeUrl(_absoluteUrl('$payload'))),
+      ) as Uint8List;
+      final code =
+          BlockingCall.run(askUser(SourceCodeRequest(image: image))) as String?;
       if (code == null || code.isEmpty) throw Exception('驗證結果為空');
       return code;
     });

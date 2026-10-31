@@ -6,7 +6,7 @@
 
 ## 怎麼做
 
-- **誰可以要使用者操作**：預設都不行。只有登入頁按下的動作（按鈕、打勾、用程式產生的表單）執行時帶著「可以互動」的記號（`SourceInteraction.runInteractive`），這時 `java.startBrowser`、`startBrowserAwait`、`getVerificationCode` 真的開網頁或驗證碼框，`java.toast`、`longToast` 顯示在登入頁上；其他地方開網頁、驗證碼立刻失敗（「需要在網頁上驗證」），提示只記在日誌。
+- **誰可以要使用者操作**：預設都不行。只有登入頁按下的動作（按鈕、打勾、用程式產生的表單）執行時帶著「可以互動」的記號（`SourceInteraction.runInteractive`），這時 `java.startBrowser`、`startBrowserAwait`、`getVerificationCode` 真的開網頁或驗證碼框，`java.toast`、`longToast` 顯示在登入頁上；其他地方要等結果的（`startBrowserAwait`、驗證碼）立刻失敗（「需要在網頁上驗證」）；不等結果的 `startBrowser` 在 Legado 是開了瀏覽器、規則照常往下跑，夜讀不開、記在日誌、規則照常往下跑；提示只記在日誌。
 - **登入頁有自己的書源 isolate**：開頁時另開一條（`SourceLoginSession`），關頁就結束。書源程式可能停在網頁上等使用者好幾分鐘，借用平常那四條（ADR 0034）的話，同一條上其他書源的閱讀與下載會整條卡住。要使用者做的事照 ADR 0034 的路走：書源 isolate 停住，網路 isolate 把請求轉給主 isolate 的登入頁。登入資料經由記憶體同步，其他書源 isolate 當下看得到；登入頁的動作等它觸發的寫入都寫完才結束，關頁結束 isolate 時不會丟資料。
 - **登入資料帶進每次抓取**：登入標頭照 Legado 跟著每次請求送出（書源 header 在前，登入標頭蓋過，網址選項再蓋過）；Cookie 照原本的 Cookie 存放。
 - **「需要登入」是狀態，不是壞掉**：校驗標成「需要登入」的書源照樣參加搜尋（很多書源搜尋不用登入）、照樣能開書，不列入清理；登入資料變了就拿掉這個標記。
