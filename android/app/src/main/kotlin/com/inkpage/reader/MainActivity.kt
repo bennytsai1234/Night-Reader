@@ -93,7 +93,11 @@ class MainActivity : AudioServiceActivity() {
                 result.notImplemented()
                 return@setMethodCallHandler
             }
-            setLaunchTheme(call.argument<String>("style"), call.argument<String>("mode"))
+            setLaunchTheme(
+                call.argument<String>("light"),
+                call.argument<String>("dark"),
+                call.argument<String>("mode"),
+            )
             result.success(null)
         }
         // 背景瀏覽器通過 Cloudflare 檢查後，夜讀要帶著同樣的 Cookie 與瀏覽器
@@ -176,18 +180,17 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
-    // 下次冷啟動時系統啟動畫面用哪個風格的底色；系統會記住，Android 13 起才有。
-    // mode 是 App 的深淺設定：light／dark 固定，其他跟隨系統。
-    private fun setLaunchTheme(style: String?, mode: String?) {
+    // 下次冷啟動時系統啟動畫面用哪個底色；系統會記住，Android 13 起才有。
+    // light 是淺色風格，dark 是深色底（black 或深色風格）；mode 是 App 的
+    // 深淺設定：light／dark 固定，其他跟隨系統。
+    private fun setLaunchTheme(light: String?, dark: String?, mode: String?) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val themes = launchThemes[style] ?: return
-        splashScreen.setSplashScreenTheme(
-            when (mode) {
-                "light" -> themes.light
-                "dark" -> themes.dark
-                else -> themes.system
-            },
-        )
+        val theme = when (mode) {
+            "light" -> launchLightThemes[light]
+            "dark" -> launchDarkThemes[dark]
+            else -> launchSystemThemes["$light/$dark"]
+        } ?: return
+        splashScreen.setSplashScreenTheme(theme)
     }
 
     // App 內更新：開系統安裝程式安裝 APK。Android 一律要使用者在系統畫面
@@ -333,20 +336,56 @@ class MainActivity : AudioServiceActivity() {
     }
 }
 
-// AppStyle.name → 該風格的啟動畫面主題（res/values-v31/launch_themes.xml）。
-private class LaunchThemes(val system: Int, val light: Int, val dark: Int)
+// 啟動畫面主題（res/values-v31/launch_themes.xml）：跟隨系統的以
+// 「淺色風格/深色底」為鍵，固定淺色以淺色風格、固定深色以深色底為鍵。
+private val launchSystemThemes = mapOf(
+    "plain/black" to R.style.LaunchTheme_System_PlainBlack,
+    "plain/paper" to R.style.LaunchTheme_System_PlainPaper,
+    "plain/tea" to R.style.LaunchTheme_System_PlainTea,
+    "plain/kraft" to R.style.LaunchTheme_System_PlainKraft,
+    "plain/bamboo" to R.style.LaunchTheme_System_PlainBamboo,
+    "paper/black" to R.style.LaunchTheme_System_PaperBlack,
+    "paper/paper" to R.style.LaunchTheme_System_PaperPaper,
+    "paper/tea" to R.style.LaunchTheme_System_PaperTea,
+    "paper/kraft" to R.style.LaunchTheme_System_PaperKraft,
+    "paper/bamboo" to R.style.LaunchTheme_System_PaperBamboo,
+    "tea/black" to R.style.LaunchTheme_System_TeaBlack,
+    "tea/paper" to R.style.LaunchTheme_System_TeaPaper,
+    "tea/tea" to R.style.LaunchTheme_System_TeaTea,
+    "tea/kraft" to R.style.LaunchTheme_System_TeaKraft,
+    "tea/bamboo" to R.style.LaunchTheme_System_TeaBamboo,
+    "kraft/black" to R.style.LaunchTheme_System_KraftBlack,
+    "kraft/paper" to R.style.LaunchTheme_System_KraftPaper,
+    "kraft/tea" to R.style.LaunchTheme_System_KraftTea,
+    "kraft/kraft" to R.style.LaunchTheme_System_KraftKraft,
+    "kraft/bamboo" to R.style.LaunchTheme_System_KraftBamboo,
+    "bamboo/black" to R.style.LaunchTheme_System_BambooBlack,
+    "bamboo/paper" to R.style.LaunchTheme_System_BambooPaper,
+    "bamboo/tea" to R.style.LaunchTheme_System_BambooTea,
+    "bamboo/kraft" to R.style.LaunchTheme_System_BambooKraft,
+    "bamboo/bamboo" to R.style.LaunchTheme_System_BambooBamboo,
+    "bean/black" to R.style.LaunchTheme_System_BeanBlack,
+    "bean/paper" to R.style.LaunchTheme_System_BeanPaper,
+    "bean/tea" to R.style.LaunchTheme_System_BeanTea,
+    "bean/kraft" to R.style.LaunchTheme_System_BeanKraft,
+    "bean/bamboo" to R.style.LaunchTheme_System_BeanBamboo,
+)
 
-private val launchThemes = mapOf(
-    "paper" to LaunchThemes(R.style.LaunchTheme_Paper, R.style.LaunchTheme_Paper_Light, R.style.LaunchTheme_Paper_Dark),
-    "bamboo" to LaunchThemes(R.style.LaunchTheme_Bamboo, R.style.LaunchTheme_Bamboo_Light, R.style.LaunchTheme_Bamboo_Dark),
-    "azurite" to LaunchThemes(R.style.LaunchTheme_Azurite, R.style.LaunchTheme_Azurite_Light, R.style.LaunchTheme_Azurite_Dark),
-    "tea" to LaunchThemes(R.style.LaunchTheme_Tea, R.style.LaunchTheme_Tea_Light, R.style.LaunchTheme_Tea_Dark),
-    "plain" to LaunchThemes(R.style.LaunchTheme_Plain, R.style.LaunchTheme_Plain_Light, R.style.LaunchTheme_Plain_Dark),
-    "rouge" to LaunchThemes(R.style.LaunchTheme_Rouge, R.style.LaunchTheme_Rouge_Light, R.style.LaunchTheme_Rouge_Dark),
-    "lotus" to LaunchThemes(R.style.LaunchTheme_Lotus, R.style.LaunchTheme_Lotus_Light, R.style.LaunchTheme_Lotus_Dark),
-    "scroll" to LaunchThemes(R.style.LaunchTheme_Scroll, R.style.LaunchTheme_Scroll_Light, R.style.LaunchTheme_Scroll_Dark),
-    "amber" to LaunchThemes(R.style.LaunchTheme_Amber, R.style.LaunchTheme_Amber_Light, R.style.LaunchTheme_Amber_Dark),
-    "frost" to LaunchThemes(R.style.LaunchTheme_Frost, R.style.LaunchTheme_Frost_Light, R.style.LaunchTheme_Frost_Dark),
+private val launchLightThemes = mapOf(
+    "plain" to R.style.LaunchTheme_Light_Plain,
+    "paper" to R.style.LaunchTheme_Light_Paper,
+    "tea" to R.style.LaunchTheme_Light_Tea,
+    "kraft" to R.style.LaunchTheme_Light_Kraft,
+    "bamboo" to R.style.LaunchTheme_Light_Bamboo,
+    "bean" to R.style.LaunchTheme_Light_Bean,
+)
+
+private val launchDarkThemes = mapOf(
+    "black" to R.style.LaunchTheme_Dark_Black,
+    "paper" to R.style.LaunchTheme_Dark_Paper,
+    "tea" to R.style.LaunchTheme_Dark_Tea,
+    "kraft" to R.style.LaunchTheme_Dark_Kraft,
+    "bamboo" to R.style.LaunchTheme_Dark_Bamboo,
 )
 
 // 電量與充電狀態；只在 Dart 端有訂閱時才註冊系統廣播。
