@@ -260,6 +260,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _registerRuntime() {
     widget.runtime.addListener(_onRuntimeChanged);
     widget.runtime.addViewportGeometryListener(_onViewportGeometryChanged);
+    widget.runtime.chapterShares.addListener(_publishProgress);
     widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
@@ -267,6 +268,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _unregisterRuntime(ReaderV2Runtime runtime) {
     runtime.removeListener(_onRuntimeChanged);
     runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
+    runtime.chapterShares.removeListener(_publishProgress);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
   }
@@ -1101,6 +1103,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
     notifier.value = HybridProgress(
       chapterCount: widget.runtime.chapterCount,
+      shares: widget.runtime.chapterShares.value,
     ).progressForLocation(location, chapterLength: blocks.displayText.length);
   }
 

@@ -7,6 +7,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 
 import 'reader_v2_location.dart';
@@ -200,7 +201,25 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 每章佔全書多少，全書進度照它算；開書時從資料庫讀一次（讀得比正文排好
+  /// 快，頁尾第一次出現就是加權過的數字），讀到之前當每章一樣長。
+  ValueListenable<ReaderV2ChapterShares> get chapterShares => _chapterShares;
+  final ValueNotifier<ReaderV2ChapterShares> _chapterShares =
+      ValueNotifier<ReaderV2ChapterShares>(const ReaderV2ChapterShares.even(0));
+
+  Future<void> _loadChapterShares() async {
+    try {
+      await repository.ensureChapters();
+      final shares = await repository.loadChapterShares();
+      if (!disposed) _chapterShares.value = shares;
+    } catch (error) {
+      // 讀不到就照章數平均，不影響開書；開書失敗由 openBook 自己回報。
+      AppLog.w('讀每章長度失敗，全書進度照章數平均: $error');
+    }
+  }
+
   Future<void> openBook() async {
+    unawaited(_loadChapterShares());
     final token = stateMachine.beginOpen(location: _initialLocation);
     notifyListeners();
     try {
@@ -618,6 +637,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     disposed = true;
     progressController.dispose();
     _viewportGeometryNotifier.dispose();
+    _chapterShares.dispose();
     stateMachine.dispose();
     super.dispose();
   }
