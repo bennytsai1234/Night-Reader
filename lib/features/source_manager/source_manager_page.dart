@@ -709,7 +709,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
         await _openEditor(p, s.bookSourceUrl);
       case 'login':
         final full = await p.getFullSource(s.bookSourceUrl);
-        if (full != null && mounted) await openSourceLogin(context, full);
+        if (full != null && mounted) {
+          await openSourceLogin(context, full, checkAfter: true);
+        }
       case 'debug':
         final full = await p.getFullSource(s.bookSourceUrl);
         if (full != null && mounted) {

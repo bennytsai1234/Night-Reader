@@ -9,9 +9,11 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 
 import '../../test_helper.dart';
 
@@ -45,7 +47,11 @@ void main() {
   );
 
   /// 從起始頁開登入，傳回 [openSourceLogin] 的結果（關掉、存好之後才有）。
-  Future<Future<bool>> openLogin(WidgetTester tester) async {
+  Future<Future<bool>> openLogin(
+    WidgetTester tester, {
+    BookSource? login,
+    bool checkAfter = false,
+  }) async {
     late Future<bool> result;
     await tester.pumpWidget(
       MaterialApp(
@@ -54,7 +60,11 @@ void main() {
           child: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () => result = openSourceLogin(context, source),
+                onPressed: () => result = openSourceLogin(
+                  context,
+                  login ?? source,
+                  checkAfter: checkAfter,
+                ),
                 child: const Text('開啟'),
               ),
             ),
@@ -124,4 +134,113 @@ void main() {
     final stored = await tester.runAsync(() => dao.getByUrl(url));
     expect(stored!.groupTags, contains(loginRequiredSourceGroupTag));
   });
+
+  group('checks the source after logging in', () {
+    late _RecordingCheckService checks;
+
+    setUp(() {
+      checks = _RecordingCheckService();
+      getIt.registerSingleton<CheckSourceService>(checks);
+    });
+
+    testWidgets('when the login data changed', (tester) async {
+      setupTestDI();
+      await tester.runAsync(() => dao.upsert(source));
+
+      // 前面的測試存的帳號會留在 App 共用的快取裡，每個測試填不同的。
+      final closed = await openLogin(tester, checkAfter: true);
+      await tester.enterText(find.byType(TextField), '要校驗的帳號');
+
+      expect(await close(tester, closed), isTrue);
+      expect(checks.checked, [
+        [url],
+      ]);
+    });
+
+    testWidgets('not when leaving without logging in', (tester) async {
+      setupTestDI();
+      await tester.runAsync(() => dao.upsert(source));
+
+      final closed = await openLogin(tester, checkAfter: true);
+
+      expect(await close(tester, closed), isFalse);
+      expect(checks.checked, isEmpty);
+    });
+
+    testWidgets('not when opened from where it failed', (tester) async {
+      setupTestDI();
+      await tester.runAsync(() => dao.upsert(source));
+
+      final closed = await openLogin(tester);
+      await tester.enterText(find.byType(TextField), '不校驗的帳號');
+
+      expect(await close(tester, closed), isTrue);
+      expect(checks.checked, isEmpty);
+    });
+  });
+
+  group('log in on the website', () {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byType(GlassMenuButton<String>));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('is in the form menu of a website source', (tester) async {
+      setupTestDI();
+      await tester.runAsync(() => dao.upsert(source));
+
+      await openLogin(tester);
+      await openMenu(tester);
+
+      expect(find.text('在網站登入'), findsOneWidget);
+    });
+
+    testWidgets('is not offered when the source URL is a name', (tester) async {
+      setupTestDI();
+      final named = BookSource.fromJson({
+        ...source.toJson(),
+        'bookSourceUrl': '聚合書源',
+      });
+      await tester.runAsync(() => dao.upsert(named));
+
+      await openLogin(tester, login: named);
+      await openMenu(tester);
+
+      expect(find.text('登入標頭'), findsOneWidget);
+      expect(find.text('在網站登入'), findsNothing);
+    });
+
+    test('opens the login URL when it is a URL, else the source URL', () {
+      BookSource withLogin(String? loginUrl, [String sourceUrl = url]) =>
+          BookSource(
+            bookSourceUrl: sourceUrl,
+            bookSourceName: '書源',
+            loginUrl: loginUrl,
+          );
+
+      expect(sourceWebsiteLoginUrl(withLogin('@js: login()')), url);
+      expect(sourceWebsiteLoginUrl(withLogin('function login() {}')), url);
+      expect(sourceWebsiteLoginUrl(withLogin(null)), url);
+      expect(
+        sourceWebsiteLoginUrl(withLogin('/user/login')),
+        'https://login.example/user/login',
+      );
+      expect(
+        sourceWebsiteLoginUrl(withLogin('https://passport.example/login')),
+        'https://passport.example/login',
+      );
+      expect(sourceWebsiteLoginUrl(withLogin('/login', '聚合書源')), isNull);
+    });
+  });
+}
+
+/// 只記下要校驗哪些書源，不真的校驗。
+class _RecordingCheckService extends CheckSourceService {
+  final List<List<String>> checked = [];
+
+  @override
+  Future<SourceCheckReport> check(List<String> urls) async {
+    checked.add(urls);
+    return SourceCheckReport.empty;
+  }
 }
