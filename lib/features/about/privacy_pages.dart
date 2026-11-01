@@ -36,6 +36,10 @@ class PrivacyNoticePage extends StatelessWidget {
             body: '備份檔會包含書架、書源、閱讀進度、設定、規則與已快取正文等資料，以及書源的登入資料（登入表單填的帳號密碼、登入標頭與 Cookie）。備份檔目前不加密，請自行保存於可信位置。',
           ),
           _NoticeSection(
+            title: '同步',
+            body: '設定了同步空間（例如 WebDAV）時，書架上每本書的閱讀進度（書名、作者、讀到第幾章第幾個字）會存到使用者自己的同步空間，不經過其他伺服器；WebDAV 的帳號密碼存在這台手機的設定裡，備份檔也會帶著。同步的資料目前不加密。',
+          ),
+          _NoticeSection(
             title: 'Crash log',
             body: 'Crash log 用於除錯，可能包含錯誤訊息、網址或書源解析資訊。App 不會自動上傳這些 log。',
           ),
@@ -89,11 +93,11 @@ class _PermissionsPageState extends State<PermissionsPage>
           ..._noticeSections(context, const [
             _NoticeSection(
               title: '檔案',
-              body: '匯入本地書、匯入/匯出書源、備份與還原會透過系統檔案選擇器或分享面板讀取、建立檔案。App 只處理使用者選取或分享的檔案，不要求 Android 所有檔案存取權。',
+              body: '匯入本地書、匯入/匯出書源、建立備份與從備份檔還原會透過系統檔案選擇器或分享面板讀取、建立檔案。App 只處理使用者選取或分享的檔案，不要求 Android 所有檔案存取權。',
             ),
             _NoticeSection(
               title: '網路',
-              body: '網路權限用於搜尋書籍、載入章節、下載封面、同步 Cookie、WebView 驗證與書源除錯。',
+              body: '網路權限用於搜尋書籍、載入章節、下載封面、同步 Cookie、多台手機同步、WebView 驗證與書源除錯。',
             ),
             _NoticeSection(
               title: '通知與背景任務',

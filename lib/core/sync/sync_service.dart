@@ -172,11 +172,22 @@ class SyncService {
     } while (_again);
   }
 
-  Future<void> _syncOnce() async {
-    final store = await _store();
-    if (store == null) return;
-    status.value = status.value.copyWith(running: true);
+  /// 開 App 進場播完時：讀出設定、同步第一次。
+  Future<void> start() async {
     try {
+      await load();
+    } catch (error, stackTrace) {
+      AppLog.e('讀同步設定失敗', error: error, stackTrace: stackTrace);
+      return;
+    }
+    await syncNow();
+  }
+
+  Future<void> _syncOnce() async {
+    try {
+      final store = await _store();
+      if (store == null) return;
+      status.value = status.value.copyWith(running: true);
       await _lock.synchronized(() => _syncProgress(store));
       final now = _clock();
       await _settings.setLastSyncAt(now);
