@@ -91,18 +91,9 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - **同一個資料夾常有好幾個 session**：切分支會影響別人。自己的工作開 repo 外的 worktree 做，開工前 `git branch --show-current` 確認。本機預覽伺服器的 port（例如 8765）被佔用時換一個，不要結束別人的程序。
 - **從 `origin/beta` 開分支會推進 `beta`**：家裡這台的全域設定是 `push.default=upstream`，`git worktree add -b <分支> <路徑> origin/beta` 會把上游設成 `beta`，之後 `git push -u origin <分支>` 直接推進 `beta`，不會建同名分支（2026-10-23 踩過）。開分支加 `--no-track`。
-- **Claude Code 子代理的 worktree**（`isolation: "worktree"`）放在主資料夾的 `.claude/worktrees/`，起點是主資料夾目前的 commit（通常是 `beta`），不是呼叫端所在的分支；要疊在別的分支上，合併時得自己解衝突，或先把那條分支併進 `beta`。
-- **T3 的自動拉取與 worktree 都認 `origin/HEAD`**，`git fetch` 不會更新它。資料夾還停在 `main` 的電腦開工前先 `git fetch`、`git switch beta`、`git remote set-head origin -a`。這台已經是 `beta`，`core.hooksPath` 是相對的 `.githooks`（每個 worktree 跑自己那份 hook）。`main` 收到不在 `beta` 上的提交就讓 Android Release 失敗的檢查，要等 `main` 第一次快轉到 `beta` 才生效。
 - **新 worktree 的 sqlite3**：`flutter test` 要下載 sqlite3 的 native asset，公司網路會改掉檔案讓雜湊不符；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就直接用快取。
-- **Linux（雲端 session）跑要字型的測試**（`test/screens`、`test/frame_budget`、`test/polish`）：先 `apt-get install fonts-noto-cjk`。一般測試（含打開真的閱讀器的）用測試預設字型，CI 不裝中文字型。雲端機器比 Windows 那台慢約一倍，frame budget 的數字只能同一台交錯比；量不到手機上的合成（raster）成本，測試的資料庫與書源解析在主執行緒，「幀前」數字比手機上重。
-- **測試字型每個字一樣寬**，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(kReaderV2PunctFontFamily)` 載入，範例在 `test/features/reader_v2/hybrid/half_cell_layout_test.dart`）。
-- **`download_service_test` 的「`_dio` 尚未初始化」日誌**不是警告：測試沒準備網路層，只檢查排隊與範圍。
-- **Codex 審查的暫存** `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時擋掉 Codex 最後一次連線，`codex exec` 回非零但報告通常已經寫好；先看報告檔再決定要不要重跑。
-- **Windows 上用 Python 寫檔**要給 `newline='\n'`，不然會寫成 CRLF。
-- **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
-- **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 - **使用者的手機**：連手機、從手機拿崩潰日誌或書源、在手機上量效能時，先讀 `docs/agents/phone.md`。
-- **Legado 原始碼**：對照 Legado 的做法時讀 `C:\Users\benny\Desktop\Folder\projects\legado`（使用者的 fork）；GitHub 上的 `gedoor/legado` 已經清空。
+- **其他情況的坑**：用到子代理 worktree 或 T3、在 Linux 跑字型或幀預算測試、Codex 審查、用 Python 或 `jq`、重新產生標點字型、對照 Legado 原始碼、連真網站校驗書源時，先讀 `docs/agents/environment.md`。
 
 ## Agent skills
 
