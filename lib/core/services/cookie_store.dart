@@ -67,6 +67,16 @@ class CookieStore {
     await _cookieDao?.upsert(Cookie(url: domain, cookie: cookie));
   }
 
+  /// 從備份還原：每筆的 `url` 已經是存放用的網域，照原樣寫回。
+  Future<void> restoreAll(List<Cookie> cookies) async {
+    for (final entry in cookies) {
+      if (entry.url.isEmpty || entry.cookie.isEmpty) continue;
+      _memoryCache[entry.url] = entry.cookie;
+      onMemoryWrite?.call(entry.url, entry.cookie);
+      await _cookieDao?.upsert(entry);
+    }
+  }
+
   /// 記憶體裡 [url] 的 Cookie；沒有時是 null，要連資料庫一起找用 [getCookie]。
   String? getMemoryCookie(String url) => _memoryCache[getSubDomain(url)];
 
