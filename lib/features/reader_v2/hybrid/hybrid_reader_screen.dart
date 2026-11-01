@@ -1024,9 +1024,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final restored = _restoredLocation;
     if (restored == null) return null;
     final blocks = _pipeline.blocksOf(restored.chapterIndex);
+    // 和還原最後停的位置同一套算法：書首、書尾那一行到不了錨線，還原時
+    // 夾進可捲的範圍。
     final expected = blocks == null
         ? null
-        : _offsetForAnchor(HybridAnchor.fromLocation(restored, blocks), blocks);
+        : _restingOffset(HybridAnchor.fromLocation(restored, blocks), blocks);
     if (expected == null || (expected - offset).abs() > 0.5) {
       _restoredLocation = null;
       return null;

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
@@ -55,6 +56,25 @@ void main() {
       await rest(tester);
       expect(await saved(), (2, 137), reason: '第 ${round + 1} 次關掉後存的進度');
     }
+
+    // 書首：第一行到不了錨線，還原時停在最上面；沒捲動也還是書首。
+    await tester.runAsync(() async {
+      final book = (await getIt<BookDao>().getByUrl(kBookUrl))!;
+      book
+        ..chapterIndex = 0
+        ..charOffset = 0
+        ..visualOffsetPx = 0;
+      await getIt<BookDao>().upsert(book);
+    });
+    AppEventBus().fire(AppEventBus.upBookshelf);
+    await rest(tester);
+    await openReader(tester);
+    await rest(tester);
+    expect(visible().chapterIndex, 0);
+    expect(visible().charOffset, 0, reason: '書首開書停的字');
+    await tester.binding.handlePopRoute();
+    await rest(tester);
+    expect(await saved(), (0, 0), reason: '書首開書沒捲動，存的還是書首');
     await tearDownApp(tester);
   });
 }

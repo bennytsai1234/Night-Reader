@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_controller.dart';
 
 import 'legacy_chapters_table.dart';
 
@@ -84,6 +85,30 @@ void main() {
     await dao.renameBook(from: '沒讀過', to: '別的名字');
     await dao.renameBook(from: '新書名', to: '新書名');
     expect((await dao.getAll()).single.readTime, 35 * 60);
+  });
+
+  test('閱讀中改書名：回去接著讀的時間記在新書名下，不再分成兩筆', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final dao = ReadRecordDao(db);
+    var now = DateTime(2026, 10, 15, 21);
+    var currentName = '舊書名';
+    final timer = ReaderV2ReadTimeController(
+      bookName: () async => currentName,
+      readRecordDao: dao,
+      now: () => now,
+    );
+    timer.start();
+    now = now.add(const Duration(seconds: 10));
+    await timer.stop(); // 進書籍詳情
+    currentName = '新書名';
+    await dao.renameBook(from: '舊書名', to: '新書名');
+    timer.start(); // 回到閱讀器
+    now = now.add(const Duration(seconds: 20));
+    await timer.stop();
+
+    final records = await dao.getAll();
+    expect(records.map((r) => (r.bookName, r.readTime)), [('新書名', 30)]);
   });
 
   test('upgrading from schema 6 keeps the totals and adds daily records', () async {
