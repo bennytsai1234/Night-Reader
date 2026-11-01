@@ -1,5 +1,5 @@
 import 'dart:math';
-import 'dart:io' show gzip;
+import 'dart:io' show ZLibDecoder, gzip;
 import 'dart:convert';
 
 import 'package:convert/convert.dart';
@@ -140,24 +140,34 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
+    // java.base64Encode(data[, flags])、base64Decode(str[, charset 或 flags])、
+    // base64DecodeToByteArray(str[, flags])：JS 送 {d: 資料, f: flags, c: 字元
+    // 編碼}；flags 照 Android Base64，編碼預設 NO_WRAP、解碼預設 DEFAULT。
     runtime.onMessage('_base64Encode', (dynamic args) {
-      final payload = args;
-      return JsEncodeUtils.base64Encode(payload);
+      final (data, flags, _) = _base64Args(args);
+      return JsEncodeUtils.base64Encode(
+        data,
+        flags: flags ?? EncodeUtilsBase.base64NoWrap,
+      );
     });
-    runtime.onMessage('_base64Decode', (dynamic args) {
-      final payload = args;
-      final str = payload is List ? payload[0].toString() : payload.toString();
-      final charset = payload is List && payload.length > 1
-          ? payload[1].toString()
-          : 'UTF-8';
-      return JsEncodeUtils.base64Decode(str, charset: charset);
+    // 不認得的字元集丟錯誤給規則 JS（同 Legado 的 charset()），所以經
+    // onBlocking 包成 {value}／{error}。
+    onBlocking('_base64Decode', (dynamic args) {
+      final (data, flags, charset) = _base64Args(args);
+      return JsEncodeUtils.base64Decode(
+        data.toString(),
+        charset: charset ?? 'UTF-8',
+        flags: flags ?? 0,
+      );
     });
     runtime.onMessage('_base64DecodeToBytes', (dynamic args) {
-      final payload = args;
-      final str = payload is List
-          ? payload.first.toString()
-          : payload.toString();
-      return jsonEncode(JsEncodeUtils.base64DecodeToBytes(str).toList());
+      final (data, flags, _) = _base64Args(args);
+      return jsonEncode(
+        JsEncodeUtils.base64DecodeToBytes(
+          data.toString(),
+          flags: flags ?? 0,
+        ).toList(),
+      );
     });
     runtime.onMessage(
       '_hexEncode',
@@ -172,6 +182,41 @@ extension JsCryptoExtensions on JsExtensions {
       (dynamic args) => jsonEncode(hex.decode(args.toString())),
     );
     runtime.onMessage('_randomUUID', (dynamic args) => const Uuid().v4());
+    // java.security.MessageDigest：位元組進、位元組出。
+    runtime.onMessage('_digestBytes', (dynamic args) {
+      final payload = args as List;
+      return jsonEncode(
+        EncodeUtilsHash.digestBytes(
+          List<int>.from(payload[0] as List),
+          payload[1].toString(),
+        ).toList(),
+      );
+    });
+    // javax.crypto.Mac：[資料, 演算法（HmacSHA256 這類）, 金鑰]，都是位元組。
+    runtime.onMessage('_hmacBytes', (dynamic args) {
+      final payload = args as List;
+      return jsonEncode(
+        EncodeUtilsHash.hmacBytes(
+          List<int>.from(payload[0] as List),
+          payload[1].toString(),
+          List<int>.from(payload[2] as List),
+        ).toList(),
+      );
+    });
+    // java.security.SecureRandom：n 個隨機位元組。
+    runtime.onMessage('_randomBytes', (dynamic args) {
+      final random = Random.secure();
+      final count = args is num ? args.toInt() : int.tryParse('$args') ?? 0;
+      return jsonEncode([for (var i = 0; i < count; i++) random.nextInt(256)]);
+    });
+    // java.util.zip.Inflater／InflaterInputStream：zlib，nowrap 時是沒有
+    // 標頭的 deflate。
+    runtime.onMessage('_inflateBytes', (dynamic args) {
+      final payload = args as List;
+      final bytes = List<int>.from(payload[0] as List);
+      final raw = payload.length > 1 && payload[1] == true;
+      return jsonEncode(ZLibDecoder(raw: raw).convert(bytes));
+    });
     runtime.onMessage('_gunzipBytes', (dynamic args) {
       final payload = args;
       final bytesSource =
@@ -182,4 +227,12 @@ extension JsCryptoExtensions on JsExtensions {
       return jsonEncode(gzip.decode(bytes));
     });
   }
+}
+
+/// base64 呼叫的 `{d, f, c}`：資料、Android Base64 flags、字元編碼。
+(dynamic, int?, String?) _base64Args(dynamic args) {
+  if (args is! Map) return (args, null, null);
+  final flags = args['f'];
+  final charset = args['c'];
+  return (args['d'], flags is num ? flags.toInt() : null, charset?.toString());
 }

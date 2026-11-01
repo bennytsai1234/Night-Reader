@@ -9,7 +9,12 @@ import 'package:night_reader/core/exception/app_exception.dart';
 
 /// AnalyzeRule 的元素解析擴展
 mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
-  String getString(String ruleStr, {bool isUrl = false, bool unescape = true});
+  String getString(
+    String ruleStr, {
+    dynamic mContent,
+    bool isUrl = false,
+    bool unescape = true,
+  });
 
   /// 獲取單個元素，保留原始結果型別（`init` 這類規則要拿到 JSON 物件與
   /// 陣列本身）。

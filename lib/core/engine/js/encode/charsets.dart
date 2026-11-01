@@ -25,6 +25,45 @@ abstract final class Charsets {
         final other => throw UnsupportedError('不支援的字元集：$other'),
       };
 
+  /// Java 的 `URLEncoder.encode(text, charset)`：英數字與 `.-*_` 照原樣，
+  /// 空白變 `+`，其他照 [charset] 的位元組寫成大寫的 `%XX`。
+  ///
+  /// 照 Java 的做法逐字看：連續一段要編碼的字一起照 [charset] 轉成位元組，
+  /// 每個位元組都寫成 `%XX`（UTF-16 這類會在每段前面加 BOM，同 Java）。
+  static String urlEncode(String text, [String? charset]) {
+    bool safe(int c) =>
+        (c >= 0x30 && c <= 0x39) ||
+        (c >= 0x41 && c <= 0x5A) ||
+        (c >= 0x61 && c <= 0x7A) ||
+        c == 0x2E ||
+        c == 0x2D ||
+        c == 0x2A ||
+        c == 0x5F;
+    final out = StringBuffer();
+    final pending = StringBuffer();
+    void flush() {
+      if (pending.isEmpty) return;
+      for (final b in encode(pending.toString(), charset)) {
+        out.write('%${b.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+      }
+      pending.clear();
+    }
+
+    for (final rune in text.runes) {
+      if (safe(rune)) {
+        flush();
+        out.writeCharCode(rune);
+      } else if (rune == 0x20) {
+        flush();
+        out.write('+');
+      } else {
+        pending.writeCharCode(rune);
+      }
+    }
+    flush();
+    return out.toString();
+  }
+
   static String decode(List<int> bytes, [String? charset]) =>
       switch (_name(charset)) {
         'UTF-8' => utf8.decode(bytes, allowMalformed: true),

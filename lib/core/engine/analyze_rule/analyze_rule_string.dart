@@ -10,15 +10,21 @@ import 'package:night_reader/core/utils/network_utils.dart';
 
 /// AnalyzeRule 的字串解析擴展
 mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
-  /// 獲取單個字串
-  String getString(String ruleStr, {bool isUrl = false, bool unescape = true}) {
+  /// 獲取單個字串。[mContent] 有給時解析它，不給時解析目前內容（同 Legado
+  /// `getString(rule, mContent, isUrl)`）。
+  String getString(
+    String ruleStr, {
+    dynamic mContent,
+    bool isUrl = false,
+    bool unescape = true,
+  }) {
     if (ruleStr.isEmpty) {
       return '';
     }
 
     log('⇒ 執行 getString: $ruleStr');
     final ruleList = splitSourceRuleCacheString(ruleStr);
-    var result = content;
+    var result = mContent ?? content;
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
@@ -184,15 +190,19 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     return false;
   }
 
-  /// 獲取字串列表
-  List<String> getStringList(String ruleStr, {bool isUrl = false}) {
+  /// 獲取字串列表，[mContent] 同 [getString]。
+  List<String> getStringList(
+    String ruleStr, {
+    dynamic mContent,
+    bool isUrl = false,
+  }) {
     if (ruleStr.isEmpty) {
       return [];
     }
     log('⇒ 執行 getStringList: $ruleStr');
 
     final ruleList = splitSourceRuleCacheString(ruleStr);
-    var result = content;
+    var result = mContent ?? content;
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
@@ -298,15 +308,14 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     Iterable<String> values, {
     required bool isUrl,
   }) {
-    final normalized = values
-        .where((value) => value.isNotEmpty)
+    final nonEmpty = values.where((value) => value.isNotEmpty);
+    // 同 Legado：網址補成完整網址並去掉重複的；一般文字照原樣，重複的留著。
+    if (!isUrl) return nonEmpty.toList();
+    return nonEmpty
         .map(
-          (value) => isUrl
-              ? NetworkUtils.getAbsoluteURL(redirectUrl ?? baseUrl, value)
-              : value,
+          (value) => NetworkUtils.getAbsoluteURL(redirectUrl ?? baseUrl, value),
         )
         .toSet()
         .toList();
-    return normalized;
   }
 }

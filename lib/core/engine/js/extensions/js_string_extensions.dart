@@ -128,6 +128,20 @@ extension JsStringExtensions on JsExtensions {
       return Charsets.decode(bytes, charset);
     });
 
+    // java.encodeURI(str[, enc])：Java 的 URLEncoder（空白變 +）；字元集
+    // 不認得時傳回空字串，同 Legado。
+    runtime.onMessage('_urlEncode', (dynamic args) {
+      final payload = args is List ? args : [args];
+      try {
+        return Charsets.urlEncode(
+          payload[0]?.toString() ?? '',
+          payload.length > 1 ? payload[1]?.toString() : null,
+        );
+      } on UnsupportedError {
+        return '';
+      }
+    });
+
     runtime.onMessage('_timeFormat', (dynamic args) {
       final time = args;
       final t = time is int ? time : int.tryParse(time.toString()) ?? 0;

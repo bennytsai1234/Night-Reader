@@ -20,9 +20,11 @@ class JsEncodeUtils extends EncodeUtilsBase {
   /// MD5 加密 (16位)
   static String md5Encode16(String str) => EncodeUtilsHash.md5Encode16(str);
 
-  /// Base64 編碼 (支援 Flags)
-  static String base64Encode(dynamic data, {int flags = 0}) =>
-      EncodeUtilsBase64.base64Encode(data, flags: flags);
+  /// Base64 編碼，[flags] 照 Android Base64（預設 NO_WRAP）。
+  static String base64Encode(
+    dynamic data, {
+    int flags = EncodeUtilsBase.base64NoWrap,
+  }) => EncodeUtilsBase64.base64Encode(data, flags: flags);
 
   /// Base64 解碼
   static String base64Decode(

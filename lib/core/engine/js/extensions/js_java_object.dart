@@ -35,6 +35,14 @@ extension JsJavaObject on JsExtensionsBase {
         })) {
           return { __lrResponse: value.__lrResponse };
         }
+        // java.util.HashMap 有 size／get，但交回的是物件，不是清單。
+        if (value.__lrMap) {
+          var normalizedMap = {};
+          value.keySet().forEach(function(key) {
+            normalizedMap[key] = __lrNormalizeRuleResult(value.get(key));
+          });
+          return normalizedMap;
+        }
         if (typeof value.size === 'function' && typeof value.get === 'function') {
           var normalizedItems = [];
           var size = Number(value.size()) || 0;
@@ -72,6 +80,19 @@ extension JsJavaObject on JsExtensionsBase {
           }
         }
         return value;
+      }
+
+      /// 交給 Dart 解析的內容：元素、清單與一般物件照 [__lrNormalizeRuleResult]，
+      /// JavaString 這類自訂物件轉成文字（JSON 會把它們變成空物件）。
+      function __lrContentArg(value) {
+        if (value == null) return null;
+        if (typeof value === 'object' && !Array.isArray(value) &&
+            value.__lrElementId === undefined &&
+            typeof value.size !== 'function' &&
+            Object.getPrototypeOf(value) !== Object.prototype) {
+          return String(value);
+        }
+        return __lrNormalizeRuleResult(value);
       }
 
       function buildHttpResponse(res) {
@@ -229,7 +250,7 @@ extension JsJavaObject on JsExtensionsBase {
               Object.keys(source).forEach(function(key) {
                 map[String(key).toLowerCase()] = valuesOf(key);
               });
-              return map;
+              return __lrJavaMap(map);
             }
           };
           Object.keys(methods).forEach(function(name) {
@@ -245,7 +266,34 @@ extension JsJavaObject on JsExtensionsBase {
             code: function() { return responseCode(); },
             message: function() { return responseMessage(); },
             isSuccessful: function() { return isSuccessfulStatus(); },
+            // OkHttp：轉址前的那一個回應（它的 Location 指向下一站）；沒有轉址
+            // 時是 null。
+            priorResponse: function() { return buildPriorResponse(); },
             toString: function() { return responseUrl(); }
+          };
+        }
+        function buildPriorResponse() {
+          var hops = res && Array.isArray(res.redirects) ? res.redirects : [];
+          if (!hops.length) return null;
+          var from = hops.length > 1 ? String(hops[hops.length - 2]) : String(res.requestUrl || '');
+          var to = String(hops[hops.length - 1]);
+          var priorHeaders = { location: to };
+          return {
+            request: function() {
+              return { url: function() { return from; }, toString: function() { return from; } };
+            },
+            url: function() { return from; },
+            code: function() { return 302; },
+            isRedirect: function() { return true; },
+            header: function(name) { return String(name).toLowerCase() === 'location' ? to : null; },
+            headers: function() {
+              var h = {};
+              Object.defineProperty(h, 'get', { value: function(n) { return priorHeaders[String(n).toLowerCase()] || null; } });
+              h.location = to;
+              return h;
+            },
+            priorResponse: function() { return null; },
+            toString: function() { return from; }
           };
         }
         var response = {
@@ -255,8 +303,37 @@ extension JsJavaObject on JsExtensionsBase {
           statusCode: function() { return responseCode(); },
           message: function() { return responseMessage(); },
           isSuccessful: function() { return isSuccessfulStatus(); },
-          headers: function() { return buildHeaders(); },
+          // OkHttp 的 headers()；給名稱時是 Jsoup Response 的 headers(name)：
+          // 那個標頭的每個值（java.get／post／head 回傳的是 Jsoup Response）。
+          headers: function(name) {
+            if (name === undefined) return buildHeaders();
+            return buildHeaders().values(name);
+          },
           header: function(name) { return getHeader(name); },
+          // 以下是 Jsoup Connection.Response 的方法。
+          hasHeader: function(name) { return buildHeaders().values(name).length > 0; },
+          statusMessage: function() { return responseMessage(); },
+          contentType: function() { return buildHeaders().get('content-type'); },
+          charset: function() {
+            var type = buildHeaders().get('content-type') || '';
+            var match = /charset=([^;]+)/i.exec(type);
+            return match ? match[1].trim() : null;
+          },
+          cookies: function() {
+            var map = {};
+            buildHeaders().values('set-cookie').forEach(function(line) {
+              var pair = String(line).split(';')[0];
+              var eq = pair.indexOf('=');
+              if (eq > 0) map[pair.substring(0, eq).trim()] = pair.substring(eq + 1).trim();
+            });
+            return __lrJavaMap(map);
+          },
+          cookie: function(name) {
+            var value = response.cookies().get(name);
+            return value == null ? null : value;
+          },
+          bodyAsBytes: function() { return java.strToBytes(String(res && res.body != null ? res.body : ''), 'UTF-8'); },
+          parse: function() { return org.jsoup.Jsoup.parse(String(res && res.body != null ? res.body : ''), responseUrl()); },
           // Legado 只在請求失敗時有 errorBody（內文放在這裡，不在 body）。
           errorBody: function() {
             if (isSuccessfulStatus()) return null;
@@ -466,12 +543,26 @@ extension JsJavaObject on JsExtensionsBase {
         digestHex: function(str, algorithm) {
           return new JavaString(sendMessage('_digest', JSON.stringify([__lrCryptoArg(str), __lrCryptoArg(algorithm), true])));
         },
-        base64Encode: function(str) { return sendMessage('_base64Encode', JSON.stringify(__lrCryptoArg(str))); },
-        base64Decode: function(str) { return sendMessage('_base64Decode', JSON.stringify(__lrCryptoArg(str))); },
-        base64DecodeToByteArray: function(str) {
-          return normalizeByteArray(
-            sendMessage('_base64DecodeToBytes', JSON.stringify(__lrCryptoArg(str)))
-          );
+        // Legado：base64Encode(str[, flags])、base64Decode(str[, charset])、
+        // base64Decode(str, flags)、base64DecodeToByteArray(str[, flags])；
+        // flags 照 Android Base64（URL_SAFE 8、NO_WRAP 2、NO_PADDING 1）。
+        base64Encode: function(str, flags) {
+          return sendMessage('_base64Encode', JSON.stringify(
+            { d: __lrCryptoArg(str), f: flags == null ? null : Number(flags) }
+          ));
+        },
+        base64Decode: function(str, charsetOrFlags) {
+          if (str == null) return null;
+          var arg = { d: __lrCryptoArg(str) };
+          if (typeof charsetOrFlags === 'number') arg.f = charsetOrFlags;
+          else if (charsetOrFlags != null) arg.c = String(charsetOrFlags);
+          return __lrWait('_base64Decode', arg);
+        },
+        base64DecodeToByteArray: function(str, flags) {
+          if (str == null || String(str).trim() === '') return null;
+          return normalizeByteArray(sendMessage('_base64DecodeToBytes', JSON.stringify(
+            { d: __lrCryptoArg(str), f: flags == null ? null : Number(flags) }
+          )));
         },
         hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(__lrCryptoArg(str))); },
         hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(__lrCryptoArg(hex))); },
@@ -500,8 +591,11 @@ extension JsJavaObject on JsExtensionsBase {
         toNumChapter: function(text) { return sendMessage('_toNumChapter', JSON.stringify(text)); },
         t2s: function(text) { return sendMessage('t2s', JSON.stringify(text)); },
         s2t: function(text) { return sendMessage('s2t', JSON.stringify(text)); },
-        encodeURI: function(value) {
-          return encodeURIComponent(String(value == null ? '' : value));
+        // Legado 用 Java 的 URLEncoder：空白變 +、!'()~ 也編碼；enc 預設 UTF-8。
+        encodeURI: function(value, enc) {
+          return sendMessage('_urlEncode', JSON.stringify(
+            [String(value == null ? '' : value), enc == null ? null : String(enc)]
+          ));
         },
         decodeURI: function(value) {
           return decodeURIComponent(String(value == null ? '' : value));
@@ -546,20 +640,45 @@ extension JsJavaObject on JsExtensionsBase {
           sendMessage('scopePut', JSON.stringify([key, normalized]));
           return normalized;
         },
-        getString: function(rule) { return sendMessage('ruleGetString', JSON.stringify(rule)); },
-        getStringList: function(rule) {
-          return __lrJavaList(
-            sendMessage('ruleGetStringList', JSON.stringify(rule))
-          );
+        // Legado：getString(rule[, mContent, isUrl])、getString(rule, unescape)；
+        // 有 mContent 時解析它，不是目前內容。
+        getString: function(rule, content, isUrl) {
+          if (arguments.length === 2 && typeof content === 'boolean') {
+            return sendMessage('ruleGetString', JSON.stringify([String(rule), null, false, content]));
+          }
+          return sendMessage('ruleGetString', JSON.stringify(
+            [String(rule), __lrContentArg(content), !!isUrl, true]
+          ));
+        },
+        getStringList: function(rule, content, isUrl) {
+          if (rule == null || String(rule) === '') return null;
+          return __lrJavaList(sendMessage('ruleGetStringList', JSON.stringify(
+            [String(rule), __lrContentArg(content), !!isUrl]
+          )));
         },
         getElement: function(rule) { return __lrJsoupDecode(sendMessage('ruleGetElement', JSON.stringify(String(rule)))); },
         getElements: function(rule) {
           var found = __lrJsoupDecode(sendMessage('ruleGetElements', JSON.stringify(String(rule))));
           return Array.isArray(found) ? __lrJsoupElements(found) : found;
         },
+        // Legado 的 setContent、setBaseUrl 傳回規則解析器本身，可以接著呼叫；
+        // setRedirectUrl 傳回改完的網址（java.net.URL），data: 或不是網址時
+        // 不改。
         setContent: function(content, baseUrl) {
           sendMessage('ruleSetContent', JSON.stringify([content, baseUrl || null]));
-          return null;
+          return java;
+        },
+        setBaseUrl: function(url) {
+          if (url != null) sendMessage('ruleSetUrl', JSON.stringify(['base', String(url)]));
+          return java;
+        },
+        setRedirectUrl: function(url) {
+          var current = sendMessage('ruleSetUrl', JSON.stringify(['redirect', url == null ? null : String(url)]));
+          return current ? new Packages.java.net.URL(current) : null;
+        },
+        // AnalyzeRule.evalJS(js, result)：跑一段 JS，result 是給的值。
+        evalJS: function(js, result) {
+          return (function(result) { return eval(String(js)); })(result);
         },
         refreshTocUrl: function() { __lrWait('ruleRefreshTocUrl', null); },
         reGetBook: function() {
@@ -571,9 +690,53 @@ extension JsJavaObject on JsExtensionsBase {
           var ttfId = sendMessage('queryTTF', JSON.stringify([data, useCache === undefined ? true : useCache]));
           return ttfId ? { _ttfId: ttfId } : null;
         },
-        replaceFont: function(text, errTTF, correctTTF) {
-          return sendMessage('replaceFont', JSON.stringify([text, errTTF ? errTTF._ttfId : null, correctTTF ? correctTTF._ttfId : null]));
-        }
+        // 第四個參數 filter：錯誤字型裡沒有輪廓的字刪掉（Legado）。
+        replaceFont: function(text, errTTF, correctTTF, filter) {
+          return sendMessage('replaceFont', JSON.stringify(
+            [text, errTTF ? errTTF._ttfId : null, correctTTF ? correctTTF._ttfId : null, filter === true]
+          ));
+        },
+        // Legado 已標成過時、改叫 queryTTF 的舊名字。
+        queryBase64TTF: function(data) { return java.queryTTF(data); },
+
+        // ─── sync: 其他 Legado JsExtensions ─────────────────────
+        htmlFormat: function(str) { return sendMessage('htmlFormat', JSON.stringify(String(str == null ? '' : str))); },
+        // Legado JsURL：host、origin、pathname 與解碼後的 searchParams（Map）。
+        toURL: function(url, baseUrl) {
+          var parts = sendMessage('toURL', JSON.stringify([String(url), baseUrl == null ? null : String(baseUrl)]));
+          if (!parts || !parts.protocol) throw new Error('java.net.MalformedURLException: ' + url);
+          return {
+            host: parts.host,
+            origin: parts.origin,
+            pathname: parts.pathname,
+            searchParams: parts.searchParams == null ? null : __lrJavaMap(parts.searchParams)
+          };
+        },
+        // Legado 記下 Java 的類別名稱；這裡記 JS 的型別。
+        logType: function(value) {
+          java.log(value == null ? 'null'
+            : (Array.isArray(value) ? 'Array' : (value.constructor && value.constructor.name) || typeof value));
+        },
+        // 手機編號：Legado 是 Android 的 ANDROID_ID（16 個十六進位字）。夜讀
+        // 第一次用到時產生一組存在快取裡，之後都是同一組。
+        androidId: function() {
+          var id = cache.get('__nightReaderAndroidId');
+          if (!id) {
+            id = String(java.randomUUID()).replace(/-/g, '').substring(0, 16);
+            cache.put('__nightReaderAndroidId', id);
+          }
+          return String(id);
+        },
+        // Legado 開外部 App 前先問使用者；夜讀和 startBrowser 一樣只在登入頁
+        // 打開，其他地方記在日誌（ADR 0038）。
+        openUrl: function(url) { java.startBrowser(String(url), ''); },
+        getSource: function() { return source; },
+        get7zByteArrayContent: function() { throw new Error('夜讀不支援 7z 壓縮檔'); },
+        get7zStringContent: function() { throw new Error('夜讀不支援 7z 壓縮檔'); },
+        un7zFile: function() { throw new Error('夜讀不支援 7z 壓縮檔'); },
+        getRarByteArrayContent: function() { throw new Error('夜讀不支援 rar 壓縮檔'); },
+        getRarStringContent: function() { throw new Error('夜讀不支援 rar 壓縮檔'); },
+        unrarFile: function() { throw new Error('夜讀不支援 rar 壓縮檔'); }
       };
 
       // ─── java.getCookie → 獨立 channel ───────────────────────
@@ -590,15 +753,112 @@ extension JsJavaObject on JsExtensionsBase {
         setCookie: function(url, value) { sendMessage('setCookie', JSON.stringify([url, value])); },
         remove: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
         removeCookie: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
-        all: function() { return __lrWait('allCookies', ''); }
+        all: function() { return __lrWait('allCookies', ''); },
+        // Legado CookieStore：「a=1; b=2」與 Map 互轉，空值的項目略過。傳回
+        // Java 的 Map（get、put、keySet 都能用，也能照屬性讀）。
+        cookieToMap: function(text) {
+          return __lrJavaMap(sendMessage('cookieToMap', JSON.stringify(String(text == null ? '' : text))));
+        },
+        mapToCookie: function(map) {
+          if (map == null) return null;
+          var plain = map.__lrMap ? map.toJSON() : map;
+          if (!Object.keys(plain).length) return null;
+          return sendMessage('mapToCookie', JSON.stringify(plain));
+        },
+        // 這個網站的 Cookie 裡 key 那一項的值，沒有時是空字串。
+        getKey: function(url, key) {
+          var value = cookie.cookieToMap(cookie.getCookie(url)).get(key);
+          return value == null ? '' : value;
+        },
+        // 合併進原本的 Cookie：同名的換成新的，其他留著。同 Legado 在回傳前
+        // 合併好，緊接著讀就是新的。
+        replaceCookie: function(url, value) {
+          if (!url || !value) return;
+          var old = cookie.getCookie(url);
+          if (!old) {
+            cookie.setCookie(url, value);
+            return;
+          }
+          var merged = cookie.cookieToMap(old);
+          merged.putAll(cookie.cookieToMap(value));
+          cookie.setCookie(url, cookie.mapToCookie(merged));
+        },
+        // 清掉夜讀存的所有網站的 Cookie。
+        clear: function() { sendMessage('clearCookies', '""'); }
       };
 
+      /// Legado CacheManager。get／put 是資料庫的文字快取；putFile／getFile／
+      /// getByteArray 是另一處的檔案快取（Legado 的 ACache），兩邊同名的鍵互不
+      /// 相干；put 給位元組陣列時也存進檔案快取。夜讀的檔案快取存在同一個資料庫
+      /// 的另一組鍵，內容存成 Base64。
+      var __lrFileKey = function(key) { return '__lrFile_' + key; };
+      var __lrIsBytes = function(v) {
+        return Array.isArray(v) && v.length > 0 && v.every(function(b) { return typeof b === 'number'; });
+      };
+      /// 放進記憶體快取的物件本身：同一個 JS 環境裡取回的就是同一個物件（同
+      /// Legado 的 LruCache）；別的環境取回的是 Dart 那邊存的內容。
+      var __lrMemoryObjects = new Map();
       var cache = {
         get: function(key) { return __lrWait('getCache', key); },
-        getFile: function(key) { return __lrWait('getCache', key); },
-        put: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
-        putFile: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
-        delete: function(key) { sendMessage('deleteCache', JSON.stringify(key)); }
+        put: function(key, value, time) {
+          if (__lrIsBytes(value)) {
+            sendMessage('putCache', JSON.stringify([__lrFileKey(key), java.base64Encode(value), time || 0]));
+            return;
+          }
+          sendMessage('putCache', JSON.stringify([key, String(value), time || 0]));
+        },
+        putFile: function(key, value, time) {
+          sendMessage('putCache', JSON.stringify([__lrFileKey(key), java.base64Encode(String(value)), time || 0]));
+        },
+        getFile: function(key) {
+          var stored = __lrWait('getCache', __lrFileKey(key));
+          return stored ? java.base64Decode(stored) : null;
+        },
+        getByteArray: function(key) {
+          var stored = __lrWait('getCache', __lrFileKey(key));
+          return stored ? java.base64DecodeToByteArray(stored) : null;
+        },
+        delete: function(key) {
+          sendMessage('deleteCache', JSON.stringify(key));
+          sendMessage('deleteCache', JSON.stringify(__lrFileKey(key)));
+          cache.deleteMemory(key);
+        },
+        // Kotlin 的 toIntOrNull／toLongOrNull／toDoubleOrNull／toFloatOrNull：
+        // 超出範圍或不是那種數字時是 null。
+        getInt: function(key) {
+          var text = cache.get(key);
+          if (!/^[+-]?\d+$/.test(String(text))) return null;
+          var v = Number(text);
+          return v >= -2147483648 && v <= 2147483647 ? v : null;
+        },
+        getLong: function(key) {
+          var text = cache.get(key);
+          if (!/^[+-]?\d+$/.test(String(text))) return null;
+          var v = Number(text);
+          return Math.abs(v) <= 9223372036854775807 ? v : null;
+        },
+        getDouble: function(key) {
+          var text = cache.get(key);
+          var match = /^\s*([+-]?(?:NaN|Infinity|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?))[fFdD]?\s*$/.exec(String(text));
+          return match ? Number(match[1]) : null;
+        },
+        getFloat: function(key) {
+          var v = cache.getDouble(key);
+          return v == null ? null : Math.fround(v);
+        },
+        putMemory: function(key, value) {
+          __lrMemoryObjects.set(String(key), value);
+          sendMessage('cachePutMemory', JSON.stringify([String(key), __lrNormalizeRuleResult(value)]));
+        },
+        getFromMemory: function(key) {
+          if (__lrMemoryObjects.has(String(key))) return __lrMemoryObjects.get(String(key));
+          var value = sendMessage('cacheGetMemory', JSON.stringify(String(key)));
+          return value === undefined ? null : value;
+        },
+        deleteMemory: function(key) {
+          __lrMemoryObjects.delete(String(key));
+          sendMessage('cacheDeleteMemory', JSON.stringify(String(key)));
+        }
       };
 
       var source = source || {};
@@ -611,31 +871,85 @@ extension JsJavaObject on JsExtensionsBase {
         sendMessage('sourceSetVariable', JSON.stringify(value == null ? null : String(value)));
         return value;
       };
+      // Legado 預設不含登入標頭（getHeaderMap(hasLoginHeader = false)）；
+      // 傳回 Java 的 Map。
       source.getHeaderMap = function(hasLoginHeader) {
-        var includeLoginHeader = hasLoginHeader === undefined ? true : !!hasLoginHeader;
-        var headerMap = sendMessage('sourceGetHeaderMap', JSON.stringify(includeLoginHeader));
-        if (headerMap == null || headerMap === '') return {};
+        var headerMap = sendMessage('sourceGetHeaderMap', JSON.stringify(hasLoginHeader === true));
         if (typeof headerMap === 'string') {
-          try { return JSON.parse(headerMap); } catch (e) { return {}; }
+          try { headerMap = JSON.parse(headerMap); } catch (e) { headerMap = {}; }
         }
-        return headerMap;
+        return __lrJavaMap(headerMap || {});
       };
+      /// 登入資料、登入標頭讀成 Map；沒有或讀不成 JSON 時是 null，同 Legado。
+      function __lrJsonMap(text) {
+        if (text == null || text === '') return null;
+        try {
+          var value = JSON.parse(text);
+          return value && typeof value === 'object' && !Array.isArray(value) ? __lrJavaMap(value) : null;
+        } catch (e) { return null; }
+      }
       source.getLoginInfo = function() { return __lrWait('sourceGetLoginInfo', ''); };
-      source.putLoginInfo = function(info) { sendMessage('sourcePutLoginInfo', JSON.stringify(info)); };
-      source.getLoginInfoMap = function() {
-        try { return JSON.parse(source.getLoginInfo()); } catch(e) { return {}; }
+      source.putLoginInfo = function(info) {
+        sendMessage('sourcePutLoginInfo', JSON.stringify(info));
+        return true;
       };
+      source.getLoginInfoMap = function() { return __lrJsonMap(source.getLoginInfo()); };
       source.removeLoginInfo = function() { sendMessage('sourceRemoveLoginInfo', '""'); };
       source.getLoginHeader = function() { return __lrWait('sourceGetLoginHeader', ''); };
-      source.getLoginHeaderMap = function() {
-        try { return JSON.parse(source.getLoginHeader()); } catch(e) { return {}; }
-      };
+      source.getLoginHeaderMap = function() { return __lrJsonMap(source.getLoginHeader()); };
       source.putLoginHeader = function(header) {
         sendMessage('sourcePutLoginHeader', JSON.stringify(String(header)));
       };
       source.removeLoginHeader = function() { sendMessage('sourceRemoveLoginHeader', '""'); };
-      source.put = function(key, value) { sendMessage('sourcePut', JSON.stringify([key, value])); };
+      source.put = function(key, value) {
+        sendMessage('sourcePut', JSON.stringify([key, value]));
+        return value;
+      };
       source.get = function(key) { return __lrWait('sourceGet', key); };
+      // Legado BaseSource：登入網址裡的程式（去掉 @js: 或 <js></js>）。
+      source.getLoginJs = function() {
+        var js = source.loginUrl;
+        if (js == null) return null;
+        js = String(js);
+        if (js.indexOf('@js:') === 0) return js.substring(4);
+        if (js.indexOf('<js>') === 0) return js.substring(4, js.lastIndexOf('<'));
+        return js;
+      };
+      // Legado BaseSource.evalJS：java 與 source 都是書源、baseUrl 是書源網址，
+      // 每次有自己的範圍，宣告的變數與函式不留到別次。
+      function __lrSourceEval(js) {
+        return (function(java, source, baseUrl) { return eval(String(js)); })(source, source, source.getKey());
+      }
+      // 書源程式自己呼叫登入：跑登入網址裡的程式，再呼叫它的 login()。要使用者
+      // 操作的步驟在登入頁以外照樣立刻失敗（ADR 0038）。
+      source.login = function() {
+        var js = source.getLoginJs();
+        if (!js || !String(js).trim()) return;
+        __lrSourceEval(js + "\nif (typeof login == 'function') { login.apply(this); }" +
+          " else { throw ('Function login not implements!!!'); }");
+      };
+      source.evalJS = function(js) { return __lrSourceEval(js); };
+      source.getSource = function() { return source; };
+      // BaseSource 實作 JsExtensions：source.ajax、source.encodeURI 這類也能用，
+      // 和 java 的同一份。規則解析器專有的（getString 這類）不給。
+      (function() {
+        var ruleOnly = ['getString', 'getStringList', 'getElement', 'getElements', 'setContent',
+          'setBaseUrl', 'setRedirectUrl', 'refreshTocUrl', 'reGetBook', 'evalJS'];
+        Object.keys(java).forEach(function(name) {
+          if (ruleOnly.indexOf(name) >= 0 || source[name] !== undefined) return;
+          Object.defineProperty(source, name, { value: java[name], enumerable: false, configurable: true, writable: true });
+        });
+      })();
+      // 每次執行規則前重設成這幾個物件（JsEngine）：Legado 每次執行給新的
+      // java、cookie、cache、source，規則把它們拿去存別的值（`cookie = …`）
+      // 也不影響下一次。
+      var __lrBindings = { java: java, cookie: cookie, cache: cache, source: source };
+      function __lrRestoreBindings() {
+        java = __lrBindings.java;
+        cookie = __lrBindings.cookie;
+        cache = __lrBindings.cache;
+        source = __lrBindings.source;
+      }
 
       /// Rhino 的 importClass／importPackage：把類別照名稱放進全域。
       function importClass(clazz) {
@@ -655,7 +969,26 @@ extension JsJavaObject on JsExtensionsBase {
         }
       }
 
+      /// Rhino 的 `new JavaImporter(類別或套件, …)`：傳入的類別照名稱、套件照
+      /// 裡面的成員放進這個物件，給 `with (importer) {…}` 用。
       function JavaImporter() {
+        for (var i = 0; i < arguments.length; i++) {
+          var item = arguments[i];
+          if (item == null) continue;
+          var name = item.__lrClassName || (typeof item === 'function' ? item.name : null);
+          if (name) {
+            this[name] = item;
+          } else if (typeof item === 'object') {
+            for (var key in item) {
+              if (Object.prototype.hasOwnProperty.call(item, key)) this[key] = item[key];
+            }
+          }
+        }
+        this.importClass = function(clazz) {
+          var name = clazz && (clazz.__lrClassName || (typeof clazz === 'function' ? clazz.name : null));
+          if (name) this[name] = clazz;
+          return clazz;
+        };
         this.importPackage = function() {
           for (var i = 0; i < arguments.length; i++) {
             var pkg = arguments[i] || {};
@@ -770,60 +1103,6 @@ extension JsJavaObject on JsExtensionsBase {
       };
       JavaString.prototype.valueOf = function() {
         return this._value;
-      };
-
-      function ByteArrayOutputStream() {
-        this._bytes = [];
-      }
-      ByteArrayOutputStream.prototype.write = function(bytes, offset, len) {
-        bytes = normalizeByteArray(bytes);
-        var start = offset || 0;
-        var end = len == null ? bytes.length : start + len;
-        for (var i = start; i < end && i < bytes.length; i++) {
-          this._bytes.push(bytes[i]);
-        }
-      };
-      ByteArrayOutputStream.prototype.toString = function(charset) {
-        return java.bytesToStr(this._bytes, charset || 'UTF-8');
-      };
-      ByteArrayOutputStream.prototype.close = function() {};
-
-      function ByteArrayInputStream(bytes) {
-        this._bytes = normalizeByteArray(bytes);
-      }
-      ByteArrayInputStream.prototype.close = function() {};
-
-      function GZIPInputStream(inputStream) {
-        this._bytes = normalizeByteArray(
-          sendMessage('_gunzipBytes', JSON.stringify(inputStream._bytes || []))
-        );
-        this._pos = 0;
-      }
-      GZIPInputStream.prototype.read = function(buffer) {
-        if (this._pos >= this._bytes.length) {
-          return -1;
-        }
-        var count = Math.min(buffer.length, this._bytes.length - this._pos);
-        for (var i = 0; i < count; i++) {
-          buffer[i] = this._bytes[this._pos++];
-        }
-        return count;
-      };
-      GZIPInputStream.prototype.close = function() {};
-
-      var Base64 = {
-        getDecoder: function() {
-          return {
-            decode: function(value) {
-              return normalizeByteArray(
-                sendMessage(
-                  '_base64DecodeToBytes',
-                  JSON.stringify(value == null ? '' : value.toString())
-                )
-              );
-            }
-          };
-        }
       };
 
       var Arrays = {
@@ -1003,36 +1282,6 @@ extension JsJavaObject on JsExtensionsBase {
         }
       };
 
-      var Packages = {
-        org: globalThis.org,
-        java: {
-          lang: {
-            String: function(value) { return new JavaString(value); },
-            Integer: Integer
-          },
-          io: {
-            ByteArrayOutputStream: ByteArrayOutputStream,
-            ByteArrayInputStream: ByteArrayInputStream
-          },
-          util: {
-            Arrays: Arrays,
-            Base64: Base64,
-            zip: {
-              GZIPInputStream: GZIPInputStream
-            }
-          }
-        },
-        javax: {
-          crypto: {
-            Cipher: Cipher,
-            spec: {
-              SecretKeySpec: SecretKeySpec,
-              IvParameterSpec: IvParameterSpec,
-              GCMParameterSpec: GCMParameterSpec
-            }
-          }
-        }
-      };
     ''');
   }
 }
