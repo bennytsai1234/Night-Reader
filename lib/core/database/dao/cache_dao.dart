@@ -25,6 +25,14 @@ class CacheDao extends DatabaseAccessor<AppDatabase> with _$CacheDaoMixin {
     ).map((row) => row.read<String>('key')).get();
   }
 
+  /// 在 [now]（毫秒）還沒過期的全部內容。
+  Future<List<Cache>> getLive(int now) {
+    return (select(cacheTable)..where(
+          (t) => t.deadline.equals(0) | t.deadline.isBiggerThanValue(now),
+        ))
+        .get();
+  }
+
   Future<void> upsert(Cache cache) =>
       into(cacheTable)
           .insertOnConflictUpdate(CacheToInsertable(cache).toInsertable());
