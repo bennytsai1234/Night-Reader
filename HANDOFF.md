@@ -18,7 +18,7 @@
   - 閱讀中遇到書源要在網頁上驗證（`startBrowserAwait`，148 個書源）：2026-10-31 談定的設計是背景照舊立刻失敗，閱讀器的失敗提示附「前往驗證」，開書源要的那個網頁、關掉後重抓；登入頁的瀏覽器頁可以直接用。校驗遇到時目前照 ADR 0033 隔離，做這項時一起決定要不要改成和「需要登入」一樣只是提示。
   - `data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫，登入程式也用了 25 次）、`androidId`、`java.refreshExplore` 等。
   - 預整理 JS 的 `java.reGetBook()`（精確搜尋同名同作者、換成它的書籍網址再讀詳情）：目前丟出「還不支援」。章節以「書＋網址」為身分（#165），只在抓目錄時換網址會讓章節對不上書架上的書，做的時候要連書架上那本書的網址一起換。
-  - 一些改版閱讀 App 的登入表單欄位（`toggle` 11、`select` 10 個）照 Legado 不顯示。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查。實測腳本不在 repo：用 `SourceChecker` 搭 `toc_require_complete_test.dart` 那種最小 binding 就能連真的網站跑（測試環境沒有 WebView，Cloudflare 與網頁渲染量不到）。
+  - 一些改版閱讀 App 的登入表單欄位（`toggle` 11、`select` 10 個）照 Legado 不顯示。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查，用 `test/live/` 連真的網站校驗。
 
 ## 先不做
 
