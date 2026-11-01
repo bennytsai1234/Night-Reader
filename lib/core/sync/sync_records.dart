@@ -19,11 +19,13 @@ class SyncRecord {
   /// 這筆在某一台刪掉了；另一台照著刪，不把它加回來。
   final bool deleted;
 
-  /// 內容的指紋：內容一樣就一樣，和最後修改時間無關。開書沒有翻頁也會更新
-  /// 時間，判斷「改過沒有」只看指紋。
-  String get fingerprint => deleted
-      ? 'deleted'
-      : md5.convert(utf8.encode(_canonicalJson(data))).toString();
+  /// 內容的指紋：內容一樣就一樣，和最後修改時間無關；判斷「改過沒有」只看
+  /// 指紋。某種資料有些欄位只是這台的座標（例如進度的章節序號）時，那種
+  /// 資料用 [fingerprintOf] 只算代表內容的欄位（[SyncFingerprint]）。
+  String get fingerprint => deleted ? 'deleted' : fingerprintOf(data);
+
+  static String fingerprintOf(Map<String, Object?> content) =>
+      md5.convert(utf8.encode(_canonicalJson(content))).toString();
 
   Map<String, Object?> toJson() => {
     'time': time,
@@ -105,6 +107,11 @@ class SyncBaseEntry {
   }
 }
 
+/// 一筆的內容指紋怎麼算。
+typedef SyncFingerprint = String Function(SyncRecord record);
+
+String defaultSyncFingerprint(SyncRecord record) => record.fingerprint;
+
 /// 一筆合併的結果。
 enum SyncDecision {
   /// 兩邊一樣，或都沒改。
@@ -121,29 +128,33 @@ enum SyncDecision {
 ///
 /// - 只有一邊改過（指紋和上次同步時不同）就用那一邊的。
 /// - 兩邊都改過，或從沒同步過、內容不同，最後修改時間新的贏。
-/// - 雲端和上次不同、時間卻不比上次新：別台同時寫入、蓋掉了這台寫上去的。
-///   本機有就再寫一次，被蓋掉的改動只晚一次到。
+/// - 雲端和上次不同、時間卻比上次舊：別台同時寫入、用舊的蓋掉了這台寫上去
+///   的。本機有就再寫一次，被蓋掉的改動只晚一次到。時間一樣不算：兩台各自
+///   把同一筆改成不同樣子又同時間的話，會一直互相再寫一次。
+///
+/// [fingerprint] 決定兩筆算不算內容一樣，[base] 裡的指紋也要用同一個算。
 SyncDecision decideSync({
   required SyncRecord? local,
   required SyncRecord? remote,
   required SyncBaseEntry? base,
+  SyncFingerprint fingerprint = defaultSyncFingerprint,
 }) {
   if (local == null && remote == null) return SyncDecision.same;
   if (remote == null) return SyncDecision.upload;
   if (local == null) {
-    return base != null && remote.fingerprint == base.remote
+    return base != null && fingerprint(remote) == base.remote
         ? SyncDecision.same
         : SyncDecision.apply;
   }
-  final localPrint = local.fingerprint;
-  final remotePrint = remote.fingerprint;
+  final localPrint = fingerprint(local);
+  final remotePrint = fingerprint(remote);
   if (localPrint == remotePrint) return SyncDecision.same;
   if (base == null) {
     return local.time >= remote.time ? SyncDecision.upload : SyncDecision.apply;
   }
   final localChanged = localPrint != base.local;
   final remoteDiffers = remotePrint != base.remote;
-  if (remoteDiffers && remote.time <= base.time) return SyncDecision.upload;
+  if (remoteDiffers && remote.time < base.time) return SyncDecision.upload;
   if (!remoteDiffers) {
     return localChanged ? SyncDecision.upload : SyncDecision.same;
   }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 
 import 'reader_v2_location.dart';
@@ -109,14 +110,25 @@ class ReaderV2ProgressSync {
       chapterIndex: index,
       charOffset: pulled.progress.charOffset,
     );
-    if (index != current.chapterIndex ||
-        (target.charOffset - current.charOffset).abs() > nearChars) {
+    final jumps =
+        index != current.chapterIndex ||
+        (target.charOffset - current.charOffset).abs() > nearChars;
+    if (jumps) {
       await runtime.jumpToLocation(target);
-      if (_disposed || runtime.disposed) return;
-      await runtime.flushProgress();
-      _onJumped(current);
+      // 那一章取不到（要登入、載入失敗）或被別的操作取代時，跳轉照樣正常
+      // 結束、畫面留在原處：不提示、不記成已同步，下次開書或回到前景再試。
+      if (_disposed ||
+          runtime.disposed ||
+          runtime.state.lifecycle != ReaderV2Lifecycle.ready ||
+          runtime.state.visibleLocation.chapterIndex != index) {
+        return;
+      }
     }
-    await pulled.commit();
+    await runtime.flushProgress();
+    if (_disposed) return;
+    if (jumps) _onJumped(current);
+    // 進度控制器存好後，記憶體裡的書就是存下的那一筆。
+    await pulled.commit(ProgressSync.recordOf(book));
   }
 
   /// 閱讀器關掉時（在 runtime 釋放之前）呼叫：存好最後的位置再上傳。

@@ -8,6 +8,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
@@ -87,6 +88,7 @@ class _Phone {
         charOffset: charOffset,
         durChapterTitle: toc[chapterIndex],
         durChapterTime: time,
+        progressTime: time,
       ),
     );
     await chapters.insertChapters([
@@ -102,6 +104,7 @@ void main() {
   late _MemoryStore store;
   late _Phone a;
   late _Phone b;
+  late Directory baseDir;
 
   // 兩台手機各一個資料庫，是刻意的。
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
@@ -110,6 +113,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     store = _MemoryStore();
     final temp = await Directory.systemTemp.createTemp('nr-sync-test');
+    baseDir = temp;
     addTearDown(() => temp.delete(recursive: true));
     a = _Phone(store, Directory('${temp.path}/a'));
     b = _Phone(store, Directory('${temp.path}/b'));
@@ -197,7 +201,7 @@ void main() {
 
       // 閱讀器跳過去、存好位置後記成已同步；之後同步不再把它當新改動上傳。
       await b.books.updateProgress('b-src', 3, '第三章', 7);
-      await pulled.commit();
+      await pulled.commit(ProgressSync.recordOf(await b.book('b-src')));
       b.sync.closeBook(opened);
       final writes = store.writes;
       await b.sync.syncNow();
@@ -214,5 +218,98 @@ void main() {
     await idle.syncNow();
     expect(await idle.pullProgress('x'), isNull);
     expect(store.writes, 0);
+  });
+
+  test('a chapter inserted before the reading position does not make the '
+      'phones overwrite each other', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 100);
+    await b.addBook('b-src', toc: toc, chapterIndex: 1, time: 100);
+    await a.sync.syncNow();
+    await b.sync.syncNow();
+
+    // B 的書源在前面插了一章：同一章的序號從 1 變 2，讀到的地方沒變
+    // （書架檢查更新照章節網址重新對位，時間不動）。
+    final moved = (await b.book('b-src')).copyWith(chapterIndex: 2);
+    await b.books.upsert(moved);
+    final writes = store.writes;
+    for (var round = 0; round < 3; round++) {
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+    }
+
+    expect(store.writes, writes);
+    expect((await a.book('a-src')).chapterIndex, 1);
+    expect((await b.book('b-src')).chapterIndex, 2);
+  });
+
+  test('opening a book that never synced does not beat newer progress from '
+      'the other phone', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 3, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncNow();
+
+    // B 還沒同步過就開書，沒翻頁：最近閱讀時間變新，位置移動的時間不變。
+    expect(await b.books.updateProgress('b-src', 0, '序', 0), isNull);
+    await b.sync.syncNow();
+
+    expect((await b.book('b-src')).chapterIndex, 3);
+    expect(store.files['progress.json']!.$1, contains('第三章'));
+  });
+
+  test('reading on after the jump, before commit, is still uploaded', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncNow();
+
+    final pulled = await b.sync.pullProgress('b-src');
+    await b.books.updateProgress('b-src', 2, '第二章', 0);
+    final saved = ProgressSync.recordOf(await b.book('b-src'));
+    // 等 commit 的期間又讀到第三章。
+    await b.books.updateProgress('b-src', 3, '第三章', 123);
+    await pulled!.commit(saved);
+    await b.sync.syncNow();
+
+    expect(store.files['progress.json']!.$1, contains('第三章'));
+  });
+
+  test('a book opened while the sync is writing is left alone', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncNow();
+    // B 另一本書讀過，這次同步要寫雲端；寫的時候使用者打開了夜航、讀到第三章。
+    await b.books.upsert(
+      Book(
+        bookUrl: 'other',
+        name: '別本',
+        author: '別人',
+        isInBookshelf: true,
+        durChapterTitle: 'x',
+        progressTime: 300,
+      ),
+    );
+    store.beforeNextWrite = () async {
+      b.sync.openBook(await b.book('b-src'));
+      await b.books.updateProgress('b-src', 3, '第三章', 5);
+    };
+    await b.sync.syncNow();
+
+    final book = await b.book('b-src');
+    expect(book.chapterIndex, 3);
+    expect(book.charOffset, 5);
+  });
+
+  test('progress pulled before turning sync off is not recorded', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncNow();
+
+    final pulled = await b.sync.pullProgress('b-src');
+    await b.sync.disable();
+    await pulled!.commit(ProgressSync.recordOf(await b.book('b-src')));
+
+    final base = await SyncBaseStorage(
+      directory: () async => Directory('${baseDir.path}/b'),
+    ).read(ProgressSync.kind);
+    expect(base, isEmpty);
   });
 }

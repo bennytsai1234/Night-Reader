@@ -148,6 +148,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     )..start();
     unawaited(_host.opened.then((_) => _progressSync.bookOpened()));
     _host.menu.controlsVisible.addListener(_dismissSyncHintOnMenu);
+    _progress.addListener(_dismissSyncHintIfMoved);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
   }
@@ -233,11 +234,17 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     }
   }
 
-  void _handleControllerChanged() {
+  /// 同一章裡捲動、翻頁不通知整頁，只發布頁尾的進度（[_progress]）；發布
+  /// 之前正文已經把讀到的位置交給 runtime，這時比得出動了沒有。
+  void _dismissSyncHintIfMoved() {
     final hintAt = _syncHintAt;
     if (hintAt != null && _host.runtime?.state.visibleLocation != hintAt) {
       _dismissSyncHint();
     }
+  }
+
+  void _handleControllerChanged() {
+    _dismissSyncHintIfMoved();
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();

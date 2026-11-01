@@ -48,15 +48,17 @@ class SyncStatus {
   );
 }
 
-/// 閱讀器開書或回到前景時抓到、比這台新的進度。跳過去之後呼叫 [commit]，
-/// 把這台存好的位置記成「已同步」，離開時不會再把它當成新的改動上傳。
+/// 閱讀器開書或回到前景時抓到、比這台新的進度。跳過去、存好位置之後，用
+/// 存下的那一筆（[ProgressSync.recordOf]）呼叫 [commit]，把它記成和雲端那筆
+/// 同步過，離開時不會再當成新的改動上傳；之後又讀了的話，和它比得出來。
+/// 沒跳成（取不到那一章、被別的操作取代）就不要呼叫，下次還會再抓到。
 class PulledProgress {
   PulledProgress(this.progress, this._commit);
 
   final SyncedProgress progress;
-  final Future<void> Function() _commit;
+  final Future<void> Function(SyncRecord applied) _commit;
 
-  Future<void> commit() => _commit();
+  Future<void> commit(SyncRecord applied) => _commit(applied);
 }
 
 /// 多台手機同步（ADR 0039）：讀雲端、每筆合併、寫回。同一時間只跑一次；
@@ -93,6 +95,10 @@ class SyncService {
   /// 閱讀器開著的書：全部同步時不改這幾本的進度，由閱讀器自己跳。
   final Set<String> _openBooks = {};
 
+  /// 換同步空間或停用時加一：之前抓到、還沒 commit 的進度屬於舊的空間，
+  /// 不再記進上次同步的紀錄。
+  int _generation = 0;
+
   Future<void>? _running;
   bool _again = false;
 
@@ -121,6 +127,8 @@ class SyncService {
     );
   }
 
+  /// 目前設定的同步空間。只在 [_lock] 裡呼叫：讀設定到用完同步空間之間，
+  /// 不會被停用或換帳號插進來，寫到已經不用的空間。
   Future<SyncStore?> _store() async {
     final space = await _settings.space();
     return _storeFactory(space, await _settings.webDavAccount());
@@ -131,15 +139,17 @@ class SyncService {
     final store = _storeFactory(SyncSpace.webdav, account);
     await store!.check();
     await _lock.synchronized(() async {
+      _generation++;
       await _settings.useWebDav(account);
       await _bases.clear();
     });
-    status.value = SyncStatus(space: SyncSpace.webdav);
+    status.value = const SyncStatus(space: SyncSpace.webdav);
     await syncNow();
   }
 
   Future<void> disable() async {
     await _lock.synchronized(() async {
+      _generation++;
       await _settings.disable();
       await _bases.clear();
     });
@@ -185,17 +195,19 @@ class SyncService {
 
   Future<void> _syncOnce() async {
     try {
-      final store = await _store();
-      if (store == null) return;
-      status.value = status.value.copyWith(running: true);
-      await _lock.synchronized(() => _syncProgress(store));
-      final now = _clock();
-      await _settings.setLastSyncAt(now);
-      status.value = status.value.copyWith(
-        running: false,
-        lastSyncAt: now,
-        clearError: true,
-      );
+      await _lock.synchronized(() async {
+        final store = await _store();
+        if (store == null) return;
+        status.value = status.value.copyWith(running: true);
+        await _syncProgress(store);
+        final now = _clock();
+        await _settings.setLastSyncAt(now);
+        status.value = status.value.copyWith(
+          running: false,
+          lastSyncAt: now,
+          clearError: true,
+        );
+      });
     } catch (error, stackTrace) {
       AppLog.e('同步失敗', error: error, stackTrace: stackTrace);
       status.value = status.value.copyWith(
@@ -225,26 +237,32 @@ class SyncService {
           entry.key: ProgressSync.recordOf(entry.value),
       };
 
+      const fingerprint = ProgressSync.fingerprint;
       final nextRemote = Map.of(remote);
       final nextBase = Map.of(base);
       final toApply = <String>[];
       for (final key in {...local.keys, ...remote.keys}) {
         final mine = local[key];
         final theirs = remote[key];
-        switch (decideSync(local: mine, remote: theirs, base: base[key])) {
+        switch (decideSync(
+          local: mine,
+          remote: theirs,
+          base: base[key],
+          fingerprint: fingerprint,
+        )) {
           case SyncDecision.same:
             if (mine != null && theirs != null) {
               nextBase[key] = SyncBaseEntry(
-                local: mine.fingerprint,
-                remote: theirs.fingerprint,
+                local: fingerprint(mine),
+                remote: fingerprint(theirs),
                 time: theirs.time,
               );
             }
           case SyncDecision.upload:
             nextRemote[key] = mine!;
             nextBase[key] = SyncBaseEntry(
-              local: mine.fingerprint,
-              remote: mine.fingerprint,
+              local: fingerprint(mine),
+              remote: fingerprint(mine),
               time: mine.time,
             );
           case SyncDecision.apply:
@@ -272,11 +290,20 @@ class SyncService {
       }
 
       for (final key in toApply) {
+        // 寫雲端的這段時間，書可能被打開、讀了幾頁：這台的位置已經和合併時
+        // 不同就不套用，上次同步的紀錄留著，下次同步重新比。
+        if (_openBooks.contains(key)) continue;
+        final current = await progress.bookDao.getByUrl(books[key]!.bookUrl);
+        if (current == null ||
+            fingerprint(ProgressSync.recordOf(current)) !=
+                fingerprint(local[key]!)) {
+          continue;
+        }
         final theirs = remote[key]!;
-        final applied = await progress.apply(books[key]!, theirs);
+        final applied = await progress.apply(current, theirs);
         nextBase[key] = SyncBaseEntry(
-          local: applied.fingerprint,
-          remote: theirs.fingerprint,
+          local: fingerprint(applied),
+          remote: fingerprint(theirs),
           time: theirs.time,
         );
       }
@@ -300,9 +327,10 @@ class SyncService {
   /// 連不上、沒設定同步空間也是 null，閱讀器照常停在這台的位置。
   Future<PulledProgress?> pullProgress(String bookUrl) async {
     try {
-      final store = await _store();
-      if (store == null) return null;
       return await _lock.synchronized(() async {
+        final store = await _store();
+        if (store == null) return null;
+        final generation = _generation;
         final bookDao = _bookDao ?? getIt<BookDao>();
         final book = await bookDao.getByUrl(bookUrl);
         if (book == null) return null;
@@ -315,11 +343,12 @@ class SyncService {
           local: ProgressSync.recordOf(book),
           remote: theirs,
           base: base[key],
+          fingerprint: ProgressSync.fingerprint,
         );
         if (decision != SyncDecision.apply || theirs == null) return null;
         return PulledProgress(
           SyncedProgress.fromRecord(theirs),
-          () => _commitPulled(bookUrl, theirs),
+          (applied) => _commitPulled(key, theirs, applied, generation),
         );
       });
     } catch (error, stackTrace) {
@@ -328,16 +357,21 @@ class SyncService {
     }
   }
 
-  /// 閱讀器跳到雲端的進度、存好之後：這台現在的位置記成和雲端那筆同步過。
-  Future<void> _commitPulled(String bookUrl, SyncRecord theirs) {
+  /// 閱讀器跳到雲端的進度、存好之後：存下的那一筆（[applied]）記成和雲端那筆
+  /// 同步過。用存下的那一筆、不重讀資料庫：等這把鎖的期間又讀了幾頁的話，
+  /// 新的位置下次同步看得出是改過的。
+  Future<void> _commitPulled(
+    String key,
+    SyncRecord theirs,
+    SyncRecord applied,
+    int generation,
+  ) {
     return _lock.synchronized(() async {
-      final bookDao = _bookDao ?? getIt<BookDao>();
-      final book = await bookDao.getByUrl(bookUrl);
-      if (book == null) return;
+      if (generation != _generation) return;
       final base = await _bases.read(ProgressSync.kind);
-      base[ProgressSync.keyOf(book)] = SyncBaseEntry(
-        local: ProgressSync.recordOf(book).fingerprint,
-        remote: theirs.fingerprint,
+      base[key] = SyncBaseEntry(
+        local: ProgressSync.fingerprint(applied),
+        remote: ProgressSync.fingerprint(theirs),
         time: theirs.time,
       );
       await _bases.write(ProgressSync.kind, base);

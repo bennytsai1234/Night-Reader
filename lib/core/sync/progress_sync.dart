@@ -18,14 +18,30 @@ class ProgressSync {
 
   static String keyOf(Book book) => '${book.name}\t${book.author}';
 
+  /// 時間用「位置最後移動的時間」，不用最近閱讀時間：開書沒翻頁也會更新
+  /// 後者，拿它比新舊，沒動過的這台會蓋掉別台真的讀過的進度。
   static SyncRecord recordOf(Book book) => SyncRecord(
-    time: book.durChapterTime,
+    time: book.progressTime,
     data: {
       'chapterIndex': book.chapterIndex,
       'charOffset': book.charOffset,
       'chapterTitle': book.durChapterTitle ?? '',
     },
   );
+
+  /// 進度的內容是「哪一章（章名）的第幾個字」。章節序號只是這台目錄裡的
+  /// 座標：書源在前面插一章、序號跟著變，讀到的地方沒變，不算改過；沒有
+  /// 章名時才看序號。
+  static String fingerprint(SyncRecord record) {
+    if (record.deleted) return record.fingerprint;
+    final title = record.data['chapterTitle'];
+    final hasTitle = title is String && title.trim().isNotEmpty;
+    return SyncRecord.fingerprintOf({
+      if (hasTitle) 'chapterTitle': title.trim(),
+      if (!hasTitle) 'chapterIndex': record.data['chapterIndex'],
+      'charOffset': record.data['charOffset'],
+    });
+  }
 
   /// 書架上每個書名加作者最近讀的那一本。同一本書從兩個書源都加進書架時，
   /// 同步只跟著最近讀的那本。

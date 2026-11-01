@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 
+import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
 
 void main() {
@@ -67,6 +68,7 @@ void main() {
             "VALUES ('甲', '', 3600, 1)",
           );
           raw.execute(legacyChaptersTable);
+          raw.execute(legacyBooksTable);
           raw.execute('PRAGMA user_version = 6');
         },
       ),

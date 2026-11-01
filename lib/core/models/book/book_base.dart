@@ -36,7 +36,11 @@ class BookBase {
   int charOffset; // 目前閱讀位置 (首行字索引)
   double visualOffsetPx; // 目前閱讀位置的可視微調位移
   String? readerAnchorJson; // 本機精準閱讀錨點
-  int durChapterTime; // 最近一次閱讀時間
+  int durChapterTime; // 最近一次閱讀時間（開書沒翻頁也會更新，書架照它排）
+
+  /// 閱讀位置最後一次真的移動的時間；多台手機同步比新舊用（ADR 0039）。
+  /// 0 是還沒讀過。
+  int progressTime;
   String? wordCount; // 字數
   bool canUpdate; // 是否自動更新
   int order; // 手動排序
@@ -79,6 +83,7 @@ class BookBase {
     this.visualOffsetPx = 0.0,
     this.readerAnchorJson,
     this.durChapterTime = 0,
+    this.progressTime = 0,
     this.wordCount,
     this.canUpdate = true,
     this.order = 0,
