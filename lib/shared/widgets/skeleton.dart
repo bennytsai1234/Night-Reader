@@ -187,9 +187,38 @@ class _SkeletonState extends State<Skeleton>
     super.dispose();
   }
 
+  // 底下的骨架形狀只畫一次（最深、實色），自己一層；呼吸時每一格只重畫
+  // 上面那一層遮罩（[_RenderSkeletonLayer]），和骨架有幾個形狀無關。
   @override
-  Widget build(BuildContext context) =>
-      _SkeletonScope(phase: _breathing ? _clock : null, child: widget.child);
+  Widget build(BuildContext context) => _SkeletonLayer(
+    clock: _breathing ? _clock : null,
+    viewWidth: MediaQuery.sizeOf(context).width,
+    child: _SkeletonContent(child: widget.child),
+  );
+}
+
+/// [Skeleton] 底下的骨架形狀自己一層：只在形狀變了時重畫；這時上面那一層
+/// 墊在下面的實色（[_RenderSkeletonLayer._fills]）也跟著重畫。
+class _SkeletonContent extends SingleChildRenderObjectWidget {
+  const _SkeletonContent({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderSkeletonContent();
+}
+
+class _RenderSkeletonContent extends RenderProxyBox {
+  @override
+  bool get isRepaintBoundary => true;
+
+  @override
+  void markNeedsPaint() {
+    super.markNeedsPaint();
+    final layer = parent;
+    if (layer is _RenderSkeletonLayer && layer._fills.isNotEmpty) {
+      layer.markNeedsPaint();
+    }
+  }
 }
 
 /// 收住一群 [Skeleton] 的呼吸：每個位置把這一口氣呼完、停在最深，整個畫面
@@ -426,20 +455,235 @@ class _BreathClock extends ChangeNotifier {
   }
 }
 
-class _SkeletonScope extends InheritedWidget {
-  const _SkeletonScope({required this.phase, required super.child});
+/// 一個 [Skeleton] 的呼吸畫在哪裡：底下的骨架形狀都畫成最深的實色，包在
+/// 自己的一層裡（[Skeleton.build] 的 [RepaintBoundary]），只畫一次；呼吸時
+/// 在上面蓋一層遮罩，照螢幕橫向位置把透明度乘上那裡的深淺
+/// （[_BreathClock.depthAt]）。骨架的顏色是半透明疊上去的，透明度乘上深淺和
+/// 每個形狀各自畫一道漸層一樣（ADR 0024）；呼吸的每一格只重畫這一層遮罩，
+/// 底下不重畫，和骨架有幾個形狀無關。
+class _SkeletonLayer extends SingleChildRenderObjectWidget {
+  const _SkeletonLayer({
+    required this.clock,
+    required this.viewWidth,
+    required super.child,
+  });
 
   /// 呼吸；null 是不呼吸（減少動態）。
-  final _BreathClock? phase;
-
-  /// 在 [Skeleton] 底下時回傳 scope 本身（不呼吸時 [phase] 為 null），不在
-  /// 底下時回傳 null。
-  static _SkeletonScope? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_SkeletonScope>();
+  final _BreathClock? clock;
+  final double viewWidth;
 
   @override
-  bool updateShouldNotify(_SkeletonScope oldWidget) =>
-      !identical(phase, oldWidget.phase);
+  _RenderSkeletonLayer createRenderObject(BuildContext context) =>
+      _RenderSkeletonLayer(clock: clock, viewWidth: viewWidth);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderSkeletonLayer renderObject,
+  ) {
+    renderObject
+      ..clock = clock
+      ..viewWidth = viewWidth;
+  }
+}
+
+class _RenderSkeletonLayer extends RenderProxyBox {
+  _RenderSkeletonLayer({required this._clock, required this._viewWidth});
+
+  _BreathClock? _clock;
+  set clock(_BreathClock? value) {
+    if (identical(_clock, value)) return;
+    if (attached) _clock?.removeListener(markNeedsPaint);
+    // 實色改由誰畫（呼吸時這一層，不呼吸時形狀自己）：形狀重畫一次。
+    if ((_clock == null) != (value == null)) {
+      for (final owner in _fills.keys) {
+        owner.markNeedsPaint();
+      }
+    }
+    _clock = value;
+    if (attached) _clock?.addListener(markNeedsPaint);
+    markNeedsPaint();
+  }
+
+  /// 底下的實色由這一層畫（呼吸時），形狀自己不畫。
+  bool get _paintsFills => _clock != null;
+
+  double _viewWidth;
+  set viewWidth(double value) {
+    if (_viewWidth == value) return;
+    _viewWidth = value;
+    markNeedsPaint();
+  }
+
+  // 呼吸的每一格只重畫這一層：不牽動外面，底下的骨架那一層照舊。
+  @override
+  bool get isRepaintBoundary => true;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _clock?.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    _clock?.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  @override
+  void dispose() {
+    _mask.layer = null;
+    _fillPicture?.dispose();
+    super.dispose();
+  }
+
+  final LayerHandle<ShaderMaskLayer> _mask = LayerHandle<ShaderMaskLayer>();
+
+  /// 底下有實色形狀（卡片底，[SkeletonShape.fill]）的元件，與它們這次畫的
+  /// 位置（到這一層的轉換）。遮罩會把底下的實色也變淡，所以呼吸時實色由
+  /// 這一層畫在遮罩下面，形狀自己只畫跟著呼吸的佔位條（[_paintsFills]）：
+  /// 實色照樣不呼吸，上面的條照深淺疊上去。實色一律畫在條的下面（卡片底
+  /// 先畫，ADR 0029 的骨架都是這樣排）。
+  final Map<_RenderSkeletonShapes, (Matrix4, List<SkeletonShape>)> _fills = {};
+
+  /// [_fills] 畫成的圖，實色變了才重畫。
+  ui.Picture? _fillPicture;
+  bool _fillsChanged = false;
+
+  /// [owner] 這次畫的實色與位置；在 [owner] 畫的時候登記（比這一層先畫，
+  /// 這一層同一格接著用）。
+  void _setFills(
+    _RenderSkeletonShapes owner,
+    Matrix4 transform,
+    List<SkeletonShape> fills,
+  ) {
+    if (fills.isEmpty) {
+      if (_fills.remove(owner) != null) _fillsChanged = true;
+      return;
+    }
+    _fills[owner] = (transform, fills);
+    _fillsChanged = true;
+  }
+
+  void _removeFills(_RenderSkeletonShapes owner) {
+    if (_fills.remove(owner) == null) return;
+    _fillsChanged = true;
+    markNeedsPaint();
+  }
+
+  ui.Picture _paintFills() {
+    if (!_fillsChanged) {
+      if (_fillPicture case final picture?) return picture;
+    }
+    _fillsChanged = false;
+    _fillPicture?.dispose();
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint();
+    for (final (transform, fills) in _fills.values) {
+      canvas
+        ..save()
+        ..transform(transform.storage);
+      for (final fill in fills) {
+        canvas.drawRRect(
+          fill.radius.toRRect(fill.rect),
+          paint..color = fill.fill!,
+        );
+      }
+      canvas.restore();
+    }
+    return _fillPicture = recorder.endRecording();
+  }
+
+  /// 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
+  static const int _stops = 33;
+  static final List<double> _stopPositions = List<double>.unmodifiable([
+    for (var i = 0; i < _stops; i++) i / (_stops - 1),
+  ]);
+
+  /// 遮罩每一格的顏色清單：漸層建好時已經把顏色抄走，可以每一格重用。
+  final List<Color> _stopColors = List<Color>.filled(
+    _stops,
+    const Color(0xFF000000),
+  );
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) return;
+    final clock = _clock;
+    if (clock != null && _fills.isNotEmpty) {
+      context.canvas
+        ..save()
+        ..translate(offset.dx, offset.dy)
+        ..drawPicture(_paintFills())
+        ..restore();
+    }
+    if (clock == null || _viewWidth <= 0 || !_breathes(clock)) {
+      _mask.layer = null;
+      context.paintChild(child, offset);
+      return;
+    }
+    // 這一層在螢幕上的橫向位置：換頁途中整頁在平移、縮放，同一個螢幕位置
+    // 的骨架才會一樣深。到螢幕的轉換每一格只算一次。
+    final toScreen = _screenTransform(this);
+    final left = MatrixUtils.transformPoint(toScreen, Offset.zero).dx;
+    final scale =
+        MatrixUtils.transformPoint(toScreen, const Offset(1, 0)).dx - left;
+    if (scale == 0) {
+      _mask.layer = null;
+      context.paintChild(child, offset);
+      return;
+    }
+    // 螢幕左緣與右緣在這一層裡的橫向位置。
+    final screenLeft = offset.dx - left / scale;
+    final screenRight = screenLeft + _viewWidth / scale;
+    // 遮罩的範圍外不套遮罩：橫向蓋滿整個螢幕，直向多留一倍，骨架畫出自己
+    // 範圍外一點也照樣呼吸。漸層的座標從遮罩範圍的左上角算（同
+    // RenderShaderMask）。
+    final mask = Rect.fromLTRB(
+      math.min(screenLeft, screenRight),
+      offset.dy - size.height,
+      math.max(screenLeft, screenRight),
+      offset.dy + size.height * 2,
+    );
+    final layer = _mask.layer ??= ShaderMaskLayer();
+    layer
+      ..shader = ui.Gradient.linear(
+        Offset(screenLeft - mask.left, 0),
+        Offset(screenRight - mask.left, 0),
+        _stopColors,
+        _stopPositions,
+      )
+      ..maskRect = mask
+      ..blendMode = BlendMode.dstIn;
+    context.pushLayer(
+      layer,
+      (context, offset) => context.paintChild(child, offset),
+      offset,
+    );
+  }
+
+  /// 照螢幕上每 1/32 寬的深淺填好 [_stopColors]；整片都是最深（長出時、
+  /// 收住後）時回傳 false：不必蓋遮罩。
+  bool _breathes(_BreathClock clock) {
+    var breathes = false;
+    for (var i = 0; i < _stops; i++) {
+      final depth = clock.depthAt(_stopPositions[i], clock.breath);
+      if (depth < 1) breathes = true;
+      _stopColors[i] = Color.fromRGBO(0, 0, 0, depth);
+    }
+    return breathes;
+  }
+}
+
+/// 往上找 [box] 所在的 [Skeleton] 那一層；不在 [Skeleton] 底下時回傳 null。
+_RenderSkeletonLayer? _layerAbove(RenderObject box) {
+  for (var node = box.parent; node != null; node = node.parent) {
+    if (node is _RenderSkeletonLayer) return node;
+  }
+  return null;
 }
 
 /// 方塊佔位（封面、按鈕）。放在 [Skeleton] 底下時跟著呼吸。
@@ -473,39 +717,21 @@ class SkeletonBox extends StatelessWidget {
     child: _SkeletonBoxPaint(
       color: color ?? Skeleton.colorOf(context),
       borderRadius: borderRadius,
-      phase: _SkeletonScope.maybeOf(context)?.phase,
-      breath: SkeletonLook.of(context).breath,
-      viewWidth: MediaQuery.sizeOf(context).width,
     ),
   );
 }
 
-/// [SkeletonBox] 的圓角方塊：呼吸時每一幀只重畫自己，不重建。由左而右呼吸
-/// 時照方塊在畫面上的橫向位置畫成漸層，同一直行的方塊深淺一致。
+/// [SkeletonBox] 的圓角方塊：畫成最深的實色，只在顏色、大小變了時重畫；
+/// 呼吸由所在的 [Skeleton] 那一層蓋遮罩（[_RenderSkeletonLayer]）。
 class _SkeletonBoxPaint extends LeafRenderObjectWidget {
-  const _SkeletonBoxPaint({
-    required this.color,
-    required this.borderRadius,
-    required this.phase,
-    required this.breath,
-    required this.viewWidth,
-  });
+  const _SkeletonBoxPaint({required this.color, required this.borderRadius});
 
   final Color color;
   final BorderRadius borderRadius;
-  final _BreathClock? phase;
-  final SkeletonBreath breath;
-  final double viewWidth;
 
   @override
   _RenderSkeletonBox createRenderObject(BuildContext context) =>
-      _RenderSkeletonBox(
-        color: color,
-        borderRadius: borderRadius,
-        phase: phase,
-        breath: breath,
-        viewWidth: viewWidth,
-      );
+      _RenderSkeletonBox(color: color, borderRadius: borderRadius);
 
   @override
   void updateRenderObject(
@@ -514,21 +740,12 @@ class _SkeletonBoxPaint extends LeafRenderObjectWidget {
   ) {
     renderObject
       ..color = color
-      ..borderRadius = borderRadius
-      ..phase = phase
-      ..breath = breath
-      ..viewWidth = viewWidth;
+      ..borderRadius = borderRadius;
   }
 }
 
 class _RenderSkeletonBox extends RenderBox {
-  _RenderSkeletonBox({
-    required this._color,
-    required this._borderRadius,
-    required this._phase,
-    required this._breath,
-    required this._viewWidth,
-  });
+  _RenderSkeletonBox({required this._color, required this._borderRadius});
 
   Color _color;
   set color(Color value) {
@@ -544,41 +761,6 @@ class _RenderSkeletonBox extends RenderBox {
     markNeedsPaint();
   }
 
-  _BreathClock? _phase;
-  set phase(_BreathClock? value) {
-    if (identical(_phase, value)) return;
-    if (attached) _phase?.removeListener(markNeedsPaint);
-    _phase = value;
-    if (attached) _phase?.addListener(markNeedsPaint);
-    markNeedsPaint();
-  }
-
-  SkeletonBreath _breath;
-  set breath(SkeletonBreath value) {
-    if (_breath == value) return;
-    _breath = value;
-    markNeedsPaint();
-  }
-
-  double _viewWidth;
-  set viewWidth(double value) {
-    if (_viewWidth == value) return;
-    _viewWidth = value;
-    markNeedsPaint();
-  }
-
-  @override
-  void attach(PipelineOwner owner) {
-    super.attach(owner);
-    _phase?.addListener(markNeedsPaint);
-  }
-
-  @override
-  void detach() {
-    _phase?.removeListener(markNeedsPaint);
-    super.detach();
-  }
-
   // 和原本的 DecoratedBox 一樣取最小的尺寸，由外層的 SizedBox 決定大小。
   @override
   bool get sizedByParent => true;
@@ -586,7 +768,7 @@ class _RenderSkeletonBox extends RenderBox {
   @override
   Size computeDryLayout(BoxConstraints constraints) => constraints.smallest;
 
-  /// 每一幀重畫都用同一支畫筆（畫的當下就記下了），不每次新建。
+  /// 重畫都用同一支畫筆，不每次新建。
   final Paint _paint = Paint();
 
   @override
@@ -598,91 +780,15 @@ class _RenderSkeletonBox extends RenderBox {
     }());
     context.canvas.drawRRect(
       _borderRadius.toRRect(offset & size),
-      _breathingPaint(
-        _paint,
-        this,
-        offset,
-        Offset.zero & size,
-        color: _color,
-        phase: _phase,
-        breath: _breath,
-        viewWidth: _viewWidth,
-      ),
+      _paint..color = _color,
     );
   }
 }
-
-/// 佔位形狀在呼吸這一刻的畫筆：設好 [paint] 後回傳它。[local] 是形狀在
-/// [box] 裡的位置，[offset] 是 [box] 這次畫在圖層上的位置。[toScreen] 是
-/// [box] 到螢幕的轉換（[_screenTransform]），一次畫好幾個形狀時由呼叫端算
-/// 一次傳進來；null 時這裡算。
-///
-/// 骨架呼吸時每一格每個形狀都要重畫，這裡是骨架本身每一格的成本：到螢幕
-/// 的轉換要沿著元件樹一路往上乘，一個形狀只算一次；曲線查表（[_breathTable]）
-/// 不在每個停點重解一次（ADR 0029「用時間換流暢」，留空間給底下準備內容）。
-/// 每一格也盡量不產生新的物件：開 App 的呼吸與換場加起來約 1.5 秒，呼吸前
-/// 清過記憶體（`_collectGarbage`），這段期間產生的東西撐不滿新生區，Dart 就
-/// 不會在動畫途中回收。原本每個形狀每一格都新建畫筆、停點清單與一份轉換
-/// （沿元件樹記下每一層），新生區約 20 幀就滿，呼吸 0.9 秒裡固定回收 5 次，
-/// 落到哪一幀、停多久看運氣（2026-10-28 量到）。
-Paint _breathingPaint(
-  Paint paint,
-  RenderBox box,
-  Offset offset,
-  Rect local, {
-  required Color color,
-  required _BreathClock? phase,
-  required SkeletonBreath breath,
-  required double viewWidth,
-  Matrix4? toScreen,
-}) {
-  // 重用的畫筆先回到新建時的樣子：畫漸層時畫筆的透明度會乘上去，上一筆
-  // 留下的半透明顏色（實色的形狀、減少動態時的單色）會讓漸層變淡。
-  paint
-    ..shader = null
-    ..color = const Color(0xFF000000);
-  if (phase == null) {
-    paint.color = color;
-  } else if (breath.lag == 0 || viewWidth <= 0) {
-    paint.color = color.withValues(alpha: color.a * phase.depthAt(0, breath));
-  } else {
-    // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
-    // 骨架才會一樣深。
-    final transform = toScreen ?? _screenTransform(box);
-    final left =
-        MatrixUtils.transformPoint(transform, local.topLeft).dx / viewWidth;
-    final right =
-        MatrixUtils.transformPoint(transform, local.topRight).dx / viewWidth;
-    final span = right - left;
-    final rect = local.shift(offset);
-    // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
-    final count = math.max(2, (span.abs() * 32).ceil() + 1);
-    // 漸層建好時已經把顏色與停點抄走，清單可以每一格重用。
-    final colors = _gradientColors[count] ??= List<Color>.filled(count, color);
-    for (var i = 0; i < count; i++) {
-      colors[i] = color.withValues(
-        alpha: color.a * phase.depthAt(left + span * i / (count - 1), breath),
-      );
-    }
-    paint.shader = ui.Gradient.linear(
-      rect.centerLeft,
-      rect.centerRight,
-      colors,
-      _gradientStops[count] ??= List<double>.unmodifiable([
-        for (var i = 0; i < count; i++) i / (count - 1),
-      ]),
-    );
-  }
-  return paint;
-}
-
-/// [_breathingPaint] 每種停點數重用的顏色清單與停點。
-final Map<int, List<Color>> _gradientColors = {};
-final Map<int, List<double>> _gradientStops = {};
 
 /// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`，但不沿路
-/// 記下每一層、不新建矩陣：結果放在共用的 [_toScreen]，下一個形狀算的時候
-/// 就被蓋掉，拿到就要用掉。呼吸時每個骨架每一格都要算一次（[_breathingPaint]）。
+/// 記下每一層、不新建矩陣：結果放在共用的 [_toScreen]，下一個用的時候就
+/// 被蓋掉，拿到就要用掉。呼吸時每個 [Skeleton] 每一格算一次
+/// （[_RenderSkeletonLayer.paint]）。
 Matrix4 _screenTransform(RenderObject box) {
   final root = box.owner?.rootNode;
   _toScreen.setIdentity();
@@ -756,9 +862,6 @@ class SkeletonShapes extends LeafRenderObjectWidget {
     height: height,
     shapes: shapes,
     color: Skeleton.colorOf(context),
-    phase: _SkeletonScope.maybeOf(context)?.phase,
-    breath: SkeletonLook.of(context).breath,
-    viewWidth: MediaQuery.sizeOf(context).width,
   );
 
   @override
@@ -766,10 +869,7 @@ class SkeletonShapes extends LeafRenderObjectWidget {
     (renderObject as _RenderSkeletonShapes)
       ..height = height
       ..shapes = shapes
-      ..color = Skeleton.colorOf(context)
-      ..phase = _SkeletonScope.maybeOf(context)?.phase
-      ..breath = SkeletonLook.of(context).breath
-      ..viewWidth = MediaQuery.sizeOf(context).width;
+      ..color = Skeleton.colorOf(context);
   }
 }
 
@@ -778,10 +878,32 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
     required this._height,
     required this._shapes,
     required super.color,
-    required super.phase,
-    required super.breath,
-    required super.viewWidth,
   }) : super(borderRadius: BorderRadius.zero);
+
+  /// 所在的 [Skeleton] 那一層：呼吸時它在遮罩下面照原樣再畫一次這裡的
+  /// 實色（[_RenderSkeletonLayer._fills]）。
+  _RenderSkeletonLayer? _layer;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _layer = _layerAbove(this);
+  }
+
+  @override
+  void detach() {
+    _layer?._removeFills(this);
+    _layer = null;
+    super.detach();
+  }
+
+  // 實色變了（重畫、重新排版、換位置），那一層墊在遮罩下的實色也要跟著
+  // 重畫。
+  @override
+  void markNeedsPaint() {
+    super.markNeedsPaint();
+    _layer?.markNeedsPaint();
+  }
 
   double _height;
   set height(double value) {
@@ -813,36 +935,25 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
     final canvas = context.canvas;
-    // 整塊到螢幕的轉換只算一次，每個形狀共用。
-    Matrix4? toScreen;
+    final layer = _layer;
+    final layerFills = layer?._paintsFills ?? false;
+    final fills = <SkeletonShape>[];
     for (final shape in _shapes(size)) {
-      final rrect = shape.radius.toRRect(shape.rect.shift(offset));
       final fill = shape.fill;
+      if (fill != null) {
+        fills.add(shape);
+        if (layerFills) continue;
+      }
       assert(() {
         if (fill == null) SkeletonBox.debugShapePaints++;
         return true;
       }());
       canvas.drawRRect(
-        rrect,
-        fill != null
-            ? (_paint
-                ..shader = null
-                ..color = fill)
-            : _breathingPaint(
-                _paint,
-                this,
-                offset,
-                shape.rect,
-                color: _color,
-                phase: _phase,
-                breath: _breath,
-                viewWidth: _viewWidth,
-                toScreen: _phase == null || _breath.lag == 0
-                    ? null
-                    : toScreen ??= _screenTransform(this),
-              ),
+        shape.radius.toRRect(shape.rect.shift(offset)),
+        _paint..color = fill ?? _color,
       );
     }
+    layer?._setFills(this, getTransformTo(layer), fills);
   }
 }
 

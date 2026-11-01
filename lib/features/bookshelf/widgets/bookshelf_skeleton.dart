@@ -143,57 +143,73 @@ class _ListCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = AppChrome.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: chrome.groupedSurface,
-        borderRadius: AppGrouped.cardRadius,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            const SkeletonBox(
-              width: BookshelfListCard.coverWidth,
-              height: BookshelfListCard.coverHeight,
-            ),
-            const SizedBox(width: AppSpacing.lg),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (title case final title?) ...[
-                    _TextBars(
-                      text: context.zh(title.name),
-                      style: BookshelfListCard.titleStyle,
-                      maxLines: 1,
-                    ),
-                    const SizedBox(height: 2),
-                    // 沒有作者時和真的書卡一樣只留這一行的高度。
-                    _TextBars(
-                      text: context.zh(title.author).trim(),
-                      style: BookshelfListCard.authorStyle,
-                      maxLines: 1,
-                    ),
-                  ] else ...[
-                    SkeletonLine(
-                      style: BookshelfListCard.titleStyle,
-                      widthFactor: titleWidth * 0.7,
-                    ),
-                    const SizedBox(height: 2),
-                    SkeletonLine(
-                      style: BookshelfListCard.authorStyle,
-                      widthFactor: 0.3,
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.md),
-                  const _ProgressLineSkeleton(),
-                ],
+    final surface = AppChrome.of(context).groupedSurface;
+    // 紙卡是骨架的實色形狀：呼吸只讓上面的封面與文字條起伏，紙卡不跟著
+    // 變淡（[SkeletonShape.fill]）。
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: SkeletonShapes(
+            height: 0,
+            shapes: (size) => [
+              SkeletonShape(
+                Offset.zero & size,
+                radius: AppGrouped.cardRadius,
+                fill: surface,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+        _content(context),
+      ],
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          const SkeletonBox(
+            width: BookshelfListCard.coverWidth,
+            height: BookshelfListCard.coverHeight,
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title case final title?) ...[
+                  _TextBars(
+                    text: context.zh(title.name),
+                    style: BookshelfListCard.titleStyle,
+                    maxLines: 1,
+                  ),
+                  const SizedBox(height: 2),
+                  // 沒有作者時和真的書卡一樣只留這一行的高度。
+                  _TextBars(
+                    text: context.zh(title.author).trim(),
+                    style: BookshelfListCard.authorStyle,
+                    maxLines: 1,
+                  ),
+                ] else ...[
+                  SkeletonLine(
+                    style: BookshelfListCard.titleStyle,
+                    widthFactor: titleWidth * 0.7,
+                  ),
+                  const SizedBox(height: 2),
+                  SkeletonLine(
+                    style: BookshelfListCard.authorStyle,
+                    widthFactor: 0.3,
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.md),
+                const _ProgressLineSkeleton(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
