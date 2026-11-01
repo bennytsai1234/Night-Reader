@@ -66,7 +66,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 合併時照這個順序走，讓 CI 盡量只等一次：
   1. 把這次要合併的分支併成一條，`git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，開一個以 `beta` 為目標的 PR（PR 說明照 `pr` 技能寫，用繁體中文）。
   2. 改到 App 內容的 PR（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出）開 PR 就派 Codex 審整個 PR 一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的 PR 不審。
-  3. 等審查時把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態（合併後不另外補交接）。核對屬實的問題修在同一個 PR，審查摘要（發現了什麼、核對結果、修了哪些、沒修的為什麼）用 `gh pr edit --body-file` 寫進 PR 說明的「審查」一段，不另貼留言。修正、交接一起推一次。
+  3. 等審查時把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態（合併後不另外補交接）：`HANDOFF.md` 以 `beta` 那份為底、拿掉這條分支那段；這件事還有下一個 PR 時，從 `beta` 開下一條分支，把剩下的交接搬過去。核對屬實的問題修在同一個 PR，審查摘要（發現了什麼、核對結果、修了哪些、沒修的為什麼）用 `gh pr edit --body-file` 寫進 PR 說明的「審查」一段，不另貼留言。修正、交接一起推一次。
   4. 合併前再 `git fetch`：`beta` 在這段時間有新提交才再併一次、推上去。CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，PR 的分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `beta`，刪掉本機分支，併進這個 PR 的其他分支也連同遠端一起刪掉，`git worktree prune`。
 - `beta` 的 `HANDOFF.md` 只寫查不到的事：等使用者決定的事、還沒寫進其他文件的決定；分支上的工作看那條分支的 `HANDOFF.md`（`git branch -a` 列出所有分支），合併了什麼看 PR，發版看 GitHub Actions，環境上的坑寫在本檔「環境」。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。

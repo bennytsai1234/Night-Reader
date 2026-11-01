@@ -21,9 +21,9 @@ import 'package:night_reader/features/about/check_update_row.dart';
 /// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）；「檢查更新」
 /// 例外，點了就檢查（ADR 0030）。
 ///
-/// 依用途分兩組：閱讀（偏好、外觀、朗讀、統計），書與 App（書源、下載、
-/// 備份、檢查更新、關於）；組數少，組間的空帶只有一條。第一層九個
-/// （使用者 2026-10-23：九個剛好；崩潰日誌在關於夜讀裡），ADR 0030。
+/// 依用途分三組：閱讀（偏好、外觀、朗讀、統計），書與資料（書源、下載、
+/// 備份），App（檢查更新、關於）。第一層九個（使用者 2026-10-23：九個剛好；
+/// 崩潰日誌在關於夜讀裡），ADR 0030。
 ///
 /// 圖示顏料依意義固定：硃砂＝閱讀、點金＝紀錄、石青＝網路與書源、
 /// 茄紫＝外觀、苔綠＝聲音、茶褐＝資料、墨＝App 資訊。
@@ -50,8 +50,8 @@ class SettingsPage extends StatelessWidget {
         title: '我的',
         automaticallyImplyLeading: _impliesBack(context),
       ),
-      // 底部只留一點空白：入口在一般高度的螢幕一頁放得下、不用捲；預設多留
-      // 的 40 會讓最後一列明明看得到也還能捲一段。
+      // 底部只留一點空白：入口一頁放得下、不用捲；預設多留的 40 會讓最後
+      // 一列明明看得到也還能捲一段。
       body: GroupedListView(
         bottomPadding: AppSpacing.lg,
         children: [
@@ -119,6 +119,10 @@ class SettingsPage extends StatelessWidget {
                 title: '備份與還原',
                 onTap: () => _push(context, const BackupSettingsPage()),
               ),
+            ],
+          ),
+          GroupedSection(
+            children: [
               const CheckUpdateRow(),
               GroupedRow(
                 leading: const GroupedIconTile(
