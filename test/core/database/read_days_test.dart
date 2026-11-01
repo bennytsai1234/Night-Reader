@@ -50,6 +50,42 @@ void main() {
     expect(first!.readTime, 210 * 60);
   });
 
+  test('改書名：閱讀統計併到新書名，不分成兩筆', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final dao = ReadRecordDao(db);
+    Future<void> read(String book, DateTime start, int minutes) =>
+        dao.recordReadActivity(
+          bookName: book,
+          startedAt: start,
+          stoppedAt: start.add(Duration(minutes: minutes)),
+        );
+    await read('舊書名', DateTime(2026, 10, 14, 21), 10);
+    await read('舊書名', DateTime(2026, 10, 15, 21), 20);
+    // 新書名本來就有紀錄（例如改回以前用過的名字）：兩邊加起來。
+    await read('新書名', DateTime(2026, 10, 15, 22), 5);
+
+    await dao.renameBook(from: '舊書名', to: '新書名');
+
+    final records = await dao.getAll();
+    expect(records.map((r) => r.bookName), ['新書名']);
+    expect(records.single.readTime, 35 * 60);
+    expect(
+      records.single.lastRead,
+      DateTime(2026, 10, 15, 22, 5).millisecondsSinceEpoch,
+    );
+    final days = {
+      for (final day in await dao.getAllDays())
+        '${day.bookName} ${day.day}': day.seconds,
+    };
+    expect(days, {'新書名 2026-10-14': 600, '新書名 2026-10-15': 1500});
+
+    // 沒讀過的書改名、名字沒變：什麼都不動。
+    await dao.renameBook(from: '沒讀過', to: '別的名字');
+    await dao.renameBook(from: '新書名', to: '新書名');
+    expect((await dao.getAll()).single.readTime, 35 * 60);
+  });
+
   test('upgrading from schema 6 keeps the totals and adds daily records', () async {
     final db = AppDatabase.forTesting(
       NativeDatabase.memory(
