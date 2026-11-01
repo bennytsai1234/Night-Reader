@@ -710,7 +710,14 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
       case 'login':
         final full = await p.getFullSource(s.bookSourceUrl);
         if (full != null && mounted) {
-          await openSourceLogin(context, full, checkAfter: true);
+          // 登入完校驗一次，看標記就知道有沒有登入成功（DESIGN.md「書源登入」）。
+          await openSourceLogin(
+            context,
+            full,
+            onLoggedIn: () {
+              if (mounted) unawaited(p.checkSource(full.bookSourceUrl));
+            },
+          );
         }
       case 'debug':
         final full = await p.getFullSource(s.bookSourceUrl);
