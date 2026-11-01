@@ -89,6 +89,22 @@ void main() {
     );
   }, skip: skip);
 
+  test('java.get responses also read like Jsoup Connection.Response', () {
+    expect(
+      eval(r'''
+        var r = buildHttpResponse({
+          body: '<p class="t">內文</p>', url: 'https://a.test/x', code: 302, message: 'Found',
+          headers: { 'Location': ['https://b.test/y'], 'Set-Cookie': ['a=1; Path=/', 'b=2'],
+                     'Content-Type': ['text/html; charset=gbk'] }
+        });
+        [r.headers('Location')[0], r.hasHeader('set-cookie'), r.cookie('a'), r.cookies().b,
+         r.statusCode(), r.statusMessage(), r.charset(), r.parse().select('p.t').text(),
+         typeof r.headers().get].join('|')
+      '''),
+      'https://b.test/y|true|1|2|302|Found|gbk|內文|function',
+    );
+  }, skip: skip);
+
   group('Java classes book sources use', () {
     test('Thread, System, StringBuilder', () {
       expect(

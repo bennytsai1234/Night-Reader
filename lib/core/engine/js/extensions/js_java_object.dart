@@ -276,8 +276,37 @@ extension JsJavaObject on JsExtensionsBase {
           statusCode: function() { return responseCode(); },
           message: function() { return responseMessage(); },
           isSuccessful: function() { return isSuccessfulStatus(); },
-          headers: function() { return buildHeaders(); },
+          // OkHttp 的 headers()；給名稱時是 Jsoup Response 的 headers(name)：
+          // 那個標頭的每個值（java.get／post／head 回傳的是 Jsoup Response）。
+          headers: function(name) {
+            if (name === undefined) return buildHeaders();
+            return buildHeaders().values(name);
+          },
           header: function(name) { return getHeader(name); },
+          // 以下是 Jsoup Connection.Response 的方法。
+          hasHeader: function(name) { return buildHeaders().values(name).length > 0; },
+          statusMessage: function() { return responseMessage(); },
+          contentType: function() { return buildHeaders().get('content-type'); },
+          charset: function() {
+            var type = buildHeaders().get('content-type') || '';
+            var match = /charset=([^;]+)/i.exec(type);
+            return match ? match[1].trim() : null;
+          },
+          cookies: function() {
+            var map = {};
+            buildHeaders().values('set-cookie').forEach(function(line) {
+              var pair = String(line).split(';')[0];
+              var eq = pair.indexOf('=');
+              if (eq > 0) map[pair.substring(0, eq).trim()] = pair.substring(eq + 1).trim();
+            });
+            return map;
+          },
+          cookie: function(name) {
+            var value = response.cookies()[name];
+            return value == null ? null : value;
+          },
+          bodyAsBytes: function() { return java.strToBytes(String(res && res.body != null ? res.body : ''), 'UTF-8'); },
+          parse: function() { return org.jsoup.Jsoup.parse(String(res && res.body != null ? res.body : ''), responseUrl()); },
           // Legado 只在請求失敗時有 errorBody（內文放在這裡，不在 body）。
           errorBody: function() {
             if (isSuccessfulStatus()) return null;
