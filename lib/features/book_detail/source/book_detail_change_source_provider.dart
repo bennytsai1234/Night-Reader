@@ -397,7 +397,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     }).toList();
   }
 
-  /// 回得快的書源在前：換過去之後開書、翻章也快。這次搜到的照這次的
+  /// 搜尋回得快的書源在前。這次搜到的照這次的
   /// 回應時間；先列出來的快取結果照書源上次搜尋記下的時間，這次回來就
   /// 換成這次的。都沒量過的照書源順序排在後面。
   List<SearchBook> _sortResults(List<SearchBook> results) {

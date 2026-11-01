@@ -3,8 +3,7 @@ import 'package:flutter/foundation.dart';
 /// 每一章佔全書多少，全書進度照它算：讀到第幾章不照章數平均，照前面
 /// 各章的長度加總。長度是下載好的正文的位元組數（中文一個字固定三個
 /// 位元組，比例和字數一樣）；還不知道長度的章用已知各章的平均，一章都
-/// 不知道時就是平均分（[ReaderV2ChapterShares.even]）。分卷標題沒有
-/// 正文，佔 0。
+/// 不知道時各算一份。分卷標題沒有正文，佔 0。
 @immutable
 final class ReaderV2ChapterShares {
   /// 每章一樣長。
@@ -16,8 +15,10 @@ final class ReaderV2ChapterShares {
       for (final length in lengths)
         if (length != null && length > 0) length,
     ];
-    if (known.isEmpty) return ReaderV2ChapterShares.even(lengths.length);
-    final average = known.reduce((a, b) => a + b) / known.length;
+    // 一章都還沒下載時，還不知道的章各算一份，分卷照樣佔 0。
+    final average = known.isEmpty
+        ? 1.0
+        : known.reduce((a, b) => a + b) / known.length;
     final weights = [
       for (final length in lengths)
         length == null ? average : length.toDouble(),

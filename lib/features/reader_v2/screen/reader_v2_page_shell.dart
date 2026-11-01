@@ -17,8 +17,6 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
-import 'package:night_reader/features/reader_v2/hybrid/progress/hybrid_progress.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
@@ -528,16 +526,27 @@ final class ReaderV2InfoTarget {
   /// 這一章的進度：進度通道已經是這一章（例如開書時先放進去的上次進度）就
   /// 用它，否則當作在章首。跳章跳到章首，數字和排好後一樣；開書沒有上次
   /// 進度時章內百分比不知道，位數通常一樣。
-  HybridProgressSnapshot progressFrom(HybridProgressSnapshot? progress) =>
-      progress != null && progress.chapterIndex == chapterIndex
-      ? progress
-      : HybridProgress(
-          chapterCount: chapterCount,
-          shares: shares,
-        ).progressForLocation(
-          ReaderV2Location(chapterIndex: chapterIndex, charOffset: 0),
-          chapterLength: 0,
-        );
+  ///
+  /// 同一章時只沿用它的章內比例；章數與每章佔全書多少用這次的（[shares]，
+  /// 開書時排正文前就讀好），這次還沒讀到時才用它記下的（上次存的骨架頁）。
+  HybridProgressSnapshot progressFrom(HybridProgressSnapshot? progress) {
+    final sameChapter =
+        progress != null && progress.chapterIndex == chapterIndex;
+    final current = shares?.chapterCount == chapterCount ? shares : null;
+    final keepRecorded =
+        current == null && sameChapter && progress.chapterCount == chapterCount;
+    return HybridProgressSnapshot(
+      chapterIndex: chapterIndex,
+      chapterCount: chapterCount,
+      chapterPercent: sameChapter ? progress.chapterPercent : 0,
+      chapterStart: keepRecorded
+          ? progress.chapterStart
+          : current?.startOf(chapterIndex),
+      chapterShare: keepRecorded
+          ? progress.chapterShare
+          : current?.shareOf(chapterIndex),
+    );
+  }
 }
 
 /// 資訊列在骨架與真正資訊之間交叉淡換：骨架照資訊的寬度畫在同一個位置，

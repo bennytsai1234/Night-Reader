@@ -201,28 +201,32 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 每章佔全書多少，全書進度照它算；開書時從資料庫讀一次（讀得比正文排好
-  /// 快，頁尾第一次出現就是加權過的數字），讀到之前當每章一樣長。
+  /// 每章佔全書多少，全書進度照它算。開書時先讀好（[openBook]）再排正文：
+  /// 頁尾第一次出現就是加權過的數字，之後不會在換場途中換數字。讀到之前
+  /// 是 `even(0)`（章數對不上，照章數平均）。
   ValueListenable<ReaderV2ChapterShares> get chapterShares => _chapterShares;
   final ValueNotifier<ReaderV2ChapterShares> _chapterShares =
       ValueNotifier<ReaderV2ChapterShares>(const ReaderV2ChapterShares.even(0));
 
+  /// 只讀資料庫（目錄已經載入）；讀不到就照章數平均，不擋開書。
   Future<void> _loadChapterShares() async {
     try {
-      await repository.ensureChapters();
       final shares = await repository.loadChapterShares();
       if (!disposed) _chapterShares.value = shares;
     } catch (error) {
-      // 讀不到就照章數平均，不影響開書；開書失敗由 openBook 自己回報。
       AppLog.w('讀每章長度失敗，全書進度照章數平均: $error');
     }
   }
 
   Future<void> openBook() async {
-    unawaited(_loadChapterShares());
     final token = stateMachine.beginOpen(location: _initialLocation);
     notifyListeners();
     try {
+      // 目錄取不到的失敗和排版時一樣交給下面處理；目錄有了才讀每章長度
+      // （幾十毫秒，這時紙剛蓋上），讀好才排正文。
+      await repository.ensureChapters();
+      await _loadChapterShares();
+      if (!isCurrentOperationToken(token)) return;
       await _positionViewport(location: _initialLocation, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
