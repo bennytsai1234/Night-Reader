@@ -997,8 +997,13 @@ bool _matchesStructuralPseudo(Element element, _StructuralPseudo pseudo) {
       }
       return identical(element, root);
     case ':empty':
-      // Jsoup 1.15：只有註解才算空；只有空白的文字也算內容。
-      return element.nodes.every((node) => node is Comment);
+      // Jsoup 1.16.2 IsEmpty：照順序看，註解跳過；碰到的第一個文字節點是
+      // 空白就算空（後面還有元素也一樣），碰到元素就不是。
+      for (final node in element.nodes) {
+        if (node is Text) return _jsoupBlank.hasMatch(node.data);
+        if (node is! Comment) return false;
+      }
+      return true;
     case ':nth-child':
       return _matchesNthExpression(_elementIndex(element) + 1, pseudo.argument);
     case ':nth-last-child':
@@ -1482,6 +1487,9 @@ bool _isFollowingSibling(Element element, Element anchor) {
   }
   return false;
 }
+
+/// Jsoup `StringUtil.isBlank`：只有空格、tab、換行、換頁、歸位。
+final RegExp _jsoupBlank = RegExp(r'^[ \t\n\f\r]*$');
 
 /// Jsoup 用 Java 的正規式：開頭的 `(?i)`、`(?s)`、`(?m)`、`(?u)` 這類旗標
 /// Dart 不認得，換成 RegExp 的選項。
