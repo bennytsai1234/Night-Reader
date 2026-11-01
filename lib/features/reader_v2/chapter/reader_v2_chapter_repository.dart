@@ -17,6 +17,8 @@ import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
+import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
+
 import 'reader_v2_content.dart';
 import 'reader_v2_content_transformer.dart';
 
@@ -98,8 +100,18 @@ class ReaderV2ChapterRepository {
   List<BookChapter> get chapters => List<BookChapter>.unmodifiable(_chapters);
   int get chapterCount => _chapters.length;
 
-  Future<List<BookChapter>> ensureChapters() async {
-    if (_chapters.isNotEmpty) return chapters;
+  /// 同時有好幾處要目錄（開書排版、讀每章長度）時共用同一次載入，不會
+  /// 向書源抓兩次。
+  Future<List<BookChapter>> ensureChapters() {
+    if (_chapters.isNotEmpty) return Future.value(chapters);
+    return _chaptersInFlight ??= _loadChapters().whenComplete(
+      () => _chaptersInFlight = null,
+    );
+  }
+
+  Future<List<BookChapter>>? _chaptersInFlight;
+
+  Future<List<BookChapter>> _loadChapters() async {
     _chapters = await chapterDao.getByBook(book.bookUrl);
     if (_chapters.isNotEmpty) return chapters;
     final source = await _ensureSource();
@@ -120,6 +132,32 @@ class ReaderV2ChapterRepository {
     await chapterDao.insertChapters(fetched);
     _chapters = fetched;
     return chapters;
+  }
+
+  /// 每章佔全書多少（全書進度用）。本地書照每章在檔案裡的位元組範圍；
+  /// 網路書照下載好的正文的位元組數，還沒下載的章照已下載的平均。分卷
+  /// 標題沒有正文，佔 0。
+  Future<ReaderV2ChapterShares> loadChapterShares() async {
+    final chapters = _chapters;
+    if (chapters.isEmpty) return const ReaderV2ChapterShares.even(0);
+    Map<String, int> stored = const <String, int>{};
+    if (book.origin != 'local') {
+      stored =
+          await contentDao?.getStoredContentBytes(
+            origin: book.origin,
+            bookUrl: book.bookUrl,
+          ) ??
+          const <String, int>{};
+    }
+    return ReaderV2ChapterShares.fromLengths([
+      for (final chapter in chapters)
+        if (chapter.isVolume)
+          0
+        else if (chapter.start != null && chapter.end != null)
+          chapter.end! - chapter.start!
+        else
+          stored[chapter.url],
+    ]);
   }
 
   Future<List<BookChapter>> _loadChapterListFromSource(
