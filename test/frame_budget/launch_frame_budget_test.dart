@@ -62,14 +62,18 @@ void main() {
           final entrance = shelf.isEmpty
               ? null
               : LaunchEntrance.maybeOf(shelf.first);
+          // 長完停拍定格畫面時頁首與分頁列會暫時換成真的（revealed），那
+          // 幾幀還在長完停；換場從 revealStarted 起算。
           if (entrance != null &&
-              entrance.revealed.value &&
+              entrance.revealStarted &&
               !entrance.isFinished) {
             return _paintsBlur(tester) ? null : '換場中';
           }
           if (find.byType(SkeletonBox).evaluate().isEmpty) return null;
-          if (!(entrance?.skeleton.isCompleted ?? false)) return '骨架長出';
-          return entrance!.breathing.value ? '骨架呼吸' : '長完停';
+          // 還沒開始長：畫面只有底色，靜止時可以做事（預留停頓）。
+          if (entrance == null || entrance.skeleton.value == 0) return '長出前';
+          if (!entrance.skeleton.isCompleted) return '骨架長出';
+          return entrance.breathing.value ? '骨架呼吸' : '長完停';
         },
         // 骨架出現過、又全部換成內容，就是整段進場播完；之後再看一秒，開
         // App 的背景工作從這時開始。
