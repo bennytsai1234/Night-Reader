@@ -35,6 +35,14 @@ extension JsJavaObject on JsExtensionsBase {
         })) {
           return { __lrResponse: value.__lrResponse };
         }
+        // java.util.HashMap 有 size／get，但交回的是物件，不是清單。
+        if (value.__lrMap) {
+          var normalizedMap = {};
+          value.keySet().forEach(function(key) {
+            normalizedMap[key] = __lrNormalizeRuleResult(value.get(key));
+          });
+          return normalizedMap;
+        }
         if (typeof value.size === 'function' && typeof value.get === 'function') {
           var normalizedItems = [];
           var size = Number(value.size()) || 0;
@@ -72,6 +80,19 @@ extension JsJavaObject on JsExtensionsBase {
           }
         }
         return value;
+      }
+
+      /// 交給 Dart 解析的內容：元素、清單與一般物件照 [__lrNormalizeRuleResult]，
+      /// JavaString 這類自訂物件轉成文字（JSON 會把它們變成空物件）。
+      function __lrContentArg(value) {
+        if (value == null) return null;
+        if (typeof value === 'object' && !Array.isArray(value) &&
+            value.__lrElementId === undefined &&
+            typeof value.size !== 'function' &&
+            Object.getPrototypeOf(value) !== Object.prototype) {
+          return String(value);
+        }
+        return __lrNormalizeRuleResult(value);
       }
 
       function buildHttpResponse(res) {
@@ -466,12 +487,25 @@ extension JsJavaObject on JsExtensionsBase {
         digestHex: function(str, algorithm) {
           return new JavaString(sendMessage('_digest', JSON.stringify([__lrCryptoArg(str), __lrCryptoArg(algorithm), true])));
         },
-        base64Encode: function(str) { return sendMessage('_base64Encode', JSON.stringify(__lrCryptoArg(str))); },
-        base64Decode: function(str) { return sendMessage('_base64Decode', JSON.stringify(__lrCryptoArg(str))); },
-        base64DecodeToByteArray: function(str) {
-          return normalizeByteArray(
-            sendMessage('_base64DecodeToBytes', JSON.stringify(__lrCryptoArg(str)))
-          );
+        // Legado：base64Encode(str[, flags])、base64Decode(str[, charset])、
+        // base64Decode(str, flags)、base64DecodeToByteArray(str[, flags])；
+        // flags 照 Android Base64（URL_SAFE 8、NO_WRAP 2、NO_PADDING 1）。
+        base64Encode: function(str, flags) {
+          return sendMessage('_base64Encode', JSON.stringify(
+            { d: __lrCryptoArg(str), f: flags == null ? null : Number(flags) }
+          ));
+        },
+        base64Decode: function(str, charsetOrFlags) {
+          var arg = { d: __lrCryptoArg(str) };
+          if (typeof charsetOrFlags === 'number') arg.f = charsetOrFlags;
+          else if (charsetOrFlags != null) arg.c = String(charsetOrFlags);
+          return sendMessage('_base64Decode', JSON.stringify(arg));
+        },
+        base64DecodeToByteArray: function(str, flags) {
+          if (str == null || String(str).trim() === '') return null;
+          return normalizeByteArray(sendMessage('_base64DecodeToBytes', JSON.stringify(
+            { d: __lrCryptoArg(str), f: flags == null ? null : Number(flags) }
+          )));
         },
         hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(__lrCryptoArg(str))); },
         hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(__lrCryptoArg(hex))); },
@@ -500,8 +534,11 @@ extension JsJavaObject on JsExtensionsBase {
         toNumChapter: function(text) { return sendMessage('_toNumChapter', JSON.stringify(text)); },
         t2s: function(text) { return sendMessage('t2s', JSON.stringify(text)); },
         s2t: function(text) { return sendMessage('s2t', JSON.stringify(text)); },
-        encodeURI: function(value) {
-          return encodeURIComponent(String(value == null ? '' : value));
+        // Legado 用 Java 的 URLEncoder：空白變 +、!'()~ 也編碼；enc 預設 UTF-8。
+        encodeURI: function(value, enc) {
+          return sendMessage('_urlEncode', JSON.stringify(
+            [String(value == null ? '' : value), enc == null ? null : String(enc)]
+          ));
         },
         decodeURI: function(value) {
           return decodeURIComponent(String(value == null ? '' : value));
@@ -546,11 +583,20 @@ extension JsJavaObject on JsExtensionsBase {
           sendMessage('scopePut', JSON.stringify([key, normalized]));
           return normalized;
         },
-        getString: function(rule) { return sendMessage('ruleGetString', JSON.stringify(rule)); },
-        getStringList: function(rule) {
-          return __lrJavaList(
-            sendMessage('ruleGetStringList', JSON.stringify(rule))
-          );
+        // Legado：getString(rule[, mContent, isUrl])、getString(rule, unescape)；
+        // 有 mContent 時解析它，不是目前內容。
+        getString: function(rule, content, isUrl) {
+          if (arguments.length === 2 && typeof content === 'boolean') {
+            return sendMessage('ruleGetString', JSON.stringify([String(rule), null, false, content]));
+          }
+          return sendMessage('ruleGetString', JSON.stringify(
+            [String(rule), __lrContentArg(content), !!isUrl, true]
+          ));
+        },
+        getStringList: function(rule, content, isUrl) {
+          return __lrJavaList(sendMessage('ruleGetStringList', JSON.stringify(
+            [String(rule), __lrContentArg(content), !!isUrl]
+          )));
         },
         getElement: function(rule) { return __lrJsoupDecode(sendMessage('ruleGetElement', JSON.stringify(String(rule)))); },
         getElements: function(rule) {
@@ -561,6 +607,8 @@ extension JsJavaObject on JsExtensionsBase {
           sendMessage('ruleSetContent', JSON.stringify([content, baseUrl || null]));
           return null;
         },
+        setBaseUrl: function(url) { sendMessage('ruleSetUrl', JSON.stringify(['base', url == null ? null : String(url)])); },
+        setRedirectUrl: function(url) { sendMessage('ruleSetUrl', JSON.stringify(['redirect', url == null ? null : String(url)])); },
         refreshTocUrl: function() { __lrWait('ruleRefreshTocUrl', null); },
         reGetBook: function() {
           throw new Error('夜讀還不支援 java.reGetBook()（換成搜尋到的同名書再讀詳情）');
@@ -571,9 +619,45 @@ extension JsJavaObject on JsExtensionsBase {
           var ttfId = sendMessage('queryTTF', JSON.stringify([data, useCache === undefined ? true : useCache]));
           return ttfId ? { _ttfId: ttfId } : null;
         },
-        replaceFont: function(text, errTTF, correctTTF) {
-          return sendMessage('replaceFont', JSON.stringify([text, errTTF ? errTTF._ttfId : null, correctTTF ? correctTTF._ttfId : null]));
-        }
+        // 第四個參數 filter：錯誤字型裡沒有輪廓的字刪掉（Legado）。
+        replaceFont: function(text, errTTF, correctTTF, filter) {
+          return sendMessage('replaceFont', JSON.stringify(
+            [text, errTTF ? errTTF._ttfId : null, correctTTF ? correctTTF._ttfId : null, filter === true]
+          ));
+        },
+        // Legado 已標成過時、改叫 queryTTF 的舊名字。
+        queryBase64TTF: function(data) { return java.queryTTF(data); },
+
+        // ─── sync: 其他 Legado JsExtensions ─────────────────────
+        htmlFormat: function(str) { return sendMessage('htmlFormat', JSON.stringify(String(str == null ? '' : str))); },
+        toURL: function(url, baseUrl) {
+          return sendMessage('toURL', JSON.stringify([String(url), baseUrl == null ? null : String(baseUrl)]));
+        },
+        // Legado 記下 Java 的類別名稱；這裡記 JS 的型別。
+        logType: function(value) {
+          java.log(value == null ? 'null'
+            : (Array.isArray(value) ? 'Array' : (value.constructor && value.constructor.name) || typeof value));
+        },
+        // 手機編號：Legado 是 Android 的 ANDROID_ID（16 個十六進位字）。夜讀
+        // 第一次用到時產生一組存在快取裡，之後都是同一組。
+        androidId: function() {
+          var id = cache.get('__nightReaderAndroidId');
+          if (!id) {
+            id = String(java.randomUUID()).replace(/-/g, '').substring(0, 16);
+            cache.put('__nightReaderAndroidId', id);
+          }
+          return String(id);
+        },
+        // Legado 開外部 App 前先問使用者；夜讀和 startBrowser 一樣只在登入頁
+        // 打開，其他地方記在日誌（ADR 0038）。
+        openUrl: function(url) { java.startBrowser(String(url), ''); },
+        getSource: function() { return source; },
+        get7zByteArrayContent: function() { throw new Error('夜讀不支援 7z 壓縮檔'); },
+        get7zStringContent: function() { throw new Error('夜讀不支援 7z 壓縮檔'); },
+        un7zFile: function() { throw new Error('夜讀不支援 7z 壓縮檔'); },
+        getRarByteArrayContent: function() { throw new Error('夜讀不支援 rar 壓縮檔'); },
+        getRarStringContent: function() { throw new Error('夜讀不支援 rar 壓縮檔'); },
+        unrarFile: function() { throw new Error('夜讀不支援 rar 壓縮檔'); }
       };
 
       // ─── java.getCookie → 獨立 channel ───────────────────────
@@ -590,7 +674,27 @@ extension JsJavaObject on JsExtensionsBase {
         setCookie: function(url, value) { sendMessage('setCookie', JSON.stringify([url, value])); },
         remove: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
         removeCookie: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
-        all: function() { return __lrWait('allCookies', ''); }
+        all: function() { return __lrWait('allCookies', ''); },
+        // Legado CookieStore：「a=1; b=2」與物件互轉，空值的項目略過。
+        cookieToMap: function(text) {
+          return sendMessage('cookieToMap', JSON.stringify(String(text == null ? '' : text)));
+        },
+        mapToCookie: function(map) {
+          if (map == null || !Object.keys(map).length) return null;
+          return sendMessage('mapToCookie', JSON.stringify(map));
+        },
+        // 這個網站的 Cookie 裡 key 那一項的值，沒有時是空字串。
+        getKey: function(url, key) {
+          var value = cookie.cookieToMap(cookie.getCookie(url))[key];
+          return value == null ? '' : value;
+        },
+        // 合併進原本的 Cookie：同名的換成新的，其他留著。
+        replaceCookie: function(url, value) {
+          if (!url || !value) return;
+          sendMessage('replaceCookie', JSON.stringify([String(url), String(value)]));
+        },
+        // 清掉夜讀存的所有網站的 Cookie。
+        clear: function() { sendMessage('clearCookies', '""'); }
       };
 
       var cache = {
@@ -598,7 +702,32 @@ extension JsJavaObject on JsExtensionsBase {
         getFile: function(key) { return __lrWait('getCache', key); },
         put: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
         putFile: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
-        delete: function(key) { sendMessage('deleteCache', JSON.stringify(key)); }
+        delete: function(key) {
+          sendMessage('deleteCache', JSON.stringify(key));
+          cache.deleteMemory(key);
+        },
+        // Legado CacheManager 的數字讀法：讀不成數字時是 null。
+        getInt: function(key) {
+          var text = cache.get(key);
+          return /^[+-]?\d+$/.test(String(text)) ? Number(text) : null;
+        },
+        getLong: function(key) { return cache.getInt(key); },
+        getDouble: function(key) {
+          var text = cache.get(key);
+          if (text == null || String(text).trim() === '') return null;
+          var value = Number(text);
+          return isNaN(value) ? null : value;
+        },
+        getFloat: function(key) { return cache.getDouble(key); },
+        // 只在記憶體、App 關掉就沒了的快取。
+        putMemory: function(key, value) {
+          sendMessage('cachePutMemory', JSON.stringify([String(key), __lrNormalizeRuleResult(value)]));
+        },
+        getFromMemory: function(key) {
+          var value = sendMessage('cacheGetMemory', JSON.stringify(String(key)));
+          return value === undefined ? null : value;
+        },
+        deleteMemory: function(key) { sendMessage('cacheDeleteMemory', JSON.stringify(String(key))); }
       };
 
       var source = source || {};
@@ -636,6 +765,25 @@ extension JsJavaObject on JsExtensionsBase {
       source.removeLoginHeader = function() { sendMessage('sourceRemoveLoginHeader', '""'); };
       source.put = function(key, value) { sendMessage('sourcePut', JSON.stringify([key, value])); };
       source.get = function(key) { return __lrWait('sourceGet', key); };
+      // Legado BaseSource：登入網址裡的程式（去掉 @js: 或 <js></js>）。
+      source.getLoginJs = function() {
+        var js = source.loginUrl;
+        if (js == null) return null;
+        js = String(js);
+        if (js.indexOf('@js:') === 0) return js.substring(4);
+        if (js.indexOf('<js>') === 0) return js.substring(4, js.lastIndexOf('<'));
+        return js;
+      };
+      // 書源程式自己呼叫登入：跑登入網址裡的程式，再呼叫它的 login()。要使用者
+      // 操作的步驟在登入頁以外照樣立刻失敗（ADR 0038）。
+      source.login = function() {
+        var js = source.getLoginJs();
+        if (!js || !String(js).trim()) return;
+        (0, eval)(js + "\nif (typeof login == 'function') { login.apply(this); }" +
+          " else { throw ('Function login not implements!!!'); }");
+      };
+      source.evalJS = function(js) { return (0, eval)(String(js)); };
+      source.getSource = function() { return source; };
 
       /// Rhino 的 importClass／importPackage：把類別照名稱放進全域。
       function importClass(clazz) {
@@ -655,7 +803,26 @@ extension JsJavaObject on JsExtensionsBase {
         }
       }
 
+      /// Rhino 的 `new JavaImporter(類別或套件, …)`：傳入的類別照名稱、套件照
+      /// 裡面的成員放進這個物件，給 `with (importer) {…}` 用。
       function JavaImporter() {
+        for (var i = 0; i < arguments.length; i++) {
+          var item = arguments[i];
+          if (item == null) continue;
+          var name = item.__lrClassName || (typeof item === 'function' ? item.name : null);
+          if (name) {
+            this[name] = item;
+          } else if (typeof item === 'object') {
+            for (var key in item) {
+              if (Object.prototype.hasOwnProperty.call(item, key)) this[key] = item[key];
+            }
+          }
+        }
+        this.importClass = function(clazz) {
+          var name = clazz && (clazz.__lrClassName || (typeof clazz === 'function' ? clazz.name : null));
+          if (name) this[name] = clazz;
+          return clazz;
+        };
         this.importPackage = function() {
           for (var i = 0; i < arguments.length; i++) {
             var pkg = arguments[i] || {};
@@ -776,6 +943,11 @@ extension JsJavaObject on JsExtensionsBase {
         this._bytes = [];
       }
       ByteArrayOutputStream.prototype.write = function(bytes, offset, len) {
+        // write(int)：寫一個位元組，同 Java。
+        if (typeof bytes === 'number') {
+          this._bytes.push(bytes & 0xFF);
+          return;
+        }
         bytes = normalizeByteArray(bytes);
         var start = offset || 0;
         var end = len == null ? bytes.length : start + len;
@@ -792,6 +964,23 @@ extension JsJavaObject on JsExtensionsBase {
         this._bytes = normalizeByteArray(bytes);
       }
       ByteArrayInputStream.prototype.close = function() {};
+      ByteArrayOutputStream.prototype.toByteArray = function() { return this._bytes.slice(); };
+      ByteArrayOutputStream.prototype.size = function() { return this._bytes.length; };
+      ByteArrayOutputStream.prototype.reset = function() { this._bytes = []; };
+      ByteArrayInputStream.prototype._pos = 0;
+      // read()：一個位元組，讀完是 -1；read(buffer[, off, len])：讀進 buffer，
+      // 傳回讀了幾個。
+      ByteArrayInputStream.prototype.read = function(buffer, off, len) {
+        if (buffer === undefined) {
+          return this._pos < this._bytes.length ? this._bytes[this._pos++] : -1;
+        }
+        if (this._pos >= this._bytes.length) return -1;
+        var start = off || 0;
+        var count = Math.min(len == null ? buffer.length - start : len, this._bytes.length - this._pos);
+        for (var i = 0; i < count; i++) buffer[start + i] = this._bytes[this._pos++];
+        return count;
+      };
+      ByteArrayInputStream.prototype.available = function() { return this._bytes.length - this._pos; };
 
       function GZIPInputStream(inputStream) {
         this._bytes = normalizeByteArray(
@@ -1003,12 +1192,369 @@ extension JsJavaObject on JsExtensionsBase {
         }
       };
 
+      // ─── 書源常用的其他 Java 類別（Rhino 讓規則 JS 直接用整個 Java）──
+      function __lrNamed(name, value) {
+        Object.defineProperty(value, '__lrClassName', { value: name, enumerable: false });
+        return value;
+      }
+      function __lrHide(target, name, fn) {
+        Object.defineProperty(target, name, { value: fn, enumerable: false, configurable: true, writable: true });
+      }
+
+      var Thread = __lrNamed('Thread', {
+        sleep: function(ms) { sendMessage('_sleep', JSON.stringify(Number(ms) || 0)); }
+      });
+      var LockSupport = __lrNamed('LockSupport', {
+        parkNanos: function(blockerOrNanos, nanos) {
+          var n = nanos === undefined ? blockerOrNanos : nanos;
+          sendMessage('_sleep', JSON.stringify(Math.floor((Number(n) || 0) / 1e6)));
+        }
+      });
+      var JavaSystem = __lrNamed('System', {
+        currentTimeMillis: function() { return __lrJsDate.now(); },
+        nanoTime: function() { return __lrJsDate.now() * 1e6; },
+        arraycopy: function(src, srcPos, dest, destPos, length) {
+          for (var i = 0; i < length; i++) dest[destPos + i] = src[srcPos + i];
+        }
+      });
+
+      function StringBuilder(init) { this._s = init == null || typeof init === 'number' ? '' : String(init); }
+      StringBuilder.prototype.append = function(v) { this._s += String(v); return this; };
+      StringBuilder.prototype.insert = function(i, v) { this._s = this._s.substring(0, i) + String(v) + this._s.substring(i); return this; };
+      StringBuilder.prototype.length = function() { return this._s.length; };
+      StringBuilder.prototype.charAt = function(i) { return this._s.charAt(i); };
+      StringBuilder.prototype.reverse = function() { this._s = this._s.split('').reverse().join(''); return this; };
+      StringBuilder.prototype.setLength = function(n) { this._s = this._s.substring(0, n); };
+      StringBuilder.prototype.deleteCharAt = function(i) { this._s = this._s.substring(0, i) + this._s.substring(i + 1); return this; };
+      StringBuilder.prototype.toString = function() { return this._s; };
+
+      /// java.util.HashMap／LinkedHashMap：照放進去的順序；交回 Dart 時是一般
+      /// 物件（[__lrNormalizeRuleResult] 看 __lrMap）。
+      function HashMap(init) {
+        Object.defineProperty(this, '_d', { value: {}, writable: true });
+        Object.defineProperty(this, '_k', { value: [], writable: true });
+        if (init != null && typeof init === 'object') this.putAll(init);
+      }
+      HashMap.prototype.__lrMap = true;
+      HashMap.prototype.put = function(k, v) {
+        var key = String(k);
+        var old = Object.prototype.hasOwnProperty.call(this._d, key) ? this._d[key] : null;
+        if (old === null && !Object.prototype.hasOwnProperty.call(this._d, key)) this._k.push(key);
+        this._d[key] = v;
+        return old;
+      };
+      HashMap.prototype.get = function(k) {
+        var key = String(k);
+        return Object.prototype.hasOwnProperty.call(this._d, key) ? this._d[key] : null;
+      };
+      HashMap.prototype.getOrDefault = function(k, d) { return this.containsKey(k) ? this.get(k) : d; };
+      HashMap.prototype.containsKey = function(k) { return Object.prototype.hasOwnProperty.call(this._d, String(k)); };
+      HashMap.prototype.containsValue = function(v) { var d = this._d; return this._k.some(function(k) { return d[k] === v; }); };
+      HashMap.prototype.remove = function(k) {
+        var key = String(k);
+        if (!this.containsKey(key)) return null;
+        var old = this._d[key];
+        delete this._d[key];
+        this._k.splice(this._k.indexOf(key), 1);
+        return old;
+      };
+      HashMap.prototype.size = function() { return this._k.length; };
+      HashMap.prototype.isEmpty = function() { return this._k.length === 0; };
+      HashMap.prototype.clear = function() { this._d = {}; this._k = []; };
+      HashMap.prototype.keySet = function() { return __lrJavaList(this._k); };
+      HashMap.prototype.values = function() { var d = this._d; return __lrJavaList(this._k.map(function(k) { return d[k]; })); };
+      HashMap.prototype.entrySet = function() {
+        var d = this._d;
+        return __lrJavaList(this._k.map(function(k) {
+          return { key: k, value: d[k], getKey: function() { return k; }, getValue: function() { return d[k]; } };
+        }));
+      };
+      HashMap.prototype.putAll = function(map) {
+        var self = this;
+        if (map && map.__lrMap) map._k.forEach(function(k) { self.put(k, map._d[k]); });
+        else for (var k in map) if (Object.prototype.hasOwnProperty.call(map, k)) self.put(k, map[k]);
+      };
+      HashMap.prototype.forEach = function(fn) { var d = this._d; this._k.forEach(function(k) { fn(k, d[k]); }); };
+      HashMap.prototype.toJSON = function() { var o = {}, d = this._d; this._k.forEach(function(k) { o[k] = d[k]; }); return o; };
+      HashMap.prototype.toString = function() {
+        var d = this._d;
+        return '{' + this._k.map(function(k) { return k + '=' + d[k]; }).join(', ') + '}';
+      };
+      var LinkedHashMap = __lrNamed('LinkedHashMap', function(init) { return new HashMap(init); });
+      var TreeMap = __lrNamed('TreeMap', function(init) { return new HashMap(init); });
+
+      /// java.util.ArrayList／LinkedList：JS 陣列加上 Java List 的方法。
+      function ArrayList(init) {
+        var list = [];
+        if (init != null && typeof init === 'object') {
+          var items = typeof init.toArray === 'function' ? init.toArray() : init;
+          for (var i = 0; i < items.length; i++) list.push(items[i]);
+        }
+        __lrHide(list, 'add', function(a, b) {
+          if (b === undefined) { list.push(a); return true; }
+          list.splice(a, 0, b);
+        });
+        __lrHide(list, 'get', function(i) { return list[i]; });
+        __lrHide(list, 'set', function(i, v) { var old = list[i]; list[i] = v; return old; });
+        __lrHide(list, 'size', function() { return list.length; });
+        __lrHide(list, 'isEmpty', function() { return list.length === 0; });
+        __lrHide(list, 'contains', function(v) { return list.indexOf(v) >= 0; });
+        __lrHide(list, 'remove', function(v) {
+          if (typeof v === 'number') return list.splice(v, 1)[0];
+          var i = list.indexOf(v);
+          if (i < 0) return false;
+          list.splice(i, 1);
+          return true;
+        });
+        __lrHide(list, 'addAll', function(more) {
+          var items = typeof more.toArray === 'function' ? more.toArray() : more;
+          for (var j = 0; j < items.length; j++) list.push(items[j]);
+          return true;
+        });
+        __lrHide(list, 'clear', function() { list.length = 0; });
+        __lrHide(list, 'toArray', function() { return list.slice(); });
+        return list;
+      }
+      var LinkedList = __lrNamed('LinkedList', function(init) { return new ArrayList(init); });
+      function HashSet(init) {
+        var set = new ArrayList();
+        __lrHide(set, 'add', function(v) { if (set.indexOf(v) >= 0) return false; set.push(v); return true; });
+        __lrHide(set, 'addAll', function(more) {
+          var items = typeof more.toArray === 'function' ? more.toArray() : more;
+          var changed = false;
+          for (var j = 0; j < items.length; j++) changed = set.add(items[j]) || changed;
+          return changed;
+        });
+        if (init != null) set.addAll(init);
+        return set;
+      }
+
+      var UUID = __lrNamed('UUID', {
+        randomUUID: function() {
+          var id = String(java.randomUUID());
+          return { toString: function() { return id; } };
+        }
+      });
+      // importClass(java.util.Date) 會像 Rhino 一樣蓋掉 JS 的 Date，這裡用原本的。
+      var __lrJsDate = Date;
+      function JavaDate(ms) { this._t = ms == null ? __lrJsDate.now() : Number(ms); }
+      JavaDate.prototype.getTime = function() { return this._t; };
+      JavaDate.prototype.toString = function() { return new __lrJsDate(this._t).toString(); };
+      __lrNamed('Date', JavaDate);
+      /// java.text.SimpleDateFormat：format 支援 y M d H h m s S a 與 '文字'。
+      function SimpleDateFormat(pattern) { this._p = String(pattern || 'yyyy-MM-dd HH:mm:ss'); }
+      SimpleDateFormat.prototype.format = function(date) {
+        var t = date == null ? __lrJsDate.now() : (typeof date.getTime === 'function' ? date.getTime() : Number(date));
+        var d = new __lrJsDate(t);
+        function pad(n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; }
+        return this._p.replace(/'([^']*)'|y+|M+|d+|H+|h+|m+|s+|S+|a/g, function(token, literal) {
+          if (literal !== undefined) return literal;
+          var w = token.length;
+          switch (token.charAt(0)) {
+            case 'y': return w === 2 ? pad(d.getFullYear() % 100, 2) : pad(d.getFullYear(), w);
+            case 'M': return pad(d.getMonth() + 1, w);
+            case 'd': return pad(d.getDate(), w);
+            case 'H': return pad(d.getHours(), w);
+            case 'h': return pad(d.getHours() % 12 || 12, w);
+            case 'm': return pad(d.getMinutes(), w);
+            case 's': return pad(d.getSeconds(), w);
+            case 'S': return pad(d.getMilliseconds(), w);
+            case 'a': return d.getHours() < 12 ? 'AM' : 'PM';
+          }
+          return token;
+        });
+      };
+
+      /// java.security.MessageDigest：update 累積位元組，digest 傳回位元組。
+      var MessageDigest = __lrNamed('MessageDigest', {
+        getInstance: function(algorithm) {
+          var buffer = [];
+          function bytesOf(v) {
+            return typeof v === 'string' || v instanceof JavaString ? java.strToBytes(String(v), 'UTF-8') : normalizeByteArray(v);
+          }
+          return {
+            update: function(v, off, len) {
+              var b = bytesOf(v);
+              var start = off || 0;
+              buffer = buffer.concat(b.slice(start, len == null ? b.length : start + len));
+            },
+            digest: function(v) {
+              if (v !== undefined) this.update(v);
+              var out = normalizeByteArray(sendMessage('_digestBytes', JSON.stringify([buffer, String(algorithm)])));
+              buffer = [];
+              return out;
+            },
+            reset: function() { buffer = []; },
+            getAlgorithm: function() { return String(algorithm); }
+          };
+        }
+      });
+
+      /// javax.crypto.Mac：init 給 SecretKeySpec，doFinal 傳回位元組。
+      var Mac = __lrNamed('Mac', {
+        getInstance: function(algorithm) {
+          var key = [], buffer = [];
+          function bytesOf(v) {
+            return typeof v === 'string' || v instanceof JavaString ? java.strToBytes(String(v), 'UTF-8') : normalizeByteArray(v);
+          }
+          return {
+            init: function(spec) { key = normalizeByteArray(spec && spec.bytes !== undefined ? spec.bytes : spec); },
+            update: function(v) { buffer = buffer.concat(bytesOf(v)); },
+            doFinal: function(v) {
+              if (v !== undefined) buffer = buffer.concat(bytesOf(v));
+              var out = normalizeByteArray(sendMessage('_hmacBytes', JSON.stringify([buffer, String(algorithm), key])));
+              buffer = [];
+              return out;
+            },
+            reset: function() { buffer = []; },
+            getAlgorithm: function() { return String(algorithm); }
+          };
+        }
+      });
+      /// java.security.SecureRandom。
+      function SecureRandom() {}
+      SecureRandom.prototype.nextBytes = function(bytes) {
+        var random = normalizeByteArray(sendMessage('_randomBytes', JSON.stringify(bytes.length)));
+        for (var i = 0; i < bytes.length; i++) bytes[i] = random[i];
+      };
+      SecureRandom.prototype.generateSeed = function(n) {
+        return normalizeByteArray(sendMessage('_randomBytes', JSON.stringify(Number(n))));
+      };
+      SecureRandom.prototype.nextInt = function(bound) {
+        var b = normalizeByteArray(sendMessage('_randomBytes', JSON.stringify(4)));
+        var v = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
+        return bound == null ? (v | 0) : v % Number(bound);
+      };
+
+      /// java.nio.ByteBuffer：大端序寫入。
+      var ByteBuffer = __lrNamed('ByteBuffer', {
+        allocate: function(size) {
+          var bytes = [];
+          for (var i = 0; i < size; i++) bytes.push(0);
+          var pos = 0;
+          function putBytes(list) { for (var j = 0; j < list.length; j++) bytes[pos++] = list[j] & 0xFF; }
+          return {
+            put: function(v) { putBytes(typeof v === 'number' ? [v] : normalizeByteArray(v)); return this; },
+            putInt: function(v) { putBytes([(v >>> 24) & 0xFF, (v >>> 16) & 0xFF, (v >>> 8) & 0xFF, v & 0xFF]); return this; },
+            putShort: function(v) { putBytes([(v >>> 8) & 0xFF, v & 0xFF]); return this; },
+            array: function() { return bytes.slice(); },
+            position: function() { return pos; }
+          };
+        }
+      });
+
+      /// java.net.URL：和 java.toURL 用同一個拆網址。
+      function JavaURL(a, b) {
+        var spec = b === undefined ? String(a) : String(b);
+        var base = b === undefined ? null : String(a);
+        var parts = sendMessage('toURL', JSON.stringify([spec, base]));
+        this._p = parts;
+      }
+      JavaURL.prototype.getHost = function() { return this._p.host; };
+      JavaURL.prototype.getPort = function() { return this._p.port; };
+      JavaURL.prototype.getProtocol = function() { return this._p.protocol; };
+      JavaURL.prototype.getPath = function() { return this._p.pathname; };
+      JavaURL.prototype.getQuery = function() { return this._p.query; };
+      JavaURL.prototype.getRef = function() { return this._p.ref; };
+      JavaURL.prototype.getFile = function() { return this._p.pathname + (this._p.query != null ? '?' + this._p.query : ''); };
+      JavaURL.prototype.getAuthority = function() { return this._p.host + (this._p.port > 0 ? ':' + this._p.port : ''); };
+      JavaURL.prototype.toString = function() { return this._p.href; };
+      JavaURL.prototype.toExternalForm = JavaURL.prototype.toString;
+      __lrNamed('URL', JavaURL);
+      var URLEncoder = __lrNamed('URLEncoder', {
+        encode: function(s, enc) { return java.encodeURI(s, enc || 'UTF-8'); }
+      });
+      /// java.net.URLDecoder：+ 變空白，連續的 %XX 照字元集解成文字。
+      var URLDecoder = __lrNamed('URLDecoder', {
+        decode: function(s, enc) {
+          var text = String(s == null ? '' : s).replace(/\+/g, ' ');
+          return text.replace(/(%[0-9a-fA-F]{2})+/g, function(run) {
+            var bytes = run.substring(1).split('%').map(function(h) { return parseInt(h, 16); });
+            return java.bytesToStr(bytes, enc || 'UTF-8');
+          });
+        }
+      });
+      function __lrNoSocket() { throw new Error('夜讀不支援規則 JS 直接開網路連線（java.net.Socket）'); }
+
+      /// android.util.Base64：flags 照 Android（DEFAULT 每 76 字換行）。
+      var AndroidBase64 = __lrNamed('Base64', {
+        DEFAULT: 0, NO_PADDING: 1, NO_WRAP: 2, CRLF: 4, URL_SAFE: 8, NO_CLOSE: 16,
+        encodeToString: function(data, flags) { return java.base64Encode(data, flags == null ? 0 : flags); },
+        encode: function(data, flags) {
+          return java.strToBytes(java.base64Encode(data, flags == null ? 0 : flags), 'US-ASCII');
+        },
+        decode: function(data, flags) {
+          var text = typeof data === 'string' || data instanceof JavaString ? String(data) : java.bytesToStr(normalizeByteArray(data), 'US-ASCII');
+          return java.base64DecodeToByteArray(text, flags == null ? 0 : flags) || [];
+        }
+      });
+      Base64.getEncoder = function() {
+        return {
+          encodeToString: function(data) { return java.base64Encode(data, 2); },
+          encode: function(data) { return java.strToBytes(java.base64Encode(data, 2), 'US-ASCII'); }
+        };
+      };
+      Base64.getUrlEncoder = function() {
+        return {
+          encodeToString: function(data) { return java.base64Encode(data, 10); },
+          encode: function(data) { return java.strToBytes(java.base64Encode(data, 10), 'US-ASCII'); }
+        };
+      };
+      Base64.getUrlDecoder = Base64.getDecoder;
+      Base64.getMimeDecoder = Base64.getDecoder;
+      __lrNamed('Base64', Base64);
+
+      /// com.jayway.jsonpath.JsonPath。
+      var JsonPath = __lrNamed('JsonPath', {
+        read: function(json, path) {
+          var text = typeof json === 'string' || json instanceof JavaString ? String(json) : JSON.stringify(__lrNormalizeRuleResult(json));
+          return sendMessage('_jsonPathRead', JSON.stringify([text, String(path)]));
+        },
+        parse: function(json) { return { read: function(path) { return JsonPath.read(json, path); } }; }
+      });
+
+      /// java.util.zip.Inflater／InflaterInputStream（zlib；nowrap 是沒有標頭的
+      /// deflate），讀法和 GZIPInputStream 一樣。
+      function Inflater(nowrap) { this._nowrap = !!nowrap; }
+      Inflater.prototype.end = function() {};
+      function InflaterInputStream(inputStream, inflater) {
+        this._bytes = normalizeByteArray(sendMessage('_inflateBytes', JSON.stringify(
+          [inputStream._bytes || [], !!(inflater && inflater._nowrap)]
+        )));
+        this._pos = 0;
+      }
+      InflaterInputStream.prototype.read = GZIPInputStream.prototype.read;
+      InflaterInputStream.prototype.close = function() {};
+
+      /// okhttp3.HttpUrl：書源拿來拆網址。
+      var HttpUrl = __lrNamed('HttpUrl', {
+        parse: function(url) {
+          var u = new JavaURL(url);
+          return {
+            host: function() { return u.getHost(); },
+            scheme: function() { return u.getProtocol(); },
+            port: function() { return u.getPort() > 0 ? u.getPort() : (u.getProtocol() === 'https' ? 443 : 80); },
+            encodedPath: function() { return u.getPath(); },
+            query: function() { return u.getQuery(); },
+            queryParameter: function(name) {
+              var params = java.toURL(String(url)).searchParams || {};
+              return params[name] == null ? null : params[name];
+            },
+            toString: function() { return u.toString(); }
+          };
+        }
+      });
+      HttpUrl.get = HttpUrl.parse;
+
       var Packages = {
         org: globalThis.org,
         java: {
           lang: {
             String: function(value) { return new JavaString(value); },
-            Integer: Integer
+            Integer: Integer,
+            Thread: Thread,
+            System: JavaSystem,
+            StringBuilder: StringBuilder
           },
           io: {
             ByteArrayOutputStream: ByteArrayOutputStream,
@@ -1017,22 +1563,54 @@ extension JsJavaObject on JsExtensionsBase {
           util: {
             Arrays: Arrays,
             Base64: Base64,
+            HashMap: HashMap,
+            LinkedHashMap: LinkedHashMap,
+            TreeMap: TreeMap,
+            ArrayList: ArrayList,
+            LinkedList: LinkedList,
+            HashSet: HashSet,
+            UUID: UUID,
+            Date: JavaDate,
             zip: {
-              GZIPInputStream: GZIPInputStream
-            }
+              GZIPInputStream: GZIPInputStream,
+              Inflater: Inflater,
+              InflaterInputStream: InflaterInputStream
+            },
+            concurrent: { locks: { LockSupport: LockSupport } }
+          },
+          text: { SimpleDateFormat: SimpleDateFormat },
+          security: { MessageDigest: MessageDigest, SecureRandom: SecureRandom },
+          nio: { ByteBuffer: ByteBuffer },
+          net: {
+            URL: JavaURL,
+            URLEncoder: URLEncoder,
+            URLDecoder: URLDecoder,
+            Socket: __lrNoSocket,
+            InetAddress: { getByName: __lrNoSocket },
+            InetSocketAddress: __lrNoSocket
           }
         },
         javax: {
           crypto: {
             Cipher: Cipher,
+            Mac: Mac,
             spec: {
               SecretKeySpec: SecretKeySpec,
               IvParameterSpec: IvParameterSpec,
               GCMParameterSpec: GCMParameterSpec
             }
           }
-        }
+        },
+        android: { util: { Base64: AndroidBase64 } },
+        com: { jayway: { jsonpath: { JsonPath: JsonPath } } },
+        okhttp3: { HttpUrl: HttpUrl }
       };
+      // Rhino 的頂層套件名稱；`java` 被 Legado 的 java 物件佔走，同 Legado
+      // 要寫 Packages.java。
+      globalThis.android = Packages.android;
+      globalThis.javax = Packages.javax;
+      globalThis.com = Packages.com;
+      globalThis.okhttp3 = Packages.okhttp3;
     ''');
   }
 }

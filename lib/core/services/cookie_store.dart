@@ -115,21 +115,18 @@ class CookieStore {
     await _cookieDao?.clearAll();
   }
 
-  /// 將 Cookie 字串轉換為 Map
+  /// 「a=1; b=2」轉成 Map，同 Legado `CookieStore.cookieToMap`：沒有 `=`
+  /// 的項目與空值略過。
   Map<String, String> cookieToMap(String cookie) {
     final cookieMap = <String, String>{};
-    if (cookie.isEmpty) return cookieMap;
+    if (cookie.trim().isEmpty) return cookieMap;
 
-    final pairs = cookie.split(RegExp(r';\s*'));
-    for (var pair in pairs) {
-      final parts = pair.split('=');
-      if (parts.length >= 2) {
-        final key = parts[0].trim();
-        final value = parts.sublist(1).join('=').trim();
-        if (key.isNotEmpty) {
-          cookieMap[key] = value;
-        }
-      }
+    for (final pair in cookie.split(';')) {
+      final eq = pair.indexOf('=');
+      if (eq < 0) continue;
+      final key = pair.substring(0, eq).trim();
+      final value = pair.substring(eq + 1).trim();
+      if (value.isNotEmpty) cookieMap[key] = value;
     }
     return cookieMap;
   }

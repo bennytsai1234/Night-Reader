@@ -14,9 +14,11 @@
 
 - 開 App 呼吸剛開始那一幀偶爾碰上舊生區回收（手機 14ms，6 次有 1 次）：使用者 2026-10-29 改成感覺得到才修時，指定開 App 的動畫仍要處理；試過的做法與代價寫在 ADR 0036「待處理」。
 
-- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）、`java.ajaxAll` 回應物件與 `java.importScript` 原樣交出、`java.toNumChapter` 的簡繁大寫數字（#166）、書源登入（ADR 0038：網頁登入、書源表單、`longToast`、登入標頭）、規則 JS 拿到的元素清單是 Jsoup `Elements`、預整理 JS 的 `java.refreshTocUrl`。還沒做，照源倉庫 803 個文字書源的用量排：
+- 源倉庫書源相容（2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過）：使用者要全部補齊。已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）、`java.ajaxAll` 回應物件與 `java.importScript` 原樣交出、`java.toNumChapter` 的簡繁大寫數字（#166）、書源登入（ADR 0038：網頁登入、書源表單、`longToast`、登入標頭）、規則 JS 拿到的元素清單是 Jsoup `Elements`、預整理 JS 的 `java.refreshTocUrl`、規則 JS 的 `java`／`source`／`cookie`／`cache` 每個方法與參數版本照 Legado（完整清單與刻意不做的在 `test/core/engine/js/legado_api_parity_test.dart`）、書源常用的 Java 類別。還沒做，照源倉庫 799 個文字書源（2026-11-01）的用量排：
   - 閱讀中遇到書源要在網頁上驗證（`startBrowserAwait`，148 個書源）：2026-10-31 談定的設計是背景照舊立刻失敗，閱讀器的失敗提示附「前往驗證」，開書源要的那個網頁、關掉後重抓；登入頁的瀏覽器頁可以直接用。校驗遇到時目前照 ADR 0033 隔離，做這項時一起決定要不要改成和「需要登入」一樣只是提示。
-  - `data:` 網址與網址選項 `type`（67；魔丸）、Java 類別（`Thread.sleep`、`MessageDigest`、`Mac` 等；七貓、紙間）、`cookie.getKey`（輕小說文庫，登入程式也用了 25 次）、`androidId`、`java.refreshExplore` 等。
+  - 網址選項與下載：`type`（65）、`data:` 網址（47）、網址 JS 裡 `java` 是網址解析器（`getStrResponse`、`initUrl` 22）、`origin`、`retry`、`serverID`、`headers` 寫成 JSON 字串、`webView` 只要不是空或 false 就算；`downloadFile`、`getFile`、`deleteFile`、`unzipFile`、`getZipStringContent`、`cache.getByteArray` 照 Legado 以快取資料夾為準、帶書源標頭。rar、7z 壓縮檔沒有 Dart 函式庫，回報「不支援」。
+  - Java 類別裡的 RSA 金鑰物件（`KeyFactory`、`X509EncodedKeySpec`，星愿瓶 1 個）；直接開網路連線（`java.net.Socket`）做不到，回報「不支援」。
+  - 其他改版閱讀 App 才有的功能（`refreshExplore`、`deviceID`、`showBrowser`、`qread` 等，56 個書源）不在 Legado 裡，使用者 2026-11-01 沒要求。
   - 預整理 JS 的 `java.reGetBook()`（精確搜尋同名同作者、換成它的書籍網址再讀詳情）：目前丟出「還不支援」。章節以「書＋網址」為身分（#165），只在抓目錄時換網址會讓章節對不上書架上的書，做的時候要連書架上那本書的網址一起換。
   - 一些改版閱讀 App 的登入表單欄位（`toggle` 11、`select` 10 個）照 Legado 不顯示。神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查，用 `test/live/` 連真的網站校驗。
 

@@ -25,6 +25,31 @@ abstract final class Charsets {
         final other => throw UnsupportedError('不支援的字元集：$other'),
       };
 
+  /// Java 的 `URLEncoder.encode(text, charset)`：英數字與 `.-*_` 照原樣，
+  /// 空白變 `+`，其他照 [charset] 的位元組寫成大寫的 `%XX`。
+  static String urlEncode(String text, [String? charset]) {
+    final out = StringBuffer();
+    final bytes = encode(text, charset);
+    for (final b in bytes) {
+      final keep =
+          (b >= 0x30 && b <= 0x39) ||
+          (b >= 0x41 && b <= 0x5A) ||
+          (b >= 0x61 && b <= 0x7A) ||
+          b == 0x2E ||
+          b == 0x2D ||
+          b == 0x2A ||
+          b == 0x5F;
+      if (keep) {
+        out.writeCharCode(b);
+      } else if (b == 0x20) {
+        out.write('+');
+      } else {
+        out.write('%${b.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+      }
+    }
+    return out.toString();
+  }
+
   static String decode(List<int> bytes, [String? charset]) =>
       switch (_name(charset)) {
         'UTF-8' => utf8.decode(bytes, allowMalformed: true),

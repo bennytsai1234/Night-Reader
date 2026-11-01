@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
+import 'package:json_path/json_path.dart';
 import 'package:xpath_selector/xpath_selector.dart' show XPathNode;
 import 'package:night_reader/core/engine/analyze_rule.dart' show AnalyzeRule;
 import 'package:night_reader/core/engine/analyze_rule/analyze_rule_support.dart';
@@ -26,6 +28,7 @@ import 'extensions/js_jsoup_extensions.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/utils/html_formatter.dart';
 
 export 'js_extensions_base.dart';
 export 'extensions/js_network_extensions.dart';
@@ -101,20 +104,32 @@ class JsExtensions extends JsExtensionsBase {
       final value = JsExtensionsBase.sharedScope[key];
       return value == null ? '' : value.toString();
     });
+    // java.getString(rule[, mContent, isUrl])、getString(rule, unescape)、
+    // getStringList(rule[, mContent, isUrl])：JS 送 [規則, 內容, isUrl, unescape]，
+    // 內容是 null 時解析目前內容（同 Legado）。
     runtime.onMessage('ruleGetString', (args) {
-      final rule = args.toString();
+      final (rule, content, isUrl, unescape) = _ruleCall(args);
       if (ruleContext != null) {
         try {
-          return ruleContext.getString(rule);
+          return ruleContext.getString(
+            rule,
+            mContent: content,
+            isUrl: isUrl,
+            unescape: unescape,
+          );
         } catch (_) {}
       }
       return '';
     });
     runtime.onMessage('ruleGetStringList', (args) {
-      final rule = args.toString();
+      final (rule, content, isUrl, _) = _ruleCall(args);
       if (ruleContext != null) {
         try {
-          return ruleContext.getStringList(rule);
+          return ruleContext.getStringList(
+            rule,
+            mContent: content,
+            isUrl: isUrl,
+          );
         } catch (_) {}
       }
       return const <String>[];
@@ -149,6 +164,19 @@ class JsExtensions extends JsExtensionsBase {
               : null;
           ruleContext.setContent(payload[0], baseUrl: nextBaseUrl);
         } catch (_) {}
+      }
+      return null;
+    });
+    // java.setBaseUrl／setRedirectUrl：之後的規則用這個網址補相對網址。
+    runtime.onMessage('ruleSetUrl', (args) {
+      final rule = ruleContext;
+      if (rule is AnalyzeRule && args is List && args.length > 1) {
+        final url = args[1]?.toString();
+        if (args[0] == 'base') {
+          rule.baseUrl = url;
+        } else if (url != null) {
+          rule.setRedirectUrl(url);
+        }
       }
       return null;
     });
@@ -222,6 +250,29 @@ class JsExtensions extends JsExtensionsBase {
       _track(CookieStore().removeCookie(args.toString()));
       return null;
     });
+    runtime.onMessage('replaceCookie', (args) {
+      if (args is List && args.length >= 2) {
+        _track(
+          CookieStore().replaceCookie(args[0].toString(), args[1].toString()),
+        );
+      }
+      return null;
+    });
+    runtime.onMessage('clearCookies', (_) {
+      _track(CookieStore().clearAll());
+      return null;
+    });
+    runtime.onMessage(
+      'cookieToMap',
+      (args) => CookieStore().cookieToMap(args?.toString() ?? ''),
+    );
+    runtime.onMessage(
+      'mapToCookie',
+      (args) => CookieStore().mapToCookie({
+        for (final MapEntry(:key, :value) in (args as Map).entries)
+          key.toString(): value.toString(),
+      }),
+    );
     runtime.onMessage('putCache', (args) {
       if (args is List && args.length >= 2) {
         final saveTime = args.length > 2
@@ -240,6 +291,83 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('deleteCache', (args) {
       _track(cacheManager.delete(args.toString()));
       return null;
+    });
+    // cache.putMemory／getFromMemory／deleteMemory：只在記憶體，App 關掉就
+    // 沒了（同 Legado）。值照 JSON 存取，物件與陣列讀回來是內容相同的新物件。
+    runtime.onMessage('cachePutMemory', (args) {
+      if (args is List && args.isNotEmpty) {
+        cacheManager.putMemory(
+          args[0].toString(),
+          args.length > 1 ? args[1] : null,
+        );
+      }
+      return null;
+    });
+    runtime.onMessage(
+      'cacheGetMemory',
+      (args) => cacheManager.getFromMemory(args.toString()),
+    );
+    runtime.onMessage('cacheDeleteMemory', (args) {
+      cacheManager.deleteMemory(args.toString());
+      return null;
+    });
+    // java.htmlFormat：HTML 轉文字、保留圖片。
+    runtime.onMessage(
+      'htmlFormat',
+      (args) => HtmlFormatter.formatKeepImg(args?.toString()),
+    );
+    // java.toURL(url[, baseUrl])：網址拆成 host、origin、pathname、searchParams
+    // （Legado JsURL；查詢參數的值照 UTF-8 解碼）。
+    runtime.onMessage('toURL', (args) {
+      final list = args is List ? args : [args];
+      final raw = list.first.toString();
+      final base = list.length > 1 && list[1] != null ? list[1].toString() : '';
+      final uri = base.isEmpty ? Uri.parse(raw) : Uri.parse(base).resolve(raw);
+      final origin = uri.hasPort
+          ? '${uri.scheme}://${uri.host}:${uri.port}'
+          : '${uri.scheme}://${uri.host}';
+      Map<String, String>? params;
+      if (uri.hasQuery) {
+        params = {};
+        for (final pair in uri.query.split('&')) {
+          final eq = pair.indexOf('=');
+          if (eq < 0) continue;
+          params[pair.substring(0, eq)] = Uri.decodeQueryComponent(
+            pair.substring(eq + 1),
+          );
+        }
+      }
+      return {
+        'host': uri.host,
+        'origin': origin,
+        'pathname': uri.path,
+        'searchParams': params,
+        // java.net.URL 也用這裡拆好的網址。
+        'protocol': uri.scheme,
+        'port': uri.hasPort ? uri.port : -1,
+        'query': uri.hasQuery ? uri.query : null,
+        'ref': uri.hasFragment ? uri.fragment : null,
+        'href': uri.toString(),
+      };
+    });
+    // Thread.sleep／LockSupport.parkNanos：這條書源 isolate 停住，同 Java。
+    runtime.onMessage('_sleep', (args) {
+      final ms = args is num ? args.toInt() : int.tryParse('$args') ?? 0;
+      if (ms > 0) sleep(Duration(milliseconds: ms));
+      return null;
+    });
+    // com.jayway.jsonpath.JsonPath.read(json, path)：確定的路徑傳回那個值，
+    // 有萬用字元、切片、篩選或 `..` 的傳回清單。
+    runtime.onMessage('_jsonPathRead', (args) {
+      final payload = args as List;
+      var json = payload[0];
+      if (json is String) json = jsonDecode(json);
+      final path = payload[1].toString();
+      final values = JsonPath(path).readValues(json).toList();
+      final indefinite = RegExp(r'\*|\.\.|\[\?|\[[^\]]*[:,][^\]]*\]')
+          .hasMatch(path);
+      if (indefinite) return values;
+      return values.isEmpty ? null : values.first;
     });
     runtime.onMessage('sourcePut', (args) {
       if (args is List && args.length >= 2 && source != null) {
@@ -440,6 +568,29 @@ class JsExtensions extends JsExtensionsBase {
       case final BookChapter chapter:
         chapterRuleFields[fieldName]?.write(chapter, value);
     }
+  }
+
+  (String, dynamic, bool, bool) _ruleCall(dynamic args) {
+    if (args is! List) return (args.toString(), null, false, true);
+    return (
+      args[0].toString(),
+      args.length > 1 ? _fromJsRuleValue(args[1]) : null,
+      args.length > 2 && args[2] == true,
+      args.length <= 3 || args[3] != false,
+    );
+  }
+
+  /// JS 交來的規則內容（`__lrNormalizeRuleResult` 的結果）換回 Dart：元素
+  /// 換回真的節點，其他照 JSON。
+  dynamic _fromJsRuleValue(dynamic value) {
+    if (value is List) return value.map(_fromJsRuleValue).toList();
+    if (value is Map) {
+      final id = value['__lrElementId'];
+      if (id is num) return jsoup.node(id.toInt()) ?? value['outerHtml'];
+      if (value['__html'] != null) return value['__html'].toString();
+      return value.map((k, v) => MapEntry(k.toString(), _fromJsRuleValue(v)));
+    }
+    return value;
   }
 
   dynamic _toJsRuleValue(dynamic value) {

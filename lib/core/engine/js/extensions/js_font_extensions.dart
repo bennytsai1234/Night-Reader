@@ -42,7 +42,9 @@ extension JsFontExtensions on JsExtensionsBase {
         final text = args[0]?.toString() ?? '';
         final errorKey = args[1]?.toString();
         final correctKey = args[2]?.toString();
-        final cacheKey = '${errorKey}_${correctKey}_${text.hashCode}';
+        // 第四個參數 filter（同 Legado）：錯誤字型裡沒有輪廓的字刪掉。
+        final filter = args.length > 3 && args[3] == true;
+        final cacheKey = '${errorKey}_${correctKey}_${filter}_${text.hashCode}';
         if (JsExtensionsBase.fontReplaceCache.containsKey(cacheKey)) {
           return JsExtensionsBase.fontReplaceCache[cacheKey];
         }
@@ -64,7 +66,7 @@ extension JsFontExtensions on JsExtensionsBase {
           var glyf = errorTTF.getGlyfByUnicode(codePoint);
           if (errorTTF.getGlyfIdByUnicode(codePoint) == 0) glyf = null;
           if (glyf == null) {
-            result.writeCharCode(codePoint);
+            if (!filter) result.writeCharCode(codePoint);
             continue;
           }
           final newCode = correctTTF.getUnicodeByGlyf(glyf);
