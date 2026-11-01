@@ -180,6 +180,8 @@ void main() {
       debugOnRebuildDirtyWidget = null;
     }
     expect(find.text('18.5'), findsOneWidget);
-    expect(rebuilt, {'字號'});
+    // 每行字數的上限是畫面放得下的字數，跟著字號變（393 寬時 18 號放得下
+    // 20 字、18.5 號 19 字），那一列跟著重建；上限沒變時不重建。
+    expect(rebuilt.difference({'每行字數'}), {'字號'});
   });
 }
