@@ -460,6 +460,12 @@ class SkeletonBox extends StatelessWidget {
   /// （例如閱讀器）傳 [Skeleton.tint] 算好的顏色。
   final Color? color;
 
+  /// 到現在為止畫了幾個跟著呼吸的佔位形狀（[SkeletonBox] 一個算一個，
+  /// [SkeletonShapes] 每個不是實色的形狀算一個），只在除錯模式下數。測試拿
+  /// 每一幀前後的差，看骨架長出與呼吸時每一幀重畫了多少形狀（ADR 0036）。
+  @visibleForTesting
+  static int debugShapePaints = 0;
+
   @override
   Widget build(BuildContext context) => SizedBox(
     width: width,
@@ -586,6 +592,10 @@ class _RenderSkeletonBox extends RenderBox {
   @override
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
+    assert(() {
+      SkeletonBox.debugShapePaints++;
+      return true;
+    }());
     context.canvas.drawRRect(
       _borderRadius.toRRect(offset & size),
       _breathingPaint(
@@ -808,6 +818,10 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
     for (final shape in _shapes(size)) {
       final rrect = shape.radius.toRRect(shape.rect.shift(offset));
       final fill = shape.fill;
+      assert(() {
+        if (fill == null) SkeletonBox.debugShapePaints++;
+        return true;
+      }());
       canvas.drawRRect(
         rrect,
         fill != null
