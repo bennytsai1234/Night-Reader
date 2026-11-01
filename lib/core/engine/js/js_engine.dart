@@ -305,6 +305,9 @@ globalThis.__lrStartedRule = -1;
           final jsLiteral = _encodeScopedObject(key, value);
           statements.add('var $key = $jsLiteral;');
           return;
+        case '__lrUrl':
+          statements.add('__lrUseUrl(${_encodeJsonContextValue(value)});');
+          return;
         default:
           final jsLiteral = _encodeContextValue(value);
           statements.add('var $key = $jsLiteral;');

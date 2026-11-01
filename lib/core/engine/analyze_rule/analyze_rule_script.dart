@@ -79,6 +79,8 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       'key': key,
       'page': page,
       'src': content,
+      // 在網址或登入檢查裡跑時，java 多了請求的屬性與方法（見 urlContext）。
+      '__lrUrl': urlContext?.toJs(),
     };
   }
 

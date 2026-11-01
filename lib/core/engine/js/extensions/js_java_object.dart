@@ -401,13 +401,30 @@ extension JsJavaObject on JsExtensionsBase {
           );
         },
         getVerificationCode: function(imageUrl) { return __lrWait('getVerificationCode', imageUrl); },
-        downloadFile: function(url) { return __lrWait('downloadFile', url); },
+        // 檔案函式的路徑都相對快取資料夾（同 Legado，見 js_file_extensions）。
+        downloadFile: function(a, b) {
+          return __lrWait('downloadFile', b === undefined ? [String(a)] : [String(a), String(b)]);
+        },
         importScript: function(path) { return __lrWait('importScript', path); },
-        readFile: function(path) { return __lrWait('readFile', path); },
-        readTxtFile: function(path, charset) { return __lrWait('readTxtFile', [path, charset]); },
-        getZipByteArrayContent: function(url, innerPath) { return __lrWait('getZipByteArrayContent', [url, innerPath]); },
-        unArchiveFile: function(zipPath) { return __lrWait('unArchiveFile', zipPath); },
-        getTxtInFolder: function(relPath) { return __lrWait('getTxtInFolder', relPath); },
+        getFile: function(path) {
+          return new Packages.java.io.File(__lrWait('getFile', String(path)));
+        },
+        readFile: function(path) { return __lrWait('readFile', String(path)); },
+        readTxtFile: function(path, charset) {
+          return __lrWait('readTxtFile', charset == null ? [String(path)] : [String(path), String(charset)]);
+        },
+        deleteFile: function(path) { return __lrWait('deleteFile', String(path)); },
+        getZipByteArrayContent: function(url, innerPath) {
+          return __lrWait('getZipByteArrayContent', [String(url), String(innerPath)]);
+        },
+        getZipStringContent: function(url, innerPath, charset) {
+          var args = [String(url), String(innerPath)];
+          if (charset != null) args.push(String(charset));
+          return __lrWait('getZipStringContent', args);
+        },
+        unzipFile: function(zipPath) { return __lrWait('unzipFile', String(zipPath)); },
+        unArchiveFile: function(zipPath) { return __lrWait('unArchiveFile', String(zipPath)); },
+        getTxtInFolder: function(relPath) { return __lrWait('getTxtInFolder', String(relPath)); },
 
         // ─── sync: crypto / encoding ─────────────────────────────
         createSymmetricCrypto: function(transformation, key, iv) {

@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -12,10 +10,8 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
-import 'package:path/path.dart' as p;
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 import '../js_encode_utils.dart';
@@ -52,17 +48,34 @@ BlockingTask responses(List<AnalyzeUrl> urls) =>
       for (final (index, response) in (await Future.wait(
         urls.map((u) => u.getStrResponse()),
       )).indexed)
-        responseToJs(response, requestUrl: urls[index].url),
+        responseToJs(response, requestUrl: urls[index].requestUrl),
     ];
+
+/// 網址或登入檢查的規則 JS 用 `java.getStrResponse(js, sourceRegex,
+/// useWebView)` 抓這個請求（[AnalyzeUrl.getStrResponse]）。
+BlockingTask requestResponse(
+  AnalyzeUrl url, {
+  String? jsStr,
+  String? sourceRegex,
+  bool useWebView = true,
+}) =>
+    () async => responseToJs(
+      await url.getStrResponse(
+        jsStr: jsStr,
+        sourceRegex: sourceRegex,
+        useWebView: useWebView,
+      ),
+      requestUrl: url.requestUrl,
+    );
 
 /// `java.connect` 的回應：內文、網址、狀態與標頭。失敗時傳回 500 與錯誤
 /// 訊息，不丟出，和原本一樣。
 BlockingTask connectResponse(AnalyzeUrl url) => () async {
   try {
-    return responseToJs(await url.getStrResponse(), requestUrl: url.url);
+    return responseToJs(await url.getStrResponse(), requestUrl: url.requestUrl);
   } catch (e) {
     AppLog.e('java.connect failed: $e');
-    return failedResponse(url.url, e);
+    return failedResponse(url.requestUrl, e);
   }
 };
 
@@ -189,78 +202,6 @@ BlockingTask backstagePage({
   return response['body']?.toString() ?? '';
 };
 
-/// `java.downloadFile`：下載到暫存資料夾，傳回路徑；失敗時是空字串。
-BlockingTask downloadToTemp(String url) => () async {
-  try {
-    final key = JsEncodeUtils.md5Encode16(url);
-    final tempDir = await AppStoragePaths.temporaryDir();
-    final savePath = p.join(tempDir.path, 'downloads', key);
-    final file = File(savePath);
-    if (!await file.parent.exists()) {
-      await file.parent.create(recursive: true);
-    }
-    await HttpClient().client.download(
-      url,
-      savePath,
-      cancelToken: currentSourceCancelToken,
-    );
-    return savePath;
-  } catch (e) {
-    AppLog.e('java.downloadFile failed: $e');
-    return '';
-  }
-};
-
-/// `java.unArchiveFile`：解壓文件資料夾裡的 [relPath] 到暫存資料夾，傳回
-/// 相對暫存資料夾的路徑；失敗時是空字串。
-BlockingTask unArchive(String relPath) => () async {
-  try {
-    final docs = await AppStoragePaths.documentsDir();
-    final file = File(p.join(docs.path, relPath));
-    if (!await file.exists()) return '';
-    final archive = ZipDecoder().decodeBytes(await file.readAsBytes());
-    final tempDir = await AppStoragePaths.temporaryDir();
-    final outPath = p.join(
-      tempDir.path,
-      'ArchiveTemp',
-      JsEncodeUtils.md5Encode16(file.path),
-    );
-    final outputDirectory = Directory(outPath);
-    if (await outputDirectory.exists()) {
-      await outputDirectory.delete(recursive: true);
-    }
-    await outputDirectory.create(recursive: true);
-    for (final entry in archive) {
-      if (!entry.isFile) continue;
-      final entryPath = p.normalize(p.absolute(p.join(outPath, entry.name)));
-      if (!p.isWithin(p.normalize(p.absolute(outPath)), entryPath)) {
-        AppLog.w('java.unArchiveFile skipped unsafe entry: ${entry.name}');
-        continue;
-      }
-      final outputFile = File(entryPath);
-      await outputFile.parent.create(recursive: true);
-      await outputFile.writeAsBytes(entry.content as List<int>);
-    }
-    return p.relative(outPath, from: tempDir.path);
-  } catch (e) {
-    AppLog.e('java.unArchiveFile failed: $e');
-    return '';
-  }
-};
-
-/// `java.getTxtInFolder`：暫存資料夾裡 [relPath] 的所有文字檔接在一起。
-BlockingTask textInTempFolder(String relPath) => () async {
-  try {
-    final tempDir = await AppStoragePaths.temporaryDir();
-    final folder = Directory(p.join(tempDir.path, relPath));
-    if (!await folder.exists()) return '';
-    final buffer = StringBuffer();
-    for (final file in folder.listSync().whereType<File>()) {
-      buffer.writeln(EncodingDetect.decode(await file.readAsBytes()));
-    }
-    return buffer.toString();
-  } catch (e) {
-    AppLog.e('java.getTxtInFolder failed: $e');
-    return '';
-  }
-};
+/// App 的快取資料夾（規則 JS 的檔案函式都相對它，同 Legado）。
+BlockingTask cacheDirPath() =>
+    () async => (await AppStoragePaths.temporaryDir()).path;

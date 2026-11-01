@@ -23,6 +23,10 @@ class AppStoragePaths {
 
   static void useRoots(StorageRoots roots) => _roots = roots;
 
+  /// 這個 isolate 已經知道的暫存資料夾（背景 isolate 由 [useRoots] 給）；
+  /// 不知道時是 null，要用 [temporaryDir] 問。
+  static String? get knownTemporaryPath => _roots?.temporary;
+
   static Future<Directory> documentsDir() async {
     if (_roots case final roots?) return Directory(roots.documents);
     try {
