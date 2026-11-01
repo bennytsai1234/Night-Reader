@@ -17,7 +17,6 @@ import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'core/storage/reader_layout_cache.dart';
 import 'app_providers.dart';
-import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
@@ -205,8 +204,15 @@ class _StartupFailureApp extends StatelessWidget {
     return MaterialApp(
       title: kAppDisplayName,
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(AppStyle.paper, Brightness.light),
-      darkTheme: buildAppTheme(AppStyle.paper, Brightness.dark),
+      theme: buildAppTheme(
+        ThemeSettingsProvider.defaultLightStyle,
+        Brightness.light,
+      ),
+      darkTheme: buildAppTheme(
+        ThemeSettingsProvider.defaultDarkStyle,
+        Brightness.dark,
+        pureBlack: true,
+      ),
       home: Scaffold(
         body: SafeArea(
           child: Center(
@@ -311,18 +317,19 @@ class ReaderApp extends StatelessWidget {
           navigatorObservers: [appRouteObserver, statusBarPolicy],
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(
-            themeSettings.style,
+            themeSettings.lightStyle,
             Brightness.light,
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
           ),
           darkTheme: buildAppTheme(
-            themeSettings.style,
+            themeSettings.darkStyle,
             Brightness.dark,
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
+            pureBlack: themeSettings.pureBlack,
           ),
           themeMode: themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，

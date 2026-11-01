@@ -4,9 +4,11 @@
 //   SHOT_MODE=dark flutter test --run-skipped -t screens test/screens
 //   SHOT_ONLY=r04,s12 flutter test --run-skipped -t screens test/screens
 //   SHOT_STYLE=plain flutter test --run-skipped -t screens test/screens
+//   SHOT_PURE_BLACK=off SHOT_MODE=dark flutter test --run-skipped -t screens test/screens
 //
-// SHOT_STYLE 是 `AppStyle` 的名稱（paper、bamboo、azurite、tea、plain、rouge、
-// lotus、scroll、amber、frost），預設紙墨。
+// SHOT_STYLE 是 `AppStyle` 的名稱（plain、paper、tea、kraft、bamboo、bean），
+// 淺色與深色都用它；不給時淺色紙墨、深色素色。SHOT_PURE_BLACK=off 關掉
+// 「深色用純黑」（預設開）。
 //
 // 圖檔寫在 [screenshotDir]，檔名是「情境_深淺.png」。這組測試帶 `screens`
 // 標籤，`dart_test.yaml` 讓它平常跳過，pre-push 與 CI 的全套測試不會跑。
@@ -173,6 +175,7 @@ void main() {
   final mode = Platform.environment['SHOT_MODE'] ?? 'light';
   final only = Platform.environment['SHOT_ONLY']?.split(',');
   final style = Platform.environment['SHOT_STYLE'];
+  final pureBlack = Platform.environment['SHOT_PURE_BLACK'];
 
   // 全部情境在同一個測試裡依序拍：App 的單例服務（下載服務等）第一次用到
   // 時就綁在當下測試的非同步環境，換到下一個測試就不會再回應，開書會一直
@@ -189,7 +192,9 @@ void main() {
       await tester.runAsync(
         () => resetPrefs({
           'themeMode': mode,
-          PreferKey.appStyle: ?style,
+          PreferKey.lightStyle: ?style,
+          PreferKey.darkStyle: ?style,
+          if (pureBlack != null) PreferKey.pureBlack: pureBlack != 'off',
           ...prefs,
         }),
       );

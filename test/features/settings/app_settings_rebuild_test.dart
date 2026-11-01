@@ -36,7 +36,8 @@ void main() {
     await tester.pump();
     final changedLocale = tester.widget<MaterialApp>(root).locale;
 
-    themeSettings.setStyle(AppStyle.values.last);
+    themeSettings.setStyle(Brightness.light, AppStyle.values.last);
+    themeSettings.setStyle(Brightness.dark, AppStyle.values.last);
     await tester.pump();
     final changed = tester.widget<MaterialApp>(root);
     await tearDownApp(tester);
