@@ -82,10 +82,11 @@ void main() {
       );
       // ignore: avoid_print
       print(describeFrames(label, costs));
-      // 長完停（建書架、拍圖）與骨架呼吸的每一格各列一段，對照表才看得到
-      // 這兩段；換場中只列中位數與最大。
+      // 進場的每一段各列一段，對照表才分得出是哪一段掉幀：長出、呼吸、換場
+      // 中要每一幀都在上限內；長完停（建書架、拍圖）是預留停頓，可以重
+      // （ADR 0035、0036）。換場中另外列中位數與最大。
       String ms(int us) => (us / 1000).toStringAsFixed(1);
-      for (final segment in ['長完停', '骨架呼吸']) {
+      for (final segment in ['骨架長出', '長完停', '骨架呼吸', '換場中']) {
         final frames = [
           for (final cost in costs)
             if (cost.note == segment) cost,

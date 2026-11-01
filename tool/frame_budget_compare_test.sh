@@ -79,6 +79,29 @@ else
   exit 1
 fi
 
+# 每一邊跑了好幾次（FRAME_REPEAT）：每一格照次序列出每一次。
+mkdir "$work/repeat"
+for run in base head base-2 head-2 base-3; do
+  case $run in
+    base-2) n=4 ;;
+    head*) n=0 ;;
+    *) n=1 ;;
+  esac
+  cat > "$work/repeat/$run.log" <<EOF
+骨架呼吸：57 幀，中位數 2.0ms，最大 9.0ms，超過 4.2ms 的 $n 幀
+  動畫中（不含點下去後的第 0 幀） 57 幀，最大 9.0ms（第 60 幀）、超過 4.2ms 的 $n 幀（扣掉資料庫、排版切片照實算後 $n 幀）；靜止時 0 幀
+EOF
+done
+expected='| 情境 | 動畫中超過 4.2ms 的幀 改前 → 改後 |
+|---|---|
+| 骨架呼吸 | 1、4、1 → 0、0 |'
+if actual=$(bash "$tool" summarize "$work/repeat" 2>&1) && [ "$actual" = "$expected" ]; then
+  echo 'ok   跑了好幾次'
+else
+  printf 'FAIL 跑了好幾次\n  expected:\n%s\n  actual:\n%s\n' "$expected" "$actual" >&2
+  exit 1
+fi
+
 # 整支跑一遍：暫時的 repo 有兩個提交，flutter 換成假的，鎖放在自己的暫存資料夾。
 # FAKE_FLUTTER 決定假 flutter 怎麼結束：ok 印一行摘要、fail 印完摘要後失敗、
 # interrupt 對整支指令送 Ctrl+C 後自己正常結束（flutter test 收到 Ctrl+C 就是這樣）。
