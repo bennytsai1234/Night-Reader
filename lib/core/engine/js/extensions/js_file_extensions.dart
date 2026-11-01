@@ -24,16 +24,27 @@ extension JsFileExtensions on JsExtensionsBase {
     // java.getFile(path)：快取資料夾裡的完整路徑，JS 包成 java.io.File。
     onBlocking('getFile', (path) => _cacheFile('$path').path);
 
-    // java.io.File 的方法：[動作, 路徑]。只能碰 App 自己的資料夾。
+    // java.io.File 的方法：[動作, 路徑]，照 Java File 各自的做法（delete
+    // 不刪有東西的資料夾、mkdir 與 createNewFile 不建上層資料夾）。只能碰
+    // App 自己的資料夾。
     runtime.onMessage('_fileOp', (args) {
       final list = args as List;
-      final path = p.normalize('${list[1]}');
+      final path = _canonical(p.normalize('${list[1]}'));
       final appRoot = p.dirname(_cacheRoot());
       if (!p.isWithin(appRoot, path) && path != appRoot) {
         throw const FileSystemException('非法路徑');
       }
       final type = FileSystemEntity.typeSync(path);
       final exists = type != FileSystemEntityType.notFound;
+      bool attempt(void Function() action) {
+        try {
+          action();
+          return true;
+        } on FileSystemException {
+          return false;
+        }
+      }
+
       return switch (list[0]) {
         'canonical' => path,
         'exists' => exists,
@@ -43,12 +54,15 @@ extension JsFileExtensions on JsExtensionsBase {
           type == FileSystemEntityType.file ? File(path).lengthSync() : 0,
         'lastModified' =>
           exists ? FileStat.statSync(path).modified.millisecondsSinceEpoch : 0,
-        'delete' => _deleteQuietly(path, type),
-        'mkdirs' || 'mkdir' =>
-          !exists &&
-              (Directory(path)..createSync(recursive: true)).existsSync(),
-        'createNewFile' =>
-          !exists && (File(path)..createSync(recursive: true)).existsSync(),
+        'delete' => switch (type) {
+          FileSystemEntityType.notFound => false,
+          FileSystemEntityType.directory => attempt(Directory(path).deleteSync),
+          _ => attempt(File(path).deleteSync),
+        },
+        'mkdirs' =>
+          !exists && attempt(() => Directory(path).createSync(recursive: true)),
+        'mkdir' => !exists && attempt(Directory(path).createSync),
+        'createNewFile' => !exists && attempt(File(path).createSync),
         'list' =>
           type == FileSystemEntityType.directory
               ? [
@@ -200,7 +214,7 @@ extension JsFileExtensions on JsExtensionsBase {
     final relative = path.startsWith('/') || path.startsWith(r'\')
         ? path.substring(1)
         : path;
-    final file = File(p.normalize(p.join(root, relative)));
+    final file = File(_canonical(p.normalize(p.join(root, relative))));
     final safe = p.dirname(root);
     if (!p.isWithin(safe, file.path) && file.path != safe) {
       throw const FileSystemException('非法路徑');
@@ -208,13 +222,30 @@ extension JsFileExtensions on JsExtensionsBase {
     return file;
   }
 
+  /// [path] 解開捷徑（符號連結）後的實際位置，同 Java 的 canonicalPath：
+  /// 還不存在的部分接在最近一層存在的資料夾後面。
+  static String _canonical(String path) {
+    var existing = path;
+    final rest = <String>[];
+    while (FileSystemEntity.typeSync(existing, followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      final parent = p.dirname(existing);
+      if (parent == existing) return path;
+      rest.insert(0, p.basename(existing));
+      existing = parent;
+    }
+    return p.joinAll([File(existing).resolveSymbolicLinksSync(), ...rest]);
+  }
+
   static String? _root;
 
-  /// App 的快取資料夾：書源 isolate 啟動時就拿到了；不知道時交給網路
-  /// isolate 問平台，之後記住。
-  String _cacheRoot() => p.normalize(
-    AppStoragePaths.knownTemporaryPath ??
-        (_root ??= BlockingCall.run(cacheDirPath()) as String),
+  /// App 的快取資料夾（解開捷徑後的）：書源 isolate 啟動時就拿到了；不知道
+  /// 時交給網路 isolate 問平台，之後記住。
+  String _cacheRoot() => _canonical(
+    p.normalize(
+      AppStoragePaths.knownTemporaryPath ??
+          (_root ??= BlockingCall.run(cacheDirPath()) as String),
+    ),
   );
 
   /// 網址最後一段的副檔名（Legado `UrlUtil.getSuffix`）：不是 1 到 5 個

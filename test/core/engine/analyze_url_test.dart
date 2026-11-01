@@ -188,6 +188,22 @@ void main() {
       );
       expect(analyzeUrl.url, 'https://example.com/a?t=t1&p=false');
 
+      // java.headerMap 就是這個請求的標頭：網址 JS 改了，送出時就帶著。
+      final signed = AnalyzeUrl(
+        'https://example.com/s,{"js":"java.headerMap.put(\'X-Sign\', \'abc\'); result"}',
+      );
+      expect(signed.headerMap['X-Sign'], 'abc');
+      expect(signed.url, 'https://example.com/s');
+
+      expect(
+        AnalyzeUrl(
+          'https://example.com/tts?t={{speakText + "!"}}&s={{speakSpeed * 2}}',
+          speakText: '夜讀',
+          speakSpeed: 5,
+        ).url,
+        'https://example.com/tts?t=夜讀!&s=10',
+      );
+
       final replaced = AnalyzeUrl('@js:"https://example.com/b"\n');
       expect(replaced.url, 'https://example.com/b');
     }, skip: quickJsSkip);

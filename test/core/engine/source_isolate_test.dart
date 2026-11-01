@@ -156,6 +156,11 @@ Future<String> _loginCheckBody(String url, String loginCheckJs) =>
       return runLoginCheckJs(request, fetched).body;
     });
 
+/// 在書源 isolate 組 [rule] 這個網址並抓回內文。
+Future<String> _fetchInSourceIsolate(String rule) => SourceIsolate.run(
+  (_) async => (await AnalyzeUrl(rule).getStrResponse()).body,
+);
+
 /// 停住書源 isolate，交給網路 isolate 抓 [url]（[BlockingCall]）。
 Future<Object?> _blockOn(
   String url, {
@@ -273,6 +278,22 @@ void main() {
         case '/count':
           counted++;
           request.response.write('數到了');
+        case '/bytes':
+          request.response.add([0xFF, 0x00, 0xFE]);
+        case '/utf8':
+          request.response.headers.contentType = ContentType(
+            'text',
+            'html',
+            charset: 'utf-8',
+          );
+          request.response.write('夜讀');
+        case '/xml':
+          request.response.headers.contentType = ContentType(
+            'application',
+            'xml',
+            charset: 'utf-8',
+          );
+          request.response.write('<root><item/></root>');
         case '/echo':
           request.response.write(
             'echo:${request.headers.value('x-token')}|${request.uri.query}',
@@ -620,6 +641,43 @@ void main() {
       expect(await _evaluateJs('typeof java.getStrResponse'), 'undefined');
     });
 
+    // 網址組到一半（網址選項的 js）就用 java 抓：這時請求還掛著組網址的
+    // JS 引擎，交給網路 isolate 前要先拿下。getResponse 的 bytes() 是原始
+    // 位元組。
+    test('URL JS fetches the request it is building', () async {
+      expect(
+        await _loginCheckBody('$baseUrl/c/1', '''
+          var raw = java.getResponse();
+          var bytes = raw.body().bytes();
+          java.url = "$baseUrl/bytes";
+          var other = java.getByteArray();
+          buildHttpResponse({ url: java.url, code: 200, headers: {},
+            body: [raw.code(), raw.body().string().indexOf("第一章") >= 0,
+              bytes.length > 0, other.join("-")].join(",") })
+        '''),
+        '200,true,true,255-0-254',
+      );
+      expect(
+        await _fetchInSourceIsolate(
+          '$baseUrl/c/2,{"js":"java.getStrResponse().body().indexOf(\\"第二章\\") >= 0 ? result : \\"\\""}',
+        ),
+        contains('第二章的正文'),
+      );
+    });
+
+    // Legado 解碼回應不看網址選項的 charset（那是送出參數用的），XML 沒有
+    // 宣告時補上。
+    test('responses decode like Legado', () async {
+      expect(
+        await _fetchInSourceIsolate('$baseUrl/utf8,{"charset":"gbk"}'),
+        '夜讀',
+      );
+      expect(
+        await _fetchInSourceIsolate('$baseUrl/xml'),
+        '<?xml version="1.0"?><root><item/></root>',
+      );
+    });
+
     // Legado 的檔案函式都相對快取資料夾：下載的傳回相對路徑，讀、解壓、
     // 刪都照它。
     test('file functions work in the cache folder like Legado', () async {
@@ -638,6 +696,20 @@ void main() {
       await expectLater(
         _evaluateJs('java.readTxtFile("../../../etc/passwd")'),
         throwsA(isA<RuleJsException>()),
+      );
+      // java.io.File 照 Java：delete 不刪有東西的資料夾，mkdir 不建上層。
+      expect(
+        await _evaluateJs('''
+          var dir = java.getFile("night_reader_file_test");
+          var made = dir.mkdirs();
+          var inner = new Packages.java.io.File(dir, "book.txt");
+          var created = inner.createNewFile();
+          var deep = java.getFile("night_reader_file_test/a/b").mkdir();
+          var kept = !dir.delete() && inner.exists();
+          var cleaned = java.deleteFile("night_reader_file_test");
+          [made, created, deep, kept, cleaned, dir.exists()].join(",")
+        '''),
+        'true,true,false,true,true,false',
       );
     });
 

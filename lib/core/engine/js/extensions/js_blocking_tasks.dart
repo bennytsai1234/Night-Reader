@@ -68,6 +68,15 @@ BlockingTask requestResponse(
       requestUrl: url.requestUrl,
     );
 
+/// `java.getResponse()`：原始回應，多帶原始位元組（[AnalyzeUrl.getResponse]）。
+BlockingTask rawRequestResponse(AnalyzeUrl url) => () async {
+  final (response, bytes) = await url.getResponse();
+  return {
+    ...responseToJs(response, requestUrl: url.requestUrl),
+    'bytes': List<int>.of(bytes),
+  };
+};
+
 /// `java.connect` 的回應：內文、網址、狀態與標頭。失敗時傳回 500 與錯誤
 /// 訊息，不丟出，和原本一樣。
 BlockingTask connectResponse(AnalyzeUrl url) => () async {

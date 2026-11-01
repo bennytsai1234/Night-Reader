@@ -9,29 +9,41 @@ import 'js_blocking_tasks.dart';
 /// Legado 的 AnalyzeUrl：多了 `url`、`ruleUrl`、`headerMap`、`type`、
 /// `serverID` 與 `initUrl()`、`getStrResponse()` 這些。其他規則裡沒有。
 ///
-/// 規則 JS 改了 `java.url` 或 `java.headerMap` 之後抓，照改過的送出。
+/// 規則 JS 改了 `java.url` 或 `java.headerMap` 就是改了這個請求：每段 JS
+/// 跑完寫回（`AnalyzeRuleScript.evalJS`），呼叫這些方法前也先寫回。
 extension JsUrlExtensions on JsExtensions {
   void injectUrlExtensions() {
-    onBlocking('urlInit', (_) {
-      final request = _request();
-      request.initUrl();
+    onBlocking('urlInit', (state) {
+      final request = _request()
+        ..applyJs(state)
+        ..initUrl();
       return request.toJs();
     });
     onBlocking('urlStrResponse', (payload) {
       final args = payload as List;
       final request = _request()..applyJs(args[0]);
-      return BlockingCall.run(
-        requestResponse(
-          request,
-          jsStr: args[1] as String?,
-          sourceRegex: args[2] as String?,
-          useWebView: args[3] != false,
+      return request.whileSendable(
+        () => BlockingCall.run(
+          requestResponse(
+            request,
+            jsStr: args[1] as String?,
+            sourceRegex: args[2] as String?,
+            useWebView: args[3] != false,
+          ),
         ),
+      );
+    });
+    onBlocking('urlResponse', (state) {
+      final request = _request()..applyJs(state);
+      return request.whileSendable(
+        () => BlockingCall.run(rawRequestResponse(request)),
       );
     });
     onBlocking('urlBytes', (state) {
       final request = _request()..applyJs(state);
-      return BlockingCall.run(responseBytes(request));
+      return request.whileSendable(
+        () => BlockingCall.run(responseBytes(request)),
+      );
     });
     runtime.onMessage('urlUserAgent', (state) {
       final request = _request()..applyJs(state);
@@ -65,20 +77,25 @@ extension JsUrlExtensions on JsExtensions {
     java.type = s.type;
     java.serverID = s.serverID;
   }
-  function okHttpResponse(res) {
-    // OkHttp 的 Response：body() 是 ResponseBody，用 string() 讀。
+  function okHttpResponse(data) {
+    // OkHttp 的 Response：body() 是 ResponseBody，string() 照回應的字元集
+    // 解碼，bytes() 是原始位元組。
+    var res = buildHttpResponse(data);
     var text = res.body();
     res.body = function() {
       return {
         string: function() { return text; },
-        bytes: function() { return java.strToBytes(text); },
+        bytes: function() { return data.bytes; },
         toString: function() { return text; }
       };
     };
     return res;
   }
+  global.__lrUrlStateJson = function() {
+    return current == null ? 'null' : JSON.stringify(state());
+  };
   var members = {
-    initUrl: function() { apply(__lrWait('urlInit', null)); },
+    initUrl: function() { apply(__lrWait('urlInit', state())); },
     getStrResponse: function(jsStr, sourceRegex, useWebView) {
       return buildHttpResponse(__lrWait('urlStrResponse', [
         state(),
@@ -87,9 +104,7 @@ extension JsUrlExtensions on JsExtensions {
         useWebView !== false
       ]));
     },
-    getResponse: function() {
-      return okHttpResponse(buildHttpResponse(__lrWait('urlStrResponse', [state(), null, null, false])));
-    },
+    getResponse: function() { return okHttpResponse(__lrWait('urlResponse', state())); },
     getByteArray: function() { return __lrWait('urlBytes', state()); },
     getInputStream: function() {
       return new Packages.java.io.ByteArrayInputStream(this.getByteArray());

@@ -197,7 +197,9 @@ class QuickJsRuntime2 extends JavascriptRuntime {
 
     if (jsIsException(jsval) != 0) {
       jsFreeValue(ctx, jsval);
-      JSError exception = _parseJSException(ctx);
+      // 規則丟的不一定是 Error（`throw "請先登入"`）：只留它的文字。
+      final thrown = _parseJSException(ctx);
+      final exception = thrown is JSError ? thrown : JSError(thrown, "");
       return JsEvalResult(exception.toString(), exception, isError: true);
     }
     final result = _jsToDart(ctx, jsval);

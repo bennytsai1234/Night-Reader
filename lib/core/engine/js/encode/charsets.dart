@@ -78,6 +78,18 @@ abstract final class Charsets {
         final other => throw UnsupportedError('不支援的字元集：$other'),
       };
 
+  /// 認得 [charset]（空的是 UTF-8）。
+  static bool supports(String? charset) => switch (_name(charset)) {
+    'UTF-8' ||
+    'GBK' ||
+    'UTF-16LE' ||
+    'UTF-16BE' ||
+    'UTF-16' ||
+    'ISO-8859-1' ||
+    'US-ASCII' => true,
+    _ => false,
+  };
+
   static String _name(String? charset) {
     final name = (charset ?? '').trim().toUpperCase().replaceAll('_', '-');
     return switch (name) {

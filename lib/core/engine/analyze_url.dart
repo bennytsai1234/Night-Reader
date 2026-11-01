@@ -146,6 +146,19 @@ class AnalyzeUrl {
     _jsRuleInstance = null;
   }
 
+  /// 網址 JS 跑到一半要把這個請求交給網路 isolate 時（[send] 裡捕捉它），
+  /// 先拿下組網址用的 JS 引擎：引擎連著連接埠，不能跨 isolate（ADR 0034）。
+  /// 送出時複製的是當下的物件，[send] 結束就裝回去。
+  T whileSendable<T>(T Function() send) {
+    final rule = _jsRuleInstance;
+    _jsRuleInstance = null;
+    try {
+      return send();
+    } finally {
+      _jsRuleInstance = rule;
+    }
+  }
+
   /// 跑網址裡的一段 JS（Legado `AnalyzeUrl.evalJS`）：規則裡的 `java` 是
   /// 這個請求。
   dynamic evalJS(String jsStr, [dynamic result]) =>
@@ -331,6 +344,13 @@ class AnalyzeUrl {
     };
     type = _nonBlank(options['type']);
     charset = _nonBlank(options['charset']);
+    final given = charset;
+    if (given != null && given != 'escape' && !Charsets.supports(given)) {
+      // 書源打錯字（例如「UTF–8」用了長破折號）或夜讀不認得的：編碼照
+      // UTF-8，解碼照回應自己標的。
+      AppLog.w('網址選項的字元集認不得，照 UTF-8：$given');
+      charset = null;
+    }
     retry = int.tryParse('${options['retry'] ?? ''}') ?? 0;
     useWebView = switch (options['webView']) {
       null || '' || false || 'false' => false,
@@ -458,11 +478,6 @@ class AnalyzeUrl {
   /// 規則 JS 改過的 `java.url`、`java.headerMap` 寫回來，之後照它送出。
   void applyJs(Object? state) {
     if (state is! Map) return;
-    final newUrl = state['url'];
-    if (newUrl != null && newUrl.toString() != url) {
-      url = newUrl.toString();
-      _prepareRequest();
-    }
     final headers = state['headerMap'];
     if (headers is Map) {
       headerMap
@@ -472,6 +487,10 @@ class AnalyzeUrl {
             if (value != null) key.toString(): value.toString(),
         });
     }
+    // 網址組到一半（網址選項的 js）就要送出時，也照目前的網址與標頭準備。
+    final newUrl = state['url'];
+    if (newUrl != null) url = newUrl.toString();
+    _prepareRequest();
   }
 
   /// 實際送出的網址：GET 的查詢參數已照字元集編碼。
@@ -545,12 +564,15 @@ class AnalyzeUrl {
   /// - 網址選項有 `type` 時，內文是回應位元組的十六進位。
   /// - 網址選項開了 `webView`（而且 [useWebView] 為 true）時在看不到的
   ///   瀏覽器裡載入，[jsStr] 是載入後要跑的 JS（網址選項的 `webJs` 優先），
-  ///   結果是它的傳回值；[sourceRegex] 是要等的資源網址。POST 先照一般請求
-  ///   送出，再把回應交給瀏覽器。
+  ///   結果是它的傳回值；[sourceRegex] 在拿到的內容裡找（Legado 是等網頁
+  ///   載入的資源網址，WebView 套件拿不到資源載入的事件），找到時內文是
+  ///   比對到的那段。POST 先照一般請求送出，再把回應交給瀏覽器。
   /// - 網站回 4xx、5xx 時照樣傳回（[StrResponse.isSuccessful] 為 false），
   ///   交給規則解析；`retry` 是不成功時再試幾次。
   ///
-  /// 內文依序照網址選項的 `charset`、回應標頭、HTML 的 meta、自動偵測解碼。
+  /// 內文照 Legado 依序照回應標頭、HTML 的 meta、自動偵測解碼（網址選項
+  /// 的 `charset` 只用在送出的參數）；回應是 XML 卻沒有宣告時補上
+  /// `<?xml version="1.0"?>`。
   Future<StrResponse> getStrResponse({
     CancelToken? cancelToken,
     String? jsStr,
@@ -581,15 +603,50 @@ class AnalyzeUrl {
           sourceRegex: sourceRegex,
         );
       }
-      final response = await _send(cancelToken);
-      final bytes = Uint8List.fromList(response.data ?? const []);
-      return StrResponse(
+      final (response, _) = await _fetch(cancelToken);
+      final contentType = response.raw.headers.value('content-type') ?? '';
+      if (_xmlContentType.hasMatch(contentType) &&
+          !response.body.trimLeft().toLowerCase().startsWith('<?xml')) {
+        return StrResponse(
+          url: response.url,
+          body: '<?xml version="1.0"?>${response.body}',
+          headers: response.headers,
+          raw: response.raw,
+        );
+      }
+      return response;
+    }, cancelToken: cancelToken);
+  }
+
+  static final RegExp _xmlContentType = RegExp(
+    r'(application|text)/\w*\+?xml',
+    caseSensitive: false,
+  );
+
+  /// 抓這個請求，傳回解碼的回應與原始位元組（Legado `getResponseAwait`）：
+  /// 不管網址選項的 `type` 與 `webView`。
+  Future<(StrResponse, Uint8List)> getResponse({
+    CancelToken? cancelToken,
+  }) async {
+    cancelToken ??= currentSourceCancelToken;
+    return ConcurrentRateLimiter(source).withLimit(() async {
+      await _mergeStoredCookie();
+      return _fetch(cancelToken);
+    }, cancelToken: cancelToken);
+  }
+
+  Future<(StrResponse, Uint8List)> _fetch(CancelToken? cancelToken) async {
+    final response = await _send(cancelToken);
+    final bytes = Uint8List.fromList(response.data ?? const []);
+    return (
+      StrResponse(
         url: response.finalUri.toString(),
         body: _decodeResponseBody(bytes, response),
         headers: response.headers.map,
         raw: response,
-      );
-    }, cancelToken: cancelToken);
+      ),
+      bytes,
+    );
   }
 
   Future<StrResponse> _webViewResponse(
@@ -788,13 +845,8 @@ class AnalyzeUrl {
       cleanBytes = bytes.sublist(3);
     }
 
-    // 1. 書源規則指定的 charset (最高優先)
-    final charset = this.charset;
-    if (charset != null && charset.isNotEmpty && charset != 'escape') {
-      return EncodingDetect.decodeWithCharset(cleanBytes, charset);
-    }
-
-    // 2. HTTP Content-Type 標頭中的 charset
+    // 1. HTTP Content-Type 標頭中的 charset。網址選項的 charset 只管送出的
+    //    參數，同 Legado（newCallStrResponse 解碼時不帶它）。
     final contentType = response.headers.value('content-type');
     if (contentType != null) {
       final ctCharset = _extractCharsetFromContentType(contentType);
@@ -803,7 +855,7 @@ class AnalyzeUrl {
       }
     }
 
-    // 3. HTML meta 標籤 + 自動偵測 (EncodingDetect.getHtmlEncode)
+    // 2. HTML meta 標籤 + 自動偵測 (EncodingDetect.getHtmlEncode)
     final detected = EncodingDetect.getHtmlEncode(cleanBytes);
     return EncodingDetect.decodeWithCharset(cleanBytes, detected);
   }

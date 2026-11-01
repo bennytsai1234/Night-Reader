@@ -94,6 +94,14 @@ class JsEngine {
     }
   }
 
+  /// 網址 JS 跑完時 `java.url`、`java.headerMap` 的值（`AnalyzeUrl.applyJs`）；
+  /// 不在網址裡跑時是 null。
+  Object? urlState() {
+    if (!_isAvailable || _isDisposed) return null;
+    final result = _runtime!.evaluate('__lrUrlStateJson()');
+    return result.isError ? null : jsonDecode(result.stringResult);
+  }
+
   /// 正在跑的規則數。規則 JS 裡呼叫 `java.getString` 這類會再跑別的規則；
   /// 交給 JS 的 Jsoup 元素只在沒有規則在跑時才清掉，外層規則手上的元素
   /// 不會在巢狀執行時失效。

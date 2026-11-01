@@ -18,6 +18,7 @@
   - 閱讀中遇到書源要在網頁上驗證（`startBrowserAwait`，148 個書源）：2026-10-31 談定的設計是背景照舊立刻失敗，閱讀器的失敗提示附「前往驗證」，開書源要的那個網頁、關掉後重抓；登入頁的瀏覽器頁可以直接用。校驗遇到時目前照 ADR 0033 隔離，做這項時一起決定要不要改成和「需要登入」一樣只是提示。
   - Jsoup 改元素：`createElement`、`appendChild`、`appendText`、`replaceWith`、`Jsoup.connect().execute()` 這類（約 20 個書源，禁忌书屋、话本小说）；做法照 `legado_api_parity_test` 列 Jsoup 的公開方法防漏。
   - `book`、`chapter`、`source` 物件的 Java 寫法：`book.putCustomVariable`（9）、`getXxx()`／`setXxx()`（`source.getConcurrentRate()`）、`chapter.isVip()`、`java.getBook()`。
+  - 看不到的瀏覽器的 `sourceRegex`（`java.webViewGetSource`、`getStrResponse(js, sourceRegex)`）：Legado 等網頁載入的資源網址、內文是那個網址；夜讀在拿到的內容裡找，因為 webview_flutter 沒有資源載入的事件，要做得在 Android 端自己接 `WebViewClient.onLoadResource`。
   - 其他 Java 類別：`BigInteger`（番茄）、`Arrays.copyOf`、`Iterator.hasNext`、`List.subList`、`okhttp3.OkHttpClient`、`HttpUrl.topPrivateDomain`、RSA 金鑰物件（`KeyFactory`、`X509EncodedKeySpec`，星愿瓶）。直接開網路連線（`java.net.Socket`）做不到，回報「不支援」；rar、7z 壓縮檔沒有 Dart 函式庫，回報「不支援」。
   - 其他改版閱讀 App 才有的功能（`refreshExplore`、`deviceID`、`showBrowser`、`qread` 等，56 個書源）不在 Legado 裡，使用者 2026-11-01 沒要求。
   - 預整理 JS 的 `java.reGetBook()`（精確搜尋同名同作者、換成它的書籍網址再讀詳情）：目前丟出「還不支援」。章節以「書＋網址」為身分（#165），只在抓目錄時換網址會讓章節對不上書架上的書，做的時候要連書架上那本書的網址一起換。

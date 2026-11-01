@@ -104,6 +104,20 @@ void main() {
     expect(checked.body, '重抓的內容');
   }, skip: skip);
 
+  // 番茄這類書源沒登入時 `throw '请先…'`：丟的是文字，不是 Error。
+  test('a check that throws a plain string fails with that message', () {
+    expect(
+      () => check("throw '请先到书源登录页选择设备'"),
+      throwsA(
+        isA<ParsingException>().having(
+          (e) => '${e.originalError}',
+          'originalError',
+          contains('请先到书源登录页选择设备'),
+        ),
+      ),
+    );
+  }, skip: skip);
+
   test('anything else keeps the fetched response', () {
     expect(check('result.body().length'), same(response));
   }, skip: skip);

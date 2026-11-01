@@ -70,7 +70,6 @@ class WebBook {
       filter: filter,
       shouldBreak: shouldBreak,
     );
-    if (results.isEmpty) ErrorPage.check(res);
     return results;
   }
 
@@ -92,7 +91,6 @@ class WebBook {
       baseUrl: res.url,
       isSearch: false,
     );
-    if (results.isEmpty) ErrorPage.check(res);
     return results;
   }
 

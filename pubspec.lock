@@ -459,7 +459,7 @@ packages:
       path: "third_party/flutter_js"
       relative: true
     source: path
-    version: "0.8.7+nightreader.5"
+    version: "0.8.7+nightreader.6"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
