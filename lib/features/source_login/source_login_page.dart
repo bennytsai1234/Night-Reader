@@ -39,10 +39,16 @@ import 'source_login_form.dart';
 ///
 /// [beforePush] 在推頁之前呼叫，傳回 false 就不開（例如閱讀器要等選單
 /// 滑出畫面，這段時間使用者又改做別的事）。
+///
+/// [onLoggedIn]：登入過（表單打勾、網頁登入或「在網站登入」關掉，或登入
+/// 資料變了）就在返回動畫播完後呼叫。書源管理拿它對這個書源跑一次書源
+/// 校驗，結果寫到書源的標記上，使用者看得到有沒有登入成功；從失敗處進來
+/// 的（閱讀器、書籍詳情）不用，回來重抓本身就是結果。
 Future<bool> openSourceLogin(
   BuildContext context,
   BookSource source, {
   Future<bool> Function()? beforePush,
+  VoidCallback? onLoggedIn,
 }) async {
   final before = await _loginSnapshot(source);
   final saved = await source.getLoginInfoMap() ?? const <String, String>{};
@@ -52,7 +58,9 @@ Future<bool> openSourceLogin(
   final navigator = Navigator.of(context);
   final form = source.loginForm;
   final loginUrl = source.loginUrl?.trim() ?? '';
+  final bool attempted;
   if (form == null && !_looksLikeScript(loginUrl)) {
+    attempted = true;
     await navigator.push<String>(
       MaterialPageRoute(
         builder: (_) => SourceBrowserPage(
@@ -64,7 +72,7 @@ Future<bool> openSourceLogin(
       ),
     );
   } else {
-    final closed = Completer<void>();
+    final closed = Completer<bool>();
     unawaited(
       navigator.push<void>(
         MaterialPageRoute(
@@ -77,8 +85,9 @@ Future<bool> openSourceLogin(
         ),
       ),
     );
-    // 表單頁在卸載時才把沒按登入的修改存好，等它存完再比。
-    await closed.future;
+    // 表單頁在卸載時才把沒按登入的修改存好，換成「在網站登入」的還要等
+    // 瀏覽器關掉；都好了再比。
+    attempted = await closed.future;
   }
   final after = await _loginSnapshot(source);
   final changed = after != before;
@@ -86,7 +95,28 @@ Future<bool> openSourceLogin(
   // 呼叫端拿到結果就重抓、改畫面；等返回動畫播完再交出去，不和動畫疊在
   // 一起（ADR 0018）。網頁登入的頁面一開始返回就交回結果，表單頁要等卸載。
   if (context.mounted) await TransitionSettled.uncovered(context);
+  if (attempted || changed) onLoggedIn?.call();
   return changed;
+}
+
+/// 有表單的書源「在網站登入」要開的網頁（ADR 0038）：登入網址是網址時開
+/// 它，否則開書源網址。書源網址不是 `http(s)`（聚合源寫的是名稱）時是
+/// null，不給這個選項。
+String? sourceWebsiteLoginUrl(BookSource source) {
+  final sourceUrl = source.bookSourceUrl.trim();
+  final scheme = Uri.tryParse(sourceUrl)?.scheme.toLowerCase();
+  if (scheme != 'http' && scheme != 'https') return null;
+  final loginUrl = source.loginUrl?.trim() ?? '';
+  if (_looksLikeScript(loginUrl)) return sourceUrl;
+  final login = Uri.tryParse(loginUrl);
+  if (login != null &&
+      (login.scheme == 'http' || login.scheme == 'https') &&
+      login.host.isNotEmpty) {
+    return login.toString();
+  }
+  return loginUrl.startsWith('/')
+      ? NetworkUtils.getAbsoluteURL(sourceUrl, loginUrl)
+      : sourceUrl;
 }
 
 /// 清掉 [source] 的登入資料（單獨登出一個書源）：表單內容、登入標頭，以及
@@ -166,8 +196,9 @@ class SourceLoginPage extends StatefulWidget {
   /// 已存的表單內容，填進輸入框。
   final Map<String, String> savedInfo;
 
-  /// 頁面卸載、改過的輸入框存好後完成。
-  final Completer<void>? closed;
+  /// 頁面卸載、改過的輸入框存好後完成（換成「在網站登入」的，等瀏覽器也
+  /// 關掉）；值是使用者有沒有登入過（打勾登入成功，或去過「在網站登入」）。
+  final Completer<bool>? closed;
 
   @override
   State<SourceLoginPage> createState() => _SourceLoginPageState();
@@ -191,6 +222,12 @@ class _SourceLoginPageState extends State<SourceLoginPage>
   SourceLoginRow? _running;
   bool _submitting = false;
   CancelToken? _cancel;
+
+  /// 打勾登入成功過，或去過「在網站登入」。
+  bool _attempted = false;
+
+  /// 換成「在網站登入」時，瀏覽器關掉才完成。
+  Future<void>? _website;
 
   bool get _busy => _running != null || _submitting;
 
@@ -244,13 +281,15 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     final save = _dirty
         ? saveLoginForm(widget.source, _formValues())
         : Future<void>.value();
+    final website = _website;
     unawaited(
       save
           .catchError(
             (Object error, StackTrace stackTrace) =>
                 AppLog.e('存書源登入表單失敗', error: error, stackTrace: stackTrace),
           )
-          .whenComplete(() => widget.closed?.complete()),
+          .then((_) => website)
+          .whenComplete(() => widget.closed?.complete(_attempted)),
     );
     _cancel?.cancel();
     unawaited(_session.then((session) => session.close(), onError: (_) {}));
@@ -298,6 +337,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         await Future.wait(_openMessages.toList());
       }
       if (!mounted) return;
+      _attempted = true;
       if (loggedIn) _showNotice('已登入「${widget.source.bookSourceName}」');
       _close();
     } catch (error, stackTrace) {
@@ -307,6 +347,26 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// 「在網站登入」：開書源的網站（[sourceWebsiteLoginUrl]），每頁都存
+  /// Cookie，同網頁登入。在網站登入拿到的憑證和表單登入的一樣，表單就不
+  /// 用填了：瀏覽器取代這一頁，返回直接回到打開登入的地方，照一般登入的
+  /// 流程重抓。這一頁照常在卸載時存表單，等瀏覽器關掉才交出結果
+  /// （[SourceLoginPage.closed]）。
+  void _loginOnWebsite(String url) {
+    if (_busy || _website != null) return;
+    _attempted = true;
+    _website = Navigator.of(context).pushReplacement<String, void>(
+      MaterialPageRoute(
+        builder: (_) => SourceBrowserPage(
+          sourceUrl: widget.source.bookSourceUrl,
+          url: url,
+          title: '登入 · ${widget.source.bookSourceName}',
+          headers: widget.source.getHeaderMapSync(),
+        ),
+      ),
+    );
   }
 
   Future<void> _showLoginHeader() async {
@@ -503,6 +563,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     final chrome = AppChrome.of(context);
     final rows = _rows;
     final broken = _broken;
+    final websiteUrl = sourceWebsiteLoginUrl(widget.source);
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: chrome.groupedBackground,
@@ -510,13 +571,20 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         title: '登入 · ${widget.source.bookSourceName}',
         actions: [
           GlassMenuButton<String>(
-            entriesBuilder: (_) => const [
-              GlassMenuItem(
+            entriesBuilder: (_) => [
+              if (websiteUrl != null)
+                GlassMenuItem(
+                  value: 'website',
+                  label: '在網站登入',
+                  icon: Icons.open_in_browser_rounded,
+                  enabled: !_busy,
+                ),
+              const GlassMenuItem(
                 value: 'header',
                 label: '登入標頭',
                 icon: Icons.badge_outlined,
               ),
-              GlassMenuItem(
+              const GlassMenuItem(
                 value: 'clear',
                 label: '清除登入資料',
                 icon: Icons.logout_rounded,
@@ -524,6 +592,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
               ),
             ],
             onSelected: (value) => switch (value) {
+              'website' => _loginOnWebsite(websiteUrl!),
               'header' => _showLoginHeader(),
               _ => _clearLoginData(),
             },
