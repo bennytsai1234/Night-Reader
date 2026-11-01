@@ -47,6 +47,8 @@
   - 一次抓好幾頁的書源（`java.ajaxAll`）讀得到每一頁的內容與狀態，不再出錯
   - 目錄規則拿到的一串章節元素可以照 Legado 再篩選、排序（`select`、`attr`），不再出現「not a function」而讀不到目錄
   - 書源程式用 Jsoup 自己做網頁元素、搬動或取代元素（例如話本小說把留言換成頭像加文字、禁忌書屋自己組章節連結），和用 `Jsoup.connect` 直接抓網頁，都照 Legado 運作，不再出現「not a function」
+  - 書源程式照 Java 的寫法讀寫書、章節與書源（例如 `source.getConcurrentRate()`、`book.setName(…)`、`chapter.isVip()`、`book.putCustomVariable(…)`），和 Legado 一樣能用
+  - 書源程式用到的大數運算（番茄小說的簽章）、陣列複製（`Arrays.copyOf`）與 Java 的逐項讀取（`iterator().hasNext()`）照 Java 算，結果和 Legado 一樣
   - 抓目錄前要先重讀書籍詳情、換新目錄網址的書源（`java.refreshTocUrl`）讀得到目錄了
   - 載入外部腳本的書源（`java.importScript`）叫得到腳本裡的函式，正文與搜尋不再失敗
   - 規則裡的文字剛好長得像舊寫法時，不再被改掉，搜尋與正文照書源寫的抓
