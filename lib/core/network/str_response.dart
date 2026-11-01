@@ -31,9 +31,13 @@ class StrResponse {
   static bool mentionsLoginRequired(String text) =>
       _loginRequiredMarker.hasMatch(text);
 
+  /// 明確要求登入或付費的片語。不收單獨的「VIP」「訂閱」：正文與網頁選單
+  /// 常有這些字（例如作者在章末求訂閱）。
   static final RegExp _loginRequiredMarker = RegExp(
     'permissionlimit|loginrequired|需要你登录后阅读|需要你登入後閱讀|'
-    '登录后阅读|登入後閱讀|請先登錄|请先登录',
+    '需要登录|需要登入|需要登錄|登录后阅读|登入後閱讀|登錄後閱讀|'
+    '請先登錄|请先登录|請先登入|请先登入|'
+    'vip章节|vip章節|付费章节|付費章節|订阅本章|訂閱本章|购买本章|購買本章',
     caseSensitive: false,
   );
 }

@@ -50,6 +50,11 @@ void main() {
           request.response.write(page(''));
         case '/linked':
           request.response.write(page(longText));
+        case '/prompt':
+          request.response.write(page('本章需要登录，请完成账号验证以后再查看本章全部正文内容。'));
+        case '/subscribe':
+          // 手机看书第一章：作者在章末求訂閱。
+          request.response.write(page('$longText（在这里求收藏，求追更，订阅）'));
         default:
           request.response.statusCode = HttpStatus.notFound;
       }
@@ -85,17 +90,25 @@ void main() {
     }
   });
 
-  test(
-    'a login link in the page header does not fail a readable chapter',
-    () async {
+  test('a chapter that is only a login prompt fails', () async {
+    for (final fetch in [
+      () => WebBook.getContentAwait(source, book, chapter('/prompt')),
+      () => CompleteContentFetcher.fetch(source, book, chapter('/prompt')),
+    ]) {
+      await expectLater(fetch(), throwsA(isA<LoginCheckException>()));
+    }
+  });
+
+  for (final path in ['/linked', '/subscribe']) {
+    test('a readable chapter does not fail on login words ($path)', () async {
       expect(
-        await WebBook.getContentAwait(source, book, chapter('/linked')),
+        await WebBook.getContentAwait(source, book, chapter(path)),
         contains('正文的一段話'),
       );
       expect(
-        await CompleteContentFetcher.fetch(source, book, chapter('/linked')),
+        await CompleteContentFetcher.fetch(source, book, chapter(path)),
         contains('正文的一段話'),
       );
-    },
-  );
+    });
+  }
 }

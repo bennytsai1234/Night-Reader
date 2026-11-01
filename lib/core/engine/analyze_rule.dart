@@ -1,7 +1,5 @@
 import 'package:night_reader/core/models/rule_data_interface.dart';
-import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
 
 // 導入拆分後的模組
 import 'analyze_rule/analyze_rule_base.dart';
@@ -68,36 +66,32 @@ class AnalyzeRule extends AnalyzeRuleBase
     return AnalyzeRuleScript(this).evalJS(jsStr, result);
   }
 
-  /// 執行目錄的預整理 JS（`ruleToc.preUpdateJs`）。
-  void preUpdateToc() {
-    if (source is! BookSource) return;
+  bool _inPreUpdateJs = false;
+  bool _tocUrlRefreshRequested = false;
+
+  /// 執行目錄的預整理 JS（`ruleToc.preUpdateJs`），傳回它有沒有呼叫
+  /// `java.refreshTocUrl()`：有的話，抓目錄前要重新讀一次書籍詳情。
+  bool preUpdateToc() {
+    if (source is! BookSource) return false;
     final js = (source as BookSource).ruleToc?.preUpdateJs;
-    if (js != null && js.isNotEmpty) {
+    if (js == null || js.isEmpty) return false;
+    _inPreUpdateJs = true;
+    try {
       evalJS(js, null);
+    } finally {
+      _inPreUpdateJs = false;
     }
+    return _tocUrlRefreshRequested;
   }
 
-  /// 重新獲取書籍資訊 (原 Android AnalyzeRule.reGetBook)
-  Future<void> reGetBook() async {
-    if (source is! BookSource || ruleData is! Book) return;
-    final book = ruleData as Book;
-    final service = BookSourceService();
-    // 模擬精確搜尋與更新
-    final results = await service.searchBooks(source as BookSource, book.name);
-    final match = results
-        .where((e) => e.name == book.name && e.author == book.author)
-        .firstOrNull;
-    if (match != null) {
-      book.bookUrl = match.bookUrl;
-      await service.getBookInfo(source as BookSource, book);
+  /// `java.refreshTocUrl()`：同 Legado，只能在預整理 JS 裡呼叫，要的是
+  /// 抓目錄前重新讀書籍詳情、換上新的目錄網址。讀詳情要等網路、跑詳情規則，
+  /// 規則 JS 不能停下來等，所以這裡只記下來，預整理 JS 跑完再讀。
+  void requestTocUrlRefresh() {
+    if (!_inPreUpdateJs) {
+      throw StateError('java.refreshTocUrl() 只能在目錄的預整理 JS（preUpdateJs）裡呼叫');
     }
-  }
-
-  /// 刷新目錄位址 (原 Android AnalyzeRule.refreshTocUrl)
-  Future<void> refreshTocUrl() async {
-    if (source is! BookSource || ruleData is! Book) return;
-    final service = BookSourceService();
-    await service.getBookInfo(source as BookSource, ruleData as Book);
+    _tocUrlRefreshRequested = true;
   }
 
   // 靜態輔助方法

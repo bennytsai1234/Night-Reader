@@ -561,6 +561,10 @@ extension JsJavaObject on JsExtensionsBase {
           sendMessage('ruleSetContent', JSON.stringify([content, baseUrl || null]));
           return null;
         },
+        refreshTocUrl: function() { __lrWait('ruleRefreshTocUrl', null); },
+        reGetBook: function() {
+          throw new Error('夜讀還不支援 java.reGetBook()（換成搜尋到的同名書再讀詳情）');
+        },
 
         // ─── sync: TTF query/replace (sync helpers) ──────────────
         queryTTF: function(data, useCache) {

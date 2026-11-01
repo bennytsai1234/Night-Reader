@@ -338,6 +338,8 @@ globalThis.__lrStartedRule = -1;
       return 'buildHttpResponse(${jsonEncode(data)})';
     }
     if (value is Iterable) {
+      final nodes = _elementNodes(value);
+      if (nodes != null) return _encodeElements(nodes);
       final encodedItems = value.map(_encodeContextValue).join(',');
       return '''
 (function() {
@@ -478,6 +480,31 @@ var __lrScopedObject = function(scope, seed) {
   String _encodeElement(dom.Node element) {
     final jsoup = _extensions!.jsoup..setBaseUri(element, _contextBaseUrl);
     return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(element))})';
+  }
+
+  /// 元素清單（例如列表規則選到的元素）交給 JS 時是 Jsoup 的 `Elements`，
+  /// 和 Legado 一樣能 `select`、`attr`、`text`，也能 `sort`、`[i]`。
+  String _encodeElements(List<dom.Node> nodes) {
+    final jsoup = _extensions!.jsoup;
+    for (final node in nodes) {
+      jsoup.setBaseUri(node, _contextBaseUrl);
+    }
+    return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(nodes))})';
+  }
+
+  /// [values] 是元素清單時傳回它們的節點，否則傳回 null。CSS 選取的結果
+  /// 是 `List<Element>`，空的也當元素清單（同 [JsoupBridge.toJs]）；其他
+  /// 清單（XPath 的結果）要有內容且全是元素，空的 JSON 清單照一般陣列。
+  static List<dom.Node>? _elementNodes(Iterable<dynamic> values) {
+    if (values is Iterable<dom.Node>) return values.toList();
+    if (values.isEmpty) return null;
+    final nodes = <dom.Node>[];
+    for (final value in values) {
+      final node = value is XPathNode ? value.node : value;
+      if (node is! dom.Element && node is! dom.Document) return null;
+      nodes.add(node as dom.Node);
+    }
+    return nodes;
   }
 
   dynamic _decodeContextValue(dynamic value) {

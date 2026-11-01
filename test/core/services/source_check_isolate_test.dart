@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -206,17 +207,31 @@ void main() {
     },
   );
 
-  test('VIP text in the content marks the source as needing login', () async {
-    final (_, checked) = await _check(
-      _FakeBookSourceService(content: (_) async => '本章為VIP章節，請登入後閱讀全文內容。'),
+  test(
+    'a login wall on the content marks the source as needing login',
+    () async {
+      final (_, checked) = await _check(
+        _FakeBookSourceService(
+          content: (_) async => throw LoginCheckException('正文需要登入後閱讀'),
+        ),
+      );
+
+      expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
+      // 要登入是書源的狀態，不是壞掉：照樣參加搜尋、照樣能開書，不列入清理
+      // （ADR 0038）。
+      expect(checked.isCleanupCandidate, isFalse);
+      expect(checked.isSearchEnabledByRuntime, isTrue);
+      expect(checked.isReadingEnabledByRuntime, isTrue);
+    },
+  );
+
+  test('a readable chapter that mentions subscribing is healthy', () async {
+    // 手机看书第一章的作者後記：抓得到的正文提到「订阅」不是登入牆。
+    final (result, _) = await _check(
+      _FakeBookSourceService(content: (_) async => '$_readable（在这里求收藏，求追更，订阅）'),
     );
 
-    expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
-    // 要登入是書源的狀態，不是壞掉：照樣參加搜尋、照樣能開書，不列入清理
-    // （ADR 0038）。
-    expect(checked.isCleanupCandidate, isFalse);
-    expect(checked.isSearchEnabledByRuntime, isTrue);
-    expect(checked.isReadingEnabledByRuntime, isTrue);
+    expect(result.isHealthy, isTrue);
   });
 
   test(
