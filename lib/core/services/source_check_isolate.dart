@@ -715,18 +715,8 @@ class SourceChecker {
               onTimeout: () => throw TimeoutException('${mode.label}正文檢查超時'),
             );
 
-        if (_looksLikeLoginRequired(content)) {
-          _recordIssue(
-            issues,
-            _IssueData(
-              stage: _stageFor(mode, 'content'),
-              message: '正文需要登入、VIP 或解鎖後閱讀',
-              health: loginRequiredSourceHealth,
-            ),
-          );
-          return;
-        }
-
+        // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
+        // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
         if (_looksReadable(content)) return;
       } on TimeoutException catch (e) {
         _recordIssue(
@@ -1268,32 +1258,6 @@ bool _looksReadable(String content) {
   if (trimmed.startsWith('加載章節失敗')) return false;
   if (trimmed.startsWith('章節內容為空')) return false;
   return trimmed.runes.length >= 20;
-}
-
-bool _looksLikeLoginRequired(String content) {
-  final normalized = content.trim().toLowerCase();
-  if (normalized.isEmpty) return false;
-  return normalized.contains('permissionlimit') ||
-      normalized.contains('loginrequired') ||
-      normalized.contains('需要登入') ||
-      normalized.contains('需要登录') ||
-      normalized.contains('登入後閱讀') ||
-      normalized.contains('登录后阅读') ||
-      normalized.contains('請先登錄') ||
-      normalized.contains('请先登录') ||
-      normalized.contains('vip') ||
-      normalized.contains('鎖章') ||
-      normalized.contains('锁章') ||
-      normalized.contains('解鎖') ||
-      normalized.contains('解锁') ||
-      normalized.contains('付費') ||
-      normalized.contains('付费') ||
-      normalized.contains('收費') ||
-      normalized.contains('收费') ||
-      normalized.contains('訂閱') ||
-      normalized.contains('订阅') ||
-      normalized.contains('購買') ||
-      normalized.contains('购买');
 }
 
 bool _looksLikeDownloadOnly(Book book, List<BookChapter> readableChapters) {

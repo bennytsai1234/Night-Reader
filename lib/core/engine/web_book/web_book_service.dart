@@ -97,7 +97,6 @@ class WebBook {
   static Future<Book> getBookInfoAwait(
     BookSource source,
     Book book, {
-    bool canReName = true,
     CancelToken? cancelToken,
   }) async {
     if (book.infoHtml != null && book.infoHtml!.isNotEmpty) {
@@ -148,7 +147,11 @@ class WebBook {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final rule = AnalyzeRule(source: source, ruleData: book);
     try {
-      rule.preUpdateToc();
+      // 預整理 JS 呼叫了 java.refreshTocUrl()：重讀書籍詳情，目錄從新的
+      // 目錄網址抓（同 Legado）。剛讀過詳情的書帶著詳情頁，直接重新解析。
+      if (rule.preUpdateToc()) {
+        book = await getBookInfoAwait(source, book, cancelToken: cancelToken);
+      }
 
       final allChapters = <BookChapter>[];
       final visitedUrls = <String>{};

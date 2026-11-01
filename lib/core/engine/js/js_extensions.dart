@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:xpath_selector/xpath_selector.dart' show XPathNode;
+import 'package:night_reader/core/engine/analyze_rule.dart' show AnalyzeRule;
 import 'package:night_reader/core/engine/analyze_rule/analyze_rule_support.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -149,6 +150,14 @@ class JsExtensions extends JsExtensionsBase {
           ruleContext.setContent(payload[0], baseUrl: nextBaseUrl);
         } catch (_) {}
       }
+      return null;
+    });
+    onBlocking('ruleRefreshTocUrl', (_) {
+      final rule = ruleContext;
+      if (rule is! AnalyzeRule) {
+        throw StateError('java.refreshTocUrl() 只能在目錄的預整理 JS（preUpdateJs）裡呼叫');
+      }
+      rule.requestTocUrlRefresh();
       return null;
     });
     runtime.onMessage('log', (args) {

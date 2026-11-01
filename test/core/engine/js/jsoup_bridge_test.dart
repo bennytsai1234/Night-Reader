@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -234,5 +235,39 @@ String(clean.outerHtml());''',
     expect(content.content, contains('第一段'));
     expect(content.content, contains('第二段'));
     expect(content.content, isNot(contains('3')));
+  }, skip: skip);
+
+  test('a list rule hands JS Jsoup elements (小红书)', () async {
+    // 小红书的目錄規則：選到的章節排成網頁打亂前的順序，再 select 出連結。
+    final source = BookSource.fromJson({
+      'bookSourceName': '小红书',
+      'bookSourceUrl': 'https://site.test',
+      'ruleToc': {
+        'chapterList':
+            'class.ch\n<js>\n'
+            'result.sort((a, b) => a.attr("data-x") - b.attr("data-x"));\n'
+            'result.select("a");\n</js>',
+        'chapterName': 'text',
+        'chapterUrl': 'href',
+      },
+    });
+    const tocHtml = '''
+<html><body>
+<div class="ch" data-x="2"><a href="/2.html">第二章</a></div>
+<div class="ch" data-x="1"><a href="/1.html">第一章</a></div>
+</body></html>''';
+    final result = await ChapterListParser.parse(
+      source: source,
+      book: Book(
+        bookUrl: 'https://site.test/book',
+        origin: 'https://site.test',
+        name: '書',
+      ),
+      body: tocHtml,
+      baseUrl: 'https://site.test/book/',
+    );
+
+    expect(result.chapters.map((c) => c.title), ['第一章', '第二章']);
+    expect(result.chapters.first.url, 'https://site.test/1.html');
   }, skip: skip);
 }
