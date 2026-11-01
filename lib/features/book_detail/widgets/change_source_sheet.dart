@@ -212,14 +212,29 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     final primary = Theme.of(context).colorScheme.primary;
     return SheetHeader(
       title: '更換來源',
-      leading: GlassIconButton(
-        icon: provider.checkAuthor
-            ? Icons.person_rounded
-            : Icons.person_off_outlined,
-        iconSize: 20,
-        color: provider.checkAuthor ? primary : null,
-        tooltip: provider.checkAuthor ? '校驗作者：開' : '校驗作者：關',
-        onPressed: _isSwitchingSource ? null : provider.toggleCheckAuthor,
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassIconButton(
+            icon: provider.checkAuthor
+                ? Icons.person_rounded
+                : Icons.person_off_outlined,
+            iconSize: 20,
+            color: provider.checkAuthor ? primary : null,
+            tooltip: provider.checkAuthor ? '校驗作者：開' : '校驗作者：關',
+            onPressed: _isSwitchingSource ? null : provider.toggleCheckAuthor,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          GlassIconButton(
+            icon: Icons.straighten_rounded,
+            iconSize: 20,
+            color: provider.excludeFarWordCount ? primary : null,
+            tooltip: provider.excludeFarWordCount ? '不列字數差太多的：開' : '不列字數差太多的：關',
+            onPressed: _isSwitchingSource
+                ? null
+                : provider.toggleExcludeFarWordCount,
+          ),
+        ],
       ),
       trailing: provider.isSearching
           ? const SizedBox.square(
