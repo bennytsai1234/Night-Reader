@@ -102,6 +102,8 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
 - **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 - **使用者的手機只在使用者主動提供時量**（2026-10-14 定的；2026-10-28 使用者開了無線偵錯讓 agent 量，跑通的做法如下）。`adb mdns services` 找得到手機，`adb connect` 就連上；Git Bash 裡傳給 adb 的手機路徑要先 `export MSYS_NO_PATHCONV=1`，不然會被改成 Windows 路徑。profile 建置的套件是 `com.inkpage.reader.debug`，和正式版分開、不動使用者的書；vivo 用 adb 安裝要使用者在手機上按繼續安裝。量測入口不提交：第一次開只放測試書就結束；之後每次開先把 `developer.Service.getInfo()` 的位址寫進 App 的外部資料夾，等電腦連上 `vm_service`、`setVMTimelineFlags(['GC'])` 並清空時間軸後才 `runApp`（時間軸是環狀的，全記的話開 App 前段會被蓋掉）；每幀的時間用 `addTimingsCallback` 的 `FrameTiming`，動畫各段的時刻由 App 自己用 `Timeline.now` 記，三者同一個時鐘。使用者手機開著 GKD 與隨選朗讀兩個無障礙服務，每幀都有無障礙資料的工作，這是實際使用的環境。判斷標準見 ADR 0036。
+- **手機連不上、要拿手機上的資料**：`adb connect` 回「failed to connect」多半是手機忘了和這台的配對。請使用者在無線偵錯開「使用配對碼配對裝置」，配對碼用 `request_secret` 要；配對的連接埠要先 `ADB_MDNS_OPENSCREEN=1 adb start-server`，`adb mdns services` 才列得出來。正式版讀不到內部資料，剪貼簿從電腦也讀不到；崩潰日誌在 `/sdcard/Android/data/com.inkpage.reader/files/` 直接讀，書源原文在書源管理多選 →「分享選中」→「儲存到檔案管理員」，檔案在 `/sdcard/Download/分享儲存/`，拿到後用 `test/live/` 在電腦上連真網站校驗。
+- **Legado 原始碼**：對照 Legado 的做法時讀 `C:\Users\benny\Desktop\Folder\projects\legado`（使用者的 fork）；GitHub 上的 `gedoor/legado` 已經清空。
 
 ## Agent skills
 

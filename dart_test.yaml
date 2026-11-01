@@ -11,3 +11,7 @@ tags:
   # flutter test --run-skipped -t polish test/polish
   polish:
     skip: "細節檢查，還沒清乾淨前不擋推送"
+  # 用真的網站校驗書源（test/live/），用法寫在檔頭：
+  # NR_SOURCES=<書源 JSON> flutter test --run-skipped -t live test/live
+  live:
+    skip: "連真的網站，要查書源時才跑"
