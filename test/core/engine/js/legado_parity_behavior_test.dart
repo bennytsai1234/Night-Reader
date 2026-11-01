@@ -2,7 +2,9 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 
 import '../../../test_helper.dart';
 
@@ -381,6 +383,50 @@ void main() {
     // 規則把 cookie 拿去存別的值，下一條規則照樣拿到 Legado 的 cookie。
     rule.evalJS('cookie = "被改掉"; 1', null);
     expect(rule.evalJS('typeof cookie.getKey', null), 'function');
+  }, skip: skip);
+
+  test('book、chapter、source 照 Java 物件寫：getXxx()／setXxx()、isVip()、自訂變數', () {
+    final book = Book(
+      bookUrl: 'https://src.test/b',
+      name: '書名',
+      author: '作者：沈知秋',
+      kind: '仙俠,連載',
+      wordCount: '12萬字',
+      totalChapterNum: 10,
+      chapterIndex: 3,
+    );
+    final chapter = BookChapter(
+      url: 'https://src.test/c1',
+      title: '第一章',
+      isVip: true,
+    );
+    final rule = AnalyzeRule(
+      ruleData: book,
+      source: BookSource(
+        bookSourceUrl: 'https://src.test',
+        bookSourceName: '書源',
+        concurrentRate: '1/1000',
+      ),
+    )..setChapter(chapter);
+    addTearDown(rule.dispose);
+    expect(
+      rule.evalJS(r'''
+        book.setName('新書名');
+        book.putCustomVariable('自訂');
+        [book.getName(), book.name, book.getCustomVariable(),
+         book.getRealAuthor(), book.getKindList().join('/'),
+         book.durChapterIndex, book.getDurChapterIndex(), book.getUnreadChapterNum(),
+         chapter.isVip(), chapter.vip, chapter.isVolume(), chapter.getTitle(),
+         source.getConcurrentRate(), source.getBookSourceName(),
+         // 書源自己的方法不被欄位的 getter 蓋掉。
+         source.getKey()].join('|')
+      ''', null),
+      '新書名|新書名|自訂|沈知秋|12萬字/仙俠/連載|3|3|6|'
+      'true|true|false|第一章|1/1000|書源|https://src.test',
+    );
+    // 寫進去的會回到夜讀的書上。
+    expect(book.name, '新書名');
+    expect(book.getVariable('custom'), '自訂');
   }, skip: skip);
 
   test('getString parses the content it is given', () {

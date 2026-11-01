@@ -301,10 +301,13 @@ globalThis.__lrStartedRule = -1;
           return;
         case 'source':
           final jsLiteral = _encodeContextValue(value);
+          _ensureScopedObjectFactory();
           statements.add(
+            'var __lrSourceSeed = $jsLiteral; '
             'if (typeof source === "object" && source !== null) { '
-            'Object.assign(source, $jsLiteral); '
-            '} else { var source = $jsLiteral; }',
+            'Object.assign(source, __lrSourceSeed); '
+            '} else { var source = __lrSourceSeed; } '
+            '__lrBeanMethods(source, __lrSourceSeed, {});',
           );
           _sourceInjected = true;
           return;
@@ -413,22 +416,75 @@ globalThis.__lrStartedRule = -1;
   /// 方法。建構函式每個引擎只定義一次，之後每次執行只傳資料；整段建構程式
   /// 每次重新送進引擎解析，逐章執行時佔了大半時間。
   static const String _scopedObjectFactory = '''
+// Legado 的欄位名與夜讀不同的，兩個名字都能讀寫。
+var __lrFieldAliases = {
+  book: { durChapterIndex: 'chapterIndex', durChapterPos: 'charOffset' }
+};
+// Legado AppPattern.authorRegex：作者欄常帶的「作者：」「著」這類字樣。
+var __lrAuthorNoise = /^\\s*作\\s*者[:：\\s]+|\\s+著/g;
+// Java 物件的 getXxx()／setXxx()（Kotlin 的 isXxx 是 isXxx()／setXxx()），
+// 書源照 Legado 寫 source.getConcurrentRate()、book.setName(...)。已經有
+// 同名方法的不蓋（例如 source.getVariable 是讀書源變數）。
+var __lrBeanMethods = function(obj, seed, aliases) {
+  var names = Object.keys(seed);
+  Object.keys(aliases).forEach(function(alias) {
+    var target = aliases[alias];
+    if (alias in obj || !(target in obj)) return;
+    Object.defineProperty(obj, alias, {
+      configurable: true,
+      get: function() { return obj[target]; },
+      set: function(value) { obj[target] = value; }
+    });
+    names.push(alias);
+  });
+  names.forEach(function(prop) {
+    var flag = /^is([A-Z].*)\$/.exec(prop);
+    var cap = flag ? flag[1] : prop.charAt(0).toUpperCase() + prop.slice(1);
+    if (!flag && typeof obj['get' + cap] === 'undefined') {
+      obj['get' + cap] = function() { return obj[prop]; };
+    }
+    if (typeof obj['set' + cap] === 'undefined') {
+      obj['set' + cap] = function(value) { obj[prop] = value; return null; };
+    }
+  });
+};
 var __lrScopedObject = function(scope, seed) {
   if (seed == null || typeof seed !== 'object') {
     return seed;
   }
   var obj = {};
-  Object.keys(seed).forEach(function(prop) {
-    var current = seed[prop];
+  var field = function(prop, getter) {
     Object.defineProperty(obj, prop, {
       enumerable: true,
       configurable: true,
-      get: function() { return current; },
+      get: getter,
       set: function(value) {
-        current = value;
+        values[prop] = value;
         sendMessage('scopedObjectSetField', JSON.stringify([scope, prop, value]));
       }
     });
+  };
+  var values = {};
+  Object.keys(seed).forEach(function(prop) {
+    values[prop] = seed[prop];
+    // Kotlin 的 isVip、isVolume 在 Java 是方法 isVip()、屬性 vip，書源照
+    // Legado 寫 chapter.isVip()；Legado 裡 chapter.isVip 是方法（永遠為真）。
+    var flag = /^is([A-Z])(.*)\$/.exec(prop);
+    if (flag) {
+      field(prop, function() {
+        return function() { return !!values[prop]; };
+      });
+      var bean = flag[1].toLowerCase() + flag[2];
+      if (!(bean in seed)) {
+        Object.defineProperty(obj, bean, {
+          configurable: true,
+          get: function() { return !!values[prop]; },
+          set: function(value) { obj[prop] = value; }
+        });
+      }
+    } else {
+      field(prop, function() { return values[prop]; });
+    }
   });
   obj.getVariable = function(key) {
     var value = sendMessage(
@@ -444,7 +500,35 @@ var __lrScopedObject = function(scope, seed) {
     );
     return null;
   };
+  // BaseBook、BookChapter：大變數在 Legado 另存成檔案，讀寫和一般變數一樣；
+  // 自訂變數是 key 為 custom 的變數。
+  obj.putBigVariable = obj.putVariable;
+  obj.getBigVariable = obj.getVariable;
+  obj.putCustomVariable = function(value) {
+    return obj.putVariable('custom', value);
+  };
+  obj.getCustomVariable = function() { return obj.getVariable('custom'); };
   if (scope === "book") {
+    obj.getRealAuthor = function() {
+      return String(obj.author || '').replace(__lrAuthorNoise, '');
+    };
+    obj.getDisplayCover = function() {
+      return obj.customCoverUrl ? obj.customCoverUrl : obj.coverUrl;
+    };
+    obj.getDisplayIntro = function() {
+      return obj.customIntro ? obj.customIntro : obj.intro;
+    };
+    obj.getKindList = function() {
+      var kinds = [];
+      if (obj.wordCount) kinds.push(String(obj.wordCount));
+      String(obj.kind || '').split(/[,\\n]/).forEach(function(kind) {
+        if (kind.trim()) kinds.push(kind.trim());
+      });
+      return kinds;
+    };
+    obj.getUnreadChapterNum = function() {
+      return Math.max((obj.totalChapterNum || 0) - (obj.chapterIndex || 0) - 1, 0);
+    };
     obj.setReverseToc = function(value) {
       sendMessage(
         'scopedObjectSetField',
@@ -472,17 +556,21 @@ var __lrScopedObject = function(scope, seed) {
       );
     };
   }
+  __lrBeanMethods(obj, seed, __lrFieldAliases[scope] || {});
   return obj;
 };
 ''';
 
   bool _scopedObjectFactoryInstalled = false;
 
+  void _ensureScopedObjectFactory() {
+    if (_scopedObjectFactoryInstalled) return;
+    _runtime!.evaluate(_scopedObjectFactory);
+    _scopedObjectFactoryInstalled = true;
+  }
+
   String _encodeScopedObject(String scopeName, dynamic value) {
-    if (!_scopedObjectFactoryInstalled) {
-      _runtime!.evaluate(_scopedObjectFactory);
-      _scopedObjectFactoryInstalled = true;
-    }
+    _ensureScopedObjectFactory();
     final payload = _encodeJsonContextValue(value);
     return '__lrScopedObject(${jsonEncode(scopeName)}, $payload)';
   }
