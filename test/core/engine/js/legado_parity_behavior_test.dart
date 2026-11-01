@@ -124,6 +124,51 @@ void main() {
       );
     }, skip: skip);
 
+    test('BigInteger 照 Java 算（番茄的 64 位元雜湊、modPow）', () {
+      expect(
+        eval(r'''
+          var B = Packages.java.math.BigInteger;
+          var J64 = new B("18446744073709551615");
+          [new B("ff", 16).and(J64).toString(),
+           new B("1").shiftLeft(64).subtract(B.ONE).equals(J64),
+           B.valueOf(2).modPow(B.valueOf(10), B.valueOf(1000)).toString(),
+           new B("-7").mod(B.valueOf(3)).toString(),
+           new B("-7").remainder(B.valueOf(3)).toString(),
+           new B("4294967301").intValue(), new B("2147483648").intValue(),
+           new B("-1").toByteArray().join(","), new B("128").toByteArray().join(","),
+           new B([255]).toString(), new B(1, [255]).toString(),
+           J64.shiftRight(60).toString(16), J64.signum(), new B("-5").signum(),
+           B.valueOf(3).modInverse(B.valueOf(11)).toString(),
+           new B(16, new Packages.java.security.SecureRandom()).bitLength() <= 16
+          ].join("|")
+        '''),
+        '255|true|24|2|-1|5|-2147483648|255|0,128|-1|255|f|1|-1|4|true',
+      );
+    }, skip: skip);
+
+    test('Arrays 與 Iterator 照 Java：超過長度補 0、keySet().iterator()', () {
+      expect(
+        eval(r'''
+          var A = Packages.java.util.Arrays;
+          var m = new Packages.java.util.HashMap();
+          m.put("a", 1); m.put("b", 2);
+          var it = m.keySet().iterator(), keys = [];
+          while (it.hasNext()) keys.push(it.next());
+          var entries = m.entrySet().iterator(), sum = 0;
+          while (entries.hasNext()) sum += entries.next().getValue();
+          var list = new Packages.java.util.ArrayList();
+          list.add("x"); list.add("y"); list.add("z");
+          var li = list.iterator(), joined = "";
+          while (li.hasNext()) joined += li.next();
+          [A.copyOf([1, 2], 4).join(","), A.copyOf([1, 2, 3], 2).join(","),
+           A.copyOfRange([1, 2, 3], 1, 5).join(","), A.equals([1, 2], [1, 2]),
+           keys.join(""), sum, joined, list.subList(1, 3).join(""),
+           m.keySet().subList(0, 1).join("")].join("|")
+        '''),
+        '1,2,0,0|1,2|2,3,0,0|true|ab|3|xyz|yz|a',
+      );
+    }, skip: skip);
+
     test('HashMap and ArrayList read like Java and reach Dart as JSON', () {
       expect(
         eval(r'''

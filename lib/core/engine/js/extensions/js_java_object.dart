@@ -16,7 +16,28 @@ extension JsJavaObject on JsExtensionsBase {
         list.last = function() {
           return this.length ? this[this.length - 1] : null;
         };
+        list.isEmpty = function() { return this.length === 0; };
+        list.contains = function(value) { return this.indexOf(value) >= 0; };
+        list.iterator = function() { return __lrJavaIterator(this); };
+        list.subList = function(from, to) {
+          return __lrJavaList(this.slice(from, to));
+        };
         return list;
+      }
+
+      /// java.util.Iterator：書源照 Java 寫
+      /// `var it = map.keySet().iterator(); while (it.hasNext()) it.next()`。
+      function __lrJavaIterator(items) {
+        var index = 0;
+        return {
+          hasNext: function() { return index < items.length; },
+          next: function() {
+            if (index >= items.length) {
+              throw new Error('java.util.NoSuchElementException');
+            }
+            return items[index++];
+          }
+        };
       }
 
       function __lrNormalizeRuleResult(value) {
@@ -1122,9 +1143,41 @@ extension JsJavaObject on JsExtensionsBase {
         return this._value;
       };
 
+      /// java.util.Arrays：複製時超過原陣列的部分照 Java 補 0。
       var Arrays = {
         copyOfRange: function(value, start, end) {
-          return normalizeByteArray(value).slice(start, end);
+          var bytes = normalizeByteArray(value);
+          if (start < 0 || start > bytes.length) {
+            throw new Error('java.lang.ArrayIndexOutOfBoundsException');
+          }
+          if (start > end) {
+            throw new Error('java.lang.IllegalArgumentException: ' + start + ' > ' + end);
+          }
+          var out = bytes.slice(start, end);
+          while (out.length < end - start) out.push(0);
+          return out;
+        },
+        copyOf: function(value, length) {
+          if (length < 0) throw new Error('java.lang.NegativeArraySizeException');
+          return Arrays.copyOfRange(value, 0, length);
+        },
+        equals: function(a, b) {
+          if (a == null || b == null) return a == b;
+          if (a.length !== b.length) return false;
+          for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+          return true;
+        },
+        fill: function(array, value) {
+          for (var i = 0; i < array.length; i++) array[i] = value;
+        },
+        asList: function() {
+          var items = arguments.length === 1 && Array.isArray(arguments[0])
+            ? arguments[0]
+            : Array.prototype.slice.call(arguments);
+          return __lrJavaList(items);
+        },
+        toString: function(array) {
+          return array == null ? 'null' : '[' + Array.prototype.join.call(array, ', ') + ']';
         }
       };
 
