@@ -814,7 +814,8 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
   /// 它大時顯示它。
   final double Function(BuildContext context)? maxOf;
 
-  /// [maxOf] 依據的設定；它通知時重算上限。
+  /// [maxOf] 依據的設定；它通知時重算上限，上限變了才重建這一列（改字號時
+  /// 放得下的字數常常不變）。
   final Listenable? listenable;
 
   NumberStepperRow _row(BuildContext context, double value) {
@@ -845,11 +846,19 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     final value = edits.listenableOf(field);
+    Widget row() => ListenableBuilder(
+      listenable: value,
+      builder: (context, _) => _row(context, value.value),
+    );
+    final listenable = this.listenable;
     return _StepperRow(
-      ListenableBuilder(
-        listenable: Listenable.merge([value, ?listenable]),
-        builder: (context, _) => _row(context, value.value),
-      ),
+      listenable == null
+          ? row()
+          : _Watch<double?>(
+              listenable: listenable,
+              select: () => maxOf?.call(context),
+              builder: (context, _) => row(),
+            ),
     );
   }
 }
