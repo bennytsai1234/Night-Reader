@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../js_extensions_base.dart';
 
 /// 書源直接用的 Java 類別（Rhino 讓規則 JS 直接用整個 Java）：照書源實際的
@@ -10,6 +12,10 @@ import '../js_extensions_base.dart';
 /// `JavaString`、加解密類別與 `buildHttpResponse`。
 extension JsJavaClasses on JsExtensionsBase {
   void injectJavaClasses() {
+    runtime.onMessage(
+      '_bigInteger',
+      (dynamic args) => jsonEncode(_bigIntegerOp(args as List)),
+    );
     runtime.evaluate(r'''
 (function(global) {
   var java = global.java;
@@ -205,6 +211,70 @@ extension JsJavaClasses on JsExtensionsBase {
     return map;
   }
 
+  /// java.math.BigInteger（番茄的 64 位元雜湊、Diffie-Hellman 的 modPow）。這個
+  /// QuickJS 沒有 BigInt：值存成十進位字串，運算交給 Dart 的 BigInt（`_bigInteger`）。
+  /// 位元組陣列照 Java 是二補數、高位在前，值和夜讀其他位元組陣列一樣是 0–255。
+  function bigOp() {
+    var reply = JSON.parse(send('_bigInteger', JSON.stringify(Array.prototype.slice.call(arguments))));
+    if (reply.error) throw javaError(reply.error, reply.message);
+    return reply.value;
+  }
+  function BigInteger(a, b) {
+    if (!(this instanceof BigInteger)) return new BigInteger(a, b);
+    var value;
+    if (a && a.__lrBigDecimal != null) {
+      value = a.__lrBigDecimal;
+    } else if (isText(a)) {
+      value = bigOp('parse', String(a), b == null ? 10 : Number(b));
+    } else if (typeof a === 'number' && b != null && typeof b.nextBytes === 'function') {
+      // BigInteger(numBits, rnd)：0 到 2^numBits − 1 的隨機數。
+      var random = [];
+      for (var r = 0; r < Math.ceil(a / 8); r++) random.push(0);
+      b.nextBytes(random);
+      value = bigOp('random', random.map(toByte), a);
+    } else if (typeof a === 'number' && b != null) {
+      // BigInteger(signum, magnitude)
+      value = bigOp('magnitude', a, normalizeByteArray(b).map(toByte));
+    } else {
+      // BigInteger(byte[])：二補數。
+      value = bigOp('bytes', normalizeByteArray(a).map(toByte));
+    }
+    hide(this, '_v', value);
+  }
+  function big(v) { return v instanceof BigInteger ? v._v : String(Math.trunc(Number(v))); }
+  function wrap(decimal) { return new BigInteger({ __lrBigDecimal: decimal }); }
+  function op(name) {
+    return function(o, m) { return wrap(bigOp(name, this._v, o == null ? null : big(o), m == null ? null : big(m))); };
+  }
+  var BP = BigInteger.prototype;
+  ['add', 'subtract', 'multiply', 'divide', 'remainder', 'mod', 'modPow',
+   'modInverse', 'and', 'or', 'xor', 'andNot', 'min', 'max'].forEach(function(name) { BP[name] = op(name); });
+  ['negate', 'abs', 'not'].forEach(function(name) {
+    BP[name] = function() { return wrap(bigOp(name, this._v)); };
+  });
+  ['pow', 'shiftLeft', 'shiftRight', 'setBit', 'clearBit', 'flipBit'].forEach(function(name) {
+    BP[name] = function(n) { return wrap(bigOp(name, this._v, Number(n))); };
+  });
+  BP.testBit = function(n) { return bigOp('testBit', this._v, Number(n)); };
+  BP.bitLength = function() { return bigOp('bitLength', this._v); };
+  BP.bitCount = function() { return bigOp('bitCount', this._v); };
+  BP.signum = function() { return this._v === '0' ? 0 : (this._v.charAt(0) === '-' ? -1 : 1); };
+  BP.compareTo = function(o) { return bigOp('compare', this._v, big(o)); };
+  BP.equals = function(o) { return o instanceof BigInteger && o._v === this._v; };
+  BP.intValue = function() { return bigOp('intValue', this._v); };
+  BP.longValue = function() { return bigOp('longValue', this._v); };
+  BP.doubleValue = function() { return Number(this._v); };
+  BP.toString = function(radix) { return radix == null || Number(radix) === 10 ? this._v : bigOp('toString', this._v, Number(radix)); };
+  BP.valueOf = function() { return Number(this._v); };
+  BP.hashCode = function() { return bigOp('hashCode', this._v); };
+  BP.toByteArray = function() { return bigOp('toByteArray', this._v); };
+  BigInteger.valueOf = function(n) { return wrap(big(n)); };
+  BigInteger.ZERO = wrap('0');
+  BigInteger.ONE = wrap('1');
+  BigInteger.TWO = wrap('2');
+  BigInteger.TEN = wrap('10');
+  named('BigInteger', BigInteger);
+
   /// java.util.ArrayList／LinkedList：JS 陣列加上 Java List 的方法。
   function ArrayList(init) {
     var list = [];
@@ -223,7 +293,10 @@ extension JsJavaClasses on JsExtensionsBase {
     hide(list, 'set', function(i, v) { var old = list[i]; list[i] = v; return old; });
     hide(list, 'size', function() { return list.length; });
     hide(list, 'isEmpty', function() { return list.length === 0; });
-    hide(list, 'contains', function(v) { return list.indexOf(v) >= 0; });
+    hide(list, 'contains', function(v) {
+      for (var i = 0; i < list.length; i++) if (global.__lrJavaEquals(list[i], v)) return true;
+      return false;
+    });
     hide(list, 'remove', function(v) {
       if (typeof v === 'number') return list.splice(v, 1)[0];
       var i = list.indexOf(v);
@@ -238,6 +311,8 @@ extension JsJavaClasses on JsExtensionsBase {
     });
     hide(list, 'clear', function() { list.length = 0; });
     hide(list, 'toArray', function() { return list.slice(); });
+    hide(list, 'iterator', function() { return global.__lrJavaIterator(list); });
+    hide(list, 'subList', function(from, to) { return global.__lrSubList(list, from, to); });
     return list;
   }
   named('ArrayList', ArrayList);
@@ -745,6 +820,7 @@ extension JsJavaClasses on JsExtensionsBase {
         }
       },
       text: { SimpleDateFormat: SimpleDateFormat },
+      math: { BigInteger: BigInteger },
       security: { MessageDigest: MessageDigest, SecureRandom: SecureRandom },
       nio: { ByteBuffer: ByteBuffer },
       net: {
@@ -780,4 +856,192 @@ extension JsJavaClasses on JsExtensionsBase {
 })(globalThis);
 ''');
   }
+}
+
+/// `java.math.BigInteger` 的運算：`[運算, 值, 參數…]`，值都是十進位字串。傳回
+/// `{value}`，Java 會丟例外的情況傳回 `{error, message}`，由 JS 丟出同樣的錯。
+Map<String, Object?> _bigIntegerOp(List<dynamic> args) {
+  BigInt at(int i) => BigInt.parse(args[i].toString());
+  int intAt(int i) => (args[i] as num).toInt();
+  List<int> bytesAt(int i) => List<int>.from(args[i] as List);
+  BigInt magnitude(List<int> bytes) =>
+      bytes.fold(BigInt.zero, (v, b) => (v << 8) | BigInt.from(b & 0xFF));
+  Map<String, Object?> number(BigInt v) => {'value': v.toString()};
+  Map<String, Object?> fail(String type, String message) => {
+    'error': type,
+    'message': message,
+  };
+  const arithmetic = 'java.lang.ArithmeticException';
+  const numberFormat = 'java.lang.NumberFormatException';
+  final op = args[0].toString();
+  try {
+    switch (op) {
+      case 'parse':
+        // Java 不去頭尾空白；radix 不在 2–36 也是 NumberFormatException。
+        final text = args[1].toString();
+        final radix = intAt(2);
+        if (radix < 2 || radix > 36) {
+          return fail(numberFormat, 'Radix out of range');
+        }
+        final digits = text.startsWith('-') || text.startsWith('+')
+            ? text.substring(1)
+            : text;
+        final parsed = RegExp(r'^[0-9a-zA-Z]+$').hasMatch(digits)
+            ? BigInt.tryParse(text, radix: radix)
+            : null;
+        if (parsed == null) {
+          return fail(numberFormat, 'For input string: "$text"');
+        }
+        return number(parsed);
+      case 'bytes':
+        final bytes = bytesAt(1);
+        if (bytes.isEmpty) return fail(numberFormat, 'Zero length BigInteger');
+        var v = magnitude(bytes);
+        if (bytes.first & 0x80 != 0) {
+          v -= BigInt.one << (bytes.length * 8);
+        }
+        return number(v);
+      case 'magnitude':
+        final signum = intAt(1);
+        final v = magnitude(bytesAt(2));
+        if (signum < -1 || signum > 1) {
+          return fail(numberFormat, 'Invalid signum value');
+        }
+        if (signum == 0 && v != BigInt.zero) {
+          return fail(numberFormat, 'signum-magnitude mismatch');
+        }
+        return number(signum < 0 ? -v : v);
+      case 'random':
+        if (intAt(2) < 0) {
+          return fail(
+            'java.lang.IllegalArgumentException',
+            'numBits must be non-negative',
+          );
+        }
+        return number(
+          magnitude(bytesAt(1)) & ((BigInt.one << intAt(2)) - BigInt.one),
+        );
+      case 'add':
+        return number(at(1) + at(2));
+      case 'subtract':
+        return number(at(1) - at(2));
+      case 'multiply':
+        return number(at(1) * at(2));
+      case 'divide':
+      case 'remainder':
+        if (at(2) == BigInt.zero) {
+          return fail(arithmetic, 'BigInteger divide by zero');
+        }
+        return number(op == 'divide' ? at(1) ~/ at(2) : at(1).remainder(at(2)));
+      case 'mod':
+        if (at(2) <= BigInt.zero) {
+          return fail(arithmetic, 'BigInteger: modulus not positive');
+        }
+        return number(at(1) % at(2));
+      case 'modPow':
+        final mod = at(3);
+        if (mod <= BigInt.zero) {
+          return fail(arithmetic, 'BigInteger: modulus not positive');
+        }
+        final exp = at(2);
+        final base = exp.isNegative ? at(1).modInverse(mod) : at(1) % mod;
+        // Dart 的 modPow 在指數 0、模數 1 時是 1，Java 是 0：結果再取一次模。
+        return number(base.modPow(exp.abs(), mod) % mod);
+      case 'modInverse':
+        if (at(2) <= BigInt.zero) {
+          return fail(arithmetic, 'BigInteger: modulus not positive');
+        }
+        return number(at(1).modInverse(at(2)));
+      case 'pow':
+        if (intAt(2) < 0) return fail(arithmetic, 'Negative exponent');
+        return number(at(1).pow(intAt(2)));
+      case 'negate':
+        return number(-at(1));
+      case 'abs':
+        return number(at(1).abs());
+      case 'not':
+        return number(~at(1));
+      case 'and':
+        return number(at(1) & at(2));
+      case 'or':
+        return number(at(1) | at(2));
+      case 'xor':
+        return number(at(1) ^ at(2));
+      case 'andNot':
+        return number(at(1) & ~at(2));
+      case 'min':
+        return number(at(1) <= at(2) ? at(1) : at(2));
+      case 'max':
+        return number(at(1) >= at(2) ? at(1) : at(2));
+      case 'shiftLeft':
+        final n = intAt(2);
+        return number(n >= 0 ? at(1) << n : at(1) >> -n);
+      case 'shiftRight':
+        final n = intAt(2);
+        return number(n >= 0 ? at(1) >> n : at(1) << -n);
+      case 'setBit':
+      case 'clearBit':
+      case 'flipBit':
+      case 'testBit':
+        final n = intAt(2);
+        if (n < 0) return fail(arithmetic, 'Negative bit address');
+        final bit = BigInt.one << n;
+        return switch (op) {
+          'setBit' => number(at(1) | bit),
+          'clearBit' => number(at(1) & ~bit),
+          'flipBit' => number(at(1) ^ bit),
+          _ => {'value': at(1) & bit != BigInt.zero},
+        };
+      case 'bitLength':
+        return {'value': at(1).bitLength};
+      case 'bitCount':
+        // Java：負數算 ~x 的 1。
+        final v = at(1).isNegative ? ~at(1) : at(1);
+        return {'value': v.toRadixString(2).replaceAll('0', '').length};
+      case 'compare':
+        return {'value': at(1).compareTo(at(2)).sign};
+      case 'intValue':
+        return {'value': at(1).toSigned(32).toInt()};
+      case 'longValue':
+        return {'value': at(1).toSigned(64).toInt()};
+      case 'toString':
+        // Java：radix 不在 2–36 時照十進位。
+        final radix = intAt(2);
+        return {
+          'value': at(1).toRadixString(radix < 2 || radix > 36 ? 10 : radix),
+        };
+      case 'hashCode':
+        // JDK BigInteger.hashCode：大小（magnitude）的每個 32 位元字組從高到
+        // 低 hash = 31 * hash + word，最後乘上正負號，都照 Java int 溢位。
+        final v = at(1);
+        var hash = 0;
+        var mag = v.abs();
+        final words = <int>[];
+        while (mag > BigInt.zero) {
+          words.insert(0, (mag & BigInt.from(0xFFFFFFFF)).toInt());
+          mag >>= 32;
+        }
+        for (final word in words) {
+          hash = (31 * hash + word).toSigned(32);
+        }
+        return {'value': (hash * v.sign).toSigned(32)};
+      case 'toByteArray':
+        final v = at(1);
+        final length = v.bitLength ~/ 8 + 1;
+        final unsigned = v.toUnsigned(length * 8);
+        return {
+          'value': [
+            for (var i = length - 1; i >= 0; i--)
+              ((unsigned >> (i * 8)) & BigInt.from(0xFF)).toInt(),
+          ],
+        };
+    }
+  } on Exception catch (error) {
+    // modInverse 沒有反元素時 Dart 丟 Exception，Java 丟 ArithmeticException。
+    return fail(arithmetic, error.toString());
+  } on ArgumentError catch (error) {
+    // 前面沒擋到的參數錯誤（例如位移量太大）不漏成 Dart 的錯誤。
+    return fail(arithmetic, error.toString());
+  }
+  return fail('java.lang.UnsupportedOperationException', op);
 }
