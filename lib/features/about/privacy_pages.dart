@@ -33,7 +33,7 @@ class PrivacyNoticePage extends StatelessWidget {
           ),
           _NoticeSection(
             title: '備份資料',
-            body: '備份檔會包含書架、書源、閱讀進度、設定、規則與已快取正文等資料。備份檔目前不加密，請自行保存於可信位置。',
+            body: '備份檔會包含書架、書源、閱讀進度、設定、規則與已快取正文等資料，以及書源的登入資料（登入表單填的帳號密碼、登入標頭與 Cookie）。備份檔目前不加密，請自行保存於可信位置。',
           ),
           _NoticeSection(
             title: 'Crash log',
