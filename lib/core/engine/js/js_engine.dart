@@ -272,7 +272,11 @@ globalThis.__lrStartedRule = -1;
   /// 時，每次都要多付十幾次跨 FFI 的解析與執行。
   void _injectContext(Map<String, dynamic>? context) {
     if (context == null) return;
-    final statements = <String>[];
+    // 先把 java、cookie、cache、source 重設回原本的物件：上一條規則把它們
+    // 拿去存別的值時，這一條照樣拿到 Legado 給的物件。
+    final statements = <String>[
+      'if (typeof __lrRestoreBindings === "function") __lrRestoreBindings();',
+    ];
     // 只剩這一條規則在跑（不是巢狀執行）：上一條規則交給 JS 的 Jsoup 元素
     // 不會再用，清掉。
     final jsoup = _extensions?.jsoup;

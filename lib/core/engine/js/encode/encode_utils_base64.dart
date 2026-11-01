@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:convert/convert.dart';
-import 'package:fast_gbk/fast_gbk.dart';
 
+import 'charsets.dart';
 import 'encode_utils_base.dart';
 
 /// JsEncodeUtils 的 Base64 與 Hex 轉碼擴展
@@ -38,14 +38,8 @@ extension EncodeUtilsBase64 on EncodeUtilsBase {
     String charset = 'UTF-8',
     int flags = 0,
   }) {
-    final bytes = base64DecodeToBytes(str, flags: flags);
-    final name = charset.toUpperCase();
-    if (name.contains('GBK') || name.contains('GB2312') || name == 'GB18030') {
-      return gbk.decode(bytes);
-    }
-    if (name == 'ISO-8859-1' || name == 'LATIN1') return latin1.decode(bytes);
-    // 解不出來的位元組換成 �，同 Java 的 String(bytes, charset)。
-    return utf8.decode(bytes, allowMalformed: true);
+    // 照 Java 的 String(bytes, charset)；不認得的字元集丟錯誤。
+    return Charsets.decode(base64DecodeToBytes(str, flags: flags), charset);
   }
 
   /// 空白與換行略過、缺的 `=` 補上；兩種字母表（`+/` 與 `-_`）都收，同

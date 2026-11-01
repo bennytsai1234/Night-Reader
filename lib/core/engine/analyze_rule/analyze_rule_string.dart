@@ -308,15 +308,14 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     Iterable<String> values, {
     required bool isUrl,
   }) {
-    final normalized = values
-        .where((value) => value.isNotEmpty)
+    final nonEmpty = values.where((value) => value.isNotEmpty);
+    // 同 Legado：網址補成完整網址並去掉重複的；一般文字照原樣，重複的留著。
+    if (!isUrl) return nonEmpty.toList();
+    return nonEmpty
         .map(
-          (value) => isUrl
-              ? NetworkUtils.getAbsoluteURL(redirectUrl ?? baseUrl, value)
-              : value,
+          (value) => NetworkUtils.getAbsoluteURL(redirectUrl ?? baseUrl, value),
         )
         .toSet()
         .toList();
-    return normalized;
   }
 }

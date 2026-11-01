@@ -202,6 +202,13 @@ extension JsJsoupExtensions on JsExtensionsBase {
             return list.length ? list[0].val() : '';
           });
           hide('toArray', function() { return list.slice(); });
+          // Elements 是 ArrayList<Element>：書源自己組清單時 add、addAll。
+          hide('add', function(node) { list.push(node); return true; });
+          hide('addAll', function(more) {
+            var items = typeof more.toArray === 'function' ? more.toArray() : more;
+            for (var i = 0; i < items.length; i++) list.push(items[i]);
+            return items.length > 0;
+          });
           hide('asList', function() { return list.slice(); });
           hide('textNodes', function() { return union('textNodes', []); });
           return list;
@@ -230,7 +237,18 @@ extension JsJsoupExtensions on JsExtensionsBase {
         global.org.jsoup = {
           Jsoup: Jsoup,
           parser: { Parser: Parser },
-          nodes: { Document: { createShell: function(baseUri) { return Jsoup.parse('', baseUri); } } }
+          nodes: { Document: { createShell: function(baseUri) { return Jsoup.parse('', baseUri); } } },
+          // new Elements([元素清單])：書源自己組元素清單。
+          select: {
+            Elements: function(items) {
+              var list = [];
+              if (items != null) {
+                var source = typeof items.toArray === 'function' ? items.toArray() : items;
+                for (var i = 0; i < source.length; i++) list.push(source[i]);
+              }
+              return elements(list);
+            }
+          }
         };
       })(globalThis);
     ''');

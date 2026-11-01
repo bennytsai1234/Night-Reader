@@ -22,6 +22,7 @@ import 'extensions/js_crypto_extensions.dart';
 import 'extensions/js_string_extensions.dart';
 import 'extensions/js_file_extensions.dart';
 import 'extensions/js_font_extensions.dart';
+import 'extensions/js_java_classes.dart';
 import 'extensions/js_java_object.dart';
 import 'extensions/js_jsoup_extensions.dart';
 
@@ -57,6 +58,8 @@ class JsExtensions extends JsExtensionsBase {
     // Jsoup 在 java 物件之前：java.getElements 與 Packages.org 要用到它。
     injectJsoupExtensions();
     injectJavaObjectJs();
+    // Java 類別用到 java 物件與它定義的加解密類別。
+    injectJavaClasses();
   }
 
   void _injectCoreHandlers() {
@@ -168,17 +171,24 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
     // java.setBaseUrl／setRedirectUrl：之後的規則用這個網址補相對網址。
+    // setRedirectUrl 同 Legado：data: 與不是網址的不改，傳回改完的網址。
     runtime.onMessage('ruleSetUrl', (args) {
       final rule = ruleContext;
-      if (rule is AnalyzeRule && args is List && args.length > 1) {
-        final url = args[1]?.toString();
-        if (args[0] == 'base') {
-          rule.baseUrl = url;
-        } else if (url != null) {
-          rule.setRedirectUrl(url);
-        }
+      if (rule is! AnalyzeRule || args is! List || args.length < 2) return null;
+      final url = args[1]?.toString();
+      if (args[0] == 'base') {
+        if (url != null) rule.baseUrl = url;
+        return null;
       }
-      return null;
+      final parsed = url == null ? null : Uri.tryParse(url);
+      if (url != null &&
+          !url.startsWith('data:') &&
+          parsed != null &&
+          parsed.hasScheme &&
+          parsed.host.isNotEmpty) {
+        rule.setRedirectUrl(url);
+      }
+      return rule.redirectUrl;
     });
     onBlocking('ruleRefreshTocUrl', (_) {
       final rule = ruleContext;
@@ -250,14 +260,6 @@ class JsExtensions extends JsExtensionsBase {
       _track(CookieStore().removeCookie(args.toString()));
       return null;
     });
-    runtime.onMessage('replaceCookie', (args) {
-      if (args is List && args.length >= 2) {
-        _track(
-          CookieStore().replaceCookie(args[0].toString(), args[1].toString()),
-        );
-      }
-      return null;
-    });
     runtime.onMessage('clearCookies', (_) {
       _track(CookieStore().clearAll());
       return null;
@@ -318,11 +320,18 @@ class JsExtensions extends JsExtensionsBase {
     );
     // java.toURL(url[, baseUrl])：網址拆成 host、origin、pathname、searchParams
     // （Legado JsURL；查詢參數的值照 UTF-8 解碼）。
+    // 網址不完整（沒有協定）時是 null，由 JS 丟 MalformedURLException。
     runtime.onMessage('toURL', (args) {
       final list = args is List ? args : [args];
       final raw = list.first.toString();
       final base = list.length > 1 && list[1] != null ? list[1].toString() : '';
-      final uri = base.isEmpty ? Uri.parse(raw) : Uri.parse(base).resolve(raw);
+      final Uri? uri;
+      try {
+        uri = base.isEmpty ? Uri.parse(raw) : Uri.parse(base).resolve(raw);
+      } on FormatException {
+        return null;
+      }
+      if (!uri.hasScheme) return null;
       final origin = uri.hasPort
           ? '${uri.scheme}://${uri.host}:${uri.port}'
           : '${uri.scheme}://${uri.host}';
@@ -332,9 +341,7 @@ class JsExtensions extends JsExtensionsBase {
         for (final pair in uri.query.split('&')) {
           final eq = pair.indexOf('=');
           if (eq < 0) continue;
-          params[pair.substring(0, eq)] = Uri.decodeQueryComponent(
-            pair.substring(eq + 1),
-          );
+          params[pair.substring(0, eq)] = _urlDecode(pair.substring(eq + 1));
         }
       }
       return {
@@ -342,16 +349,20 @@ class JsExtensions extends JsExtensionsBase {
         'origin': origin,
         'pathname': uri.path,
         'searchParams': params,
-        // java.net.URL 也用這裡拆好的網址。
+        // java.net.URL 也用這裡拆好的網址：query 是原樣，不解碼。
         'protocol': uri.scheme,
         'port': uri.hasPort ? uri.port : -1,
         'query': uri.hasQuery ? uri.query : null,
         'ref': uri.hasFragment ? uri.fragment : null,
+        'userInfo': uri.userInfo.isEmpty ? null : uri.userInfo,
         'href': uri.toString(),
       };
     });
     // Thread.sleep／LockSupport.parkNanos：這條書源 isolate 停住，同 Java。
-    runtime.onMessage('_sleep', (args) {
+    // 只有書源 isolate 停得起；畫面那條 isolate 不能停（ADR 0034），丟錯誤
+    // 讓規則 JS 接到，和其他要等的呼叫一樣。
+    onBlocking('_sleep', (args) {
+      if (!BlockingCall.available) throw const BlockingCallUnavailable();
       final ms = args is num ? args.toInt() : int.tryParse('$args') ?? 0;
       if (ms > 0) sleep(Duration(milliseconds: ms));
       return null;
@@ -568,6 +579,31 @@ class JsExtensions extends JsExtensionsBase {
       case final BookChapter chapter:
         chapterRuleFields[fieldName]?.write(chapter, value);
     }
+  }
+
+  /// Java 的 URLDecoder.decode(s, "utf-8")：+ 變空白、%XX 照 UTF-8 解，解不出
+  /// 的位元組換成 �（Legado JsURL 的 searchParams）。
+  static String _urlDecode(String text) {
+    final bytes = <int>[];
+    final chars = text.replaceAll('+', ' ').runes.toList();
+    bool isHex(int c) =>
+        (c >= 0x30 && c <= 0x39) ||
+        (c >= 0x41 && c <= 0x46) ||
+        (c >= 0x61 && c <= 0x66);
+    for (var i = 0; i < chars.length; i++) {
+      if (chars[i] == 0x25 &&
+          i + 2 < chars.length &&
+          isHex(chars[i + 1]) &&
+          isHex(chars[i + 2])) {
+        bytes.add(
+          int.parse(String.fromCharCodes(chars, i + 1, i + 3), radix: 16),
+        );
+        i += 2;
+      } else {
+        bytes.addAll(utf8.encode(String.fromCharCode(chars[i])));
+      }
+    }
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   (String, dynamic, bool, bool) _ruleCall(dynamic args) {

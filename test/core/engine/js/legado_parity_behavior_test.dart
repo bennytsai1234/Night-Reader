@@ -109,15 +109,16 @@ void main() {
     test('Thread, System, StringBuilder', () {
       expect(
         eval(r'''
-          Packages.java.lang.Thread.sleep(1);
-          Packages.java.util.concurrent.locks.LockSupport.parkNanos(this, 1000);
+          // 測試跑在畫面那條 isolate：停不得，丟錯誤（ADR 0034）。
+          var refused;
+          try { Packages.java.lang.Thread.sleep(1); } catch (e) { refused = 'refused'; }
           var a = [1, 2, 3], b = [0, 0, 0, 0];
           Packages.java.lang.System.arraycopy(a, 0, b, 1, 3);
           var sb = new Packages.java.lang.StringBuilder("x").append(1).append("y");
-          [b.join(""), sb.toString(), sb.length(),
+          [refused, b.join(""), sb.toString(), sb.length(),
            typeof Packages.java.lang.System.currentTimeMillis()].join("|")
         '''),
-        '0123|x1y|3|number',
+        'refused|0123|x1y|3|number',
       );
     }, skip: skip);
 
@@ -232,6 +233,155 @@ void main() {
       );
     }, skip: skip);
   });
+
+  group('the same results as Java for edge cases', () {
+    test('digest and HMAC updates, Hutool', () {
+      expect(
+        eval(r'''
+          function hex(b) { return b.map(function(x) { return ((x & 0xFF) + 0x100).toString(16).substring(1); }).join(''); }
+          var md = Packages.java.security.MessageDigest.getInstance('MD5');
+          md.update(97);
+          var one = hex(md.digest());
+          var mac = Packages.javax.crypto.Mac.getInstance('HmacSHA256');
+          mac.init(new Packages.javax.crypto.spec.SecretKeySpec(java.strToBytes('key', 'UTF-8'), 'HmacSHA256'));
+          mac.update([65, 66, 67], 1, 1);
+          var sliced = hex(mac.doFinal());
+          mac.update(66);
+          var single = hex(mac.doFinal());
+          [one, sliced === single, cn.hutool.crypto.digest.DigestUtil.md5Hex('a')].join('|')
+        '''),
+        '0cc175b9c0f1b6a831c399e269772661|true|0cc175b9c0f1b6a831c399e269772661',
+      );
+    }, skip: skip);
+
+    test('URL encoding and Base64 charsets', () {
+      expect(
+        eval(r'''
+          var bad;
+          try { java.base64Decode('QQ==', 'NOT-A-CHARSET'); } catch (e) { bad = 'error'; }
+          [java.encodeURI('A B中', 'UTF-16'),
+           java.base64Decode(java.base64Encode(java.strToBytes('中', 'UTF-16LE')), 'UTF-16LE'),
+           bad, String(java.base64Decode(null)),
+           android.util.Base64.encodeToString([65, 66, 67], 1, 1, 2),
+           Packages.java.util.Base64.getDecoder().decode([81, 81, 61, 61]).join(',')].join('|')
+        '''),
+        'A+B%FE%FF%4E%2D|中|error|null|Qg==|65',
+      );
+    }, skip: skip);
+
+    test('maps, sets, arrays', () {
+      expect(
+        eval(r'''
+          var m = new Packages.java.util.HashMap();
+          m.put(1, 'n'); m.put('1', 's'); m.put('__proto__', 123);
+          var t = new Packages.java.util.TreeMap(); t.put('b', 2); t.put('a', 1);
+          var set = new Packages.java.util.HashSet([10, 20]);
+          var removed = set.remove(10);
+          var a = [1, 2, 3, 4];
+          Packages.java.lang.System.arraycopy(a, 0, a, 1, 3);
+          var h = new Packages.java.util.HashMap(); h.put('a', '1');
+          cache.putMemory('obj', h);
+          [m.size(), m.get(1), m.get('1'), m.get('__proto__'), t.keySet().join(','),
+           removed, set.join(','), a.join(','), cookie.cookieToMap('a=1').get('a'),
+           cookie.mapToCookie(h), cache.getFromMemory('obj') === h,
+           java.toURL('https://a.test/?x=%D6%D0&y=1').searchParams.get('y'),
+           new Packages.java.util.ArrayList().addAll([])].join('|')
+        '''),
+        '3|n|s|123|a,b|true|20|1,1,2,3|1|a=1|true|1|false',
+      );
+    }, skip: skip);
+
+    test('streams, buffers, StringBuilder', () {
+      expect(
+        eval(r'''
+          var input = new Packages.java.io.ByteArrayInputStream([-1, 65, 66, 67], 2, 1);
+          var first = new Packages.java.io.ByteArrayInputStream([-1]).read();
+          var zlib = [120, 156, 203, 72, 205, 201, 201, 7, 0, 6, 44, 2, 21];
+          var inflated = new Packages.java.util.zip.InflaterInputStream(
+            new Packages.java.io.ByteArrayInputStream(zlib)).read();
+          var inflater = new Packages.java.util.zip.Inflater();
+          inflater.setInput(zlib);
+          var out = [0, 0, 0, 0, 0];
+          var n = inflater.inflate(out);
+          var bb = Packages.java.nio.ByteBuffer.allocate(4); bb.putInt(0, 258);
+          var overflow;
+          try { Packages.java.nio.ByteBuffer.allocate(1).putInt(258); } catch (e) { overflow = 'overflow'; }
+          var sb = new Packages.java.lang.StringBuilder('😀a').reverse();
+          var grow = new Packages.java.lang.StringBuilder('a'); grow.setLength(3);
+          [first, input.read(), input.read(), inflated, n, inflater.finished(),
+           bb.array().join(','), bb.position(), overflow, sb.toString(), grow.length()].join('|')
+        '''),
+        '255|66|-1|104|5|true|0,0,1,2|0|overflow|a😀|3',
+      );
+    }, skip: skip);
+
+    test('dates, URLs, decoder errors', () {
+      expect(
+        eval(r'''
+          var f = new Packages.java.text.SimpleDateFormat('yyyy-MM-dd Z E EEEE a MMM');
+          f.setTimeZone(Packages.java.util.TimeZone.getTimeZone('GMT+8'));
+          var parsed = new Packages.java.text.SimpleDateFormat('yyyyMMddHHmm');
+          parsed.setTimeZone(Packages.java.util.TimeZone.getTimeZone('UTC'));
+          var u = new Packages.java.net.URL('https://user@a.test:81/p?q=%D6%D0#r');
+          var bad;
+          try { Packages.java.net.URLDecoder.decode('a%ZZ', 'UTF-8'); } catch (e) { bad = 'error'; }
+          var h = okhttp3.HttpUrl.parse('https://a.test/?x=1&x=2');
+          [f.format(new Packages.java.util.Date(0)), parsed.parse('197001020304').getTime(),
+           u.getQuery(), u.getAuthority(), String(okhttp3.HttpUrl.parse('not a url')),
+           h.queryParameter('x'), bad].join('|')
+        '''),
+        '1970-01-01 +0800 週四 星期四 上午 1月|97440000|q=%D6%D0|user@a.test:81|null|1|error',
+      );
+    }, skip: skip);
+
+    test('cache numbers follow Kotlin', () {
+      expect(
+        eval(r'''
+          cache.put('big', '2147483648'); cache.put('hex', '0x10'); cache.put('f', '16777217');
+          cache.put('d', '1.5e2'); cache.put('i', '-12');
+          [String(cache.getInt('big')), cache.getLong('big'), String(cache.getDouble('hex')),
+           cache.getFloat('f'), cache.getDouble('d'), cache.getInt('i')].join('|')
+        '''),
+        'null|2147483648|null|16777216|150|-12',
+      );
+    }, skip: skip);
+
+    test('Jsoup Elements, StrResponse, priorResponse', () {
+      expect(
+        eval(r'''
+          var doc = org.jsoup.Jsoup.parse('<p>a</p><p>b</p>');
+          var list = new org.jsoup.select.Elements();
+          list.add(doc.select('p').get(1));
+          var r = new Packages.io.legado.app.help.http.StrResponse('https://a.test/', '內文');
+          var hop = buildHttpResponse({ url: 'https://b.test/', requestUrl: 'https://a.test/',
+            redirects: ['https://b.test/'], code: 200, headers: {} }).raw().priorResponse();
+          [list.size(), list.text(), r.body(), r.url(), hop.request().url(), hop.header('Location')].join('|')
+        '''),
+        '1|b|內文|https://a.test/|https://a.test/|https://b.test/',
+      );
+    }, skip: skip);
+  });
+
+  test('rule scope: setters, evalJS, source scope, bindings reset', () {
+    final rule = AnalyzeRule(
+      source: BookSource(bookSourceUrl: 'https://src.test'),
+    )..setContent('<i>x</i><i>x</i>', baseUrl: 'https://page.test/c/1');
+    addTearDown(rule.dispose);
+    expect(
+      rule.evalJS(r'''
+        [java.setBaseUrl('https://page.test/c/2') === java,
+         String(java.setRedirectUrl('data:text/plain,x')),
+         java.evalJS('result + 1', 2),
+         source.evalJS('baseUrl'),
+         typeof source.encodeURI,
+         java.getStringList('tag.i@text').join(',')].join('|')
+      ''', null),
+      'true|https://page.test/c/1|3|https://src.test|function|x,x',
+    );
+    // 規則把 cookie 拿去存別的值，下一條規則照樣拿到 Legado 的 cookie。
+    rule.evalJS('cookie = "被改掉"; 1', null);
+    expect(rule.evalJS('typeof cookie.getKey', null), 'function');
+  }, skip: skip);
 
   test('getString parses the content it is given', () {
     final rule = AnalyzeRule(

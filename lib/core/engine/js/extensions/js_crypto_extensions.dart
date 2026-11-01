@@ -150,7 +150,9 @@ extension JsCryptoExtensions on JsExtensions {
         flags: flags ?? EncodeUtilsBase.base64NoWrap,
       );
     });
-    runtime.onMessage('_base64Decode', (dynamic args) {
+    // 不認得的字元集丟錯誤給規則 JS（同 Legado 的 charset()），所以經
+    // onBlocking 包成 {value}／{error}。
+    onBlocking('_base64Decode', (dynamic args) {
       final (data, flags, charset) = _base64Args(args);
       return JsEncodeUtils.base64Decode(
         data.toString(),
