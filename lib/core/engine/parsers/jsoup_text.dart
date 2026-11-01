@@ -82,6 +82,9 @@ String jsoupWholeText(dom.Node node) {
   return buffer.toString();
 }
 
+/// Jsoup `Element.isBlock()`：[tag] 是不是 Jsoup 的區塊元素。
+bool jsoupIsBlock(String tag) => _blockTags.contains(tag);
+
 bool _isDataElement(dom.Node node) =>
     node is dom.Element && _dataTags.contains(node.localName);
 

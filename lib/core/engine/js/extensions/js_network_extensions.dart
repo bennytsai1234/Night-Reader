@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 
+import '../encode/charsets.dart';
 import '../js_extensions.dart';
 import 'js_blocking_tasks.dart';
 
@@ -111,6 +112,68 @@ extension JsNetworkExtensions on JsExtensions {
           method: 'HEAD',
           url: payload[0].toString(),
           headers: _headersAt(payload, 1),
+        ),
+      );
+    });
+
+    // ─── org.jsoup.Jsoup.connect(url)…execute() ──────────────────
+    // 表單欄位照 Jsoup 編碼：沒有內文的方法接在網址後面；有內文的放進
+    // 內文，書源自己給了 requestBody 時改接在網址後面。
+    onBlocking('jsoupExecute', (payload) {
+      final request = payload as Map;
+      final charset = '${request['charset'] ?? 'UTF-8'}';
+      String form(List pairs) => [
+        for (final pair in pairs.cast<List>())
+          '${Charsets.urlEncode('${pair[0]}', charset)}='
+              '${Charsets.urlEncode('${pair[1]}', charset)}',
+      ].join('&');
+      var url = '${request['url']}';
+      final data = (request['data'] as List?) ?? const [];
+      final hasBody = request['hasBody'] == true;
+      final rawBody = request['body'] as String?;
+      final inBody = hasBody && rawBody == null;
+      final body = hasBody ? rawBody ?? form(data) : null;
+      if (!inBody && data.isNotEmpty) {
+        url += '${url.contains('?') ? '&' : '?'}${form(data)}';
+      }
+      final headers = <String, String>{};
+      for (final header
+          in ((request['headers'] as List?) ?? const []).cast<List>()) {
+        final name = '${header[0]}';
+        final existing = headers.keys
+            .where((k) => k.toLowerCase() == name.toLowerCase())
+            .firstOrNull;
+        if (existing == null) {
+          headers[name] = '${header[1]}';
+        } else {
+          headers[existing] = '${headers[existing]}, ${header[1]}';
+        }
+      }
+      final cookies = (request['cookies'] as Map?) ?? const {};
+      if (cookies.isNotEmpty) {
+        final cookie = [for (final e in cookies.entries) '${e.key}=${e.value}']
+            .join('; ');
+        final key = headers.keys
+            .where((k) => k.toLowerCase() == 'cookie')
+            .firstOrNull;
+        headers[key ?? 'Cookie'] = key == null
+            ? cookie
+            : '${headers[key]}; $cookie';
+      }
+      if (hasBody &&
+          !headers.keys.any((k) => k.toLowerCase() == 'content-type')) {
+        headers['Content-Type'] =
+            'application/x-www-form-urlencoded; charset=$charset';
+      }
+      return BlockingCall.run(
+        jsoupResponse(
+          method: '${request['method']}',
+          url: url,
+          headers: headers,
+          body: body == null ? null : Charsets.encode(body, charset),
+          timeoutMs: (request['timeout'] as num?)?.toInt() ?? 30000,
+          maxBodySize: (request['maxBodySize'] as num?)?.toInt() ?? 0,
+          followRedirects: request['followRedirects'] != false,
         ),
       );
     });

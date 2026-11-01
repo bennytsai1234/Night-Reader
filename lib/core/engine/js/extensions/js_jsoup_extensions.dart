@@ -1,4 +1,5 @@
 import '../js_extensions_base.dart';
+import 'js_jsoup_connection.dart';
 
 /// 規則 JS 的 Jsoup：`org.jsoup.Jsoup`、`Packages.org.jsoup`、
 /// `java.getElements` 傳回的元素。JS 端的物件只帶 [JsoupBridge] 的編號，
@@ -15,6 +16,7 @@ extension JsJsoupExtensions on JsExtensionsBase {
       }
     });
 
+    runtime.evaluate(jsoupConnectionJs);
     runtime.evaluate(r'''
       (function(global) {
         var cache = {};
@@ -37,13 +39,28 @@ extension JsJsoupExtensions on JsExtensionsBase {
         }
         global.__lrJsoupDecode = decode;
 
+        /// 參數交給 Dart：節點帶編號，節點清單帶編號清單，Java 的 Pattern
+        /// （JS 的正規式）用原文，其他物件轉成字串。
+        function encodeArg(arg) {
+          if (arg == null || typeof arg !== 'object') return arg;
+          if (arg instanceof LrNode) return { __lrNode: arg.__lrElementId };
+          if (arg instanceof RegExp) return arg.source;
+          var items = Array.isArray(arg) ? arg
+            : (typeof arg.toArray === 'function' ? arg.toArray() : null);
+          if (items && (items.length === 0 || items[0] instanceof LrNode)) {
+            return { __lrList: items.map(encodeArg) };
+          }
+          return String(arg);
+        }
+
         function call(op, id, args) {
           var payload = [op, id];
-          for (var i = 0; i < args.length; i++) {
-            var arg = args[i];
-            payload.push(arg != null && typeof arg === 'object' ? String(arg) : arg);
-          }
+          for (var i = 0; i < args.length; i++) payload.push(encodeArg(args[i]));
           return decode(sendMessage('jsoup', JSON.stringify(payload)));
+        }
+        function create(kind, value, baseUri) {
+          return decode(sendMessage('jsoup', JSON.stringify(
+            ['create', 0, kind, value == null ? '' : String(value), baseUri == null ? null : String(baseUri)])));
         }
 
         function LrNode(id, kind) {
@@ -52,35 +69,151 @@ extension JsJsoupExtensions on JsExtensionsBase {
         }
         var methods = [
           'text', 'ownText', 'wholeText', 'html', 'outerHtml', 'data', 'val',
-          'attr', 'hasAttr', 'removeAttr', 'absUrl', 'id', 'className',
+          'hasAttr', 'removeAttr', 'absUrl', 'className',
           'hasClass', 'addClass', 'removeClass', 'toggleClass',
           'nodeName', 'normalName', 'select', 'selectFirst', 'is',
           'getElementById', 'getElementsByTag', 'getElementsByClass',
           'getElementsByAttribute', 'getElementsByAttributeValue',
           'getElementsContainingText', 'getElementsContainingOwnText',
-          'getAllElements', 'body', 'head', 'title', 'location', 'baseUri',
+          'getAllElements', 'body', 'head', 'location', 'baseUri',
           'setBaseUri', 'parent', 'parents', 'children', 'child',
           'childrenSize', 'firstElementChild', 'lastElementChild',
           'nextElementSibling', 'previousElementSibling', 'siblingElements',
           'elementSiblingIndex', 'nextSibling', 'previousSibling',
           'childNodes', 'childNodeSize', 'textNodes', 'cssSelector', 'remove',
-          'empty', 'clone', 'append', 'prepend', 'appendText', 'before',
-          'after', 'unwrap', 'isBlank', 'hasText'
+          'empty', 'clone', 'append', 'prepend', 'appendText',
+          'unwrap', 'isBlank', 'hasText',
+          // Node
+          'hasParent', 'attributesSize', 'clearAttributes', 'childNode',
+          'childNodesCopy', 'firstChild', 'lastChild', 'root', 'siblingIndex',
+          'siblingNodes', 'replaceWith', 'wrap', 'shallowClone', 'hasSameValue',
+          'hashCode',
+          // Element
+          'appendChild', 'appendChildren', 'prependChild', 'prependChildren',
+          'appendTo', 'appendElement', 'prependElement', 'prependText',
+          'closest', 'expectFirst', 'selectXpath', 'dataNodes',
+          'firstElementSibling', 'lastElementSibling', 'nextElementSiblings',
+          'previousElementSiblings', 'getElementsByAttributeStarting',
+          'getElementsByAttributeValueNot', 'getElementsByAttributeValueStarting',
+          'getElementsByAttributeValueEnding',
+          'getElementsByAttributeValueContaining',
+          'getElementsByAttributeValueMatching', 'getElementsByIndexEquals',
+          'getElementsByIndexLessThan', 'getElementsByIndexGreaterThan',
+          'getElementsMatchingText', 'getElementsMatchingOwnText', 'isBlock',
+          'wholeOwnText',
+          // Document、TextNode
+          'createElement', 'forms', 'expectForm', 'splitText'
         ];
         methods.forEach(function(name) {
           LrNode.prototype[name] = function() {
             return call(name, this.__lrElementId, Array.prototype.slice.call(arguments));
           };
         });
+        /// 一個名稱有讀有寫的（`id()`、`id(值)`）：有參數時改用 [setter]。
+        function overload(name, setter, isSet) {
+          LrNode.prototype[name] = function() {
+            var args = Array.prototype.slice.call(arguments);
+            return call(isSet(args) ? setter : name, this.__lrElementId, args);
+          };
+        }
+        var hasArgs = function(args) { return args.length > 0 && args[0] != null; };
+        overload('id', 'idSet', hasArgs);
+        overload('title', 'titleSet', hasArgs);
+        overload('attr', 'attrFlag', function(args) { return typeof args[1] === 'boolean'; });
+        overload('before', 'beforeNode', function(args) { return args[0] instanceof LrNode; });
+        overload('after', 'afterNode', function(args) { return args[0] instanceof LrNode; });
         LrNode.prototype.tagName = function(name) {
           return name == null
             ? call('tagName', this.__lrElementId, [])
             : call('tagNameSet', this.__lrElementId, [name]);
         };
+        LrNode.prototype.insertChildren = function(index) {
+          return call('insertChildren', this.__lrElementId,
+            Array.prototype.slice.call(arguments));
+        };
         LrNode.prototype.getWholeText = LrNode.prototype.wholeText;
         LrNode.prototype.parentNode = LrNode.prototype.parent;
         LrNode.prototype.ownerDocument = function() {
           return call('ownerDocument', this.__lrElementId, []);
+        };
+        // DataNode（<script>、<style> 的內容）與 Comment。
+        LrNode.prototype.getWholeData = LrNode.prototype.wholeText;
+        LrNode.prototype.setWholeData = function(data) {
+          return call('textSet', this.__lrElementId, [data]);
+        };
+        LrNode.prototype.getData = function() { return call('nodeData', this.__lrElementId, []); };
+        LrNode.prototype.setData = LrNode.prototype.setWholeData;
+        LrNode.prototype.isXmlDeclaration = function() {
+          var data = this.getData();
+          return data.length > 1 && (data.charAt(0) === '!' || data.charAt(0) === '?');
+        };
+        /// Jsoup 的 Tag：書源只會讀名稱、是不是區塊。
+        LrNode.prototype.tag = function() {
+          var node = this, name = node.tagName();
+          return {
+            getName: function() { return name; },
+            getNormalName: function() { return name.toLowerCase(); },
+            normalName: function() { return name.toLowerCase(); },
+            isBlock: function() { return node.isBlock(); },
+            isInline: function() { return !node.isBlock(); },
+            toString: function() { return name; }
+          };
+        };
+        LrNode.prototype.classNames = function(names) {
+          if (names == null) return javaList(call('classNames', this.__lrElementId, []));
+          var items = typeof names.toArray === 'function' ? names.toArray() : names;
+          return this.attr('class', Array.prototype.slice.call(items).join(' '));
+        };
+
+        // ── 走訪：NodeVisitor、NodeFilter、Consumer 可以是物件或函式 ──
+        function method(target, name) {
+          if (typeof target === 'function') return name === 'tail' ? null : target;
+          return target != null && typeof target[name] === 'function'
+            ? function() { return target[name].apply(target, arguments); } : null;
+        }
+        function traverseNode(root, visitor) {
+          var head = method(visitor, 'head'), tail = method(visitor, 'tail');
+          (function walk(node, depth) {
+            if (head) head(node, depth);
+            var kids = node.childNodes();
+            for (var i = 0; i < kids.length; i++) walk(kids[i], depth + 1);
+            if (tail) tail(node, depth);
+          })(root, 0);
+        }
+        /// Jsoup NodeTraversor.filter：head 的結果決定要不要往下、要不要拿掉。
+        function filterNode(node, depth, filter) {
+          var head = method(filter, 'head') || method(filter, 'filter');
+          var tail = method(filter, 'tail');
+          var result = String(head ? head(node, depth) : 'CONTINUE');
+          if (result === 'STOP') return 'STOP';
+          if (result === 'CONTINUE') {
+            var kids = node.childNodes();
+            for (var i = 0; i < kids.length; i++) {
+              if (filterNode(kids[i], depth + 1, filter) === 'STOP') return 'STOP';
+            }
+          }
+          if (result === 'CONTINUE' || result === 'SKIP_CHILDREN') {
+            var after = String(tail ? tail(node, depth) : 'CONTINUE');
+            if (after === 'STOP') return 'STOP';
+            if (after === 'REMOVE') node.remove();
+          }
+          if (result === 'REMOVE') node.remove();
+          return 'CONTINUE';
+        }
+        function accept(consumer) {
+          return method(consumer, 'accept') || method(consumer, 'apply');
+        }
+        LrNode.prototype.traverse = function(visitor) { traverseNode(this, visitor); return this; };
+        LrNode.prototype.filter = function(filter) { filterNode(this, 0, filter); return this; };
+        LrNode.prototype.forEachNode = function(consumer) {
+          var fn = accept(consumer);
+          traverseNode(this, function(node) { fn(node); });
+          return this;
+        };
+        LrNode.prototype.forEach = function(consumer) {
+          var fn = accept(consumer);
+          this.getAllElements().forEach(function(element) { fn(element); });
+          return this;
         };
         /// Java 的 List<String>（eachText、classNames 這類）：陣列加上 size/get。
         function javaList(items) {
@@ -184,8 +317,52 @@ extension JsJsoupExtensions on JsExtensionsBase {
           hide('not', function(css) { return elements(list.filter(function(n) { return !n.is(css); })); });
           hide('select', function(css) { return union('select', [css]); });
           hide('parents', function() { return union('parents', []); });
-          hide('next', function() { return union('nextElementSibling', []); });
-          hide('prev', function() { return union('previousElementSibling', []); });
+          /// Jsoup Elements.next／nextAll／prev／prevAll：每個元素往後（往前）
+          /// 的兄弟元素，符合 [css] 的；和 Jsoup 一樣不去掉重複。
+          function siblings(next, all, css) {
+            var out = [];
+            each(function(node) {
+              var current = node;
+              do {
+                current = next ? current.nextElementSibling() : current.previousElementSibling();
+                if (current == null) break;
+                if (css == null || current.is(css)) out.push(current);
+              } while (all);
+            });
+            return elements(out);
+          }
+          hide('next', function(css) { return siblings(true, false, css); });
+          hide('nextAll', function(css) { return siblings(true, true, css); });
+          hide('prev', function(css) { return siblings(false, false, css); });
+          hide('prevAll', function(css) { return siblings(false, true, css); });
+          hide('wrap', function(h) { return each(function(n) { n.wrap(h); }); });
+          hide('tagName', function(t) { return each(function(n) { n.tagName(t); }); });
+          hide('toggleClass', function(c) { return each(function(n) { n.toggleClass(c); }); });
+          hide('comments', function() {
+            var out = [];
+            each(function(n) {
+              n.childNodes().forEach(function(c) { if (c.__lrKind === 'comment') out.push(c); });
+            });
+            return out;
+          });
+          hide('dataNodes', function() { return union('dataNodes', []); });
+          hide('forms', function() { return list.filter(function(n) { return n.tagName() === 'form'; }); });
+          hide('traverse', function(visitor) { return each(function(n) { traverseNode(n, visitor); }); });
+          // JS 陣列的 filter(函式) 照舊；Jsoup 的 filter(NodeFilter) 是物件。
+          hide('filter', function(filter) {
+            if (typeof filter === 'function') {
+              return elements(Array.prototype.filter.apply(list, arguments));
+            }
+            return each(function(n) { filterNode(n, 0, filter); });
+          });
+          hide('forEach', function(consumer) {
+            if (typeof consumer === 'function') {
+              Array.prototype.forEach.apply(list, arguments);
+              return;
+            }
+            var fn = accept(consumer);
+            each(function(n) { fn(n); });
+          });
           hide('remove', function() { return each(function(n) { n.remove(); }); });
           hide('empty', function() { return each(function(n) { n.empty(); }); });
           hide('addClass', function(c) { return each(function(n) { n.addClass(c); }); });
@@ -223,31 +400,59 @@ extension JsJsoupExtensions on JsExtensionsBase {
           parseBodyFragment: function(html, baseUri) {
             return decode(sendMessage('jsoup', JSON.stringify(
               ['parseBodyFragment', 0, html == null ? '' : String(html), baseUri == null ? null : String(baseUri)])));
-          }
+          },
+          connect: function(url) { return global.__lrJsoupConnection(url); },
+          newSession: function() { return global.__lrJsoupConnection(null); }
         };
         var Parser = {
           unescapeEntities: function(text) {
             return sendMessage('jsoup', JSON.stringify(['unescapeEntities', 0, text == null ? '' : String(text)]));
           }
         };
+        /// `new org.jsoup.nodes.Element('div')` 這類建構式：傳回物件的建構式，
+        /// `new` 拿到的就是那個物件。
+        function Element(tag, baseUri) { return create('element', tag, baseUri); }
+        function TextNode(text) { return create('text', text); }
+        TextNode.createFromEncoded = function(encoded) { return create('encodedText', encoded); };
+        function DataNode(data) { return create('data', data); }
+        function Comment(data) { return create('comment', data); }
+        function Document(baseUri) { return create('document', '', baseUri); }
+        Document.createShell = function(baseUri) { return Jsoup.parse('', baseUri); };
+        var FilterResult = {};
+        ['CONTINUE', 'SKIP_CHILDREN', 'SKIP_ENTIRELY', 'REMOVE', 'STOP'].forEach(function(name) {
+          FilterResult[name] = name;
+        });
+        // new NodeVisitor({head: …, tail: …})：Rhino 實作 Java 介面的寫法。
+        function NodeVisitor(impl) { return impl; }
+        function NodeFilter(impl) { return impl; }
+        NodeFilter.FilterResult = FilterResult;
         // Rhino 的 importClass 用類別名稱放進全域。
-        Object.defineProperty(Jsoup, '__lrClassName', { value: 'Jsoup', enumerable: false });
-        Object.defineProperty(Parser, '__lrClassName', { value: 'Parser', enumerable: false });
+        [[Jsoup, 'Jsoup'], [Parser, 'Parser'], [Element, 'Element'], [TextNode, 'TextNode'],
+         [DataNode, 'DataNode'], [Comment, 'Comment'], [Document, 'Document'],
+         [NodeVisitor, 'NodeVisitor'], [NodeFilter, 'NodeFilter']].forEach(function(pair) {
+          Object.defineProperty(pair[0], '__lrClassName', { value: pair[1], enumerable: false });
+        });
         global.org = global.org || {};
         global.org.jsoup = {
           Jsoup: Jsoup,
+          Connection: { Method: global.__lrJsoupMethod },
           parser: { Parser: Parser },
-          nodes: { Document: { createShell: function(baseUri) { return Jsoup.parse('', baseUri); } } },
-          // new Elements([元素清單])：書源自己組元素清單。
+          nodes: {
+            Document: Document, Element: Element, TextNode: TextNode,
+            DataNode: DataNode, Comment: Comment
+          },
           select: {
+            // new Elements([元素清單])：書源自己組元素清單。
             Elements: function(items) {
               var list = [];
-              if (items != null) {
+              if (items != null && typeof items === 'object') {
                 var source = typeof items.toArray === 'function' ? items.toArray() : items;
                 for (var i = 0; i < source.length; i++) list.push(source[i]);
               }
               return elements(list);
-            }
+            },
+            NodeVisitor: NodeVisitor,
+            NodeFilter: NodeFilter
           }
         };
       })(globalThis);
