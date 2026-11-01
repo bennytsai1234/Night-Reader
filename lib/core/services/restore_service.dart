@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/login_data_backup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -98,7 +99,11 @@ class RestoreService {
       }
       try {
         if (error != null) throw error;
-        if (decoded is List<dynamic>) {
+        if (LoginDataBackup.files.contains(fileName)) {
+          if (decoded is! List<dynamic>) throw FormatException(fileName);
+          final restored = await LoginDataBackup.restore(fileName, decoded);
+          restoredAny = restoredAny || restored;
+        } else if (decoded is List<dynamic>) {
           final restored = await _importListData(fileName, decoded);
           restoredAny = restoredAny || restored;
         } else if (fileName == 'config.json' &&

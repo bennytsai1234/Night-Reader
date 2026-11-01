@@ -17,6 +17,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/login_data_backup.dart';
 
 class BackupService {
   static final BackupService _instance = BackupService._internal();
@@ -88,6 +89,23 @@ class BackupService {
         await getIt<ReadRecordDao>().getAllDays(),
       );
 
+      // 登入資料（ADR 0039）
+      await _writeMaps(
+        backupFolder,
+        LoginDataBackup.cacheFile,
+        await LoginDataBackup.exportCache(),
+      );
+      await _writeMaps(
+        backupFolder,
+        LoginDataBackup.cookieFile,
+        await LoginDataBackup.exportCookies(),
+      );
+      await _writeMaps(
+        backupFolder,
+        LoginDataBackup.cookieJarFile,
+        await LoginDataBackup.exportCookieJar(),
+      );
+
       // 2. 導出偏好設定 (對標 config.xml)
       final prefs = await SharedPreferences.getInstance();
       final Map<String, dynamic> config = {};
@@ -121,6 +139,12 @@ class BackupService {
       return null;
     }
   }
+
+  Future<void> _writeMaps(
+    Directory folder,
+    String name,
+    List<Map<String, dynamic>> data,
+  ) => File(p.join(folder.path, name)).writeAsString(jsonEncode(data));
 
   Future<void> _writeJson(
     Directory folder,

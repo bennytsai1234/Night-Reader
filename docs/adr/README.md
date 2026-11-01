@@ -55,6 +55,7 @@
 | [0034](0034-rule-js-waits-synchronously.md) | 規則 JS 等網路時整條書源 isolate 停住、拿到的就是結果，和 Legado 一樣；書源 isolate 開四條，網路 isolate 替它們做要等的事 |
 | [0008](0008-shelf-books-download-whole-book.md) | 書架上的網路書整本下載，不限網路、沒有開關 |
 | [0038](0038-source-login-in-the-foreground.md) | 書源照 Legado 登入（網頁登入與書源的表單），只在使用者打開的登入頁裡進行，背景從不等人；「需要登入」「需要在網頁驗證」是狀態不是壞掉，閱讀器在失敗處給登入與前往驗證的路 |
+| [0039](0039-multi-device-sync.md) | 多台手機同步：Google 雲端硬碟或 WebDAV 都能用，每筆資料各自比時間合併、刪除也同步；備份與同步都帶登入資料 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
 
 ## 工程與流程

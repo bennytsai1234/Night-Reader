@@ -177,13 +177,16 @@ class CacheManager {
     return null;
   }
 
-  /// 保存快取文本 (記憶體 + 資料庫 + 檔案)
+  /// 保存快取文本 (記憶體 + 資料庫 + 檔案)。期限給 [saveTimeSeconds]（從現在
+  /// 起算幾秒，0 是永久），或給 [deadline]（到期的時刻，毫秒，0 是永久；從
+  /// 備份還原時照原本的時刻）。
   Future<void> put(
     String key,
     String content, {
     int saveTimeSeconds = 0,
+    int? deadline,
   }) async {
-    final deadline = saveTimeSeconds == 0
+    deadline ??= saveTimeSeconds == 0
         ? 0
         : DateTime.now().millisecondsSinceEpoch + saveTimeSeconds * 1000;
     _putMemory(key, content, deadline: deadline);
@@ -252,11 +255,7 @@ class CacheManager {
     final value = await get(from);
     final now = DateTime.now().millisecondsSinceEpoch;
     if (value == null || (deadline != 0 && deadline <= now)) return false;
-    await put(
-      to,
-      value,
-      saveTimeSeconds: deadline == 0 ? 0 : ((deadline - now) / 1000).ceil(),
-    );
+    await put(to, value, deadline: deadline);
     return true;
   }
 

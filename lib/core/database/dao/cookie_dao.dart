@@ -14,6 +14,8 @@ class CookieDao extends DatabaseAccessor<AppDatabase> with _$CookieDaoMixin {
     return (select(cookies)..where((t) => t.url.equals(url))).getSingleOrNull();
   }
 
+  Future<List<Cookie>> getAll() => select(cookies).get();
+
   Future<void> upsert(Cookie cookie) =>
       into(cookies)
           .insertOnConflictUpdate(CookieToInsertable(cookie).toInsertable());

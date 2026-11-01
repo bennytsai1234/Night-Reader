@@ -8,12 +8,15 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/cache_dao.dart';
+import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/backup_service.dart';
+import 'package:night_reader/core/services/network_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,7 +44,10 @@ void main() {
       ..registerSingleton<BookGroupDao>(BookGroupDao(db))
       ..registerSingleton<DownloadDao>(DownloadDao(db))
       ..registerSingleton<ReadRecordDao>(ReadRecordDao(db))
-      ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db));
+      ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db))
+      ..registerSingleton<CacheDao>(CacheDao(db))
+      ..registerSingleton<CookieDao>(CookieDao(db));
+    await NetworkService().init(ephemeral: true);
   });
 
   tearDownAll(() async {
@@ -78,6 +84,9 @@ void main() {
         'downloadTask.json',
         'readerChapterContent.json',
         'readRecord.json',
+        'cache.json',
+        'cookie.json',
+        'cookieJar.json',
         'config.json',
       ]),
     );
