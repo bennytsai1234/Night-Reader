@@ -4,15 +4,41 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+/// 閱讀器的「前往驗證」：開書源 [sourceUrl] 要使用者操作的那一頁
+/// [request]（ADR 0038），使用者離開、返回動畫播完才回來，呼叫端接著重抓。
+/// 去過之後就不再記著這一頁，重抓又要驗證時記新的。
+Future<void> openSourceVerification(
+  BuildContext context, {
+  required String sourceUrl,
+  required String sourceName,
+  required SourceBrowseRequest request,
+}) async {
+  SourceInteraction.forgetVerification(sourceUrl);
+  await Navigator.of(context).push<String>(
+    MaterialPageRoute(
+      builder: (_) => SourceBrowserPage(
+        sourceUrl: sourceUrl,
+        url: request.url,
+        title: request.title.isEmpty ? sourceName : request.title,
+        headers: request.headers,
+      ),
+    ),
+  );
+  if (context.mounted) await TransitionSettled.uncovered(context);
+}
+
 /// 書源登入用的瀏覽器：沒有表單的書源在這裡登入（網頁登入），書源程式要
-/// 使用者在網頁上操作（`java.startBrowser`、`startBrowserAwait`）也開這一頁。
+/// 使用者在網頁上操作（`java.startBrowser`、`startBrowserAwait`）、閱讀器的
+/// 「前往驗證」也開這一頁。
 ///
 /// 每載完一頁，就把書源網站與這一頁在瀏覽器裡的 Cookie 存給夜讀，同
 /// Legado；離開時再存一次，不論按的是完成還是返回，都不會白登入。右上角

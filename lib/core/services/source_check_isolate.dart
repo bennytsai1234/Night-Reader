@@ -799,20 +799,13 @@ class SourceChecker {
       );
     }
 
-    if (error is SourceInteractionBlockedException ||
-        _looksLikeInteractiveVerificationBlock(normalized)) {
+    // 書源要使用者驗證：校驗不跳畫面、不等人，只標狀態；閱讀時讓使用者
+    // 自己去網頁上驗證（ADR 0038）。
+    if (error is SourceVerificationException) {
       return _IssueData(
         stage: stage,
-        message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.upstreamUnstable,
-          label: quarantineSourceGroupTag,
-          description: '批量校驗跳過人工驗證，來源先隔離但不視為永久失效',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: false,
-          quarantined: true,
-        ),
+        message: error.message,
+        health: verificationRequiredSourceHealth,
       );
     }
 
@@ -1001,62 +994,10 @@ class SourceChecker {
     final seenCategories = <SourceHealthCategory>{};
     for (final h in <SourceRuntimeHealth>[health, ...extraHealths]) {
       if (!seenCategories.add(h.category)) continue;
-      _applyHealthGroup(h);
+      _source.addHealthGroups(h);
     }
     if (message.trim().isNotEmpty) {
       _source.addErrorComment(message.trim());
-    }
-  }
-
-  void _applyHealthGroup(SourceRuntimeHealth health) {
-    if (health.category != SourceHealthCategory.healthy) {
-      _source.addGroup(abnormalSourceGroupTag);
-    }
-    switch (health.category) {
-      case SourceHealthCategory.healthy:
-        break;
-      case SourceHealthCategory.nonNovel:
-        _source.addGroup(nonNovelSourceGroupTag);
-        break;
-      case SourceHealthCategory.loginRequired:
-        _source.addGroup(loginRequiredSourceGroupTag);
-        break;
-      case SourceHealthCategory.downloadOnly:
-        _source.addGroup(downloadOnlySourceGroupTag);
-        break;
-      case SourceHealthCategory.searchBroken:
-        _source.addGroup(searchBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryBroken:
-        _source.addGroup(discoveryBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryDetailBroken:
-        _source.addGroup(discoveryDetailBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryTocBroken:
-        _source.addGroup(discoveryTocBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryContentBroken:
-        _source.addGroup(discoveryContentBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.detailBroken:
-        _source.addGroup(
-          '$detailBrokenSourceGroupTag,$quarantineSourceGroupTag',
-        );
-        break;
-      case SourceHealthCategory.tocBroken:
-        _source.addGroup('$tocBrokenSourceGroupTag,$quarantineSourceGroupTag');
-        break;
-      case SourceHealthCategory.contentBroken:
-        _source.addGroup(
-          '$contentBrokenSourceGroupTag,$quarantineSourceGroupTag',
-        );
-        break;
-      case SourceHealthCategory.upstreamUnstable:
-        _source.addGroup(
-          '$upstreamBlockedSourceGroupTag,$timeoutSourceGroupTag,$quarantineSourceGroupTag',
-        );
-        break;
     }
   }
 
@@ -1300,21 +1241,14 @@ bool _looksLikeBlockedUpstream(String normalized) =>
     normalized.contains('cloudflare') ||
     normalized.contains('certificate_verify_failed');
 
-bool _looksLikeInteractiveVerificationBlock(String normalized) =>
-    normalized.contains('批量校驗不執行') ||
-    normalized.contains('非互動校驗') ||
-    normalized.contains('互動驗證') ||
-    normalized.contains('人工驗證') ||
-    normalized.contains('驗證碼') ||
-    normalized.contains('验证码') ||
-    normalized.contains('sourceinteractionblocked');
-
 int _issuePriority(SourceHealthCategory category) {
   switch (category) {
     case SourceHealthCategory.nonNovel:
       return 100;
     case SourceHealthCategory.loginRequired:
       return 95;
+    case SourceHealthCategory.verificationRequired:
+      return 94;
     case SourceHealthCategory.downloadOnly:
       return 90;
     case SourceHealthCategory.contentBroken:

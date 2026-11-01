@@ -728,7 +728,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _retryUnavailableFrontier({required bool forward}) {
     final unavailable = _pipeline.unavailableFrontier(forward: forward);
     if (unavailable == null) return;
-    widget.runtime.emitUserNotice(unavailable.failure.message);
+    widget.runtime.emitUserNotice(
+      unavailable.failure.message,
+      chapterIndex: unavailable.chapter,
+    );
     _pipeline.retryChapter(unavailable.chapter);
   }
 

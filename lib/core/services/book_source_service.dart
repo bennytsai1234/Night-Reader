@@ -20,6 +20,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
@@ -352,11 +353,23 @@ Future<R> _runOnSource<R>(
   final onRequest = isRecordingRequestUrls
       ? null
       : Zone.current[_requestLogZoneKey] as void Function(String url)?;
-  final ran = await SourceIsolate.run(
-    _tracked(work, book, chapter, recordRequests: onRequest != null),
-    affinity: source?.bookSourceUrl,
-    cancelToken: cancelToken,
-  );
+  final _Ran<R> ran;
+  try {
+    ran = await SourceIsolate.run(
+      _tracked(work, book, chapter, recordRequests: onRequest != null),
+      affinity: source?.bookSourceUrl,
+      cancelToken: cancelToken,
+    );
+  } on SourceVerificationException catch (error) {
+    // 取消後才交回的：書源 isolate 停在等網路時還沒收到取消，認不出來。
+    if (cancelToken?.cancelError case final cancelled?) throw cancelled;
+    // 記下要開的網頁，閱讀器的失敗提示旁給「前往驗證」。
+    final request = error.request;
+    if (source != null && request != null) {
+      SourceInteraction.rememberVerification(source.bookSourceUrl, request);
+    }
+    rethrow;
+  }
   if (book != null) _apply(bookRuleFields, ran.bookChanges, book);
   if (chapter != null) _apply(chapterRuleFields, ran.chapterChanges, chapter);
   if (onRequest != null) ran.requestUrls.forEach(onRequest);
@@ -378,9 +391,14 @@ _Work<_Ran<R>> _tracked<R>(
       ? null
       : _readFields(chapterRuleFields, chapter);
   final requestUrls = <String>[];
+  // 書源要使用者驗證而失敗時，失敗照實說是要驗證（ADR 0038）。
+  Future<R> run() => SourceInteraction.watchVerification(
+    () => work(cancelToken),
+    cancelToken: cancelToken,
+  );
   final result = recordRequests
-      ? await recordRequestUrls(requestUrls, () => work(cancelToken))
-      : await work(cancelToken);
+      ? await recordRequestUrls(requestUrls, run)
+      : await run();
   return _Ran(
     result,
     book == null ? const {} : _changes(bookRuleFields, bookBefore!, book),
