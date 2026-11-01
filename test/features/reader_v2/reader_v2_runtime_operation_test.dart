@@ -399,7 +399,11 @@ void main() {
       expect(runtime.state.visibleLocation, before);
       expect(runtime.state.layoutGeneration, generation);
       expect(runtime.pendingLocation, isNull);
-      expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+      // 提示帶著取不到的那一章：登入或前往驗證回來後重抓的是它。
+      expect(runtime.takeUserNotice(), (
+        message: '目標章節暫時無法取得',
+        chapterIndex: 1,
+      ));
     },
   );
 
@@ -463,7 +467,7 @@ void main() {
         runtime.repository.contentGeneration,
       );
       expect(runtime.state.layoutGeneration, layoutBefore);
-      expect(runtime.takeUserNotice(), '重新載入正文失敗');
+      expect(runtime.takeUserNotice()?.message, '重新載入正文失敗');
     },
   );
 
@@ -497,7 +501,7 @@ void main() {
       expect(runtime.state.hasStableWorld, isTrue);
       expect(runtime.state.visibleLocation, before);
       expect(runtime.pendingLocation, isNull);
-      expect(runtime.takeUserNotice(), isNull);
+      expect(runtime.takeUserNotice()?.message, isNull);
     },
   );
 
@@ -519,7 +523,7 @@ void main() {
       expect(runtime.state.hasStableWorld, isFalse);
       expect(runtime.pendingLocation, isNull);
       expect(runtime.state.unavailableMessage, contains('正文暫時無法取得'));
-      expect(runtime.takeUserNotice(), isNull);
+      expect(runtime.takeUserNotice()?.message, isNull);
     },
   );
 
@@ -557,7 +561,7 @@ void main() {
       expect(runtime.state.visibleLocation.chapterIndex, 0);
       expect(restores.last.chapterIndex, 0);
       expect(runtime.pendingLocation, isNull);
-      expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+      expect(runtime.takeUserNotice()?.message, '目標章節暫時無法取得');
     },
   );
 
@@ -600,7 +604,7 @@ void main() {
     );
     expect(restores.last.chapterIndex, 0);
     expect(runtime.pendingLocation, isNull);
-    expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+    expect(runtime.takeUserNotice()?.message, '目標章節暫時無法取得');
   });
 
   test('internal viewport ownership violation is exposed as a bug', () async {
@@ -1026,7 +1030,7 @@ void main() {
       expect(runtime.stateMachine.currentOperation, isNull);
       expect(runtime.stateMachine.stagedLayoutSpec, isNull);
       expect(runtime.state.layoutSpec.presentationSignature, initialSignature);
-      expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+      expect(runtime.takeUserNotice()?.message, '目標章節暫時無法取得');
 
       host.syncRuntimeConfiguration(runtime, size, desiredStyle);
       for (var frame = 0; frame < 4; frame++) {
@@ -1151,7 +1155,7 @@ void main() {
 
       expect(loads[0], chapter0Baseline + 1);
       expect(runtime.stateMachine.currentOperation, isNull);
-      expect(runtime.takeUserNotice(), '正文設定重新載入失敗');
+      expect(runtime.takeUserNotice()?.message, '正文設定重新載入失敗');
 
       // Failure must not create a rebuild/retry loop in the same Reader world.
       await tester.pumpWidget(buildHarness());

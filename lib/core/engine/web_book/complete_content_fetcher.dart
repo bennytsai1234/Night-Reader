@@ -9,6 +9,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/source_interaction.dart';
 
 /// 正文完整性優先的抓取器。
 ///
@@ -86,7 +87,30 @@ final class CompleteContentFetcher {
     return content;
   }
 
+  /// 抓一頁正文。這一頁的書源程式要使用者驗證而被擋下、這一頁因此失敗或
+  /// 是空的，整章照「需要在網頁上驗證」失敗（ADR 0038），和登入牆一樣不存
+  /// 半章。
   static Future<_FetchedContentPage> _fetchPage(
+    BookSource source,
+    Book book,
+    BookChapter chapter,
+    String url, {
+    String? nextChapterUrl,
+    CancelToken? cancelToken,
+  }) => SourceInteraction.watchVerification(
+    () => _fetchPageContent(
+      source,
+      book,
+      chapter,
+      url,
+      nextChapterUrl: nextChapterUrl,
+      cancelToken: cancelToken,
+    ),
+    gotNothing: (page) => page.content.trim().isEmpty,
+    cancelToken: cancelToken,
+  );
+
+  static Future<_FetchedContentPage> _fetchPageContent(
     BookSource source,
     Book book,
     BookChapter chapter,

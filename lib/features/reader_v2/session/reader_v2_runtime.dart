@@ -18,6 +18,9 @@ import 'reader_v2_state_machine.dart';
 import 'reader_v2_viewport_bridge.dart';
 
 typedef ReaderV2VisibleLocationCapture = ReaderV2Location? Function();
+
+/// 交給頁面顯示的提示；某一章取不到時 [chapterIndex] 是那一章。
+typedef ReaderV2UserNotice = ({String message, int? chapterIndex});
 typedef ReaderV2ViewportRestore = Future<bool> Function(
   ReaderV2Location location,
 );
@@ -74,7 +77,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   late final ReaderV2ViewportBridge viewportBridge;
 
   bool disposed = false;
-  String? _pendingUserNotice;
+  ReaderV2UserNotice? _pendingUserNotice;
   ReaderV2Location? get pendingLocation => stateMachine.pendingLocation;
 
   /// 正在跳到別章、還沒排好。同一章內的跳轉（例如拖進度條預覽）不算。
@@ -184,15 +187,16 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   // -- Runtime-owned methods --
 
-  String? takeUserNotice() {
+  ReaderV2UserNotice? takeUserNotice() {
     final notice = _pendingUserNotice;
     _pendingUserNotice = null;
     return notice;
   }
 
-  /// 交給頁面顯示的提示；通知監聽者，頁面才會馬上取走並顯示。
-  void emitUserNotice(String message) {
-    _pendingUserNotice = message;
+  /// 交給頁面顯示的提示；通知監聽者，頁面才會馬上取走並顯示。是某一章
+  /// 取不到時帶著 [chapterIndex]。
+  void emitUserNotice(String message, {int? chapterIndex}) {
+    _pendingUserNotice = (message: message, chapterIndex: chapterIndex);
     notifyListeners();
   }
 
@@ -337,18 +341,25 @@ class ReaderV2Runtime extends ChangeNotifier {
     ReaderV2ContentUnavailableException error,
   ) async {
     if (!isCurrentOperationToken(token)) return;
+    // 取不到的那一章：頁面給登入或前往驗證的路時，回來重抓的是它。
+    final notice = (
+      message: error.message,
+      chapterIndex: token.targetLocation
+          .normalized(chapterCount: repository.chapterCount)
+          .chapterIndex,
+    );
     if (state.lifecycle == ReaderV2Lifecycle.cold &&
         _targetsAnotherChapterThanOpen(token)) {
       // 開書還沒排好就跳到別章（之後可能又改了排版、沿用同一個目標），
       // 那一章取不到：取不到的是跳到的章，不是這本書。回到開書的位置重新開，
       // 新的開書接手這次操作，連同已經改好的排版；並告訴使用者原因。
-      _pendingUserNotice = error.message;
+      _pendingUserNotice = notice;
       await openBook();
       return;
     }
     if (state.hasStableWorld) {
       if (!stateMachine.abandonOperation(token)) return;
-      _pendingUserNotice = error.message;
+      _pendingUserNotice = notice;
     } else {
       if (!stateMachine.markUnavailable(token, error)) return;
     }

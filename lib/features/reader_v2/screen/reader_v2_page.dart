@@ -520,8 +520,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _handleExitIntent();
   }
 
-  /// 點目錄的一章：目錄與選單馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段
-  /// 動畫都播完才開始載入（ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
+  /// 點目錄的一章（登入或驗證回來、取不到的是別章時也走這裡）：目錄與選單
+  /// 馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段動畫都播完才開始載入
+  /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
   void _jumpToChapterFromDrawer(int index) {
     final scaffold = _scaffoldKey.currentState;
     final drawerClosed = scaffold != null && scaffold.isDrawerOpen
@@ -550,28 +551,37 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   void _drainRuntimeNotice() {
     final notice = _host.runtime?.takeUserNotice();
-    if (!mounted || notice == null || notice.isEmpty) return;
-    if (_verificationFor(notice) case final request?) {
-      // 書源要在網頁上驗證：提示旁給「前往驗證」，關掉就重抓這一章。
+    if (!mounted || notice == null || notice.message.isEmpty) return;
+    final (:message, :chapterIndex) = notice;
+    if (_verificationFor(message) case final request?) {
+      // 書源要在網頁上驗證：提示旁給「前往驗證」，關掉就重抓取不到的那一章。
       _showNotice(
-        notice,
-        action: (label: '前往驗證', onPressed: () => unawaited(_verify(request))),
+        message,
+        action: (
+          label: '前往驗證',
+          onPressed: () =>
+              unawaited(_verify(request, failedChapter: chapterIndex)),
+        ),
       );
       return;
     }
-    if (!LoginCheckException.describes(notice)) {
-      _showNotice(notice);
+    if (!LoginCheckException.describes(message)) {
+      _showNotice(message);
       return;
     }
-    // 要登入才讀得到：提示旁給「登入」，登入完重抓這一章（ADR 0038）。
+    // 要登入才讀得到：提示旁給「登入」，登入完重抓取不到的那一章（ADR 0038）。
     unawaited(
       _loginSource().then((source) {
         if (!mounted) return;
         _showNotice(
-          notice,
+          message,
           action: source == null
               ? null
-              : (label: '登入', onPressed: () => unawaited(_login(source))),
+              : (
+                  label: '登入',
+                  onPressed: () =>
+                      unawaited(_login(source, failedChapter: chapterIndex)),
+                ),
         );
       }),
     );
@@ -588,12 +598,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }();
   Future<BookSource?>? _loginSourceLookup;
 
-  /// 開書源的登入；登入資料變了就重抓：開書失敗的重開，否則重抓這一章、
-  /// 停在原位。[ticket] 是從選單開的那一次：等選單滑出才推頁，回來後
-  /// 選單滑回來。
+  /// 開書源的登入；登入資料變了就重抓（[_refetchFailed]）。[ticket] 是從
+  /// 選單開的那一次：等選單滑出才推頁，回來後選單滑回來。
   Future<void> _login(
     BookSource source, {
     ReaderV2MenuDepartureTicket? ticket,
+    int? failedChapter,
   }) async {
     final changed = await openSourceLogin(
       context,
@@ -613,7 +623,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (!mounted) return;
     if (ticket != null) _restoreMenuWhenUncovered();
     if (!changed) return;
-    await _refetchFailed();
+    await _refetchFailed(failedChapter);
   }
 
   /// 失敗是因為書源要在網頁上驗證時，書源要開的那一頁（ADR 0038）。
@@ -625,24 +635,32 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return SourceInteraction.verificationFor(widget.book.origin);
   }
 
-  /// 「前往驗證」：開書源要的那一頁，關掉就重抓（不論有沒有按完成，網頁的
-  /// Cookie 都存了）。
-  Future<void> _verify(SourceBrowseRequest request) async {
+  /// 「前往驗證」：開書源要的那一頁，關掉就重抓（[_refetchFailed]；不論
+  /// 有沒有按完成，網頁的 Cookie 都存了）。
+  Future<void> _verify(
+    SourceBrowseRequest request, {
+    int? failedChapter,
+  }) async {
     await openSourceVerification(
       context,
       sourceUrl: widget.book.origin,
       sourceName: widget.book.originName,
       request: request,
     );
-    if (mounted) await _refetchFailed();
+    if (mounted) await _refetchFailed(failedChapter);
   }
 
-  /// 登入或驗證回來之後重抓：開書失敗的重開，否則重抓這一章、停在原位。
-  Future<void> _refetchFailed() async {
+  /// 登入或驗證回來之後重抓：開書失敗的重開；取不到的是別章
+  /// （[failedChapter]，例如跳章或捲到下一章時）就跳過去；否則重抓這一章、
+  /// 停在原位。
+  Future<void> _refetchFailed([int? failedChapter]) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
     if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
       await _retryReader(runtime);
+    } else if (failedChapter != null &&
+        failedChapter != _currentChapterIndex(runtime)) {
+      _jumpToChapterFromDrawer(failedChapter);
     } else {
       await _refetchCurrentChapter();
     }

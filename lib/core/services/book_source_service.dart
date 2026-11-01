@@ -259,19 +259,15 @@ _Work<String> _contentTask(
   BookChapter chapter, {
   required String? nextChapterUrl,
   required int? pageConcurrency,
-}) => (cancelToken) async {
-  final content = await CompleteContentFetcher.fetch(
-    source,
-    book,
-    chapter,
-    nextChapterUrl: nextChapterUrl,
-    pageConcurrency: pageConcurrency,
-    cancelToken: cancelToken,
-  );
-  // 規則接住了要驗證的錯誤、正文因此是空的：照實說是要驗證。
-  if (content.trim().isEmpty) SourceInteraction.failIfVerificationBlocked();
-  return content;
-};
+}) =>
+    (cancelToken) => CompleteContentFetcher.fetch(
+      source,
+      book,
+      chapter,
+      nextChapterUrl: nextChapterUrl,
+      pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
+    );
 
 _Work<List<SearchBook>> _searchTask(
   BookSource source,
@@ -365,6 +361,8 @@ Future<R> _runOnSource<R>(
       cancelToken: cancelToken,
     );
   } on SourceVerificationException catch (error) {
+    // 取消後才交回的：書源 isolate 停在等網路時還沒收到取消，認不出來。
+    if (cancelToken?.cancelError case final cancelled?) throw cancelled;
     // 記下要開的網頁，閱讀器的失敗提示旁給「前往驗證」。
     final request = error.request;
     if (source != null && request != null) {
@@ -394,8 +392,10 @@ _Work<_Ran<R>> _tracked<R>(
       : _readFields(chapterRuleFields, chapter);
   final requestUrls = <String>[];
   // 書源要使用者驗證而失敗時，失敗照實說是要驗證（ADR 0038）。
-  Future<R> run() =>
-      SourceInteraction.watchVerification(() => work(cancelToken));
+  Future<R> run() => SourceInteraction.watchVerification(
+    () => work(cancelToken),
+    cancelToken: cancelToken,
+  );
   final result = recordRequests
       ? await recordRequestUrls(requestUrls, run)
       : await run();

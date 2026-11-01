@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -34,16 +35,21 @@ void main() {
   late String baseUrl;
   final longText = '正文的一段話，' * 60;
 
-  // /blocked 是網站的真人驗證頁，/open 讀得到。
+  // /blocked 是網站的真人驗證頁，/open 讀得到；/paged 讀得到、下一頁
+  // /blocked。
   setUpAll(() async {
     await NetworkService().init();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     baseUrl = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
       request.response.headers.contentType = ContentType.html;
-      final content = request.uri.path == '/open' ? longText : 'Just a moment';
+      final path = request.uri.path;
+      final content = path == '/blocked' ? 'Just a moment' : longText;
+      final next = path == '/paged'
+          ? '<a class="next" href="/blocked">下一頁</a>'
+          : '';
       request.response.write(
-        '<html><body><div id="content">$content</div></body></html>',
+        '<html><body><div id="content">$content</div>$next</body></html>',
       );
       await request.response.close();
     });
@@ -54,7 +60,10 @@ void main() {
   BookSource source(String contentRule) => BookSource.fromJson({
     'bookSourceName': '測試',
     'bookSourceUrl': baseUrl,
-    'ruleContent': {'content': contentRule},
+    'ruleContent': {
+      'content': contentRule,
+      'nextContentUrl': 'class.next@href',
+    },
   });
   Book book() => Book(bookUrl: '$baseUrl/book', origin: baseUrl, name: '書');
   BookChapter chapter(String path) =>
@@ -132,4 +141,73 @@ void main() {
     );
     expect(SourceInteraction.verificationFor(baseUrl), isNull);
   }, skip: skip);
+
+  // 第一頁讀得到、第二頁要驗證而規則交出空的：和登入牆一樣，不把前半章
+  // 當成一整章。
+  test(
+    'a later page that needs verification fails the whole chapter',
+    () async {
+      const swallowedOnChallenge =
+          '<js>if (result.match(/Just a moment/)) {'
+          ' try { java.startBrowserAwait(baseUrl, "驗證"); } catch (e) {}'
+          ' result = ""; } result</js>id.content@text';
+      await expectLater(
+        BookSourceService().getContent(
+          source(swallowedOnChallenge),
+          book(),
+          chapter('/paged'),
+        ),
+        throwsA(isA<SourceVerificationException>()),
+      );
+      expect(
+        SourceInteraction.verificationFor(baseUrl)?.url,
+        '$baseUrl/blocked',
+      );
+    },
+    skip: skip,
+  );
+
+  group('watchVerification', () {
+    const request = SourceBrowseRequest(
+      url: 'https://site.example/verify',
+      title: '',
+      headers: {},
+    );
+
+    // 取消經過規則 JS 會被包成解析失敗：看工作的取消訊號，照原樣丟出。
+    test('a cancelled work keeps its own failure', () async {
+      final cancelToken = CancelToken()..cancel('已取消');
+      final failure = StateError('規則 JS 裡的請求被取消');
+      await expectLater(
+        SourceInteraction.watchVerification<String>(() async {
+          try {
+            SourceInteraction.blocked(request);
+          } on SourceVerificationException catch (_) {}
+          throw failure;
+        }, cancelToken: cancelToken),
+        throwsA(same(failure)),
+      );
+    });
+
+    // 工作裡又跑一件，裡面那件的失敗被規則接住，外層照樣認得。
+    test('an inner blocked call marks the outer work too', () async {
+      await expectLater(
+        SourceInteraction.watchVerification<String>(() async {
+          try {
+            await SourceInteraction.watchVerification<String>(
+              () async => SourceInteraction.blocked(request),
+            );
+          } on SourceVerificationException catch (_) {}
+          throw StateError('外層解析失敗');
+        }),
+        throwsA(
+          isA<SourceVerificationException>().having(
+            (e) => e.request?.url,
+            'request.url',
+            request.url,
+          ),
+        ),
+      );
+    });
+  });
 }

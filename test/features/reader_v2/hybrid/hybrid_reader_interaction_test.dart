@@ -599,7 +599,7 @@ void main() {
     await jump;
     await settle(tester);
 
-    expect(runtime.takeUserNotice(), '第 7 章暫時取不到');
+    expect(runtime.takeUserNotice()?.message, '第 7 章暫時取不到');
     expect(find.byType(LoadingVeil), findsNothing);
     expect(identical(scrollPosition(tester), position), isTrue);
     expect(position.pixels, start);
@@ -941,7 +941,7 @@ void main() {
       await applied;
 
       expect(tester.takeException(), isNull);
-      expect(runtime.takeUserNotice(), '第 7 章暫時取不到');
+      expect(runtime.takeUserNotice()?.message, '第 7 章暫時取不到');
       expectTextBack(fontSize: 26);
     });
 
@@ -1099,7 +1099,7 @@ void main() {
     await jump;
     await settle(tester);
 
-    expect(runtime.takeUserNotice(), '第 7 章暫時取不到');
+    expect(runtime.takeUserNotice()?.message, '第 7 章暫時取不到');
     expect(find.byType(LoadingVeil), findsNothing);
     expect(position.pixels, coveredAt, reason: '掀紙回到蓋紙那一刻的位置');
     expect(runtime.state.visibleLocation.chapterIndex, 0);
@@ -1390,7 +1390,7 @@ void main() {
     available = true;
     await tester.drag(find.byType(CustomScrollView), const Offset(0, 200));
     await settle(tester);
-    expect(runtime.takeUserNotice(), '第 0 章暫時取不到');
+    expect(runtime.takeUserNotice()?.message, '第 0 章暫時取不到');
     expect(requests, afterOpen + 1, reason: '停在上緣時重試一次');
     for (var frame = 0; frame < 200; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
@@ -1432,7 +1432,8 @@ void main() {
 
     final edge = position.maxScrollExtent;
     expect(position.pixels, closeTo(edge, 0.5));
-    expect(runtime.takeUserNotice(), '第 1 章暫時取不到');
+    // 提示帶著取不到的那一章：登入或前往驗證回來後跳過去。
+    expect(runtime.takeUserNotice(), (message: '第 1 章暫時取不到', chapterIndex: 1));
     expect(requests, afterOpen + 1, reason: '停在邊緣時重試一次');
 
     available = true;

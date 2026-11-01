@@ -82,34 +82,40 @@ abstract final class SourceInteraction {
     throw SourceVerificationException(request);
   }
 
-  /// 執行一件書源工作 [body]。裡面的書源程式要驗證而被擋下（[blocked]）、
-  /// 這件工作又失敗了，失敗就是因為要驗證，改丟 [SourceVerificationException]：
-  /// 規則多半沒接住這個錯誤，它被包成「解析失敗」；接住了的，也常因此抓不到
-  /// 東西。規則接住後照樣做完的，照常傳回；取消照原樣丟出。
-  static Future<R> watchVerification<R>(Future<R> Function() body) async {
+  /// 執行一件書源工作（或其中一段，例如正文的一頁）[body]。裡面的書源程式
+  /// 要驗證而被擋下（[blocked]），[body] 又失敗了，或沒失敗卻什麼都沒抓到
+  /// （[gotNothing]，例如這一頁的正文是空的），就是因為要驗證才抓不到，改丟
+  /// [SourceVerificationException]：規則多半沒接住這個錯誤，它被包成「解析
+  /// 失敗」；接住了的，常交出空的結果。規則接住後照樣抓到東西的，照常傳回。
+  ///
+  /// [cancelToken] 取消了就照原樣丟出：取消經過規則 JS 也會被包成解析失敗，
+  /// 認不出是取消，所以看這件工作的取消訊號。
+  static Future<R> watchVerification<R>(
+    Future<R> Function() body, {
+    bool Function(R result)? gotNothing,
+    CancelToken? cancelToken,
+  }) async {
     final watch = _VerificationWatch(
       Zone.current[_watchKey] as _VerificationWatch?,
     );
+    final R result;
     try {
-      return await runZoned(body, zoneValues: {_watchKey: watch});
+      result = await runZoned(body, zoneValues: {_watchKey: watch});
     } catch (error) {
       if (!watch.blocked ||
           error is SourceVerificationException ||
-          (error is DioException && error.type == DioExceptionType.cancel)) {
+          (error is DioException && error.type == DioExceptionType.cancel) ||
+          (cancelToken?.isCancelled ?? false)) {
         rethrow;
       }
       throw SourceVerificationException(watch.request);
     }
-  }
-
-  /// 執行中的書源工作沒有失敗、卻什麼都沒抓到（例如正文是空的）時呼叫：
-  /// 裡面的書源程式要驗證而被擋下，就是因為要驗證才抓不到，丟出
-  /// [SourceVerificationException]。
-  static void failIfVerificationBlocked() {
-    final watch = Zone.current[_watchKey] as _VerificationWatch?;
-    if (watch != null && watch.blocked) {
+    if (watch.blocked &&
+        !(cancelToken?.isCancelled ?? false) &&
+        (gotNothing?.call(result) ?? false)) {
       throw SourceVerificationException(watch.request);
     }
+    return result;
   }
 
   static final Map<String, SourceBrowseRequest> _verifications = {};
