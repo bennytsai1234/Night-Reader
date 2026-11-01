@@ -140,21 +140,24 @@ extension JsNetworkExtensions on JsExtensions {
 
     // ─── java.startBrowser／startBrowserAwait／getVerificationCode ──
     // 要使用者操作的：只有登入頁按下的動作可以（[SourceInteraction]），其他
-    // 地方立刻失敗，背景工作不停下來等人（ADR 0038）。網址與標頭在這裡
-    // 組好，請求經網路 isolate 送到主 isolate 的登入頁，這條停住等使用者。
+    // 地方立刻失敗、記下要開的網頁給閱讀器的「前往驗證」，背景工作不停下來
+    // 等人（ADR 0038）。網址與標頭在這裡組好，請求經網路 isolate 送到主
+    // isolate 的登入頁，這條停住等使用者。
     onBlocking('startBrowser', (payload) {
       if (!SourceInteraction.allowed) {
         // Legado 會開瀏覽器、不等結果；夜讀不從背景跳出畫面，照日誌記下。
         AppLog.i('書源要開網頁，只有在登入頁才會開: ${_stringAt(payload, 0)}');
         return null;
       }
-      _browse(payload);
+      _browse(_browseRequest(payload));
       return null;
     });
     onBlocking('startBrowserAwait', (payload) {
       final args = payload is List ? payload : [payload];
-      final url = _absoluteUrl(_stringAt(args, 0) ?? '');
-      final html = _browse(args);
+      final request = _browseRequest(args);
+      if (!SourceInteraction.allowed) SourceInteraction.blocked(request);
+      final url = request.url;
+      final html = _browse(request);
       if (html == null || html.isEmpty) throw Exception('驗證結果為空');
       // 和 Legado 一樣預設用書源的標頭重抓一次網址，交出通過驗證後的網頁；
       // 書源指定不重抓（第三個參數 false）時交出瀏覽器裡的網頁。
@@ -173,7 +176,7 @@ extension JsNetworkExtensions on JsExtensions {
       return (BlockingCall.run(responses([_analyzeUrl(url)])) as List).first;
     });
     onBlocking('getVerificationCode', (payload) {
-      _requireInteraction();
+      if (!SourceInteraction.allowed) SourceInteraction.blocked(null);
       // 圖片照書源的請求抓（同一個登入中的 Cookie 與標頭，回應的 Cookie 也
       // 存下來），驗證碼才對得上這次登入。
       final image = BlockingCall.run(
@@ -227,28 +230,20 @@ extension JsNetworkExtensions on JsExtensions {
   AnalyzeUrl _analyzeUrl(String url) =>
       AnalyzeUrl(url, source: source as BookSource?);
 
-  /// 不是登入頁按下的動作時，要使用者操作的呼叫立刻失敗。
-  void _requireInteraction() {
-    if (!SourceInteraction.allowed) {
-      throw const SourceInteractionBlockedException('需要在網頁上驗證');
-    }
+  /// `[網址, 標題]` 要開的網頁。
+  SourceBrowseRequest _browseRequest(dynamic payload) {
+    final args = payload is List ? payload : [payload];
+    return SourceBrowseRequest(
+      url: _absoluteUrl(_stringAt(args, 0) ?? ''),
+      title: _stringAt(args, 1) ?? '',
+      headers: _sourceHeaders(),
+    );
   }
 
-  /// `[網址, 標題]`：開網頁讓使用者操作，停住等他按完成，傳回網頁內容；
-  /// 沒按完成就離開時是 null。
-  String? _browse(dynamic payload) {
-    _requireInteraction();
-    final args = payload is List ? payload : [payload];
-    return BlockingCall.run(
-      askUser(
-        SourceBrowseRequest(
-          url: _absoluteUrl(_stringAt(args, 0) ?? ''),
-          title: _stringAt(args, 1) ?? '',
-          headers: _sourceHeaders(),
-        ),
-      ),
-    ) as String?;
-  }
+  /// 開網頁讓使用者操作，停住等他按完成，傳回網頁內容；沒按完成就離開時
+  /// 是 null。只有登入頁按下的動作會走到這裡。
+  String? _browse(SourceBrowseRequest request) =>
+      BlockingCall.run(askUser(request)) as String?;
 
   String _absoluteUrl(String url) {
     final base = source?.getKey();

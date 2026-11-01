@@ -191,21 +191,29 @@ void main() {
     expect(checked.runtimeHealth.allowsReading, isFalse);
   });
 
-  test(
-    'a rule asking for interactive verification quarantines the source',
-    () async {
-      final (_, checked) = await _check(
-        _FakeBookSourceService(
-          info: (_) => Future.error(
-            const SourceInteractionBlockedException('批量校驗不執行互動驗證'),
+  test('a rule asking for web verification only marks the source', () async {
+    final (_, checked) = await _check(
+      _FakeBookSourceService(
+        info: (_) => Future.error(
+          SourceVerificationException(
+            const SourceBrowseRequest(
+              url: 'https://site.example/verify',
+              title: '驗證',
+              headers: {},
+            ),
           ),
         ),
-      );
+      ),
+    );
 
-      expect(checked.groupTags, contains(quarantineSourceGroupTag));
-      expect(checked.isQuarantined, isTrue);
-    },
-  );
+    // 校驗不跳畫面、不隔離，只標狀態；書源照樣參加搜尋、照樣能開書，閱讀時
+    // 遇到再去網頁上驗證（ADR 0038）。
+    expect(checked.groupTags, contains(verificationRequiredSourceGroupTag));
+    expect(checked.isQuarantined, isFalse);
+    expect(checked.isCleanupCandidate, isFalse);
+    expect(checked.isSearchEnabledByRuntime, isTrue);
+    expect(checked.isReadingEnabledByRuntime, isTrue);
+  });
 
   test(
     'a login wall on the content marks the source as needing login',

@@ -615,7 +615,7 @@ class CheckSourceService extends ChangeNotifier {
       if (!seenCategories.add(nextHealth.category)) {
         continue;
       }
-      _applyHealthGroup(source, nextHealth);
+      source.addHealthGroups(nextHealth);
     }
 
     if (message.trim().isNotEmpty) {
@@ -636,59 +636,6 @@ class CheckSourceService extends ChangeNotifier {
     final writes = _pendingStatusWrites.values.toList(growable: false);
     _pendingStatusWrites.clear();
     await _sourceDao.upsertAll(writes);
-  }
-
-  void _applyHealthGroup(BookSource source, SourceRuntimeHealth health) {
-    if (health.category != SourceHealthCategory.healthy) {
-      source.addGroup(abnormalSourceGroupTag);
-    }
-
-    switch (health.category) {
-      case SourceHealthCategory.healthy:
-        break;
-      case SourceHealthCategory.nonNovel:
-        source.addGroup(nonNovelSourceGroupTag);
-        break;
-      case SourceHealthCategory.loginRequired:
-        source.addGroup(loginRequiredSourceGroupTag);
-        break;
-      case SourceHealthCategory.downloadOnly:
-        source.addGroup(downloadOnlySourceGroupTag);
-        break;
-      case SourceHealthCategory.searchBroken:
-        source.addGroup(searchBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryBroken:
-        source.addGroup(discoveryBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryDetailBroken:
-        source.addGroup(discoveryDetailBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryTocBroken:
-        source.addGroup(discoveryTocBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.discoveryContentBroken:
-        source.addGroup(discoveryContentBrokenSourceGroupTag);
-        break;
-      case SourceHealthCategory.detailBroken:
-        source.addGroup(
-          '$detailBrokenSourceGroupTag,$quarantineSourceGroupTag',
-        );
-        break;
-      case SourceHealthCategory.tocBroken:
-        source.addGroup('$tocBrokenSourceGroupTag,$quarantineSourceGroupTag');
-        break;
-      case SourceHealthCategory.contentBroken:
-        source.addGroup(
-          '$contentBrokenSourceGroupTag,$quarantineSourceGroupTag',
-        );
-        break;
-      case SourceHealthCategory.upstreamUnstable:
-        source.addGroup(
-          '$upstreamBlockedSourceGroupTag,$timeoutSourceGroupTag,$quarantineSourceGroupTag',
-        );
-        break;
-    }
   }
 
   /// 書源的校驗標記被清掉後，上次的摘要已經對不上，一併收起。

@@ -16,6 +16,7 @@ const String downloadOnlySourceGroupTag = '下載站';
 const String quarantineSourceGroupTag = '已隔離';
 const String nonNovelSourceGroupTag = '非小說源';
 const String loginRequiredSourceGroupTag = '需要登入';
+const String verificationRequiredSourceGroupTag = '需要在網頁驗證';
 const String abnormalSourceGroupTag = '異常';
 
 /// 「需要登入」是書源的狀態，不是壞掉（ADR 0038）：照樣參加搜尋（很多書源
@@ -30,6 +31,21 @@ const SourceRuntimeHealth loginRequiredSourceHealth = SourceRuntimeHealth(
   cleanupCandidate: false,
   quarantined: false,
 );
+
+/// 「需要在網頁驗證」和「需要登入」一樣是狀態（ADR 0038）：書源程式要
+/// 使用者驗證（`java.startBrowserAwait`、驗證碼），多半是網站刁難時才走到
+/// 的備援，平常照樣能用，所以照樣參加搜尋、照樣能開書，不列入清理。閱讀
+/// 時遇到，失敗提示旁有「前往驗證」。
+const SourceRuntimeHealth verificationRequiredSourceHealth =
+    SourceRuntimeHealth(
+      category: SourceHealthCategory.verificationRequired,
+      label: verificationRequiredSourceGroupTag,
+      description: '網站有時要在網頁上驗證，閱讀時遇到再去驗證',
+      allowsSearch: true,
+      allowsReading: true,
+      cleanupCandidate: false,
+      quarantined: false,
+    );
 
 const List<String> sourceRuntimeStatusTags = <String>[
   abnormalSourceGroupTag,
@@ -48,6 +64,7 @@ const List<String> sourceRuntimeStatusTags = <String>[
   quarantineSourceGroupTag,
   nonNovelSourceGroupTag,
   loginRequiredSourceGroupTag,
+  verificationRequiredSourceGroupTag,
 ];
 
 const List<String> _nonNovelSourceMarkers = <String>[
@@ -84,6 +101,7 @@ enum SourceHealthCategory {
   healthy,
   nonNovel,
   loginRequired,
+  verificationRequired,
   downloadOnly,
   searchBroken,
   discoveryBroken,
@@ -199,6 +217,54 @@ extension BookSourceLogic on BookSourceBase {
     removeGroup(sourceRuntimeStatusTags.join(','));
   }
 
+  /// 校驗的結論 [health] 寫成分組標記：不是可用的都加「異常」，再加這個
+  /// 狀態自己的標記（壞掉的目錄、正文、詳情與網站問題另外加「已隔離」）。
+  void addHealthGroups(SourceRuntimeHealth health) {
+    if (health.category != SourceHealthCategory.healthy) {
+      addGroup(abnormalSourceGroupTag);
+    }
+    final tags = switch (health.category) {
+      SourceHealthCategory.healthy => const <String>[],
+      SourceHealthCategory.nonNovel => const [nonNovelSourceGroupTag],
+      SourceHealthCategory.loginRequired => const [loginRequiredSourceGroupTag],
+      SourceHealthCategory.verificationRequired => const [
+        verificationRequiredSourceGroupTag,
+      ],
+      SourceHealthCategory.downloadOnly => const [downloadOnlySourceGroupTag],
+      SourceHealthCategory.searchBroken => const [searchBrokenSourceGroupTag],
+      SourceHealthCategory.discoveryBroken => const [
+        discoveryBrokenSourceGroupTag,
+      ],
+      SourceHealthCategory.discoveryDetailBroken => const [
+        discoveryDetailBrokenSourceGroupTag,
+      ],
+      SourceHealthCategory.discoveryTocBroken => const [
+        discoveryTocBrokenSourceGroupTag,
+      ],
+      SourceHealthCategory.discoveryContentBroken => const [
+        discoveryContentBrokenSourceGroupTag,
+      ],
+      SourceHealthCategory.detailBroken => const [
+        detailBrokenSourceGroupTag,
+        quarantineSourceGroupTag,
+      ],
+      SourceHealthCategory.tocBroken => const [
+        tocBrokenSourceGroupTag,
+        quarantineSourceGroupTag,
+      ],
+      SourceHealthCategory.contentBroken => const [
+        contentBrokenSourceGroupTag,
+        quarantineSourceGroupTag,
+      ],
+      SourceHealthCategory.upstreamUnstable => const [
+        upstreamBlockedSourceGroupTag,
+        timeoutSourceGroupTag,
+        quarantineSourceGroupTag,
+      ],
+    };
+    if (tags.isNotEmpty) addGroup(tags.join(','));
+  }
+
   // 註釋與錯誤訊息
   /// 逐行移除 `// Error:` 錯誤行，其他行原樣保留；錯誤行後面接的空行
   /// （addErrorComment 用來和原註解隔開）一起拿掉。
@@ -299,6 +365,9 @@ extension BookSourceLogic on BookSourceBase {
     }
 
     if (tagged(loginRequiredSourceGroupTag)) return loginRequiredSourceHealth;
+    if (tagged(verificationRequiredSourceGroupTag)) {
+      return verificationRequiredSourceHealth;
+    }
 
     if (tagged(searchBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(

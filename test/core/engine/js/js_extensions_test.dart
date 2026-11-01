@@ -464,13 +464,16 @@ void main() {
 
       // 閱讀、下載、校驗、搜尋裡的書源程式要使用者操作：立刻失敗，不等人
       // （ADR 0038）。
-      for (final call in [
-        'java.startBrowserAwait("https://example.com/captcha", "驗證")',
-        'java.getVerificationCode("https://example.com/code.png")',
+      for (final (call, message) in [
+        (
+          'java.startBrowserAwait("https://example.com/captcha", "驗證")',
+          '需要在網頁上驗證',
+        ),
+        ('java.getVerificationCode("https://example.com/code.png")', '需要輸入驗證碼'),
       ]) {
         final result = runtime!.evaluate(call);
         expect(result.isError, isTrue, reason: call);
-        expect(result.stringResult, contains('需要在網頁上驗證'), reason: call);
+        expect(result.stringResult, contains(message), reason: call);
       }
       // 不等結果的開網頁不開、也不讓書源程式失敗。
       expect(
