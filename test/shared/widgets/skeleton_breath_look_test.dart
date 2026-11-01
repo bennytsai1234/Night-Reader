@@ -18,7 +18,12 @@ const _cardRadius = BorderRadius.all(Radius.circular(12));
 /// 一個形狀在畫面上的位置；[fill] 給了是不呼吸的實色。
 typedef _Shape = ({Rect rect, BorderRadius radius, Color? fill});
 
-/// 一條滿版的、一排三個，和一塊卡片底上的三條（[SkeletonShapes]）。
+/// 另一個 [Skeleton]（自己一份呼吸）裡的一條，不在畫面左緣：像頁首按鈕
+/// 那種各自包一個 [Skeleton] 的骨架，照的一樣是螢幕上的位置。
+const _apart = Rect.fromLTWH(200, 165, 180, 20);
+
+/// 一條滿版的、一排三個，和一塊卡片底上的三條（[SkeletonShapes]），加上
+/// 另一個 [Skeleton] 裡的 [_apart]。
 List<_Shape> _shapes(Color card) => [
   (rect: const Rect.fromLTWH(0, 0, 400, 20), radius: _radius, fill: null),
   for (final x in [10.0, 140.0, 270.0])
@@ -30,37 +35,48 @@ List<_Shape> _shapes(Color card) => [
     Rect.fromLTWH(250, 70, 120, 14),
   ])
     (rect: bar, radius: _radius, fill: null),
+  (rect: _apart, radius: _radius, fill: null),
 ];
 
 Widget _skeleton(Color card) {
   final shapes = _shapes(card);
-  return Skeleton(
-    child: Stack(
-      children: [
-        for (final shape in shapes.take(4))
-          Positioned.fromRect(
-            rect: shape.rect,
-            child: SkeletonBox(borderRadius: shape.radius),
-          ),
-        Positioned(
-          left: 0,
-          top: 60,
-          width: 400,
-          height: 90,
-          child: SkeletonShapes(
-            height: 90,
-            shapes: (_) => [
-              for (final shape in shapes.skip(4))
-                SkeletonShape(
-                  shape.rect.shift(const Offset(0, -60)),
-                  radius: shape.radius,
-                  fill: shape.fill,
+  return Stack(
+    children: [
+      Positioned.fill(
+        child: Skeleton(
+          child: Stack(
+            children: [
+              for (final shape in shapes.take(4))
+                Positioned.fromRect(
+                  rect: shape.rect,
+                  child: SkeletonBox(borderRadius: shape.radius),
                 ),
+              Positioned(
+                left: 0,
+                top: 60,
+                width: 400,
+                height: 90,
+                child: SkeletonShapes(
+                  height: 90,
+                  shapes: (_) => [
+                    for (final shape in shapes.skip(4).take(4))
+                      SkeletonShape(
+                        shape.rect.shift(const Offset(0, -60)),
+                        radius: shape.radius,
+                        fill: shape.fill,
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ],
-    ),
+      ),
+      Positioned.fromRect(
+        rect: _apart,
+        child: const Skeleton(child: SkeletonBox(borderRadius: _radius)),
+      ),
+    ],
   );
 }
 
