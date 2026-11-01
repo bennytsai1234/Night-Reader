@@ -492,8 +492,12 @@ var __lrScopedObject = function(scope, seed) {
     return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(nodes))})';
   }
 
-  /// [values] 全是元素時傳回它們的節點，有別的值就傳回 null。
+  /// [values] 是元素清單時傳回它們的節點，否則傳回 null。CSS 選取的結果
+  /// 是 `List<Element>`，空的也當元素清單（同 [JsoupBridge.toJs]）；其他
+  /// 清單（XPath 的結果）要有內容且全是元素，空的 JSON 清單照一般陣列。
   static List<dom.Node>? _elementNodes(Iterable<dynamic> values) {
+    if (values is Iterable<dom.Node>) return values.toList();
+    if (values.isEmpty) return null;
     final nodes = <dom.Node>[];
     for (final value in values) {
       final node = value is XPathNode ? value.node : value;

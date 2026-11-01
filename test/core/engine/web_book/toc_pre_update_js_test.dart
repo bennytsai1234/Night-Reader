@@ -64,25 +64,26 @@ void main() {
     'ruleToc': {
       'preUpdateJs': 'java.refreshTocUrl()',
       'chapterList': 'class.list@a',
-      'chapterName': 'text',
+      'chapterName': 'text\n@js:book.putVariable("tocToken", "fresh"); result',
       'chapterUrl': 'href',
     },
   });
 
   test('java.refreshTocUrl() in preUpdateJs reads the TOC from the details '
       'page again', () async {
-    final chapters = await WebBook.getChapterListAwait(
-      source(),
-      Book(
-        bookUrl: '$baseUrl/book',
-        tocUrl: '$baseUrl/toc/old',
-        origin: baseUrl,
-        name: '書',
-        author: '作者',
-      ),
+    final book = Book(
+      bookUrl: '$baseUrl/book',
+      tocUrl: '$baseUrl/toc/old',
+      origin: baseUrl,
+      name: '書',
+      author: '作者',
     );
+    final chapters = await WebBook.getChapterListAwait(source(), book);
 
     expect(chapters.map((c) => c.title), ['第一章', '第二章']);
+    // 重讀的結果與目錄規則寫的變數留在傳入的書上，呼叫端照它抄回。
+    expect(book.tocUrl, '$baseUrl/toc/new');
+    expect(book.getVariable('tocToken'), 'fresh');
   }, skip: skip);
 
   test('java.refreshTocUrl() outside preUpdateJs is an error, as in '

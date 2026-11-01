@@ -237,6 +237,17 @@ String(clean.outerHtml());''',
     expect(content.content, isNot(contains('3')));
   }, skip: skip);
 
+  test('an empty CSS result is Elements, an empty JSON list is an array', () {
+    final html = AnalyzeRule()..setContent(_page, baseUrl: 'https://site.test');
+    expect(html.getElements('tag.missing<js>result.select("a")</js>'), isEmpty);
+
+    final json = AnalyzeRule()..setContent('{"items":[]}');
+    expect(
+      json.getElements(r'$.items<js>result.push("c"); String(result)</js>'),
+      ['c'],
+    );
+  }, skip: skip);
+
   test('a list rule hands JS Jsoup elements (小红书)', () async {
     // 小红书的目錄規則：選到的章節排成網頁打亂前的順序，再 select 出連結。
     final source = BookSource.fromJson({

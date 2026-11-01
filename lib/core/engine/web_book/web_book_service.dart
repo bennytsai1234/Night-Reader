@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
@@ -149,8 +150,19 @@ class WebBook {
     try {
       // 預整理 JS 呼叫了 java.refreshTocUrl()：重讀書籍詳情，目錄從新的
       // 目錄網址抓（同 Legado）。剛讀過詳情的書帶著詳情頁，直接重新解析。
+      // 結果寫回同一本書：呼叫端照這本書抄回規則改過的欄位與變數。
       if (rule.preUpdateToc()) {
-        book = await getBookInfoAwait(source, book, cancelToken: cancelToken);
+        final refreshed = await getBookInfoAwait(
+          source,
+          book,
+          cancelToken: cancelToken,
+        );
+        for (final field in bookRuleFields.values) {
+          field.write(book, field.read(refreshed));
+        }
+        book
+          ..infoHtml = refreshed.infoHtml
+          ..tocHtml = refreshed.tocHtml;
       }
 
       final allChapters = <BookChapter>[];
