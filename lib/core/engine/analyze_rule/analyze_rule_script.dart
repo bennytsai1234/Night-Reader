@@ -16,6 +16,9 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
     try {
       return engine.evaluate(jsStr, context: context);
     } finally {
+      // 網址 JS 改了 java.url、java.headerMap 就是改了這個請求（Legado 的
+      // java 就是 AnalyzeUrl 本身），出錯時也一樣。
+      urlContext?.applyJs(engine.urlState());
       engine.ruleContext = previous;
     }
   }
@@ -79,6 +82,12 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       'key': key,
       'page': page,
       'src': content,
+      // 在網址或登入檢查裡跑時，java 多了請求的屬性與方法（見 urlContext）。
+      '__lrUrl': urlContext?.toJs(),
+      if (urlContext case final request?) ...{
+        'speakText': request.speakText,
+        'speakSpeed': request.speakSpeed,
+      },
     };
   }
 

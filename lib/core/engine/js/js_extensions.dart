@@ -25,6 +25,7 @@ import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_classes.dart';
 import 'extensions/js_java_object.dart';
 import 'extensions/js_jsoup_extensions.dart';
+import 'extensions/js_url_extensions.dart';
 
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
@@ -60,6 +61,8 @@ class JsExtensions extends JsExtensionsBase {
     injectJavaObjectJs();
     // Java 類別用到 java 物件與它定義的加解密類別。
     injectJavaClasses();
+    // 網址裡的 java 用到 Java 類別（LinkedHashMap、ByteArrayInputStream）。
+    injectUrlExtensions();
   }
 
   void _injectCoreHandlers() {
@@ -429,9 +432,10 @@ class JsExtensions extends JsExtensionsBase {
 
     onBlocking('importScript', (payload) {
       final path = payload.toString();
+      // 網址抓回來存著；其他是快取資料夾裡的相對路徑（同 Legado）。
       final content = path.startsWith('http')
           ? BlockingCall.run(cachedText(path, 0)) as String
-          : (File(path).existsSync() ? File(path).readAsStringSync() : '');
+          : readCacheText(path);
       if (content.trim().isEmpty) {
         throw Exception('$path 內容獲取失敗或者為空');
       }

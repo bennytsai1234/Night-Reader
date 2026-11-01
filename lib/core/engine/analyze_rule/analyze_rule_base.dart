@@ -5,6 +5,7 @@ import 'package:html_unescape/html_unescape.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/analyze_by_json_path.dart';
 import '../parsers/analyze_by_xpath.dart';
+import '../analyze_url.dart';
 import '../js/js_engine.dart';
 
 import 'package:night_reader/core/models/rule_data_interface.dart';
@@ -38,6 +39,10 @@ abstract class AnalyzeRuleBase {
   String? key;
   int page = 1;
   final Map<String, String> transientVariables = {};
+
+  /// 規則 JS 在網址裡或登入檢查裡跑時，`java` 是這個請求（同 Legado 的
+  /// AnalyzeUrl）：多了 `url`、`headerMap`、`initUrl()`、`getStrResponse()`。
+  AnalyzeUrl? urlContext;
 
   AnalyzeByXPath? analyzeByXPath;
   AnalyzeByCss? analyzeByJSoup;

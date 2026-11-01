@@ -21,6 +21,12 @@ class StrResponse {
 
   bool get isRedirect => raw.redirects.isNotEmpty || redirectChain.isNotEmpty;
 
+  /// 網站回的是 2xx。4xx、5xx 的頁面照 Legado 也交給規則解析。
+  bool get isSuccessful {
+    final code = raw.statusCode ?? 200;
+    return code >= 200 && code < 300;
+  }
+
   /// 網址或內容帶有「需要登入」的字樣（不分大小寫）。只用來說明解析不出
   /// 東西的原因（ADR 0038）。整頁網頁可能上百 KB，所以直接比對原文，不先
   /// 轉小寫再逐一搜尋。

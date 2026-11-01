@@ -28,7 +28,7 @@ class AppInterceptor extends Interceptor {
 
     // 2. 確保 User-Agent 存在
     if (!_hasHeader(options.headers, 'user-agent')) {
-      options.headers['User-Agent'] = _defaultUserAgentFor(options.uri);
+      options.headers['User-Agent'] = defaultUserAgentFor(options.uri);
     }
 
     // 3. 語言修復 (對標 Android: 支援中文環境)
@@ -55,7 +55,8 @@ class AppInterceptor extends Interceptor {
     }
   }
 
-  String _defaultUserAgentFor(Uri uri) {
+  /// 請求沒帶瀏覽器標識時用的：`m.` 開頭的網站用手機的，其他用電腦的。
+  static String defaultUserAgentFor(Uri uri) {
     final host = uri.host.toLowerCase();
     if (host.startsWith('m.')) {
       return mobileUserAgent;

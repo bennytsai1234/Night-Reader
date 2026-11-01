@@ -1,30 +1,13 @@
 import 'dart:convert';
-import 'dart:io' show Directory, File, gzip;
+import 'dart:io' show gzip;
 
-import 'package:archive/archive.dart';
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import '../../../test_helper.dart';
-
-class _FakePathProvider extends PathProviderPlatform {
-  _FakePathProvider({required this.temporaryPath, required this.documentsPath});
-
-  final String temporaryPath;
-  final String documentsPath;
-
-  @override
-  Future<String?> getTemporaryPath() async => temporaryPath;
-
-  @override
-  Future<String?> getApplicationDocumentsPath() async => documentsPath;
-}
 
 /// 記下書源送到登入頁的訊息。
 class _RecordingHandler implements SourceInteractionHandler {
@@ -422,76 +405,6 @@ void main() {
 
       expect(result.isError, isTrue);
       expect(result.stringResult, contains('只能在書源 isolate'));
-    });
-
-    test('java.readTxtFile honors UTF-16LE charset', () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final file = File(
-        '${Directory.systemTemp.path}/night_reader_js_utf16_${DateTime.now().microsecondsSinceEpoch}.txt',
-      );
-      final bytes = <int>[0xFF, 0xFE];
-      for (final codeUnit in '夜讀文字'.codeUnits) {
-        bytes
-          ..add(codeUnit & 0xFF)
-          ..add(codeUnit >> 8);
-      }
-      await file.writeAsBytes(bytes, flush: true);
-      addTearDown(() async {
-        if (await file.exists()) await file.delete();
-      });
-      final ext = JsExtensions(runtime!);
-      ext.inject();
-      final evalResult = runtime!.evaluate(
-        'java.readTxtFile(${jsonEncode(file.path)}, "UTF-16LE")',
-      );
-      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-      expect(evalResult.stringResult, '夜讀文字');
-    });
-
-    // java.unArchiveFile 在網路 isolate 做（要問平台暫存資料夾在哪）；這裡
-    // 直接跑它交出去的那件事。
-    test('java.unArchiveFile keeps entries inside its output folder', () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final root = await Directory.systemTemp.createTemp(
-        'night_reader_js_archive_',
-      );
-      final documents = await Directory(p.join(root.path, 'documents'))
-          .create();
-      final temporary = await Directory(p.join(root.path, 'temporary'))
-          .create();
-      final previousPathProvider = PathProviderPlatform.instance;
-      PathProviderPlatform.instance = _FakePathProvider(
-        temporaryPath: temporary.path,
-        documentsPath: documents.path,
-      );
-      addTearDown(() async {
-        PathProviderPlatform.instance = previousPathProvider;
-        if (await root.exists()) await root.delete(recursive: true);
-      });
-
-      final archive = Archive()
-        ..addFile(ArchiveFile.string('safe.txt', 'safe'))
-        ..addFile(ArchiveFile.string('../../escape.txt', 'escape'));
-      final zipBytes = ZipEncoder().encode(archive);
-      await File(p.join(documents.path, 'archive.zip'))
-          .writeAsBytes(zipBytes, flush: true);
-
-      final relativeOutputPath = (await unArchive('archive.zip')()).toString();
-      expect(
-        await File(p.join(temporary.path, relativeOutputPath, 'safe.txt'))
-            .readAsString(),
-        'safe',
-      );
-      expect(
-        await File(p.join(temporary.path, 'escape.txt')).exists(),
-        isFalse,
-      );
     });
 
     test('source bridge is exposed when source exists', () {

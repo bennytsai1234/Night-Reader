@@ -70,7 +70,6 @@ class WebBook {
       filter: filter,
       shouldBreak: shouldBreak,
     );
-
     return results;
   }
 
@@ -86,12 +85,13 @@ class WebBook {
     res = runLoginCheckJs(analyzeUrl, res);
     _checkRedirect(source, res);
 
-    return BookListParser.parse(
+    final results = await BookListParser.parse(
       source: source,
       body: res.body,
       baseUrl: res.url,
       isSearch: false,
     );
+    return results;
   }
 
   /// 獲取書籍資訊 (對標 getBookInfoAwait)

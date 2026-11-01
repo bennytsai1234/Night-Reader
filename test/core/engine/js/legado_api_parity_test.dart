@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_js/flutter_js.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 
@@ -82,17 +85,25 @@ const _legado = <String, List<String>>{
   ],
 };
 
-/// 刻意不做的，和理由（java 與 source 都適用）。
-const _notProvided = <String, String>{
-  // 這一組照 Legado 以快取資料夾為準、帶書源標頭與網址選項 type，和網址
-  // 選項一起補（HANDOFF）。
-  'deleteFile': '下載與檔案一組，隨網址選項 type 一起補',
-  'getFile': '下載與檔案一組，隨網址選項 type 一起補',
-  'getZipStringContent': '下載與檔案一組，隨網址選項 type 一起補',
-  'unzipFile': '下載與檔案一組，隨網址選項 type 一起補',
-};
+/// `model/analyzeRule/AnalyzeUrl.kt`：網址裡的 JS 與登入檢查裡的 `java`
+/// 是這個請求，多了這些（屬性另外看 `url`、`headerMap`）。
+const _analyzeUrl = [
+  'initUrl',
+  'getStrResponse',
+  'getResponse',
+  'getByteArray',
+  'getInputStream',
+  'getUserAgent',
+  'isPost',
+  'getSource',
+  'put',
+  'get',
+  'evalJS',
+];
 
 // 不列的 Legado 公開方法：
+// - AnalyzeUrl 的 getGlideUrl、getMediaItem、upload：Legado 自己載圖片、
+//   播放與上傳用，書源用不到。
 // - AnalyzeRule.splitSourceRule：傳回 Legado 內部的規則物件，書源用不到。
 // - BaseSource.loginUi()：和書源的 loginUi 欄位同名，Rhino 裡書源讀到的是欄位。
 // - CacheManager.sizeOf：LruCache 內部算大小用的。clearSourceVariables、
@@ -111,13 +122,24 @@ void main() {
     final missing = <String>[];
     for (final MapEntry(key: object, value: methods) in _legado.entries) {
       for (final method in methods.toSet()) {
-        final fromJsExtensions = object == 'java' || object == 'source';
-        if (fromJsExtensions && _notProvided.containsKey(method)) continue;
         final name = '$object.$method';
         final type = runtime.evaluate('typeof $name').stringResult;
         if (type != 'function') missing.add(name);
       }
     }
     expect(missing, isEmpty, reason: '夜讀少了這些 Legado 方法');
+  }, skip: skip);
+
+  test('java in URL JS is the request, like Legado AnalyzeUrl', () {
+    final url = AnalyzeUrl(
+      'https://example.com/a<js>'
+      'var missing = ${jsonEncode(_analyzeUrl)}.filter(function(m) {'
+      '  return typeof java[m] !== "function"; });'
+      'if (typeof java.url !== "string") missing.push("url");'
+      'if (typeof java.headerMap.get !== "function") missing.push("headerMap");'
+      'result + "?missing=" + missing.join("+")'
+      '</js>',
+    );
+    expect(Uri.parse(url.url).queryParameters['missing'], isEmpty);
   }, skip: skip);
 }

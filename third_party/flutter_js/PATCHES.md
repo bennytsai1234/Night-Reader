@@ -79,6 +79,14 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
   has no `ServicesBinding` and therefore no `rootBundle`. The root isolate
   reads the asset once and hands the text over.
 
+## Patch `nightreader.6`: throwing a value that is not an Error
+
+- `QuickJsRuntime2.evaluate` wraps whatever the script threw in a `JSError`
+  with no stack. Upstream assigned the thrown value straight to a `JSError`
+  variable, so `throw "message"` (common in book-source rules) failed with
+  Dart's "type 'String' is not a subtype of type 'JSError'" instead of
+  returning an error result with that message.
+
 ## Patch `nightreader.5`: QuickJS dispose releases its channels
 
 - `QuickJsRuntime2.dispose()` removes the runtime's entry from

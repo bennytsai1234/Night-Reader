@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:drift/native.dart';
@@ -13,11 +14,13 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
+import 'package:night_reader/core/engine/web_book/login_check.dart';
+import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -33,6 +36,7 @@ import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/http_client.dart' as app_http;
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/features/search/search_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -83,10 +87,6 @@ Future<int> _limitedRequestStart(BookSource source) => SourceIsolate.run(
           .withLimit(() async => DateTime.now().millisecondsSinceEpoch),
 );
 
-Future<String> _renderInSourceIsolate(String url) => SourceIsolate.run(
-  (_) => HeadlessWebViewService().getRenderedHtml(url: url, delayTime: 5),
-);
-
 Future<Object?> _backstageInSourceIsolate(String html) => SourceIsolate.run(
   (_) async => (await BackstageWebView(
     html: html,
@@ -131,6 +131,35 @@ Future<String> _evaluateSourceJs(String code, {String? jsLib}) =>
         engine.dispose();
       }
     });
+
+/// 在書源 isolate 對 [url] 的請求跑登入檢查 [loginCheckJs]，抓到的回應先給
+/// 一個 401 的，傳回登入檢查交出的回應內文。
+Future<String> _loginCheckBody(String url, String loginCheckJs) =>
+    SourceIsolate.run((_) async {
+      final request = AnalyzeUrl(
+        url,
+        source: BookSource(
+          bookSourceUrl: url,
+          bookSourceName: 'login',
+          loginCheckJs: loginCheckJs,
+        ),
+      );
+      final fetched = StrResponse(
+        url: url,
+        body: '請先登入',
+        headers: const {},
+        raw: Response(
+          requestOptions: RequestOptions(path: url),
+          statusCode: 401,
+        ),
+      );
+      return runLoginCheckJs(request, fetched).body;
+    });
+
+/// 在書源 isolate 組 [rule] 這個網址並抓回內文。
+Future<String> _fetchInSourceIsolate(String rule) => SourceIsolate.run(
+  (_) async => (await AnalyzeUrl(rule).getStrResponse()).body,
+);
 
 /// 停住書源 isolate，交給網路 isolate 抓 [url]（[BlockingCall]）。
 Future<Object?> _blockOn(
@@ -249,6 +278,26 @@ void main() {
         case '/count':
           counted++;
           request.response.write('數到了');
+        case '/bytes':
+          request.response.add([0xFF, 0x00, 0xFE]);
+        case '/utf8':
+          request.response.headers.contentType = ContentType(
+            'text',
+            'html',
+            charset: 'utf-8',
+          );
+          request.response.write('夜讀');
+        case '/xml':
+          request.response.headers.contentType = ContentType(
+            'application',
+            'xml',
+            charset: 'utf-8',
+          );
+          request.response.write('<root><item/></root>');
+        case '/echo':
+          request.response.write(
+            'echo:${request.headers.value('x-token')}|${request.uri.query}',
+          );
         case final path when path.startsWith('/held/'):
           final name = path.substring('/held/'.length);
           gate(arrived, name).complete();
@@ -464,38 +513,11 @@ void main() {
   });
 
   group('WebView requests are served by the main isolate', () {
-    tearDown(() {
-      HeadlessWebViewService.delegate = null;
-      BackstageWebView.delegate = null;
-    });
-
-    test('rendering a page', () async {
-      // 測試裡沒有平台的 WebView：主 isolate 這一端換成假的，看請求有沒有
-      // 原樣送到。
-      String? renderedUrl;
-      int? renderedDelay;
-      HeadlessWebViewService.delegate =
-          ({
-            required String url,
-            Map<String, String>? headers,
-            String? userAgent,
-            String? js,
-            int delayTime = 0,
-          }) async {
-            renderedUrl = url;
-            renderedDelay = delayTime;
-            return '<html>rendered</html>';
-          };
-
-      expect(
-        await _renderInSourceIsolate('https://web.test/page'),
-        '<html>rendered</html>',
-      );
-      expect(renderedUrl, 'https://web.test/page');
-      expect(renderedDelay, 5);
-    });
+    tearDown(() => BackstageWebView.delegate = null);
 
     test('java.webView', () async {
+      // 測試裡沒有平台的 WebView：主 isolate 這一端換成假的，看請求有沒有
+      // 原樣送到。
       BackstageWebView.delegate = (request) async => {
         'body': '${request.html}|${request.sourceRegex}',
       };
@@ -581,25 +603,157 @@ void main() {
     test(
       'java.importScript hands the script over for the rule to eval',
       () async {
-        final dir = await Directory.systemTemp.createTemp(
-          'night_reader_import_',
-        );
-        addTearDown(() => dir.delete(recursive: true));
-        final file = File('${dir.path}/helper.js')
+        // 本機的路徑相對 App 的快取資料夾（同 Legado）。
+        final cacheDir = await AppStoragePaths.temporaryDir();
+        final file = File('${cacheDir.path}/night_reader_import_helper.js')
+          ..createSync(recursive: true)
           ..writeAsStringSync(
             'function importedTitle() { return "第一章"; }\n'
             'var importedPrefix = "第";\n',
           );
-        final path = file.path.replaceAll(r'\', '/');
+        addTearDown(file.deleteSync);
         expect(
           await _evaluateJs('''
-          eval(String(java.importScript("$path")));
+          eval(String(java.importScript("/night_reader_import_helper.js")));
           importedTitle() + "|" + importedPrefix
         '''),
           '第一章|第',
         );
       },
     );
+
+    // Legado 的登入檢查裡 java 是那個請求：改標頭、initUrl 重組網址後
+    // getStrResponse 重抓。其他規則的 java 沒有這些。
+    test('the login check refetches its request like Legado', () async {
+      expect(
+        await _loginCheckBody(
+          '$baseUrl/echo?t={{cache.get("login-check-t")}}',
+          '''
+          if (result.code() != 401) throw "code " + result.code();
+          cache.put("login-check-t", "2");
+          java.initUrl();
+          java.headerMap.put("X-Token", "after-login");
+          java.getStrResponse(null, null)
+          ''',
+        ),
+        'echo:after-login|t=2',
+      );
+      expect(await _evaluateJs('typeof java.getStrResponse'), 'undefined');
+    });
+
+    // 網址組到一半（網址選項的 js）就用 java 抓：這時請求還掛著組網址的
+    // JS 引擎，交給網路 isolate 前要先拿下。getResponse 的 bytes() 是原始
+    // 位元組。
+    test('URL JS fetches the request it is building', () async {
+      expect(
+        await _loginCheckBody('$baseUrl/c/1', '''
+          var raw = java.getResponse();
+          var bytes = raw.body().bytes();
+          java.url = "$baseUrl/bytes";
+          var other = java.getByteArray();
+          buildHttpResponse({ url: java.url, code: 200, headers: {},
+            body: [raw.code(), raw.body().string().indexOf("第一章") >= 0,
+              bytes.length > 0, other.join("-")].join(",") })
+        '''),
+        '200,true,true,255-0-254',
+      );
+      expect(
+        await _fetchInSourceIsolate(
+          '$baseUrl/c/2,{"js":"java.getStrResponse().body().indexOf(\\"第二章\\") >= 0 ? result : \\"\\""}',
+        ),
+        contains('第二章的正文'),
+      );
+    });
+
+    // Legado 解碼回應不看網址選項的 charset（那是送出參數用的），XML 沒有
+    // 宣告時補上。
+    test('responses decode like Legado', () async {
+      expect(
+        await _fetchInSourceIsolate('$baseUrl/utf8,{"charset":"gbk"}'),
+        '夜讀',
+      );
+      expect(
+        await _fetchInSourceIsolate('$baseUrl/xml'),
+        '<?xml version="1.0"?><root><item/></root>',
+      );
+    });
+
+    // Legado 的檔案函式都相對快取資料夾：下載的傳回相對路徑，讀、解壓、
+    // 刪都照它。
+    test('file functions work in the cache folder like Legado', () async {
+      expect(
+        await _evaluateJs('''
+          var path = java.downloadFile("$baseUrl/c/1,{\\"type\\":\\"txt\\"}");
+          var text = java.readTxtFile(path);
+          var file = java.getFile(path);
+          var existed = file.exists() && file.isFile() && file.length() > 0;
+          var deleted = java.deleteFile(path);
+          [/^[\\/\\\\][0-9a-f]{16}\\.txt\$/.test(path), text.indexOf("第一章的正文") >= 0,
+            existed, deleted, java.getFile(path).exists()].join(",")
+        '''),
+        'true,true,true,true,false',
+      );
+      await expectLater(
+        _evaluateJs('java.readTxtFile("../../../etc/passwd")'),
+        throwsA(isA<RuleJsException>()),
+      );
+      // java.io.File 照 Java：delete 不刪有東西的資料夾，mkdir 不建上層。
+      expect(
+        await _evaluateJs('''
+          var dir = java.getFile("night_reader_file_test");
+          var made = dir.mkdirs();
+          var inner = new Packages.java.io.File(dir, "book.txt");
+          var created = inner.createNewFile();
+          var deep = java.getFile("night_reader_file_test/a/b").mkdir();
+          var kept = !dir.delete() && inner.exists();
+          var cleaned = java.deleteFile("night_reader_file_test");
+          [made, created, deep, kept, cleaned, dir.exists()].join(",")
+        '''),
+        'true,true,false,true,true,false',
+      );
+    });
+
+    test('java.unzipFile keeps entries inside its folder', () async {
+      final cacheDir = await AppStoragePaths.temporaryDir();
+      final zip = File('${cacheDir.path}/night_reader_unzip_test.zip')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(
+          ZipEncoder().encode(
+            Archive()
+              ..addFile(ArchiveFile.string('safe.txt', 'safe'))
+              ..addFile(ArchiveFile.string('../../escape.txt', 'escape')),
+          ),
+        );
+      addTearDown(zip.deleteSync);
+      final folder = await _evaluateJs(
+        'java.unzipFile("night_reader_unzip_test.zip")',
+      );
+      addTearDown(
+        () => Directory('${cacheDir.path}/$folder').deleteSync(recursive: true),
+      );
+      expect(folder, startsWith('ArchiveTemp'));
+      expect(
+        File('${cacheDir.path}/$folder/safe.txt').readAsStringSync(),
+        'safe',
+      );
+      expect(File('${cacheDir.path}/escape.txt').existsSync(), isFalse);
+    });
+
+    test('java.readTxtFile honors the charset it is given', () async {
+      final cacheDir = await AppStoragePaths.temporaryDir();
+      final file = File('${cacheDir.path}/night_reader_utf16.txt')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([
+          for (final unit in '夜讀文字'.codeUnits) ...[unit & 0xFF, unit >> 8],
+        ]);
+      addTearDown(file.deleteSync);
+      expect(
+        await _evaluateJs(
+          'java.readTxtFile("night_reader_utf16.txt", "UTF-16LE")',
+        ),
+        '夜讀文字',
+      );
+    });
 
     test('inside a callback', () async {
       expect(

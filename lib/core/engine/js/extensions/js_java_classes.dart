@@ -390,6 +390,39 @@ extension JsJavaClasses on JsExtensionsBase {
     this._end = len == null ? this._bytes.length : Math.min(this._bytes.length, this._pos + len);
   }
   readerOf(named('ByteArrayInputStream', ByteArrayInputStream));
+  /// java.io.File(路徑) 或 (上層, 名稱)：只能碰 App 自己的資料夾
+  /// （`java.getFile` 給的就是快取資料夾裡的）。
+  function JavaFile(parent, child) {
+    var base = parent instanceof JavaFile ? parent._path : String(parent);
+    this._path = child === undefined ? base : base.replace(/[\/\\]+$/, '') + '/' + String(child);
+  }
+  function fileOp(op, path, arg) {
+    return send('_fileOp', JSON.stringify([op, path, arg === undefined ? null : arg]));
+  }
+  JavaFile.prototype.getPath = function() { return this._path; };
+  JavaFile.prototype.getAbsolutePath = function() { return this._path; };
+  JavaFile.prototype.getCanonicalPath = function() { return fileOp('canonical', this._path); };
+  JavaFile.prototype.toString = function() { return this._path; };
+  JavaFile.prototype.getName = function() { return this._path.replace(/[\/\\]+$/, '').split(/[\/\\]/).pop(); };
+  JavaFile.prototype.getParent = function() {
+    var i = Math.max(this._path.lastIndexOf('/'), this._path.lastIndexOf('\\'));
+    return i <= 0 ? null : this._path.substring(0, i);
+  };
+  JavaFile.prototype.getParentFile = function() {
+    var parent = this.getParent();
+    return parent == null ? null : new JavaFile(parent);
+  };
+  ['exists', 'isFile', 'isDirectory', 'length', 'lastModified', 'delete', 'mkdirs', 'mkdir', 'createNewFile']
+    .forEach(function(op) {
+      JavaFile.prototype[op] = function() { return fileOp(op, this._path); };
+    });
+  JavaFile.prototype.list = function() { return fileOp('list', this._path); };
+  JavaFile.prototype.listFiles = function() {
+    var names = this.list();
+    var self = this;
+    return names == null ? null : names.map(function(name) { return new JavaFile(self, name); });
+  };
+  named('File', JavaFile);
   /// 從 InputStream 讀出還沒讀的位元組（解壓串流用）。
   function remaining(input) {
     if (input == null) return [];
@@ -692,7 +725,7 @@ extension JsJavaClasses on JsExtensionsBase {
         System: JavaSystem,
         StringBuilder: StringBuilder
       },
-      io: { ByteArrayOutputStream: ByteArrayOutputStream, ByteArrayInputStream: ByteArrayInputStream },
+      io: { ByteArrayOutputStream: ByteArrayOutputStream, ByteArrayInputStream: ByteArrayInputStream, File: JavaFile },
       util: {
         Arrays: global.Arrays,
         Base64: JdkBase64,

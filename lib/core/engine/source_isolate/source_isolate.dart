@@ -12,7 +12,6 @@ import 'package:native_synchronization/mailbox.dart';
 import 'package:native_synchronization/sendable.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -502,14 +501,6 @@ final class SourceWorker {
     Object request,
   ) async {
     switch (request) {
-      case final _RenderHtml render:
-        return HeadlessWebViewService().getRenderedHtml(
-          url: render.url,
-          headers: render.headers,
-          userAgent: render.userAgent,
-          js: render.js,
-          delayTime: render.delayTime,
-        );
       case final BackstageWebView webView:
         return webView.getStrResponse();
       case _Clearance(:final uri):
@@ -714,22 +705,6 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
       toast: toast,
     ),
   );
-  HeadlessWebViewService.delegate =
-      ({
-        required String url,
-        Map<String, String>? headers,
-        String? userAgent,
-        String? js,
-        int delayTime = 0,
-      }) async => await channel.request(
-        _RenderHtml(
-          url: url,
-          headers: headers,
-          userAgent: userAgent,
-          js: js,
-          delayTime: delayTime,
-        ),
-      ) as String;
   BackstageWebView.delegate = (request) async =>
       (await channel.request(request) as Map).cast<String, dynamic>();
   CloudflareClearance.delegate = (uri) async =>
@@ -931,22 +906,6 @@ final class _Log {
   final String? error;
   final String? stackTrace;
   final bool toast;
-}
-
-final class _RenderHtml {
-  const _RenderHtml({
-    required this.url,
-    required this.headers,
-    required this.userAgent,
-    required this.js,
-    required this.delayTime,
-  });
-
-  final String url;
-  final Map<String, String>? headers;
-  final String? userAgent;
-  final String? js;
-  final int delayTime;
 }
 
 final class _Clearance {
