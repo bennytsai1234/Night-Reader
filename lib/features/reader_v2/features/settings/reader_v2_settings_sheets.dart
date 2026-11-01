@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -115,31 +117,46 @@ class _ReaderStyleSelector extends StatelessWidget
           width: double.infinity,
         ),
     ];
-    final rowWidth = width.clamp(
-      AppStyle.values.length * _swatchSize +
-          (AppStyle.values.length - 1) * AppSpacing.md,
-      double.infinity,
+    // 每一格和 Row 裡的 Column 一樣寬：色票與名稱取較寬的（字級放大時
+    // 「牛皮紙」比色票寬），色票與名稱在格裡置中；格與格之間照
+    // spaceBetween 平分剩下的寬度，至少隔 md。
+    final columns = [
+      for (final label in labels) math.max(_swatchSize, label.width!),
+    ];
+    final content = columns.fold<double>(0, (sum, column) => sum + column);
+    final rowWidth = math.max(
+      width,
+      content + (columns.length - 1) * AppSpacing.md,
     );
-    final stride = (rowWidth - _swatchSize) / (AppStyle.values.length - 1);
+    final gap = (rowWidth - content) / (columns.length - 1);
+    final marks = <SkeletonShape>[];
+    var left = 0.0;
+    for (var i = 0; i < labels.length; i++) {
+      final column = columns[i];
+      marks.add(
+        SkeletonShape(
+          Rect.fromLTWH(
+            left + (column - _swatchSize) / 2,
+            0,
+            _swatchSize,
+            _swatchSize,
+          ),
+          radius: AppRadius.pillShape,
+        ),
+      );
+      marks.addAll(
+        labels[i].marksAt(
+          Offset(
+            left + (column - labels[i].width!) / 2,
+            _swatchSize + AppSpacing.xs,
+          ),
+        ),
+      );
+      left += column + gap;
+    }
     return GroupedItemShape(
       _swatchSize + AppSpacing.xs + labels.first.height,
-      marks: [
-        for (var i = 0; i < labels.length; i++) ...[
-          SkeletonShape(
-            Rect.fromLTWH(i * stride, 0, _swatchSize, _swatchSize),
-            radius: AppRadius.pillShape,
-          ),
-          for (final mark in labels[i].marks)
-            SkeletonShape(
-              mark.rect.shift(
-                Offset(
-                  i * stride + (_swatchSize - mark.rect.width) / 2,
-                  _swatchSize + AppSpacing.xs,
-                ),
-              ),
-            ),
-        ],
-      ],
+      marks: marks,
     );
   }
 

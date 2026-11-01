@@ -277,6 +277,17 @@ void main() {
       expect(prefs.getString(PreferKey.darkStyle), AppStyle.tea.name);
     });
 
+    test('還原舊版備份帶回共用的風格時，以備份為準蓋過兩邊', () async {
+      await register(<String, Object>{
+        PreferKey.lightStyle: AppStyle.kraft.name,
+        PreferKey.darkStyle: AppStyle.plain.name,
+        PreferKey.sharedStyle: AppStyle.bamboo.name,
+      });
+      final provider = ThemeSettingsProvider();
+      expect(provider.lightStyle, AppStyle.bamboo);
+      expect(provider.darkStyle, AppStyle.bamboo);
+    });
+
     test('認不得的風格（含拿掉的）回到預設', () async {
       await register(<String, Object>{
         PreferKey.lightStyle: 'rainbow',

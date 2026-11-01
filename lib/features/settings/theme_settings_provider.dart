@@ -12,10 +12,10 @@ class ThemeSettingsProvider extends ChangeNotifier {
   ThemeSettingsProvider() : _prefs = getIt<SharedPreferences>() {
     final shared = _prefs.getString(PreferKey.sharedStyle);
     if (shared != null) {
-      // 淺深共用一個風格時選的，升級後兩邊都沿用，畫面不變。
-      for (final key in [PreferKey.lightStyle, PreferKey.darkStyle]) {
-        if (!_prefs.containsKey(key)) _prefs.setString(key, shared);
-      }
+      // 淺深共用一個風格時選的：升級後兩邊都沿用，畫面不變。讀完就刪，
+      // 之後只會在還原舊版備份時再出現，那時以備份為準蓋過兩邊。
+      _prefs.setString(PreferKey.lightStyle, shared);
+      _prefs.setString(PreferKey.darkStyle, shared);
       _prefs.remove(PreferKey.sharedStyle);
     }
     lightStyle = AppStyle.fromStorage(
