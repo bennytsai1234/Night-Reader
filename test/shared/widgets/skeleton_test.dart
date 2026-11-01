@@ -179,12 +179,13 @@ void main() {
                 LaunchEntranceMotion.breathCycle.inMicroseconds)
             .ceil() +
         1;
-    final boundary = GlobalKey();
     late LaunchEntranceMotion motion;
 
     /// 兩條 400 寬的黑色骨架疊在白底上（第二條 [second] 時才有），包在
-    /// 開 App 的進場底下。[ticking] 是外層的 TickerMode，[reduce] 是減少
-    /// 動態；重新 pump 時元件樹不變，骨架的狀態留著。
+    /// 開 App 的進場底下。第一條和 App 的骨架一樣照進場長出
+    /// （[LaunchEntranceMotion.appearance]），長出前畫面只有底色。[ticking]
+    /// 是外層的 TickerMode，[reduce] 是減少動態；重新 pump 時元件樹不變，
+    /// 骨架的狀態留著。
     Widget host({
       bool ticking = true,
       bool reduce = false,
@@ -200,18 +201,23 @@ void main() {
                 builder: (context) {
                   motion = LaunchEntrance.maybeOf(context)!;
                   return RepaintBoundary(
-                    key: boundary,
                     child: ColoredBox(
                       color: const Color(0xFFFFFFFF),
                       child: TickerMode(
                         enabled: ticking,
                         child: Column(
                           children: [
-                            const Skeleton(
-                              child: SkeletonBox(
-                                width: 400,
-                                height: 20,
-                                color: black,
+                            SkeletonRevealLayer(
+                              presence: motion.appearance,
+                              side: SkeletonRevealSide.skeleton,
+                              incoming: SkeletonRevealSide.skeleton,
+                              sweep: motion.sweep,
+                              child: const Skeleton(
+                                child: SkeletonBox(
+                                  width: 400,
+                                  height: 20,
+                                  color: black,
+                                ),
                               ),
                             ),
                             if (second)
@@ -237,14 +243,15 @@ void main() {
 
     const xs = [5, 100, 200, 300, 395];
 
-    /// 第 [row] 條骨架在 [xs] 的紅色：黑色骨架疊在白底上，越小越深，
-    /// 最深是 0。
+    /// 螢幕上第 [row] 條骨架在 [xs] 的紅色：黑色骨架疊在白底上，越小越深，
+    /// 最深是 0。開 App 的骨架長出與呼吸畫的是兩張定格畫面的混合，底下的
+    /// 真畫面那時不畫，所以看整個螢幕。
     Future<List<int>> sample(WidgetTester tester, {int row = 0}) async {
       final bytes = await tester.runAsync(() async {
-        final image =
-            await (boundary.currentContext!.findRenderObject()!
-                    as RenderRepaintBoundary)
-                .toImage();
+        final view = tester.binding.renderViews.first;
+        final image = await (view.debugLayer! as OffsetLayer).toImage(
+          Offset.zero & view.size,
+        );
         return image.toByteData();
       });
       final y = 10 + row * 20;
@@ -293,10 +300,23 @@ void main() {
       await setUpView(tester);
       await tester.pumpWidget(host());
       await tester.pump();
-      // 長出期間不呼吸：每一格都停在最深。
+      // 長出期間不呼吸：每一格都是最深的骨架照長出的進度出現。
       var frames = 0;
       while (!motion.skeleton.isCompleted) {
-        expect(await sample(tester), everyElement(0), reason: '長出第 $frames 格');
+        final progress = motion.skeleton.value;
+        final now = await sample(tester);
+        for (var i = 0; i < xs.length; i++) {
+          final grown = SkeletonReveal.incomingOpacityAt(
+            progress,
+            (xs[i] + 0.5) / 400,
+            sweep: motion.sweep,
+          );
+          expect(
+            now[i],
+            closeTo(255 * (1 - grown), 2),
+            reason: '長出第 $frames 格 x=${xs[i]}',
+          );
+        }
         await tester.pump(frame);
         frames++;
       }
@@ -397,8 +417,12 @@ void main() {
       await tester.pump(frame);
       expect(rested, isFalse);
 
+      // 藏起來的骨架直接算停好；螢幕上的呼吸（兩張定格畫面的混合）照常
+      // 收住，最多再一輪。
       await tester.pumpWidget(host(ticking: false));
-      await tester.pump(frame);
+      for (var i = 0; i < cycleFrames && !rested; i++) {
+        await tester.pump(frame);
+      }
       expect(rested, isTrue);
       // 再出現時停在最深，不接著呼吸。
       await tester.pumpWidget(host());
@@ -434,6 +458,9 @@ void main() {
       unawaited(motion.rest.settle().then((_) => rested = true));
       await tester.pump(const Duration(milliseconds: 480));
 
+      // 螢幕上畫的是長出前拍好的定格畫面，之後才出現的骨架不在裡面：放掉
+      // 定格畫面、改畫真的畫面，看這條骨架自己的呼吸。
+      motion.screen.releaseSkeleton();
       await tester.pumpWidget(host(second: true));
       expect(await sample(tester, row: 1), everyElement(0), reason: '一出現就最深');
       var frames = 30;

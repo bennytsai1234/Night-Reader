@@ -119,17 +119,21 @@ void main() {
           16 +
       10;
 
-  /// 第一幀之後：準備工作做完的那一格畫完、隔 idle，這一格開始長骨架。
-  Future<void> startGrowing(WidgetTester tester) async {
-    await tester.pump();
-    await tester.pump(LaunchEntranceMotion.idle);
-  }
-
   /// 推進一格。定格畫面照一般的畫法拍（ADR 0035），圖要讓出真實時間才拿
   /// 得到。
   Future<void> frame(WidgetTester tester) async {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump(const Duration(milliseconds: 16));
+  }
+
+  /// 第一幀之後：準備工作做完的那一格畫完、拍好長出前的兩張圖、隔 idle，
+  /// 推進到開始長骨架的那一格。
+  Future<void> startGrowing(WidgetTester tester) async {
+    final motion = motionOf(tester);
+    for (var i = 0; i < 60 && motion.skeleton.value == 0; i++) {
+      await frame(tester);
+    }
+    expect(motion.skeleton.value, greaterThan(0), reason: '開始長骨架');
   }
 
   /// 一格一格推進，直到換場開始（最多 [frames] 格）；回傳推進了幾格。
@@ -210,16 +214,18 @@ void main() {
     expect(motion.skeleton.value, 0, reason: '準備工作還沒做完');
 
     prepared.complete();
-    // 一格一格推進：做完、那一格畫完，再隔 idle 才開始長。
+    // 一格一格推進：做完、那一格畫完，拍長出前的兩張圖（底色那張等一格、
+    // 骨架那張再等一格、換回底色再一格），再隔 idle 才開始長。
     const frame = Duration(milliseconds: 16);
     var waited = Duration.zero;
     while (!motion.skeleton.isAnimating &&
         waited < const Duration(seconds: 1)) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pump(frame);
       waited += frame;
     }
     expect(waited, greaterThanOrEqualTo(LaunchEntranceMotion.idle));
-    expect(waited, lessThanOrEqualTo(LaunchEntranceMotion.idle + frame * 3));
+    expect(waited, lessThanOrEqualTo(LaunchEntranceMotion.idle + frame * 6));
     await tester.pump(frame);
     expect(motion.skeleton.value, greaterThan(0));
   });
@@ -245,8 +251,10 @@ void main() {
     )!;
     await tester.pump();
     expect(tester.takeException(), isStateError, reason: '錯誤照樣回報');
-    await tester.pump(LaunchEntranceMotion.idle);
-    await tester.pump(const Duration(milliseconds: 16));
+    for (var i = 0; i < 20 && motion.skeleton.value == 0; i++) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     expect(motion.skeleton.value, greaterThan(0), reason: '不能停在底色');
   });
 

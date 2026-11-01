@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -85,6 +86,40 @@ class SnapshotSweepController {
     return state._play(change, duration, sweep, gap, settle);
   }
 
+  /// 開 App 長骨架前拍好兩張圖（ADR 0035 的延伸）：「只有底色」是現在的
+  /// 畫面，呼叫 [change] 把骨架整個長出來（最深），畫好後拍下「骨架最深」，
+  /// 再呼叫 [restore] 換回底色；換回的那一格畫完時完成，拍到時回傳 true。
+  /// 拍圖這幾格螢幕上蓋著「只有底色」那張圖，看起來不動。
+  ///
+  /// 拍好後骨架長出與呼吸都只混合這兩張圖（[mixSkeleton]），不重畫骨架。
+  /// 不在 [SnapshotSweep] 底下、系統要求減少動態或還沒畫出來時不拍，回傳
+  /// false，骨架照常即時畫。
+  Future<bool> captureSkeleton({
+    required VoidCallback change,
+    required VoidCallback restore,
+  }) {
+    final state = _state;
+    if (state == null || !state.mounted) return Future<bool>.value(false);
+    return state._captureSkeleton(change, restore);
+  }
+
+  /// 螢幕上改畫「只有底色」與「骨架」兩張圖照每一行像素混合：橫向位置 u
+  /// （0 左緣、1 右緣）那一行是 底色 +（骨架 − 底色）×[depthAt] (u)。骨架的
+  /// 顏色是半透明疊上去的，所以和把每個骨架形狀的透明度乘上 [depthAt] 畫
+  /// 出來一樣。[tick] 每次通知就重畫一次；底下的畫面不畫。
+  ///
+  /// 「骨架」先用 [captureSkeleton] 拍的那張；換場的兩張圖拍好（[capture]）
+  /// 之後改用「之前」那張（同樣是骨架最深的畫面），先拍的那張放掉。沒有
+  /// 圖、圖和畫面大小對不上，或換場開始時（[play]），換回真的畫面。
+  void mixSkeleton(Listenable tick, double Function(double u) depthAt) =>
+      _state?._mixSkeleton(tick, depthAt);
+
+  /// 停止 [mixSkeleton]，換回真的畫面（圖留著，之後還可以再混合）。
+  void stopMixingSkeleton() => _state?._stopMixing();
+
+  /// 放掉 [captureSkeleton] 拍的圖，停止混合。
+  void releaseSkeleton() => _state?._releaseSkeleton();
+
   /// 兩張圖已經 [capture] 好、還沒開始 [play]。
   bool get captured => _state?._phase == _Phase.captured;
 
@@ -144,6 +179,20 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   /// [SnapshotSweepController.play] 換場播完時完成。
   Completer<void>? _run;
 
+  /// [SnapshotSweepController.captureSkeleton] 拍的「只有底色」與「骨架最深」；
+  /// [_cover] 是拍骨架那幾格蓋在螢幕上的圖（就是 [_base]）。
+  ui.Image? _base;
+  ui.Image? _skeleton;
+  ui.Image? _cover;
+
+  /// 這一輪拍骨架；放掉或被下一輪蓋過時換掉。
+  Object? _skeletonSession;
+
+  /// [SnapshotSweepController.mixSkeleton] 正在混合時的重畫時機與每個橫向
+  /// 位置的深淺。
+  Listenable? _mixTick;
+  double Function(double u)? _mixDepth;
+
   @override
   void initState() {
     super.initState();
@@ -166,8 +215,96 @@ class _SnapshotSweepState extends State<SnapshotSweep>
       widget.controller._state = null;
     }
     _end(rebuild: false);
+    _releaseSkeleton(rebuild: false);
     _progress.dispose();
     super.dispose();
+  }
+
+  Future<bool> _captureSkeleton(
+    VoidCallback change,
+    VoidCallback restore,
+  ) async {
+    _releaseSkeleton();
+    if (MediaQuery.disableAnimationsOf(context)) return false;
+    final session = _skeletonSession = Object();
+    bool current() => mounted && identical(_skeletonSession, session);
+
+    /// 下一格畫完、拍得到（沒有要重畫）時拍下底下的畫面；拍不到時回傳 null。
+    Future<ui.Image?> shoot() async {
+      while (true) {
+        await _nextFrame();
+        if (!current()) return null;
+        final boundary = _boundary;
+        if (boundary == null) return null;
+        if (!_readyToCapture(boundary)) continue;
+        final image = await _toImage(boundary);
+        if (current()) return image;
+        image.dispose();
+        return null;
+      }
+    }
+
+    final base = await shoot();
+    if (base == null) return false;
+    // 底下長出骨架；這一格（與拍骨架之前的每一格）螢幕上蓋著只有底色的圖。
+    change();
+    setState(() => _base = _cover = base);
+    ui.Image? skeleton;
+    try {
+      skeleton = await shoot();
+    } finally {
+      restore();
+      if (current()) setState(() => _cover = null);
+    }
+    if (skeleton == null) {
+      if (current()) _releaseSkeleton();
+      return false;
+    }
+    _skeleton = skeleton;
+    // 換回底色的那一格畫完才算拍好。
+    await _nextFrame();
+    return current();
+  }
+
+  /// 下一格畫完時完成。
+  Future<void> _nextFrame() {
+    final done = Completer<void>();
+    _afterFrame(done.complete);
+    return done.future;
+  }
+
+  void _mixSkeleton(Listenable tick, double Function(double u) depthAt) {
+    if (!mounted || _base == null) return;
+    setState(() {
+      _mixTick = tick;
+      _mixDepth = depthAt;
+    });
+  }
+
+  void _stopMixing() {
+    if (!mounted || _mixTick == null) return;
+    setState(() {
+      _mixTick = null;
+      _mixDepth = null;
+    });
+  }
+
+  void _releaseSkeleton({bool rebuild = true}) {
+    final base = _base, skeleton = _skeleton;
+    _skeletonSession = null;
+    void reset() {
+      _base = _skeleton = _cover = null;
+      _mixTick = null;
+      _mixDepth = null;
+    }
+
+    if (rebuild && mounted && (base != null || skeleton != null)) {
+      setState(reset);
+    } else {
+      reset();
+    }
+    base?.dispose();
+    skeleton?.dispose();
   }
 
   RenderRepaintBoundary? get _boundary {
@@ -211,7 +348,14 @@ class _SnapshotSweepState extends State<SnapshotSweep>
         onMissing: _end,
         then: () {
           restore();
-          setState(() => _phase = _Phase.captured);
+          // 「之前」也是骨架最深的畫面：之後的混合改用它，先拍的那張放掉，
+          // 進場只多佔一張「只有底色」的圖。
+          final skeleton = _skeleton;
+          setState(() {
+            _phase = _Phase.captured;
+            _skeleton = null;
+          });
+          skeleton?.dispose();
           _afterFrame(() {
             if (!_current(session)) return;
             _captured = null;
@@ -230,6 +374,8 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     Duration gap,
     VoidCallback? settle,
   ) {
+    // 換場開始：骨架的混合到此為止，「之前」那張圖接著畫。
+    _releaseSkeleton();
     final session = _session;
     final ready = session != null && _phase == _Phase.captured;
     if (!ready || MediaQuery.disableAnimationsOf(context)) _end();
@@ -414,16 +560,27 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   }
 
   @override
-  Widget build(BuildContext context) => _SnapshotSweepPaint(
-    phase: _phase,
-    before: _before,
-    after: _after,
-    progress: _progress,
-    sweep: _sweep,
-    pixelRatio: _pixelRatio,
-    onStale: _onStale,
-    child: RepaintBoundary(key: _boundaryKey, child: widget.child),
-  );
+  Widget build(BuildContext context) {
+    final mixing = _mixTick != null;
+    return _SnapshotSweepPaint(
+      phase: _phase,
+      before: _before,
+      after: _after,
+      progress: _progress,
+      sweep: _sweep,
+      pixelRatio: _pixelRatio,
+      onStale: _onStale,
+      cover: _cover,
+      mixBase: mixing ? _base : null,
+      // 換場的兩張圖拍好後，「之前」就是骨架最深的畫面（[_capture]）。
+      mixSkeleton: mixing
+          ? (_phase == _Phase.captured ? _before : null) ?? _skeleton
+          : null,
+      mixTick: _mixTick,
+      mixDepth: _mixDepth,
+      child: RepaintBoundary(key: _boundaryKey, child: widget.child),
+    );
+  }
 }
 
 class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
@@ -435,6 +592,11 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
     required this.sweep,
     required this.pixelRatio,
     required this.onStale,
+    required this.cover,
+    required this.mixBase,
+    required this.mixSkeleton,
+    required this.mixTick,
+    required this.mixDepth,
     required super.child,
   });
 
@@ -445,6 +607,11 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
   final bool sweep;
   final double pixelRatio;
   final VoidCallback onStale;
+  final ui.Image? cover;
+  final ui.Image? mixBase;
+  final ui.Image? mixSkeleton;
+  final Listenable? mixTick;
+  final double Function(double u)? mixDepth;
 
   @override
   _RenderSnapshotSweep createRenderObject(BuildContext context) =>
@@ -453,7 +620,12 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
         ..before = before
         ..after = after
         ..sweep = sweep
-        ..pixelRatio = pixelRatio;
+        ..pixelRatio = pixelRatio
+        ..cover = cover
+        ..mixBase = mixBase
+        ..mixSkeleton = mixSkeleton
+        ..mixTick = mixTick
+        ..mixDepth = mixDepth;
 
   @override
   void updateRenderObject(
@@ -466,7 +638,12 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
       ..after = after
       ..sweep = sweep
       ..pixelRatio = pixelRatio
-      ..onStale = onStale;
+      ..onStale = onStale
+      ..cover = cover
+      ..mixBase = mixBase
+      ..mixSkeleton = mixSkeleton
+      ..mixTick = mixTick
+      ..mixDepth = mixDepth;
   }
 }
 
@@ -514,6 +691,46 @@ class _RenderSnapshotSweep extends RenderProxyBox {
     markNeedsPaint();
   }
 
+  /// 拍骨架那幾格蓋在螢幕上的圖（[SnapshotSweepController.captureSkeleton]）。
+  ui.Image? _cover;
+  set cover(ui.Image? value) {
+    if (identical(_cover, value)) return;
+    _cover = value;
+    markNeedsPaint();
+  }
+
+  /// 骨架混合（[SnapshotSweepController.mixSkeleton]）的兩張圖；有這兩張和
+  /// [_mixDepth] 時螢幕上畫混合，不畫底下。
+  ui.Image? _mixBase;
+  set mixBase(ui.Image? value) {
+    if (identical(_mixBase, value)) return;
+    _mixBase = value;
+    markNeedsPaint();
+  }
+
+  ui.Image? _mixSkeleton;
+  set mixSkeleton(ui.Image? value) {
+    if (identical(_mixSkeleton, value)) return;
+    _mixSkeleton = value;
+    markNeedsPaint();
+  }
+
+  Listenable? _mixTick;
+  set mixTick(Listenable? value) {
+    if (identical(_mixTick, value)) return;
+    if (attached) _mixTick?.removeListener(markNeedsPaint);
+    _mixTick = value;
+    if (attached) _mixTick?.addListener(markNeedsPaint);
+    markNeedsPaint();
+  }
+
+  double Function(double u)? _mixDepth;
+  set mixDepth(double Function(double u)? value) {
+    if (identical(_mixDepth, value)) return;
+    _mixDepth = value;
+    markNeedsPaint();
+  }
+
   void _onTick() {
     if (_phase == _Phase.playing) markNeedsPaint();
   }
@@ -522,11 +739,13 @@ class _RenderSnapshotSweep extends RenderProxyBox {
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _progress.addListener(_onTick);
+    _mixTick?.addListener(markNeedsPaint);
   }
 
   @override
   void detach() {
     _progress.removeListener(_onTick);
+    _mixTick?.removeListener(markNeedsPaint);
     super.detach();
   }
 
@@ -563,7 +782,20 @@ class _RenderSnapshotSweep extends RenderProxyBox {
     switch (_phase) {
       case _Phase.live:
       case _Phase.captured:
+        final base = _mixBase, skeleton = _mixSkeleton, depth = _mixDepth;
+        if (base != null &&
+            skeleton != null &&
+            depth != null &&
+            _fits(base) &&
+            _fits(skeleton)) {
+          _paintDepth(context.canvas, offset, base, skeleton, depth);
+          return;
+        }
         super.paint(context, offset);
+        final cover = _cover;
+        if (cover != null && _fits(cover)) {
+          _drawWhole(context.canvas, cover, offset);
+        }
       case _Phase.holding:
         // 底下畫的是換好的樣子（為了拍下來），上面蓋著「之前」。
         super.paint(context, offset);
@@ -654,6 +886,54 @@ class _RenderSnapshotSweep extends RenderProxyBox {
         to++;
       }
       draw(after, from, to, alpha);
+      from = to;
+    }
+  }
+
+  /// 每一行像素的透明度（[_paintDepth]），照圖的寬度建一次、每一格重用：
+  /// 呼吸每一格都要算一次，不每格新建。
+  Uint8List _alphas = Uint8List(0);
+
+  /// [base] 整片畫上，[skeleton] 照每一行像素的深淺 [depthAt] 疊上去：
+  /// 底色 +（骨架 − 底色）× 深淺。深淺先換成 8 位元的透明度，透明度相同、
+  /// 相鄰的行合成一段，每段一次 [Canvas.drawImageRect]（同 [_paintMix]）；
+  /// 深淺不必由左往右遞減（呼吸是一道明暗走過去）。
+  void _paintDepth(
+    Canvas canvas,
+    Offset offset,
+    ui.Image base,
+    ui.Image skeleton,
+    double Function(double u) depthAt,
+  ) {
+    final width = skeleton.width;
+    final height = skeleton.height.toDouble();
+    final scale = size.width / width;
+    if (_alphas.length != width) _alphas = Uint8List(width);
+    final alphas = _alphas;
+    for (var x = 0; x < width; x++) {
+      alphas[x] = (depthAt((x + 0.5) / width).clamp(0.0, 1.0) * 255).round();
+    }
+    _drawWhole(canvas, base, offset);
+    var from = 0;
+    while (from < width) {
+      final alpha = alphas[from];
+      var to = from + 1;
+      while (to < width && alphas[to] == alpha) {
+        to++;
+      }
+      if (alpha > 0) {
+        canvas.drawImageRect(
+          skeleton,
+          Rect.fromLTWH(from.toDouble(), 0, (to - from).toDouble(), height),
+          Rect.fromLTWH(
+            offset.dx + from * scale,
+            offset.dy,
+            (to - from) * scale,
+            size.height,
+          ),
+          alpha >= 255 ? _exact : _faded[alpha] ??= _fadedPaint(alpha),
+        );
+      }
       from = to;
     }
   }

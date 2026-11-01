@@ -231,6 +231,49 @@ class SkeletonRest {
   }
 }
 
+/// 開 App 進場整個畫面的呼吸：[LaunchEntrance] 用兩張定格畫面畫呼吸時，
+/// 每一行像素照它的深淺混合（[SnapshotSweepController.mixSkeleton]）。和
+/// 進場底下的每個 [Skeleton] 同一個節奏：等 [LaunchEntranceMotion.breathing]
+/// 才開始，跟著 [LaunchEntranceMotion.rest] 收住、停在最深。
+class LaunchBreath {
+  LaunchBreath(
+    TickerProvider vsync,
+    LaunchEntranceMotion entrance, {
+    required SkeletonBreath breath,
+  }) : _clock = _BreathClock(vsync),
+       _rest = entrance.rest {
+    _clock
+      ..breath = breath
+      ..holdUntil(entrance)
+      ..allowed = true;
+    _rest._add(_clock);
+  }
+
+  final _BreathClock _clock;
+  final SkeletonRest _rest;
+
+  /// 同 [Skeleton]：系統要求減少動態（[allowed] 為 false）時不呼吸、整片
+  /// 最深；畫面上看不到（[visible] 為 false，[TickerMode]）時收住直接算停好。
+  bool _allowed = true;
+  set allowed(bool value) {
+    _allowed = value;
+    _clock.allowed = value;
+  }
+
+  set visible(bool value) => _clock.visible = value;
+
+  /// 每呼吸一格通知一次。
+  Listenable get tick => _clock;
+
+  /// 橫向位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例，1 是最深。
+  double depthAt(double u) => _allowed ? _clock.depthAt(u, _clock.breath) : 1;
+
+  void dispose() {
+    _rest._clocks.remove(_clock);
+    _clock.dispose();
+  }
+}
+
 /// 一個 [Skeleton] 的呼吸：從開始呼吸起經過了幾輪（不折回 0）。收住時
 /// （[rest]）每個位置等到下一次最深就停在那裡：呼吸曲線在最深處的變化是
 /// 零，停下來接得上，不是動到一半定住。
@@ -1146,7 +1189,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   Widget build(BuildContext context) {
     final reveal = _reveal;
     final entrance = _entering ? widget.entrance : null;
-    final appearing = entrance?.skeleton;
+    final appearing = entrance?.appearance;
     final loading = widget.loading || entrance != null || _resting != null;
     // 還沒開始換場：內容建在骨架底下看不到（有墊色時被骨架整個蓋住，沒有
     // 時全透明），例如等封面、開 App 呼吸前就拍好兩張定格畫面時呼吸的那段

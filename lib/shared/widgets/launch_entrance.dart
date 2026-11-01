@@ -56,13 +56,20 @@ class LaunchEntrance extends StatefulWidget {
 
 /// 進場的狀態。
 class LaunchEntranceMotion {
-  LaunchEntranceMotion._(this._controller, {required this.sweep});
+  LaunchEntranceMotion._(this._controller, {required this.sweep})
+    : _appearance = ProxyAnimation(_controller);
 
   final AnimationController _controller;
 
   /// 骨架出現的進度（經過的時間比例，曲線由 [SkeletonReveal] 套）；完成時才
   /// 讀進書架的內容。
   Animation<double> get skeleton => _controller;
+
+  /// 骨架畫成長到哪裡：照 [skeleton]，只有長出前拍「骨架最深」那張圖時暫時
+  /// 整個長好（[SnapshotSweepController.captureSkeleton]）。書架與頁首、分頁
+  /// 列的骨架照它畫。
+  Animation<double> get appearance => _appearance;
+  final ProxyAnimation _appearance;
 
   /// 骨架出現是不是由左而右。
   final bool sweep;
@@ -289,13 +296,23 @@ void _collectGarbage({int collections = 4, int maxBytes = 256 << 20}) {
 }
 
 class _LaunchEntranceState extends State<LaunchEntrance>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(vsync: this);
   LaunchEntranceMotion? _motion;
+
+  /// 整個畫面的呼吸，給呼吸時混合兩張定格畫面用。
+  LaunchBreath? _breath;
+
+  /// 長骨架前拍好了「只有底色」與「骨架最深」兩張圖：骨架長出與呼吸只
+  /// 混合它們（[SnapshotSweepController.mixSkeleton]），不重畫骨架。
+  bool _shot = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _breath
+      ?..allowed = !MediaQuery.disableAnimationsOf(context)
+      ..visible = TickerMode.valuesOf(context).enabled;
     if (_motion != null) return;
     // 方式與時長在第一次建畫面時定下來，播放中改設定不影響這一次。
     final reveal = SkeletonReveal.of(context);
@@ -325,9 +342,24 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     // 拍好兩張定格畫面（[LaunchEntranceMotion.requestPreparation]），清掉
     // 留下的記憶體，再停 idle 才開始呼吸（長完的通知在這一格建畫面之前，從
     // 那時就算的話，這一格越重、停得越短），開始呼吸才算停頓。
+    final breath = _breath = LaunchBreath(
+      this,
+      motion,
+      breath: SkeletonLook.of(context).breath,
+    );
+    // 換場開始就不再混合；進場結束時收掉，不跟著留下的骨架接著呼吸。
+    unawaited(
+      motion.finished.then((_) {
+        _breath?.dispose();
+        _breath = null;
+      }),
+    );
     void onStatus(AnimationStatus status) {
       if (!status.isCompleted) return;
       _controller.removeStatusListener(onStatus);
+      // 長好的混合和底下長好的骨架一樣：換回真的畫面，長完停要在真的畫面
+      // 上建書架、拍換場的兩張圖。
+      motion.screen.stopMixingSkeleton();
       SchedulerBinding.instance.endOfFrame.then((_) async {
         if (!mounted) return;
         motion._breathScheduled = true;
@@ -338,6 +370,10 @@ class _LaunchEntranceState extends State<LaunchEntrance>
           if (!mounted) return;
           _collectGarbage();
         }
+        // 呼吸前停的這段就換成混合（還沒呼吸，整片最深，和真的畫面一樣）：
+        // 換過去的那一格畫面不動；底下的真畫面從這時起不畫，呼吸的第一格
+        // 也不必先重畫一次骨架。
+        if (_shot) motion.screen.mixSkeleton(breath.tick, breath.depthAt);
         _timer = Timer(LaunchEntranceMotion.idle, () {
           motion._breathing.value = true;
           _timer = Timer(LaunchEntranceMotion.pause, () {
@@ -348,8 +384,11 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     }
 
     _controller.addStatusListener(onStatus);
-    // 第一幀只畫底色、和系統啟動畫面一樣；畫完、準備工作也做完，清掉開 App
-    // 留下的記憶體，再隔 idle 才開始長骨架。
+    // 第一幀只畫底色、和系統啟動畫面一樣；畫完、準備工作也做完，在這段靜止
+    // 的畫面上拍「只有底色」與「骨架最深」兩張圖，清掉開 App 與拍圖留下的
+    // 記憶體，再隔 idle 才開始長骨架。骨架長出與呼吸的每一格只照每一行像素
+    // 的深淺混合這兩張圖（同換場，ADR 0031、0037 策略二），和書架上有幾個
+    // 骨架方塊無關；拍不到時照常即時畫。
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await widget.prepared?.call();
@@ -367,9 +406,39 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       // 資料回來排的那次重建：等它畫完。
       await SchedulerBinding.instance.endOfFrame;
       if (!mounted) return;
+      try {
+        _shot = await motion.screen.captureSkeleton(
+          change: () => motion._appearance.parent = kAlwaysCompleteAnimation,
+          restore: () => motion._appearance.parent = _controller,
+        );
+      } catch (error, stackTrace) {
+        // 拍不到也照常進場，骨架即時畫。
+        motion.screen.releaseSkeleton();
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'launch entrance',
+            context: ErrorDescription('長骨架前拍定格畫面失敗'),
+          ),
+        );
+      }
+      if (!mounted) return;
       _collectGarbage();
       _timer = Timer(LaunchEntranceMotion.idle, () {
-        if (mounted) _controller.forward();
+        if (!mounted) return;
+        if (_shot) {
+          final sweep = motion.sweep;
+          motion.screen.mixSkeleton(
+            _controller,
+            (u) => SkeletonReveal.incomingOpacityAt(
+              _controller.value,
+              u,
+              sweep: sweep,
+            ),
+          );
+        }
+        _controller.forward();
       });
     });
   }
@@ -380,6 +449,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
   @override
   void dispose() {
     _timer?.cancel();
+    _breath?.dispose();
     _controller.dispose();
     _motion?._dispose();
     super.dispose();
@@ -504,10 +574,10 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
                 child: IgnorePointer(
                   child: Center(
                     child: AnimatedBuilder(
-                      animation: motion.skeleton,
+                      animation: motion.appearance,
                       builder: (context, _) {
                         final appeared = SkeletonReveal.incomingOpacityAt(
-                          motion.skeleton.value,
+                          motion.appearance.value,
                           _u,
                           sweep: motion.sweep,
                         );
