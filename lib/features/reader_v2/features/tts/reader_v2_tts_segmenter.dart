@@ -27,7 +27,7 @@ final class ReaderV2TtsSegmenter {
     required int chapterIndex,
     required int startOffset,
   }) {
-    final span = _readableSpan(text, startOffset);
+    final span = _readableSpan(text, _sentenceStart(text, startOffset));
     if (span == null) return const <ReaderV2TtsSegment>[];
     final segments = <ReaderV2TtsSegment>[];
     var cursor = _safeSegmentStart(text, span.start, span.end);
@@ -85,6 +85,31 @@ final class ReaderV2TtsSegmenter {
       if (_isWhitespace(text.codeUnitAt(index))) return index;
     }
     return preferredLimit;
+  }
+
+  /// 包含 [offset] 的那一句的句首：畫面第一個看得到的字常在句子中間，
+  /// 從那裡切會從詞中間念起。往前找上一句的句尾（含收引號），找不到
+  /// 就是章首；一句長過 [maxSegmentLength] 時原本就會從中間切開，
+  /// 不再往前退，免得重念上一頁的一大段。
+  int _sentenceStart(String text, int offset) {
+    final safeOffset = offset.clamp(0, text.length).toInt();
+    final floor = math.max(0, safeOffset - maxSegmentLength);
+    var boundary = -1;
+    for (var index = safeOffset - 1; index >= floor; index -= 1) {
+      if (_isSegmentBoundary(text.codeUnitAt(index))) {
+        boundary = index;
+        break;
+      }
+    }
+    if (boundary < 0) return floor == 0 ? 0 : safeOffset;
+    var start = boundary + 1;
+    if (text.codeUnitAt(boundary) != 0x0A) {
+      while (start < text.length &&
+          _isClosingPunctuation(text.codeUnitAt(start))) {
+        start += 1;
+      }
+    }
+    return start;
   }
 
   int _safeSegmentStart(String text, int start, int end) {
