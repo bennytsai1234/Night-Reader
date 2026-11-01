@@ -1,8 +1,11 @@
 // 開 App 到書架換場播完、之後一秒的每一幀成本（ADR 0018、0025）。用法見
 // `test/support/frame_budget.dart`；帶 `frame_budget` 標籤，平常的全套測試
-// 跳過。
+// 跳過。預設是手機；`FRAME_SIZE=1280x880`（寬x高，邏輯像素）改量平板這類
+// 其他尺寸。
 @Tags(['frame_budget'])
 library;
+
+import 'dart:io';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -22,7 +25,13 @@ void main() {
   setUpAll(loadScreenshotFonts);
 
   testWidgets('launch until the shelf has turned into content', (tester) async {
-    setUpPhone(tester);
+    setUpPhone(
+      tester,
+      size: switch (Platform.environment['FRAME_SIZE']?.split('x')) {
+        [final w, final h] => Size(double.parse(w), double.parse(h)),
+        _ => null,
+      },
+    );
     // 書架上 30 本書，超過一個畫面，都帶手機裡已有的封面：骨架呼吸時底下
     // 建書卡、解碼封面，換場前等它們畫得出來（ADR 0031）。
     final covers = coverDirectory();

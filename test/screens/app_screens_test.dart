@@ -4,6 +4,9 @@
 //   SHOT_MODE=dark flutter test --run-skipped -t screens test/screens
 //   SHOT_ONLY=r04,s12 flutter test --run-skipped -t screens test/screens
 //   SHOT_STYLE=plain flutter test --run-skipped -t screens test/screens
+//   SHOT_SIZE=1280x880 flutter test --run-skipped -t screens test/screens
+//
+// SHOT_SIZE 是畫面的寬x高（邏輯像素），給平板這類其他尺寸用，預設是手機。
 //
 // SHOT_STYLE 是 `AppStyle` 的名稱（paper、bamboo、azurite、tea、plain、rouge、
 // lotus、scroll、amber、frost），預設紙墨。
@@ -173,12 +176,19 @@ void main() {
   final mode = Platform.environment['SHOT_MODE'] ?? 'light';
   final only = Platform.environment['SHOT_ONLY']?.split(',');
   final style = Platform.environment['SHOT_STYLE'];
+  final size = switch (Platform.environment['SHOT_SIZE']?.split('x')) {
+    [final w, final h] => Size(double.parse(w), double.parse(h)),
+    _ => null,
+  };
+  final suffix = size == null
+      ? mode
+      : '${size.width.toInt()}x${size.height.toInt()}_$mode';
 
   // 全部情境在同一個測試裡依序拍：App 的單例服務（下載服務等）第一次用到
   // 時就綁在當下測試的非同步環境，換到下一個測試就不會再回應，開書會一直
   // 停在載入中。每個情境之間只換偏好設定、重建整個 App。
   testWidgets('app screens', (tester) async {
-    setUpPhone(tester);
+    setUpPhone(tester, size: size);
     await tester.runAsync(() async {
       await setUpApp();
       await seedLibrary();
@@ -196,7 +206,7 @@ void main() {
       await pumpApp(tester);
       await steps(tester);
       if (name.startsWith('r')) await waitForText(tester);
-      await shot(tester, '${name}_$mode');
+      await shot(tester, '${name}_$suffix');
       // 拆掉整個 App，下一個情境從頭建。
       await tester.pumpWidget(const SizedBox.shrink());
       await settle(tester, const Duration(milliseconds: 300));

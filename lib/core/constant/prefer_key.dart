@@ -183,6 +183,7 @@ class PreferKey {
   static const String readerHighlightStrength = 'reader_highlight_strength';
   static const String readerClickActions = 'reader_click_actions';
   static const String readerPaddingHorizontal = 'reader_padding_horizontal';
+  static const String readerLineChars = 'reader_line_chars';
   static const String readerPaddingTop = 'reader_padding_top';
   static const String readerPaddingBottom = 'reader_padding_bottom';
   static const String readerFooterOffset = 'reader_footer_offset';

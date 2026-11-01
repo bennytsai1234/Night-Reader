@@ -32,9 +32,6 @@ class BookshelfSkeleton extends StatelessWidget {
   /// 與書架清單相同的內距（讓出玻璃頁首與底部浮動列）。
   final EdgeInsets padding;
 
-  /// 與書架網格相同的欄數。
-  static const int _gridColumns = 3;
-
   /// 書名佔位的長度，輪流使用，看起來才像不同的書。
   static const List<double> _titleWidths = [0.9, 0.65, 0.8, 0.55, 0.75];
 
@@ -49,11 +46,10 @@ class BookshelfSkeleton extends StatelessWidget {
   }
 
   Widget _buildGrid(BuildContext context, BoxConstraints constraints) {
-    final cellWidth =
-        (constraints.maxWidth -
-            padding.horizontal -
-            AppSpacing.lg * (_gridColumns - 1)) /
-        _gridColumns;
+    // 與書架網格相同的欄數與格寬。
+    final width = constraints.maxWidth - padding.horizontal;
+    final columns = BookshelfGridTile.columnsFor(width);
+    final cellWidth = BookshelfGridTile.cellWidthFor(width, columns);
     final cellHeight = BookshelfGridTile.heightFor(
       cellWidth,
       MediaQuery.textScalerOf(context),
@@ -66,12 +62,12 @@ class BookshelfSkeleton extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       padding: padding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: _gridColumns,
+        crossAxisCount: columns,
         mainAxisExtent: cellHeight,
-        crossAxisSpacing: AppSpacing.lg,
+        crossAxisSpacing: BookshelfGridTile.columnGap,
         mainAxisSpacing: AppSpacing.md,
       ),
-      itemCount: _limit(rows * _gridColumns),
+      itemCount: _limit(rows * columns),
       itemBuilder: (context, index) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

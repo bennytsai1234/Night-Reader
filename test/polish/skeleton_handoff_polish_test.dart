@@ -151,9 +151,14 @@ Future<void> _tapOnShelf(WidgetTester tester, String name) async {
 }
 
 /// 同一列裡的「加」鈕（步進列的加號沒有 Tooltip，只有語意標籤）。
-Finder _stepUp(String label) => find.descendant(
+Finder _stepUp(String label) => _stepButton(label, Icons.add_rounded);
+
+/// 同一列裡的「減」鈕。
+Finder _stepDown(String label) => _stepButton(label, Icons.remove_rounded);
+
+Finder _stepButton(String label, IconData icon) => find.descendant(
   of: find.ancestor(of: find.text(label), matching: find.byType(Row)).first,
-  matching: find.byIcon(Icons.add_rounded),
+  matching: find.byIcon(icon),
 );
 
 // 額外加進書架的書（見 [_seedExtraBooks]）。
@@ -220,8 +225,8 @@ final scenarios = <String, _Scenario>{
     before: _openTypography,
   ),
   'margin-a': _Scenario(
-    '閱讀中加大左右邊距（A 組欄位）',
-    (t) => t.tap(_stepUp('左右邊距')),
+    '閱讀中減少每行字數，兩側留白變寬（A 組欄位）',
+    (t) => t.tap(_stepDown('每行字數')),
     before: _openTypography,
   ),
   'new-a': _Scenario('剛加入書架、從沒讀過的書（A 組欄位）', (t) => _tapOnShelf(t, _newBook)),

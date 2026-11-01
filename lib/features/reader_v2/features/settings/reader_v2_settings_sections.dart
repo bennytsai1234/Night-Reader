@@ -65,11 +65,14 @@ class ReaderV2SettingsGroups {
     settings,
     fields: _PaddingField.values,
     read: (field) => field.read(settings),
-    commit: (values) => settings.setPagePadding(
-      horizontal: values[_PaddingField.horizontal],
-      top: values[_PaddingField.top],
-      bottom: values[_PaddingField.bottom],
-    ),
+    commit: (values) {
+      settings.setPagePadding(
+        top: values[_PaddingField.top],
+        bottom: values[_PaddingField.bottom],
+      );
+      final lineChars = values[_PaddingField.lineChars];
+      if (lineChars != null) settings.setLineChars(lineChars.round());
+    },
   );
 
   /// 跟著別的設定出現的列在不在：「頁尾位置」（頁尾兩欄都不顯示時拿掉）、
@@ -231,11 +234,28 @@ class ReaderV2SettingsGroups {
     step: _paddingStep,
   );
 
-  /// 版面：正文邊距、系統狀態列與頁首／頁尾資訊列。[compact] 是閱讀器
-  /// 面板的精簡版：只放左右邊距；其他版面項目、狀態列與頁首頁尾在閱讀
-  /// 偏好頁。
+  /// 每行字數：最多調到這個畫面放得下的字數，數字是畫面上實際的字數（設的
+  /// 比放得下的多時顯示放得下的數）。字號與字距改了，放得下的數跟著變。
+  Widget _lineCharsStepper() => _StagedStepper(
+    edits: _padding,
+    field: _PaddingField.lineChars,
+    label: '每行字數',
+    min: ReaderV2PrefsRepository.lineCharsRange.min.toDouble(),
+    max: ReaderV2PrefsRepository.lineCharsRange.max.toDouble(),
+    maxOf: (context) => _lineCapacity(context).toDouble(),
+    listenable: settings,
+    step: 1,
+    unit: '字',
+  );
+
+  int _lineCapacity(BuildContext context) =>
+      settings.lineCapacityFor(MediaQuery.sizeOf(context).width);
+
+  /// 版面：每行字數、正文邊距、系統狀態列與頁首／頁尾資訊列。[compact] 是
+  /// 閱讀器面板的精簡版：只放每行字數；其他版面項目、狀態列與頁首頁尾在
+  /// 閱讀偏好頁。
   List<GroupedSection> pageLayout({bool compact = false}) {
-    final horizontal = _paddingStepper(_PaddingField.horizontal, '左右邊距');
+    final horizontal = _lineCharsStepper();
     if (compact) {
       return [
         GroupedSection(margin: margin, header: '版面', children: [horizontal]),
@@ -650,12 +670,12 @@ enum _TypographyField {
 }
 
 enum _PaddingField {
-  horizontal,
+  lineChars,
   top,
   bottom;
 
   double read(ReaderV2SettingsController s) => switch (this) {
-    horizontal => s.paddingHorizontal,
+    lineChars => s.lineChars.toDouble(),
     top => s.paddingTop,
     bottom => s.paddingBottom,
   };
@@ -776,6 +796,8 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
     this.fractionDigits = 0,
     this.trimZeroFraction = false,
     this.unit = '',
+    this.maxOf,
+    this.listenable,
   });
 
   final _StagedEdits<F> edits;
@@ -788,33 +810,45 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
   final bool trimZeroFraction;
   final String unit;
 
-  NumberStepperRow _row(double value) => NumberStepperRow(
-    label: label,
-    value: value,
-    min: min,
-    max: max,
-    step: step,
-    fractionDigits: fractionDigits,
-    trimZeroFraction: trimZeroFraction,
-    unit: unit,
-    onChanged: (next) => edits.stage(field, next),
-  );
+  /// 這個畫面上能調到的上限（例如放得下的字數），比 [max] 小時取它；值比
+  /// 它大時顯示它。
+  final double Function(BuildContext context)? maxOf;
+
+  /// [maxOf] 依據的設定；它通知時重算上限。
+  final Listenable? listenable;
+
+  NumberStepperRow _row(BuildContext context, double value) {
+    var hi = max;
+    final limit = maxOf?.call(context);
+    if (limit != null && limit >= step) hi = math.min(max, limit);
+    return NumberStepperRow(
+      label: label,
+      value: value,
+      min: math.min(min, hi - step),
+      max: hi,
+      step: step,
+      fractionDigits: fractionDigits,
+      trimZeroFraction: trimZeroFraction,
+      unit: unit,
+      onChanged: (next) => edits.stage(field, next),
+    );
+  }
 
   @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
-  }) =>
-      _row(edits.listenableOf(field).value)
-          .skeletonShape(context, width: width - _stepperPadding.horizontal)
-          .padded(_stepperPadding);
+  }) => _row(context, edits.listenableOf(field).value)
+      .skeletonShape(context, width: width - _stepperPadding.horizontal)
+      .padded(_stepperPadding);
 
   @override
   Widget build(BuildContext context) {
+    final value = edits.listenableOf(field);
     return _StepperRow(
-      ValueListenableBuilder<double>(
-        valueListenable: edits.listenableOf(field),
-        builder: (context, value, _) => _row(value),
+      ListenableBuilder(
+        listenable: Listenable.merge([value, ?listenable]),
+        builder: (context, _) => _row(context, value.value),
       ),
     );
   }

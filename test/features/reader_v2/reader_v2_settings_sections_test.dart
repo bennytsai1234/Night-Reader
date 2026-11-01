@@ -213,7 +213,7 @@ void main() {
     await tester.tap(find.text('開啟'));
     await tester.pumpAndSettle();
 
-    for (final label in ['字號', '行高', '段距', '左右邊距']) {
+    for (final label in ['字號', '行高', '段距', '每行字數']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     for (final label in ['標題字號', '字距', '章節間距', '上邊距', '頁首與頁尾']) {

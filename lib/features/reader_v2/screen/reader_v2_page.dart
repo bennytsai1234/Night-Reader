@@ -288,7 +288,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 hideStatusBar: settings.hideStatusBar,
                 headerInfo: settings.headerInfo,
                 footerInfo: settings.footerInfo,
-                paddingHorizontal: settings.paddingHorizontal,
+                // 正文區橫向佔滿畫面，和正文用同一個寬度算。
+                paddingHorizontal: settings.paddingHorizontalFor(
+                  MediaQuery.sizeOf(context).width,
+                ),
                 paddingTop: settings.paddingTop,
                 paddingBottom: settings.paddingBottom,
                 footerOffset: settings.footerOffset,
@@ -372,6 +375,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
         final style = _host.settings.readStyleFor(
           mediaPadding,
+          viewportWidth: size.width,
           topInfoReservedExternally: true,
           bottomInfoReservedExternally: _host.settings.showReadTitleAddition,
         );
