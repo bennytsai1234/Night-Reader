@@ -6,14 +6,16 @@ import 'app_style.dart';
 import 'app_text_styles.dart';
 import 'app_tokens.dart';
 
+/// [style] 是這個深淺用的風格；[pureBlack] 只影響深色（「深色用純黑」）。
 ThemeData buildAppTheme(
   AppStyle style,
   Brightness brightness, {
   GlassStrength glassStrength = GlassStrength.frosted,
   AppAccent accent = AppAccent.theme,
   AppPageTransition pageTransition = AppPageTransition.slide,
+  bool pureBlack = false,
 }) {
-  final colors = style.paletteFor(brightness, accent);
+  final colors = style.paletteFor(brightness, accent, pureBlack: pureBlack);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
   final inversePrimary = style
       .paletteFor(

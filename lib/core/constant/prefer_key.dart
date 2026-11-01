@@ -6,8 +6,15 @@ class PreferKey {
   static const String fontScale = 'fontScale';
   static const String themeMode = 'themeMode';
 
-  /// 外觀風格（[AppStyle.name]）。
-  static const String appStyle = 'app_style';
+  /// 淺色、深色各用的外觀風格（[AppStyle.name]）。
+  static const String lightStyle = 'app_style_light';
+  static const String darkStyle = 'app_style_dark';
+
+  /// 淺深共用一個風格時存的鍵；讀到就搬到 [lightStyle]、[darkStyle] 後刪掉。
+  static const String sharedStyle = 'app_style';
+
+  /// 深色用純黑（bool，預設開）。
+  static const String pureBlack = 'app_pure_black';
 
   /// 強調色（[AppAccent.name]）。
   static const String appAccent = 'app_accent';

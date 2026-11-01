@@ -92,8 +92,9 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
   }
 }
 
-/// 風格選擇：與「外觀與主題」頁是同一個設定，換了整個 App 一起換。
-/// 色票顯示各風格在目前深淺下的正文紙張與文字。
+/// 風格選擇：改的是目前深淺用的風格（「外觀與主題」頁的同一個設定），
+/// 換了整個 App 一起換，另一個深淺的風格不動。色票顯示各風格在目前深淺
+/// 下的正文紙張與文字（含純黑）。
 class _ReaderStyleSelector extends StatelessWidget
     implements GroupedSkeletonItem {
   const _ReaderStyleSelector();
@@ -160,14 +161,19 @@ class _ReaderStyleSelector extends StatelessWidget
               for (final style in AppStyle.values)
                 _swatch(
                   style,
-                  style.of(brightness),
-                  selected: style == themeSettings.style,
+                  style.paletteFor(
+                    brightness,
+                    AppAccent.theme,
+                    pureBlack: themeSettings.pureBlack,
+                  ),
+                  selected: style == themeSettings.styleFor(brightness),
                   scheme: scheme,
                   // 和外觀設定頁一樣，新配色從點擊處像墨水一樣暈開。
                   onTap: () {
-                    if (style == themeSettings.style) return;
-                    ThemeRevealScope.of(context)
-                        .run(change: () => themeSettings.setStyle(style));
+                    if (style == themeSettings.styleFor(brightness)) return;
+                    ThemeRevealScope.of(context).run(
+                      change: () => themeSettings.setStyle(brightness, style),
+                    );
                   },
                 ),
             ],
