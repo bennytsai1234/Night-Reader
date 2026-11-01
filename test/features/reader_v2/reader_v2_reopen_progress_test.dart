@@ -30,7 +30,7 @@ void main() {
       final book = (await tester.runAsync(
         () => getIt<BookDao>().getByUrl(kBookUrl),
       ))!;
-      return (book!.chapterIndex, book.charOffset);
+      return (book.chapterIndex, book.charOffset);
     }
 
     // 從畫面量位置記的是錨線上那一行的行首；存的位置在行中間時，沒捲動
