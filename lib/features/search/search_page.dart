@@ -732,14 +732,14 @@ class _SearchViewState extends State<SearchView> {
       showDragHandle: true,
       // 輸入框控制器由面板擁有，退場動畫結束後才釋放。
       builder: (sheetContext) => TextControllersScope(
-        initialTexts: [provider.authorFilter],
+        initialTexts: [provider.authorFilter, provider.blockedWords],
         // 面板在另一條路由上，拿不到頁面的 provider；用會跟著通知重建的
         // ChangeNotifierProvider.value 接過來，不是 Provider.value。
         builder: (_, fields) => ChangeNotifierProvider.value(
           value: provider,
           child: Consumer<SearchProvider>(
             builder: (context, p, _) {
-              final [authorController] = fields;
+              final [authorController, blockedController] = fields;
               final sources = p.availableSourceFilters;
               final primary = Theme.of(context).colorScheme.primary;
               return SafeArea(
@@ -790,6 +790,19 @@ class _SearchViewState extends State<SearchView> {
                                       controller: authorController,
                                       hintText: '不限',
                                       onChanged: p.setAuthorFilter,
+                                    ),
+                                  ],
+                                ),
+                                // 屏蔽詞記在手機上、每次搜尋都套用，「清除」
+                                // 不清它：清的是這次搜尋的篩選。
+                                GroupedSection(
+                                  footer: '書名或作者含有這些字的結果不列，每次搜尋都套用；用逗號或空白分開。',
+                                  children: [
+                                    GroupedTextFieldRow(
+                                      label: '屏蔽詞',
+                                      controller: blockedController,
+                                      hintText: '不屏蔽',
+                                      onChanged: p.setBlockedWords,
                                     ),
                                   ],
                                 ),

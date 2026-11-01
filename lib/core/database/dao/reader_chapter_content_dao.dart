@@ -157,6 +157,35 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
     return rows.map((row) => row.read<String>('chapterUrl')).toSet();
   }
 
+  /// 已下載好正文的章節網址與正文的位元組數，全書進度照它算每章多長。
+  /// `octet_length` 從資料列的標頭就讀得到長度，不用把正文讀出來：3000 章
+  /// 約 10–25ms，`length` 要逐字數、約 200ms（2026-11-02 在電腦上量）。
+  Future<Map<String, int>> getStoredContentBytes({
+    required String origin,
+    required String bookUrl,
+  }) async {
+    final rows = await customSelect(
+      '''
+          SELECT chapterUrl, octet_length(content) AS bytes
+          FROM reader_chapter_contents
+          WHERE origin = ?
+            AND bookUrl = ?
+            AND status = ?
+            AND content IS NOT NULL
+          ''',
+      variables: [
+        Variable.withString(origin),
+        Variable.withString(bookUrl),
+        Variable.withInt(ReaderChapterContentStatus.ready.code),
+      ],
+      readsFrom: {readerChapterContents},
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<String>('chapterUrl'): row.read<int>('bytes'),
+    };
+  }
+
   Future<void> saveContent({
     required String contentKey,
     required String origin,

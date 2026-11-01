@@ -1124,6 +1124,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
       title: _chapterTitleAt(chapterIndex),
+      shares: runtime?.chapterShares.value,
     );
   }
 
