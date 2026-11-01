@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
 
@@ -127,6 +128,10 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final allowedOrigins = enabledSources
         .map((source) => source.bookSourceUrl)
         .toSet();
+    _sourceRespondTimes = {
+      for (final source in enabledSources)
+        source.bookSourceUrl: source.respondTime,
+    };
     final cachedResults = _sortResults(
       cached
           .where(
@@ -167,6 +172,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
             try {
               final shouldCheckAuthor =
                   checkAuthor && book.author.trim().isNotEmpty;
+              final stopwatch = Stopwatch()..start();
               final results = await _searchNames(
                 source,
                 names,
@@ -177,6 +183,10 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
                 ),
               );
               if (!_isSearchActive(searchId)) return;
+              final elapsed = stopwatch.elapsedMilliseconds;
+              for (final result in results) {
+                result.respondTime = elapsed;
+              }
               _replaceSourceResults(source.bookSourceUrl, results);
             } catch (_) {
               if (_isSearchActive(searchId)) {
@@ -282,6 +292,16 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     unawaited(startSearch());
   }
 
+  /// 不列字數和這本書差太多的結果（[_wordCountClose]）；只是篩掉，
+  /// 不重新搜尋。
+  bool excludeFarWordCount = false;
+
+  void toggleExcludeFarWordCount() {
+    excludeFarWordCount = !excludeFarWordCount;
+    _rebuildFilteredResults();
+    _notifySafely();
+  }
+
   void updateSelectedGroup(String group) {
     if (selectedGroup == group) return;
     selectedGroup = group;
@@ -358,12 +378,15 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   String _resultKey(SearchBook result) => '${result.origin}\n${result.bookUrl}';
 
   void _rebuildFilteredResults() {
+    final candidates = excludeFarWordCount
+        ? allResults.where(_wordCountClose)
+        : allResults;
     if (_filterQuery.isEmpty) {
-      filteredResults = List<SearchBook>.from(allResults);
+      filteredResults = List<SearchBook>.from(candidates);
       return;
     }
 
-    filteredResults = allResults.where((result) {
+    filteredResults = candidates.where((result) {
       return <String>[
         result.originName ?? '',
         result.latestChapterTitle ?? '',
@@ -374,23 +397,39 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     }).toList();
   }
 
+  /// 回得快的書源在前：換過去之後開書、翻章也快。這次搜到的照這次的
+  /// 回應時間；先列出來的快取結果照書源上次搜尋記下的時間，這次回來就
+  /// 換成這次的。都沒量過的照書源順序排在後面。
   List<SearchBook> _sortResults(List<SearchBook> results) {
+    int speed(SearchBook result) {
+      if (result.respondTime > 0) return result.respondTime;
+      final recorded = _sourceRespondTimes[result.origin] ?? 0;
+      return recorded > 0 && recorded < _unmeasuredRespondTime
+          ? recorded
+          : _unmeasuredRespondTime;
+    }
+
     results.sort((a, b) {
+      final speedCompare = speed(a).compareTo(speed(b));
+      if (speedCompare != 0) return speedCompare;
       final orderCompare = a.originOrder.compareTo(b.originOrder);
-      if (orderCompare != 0) {
-        return orderCompare;
-      }
-
-      final chapterCompare = (b.latestChapterTitle?.length ?? 0).compareTo(
-        a.latestChapterTitle?.length ?? 0,
-      );
-      if (chapterCompare != 0) {
-        return chapterCompare;
-      }
-
+      if (orderCompare != 0) return orderCompare;
       return a.name.compareTo(b.name);
     });
     return results;
+  }
+
+  /// 書源上記的回應時間（上次搜尋量的）；180000 是預設值，代表沒量過。
+  static const int _unmeasuredRespondTime = 180000;
+  Map<String, int> _sourceRespondTimes = const <String, int>{};
+
+  /// 字數和這本書差到一半以下或兩倍以上，多半是同名的另一本書或只有
+  /// 部分章節；兩邊都讀得出字數才比。
+  bool _wordCountClose(SearchBook result) {
+    final mine = StringUtils.wordCountValue(book.wordCount, book.kind);
+    final theirs = StringUtils.wordCountValue(result.wordCount, result.kind);
+    if (mine == null || theirs == null) return true;
+    return theirs * 2 >= mine && theirs <= mine * 2;
   }
 
   Set<String> _splitGroups(String value) => splitSourceGroups(value);
