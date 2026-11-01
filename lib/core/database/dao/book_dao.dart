@@ -119,6 +119,36 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     );
   }
 
+  /// 套用另一台同步來的進度（ADR 0039）：位置換成那一台的，畫面上的細微
+  /// 位移與錨點是那台螢幕的，清掉。最近閱讀時間取兩台較晚的，書架排序不會
+  /// 因為同步往後掉。
+  Future<void> applySyncedProgress(
+    String bookUrl, {
+    required int chapterIndex,
+    required String chapterTitle,
+    required int charOffset,
+    required int time,
+  }) {
+    return transaction(() async {
+      final current = await (select(
+        books,
+      )..where((t) => t.bookUrl.equals(bookUrl))).getSingleOrNull();
+      if (current == null) return;
+      await (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+        BooksCompanion(
+          chapterIndex: Value(chapterIndex),
+          durChapterTitle: Value(chapterTitle),
+          charOffset: Value(charOffset),
+          visualOffsetPx: const Value(0.0),
+          readerAnchorJson: const Value(null),
+          durChapterTime: Value(
+            time > current.durChapterTime ? time : current.durChapterTime,
+          ),
+        ),
+      );
+    });
+  }
+
   /// 只改「是否參與書架更新」；其他欄位（閱讀進度等）不跟著被舊資料覆寫。
   Future<void> updateCanUpdate(String bookUrl, bool canUpdate) {
     return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(

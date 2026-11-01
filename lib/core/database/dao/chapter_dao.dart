@@ -88,6 +88,15 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
         .getSingleOrNull();
   }
 
+  /// 整本目錄的章名，照序號排；同步進度時拿來對另一台的章節。
+  Future<List<String>> titlesByBook(String bookUrl) async {
+    final query = selectOnly(chapters)
+      ..addColumns([chapters.title])
+      ..where(chapters.bookUrl.equals(bookUrl))
+      ..orderBy([OrderingTerm(expression: chapters.index)]);
+    return [for (final row in await query.get()) row.read(chapters.title)!];
+  }
+
   /// 這本書目前的目錄裡這個網址的章節序號；目錄裡沒有這一章時回傳 null。
   Future<int?> indexOfUrl(String bookUrl, String url) async =>
       (await getByUrl(bookUrl, url))?.index;
