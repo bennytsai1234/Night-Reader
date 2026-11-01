@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_js/flutter_js.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 
+import '../../../support/source_isolate_harness.dart';
 import '../../../test_helper.dart';
 
 /// Legado 交給書源程式的每個物件、每個公開方法，照 Legado 原始碼列出。夜讀的
@@ -109,6 +111,366 @@ const _analyzeUrl = [
 // - CacheManager.sizeOf：LruCache 內部算大小用的。clearSourceVariables、
 //   getQueryTTF 在 Legado 的 AppCacheManager，不是 cache。
 
+/// Legado 帶的 Jsoup 1.16.2（`gradle/libs.versions.toml`）每個類別的公開
+/// 方法，含繼承來的（照 `javap -public` 列出）。規則 JS 拿到的節點、元素
+/// 清單、`Jsoup.connect` 的連線都要有；刻意不做的列在 [_jsoupNotProvided]。
+const _jsoup = <String, List<String>>{
+  'element': [
+    'absUrl',
+    'addClass',
+    'after',
+    'append',
+    'appendChild',
+    'appendChildren',
+    'appendElement',
+    'appendText',
+    'appendTo',
+    'attr',
+    'attributes',
+    'attributesSize',
+    'baseUri',
+    'before',
+    'child',
+    'childNode',
+    'childNodeSize',
+    'childNodes',
+    'childNodesCopy',
+    'children',
+    'childrenSize',
+    'className',
+    'classNames',
+    'clearAttributes',
+    'clone',
+    'closest',
+    'cssSelector',
+    'data',
+    'dataNodes',
+    'dataset',
+    'elementSiblingIndex',
+    'empty',
+    'endSourceRange',
+    'equals',
+    'expectFirst',
+    'filter',
+    'firstChild',
+    'firstElementChild',
+    'firstElementSibling',
+    'forEach',
+    'forEachNode',
+    'getAllElements',
+    'getElementById',
+    'getElementsByAttribute',
+    'getElementsByAttributeStarting',
+    'getElementsByAttributeValue',
+    'getElementsByAttributeValueContaining',
+    'getElementsByAttributeValueEnding',
+    'getElementsByAttributeValueMatching',
+    'getElementsByAttributeValueNot',
+    'getElementsByAttributeValueStarting',
+    'getElementsByClass',
+    'getElementsByIndexEquals',
+    'getElementsByIndexGreaterThan',
+    'getElementsByIndexLessThan',
+    'getElementsByTag',
+    'getElementsContainingOwnText',
+    'getElementsContainingText',
+    'getElementsMatchingOwnText',
+    'getElementsMatchingText',
+    'hasAttr',
+    'hasClass',
+    'hasParent',
+    'hasSameValue',
+    'hasText',
+    'hashCode',
+    'html',
+    'id',
+    'insertChildren',
+    'is',
+    'isBlock',
+    'lastChild',
+    'lastElementChild',
+    'lastElementSibling',
+    'nextElementSibling',
+    'nextElementSiblings',
+    'nextSibling',
+    'nodeName',
+    'normalName',
+    'outerHtml',
+    'ownText',
+    'ownerDocument',
+    'parent',
+    'parentNode',
+    'parents',
+    'prepend',
+    'prependChild',
+    'prependChildren',
+    'prependElement',
+    'prependText',
+    'previousElementSibling',
+    'previousElementSiblings',
+    'previousSibling',
+    'remove',
+    'removeAttr',
+    'removeClass',
+    'replaceWith',
+    'root',
+    'select',
+    'selectFirst',
+    'selectXpath',
+    'setBaseUri',
+    'shallowClone',
+    'siblingElements',
+    'siblingIndex',
+    'siblingNodes',
+    'sourceRange',
+    'tag',
+    'tagName',
+    'text',
+    'textNodes',
+    'toString',
+    'toggleClass',
+    'traverse',
+    'unwrap',
+    'val',
+    'wholeOwnText',
+    'wholeText',
+    'wrap',
+  ],
+  // Document 繼承 Element；createShell 是靜態方法，另外看類別。
+  'document': [
+    'body',
+    'charset',
+    'connection',
+    'createElement',
+    'documentType',
+    'expectForm',
+    'forms',
+    'head',
+    'location',
+    'outputSettings',
+    'parser',
+    'quirksMode',
+    'title',
+    'updateMetaCharsetElement',
+  ],
+  // Node（含 LeafNode）：TextNode、DataNode、Comment 都有。
+  'node': [
+    'absUrl',
+    'after',
+    'attr',
+    'attributes',
+    'attributesSize',
+    'baseUri',
+    'before',
+    'childNode',
+    'childNodeSize',
+    'childNodes',
+    'childNodesCopy',
+    'clearAttributes',
+    'clone',
+    'empty',
+    'equals',
+    'filter',
+    'firstChild',
+    'forEachNode',
+    'hasAttr',
+    'hasParent',
+    'hasSameValue',
+    'hashCode',
+    'html',
+    'lastChild',
+    'nextSibling',
+    'nodeName',
+    'normalName',
+    'outerHtml',
+    'ownerDocument',
+    'parent',
+    'parentNode',
+    'previousSibling',
+    'remove',
+    'removeAttr',
+    'replaceWith',
+    'root',
+    'setBaseUri',
+    'shallowClone',
+    'siblingIndex',
+    'siblingNodes',
+    'sourceRange',
+    'toString',
+    'traverse',
+    'unwrap',
+    'wrap',
+  ],
+  'textNode': ['getWholeText', 'isBlank', 'splitText', 'text'],
+  'dataNode': ['getWholeData', 'setWholeData'],
+  'comment': ['asXmlDeclaration', 'getData', 'isXmlDeclaration', 'setData'],
+  'elements': [
+    'addClass',
+    'after',
+    'append',
+    'attr',
+    'before',
+    'clone',
+    'comments',
+    'dataNodes',
+    'eachAttr',
+    'eachText',
+    'empty',
+    'eq',
+    'filter',
+    'first',
+    'forms',
+    'hasAttr',
+    'hasClass',
+    'hasText',
+    'html',
+    'is',
+    'last',
+    'next',
+    'nextAll',
+    'not',
+    'outerHtml',
+    'parents',
+    'prepend',
+    'prev',
+    'prevAll',
+    'remove',
+    'removeAttr',
+    'removeClass',
+    'select',
+    'tagName',
+    'text',
+    'textNodes',
+    'toString',
+    'toggleClass',
+    'traverse',
+    'unwrap',
+    'val',
+    'wrap',
+  ],
+  'jsoup': [
+    'clean',
+    'connect',
+    'isValid',
+    'newSession',
+    'parse',
+    'parseBodyFragment',
+  ],
+  'connection': [
+    'cookie',
+    'cookieStore',
+    'cookies',
+    'data',
+    'execute',
+    'followRedirects',
+    'get',
+    'header',
+    'headers',
+    'ignoreContentType',
+    'ignoreHttpErrors',
+    'maxBodySize',
+    'method',
+    'newRequest',
+    'parser',
+    'post',
+    'postDataCharset',
+    'proxy',
+    'referrer',
+    'request',
+    'requestBody',
+    'response',
+    'sslSocketFactory',
+    'timeout',
+    'url',
+    'userAgent',
+  ],
+  'request': [
+    'addHeader',
+    'cookie',
+    'cookies',
+    'data',
+    'followRedirects',
+    'hasCookie',
+    'hasHeader',
+    'hasHeaderWithValue',
+    'header',
+    'headers',
+    'ignoreContentType',
+    'ignoreHttpErrors',
+    'maxBodySize',
+    'method',
+    'multiHeaders',
+    'parser',
+    'postDataCharset',
+    'proxy',
+    'removeCookie',
+    'removeHeader',
+    'requestBody',
+    'sslSocketFactory',
+    'timeout',
+    'url',
+  ],
+  'response': [
+    'addHeader',
+    'body',
+    'bodyAsBytes',
+    'bodyStream',
+    'bufferUp',
+    'charset',
+    'contentType',
+    'cookie',
+    'cookies',
+    'hasCookie',
+    'hasHeader',
+    'hasHeaderWithValue',
+    'header',
+    'headers',
+    'method',
+    'multiHeaders',
+    'parse',
+    'removeCookie',
+    'removeHeader',
+    'statusCode',
+    'statusMessage',
+    'url',
+  ],
+  'keyVal': ['contentType', 'hasInputStream', 'inputStream', 'key', 'value'],
+  'method': ['valueOf', 'values'],
+  'methodValue': ['hasBody', 'name', 'ordinal'],
+  'statics': [
+    'org.jsoup.nodes.Document.createShell',
+    'org.jsoup.nodes.TextNode.createFromEncoded',
+  ],
+};
+
+/// Jsoup 刻意不做的方法與理由。
+const _jsoupNotProvided = <String, Set<String>>{
+  // 解析時的原始位置：Jsoup 預設不記，Legado 也沒開，書源拿到的永遠是空的。
+  'element': {'sourceRange', 'endSourceRange'},
+  'node': {'sourceRange'},
+  // 輸出設定、解析器、文件類型與 Java 的字元集物件：夜讀用另一套 HTML
+  // 函式庫解析與輸出，沒有這些設定，書源讀網頁用 html()、text()。
+  // connection() 只有 Jsoup 自己抓來的文件才有，書源的文件來自規則。
+  'document': {
+    'charset',
+    'connection',
+    'documentType',
+    'outputSettings',
+    'parser',
+    'quirksMode',
+    'updateMetaCharsetElement',
+  },
+  // 傳回 XmlDeclaration 物件，只有 XML 宣告用得到。
+  'comment': {'asXmlDeclaration'},
+  // 要 Safelist 整套白名單規則；源倉庫的書源沒有用到。
+  'jsoup': {'clean', 'isValid'},
+  // Java 的網路物件與解析器設定。
+  'connection': {'cookieStore', 'parser', 'proxy', 'sslSocketFactory'},
+  'request': {'parser', 'proxy', 'sslSocketFactory'},
+  // Java 的串流；書源用 body()、bodyAsBytes()。
+  'response': {'bodyStream'},
+};
+
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -142,4 +504,60 @@ void main() {
     );
     expect(Uri.parse(url.url).queryParameters['missing'], isEmpty);
   }, skip: skip);
+
+  // 回應要真的發一次請求，請求只能在書源 isolate 裡等（ADR 0034）。
+  group('in the source isolate', () {
+    final isolates = SourceIsolateHarness();
+    late HttpServer server;
+    late String baseUrl;
+    setUpAll(() async {
+      await isolates.start();
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      baseUrl = 'http://${server.address.address}:${server.port}';
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.html;
+        request.response.write('<p>ok</p>');
+        await request.response.close();
+      });
+    });
+    tearDownAll(() async {
+      await server.close(force: true);
+      await isolates.stop();
+    });
+
+    test('rule JS Jsoup has every public method of Jsoup 1.16.2', () async {
+      final missing = await evaluateInSourceIsolate('''
+      var doc = org.jsoup.Jsoup.parse('<p>a<!--c--></p><script>x</script>');
+      var p = doc.selectFirst('p');
+      var conn = org.jsoup.Jsoup.connect('$baseUrl/');
+      var targets = {
+        element: p, document: doc, textNode: p.childNode(0),
+        dataNode: doc.selectFirst('script').childNode(0), comment: p.childNode(1),
+        elements: doc.select('p'), jsoup: org.jsoup.Jsoup, connection: conn,
+        request: conn.request(), response: conn.execute(),
+        keyVal: conn.data('k', 'v').data('k'),
+        method: org.jsoup.Connection.Method,
+        methodValue: org.jsoup.Connection.Method.GET
+      };
+      var lists = ${jsonEncode(_jsoup)};
+      var skipped = ${jsonEncode(_jsoupNotProvided.map((k, v) => MapEntry(k, v.toList())))};
+      var missing = [];
+      Object.keys(lists).forEach(function(kind) {
+        lists[kind].forEach(function(name) {
+          if ((skipped[kind] || []).indexOf(name) >= 0) return;
+          if (kind === 'statics') {
+            if (typeof eval(name) !== 'function') missing.push(name);
+            return;
+          }
+          var checks = kind === 'node' ? ['textNode', 'dataNode', 'comment'] : [kind];
+          checks.forEach(function(target) {
+            if (typeof targets[target][name] !== 'function') missing.push(target + '.' + name);
+          });
+        });
+      });
+      missing.join(',')
+    ''');
+      expect(missing, isEmpty, reason: '夜讀的 Jsoup 少了這些方法');
+    }, skip: skip);
+  });
 }
