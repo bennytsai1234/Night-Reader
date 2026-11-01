@@ -2,31 +2,39 @@ import 'package:html/dom.dart' as dom;
 
 /// Jsoup 的 `Element.text()`：空白縮成一格、頭尾去掉；區塊元素的前後與
 /// `<br>` 處補一個空格（`<p>甲</p><p>乙</p>` 是「甲 乙」）；`<pre>`、
-/// `<textarea>` 裡的空白照原樣；`<script>`、`<style>` 的內容是資料、不算
-/// 文字（取它們自己的 text 也是空的，內容用 `data()`）。對照 Jsoup 1.15.3。
-String jsoupText(dom.Node node) {
-  if (_isDataElement(node)) return '';
+/// `<textarea>` 裡的空白照原樣；`<script>`、`<style>` 的內容是資料
+/// （Jsoup 的 DataNode）、不算文字（取它們自己的 text 也是空的，內容用
+/// `data()`）。對照 Jsoup 1.16.2。
+///
+/// 哪些文字節點是資料由 [isData] 決定，沒給時看它是不是在 `<script>`、
+/// `<style>` 底下（解析出來的網頁都是這樣）；規則 JS 自己做的 DataNode
+/// 放到別處仍是資料，由 `JsoupBridge` 給。
+String jsoupText(dom.Node node, {bool Function(dom.Text)? isData}) {
   final writer = _TextWriter();
   if (node is dom.Text) {
     writer.appendNormalised(node);
   } else {
-    _visitChildren(node, writer);
+    _visitChildren(node, writer, isData ?? isParsedDataNode);
   }
   return writer.toString().trim();
 }
 
-void _visitChildren(dom.Node parent, _TextWriter writer) {
+void _visitChildren(
+  dom.Node parent,
+  _TextWriter writer,
+  bool Function(dom.Text) isData,
+) {
   final children = parent.nodes;
   for (var i = 0; i < children.length; i++) {
     final child = children[i];
     switch (child) {
       case dom.Text():
-        writer.appendNormalised(child);
+        if (!isData(child)) writer.appendNormalised(child);
       case dom.Element():
         final tag = child.localName ?? '';
         final isBlock = _blockTags.contains(tag);
         if (writer.isNotEmpty && (isBlock || tag == 'br')) writer.space();
-        if (!_dataTags.contains(tag)) _visitChildren(child, writer);
+        _visitChildren(child, writer, isData);
         if (isBlock && i + 1 < children.length) {
           final next = children[i + 1];
           if (next is dom.Text ||
@@ -35,18 +43,18 @@ void _visitChildren(dom.Node parent, _TextWriter writer) {
           }
         }
       default:
-        _visitChildren(child, writer);
+        _visitChildren(child, writer, isData);
     }
   }
 }
 
 /// Jsoup 的 `Element.ownText()`：只有自己底下的文字，`<br>` 算一個空格。
-String jsoupOwnText(dom.Node node) {
-  if (_isDataElement(node)) return '';
+String jsoupOwnText(dom.Node node, {bool Function(dom.Text)? isData}) {
+  final data = isData ?? isParsedDataNode;
   final writer = _TextWriter();
   for (final child in node.nodes) {
     if (child is dom.Text) {
-      writer.appendNormalised(child);
+      if (!data(child)) writer.appendNormalised(child);
     } else if (child is dom.Element && child.localName == 'br') {
       writer.space();
     }
@@ -55,20 +63,19 @@ String jsoupOwnText(dom.Node node) {
 }
 
 /// Jsoup 的 `Element.wholeText()`：文字照原樣不整理空白，`<br>` 換成
-/// 換行；`<script>`、`<style>` 的內容不算。
-String jsoupWholeText(dom.Node node) {
-  if (_isDataElement(node)) return '';
+/// 換行；資料（`<script>`、`<style>` 的內容）不算。
+String jsoupWholeText(dom.Node node, {bool Function(dom.Text)? isData}) {
+  final data = isData ?? isParsedDataNode;
   final buffer = StringBuffer();
   void visit(dom.Node current) {
     for (final child in current.nodes) {
       switch (child) {
         case dom.Text():
-          buffer.write(child.data);
+          if (!data(child)) buffer.write(child.data);
         case dom.Element():
-          final tag = child.localName ?? '';
-          if (tag == 'br') {
+          if (child.localName == 'br') {
             buffer.write('\n');
-          } else if (!_dataTags.contains(tag)) {
+          } else {
             visit(child);
           }
         default:
@@ -82,8 +89,15 @@ String jsoupWholeText(dom.Node node) {
   return buffer.toString();
 }
 
-bool _isDataElement(dom.Node node) =>
-    node is dom.Element && _dataTags.contains(node.localName);
+/// Jsoup `Element.isBlock()`：[tag] 是不是 Jsoup 的區塊元素。
+bool jsoupIsBlock(String tag) => _blockTags.contains(tag);
+
+/// 解析出來的網頁裡，[text] 是不是 Jsoup 的 DataNode：在 `<script>`、
+/// `<style>` 底下。
+bool isParsedDataNode(dom.Text text) {
+  final parent = text.parentNode;
+  return parent is dom.Element && _dataTags.contains(parent.localName);
+}
 
 /// 一路寫一路記最後一個字是不是空格，不必每次把整段轉成字串再看。
 class _TextWriter {
