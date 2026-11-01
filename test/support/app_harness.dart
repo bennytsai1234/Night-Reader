@@ -35,6 +35,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
@@ -185,9 +186,17 @@ Future<void> resetPrefs(Map<String, Object> values) async {
         await prefs.setString(key, '$value');
     }
   }
-  // App 開機時從偏好讀進記憶體的值也照新的設定（App 是 ChineseDisplay.start）：
-  // 前一個情境把繁簡轉換改掉的話，測試沒載字典，書架會一直等字典、停在骨架。
-  ChineseDisplay.mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
+  // App 開機時從偏好讀進記憶體的值也照新的設定（App 是 ChineseDisplay.start）。
+  // 開著繁簡轉換時書架等字典載好才換成內容，字典要和 App 一樣先載好，不然
+  // 開 App 一直停在骨架。
+  final mode = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
+  if (mode != 0 && !ChineseUtils.isInitialized) {
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        await File(path).readAsString(),
+    ]);
+  }
+  ChineseDisplay.mode.value = mode;
 }
 
 /// 書源、書架與一本有內容的書。
