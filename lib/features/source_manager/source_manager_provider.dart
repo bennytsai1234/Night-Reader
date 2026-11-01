@@ -930,6 +930,19 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
+  /// 校驗一個書源（登入完用）。和批次校驗一樣先鎖住清單；已有其他工作或
+  /// 校驗在跑時不跑。
+  Future<void> checkSource(String url) async {
+    if (!_beginBatchOperation()) return;
+    try {
+      await checkService.check([url]);
+    } catch (error, stackTrace) {
+      AppLog.e('校驗書源失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      _endBatchOperation();
+    }
+  }
+
   List<String> get groups => _allGroups;
 
   Future<void> selectionAddToGroups(Set<String> urls, String g) async {
