@@ -17,12 +17,52 @@ extension JsJavaObject on JsExtensionsBase {
           return this.length ? this[this.length - 1] : null;
         };
         list.isEmpty = function() { return this.length === 0; };
-        list.contains = function(value) { return this.indexOf(value) >= 0; };
-        list.iterator = function() { return __lrJavaIterator(this); };
-        list.subList = function(from, to) {
-          return __lrJavaList(this.slice(from, to));
+        list.contains = function(value) {
+          for (var i = 0; i < this.length; i++) {
+            if (__lrJavaEquals(this[i], value)) return true;
+          }
+          return false;
         };
+        list.iterator = function() { return __lrJavaIterator(this); };
+        list.subList = function(from, to) { return __lrSubList(this, from, to); };
         return list;
+      }
+
+      /// Java 的 equals：有 equals 方法的物件照它比，其餘照值比。
+      function __lrJavaEquals(a, b) {
+        if (a == null || b == null) return a == b;
+        if (typeof a === 'object' && typeof a.equals === 'function') return !!a.equals(b);
+        return a === b;
+      }
+
+      /// List.subList：原清單 [from, to) 那一段，讀寫、清空都落在原清單上
+      /// （書源寫 `list.subList(1, i).clear()` 刪掉原清單那幾項）。
+      function __lrSubList(parent, from, to) {
+        if (from < 0 || to > parent.length) {
+          throw new Error('java.lang.IndexOutOfBoundsException: fromIndex: ' + from + ', toIndex: ' + to);
+        }
+        if (from > to) {
+          throw new Error('java.lang.IllegalArgumentException: fromIndex(' + from + ') > toIndex(' + to + ')');
+        }
+        var view = __lrJavaList(parent.slice(from, to));
+        var size = to - from;
+        view.size = function() { return size; };
+        view.get = function(i) {
+          if (i < 0 || i >= size) throw new Error('java.lang.IndexOutOfBoundsException');
+          return parent[from + i];
+        };
+        view.set = function(i, value) {
+          var old = view.get(i);
+          parent[from + i] = value;
+          view[i] = value;
+          return old;
+        };
+        view.clear = function() {
+          parent.splice(from, size);
+          view.length = 0;
+          size = 0;
+        };
+        return view;
       }
 
       /// java.util.Iterator：書源照 Java 寫
@@ -1143,41 +1183,37 @@ extension JsJavaObject on JsExtensionsBase {
         return this._value;
       };
 
-      /// java.util.Arrays：複製時超過原陣列的部分照 Java 補 0。
+      /// java.util.Arrays：書源用到的複製與比較（照源倉庫 2026-11-01 的書源）。
+      /// 複製超過原陣列的部分照 Java 補預設值：位元組、數字陣列補 0，字串或
+      /// 物件陣列補 null；檢查順序同 JDK（起訖顛倒先於越界）。
       var Arrays = {
         copyOfRange: function(value, start, end) {
-          var bytes = normalizeByteArray(value);
-          if (start < 0 || start > bytes.length) {
-            throw new Error('java.lang.ArrayIndexOutOfBoundsException');
-          }
+          if (value == null) throw new Error('java.lang.NullPointerException');
           if (start > end) {
             throw new Error('java.lang.IllegalArgumentException: ' + start + ' > ' + end);
           }
-          var out = bytes.slice(start, end);
-          while (out.length < end - start) out.push(0);
+          var items = normalizeByteArray(value);
+          if (start < 0 || start > items.length) {
+            throw new Error('java.lang.ArrayIndexOutOfBoundsException');
+          }
+          var numeric = items.every(function(item) { return typeof item === 'number'; });
+          var out = items.slice(start, end);
+          while (out.length < end - start) out.push(numeric ? 0 : null);
           return out;
         },
         copyOf: function(value, length) {
+          if (value == null) throw new Error('java.lang.NullPointerException');
           if (length < 0) throw new Error('java.lang.NegativeArraySizeException');
           return Arrays.copyOfRange(value, 0, length);
         },
+        /// 元素有 equals（BigInteger、Java 字串）時照它比，其餘照值比。
         equals: function(a, b) {
           if (a == null || b == null) return a == b;
           if (a.length !== b.length) return false;
-          for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+          for (var i = 0; i < a.length; i++) {
+            if (!__lrJavaEquals(a[i], b[i])) return false;
+          }
           return true;
-        },
-        fill: function(array, value) {
-          for (var i = 0; i < array.length; i++) array[i] = value;
-        },
-        asList: function() {
-          var items = arguments.length === 1 && Array.isArray(arguments[0])
-            ? arguments[0]
-            : Array.prototype.slice.call(arguments);
-          return __lrJavaList(items);
-        },
-        toString: function(array) {
-          return array == null ? 'null' : '[' + Array.prototype.join.call(array, ', ') + ']';
         }
       };
 

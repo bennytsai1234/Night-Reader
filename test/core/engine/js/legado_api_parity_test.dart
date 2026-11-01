@@ -546,50 +546,73 @@ final _entities = <String, List<String>>{
     'putBigVariable',
     'getVariableMap',
   ],
-  'source': _beanMethods([
-    'bookSourceUrl',
-    'bookSourceName',
-    'bookSourceGroup',
-    'bookSourceType',
-    'bookUrlPattern',
-    'customOrder',
-    'enabled',
-    'enabledExplore',
-    'jsLib',
-    'enabledCookieJar',
-    'concurrentRate',
-    'header',
-    'loginUrl',
-    'loginUi',
-    'loginCheckJs',
-    'coverDecodeJs',
-    'bookSourceComment',
-    'variableComment',
-    'lastUpdateTime',
-    'respondTime',
-    'weight',
-    'exploreUrl',
-    'exploreScreen',
-    'ruleExplore',
-    'searchUrl',
-    'ruleSearch',
-    'ruleBookInfo',
-    'ruleToc',
-    'ruleContent',
-    'ruleReview',
-  ]),
+  'source': [
+    ..._beanMethods(_sourceFields),
+    // BookSource.kt 的方法（BaseSource 的另外在 _legado['source']）。
+    'getDisPlayNameGroup', 'addGroup', 'removeGroup', 'hasGroup',
+    'removeInvalidGroups', 'removeErrorComment', 'addErrorComment',
+    'getInvalidGroupNames', 'getDisplayVariableComment', 'equal',
+    'getSearchRule', 'getExploreRule', 'getBookInfoRule', 'getTocRule',
+    'getContentRule', 'getCheckKeyword',
+  ],
 };
 
+/// BookSource.kt 的欄位。
+const _sourceFields = [
+  'bookSourceUrl',
+  'bookSourceName',
+  'bookSourceGroup',
+  'bookSourceType',
+  'bookUrlPattern',
+  'customOrder',
+  'enabled',
+  'enabledExplore',
+  'jsLib',
+  'enabledCookieJar',
+  'concurrentRate',
+  'header',
+  'loginUrl',
+  'loginUi',
+  'loginCheckJs',
+  'coverDecodeJs',
+  'bookSourceComment',
+  'variableComment',
+  'lastUpdateTime',
+  'respondTime',
+  'weight',
+  'exploreUrl',
+  'exploreScreen',
+  'ruleExplore',
+  'searchUrl',
+  'ruleSearch',
+  'ruleBookInfo',
+  'ruleToc',
+  'ruleContent',
+  'ruleReview',
+];
+
 /// `book`、`chapter`、`source` 刻意不做的方法與理由。
-const _entitiesNotProvided = <String, Set<String>>{
+final _entitiesNotProvided = <String, Set<String>>{
   'book': {
     // 夜讀不留書籍詳情、目錄的網頁原文，也沒有下載網址清單（Legado 給
     // 聽書、檔案書用）。
     'getInfoHtml', 'setInfoHtml', 'getTocHtml', 'setTocHtml',
     'getDownloadUrls', 'setDownloadUrls',
+    // 書架與閱讀進度的欄位（自訂封面與簡介、分組、檢查更新、進度、排序、
+    // 同步時間、閱讀設定）由 App 管：規則程式寫了不會留下，不給 setter；
+    // upCustomIntro 就是把 intro 寫進自訂簡介。
+    'setCustomTag', 'setCustomCoverUrl', 'setCustomIntro', 'setCharset',
+    'setGroup', 'setLatestChapterTime', 'setLastCheckTime',
+    'setLastCheckCount', 'setTotalChapterNum', 'setDurChapterTitle',
+    'setDurChapterPos', 'setDurChapterTime', 'setCanUpdate', 'setOrder',
+    'setOriginOrder', 'setSyncTime', 'getReadConfig', 'setReadConfig',
+    'upCustomIntro',
+    // 大變數：Legado 另存成檔案、和一般變數分開；源倉庫（2026-11-01）沒有
+    // 書源用到，夜讀沒有另一份儲存。
+    'getBigVariable', 'putBigVariable',
     // 閱讀器的設定（分段、翻頁動畫、圖片樣式、朗讀引擎、長章節、模擬
     // 追讀、去標籤）是 Legado 閱讀介面的，夜讀的閱讀器沒有這些設定。
-    'upCustomIntro', 'fileCharset', 'setReSegment', 'getReSegment',
+    'fileCharset', 'setReSegment', 'getReSegment',
     'setPageAnim', 'getPageAnim', 'setImageStyle', 'getImageStyle',
     'setTtsEngine', 'getTtsEngine', 'setSplitLongChapter',
     'getSplitLongChapter', 'setReadSimulating', 'getReadSimulating',
@@ -604,9 +627,14 @@ const _entitiesNotProvided = <String, Set<String>>{
     'getLastChapterIndex', 'getVariableMap',
   },
   'chapter': {
-    // 顯示用（套替換規則與繁簡、檔名、字型名），書源程式用不到。
-    'primaryStr', 'getDisplayTitle', 'getAbsoluteURL', 'getFileName',
-    'getFontName', 'getTitleMD5', 'setTitleMD5', 'getVariableMap',
+    // 顯示用（套替換規則與繁簡、檔名、字型名、標題雜湊）。
+    'primaryStr', 'getDisplayTitle', 'getFileName', 'getFontName',
+    'getTitleMD5', 'setTitleMD5', 'getVariableMap',
+    // 章節的完整網址：夜讀抓章節時自己組（BookChapter.getAbsoluteURL），
+    // 源倉庫（2026-11-01）沒有書源在規則裡呼叫。
+    'getAbsoluteURL',
+    // 大變數：同 book。
+    'getBigVariable', 'putBigVariable',
   },
   'source': {
     // 書源的規則物件與發現篩選：夜讀交給 JS 的書源只有欄位文字，規則
@@ -615,6 +643,17 @@ const _entitiesNotProvided = <String, Set<String>>{
     'getRuleBookInfo', 'setRuleBookInfo', 'getRuleToc', 'setRuleToc',
     'getRuleContent', 'setRuleContent', 'getRuleReview', 'setRuleReview',
     'getExploreScreen', 'setExploreScreen',
+    // 書源的設定與分組由書源管理改；規則程式改了不會存回書源，給 setter
+    // 會讓 getHeaderMap、getKey 這類方法讀到和 getter 不同的值。
+    ..._beanMethods(_sourceFields).where((name) => name.startsWith('set')),
+    'getDisPlayNameGroup', 'addGroup', 'removeGroup', 'hasGroup',
+    'removeInvalidGroups', 'removeErrorComment', 'addErrorComment',
+    'getInvalidGroupNames', 'getDisplayVariableComment', 'equal',
+    // 規則物件不在交給 JS 的書源裡（同上 getRuleSearch 這類）。
+    'getSearchRule', 'getExploreRule', 'getBookInfoRule', 'getTocRule',
+    'getContentRule',
+    // 書源校驗用的關鍵字，是書源管理的事。
+    'getCheckKeyword',
   },
 };
 

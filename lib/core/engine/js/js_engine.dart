@@ -5,6 +5,7 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:xpath_selector/xpath_selector.dart';
+import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/base_source.dart';
@@ -307,7 +308,7 @@ globalThis.__lrStartedRule = -1;
             'if (typeof source === "object" && source !== null) { '
             'Object.assign(source, __lrSourceSeed); '
             '} else { var source = __lrSourceSeed; } '
-            '__lrBeanMethods(source, __lrSourceSeed, {});',
+            '__lrBeanMethods(source, __lrSourceSeed, {}, []);',
           );
           _sourceInjected = true;
           return;
@@ -422,10 +423,15 @@ var __lrFieldAliases = {
 };
 // Legado AppPattern.authorRegex：作者欄常帶的「作者：」「著」這類字樣。
 var __lrAuthorNoise = /^\\s*作\\s*者[:：\\s]+|\\s+著/g;
+// Legado 裡是 Boolean、夜讀存成 0／1 的欄位：getter 照 Java 傳回布林。
+var __lrBooleanFields = ['canUpdate', 'enabled', 'enabledExplore', 'enabledCookieJar'];
 // Java 物件的 getXxx()／setXxx()（Kotlin 的 isXxx 是 isXxx()／setXxx()），
-// 書源照 Legado 寫 source.getConcurrentRate()、book.setName(...)。已經有
-// 同名方法的不蓋（例如 source.getVariable 是讀書源變數）。
-var __lrBeanMethods = function(obj, seed, aliases) {
+// 書源照 Legado 寫 source.getConcurrentRate()、book.setName(...)。setter 只給
+// 夜讀會寫回的欄位（[writable]，Dart 的 bookRuleFields、chapterRuleFields），
+// 其他欄位寫了也不會留下，不給 setter。已經有同名方法的不蓋（例如
+// source.getVariable 是讀書源變數）。
+var __lrBeanMethods = function(obj, seed, aliases, writable) {
+  if (obj == null || seed == null || typeof seed !== 'object') return;
   var names = Object.keys(seed);
   Object.keys(aliases).forEach(function(alias) {
     var target = aliases[alias];
@@ -441,9 +447,12 @@ var __lrBeanMethods = function(obj, seed, aliases) {
     var flag = /^is([A-Z].*)\$/.exec(prop);
     var cap = flag ? flag[1] : prop.charAt(0).toUpperCase() + prop.slice(1);
     if (!flag && typeof obj['get' + cap] === 'undefined') {
-      obj['get' + cap] = function() { return obj[prop]; };
+      obj['get' + cap] = __lrBooleanFields.indexOf(prop) >= 0
+        ? function() { var v = obj[prop]; return v == null ? null : !!v; }
+        : function() { return obj[prop]; };
     }
-    if (typeof obj['set' + cap] === 'undefined') {
+    var field = aliases[prop] || prop;
+    if (writable.indexOf(field) >= 0 && typeof obj['set' + cap] === 'undefined') {
       obj['set' + cap] = function(value) { obj[prop] = value; return null; };
     }
   });
@@ -486,7 +495,10 @@ var __lrScopedObject = function(scope, seed) {
       field(prop, function() { return values[prop]; });
     }
   });
+  // Kotlin 的 variable 欄位 getVariable() 和 RuleDataInterface 的
+  // getVariable(key) 是兩個多載：不帶參數時是整份變數 JSON。
   obj.getVariable = function(key) {
+    if (arguments.length === 0) return values.variable;
     var value = sendMessage(
       'scopedObjectGetVariable',
       JSON.stringify([scope, key])
@@ -500,10 +512,7 @@ var __lrScopedObject = function(scope, seed) {
     );
     return null;
   };
-  // BaseBook、BookChapter：大變數在 Legado 另存成檔案，讀寫和一般變數一樣；
-  // 自訂變數是 key 為 custom 的變數。
-  obj.putBigVariable = obj.putVariable;
-  obj.getBigVariable = obj.getVariable;
+  // BaseBook：自訂變數是 key 為 custom 的變數。
   obj.putCustomVariable = function(value) {
     return obj.putVariable('custom', value);
   };
@@ -518,13 +527,16 @@ var __lrScopedObject = function(scope, seed) {
     obj.getDisplayIntro = function() {
       return obj.customIntro ? obj.customIntro : obj.intro;
     };
+    // BaseBook.getKindList：字數（不是空白時）加上分類，傳回 Java List。
     obj.getKindList = function() {
       var kinds = [];
-      if (obj.wordCount) kinds.push(String(obj.wordCount));
+      if (obj.wordCount && String(obj.wordCount).trim()) {
+        kinds.push(String(obj.wordCount));
+      }
       String(obj.kind || '').split(/[,\\n]/).forEach(function(kind) {
         if (kind.trim()) kinds.push(kind.trim());
       });
-      return kinds;
+      return new Packages.java.util.ArrayList(kinds);
     };
     obj.getUnreadChapterNum = function() {
       return Math.max((obj.totalChapterNum || 0) - (obj.chapterIndex || 0) - 1, 0);
@@ -556,7 +568,7 @@ var __lrScopedObject = function(scope, seed) {
       );
     };
   }
-  __lrBeanMethods(obj, seed, __lrFieldAliases[scope] || {});
+  __lrBeanMethods(obj, seed, __lrFieldAliases[scope] || {}, __lrWritableFields[scope] || []);
   return obj;
 };
 ''';
@@ -565,6 +577,10 @@ var __lrScopedObject = function(scope, seed) {
 
   void _ensureScopedObjectFactory() {
     if (_scopedObjectFactoryInstalled) return;
+    // 規則寫了會留下的欄位（setter 只給這些）。
+    _runtime!.evaluate(
+      'var __lrWritableFields = ${jsonEncode({'book': bookRuleFields.keys.toList(), 'chapter': chapterRuleFields.keys.toList()})};',
+    );
     _runtime!.evaluate(_scopedObjectFactory);
     _scopedObjectFactoryInstalled = true;
   }

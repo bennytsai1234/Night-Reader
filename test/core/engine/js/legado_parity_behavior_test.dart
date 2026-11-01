@@ -139,10 +139,30 @@ void main() {
            new B([255]).toString(), new B(1, [255]).toString(),
            J64.shiftRight(60).toString(16), J64.signum(), new B("-5").signum(),
            B.valueOf(3).modInverse(B.valueOf(11)).toString(),
-           new B(16, new Packages.java.security.SecureRandom()).bitLength() <= 16
+           new B(16, new Packages.java.security.SecureRandom()).bitLength() <= 16,
+           B.ZERO.modPow(B.ZERO, B.ONE).toString(), new B("12").toString(1),
+           new B("4294967296").hashCode()
           ].join("|")
         '''),
-        '255|true|24|2|-1|5|-2147483648|255|0,128|-1|255|f|1|-1|4|true',
+        '255|true|24|2|-1|5|-2147483648|255|0,128|-1|255|f|1|-1|4|true|0|12|31',
+      );
+      // 不合 Java 規格的參數照 Java 丟例外，不漏成 Dart 的錯誤。
+      expect(
+        eval(r'''
+          var B = Packages.java.math.BigInteger, out = [];
+          [function() { return new B(" 12 "); }, function() { return new B([]); },
+           function() { return new B(2, [1]); }, function() { return new B(0, [1]); },
+           function() { return new B("12", 1); }, function() { return B.ONE.setBit(-1); },
+           function() { return new B(-1, new Packages.java.security.SecureRandom()); }
+          ].forEach(function(f) {
+            try { f(); out.push("ok"); } catch (e) { out.push(String(e.message).split(":")[0]); }
+          });
+          out.join(",")
+        '''),
+        'java.lang.NumberFormatException,java.lang.NumberFormatException,'
+        'java.lang.NumberFormatException,java.lang.NumberFormatException,'
+        'java.lang.NumberFormatException,java.lang.ArithmeticException,'
+        'java.lang.IllegalArgumentException',
       );
     }, skip: skip);
 
@@ -160,12 +180,31 @@ void main() {
           list.add("x"); list.add("y"); list.add("z");
           var li = list.iterator(), joined = "";
           while (li.hasNext()) joined += li.next();
+          // subList 是原清單的一段：清掉它就刪掉原清單那幾項（書源寫
+          // src.subList(1, i).clear()）。
+          var src = new Packages.java.util.ArrayList();
+          ["a", "b", "c", "d"].forEach(function(s) { src.add(s); });
+          var sub = src.subList(1, 3);
+          sub.set(0, "B");
+          var seen = src.get(1);
+          sub.clear();
+          var errors = [];
+          [function() { A.copyOf(null, 2); },
+           function() { A.copyOfRange([1, 2], -1, -2); },
+           function() { src.subList(2, 1); }].forEach(function(f) {
+            try { f(); } catch (e) { errors.push(String(e.message).split(":")[0]); }
+          });
+          var B = Packages.java.math.BigInteger;
           [A.copyOf([1, 2], 4).join(","), A.copyOf([1, 2, 3], 2).join(","),
-           A.copyOfRange([1, 2, 3], 1, 5).join(","), A.equals([1, 2], [1, 2]),
-           keys.join(""), sum, joined, list.subList(1, 3).join(""),
-           m.keySet().subList(0, 1).join("")].join("|")
+           A.copyOfRange([1, 2, 3], 1, 5).join(","),
+           String(A.copyOf(["a"], 3)[2]),
+           A.equals([1, 2], [1, 2]), A.equals([new B("12")], [new B("12")]),
+           keys.join(""), sum, joined, seen, src.join(""), errors.join(",")
+          ].join("|")
         '''),
-        '1,2,0,0|1,2|2,3,0,0|true|ab|3|xyz|yz|a',
+        '1,2,0,0|1,2|2,3,0,0|null|true|true|ab|3|xyz|B|ad|'
+        'java.lang.NullPointerException,java.lang.IllegalArgumentException,'
+        'java.lang.IllegalArgumentException',
       );
     }, skip: skip);
 
@@ -469,9 +508,21 @@ void main() {
       '新書名|新書名|自訂|沈知秋|12萬字/仙俠/連載|3|3|6|'
       'true|true|false|第一章|1/1000|書源|https://src.test',
     );
-    // 寫進去的會回到夜讀的書上。
+    // 寫進去的會回到夜讀的書上，下一條規則也讀得到。
     expect(book.name, '新書名');
     expect(book.getVariable('custom'), '自訂');
+    expect(rule.evalJS('book.getName()', null), '新書名');
+    // getter 照 Java 型別；App 管的欄位沒有 setter；getVariable() 不帶參數
+    // 是整份變數；getKindList 是 Java List；source 沒有 setter。
+    expect(
+      rule.evalJS(r'''
+        [book.getCanUpdate() === true, typeof book.setDurChapterPos,
+         typeof book.setDurChapterIndex, JSON.parse(book.getVariable()).custom,
+         book.getKindList().size(), typeof source.setHeader,
+         source.getEnabled() === true].join('|')
+      ''', null),
+      'true|undefined|function|自訂|3|undefined|true',
+    );
   }, skip: skip);
 
   test('getString parses the content it is given', () {
