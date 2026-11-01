@@ -24,6 +24,33 @@ void main() {
       final response = request.response;
       response.headers.set('Set-Cookie', 'sid=abc; Path=/');
       switch (request.uri.path) {
+        case '/redir':
+        case '/redir307':
+          // 跳轉這一站給另一個 Cookie，看下一站有沒有帶上。
+          response.statusCode = request.uri.path == '/redir'
+              ? HttpStatus.found
+              : HttpStatus.temporaryRedirect;
+          response.headers.set('Set-Cookie', 'r=1; Path=/');
+          response.headers.set('Location', '/echo');
+          await response.close();
+          return;
+        case '/stream':
+          // 先送三個字，之後一直不結束（不緩衝，flush 才真的送出那三個字）。
+          response.bufferOutput = false;
+          response.headers.contentType = ContentType.html;
+          response.write('abc');
+          await response.flush();
+          return;
+        case '/latin':
+          response.headers.set('Content-Type', 'text/html; charset=ISO-8859-1');
+          response.add([...ascii.encode('<p>'), 0xE9, ...ascii.encode('</p>')]);
+          await response.close();
+          return;
+        case '/plain':
+          response.headers.set('Content-Type', 'text/html');
+          response.write('<p>ok</p>');
+          await response.close();
+          return;
         case '/missing':
           response.statusCode = HttpStatus.notFound;
           response.headers.contentType = ContentType.html;
@@ -155,6 +182,100 @@ void main() {
         [page.body().text(), gbk.parse().body().text(), gbk.charset()].join('|')
       '''),
         'GET /g body= ct=null cookie=null ua=UA/1 x=null|夜读|GBK',
+      );
+    },
+    skip: skip,
+  );
+
+  test('redirects carry the cookies; POST becomes GET except on 307', () async {
+    expect(
+      await run('''
+        var get = org.jsoup.Jsoup.connect('$baseUrl/redir').execute();
+        var c = org.jsoup.Jsoup.connect('$baseUrl/redir').data('k', 'v');
+        var post = c.post();
+        var kept = org.jsoup.Jsoup.connect('$baseUrl/redir307').data('k', 'v')
+          .method(org.jsoup.Connection.Method.POST).execute();
+        [get.body(), get.url(), get.cookie('r') + ',' + get.cookie('sid'),
+         post.body().text(), c.request().method(), c.request().data().size(),
+         String(c.request().header('Content-Type')), kept.body()].join('|')
+      '''),
+      'GET /echo body= ct=null cookie=[r=1] ua=$ua x=null|$baseUrl/echo|1,abc|'
+      'GET /echo body= ct=null cookie=[r=1] ua=$ua x=null|GET|0|null|'
+      'POST /echo body=k=v ct=application/x-www-form-urlencoded; charset=UTF-8 '
+      'cookie=[r=1] ua=$ua x=null',
+    );
+  }, skip: skip);
+
+  test(
+    'newRequest() shares the cookies of its session, not of others',
+    () async {
+      expect(
+        await run('''
+        var session = org.jsoup.Jsoup.newSession();
+        session.newRequest().url('$baseUrl/a').execute();
+        var again = session.newRequest().url('$baseUrl/b').execute().body();
+        var other = org.jsoup.Jsoup.connect('$baseUrl/c').execute().body();
+        [again, other].join('|')
+      '''),
+        'GET /b body= ct=null cookie=[sid=abc] ua=$ua x=null|'
+        'GET /c body= ct=null cookie=null ua=$ua x=null',
+      );
+    },
+    skip: skip,
+  );
+
+  test('maxBodySize stops reading once it has enough', () async {
+    expect(
+      await run(
+        "org.jsoup.Jsoup.connect('$baseUrl/stream').maxBodySize(3)"
+        '.timeout(10000).execute().body()',
+      ),
+      'abc',
+    );
+  }, skip: skip);
+
+  test('form data goes before the fragment, in UTF-8; the header charset '
+      'decodes the page', () async {
+    expect(
+      await run('''
+        var frag = org.jsoup.Jsoup.connect('$baseUrl/e#frag').data('q', '1').execute();
+        var gbk = org.jsoup.Jsoup.connect('$baseUrl/e').postDataCharset('GBK')
+          .data('q', '中').execute().body();
+        var latin = org.jsoup.Jsoup.connect('$baseUrl/latin').execute();
+        var plain = org.jsoup.Jsoup.connect('$baseUrl/plain').execute();
+        var before = String(plain.charset());
+        plain.parse();
+        [frag.body(), gbk, latin.body(), latin.parse().text(), latin.charset(),
+         before, plain.charset()].join('|')
+      '''),
+      'GET /e?q=1 body= ct=null cookie=null ua=$ua x=null|'
+      'GET /e?q=%E4%B8%AD body= ct=null cookie=null ua=$ua x=null|'
+      '<p>é</p>|é|ISO-8859-1|null|UTF-8',
+    );
+  }, skip: skip);
+
+  test(
+    'request(other) uses that request; bad settings throw at once',
+    () async {
+      expect(
+        await run('''
+        var a = org.jsoup.Jsoup.connect('$baseUrl/a').header('X', 'old');
+        var r = a.request();
+        var b = org.jsoup.Jsoup.connect('$baseUrl/b');
+        b.request(r);
+        a.header('X', 'new');
+        var errors = [];
+        function attempt(fn) { try { fn(); errors.push('none'); } catch (e) { errors.push(e.message); } }
+        attempt(function() { org.jsoup.Jsoup.connect('$baseUrl/a').requestBody('x').execute(); });
+        attempt(function() { org.jsoup.Jsoup.connect('$baseUrl/a').timeout(-1); });
+        attempt(function() { org.jsoup.Jsoup.connect('$baseUrl/a').maxBodySize(-1); });
+        attempt(function() { org.jsoup.Jsoup.connect('$baseUrl/a').data('a', 'b', 'c'); });
+        [b.request() === r, b.request().header('X')].concat(errors).join('|')
+      '''),
+        'true|new|Cannot set a request body for HTTP method GET|'
+        'Timeout milliseconds must be 0 (infinite) or greater|'
+        'maxSize must be 0 (unlimited) or larger|'
+        'Must supply an even number of key value pairs',
       );
     },
     skip: skip,

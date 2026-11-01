@@ -40,11 +40,16 @@ extension JsJsoupExtensions on JsExtensionsBase {
         global.__lrJsoupDecode = decode;
 
         /// 參數交給 Dart：節點帶編號，節點清單帶編號清單，Java 的 Pattern
-        /// （JS 的正規式）用原文，其他物件轉成字串。
+        /// （JS 的正規式）用原文、旗標寫成 Java 的 (?i) 這類，其他物件轉成
+        /// 字串。
         function encodeArg(arg) {
           if (arg == null || typeof arg !== 'object') return arg;
           if (arg instanceof LrNode) return { __lrNode: arg.__lrElementId };
-          if (arg instanceof RegExp) return arg.source;
+          if (arg instanceof RegExp) {
+            var flags = (arg.ignoreCase ? 'i' : '') + (arg.multiline ? 'm' : '') +
+              (arg.dotAll ? 's' : '');
+            return (flags ? '(?' + flags + ')' : '') + arg.source;
+          }
           var items = Array.isArray(arg) ? arg
             : (typeof arg.toArray === 'function' ? arg.toArray() : null);
           if (items && (items.length === 0 || items[0] instanceof LrNode)) {
@@ -159,10 +164,13 @@ extension JsJsoupExtensions on JsExtensionsBase {
             toString: function() { return name; }
           };
         };
+        /// classNames()：類名清單；classNames(Set)：整個換掉，空的就拿掉 class。
         LrNode.prototype.classNames = function(names) {
           if (names == null) return javaList(call('classNames', this.__lrElementId, []));
-          var items = typeof names.toArray === 'function' ? names.toArray() : names;
-          return this.attr('class', Array.prototype.slice.call(items).join(' '));
+          var items = Array.prototype.slice.call(
+            typeof names.toArray === 'function' ? names.toArray() : names);
+          if (items.length === 0) return this.removeAttr('class');
+          return this.attr('class', items.join(' '));
         };
 
         // ── 走訪：NodeVisitor、NodeFilter、Consumer 可以是物件或函式 ──
@@ -171,40 +179,84 @@ extension JsJsoupExtensions on JsExtensionsBase {
           return target != null && typeof target[name] === 'function'
             ? function() { return target[name].apply(target, arguments); } : null;
         }
+        /// Jsoup 1.16.2 NodeTraversor.traverse：head 裡把目前的節點換掉，就接著
+        /// 走換上來的節點；拿掉了就跳到原本的下一個（不呼叫它的 tail）。
         function traverseNode(root, visitor) {
           var head = method(visitor, 'head'), tail = method(visitor, 'tail');
-          (function walk(node, depth) {
+          var node = root, depth = 0;
+          while (node != null) {
+            var parent = node.parentNode();
+            var origSize = parent != null ? parent.childNodeSize() : 0;
+            var index = parent != null ? node.siblingIndex() : 0;
+            var next = node.nextSibling();
             if (head) head(node, depth);
-            var kids = node.childNodes();
-            for (var i = 0; i < kids.length; i++) walk(kids[i], depth + 1);
-            if (tail) tail(node, depth);
-          })(root, 0);
-        }
-        /// Jsoup NodeTraversor.filter：head 的結果決定要不要往下、要不要拿掉。
-        function filterNode(node, depth, filter) {
-          var head = method(filter, 'head') || method(filter, 'filter');
-          var tail = method(filter, 'tail');
-          var result = String(head ? head(node, depth) : 'CONTINUE');
-          if (result === 'STOP') return 'STOP';
-          if (result === 'CONTINUE') {
-            var kids = node.childNodes();
-            for (var i = 0; i < kids.length; i++) {
-              if (filterNode(kids[i], depth + 1, filter) === 'STOP') return 'STOP';
+            if (parent != null && !node.hasParent()) {
+              if (origSize === parent.childNodeSize()) {
+                node = parent.childNode(index);
+              } else {
+                node = next;
+                if (node == null) { node = parent; depth--; }
+                continue;
+              }
+            }
+            if (node.childNodeSize() > 0) {
+              node = node.childNode(0);
+              depth++;
+            } else {
+              while (node.nextSibling() == null && depth > 0) {
+                if (tail) tail(node, depth);
+                node = node.parentNode();
+                depth--;
+              }
+              if (tail) tail(node, depth);
+              if (node.equals(root)) break;
+              node = node.nextSibling();
             }
           }
-          if (result === 'CONTINUE' || result === 'SKIP_CHILDREN') {
-            var after = String(tail ? tail(node, depth) : 'CONTINUE');
-            if (after === 'STOP') return 'STOP';
-            if (after === 'REMOVE') node.remove();
+        }
+        /// Jsoup 1.16.2 NodeTraversor.filter：head 的結果決定要不要往下、要不要
+        /// 拿掉；傳回 STOP 或 root 最後的結果。
+        function filterNode(root, filter) {
+          var head = method(filter, 'head') || method(filter, 'filter');
+          var tail = method(filter, 'tail');
+          function headOf(node, depth) { return String(head ? head(node, depth) : 'CONTINUE'); }
+          function tailOf(node, depth) { return String(tail ? tail(node, depth) : 'CONTINUE'); }
+          var node = root, depth = 0;
+          while (node != null) {
+            var result = headOf(node, depth);
+            if (result === 'STOP') return result;
+            if (result === 'CONTINUE' && node.childNodeSize() > 0) {
+              node = node.childNode(0);
+              depth++;
+              continue;
+            }
+            while (node.nextSibling() == null && depth > 0) {
+              if (result === 'CONTINUE' || result === 'SKIP_CHILDREN') {
+                result = tailOf(node, depth);
+                if (result === 'STOP') return result;
+              }
+              var prev = node;
+              node = node.parentNode();
+              depth--;
+              if (result === 'REMOVE') prev.remove();
+              result = 'CONTINUE';
+            }
+            if (result === 'CONTINUE' || result === 'SKIP_CHILDREN') {
+              result = tailOf(node, depth);
+              if (result === 'STOP') return result;
+            }
+            if (node.equals(root)) return result;
+            var prevSibling = node;
+            node = node.nextSibling();
+            if (result === 'REMOVE') prevSibling.remove();
           }
-          if (result === 'REMOVE') node.remove();
           return 'CONTINUE';
         }
         function accept(consumer) {
           return method(consumer, 'accept') || method(consumer, 'apply');
         }
         LrNode.prototype.traverse = function(visitor) { traverseNode(this, visitor); return this; };
-        LrNode.prototype.filter = function(filter) { filterNode(this, 0, filter); return this; };
+        LrNode.prototype.filter = function(filter) { filterNode(this, filter); return this; };
         LrNode.prototype.forEachNode = function(consumer) {
           var fn = accept(consumer);
           traverseNode(this, function(node) { fn(node); });
@@ -212,7 +264,7 @@ extension JsJsoupExtensions on JsExtensionsBase {
         };
         LrNode.prototype.forEach = function(consumer) {
           var fn = accept(consumer);
-          this.getAllElements().forEach(function(element) { fn(element); });
+          traverseNode(this, function(node) { if (node.__lrKind === 'element') fn(node); });
           return this;
         };
         /// Java 的 List<String>（eachText、classNames 這類）：陣列加上 size/get。
@@ -224,9 +276,6 @@ extension JsJsoupExtensions on JsExtensionsBase {
           Object.defineProperty(list, 'contains', { value: function(v) { return list.indexOf(v) >= 0; }, enumerable: false });
           return list;
         }
-        LrNode.prototype.classNames = function() {
-          return javaList(call('classNames', this.__lrElementId, []));
-        };
         LrNode.prototype.attributes = function() {
           return attributes(call('attributes', this.__lrElementId, []));
         };
@@ -353,7 +402,10 @@ extension JsJsoupExtensions on JsExtensionsBase {
             if (typeof filter === 'function') {
               return elements(Array.prototype.filter.apply(list, arguments));
             }
-            return each(function(n) { filterNode(n, 0, filter); });
+            for (var i = 0; i < list.length; i++) {
+              if (filterNode(list[i], filter) === 'STOP') break;
+            }
+            return list;
           });
           hide('forEach', function(consumer) {
             if (typeof consumer === 'function') {

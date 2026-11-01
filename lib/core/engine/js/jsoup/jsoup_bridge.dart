@@ -23,24 +23,31 @@ class JsoupException implements Exception {
 ///
 /// 每個交給 JS 的節點在這裡記一個編號，JS 端的物件只帶編號，方法呼叫回來
 /// 照編號找到真正的節點操作；選取、走訪、修改都作用在同一棵樹上，和
-/// Legado 拿到真的 Jsoup 物件一樣（行為對照 Jsoup 1.15.3）。編號在引擎沒有
+/// Legado 拿到真的 Jsoup 物件一樣（行為對照 Jsoup 1.16.2）。編號在引擎沒有
 /// 規則在跑時清掉（見 `JsEngine`），規則裡巢狀執行別的規則時不清。
 class JsoupBridge {
   final Map<int, dom.Node> _nodes = {};
   final Map<dom.Node, int> _ids = Map.identity();
 
-  /// 節點與它底下的網址（`abs:` 屬性用）。查詢時往上找最近有記的祖先，
-  /// 所以設在文件上就整份文件適用；節點被移出文件前先記在它自己身上，
-  /// 拿出來之後照樣算得出完整網址（Jsoup 也是）。
+  /// 節點與它底下的網址（`abs:` 屬性用），Jsoup 存在元素屬性裡的那個：
+  /// 文件、`setBaseUri`、建立與複製出來的元素。查詢時往上找最近有記的
+  /// 祖先，所以設在文件上就整份文件適用；被拿出文件的節點和 Jsoup 一樣
+  /// 沒有網址。
   final Map<dom.Node, String> _baseUris = Map.identity();
+
+  /// 文字節點是 Jsoup 的 TextNode（false）還是 DataNode（true）。DOM 只有
+  /// 一種文字節點：解析出來的照它在不在 `<script>`、`<style>` 底下，交給
+  /// JS 時記下來，之後搬到別處也不變；規則自己做的照它做的是哪一種。
+  final Map<dom.Text, bool> _textKinds = Map.identity();
   int _nextId = 1;
 
-  bool get isEmpty => _nodes.isEmpty && _baseUris.isEmpty;
+  bool get isEmpty => _nodes.isEmpty && _baseUris.isEmpty && _textKinds.isEmpty;
 
   void clear() {
     _nodes.clear();
     _ids.clear();
     _baseUris.clear();
+    _textKinds.clear();
   }
 
   dom.Node? node(int id) => _nodes[id];
@@ -67,17 +74,17 @@ class JsoupBridge {
     return '';
   }
 
-  /// 節點要被移出文件：先把現在的網址記在它身上。
-  void _pinBaseUri(dom.Node node) {
-    final uri = baseUriOf(node);
-    if (uri.isNotEmpty) _baseUris.putIfAbsent(node, () => uri);
-  }
+  /// [text] 是不是 Jsoup 的 DataNode（[_textKinds]）。
+  bool _isData(dom.Text text) => _textKinds[text] ?? isParsedDataNode(text);
 
   /// 交給 JS 的值：節點換成 `{__lrNode: 編號, k: 種類}`，節點清單包成
   /// `{__lrList: [...]}`（JS 端做成 Jsoup 的 Elements，空的也是），其他清單
   /// 逐項換。
   dynamic toJs(dynamic value) {
     if (value is dom.Node) {
+      if (value is dom.Text) {
+        _textKinds.putIfAbsent(value, () => isParsedDataNode(value));
+      }
       return {'__lrNode': idOf(value), 'k': _kind(value)};
     }
     if (value is Iterable<dom.Node>) {
@@ -87,15 +94,27 @@ class JsoupBridge {
     return value;
   }
 
-  static String _kind(dom.Node node) => switch (node) {
+  String _kind(dom.Node node) => switch (node) {
     dom.Document() => 'document',
     dom.Element() => 'element',
-    // <script>、<style> 裡的文字在 Jsoup 是 DataNode。
-    dom.Text() when _isDataParent(node.parentNode ?? node) => 'data',
+    dom.Text() when _isData(node) => 'data',
     dom.Text() => 'text',
     dom.Comment() => 'comment',
     _ => 'node',
   };
+
+  /// 把 [node] 拿出它的父節點。DOM 的 `Node.remove()` 不會清掉節點記的
+  /// 父節點，拿出來的節點還以為自己在原處；用 `removeAt` 才會清。
+  static void _detach(dom.Node node) {
+    final parent = node.parentNode;
+    if (parent == null) return;
+    final index = parent.nodes.indexOf(node);
+    if (index >= 0) {
+      parent.nodes.removeAt(index);
+    } else {
+      node.parentNode = null;
+    }
+  }
 
   /// Jsoup.parse：網址先看頁面裡的 `<base href>`（相對於 [baseUri]）。
   dom.Document parse(String html, String? baseUri) {
@@ -172,11 +191,11 @@ class JsoupBridge {
       // ── 文字與內容 ──
       case 'text':
         if (args.isNotEmpty) return _setText(node, arg(0));
-        return jsoupText(node);
+        return jsoupText(node, isData: _isData);
       case 'ownText':
-        return jsoupOwnText(node);
+        return jsoupOwnText(node, isData: _isData);
       case 'wholeText':
-        return jsoupWholeText(node);
+        return jsoupWholeText(node, isData: _isData);
       case 'html':
         if (args.isNotEmpty) {
           _setHtml(node, arg(0));
@@ -262,13 +281,7 @@ class JsoupBridge {
       case 'tagName':
       case 'nodeName':
       case 'normalName':
-        return switch (node) {
-          dom.Element() => node.localName ?? '',
-          dom.Document() => '#document',
-          dom.Text() => '#text',
-          dom.Comment() => '#comment',
-          _ => '',
-        };
+        return _nodeName(node);
       // ── 選取 ──
       case 'select':
         if (container == null) return const <dom.Element>[];
@@ -378,21 +391,21 @@ class JsoupBridge {
       case 'childNodeSize':
         return node.nodes.length;
       case 'textNodes':
-        return node.nodes.whereType<dom.Text>().toList();
+        return [
+          for (final child in node.nodes)
+            if (child is dom.Text && !_isData(child)) child,
+        ];
       case 'cssSelector':
         return element == null ? '' : _cssSelector(element);
       // ── 修改 ──
       case 'remove':
-        _pinBaseUri(node);
-        node.remove();
+        _detach(node);
         return null;
       case 'empty':
-        _detachChildren(node);
+        node.nodes.clear();
         return node;
       case 'clone':
-        final copy = node.clone(true);
-        setBaseUri(copy, baseUriOf(node));
-        return copy;
+        return _copy(node, deep: true);
       case 'append':
         _insertHtml(node, arg(0), (parsed) => node.nodes.addAll(parsed));
         return node;
@@ -400,7 +413,7 @@ class JsoupBridge {
         _insertHtml(node, arg(0), (parsed) => node.nodes.insertAll(0, parsed));
         return node;
       case 'appendText':
-        node.nodes.add(dom.Text(arg(0)));
+        node.nodes.add(_textNode(arg(0), data: false));
         return node;
       case 'before':
         _insertSibling(node, arg(0), after: false);
@@ -412,9 +425,9 @@ class JsoupBridge {
         final parent = node.parentNode;
         if (parent == null) return null;
         final children = node.nodes.toList();
+        _pinKinds(children);
         final index = parent.nodes.indexOf(node);
-        _pinBaseUri(node);
-        node.remove();
+        _detach(node);
         parent.nodes.insertAll(index, children);
         return children.firstOrNull;
       case 'tagNameSet':
@@ -422,7 +435,7 @@ class JsoupBridge {
       case 'isBlank':
         return (node.text ?? '').trim().isEmpty;
       case 'hasText':
-        return jsoupText(node).isNotEmpty;
+        return jsoupText(node, isData: _isData).isNotEmpty;
     }
     return _dispatchMore(op, node, args, arg, nodeArg, intArg);
   }
@@ -533,7 +546,7 @@ class JsoupBridge {
         node.nodes.insert(0, child);
         return child;
       case 'prependText':
-        node.nodes.insert(0, dom.Text(arg(0)));
+        node.nodes.insert(0, _textNode(arg(0), data: false));
         return node;
       case 'nodeData':
         // Comment.getData、DataNode 的內容。
@@ -548,10 +561,15 @@ class JsoupBridge {
         if (node is! dom.Text) throw JsoupException('只有文字節點能切開');
         final text = node.data;
         final offset = intArg(0);
-        if (offset < 0 || offset > text.length) {
-          throw RangeError.range(offset, 0, text.length, 'offset');
+        if (offset < 0) {
+          throw JsoupException('Split offset must be not be negative');
         }
-        final tail = dom.Text(text.substring(offset));
+        if (offset >= text.length) {
+          throw JsoupException(
+            'Split offset must not be greater than current text length',
+          );
+        }
+        final tail = _textNode(text.substring(offset), data: false);
         node.data = text.substring(0, offset);
         final parent = node.parentNode;
         if (parent != null) {
@@ -597,8 +615,10 @@ class JsoupBridge {
             if (found.node case final dom.Element element) element,
         ];
       case 'dataNodes':
-        if (!_isDataParent(node)) return const <dom.Node>[];
-        return node.nodes.whereType<dom.Text>().toList();
+        return [
+          for (final child in node.nodes)
+            if (child is dom.Text && _isData(child)) child,
+        ];
       case 'comments':
         return node.nodes.whereType<dom.Comment>().toList();
       case 'firstElementSibling':
@@ -651,7 +671,7 @@ class JsoupBridge {
             .toList();
       case 'getElementsByAttributeValueMatching':
         final name = arg(0).trim();
-        final pattern = RegExp(arg(1));
+        final pattern = javaRegExp(arg(1));
         return _allElements(container)
             .where(
               (e) =>
@@ -673,21 +693,21 @@ class JsoupBridge {
           };
         }).toList();
       case 'getElementsMatchingText':
-        final pattern = RegExp(arg(0));
+        final pattern = javaRegExp(arg(0));
         return _allElements(container)
-            .where((e) => pattern.hasMatch(jsoupText(e)))
+            .where((e) => pattern.hasMatch(jsoupText(e, isData: _isData)))
             .toList();
       case 'getElementsMatchingOwnText':
-        final pattern = RegExp(arg(0));
+        final pattern = javaRegExp(arg(0));
         return _allElements(container)
-            .where((e) => pattern.hasMatch(jsoupOwnText(e)))
+            .where((e) => pattern.hasMatch(jsoupOwnText(e, isData: _isData)))
             .toList();
       case 'isBlock':
         return element != null && jsoupIsBlock(element.localName ?? '');
       case 'wholeOwnText':
         final buffer = StringBuffer();
         for (final child in node.nodes) {
-          if (child is dom.Text) buffer.write(child.data);
+          if (child is dom.Text && !_isData(child)) buffer.write(child.data);
           if (child is dom.Element && child.localName == 'br') {
             buffer.write('\n');
           }
@@ -731,8 +751,9 @@ class JsoupBridge {
   dom.Node create(String kind, String value, String? baseUri) {
     final dom.Node created = switch (kind) {
       'element' => dom.Element.tag(value),
-      'text' || 'data' => dom.Text(value),
-      'encodedText' => dom.Text(_unescape.convert(value)),
+      'text' => _textNode(value, data: false),
+      'data' => _textNode(value, data: true),
+      'encodedText' => _textNode(_unescape.convert(value), data: false),
       'comment' => dom.Comment(value),
       _ => html_parser.parse(''),
     };
@@ -741,13 +762,26 @@ class JsoupBridge {
     return created;
   }
 
-  static bool _isDataParent(dom.Node node) =>
-      node is dom.Element &&
-      (node.localName == 'script' || node.localName == 'style');
+  /// 新的 TextNode（[data] 是 false）或 DataNode。
+  dom.Text _textNode(String value, {required bool data}) {
+    final text = dom.Text(value);
+    _textKinds[text] = data;
+    return text;
+  }
 
-  static String _nodeName(dom.Node node) => switch (node) {
+  /// [nodes] 要搬到別的父節點底下：先記下其中文字節點現在是哪一種。
+  void _pinKinds(Iterable<dom.Node> nodes) {
+    for (final node in nodes) {
+      if (node is dom.Text) {
+        _textKinds.putIfAbsent(node, () => isParsedDataNode(node));
+      }
+    }
+  }
+
+  String _nodeName(dom.Node node) => switch (node) {
     dom.Element() => node.localName ?? '',
     dom.Document() => '#document',
+    dom.Text() when _isData(node) => '#data',
     dom.Text() => '#text',
     dom.Comment() => '#comment',
     _ => '',
@@ -767,6 +801,8 @@ class JsoupBridge {
       ? const []
       : [container, ...container.querySelectorAll('*')];
 
+  /// Jsoup `clone`／`shallowClone`：複製出來的元素記著原本的網址；深複製時
+  /// 底下各自設過網址的元素、文字節點是哪一種也照抄。
   dom.Node _copy(dom.Node node, {required bool deep}) {
     final dom.Node copy;
     if (deep || node is! dom.Element) {
@@ -777,8 +813,22 @@ class JsoupBridge {
       copy = dom.Element.tag(node.localName)
         ..attributes.addAll(node.attributes);
     }
+    _copyMarks(node, copy, deep: deep);
     setBaseUri(copy, baseUriOf(node));
     return copy;
+  }
+
+  void _copyMarks(dom.Node from, dom.Node to, {required bool deep}) {
+    final uri = _baseUris[from];
+    if (uri != null) _baseUris[to] = uri;
+    if (from is dom.Text && to is dom.Text) _textKinds[to] = _isData(from);
+    if (!deep) return;
+    final count = from.nodes.length < to.nodes.length
+        ? from.nodes.length
+        : to.nodes.length;
+    for (var i = 0; i < count; i++) {
+      _copyMarks(from.nodes[i], to.nodes[i], deep: true);
+    }
   }
 
   /// Jsoup `Node.replaceWith`：[node] 要在某個父節點底下。
@@ -786,10 +836,9 @@ class JsoupBridge {
     final parent = node.parentNode;
     if (parent == null) throw JsoupException('這個節點沒有父節點，不能取代');
     if (identical(node, replacement)) return;
-    replacement.remove();
+    _detach(replacement);
     final index = parent.nodes.indexOf(node);
-    _pinBaseUri(node);
-    node.remove();
+    _detach(node);
     parent.nodes.insert(index, replacement);
   }
 
@@ -814,7 +863,7 @@ class JsoupBridge {
     deepest.nodes.add(node);
     final wrapParent = wrap.parentNode;
     for (final remainder in parsed.skip(1)) {
-      remainder.remove();
+      _detach(remainder);
       if (wrapParent != null) {
         wrapParent.nodes.insert(wrapParent.nodes.indexOf(wrap) + 1, remainder);
       }
@@ -825,7 +874,7 @@ class JsoupBridge {
   /// 原本算好的位置插進去。
   void _insertChildren(dom.Node parent, int index, List<dom.Node> children) {
     for (final child in children) {
-      child.remove();
+      _detach(child);
     }
     final at = index.clamp(0, parent.nodes.length);
     parent.nodes.insertAll(at, children);
@@ -838,7 +887,7 @@ class JsoupBridge {
   }) {
     final parent = node.parentNode;
     if (parent == null) throw JsoupException('這個節點沒有父節點');
-    sibling.remove();
+    _detach(sibling);
     final index = parent.nodes.indexOf(node) + (after ? 1 : 0);
     parent.nodes.insert(index, sibling);
   }
@@ -852,16 +901,13 @@ class JsoupBridge {
   /// Jsoup 原地改名、傳回自己。這裡的 DOM 不能改標籤名稱，只能換一個
   /// 新元素：同一個編號改指向新元素，JS 手上的物件和之後拿到的都是它。
   dom.Element _rename(dom.Element element, String tag) {
+    _pinKinds(element.nodes);
     final replacement = dom.Element.tag(tag.toLowerCase())
       ..attributes.addAll(element.attributes)
       ..nodes.addAll(element.nodes.toList());
     final uri = _baseUris.remove(element);
     if (uri != null) _baseUris[replacement] = uri;
-    if (element.parentNode != null) {
-      element.replaceWith(replacement);
-    } else {
-      setBaseUri(replacement, baseUriOf(element));
-    }
+    if (element.parentNode != null) element.replaceWith(replacement);
     final id = _ids.remove(element);
     if (id != null) {
       _ids[replacement] = id;
@@ -900,43 +946,51 @@ class JsoupBridge {
     return base.resolveUri(relative).toString();
   }
 
+  /// Jsoup `Element.data()`：底下每個 DataNode 與註解的內容，照文件順序。
   String _data(dom.Node node) {
-    if (node is dom.Element &&
-        (node.localName == 'script' || node.localName == 'style')) {
-      return node.text;
+    final buffer = StringBuffer();
+    void visit(dom.Node current) {
+      for (final child in current.nodes) {
+        if (child is dom.Text) {
+          if (_isData(child)) buffer.write(child.data);
+        } else if (child is dom.Comment) {
+          buffer.write(child.data ?? '');
+        } else {
+          visit(child);
+        }
+      }
     }
-    final root = node is dom.Document ? node.documentElement : node;
-    if (root is! dom.Element) return '';
-    return root
-        .querySelectorAll('script, style')
-        .map((script) => script.text)
-        .join();
+
+    visit(node);
+    return buffer.toString();
   }
 
-  /// `text(文字)`：元素換掉底下的全部；文字節點改自己的內容；文件改
-  /// `<body>` 的（Jsoup 的 Document.text）。
+  /// `text(文字)`：元素換掉底下的全部（在文件裡的 `<script>`、`<style>`
+  /// 換成 DataNode）；文字節點改自己的內容；文件改 `<body>` 的（Jsoup 的
+  /// Document.text）。
   dom.Node _setText(dom.Node node, String text) {
     if (node is dom.Text) {
       node.data = text;
       return node;
     }
     final target = node is dom.Document ? node.body ?? node : node;
-    _detachChildren(target);
-    target.nodes.add(dom.Text(text));
+    var root = target;
+    while (root.parentNode != null) {
+      root = root.parentNode!;
+    }
+    final data =
+        root is dom.Document &&
+        target is dom.Element &&
+        (target.localName == 'script' || target.localName == 'style');
+    target.nodes
+      ..clear()
+      ..add(_textNode(text, data: data));
     return node;
   }
 
   void _setHtml(dom.Node node, String html) {
-    _detachChildren(node);
-    _insertHtml(node, html, (parsed) => node.nodes.addAll(parsed));
-  }
-
-  /// 清掉底下的節點；規則可能還拿著其中的元素，先把網址記在它們身上。
-  void _detachChildren(dom.Node node) {
-    for (final child in node.nodes) {
-      _pinBaseUri(child);
-    }
     node.nodes.clear();
+    _insertHtml(node, html, (parsed) => node.nodes.addAll(parsed));
   }
 
   void _insertHtml(

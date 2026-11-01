@@ -2,10 +2,11 @@
 /// Request、Response、KeyVal、Connection.Method），在 [JsJsoupExtensions]
 /// 之前注入。
 ///
-/// 連線設定都在 JS 這邊記著，`execute()` 時整包交給 Dart（`jsoupExecute`），
-/// 由網路 isolate 照 Jsoup 自己的方式發（不帶 App 的 Cookie 與標識，
-/// [jsoupResponse]）。和 Jsoup 一樣：狀態碼不是 2xx、3xx 時丟出錯誤，除非
-/// `ignoreHttpErrors(true)`；回應不是文字或 XML 時丟出錯誤，除非
+/// 連線設定與這個連線收過的 Cookie 都在 JS 這邊記著，`execute()` 時整包
+/// 交給網路 isolate 照 Jsoup 自己的方式發（不帶 App 的 Cookie 與標識，
+/// `jsoupExecute`），發完把 Jsoup 執行時改掉的設定寫回來（表單接進網址後
+/// 清空、跳轉後改成 GET）。和 Jsoup 一樣：狀態碼不是 2xx、3xx 時丟出錯誤，
+/// 除非 `ignoreHttpErrors(true)`；回應不是文字或 XML 時丟出錯誤，除非
 /// `ignoreContentType(true)`。
 const String jsoupConnectionJs = r'''
 (function(global) {
@@ -54,6 +55,16 @@ const String jsoupConnectionJs = r'''
     hide('keySet', function() { return Object.keys(map); });
     hide('values', function() { return Object.keys(map).map(function(k) { return map[k]; }); });
     return map;
+  }
+  /// Java 的 Collection（Request.data()）：陣列的複本，多了 size、get 這類。
+  function javaCollection(items) {
+    var list = items.slice();
+    function hide(name, fn) { Object.defineProperty(list, name, { value: fn, enumerable: false }); }
+    hide('size', function() { return list.length; });
+    hide('isEmpty', function() { return list.length === 0; });
+    hide('get', function(i) { return list[i]; });
+    hide('toArray', function() { return list.slice(); });
+    return list;
   }
 
   /// Connection.Base：請求與回應共用的網址、方法、標頭與 Cookie。標頭名稱
@@ -147,15 +158,18 @@ const String jsoupConnectionJs = r'''
     return self;
   }
 
+  /// 一個 Request 的設定。cookieStore 是這個連線收過的 Set-Cookie（網址、
+  /// 原文），newRequest() 出來的連線共用同一份（Jsoup 的 CookieManager）。
   function newState(url) {
     return {
       url: url == null ? null : String(url), method: Method.GET,
       headers: [['Accept-Encoding', 'gzip'], ['User-Agent', DEFAULT_UA]],
       cookies: {}, data: [], body: null, timeout: 30000, maxBodySize: 2 * 1024 * 1024,
       followRedirects: true, ignoreHttpErrors: false, ignoreContentType: false,
-      postDataCharset: 'UTF-8'
+      postDataCharset: 'UTF-8', cookieStore: { entries: [] }
     };
   }
+  /// Jsoup Request(Request copy)：表單與內文不複製，Cookie 罐共用。
   function copyState(state) {
     return {
       url: state.url, method: state.method,
@@ -163,7 +177,8 @@ const String jsoupConnectionJs = r'''
       cookies: JSON.parse(JSON.stringify(state.cookies)), data: [], body: null,
       timeout: state.timeout, maxBodySize: state.maxBodySize,
       followRedirects: state.followRedirects, ignoreHttpErrors: state.ignoreHttpErrors,
-      ignoreContentType: state.ignoreContentType, postDataCharset: state.postDataCharset
+      ignoreContentType: state.ignoreContentType, postDataCharset: state.postDataCharset,
+      cookieStore: state.cookieStore
     };
   }
 
@@ -177,8 +192,15 @@ const String jsoupConnectionJs = r'''
         return self;
       };
     }
-    option('timeout', Number);
-    option('maxBodySize', Number);
+    function atLeastZero(message) {
+      return function(value) {
+        var n = Number(value);
+        if (!(n >= 0)) throw new Error(message);
+        return n;
+      };
+    }
+    option('timeout', atLeastZero('Timeout milliseconds must be 0 (infinite) or greater'));
+    option('maxBodySize', atLeastZero('maxSize must be 0 (unlimited) or larger'));
     option('followRedirects', Boolean);
     option('ignoreHttpErrors', Boolean);
     option('ignoreContentType', Boolean);
@@ -189,7 +211,7 @@ const String jsoupConnectionJs = r'''
       return self;
     };
     self.data = function(kv) {
-      if (arguments.length === 0) return state.data.slice();
+      if (arguments.length === 0) return javaCollection(state.data);
       state.data.push(kv);
       return self;
     };
@@ -197,20 +219,21 @@ const String jsoupConnectionJs = r'''
     return self;
   }
 
-  var textType = /^(text\/|application\/(xml|xhtml\+xml|[\w.+-]*\+xml))/i;
+  /// Jsoup 讀得了的回應類型（Dart 的 isJsoupTextType）。
+  function isTextType(contentType) {
+    return contentType.indexOf('text/') === 0 ||
+      /^(application|text)\/\w*\+?xml/.test(contentType);
+  }
 
-  /// Connection.Response。
-  function response(reply, state) {
-    var rstate = { url: reply.url, method: state.method, headers: [], cookies: {} };
+  /// Connection.Response。Cookie 是這次（含跳轉途中）收到的。
+  function response(reply) {
+    var rstate = { url: reply.url, method: Method.valueOf(reply.method), headers: [], cookies: {} };
     Object.keys(reply.headers || {}).forEach(function(name) {
       [].concat(reply.headers[name]).forEach(function(value) {
         rstate.headers.push([name, value]);
-        if (lower(name) === 'set-cookie') {
-          var pair = String(value).split(';')[0], eq = pair.indexOf('=');
-          if (eq > 0) rstate.cookies[pair.substring(0, eq).trim()] = pair.substring(eq + 1).trim();
-        }
       });
     });
+    (reply.cookies || []).forEach(function(c) { rstate.cookies[c[0]] = c[1]; });
     var self = base({}, rstate);
     // 沒有的欄位 Dart 那邊不傳，Java 這裡是 null。
     var contentType = reply.contentType == null ? null : reply.contentType;
@@ -218,19 +241,24 @@ const String jsoupConnectionJs = r'''
     self.statusCode = function() { return reply.code; };
     self.statusMessage = function() { return reply.message; };
     self.contentType = function() { return contentType; };
-    self.charset = function(name) {
-      if (arguments.length === 0) return charset;
-      charset = String(name);
-      body = java.bytesToStr(self.bodyAsBytes(), charset);
-      return self;
-    };
     self.body = function() { return body; };
     self.bodyAsBytes = function() { return java.base64DecodeToByteArray(reply.bytes); };
     self.bufferUp = function() { return self; };
+    // parse()：沒用 charset(…) 指定時，字元集照網頁認出的（BOM、回應標頭、
+    // <meta>，都沒有是 UTF-8），之後 charset() 傳回它。XML 回應也照 HTML
+    // 解析：夜讀沒有 Jsoup 的 XML parser（parser 列在刻意不做的）。
+    var charsetSet = false;
+    self.charset = function(name) {
+      if (arguments.length === 0) return charset;
+      charset = String(name);
+      charsetSet = true;
+      body = java.bytesToStr(self.bodyAsBytes(), charset);
+      return self;
+    };
     self.parse = function() {
-      if (reply.htmlBody != null && charset === (reply.charset == null ? null : reply.charset)) {
+      if (!charsetSet) {
         charset = reply.htmlCharset;
-        body = reply.htmlBody;
+        if (reply.htmlBody != null) body = reply.htmlBody;
       }
       return global.org.jsoup.Jsoup.parse(body, reply.url);
     };
@@ -238,33 +266,55 @@ const String jsoupConnectionJs = r'''
   }
 
   function execute(state) {
-    if (state.url == null) throw new Error('Must set the URL to be fetched');
+    if (state.url == null) throw new Error('URL must be specified to connect');
+    if (!state.method.hasBody() && state.body != null) {
+      throw new Error('Cannot set a request body for HTTP method ' + state.method.name());
+    }
     var reply = __lrWait('jsoupExecute', {
-      url: state.url, method: state.method.name(), hasBody: state.method.hasBody(),
+      url: state.url, method: state.method.name(),
       headers: state.headers, cookies: state.cookies,
       data: state.data.map(function(kv) { return [kv.key(), kv.value()]; }),
       body: state.body, charset: state.postDataCharset, timeout: state.timeout,
-      maxBodySize: state.maxBodySize, followRedirects: state.followRedirects
+      maxBodySize: state.maxBodySize, followRedirects: state.followRedirects,
+      ignoreHttpErrors: state.ignoreHttpErrors, ignoreContentType: state.ignoreContentType,
+      cookieStore: state.cookieStore.entries
     });
+    // Jsoup 執行時改掉的設定：表單接進網址就清空，跳轉後改成 GET、拿掉內文
+    // 與 Content-Type，沒寫 Content-Type 的表單補上。
+    var changed = reply.request;
+    state.url = changed.url;
+    state.method = Method.valueOf(changed.method);
+    if (changed.dataCleared) state.data = [];
+    state.body = changed.body == null ? null : changed.body;
+    state.headers = changed.headers;
+    state.cookieStore.entries = reply.cookieStore;
     if (!state.ignoreHttpErrors && (reply.code < 200 || reply.code >= 400)) {
       throw new Error('HTTP error fetching URL. Status=' + reply.code + ', URL=[' + reply.url + ']');
     }
-    if (!state.ignoreContentType && reply.contentType != null && !textType.test(reply.contentType)) {
+    if (!state.ignoreContentType && reply.contentType != null && !isTextType(reply.contentType)) {
       throw new Error('Unhandled content type. Must be text/*, application/xml, or ' +
         'application/*+xml');
     }
-    return response(reply, state);
+    return response(reply);
   }
 
-  /// org.jsoup.Connection。
-  function connection(url) {
-    var state = newState(url);
-    var req = request(state);
+  var baseMethods = ['url', 'method', 'header', 'addHeader', 'hasHeader', 'hasHeaderWithValue',
+    'removeHeader', 'multiHeaders', 'cookie', 'hasCookie', 'removeCookie', 'headers', 'cookies',
+    'timeout', 'maxBodySize', 'followRedirects', 'ignoreHttpErrors', 'ignoreContentType',
+    'postDataCharset', 'requestBody'];
+
+  /// org.jsoup.Connection：設定都在它目前的 Request 上；request(另一個) 之後
+  /// 改用那一個，兩邊讀寫的是同一份。
+  function connection(url, initial) {
+    var req = initial || request(newState(url));
     var last = null;
-    var self = base({}, state);
-    ['timeout', 'maxBodySize', 'followRedirects', 'ignoreHttpErrors',
-     'ignoreContentType', 'postDataCharset', 'requestBody'].forEach(function(name) {
-      self[name] = function(value) { req[name](value); return self; };
+    var self = {};
+    function state() { return req.__state; }
+    baseMethods.forEach(function(name) {
+      self[name] = function() {
+        var result = req[name].apply(req, arguments);
+        return result === req ? self : result;
+      };
     });
     self.userAgent = function(ua) { return self.header('User-Agent', ua); };
     self.referrer = function(referrer) { return self.header('Referer', referrer); };
@@ -272,39 +322,38 @@ const String jsoupConnectionJs = r'''
     /// data(key) 讀出那個欄位。
     self.data = function() {
       var args = Array.prototype.slice.call(arguments);
+      var data = state().data;
       if (args.length === 1 && typeof args[0] === 'string') {
         var key = args[0];
-        for (var i = 0; i < state.data.length; i++) {
-          if (state.data[i].key() === key) return state.data[i];
+        for (var i = 0; i < data.length; i++) {
+          if (data[i].key() === key) return data[i];
         }
         return null;
       }
       if (args.length === 1) {
         var items = typeof args[0].toArray === 'function' ? args[0].toArray() : args[0];
         if (Array.isArray(items)) {
-          items.forEach(function(kv) { state.data.push(keyVal(kv.key(), kv.value())); });
+          items.forEach(function(kv) { data.push(keyVal(kv.key(), kv.value())); });
         } else {
-          entriesOf(args[0]).forEach(function(e) { state.data.push(keyVal(String(e[0]), String(e[1]))); });
+          entriesOf(args[0]).forEach(function(e) { data.push(keyVal(String(e[0]), String(e[1]))); });
         }
         return self;
       }
-      if (args.length === 3 || args.length === 4) {
-        if (typeof args[2] === 'object' && args[2] != null) throw new Error('夜讀的 Jsoup 不支援上傳檔案');
+      if ((args.length === 3 || args.length === 4) && typeof args[2] === 'object' && args[2] != null) {
+        throw new Error('夜讀的 Jsoup 不支援上傳檔案');
       }
-      for (var j = 0; j + 1 < args.length; j += 2) {
-        state.data.push(keyVal(String(args[j]), String(args[j + 1])));
+      if (args.length % 2 !== 0) throw new Error('Must supply an even number of key value pairs');
+      for (var j = 0; j < args.length; j += 2) {
+        data.push(keyVal(String(args[j]), String(args[j + 1])));
       }
       return self;
     };
-    self.get = function() { state.method = Method.GET; return self.execute().parse(); };
-    self.post = function() { state.method = Method.POST; return self.execute().parse(); };
-    self.execute = function() { last = execute(state); return last; };
-    // request(另一個請求)：照它的設定；連線與 request() 拿到的物件仍共用
-    // 同一份設定。
+    self.get = function() { state().method = Method.GET; return self.execute().parse(); };
+    self.post = function() { state().method = Method.POST; return self.execute().parse(); };
+    self.execute = function() { last = execute(state()); return last; };
     self.request = function(other) {
       if (arguments.length === 0) return req;
-      var source = other.__state;
-      Object.keys(source).forEach(function(key) { state[key] = source[key]; });
+      req = other;
       return self;
     };
     self.response = function(other) {
@@ -312,11 +361,7 @@ const String jsoupConnectionJs = r'''
       last = other;
       return self;
     };
-    self.newRequest = function() {
-      var copy = connection(state.url);
-      copy.request(request(copyState(state)));
-      return copy;
-    };
+    self.newRequest = function() { return connection(null, request(copyState(state()))); };
     return self;
   }
   global.__lrJsoupConnection = connection;

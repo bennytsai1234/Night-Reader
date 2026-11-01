@@ -245,4 +245,117 @@ void main() {
       ].join(' ~ '),
     );
   }, skip: skip);
+
+  test('removed and replaced nodes leave their parent and its URL', () async {
+    expect(
+      await run('''
+        var d = org.jsoup.Jsoup.parse('<p>a</p><b>b</b>');
+        var p = d.selectFirst('p'), b = d.selectFirst('b');
+        p.replaceWith(b);
+        var q = org.jsoup.Jsoup.parse('<i>q</i>').selectFirst('i');
+        q.remove();
+        var old = org.jsoup.Jsoup.parse('<p><a href=c>x</a></p>', 'https://old.test/');
+        var op = old.selectFirst('p');
+        op.wrap('<div></div>');
+        var moved = org.jsoup.Jsoup.parse('', 'https://new.test/');
+        moved.body().appendChild(op.parent());
+        var e = org.jsoup.Jsoup.parse('<div><a href=c>x</a></div>', 'https://old.test/');
+        e.selectFirst('a').setBaseUri('https://custom.test/');
+        var copy = e.body().childNodesCopy().get(0);
+        [p.parent() == null, p.hasParent(), b.parent().tagName(), d.body().html(),
+         q.parent() == null, op.selectFirst('a').absUrl('href'),
+         copy.childNode(0).baseUri(), copy.baseUri()].join('|')
+      '''),
+      'true|false|body|<b>b</b>|true|https://new.test/c|https://custom.test/|'
+      'https://old.test/',
+    );
+  }, skip: skip);
+
+  test('classNames(Set) replaces the classes', () async {
+    expect(
+      await run('''
+        var f = org.jsoup.Jsoup.parse('<p class=old>x</p>').selectFirst('p');
+        var same = f.classNames(['x', 'y']) === f;
+        var after = f.className();
+        f.classNames([]);
+        [after, same, f.hasAttr('class')].join('|')
+      '''),
+      'x y|true|false',
+    );
+  }, skip: skip);
+
+  test('traverse follows a node replaced in head and skips a removed one; '
+      'filter stops the whole list', () async {
+    expect(
+      await run('''
+        var g = '';
+        org.jsoup.Jsoup.parse('<div><p>old</p><b>end</b></div>').selectFirst('div')
+          .traverse({ head: function(n, depth) {
+            g += n.nodeName() + ':' + (n.nodeName() == '#text' ? n.text() : '') + ',';
+            if (n.nodeName() == 'p') n.replaceWith(new org.jsoup.nodes.Element('i').text('new'));
+          } });
+        var heads = '', tails = '';
+        var gr = org.jsoup.Jsoup.parse('<div><p>x</p><b>y</b></div>').selectFirst('div');
+        gr.traverse({
+          head: function(n, depth) { heads += n.nodeName() + depth + ','; if (n.nodeName() == 'p') n.remove(); },
+          tail: function(n, depth) { tails += n.nodeName() + depth + ','; }
+        });
+        var R = org.jsoup.select.NodeFilter.FilterResult;
+        var h = '';
+        org.jsoup.Jsoup.parse('<p>a</p><p>b</p>').select('p')
+          .filter({ head: function(n, depth) { h += n.text(); return R.STOP; } });
+        var hf = org.jsoup.Jsoup.parse('<div><p>a</p><span>b</span><i>c</i></div>').selectFirst('div');
+        var ht = '';
+        hf.filter({
+          head: function(n, depth) {
+            return n.nodeName() == 'p' ? R.REMOVE : n.nodeName() == 'span' ? R.SKIP_ENTIRELY : R.CONTINUE;
+          },
+          tail: function(n, depth) { ht += n.nodeName() + ','; return R.CONTINUE; }
+        });
+        [g, heads, tails, gr.html(), h, ht, hf.html()].join('|')
+      '''),
+      'div:,p:,#text:new,b:,#text:end,|div0,p1,b1,#text2,|#text2,b1,div0,|'
+      '<b>y</b>|a|#text,i,div,|<span>b</span><i>c</i>',
+    );
+  }, skip: skip);
+
+  test(
+    'a DataNode stays data wherever it goes; data() includes comments',
+    () async {
+      expect(
+        await run('''
+        var div = new org.jsoup.nodes.Element('div');
+        div.appendChild(new org.jsoup.nodes.DataNode('SECRET'));
+        var dc = org.jsoup.Jsoup.parse('<div>x<!--c--><script>s</script></div>').selectFirst('div');
+        var s = dc.selectFirst('script');
+        var before = dc.data();
+        s.text('t2');
+        var kind = s.childNode(0).nodeName();
+        s.appendText('u');
+        [div.text(), div.data(), div.textNodes().size(), div.dataNodes().size(),
+         div.childNode(0).nodeName(), before, kind, s.childNode(1).nodeName(),
+         s.text(), s.data()].join('|')
+      '''),
+        '|SECRET|0|1|#data|cs|#data|#text|u|t2',
+      );
+    },
+    skip: skip,
+  );
+
+  test('regex lookups take Java flags; splitText checks the offset', () async {
+    expect(
+      await run('''
+        var j = org.jsoup.Jsoup.parse('<p>ABC</p><a title=XyZ>1</a>');
+        var errors = [];
+        try { new org.jsoup.nodes.TextNode('abc').splitText(3); } catch (e) { errors.push(e.message); }
+        try { new org.jsoup.nodes.TextNode('abc').splitText(-1); } catch (e) { errors.push(e.message); }
+        [j.getElementsMatchingOwnText('(?i)abc').size(),
+         j.getElementsMatchingText('(?i)^abc\$').size(),
+         j.getElementsByAttributeValueMatching('title', '(?i)xyz').size(),
+         j.getElementsMatchingOwnText(/abc/i).size()].concat(errors).join('|')
+      '''),
+      '1|1|1|1|Split offset must not be greater than current text length|'
+      'Split offset must be not be negative',
+    );
+  }, skip: skip);
 }

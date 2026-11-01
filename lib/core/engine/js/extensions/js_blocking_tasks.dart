@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -11,7 +10,6 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
@@ -129,70 +127,6 @@ BlockingTask rawResponse({
     AppLog.e('java.${method.toLowerCase()} failed: $e');
     return failedResponse(url, e);
   }
-};
-
-/// `Jsoup.connect` 用的連線：Legado 的 Jsoup 用 Java 自己的連線，不經 App
-/// 的連線設定，所以這裡也不掛攔截器——不帶 App 的 Cookie 與標識，回應的
-/// Cookie 也不存進 App。
-Dio? _jsoupDio;
-
-/// `org.jsoup.Jsoup.connect(…).execute()`：照書源給的設定發一次（Jsoup 最多
-/// 跟著跳轉 20 次）。內文照回應標頭的字元集解碼，沒寫時用 UTF-8；`parse()`
-/// 沒寫字元集時看網頁的 `<meta>`（[EncodingDetect.getHtmlEncode]），和
-/// Jsoup 一樣。內文超過 [maxBodySize]（0 是不限）的部分截掉。
-BlockingTask jsoupResponse({
-  required String method,
-  required String url,
-  required Map<String, String> headers,
-  Uint8List? body,
-  required int timeoutMs,
-  required int maxBodySize,
-  required bool followRedirects,
-}) => () async {
-  final timeout = timeoutMs > 0 ? Duration(milliseconds: timeoutMs) : null;
-  final response = await (_jsoupDio ??= Dio()).fetch<List<int>>(
-    RequestOptions(
-      method: method,
-      path: url,
-      data: body,
-      headers: headers,
-      connectTimeout: timeout,
-      receiveTimeout: timeout,
-      sendTimeout: body == null ? null : timeout,
-      followRedirects: followRedirects,
-      maxRedirects: 20,
-      validateStatus: (_) => true,
-      responseType: ResponseType.bytes,
-      cancelToken: currentSourceCancelToken,
-    ),
-  );
-  var bytes = Uint8List.fromList(response.data ?? const <int>[]);
-  if (maxBodySize > 0 && bytes.length > maxBodySize) {
-    bytes = bytes.sublist(0, maxBodySize);
-  }
-  final contentType = response.headers.value('content-type');
-  final charset = RegExp(
-    r'charset=\s*"?([\w.:-]+)',
-    caseSensitive: false,
-  ).firstMatch(contentType ?? '')?.group(1);
-  // 從網頁認出的字元集照 Java 的 Charset.name() 寫成大寫（GBK、UTF-8）。
-  final htmlCharset =
-      charset ?? EncodingDetect.getHtmlEncode(bytes).toUpperCase();
-  final text = EncodingDetect.decodeWithCharset(bytes, charset ?? 'UTF-8');
-  return {
-    'code': response.statusCode ?? 0,
-    'message': response.statusMessage ?? '',
-    'url': response.realUri.toString(),
-    'headers': response.headers.map,
-    'contentType': contentType,
-    'charset': charset,
-    'body': text,
-    'htmlCharset': htmlCharset,
-    'htmlBody': htmlCharset.toUpperCase() == (charset ?? 'UTF-8').toUpperCase()
-        ? null
-        : EncodingDetect.decodeWithCharset(bytes, htmlCharset),
-    'bytes': base64Encode(bytes),
-  };
 };
 
 /// 請求失敗時給規則 JS 的回應：狀態碼 500，內文是錯誤訊息。
