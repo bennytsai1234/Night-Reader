@@ -113,6 +113,19 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
                 ? const LinearProgressIndicator(minHeight: 2)
                 : null,
           ),
+          // 目前的書源固定在清單上方：一打開就看得到現在讀的是哪一個，
+          // 不用在清單裡找；它不參加搜尋，所以不會出現在下面的清單裡。
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: GroupedSliceItem(
+              index: 0,
+              count: 1,
+              child: BookDetailChangeSourceItem(
+                searchBook: widget.originalBook.toSearchBook(),
+                isCurrent: true,
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppGrouped.margin + AppGrouped.rowPadding,
@@ -154,17 +167,12 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
                       itemCount: count,
                       itemBuilder: (ctx, i) {
                         final result = sources[i];
-                        final isCurrent =
-                            result.origin == widget.originalBook.origin;
                         return GroupedSliceItem(
                           index: i,
                           count: count,
                           child: BookDetailChangeSourceItem(
                             searchBook: result,
-                            isCurrent: isCurrent,
-                            onTap: isCurrent
-                                ? null
-                                : () => _handleSelect(context, result),
+                            onTap: () => _handleSelect(context, result),
                           ),
                         );
                       },
