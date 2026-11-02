@@ -230,14 +230,16 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       final values = result.map((e) => stringifyRuleResult(e));
       return _normalizeStringList(values, isUrl: isUrl);
     }
-    if (result == null) {
-      return [];
+    if (result is String) {
+      return _normalizeStringList(
+        result.split('\n').where((s) => s.isNotEmpty),
+        isUrl: isUrl,
+      );
     }
-    final str = stringifyRuleResult(result);
-    return _normalizeStringList(
-      str.split('\n').where((s) => s.isNotEmpty),
-      isUrl: isUrl,
-    );
+    // 同 Legado `AnalyzeRule.getStringList`：只有文字與清單算結果，JS 交回的
+    // 物件、數字、元素等（例如 try 裡先把回應 `JSON.parse` 存進變數、後面
+    // 出錯被 catch 吃掉時，整段程式的值是那個物件）不是清單，沒有結果。
+    return [];
   }
 
   List<String> _normalizeStringList(

@@ -678,8 +678,20 @@ var __lrScopedObject = function(scope, seed) {
       });
       return decoded;
     }
+    // QuickJS 的數字超過 32 位元整數就以浮點數交出（Lofter 的貼文編號
+    // 11702988684），Dart 端印成 `11702988684.0`，拿去組網址就錯了。JS 的
+    // 數字沒有整數與浮點之分，Legado 的 Rhino 交回的資料物件也原樣留著
+    // Long，所以整數值一律還原成整數；超過 2^53 的本來就不精確，維持原樣。
+    if (value is double &&
+        value.isFinite &&
+        value == value.truncateToDouble() &&
+        value.abs() <= _maxSafeInteger) {
+      return value.toInt();
+    }
     return value;
   }
+
+  static const double _maxSafeInteger = 9007199254740991;
 
   dynamic _mockEvaluate(String jsCode, Map<String, dynamic>? context) {
     final trimmedJs = jsCode.trim();
