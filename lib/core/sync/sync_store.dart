@@ -18,6 +18,11 @@ abstract interface class SyncStore {
   /// 讀一份檔案；還沒有這份時傳回 null。
   Future<SyncFile?> read(String name);
 
+  /// 一份檔案目前的版本（和 [read] 給的 [SyncFile.version] 同一種），不下載
+  /// 內容；還沒有這份、或同步空間不提供版本時傳回 null。用來在兩邊都沒變
+  /// 時跳過一整種資料。
+  Future<String?> version(String name);
+
   /// 寫一份檔案。[ifVersion] 給了的話，檔案已經不是那個版本就丟
   /// [SyncConflict]；[ifAbsent] 為 true 時檔案已經存在就丟 [SyncConflict]。
   Future<void> write(

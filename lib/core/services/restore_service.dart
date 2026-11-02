@@ -22,6 +22,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:path/path.dart' as p;
 
 typedef _DecodedFile = ({String fileName, Object? decoded, Object? error});
@@ -119,7 +120,12 @@ class RestoreService {
     }
     if (readStatsFiles.isNotEmpty) {
       try {
-        restoredAny = await _restoreReadingStats(readStatsFiles) || restoredAny;
+        restoredAny =
+            await _restoreReadingStats(
+              readStatsFiles,
+              fromDevice: backup.manifest?['syncDeviceId'] as String?,
+            ) ||
+            restoredAny;
       } catch (e) {
         AppLog.e('Restore failed for reading stats: $e', error: e);
         failedFiles.addAll(readStatsFiles.map((file) => file.fileName));
@@ -134,8 +140,12 @@ class RestoreService {
     'readDay.json',
   };
 
-  /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。
-  Future<bool> _restoreReadingStats(List<_DecodedFile> files) async {
+  /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。備份那台用過
+  /// 同步（[fromDevice]）時記下還原了哪些，同步時不再算一次（ADR 0039）。
+  Future<bool> _restoreReadingStats(
+    List<_DecodedFile> files, {
+    required String? fromDevice,
+  }) async {
     final records = <ReadRecord>[];
     final days = <ReadDay>[];
     for (final (:fileName, :decoded, :error) in files) {
@@ -150,6 +160,12 @@ class RestoreService {
       }
     }
     await _readRecordDao.restoreReadingStats(records: records, days: days);
+    await RestoredStats.remember(
+      await SharedPreferences.getInstance(),
+      from: fromDevice,
+      records: records,
+      days: days,
+    );
     return records.isNotEmpty || days.isNotEmpty;
   }
 

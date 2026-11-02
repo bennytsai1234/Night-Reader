@@ -80,7 +80,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         children: [
           GroupedSection(
             header: '同步',
-            footer: '多台手機選同一個同步空間，書架上的書開書時會接上另一台讀到的地方。',
+            footer: '多台手機選同一個同步空間，書架、閱讀進度、書源、替換規則、設定、登入資料與閱讀統計會自動合併；開書時接上另一台讀到的地方。已下載的正文不同步，另一台照書架自己下載。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

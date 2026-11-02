@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/sync/settings_sync.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -18,6 +19,11 @@ class ThemeSettingsProvider extends ChangeNotifier {
       _prefs.setString(PreferKey.darkStyle, shared);
       _prefs.remove(PreferKey.sharedStyle);
     }
+    _load();
+    SettingsSync.applied.addListener(_reload);
+  }
+
+  void _load() {
     lightStyle = AppStyle.fromStorage(
       _prefs.getString(PreferKey.lightStyle),
       fallback: defaultLightStyle,
@@ -34,6 +40,18 @@ class ThemeSettingsProvider extends ChangeNotifier {
     pageTransition = AppPageTransition.fromStorage(
       _prefs.getString(PreferKey.pageTransition),
     );
+  }
+
+  /// 同步套用了另一台的設定。
+  void _reload() {
+    _load();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    SettingsSync.applied.removeListener(_reload);
+    super.dispose();
   }
 
   static const AppStyle defaultLightStyle = AppStyle.paper;

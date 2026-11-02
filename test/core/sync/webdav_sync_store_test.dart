@@ -35,11 +35,11 @@ class _FakeWebDav implements HttpClientAdapter {
         if (!folders.contains(parent)) return _status(409);
         folders.add(path);
         return _status(201);
-      case 'GET':
+      case 'GET' || 'HEAD':
         final file = files[path];
         if (file == null) return _status(404);
         return ResponseBody.fromBytes(
-          file.$1,
+          options.method == 'HEAD' ? Uint8List(0) : file.$1,
           200,
           headers: {
             'etag': ['"${file.$2}"'],
@@ -97,6 +97,17 @@ void main() {
       expect(file.version, '"1"');
     },
   );
+
+  test('the version can be asked without downloading the file', () async {
+    expect(await store().version('p.json'), isNull);
+    await store().write('p.json', 'one');
+    server.log.clear();
+    expect(
+      await store().version('p.json'),
+      (await store().read('p.json'))!.version,
+    );
+    expect(server.log.first, 'HEAD /dav/NightReader/p.json');
+  });
 
   test('a write over a newer version is a conflict', () async {
     await store().write('p.json', 'one');

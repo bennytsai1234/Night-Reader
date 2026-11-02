@@ -93,7 +93,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     final confirmed = await showAppConfirm(
       context: context,
       title: '停用同步？',
-      message: '這台手機不再和其他手機同步；已經在這台的書與進度都留著。',
+      message: '這台手機不再和其他手機同步；已經在這台的書、進度、書源與設定都留著。',
       confirmLabel: '停用',
     );
     if (!confirmed || !mounted) return;

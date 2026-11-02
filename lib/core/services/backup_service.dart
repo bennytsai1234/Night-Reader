@@ -18,6 +18,7 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/login_data_backup.dart';
+import 'package:night_reader/core/sync/sync_settings.dart';
 
 class BackupService {
   static final BackupService _instance = BackupService._internal();
@@ -39,10 +40,14 @@ class BackupService {
     try {
       // 0. 寫入備份 manifest（版本資訊，供還原時驗證）
       final version = await AppVersion.current();
+      final prefs = await SharedPreferences.getInstance();
       final manifest = {
         'appVersion': version.versionName,
         'schemaVersion': currentSchemaVersion,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        // 這台在同步裡的名字：還原到另一台時，閱讀統計認得出哪些時間已經
+        // 在雲端這台的那筆裡（`RestoredStats`）。
+        'syncDeviceId': ?prefs.getString(SyncSettings.deviceIdKey),
       };
       await File(p.join(backupFolder.path, 'manifest.json'))
           .writeAsString(jsonEncode(manifest));
@@ -107,9 +112,10 @@ class BackupService {
       );
 
       // 2. 導出偏好設定 (對標 config.xml)
-      final prefs = await SharedPreferences.getInstance();
       final Map<String, dynamic> config = {};
       for (var key in prefs.getKeys()) {
+        // 這台手機在同步裡的名字只屬於這台，還原到另一台不能沿用。
+        if (key == SyncSettings.deviceIdKey) continue;
         config[key] = prefs.get(key);
       }
       await File(p.join(backupFolder.path, 'config.json'))

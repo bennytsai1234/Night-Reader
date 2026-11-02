@@ -23,6 +23,9 @@ class _Store implements SyncStore {
   Future<SyncFile?> read(String name) async => null;
 
   @override
+  Future<String?> version(String name) async => null;
+
+  @override
   Future<void> write(
     String name,
     String content, {

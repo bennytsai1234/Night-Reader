@@ -7,6 +7,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/sync/settings_sync.dart';
 
 import 'app_permission_service.dart';
 import 'audio_handler.dart';
@@ -80,7 +81,18 @@ class TTSService extends ChangeNotifier {
   int currentWordEnd = 0;
   int _resumeOffset = 0;
 
-  TTSService._internal();
+  TTSService._internal() {
+    SettingsSync.applied.addListener(_reloadSyncedParams);
+  }
+
+  /// 同步套用了另一台的語速與音調。引擎還沒開的話不用管，開的時候會讀。
+  Future<void> _reloadSyncedParams() async {
+    if (!_isInitialized) return;
+    await _loadSavedSpeechParams();
+    notifyListeners();
+    await _applyRateToEngine();
+    await _applyPitchToEngine();
+  }
 
   /// 朗讀參數的合法範圍與步進；閱讀器朗讀面板與「朗讀與語音」設定頁共用。
   ///

@@ -136,10 +136,14 @@ class _MainPageState extends State<MainPage>
     super.dispose();
   }
 
-  /// 從背景回來時同步一次：別台在這段時間讀的進度，書架上馬上看得到。
+  /// 從背景回來時同步一次：別台在這段時間讀的進度、加的書，書架上馬上看得
+  /// 到；退到背景時也同步一次，把這台的改動送上去。
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _launchWorkStarted) {
+    // 回到前景抓別台的改動；退到背景把這台的改動（例如剛改的設定）送上去。
+    if ((state == AppLifecycleState.resumed ||
+            state == AppLifecycleState.paused) &&
+        _launchWorkStarted) {
       SyncService.instance.requestSync();
     }
   }

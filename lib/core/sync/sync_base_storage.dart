@@ -17,35 +17,40 @@ class SyncBaseStorage {
   static Future<Directory> _defaultDirectory() async =>
       Directory(p.join((await getApplicationSupportDirectory()).path, 'sync'));
 
-  Future<File> _file(String kind) async =>
-      File(p.join((await _directory()).path, 'base_$kind.json'));
+  Future<File> _file(String name) async =>
+      File(p.join((await _directory()).path, '$name.json'));
 
-  Future<Map<String, SyncBaseEntry>> read(String kind) async {
-    final file = await _file(kind);
+  Future<Map<String, SyncBaseEntry>> read(String kind) async => {
+    for (final entry in (await readJson('base_$kind')).entries)
+      entry.key: ?SyncBaseEntry.fromJson(entry.value),
+  };
+
+  Future<void> write(String kind, Map<String, SyncBaseEntry> base) => writeJson(
+    'base_$kind',
+    {for (final entry in base.entries) entry.key: entry.value.toJson()},
+  );
+
+  /// 同一個資料夾裡其他跟著同步空間的檔（例如別台的閱讀統計）；換同步空間
+  /// 時一起清掉（[clear]）。
+  Future<Map<String, Object?>> readJson(String name) async {
+    final file = await _file(name);
     if (!await file.exists()) return {};
     try {
       final json = jsonDecode(await file.readAsString());
-      if (json is! Map) return {};
-      return {
-        for (final entry in json.entries)
-          '${entry.key}': ?SyncBaseEntry.fromJson(entry.value),
-      };
+      return json is Map
+          ? {for (final e in json.entries) '${e.key}': e.value}
+          : {};
     } on FormatException {
       // 寫到一半被關掉的檔：當成從沒同步過，下次照最後修改時間合併。
       return {};
     }
   }
 
-  Future<void> write(String kind, Map<String, SyncBaseEntry> base) async {
-    final file = await _file(kind);
+  Future<void> writeJson(String name, Map<String, Object?> json) async {
+    final file = await _file(name);
     await file.parent.create(recursive: true);
     final temp = File('${file.path}.tmp');
-    await temp.writeAsString(
-      jsonEncode({
-        for (final entry in base.entries) entry.key: entry.value.toJson(),
-      }),
-      flush: true,
-    );
+    await temp.writeAsString(jsonEncode(json), flush: true);
     await temp.rename(file.path);
   }
 

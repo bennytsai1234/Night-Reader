@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/sync/settings_sync.dart';
 
 import 'provider/settings_base.dart';
 
@@ -81,6 +82,19 @@ class SettingsProvider extends SettingsProviderBase {
   SettingsProvider() {
     _loadFromPrefs(getIt<SharedPreferences>());
     unawaited(_migrateLegacySettings());
+    SettingsSync.applied.addListener(_reload);
+  }
+
+  /// 同步套用了另一台的設定（深淺模式等）。
+  void _reload() {
+    _loadFromPrefs(getIt<SharedPreferences>());
+    update();
+  }
+
+  @override
+  void dispose() {
+    SettingsSync.applied.removeListener(_reload);
+    super.dispose();
   }
 
   /// 從已預載的 SharedPreferences 同步讀取所有設定，在建構子第一幀前完成，消除啟動閃爍。

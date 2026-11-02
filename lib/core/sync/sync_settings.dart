@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 這台手機選的同步空間（ADR 0039）。
@@ -15,6 +17,10 @@ class SyncSettings {
   static const _userKey = 'sync.webdav.user';
   static const _passwordKey = 'sync.webdav.password';
   static const _lastSyncKey = 'sync.last_success_at';
+
+  /// 這台手機在同步裡的名字。只屬於這台：備份不帶（`BackupService`），
+  /// 不然還原到另一台時兩台同名，閱讀統計會互相蓋掉。
+  static const deviceIdKey = 'sync.device_id';
 
   SharedPreferences? _prefs;
 
@@ -40,6 +46,15 @@ class SyncSettings {
     );
   }
 
+  /// 目前同步到哪裡（種類、網址、帳號）；沒有同步空間時是 null。上次同步
+  /// 的紀錄屬於這個空間，換了（包括還原備份改掉設定）就作廢。
+  Future<String?> identity() async {
+    if (await space() != SyncSpace.webdav) return null;
+    final account = await webDavAccount();
+    if (account == null) return null;
+    return 'webdav\t${account.url.trim()}\t${account.user}';
+  }
+
   Future<void> useWebDav(WebDavAccount account) async {
     final prefs = await _ensure();
     await prefs.setString(_urlKey, account.url);
@@ -54,6 +69,20 @@ class SyncSettings {
     final prefs = await _ensure();
     await prefs.setString(_spaceKey, 'none');
     await prefs.remove(_lastSyncKey);
+  }
+
+  /// 這台手機的名字，第一次用到時隨機產生。
+  Future<String> deviceId() async {
+    final prefs = await _ensure();
+    final saved = prefs.getString(deviceIdKey);
+    if (saved != null && saved.isNotEmpty) return saved;
+    final random = Random.secure();
+    final id = [
+      for (var i = 0; i < 16; i++)
+        random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ].join();
+    await prefs.setString(deviceIdKey, id);
+    return id;
   }
 
   Future<DateTime?> lastSyncAt() async {
