@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../layout/readable_width.dart';
 import '../navigation/app_page_transition.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_layers.dart';
@@ -679,24 +680,28 @@ class GlassCapsule extends StatelessWidget {
   }
 }
 
-/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中、最寬同
-/// 浮動分頁列。左右外距與底部安全區由呼叫端決定。
+/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中，預設最寬
+/// 同浮動分頁列。左右外距與底部安全區由呼叫端決定。
 class FloatingGlassToolbar extends StatelessWidget {
   const FloatingGlassToolbar({
     super.key,
     required this.child,
     this.height = AppGlass.tabItemHeight,
+    this.maxWidth = AppGlass.tabBarMaxWidth,
   });
 
   final Widget child;
   final double height;
+
+  /// 清單頁的工具列和卡片切齊，由呼叫端的外距決定寬度，這裡傳無限大。
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       heightFactor: 1,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: AppGlass.tabBarMaxWidth),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: SizedBox(
           height: height,
           child: GlassSurface(
@@ -790,7 +795,13 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.systemOverlayStyle,
     this.titleSheen,
     this.morph = false,
+    this.readable = true,
   });
+
+  /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕照
+  /// [ReadableWidth.headerInsetOf] 往內收，[bottom] 跟著內容欄。書架這類
+  /// 鋪滿畫面的頁面設 false。
+  final bool readable;
 
   /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
   /// 左右兩側每個位置的按鈕包在 [GlassMorph] 裡，玻璃留著只改大小、內容
@@ -859,6 +870,13 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 onPressed: () => Navigator.maybePop(context),
               )
             : null);
+    // 清單頁在平板上有內容欄（[ReadableWidth]）：按鈕位置照
+    // [ReadableWidth.headerInsetOf]，頁首下方的搜尋框、分頁跟著內容欄。
+    final size = MediaQuery.sizeOf(context);
+    final contentSide = readable ? ReadableWidth.sideOf(size.width) : 0.0;
+    final buttonInset = readable
+        ? ReadableWidth.headerInsetOf(size)
+        : AppGrouped.margin;
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
@@ -931,9 +949,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   leading: !hasLeading
                       ? null
                       : Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppGrouped.margin,
-                          ),
+                          padding: EdgeInsets.only(left: buttonInset),
                           child: IconTheme.merge(
                             data: IconThemeData(color: fg),
                             child: slot(effectiveLeading),
@@ -948,9 +964,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   trailing: trailing.isEmpty
                       ? null
                       : Padding(
-                          padding: const EdgeInsets.only(
-                            right: AppGrouped.margin,
-                          ),
+                          padding: EdgeInsets.only(right: buttonInset),
                           child: IconTheme.merge(
                             data: IconThemeData(color: fg),
                             child: Row(
@@ -970,8 +984,8 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
             if (bottom != null)
               Positioned(
                 top: topPadding + _toolbarHeight,
-                left: 0,
-                right: 0,
+                left: contentSide,
+                right: contentSide,
                 height: bottomHeight,
                 child: bottom!,
               ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/scheduler.dart';
 
+import '../layout/readable_width.dart';
 import '../navigation/app_page_transition.dart';
 import '../navigation/transition_settled.dart';
 import '../theme/app_chrome.dart';
@@ -260,10 +261,12 @@ class GroupedListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.paddingOf(context);
-    final padding = EdgeInsets.only(
-      top: mediaPadding.top,
-      bottom: mediaPadding.bottom + bottomPadding,
-    );
+    final padding =
+        EdgeInsets.only(
+          top: mediaPadding.top,
+          bottom: mediaPadding.bottom + bottomPadding,
+        ) +
+        ReadableWidth.insetOf(context);
     return _GroupedEntrance(
       items: children,
       padding: padding,
