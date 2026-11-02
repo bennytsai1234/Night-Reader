@@ -497,6 +497,9 @@ final class LayoutPump implements HybridLayoutPump {
 
     final paragraphStyle = ui.ParagraphStyle(
       textDirection: ui.TextDirection.ltr,
+      textAlign: task.textStyle.center
+          ? ui.TextAlign.center
+          : ui.TextAlign.start,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
     );

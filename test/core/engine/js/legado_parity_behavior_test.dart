@@ -1,6 +1,7 @@
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/js/extensions/js_java_classes.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -19,6 +20,7 @@ void main() {
 
   setUp(() {
     if (skip != null) return;
+    JavaSystemProperties.reset();
     runtime = getJavascriptRuntime();
     JsExtensions(runtime).inject();
   });
@@ -235,6 +237,183 @@ void main() {
         [
           {'name': '一'},
         ],
+      );
+    }, skip: skip);
+
+    // Java 8 加進 Map 的方法；JS 函式當 Java 的 Function、BiFunction 傳進去
+    // （Rhino 會轉）。期望值是 Java HashMap 的結果。
+    test('Map compute, merge, putIfAbsent and replace follow Java', () {
+      expect(
+        eval(r'''
+          var m = new Packages.java.util.HashMap();
+          var calls = 0;
+          var a = m.computeIfAbsent("k", function(key) { calls++; return key + "1"; });
+          var b = m.computeIfAbsent("k", function(key) { calls++; return "x"; });
+          var n = m.computeIfAbsent("n", function(key) { return null; });
+          var p = m.computeIfPresent("k", function(key, v) { return v + "2"; });
+          var q = m.computeIfPresent("none", function(key, v) { return "x"; });
+          var c = m.compute("c", function(key, v) { return v == null ? 1 : v + 1; });
+          m.compute("c", function(key, v) { return v + 1; });
+          var g = m.merge("g", 5, function(o, v) { return o + v; });
+          m.merge("g", 5, function(o, v) { return o + v; });
+          m.merge("c", 0, function(o, v) { return null; });
+          var i1 = m.putIfAbsent("i", "first");
+          var i2 = m.putIfAbsent("i", "second");
+          var r1 = m.replace("i", "third");
+          var r2 = m.replace("none", "x");
+          var r3 = m.replace("i", "nope", "x");
+          [a, b, calls, String(n), m.containsKey("n"), p, String(q), c,
+           m.get("g"), m.containsKey("c"), String(i1), i2, r1, String(r2),
+           r3, m.get("i")].join("|")
+        '''),
+        'k1|k1|1|null|false|k12|null|1|10|false|null|first|first|null|'
+        'false|third',
+      );
+    }, skip: skip);
+
+    // 半夏小说把搜尋的限流時間存在 System.getProperties()，跨次執行共用。
+    test('System.getProperties is one Hashtable that keeps its entries', () {
+      eval(r'''
+        Packages.java.lang.System.getProperties().computeIfAbsent(
+          "app.next", function(k) {
+            return new Packages.java.util.concurrent.atomic.AtomicLong(0);
+          });
+        Packages.java.lang.System.getProperties().get("app.next").set(42);
+      ''');
+      expect(
+        eval(r'''
+          var p = Packages.java.lang.System.getProperties();
+          p.setProperty("a", "1");
+          [p.get("app.next").get(), p.getProperty("a"),
+           Packages.java.lang.System.getProperty("a"),
+           p.getProperty("none", "d"), String(p.getProperty("none")),
+           Packages.java.lang.System.getProperty("line.separator") === "\n",
+           Packages.java.lang.System.getProperty("java.vm.name")].join("|")
+        '''),
+        '42|1|1|d|null|true|Dalvik',
+      );
+    }, skip: skip);
+
+    // 夜讀每次解析開一個新的 JS 引擎；Legado 的系統屬性在 JVM 裡一直都在。
+    // 半夏小说的限流時間要在下一次搜尋還讀得到，AtomicLong 是同一個。
+    test('System.getProperties outlives the engine and shares atomics', () {
+      final other = getJavascriptRuntime();
+      addTearDown(other.dispose);
+      JsExtensions(other).inject();
+      String evalOther(String js) => other.evaluate(js).stringResult;
+
+      eval(r'''
+        var P = Packages.java.lang.System.getProperties();
+        var held = P.computeIfAbsent("rate.next", function(k) {
+          return new Packages.java.util.concurrent.atomic.AtomicLong(5);
+        });
+        held.incrementAndGet();
+        P.put("obj", {a: [1]});
+        P.put(1, "number key");
+      ''');
+      expect(
+        evalOther(r'''
+          var P = Packages.java.lang.System.getProperties();
+          var a = P.get("rate.next");
+          var before = a.get();
+          a.compareAndSet(6, 100);
+          [before, a.get(), JSON.stringify(P.get("obj")), P.get(1),
+           String(P.get("1")), P.containsKey("rate.next"),
+           P["rate.next"] === undefined ? "no" : "mirrored"].join("|")
+        '''),
+        '6|100|{"a":[1]}|number key|null|true|mirrored',
+      );
+      // 原本那個引擎手上的 AtomicLong 看得到別的引擎改的值；同一個引擎放進去的
+      // 物件拿回同一個。
+      expect(
+        eval(r'''
+          var P = Packages.java.lang.System.getProperties();
+          [held.get(), P.get("obj") === P.get("obj"),
+           P.get("rate.next") === held,
+           P.get("rate.next").getAndAdd(1), held.get()].join("|")
+        '''),
+        '100|true|true|100|101',
+      );
+      evalOther(
+        'Packages.java.lang.System.getProperties().remove("rate.next")',
+      );
+      expect(
+        eval(r'''
+          var P = Packages.java.lang.System.getProperties();
+          [P.containsKey("rate.next"), "rate.next" in P].join("|")
+        '''),
+        'false|false',
+      );
+    }, skip: skip);
+
+    // Java HashMap：函式是 null、merge 的值是 null 時先丟 NullPointerException，
+    // 不執行也不寫入；三個參數的 replace、containsValue、remove(k, v) 用 equals。
+    test('Map methods reject nulls and compare with equals like Java', () {
+      expect(
+        eval(r'''
+          var m = new Packages.java.util.HashMap();
+          m.put("k", "v");
+          var out = [];
+          [function() { m.merge("k", null, function(a, b) { return a + b; }); },
+           function() { m.merge("n", "x", null); },
+           function() { m.computeIfAbsent("n", null); },
+           function() { m.computeIfPresent("k", null); },
+           function() { m.compute("k", null); }].forEach(function(f) {
+            try { f(); out.push("ok"); } catch (e) { out.push(e.javaClass); }
+          });
+          var JS = Packages.java.lang.String;
+          var r1 = m.replace("k", new JS("v"), "w");
+          var r2 = m.replace(new JS("k"), "w", new JS("x"));
+          var r3 = m.replace("k", "nope", "y");
+          m.put(null, null);
+          [out.join(","), m.get("k"), m.containsKey("n"), r1, r2, r3,
+           m.containsValue("x"), m.containsKey(null), m.remove("k", "z"),
+           m.remove("k", new JS("x")), m.containsKey("k"),
+           new JS("a").equals("a"), "a" == new JS("a")].join("|")
+        '''),
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException|x|false|true|true|false|true|true|'
+        'false|true|false|true|true',
+      );
+    }, skip: skip);
+
+    // Properties 是 Hashtable：null 鍵、null 值丟 NPE（compute 類算出 null
+    // 照舊是移除）；鍵和方法同名時方法照樣能用；stringPropertyNames 只列鍵和值
+    // 都是文字的。
+    test('Properties follows Hashtable and keeps its own methods', () {
+      expect(
+        eval(r'''
+          var p = new Packages.java.util.Properties();
+          var out = [];
+          [function() { p.put(null, "v"); },
+           function() { p.put("k", null); },
+           function() { p.get(null); },
+           function() { p.setProperty("k", null); },
+           function() { p.putIfAbsent("k", null); }].forEach(function(f) {
+            try { f(); out.push("ok"); } catch (e) { out.push(e.javaClass); }
+          });
+          p.put("getProperty", "g");
+          p.put("stringPropertyNames", new Packages.java.lang.String("s"));
+          p.put("n", 1);
+          p.put(2, "two");
+          p.put("c", "x");
+          p.compute("c", function(k, v) { return null; });
+          try { p.remove("n", null); out.push("ok"); } catch (e) { out.push(e.javaClass); }
+          // 和內部欄位同名的鍵照樣是一般的鍵。
+          var t = new Packages.java.util.TreeMap();
+          t.put("_cmp", "x"); t.put("_m", "y"); t.put("b", 1);
+          out.push(t.keySet().join("+"), t.get("_m"));
+          var S = Packages.java.lang.System.getProperties();
+          S.put("_m", "z");
+          out.push(S.get("_m"), Packages.java.lang.System.getProperty("_m"));
+          [out.join(","), p.getProperty("getProperty"),
+           p.stringPropertyNames().join(","), p.containsKey("c")].join("|")
+        '''),
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        '_cmp+_m+b,y,z,z|g|getProperty,stringPropertyNames|false',
       );
     }, skip: skip);
 

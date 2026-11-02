@@ -172,4 +172,96 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('沒有標註'), findsOneWidget);
   });
+
+  testWidgets('volumes read before the current one open collapsed; tapping a '
+      'volume collapses or expands it, and the scrollbar counts rows', (
+    tester,
+  ) async {
+    final chapters = [
+      BookChapter(url: '/v1', title: '第一卷 雨夜書鋪', isVolume: true),
+      BookChapter(url: '/c/1', title: '第1章 開門'),
+      BookChapter(url: '/c/2', title: '第2章 雨'),
+      BookChapter(url: '/v2', title: '第二卷 夜讀', isVolume: true),
+      BookChapter(url: '/c/3', title: '第3章 少年'),
+      BookChapter(url: '/c/4', title: '第4章 匣蓋'),
+    ];
+    final tapped = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderV2ChaptersDrawer(
+            chapters: chapters,
+            currentChapter: ValueNotifier(4),
+            titleFor: (index) => chapters[index].title,
+            onChapterTap: tapped.add,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('共 4 章'), findsOneWidget);
+    expect(find.text('2 章'), findsNWidgets(2));
+    expect(find.text('第1章 開門'), findsNothing);
+    expect(find.text('第3章 少年'), findsOneWidget);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+    await tester.tap(find.text('第一卷 雨夜書鋪'));
+    await tester.pump();
+    expect(find.text('第1章 開門'), findsOneWidget);
+    expect(tapped, isEmpty, reason: '點分卷只收起或展開，不跳過去');
+
+    await tester.tap(find.text('第二卷 夜讀'));
+    await tester.pump();
+    expect(find.text('第3章 少年'), findsNothing);
+
+    // 卷內的章往右縮一個字：比卷名的字往右。
+    final volumeLeft = tester.getTopLeft(find.text('第一卷 雨夜書鋪')).dx;
+    final chapterLeft = tester.getTopLeft(find.text('第1章 開門')).dx;
+    expect(chapterLeft - volumeLeft, closeTo(15, 0.5));
+
+    await tester.tap(find.text('第1章 開門'));
+    expect(tapped, [1]);
+  });
+
+  testWidgets('moving to a volume row expands it; a new copy of the table of '
+      'contents with chapters added at the end keeps what was collapsed', (
+    tester,
+  ) async {
+    BookChapter chapter(String title, {bool volume = false}) =>
+        BookChapter(url: '/$title', title: title, isVolume: volume);
+    var chapters = [
+      chapter('第一卷', volume: true),
+      chapter('第1章'),
+      chapter('第二卷', volume: true),
+      chapter('第2章'),
+    ];
+    final current = ValueNotifier(1);
+    Widget drawer() => MaterialApp(
+      home: Scaffold(
+        body: ReaderV2ChaptersDrawer(
+          chapters: chapters,
+          currentChapter: current,
+          titleFor: (index) => chapters[index].title,
+          onChapterTap: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpWidget(drawer());
+
+    await tester.tap(find.text('第二卷'));
+    await tester.pump();
+    expect(find.text('第2章'), findsNothing);
+    current.value = 2;
+    await tester.pump();
+    expect(find.text('第2章'), findsOneWidget);
+
+    await tester.tap(find.text('第一卷'));
+    await tester.pump();
+    expect(find.text('第1章'), findsNothing);
+    chapters = [...chapters, chapter('第3章')];
+    await tester.pumpWidget(drawer());
+    expect(find.text('第1章'), findsNothing);
+    expect(find.text('第3章'), findsOneWidget);
+    expect(find.text('共 3 章'), findsOneWidget);
+  });
 }

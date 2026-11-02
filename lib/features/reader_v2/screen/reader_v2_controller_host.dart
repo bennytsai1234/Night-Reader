@@ -466,6 +466,8 @@ class ReaderV2ControllerHost {
         paddingLeft: style.paddingLeft,
         paddingRight: style.paddingRight,
         bold: style.bold,
+        titleBold: style.titleBold,
+        titleCenter: style.titleCenter,
         textIndent: style.textIndent,
         titleFontSize: style.titleFontSize,
         titleSpacing: style.titleSpacing,

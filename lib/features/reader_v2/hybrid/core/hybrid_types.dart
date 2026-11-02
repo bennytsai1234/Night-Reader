@@ -97,6 +97,8 @@ final class StyleFingerprint {
     this.chapterSpacing = 1.0,
     required this.textIndent,
     required this.bold,
+    this.titleBold = true,
+    this.titleCenter = false,
     required this.textScaleFactor,
     required this.fontFamilySignature,
     required this.platformFontSignature,
@@ -123,6 +125,8 @@ final class StyleFingerprint {
       chapterSpacing: style.chapterSpacing,
       textIndent: style.textIndent,
       bold: style.bold,
+      titleBold: style.titleBold,
+      titleCenter: style.titleCenter,
       textScaleFactor: textScaleFactor,
       fontFamilySignature: fontFamilySignature,
       platformFontSignature: platformFontSignature,
@@ -146,6 +150,10 @@ final class StyleFingerprint {
   final double chapterSpacing;
   final int textIndent;
   final bool bold;
+
+  /// 標題加粗與置中改變標題 block 的折行與量測，必須進入快取鍵。
+  final bool titleBold;
+  final bool titleCenter;
   final double textScaleFactor;
   final String fontFamilySignature;
   final String platformFontSignature;
@@ -167,6 +175,8 @@ final class StyleFingerprint {
     chapterSpacing,
     textIndent,
     bold,
+    titleBold,
+    titleCenter,
     textScaleFactor,
     fontFamilySignature,
     platformFontSignature,
@@ -185,6 +195,8 @@ final class StyleFingerprint {
     chapterSpacing,
     textIndent,
     bold,
+    titleBold,
+    titleCenter,
     textScaleFactor,
     fontFamilySignature,
     platformFontSignature,
@@ -205,6 +217,8 @@ final class StyleFingerprint {
         other.chapterSpacing == chapterSpacing &&
         other.textIndent == textIndent &&
         other.bold == bold &&
+        other.titleBold == titleBold &&
+        other.titleCenter == titleCenter &&
         other.textScaleFactor == textScaleFactor &&
         other.fontFamilySignature == fontFamilySignature &&
         other.platformFontSignature == platformFontSignature &&
@@ -752,6 +766,7 @@ final class HybridBlockTextStyle {
     required this.lineHeight,
     required this.letterSpacing,
     this.bold = false,
+    this.center = false,
   });
 
   factory HybridBlockTextStyle.fromLayoutStyle(
@@ -762,7 +777,8 @@ final class HybridBlockTextStyle {
       fontSize: isTitle ? style.titleFontSize : style.fontSize,
       lineHeight: style.effectiveLineHeight,
       letterSpacing: style.letterSpacing,
-      bold: isTitle || style.bold,
+      bold: isTitle ? style.titleBold : style.bold,
+      center: isTitle && style.titleCenter,
     );
   }
 
@@ -770,6 +786,10 @@ final class HybridBlockTextStyle {
   final double lineHeight;
   final double letterSpacing;
   final bool bold;
+
+  /// 每一行在欄內置中（章節標題的「置中」）。只在排出要畫的段落時套用；
+  /// 量字形與折行時一律從左緣起算。
+  final bool center;
 }
 
 final class LayoutTask {

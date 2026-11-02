@@ -46,6 +46,7 @@
 | [0019](0019-justify-by-spreading-residual-into-letter-spacing.md) | 左右對齊把湊不滿一格的空隙攤進字距 |
 | [0026](0026-kinsoku-spreads-into-the-pulled-line.md) | 換行做避頭尾，被拉字的那一行把空隙攤進字距（取代 0005） |
 | [0006](0006-tap-page-turn-scrolls-one-screen.md) | 點擊翻頁就是捲動一屏，不做分頁模式 |
+| [0043](0043-reader-weight-title-and-info-size-are-settings.md) | 正文粗細、章節標題粗細與對齊、頁首頁尾字級是閱讀設定（使用者點名要調，不照「選定即固定」） |
 
 ## 書源與下載
 

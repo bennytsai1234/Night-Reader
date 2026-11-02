@@ -10,6 +10,11 @@ import 'package:night_reader/core/engine/rule_analyzer.dart';
 /// 使用 Dart `xpath_selector` + `xpath_selector_html_parser` 套件
 class AnalyzeByXPath {
   late HtmlXPath _xpath;
+
+  /// 相對路徑（`div[2]/a/@href`，開頭沒有 `/`）的起點：解析的是元素時是那個
+  /// 元素，是整份網頁時是網頁本身，同 Legado（JsoupXpath 從 JXNode 或
+  /// JXDocument 的節點往下找）。
+  late HtmlXPath _contextXPath;
   late Element _domRoot;
   Element? _bodyCompatRoot;
   static final RegExp _customFunctionPattern = RegExp(
@@ -45,6 +50,7 @@ class AnalyzeByXPath {
     _domRoot = document.documentElement ?? document.body!;
     _bodyCompatRoot = _buildBodyCompatRoot(html);
     _xpath = HtmlXPath.html(html);
+    _contextXPath = HtmlXPath.node(document);
   }
 
   void _initFromElement(Element element) {
@@ -54,6 +60,35 @@ class AnalyzeByXPath {
     _domRoot = wrapper;
     _bodyCompatRoot = wrapper;
     _xpath = HtmlXPath.html(wrapper.outerHtml);
+    // 直接從原本的元素查，不重新解析：表格的一列（`<tr>`）重新解析時標籤會
+    // 被丟掉。
+    _contextXPath = HtmlXPath.node(element);
+  }
+
+  /// 相對路徑：第一步是元素名稱（`div[2]/…`、`item`），不是 `/`、`(`、`.`、
+  /// `@` 或函式開頭。
+  static final RegExp _relativeStart = RegExp(r'^[A-Za-z_*][\w.:-]*(?:\[|/|$)');
+
+  /// 照每一段（`|` 分開）的開頭決定起點：相對路徑從 [_contextXPath] 查，其餘
+  /// 照舊從整份查。兩種混在一起時各段分開查，結果照順序接起來、去掉重複。
+  XPathResult<Node> _query(String rule) {
+    final parts = rule.split('|');
+    bool isRelative(String part) => _relativeStart.hasMatch(part.trim());
+    final relative = parts.map(isRelative).toSet();
+    if (relative.length == 1) {
+      return (relative.single ? _contextXPath : _xpath).query(rule);
+    }
+    final nodes = <XPathNode<Node>>[];
+    final attrs = <String?>[];
+    for (final part in parts) {
+      final result = (isRelative(part) ? _contextXPath : _xpath).query(part);
+      for (var i = 0; i < result.nodes.length; i++) {
+        if (nodes.contains(result.nodes[i])) continue;
+        nodes.add(result.nodes[i]);
+        if (i < result.attrs.length) attrs.add(result.attrs[i]);
+      }
+    }
+    return XPathResult(nodes, attrs);
   }
 
   Element? _buildBodyCompatRoot(String html) {
@@ -159,7 +194,7 @@ class AnalyzeByXPath {
         return _applyCustomFunction(nodes, functionName);
       }
 
-      final queryResult = _xpath.query(rule);
+      final queryResult = _query(rule);
 
       // 1. 處理屬性提取 /@attr 或 /attr()
       if (rule.contains('/@')) {
@@ -296,7 +331,7 @@ class AnalyzeByXPath {
   }
 
   List<dynamic> _queryNodesCompat(String rule) {
-    final nodes = _xpath.query(rule).nodes;
+    final nodes = _query(rule).nodes;
     if (nodes.isNotEmpty) {
       return nodes;
     }
