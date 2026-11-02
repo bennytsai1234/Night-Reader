@@ -125,6 +125,10 @@ class LoginCookieSync extends LoginDataSync {
 }
 
 /// 網路請求收到、存在 Cookie 檔裡的 Cookie，一個 Cookie 一筆。
+///
+/// 一筆的身分是存放的網域與路徑、名稱，加上適用範圍：只給這個主機用的，
+/// 或帶 Domain 屬性、子網域也帶得出去的。同名同路徑的兩種可以同時存在
+/// （Cookie 檔分開存），所以適用範圍也在鍵裡，不然其中一筆會被蓋掉。
 class LoginCookieJarSync extends LoginDataSync {
   LoginCookieJarSync({CookieJar? cookieJar}) : _jar = cookieJar;
 
@@ -149,6 +153,18 @@ class LoginCookieJarSync extends LoginDataSync {
     return uri != null && uri.hasScheme && uri.host.isNotEmpty;
   }
 
+  /// 主機限定的鍵維持 `網址|名稱`，和舊版一樣，已經上傳的紀錄照樣對得上；
+  /// 帶 Domain 屬性的多一段 `|domain=網域`。
+  static String keyOf(String url, io.Cookie cookie) {
+    final domain = cookie.domain?.toLowerCase().replaceFirst(
+      RegExp(r'^\.'),
+      '',
+    );
+    return domain == null || domain.isEmpty
+        ? '$url|${cookie.name}'
+        : '$url|${cookie.name}|domain=$domain';
+  }
+
   @override
   Future<Map<String, SyncRecord>> local() async {
     final records = <String, SyncRecord>{};
@@ -158,7 +174,7 @@ class LoginCookieJarSync extends LoginDataSync {
           CloudflareInterceptor.isCloudflareCookie(cookie.name)) {
         continue;
       }
-      records['${entry['url']}|${cookie.name}'] = SyncRecord(
+      records[keyOf(entry['url']!, cookie)] = SyncRecord(
         time: 0,
         data: {'url': entry['url'], 'cookie': entry['cookie']},
       );
@@ -166,16 +182,33 @@ class LoginCookieJarSync extends LoginDataSync {
     return records;
   }
 
+  /// 拿掉過期的，並把鍵換成現在的寫法：舊版的鍵不分適用範圍，雲端上
+  /// 帶 Domain 的 Cookie 可能還放在 `網址|名稱`；不換的話，它會被當成另一筆
+  /// 套用，把比較舊的內容蓋到這台已有的同一個 Cookie 上。同一個 Cookie 在
+  /// 雲端有新舊兩個鍵時留時間新的，一樣新就留已經是新鍵的那筆。
   @override
   Map<String, SyncRecord> prune(Map<String, SyncRecord> remote) {
     final now = DateTime.now();
-    return {
-      for (final entry in remote.entries)
-        if (_parse(entry.value.data['cookie']) case final cookie?
-            when _validUrl(entry.value.data['url']) &&
-                (cookie.expires == null || cookie.expires!.isAfter(now)))
-          entry.key: entry.value,
-    };
+    final pruned = <String, SyncRecord>{};
+    for (final MapEntry(key: oldKey, value: record) in remote.entries) {
+      if (record.data
+          case {'url': final String url, 'cookie': final Object? raw}
+          when _validUrl(url)) {
+        final cookie = _parse(raw);
+        if (cookie == null ||
+            (cookie.expires != null && !cookie.expires!.isAfter(now))) {
+          continue;
+        }
+        final key = keyOf(url, cookie);
+        final kept = pruned[key];
+        if (kept == null ||
+            record.time > kept.time ||
+            (record.time == kept.time && oldKey == key)) {
+          pruned[key] = record;
+        }
+      }
+    }
+    return pruned;
   }
 
   @override

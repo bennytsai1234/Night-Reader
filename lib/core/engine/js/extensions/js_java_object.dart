@@ -738,7 +738,12 @@ extension JsJavaObject on JsExtensionsBase {
             [String(rule), __lrContentArg(content), !!isUrl]
           )));
         },
-        getElement: function(rule) { return __lrJsoupDecode(sendMessage('ruleGetElement', JSON.stringify(String(rule)))); },
+        // CSS、XPath 規則同 Legado 交回一組元素（Jsoup 的 Elements），找不到時
+        // 是空的一組。
+        getElement: function(rule) {
+          var found = __lrJsoupDecode(sendMessage('ruleGetElement', JSON.stringify(String(rule))));
+          return Array.isArray(found) ? __lrJsoupElements(found) : found;
+        },
         getElements: function(rule) {
           var found = __lrJsoupDecode(sendMessage('ruleGetElements', JSON.stringify(String(rule))));
           return Array.isArray(found) ? __lrJsoupElements(found) : found;

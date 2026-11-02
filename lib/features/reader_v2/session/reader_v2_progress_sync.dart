@@ -15,6 +15,7 @@ import 'reader_v2_state.dart';
 /// 閱讀器這一頭的進度同步（ADR 0039）。同步在開 App 與回到 App 時做，
 /// 開書不連網：接著上次讀的地方開書時，那次同步的閱讀進度還沒做完就等它
 /// （最多 [openGrace]），再照這台資料庫裡的位置開，書就在另一台讀到的地方。
+/// 等不及的話先照這台的位置開，進度晚到時讀者還沒動就跳過去。
 /// 讀書途中 App 回到前景時抓這本書的雲端進度，比這台新就跳過去。離開閱讀
 /// 器、App 退到背景時把進度存好再上傳。
 class ReaderV2ProgressSync {
@@ -51,7 +52,10 @@ class ReaderV2ProgressSync {
 
   AppLifecycleListener? _lifecycle;
   Timer? _graceTimer;
-  Completer<void>? _grace;
+  Completer<bool>? _grace;
+
+  /// 開書時等不及的那次同步：進度晚到時，書已經開在這台的舊位置了。
+  Future<void>? _lateProgress;
   bool _marked = false;
   bool _opened = false;
   bool _disposed = false;
@@ -76,7 +80,9 @@ class ReaderV2ProgressSync {
   Future<ReaderV2Location?> openLocation(ReaderV2Runtime runtime) async {
     if (!_resumes) return null;
     final ready = _sync.progressReady;
-    if (ready != null) await _within(ready, openGrace);
+    if (ready != null && !await _within(ready, openGrace)) {
+      _lateProgress = ready;
+    }
     if (_disposed || runtime.disposed) return null;
     _markOpen();
     final Book? stored;
@@ -95,6 +101,25 @@ class ReaderV2ProgressSync {
   void bookOpened() {
     _opened = true;
     _markOpen();
+    final late = _lateProgress;
+    _lateProgress = null;
+    if (late != null) unawaited(_catchUp(late));
+  }
+
+  /// 開書時進度還沒同步完、先照這台的位置開了：等那次同步做完，讀者還沒
+  /// 動就跳到另一台的位置。這本書已經記成開著，背景同步不會改它，不接的話
+  /// 要等下次回到前景才接得上；讀者已經翻頁或捲動的話，這台的位置比較新，
+  /// 不蓋掉。
+  Future<void> _catchUp(Future<void> syncing) async {
+    final since = _runtime()?.state.visibleLocation;
+    if (since == null) return;
+    await syncing;
+    final runtime = _runtime();
+    if (!_isReady(runtime) ||
+        !_samePlace(runtime!.state.visibleLocation, since)) {
+      return;
+    }
+    await _jumpIfStill(await _sync.pullProgress(book.bookUrl), since);
   }
 
   void _onShow() => unawaited(_pullAfterResume());
@@ -121,7 +146,7 @@ class ReaderV2ProgressSync {
               AppLog.e('存進度失敗', error: error, stackTrace: stackTrace);
             },
           )
-          .whenComplete(_sync.requestSync),
+          .whenComplete(_sync.requestSyncProgressFirst),
     );
   }
 
@@ -146,13 +171,11 @@ class ReaderV2ProgressSync {
         index != current.chapterIndex ||
         (target.charOffset - current.charOffset).abs() > nearChars;
     if (jumps) {
-      await runtime.jumpToLocation(target);
-      // 那一章取不到（要登入、載入失敗）或被別的操作取代時，跳轉照樣正常
-      // 結束、畫面留在原處：不提示、不記成已同步，下次回到前景再試。
-      if (!_isReady(runtime) ||
-          runtime.state.visibleLocation.chapterIndex != index) {
-        return;
-      }
+      final reached = await runtime.jumpToLocation(target);
+      // 沒定位到目標（那一章取不到、使用者自己捲動而作廢、被別的操作取代）
+      // 時，跳轉照樣正常結束、畫面留在原處：不提示、不記成已同步，下次回到
+      // 前景再試。同一章內的跳轉也一樣，不能只看章節序號。
+      if (!reached || !_isReady(runtime)) return;
     }
     await runtime.flushProgress();
     if (_disposed) return;
@@ -170,17 +193,18 @@ class ReaderV2ProgressSync {
   static bool _samePlace(ReaderV2Location a, ReaderV2Location b) =>
       a.chapterIndex == b.chapterIndex && a.charOffset == b.charOffset;
 
-  /// 等 [future]，最多 [limit]；閱讀器關掉時馬上結束。
-  Future<void> _within(Future<void> future, Duration limit) {
-    final grace = _grace = Completer<void>();
-    void finish() {
+  /// 等 [future]，最多 [limit]；傳回它有沒有在時限內完成。閱讀器關掉時馬上
+  /// 結束（傳回 false）。
+  Future<bool> _within(Future<void> future, Duration limit) {
+    final grace = _grace = Completer<bool>();
+    void finish(bool done) {
       _graceTimer?.cancel();
       _graceTimer = null;
-      if (!grace.isCompleted) grace.complete();
+      if (!grace.isCompleted) grace.complete(done);
     }
 
-    _graceTimer = Timer(limit, finish);
-    unawaited(future.whenComplete(finish));
+    _graceTimer = Timer(limit, () => finish(false));
+    unawaited(future.whenComplete(() => finish(true)));
     return grace.future;
   }
 
@@ -190,7 +214,7 @@ class ReaderV2ProgressSync {
     _graceTimer?.cancel();
     _graceTimer = null;
     final grace = _grace;
-    if (grace != null && !grace.isCompleted) grace.complete();
+    if (grace != null && !grace.isCompleted) grace.complete(false);
     _lifecycle?.dispose();
     if (_marked) _sync.closeBook(book);
     _upload(_runtime());
