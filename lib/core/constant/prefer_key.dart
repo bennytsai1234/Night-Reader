@@ -205,6 +205,10 @@ class PreferKey {
   static const String readerTitleBold = 'reader_title_bold';
   static const String readerTitleCenter = 'reader_title_center';
 
+  /// 正文字型與 App 介面字型（[AppFont.id]，ADR 0045）。
+  static const String readerFont = 'reader_font';
+  static const String uiFont = 'ui_font';
+
   /// 閱讀器亮度跟隨系統；關閉時用 [readerBrightness]。
   static const String readerBrightnessAuto = 'reader_brightness_auto';
 

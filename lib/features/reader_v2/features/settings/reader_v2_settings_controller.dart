@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
+import 'package:night_reader/core/fonts/font_library.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
@@ -33,7 +36,20 @@ class ReaderV2SettingsController extends ChangeNotifier {
       _persisted = ReaderV2PrefsSnapshot.defaults();
     }
     _initFromCache(_persisted);
+    _fonts.changes.addListener(_onFontsChanged);
+    // 另一台選了這台還沒下載的字型：開書時在背景下載，好了再換上。
+    unawaited(_fonts.ensure(readerFont));
   }
+
+  FontLibrary get _fonts => FontLibrary.instance;
+
+  /// 字型下載好、註冊了：正文照新的字族重排。
+  void _onFontsChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
+  /// 正文目前用的字族；選的字型還不能用時是 null（系統字型）。
+  String? get readerFontFamily => _fonts.familyOf(readerFont);
 
   static const double minReadableLineHeight =
       ReaderV2Style.minReadableLineHeight;
@@ -101,6 +117,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool titleBold = ReaderV2PrefsSnapshot.defaults().titleBold;
   bool titleCenter = ReaderV2PrefsSnapshot.defaults().titleCenter;
   double infoFontSize = ReaderV2PrefsSnapshot.defaults().infoFontSize;
+  AppFont readerFont = ReaderV2PrefsSnapshot.defaults().readerFont;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
@@ -177,11 +194,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
     titleBold = snapshot.titleBold;
     titleCenter = snapshot.titleCenter;
     infoFontSize = snapshot.infoFontSize;
+    readerFont = snapshot.readerFont;
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _fonts.changes.removeListener(_onFontsChanged);
     unawaited(_saveFailures.close());
     super.dispose();
   }
@@ -223,6 +242,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     fontSize: fontSize,
     letterSpacing: letterSpacing,
     bold: bodyBold,
+    fontFamilyFallback: readerV2FontFallback(readerFontFamily),
   );
 
   /// 畫面寬 [viewportWidth] 時一行最多放得下幾個字（兩側留最少留白）。
@@ -245,6 +265,22 @@ class ReaderV2SettingsController extends ChangeNotifier {
         cellWidth: cellWidth,
         lineChars: lineChars,
       );
+
+  /// 閱讀選單與面板最窄的寬度：下方選單的一排圓鈕與面板的步進列在這個
+  /// 寬度都放得下（一般手機的寬度）。
+  static const double menuMinWidth = 360;
+
+  /// 閱讀選單與面板左右對齊的位置（畫面寬 [viewportWidth]）：正文欄照
+  /// 每行字數收窄時，上下選單與面板的左右緣對齊正文的左右邊，但不窄過
+  /// [menuMinWidth]；沒收窄（手機直拿）時是 null，選單照原本離邊 16、
+  /// 面板照預設寬度。
+  double? menuSideFor(double viewportWidth) {
+    final side = math.min(
+      paddingHorizontalFor(viewportWidth),
+      (viewportWidth - menuMinWidth) / 2,
+    );
+    return side > paddingHorizontal ? side : null;
+  }
 
   ReaderV2Style readStyleFor(
     EdgeInsets mediaPadding, {
@@ -273,6 +309,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       bold: bodyBold,
       titleBold: titleBold,
       titleCenter: titleCenter,
+      fontFamily: readerFontFamily,
       textIndent: textIndent,
       titleFontSize: titleFontSize,
       titleSpacing: titleSpacing,
@@ -397,13 +434,15 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 將字號、標題、行高、字距、段距、章節間距、首行縮排與粗細、標題對齊
+  /// 將字號、標題、行高、字距、段距、章節間距、首行縮排、粗細、標題對齊與
+  /// 正文字型
   /// 恢復為預設值。
   void resetTypography() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setBodyBold(defaults.bodyBold, force: true);
     setTitleBold(defaults.titleBold, force: true);
     setTitleCenter(defaults.titleCenter, force: true);
+    setReaderFont(defaults.readerFont, force: true);
     setTypography(
       fontSize: defaults.fontSize,
       titleFontSize: defaults.titleFontSize,
@@ -416,12 +455,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
-  /// 正文粗細、標題粗細與標題對齊是否都是預設值。
-  bool get isWeightAndAlignDefault {
+  /// 正文粗細、標題粗細、標題對齊與正文字型是否都是預設值。
+  bool get isTypographyChoicesDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     return bodyBold == defaults.bodyBold &&
         titleBold == defaults.titleBold &&
-        titleCenter == defaults.titleCenter;
+        titleCenter == defaults.titleCenter &&
+        readerFont == defaults.readerFont;
   }
 
   void setBodyBold(bool value, {bool force = false}) {
@@ -457,6 +497,20 @@ class ReaderV2SettingsController extends ChangeNotifier {
       onSaved: (p) => p.copyWith(titleCenter: value),
       restore: (p) => titleCenter = p.titleCenter,
     );
+    notifyListeners();
+  }
+
+  /// 正文字型；選了還沒下載的就開始下載，好了才換上（[_onFontsChanged]）。
+  void setReaderFont(AppFont value, {bool force = false}) {
+    if (readerFont == value && !force) return;
+    readerFont = value;
+    _persist(
+      'readerFont',
+      () => _prefsRepository.saveReaderFont(value),
+      onSaved: (p) => p.copyWith(readerFont: value),
+      restore: (p) => readerFont = p.readerFont,
+    );
+    unawaited(_fonts.ensure(value));
     notifyListeners();
   }
 

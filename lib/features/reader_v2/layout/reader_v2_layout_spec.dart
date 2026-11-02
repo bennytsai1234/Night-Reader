@@ -38,6 +38,7 @@ class ReaderV2LayoutStyle {
     this.bold = false,
     this.titleBold = true,
     this.titleCenter = false,
+    this.fontFamily,
     this.textIndent = 0,
     double? titleFontSize,
     this.titleSpacing = 0.0,
@@ -58,6 +59,9 @@ class ReaderV2LayoutStyle {
   final bool bold;
   final bool titleBold;
   final bool titleCenter;
+
+  /// 字族（ADR 0045）；null 是系統字型。
+  final String? fontFamily;
   final int textIndent;
   final double titleFontSize;
 
@@ -305,6 +309,7 @@ class ReaderV2LayoutSpec {
             bold: style.bold,
             titleBold: style.titleBold,
             titleCenter: style.titleCenter,
+            fontFamily: style.fontFamily,
             textIndent: style.textIndent,
             titleFontSize: style.titleFontSize,
             titleSpacing: style.titleSpacing,
@@ -343,6 +348,7 @@ class ReaderV2LayoutSpec {
       style.bold,
       style.titleBold,
       style.titleCenter,
+      style.fontFamily,
       style.titleFontSize,
       style.titleSpacing,
       kReaderV2CjkTypographyFeatureSignature,

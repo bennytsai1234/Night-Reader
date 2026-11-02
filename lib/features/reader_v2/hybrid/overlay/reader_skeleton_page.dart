@@ -72,6 +72,7 @@ final class ReaderSkeletonPage {
       style.bold,
       style.titleBold,
       style.titleCenter,
+      style.fontFamily,
       style.textIndent,
       style.titleFontSize,
       style.titleSpacing,

@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_font_picker_row.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
@@ -17,8 +18,8 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果
-/// 與換頁動畫。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
+/// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
+/// 換頁動畫與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
 /// 載入骨架的深淺、呼吸與換場不給選，固定用 `SkeletonLook`、
 /// `SkeletonReveal` 的預設。
 class AppearanceSettingsPage extends StatelessWidget {
@@ -115,6 +116,11 @@ class AppearanceSettingsPage extends StatelessWidget {
                     onPicked: themeSettings.setPageTransition,
                   ),
                 ),
+              ),
+              AppFontPickerRow(
+                title: '介面字型',
+                value: themeSettings.uiFont,
+                onChanged: themeSettings.setUiFont,
               ),
             ],
           ),

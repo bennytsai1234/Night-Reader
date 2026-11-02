@@ -14,6 +14,7 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_contr
 import 'package:night_reader/features/reader_v2/hybrid/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
@@ -440,6 +441,7 @@ class ReaderV2ControllerHost {
           fontSize: style.fontSize,
           letterSpacing: letterSpacing,
           bold: style.bold,
+          fontFamilyFallback: readerV2FontFallback(style.fontFamily),
         );
     var letterSpacing = style.letterSpacing;
     var cellWidth = measureCell(letterSpacing);
@@ -468,6 +470,7 @@ class ReaderV2ControllerHost {
         bold: style.bold,
         titleBold: style.titleBold,
         titleCenter: style.titleCenter,
+        fontFamily: style.fontFamily,
         textIndent: style.textIndent,
         titleFontSize: style.titleFontSize,
         titleSpacing: style.titleSpacing,
