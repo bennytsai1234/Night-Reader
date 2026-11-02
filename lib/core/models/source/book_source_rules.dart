@@ -1,3 +1,5 @@
+import 'package:night_reader/core/models/json_read.dart';
+
 /// BookSource 的子規則類別定義 (對齊 Android Legado rule/)
 class SearchRule {
   String? checkKeyWord,
@@ -27,17 +29,17 @@ class SearchRule {
   });
 
   factory SearchRule.fromJson(Map<String, dynamic> json) => SearchRule(
-    checkKeyWord: json['checkKeyWord'],
-    bookList: json['bookList'],
-    name: json['name'],
-    author: json['author'],
-    intro: json['intro'],
-    kind: json['kind'],
-    lastChapter: json['lastChapter'],
-    updateTime: json['updateTime'],
-    bookUrl: json['bookUrl'],
-    coverUrl: json['coverUrl'],
-    wordCount: json['wordCount'],
+    checkKeyWord: readJsonString(json['checkKeyWord']),
+    bookList: readJsonString(json['bookList']),
+    name: readJsonString(json['name']),
+    author: readJsonString(json['author']),
+    intro: readJsonString(json['intro']),
+    kind: readJsonString(json['kind']),
+    lastChapter: readJsonString(json['lastChapter']),
+    updateTime: readJsonString(json['updateTime']),
+    bookUrl: readJsonString(json['bookUrl']),
+    coverUrl: readJsonString(json['coverUrl']),
+    wordCount: readJsonString(json['wordCount']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -81,16 +83,16 @@ class ExploreRule {
   });
 
   factory ExploreRule.fromJson(Map<String, dynamic> json) => ExploreRule(
-    bookList: json['bookList'],
-    name: json['name'],
-    author: json['author'],
-    intro: json['intro'],
-    kind: json['kind'],
-    lastChapter: json['lastChapter'],
-    updateTime: json['updateTime'],
-    bookUrl: json['bookUrl'],
-    coverUrl: json['coverUrl'],
-    wordCount: json['wordCount'],
+    bookList: readJsonString(json['bookList']),
+    name: readJsonString(json['name']),
+    author: readJsonString(json['author']),
+    intro: readJsonString(json['intro']),
+    kind: readJsonString(json['kind']),
+    lastChapter: readJsonString(json['lastChapter']),
+    updateTime: readJsonString(json['updateTime']),
+    bookUrl: readJsonString(json['bookUrl']),
+    coverUrl: readJsonString(json['coverUrl']),
+    wordCount: readJsonString(json['wordCount']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -137,18 +139,18 @@ class BookInfoRule {
   });
 
   factory BookInfoRule.fromJson(Map<String, dynamic> json) => BookInfoRule(
-    init: json['init'],
-    name: json['name'],
-    author: json['author'],
-    intro: json['intro'],
-    kind: json['kind'],
-    lastChapter: json['lastChapter'],
-    updateTime: json['updateTime'],
-    coverUrl: json['coverUrl'],
-    tocUrl: json['tocUrl'],
-    wordCount: json['wordCount'],
-    canReName: json['canReName']?.toString(), // 原 Android 為 String?
-    downloadUrls: json['downloadUrls'],
+    init: readJsonString(json['init']),
+    name: readJsonString(json['name']),
+    author: readJsonString(json['author']),
+    intro: readJsonString(json['intro']),
+    kind: readJsonString(json['kind']),
+    lastChapter: readJsonString(json['lastChapter']),
+    updateTime: readJsonString(json['updateTime']),
+    coverUrl: readJsonString(json['coverUrl']),
+    tocUrl: readJsonString(json['tocUrl']),
+    wordCount: readJsonString(json['wordCount']),
+    canReName: readJsonString(json['canReName']), // 原 Android 為 String?
+    downloadUrls: readJsonString(json['downloadUrls']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -197,16 +199,18 @@ class TocRule {
   });
 
   factory TocRule.fromJson(Map<String, dynamic> json) => TocRule(
-    preUpdateJs: json['preUpdateJs'],
-    chapterList: json['chapterList'],
-    chapterName: json['chapterName'],
-    chapterUrl: json['chapterUrl'],
-    formatJs: json['formatJs'],
-    isVolume: json['isVolume']?.toString(),
-    isVip: json['isVip']?.toString(),
-    isPay: json['isPay']?.toString(),
-    updateTime: json['updateTime'],
-    nextTocUrl: json['nextTocUrl'] ?? json['nextPage'], // 相容舊版 nextPage
+    preUpdateJs: readJsonString(json['preUpdateJs']),
+    chapterList: readJsonString(json['chapterList']),
+    chapterName: readJsonString(json['chapterName']),
+    chapterUrl: readJsonString(json['chapterUrl']),
+    formatJs: readJsonString(json['formatJs']),
+    isVolume: readJsonString(json['isVolume']),
+    isVip: readJsonString(json['isVip']),
+    isPay: readJsonString(json['isPay']),
+    updateTime: readJsonString(json['updateTime']),
+    nextTocUrl:
+        readJsonString(json['nextTocUrl']) ??
+        readJsonString(json['nextPage']), // 相容舊版 nextPage
   );
 
   Map<String, dynamic> toJson() => {
@@ -253,15 +257,19 @@ class ContentRule {
   });
 
   factory ContentRule.fromJson(Map<String, dynamic> json) => ContentRule(
-    content: json['content'],
-    title: json['title'],
-    nextContentUrl: json['nextContentUrl'] ?? json['nextPage'], // 相容舊版 nextPage
-    webJs: json['webJs'],
-    sourceRegex: json['sourceRegex'],
-    replaceRegex: json['replaceRegex'] ?? json['replace'], // 相容舊版 replace
-    imageStyle: json['imageStyle'],
-    imageDecode: json['imageDecode'],
-    payAction: json['payAction'],
+    content: readJsonString(json['content']),
+    title: readJsonString(json['title']),
+    nextContentUrl:
+        readJsonString(json['nextContentUrl']) ??
+        readJsonString(json['nextPage']), // 相容舊版 nextPage
+    webJs: readJsonString(json['webJs']),
+    sourceRegex: readJsonString(json['sourceRegex']),
+    replaceRegex:
+        readJsonString(json['replaceRegex']) ??
+        readJsonString(json['replace']), // 相容舊版 replace
+    imageStyle: readJsonString(json['imageStyle']),
+    imageDecode: readJsonString(json['imageDecode']),
+    payAction: readJsonString(json['payAction']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -303,16 +311,16 @@ class ReviewRule {
   });
 
   factory ReviewRule.fromJson(Map<String, dynamic> json) => ReviewRule(
-    reviewUrl: json['reviewUrl'],
-    avatarRule: json['avatarRule'],
-    contentRule: json['contentRule'],
-    postTimeRule: json['postTimeRule'],
-    reviewQuoteUrl: json['reviewQuoteUrl'],
-    voteUpUrl: json['voteUpUrl'],
-    voteDownUrl: json['voteDownUrl'],
-    postReviewUrl: json['postReviewUrl'],
-    postQuoteUrl: json['postQuoteUrl'],
-    deleteUrl: json['deleteUrl'],
+    reviewUrl: readJsonString(json['reviewUrl']),
+    avatarRule: readJsonString(json['avatarRule']),
+    contentRule: readJsonString(json['contentRule']),
+    postTimeRule: readJsonString(json['postTimeRule']),
+    reviewQuoteUrl: readJsonString(json['reviewQuoteUrl']),
+    voteUpUrl: readJsonString(json['voteUpUrl']),
+    voteDownUrl: readJsonString(json['voteDownUrl']),
+    postReviewUrl: readJsonString(json['postReviewUrl']),
+    postQuoteUrl: readJsonString(json['postQuoteUrl']),
+    deleteUrl: readJsonString(json['deleteUrl']),
   );
 
   Map<String, dynamic> toJson() => {
