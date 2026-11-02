@@ -7,22 +7,23 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 /// 第幾個字還要照那一章目前的正文解析（正文變了照錨點找回同一句）。
 typedef ReaderMark = ({int id, ReaderV2Location location});
 
-/// 書籤在正文旁的記號：書籤那個字所在的那一行，右側邊距畫一條小緞帶。
+/// 書籤在正文旁的記號：書籤那一句開頭那一行，左側邊距畫一條細短線
+/// （使用者 2026-11-02 從緞帶、短線、圓點三個候選選定）。
 ///
 /// [lines] 是每個書籤那一行在 viewport 上的行框（只有排好、在附近的章節
-/// 才有）；記號畫在正文欄右緣和畫面右緣中間，不擋字、不接點擊。
+/// 才有）；短線畫在左邊距中間，不擋字、不接點擊。
 final class BookmarkMarksOverlay extends StatelessWidget {
   const BookmarkMarksOverlay({
     super.key,
     required this.lines,
-    required this.textRight,
+    required this.textLeft,
     required this.color,
   });
 
   final List<HybridLineBox> lines;
 
-  /// 正文欄的右緣（viewport 座標）。
-  final double textRight;
+  /// 正文欄的左緣（viewport 座標），也就是左邊距的寬。
+  final double textLeft;
   final Color color;
 
   @override
@@ -31,7 +32,7 @@ final class BookmarkMarksOverlay extends StatelessWidget {
       child: CustomPaint(
         painter: _BookmarkMarksPainter(
           lines: lines,
-          textRight: textRight,
+          textLeft: textLeft,
           color: color,
         ),
       ),
@@ -42,44 +43,46 @@ final class BookmarkMarksOverlay extends StatelessWidget {
 final class _BookmarkMarksPainter extends CustomPainter {
   const _BookmarkMarksPainter({
     required this.lines,
-    required this.textRight,
+    required this.textLeft,
     required this.color,
   });
 
   final List<HybridLineBox> lines;
-  final double textRight;
+  final double textLeft;
   final Color color;
 
-  static const double _width = 5;
-  static const double _height = 10;
-  static const double _notch = 2.5;
+  static const double _width = 3;
+
+  /// 短線佔那一行行框的幾成高，和字差不多高。
+  static const double _heightFactor = 0.7;
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.clipRect(Offset.zero & size);
-    final margin = size.width - textRight;
-    // 邊距放得下就置中，放不下貼著正文欄。
-    final left = margin >= _width + 4
-        ? textRight + (margin - _width) / 2
-        : textRight + 1;
+    // 左邊距中間；邊距窄到放不下時貼著畫面左緣。
+    final centerX = (textLeft / 2).clamp(_width, double.infinity);
     final paint = Paint()..color = color;
     for (final line in lines) {
-      final top = (line.top + line.bottom) / 2 - _height / 2;
-      final path = Path()
-        ..moveTo(left, top)
-        ..lineTo(left + _width, top)
-        ..lineTo(left + _width, top + _height)
-        ..lineTo(left + _width / 2, top + _height - _notch)
-        ..lineTo(left, top + _height)
-        ..close();
-      canvas.drawPath(path, paint);
+      final height = (line.bottom - line.top) * _heightFactor;
+      final centerY = (line.top + line.bottom) / 2;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(centerX, centerY),
+            width: _width,
+            height: height,
+          ),
+          const Radius.circular(_width / 2),
+        ),
+        paint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(_BookmarkMarksPainter old) =>
       old.color != color ||
-      old.textRight != textRight ||
+      old.textLeft != textLeft ||
       !_sameLines(old.lines, lines);
 
   static bool _sameLines(List<HybridLineBox> a, List<HybridLineBox> b) {

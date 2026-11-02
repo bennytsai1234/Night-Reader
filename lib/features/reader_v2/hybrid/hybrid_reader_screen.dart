@@ -1970,9 +1970,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                             if (lines.isEmpty) return const SizedBox.shrink();
                             return BookmarkMarksOverlay(
                               lines: lines,
-                              textRight:
-                                  _viewportSize.width -
-                                  textSpec.textPaddingRight,
+                              textLeft: textSpec.textPaddingLeft,
                               color: widget.highlightColor,
                             );
                           },
