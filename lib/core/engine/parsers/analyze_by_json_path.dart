@@ -34,10 +34,16 @@ class AnalyzeByJsonPath {
     if (rule.toLowerCase().startsWith('@json:')) {
       rule = rule.substring(6).trim();
     }
-    if (rule.startsWith(r'$.[')) {
-      return '\$${rule.substring(2)}';
-    }
     return rule;
+  }
+
+  /// 照 Legado 用的 Jayway JsonPath 編譯路徑：不是 `$`、`@` 開頭的補上
+  /// `$.`（`title` 就是 `$.title`、`[0]` 就是 `$[0]`）。
+  static JsonPath _compile(String rule) {
+    var path = rule;
+    if (!path.startsWith(r'$') && !path.startsWith('@')) path = '\$.$path';
+    if (path.startsWith(r'$.[')) path = '\$${path.substring(2)}';
+    return JsonPath(path);
   }
 
   /// Get a string result from JsonPath
@@ -59,7 +65,7 @@ class AnalyzeByJsonPath {
       // 如果替換後結果與原規則相同，說明沒有嵌套規則，或者是純 JsonPath 規則
       if (result == rule) {
         try {
-          final path = JsonPath(rule);
+          final path = _compile(rule);
           final matches = path.read(_jsonData);
           if (matches.isEmpty) return null;
 
@@ -107,7 +113,7 @@ class AnalyzeByJsonPath {
 
       if (ruleStr == rule) {
         try {
-          final path = JsonPath(rule);
+          final path = _compile(rule);
           final matches = path.read(_jsonData);
           final values = <dynamic>[];
           for (final match in matches) {

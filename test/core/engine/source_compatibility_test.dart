@@ -426,6 +426,42 @@ void main() {
       expect(results.first.wordCount, isNotEmpty);
     });
 
+    // 豆瓣阅读：章名規則是 `img@alt||text||title`，同一條規則也給 HTML 目錄用。
+    // Legado 遇到 JSON 內容時，沒有前綴的規則一律當 JSON 路徑（`img@alt`、
+    // `text` 找不到，落到 `title`），不先拿 HTML 的寫法解析。
+    test('JSON content reads rules without a prefix as JSON paths', () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': '豆瓣測試',
+        'bookSourceUrl': 'https://read-douban.test',
+        'ruleToc': {
+          'chapterList': r'$.list[*]',
+          'chapterName': 'img@alt||text||title',
+          'chapterUrl': r'links.reader',
+        },
+      });
+      const tocJson = '''
+      {"list": [
+        {"links": {"reader": "/reader/column/1/chapter/11/"},
+         "abstract": "第一章的摘要", "title": "第一章 起點"},
+        {"links": {"reader": "/reader/column/1/chapter/12/"},
+         "abstract": "第二章的摘要", "title": "第二章 轉折"}
+      ]}
+      ''';
+
+      final toc = await ChapterListParser.parse(
+        source: source,
+        book: Book(bookUrl: 'https://read-douban.test/column/1/', origin: ''),
+        body: tocJson,
+        baseUrl: 'https://read-douban.test/j/column_v2/1/chapters',
+      );
+
+      expect(toc.chapters.map((c) => c.title), ['第一章 起點', '第二章 轉折']);
+      expect(
+        toc.chapters.first.url,
+        'https://read-douban.test/reader/column/1/chapter/11/',
+      );
+    });
+
     test(
       'Legado-style bare JSON list rules parse from raw JSON strings',
       () async {

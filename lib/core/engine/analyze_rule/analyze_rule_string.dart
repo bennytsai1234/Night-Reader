@@ -85,15 +85,6 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                     : sourceRule
                           .getAnalyzeByJSoup(this, result)
                           .getString(rule);
-                if ((tempResult == null || tempResult.toString().isEmpty) &&
-                    isJsonLikeRuleInput(result)) {
-                  final jsonRule = buildJsonFallbackRule(rule);
-                  if (jsonRule != null) {
-                    tempResult = sourceRule
-                        .getAnalyzeByJSonPath(this, result)
-                        .getString(jsonRule);
-                  }
-                }
             }
           } else {
             // rule 為空 + replaceRegex 非空 → 內容直通，交由 replaceRegex 處理
@@ -247,16 +238,6 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               result = sourceRule
                   .getAnalyzeByJSoup(this, currentInput)
                   .getStringList(rule);
-              if (result is List &&
-                  result.isEmpty &&
-                  isJsonLikeRuleInput(currentInput)) {
-                final jsonRule = buildJsonFallbackRule(rule);
-                if (jsonRule != null) {
-                  result = sourceRule
-                      .getAnalyzeByJSonPath(this, currentInput)
-                      .getStringList(jsonRule);
-                }
-              }
           }
 
           if (sourceRule.replaceRegex.isNotEmpty) {
