@@ -169,10 +169,13 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<void> jumpToChapter(int chapterIndex, {Future<void>? settled}) =>
       _jumpToChapter(chapterIndex, settled: settled);
 
+  /// 跳到 [location]；[settled] 同 [jumpToChapter]。
   Future<void> jumpToLocation(
     ReaderV2Location location, {
     bool immediateSave = true,
-  }) => _jumpToLocation(location, immediateSave: immediateSave);
+    Future<void>? settled,
+  }) =>
+      _jumpToLocation(location, immediateSave: immediateSave, settled: settled);
 
   Future<bool> restoreFromLocation(ReaderV2Location location) async {
     final token = beginRestoreOperation(location: location);

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
 enum SelectionEdge { start, end }
 
@@ -11,6 +12,14 @@ typedef ParagraphSelection = ({
   String paragraph,
   int start,
   int end,
+});
+
+/// 在選取開頭留書籤要的東西（見 [ReaderTextSelection.asBookmark]）：位置
+/// 已綁好那一章正文的錨點。
+typedef SelectionBookmark = ({
+  ReaderV2Location location,
+  String chapterTitle,
+  String excerpt,
 });
 
 /// 正文上的一段選取。offset 是章內 displayText 的 UTF-16 位置，範圍不會
@@ -45,6 +54,21 @@ final class ReaderTextSelection {
     paragraph: blocks.displayText.substring(paragraph.start, paragraph.end),
     start: range.start - paragraph.start,
     end: range.end - paragraph.start,
+  );
+
+  /// 在選取開頭留書籤：位置和閱讀進度同一套（章內第幾個字，綁上這一章
+  /// 正文的身分與前後原文）。
+  SelectionBookmark get asBookmark => (
+    location:
+        ReaderV2Location(
+          chapterIndex: chapterIndex,
+          charOffset: range.start,
+        ).withContentIdentity(
+          contentHash: blocks.contentHash,
+          displayText: blocks.displayText,
+        ),
+    chapterTitle: blocks.title,
+    excerpt: text.trim(),
   );
 
   /// 把 [edge] 拖到 [offset]。夾在段落內；越過另一端時兩端互換，且至少

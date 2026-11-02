@@ -266,6 +266,7 @@ void main() {
     Future<SelectionService> pumpSelected(
       WidgetTester tester, {
       ValueChanged<ReaderTextSelection>? onHide,
+      ValueChanged<ReaderTextSelection>? onBookmark,
       HybridLineBox box = const HybridLineBox(
         left: 100,
         top: 300,
@@ -295,6 +296,7 @@ void main() {
             boxesFor: (_) => <HybridLineBox>[box],
             caretAt: (_, _) => null,
             onHide: onHide,
+            onBookmark: onBookmark,
             highlightColor: Colors.amber,
             child: const SizedBox.expand(),
           ),
@@ -494,11 +496,38 @@ void main() {
       expect(service.active, isFalse);
     });
 
-    testWidgets('沒有接上隱藏時不顯示這個按鈕', (tester) async {
+    testWidgets('沒有接上隱藏與書籤時不顯示這兩個按鈕', (tester) async {
       await pumpSelected(tester);
 
       expect(find.text('複製'), findsOneWidget);
       expect(find.text('隱藏'), findsNothing);
+      expect(find.text('書籤'), findsNothing);
+    });
+
+    testWidgets('「書籤」排在隱藏後面，按下在選到的字開頭留書籤並收起選取', (tester) async {
+      ReaderTextSelection? marked;
+      final service = await pumpSelected(
+        tester,
+        onHide: (_) {},
+        onBookmark: (selection) => marked = selection,
+      );
+
+      expect(
+        tester.getTopLeft(find.text('書籤')).dx,
+        greaterThan(tester.getTopLeft(find.text('隱藏')).dx),
+      );
+      await tester.tap(find.text('書籤'));
+      await tester.pump();
+
+      expect(service.active, isFalse);
+      final bookmark = marked!.asBookmark;
+      final chapter = _chapter();
+      expect(bookmark.excerpt, '城門');
+      expect(bookmark.chapterTitle, '第一章');
+      expect(bookmark.location.chapterIndex, 0);
+      expect(bookmark.location.charOffset, chapter.displayText.indexOf('城門'));
+      expect(bookmark.location.contentHash, 'hash');
+      expect(bookmark.location.anchorAfter, startsWith('城門即將關閉'));
     });
   });
 }
