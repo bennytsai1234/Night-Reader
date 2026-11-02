@@ -71,7 +71,14 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   final ReaderV2ChapterRepository repository;
   final ReaderV2ProgressController progressController;
-  final ReaderV2Location _initialLocation;
+
+  /// 開書的位置，開書前跳章失敗時也回到這裡（[openBook]）。
+  ReaderV2Location _initialLocation;
+
+  /// 開書開始了沒有（[openBook]）；開始之前的跳章記在 [_jumpedBeforeOpen]，
+  /// 開書時開在那裡，不蓋掉使用者的選擇。
+  bool _openStarted = false;
+  ReaderV2Location? _jumpedBeforeOpen;
   final ReaderV2StateMachine stateMachine;
   final ChangeNotifier _viewportGeometryNotifier = ChangeNotifier();
 
@@ -218,8 +225,16 @@ class ReaderV2Runtime extends ChangeNotifier {
     }
   }
 
-  Future<void> openBook() async {
-    final token = stateMachine.beginOpen(location: _initialLocation);
+  /// 開書，停在建立時給的位置；給了 [at]（開書前才從資料庫讀到的較新位置，
+  /// 例如剛同步來的）就改停在那裡，之後跳章失敗也回到這裡。開書前使用者
+  /// 已經跳章（例如在換頁動畫期間開了目錄），開在跳去的地方。
+  Future<void> openBook({ReaderV2Location? at}) async {
+    _openStarted = true;
+    if (at != null) _initialLocation = at.normalized();
+    final jumped = _jumpedBeforeOpen;
+    _jumpedBeforeOpen = null;
+    final location = jumped ?? _initialLocation;
+    final token = stateMachine.beginOpen(location: location);
     notifyListeners();
     try {
       // 目錄取不到的失敗和排版時一樣交給下面處理；目錄有了才讀每章長度
@@ -227,7 +242,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       await repository.ensureChapters();
       await _loadChapterShares();
       if (!isCurrentOperationToken(token)) return;
-      await _positionViewport(location: _initialLocation, token: token);
+      await _positionViewport(location: location, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
@@ -325,6 +340,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   ReaderV2OperationToken beginJumpOperation({ReaderV2Location? location}) {
+    if (!_openStarted && location != null) _jumpedBeforeOpen = location;
     final token = stateMachine.beginJump(location: location);
     notifyListeners();
     return token;
@@ -377,6 +393,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       // 那一章取不到：取不到的是跳到的章，不是這本書。回到開書的位置重新開，
       // 新的開書接手這次操作，連同已經改好的排版；並告訴使用者原因。
       _pendingUserNotice = notice;
+      _jumpedBeforeOpen = null;
       await openBook();
       return;
     }

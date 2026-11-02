@@ -1,59 +1,100 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 
 import 'reader_v2_location.dart';
+import 'reader_v2_open_target.dart';
 import 'reader_v2_runtime.dart';
 import 'reader_v2_state.dart';
 
-/// 閱讀器這一頭的進度同步（ADR 0039）：開書時抓這本書的雲端進度，比這台新、
-/// 而且還沒翻頁就直接跳過去；回到前景時再抓一次。離開閱讀器、App 退到背景
-/// 時把進度存好再上傳。
+/// 閱讀器這一頭的進度同步（ADR 0039）。同步在開 App 與回到 App 時做，
+/// 開書不連網：接著上次讀的地方開書時，那次同步的閱讀進度還沒做完就等它
+/// （最多 [openGrace]），再照這台資料庫裡的位置開，書就在另一台讀到的地方。
+/// 讀書途中 App 回到前景時抓這本書的雲端進度，比這台新就跳過去。離開閱讀
+/// 器、App 退到背景時把進度存好再上傳。
 class ReaderV2ProgressSync {
   ReaderV2ProgressSync({
     required this.book,
     required this._runtime,
     required this._onJumped,
+    required this._bookDao,
+    ReaderV2OpenTarget? openTarget,
     SyncService? sync,
-  }) : _sync = sync ?? SyncService.instance;
+  }) : _resumes =
+           openTarget == null || openTarget.intent == ReaderV2OpenIntent.resume,
+       _sync = sync ?? SyncService.instance;
 
   /// 同一章裡差這麼多字以內不跳：多半是另一台螢幕大小不同、存的是畫面頂端
   /// 的那個字，跳了只是畫面抖一下。
   static const int nearChars = 100;
 
+  /// 換頁動畫播完時同步的閱讀進度還沒做完，最多再等這麼久（期間畫面停在
+  /// 骨架）；再晚就照這台的位置開。
+  static const Duration openGrace = Duration(milliseconds: 500);
+
   final Book book;
   final ReaderV2Runtime? Function() _runtime;
 
-  /// 跳過去之後呼叫，[previous] 是跳之前的位置，給「回到原處」用。
+  /// 跳到另一台的位置之後呼叫，[previous] 是跳之前的位置，給「回到原處」用。
   final void Function(ReaderV2Location previous) _onJumped;
+  final BookDao _bookDao;
   final SyncService _sync;
 
-  Future<PulledProgress?>? _openPull;
+  /// 接著上次讀的地方開書（不是從目錄或詳情點了某一章）：只有這時才照
+  /// 同步來的進度開。
+  final bool _resumes;
+
   AppLifecycleListener? _lifecycle;
+  Timer? _graceTimer;
+  Completer<void>? _grace;
+  bool _marked = false;
   bool _opened = false;
   bool _disposed = false;
 
-  /// 閱讀器一建立就開始抓，和開書的換頁動畫、載入同時進行；比的是開書前
-  /// 這台存的位置。
   void start() {
-    _sync.openBook(book);
-    _openPull = _sync.pullProgress(book.bookUrl);
+    // 照點的章節開書不等同步，馬上記成開著，背景同步就不改這本。
+    if (!_resumes) _markOpen();
     _lifecycle = AppLifecycleListener(onShow: _onShow, onHide: _onHide);
   }
 
+  /// 記成開著：之後的同步不在背景改這本書，由閱讀器自己跳。
+  void _markOpen() {
+    if (_marked || _disposed) return;
+    _marked = true;
+    _sync.openBook(book);
+  }
+
+  /// 換頁動畫播完、開書之前呼叫：要開在哪裡。null 就照原本要開的位置。
+  ///
+  /// 開 App 或回到 App 的同步還沒做完閱讀進度就等它，記成開著之後再讀這台
+  /// 資料庫裡的位置：書架或詳情頁拿著的書可能是同步套用之前的舊位置。
+  Future<ReaderV2Location?> openLocation(ReaderV2Runtime runtime) async {
+    if (!_resumes) return null;
+    final ready = _sync.progressReady;
+    if (ready != null) await _within(ready, openGrace);
+    if (_disposed || runtime.disposed) return null;
+    _markOpen();
+    final Book? stored;
+    try {
+      stored = await _bookDao.getByUrl(book.bookUrl);
+    } catch (error, stackTrace) {
+      AppLog.e('讀閱讀紀錄失敗', error: error, stackTrace: stackTrace);
+      return null;
+    }
+    if (stored == null) return null;
+    final at = ReaderV2OpenTarget.resume(stored).location;
+    return _samePlace(at, runtime.state.visibleLocation) ? null : at;
+  }
+
   /// 開書定位完成時呼叫。
-  Future<void> bookOpened() async {
+  void bookOpened() {
     _opened = true;
-    final pull = _openPull;
-    _openPull = null;
-    final runtime = _runtime();
-    if (pull == null || runtime == null) return;
-    final settled = runtime.state.visibleLocation;
-    await _jumpIfStill(await pull, settled);
+    _markOpen();
   }
 
   void _onShow() => unawaited(_pullAfterResume());
@@ -91,18 +132,9 @@ class ReaderV2ProgressSync {
     ReaderV2Location since,
   ) async {
     final runtime = _runtime();
-    if (pulled == null ||
-        _disposed ||
-        runtime == null ||
-        runtime.disposed ||
-        runtime.state.lifecycle != ReaderV2Lifecycle.ready) {
-      return;
-    }
-    final current = runtime.state.visibleLocation;
-    if (current.chapterIndex != since.chapterIndex ||
-        current.charOffset != since.charOffset) {
-      return;
-    }
+    if (pulled == null || !pulled.isCurrent || !_isReady(runtime)) return;
+    final current = runtime!.state.visibleLocation;
+    if (!_samePlace(current, since)) return;
     final index = pulled.progress.chapterIndexIn([
       for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
     ]);
@@ -116,10 +148,8 @@ class ReaderV2ProgressSync {
     if (jumps) {
       await runtime.jumpToLocation(target);
       // 那一章取不到（要登入、載入失敗）或被別的操作取代時，跳轉照樣正常
-      // 結束、畫面留在原處：不提示、不記成已同步，下次開書或回到前景再試。
-      if (_disposed ||
-          runtime.disposed ||
-          runtime.state.lifecycle != ReaderV2Lifecycle.ready ||
+      // 結束、畫面留在原處：不提示、不記成已同步，下次回到前景再試。
+      if (!_isReady(runtime) ||
           runtime.state.visibleLocation.chapterIndex != index) {
         return;
       }
@@ -131,11 +161,38 @@ class ReaderV2ProgressSync {
     await pulled.commit(ProgressSync.recordOf(book));
   }
 
+  bool _isReady(ReaderV2Runtime? runtime) =>
+      !_disposed &&
+      runtime != null &&
+      !runtime.disposed &&
+      runtime.state.lifecycle == ReaderV2Lifecycle.ready;
+
+  static bool _samePlace(ReaderV2Location a, ReaderV2Location b) =>
+      a.chapterIndex == b.chapterIndex && a.charOffset == b.charOffset;
+
+  /// 等 [future]，最多 [limit]；閱讀器關掉時馬上結束。
+  Future<void> _within(Future<void> future, Duration limit) {
+    final grace = _grace = Completer<void>();
+    void finish() {
+      _graceTimer?.cancel();
+      _graceTimer = null;
+      if (!grace.isCompleted) grace.complete();
+    }
+
+    _graceTimer = Timer(limit, finish);
+    unawaited(future.whenComplete(finish));
+    return grace.future;
+  }
+
   /// 閱讀器關掉時（在 runtime 釋放之前）呼叫：存好最後的位置再上傳。
   void dispose() {
     _disposed = true;
+    _graceTimer?.cancel();
+    _graceTimer = null;
+    final grace = _grace;
+    if (grace != null && !grace.isCompleted) grace.complete();
     _lifecycle?.dispose();
-    _sync.closeBook(book);
+    if (_marked) _sync.closeBook(book);
     _upload(_runtime());
   }
 }
