@@ -2,6 +2,21 @@
 
 分支上的工作（含還沒開工的計畫）寫在各分支自己的 `HANDOFF.md`，`git branch -a` 列出所有分支；這裡只寫 `beta` 的事。
 
+## 本分支：源倉庫書源相容
+
+2026-10-25 實測 48 個一般小說書源，#131 修完匯入後 11 個完整通過；使用者要全部補齊。上一段在 `feat/source-compat`（#209：書源 Cookie 的網域照公共字尾表算、`HttpUrl.topPrivateDomain`）；#209 合併前這條分支先併 `beta` 再動 `js_java_classes.dart`。
+
+已做：Cloudflare（ADR 0033）、加解密照 Java 規則（#134）、Jsoup 元素（#135）、規則 JS 同步等待（ADR 0034）、`java.ajaxAll` 回應物件與 `java.importScript` 原樣交出、`java.toNumChapter` 的簡繁大寫數字（#166）、書源登入（ADR 0038：網頁登入、書源表單、`longToast`、登入標頭）、規則 JS 拿到的元素清單是 Jsoup `Elements`、預整理 JS 的 `java.refreshTocUrl`、規則 JS 的 `java`／`source`／`cookie`／`cache` 每個方法與參數版本照 Legado（完整清單與刻意不做的在 `test/core/engine/js/legado_api_parity_test.dart`）、書源常用的 Java 類別、網址照 Legado 組（關鍵字代原文、送出時照字元集編碼、網址選項、`data:` 網址、4xx／5xx 的頁面交給規則）、網址 JS 與登入檢查裡的 `java` 是那個請求（`initUrl`、`getStrResponse`）、下載與檔案函式以快取資料夾為準、閱讀中要在網頁上驗證（「前往驗證」與校驗的「需要在網頁驗證」，ADR 0038；使用者 2026-11-01 說瀏覽器相關的事做到這項為止）、有表單的書源「在網站登入」與從書源管理登入完自動校驗（`DESIGN.md`「書源登入」）、Jsoup 1.16.2 交給書源的每個公開方法（#192）、`book`／`chapter`／`source` 的 Java 寫法、`BigInteger`、`Arrays.copyOf`／`copyOfRange`／`equals`、清單的 `iterator()` 與連動的 `subList`（#197）、書源 Cookie 的網域照公共字尾表（`tool/public_suffix.dart` 產生）與 `HttpUrl.topPrivateDomain`（#209）。`java.getBook()` 不做：Legado 的是 private，Rhino 叫不到。
+
+還沒做，照源倉庫 1087 份書源（2026-11-01 收在 `%TEMP%\nr-corpus-1101`，`corpus.sh` 重抓）的用量排：
+- 神文、番茄 APP 目錄空、愛看吧與豆瓣正文空還沒查，用 `test/live/` 連真的網站校驗。
+- 看不到的瀏覽器的 `sourceRegex`（`java.webViewGetSource`、`getStrResponse(js, sourceRegex)`）：87 個書源有這個欄位，79 個是空的，有內容的 7 個多半是影音（mp4、m3u8），文字書源約 3 個。Legado 等網頁載入的資源網址、內文是那個網址；夜讀在拿到的內容裡找，因為 webview_flutter 沒有資源載入的事件，要做得在 Android 端自己接 `WebViewClient.onLoadResource`。
+- 其他 Java 類別：`okhttp3.OkHttpClient`（2，其一是漫畫）、RSA 金鑰物件（`KeyFactory`、`X509EncodedKeySpec`，1，星愿瓶）。直接開網路連線（`java.net.Socket`）做不到，回報「不支援」；rar、7z 壓縮檔沒有 Dart 函式庫，回報「不支援」。
+- 預整理 JS 的 `java.reGetBook()`（精確搜尋同名同作者、換成它的書籍網址再讀詳情）：目前丟出「還不支援」。章節以「書＋網址」為身分（#165），只在抓目錄時換網址會讓章節對不上書架上的書，做的時候要連書架上那本書的網址一起換。
+- 其他改版閱讀 App 才有的功能（`refreshExplore`、`deviceID`、`showBrowser`、`qread` 等，56 個書源）不在 Legado 裡，使用者 2026-11-01 沒要求。一些改版閱讀 App 的登入表單欄位（`toggle` 11、`select` 10 個）照 Legado 不顯示。
+
+一項一個 PR；合併後 GitHub 會刪掉這條分支，還有沒做的就從 `beta` 開新分支，把這段交接搬過去。
+
 ## 等使用者決定
 
 - 多台手機同步第 4 段（本地書，#193）等使用者討論。
