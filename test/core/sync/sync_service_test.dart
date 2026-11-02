@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -365,6 +366,41 @@ void main() {
     final book = await b.book('b-src');
     expect(book.chapterIndex, 3);
     expect(book.charOffset, 5);
+  });
+
+  test('opening a book does not wait for the sync running in the '
+      'background', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncNow();
+
+    // B 另有一本書要送上去；背景同步卡在寫雲端（例如網路慢）的時候開書。
+    await b.books.upsert(
+      Book(
+        bookUrl: 'other',
+        name: '別本',
+        author: '別人',
+        isInBookshelf: true,
+        durChapterTitle: 'x',
+        progressTime: 300,
+      ),
+    );
+    final stuck = Completer<void>();
+    final writing = Completer<void>();
+    store.beforeNextWrite = () {
+      writing.complete();
+      return stuck.future;
+    };
+    final background = b.sync.syncNow();
+    await writing.future;
+
+    final pulled = await b.sync
+        .pullProgress('b-src')
+        .timeout(const Duration(seconds: 5));
+    expect(pulled?.progress.chapterIndex, 2);
+
+    stuck.complete();
+    await background;
   });
 
   test('progress pulled before turning sync off is not recorded', () async {

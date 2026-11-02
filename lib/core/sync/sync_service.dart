@@ -190,8 +190,8 @@ class SyncService {
     );
   }
 
-  /// 目前設定的同步空間。只在 [_lock] 裡呼叫：讀設定到用完同步空間之間，
-  /// 不會被停用或換帳號插進來，寫到已經不用的空間。
+  /// 目前設定的同步空間。要寫入的只在 [_lock] 裡呼叫：讀設定到用完同步空間
+  /// 之間，不會被停用或換帳號插進來，寫到已經不用的空間。
   Future<SyncStore?> _store() async {
     final space = await _settings.space();
     return _storeFactory(
@@ -580,33 +580,41 @@ class SyncService {
 
   /// 開書或回到前景時抓這本書的雲端進度：比這台的新才傳回，否則 null。
   /// 連不上、沒設定同步空間也是 null，閱讀器照常停在這台的位置。
+  ///
+  /// 不等 [_lock]：開書時背景正在同步的話，這本書的進度不排在整次同步
+  /// 後面，開書等的只有讀一份進度檔。這裡只讀不寫；寫上次同步的紀錄在
+  /// [PulledProgress.commit]，在鎖裡、換過同步空間就不寫。
   Future<PulledProgress?> pullProgress(String bookUrl) async {
     try {
-      return await _lock.synchronized(() async {
-        final store = await _store();
-        if (store == null) return null;
-        await _claimBases();
-        final generation = _generation;
-        final bookDao = _bookDao ?? getIt<BookDao>();
-        final book = await bookDao.getByUrl(bookUrl);
-        if (book == null) return null;
-        final key = ProgressSync.keyOf(book);
-        final file = await store.read(_progress.fileName);
-        if (file == null) return null;
-        final theirs = SyncDocument.decode(file.content).records[key];
-        final base = await _bases.read(ProgressSync.kind);
-        final decision = decideSync(
-          local: ProgressSync.recordOf(book),
-          remote: theirs,
-          base: base[key],
-          fingerprint: ProgressSync.fingerprintOf,
-        );
-        if (decision != SyncDecision.apply || theirs == null) return null;
-        return PulledProgress(
-          SyncedProgress.fromRecord(theirs),
-          (applied) => _commitPulled(key, theirs, applied, generation),
-        );
-      });
+      final generation = _generation;
+      final store = await _store();
+      if (store == null) return null;
+      final bookDao = _bookDao ?? getIt<BookDao>();
+      final book = await bookDao.getByUrl(bookUrl);
+      if (book == null) return null;
+      final key = ProgressSync.keyOf(book);
+      final file = await store.read(_progress.fileName);
+      if (file == null) return null;
+      final theirs = SyncDocument.decode(file.content).records[key];
+      // 上次同步的紀錄是另一個同步空間的：當成從沒同步過，由下次同步作廢
+      // 它（[_claimBases]）。
+      final owned =
+          (await _bases.readJson(_ownerFile))['space'] ==
+          await _settings.identity();
+      final base = owned
+          ? await _bases.read(ProgressSync.kind)
+          : const <String, SyncBaseEntry>{};
+      final decision = decideSync(
+        local: ProgressSync.recordOf(book),
+        remote: theirs,
+        base: base[key],
+        fingerprint: ProgressSync.fingerprintOf,
+      );
+      if (decision != SyncDecision.apply || theirs == null) return null;
+      return PulledProgress(
+        SyncedProgress.fromRecord(theirs),
+        (applied) => _commitPulled(key, theirs, applied, generation),
+      );
     } catch (error, stackTrace) {
       AppLog.e('抓雲端進度失敗', error: error, stackTrace: stackTrace);
       return null;

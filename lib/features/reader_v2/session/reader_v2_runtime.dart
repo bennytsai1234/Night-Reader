@@ -218,8 +218,11 @@ class ReaderV2Runtime extends ChangeNotifier {
     }
   }
 
-  Future<void> openBook() async {
-    final token = stateMachine.beginOpen(location: _initialLocation);
+  /// 開書，停在建立時給的位置；給了 [at]（另一台同步來的進度）就停在那裡，
+  /// 那一章取不到時回到建立時的位置重開，並告訴使用者原因。
+  Future<void> openBook({ReaderV2Location? at}) async {
+    final location = at?.normalized() ?? _initialLocation;
+    final token = stateMachine.beginOpen(location: location);
     notifyListeners();
     try {
       // 目錄取不到的失敗和排版時一樣交給下面處理；目錄有了才讀每章長度
@@ -227,7 +230,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       await repository.ensureChapters();
       await _loadChapterShares();
       if (!isCurrentOperationToken(token)) return;
-      await _positionViewport(location: _initialLocation, token: token);
+      await _positionViewport(location: location, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
@@ -373,9 +376,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
     if (state.lifecycle == ReaderV2Lifecycle.cold &&
         _targetsAnotherChapterThanOpen(token)) {
-      // 開書還沒排好就跳到別章（之後可能又改了排版、沿用同一個目標），
-      // 那一章取不到：取不到的是跳到的章，不是這本書。回到開書的位置重新開，
-      // 新的開書接手這次操作，連同已經改好的排版；並告訴使用者原因。
+      // 開書還沒排好就跳到別章（之後可能又改了排版、沿用同一個目標），或
+      // 開在另一台同步來的那一章，那一章取不到：取不到的是那一章，不是這本
+      // 書。回到開書的位置重新開，新的開書接手這次操作，連同已經改好的排版；
+      // 並告訴使用者原因。
       _pendingUserNotice = notice;
       await openBook();
       return;
