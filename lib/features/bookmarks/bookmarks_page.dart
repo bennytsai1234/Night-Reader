@@ -399,8 +399,13 @@ class _BookmarksPageState extends State<BookmarksPage> {
                       leading: HighlightColorBar(color: highlight.color),
                       title: context.zh(highlight.quote),
                       maxTitleLines: 3,
-                      subtitle: context.zh(highlight.chapterTitle),
-                      maxSubtitleLines: 1,
+                      // 章名一行，有備忘時接在下面（最多兩行）。備忘是
+                      // 自己寫的，不做繁簡轉換。
+                      subtitle: [
+                        context.zh(highlight.chapterTitle),
+                        if (highlight.note.isNotEmpty) highlight.note,
+                      ].join('\n'),
+                      maxSubtitleLines: highlight.note.isEmpty ? 1 : 3,
                       showChevron: false,
                       onTap: () => unawaited(
                         _open(
