@@ -26,14 +26,14 @@ class JsEncodeUtils extends EncodeUtilsBase {
     int flags = EncodeUtilsBase.base64NoWrap,
   }) => EncodeUtilsBase64.base64Encode(data, flags: flags);
 
-  /// Base64 解碼
+  /// Base64 解碼，[flags] 是 null 時照 Hutool，有給時照 Android Base64。
   static String base64Decode(
     String str, {
     String charset = 'UTF-8',
-    int flags = 0,
+    int? flags,
   }) => EncodeUtilsBase64.base64Decode(str, charset: charset, flags: flags);
 
-  static Uint8List base64DecodeToBytes(String str, {int flags = 0}) =>
+  static Uint8List base64DecodeToBytes(String str, {int? flags}) =>
       EncodeUtilsBase64.base64DecodeToBytes(str, flags: flags);
 
   /// CRC32 校驗
