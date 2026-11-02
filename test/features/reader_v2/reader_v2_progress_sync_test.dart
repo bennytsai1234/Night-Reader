@@ -74,6 +74,12 @@ class _Sync extends Fake implements SyncService {
 
   @override
   void requestSync() {}
+
+  /// 離開閱讀器、退到背景時要求進度優先同步的次數。
+  int progressFirstRequests = 0;
+
+  @override
+  void requestSyncProgressFirst() => progressFirstRequests++;
 }
 
 void main() {
@@ -250,6 +256,147 @@ void main() {
     );
 
     expect(runtime.state.visibleLocation.chapterIndex, 4);
+  });
+
+  group('leaving the reader', () {
+    test('closing it saves the position and asks for the progress to go up '
+        'first', () async {
+      final progressSync = ReaderV2ProgressSync(
+        book: book,
+        runtime: () => runtime,
+        onJumped: (_) {},
+        bookDao: bookDao,
+        sync: sync,
+      )..start();
+      progressSync.bookOpened();
+      await runtime.openBook();
+
+      progressSync.dispose();
+      await pumpEventQueue();
+
+      expect(sync.progressFirstRequests, 1);
+    });
+
+    test(
+      'going to the background asks for the progress to go up first',
+      () async {
+        start().bookOpened();
+        await runtime.openBook();
+
+        final binding = TestWidgetsFlutterBinding.instance;
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await pumpEventQueue();
+
+        expect(sync.progressFirstRequests, 1);
+      },
+    );
+  });
+
+  group('progress that arrives after the book opened', () {
+    var commits = 0;
+    final jumped = <ReaderV2Location>[];
+
+    PulledProgress cloudAt(int chapter, int offset) => PulledProgress(
+      SyncedProgress(
+        chapterIndex: chapter,
+        charOffset: offset,
+        chapterTitle: '第 $chapter 章',
+        time: 1,
+      ),
+      (_) async => commits++,
+    );
+
+    /// 開書時同步的進度還沒好，等滿 [ReaderV2ProgressSync.openGrace] 照這台
+    /// 的位置開了。
+    Future<ReaderV2ProgressSync> openWhileSyncing() async {
+      commits = 0;
+      jumped.clear();
+      sync.progress = Completer();
+      final progressSync = start(onJumped: jumped.add);
+      final at = await progressSync.openLocation(runtime);
+      expect(at, isNull);
+      await runtime.openBook(at: at);
+      return progressSync;
+    }
+
+    test('the reader has not moved: it catches up with the other phone and '
+        'says so', () async {
+      final progressSync = await openWhileSyncing();
+      progressSync.bookOpened();
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+
+      // 進度晚到（超過等待的 0.5 秒）：另一台讀到第 3 章。
+      sync.pulled = cloudAt(3, 40);
+      sync.progress!.complete();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 3);
+      expect(runtime.state.visibleLocation.charOffset, 40);
+      expect(jumped.map((it) => it.chapterIndex), [1], reason: '提示可以回到原處');
+      expect(commits, 1);
+    });
+
+    test('the sync finished before the book was positioned: still catches '
+        'up', () async {
+      sync.progress = Completer();
+      commits = 0;
+      jumped.clear();
+      final progressSync = start(onJumped: jumped.add);
+      await progressSync.openLocation(runtime);
+      sync.pulled = cloudAt(3, 40);
+      sync.progress!.complete();
+      await runtime.openBook();
+      progressSync.bookOpened();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 3);
+      expect(commits, 1);
+    });
+
+    test('the reader already moved: this phone\'s position is newer, nothing '
+        'is overwritten', () async {
+      final progressSync = await openWhileSyncing();
+      progressSync.bookOpened();
+      runtime.updateVisibleLocation(
+        const ReaderV2Location(chapterIndex: 1, charOffset: 300),
+      );
+
+      sync.pulled = cloudAt(3, 40);
+      sync.progress!.complete();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(runtime.state.visibleLocation.charOffset, 300);
+      expect(jumped, isEmpty);
+      expect(commits, 0);
+    });
+
+    test('the sync ended without anything newer: nothing happens', () async {
+      final progressSync = await openWhileSyncing();
+      progressSync.bookOpened();
+
+      sync.progress!.complete();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(jumped, isEmpty);
+      expect(commits, 0);
+    });
+
+    test('progress that came in time needs no catching up', () async {
+      sync.progress = Completer();
+      final progressSync = start();
+      final opening = progressSync.openLocation(runtime);
+      bookDao.stored = book.copyWith(chapterIndex: 3, charOffset: 40);
+      sync.progress!.complete();
+      await runtime.openBook(at: await opening);
+      sync.pulled = cloudAt(4, 0);
+      progressSync.bookOpened();
+      await pumpEventQueue();
+
+      expect(runtime.state.visibleLocation.chapterIndex, 3);
+    });
   });
 
   group('catching up with a newer progress while reading', () {

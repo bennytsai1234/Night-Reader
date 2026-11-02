@@ -285,6 +285,18 @@ class SyncService {
   /// 要同步一次，不等結果：正在同步時，跑完再補一次。
   void requestSync() => unawaited(syncNow());
 
+  /// 離開閱讀器、App 退到背景、剛存好閱讀進度時用：同步一次，而且閱讀進度
+  /// 優先送出。沒在同步就是一次完整同步，進度本來就排第一個；正在同步的話，
+  /// 不等這一輪全部做完，目前這一種做完就先把進度再同步一次，另一台才在
+  /// 幾秒內拿得到。其餘照 [requestSync]，跑完再補一次。
+  void requestSyncProgressFirst() {
+    _progressFirst = true;
+    requestSync();
+  }
+
+  /// 有人要閱讀進度優先送出（[requestSyncProgressFirst]），還沒送。
+  bool _progressFirst = false;
+
   /// 同步一次，失敗記在 [status]、不丟出來。沒設定同步空間時什麼都不做。
   Future<void> syncNow() {
     final running = _running;
@@ -420,9 +432,12 @@ class SyncService {
         StackTrace? failureStack;
         // 排了兩次的種類，第二次只在中間有別種套用了改動時才跑。
         final appliedAfter = <String, bool>{};
-        for (final kind in _kinds(this)) {
+        final kinds = _kinds(this);
+        for (final kind in kinds) {
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
+          // 這一種讀這台資料的時候，要求優先送出的進度已經存好了。
+          if (kind is ProgressSync) _progressFirst = false;
           try {
             if (await _syncKind(store, kind)) {
               appliedAfter.updateAll((name, _) => name != kind.name);
@@ -440,6 +455,7 @@ class SyncService {
           } finally {
             if (kind is ProgressSync) _progressDone();
           }
+          if (_progressFirst) await _syncProgressAgain(store, kinds);
         }
         if (failure != null) {
           Error.throwWithStackTrace(failure, failureStack!);
@@ -458,6 +474,19 @@ class SyncService {
         running: false,
         error: _messageOf(error),
       );
+    }
+  }
+
+  /// 同步途中有人要進度優先送出：把閱讀進度再同步一次，之後才接著做下一種。
+  /// 失敗只記下來：這一輪本來就會報錯，下一次同步也還會再送。
+  Future<void> _syncProgressAgain(SyncStore store, List<SyncKind> kinds) async {
+    _progressFirst = false;
+    final progress = kinds.whereType<ProgressSync>().firstOrNull;
+    if (progress == null) return;
+    try {
+      await _syncKind(store, progress);
+    } catch (error, stackTrace) {
+      AppLog.e('優先同步閱讀進度失敗', error: error, stackTrace: stackTrace);
     }
   }
 

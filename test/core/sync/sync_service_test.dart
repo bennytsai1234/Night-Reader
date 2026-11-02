@@ -444,6 +444,64 @@ void main() {
     await background;
   });
 
+  test('progress saved while a sync is running is uploaded right after the '
+      'step in progress, not after the whole sync', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.sync.syncNow();
+
+    // A 的完整同步卡在讀書源（例如網路慢）。
+    final order = <String>[];
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      order.add(name);
+      if (name != 'sources.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    final running = a.sync.syncNow();
+    await reading.future;
+
+    // 這時 A 離開閱讀器：進度存好，要求同步。
+    await a.books.updateProgress('a-src', 3, '第三章', 77);
+    a.sync.requestSyncProgressFirst();
+    stuck.complete();
+    await running;
+
+    // 書源那一步做完，馬上把進度送上去，再做替換規則這些。
+    final afterSources = order.sublist(order.indexOf('sources.json'));
+    expect(
+      afterSources.indexOf('progress.json'),
+      lessThan(afterSources.indexOf('replace_rules.json')),
+    );
+    expect(store.files['progress.json']!.$1, contains('第三章'));
+
+    store.beforeNextRead = null;
+    await b.sync.syncNow();
+    final read = await b.book('b-src');
+    expect(read.durChapterTitle, '第三章');
+    expect(read.charOffset, 77);
+  });
+
+  test('progress asked for first while nothing is running is the first thing '
+      'uploaded', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 200);
+    await a.sync.syncNow();
+    await a.books.updateProgress('a-src', 2, '第二章', 5);
+    final order = <String>[];
+    store.beforeNextRead = (name) {
+      order.add(name);
+      return null;
+    };
+
+    a.sync.requestSyncProgressFirst();
+    await a.sync.syncNow();
+
+    expect(order.first, 'progress.json');
+    expect(store.files['progress.json']!.$1, contains('第二章'));
+  });
+
   test('progress pulled before turning sync off is not recorded', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
