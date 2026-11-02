@@ -31,6 +31,8 @@ class ExploreSourceListSkeleton extends StatelessWidget {
             rowHeight,
           );
           return ListView.builder(
+            // 骨架呼吸時整片每一幀都重畫，每列各一層只多了每一幀的開銷。
+            addRepaintBoundaries: false,
             physics: const NeverScrollableScrollPhysics(),
             padding: padding,
             itemCount: count,
@@ -79,6 +81,8 @@ class ExploreBookListSkeleton extends StatelessWidget {
             rowHeight,
           );
           return ListView.separated(
+            // 同書源列表的骨架：整片每一幀都重畫，不每列各一層。
+            addRepaintBoundaries: false,
             physics: const NeverScrollableScrollPhysics(),
             padding: padding,
             itemCount: count,

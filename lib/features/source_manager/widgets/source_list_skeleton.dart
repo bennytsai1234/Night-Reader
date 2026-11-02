@@ -53,6 +53,8 @@ class SourceListSkeleton extends StatelessWidget {
           // 書源比一個畫面多時卡片延伸出畫面，底部不收圓角。
           final cardCount = count == null || count! > fill ? rows + 1 : rows;
           return ListView.builder(
+            // 骨架呼吸時整片每一幀都重畫，每列各一層只多了每一幀的開銷。
+            addRepaintBoundaries: false,
             physics: const NeverScrollableScrollPhysics(),
             padding: padding,
             itemCount: rows,

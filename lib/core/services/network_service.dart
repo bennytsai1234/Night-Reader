@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/cloudflare_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// NetworkService - 專業網路伺服 (具備反爬蟲對應能力)
 /// 封裝全域 Dio 實例並支持 Cookie 持久化與書源併發控制
@@ -51,6 +52,15 @@ class NetworkService {
       ),
     );
 
+    // 最先：中文網域換成 punycode，Cookie 與後面的攔截器看到的是送出的網址。
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          options.path = NetworkUtils.toAsciiHost(options.path);
+          handler.next(options);
+        },
+      ),
+    );
     _dio.interceptors.add(LenientCookieManager(_cookieJar));
     // 在 Cookie 管理器之後：看得到載入的通行 Cookie，也先存下檢查頁的 Cookie。
     _dio.interceptors.add(

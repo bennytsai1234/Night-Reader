@@ -9,12 +9,49 @@ import 'app_tokens.dart';
 // 淺色與深色共用。
 const _amber = Color(0xFFFFC857);
 const _citron = Color(0xFFE8C547);
-const _sky = Color(0xFF5AA9FF);
 const _apricot = Color(0xFFF5A742);
 
-/// 外觀風格：一套同時套到 App 介面、閱讀正文與閱讀選單的配色，
-/// 各有淺色與深色；使用者只選風格、深淺與強調色（[AppAccent]），不個別調色。
+const _black = Color(0xFF000000);
+
+/// 外觀風格：一套同時套到 App 介面、閱讀正文與閱讀選單的配色，各有淺色
+/// 與深色。使用者替淺色、深色各選一個風格（例如白天茶褐、晚上素色），再選
+/// 強調色（[AppAccent]）與深色要不要純黑，不個別調色。
 enum AppStyle {
+  plain(
+    '素色',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFDDDDDD),
+      surface: Color(0xFFFFFFFF),
+      bar: Color(0xFFFFFFFF),
+      text: Color(0xFF111111),
+      textMuted: Color(0xFF6B6B6B),
+      border: Color(0xFFDADADA),
+      primary: Color(0xFF333333),
+      secondary: Color(0xFF8E8E93),
+      readerBackground: Color(0xFFFFFFFF),
+      readerMenu: Color(0xFFDDDDDD),
+      readerText: Color(0xFF1A1A1A),
+      readerInfo: Color(0xFF636363),
+      highlight: _amber,
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: _black,
+      surface: Color(0xFF262626),
+      bar: Color(0xFF323232),
+      text: Color(0xFFEDEDED),
+      textMuted: Color(0xFF999999),
+      border: Color(0xFF363636),
+      primary: Color(0xFFD6D6D6),
+      secondary: Color(0xFF8E8E93),
+      readerBackground: _black,
+      readerMenu: Color(0xFF262626),
+      readerText: Color(0xFFC4C4C4),
+      readerInfo: Color(0xFF808080),
+      highlight: _amber,
+    ),
+  ),
   paper(
     '紙墨',
     light: StylePalette(
@@ -48,76 +85,6 @@ enum AppStyle {
       readerText: Color(0xFFCFC6B2),
       readerInfo: Color(0xFF938C7D),
       highlight: _amber,
-    ),
-  ),
-  bamboo(
-    '竹青',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFD3D7CE),
-      surface: Color(0xFFF6F9F0),
-      bar: Color(0xFFF6F9F0),
-      text: Color(0xFF1C2619),
-      textMuted: Color(0xFF5A6854),
-      border: Color(0xFFC9D4BC),
-      primary: Color(0xFF4A6B45),
-      secondary: Color(0xFFA0844A),
-      readerBackground: Color(0xFFE4ECD6),
-      readerMenu: Color(0xFFC1CAB6),
-      readerText: Color(0xFF202D21),
-      readerInfo: Color(0xFF56664F),
-      highlight: _citron,
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF101713),
-      surface: Color(0xFF2F3730),
-      bar: Color(0xFF3C443D),
-      text: Color(0xFFDCE8D6),
-      textMuted: Color(0xFF94A48E),
-      border: Color(0xFF404741),
-      primary: Color(0xFF8FB58A),
-      secondary: AppPalette.teaDark,
-      readerBackground: Color(0xFF0F1D19),
-      readerMenu: Color(0xFF2D3E37),
-      readerText: Color(0xFFB9D7C2),
-      readerInfo: Color(0xFF839B8C),
-      highlight: _citron,
-    ),
-  ),
-  azurite(
-    '石青',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFD7D9DB),
-      surface: Color(0xFFFAFBFC),
-      bar: Color(0xFFFAFBFC),
-      text: Color(0xFF121820),
-      textMuted: Color(0xFF586372),
-      border: Color(0xFFD2D8DF),
-      primary: Color(0xFF3D5F80),
-      secondary: Color(0xFFB07D3A),
-      readerBackground: Color(0xFFF1F4F7),
-      readerMenu: Color(0xFFCED2D6),
-      readerText: Color(0xFF1E2833),
-      readerInfo: Color(0xFF626972),
-      highlight: _sky,
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF10151B),
-      surface: Color(0xFF2F343A),
-      bar: Color(0xFF3C4248),
-      text: Color(0xFFE2E8EF),
-      textMuted: Color(0xFF98A4B2),
-      border: Color(0xFF3C4248),
-      primary: AppPalette.azuriteDark,
-      secondary: AppPalette.teaDark,
-      readerBackground: Color(0xFF0D1217),
-      readerMenu: Color(0xFF2B3238),
-      readerText: Color(0xFFB6C3CF),
-      readerInfo: Color(0xFF808A94),
-      highlight: _sky,
     ),
   ),
   tea(
@@ -155,228 +122,115 @@ enum AppStyle {
       highlight: _apricot,
     ),
   ),
-  plain(
-    '素色',
+
+  /// 閱讀紙與字取自 Legado 內建的「预设2」；深色是 Legado 的灰底，這裡
+  /// 換成和茶褐同一類的近黑暖底。
+  kraft(
+    '牛皮紙',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFDDDDDD),
-      surface: Color(0xFFFFFFFF),
-      bar: Color(0xFFFFFFFF),
-      text: Color(0xFF111111),
-      textMuted: Color(0xFF6B6B6B),
-      border: Color(0xFFDADADA),
-      primary: Color(0xFF333333),
-      secondary: Color(0xFF8E8E93),
-      readerBackground: Color(0xFFFFFFFF),
-      readerMenu: Color(0xFFDDDDDD),
-      readerText: Color(0xFF1A1A1A),
-      readerInfo: Color(0xFF636363),
+      background: Color(0xFFD2C5AD),
+      surface: Color(0xFFF4E7CC),
+      bar: Color(0xFFF4E7CC),
+      text: Color(0xFF2E2416),
+      textMuted: Color(0xFF6F5D40),
+      border: Color(0xFFDDD0B7),
+      primary: Color(0xFF86561C),
+      secondary: AppPalette.gold,
+      readerBackground: Color(0xFFDDC090),
+      readerMenu: Color(0xFFB8A077),
+      readerText: Color(0xFF3E3422),
+      readerInfo: Color(0xFF55462D),
+      highlight: _apricot,
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF1A140B),
+      surface: Color(0xFF3B3426),
+      bar: Color(0xFF494232),
+      text: Color(0xFFEEDDBA),
+      textMuted: Color(0xFFAE9C78),
+      border: Color(0xFF4B4434),
+      primary: Color(0xFFDDA55C),
+      secondary: AppPalette.teaDark,
+      readerBackground: Color(0xFF19130A),
+      readerMenu: Color(0xFF3B3222),
+      readerText: Color(0xFFD6BF91),
+      readerInfo: Color(0xFF958262),
+      highlight: _apricot,
+    ),
+  ),
+  bamboo(
+    '竹青',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFD3D7CE),
+      surface: Color(0xFFF6F9F0),
+      bar: Color(0xFFF6F9F0),
+      text: Color(0xFF1C2619),
+      textMuted: Color(0xFF5A6854),
+      border: Color(0xFFC9D4BC),
+      primary: Color(0xFF4A6B45),
+      secondary: Color(0xFFA0844A),
+      readerBackground: Color(0xFFE4ECD6),
+      readerMenu: Color(0xFFC1CAB6),
+      readerText: Color(0xFF202D21),
+      readerInfo: Color(0xFF56664F),
+      highlight: _citron,
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF101713),
+      surface: Color(0xFF2F3730),
+      bar: Color(0xFF3C443D),
+      text: Color(0xFFDCE8D6),
+      textMuted: Color(0xFF94A48E),
+      border: Color(0xFF404741),
+      primary: Color(0xFF8FB58A),
+      secondary: AppPalette.teaDark,
+      readerBackground: Color(0xFF0F1D19),
+      readerMenu: Color(0xFF2D3E37),
+      readerText: Color(0xFFB9D7C2),
+      readerInfo: Color(0xFF839B8C),
+      highlight: _citron,
+    ),
+  ),
+
+  /// 閱讀紙與字照搬 Legado 內建的「微信读书」：淺色豆綠紙配近黑字，深色
+  /// 純黑配灰字。
+  bean(
+    '豆綠',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFC7D5CA),
+      surface: Color(0xFFEAF7EC),
+      bar: Color(0xFFEAF7EC),
+      text: Color(0xFF112016),
+      textMuted: Color(0xFF4E6354),
+      border: Color(0xFFD3E0D6),
+      primary: Color(0xFF2F7445),
+      secondary: AppPalette.gold,
+      readerBackground: Color(0xFFC0EDC6),
+      readerMenu: Color(0xFFA4C9A9),
+      readerText: Color(0xFF0B0B0B),
+      readerInfo: Color(0xFF4A5A4C),
       highlight: _amber,
     ),
     dark: StylePalette(
       brightness: Brightness.dark,
-      background: Color(0xFF000000),
-      surface: Color(0xFF262626),
-      bar: Color(0xFF323232),
-      text: Color(0xFFEDEDED),
-      textMuted: Color(0xFF999999),
-      border: Color(0xFF363636),
-      primary: Color(0xFFD6D6D6),
-      secondary: Color(0xFF8E8E93),
-      readerBackground: Color(0xFF000000),
+      background: _black,
+      surface: Color(0xFF252625),
+      bar: Color(0xFF323332),
+      text: Color(0xFFE6EDE7),
+      textMuted: Color(0xFF929C94),
+      border: Color(0xFF343534),
+      primary: Color(0xFF8CC79A),
+      secondary: AppPalette.teaDark,
+      readerBackground: _black,
       readerMenu: Color(0xFF262626),
-      readerText: Color(0xFFC4C4C4),
-      readerInfo: Color(0xFF808080),
+      readerText: Color(0xFFADADAD),
+      readerInfo: Color(0xFF7A7A7A),
       highlight: _amber,
-    ),
-  ),
-  // 以下五種取材自常見的編輯器與閱讀配色，明暗略有調整，
-  // 色相與原作相同、明度不完全一樣。頁面、卡片、玻璃列與閱讀選單的底色
-  // 照 [AppLayers] 從原作的卡片（淺色）與頁面（深色）算出。
-
-  /// Rosé Pine（Dawn／Main）。
-  rouge(
-    '胭脂',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFDCD7D8),
-      surface: Color(0xFFFFFAF3),
-      bar: Color(0xFFFFFAF3),
-      text: Color(0xFF3E3A5E),
-      textMuted: Color(0xFF6E6A86),
-      border: Color(0xFFE6D9CE),
-      primary: Color(0xFFA9516A),
-      secondary: Color(0xFFD7827E),
-      readerBackground: Color(0xFFFAF4ED),
-      readerMenu: Color(0xFFD7D1D4),
-      readerText: Color(0xFF4A4570),
-      readerInfo: Color(0xFF706C8A),
-      highlight: Color(0xFFF6C177),
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF191724),
-      surface: Color(0xFF383645),
-      bar: Color(0xFF464453),
-      text: Color(0xFFE0DEF4),
-      textMuted: Color(0xFFA7A4BF),
-      border: Color(0xFF42404F),
-      primary: Color(0xFFF2A0B7),
-      secondary: Color(0xFFEBBCBA),
-      readerBackground: Color(0xFF171521),
-      readerMenu: Color(0xFF363442),
-      readerText: Color(0xFFD3D0E8),
-      readerInfo: Color(0xFF908CAA),
-      highlight: Color(0xFFF6C177),
-    ),
-  ),
-
-  /// Catppuccin（Latte／Mocha）。
-  lotus(
-    '藕荷',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFCDCFD7),
-      surface: Color(0xFFEFF1F5),
-      bar: Color(0xFFEFF1F5),
-      text: Color(0xFF3A3D55),
-      textMuted: Color(0xFF5C5F77),
-      border: Color(0xFFCCD0DA),
-      primary: Color(0xFF8534EF),
-      secondary: Color(0xFF7287FD),
-      readerBackground: Color(0xFFEFF1F5),
-      readerMenu: Color(0xFFCDCFD7),
-      readerText: Color(0xFF3A3D55),
-      readerInfo: Color(0xFF5C5F77),
-      highlight: Color(0xFFDF8E1D),
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF181825),
-      surface: Color(0xFF363848),
-      bar: Color(0xFF434556),
-      text: Color(0xFFCDD6F4),
-      textMuted: Color(0xFFBDC5E2),
-      border: Color(0xFF444657),
-      primary: Color(0xFFCCA8F7),
-      secondary: Color(0xFFB4BEFE),
-      readerBackground: Color(0xFF161622),
-      readerMenu: Color(0xFF343544),
-      readerText: Color(0xFFBAC2DE),
-      readerInfo: Color(0xFF9399B2),
-      highlight: Color(0xFFF9E2AF),
-    ),
-  ),
-
-  /// Solarized。
-  scroll(
-    '黃卷',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFD3D6C8),
-      surface: Color(0xFFFDF6E3),
-      bar: Color(0xFFFDF6E3),
-      text: Color(0xFF073642),
-      textMuted: Color(0xFF566B72),
-      border: Color(0xFFDDD6C1),
-      primary: Color(0xFF1B6C66),
-      secondary: Color(0xFFB58900),
-      readerBackground: Color(0xFFFDF6E3),
-      readerMenu: Color(0xFFD3D6C8),
-      readerText: Color(0xFF073642),
-      readerInfo: Color(0xFF5F747C),
-      highlight: Color(0xFFB58900),
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF00212B),
-      surface: Color(0xFF274247),
-      bar: Color(0xFF374F53),
-      text: Color(0xFFEEE8D5),
-      textMuted: Color(0xFFACB5AF),
-      border: Color(0xFF3A5254),
-      primary: Color(0xFF30B7AD),
-      secondary: Color(0xFFB58900),
-      readerBackground: Color(0xFF002B36),
-      readerMenu: Color(0xFF2C4D52),
-      readerText: Color(0xFFD2CDBA),
-      readerInfo: Color(0xFF839496),
-      highlight: Color(0xFFB58900),
-    ),
-  ),
-
-  /// Gruvbox。
-  amber(
-    '琥珀',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFD8CFAC),
-      surface: Color(0xFFFBF1C7),
-      bar: Color(0xFFFBF1C7),
-      text: Color(0xFF3C3836),
-      textMuted: Color(0xFF665C54),
-      border: Color(0xFFD5C4A1),
-      primary: Color(0xFFAF3A03),
-      secondary: Color(0xFF79740E),
-      readerBackground: Color(0xFFFBF1C7),
-      readerMenu: Color(0xFFD8CFAC),
-      readerText: Color(0xFF3C3836),
-      readerInfo: Color(0xFF786B61),
-      highlight: Color(0xFFFABD2F),
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF1D2021),
-      surface: Color(0xFF40403A),
-      bar: Color(0xFF4F4E45),
-      text: Color(0xFFEBDBB2),
-      textMuted: Color(0xFFBEAE93),
-      border: Color(0xFF4C4B42),
-      primary: Color(0xFFFE953F),
-      secondary: Color(0xFFB8BB26),
-      readerBackground: Color(0xFF1D2021),
-      readerMenu: Color(0xFF41403A),
-      readerText: Color(0xFFD5C4A1),
-      readerInfo: Color(0xFFA89984),
-      highlight: Color(0xFFFABD2F),
-    ),
-  ),
-
-  /// Nord。
-  frost(
-    '霜夜',
-    light: StylePalette(
-      brightness: Brightness.light,
-      background: Color(0xFFCACDD3),
-      surface: Color(0xFFECEFF4),
-      bar: Color(0xFFECEFF4),
-      text: Color(0xFF2E3440),
-      textMuted: Color(0xFF4C566A),
-      border: Color(0xFFD8DEE9),
-      primary: Color(0xFF4A6990),
-      secondary: Color(0xFFBF616A),
-      readerBackground: Color(0xFFECEFF4),
-      readerMenu: Color(0xFFCACDD3),
-      readerText: Color(0xFF2E3440),
-      readerInfo: Color(0xFF4C566A),
-      highlight: Color(0xFFEBCB8B),
-    ),
-    dark: StylePalette(
-      brightness: Brightness.dark,
-      background: Color(0xFF2E3440),
-      surface: Color(0xFF515661),
-      bar: Color(0xFF60656F),
-      text: Color(0xFFECEFF4),
-      // 照規則移的話會和正文字色只差一階、分不出主次，留原作的次要字色。
-      textMuted: Color(0xFFD8DEE9),
-      border: Color(0xFF545964),
-      primary: Color(0xFF88C0D0),
-      secondary: Color(0xFFB48EAD),
-      readerBackground: Color(0xFF2E3440),
-      readerMenu: Color(0xFF505662),
-      readerText: Color(0xFFD8DEE9),
-      readerInfo: Color(0xFFA3ABBA),
-      highlight: Color(0xFFEBCB8B),
     ),
   );
 
@@ -389,18 +243,25 @@ enum AppStyle {
   StylePalette of(Brightness brightness) =>
       brightness == Brightness.dark ? dark : light;
 
-  /// 套上強調色後的配色：主色換成強調色在這個深淺的顏色，其餘照風格；
-  /// [AppAccent.theme] 就是 [of]。
-  StylePalette paletteFor(Brightness brightness, AppAccent accent) {
-    final palette = of(brightness);
+  /// 實際套用的配色：主色換成強調色在這個深淺的顏色（[AppAccent.theme]
+  /// 照風格），深色且 [pureBlack] 時底色換成純黑（[StylePalette.toPureBlack]）。
+  StylePalette paletteFor(
+    Brightness brightness,
+    AppAccent accent, {
+    bool pureBlack = false,
+  }) {
+    var palette = of(brightness);
+    if (pureBlack) palette = palette.toPureBlack();
     final color = accent.colorFor(brightness);
     return color == null ? palette : palette.copyWith(primary: color);
   }
 
-  static AppStyle fromStorage(String? value) => AppStyle.values.firstWhere(
-    (style) => style.name == value,
-    orElse: () => AppStyle.paper,
-  );
+  /// 讀回保存的名稱；認不得（含已經拿掉的風格）時用 [fallback]。
+  static AppStyle fromStorage(String? value, {required AppStyle fallback}) =>
+      AppStyle.values.firstWhere(
+        (style) => style.name == value,
+        orElse: () => fallback,
+      );
 }
 
 /// 強調色：開關、選取、勾勾、強調按鈕與純文字動作用的主色。預設跟隨風格；
@@ -497,6 +358,29 @@ class StylePalette extends ThemeExtension<StylePalette> {
           _contrast(AppPalette.ink700, primary)
       ? AppPalette.paper50
       : AppPalette.ink700;
+
+  /// 「深色用純黑」：App 頁面與閱讀紙換成純黑，卡片、玻璃列、分隔線與閱讀
+  /// 選單照 [AppLayers] 從純黑往各自的字色重算，字色與主色不變，所以每個
+  /// 風格在純黑上仍帶著自己的字色與卡片色調。淺色、或底色本來就是純黑的
+  /// 深色原樣回傳。
+  StylePalette toPureBlack() {
+    if (brightness == Brightness.light ||
+        (background == _black && readerBackground == _black)) {
+      return this;
+    }
+    final card = AppLayers.step(_black, text, AppLayers.cardGapDark);
+    final borderGap =
+        AppLayers.lightness(border) - AppLayers.lightness(surface);
+    return copyWith(
+      background: _black,
+      surface: card,
+      bar: AppLayers.step(card, text, AppLayers.floatGapDark),
+      textMuted: AppLayers.keepGap(textMuted, text, from: surface, to: card),
+      border: AppLayers.step(card, text, borderGap.abs()),
+      readerBackground: _black,
+      readerMenu: AppLayers.step(_black, readerText, AppLayers.cardGapDark),
+    );
+  }
 
   /// 目前主題的配色；主題沒有掛擴充時以預設風格補上。
   static StylePalette of(BuildContext context) {

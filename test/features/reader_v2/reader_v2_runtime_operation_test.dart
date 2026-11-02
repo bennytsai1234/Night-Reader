@@ -22,14 +22,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
-  Future<void> updateProgress(
+  Future<int?> updateProgress(
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
     int pos, {
     double visualOffsetPx = 0.0,
     String? readerAnchorJson,
-  }) async {}
+  }) async => null;
 }
 
 class _FakeChapterDao extends Fake implements ChapterDao {
@@ -80,6 +80,10 @@ void main() {
     List<BookChapter> chapters, {
     ReaderV2TestContentLoader? contentLoader,
     ReaderV2LayoutSpec? initialLayoutSpec,
+    ReaderV2Location initialLocation = const ReaderV2Location(
+      chapterIndex: 0,
+      charOffset: 0,
+    ),
   }) {
     final book = Book(
       bookUrl: 'http://book.test',
@@ -106,9 +110,39 @@ void main() {
         bookDao: bookDao,
       ),
       initialLayoutSpec: initialLayoutSpec ?? specWithFontSize(18),
-      initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      initialLocation: initialLocation,
     );
   }
+
+  test('opening from a bookmark finds its chapter by title once the chapter '
+      'list is loaded', () async {
+    // 書籤記的是別處目錄的「第 1 章」、序號 1；這台的目錄前面多一個楔子。
+    final chapters = [
+      BookChapter(
+        url: 'prologue',
+        title: '楔子',
+        bookUrl: 'http://book.test',
+        index: 0,
+        content: '楔子內容。',
+      ),
+      for (var i = 0; i < 3; i++) chapter(i).copyWith(index: i + 1),
+    ];
+    final runtime = makeRuntime(
+      chapters,
+      initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 2),
+    );
+    addTearDown(runtime.dispose);
+    final restores = <ReaderV2Location>[];
+    runtime.registerViewportRestore(Object(), (location) async {
+      restores.add(location);
+      return true;
+    });
+
+    await runtime.openBook(chapterTitle: '第 1 章');
+
+    expect(restores.last.chapterIndex, 2);
+    expect(restores.last.charOffset, 2);
+  });
 
   test('latest operation owns the semantic target', () async {
     final content = Completer<String?>();

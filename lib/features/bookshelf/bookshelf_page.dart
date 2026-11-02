@@ -855,11 +855,9 @@ class _BookshelfPageState extends State<BookshelfPage>
     double topInset,
     double bottomInset,
   ) {
-    const columns = 3;
-    final width = MediaQuery.sizeOf(context).width;
-    final cellWidth =
-        (width - AppGrouped.margin * 2 - AppSpacing.lg * (columns - 1)) /
-        columns;
+    final width = MediaQuery.sizeOf(context).width - AppGrouped.margin * 2;
+    final columns = BookshelfGridTile.columnsFor(width);
+    final cellWidth = BookshelfGridTile.cellWidthFor(width, columns);
     return GridView.builder(
       padding: EdgeInsets.fromLTRB(
         AppGrouped.margin,
@@ -879,7 +877,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           cellWidth,
           MediaQuery.textScalerOf(context),
         ),
-        crossAxisSpacing: AppSpacing.lg,
+        crossAxisSpacing: BookshelfGridTile.columnGap,
         mainAxisSpacing: AppSpacing.md,
       ),
       itemCount: books.length,

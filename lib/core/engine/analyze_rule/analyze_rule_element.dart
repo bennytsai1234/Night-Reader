@@ -72,20 +72,10 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = evalJS(rule, result);
               break;
             default:
-              final jsonRule = isJsonLikeRuleInput(result)
-                  ? buildJsonFallbackRule(rule)
-                  : null;
-              if (jsonRule != null) {
-                tempResult = sourceRule
-                    .getAnalyzeByJSonPath(this, result)
-                    .getObject(jsonRule);
-              }
-              if (tempResult == null) {
-                final elements = sourceRule
-                    .getAnalyzeByJSoup(this, result)
-                    .getElements(rule);
-                tempResult = elements.isNotEmpty ? elements.first : null;
-              }
+              final elements = sourceRule
+                  .getAnalyzeByJSoup(this, result)
+                  .getElements(rule);
+              tempResult = elements.isNotEmpty ? elements.first : null;
           }
         } catch (e) {
           throw ParsingException(
@@ -174,19 +164,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = evalJS(rule, result);
               break;
             default:
-              final jsonRule = isJsonLikeRuleInput(result)
-                  ? buildJsonFallbackRule(rule)
-                  : null;
-              if (jsonRule != null) {
-                tempResult = sourceRule
-                    .getAnalyzeByJSonPath(this, result)
-                    .getElements(jsonRule);
-              }
-              if (tempResult is! List || tempResult.isEmpty) {
-                tempResult = sourceRule
-                    .getAnalyzeByJSoup(this, result)
-                    .getElements(rule);
-              }
+              tempResult = sourceRule
+                  .getAnalyzeByJSoup(this, result)
+                  .getElements(rule);
           }
         } catch (e) {
           throw ParsingException(

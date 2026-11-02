@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
+import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -46,6 +48,11 @@ class ReaderV2PageCoordinator {
   final ReaderV2ControllerHost _host;
   final ReaderV2NoticeSink _showNotice;
 
+  /// 點擊區域的「目錄」「日夜切換」：要用到頁面的抽屜與主題，由頁面接上，
+  /// 和閱讀選單的同名按鈕做同一件事。
+  VoidCallback? openChapters;
+  VoidCallback? toggleDayNight;
+
   /// 拖動條跨檔位的預覽跳轉防抖：快速滑過多個檔位時只跳最後停留者。
   static const Duration _scrubPreviewDebounce = Duration(milliseconds: 180);
   Timer? _scrubPreviewTimer;
@@ -82,6 +89,15 @@ class ReaderV2PageCoordinator {
         return;
       case ReaderV2TapAction.toggleTts:
         unawaited(_host.tts?.toggle());
+        return;
+      case ReaderV2TapAction.openChapters:
+        openChapters?.call();
+        return;
+      case ReaderV2TapAction.toggleAutoPage:
+        toggleAutoPage();
+        return;
+      case ReaderV2TapAction.toggleDayNight:
+        toggleDayNight?.call();
         return;
     }
   }
@@ -297,6 +313,54 @@ class ReaderV2PageCoordinator {
       AppLog.e('隱藏選字後重排失敗', error: error, stackTrace: stackTrace);
     }
     _showNotice(reloaded ? '已隱藏「$pattern」' : '已新增隱藏規則，但正文沒有更新', action: undo);
+  }
+
+  /// 選字選單的「書籤」：在選到的字那一句留一個書籤，提示可「復原」。
+  Future<void> addBookmark(SelectionBookmark selection) async {
+    final bookmarks = _host.bookmarks;
+    final Bookmark? saved;
+    try {
+      saved = await bookmarks.add(
+        location: selection.location,
+        chapterTitle: selection.chapterTitle,
+        excerpt: selection.excerpt,
+      );
+    } catch (error, stackTrace) {
+      AppLog.e('加入書籤失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('加入書籤', error));
+      return;
+    }
+    if (saved case final kept?) {
+      _showNotice(
+        '已加入書籤',
+        action: (
+          label: '復原',
+          onPressed: () => unawaited(bookmarks.remove(kept)),
+        ),
+      );
+    } else {
+      _showNotice('無法加入書籤');
+    }
+  }
+
+  /// 跳到書籤那一句，照目前的排版放在畫面上方讀起的位置（同跳章）。
+  Future<void> jumpToBookmark(
+    Bookmark bookmark, {
+    Future<void>? settled,
+  }) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    final location = ReaderV2Bookmarks.locationOf(
+      bookmark,
+      chapterIndex: ReaderV2Bookmarks.chapterIndexIn(
+        bookmark,
+        runtime.chapters,
+      ),
+    ).copyWith(visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport);
+    await runtime.jumpToLocation(location, settled: settled);
+    if (runtime.state.visibleLocation.chapterIndex == location.chapterIndex) {
+      await _host.tts?.followManualJump();
+    }
   }
 
   /// 「隱藏」新增的規則都放在這一組，在替換規則清單裡找得到。

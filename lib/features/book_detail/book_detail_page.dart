@@ -35,6 +35,7 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 
 import 'widgets/book_cover_ambience.dart';
 import 'widgets/book_detail_skeleton.dart';
@@ -378,12 +379,30 @@ class _BookDetailPageState extends State<BookDetailPage> {
             listController: _chapterListController,
             delegate: SliverChildBuilderDelegate((ctx, i) {
               final chapter = chapters[i];
+              final position = provider.displayPositionAt(i);
+              final volumes = provider.tocVolumes;
+              if (chapter.isVolume) {
+                return GroupedSliceItem(
+                  index: i,
+                  count: chapters.length,
+                  child: TocVolumeRow(
+                    title: ctx.zh(chapter.title),
+                    count: volumes.countOf(position),
+                    collapsed: provider.groupsVolumes
+                        ? provider.isVolumeCollapsed(position)
+                        : null,
+                    onToggle: () => provider.toggleVolume(position),
+                  ),
+                );
+              }
               final isCurrent = chapter.index == currentBook.chapterIndex;
               return GroupedSliceItem(
                 index: i,
                 count: chapters.length,
                 child: _ChapterRow(
                   title: ctx.zh(chapter.title),
+                  indented:
+                      provider.groupsVolumes && volumes.volumeOf(position) >= 0,
                   isCurrent: isCurrent,
                   isLocked: chapter.isLocked,
                   onTap: widget.fromReader
@@ -1078,12 +1097,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
 class _ChapterRow extends StatelessWidget {
   const _ChapterRow({
     required this.title,
+    required this.indented,
     required this.isCurrent,
     required this.isLocked,
     required this.onTap,
   });
 
   final String title;
+
+  /// 卷內的章往右縮一個字（目錄照卷分組時）。
+  final bool indented;
   final bool isCurrent;
   final bool isLocked;
   final VoidCallback onTap;
@@ -1093,14 +1116,17 @@ class _ChapterRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return GroupedRow(
       title: title,
-      titleWidget: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTextStyles.bodyBase.copyWith(
-          height: 1.3,
-          color: isCurrent ? scheme.primary : scheme.onSurface,
-          fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
+      titleWidget: Padding(
+        padding: EdgeInsets.only(left: indented ? tocChapterIndent : 0),
+        child: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.bodyBase.copyWith(
+            height: 1.3,
+            color: isCurrent ? scheme.primary : scheme.onSurface,
+            fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
+          ),
         ),
       ),
       showChevron: false,

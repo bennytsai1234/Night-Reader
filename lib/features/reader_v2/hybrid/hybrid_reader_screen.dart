@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -24,6 +25,7 @@ import 'core/hybrid_types.dart';
 import 'geometry/text_geometry.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
+import 'overlay/bookmark_marks.dart';
 import 'overlay/loading_veil.dart';
 import 'overlay/reader_skeleton_page.dart';
 import 'overlay/selection_service.dart';
@@ -53,6 +55,8 @@ class HybridReaderScreen extends StatefulWidget {
     this.controlsVisible,
     this.textSelectionEnabled = false,
     this.onHideText,
+    this.onBookmarkText,
+    this.marks,
     this.highlightColor = const Color(0xFFFFC857),
     this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
     this.progressListenable,
@@ -85,6 +89,13 @@ class HybridReaderScreen extends StatefulWidget {
   /// 選字選單的「隱藏」：把選到的字（連同所在段落與段內位置）交給上層
   /// 新增替換規則；沒給就不顯示這個按鈕。
   final ValueChanged<ParagraphSelection>? onHideText;
+
+  /// 選字選單的「書籤」：在選到的字那一句的開頭留一個書籤
+  /// （[ReaderTextSelection.asBookmark]）。沒給就不顯示這個按鈕。
+  final ValueChanged<SelectionBookmark>? onBookmarkText;
+
+  /// 這本書的書籤，在那一行旁畫記號（[BookmarkMarksOverlay]）。
+  final ValueListenable<List<ReaderMark>>? marks;
 
   /// 朗讀高亮與選字反白的顏色；[highlightStrength] 只套在朗讀高亮，選字
   /// 反白固定深淺以保持可辨識。
@@ -168,6 +179,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 放棄該操作。
   int _restoreRevision = 0;
   ReaderV2Location? _lastReportedLocation;
+
+  /// 最近一次還原到的位置，畫面還沒離開它之前量到的位置就是它
+  /// （[_unmovedRestoredLocation]）；畫面一離開就清掉。
+  ReaderV2Location? _restoredLocation;
   bool _initialRestoreCompleted = false;
 
   /// 正在等正文的跳章：一開始就蓋紙、攔下觸控，排版開始後交給
@@ -260,6 +275,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _registerRuntime() {
     widget.runtime.addListener(_onRuntimeChanged);
     widget.runtime.addViewportGeometryListener(_onViewportGeometryChanged);
+    widget.runtime.chapterShares.addListener(_publishProgress);
     widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
@@ -267,6 +283,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _unregisterRuntime(ReaderV2Runtime runtime) {
     runtime.removeListener(_onRuntimeChanged);
     runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
+    runtime.chapterShares.removeListener(_publishProgress);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
   }
@@ -992,6 +1009,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final anchorLine = AnchorManager.anchorOffsetInViewport(
       _viewportSize.height,
     );
+    final unmoved = _unmovedRestoredLocation(offset);
+    if (unmoved != null) return unmoved;
     final worldY = offset + anchorLine;
     final anchorHit = _documentIndex.hitTest(worldY);
     final scrollTopHit = _documentIndex.hitTest(offset);
@@ -1007,6 +1026,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       worldY: worldY,
       chapterCount: widget.runtime.chapterCount,
     );
+  }
+
+  /// 還原後畫面沒動過，就回傳還原到的位置。從畫面量位置記的是錨線上那一行
+  /// 的行首；還原的位置常在行中間（朗讀的句首、另一台手機或換字級前存的
+  /// 進度），沒捲動就重新量會變成行首，進度小幅往回跳，每換一次排版就再
+  /// 往回退一點。捲動位置等於還原到它會停的位置，就是沒動過；上方補進
+  /// 章節而調整捲動時兩邊一起變，也算沒動過。
+  ReaderV2Location? _unmovedRestoredLocation(double offset) {
+    final restored = _restoredLocation;
+    if (restored == null) return null;
+    final blocks = _pipeline.blocksOf(restored.chapterIndex);
+    // 和還原最後停的位置同一套算法：書首、書尾那一行到不了錨線，還原時
+    // 夾進可捲的範圍。
+    final expected = blocks == null
+        ? null
+        : _restingOffset(HybridAnchor.fromLocation(restored, blocks), blocks);
+    if (expected == null || (expected - offset).abs() > 0.5) {
+      _restoredLocation = null;
+      return null;
+    }
+    return restored;
   }
 
   ReaderV2Location? _preserveShortChapterAtBoundary({
@@ -1059,6 +1099,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
     if (!ok || !current()) return false;
     _lastReportedLocation = location;
+    _restoredLocation = location;
     _scheduleRebuild();
     return true;
   }
@@ -1101,6 +1142,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
     notifier.value = HybridProgress(
       chapterCount: widget.runtime.chapterCount,
+      shares: widget.runtime.chapterShares.value,
     ).progressForLocation(location, chapterLength: blocks.displayText.length);
   }
 
@@ -1557,6 +1599,72 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// [start, end) 在 viewport 上的字形範圍，每條視覺行一個框（見
   /// [HybridTextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
+  /// 每個書籤那一行在文件上的行框（還沒扣捲動位置）。書籤的位置、那一章
+  /// 的正文與文件索引都沒變就沿用：捲動時每一幀只扣掉捲動位置，不重新照
+  /// 錨點找字、不查字形（幾何的行框只記最近一次，幾個書籤與朗讀高亮輪流
+  /// 查會互相擠掉）。
+  final Map<
+    int,
+    ({
+      ReaderV2Location location,
+      ChapterBlocks blocks,
+      int revision,
+      HybridLineBox box,
+    })
+  >
+  _markBoxes = {};
+
+  /// 書籤那一行在 viewport 上的行框；那一章還沒排好的不畫。
+  List<HybridLineBox> _markLines(List<ReaderMark> marks) {
+    final scroll = _effectiveScrollOffset();
+    if (marks.isEmpty || scroll == null) return const <HybridLineBox>[];
+    final revision = _documentIndex.revisionNumber;
+    final lines = <HybridLineBox>[];
+    final seen = <int>{};
+    for (final (:id, :location) in marks) {
+      seen.add(id);
+      final blocks = _pipeline.blocksOf(location.chapterIndex);
+      if (blocks == null || blocks.displayText.isEmpty) continue;
+      var cached = _markBoxes[id];
+      if (cached == null ||
+          !identical(cached.location, location) ||
+          !identical(cached.blocks, blocks) ||
+          cached.revision != revision) {
+        final text = blocks.displayText;
+        final offset = ReaderV2ContentLocationMapper.offsetIn(
+          location: location,
+          displayText: text,
+          contentHash: blocks.contentHash,
+        ).clamp(0, text.length - 1).toInt();
+        final world = _pipeline.geometry.lineBoxes(
+          location.chapterIndex,
+          offset,
+          offset + 1,
+        );
+        // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
+        if (world.isEmpty) continue;
+        cached = (
+          location: location,
+          blocks: blocks,
+          revision: revision,
+          box: world.first,
+        );
+        _markBoxes[id] = cached;
+      }
+      final box = cached.box;
+      lines.add(
+        HybridLineBox(
+          left: box.left,
+          top: box.top - scroll,
+          right: box.right,
+          bottom: box.bottom - scroll,
+        ),
+      );
+    }
+    _markBoxes.removeWhere((id, _) => !seen.contains(id));
+    return lines;
+  }
+
   List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
     if (offset == null) return const <HybridLineBox>[];
@@ -1886,6 +1994,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           clipBehavior: Clip.none,
           children: <Widget>[
             visualContent,
+            if (widget.marks case final marks?)
+              Positioned.fill(
+                // 沒有書籤時不跟著捲動每一幀重建。
+                child: ValueListenableBuilder(
+                  valueListenable: marks,
+                  builder: (context, items, _) => items.isEmpty
+                      ? const SizedBox.shrink()
+                      : ListenableBuilder(
+                          listenable: controller,
+                          builder: (context, _) {
+                            final lines = _markLines(items);
+                            if (lines.isEmpty) return const SizedBox.shrink();
+                            return BookmarkMarksOverlay(
+                              lines: lines,
+                              textLeft: textSpec.textPaddingLeft,
+                              color: widget.highlightColor,
+                            );
+                          },
+                        ),
+                ),
+              ),
             if (highlight != null && highlight.isValid)
               Positioned.fill(
                 // 朗讀高亮只畫在正文可視區內，捲到邊緣的句子不會在邊距與
@@ -1930,6 +2059,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             onHide: widget.onHideText == null
                 ? null
                 : (selection) => widget.onHideText!(selection.inParagraph),
+            onBookmark: widget.onBookmarkText == null
+                ? null
+                : (selection) => widget.onBookmarkText!(selection.asBookmark),
             highlightColor: widget.highlightColor,
             child: _whileControls(
               (controlsVisible, child) => ReaderV2PointerTapLayer(

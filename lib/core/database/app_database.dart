@@ -14,6 +14,7 @@ import '../models/chapter.dart';
 import '../models/replace_rule.dart';
 import '../models/book_source.dart';
 import '../models/book_group.dart';
+import '../models/bookmark.dart';
 import '../models/cookie.dart';
 import '../models/dict_rule.dart';
 import '../models/http_tts.dart';
@@ -29,6 +30,7 @@ import 'dao/book_dao.dart';
 import 'dao/chapter_dao.dart';
 import 'dao/book_source_dao.dart';
 import 'dao/book_group_dao.dart';
+import 'dao/bookmark_dao.dart';
 import 'dao/replace_rule_dao.dart';
 import 'dao/search_history_dao.dart';
 import 'dao/cookie_dao.dart';
@@ -67,6 +69,7 @@ part 'app_database.g.dart';
     SearchBooks,
     DownloadTasks,
     SearchKeywords,
+    Bookmarks,
   ],
   daos: [
     BookDao,
@@ -87,6 +90,7 @@ part 'app_database.g.dart';
     DownloadDao,
     SearchKeywordDao,
     ReaderChapterContentDao,
+    BookmarkDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -124,7 +128,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -137,7 +141,8 @@ class AppDatabase extends _$AppDatabase {
         await _createPerformanceIndexes();
       }
       if (from < 3) {
-        // 書籤功能已移除；表與索引一併刪除，不留無人使用的資料。
+        // 舊的書籤表（照書的網址記）與索引刪掉；現在的書籤表在 schema 10
+        // 重新建立。
         await customStatement('DROP INDEX IF EXISTS idx_bookmarks_book');
         await customStatement('DROP TABLE IF EXISTS bookmarks');
       }
@@ -181,6 +186,16 @@ class AppDatabase extends _$AppDatabase {
         // 照原樣搬過去；重建表會丟掉章節的索引，重新建立。
         await m.alterTable(TableMigration(chapters));
         await customStatement(_chaptersIndexStatement);
+      }
+      if (from < 9) {
+        // 多台手機同步比進度新舊用的「位置最後移動的時間」（ADR 0039）。
+        // 最近閱讀時間開書沒翻頁也會更新，只能當升級時的估計。
+        await m.addColumn(books, books.progressTime);
+        await customStatement('UPDATE books SET progressTime = durChapterTime');
+      }
+      if (from < 10) {
+        // 書籤：照書名加作者記，跟著書走、不跟書源。
+        await m.createTable(bookmarks);
       }
     },
     beforeOpen: (_) async {

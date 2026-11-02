@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 
 import 'reader_v2_location.dart';
@@ -70,7 +72,14 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   final ReaderV2ChapterRepository repository;
   final ReaderV2ProgressController progressController;
-  final ReaderV2Location _initialLocation;
+
+  /// 開書的位置，開書前跳章失敗時也回到這裡（[openBook]）。
+  ReaderV2Location _initialLocation;
+
+  /// 開書開始了沒有（[openBook]）；開始之前的跳章記在 [_jumpedBeforeOpen]，
+  /// 開書時開在那裡，不蓋掉使用者的選擇。
+  bool _openStarted = false;
+  ReaderV2Location? _jumpedBeforeOpen;
   final ReaderV2StateMachine stateMachine;
   final ChangeNotifier _viewportGeometryNotifier = ChangeNotifier();
 
@@ -168,10 +177,13 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<void> jumpToChapter(int chapterIndex, {Future<void>? settled}) =>
       _jumpToChapter(chapterIndex, settled: settled);
 
+  /// 跳到 [location]；[settled] 同 [jumpToChapter]。
   Future<void> jumpToLocation(
     ReaderV2Location location, {
     bool immediateSave = true,
-  }) => _jumpToLocation(location, immediateSave: immediateSave);
+    Future<void>? settled,
+  }) =>
+      _jumpToLocation(location, immediateSave: immediateSave, settled: settled);
 
   Future<bool> restoreFromLocation(ReaderV2Location location) async {
     final token = beginRestoreOperation(location: location);
@@ -200,11 +212,54 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> openBook() async {
-    final token = stateMachine.beginOpen(location: _initialLocation);
+  /// 每章佔全書多少，全書進度照它算。開書時先讀好（[openBook]）再排正文：
+  /// 頁尾第一次出現就是加權過的數字，之後不會在換場途中換數字。讀到之前
+  /// 是 `even(0)`（章數對不上，照章數平均）。
+  ValueListenable<ReaderV2ChapterShares> get chapterShares => _chapterShares;
+  final ValueNotifier<ReaderV2ChapterShares> _chapterShares =
+      ValueNotifier<ReaderV2ChapterShares>(const ReaderV2ChapterShares.even(0));
+
+  /// 只讀資料庫（目錄已經載入）；讀不到就照章數平均，不擋開書。
+  Future<void> _loadChapterShares() async {
+    try {
+      final shares = await repository.loadChapterShares();
+      if (!disposed) _chapterShares.value = shares;
+    } catch (error) {
+      AppLog.w('讀每章長度失敗，全書進度照章數平均: $error');
+    }
+  }
+
+  /// 開書，停在建立時給的位置；給了 [at]（開書前才從資料庫讀到的較新位置，
+  /// 例如剛同步來的）就改停在那裡，之後跳章失敗也回到這裡。開書前使用者
+  /// 已經跳章（例如在換頁動畫期間開了目錄），開在跳去的地方。給了
+  /// [chapterTitle]（從書籤開書）時，讀到目錄後照章名對到這台目錄的那一章：
+  /// 開書前目錄可能還沒抓，位置裡的章節序號是別處的座標。
+  Future<void> openBook({ReaderV2Location? at, String? chapterTitle}) async {
+    _openStarted = true;
+    if (at != null) _initialLocation = at.normalized();
+    final jumped = _jumpedBeforeOpen;
+    _jumpedBeforeOpen = null;
+    var location = jumped ?? _initialLocation;
+    final token = stateMachine.beginOpen(location: location);
     notifyListeners();
     try {
-      await _positionViewport(location: _initialLocation, token: token);
+      // 目錄取不到的失敗和排版時一樣交給下面處理；目錄有了才讀每章長度
+      // （幾十毫秒，這時紙剛蓋上），讀好才排正文。
+      await repository.ensureChapters();
+      await _loadChapterShares();
+      if (!isCurrentOperationToken(token)) return;
+      if (jumped == null && chapterTitle != null && chapterTitle.isNotEmpty) {
+        location = location.copyWith(
+          chapterIndex: alignChapterIndex(
+            oldIndex: location.chapterIndex,
+            oldTitle: chapterTitle,
+            oldTotalCount: 0,
+            newChapters: repository.chapters,
+          ),
+        );
+        _initialLocation = location;
+      }
+      await _positionViewport(location: location, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
@@ -302,6 +357,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   ReaderV2OperationToken beginJumpOperation({ReaderV2Location? location}) {
+    if (!_openStarted && location != null) _jumpedBeforeOpen = location;
     final token = stateMachine.beginJump(location: location);
     notifyListeners();
     return token;
@@ -354,6 +410,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       // 那一章取不到：取不到的是跳到的章，不是這本書。回到開書的位置重新開，
       // 新的開書接手這次操作，連同已經改好的排版；並告訴使用者原因。
       _pendingUserNotice = notice;
+      _jumpedBeforeOpen = null;
       await openBook();
       return;
     }
@@ -618,6 +675,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     disposed = true;
     progressController.dispose();
     _viewportGeometryNotifier.dispose();
+    _chapterShares.dispose();
     stateMachine.dispose();
     super.dispose();
   }
