@@ -68,7 +68,11 @@ class ReaderV2BottomMenu extends StatelessWidget {
     this.showAutoPage = true,
     this.showReplaceRule = true,
     this.onHidden,
+    this.horizontalInset = AppGrouped.margin,
   });
+
+  /// 左右離畫面邊的距離；正文欄照每行字數收窄時對齊正文的左右邊。
+  final double horizontalInset;
 
   /// 膠囊內容離上緣的距離。
   static const double _panelTopPadding = AppSpacing.md;
@@ -124,9 +128,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
         data: menuStyle.toSheetTheme(Theme.of(context)),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            AppGrouped.margin,
+            horizontalInset,
             0,
-            AppGrouped.margin,
+            horizontalInset,
             bottomInset + AppSpacing.sm,
           ),
           child: Column(

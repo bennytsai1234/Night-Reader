@@ -20,7 +20,11 @@ class ReaderV2TopMenu extends StatelessWidget {
     required this.showReadTitleAddition,
     required this.onBack,
     required this.onMore,
+    this.horizontalInset = AppGrouped.margin,
   });
+
+  /// 左右離畫面邊的距離；正文欄照每行字數收窄時對齊正文的左右邊。
+  final double horizontalInset;
 
   /// 選單開著；只有滑動那一層聽它（見 [ReaderV2MenuEntrance]）。
   final ValueListenable<bool> controlsVisible;
@@ -45,9 +49,9 @@ class ReaderV2TopMenu extends StatelessWidget {
         data: menuStyle.toSheetTheme(Theme.of(context)),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            AppGrouped.margin,
+            horizontalInset,
             topInset + AppSpacing.xs,
-            AppGrouped.margin,
+            horizontalInset,
             0,
           ),
           child: Column(

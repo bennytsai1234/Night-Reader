@@ -17,6 +17,7 @@ import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'core/storage/reader_layout_cache.dart';
 import 'app_providers.dart';
+import 'shared/layout/tablet_text_scale.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
@@ -338,13 +339,15 @@ class ReaderApp extends StatelessWidget {
           themeAnimationStyle: AnimationStyle.noAnimation,
           locale: locale,
           // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
-          builder: (context, child) => TransitionOriginRecorder(
-            child: ThemeRevealScope(
-              child: StatusBarStableInset(
-                child: BackdropGroup(
-                  child: ChineseDisplayScope(
-                    child: HiddenWebViews(
-                      child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => TabletTextScale(
+            child: TransitionOriginRecorder(
+              child: ThemeRevealScope(
+                child: StatusBarStableInset(
+                  child: BackdropGroup(
+                    child: ChineseDisplayScope(
+                      child: HiddenWebViews(
+                        child: child ?? const SizedBox.shrink(),
+                      ),
                     ),
                   ),
                 ),
