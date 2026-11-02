@@ -685,6 +685,126 @@ const _jsoupNotProvided = <String, Set<String>>{
   'response': {'bodyStream'},
 };
 
+/// Rhino 裡 Java 的 `List`／`ArrayList`／`Set`／Jsoup `Elements` 都有
+/// `stream()`，lambda 直接傳 JS 函式。這是 Java 17 的 `Stream`（含
+/// `BaseStream`）、`IntStream`、`Collectors`、`Optional` 的公開方法；夜讀的
+/// 每一種清單都要有 `stream()`、`parallelStream()`，刻意不做的列在
+/// [_streamNotProvided]。
+const _javaListStream = ['stream', 'parallelStream'];
+
+const _javaStream = <String, List<String>>{
+  'stream': [
+    'allMatch',
+    'anyMatch',
+    'close',
+    'collect',
+    'count',
+    'distinct',
+    'dropWhile',
+    'filter',
+    'findAny',
+    'findFirst',
+    'flatMap',
+    'flatMapToDouble',
+    'flatMapToInt',
+    'flatMapToLong',
+    'forEach',
+    'forEachOrdered',
+    'isParallel',
+    'iterator',
+    'limit',
+    'map',
+    'mapMulti',
+    'mapMultiToDouble',
+    'mapMultiToInt',
+    'mapMultiToLong',
+    'mapToDouble',
+    'mapToInt',
+    'mapToLong',
+    'max',
+    'min',
+    'noneMatch',
+    'onClose',
+    'parallel',
+    'peek',
+    'reduce',
+    'sequential',
+    'skip',
+    'sorted',
+    'spliterator',
+    'takeWhile',
+    'toArray',
+    'toList',
+    'unordered',
+  ],
+  // IntStream、LongStream、DoubleStream 多出來的。
+  'primitiveStream': [
+    'asDoubleStream',
+    'asLongStream',
+    'average',
+    'boxed',
+    'mapToObj',
+    'sum',
+    'summaryStatistics',
+  ],
+  'Stream': ['concat', 'empty', 'generate', 'iterate', 'of', 'ofNullable'],
+  'IntStream': [
+    'concat',
+    'empty',
+    'generate',
+    'iterate',
+    'of',
+    'range',
+    'rangeClosed',
+  ],
+  'Collectors': [
+    'averagingDouble',
+    'averagingInt',
+    'averagingLong',
+    'counting',
+    'filtering',
+    'groupingBy',
+    'joining',
+    'mapping',
+    'partitioningBy',
+    'summingDouble',
+    'summingInt',
+    'summingLong',
+    'toCollection',
+    'toList',
+    'toMap',
+    'toSet',
+    'toUnmodifiableList',
+  ],
+  'optional': [
+    'filter',
+    'flatMap',
+    'get',
+    'ifPresent',
+    'ifPresentOrElse',
+    'isEmpty',
+    'isPresent',
+    'map',
+    'or',
+    'orElse',
+    'orElseGet',
+    'orElseThrow',
+    'stream',
+  ],
+  'optionalStatics': ['empty', 'of', 'ofNullable'],
+};
+
+/// Stream 刻意不做的方法與理由。
+const _streamNotProvided = <String, Set<String>>{
+  'stream': {
+    // 要把 Consumer 當輸出口傳給 lambda、再展開成基本型別串流；源倉庫的
+    // 書源沒有用到，要的時候用 flatMap。
+    'mapMulti', 'mapMultiToDouble', 'mapMultiToInt', 'mapMultiToLong',
+    // Java 的 Spliterator 物件，書源用 iterator()。
+    'spliterator',
+  },
+};
+
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -726,6 +846,59 @@ void main() {
       missing.join(',')
     ''', null);
     expect(missing, isEmpty, reason: '夜讀的 book、chapter、source 少了這些方法');
+  }, skip: skip);
+
+  test('每一種 Java 清單有 stream()，Stream、Collectors、Optional 有 Java 的方法', () {
+    final runtime = getJavascriptRuntime();
+    addTearDown(runtime.dispose);
+    JsExtensions(runtime).inject();
+    final rule = AnalyzeRule(
+      source: BookSource(bookSourceUrl: 'https://a.test'),
+    )..setContent('<p>1</p>', baseUrl: 'https://a.test/');
+    addTearDown(rule.dispose);
+
+    final missing = rule.evalJS(
+      '''
+      var S = Packages.java.util.stream;
+      var lists = {
+        ArrayList: new Packages.java.util.ArrayList(),
+        LinkedList: new Packages.java.util.LinkedList(),
+        HashSet: new Packages.java.util.HashSet(),
+        keySet: new Packages.java.util.HashMap().keySet(),
+        values: new Packages.java.util.HashMap().values(),
+        entrySet: new Packages.java.util.HashMap().entrySet(),
+        stringList: java.getStringList("tag.p@text"),
+        elements: java.getElements("tag.p"),
+        result: result
+      };
+      var stream = [1].stream();
+      var primitive = S.IntStream.of(1);
+      var groups = {
+        stream: stream, primitiveStream: primitive,
+        Stream: S.Stream, IntStream: S.IntStream, Collectors: S.Collectors,
+        optional: Packages.java.util.Optional.empty(),
+        optionalStatics: Packages.java.util.Optional
+      };
+      var lib = ${jsonEncode(_javaStream)};
+      var skipped = ${jsonEncode(_streamNotProvided.map((k, v) => MapEntry(k, v.toList())))};
+      var missing = [];
+      Object.keys(lists).forEach(function(kind) {
+        ${jsonEncode(_javaListStream)}.forEach(function(name) {
+          if (typeof lists[kind][name] !== 'function') missing.push(kind + '.' + name);
+        });
+        if (typeof lists[kind].stream().toList !== 'function') missing.push(kind + '.stream().toList');
+      });
+      Object.keys(lib).forEach(function(group) {
+        lib[group].forEach(function(name) {
+          if ((skipped[group] || []).indexOf(name) >= 0) return;
+          if (typeof groups[group][name] !== 'function') missing.push(group + '.' + name);
+        });
+      });
+      missing.join(',')
+    ''',
+      ['x'],
+    );
+    expect(missing, isEmpty, reason: '夜讀的 Java Stream 少了這些方法');
   }, skip: skip);
 
   test('java in URL JS is the request, like Legado AnalyzeUrl', () {
