@@ -616,7 +616,9 @@ class _SourceLoginPageState extends State<SourceLoginPage>
               backdrop: chrome.groupedBackground,
               // 程式表單回來後，以真實欄位及按鈕重算揭開前的骨架；
               // 尚未知資料時才使用通用的兩欄表單預覽。
-              skeleton: _FormSkeleton(items: rows == null ? null : _items(rows)),
+              skeleton: _FormSkeleton(
+                items: rows == null ? null : _items(rows),
+              ),
               builder: (_) => GroupedListView(children: _items(rows ?? [])),
             ),
     );
@@ -655,22 +657,24 @@ class _FormSkeletonState extends State<_FormSkeleton> {
   @override
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);
-    final items = widget.items ?? <Widget>[
-      GroupedSection(
-        topGap: AppSpacing.xs,
-        children: [
-          SourceLoginField(row: _field, controller: _empty),
-          SourceLoginField(row: _field, controller: _empty),
-        ],
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: AppSpacing.xl),
-        child: SourceLoginButtons(
-          buttons: const [_button, _button, _button, _button],
-          onPressed: (_) {},
-        ),
-      ),
-    ];
+    final items =
+        widget.items ??
+        <Widget>[
+          GroupedSection(
+            topGap: AppSpacing.xs,
+            children: [
+              SourceLoginField(row: _field, controller: _empty),
+              SourceLoginField(row: _field, controller: _empty),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xl),
+            child: SourceLoginButtons(
+              buttons: const [_button, _button, _button, _button],
+              onPressed: (_) {},
+            ),
+          ),
+        ];
     final top = MediaQuery.paddingOf(context).top;
     // 和換上的表單（[GroupedListView]）一樣收在平板的內容欄裡。
     final inset = ReadableWidth.insetOf(context);
