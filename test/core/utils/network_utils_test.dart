@@ -41,6 +41,56 @@ void main() {
       );
     });
 
+    // 同 OkHttp 照 UTS #46（非過渡）對應。預期值取自 Node 的
+    // `url.domainToASCII`（照 WHATWG／UTS #46 實作，和夜讀的程式無關）。
+    test('照 UTS #46 對應再換：全形、組合重音、該忽略的字、ß', () {
+      expect(
+        NetworkUtils.toAsciiHost('https://\u{3f2}.gr/a'),
+        'https://xn--4xa.gr/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://a\u{34f}b.com/a'),
+        'https://ab.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://Straße.de/a'),
+        'https://xn--strae-oqa.de/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://例子.中国/a'),
+        'https://xn--fsqu00a.xn--fiqs8s/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://ＥＸＡＭＰＬＥ.com/a'),
+        'https://example.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://e\u{301}.com/a'),
+        'https://xn--9ca.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://\u{e9}.com/a'),
+        'https://xn--9ca.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://例子．ＣＯＭ/a'),
+        'https://xn--fsqu00a.com/a',
+      );
+    });
+
+    // 全形的「＠」「／」「：」與不換行空白對應成網址的分隔符或空白，不是合法
+    // 主機名（Node 也交出空字串）：照原樣送，不會被拼成另一個主機、路徑或埠號。
+    test('換出來不是合法主機名時照原樣', () {
+      for (final url in [
+        'https://example.com＠other.invalid/a',
+        'https://example.com／other/a',
+        'https://example.com：8080/a',
+        'https://a\u{a0}b.com/a',
+      ]) {
+        expect(NetworkUtils.toAsciiHost(url), url);
+      }
+    });
+
     test('ASCII 網域與不是網址的照舊', () {
       for (final url in [
         'https://www.example.com/中文路徑',
