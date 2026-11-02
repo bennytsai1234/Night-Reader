@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
@@ -102,6 +103,9 @@ class ReaderV2PrefsSnapshot {
   /// 頁首頁尾資訊的字級。
   final double infoFontSize;
 
+  /// 正文、標題與頁首頁尾的字型（ADR 0045）。
+  final AppFont readerFont;
+
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
     required this.titleFontSize,
@@ -144,6 +148,7 @@ class ReaderV2PrefsSnapshot {
     required this.titleBold,
     required this.titleCenter,
     required this.infoFontSize,
+    required this.readerFont,
   });
 
   factory ReaderV2PrefsSnapshot.defaults() {
@@ -198,6 +203,7 @@ class ReaderV2PrefsSnapshot {
       titleBold: true,
       titleCenter: false,
       infoFontSize: kReaderInfoFontSize,
+      readerFont: AppFont.system,
     );
   }
 
@@ -243,6 +249,7 @@ class ReaderV2PrefsSnapshot {
     bool? titleBold,
     bool? titleCenter,
     double? infoFontSize,
+    AppFont? readerFont,
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
@@ -287,6 +294,7 @@ class ReaderV2PrefsSnapshot {
       titleBold: titleBold ?? this.titleBold,
       titleCenter: titleCenter ?? this.titleCenter,
       infoFontSize: infoFontSize ?? this.infoFontSize,
+      readerFont: readerFont ?? this.readerFont,
     );
   }
 }
@@ -475,6 +483,7 @@ class ReaderV2PrefsRepository {
       infoFontSize: normalizeInfoFontSize(
         prefs.getDouble(PreferKey.readerInfoFontSize),
       ),
+      readerFont: AppFont.fromStorage(prefs.getString(PreferKey.readerFont)),
     );
   }
 
@@ -678,6 +687,10 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveTitleCenter(bool value) {
     return _setBool(PreferKey.readerTitleCenter, value);
+  }
+
+  Future<void> saveReaderFont(AppFont value) {
+    return _setString(PreferKey.readerFont, value.id);
   }
 
   Future<void> saveInfoFontSize(double value) {

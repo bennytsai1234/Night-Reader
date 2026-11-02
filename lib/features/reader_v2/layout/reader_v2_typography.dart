@@ -30,6 +30,14 @@ const String kReaderV2PunctFontFamily = 'NightReaderPunct';
 /// 數字維持原本的系統字型。
 const List<String> kReaderV2FontFamilyFallback = <String>['sans-serif'];
 
+/// 標點字型之後的字族清單：選了下載的字型（[family]，ADR 0045）時排在
+/// 平台預設（Android 的 `sans-serif` 只有 Roboto，沒有漢字）後面，英數字照舊
+/// 用系統字型、照 ADR 0007 補半格，漢字才落到下載的字型；思源宋體自己的英數字
+/// 吃了 `fwid` 會變成全形。那套字型沒有的字（例如子集外的罕見字）照樣交給平台。
+List<String> readerV2FontFallback(String? family) => family == null
+    ? kReaderV2FontFamilyFallback
+    : <String>[...kReaderV2FontFamilyFallback, family];
+
 // lastline-v1 為已移除的末行字距補償所留；保留字串以免無謂地讓既有
 // metrics 快取失效。
 // physicalwidth-v1：contentWidth 只代表 viewport 扣除使用者 padding 後的

@@ -30,7 +30,7 @@ class PrivacyNoticePage extends StatelessWidget {
           ),
           _NoticeSection(
             title: '網路請求',
-            body: '搜尋、詳情、目錄、正文、封面與書源驗證會向使用者配置的書源或網址發出請求，請求可能包含 User-Agent、Headers 與 Cookie。',
+            body: '搜尋、詳情、目錄、正文、封面與書源驗證會向使用者配置的書源或網址發出請求，請求可能包含 User-Agent、Headers 與 Cookie。選了思源宋體或霞鶩文楷當字型時，會從 GitHub 下載一次字型檔，請求不帶任何個人資料。',
           ),
           _NoticeSection(
             title: '備份資料',
