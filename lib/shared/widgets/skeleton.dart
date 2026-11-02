@@ -188,8 +188,60 @@ class _SkeletonState extends State<Skeleton>
   }
 
   @override
-  Widget build(BuildContext context) =>
-      _SkeletonScope(phase: _breathing ? _clock : null, child: widget.child);
+  Widget build(BuildContext context) => _SkeletonAnchor(
+    clock: _clock,
+    child: _SkeletonScope(
+      phase: _breathing ? _clock : null,
+      child: widget.child,
+    ),
+  );
+}
+
+/// [Skeleton] 最外層，登記成呼吸的 [_BreathClock._anchor]；自己不畫東西。
+class _SkeletonAnchor extends SingleChildRenderObjectWidget {
+  const _SkeletonAnchor({required this.clock, super.child});
+
+  final _BreathClock clock;
+
+  @override
+  _RenderSkeletonAnchor createRenderObject(BuildContext context) =>
+      _RenderSkeletonAnchor(clock);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderSkeletonAnchor renderObject,
+  ) {
+    renderObject.clock = clock;
+  }
+}
+
+class _RenderSkeletonAnchor extends RenderProxyBox {
+  _RenderSkeletonAnchor(this._clock);
+
+  _BreathClock _clock;
+  set clock(_BreathClock value) {
+    if (identical(_clock, value)) return;
+    if (attached) _release();
+    _clock = value;
+    if (attached) _clock._anchor = this;
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _clock._anchor = this;
+  }
+
+  @override
+  void detach() {
+    _release();
+    super.detach();
+  }
+
+  void _release() {
+    if (identical(_clock._anchor, this)) _clock._anchor = null;
+  }
 }
 
 /// 收住一群 [Skeleton] 的呼吸：每個位置把這一口氣呼完、停在最深，整個畫面
@@ -237,6 +289,25 @@ class SkeletonRest {
 class _BreathClock extends ChangeNotifier {
   _BreathClock(TickerProvider vsync) {
     _ticker = vsync.createTicker(_tick);
+    _countFrames();
+  }
+
+  /// 這個骨架最外層的 render object（[_SkeletonAnchor]），底下的形狀到螢幕
+  /// 的轉換從它接上去（[_screenTransform]）。
+  RenderObject? _anchor;
+
+  /// [_anchor] 到螢幕的轉換，第 [_anchorFrame] 幀算的；一幀只沿元件樹往上
+  /// 算一次，底下的形狀只要算到 [_anchor] 為止。
+  final Matrix4 _anchorToScreen = Matrix4.identity();
+  int _anchorFrame = -1;
+
+  /// [_anchor] 這一幀到螢幕的轉換。
+  Matrix4 _anchorTransform() {
+    if (_anchorFrame != _frames) {
+      _anchorFrame = _frames;
+      _walkUp(_anchor!, null, _anchorToScreen);
+    }
+    return _anchorToScreen;
   }
 
   late final Ticker _ticker;
@@ -417,6 +488,49 @@ class _BreathClock extends ChangeNotifier {
     return _breathTable.at(phase, u, breath);
   }
 
+  /// 這一刻整個畫面寬的呼吸漸層：螢幕座標從左緣（x = 0）到右緣
+  /// （x = [viewWidth]），每 1/32 個畫面寬一個停點，顏色是 [color] 乘上那個
+  /// 位置的深淺。同一個骨架每一幀每種顏色只建一道，底下每個形狀共用
+  /// （[_drawBreathing]），呼吸每一幀的成本不跟著形狀數變多。整片一樣深時
+  /// （還沒開始呼吸、收住了、整片一起呼吸）回傳 null，用單色畫。
+  ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth) {
+    if (_hold != null || _still || breath.lag == 0 || viewWidth <= 0) {
+      return null;
+    }
+    // 深淺只看這幾個值（[depthAt]）；有一個變了，上一幀的漸層就不能用。
+    if (_cachedCycles != _cycles ||
+        _cachedShift != _shift ||
+        _cachedRestFrom != _restFrom ||
+        _cachedRestarted != _restarted ||
+        _cachedBreath != breath ||
+        _cachedWidth != viewWidth) {
+      _gradients.clear();
+      _cachedCycles = _cycles;
+      _cachedShift = _shift;
+      _cachedRestFrom = _restFrom;
+      _cachedRestarted = _restarted;
+      _cachedBreath = breath;
+      _cachedWidth = viewWidth;
+    }
+    return _gradients[color] ??= ui.Gradient.linear(
+      Offset.zero,
+      Offset(viewWidth, 0),
+      [
+        for (var i = 0; i < _gradientStops.length; i++)
+          color.withValues(alpha: color.a * depthAt(_gradientStops[i], breath)),
+      ],
+      _gradientStops,
+    );
+  }
+
+  final Map<Color, ui.Gradient> _gradients = {};
+  double? _cachedCycles;
+  double? _cachedShift;
+  double? _cachedRestFrom;
+  bool? _cachedRestarted;
+  SkeletonBreath? _cachedBreath;
+  double? _cachedWidth;
+
   @override
   void dispose() {
     _releaseHold();
@@ -586,112 +700,164 @@ class _RenderSkeletonBox extends RenderBox {
   @override
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
-    context.canvas.drawRRect(
-      _borderRadius.toRRect(offset & size),
-      _breathingPaint(
-        _paint,
-        this,
-        offset,
-        Offset.zero & size,
-        color: _color,
-        phase: _phase,
-        breath: _breath,
-        viewWidth: _viewWidth,
-      ),
+    _drawBreathing(
+      context.canvas,
+      _paint,
+      this,
+      offset,
+      _borderRadius.toRRect(Offset.zero & size),
+      color: _color,
+      phase: _phase,
+      breath: _breath,
+      viewWidth: _viewWidth,
     );
   }
 }
 
-/// 佔位形狀在呼吸這一刻的畫筆：設好 [paint] 後回傳它。[local] 是形狀在
-/// [box] 裡的位置，[offset] 是 [box] 這次畫在圖層上的位置。[toScreen] 是
-/// [box] 到螢幕的轉換（[_screenTransform]），一次畫好幾個形狀時由呼叫端算
-/// 一次傳進來；null 時這裡算。
+/// 畫一個跟著呼吸的佔位形狀。[shape] 是形狀在 [box] 裡的位置，[offset] 是
+/// [box] 這次畫在圖層上的位置。[toScreen] 是 [box] 到螢幕的轉換
+/// （[_screenTransform]），一次畫好幾個形狀時由呼叫端算一次傳進來；null 時
+/// 這裡算。
 ///
-/// 骨架呼吸時每一格每個形狀都要重畫，這裡是骨架本身每一格的成本：到螢幕
-/// 的轉換要沿著元件樹一路往上乘，一個形狀只算一次；曲線查表（[_breathTable]）
-/// 不在每個停點重解一次（ADR 0029「用時間換流暢」，留空間給底下準備內容）。
-/// 每一格也盡量不產生新的物件：開 App 的呼吸與換場加起來約 1.5 秒，呼吸前
-/// 清過記憶體（`_collectGarbage`），這段期間產生的東西撐不滿新生區，Dart 就
-/// 不會在動畫途中回收。原本每個形狀每一格都新建畫筆、停點清單與一份轉換
-/// （沿元件樹記下每一層），新生區約 20 幀就滿，呼吸 0.9 秒裡固定回收 5 次，
-/// 落到哪一幀、停多久看運氣（2026-10-28 量到）。
-Paint _breathingPaint(
+/// 由左而右呼吸時，每個形狀用骨架這一幀共用的那一道漸層
+/// （[_BreathClock.gradient]，螢幕座標）：畫之前把畫布的橫軸換成螢幕的橫軸，
+/// 形狀也換到螢幕的橫向位置上畫，畫完換回來。換頁途中整頁在平移、縮放，
+/// 同一個螢幕位置的骨架照樣一樣深。每個形狀自己畫在原本的位置，裁切、捲動、
+/// 先後順序都和其他元件一樣。
+///
+/// 骨架呼吸時每一幀每個形狀都要重畫，這裡是骨架本身每一幀的成本：到螢幕
+/// 的轉換要沿著元件樹一路往上乘，一個形狀只算一次；漸層每個骨架每一幀只建
+/// 一道。每一幀也盡量不產生新的物件：開 App 的呼吸與換場加起來約 1.5 秒，
+/// 呼吸前清過記憶體（`_collectGarbage`），這段期間產生的東西撐不滿新生區，
+/// Dart 就不會在動畫途中回收（2026-10-28 量到原本每個形狀每一幀新建畫筆、
+/// 停點清單與轉換時，呼吸 0.9 秒裡固定回收 5 次）。
+void _drawBreathing(
+  Canvas canvas,
   Paint paint,
   RenderBox box,
   Offset offset,
-  Rect local, {
+  RRect shape, {
   required Color color,
   required _BreathClock? phase,
   required SkeletonBreath breath,
   required double viewWidth,
   Matrix4? toScreen,
 }) {
+  final gradient = phase?.gradient(color, breath, viewWidth);
   // 重用的畫筆先回到新建時的樣子：畫漸層時畫筆的透明度會乘上去，上一筆
-  // 留下的半透明顏色（實色的形狀、減少動態時的單色）會讓漸層變淡。
+  // 留下的半透明顏色（實色的形狀、單色）會讓漸層變淡。
   paint
     ..shader = null
     ..color = const Color(0xFF000000);
-  if (phase == null) {
-    paint.color = color;
-  } else if (breath.lag == 0 || viewWidth <= 0) {
-    paint.color = color.withValues(alpha: color.a * phase.depthAt(0, breath));
-  } else {
-    // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
-    // 骨架才會一樣深。
-    final transform = toScreen ?? _screenTransform(box);
-    final left =
-        MatrixUtils.transformPoint(transform, local.topLeft).dx / viewWidth;
-    final right =
-        MatrixUtils.transformPoint(transform, local.topRight).dx / viewWidth;
-    final span = right - left;
-    final rect = local.shift(offset);
-    // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
-    final count = math.max(2, (span.abs() * 32).ceil() + 1);
-    // 漸層建好時已經把顏色與停點抄走，清單可以每一格重用。
-    final colors = _gradientColors[count] ??= List<Color>.filled(count, color);
-    for (var i = 0; i < count; i++) {
-      colors[i] = color.withValues(
-        alpha: color.a * phase.depthAt(left + span * i / (count - 1), breath),
-      );
-    }
-    paint.shader = ui.Gradient.linear(
-      rect.centerLeft,
-      rect.centerRight,
-      colors,
-      _gradientStops[count] ??= List<double>.unmodifiable([
-        for (var i = 0; i < count; i++) i / (count - 1),
-      ]),
-    );
+  if (gradient == null) {
+    paint.color = phase == null
+        ? color
+        : color.withValues(alpha: color.a * phase.depthAt(0, breath));
+    canvas.drawRRect(shape.shift(offset), paint);
+    return;
   }
-  return paint;
+  // 形狀左上角在螢幕上的橫向位置是 scale·x + shift（x 是在 box 裡的位置）。
+  final transform = toScreen ?? _screenTransform(box, phase);
+  final scale = transform.storage[0];
+  final shift = transform.storage[12] + transform.storage[4] * shape.top;
+  if (scale == 0) {
+    // 縮到沒有寬度：看不到，照左緣的深淺畫單色。
+    paint.color = color.withValues(
+      alpha: color.a * phase!.depthAt(shift / viewWidth, breath),
+    );
+    canvas.drawRRect(shape.shift(offset), paint);
+    return;
+  }
+  paint.shader = gradient;
+  // 畫布的 x' 對到螢幕的 x：畫布 x = offset.dx + (x' − shift) / scale。
+  canvas
+    ..save()
+    ..translate(offset.dx - shift / scale, offset.dy)
+    ..scale(1 / scale, 1)
+    ..drawRRect(_scaleX(shape, scale, shift), paint)
+    ..restore();
 }
 
-/// [_breathingPaint] 每種停點數重用的顏色清單與停點。
-final Map<int, List<Color>> _gradientColors = {};
-final Map<int, List<double>> _gradientStops = {};
+/// [shape] 的橫向照 x' = scale·x + shift 換過去，縱向不變；scale 是負的
+/// （左右翻過來）時左右兩邊對調。
+RRect _scaleX(RRect shape, double scale, double shift) {
+  if (scale == 1) return shape.shift(Offset(shift, 0));
+  Radius x(Radius r) => Radius.elliptical(r.x * scale.abs(), r.y);
+  final flip = scale < 0;
+  return RRect.fromLTRBAndCorners(
+    (flip ? shape.right : shape.left) * scale + shift,
+    shape.top,
+    (flip ? shape.left : shape.right) * scale + shift,
+    shape.bottom,
+    topLeft: x(flip ? shape.trRadius : shape.tlRadius),
+    topRight: x(flip ? shape.tlRadius : shape.trRadius),
+    bottomRight: x(flip ? shape.blRadius : shape.brRadius),
+    bottomLeft: x(flip ? shape.brRadius : shape.blRadius),
+  );
+}
+
+/// [_BreathClock.gradient] 的停點：每 1/32 個畫面寬一個。呼吸沿橫向是平滑的
+/// 曲線，這樣分就看不出折角。
+final List<double> _gradientStops = List<double>.unmodifiable([
+  for (var i = 0; i <= 32; i++) i / 32,
+]);
 
 /// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`，但不沿路
 /// 記下每一層、不新建矩陣：結果放在共用的 [_toScreen]，下一個形狀算的時候
-/// 就被蓋掉，拿到就要用掉。呼吸時每個骨架每一格都要算一次（[_breathingPaint]）。
-Matrix4 _screenTransform(RenderObject box) {
-  final root = box.owner?.rootNode;
-  _toScreen.setIdentity();
-  var child = box;
-  // 從自己往上，每一層的轉換乘在左邊；最上面那一層（整個畫面到裝置像素）
-  // 不算，和 getTransformTo(null) 一樣。
-  for (var parent = child.parent; parent != null && !identical(parent, root);) {
-    _step.setIdentity();
-    parent.applyPaintTransform(child, _step);
-    _step.multiply(_toScreen);
+/// 就被蓋掉，拿到就要用掉。由左而右呼吸時每個骨架元件每一幀都要算一次
+/// （[_drawBreathing]）。
+///
+/// 只往上算到所在骨架的最外層（[_BreathClock._anchor]），再接上那一層這一幀
+/// 到螢幕的轉換（每個骨架一幀算一次）：骨架上面的元件樹（App、頁面、換頁
+/// 動畫…）比骨架裡面深得多，平板書架 69 個形狀每個都從頭算到螢幕時，光這
+/// 一步每幀約 0.7ms（2026-11-02 量）。
+Matrix4 _screenTransform(RenderObject box, _BreathClock? clock) {
+  final anchor = clock?._anchor;
+  final reached = _walkUp(box, anchor, _toScreen);
+  if (anchor != null && identical(reached, anchor)) {
+    _step
+      ..setFrom(clock!._anchorTransform())
+      ..multiply(_toScreen);
     _toScreen.setFrom(_step);
-    child = parent;
-    parent = child.parent;
   }
   return _toScreen;
 }
 
+/// 從 [box] 往上，把每一層的轉換乘在左邊，寫進 [into]；走到 [stopAt] 或
+/// 最上面那一層（整個畫面到裝置像素，不算，和 getTransformTo(null) 一樣）
+/// 為止，回傳停在哪一層。
+RenderObject _walkUp(RenderObject box, RenderObject? stopAt, Matrix4 into) {
+  final root = box.owner?.rootNode;
+  into.setIdentity();
+  var child = box;
+  for (
+    var parent = child.parent;
+    parent != null && !identical(parent, root) && !identical(child, stopAt);
+  ) {
+    _walkStep.setIdentity();
+    parent.applyPaintTransform(child, _walkStep);
+    _walkStep.multiply(into);
+    into.setFrom(_walkStep);
+    child = parent;
+    parent = child.parent;
+  }
+  return child;
+}
+
 final Matrix4 _toScreen = Matrix4.identity();
 final Matrix4 _step = Matrix4.identity();
+final Matrix4 _walkStep = Matrix4.identity();
+
+/// 到現在畫了幾幀：每一幀開始時加一（[_BreathClock._anchorTransform] 一幀
+/// 算一次用）。在第一個 [_BreathClock] 建立時開始數。
+int _frames = 0;
+bool _countingFrames = false;
+
+void _countFrames() {
+  if (_countingFrames) return;
+  _countingFrames = true;
+  SchedulerBinding.instance.addPersistentFrameCallback((_) => _frames++);
+}
 
 /// [Skeleton.breathAt] 先算好的一張表：呼吸曲線只看一輪裡的位置，和相位、
 /// 橫向位置無關，開 App 時算一次（513 個點），畫骨架時查表內插，和直接算的
@@ -803,30 +969,33 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
     final canvas = context.canvas;
-    // 整塊到螢幕的轉換只算一次，每個形狀共用。
-    Matrix4? toScreen;
+    // 由左而右呼吸時，整塊到螢幕的轉換只算一次，每個形狀共用。
+    final toScreen = _phase?.gradient(_color, _breath, _viewWidth) == null
+        ? null
+        : _screenTransform(this, _phase);
     for (final shape in _shapes(size)) {
-      final rrect = shape.radius.toRRect(shape.rect.shift(offset));
+      final rrect = shape.radius.toRRect(shape.rect);
       final fill = shape.fill;
-      canvas.drawRRect(
+      if (fill != null) {
+        canvas.drawRRect(
+          rrect.shift(offset),
+          _paint
+            ..shader = null
+            ..color = fill,
+        );
+        continue;
+      }
+      _drawBreathing(
+        canvas,
+        _paint,
+        this,
+        offset,
         rrect,
-        fill != null
-            ? (_paint
-                ..shader = null
-                ..color = fill)
-            : _breathingPaint(
-                _paint,
-                this,
-                offset,
-                shape.rect,
-                color: _color,
-                phase: _phase,
-                breath: _breath,
-                viewWidth: _viewWidth,
-                toScreen: _phase == null || _breath.lag == 0
-                    ? null
-                    : toScreen ??= _screenTransform(this),
-              ),
+        color: _color,
+        phase: _phase,
+        breath: _breath,
+        viewWidth: _viewWidth,
+        toScreen: toScreen,
       );
     }
   }

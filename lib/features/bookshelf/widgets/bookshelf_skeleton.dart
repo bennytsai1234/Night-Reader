@@ -59,6 +59,8 @@ class BookshelfSkeleton extends StatelessWidget {
       cellHeight + AppSpacing.md,
     );
     return GridView.builder(
+      // 骨架呼吸時整片每一幀都重畫，每格各一層只多了每一幀的開銷（Skeleton）。
+      addRepaintBoundaries: false,
       physics: const NeverScrollableScrollPhysics(),
       padding: padding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -109,6 +111,8 @@ class BookshelfSkeleton extends StatelessWidget {
       cardHeight + AppSpacing.sm,
     );
     return ListView.builder(
+      // 同 _buildGrid：骨架呼吸時整片每一幀都重畫，不每張卡各一層。
+      addRepaintBoundaries: false,
       physics: const NeverScrollableScrollPhysics(),
       padding: padding,
       itemCount: _limit(count),
