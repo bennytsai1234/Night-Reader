@@ -135,7 +135,10 @@ class AppUpdateService {
       for (final line in lines)
         if (_markdownBullet.hasMatch(line)) line,
     ];
-    if (topLevel.length <= 4 && full.runes.length <= 380) {
+    final hasNested = lines.any(
+      (line) => RegExp(r'^\s+[-*+]\s+').hasMatch(line),
+    );
+    if (topLevel.length <= 4 && full.runes.length <= 380 && !hasNested) {
       return full;
     }
 
