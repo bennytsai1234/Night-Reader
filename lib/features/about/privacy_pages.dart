@@ -128,7 +128,9 @@ class _PermissionsPageState extends State<PermissionsPage>
     );
   }
 
-  Widget _buildPermissionSection(AsyncSnapshot<AppPermissionSnapshot> snapshot) {
+  Widget _buildPermissionSection(
+    AsyncSnapshot<AppPermissionSnapshot> snapshot,
+  ) {
     if (snapshot.hasError) {
       return GroupedSection(
         header: '權限狀態',
@@ -145,7 +147,8 @@ class _PermissionsPageState extends State<PermissionsPage>
       );
     }
 
-    final items = snapshot.data?.items ?? _permissionService.loadingSnapshot().items;
+    final items =
+        snapshot.data?.items ?? _permissionService.loadingSnapshot().items;
     return GroupedSection(
       header: '權限狀態',
       children: [
