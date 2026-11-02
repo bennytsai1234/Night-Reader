@@ -36,4 +36,62 @@ void main() {
       expect(xpath.getStringList('//li//a[not(@class)]/text()'), ['乙']);
     });
   });
+  // novelnext 這類英文小說站：搜尋結果每一列用 `@XPath:div[2]/div/h3/a/@title`
+  // 從那一列往下找（JsoupXpath 從 JXNode 起算）。
+  group('相對路徑：從目前的元素往下找', () {
+    const html = '''
+      <div class="list">
+        <div class="row"><div>封面</div>
+          <div><div><h3><a href="/a" title="Book A">A</a></h3>
+          <span>x</span><span>Author A</span></div></div></div>
+        <div class="row"><div>封面</div>
+          <div><div><h3><a href="/b" title="Book B">B</a></h3>
+          <span>x</span><span>Author B</span></div></div></div>
+      </div>
+    ''';
+
+    test('列表的每一項各自從自己往下找', () {
+      final rows = AnalyzeByXPath(html).getElements("//div[@class='row']");
+      expect(rows, hasLength(2));
+      final second = AnalyzeByXPath(rows[1]);
+      expect(second.getStringList('div[2]/div/h3/a/@title'), ['Book B']);
+      expect(second.getString('div[2]/div/span[2]/text()'), 'Author B');
+      expect(second.getStringList('div[2]/div/h3/a/@href'), ['/b']);
+      // 開頭是 / 的照舊從整份（這一列）找。
+      expect(second.getStringList('//h3/a/text()'), ['B']);
+    });
+
+    test('表格的一列也從那一列往下找', () {
+      const table =
+          '<table><tr class="r"><td>甲書</td><td><a href="/a">作者甲</a></td></tr>'
+          '<tr class="r"><td>乙書</td><td><a href="/b">作者乙</a></td></tr></table>';
+      final rows = AnalyzeByXPath(table).getElements("//tr[@class='r']");
+      expect(rows, hasLength(2));
+      final second = AnalyzeByXPath(rows[1]);
+      expect(second.getString('td[1]/text()'), '乙書');
+      expect(second.getStringList('td[2]/a/@href'), ['/b']);
+    });
+
+    test('| 兩邊各從自己的起點找', () {
+      final rows = AnalyzeByXPath(html).getElements("//div[@class='row']");
+      final first = AnalyzeByXPath(rows[0]);
+      expect(first.getStringList('div[2]/div/h3/a/@title | //span[2]/text()'), [
+        'Book A',
+        'Author A',
+      ]);
+    });
+
+    test('只有第一步可以省略 /', () {
+      final rows = AnalyzeByXPath(html).getElements("//div[@class='row']");
+      final first = AnalyzeByXPath(rows[0]);
+      // 中間少了 / 的不是合法的路徑，照舊當成錯誤，不默默當成 div/div。
+      expect(() => first.getStringList('div[2] div'), throwsFormatException);
+    });
+
+    test('整份網頁時從網頁本身找', () {
+      expect(AnalyzeByXPath(html).getStringList('html/body/div/@class'), [
+        'list',
+      ]);
+    });
+  });
 }
