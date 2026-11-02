@@ -36,7 +36,8 @@ class BookListParser {
     // 1. 偵測 bookUrlPattern (對標 Android BookList.analyzeBookList)
     if (isSearch && source.bookUrlPattern?.isNotEmpty == true) {
       try {
-        if (RegExp(source.bookUrlPattern!).hasMatch(baseUrl)) {
+        // Legado `baseUrl.matches(it.toRegex())`：整個網址都符合才算詳情頁。
+        if (RegExp('^(?:${source.bookUrlPattern!})\$').hasMatch(baseUrl)) {
           final searchBook = await _getInfoItem(
             source: source,
             body: body,
