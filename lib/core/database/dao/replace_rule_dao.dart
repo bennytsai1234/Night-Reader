@@ -23,20 +23,62 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
     )..orderBy([(t) => OrderingTerm(expression: t.order)])).watch();
   }
 
-  Future<void> upsert(ReplaceRule rule) =>
-      into(replaceRules).insertOnConflictUpdate(_toInsertable(rule));
+  /// 存一條規則；還沒有編號（id 為 0）的是新規則，配一個編號（[_assignIds]）。
+  Future<void> upsert(ReplaceRule rule) async {
+    await _assignIds([rule]);
+    await into(replaceRules).insertOnConflictUpdate(_toInsertable(rule));
+  }
 
   /// 新增一條規則，回傳它的 id。
-  Future<int> insert(ReplaceRule rule) =>
-      into(replaceRules).insert(_toInsertable(rule));
+  Future<int> insert(ReplaceRule rule) async {
+    await _assignIds([rule]);
+    return into(replaceRules).insert(_toInsertable(rule));
+  }
 
   Future<void> upsertAll(List<ReplaceRule> rules) async {
+    await _assignIds(rules);
     await batch(
       (b) => b.insertAllOnConflictUpdate(
         replaceRules,
         rules.map(_toInsertable).toList(),
       ),
     );
+  }
+
+  /// 規則換編號（同步時兩台的舊規則同號不同內容，把這台的換開）。
+  Future<void> changeId(int from, int to) =>
+      (update(replaceRules)..where((t) => t.id.equals(from))).write(
+        ReplaceRulesCompanion(id: Value(to)),
+      );
+
+  /// 一個沒用過的新編號，用法同 [_assignIds]。
+  Future<int> newId() async => (await _newIds(1)).single;
+
+  /// 新規則的編號用建立的時間（毫秒，同 Legado）：兩台手機各自新增的規則
+  /// 不會撞號，同步時分得開（ADR 0039）。直接寫進 [rules]，呼叫端拿得到。
+  Future<void> _assignIds(List<ReplaceRule> rules) async {
+    final missing = [
+      for (final rule in rules)
+        if (rule.id <= 0) rule,
+    ];
+    if (missing.isEmpty) return;
+    final ids = await _newIds(missing.length);
+    for (var i = 0; i < missing.length; i++) {
+      missing[i].id = ids[i];
+    }
+  }
+
+  /// 同一毫秒要好幾個、或現在的時間比已有的編號小時，接在最大的後面。
+  Future<List<int>> _newIds(int count) async {
+    final maxId = replaceRules.id.max();
+    final largest =
+        await (selectOnly(
+          replaceRules,
+        )..addColumns([maxId])).map((row) => row.read(maxId)).getSingle() ??
+        0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final start = now > largest ? now : largest + 1;
+    return [for (var i = 0; i < count; i++) start + i];
   }
 
   Future<void> deleteById(int id) =>

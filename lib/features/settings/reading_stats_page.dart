@@ -6,8 +6,9 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/read_record.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -24,7 +25,10 @@ class ReadingStatsPage extends StatefulWidget {
   State<ReadingStatsPage> createState() => _ReadingStatsPageState();
 }
 
-typedef _Stats = ({List<ReadRecord> records, int today, int week});
+typedef _Stats = ({List<_BookTime> records, int today, int week});
+
+/// 一本書在所有手機上加起來讀了多久。
+typedef _BookTime = ({String bookName, int readTime, int lastRead});
 
 class _ReadingStatsPageState extends State<ReadingStatsPage> {
   late final ReadRecordDao _readRecordDao;
@@ -37,10 +41,47 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
     _stats = _load();
   }
 
+  /// 這台的加上同步來的別台的（ADR 0039）。
   Future<_Stats> _load() async {
+    final now = DateTime.now();
     final records = await _readRecordDao.getAllShow();
-    final recent = await _readRecordDao.recentTotals(DateTime.now());
-    return (records: records, today: recent.today, week: recent.week);
+    final recent = await _readRecordDao.recentTotals(now);
+    final others = await _othersStats();
+    final books = <String, _BookTime>{
+      for (final record in records)
+        record.bookName: (
+          bookName: record.bookName,
+          readTime: record.readTime,
+          lastRead: record.lastRead,
+        ),
+    };
+    for (final MapEntry(key: name, value: other) in others.books.entries) {
+      final mine = books[name];
+      books[name] = (
+        bookName: name,
+        readTime: (mine?.readTime ?? 0) + other.readTime,
+        lastRead: mine == null || other.lastRead > mine.lastRead
+            ? other.lastRead
+            : mine.lastRead,
+      );
+    }
+    final (:today, :weekStart) = ReadRecordDao.recentDays(now);
+    return (
+      records: books.values.toList()
+        ..sort((a, b) => b.lastRead.compareTo(a.lastRead)),
+      today: recent.today + others.secondsBetween(today, today),
+      week: recent.week + others.secondsBetween(weekStart, today),
+    );
+  }
+
+  /// 別台的統計讀不出來（檔壞了）就只顯示這台的。
+  Future<OtherDevicesStats> _othersStats() async {
+    try {
+      return await ReadStatsSync.others();
+    } catch (error, stackTrace) {
+      AppLog.e('讀別台的閱讀統計失敗', error: error, stackTrace: stackTrace);
+      return OtherDevicesStats.empty;
+    }
   }
 
   /// 紀錄只有書名。書還在（書架上優先，其次最近讀的那本）就開書籍詳情；

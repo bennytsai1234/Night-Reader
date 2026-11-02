@@ -96,12 +96,17 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
     return result;
   }
 
+  /// 今天與本週第一天（週一）的 [dayKey]。
+  static ({String today, String weekStart}) recentDays(DateTime now) => (
+    today: dayKey(now),
+    weekStart: dayKey(
+      DateTime(now.year, now.month, now.day - (now.weekday - 1)),
+    ),
+  );
+
   /// 今天與本週（週一起算）讀了幾秒，所有書加總。
   Future<({int today, int week})> recentTotals(DateTime now) async {
-    final today = dayKey(now);
-    final weekStart = dayKey(
-      DateTime(now.year, now.month, now.day - (now.weekday - 1)),
-    );
+    final (:today, :weekStart) = recentDays(now);
     Future<int> sumBetween(String from, String to) async {
       final total = readDays.seconds.sum();
       final query = selectOnly(readDays)

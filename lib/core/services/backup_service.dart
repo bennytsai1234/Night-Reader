@@ -18,6 +18,7 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/login_data_backup.dart';
+import 'package:night_reader/core/sync/sync_settings.dart';
 
 class BackupService {
   static final BackupService _instance = BackupService._internal();
@@ -110,6 +111,8 @@ class BackupService {
       final prefs = await SharedPreferences.getInstance();
       final Map<String, dynamic> config = {};
       for (var key in prefs.getKeys()) {
+        // 這台手機在同步裡的名字只屬於這台，還原到另一台不能沿用。
+        if (key == SyncSettings.deviceIdKey) continue;
         config[key] = prefs.get(key);
       }
       await File(p.join(backupFolder.path, 'config.json'))

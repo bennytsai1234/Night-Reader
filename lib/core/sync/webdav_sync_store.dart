@@ -64,6 +64,14 @@ class WebDavSyncStore implements SyncStore {
   }
 
   @override
+  Future<String?> version(String name) async {
+    final response = await _send(_fileUrl(name), 'HEAD');
+    if (response.statusCode == 404) return null;
+    _ensureOk(response);
+    return _strongEtag(response.headers.value('etag'));
+  }
+
+  @override
   Future<void> write(
     String name,
     String content, {
