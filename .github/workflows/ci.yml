@@ -159,11 +159,6 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Inspect sync formatter changes
-        run: |
-          dart format lib/core/sync/sync_service.dart
-          git diff -- lib/core/sync/sync_service.dart
-          git checkout -- lib/core/sync/sync_service.dart
       - name: Check formatting
         # *.g.dart 由 build_runner 產生，格式不在這裡把關。
         run: git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed
