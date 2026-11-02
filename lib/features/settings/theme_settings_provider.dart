@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
+import 'package:night_reader/core/fonts/font_library.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -21,6 +25,19 @@ class ThemeSettingsProvider extends ChangeNotifier {
     }
     _load();
     SettingsSync.applied.addListener(_reload);
+    _shownUiFontFamily = uiFontFamily;
+    FontLibrary.instance.changes.addListener(_onFontsChanged);
+  }
+
+  /// 主題目前用的介面字族；有字型下載好時只在它變了才重建整個 App（正文字型
+  /// 下載好不影響介面）。
+  String? _shownUiFontFamily;
+
+  void _onFontsChanged() {
+    final family = uiFontFamily;
+    if (family == _shownUiFontFamily) return;
+    _shownUiFontFamily = family;
+    notifyListeners();
   }
 
   void _load() {
@@ -40,17 +57,22 @@ class ThemeSettingsProvider extends ChangeNotifier {
     pageTransition = AppPageTransition.fromStorage(
       _prefs.getString(PreferKey.pageTransition),
     );
+    uiFont = AppFont.fromStorage(_prefs.getString(PreferKey.uiFont));
+    // 另一台選了這台還沒下載的字型：在背景下載，好了再換上。
+    unawaited(FontLibrary.instance.ensure(uiFont));
   }
 
   /// 同步套用了另一台的設定。
   void _reload() {
     _load();
+    _shownUiFontFamily = uiFontFamily;
     notifyListeners();
   }
 
   @override
   void dispose() {
     SettingsSync.applied.removeListener(_reload);
+    FontLibrary.instance.changes.removeListener(_onFontsChanged);
     super.dispose();
   }
 
@@ -76,6 +98,12 @@ class ThemeSettingsProvider extends ChangeNotifier {
 
   /// 全 App 換頁共用的轉場。
   late AppPageTransition pageTransition;
+
+  /// App 介面的字型（ADR 0045）；閱讀正文另外選。
+  late AppFont uiFont;
+
+  /// 介面目前用的字族；選的字型還不能用時是 null（系統字型）。
+  String? get uiFontFamily => FontLibrary.instance.familyOf(uiFont);
 
   AppStyle styleFor(Brightness brightness) =>
       brightness == Brightness.dark ? darkStyle : lightStyle;
@@ -114,6 +142,16 @@ class ThemeSettingsProvider extends ChangeNotifier {
     if (glassStrength == value) return;
     glassStrength = value;
     _prefs.setString(PreferKey.glassStrength, value.name);
+    notifyListeners();
+  }
+
+  /// 選了還沒下載的字型就開始下載，好了才換上（[FontLibrary.changes]）。
+  void setUiFont(AppFont value) {
+    if (uiFont == value) return;
+    uiFont = value;
+    _prefs.setString(PreferKey.uiFont, value.id);
+    unawaited(FontLibrary.instance.ensure(value));
+    _shownUiFontFamily = uiFontFamily;
     notifyListeners();
   }
 
