@@ -2,6 +2,16 @@
 
 分支上的工作（含還沒開工的計畫）寫在各分支自己的 `HANDOFF.md`，`git branch -a` 列出所有分支；這裡只寫 `beta` 的事。
 
+## 這條分支：多台手機同步第 3 段，Google 雲端硬碟（ADR 0039）
+
+第 1、2 段已合併（#194、#199）。第 4 段（本地書）是 #193，這段做完再和使用者討論。
+
+- 程式已寫：`GoogleSignInDriveAuth`（`google_sign_in` 7）、`GoogleDriveSyncStore`（Drive REST v3、`appDataFolder`）、「同步空間」頁（Google 雲端硬碟／WebDAV，Google 只在 Android）。
+- Google Cloud 登記（用使用者平常的瀏覽器 Ego Lite，已登入 bennytsai0711@gmail.com；`ego-browser` 技能，工作空間「夜讀 Google 雲端硬碟登記」）：
+  - 已做：建專案 Night Reader Sync（`night-reader-sync`）、啟用 Google Drive API、同意畫面填好（名稱夜讀、對象外部、聯絡信箱）。
+  - 等使用者：勾選《Google API 服務：使用者資料政策》→ 繼續 → 建立（用使用者帳號接受條款，交給使用者點；已 `handOff`）。
+  - 之後：發布到正式（`drive.appdata` 不敏感，不用送審）；建 Android 用戶端（套件 `com.inkpage.reader`、正式簽章 SHA-1 `B1:73:C4:CF:B5:A2:9D:87:34:A4:A7:E7:42:BC:3D:BB:94:F5:96:B3`，從 v0.3.8-beta.73 的 APK 用 apksigner 讀）與網頁用戶端；網頁用戶端編號填進 `GoogleSignInDriveAuth.serverClientId`。
+
 ## 先不做
 
 - 細節檢查（`test/polish/`，總覽頁 `tool/polish_viewer/`）目前只檢查閱讀器頁首頁尾的骨架換場，24 種日常情境淺色、深色都對得上。之後要接書架、書籍詳情、發現等其他骨架頁，等使用者說要不要做；全部清乾淨後再拿掉 `dart_test.yaml` 的跳過，讓它擋推送。

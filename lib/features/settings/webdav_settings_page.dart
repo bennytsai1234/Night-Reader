@@ -5,7 +5,6 @@ import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
@@ -81,26 +80,18 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       if (!mounted) return;
       setState(() => _usingWebDav = true);
       final error = _sync.status.value.error;
-      _say(error == null ? '已連上，同步好了' : '已連上，但同步失敗：$error');
+      if (error != null) {
+        _say('已連上，但同步失敗：$error');
+        return;
+      }
+      _say('已連上，同步好了');
+      // 回到「同步空間」，那裡看得到選了哪個。
+      unawaited(Navigator.maybePop(context));
     } on SyncStoreException catch (error) {
       if (mounted) _say(error.message);
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
-  }
-
-  Future<void> _disable() async {
-    final confirmed = await showAppConfirm(
-      context: context,
-      title: '停用同步？',
-      message: '這台手機不再和其他手機同步；已經在這台的書、進度、書源與設定都留著。',
-      confirmLabel: '停用',
-    );
-    if (!confirmed || !mounted) return;
-    await _sync.disable();
-    if (!mounted) return;
-    setState(() => _usingWebDav = false);
-    _say('已停用同步');
   }
 
   @override
@@ -151,20 +142,16 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
           GroupedSection(
             children: [
               GroupedRow(
-                title: _connecting ? '連線中…' : '連線並開始同步',
+                title: _connecting
+                    ? '連線中…'
+                    : _usingWebDav
+                    ? '重新連線並同步'
+                    : '連線並開始同步',
                 accent: true,
                 showChevron: false,
                 enabled: !_connecting,
                 onTap: _connecting ? null : () => unawaited(_connect()),
               ),
-              if (_usingWebDav)
-                GroupedRow(
-                  title: '停用同步',
-                  destructive: true,
-                  showChevron: false,
-                  enabled: !_connecting,
-                  onTap: _connecting ? null : () => unawaited(_disable()),
-                ),
             ],
           ),
         ],

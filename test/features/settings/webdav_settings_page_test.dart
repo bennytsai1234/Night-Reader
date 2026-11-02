@@ -62,7 +62,6 @@ void main() {
 
     expect(find.text('帳號或密碼不對'), findsOneWidget);
     expect(await SyncSettings().space(), SyncSpace.none);
-    expect(find.text('停用同步'), findsNothing);
   });
 
   testWidgets('an empty address asks for one first', (tester) async {
