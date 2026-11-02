@@ -24,6 +24,7 @@
 | [0031](0031-launch-reveal-crossfades-two-still-pictures.md) | 開 App 書架換場是兩張定格畫面的交叉淡換：用時間與記憶體換流暢與穩定（準備書架的時機已由 0035 改到呼吸前） |
 | [0035](0035-launch-prepares-shelf-before-breathing.md) | 開 App 在骨架長完、呼吸之前就建好書架並拍好兩張定格畫面；定格畫面用一般的畫法拍 |
 | [0024](0024-skeleton-drawn-from-last-screen.md) | 骨架照上次的畫面畫，骨架換場由左而右 |
+| [0041](0041-skeleton-breath-shared-gradient.md) | 骨架呼吸的漸層每個骨架每幀一道，形狀照舊各自畫；否決整個骨架蓋遮罩與開 App 整段定格畫面 |
 | [0016](0016-reader-skeleton-from-the-real-page.md) | 閱讀器的正文骨架照一頁真正的行畫 |
 
 ## 介面與動畫

@@ -13,14 +13,19 @@
 # 就停下來，不印表。
 #
 # 只跑一次：數字有疑問時，打開完整輸出看那幾幀落在哪一段、在做什麼工作，不重跑。
+# 要證明某個掉幀修好了（同一份程式這次 4 幀、下次 0 幀的那種），用 FRAME_REPEAT=N
+# 改前改後輪流各跑 N 次，表上每一格列出每一次的幀數。
 #
 # - 全機同時只跑一個量測：別的 session 正在用這支指令時排隊等它結束。電腦上還有其他
 #   flutter_tester 在跑（別人直接跑 flutter test）時只提醒，數字可能偏高；不結束任何程序。
 # - FRAME_ATTRIBUTE=1 照樣傳下去，但歸因本身會讓數字變大，只拿來找是誰，不拿來比前後。
-# - 兩邊的完整輸出（base.log、head.log）留在最後印出的資料夾，看每一幀的細節用；看完刪掉。
+# - FRAME_GC=1、FRAME_CPU=1 照樣傳下去，並替 flutter test 加上它們要的 --enable-vmservice。
+# - FRAME_SIZE 等其他環境變數照樣傳給測試。
+# - 兩邊的完整輸出（base.log、head.log；FRAME_REPEAT 時第 2 次起是 base-2.log、head-2.log…）
+#   留在最後印出的資料夾，看每一幀的細節用；看完刪掉。
 #
 #   bash tool/frame_budget_compare.sh summarize <資料夾>
-#     只重印那個資料夾裡 base.log、head.log 的對照表。
+#     只重印那個資料夾裡各次 base、head 輸出的對照表。
 #
 # 測試：sh tool/frame_budget_compare_test.sh
 set -euo pipefail
@@ -28,10 +33,16 @@ set -euo pipefail
 # 從 describeFrames 的摘要（「<情境>：N 幀，…」與下一行「  動畫中…（扣掉資料庫、排版切片
 # 照實算後 K 幀）…」）收集兩邊的 K，印成對照表。
 summarize() {
-  local dir=$1 logs=() side
+  local dir=$1 logs=() side log i
   # 改前沒有這些測試檔時只有改後的 log；一份都沒有時 awk 會改讀標準輸入，先擋下來。
+  # 同一邊跑了好幾次（FRAME_REPEAT）時照次序排，每一格照次序列出每一次的幀數。
   for side in base head; do
-    [ -f "$dir/$side.log" ] && logs+=("$dir/$side.log")
+    for ((i = 1; ; i++)); do
+      log="$dir/$side.log"
+      [ "$i" -gt 1 ] && log="$dir/$side-$i.log"
+      [ -f "$log" ] || break
+      logs+=("$log")
+    done
   done
   if [ ${#logs[@]} -eq 0 ]; then
     echo "$dir 裡沒有 base.log 或 head.log" >&2
@@ -39,7 +50,10 @@ summarize() {
   fi
   LC_ALL=C awk '
     function cell(side, label) { return (side, label) in over ? over[side, label] : "—" }
-    FNR == 1 { side = FILENAME ~ /base\.log$/ ? "base" : "head"; split("", occ); label = "" }
+    function record(side, label, value) {
+      over[side, label] = (side, label) in over ? over[side, label] "、" value : value
+    }
+    FNR == 1 { side = FILENAME ~ /\/base(-[0-9]+)?\.log$/ ? "base" : "head"; split("", occ); label = "" }
     match($0, /：[0-9]+ 幀，中位數 [0-9.]+ms，最大 [0-9.]+ms，/) {
       label = substr($0, 1, RSTART - 1)
       # 同一次輸出裡同名的情境（例如來回兩次「發現→書架」）照出現順序分開。
@@ -50,11 +64,11 @@ summarize() {
     label != "" && match($0, /扣掉資料庫、排版切片照實算後 [0-9]+ 幀/) {
       rest = substr($0, RSTART, RLENGTH)
       gsub(/[^0-9]+/, "", rest)
-      over[side, label] = rest
+      record(side, label, rest)
       label = ""
     }
     # 整段沒有動畫在動的幀時，摘要只印「0 幀」。
-    label != "" && /^  動畫中（不含點下去後的第 0 幀） 0 幀；/ { over[side, label] = 0; label = "" }
+    label != "" && /^  動畫中（不含點下去後的第 0 幀） 0 幀；/ { record(side, label, 0); label = "" }
     END {
       if (!count) { print "輸出裡沒有 describeFrames 的摘要行" > "/dev/stderr"; exit 1 }
       print "| 情境 | 動畫中超過 4.2ms 的幀 改前 → 改後 |"
@@ -154,6 +168,17 @@ others() {
   fi
 }
 
+repeat=${FRAME_REPEAT:-1}
+case $repeat in
+  '' | *[!0-9]* | 0)
+    echo "FRAME_REPEAT 要是正整數：$repeat" >&2
+    exit 2
+    ;;
+esac
+# 記回收記憶體與 CPU 取樣要連到測試的 VM。
+vm=()
+[ "${FRAME_GC:-}" = 1 ] || [ "${FRAME_CPU:-}" = 1 ] && vm=(--enable-vmservice)
+
 run() {
   local side=$1 name=$2 dir=$3 present=() f busy
   for f in "${files[@]}"; do
@@ -167,16 +192,22 @@ run() {
   [ "${busy:-0}" -gt 0 ] && echo "  提醒：電腦上還有 $busy 個 flutter_tester 在跑，這次的數字可能偏高" >&2
   echo "  $name" >&2
   # 摘要在測試的檢查之前印出，沒全過的那次數字可能是沒量完的，不算進表。
-  if ! (cd "$dir" && flutter test --run-skipped -t frame_budget "${present[@]}") > "$out/$side.log" 2>&1; then
+  if ! (cd "$dir" && flutter test --run-skipped -t frame_budget ${vm[@]+"${vm[@]}"} "${present[@]}") > "$out/$side.log" 2>&1; then
     mv "$out/$side.log" "$out/failed-$side.log"
     echo "  $name的測試沒有全過，停下來；看 $out/failed-$side.log" >&2
     exit 1
   fi
 }
 
-echo "改前 $(git log -1 --format='%h %s' "$base_commit")，改後是目前的工作目錄，各跑一次" >&2
-run base 改前 "$base"
-run head 改後 "$root"
+echo "改前 $(git log -1 --format='%h %s' "$base_commit")，改後是目前的工作目錄，各跑 $repeat 次" >&2
+# 輪流跑：電腦的狀態隨時間漂移時，兩邊受到的影響差不多。
+for ((i = 1; i <= repeat; i++)); do
+  suffix=""
+  [ "$i" -gt 1 ] && suffix="-$i"
+  [ "$repeat" -gt 1 ] && echo "第 $i 次" >&2
+  run "base$suffix" 改前 "$base"
+  run "head$suffix" 改後 "$root"
+done
 
 summarize "$out"
 echo "完整輸出：$out（看完刪掉）" >&2

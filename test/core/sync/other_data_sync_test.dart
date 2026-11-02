@@ -91,6 +91,7 @@ void main() {
       'stays on each phone', () async {
     final a = await prefsOf({
       PreferKey.readerFontSize: 22.0,
+      PreferKey.readerLineChars: 24,
       PreferKey.lightStyle: 'tea',
       PreferKey.readerBrightness: 0.3,
     });
@@ -106,6 +107,7 @@ void main() {
     await onB.syncNow();
 
     expect(b.getDouble(PreferKey.readerFontSize), 22.0);
+    expect(b.getInt(PreferKey.readerLineChars), 24);
     expect(b.getString(PreferKey.lightStyle), 'tea');
     expect(b.getDouble(PreferKey.readerBrightness), 0.9);
     expect(SettingsSync.applied.value, applied + 1);
