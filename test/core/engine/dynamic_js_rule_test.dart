@@ -23,6 +23,7 @@ void main() {
 
   test('JS 沒有值時是空的，不是程式碼', () {
     expect(rule().getString(lofter), '');
+    expect(rule().getElements(r'@js:""'), isEmpty);
   });
 
   test('目錄網址沒有值時照舊用回目前的網址', () {

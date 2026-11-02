@@ -214,7 +214,8 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (result is List) {
       return result;
     }
-    if (result == null) {
+    // 沒有結果（JS 交回空的）就是空的一組，不是一個空字串。
+    if (result == null || (result is String && result.isEmpty)) {
       return [];
     }
     return [result];
