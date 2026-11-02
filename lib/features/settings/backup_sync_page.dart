@@ -9,6 +9,7 @@ import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -43,17 +44,6 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
 
   void _onSyncStatus() {
     if (mounted) setState(() {});
-  }
-
-  /// 「立即同步」下面那行：同步中、上次失敗的原因，或上次同步的時間。
-  static String? _syncSubtitle(SyncStatus status) {
-    if (!status.enabled) return null;
-    if (status.running) return '同步中…';
-    if (status.error case final error?) return '上次同步失敗：$error';
-    final at = status.lastSyncAt;
-    if (at == null) return '還沒同步過';
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '上次同步：${at.month}/${at.day} ${two(at.hour)}:${two(at.minute)}';
   }
 
   @override
@@ -106,7 +96,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                   tint: AppTint.azurite,
                 ),
                 title: '立即同步',
-                subtitle: _syncSubtitle(status),
+                subtitle: syncStatusSubtitle(status),
                 enabled: status.enabled && !status.running,
                 showChevron: false,
                 onTap: status.enabled && !status.running
