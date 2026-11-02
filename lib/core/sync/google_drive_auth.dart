@@ -31,7 +31,8 @@ class GoogleSignInDriveAuth implements GoogleDriveAuth {
 
   static const String scope = 'https://www.googleapis.com/auth/drive.appdata';
 
-  static const String serverClientId = '';
+  static const String serverClientId =
+      '856780370145-u1dj6opn9ov8flr3r96id19h3k5ukg9s.apps.googleusercontent.com';
 
   Future<void>? _initialized;
 

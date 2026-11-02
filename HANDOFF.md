@@ -1,16 +1,10 @@
-# 交接（2026-11-01）
+# 交接（2026-11-02）
 
 分支上的工作（含還沒開工的計畫）寫在各分支自己的 `HANDOFF.md`，`git branch -a` 列出所有分支；這裡只寫 `beta` 的事。
 
-## 這條分支：多台手機同步第 3 段，Google 雲端硬碟（ADR 0039）
+## 等使用者決定
 
-第 1、2 段已合併（#194、#199）。第 4 段（本地書）是 #193，這段做完再和使用者討論。
-
-- 程式已寫：`GoogleSignInDriveAuth`（`google_sign_in` 7）、`GoogleDriveSyncStore`（Drive REST v3、`appDataFolder`）、「同步空間」頁（Google 雲端硬碟／WebDAV，Google 只在 Android）。
-- Google Cloud 登記（用使用者平常的瀏覽器 Ego Lite，已登入 bennytsai0711@gmail.com；`ego-browser` 技能，工作空間「夜讀 Google 雲端硬碟登記」）：
-  - 已做：建專案 Night Reader Sync（`night-reader-sync`）、啟用 Google Drive API、同意畫面填好（名稱夜讀、對象外部、聯絡信箱）。
-  - 等使用者：勾選《Google API 服務：使用者資料政策》→ 繼續 → 建立（用使用者帳號接受條款，交給使用者點；已 `handOff`）。
-  - 之後：發布到正式（`drive.appdata` 不敏感，不用送審）；建 Android 用戶端（套件 `com.inkpage.reader`、正式簽章 SHA-1 `B1:73:C4:CF:B5:A2:9D:87:34:A4:A7:E7:42:BC:3D:BB:94:F5:96:B3`，從 v0.3.8-beta.73 的 APK 用 apksigner 讀）與網頁用戶端；網頁用戶端編號填進 `GoogleSignInDriveAuth.serverClientId`。
+- 多台手機同步：Google Cloud 專案 Night Reader Sync 的發布狀態目前是「測試」，只有測試使用者（使用者的 Gmail）登得進去，Google 對測試中的授權 7 天到期，可能每週要到「同步空間」重新登入一次。使用者 2026-11-02 說「目前先在 beta」，要不要發布到正式（`drive.appdata` 不敏感，不用送審）等使用者說。操作在 Google Auth Platform 的「目標對象」頁按「發布應用程式」。第 4 段（本地書，#193）也等使用者討論。
 
 ## 先不做
 

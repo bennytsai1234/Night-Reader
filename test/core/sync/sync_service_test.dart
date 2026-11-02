@@ -166,6 +166,9 @@ class _Phone {
 }
 
 void main() {
+  // 刪書源時會清它在快取裡的登入資料，快取找存放的資料夾要用到。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late _MemoryStore store;
   late _Phone a;
   late _Phone b;
