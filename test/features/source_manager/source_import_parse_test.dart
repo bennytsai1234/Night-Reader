@@ -35,6 +35,42 @@ void main() {
     expect(source.enabledExplore, isFalse);
   });
 
+  test('text fields written as objects, arrays or numbers still import', () {
+    // 牛颜小说网把 header 寫成物件；Legado 的 StringJsonDeserializer 把物件、
+    // 陣列轉成 JSON 文字，數字、true/false 轉成原本的文字。
+    const json = '''
+[{
+  "bookSourceName": "牛颜小说网",
+  "bookSourceUrl": "https://www.niuyan123.link",
+  "header": {"User-Agent": "Mozilla/5.0", "Referer": "https://a.test/"},
+  "loginUi": [{"name": "帳號", "type": "text"}],
+  "exploreUrl": [{"title": "玄幻", "url": "/x/1"}],
+  "concurrentRate": 1000,
+  "bookSourceGroup": 1,
+  "ruleSearch": {"bookList": ".item", "checkKeyWord": 123, "name": true},
+  "ruleToc": {"chapterList": "li", "isVolume": false, "nextPage": "a@href"}
+}]
+''';
+
+    final source = SourceImportService(dao: _UnusedDao())
+        .parseSourcesDetailed(json)
+        .importableSources
+        .single;
+
+    expect(
+      source.header,
+      '{"User-Agent":"Mozilla/5.0","Referer":"https://a.test/"}',
+    );
+    expect(source.loginUi, '[{"name":"帳號","type":"text"}]');
+    expect(source.exploreUrl, '[{"title":"玄幻","url":"/x/1"}]');
+    expect(source.concurrentRate, '1000');
+    expect(source.bookSourceGroup, '1');
+    expect(source.ruleSearch?.checkKeyWord, '123');
+    expect(source.ruleSearch?.name, 'true');
+    expect(source.ruleToc?.isVolume, 'false');
+    expect(source.ruleToc?.nextTocUrl, 'a@href');
+  });
+
   test('source switches default on only when missing', () {
     const json = '''
 [{"bookSourceName": "a", "bookSourceUrl": "https://a.test",

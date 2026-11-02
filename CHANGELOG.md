@@ -83,6 +83,7 @@
     - 中文網域（例如「永远的神.com」）連得上了，網域裡打成全形字或帶重音的字也一樣
     - 書源網址頭尾多打的空白不算，品书斋這類書源搜得到書
   - 書源程式用 `var` 重新宣告 Legado 給的變數時（例如 `var result = result.trim()`、`var src`），照 Legado 拿到原本的值，不再變成 undefined
+  - 書源把文字欄位寫成物件、清單或數字時（例如標頭寫成 `{"User-Agent": …}`）照 Legado 轉成文字讀，牛颜小说网這類書源匯入時不再出錯；替換規則也一樣
   - XPath 規則的條件只寫名稱時（例如 `//dd[a]` 是「有連結的那幾項」）照 Legado 讀，思兔阅读的目錄不再出錯
   - XPath 規則寫成相對路徑時（例如 `div[2]/div/h3/a/@title`，開頭沒有 `/`）照 Legado 從那一項往下找，novelnext 這類英文小說站不再出現「解析字串失敗」
   - 書源程式用 Java 的 `HashMap` 時，`computeIfAbsent`、`merge`、`putIfAbsent` 這類方法都能用；系統屬性（`System.getProperties()`）也有，而且和 Legado 一樣整個 App 共用一份、下一次搜尋還記得，半夏小说、69書吧這類用它限流的書源不再出現「not a function」
