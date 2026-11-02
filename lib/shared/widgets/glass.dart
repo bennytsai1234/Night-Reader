@@ -577,6 +577,9 @@ class GlassCapsule extends StatelessWidget {
 
   static const double height = 34.0;
 
+  /// 膠囊上下的內距。
+  static const double verticalPadding = AppSpacing.xs + 2;
+
   /// 選取中的淡主色底。字也是主色，主色比例壓低才維持 4.5:1 的文字對比。
   static Color selectedTintOf(ColorScheme scheme) => Color.alphaBlend(
     scheme.primary.withValues(alpha: 0.06),
@@ -627,7 +630,7 @@ class GlassCapsule extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md + 2,
-            vertical: AppSpacing.xs + 2,
+            vertical: verticalPadding,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -680,36 +683,29 @@ class GlassCapsule extends StatelessWidget {
   }
 }
 
-/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中，預設最寬
-/// 同浮動分頁列。左右外距與底部安全區由呼叫端決定。
+/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）。寬度與底部安全
+/// 區由呼叫端的外距決定（照 `FloatingTabBar.slotOf`，和卡片左右切齊）。
 class FloatingGlassToolbar extends StatelessWidget {
   const FloatingGlassToolbar({
     super.key,
     required this.child,
     this.height = AppGlass.tabItemHeight,
-    this.maxWidth = AppGlass.tabBarMaxWidth,
   });
 
   final Widget child;
   final double height;
 
-  /// 清單頁的工具列和卡片切齊，由呼叫端的外距決定寬度，這裡傳無限大。
-  final double maxWidth;
-
   @override
   Widget build(BuildContext context) {
     return Center(
       heightFactor: 1,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: SizedBox(
-          height: height,
-          child: GlassSurface(
-            borderRadius: AppRadius.pillShape,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-              child: child,
-            ),
+      child: SizedBox(
+        height: height,
+        child: GlassSurface(
+          borderRadius: AppRadius.pillShape,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: child,
           ),
         ),
       ),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
@@ -31,6 +33,15 @@ class GroupFilterBar<T> extends StatefulWidget {
   });
 
   static const double height = GlassCapsule.height;
+
+  /// 篩選列實際的高度：膠囊最矮 [height]，字大（系統字級、平板放大）時跟著
+  /// 膠囊裡的一行字長高，橫向捲動的列才不會把膠囊底部裁掉。
+  static double heightOf(BuildContext context) {
+    final line =
+        MediaQuery.textScalerOf(context).scale(AppTextStyles.uiSm.fontSize!) *
+        AppTextStyles.uiSm.height!;
+    return math.max(height, line + GlassCapsule.verticalPadding * 2);
+  }
 
   /// 「全部」選項，固定不隨捲動移走。
   final GroupFilterOption<T> all;
@@ -105,8 +116,9 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
     final values = widget.groups.map((group) => group.value).toSet();
     _chipKeys.removeWhere((value, _) => !values.contains(value));
 
+    final height = GroupFilterBar.heightOf(context);
     return SizedBox(
-      height: GroupFilterBar.height,
+      height: height,
       child: Row(
         children: [
           _chip(widget.all),
@@ -130,7 +142,7 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
           GlassIconButton(
             icon: Icons.grid_view_rounded,
             tooltip: '全部分組',
-            size: GroupFilterBar.height,
+            size: height,
             iconSize: 17,
             onPressed: _openPicker,
           ),

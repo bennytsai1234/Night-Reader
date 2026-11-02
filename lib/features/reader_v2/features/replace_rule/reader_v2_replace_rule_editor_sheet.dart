@@ -29,9 +29,12 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
     ReplaceRule? rule,
     String? testSample,
     required Future<void> Function(ReplaceRule rule) onSave,
+    BoxConstraints? constraints,
   }) {
     return AppBottomSheet.showCustom<void>(
       context: context,
+      // 從閱讀器打開時對齊正文（ReaderV2MenuSheet.constraintsFor）。
+      constraints: constraints,
       isScrollControlled: true,
       builder: (_) => ReaderV2ReplaceRuleEditorSheet(
         rule: rule,
