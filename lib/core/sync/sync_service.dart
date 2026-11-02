@@ -36,11 +36,15 @@ class SyncStatus {
     this.running = false,
     this.lastSyncAt,
     this.error,
+    this.progress,
   });
 
   final SyncSpace space;
   final bool running;
   final DateTime? lastSyncAt;
+
+  /// 目前正在處理的資料及順序；不是傳輸百分比。
+  final ({String kind, int step, int total})? progress;
 
   /// 上次同步失敗的原因；成功一次就清掉。
   final String? error;
@@ -53,11 +57,14 @@ class SyncStatus {
     DateTime? lastSyncAt,
     String? error,
     bool clearError = false,
+    ({String kind, int step, int total})? progress,
+    bool clearProgress = false,
   }) => SyncStatus(
     space: space ?? this.space,
     running: running ?? this.running,
     lastSyncAt: lastSyncAt ?? this.lastSyncAt,
     error: clearError ? null : error ?? this.error,
+    progress: clearProgress ? null : progress ?? this.progress,
   );
 }
 
@@ -257,7 +264,8 @@ class SyncService {
       await _claimBases();
     });
     status.value = const SyncStatus(space: SyncSpace.googleDrive);
-    await syncNow();
+    // 登入與選取同步空間完成後就讓畫面更新；整批資料接著同步，不占用登入流程。
+    requestSync();
   }
 
   Future<void> disable() async {
@@ -310,6 +318,8 @@ class SyncService {
         await _syncOnce();
       } while (_again);
     } finally {
+      // 整輪（包含同步途中補跑的輪次）才算結束，避免進度短暫顯示已完成。
+      status.value = status.value.copyWith(running: false, clearProgress: true);
       // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
       _progressDone();
     }
@@ -413,16 +423,23 @@ class SyncService {
       await _lock.synchronized(() async {
         final store = await _store();
         if (store == null) return;
+        status.value = status.value.copyWith(
+          running: true,
+          clearProgress: true,
+        );
         await _claimBases();
-        status.value = status.value.copyWith(running: true);
         // 一種資料失敗不擋其他種：都試過一次，再報第一個失敗。
         Object? failure;
         StackTrace? failureStack;
         // 排了兩次的種類，第二次只在中間有別種套用了改動時才跑。
         final appliedAfter = <String, bool>{};
-        for (final kind in _kinds(this)) {
+        final kinds = _kinds(this);
+        for (final (index, kind) in kinds.indexed) {
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
+          status.value = status.value.copyWith(
+            progress: (kind: kind.name, step: index + 1, total: kinds.length),
+          );
           try {
             if (await _syncKind(store, kind)) {
               appliedAfter.updateAll((name, _) => name != kind.name);
@@ -447,17 +464,13 @@ class SyncService {
         final now = _clock();
         await _settings.setLastSyncAt(now);
         status.value = status.value.copyWith(
-          running: false,
           lastSyncAt: now,
           clearError: true,
         );
       });
     } catch (error, stackTrace) {
       AppLog.e('同步失敗', error: error, stackTrace: stackTrace);
-      status.value = status.value.copyWith(
-        running: false,
-        error: _messageOf(error),
-      );
+      status.value = status.value.copyWith(error: _messageOf(error));
     }
   }
 
