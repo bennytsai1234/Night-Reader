@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:punycoder/punycoder.dart';
+
 import 'public_suffix.dart';
 
 /// NetworkUtils - 網路輔助工具 (原 Android utils/NetworkUtils.kt)
@@ -7,6 +9,30 @@ class NetworkUtils {
   NetworkUtils._();
 
   static final RegExp _analyzeUrlParamSplitRegex = RegExp(r'\s*,\s*(?=\{)');
+
+  static final RegExp _authority = RegExp(
+    r'^([A-Za-z][A-Za-z0-9+.-]*://)([^/?#]*)(.*)$',
+    dotAll: true,
+  );
+
+  /// [url] 的主機名有中文這類非 ASCII 字時換成 punycode（`xn--…`），其他照舊。
+  /// 同 Legado 用的 OkHttp `HttpUrl`；Dart 的 `Uri` 會把這種主機名百分比編碼，
+  /// 連線時查不到網域。
+  static String toAsciiHost(String url) {
+    final match = _authority.firstMatch(url);
+    if (match == null) return url;
+    final authority = match.group(2)!;
+    final at = authority.lastIndexOf('@');
+    final userInfo = at < 0 ? '' : authority.substring(0, at + 1);
+    final hostPort = authority.substring(at + 1);
+    final colon = hostPort.lastIndexOf(':');
+    final hasPort = colon >= 0 && !hostPort.startsWith('[');
+    final host = hasPort ? hostPort.substring(0, colon) : hostPort;
+    if (!host.runes.any((c) => c > 0x7f)) return url;
+    final ascii = domainToAscii(host, validate: false);
+    final port = hasPort ? hostPort.substring(colon) : '';
+    return '${match.group(1)}$userInfo$ascii$port${match.group(3)}';
+  }
 
   /// 獲取絕對地址 (對標 getAbsoluteURL)
   static String getAbsoluteURL(String? baseURL, String relativePath) {
@@ -29,7 +55,8 @@ class NetworkUtils {
     }
 
     try {
-      final baseUri = Uri.parse(_splitAnalyzeUrl(baseURL).$1);
+      // 同 Legado 用的 java.net.URL：網址頭尾的空白不算（書源網址常多打一格）。
+      final baseUri = Uri.parse(_splitAnalyzeUrl(baseURL).$1.trim());
       final absoluteUri = baseUri.resolve(relativeUrl);
       return '${absoluteUri.toString()}$relativeOptions';
     } catch (_) {

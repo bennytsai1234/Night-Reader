@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 import '../encode/charsets.dart';
 import '../jsoup/jsoup_bridge.dart';
@@ -128,7 +129,7 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
     final response = await (_jsoupDio ??= Dio()).fetch<ResponseBody>(
       RequestOptions(
         method: method,
-        path: url,
+        path: NetworkUtils.toAsciiHost(url),
         data: payload,
         headers: wire,
         connectTimeout: timeout,
