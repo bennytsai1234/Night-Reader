@@ -164,7 +164,7 @@ class AppUpdateService {
       if (colon > 0 && colon <= 16) {
         if (!topics.add(content.substring(0, colon))) continue;
       }
-      if (note.endsWith('：')) note = '${note}相關功能已改善。';
+      if (note.endsWith('：')) note = '$note相關功能已改善。';
       note = _shortNote(note, 110);
       // 預留最後一行「還有其他更新」的位置；不截斷完整的發版資料。
       if (summary.join('\n').runes.length + note.runes.length > 320) {
