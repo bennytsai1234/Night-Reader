@@ -22,6 +22,7 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
     required this.boxesFor,
     required this.caretAt,
     this.onHide,
+    this.onReplace,
     this.onBookmark,
     this.onHighlight,
     required this.highlightColor,
@@ -42,6 +43,10 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
   /// 選單的「隱藏」：用選到的字新增一條換成空白的替換規則（例如藏掉廣
   /// 告）；沒給就不顯示。
   final ValueChanged<ReaderTextSelection>? onHide;
+
+  /// 選單的「替換」：用選到的字開一條新的替換規則，要換成的字由使用者填；
+  /// 沒給就不顯示。
+  final ValueChanged<ReaderTextSelection>? onReplace;
 
   /// 選單的「書籤」：在選到的字那一句留一個書籤；沒給就不顯示。
   final ValueChanged<ReaderTextSelection>? onBookmark;
@@ -212,6 +217,14 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
           onPressed: () {
             widget.selection.clear();
             onHide(selection);
+          },
+        ),
+      if (widget.onReplace case final onReplace?)
+        ContextMenuButtonItem(
+          label: '替換',
+          onPressed: () {
+            widget.selection.clear();
+            onReplace(selection);
           },
         ),
       if (widget.onBookmark case final onBookmark?)

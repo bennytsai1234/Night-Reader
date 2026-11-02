@@ -12,22 +12,35 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleEditorSheet({
     super.key,
     this.rule,
+    this.testSample,
     required this.onSave,
   });
 
+  /// 要編輯的規則；編號是 0（還沒存過，例如選字「替換」先填好的）時是
+  /// 新增。
   final ReplaceRule? rule;
+
+  /// 即時測試先放的字；沒給用預設的範例。
+  final String? testSample;
   final Future<void> Function(ReplaceRule rule) onSave;
 
   static Future<void> show(
     BuildContext context, {
     ReplaceRule? rule,
+    String? testSample,
     required Future<void> Function(ReplaceRule rule) onSave,
+    BoxConstraints? constraints,
   }) {
     return AppBottomSheet.showCustom<void>(
       context: context,
+      // 從閱讀器打開時對齊正文（ReaderV2MenuSheet.constraintsFor）。
+      constraints: constraints,
       isScrollControlled: true,
-      builder: (_) =>
-          ReaderV2ReplaceRuleEditorSheet(rule: rule, onSave: onSave),
+      builder: (_) => ReaderV2ReplaceRuleEditorSheet(
+        rule: rule,
+        testSample: testSample,
+        onSave: onSave,
+      ),
     );
   }
 
@@ -46,8 +59,8 @@ class _ReaderV2ReplaceRuleEditorSheetState
   late final TextEditingController _replacementCtrl;
   late final TextEditingController _scopeCtrl;
   late final TextEditingController _excludeScopeCtrl;
-  final TextEditingController _testInputCtrl = TextEditingController(
-    text: '這是一段測試文字，包含 junk123 內容。',
+  late final TextEditingController _testInputCtrl = TextEditingController(
+    text: widget.testSample ?? '這是一段測試文字，包含 junk123 內容。',
   );
 
   String _testResult = '';
@@ -148,7 +161,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
   @override
   Widget build(BuildContext context) {
     return AppBottomSheet(
-      title: widget.rule == null ? '新增規則' : '編輯規則',
+      title: (widget.rule?.id ?? 0) == 0 ? '新增規則' : '編輯規則',
       icon: Icons.rule_rounded,
       trailing: GlassTextButton(
         label: _saving ? '儲存中…' : '儲存',

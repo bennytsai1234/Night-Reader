@@ -7,7 +7,7 @@ void main() {
       Highlight(id: 0, bookName: '夜雨聽書', chapterTitle: chapter, quote: quote);
 
   test('one heading per book, highlights of a chapter under its title, each '
-      'one a quote; books with nothing are left out', () {
+      'one a quote with its note below; books with nothing are left out', () {
     final markdown = highlightsToMarkdown([
       (
         bookName: '夜雨聽書',
@@ -15,7 +15,7 @@ void main() {
         items: [
           paint('第一章', '雨聲'),
           paint('第一章', '燈下\n字句'),
-          paint('第二章', '松煙墨'),
+          paint('第二章', '松煙墨').copyWith(note: '  想起外婆的墨盒 '),
         ],
       ),
       (bookName: '空的書', bookAuthor: '', items: const []),
@@ -36,6 +36,8 @@ void main() {
 ## 第二章
 
 > 松煙墨
+
+想起外婆的墨盒
 
 # 松煙墨
 

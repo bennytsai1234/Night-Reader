@@ -37,7 +37,8 @@ enum HighlightStyle {
   }
 }
 
-/// 標註：正文裡畫上底色或底線的一段字，之後在清單裡看、匯出。
+/// 標註：正文裡畫上底色或底線的一段字，可以附一段自己的話（[note]），之後
+/// 在清單裡看、匯出。
 ///
 /// 書籤記位置，標註記內容：[quote] 是畫到的那段字本身，清單與匯出照它；
 /// 位置和書籤、閱讀進度同一套（第幾章的第幾個字加錨點，ADR 0042），正文
@@ -56,6 +57,7 @@ class Highlight {
     this.quote = '',
     this.color = HighlightColor.amber,
     this.style = HighlightStyle.fill,
+    this.note = '',
   });
 
   /// 編號的配法同書籤（`BookmarkDao.newId`）：兩台各自新增的不撞號。
@@ -78,6 +80,9 @@ class Highlight {
   final HighlightColor color;
   final HighlightStyle style;
 
+  /// 備忘：標註旁附的一段自己的話；沒寫是空字串。
+  final String note;
+
   /// 標註結尾（不含）是章內第幾個字。
   int get endOffset => charOffset + quote.length;
 
@@ -89,6 +94,7 @@ class Highlight {
     String? chapterTitle,
     HighlightColor? color,
     HighlightStyle? style,
+    String? note,
   }) => Highlight(
     id: id ?? this.id,
     bookName: bookName ?? this.bookName,
@@ -100,6 +106,7 @@ class Highlight {
     quote: quote,
     color: color ?? this.color,
     style: style ?? this.style,
+    note: note ?? this.note,
   );
 
   Map<String, dynamic> toJson() => {
@@ -113,6 +120,7 @@ class Highlight {
     'quote': quote,
     'color': color.name,
     'style': style.name,
+    'note': note,
   };
 
   factory Highlight.fromJson(Map<String, dynamic> json) {
@@ -133,6 +141,7 @@ class Highlight {
       quote: readString('quote'),
       color: HighlightColor.parse(json['color']),
       style: HighlightStyle.parse(json['style']),
+      note: readString('note'),
     );
   }
 }
