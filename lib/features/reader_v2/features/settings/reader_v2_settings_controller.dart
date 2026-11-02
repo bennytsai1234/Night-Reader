@@ -97,6 +97,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double maxDim = ReaderV2PrefsSnapshot.defaults().maxDim;
   double edgeFade = ReaderV2PrefsSnapshot.defaults().edgeFade;
   bool ttsFollow = ReaderV2PrefsSnapshot.defaults().ttsFollow;
+  bool bodyBold = ReaderV2PrefsSnapshot.defaults().bodyBold;
+  bool titleBold = ReaderV2PrefsSnapshot.defaults().titleBold;
+  bool titleCenter = ReaderV2PrefsSnapshot.defaults().titleCenter;
+  double infoFontSize = ReaderV2PrefsSnapshot.defaults().infoFontSize;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
@@ -169,6 +173,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
     maxDim = snapshot.maxDim;
     edgeFade = snapshot.edgeFade;
     ttsFollow = snapshot.ttsFollow;
+    bodyBold = snapshot.bodyBold;
+    titleBold = snapshot.titleBold;
+    titleCenter = snapshot.titleCenter;
+    infoFontSize = snapshot.infoFontSize;
   }
 
   @override
@@ -210,11 +218,11 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
-  /// 正文一個字格的寬度（含字距，正文不加粗）；量不到時是 null。
+  /// 正文一個字格的寬度（含字距與正文粗細）；量不到時是 null。
   double? get cellWidth => const ReaderParagraphLayout().measureCellWidth(
     fontSize: fontSize,
     letterSpacing: letterSpacing,
-    bold: false,
+    bold: bodyBold,
   );
 
   /// 畫面寬 [viewportWidth] 時一行最多放得下幾個字（兩側留最少留白）。
@@ -262,7 +270,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paddingLeft: horizontal,
       paddingRight: horizontal,
       justify: justifyText,
-      bold: false,
+      bold: bodyBold,
+      titleBold: titleBold,
+      titleCenter: titleCenter,
       textIndent: textIndent,
       titleFontSize: titleFontSize,
       titleSpacing: titleSpacing,
@@ -387,9 +397,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 將字號、標題、行高、字距、段距、章節間距與首行縮排恢復為預設值。
+  /// 將字號、標題、行高、字距、段距、章節間距、首行縮排與粗細、標題對齊
+  /// 恢復為預設值。
   void resetTypography() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
+    setBodyBold(defaults.bodyBold);
+    setTitleBold(defaults.titleBold);
+    setTitleCenter(defaults.titleCenter);
     setTypography(
       fontSize: defaults.fontSize,
       titleFontSize: defaults.titleFontSize,
@@ -400,6 +414,64 @@ class ReaderV2SettingsController extends ChangeNotifier {
       letterSpacing: defaults.letterSpacing,
       textIndent: defaults.textIndent,
     );
+  }
+
+  /// 正文粗細、標題粗細與標題對齊是否都是預設值。
+  bool get isWeightAndAlignDefault {
+    final defaults = ReaderV2PrefsSnapshot.defaults();
+    return bodyBold == defaults.bodyBold &&
+        titleBold == defaults.titleBold &&
+        titleCenter == defaults.titleCenter;
+  }
+
+  void setBodyBold(bool value) {
+    if (bodyBold == value) return;
+    bodyBold = value;
+    _persist(
+      'bodyBold',
+      () => _prefsRepository.saveBodyBold(value),
+      onSaved: (p) => p.copyWith(bodyBold: value),
+      restore: (p) => bodyBold = p.bodyBold,
+    );
+    notifyListeners();
+  }
+
+  void setTitleBold(bool value) {
+    if (titleBold == value) return;
+    titleBold = value;
+    _persist(
+      'titleBold',
+      () => _prefsRepository.saveTitleBold(value),
+      onSaved: (p) => p.copyWith(titleBold: value),
+      restore: (p) => titleBold = p.titleBold,
+    );
+    notifyListeners();
+  }
+
+  void setTitleCenter(bool value) {
+    if (titleCenter == value) return;
+    titleCenter = value;
+    _persist(
+      'titleCenter',
+      () => _prefsRepository.saveTitleCenter(value),
+      onSaved: (p) => p.copyWith(titleCenter: value),
+      restore: (p) => titleCenter = p.titleCenter,
+    );
+    notifyListeners();
+  }
+
+  /// 頁首頁尾資訊的字級；那一列跟著變高，正文區跟著讓出位置。
+  void setInfoFontSize(double value) {
+    final normalized = ReaderV2PrefsRepository.normalizeInfoFontSize(value);
+    if (infoFontSize == normalized) return;
+    infoFontSize = normalized;
+    _persist(
+      'infoFontSize',
+      () => _prefsRepository.saveInfoFontSize(normalized),
+      onSaved: (p) => p.copyWith(infoFontSize: normalized),
+      restore: (p) => infoFontSize = p.infoFontSize,
+    );
+    notifyListeners();
   }
 
   void setAutoPageSpeed(double value) {
@@ -762,6 +834,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     setFooterInfo(defaults.footerInfo);
     setUse24HourClock(defaults.use24HourClock);
     setProgressFractionDigits(defaults.progressFractionDigits);
+    setInfoFontSize(defaults.infoFontSize);
   }
 
   bool get isPageLayoutDefault {
@@ -778,7 +851,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
         headerInfo == defaults.headerInfo &&
         footerInfo == defaults.footerInfo &&
         use24HourClock == defaults.use24HourClock &&
-        progressFractionDigits == defaults.progressFractionDigits;
+        progressFractionDigits == defaults.progressFractionDigits &&
+        infoFontSize == defaults.infoFontSize;
   }
 
   void setHideStatusBar(bool value) {

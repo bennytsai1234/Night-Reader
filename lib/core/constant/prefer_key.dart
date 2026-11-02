@@ -197,6 +197,14 @@ class PreferKey {
   static const String readerHeaderInfo = 'reader_header_info';
   static const String readerFooterInfo = 'reader_footer_info';
 
+  /// 頁首頁尾資訊的字級。
+  static const String readerInfoFontSize = 'reader_info_font_size';
+
+  /// 正文加粗；章節標題加粗、置中。
+  static const String readerBodyBold = 'reader_body_bold';
+  static const String readerTitleBold = 'reader_title_bold';
+  static const String readerTitleCenter = 'reader_title_center';
+
   /// 閱讀器亮度跟隨系統；關閉時用 [readerBrightness]。
   static const String readerBrightnessAuto = 'reader_brightness_auto';
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -93,6 +94,14 @@ class ReaderV2PrefsSnapshot {
   /// 朗讀時畫面跟著念到的句子捲動。
   final bool ttsFollow;
 
+  /// 正文加粗；章節標題加粗、置中。
+  final bool bodyBold;
+  final bool titleBold;
+  final bool titleCenter;
+
+  /// 頁首頁尾資訊的字級。
+  final double infoFontSize;
+
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
     required this.titleFontSize,
@@ -131,6 +140,10 @@ class ReaderV2PrefsSnapshot {
     required this.maxDim,
     required this.edgeFade,
     required this.ttsFollow,
+    required this.bodyBold,
+    required this.titleBold,
+    required this.titleCenter,
+    required this.infoFontSize,
   });
 
   factory ReaderV2PrefsSnapshot.defaults() {
@@ -181,6 +194,10 @@ class ReaderV2PrefsSnapshot {
       maxDim: ReaderV2Brightness.defaultMaxDim,
       edgeFade: ReaderV2PrefsRepository.defaultEdgeFade,
       ttsFollow: true,
+      bodyBold: false,
+      titleBold: true,
+      titleCenter: false,
+      infoFontSize: kReaderInfoFontSize,
     );
   }
 
@@ -222,6 +239,10 @@ class ReaderV2PrefsSnapshot {
     double? maxDim,
     double? edgeFade,
     bool? ttsFollow,
+    bool? bodyBold,
+    bool? titleBold,
+    bool? titleCenter,
+    double? infoFontSize,
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
@@ -262,6 +283,10 @@ class ReaderV2PrefsSnapshot {
       maxDim: maxDim ?? this.maxDim,
       edgeFade: edgeFade ?? this.edgeFade,
       ttsFollow: ttsFollow ?? this.ttsFollow,
+      bodyBold: bodyBold ?? this.bodyBold,
+      titleBold: titleBold ?? this.titleBold,
+      titleCenter: titleCenter ?? this.titleCenter,
+      infoFontSize: infoFontSize ?? this.infoFontSize,
     );
   }
 }
@@ -443,6 +468,13 @@ class ReaderV2PrefsRepository {
       ),
       edgeFade: normalizeEdgeFade(prefs.getDouble(PreferKey.readerEdgeFade)),
       ttsFollow: prefs.getBool(PreferKey.readerTtsFollow) ?? defaults.ttsFollow,
+      bodyBold: prefs.getBool(PreferKey.readerBodyBold) ?? defaults.bodyBold,
+      titleBold: prefs.getBool(PreferKey.readerTitleBold) ?? defaults.titleBold,
+      titleCenter:
+          prefs.getBool(PreferKey.readerTitleCenter) ?? defaults.titleCenter,
+      infoFontSize: normalizeInfoFontSize(
+        prefs.getDouble(PreferKey.readerInfoFontSize),
+      ),
     );
   }
 
@@ -634,6 +666,35 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveTtsFollow(bool value) {
     return _setBool(PreferKey.readerTtsFollow, value);
+  }
+
+  Future<void> saveBodyBold(bool value) {
+    return _setBool(PreferKey.readerBodyBold, value);
+  }
+
+  Future<void> saveTitleBold(bool value) {
+    return _setBool(PreferKey.readerTitleBold, value);
+  }
+
+  Future<void> saveTitleCenter(bool value) {
+    return _setBool(PreferKey.readerTitleCenter, value);
+  }
+
+  Future<void> saveInfoFontSize(double value) {
+    return _setDouble(
+      PreferKey.readerInfoFontSize,
+      normalizeInfoFontSize(value),
+    );
+  }
+
+  /// 頁首頁尾字級的範圍：小於 9 在手機上讀不出來，大於 16 就比常用的正文
+  /// 還大。
+  static const double minInfoFontSize = 9.0;
+  static const double maxInfoFontSize = 16.0;
+
+  static double normalizeInfoFontSize(double? value) {
+    if (value == null || !value.isFinite) return kReaderInfoFontSize;
+    return value.roundToDouble().clamp(minInfoFontSize, maxInfoFontSize);
   }
 
   List<int> parseClickActions(String? stored) {
