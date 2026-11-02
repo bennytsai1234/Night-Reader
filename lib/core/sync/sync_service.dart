@@ -319,7 +319,10 @@ class SyncService {
       } while (_again);
     } finally {
       // 整輪（包含同步途中補跑的輪次）才算結束，避免進度短暫顯示已完成。
-      status.value = status.value.copyWith(running: false, clearProgress: true);
+      status.value = status.value.copyWith(
+        running: false,
+        clearProgress: true,
+      );
       // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
       _progressDone();
     }
