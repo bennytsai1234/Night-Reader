@@ -14,6 +14,19 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 class ReaderV2MenuSheet {
   const ReaderV2MenuSheet._();
 
+  /// 閱讀器裡的面板寬度：正文欄照每行字數收窄時，面板左右緣對齊正文的
+  /// 左右邊（[ReaderV2SettingsController.menuSideFor]）；沒收窄時 null，
+  /// 照預設寬度。
+  static BoxConstraints? constraintsFor(
+    BuildContext context,
+    ReaderV2SettingsController settings,
+  ) {
+    final width = MediaQuery.sizeOf(context).width;
+    final side = settings.menuSideFor(width);
+    if (side == null) return null;
+    return BoxConstraints(maxWidth: width - side * 2);
+  }
+
   static Future<T?> show<T>(
     BuildContext context, {
     required ReaderV2SettingsController settings,
@@ -22,6 +35,7 @@ class ReaderV2MenuSheet {
   }) {
     return AppBottomSheet.showCustom<T>(
       context: context,
+      constraints: constraintsFor(context, settings),
       isScrollControlled: true,
       // 面板底色由下方 Material 依選單主題繪製，才能在開啟期間即時換色。
       backgroundColor: Colors.transparent,

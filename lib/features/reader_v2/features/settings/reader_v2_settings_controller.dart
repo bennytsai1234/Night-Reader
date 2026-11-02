@@ -246,6 +246,14 @@ class ReaderV2SettingsController extends ChangeNotifier {
         lineChars: lineChars,
       );
 
+  /// 閱讀選單與面板左右對齊的位置（畫面寬 [viewportWidth]）：正文欄照
+  /// 每行字數收窄時，上下選單與面板的左右緣對齊正文的左右邊；沒收窄
+  /// （手機直拿）時是 null，選單照原本離邊 16、面板照預設寬度。
+  double? menuSideFor(double viewportWidth) {
+    final side = paddingHorizontalFor(viewportWidth);
+    return side > paddingHorizontal ? side : null;
+  }
+
   ReaderV2Style readStyleFor(
     EdgeInsets mediaPadding, {
     required double viewportWidth,

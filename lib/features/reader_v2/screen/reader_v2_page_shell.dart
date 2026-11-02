@@ -130,6 +130,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.headerInfo,
     required this.footerInfo,
     required this.paddingHorizontal,
+    this.menuSide,
     required this.paddingTop,
     required this.paddingBottom,
     required this.footerOffset,
@@ -202,6 +203,10 @@ class ReaderV2PageShell extends StatelessWidget {
 
   /// 正文的左右邊距；頁首頁尾資訊列的左右內距也用它。
   final double paddingHorizontal;
+
+  /// 上下選單左右對齊的位置：正文欄收窄時是正文的左右邊，否則 null、
+  /// 照原本離邊 16（`ReaderV2SettingsController.menuSideFor`）。
+  final double? menuSide;
   final double paddingTop;
   final double paddingBottom;
 
@@ -397,6 +402,7 @@ class ReaderV2PageShell extends StatelessWidget {
                     LayoutId(
                       id: _MenuSlot.top,
                       child: ReaderV2TopMenu(
+                        horizontalInset: menuSide ?? AppGrouped.margin,
                         controlsVisible: controlsVisible,
                         bookName: context.zh(book.name),
                         navigation: navigation,
@@ -409,6 +415,7 @@ class ReaderV2PageShell extends StatelessWidget {
                     LayoutId(
                       id: _MenuSlot.bottom,
                       child: ReaderV2BottomMenu(
+                        horizontalInset: menuSide ?? AppGrouped.margin,
                         controlsVisible: controlsVisible,
                         navigation: navigation,
                         isAutoPaging: isAutoPaging,
