@@ -680,24 +680,28 @@ class GlassCapsule extends StatelessWidget {
   }
 }
 
-/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中、最寬同
-/// 浮動分頁列。左右外距與底部安全區由呼叫端決定。
+/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中，預設最寬
+/// 同浮動分頁列。左右外距與底部安全區由呼叫端決定。
 class FloatingGlassToolbar extends StatelessWidget {
   const FloatingGlassToolbar({
     super.key,
     required this.child,
     this.height = AppGlass.tabItemHeight,
+    this.maxWidth = AppGlass.tabBarMaxWidth,
   });
 
   final Widget child;
   final double height;
+
+  /// 清單頁的工具列和卡片切齊，由呼叫端的外距決定寬度，這裡傳無限大。
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       heightFactor: 1,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: AppGlass.tabBarMaxWidth),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: SizedBox(
           height: height,
           child: GlassSurface(
@@ -794,9 +798,9 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.readable = true,
   });
 
-  /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕的外緣
-  /// 和底下卡片的左右邊切齊，[bottom] 跟著內容欄。書架這類鋪滿畫面的頁面設
-  /// false。
+  /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕照
+  /// [ReadableWidth.headerInsetOf] 往內收，[bottom] 跟著內容欄。書架這類
+  /// 鋪滿畫面的頁面設 false。
   final bool readable;
 
   /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
@@ -866,12 +870,13 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 onPressed: () => Navigator.maybePop(context),
               )
             : null);
-    // 清單頁在平板上有內容欄（[ReadableWidth]）：兩側按鈕的外緣和底下卡片的
-    // 左右邊切齊，頁首下方的搜尋框、分頁也跟著內容欄。
-    final contentSide = readable
-        ? ReadableWidth.sideOf(MediaQuery.sizeOf(context).width)
-        : 0.0;
-    final buttonInset = contentSide + AppGrouped.margin;
+    // 清單頁在平板上有內容欄（[ReadableWidth]）：按鈕位置照
+    // [ReadableWidth.headerInsetOf]，頁首下方的搜尋框、分頁跟著內容欄。
+    final size = MediaQuery.sizeOf(context);
+    final contentSide = readable ? ReadableWidth.sideOf(size.width) : 0.0;
+    final buttonInset = readable
+        ? ReadableWidth.headerInsetOf(size)
+        : AppGrouped.margin;
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
