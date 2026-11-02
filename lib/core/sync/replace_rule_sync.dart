@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
@@ -19,6 +20,10 @@ class ReplaceRuleSync extends SyncKind {
   static const int _firstTimeId = 1000000000000;
 
   static const String kind = 'replace_rules';
+
+  /// 這台的替換規則因同步而變了（套用了另一台的規則，或規則換了編號）時
+  /// 加一：把規則清單讀進記憶體的頁面（閱讀器的替換規則頁）聽它重讀。
+  static final ValueNotifier<int> applied = ValueNotifier(0);
 
   @override
   String get name => kind;
@@ -110,6 +115,7 @@ class ReplaceRuleSync extends SyncKind {
     for (final MapEntry(key: from, value: to) in targets.entries) {
       aligned['$to'] = local['$from']!;
     }
+    if (targets.isNotEmpty) applied.value++;
     return aligned;
   }
 
@@ -133,6 +139,7 @@ class ReplaceRuleSync extends SyncKind {
     }
     if (upserts.isNotEmpty) await _dao.upsertAll(upserts);
     if (deleted.isNotEmpty) await _dao.deleteByIds(deleted);
+    if (applied.isNotEmpty) ReplaceRuleSync.applied.value++;
     return applied;
   }
 }

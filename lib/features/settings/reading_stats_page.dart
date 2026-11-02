@@ -11,6 +11,7 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
@@ -39,6 +40,36 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
     super.initState();
     _readRecordDao = getIt<ReadRecordDao>();
     _stats = _load();
+    ReadStatsSync.applied.addListener(_othersSynced);
+  }
+
+  @override
+  void dispose() {
+    ReadStatsSync.applied.removeListener(_othersSynced);
+    super.dispose();
+  }
+
+  bool _syncReloadPending = false;
+
+  /// 同步收到別台的統計：安靜地重讀，讀完才換上去（不閃載入圈）。被別的
+  /// 頁面蓋著時等露出來才讀，不疊在換頁動畫上（ADR 0018）。
+  Future<void> _othersSynced() async {
+    if (_syncReloadPending) return;
+    _syncReloadPending = true;
+    await TransitionSettled.uncovered(context);
+    _syncReloadPending = false;
+    if (!mounted) return;
+    try {
+      final next = _load();
+      await next;
+      if (mounted) {
+        setState(() {
+          _stats = next;
+        });
+      }
+    } catch (error, stackTrace) {
+      AppLog.e('同步後重讀閱讀統計失敗', error: error, stackTrace: stackTrace);
+    }
   }
 
   /// 這台的加上同步來的別台的（ADR 0039）。
@@ -117,7 +148,10 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
       body: FutureBuilder<_Stats>(
         future: _stats,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          // 同步後換上重讀好的統計時，FutureBuilder 第一格仍是 waiting：
+          // 有上一次的資料就先照它畫，不閃一格轉圈。
+          if (snapshot.connectionState != ConnectionState.done &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -130,7 +164,11 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
               primaryAction: AppStateAction(
                 label: '重新載入',
                 icon: Icons.refresh,
-                onPressed: () => setState(() => _stats = _load()),
+                onPressed: () {
+                  setState(() {
+                    _stats = _load();
+                  });
+                },
               ),
             );
           }

@@ -29,7 +29,8 @@ class BookInfoParser {
         final initResult = rule.getElement(infoRule.init!);
         final hasInitResult =
             initResult != null &&
-            (initResult is! String || initResult.trim().isNotEmpty);
+            (initResult is! String || initResult.trim().isNotEmpty) &&
+            (initResult is! List || initResult.isNotEmpty);
         if (hasInitResult) {
           // init 規則的結果替換為新的解析內容
           rule.setContent(initResult, baseUrl: baseUrl);

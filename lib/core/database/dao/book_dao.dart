@@ -189,6 +189,18 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     );
   }
 
+  /// 只改書名與作者（另一台改了名，同步照著改，ADR 0039）：書的網址、目錄、
+  /// 正文、閱讀進度都不動。
+  Future<void> renameBook(
+    String bookUrl, {
+    required String name,
+    required String author,
+  }) {
+    return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+      BooksCompanion(name: Value(name), author: Value(author)),
+    );
+  }
+
   Future<void> updateInBookshelf(String bookUrl, bool inBookshelf) {
     return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
       BooksCompanion(isInBookshelf: Value(inBookshelf)),
