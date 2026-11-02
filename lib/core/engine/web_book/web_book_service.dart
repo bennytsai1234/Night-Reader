@@ -560,7 +560,7 @@ class WebBook {
         body: cachedBody,
         headers: const <String, List<String>>{},
         raw: Response(
-          requestOptions: RequestOptions(path: initialUrl),
+          requestOptions: StrResponse.requestFor(initialUrl),
           data: cachedBody,
         ),
       );
