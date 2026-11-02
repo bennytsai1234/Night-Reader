@@ -435,6 +435,9 @@ class Highlights extends Table {
     Constant(HighlightStyle.fill.name),
   )();
 
+  /// 備忘（schema 12 加的）。
+  TextColumn get note => text().withDefault(const Constant(''))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

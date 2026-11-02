@@ -80,7 +80,6 @@ class SelectActionBar extends StatelessWidget {
         padding: ReadableWidth.cardInsetOf(context),
         child: FloatingGlassToolbar(
           height: height,
-          maxWidth: double.infinity,
           child: Row(
             children: [
               _BarTextButton(
