@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -75,9 +76,11 @@ class SelectActionBar extends StatelessWidget {
       top: false,
       minimum: const EdgeInsets.only(bottom: AppGlass.tabBarBottomGap),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+        // 和書源清單的卡片左右切齊（平板上收在內容欄裡）。
+        padding: ReadableWidth.cardInsetOf(context),
         child: FloatingGlassToolbar(
           height: height,
+          maxWidth: double.infinity,
           child: Row(
             children: [
               _BarTextButton(

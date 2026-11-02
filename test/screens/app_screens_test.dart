@@ -221,6 +221,13 @@ void main() {
       await pumpApp(tester);
       await steps(tester);
       if (name.startsWith('r')) await waitForText(tester);
+      // 等骨架換成內容再拍：書籍詳情、書源管理等封面（真實時間）再換場。
+      for (var i = 0; i < 30; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 30)),
+        );
+        await settle(tester, const Duration(milliseconds: 100));
+      }
       await shot(tester, '${name}_$suffix');
       // 拆掉整個 App，下一個情境從頭建。
       await tester.pumpWidget(const SizedBox.shrink());

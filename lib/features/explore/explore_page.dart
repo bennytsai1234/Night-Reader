@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -142,11 +143,13 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }
 
   /// 書源清單讓出頁首與底部浮動分頁列。
-  EdgeInsets get _listPadding => EdgeInsets.only(
-    // 和書架、我的一樣從頁首下方同一條線開始。
-    top: _bodyPadding.top + AppSpacing.xs,
-    bottom: _bodyPadding.bottom + AppSpacing.xl,
-  );
+  EdgeInsets get _listPadding =>
+      EdgeInsets.only(
+        // 和書架、我的一樣從頁首下方同一條線開始。
+        top: _bodyPadding.top + AppSpacing.xs,
+        bottom: _bodyPadding.bottom + AppSpacing.xl,
+      ) +
+      ReadableWidth.insetOf(context);
 
   Widget _buildSourceList(ExploreProvider provider) {
     if (provider.sourceLoadError != null) {

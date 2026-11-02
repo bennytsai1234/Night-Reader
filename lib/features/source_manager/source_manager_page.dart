@@ -6,6 +6,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -421,10 +422,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
       backdrop: AppChrome.of(context).groupedBackground,
       skeleton: p.expectsSources
           ? SourceListSkeleton(
-              padding: EdgeInsets.only(
-                top: padding.top + AppSpacing.sm,
-                bottom: padding.bottom + AppSpacing.xxl,
-              ),
+              padding:
+                  EdgeInsets.only(
+                    top: padding.top + AppSpacing.sm,
+                    bottom: padding.bottom + AppSpacing.xxl,
+                  ) +
+                  ReadableWidth.insetOf(context),
               count: p.lastSourceCount,
             )
           : const SizedBox.shrink(),
@@ -532,56 +535,63 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
         child: CustomScrollView(
           slivers: [
             SliverPadding(padding: EdgeInsets.only(top: padding.top)),
-            if (p.loadErrorMessage != null && p.totalSourceCount > 0)
-              SliverToBoxAdapter(
-                child: GroupedSection(
-                  topGap: AppSpacing.sm,
-                  children: [
-                    GroupedRow(
-                      title: p.loadErrorMessage!,
-                      destructive: true,
-                      showChevron: false,
-                      trailing: Text(
-                        '重試',
-                        style: AppTextStyles.bodyBase.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      onTap: p.loadSources,
-                    ),
-                  ],
-                ),
-              ),
             SliverPadding(
-              padding: EdgeInsets.only(
-                top: groupByHost ? 0 : AppSpacing.sm,
-                bottom: padding.bottom + AppSpacing.xxl,
-              ),
-              sliver: canReorder
-                  ? SliverReorderableList(
-                      itemCount: list.length,
-                      onReorderItem: (oldIndex, newIndex) => _runAction(
-                        () => p.reorderSource(oldIndex, newIndex),
-                        errorPrefix: '調整書源排序失敗',
-                      ),
-                      proxyDecorator: (child, _, _) => DecoratedBox(
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color: chrome.glassShadow,
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
+              padding: ReadableWidth.insetOf(context),
+              sliver: SliverMainAxisGroup(
+                slivers: [
+                  if (p.loadErrorMessage != null && p.totalSourceCount > 0)
+                    SliverToBoxAdapter(
+                      child: GroupedSection(
+                        topGap: AppSpacing.sm,
+                        children: [
+                          GroupedRow(
+                            title: p.loadErrorMessage!,
+                            destructive: true,
+                            showChevron: false,
+                            trailing: Text(
+                              '重試',
+                              style: AppTextStyles.bodyBase.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                             ),
-                          ],
-                        ),
-                        child: child,
+                            onTap: p.loadSources,
+                          ),
+                        ],
                       ),
-                      itemBuilder: (ctx, i) => itemAt(i),
-                    )
-                  : SliverList.builder(
-                      itemCount: list.length,
-                      itemBuilder: (ctx, i) => itemAt(i),
                     ),
+                  SliverPadding(
+                    padding: EdgeInsets.only(
+                      top: groupByHost ? 0 : AppSpacing.sm,
+                      bottom: padding.bottom + AppSpacing.xxl,
+                    ),
+                    sliver: canReorder
+                        ? SliverReorderableList(
+                            itemCount: list.length,
+                            onReorderItem: (oldIndex, newIndex) => _runAction(
+                              () => p.reorderSource(oldIndex, newIndex),
+                              errorPrefix: '調整書源排序失敗',
+                            ),
+                            proxyDecorator: (child, _, _) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: chrome.glassShadow,
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: child,
+                            ),
+                            itemBuilder: (ctx, i) => itemAt(i),
+                          )
+                        : SliverList.builder(
+                            itemCount: list.length,
+                            itemBuilder: (ctx, i) => itemAt(i),
+                          ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

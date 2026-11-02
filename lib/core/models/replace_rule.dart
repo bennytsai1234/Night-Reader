@@ -169,13 +169,7 @@ class ReplaceRule {
     return trimmed.isNotEmpty && scopeText.contains(trimmed);
   }
 
-  static String _readString(dynamic value) {
-    if (value == null) return '';
-    return value.toString();
-  }
+  static String _readString(dynamic value) => readJsonString(value) ?? '';
 
-  static String? _readNullableString(dynamic value) {
-    if (value == null) return null;
-    return value.toString();
-  }
+  static String? _readNullableString(dynamic value) => readJsonString(value);
 }

@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart'
     show BoxHitTestResult, PipelineOwner, RenderProxyBox, RenderSliver;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -321,7 +322,9 @@ class _SearchViewState extends State<SearchView> {
     }
     final padding = _bodyPadding;
     return Padding(
-      padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
+      padding:
+          EdgeInsets.only(top: padding.top, bottom: padding.bottom) +
+          ReadableWidth.insetOf(context),
       child: Column(
         children: [
           ..._buildPanels(provider),
@@ -894,10 +897,12 @@ class _SearchViewState extends State<SearchView> {
       },
       child: ListView.builder(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.only(
-          top: padding.top,
-          bottom: padding.bottom + AppSpacing.xl,
-        ),
+        padding:
+            EdgeInsets.only(
+              top: padding.top,
+              bottom: padding.bottom + AppSpacing.xl,
+            ) +
+            ReadableWidth.insetOf(context),
         itemCount: panels.length + results.length,
         findChildIndexCallback: (key) {
           final index = key is ValueKey<String> ? indexByKey[key.value] : null;
