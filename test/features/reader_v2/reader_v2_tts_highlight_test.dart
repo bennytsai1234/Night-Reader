@@ -45,6 +45,47 @@ void main() {
     }
   });
 
+  group('從畫面上的位置開始念，從那一句的句首念起', () {
+    const text = '天黑了。「走吧！」他轉身離開了院子。\n　　風很大，吹得門窗作響。';
+
+    String firstFrom(int offset) => segmenter
+        .segment(text: text, chapterIndex: 0, startOffset: offset)
+        .first
+        .text;
+
+    test('位置落在句子中間：退回句首', () {
+      expect(firstFrom(text.indexOf('離開')), '他轉身離開了院子。');
+      expect(firstFrom(text.indexOf('吹得')), '風很大，吹得門窗作響。');
+    });
+
+    test('位置落在句首或句尾的收引號：不往前退', () {
+      expect(firstFrom(text.indexOf('他')), '他轉身離開了院子。');
+      expect(firstFrom(text.indexOf('」')), '他轉身離開了院子。');
+      expect(firstFrom(0), '天黑了。');
+    });
+
+    test('段首縮排前一行沒有句號：換行就是句首', () {
+      const unpunctuated = '第一章 出發\n　　他轉身離開了院子';
+      final segments = segmenter.segment(
+        text: unpunctuated,
+        chapterIndex: 0,
+        startOffset: unpunctuated.indexOf('離開'),
+      );
+      expect(segments.first.text, '他轉身離開了院子');
+    });
+
+    test('一句長到找不到句首：從原位置念，不往前念一大段', () {
+      final long = '他${'走' * 400}到了';
+      final offset = long.indexOf('到了');
+      final segments = segmenter.segment(
+        text: long,
+        chapterIndex: 0,
+        startOffset: offset,
+      );
+      expect(segments.first.startCharOffset, offset);
+    });
+  });
+
   test('短句不併句：每句、每個段落各自成段', () {
     const text = '「好。」\n「走吧！」他說。天黑了。';
     final segments = segmenter.segment(

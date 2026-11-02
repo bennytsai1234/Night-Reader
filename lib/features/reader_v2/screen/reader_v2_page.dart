@@ -136,10 +136,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
     );
-    _coordinator = ReaderV2PageCoordinator(
-      host: _host,
-      showNotice: _showNotice,
-    );
+    _coordinator = ReaderV2PageCoordinator(host: _host, showNotice: _showNotice)
+      ..openChapters = _openChapters
+      ..toggleDayNight = _toggleDayNight;
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
     _progressSync = ReaderV2ProgressSync(
       book: widget.book,
@@ -357,7 +356,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 onExitIntent: _handleExitIntent,
                 onSystemBack: _handleSystemBack,
                 onMore: () => unawaited(_showMore()),
-                onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                onOpenDrawer: _openChapters,
                 onTts: () => _openPanel(_showTts),
                 onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
                 onInterface: () => _openPanel(
@@ -368,12 +367,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 ),
                 onSettings: () => unawaited(_openReadingPreferences()),
                 onAutoPage: _coordinator.toggleAutoPage,
-                // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
-                onToggleDayNight: () => ThemeRevealScope.of(context).run(
-                  change: () => context.read<SettingsProvider>().setThemeMode(
-                    isDarkBackground ? ThemeMode.light : ThemeMode.dark,
-                  ),
-                ),
+                onToggleDayNight: _toggleDayNight,
                 onReplaceRule: () =>
                     _openPanel(() => _coordinator.openReplaceRule(context)),
                 onShowControls: menu.showControls,
@@ -557,6 +551,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       return;
     }
     await runtime.reloadContentPreservingLocation();
+  }
+
+  void _openChapters() => _scaffoldKey.currentState?.openDrawer();
+
+  /// 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
+  void _toggleDayNight() {
+    final dark = StylePalette.of(context).brightness == Brightness.dark;
+    ThemeRevealScope.of(context).run(
+      change: () => context.read<SettingsProvider>().setThemeMode(
+        dark ? ThemeMode.light : ThemeMode.dark,
+      ),
+    );
   }
 
   void _handleContentTap(TapUpDetails details) {
@@ -1177,6 +1183,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
       title: _chapterTitleAt(chapterIndex),
+      shares: runtime?.chapterShares.value,
     );
   }
 

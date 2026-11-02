@@ -303,6 +303,10 @@ class SourceManagerProvider with ChangeNotifier {
       list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '已禁用發現') {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
+    } else if (filterGroup == noAbnormalFilter) {
+      list = list
+          .where((s) => !_hasGroup(s.bookSourceGroup, abnormalSourceGroupTag))
+          .toList();
     } else if (filterGroup == '無分組') {
       list = list
           .where((s) => _groupLabels(s.bookSourceGroup).isEmpty)
@@ -397,6 +401,22 @@ class SourceManagerProvider with ChangeNotifier {
   Set<String> get selectedUrls => Set<String>.unmodifiable(_selectedUrls);
   List<String> _allGroups = [];
   List<String> get allGroups => List<String>.unmodifiable(_allGroups);
+
+  /// 篩選「沒有異常」：校驗沒有標上「異常」的書源（含還沒校驗過的）。
+  static const String noAbnormalFilter = '沒有異常';
+
+  /// 書源上出現的校驗結果標記，照 [sourceRuntimeStatusTags] 的順序
+  /// （「異常」在最前）；篩選選單把它們和使用者自己的分組分開列。
+  List<String> get checkResultTags => [
+    for (final tag in sourceRuntimeStatusTags)
+      if (_allGroups.contains(tag)) tag,
+  ];
+
+  /// 使用者自己的分組，不含校驗結果標記。
+  List<String> get userGroups => [
+    for (final group in _allGroups)
+      if (!sourceRuntimeStatusTags.contains(group)) group,
+  ];
 
   /// [entrance] 是書源管理頁的進場動畫；播完才讀書源（ADR 0018）。
   SourceManagerProvider({

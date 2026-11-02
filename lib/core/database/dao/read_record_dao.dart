@@ -138,6 +138,56 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// 書改名時把 [from] 的累計與每日秒數併到 [to]：統計照書名記（換源後
+  /// 同一本書的統計接得上），改名不搬就會變成兩筆。[to] 已經有紀錄時
+  /// 兩邊相加，最後閱讀時間取晚的。
+  Future<void> renameBook({required String from, required String to}) {
+    if (from == to) return Future<void>.value();
+    return transaction(() async {
+      final old = await getByBookName(from);
+      if (old != null) {
+        final existing = await getByBookName(to);
+        if (existing == null) {
+          await (update(readRecords)..where((t) => t.id.equals(old.id))).write(
+            ReadRecordsCompanion(bookName: Value(to)),
+          );
+        } else {
+          await (update(
+            readRecords,
+          )..where((t) => t.id.equals(existing.id))).write(
+            ReadRecordsCompanion(
+              readTime: Value(existing.readTime + old.readTime),
+              lastRead: Value(
+                existing.lastRead > old.lastRead
+                    ? existing.lastRead
+                    : old.lastRead,
+              ),
+            ),
+          );
+          await (delete(readRecords)..where((t) => t.id.equals(old.id))).go();
+        }
+      }
+      final oldDays = await (select(
+        readDays,
+      )..where((t) => t.bookName.equals(from))).get();
+      for (final day in oldDays) {
+        await into(readDays).insert(
+          ReadDaysCompanion.insert(
+            bookName: to,
+            day: day.day,
+            seconds: Value(day.seconds),
+          ),
+          onConflict: DoUpdate(
+            (current) => ReadDaysCompanion.custom(
+              seconds: current.seconds + Constant(day.seconds),
+            ),
+          ),
+        );
+      }
+      await (delete(readDays)..where((t) => t.bookName.equals(from))).go();
+    });
+  }
+
   Future<void> _addToTotal({
     required String bookName,
     required int seconds,
