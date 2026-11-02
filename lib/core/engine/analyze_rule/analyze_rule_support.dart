@@ -202,8 +202,15 @@ class SourceRule {
       } else {
         // 反向引用 $1..$N —— AnalyzeByRegex 會把 group(0) 放在 index 0，
         // 這裡需對齊 legado 語義，令 `$1` 對應第一個捕獲組而不是整段匹配。
-        if (result is List && type > 0 && type < result.length) {
-          buffer.write(result[type]?.toString() ?? '');
+        // 同 Legado：上一步交來的是一組分組（清單）才代換，沒有那一組就是
+        // 空的；交來的不是清單就照原文留著（規則 JS 裡 `replace` 的 `'$1'`
+        // 才到得了 JS）。
+        if (result is List) {
+          if (type < result.length) {
+            buffer.write(result[type]?.toString() ?? '');
+          }
+        } else {
+          buffer.write(param);
         }
       }
     }

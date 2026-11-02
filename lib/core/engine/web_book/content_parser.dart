@@ -29,10 +29,14 @@ class ContentParser {
     BookChapter? chapter,
     required String body,
     required String baseUrl,
+    String? redirectUrl,
     String? nextChapterUrl,
   }) async {
+    // [baseUrl] 是請求這一頁的網址，[redirectUrl] 是網站轉址後回應的網址
+    // （同 Legado）；沒給時是同一個。
+    final pageUrl = redirectUrl ?? baseUrl;
     final rule = AnalyzeRule(source: source, ruleData: book)
-        .setContent(body, baseUrl: baseUrl)
+        .setContent(body, baseUrl: baseUrl, redirectUrl: pageUrl)
         .setChapter(chapter)
         .setNextChapterUrl(nextChapterUrl);
 
@@ -55,11 +59,11 @@ class ContentParser {
           isUrl: true,
         );
         for (final u in list) {
-          if (u.isEmpty || u == baseUrl) continue;
+          if (u.isEmpty || u == pageUrl) continue;
           if (nextChapterUrl != null) {
-            final absNext = NetworkUtils.getAbsoluteURL(baseUrl, u);
+            final absNext = NetworkUtils.getAbsoluteURL(pageUrl, u);
             final absChapter = NetworkUtils.getAbsoluteURL(
-              baseUrl,
+              pageUrl,
               nextChapterUrl,
             );
             if (absNext == absChapter) continue;
@@ -82,6 +86,7 @@ class ContentParser {
     BookChapter? chapter,
     required String contentStr,
     String? baseUrl,
+    String? redirectUrl,
   }) async {
     if (contentStr.trim().isEmpty) return '';
     final replaceRegex = source.ruleContent?.replaceRegex;
@@ -94,10 +99,9 @@ class ContentParser {
         .join('\n');
 
     try {
-      final rule = AnalyzeRule(
-        source: source,
-        ruleData: book,
-      ).setContent(str, baseUrl: baseUrl).setChapter(chapter);
+      final rule = AnalyzeRule(source: source, ruleData: book)
+          .setContent(str, baseUrl: baseUrl, redirectUrl: redirectUrl)
+          .setChapter(chapter);
       try {
         str = rule.getString(replaceRegex);
       } finally {
