@@ -251,7 +251,8 @@ class SyncService {
       await _settings.useWebDav(account);
       await _claimBases();
     });
-    status.value = const SyncStatus(space: SyncSpace.webdav);
+    // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒同步過」。
+    status.value = const SyncStatus(space: SyncSpace.webdav, running: true);
     // 連線確認後就回報選取成功；資料同步在背景繼續執行。
     requestSync();
   }
@@ -269,7 +270,11 @@ class SyncService {
         await _settings.useGoogleDrive(account);
         await _claimBases();
       });
-      status.value = const SyncStatus(space: SyncSpace.googleDrive);
+      // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒同步過」。
+      status.value = const SyncStatus(
+        space: SyncSpace.googleDrive,
+        running: true,
+      );
       // 登入與選取同步空間完成後就讓畫面更新；整批資料接著同步。
       requestSync();
     } finally {
