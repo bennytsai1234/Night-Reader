@@ -202,7 +202,7 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(bookmarks);
       }
       if (from < 11) {
-        // 標註：同書籤，照書名加作者記（ADR 0043）。
+        // 標註：同書籤，照書名加作者記（ADR 0044）。
         await m.createTable(highlights);
       }
     },

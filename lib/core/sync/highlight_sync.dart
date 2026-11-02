@@ -5,7 +5,7 @@ import 'package:night_reader/core/models/highlight.dart';
 import 'sync_kind.dart';
 import 'sync_records.dart';
 
-/// 標註的同步：一個標註一筆，用編號對上，刪除也同步（同書籤，ADR 0043）。
+/// 標註的同步：一個標註一筆，用編號對上，刪除也同步（同書籤，ADR 0044）。
 class HighlightSync extends SyncKind {
   HighlightSync({HighlightDao? dao}) : _dao = dao ?? getIt<HighlightDao>();
 

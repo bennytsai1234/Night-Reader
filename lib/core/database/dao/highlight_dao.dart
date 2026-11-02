@@ -11,7 +11,7 @@ import 'bookmark_dao.dart';
 
 part 'highlight_dao.g.dart';
 
-/// 標註的資料表。和書籤同一套（ADR 0042、0043）：跟著書名加作者、編號
+/// 標註的資料表。和書籤同一套（ADR 0042、0044）：跟著書名加作者、編號
 /// 用 [BookmarkDao.newId] 的配法、換源時跟著搬。
 @DriftAccessor(tables: [Highlights])
 class HighlightDao extends DatabaseAccessor<AppDatabase>

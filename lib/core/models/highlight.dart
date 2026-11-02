@@ -43,7 +43,7 @@ enum HighlightStyle {
 /// 位置和書籤、閱讀進度同一套（第幾章的第幾個字加錨點，ADR 0042），正文
 /// 變了照錨點找回開頭，再往後畫 [quote] 那麼長。
 ///
-/// 跟著書名加作者，不跟書源（同書籤，ADR 0043）。
+/// 跟著書名加作者，不跟書源（同書籤，ADR 0044）。
 class Highlight {
   Highlight({
     required this.id,
