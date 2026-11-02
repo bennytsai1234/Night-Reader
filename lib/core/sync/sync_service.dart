@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'bookshelf_sync.dart';
+import 'google_drive_auth.dart';
+import 'google_drive_sync_store.dart';
 import 'login_data_sync.dart';
 import 'progress_sync.dart';
 import 'read_stats_sync.dart';
@@ -76,15 +78,29 @@ class SyncService {
   SyncService({
     SyncSettings? settings,
     SyncBaseStorage? bases,
-    SyncStore? Function(SyncSpace space, WebDavAccount? account)? storeFactory,
+    SyncStore? Function(
+      SyncSpace space,
+      WebDavAccount? webDav,
+      String? googleAccount,
+    )?
+    storeFactory,
     this._bookDao,
     this._chapterDao,
     this._database,
     List<SyncKind> Function(SyncService service)? kinds,
+    GoogleDriveAuth? googleAuth,
     DateTime Function()? clock,
   }) : _settings = settings ?? SyncSettings(),
        _bases = bases ?? SyncBaseStorage(),
-       _storeFactory = storeFactory ?? _defaultStore,
+       _googleAuth = googleAuth ?? GoogleSignInDriveAuth.instance,
+       _storeFactory =
+           storeFactory ??
+           ((space, webDav, googleAccount) => _defaultStore(
+             space,
+             webDav,
+             googleAccount,
+             googleAuth ?? GoogleSignInDriveAuth.instance,
+           )),
        _kinds = kinds ?? _defaultKinds,
        _clock = clock ?? DateTime.now;
 
@@ -92,8 +108,13 @@ class SyncService {
 
   final SyncSettings _settings;
   final SyncBaseStorage _bases;
-  final SyncStore? Function(SyncSpace space, WebDavAccount? account)
+  final SyncStore? Function(
+    SyncSpace space,
+    WebDavAccount? webDav,
+    String? googleAccount,
+  )
   _storeFactory;
+  final GoogleDriveAuth _googleAuth;
   final BookDao? _bookDao;
   final ChapterDao? _chapterDao;
 
@@ -119,15 +140,24 @@ class SyncService {
   Future<void>? _running;
   bool _again = false;
 
-  static SyncStore? _defaultStore(SyncSpace space, WebDavAccount? account) {
+  static SyncStore? _defaultStore(
+    SyncSpace space,
+    WebDavAccount? webDav,
+    String? googleAccount,
+    GoogleDriveAuth googleAuth,
+  ) {
     return switch (space) {
       SyncSpace.none => null,
-      SyncSpace.webdav when account != null => WebDavSyncStore(
-        url: account.url,
-        user: account.user,
-        password: account.password,
+      SyncSpace.webdav when webDav != null => WebDavSyncStore(
+        url: webDav.url,
+        user: webDav.user,
+        password: webDav.password,
       ),
-      SyncSpace.webdav => null,
+      SyncSpace.googleDrive when googleAccount != null => GoogleDriveSyncStore(
+        auth: googleAuth,
+        account: googleAccount,
+      ),
+      SyncSpace.webdav || SyncSpace.googleDrive => null,
     };
   }
 
@@ -164,14 +194,18 @@ class SyncService {
   /// 不會被停用或換帳號插進來，寫到已經不用的空間。
   Future<SyncStore?> _store() async {
     final space = await _settings.space();
-    return _storeFactory(space, await _settings.webDavAccount());
+    return _storeFactory(
+      space,
+      await _settings.webDavAccount(),
+      await _settings.googleAccount(),
+    );
   }
 
   /// 上次同步的紀錄屬於哪個同步空間的檔名。
   static const String _ownerFile = 'owner';
 
-  /// 上次同步的紀錄是另一個同步空間的（還原備份直接改了同步設定，沒經過
-  /// [useWebDav]），就全部作廢，照從沒同步過合併；不然會拿另一個空間的
+  /// 上次同步的紀錄是另一個同步空間的（在「同步空間」換了，或還原備份直接
+  /// 改了同步設定），就全部作廢，照從沒同步過合併；不然會拿另一個空間的
   /// 紀錄判斷，把舊資料當成新的改動蓋掉這個空間。只在 [_lock] 裡呼叫。
   Future<void> _claimBases() async {
     final identity = await _settings.identity();
@@ -183,21 +217,36 @@ class SyncService {
     await _bases.writeJson(_ownerFile, {'space': identity});
   }
 
-  /// 改用 [account] 的 WebDAV：先試連，連得上才存起來、從頭同步一次。
+  /// 改用 [account] 的 WebDAV：先試連，連得上才存起來、同步一次。換了空間
+  /// 照從沒同步過合併；同一個空間（只改了密碼）留著上次同步的紀錄。
   Future<void> useWebDav(WebDavAccount account) async {
-    final store = _storeFactory(SyncSpace.webdav, account);
+    final store = _storeFactory(SyncSpace.webdav, account, null);
     await store!.check();
     await _lock.synchronized(() async {
-      _generation++;
-      _settled.clear();
       await _settings.useWebDav(account);
-      await _bases.clear();
+      await _claimBases();
     });
     status.value = const SyncStatus(space: SyncSpace.webdav);
     await syncNow();
   }
 
+  /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來、
+  /// 同步一次。只在使用者按了按鈕時呼叫；授權失效後重新登入同一個帳號也走
+  /// 這裡，留著上次同步的紀錄。
+  Future<void> useGoogleDrive() async {
+    final account = await _googleAuth.signIn();
+    final store = _storeFactory(SyncSpace.googleDrive, null, account);
+    await store!.check();
+    await _lock.synchronized(() async {
+      await _settings.useGoogleDrive(account);
+      await _claimBases();
+    });
+    status.value = const SyncStatus(space: SyncSpace.googleDrive);
+    await syncNow();
+  }
+
   Future<void> disable() async {
+    final wasGoogle = await _settings.space() == SyncSpace.googleDrive;
     await _lock.synchronized(() async {
       _generation++;
       _settled.clear();
@@ -205,6 +254,13 @@ class SyncService {
       await _bases.clear();
     });
     status.value = const SyncStatus();
+    if (wasGoogle) {
+      try {
+        await _googleAuth.signOut();
+      } catch (error, stackTrace) {
+        AppLog.e('登出 Google 帳號失敗', error: error, stackTrace: stackTrace);
+      }
+    }
   }
 
   void openBook(Book book) => _openBooks.add(ProgressSync.keyOf(book));

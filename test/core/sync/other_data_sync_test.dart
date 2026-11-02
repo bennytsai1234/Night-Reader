@@ -77,7 +77,7 @@ void main() {
     bases: SyncBaseStorage(
       directory: () async => Directory('${temp.path}/$name'),
     ),
-    storeFactory: (_, _) => store,
+    storeFactory: (_, _, _) => store,
     kinds: (_) => kinds,
   );
 
@@ -136,7 +136,7 @@ void main() {
         sync: SyncService(
           settings: settings,
           bases: bases,
-          storeFactory: (_, _) => store,
+          storeFactory: (_, _, _) => store,
           kinds: (_) => [
             ReadStatsSync(
               settings: settings,

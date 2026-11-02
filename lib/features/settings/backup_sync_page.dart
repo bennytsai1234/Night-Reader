@@ -8,7 +8,7 @@ import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
-import 'package:night_reader/features/settings/webdav_settings_page.dart';
+import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -91,11 +91,12 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                 value: switch (status.space) {
                   SyncSpace.none => '未設定',
                   SyncSpace.webdav => 'WebDAV',
+                  SyncSpace.googleDrive => 'Google 雲端硬碟',
                 },
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (_) => const WebDavSettingsPage(),
+                    builder: (_) => const SyncSpacePage(),
                   ),
                 ),
               ),

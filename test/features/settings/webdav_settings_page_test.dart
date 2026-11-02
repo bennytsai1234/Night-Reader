@@ -45,7 +45,7 @@ void main() {
 
   Future<SyncService> pump(WidgetTester tester, _Store store) async {
     final sync = SyncService(
-      storeFactory: (space, _) => space == SyncSpace.none ? null : store,
+      storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
       bases: SyncBaseStorage(directory: () async => bases),
     );
     await tester.pumpWidget(MaterialApp(home: WebDavSettingsPage(sync: sync)));
@@ -62,7 +62,6 @@ void main() {
 
     expect(find.text('帳號或密碼不對'), findsOneWidget);
     expect(await SyncSettings().space(), SyncSpace.none);
-    expect(find.text('停用同步'), findsNothing);
   });
 
   testWidgets('an empty address asks for one first', (tester) async {

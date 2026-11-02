@@ -94,7 +94,7 @@ class _Phone {
     sync = SyncService(
       settings: SyncSettings(),
       bases: SyncBaseStorage(directory: () async => dir),
-      storeFactory: (_, _) => store,
+      storeFactory: (_, _, _) => store,
       bookDao: books,
       chapterDao: chapters,
       database: db,
@@ -166,6 +166,9 @@ class _Phone {
 }
 
 void main() {
+  // 刪書源時會清它在快取裡的登入資料，快取找存放的資料夾要用到。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late _MemoryStore store;
   late _Phone a;
   late _Phone b;
@@ -279,7 +282,7 @@ void main() {
   test('nothing configured: nothing happens', () async {
     final idle = SyncService(
       settings: SyncSettings(),
-      storeFactory: (space, _) => space == SyncSpace.none ? null : store,
+      storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
     );
     await idle.syncNow();
     expect(await idle.pullProgress('x'), isNull);
@@ -445,7 +448,7 @@ void main() {
         bases: SyncBaseStorage(
           directory: () async => Directory('${baseDir.path}/b'),
         ),
-        storeFactory: (_, _) => store,
+        storeFactory: (_, _, _) => store,
         kinds: (_) => [
           BookshelfSync(
             bookDao: b.books,
@@ -674,7 +677,7 @@ void main() {
       bases: SyncBaseStorage(
         directory: () async => Directory('${baseDir.path}/restore'),
       ),
-      storeFactory: (_, _) => useOther ? other : store,
+      storeFactory: (_, _, _) => useOther ? other : store,
       kinds: (_) => [
         SourceSync(dao: a.sources, bookDao: a.books, prefs: prefs),
       ],
@@ -698,7 +701,7 @@ void main() {
       bases: SyncBaseStorage(
         directory: () async => Directory('${baseDir.path}/other'),
       ),
-      storeFactory: (_, _) => other,
+      storeFactory: (_, _, _) => other,
       kinds: (_) => [
         SourceSync(dao: b.sources, bookDao: b.books, prefs: prefs),
       ],
