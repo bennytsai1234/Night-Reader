@@ -12,6 +12,8 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
+import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/services/restore_service.dart';
@@ -36,6 +38,7 @@ void main() {
       ..registerSingleton<DownloadDao>(DownloadDao(db))
       ..registerSingleton<ReadRecordDao>(ReadRecordDao(db))
       ..registerSingleton<BookmarkDao>(BookmarkDao(db))
+      ..registerSingleton<HighlightDao>(HighlightDao(db))
       ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db));
     tempDir = await Directory.systemTemp.createTemp('restore_test');
   });
@@ -137,6 +140,38 @@ void main() {
     expect(legacy.charOffset, 88);
     expect(legacy.excerpt, '松煙墨');
     expect(restored[1790000000000]!.excerpt, '雨聲');
+  });
+
+  test('highlights are restored with their color and style', () async {
+    final zip = await writeZip('highlights.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+      'highlight.json': jsonEncode([
+        {
+          'id': 1790000000000123,
+          'bookName': '夜雨聽書',
+          'bookAuthor': '沈知秋',
+          'chapterIndex': 4,
+          'chapterTitle': '第五章',
+          'charOffset': 10,
+          'quote': '雨聲',
+          'color': 'pink',
+          'style': 'underline',
+          'note': '窗外的雨',
+        },
+        // 沒有畫到字的不還原。
+        {'id': 2, 'bookName': '夜雨聽書', 'quote': ''},
+      ]),
+    });
+
+    final result = await RestoreService().restoreFromZip(zip);
+
+    expect(result.failedFiles, isEmpty);
+    final restored = (await HighlightDao(db).getAll()).single;
+    expect(restored.id, 1790000000000123);
+    expect(restored.quote, '雨聲');
+    expect(restored.color, HighlightColor.pink);
+    expect(restored.style, HighlightStyle.underline);
+    expect(restored.note, '窗外的雨');
   });
 
   test('reading totals and daily seconds are restored together', () async {

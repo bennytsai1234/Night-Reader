@@ -23,7 +23,7 @@ import 'package:night_reader/features/about/check_update_row.dart';
 /// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）；「檢查更新」
 /// 例外，點了就檢查（ADR 0030）。
 ///
-/// 依用途分三組：閱讀（偏好、外觀、朗讀、統計），書與資料（書籤、書源、
+/// 依用途分三組：閱讀（偏好、外觀、朗讀、統計），書與資料（書籤與標註、書源、
 /// 備份），App（檢查更新、關於）。第一層九個（使用者 2026-10-23：九個剛好；
 /// 崩潰日誌與背景下載佇列在關於夜讀裡），ADR 0030。
 ///
@@ -102,7 +102,7 @@ class SettingsPage extends StatelessWidget {
                   Icons.bookmarks_outlined,
                   tint: AppTint.gold,
                 ),
-                title: '書籤',
+                title: '書籤與標註',
                 onTap: () => unawaited(BookmarksPage.open(context)),
               ),
               GroupedRow(
