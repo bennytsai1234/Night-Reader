@@ -161,37 +161,41 @@ void main() {
     expect(find.textContaining('上次同步：'), findsOneWidget);
   });
 
-  testWidgets('WebDAV error appears on the sync space page without reentering', (
-    tester,
-  ) async {
-    final gate = Completer<void>();
-    final sync = await pump(
-      tester,
-      _Store(beforeRead: gate.future, readError: 'WebDAV 讀取失敗'),
-      kinds: (_) => [_SourceKind()],
-      inSpace: true,
-    );
+  testWidgets(
+    'WebDAV error appears on the sync space page without reentering',
+    (tester) async {
+      final gate = Completer<void>();
+      final sync = await pump(
+        tester,
+        _Store(beforeRead: gate.future, readError: 'WebDAV 讀取失敗'),
+        kinds: (_) => [_SourceKind()],
+        inSpace: true,
+      );
 
-    await tester.tap(find.text('WebDAV'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
-    await tester.tap(find.text('連線並開始同步'));
-    await waitForStatus(
-      tester,
-      sync,
-      (status) => status.progress != null || status.error != null,
-    );
-    expect(sync.status.value.error, isNull);
-    expect(sync.status.value.running, isTrue);
+      await tester.tap(find.text('WebDAV'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'https://dav.example',
+      );
+      await tester.tap(find.text('連線並開始同步'));
+      await waitForStatus(
+        tester,
+        sync,
+        (status) => status.progress != null || status.error != null,
+      );
+      expect(sync.status.value.error, isNull);
+      expect(sync.status.value.running, isTrue);
 
-    gate.complete();
-    await waitForStatus(
-      tester,
-      sync,
-      (status) => !status.running && status.error != null,
-    );
-    expect(find.text('上次同步失敗：WebDAV 讀取失敗'), findsOneWidget);
-  });
+      gate.complete();
+      await waitForStatus(
+        tester,
+        sync,
+        (status) => !status.running && status.error != null,
+      );
+      expect(find.text('上次同步失敗：WebDAV 讀取失敗'), findsOneWidget);
+    },
+  );
 
   testWidgets('an empty address asks for one first', (tester) async {
     await pump(tester, _Store());
