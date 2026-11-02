@@ -155,9 +155,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('資料還沒到時保留骨架，到齊後照新增列的真實形狀揭開', (
-    tester,
-  ) async {
+  testWidgets('資料還沒到時保留骨架，到齊後照新增列的真實形狀揭開', (tester) async {
     final ready = ValueNotifier<bool>(false);
     addTearDown(ready.dispose);
     await _push(
