@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -264,6 +265,22 @@ class ReaderV2SettingsController extends ChangeNotifier {
         cellWidth: cellWidth,
         lineChars: lineChars,
       );
+
+  /// 閱讀選單與面板最窄的寬度：下方選單的一排圓鈕與面板的步進列在這個
+  /// 寬度都放得下（一般手機的寬度）。
+  static const double menuMinWidth = 360;
+
+  /// 閱讀選單與面板左右對齊的位置（畫面寬 [viewportWidth]）：正文欄照
+  /// 每行字數收窄時，上下選單與面板的左右緣對齊正文的左右邊，但不窄過
+  /// [menuMinWidth]；沒收窄（手機直拿）時是 null，選單照原本離邊 16、
+  /// 面板照預設寬度。
+  double? menuSideFor(double viewportWidth) {
+    final side = math.min(
+      paddingHorizontalFor(viewportWidth),
+      (viewportWidth - menuMinWidth) / 2,
+    );
+    return side > paddingHorizontal ? side : null;
+  }
 
   ReaderV2Style readStyleFor(
     EdgeInsets mediaPadding, {

@@ -19,6 +19,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
@@ -221,10 +222,16 @@ class ReaderV2PageCoordinator {
       return;
     }
     // 點下去就開，和選單收起同時；測試文字與規則數由面板打開後自己讀。
+    final constraints = ReaderV2MenuSheet.constraintsFor(
+      context,
+      _host.settings,
+    );
     await AppBottomSheet.showCustom<void>(
       context: context,
+      constraints: constraints,
       isScrollControlled: true,
       builder: (_) => ReaderV2ReplaceRuleSheet(
+        sheetConstraints: constraints,
         book: _host.book,
         bookDao: _host.dependencies.bookDao,
         replaceDao: replaceDao,
@@ -284,6 +291,7 @@ class ReaderV2PageCoordinator {
     int? id;
     await ReaderV2ReplaceRuleEditorSheet.show(
       context,
+      constraints: ReaderV2MenuSheet.constraintsFor(context, _host.settings),
       rule: ReplaceRule(
         name: pattern,
         group: _replacedTextGroup,

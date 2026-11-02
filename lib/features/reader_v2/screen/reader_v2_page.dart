@@ -381,6 +381,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 paddingHorizontal: settings.paddingHorizontalFor(
                   MediaQuery.sizeOf(context).width,
                 ),
+                menuSide: settings.menuSideFor(
+                  MediaQuery.sizeOf(context).width,
+                ),
                 paddingTop: settings.paddingTop,
                 paddingBottom: settings.paddingBottom,
                 footerOffset: settings.footerOffset,
@@ -1104,6 +1107,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     PreparedSourceSwitch? preparedSwitch;
     await AppBottomSheet.showCustom<void>(
       context: context,
+      constraints: ReaderV2MenuSheet.constraintsFor(context, _host.settings),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => ChangeSourceSheet(
