@@ -25,6 +25,7 @@ class BackupSyncPage extends StatefulWidget {
 
 class _BackupSyncPageState extends State<BackupSyncPage> {
   bool _isProcessing = false;
+  bool _loaded = false;
 
   final SyncService _sync = SyncService.instance;
 
@@ -32,7 +33,9 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
   void initState() {
     super.initState();
     _sync.status.addListener(_onSyncStatus);
-    unawaited(_sync.load());
+    unawaited(_sync.load().then((_) {
+      if (mounted) setState(() => _loaded = true);
+    }));
   }
 
   @override
@@ -77,6 +80,8 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '備份與同步'),
       body: GroupedListView(
+        // 同步空間與上次同步時間讀好才算骨架，避免新增副標撐高整列。
+        ready: _loaded,
         children: [
           GroupedSection(
             header: '同步',
