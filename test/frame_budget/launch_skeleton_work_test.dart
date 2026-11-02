@@ -7,10 +7,12 @@
 //   SKELETON_BASE=<資料夾> …  和改前存的同一幀逐像素比
 //
 // 1. 工作量：手機（393 寬，書架 3 欄）與平板（1280 寬，7 欄）各開一次 App，
-//    數骨架長出與呼吸的每一幀重畫了幾個骨架形狀
-//    （[SkeletonBox.debugShapePaints]）。每一幀的工作要和書架上的方塊數
-//    無關：兩種寬度裡每一幀最多重畫的形狀數要一樣。骨架長出的第一幀不算：
-//    骨架第一次出現，總要畫一次。
+//    每一幀記下哪些骨架元件（[SkeletonBox]、[SkeletonShapes]）重畫了
+//    （[debugOnProfilePaint]），再把它們各畫一次到錄製用的畫布，數畫了幾個
+//    形狀（含卡片底）、用了幾道不同的漸層。兩種寬度要一樣的：骨架長出每一幀
+//    最多重畫的形狀數（第一幀不算：骨架第一次出現，總要畫一次），與骨架
+//    呼吸每一幀最多用的漸層數（漸層要照骨架算，不照方塊算）。長出或呼吸
+//    一幀都沒量到時失敗，不當成 0 通過。
 // 2. 長相：長出與呼吸的每一幀照「從長出（呼吸）第一幀起的第幾幀」存成
 //    PNG；給了 SKELETON_BASE 時和改前同一幀比，列出每段最多差幾階、哪幾幀
 //    有像素差超過 [_tolerance]。時間是測試推的假時間，一幀 16ms，改前改後
@@ -20,6 +22,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -43,20 +46,64 @@ const _tolerance = 2;
 
 const _sizes = {'phone': Size(393, 852), 'tablet': Size(1280, 880)};
 
-/// 一幀：在哪一段、這一段的第幾幀、重畫了幾個骨架形狀。
+/// 一幀：在哪一段、這一段的第幾幀、重畫了幾個骨架形狀、用了幾道漸層。
 class _Frame {
-  _Frame(this.segment, this.index, this.paints);
+  _Frame(this.segment, this.index, this.work);
 
   final String segment;
   final int index;
-  final int paints;
+  final _Work work;
 
   Map<String, Object> toJson() => {
     'segment': segment,
     'index': index,
-    'paints': paints,
+    'shapes': work.shapes,
+    'gradients': work.gradients,
   };
 }
+
+/// 一幀裡骨架的工作量：畫了幾個形狀、用了幾道不同的漸層。
+typedef _Work = ({int shapes, int gradients});
+
+/// 畫面上所有骨架元件畫圖的那一個 render object。
+Set<RenderObject> _skeletonPainters() {
+  final found = <RenderObject>{};
+  for (final element in find.byType(SkeletonShapes).evaluate()) {
+    found.add(element.renderObject!);
+  }
+  // SkeletonBox 是外面一層定大小、裡面一個畫圖的元件：往下取到最裡面。
+  for (final element in find.byType(SkeletonBox).evaluate()) {
+    found.add(_innermost(element.renderObject!));
+  }
+  return found;
+}
+
+RenderObject _innermost(RenderObject object) {
+  var current = object;
+  while (current is RenderObjectWithChildMixin && current.child != null) {
+    current = current.child!;
+  }
+  return current;
+}
+
+/// 把這一幀重畫的骨架元件各畫一次到錄製用的畫布，數形狀與不同的漸層。
+_Work _workOf(Iterable<RenderObject> painted) {
+  var shapes = 0;
+  final gradients = Set<Shader>.identity();
+  for (final object in painted) {
+    final canvas = TestRecordingCanvas();
+    object.paint(TestRecordingPaintingContext(canvas), Offset.zero);
+    for (final call in canvas.invocations) {
+      if (call.invocation.memberName != #drawRRect) continue;
+      shapes++;
+      final paint = call.invocation.positionalArguments[1] as Paint;
+      if (paint.shader case final shader?) gradients.add(shader);
+    }
+  }
+  return (shapes: shapes, gradients: gradients.length);
+}
+
+String _label(String segment) => segment == 'grow' ? '長出' : '呼吸';
 
 /// 這一幀在進場的哪一段；進場還沒開始或已經開始換成內容時是 null。長完停
 /// 拍定格畫面時頁首與分頁列會暫時換成真的（[LaunchEntranceMotion.revealed]），
@@ -111,9 +158,10 @@ void main() {
       final diffs = <String, List<(int, int, int)>>{};
       for (var i = 0; i < 600; i++) {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-        final before = SkeletonBox.debugShapePaints;
+        final painted = <RenderObject>{};
+        debugOnProfilePaint = painted.add;
         await tester.pump(_frame);
-        final paints = SkeletonBox.debugShapePaints - before;
+        debugOnProfilePaint = null;
         final shelf = find.byType(BookshelfPage).evaluate();
         final entrance = shelf.isEmpty
             ? null
@@ -122,7 +170,10 @@ void main() {
         final segment = _segmentOf(entrance);
         if (segment == null) continue;
         final index = counts[segment] = (counts[segment] ?? -1) + 1;
-        frames.add(_Frame(segment, index, paints));
+        final skeletons = _skeletonPainters();
+        frames.add(
+          _Frame(segment, index, _workOf(painted.where(skeletons.contains))),
+        );
         if (segment == 'settled' || (out == null && base == null)) continue;
         final file = '${name}_${segment}_${index.toString().padLeft(3, '0')}';
         final pixels = await tester.runAsync(() => _capture(tester));
@@ -149,24 +200,29 @@ void main() {
       }
 
       for (final segment in ['grow', 'breath']) {
-        final paints = [
+        final measured = [
           for (final frame in frames)
-            if (frame.segment == segment &&
-                !(segment == 'grow' && frame.index == 0))
-              frame.paints,
+            if (frame.segment == segment) frame,
         ];
-        final first = frames
-            .where((f) => f.segment == segment && f.index == 0)
-            .map((f) => f.paints)
-            .firstOrNull;
-        final most = paints.isEmpty
-            ? 0
-            : paints.reduce((a, b) => a > b ? a : b);
-        worst['$name/$segment'] = most;
+        // 長出第一幀不算，至少要再量到一幀才有東西可比。
+        expect(
+          measured.length,
+          greaterThanOrEqualTo(2),
+          reason: '$name 的骨架${_label(segment)}只量到 ${measured.length} 幀',
+        );
+        final rest = measured.skip(segment == 'grow' ? 1 : 0).toList();
+        final shapes = [for (final frame in rest) frame.work.shapes];
+        final gradients = [for (final frame in rest) frame.work.gradients];
+        final first = measured.first.work;
+        worst['$name/$segment'] = segment == 'grow'
+            ? shapes.reduce(math.max)
+            : gradients.reduce(math.max);
         // ignore: avoid_print
         print(
-          '$name $segment：${paints.length + (segment == 'grow' ? 1 : 0)} 幀，'
-          '第一幀重畫 $first 個形狀，之後每幀最多 $most 個：$paints',
+          '$name ${_label(segment)}：${measured.length} 幀，第一幀重畫 '
+          '${first.shapes} 個形狀、${first.gradients} 道漸層；之後每幀重畫'
+          '最多 ${shapes.reduce(math.max)} 個形狀、'
+          '${gradients.reduce(math.max)} 道漸層。形狀：$shapes；漸層：$gradients',
         );
         final segmentDiffs = diffs[segment];
         if (segmentDiffs != null) {
@@ -196,8 +252,9 @@ void main() {
         worst['tablet/$segment'],
         worst['phone/$segment'],
         reason:
-            '骨架${segment == 'grow' ? '長出' : '呼吸'}每一幀重畫的形狀數跟著'
-            '書架的方塊數變多（手機 3 欄、平板 7 欄）',
+            '骨架${_label(segment)}每一幀'
+            '${segment == 'grow' ? '重畫的形狀' : '用的漸層'}數跟著書架的方塊數'
+            '變多（手機 3 欄、平板 7 欄）',
       );
     }
 
