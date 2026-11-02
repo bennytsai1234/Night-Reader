@@ -25,10 +25,12 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     }
 
     log('⇒ 執行 getElement: $ruleStr');
-    var result = content;
+    // 同 Legado：只有空白的規則拆不出任何一段，沒有結果，不是整份內容。
+    dynamic result;
     final ruleList = splitSourceRuleCacheString(ruleStr);
 
-    if (result != null && ruleList.isNotEmpty) {
+    if (content != null && ruleList.isNotEmpty) {
+      result = content;
       for (final sourceRule in ruleList) {
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
@@ -114,10 +116,12 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     }
 
     log('⇒ 執行 getElements: $ruleStr');
-    var result = content;
+    // 同 Legado：只有空白的規則拆不出任何一段，沒有結果，不是整份內容。
+    dynamic result;
     final ruleList = splitSourceRuleCacheString(ruleStr);
 
-    if (result != null && ruleList.isNotEmpty) {
+    if (content != null && ruleList.isNotEmpty) {
+      result = content;
       for (final sourceRule in ruleList) {
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
