@@ -2,8 +2,11 @@
 /// 字串可以用單引號、可以有 `//`、`/* */`、`#` 註解，陣列與物件結尾可以多
 /// 一個逗號，不加引號的值照字串讀。書源作者常照 JS 的寫法填，Legado 照收，
 /// 夜讀也要照收。讀不懂時丟出 [FormatException]。
-Object? decodeLenientJson(String source) {
-  final reader = _LenientReader(source);
+///
+/// [numbersAsText]：數字照原文交出文字（`007`、`1.50` 不變成 7、1.5），給讀進
+/// 文字欄位的地方用，同 Gson 把數字讀進 String 時保留原文。
+Object? decodeLenientJson(String source, {bool numbersAsText = false}) {
+  final reader = _LenientReader(source, numbersAsText: numbersAsText);
   final value = reader.readValue();
   reader.skipSpace();
   if (!reader.atEnd) reader.fail('多出無法解讀的內容');
@@ -11,9 +14,10 @@ Object? decodeLenientJson(String source) {
 }
 
 final class _LenientReader {
-  _LenientReader(this.text);
+  _LenientReader(this.text, {this.numbersAsText = false});
 
   final String text;
+  final bool numbersAsText;
   int index = 0;
 
   bool get atEnd => index >= text.length;
@@ -184,6 +188,7 @@ final class _LenientReader {
       case 'null':
         return null;
     }
+    if (numbersAsText) return raw;
     return num.tryParse(raw) ?? raw;
   }
 }

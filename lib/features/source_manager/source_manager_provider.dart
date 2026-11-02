@@ -12,6 +12,7 @@ import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -419,8 +420,12 @@ class SourceManagerProvider with ChangeNotifier {
   ];
 
   /// [entrance] 是書源管理頁的進場動畫；播完才讀書源（ADR 0018）。
+  /// [uncovered] 在這一頁沒被別的頁面蓋著（或蓋著的頁面的換頁動畫播完）時
+  /// 完成：同步套用了另一台的書源後等它才重讀，不疊在換頁動畫上；沒給就
+  /// 馬上讀。
   SourceManagerProvider({
     required Future<void> entrance,
+    this._uncovered,
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
@@ -433,8 +438,35 @@ class SourceManagerProvider with ChangeNotifier {
         if (_disposed) return;
         loadSources();
         checkService.loadConfig();
+        // 進場前同步套用的，上面這一次讀已經讀到；之後的才需要重讀。
+        SourceSync.applied.addListener(_handleSourcesSynced);
+        _listeningSync = true;
       }),
     );
+  }
+
+  final Future<void> Function()? _uncovered;
+  bool _listeningSync = false;
+  bool _syncReloadPending = false;
+
+  /// 同步套用了另一台的書源：安靜地重讀清單（不顯示載入中，選取與篩選
+  /// 留著）。連續幾次通知、或被別的頁面蓋著期間的通知合併成一次，等露出來
+  /// 才讀（ADR 0018）。
+  void _handleSourcesSynced() {
+    if (_disposed || _syncReloadPending) return;
+    _syncReloadPending = true;
+    unawaited(_reloadAfterSync());
+  }
+
+  Future<void> _reloadAfterSync() async {
+    try {
+      await _uncovered?.call();
+    } catch (error, stackTrace) {
+      AppLog.e('等書源管理露出來失敗', error: error, stackTrace: stackTrace);
+    }
+    _syncReloadPending = false;
+    if (_disposed) return;
+    await loadSources(showLoading: false);
   }
 
   void _handleCheckServiceChanged() {
@@ -464,6 +496,7 @@ class SourceManagerProvider with ChangeNotifier {
     _loadGeneration++;
     _checkNotifyTimer?.cancel();
     checkService.removeListener(_handleCheckServiceChanged);
+    if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
     super.dispose();
   }
 

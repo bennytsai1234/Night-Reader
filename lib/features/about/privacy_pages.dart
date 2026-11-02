@@ -30,7 +30,7 @@ class PrivacyNoticePage extends StatelessWidget {
           ),
           _NoticeSection(
             title: '網路請求',
-            body: '搜尋、詳情、目錄、正文、封面與書源驗證會向使用者配置的書源或網址發出請求，請求可能包含 User-Agent、Headers 與 Cookie。',
+            body: '搜尋、詳情、目錄、正文、封面與書源驗證會向使用者配置的書源或網址發出請求，請求可能包含 User-Agent、Headers 與 Cookie。選了思源宋體或霞鶩文楷當字型時，會從 GitHub 下載一次字型檔，請求不帶任何個人資料。',
           ),
           _NoticeSection(
             title: '備份資料',
@@ -53,7 +53,10 @@ class PrivacyNoticePage extends StatelessWidget {
 /// 權限：上面是目前的權限狀態（可以直接要求或開系統設定），下面是每一種
 /// 權限拿來做什麼。從「關於夜讀」進來。
 class PermissionsPage extends StatefulWidget {
-  const PermissionsPage({super.key});
+  const PermissionsPage({super.key, this.service});
+
+  /// 允許測試用可控制的權限查詢，正式頁面使用系統實作。
+  final AppPermissionService? service;
 
   @override
   State<PermissionsPage> createState() => _PermissionsPageState();
@@ -61,7 +64,8 @@ class PermissionsPage extends StatefulWidget {
 
 class _PermissionsPageState extends State<PermissionsPage>
     with WidgetsBindingObserver {
-  final AppPermissionService _permissionService = AppPermissionService();
+  late final AppPermissionService _permissionService =
+      widget.service ?? AppPermissionService();
   late Future<AppPermissionSnapshot> _permissionSnapshot;
 
   @override
@@ -88,90 +92,80 @@ class _PermissionsPageState extends State<PermissionsPage>
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '權限'),
-      body: GroupedListView(
-        children: [
-          _buildPermissionSection(),
-          ..._noticeSections(context, const [
-            _NoticeSection(
-              title: '檔案',
-              body: '匯入本地書、匯入/匯出書源、建立備份與從備份檔還原會透過系統檔案選擇器或分享面板讀取、建立檔案。App 只處理使用者選取或分享的檔案，不要求 Android 所有檔案存取權。',
-            ),
-            _NoticeSection(
-              title: '網路',
-              body: '網路權限用於搜尋書籍、載入章節、下載封面、同步 Cookie、多台手機同步、WebView 驗證與書源除錯。',
-            ),
-            _NoticeSection(
-              title: '通知與背景任務',
-              body: 'TTS 朗讀的媒體控制會使用通知權限；若使用者拒絕，朗讀仍可執行，但通知列控制可能無法顯示。背景任務會受到系統省電與背景執行設定限制。',
-            ),
-            _NoticeSection(
-              title: '相簿',
-              body: '更換書籍封面時可能會開啟系統圖片選取器。iOS 會顯示相簿權限提示，Android 以系統圖片選取流程為主，不要求整個相簿或儲存空間存取權。',
-            ),
-            _NoticeSection(
-              title: 'WebView',
-              body: '部分書源會使用 WebView 載入網頁、執行必要腳本或完成驗證。WebView 可能產生 Cookie、localStorage 與 cache。',
-            ),
-          ]),
-        ],
+      body: FutureBuilder<AppPermissionSnapshot>(
+        future: _permissionSnapshot,
+        builder: (context, snapshot) => GroupedListView(
+          // 等狀態查完才揭開：骨架先有固定的權限列，換場前改用查到的
+          // 真正狀態排字與箭頭；重查時 FutureBuilder 保留上次資料。
+          ready: snapshot.hasData || snapshot.hasError,
+          children: [
+            _buildPermissionSection(snapshot),
+            ..._noticeSections(context, const [
+              _NoticeSection(
+                title: '檔案',
+                body: '匯入本地書、匯入/匯出書源、建立備份與從備份檔還原會透過系統檔案選擇器或分享面板讀取、建立檔案。App 只處理使用者選取或分享的檔案，不要求 Android 所有檔案存取權。',
+              ),
+              _NoticeSection(
+                title: '網路',
+                body: '網路權限用於搜尋書籍、載入章節、下載封面、同步 Cookie、多台手機同步、WebView 驗證與書源除錯。',
+              ),
+              _NoticeSection(
+                title: '通知與背景任務',
+                body: 'TTS 朗讀的媒體控制會使用通知權限；若使用者拒絕，朗讀仍可執行，但通知列控制可能無法顯示。背景任務會受到系統省電與背景執行設定限制。',
+              ),
+              _NoticeSection(
+                title: '相簿',
+                body: '更換書籍封面時可能會開啟系統圖片選取器。iOS 會顯示相簿權限提示，Android 以系統圖片選取流程為主，不要求整個相簿或儲存空間存取權。',
+              ),
+              _NoticeSection(
+                title: 'WebView',
+                body: '部分書源會使用 WebView 載入網頁、執行必要腳本或完成驗證。WebView 可能產生 Cookie、localStorage 與 cache。',
+              ),
+            ]),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPermissionSection() {
-    return FutureBuilder<AppPermissionSnapshot>(
-      future: _permissionSnapshot,
-      builder: (context, snapshot) {
-        // 重新整理時 FutureBuilder 保留上一次的資料：先照舊顯示，只有第一次
-        // 還沒有任何資料時才轉圈，區塊才不會塌下去再撐開。
-        if (snapshot.connectionState != ConnectionState.done &&
-            !snapshot.hasData) {
-          return const GroupedSection(
-            header: '權限狀態',
-            children: [
-              GroupedContent(
-                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            ],
-          );
-        }
-        if (snapshot.hasError) {
-          return GroupedSection(
-            header: '權限狀態',
-            children: [
-              GroupedRow(
-                title: '權限狀態載入失敗',
-                subtitle: userErrorReason(snapshot.error!),
-                maxSubtitleLines: 4,
-                value: '重試',
-                showChevron: false,
-                onTap: _refreshPermissionSnapshot,
-              ),
-            ],
-          );
-        }
+  Widget _buildPermissionSection(
+    AsyncSnapshot<AppPermissionSnapshot> snapshot,
+  ) {
+    if (snapshot.hasError) {
+      return GroupedSection(
+        header: '權限狀態',
+        children: [
+          GroupedRow(
+            title: '權限狀態載入失敗',
+            subtitle: userErrorReason(snapshot.error!),
+            maxSubtitleLines: 4,
+            value: '重試',
+            showChevron: false,
+            onTap: _refreshPermissionSnapshot,
+          ),
+        ],
+      );
+    }
 
-        final items = snapshot.data?.items ?? const <AppPermissionItem>[];
-        return GroupedSection(
-          header: '權限狀態',
-          children: [
-            for (final item in items) _permissionRow(item),
-            GroupedRow(
-              title: '開啟系統設定',
-              accent: true,
-              showChevron: false,
-              onTap: _permissionService.openSystemSettings,
-            ),
-            GroupedRow(
-              title: '重新整理',
-              accent: true,
-              showChevron: false,
-              onTap: _refreshPermissionSnapshot,
-            ),
-          ],
-        );
-      },
+    final items =
+        snapshot.data?.items ?? _permissionService.loadingSnapshot().items;
+    return GroupedSection(
+      header: '權限狀態',
+      children: [
+        for (final item in items) _permissionRow(item),
+        GroupedRow(
+          title: '開啟系統設定',
+          accent: true,
+          showChevron: false,
+          onTap: _permissionService.openSystemSettings,
+        ),
+        GroupedRow(
+          title: '重新整理',
+          accent: true,
+          showChevron: false,
+          onTap: _refreshPermissionSnapshot,
+        ),
+      ],
     );
   }
 

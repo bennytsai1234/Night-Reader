@@ -11,6 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
+import 'core/constant/prefer_key.dart';
+import 'core/fonts/app_font.dart';
+import 'core/fonts/font_library.dart';
 import 'core/services/chinese_display.dart';
 import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
@@ -131,6 +134,18 @@ Future<void> _startApp() async {
     };
 
     AppLog.i('$kAppDisplayName Ready to Run');
+
+    // 選了下載的字型（ADR 0045）而且已經下載過：第一幀前註冊好，開 App 就是
+    // 這套字，不會先畫系統字型再換。還沒下載的在背景下載。讀不到也照樣開。
+    try {
+      final prefs = getIt<SharedPreferences>();
+      await FontLibrary.instance.start([
+        AppFont.fromStorage(prefs.getString(PreferKey.uiFont)),
+        AppFont.fromStorage(prefs.getString(PreferKey.readerFont)),
+      ]);
+    } catch (error, stack) {
+      AppLog.e('字型載入失敗: $error', error: error, stackTrace: stack);
+    }
 
     // 第一幀前定下書名的繁簡轉換模式；字典在背景載入，書架等它好了才換場。
     unawaited(ChineseDisplay.start(getIt<SharedPreferences>()));
@@ -323,6 +338,7 @@ class ReaderApp extends StatelessWidget {
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
+            fontFamily: themeSettings.uiFontFamily,
           ),
           darkTheme: buildAppTheme(
             themeSettings.darkStyle,
@@ -331,6 +347,7 @@ class ReaderApp extends StatelessWidget {
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
             pureBlack: themeSettings.pureBlack,
+            fontFamily: themeSettings.uiFontFamily,
           ),
           themeMode: themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，

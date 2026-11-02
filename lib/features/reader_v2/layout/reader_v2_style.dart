@@ -19,6 +19,7 @@ class ReaderV2Style {
     this.bold = false,
     this.titleBold = true,
     this.titleCenter = false,
+    this.fontFamily,
     this.textIndent = 0,
     double? titleFontSize,
     this.titleSpacing = 0.0,
@@ -49,6 +50,9 @@ class ReaderV2Style {
 
   /// 章節標題置中；關著時靠左（從正文欄左緣起排）。
   final bool titleCenter;
+
+  /// 正文、標題與頁首頁尾的字族（下載的字型註冊的名稱）；null 是系統字型。
+  final String? fontFamily;
   final int textIndent;
 
   /// 章節標題字號；未指定時比正文大 [kReaderV2DefaultTitleSizeDelta]。
@@ -78,6 +82,7 @@ class ReaderV2Style {
     bool? bold,
     bool? titleBold,
     bool? titleCenter,
+    String? fontFamily,
     int? textIndent,
     double? titleFontSize,
     double? titleSpacing,
@@ -96,6 +101,7 @@ class ReaderV2Style {
       bold: bold ?? this.bold,
       titleBold: titleBold ?? this.titleBold,
       titleCenter: titleCenter ?? this.titleCenter,
+      fontFamily: fontFamily ?? this.fontFamily,
       textIndent: textIndent ?? this.textIndent,
       titleFontSize: titleFontSize ?? this.titleFontSize,
       titleSpacing: titleSpacing ?? this.titleSpacing,
@@ -118,6 +124,7 @@ class ReaderV2Style {
         other.bold == bold &&
         other.titleBold == titleBold &&
         other.titleCenter == titleCenter &&
+        other.fontFamily == fontFamily &&
         other.textIndent == textIndent &&
         other.titleFontSize == titleFontSize &&
         other.titleSpacing == titleSpacing;
@@ -138,6 +145,7 @@ class ReaderV2Style {
     bold,
     titleBold,
     titleCenter,
+    fontFamily,
     textIndent,
     titleFontSize,
     titleSpacing,
