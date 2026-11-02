@@ -40,6 +40,9 @@ class _FakeDrive implements HttpClientAdapter {
   final List<String> log = [];
   Set<String> rejected = {};
 
+  /// 下載這些檔名的檔案時回 403（只有這幾份被拒絕）。
+  final Set<String> forbidden = {};
+
   /// 列檔時先回一頁空的、附上下一頁（雲端硬碟會這樣回）。
   bool emptyFirstPage = false;
   var _nextId = 0;
@@ -80,6 +83,7 @@ class _FakeDrive implements HttpClientAdapter {
     if (uri.path.startsWith('/drive/v3/files/') && options.method == 'GET') {
       final file = files[uri.pathSegments.last];
       if (file == null) return _json(404, {});
+      if (forbidden.contains(file.name)) return _json(403, {});
       return ResponseBody.fromBytes(utf8.encode(file.content), 200);
     }
     if (uri.path.startsWith('/upload/drive/v3/files/') &&
@@ -198,6 +202,34 @@ void main() {
           (e) => e.message,
           'message',
           contains('重新登入'),
+        ),
+      ),
+    );
+  });
+
+  test('one refused file fails alone; a rejected token fails the whole '
+      'space', () async {
+    await store().write('p.json', 'x');
+    drive.forbidden.add('p.json');
+    await expectLater(
+      store().read('p.json'),
+      throwsA(
+        isA<SyncStoreException>().having(
+          (e) => e.wholeSpace,
+          'wholeSpace',
+          false,
+        ),
+      ),
+    );
+
+    drive.rejected = {'token-0', 'token-1'};
+    await expectLater(
+      store().read('q.json'),
+      throwsA(
+        isA<SyncStoreException>().having(
+          (e) => e.wholeSpace,
+          'wholeSpace',
+          true,
         ),
       ),
     );

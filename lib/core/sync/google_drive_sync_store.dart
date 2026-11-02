@@ -206,10 +206,17 @@ class GoogleDriveSyncStore implements SyncStore {
   static void _ensureOk(Response<Object?> response) {
     final status = response.statusCode ?? 0;
     if (status >= 200 && status < 300) return;
-    throw SyncStoreException(switch (status) {
-      401 => 'Google 帳號的授權失效了，到「同步空間」重新登入',
-      403 => 'Google 雲端硬碟拒絕存取（HTTP 403），稍後再試',
-      _ => 'Google 雲端硬碟回應錯誤（HTTP $status）',
-    });
+    // 401 授權失效、429 被限流：整個空間都用不了。其他（403 拒絕存取這份檔、
+    // 5xx）只算這一份檔案的事，其他檔案照常同步。
+    switch (status) {
+      case 401:
+        throw const SyncStoreException('Google 帳號的授權失效了，到「同步空間」重新登入');
+      case 429:
+        throw const SyncStoreException('Google 雲端硬碟要求放慢速度（HTTP 429），稍後再試');
+      case 403:
+        throw const SyncStoreException.file('Google 雲端硬碟拒絕存取（HTTP 403），稍後再試');
+      default:
+        throw SyncStoreException.file('Google 雲端硬碟回應錯誤（HTTP $status）');
+    }
   }
 }

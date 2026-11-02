@@ -442,9 +442,11 @@ class SyncService {
             if (await _syncKind(store, kind)) {
               appliedAfter.updateAll((name, _) => name != kind.name);
             }
-          } on SyncStoreException {
-            rethrow;
           } catch (error, stackTrace) {
+            // 整個空間用不了（連不上、授權失效）才停下；只有這一份檔案被
+            // 拒絕（[SyncStoreException.file]），其他種類照常同步，最後仍
+            // 報第一個失敗。
+            if (error is SyncStoreException && error.wholeSpace) rethrow;
             AppLog.e(
               '同步 ${kind.name} 失敗',
               error: error,

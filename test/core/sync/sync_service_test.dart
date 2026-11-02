@@ -19,6 +19,8 @@ import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/replace_rule_sync.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
+import 'package:night_reader/core/sync/sync_kind.dart';
+import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -83,6 +85,40 @@ class _Storage implements BookStorageService {
 
   @override
   Future<void> discardBook(Book book) => books.deleteByUrl(book.bookUrl);
+}
+
+/// 指定檔案讀不了的同步空間（模擬雲端對某一份檔回 403、或整個連不上）。
+class _FailingStore extends _MemoryStore {
+  /// 檔名 → 讀這份檔時丟的錯。
+  final Map<String, SyncStoreException> failing = {};
+
+  @override
+  Future<SyncFile?> read(String name) {
+    if (failing[name] case final error?) throw error;
+    return super.read(name);
+  }
+}
+
+/// 只有幾筆固定紀錄的資料種類，用來測整輪同步的流程。
+class _FakeKind extends SyncKind {
+  _FakeKind(this.name, this.records);
+
+  @override
+  final String name;
+  final Map<String, SyncRecord> records;
+  final Map<String, SyncRecord> received = {};
+
+  @override
+  bool get hasOwnTime => true;
+
+  @override
+  Future<Map<String, SyncRecord>> local() async => records;
+
+  @override
+  Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async {
+    received.addAll(remote);
+    return remote;
+  }
 }
 
 class _Phone {
@@ -851,5 +887,71 @@ void main() {
       (await a.sources.getByUrl('https://src.example'))!.bookSourceName,
       '另一個空間較新的',
     );
+  });
+
+  group('one failing file', () {
+    late _FailingStore failing;
+    late _FakeKind first;
+    late _FakeKind second;
+    late SyncService service;
+    final syncedAt = DateTime.utc(2026, 11, 2);
+
+    setUp(() {
+      failing = _FailingStore();
+      first = _FakeKind('first', {
+        'a': const SyncRecord(time: 1, data: {'v': 1}),
+      });
+      second = _FakeKind('second', {
+        'b': const SyncRecord(time: 1, data: {'v': 2}),
+      });
+      service = SyncService(
+        settings: SyncSettings(),
+        bases: SyncBaseStorage(
+          directory: () async => Directory('${baseDir.path}/failing'),
+        ),
+        storeFactory: (_, _, _) => failing,
+        kinds: (_) => [first, second],
+        clock: () => syncedAt,
+      );
+    });
+
+    test('a refused file does not stop the other kinds, but the round still '
+        'fails and keeps the first error', () async {
+      failing.failing['first.json'] = const SyncStoreException.file('單一檔案拒絕存取');
+
+      await service.syncNow();
+
+      expect(failing.files['second.json'], isNotNull);
+      expect(failing.files['first.json'], isNull);
+      expect(service.status.value.error, '單一檔案拒絕存取');
+      expect(service.status.value.running, isFalse);
+      expect(service.status.value.lastSyncAt, isNull);
+
+      // 好了之後，下一輪補上，錯誤清掉、成功時間更新。
+      failing.failing.clear();
+      await service.syncNow();
+      expect(failing.files['first.json'], isNotNull);
+      expect(service.status.value.error, isNull);
+      expect(service.status.value.lastSyncAt, syncedAt);
+    });
+
+    test('the first error is the one reported', () async {
+      failing.failing['first.json'] = const SyncStoreException.file('第一個');
+      failing.failing['second.json'] = const SyncStoreException.file('第二個');
+
+      await service.syncNow();
+
+      expect(service.status.value.error, '第一個');
+    });
+
+    test('a space that is down stops the whole round', () async {
+      failing.failing['first.json'] = const SyncStoreException('連不上同步空間');
+
+      await service.syncNow();
+
+      expect(failing.files['second.json'], isNull);
+      expect(service.status.value.error, '連不上同步空間');
+      expect(service.status.value.lastSyncAt, isNull);
+    });
   });
 }

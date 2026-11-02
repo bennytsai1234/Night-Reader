@@ -12,6 +12,9 @@ class _FakeWebDav implements HttpClientAdapter {
   final Set<String> folders = {'/dav/'};
   final Map<String, (Uint8List, int)> files = {};
   final List<String> log = [];
+
+  /// 讀寫這些路徑時回 403（只有這幾份被拒絕）。
+  final Set<String> forbidden = {};
   String auth = 'Basic ${base64.encode(utf8.encode('me:pw'))}';
 
   @override
@@ -23,6 +26,7 @@ class _FakeWebDav implements HttpClientAdapter {
     final path = options.uri.path;
     log.add('${options.method} $path');
     if (options.headers['Authorization'] != auth) return _status(401);
+    if (forbidden.contains(path)) return _status(403);
     final parent = path.substring(
       0,
       path.lastIndexOf('/', path.length - 2) + 1,
@@ -152,6 +156,33 @@ void main() {
           (e) => e.message,
           'message',
           '這個網址找不到 WebDAV',
+        ),
+      ),
+    );
+  });
+
+  test('one refused file fails alone; a wrong password fails the whole '
+      'space', () async {
+    server.forbidden.add('/dav/NightReader/p.json');
+    await expectLater(
+      store().read('p.json'),
+      throwsA(
+        isA<SyncStoreException>().having(
+          (e) => e.wholeSpace,
+          'wholeSpace',
+          false,
+        ),
+      ),
+    );
+    expect(await store().read('q.json'), isNull);
+
+    await expectLater(
+      store(password: 'bad').read('q.json'),
+      throwsA(
+        isA<SyncStoreException>().having(
+          (e) => e.wholeSpace,
+          'wholeSpace',
+          true,
         ),
       ),
     );
