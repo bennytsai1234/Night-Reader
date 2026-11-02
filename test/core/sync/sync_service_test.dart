@@ -81,8 +81,12 @@ class _Storage implements BookStorageService {
 }
 
 class _Phone {
-  _Phone(_MemoryStore store, Directory dir, {DateTime Function()? clock})
-    : db = AppDatabase.forTesting(NativeDatabase.memory()) {
+  _Phone(
+    _MemoryStore store,
+    Directory dir,
+    this.prefs, {
+    DateTime Function()? clock,
+  }) : db = AppDatabase.forTesting(NativeDatabase.memory()) {
     books = BookDao(db);
     chapters = ChapterDao(db);
     sources = BookSourceDao(db);
@@ -96,7 +100,13 @@ class _Phone {
       database: db,
       clock: clock,
       kinds: (service) => [
-        SourceSync(dao: sources),
+        SourceSync(
+          dao: sources,
+          bookDao: books,
+          prefs: prefs,
+          move: (source, previousUrl) =>
+              sources.saveEdited(source, previousUrl: previousUrl),
+        ),
         ReplaceRuleSync(dao: rules),
         BookshelfSync(
           bookDao: books,
@@ -104,12 +114,19 @@ class _Phone {
           isOpen: service.isBookOpen,
           download: downloaded.add,
         ),
-        service.progressKind,
+        ProgressSync(
+          bookDao: books,
+          chapterDao: chapters,
+          isOpen: service.isBookOpen,
+        ),
       ],
     );
   }
 
   final AppDatabase db;
+
+  /// 偏好設定在測試裡只有一份，兩台共用（書源改網址的紀錄、同步設定）。
+  final SharedPreferences prefs;
   late final BookDao books;
   late final ChapterDao chapters;
   late final BookSourceDao sources;
@@ -159,12 +176,13 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
     store = _MemoryStore();
     final temp = await Directory.systemTemp.createTemp('nr-sync-test');
     baseDir = temp;
     addTearDown(() => temp.delete(recursive: true));
-    a = _Phone(store, Directory('${temp.path}/a'));
-    b = _Phone(store, Directory('${temp.path}/b'));
+    a = _Phone(store, Directory('${temp.path}/a'), prefs);
+    b = _Phone(store, Directory('${temp.path}/b'), prefs);
     addTearDown(a.db.close);
     addTearDown(b.db.close);
   });
@@ -413,6 +431,34 @@ void main() {
       expect(await b.books.getByUrl('a-src'), isNull);
     });
 
+    test('a book opened while the sync is applying is not removed', () async {
+      await a.addBook('a-src', toc: toc, time: 200);
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncNow();
+
+      // 合併時還沒開，套用前一刻才打開。
+      var checks = 0;
+      final late = SyncService(
+        settings: SyncSettings(),
+        bases: SyncBaseStorage(
+          directory: () async => Directory('${baseDir.path}/b'),
+        ),
+        storeFactory: (_, _) => store,
+        kinds: (_) => [
+          BookshelfSync(
+            bookDao: b.books,
+            storage: _Storage(b.books),
+            isOpen: (_) => ++checks > 2,
+          ),
+        ],
+      );
+      await late.syncNow();
+
+      expect(await b.books.getByUrl('a-src'), isNotNull);
+    });
+
     test('a cover changed on one phone reaches the other; different sources '
         'for the same book are left alone', () async {
       await a.addBook('a-src', toc: toc, time: 200);
@@ -497,6 +543,38 @@ void main() {
       );
     });
 
+    test('a source whose address changed moves the other phone\'s books to '
+        'the new address', () async {
+      await a.sources.upsert(source('書源'));
+      await b.sources.upsert(source('書源'));
+      await b.books.upsert(
+        Book(
+          bookUrl: 'b-book',
+          name: '夜航',
+          author: '某人',
+          origin: 'https://src.example',
+          isInBookshelf: true,
+        ),
+      );
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+
+      // A 編輯書源改了網址（同 BookSourceService.saveEditedSource）。
+      final moved = BookSource(
+        bookSourceUrl: 'https://new.example',
+        bookSourceName: '書源',
+      );
+      await a.sources.saveEdited(moved, previousUrl: 'https://src.example');
+      await SourceMoves(a.prefs)
+          .record(from: 'https://src.example', to: 'https://new.example');
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+
+      expect(await b.sources.getByUrl('https://src.example'), isNull);
+      expect(await b.sources.getByUrl('https://new.example'), isNotNull);
+      expect((await b.book('b-book')).origin, 'https://new.example');
+    });
+
     test('a phone syncing for the first time does not overwrite the cloud '
         'with its own copy', () async {
       await a.sources.upsert(source('新的'));
@@ -541,5 +619,99 @@ void main() {
       expect(onA.values, unorderedEquals(['甲', '乙', '丙']));
       expect(onB, onA);
     });
+
+    test('rules that swapped numbers on the two phones are not '
+        'duplicated', () async {
+      await a.rules.upsertAll([
+        ReplaceRule(id: 1, name: '甲', pattern: 'a'),
+        ReplaceRule(id: 2, name: '乙', pattern: 'b'),
+      ]);
+      await b.rules.upsertAll([
+        ReplaceRule(id: 1, name: '乙', pattern: 'b'),
+        ReplaceRule(id: 2, name: '甲', pattern: 'a'),
+      ]);
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+
+      final onB = {
+        for (final rule in await b.rules.getAll()) rule.id: rule.name,
+      };
+      expect(onB, {1: '甲', 2: '乙'});
+    });
+
+    test('rules added at the same moment both stay', () async {
+      // 已有的規則編號比現在的時間還大，兩條新的都會想接在它後面。
+      final future = DateTime.now().millisecondsSinceEpoch + 600000;
+      await a.rules.upsert(ReplaceRule(id: future, name: '舊', pattern: 'o'));
+      await Future.wait([
+        a.rules.upsert(ReplaceRule(name: '一', pattern: '1')),
+        a.rules.upsert(ReplaceRule(name: '二', pattern: '2')),
+      ]);
+      expect(await a.rules.getAll(), hasLength(3));
+    });
+
+    test('undoing a hidden selection still works after the rule took the '
+        'cloud\'s number', () async {
+      await b.rules.insert(ReplaceRule(name: '選字隱藏', pattern: '廣告'));
+      await b.sync.syncNow();
+      // A 也隱藏了同一段，還沒同步；拿著新增時的編號等使用者按復原。
+      final id = await a.rules.insert(ReplaceRule(name: '選字隱藏', pattern: '廣告'));
+      await a.sync.syncNow();
+      expect(await a.rules.getAll(), hasLength(1));
+
+      await a.rules.deleteById(id);
+      expect(await a.rules.getAll(), isEmpty);
+    });
+  });
+
+  test('a sync space changed behind the service\'s back (restoring a backup) '
+      'starts over instead of pushing old data', () async {
+    final other = _MemoryStore();
+    var useOther = false;
+    final prefs = a.prefs;
+    final phone = SyncService(
+      settings: SyncSettings(prefs),
+      bases: SyncBaseStorage(
+        directory: () async => Directory('${baseDir.path}/restore'),
+      ),
+      storeFactory: (_, _) => useOther ? other : store,
+      kinds: (_) => [
+        SourceSync(dao: a.sources, bookDao: a.books, prefs: prefs),
+      ],
+    );
+    Future<void> useAccount(String url) async {
+      await prefs.setString('sync.space', 'webdav');
+      await prefs.setString('sync.webdav.url', url);
+    }
+
+    BookSource named(String name) =>
+        BookSource(bookSourceUrl: 'https://src.example', bookSourceName: name);
+
+    await useAccount('https://one.example');
+    await a.sources.upsert(named('舊'));
+    await phone.syncNow();
+
+    // 另一個空間裡已經有較新的；還原備份直接把設定換成那個空間。
+    await b.sources.upsert(named('另一個空間較新的'));
+    await SyncService(
+      settings: SyncSettings(prefs),
+      bases: SyncBaseStorage(
+        directory: () async => Directory('${baseDir.path}/other'),
+      ),
+      storeFactory: (_, _) => other,
+      kinds: (_) => [
+        SourceSync(dao: b.sources, bookDao: b.books, prefs: prefs),
+      ],
+    ).syncNow();
+    useOther = true;
+    await useAccount('https://two.example');
+    await a.sources.upsert(named('備份裡的舊資料'));
+    await phone.syncNow();
+
+    expect(other.files['sources.json']!.$1, contains('另一個空間較新的'));
+    expect(
+      (await a.sources.getByUrl('https://src.example'))!.bookSourceName,
+      '另一個空間較新的',
+    );
   });
 }

@@ -13,6 +13,8 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/sync/source_sync.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +24,7 @@ void main() {
   late AppDatabase db;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     await GetIt.instance.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
     registerDatabase(db);
@@ -95,6 +98,10 @@ void main() {
     expect(await cache.get('userInfo_$oldUrl'), isNull);
     expect(await cache.get('v_${newUrl}_token'), 'abc');
     expect(await cache.get('v_${oldUrl}_token'), isNull);
+    // 同步時別台照這份紀錄搬。
+    expect(SourceMoves(await SharedPreferences.getInstance()).read(), {
+      newUrl: [oldUrl],
+    });
   });
 
   test('rule variables of another source whose URL starts with this one are '

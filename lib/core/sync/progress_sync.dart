@@ -52,11 +52,14 @@ class ProgressSync extends SyncKind {
   @override
   Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async {
     final books = await shelfBooks();
-    final applied = {
-      for (final entry in remote.entries)
-        if (books[entry.key] case final book? when !entry.value.deleted)
-          entry.key: await applyTo(book, entry.value),
-    };
+    final applied = <String, SyncRecord>{};
+    for (final MapEntry(:key, value: record) in remote.entries) {
+      // 查書架的這段時間剛被打開的，留給閱讀器。
+      if (record.deleted || _isOpen(key)) continue;
+      if (books[key] case final book?) {
+        applied[key] = await applyTo(book, record);
+      }
+    }
     // 書卡的進度線與書架的順序跟著換。
     if (applied.isNotEmpty) AppEventBus().fire(AppEventBus.upBookshelf);
     return applied;

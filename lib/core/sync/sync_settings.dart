@@ -46,6 +46,15 @@ class SyncSettings {
     );
   }
 
+  /// 目前同步到哪裡（種類、網址、帳號）；沒有同步空間時是 null。上次同步
+  /// 的紀錄屬於這個空間，換了（包括還原備份改掉設定）就作廢。
+  Future<String?> identity() async {
+    if (await space() != SyncSpace.webdav) return null;
+    final account = await webDavAccount();
+    if (account == null) return null;
+    return 'webdav\t${account.url.trim()}\t${account.user}';
+  }
+
   Future<void> useWebDav(WebDavAccount account) async {
     final prefs = await _ensure();
     await prefs.setString(_urlKey, account.url);

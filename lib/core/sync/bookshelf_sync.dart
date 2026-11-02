@@ -60,7 +60,7 @@ class BookshelfSync extends SyncKind {
     'syncTime',
   ];
 
-  /// 使用者自己改的；內容只算這些，兩台書源不同也不算不一樣。
+  /// 使用者自己改的，套用時只寫這些。
   static const List<String> _userFields = [
     'customTag',
     'customCoverUrl',
@@ -82,11 +82,15 @@ class BookshelfSync extends SyncKind {
     );
   }
 
+  /// 內容算使用者改的欄位與這台用的書源（網址）。書源算進去，雲端那筆才會
+  /// 跟著最近換源、或書源改了網址的那台，之後新加入的手機照它加書拿到
+  /// 用得了的書源；套用時仍只寫使用者改的欄位，不動這台的書源。
   @override
   String fingerprint(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
     return SyncRecord.fingerprintOf({
-      for (final field in _userFields) field: record.data[field],
+      for (final field in [..._userFields, 'bookUrl', 'origin'])
+        field: record.data[field],
     });
   }
 
@@ -114,57 +118,69 @@ class BookshelfSync extends SyncKind {
   @override
   bool canApply(String key, SyncRecord? local) => !_isOpen(key);
 
+  /// 每一本動手之前再看一次是不是開著：查書架的這段時間可能剛被打開。
+  /// 傳回這次寫進去的樣子，不重讀：寫完才又改的，下次同步比得出來。
   @override
   Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async {
     final shelf = await _shelf();
     final added = <String>[];
+    final applied = <String, SyncRecord>{};
     for (final MapEntry(:key, value: record) in remote.entries) {
+      if (_isOpen(key)) continue;
       final books = shelf[key] ?? const <Book>[];
       if (record.deleted) {
         final storage = _storage ?? BookStorageService();
         for (final book in books) {
           await storage.discardBook(book);
         }
+        applied[key] = record;
         continue;
       }
       final incoming = Book.fromJson(Map<String, dynamic>.of(record.data));
       if (books.isNotEmpty) {
         for (final book in books) {
-          _copyUserFields(from: incoming, to: book);
-          await _bookDao.upsert(book);
+          await _writeUserFields(from: incoming, to: book);
         }
+        applied[key] = recordOf(_latest(books));
         continue;
       }
       if (incoming.bookUrl.isEmpty) continue;
-      // 這台曾經看過、沒加進書架的同一本（同一個網址）：留著它的目錄。
+      // 這台曾經看過、沒加進書架的同一本（同一個網址）：留著它的目錄與進度。
       final existing = await _bookDao.getByUrl(incoming.bookUrl);
-      final book = existing ?? incoming;
-      if (existing != null) _copyUserFields(from: incoming, to: existing);
-      book.isInBookshelf = true;
-      if (book.syncTime == 0) {
-        book.syncTime = DateTime.now().millisecondsSinceEpoch;
+      if (existing != null) {
+        await _writeUserFields(from: incoming, to: existing);
+        await _bookDao.updateInBookshelf(existing.bookUrl, true);
+        existing.isInBookshelf = true;
+        applied[key] = recordOf(existing);
+      } else {
+        if (incoming.syncTime == 0) {
+          incoming.syncTime = DateTime.now().millisecondsSinceEpoch;
+        }
+        incoming.isInBookshelf = true;
+        await _bookDao.upsert(incoming);
+        applied[key] = recordOf(incoming);
       }
-      await _bookDao.upsert(book);
-      added.add(book.bookUrl);
+      added.add(incoming.bookUrl);
     }
     AppEventBus().fire(AppEventBus.upBookshelf);
     added.forEach(_download);
-
-    final after = await _shelf();
-    return {
-      for (final key in remote.keys)
-        key: switch (after[key]) {
-          final books? => recordOf(_latest(books)),
-          null => const SyncRecord(time: 0, data: {}, deleted: true),
-        },
-    };
+    return applied;
   }
 
-  static void _copyUserFields({required Book from, required Book to}) {
+  /// 只寫使用者改的欄位，[to] 也跟著改成寫進去的樣子。
+  Future<void> _writeUserFields({required Book from, required Book to}) async {
     // 換了封面網址，存在這台的封面檔就不是它了（同書籍詳情換封面）。
-    if (to.customCoverUrl != from.customCoverUrl) {
-      to.customCoverLocalPath = null;
-    }
+    final coverChanged = to.customCoverUrl != from.customCoverUrl;
+    await _bookDao.updateUserFields(
+      to.bookUrl,
+      customTag: from.customTag,
+      customCoverUrl: from.customCoverUrl,
+      customIntro: from.customIntro,
+      canUpdate: from.canUpdate,
+      readConfig: from.readConfig,
+      coverChanged: coverChanged,
+    );
+    if (coverChanged) to.customCoverLocalPath = null;
     to
       ..customTag = from.customTag
       ..customCoverUrl = from.customCoverUrl

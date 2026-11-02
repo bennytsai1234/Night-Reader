@@ -164,6 +164,37 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   }
 
   /// 只改「是否參與書架更新」；其他欄位（閱讀進度等）不跟著被舊資料覆寫。
+  /// 同步來的、使用者自己改的欄位（ADR 0039）：只寫這幾欄，同一時間寫的進度、
+  /// 換源結果不會被蓋掉。封面網址換了，存在這台的封面檔一起清掉。
+  Future<void> updateUserFields(
+    String bookUrl, {
+    required String? customTag,
+    required String? customCoverUrl,
+    required String? customIntro,
+    required bool canUpdate,
+    required ReadConfig? readConfig,
+    required bool coverChanged,
+  }) {
+    return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+      BooksCompanion(
+        customTag: Value(customTag),
+        customCoverUrl: Value(customCoverUrl),
+        customCoverLocalPath: coverChanged
+            ? const Value(null)
+            : const Value.absent(),
+        customIntro: Value(customIntro),
+        canUpdate: Value(canUpdate),
+        readConfig: Value(readConfig),
+      ),
+    );
+  }
+
+  Future<void> updateInBookshelf(String bookUrl, bool inBookshelf) {
+    return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+      BooksCompanion(isInBookshelf: Value(inBookshelf)),
+    );
+  }
+
   Future<void> updateCanUpdate(String bookUrl, bool canUpdate) {
     return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
       BooksCompanion(canUpdate: Value(canUpdate)),

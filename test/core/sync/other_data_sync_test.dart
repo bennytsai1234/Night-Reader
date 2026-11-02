@@ -42,6 +42,23 @@ class _MemoryStore implements SyncStore {
   }) async => files[name] = content;
 }
 
+class _StatsPhone {
+  _StatsPhone({
+    required this.sync,
+    required this.bases,
+    required this.dao,
+    required this.prefs,
+  });
+
+  final SyncService sync;
+  final SyncBaseStorage bases;
+  final ReadRecordDao dao;
+  final SharedPreferences prefs;
+
+  Future<OtherDevicesStats> others() =>
+      ReadStatsSync.others(bases: bases, prefs: prefs);
+}
+
 void main() {
   late _MemoryStore store;
   late Directory temp;
@@ -102,68 +119,111 @@ void main() {
     expect(records[PreferKey.lightStyle]!.deleted, isTrue);
   });
 
-  test('reading time from every phone adds up; no phone overwrites '
-      'another', () async {
-    final dbA = AppDatabase.forTesting(NativeDatabase.memory());
-    final dbB = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(dbA.close);
-    addTearDown(dbB.close);
+  group('reading stats', () {
     final start = DateTime(2026, 11, 2, 10);
-    Duration minutes(int n) => Duration(minutes: n);
+    const today = '2026-11-02';
 
-    Future<(SyncService, SyncBaseStorage)> statsPhone(
-      String name,
-      AppDatabase db,
-    ) async {
-      final settings = SyncSettings(await prefsOf({}));
+    Future<_StatsPhone> statsPhone(String name) async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final prefs = await prefsOf({});
+      final settings = SyncSettings(prefs);
       final bases = SyncBaseStorage(
         directory: () async => Directory('${temp.path}/$name'),
       );
-      final kind = ReadStatsSync(
-        settings: settings,
-        bases: bases,
-        dao: ReadRecordDao(db),
-      );
-      return (
-        SyncService(
+      final dao = ReadRecordDao(db);
+      return _StatsPhone(
+        sync: SyncService(
           settings: settings,
           bases: bases,
           storeFactory: (_, _) => store,
-          kinds: (_) => [kind],
+          kinds: (_) => [
+            ReadStatsSync(
+              settings: settings,
+              bases: bases,
+              dao: dao,
+              prefs: prefs,
+            ),
+          ],
         ),
-        bases,
+        bases: bases,
+        dao: dao,
+        prefs: prefs,
       );
     }
 
-    final (a, basesA) = await statsPhone('a', dbA);
-    final (b, basesB) = await statsPhone('b', dbB);
-    await ReadRecordDao(dbA).recordReadActivity(
-      bookName: '夜航',
-      startedAt: start,
-      stoppedAt: start.add(minutes(30)),
-    );
-    await ReadRecordDao(dbB).recordReadActivity(
-      bookName: '夜航',
-      startedAt: start,
-      stoppedAt: start.add(minutes(20)),
-    );
-    await ReadRecordDao(dbB).recordReadActivity(
-      bookName: '別本',
-      startedAt: start,
-      stoppedAt: start.add(minutes(10)),
-    );
+    Future<void> read(_StatsPhone phone, String book, int minutes) =>
+        phone.dao.recordReadActivity(
+          bookName: book,
+          startedAt: start,
+          stoppedAt: start.add(Duration(minutes: minutes)),
+        );
 
-    await a.syncNow();
-    await b.syncNow();
-    await a.syncNow();
+    test('reading time from every phone adds up; no phone overwrites '
+        'another', () async {
+      final a = await statsPhone('a');
+      final b = await statsPhone('b');
+      await read(a, '夜航', 30);
+      await read(b, '夜航', 20);
+      await read(b, '別本', 10);
 
-    final onA = await ReadStatsSync.others(bases: basesA);
-    expect(onA.books['夜航']!.readTime, 20 * 60);
-    expect(onA.books['別本']!.readTime, 10 * 60);
-    expect(onA.secondsBetween('2026-11-02', '2026-11-02'), 30 * 60);
-    final onB = await ReadStatsSync.others(bases: basesB);
-    expect(onB.books['夜航']!.readTime, 30 * 60);
-    expect(onB.books.containsKey('別本'), isFalse);
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+
+      final onA = await a.others();
+      expect(onA.books['夜航']!.readTime, 20 * 60);
+      expect(onA.books['別本']!.readTime, 10 * 60);
+      expect(onA.secondsBetween(today, today), 30 * 60);
+      final onB = await b.others();
+      expect(onB.books['夜航']!.readTime, 30 * 60);
+      expect(onB.books.containsKey('別本'), isFalse);
+    });
+
+    test('a phone keeps sending its own time after sync is turned off and '
+        'on again', () async {
+      final a = await statsPhone('a');
+      final b = await statsPhone('b');
+      await read(a, '夜航', 10);
+      await a.sync.syncNow();
+
+      // 停用（上次同步的紀錄清掉）後又讀了 5 分鐘，再打開同一個空間。
+      await a.bases.clear();
+      await read(a, '夜航', 5);
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+
+      expect((await b.others()).books['夜航']!.readTime, 15 * 60);
+    });
+
+    test('time restored from the other phone\'s backup is not counted '
+        'twice', () async {
+      final a = await statsPhone('a');
+      await read(a, '夜航', 10);
+      await a.sync.syncNow();
+      final aId = await SyncSettings(a.prefs).deviceId();
+
+      // B 還原了 A 的備份（10 分鐘），之後自己又讀了 5 分鐘。
+      final b = await statsPhone('b');
+      final records = await a.dao.getAll();
+      final days = await a.dao.getAllDays();
+      await b.dao.restoreReadingStats(records: records, days: days);
+      await RestoredStats.remember(
+        b.prefs,
+        from: aId,
+        records: records,
+        days: days,
+      );
+      await read(b, '夜航', 5);
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+
+      // A：自己的 10 分鐘 + B 自己讀的 5 分鐘。
+      expect((await a.others()).books['夜航']!.readTime, 5 * 60);
+      // B：這台的 15 分鐘（含還原的 10 分鐘）+ A 那筆扣掉還原的部分。
+      final bLocal = (await b.dao.getByBookName('夜航'))!.readTime;
+      expect(bLocal + (await b.others()).books['夜航']!.readTime, 15 * 60);
+    });
   });
 
   group('login data', () {

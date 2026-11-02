@@ -140,10 +140,6 @@ class SyncService {
   /// 書名加作者是 [key] 的書正開在閱讀器裡（[openBook]）。
   bool isBookOpen(String key) => _openBooks.contains(key);
 
-  /// 閱讀進度這一種，給只測進度的測試組 [kinds]。
-  @visibleForTesting
-  ProgressSync get progressKind => _progress;
-
   /// 同步的順序：書源先到，書架上的書才找得到書源；書先加進書架，進度才
   /// 套用得上。
   static List<SyncKind> _defaultKinds(SyncService service) => [
@@ -169,6 +165,22 @@ class SyncService {
   Future<SyncStore?> _store() async {
     final space = await _settings.space();
     return _storeFactory(space, await _settings.webDavAccount());
+  }
+
+  /// 上次同步的紀錄屬於哪個同步空間的檔名。
+  static const String _ownerFile = 'owner';
+
+  /// 上次同步的紀錄是另一個同步空間的（還原備份直接改了同步設定，沒經過
+  /// [useWebDav]），就全部作廢，照從沒同步過合併；不然會拿另一個空間的
+  /// 紀錄判斷，把舊資料當成新的改動蓋掉這個空間。只在 [_lock] 裡呼叫。
+  Future<void> _claimBases() async {
+    final identity = await _settings.identity();
+    final owner = (await _bases.readJson(_ownerFile))['space'];
+    if (owner == identity) return;
+    _generation++;
+    _settled.clear();
+    await _bases.clear();
+    await _bases.writeJson(_ownerFile, {'space': identity});
   }
 
   /// 改用 [account] 的 WebDAV：先試連，連得上才存起來、從頭同步一次。
@@ -211,7 +223,13 @@ class SyncService {
     }
     final future = _runUntilSettled();
     _running = future;
-    return future.whenComplete(() => _running = null);
+    return future.whenComplete(() {
+      _running = null;
+      if (_editedWhileSyncing) {
+        _editedWhileSyncing = false;
+        _scheduleAfterEdit();
+      }
+    });
   }
 
   Future<void> _runUntilSettled() async {
@@ -236,6 +254,13 @@ class SyncService {
 
   final List<StreamSubscription<void>> _edits = [];
   Timer? _editTimer;
+  bool _editedWhileSyncing = false;
+
+  void _scheduleAfterEdit() {
+    if (!status.value.enabled) return;
+    _editTimer?.cancel();
+    _editTimer = Timer(_editDelay, requestSync);
+  }
 
   /// 改完隔多久同步：連續改好幾個（匯入、批次啟用）合併成一次。
   static const Duration _editDelay = Duration(seconds: 5);
@@ -266,9 +291,13 @@ class SyncService {
       _edits.add(
         db.tableUpdates(TableUpdateQuery.onTable(table)).listen((_) {
           _localEdits.update(kind, (count) => count + 1);
-          if (!status.value.enabled || status.value.running) return;
-          _editTimer?.cancel();
-          _editTimer = Timer(_editDelay, requestSync);
+          // 同步途中改的（可能這一種已經同步過了），這輪結束再排一次；同步
+          // 自己套用引起的也算，多的那次比不出差異、不寫雲端。
+          if (_running != null) {
+            _editedWhileSyncing = true;
+          } else {
+            _scheduleAfterEdit();
+          }
         }),
       );
     }
@@ -279,6 +308,7 @@ class SyncService {
       await _lock.synchronized(() async {
         final store = await _store();
         if (store == null) return;
+        await _claimBases();
         status.value = status.value.copyWith(running: true);
         // 一種資料失敗不擋其他種：都試過一次，再報第一個失敗。
         Object? failure;
@@ -329,7 +359,9 @@ class SyncService {
   Future<void> _syncKind(SyncStore store, SyncKind kind) async {
     final edits = _localEdits[kind.name];
     if (_settled[kind.name] case final last? when last.edits == edits) {
-      if (await store.version(kind.fileName) == last.version) return;
+      final version = await store.version(kind.fileName);
+      // 問版本的這段時間這台又改了，就照常整份比。
+      if (version == last.version && _localEdits[kind.name] == edits) return;
     }
     _settled.remove(kind.name);
     final fingerprint = kind.fingerprint;
@@ -497,6 +529,7 @@ class SyncService {
       return await _lock.synchronized(() async {
         final store = await _store();
         if (store == null) return null;
+        await _claimBases();
         final generation = _generation;
         final bookDao = _bookDao ?? getIt<BookDao>();
         final book = await bookDao.getByUrl(bookUrl);
