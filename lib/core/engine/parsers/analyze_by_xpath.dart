@@ -60,18 +60,35 @@ class AnalyzeByXPath {
     _domRoot = wrapper;
     _bodyCompatRoot = wrapper;
     _xpath = HtmlXPath.html(wrapper.outerHtml);
-    final context = wrapper.children.length == 1
-        ? wrapper.children.first
-        : null;
-    _contextXPath = context == null ? _xpath : HtmlXPath.node(context);
+    // 直接從原本的元素查，不重新解析：表格的一列（`<tr>`）重新解析時標籤會
+    // 被丟掉。
+    _contextXPath = HtmlXPath.node(element);
   }
 
-  /// 開頭是 `/` 或 `(` 的照整份查；其餘是相對路徑，從 [_contextXPath] 查。
+  /// 相對路徑：第一步是元素名稱（`div[2]/…`、`item`），不是 `/`、`(`、`.`、
+  /// `@` 或函式開頭。
+  static final RegExp _relativeStart = RegExp(r'^[A-Za-z_*][\w.:-]*(?:\[|/|$)');
+
+  /// 照每一段（`|` 分開）的開頭決定起點：相對路徑從 [_contextXPath] 查，其餘
+  /// 照舊從整份查。兩種混在一起時各段分開查，結果照順序接起來、去掉重複。
   XPathResult<Node> _query(String rule) {
-    final first = rule.trimLeft();
-    final relative =
-        first.isNotEmpty && !first.startsWith('/') && !first.startsWith('(');
-    return (relative ? _contextXPath : _xpath).query(rule);
+    final parts = rule.split('|');
+    bool isRelative(String part) => _relativeStart.hasMatch(part.trim());
+    final relative = parts.map(isRelative).toSet();
+    if (relative.length == 1) {
+      return (relative.single ? _contextXPath : _xpath).query(rule);
+    }
+    final nodes = <XPathNode<Node>>[];
+    final attrs = <String?>[];
+    for (final part in parts) {
+      final result = (isRelative(part) ? _contextXPath : _xpath).query(part);
+      for (var i = 0; i < result.nodes.length; i++) {
+        if (nodes.contains(result.nodes[i])) continue;
+        nodes.add(result.nodes[i]);
+        if (i < result.attrs.length) attrs.add(result.attrs[i]);
+      }
+    }
+    return XPathResult(nodes, attrs);
   }
 
   Element? _buildBodyCompatRoot(String html) {

@@ -21,10 +21,12 @@
   understood is evaluated as before. `_multipleCompare` (`and` / `or`) is
   unchanged.
 - `lib/src/reg.dart`: the `predicateExists` pattern for the case above.
-- `lib/src/parser.dart` `_parseSelector`: a path whose first step has no
-  leading `/` (a relative location path such as `div[2]/div/h3/a/@title`) is
-  read as a child step from the queried node, the same as `/div[2]` from that
-  node. Upstream threw `is not a valid xpath query string`.
+- `lib/src/parser.dart` `parseSelectGroup` / `_parseSelector`: when the first
+  step of a path has no leading `/` and is an element name (a relative location
+  path such as `div[2]/div/h3/a/@title`), it is read as a child step from the
+  queried node, the same as `/div[2]` from that node. Upstream threw `is not a
+  valid xpath query string`. Later steps still need their `/`, and a path
+  starting with `@`, `.` or a function (`text()`) is still rejected.
 - `pubspec.yaml`: version `3.0.2+nightreader.1`, `publish_to: none`, no
   `dev_dependencies`.
 - `analysis_options.yaml` includes the app's rules and turns off

@@ -11,14 +11,17 @@ List<List<Selector>> parseSelectGroup(String xpath) {
   for (final _path in combine) {
     final path = _path.trim();
     final xpathItem =
-        xpathGroup.allMatches(path).map((e) => e.group(0)!.trim());
-    selectorList.add(xpathItem.map(_parseSelector).toList());
+        xpathGroup.allMatches(path).map((e) => e.group(0)!.trim()).toList();
+    selectorList.add([
+      for (var i = 0; i < xpathItem.length; i++)
+        _parseSelector(xpathItem[i], first: i == 0),
+    ]);
   }
 
   return selectorList;
 }
 
-Selector _parseSelector(String input) {
+Selector _parseSelector(String input, {required bool first}) {
   late String source;
   late SelectorType selectorType;
   if (input.startsWith('//')) {
@@ -29,10 +32,12 @@ Selector _parseSelector(String input) {
     // self
     selectorType = SelectorType.self;
     source = input.substring(1);
-  } else if (RegExp(r'^@?[\w*]').hasMatch(input)) {
+  } else if (first && RegExp(r'^[A-Za-z_*][\w.:-]*(?:\[|$)').hasMatch(input)) {
     // Night Reader patch: a relative location path (`div[2]/a/@href`) starts
     // with a child step from the node being queried, the same as `/div[2]`
-    // from that node (XPath 1.0, JsoupXpath).
+    // from that node (XPath 1.0, JsoupXpath). Only the first step, and only
+    // an element name: later steps still need their `/`, and a path starting
+    // with `@`, `text()` or `.` is still rejected.
     selectorType = SelectorType.self;
     source = input;
   } else {
