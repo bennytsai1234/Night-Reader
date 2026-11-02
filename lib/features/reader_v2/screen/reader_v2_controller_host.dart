@@ -481,10 +481,16 @@ class ReaderV2ControllerHost {
         final at = await _openLocation?.call(runtime);
         if (!_isMounted() || runtime.disposed) return;
         unawaited(
-          runtime.openBook(at: at).whenComplete(() {
-            _opening = false;
-            if (!_opened.isCompleted) _opened.complete();
-          }),
+          runtime
+              .openBook(
+                at: at,
+                // 換成別處讀到的位置時，不再照書籤的章名對。
+                chapterTitle: at == null ? openTarget?.chapterTitle : null,
+              )
+              .whenComplete(() {
+                _opening = false;
+                if (!_opened.isCompleted) _opened.complete();
+              }),
         );
       }),
     );

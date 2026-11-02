@@ -390,7 +390,8 @@ class ReplaceRules extends Table {
 }
 
 // ───────────── Bookmarks ─────────────
-/// 書籤（[Bookmark]）。編號是建立時間，不自動配號：兩台各自新增的不撞號。
+/// 書籤（[Bookmark]）。編號由建立時間加隨機數配（`BookmarkDao.newId`），
+/// 不自動配號：兩台各自新增的不撞號。
 @UseRowClass(Bookmark, generateInsertable: true)
 class Bookmarks extends Table {
   IntColumn get id => integer()();

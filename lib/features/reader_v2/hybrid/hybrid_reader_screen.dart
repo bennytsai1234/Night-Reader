@@ -1599,31 +1599,69 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// [start, end) 在 viewport 上的字形範圍，每條視覺行一個框（見
   /// [HybridTextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
-  /// 每個書籤那個字在目前正文裡的位置，鍵是（書籤、章節、正文身分）：
-  /// 正文變了（換源、替換規則）才重新照錨點找，不是每一幀都找。
-  final Map<(int, int, String), int> _markOffsets = {};
+  /// 每個書籤那一行在文件上的行框（還沒扣捲動位置）。書籤的位置、那一章
+  /// 的正文與文件索引都沒變就沿用：捲動時每一幀只扣掉捲動位置，不重新照
+  /// 錨點找字、不查字形（幾何的行框只記最近一次，幾個書籤與朗讀高亮輪流
+  /// 查會互相擠掉）。
+  final Map<
+    int,
+    ({
+      ReaderV2Location location,
+      ChapterBlocks blocks,
+      int revision,
+      HybridLineBox box,
+    })
+  >
+  _markBoxes = {};
 
   /// 書籤那一行在 viewport 上的行框；那一章還沒排好的不畫。
   List<HybridLineBox> _markLines(List<ReaderMark> marks) {
-    if (marks.isEmpty) return const <HybridLineBox>[];
-    if (_markOffsets.length > 512) _markOffsets.clear();
+    final scroll = _effectiveScrollOffset();
+    if (marks.isEmpty || scroll == null) return const <HybridLineBox>[];
+    final revision = _documentIndex.revisionNumber;
     final lines = <HybridLineBox>[];
+    final seen = <int>{};
     for (final (:id, :location) in marks) {
+      seen.add(id);
       final blocks = _pipeline.blocksOf(location.chapterIndex);
-      if (blocks == null) continue;
-      final text = blocks.displayText;
-      if (text.isEmpty) continue;
-      final offset = _markOffsets.putIfAbsent(
-        (id, location.chapterIndex, blocks.contentHash),
-        () => ReaderV2ContentLocationMapper.offsetIn(
+      if (blocks == null || blocks.displayText.isEmpty) continue;
+      var cached = _markBoxes[id];
+      if (cached == null ||
+          !identical(cached.location, location) ||
+          !identical(cached.blocks, blocks) ||
+          cached.revision != revision) {
+        final text = blocks.displayText;
+        final offset = ReaderV2ContentLocationMapper.offsetIn(
           location: location,
           displayText: text,
           contentHash: blocks.contentHash,
-        ).clamp(0, text.length - 1).toInt(),
+        ).clamp(0, text.length - 1).toInt();
+        final world = _pipeline.geometry.lineBoxes(
+          location.chapterIndex,
+          offset,
+          offset + 1,
+        );
+        // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
+        if (world.isEmpty) continue;
+        cached = (
+          location: location,
+          blocks: blocks,
+          revision: revision,
+          box: world.first,
+        );
+        _markBoxes[id] = cached;
+      }
+      final box = cached.box;
+      lines.add(
+        HybridLineBox(
+          left: box.left,
+          top: box.top - scroll,
+          right: box.right,
+          bottom: box.bottom - scroll,
+        ),
       );
-      final boxes = _lineBoxes(location.chapterIndex, offset, offset + 1);
-      if (boxes.isNotEmpty) lines.add(boxes.first);
     }
+    _markBoxes.removeWhere((id, _) => !seen.contains(id));
     return lines;
   }
 

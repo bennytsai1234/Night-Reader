@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../models/book/chapter_alignment.dart';
 import '../../models/bookmark.dart';
@@ -32,8 +35,8 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
             ]))
           .watch();
 
-  /// 新增一個書籤，編號配成現在的時間；同一毫秒已有書籤或時間比已有的編號
-  /// 小時，接在最大的後面。傳回存進去的那筆。
+  /// 新增一個書籤，傳回存進去的那筆。編號是建立時間的毫秒乘 1000 再加
+  /// 隨機的三位數（[newId]）。
   Future<Bookmark> add(Bookmark bookmark) => transaction(() async {
     final maxId = bookmarks.id.max();
     final largest =
@@ -41,11 +44,25 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
           bookmarks,
         )..addColumns([maxId])).map((row) => row.read(maxId)).getSingle() ??
         0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final saved = bookmark.copyWith(id: now > largest ? now : largest + 1);
+    final saved = bookmark.copyWith(
+      id: newId(DateTime.now().millisecondsSinceEpoch, largest, _random),
+    );
     await into(bookmarks).insert(saved.toInsertable());
     return saved;
   });
+
+  static final math.Random _random = math.Random();
+
+  /// 新書籤的編號：兩台各自新增的不能撞號，同步拿它當身分（ADR 0042）。
+  /// 只用毫秒時，兩台同一毫秒新增、或一台時鐘曾經偏快（編號比現在大，
+  /// 兩台都接在同一個最大編號後面）就會撞號，雲端那筆蓋掉這台的；加上
+  /// 隨機的三位數，要同一毫秒又抽到同一個數才會撞。比這台已有的最大編號
+  /// 小時接在後面，同樣隔一段隨機的距離。
+  @visibleForTesting
+  static int newId(int nowMillis, int largest, math.Random random) {
+    final candidate = nowMillis * 1000 + random.nextInt(1000);
+    return candidate > largest ? candidate : largest + 1 + random.nextInt(1000);
+  }
 
   Future<void> upsertAll(List<Bookmark> items) => batch(
     (b) => b.insertAllOnConflictUpdate(

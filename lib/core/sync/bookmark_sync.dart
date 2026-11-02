@@ -5,7 +5,8 @@ import 'package:night_reader/core/models/bookmark.dart';
 import 'sync_kind.dart';
 import 'sync_records.dart';
 
-/// 書籤的同步：一個書籤一筆，用編號（建立時間）對上；刪除也同步（ADR 0039）。
+/// 書籤的同步：一個書籤一筆，用編號（建立時間加隨機數，`BookmarkDao.newId`）
+/// 對上；刪除也同步（ADR 0039、0042）。
 class BookmarkSync extends SyncKind {
   BookmarkSync({BookmarkDao? dao}) : _dao = dao ?? getIt<BookmarkDao>();
 

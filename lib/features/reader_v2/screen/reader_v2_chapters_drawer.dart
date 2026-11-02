@@ -334,18 +334,31 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
             title: '沒有書籤',
           );
         }
+        // 照在這台目錄裡的章排（書籤可能來自另一個書源，記下的序號是那邊
+        // 的），同一章照第幾個字。
+        final rows =
+            [
+              for (final bookmark in items)
+                (
+                  bookmark: bookmark,
+                  chapter:
+                      widget.bookmarkChapter?.call(bookmark) ??
+                      bookmark.chapterIndex,
+                ),
+            ]..sort(
+              (a, b) => a.chapter != b.chapter
+                  ? a.chapter.compareTo(b.chapter)
+                  : a.bookmark.charOffset.compareTo(b.bookmark.charOffset),
+            );
         return SwipeActionsGroup(
           child: ListView.builder(
             padding: EdgeInsets.only(
               bottom: MediaQuery.paddingOf(context).bottom,
             ),
-            itemCount: items.length,
+            itemCount: rows.length,
             itemBuilder: (context, index) {
-              final bookmark = items[index];
-              final chapter = widget.bookmarkChapter?.call(bookmark);
-              final excerpt = bookmark.excerpt.isEmpty
-                  ? '（空白）'
-                  : bookmark.excerpt;
+              final (:bookmark, :chapter) = rows[index];
+              final excerpt = bookmark.excerpt;
               return SwipeActions(
                 key: ValueKey(bookmark.id),
                 enabled: widget.onBookmarkDelete != null,
@@ -364,7 +377,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                     GroupedRow(
                       title: excerpt,
                       maxTitleLines: 2,
-                      subtitle: chapter == null
+                      subtitle: widget.bookmarkChapter == null
                           ? bookmark.chapterTitle
                           : widget.titleFor(chapter),
                       maxSubtitleLines: 1,

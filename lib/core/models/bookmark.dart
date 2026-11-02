@@ -20,7 +20,9 @@ class Bookmark {
     this.excerpt = '',
   });
 
-  /// 建立的時間（毫秒），也是這筆書籤的編號；兩台各自新增的不會撞號。
+  /// 這筆書籤的編號：建立時間的毫秒乘 1000 加隨機三位數
+  /// （`BookmarkDao.newId`），兩台各自新增的不會撞號；2026-09 以前備份裡
+  /// 的書籤是建立時間的毫秒。
   final int id;
   final String bookName;
   final String bookAuthor;

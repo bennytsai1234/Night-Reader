@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
@@ -114,6 +115,26 @@ void main() {
 
     await a.sync.syncNow();
     expect((await a.dao.getAll()).single.chapterIndex, 3);
+  });
+
+  test('two phones never hand out the same number, even in the same '
+      'millisecond or after a clock that ran fast', () {
+    const now = 1790000000000;
+    // 兩台同一毫秒新增。
+    final a = BookmarkDao.newId(now, 0, Random(1));
+    final b = BookmarkDao.newId(now, 0, Random(2));
+    expect(a, isNot(b));
+    // 兩台都同步到一個比現在大的編號（某台時鐘曾經偏快），各自接在後面。
+    final ahead = (now + 60000) * 1000;
+    final c = BookmarkDao.newId(now, ahead, Random(1));
+    final d = BookmarkDao.newId(now, ahead, Random(2));
+    expect([c, d], everyElement(greaterThan(ahead)));
+    expect(c, isNot(d));
+    // 後建立的編號比較大（「最近留過書籤的書」照它排）。
+    expect(
+      BookmarkDao.newId(now + 1, 0, Random(3)),
+      greaterThan(BookmarkDao.newId(now, 0, Random(4))),
+    );
   });
 
   test('two phones adding bookmarks at the same time keep both', () async {
