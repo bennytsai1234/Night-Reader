@@ -23,6 +23,7 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/keyboard_assist_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
@@ -116,6 +117,7 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
     ..registerLazySingleton<DownloadDao>(() => DownloadDao(_db))
     ..registerLazySingleton<ReadRecordDao>(() => ReadRecordDao(_db))
     ..registerLazySingleton<BookmarkDao>(() => BookmarkDao(_db))
+    ..registerLazySingleton<HighlightDao>(() => HighlightDao(_db))
     ..registerLazySingleton<ReplaceRuleDao>(() => ReplaceRuleDao(_db))
     ..registerLazySingleton<SearchBookDao>(() => SearchBookDao(_db))
     ..registerLazySingleton<SearchHistoryDao>(() => SearchHistoryDao(_db))

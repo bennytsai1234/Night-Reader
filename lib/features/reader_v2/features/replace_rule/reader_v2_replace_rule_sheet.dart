@@ -26,7 +26,11 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
     required this.replaceDao,
     required this.onReload,
     this.loadTestSample,
+    this.sheetConstraints,
   });
+
+  /// 這個面板的寬度限制（對齊正文欄）；從這裡打開的新增規則面板照同一個。
+  final BoxConstraints? sheetConstraints;
 
   final Book book;
   final BookDao bookDao;
@@ -238,6 +242,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                 var saved = false;
                 await ReaderV2ReplaceRuleEditorSheet.show(
                   context,
+                  constraints: widget.sheetConstraints,
                   onSave: (rule) async {
                     final nextOrder = (await widget.replaceDao.getAll()).length;
                     rule.order = nextOrder;

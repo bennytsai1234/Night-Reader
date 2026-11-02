@@ -47,6 +47,7 @@
 | [0026](0026-kinsoku-spreads-into-the-pulled-line.md) | 換行做避頭尾，被拉字的那一行把空隙攤進字距（取代 0005） |
 | [0006](0006-tap-page-turn-scrolls-one-screen.md) | 點擊翻頁就是捲動一屏，不做分頁模式 |
 | [0043](0043-reader-weight-title-and-info-size-are-settings.md) | 正文粗細、章節標題粗細與對齊、頁首頁尾字級是閱讀設定（使用者點名要調，不照「選定即固定」） |
+| [0045](0045-fonts-downloaded-on-pick.md) | 正文與介面字型可選（系統、思源宋體、霞鶩文楷），選了才下載、核對 SHA-256；英數字照舊用系統字型 |
 
 ## 書源與下載
 
@@ -59,6 +60,7 @@
 | [0038](0038-source-login-in-the-foreground.md) | 書源照 Legado 登入（網頁登入與書源的表單），只在使用者打開的登入頁裡進行，背景從不等人；「需要登入」「需要在網頁驗證」是狀態不是壞掉，閱讀器在失敗處給登入與前往驗證的路 |
 | [0039](0039-multi-device-sync.md) | 多台手機同步：Google 雲端硬碟或 WebDAV 都能用，每筆資料各自比時間合併、刪除也同步；備份與同步都帶登入資料 |
 | [0042](0042-bookmarks-follow-the-book-not-the-source.md) | 書籤跟著書名加作者、不跟書源，位置和閱讀進度同一套（章名＋第幾個字＋錨點）；換源跟著搬、同步與備份都帶 |
+| [0044](0044-highlights-mark-content.md) | 標註記畫到的字與顏色、樣子，位置與跟著書走的方式同書籤；從選字選單「⋮」畫，點了換顏色、寫備忘或刪除，可匯出 Markdown |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
 
 ## 工程與流程
