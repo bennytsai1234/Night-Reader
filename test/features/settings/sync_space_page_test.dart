@@ -17,12 +17,14 @@ class _Store implements SyncStore {
 
   final Future<void>? beforeRead;
   final String? readError;
+  int reads = 0;
 
   @override
   Future<void> check() async {}
 
   @override
   Future<SyncFile?> read(String name) async {
+    reads++;
     if (beforeRead != null) await beforeRead;
     if (readError != null) throw SyncStoreException(readError!);
     return null;
@@ -54,9 +56,10 @@ class _SourceKind extends SyncKind {
 }
 
 class _Auth implements GoogleDriveAuth {
-  _Auth({this.fail});
+  _Auth({this.fail, this.signInGate});
 
   final String? fail;
+  final Future<void>? signInGate;
   bool signedOut = false;
   int signIns = 0;
 
@@ -67,6 +70,7 @@ class _Auth implements GoogleDriveAuth {
   Future<String> signIn() async {
     if (fail != null) throw SyncStoreException(fail!);
     signIns++;
+    if (signInGate != null) await signInGate;
     return account;
   }
 
@@ -215,6 +219,37 @@ void main() {
 
     expect(sync.status.value.running, isFalse);
     expect(find.text('上次同步失敗：書源暫時不可用'), findsOneWidget);
+  });
+
+  testWidgets('Google authorization does not schedule lifecycle sync passes', (
+    tester,
+  ) async {
+    // 重新授權既有的 Google 帳號：跳出系統畫面會讓 App 暫停、恢復。
+    await SyncSettings().useGoogleDrive('reader@gmail.com');
+    final gate = Completer<void>();
+    final auth = _Auth(signInGate: gate.future);
+    final store = _Store();
+    final sync = await pump(
+      tester,
+      auth,
+      store: store,
+      kinds: (_) => [_SourceKind()],
+    );
+
+    await tester.tap(find.text('Google 雲端硬碟'));
+    await tester.pump();
+    sync.syncBeforeBackground();
+    sync.syncAfterResume();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+
+    expect(store.reads, 0);
+    expect(sync.progressReady, isNull);
+    gate.complete();
+    await settle(tester);
+
+    expect(auth.signIns, 1);
+    expect(store.reads, 1);
+    expect(find.textContaining('上次同步：'), findsOneWidget);
   });
 
   testWidgets('a cancelled Google sign-in changes nothing', (tester) async {
