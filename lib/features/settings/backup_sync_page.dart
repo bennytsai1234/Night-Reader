@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
@@ -33,11 +34,17 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
   void initState() {
     super.initState();
     _sync.status.addListener(_onSyncStatus);
-    unawaited(
-      _sync.load().then((_) {
-        if (mounted) setState(() => _loaded = true);
-      }),
-    );
+    unawaited(_loadSyncStatus());
+  }
+
+  Future<void> _loadSyncStatus() async {
+    try {
+      await _sync.load();
+    } catch (error, stackTrace) {
+      AppLog.e('讀取同步狀態失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   @override
