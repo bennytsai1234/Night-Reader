@@ -123,7 +123,8 @@ class WebBook {
       source: source,
       book: book,
       body: res.body,
-      baseUrl: res.url,
+      baseUrl: book.bookUrl,
+      redirectUrl: res.url,
     );
     parsed.infoHtml = res.body;
     if (parsed.tocUrl.isEmpty || parsed.tocUrl == parsed.bookUrl) {
@@ -184,7 +185,8 @@ class WebBook {
         source: source,
         book: book,
         body: firstRes.body,
-        baseUrl: firstRes.url,
+        baseUrl: initialUrl,
+        redirectUrl: firstRes.url,
         maxChapters: chapterLimit,
       );
       LoginWall.checkToc(
@@ -219,7 +221,8 @@ class WebBook {
               source: source,
               book: book,
               body: res.body,
-              baseUrl: res.url,
+              baseUrl: pending[i],
+              redirectUrl: res.url,
               maxChapters: chapterLimit == null
                   ? null
                   : chapterLimit - allChapters.length,
@@ -260,7 +263,8 @@ class WebBook {
               source: source,
               book: book,
               body: res.body,
-              baseUrl: res.url,
+              baseUrl: currentUrl,
+              redirectUrl: res.url,
               maxChapters: chapterLimit == null
                   ? null
                   : (chapterLimit - allChapters.length),
@@ -370,7 +374,6 @@ class WebBook {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final contentParts = <String>[];
     final visitedUrls = <String>{};
-    String? lastBaseUrl;
 
     // 1. 抓取首頁正文
     visitedUrls.add(chapter.url);
@@ -390,14 +393,14 @@ class WebBook {
       book: book,
       chapter: chapter,
       body: firstRes.body,
-      baseUrl: firstRes.url,
+      baseUrl: chapter.url,
+      redirectUrl: firstRes.url,
       nextChapterUrl: nextChapterUrl,
     );
     LoginWall.checkContent(firstRes, firstResult.content);
     if (firstResult.content.isNotEmpty) {
       contentParts.add(firstResult.content);
     }
-    lastBaseUrl = firstRes.url;
 
     if (firstResult.nextUrls.length > 1) {
       // 多 nextUrl → 並發抓取 (對標 Android BookContent mapAsync)
@@ -421,14 +424,14 @@ class WebBook {
           book: book,
           chapter: chapter,
           body: res.body,
-          baseUrl: res.url,
+          baseUrl: pending[i],
+          redirectUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
         LoginWall.checkContent(res, pageResult.content);
         if (pageResult.content.isNotEmpty) {
           contentParts.add(pageResult.content);
         }
-        lastBaseUrl = res.url;
       }
     } else {
       // 單 nextUrl → daisy chain 循序抓取
@@ -456,14 +459,14 @@ class WebBook {
           book: book,
           chapter: chapter,
           body: res.body,
-          baseUrl: res.url,
+          baseUrl: currentUrl,
+          redirectUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
         LoginWall.checkContent(res, result.content);
         if (result.content.isNotEmpty) {
           contentParts.add(result.content);
         }
-        lastBaseUrl = res.url;
         currentUrl = result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
       }
     }
@@ -475,7 +478,10 @@ class WebBook {
       book: book,
       chapter: chapter,
       contentStr: joined,
-      baseUrl: lastBaseUrl,
+      // 同 Legado BookContent 尾段：用第一頁的規則，baseUrl 是章節網址、
+      // redirectUrl 是第一頁轉址後的網址，不是最後一頁的。
+      baseUrl: chapter.url,
+      redirectUrl: firstRes.url,
     );
     // 每一頁都讀得到，套完替換規則卻只剩一句登入提示。
     LoginWall.checkContent(null, content);

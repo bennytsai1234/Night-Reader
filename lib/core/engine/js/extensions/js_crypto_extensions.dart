@@ -142,7 +142,8 @@ extension JsCryptoExtensions on JsExtensions {
     });
     // java.base64Encode(data[, flags])、base64Decode(str[, charset 或 flags])、
     // base64DecodeToByteArray(str[, flags])：JS 送 {d: 資料, f: flags, c: 字元
-    // 編碼}；flags 照 Android Base64，編碼預設 NO_WRAP、解碼預設 DEFAULT。
+    // 編碼}；flags 照 Android Base64，編碼預設 NO_WRAP、解碼預設 DEFAULT；
+    // base64Decode 沒給 flags 時照 Hutool（兩種字母表都收）。
     runtime.onMessage('_base64Encode', (dynamic args) {
       final (data, flags, _) = _base64Args(args);
       return JsEncodeUtils.base64Encode(
@@ -157,7 +158,7 @@ extension JsCryptoExtensions on JsExtensions {
       return JsEncodeUtils.base64Decode(
         data.toString(),
         charset: charset ?? 'UTF-8',
-        flags: flags ?? 0,
+        flags: flags,
       );
     });
     runtime.onMessage('_base64DecodeToBytes', (dynamic args) {
