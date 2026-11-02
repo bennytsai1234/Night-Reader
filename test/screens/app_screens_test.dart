@@ -25,6 +25,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/shared/layout/tablet_text_scale.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import '../support/app_harness.dart';
@@ -193,9 +194,14 @@ void main() {
     [final w, final h] => Size(double.parse(w), double.parse(h)),
     _ => null,
   };
-  final suffix = size == null
-      ? mode
-      : '${size.width.toInt()}x${size.height.toInt()}_$mode';
+  // 原型：SHOT_TEXT=1.15 平板上的字放大 1.15 倍。
+  final text = Platform.environment['SHOT_TEXT'];
+  if (text != null) TabletTextScale.factor = double.parse(text);
+  final suffix = [
+    if (text != null) 'text$text',
+    if (size != null) '${size.width.toInt()}x${size.height.toInt()}',
+    mode,
+  ].join('_');
 
   // 全部情境在同一個測試裡依序拍：App 的單例服務（下載服務等）第一次用到
   // 時就綁在當下測試的非同步環境，換到下一個測試就不會再回應，開書會一直
