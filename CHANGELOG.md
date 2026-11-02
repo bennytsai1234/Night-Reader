@@ -76,6 +76,7 @@
   - 書源程式可以照 Java 的寫法讀書、章節與書源的欄位（例如 `source.getConcurrentRate()`、`chapter.isVip()`），也能改書名、作者、簡介這類書源本來就能改的欄位（`book.setName(…)`）與自訂變數（`book.putCustomVariable(…)`）
   - 書源程式用到的大數運算（番茄小說的簽章）、陣列複製（`Arrays.copyOf`）、Java 清單的逐項讀取（`iterator().hasNext()`）與刪掉一段（`subList(…).clear()`）照 Java 算
   - 抓目錄前要先重讀書籍詳情、換新目錄網址的書源（`java.refreshTocUrl`）讀得到目錄了
+  - 詳情頁照 Legado 的順序一項項讀，後面的規則讀得到這一頁剛讀出來的書名、簡介（蓝海搜书從簡介取換源序號，不再出錯）
   - 載入外部腳本的書源（`java.importScript`）叫得到腳本裡的函式，正文與搜尋不再失敗
   - 規則裡的文字剛好長得像舊寫法時，不再被改掉，搜尋與正文照書源寫的抓
   - 書源程式用得到的 Legado 功能補齊，結果和 Legado 一樣：網址編碼（空白、GBK）、Base64 的各種選項、解析指定的內容、記憶體快取、Cookie 的單項讀取與合併、手機編號、書源自己呼叫登入等；書源直接用的 Java 寫法（暫停、雜湊、HashMap 與 ArrayList、Android 的 Base64、JsonPath、網址拆解、日期格式、解壓）也照 Java 運作
@@ -94,7 +95,6 @@
   - 書源把文字欄位寫成物件、清單或數字時（例如標頭寫成 `{"User-Agent": …}`）照 Legado 轉成文字讀，牛颜小说网這類書源匯入時不再出錯；替換規則也一樣
   - XPath 規則的條件只寫名稱時（例如 `//dd[a]` 是「有連結的那幾項」）照 Legado 讀，思兔阅读的目錄不再出錯
   - XPath 規則寫成相對路徑時（例如 `div[2]/div/h3/a/@title`，開頭沒有 `/`）照 Legado 從那一項往下找，novelnext 這類英文小說站不再出現「解析字串失敗」
-  - 詳情頁照 Legado 的順序一項項讀，後面的規則讀得到這一頁剛讀出來的書名、簡介（蓝海搜书從簡介取換源序號，不再出錯）
   - 書源程式用 Java 的 `HashMap` 時，`computeIfAbsent`、`merge`、`putIfAbsent` 這類方法都能用；系統屬性（`System.getProperties()`）也有，而且和 Legado 一樣整個 App 共用一份、下一次搜尋還記得，半夏小说、69書吧這類用它限流的書源不再出現「not a function」
 - 兩本書都有沒附連結的分卷（例如都叫「第一卷」）時，不再互相搶走那一章，重開書目錄不再少章
 - 在書源管理改了書源的網址後，書架上用這個書源的書跟著改用新網址：照樣能檢查更新、下載新章，已下載的章節還在，登入也不用重來
