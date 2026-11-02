@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 讀外部匯入的 Legado JSON（書源、替換規則）用的寬鬆轉換。
 ///
 /// Legado 用 Gson 解析，數字欄位寫成字串（例如源倉庫給的
@@ -29,4 +31,22 @@ bool readJsonBool(dynamic value, {required bool fallback}) {
     }
   }
   return fallback;
+}
+
+/// 書源、替換規則的文字欄位：照 Legado 的 `StringJsonDeserializer`，數字、
+/// true／false 轉成文字，物件或陣列（例如 `"header": {"User-Agent": …}`、
+/// `"loginUi": [...]`）轉成 JSON 文字，null 是 null。
+///
+/// 和 Gson 差在數字：Dart 讀 JSON 時不留原文，`1.50` 讀成 `"1.5"`。物件裡有
+/// 超出範圍的數字（`1e400` 讀成 Infinity）時 JSON 寫不出來，改用 Dart 的文字，
+/// 不讓一個欄位擋掉整份匯入。
+String? readJsonString(dynamic value) {
+  if (value == null) return null;
+  if (value is String) return value;
+  if (value is num || value is bool) return value.toString();
+  try {
+    return jsonEncode(value);
+  } on JsonUnsupportedObjectError {
+    return value.toString();
+  }
 }
