@@ -251,9 +251,14 @@ class GroupedListView extends StatelessWidget {
     this.controller,
     this.bottomPadding = AppSpacing.xxxl,
     this.physics,
+    this.ready = true,
   });
 
   final List<Widget> children;
+
+  /// 資料還沒準備好時，進場骨架繼續顯示；資料到了才用最後的列形狀換場。
+  /// 只影響推入頁面的進場，已在畫面上的清單直接顯示內容。
+  final bool ready;
   final ScrollController? controller;
   final double bottomPadding;
   final ScrollPhysics? physics;
@@ -269,6 +274,7 @@ class GroupedListView extends StatelessWidget {
         ReadableWidth.insetOf(context);
     return _GroupedEntrance(
       items: children,
+      ready: ready,
       padding: padding,
       background: AppChrome.of(context).groupedBackground,
       builder: (context, items) => ListView(
@@ -290,10 +296,12 @@ class _GroupedEntrance extends StatefulWidget {
     required this.padding,
     required this.background,
     required this.builder,
+    this.ready = true,
     this.fit = StackFit.expand,
   });
 
   final List<Widget> items;
+  final bool ready;
   final EdgeInsets padding;
   final Color background;
   final Widget Function(BuildContext context, List<Widget> items) builder;
@@ -339,8 +347,8 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
   /// 掛上時所在的頁面還在進場；之後一直走骨架這條路（換掉會讓內容重建）。
   bool? _entering;
 
-  /// 進場播完的下一格才變 false。
-  bool _loading = true;
+  /// 進場播完的下一格才允許換場；若資料仍未就緒，骨架繼續顯示。
+  bool _entranceFinished = false;
 
   @override
   void didChangeDependencies() {
@@ -354,7 +362,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
     TransitionSettled.entered(context).then((_) async {
       // 進場最後一格之後再開始建內容，不和換頁擠在同一格。
       await SchedulerBinding.instance.endOfFrame;
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _entranceFinished = true);
     });
   }
 
@@ -447,7 +455,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
           color: background,
           child: SkeletonSwitcher(
             fit: widget.fit,
-            loading: _loading,
+            loading: !_entranceFinished || !widget.ready,
             waitForCovers: CoverWait.brief,
             backdrop: background,
             onRevealed: () => _revealed = true,

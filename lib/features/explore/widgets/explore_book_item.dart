@@ -114,7 +114,7 @@ class ExploreBookItem extends StatelessWidget {
                       height: metaLineHeight,
                       child: _withExtras(
                         (book) => Text(
-                          _meta(context, book),
+                          metaOf(context, book),
                           style: metaStyle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -153,7 +153,8 @@ class ExploreBookItem extends StatelessWidget {
   }
 
   /// 作者 · 字數 · 分類（分類最多三個）。
-  static String _meta(BuildContext context, SearchBook book) {
+  /// 真實清單與載入骨架共用的作者、字數、分類文字。
+  static String metaOf(BuildContext context, SearchBook book) {
     final kind = context.zh(book.kind ?? '');
     final wordCount = StringUtils.displayWordCount(book.wordCount, kind);
     return [

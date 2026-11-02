@@ -145,7 +145,7 @@ class _MainPageState extends State<MainPage>
     if (state == AppLifecycleState.resumed) {
       SyncService.instance.syncAfterResume();
     } else if (state == AppLifecycleState.paused) {
-      SyncService.instance.requestSync();
+      SyncService.instance.syncBeforeBackground();
     }
   }
 
