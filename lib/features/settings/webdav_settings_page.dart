@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -37,18 +38,21 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Future<void> _loadSaved() async {
-    final account = await _settings.webDavAccount();
-    final space = await _settings.space();
-    if (!mounted) return;
-    setState(() {
+    try {
+      final account = await _settings.webDavAccount();
+      final space = await _settings.space();
+      if (!mounted) return;
       if (account != null) {
         _url.text = account.url;
         _user.text = account.user;
         _password.text = account.password;
       }
       _usingWebDav = space == SyncSpace.webdav;
-      _loaded = true;
-    });
+    } catch (error, stackTrace) {
+      AppLog.e('讀取 WebDAV 設定失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   @override
