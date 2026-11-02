@@ -33,7 +33,7 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   }) {
     return AppBottomSheet.showCustom<void>(
       context: context,
-      // 從閱讀器打開時和替換規則面板同寬（對齊正文）。
+      // 從閱讀器打開時對齊正文（ReaderV2MenuSheet.constraintsFor）。
       constraints: constraints,
       isScrollControlled: true,
       builder: (_) => ReaderV2ReplaceRuleEditorSheet(

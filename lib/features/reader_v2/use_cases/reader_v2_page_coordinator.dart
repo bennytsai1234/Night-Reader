@@ -291,6 +291,7 @@ class ReaderV2PageCoordinator {
     int? id;
     await ReaderV2ReplaceRuleEditorSheet.show(
       context,
+      constraints: ReaderV2MenuSheet.constraintsFor(context, _host.settings),
       rule: ReplaceRule(
         name: pattern,
         group: _replacedTextGroup,
