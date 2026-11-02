@@ -47,7 +47,7 @@ class WebDavSyncStore implements SyncStore {
     if (response.statusCode == 404) {
       throw const SyncStoreException('這個網址找不到 WebDAV');
     }
-    _ensureOk(response);
+    _ensureOk(response, probe: true);
     await _makeFolder();
   }
 
@@ -135,13 +135,18 @@ class WebDavSyncStore implements SyncStore {
     }
   }
 
-  static void _ensureOk(Response<Object?> response) {
+  /// 401 是帳號密碼不對，整個空間都用不了。403 在試連根目錄時也當成帳號密碼
+  /// 不對（[probe]）；讀寫某一份檔案時只是這一份被拒絕，其他檔案照常同步。
+  static void _ensureOk(Response<Object?> response, {bool probe = false}) {
     final status = response.statusCode ?? 0;
     if (status >= 200 && status < 300) return;
-    if (status == 401 || status == 403) {
+    if (status == 401 || (probe && status == 403)) {
       throw const SyncStoreException('帳號或密碼不對');
     }
-    throw SyncStoreException('同步空間回應錯誤（HTTP $status）');
+    if (status == 403) {
+      throw const SyncStoreException.file('同步空間拒絕存取這份檔案（HTTP 403）');
+    }
+    throw SyncStoreException.file('同步空間回應錯誤（HTTP $status）');
   }
 
   /// 只用強 ETag 做寫入前的比對：弱 ETag（`W/` 開頭）在 If-Match 裡一律

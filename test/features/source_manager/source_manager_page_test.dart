@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 import 'dart:math' as math;
 
 import 'package:drift/native.dart';
@@ -7,9 +8,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/sync/source_sync.dart';
+import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/source_batch_toolbar.dart';
@@ -21,10 +26,29 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/glass_motion.dart';
+
+class _OwnPathProvider extends PathProviderPlatform {
+  _OwnPathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationSupportPath() async => path;
+
+  @override
+  Future<String?> getTemporaryPath() async => path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+
+  @override
+  Future<String?> getApplicationCachePath() async => path;
+}
 
 /// 可以把書源讀取卡住的 DAO，用來觀察「重新載入中」的畫面。
 class _GatedSourceDao extends BookSourceDao {
@@ -679,6 +703,120 @@ void main() {
       expect(mid, lessThan(after));
       expect(find.byType(SearchField), findsOneWidget);
       expect(find.byType(SelectActionBar), findsOneWidget);
+    });
+  });
+
+  group('同步套用別台的書源', () {
+    late SourceSync sync;
+
+    setUp(() async {
+      // 刪書源時要清掉它存的登入資訊（快取資料表與快取資料夾）。
+      GetIt.instance.registerSingleton<CacheDao>(CacheDao(db));
+      final appDir = io.Directory.systemTemp.createTempSync('nr-source-sync-');
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _OwnPathProvider(appDir.path);
+      addTearDown(() {
+        PathProviderPlatform.instance = previous;
+        appDir.deleteSync(recursive: true);
+      });
+      sync = SourceSync(
+        dao: gatedDao,
+        bookDao: BookDao(db),
+        prefs: GetIt.instance<SharedPreferences>(),
+      );
+    });
+
+    BookSource source(String id, String name) => BookSource(
+      bookSourceUrl: 'https://$id.example',
+      bookSourceName: name,
+      searchUrl: '/s?q={{key}}',
+    );
+
+    Future<void> applyRemote(
+      WidgetTester tester,
+      Map<String, SyncRecord> remote,
+    ) async {
+      await tester.runAsync(() => sync.apply(remote));
+      await settleQueries(tester);
+    }
+
+    testWidgets('開著的書源管理跟著新增、修改、刪除更新，不用手動重讀', (tester) async {
+      await pumpPage(tester, sources: 1);
+      expect(find.text('書源0'), findsOneWidget);
+
+      await applyRemote(tester, {
+        'https://new.example': SourceSync.recordOf(source('new', '別台新增')),
+      });
+      expect(find.text('書源0'), findsOneWidget);
+      expect(find.text('別台新增'), findsOneWidget);
+
+      await applyRemote(tester, {
+        'https://new.example': SourceSync.recordOf(source('new', '別台改名')),
+      });
+      expect(find.text('別台新增'), findsNothing);
+      expect(find.text('別台改名'), findsOneWidget);
+
+      await applyRemote(tester, {
+        'https://s0.example': const SyncRecord(
+          time: 0,
+          data: {},
+          deleted: true,
+        ),
+      });
+      expect(find.text('書源0'), findsNothing);
+      expect(find.text('別台改名'), findsOneWidget);
+    });
+
+    testWidgets('沒有實際改到這台的書源時不通知', (tester) async {
+      await pumpPage(tester, sources: 1);
+      final applied = SourceSync.applied.value;
+
+      await applyRemote(tester, {
+        'https://gone.example': const SyncRecord(
+          time: 0,
+          data: {},
+          deleted: true,
+        ),
+      });
+
+      expect(SourceSync.applied.value, applied);
+    });
+
+    testWidgets('頁面關掉後不再聽同步，也不重讀', (tester) async {
+      await pumpPage(tester, sources: 1);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+
+      await applyRemote(tester, {
+        'https://new.example': SourceSync.recordOf(source('new', '別台新增')),
+      });
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('被別的頁面蓋著時等露出來才重讀（ADR 0018）', (tester) async {
+      await pumpPage(tester, sources: 1);
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(builder: (_) => const Text('上面那頁')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await applyRemote(tester, {
+        'https://new.example': SourceSync.recordOf(source('new', '別台新增')),
+      });
+      navigator.pop();
+      await tester.pump();
+      // 返回動畫還在播：還沒讀。
+      await tester.pump(const Duration(milliseconds: 50));
+      await settleQueries(tester);
+      expect(find.text('別台新增'), findsNothing);
+
+      await tester.pumpAndSettle();
+      await settleQueries(tester);
+      expect(find.text('別台新增'), findsOneWidget);
     });
   });
 }

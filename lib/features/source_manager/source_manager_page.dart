@@ -59,7 +59,10 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => SourceManagerProvider(entrance: _entrance!),
+      create: (_) => SourceManagerProvider(
+        entrance: _entrance!,
+        uncovered: () => TransitionSettled.uncovered(context),
+      ),
       child: const _SourceManagerPageContent(),
     );
   }

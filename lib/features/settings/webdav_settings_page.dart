@@ -85,12 +85,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       ));
       if (!mounted) return;
       setState(() => _usingWebDav = true);
-      final error = _sync.status.value.error;
-      if (error != null) {
-        _say('已連上，但同步失敗：$error');
-        return;
-      }
-      _say('已連上，同步好了');
+      _say('已連上，開始同步');
       // 回到「同步空間」，那裡看得到選了哪個。
       unawaited(Navigator.maybePop(context));
     } on SyncStoreException catch (error) {

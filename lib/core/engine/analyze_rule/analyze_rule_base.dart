@@ -126,10 +126,12 @@ abstract class AnalyzeRuleBase {
 
     String? val;
 
+    // 同 Legado：章節、書、書源一層層找，空的也算沒有，往下一層找（正文的
+    // 規則讀得到詳情頁用 @put 存在書上的變數）。
     if (chapter != null && chapter is RuleDataInterface) {
       val = (chapter as RuleDataInterface).getVariable(key);
     }
-    val ??= ruleData?.getVariable(key);
+    if (val == null || val.isEmpty) val = ruleData?.getVariable(key);
     if (val == null || val.isEmpty) {
       if (source != null && source is RuleDataInterface) {
         val = (source as RuleDataInterface).getVariable(key);
