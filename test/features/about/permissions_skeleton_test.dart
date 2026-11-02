@@ -60,7 +60,7 @@ void main() {
     );
     await tester.tap(find.text('開啟'));
     await tester.pump();
-    final list = find.byType(GroupedListView);
+    final list = find.byType(GroupedListView, skipOffstage: false);
     final route = ModalRoute.of(tester.element(list))!;
     while (!route.animation!.isCompleted) {
       await tester.pump(const Duration(milliseconds: 16));
