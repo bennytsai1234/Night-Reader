@@ -1,10 +1,46 @@
 import 'dart:io';
 
+import 'package:punycoder/punycoder.dart';
+
+import 'public_suffix.dart';
+
 /// NetworkUtils - 網路輔助工具 (原 Android utils/NetworkUtils.kt)
 class NetworkUtils {
   NetworkUtils._();
 
   static final RegExp _analyzeUrlParamSplitRegex = RegExp(r'\s*,\s*(?=\{)');
+
+  static final RegExp _authority = RegExp(
+    r'^([A-Za-z][A-Za-z0-9+.-]*://)([^/?#]*)(.*)$',
+    dotAll: true,
+  );
+
+  /// [url] 的主機名有中文這類非 ASCII 字時換成 punycode（`xn--…`），其他照舊。
+  /// 同 Legado 用的 OkHttp `HttpUrl`；Dart 的 `Uri` 會把這種主機名百分比編碼
+  /// （組相對網址時也會），連線時查不到網域，所以編碼過的也還原再換。
+  static String toAsciiHost(String url) {
+    final match = _authority.firstMatch(url);
+    if (match == null) return url;
+    final authority = match.group(2)!;
+    final at = authority.lastIndexOf('@');
+    final userInfo = at < 0 ? '' : authority.substring(0, at + 1);
+    final hostPort = authority.substring(at + 1);
+    final colon = hostPort.lastIndexOf(':');
+    final hasPort = colon >= 0 && !hostPort.startsWith('[');
+    var host = hasPort ? hostPort.substring(0, colon) : hostPort;
+    if (host.contains('%') && !host.startsWith('[')) {
+      try {
+        host = Uri.decodeComponent(host);
+      } catch (_) {
+        // 不合法的百分比編碼或不是 UTF-8：不是中文網域，照原樣送。
+        return url;
+      }
+    }
+    if (!host.runes.any((c) => c > 0x7f)) return url;
+    final ascii = domainToAscii(host, validate: false);
+    final port = hasPort ? hostPort.substring(colon) : '';
+    return '${match.group(1)}$userInfo$ascii$port${match.group(3)}';
+  }
 
   /// 獲取絕對地址 (對標 getAbsoluteURL)
   static String getAbsoluteURL(String? baseURL, String relativePath) {
@@ -27,7 +63,8 @@ class NetworkUtils {
     }
 
     try {
-      final baseUri = Uri.parse(_splitAnalyzeUrl(baseURL).$1);
+      // 同 Legado 用的 java.net.URL：網址頭尾的空白不算（書源網址常多打一格）。
+      final baseUri = Uri.parse(_splitAnalyzeUrl(baseURL).$1.trim());
       final absoluteUri = baseUri.resolve(relativeUrl);
       return '${absoluteUri.toString()}$relativeOptions';
     } catch (_) {
@@ -57,16 +94,6 @@ class NetworkUtils {
     }
   }
 
-  /// 獲取域名 (對標 getDomain)
-  static String getDomain(String url) {
-    try {
-      final uri = Uri.parse(url);
-      return uri.host;
-    } catch (_) {
-      return url;
-    }
-  }
-
   /// 檢查字串是否為 IP 地址
   static bool isIPAddress(String input) {
     try {
@@ -77,16 +104,23 @@ class NetworkUtils {
     }
   }
 
-  /// 獲取子域名 (對標 getSubDomain)
-  /// 注意：此處為簡易實作，不含 PublicSuffixDatabase
+  /// 書源 Cookie 存放用的網域，同 Legado `NetworkUtils.getSubDomain`：
+  /// `https://www.biquge.com.cn/x` → `biquge.com.cn`（照公共字尾表，
+  /// [registrableDomain]），IP 位址照原樣；不是 http／https 網址或解析失敗時
+  /// 傳回 [url] 本身。
   static String getSubDomain(String url) {
-    final host = getDomain(url);
-    if (isIPAddress(host)) return host;
-
-    final parts = host.split('.');
-    if (parts.length >= 2) {
-      return parts.sublist(parts.length - 2).join('.');
+    final lower = url.toLowerCase();
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      return url;
     }
-    return host;
+    final String host;
+    try {
+      host = Uri.parse(url).host;
+    } on FormatException {
+      return url;
+    }
+    if (host.isEmpty) return url;
+    if (isIPAddress(host)) return host;
+    return registrableDomain(host) ?? host;
   }
 }

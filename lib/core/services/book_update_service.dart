@@ -153,6 +153,7 @@ Future<int?> _refreshFromSource(Book book, int checkedAt) async {
     info.visualOffsetPx = current.visualOffsetPx;
     info.durChapterTitle = current.durChapterTitle;
     info.durChapterTime = current.durChapterTime;
+    info.progressTime = current.progressTime;
     info.readerAnchorJson = current.readerAnchorJson;
     info.canUpdate = current.canUpdate;
     info.customCoverUrl = current.customCoverUrl;

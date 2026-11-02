@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../models/book.dart';
+import '../../models/bookmark.dart';
 import '../../models/chapter.dart';
 import '../../models/replace_rule.dart';
 import '../../models/book_source.dart';
@@ -209,6 +210,8 @@ class Books extends Table {
       text().named('readerAnchorJson').nullable()();
   IntColumn get durChapterTime =>
       integer().named('durChapterTime').withDefault(const Constant(0))();
+  IntColumn get progressTime =>
+      integer().named('progressTime').withDefault(const Constant(0))();
   TextColumn get wordCount => text().named('wordCount').nullable()();
   BoolColumn get canUpdate =>
       boolean().named('canUpdate').withDefault(const Constant(true))();
@@ -384,6 +387,28 @@ class ReplaceRules extends Table {
   TextColumn get group => text().named('group').nullable()();
   IntColumn get order =>
       integer().named('order').withDefault(const Constant(0))();
+}
+
+// ───────────── Bookmarks ─────────────
+/// 書籤（[Bookmark]）。編號由建立時間加隨機數配（`BookmarkDao.newId`），
+/// 不自動配號：兩台各自新增的不撞號。
+@UseRowClass(Bookmark, generateInsertable: true)
+class Bookmarks extends Table {
+  IntColumn get id => integer()();
+  TextColumn get bookName => text().named('bookName')();
+  TextColumn get bookAuthor =>
+      text().named('bookAuthor').withDefault(const Constant(''))();
+  IntColumn get chapterIndex =>
+      integer().named('chapterIndex').withDefault(const Constant(0))();
+  TextColumn get chapterTitle =>
+      text().named('chapterTitle').withDefault(const Constant(''))();
+  IntColumn get charOffset =>
+      integer().named('charOffset').withDefault(const Constant(0))();
+  TextColumn get anchor => text().nullable()();
+  TextColumn get excerpt => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
 // ───────────── Cookies ─────────────

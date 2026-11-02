@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
@@ -51,6 +53,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_progress_sync.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:provider/provider.dart';
@@ -84,6 +87,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   late final ReaderV2ControllerHost _host;
   late final ReaderV2PageCoordinator _coordinator;
+  late final ReaderV2ProgressSync _progressSync;
 
   final ValueNotifier<HybridProgressSnapshot?> _progress =
       ValueNotifier<HybridProgressSnapshot?>(null);
@@ -133,12 +137,22 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       entrance: _entrance.future,
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
+      openLocation: (runtime) => _progressSync.openLocation(runtime),
     );
-    _coordinator = ReaderV2PageCoordinator(
-      host: _host,
-      showNotice: _showNotice,
-    );
+    _coordinator = ReaderV2PageCoordinator(host: _host, showNotice: _showNotice)
+      ..openChapters = _openChapters
+      ..toggleDayNight = _toggleDayNight;
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
+    _progressSync = ReaderV2ProgressSync(
+      book: widget.book,
+      runtime: () => _host.runtime,
+      onJumped: _showSyncHint,
+      bookDao: _host.dependencies.bookDao,
+      openTarget: widget.openTarget,
+    )..start();
+    unawaited(_host.opened.then((_) => _progressSync.bookOpened()));
+    _host.menu.controlsVisible.addListener(_dismissSyncHintOnMenu);
+    _progress.addListener(_dismissSyncHintIfMoved);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
   }
@@ -185,12 +199,56 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _menuDeparture.dispose();
     _coordinator.dispose();
     _progress.dispose();
+    _host.menu.controlsVisible.removeListener(_dismissSyncHintOnMenu);
+    // 在 runtime 釋放前：存好最後的位置再上傳。
+    _progressSync.dispose();
     _host.dispose();
     _skeletonFadeIn.dispose();
     super.dispose();
   }
 
+  /// 跳到另一台的進度後，提示顯示期間停在的位置；一翻頁、捲動就收起提示。
+  ReaderV2Location? _syncHintAt;
+
+  static const String _syncHintMessage = '已接上另一台的進度';
+
+  void _showSyncHint(ReaderV2Location previous) {
+    final runtime = _host.runtime;
+    if (!mounted || runtime == null) return;
+    _syncHintAt = runtime.state.visibleLocation;
+    _showNotice(
+      _syncHintMessage,
+      action: (
+        label: '回到原處',
+        onPressed: () => unawaited(runtime.jumpToLocation(previous)),
+      ),
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  void _dismissSyncHint() {
+    _syncHintAt = null;
+    if (_visibleNoticeMessage != _syncHintMessage) return;
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+  }
+
+  void _dismissSyncHintOnMenu() {
+    if (_syncHintAt != null && _host.menu.controlsVisible.value) {
+      _dismissSyncHint();
+    }
+  }
+
+  /// 同一章裡捲動、翻頁不通知整頁，只發布頁尾的進度（[_progress]）；發布
+  /// 之前正文已經把讀到的位置交給 runtime，這時比得出動了沒有。
+  void _dismissSyncHintIfMoved() {
+    final hintAt = _syncHintAt;
+    if (hintAt != null && _host.runtime?.state.visibleLocation != hintAt) {
+      _dismissSyncHint();
+    }
+  }
+
   void _handleControllerChanged() {
+    _dismissSyncHintIfMoved();
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
@@ -272,6 +330,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   titleFor: _chapterTitleAt,
                   listenable: runtime,
                   onChapterTap: _jumpToChapterFromDrawer,
+                  bookmarks: _host.bookmarks.available ? _host.bookmarks : null,
+                  bookmarkChapter: (bookmark) =>
+                      ReaderV2Bookmarks.chapterIndexIn(
+                        bookmark,
+                        runtime?.chapters ?? widget.initialChapters,
+                      ),
+                  onBookmarkTap: _jumpToBookmarkFromDrawer,
+                  onBookmarkDelete: _deleteBookmark,
                   onClosed: _handleDrawerClosed,
                 ),
                 backgroundColor: palette.readerBackground,
@@ -288,7 +354,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 hideStatusBar: settings.hideStatusBar,
                 headerInfo: settings.headerInfo,
                 footerInfo: settings.footerInfo,
-                paddingHorizontal: settings.paddingHorizontal,
+                // 正文區橫向佔滿畫面，和正文用同一個寬度算。
+                paddingHorizontal: settings.paddingHorizontalFor(
+                  MediaQuery.sizeOf(context).width,
+                ),
                 paddingTop: settings.paddingTop,
                 paddingBottom: settings.paddingBottom,
                 footerOffset: settings.footerOffset,
@@ -303,7 +372,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 onExitIntent: _handleExitIntent,
                 onSystemBack: _handleSystemBack,
                 onMore: () => unawaited(_showMore()),
-                onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                onOpenDrawer: _openChapters,
                 onTts: () => _openPanel(_showTts),
                 onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
                 onInterface: () => _openPanel(
@@ -314,12 +383,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 ),
                 onSettings: () => unawaited(_openReadingPreferences()),
                 onAutoPage: _coordinator.toggleAutoPage,
-                // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
-                onToggleDayNight: () => ThemeRevealScope.of(context).run(
-                  change: () => context.read<SettingsProvider>().setThemeMode(
-                    isDarkBackground ? ThemeMode.light : ThemeMode.dark,
-                  ),
-                ),
+                onToggleDayNight: _toggleDayNight,
                 onReplaceRule: () =>
                     _openPanel(() => _coordinator.openReplaceRule(context)),
                 onShowControls: menu.showControls,
@@ -372,6 +436,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
         final style = _host.settings.readStyleFor(
           mediaPadding,
+          viewportWidth: size.width,
           topInfoReservedExternally: true,
           bottomInfoReservedExternally: _host.settings.showReadTitleAddition,
         );
@@ -397,6 +462,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !(_host.tts?.isPlaying ?? false),
               onHideText: (selection) =>
                   unawaited(_coordinator.hideText(selection)),
+              onBookmarkText: _host.bookmarks.available
+                  ? (selection) =>
+                        unawaited(_coordinator.addBookmark(selection))
+                  : null,
+              marks: _host.bookmarks.marks,
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
               onContentTapUp: _handleContentTap,
@@ -505,6 +575,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     await runtime.reloadContentPreservingLocation();
   }
 
+  void _openChapters() => _scaffoldKey.currentState?.openDrawer();
+
+  /// 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
+  void _toggleDayNight() {
+    final dark = StylePalette.of(context).brightness == Brightness.dark;
+    ThemeRevealScope.of(context).run(
+      change: () => context.read<SettingsProvider>().setThemeMode(
+        dark ? ThemeMode.light : ThemeMode.dark,
+      ),
+    );
+  }
+
   void _handleContentTap(TapUpDetails details) {
     _coordinator.handleTap(details, _lastViewportSize);
   }
@@ -524,6 +606,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段動畫都播完才開始載入
   /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
   void _jumpToChapterFromDrawer(int index) {
+    final settled = _closeDrawerForJump();
+    unawaited(_coordinator.jumpToChapter(index, settled: settled));
+  }
+
+  void _jumpToBookmarkFromDrawer(Bookmark bookmark) {
+    final settled = _closeDrawerForJump();
+    unawaited(_coordinator.jumpToBookmark(bookmark, settled: settled));
+  }
+
+  /// 從目錄面板跳過去：收起面板與選單、蓋上紙；傳回面板收完、紙蓋好的
+  /// 時候，跳轉等它才開始載入（ADR 0018）。
+  Future<void> _closeDrawerForJump() {
     final scaffold = _scaffoldKey.currentState;
     final drawerClosed = scaffold != null && scaffold.isDrawerOpen
         ? (_drawerClosed ??= Completer<void>()).future
@@ -532,14 +626,21 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _host.menu.dismissControls();
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
-    unawaited(
-      _coordinator.jumpToChapter(
-        index,
-        settled: Future.wait([
-          drawerClosed,
-          if (!reduceMotion)
-            TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
-        ]),
+    return Future.wait([
+      drawerClosed,
+      if (!reduceMotion)
+        TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
+    ]);
+  }
+
+  void _deleteBookmark(Bookmark bookmark) {
+    final bookmarks = _host.bookmarks;
+    unawaited(bookmarks.remove(bookmark));
+    _showNotice(
+      '已刪除書籤',
+      action: (
+        label: '復原',
+        onPressed: () => unawaited(bookmarks.restore(bookmark)),
       ),
     );
   }
@@ -666,7 +767,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     }
   }
 
-  void _showNotice(String message, {ReaderV2NoticeAction? action}) {
+  void _showNotice(
+    String message, {
+    ReaderV2NoticeAction? action,
+    Duration duration = const Duration(milliseconds: 4000),
+  }) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (!mounted || messenger == null) return;
     if (_visibleNoticeMessage == message) return;
@@ -680,6 +785,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             : SnackBarAction(label: action.label, onPressed: action.onPressed),
         // 帶按鈕的提示預設不會自己收起，會一直蓋在正文上。
         persist: false,
+        duration: duration,
       ),
     );
     unawaited(
@@ -1118,6 +1224,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
       title: _chapterTitleAt(chapterIndex),
+      shares: runtime?.chapterShares.value,
     );
   }
 

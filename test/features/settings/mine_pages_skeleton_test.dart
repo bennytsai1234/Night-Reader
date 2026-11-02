@@ -14,7 +14,7 @@ import '../../support/skeleton_match.dart';
 /// 進來時是推入的頁面，同樣先畫骨架。
 const _mine = '「我的」（從閱讀器推入）';
 
-const _pages = [_mine, '閱讀偏好', '外觀與主題', '朗讀與語音', '備份與還原', '關於夜讀'];
+const _pages = [_mine, '閱讀偏好', '外觀與主題', '朗讀與語音', '備份與同步', '關於夜讀'];
 
 void main() {
   // App 的單例服務綁在第一個測試的非同步環境（見 app_screens_test），每一頁

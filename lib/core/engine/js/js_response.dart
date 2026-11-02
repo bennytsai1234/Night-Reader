@@ -34,8 +34,8 @@ StrResponse responseFromJs(Map<dynamic, dynamic> data) {
     body: data['body']?.toString() ?? '',
     headers: headers,
     raw: Response(
-      requestOptions: RequestOptions(
-        path: data['requestUrl']?.toString() ?? url,
+      requestOptions: StrResponse.requestFor(
+        data['requestUrl']?.toString() ?? url,
       ),
       statusCode: (data['code'] as num?)?.toInt(),
       statusMessage: data['message']?.toString(),

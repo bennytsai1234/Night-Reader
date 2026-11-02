@@ -21,6 +21,8 @@ import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/sync/source_sync.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
@@ -189,6 +191,9 @@ class BookSourceService {
     } finally {
       release?.call();
     }
+    // 同步時別台照這份紀錄把舊網址的書搬過去（ADR 0039）。
+    await SourceMoves(await SharedPreferences.getInstance())
+        .record(from: previousUrl, to: source.bookSourceUrl);
   }
 
   /// 依 URL 取得書源

@@ -102,9 +102,15 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   /// 的長度畫。
   List<ShelfSkeletonTitle> lastShelfTitles = const [];
 
-  bool isGridView = true;
-  bool showLastUpdate = false;
-  BookshelfSortMode sortMode = BookshelfSortMode.recentRead;
+  bool isGridView = defaultGridView;
+  bool showLastUpdate = defaultShowLastUpdate;
+  BookshelfSortMode sortMode = defaultSortMode;
+
+  /// 沒存過（或同步改回預設）時的樣子。
+  static const bool defaultGridView = true;
+  static const bool defaultShowLastUpdate = false;
+  static const BookshelfSortMode defaultSortMode = BookshelfSortMode.recentRead;
+
   int updatingCount = 0;
 
   /// 書架自動下載，預設交給 [DownloadService]。

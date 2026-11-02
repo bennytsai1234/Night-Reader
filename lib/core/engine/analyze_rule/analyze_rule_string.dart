@@ -23,7 +23,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     }
 
     log('⇒ 執行 getString: $ruleStr');
-    final ruleList = splitSourceRuleCacheString(ruleStr);
+    final ruleList = splitSourceRuleCacheString(ruleStr, mContent: mContent);
     var result = mContent ?? content;
 
     if (result != null && ruleList.isNotEmpty) {
@@ -48,9 +48,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
           dynamic tempResult;
-          if (_shouldTreatMapDynamicRuleAsLiteral(result, sourceRule, rule)) {
-            tempResult = rule;
-          } else if (isUrl && _looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
+          if (isUrl && _looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
             tempResult = rule;
           } else if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
             switch (sourceRule.mode) {
@@ -68,7 +66,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                     .getString(rule);
                 break;
               case Mode.regex:
-                if (sourceRule.replaceRegex.isEmpty) {
+                if (sourceRule.replaceRegex.isEmpty || sourceRule.isDynamic) {
                   tempResult = rule;
                 } else {
                   tempResult = AnalyzeByRegex.getString(
@@ -85,15 +83,6 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                     : sourceRule
                           .getAnalyzeByJSoup(this, result)
                           .getString(rule);
-                if ((tempResult == null || tempResult.toString().isEmpty) &&
-                    isJsonLikeRuleInput(result)) {
-                  final jsonRule = buildJsonFallbackRule(rule);
-                  if (jsonRule != null) {
-                    tempResult = sourceRule
-                        .getAnalyzeByJSonPath(this, result)
-                        .getString(jsonRule);
-                  }
-                }
             }
           } else {
             // rule 為空 + replaceRegex 非空 → 內容直通，交由 replaceRegex 處理
@@ -150,46 +139,6 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         trimmed.contains(',{');
   }
 
-  bool _shouldTreatMapDynamicRuleAsLiteral(
-    dynamic result,
-    SourceRule sourceRule,
-    String rule,
-  ) {
-    if (result is! Map ||
-        sourceRule.mode == Mode.js ||
-        sourceRule.paramSize <= 1) {
-      return false;
-    }
-
-    final trimmed = rule.trimLeft();
-    if (trimmed.isEmpty || trimmed.startsWith('//')) {
-      return false;
-    }
-
-    if (_looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
-      return true;
-    }
-
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return true;
-    }
-
-    if (trimmed.startsWith('./') || trimmed.startsWith('../')) {
-      return true;
-    }
-
-    if (trimmed.startsWith('?')) {
-      return true;
-    }
-
-    if (trimmed.startsWith('/')) {
-      return trimmed.contains('?') ||
-          RegExp(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$").hasMatch(trimmed);
-    }
-
-    return false;
-  }
-
   /// 獲取字串列表，[mContent] 同 [getString]。
   List<String> getStringList(
     String ruleStr, {
@@ -201,7 +150,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     }
     log('⇒ 執行 getStringList: $ruleStr');
 
-    final ruleList = splitSourceRuleCacheString(ruleStr);
+    final ruleList = splitSourceRuleCacheString(ruleStr, mContent: mContent);
     var result = mContent ?? content;
 
     if (result != null && ruleList.isNotEmpty) {
@@ -247,16 +196,6 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               result = sourceRule
                   .getAnalyzeByJSoup(this, currentInput)
                   .getStringList(rule);
-              if (result is List &&
-                  result.isEmpty &&
-                  isJsonLikeRuleInput(currentInput)) {
-                final jsonRule = buildJsonFallbackRule(rule);
-                if (jsonRule != null) {
-                  result = sourceRule
-                      .getAnalyzeByJSonPath(this, currentInput)
-                      .getStringList(jsonRule);
-                }
-              }
           }
 
           if (sourceRule.replaceRegex.isNotEmpty) {

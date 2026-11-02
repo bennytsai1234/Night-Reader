@@ -11,6 +11,7 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
@@ -135,6 +136,21 @@ class _MainPageState extends State<MainPage>
     super.dispose();
   }
 
+  /// 從背景回來時同步一次：別台在這段時間讀的進度、加的書，書架上馬上看得
+  /// 到；退到背景時也同步一次，把這台的改動送上去。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 回到前景抓別台的改動；退到背景把這台的改動（例如剛改的設定）送上去。
+    if (!_launchWorkStarted) return;
+    if (state == AppLifecycleState.resumed) {
+      SyncService.instance.syncAfterResume();
+    } else if (state == AppLifecycleState.paused) {
+      SyncService.instance.requestSync();
+    }
+  }
+
+  bool _launchWorkStarted = false;
+
   @override
   void initState() {
     super.initState();
@@ -155,7 +171,9 @@ class _MainPageState extends State<MainPage>
   /// 的書、App 更新檢查這時才開始。原本第一幀後就開始，書架讀完的那一刻
   /// 正好是書架換場開始，這些工作留在主執行緒的部分全疊在換場上（ADR 0018）。
   ///
-  /// 五件工作依序開始，每件之間隔一格的時間（60Hz 一格約 16ms）：各自留在
+  /// 多台手機同步（ADR 0039）也在這時同步第一次。
+  ///
+  /// 這些工作依序開始，每件之間隔一格的時間（60Hz 一格約 16ms）：各自留在
   /// 主執行緒的同步部分落在不同的格，不會全擠在換場結束的那一格（ADR
   /// 0029）。不用 [Priority.idle] 的閒置工作：只要畫面上還有動畫（別的
   /// 分頁的骨架呼吸）就一直輪不到，等這些工作的資料的骨架會永遠停著。
@@ -164,7 +182,10 @@ class _MainPageState extends State<MainPage>
   static const Duration _launchWorkGap = Duration(milliseconds: 16);
 
   Future<void> _startLaunchWork() async {
+    _launchWorkStarted = true;
     final tasks = <void Function()>[
+      // 同步排第一個：開 App 後馬上點書，閱讀器要等它的閱讀進度做完。
+      () => unawaited(SyncService.instance.start()),
       () => unawaited(_initDeferredStartupData()),
       _refreshShelfOnceLoaded,
       () => unawaited(

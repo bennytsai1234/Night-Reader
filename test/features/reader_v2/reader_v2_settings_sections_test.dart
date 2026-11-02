@@ -148,8 +148,8 @@ void main() {
     expect(theme.textTheme.bodyMedium?.color, foreground);
   });
 
-  testWidgets('外觀與排版面板在窄視窗不溢位，五個風格都點得到', (tester) async {
-    // 面板左右各內縮 16，內容寬 248，放不下五個並排的色票。
+  testWidgets('外觀與排版面板在窄視窗不溢位，每個風格都點得到，點了只換目前深淺的風格', (tester) async {
+    // 面板左右各內縮 16，內容寬 248，放不下六個並排的色票。
     tester.view.physicalSize = const Size(280, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -183,7 +183,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(last);
     await tester.pump();
-    expect(themeSettings.style, AppStyle.values.last);
+    expect(themeSettings.lightStyle, AppStyle.values.last);
+    expect(
+      themeSettings.darkStyle,
+      ThemeSettingsProvider.defaultDarkStyle,
+      reason: '淺色時點色票不動深色的風格',
+    );
   });
 
   testWidgets('外觀與排版面板只放常調的幾項，更多排版設定進閱讀偏好，關掉後閱讀器才重讀', (tester) async {
@@ -213,7 +218,7 @@ void main() {
     await tester.tap(find.text('開啟'));
     await tester.pumpAndSettle();
 
-    for (final label in ['字號', '行高', '段距', '左右邊距']) {
+    for (final label in ['字號', '行高', '段距', '每行字數']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     for (final label in ['標題字號', '字距', '章節間距', '上邊距', '頁首與頁尾']) {

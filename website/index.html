@@ -1120,7 +1120,7 @@
         <div class="sec-head reveal">
           <p class="sec-vol">卷一</p>
           <h2>一字一句，都聽你的</h2>
-          <p class="sec-sub">自製排版引擎，字號、標題字號、行高、字距、段距、章節間距、縮排、左右與上下邊距皆可獨立調校；全形標點置中、引號統一為「」『』，刪節號與破折號各佔兩格；換行避開行首行尾的標點；英數字與 emoji 也對齊字格。下面這一頁是活的 — 動手調調看。</p>
+          <p class="sec-sub">自製排版引擎，字號、標題字號、行高、字距、段距、章節間距、縮排、每行字數與上下邊距皆可獨立調校，平板上正文收在中間、一行不會長得讀不完；全形標點置中、引號統一為「」『』，刪節號與破折號各佔兩格；換行避開行首行尾的標點；英數字與 emoji 也對齊字格。下面這一頁是活的 — 動手調調看。</p>
         </div>
 
         <div class="demo-wrap">
@@ -1149,7 +1149,7 @@
 
           <div class="demo-controls reveal" style="--rd: 120ms">
             <p class="lead">這不是截圖，是排版。</p>
-            <p class="lead-sub">拖動滑桿、調整邊距與風格，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
+            <p class="lead-sub">拖動滑桿、調整每行字數與風格，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
 
             <div class="ctrl-row">
               <label class="ctrl-label" for="fsRange">字號<output id="fsVal">17 px</output></label>
@@ -1160,8 +1160,8 @@
               <input type="range" id="lhRange" min="150" max="240" step="5" value="195" />
             </div>
             <div class="ctrl-row">
-              <label class="ctrl-label" for="padRange">左右邊距<output id="padVal">22 px</output></label>
-              <input type="range" id="padRange" min="0" max="40" step="2" value="22" />
+              <label class="ctrl-label" for="charsRange">每行字數<output id="charsVal">15 字</output></label>
+              <input type="range" id="charsRange" min="8" max="32" step="1" value="32" />
             </div>
             <div class="ctrl-row themes">
               <p class="ctrl-label" id="themeLabel">風格</p>
@@ -1285,8 +1285,8 @@
             <div class="cell-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.58-8-10-8z"/></svg>
             </div>
-            <h3>十種外觀風格</h3>
-            <p>紙墨、竹青、石青、茶褐、素色，以及胭脂、藕荷、黃卷、琥珀、霜夜，各有淺色與深色；App、正文與選單一次換好，深夜讀書也不刺眼。開關與按鈕的顏色也能另外挑。</p>
+            <h3>白天晚上各一種風格</h3>
+            <p>素色、紙墨、茶褐、牛皮紙、竹青、豆綠六種風格，淺色、深色各選一個，例如白天牛皮紙、晚上素色；深色預設純黑，OLED 螢幕的黑色部分不發光。App、正文與選單一次換好，開關與按鈕的顏色也能另外挑。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 60ms">
@@ -1581,6 +1581,7 @@
       fsRange.addEventListener('input', function () {
         page.style.setProperty('--d-fs', fsRange.value + 'px');
         fsVal.textContent = fsRange.value + ' px';
+        applyChars();
       });
 
       var lhRange = document.getElementById('lhRange');
@@ -1591,12 +1592,22 @@
         lhVal.textContent = lh;
       });
 
-      var padRange = document.getElementById('padRange');
-      var padVal = document.getElementById('padVal');
-      padRange.addEventListener('input', function () {
-        page.style.setProperty('--d-pad', padRange.value + 'px');
-        padVal.textContent = padRange.value + ' px';
-      });
+      // 每行字數：和 App 一樣，放得下更多字時正文收成剛好這麼多字、置中；
+      // 放不下就撐滿，兩側只留最少的 12px。顯示的是畫面上實際的字數。
+      var charsRange = document.getElementById('charsRange');
+      var charsVal = document.getElementById('charsVal');
+      function applyChars() {
+        var fs = Number(fsRange.value);
+        var width = page.clientWidth;
+        var fit = Math.max(1, Math.floor((width - 24) / fs));
+        var chars = Math.min(Number(charsRange.value), fit);
+        var pad = Math.max(12, (width - chars * fs) / 2);
+        page.style.setProperty('--d-pad', pad + 'px');
+        charsVal.textContent = chars + ' 字';
+      }
+      charsRange.addEventListener('input', applyChars);
+      window.addEventListener('resize', applyChars);
+      applyChars();
 
       document.getElementById('themeSwatches').addEventListener('click', function (e) {
         var btn = e.target.closest('button');

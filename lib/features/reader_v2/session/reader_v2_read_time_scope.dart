@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -35,8 +36,12 @@ class _ReaderV2ReadTimeScopeState extends State<ReaderV2ReadTimeScope>
     _appInForeground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    final book = widget.book;
     _controller = ReaderV2ReadTimeController(
-      bookName: widget.book.name,
+      // 書架上的書照資料庫裡現在的書名（可能在書籍詳情改過）；不在資料庫
+      // 的書照開書時的書名。
+      bookName: () async =>
+          (await getIt<BookDao>().getByUrl(book.bookUrl))?.name ?? book.name,
       readRecordDao: getIt<ReadRecordDao>(),
     );
   }

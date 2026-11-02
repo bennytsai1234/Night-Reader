@@ -23,6 +23,7 @@ class ReaderV2SessionFacade {
     book.durChapterTitle = chapterTitle;
     book.readerAnchorJson = null;
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
+    book.progressTime = book.durChapterTime;
     if (book.syncTime == 0) {
       book.syncTime = DateTime.now().millisecondsSinceEpoch;
     }

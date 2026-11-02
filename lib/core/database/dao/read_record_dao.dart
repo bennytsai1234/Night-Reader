@@ -96,12 +96,17 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
     return result;
   }
 
+  /// 今天與本週第一天（週一）的 [dayKey]。
+  static ({String today, String weekStart}) recentDays(DateTime now) => (
+    today: dayKey(now),
+    weekStart: dayKey(
+      DateTime(now.year, now.month, now.day - (now.weekday - 1)),
+    ),
+  );
+
   /// 今天與本週（週一起算）讀了幾秒，所有書加總。
   Future<({int today, int week})> recentTotals(DateTime now) async {
-    final today = dayKey(now);
-    final weekStart = dayKey(
-      DateTime(now.year, now.month, now.day - (now.weekday - 1)),
-    );
+    final (:today, :weekStart) = recentDays(now);
     Future<int> sumBetween(String from, String to) async {
       final total = readDays.seconds.sum();
       final query = selectOnly(readDays)
@@ -135,6 +140,56 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
       for (final day in days) {
         await into(readDays).insertOnConflictUpdate(day);
       }
+    });
+  }
+
+  /// 書改名時把 [from] 的累計與每日秒數併到 [to]：統計照書名記（換源後
+  /// 同一本書的統計接得上），改名不搬就會變成兩筆。[to] 已經有紀錄時
+  /// 兩邊相加，最後閱讀時間取晚的。
+  Future<void> renameBook({required String from, required String to}) {
+    if (from == to) return Future<void>.value();
+    return transaction(() async {
+      final old = await getByBookName(from);
+      if (old != null) {
+        final existing = await getByBookName(to);
+        if (existing == null) {
+          await (update(readRecords)..where((t) => t.id.equals(old.id))).write(
+            ReadRecordsCompanion(bookName: Value(to)),
+          );
+        } else {
+          await (update(
+            readRecords,
+          )..where((t) => t.id.equals(existing.id))).write(
+            ReadRecordsCompanion(
+              readTime: Value(existing.readTime + old.readTime),
+              lastRead: Value(
+                existing.lastRead > old.lastRead
+                    ? existing.lastRead
+                    : old.lastRead,
+              ),
+            ),
+          );
+          await (delete(readRecords)..where((t) => t.id.equals(old.id))).go();
+        }
+      }
+      final oldDays = await (select(
+        readDays,
+      )..where((t) => t.bookName.equals(from))).get();
+      for (final day in oldDays) {
+        await into(readDays).insert(
+          ReadDaysCompanion.insert(
+            bookName: to,
+            day: day.day,
+            seconds: Value(day.seconds),
+          ),
+          onConflict: DoUpdate(
+            (current) => ReadDaysCompanion.custom(
+              seconds: current.seconds + Constant(day.seconds),
+            ),
+          ),
+        );
+      }
+      await (delete(readDays)..where((t) => t.bookName.equals(from))).go();
     });
   }
 

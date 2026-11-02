@@ -14,6 +14,15 @@ class StrResponse {
     required this.raw,
   });
 
+  /// 不是網站回的、夜讀自己組的回應用的請求（同 Legado
+  /// `StrResponse(url, body)`）：[url] 不是 http(s) 網址（例如 `data:`）時
+  /// 請求網址是 `http://localhost/`，讀回應的請求網址才不會出錯。
+  static RequestOptions requestFor(String url) {
+    final scheme = Uri.tryParse(url)?.scheme.toLowerCase();
+    final isHttp = scheme == 'http' || scheme == 'https';
+    return RequestOptions(path: isHttp ? url : 'http://localhost/');
+  }
+
   List<String> get redirectChain =>
       ((raw.extra['_manualRedirectChain'] as List?) ?? const <dynamic>[])
           .map((item) => item.toString())

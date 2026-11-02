@@ -12,19 +12,24 @@ import 'bookshelf_provider_base.dart';
 
 /// BookshelfProvider 的 UI 狀態與分組邏輯擴展
 mixin BookshelfLogicMixin on BookshelfProviderBase {
+  /// 沒存的一律回到預設值，不沿用記憶體裡的：同步把另一台改回預設的設定
+  /// 套用過來時，畫面也要跟著回到預設。
   void loadUiPreferences() {
     final prefs = getIt<SharedPreferences>();
-    isGridView = prefs.getBool('bookshelf_is_grid') ?? isGridView;
+    isGridView =
+        prefs.getBool('bookshelf_is_grid') ??
+        BookshelfProviderBase.defaultGridView;
     showLastUpdate =
-        prefs.getBool('bookshelf_show_last_update') ?? showLastUpdate;
-    UnifiedCovers.enabled.value =
-        prefs.getBool(_unifiedCoversKey) ?? UnifiedCovers.enabled.value;
+        prefs.getBool('bookshelf_show_last_update') ??
+        BookshelfProviderBase.defaultShowLastUpdate;
+    UnifiedCovers.enabled.value = prefs.getBool(_unifiedCoversKey) ?? false;
     final savedSort = prefs.getInt(PreferKey.bookshelfSort);
-    if (savedSort != null &&
-        savedSort >= 0 &&
-        savedSort < BookshelfSortMode.values.length) {
-      sortMode = BookshelfSortMode.values[savedSort];
-    }
+    sortMode =
+        savedSort != null &&
+            savedSort >= 0 &&
+            savedSort < BookshelfSortMode.values.length
+        ? BookshelfSortMode.values[savedSort]
+        : BookshelfProviderBase.defaultSortMode;
     _readShelfSkeleton(prefs.getString(_skeletonKey));
   }
 

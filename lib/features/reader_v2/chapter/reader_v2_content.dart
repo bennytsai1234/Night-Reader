@@ -109,11 +109,31 @@ final class ReaderV2ContentLocationMapper {
     required ReaderV2Location location,
     required ReaderV2Content target,
   }) {
-    final text = target.displayText;
     if (location.contentHash == target.contentHash) {
       return capture(location: location, content: target);
     }
+    final resolved = location.copyWith(
+      charOffset: offsetIn(
+        location: location,
+        displayText: target.displayText,
+        contentHash: target.contentHash,
+      ),
+      clearContentIdentity: true,
+    );
+    return capture(location: resolved, content: target);
+  }
 
+  /// [location] 在另一份正文（[displayText]，身分 [contentHash]）裡是第幾個
+  /// 字：同一份照原位置，不同就照前後原文找回同一句，找不到時照長度比例估。
+  static int offsetIn({
+    required ReaderV2Location location,
+    required String displayText,
+    required String contentHash,
+  }) {
+    final text = displayText;
+    if (location.contentHash == contentHash) {
+      return location.charOffset.clamp(0, text.length).toInt();
+    }
     final oldLength = location.contentLength;
     final projected = oldLength != null && oldLength > 0
         ? (location.charOffset * text.length / oldLength)
@@ -127,11 +147,7 @@ final class ReaderV2ContentLocationMapper {
       after: location.anchorAfter,
       projectedOffset: projected,
     );
-    final resolved = location.copyWith(
-      charOffset: mapped ?? projected,
-      clearContentIdentity: true,
-    );
-    return capture(location: resolved, content: target);
+    return mapped ?? projected;
   }
 
   static ReaderV2Location remap({

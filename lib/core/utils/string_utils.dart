@@ -265,15 +265,22 @@ class StringUtils {
   /// 卡片上的字數：字數欄讀不出來時，再看分類裡有沒有寫成「…字」或
   /// 「字數：…」的標籤（有些書源把字數放在分類欄）。只有數字、沒有「字」
   /// 的標籤可能是點擊數，不拿來當字數。
-  static String displayWordCount(String? wordCount, String? kind) {
-    final formatted = wordCountFormat(wordCount);
-    if (formatted.isNotEmpty || kind == null) return formatted;
+  static String displayWordCount(String? wordCount, String? kind) =>
+      _formatIntWordCount(wordCountValue(wordCount, kind) ?? 0);
+
+  /// [displayWordCount] 讀到的字數，讀不出來時是 null。
+  static int? wordCountValue(String? wordCount, String? kind) {
+    int? positive(int? words) => words != null && words > 0 ? words : null;
+    final direct = positive(
+      wordCount == null ? null : _parseWordCount(wordCount),
+    );
+    if (direct != null || kind == null) return direct;
     for (final label in _kindTokens(kind)) {
       if (!label.contains('字')) continue;
-      final fromKind = wordCountFormat(label);
-      if (fromKind.isNotEmpty) return fromKind;
+      final fromKind = positive(_parseWordCount(label));
+      if (fromKind != null) return fromKind;
     }
-    return '';
+    return null;
   }
 
   static bool _isKindNoise(String label) =>

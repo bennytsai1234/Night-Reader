@@ -7,11 +7,13 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/login_data_backup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/book_group.dart';
@@ -22,6 +24,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:path/path.dart' as p;
 
 typedef _DecodedFile = ({String fileName, Object? decoded, Object? error});
@@ -58,6 +61,7 @@ class RestoreService {
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
   final ReplaceRuleDao _ruleDao = getIt<ReplaceRuleDao>();
   final BookGroupDao _groupDao = getIt<BookGroupDao>();
+  final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final DownloadDao _downloadDao = getIt<DownloadDao>();
   final ReadRecordDao _readRecordDao = getIt<ReadRecordDao>();
   final ReaderChapterContentDao _chapterContentDao =
@@ -119,7 +123,12 @@ class RestoreService {
     }
     if (readStatsFiles.isNotEmpty) {
       try {
-        restoredAny = await _restoreReadingStats(readStatsFiles) || restoredAny;
+        restoredAny =
+            await _restoreReadingStats(
+              readStatsFiles,
+              fromDevice: backup.manifest?['syncDeviceId'] as String?,
+            ) ||
+            restoredAny;
       } catch (e) {
         AppLog.e('Restore failed for reading stats: $e', error: e);
         failedFiles.addAll(readStatsFiles.map((file) => file.fileName));
@@ -134,8 +143,12 @@ class RestoreService {
     'readDay.json',
   };
 
-  /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。
-  Future<bool> _restoreReadingStats(List<_DecodedFile> files) async {
+  /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。備份那台用過
+  /// 同步（[fromDevice]）時記下還原了哪些，同步時不再算一次（ADR 0039）。
+  Future<bool> _restoreReadingStats(
+    List<_DecodedFile> files, {
+    required String? fromDevice,
+  }) async {
     final records = <ReadRecord>[];
     final days = <ReadDay>[];
     for (final (:fileName, :decoded, :error) in files) {
@@ -150,6 +163,12 @@ class RestoreService {
       }
     }
     await _readRecordDao.restoreReadingStats(records: records, days: days);
+    await RestoredStats.remember(
+      await SharedPreferences.getInstance(),
+      from: fromDevice,
+      records: records,
+      days: days,
+    );
     return records.isNotEmpty || days.isNotEmpty;
   }
 
@@ -209,6 +228,8 @@ class RestoreService {
       'replaceRule.json',
       'bookGroups.json',
       'bookGroup.json',
+      'bookmark.json',
+      'bookmarks.json',
       'downloadTask.json',
       'downloadTasks.json',
       'readerChapterContent.json',
@@ -247,6 +268,14 @@ class RestoreService {
           case 'bookGroups.json':
           case 'bookGroup.json':
             await _groupDao.upsert(BookGroup.fromJson(item));
+            break;
+          case 'bookmark.json':
+          case 'bookmarks.json':
+            // 2026-09 以前的備份也有書籤，欄位不同，`Bookmark.fromJson` 都讀得懂。
+            final bookmark = Bookmark.fromJson(item);
+            if (bookmark.id > 0 && bookmark.bookName.isNotEmpty) {
+              await _bookmarkDao.upsertAll([bookmark]);
+            }
             break;
           case 'downloadTask.json':
           case 'downloadTasks.json':

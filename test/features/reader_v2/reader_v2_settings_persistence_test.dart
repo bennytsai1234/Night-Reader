@@ -96,7 +96,10 @@ void main() {
 
     test('settings added later open as the reader looked before', () async {
       final settings = ReaderV2SettingsController();
-      final readStyle = settings.readStyleFor(EdgeInsets.zero);
+      final readStyle = settings.readStyleFor(
+        EdgeInsets.zero,
+        viewportWidth: 393,
+      );
 
       expect(readStyle.titleSpacing, 0);
       expect(settings.keepScreenOn, isTrue);
@@ -229,13 +232,43 @@ void main() {
     settings.dispose();
   });
 
+  test('line chars persists and reset returns to 32', () async {
+    final settings = ReaderV2SettingsController();
+    await settings.loadSettings();
+    expect(settings.lineChars, 32);
+
+    settings.setLineChars(20);
+    await pumpEventQueue();
+    expect((await const ReaderV2PrefsRepository().load()).lineChars, 20);
+    expect(settings.isPageLayoutDefault, isFalse);
+
+    settings.resetPageLayout();
+    await pumpEventQueue();
+    expect(settings.lineChars, 32);
+    expect(settings.isPageLayoutDefault, isTrue);
+    settings.dispose();
+  });
+
+  test('an earlier left/right margin stays as the minimum margin', () async {
+    await usePrefs(<String, Object>{PreferKey.readerPaddingHorizontal: 6.0});
+    final settings = ReaderV2SettingsController();
+    await settings.loadSettings();
+
+    // 手機放不下 32 字：撐滿，兩側照舊是原本設的邊距。
+    expect(settings.paddingHorizontalFor(393), 6);
+    settings.dispose();
+  });
+
   test(
     'justify text is on by default, persists and reaches the style',
     () async {
       final settings = ReaderV2SettingsController();
       await settings.loadSettings();
       expect(settings.justifyText, isTrue);
-      expect(settings.readStyleFor(EdgeInsets.zero).justify, isTrue);
+      expect(
+        settings.readStyleFor(EdgeInsets.zero, viewportWidth: 393).justify,
+        isTrue,
+      );
 
       settings.setJustifyText(false);
       await pumpEventQueue();
@@ -243,7 +276,10 @@ void main() {
         (await const ReaderV2PrefsRepository().load()).justifyText,
         isFalse,
       );
-      expect(settings.readStyleFor(EdgeInsets.zero).justify, isFalse);
+      expect(
+        settings.readStyleFor(EdgeInsets.zero, viewportWidth: 393).justify,
+        isFalse,
+      );
       expect(settings.isPageLayoutDefault, isFalse);
 
       settings.resetPageLayout();

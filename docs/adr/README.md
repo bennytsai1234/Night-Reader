@@ -24,6 +24,7 @@
 | [0031](0031-launch-reveal-crossfades-two-still-pictures.md) | 開 App 書架換場是兩張定格畫面的交叉淡換：用時間與記憶體換流暢與穩定（準備書架的時機已由 0035 改到呼吸前） |
 | [0035](0035-launch-prepares-shelf-before-breathing.md) | 開 App 在骨架長完、呼吸之前就建好書架並拍好兩張定格畫面；定格畫面用一般的畫法拍 |
 | [0024](0024-skeleton-drawn-from-last-screen.md) | 骨架照上次的畫面畫，骨架換場由左而右 |
+| [0041](0041-skeleton-breath-shared-gradient.md) | 骨架呼吸的漸層每個骨架每幀一道，形狀照舊各自畫；否決整個骨架蓋遮罩與開 App 整段定格畫面 |
 | [0016](0016-reader-skeleton-from-the-real-page.md) | 閱讀器的正文骨架照一頁真正的行畫 |
 
 ## 介面與動畫
@@ -35,6 +36,7 @@
 | [0015](0015-my-tab-rows-are-navigation-only.md) | 「我的」分頁只放入口，不放開關 |
 | [0020](0020-chosen-transition-everywhere.md) | 選定的換頁動畫用在每一種換頁，拖曳返回與點分頁也一樣 |
 | [0021](0021-covers-are-plain-images.md) | 封面只畫圖片，不做成像一本書 |
+| [0040](0040-day-and-night-styles-pure-black.md) | 淺色、深色各選一個風格，深色預設純黑（可關），風格精簡成六種 |
 
 ## 正文排版
 
@@ -55,6 +57,7 @@
 | [0008](0008-shelf-books-download-whole-book.md) | 書架上的網路書整本下載，不限網路、沒有開關 |
 | [0038](0038-source-login-in-the-foreground.md) | 書源照 Legado 登入（網頁登入與書源的表單），只在使用者打開的登入頁裡進行，背景從不等人；「需要登入」「需要在網頁驗證」是狀態不是壞掉，閱讀器在失敗處給登入與前往驗證的路 |
 | [0039](0039-multi-device-sync.md) | 多台手機同步：Google 雲端硬碟或 WebDAV 都能用，每筆資料各自比時間合併、刪除也同步；備份與同步都帶登入資料 |
+| [0042](0042-bookmarks-follow-the-book-not-the-source.md) | 書籤跟著書名加作者、不跟書源，位置和閱讀進度同一套（章名＋第幾個字＋錨點）；換源跟著搬、同步與備份都帶 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
 
 ## 工程與流程
