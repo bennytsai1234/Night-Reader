@@ -30,6 +30,7 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
   String? _googleAccount;
   String? _webDavUrl;
   bool _connecting = false;
+  bool _loaded = false;
 
   static bool get _googleAvailable =>
       defaultTargetPlatform == TargetPlatform.android;
@@ -49,6 +50,7 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
       _space = space;
       _googleAccount = google;
       _webDavUrl = webDav?.url;
+      _loaded = true;
     });
   }
 
@@ -102,6 +104,8 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '同步空間'),
       body: GroupedListView(
+        // 等原有設定讀回後，骨架才照最後的文字與區塊換成內容。
+        ready: _loaded,
         children: [
           GroupedSection(
             footer: _googleAvailable
