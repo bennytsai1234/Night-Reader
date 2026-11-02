@@ -521,8 +521,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
             : a.highlight.charOffset.compareTo(b.highlight.charOffset),
       );
 
-  /// 標註列：左邊一條標註的顏色，畫到的字（最多三行）、下面寫在哪一章；
-  /// 往左滑刪除。
+  /// 標註列：左邊一條標註的顏色，畫到的字（最多三行）、下面寫在哪一章與
+  /// 備忘；往左滑刪除。
   Widget _buildHighlightList(
     BuildContext context,
     ValueListenable<List<Highlight>> highlights,
@@ -564,10 +564,14 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                       leading: HighlightColorBar(color: highlight.color),
                       title: highlight.quote,
                       maxTitleLines: 3,
-                      subtitle: widget.highlightChapter == null
-                          ? highlight.chapterTitle
-                          : widget.titleFor(chapter),
-                      maxSubtitleLines: 1,
+                      // 章名一行，有備忘時接在下面（最多兩行）。
+                      subtitle: [
+                        widget.highlightChapter == null
+                            ? highlight.chapterTitle
+                            : widget.titleFor(chapter),
+                        if (highlight.note.isNotEmpty) highlight.note,
+                      ].join('\n'),
+                      maxSubtitleLines: highlight.note.isEmpty ? 1 : 3,
                       showChevron: false,
                       onTap: () => widget.onHighlightTap?.call(highlight),
                     ),

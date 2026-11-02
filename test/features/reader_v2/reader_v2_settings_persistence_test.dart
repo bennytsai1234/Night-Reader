@@ -287,6 +287,36 @@ void main() {
     },
   );
 
+  test('reset writes the defaults even when another phone changed them '
+      'while the page was open', () async {
+    final settings = ReaderV2SettingsController();
+    expect(settings.isWeightAndAlignDefault, isTrue);
+    expect(settings.isPageLayoutDefault, isTrue);
+    // 頁面開著時同步寫進另一台的值，記憶體裡還是預設。
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(PreferKey.readerBodyBold, true);
+    await prefs.setBool(PreferKey.readerTitleCenter, true);
+    await prefs.setBool(PreferKey.readerJustifyText, false);
+    await prefs.setDouble(PreferKey.readerInfoFontSize, 15);
+    await prefs.setDouble(PreferKey.readerPaddingTop, 30);
+    await prefs.setString(PreferKey.readerHeaderInfo, '2,1');
+
+    settings
+      ..resetTypography()
+      ..resetPageLayout();
+    await pumpEventQueue();
+
+    final saved = await const ReaderV2PrefsRepository().load();
+    final defaults = ReaderV2PrefsSnapshot.defaults();
+    expect(saved.bodyBold, defaults.bodyBold);
+    expect(saved.titleCenter, defaults.titleCenter);
+    expect(saved.justifyText, defaults.justifyText);
+    expect(saved.infoFontSize, defaults.infoFontSize);
+    expect(saved.paddingTop, defaults.paddingTop);
+    expect(saved.headerInfo, defaults.headerInfo);
+    settings.dispose();
+  });
+
   test('line chars persists and reset returns to 32', () async {
     final settings = ReaderV2SettingsController();
     await settings.loadSettings();

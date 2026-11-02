@@ -10,8 +10,8 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
-/// 點正文上已畫的標註打開的面板：畫到的字、換顏色、換底色或底線、複製、
-/// 刪除。換了就存，不另按儲存。
+/// 點正文上已畫的標註打開的面板：畫到的字、換顏色、換底色或底線、備忘、
+/// 複製、刪除。換了就存，不另按儲存；備忘在面板收起時存。
 class ReaderV2HighlightSheet extends StatefulWidget {
   const ReaderV2HighlightSheet({
     super.key,
@@ -34,6 +34,13 @@ class ReaderV2HighlightSheet extends StatefulWidget {
 
 class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
   late Highlight _highlight = widget.highlight;
+  late final TextEditingController _note = TextEditingController(
+    text: widget.highlight.note,
+  );
+  bool _deleted = false;
+
+  /// 目前的樣子，備忘照輸入框裡的字。
+  Highlight get _current => _highlight.copyWith(note: _note.text.trim());
 
   void _update(Highlight next) {
     setState(() => _highlight = next);
@@ -41,72 +48,101 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
   }
 
   @override
+  void dispose() {
+    // 備忘改了就在收起時存一次，不是每打一個字存一次。
+    final current = _current;
+    if (!_deleted && current.note != _highlight.note) {
+      widget.onChanged(current);
+    }
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ReaderV2SheetScaffold(
-      title: '標註',
-      // 看得到面板上方那一段正文，換顏色時就看得到效果。
-      maxHeightFactor: 0.7,
-      children: [
-        GroupedSection(
-          children: [
-            GroupedRow(
-              title: _highlight.quote,
-              maxTitleLines: 4,
-              subtitle: _highlight.chapterTitle,
-              maxSubtitleLines: 1,
-            ),
-          ],
-        ),
-        GroupedSection(
-          header: '顏色',
-          children: [
-            HighlightColorRow(
-              selected: _highlight.color,
-              onSelected: (color) => _update(_highlight.copyWith(color: color)),
-            ),
-          ],
-        ),
-        GroupedSection(
-          header: '樣子',
-          children: [
-            for (final style in HighlightStyle.values)
+    // 面板不會自己避開鍵盤：寫備忘時整個面板墊高鍵盤的高度。
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: ReaderV2SheetScaffold(
+        title: '標註',
+        // 看得到面板上方那一段正文，換顏色時就看得到效果。
+        maxHeightFactor: 0.7,
+        children: [
+          GroupedSection(
+            children: [
               GroupedRow(
-                title: style.label,
-                showChevron: false,
-                trailing: style == _highlight.style
-                    ? Icon(
-                        Icons.check_rounded,
-                        color: Theme.of(context).colorScheme.primary,
-                      )
-                    : null,
-                onTap: () => _update(_highlight.copyWith(style: style)),
+                title: _highlight.quote,
+                maxTitleLines: 4,
+                subtitle: _highlight.chapterTitle,
+                maxSubtitleLines: 1,
               ),
-          ],
-        ),
-        GroupedSection(
-          children: [
-            GroupedRow(
-              title: '複製',
-              showChevron: false,
-              onTap: () {
-                unawaited(
-                  Clipboard.setData(ClipboardData(text: _highlight.quote)),
-                );
-                Navigator.of(context).pop();
-              },
-            ),
-            GroupedRow(
-              title: '刪除',
-              destructive: true,
-              showChevron: false,
-              onTap: () {
-                Navigator.of(context).pop();
-                widget.onDelete(_highlight);
-              },
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+          GroupedSection(
+            header: '顏色',
+            children: [
+              HighlightColorRow(
+                selected: _highlight.color,
+                onSelected: (color) => _update(_current.copyWith(color: color)),
+              ),
+            ],
+          ),
+          GroupedSection(
+            header: '樣子',
+            children: [
+              for (final style in HighlightStyle.values)
+                GroupedRow(
+                  title: style.label,
+                  showChevron: false,
+                  trailing: style == _highlight.style
+                      ? Icon(
+                          Icons.check_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () => _update(_current.copyWith(style: style)),
+                ),
+            ],
+          ),
+          GroupedSection(
+            header: '備忘',
+            children: [
+              GroupedTextFieldRow(
+                controller: _note,
+                hintText: '寫下自己的話',
+                minLines: 2,
+                maxLines: 6,
+                keyboardType: TextInputType.multiline,
+              ),
+            ],
+          ),
+          GroupedSection(
+            children: [
+              GroupedRow(
+                title: '複製',
+                showChevron: false,
+                onTap: () {
+                  unawaited(
+                    Clipboard.setData(ClipboardData(text: _highlight.quote)),
+                  );
+                  Navigator.of(context).pop();
+                },
+              ),
+              GroupedRow(
+                title: '刪除',
+                destructive: true,
+                showChevron: false,
+                onTap: () {
+                  _deleted = true;
+                  Navigator.of(context).pop();
+                  widget.onDelete(_current);
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
