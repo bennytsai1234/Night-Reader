@@ -47,4 +47,28 @@ void main() {
     expect(original.intro, isNull);
     expect(original.name, '搜尋時的書名');
   });
+
+  test('規則改閱讀設定時只改交回的書', () async {
+    final source = BookSource.fromJson({
+      'bookSourceName': '順序',
+      'bookSourceUrl': 'https://order.test',
+      'ruleBookInfo': {
+        'name': '@js:book.setReverseToc(true); "書名"',
+        'tocUrl': '/toc',
+      },
+    });
+    final original = Book(
+      bookUrl: 'https://order.test/b/1',
+      origin: 'https://order.test',
+      readConfig: ReadConfig(),
+    );
+    final book = await BookInfoParser.parse(
+      source: source,
+      book: original,
+      body: '<html></html>',
+      baseUrl: 'https://order.test/b/1',
+    );
+    expect(book.name, '書名');
+    expect(original.readConfig?.reverseToc, isFalse);
+  });
 }

@@ -22,6 +22,11 @@ class BookInfoParser {
     // 讀 `book.intro` 這類欄位時拿到的是這一頁剛算出來的。用一份複本，交回前
     // 不動到傳進來的書。
     final working = book.copyWith();
+    // 閱讀設定是可以改的物件，規則寫 `book.reverseToc` 時只改複本那一份。
+    final readConfig = book.readConfig;
+    if (readConfig != null) {
+      working.readConfig = ReadConfig.fromJson(readConfig.toJson());
+    }
     final rule = AnalyzeRule(
       source: source,
       ruleData: working,
