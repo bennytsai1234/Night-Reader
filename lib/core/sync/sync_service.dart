@@ -157,6 +157,9 @@ class SyncService {
   Future<void>? _running;
   bool _again = false;
 
+  /// Google 系統登入畫面會使 App 暫停／恢復，這段期間不需要額外同步舊空間。
+  bool _authorizingGoogleDrive = false;
+
   static SyncStore? _defaultStore(
     SyncSpace space,
     WebDavAccount? webDav,
@@ -249,23 +252,29 @@ class SyncService {
       await _claimBases();
     });
     status.value = const SyncStatus(space: SyncSpace.webdav);
-    await syncNow();
+    // 連線確認後就回報選取成功；資料同步在背景繼續執行。
+    requestSync();
   }
 
   /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來、
   /// 接著排一次同步，不等整批資料跑完。只在使用者按了按鈕時呼叫；授權失效
   /// 後重新登入同一個帳號也走這裡，留著上次同步的紀錄。
   Future<void> useGoogleDrive() async {
-    final account = await _googleAuth.signIn();
-    final store = _storeFactory(SyncSpace.googleDrive, null, account);
-    await store!.check();
-    await _lock.synchronized(() async {
-      await _settings.useGoogleDrive(account);
-      await _claimBases();
-    });
-    status.value = const SyncStatus(space: SyncSpace.googleDrive);
-    // 登入與選取同步空間完成後就讓畫面更新；整批資料接著同步，不占用登入流程。
-    requestSync();
+    _authorizingGoogleDrive = true;
+    try {
+      final account = await _googleAuth.signIn();
+      final store = _storeFactory(SyncSpace.googleDrive, null, account);
+      await store!.check();
+      await _lock.synchronized(() async {
+        await _settings.useGoogleDrive(account);
+        await _claimBases();
+      });
+      status.value = const SyncStatus(space: SyncSpace.googleDrive);
+      // 登入與選取同步空間完成後就讓畫面更新；整批資料接著同步。
+      requestSync();
+    } finally {
+      _authorizingGoogleDrive = false;
+    }
   }
 
   Future<void> disable() async {
@@ -293,6 +302,12 @@ class SyncService {
   /// 要同步一次，不等結果：正在同步時，跑完再補一次。
   void requestSync() => unawaited(syncNow());
 
+  /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。
+  void syncBeforeBackground() {
+    if (_authorizingGoogleDrive) return;
+    requestSync();
+  }
+
   /// 同步一次，失敗記在 [status]、不丟出來。沒設定同步空間時什麼都不做。
   Future<void> syncNow() {
     final running = _running;
@@ -312,12 +327,18 @@ class SyncService {
   }
 
   Future<void> _runUntilSettled() async {
+    final timer = Stopwatch()..start();
+    var rounds = 0;
     try {
       do {
         _again = false;
+        rounds++;
         await _syncOnce();
       } while (_again);
     } finally {
+      if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
+        AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
+      }
       // 整輪（包含同步途中補跑的輪次）才算結束，避免進度短暫顯示已完成。
       status.value = status.value.copyWith(running: false, clearProgress: true);
       // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
@@ -343,6 +364,7 @@ class SyncService {
   /// App 回到前景：同步一次，把別台在這段時間的改動接過來。開書等它的閱讀
   /// 進度做完（[progressReady]）。
   void syncAfterResume() {
+    if (_authorizingGoogleDrive) return;
     _expectProgress();
     requestSync();
   }
@@ -419,6 +441,7 @@ class SyncService {
   }
 
   Future<void> _syncOnce() async {
+    final kindTimes = <String, int>{};
     try {
       await _lock.synchronized(() async {
         final store = await _store();
@@ -440,6 +463,7 @@ class SyncService {
           status.value = status.value.copyWith(
             progress: (kind: kind.name, step: index + 1, total: kinds.length),
           );
+          final kindTimer = Stopwatch()..start();
           try {
             if (await _syncKind(store, kind)) {
               appliedAfter.updateAll((name, _) => name != kind.name);
@@ -455,6 +479,11 @@ class SyncService {
             failure ??= error;
             failureStack ??= stackTrace;
           } finally {
+            kindTimes.update(
+              kind.name,
+              (elapsed) => elapsed + kindTimer.elapsedMilliseconds,
+              ifAbsent: () => kindTimer.elapsedMilliseconds,
+            );
             if (kind is ProgressSync) _progressDone();
           }
         }
@@ -468,6 +497,12 @@ class SyncService {
     } catch (error, stackTrace) {
       AppLog.e('同步失敗', error: error, stackTrace: stackTrace);
       status.value = status.value.copyWith(error: _messageOf(error));
+    } finally {
+      if (kindTimes.values.any((ms) => ms >= 500)) {
+        AppLog.i(
+          '同步各類耗時（ms）：${kindTimes.entries.map((e) => '${e.key}=${e.value}').join('、')}',
+        );
+      }
     }
   }
 
