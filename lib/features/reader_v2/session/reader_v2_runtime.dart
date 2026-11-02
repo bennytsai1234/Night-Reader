@@ -177,8 +177,10 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<void> jumpToChapter(int chapterIndex, {Future<void>? settled}) =>
       _jumpToChapter(chapterIndex, settled: settled);
 
-  /// 跳到 [location]；[settled] 同 [jumpToChapter]。
-  Future<void> jumpToLocation(
+  /// 跳到 [location]；[settled] 同 [jumpToChapter]。傳回有沒有真的定位到
+  /// [location]：跳轉途中使用者自己捲動（[cancelJumpForUserScroll]）、被更新
+  /// 的操作取代、那一章取不到、閱讀器關掉都傳回 false，畫面不在目標上。
+  Future<bool> jumpToLocation(
     ReaderV2Location location, {
     bool immediateSave = true,
     Future<void>? settled,
@@ -546,7 +548,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
   }
 
-  Future<void> _jumpToLocation(
+  Future<bool> _jumpToLocation(
     ReaderV2Location location, {
     required bool immediateSave,
     Future<void>? settled,
@@ -559,7 +561,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     try {
       if (settled != null) {
         await settled;
-        if (!isCurrentOperationToken(token)) return;
+        if (!isCurrentOperationToken(token)) return false;
       }
       final positioned = await _positionViewport(
         location: location,
@@ -570,12 +572,14 @@ class ReaderV2Runtime extends ChangeNotifier {
         'current=${stateMachine.isCurrent(token)} lifecycle=${state.lifecycle.name} '
         'visible=${state.visibleLocation.chapterIndex}',
       );
-      if (!positioned) return;
+      if (!positioned) return false;
       if (immediateSave) {
         await viewportBridge.saveProgressLocation(state.visibleLocation);
       }
+      return true;
     } on ReaderV2ContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
+      return false;
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }

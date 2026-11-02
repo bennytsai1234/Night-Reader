@@ -1,5 +1,7 @@
-import 'dart:io';
+import 'dart:io' hide Cookie;
+import 'dart:io' as io show Cookie;
 
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,7 @@ import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/cookie.dart';
+import 'package:night_reader/core/services/login_data_backup.dart';
 import 'package:night_reader/core/sync/login_data_sync.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
@@ -264,6 +267,148 @@ void main() {
         unorderedEquals(['token=abc', 'cf_clearance=theirs']),
       );
     });
+
+    final site = Uri.parse('https://example.com/');
+    final subsite = Uri.parse('https://app.example.com/');
+
+    /// 同名、同路徑的兩個 Cookie：一個只給 example.com，一個帶 Domain，
+    /// 子網域也帶得出去。
+    Future<DefaultCookieJar> jarWithBothScopes() async {
+      final jar = DefaultCookieJar();
+      await jar.saveFromResponse(site, [
+        io.Cookie('sid', 'host-only')..path = '/',
+        io.Cookie('sid', 'shared')
+          ..domain = 'example.com'
+          ..path = '/',
+      ]);
+      return jar;
+    }
+
+    Future<Map<Uri, List<String>>> sentBy(CookieJar jar) async => {
+      for (final uri in [site, subsite])
+        uri: [
+          for (final cookie in await jar.loadForRequest(uri))
+            '${cookie.name}=${cookie.value}',
+        ]..sort(),
+    };
+
+    test(
+      'same-named cookies of host-only and Domain scope are both kept',
+      () async {
+        final jar = await jarWithBothScopes();
+        expect(await LoginDataBackup.exportCookieJar(jar), hasLength(2));
+
+        final records = await LoginCookieJarSync(cookieJar: jar).local();
+        expect(records, hasLength(2));
+        expect(
+          records.values.map((r) => (r.data['cookie'] as String)),
+          containsAll([contains('sid=host-only'), contains('sid=shared')]),
+        );
+        // 主機限定的鍵和舊版一樣。
+        expect(records.keys, contains('https://example.com/|sid'));
+      },
+    );
+
+    test(
+      'both scopes reach the other phone and send the right cookie',
+      () async {
+        final a = await jarWithBothScopes();
+        await phone('a', [LoginCookieJarSync(cookieJar: a)]).syncNow();
+        expect(
+          SyncDocument.decode(store.files['login_cookie_jar.json']!).records,
+          hasLength(2),
+        );
+
+        final b = DefaultCookieJar();
+        await phone('b', [LoginCookieJarSync(cookieJar: b)]).syncNow();
+
+        expect(await sentBy(b), await sentBy(a));
+        // 原主機兩個都帶（路徑相同時主機限定的先送），子網域只有帶 Domain 的。
+        expect((await sentBy(b))[site], ['sid=host-only', 'sid=shared']);
+        expect((await sentBy(b))[subsite], ['sid=shared']);
+        // 再同步一次不增不減。
+        await phone('b', [LoginCookieJarSync(cookieJar: b)]).syncNow();
+        expect(await LoginDataBackup.exportCookieJar(b), hasLength(2));
+      },
+    );
+
+    test('records uploaded by the old key format are re-keyed, not '
+        'duplicated or applied over newer content', () async {
+      // 舊版：不分適用範圍，帶 Domain 的 Cookie 放在 `網址|名稱`。
+      final b = DefaultCookieJar();
+      await b.saveFromResponse(site, [
+        io.Cookie('sid', 'new')..domain = 'example.com',
+      ]);
+      store.files['login_cookie_jar.json'] = SyncDocument({
+        'https://example.com/|sid': SyncRecord(
+          time: 1,
+          data: {
+            'url': 'https://example.com/',
+            'cookie': (io.Cookie(
+              'sid',
+              'old',
+            )..domain = 'example.com').toString(),
+          },
+        ),
+        'https://example.com/|token': SyncRecord(
+          time: 1,
+          data: {
+            'url': 'https://example.com/',
+            'cookie': io.Cookie('token', 't').toString(),
+          },
+        ),
+      }).encode();
+
+      final kind = LoginCookieJarSync(cookieJar: b);
+      expect(
+        kind
+            .prune(
+              SyncDocument.decode(store.files['login_cookie_jar.json']!)
+                  .records,
+            )
+            .keys,
+        unorderedEquals([
+          'https://example.com/|sid|domain=example.com',
+          'https://example.com/|token',
+        ]),
+      );
+
+      // 這台已經有新內容、雲端只有舊鍵：舊內容照新鍵比，這台沒同步過所以
+      // 雲端的贏，但只會是一筆 sid，不會變成兩筆。
+      await phone('b', [kind]).syncNow();
+      final sent = await sentBy(b);
+      expect(sent[site]!.where((c) => c.startsWith('sid=')), hasLength(1));
+      expect(sent[subsite], ['sid=old']);
+      expect(sent[site], contains('token=t'));
+      expect(await LoginDataBackup.exportCookieJar(b), hasLength(2));
+    });
+
+    test(
+      'an old-key record next to its new-key record keeps the newer one',
+      () {
+        final kind = LoginCookieJarSync(cookieJar: DefaultCookieJar());
+        String cookie(String value) =>
+            (io.Cookie('sid', value)..domain = 'example.com').toString();
+        SyncRecord record(int time, String value) => SyncRecord(
+          time: time,
+          data: {'url': 'https://example.com/', 'cookie': cookie(value)},
+        );
+        const newKey = 'https://example.com/|sid|domain=example.com';
+
+        var pruned = kind.prune({
+          'https://example.com/|sid': record(5, 'stale'),
+          newKey: record(9, 'fresh'),
+        });
+        expect(pruned.keys, [newKey]);
+        expect(pruned[newKey]!.data['cookie'], contains('fresh'));
+
+        pruned = kind.prune({
+          'https://example.com/|sid': record(9, 'fresh'),
+          newKey: record(5, 'stale'),
+        });
+        expect(pruned[newKey]!.data['cookie'], contains('fresh'));
+      },
+    );
 
     test('expired cache entries in the cloud are dropped, not applied', () {
       final kind = LoginCacheSync();

@@ -206,10 +206,33 @@ class GoogleDriveSyncStore implements SyncStore {
   static void _ensureOk(Response<Object?> response) {
     final status = response.statusCode ?? 0;
     if (status >= 200 && status < 300) return;
-    throw SyncStoreException(switch (status) {
-      401 => 'Google 帳號的授權失效了，到「同步空間」重新登入',
-      403 => 'Google 雲端硬碟拒絕存取（HTTP 403），稍後再試',
-      _ => 'Google 雲端硬碟回應錯誤（HTTP $status）',
-    });
+    // 整個空間都用不了的才中止整輪：授權失效（401）、被限流（429，或 403
+    // 帶著限流的原因）、伺服器故障（5xx）。其他（403 拒絕存取這份檔、404
+    // 這類）只算這一份檔案的事，其他檔案照常同步（#205）。
+    if (status == 401) {
+      throw const SyncStoreException('Google 帳號的授權失效了，到「同步空間」重新登入');
+    }
+    if (status == 429 || (status == 403 && _rateLimited(response.data))) {
+      throw SyncStoreException('Google 雲端硬碟要求放慢速度（HTTP $status），稍後再試');
+    }
+    if (status >= 500) {
+      throw SyncStoreException('Google 雲端硬碟暫時無法使用（HTTP $status），稍後再試');
+    }
+    if (status == 403) {
+      throw const SyncStoreException.file('Google 雲端硬碟拒絕存取（HTTP 403），稍後再試');
+    }
+    throw SyncStoreException.file('Google 雲端硬碟回應錯誤（HTTP $status）');
+  }
+
+  /// Google 限流時回 403，錯誤內容的原因是 `userRateLimitExceeded`、
+  /// `rateLimitExceeded`（新格式寫成 `RATE_LIMIT_EXCEEDED`）。
+  static bool _rateLimited(Object? data) {
+    final text = switch (data) {
+      final Uint8List bytes => utf8.decode(bytes, allowMalformed: true),
+      final String text => text,
+      _ => '',
+    }.toLowerCase();
+    return text.contains('ratelimitexceeded') ||
+        text.contains('rate_limit_exceeded');
   }
 }
