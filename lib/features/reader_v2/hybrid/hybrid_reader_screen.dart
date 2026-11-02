@@ -26,6 +26,7 @@ import 'geometry/text_geometry.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'overlay/bookmark_marks.dart';
+import 'overlay/highlight_marks.dart';
 import 'overlay/loading_veil.dart';
 import 'overlay/reader_skeleton_page.dart';
 import 'overlay/selection_service.dart';
@@ -57,6 +58,9 @@ class HybridReaderScreen extends StatefulWidget {
     this.onHideText,
     this.onBookmarkText,
     this.marks,
+    this.onHighlightText,
+    this.highlights,
+    this.onHighlightTap,
     this.highlightColor = const Color(0xFFFFC857),
     this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
     this.progressListenable,
@@ -96,6 +100,16 @@ class HybridReaderScreen extends StatefulWidget {
 
   /// 這本書的書籤，在那一行旁畫記號（[BookmarkMarksOverlay]）。
   final ValueListenable<List<ReaderMark>>? marks;
+
+  /// 選字選單「⋮」裡的「標註」：把選到的字畫上標註
+  /// （[ReaderTextSelection.asHighlight]）。沒給就不顯示這個按鈕。
+  final ValueChanged<SelectionHighlight>? onHighlightText;
+
+  /// 這本書的標註，在字上畫底色或底線（[HighlightMarksOverlay]）。
+  final ValueListenable<List<ReaderHighlightMark>>? highlights;
+
+  /// 點到已畫的標註（給標註的編號）；沒給時點標註和點別處一樣。
+  final ValueChanged<int>? onHighlightTap;
 
   /// 朗讀高亮與選字反白的顏色；[highlightStrength] 只套在朗讀高亮，選字
   /// 反白固定深淺以保持可辨識。
@@ -1594,11 +1608,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _clearSelection();
       return;
     }
+    // 點到已畫的標註：打開那個標註，不翻頁、不叫選單。
+    if (widget.onHighlightTap case final onHighlightTap?) {
+      final id = _highlightAt(details.localPosition);
+      if (id != null) {
+        onHighlightTap(id);
+        return;
+      }
+    }
     widget.onContentTapUp?.call(details);
   }
 
-  /// [start, end) 在 viewport 上的字形範圍，每條視覺行一個框（見
-  /// [HybridTextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
   /// 每個書籤那一行在文件上的行框（還沒扣捲動位置）。書籤的位置、那一章
   /// 的正文與文件索引都沒變就沿用：捲動時每一幀只扣掉捲動位置，不重新照
   /// 錨點找字、不查字形（幾何的行框只記最近一次，幾個書籤與朗讀高亮輪流
@@ -1665,6 +1685,116 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return lines;
   }
 
+  /// 每個標註在那一章正文裡的範圍與文件上的行框（還沒扣捲動位置），沿用
+  /// 的條件同書籤（[_markBoxes]）：捲動時每一幀只扣掉捲動位置。
+  final Map<
+    int,
+    ({
+      ReaderHighlightMark mark,
+      ChapterBlocks blocks,
+      int revision,
+      HybridTextRange range,
+      List<HybridLineBox> boxes,
+    })
+  >
+  _highlightBoxes = {};
+
+  /// 標註在那一章正文裡的範圍：開頭照錨點找回（正文變了照前後原文），往
+  /// 後畫記下的那麼長，不超出那一章。
+  static HybridTextRange _highlightRangeIn(
+    ReaderHighlightMark mark,
+    ChapterBlocks blocks,
+  ) {
+    final text = blocks.displayText;
+    final start = ReaderV2ContentLocationMapper.offsetIn(
+      location: mark.location,
+      displayText: text,
+      contentHash: blocks.contentHash,
+    ).clamp(0, text.length - 1).toInt();
+    return HybridTextRange(
+      start,
+      math.min(text.length, start + math.max(1, mark.length)),
+    );
+  }
+
+  /// 標註在 viewport 上的字形範圍；那一章還沒排好的不畫。
+  List<HighlightPaint> _highlightPaints(List<ReaderHighlightMark> marks) {
+    final scroll = _effectiveScrollOffset();
+    if (marks.isEmpty || scroll == null) return const <HighlightPaint>[];
+    final revision = _documentIndex.revisionNumber;
+    final paints = <HighlightPaint>[];
+    final seen = <int>{};
+    for (final mark in marks) {
+      seen.add(mark.id);
+      final blocks = _pipeline.blocksOf(mark.location.chapterIndex);
+      if (blocks == null || blocks.displayText.isEmpty) continue;
+      var cached = _highlightBoxes[mark.id];
+      if (cached == null ||
+          !identical(cached.mark.location, mark.location) ||
+          cached.mark.length != mark.length ||
+          !identical(cached.blocks, blocks) ||
+          cached.revision != revision) {
+        final range = _highlightRangeIn(mark, blocks);
+        final world = _pipeline.geometry.lineBoxes(
+          mark.location.chapterIndex,
+          range.start,
+          range.end,
+        );
+        // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
+        if (world.isEmpty) continue;
+        cached = (
+          mark: mark,
+          blocks: blocks,
+          revision: revision,
+          range: range,
+          boxes: world,
+        );
+        _highlightBoxes[mark.id] = cached;
+      }
+      paints.add((
+        boxes: [
+          for (final box in cached.boxes)
+            HybridLineBox(
+              left: box.left,
+              top: box.top - scroll,
+              right: box.right,
+              bottom: box.bottom - scroll,
+            ),
+        ],
+        color: mark.color,
+        style: mark.style,
+      ));
+    }
+    _highlightBoxes.removeWhere((id, _) => !seen.contains(id));
+    return paints;
+  }
+
+  /// viewport 上 [point] 點到的標註；同一個字有好幾個標註時取最後畫的。
+  int? _highlightAt(Offset point) {
+    final marks = widget.highlights?.value;
+    final scroll = _effectiveScrollOffset();
+    if (marks == null || marks.isEmpty || scroll == null) return null;
+    final hit = _pipeline.geometry.glyphAt(point.translate(0, scroll));
+    if (hit == null) return null;
+    int? found;
+    for (final mark in marks) {
+      if (mark.location.chapterIndex != hit.blocks.chapterIndex) continue;
+      final cached = _highlightBoxes[mark.id];
+      final range =
+          cached != null &&
+              identical(cached.mark.location, mark.location) &&
+              identical(cached.blocks, hit.blocks)
+          ? cached.range
+          : _highlightRangeIn(mark, hit.blocks);
+      if (hit.offset >= range.start && hit.offset < range.end) {
+        if (found == null || mark.id > found) found = mark.id;
+      }
+    }
+    return found;
+  }
+
+  /// [start, end) 在 viewport 上的字形範圍，每條視覺行一個框（見
+  /// [HybridTextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
   List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
     if (offset == null) return const <HybridLineBox>[];
@@ -1994,6 +2124,28 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           clipBehavior: Clip.none,
           children: <Widget>[
             visualContent,
+            if (widget.highlights case final highlights?)
+              Positioned.fill(
+                // 標註只畫在正文可視區內（同朗讀高亮）；沒有標註時不跟著捲動
+                // 每一幀重建。
+                child: ClipRect(
+                  child: ValueListenableBuilder(
+                    valueListenable: highlights,
+                    builder: (context, items, _) => items.isEmpty
+                        ? const SizedBox.shrink()
+                        : ListenableBuilder(
+                            listenable: controller,
+                            builder: (context, _) {
+                              final paints = _highlightPaints(items);
+                              if (paints.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return HighlightMarksOverlay(items: paints);
+                            },
+                          ),
+                  ),
+                ),
+              ),
             if (widget.marks case final marks?)
               Positioned.fill(
                 // 沒有書籤時不跟著捲動每一幀重建。
@@ -2062,6 +2214,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             onBookmark: widget.onBookmarkText == null
                 ? null
                 : (selection) => widget.onBookmarkText!(selection.asBookmark),
+            onHighlight: widget.onHighlightText == null
+                ? null
+                : (selection) => widget.onHighlightText!(selection.asHighlight),
             highlightColor: widget.highlightColor,
             child: _whileControls(
               (controlsVisible, child) => ReaderV2PointerTapLayer(

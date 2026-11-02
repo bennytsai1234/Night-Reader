@@ -23,6 +23,7 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
     required this.caretAt,
     this.onHide,
     this.onBookmark,
+    this.onHighlight,
     required this.highlightColor,
     required this.child,
   });
@@ -44,6 +45,9 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
 
   /// 選單的「書籤」：在選到的字那一句留一個書籤；沒給就不顯示。
   final ValueChanged<ReaderTextSelection>? onBookmark;
+
+  /// 「⋮」裡的「標註」：把選到的字畫上底色或底線；沒給就不顯示。
+  final ValueChanged<ReaderTextSelection>? onHighlight;
 
   final Color highlightColor;
   final Widget child;
@@ -219,6 +223,22 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
           },
         ),
     ];
+    // 「⋮」裡：自己的「標註」在前，系統能處理文字的 App 在後。
+    final moreItems = <ContextMenuButtonItem>[
+      if (widget.onHighlight case final onHighlight?)
+        ContextMenuButtonItem(
+          label: '標註',
+          onPressed: () {
+            widget.selection.clear();
+            onHighlight(selection);
+          },
+        ),
+      for (final action in _processTextActions)
+        ContextMenuButtonItem(
+          label: action.label,
+          onPressed: () => _processTextAction(selection, action),
+        ),
+    ];
     final anchors = TextSelectionToolbarAnchors(
       primaryAnchor: Offset(centerX, boxes.first.top),
       secondaryAnchor: Offset(centerX, last.bottom + handleHeight),
@@ -228,7 +248,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
       context: context,
       removeTop: true,
       removeBottom: true,
-      child: _processTextActions.isEmpty
+      child: moreItems.isEmpty
           ? AdaptiveTextSelectionToolbar.buttonItems(
               anchors: anchors,
               buttonItems: items,
@@ -238,13 +258,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
               key: ValueKey(selection.range),
               anchors: anchors,
               items: items,
-              moreItems: [
-                for (final action in _processTextActions)
-                  ContextMenuButtonItem(
-                    label: action.label,
-                    onPressed: () => _processTextAction(selection, action),
-                  ),
-              ],
+              moreItems: moreItems,
             ),
     );
   }
@@ -284,10 +298,10 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   }
 }
 
-/// 有系統文字處理 App 時的選單：列上固定只有 [items]，[moreItems] 一律收
-/// 在「⋮」裡，按下展開成直式選單、左上（選單在字上方時是左下）的返回鍵
-/// 收回。對方 App 的名稱由它自己決定，會混進簡體字，所以不和自己的按鈕
-/// 並排。
+/// 有「⋮」的選單：列上固定只有 [items]，[moreItems]（「標註」與系統能處理
+/// 文字的 App）一律收在「⋮」裡，按下展開成直式選單、左上（選單在字上方
+/// 時是左下）的返回鍵收回。對方 App 的名稱由它自己決定，會混進簡體字，
+/// 所以不和自己的按鈕並排；「標註」不常用，收起來讓列上放得下。
 ///
 /// Flutter 的 [TextSelectionToolbar] 只在寬度放不下時才把按鈕收進「⋮」，
 /// 指定不了哪些收起來；這裡照它的樣子（外框、按鈕、位置、展開的時間與

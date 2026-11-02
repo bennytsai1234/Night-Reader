@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
@@ -100,5 +101,75 @@ void main() {
     bookmarks.value = const [];
     await tester.pumpAndSettle();
     expect(find.text('沒有書籤'), findsOneWidget);
+  });
+
+  testWidgets('the highlights tab lists highlights in reading order; tapping '
+      'one jumps, swiping deletes, 匯出 hands over the list', (tester) async {
+    final chapters = [
+      BookChapter(url: '/c/1', title: '第一章'),
+      BookChapter(url: '/c/2', title: '第二章'),
+    ];
+    final highlights = ValueNotifier<List<Highlight>>([
+      Highlight(
+        id: 2,
+        bookName: '書',
+        chapterIndex: 1,
+        chapterTitle: '第二章',
+        quote: '後面畫的字',
+      ),
+      Highlight(
+        id: 1,
+        bookName: '書',
+        chapterIndex: 0,
+        chapterTitle: '第一章',
+        charOffset: 5,
+        quote: '前面畫的字',
+      ),
+    ]);
+    Highlight? tapped;
+    Highlight? deleted;
+    List<Highlight>? exported;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderV2ChaptersDrawer(
+            chapters: chapters,
+            currentChapter: ValueNotifier(0),
+            titleFor: (index) => chapters[index].title,
+            onChapterTap: (_) {},
+            bookmarks: ValueNotifier(const []),
+            highlights: highlights,
+            highlightChapter: (highlight) => highlight.chapterIndex,
+            onHighlightTap: (highlight) => tapped = highlight,
+            onHighlightDelete: (highlight) => deleted = highlight,
+            onHighlightExport: (items) => exported = items,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('目錄'), findsOneWidget);
+    expect(find.text('書籤'), findsOneWidget);
+    await tester.tap(find.text('標註'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 個'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('前面畫的字')).dy,
+      lessThan(tester.getTopLeft(find.text('後面畫的字')).dy),
+    );
+
+    await tester.tap(find.byTooltip('匯出'));
+    expect(exported?.map((h) => h.id), [1, 2]);
+
+    await tester.tap(find.text('前面畫的字'));
+    expect(tapped?.id, 1);
+
+    await tester.drag(find.text('後面畫的字'), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(deleted?.id, 2);
+
+    highlights.value = const [];
+    await tester.pumpAndSettle();
+    expect(find.text('沒有標註'), findsOneWidget);
   });
 }

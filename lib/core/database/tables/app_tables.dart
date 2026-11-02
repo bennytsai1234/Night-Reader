@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../models/book.dart';
 import '../../models/bookmark.dart';
 import '../../models/chapter.dart';
+import '../../models/highlight.dart';
 import '../../models/replace_rule.dart';
 import '../../models/book_source.dart';
 import '../../models/book_group.dart';
@@ -406,6 +407,33 @@ class Bookmarks extends Table {
       integer().named('charOffset').withDefault(const Constant(0))();
   TextColumn get anchor => text().nullable()();
   TextColumn get excerpt => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ───────────── Highlights ─────────────
+/// 標註（[Highlight]）。編號的配法同書籤（`BookmarkDao.newId`）。
+@UseRowClass(Highlight, generateInsertable: true)
+class Highlights extends Table {
+  IntColumn get id => integer()();
+  TextColumn get bookName => text().named('bookName')();
+  TextColumn get bookAuthor =>
+      text().named('bookAuthor').withDefault(const Constant(''))();
+  IntColumn get chapterIndex =>
+      integer().named('chapterIndex').withDefault(const Constant(0))();
+  TextColumn get chapterTitle =>
+      text().named('chapterTitle').withDefault(const Constant(''))();
+  IntColumn get charOffset =>
+      integer().named('charOffset').withDefault(const Constant(0))();
+  TextColumn get anchor => text().nullable()();
+  TextColumn get quote => text().withDefault(const Constant(''))();
+  TextColumn get color => textEnum<HighlightColor>().withDefault(
+    Constant(HighlightColor.amber.name),
+  )();
+  TextColumn get style => textEnum<HighlightStyle>().withDefault(
+    Constant(HighlightStyle.fill.name),
+  )();
 
   @override
   Set<Column> get primaryKey => {id};

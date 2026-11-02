@@ -2,13 +2,16 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/highlight.dart';
 
 import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
 
 /// 書籤表的遷移：舊版（schema 2）照書的網址記的書籤表與索引刪掉，換成現在
-/// 照書名加作者記的書籤表，升級後可以照常新增書籤。
+/// 照書名加作者記的書籤表，升級後可以照常新增書籤；標註表（schema 11）也
+/// 一起建好。
 void main() {
   test('upgrading from schema 2 replaces the old bookmarks table', () async {
     final db = AppDatabase.forTesting(
@@ -53,6 +56,11 @@ void main() {
       Bookmark(id: 0, bookName: '夜雨聽書', chapterTitle: '第一章', charOffset: 12),
     );
     expect((await dao.getAll()).single.id, saved.id);
+    final highlights = HighlightDao(db);
+    final painted = await highlights.add(
+      Highlight(id: 0, bookName: '夜雨聽書', charOffset: 12, quote: '雨聲'),
+    );
+    expect((await highlights.getAll()).single.id, painted.id);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(version.data.values.single, db.schemaVersion);
   });

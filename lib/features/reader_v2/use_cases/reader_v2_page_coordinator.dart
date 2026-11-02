@@ -7,6 +7,8 @@ import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
+import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -350,13 +352,86 @@ class ReaderV2PageCoordinator {
   }) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
-    final location = ReaderV2Bookmarks.locationOf(
-      bookmark,
-      chapterIndex: ReaderV2Bookmarks.chapterIndexIn(
+    await _jumpTo(
+      ReaderV2Bookmarks.locationOf(
         bookmark,
-        runtime.chapters,
+        chapterIndex: ReaderV2Bookmarks.chapterIndexIn(
+          bookmark,
+          runtime.chapters,
+        ),
       ),
-    ).copyWith(visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport);
+      settled: settled,
+    );
+  }
+
+  /// 選字選單「⋮」裡的「標註」：把選到的字畫上標註（顏色與樣子沿用上一
+  /// 個），提示可「復原」。
+  Future<void> addHighlight(SelectionHighlight selection) async {
+    final highlights = _host.highlights;
+    final Highlight? saved;
+    try {
+      saved = await highlights.add(
+        location: selection.location,
+        chapterTitle: selection.chapterTitle,
+        quote: selection.quote,
+      );
+    } catch (error, stackTrace) {
+      AppLog.e('加入標註失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('加入標註', error));
+      return;
+    }
+    if (saved case final kept?) {
+      _showNotice(
+        '已標註',
+        action: (
+          label: '復原',
+          onPressed: () => unawaited(highlights.remove(kept)),
+        ),
+      );
+    } else {
+      _showNotice('無法加入標註');
+    }
+  }
+
+  /// 刪掉一個標註，提示可「復原」。
+  void deleteHighlight(Highlight highlight) {
+    final highlights = _host.highlights;
+    unawaited(highlights.remove(highlight));
+    _showNotice(
+      '已刪除標註',
+      action: (
+        label: '復原',
+        onPressed: () => unawaited(highlights.save(highlight)),
+      ),
+    );
+  }
+
+  /// 跳到標註開頭那一行（同跳書籤）。
+  Future<void> jumpToHighlight(
+    Highlight highlight, {
+    Future<void>? settled,
+  }) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    await _jumpTo(
+      ReaderV2Highlights.locationOf(
+        highlight,
+        chapterIndex: ReaderV2Highlights.chapterIndexIn(
+          highlight,
+          runtime.chapters,
+        ),
+      ),
+      settled: settled,
+    );
+  }
+
+  /// 跳到 [target]，照目前的排版放在畫面上方讀起的位置（同跳章）。
+  Future<void> _jumpTo(ReaderV2Location target, {Future<void>? settled}) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    final location = target.copyWith(
+      visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+    );
     await runtime.jumpToLocation(location, settled: settled);
     if (runtime.state.visibleLocation.chapterIndex == location.chapterIndex) {
       await _host.tts?.followManualJump();

@@ -267,6 +267,7 @@ void main() {
       WidgetTester tester, {
       ValueChanged<ReaderTextSelection>? onHide,
       ValueChanged<ReaderTextSelection>? onBookmark,
+      ValueChanged<ReaderTextSelection>? onHighlight,
       HybridLineBox box = const HybridLineBox(
         left: 100,
         top: 300,
@@ -297,6 +298,7 @@ void main() {
             caretAt: (_, _) => null,
             onHide: onHide,
             onBookmark: onBookmark,
+            onHighlight: onHighlight,
             highlightColor: Colors.amber,
             child: const SizedBox.expand(),
           ),
@@ -529,6 +531,73 @@ void main() {
       expect(bookmark.location.charOffset, chapter.displayText.indexOf('天色漸暗'));
       expect(bookmark.location.contentHash, 'hash');
       expect(bookmark.location.anchorAfter, startsWith('天色漸暗，城門'));
+    });
+
+    testWidgets('「標註」收在「⋮」裡（手機上沒有文字處理 App 也有「⋮」），排在'
+        '文字處理 App 前面；按下畫上選到的字並收起選取', (tester) async {
+      mockApps(tester, const {'a': '譯'});
+      ReaderTextSelection? painted;
+      final service = await pumpSelected(
+        tester,
+        onHide: (_) {},
+        onBookmark: (_) {},
+        onHighlight: (selection) => painted = selection,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('標註'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('標註')).dy,
+        lessThan(tester.getTopLeft(find.text('譯')).dy),
+      );
+      await tester.tap(find.text('標註'));
+      await tester.pump();
+
+      expect(service.active, isFalse);
+      final highlight = painted!.asHighlight;
+      expect(highlight.quote, '城門');
+      expect(highlight.chapterTitle, '第一章');
+      expect(
+        highlight.location.charOffset,
+        _chapter().displayText.indexOf('城門'),
+      );
+      expect(highlight.location.anchorAfter, startsWith('城門即將關閉'));
+    });
+
+    testWidgets('沒有文字處理 App 時，「⋮」裡只有「標註」', (tester) async {
+      await pumpSelected(tester, onHighlight: (_) {});
+      await tester.pump();
+      expect(find.byIcon(Icons.more_vert), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('標註'), findsOneWidget);
+    });
+
+    test('a highlight drops the blanks at either end of the selection', () {
+      const title = '第二章';
+      const body = '　　雨停了。 ';
+      const display = '$title\n\n$body';
+      final start = title.length + 2;
+      final chapter = ChapterBlocks(
+        chapterIndex: 0,
+        title: title,
+        displayText: display,
+        contentHash: 'h3',
+        blocks: [
+          _block(0, title, 0, paragraph: -1, isTitle: true),
+          _block(1, body, start),
+        ],
+      );
+      final highlight = ReaderTextSelection(
+        blocks: chapter,
+        epoch: LayoutEpoch.initial,
+        paragraph: HybridTextRange(start, start + body.length),
+        range: HybridTextRange(start, start + body.length),
+      ).asHighlight;
+      expect(highlight.quote, '雨停了。');
+      expect(highlight.location.charOffset, display.indexOf('雨停了'));
     });
 
     test('a bookmark covers the sentence the selection starts in, or the '

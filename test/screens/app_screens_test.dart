@@ -107,7 +107,7 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
       await settle(t);
     },
   ),
-  's14_bookmarks': (const {}, (t) async => openMine(t, '書籤')),
+  's14_bookmarks': (const {}, (t) async => openMine(t, '書籤與標註')),
   's15_appearance': (const {}, (t) async => openMine(t, '外觀與主題')),
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
   's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),

@@ -7,6 +7,7 @@ import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/features/reader_v2/screen/dependencies/reader_v2_dependencies.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
+import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
@@ -39,6 +40,11 @@ class ReaderV2ControllerHost {
     bookmarks = ReaderV2Bookmarks(
       book: book,
       dao: dependencies.bookmarkDao,
+      chapters: () => runtime?.chapters ?? initialChapters,
+    );
+    highlights = ReaderV2Highlights(
+      book: book,
+      dao: dependencies.highlightDao,
       chapters: () => runtime?.chapters ?? initialChapters,
     );
     bookStorageService = BookStorageService(
@@ -81,8 +87,11 @@ class ReaderV2ControllerHost {
   /// 這本書的書籤（正文旁的記號、目錄的書籤分頁）。
   late final ReaderV2Bookmarks bookmarks;
 
-  /// 上次算書籤記號落在哪一章時的目錄（章數、頭尾章節網址）；目錄讀出來
-  /// 或換過才重算。
+  /// 這本書的標註（正文上的底色與底線、目錄的標註分頁）。
+  late final ReaderV2Highlights highlights;
+
+  /// 上次算書籤記號與標註落在哪一章時的目錄（章數、頭尾章節網址）；目錄
+  /// 讀出來或換過才重算。
   (int, String, String)? _markedChapters;
 
   ReaderV2Runtime? runtime;
@@ -115,6 +124,7 @@ class ReaderV2ControllerHost {
       if (signature != _markedChapters) {
         _markedChapters = signature;
         bookmarks.refreshMarks();
+        highlights.refreshMarks();
       }
     }
     _onChanged();
@@ -507,6 +517,7 @@ class ReaderV2ControllerHost {
     tts?.dispose();
     runtime?.dispose();
     bookmarks.dispose();
+    highlights.dispose();
     menu.dispose();
     settings.dispose();
   }

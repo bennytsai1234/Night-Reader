@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -73,6 +74,11 @@ class BackupService {
         backupFolder,
         'bookmark.json',
         await getIt<BookmarkDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'highlight.json',
+        await getIt<HighlightDao>().getAll(),
       );
       await _writeJson(
         backupFolder,

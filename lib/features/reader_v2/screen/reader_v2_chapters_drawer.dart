@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/highlight_marks.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -15,7 +17,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 
-/// 閱讀器左側的面板：「目錄」與「書籤」兩個分頁，頂端的分段切換。
+/// 閱讀器左側的面板：「目錄」「書籤」「標註」三個分頁，頂端的分段切換。
 class ReaderV2ChaptersDrawer extends StatefulWidget {
   const ReaderV2ChaptersDrawer({
     super.key,
@@ -27,11 +29,16 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
     this.bookmarkChapter,
     this.onBookmarkTap,
     this.onBookmarkDelete,
+    this.highlights,
+    this.highlightChapter,
+    this.onHighlightTap,
+    this.onHighlightDelete,
+    this.onHighlightExport,
     this.onClosed,
     this.listenable,
   });
 
-  /// 這本書的書籤；沒給就只有目錄、沒有分段。
+  /// 這本書的書籤；書籤與標註都沒給就只有目錄、沒有分段。
   final ValueListenable<List<Bookmark>>? bookmarks;
 
   /// 書籤在這台目錄裡是第幾章（列上寫那一章的章名）。
@@ -42,6 +49,21 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
 
   /// 往左滑刪掉一個書籤。
   final ValueChanged<Bookmark>? onBookmarkDelete;
+
+  /// 這本書的標註；沒給就沒有標註分頁。
+  final ValueListenable<List<Highlight>>? highlights;
+
+  /// 標註在這台目錄裡是第幾章（列上寫那一章的章名）。
+  final int Function(Highlight highlight)? highlightChapter;
+
+  /// 點了一個標註。收起面板與跳過去都由呼叫端負責。
+  final ValueChanged<Highlight>? onHighlightTap;
+
+  /// 往左滑刪掉一個標註。
+  final ValueChanged<Highlight>? onHighlightDelete;
+
+  /// 按了「匯出」，給照這台目錄排好的標註。
+  final ValueChanged<List<Highlight>>? onHighlightExport;
 
   final List<BookChapter> chapters;
 
@@ -236,21 +258,23 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                   AppGrouped.margin,
                   AppSpacing.md,
                 ),
-                child: widget.bookmarks == null
+                child: _tabs.length == 1
                     ? _buildTitle(theme)
                     : _buildTabs(theme),
               ),
             ),
             Container(height: AppGlass.hairline, color: chrome.separator),
             Expanded(
-              // 兩個分頁都留著：切回目錄時捲動位置不變。
+              // 每個分頁都留著：切回目錄時捲動位置不變。
               child: IndexedStack(
-                index: _tab.index,
+                index: _tabs.indexOf(_tab),
                 sizing: StackFit.expand,
                 children: [
                   _buildChapterList(context),
                   if (widget.bookmarks case final bookmarks?)
                     _buildBookmarkList(context, bookmarks),
+                  if (widget.highlights case final highlights?)
+                    _buildHighlightList(context, highlights),
                 ],
               ),
             ),
@@ -280,16 +304,21 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     );
   }
 
-  /// 頂端分段切換目錄與書籤，右側寫這一頁有幾章、幾個書籤。
+  /// 有哪些分頁：目錄一定有，書籤與標註有給才有。
+  List<_DrawerTab> get _tabs => [
+    _DrawerTab.chapters,
+    if (widget.bookmarks != null) _DrawerTab.bookmarks,
+    if (widget.highlights != null) _DrawerTab.highlights,
+  ];
+
+  /// 頂端分段切換目錄、書籤與標註，右側寫這一頁有幾章、幾個書籤或標註；
+  /// 標註頁另有「匯出」。
   Widget _buildTabs(ThemeData theme) {
     return Row(
       children: [
         GlassSegmented<_DrawerTab>(
           expand: false,
-          segments: const [
-            GlassSegment(_DrawerTab.chapters, '目錄'),
-            GlassSegment(_DrawerTab.bookmarks, '書籤'),
-          ],
+          segments: [for (final tab in _tabs) GlassSegment(tab, tab.label)],
           selected: _tab,
           onChanged: (tab) {
             setState(() => _tab = tab);
@@ -307,6 +336,27 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
             builder: (context, items, _) => items.isEmpty
                 ? const SizedBox.shrink()
                 : _countLabel(theme, '${items.length} 個'),
+          ),
+          _DrawerTab.highlights => ValueListenableBuilder(
+            valueListenable: widget.highlights!,
+            builder: (context, items, _) => items.isEmpty
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _countLabel(theme, '${items.length} 個'),
+                      if (widget.onHighlightExport case final onExport?)
+                        IconButton(
+                          tooltip: '匯出',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.ios_share_rounded, size: 20),
+                          onPressed: () => onExport([
+                            for (final row in _highlightRows(items))
+                              row.highlight,
+                          ]),
+                        ),
+                    ],
+                  ),
           ),
         },
       ],
@@ -401,6 +451,91 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     );
   }
 
+  /// 照在這台目錄裡的章排（標註可能來自另一個書源），同一章照第幾個字。
+  List<({Highlight highlight, int chapter})> _highlightRows(
+    List<Highlight> items,
+  ) =>
+      [
+        for (final highlight in items)
+          (
+            highlight: highlight,
+            chapter:
+                widget.highlightChapter?.call(highlight) ??
+                highlight.chapterIndex,
+          ),
+      ]..sort(
+        (a, b) => a.chapter != b.chapter
+            ? a.chapter.compareTo(b.chapter)
+            : a.highlight.charOffset.compareTo(b.highlight.charOffset),
+      );
+
+  /// 標註列：左邊一條標註的顏色，畫到的字（最多三行）、下面寫在哪一章；
+  /// 往左滑刪除。
+  Widget _buildHighlightList(
+    BuildContext context,
+    ValueListenable<List<Highlight>> highlights,
+  ) {
+    return ValueListenableBuilder(
+      valueListenable: highlights,
+      builder: (context, items, _) {
+        if (items.isEmpty) {
+          return const AppStateView(
+            icon: Icons.border_color_outlined,
+            title: '沒有標註',
+          );
+        }
+        final rows = _highlightRows(items);
+        return SwipeActionsGroup(
+          child: ListView.builder(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.paddingOf(context).bottom,
+            ),
+            itemCount: rows.length,
+            itemBuilder: (context, index) {
+              final (:highlight, :chapter) = rows[index];
+              return SwipeActions(
+                key: ValueKey(highlight.id),
+                enabled: widget.onHighlightDelete != null,
+                trailing: [
+                  SwipeAction(
+                    label: '刪除',
+                    icon: Icons.delete_outline_rounded,
+                    color: AppTint.rust.color,
+                    destructive: true,
+                    onPressed: () => widget.onHighlightDelete?.call(highlight),
+                  ),
+                ],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GroupedRow(
+                      leading: HighlightColorBar(color: highlight.color),
+                      title: highlight.quote,
+                      maxTitleLines: 3,
+                      subtitle: widget.highlightChapter == null
+                          ? highlight.chapterTitle
+                          : widget.titleFor(chapter),
+                      maxSubtitleLines: 1,
+                      showChevron: false,
+                      onTap: () => widget.onHighlightTap?.call(highlight),
+                    ),
+                    Container(
+                      height: AppGlass.hairline,
+                      margin: const EdgeInsets.only(
+                        left: AppGrouped.rowPadding,
+                      ),
+                      color: AppChrome.of(context).separator,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildChapterList(BuildContext context) {
     return ChapterScrollbar(
       itemCount: widget.chapters.length,
@@ -419,4 +554,12 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 }
 
-enum _DrawerTab { chapters, bookmarks }
+enum _DrawerTab {
+  chapters('目錄'),
+  bookmarks('書籤'),
+  highlights('標註');
+
+  const _DrawerTab(this.label);
+
+  final String label;
+}

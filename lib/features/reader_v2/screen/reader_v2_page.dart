@@ -10,6 +10,10 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
+import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/services/highlight_export.dart';
+import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlight_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
@@ -338,6 +342,25 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       ),
                   onBookmarkTap: _jumpToBookmarkFromDrawer,
                   onBookmarkDelete: _deleteBookmark,
+                  highlights: _host.highlights.available
+                      ? _host.highlights
+                      : null,
+                  highlightChapter: (highlight) =>
+                      ReaderV2Highlights.chapterIndexIn(
+                        highlight,
+                        runtime?.chapters ?? widget.initialChapters,
+                      ),
+                  onHighlightTap: _jumpToHighlightFromDrawer,
+                  onHighlightDelete: _coordinator.deleteHighlight,
+                  onHighlightExport: (items) => unawaited(
+                    shareHighlights([
+                      (
+                        bookName: widget.book.name,
+                        bookAuthor: widget.book.author,
+                        items: items,
+                      ),
+                    ]),
+                  ),
                   onClosed: _handleDrawerClosed,
                 ),
                 backgroundColor: palette.readerBackground,
@@ -467,6 +490,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                         unawaited(_coordinator.addBookmark(selection))
                   : null,
               marks: _host.bookmarks.marks,
+              onHighlightText: _host.highlights.available
+                  ? (selection) =>
+                        unawaited(_coordinator.addHighlight(selection))
+                  : null,
+              highlights: _host.highlights.marks,
+              onHighlightTap: _host.highlights.available
+                  ? (id) => unawaited(_showHighlight(id))
+                  : null,
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
               onContentTapUp: _handleContentTap,
@@ -613,6 +644,27 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _jumpToBookmarkFromDrawer(Bookmark bookmark) {
     final settled = _closeDrawerForJump();
     unawaited(_coordinator.jumpToBookmark(bookmark, settled: settled));
+  }
+
+  void _jumpToHighlightFromDrawer(Highlight highlight) {
+    final settled = _closeDrawerForJump();
+    unawaited(_coordinator.jumpToHighlight(highlight, settled: settled));
+  }
+
+  /// 點正文上已畫的標註：打開標註面板，換顏色、樣子或刪掉。
+  Future<void> _showHighlight(int id) async {
+    final highlights = _host.highlights;
+    final highlight = highlights.byId(id);
+    if (highlight == null) return;
+    await ReaderV2MenuSheet.show<void>(
+      context,
+      settings: _host.settings,
+      builder: (_) => ReaderV2HighlightSheet(
+        highlight: highlight,
+        onChanged: (next) => unawaited(highlights.save(next)),
+        onDelete: _coordinator.deleteHighlight,
+      ),
+    );
   }
 
   /// 從目錄面板跳過去：收起面板與選單、蓋上紙；傳回面板收完、紙蓋好的
