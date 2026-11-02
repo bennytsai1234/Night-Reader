@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
@@ -47,9 +48,13 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     return GlassNavHeader(
       automaticallyImplyLeading: false,
       titleWidget: Padding(
-        // NavigationToolbar 兩側已有 middleSpacing，補到與分組卡片對齊。
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppGrouped.margin - AppSpacing.md,
+        // NavigationToolbar 兩側已有 middleSpacing，補到與分組卡片對齊；
+        // 平板上跟著內容欄（[ReadableWidth]）。
+        padding: EdgeInsets.symmetric(
+          horizontal:
+              AppGrouped.margin -
+              AppSpacing.md +
+              ReadableWidth.sideOf(MediaQuery.sizeOf(context).width),
         ),
         child: Row(
           children: [

@@ -90,6 +90,8 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
           final busy = provider.isRunning || !provider.isFinished;
           return Scaffold(
             appBar: GlassNavHeader(
+              // 除錯日誌照整個畫面寬，長網址少換行。
+              readable: false,
               title: '除錯：${widget.source.bookSourceName}',
               actions: [
                 GlassIconButton(

@@ -239,6 +239,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           _selectedUrls.length == provider.books.length;
       return GlassNavHeader(
         morph: true,
+        readable: false,
         title: '已選 ${_selectedUrls.length} 本',
         leading: GlassTextButton(
           label: '完成',
@@ -266,6 +267,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     // 進出多選時標題淡換、兩側按鈕的玻璃留著只改大小（GlassMorph）。
     return GlassNavHeader(
       morph: true,
+      readable: false,
       title: '書架',
       titleSheen: provider.checkingShelf,
       leading: GlassMenuButton<Object>(
