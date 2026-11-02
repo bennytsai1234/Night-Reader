@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -113,10 +115,19 @@ class ExploreSourceListSkeleton extends StatelessWidget {
 
 /// 發現分類書單的骨架：與 [ExploreBookItem] 同樣的封面與文字位置。
 class ExploreBookListSkeleton extends StatelessWidget {
-  const ExploreBookListSkeleton({super.key, required this.padding});
+  const ExploreBookListSkeleton({
+    super.key,
+    required this.padding,
+    this.books = const [],
+    this.inBookshelf,
+  });
 
   /// 與書單相同的內距。
   final EdgeInsets padding;
+
+  /// 取得分類書單後，使用本輪真正的書名、作者與最新章節排骨架。
+  final List<SearchBook> books;
+  final bool Function(SearchBook book)? inBookshelf;
 
   @override
   Widget build(BuildContext context) {
@@ -124,10 +135,11 @@ class ExploreBookListSkeleton extends StatelessWidget {
     return ExcludeSemantics(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final count = _countToFill(
+          final fill = _countToFill(
             constraints.maxHeight - padding.vertical,
             rowHeight,
           );
+          final count = books.isEmpty ? fill : math.min(books.length, fill);
           return ListView.separated(
             // 同書源列表的骨架：整片每一幀都重畫，不每列各一層。
             addRepaintBoundaries: false,
@@ -136,8 +148,13 @@ class ExploreBookListSkeleton extends StatelessWidget {
             itemCount: count,
             separatorBuilder: (_, _) =>
                 const InsetSeparator(indent: ExploreBookItem.textIndent),
-            itemBuilder: (context, index) =>
-                _BookRowSkeleton(seed: index % _widths.length),
+            itemBuilder: (context, index) => _BookRowSkeleton(
+              seed: index % _widths.length,
+              book: index < books.length ? books[index] : null,
+              isInBookshelf:
+                  index < books.length &&
+                  (inBookshelf?.call(books[index]) ?? false),
+            ),
           );
         },
       ),
@@ -146,15 +163,27 @@ class ExploreBookListSkeleton extends StatelessWidget {
 }
 
 class _BookRowSkeleton extends StatelessWidget {
-  const _BookRowSkeleton({required this.seed});
+  const _BookRowSkeleton({
+    required this.seed,
+    this.book,
+    this.isInBookshelf = false,
+  });
 
   final int seed;
+  final SearchBook? book;
+  final bool isInBookshelf;
 
   @override
   Widget build(BuildContext context) {
-    final title = AppTextStyles.bodyBase.copyWith(height: 1.3);
+    final title = AppTextStyles.bodyBase.copyWith(
+      height: 1.3,
+      fontWeight: FontWeight.w600,
+    );
     final meta = AppTextStyles.bodySm.copyWith(height: 1.35);
+    final metaHeight =
+        MediaQuery.textScalerOf(context).scale(meta.fontSize!) * meta.height!;
     double width(int offset) => _widths[(seed + offset) % _widths.length];
+    final loaded = book;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppGrouped.margin,
@@ -174,16 +203,104 @@ class _BookRowSkeleton extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SkeletonLine(style: title, widthFactor: width(0) + 0.2),
-                const SizedBox(height: 2),
-                SkeletonLine(style: meta, widthFactor: width(1)),
-                const SizedBox(height: 2),
-                SkeletonLine(style: meta, widthFactor: width(2) + 0.35),
+                if (loaded == null) ...[
+                  SkeletonLine(style: title, widthFactor: width(0) + 0.2),
+                  const SizedBox(height: 2),
+                  SkeletonLine(style: meta, widthFactor: width(1)),
+                  const SizedBox(height: 2),
+                  SkeletonLine(style: meta, widthFactor: width(2) + 0.35),
+                ] else ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _BookTextBars(
+                          text: context.zh(loaded.name),
+                          style: title,
+                          maxLines: 2,
+                        ),
+                      ),
+                      if (isInBookshelf) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        const _ShelfBadgeSkeleton(),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    height: metaHeight,
+                    child: _BookTextBars(
+                      text: ExploreBookItem.metaOf(context, loaded),
+                      style: meta,
+                      maxLines: 1,
+                    ),
+                  ),
+                  if (loaded.latestChapterTitle case final chapter?
+                      when chapter.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    _BookTextBars(
+                      text: '最新：${context.zh(chapter)}',
+                      style: meta,
+                      maxLines: 1,
+                    ),
+                  ],
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 已經收到文字時，依 TextPainter 的每行字框畫相同寬度與行高的條。
+class _BookTextBars extends StatelessWidget {
+  const _BookTextBars({
+    required this.text,
+    required this.style,
+    required this.maxLines,
+  });
+
+  final String text;
+  final TextStyle style;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final shape = GroupedItemShape.text(
+        context,
+        text,
+        style: style,
+        width: constraints.maxWidth,
+        maxLines: maxLines,
+      );
+      return SkeletonShapes(height: shape.height, shapes: (_) => shape.marks);
+    },
+  );
+}
+
+/// 右側「書架」膠囊的形狀跟著相同的字級與水平內距。
+class _ShelfBadgeSkeleton extends StatelessWidget {
+  const _ShelfBadgeSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final label = GroupedItemShape.text(
+      context,
+      '書架',
+      style: AppTextStyles.labelXs.copyWith(
+        height: 1.3,
+        fontWeight: FontWeight.w600,
+      ),
+      width: double.infinity,
+      maxLines: 1,
+    );
+    return SkeletonBox(
+      width: label.width! + AppSpacing.sm * 2,
+      height: label.height + 4,
+      borderRadius: AppRadius.pillShape,
     );
   }
 }
