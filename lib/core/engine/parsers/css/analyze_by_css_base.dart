@@ -1,5 +1,6 @@
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:xpath_selector/xpath_selector.dart';
 
 /// AnalyzeByCss 的基礎類別
 /// (原 Android model/analyzeRule/AnalyzeByJSoup.kt)
@@ -10,6 +11,11 @@ abstract class AnalyzeByCssBase {
     final htmlLike = _extractHtmlLikeContent(doc);
     if (doc is Element) {
       element = doc;
+    } else if (doc is XPathNode) {
+      // XPath 找到的節點交給 CSS 規則時直接用裡面的元素，同 Legado
+      // `AnalyzeByJSoup.parse` 的 `doc.asElement()`；`toString()` 只有標籤名稱。
+      final node = doc.node;
+      element = node is Element ? node : _parseRootElement(doc.text ?? '');
     } else if (htmlLike != null) {
       element = _parseRootElement(htmlLike);
     } else if (doc is String) {
