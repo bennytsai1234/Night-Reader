@@ -114,7 +114,7 @@ dependencies:
   google_sign_in_platform_interface: ^3.1.0
   # 書源網址的中文網域換成 punycode 才連得上（同 OkHttp）。
   punycoder: ^0.3.0
-  # 中文網域換 punycode 前先統一寫法（全形轉半形、組合字合成），同 OkHttp。
+  # 中文網域照 UTS #46 換 punycode 時的 NFC（lib/core/utils/idna.dart），同 OkHttp。
   unorm_dart: ^0.3.3
 
 dependency_overrides:

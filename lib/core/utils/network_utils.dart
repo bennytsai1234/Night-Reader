@@ -1,8 +1,6 @@
 import 'dart:io';
 
-import 'package:punycoder/punycoder.dart';
-import 'package:unorm_dart/unorm_dart.dart';
-
+import 'idna.dart';
 import 'public_suffix.dart';
 
 /// NetworkUtils - 網路輔助工具 (原 Android utils/NetworkUtils.kt)
@@ -38,8 +36,10 @@ class NetworkUtils {
       }
     }
     if (!host.runes.any((c) => c > 0x7f)) return url;
-    // 同 OkHttp 照 UTS 46 先統一寫法：全形轉半形、組合字合成（NFKC）、轉小寫。
-    final ascii = domainToAscii(nfkc(host).toLowerCase(), validate: false);
+    // 換出來不是合法主機名（例如全形的「＠」「／」對應成 @、/）時照原樣送，
+    // 請求照樣失敗，不會被拼成另一個主機或路徑；OkHttp 也是丟錯不送。
+    final ascii = idnaToAscii(host);
+    if (ascii == null) return url;
     final port = hasPort ? hostPort.substring(colon) : '';
     return '${match.group(1)}$userInfo$ascii$port${match.group(3)}';
   }
