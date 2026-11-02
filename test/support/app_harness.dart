@@ -46,6 +46,7 @@ import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart
 import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:night_reader/core/sync/sync_service.dart';
 
 import 'db_clock.dart';
 import 'screenshot.dart';
@@ -96,6 +97,8 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   ReaderV2ContentTransformWorker.instance.stop();
   rootBundle.clear();
   SharedPreferences.setMockInitialValues(<String, Object>{...prefs});
+  // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
+  SyncService.instance = SyncService();
   dbWork.clear();
   _db = AppDatabase.forTesting(
     NativeDatabase.memory().interceptWith(DbClock()),

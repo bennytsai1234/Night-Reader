@@ -11,7 +11,7 @@ import 'package:night_reader/features/about/about_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
-import 'package:night_reader/features/settings/backup_settings_page.dart';
+import 'package:night_reader/features/settings/backup_sync_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
@@ -32,7 +32,7 @@ const _rows = <(String, Type)>[
   ('閱讀統計', ReadingStatsPage),
   ('書源管理', SourceManagerPage),
   ('背景下載佇列', DownloadManagerPage),
-  ('備份與還原', BackupSettingsPage),
+  ('備份與同步', BackupSyncPage),
   ('關於夜讀', AboutPage),
 ];
 

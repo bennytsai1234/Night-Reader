@@ -95,8 +95,6 @@ class PreferKey {
   static const String autoClearExpired = 'autoClearExpired';
   static const String importKeepName = 'importKeepName';
   static const String importKeepGroup = 'importKeepGroup';
-  static const String syncBookProgress = 'syncBookProgress';
-  static const String syncBookProgressPlus = 'syncBookProgressPlus';
   static const String cronet = 'Cronet';
   static const String antiAlias = 'antiAlias';
   static const String bitmapCacheSize = 'bitmapCacheSize';

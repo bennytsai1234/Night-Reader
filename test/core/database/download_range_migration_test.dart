@@ -4,6 +4,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/download_task.dart';
 
+import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
 
 void main() {
@@ -34,6 +35,7 @@ void main() {
             "VALUES ('a', 'A', 10, 20, 11, 2, 4, 123, 7)",
           );
           raw.execute(legacyChaptersTable);
+          raw.execute(legacyBooksTable);
           raw.execute('PRAGMA user_version = 5');
         },
       ),

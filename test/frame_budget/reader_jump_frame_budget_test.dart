@@ -31,14 +31,14 @@ import '../support/frame_budget.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
-  Future<void> updateProgress(
+  Future<int?> updateProgress(
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
     int pos, {
     double visualOffsetPx = 0.0,
     String? readerAnchorJson,
-  }) async {}
+  }) async => null;
 }
 
 class _FakeChapterDao extends Fake implements ChapterDao {

@@ -97,7 +97,7 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's13_downloads': (const {}, (t) async => openMine(t, '背景下載佇列')),
   's15_appearance': (const {}, (t) async => openMine(t, '外觀與主題')),
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
-  's17_backup': (const {}, (t) async => openMine(t, '備份與還原')),
+  's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
   's19_release_notes': (
     const {},

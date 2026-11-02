@@ -89,12 +89,13 @@ class ReaderV2ProgressController {
     book.durChapterTitle = title;
     book.readerAnchorJson = anchorJson;
     final chapterDao = repository.chapterDao;
+    int? movedAt;
     await chapterDao.transaction(() async {
       final storedIndex = chapter == null
           ? null
           : await chapterDao.indexOfUrl(book.bookUrl, chapter.url);
       final persistedIndex = storedIndex ?? normalized.chapterIndex;
-      await bookDao.updateProgress(
+      movedAt = await bookDao.updateProgress(
         book.bookUrl,
         persistedIndex,
         title,
@@ -111,6 +112,8 @@ class ReaderV2ProgressController {
     // in-memory model behind that boundary so a failed persistence cannot
     // create a second, contradictory truth.
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
+    // 記憶體裡的書之後可能整筆寫回資料庫，位置移動的時間要跟著。
+    if (movedAt case final time?) book.progressTime = time;
   }
 
   void dispose() {
