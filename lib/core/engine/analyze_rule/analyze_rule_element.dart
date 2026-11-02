@@ -17,7 +17,8 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
   });
 
   /// 獲取單個元素，保留原始結果型別（`init` 這類規則要拿到 JSON 物件與
-  /// 陣列本身）。
+  /// 陣列本身）。CSS 與 XPath 規則同 Legado 交回找到的一整組元素（找不到時
+  /// 是空的一組），不是只有第一個：書源寫 `java.getElement(...).length`。
   dynamic getElement(String ruleStr) {
     if (ruleStr.isEmpty) {
       return null;
@@ -63,19 +64,17 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                   .getObject(rule);
               break;
             case Mode.xpath:
-              final elements = sourceRule
+              tempResult = sourceRule
                   .getAnalyzeByXPath(this, result)
                   .getElements(rule);
-              tempResult = elements.isNotEmpty ? elements.first : null;
               break;
             case Mode.js:
               tempResult = evalJS(rule, result);
               break;
             default:
-              final elements = sourceRule
+              tempResult = sourceRule
                   .getAnalyzeByJSoup(this, result)
                   .getElements(rule);
-              tempResult = elements.isNotEmpty ? elements.first : null;
           }
         } catch (e) {
           throw ParsingException(

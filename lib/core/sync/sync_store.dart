@@ -40,9 +40,18 @@ class SyncConflict implements Exception {
 
 /// 同步失敗，[message] 是給使用者看的原因。
 class SyncStoreException implements Exception {
-  const SyncStoreException(this.message);
+  /// 整個同步空間用不了（連不上、授權失效、網址不對）：後面的檔案也一樣會
+  /// 失敗，這一輪不必再試。
+  const SyncStoreException(this.message) : wholeSpace = true;
+
+  /// 只有這一份檔案失敗（例如雲端對它回 403）：其他檔案照常同步，這一輪
+  /// 最後仍算失敗。
+  const SyncStoreException.file(this.message) : wholeSpace = false;
 
   final String message;
+
+  /// 見 [SyncStoreException.new]、[SyncStoreException.file]。
+  final bool wholeSpace;
 
   @override
   String toString() => message;
