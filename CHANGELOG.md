@@ -81,6 +81,7 @@
     - 資料直接寫在網址裡（`data:` 網址）時照 Legado 讀，晋江文学的目錄、七猫小说的正文不再出現「Invalid MIME type」或連線錯誤
     - 中文網域（例如「永远的神.com」）連得上了，網域裡打成全形字或帶重音的字也一樣
     - 書源網址頭尾多打的空白不算，品书斋這類書源搜得到書
+  - 書源程式用 `var` 重新宣告 Legado 給的變數時（例如 `var result = result.trim()`、`var src`），照 Legado 拿到原本的值，不再變成 undefined
   - XPath 規則的條件只寫名稱時（例如 `//dd[a]` 是「有連結的那幾項」）照 Legado 讀，思兔阅读的目錄不再出錯
   - 書源程式用 Java 的 `HashMap` 時，`computeIfAbsent`、`merge`、`putIfAbsent` 這類方法都能用；系統屬性（`System.getProperties()`）也有，而且和 Legado 一樣整個 App 共用一份、下一次搜尋還記得，半夏小说、69書吧這類用它限流的書源不再出現「not a function」
 - 兩本書都有沒附連結的分卷（例如都叫「第一卷」）時，不再互相搶走那一章，重開書目錄不再少章

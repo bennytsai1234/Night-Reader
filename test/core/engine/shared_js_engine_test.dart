@@ -172,6 +172,25 @@ void main() {
       );
     });
 
+    test('var with a binding name keeps the value Legado gave', () async {
+      // Legado 的 bindings 和規則頂層的 var 在同一個作用域：重新宣告不會把
+      // 值清掉，右邊讀到的還是原本的值（35 個源倉庫書源這樣寫）。
+      expect(
+        await chapterTitles('a@text@js:var result = result + "!"; result'),
+        ['第一章!', '第二章!'],
+      );
+      expect(
+        await chapterTitles('a@text@js:var baseUrl\nresult + baseUrl.length'),
+        ['第一章21', '第二章21'],
+      );
+      expect(
+        await chapterTitles(
+          'a@text@js:function f() { return result; } var result = f() + "?"; result',
+        ),
+        ['第一章?', '第二章?'],
+      );
+    });
+
     test('a nested rule does not clear what the outer rule set', () async {
       // java.getString 帶 @js: 時在同一個引擎裡再執行一段規則；外層規則先
       // 掛上的全域在內層結束時還要在。

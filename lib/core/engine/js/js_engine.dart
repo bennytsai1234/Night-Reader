@@ -238,17 +238,46 @@ globalThis.__lrStartedRule = -1;
   /// 這個引擎下一次執行規則的編號，見 [_evaluateRuleScript]。
   int _nextRuleRun = 0;
 
+  /// Legado 交給規則 JS 的變數（`AnalyzeRule.evalJS` 與網址 JS 的 bindings）。
+  static const List<String> _ruleBindingNames = [
+    'java',
+    'cookie',
+    'cache',
+    'source',
+    'book',
+    'result',
+    'baseUrl',
+    'chapter',
+    'title',
+    'src',
+    'nextChapterUrl',
+    'rssArticle',
+    'key',
+    'page',
+    'speakText',
+    'speakSpeed',
+  ];
+
+  /// 包住規則的函式開頭先用同樣的名稱宣告區域變數、放進現在的值。Legado
+  /// 的 bindings 和規則頂層的 `var` 在同一個作用域：`var src` 只是重新宣告，
+  /// 值還是正文；`var result = result.trim()` 右邊讀到的是網頁。直接 eval 在
+  /// 函式裡跑，`var` 會另開一個新的區域變數（一開始是 undefined）蓋掉外面
+  /// 的值；先宣告好，eval 裡的 `var` 就只是重新宣告同一個變數。
+  static final String _ruleBindingLocals =
+      'var ${_ruleBindingNames.map((n) => '$n = globalThis.$n').join(', ')};';
+
   /// 規則 JS 包在函式裡用直接 eval 執行：規則裡 `var` 宣告的變數留在這次
   /// 執行，不會掛到全域讓下一次（下一章、下一筆結果）看到，與 Legado 每次
   /// 執行一個新作用域相同。沒宣告就賦值的變數由 `__lrRunRule` 在結束後清掉
-  /// （見 [_ruleGlobalsHelpers]）。
+  /// （見 [_ruleGlobalsHelpers]）。Legado 給的變數見 [_ruleBindingLocals]。
   JsEvalResult _evaluateRuleScript(String jsCode) {
     // eval 先讀完整段、語法沒問題才開始執行，所以開頭這句跑到了就表示規則
     // 已經開始執行。`void 0` 讓結尾只有宣告的規則照樣得到 undefined。
     final run = _nextRuleRun++;
     final marked = jsonEncode('__lrStartedRule=$run;void 0;$jsCode');
     final wrapped =
-        '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
+        '__lrRunRule(function() { $_ruleBindingLocals '
+        'return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult(eval($marked)) '
         ': eval($marked); })';
     final result = _runtime!.evaluate(wrapped);
@@ -264,8 +293,8 @@ globalThis.__lrStartedRule = -1;
     final fallbackBody = RuleFinalReturn.inject(jsCode);
     final fallbackWrapped =
         '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
-        '? __lrNormalizeRuleResult((function() {\n$fallbackBody\n})()) '
-        ': (function() {\n$fallbackBody\n})(); })';
+        '? __lrNormalizeRuleResult((function() {\n$_ruleBindingLocals\n{\n$fallbackBody\n}\n})()) '
+        ': (function() {\n$_ruleBindingLocals\n{\n$fallbackBody\n}\n})(); })';
     return _runtime!.evaluate(fallbackWrapped);
   }
 
