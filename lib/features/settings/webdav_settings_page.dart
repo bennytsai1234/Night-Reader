@@ -28,6 +28,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   bool _connecting = false;
   bool _revealed = false;
   bool _usingWebDav = false;
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
         _password.text = account.password;
       }
       _usingWebDav = space == SyncSpace.webdav;
+      _loaded = true;
     });
   }
 
@@ -101,6 +103,8 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: 'WebDAV'),
       body: GroupedListView(
+        // 等原有設定讀回後，骨架才照最後的文字與區塊換成內容。
+        ready: _loaded,
         children: [
           GroupedSection(
             footer: '堅果雲要用「第三方應用管理」產生的應用密碼，不是登入密碼。',
