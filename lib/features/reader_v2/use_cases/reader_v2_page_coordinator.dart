@@ -46,6 +46,11 @@ class ReaderV2PageCoordinator {
   final ReaderV2ControllerHost _host;
   final ReaderV2NoticeSink _showNotice;
 
+  /// 點擊區域的「目錄」「日夜切換」：要用到頁面的抽屜與主題，由頁面接上，
+  /// 和閱讀選單的同名按鈕做同一件事。
+  VoidCallback? openChapters;
+  VoidCallback? toggleDayNight;
+
   /// 拖動條跨檔位的預覽跳轉防抖：快速滑過多個檔位時只跳最後停留者。
   static const Duration _scrubPreviewDebounce = Duration(milliseconds: 180);
   Timer? _scrubPreviewTimer;
@@ -82,6 +87,15 @@ class ReaderV2PageCoordinator {
         return;
       case ReaderV2TapAction.toggleTts:
         unawaited(_host.tts?.toggle());
+        return;
+      case ReaderV2TapAction.openChapters:
+        openChapters?.call();
+        return;
+      case ReaderV2TapAction.toggleAutoPage:
+        toggleAutoPage();
+        return;
+      case ReaderV2TapAction.toggleDayNight:
+        toggleDayNight?.call();
         return;
     }
   }

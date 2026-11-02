@@ -46,7 +46,9 @@ final Directory frameRecordingDir = Directory(
 
 /// 錄一段動畫，直到 [until] 成立後再多 [tailFrames] 格。[phase] 在每格畫完
 /// 時回答畫面在哪一段（頁面上的色條與說明照它分段）。[onFrame]、
-/// [realAsync] 同 [recordFrames]。
+/// [realAsync] 同 [recordFrames]。[scale] 是存下的畫面相對邏輯尺寸的比例：
+/// 平板這類大畫面一格就有好幾 MB，錄一段動畫上 GB，存成一半大小；設定檔
+/// 裡要畫深淺的位置照存下的大小給。
 Future<void> recordAnimation(
   WidgetTester tester, {
   required String name,
@@ -56,6 +58,7 @@ Future<void> recordAnimation(
   bool realAsync = false,
   Future<void> Function(int frame)? onFrame,
   Duration frameDuration = const Duration(microseconds: 8333),
+  double scale = 1,
 }) async {
   final dir = Directory(
     '${frameRecordingDir.path}${Platform.pathSeparator}$name',
@@ -83,7 +86,7 @@ Future<void> recordAnimation(
         // 直接用縮小的比例畫，定格換場那種貼上去的圖（照裝置像素比拍的）會
         // 被縮小，直接畫的文字與形狀卻是照小尺寸重畫，兩者邊緣不一樣：換上
         // 圖、換回真畫面的那一格整片都在變，畫面其實沒動。
-        final ratio = 1 / tester.view.devicePixelRatio;
+        final ratio = scale / tester.view.devicePixelRatio;
         await tester.runAsync(() async {
           final full = await layer.toImage(box.paintBounds);
           final w = (full.width * ratio).round();

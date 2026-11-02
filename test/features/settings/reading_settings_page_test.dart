@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -180,6 +181,40 @@ void main() {
       debugOnRebuildDirtyWidget = null;
     }
     expect(find.text('18.5'), findsOneWidget);
-    expect(rebuilt, {'字號'});
+    // 每行字數的上限是畫面放得下的字數，跟著字號變（393 寬時 18 號放得下
+    // 20 字、18.5 號 19 字），那一列跟著重建；上限沒變時不重建。
+    expect(rebuilt.difference({'每行字數'}), {'字號'});
+  });
+
+  testWidgets('一行放不到幾個字時，每行字數給的每個數都存得下', (tester) async {
+    // 最大字號加上最寬的最少留白：393 寬的手機一行只放得下幾個字。
+    final prefs = GetIt.instance<SharedPreferences>();
+    await prefs.setDouble(PreferKey.readerFontSize, 40);
+    await prefs.setDouble(PreferKey.readerPaddingHorizontal, 64);
+    await pumpHost(tester);
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+
+    final rowFinder = find.byWidgetPredicate(
+      (w) => w is NumberStepperRow && w.label == '每行字數',
+    );
+    final row = tester.widget<NumberStepperRow>(rowFinder);
+    final capacity = row.max.toInt();
+    expect(capacity, lessThanOrEqualTo(6), reason: '這個情境要一行放不到 6 個字');
+    expect(row.min, 1);
+
+    await tester.tap(
+      find.descendant(
+        of: rowFinder,
+        matching: find.byIcon(Icons.remove_rounded),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(prefs.getInt(PreferKey.readerLineChars), capacity - 1);
+    expect(
+      tester.widget<NumberStepperRow>(rowFinder).displayText,
+      '${capacity - 1} 字',
+    );
   });
 }

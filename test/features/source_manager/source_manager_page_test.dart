@@ -364,6 +364,41 @@ void main() {
     expect(remaining, hasLength(15));
   });
 
+  testWidgets('「沒有異常」只留下校驗沒標異常的書源', (tester) async {
+    final dao = GetIt.instance<BookSourceDao>();
+    await tester.runAsync(() async {
+      await dao.upsert(
+        BookSource(
+          bookSourceUrl: 'https://broken.example',
+          bookSourceName: '壞掉的書源',
+          bookSourceGroup:
+              '$abnormalSourceGroupTag,$searchBrokenSourceGroupTag',
+          customOrder: 9,
+        ),
+      );
+    });
+    await pumpPage(tester);
+
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.byType(SourceItemTile).first),
+      listen: false,
+    );
+    expect(provider.checkResultTags, [
+      abnormalSourceGroupTag,
+      searchBrokenSourceGroupTag,
+    ]);
+    expect(provider.userGroups, isNot(contains(abnormalSourceGroupTag)));
+
+    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分組與篩選'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SourceManagerProvider.noAbnormalFilter));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('壞掉的書源'), findsNothing);
+    expect(find.textContaining('書源0'), findsOneWidget);
+  });
+
   testWidgets('the batch toolbar stays at the bottom outside selection mode', (
     tester,
   ) async {

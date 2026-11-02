@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../js_extensions.dart';
 import 'js_blocking_tasks.dart';
+import 'js_jsoup_http.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
@@ -114,6 +115,14 @@ extension JsNetworkExtensions on JsExtensions {
         ),
       );
     });
+
+    // ─── org.jsoup.Jsoup.connect(url)…execute() ──────────────────
+    onBlocking(
+      'jsoupExecute',
+      (payload) => BlockingCall.run(
+        jsoupExecute(Map<String, Object?>.from(payload as Map)),
+      ),
+    );
 
     // ─── java.getCookie(tag, key) ────────────────────────────────
     onBlocking('getCookie', (payload) {

@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 
+import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
 
 /// 書籤功能移除的遷移契約：舊版（schema 2）資料庫升級後，bookmarks 表與
@@ -31,6 +32,7 @@ void main() {
               addTime INTEGER NOT NULL DEFAULT 0
             )''');
           raw.execute(legacyChaptersTable);
+          raw.execute(legacyBooksTable);
           raw.execute('PRAGMA user_version = 2');
         },
       ),

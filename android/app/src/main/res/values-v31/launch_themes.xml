@@ -1,96 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 各風格的系統啟動畫面（Android 13 起由 MainActivity.setLaunchTheme 選用）：
-         LaunchTheme.<風格> 跟隨系統深淺，.Light／.Dark 給 App 內固定深淺時用。
-         圖示與其他屬性繼承 LaunchTheme。 -->
-    <style name="LaunchTheme.Paper">
-        <item name="android:windowSplashScreenBackground">@color/launch_paper</item>
+    <!-- 系統啟動畫面（Android 13 起由 MainActivity.setLaunchTheme 選用）：
+         LaunchTheme.System.<淺色風格><深色底> 跟隨系統深淺，LaunchTheme.Light.<淺色風格>、
+         LaunchTheme.Dark.<深色底> 給 App 內固定深淺時用。深色底是純黑（Black）或
+         深色風格的名稱。圖示與其他屬性繼承 LaunchTheme。 -->
+    <style name="LaunchTheme.System.PlainBlack" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_black</item>
     </style>
-    <style name="LaunchTheme.Paper.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_paper_light</item>
+    <style name="LaunchTheme.System.PlainPaper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_paper</item>
     </style>
-    <style name="LaunchTheme.Paper.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_paper_dark</item>
+    <style name="LaunchTheme.System.PlainTea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_tea</item>
     </style>
-    <style name="LaunchTheme.Bamboo">
-        <item name="android:windowSplashScreenBackground">@color/launch_bamboo</item>
+    <style name="LaunchTheme.System.PlainKraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_kraft</item>
     </style>
-    <style name="LaunchTheme.Bamboo.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_light</item>
+    <style name="LaunchTheme.System.PlainBamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_bamboo</item>
     </style>
-    <style name="LaunchTheme.Bamboo.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_dark</item>
+    <style name="LaunchTheme.System.PaperBlack" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_black</item>
     </style>
-    <style name="LaunchTheme.Azurite">
-        <item name="android:windowSplashScreenBackground">@color/launch_azurite</item>
+    <style name="LaunchTheme.System.PaperPaper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_paper</item>
     </style>
-    <style name="LaunchTheme.Azurite.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_azurite_light</item>
+    <style name="LaunchTheme.System.PaperTea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_tea</item>
     </style>
-    <style name="LaunchTheme.Azurite.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_azurite_dark</item>
+    <style name="LaunchTheme.System.PaperKraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_kraft</item>
     </style>
-    <style name="LaunchTheme.Tea">
-        <item name="android:windowSplashScreenBackground">@color/launch_tea</item>
+    <style name="LaunchTheme.System.PaperBamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_bamboo</item>
     </style>
-    <style name="LaunchTheme.Tea.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_tea_light</item>
+    <style name="LaunchTheme.System.TeaBlack" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_black</item>
     </style>
-    <style name="LaunchTheme.Tea.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_tea_dark</item>
+    <style name="LaunchTheme.System.TeaPaper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_paper</item>
     </style>
-    <style name="LaunchTheme.Plain">
-        <item name="android:windowSplashScreenBackground">@color/launch_plain</item>
+    <style name="LaunchTheme.System.TeaTea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_tea</item>
     </style>
-    <style name="LaunchTheme.Plain.Light">
+    <style name="LaunchTheme.System.TeaKraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_kraft</item>
+    </style>
+    <style name="LaunchTheme.System.TeaBamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_bamboo</item>
+    </style>
+    <style name="LaunchTheme.System.KraftBlack" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_black</item>
+    </style>
+    <style name="LaunchTheme.System.KraftPaper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_paper</item>
+    </style>
+    <style name="LaunchTheme.System.KraftTea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_tea</item>
+    </style>
+    <style name="LaunchTheme.System.KraftKraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_kraft</item>
+    </style>
+    <style name="LaunchTheme.System.KraftBamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_bamboo</item>
+    </style>
+    <style name="LaunchTheme.System.BambooBlack" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_black</item>
+    </style>
+    <style name="LaunchTheme.System.BambooPaper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_paper</item>
+    </style>
+    <style name="LaunchTheme.System.BambooTea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_tea</item>
+    </style>
+    <style name="LaunchTheme.System.BambooKraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_kraft</item>
+    </style>
+    <style name="LaunchTheme.System.BambooBamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_bamboo</item>
+    </style>
+    <style name="LaunchTheme.System.BeanBlack" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bean_black</item>
+    </style>
+    <style name="LaunchTheme.System.BeanPaper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bean_paper</item>
+    </style>
+    <style name="LaunchTheme.System.BeanTea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bean_tea</item>
+    </style>
+    <style name="LaunchTheme.System.BeanKraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bean_kraft</item>
+    </style>
+    <style name="LaunchTheme.System.BeanBamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bean_bamboo</item>
+    </style>
+    <style name="LaunchTheme.Light.Plain" parent="LaunchTheme">
         <item name="android:windowSplashScreenBackground">@color/launch_plain_light</item>
     </style>
-    <style name="LaunchTheme.Plain.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_plain_dark</item>
+    <style name="LaunchTheme.Light.Paper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_light</item>
     </style>
-    <style name="LaunchTheme.Rouge">
-        <item name="android:windowSplashScreenBackground">@color/launch_rouge</item>
+    <style name="LaunchTheme.Light.Tea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_light</item>
     </style>
-    <style name="LaunchTheme.Rouge.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_rouge_light</item>
+    <style name="LaunchTheme.Light.Kraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_light</item>
     </style>
-    <style name="LaunchTheme.Rouge.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_rouge_dark</item>
+    <style name="LaunchTheme.Light.Bamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_light</item>
     </style>
-    <style name="LaunchTheme.Lotus">
-        <item name="android:windowSplashScreenBackground">@color/launch_lotus</item>
+    <style name="LaunchTheme.Light.Bean" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bean_light</item>
     </style>
-    <style name="LaunchTheme.Lotus.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_lotus_light</item>
+    <style name="LaunchTheme.Dark.Black" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_black_dark</item>
     </style>
-    <style name="LaunchTheme.Lotus.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_lotus_dark</item>
+    <style name="LaunchTheme.Dark.Paper" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_dark</item>
     </style>
-    <style name="LaunchTheme.Scroll">
-        <item name="android:windowSplashScreenBackground">@color/launch_scroll</item>
+    <style name="LaunchTheme.Dark.Tea" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_dark</item>
     </style>
-    <style name="LaunchTheme.Scroll.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_scroll_light</item>
+    <style name="LaunchTheme.Dark.Kraft" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_kraft_dark</item>
     </style>
-    <style name="LaunchTheme.Scroll.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_scroll_dark</item>
-    </style>
-    <style name="LaunchTheme.Amber">
-        <item name="android:windowSplashScreenBackground">@color/launch_amber</item>
-    </style>
-    <style name="LaunchTheme.Amber.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_amber_light</item>
-    </style>
-    <style name="LaunchTheme.Amber.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_amber_dark</item>
-    </style>
-    <style name="LaunchTheme.Frost">
-        <item name="android:windowSplashScreenBackground">@color/launch_frost</item>
-    </style>
-    <style name="LaunchTheme.Frost.Light">
-        <item name="android:windowSplashScreenBackground">@color/launch_frost_light</item>
-    </style>
-    <style name="LaunchTheme.Frost.Dark">
-        <item name="android:windowSplashScreenBackground">@color/launch_frost_dark</item>
+    <style name="LaunchTheme.Dark.Bamboo" parent="LaunchTheme">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_dark</item>
     </style>
 </resources>

@@ -168,6 +168,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 放棄該操作。
   int _restoreRevision = 0;
   ReaderV2Location? _lastReportedLocation;
+
+  /// 最近一次還原到的位置，畫面還沒離開它之前量到的位置就是它
+  /// （[_unmovedRestoredLocation]）；畫面一離開就清掉。
+  ReaderV2Location? _restoredLocation;
   bool _initialRestoreCompleted = false;
 
   /// 正在等正文的跳章：一開始就蓋紙、攔下觸控，排版開始後交給
@@ -260,6 +264,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _registerRuntime() {
     widget.runtime.addListener(_onRuntimeChanged);
     widget.runtime.addViewportGeometryListener(_onViewportGeometryChanged);
+    widget.runtime.chapterShares.addListener(_publishProgress);
     widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
@@ -267,6 +272,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _unregisterRuntime(ReaderV2Runtime runtime) {
     runtime.removeListener(_onRuntimeChanged);
     runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
+    runtime.chapterShares.removeListener(_publishProgress);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
   }
@@ -992,6 +998,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final anchorLine = AnchorManager.anchorOffsetInViewport(
       _viewportSize.height,
     );
+    final unmoved = _unmovedRestoredLocation(offset);
+    if (unmoved != null) return unmoved;
     final worldY = offset + anchorLine;
     final anchorHit = _documentIndex.hitTest(worldY);
     final scrollTopHit = _documentIndex.hitTest(offset);
@@ -1007,6 +1015,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       worldY: worldY,
       chapterCount: widget.runtime.chapterCount,
     );
+  }
+
+  /// 還原後畫面沒動過，就回傳還原到的位置。從畫面量位置記的是錨線上那一行
+  /// 的行首；還原的位置常在行中間（朗讀的句首、另一台手機或換字級前存的
+  /// 進度），沒捲動就重新量會變成行首，進度小幅往回跳，每換一次排版就再
+  /// 往回退一點。捲動位置等於還原到它會停的位置，就是沒動過；上方補進
+  /// 章節而調整捲動時兩邊一起變，也算沒動過。
+  ReaderV2Location? _unmovedRestoredLocation(double offset) {
+    final restored = _restoredLocation;
+    if (restored == null) return null;
+    final blocks = _pipeline.blocksOf(restored.chapterIndex);
+    // 和還原最後停的位置同一套算法：書首、書尾那一行到不了錨線，還原時
+    // 夾進可捲的範圍。
+    final expected = blocks == null
+        ? null
+        : _restingOffset(HybridAnchor.fromLocation(restored, blocks), blocks);
+    if (expected == null || (expected - offset).abs() > 0.5) {
+      _restoredLocation = null;
+      return null;
+    }
+    return restored;
   }
 
   ReaderV2Location? _preserveShortChapterAtBoundary({
@@ -1059,6 +1088,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
     if (!ok || !current()) return false;
     _lastReportedLocation = location;
+    _restoredLocation = location;
     _scheduleRebuild();
     return true;
   }
@@ -1101,6 +1131,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
     notifier.value = HybridProgress(
       chapterCount: widget.runtime.chapterCount,
+      shares: widget.runtime.chapterShares.value,
     ).progressForLocation(location, chapterLength: blocks.displayText.length);
   }
 

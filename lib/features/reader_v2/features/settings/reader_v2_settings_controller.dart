@@ -9,6 +9,8 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_high
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_page_turn_speed.dart';
+import 'package:night_reader/features/reader_v2/hybrid/layout/reader_paragraph_layout.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
@@ -59,7 +61,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double chapterSpacing = ReaderV2PrefsSnapshot.defaults().chapterSpacing;
   double letterSpacing = ReaderV2PrefsSnapshot.defaults().letterSpacing;
   int textIndent = 2;
+
+  /// 正文兩側最少留白；實際的左右邊距照 [lineChars] 算（[paddingHorizontalFor]）。
   double paddingHorizontal = ReaderV2PrefsSnapshot.defaults().paddingHorizontal;
+  int lineChars = ReaderV2PrefsSnapshot.defaults().lineChars;
   bool justifyText = ReaderV2PrefsSnapshot.defaults().justifyText;
   double paddingTop = ReaderV2PrefsSnapshot.defaults().paddingTop;
   double paddingBottom = ReaderV2PrefsSnapshot.defaults().paddingBottom;
@@ -139,6 +144,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     showAddToShelfAlert = snapshot.showAddToShelfAlert;
     clickActions = List<int>.from(snapshot.clickActions);
     paddingHorizontal = snapshot.paddingHorizontal;
+    lineChars = snapshot.lineChars;
     justifyText = snapshot.justifyText;
     paddingTop = snapshot.paddingTop;
     paddingBottom = snapshot.paddingBottom;
@@ -204,11 +210,41 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
+  /// 正文一個字格的寬度（含字距，正文不加粗）；量不到時是 null。
+  double? get cellWidth => const ReaderParagraphLayout().measureCellWidth(
+    fontSize: fontSize,
+    letterSpacing: letterSpacing,
+    bold: false,
+  );
+
+  /// 畫面寬 [viewportWidth] 時一行最多放得下幾個字（兩側留最少留白）。
+  int lineCapacityFor(double viewportWidth) {
+    final cell = cellWidth;
+    if (cell == null) return 0;
+    return ReaderV2TextLayoutFrame.lineCapacity(
+      viewportWidth: viewportWidth,
+      minPadding: paddingHorizontal,
+      cellWidth: cell,
+    );
+  }
+
+  /// 畫面寬 [viewportWidth] 時正文的左右邊距，頁首頁尾的左右內距也用它：
+  /// 照每行字數把正文欄收窄置中，放不下就撐滿、只留最少留白。
+  double paddingHorizontalFor(double viewportWidth) =>
+      ReaderV2TextLayoutFrame.sidePadding(
+        viewportWidth: viewportWidth,
+        minPadding: paddingHorizontal,
+        cellWidth: cellWidth,
+        lineChars: lineChars,
+      );
+
   ReaderV2Style readStyleFor(
     EdgeInsets mediaPadding, {
+    required double viewportWidth,
     bool topInfoReservedExternally = false,
     bool bottomInfoReservedExternally = false,
   }) {
+    final horizontal = paddingHorizontalFor(viewportWidth);
     final top =
         (topInfoReservedExternally
             ? 0.0
@@ -223,8 +259,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
       chapterSpacing: chapterSpacing,
       paddingTop: top,
       paddingBottom: bottom,
-      paddingLeft: paddingHorizontal,
-      paddingRight: paddingHorizontal,
+      paddingLeft: horizontal,
+      paddingRight: horizontal,
       justify: justifyText,
       bold: false,
       textIndent: textIndent,
@@ -668,6 +704,19 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  void setLineChars(int value) {
+    final normalized = ReaderV2PrefsRepository.normalizeLineChars(value);
+    if (lineChars == normalized) return;
+    lineChars = normalized;
+    _persist(
+      'lineChars',
+      () => _prefsRepository.saveLineChars(normalized),
+      onSaved: (p) => p.copyWith(lineChars: normalized),
+      restore: (p) => lineChars = p.lineChars,
+    );
+    notifyListeners();
+  }
+
   /// 頁尾資訊列底部到畫面底部的距離。
   void setFooterOffset(double value) {
     final normalized = _normalizePagePadding(value);
@@ -694,7 +743,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 將邊距、左右對齊、上下緣漸隱、頁尾位置、系統列與頁首／頁尾（含時間
+  /// 將每行字數、邊距、左右對齊、上下緣漸隱、頁尾位置、系統列與頁首／頁尾（含時間
   /// 與進度的格式）恢復為預設值。
   void resetPageLayout() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
@@ -703,6 +752,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       top: defaults.paddingTop,
       bottom: defaults.paddingBottom,
     );
+    setLineChars(defaults.lineChars);
     setJustifyText(defaults.justifyText);
     setEdgeFade(defaults.edgeFade);
     setFooterOffset(defaults.footerOffset);
@@ -717,6 +767,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool get isPageLayoutDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     return paddingHorizontal == defaults.paddingHorizontal &&
+        lineChars == defaults.lineChars &&
         justifyText == defaults.justifyText &&
         paddingTop == defaults.paddingTop &&
         paddingBottom == defaults.paddingBottom &&

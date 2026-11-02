@@ -28,6 +28,7 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -81,8 +82,9 @@ class _Scenario {
 
 Future<void> _none(WidgetTester tester) async {}
 
+/// 書架上的書名照目前的繁簡轉換顯示（繁轉簡時是「夜雨听书」）。
 Future<void> _tapBook(WidgetTester tester) =>
-    tester.tap(find.text('夜雨聽書').first);
+    tester.tap(find.text(ChineseDisplay.convert('夜雨聽書')).first);
 
 /// 讀過一次再回書架：閱讀器記下了離開時那一頁，下次開書骨架照它畫。
 Future<void> _readOnceAndBack(WidgetTester tester) async {
@@ -151,9 +153,14 @@ Future<void> _tapOnShelf(WidgetTester tester, String name) async {
 }
 
 /// 同一列裡的「加」鈕（步進列的加號沒有 Tooltip，只有語意標籤）。
-Finder _stepUp(String label) => find.descendant(
+Finder _stepUp(String label) => _stepButton(label, Icons.add_rounded);
+
+/// 同一列裡的「減」鈕。
+Finder _stepDown(String label) => _stepButton(label, Icons.remove_rounded);
+
+Finder _stepButton(String label, IconData icon) => find.descendant(
   of: find.ancestor(of: find.text(label), matching: find.byType(Row)).first,
-  matching: find.byIcon(Icons.add_rounded),
+  matching: find.byIcon(icon),
 );
 
 // 額外加進書架的書（見 [_seedExtraBooks]）。
@@ -220,8 +227,8 @@ final scenarios = <String, _Scenario>{
     before: _openTypography,
   ),
   'margin-a': _Scenario(
-    '閱讀中加大左右邊距（A 組欄位）',
-    (t) => t.tap(_stepUp('左右邊距')),
+    '閱讀中減少每行字數，兩側留白變寬（A 組欄位）',
+    (t) => t.tap(_stepDown('每行字數')),
     before: _openTypography,
   ),
   'new-a': _Scenario('剛加入書架、從沒讀過的書（A 組欄位）', (t) => _tapOnShelf(t, _newBook)),
