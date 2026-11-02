@@ -127,7 +127,8 @@ final class CompleteContentFetcher {
       book: book,
       chapter: chapter,
       body: response.body,
-      baseUrl: response.url,
+      baseUrl: url,
+      redirectUrl: response.url,
       nextChapterUrl: nextChapterUrl,
     );
     // 任何一頁被登入牆擋住，整章失敗，不存半章。

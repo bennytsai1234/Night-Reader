@@ -123,7 +123,8 @@ class WebBook {
       source: source,
       book: book,
       body: res.body,
-      baseUrl: res.url,
+      baseUrl: book.bookUrl,
+      redirectUrl: res.url,
     );
     parsed.infoHtml = res.body;
     if (parsed.tocUrl.isEmpty || parsed.tocUrl == parsed.bookUrl) {
@@ -184,7 +185,8 @@ class WebBook {
         source: source,
         book: book,
         body: firstRes.body,
-        baseUrl: firstRes.url,
+        baseUrl: initialUrl,
+        redirectUrl: firstRes.url,
         maxChapters: chapterLimit,
       );
       LoginWall.checkToc(
@@ -219,7 +221,8 @@ class WebBook {
               source: source,
               book: book,
               body: res.body,
-              baseUrl: res.url,
+              baseUrl: pending[i],
+              redirectUrl: res.url,
               maxChapters: chapterLimit == null
                   ? null
                   : chapterLimit - allChapters.length,
@@ -260,7 +263,8 @@ class WebBook {
               source: source,
               book: book,
               body: res.body,
-              baseUrl: res.url,
+              baseUrl: currentUrl,
+              redirectUrl: res.url,
               maxChapters: chapterLimit == null
                   ? null
                   : (chapterLimit - allChapters.length),
@@ -390,7 +394,8 @@ class WebBook {
       book: book,
       chapter: chapter,
       body: firstRes.body,
-      baseUrl: firstRes.url,
+      baseUrl: chapter.url,
+      redirectUrl: firstRes.url,
       nextChapterUrl: nextChapterUrl,
     );
     LoginWall.checkContent(firstRes, firstResult.content);
@@ -421,7 +426,8 @@ class WebBook {
           book: book,
           chapter: chapter,
           body: res.body,
-          baseUrl: res.url,
+          baseUrl: pending[i],
+          redirectUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
         LoginWall.checkContent(res, pageResult.content);
@@ -456,7 +462,8 @@ class WebBook {
           book: book,
           chapter: chapter,
           body: res.body,
-          baseUrl: res.url,
+          baseUrl: currentUrl,
+          redirectUrl: res.url,
           nextChapterUrl: nextChapterUrl,
         );
         LoginWall.checkContent(res, result.content);

@@ -27,11 +27,16 @@ class ChapterListResult {
 class ChapterListParser {
   /// 解析目錄頁，返回章節列表與下一頁 URL
   /// (對標 Android BookChapterList.analyzeChapterList)
+  ///
+  /// [baseUrl] 是請求這一頁的網址，[redirectUrl] 是網站轉址後回應的網址
+  /// （同 Legado）；沒給時是同一個。相對網址用 [redirectUrl] 補，章節沒有
+  /// 網址時用 [baseUrl]。
   static Future<ChapterListResult> parse({
     required BookSource source,
     required Book book,
     required String body,
     required String baseUrl,
+    String? redirectUrl,
     int? maxChapters,
   }) async {
     if (maxChapters != null && maxChapters <= 0) {
@@ -51,10 +56,11 @@ class ChapterListParser {
       listRule = listRule.substring(1);
     }
 
+    final pageUrl = redirectUrl ?? baseUrl;
     final rule = AnalyzeRule(
       source: source,
       ruleData: book,
-    ).setContent(body, baseUrl: baseUrl);
+    ).setContent(body, baseUrl: baseUrl, redirectUrl: pageUrl);
     try {
       final chapterNameRule = tocRule.chapterName ?? '';
       final chapterUrlRule = tocRule.chapterUrl ?? '';
@@ -67,12 +73,13 @@ class ChapterListParser {
 
       final chapters = <BookChapter>[];
       for (var i = 0; i < elements.length; i++) {
-        final itemRule = AnalyzeRule(
-          source: source,
-          ruleData: book,
-        ).setContent(elements[i], baseUrl: baseUrl)..jsEngineOwner = rule;
-        final chapter = BookChapter(
+        final itemRule = AnalyzeRule(source: source, ruleData: book).setContent(
+          elements[i],
           baseUrl: baseUrl,
+          redirectUrl: pageUrl,
+        )..jsEngineOwner = rule;
+        final chapter = BookChapter(
+          baseUrl: pageUrl,
           bookUrl: book.bookUrl,
           index: i,
         );
@@ -114,7 +121,7 @@ class ChapterListParser {
       if (nextTocUrlRule.isNotEmpty) {
         final list = rule.getStringList(nextTocUrlRule, isUrl: true);
         for (final u in list) {
-          if (u.isNotEmpty && u != baseUrl) nextUrls.add(u);
+          if (u.isNotEmpty && u != pageUrl) nextUrls.add(u);
         }
       }
 
