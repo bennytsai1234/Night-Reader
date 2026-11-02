@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -27,10 +28,12 @@ class SearchSuggestionView extends StatelessWidget {
     final padding = MediaQuery.paddingOf(context);
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.only(
-        top: padding.top,
-        bottom: padding.bottom + AppSpacing.xxl,
-      ),
+      padding:
+          EdgeInsets.only(
+            top: padding.top,
+            bottom: padding.bottom + AppSpacing.xxl,
+          ) +
+          ReadableWidth.insetOf(context),
       children: [
         GroupedSection(
           topGap: AppSpacing.lg,

@@ -16,6 +16,7 @@ import 'package:night_reader/core/services/source_login_session.dart';
 import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -667,18 +668,23 @@ class _FormSkeletonState extends State<_FormSkeleton> {
       ),
     ];
     final top = MediaQuery.paddingOf(context).top;
+    // 和換上的表單（[GroupedListView]）一樣收在平板的內容欄裡。
+    final inset = ReadableWidth.insetOf(context);
     return LayoutBuilder(
-      builder: (context, constraints) => GroupedListSkeleton(
-        shapes: [
-          for (final item in items)
-            GroupedItemShape.of(
-              item,
-              context: context,
-              width: constraints.maxWidth,
-            ),
-        ],
-        top: top,
-        cardFill: chrome.groupedSurface,
+      builder: (context, constraints) => Padding(
+        padding: inset,
+        child: GroupedListSkeleton(
+          shapes: [
+            for (final item in items)
+              GroupedItemShape.of(
+                item,
+                context: context,
+                width: constraints.maxWidth - inset.horizontal,
+              ),
+          ],
+          top: top,
+          cardFill: chrome.groupedSurface,
+        ),
       ),
     );
   }

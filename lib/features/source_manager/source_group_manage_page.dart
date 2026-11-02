@@ -2,6 +2,7 @@ import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -372,10 +373,12 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
         builder: (bodyContext) {
           final bodyPadding = MediaQuery.paddingOf(bodyContext);
           return ListView.builder(
-            padding: EdgeInsets.only(
-              top: bodyPadding.top + AppSpacing.sm,
-              bottom: padding.bottom + AppSpacing.xxl,
-            ),
+            padding:
+                EdgeInsets.only(
+                  top: bodyPadding.top + AppSpacing.sm,
+                  bottom: padding.bottom + AppSpacing.xxl,
+                ) +
+                ReadableWidth.insetOf(context),
             itemCount: sources.length,
             itemBuilder: (context, index) {
               final source = sources[index];

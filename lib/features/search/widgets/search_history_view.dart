@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -46,10 +47,12 @@ class SearchHistoryView extends StatelessWidget {
 
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.only(
-        top: padding.top,
-        bottom: padding.bottom + AppSpacing.xxl,
-      ),
+      padding:
+          EdgeInsets.only(
+            top: padding.top,
+            bottom: padding.bottom + AppSpacing.xxl,
+          ) +
+          ReadableWidth.insetOf(context),
       children: [
         ...leading,
         if (provider.historyKeywords.isNotEmpty)
