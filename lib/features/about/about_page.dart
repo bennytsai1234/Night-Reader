@@ -5,6 +5,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/app_version.dart';
 import 'package:night_reader/core/services/update_preferences.dart';
 import 'package:night_reader/core/services/webview_data_service.dart';
+import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -300,6 +301,20 @@ class _AboutPageState extends State<AboutPage> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CrashLogPage()),
+                ),
+              ),
+              // 和崩潰日誌一樣平常不看，出事才看（使用者 2026-11-01）。
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.download_rounded,
+                  tint: AppTint.azurite,
+                ),
+                title: '背景下載佇列',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DownloadManagerPage(),
+                  ),
                 ),
               ),
               ValueListenableBuilder(

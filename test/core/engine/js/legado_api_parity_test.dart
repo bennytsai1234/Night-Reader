@@ -2,7 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_js/flutter_js.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 
@@ -443,6 +447,216 @@ const _jsoup = <String, List<String>>{
   ],
 };
 
+/// Kotlin 欄位在 Java 的 getter／setter：`var x` 是 getX()／setX()，
+/// `var isX: Boolean` 是 isX()／setX()。
+List<String> _beanMethods(List<String> fields) => [
+  for (final field in fields)
+    if (RegExp(r'^is[A-Z]').hasMatch(field)) ...[
+      field,
+      'set${field.substring(2)}',
+    ] else ...[
+      'get${field[0].toUpperCase()}${field.substring(1)}',
+      'set${field[0].toUpperCase()}${field.substring(1)}',
+    ],
+];
+
+/// 規則 JS 拿到的 `book`、`chapter`、`source`（Legado 的 Book、BookChapter、
+/// BookSource 實體）的公開方法，照 `data/entities/` 的原始碼列。
+final _entities = <String, List<String>>{
+  'book': [
+    ..._beanMethods([
+      'bookUrl',
+      'tocUrl',
+      'origin',
+      'originName',
+      'name',
+      'author',
+      'kind',
+      'customTag',
+      'coverUrl',
+      'customCoverUrl',
+      'intro',
+      'customIntro',
+      'charset',
+      'type',
+      'group',
+      'latestChapterTitle',
+      'latestChapterTime',
+      'lastCheckTime',
+      'lastCheckCount',
+      'totalChapterNum',
+      'durChapterTitle',
+      'durChapterIndex',
+      'durChapterPos',
+      'durChapterTime',
+      'wordCount',
+      'canUpdate',
+      'order',
+      'originOrder',
+      'variable',
+      'readConfig',
+      'syncTime',
+      'infoHtml',
+      'tocHtml',
+      'downloadUrls',
+    ]),
+    // Book.kt、BaseBook.kt、RuleDataInterface.kt
+    'getRealAuthor', 'getUnreadChapterNum', 'getDisplayCover',
+    'getDisplayIntro', 'setReverseToc', 'getReverseToc', 'setUseReplaceRule',
+    'getUseReplaceRule', 'putCustomVariable', 'getCustomVariable',
+    'getKindList', 'getVariable', 'putVariable', 'getBigVariable',
+    'putBigVariable', 'upCustomIntro', 'fileCharset', 'setReSegment',
+    'getReSegment', 'setPageAnim', 'getPageAnim', 'setImageStyle',
+    'getImageStyle', 'setTtsEngine', 'getTtsEngine', 'setSplitLongChapter',
+    'getSplitLongChapter', 'setReadSimulating', 'getReadSimulating',
+    'setStartDate', 'getStartDate', 'setStartChapter', 'getStartChapter',
+    'setDailyChapters', 'getDailyChapters', 'getDelTag', 'addDelTag',
+    'removeDelTag', 'getFolderName', 'toSearchBook', 'migrateTo',
+    'createBookMark', 'save', 'delete', 'getLastChapterIndex', 'getConfig',
+    'getVariableMap',
+  ],
+  'chapter': [
+    ..._beanMethods([
+      'url',
+      'title',
+      'isVolume',
+      'baseUrl',
+      'bookUrl',
+      'index',
+      'isVip',
+      'isPay',
+      'resourceUrl',
+      'tag',
+      'wordCount',
+      'start',
+      'end',
+      'startFragmentId',
+      'endFragmentId',
+      'variable',
+      'titleMD5',
+    ]),
+    'primaryStr',
+    'getDisplayTitle',
+    'getAbsoluteURL',
+    'getFileName',
+    'getFontName',
+    'getVariable',
+    'putVariable',
+    'getBigVariable',
+    'putBigVariable',
+    'getVariableMap',
+  ],
+  'source': [
+    ..._beanMethods(_sourceFields),
+    // BookSource.kt 的方法（BaseSource 的另外在 _legado['source']）。
+    'getDisPlayNameGroup', 'addGroup', 'removeGroup', 'hasGroup',
+    'removeInvalidGroups', 'removeErrorComment', 'addErrorComment',
+    'getInvalidGroupNames', 'getDisplayVariableComment', 'equal',
+    'getSearchRule', 'getExploreRule', 'getBookInfoRule', 'getTocRule',
+    'getContentRule', 'getCheckKeyword',
+  ],
+};
+
+/// BookSource.kt 的欄位。
+const _sourceFields = [
+  'bookSourceUrl',
+  'bookSourceName',
+  'bookSourceGroup',
+  'bookSourceType',
+  'bookUrlPattern',
+  'customOrder',
+  'enabled',
+  'enabledExplore',
+  'jsLib',
+  'enabledCookieJar',
+  'concurrentRate',
+  'header',
+  'loginUrl',
+  'loginUi',
+  'loginCheckJs',
+  'coverDecodeJs',
+  'bookSourceComment',
+  'variableComment',
+  'lastUpdateTime',
+  'respondTime',
+  'weight',
+  'exploreUrl',
+  'exploreScreen',
+  'ruleExplore',
+  'searchUrl',
+  'ruleSearch',
+  'ruleBookInfo',
+  'ruleToc',
+  'ruleContent',
+  'ruleReview',
+];
+
+/// `book`、`chapter`、`source` 刻意不做的方法與理由。
+final _entitiesNotProvided = <String, Set<String>>{
+  'book': {
+    // 夜讀不留書籍詳情、目錄的網頁原文，也沒有下載網址清單（Legado 給
+    // 聽書、檔案書用）。
+    'getInfoHtml', 'setInfoHtml', 'getTocHtml', 'setTocHtml',
+    'getDownloadUrls', 'setDownloadUrls',
+    // 書架與閱讀進度的欄位（自訂封面與簡介、分組、檢查更新、進度、排序、
+    // 同步時間、閱讀設定）由 App 管：規則程式寫了不會留下，不給 setter；
+    // upCustomIntro 就是把 intro 寫進自訂簡介。
+    'setCustomTag', 'setCustomCoverUrl', 'setCustomIntro', 'setCharset',
+    'setGroup', 'setLatestChapterTime', 'setLastCheckTime',
+    'setLastCheckCount', 'setTotalChapterNum', 'setDurChapterTitle',
+    'setDurChapterPos', 'setDurChapterTime', 'setCanUpdate', 'setOrder',
+    'setOriginOrder', 'setSyncTime', 'getReadConfig', 'setReadConfig',
+    'upCustomIntro',
+    // 大變數：Legado 另存成檔案、和一般變數分開；源倉庫（2026-11-01）沒有
+    // 書源用到，夜讀沒有另一份儲存。
+    'getBigVariable', 'putBigVariable',
+    // 閱讀器的設定（分段、翻頁動畫、圖片樣式、朗讀引擎、長章節、模擬
+    // 追讀、去標籤）是 Legado 閱讀介面的，夜讀的閱讀器沒有這些設定。
+    'fileCharset', 'setReSegment', 'getReSegment',
+    'setPageAnim', 'getPageAnim', 'setImageStyle', 'getImageStyle',
+    'setTtsEngine', 'getTtsEngine', 'setSplitLongChapter',
+    'getSplitLongChapter', 'setReadSimulating', 'getReadSimulating',
+    'setStartDate', 'getStartDate', 'setStartChapter', 'getStartChapter',
+    'setDailyChapters', 'getDailyChapters', 'getDelTag', 'addDelTag',
+    'removeDelTag', 'getConfig',
+    // 存檔、刪書、換源搬移、書籤、轉成搜尋結果：App 自己的動作，書源程式
+    // 不該在抓取途中做。
+    'getFolderName', 'toSearchBook', 'migrateTo', 'createBookMark', 'save',
+    'delete',
+    // Kotlin 內部用的計算值與變數表；書源用 getVariable／putVariable。
+    'getLastChapterIndex', 'getVariableMap',
+  },
+  'chapter': {
+    // 顯示用（套替換規則與繁簡、檔名、字型名、標題雜湊）。
+    'primaryStr', 'getDisplayTitle', 'getFileName', 'getFontName',
+    'getTitleMD5', 'setTitleMD5', 'getVariableMap',
+    // 章節的完整網址：夜讀抓章節時自己組（BookChapter.getAbsoluteURL），
+    // 源倉庫（2026-11-01）沒有書源在規則裡呼叫。
+    'getAbsoluteURL',
+    // 大變數：同 book。
+    'getBigVariable', 'putBigVariable',
+  },
+  'source': {
+    // 書源的規則物件與發現篩選：夜讀交給 JS 的書源只有欄位文字，規則
+    // 物件不在裡面。
+    'getRuleExplore', 'setRuleExplore', 'getRuleSearch', 'setRuleSearch',
+    'getRuleBookInfo', 'setRuleBookInfo', 'getRuleToc', 'setRuleToc',
+    'getRuleContent', 'setRuleContent', 'getRuleReview', 'setRuleReview',
+    'getExploreScreen', 'setExploreScreen',
+    // 書源的設定與分組由書源管理改；規則程式改了不會存回書源，給 setter
+    // 會讓 getHeaderMap、getKey 這類方法讀到和 getter 不同的值。
+    ..._beanMethods(_sourceFields).where((name) => name.startsWith('set')),
+    'getDisPlayNameGroup', 'addGroup', 'removeGroup', 'hasGroup',
+    'removeInvalidGroups', 'removeErrorComment', 'addErrorComment',
+    'getInvalidGroupNames', 'getDisplayVariableComment', 'equal',
+    // 規則物件不在交給 JS 的書源裡（同上 getRuleSearch 這類）。
+    'getSearchRule', 'getExploreRule', 'getBookInfoRule', 'getTocRule',
+    'getContentRule',
+    // 書源校驗用的關鍵字，是書源管理的事。
+    'getCheckKeyword',
+  },
+};
+
 /// Jsoup 刻意不做的方法與理由。
 const _jsoupNotProvided = <String, Set<String>>{
   // 解析時的原始位置：Jsoup 預設不記，Legado 也沒開，書源拿到的永遠是空的。
@@ -490,6 +704,28 @@ void main() {
       }
     }
     expect(missing, isEmpty, reason: '夜讀少了這些 Legado 方法');
+  }, skip: skip);
+
+  test('book、chapter、source 有 Legado 實體的每個公開方法', () {
+    final rule = AnalyzeRule(
+      ruleData: Book(bookUrl: 'https://a.test/b', name: '書'),
+      source: BookSource(bookSourceUrl: 'https://a.test'),
+    )..setChapter(BookChapter(url: 'https://a.test/c', title: '章'));
+    addTearDown(rule.dispose);
+    final missing = rule.evalJS('''
+      var lists = ${jsonEncode(_entities)};
+      var skipped = ${jsonEncode(_entitiesNotProvided.map((k, v) => MapEntry(k, v.toList())))};
+      var targets = { book: book, chapter: chapter, source: source };
+      var missing = [];
+      Object.keys(lists).forEach(function(kind) {
+        lists[kind].forEach(function(name) {
+          if ((skipped[kind] || []).indexOf(name) >= 0) return;
+          if (typeof targets[kind][name] !== 'function') missing.push(kind + '.' + name);
+        });
+      });
+      missing.join(',')
+    ''', null);
+    expect(missing, isEmpty, reason: '夜讀的 book、chapter、source 少了這些方法');
   }, skip: skip);
 
   test('java in URL JS is the request, like Legado AnalyzeUrl', () {

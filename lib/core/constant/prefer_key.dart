@@ -95,8 +95,6 @@ class PreferKey {
   static const String autoClearExpired = 'autoClearExpired';
   static const String importKeepName = 'importKeepName';
   static const String importKeepGroup = 'importKeepGroup';
-  static const String syncBookProgress = 'syncBookProgress';
-  static const String syncBookProgressPlus = 'syncBookProgressPlus';
   static const String cronet = 'Cronet';
   static const String antiAlias = 'antiAlias';
   static const String bitmapCacheSize = 'bitmapCacheSize';
@@ -190,6 +188,7 @@ class PreferKey {
   static const String readerHighlightStrength = 'reader_highlight_strength';
   static const String readerClickActions = 'reader_click_actions';
   static const String readerPaddingHorizontal = 'reader_padding_horizontal';
+  static const String readerLineChars = 'reader_line_chars';
   static const String readerPaddingTop = 'reader_padding_top';
   static const String readerPaddingBottom = 'reader_padding_bottom';
   static const String readerFooterOffset = 'reader_footer_offset';

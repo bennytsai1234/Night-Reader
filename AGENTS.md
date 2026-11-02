@@ -12,6 +12,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 架構與產品決定：為什麼這樣定、否決過什麼；索引在 `docs/adr/README.md` |
 | `CHANGELOG.md` | 給讀者看的更新說明（ADR 0010） |
+| `PRIVACY.md` | 公開的隱私權政策，Google 登入的同意畫面連到這裡；和 App 的「隱私說明」一起改 |
 | `HANDOFF.md` | 還沒收尾的事、等使用者決定的事 |
 | 本檔 | 和使用者的工作默契、工具鏈、驗證、Git 與發布流程、環境上的坑 |
 

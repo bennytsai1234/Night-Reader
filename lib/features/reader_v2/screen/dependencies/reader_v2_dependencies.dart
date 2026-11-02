@@ -1,5 +1,6 @@
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
@@ -20,6 +21,7 @@ class ReaderV2Dependencies {
     BookSourceDao? sourceDao,
     ReaderChapterContentDao? readerChapterContentDao,
     ReplaceRuleDao? replaceDao,
+    BookmarkDao? bookmarkDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
     ReaderSkeletonPageStore? skeletonPages,
@@ -37,6 +39,9 @@ class ReaderV2Dependencies {
            (getIt.isRegistered<ReplaceRuleDao>()
                ? getIt<ReplaceRuleDao>()
                : null),
+       bookmarkDao =
+           bookmarkDao ??
+           (getIt.isRegistered<BookmarkDao>() ? getIt<BookmarkDao>() : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
        skeletonPages =
@@ -52,6 +57,7 @@ class ReaderV2Dependencies {
   final BookSourceDao sourceDao;
   final ReaderChapterContentDao? readerChapterContentDao;
   final ReplaceRuleDao? replaceDao;
+  final BookmarkDao? bookmarkDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
 

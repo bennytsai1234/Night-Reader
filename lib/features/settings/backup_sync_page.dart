@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
@@ -5,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
+import 'package:night_reader/core/sync/sync_service.dart';
+import 'package:night_reader/core/sync/sync_settings.dart';
+import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -12,15 +16,45 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
 
-class BackupSettingsPage extends StatefulWidget {
-  const BackupSettingsPage({super.key});
+class BackupSyncPage extends StatefulWidget {
+  const BackupSyncPage({super.key});
 
   @override
-  State<BackupSettingsPage> createState() => _BackupSettingsPageState();
+  State<BackupSyncPage> createState() => _BackupSyncPageState();
 }
 
-class _BackupSettingsPageState extends State<BackupSettingsPage> {
+class _BackupSyncPageState extends State<BackupSyncPage> {
   bool _isProcessing = false;
+
+  final SyncService _sync = SyncService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _sync.status.addListener(_onSyncStatus);
+    unawaited(_sync.load());
+  }
+
+  @override
+  void dispose() {
+    _sync.status.removeListener(_onSyncStatus);
+    super.dispose();
+  }
+
+  void _onSyncStatus() {
+    if (mounted) setState(() {});
+  }
+
+  /// 「立即同步」下面那行：同步中、上次失敗的原因，或上次同步的時間。
+  static String? _syncSubtitle(SyncStatus status) {
+    if (!status.enabled) return null;
+    if (status.running) return '同步中…';
+    if (status.error case final error?) return '上次同步失敗：$error';
+    final at = status.lastSyncAt;
+    if (at == null) return '還沒同步過';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '上次同步：${at.month}/${at.day} ${two(at.hour)}:${two(at.minute)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +72,52 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   }
 
   Widget _buildScaffold() {
+    final status = _sync.status.value;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const GlassNavHeader(title: '備份與還原'),
+      appBar: const GlassNavHeader(title: '備份與同步'),
       body: GroupedListView(
         children: [
           GroupedSection(
+            header: '同步',
+            footer: '多台手機選同一個同步空間，書架、閱讀進度、書源、替換規則、設定、登入資料與閱讀統計會自動合併；開書時接上另一台讀到的地方。已下載的正文不同步，另一台照書架自己下載。',
+            children: [
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.cloud_sync_outlined,
+                  tint: AppTint.azurite,
+                ),
+                title: '同步空間',
+                value: switch (status.space) {
+                  SyncSpace.none => '未設定',
+                  SyncSpace.webdav => 'WebDAV',
+                  SyncSpace.googleDrive => 'Google 雲端硬碟',
+                },
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SyncSpacePage(),
+                  ),
+                ),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.sync_rounded,
+                  tint: AppTint.azurite,
+                ),
+                title: '立即同步',
+                subtitle: _syncSubtitle(status),
+                enabled: status.enabled && !status.running,
+                showChevron: false,
+                onTap: status.enabled && !status.running
+                    ? () => unawaited(_sync.syncNow())
+                    : null,
+              ),
+            ],
+          ),
+          GroupedSection(
+            header: '備份',
+            footer: '整包存成一個檔，換手機時手動還原；含登入資料。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

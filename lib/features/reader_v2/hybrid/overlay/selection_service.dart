@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
 enum SelectionEdge { start, end }
 
@@ -11,6 +15,14 @@ typedef ParagraphSelection = ({
   String paragraph,
   int start,
   int end,
+});
+
+/// 在選取開頭留書籤要的東西（見 [ReaderTextSelection.asBookmark]）：位置
+/// 已綁好那一章正文的錨點。
+typedef SelectionBookmark = ({
+  ReaderV2Location location,
+  String chapterTitle,
+  String excerpt,
 });
 
 /// 正文上的一段選取。offset 是章內 displayText 的 UTF-16 位置，範圍不會
@@ -46,6 +58,41 @@ final class ReaderTextSelection {
     start: range.start - paragraph.start,
     end: range.end - paragraph.start,
   );
+
+  /// 在選取開頭那一句留書籤：書籤記在那一句的開頭（跳回時從整句讀起），
+  /// 清單上顯示整句，選得比一句長時顯示選到的全部。句子照朗讀的分句切，
+  /// 不跨出這一段。位置和閱讀進度同一套（章內第幾個字，綁上這一章正文的
+  /// 身分與前後原文）。
+  SelectionBookmark get asBookmark {
+    final paragraphText = blocks.displayText.substring(
+      paragraph.start,
+      paragraph.end,
+    );
+    final local = range.start - paragraph.start;
+    var start = range.start;
+    var end = range.end;
+    for (final sentence in const ReaderV2TtsSegmenter().segment(
+      text: paragraphText,
+      chapterIndex: chapterIndex,
+      startOffset: local,
+    )) {
+      if (sentence.startCharOffset > local) break;
+      if (local < sentence.endCharOffset) {
+        start = paragraph.start + sentence.startCharOffset;
+        end = math.max(end, paragraph.start + sentence.endCharOffset);
+        break;
+      }
+    }
+    return (
+      location: ReaderV2Location(chapterIndex: chapterIndex, charOffset: start)
+          .withContentIdentity(
+            contentHash: blocks.contentHash,
+            displayText: blocks.displayText,
+          ),
+      chapterTitle: blocks.title,
+      excerpt: blocks.displayText.substring(start, end).trim(),
+    );
+  }
 
   /// 把 [edge] 拖到 [offset]。夾在段落內；越過另一端時兩端互換，且至少
   /// 保留一個字。回傳新選取與目前拖動中的那一端。

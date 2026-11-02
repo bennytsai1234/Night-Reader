@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/engine/js/js_response.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 import '../../test_helper.dart';
@@ -112,6 +113,23 @@ void main() {
         'data:application/octet-stream;base64,5aSc6K6A',
       ).getByteArray();
       expect(utf8.decode(bytes), '夜讀');
+    });
+
+    // 晉江的目錄網址 `data:chapterList;base64,…`、七貓的 `{"type":""}`：
+    // Legado 只要寫了 type（空字串也算）就把 data: 解成十六進位，網址不是
+    // http(s) 的回應，請求網址是 http://localhost/。
+    test('寫了 type 的 data: 網址交出十六進位，回應交得給規則 JS', () async {
+      for (final options in ['{"type":"jjwx"}', '{"type":""}']) {
+        final response = await AnalyzeUrl(
+          'data:chapterList;base64,5aSc6K6A,$options',
+        ).getStrResponse();
+        expect(response.body, 'e5a49ce8ae80', reason: options);
+        expect(
+          responseToJs(response)['requestUrl'],
+          'http://localhost/',
+          reason: options,
+        );
+      }
     });
 
     test('<a,b,c> 依頁碼取對應項目，超過範圍時取最後一項', () {

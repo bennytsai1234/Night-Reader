@@ -152,11 +152,13 @@ class CloudflareInterceptor extends Interceptor {
   static List<Cookie> _parseCookies(String cookies) => [
     for (final pair in cookies.split(';'))
       if (parseSetCookieValueLenient(pair.trim(), ignoreInvalidCookies: true)
-          case final cookie? when _isCloudflareCookie(cookie.name))
+          case final cookie? when isCloudflareCookie(cookie.name))
         cookie..path = '/',
   ];
 
-  static bool _isCloudflareCookie(String name) =>
+  /// Cloudflare 檢查通過後設的 Cookie。它綁這台手機的網路，同步時不帶，
+  /// 另一台自己在背景通過（ADR 0033、0039）。
+  static bool isCloudflareCookie(String name) =>
       name == 'cf_clearance' ||
       name == '_cfuvid' ||
       name.startsWith('__cf') ||
