@@ -12,5 +12,5 @@
 
 ## Consequences
 
-- 呼吸開頭偶爾一幀撐破上限的是舊生區回收（ADR 0036「待處理」），三個做法都有，不屬於這裡。
+- 呼吸開頭偶爾一幀撐破上限的是舊生區回收（ADR 0036「開 App 動畫中的舊生區回收：不處理」），三個做法都有，不屬於這裡。
 - 證明的框架：`test/frame_budget/launch_skeleton_work_test.dart` 數呼吸每幀用了幾道漸層（手機、平板一樣，改前 44／69、現在 6），並和改前逐像素比；`test/shared/widgets/skeleton_breath_look_test.dart` 比長相；重複量測用 `FRAME_REPEAT=5 FRAME_GC=1 FRAME_SIZE=1280x880 bash tool/frame_budget_compare.sh`。
