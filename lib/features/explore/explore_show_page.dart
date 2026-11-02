@@ -176,8 +176,12 @@ class ExploreShowView extends StatelessWidget {
           final book = provider.books[index];
           return CoverRevealSlot(
             key: ValueKey(book.bookUrl),
-            placeholder: const SizedBox(
-              height: ExploreBookItem.coverHeight + AppSpacing.md * 2,
+            placeholder: SizedBox(
+              height: ExploreBookListSkeleton.rowHeightFor(
+                context,
+                book,
+                isInBookshelf: provider.isInBookshelf(book),
+              ),
             ),
             child: _ExploreBookRow(
               book: book,
