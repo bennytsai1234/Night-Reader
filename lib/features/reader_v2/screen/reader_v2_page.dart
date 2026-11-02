@@ -385,6 +385,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 paddingBottom: settings.paddingBottom,
                 footerOffset: settings.footerOffset,
                 infoFontSize: settings.infoFontSize,
+                fontFamily: settings.readerFontFamily,
                 edgeFade: settings.edgeFade,
                 use24HourClock: settings.use24HourClock,
                 progressFractionDigits: settings.progressFractionDigits,

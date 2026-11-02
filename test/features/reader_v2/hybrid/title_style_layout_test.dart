@@ -54,6 +54,7 @@ ReaderV2LayoutStyle _layoutStyle({
   bool bold = false,
   bool titleBold = true,
   bool titleCenter = false,
+  String? fontFamily,
 }) => ReaderV2LayoutStyle(
   fontSize: 18,
   lineHeight: 1.5,
@@ -66,6 +67,7 @@ ReaderV2LayoutStyle _layoutStyle({
   bold: bold,
   titleBold: titleBold,
   titleCenter: titleCenter,
+  fontFamily: fontFamily,
 );
 
 void main() {
@@ -105,6 +107,17 @@ void main() {
     paragraph.dispose();
   });
 
+  test('a downloaded font comes after the system Latin font', () {
+    final system = HybridBlockTextStyle.fromLayoutStyle(_layoutStyle());
+    final kai = HybridBlockTextStyle.fromLayoutStyle(
+      _layoutStyle(fontFamily: 'NightReaderWenKaiTC'),
+      isTitle: true,
+    );
+    expect(system.fontFamilyFallback, ['sans-serif']);
+    // 英數字照舊用系統字型（Android 的 sans-serif 沒有漢字），漢字才落到下載的字型。
+    expect(kai.fontFamilyFallback, ['sans-serif', 'NightReaderWenKaiTC']);
+  });
+
   test('only titles take the title weight and alignment', () {
     final style = _layoutStyle(titleBold: false, titleCenter: true);
     final title = HybridBlockTextStyle.fromLayoutStyle(style, isTitle: true);
@@ -138,6 +151,7 @@ void main() {
       _layoutStyle(bold: true),
       _layoutStyle(titleBold: false),
       _layoutStyle(titleCenter: true),
+      _layoutStyle(fontFamily: 'NightReaderWenKaiTC'),
     ]) {
       final other = spec(changed);
       expect(other.layoutSignature, isNot(base.layoutSignature));

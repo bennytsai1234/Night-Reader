@@ -14,6 +14,7 @@ ThemeData buildAppTheme(
   AppAccent accent = AppAccent.theme,
   AppPageTransition pageTransition = AppPageTransition.slide,
   bool pureBlack = false,
+  String? fontFamily,
 }) {
   final colors = style.paletteFor(brightness, accent, pureBlack: pureBlack);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
@@ -75,7 +76,12 @@ ThemeData buildAppTheme(
         labelMedium: AppTextStyles.labelSm,
         labelSmall: AppTextStyles.labelXs,
       )
-      .apply(bodyColor: colors.text, displayColor: colors.text);
+      .apply(
+        bodyColor: colors.text,
+        displayColor: colors.text,
+        // 介面字型（ADR 0045）；null 是系統字型。
+        fontFamily: fontFamily,
+      );
 
   final chrome = AppChrome.derive(
     brightness: brightness,
@@ -93,6 +99,7 @@ ThemeData buildAppTheme(
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
+    fontFamily: fontFamily,
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.background,
     // 骨架的樣子與換場不給選，`SkeletonLook.of`、`SkeletonReveal.of` 沒有

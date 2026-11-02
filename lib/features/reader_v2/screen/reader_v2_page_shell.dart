@@ -135,6 +135,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.paddingBottom,
     required this.footerOffset,
     this.infoFontSize = kReaderInfoFontSize,
+    this.fontFamily,
     required this.edgeFade,
     required this.use24HourClock,
     required this.progressFractionDigits,
@@ -211,6 +212,9 @@ class ReaderV2PageShell extends StatelessWidget {
 
   /// 頁首頁尾資訊的字級；那一列的高度與圖示跟著它。
   final double infoFontSize;
+
+  /// 頁首頁尾和正文用同一套字型（ADR 0045）；null 是系統字型。
+  final String? fontFamily;
 
   /// 正文上下緣漸隱的最大高度；0 是不漸隱。
   final double edgeFade;
@@ -814,7 +818,7 @@ class _InfoRow extends StatelessWidget {
               color: infoColor,
               fontWeight: FontWeight.w400,
               fontFamily: kReaderV2PunctFontFamily,
-              fontFamilyFallback: kReaderV2FontFamilyFallback,
+              fontFamilyFallback: readerV2FontFallback(shell.fontFamily),
               locale: kReaderV2TextLocale,
             ),
             maxLines: 1,

@@ -30,6 +30,7 @@ class SettingsSync extends SyncKind {
     PreferKey.appAccent,
     PreferKey.glassStrength,
     PreferKey.pageTransition,
+    PreferKey.uiFont,
     // 書架與搜尋
     'bookshelf_is_grid',
     'bookshelf_show_last_update',
@@ -51,6 +52,7 @@ class SettingsSync extends SyncKind {
     PreferKey.readerBodyBold,
     PreferKey.readerTitleBold,
     PreferKey.readerTitleCenter,
+    PreferKey.readerFont,
     PreferKey.readerPaddingHorizontal,
     PreferKey.readerLineChars,
     PreferKey.readerPaddingTop,

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
@@ -13,6 +14,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_sett
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/app_font_picker_row.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
@@ -106,7 +108,7 @@ class ReaderV2SettingsGroups {
     for (final field in _TypographyField.values) {
       if (_typography.valueOf(field) != field.defaultIn(defaults)) return false;
     }
-    return settings.isWeightAndAlignDefault;
+    return settings.isTypographyChoicesDefault;
   }
 
   void _resetTypography() {
@@ -212,6 +214,15 @@ class ReaderV2SettingsGroups {
             unit: '字',
           ),
         if (full) ...[
+          _Watch<AppFont>(
+            listenable: settings,
+            select: () => settings.readerFont,
+            builder: (context, font) => AppFontPickerRow(
+              title: '字型',
+              value: font,
+              onChanged: settings.setReaderFont,
+            ),
+          ),
           _boolSegmentRow(
             label: '正文粗細',
             select: () => settings.bodyBold,

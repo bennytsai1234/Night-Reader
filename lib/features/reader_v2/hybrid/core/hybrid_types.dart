@@ -111,7 +111,7 @@ final class StyleFingerprint {
   factory StyleFingerprint.fromLayoutSpec(
     ReaderV2LayoutSpec spec, {
     double textScaleFactor = 1.0,
-    String fontFamilySignature = 'system',
+    String? fontFamilySignature,
     String platformFontSignature = 'unknown',
   }) {
     final style = spec.style;
@@ -128,7 +128,8 @@ final class StyleFingerprint {
       titleBold: style.titleBold,
       titleCenter: style.titleCenter,
       textScaleFactor: textScaleFactor,
-      fontFamilySignature: fontFamilySignature,
+      fontFamilySignature:
+          fontFamilySignature ?? spec.style.fontFamily ?? 'system',
       platformFontSignature: platformFontSignature,
       titleFontSize: style.titleFontSize,
       titleSpacing: style.titleSpacing,
@@ -767,6 +768,7 @@ final class HybridBlockTextStyle {
     required this.letterSpacing,
     this.bold = false,
     this.center = false,
+    this.fontFamilyFallback = kReaderV2FontFamilyFallback,
   });
 
   factory HybridBlockTextStyle.fromLayoutStyle(
@@ -779,6 +781,7 @@ final class HybridBlockTextStyle {
       letterSpacing: style.letterSpacing,
       bold: isTitle ? style.titleBold : style.bold,
       center: isTitle && style.titleCenter,
+      fontFamilyFallback: readerV2FontFallback(style.fontFamily),
     );
   }
 
@@ -790,6 +793,9 @@ final class HybridBlockTextStyle {
   /// 每一行在欄內置中（章節標題的「置中」）。只在排出要畫的段落時套用；
   /// 量字形與折行時一律從左緣起算。
   final bool center;
+
+  /// 標點字型之後的字族清單（[readerV2FontFallback]）。
+  final List<String> fontFamilyFallback;
 }
 
 final class LayoutTask {

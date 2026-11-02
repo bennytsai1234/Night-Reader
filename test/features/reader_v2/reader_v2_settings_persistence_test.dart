@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
@@ -240,7 +241,7 @@ void main() {
     'weights and title alignment persist and reset with typography',
     () async {
       final settings = ReaderV2SettingsController();
-      expect(settings.isWeightAndAlignDefault, isTrue);
+      expect(settings.isTypographyChoicesDefault, isTrue);
       settings
         ..setBodyBold(true)
         ..setTitleBold(false)
@@ -260,10 +261,34 @@ void main() {
 
       settings.resetTypography();
       await pumpEventQueue();
-      expect(settings.isWeightAndAlignDefault, isTrue);
+      expect(settings.isTypographyChoicesDefault, isTrue);
       settings.dispose();
     },
   );
+
+  test('the reader font persists, stays system until it is usable and '
+      'resets with typography', () async {
+    final settings = ReaderV2SettingsController();
+    expect(settings.readerFont, AppFont.system);
+    expect(settings.readerFontFamily, isNull);
+
+    settings.setReaderFont(AppFont.wenkaiTc);
+    await pumpEventQueue();
+    expect(
+      (await const ReaderV2PrefsRepository().load()).readerFont,
+      AppFont.wenkaiTc,
+    );
+    expect(settings.isTypographyChoicesDefault, isFalse);
+    // 測試裡下載不到：還沒能用時正文照舊用系統字型。
+    final style = settings.readStyleFor(EdgeInsets.zero, viewportWidth: 393);
+    expect(style.fontFamily, isNull);
+
+    settings.resetTypography();
+    await pumpEventQueue();
+    expect(settings.readerFont, AppFont.system);
+    expect(settings.isTypographyChoicesDefault, isTrue);
+    settings.dispose();
+  });
 
   test(
     'info font size persists, is clamped and resets with the page layout',
@@ -290,7 +315,7 @@ void main() {
   test('reset writes the defaults even when another phone changed them '
       'while the page was open', () async {
     final settings = ReaderV2SettingsController();
-    expect(settings.isWeightAndAlignDefault, isTrue);
+    expect(settings.isTypographyChoicesDefault, isTrue);
     expect(settings.isPageLayoutDefault, isTrue);
     // 頁面開著時同步寫進另一台的值，記憶體裡還是預設。
     final prefs = await SharedPreferences.getInstance();
