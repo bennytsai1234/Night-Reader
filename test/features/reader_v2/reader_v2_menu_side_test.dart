@@ -46,7 +46,7 @@ void main() {
     final narrow = await settingsWith(20);
     addTearDown(narrow.dispose);
     final narrowSide = narrow.menuSideFor(1280)!;
-    GetIt.instance.reset();
+    await GetIt.instance.reset();
 
     final wide = await settingsWith(40);
     addTearDown(wide.dispose);
