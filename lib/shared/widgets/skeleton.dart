@@ -289,22 +289,32 @@ class SkeletonRest {
 class _BreathClock extends ChangeNotifier {
   _BreathClock(TickerProvider vsync) {
     _ticker = vsync.createTicker(_tick);
-    _countFrames();
   }
 
   /// 這個骨架最外層的 render object（[_SkeletonAnchor]），底下的形狀到螢幕
-  /// 的轉換從它接上去（[_screenTransform]）。
-  RenderObject? _anchor;
+  /// 的轉換從它接上去（[_screenTransform]）。換了一個時重算轉換。
+  RenderObject? get _anchor => _anchorObject;
+  RenderObject? _anchorObject;
+  set _anchor(RenderObject? value) {
+    _anchorObject = value;
+    _anchorStale = true;
+  }
 
-  /// [_anchor] 到螢幕的轉換，第 [_anchorFrame] 幀算的；一幀只沿元件樹往上
-  /// 算一次，底下的形狀只要算到 [_anchor] 為止。
+  /// [_anchor] 到螢幕的轉換；一幀只沿元件樹往上算一次，底下的形狀只要算到
+  /// [_anchor] 為止。
+  ///
+  /// 用到它的只有由左而右呼吸的時候（[gradient] 不是 null），這時計時器每
+  /// 一幀開頭都會走一格（[_tick]，在建畫面與畫圖之前），走一格就作廢；漸層
+  /// 的深淺換了（開始呼吸、收住、接著呼吸）也作廢。所以一幀裡第一個要用的
+  /// 形狀重算一次，同一幀其他形狀共用。不經過排程直接重畫（測試裡手動 paint）
+  /// 時沿用這一幀算好的，那時骨架沒動。
   final Matrix4 _anchorToScreen = Matrix4.identity();
-  int _anchorFrame = -1;
+  bool _anchorStale = true;
 
   /// [_anchor] 這一幀到螢幕的轉換。
   Matrix4 _anchorTransform() {
-    if (_anchorFrame != _frames) {
-      _anchorFrame = _frames;
+    if (_anchorStale) {
+      _anchorStale = false;
       _walkUp(_anchor!, null, _anchorToScreen);
     }
     return _anchorToScreen;
@@ -399,6 +409,8 @@ class _BreathClock extends ChangeNotifier {
   }
 
   void _tick(Duration elapsed) {
+    // 新的一幀：骨架可能換了位置（換頁平移、捲動），時間沒走也一樣。
+    _anchorStale = true;
     _cycles = _base + elapsed.inMicroseconds / _cycle.inMicroseconds;
     final from = _restFrom;
     if (from != null && _phase - from >= _restLength(from)) _settle();
@@ -505,6 +517,7 @@ class _BreathClock extends ChangeNotifier {
         _cachedBreath != breath ||
         _cachedWidth != viewWidth) {
       _gradients.clear();
+      _anchorStale = true;
       _cachedCycles = _cycles;
       _cachedShift = _shift;
       _cachedRestFrom = _restFrom;
@@ -757,6 +770,8 @@ void _drawBreathing(
     return;
   }
   // 形狀左上角在螢幕上的橫向位置是 scale·x + shift（x 是在 box 裡的位置）。
+  // 只照平移、縮放與左右翻轉換算：斜切、旋轉時整個形狀照頂邊那一行的位置
+  // 算深淺（App 裡沒有這種轉換，原本逐個形狀畫漸層時也是這樣）。
   final transform = toScreen ?? _screenTransform(box, phase);
   final scale = transform.storage[0];
   final shift = transform.storage[12] + transform.storage[4] * shape.top;
@@ -847,17 +862,6 @@ RenderObject _walkUp(RenderObject box, RenderObject? stopAt, Matrix4 into) {
 final Matrix4 _toScreen = Matrix4.identity();
 final Matrix4 _step = Matrix4.identity();
 final Matrix4 _walkStep = Matrix4.identity();
-
-/// 到現在畫了幾幀：每一幀開始時加一（[_BreathClock._anchorTransform] 一幀
-/// 算一次用）。在第一個 [_BreathClock] 建立時開始數。
-int _frames = 0;
-bool _countingFrames = false;
-
-void _countFrames() {
-  if (_countingFrames) return;
-  _countingFrames = true;
-  SchedulerBinding.instance.addPersistentFrameCallback((_) => _frames++);
-}
 
 /// [Skeleton.breathAt] 先算好的一張表：呼吸曲線只看一輪裡的位置，和相位、
 /// 橫向位置無關，開 App 時算一次（513 個點），畫骨架時查表內插，和直接算的

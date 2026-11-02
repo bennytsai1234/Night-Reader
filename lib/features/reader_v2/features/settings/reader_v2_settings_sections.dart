@@ -821,11 +821,13 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
   NumberStepperRow _row(BuildContext context, double value) {
     var hi = max;
     final limit = maxOf?.call(context);
-    if (limit != null && limit >= step) hi = math.min(max, limit);
+    // 上限至少比下限多一步（步進列要有兩個值）；下限不往下挪，步進列給的
+    // 每個值都存得下。
+    if (limit != null) hi = math.max(min + step, math.min(max, limit));
     return NumberStepperRow(
       label: label,
       value: value,
-      min: math.min(min, hi - step),
+      min: min,
       max: hi,
       step: step,
       fractionDigits: fractionDigits,

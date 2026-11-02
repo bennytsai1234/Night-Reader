@@ -49,6 +49,7 @@ class SettingsSync extends SyncKind {
     PreferKey.readerTextIndent,
     PreferKey.readerTitleSpacing,
     PreferKey.readerPaddingHorizontal,
+    PreferKey.readerLineChars,
     PreferKey.readerPaddingTop,
     PreferKey.readerPaddingBottom,
     PreferKey.readerFooterOffset,

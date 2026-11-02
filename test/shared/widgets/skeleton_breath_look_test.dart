@@ -120,6 +120,74 @@ class _Reference extends CustomPainter {
 }
 
 void main() {
+  // 骨架搬到別的位置、時間沒走（零時長的一幀）時，深淺照新的螢幕位置。
+  // 放在最前面：這個程序裡第一個呼吸的骨架，一出現的下一幀就搬（原本一幀
+  // 算一次轉換的計數，在第一個骨架出現後要再過一幀才開始數，沿用了舊位置）。
+  testWidgets('breathing follows the screen when the skeleton moves', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = _size
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final boundary = GlobalKey();
+    Widget at(double left) => MaterialApp(
+      home: RepaintBoundary(
+        key: boundary,
+        child: ColoredBox(
+          color: const Color(0xFFFFFFFF),
+          child: Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: 0,
+                width: 200,
+                height: 80,
+                child: const Skeleton(
+                  child: SkeletonBox(
+                    color: Color(0xFF000000),
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Future<int> red(int x, int y) async => (await tester.runAsync(() async {
+      final image =
+          await (boundary.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary)
+              .toImage();
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      image.dispose();
+      return data!.buffer.asUint8List()[(y * _size.width.toInt() + x) * 4];
+    }))!;
+
+    int expected(Duration elapsed, int x) =>
+        (255 *
+                (1 -
+                    Skeleton.breathAt(
+                      elapsed.inMicroseconds /
+                          Skeleton.breathCycle.inMicroseconds,
+                      (x + 0.5) / _size.width,
+                      SkeletonBreath.gentleSweep,
+                    )))
+            .round();
+
+    await tester.pumpWidget(at(0));
+    await tester.pumpWidget(at(100));
+    expect(await red(110, 20), closeTo(expected(Duration.zero, 110), 2));
+
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpWidget(at(160));
+    const elapsed = Duration(milliseconds: 700);
+    expect(await red(170, 20), closeTo(expected(elapsed, 170), 2));
+    expect(await red(350, 20), closeTo(expected(elapsed, 350), 2));
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets('breathing looks like its definition (${brightness.name})', (
       tester,

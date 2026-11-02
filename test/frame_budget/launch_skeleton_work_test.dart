@@ -11,12 +11,13 @@
 //    （[debugOnProfilePaint]），再把它們各畫一次到錄製用的畫布，數畫了幾個
 //    形狀（含卡片底）、用了幾道不同的漸層。兩種寬度要一樣的：骨架長出每一幀
 //    最多重畫的形狀數（第一幀不算：骨架第一次出現，總要畫一次），與骨架
-//    呼吸每一幀最多用的漸層數（漸層要照骨架算，不照方塊算）。長出或呼吸
-//    一幀都沒量到時失敗，不當成 0 通過。
+//    呼吸每一幀最多用的漸層數（漸層要照骨架算，不照方塊算）。量不到時失敗，
+//    不當成 0 通過：長出或呼吸少於兩幀、長出第一幀沒有形狀、呼吸沒有形狀或
+//    漸層、平板呼吸重畫的形狀沒有比手機多。
 // 2. 長相：長出與呼吸的每一幀照「從長出（呼吸）第一幀起的第幾幀」存成
 //    PNG；給了 SKELETON_BASE 時和改前同一幀比，列出每段最多差幾階、哪幾幀
-//    有像素差超過 [_tolerance]。時間是測試推的假時間，一幀 16ms，改前改後
-//    同一幀的呼吸與長出進度一樣。
+//    有像素差超過 [_tolerance]，有超過的幀或改前缺了某一幀的圖就失敗。時間
+//    是測試推的假時間，一幀 16ms，改前改後同一幀的呼吸與長出進度一樣。
 @Tags(['frame_budget'])
 library;
 
@@ -142,6 +143,8 @@ void main() {
     });
 
     final worst = <String, int>{};
+    // 呼吸每幀最多重畫的形狀數：平板要比手機多，兩邊漸層數一樣才有意義。
+    final breathShapes = <String, int>{};
     for (final MapEntry(key: name, value: size) in _sizes.entries) {
       tester.view
         ..physicalSize = size
@@ -156,12 +159,17 @@ void main() {
       final frames = <_Frame>[];
       final counts = <String, int>{};
       final diffs = <String, List<(int, int, int)>>{};
+      // 給了 SKELETON_BASE 卻沒有改前同一幀的圖：比不到也算失敗。
+      final missing = <String>[];
       for (var i = 0; i < 600; i++) {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         final painted = <RenderObject>{};
         debugOnProfilePaint = painted.add;
-        await tester.pump(_frame);
-        debugOnProfilePaint = null;
+        try {
+          await tester.pump(_frame);
+        } finally {
+          debugOnProfilePaint = null;
+        }
         final shelf = find.byType(BookshelfPage).evaluate();
         final entrance = shelf.isEmpty
             ? null
@@ -186,7 +194,9 @@ void main() {
           final diff = await tester.runAsync(
             () => _compare(pixels!, size, '${base.path}/$file.png'),
           );
-          if (diff != null) {
+          if (diff == null) {
+            missing.add(file);
+          } else {
             (diffs[segment] ??= []).add((index, diff.$1, diff.$2));
           }
         }
@@ -214,6 +224,24 @@ void main() {
         final shapes = [for (final frame in rest) frame.work.shapes];
         final gradients = [for (final frame in rest) frame.work.gradients];
         final first = measured.first.work;
+        // 真的量到骨架在畫：長出第一幀骨架第一次出現，呼吸時每個形狀照著
+        // 漸層重畫。都是 0 代表量測沒接上（例如重畫的紀錄被別的東西蓋掉），
+        // 不是工作量和方塊數無關。
+        if (segment == 'grow') {
+          expect(first.shapes, greaterThan(0), reason: '$name 長出第一幀沒量到形狀');
+        } else {
+          expect(
+            shapes.reduce(math.max),
+            greaterThan(0),
+            reason: '$name 呼吸沒量到形狀',
+          );
+          expect(
+            gradients.reduce(math.max),
+            greaterThan(0),
+            reason: '$name 呼吸沒量到漸層',
+          );
+          breathShapes[name] = shapes.reduce(math.max);
+        }
         worst['$name/$segment'] = segment == 'grow'
             ? shapes.reduce(math.max)
             : gradients.reduce(math.max);
@@ -236,8 +264,10 @@ void main() {
             '$name $segment 和改前比：${segmentDiffs.length} 幀，最多差 $max 階；'
             '${over.isEmpty ? '沒有超過 $_tolerance 階的幀' : over.join('、')}',
           );
+          expect(over, isEmpty, reason: '$name ${_label(segment)}和改前不一樣');
         }
       }
+      expect(missing, isEmpty, reason: '改前（SKELETON_BASE）沒有這幾幀的圖');
 
       await tester.pumpWidget(const SizedBox.shrink());
       // 下載服務是單例，跨兩次開 App；等上一次排的工作跑完（同開 App 量測）。
@@ -247,6 +277,11 @@ void main() {
       }
     }
 
+    expect(
+      breathShapes['tablet'],
+      greaterThan(breathShapes['phone']!),
+      reason: '平板的書架方塊沒有比手機多，比不出漸層數跟不跟著方塊數變',
+    );
     for (final segment in ['grow', 'breath']) {
       expect(
         worst['tablet/$segment'],

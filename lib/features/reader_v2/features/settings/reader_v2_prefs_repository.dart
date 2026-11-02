@@ -278,9 +278,10 @@ class ReaderV2PrefsRepository {
   static const double minPagePadding = 0.0;
   static const double maxPagePadding = 64.0;
 
-  /// 每行字數存得下的範圍；能調到多少還看畫面放得下幾個字。下限比手機用
-  /// 最大字號（40）時放得下的字數（約 9）還少，每種字號都還能往下調。
-  static const ({int min, int max}) lineCharsRange = (min: 6, max: 120);
+  /// 每行字數存得下的範圍；能調到多少還看畫面放得下幾個字。下限是 1：最大
+  /// 字號、最大字距再加上最寬的最少留白時，手機上一行放不到 6 個字，步進
+  /// 列給的每個數都要存得下（原本下限 6，放得下 5 字時步進列給了存不下的 4）。
+  static const ({int min, int max}) lineCharsRange = (min: 1, max: 120);
 
   /// 章節間距的合法範圍（行）。
   static const double minChapterSpacing = 0.0;
