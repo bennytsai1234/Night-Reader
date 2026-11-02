@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:night_reader/features/settings/backup_settings_page.dart';
+import 'package:night_reader/features/settings/backup_sync_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/welcome/main_page.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
@@ -83,13 +83,13 @@ void main() {
       rebuilt.removeWhere((entry) => entry.startsWith(step));
 
       for (final round in ['第一趟', '第二趟']) {
-        step = '$round 我的→備份與還原';
+        step = '$round 我的→備份與同步';
         await navigate(
           tester,
-          () => tester.tap(find.text('備份與還原')),
-          find.byType(BackupSettingsPage),
+          () => tester.tap(find.text('備份與同步')),
+          find.byType(BackupSyncPage),
         );
-        step = '$round 備份與還原返回我的';
+        step = '$round 備份與同步返回我的';
         await navigate(tester, () => goBack(tester), find.byType(SettingsPage));
       }
     } finally {

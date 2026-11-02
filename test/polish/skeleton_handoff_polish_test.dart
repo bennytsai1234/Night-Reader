@@ -28,6 +28,7 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -81,8 +82,9 @@ class _Scenario {
 
 Future<void> _none(WidgetTester tester) async {}
 
+/// 書架上的書名照目前的繁簡轉換顯示（繁轉簡時是「夜雨听书」）。
 Future<void> _tapBook(WidgetTester tester) =>
-    tester.tap(find.text('夜雨聽書').first);
+    tester.tap(find.text(ChineseDisplay.convert('夜雨聽書')).first);
 
 /// 讀過一次再回書架：閱讀器記下了離開時那一頁，下次開書骨架照它畫。
 Future<void> _readOnceAndBack(WidgetTester tester) async {

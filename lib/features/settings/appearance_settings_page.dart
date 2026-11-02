@@ -17,9 +17,10 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：風格、強調色、深淺、玻璃效果與換頁動畫。風格與深淺同時
-/// 決定 App 介面、閱讀正文與閱讀選單的配色。載入骨架的深淺、呼吸與換場
-/// 不給選，固定用 `SkeletonLook`、`SkeletonReveal` 的預設。
+/// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果
+/// 與換頁動畫。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
+/// 載入骨架的深淺、呼吸與換場不給選，固定用 `SkeletonLook`、
+/// `SkeletonReveal` 的預設。
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
 
@@ -34,25 +35,18 @@ class AppearanceSettingsPage extends StatelessWidget {
         children: [
           GroupedSection(
             topGap: AppSpacing.lg,
-            header: '風格',
+            header: '淺色風格',
+            children: [_styleGrid(context, themeSettings, Brightness.light)],
+          ),
+          GroupedSection(
+            header: '深色風格',
             children: [
-              GroupedContent(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                ),
-                child: _StyleGrid(
-                  selected: themeSettings.style,
-                  accent: themeSettings.accent,
-                  onSelected: (style) {
-                    if (style == themeSettings.style) return;
-                    ThemeRevealScope.of(context)
-                        .run(change: () => themeSettings.setStyle(style));
-                  },
-                ),
-              ),
+              _styleGrid(context, themeSettings, Brightness.dark),
+              _pureBlackRow(context, themeSettings),
+            ],
+          ),
+          GroupedSection(
+            children: [
               Builder(
                 builder: (rowContext) => GroupedRow(
                   title: '強調色',
@@ -130,6 +124,60 @@ class AppearanceSettingsPage extends StatelessWidget {
   }
 }
 
+/// 改某個深淺用的風格：改的正是畫面上的深淺時，新配色從點擊處暈開；
+/// 改的是另一個深淺，畫面不變，直接存。
+void _setStyle(
+  BuildContext context,
+  ThemeSettingsProvider themeSettings,
+  Brightness brightness,
+  AppStyle style,
+) {
+  if (themeSettings.styleFor(brightness) == style) return;
+  if (Theme.of(context).brightness != brightness) {
+    themeSettings.setStyle(brightness, style);
+    return;
+  }
+  ThemeRevealScope.of(context)
+      .run(change: () => themeSettings.setStyle(brightness, style));
+}
+
+GroupedContent _styleGrid(
+  BuildContext context,
+  ThemeSettingsProvider themeSettings,
+  Brightness brightness,
+) => GroupedContent(
+  padding: const EdgeInsets.fromLTRB(
+    AppSpacing.lg,
+    AppSpacing.lg,
+    AppSpacing.lg,
+    AppSpacing.md,
+  ),
+  child: _StyleGrid(
+    brightness: brightness,
+    selected: themeSettings.styleFor(brightness),
+    accent: themeSettings.accent,
+    pureBlack: themeSettings.pureBlack,
+    onSelected: (style) => _setStyle(context, themeSettings, brightness, style),
+  ),
+);
+
+/// 「深色用純黑」：只影響深色，正在深色時從開關處暈開。
+Widget _pureBlackRow(
+  BuildContext context,
+  ThemeSettingsProvider themeSettings,
+) => GroupedSwitchRow(
+  title: '深色用純黑',
+  value: themeSettings.pureBlack,
+  onChanged: (value) {
+    if (Theme.of(context).brightness != Brightness.dark) {
+      themeSettings.setPureBlack(value);
+      return;
+    }
+    ThemeRevealScope.of(context)
+        .run(change: () => themeSettings.setPureBlack(value));
+  },
+);
+
 /// 從一組選項挑一個：在那一列旁邊開出選單，目前的打勾。
 Future<void> _pickOption<T>(
   BuildContext rowContext,
@@ -168,7 +216,10 @@ Future<void> _pickAccent(
           value: accent,
           label: accent.label,
           checked: accent == themeSettings.accent,
-          swatch: themeSettings.style.paletteFor(brightness, accent).primary,
+          swatch: themeSettings
+              .styleFor(brightness)
+              .paletteFor(brightness, accent)
+              .primary,
         ),
     ],
   );
@@ -178,22 +229,27 @@ Future<void> _pickAccent(
       .run(change: () => themeSettings.setAccent(accent));
 }
 
-/// 風格卡：每個風格一張直式小書頁，兩列、每列五張，一頁放得下全部風格與
-/// 下面的強調色、深淺與玻璃效果。顯示各風格在目前深淺下的樣子。
+/// 風格卡：每個風格一張直式小書頁，全部排成一排，顯示各風格在
+/// [brightness] 下的樣子（深色含純黑）。淺色、深色各一排，一頁放得下兩排
+/// 與下面的強調色、深淺與玻璃效果。
 class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
   const _StyleGrid({
+    required this.brightness,
     required this.selected,
     required this.accent,
+    required this.pureBlack,
     required this.onSelected,
   });
 
+  final Brightness brightness;
   final AppStyle selected;
 
   /// 摺角的主色照目前的強調色畫，選下去看到的就是那個樣子。
   final AppAccent accent;
+  final bool pureBlack;
   final ValueChanged<AppStyle> onSelected;
 
-  static const int _columns = 5;
+  static final int columns = AppStyle.values.length;
   static const double _columnGap = AppSpacing.md;
   static const double _rowGap = AppSpacing.lg;
 
@@ -203,13 +259,13 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
     BuildContext context, {
     required double width,
   }) {
-    final cardWidth = (width - _columnGap * (_columns - 1)) / _columns;
+    final cardWidth = (width - _columnGap * (columns - 1)) / columns;
     final pageHeight = cardWidth / _StyleCard.aspectRatio;
     final marks = <SkeletonShape>[];
     var top = 0.0;
     var runHeight = 0.0;
     for (final (index, style) in AppStyle.values.indexed) {
-      final column = index % _columns;
+      final column = index % columns;
       if (index > 0 && column == 0) {
         top += runHeight + _rowGap;
         runHeight = 0;
@@ -243,11 +299,10 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width =
-            (constraints.maxWidth - _columnGap * (_columns - 1)) / _columns;
+            (constraints.maxWidth - _columnGap * (columns - 1)) / columns;
         return Wrap(
           spacing: _columnGap,
           runSpacing: _rowGap,
@@ -257,7 +312,11 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
                 width: width,
                 child: _StyleCard(
                   style: style,
-                  palette: style.paletteFor(brightness, accent),
+                  palette: style.paletteFor(
+                    brightness,
+                    accent,
+                    pureBlack: pureBlack,
+                  ),
                   selected: style == selected,
                   onTap: () => onSelected(style),
                 ),

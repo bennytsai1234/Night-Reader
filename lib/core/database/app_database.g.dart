@@ -308,6 +308,18 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _progressTimeMeta = const VerificationMeta(
+    'progressTime',
+  );
+  @override
+  late final GeneratedColumn<int> progressTime = GeneratedColumn<int>(
+    'progressTime',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _wordCountMeta = const VerificationMeta(
     'wordCount',
   );
@@ -433,6 +445,7 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     visualOffsetPx,
     readerAnchorJson,
     durChapterTime,
+    progressTime,
     wordCount,
     canUpdate,
     order,
@@ -644,6 +657,15 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         ),
       );
     }
+    if (data.containsKey('progressTime')) {
+      context.handle(
+        _progressTimeMeta,
+        progressTime.isAcceptableOrUnknown(
+          data['progressTime']!,
+          _progressTimeMeta,
+        ),
+      );
+    }
     if (data.containsKey('wordCount')) {
       context.handle(
         _wordCountMeta,
@@ -821,6 +843,10 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.int,
         data['${effectivePrefix}durChapterTime'],
       )!,
+      progressTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}progressTime'],
+      )!,
       wordCount: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}wordCount'],
@@ -904,6 +930,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<double> visualOffsetPx;
   final Value<String?> readerAnchorJson;
   final Value<int> durChapterTime;
+  final Value<int> progressTime;
   final Value<String?> wordCount;
   final Value<bool> canUpdate;
   final Value<int> order;
@@ -942,6 +969,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.visualOffsetPx = const Value.absent(),
     this.readerAnchorJson = const Value.absent(),
     this.durChapterTime = const Value.absent(),
+    this.progressTime = const Value.absent(),
     this.wordCount = const Value.absent(),
     this.canUpdate = const Value.absent(),
     this.order = const Value.absent(),
@@ -981,6 +1009,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.visualOffsetPx = const Value.absent(),
     this.readerAnchorJson = const Value.absent(),
     this.durChapterTime = const Value.absent(),
+    this.progressTime = const Value.absent(),
     this.wordCount = const Value.absent(),
     this.canUpdate = const Value.absent(),
     this.order = const Value.absent(),
@@ -1021,6 +1050,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<double>? visualOffsetPx,
     Expression<String>? readerAnchorJson,
     Expression<int>? durChapterTime,
+    Expression<int>? progressTime,
     Expression<String>? wordCount,
     Expression<bool>? canUpdate,
     Expression<int>? order,
@@ -1061,6 +1091,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (visualOffsetPx != null) 'visualOffsetPx': visualOffsetPx,
       if (readerAnchorJson != null) 'readerAnchorJson': readerAnchorJson,
       if (durChapterTime != null) 'durChapterTime': durChapterTime,
+      if (progressTime != null) 'progressTime': progressTime,
       if (wordCount != null) 'wordCount': wordCount,
       if (canUpdate != null) 'canUpdate': canUpdate,
       if (order != null) 'order': order,
@@ -1102,6 +1133,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<double>? visualOffsetPx,
     Value<String?>? readerAnchorJson,
     Value<int>? durChapterTime,
+    Value<int>? progressTime,
     Value<String?>? wordCount,
     Value<bool>? canUpdate,
     Value<int>? order,
@@ -1141,6 +1173,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       visualOffsetPx: visualOffsetPx ?? this.visualOffsetPx,
       readerAnchorJson: readerAnchorJson ?? this.readerAnchorJson,
       durChapterTime: durChapterTime ?? this.durChapterTime,
+      progressTime: progressTime ?? this.progressTime,
       wordCount: wordCount ?? this.wordCount,
       canUpdate: canUpdate ?? this.canUpdate,
       order: order ?? this.order,
@@ -1250,6 +1283,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (durChapterTime.present) {
       map['durChapterTime'] = Variable<int>(durChapterTime.value);
     }
+    if (progressTime.present) {
+      map['progressTime'] = Variable<int>(progressTime.value);
+    }
     if (wordCount.present) {
       map['wordCount'] = Variable<String>(wordCount.value);
     }
@@ -1313,6 +1349,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('visualOffsetPx: $visualOffsetPx, ')
           ..write('readerAnchorJson: $readerAnchorJson, ')
           ..write('durChapterTime: $durChapterTime, ')
+          ..write('progressTime: $progressTime, ')
           ..write('wordCount: $wordCount, ')
           ..write('canUpdate: $canUpdate, ')
           ..write('order: $order, ')
@@ -1361,6 +1398,7 @@ class _$BookInsertable implements Insertable<Book> {
       visualOffsetPx: Value(_object.visualOffsetPx),
       readerAnchorJson: Value(_object.readerAnchorJson),
       durChapterTime: Value(_object.durChapterTime),
+      progressTime: Value(_object.progressTime),
       wordCount: Value(_object.wordCount),
       canUpdate: Value(_object.canUpdate),
       order: Value(_object.order),
@@ -8784,6 +8822,7 @@ typedef $$BooksTableCreateCompanionBuilder = BooksCompanion Function({
   Value<double> visualOffsetPx,
   Value<String?> readerAnchorJson,
   Value<int> durChapterTime,
+  Value<int> progressTime,
   Value<String?> wordCount,
   Value<bool> canUpdate,
   Value<int> order,
@@ -8823,6 +8862,7 @@ typedef $$BooksTableUpdateCompanionBuilder = BooksCompanion Function({
   Value<double> visualOffsetPx,
   Value<String?> readerAnchorJson,
   Value<int> durChapterTime,
+  Value<int> progressTime,
   Value<String?> wordCount,
   Value<bool> canUpdate,
   Value<int> order,
@@ -8983,6 +9023,11 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
 
   ColumnFilters<int> get durChapterTime => $composableBuilder(
     column: $table.durChapterTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get progressTime => $composableBuilder(
+    column: $table.progressTime,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9177,6 +9222,11 @@ class $$BooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get progressTime => $composableBuilder(
+    column: $table.progressTime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get wordCount => $composableBuilder(
     column: $table.wordCount,
     builder: (column) => ColumnOrderings(column),
@@ -9344,6 +9394,11 @@ class $$BooksTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get progressTime => $composableBuilder(
+    column: $table.progressTime,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get wordCount =>
       $composableBuilder(column: $table.wordCount, builder: (column) => column);
 
@@ -9432,6 +9487,7 @@ class $$BooksTableTableManager
                 Value<double> visualOffsetPx = const Value.absent(),
                 Value<String?> readerAnchorJson = const Value.absent(),
                 Value<int> durChapterTime = const Value.absent(),
+                Value<int> progressTime = const Value.absent(),
                 Value<String?> wordCount = const Value.absent(),
                 Value<bool> canUpdate = const Value.absent(),
                 Value<int> order = const Value.absent(),
@@ -9470,6 +9526,7 @@ class $$BooksTableTableManager
                 visualOffsetPx: visualOffsetPx,
                 readerAnchorJson: readerAnchorJson,
                 durChapterTime: durChapterTime,
+                progressTime: progressTime,
                 wordCount: wordCount,
                 canUpdate: canUpdate,
                 order: order,
@@ -9510,6 +9567,7 @@ class $$BooksTableTableManager
                 Value<double> visualOffsetPx = const Value.absent(),
                 Value<String?> readerAnchorJson = const Value.absent(),
                 Value<int> durChapterTime = const Value.absent(),
+                Value<int> progressTime = const Value.absent(),
                 Value<String?> wordCount = const Value.absent(),
                 Value<bool> canUpdate = const Value.absent(),
                 Value<int> order = const Value.absent(),
@@ -9548,6 +9606,7 @@ class $$BooksTableTableManager
                 visualOffsetPx: visualOffsetPx,
                 readerAnchorJson: readerAnchorJson,
                 durChapterTime: durChapterTime,
+                progressTime: progressTime,
                 wordCount: wordCount,
                 canUpdate: canUpdate,
                 order: order,

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -92,8 +94,9 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
   }
 }
 
-/// 風格選擇：與「外觀與主題」頁是同一個設定，換了整個 App 一起換。
-/// 色票顯示各風格在目前深淺下的正文紙張與文字。
+/// 風格選擇：改的是目前深淺用的風格（「外觀與主題」頁的同一個設定），
+/// 換了整個 App 一起換，另一個深淺的風格不動。色票顯示各風格在目前深淺
+/// 下的正文紙張與文字（含純黑）。
 class _ReaderStyleSelector extends StatelessWidget
     implements GroupedSkeletonItem {
   const _ReaderStyleSelector();
@@ -114,31 +117,46 @@ class _ReaderStyleSelector extends StatelessWidget
           width: double.infinity,
         ),
     ];
-    final rowWidth = width.clamp(
-      AppStyle.values.length * _swatchSize +
-          (AppStyle.values.length - 1) * AppSpacing.md,
-      double.infinity,
+    // 每一格和 Row 裡的 Column 一樣寬：色票與名稱取較寬的（字級放大時
+    // 「牛皮紙」比色票寬），色票與名稱在格裡置中；格與格之間照
+    // spaceBetween 平分剩下的寬度，至少隔 md。
+    final columns = [
+      for (final label in labels) math.max(_swatchSize, label.width!),
+    ];
+    final content = columns.fold<double>(0, (sum, column) => sum + column);
+    final rowWidth = math.max(
+      width,
+      content + (columns.length - 1) * AppSpacing.md,
     );
-    final stride = (rowWidth - _swatchSize) / (AppStyle.values.length - 1);
+    final gap = (rowWidth - content) / (columns.length - 1);
+    final marks = <SkeletonShape>[];
+    var left = 0.0;
+    for (var i = 0; i < labels.length; i++) {
+      final column = columns[i];
+      marks.add(
+        SkeletonShape(
+          Rect.fromLTWH(
+            left + (column - _swatchSize) / 2,
+            0,
+            _swatchSize,
+            _swatchSize,
+          ),
+          radius: AppRadius.pillShape,
+        ),
+      );
+      marks.addAll(
+        labels[i].marksAt(
+          Offset(
+            left + (column - labels[i].width!) / 2,
+            _swatchSize + AppSpacing.xs,
+          ),
+        ),
+      );
+      left += column + gap;
+    }
     return GroupedItemShape(
       _swatchSize + AppSpacing.xs + labels.first.height,
-      marks: [
-        for (var i = 0; i < labels.length; i++) ...[
-          SkeletonShape(
-            Rect.fromLTWH(i * stride, 0, _swatchSize, _swatchSize),
-            radius: AppRadius.pillShape,
-          ),
-          for (final mark in labels[i].marks)
-            SkeletonShape(
-              mark.rect.shift(
-                Offset(
-                  i * stride + (_swatchSize - mark.rect.width) / 2,
-                  _swatchSize + AppSpacing.xs,
-                ),
-              ),
-            ),
-        ],
-      ],
+      marks: marks,
     );
   }
 
@@ -160,14 +178,19 @@ class _ReaderStyleSelector extends StatelessWidget
               for (final style in AppStyle.values)
                 _swatch(
                   style,
-                  style.of(brightness),
-                  selected: style == themeSettings.style,
+                  style.paletteFor(
+                    brightness,
+                    AppAccent.theme,
+                    pureBlack: themeSettings.pureBlack,
+                  ),
+                  selected: style == themeSettings.styleFor(brightness),
                   scheme: scheme,
                   // 和外觀設定頁一樣，新配色從點擊處像墨水一樣暈開。
                   onTap: () {
-                    if (style == themeSettings.style) return;
-                    ThemeRevealScope.of(context)
-                        .run(change: () => themeSettings.setStyle(style));
+                    if (style == themeSettings.styleFor(brightness)) return;
+                    ThemeRevealScope.of(context).run(
+                      change: () => themeSettings.setStyle(brightness, style),
+                    );
                   },
                 ),
             ],

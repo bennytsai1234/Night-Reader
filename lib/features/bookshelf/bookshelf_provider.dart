@@ -4,6 +4,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/sync/settings_sync.dart';
 
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';
@@ -25,13 +26,25 @@ class BookshelfProvider extends BookshelfProviderBase
   }) : _bookStorageService = bookStorageService ?? BookStorageService() {
     loadUiPreferences();
     firstLoad = loadBooks();
-    _bookshelfSub = AppEventBus().onName(AppEventBus.upBookshelf).listen((_) {
-      if (_covered) {
-        _reloadWhenUncovered = true;
-        return;
-      }
-      unawaited(loadBooks());
-    });
+    _bookshelfSub = AppEventBus()
+        .onName(AppEventBus.upBookshelf)
+        .listen((_) => _reloadSoon());
+    SettingsSync.applied.addListener(_settingsSynced);
+  }
+
+  void _reloadSoon() {
+    if (_covered) {
+      _reloadWhenUncovered = true;
+      return;
+    }
+    unawaited(loadBooks());
+  }
+
+  /// 同步套用了另一台的書架設定（網格或列表、排序、統一封面）。
+  void _settingsSynced() {
+    loadUiPreferences();
+    notifyListeners();
+    _reloadSoon();
   }
 
   final BookStorageService _bookStorageService;
@@ -172,6 +185,7 @@ class BookshelfProvider extends BookshelfProviderBase
   @override
   void dispose() {
     _bookshelfSub?.cancel();
+    SettingsSync.applied.removeListener(_settingsSynced);
     super.dispose();
   }
 }

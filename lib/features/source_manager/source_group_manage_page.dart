@@ -38,7 +38,7 @@ class SourceGroupManagePage extends StatelessWidget {
       ),
       body: Consumer<SourceManagerProvider>(
         builder: (context, provider, child) {
-          final groups = provider.allGroups;
+          final groups = provider.userGroups;
           final mutationEnabled = !provider.isMutationBusy;
 
           if (groups.isEmpty) {

@@ -4,12 +4,14 @@
 //   SHOT_MODE=dark flutter test --run-skipped -t screens test/screens
 //   SHOT_ONLY=r04,s12 flutter test --run-skipped -t screens test/screens
 //   SHOT_STYLE=plain flutter test --run-skipped -t screens test/screens
+//   SHOT_PURE_BLACK=off SHOT_MODE=dark flutter test --run-skipped -t screens test/screens
 //   SHOT_SIZE=1280x880 flutter test --run-skipped -t screens test/screens
 //
 // SHOT_SIZE 是畫面的寬x高（邏輯像素），給平板這類其他尺寸用，預設是手機。
 //
-// SHOT_STYLE 是 `AppStyle` 的名稱（paper、bamboo、azurite、tea、plain、rouge、
-// lotus、scroll、amber、frost），預設紙墨。
+// SHOT_STYLE 是 `AppStyle` 的名稱（plain、paper、tea、kraft、bamboo、bean），
+// 淺色與深色都用它；不給時淺色紙墨、深色素色。SHOT_PURE_BLACK=off 關掉
+// 「深色用純黑」（預設開）。
 //
 // 圖檔寫在 [screenshotDir]，檔名是「情境_深淺.png」。這組測試帶 `screens`
 // 標籤，`dart_test.yaml` 讓它平常跳過，pre-push 與 CI 的全套測試不會跑。
@@ -98,7 +100,7 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's13_downloads': (const {}, (t) async => openMine(t, '背景下載佇列')),
   's15_appearance': (const {}, (t) async => openMine(t, '外觀與主題')),
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
-  's17_backup': (const {}, (t) async => openMine(t, '備份與還原')),
+  's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
   's19_release_notes': (
     const {},
@@ -176,6 +178,7 @@ void main() {
   final mode = Platform.environment['SHOT_MODE'] ?? 'light';
   final only = Platform.environment['SHOT_ONLY']?.split(',');
   final style = Platform.environment['SHOT_STYLE'];
+  final pureBlack = Platform.environment['SHOT_PURE_BLACK'];
   final size = switch (Platform.environment['SHOT_SIZE']?.split('x')) {
     [final w, final h] => Size(double.parse(w), double.parse(h)),
     _ => null,
@@ -199,7 +202,9 @@ void main() {
       await tester.runAsync(
         () => resetPrefs({
           'themeMode': mode,
-          PreferKey.appStyle: ?style,
+          PreferKey.lightStyle: ?style,
+          PreferKey.darkStyle: ?style,
+          if (pureBlack != null) PreferKey.pureBlack: pureBlack != 'off',
           ...prefs,
         }),
       );
