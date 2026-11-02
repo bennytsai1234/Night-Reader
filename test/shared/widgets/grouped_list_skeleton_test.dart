@@ -155,6 +155,64 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('資料還沒到時保留骨架，到齊後照新增列的真實形狀揭開', (
+    tester,
+  ) async {
+    final ready = ValueNotifier<bool>(false);
+    addTearDown(ready.dispose);
+    await _push(
+      tester,
+      () => ValueListenableBuilder<bool>(
+        valueListenable: ready,
+        builder: (context, loaded, _) => Scaffold(
+          body: GroupedListView(
+            ready: loaded,
+            children: [
+              GroupedSection(
+                header: '資料',
+                children: [
+                  const GroupedRow(title: '第一列'),
+                  if (loaded)
+                    const GroupedRow(
+                      title: '載入後才知道的第二列',
+                      value: '已完成',
+                      showChevron: false,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final list = find.byType(GroupedListView);
+    final route = ModalRoute.of(tester.element(list))!;
+    while (!route.animation!.isCompleted) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // 換頁已播完，但資料還沒回來，不能先把一列的骨架換成內容。
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(SkeletonShapes), findsOneWidget);
+    expect(find.text('第一列'), findsNothing);
+
+    ready.value = true;
+    await tester.pump();
+    final skeleton = skeletonLayoutOf(
+      tester,
+      find.descendant(of: list, matching: find.byType(SkeletonShapes)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('載入後才知道的第二列'), findsOneWidget);
+    expect(
+      skeletonMismatches(
+        skeleton,
+        contentLayoutOf(tester, list),
+        visible: tester.getRect(list),
+      ),
+      isEmpty,
+    );
+  });
+
   testWidgets('算不出骨架的元件會被抓出來', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
