@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -86,9 +87,10 @@ class ExploreShowView extends StatelessWidget {
   EdgeInsets _listPadding(BuildContext context) {
     final padding = MediaQuery.paddingOf(context);
     return EdgeInsets.only(
-      top: padding.top,
-      bottom: padding.bottom + AppSpacing.xl,
-    );
+          top: padding.top,
+          bottom: padding.bottom + AppSpacing.xl,
+        ) +
+        ReadableWidth.insetOf(context);
   }
 
   /// 第一頁載入時顯示書單骨架，書到了以淡入取代。書列在骨架底下一格建一

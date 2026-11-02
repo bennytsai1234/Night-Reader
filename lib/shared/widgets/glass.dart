@@ -791,7 +791,12 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.systemOverlayStyle,
     this.titleSheen,
     this.morph = false,
+    this.readable = true,
   });
+
+  /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕置中在
+  /// 兩側留白裡，[bottom] 跟著內容欄。書架這類鋪滿畫面的頁面設 false。
+  final bool readable;
 
   /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
   /// 左右兩側每個位置的按鈕包在 [GlassMorph] 裡，玻璃留著只改大小、內容
@@ -860,12 +865,13 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 onPressed: () => Navigator.maybePop(context),
               )
             : null);
-    // 原型：頁首下方的搜尋框這類內容跟著內容欄；按鈕看 headerFollows
-    // （首頁的分頁不跟）。
-    final contentSide = route?.isFirst ?? true
-        ? 0.0
-        : ReadableWidth.sideOf(MediaQuery.sizeOf(context).width);
-    final side = ReadableWidth.headerFollows ? contentSide : 0.0;
+    // 清單頁在平板上有內容欄（[ReadableWidth]）：頁首下方的搜尋框、分頁
+    // 跟著內容欄，按鈕置中在兩側的留白裡。
+    final width = MediaQuery.sizeOf(context).width;
+    final contentSide = readable ? ReadableWidth.sideOf(width) : 0.0;
+    final buttonInset = readable
+        ? ReadableWidth.headerInsetOf(width)
+        : AppGrouped.margin;
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
@@ -930,17 +936,15 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
             if (_hasToolbar)
               Positioned(
                 top: topPadding,
-                left: side,
-                right: side,
+                left: 0,
+                right: 0,
                 height: AppGlass.headerToolbarHeight,
                 child: NavigationToolbar(
                   middleSpacing: AppSpacing.md,
                   leading: !hasLeading
                       ? null
                       : Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppGrouped.margin,
-                          ),
+                          padding: EdgeInsets.only(left: buttonInset),
                           child: IconTheme.merge(
                             data: IconThemeData(color: fg),
                             child: slot(effectiveLeading),
@@ -955,9 +959,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   trailing: trailing.isEmpty
                       ? null
                       : Padding(
-                          padding: const EdgeInsets.only(
-                            right: AppGrouped.margin,
-                          ),
+                          padding: EdgeInsets.only(right: buttonInset),
                           child: IconTheme.merge(
                             data: IconThemeData(color: fg),
                             child: Row(

@@ -867,6 +867,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
           backgroundColor: Colors.black,
           extendBodyBehindAppBar: true,
           appBar: const GlassNavHeader(
+            readable: false,
             backgroundColor: Colors.black,
             foregroundColor: Colors.white,
           ),

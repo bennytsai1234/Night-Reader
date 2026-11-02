@@ -202,6 +202,7 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
       child: Scaffold(
         backgroundColor: AppChrome.of(context).groupedBackground,
         appBar: GlassNavHeader(
+          readable: false,
           title: widget.title,
           leading: GlassIconButton(
             icon: Icons.arrow_back_ios_new_rounded,
