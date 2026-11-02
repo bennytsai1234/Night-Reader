@@ -90,8 +90,8 @@ class HybridReaderScreen extends StatefulWidget {
   /// 新增替換規則；沒給就不顯示這個按鈕。
   final ValueChanged<ParagraphSelection>? onHideText;
 
-  /// 選字選單的「書籤」：在選到的字開頭留一個書籤；給的是那個位置（綁好
-  /// 那一章正文的錨點）、章名與選到的字。沒給就不顯示這個按鈕。
+  /// 選字選單的「書籤」：在選到的字那一句的開頭留一個書籤
+  /// （[ReaderTextSelection.asBookmark]）。沒給就不顯示這個按鈕。
   final ValueChanged<SelectionBookmark>? onBookmarkText;
 
   /// 這本書的書籤，在那一行旁畫記號（[BookmarkMarksOverlay]）。

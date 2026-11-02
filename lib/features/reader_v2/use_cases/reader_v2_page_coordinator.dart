@@ -315,7 +315,7 @@ class ReaderV2PageCoordinator {
     _showNotice(reloaded ? '已隱藏「$pattern」' : '已新增隱藏規則，但正文沒有更新', action: undo);
   }
 
-  /// 選字選單的「書籤」：在選到的字開頭留一個書籤，提示可「復原」。
+  /// 選字選單的「書籤」：在選到的字那一句留一個書籤，提示可「復原」。
   Future<void> addBookmark(SelectionBookmark selection) async {
     final bookmarks = _host.bookmarks;
     final Bookmark? saved;

@@ -42,7 +42,7 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
   /// 告）；沒給就不顯示。
   final ValueChanged<ReaderTextSelection>? onHide;
 
-  /// 選單的「書籤」：在選到的字開頭留一個書籤；沒給就不顯示。
+  /// 選單的「書籤」：在選到的字那一句留一個書籤；沒給就不顯示。
   final ValueChanged<ReaderTextSelection>? onBookmark;
 
   final Color highlightColor;

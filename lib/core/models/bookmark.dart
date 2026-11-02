@@ -36,7 +36,7 @@ class Bookmark {
   /// `ReaderV2Location` 的 JSON，含這個位置綁定的正文與前後原文。
   final String? anchor;
 
-  /// 選到的字，清單上顯示它。
+  /// 書籤那一句（選得比一句長時是選到的全部），清單上顯示它。
   final String excerpt;
 
   Bookmark copyWith({

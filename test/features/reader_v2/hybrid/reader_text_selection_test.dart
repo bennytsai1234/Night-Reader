@@ -520,14 +520,49 @@ void main() {
       await tester.pump();
 
       expect(service.active, isFalse);
+      // 書籤記在選到的字那一句的開頭，清單顯示整句。
       final bookmark = marked!.asBookmark;
       final chapter = _chapter();
-      expect(bookmark.excerpt, '城門');
+      expect(bookmark.excerpt, '天色漸暗，城門即將關閉。');
       expect(bookmark.chapterTitle, '第一章');
       expect(bookmark.location.chapterIndex, 0);
-      expect(bookmark.location.charOffset, chapter.displayText.indexOf('城門'));
+      expect(bookmark.location.charOffset, chapter.displayText.indexOf('天色漸暗'));
       expect(bookmark.location.contentHash, 'hash');
-      expect(bookmark.location.anchorAfter, startsWith('城門即將關閉'));
+      expect(bookmark.location.anchorAfter, startsWith('天色漸暗，城門'));
+    });
+
+    test('a bookmark covers the sentence the selection starts in, or the '
+        'whole selection when it is longer', () {
+      const title = '第二章';
+      const body = '雨停了。他快步走過長街，回到書鋪。燈還亮著。';
+      const display = '$title\n\n$body';
+      final start = title.length + 2;
+      final chapter = ChapterBlocks(
+        chapterIndex: 0,
+        title: title,
+        displayText: display,
+        contentHash: 'h2',
+        blocks: [
+          _block(0, title, 0, paragraph: -1, isTitle: true),
+          _block(1, body, start),
+        ],
+      );
+      ReaderTextSelection select(String from, String to) => ReaderTextSelection(
+        blocks: chapter,
+        epoch: LayoutEpoch.initial,
+        paragraph: HybridTextRange(start, start + body.length),
+        range: HybridTextRange(
+          display.indexOf(from),
+          display.indexOf(to) + to.length,
+        ),
+      );
+
+      final word = select('長街', '長街').asBookmark;
+      expect(word.excerpt, '他快步走過長街，回到書鋪。');
+      expect(word.location.charOffset, display.indexOf('他快步'));
+
+      final long = select('長街', '燈還').asBookmark;
+      expect(long.excerpt, '他快步走過長街，回到書鋪。燈還');
     });
   });
 }
