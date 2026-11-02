@@ -1,4 +1,5 @@
 import 'package:html/dom.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:xml/xml.dart';
 
 /// 網站回的是 XML（`<?xml` 開頭）時，照 Legado 用 XML 解析器讀
@@ -14,26 +15,48 @@ abstract final class XmlContent {
   /// 它自己不是 XML 裡的元素。
   static const String documentTag = '#xml-document';
 
-  static bool looksLikeXml(String text) =>
-      text.trimLeft().toLowerCase().startsWith('<?xml');
+  static bool looksLikeXml(String text) {
+    final start = text.trimLeft();
+    return start.length >= 5 && start.substring(0, 5).toLowerCase() == '<?xml';
+  }
 
-  /// [text] 是 XML 時傳回包住根元素的那一層；不是 XML、或 XML 寫壞了讀不懂
-  /// 時傳回 null，照網頁讀（Legado 讀 XML 失敗時也改用網頁的解析器）。
-  static Element? parse(String text) {
+  /// [text] 是 XML 時傳回包住根元素的那一層，不是 XML 時傳回 null。
+  ///
+  /// [lowerCaseNames]：CSS 規則用。Jsoup 比對 CSS 選擇器時用小寫的標籤名稱
+  /// （`chapter` 找得到 `<Chapter>`），XPath 照原文比對（JsoupXpath 用
+  /// `nodeName()`），所以 CSS 讀出來的標籤名稱改成小寫。
+  ///
+  /// XML 寫壞了（標籤沒配對）時 Legado 的 Jsoup XML 解析器照樣讀下去；`xml`
+  /// 套件會丟錯，這時改用網頁的解析器讀，但先把 `<page/>` 這種自己結束的標籤
+  /// 展開成一對，結構才不會走樣。
+  static Element? parse(String text, {bool lowerCaseNames = false}) {
     if (!looksLikeXml(text)) return null;
-    final XmlDocument xml;
-    try {
-      xml = XmlDocument.parse(text.trimLeft());
-    } on XmlException {
-      return null;
-    }
     final document = Element.tag(documentTag);
-    for (final child in xml.children) {
-      final node = _convert(child);
-      if (node != null) document.append(node);
+    try {
+      final xml = XmlDocument.parse(text.trimLeft());
+      for (final child in xml.children) {
+        final node = _convert(child, lowerCaseNames);
+        if (node != null) document.append(node);
+      }
+    } on XmlException {
+      final body = text.trimLeft().replaceFirst(_declaration, '');
+      document.nodes.addAll(
+        html_parser
+            .parseFragment(
+              body.replaceAllMapped(_selfClosing, (m) {
+                return '<${m[1]}${m[2]}></${m[1]}>';
+              }),
+            )
+            .nodes,
+      );
     }
     return document;
   }
+
+  static final RegExp _declaration = RegExp(r'^<\?xml[^>]*\?>');
+  static final RegExp _selfClosing = RegExp(
+    r'<([A-Za-z_][\w:.-]*)([^<>]*?)\s*/>',
+  );
 
   /// [element] 是從 XML 讀出來的（在 [parse] 那一層底下）。
   static bool isFromXml(Element element) {
@@ -49,15 +72,16 @@ abstract final class XmlContent {
   static Element? rootOf(Element document) =>
       document.children.isEmpty ? null : document.children.first;
 
-  static Node? _convert(XmlNode node) {
+  static Node? _convert(XmlNode node, bool lowerCaseNames) {
     switch (node) {
       case XmlElement():
-        final element = Element.tag(node.name.qualified);
+        final name = node.name.qualified;
+        final element = Element.tag(lowerCaseNames ? name.toLowerCase() : name);
         for (final attribute in node.attributes) {
           element.attributes[attribute.name.qualified] = attribute.value;
         }
         for (final child in node.children) {
-          final converted = _convert(child);
+          final converted = _convert(child, lowerCaseNames);
           if (converted != null) element.append(converted);
         }
         return element;

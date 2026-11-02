@@ -128,6 +128,20 @@ void main() {
       expect(xpath.getString("//p[@class='m']/text()[1]"), '作者：甲');
     });
 
+    test('寫壞的 XML 照樣讀，自己結束的標籤先展開', () {
+      // 標籤沒配對（<t> 沒結束）：xml 套件讀不懂，改用網頁的解析器讀，
+      // <page/> 照樣不包住後面的 <item>。
+      const broken =
+          "<?xml version='1.0'?><r><page num='1'/><item><t>A</item>"
+          '<item><t>B</t></item></r>';
+      expect(AnalyzeByXPath(broken).getElements('item'), hasLength(2));
+    });
+
+    test('//text()[n] 每一層的元素各取第 n 段', () {
+      const page = '<div>甲<p>乙<br>丙</p></div>';
+      expect(AnalyzeByXPath(page).getStringList('//div//text()[2]'), ['丙']);
+    });
+
     test('寫壞的 XML 照網頁讀', () {
       const broken = '<?xml version="1.0"?><a><b>x</a>';
       expect(AnalyzeByXPath(broken).getStringList('//b/text()'), ['x']);

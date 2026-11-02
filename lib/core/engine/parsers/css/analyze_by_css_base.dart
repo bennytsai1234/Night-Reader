@@ -35,7 +35,7 @@ abstract class AnalyzeByCssBase {
   Element _parseRootElement(String html) {
     // 網站回的是 XML 時照 Legado 用 XML 解析器讀，規則從整份文件往下找
     // （同 Jsoup 的 Document）。
-    final xml = XmlContent.parse(html);
+    final xml = XmlContent.parse(html, lowerCaseNames: true);
     if (xml != null) return xml;
     final trimmed = html.trimLeft();
     if (RegExp(

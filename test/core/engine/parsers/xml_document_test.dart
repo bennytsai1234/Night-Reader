@@ -24,6 +24,14 @@ void main() {
     expect(css.getStringList('chapter@cid'), ['11', '12', '21']);
   });
 
+  test('CSS 照 Jsoup 不分標籤名稱大小寫，XPath 照原文', () {
+    const mixed = '''<?xml version="1.0"?>
+<Package><Chapter cid="11"/><Chapter cid="12"/></Package>''';
+    expect(AnalyzeByCss(mixed).getStringList('chapter@cid'), ['11', '12']);
+    expect(AnalyzeByXPath(mixed).getStringList('//Chapter/@cid'), ['11', '12']);
+    expect(AnalyzeByXPath(mixed).getStringList('//chapter/@cid'), isEmpty);
+  });
+
   test('CSS 找到的節點交給 XPath 時照 XML 讀，不再轉成網頁', () {
     final chapter = AnalyzeByCss(toc).getElements('chapter').first;
     expect(AnalyzeByXPath(chapter).getStringList('/text()'), ['第一章']);

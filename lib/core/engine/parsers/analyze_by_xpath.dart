@@ -320,13 +320,21 @@ class AnalyzeByXPath {
   static final RegExp _textAtPattern = RegExp(r'^(.*?)/text\(\)\[(\d+)\]$');
 
   List<String> _textAt(String base, int index) {
-    final nodes = base.isEmpty
+    // `//text()[n]`：每一層的每個元素各取第 n 段（JsoupXpath 遞迴的 text()）。
+    final recursive = base.endsWith('/');
+    final path = recursive ? base.substring(0, base.length - 1) : base;
+    final nodes = path.isEmpty
         ? <dynamic>[_contextXPath.root]
-        : _queryNodesCompat(base);
-    final results = <String>[];
+        : _queryNodesCompat(path);
+    final elements = <Element>[];
     for (final node in nodes) {
       final element = _extractElement(node);
       if (element == null) continue;
+      elements.add(element);
+      if (recursive) elements.addAll(element.querySelectorAll('*'));
+    }
+    final results = <String>[];
+    for (final element in elements) {
       final texts = element.nodes.whereType<Text>().toList();
       if (index < 1 || index > texts.length) continue;
       final text = texts[index - 1].text.trim();
