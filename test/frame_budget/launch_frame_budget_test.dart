@@ -1,8 +1,11 @@
 // 開 App 到書架換場播完、之後一秒的每一幀成本（ADR 0018、0025）。用法見
 // `test/support/frame_budget.dart`；帶 `frame_budget` 標籤，平常的全套測試
-// 跳過。
+// 跳過。預設是手機；`FRAME_SIZE=1280x880`（寬x高，邏輯像素）改量平板這類
+// 其他尺寸。
 @Tags(['frame_budget'])
 library;
+
+import 'dart:io';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -22,7 +25,13 @@ void main() {
   setUpAll(loadScreenshotFonts);
 
   testWidgets('launch until the shelf has turned into content', (tester) async {
-    setUpPhone(tester);
+    setUpPhone(
+      tester,
+      size: switch (Platform.environment['FRAME_SIZE']?.split('x')) {
+        [final w, final h] => Size(double.parse(w), double.parse(h)),
+        _ => null,
+      },
+    );
     // 書架上 30 本書，超過一個畫面，都帶手機裡已有的封面：骨架呼吸時底下
     // 建書卡、解碼封面，換場前等它們畫得出來（ADR 0031）。
     final covers = coverDirectory();
@@ -53,14 +62,18 @@ void main() {
           final entrance = shelf.isEmpty
               ? null
               : LaunchEntrance.maybeOf(shelf.first);
+          // 長完停拍定格畫面時頁首與分頁列會暫時換成真的（revealed），那
+          // 幾幀還在長完停；換場從 revealStarted 起算。
           if (entrance != null &&
-              entrance.revealed.value &&
+              entrance.revealStarted &&
               !entrance.isFinished) {
             return _paintsBlur(tester) ? null : '換場中';
           }
           if (find.byType(SkeletonBox).evaluate().isEmpty) return null;
-          if (!(entrance?.skeleton.isCompleted ?? false)) return '骨架長出';
-          return entrance!.breathing.value ? '骨架呼吸' : '長完停';
+          // 還沒開始長：畫面只有底色，靜止時可以做事（預留停頓）。
+          if (entrance == null || entrance.skeleton.value == 0) return '長出前';
+          if (!entrance.skeleton.isCompleted) return '骨架長出';
+          return entrance.breathing.value ? '骨架呼吸' : '長完停';
         },
         // 骨架出現過、又全部換成內容，就是整段進場播完；之後再看一秒，開
         // App 的背景工作從這時開始。
@@ -73,10 +86,11 @@ void main() {
       );
       // ignore: avoid_print
       print(describeFrames(label, costs));
-      // 長完停（建書架、拍圖）與骨架呼吸的每一格各列一段，對照表才看得到
-      // 這兩段；換場中只列中位數與最大。
+      // 進場的每一段各列一段，對照表才分得出是哪一段掉幀：長出、呼吸、換場
+      // 中要每一幀都在上限內；長完停（建書架、拍圖）是預留停頓，可以重
+      // （ADR 0035、0036）。換場中另外列中位數與最大。
       String ms(int us) => (us / 1000).toStringAsFixed(1);
-      for (final segment in ['長完停', '骨架呼吸']) {
+      for (final segment in ['骨架長出', '長完停', '骨架呼吸', '換場中']) {
         final frames = [
           for (final cost in costs)
             if (cost.note == segment) cost,

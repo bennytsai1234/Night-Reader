@@ -93,6 +93,32 @@ void main() {
       },
     );
 
+    test('屏蔽詞：書名或作者含有的不列，記在手機上，「清除」不清它', () async {
+      SearchBook by(String name, String author) => SearchBook(
+        bookUrl: 'https://b.example/$name',
+        name: name,
+        author: author,
+        origin: 'https://s0.example',
+        originName: '書源0',
+      );
+      final provider = await settledProvider();
+      provider.onSearchSuccess([
+        by('夜雨聽書', '沈知秋'),
+        by('穿越之霸道總裁', '某人'),
+        by('山海經異聞錄', '廣告作者'),
+      ]);
+      await provider.setBlockedWords('霸道、 廣告');
+      expect(names(provider), ['夜雨聽書']);
+
+      provider.clearResultFilters();
+      expect(names(provider), ['夜雨聽書']);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('search_blocked_words'), '霸道、 廣告');
+
+      final again = await settledProvider();
+      expect(again.blockedWords, '霸道、 廣告');
+    });
+
     test('choosing a sort order re-sorts and releases the hold', () async {
       final provider = await settledProvider();
       provider.updateSortMode(SearchResultSortMode.sourceCount);

@@ -10,6 +10,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -123,6 +124,7 @@ class BookDetailProvider extends ChangeNotifier {
   static const String _bookInfoDegradationMessage = '書籍資訊更新失敗，目前顯示已儲存內容';
 
   final BookDao _bookDao;
+  final ReadRecordDao? _readRecordDao;
   final ChapterDao _chapterDao;
   final BookSourceDao _sourceDao;
   final ReaderChapterContentDao? _chapterContentDao;
@@ -219,7 +221,13 @@ class BookDetailProvider extends ChangeNotifier {
     this._downloadService,
     BookStorageService? bookStorageService,
     BookUpdateService? updates,
+    ReadRecordDao? readRecordDao,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
+       _readRecordDao =
+           readRecordDao ??
+           (getIt.isRegistered<ReadRecordDao>()
+               ? getIt<ReadRecordDao>()
+               : null),
        _chapterDao = chapterDao ?? getIt<ChapterDao>(),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
        _chapterContentDao =
@@ -783,7 +791,17 @@ class BookDetailProvider extends ChangeNotifier {
 
     try {
       await _bookDao.upsert(next);
+      final previousName = _book.name;
       _book = next;
+      if (previousName != next.name) {
+        // 閱讀統計照書名記，改名要一起搬，不然會分成兩筆。搬失敗不擋存檔：
+        // 書的資訊已經存好，統計只是留在舊名字下。
+        try {
+          await _readRecordDao?.renameBook(from: previousName, to: next.name);
+        } catch (error) {
+          AppLog.e('改書名時搬閱讀統計失敗: $error', error: error);
+        }
+      }
       unawaited(_storeDisplayCover());
       notifyListeners();
       return BookDetailOperationResult.success('書籍資訊已儲存');

@@ -124,7 +124,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -181,6 +181,12 @@ class AppDatabase extends _$AppDatabase {
         // 照原樣搬過去；重建表會丟掉章節的索引，重新建立。
         await m.alterTable(TableMigration(chapters));
         await customStatement(_chaptersIndexStatement);
+      }
+      if (from < 9) {
+        // 多台手機同步比進度新舊用的「位置最後移動的時間」（ADR 0039）。
+        // 最近閱讀時間開書沒翻頁也會更新，只能當升級時的估計。
+        await m.addColumn(books, books.progressTime);
+        await customStatement('UPDATE books SET progressTime = durChapterTime');
       }
     },
     beforeOpen: (_) async {

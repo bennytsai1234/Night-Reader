@@ -56,6 +56,7 @@ extension BookSerialization on BookBase {
       'visualOffsetPx': toVisualOffsetPx(book.visualOffsetPx),
       'readerAnchorJson': book.readerAnchorJson,
       'durChapterTime': book.durChapterTime,
+      'progressTime': book.progressTime,
       'wordCount': book.wordCount,
       'canUpdate': book.canUpdate ? 1 : 0,
       'order': book.order,

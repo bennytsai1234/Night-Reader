@@ -40,6 +40,7 @@ extension BookLogic on Book {
       visualOffsetPx: preserveContentAddress ? visualOffsetPx : 0.0,
       readerAnchorJson: migratedAnchor,
       durChapterTime: durChapterTime,
+      progressTime: progressTime,
       group: group,
       order: order,
       customCoverUrl: customCoverUrl,

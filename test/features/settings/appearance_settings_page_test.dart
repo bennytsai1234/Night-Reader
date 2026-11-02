@@ -41,9 +41,10 @@ void main() {
         child: Consumer<ThemeSettingsProvider>(
           builder: (context, theme, _) => MaterialApp(
             theme: buildAppTheme(
-              theme.style,
+              theme.darkStyle,
               Brightness.dark,
               accent: theme.accent,
+              pureBlack: theme.pureBlack,
             ),
             home: const AppearanceSettingsPage(),
           ),
@@ -53,14 +54,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('風格卡兩列、每列五張，一頁放得下到玻璃效果', (tester) async {
+  testWidgets('淺色、深色風格各一排、每排全部風格，一頁放得下到玻璃效果', (tester) async {
     await pumpPage(tester);
     final tops = <double>[];
     for (final style in AppStyle.values) {
-      tops.add(tester.getTopLeft(find.bySemanticsLabel(style.label)).dy);
+      final cards = find.bySemanticsLabel(style.label);
+      expect(cards, findsNWidgets(2), reason: '${style.label}淺色、深色各一張');
+      for (final card in cards.evaluate()) {
+        tops.add(
+          tester.getTopLeft(find.byElementPredicate((e) => e == card)).dy,
+        );
+      }
     }
-    expect(tops.toSet(), hasLength(2), reason: '十張排成兩列');
-    expect(tops.where((top) => top == tops.first), hasLength(5));
+    expect(tops.toSet(), hasLength(2), reason: '排成兩排');
+    expect(
+      tops.where((top) => top == tops.first),
+      hasLength(AppStyle.values.length),
+    );
     final glass = tester.getBottomLeft(find.text('玻璃'));
     expect(glass.dy, lessThan(852), reason: '不用往下捲就看得到玻璃效果');
   });
@@ -70,17 +80,52 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await pumpPage(tester, size: const Size(320, 640));
     for (final style in AppStyle.values) {
-      final label = tester.renderObject<RenderParagraph>(
-        find.text(style.label),
-      );
-      expect(label.didExceedMaxLines, isFalse, reason: style.label);
+      for (final element in find.text(style.label).evaluate()) {
+        final label = element.renderObject! as RenderParagraph;
+        expect(label.didExceedMaxLines, isFalse, reason: style.label);
+      }
     }
+  });
+
+  testWidgets('上面那排只改淺色的風格，下面那排只改深色的風格', (tester) async {
+    await pumpPage(tester);
+    await tester.tap(find.bySemanticsLabel(AppStyle.tea.label).first);
+    await tester.pumpAndSettle();
+    expect(themeSettings.lightStyle, AppStyle.tea);
+    expect(themeSettings.darkStyle, ThemeSettingsProvider.defaultDarkStyle);
+
+    await tester.tap(find.bySemanticsLabel(AppStyle.kraft.label).last);
+    await tester.pumpAndSettle();
+    expect(themeSettings.darkStyle, AppStyle.kraft);
+    expect(themeSettings.lightStyle, AppStyle.tea);
+    expect(prefs.getString(PreferKey.lightStyle), AppStyle.tea.name);
+    expect(prefs.getString(PreferKey.darkStyle), AppStyle.kraft.name);
+    final context = tester.element(find.byType(AppearanceSettingsPage));
+    expect(
+      Theme.of(context).scaffoldBackgroundColor,
+      const Color(0xFF000000),
+      reason: '純黑開著，深色換成牛皮紙仍是純黑底',
+    );
+  });
+
+  testWidgets('關掉深色用純黑，深色換回風格自己的底色並保存', (tester) async {
+    await pumpPage(tester);
+    themeSettings.setStyle(Brightness.dark, AppStyle.tea);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('深色用純黑'));
+    await tester.pumpAndSettle();
+    expect(themeSettings.pureBlack, isFalse);
+    expect(prefs.getBool(PreferKey.pureBlack), isFalse);
+    final context = tester.element(find.byType(AppearanceSettingsPage));
+    expect(
+      Theme.of(context).scaffoldBackgroundColor,
+      AppStyle.tea.dark.background,
+    );
   });
 
   testWidgets('從強調色選單選顏色，整個 App 的主色跟著換並保存', (tester) async {
     await pumpPage(tester);
-    themeSettings.setStyle(AppStyle.plain);
-    await tester.pumpAndSettle();
+    expect(themeSettings.darkStyle, AppStyle.plain);
     expect(find.text('跟隨主題'), findsOneWidget);
 
     await tester.tap(find.text('強調色'));

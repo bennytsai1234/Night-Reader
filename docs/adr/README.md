@@ -24,6 +24,7 @@
 | [0031](0031-launch-reveal-crossfades-two-still-pictures.md) | 開 App 書架換場是兩張定格畫面的交叉淡換：用時間與記憶體換流暢與穩定（準備書架的時機已由 0035 改到呼吸前） |
 | [0035](0035-launch-prepares-shelf-before-breathing.md) | 開 App 在骨架長完、呼吸之前就建好書架並拍好兩張定格畫面；定格畫面用一般的畫法拍 |
 | [0024](0024-skeleton-drawn-from-last-screen.md) | 骨架照上次的畫面畫，骨架換場由左而右 |
+| [0041](0041-skeleton-breath-shared-gradient.md) | 骨架呼吸的漸層每個骨架每幀一道，形狀照舊各自畫；否決整個骨架蓋遮罩與開 App 整段定格畫面 |
 | [0016](0016-reader-skeleton-from-the-real-page.md) | 閱讀器的正文骨架照一頁真正的行畫 |
 
 ## 介面與動畫
@@ -35,6 +36,7 @@
 | [0015](0015-my-tab-rows-are-navigation-only.md) | 「我的」分頁只放入口，不放開關 |
 | [0020](0020-chosen-transition-everywhere.md) | 選定的換頁動畫用在每一種換頁，拖曳返回與點分頁也一樣 |
 | [0021](0021-covers-are-plain-images.md) | 封面只畫圖片，不做成像一本書 |
+| [0040](0040-day-and-night-styles-pure-black.md) | 淺色、深色各選一個風格，深色預設純黑（可關），風格精簡成六種 |
 
 ## 正文排版
 

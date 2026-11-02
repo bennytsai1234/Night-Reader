@@ -127,6 +127,41 @@ final class ReaderV2TextLayoutFrame {
   static int _cellCount(double contentWidth, double cellWidth) =>
       ((contentWidth + _cellCountEpsilon) / cellWidth).floor();
 
+  /// 畫面寬 [viewportWidth]、兩側至少留 [minPadding] 時，一行放得下幾個字
+  /// 格（[cellWidth] 是含字距的實測字格寬）。
+  static int lineCapacity({
+    required double viewportWidth,
+    required double minPadding,
+    required double cellWidth,
+  }) {
+    if (!cellWidth.isFinite || cellWidth <= 0) return 0;
+    final contentWidth = viewportWidth - minPadding * 2;
+    if (!contentWidth.isFinite || contentWidth <= 0) return 0;
+    return _cellCount(contentWidth, cellWidth);
+  }
+
+  /// 每行最多 [lineChars] 個字時正文兩側的留白：放得下更多字就把正文欄
+  /// 收成剛好 [lineChars] 格、置中，多的寬度平分到兩側；放不下就撐滿，
+  /// 兩側只留 [minPadding]。收窄時欄寬剛好是整數格，左右對齊沒有零頭可攤，
+  /// 字距就是使用者設的字距。
+  static double sidePadding({
+    required double viewportWidth,
+    required double minPadding,
+    required double? cellWidth,
+    required int lineChars,
+  }) {
+    if (cellWidth == null || !cellWidth.isFinite || cellWidth <= 0) {
+      return minPadding;
+    }
+    final capacity = lineCapacity(
+      viewportWidth: viewportWidth,
+      minPadding: minPadding,
+      cellWidth: cellWidth,
+    );
+    if (lineChars >= capacity) return minPadding;
+    return (viewportWidth - (lineChars * cellWidth + _paragraphSlack)) / 2;
+  }
+
   /// 左右對齊用的字距：把 [contentWidth] 湊整數個字格後剩下的空隙平均攤進
   /// 每一格（[cellWidth] 是含 [letterSpacing] 的實測字格寬），只留下
   /// paragraph slack，用新字距量出的字格排成的文字框就撐滿整個內容寬，

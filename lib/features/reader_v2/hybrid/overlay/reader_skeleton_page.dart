@@ -95,6 +95,8 @@ final class ReaderSkeletonPage {
         progress.chapterIndex,
         progress.chapterCount,
         progress.chapterPercent,
+        progress.chapterStart,
+        progress.chapterShare,
       ],
   };
 
@@ -124,6 +126,13 @@ final class ReaderSkeletonPage {
               chapterIndex: progress[0] as int,
               chapterCount: progress[1] as int,
               chapterPercent: (progress[2] as num).toDouble(),
+              // 加權前存的紀錄只有前三項，照章數平均。
+              chapterStart: progress.length > 4
+                  ? (progress[3] as num).toDouble()
+                  : null,
+              chapterShare: progress.length > 4
+                  ? (progress[4] as num).toDouble()
+                  : null,
             ),
     );
   }

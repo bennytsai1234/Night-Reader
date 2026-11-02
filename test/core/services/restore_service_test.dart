@@ -14,12 +14,15 @@ import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/services/restore_service.dart';
+import 'package:night_reader/core/sync/read_stats_sync.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late AppDatabase db;
   late Directory tempDir;
 
   setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
     final getIt = GetIt.instance;
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -122,6 +125,29 @@ void main() {
     };
     // 甲換成備份的每日；丙在備份裡沒有每日，從空的開始；乙不在備份裡，不動。
     expect(days, {'甲 2026-10-14': 600, '乙 2026-10-15': 3600});
+  });
+
+  test('reading time from a phone that used sync is remembered as restored, '
+      'so sync does not count it twice', () async {
+    final zip = await writeZip('synced_phone.zip', {
+      'manifest.json': jsonEncode({
+        'schemaVersion': db.schemaVersion,
+        'syncDeviceId': 'phone-a',
+      }),
+      'readRecord.json': jsonEncode([
+        {'bookName': '丁', 'deviceId': '', 'readTime': 900, 'lastRead': 1},
+      ]),
+      'readDay.json': jsonEncode([
+        {'bookName': '丁', 'day': '2026-10-20', 'seconds': 900},
+      ]),
+    });
+
+    await RestoreService().restoreFromZip(zip);
+
+    final restored = RestoredStats.read(await SharedPreferences.getInstance());
+    expect(restored!.from, 'phone-a');
+    expect(restored.books, {'丁': 900});
+    expect(restored.days, {'2026-10-20': 900});
   });
 
   test('a file that is not a backup is reported as invalid', () async {

@@ -265,7 +265,15 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   List<SearchBook> _filteredResults(List<SearchBook> books) {
     final authorKey = normalizeSearchText(_authorFilter);
+    final blocked = _blockedKeys;
     return books.where((book) {
+      if (blocked.isNotEmpty) {
+        final name = normalizeSearchText(book.name);
+        final author = normalizeSearchText(book.author);
+        if (blocked.any((key) => name.contains(key) || author.contains(key))) {
+          return false;
+        }
+      }
       if (_sourceFilters.isNotEmpty) {
         final labels = _sourceLabelsFor(book).toSet();
         if (!_sourceFilters.any(labels.contains)) return false;
@@ -408,7 +416,30 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   Future<void> _loadPrecisionPreference() async {
     final p = await SharedPreferences.getInstance();
     _precisionSearch = p.getBool('precision_search') ?? false;
+    _blockedWords = p.getString(_blockedWordsKey) ?? '';
     notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════
+  // 屏蔽詞：書名或作者含有這些字的結果不列，記在手機上，每次搜尋都套用
+  // ═══════════════════════════════════════════
+
+  static const String _blockedWordsKey = 'search_blocked_words';
+  String _blockedWords = '';
+
+  /// 使用者打的屏蔽詞原文（逗號、頓號、空白或換行分開）。
+  String get blockedWords => _blockedWords;
+
+  List<String> get _blockedKeys => [
+    for (final word in _blockedWords.split(RegExp(r'[,，、\s]+')))
+      if (normalizeSearchText(word).isNotEmpty) normalizeSearchText(word),
+  ];
+
+  Future<void> setBlockedWords(String value) async {
+    _blockedWords = value;
+    notifyListeners();
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_blockedWordsKey, value);
   }
 
   Future<void> togglePrecisionSearch() async {

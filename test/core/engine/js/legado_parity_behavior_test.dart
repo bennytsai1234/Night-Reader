@@ -2,7 +2,9 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 
 import '../../../test_helper.dart';
 
@@ -119,6 +121,90 @@ void main() {
            typeof Packages.java.lang.System.currentTimeMillis()].join("|")
         '''),
         'refused|0123|x1y|3|number',
+      );
+    }, skip: skip);
+
+    test('BigInteger 照 Java 算（番茄的 64 位元雜湊、modPow）', () {
+      expect(
+        eval(r'''
+          var B = Packages.java.math.BigInteger;
+          var J64 = new B("18446744073709551615");
+          [new B("ff", 16).and(J64).toString(),
+           new B("1").shiftLeft(64).subtract(B.ONE).equals(J64),
+           B.valueOf(2).modPow(B.valueOf(10), B.valueOf(1000)).toString(),
+           new B("-7").mod(B.valueOf(3)).toString(),
+           new B("-7").remainder(B.valueOf(3)).toString(),
+           new B("4294967301").intValue(), new B("2147483648").intValue(),
+           new B("-1").toByteArray().join(","), new B("128").toByteArray().join(","),
+           new B([255]).toString(), new B(1, [255]).toString(),
+           J64.shiftRight(60).toString(16), J64.signum(), new B("-5").signum(),
+           B.valueOf(3).modInverse(B.valueOf(11)).toString(),
+           new B(16, new Packages.java.security.SecureRandom()).bitLength() <= 16,
+           B.ZERO.modPow(B.ZERO, B.ONE).toString(), new B("12").toString(1),
+           new B("4294967296").hashCode()
+          ].join("|")
+        '''),
+        '255|true|24|2|-1|5|-2147483648|255|0,128|-1|255|f|1|-1|4|true|0|12|31',
+      );
+      // 不合 Java 規格的參數照 Java 丟例外，不漏成 Dart 的錯誤。
+      expect(
+        eval(r'''
+          var B = Packages.java.math.BigInteger, out = [];
+          [function() { return new B(" 12 "); }, function() { return new B([]); },
+           function() { return new B(2, [1]); }, function() { return new B(0, [1]); },
+           function() { return new B("12", 1); }, function() { return B.ONE.setBit(-1); },
+           function() { return new B(-1, new Packages.java.security.SecureRandom()); }
+          ].forEach(function(f) {
+            try { f(); out.push("ok"); } catch (e) { out.push(String(e.message).split(":")[0]); }
+          });
+          out.join(",")
+        '''),
+        'java.lang.NumberFormatException,java.lang.NumberFormatException,'
+        'java.lang.NumberFormatException,java.lang.NumberFormatException,'
+        'java.lang.NumberFormatException,java.lang.ArithmeticException,'
+        'java.lang.IllegalArgumentException',
+      );
+    }, skip: skip);
+
+    test('Arrays 與 Iterator 照 Java：超過長度補 0、keySet().iterator()', () {
+      expect(
+        eval(r'''
+          var A = Packages.java.util.Arrays;
+          var m = new Packages.java.util.HashMap();
+          m.put("a", 1); m.put("b", 2);
+          var it = m.keySet().iterator(), keys = [];
+          while (it.hasNext()) keys.push(it.next());
+          var entries = m.entrySet().iterator(), sum = 0;
+          while (entries.hasNext()) sum += entries.next().getValue();
+          var list = new Packages.java.util.ArrayList();
+          list.add("x"); list.add("y"); list.add("z");
+          var li = list.iterator(), joined = "";
+          while (li.hasNext()) joined += li.next();
+          // subList 是原清單的一段：清掉它就刪掉原清單那幾項（書源寫
+          // src.subList(1, i).clear()）。
+          var src = new Packages.java.util.ArrayList();
+          ["a", "b", "c", "d"].forEach(function(s) { src.add(s); });
+          var sub = src.subList(1, 3);
+          sub.set(0, "B");
+          var seen = src.get(1);
+          sub.clear();
+          var errors = [];
+          [function() { A.copyOf(null, 2); },
+           function() { A.copyOfRange([1, 2], -1, -2); },
+           function() { src.subList(2, 1); }].forEach(function(f) {
+            try { f(); } catch (e) { errors.push(String(e.message).split(":")[0]); }
+          });
+          var B = Packages.java.math.BigInteger;
+          [A.copyOf([1, 2], 4).join(","), A.copyOf([1, 2, 3], 2).join(","),
+           A.copyOfRange([1, 2, 3], 1, 5).join(","),
+           String(A.copyOf(["a"], 3)[2]),
+           A.equals([1, 2], [1, 2]), A.equals([new B("12")], [new B("12")]),
+           keys.join(""), sum, joined, seen, src.join(""), errors.join(",")
+          ].join("|")
+        '''),
+        '1,2,0,0|1,2|2,3,0,0|null|true|true|ab|3|xyz|B|ad|'
+        'java.lang.NullPointerException,java.lang.IllegalArgumentException,'
+        'java.lang.IllegalArgumentException',
       );
     }, skip: skip);
 
@@ -381,6 +467,62 @@ void main() {
     // 規則把 cookie 拿去存別的值，下一條規則照樣拿到 Legado 的 cookie。
     rule.evalJS('cookie = "被改掉"; 1', null);
     expect(rule.evalJS('typeof cookie.getKey', null), 'function');
+  }, skip: skip);
+
+  test('book、chapter、source 照 Java 物件寫：getXxx()／setXxx()、isVip()、自訂變數', () {
+    final book = Book(
+      bookUrl: 'https://src.test/b',
+      name: '書名',
+      author: '作者：沈知秋',
+      kind: '仙俠,連載',
+      wordCount: '12萬字',
+      totalChapterNum: 10,
+      chapterIndex: 3,
+    );
+    final chapter = BookChapter(
+      url: 'https://src.test/c1',
+      title: '第一章',
+      isVip: true,
+    );
+    final rule = AnalyzeRule(
+      ruleData: book,
+      source: BookSource(
+        bookSourceUrl: 'https://src.test',
+        bookSourceName: '書源',
+        concurrentRate: '1/1000',
+      ),
+    )..setChapter(chapter);
+    addTearDown(rule.dispose);
+    expect(
+      rule.evalJS(r'''
+        book.setName('新書名');
+        book.putCustomVariable('自訂');
+        [book.getName(), book.name, book.getCustomVariable(),
+         book.getRealAuthor(), book.getKindList().join('/'),
+         book.durChapterIndex, book.getDurChapterIndex(), book.getUnreadChapterNum(),
+         chapter.isVip(), chapter.vip, chapter.isVolume(), chapter.getTitle(),
+         source.getConcurrentRate(), source.getBookSourceName(),
+         // 書源自己的方法不被欄位的 getter 蓋掉。
+         source.getKey()].join('|')
+      ''', null),
+      '新書名|新書名|自訂|沈知秋|12萬字/仙俠/連載|3|3|6|'
+      'true|true|false|第一章|1/1000|書源|https://src.test',
+    );
+    // 寫進去的會回到夜讀的書上，下一條規則也讀得到。
+    expect(book.name, '新書名');
+    expect(book.getVariable('custom'), '自訂');
+    expect(rule.evalJS('book.getName()', null), '新書名');
+    // getter 照 Java 型別；App 管的欄位沒有 setter；getVariable() 不帶參數
+    // 是整份變數；getKindList 是 Java List；source 沒有 setter。
+    expect(
+      rule.evalJS(r'''
+        [book.getCanUpdate() === true, typeof book.setDurChapterPos,
+         typeof book.setDurChapterIndex, JSON.parse(book.getVariable()).custom,
+         book.getKindList().size(), typeof source.setHeader,
+         source.getEnabled() === true].join('|')
+      ''', null),
+      'true|undefined|function|自訂|3|undefined|true',
+    );
   }, skip: skip);
 
   test('getString parses the content it is given', () {

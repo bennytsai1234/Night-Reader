@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
@@ -425,6 +427,24 @@ class BookshelfGridTile extends StatelessWidget {
   });
 
   static const double coverAspectRatio = 0.72;
+
+  /// 一格至少這麼寬：畫面放得下幾格就排幾欄，手機上至少 3 欄。
+  static const double minWidth = 150;
+  static const int minColumns = 3;
+
+  /// 欄與欄之間的距離。
+  static const double columnGap = AppSpacing.lg;
+
+  /// 內容寬 [width]（已扣掉左右外距）排幾欄：手機 3 欄，12 吋平板直拿
+  /// 5 欄、橫拿 7 欄。書架與它的骨架共用。
+  static int columnsFor(double width) => math.max(
+    minColumns,
+    ((width + columnGap) / (minWidth + columnGap)).floor(),
+  );
+
+  /// 內容寬 [width] 排 [columns] 欄時一格的寬度。
+  static double cellWidthFor(double width, int columns) =>
+      (width - columnGap * (columns - 1)) / columns;
 
   /// 書名字級與行高，[heightFor] 依此推算兩行書名佔的高度。
   static const double _titleFontSize = 11;

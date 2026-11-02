@@ -435,13 +435,23 @@ class ReaderV2ControllerHost {
     return runtime?.flushProgress();
   }
 
+  final Completer<void> _opened = Completer<void>();
+
+  /// 開書定位完成（含取不到正文而停在錯誤畫面）時完成。
+  Future<void> get opened => _opened.future;
+
   void _openRuntimeAfterEntrance(ReaderV2Runtime runtime) {
     if (_opening) return;
     _opening = true;
     unawaited(
       _entrance.then((_) {
         if (!_isMounted() || runtime.disposed) return;
-        unawaited(runtime.openBook().whenComplete(() => _opening = false));
+        unawaited(
+          runtime.openBook().whenComplete(() {
+            _opening = false;
+            if (!_opened.isCompleted) _opened.complete();
+          }),
+        );
       }),
     );
   }
