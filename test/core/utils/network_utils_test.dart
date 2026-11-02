@@ -41,6 +41,27 @@ void main() {
       );
     });
 
+    // 同 OkHttp 照 UTS 46 對應：全形轉半形、組合字合成、轉小寫。預期值取自
+    // Python 的 NFKC 加 IDNA 編碼，與 .NET 的 IdnMapping 相同。
+    test('全形字與組合重音先統一寫法再換', () {
+      expect(
+        NetworkUtils.toAsciiHost('https://ＥＸＡＭＰＬＥ.com/a'),
+        'https://example.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://e\u{301}.com/a'),
+        'https://xn--9ca.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://\u{e9}.com/a'),
+        'https://xn--9ca.com/a',
+      );
+      expect(
+        NetworkUtils.toAsciiHost('https://例子．ＣＯＭ/a'),
+        'https://xn--fsqu00a.com/a',
+      );
+    });
+
     test('ASCII 網域與不是網址的照舊', () {
       for (final url in [
         'https://www.example.com/中文路徑',

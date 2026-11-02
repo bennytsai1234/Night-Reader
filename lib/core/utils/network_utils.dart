@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:punycoder/punycoder.dart';
+import 'package:unorm_dart/unorm_dart.dart';
 
 import 'public_suffix.dart';
 
@@ -37,7 +38,8 @@ class NetworkUtils {
       }
     }
     if (!host.runes.any((c) => c > 0x7f)) return url;
-    final ascii = domainToAscii(host, validate: false);
+    // 同 OkHttp 照 UTS 46 先統一寫法：全形轉半形、組合字合成（NFKC）、轉小寫。
+    final ascii = domainToAscii(nfkc(host).toLowerCase(), validate: false);
     final port = hasPort ? hostPort.substring(colon) : '';
     return '${match.group(1)}$userInfo$ascii$port${match.group(3)}';
   }
