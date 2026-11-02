@@ -319,10 +319,7 @@ class SyncService {
       } while (_again);
     } finally {
       // 整輪（包含同步途中補跑的輪次）才算結束，避免進度短暫顯示已完成。
-      status.value = status.value.copyWith(
-        running: false,
-        clearProgress: true,
-      );
+      status.value = status.value.copyWith(running: false, clearProgress: true);
       // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
       _progressDone();
     }
@@ -441,11 +438,7 @@ class SyncService {
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
           status.value = status.value.copyWith(
-            progress: (
-              kind: kind.name,
-              step: index + 1,
-              total: kinds.length,
-            ),
+            progress: (kind: kind.name, step: index + 1, total: kinds.length),
           );
           try {
             if (await _syncKind(store, kind)) {
@@ -470,10 +463,7 @@ class SyncService {
         }
         final now = _clock();
         await _settings.setLastSyncAt(now);
-        status.value = status.value.copyWith(
-          lastSyncAt: now,
-          clearError: true,
-        );
+        status.value = status.value.copyWith(lastSyncAt: now, clearError: true);
       });
     } catch (error, stackTrace) {
       AppLog.e('同步失敗', error: error, stackTrace: stackTrace);
