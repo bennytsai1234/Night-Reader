@@ -43,6 +43,9 @@ class _FakeDrive implements HttpClientAdapter {
   /// 下載這些檔名的檔案時回 403（只有這幾份被拒絕）。
   final Set<String> forbidden = {};
 
+  /// 下載時回這個狀態碼與內容（模擬限流、伺服器故障）；null 時照常。
+  (int, Map<String, Object?>)? failure;
+
   /// 列檔時先回一頁空的、附上下一頁（雲端硬碟會這樣回）。
   bool emptyFirstPage = false;
   var _nextId = 0;
@@ -84,6 +87,7 @@ class _FakeDrive implements HttpClientAdapter {
       final file = files[uri.pathSegments.last];
       if (file == null) return _json(404, {});
       if (forbidden.contains(file.name)) return _json(403, {});
+      if (failure case (final status, final body)) return _json(status, body);
       return ResponseBody.fromBytes(utf8.encode(file.content), 200);
     }
     if (uri.path.startsWith('/upload/drive/v3/files/') &&
@@ -233,5 +237,35 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('rate limiting and a server failure stop the whole round', () async {
+    await store().write('p.json', 'x');
+    Matcher whole(bool value) => throwsA(
+      isA<SyncStoreException>().having(
+        (e) => e.wholeSpace,
+        'wholeSpace',
+        value,
+      ),
+    );
+
+    drive.failure = (
+      403,
+      {
+        'error': {
+          'code': 403,
+          'errors': [
+            {'reason': 'userRateLimitExceeded'},
+          ],
+        },
+      },
+    );
+    await expectLater(store().read('p.json'), whole(true));
+
+    drive.failure = (503, {});
+    await expectLater(store().read('p.json'), whole(true));
+
+    drive.failure = (400, {});
+    await expectLater(store().read('p.json'), whole(false));
   });
 }

@@ -148,7 +148,10 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
       body: FutureBuilder<_Stats>(
         future: _stats,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          // 同步後換上重讀好的統計時，FutureBuilder 第一格仍是 waiting：
+          // 有上一次的資料就先照它畫，不閃一格轉圈。
+          if (snapshot.connectionState != ConnectionState.done &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 

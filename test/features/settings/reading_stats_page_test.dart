@@ -113,6 +113,25 @@ void main() {
     expect(find.text('山海經'), findsOneWidget);
   });
 
+  testWidgets('同步後重讀時不閃一格轉圈', (tester) async {
+    await tester.runAsync(
+      () =>
+          ReadRecordDao(db)
+              .upsert(ReadRecord(bookName: '夜雨聽書', readTime: 600, lastRead: 3)),
+    );
+    await pumpPage(tester);
+    await tester.runAsync(() => sync.apply({'phone-b': otherPhone(1200)}));
+    // 照 settle 的步驟一格一格看，每一格都不該是轉圈。
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    }
+    expect(find.text('30 分鐘'), findsWidgets);
+  });
+
   testWidgets('內容沒變就不通知', (tester) async {
     await tester.runAsync(() => sync.apply({'phone-b': otherPhone(60)}));
     final applied = ReadStatsSync.applied.value;

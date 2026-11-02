@@ -240,14 +240,21 @@ class BookshelfSync extends SyncKind {
   /// 換）。兩個條件都要，只有 `renamedFrom` 可能是很久以前的紀錄，那時的舊
   /// 名字現在是這台使用者另外加的書。
   ///
-  /// 傳回這次不能動的新鍵：舊鍵的書正開在閱讀器裡，連同新鍵那筆留到下次，
-  /// 不然新鍵先被套用、舊鍵之後被刪掉，書就沒了。
+  /// 傳回這次不能動的鍵：舊鍵或新鍵的書正開在閱讀器裡時，舊鍵的刪除與
+  /// 新鍵那筆都留到下次，不然其中一筆先被套用，舊名字的書就被刪掉了。
   Future<Set<String>> _applyRenames(
     Map<String, SyncRecord> remote,
     Map<String, List<Book>> shelf,
   ) async {
     final deferred = <String>{};
-    for (final MapEntry(:key, value: record) in remote.entries) {
+    // 新鍵的書正開著時，新鍵那筆不在 [remote] 裡（[canApply]），只看
+    // [remote] 就認不出舊鍵的刪除其實是改名：開著的那幾筆從整份雲端紀錄補。
+    final candidates = {
+      for (final MapEntry(:key, :value) in _cloud.entries)
+        if (_isOpen(key)) key: value,
+      ...remote,
+    };
+    for (final MapEntry(:key, value: record) in candidates.entries) {
       if (record.deleted) continue;
       final incoming = Book.fromJson(Map<String, dynamic>.of(record.data));
       if (ProgressSync.keyOf(incoming) != key) continue;
@@ -261,7 +268,9 @@ class BookshelfSync extends SyncKind {
         final books = shelf[old];
         if (books == null || books.isEmpty) continue;
         if (_isOpen(old) || _isOpen(key)) {
-          deferred.add(key);
+          // 舊鍵的刪除也一起留著：只有新鍵開著時，舊鍵那筆照樣會被套用，
+          // 舊名字的書就被當成移出書架刪掉了。
+          deferred.addAll([key, old]);
           break;
         }
         final fromName = books.first.name;

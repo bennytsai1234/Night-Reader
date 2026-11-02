@@ -811,6 +811,31 @@ void main() {
         expect(await b.books.getInBookshelf(), hasLength(1));
       });
 
+      test(
+        'the new title open on another source holds the rename too',
+        () async {
+          await a.addBook('src', toc: toc, time: 200);
+          await b.addBook('src', toc: toc, time: 100);
+          await syncBoth();
+
+          // B 另外用別的書源加過這本書的新名字，正開著讀。
+          await b.addBook('other', toc: toc, time: 50, name: '新夜航');
+          final open = await b.book('other');
+          b.sync.openBook(open);
+          await rename(a, 'src', name: '新夜航');
+          await a.sync.syncNow();
+          await b.sync.syncNow();
+          expect(b.discarded, isEmpty, reason: '舊名字的書要等新名字的書關掉再改名');
+          expect((await b.book('src')).name, '夜航');
+
+          b.sync.closeBook(open);
+          await b.sync.syncNow();
+          expect((await b.book('src')).name, '新夜航');
+          expect(await b.chapters.titlesByBook('src'), toc);
+          expect(b.discarded, isEmpty);
+        },
+      );
+
       test('a book really removed from the shelf is still removed', () async {
         await a.addBook('src', toc: toc, time: 200);
         await b.addBook('src', toc: toc, time: 100);
