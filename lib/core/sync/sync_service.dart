@@ -253,8 +253,8 @@ class SyncService {
   }
 
   /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來、
-  /// 同步一次。只在使用者按了按鈕時呼叫；授權失效後重新登入同一個帳號也走
-  /// 這裡，留著上次同步的紀錄。
+  /// 接著排一次同步，不等整批資料跑完。只在使用者按了按鈕時呼叫；授權失效
+  /// 後重新登入同一個帳號也走這裡，留著上次同步的紀錄。
   Future<void> useGoogleDrive() async {
     final account = await _googleAuth.signIn();
     final store = _storeFactory(SyncSpace.googleDrive, null, account);
@@ -441,7 +441,11 @@ class SyncService {
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
           status.value = status.value.copyWith(
-            progress: (kind: kind.name, step: index + 1, total: kinds.length),
+            progress: (
+              kind: kind.name,
+              step: index + 1,
+              total: kinds.length,
+            ),
           );
           try {
             if (await _syncKind(store, kind)) {
