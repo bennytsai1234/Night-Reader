@@ -329,9 +329,10 @@ void main() {
         eval(r'''
           var P = Packages.java.lang.System.getProperties();
           [held.get(), P.get("obj") === P.get("obj"),
+           P.get("rate.next") === held,
            P.get("rate.next").getAndAdd(1), held.get()].join("|")
         '''),
-        '100|true|100|101',
+        '100|true|true|100|101',
       );
       evalOther(
         'Packages.java.lang.System.getProperties().remove("rate.next")',
@@ -398,12 +399,21 @@ void main() {
           p.put(2, "two");
           p.put("c", "x");
           p.compute("c", function(k, v) { return null; });
+          try { p.remove("n", null); out.push("ok"); } catch (e) { out.push(e.javaClass); }
+          // 和內部欄位同名的鍵照樣是一般的鍵。
+          var t = new Packages.java.util.TreeMap();
+          t.put("_cmp", "x"); t.put("_m", "y"); t.put("b", 1);
+          out.push(t.keySet().join("+"), t.get("_m"));
+          var S = Packages.java.lang.System.getProperties();
+          S.put("_m", "z");
+          out.push(S.get("_m"), Packages.java.lang.System.getProperty("_m"));
           [out.join(","), p.getProperty("getProperty"),
            p.stringPropertyNames().join(","), p.containsKey("c")].join("|")
         '''),
         'java.lang.NullPointerException,java.lang.NullPointerException,'
         'java.lang.NullPointerException,java.lang.NullPointerException,'
-        'java.lang.NullPointerException|g|getProperty,stringPropertyNames|false',
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        '_cmp+_m+b,y,z,z|g|getProperty,stringPropertyNames|false',
       );
     }, skip: skip);
 

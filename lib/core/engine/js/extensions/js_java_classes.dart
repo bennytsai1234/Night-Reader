@@ -168,6 +168,12 @@ extension JsJavaClasses on JsExtensionsBase {
   function mapKey(k) { return k instanceof JavaString ? String(k) : k; }
   function npe() { return javaError('java.lang.NullPointerException'); }
   JavaMap.prototype.__lrMap = true;
+  /// `_m`、`_cmp` 這類內部欄位（不列舉的自有屬性）：同名的鍵不放上屬性，免得
+  /// 蓋掉 Map 自己的資料。
+  function isInternal(obj, k) {
+    var d = Object.getOwnPropertyDescriptor(obj, k);
+    return d != null && !d.enumerable;
+  }
   JavaMap.prototype._order = function() { return Array.from(this._m.keys()); };
   /// HashMap 收 null 鍵與 null 值；Hashtable（Properties）、TreeMap 覆寫成丟 NPE。
   JavaMap.prototype._checkKey = function(k) {};
@@ -175,7 +181,7 @@ extension JsJavaClasses on JsExtensionsBase {
   /// 文字鍵也照屬性讀得到；鍵名和這個 Map 原型鏈上的方法同名時不放，免得
   /// 蓋掉方法（Properties 的 getProperty 這類子類方法也算）。
   JavaMap.prototype._mirror = function(k, v, present) {
-    if (typeof k !== 'string' || k in Object.getPrototypeOf(this)) return;
+    if (typeof k !== 'string' || k in Object.getPrototypeOf(this) || isInternal(this, k)) return;
     if (present) Object.defineProperty(this, k, { value: v, enumerable: true, configurable: true, writable: true });
     else delete this[k];
   };
@@ -212,6 +218,7 @@ extension JsJavaClasses on JsExtensionsBase {
   /// remove(key)：交回原本的值；remove(key, value)：值相等（equals）才移除，交回有沒有移除。
   JavaMap.prototype.remove = function(k, v) {
     if (arguments.length >= 2) {
+      this._checkValue(v);
       if (!this.containsKey(k) || !global.__lrJavaEquals(this.get(k), v)) return false;
       this.remove(k);
       return true;
@@ -346,12 +353,14 @@ extension JsJavaClasses on JsExtensionsBase {
   /// 存成 Dart 的一個格子，每次拿到的都讀寫同一個值；其他物件在同一個引擎裡
   /// 拿回同一個物件，別的引擎拿到的是內容相同的一份複製。
   var localObjects = new JsMap();
+  var localAtomics = new JsMap();
   function encodeSysValue(v) {
     if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
     if (v instanceof JavaString) return String(v);
     var name = atomicName(v);
     if (name != null) {
       if (v._cell == null) hide(v, '_cell', sysProps('cellNew', v._v));
+      localAtomics.set(v._cell, v);
       return { __atomic: v._cell, type: name };
     }
     var stamp = sysProps('stamp');
@@ -361,8 +370,10 @@ extension JsJavaClasses on JsExtensionsBase {
   function decodeSysValue(v) {
     if (v == null || typeof v !== 'object') return v;
     if (v.__atomic != null) {
+      if (localAtomics.has(v.__atomic)) return localAtomics.get(v.__atomic);
       var a = Object.create(atomics[v.type].prototype);
       hide(a, '_cell', v.__atomic);
+      localAtomics.set(v.__atomic, a);
       return a;
     }
     if (localObjects.has(v.stamp)) return localObjects.get(v.stamp);
@@ -390,7 +401,7 @@ extension JsJavaClasses on JsExtensionsBase {
   SystemProperties.prototype.constructor = Properties;
   /// 屬性寫法讀到的是 Dart 那邊現在的值（別的引擎改過也是）。
   SystemProperties.prototype._mirror = function(k, v, present) {
-    if (typeof k !== 'string' || k in Object.getPrototypeOf(this)) return;
+    if (typeof k !== 'string' || k in Object.getPrototypeOf(this) || isInternal(this, k)) return;
     var self = this;
     if (present) {
       Object.defineProperty(this, k, {
