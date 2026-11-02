@@ -6,6 +6,9 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/sync/replace_rule_sync.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -36,6 +39,35 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   void initState() {
     super.initState();
     _loadRules();
+    ReplaceRuleSync.applied.addListener(_rulesSynced);
+  }
+
+  @override
+  void dispose() {
+    ReplaceRuleSync.applied.removeListener(_rulesSynced);
+    super.dispose();
+  }
+
+  bool _syncReloadPending = false;
+
+  /// 同步套用了另一台的規則：安靜地重讀清單（不轉圈）。被別的頁面蓋著
+  /// 時等露出來才讀，不疊在換頁動畫上（ADR 0018）。
+  Future<void> _rulesSynced() async {
+    if (_syncReloadPending) return;
+    _syncReloadPending = true;
+    await TransitionSettled.uncovered(context);
+    _syncReloadPending = false;
+    if (!mounted) return;
+    try {
+      final rules = await _replaceDao.getAll();
+      if (!mounted) return;
+      setState(() {
+        _rules = rules;
+        _loadError = null;
+      });
+    } catch (error) {
+      AppLog.e('同步後重讀替換規則失敗', error: error);
+    }
   }
 
   Future<void> _loadRules() async {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/app_database.dart' show ReadDay;
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -34,6 +35,9 @@ class ReadStatsSync extends SyncKind {
   /// 別台的統計存在這台的檔名，和上次同步的紀錄放在一起，換同步空間時
   /// 一起清掉。
   static const String othersFile = 'read_stats_others';
+
+  /// 別台的統計有變時加一：閱讀統計頁聽它重讀，開著也看得到別台剛讀的。
+  static final ValueNotifier<int> applied = ValueNotifier(0);
 
   /// 這台的 id；[local] 讀過才有。
   String? _deviceId;
@@ -97,6 +101,7 @@ class ReadStatsSync extends SyncKind {
   @override
   Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async {
     final others = await _bases.readJson(othersFile);
+    final before = jsonEncode(others);
     for (final MapEntry(:key, value: record) in remote.entries) {
       if (record.deleted) {
         others.remove(key);
@@ -105,6 +110,7 @@ class ReadStatsSync extends SyncKind {
       }
     }
     await _bases.writeJson(othersFile, others);
+    if (jsonEncode(others) != before) ReadStatsSync.applied.value++;
     return remote;
   }
 

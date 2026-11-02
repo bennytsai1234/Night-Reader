@@ -134,10 +134,15 @@ class Skeleton extends StatefulWidget {
   /// [box] 左右兩緣在螢幕上的橫向位置，以 [viewWidth] 為 1：給 [breathAt] 的
   /// 位置。照實際畫在螢幕上的位置算（含換頁的平移與縮放），由左而右呼吸時
   /// 不同方塊、書架與閱讀器才接得上。在 paint 裡呼叫。
-  static (double, double) screenSpan(RenderBox box, double viewWidth) => (
-    box.localToGlobal(Offset.zero).dx / viewWidth,
-    box.localToGlobal(Offset(box.size.width, 0)).dx / viewWidth,
-  );
+  /// 位置算不出來（換頁途中短暫的 NaN、無限大轉換或寬度）時當作整個畫面寬，
+  /// 不把 NaN 交給 [breathAt]：NaN 的透明度在換成顏色時就讓整幀繪製失敗
+  /// （#203）。
+  static (double, double) screenSpan(RenderBox box, double viewWidth) {
+    final left = box.localToGlobal(Offset.zero).dx / viewWidth;
+    final right = box.localToGlobal(Offset(box.size.width, 0)).dx / viewWidth;
+    if (!left.isFinite || !right.isFinite) return (0, 1);
+    return (left, right);
+  }
 
   /// 呼吸最淺時保留的深淺比例：再淺就會在紙上消失，看不出形狀。
   static const double _pulseFloor = 0.55;
@@ -506,7 +511,12 @@ class _BreathClock extends ChangeNotifier {
   /// （[_drawBreathing]），呼吸每一幀的成本不跟著形狀數變多。整片一樣深時
   /// （還沒開始呼吸、收住了、整片一起呼吸）回傳 null，用單色畫。
   ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth) {
-    if (_hold != null || _still || breath.lag == 0 || viewWidth <= 0) {
+    // `viewWidth <= 0` 對 NaN 不成立，無限大也一起擋下（#203）。
+    if (_hold != null ||
+        _still ||
+        breath.lag == 0 ||
+        !viewWidth.isFinite ||
+        viewWidth <= 0) {
       return null;
     }
     // 深淺只看這幾個值（[depthAt]）；有一個變了，上一幀的漸層就不能用。
@@ -775,6 +785,13 @@ void _drawBreathing(
   final transform = toScreen ?? _screenTransform(box, phase);
   final scale = transform.storage[0];
   final shift = transform.storage[12] + transform.storage[4] * shape.top;
+  if (!scale.isFinite || !shift.isFinite) {
+    // 轉換含 NaN 或無限大（換頁途中短暫的退化尺寸）：算不出螢幕上的位置，
+    // 這一格畫單色，不讓一個形狀弄壞整幀（#203）。
+    paint.color = color.withValues(alpha: color.a * phase!.depthAt(0, breath));
+    canvas.drawRRect(shape.shift(offset), paint);
+    return;
+  }
   if (scale == 0) {
     // 縮到沒有寬度：看不到，照左緣的深淺畫單色。
     paint.color = color.withValues(

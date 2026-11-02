@@ -17,7 +17,8 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
   });
 
   /// 獲取單個元素，保留原始結果型別（`init` 這類規則要拿到 JSON 物件與
-  /// 陣列本身）。
+  /// 陣列本身）。CSS 與 XPath 規則同 Legado 交回找到的一整組元素（找不到時
+  /// 是空的一組），不是只有第一個：書源寫 `java.getElement(...).length`。
   dynamic getElement(String ruleStr) {
     if (ruleStr.isEmpty) {
       return null;
@@ -63,19 +64,17 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                   .getObject(rule);
               break;
             case Mode.xpath:
-              final elements = sourceRule
+              tempResult = sourceRule
                   .getAnalyzeByXPath(this, result)
                   .getElements(rule);
-              tempResult = elements.isNotEmpty ? elements.first : null;
               break;
             case Mode.js:
               tempResult = evalJS(rule, result);
               break;
             default:
-              final elements = sourceRule
+              tempResult = sourceRule
                   .getAnalyzeByJSoup(this, result)
                   .getElements(rule);
-              tempResult = elements.isNotEmpty ? elements.first : null;
           }
         } catch (e) {
           throw ParsingException(
@@ -87,7 +86,10 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           );
         }
 
+        // 動態規則（含 `{{ }}`）沒結果時用組好的規則文字；JS 規則照 Legado
+        // 就是 JS 交回的結果，空的就是空的，不拿 JS 程式碼當結果。
         if (sourceRule.isDynamic &&
+            sourceRule.mode != Mode.js &&
             (tempResult == null || tempResult.toString().isEmpty)) {
           result = rule;
         } else {
@@ -178,7 +180,10 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           );
         }
 
+        // 動態規則（含 `{{ }}`）沒結果時用組好的規則文字；JS 規則照 Legado
+        // 就是 JS 交回的結果，空的就是空的，不拿 JS 程式碼當結果。
         if (sourceRule.isDynamic &&
+            sourceRule.mode != Mode.js &&
             (tempResult == null ||
                 (tempResult is List && tempResult.isEmpty) ||
                 (tempResult is String && tempResult.isEmpty))) {
@@ -208,7 +213,8 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (result is List) {
       return result;
     }
-    if (result == null) {
+    // 沒有結果（JS 交回空的）就是空的一組，不是一個空字串。
+    if (result == null || (result is String && result.isEmpty)) {
       return [];
     }
     return [result];
