@@ -13,6 +13,7 @@ import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -46,6 +47,7 @@ void main() {
       ..registerSingleton<DownloadDao>(DownloadDao(db))
       ..registerSingleton<ReadRecordDao>(ReadRecordDao(db))
       ..registerSingleton<BookmarkDao>(BookmarkDao(db))
+      ..registerSingleton<HighlightDao>(HighlightDao(db))
       ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db))
       ..registerSingleton<CacheDao>(CacheDao(db))
       ..registerSingleton<CookieDao>(CookieDao(db));

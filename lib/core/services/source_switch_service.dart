@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -223,9 +224,9 @@ class SourceSwitchService {
   /// Only a [PreparedSourceSwitch] can cross this boundary: target content
   /// validation has already succeeded, so commit publishes book metadata,
   /// chapters and that exact target body as one authoritative world, while
-  /// obsolete source-owned content is retired and the book's bookmarks are
-  /// realigned to the new chapter list in the same transaction; any failure
-  /// rolls the whole handoff back to the old world.
+  /// obsolete source-owned content is retired and the book's bookmarks and
+  /// highlights are realigned to the new chapter list in the same
+  /// transaction; any failure rolls the whole handoff back to the old world.
   Future<void> commitSwitch(
     Book oldBook,
     PreparedSourceSwitch prepared, {
@@ -252,6 +253,14 @@ class SourceSwitchService {
         await books.upsert(migratedBook);
         await chaptersDao.insertChapters(prepared.chapters);
         await BookmarkDao(db).moveToSource(
+          fromName: oldBook.name,
+          fromAuthor: oldBook.author,
+          toName: migratedBook.name,
+          toAuthor: migratedBook.author,
+          oldTotalCount: oldBook.totalChapterNum,
+          chapters: prepared.chapters,
+        );
+        await HighlightDao(db).moveToSource(
           fromName: oldBook.name,
           fromAuthor: oldBook.author,
           toName: migratedBook.name,

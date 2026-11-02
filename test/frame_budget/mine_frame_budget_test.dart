@@ -30,7 +30,7 @@ const _rows = <(String, Type)>[
   ('外觀與主題', AppearanceSettingsPage),
   ('朗讀與語音', TtsSettingsPage),
   ('閱讀統計', ReadingStatsPage),
-  ('書籤', BookmarksPage),
+  ('書籤與標註', BookmarksPage),
   ('書源管理', SourceManagerPage),
   ('備份與同步', BackupSyncPage),
   ('關於夜讀', AboutPage),

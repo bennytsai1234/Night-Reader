@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -573,7 +575,7 @@ void main() {
       );
     });
 
-    test('書籤跟著搬到新書源：對到新目錄裡同名的那一章，章內位置照舊', () async {
+    test('書籤與標註跟著搬到新書源：對到新目錄裡同名的那一章，章內位置照舊', () async {
       final oldBook = _currentBook();
       await db.bookDao.upsert(oldBook);
       await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 100));
@@ -591,6 +593,19 @@ void main() {
       );
       final other = await bookmarks.add(
         Bookmark(id: 0, bookName: '別本書', chapterIndex: 5, chapterTitle: '第6章'),
+      );
+      final highlights = HighlightDao(db);
+      final painted = await highlights.add(
+        Highlight(
+          id: 0,
+          bookName: oldBook.name,
+          bookAuthor: oldBook.author,
+          chapterIndex: 5,
+          chapterTitle: '第6章',
+          charOffset: 30,
+          quote: '燈下',
+          color: HighlightColor.green,
+        ),
       );
 
       // 新書源多一個楔子，第6章往後挪一格。
@@ -622,6 +637,11 @@ void main() {
       expect(moved[saved.id]!.chapterTitle, '第6章');
       expect(moved[saved.id]!.charOffset, 42);
       expect(moved[other.id]!.chapterIndex, 5, reason: '別本書的書籤不動');
+      final movedHighlight = (await highlights.getAll()).single;
+      expect(movedHighlight.id, painted.id);
+      expect(movedHighlight.chapterIndex, 6, reason: '標註也跟著搬');
+      expect(movedHighlight.charOffset, 30);
+      expect(movedHighlight.color, HighlightColor.green);
     });
 
     test('operation owner 在 commit transaction 內退休，成功後才 finalize', () async {

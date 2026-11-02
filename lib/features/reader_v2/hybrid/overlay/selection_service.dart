@@ -25,6 +25,14 @@ typedef SelectionBookmark = ({
   String excerpt,
 });
 
+/// 把選到的字畫上標註要的東西（見 [ReaderTextSelection.asHighlight]）：
+/// 開頭的位置已綁好那一章正文的錨點，[quote] 是畫到的字。
+typedef SelectionHighlight = ({
+  ReaderV2Location location,
+  String chapterTitle,
+  String quote,
+});
+
 /// 正文上的一段選取。offset 是章內 displayText 的 UTF-16 位置，範圍不會
 /// 超出長按時那個來源段落 [paragraph]。
 final class ReaderTextSelection {
@@ -93,6 +101,33 @@ final class ReaderTextSelection {
       excerpt: blocks.displayText.substring(start, end).trim(),
     );
   }
+
+  /// 把選到的字畫上標註：從選取開頭畫到結尾，頭尾的空白不算（全是空白時
+  /// [SelectionHighlight.quote] 是空的）。位置和書籤同一套（[asBookmark]）。
+  SelectionHighlight get asHighlight {
+    final text = blocks.displayText;
+    var start = range.start;
+    var end = range.end;
+    while (start < end && _isBlank(text.codeUnitAt(start))) {
+      start++;
+    }
+    while (end > start && _isBlank(text.codeUnitAt(end - 1))) {
+      end--;
+    }
+    // 選到的全是空白時 [quote] 是空的，不畫。
+    return (
+      location: ReaderV2Location(
+        chapterIndex: chapterIndex,
+        charOffset: start,
+      ).withContentIdentity(contentHash: blocks.contentHash, displayText: text),
+      chapterTitle: blocks.title,
+      quote: text.substring(start, end),
+    );
+  }
+
+  /// 半形與全形空白、換行。
+  static bool _isBlank(int unit) =>
+      unit == 0x20 || unit == 0x3000 || unit == 0x0A || unit == 0x09;
 
   /// 把 [edge] 拖到 [offset]。夾在段落內；越過另一端時兩端互換，且至少
   /// 保留一個字。回傳新選取與目前拖動中的那一端。

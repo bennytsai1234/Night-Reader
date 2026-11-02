@@ -15,6 +15,7 @@ import '../models/replace_rule.dart';
 import '../models/book_source.dart';
 import '../models/book_group.dart';
 import '../models/bookmark.dart';
+import '../models/highlight.dart';
 import '../models/cookie.dart';
 import '../models/dict_rule.dart';
 import '../models/http_tts.dart';
@@ -31,6 +32,7 @@ import 'dao/chapter_dao.dart';
 import 'dao/book_source_dao.dart';
 import 'dao/book_group_dao.dart';
 import 'dao/bookmark_dao.dart';
+import 'dao/highlight_dao.dart';
 import 'dao/replace_rule_dao.dart';
 import 'dao/search_history_dao.dart';
 import 'dao/cookie_dao.dart';
@@ -70,6 +72,7 @@ part 'app_database.g.dart';
     DownloadTasks,
     SearchKeywords,
     Bookmarks,
+    Highlights,
   ],
   daos: [
     BookDao,
@@ -91,6 +94,7 @@ part 'app_database.g.dart';
     SearchKeywordDao,
     ReaderChapterContentDao,
     BookmarkDao,
+    HighlightDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -128,7 +132,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -196,6 +200,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 10) {
         // 書籤：照書名加作者記，跟著書走、不跟書源。
         await m.createTable(bookmarks);
+      }
+      if (from < 11) {
+        // 標註：同書籤，照書名加作者記（ADR 0044）。
+        await m.createTable(highlights);
       }
     },
     beforeOpen: (_) async {
