@@ -71,6 +71,13 @@ void main() {
 
     test('non-ASCII hosts', () {
       expect(NetworkUtils.getSubDomain('http://www.例子.中国/'), '例子.中国');
+      // 大寫的非 ASCII 字：Uri.host 只把 ASCII 轉小寫，「Ø」留成 %C3%98。
+      expect(NetworkUtils.getSubDomain('https://a.ANDØY.no/'), 'a.andøy.no');
+      expect(NetworkUtils.getSubDomain('https://b.andøy.no/'), 'b.andøy.no');
+    });
+
+    test('a host that is not valid UTF-8 is kept, not thrown', () {
+      expect(NetworkUtils.getSubDomain('https://%FF.com/'), '%FF.com');
     });
 
     test('anything other than an http(s) URL is kept as is', () {

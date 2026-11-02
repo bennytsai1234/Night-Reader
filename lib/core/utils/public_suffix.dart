@@ -8,15 +8,19 @@ import 'public_suffix_rules.dart';
 /// 規則照公共字尾表的說明：例外規則（`!`）優先，其次是最長的規則（含萬用的
 /// `*.`），都不符合時當作最後一段是公共字尾。
 String? registrableDomain(String host) {
-  var domain = host.toLowerCase();
+  var domain = host;
   if (domain.contains('%')) {
-    // Dart 的 Uri 把非 ASCII 的網域編成 %XX，表上是原字。
+    // Dart 的 Uri 把非 ASCII 的網域編成 %XX，表上是原字；先解開再轉小寫，
+    // 「Ø」這類字才會變成表上的「ø」。
     try {
       domain = Uri.decodeComponent(domain);
+    } on FormatException {
+      return null;
     } on ArgumentError {
       return null;
     }
   }
+  domain = domain.toLowerCase();
   if (domain.endsWith('.')) domain = domain.substring(0, domain.length - 1);
   final labels = domain.split('.');
   if (labels.any((label) => label.isEmpty)) return null;
