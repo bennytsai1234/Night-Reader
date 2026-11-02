@@ -3,19 +3,31 @@ import 'analyze_rule_support.dart';
 
 /// AnalyzeRule 的正則工具與輔助邏輯擴展
 mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
-  List<SourceRule> splitSourceRuleCacheString(String ruleStr) {
+  /// 同一條規則對 JSON 與網頁解析成不同模式，快取分開放。模式照目前內容
+  /// 決定（同 Legado）；[mContent] 是規則 JS 交來的物件時照 JSON 讀它的欄位
+  /// （Legado 對 JS 物件直接讀鍵）。
+  List<SourceRule> splitSourceRuleCacheString(
+    String ruleStr, {
+    dynamic mContent,
+  }) {
     if (ruleStr.isEmpty) {
       return [];
     }
-    if (AnalyzeRuleBase.stringRuleCache.containsKey(ruleStr)) {
-      return AnalyzeRuleBase.stringRuleCache[ruleStr]!;
+    final isJson =
+        isJsonContent(content) ||
+        (mContent is Map && extractHtmlLikeRuleInput(mContent) == null);
+    final key = isJson ? '\u0000json:$ruleStr' : ruleStr;
+    if (AnalyzeRuleBase.stringRuleCache.containsKey(key)) {
+      return AnalyzeRuleBase.stringRuleCache[key]!;
     }
-    final ruleList = splitSourceRule(ruleStr);
-    AnalyzeRuleBase.stringRuleCache[ruleStr] = ruleList;
+    final ruleList = splitSourceRule(ruleStr, isJson: isJson);
+    AnalyzeRuleBase.stringRuleCache[key] = ruleList;
     return ruleList;
   }
 
-  List<SourceRule> splitSourceRule(String ruleStr) {
+  /// 拆成一段段規則。[isJson] 是要解析的內容是 JSON（同 Legado 以目前內容
+  /// 決定）：沒有前綴的段落是 JSON 路徑。
+  List<SourceRule> splitSourceRule(String ruleStr, {bool isJson = false}) {
     final ruleList = <SourceRule>[];
     final jsPattern = RegExp(
       r'@js:|(<js>([\w\W]*?)</js>)',
@@ -28,7 +40,7 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
       if (match.start > start) {
         final tmp = ruleStr.substring(start, match.start).trim();
         if (tmp.isNotEmpty) {
-          ruleList.add(SourceRule(tmp));
+          ruleList.add(SourceRule(tmp, isJson: isJson));
         }
       }
       if (match.group(0)!.toLowerCase() == '@js:') {
@@ -44,7 +56,7 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     if (ruleStr.length > start) {
       final tmp = ruleStr.substring(start).trim();
       if (tmp.isNotEmpty) {
-        ruleList.add(SourceRule(tmp));
+        ruleList.add(SourceRule(tmp, isJson: isJson));
       }
     }
     return ruleList;
