@@ -760,6 +760,93 @@ void main() {
       });
     }
   });
+
+  group('a degenerate screen geometry still paints (#203)', () {
+    const black = Color(0xFF000000);
+
+    /// 一條 [SkeletonBox] 和一塊 [SkeletonShapes]，包在 [transform] 底下，
+    /// 視窗寬度是 [viewWidth]。
+    Widget host(Matrix4 transform, {double viewWidth = 400}) => MaterialApp(
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(size: Size(viewWidth, 800)),
+          child: Transform(
+            transform: transform,
+            child: Skeleton(
+              child: Column(
+                children: [
+                  const SkeletonBox(width: 300, height: 40, color: black),
+                  SkeletonShapes(
+                    height: 40,
+                    shapes: (size) => const [
+                      SkeletonShape(Rect.fromLTWH(0, 0, 200, 20)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final transforms = <String, Matrix4>{
+      'zero scale': Matrix4.diagonal3Values(0, 0, 1),
+      'infinite scale': Matrix4.diagonal3Values(double.infinity, 1, 1),
+      'NaN scale': Matrix4.diagonal3Values(double.nan, 1, 1),
+      'infinite translation': Matrix4.translationValues(double.infinity, 0, 0),
+      'huge scale': Matrix4.diagonal3Values(1e300, 1, 1),
+    };
+
+    for (final entry in transforms.entries) {
+      testWidgets('${entry.key} does not throw', (tester) async {
+        await tester.pumpWidget(host(entry.value));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    for (final width in [double.nan, double.infinity, 0.0]) {
+      testWidgets('a view width of $width does not throw', (tester) async {
+        await tester.pumpWidget(host(Matrix4.identity(), viewWidth: width));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a normal size still breathes left to right', (tester) async {
+      tester.view.physicalSize = const Size(400, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final boundary = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RepaintBoundary(
+            key: boundary,
+            child: const ColoredBox(
+              color: Color(0xFFFFFFFF),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Skeleton(
+                  child: SkeletonBox(width: 400, height: 40, color: black),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      final bytes = await tester.runAsync(() async {
+        final image =
+            await (boundary.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary)
+                .toImage();
+        return image.toByteData();
+      });
+      int red(int x) => bytes!.getUint8((10 * 400 + x) * 4);
+      expect(red(10), isNot(closeTo(red(390), 2)));
+    });
+  });
 }
 
 /// 一張還畫不出來的封面：建好時登記在等待裡，拆掉時拿掉（像
