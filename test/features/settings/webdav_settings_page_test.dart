@@ -88,11 +88,6 @@ void main() {
     return sync;
   }
 
-  Future<void> settle(WidgetTester tester) async {
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-    await tester.pumpAndSettle();
-  }
-
   Future<void> waitForStatus(
     WidgetTester tester,
     SyncService sync,
