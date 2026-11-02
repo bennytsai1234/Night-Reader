@@ -177,9 +177,7 @@ class AppUpdateService {
 
     final remaining = topLevel.length - displayed;
     summary.add(
-      remaining > 0
-          ? '另有 $remaining 項改動，詳見「更新紀錄」。'
-          : '完整內容請見「更新紀錄」。',
+      remaining > 0 ? '另有 $remaining 項改動，詳見「更新紀錄」。' : '完整內容請見「更新紀錄」。',
     );
     return summary.join('\n');
   }
