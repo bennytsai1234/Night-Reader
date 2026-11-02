@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -128,6 +129,53 @@ class ExploreBookListSkeleton extends StatelessWidget {
   /// 取得分類書單後，使用本輪真正的書名、作者與最新章節排骨架。
   final List<SearchBook> books;
   final bool Function(SearchBook book)? inBookshelf;
+
+  /// 和 [ExploreBookItem] 同一個橫向空間、字級與條件：書名最多兩行，
+  /// 作者等資料固定一行，最新章節存在時才多一行。
+  /// 真正的列若高於封面，內容分幀建立前的佔位必須跟著長高。
+  static double rowHeightFor(
+    BuildContext context,
+    SearchBook book, {
+    bool isInBookshelf = false,
+  }) {
+    final titleStyle = AppTextStyles.bodyBase.copyWith(
+      height: 1.3,
+      fontWeight: FontWeight.w600,
+    );
+    final metaStyle = AppTextStyles.bodySm.copyWith(height: 1.35);
+    var width =
+        math.min(MediaQuery.sizeOf(context).width, ReadableWidth.maxWidth) -
+        AppGrouped.margin * 2 -
+        ExploreBookItem.coverWidth -
+        AppSpacing.lg;
+    if (isInBookshelf) {
+      width -= AppSpacing.sm + _ShelfBadgeSkeleton.widthFor(context);
+    }
+    final title = GroupedItemShape.text(
+      context,
+      context.zh(book.name),
+      style: titleStyle,
+      width: width,
+      maxLines: 2,
+    );
+    final metaHeight =
+        MediaQuery.textScalerOf(context).scale(metaStyle.fontSize!) *
+        metaStyle.height!;
+    var textHeight = title.height + 2 + metaHeight;
+    if (book.latestChapterTitle case final chapter? when chapter.isNotEmpty) {
+      textHeight +=
+          2 +
+          GroupedItemShape.text(
+            context,
+            '最新：${context.zh(chapter)}',
+            style: metaStyle,
+            width: width,
+            maxLines: 1,
+          ).height;
+    }
+    return math.max(ExploreBookItem.coverHeight, textHeight) +
+        AppSpacing.md * 2;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -285,20 +333,26 @@ class _BookTextBars extends StatelessWidget {
 class _ShelfBadgeSkeleton extends StatelessWidget {
   const _ShelfBadgeSkeleton();
 
+  static GroupedItemShape _labelShape(BuildContext context) =>
+      GroupedItemShape.text(
+        context,
+        '書架',
+        style: AppTextStyles.labelXs.copyWith(
+          height: 1.3,
+          fontWeight: FontWeight.w600,
+        ),
+        width: double.infinity,
+        maxLines: 1,
+      );
+
+  static double widthFor(BuildContext context) =>
+      _labelShape(context).width! + AppSpacing.sm * 2;
+
   @override
   Widget build(BuildContext context) {
-    final label = GroupedItemShape.text(
-      context,
-      '書架',
-      style: AppTextStyles.labelXs.copyWith(
-        height: 1.3,
-        fontWeight: FontWeight.w600,
-      ),
-      width: double.infinity,
-      maxLines: 1,
-    );
+    final label = _labelShape(context);
     return SkeletonBox(
-      width: label.width! + AppSpacing.sm * 2,
+      width: widthFor(context),
       height: label.height + 4,
       borderRadius: AppRadius.pillShape,
     );
