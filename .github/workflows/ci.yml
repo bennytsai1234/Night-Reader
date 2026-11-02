@@ -161,13 +161,7 @@ jobs:
       - run: flutter pub get
       - name: Check formatting
         # *.g.dart 由 build_runner 產生，格式不在這裡把關。
-        # 格式錯時直接輸出修改差異，讓本次修正可以依確切結果對照。
-        run: |
-          git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed || {
-            git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format
-            git diff -- '*.dart' ':!*.g.dart'
-            exit 1
-          }
+        run: git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed
       - run: flutter analyze --no-pub
       - name: Test frame budget compare tool
         run: sh tool/frame_budget_compare_test.sh
