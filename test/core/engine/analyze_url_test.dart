@@ -171,6 +171,18 @@ void main() {
       );
     });
 
+    // 天籁小说的書源網址結尾多一格，搜尋網址只有選項（表單網址是空的）時
+    // 直接用書源網址；java.net.URL 不算頭尾的空白。
+    test('只寫選項時用書源網址，頭尾的空白不算', () {
+      expect(
+        AnalyzeUrl(
+          ',{"method":"POST","body":"q=1"}',
+          source: BookSource(bookSourceUrl: 'http://www.picdg.co '),
+        ).url,
+        'http://www.picdg.co',
+      );
+    });
+
     test('書源的 header 先注入，網址選項的同名標頭覆寫它', () {
       final analyzeUrl = AnalyzeUrl(
         'https://example.com/a,{"headers":{"User-Agent":"rule"}}',
