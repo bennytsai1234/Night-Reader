@@ -120,8 +120,10 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (unescape && str.contains('&')) {
       str = AnalyzeRuleBase.htmlUnescape.convert(str);
     }
-    if (isUrl && str.isEmpty) {
-      return redirectUrl ?? baseUrl ?? '';
+    // 網址規則沒有結果時是請求的網址（baseUrl），不是轉址後的（同 Legado
+    // `getString` 的 `isUrl`）。
+    if (isUrl && str.trim().isEmpty) {
+      return baseUrl ?? '';
     }
     if (isUrl) {
       return NetworkUtils.getAbsoluteURL(redirectUrl ?? baseUrl, str);
