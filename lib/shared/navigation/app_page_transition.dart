@@ -1085,7 +1085,9 @@ class _TopPose {
     final RRect? clip;
     if (frame != null) {
       final rect = frame.rect;
-      final s = rect.width / size.width;
+      // 視窗寬度短暫是 0 時不縮放：除以 0 的縮放比讓整頁的轉換含 NaN，
+      // 底下的骨架算不出位置（#203）。
+      final s = size.width > 0 ? rect.width / size.width : 1.0;
       fit = Matrix4.translationValues(rect.left, rect.top, 0)
         ..scaleByDouble(s, s, 1, 1);
       clip = RRect.fromRectAndRadius(rect, Radius.circular(frame.radius));
