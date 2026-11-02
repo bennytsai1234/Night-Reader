@@ -26,6 +26,7 @@
 | --- | --- | --- |
 | 發現書源 | 等待中固定鋪滿畫面，真實清單可能只有少量書源；骨架只有名稱，漏掉右側展開箭頭 | 讀取前沿用上次記錄的書源數；收到新資料後，改用真正列數與書源名稱量長條，補上與實際列相同位置的展開箭頭；測試以兩列紀錄、三列新資料比對換場 |
 | 書源管理 | 骨架固定三／四個功能標籤，真實列可有零到五個，還可能有分組、異常標記、錯誤文字與校驗進度，造成列高不同 | 真實書源列與骨架共用功能標籤和錯誤說明的判斷，資料回來後按實際名稱、網址、標籤、提示及列高產生骨架，分幀建構內容的預留高度也用相同形狀計算；另有零標籤、分組、錯誤行及深淺風格的元件測試 |
+| 發現分類書單 | 原本無論實際有沒有最新章節都畫固定三行文字，也沒有照書架徽章、書名換行與目前書單筆數調整 | 分類資料回來後依 `ExploreBookItem.metaOf` 與真正書名、最新章節、書架徽章量形狀；缺少最新章節就不畫第三行，已知資料不足一頁就不再用假書卡鋪滿。新增淺色、深色的元件測試 |
 
 這兩頁在**資料到齊後**能按實際項目排版；第一次沒有任何書源紀錄時，等待中的形狀仍只能預估，不能保證整段呼吸期間的文字寬度完全不變。
 
@@ -35,7 +36,7 @@
 | --- | --- | --- |
 | 高 | 書源管理：`SourceListSkeleton` | 首次沒有上次紀錄時，等待中的名稱、網址與標籤仍只能預估；若依網域分組，真實清單還會額外畫網域標題，其完整幾何仍需對照 |
 | 中 | 發現書源：`ExploreSourceListSkeleton` | 首次啟動沒有上次書源數紀錄，仍會先鋪滿可視清單；取得資料後改依真實列數顯示，但零列與錯誤狀態直接換成提示畫面，尚無可預知的精確骨架 |
-| 中 | 發現分類書單：`ExploreBookListSkeleton` | 封面寬高依 `ExploreBookItem` 常數，但書名、作者等文字使用固定長度；資料未回來前無法推算實際文字寬度與可見書量 |
+| 中 | 發現分類書單：`ExploreBookListSkeleton` | 初次尚未取得書單時只能預估書卡數量及文字，網路回覆錯誤／空清單會換成狀態頁；取得資料後已改用實際書名、章節等排版，尚須補更長文字與大字級的比對 |
 | 中 | 書籍詳情：`BookDetailSkeleton` | 已知簡介與章數會照真正文字排，未知時簡介假設四行、目錄假設八列；載入後可能有分卷、書源問題提示，列的種類和數量不同 |
 | 中 | 書架：`BookshelfSkeleton` | 有上次記錄的書名、作者時照字量；首次打開或新加入的書仍使用固定長度，書本數量也可能與上次不同 |
 | 中 | 朗讀與語音：`TtsSettingsPage` | 引擎尚未初始化時先畫「系統預設」；`TTSService.init()` 在換頁動畫後才執行，真正引擎、音色文字可能在骨架揭開後才變，需在 TTS 尚未初始化的裝置量測 |
@@ -51,6 +52,6 @@
 
 ## 驗收
 
-新的測試：`test/features/about/permissions_skeleton_test.dart`，用可控制的權限回報模擬換頁已播完而資料尚未回來，確認骨架持續存在，資料到齊後用 `skeletonMismatches` 與最終內容逐塊比較。共用等待機制的回歸測試加入 `test/shared/widgets/grouped_list_skeleton_test.dart`；書源數量變化在 `test/features/explore/explore_page_test.dart`，書源不同標籤、分組、錯誤列高與深淺風格在 `test/features/source_manager/source_list_skeleton_test.dart`、`test/features/source_manager/source_manager_page_test.dart`。
+新的測試：`test/features/about/permissions_skeleton_test.dart`，用可控制的權限回報模擬換頁已播完而資料尚未回來，確認骨架持續存在，資料到齊後用 `skeletonMismatches` 與最終內容逐塊比較。共用等待機制的回歸測試加入 `test/shared/widgets/grouped_list_skeleton_test.dart`；書源數量變化在 `test/features/explore/explore_page_test.dart`，書源不同標籤、分組、錯誤列高與深淺風格在 `test/features/source_manager/source_list_skeleton_test.dart`、`test/features/source_manager/source_manager_page_test.dart`；分類書單的新案例在 `test/features/explore/explore_book_skeleton_test.dart`。
 
 建議補做：在 Android 手機及平板，分別用淺色／深色、正常／較大字級，錄下上述高優先頁面的初次進入，量骨架與內容各塊的 `Rect` 差距及整組縱向跳動；再決定固定未知資料時要顯示多少列。驗證前不可把上表的「待確認」視為已修復。
