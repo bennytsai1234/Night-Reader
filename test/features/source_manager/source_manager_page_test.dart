@@ -110,34 +110,33 @@ void main() {
     }
   });
 
-  testWidgets('書源列有零個或多個標籤與錯誤行時，分幀空位照實際列高', (
-    tester,
-  ) async {
+  testWidgets('書源列有零個或多個標籤與錯誤行時，分幀空位照實際列高', (tester) async {
     await pumpPage(tester, sources: 0);
-    await tester.runAsync(() => gatedDao.upsertAll([
-      BookSource(
-        bookSourceUrl: 'https://plain.example',
-        bookSourceName: '沒有功能的書源',
-        customOrder: 0,
-      ),
-      BookSource(
-        bookSourceUrl: 'https://multi.example',
-        bookSourceName: '分類很多而且還有搜尋及發現的書源',
-        bookSourceGroup: '常用',
-        searchUrl: '/search',
-        exploreUrl: '/explore',
-        enabledExplore: false,
-        customOrder: 1,
-      ),
-      BookSource(
-        bookSourceUrl: 'https://error.example',
-        bookSourceName: '回報錯誤的書源',
-        searchUrl: '/search',
-        bookSourceComment:
-            '// Error: 網站回應格式錯誤而且訊息比較長，需要保留真正的兩行高度',
-        customOrder: 2,
-      ),
-    ]));
+    await tester.runAsync(
+      () => gatedDao.upsertAll([
+        BookSource(
+          bookSourceUrl: 'https://plain.example',
+          bookSourceName: '沒有功能的書源',
+          customOrder: 0,
+        ),
+        BookSource(
+          bookSourceUrl: 'https://multi.example',
+          bookSourceName: '分類很多而且還有搜尋及發現的書源',
+          bookSourceGroup: '常用',
+          searchUrl: '/search',
+          exploreUrl: '/explore',
+          enabledExplore: false,
+          customOrder: 1,
+        ),
+        BookSource(
+          bookSourceUrl: 'https://error.example',
+          bookSourceName: '回報錯誤的書源',
+          searchUrl: '/search',
+          bookSourceComment: '// Error: 網站回應格式錯誤而且訊息比較長，需要保留真正的兩行高度',
+          customOrder: 2,
+        ),
+      ]),
+    );
     final p = Provider.of<SourceManagerProvider>(
       tester.element(find.byType(Scaffold).last),
       listen: false,
