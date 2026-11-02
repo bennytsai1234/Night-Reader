@@ -45,7 +45,8 @@ void main() {
 
       // 每列共用名稱、網址、右側開關；功能標籤依真實數量多零個或兩個。
       expect(marks(0), hasLength(3));
-      expect(marks(1), hasLength(5));
+      // 第二列多了兩個功能標籤與名稱旁的發現狀態點。
+      expect(marks(1), hasLength(6));
       for (var i = 0; i < sources.length; i++) {
         expect(
           tester.getSize(bars.at(i)).height,
