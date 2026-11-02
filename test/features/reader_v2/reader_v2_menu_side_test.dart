@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,5 +55,85 @@ void main() {
     final wideSide = wide.menuSideFor(1280)!;
 
     expect(narrowSide, greaterThan(wideSide));
+  });
+
+  test('a very short line still leaves the menus wide enough for their '
+      'buttons', () async {
+    final settings = await settingsWith(3);
+    addTearDown(settings.dispose);
+
+    final side = settings.menuSideFor(1280)!;
+    expect(1280 - side * 2, ReaderV2SettingsController.menuMinWidth);
+  });
+
+  group('reader panels', () {
+    Future<void> openPanel(
+      WidgetTester tester,
+      ReaderV2SettingsController settings,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 880);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: TextButton(
+                onPressed: () => ReaderV2MenuSheet.show<void>(
+                  context,
+                  settings: settings,
+                  builder: (_) =>
+                      const SizedBox(key: Key('panel'), height: 200),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    double panelWidth(WidgetTester tester) =>
+        tester.getSize(find.byKey(const Key('panel'))).width;
+
+    testWidgets('changing characters per line while a panel is open moves '
+        'its edges with the text', (tester) async {
+      final settings = await tester.runAsync(() => settingsWith(32));
+      addTearDown(settings!.dispose);
+      await openPanel(tester, settings);
+
+      final before = panelWidth(tester);
+      expect(before, 1280 - settings.menuSideFor(1280)! * 2);
+
+      settings.setLineChars(40);
+      await tester.pump();
+      final after = panelWidth(tester);
+      expect(after, greaterThan(before));
+      expect(after, 1280 - settings.menuSideFor(1280)! * 2);
+    });
+
+    testWidgets('tapping beside a narrowed panel closes it', (tester) async {
+      final settings = await tester.runAsync(() => settingsWith(20));
+      addTearDown(settings!.dispose);
+      await openPanel(tester, settings);
+      expect(find.byKey(const Key('panel')), findsOneWidget);
+
+      // 面板下緣旁邊、畫面左邊的空白。
+      await tester.tapAt(const Offset(20, 870));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('panel')), findsNothing);
+    });
+
+    testWidgets('tapping inside the panel keeps it open', (tester) async {
+      final settings = await tester.runAsync(() => settingsWith(20));
+      addTearDown(settings!.dispose);
+      await openPanel(tester, settings);
+
+      await tester.tap(find.byKey(const Key('panel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('panel')), findsOneWidget);
+    });
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -14,18 +16,27 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 class ReaderV2MenuSheet {
   const ReaderV2MenuSheet._();
 
+  /// Material 3 底部面板預設的最寬寬度。
+  static const double _defaultMaxWidth = 640;
+
   /// 閱讀器裡的面板寬度：正文欄照每行字數收窄時，面板左右緣對齊正文的
-  /// 左右邊（[ReaderV2SettingsController.menuSideFor]）；沒收窄時 null，
-  /// 照預設寬度。
-  static BoxConstraints? constraintsFor(
+  /// 左右邊（[ReaderV2SettingsController.menuSideFor]）；沒收窄時照預設
+  /// 最寬 640。
+  static double widthFor(
     BuildContext context,
     ReaderV2SettingsController settings,
   ) {
     final width = MediaQuery.sizeOf(context).width;
     final side = settings.menuSideFor(width);
-    if (side == null) return null;
-    return BoxConstraints(maxWidth: width - side * 2);
+    if (side == null) return math.min(width, _defaultMaxWidth);
+    return width - side * 2;
   }
+
+  /// 打開時就定下寬度的面板（替換規則、換源）用的寬度限制。
+  static BoxConstraints constraintsFor(
+    BuildContext context,
+    ReaderV2SettingsController settings,
+  ) => BoxConstraints(maxWidth: widthFor(context, settings));
 
   static Future<T?> show<T>(
     BuildContext context, {
@@ -35,28 +46,52 @@ class ReaderV2MenuSheet {
   }) {
     return AppBottomSheet.showCustom<T>(
       context: context,
-      constraints: constraintsFor(context, settings),
+      // 外層佔滿畫面寬、透明；看得到的面板在裡面照設定即時算寬度，在
+      // 面板裡調每行字數時跟著正文一起變寬變窄。
+      constraints: const BoxConstraints(),
       isScrollControlled: true,
       // 面板底色由下方 Material 依選單主題繪製，才能在開啟期間即時換色。
       backgroundColor: Colors.transparent,
       barrierColor: barrierColor,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetXl),
-      builder: (sheetContext) => ListenableBuilder(
-        listenable: settings,
-        builder: (context, _) {
-          final theme = ReaderV2MenuStyle.of(context)
-              .toSheetTheme(Theme.of(context));
-          return Theme(
-            data: theme,
-            child: Material(
-              color: theme.colorScheme.surface,
-              child: DefaultTextStyle.merge(
-                style: TextStyle(color: theme.colorScheme.onSurface),
-                child: Builder(builder: builder),
+      shape: const RoundedRectangleBorder(),
+      clipBehavior: Clip.none,
+      builder: (sheetContext) => GestureDetector(
+        // 點面板兩側透明的地方和點遮罩一樣收起面板。
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.maybePop(sheetContext),
+        child: ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) {
+            final theme = ReaderV2MenuStyle.of(context)
+                .toSheetTheme(Theme.of(context));
+            return Align(
+              alignment: Alignment.bottomCenter,
+              heightFactor: 1,
+              child: SizedBox(
+                width: widthFor(context, settings),
+                child: GestureDetector(
+                  // 面板裡空白的地方不算點到外面。
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                  child: Theme(
+                    data: theme,
+                    child: Material(
+                      color: theme.colorScheme.surface,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: AppRadius.topSheetXl,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: DefaultTextStyle.merge(
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                        child: Builder(builder: builder),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

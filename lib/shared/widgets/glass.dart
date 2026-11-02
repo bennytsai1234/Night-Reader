@@ -577,6 +577,9 @@ class GlassCapsule extends StatelessWidget {
 
   static const double height = 34.0;
 
+  /// 膠囊上下的內距。
+  static const double verticalPadding = AppSpacing.xs + 2;
+
   /// 選取中的淡主色底。字也是主色，主色比例壓低才維持 4.5:1 的文字對比。
   static Color selectedTintOf(ColorScheme scheme) => Color.alphaBlend(
     scheme.primary.withValues(alpha: 0.06),
@@ -627,7 +630,7 @@ class GlassCapsule extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md + 2,
-            vertical: AppSpacing.xs + 2,
+            vertical: verticalPadding,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

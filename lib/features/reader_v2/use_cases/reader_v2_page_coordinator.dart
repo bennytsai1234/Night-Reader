@@ -221,11 +221,16 @@ class ReaderV2PageCoordinator {
       return;
     }
     // 點下去就開，和選單收起同時；測試文字與規則數由面板打開後自己讀。
+    final constraints = ReaderV2MenuSheet.constraintsFor(
+      context,
+      _host.settings,
+    );
     await AppBottomSheet.showCustom<void>(
       context: context,
-      constraints: ReaderV2MenuSheet.constraintsFor(context, _host.settings),
+      constraints: constraints,
       isScrollControlled: true,
       builder: (_) => ReaderV2ReplaceRuleSheet(
+        sheetConstraints: constraints,
         book: _host.book,
         bookDao: _host.dependencies.bookDao,
         replaceDao: replaceDao,
