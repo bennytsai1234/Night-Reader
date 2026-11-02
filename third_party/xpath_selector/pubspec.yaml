@@ -1,0 +1,12 @@
+name: xpath_selector
+description: XPath package for HTML and XML, basic XPath syntax are supported.
+# 夜讀自行維護的版本，修補見 PATCHES.md。
+version: 3.0.2+nightreader.1
+homepage: https://github.com/simonkimi/xpath_selector
+publish_to: none
+
+environment:
+  sdk: '>=2.12.0 <3.0.0'
+
+dependencies:
+  expressions: ^0.2.5

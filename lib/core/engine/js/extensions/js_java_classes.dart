@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 
@@ -18,6 +20,10 @@ extension JsJavaClasses on JsExtensionsBase {
     runtime.onMessage(
       '_bigInteger',
       (dynamic args) => jsonEncode(_bigIntegerOp(args as List)),
+    );
+    runtime.onMessage(
+      '_sysProps',
+      (dynamic args) => jsonEncode(JavaSystemProperties.handle(args as List)),
     );
     runtime.onMessage('_topPrivateDomain', (dynamic args) {
       final host = '$args';
@@ -80,6 +86,9 @@ extension JsJavaClasses on JsExtensionsBase {
   var JavaSystem = named('System', {
     currentTimeMillis: function() { return JsDate.now(); },
     nanoTime: function() { return JsDate.now() * 1e6; },
+    getProperties: function() { return getSystemProperties(); },
+    getProperty: function(k, d) { return getSystemProperties().getProperty(k, d); },
+    setProperty: function(k, v) { return getSystemProperties().setProperty(k, v); },
     // 先複製來源那一段：來源與目的是同一個陣列、區段重疊時同 Java。
     arraycopy: function(src, srcPos, dest, destPos, length) {
       if (srcPos < 0 || destPos < 0 || length < 0 ||
@@ -112,20 +121,39 @@ extension JsJavaClasses on JsExtensionsBase {
   StringBuilder.prototype.toString = function() { return this._s; };
   named('StringBuilder', StringBuilder);
 
+  /// 系統屬性存在 Dart 那一側（[JavaSystemProperties]），整個書源 isolate 共用。
+  function sysProps(op) {
+    return JSON.parse(send('_sysProps', JSON.stringify(Array.prototype.slice.call(arguments))));
+  }
+
+  /// AtomicLong／AtomicInteger／AtomicBoolean。放進系統屬性後值改存在 Dart
+  /// 的一個格子（`_cell`），之後哪一次執行拿到它，讀寫的都是同一個值，同
+  /// Java 裡共用的那一個物件。
   function atomic(name, initial) {
     function Atomic(v) { this._v = v === undefined ? initial : v; }
-    Atomic.prototype.get = function() { return this._v; };
-    Atomic.prototype.set = function(v) { this._v = v; };
-    Atomic.prototype.getAndSet = function(v) { var old = this._v; this._v = v; return old; };
-    Atomic.prototype.incrementAndGet = function() { return ++this._v; };
-    Atomic.prototype.decrementAndGet = function() { return --this._v; };
-    Atomic.prototype.getAndIncrement = function() { return this._v++; };
-    Atomic.prototype.getAndDecrement = function() { return this._v--; };
-    Atomic.prototype.addAndGet = function(d) { this._v += d; return this._v; };
-    Atomic.prototype.getAndAdd = function(d) { var old = this._v; this._v += d; return old; };
-    Atomic.prototype.compareAndSet = function(e, v) { if (this._v === e) { this._v = v; return true; } return false; };
-    Atomic.prototype.toString = function() { return String(this._v); };
+    Atomic.prototype._read = function() { return this._cell == null ? this._v : sysProps('cellGet', this._cell); };
+    Atomic.prototype._write = function(v) { if (this._cell == null) this._v = v; else sysProps('cellSet', this._cell, v); };
+    Atomic.prototype.get = function() { return this._read(); };
+    Atomic.prototype.set = function(v) { this._write(v); };
+    Atomic.prototype.getAndSet = function(v) { var old = this._read(); this._write(v); return old; };
+    Atomic.prototype.addAndGet = function(d) { var v = this._read() + d; this._write(v); return v; };
+    Atomic.prototype.getAndAdd = function(d) { var old = this._read(); this._write(old + d); return old; };
+    Atomic.prototype.incrementAndGet = function() { return this.addAndGet(1); };
+    Atomic.prototype.decrementAndGet = function() { return this.addAndGet(-1); };
+    Atomic.prototype.getAndIncrement = function() { return this.getAndAdd(1); };
+    Atomic.prototype.getAndDecrement = function() { return this.getAndAdd(-1); };
+    Atomic.prototype.compareAndSet = function(e, v) { if (this._read() === e) { this._write(v); return true; } return false; };
+    Atomic.prototype.toString = function() { return String(this._read()); };
     return named(name, Atomic);
+  }
+  var atomics = {
+    AtomicLong: atomic('AtomicLong', 0),
+    AtomicInteger: atomic('AtomicInteger', 0),
+    AtomicBoolean: atomic('AtomicBoolean', false)
+  };
+  function atomicName(v) {
+    for (var name in atomics) if (v instanceof atomics[name]) return name;
+    return null;
   }
 
   // ─── java.util 集合 ────────────────────────────────────────
@@ -136,24 +164,67 @@ extension JsJavaClasses on JsExtensionsBase {
     hide(this, '_m', new JsMap());
     if (init != null && typeof init === 'object') this.putAll(init);
   }
+  /// Java 的 String 照內容比：JavaString 當鍵時換成一般文字，和 "abc" 是同一個鍵。
+  function mapKey(k) { return k instanceof JavaString ? String(k) : k; }
+  function npe() { return javaError('java.lang.NullPointerException'); }
   JavaMap.prototype.__lrMap = true;
+  /// `_m`、`_cmp` 這類內部欄位（不列舉的自有屬性）：同名的鍵不放上屬性，免得
+  /// 蓋掉 Map 自己的資料。
+  function isInternal(obj, k) {
+    var d = Object.getOwnPropertyDescriptor(obj, k);
+    return d != null && !d.enumerable;
+  }
   JavaMap.prototype._order = function() { return Array.from(this._m.keys()); };
+  /// HashMap 收 null 鍵與 null 值；Hashtable（Properties）、TreeMap 覆寫成丟 NPE。
+  JavaMap.prototype._checkKey = function(k) {};
+  JavaMap.prototype._checkValue = function(v) {};
+  /// 文字鍵也照屬性讀得到；鍵名和這個 Map 原型鏈上的方法同名時不放，免得
+  /// 蓋掉方法（Properties 的 getProperty 這類子類方法也算）。
   JavaMap.prototype._mirror = function(k, v, present) {
-    if (typeof k !== 'string' || k in JavaMap.prototype) return;
+    if (typeof k !== 'string' || k in Object.getPrototypeOf(this) || isInternal(this, k)) return;
     if (present) Object.defineProperty(this, k, { value: v, enumerable: true, configurable: true, writable: true });
     else delete this[k];
   };
   JavaMap.prototype.put = function(k, v) {
+    k = mapKey(k);
+    this._checkKey(k);
+    this._checkValue(v);
     var old = this._m.has(k) ? this._m.get(k) : null;
     this._m.set(k, v);
     this._mirror(k, v, true);
     return old;
   };
-  JavaMap.prototype.get = function(k) { return this._m.has(k) ? this._m.get(k) : null; };
-  JavaMap.prototype.getOrDefault = function(k, d) { return this._m.has(k) ? this._m.get(k) : d; };
-  JavaMap.prototype.containsKey = function(k) { return this._m.has(k); };
-  JavaMap.prototype.containsValue = function(v) { return Array.from(this._m.values()).indexOf(v) >= 0; };
-  JavaMap.prototype.remove = function(k) {
+  JavaMap.prototype.get = function(k) {
+    k = mapKey(k);
+    this._checkKey(k);
+    return this._m.has(k) ? this._m.get(k) : null;
+  };
+  JavaMap.prototype.getOrDefault = function(k, d) {
+    k = mapKey(k);
+    this._checkKey(k);
+    return this._m.has(k) ? this._m.get(k) : d;
+  };
+  JavaMap.prototype.containsKey = function(k) {
+    k = mapKey(k);
+    this._checkKey(k);
+    return this._m.has(k);
+  };
+  JavaMap.prototype.containsValue = function(v) {
+    this._checkValue(v);
+    var values = Array.from(this._m.values());
+    for (var i = 0; i < values.length; i++) if (global.__lrJavaEquals(values[i], v)) return true;
+    return false;
+  };
+  /// remove(key)：交回原本的值；remove(key, value)：值相等（equals）才移除，交回有沒有移除。
+  JavaMap.prototype.remove = function(k, v) {
+    if (arguments.length >= 2) {
+      this._checkValue(v);
+      if (!this.containsKey(k) || !global.__lrJavaEquals(this.get(k), v)) return false;
+      this.remove(k);
+      return true;
+    }
+    k = mapKey(k);
+    this._checkKey(k);
     if (!this._m.has(k)) return null;
     var old = this._m.get(k);
     this._m.delete(k);
@@ -181,6 +252,63 @@ extension JsJavaClasses on JsExtensionsBase {
     else Object.keys(map).forEach(function(k) { self.put(k, map[k]); });
   };
   JavaMap.prototype.forEach = function(fn) { var m = this._m; this._order().forEach(function(k) { fn(k, m.get(k)); }); };
+  // Java 8 加進 Map 的方法，行為照 HashMap：函式是 null、merge 的值是 null 時
+  // 先丟 NullPointerException；算出 null 就移除那個鍵。函式照 Rhino 把 JS 函式
+  // 當 Java 的 Function、BiFunction：直接是函式，或有 apply 方法的物件；交回
+  // undefined 當 null。
+  function callJavaFunction(f, args) {
+    var v = typeof f === 'function' ? f.apply(null, args) : f.apply.apply(f, args);
+    return v === undefined ? null : v;
+  }
+  JavaMap.prototype.putIfAbsent = function(k, v) {
+    this._checkValue(v);
+    var cur = this.get(k);
+    if (cur == null) this.put(k, v);
+    return cur;
+  };
+  JavaMap.prototype.computeIfAbsent = function(k, f) {
+    if (f == null) throw npe();
+    var cur = this.get(k);
+    if (cur != null) return cur;
+    var v = callJavaFunction(f, [k]);
+    if (v != null) this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.computeIfPresent = function(k, f) {
+    if (f == null) throw npe();
+    var cur = this.get(k);
+    if (cur == null) return null;
+    var v = callJavaFunction(f, [k, cur]);
+    if (v == null) this.remove(k); else this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.compute = function(k, f) {
+    if (f == null) throw npe();
+    var v = callJavaFunction(f, [k, this.get(k)]);
+    if (v == null) { this.remove(k); return null; }
+    this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.merge = function(k, value, f) {
+    if (value == null || f == null) throw npe();
+    var cur = this.get(k);
+    var v = cur == null ? value : callJavaFunction(f, [cur, value]);
+    if (v == null) this.remove(k); else this.put(k, v);
+    return v;
+  };
+  /// replace(key, value)：有這個鍵才換，交回原本的值；replace(key, old, new)：
+  /// 現在的值和 old 相等（equals）才換，交回有沒有換。
+  JavaMap.prototype.replace = function(k, a, b) {
+    if (arguments.length >= 3) {
+      this._checkValue(a);
+      this._checkValue(b);
+      if (!this.containsKey(k) || !global.__lrJavaEquals(this.get(k), a)) return false;
+      this.put(k, b);
+      return true;
+    }
+    this._checkValue(a);
+    return this.containsKey(k) ? this.put(k, a) : null;
+  };
   JavaMap.prototype.toJSON = function() {
     var o = {}, m = this._m;
     this._order().forEach(function(k) { o[String(k)] = m.get(k); });
@@ -197,6 +325,107 @@ extension JsJavaClasses on JsExtensionsBase {
   function LinkedHashMap(init) { JavaMap.call(this, init); }
   LinkedHashMap.prototype = Object.create(JavaMap.prototype);
   named('LinkedHashMap', LinkedHashMap);
+  /// java.util.Properties（Hashtable）：鍵和值都不能是 null（丟 NPE）；
+  /// getProperty 只交出文字值，找不到時交出預設值或 null。
+  function Properties() { JavaMap.call(this); }
+  Properties.prototype = Object.create(JavaMap.prototype);
+  Properties.prototype.constructor = Properties;
+  Properties.prototype._checkKey = function(k) { if (k == null) throw npe(); };
+  Properties.prototype._checkValue = function(v) { if (v == null) throw npe(); };
+  Properties.prototype.getProperty = function(k, d) {
+    var v = this.get(k);
+    return isText(v) ? v : (d === undefined ? null : d);
+  };
+  Properties.prototype.setProperty = function(k, v) { return this.put(k, v); };
+  /// 鍵和值都是文字的那幾項。
+  Properties.prototype.stringPropertyNames = function() {
+    var m = this._m;
+    return javaList(this._order().filter(function(k) { return isText(k) && isText(m.get(k)); }));
+  };
+  named('Properties', Properties);
+
+  /// System.getProperties()：Legado 是整個 App 共用 JVM 的那一份，書源拿來在
+  /// 每次執行之間存東西（例如搜尋限流的下一次時間）。夜讀每次解析開一個新的
+  /// JS 引擎，所以資料放在 Dart 那一側（[JavaSystemProperties]），整個書源
+  /// isolate 共用；這個引擎拿到的 Properties 讀寫都直接落在那裡。
+  ///
+  /// 值：文字、數字、true/false 照原樣；AtomicLong／AtomicInteger／AtomicBoolean
+  /// 存成 Dart 的一個格子，每次拿到的都讀寫同一個值；其他物件在同一個引擎裡
+  /// 拿回同一個物件，別的引擎拿到的是內容相同的一份複製。
+  var localObjects = new JsMap();
+  var localAtomics = new JsMap();
+  function encodeSysValue(v) {
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+    if (v instanceof JavaString) return String(v);
+    var name = atomicName(v);
+    if (name != null) {
+      if (v._cell == null) hide(v, '_cell', sysProps('cellNew', v._v));
+      localAtomics.set(v._cell, v);
+      return { __atomic: v._cell, type: name };
+    }
+    var stamp = sysProps('stamp');
+    localObjects.set(stamp, v);
+    return { __object: normalizeRuleResult(v), stamp: stamp };
+  }
+  function decodeSysValue(v) {
+    if (v == null || typeof v !== 'object') return v;
+    if (v.__atomic != null) {
+      if (localAtomics.has(v.__atomic)) return localAtomics.get(v.__atomic);
+      var a = Object.create(atomics[v.type].prototype);
+      hide(a, '_cell', v.__atomic);
+      localAtomics.set(v.__atomic, a);
+      return a;
+    }
+    if (localObjects.has(v.stamp)) return localObjects.get(v.stamp);
+    return v.__object;
+  }
+  /// 給 JavaMap 當 `_m` 用的 Map，讀寫都送到 Dart。鍵照 JSON 送，數字 1 與
+  /// 文字 "1" 照舊是兩個鍵。
+  function SysPropsStore() {}
+  SysPropsStore.prototype.has = function(k) { return sysProps('has', k); };
+  SysPropsStore.prototype.get = function(k) { return decodeSysValue(sysProps('get', k)); };
+  SysPropsStore.prototype.set = function(k, v) { sysProps('put', k, encodeSysValue(v)); return this; };
+  SysPropsStore.prototype.delete = function(k) { return sysProps('remove', k); };
+  SysPropsStore.prototype.keys = function() { return sysProps('keys'); };
+  SysPropsStore.prototype.values = function() {
+    var self = this;
+    return this.keys().map(function(k) { return self.get(k); });
+  };
+  SysPropsStore.prototype.clear = function() { sysProps('clear'); };
+  Object.defineProperty(SysPropsStore.prototype, 'size', { get: function() { return sysProps('size'); } });
+
+  function SystemProperties() {
+    hide(this, '_m', new SysPropsStore());
+  }
+  SystemProperties.prototype = Object.create(Properties.prototype);
+  SystemProperties.prototype.constructor = Properties;
+  /// 屬性寫法讀到的是 Dart 那邊現在的值（別的引擎改過也是）。
+  SystemProperties.prototype._mirror = function(k, v, present) {
+    if (typeof k !== 'string' || k in Object.getPrototypeOf(this) || isInternal(this, k)) return;
+    var self = this;
+    if (present) {
+      Object.defineProperty(this, k, {
+        get: function() { return self.get(k); },
+        set: function(x) { self.put(k, x); },
+        enumerable: true, configurable: true
+      });
+    } else {
+      delete this[k];
+    }
+  };
+  /// 把屬性寫法對齊 Dart 那邊現在有的鍵（別的引擎可能加了或刪了）。
+  SystemProperties.prototype._sync = function() {
+    var self = this, keys = this._order(), present = new JsMap();
+    keys.forEach(function(k) { present.set(k, true); self._mirror(k, null, true); });
+    Object.keys(this).forEach(function(k) { if (!present.has(k)) delete self[k]; });
+    return this;
+  };
+  named('Properties', SystemProperties);
+  var systemProperties = null;
+  function getSystemProperties() {
+    if (systemProperties == null) systemProperties = new SystemProperties();
+    return systemProperties._sync();
+  }
   /// java.util.TreeMap：鍵照自然順序（數字照大小、文字照 Java 的 compareTo），
   /// 或照給的 comparator。
   function TreeMap(arg) {
@@ -209,6 +438,8 @@ extension JsJavaClasses on JsExtensionsBase {
     var cmp = this._cmp || function(a, b) { return a < b ? -1 : (a > b ? 1 : 0); };
     return Array.from(this._m.keys()).sort(cmp);
   };
+  /// 照自然順序排的 TreeMap 不收 null 鍵（Java 丟 NPE）。
+  TreeMap.prototype._checkKey = function(k) { if (k == null && !this._cmp) throw npe(); };
   TreeMap.prototype.firstKey = function() { return this._order()[0]; };
   TreeMap.prototype.lastKey = function() { var o = this._order(); return o[o.length - 1]; };
   named('TreeMap', TreeMap);
@@ -817,6 +1048,7 @@ extension JsJavaClasses on JsExtensionsBase {
         Base64: JdkBase64,
         HashMap: HashMap,
         LinkedHashMap: LinkedHashMap,
+        Properties: Properties,
         TreeMap: TreeMap,
         ArrayList: ArrayList,
         LinkedList: LinkedList,
@@ -827,7 +1059,7 @@ extension JsJavaClasses on JsExtensionsBase {
         zip: { GZIPInputStream: GZIPInputStream, Inflater: Inflater, InflaterInputStream: InflaterInputStream },
         concurrent: {
           locks: { LockSupport: LockSupport },
-          atomic: { AtomicLong: atomic('AtomicLong', 0), AtomicInteger: atomic('AtomicInteger', 0), AtomicBoolean: atomic('AtomicBoolean', false) }
+          atomic: atomics
         }
       },
       text: { SimpleDateFormat: SimpleDateFormat },
@@ -866,6 +1098,82 @@ extension JsJavaClasses on JsExtensionsBase {
   global.__lrJavaMap = wrapMap;
 })(globalThis);
 ''');
+  }
+}
+
+/// `java.lang.System.getProperties()` 的資料：Legado 是整個 App 共用 JVM 的
+/// 那一份，夜讀每次解析開新的 JS 引擎，所以放在 Dart 這邊，整個書源 isolate
+/// 共用，App 關掉就沒了（同 Legado）。
+///
+/// 鍵照 JSON 文字存（數字 1 與文字 "1" 是兩個鍵）。值是文字、數字、true/false，
+/// 或 JS 那邊包好的 `{__atomic: 格子編號, type}`、`{__object: 內容, stamp}`；
+/// AtomicLong 這類的值存在 [_cells]，哪個引擎拿到都讀寫同一格。
+abstract final class JavaSystemProperties {
+  static final Map<String, Object?> _entries = {};
+  static final Map<int, Object?> _cells = {};
+  static int _nextId = 0;
+  static bool _seeded = false;
+
+  /// Android 上固定的幾項。
+  static const _defaults = <String, String>{
+    'java.vm.name': 'Dalvik',
+    'java.vendor': 'The Android Project',
+    'os.name': 'Linux',
+    'file.separator': '/',
+    'path.separator': ':',
+    'line.separator': '\n',
+    'user.dir': '/',
+  };
+
+  static Map<String, Object?> get _map {
+    if (!_seeded) {
+      _seeded = true;
+      _defaults.forEach((k, v) => _entries[jsonEncode(k)] = v);
+    }
+    return _entries;
+  }
+
+  /// JS 送來的 `[運算, 參數…]`，傳回可以 JSON 編碼的結果。
+  static Object? handle(List<dynamic> args) {
+    final op = args[0] as String;
+    String key() => jsonEncode(args[1]);
+    switch (op) {
+      case 'has':
+        return _map.containsKey(key());
+      case 'get':
+        return _map[key()];
+      case 'put':
+        _map[key()] = args[2];
+        return null;
+      case 'remove':
+        return _map.remove(key()) != null;
+      case 'keys':
+        return [for (final k in _map.keys) jsonDecode(k)];
+      case 'size':
+        return _map.length;
+      case 'clear':
+        _map.clear();
+        return null;
+      case 'stamp':
+        return ++_nextId;
+      case 'cellNew':
+        _cells[++_nextId] = args[1];
+        return _nextId;
+      case 'cellGet':
+        return _cells[args[1]];
+      case 'cellSet':
+        _cells[args[1] as int] = args[2];
+        return null;
+    }
+    throw ArgumentError.value(op, 'op');
+  }
+
+  /// 測試之間清空，回到剛開 App 的樣子。
+  @visibleForTesting
+  static void reset() {
+    _entries.clear();
+    _cells.clear();
+    _seeded = false;
   }
 }
 
