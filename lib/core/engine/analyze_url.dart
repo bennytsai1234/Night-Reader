@@ -307,7 +307,10 @@ class AnalyzeUrl {
   /// `Uri` 解析，保持原文，發請求時才照字元集編碼。
   String _absoluteUrl(String raw) {
     final trimmed = raw.trim();
-    final base = _givenBaseUrl.isNotEmpty ? _givenBaseUrl : source?.getKey();
+    // 同 java.net.URL：書源網址頭尾多打的空白不算（網址只有選項、沒寫路徑時
+    // 直接用它）。
+    final base = (_givenBaseUrl.isNotEmpty ? _givenBaseUrl : source?.getKey())
+        ?.trim();
     if (base == null ||
         base.isEmpty ||
         trimmed.startsWith(RegExp('(?:https?|data):', caseSensitive: false))) {

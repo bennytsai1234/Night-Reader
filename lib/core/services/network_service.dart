@@ -56,7 +56,7 @@ class NetworkService {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          options.path = NetworkUtils.toAsciiHost(options.path);
+          options.path = NetworkUtils.toRequestUrl(options.path);
           handler.next(options);
         },
       ),
