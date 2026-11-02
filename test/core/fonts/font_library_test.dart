@@ -132,6 +132,40 @@ void main() {
     expect(fresh.familyOf(AppFont.notoSerifTc), 'TestFamily');
   });
 
+  test(
+    'a file that cannot be registered is deleted and downloaded again',
+    () async {
+      File('${dir.path}/test.ttf').writeAsBytesSync(good);
+      var failRegister = true;
+      adapter = _FakeAdapter(good)..gate.complete();
+      final fonts = FontLibrary(
+        dio: Dio()..httpClientAdapter = adapter,
+        directoryLoader: () async => dir,
+        register: (family, bytes) async {
+          if (failRegister) throw StateError('broken font');
+          registered.add(family);
+        },
+        fileOf: (font) => font == AppFont.system ? null : spec(good),
+      );
+      expect(await fonts.ensure(AppFont.wenkaiTc), isFalse);
+      expect(fonts.status(AppFont.wenkaiTc).value, isA<FontFailed>());
+      expect(File('${dir.path}/test.ttf').existsSync(), isFalse);
+      expect(adapter.requests, 0);
+
+      failRegister = false;
+      expect(await fonts.ensure(AppFont.wenkaiTc), isTrue);
+      expect(adapter.requests, 1, reason: '再選一次真的重新下載');
+      expect(registered, ['TestFamily']);
+    },
+  );
+
+  test('opening the app clears a half-finished download', () async {
+    File('${dir.path}/test.ttf.part').writeAsBytesSync([1, 2, 3]);
+    final fonts = library(served: good);
+    await fonts.start(const []);
+    expect(File('${dir.path}/test.ttf.part').existsSync(), isFalse);
+  });
+
   test('every font id is stable and unknown ids fall back to the system', () {
     expect(AppFont.fromStorage('wenkaiTc'), AppFont.wenkaiTc);
     expect(AppFont.fromStorage('notoSerifTc'), AppFont.notoSerifTc);

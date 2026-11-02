@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/app_log_service.dart';
-import '../services/http_client.dart';
 import '../storage/app_storage_paths.dart';
 import 'app_font.dart';
 
@@ -89,6 +88,7 @@ class FontLibrary {
   /// 開 App 時呼叫：選了的字型已經下載過就載入（等它好，第一幀就是這套
   /// 字）；還沒下載的在背景下載，好了再換上。
   Future<void> start(Iterable<AppFont> selected) async {
+    await _deleteLeftoverParts();
     final wanted = {
       for (final font in selected)
         if (_fileOf(font) != null) font,
@@ -115,8 +115,14 @@ class FontLibrary {
       try {
         final file = await _fileFor(font);
         if (!await _isComplete(file, spec)) await _download(font, spec, file);
-        final bytes = await file.readAsBytes();
-        await _register(spec.family, bytes);
+        try {
+          await _register(spec.family, await file.readAsBytes());
+        } catch (_) {
+          // 大小對但註不了冊（檔案壞了）：丟掉，下次再選就重新下載，不會一直
+          // 拿同一個壞檔重試。
+          if (await file.exists()) await file.delete();
+          rethrow;
+        }
         _notifier(font).value = const FontReady();
         _changes.value++;
         return true;
@@ -129,7 +135,9 @@ class FontLibrary {
         _notifier(font).value = const FontFailed();
         return false;
       } finally {
-        unawaited(Future.microtask(() => _pending.remove(font)));
+        // 這段一定先 await 過（[_fileFor]），結束時已經放進 [_pending]；
+        // 直接移掉，失敗後馬上再要時才會重新來過，不會拿到這次的結果。
+        _pending.remove(font)?.ignore();
       }
     });
   }
@@ -139,7 +147,7 @@ class FontLibrary {
     await file.parent.create(recursive: true);
     final partial = File('${file.path}.part');
     try {
-      await (_dio ?? HttpClient().client).download(
+      await (_dio ?? _plainDio()).download(
         spec.url,
         partial.path,
         onReceiveProgress: (received, total) {
@@ -156,6 +164,29 @@ class FontLibrary {
       if (await partial.exists()) await partial.delete();
     }
   }
+
+  /// 上次下載到一半 App 就被關掉留下的 `.part`。只在開 App 時清，那時還沒有
+  /// 任何下載在跑。
+  Future<void> _deleteLeftoverParts() async {
+    try {
+      final dir = await _directoryLoader();
+      if (!await dir.exists()) return;
+      await for (final entry in dir.list()) {
+        if (entry is File && entry.path.endsWith('.part')) await entry.delete();
+      }
+    } catch (error) {
+      AppLog.e('清字型暫存檔失敗: $error');
+    }
+  }
+
+  /// 字型只從固定的網址下載：不用書源的網路層（Cookie、Cloudflare 處理、
+  /// 請求紀錄），請求不帶任何個人資料。
+  static Dio _plainDio() => Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
 
   Future<File> _fileFor(AppFont font) async =>
       File(p.join((await _directoryLoader()).path, _fileOf(font)!.fileName));

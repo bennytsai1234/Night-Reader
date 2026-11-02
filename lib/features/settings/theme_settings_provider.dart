@@ -25,7 +25,19 @@ class ThemeSettingsProvider extends ChangeNotifier {
     }
     _load();
     SettingsSync.applied.addListener(_reload);
-    FontLibrary.instance.changes.addListener(notifyListeners);
+    _shownUiFontFamily = uiFontFamily;
+    FontLibrary.instance.changes.addListener(_onFontsChanged);
+  }
+
+  /// 主題目前用的介面字族；有字型下載好時只在它變了才重建整個 App（正文字型
+  /// 下載好不影響介面）。
+  String? _shownUiFontFamily;
+
+  void _onFontsChanged() {
+    final family = uiFontFamily;
+    if (family == _shownUiFontFamily) return;
+    _shownUiFontFamily = family;
+    notifyListeners();
   }
 
   void _load() {
@@ -53,13 +65,14 @@ class ThemeSettingsProvider extends ChangeNotifier {
   /// 同步套用了另一台的設定。
   void _reload() {
     _load();
+    _shownUiFontFamily = uiFontFamily;
     notifyListeners();
   }
 
   @override
   void dispose() {
     SettingsSync.applied.removeListener(_reload);
-    FontLibrary.instance.changes.removeListener(notifyListeners);
+    FontLibrary.instance.changes.removeListener(_onFontsChanged);
     super.dispose();
   }
 
@@ -138,6 +151,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
     uiFont = value;
     _prefs.setString(PreferKey.uiFont, value.id);
     unawaited(FontLibrary.instance.ensure(value));
+    _shownUiFontFamily = uiFontFamily;
     notifyListeners();
   }
 
