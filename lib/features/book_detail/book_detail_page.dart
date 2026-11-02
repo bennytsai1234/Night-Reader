@@ -15,6 +15,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
@@ -215,50 +216,63 @@ class _BookDetailPageState extends State<BookDetailPage> {
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          SliverToBoxAdapter(
-            child: Stack(
-              children: [
-                if (ambience)
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    right: 0,
-                    // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
-                    height: padding.top + BookInfoHeader.titleTop,
-                    child: BookCoverAmbience(
-                      coverUrl: UnifiedCovers.coverOf(currentBook),
-                      bookName: context.zh(currentBook.name),
-                    ),
+          SliverPadding(
+            padding: ReadableWidth.insetOf(context),
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Stack(
+                    // 封面氛圍照整個畫面寬，伸出內容欄。
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (ambience)
+                        Positioned(
+                          left: -ReadableWidth.insetOf(context).left,
+                          top: 0,
+                          right: -ReadableWidth.insetOf(context).right,
+                          // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
+                          height: padding.top + BookInfoHeader.titleTop,
+                          child: BookCoverAmbience(
+                            coverUrl: UnifiedCovers.coverOf(currentBook),
+                            bookName: context.zh(currentBook.name),
+                          ),
+                        ),
+                      Padding(
+                        padding: EdgeInsets.only(top: padding.top),
+                        child: BookInfoHeader(
+                          book: currentBook,
+                          provider: provider,
+                          loading: loading,
+                          showPhotoView: _showPhotoView,
+                          onToggleBookshelf: widget.fromReader
+                              ? null
+                              : () => _handleBookshelfToggle(context, provider),
+                          onChangeSource:
+                              currentBook.isLocal || widget.fromReader
+                              ? null
+                              : () =>
+                                    _showChangeSourceDialog(context, provider),
+                          onShowToc: _scrollToToc,
+                        ),
+                      ),
+                    ],
                   ),
-                Padding(
-                  padding: EdgeInsets.only(top: padding.top),
-                  child: BookInfoHeader(
-                    book: currentBook,
-                    provider: provider,
-                    loading: loading,
-                    showPhotoView: _showPhotoView,
-                    onToggleBookshelf: widget.fromReader
-                        ? null
-                        : () => _handleBookshelfToggle(context, provider),
-                    onChangeSource: currentBook.isLocal || widget.fromReader
-                        ? null
-                        : () => _showChangeSourceDialog(context, provider),
-                    onShowToc: _scrollToToc,
+                ),
+                // 骨架照這一輪載入開始時手上的書排；資料到了先在骨架底下排好
+                // 內容，再照骨架換場的設定換過去，骨架不跟著新資料變形。
+                SliverSkeletonSwitcher(
+                  loading: loading,
+                  skeleton: BookDetailSkeleton(book: provider.skeletonBook),
+                  builder: (context) => _buildLoadedSlivers(context, provider),
+                ),
+                // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
+                SliverPadding(
+                  padding: EdgeInsets.only(
+                    bottom: padding.bottom + AppSpacing.md,
                   ),
                 ),
               ],
             ),
-          ),
-          // 骨架照這一輪載入開始時手上的書排；資料到了先在骨架底下排好
-          // 內容，再照骨架換場的設定換過去，骨架不跟著新資料變形。
-          SliverSkeletonSwitcher(
-            loading: loading,
-            skeleton: BookDetailSkeleton(book: provider.skeletonBook),
-            builder: (context) => _buildLoadedSlivers(context, provider),
-          ),
-          // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
-          SliverPadding(
-            padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
           ),
         ],
       ),

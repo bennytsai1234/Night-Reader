@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../layout/readable_width.dart';
 import '../navigation/app_page_transition.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_layers.dart';
@@ -859,6 +860,12 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 onPressed: () => Navigator.maybePop(context),
               )
             : null);
+    // 原型：頁首下方的搜尋框這類內容跟著內容欄；按鈕看 headerFollows
+    // （首頁的分頁不跟）。
+    final contentSide = route?.isFirst ?? true
+        ? 0.0
+        : ReadableWidth.sideOf(MediaQuery.sizeOf(context).width);
+    final side = ReadableWidth.headerFollows ? contentSide : 0.0;
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
@@ -923,8 +930,8 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
             if (_hasToolbar)
               Positioned(
                 top: topPadding,
-                left: 0,
-                right: 0,
+                left: side,
+                right: side,
                 height: AppGlass.headerToolbarHeight,
                 child: NavigationToolbar(
                   middleSpacing: AppSpacing.md,
@@ -970,8 +977,8 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
             if (bottom != null)
               Positioned(
                 top: topPadding + _toolbarHeight,
-                left: 0,
-                right: 0,
+                left: contentSide,
+                right: contentSide,
                 height: bottomHeight,
                 child: bottom!,
               ),

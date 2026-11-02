@@ -25,6 +25,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import '../support/app_harness.dart';
@@ -193,9 +194,16 @@ void main() {
     [final w, final h] => Size(double.parse(w), double.parse(h)),
     _ => null,
   };
+  // 原型：SHOT_CAP=640 內容欄最寬 640，SHOT_HEADER=follow 頁首按鈕跟著內容欄。
+  final cap = Platform.environment['SHOT_CAP'];
+  if (cap != null) ReadableWidth.maxWidth = double.parse(cap);
+  ReadableWidth.headerFollows = Platform.environment['SHOT_HEADER'] == 'follow';
+  final variant = cap == null
+      ? ''
+      : 'cap${cap}${ReadableWidth.headerFollows ? 'follow' : ''}_';
   final suffix = size == null
-      ? mode
-      : '${size.width.toInt()}x${size.height.toInt()}_$mode';
+      ? '$variant$mode'
+      : '$variant${size.width.toInt()}x${size.height.toInt()}_$mode';
 
   // 全部情境在同一個測試裡依序拍：App 的單例服務（下載服務等）第一次用到
   // 時就綁在當下測試的非同步環境，換到下一個測試就不會再回應，開書會一直
@@ -221,6 +229,13 @@ void main() {
       await pumpApp(tester);
       await steps(tester);
       if (name.startsWith('r')) await waitForText(tester);
+      // 等骨架換成內容再拍：書籍詳情、書源管理等封面（真實時間）再換場。
+      for (var i = 0; i < 30; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 30)),
+        );
+        await settle(tester, const Duration(milliseconds: 100));
+      }
       await shot(tester, '${name}_$suffix');
       // 拆掉整個 App，下一個情境從頭建。
       await tester.pumpWidget(const SizedBox.shrink());
