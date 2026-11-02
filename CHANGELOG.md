@@ -78,6 +78,7 @@
   - 書源程式可以照 Java 的寫法讀書、章節與書源的欄位（例如 `source.getConcurrentRate()`、`chapter.isVip()`），也能改書名、作者、簡介這類書源本來就能改的欄位（`book.setName(…)`）與自訂變數（`book.putCustomVariable(…)`）
   - 書源程式用到的大數運算（番茄小說的簽章）、陣列複製（`Arrays.copyOf`）、Java 清單的逐項讀取（`iterator().hasNext()`）與刪掉一段（`subList(…).clear()`）照 Java 算
   - 抓目錄前要先重讀書籍詳情、換新目錄網址的書源（`java.refreshTocUrl`）讀得到目錄了
+  - 詳情頁照 Legado 的順序一項項讀，後面的規則讀得到這一頁剛讀出來的書名、簡介（蓝海搜书從簡介取換源序號，不再出錯）
   - 載入外部腳本的書源（`java.importScript`）叫得到腳本裡的函式，正文與搜尋不再失敗
   - 規則裡的文字剛好長得像舊寫法時，不再被改掉，搜尋與正文照書源寫的抓
   - 書源程式用得到的 Legado 功能補齊，結果和 Legado 一樣：網址編碼（空白、GBK）、Base64 的各種選項、解析指定的內容、記憶體快取、Cookie 的單項讀取與合併、手機編號、書源自己呼叫登入等；書源直接用的 Java 寫法（暫停、雜湊、HashMap 與 ArrayList、Android 的 Base64、JsonPath、網址拆解、日期格式、解壓）也照 Java 運作
