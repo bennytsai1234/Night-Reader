@@ -157,8 +157,12 @@ final class ReaderParagraphLayout {
     if (!contentWidth.isFinite || contentWidth <= 0) {
       throw StateError('Paragraph width must be finite and positive.');
     }
-    final builder = ui.ParagraphBuilder(_paragraphStyle(textStyle))
-      ..pushStyle(_textStyle(textStyle, textColor));
+    final builder = ui.ParagraphBuilder(
+      _paragraphStyle(
+        textStyle,
+        textAlign: textStyle.center ? ui.TextAlign.center : ui.TextAlign.start,
+      ),
+    )..pushStyle(_textStyle(textStyle, textColor));
 
     final indentCell = cellWidth != null && cellWidth.isFinite && cellWidth > 0
         ? cellWidth
@@ -247,9 +251,16 @@ final class ReaderParagraphLayout {
   /// 每一行都用同一個 strut 定行高：標點字型的垂直度量與 Noto Sans CJK
   /// 相同，所以純中文行的行高不變；夾著英數字（Roboto）或 emoji 的行
   /// 也不會因為字型的上下比例不同而多出零點幾像素。
-  ui.ParagraphStyle _paragraphStyle(HybridBlockTextStyle style) {
+  ///
+  /// [textAlign] 只給排出要畫的段落用；量字形與字格時從左緣起算，折行
+  /// 才不會被置中的位移帶偏。
+  ui.ParagraphStyle _paragraphStyle(
+    HybridBlockTextStyle style, {
+    ui.TextAlign textAlign = ui.TextAlign.start,
+  }) {
     return ui.ParagraphStyle(
       textDirection: ui.TextDirection.ltr,
+      textAlign: textAlign,
       fontSize: style.fontSize,
       height: style.lineHeight,
       strutStyle: ui.StrutStyle(

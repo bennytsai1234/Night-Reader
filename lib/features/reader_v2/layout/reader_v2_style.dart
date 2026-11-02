@@ -17,6 +17,8 @@ class ReaderV2Style {
     required this.paddingRight,
     this.justify = false,
     this.bold = false,
+    this.titleBold = true,
+    this.titleCenter = false,
     this.textIndent = 0,
     double? titleFontSize,
     this.titleSpacing = 0.0,
@@ -38,7 +40,15 @@ class ReaderV2Style {
   /// 左右對齊：排版時把一行湊不滿一個字格的空隙攤進字距，
   /// 見 `ReaderV2TextLayoutFrame.justifiedLetterSpacing`。
   final bool justify;
+
+  /// 正文加粗。
   final bool bold;
+
+  /// 章節標題加粗。
+  final bool titleBold;
+
+  /// 章節標題置中；關著時靠左（從正文欄左緣起排）。
+  final bool titleCenter;
   final int textIndent;
 
   /// 章節標題字號；未指定時比正文大 [kReaderV2DefaultTitleSizeDelta]。
@@ -66,6 +76,8 @@ class ReaderV2Style {
     double? paddingRight,
     bool? justify,
     bool? bold,
+    bool? titleBold,
+    bool? titleCenter,
     int? textIndent,
     double? titleFontSize,
     double? titleSpacing,
@@ -82,6 +94,8 @@ class ReaderV2Style {
       paddingRight: paddingRight ?? this.paddingRight,
       justify: justify ?? this.justify,
       bold: bold ?? this.bold,
+      titleBold: titleBold ?? this.titleBold,
+      titleCenter: titleCenter ?? this.titleCenter,
       textIndent: textIndent ?? this.textIndent,
       titleFontSize: titleFontSize ?? this.titleFontSize,
       titleSpacing: titleSpacing ?? this.titleSpacing,
@@ -102,6 +116,8 @@ class ReaderV2Style {
         other.paddingRight == paddingRight &&
         other.justify == justify &&
         other.bold == bold &&
+        other.titleBold == titleBold &&
+        other.titleCenter == titleCenter &&
         other.textIndent == textIndent &&
         other.titleFontSize == titleFontSize &&
         other.titleSpacing == titleSpacing;
@@ -120,6 +136,8 @@ class ReaderV2Style {
     paddingRight,
     justify,
     bold,
+    titleBold,
+    titleCenter,
     textIndent,
     titleFontSize,
     titleSpacing,
