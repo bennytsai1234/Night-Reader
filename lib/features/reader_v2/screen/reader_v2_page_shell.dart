@@ -60,7 +60,9 @@ final class ReaderV2PageChromeLayout {
     required double paddingTop,
     required double paddingBottom,
     required double footerOffset,
+    double infoFontSize = kReaderInfoFontSize,
   }) {
+    final infoRow = readerInfoRowHeightFor(infoFontSize);
     final top = hideStatusBar
         ? topCutoutExtent ?? mediaPadding.top
         : mediaPadding.top;
@@ -70,15 +72,15 @@ final class ReaderV2PageChromeLayout {
       headerExtent = top;
       headerRowTop = top;
     } else if (hideStatusBar) {
-      headerExtent = top > kReaderInfoRowHeight ? top : kReaderInfoRowHeight;
+      headerExtent = top > infoRow ? top : infoRow;
       headerRowTop = 0;
     } else {
-      headerExtent = top + kReaderInfoRowHeight;
+      headerExtent = top + infoRow;
       headerRowTop = top;
     }
     final footerRowBottom = footerOffset;
     final footerExtent = showFooterInfo
-        ? footerRowBottom + kReaderFooterRowHeight
+        ? footerRowBottom + readerFooterRowHeightFor(infoFontSize)
         : mediaPadding.bottom;
     return ReaderV2PageChromeLayout._(
       headerExtent: headerExtent,
@@ -131,6 +133,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.paddingTop,
     required this.paddingBottom,
     required this.footerOffset,
+    this.infoFontSize = kReaderInfoFontSize,
     required this.edgeFade,
     required this.use24HourClock,
     required this.progressFractionDigits,
@@ -205,6 +208,9 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 頁尾資訊列底部到畫面底部的距離。
   final double footerOffset;
 
+  /// 頁首頁尾資訊的字級；那一列的高度與圖示跟著它。
+  final double infoFontSize;
+
   /// 正文上下緣漸隱的最大高度；0 是不漸隱。
   final double edgeFade;
 
@@ -265,6 +271,7 @@ class ReaderV2PageShell extends StatelessWidget {
       paddingTop: paddingTop,
       paddingBottom: paddingBottom,
       footerOffset: footerOffset,
+      infoFontSize: infoFontSize,
     );
     final infoShown = infoState != ReaderV2InfoState.hidden;
     // 正文與頁首、頁尾之間的空隙（上下邊距）裡的漸隱，最多 [edgeFade]。
@@ -710,7 +717,7 @@ class _PermanentInfoBar extends StatelessWidget {
               shell: shell,
               slots: shell.footerInfo,
               showAutoPage: shell.isAutoPaging,
-              rowHeight: kReaderFooterRowHeight,
+              rowHeight: readerFooterRowHeightFor(shell.infoFontSize),
               skeleton: skeleton,
             ),
           ),
@@ -726,14 +733,16 @@ class _InfoRow extends StatelessWidget {
     required this.shell,
     required this.slots,
     required this.showAutoPage,
-    this.rowHeight = kReaderInfoRowHeight,
+    this.rowHeight,
     this.skeleton = false,
   });
 
   final ReaderV2PageShell shell;
   final ReaderV2InfoSlots slots;
   final bool showAutoPage;
-  final double rowHeight;
+
+  /// null 時是頁首那一列的高度。
+  final double? rowHeight;
 
   /// 每個欄位畫成骨架（見 [_InfoItemSkeleton]），不提供語意。
   final bool skeleton;
@@ -742,8 +751,9 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // 章內進度與目前章各自是小訊號，資訊列自己聽，捲動途中不重建閱讀頁。
     final progressListenable = shell.progressListenable;
-    // 和正文一樣不跟手機的字型大小放大：頁尾那一列（kReaderFooterRowHeight）
-    // 放不下放大後的字，會被螢幕底邊切掉（DESIGN.md「閱讀器」）。
+    // 和正文一樣不跟手機的字型大小放大，字級只照閱讀器自己的「頁首頁尾字級」：
+    // 那一列的高度照這個字級算，跟著手機放大就放不下，會被螢幕底邊切掉
+    // （DESIGN.md「閱讀器」）。
     return MediaQuery.withNoTextScaling(
       child: ListenableBuilder(
         listenable: Listenable.merge([
@@ -799,6 +809,7 @@ class _InfoRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: shell.paddingHorizontal),
           child: DefaultTextStyle(
             style: AppTextStyles.uiXs.copyWith(
+              fontSize: shell.infoFontSize,
               color: infoColor,
               fontWeight: FontWeight.w400,
               fontFamily: kReaderV2PunctFontFamily,
@@ -811,14 +822,14 @@ class _InfoRow extends StatelessWidget {
             // 照它量，才會和字一樣長。
             textWidthBasis: TextWidthBasis.longestLine,
             child: SizedBox(
-              height: rowHeight,
+              height: rowHeight ?? readerInfoRowHeightFor(shell.infoFontSize),
               child: Row(
                 children: [
                   if (showAutoPage) ...[
                     ?masked(
                       Icon(
                         Icons.auto_stories_outlined,
-                        size: 13,
+                        size: _infoIconSize(shell.infoFontSize),
                         color: infoColor,
                       ),
                     ),
@@ -878,6 +889,7 @@ class _InfoRow extends StatelessWidget {
       return _ReaderBattery(
         showIcon: item == ReaderV2InfoItem.batteryWithIcon,
         iconColor: shell.infoColor,
+        iconSize: _infoIconSize(shell.infoFontSize),
       );
     }
     return Text(
@@ -962,10 +974,15 @@ class _InfoItemSkeleton extends StatelessWidget {
 
 /// 頁首／頁尾的電量；只在系統回報電量變化時重建。
 class _ReaderBattery extends StatefulWidget {
-  const _ReaderBattery({required this.showIcon, required this.iconColor});
+  const _ReaderBattery({
+    required this.showIcon,
+    required this.iconColor,
+    required this.iconSize,
+  });
 
   final bool showIcon;
   final Color iconColor;
+  final double iconSize;
 
   @override
   State<_ReaderBattery> createState() => _ReaderBatteryState();
@@ -1001,7 +1018,7 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(_iconFor(battery), size: 13, color: widget.iconColor),
+        Icon(_iconFor(battery), size: widget.iconSize, color: widget.iconColor),
         const SizedBox(width: 2),
         Flexible(child: text),
       ],
@@ -1194,3 +1211,6 @@ class _ReaderV2ControlsDismissLayerState
     );
   }
 }
+
+/// 頁首頁尾圖示（自動翻頁、電量）的大小：預設字級 11 時是 13，跟著字級等比放大。
+double _infoIconSize(double fontSize) => 13 * fontSize / kReaderInfoFontSize;

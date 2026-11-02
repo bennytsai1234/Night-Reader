@@ -36,6 +36,8 @@ class ReaderV2LayoutStyle {
     required this.paddingLeft,
     required this.paddingRight,
     this.bold = false,
+    this.titleBold = true,
+    this.titleCenter = false,
     this.textIndent = 0,
     double? titleFontSize,
     this.titleSpacing = 0.0,
@@ -54,6 +56,8 @@ class ReaderV2LayoutStyle {
   final double paddingLeft;
   final double paddingRight;
   final bool bold;
+  final bool titleBold;
+  final bool titleCenter;
   final int textIndent;
   final double titleFontSize;
 
@@ -299,6 +303,8 @@ class ReaderV2LayoutSpec {
             paddingLeft: style.paddingLeft,
             paddingRight: style.paddingRight,
             bold: style.bold,
+            titleBold: style.titleBold,
+            titleCenter: style.titleCenter,
             textIndent: style.textIndent,
             titleFontSize: style.titleFontSize,
             titleSpacing: style.titleSpacing,
@@ -335,6 +341,8 @@ class ReaderV2LayoutSpec {
       style.chapterSpacing,
       style.textIndent,
       style.bold,
+      style.titleBold,
+      style.titleCenter,
       style.titleFontSize,
       style.titleSpacing,
       kReaderV2CjkTypographyFeatureSignature,

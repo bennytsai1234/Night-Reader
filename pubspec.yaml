@@ -44,7 +44,10 @@ dependencies:
   json_path: ^0.9.0
 
   # === XPath ===
-  xpath_selector: ^3.0.2
+  # 自行維護（源自 3.0.2），見 third_party/xpath_selector/PATCHES.md；
+  # xpath_selector_html_parser 也依賴它，在 dependency_overrides 換成同一份。
+  xpath_selector:
+    path: third_party/xpath_selector
   xpath_selector_html_parser: ^3.0.1
 
   # === JavaScript Engine (replaces Android Rhino) ===
@@ -111,6 +114,13 @@ dependencies:
   google_sign_in_platform_interface: ^3.1.0
   # 書源網址的中文網域換成 punycode 才連得上（同 OkHttp）。
   punycoder: ^0.3.0
+  # 中文網域照 UTS #46 換 punycode 時的 NFC（lib/core/utils/idna.dart），同 OkHttp。
+  unorm_dart: ^0.3.3
+
+dependency_overrides:
+  # xpath_selector_html_parser 也用夜讀維護的這一份（見上面的 xpath_selector）。
+  xpath_selector:
+    path: third_party/xpath_selector
 
 dev_dependencies:
   flutter_test:
