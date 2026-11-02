@@ -120,10 +120,73 @@ class AppUpdateService {
         inRange.addAll(lines);
       }
     }
-    return [
+    final unique = [
       for (final line in inRange)
         if (line.trim().isEmpty || seen.add(line.trim())) line,
-    ].join('\n');
+    ];
+    return _compactUpdateNotes(unique);
+  }
+
+  /// 跨多個版本時只在「檢查更新」顯示重點；每一版的完整內容仍可在「更新紀錄」查看。
+  /// 舊版曾把整組巢狀書源說明反覆發布，摘要只取頂層條列，避免重新顯示整組。
+  static String _compactUpdateNotes(List<String> lines) {
+    final full = lines.join('\n');
+    final topLevel = [
+      for (final line in lines)
+        if (_markdownBullet.hasMatch(line)) line,
+    ];
+    final hasNested = lines.any(
+      (line) => RegExp(r'^\s+[-*+]\s+').hasMatch(line),
+    );
+    if (topLevel.length <= 4 && full.runes.length <= 380 && !hasNested) {
+      return full;
+    }
+
+    String? intro;
+    for (final line in lines) {
+      final text = line.trim();
+      if (_markdownBullet.hasMatch(text)) break;
+      if (text.isNotEmpty && !text.startsWith('#')) {
+        intro = _shortNote(text, 95);
+        break;
+      }
+    }
+
+    final summary = <String>[
+      if (intro != null) ...[intro, ''],
+    ];
+    final topics = <String>{};
+    var displayed = 0;
+    for (final line in topLevel) {
+      var note = line.trim();
+      final content = note.replaceFirst(_markdownBullet, '').trim();
+      // 空的條列（網頁上編輯常留下的「- 」）不算一項。
+      if (content.isEmpty) continue;
+      final colon = content.indexOf('：');
+      if (colon > 0 && colon <= 16) {
+        if (!topics.add(content.substring(0, colon))) continue;
+      }
+      if (note.endsWith('：')) note = '$note相關功能已改善。';
+      note = _shortNote(note, 110);
+      // 預留最後一行「還有其他更新」的位置；不截斷完整的發版資料。
+      if (summary.join('\n').runes.length + note.runes.length > 320) {
+        continue;
+      }
+      summary.add(note);
+      displayed++;
+      if (displayed == 4) break;
+    }
+
+    final remaining = topLevel.length - displayed;
+    summary.add(
+      remaining > 0 ? '另有 $remaining 項改動，詳見「更新紀錄」。' : '完整內容請見「更新紀錄」。',
+    );
+    return summary.join('\n');
+  }
+
+  static String _shortNote(String value, int maxChars) {
+    if (value.runes.length <= maxChars) return value;
+    return '${String.fromCharCodes(value.runes.take(maxChars))}…';
   }
 
   /// 「更新紀錄」用的發布清單：最近的 release，新的在前，跳過 draft。

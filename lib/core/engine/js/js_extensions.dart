@@ -24,6 +24,7 @@ import 'extensions/js_file_extensions.dart';
 import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_classes.dart';
 import 'extensions/js_java_object.dart';
+import 'extensions/js_java_stream.dart';
 import 'extensions/js_jsoup_extensions.dart';
 import 'extensions/js_url_extensions.dart';
 
@@ -61,6 +62,8 @@ class JsExtensions extends JsExtensionsBase {
     injectJavaObjectJs();
     // Java 類別用到 java 物件與它定義的加解密類別。
     injectJavaClasses();
+    // Stream 用到 Packages 裡的 ArrayList、HashMap，也把自己放進 Packages。
+    injectJavaStream();
     // 網址裡的 java 用到 Java 類別（LinkedHashMap、ByteArrayInputStream）。
     injectUrlExtensions();
   }
