@@ -242,9 +242,16 @@ jobs:
               echo "::error::CHANGELOG.md 找不到「## $notes_heading」段落。正式版的版號 commit 要把「## 未發布」改成「## $notes_heading」，並在上面留一個空的「## 未發布」。"
               exit 1
             fi
-            # 測試版的說明可以是空的，App 會顯示「沒有附更新說明」；正式版一定要有說明。
-            if [[ "$prerelease" != "true" && -z "$notes" ]]; then
-              echo "::error::CHANGELOG.md 的「## $notes_heading」段落是空的，請寫上這個正式版的更新說明。"
+            # 發版前就檢查真正會公開的內容；測試版要比較上一個發布的 tag，
+            # 不能拿累積的整段「未發布」代替，否則無法發現重複或過長。
+            if [[ "$prerelease" == "true" ]]; then
+              notes="$(git show "$target_sha:CHANGELOG.md" | sh tool/changelog.sh added "$notes_base" -)"
+              notes_mode=beta
+            else
+              notes_mode=stable
+            fi
+            if ! printf '%s\n' "$notes" | sh tool/changelog.sh validate "$notes_mode" -; then
+              echo "::error::請先精簡更新說明並移除具名書源，再重新發版。"
               exit 1
             fi
           fi
@@ -376,6 +383,13 @@ jobs:
             sh tool/changelog.sh added "$NOTES_BASE" > "$notes_path"
           else
             sh tool/changelog.sh section "$NOTES_HEADING" > "$notes_path"
+          fi
+
+          # 實際建立 tag 前再驗證一次 notes-file，避免發布內容和排程檢查不一致。
+          if [[ "$PRERELEASE" == "true" ]]; then
+            sh tool/changelog.sh validate beta "$notes_path"
+          else
+            sh tool/changelog.sh validate stable "$notes_path"
           fi
 
           # 測試版標成預發布版：不會成為 Latest，網站與只收正式版的 App 都看不到。
