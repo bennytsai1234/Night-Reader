@@ -322,7 +322,9 @@ class _SearchViewState extends State<SearchView> {
     }
     final padding = _bodyPadding;
     return Padding(
-      padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
+      padding:
+          EdgeInsets.only(top: padding.top, bottom: padding.bottom) +
+          ReadableWidth.insetOf(context),
       child: Column(
         children: [
           ..._buildPanels(provider),
