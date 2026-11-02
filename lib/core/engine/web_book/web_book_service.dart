@@ -374,7 +374,6 @@ class WebBook {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final contentParts = <String>[];
     final visitedUrls = <String>{};
-    String? lastBaseUrl;
 
     // 1. 抓取首頁正文
     visitedUrls.add(chapter.url);
@@ -402,7 +401,6 @@ class WebBook {
     if (firstResult.content.isNotEmpty) {
       contentParts.add(firstResult.content);
     }
-    lastBaseUrl = firstRes.url;
 
     if (firstResult.nextUrls.length > 1) {
       // 多 nextUrl → 並發抓取 (對標 Android BookContent mapAsync)
@@ -434,7 +432,6 @@ class WebBook {
         if (pageResult.content.isNotEmpty) {
           contentParts.add(pageResult.content);
         }
-        lastBaseUrl = res.url;
       }
     } else {
       // 單 nextUrl → daisy chain 循序抓取
@@ -470,7 +467,6 @@ class WebBook {
         if (result.content.isNotEmpty) {
           contentParts.add(result.content);
         }
-        lastBaseUrl = res.url;
         currentUrl = result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
       }
     }
@@ -482,7 +478,10 @@ class WebBook {
       book: book,
       chapter: chapter,
       contentStr: joined,
-      baseUrl: lastBaseUrl,
+      // 同 Legado BookContent 尾段：用第一頁的規則，baseUrl 是章節網址、
+      // redirectUrl 是第一頁轉址後的網址，不是最後一頁的。
+      baseUrl: chapter.url,
+      redirectUrl: firstRes.url,
     );
     // 每一頁都讀得到，套完替換規則卻只剩一句登入提示。
     LoginWall.checkContent(null, content);

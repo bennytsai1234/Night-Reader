@@ -101,4 +101,24 @@ void main() {
     );
     expect(result.nextUrls, ['https://u.test/read/1/2.html']);
   });
+
+  test('正文最後的替換規則看到的是章節網址，相對網址用第一頁轉址後的補', () async {
+    final replacing = BookSource.fromJson({
+      'bookSourceName': '替換規則',
+      'bookSourceUrl': 'https://u.test',
+      'ruleContent': {
+        'content': 'id.c@text',
+        'replaceRegex': '@js:result + "|" + baseUrl',
+      },
+    });
+    final content = await ContentParser.finalizeContent(
+      source: replacing,
+      book: book,
+      chapter: BookChapter(url: 'https://u.test/12.html', title: '一'),
+      contentStr: '正文',
+      baseUrl: 'https://u.test/12.html',
+      redirectUrl: 'https://www.u.test/12.html',
+    );
+    expect(content, endsWith('正文|https://u.test/12.html'));
+  });
 }

@@ -86,6 +86,7 @@ class ContentParser {
     BookChapter? chapter,
     required String contentStr,
     String? baseUrl,
+    String? redirectUrl,
   }) async {
     if (contentStr.trim().isEmpty) return '';
     final replaceRegex = source.ruleContent?.replaceRegex;
@@ -98,10 +99,9 @@ class ContentParser {
         .join('\n');
 
     try {
-      final rule = AnalyzeRule(
-        source: source,
-        ruleData: book,
-      ).setContent(str, baseUrl: baseUrl).setChapter(chapter);
+      final rule = AnalyzeRule(source: source, ruleData: book)
+          .setContent(str, baseUrl: baseUrl, redirectUrl: redirectUrl)
+          .setChapter(chapter);
       try {
         str = rule.getString(replaceRegex);
       } finally {
