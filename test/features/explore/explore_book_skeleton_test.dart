@@ -23,7 +23,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: Scaffold(body: ExploreBookItem(book: book, isInBookshelf: true)),
+        home: Scaffold(
+          body: ListView(
+            children: [ExploreBookItem(book: book, isInBookshelf: true)],
+          ),
+        ),
       ),
     );
     await tester.pump();
