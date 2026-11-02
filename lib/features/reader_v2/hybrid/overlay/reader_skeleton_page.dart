@@ -70,6 +70,8 @@ final class ReaderSkeletonPage {
       style.paddingLeft,
       style.paddingRight,
       style.bold,
+      style.titleBold,
+      style.titleCenter,
       style.textIndent,
       style.titleFontSize,
       style.titleSpacing,

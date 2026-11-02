@@ -106,7 +106,7 @@ class ReaderV2SettingsGroups {
     for (final field in _TypographyField.values) {
       if (_typography.valueOf(field) != field.defaultIn(defaults)) return false;
     }
-    return true;
+    return settings.isWeightAndAlignDefault;
   }
 
   void _resetTypography() {
@@ -211,9 +211,53 @@ class ReaderV2SettingsGroups {
             step: 1,
             unit: '字',
           ),
+        if (full) ...[
+          _boolSegmentRow(
+            label: '正文粗細',
+            select: () => settings.bodyBold,
+            onChanged: settings.setBodyBold,
+            off: '標準',
+            on: '粗',
+          ),
+          _boolSegmentRow(
+            label: '標題粗細',
+            select: () => settings.titleBold,
+            onChanged: settings.setTitleBold,
+            off: '標準',
+            on: '粗',
+          ),
+          _boolSegmentRow(
+            label: '標題對齊',
+            select: () => settings.titleCenter,
+            onChanged: settings.setTitleCenter,
+            off: '靠左',
+            on: '置中',
+          ),
+        ],
       ],
     );
   }
+
+  /// 一列兩個選項的分段：[off] 對應 false、[on] 對應 true。
+  Widget _boolSegmentRow({
+    required String label,
+    required bool Function() select,
+    required ValueChanged<bool> onChanged,
+    required String off,
+    required String on,
+  }) => _Watch<bool>(
+    listenable: settings,
+    select: select,
+    builder: (context, value) => _LabeledRow(
+      label: label,
+      child: GlassSegmented<bool>(
+        expand: false,
+        segments: [GlassSegment(false, off), GlassSegment(true, on)],
+        selected: value,
+        onChanged: onChanged,
+      ),
+    ),
+  );
 
   // ---------- 版面 ----------
 
@@ -376,6 +420,20 @@ class ReaderV2SettingsGroups {
                 },
               ),
             ),
+          _StepperRow(
+            _Watch<double>(
+              listenable: settings,
+              select: () => settings.infoFontSize,
+              builder: (context, size) => NumberStepperRow(
+                label: '字級',
+                value: size,
+                min: ReaderV2PrefsRepository.minInfoFontSize,
+                max: ReaderV2PrefsRepository.maxInfoFontSize,
+                step: 1,
+                onChanged: settings.setInfoFontSize,
+              ),
+            ),
+          ),
           _Watch<bool>(
             listenable: settings,
             select: () => settings.use24HourClock,
