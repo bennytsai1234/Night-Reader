@@ -8,6 +8,7 @@ import 'package:pointycastle/export.dart' as pc;
 
 import 'charsets.dart';
 import 'encode_utils_base.dart';
+import 'encode_utils_base64.dart';
 
 /// 規則 JS 的對稱加解密（`java.createSymmetricCrypto` 與舊的 `aes*`、
 /// `des*`、`tripleDES*`、Java `Cipher`）。照 Legado 用的 Hutool／Java 規則：
@@ -74,22 +75,10 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
     return decodeBase64Lenient(text);
   }
 
-  /// 標準與網址安全的 Base64 都收，少了 `=` 自己補。
-  static Uint8List decodeBase64Lenient(String text) {
-    var clean = text
-        .replaceAll(RegExp(r'\s+'), '')
-        .replaceAll('-', '+')
-        .replaceAll('_', '/')
-        .replaceAll('=', '');
-    final remainder = clean.length % 4;
-    if (remainder == 1) {
-      // 多出一個字元湊不成位元組，和 Java 的寬鬆解碼一樣丟掉。
-      clean = clean.substring(0, clean.length - 1);
-    } else if (remainder > 1) {
-      clean = clean.padRight(clean.length + 4 - remainder, '=');
-    }
-    return base64.decode(clean);
-  }
+  /// Hutool `Base64.decode`：標準與網址安全的 Base64 都收，字母表以外的字元
+  /// 略過，少了 `=` 不用補。
+  static Uint8List decodeBase64Lenient(String text) =>
+      EncodeUtilsBase64.decodeHutool(text);
 
   /// 空字串與空陣列都當成沒給（Legado `JsEncodeUtils.createSymmetricCrypto`
   /// 不設空的 IV）。

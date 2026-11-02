@@ -33,7 +33,7 @@ final class CompleteContentFetcher {
     final queuedUrls = <String>{chapter.url};
     final pendingUrls = ListQueue<String>()..add(chapter.url);
     final concurrency = math.max(1, pageConcurrency ?? _defaultPageConcurrency);
-    String? lastBaseUrl;
+    String? firstRedirectUrl;
     var fetchedPages = 0;
 
     while (pendingUrls.isNotEmpty) {
@@ -68,7 +68,7 @@ final class CompleteContentFetcher {
       fetchedPages += pages.length;
       for (final page in pages) {
         if (page.content.isNotEmpty) contentParts.add(page.content);
-        lastBaseUrl = page.baseUrl;
+        firstRedirectUrl ??= page.baseUrl;
         for (final nextUrl in page.nextUrls) {
           if (queuedUrls.add(nextUrl)) pendingUrls.add(nextUrl);
         }
@@ -81,7 +81,10 @@ final class CompleteContentFetcher {
       book: book,
       chapter: chapter,
       contentStr: joined,
-      baseUrl: lastBaseUrl,
+      // 同 Legado BookContent 尾段：baseUrl 是章節網址、redirectUrl 是第一頁
+      // 轉址後的網址，不是最後一頁的。
+      baseUrl: chapter.url,
+      redirectUrl: firstRedirectUrl,
     );
     LoginWall.checkContent(null, content);
     return content;
@@ -127,7 +130,8 @@ final class CompleteContentFetcher {
       book: book,
       chapter: chapter,
       body: response.body,
-      baseUrl: response.url,
+      baseUrl: url,
+      redirectUrl: response.url,
       nextChapterUrl: nextChapterUrl,
     );
     // 任何一頁被登入牆擋住，整章失敗，不存半章。

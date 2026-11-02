@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/encode/charsets.dart';
+import 'package:night_reader/core/engine/js/encode/encode_utils_base64.dart';
 import 'package:night_reader/core/engine/rule_analyzer.dart';
 import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
@@ -566,9 +567,8 @@ class AnalyzeUrl {
     if (!_urlNoQuery.startsWith('data:')) return null;
     final match = _dataUri.firstMatch(_urlNoQuery);
     if (match == null) return null;
-    final data = match.group(1)!.replaceAll(RegExp(r'\s'), '');
-    final padded = data.padRight((data.length + 3) ~/ 4 * 4, '=');
-    return base64.decode(padded.replaceAll('-', '+').replaceAll('_', '/'));
+    // Legado `Base64.decode(…, Base64.DEFAULT)`。
+    return EncodeUtilsBase64.decodeAndroid(match.group(1)!);
   }
 
   /// 抓網頁，傳回內文（Legado `getStrResponseAwait`）。
