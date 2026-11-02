@@ -6,6 +6,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/features/reader_v2/screen/dependencies/reader_v2_dependencies.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
+import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
@@ -34,6 +35,11 @@ class ReaderV2ControllerHost {
       book: book,
       initialChapters: initialChapters,
       currentChineseConvert: () => settings.chineseConvert,
+    );
+    bookmarks = ReaderV2Bookmarks(
+      book: book,
+      dao: dependencies.bookmarkDao,
+      chapters: () => runtime?.chapters ?? initialChapters,
     );
     bookStorageService = BookStorageService(
       bookDao: dependencies.bookDao,
@@ -72,6 +78,13 @@ class ReaderV2ControllerHost {
   late final ReaderV2Dependencies dependencies;
   late final BookStorageService bookStorageService;
 
+  /// 這本書的書籤（正文旁的記號、目錄的書籤分頁）。
+  late final ReaderV2Bookmarks bookmarks;
+
+  /// 上次算書籤記號落在哪一章時的目錄（章數、頭尾章節網址）；目錄讀出來
+  /// 或換過才重算。
+  (int, String, String)? _markedChapters;
+
   ReaderV2Runtime? runtime;
   ReaderV2TtsController? tts;
   ReaderV2AutoPageController? autoPage;
@@ -92,6 +105,18 @@ class ReaderV2ControllerHost {
   bool _ttsWasPlaying = false;
 
   void _onControllerChanged() {
+    final chapters = runtime?.chapters;
+    if (chapters != null && chapters.isNotEmpty) {
+      final signature = (
+        chapters.length,
+        chapters.first.url,
+        chapters.last.url,
+      );
+      if (signature != _markedChapters) {
+        _markedChapters = signature;
+        bookmarks.refreshMarks();
+      }
+    }
     _onChanged();
   }
 
@@ -456,10 +481,16 @@ class ReaderV2ControllerHost {
         final at = await _openLocation?.call(runtime);
         if (!_isMounted() || runtime.disposed) return;
         unawaited(
-          runtime.openBook(at: at).whenComplete(() {
-            _opening = false;
-            if (!_opened.isCompleted) _opened.complete();
-          }),
+          runtime
+              .openBook(
+                at: at,
+                // 換成別處讀到的位置時，不再照書籤的章名對。
+                chapterTitle: at == null ? openTarget?.chapterTitle : null,
+              )
+              .whenComplete(() {
+                _opening = false;
+                if (!_opened.isCompleted) _opened.complete();
+              }),
         );
       }),
     );
@@ -475,6 +506,7 @@ class ReaderV2ControllerHost {
     autoPage?.dispose();
     tts?.dispose();
     runtime?.dispose();
+    bookmarks.dispose();
     menu.dispose();
     settings.dispose();
   }

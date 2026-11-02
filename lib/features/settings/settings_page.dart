@@ -1,12 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
-import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
@@ -21,9 +23,9 @@ import 'package:night_reader/features/about/check_update_row.dart';
 /// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）；「檢查更新」
 /// 例外，點了就檢查（ADR 0030）。
 ///
-/// 依用途分三組：閱讀（偏好、外觀、朗讀、統計），書與資料（書源、下載、
+/// 依用途分三組：閱讀（偏好、外觀、朗讀、統計），書與資料（書籤、書源、
 /// 備份），App（檢查更新、關於）。第一層九個（使用者 2026-10-23：九個剛好；
-/// 崩潰日誌在關於夜讀裡），ADR 0030。
+/// 崩潰日誌與背景下載佇列在關於夜讀裡），ADR 0030。
 ///
 /// 圖示顏料依意義固定：硃砂＝閱讀、點金＝紀錄、石青＝網路與書源、
 /// 茄紫＝外觀、苔綠＝聲音、茶褐＝資料、墨＝App 資訊。
@@ -97,19 +99,19 @@ class SettingsPage extends StatelessWidget {
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
+                  Icons.bookmarks_outlined,
+                  tint: AppTint.gold,
+                ),
+                title: '書籤',
+                onTap: () => unawaited(BookmarksPage.open(context)),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
                   Icons.source_outlined,
                   tint: AppTint.azurite,
                 ),
                 title: '書源管理',
                 onTap: () => _push(context, const SourceManagerPage()),
-              ),
-              GroupedRow(
-                leading: const GroupedIconTile(
-                  Icons.download_rounded,
-                  tint: AppTint.azurite,
-                ),
-                title: '背景下載佇列',
-                onTap: () => _push(context, const DownloadManagerPage()),
               ),
               GroupedRow(
                 leading: const GroupedIconTile(

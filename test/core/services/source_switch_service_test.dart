@@ -3,6 +3,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -569,6 +571,57 @@ void main() {
         1,
         reason: 'handoff 後 Reader 必須直接命中已驗證正文，不得第二次抓網路',
       );
+    });
+
+    test('書籤跟著搬到新書源：對到新目錄裡同名的那一章，章內位置照舊', () async {
+      final oldBook = _currentBook();
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 100));
+      final bookmarks = BookmarkDao(db);
+      final saved = await bookmarks.add(
+        Bookmark(
+          id: 0,
+          bookName: oldBook.name,
+          bookAuthor: oldBook.author,
+          chapterIndex: 5,
+          chapterTitle: '第6章',
+          charOffset: 42,
+          excerpt: '燈下的字句',
+        ),
+      );
+      final other = await bookmarks.add(
+        Bookmark(id: 0, bookName: '別本書', chapterIndex: 5, chapterTitle: '第6章'),
+      );
+
+      // 新書源多一個楔子，第6章往後挪一格。
+      final candidate = _candidate('new-origin');
+      final chapters = [
+        BookChapter(
+          url: '${candidate.bookUrl}/prologue',
+          title: '楔子',
+          bookUrl: candidate.bookUrl,
+          index: 0,
+        ),
+        for (final chapter in _chapters(candidate.bookUrl, 100))
+          chapter.copyWith(index: chapter.index + 1),
+      ];
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(chapters: chapters),
+        sourceDao: db.bookSourceDao,
+      );
+      final resolution = await service.prepareSwitch(oldBook, candidate);
+      await service.commitSwitch(
+        oldBook,
+        resolution,
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+      );
+
+      final moved = {for (final b in await bookmarks.getAll()) b.id: b};
+      expect(moved[saved.id]!.chapterIndex, 6);
+      expect(moved[saved.id]!.chapterTitle, '第6章');
+      expect(moved[saved.id]!.charOffset, 42);
+      expect(moved[other.id]!.chapterIndex, 5, reason: '別本書的書籤不動');
     });
 
     test('operation owner 在 commit transaction 內退休，成功後才 finalize', () async {

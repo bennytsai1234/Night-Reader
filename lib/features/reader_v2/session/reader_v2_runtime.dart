@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
@@ -176,10 +177,13 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<void> jumpToChapter(int chapterIndex, {Future<void>? settled}) =>
       _jumpToChapter(chapterIndex, settled: settled);
 
+  /// 跳到 [location]；[settled] 同 [jumpToChapter]。
   Future<void> jumpToLocation(
     ReaderV2Location location, {
     bool immediateSave = true,
-  }) => _jumpToLocation(location, immediateSave: immediateSave);
+    Future<void>? settled,
+  }) =>
+      _jumpToLocation(location, immediateSave: immediateSave, settled: settled);
 
   Future<bool> restoreFromLocation(ReaderV2Location location) async {
     final token = beginRestoreOperation(location: location);
@@ -227,13 +231,15 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   /// 開書，停在建立時給的位置；給了 [at]（開書前才從資料庫讀到的較新位置，
   /// 例如剛同步來的）就改停在那裡，之後跳章失敗也回到這裡。開書前使用者
-  /// 已經跳章（例如在換頁動畫期間開了目錄），開在跳去的地方。
-  Future<void> openBook({ReaderV2Location? at}) async {
+  /// 已經跳章（例如在換頁動畫期間開了目錄），開在跳去的地方。給了
+  /// [chapterTitle]（從書籤開書）時，讀到目錄後照章名對到這台目錄的那一章：
+  /// 開書前目錄可能還沒抓，位置裡的章節序號是別處的座標。
+  Future<void> openBook({ReaderV2Location? at, String? chapterTitle}) async {
     _openStarted = true;
     if (at != null) _initialLocation = at.normalized();
     final jumped = _jumpedBeforeOpen;
     _jumpedBeforeOpen = null;
-    final location = jumped ?? _initialLocation;
+    var location = jumped ?? _initialLocation;
     final token = stateMachine.beginOpen(location: location);
     notifyListeners();
     try {
@@ -242,6 +248,17 @@ class ReaderV2Runtime extends ChangeNotifier {
       await repository.ensureChapters();
       await _loadChapterShares();
       if (!isCurrentOperationToken(token)) return;
+      if (jumped == null && chapterTitle != null && chapterTitle.isNotEmpty) {
+        location = location.copyWith(
+          chapterIndex: alignChapterIndex(
+            oldIndex: location.chapterIndex,
+            oldTitle: chapterTitle,
+            oldTotalCount: 0,
+            newChapters: repository.chapters,
+          ),
+        );
+        _initialLocation = location;
+      }
       await _positionViewport(location: location, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);

@@ -7,10 +7,19 @@ import 'reader_v2_location.dart';
 enum ReaderV2OpenIntent { resume, chapterStart }
 
 class ReaderV2OpenTarget {
-  const ReaderV2OpenTarget({required this.location, required this.intent});
+  const ReaderV2OpenTarget({
+    required this.location,
+    required this.intent,
+    this.chapterTitle,
+  });
 
   final ReaderV2Location location;
   final ReaderV2OpenIntent intent;
+
+  /// 要開的那一章的章名（書籤）：開書時目錄可能還沒抓（剛還原、剛同步來
+  /// 的書），[location] 的章節序號只是別處的座標；閱讀器讀到目錄後照章名
+  /// 再對一次（`ReaderV2Runtime.openBook`）。
+  final String? chapterTitle;
 
   factory ReaderV2OpenTarget.resume(Book book) {
     ReaderV2Location? persistedAnchor;
@@ -62,7 +71,12 @@ class ReaderV2OpenTarget {
   factory ReaderV2OpenTarget.location(
     ReaderV2Location location, {
     ReaderV2OpenIntent intent = ReaderV2OpenIntent.chapterStart,
+    String? chapterTitle,
   }) {
-    return ReaderV2OpenTarget(intent: intent, location: location.normalized());
+    return ReaderV2OpenTarget(
+      intent: intent,
+      location: location.normalized(),
+      chapterTitle: chapterTitle,
+    );
   }
 }
