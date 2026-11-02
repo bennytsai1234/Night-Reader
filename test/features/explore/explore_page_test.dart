@@ -169,7 +169,13 @@ void main() {
       findsNWidgets(2),
     );
     expect(
-      find.descendant(of: skeleton, matching: find.byType(SkeletonBox)),
+      find.descendant(
+        of: skeleton,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SkeletonBox && widget.width == 22 && widget.height == 22,
+        ),
+      ),
       findsNWidgets(2),
     );
 
