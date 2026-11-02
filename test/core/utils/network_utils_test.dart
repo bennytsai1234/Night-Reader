@@ -16,6 +16,32 @@ void main() {
     });
   });
 
+  group('toRequestUrl', () {
+    // OkHttp HttpUrl 解析時跳過頭尾的空白、換行；Dart 的 Uri 會把主機名
+    // 結尾的空白編碼成 %20 後丟錯。
+    test('頭尾的空白與換行不算，中間的照舊', () {
+      expect(
+        NetworkUtils.toRequestUrl(' \thttp://www.picdg.co \n'),
+        'http://www.picdg.co',
+      );
+      expect(
+        NetworkUtils.toRequestUrl('https://a.com/s?q=a b'),
+        'https://a.com/s?q=a b',
+      );
+      expect(
+        Uri.parse(NetworkUtils.toRequestUrl('http://www.picdg.co ')).host,
+        'www.picdg.co',
+      );
+    });
+
+    test('中文網域照樣換成 punycode', () {
+      expect(
+        NetworkUtils.toRequestUrl(' https://永远的神.com/a '),
+        'https://xn--5rwq3tukc919a.com/a',
+      );
+    });
+  });
+
   group('toAsciiHost', () {
     // 預期值取自 Python 的 `'永远的神'.encode('idna')`。
     test('中文網域換成 punycode，路徑、埠號與帳號照舊', () {

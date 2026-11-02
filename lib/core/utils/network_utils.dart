@@ -14,6 +14,27 @@ class NetworkUtils {
     dotAll: true,
   );
 
+  /// 要送出的網址照 Legado 用的 OkHttp `HttpUrl` 整理：頭尾的空白、換行不算
+  /// （`HttpUrl` 解析時跳過；Jsoup 用的 `java.net.URL` 也一樣），主機名照
+  /// [toAsciiHost] 換。Dart 的 `Uri` 會把主機名結尾的空白編碼成 `%20`，解析時
+  /// 丟錯。
+  static String toRequestUrl(String url) => toAsciiHost(_trimAsciiSpace(url));
+
+  /// OkHttp 跳過的空白：tab、換行、form feed、return、空格。
+  static String _trimAsciiSpace(String s) {
+    bool space(int c) =>
+        c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20;
+    var start = 0;
+    var end = s.length;
+    while (start < end && space(s.codeUnitAt(start))) {
+      start++;
+    }
+    while (end > start && space(s.codeUnitAt(end - 1))) {
+      end--;
+    }
+    return start == 0 && end == s.length ? s : s.substring(start, end);
+  }
+
   /// [url] 的主機名有中文這類非 ASCII 字時換成 punycode（`xn--…`），其他照舊。
   /// 同 Legado 用的 OkHttp `HttpUrl`；Dart 的 `Uri` 會把這種主機名百分比編碼
   /// （組相對網址時也會），連線時查不到網域，所以編碼過的也還原再換。
