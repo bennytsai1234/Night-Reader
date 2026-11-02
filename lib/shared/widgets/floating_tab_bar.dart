@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../layout/readable_width.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
@@ -124,13 +125,14 @@ class FloatingTabBar extends StatefulWidget {
   final bool hidden;
 
   /// 分頁列在延伸到其下方的頁面（`extendBody: true`）裡的位置，給取代
-  /// 分頁列的工具列對齊用。Scaffold 只改 padding，viewPadding 仍是系統區。
-  static EdgeInsets slotOf(BuildContext context) => EdgeInsets.fromLTRB(
-    AppGrouped.margin,
-    0,
-    AppGrouped.margin,
-    MediaQuery.viewPaddingOf(context).bottom + AppGlass.tabBarBottomGap,
-  );
+  /// 分頁列的工具列與底部浮動膠囊對齊用：左右和清單的卡片切齊（平板上
+  /// 收在內容欄裡，[ReadableWidth.cardInsetOf]）。Scaffold 只改 padding，
+  /// viewPadding 仍是系統區。
+  static EdgeInsets slotOf(BuildContext context) =>
+      ReadableWidth.cardInsetOf(context).copyWith(
+        bottom:
+            MediaQuery.viewPaddingOf(context).bottom + AppGlass.tabBarBottomGap,
+      );
 
   @override
   State<FloatingTabBar> createState() => _FloatingTabBarState();
@@ -161,16 +163,15 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
     final searchWidth = widget.onSearch == null
         ? 0.0
         : AppGlass.tabBarHeight + AppGlass.tabBarGap;
-    final barWidth = math.min(
-      AppGlass.tabBarMaxWidth,
-      width - AppGrouped.margin * 2 - searchWidth,
-    );
+    // 分頁列加搜尋鈕的左右和清單的卡片切齊（平板上收在內容欄裡）。
+    final side = ReadableWidth.cardInsetOf(context).left;
+    final barWidth = math.max(0.0, width - side * 2 - searchWidth);
 
     final bar = Padding(
       padding: EdgeInsets.fromLTRB(
-        AppGrouped.margin,
+        side,
         AppSpacing.sm,
-        AppGrouped.margin,
+        side,
         bottom + AppGlass.tabBarBottomGap,
       ),
       child: Row(

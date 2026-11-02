@@ -680,36 +680,29 @@ class GlassCapsule extends StatelessWidget {
   }
 }
 
-/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中，預設最寬
-/// 同浮動分頁列。左右外距與底部安全區由呼叫端決定。
+/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）。寬度與底部安全
+/// 區由呼叫端的外距決定（照 `FloatingTabBar.slotOf`，和卡片左右切齊）。
 class FloatingGlassToolbar extends StatelessWidget {
   const FloatingGlassToolbar({
     super.key,
     required this.child,
     this.height = AppGlass.tabItemHeight,
-    this.maxWidth = AppGlass.tabBarMaxWidth,
   });
 
   final Widget child;
   final double height;
 
-  /// 清單頁的工具列和卡片切齊，由呼叫端的外距決定寬度，這裡傳無限大。
-  final double maxWidth;
-
   @override
   Widget build(BuildContext context) {
     return Center(
       heightFactor: 1,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: SizedBox(
-          height: height,
-          child: GlassSurface(
-            borderRadius: AppRadius.pillShape,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-              child: child,
-            ),
+      child: SizedBox(
+        height: height,
+        child: GlassSurface(
+          borderRadius: AppRadius.pillShape,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: child,
           ),
         ),
       ),

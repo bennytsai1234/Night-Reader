@@ -115,7 +115,6 @@ class AppGlass {
   static const double tabItemHeight = 56.0;
   static const double tabInnerInset = 4.0;
   static const double tabBarHeight = tabItemHeight + tabInnerInset * 2;
-  static const double tabBarMaxWidth = 500.0;
   static const double tabBarGap = 8.0;
 
   /// 分頁列與螢幕底部系統區之間的距離。

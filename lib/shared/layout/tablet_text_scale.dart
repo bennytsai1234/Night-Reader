@@ -1,24 +1,22 @@
 import 'package:flutter/widgets.dart';
 
 /// 平板（畫面短邊至少 [minShortestSide]）上把介面的字整體放大 [factor] 倍，
-/// 疊在系統字級上；手機不變。閱讀器正文照自己的字號設定，不受影響。
-///
-/// 原型：候選圖用 [factor] 切換，使用者選定後定成常數。
+/// 疊在系統字級上；手機不變。閱讀器正文與頁首頁尾照自己的字號，不跟系統
+/// 字級，也就不受影響。2026-11-02 使用者在 1.1、1.15、1.2 的候選圖上選了 1.2。
 class TabletTextScale extends StatelessWidget {
   const TabletTextScale({super.key, required this.child});
 
   /// 視為平板的畫面短邊。
   static const double minShortestSide = 600;
 
-  /// 平板上的放大倍數；1 表示不放大。
-  static double factor = 1;
+  /// 平板上的放大倍數。
+  static const double factor = 1.2;
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    if (factor == 1 ||
-        MediaQuery.sizeOf(context).shortestSide < minShortestSide) {
+    if (MediaQuery.sizeOf(context).shortestSide < minShortestSide) {
       return child;
     }
     final base = MediaQuery.textScalerOf(context);
