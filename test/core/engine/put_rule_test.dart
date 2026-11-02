@@ -4,10 +4,11 @@ import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/source/lenient_json.dart';
 
 import '../../test_helper.dart';
 
-/// `@put:{…}` 存變數：同 Legado 先照標準 JSON 讀，不行再照 Gson 寬鬆模式讀。
+/// `@put:{…}` 存變數：同 Legado 照 Gson 讀，標準 JSON 與寬鬆寫法都收。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setupTestDI();
@@ -43,6 +44,19 @@ void main() {
       baseUrl: 'https://put.test/c/1',
     );
     expect(result.content, contains('書號 1885648'));
+  });
+
+  test('數字照原文讀（同 Gson 讀進文字）', () {
+    expect(
+      decodeLenientJson(
+        '{bid:007, v:1.50, t:1e3, ok:true}',
+        numbersAsText: true,
+      ),
+      {'bid': '007', 'v': '1.50', 't': '1e3', 'ok': true},
+    );
+    expect(decodeLenientJson('{"v":1.50}', numbersAsText: true), {'v': '1.50'});
+    // 沒指定時照舊讀成數字。
+    expect(decodeLenientJson('{v:1.50}'), {'v': 1.5});
   });
 
   test('標準 JSON 照舊', () async {

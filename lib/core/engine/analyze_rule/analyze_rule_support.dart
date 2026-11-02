@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:html/dom.dart';
 import 'package:night_reader/core/models/json_read.dart';
 import 'package:night_reader/core/models/source/lenient_json.dart';
@@ -90,8 +88,9 @@ class SourceRule {
         mode = Mode.xpath;
       }
     }
-    // 同 Legado `splitPutRule`：先照標準 JSON 讀，不行再照 Gson 寬鬆模式讀
-    // （`@put:{bid:id}` 這種鍵和值都沒加引號的寫法）；值照 Gson 轉成文字。
+    // 同 Legado `splitPutRule`：照 Gson 讀進 `Map<String, String>`，標準 JSON
+    // 與寬鬆寫法（`@put:{bid:id}` 鍵和值都沒加引號）都收；數字照原文
+    // （`007` 不變成 7），物件與陣列轉成 JSON 文字。
     final putPattern = RegExp(r'@put:(\{[^}]+?\})', caseSensitive: false);
     var vRuleStr = rule;
     final putMatches = putPattern.allMatches(rule);
@@ -100,13 +99,9 @@ class SourceRule {
       final jsonStr = putMatch.group(1)!;
       Object? decoded;
       try {
-        decoded = jsonDecode(jsonStr);
+        decoded = decodeLenientJson(jsonStr, numbersAsText: true);
       } on FormatException {
-        try {
-          decoded = decodeLenientJson(jsonStr);
-        } on FormatException {
-          decoded = null;
-        }
+        decoded = null;
       }
       if (decoded is Map) {
         decoded.forEach((k, v) {
