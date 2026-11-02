@@ -93,6 +93,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> waitForStatus(
+    WidgetTester tester,
+    SyncService sync,
+    bool Function(SyncStatus) matches,
+  ) async {
+    final ready = Completer<void>();
+    void onChange() {
+      if (matches(sync.status.value) && !ready.isCompleted) ready.complete();
+    }
+
+    sync.status.addListener(onChange);
+    try {
+      onChange();
+      await tester.runAsync(
+        () => ready.future.timeout(const Duration(seconds: 5)),
+      );
+    } finally {
+      sync.status.removeListener(onChange);
+    }
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('a wrong password is shown and nothing is saved', (tester) async {
     await pump(tester, _Store(fail: '帳號或密碼不對'));
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
@@ -119,15 +141,23 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
     await tester.tap(find.text('連線並開始同步'));
-    await settle(tester);
+    await waitForStatus(
+      tester,
+      sync,
+      (status) => status.progress != null || status.error != null,
+    );
 
+    expect(sync.status.value.error, isNull);
     expect(await SyncSettings().space(), SyncSpace.webdav);
     expect(sync.status.value.running, isTrue);
     expect(find.text('同步中（1/1）：書源'), findsOneWidget);
 
     gate.complete();
-    await settle(tester);
-    expect(sync.status.value.running, isFalse);
+    await waitForStatus(
+      tester,
+      sync,
+      (status) => !status.running && status.lastSyncAt != null,
+    );
     expect(find.textContaining('上次同步：'), findsOneWidget);
   });
 
@@ -146,12 +176,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
     await tester.tap(find.text('連線並開始同步'));
-    await settle(tester);
+    await waitForStatus(
+      tester,
+      sync,
+      (status) => status.progress != null || status.error != null,
+    );
+    expect(sync.status.value.error, isNull);
     expect(sync.status.value.running, isTrue);
 
     gate.complete();
-    await settle(tester);
-    expect(sync.status.value.running, isFalse);
+    await waitForStatus(
+      tester,
+      sync,
+      (status) => !status.running && status.error != null,
+    );
     expect(find.text('上次同步失敗：WebDAV 讀取失敗'), findsOneWidget);
   });
 
