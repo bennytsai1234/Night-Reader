@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/scheduler.dart';
 
 import '../layout/readable_width.dart';
@@ -470,10 +471,18 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
 
 /// 清單的一項：骨架底下輪到才建，之前佔著骨架算好的高度。一組分組卡片
 /// 以列為單位排隊（組標題文字與卡片外框先建），一格建一列：像「排版」這樣一組
-/// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。只有第一個畫面
-/// 裡的列排隊；畫面外的列（替換規則、下載佇列這類上百列的組）和組一起建、
-/// 換場不等它們，不然一列一格，兩百列要等三秒以上。
+/// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。第一個畫面裡
+/// 的列，加上畫面底下清單本來就會先建好的那一段放得下的列數（[_queuedBelow]）
+/// 排隊：一組跨在畫面底邊時，緊接在下面的幾列不和露出來的那一列擠在同一格。
+/// 再往下的列（替換規則、下載佇列這類上百列的組）和組一起建、換場不等它們，
+/// 不然一列一格，兩百列要等三秒以上。
 class _GroupedListSlot extends StatelessWidget {
+  /// 跨在畫面底邊的組，畫面外還排隊的列數：清單在畫面底下先建好的那一段
+  /// （[RenderAbstractViewport.defaultCacheExtent]）放得下幾列最矮的列。
+  static final int _queuedBelow =
+      (RenderAbstractViewport.defaultCacheExtent / AppGrouped.rowMinHeight)
+          .ceil();
+
   const _GroupedListSlot({
     super.key,
     required this.index,
@@ -526,12 +535,15 @@ class _GroupedListSlot extends StatelessWidget {
   List<Widget> _rows(List<Widget> children, List<double> heights) {
     final out = <Widget>[];
     var top = shape.card?.top ?? 0;
+    var below = 0;
     for (var i = 0; i < children.length; i++) {
+      // 骨架只量到畫面底，再往下的列高度不知道，照列數算。
+      final wait = top < visible || below++ < _queuedBelow;
       out.add(
         CoverRevealSlot(
           key: _slotKey(children[i]),
           placeholder: SizedBox(height: heights[i]),
-          wait: top < visible,
+          wait: wait,
           child: children[i],
         ),
       );

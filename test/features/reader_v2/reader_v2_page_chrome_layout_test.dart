@@ -19,6 +19,7 @@ void main() {
     double paddingTop = 0,
     double paddingBottom = 16,
     double footerOffset = 4,
+    double infoFontSize = kReaderInfoFontSize,
   }) {
     return ReaderV2PageChromeLayout.resolve(
       mediaPadding: EdgeInsets.only(top: statusInset, bottom: navInset),
@@ -29,6 +30,7 @@ void main() {
       paddingTop: paddingTop,
       paddingBottom: paddingBottom,
       footerOffset: footerOffset,
+      infoFontSize: infoFontSize,
     );
   }
 
@@ -81,6 +83,46 @@ void main() {
     test('without a footer the gap is measured from the system inset', () {
       final layout = resolve(showFooterInfo: false, navInset: 20);
       expect(layout.contentBottom, 20 + 16);
+    });
+  });
+
+  group('info font size', () {
+    test('the default size keeps the rows as they were', () {
+      expect(readerInfoRowHeightFor(kReaderInfoFontSize), kReaderInfoRowHeight);
+      expect(
+        readerFooterRowHeightFor(kReaderInfoFontSize),
+        kReaderFooterRowHeight,
+      );
+    });
+
+    test('a larger size makes both rows taller and pushes the text in', () {
+      final small = resolve(
+        hideStatusBar: false,
+        showHeaderInfo: true,
+        statusInset: 30,
+      );
+      final large = resolve(
+        hideStatusBar: false,
+        showHeaderInfo: true,
+        statusInset: 30,
+        infoFontSize: 15,
+      );
+      const growth = (15 - kReaderInfoFontSize) * 1.3;
+      expect(large.headerExtent, closeTo(small.headerExtent + growth, 1e-9));
+      expect(large.contentTop, closeTo(small.contentTop + growth, 1e-9));
+      expect(large.footerExtent, closeTo(small.footerExtent + growth, 1e-9));
+      expect(large.contentBottom, closeTo(small.contentBottom + growth, 1e-9));
+      // 頁尾那一列的底還是在使用者設的位置。
+      expect(large.footerRowBottom, small.footerRowBottom);
+    });
+
+    test('with the status bar hidden the header grows past a small cutout', () {
+      final layout = resolve(
+        showHeaderInfo: true,
+        cutout: 20,
+        infoFontSize: 16,
+      );
+      expect(layout.headerExtent, readerInfoRowHeightFor(16));
     });
   });
 }
