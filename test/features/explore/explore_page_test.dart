@@ -330,6 +330,14 @@ void main() {
 
         // 和沒有紀錄一樣：先沒有分組鈕，讀到書源才長出來並重新記下。
         expect(groupButton, findsNothing);
+        // 骨架也照沒有紀錄的樣子鋪滿（null），不是畫 0 列。
+        final pending = StreamController<List<BookSource>>();
+        addTearDown(() => unawaited(pending.close()));
+        final fresh = ExploreProvider(
+          sourceDao: _FakeSourceDao.stream(pending.stream),
+        );
+        addTearDown(fresh.dispose);
+        expect(fresh.skeletonSourceCount, isNull);
         sources.add(groupedSources());
         await tester.pumpAndSettle();
         expect(groupButton, findsOneWidget);

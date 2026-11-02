@@ -518,7 +518,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
       final isLastInGroup = i == list.length - 1 || startsHostGroup(i + 1);
       return CoverRevealSlot(
         key: ValueKey(list[i].bookSourceUrl),
-        placeholder: SizedBox(
+        placeholderBuilder: (context) => SizedBox(
           height: SourceListSkeleton.rowHeightFor(
             context,
             list[i],

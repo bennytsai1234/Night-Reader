@@ -176,7 +176,7 @@ class ExploreShowView extends StatelessWidget {
           final book = provider.books[index];
           return CoverRevealSlot(
             key: ValueKey(book.bookUrl),
-            placeholder: SizedBox(
+            placeholderBuilder: (context) => SizedBox(
               height: ExploreBookListSkeleton.rowHeightFor(
                 context,
                 book,

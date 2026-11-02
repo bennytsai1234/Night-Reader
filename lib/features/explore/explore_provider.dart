@@ -110,6 +110,8 @@ class ExploreProvider extends ChangeNotifier {
       _groups = counts.keys.toList()..sort();
     } catch (error) {
       AppLog.w('發現分組的紀錄讀不懂，這次等書源讀完: $error');
+      // 當作沒有紀錄：骨架照第一次的樣子鋪滿畫面，不是畫 0 列。
+      _savedGroupRecord = null;
       _lastAllCount = 0;
       _groupCounts = {};
       _groups = [];
