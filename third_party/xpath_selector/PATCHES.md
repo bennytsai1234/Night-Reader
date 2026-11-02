@@ -21,6 +21,10 @@
   understood is evaluated as before. `_multipleCompare` (`and` / `or`) is
   unchanged.
 - `lib/src/reg.dart`: the `predicateExists` pattern for the case above.
+- `lib/src/parser.dart` `_parseSelector`: a path whose first step has no
+  leading `/` (a relative location path such as `div[2]/div/h3/a/@title`) is
+  read as a child step from the queried node, the same as `/div[2]` from that
+  node. Upstream threw `is not a valid xpath query string`.
 - `pubspec.yaml`: version `3.0.2+nightreader.1`, `publish_to: none`, no
   `dev_dependencies`.
 - `analysis_options.yaml` includes the app's rules and turns off
@@ -32,6 +36,8 @@
 Legado evaluates XPath rules with JsoupXpath, which supports existence
 predicates. Book sources in the yckceo.com repository use them (思兔阅读
 `//*[@id='allchapter']//dd[a]`, 第一版主 banzhu `//li/div//a[@class]/text()`);
-upstream 3.0.2 throws `Unsupported predicate`. The app depends on this copy
+upstream 3.0.2 throws `Unsupported predicate`. Relative paths are used from
+a list item (novelnext and the other English novel sites
+`@XPath:div[2]/div/h3/a/@title`); JsoupXpath evaluates them from that node. The app depends on this copy
 through `dependency_overrides` so `xpath_selector_html_parser` uses it too.
 Tests: `test/core/engine/parsers/analyze_by_xpath_test.dart`.

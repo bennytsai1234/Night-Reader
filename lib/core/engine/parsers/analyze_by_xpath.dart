@@ -10,6 +10,11 @@ import 'package:night_reader/core/engine/rule_analyzer.dart';
 /// 使用 Dart `xpath_selector` + `xpath_selector_html_parser` 套件
 class AnalyzeByXPath {
   late HtmlXPath _xpath;
+
+  /// 相對路徑（`div[2]/a/@href`，開頭沒有 `/`）的起點：解析的是元素時是那個
+  /// 元素，是整份網頁時是網頁本身，同 Legado（JsoupXpath 從 JXNode 或
+  /// JXDocument 的節點往下找）。
+  late HtmlXPath _contextXPath;
   late Element _domRoot;
   Element? _bodyCompatRoot;
   static final RegExp _customFunctionPattern = RegExp(
@@ -45,6 +50,7 @@ class AnalyzeByXPath {
     _domRoot = document.documentElement ?? document.body!;
     _bodyCompatRoot = _buildBodyCompatRoot(html);
     _xpath = HtmlXPath.html(html);
+    _contextXPath = HtmlXPath.node(document);
   }
 
   void _initFromElement(Element element) {
@@ -54,6 +60,18 @@ class AnalyzeByXPath {
     _domRoot = wrapper;
     _bodyCompatRoot = wrapper;
     _xpath = HtmlXPath.html(wrapper.outerHtml);
+    final context = wrapper.children.length == 1
+        ? wrapper.children.first
+        : null;
+    _contextXPath = context == null ? _xpath : HtmlXPath.node(context);
+  }
+
+  /// 開頭是 `/` 或 `(` 的照整份查；其餘是相對路徑，從 [_contextXPath] 查。
+  XPathResult<Node> _query(String rule) {
+    final first = rule.trimLeft();
+    final relative =
+        first.isNotEmpty && !first.startsWith('/') && !first.startsWith('(');
+    return (relative ? _contextXPath : _xpath).query(rule);
   }
 
   Element? _buildBodyCompatRoot(String html) {
@@ -159,7 +177,7 @@ class AnalyzeByXPath {
         return _applyCustomFunction(nodes, functionName);
       }
 
-      final queryResult = _xpath.query(rule);
+      final queryResult = _query(rule);
 
       // 1. 處理屬性提取 /@attr 或 /attr()
       if (rule.contains('/@')) {
@@ -296,7 +314,7 @@ class AnalyzeByXPath {
   }
 
   List<dynamic> _queryNodesCompat(String rule) {
-    final nodes = _xpath.query(rule).nodes;
+    final nodes = _query(rule).nodes;
     if (nodes.isNotEmpty) {
       return nodes;
     }

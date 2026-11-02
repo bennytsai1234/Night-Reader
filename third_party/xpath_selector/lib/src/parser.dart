@@ -29,6 +29,12 @@ Selector _parseSelector(String input) {
     // self
     selectorType = SelectorType.self;
     source = input.substring(1);
+  } else if (RegExp(r'^@?[\w*]').hasMatch(input)) {
+    // Night Reader patch: a relative location path (`div[2]/a/@href`) starts
+    // with a child step from the node being queried, the same as `/div[2]`
+    // from that node (XPath 1.0, JsoupXpath).
+    selectorType = SelectorType.self;
+    source = input;
   } else {
     throw FormatException("'$input' is not a valid xpath query string");
   }
