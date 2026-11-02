@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
@@ -26,6 +27,7 @@ class BackupSyncPage extends StatefulWidget {
 
 class _BackupSyncPageState extends State<BackupSyncPage> {
   bool _isProcessing = false;
+  bool _loaded = false;
 
   final SyncService _sync = SyncService.instance;
 
@@ -33,7 +35,17 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
   void initState() {
     super.initState();
     _sync.status.addListener(_onSyncStatus);
-    unawaited(_sync.load());
+    unawaited(_loadSyncStatus());
+  }
+
+  Future<void> _loadSyncStatus() async {
+    try {
+      await _sync.load();
+    } catch (error, stackTrace) {
+      AppLog.e('讀取同步狀態失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   @override
@@ -67,6 +79,8 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '備份與同步'),
       body: GroupedListView(
+        // 同步空間與上次同步時間讀好才算骨架，避免新增副標撐高整列。
+        ready: _loaded,
         children: [
           GroupedSection(
             header: '同步',
