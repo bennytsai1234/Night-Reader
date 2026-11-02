@@ -48,6 +48,23 @@ void main() {
     expect(eval('String(java.base64DecodeToByteArray(""))'), 'null');
   }, skip: skip);
 
+  // 完本小说网：密文取自網頁的 JSON 字串，裡面有 `\/`；Android 與 Hutool 的
+  // 解碼器都略過字母表以外的字元，不丟錯。
+  test('base64 decoders skip characters outside the alphabet', () {
+    expect(
+      eval(r"""String(java.base64DecodeToByteArray('aGVsbG8\\/Pj4='))"""),
+      '104,101,108,108,111,63,62,62',
+    );
+    expect(eval(r"""java.base64Decode('aGVsbG8\\/Pj4=')"""), 'hello?>>');
+    expect(eval(r"""java.base64Decode('aGVsbG8\\/Pj4=', 0)"""), 'hello?>>');
+    expect(
+      eval(
+        r"""java.bytesToStr(java.base64DecodeToByteArray('aGVs bG8=\n'), 'UTF-8')""",
+      ),
+      'hello',
+    );
+  }, skip: skip);
+
   test('cookie converts between text and a map', () {
     expect(
       eval('JSON.stringify(cookie.cookieToMap("a=1; b=; c=x=y;d"))'),

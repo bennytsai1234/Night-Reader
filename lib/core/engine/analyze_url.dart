@@ -7,7 +7,9 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/encode/charsets.dart';
+import 'package:night_reader/core/engine/js/encode/encode_utils_base64.dart';
 import 'package:night_reader/core/engine/rule_analyzer.dart';
+import 'package:night_reader/core/models/source/lenient_json.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
@@ -531,8 +533,10 @@ class AnalyzeUrl {
     return raw;
   }
 
-  /// JSON 物件；不是標準 JSON 時照 JS 物件寫法讀（單引號、不加引號的鍵），
-  /// 同 Legado 先嚴格、再寬鬆讀一次。
+  /// JSON 物件；不是標準 JSON 時照 Gson 寬鬆模式讀（Legado `AnalyzeUrl` 先
+  /// `GSONStrict`、再 `GSON`）：`;` 當 `,`、`=`／`=>` 當 `:`、單引號、不加引號的
+  /// 名稱與值。Gson 讀不了、但 JS 物件寫法讀得了的（字串相加之類）最後再用
+  /// JS 求值。
   Map<String, dynamic>? _decodeLooseObject(String raw) {
     Map<String, dynamic>? asMap(Object? decoded) => switch (decoded) {
       final Map<String, dynamic> map => map,
@@ -542,6 +546,11 @@ class AnalyzeUrl {
     try {
       return asMap(jsonDecode(raw));
     } catch (_) {}
+    try {
+      return asMap(decodeLenientJson(raw));
+    } on FormatException {
+      // 往下試 JS 的寫法。
+    }
     try {
       final normalized = evalJS('JSON.stringify(($raw))')?.toString();
       if (normalized == null || normalized.isEmpty) return null;
@@ -558,9 +567,8 @@ class AnalyzeUrl {
     if (!_urlNoQuery.startsWith('data:')) return null;
     final match = _dataUri.firstMatch(_urlNoQuery);
     if (match == null) return null;
-    final data = match.group(1)!.replaceAll(RegExp(r'\s'), '');
-    final padded = data.padRight((data.length + 3) ~/ 4 * 4, '=');
-    return base64.decode(padded.replaceAll('-', '+').replaceAll('_', '/'));
+    // Legado `Base64.decode(…, Base64.DEFAULT)`。
+    return EncodeUtilsBase64.decodeAndroid(match.group(1)!);
   }
 
   /// 抓網頁，傳回內文（Legado `getStrResponseAwait`）。

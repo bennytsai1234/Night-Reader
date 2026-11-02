@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../js_extensions_base.dart';
 import '../query_ttf.dart';
 import 'js_blocking_tasks.dart';
+import '../encode/encode_utils_base64.dart';
 
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 
@@ -26,7 +27,7 @@ extension JsFontExtensions on JsExtensionsBase {
 
         final buffer = dataStr.startsWith('http')
             ? BlockingCall.run(plainBytes(dataStr)) as Uint8List
-            : base64Decode(dataStr);
+            : EncodeUtilsBase64.decodeAndroid(dataStr);
         final qTTF = QueryTTF(buffer);
         final cacheKey = key.isNotEmpty ? key : md5.convert(buffer).toString();
         JsExtensionsBase.ttfCache[cacheKey] = qTTF;
