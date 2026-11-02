@@ -198,6 +198,51 @@ void main() {
       );
     });
 
+    test(
+      'old nested notes show the heading, not individual source details',
+      () async {
+        final log = await notes([
+          release(
+            'v0.3.4-beta.5',
+            '- 書源相容性：\n'
+                '  - 番茄小說的簽章解析修正。\n'
+                '  - 其他具名書源的目錄修正。',
+          ),
+          release('v0.3.3', '- 上一版', prerelease: false),
+        ], '0.3.3');
+        expect(log, contains('- 書源相容性：相關功能已改善。'));
+        expect(log, isNot(contains('番茄小說')));
+        expect(log, contains('完整內容請見「更新紀錄」。'));
+      },
+    );
+
+    test(
+      'a long sequence shows newest topic once and links to history',
+      () async {
+        final log = await notes([
+          release('v0.3.4-beta.9', '- 書源相容性：改善登入。'),
+          release('v0.3.4-beta.8', '- 書源相容性：改善目錄。'),
+          release('v0.3.4-beta.7', '- 閱讀器：改善跳章。'),
+          release('v0.3.4-beta.6', '- 同步：改善進度。'),
+          release('v0.3.4-beta.5', '- 書籤：新增快速跳轉。'),
+          release('v0.3.4-beta.4', '- 排版：改善字距。'),
+          release('v0.3.3', '- 上一版', prerelease: false),
+        ], '0.3.3');
+        expect(RegExp('書源相容性').allMatches(log!).length, 1);
+        expect(log, contains('另有 2 項改動，詳見「更新紀錄」。'));
+      },
+    );
+
+    test('an empty bullet left in a release note is skipped', () async {
+      final log = await notes([
+        release('v0.3.4-beta.6', '- 甲\n- \n- 乙'),
+        release('v0.3.4-beta.5', '- 丙\n- 丁\n- 戊'),
+        release('v0.3.3', '- 上一版', prerelease: false),
+      ], '0.3.3');
+      expect(log, contains('- 甲'));
+      expect(log, isNot(contains('\n- \n')));
+    });
+
     test('reads further pages until the installed cycle', () async {
       final api = _ReleaseApi(
         latest: stable,
@@ -211,9 +256,10 @@ void main() {
         '0.3.5-beta.1',
       ).checkLatest(includeBeta: true))?.updateLog;
       expect(log, contains('- 第150條'));
-      expect(log, contains('- 第2條'), reason: '跨頁的測試版也要列出');
-      expect(log, isNot(contains('- 第1條')), reason: '目前版本已經收過');
-      expect(api.paths, hasLength(2));
+      expect(log, contains('- 第149條'));
+      expect(log, contains('另有 145 項改動，詳見「更新紀錄」。'));
+      expect(log, isNot(contains('- 第2條')), reason: '更新視窗只顯示摘要');
+      expect(api.paths, hasLength(2), reason: '仍需讀完版本，才能正確計算略過的數量');
     });
   });
 
