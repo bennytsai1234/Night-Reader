@@ -156,6 +156,7 @@ void main() {
           'quote': '雨聲',
           'color': 'pink',
           'style': 'underline',
+          'note': '窗外的雨',
         },
         // 沒有畫到字的不還原。
         {'id': 2, 'bookName': '夜雨聽書', 'quote': ''},
@@ -170,6 +171,7 @@ void main() {
     expect(restored.quote, '雨聲');
     expect(restored.color, HighlightColor.pink);
     expect(restored.style, HighlightStyle.underline);
+    expect(restored.note, '窗外的雨');
   });
 
   test('reading totals and daily seconds are restored together', () async {

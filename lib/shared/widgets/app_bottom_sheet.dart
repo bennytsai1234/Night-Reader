@@ -194,10 +194,13 @@ class AppBottomSheet extends StatelessWidget {
     Color? barrierColor,
     ShapeBorder? shape,
     Clip? clipBehavior,
+    BoxConstraints? constraints,
   }) {
     return showModalBottomSheet<T>(
       context: context,
       builder: builder,
+      // 不給時照 Material 3 預設：最寬 640、置中。
+      constraints: constraints,
       barrierColor: barrierColor ?? AppChrome.of(context).barrier,
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,

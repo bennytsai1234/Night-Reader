@@ -174,6 +174,7 @@ final class VisualLineLayoutEngine {
           fontSize: textStyle.fontSize,
           letterSpacing: textStyle.letterSpacing,
           bold: textStyle.bold,
+          fontFamilyFallback: textStyle.fontFamilyFallback,
         ) ??
         textStyle.fontSize;
     var lookahead = _probeLookaheadCodeUnits;

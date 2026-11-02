@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
+import 'package:night_reader/core/fonts/font_library.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
@@ -33,7 +36,20 @@ class ReaderV2SettingsController extends ChangeNotifier {
       _persisted = ReaderV2PrefsSnapshot.defaults();
     }
     _initFromCache(_persisted);
+    _fonts.changes.addListener(_onFontsChanged);
+    // 另一台選了這台還沒下載的字型：開書時在背景下載，好了再換上。
+    unawaited(_fonts.ensure(readerFont));
   }
+
+  FontLibrary get _fonts => FontLibrary.instance;
+
+  /// 字型下載好、註冊了：正文照新的字族重排。
+  void _onFontsChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
+  /// 正文目前用的字族；選的字型還不能用時是 null（系統字型）。
+  String? get readerFontFamily => _fonts.familyOf(readerFont);
 
   static const double minReadableLineHeight =
       ReaderV2Style.minReadableLineHeight;
@@ -101,6 +117,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool titleBold = ReaderV2PrefsSnapshot.defaults().titleBold;
   bool titleCenter = ReaderV2PrefsSnapshot.defaults().titleCenter;
   double infoFontSize = ReaderV2PrefsSnapshot.defaults().infoFontSize;
+  AppFont readerFont = ReaderV2PrefsSnapshot.defaults().readerFont;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
@@ -177,11 +194,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
     titleBold = snapshot.titleBold;
     titleCenter = snapshot.titleCenter;
     infoFontSize = snapshot.infoFontSize;
+    readerFont = snapshot.readerFont;
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _fonts.changes.removeListener(_onFontsChanged);
     unawaited(_saveFailures.close());
     super.dispose();
   }
@@ -223,6 +242,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     fontSize: fontSize,
     letterSpacing: letterSpacing,
     bold: bodyBold,
+    fontFamilyFallback: readerV2FontFallback(readerFontFamily),
   );
 
   /// 畫面寬 [viewportWidth] 時一行最多放得下幾個字（兩側留最少留白）。
@@ -245,6 +265,22 @@ class ReaderV2SettingsController extends ChangeNotifier {
         cellWidth: cellWidth,
         lineChars: lineChars,
       );
+
+  /// 閱讀選單與面板最窄的寬度：下方選單的一排圓鈕與面板的步進列在這個
+  /// 寬度都放得下（一般手機的寬度）。
+  static const double menuMinWidth = 360;
+
+  /// 閱讀選單與面板左右對齊的位置（畫面寬 [viewportWidth]）：正文欄照
+  /// 每行字數收窄時，上下選單與面板的左右緣對齊正文的左右邊，但不窄過
+  /// [menuMinWidth]；沒收窄（手機直拿）時是 null，選單照原本離邊 16、
+  /// 面板照預設寬度。
+  double? menuSideFor(double viewportWidth) {
+    final side = math.min(
+      paddingHorizontalFor(viewportWidth),
+      (viewportWidth - menuMinWidth) / 2,
+    );
+    return side > paddingHorizontal ? side : null;
+  }
 
   ReaderV2Style readStyleFor(
     EdgeInsets mediaPadding, {
@@ -273,6 +309,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       bold: bodyBold,
       titleBold: titleBold,
       titleCenter: titleCenter,
+      fontFamily: readerFontFamily,
       textIndent: textIndent,
       titleFontSize: titleFontSize,
       titleSpacing: titleSpacing,
@@ -397,13 +434,15 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 將字號、標題、行高、字距、段距、章節間距、首行縮排與粗細、標題對齊
+  /// 將字號、標題、行高、字距、段距、章節間距、首行縮排、粗細、標題對齊與
+  /// 正文字型
   /// 恢復為預設值。
   void resetTypography() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
-    setBodyBold(defaults.bodyBold);
-    setTitleBold(defaults.titleBold);
-    setTitleCenter(defaults.titleCenter);
+    setBodyBold(defaults.bodyBold, force: true);
+    setTitleBold(defaults.titleBold, force: true);
+    setTitleCenter(defaults.titleCenter, force: true);
+    setReaderFont(defaults.readerFont, force: true);
     setTypography(
       fontSize: defaults.fontSize,
       titleFontSize: defaults.titleFontSize,
@@ -416,16 +455,17 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
-  /// 正文粗細、標題粗細與標題對齊是否都是預設值。
-  bool get isWeightAndAlignDefault {
+  /// 正文粗細、標題粗細、標題對齊與正文字型是否都是預設值。
+  bool get isTypographyChoicesDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     return bodyBold == defaults.bodyBold &&
         titleBold == defaults.titleBold &&
-        titleCenter == defaults.titleCenter;
+        titleCenter == defaults.titleCenter &&
+        readerFont == defaults.readerFont;
   }
 
-  void setBodyBold(bool value) {
-    if (bodyBold == value) return;
+  void setBodyBold(bool value, {bool force = false}) {
+    if (bodyBold == value && !force) return;
     bodyBold = value;
     _persist(
       'bodyBold',
@@ -436,8 +476,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTitleBold(bool value) {
-    if (titleBold == value) return;
+  void setTitleBold(bool value, {bool force = false}) {
+    if (titleBold == value && !force) return;
     titleBold = value;
     _persist(
       'titleBold',
@@ -448,8 +488,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTitleCenter(bool value) {
-    if (titleCenter == value) return;
+  void setTitleCenter(bool value, {bool force = false}) {
+    if (titleCenter == value && !force) return;
     titleCenter = value;
     _persist(
       'titleCenter',
@@ -460,10 +500,24 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 正文字型；選了還沒下載的就開始下載，好了才換上（[_onFontsChanged]）。
+  void setReaderFont(AppFont value, {bool force = false}) {
+    if (readerFont == value && !force) return;
+    readerFont = value;
+    _persist(
+      'readerFont',
+      () => _prefsRepository.saveReaderFont(value),
+      onSaved: (p) => p.copyWith(readerFont: value),
+      restore: (p) => readerFont = p.readerFont,
+    );
+    unawaited(_fonts.ensure(value));
+    notifyListeners();
+  }
+
   /// 頁首頁尾資訊的字級；那一列跟著變高，正文區跟著讓出位置。
-  void setInfoFontSize(double value) {
+  void setInfoFontSize(double value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeInfoFontSize(value);
-    if (infoFontSize == normalized) return;
+    if (infoFontSize == normalized && !force) return;
     infoFontSize = normalized;
     _persist(
       'infoFontSize',
@@ -591,8 +645,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setHideNavigationBar(bool value) {
-    if (hideNavigationBar == value) return;
+  void setHideNavigationBar(bool value, {bool force = false}) {
+    if (hideNavigationBar == value && !force) return;
     hideNavigationBar = value;
     _persist(
       'hideNavigationBar',
@@ -628,8 +682,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setUse24HourClock(bool value) {
-    if (use24HourClock == value) return;
+  void setUse24HourClock(bool value, {bool force = false}) {
+    if (use24HourClock == value && !force) return;
     use24HourClock = value;
     _persist(
       'use24HourClock',
@@ -640,11 +694,11 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setProgressFractionDigits(int value) {
+  void setProgressFractionDigits(int value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeProgressFractionDigits(
       value,
     );
-    if (progressFractionDigits == normalized) return;
+    if (progressFractionDigits == normalized && !force) return;
     progressFractionDigits = normalized;
     _persist(
       'progressFractionDigits',
@@ -668,9 +722,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setEdgeFade(double value) {
+  void setEdgeFade(double value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeEdgeFade(value);
-    if (edgeFade == normalized) return;
+    if (edgeFade == normalized && !force) return;
     edgeFade = normalized;
     _persist(
       'edgeFade',
@@ -732,11 +786,16 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setPagePadding({double? horizontal, double? top, double? bottom}) {
+  void setPagePadding({
+    double? horizontal,
+    double? top,
+    double? bottom,
+    bool force = false,
+  }) {
     var changed = false;
     if (horizontal != null) {
       final value = _normalizePagePadding(horizontal);
-      if (paddingHorizontal != value) {
+      if (force || paddingHorizontal != value) {
         paddingHorizontal = value;
         changed = true;
         _persist(
@@ -749,7 +808,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (top != null) {
       final value = _normalizePagePadding(top);
-      if (paddingTop != value) {
+      if (force || paddingTop != value) {
         paddingTop = value;
         changed = true;
         _persist(
@@ -762,7 +821,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (bottom != null) {
       final value = _normalizePagePadding(bottom);
-      if (paddingBottom != value) {
+      if (force || paddingBottom != value) {
         paddingBottom = value;
         changed = true;
         _persist(
@@ -776,9 +835,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  void setLineChars(int value) {
+  void setLineChars(int value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeLineChars(value);
-    if (lineChars == normalized) return;
+    if (lineChars == normalized && !force) return;
     lineChars = normalized;
     _persist(
       'lineChars',
@@ -790,9 +849,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   /// 頁尾資訊列底部到畫面底部的距離。
-  void setFooterOffset(double value) {
+  void setFooterOffset(double value, {bool force = false}) {
     final normalized = _normalizePagePadding(value);
-    if (footerOffset == normalized) return;
+    if (footerOffset == normalized && !force) return;
     footerOffset = normalized;
     _persist(
       'footerOffset',
@@ -803,8 +862,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setJustifyText(bool value) {
-    if (justifyText == value) return;
+  void setJustifyText(bool value, {bool force = false}) {
+    if (justifyText == value && !force) return;
     justifyText = value;
     _persist(
       'justifyText',
@@ -815,6 +874,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 恢復預設一律把預設值寫入（`force`），不看記憶體裡的值：畫面開著時另一台
+  /// 的設定同步進來，記憶體裡還是舊值，看起來已是預設就不寫，另一台的值會
+  /// 留著。排版那幾項（[setTypography]）本來就每次都寫。
+  ///
   /// 將每行字數、邊距、左右對齊、上下緣漸隱、頁尾位置、系統列與頁首／頁尾（含時間
   /// 與進度的格式）恢復為預設值。
   void resetPageLayout() {
@@ -823,18 +886,19 @@ class ReaderV2SettingsController extends ChangeNotifier {
       horizontal: defaults.paddingHorizontal,
       top: defaults.paddingTop,
       bottom: defaults.paddingBottom,
+      force: true,
     );
-    setLineChars(defaults.lineChars);
-    setJustifyText(defaults.justifyText);
-    setEdgeFade(defaults.edgeFade);
-    setFooterOffset(defaults.footerOffset);
-    setHideStatusBar(defaults.hideStatusBar);
-    setHideNavigationBar(defaults.hideNavigationBar);
-    setHeaderInfo(defaults.headerInfo);
-    setFooterInfo(defaults.footerInfo);
-    setUse24HourClock(defaults.use24HourClock);
-    setProgressFractionDigits(defaults.progressFractionDigits);
-    setInfoFontSize(defaults.infoFontSize);
+    setLineChars(defaults.lineChars, force: true);
+    setJustifyText(defaults.justifyText, force: true);
+    setEdgeFade(defaults.edgeFade, force: true);
+    setFooterOffset(defaults.footerOffset, force: true);
+    setHideStatusBar(defaults.hideStatusBar, force: true);
+    setHideNavigationBar(defaults.hideNavigationBar, force: true);
+    setHeaderInfo(defaults.headerInfo, force: true);
+    setFooterInfo(defaults.footerInfo, force: true);
+    setUse24HourClock(defaults.use24HourClock, force: true);
+    setProgressFractionDigits(defaults.progressFractionDigits, force: true);
+    setInfoFontSize(defaults.infoFontSize, force: true);
   }
 
   bool get isPageLayoutDefault {
@@ -855,8 +919,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
         infoFontSize == defaults.infoFontSize;
   }
 
-  void setHideStatusBar(bool value) {
-    if (hideStatusBar == value) return;
+  void setHideStatusBar(bool value, {bool force = false}) {
+    if (hideStatusBar == value && !force) return;
     hideStatusBar = value;
     _persist(
       'hideStatusBar',
@@ -867,8 +931,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setHeaderInfo(ReaderV2InfoSlots value) {
-    if (headerInfo == value) return;
+  void setHeaderInfo(ReaderV2InfoSlots value, {bool force = false}) {
+    if (headerInfo == value && !force) return;
     headerInfo = value;
     _persist(
       'headerInfo',
@@ -879,8 +943,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setFooterInfo(ReaderV2InfoSlots value) {
-    if (footerInfo == value) return;
+  void setFooterInfo(ReaderV2InfoSlots value, {bool force = false}) {
+    if (footerInfo == value && !force) return;
     footerInfo = value;
     _persist(
       'footerInfo',

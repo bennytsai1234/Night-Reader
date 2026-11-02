@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -44,6 +45,10 @@ class SourceSync extends SyncKind {
 
   static const String kind = 'sources';
 
+  /// 套用了另一台的書源（新增、修改、刪除）時加一：把書源清單讀進記憶體的
+  /// 頁面（書源管理）聽它重讀。沒有實際改到這台的書源時不加。
+  static final ValueNotifier<int> applied = ValueNotifier(0);
+
   @override
   String get name => kind;
 
@@ -80,6 +85,7 @@ class SourceSync extends SyncKind {
     final before = await _byUrl();
     final upserts = <BookSource>[];
     final applied = <String, SyncRecord>{};
+    var changed = deleted.any(before.containsKey);
     for (final MapEntry(:key, value: record) in remote.entries) {
       if (record.deleted) continue;
       final existing = before[key];
@@ -101,6 +107,7 @@ class SourceSync extends SyncKind {
           : null;
       if (previous != null) {
         await _move(source, previous);
+        changed = true;
       } else {
         upserts.add(source);
       }
@@ -113,6 +120,7 @@ class SourceSync extends SyncKind {
     for (final url in deleted) {
       applied[url] = const SyncRecord(time: 0, data: {}, deleted: true);
     }
+    if (upserts.isNotEmpty || changed) SourceSync.applied.value++;
     return applied;
   }
 

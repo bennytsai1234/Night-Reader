@@ -10,7 +10,8 @@ typedef HighlightExportBook = ({
 });
 
 /// 標註匯出成 Markdown：一本書一個標題（書名、作者），同一章的標註排在
-/// 章名下面，每個標註是一段引用。文字照記下的原樣，不做繁簡轉換。
+/// 章名下面，每個標註是一段引用，有備忘時接在引用下面一段。文字照記下的
+/// 原樣，不做繁簡轉換。
 String highlightsToMarkdown(List<HighlightExportBook> books) {
   final out = StringBuffer();
   for (final (:bookName, :bookAuthor, :items) in books) {
@@ -33,6 +34,12 @@ String highlightsToMarkdown(List<HighlightExportBook> books) {
       out.writeln();
       for (final line in highlight.quote.split('\n')) {
         out.writeln(line.isEmpty ? '>' : '> $line');
+      }
+      final note = highlight.note.trim();
+      if (note.isNotEmpty) {
+        out
+          ..writeln()
+          ..writeln(note);
       }
     }
   }

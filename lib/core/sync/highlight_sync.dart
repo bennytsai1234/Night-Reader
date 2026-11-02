@@ -20,7 +20,7 @@ class HighlightSync extends SyncKind {
       SyncRecord(time: 0, data: highlight.toJson()..remove('id'));
 
   /// 標註的內容是「哪本書、哪一章（章名）的第幾個字起、畫了哪段字、什麼
-  /// 顏色與樣子」。章節序號與錨點同書籤，只是這台目錄裡的座標，不算改過。
+  /// 顏色與樣子、備忘寫了什麼」。章節序號與錨點同書籤，只是這台目錄裡的座標，不算改過。
   @override
   String fingerprint(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
@@ -36,6 +36,7 @@ class HighlightSync extends SyncKind {
       'quote': data['quote'],
       'color': data['color'],
       'style': data['style'],
+      'note': data['note'] ?? '',
     });
   }
 
@@ -50,6 +51,8 @@ class HighlightSync extends SyncKind {
     final upserts = <Highlight>[];
     final deleted = <int>[];
     final applied = <String, SyncRecord>{};
+    // 還沒有備忘的舊版上傳的那筆沒有 note：保留這台的備忘，不當成刪掉了。
+    Map<int, String>? localNotes;
     for (final MapEntry(:key, value: record) in remote.entries) {
       final id = int.tryParse(key);
       if (id == null || id <= 0) continue;
@@ -57,7 +60,14 @@ class HighlightSync extends SyncKind {
         deleted.add(id);
         applied[key] = record;
       } else {
-        final highlight = Highlight.fromJson({...record.data, 'id': id});
+        final data = {...record.data, 'id': id};
+        if (!data.containsKey('note')) {
+          localNotes ??= {
+            for (final local in await _dao.getAll()) local.id: local.note,
+          };
+          data['note'] = localNotes[id] ?? '';
+        }
+        final highlight = Highlight.fromJson(data);
         upserts.add(highlight);
         applied[key] = recordOf(highlight);
       }

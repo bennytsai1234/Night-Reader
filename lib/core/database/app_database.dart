@@ -132,7 +132,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -204,6 +204,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 11) {
         // 標註：同書籤，照書名加作者記（ADR 0044）。
         await m.createTable(highlights);
+      } else if (from < 12) {
+        // 標註的備忘；schema 11 以前的在上面照現在的樣子建表，已經有這欄。
+        await m.addColumn(highlights, highlights.note);
       }
     },
     beforeOpen: (_) async {
