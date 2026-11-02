@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -25,6 +27,7 @@ class BackupSyncPage extends StatefulWidget {
 
 class _BackupSyncPageState extends State<BackupSyncPage> {
   bool _isProcessing = false;
+  bool _loaded = false;
 
   final SyncService _sync = SyncService.instance;
 
@@ -32,7 +35,17 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
   void initState() {
     super.initState();
     _sync.status.addListener(_onSyncStatus);
-    unawaited(_sync.load());
+    unawaited(_loadSyncStatus());
+  }
+
+  Future<void> _loadSyncStatus() async {
+    try {
+      await _sync.load();
+    } catch (error, stackTrace) {
+      AppLog.e('讀取同步狀態失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   @override
@@ -43,17 +56,6 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
 
   void _onSyncStatus() {
     if (mounted) setState(() {});
-  }
-
-  /// 「立即同步」下面那行：同步中、上次失敗的原因，或上次同步的時間。
-  static String? _syncSubtitle(SyncStatus status) {
-    if (!status.enabled) return null;
-    if (status.running) return '同步中…';
-    if (status.error case final error?) return '上次同步失敗：$error';
-    final at = status.lastSyncAt;
-    if (at == null) return '還沒同步過';
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '上次同步：${at.month}/${at.day} ${two(at.hour)}:${two(at.minute)}';
   }
 
   @override
@@ -77,6 +79,8 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '備份與同步'),
       body: GroupedListView(
+        // 同步空間與上次同步時間讀好才算骨架，避免新增副標撐高整列。
+        ready: _loaded,
         children: [
           GroupedSection(
             header: '同步',
@@ -106,7 +110,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                   tint: AppTint.azurite,
                 ),
                 title: '立即同步',
-                subtitle: _syncSubtitle(status),
+                subtitle: syncStatusSubtitle(status),
                 enabled: status.enabled && !status.running,
                 showChevron: false,
                 onTap: status.enabled && !status.running

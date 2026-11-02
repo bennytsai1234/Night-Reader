@@ -154,11 +154,17 @@ class CoverRevealSlot extends StatefulWidget {
   const CoverRevealSlot({
     super.key,
     this.placeholder = const SizedBox.shrink(),
+    this.placeholderBuilder,
     this.wait = true,
     required this.child,
   });
 
   final Widget placeholder;
+
+  /// 給了就用它畫 [placeholder]：只有還沒輪到、真的要畫佔位的那一格才呼叫。
+  /// 佔位的大小要排版才算得出來（照真實內容算列高）時用它，已經建好的列、
+  /// 整頁重建時都不用再算一次（ADR 0018）。
+  final WidgetBuilder? placeholderBuilder;
 
   /// false 時不排隊、直接建，換場也不等它（畫面外的列）。只看建立當下的
   /// 值；同一個位置之後改了也不會換掉已經建好的內容。
@@ -209,7 +215,9 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_granted) return widget.placeholder;
+    if (!_granted) {
+      return widget.placeholderBuilder?.call(context) ?? widget.placeholder;
+    }
     _release();
     return widget.child;
   }
