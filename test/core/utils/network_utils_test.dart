@@ -34,6 +34,14 @@ void main() {
       );
     });
 
+    test('Cookie 的網域也不算頭尾的空白', () {
+      // 登入存 Cookie 用書源網址原文，送出時用整理過的網址，兩邊要對得上。
+      expect(
+        NetworkUtils.getSubDomain('http://www.picdg.co '),
+        NetworkUtils.getSubDomain('http://www.picdg.co/search'),
+      );
+    });
+
     test('中文網域照樣換成 punycode', () {
       expect(
         NetworkUtils.toRequestUrl(' https://永远的神.com/a '),

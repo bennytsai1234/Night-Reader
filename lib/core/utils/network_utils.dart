@@ -130,8 +130,10 @@ class NetworkUtils {
   /// 書源 Cookie 存放用的網域，同 Legado `NetworkUtils.getSubDomain`：
   /// `https://www.biquge.com.cn/x` → `biquge.com.cn`（照公共字尾表，
   /// [registrableDomain]），IP 位址照原樣；不是 http／https 網址或解析失敗時
-  /// 傳回 [url] 本身。
-  static String getSubDomain(String url) {
+  /// 傳回 [url] 本身。網址頭尾的空白不算（Legado 經 `java.net.URL`），存與讀
+  /// 的網域才對得上：書源網址結尾多一格時，登入存的 Cookie 照樣帶得上。
+  static String getSubDomain(String rawUrl) {
+    final url = _trimAsciiSpace(rawUrl);
     final lower = url.toLowerCase();
     if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
       return url;
