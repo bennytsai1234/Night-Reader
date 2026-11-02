@@ -28,9 +28,13 @@ extension JsJavaObject on JsExtensionsBase {
         return list;
       }
 
-      /// Java 的 equals：有 equals 方法的物件照它比，其餘照值比。
+      /// Java 的 equals：文字（含 JavaString）照內容比，有 equals 方法的物件
+      /// 照它比，其餘照值比。
       function __lrJavaEquals(a, b) {
         if (a == null || b == null) return a == b;
+        var aText = typeof a === 'string' || a instanceof JavaString;
+        var bText = typeof b === 'string' || b instanceof JavaString;
+        if (aText || bText) return aText && bText && String(a) === String(b);
         if (typeof a === 'object' && typeof a.equals === 'function') return !!a.equals(b);
         return a === b;
       }
@@ -1181,6 +1185,9 @@ extension JsJavaObject on JsExtensionsBase {
       };
       JavaString.prototype.valueOf = function() {
         return this._value;
+      };
+      JavaString.prototype.equals = function(other) {
+        return __lrJavaEquals(this, other);
       };
 
       /// java.util.Arrays：書源用到的複製與比較（照源倉庫 2026-11-01 的書源）。

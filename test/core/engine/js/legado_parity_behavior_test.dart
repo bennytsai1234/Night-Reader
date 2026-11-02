@@ -1,6 +1,7 @@
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/js/extensions/js_java_classes.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -19,6 +20,7 @@ void main() {
 
   setUp(() {
     if (skip != null) return;
+    JavaSystemProperties.reset();
     runtime = getJavascriptRuntime();
     JsExtensions(runtime).inject();
   });
@@ -289,6 +291,119 @@ void main() {
            Packages.java.lang.System.getProperty("java.vm.name")].join("|")
         '''),
         '42|1|1|d|null|true|Dalvik',
+      );
+    }, skip: skip);
+
+    // 夜讀每次解析開一個新的 JS 引擎；Legado 的系統屬性在 JVM 裡一直都在。
+    // 半夏小说的限流時間要在下一次搜尋還讀得到，AtomicLong 是同一個。
+    test('System.getProperties outlives the engine and shares atomics', () {
+      final other = getJavascriptRuntime();
+      addTearDown(other.dispose);
+      JsExtensions(other).inject();
+      String evalOther(String js) => other.evaluate(js).stringResult;
+
+      eval(r'''
+        var P = Packages.java.lang.System.getProperties();
+        var held = P.computeIfAbsent("rate.next", function(k) {
+          return new Packages.java.util.concurrent.atomic.AtomicLong(5);
+        });
+        held.incrementAndGet();
+        P.put("obj", {a: [1]});
+        P.put(1, "number key");
+      ''');
+      expect(
+        evalOther(r'''
+          var P = Packages.java.lang.System.getProperties();
+          var a = P.get("rate.next");
+          var before = a.get();
+          a.compareAndSet(6, 100);
+          [before, a.get(), JSON.stringify(P.get("obj")), P.get(1),
+           String(P.get("1")), P.containsKey("rate.next"),
+           P["rate.next"] === undefined ? "no" : "mirrored"].join("|")
+        '''),
+        '6|100|{"a":[1]}|number key|null|true|mirrored',
+      );
+      // 原本那個引擎手上的 AtomicLong 看得到別的引擎改的值；同一個引擎放進去的
+      // 物件拿回同一個。
+      expect(
+        eval(r'''
+          var P = Packages.java.lang.System.getProperties();
+          [held.get(), P.get("obj") === P.get("obj"),
+           P.get("rate.next").getAndAdd(1), held.get()].join("|")
+        '''),
+        '100|true|100|101',
+      );
+      evalOther(
+        'Packages.java.lang.System.getProperties().remove("rate.next")',
+      );
+      expect(
+        eval(r'''
+          var P = Packages.java.lang.System.getProperties();
+          [P.containsKey("rate.next"), "rate.next" in P].join("|")
+        '''),
+        'false|false',
+      );
+    }, skip: skip);
+
+    // Java HashMap：函式是 null、merge 的值是 null 時先丟 NullPointerException，
+    // 不執行也不寫入；三個參數的 replace、containsValue、remove(k, v) 用 equals。
+    test('Map methods reject nulls and compare with equals like Java', () {
+      expect(
+        eval(r'''
+          var m = new Packages.java.util.HashMap();
+          m.put("k", "v");
+          var out = [];
+          [function() { m.merge("k", null, function(a, b) { return a + b; }); },
+           function() { m.merge("n", "x", null); },
+           function() { m.computeIfAbsent("n", null); },
+           function() { m.computeIfPresent("k", null); },
+           function() { m.compute("k", null); }].forEach(function(f) {
+            try { f(); out.push("ok"); } catch (e) { out.push(e.javaClass); }
+          });
+          var JS = Packages.java.lang.String;
+          var r1 = m.replace("k", new JS("v"), "w");
+          var r2 = m.replace(new JS("k"), "w", new JS("x"));
+          var r3 = m.replace("k", "nope", "y");
+          m.put(null, null);
+          [out.join(","), m.get("k"), m.containsKey("n"), r1, r2, r3,
+           m.containsValue("x"), m.containsKey(null), m.remove("k", "z"),
+           m.remove("k", new JS("x")), m.containsKey("k"),
+           new JS("a").equals("a"), "a" == new JS("a")].join("|")
+        '''),
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException|x|false|true|true|false|true|true|'
+        'false|true|false|true|true',
+      );
+    }, skip: skip);
+
+    // Properties 是 Hashtable：null 鍵、null 值丟 NPE（compute 類算出 null
+    // 照舊是移除）；鍵和方法同名時方法照樣能用；stringPropertyNames 只列鍵和值
+    // 都是文字的。
+    test('Properties follows Hashtable and keeps its own methods', () {
+      expect(
+        eval(r'''
+          var p = new Packages.java.util.Properties();
+          var out = [];
+          [function() { p.put(null, "v"); },
+           function() { p.put("k", null); },
+           function() { p.get(null); },
+           function() { p.setProperty("k", null); },
+           function() { p.putIfAbsent("k", null); }].forEach(function(f) {
+            try { f(); out.push("ok"); } catch (e) { out.push(e.javaClass); }
+          });
+          p.put("getProperty", "g");
+          p.put("stringPropertyNames", new Packages.java.lang.String("s"));
+          p.put("n", 1);
+          p.put(2, "two");
+          p.put("c", "x");
+          p.compute("c", function(k, v) { return null; });
+          [out.join(","), p.getProperty("getProperty"),
+           p.stringPropertyNames().join(","), p.containsKey("c")].join("|")
+        '''),
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException,java.lang.NullPointerException,'
+        'java.lang.NullPointerException|g|getProperty,stringPropertyNames|false',
       );
     }, skip: skip);
 
