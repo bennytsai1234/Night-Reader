@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'explore_book_item.dart';
@@ -11,35 +14,49 @@ const List<double> _widths = [0.45, 0.6, 0.35, 0.55, 0.4, 0.5];
 
 /// 發現頁書源清單的骨架：一張分組卡片，每列一條書源名稱。
 class ExploreSourceListSkeleton extends StatelessWidget {
-  const ExploreSourceListSkeleton({super.key, required this.padding});
+  const ExploreSourceListSkeleton({
+    super.key,
+    required this.padding,
+    this.count,
+    this.names = const [],
+  });
 
   /// 與書源清單相同的內距。
   final EdgeInsets padding;
 
+  /// 尚未讀取時的上次列數；null 才需要鋪滿畫面。
+  final int? count;
+
+  /// 這輪資料回來後，可用真正名稱而不是固定比例重算最後一幀的骨架。
+  final List<String> names;
+
   @override
   Widget build(BuildContext context) {
-    final rowHeight =
-        MediaQuery.textScalerOf(context)
-                .scale(AppTextStyles.bodyBase.fontSize!) *
-            1.3 +
-        AppSpacing.md * 2;
+    final rowHeight = math.max(
+      AppGrouped.rowMinHeight,
+      MediaQuery.textScalerOf(context)
+              .scale(AppTextStyles.bodyBase.fontSize!) *
+          1.3 +
+          AppSpacing.md * 2,
+    );
     return ExcludeSemantics(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final count = _countToFill(
+          final fill = _countToFill(
             constraints.maxHeight - padding.vertical,
             rowHeight,
           );
+          final rows = count == null ? fill : count!.clamp(0, fill);
+          final cardCount = count == null || count! > fill ? rows + 1 : rows;
           return ListView.builder(
             // 骨架呼吸時整片每一幀都重畫，每列各一層只多了每一幀的開銷。
             addRepaintBoundaries: false,
             physics: const NeverScrollableScrollPhysics(),
             padding: padding,
-            itemCount: count,
+            itemCount: rows,
             itemBuilder: (context, index) => GroupedSliceItem(
               index: index,
-              // 卡片延伸出畫面，底部不收圓角。
-              count: count + 1,
+              count: cardCount,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   minHeight: AppGrouped.rowMinHeight,
@@ -49,9 +66,41 @@ class ExploreSourceListSkeleton extends StatelessWidget {
                     horizontal: AppGrouped.rowPadding,
                     vertical: AppSpacing.md,
                   ),
-                  child: SkeletonLine(
-                    style: AppTextStyles.bodyBase.copyWith(height: 1.3),
-                    widthFactor: _widths[index % _widths.length],
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: index < names.length
+                            ? LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final text = GroupedItemShape.text(
+                                    context,
+                                    names[index],
+                                    style: AppTextStyles.bodyBase.copyWith(
+                                      height: 1.3,
+                                    ),
+                                    width: constraints.maxWidth,
+                                    maxLines: 1,
+                                  );
+                                  return SkeletonShapes(
+                                    height: text.height,
+                                    shapes: (_) => text.marks,
+                                  );
+                                },
+                              )
+                            : SkeletonLine(
+                                style: AppTextStyles.bodyBase.copyWith(
+                                  height: 1.3,
+                                ),
+                                widthFactor: _widths[index % _widths.length],
+                              ),
+                      ),
+                      // 真正的發現書源列右側永遠有一個 22×22 展開箭頭。
+                      const SkeletonBox(
+                        width: 22,
+                        height: 22,
+                        borderRadius: BorderRadius.all(Radius.circular(5.5)),
+                      ),
+                    ],
                   ),
                 ),
               ),
