@@ -59,8 +59,15 @@ class AnalyzeRule extends AnalyzeRuleBase
       throw ArgumentError('Content cannot be null');
     }
     this.content = content;
-    this.baseUrl = baseUrl;
-    this.redirectUrl = redirectUrl ?? baseUrl;
+    // 同 Legado `setContent(content, baseUrl = null)`：沒給 baseUrl（例如規則 JS
+    // 的 `java.setContent(html)`）只換內容，原本的 baseUrl 與 redirectUrl 都留著，
+    // 不清成空的，之後補相對網址才不會失靈。
+    if (baseUrl != null) {
+      this.baseUrl = baseUrl;
+      this.redirectUrl = redirectUrl ?? baseUrl;
+    } else if (redirectUrl != null) {
+      this.redirectUrl = redirectUrl;
+    }
     analyzeByXPath = null;
     analyzeByJSoup = null;
     analyzeByJSonPath = null;

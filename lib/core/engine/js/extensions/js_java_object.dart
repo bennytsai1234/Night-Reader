@@ -759,7 +759,7 @@ extension JsJavaObject on JsExtensionsBase {
         // setRedirectUrl 傳回改完的網址（java.net.URL），data: 或不是網址時
         // 不改。
         setContent: function(content, baseUrl) {
-          sendMessage('ruleSetContent', JSON.stringify([content, baseUrl || null]));
+          sendMessage('ruleSetContent', JSON.stringify([content, baseUrl == null ? null : String(baseUrl)]));
           return java;
         },
         setBaseUrl: function(url) {
