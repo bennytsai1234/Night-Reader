@@ -420,6 +420,18 @@ void main() {
       );
     }, skip: skip);
 
+    test('HttpUrl.topPrivateDomain follows the public suffix list', () {
+      expect(
+        eval(r'''
+          ['https://www.biquge.com.cn/a', 'https://m.foo.github.io/', 'https://com.cn/',
+           'http://192.168.1.10:8080/'].map(function(url) {
+            return String(okhttp3.HttpUrl.parse(url).topPrivateDomain());
+          }).join('|')
+        '''),
+        'biquge.com.cn|foo.github.io|null|null',
+      );
+    }, skip: skip);
+
     test('cache numbers follow Kotlin', () {
       expect(
         eval(r'''

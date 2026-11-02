@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:night_reader/core/utils/network_utils.dart';
+import 'package:night_reader/core/utils/public_suffix.dart';
+
 import '../js_extensions_base.dart';
 
 /// 書源直接用的 Java 類別（Rhino 讓規則 JS 直接用整個 Java）：照書源實際的
@@ -16,6 +19,12 @@ extension JsJavaClasses on JsExtensionsBase {
       '_bigInteger',
       (dynamic args) => jsonEncode(_bigIntegerOp(args as List)),
     );
+    runtime.onMessage('_topPrivateDomain', (dynamic args) {
+      final host = '$args';
+      return jsonEncode(
+        NetworkUtils.isIPAddress(host) ? null : registrableDomain(host),
+      );
+    });
     runtime.evaluate(r'''
 (function(global) {
   var java = global.java;
@@ -687,7 +696,8 @@ extension JsJavaClasses on JsExtensionsBase {
   });
   function noSocket() { throw javaError('java.lang.UnsupportedOperationException', '夜讀不支援規則 JS 直接開網路連線（java.net.Socket）'); }
   /// okhttp3.HttpUrl：只收 http／https，parse 失敗傳回 null；queryParameter
-  /// 取第一個值。
+  /// 取第一個值；topPrivateDomain 照公共字尾表（`_topPrivateDomain`），網址是
+  /// IP 位址或本身就是公共字尾時是 null。
   var HttpUrl = named('HttpUrl', {
     parse: function(url) {
       var u;
@@ -695,6 +705,7 @@ extension JsJavaClasses on JsExtensionsBase {
       if (u.getProtocol() !== 'http' && u.getProtocol() !== 'https') return null;
       return {
         host: function() { return u.getHost(); },
+        topPrivateDomain: function() { return JSON.parse(send('_topPrivateDomain', JSON.stringify(u.getHost()))); },
         scheme: function() { return u.getProtocol(); },
         port: function() { return u.getPort() > 0 ? u.getPort() : u.getDefaultPort(); },
         encodedPath: function() { return u.getPath(); },
