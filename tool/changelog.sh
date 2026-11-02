@@ -22,6 +22,10 @@
 #     段落。只改介紹不算：測試版說明只取條列。沒寫時結束碼為 1。
 #     android-release.yml 發測試版時以上一個發布的 tag 為 base 呼叫（ADR 0027）。
 #
+#   sh tool/changelog.sh validate beta|stable [檔案]
+#     檢查即將公開的更新說明：長度、條列數、具名書源與網址；預設從標準輸入讀取。
+#     只驗證這一次要發布的文字，不讀舊版歷史。
+#
 # 測試：sh tool/changelog_test.sh
 set -eu
 
@@ -165,13 +169,17 @@ check() {
     echo "changelog: CHANGELOG.md 找不到「## $UNRELEASED」段落。請在最上面保留這個標題，正式版的段落放在它下面。" >&2
     return 1
   fi
+  # 「未發布」最後會成為正式版說明，合併時先把長篇或具名書源擋下來。
+  if [ -n "$new" ] && ! printf '%s\n' "$new" | validate stable -; then
+    return 1
+  fi
   old=$(section_at "$base" "$UNRELEASED") || old=''
-  # 測試版的說明只取新增或改寫的條列（added），所以照同一個判斷放行：只改介紹，測試版
-  # 說明會是空的。只刪了條列（例如推翻剛加的功能）時沒有新條列，ADR 0010 允許。清空不算。
+  # 巢狀條列會因任一子項改寫而把整組內容重發；公開說明一律平鋪。
+  # 只刪除條列也不能發空白更新說明，應改寫一項描述最新行為。
   added=$(new_items "$old" "$new")
-  removed=$(new_items "$new" "$old")
-  if [ -n "$new" ] && { [ -n "$added" ] || [ -n "$removed" ]; }; then
-    echo "changelog: 「## $UNRELEASED」已更新。"
+  if [ -n "$added" ]; then
+    if ! printf '%s\n' "$added" | validate beta -; then return 1; fi
+    echo "changelog: 「## $UNRELEASED」已更新，公開說明通過檢查。"
     return 0
   fi
 
@@ -188,7 +196,7 @@ check() {
     if [ -z "$new" ] && [ -n "$old" ]; then
       echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」被清空了，也沒有新增正式版的段落。"
     elif [ "$new" != "$old" ]; then
-      echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」只改了介紹，沒有新增或改寫條列；測試版的說明只取新增或改寫的條列，會是空的。"
+      echo "changelog: 這段範圍的改動動到了 App 內容，但沒有新增或改寫條列；測試版不能發布空白更新說明。"
     else
       echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」沒有更新。"
     fi
@@ -196,7 +204,7 @@ check() {
     echo "  測試版與正式版的 GitHub Release 說明都取自 CHANGELOG.md，App 的更新視窗與「更新紀錄」會顯示它。"
     echo "  請在「## $UNRELEASED」下面用一般讀者看得懂的中文寫這次的變化："
     echo "    - 有新重點時，在段落開頭用一兩句話介紹；"
-    echo "    - 每項使用者看得到的改動寫成一行條列，不寫內部實作，也不寫 feat:、fix: 這類前綴。"
+    echo "    - 每項改動寫成一行，不列個別書源或網址，不用巢狀條列，也不寫內部實作。"
     echo "  發正式版時，版號 commit 要把「## $UNRELEASED」改成「## X.Y.Z」，並在上面留一個空的「## $UNRELEASED」。"
     echo
     echo "  改到 App 內容的檔案（最多列 10 個）："
@@ -205,8 +213,63 @@ check() {
   return 1
 }
 
+# 檢查實際公開的段落；既有已發布版本不在這裡重新檢查。
+# 具名書源檢查包含已知清單與網址，新的名稱仍需 PR 審查時人工確認。
+validate() {
+  mode=${1:-}
+  case "$mode" in
+    beta) max_items=4; max_chars=480 ;;
+    stable) max_items=8; max_chars=900 ;;
+    *) echo "changelog: validate 需要 beta 或 stable 模式。" >&2; return 2 ;;
+  esac
+  body=$(cat "${2:--}") || return 1
+  if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
+    echo "changelog: 公開更新說明不可為空。" >&2
+    return 1
+  fi
+  count=$(printf '%s\n' "$body" | grep -c '^- ' || true)
+  chars=$(printf '%s' "$body" | LC_ALL=C.UTF-8 wc -m | tr -d ' ')
+  if [ "$count" -lt 1 ] || [ "$count" -gt "$max_items" ] || [ "$chars" -gt "$max_chars" ]; then
+    echo "changelog: $mode 更新說明要有 1～$max_items 項、至多 $max_chars 字元（目前 $count 項、$chars 字元），請合併成讀者看得懂的重點。" >&2
+    return 1
+  fi
+  if printf '%s\n' "$body" | grep -qE '^[[:space:]]+[-*+] |^[*+] '; then
+    echo "changelog: 公開更新說明不能用巢狀條列或其他條列格式，請平鋪成一句重點。" >&2
+    return 1
+  fi
+  if [ "$mode" = beta ] && printf '%s\n' "$body" | grep -qEv '^[[:space:]]*$|^- '; then
+    echo "changelog: 測試版只能使用平鋪的「- 」條列，不要介紹段落或續行。" >&2
+    return 1
+  fi
+  if printf '%s\n' "$body" | grep -Eiq 'https?://|www\\.|[[:alnum:]-]+\\.(com|net|org|io|cn|tw|cc|vip|top|dev)(/|[[:space:][:punct:]]|$)'; then
+    echo "changelog: 公開更新說明不能列出網址或網域，請改寫成通用功能描述。" >&2
+    return 1
+  fi
+  names="$(dirname "$0")/release_note_source_names.txt"
+  if [ ! -s "$names" ]; then
+    echo "changelog: 找不到具名書源檢查清單，不能略過檢查。" >&2
+    return 1
+  fi
+  if printf '%s\n' "$body" | grep -iqFf "$names"; then
+    echo "changelog: 公開更新說明包含已知書源名稱；只描述通用行為，細節留在 PR 與測試。" >&2
+    return 1
+  fi
+  too_long=$(printf '%s\n' "$body" | while IFS= read -r line; do
+    case "$line" in
+      '- '*)
+        line_chars=$(printf '%s' "$line" | LC_ALL=C.UTF-8 wc -m | tr -d ' ')
+        if [ "$line_chars" -gt 145 ]; then printf '1\n'; break; fi
+        ;;
+    esac
+  done)
+  if [ -n "$too_long" ]; then
+    echo "changelog: 每一項公開更新說明不得超過 145 字元，請縮成一句重點。" >&2
+    return 1
+  fi
+}
+
 usage() {
-  echo "用法：sh tool/changelog.sh section <標題> [檔案] | added <base> [檔案] | app-files <base> <head> | check <base> <head>" >&2
+  echo "用法：sh tool/changelog.sh section <標題> [檔案] | added <base> [檔案] | app-files <base> <head> | check <base> <head> | validate beta|stable [檔案]" >&2
   exit 2
 }
 
@@ -230,6 +293,10 @@ case $command in
   check)
     [ $# -eq 2 ] || usage
     check "$@"
+    ;;
+  validate)
+    [ $# -ge 1 ] && [ $# -le 2 ] || usage
+    validate "$@"
     ;;
   *) usage ;;
 esac
