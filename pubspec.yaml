@@ -109,6 +109,8 @@ dependencies:
   google_sign_in: ^7.2.0
   # 背景取授權要指定帳號，google_sign_in 只在登入當下給得出綁帳號的入口。
   google_sign_in_platform_interface: ^3.1.0
+  # 書源網址的中文網域換成 punycode 才連得上（同 OkHttp）。
+  punycoder: ^0.3.0
 
 dev_dependencies:
   flutter_test:

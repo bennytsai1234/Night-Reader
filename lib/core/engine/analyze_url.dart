@@ -342,7 +342,8 @@ class AnalyzeUrl {
       final String text => text,
       final other => jsonEncode(other),
     };
-    type = _nonBlank(options['type']);
+    // 同 Legado：寫了 type 就算（空字串也是），內文是位元組的十六進位。
+    type = options['type']?.toString();
     charset = _nonBlank(options['charset']);
     final given = charset;
     if (given != null && given != 'escape' && !Charsets.supports(given)) {
@@ -588,7 +589,7 @@ class AnalyzeUrl {
         body: _hex(bytes),
         headers: const {},
         raw: Response(
-          requestOptions: RequestOptions(path: requestUrl),
+          requestOptions: StrResponse.requestFor(requestUrl),
           statusCode: 200,
         ),
       );
@@ -683,7 +684,7 @@ class AnalyzeUrl {
       body: body,
       headers: const {},
       raw: Response(
-        requestOptions: RequestOptions(path: finalUrl),
+        requestOptions: StrResponse.requestFor(finalUrl),
         data: body,
         statusCode: 200,
       ),

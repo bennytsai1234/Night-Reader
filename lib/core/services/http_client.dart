@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// HttpClient - 全域 HTTP 客戶端 (專業升級版)
 /// 整合 NetworkService 以支援持久化 Cookie 與反爬蟲攔截
@@ -13,7 +14,7 @@ class HttpClient {
 
   /// 手動保存 Cookie (用於 WebView 同步等場景)
   Future<void> saveCookies(String url, String cookieStr) async {
-    final uri = Uri.parse(url);
+    final uri = Uri.parse(NetworkUtils.toAsciiHost(url));
     final cookie = parseSetCookieValueLenient(
       cookieStr,
       ignoreInvalidCookies: true,
@@ -24,7 +25,7 @@ class HttpClient {
 
   /// 獲取特定網站的 Cookie
   Future<String> getCookie(String url) async {
-    final uri = Uri.parse(url);
+    final uri = Uri.parse(NetworkUtils.toAsciiHost(url));
     final cookies = await NetworkService().cookieJar.loadForRequest(uri);
     return cookies.map((c) => '${c.name}=${c.value}').join('; ');
   }
