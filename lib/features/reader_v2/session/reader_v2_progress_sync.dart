@@ -146,13 +146,11 @@ class ReaderV2ProgressSync {
         index != current.chapterIndex ||
         (target.charOffset - current.charOffset).abs() > nearChars;
     if (jumps) {
-      await runtime.jumpToLocation(target);
-      // 那一章取不到（要登入、載入失敗）或被別的操作取代時，跳轉照樣正常
-      // 結束、畫面留在原處：不提示、不記成已同步，下次回到前景再試。
-      if (!_isReady(runtime) ||
-          runtime.state.visibleLocation.chapterIndex != index) {
-        return;
-      }
+      final reached = await runtime.jumpToLocation(target);
+      // 沒定位到目標（那一章取不到、使用者自己捲動而作廢、被別的操作取代）
+      // 時，跳轉照樣正常結束、畫面留在原處：不提示、不記成已同步，下次回到
+      // 前景再試。同一章內的跳轉也一樣，不能只看章節序號。
+      if (!reached || !_isReady(runtime)) return;
     }
     await runtime.flushProgress();
     if (_disposed) return;

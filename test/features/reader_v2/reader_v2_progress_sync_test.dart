@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -56,6 +57,12 @@ class _Sync extends Fake implements SyncService {
   Completer<void>? progress;
   final List<String> opened = [];
 
+  /// 閱讀器回到前景時抓到的雲端進度；null 是沒有比較新的。
+  PulledProgress? pulled;
+
+  @override
+  Future<PulledProgress?> pullProgress(String bookUrl) async => pulled;
+
   @override
   Future<void>? get progressReady => progress?.future;
 
@@ -88,7 +95,15 @@ void main() {
   late Book book;
   late ReaderV2Runtime runtime;
 
+  /// 視窗把位置排好的動作；測試換掉它來控制跳轉什麼時候完成。
+  late Future<bool> Function(ReaderV2Location location) restore;
+
+  /// 取不到內容的章節。
+  late Set<int> unavailable;
+
   setUp(() {
+    restore = (_) async => true;
+    unavailable = {};
     bookDao = _BookDao();
     sync = _Sync();
     book = Book(
@@ -103,6 +118,12 @@ void main() {
     final repository = ReaderV2ChapterRepository(
       book: book,
       initialChapters: chapters,
+      contentLoader: (index, chapter) async {
+        if (unavailable.contains(index)) {
+          throw const ReaderV2ContentUnavailableException('這一章暫時取不到');
+        }
+        return chapter.content;
+      },
       bookDao: bookDao,
       chapterDao: _ChapterDao(),
       sourceDao: _SourceDao(),
@@ -131,15 +152,18 @@ void main() {
       ),
       initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 10),
     );
-    runtime.registerViewportRestore(Object(), (_) async => true);
+    runtime.registerViewportRestore(Object(), (location) => restore(location));
     addTearDown(runtime.dispose);
   });
 
-  ReaderV2ProgressSync start({ReaderV2OpenTarget? openTarget}) {
+  ReaderV2ProgressSync start({
+    ReaderV2OpenTarget? openTarget,
+    void Function(ReaderV2Location previous)? onJumped,
+  }) {
     final progressSync = ReaderV2ProgressSync(
       book: book,
       runtime: () => runtime,
-      onJumped: (_) => fail('開書不提示'),
+      onJumped: onJumped ?? (_) => fail('開書不提示'),
       bookDao: bookDao,
       openTarget: openTarget,
       sync: sync,
@@ -226,5 +250,132 @@ void main() {
     );
 
     expect(runtime.state.visibleLocation.chapterIndex, 4);
+  });
+
+  group('catching up with a newer progress while reading', () {
+    var commits = 0;
+    final jumped = <ReaderV2Location>[];
+
+    /// 另一台讀到第 [chapter] 章第 [offset] 個字。
+    PulledProgress cloudAt(int chapter, int offset) => PulledProgress(
+      SyncedProgress(
+        chapterIndex: chapter,
+        charOffset: offset,
+        chapterTitle: '第 $chapter 章',
+        time: 1,
+      ),
+      (_) async => commits++,
+    );
+
+    /// App 退到背景再回到前景。
+    Future<void> backToForeground() async {
+      final binding = TestWidgetsFlutterBinding.instance;
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        binding.handleAppLifecycleStateChanged(state);
+      }
+      await pumpEventQueue();
+    }
+
+    Future<void> openReader() async {
+      commits = 0;
+      jumped.clear();
+      start(onJumped: jumped.add).bookOpened();
+      await runtime.openBook();
+    }
+
+    test('a jump that lands shows the notice and records the sync', () async {
+      await openReader();
+      sync.pulled = cloudAt(1, 400);
+
+      await backToForeground();
+
+      expect(runtime.state.visibleLocation.charOffset, 400);
+      expect(jumped.map((it) => it.charOffset), [10]);
+      expect(commits, 1);
+    });
+
+    test(
+      'a position within the near range does not jump but is recorded',
+      () async {
+        await openReader();
+        sync.pulled = cloudAt(1, 50);
+
+        await backToForeground();
+
+        expect(jumped, isEmpty);
+        expect(commits, 1);
+      },
+    );
+
+    test('scrolling in the same chapter while the jump is loading cancels '
+        'it: no notice, not recorded as synced', () async {
+      await openReader();
+      sync.pulled = cloudAt(1, 400);
+      final entered = Completer<void>();
+      final gate = Completer<void>();
+      restore = (_) async {
+        entered.complete();
+        await gate.future;
+        return true;
+      };
+
+      await backToForeground();
+      await entered.future;
+      runtime.cancelJumpForUserScroll();
+      runtime.updateVisibleLocation(
+        const ReaderV2Location(chapterIndex: 1, charOffset: 200),
+      );
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(jumped, isEmpty);
+      expect(commits, 0, reason: '沒記成同步過，下次回到前景還會再抓到雲端的位置');
+      expect(runtime.state.visibleLocation.charOffset, 200);
+    });
+
+    test('a chapter that cannot be loaded does not jump or record', () async {
+      await openReader();
+      unavailable = {3};
+      sync.pulled = cloudAt(3, 5);
+
+      await backToForeground();
+
+      expect(jumped, isEmpty);
+      expect(commits, 0);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+    });
+
+    test('a jump replaced by a newer one does not show the notice or '
+        'record', () async {
+      await openReader();
+      sync.pulled = cloudAt(1, 400);
+      final entered = Completer<void>();
+      final gate = Completer<void>();
+      var calls = 0;
+      restore = (_) async {
+        if (calls++ > 0) return true;
+        entered.complete();
+        await gate.future;
+        return true;
+      };
+
+      await backToForeground();
+      await entered.future;
+      final newer = runtime.jumpToLocation(
+        const ReaderV2Location(chapterIndex: 2, charOffset: 0),
+      );
+      await newer;
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(jumped, isEmpty);
+      expect(commits, 0);
+      expect(runtime.state.visibleLocation.chapterIndex, 2);
+    });
   });
 }
