@@ -20,6 +20,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight_follower.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
@@ -240,20 +241,94 @@ class ReaderV2PageCoordinator {
   /// 套用之後的原文：畫面上的字經過排版整理與繁簡轉換，直接用常對不到
   /// （見 [sourceRangeOf]）。
   Future<void> hideText(ParagraphSelection selection) async {
+    final source = await _selectionSource(selection, action: '隱藏');
+    if (source == null) return;
+    final (:replaceDao, :pattern, paragraph: _) = source;
+    final int id;
+    try {
+      final rules = await replaceDao.getAll();
+      id = await replaceDao.insert(
+        ReplaceRule(
+          name: pattern,
+          group: _hiddenTextGroup,
+          pattern: pattern,
+          replacement: '',
+          isRegex: false,
+          order: rules.fold(0, (last, rule) => math.max(last, rule.order + 1)),
+        ),
+      );
+    } catch (error, stackTrace) {
+      AppLog.e('隱藏選字失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('隱藏', error));
+      return;
+    }
+    await _reloadAfterRule(
+      replaceDao,
+      id,
+      done: '已隱藏「$pattern」',
+      notReloaded: '已新增隱藏規則，但正文沒有更新',
+    );
+  }
+
+  /// 選字選單的「替換」：找原文的方法同「隱藏」，打開替換規則的編輯畫面、
+  /// 原文先填好（不是正則、套用到所有書、放在「選字替換」分組），使用者填
+  /// 要換成的字；即時測試先放那一段的原文。存了就重新排版，提示可以復原；
+  /// 取消就不新增。
+  Future<void> replaceText(
+    BuildContext context,
+    ParagraphSelection selection,
+  ) async {
+    final source = await _selectionSource(selection, action: '替換');
+    if (source == null || !context.mounted) return;
+    final (:replaceDao, :pattern, :paragraph) = source;
+    int? id;
+    await ReaderV2ReplaceRuleEditorSheet.show(
+      context,
+      rule: ReplaceRule(
+        name: pattern,
+        group: _replacedTextGroup,
+        pattern: pattern,
+        isRegex: false,
+      ),
+      testSample: paragraph,
+      onSave: (rule) async {
+        final rules = await replaceDao.getAll();
+        rule.order = rules.fold(
+          0,
+          (last, existing) => math.max(last, existing.order + 1),
+        );
+        id = await replaceDao.insert(rule);
+      },
+    );
+    final saved = id;
+    if (saved == null) return;
+    await _reloadAfterRule(
+      replaceDao,
+      saved,
+      done: '已新增替換規則',
+      notReloaded: '已新增替換規則，但正文沒有更新',
+    );
+  }
+
+  /// 選到的字在既有規則套用之後的原文（[sourceRangeOf]），與它所在那一段的
+  /// 原文；找不到或這本書關了替換規則時提示原因、傳回 null。
+  Future<({ReplaceRuleDao replaceDao, String pattern, String paragraph})?>
+  _selectionSource(
+    ParagraphSelection selection, {
+    required String action,
+  }) async {
     final book = _host.book;
     final replaceDao = _host.dependencies.replaceDao;
     final contentDao = _host.dependencies.readerChapterContentDao;
     final chapter = _host.runtime?.chapterAt(selection.chapterIndex);
     if (replaceDao == null || contentDao == null || chapter == null) {
-      _showNotice('無法隱藏這段字');
-      return;
+      _showNotice('無法$action這段字');
+      return null;
     }
     if (!book.getUseReplaceRule()) {
-      _showNotice('這本書沒有套用替換規則，打開後才能隱藏');
-      return;
+      _showNotice('這本書沒有套用替換規則，打開後才能$action');
+      return null;
     }
-    final String pattern;
-    final int id;
     try {
       final raw = await ReaderChapterContentStore(
         chapterDao: _host.dependencies.chapterDao,
@@ -282,39 +357,41 @@ class ReaderV2PageCoordinator {
               end: selection.end,
             );
       if (source == null || range == null) {
-        _showNotice('找不到這段字的原文，沒有隱藏');
-        return;
+        _showNotice('找不到這段字的原文，沒有$action');
+        return null;
       }
-      pattern = source.substring(range.start, range.end);
-      final rules = await replaceDao.getAll();
-      id = await replaceDao.insert(
-        ReplaceRule(
-          name: pattern,
-          group: _hiddenTextGroup,
-          pattern: pattern,
-          replacement: '',
-          isRegex: false,
-          order: rules.fold(0, (last, rule) => math.max(last, rule.order + 1)),
-        ),
+      return (
+        replaceDao: replaceDao,
+        pattern: source.substring(range.start, range.end),
+        paragraph: source,
       );
     } catch (error, stackTrace) {
-      AppLog.e('隱藏選字失敗', error: error, stackTrace: stackTrace);
-      _showNotice(failureMessage('隱藏', error));
-      return;
+      AppLog.e('$action選字時找原文失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage(action, error));
+      return null;
     }
-    // 規則已經存進去了：重排失敗也留著復原，不然只能到替換規則裡刪。
+  }
+
+  /// 新增了規則 [id]：重新排版，提示可以復原。規則已經存進去了，重排失敗也
+  /// 留著復原，不然只能到替換規則裡刪。
+  Future<void> _reloadAfterRule(
+    ReplaceRuleDao replaceDao,
+    int id, {
+    required String done,
+    required String notReloaded,
+  }) async {
     final undo = (
       label: '復原',
-      onPressed: () => unawaited(_restoreHiddenText(replaceDao, id)),
+      onPressed: () => unawaited(_removeAddedRule(replaceDao, id)),
     );
     var reloaded = false;
     try {
       reloaded =
           await _host.runtime?.reloadContentPreservingLocation() ?? false;
     } catch (error, stackTrace) {
-      AppLog.e('隱藏選字後重排失敗', error: error, stackTrace: stackTrace);
+      AppLog.e('新增規則後重排失敗', error: error, stackTrace: stackTrace);
     }
-    _showNotice(reloaded ? '已隱藏「$pattern」' : '已新增隱藏規則，但正文沒有更新', action: undo);
+    _showNotice(reloaded ? done : notReloaded, action: undo);
   }
 
   /// 選字選單的「書籤」：在選到的字那一句留一個書籤，提示可「復原」。
@@ -445,14 +522,18 @@ class ReaderV2PageCoordinator {
   /// 「隱藏」新增的規則都放在這一組，在替換規則清單裡找得到。
   static const String _hiddenTextGroup = '選字隱藏';
 
-  Future<void> _restoreHiddenText(ReplaceRuleDao replaceDao, int id) async {
+  /// 「替換」新增的規則預設放在這一組（編輯畫面裡可以改）。
+  static const String _replacedTextGroup = '選字替換';
+
+  /// 「隱藏」「替換」提示的「復原」：刪掉剛新增的規則、重新排版。
+  Future<void> _removeAddedRule(ReplaceRuleDao replaceDao, int id) async {
     try {
       await replaceDao.deleteById(id);
       final reloaded =
           await _host.runtime?.reloadContentPreservingLocation() ?? false;
-      if (!reloaded) _showNotice('已刪除隱藏規則，但正文沒有更新');
+      if (!reloaded) _showNotice('已刪除剛新增的規則，但正文沒有更新');
     } catch (error, stackTrace) {
-      AppLog.e('復原隱藏的字失敗', error: error, stackTrace: stackTrace);
+      AppLog.e('復原新增的規則失敗', error: error, stackTrace: stackTrace);
       _showNotice(failureMessage('復原', error));
     }
   }
