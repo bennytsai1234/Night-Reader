@@ -142,7 +142,10 @@ GroupedItemShape _sourceRowShape(
   final scale = MediaQuery.textScalerOf(context);
   final barFactor = Skeleton.barHeightFactor;
 
-  GroupedItemShape text(String value, TextStyle style, double maxWidth, {
+  GroupedItemShape text(
+    String value,
+    TextStyle style,
+    double maxWidth, {
     int maxLines = 1,
   }) => GroupedItemShape.text(
     context,
@@ -152,19 +155,23 @@ GroupedItemShape _sourceRowShape(
     maxLines: maxLines,
   );
 
-  void placeholder(double x, double y, double w, double h, {
+  void placeholder(
+    double x,
+    double y,
+    double w,
+    double h, {
     BorderRadius radius = AppRadius.cardXs,
   }) {
     if (w <= 0 || h <= 0) return;
-    marks.add(
-      SkeletonShape(
-        Rect.fromLTWH(x, y, w, h),
-        radius: radius,
-      ),
-    );
+    marks.add(SkeletonShape(Rect.fromLTWH(x, y, w, h), radius: radius));
   }
 
-  (double, double) pill(String label, TextStyle style, double maxWidth, double horizontal) {
+  (double, double) pill(
+    String label,
+    TextStyle style,
+    double maxWidth,
+    double horizontal,
+  ) {
     final shape = text(label, style, maxWidth - horizontal);
     return (math.min(maxWidth, shape.width! + horizontal), shape.height + 4);
   }
@@ -172,8 +179,8 @@ GroupedItemShape _sourceRowShape(
   final group = source?.bookSourceGroup?.trim();
   final hasGroup = group != null && group.isNotEmpty;
   final health = source?.runtimeHealth;
-  final hasHealth = health != null &&
-      health.category != SourceHealthCategory.healthy;
+  final hasHealth =
+      health != null && health.category != SourceHealthCategory.healthy;
   final groupSize = hasGroup
       ? pill(group, labelStyle, 120, AppSpacing.sm * 2)
       : (0.0, 0.0);
@@ -192,7 +199,11 @@ GroupedItemShape _sourceRowShape(
       (hasHealth ? AppSpacing.sm + statusSize.$1 : 0);
   final nameWidth = math.max(0.0, textWidth - trailingWidth);
   final title = text(source?.bookSourceName ?? '書源', titleStyle, nameWidth);
-  final url = text(source?.bookSourceUrl ?? 'https://example.org', urlStyle, textWidth);
+  final url = text(
+    source?.bookSourceUrl ?? 'https://example.org',
+    urlStyle,
+    textWidth,
+  );
   final titleHeight = [
     title.height,
     if (hasGroup) groupSize.$2,
@@ -204,7 +215,8 @@ GroupedItemShape _sourceRowShape(
   if (source == null) {
     placeholder(
       left,
-      titleTop + (title.height - scale.scale(titleStyle.fontSize!) * barFactor) / 2,
+      titleTop +
+          (title.height - scale.scale(titleStyle.fontSize!) * barFactor) / 2,
       nameWidth * _nameWidths[seed % _nameWidths.length],
       scale.scale(titleStyle.fontSize!) * barFactor,
     );
@@ -214,19 +226,34 @@ GroupedItemShape _sourceRowShape(
   var right = left + (source == null ? title.width! : title.width!);
   if (hasGroup) {
     right += AppSpacing.sm;
-    placeholder(right, y + (titleHeight - groupSize.$2) / 2, groupSize.$1, groupSize.$2,
-        radius: AppRadius.pillShape);
+    placeholder(
+      right,
+      y + (titleHeight - groupSize.$2) / 2,
+      groupSize.$1,
+      groupSize.$2,
+      radius: AppRadius.pillShape,
+    );
     right += groupSize.$1;
   }
   if (hasExplore) {
     right += AppSpacing.sm;
-    placeholder(right, y + (titleHeight - 8) / 2, 8, 8,
-        radius: const BorderRadius.all(Radius.circular(4)));
+    placeholder(
+      right,
+      y + (titleHeight - 8) / 2,
+      8,
+      8,
+      radius: const BorderRadius.all(Radius.circular(4)),
+    );
     right += 8;
   }
   if (hasHealth) {
     right += AppSpacing.sm;
-    placeholder(right, y + (titleHeight - statusSize.$2) / 2, statusSize.$1, statusSize.$2);
+    placeholder(
+      right,
+      y + (titleHeight - statusSize.$2) / 2,
+      statusSize.$1,
+      statusSize.$2,
+    );
   }
 
   y += titleHeight + 2;
@@ -268,8 +295,13 @@ GroupedItemShape _sourceRowShape(
   if (progress != null) {
     y += AppSpacing.sm;
     final symbol = progress.isFinal ? 14.0 : 12.0;
-    placeholder(left, y + 2, symbol, symbol,
-        radius: BorderRadius.circular(symbol / 2));
+    placeholder(
+      left,
+      y + 2,
+      symbol,
+      symbol,
+      radius: BorderRadius.circular(symbol / 2),
+    );
     final message = text(
       progress.message,
       errorStyle.copyWith(
