@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -28,6 +29,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   bool _connecting = false;
   bool _revealed = false;
   bool _usingWebDav = false;
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -36,17 +38,21 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Future<void> _loadSaved() async {
-    final account = await _settings.webDavAccount();
-    final space = await _settings.space();
-    if (!mounted) return;
-    setState(() {
+    try {
+      final account = await _settings.webDavAccount();
+      final space = await _settings.space();
+      if (!mounted) return;
       if (account != null) {
         _url.text = account.url;
         _user.text = account.user;
         _password.text = account.password;
       }
       _usingWebDav = space == SyncSpace.webdav;
-    });
+    } catch (error, stackTrace) {
+      AppLog.e('讀取 WebDAV 設定失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   @override
@@ -79,12 +85,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       ));
       if (!mounted) return;
       setState(() => _usingWebDav = true);
-      final error = _sync.status.value.error;
-      if (error != null) {
-        _say('已連上，但同步失敗：$error');
-        return;
-      }
-      _say('已連上，同步好了');
+      _say('已連上，開始同步');
       // 回到「同步空間」，那裡看得到選了哪個。
       unawaited(Navigator.maybePop(context));
     } on SyncStoreException catch (error) {
@@ -101,6 +102,8 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: 'WebDAV'),
       body: GroupedListView(
+        // 等原有設定讀回後，骨架才照最後的文字與區塊換成內容。
+        ready: _loaded,
         children: [
           GroupedSection(
             footer: '堅果雲要用「第三方應用管理」產生的應用密碼，不是登入密碼。',

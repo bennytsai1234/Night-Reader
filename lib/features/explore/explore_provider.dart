@@ -56,6 +56,12 @@ class ExploreProvider extends ChangeNotifier {
       : totalSourceCount;
   int _lastAllCount = 0;
 
+  /// 載入前用上次儲存的數量；第一次沒有紀錄時才交給骨架鋪滿畫面。
+  /// 資料到齊後用這一輪篩出的真正列數。
+  int? get skeletonSourceCount => _isLoadingSources && _allSources.isEmpty
+      ? (_savedGroupRecord == null ? null : _lastAllCount)
+      : _filteredSources.length;
+
   /// 上次讀完時的分組：「全部」的書源數與各分組的名稱、書源數，JSON
   /// `{"all": n, "groups": [[分組, 書源數], ...]}`。開 App 建立時同步讀出，
   /// 第一次讀到書源前照它決定頁首有沒有分組鈕，不會讀完才長出來。鍵名
@@ -104,6 +110,8 @@ class ExploreProvider extends ChangeNotifier {
       _groups = counts.keys.toList()..sort();
     } catch (error) {
       AppLog.w('發現分組的紀錄讀不懂，這次等書源讀完: $error');
+      // 當作沒有紀錄：骨架照第一次的樣子鋪滿畫面，不是畫 0 列。
+      _savedGroupRecord = null;
       _lastAllCount = 0;
       _groupCounts = {};
       _groups = [];

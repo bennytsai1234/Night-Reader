@@ -80,7 +80,13 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         _bodyPadding = MediaQuery.paddingOf(bodyContext);
         return SkeletonSwitcher(
           loading: provider.isLoadingSources,
-          skeleton: ExploreSourceListSkeleton(padding: _listPadding),
+          skeleton: ExploreSourceListSkeleton(
+            padding: _listPadding,
+            count: provider.skeletonSourceCount,
+            names: [
+              for (final source in provider.sources) source.bookSourceName,
+            ],
+          ),
           builder: (_) => _buildSourceList(provider),
         );
       },

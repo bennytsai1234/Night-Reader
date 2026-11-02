@@ -458,6 +458,40 @@ void main() {
     expect((await b.book('new')).chapterIndex, 3);
   });
 
+  test('the status stays running through a round asked for mid-sync, and '
+      'only reads finished when every round is done', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await a.sync.syncNow();
+
+    final running = <bool>[];
+    void record() => running.add(a.sync.status.value.running);
+    a.sync.status.addListener(record);
+    addTearDown(() => a.sync.status.removeListener(record));
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name != 'sources.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    final first = a.sync.syncNow();
+    await reading.future;
+    // 同步途中又改了東西、再要一次：跑完這輪接著補一輪。
+    final second = a.sync.syncNow();
+    stuck.complete();
+    await first;
+    await second;
+
+    expect(running, isNotEmpty);
+    expect(running.last, isFalse);
+    expect(
+      running.sublist(0, running.length - 1),
+      everyElement(isTrue),
+      reason: '兩輪之間不閃一下「同步完成」',
+    );
+    expect(a.sync.status.value.progress, isNull);
+  });
+
   test('the open reader pulls its progress without waiting for the sync '
       'running in the background', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
