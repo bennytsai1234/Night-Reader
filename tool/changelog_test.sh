@@ -147,7 +147,7 @@ intro_only=$(commit intro "lib/main.dart=v2c" "CHANGELOG.md=$(changelog '新的�
 expect_failure 'check: 只改介紹、條列沒變時擋下' check "$noted" "$intro_only"
 g checkout -q -
 
-# 只刪了條列（推翻剛加的功能）時沒有新條列，照樣放行（ADR 0010）。
+# 只刪條列不能發空白更新說明；改寫一個最後結果的條列才可發布。
 g checkout -q -b removed_only "$noted"
 commit two "CHANGELOG.md=$(changelog '- 新功能
 - 要推翻的功能
@@ -155,10 +155,10 @@ commit two "CHANGELOG.md=$(changelog '- 新功能
 two=$(g rev-parse HEAD)
 removed_only=$(commit drop "lib/main.dart=v2d" "CHANGELOG.md=$(changelog '- 新功能
 ')")
-expect_success 'check: 只刪條列時放行' check "$two" "$removed_only"
+expect_failure 'check: 只刪條列時要寫出可發布的改動' check "$two" "$removed_only"
 g checkout -q -
 
-# 子條列算在上面那一條裡：只在既有條列底下加子條列也算改寫。
+# 歷史工具仍能辨認子條列變化，但公開檢查必須擋下巢狀條列。
 g checkout -q -b nested "$noted"
 nested_base=$(commit parent "CHANGELOG.md=$(changelog '- 一批設定：
   - 第一個
@@ -169,7 +169,7 @@ nested=$(commit child "lib/main.dart=v2e" "CHANGELOG.md=$(changelog '- 一批設
   - 第二個
 - 另一項
 ')")
-expect_success 'check: 只加子條列時放行' check "$nested_base" "$nested"
+expect_failure 'check: 巢狀條列會重發整組，須改成平鋪摘要' check "$nested_base" "$nested"
 g checkout -q -
 
 # 正式版：版號 commit 把「未發布」改名成「0.3.4」，上面留空的「未發布」。
@@ -244,13 +244,41 @@ commit reworded "CHANGELOG.md=$(changelog '- 新功能（改寫）
 expect_output 'added: 改寫過的條列也算新的' '- 新功能（改寫）' added "$more"
 g checkout -q -
 
-# 子條列跟著上面那一條：新的一條整條印出，只改了子條列也整條印出。
+# 舊格式的差異會把父項與子項一起印出；validate 會阻擋這種發版說明。
 g checkout -q nested
 expect_output 'added: 只改了子條列時整條印出' "$(printf -- '- 一批設定：\n  - 第一個\n  - 第二個')" \
   added "$nested_base"
 expect_output 'added: 新的一條連子條列一起印出' "$(printf -- '- 一批設定：\n  - 第一個\n  - 第二個\n- 另一項')" \
   added "$noted"
 g checkout -q -
+
+# ---- 公開更新說明 ----
+
+validate() { (cd "$repo" && sh "$tool" validate "$@"); }
+printf '%s\n' '- 改善搜尋與目錄的相容性。' >"$work/public.md"
+expect_success 'validate: 精簡通用的測試版說明通過' validate beta "$work/public.md"
+printf '%s\n' '這次更容易在多台裝置接著閱讀。' '' '- 改善閱讀進度同步。' >"$work/public.md"
+expect_success 'validate: 正式版允許一段簡短介紹' validate stable "$work/public.md"
+expect_failure 'validate: 測試版不能放介紹段落' validate beta "$work/public.md"
+printf '%s\n' '- 改善番茄小說的簽章解析。' >"$work/public.md"
+expect_failure 'validate: 已知書源名稱不得出現在公開說明' validate beta "$work/public.md"
+printf '%s\n' '- 改善 https://books.example.com 的書源。' >"$work/public.md"
+expect_failure 'validate: 書源網址不得出現在公開說明' validate beta "$work/public.md"
+printf '%s\n' '- 改善 www.example.org 上的搜尋。' >"$work/public.md"
+expect_failure 'validate: 網域不得出現在公開說明' validate beta "$work/public.md"
+printf '%s\n' '- 改善書源相容性：' '  - 修正某項解析' >"$work/public.md"
+expect_failure 'validate: 巢狀條列不能公開' validate beta "$work/public.md"
+printf '%s\n' '- 第一項' '- 第二項' '- 第三項' '- 第四項' >"$work/public.md"
+expect_success 'validate: 測試版四項以內通過' validate beta "$work/public.md"
+printf '%s\n' '- 第一項' '- 第二項' '- 第三項' '- 第四項' '- 第五項' >"$work/public.md"
+expect_failure 'validate: 測試版超過四項失敗' validate beta "$work/public.md"
+expect_success 'validate: 正式版可容納五項' validate stable "$work/public.md"
+awk 'BEGIN { printf "- "; for (i = 0; i < 146; i++) printf "字"; print "" }' >"$work/public.md"
+expect_failure 'validate: 單項超過 145 字元會失敗' validate beta "$work/public.md"
+awk 'BEGIN { for (j = 0; j < 4; j++) { printf "- "; for (i = 0; i < 130; i++) printf "字"; print "" } }' >"$work/public.md"
+expect_failure 'validate: 更新說明總長度過長會失敗' validate beta "$work/public.md"
+: >"$work/public.md"
+expect_failure 'validate: 空白更新說明會失敗' validate beta "$work/public.md"
 
 # ---- git 失敗 ----
 
