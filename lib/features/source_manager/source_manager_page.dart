@@ -429,6 +429,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
                   ) +
                   ReadableWidth.insetOf(context),
               count: p.lastSourceCount,
+              sources: p.sources,
+              progressOf: p.checkService.progressOf,
             )
           : const SizedBox.shrink(),
       builder: (context) => _buildLoadedContent(context, p),
@@ -509,13 +511,17 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
 
     final canReorder = p.showsManualOrder;
     final editing = _isEditing(p);
-    final rowHeight = SourceListSkeleton.rowHeightOf(context);
-
     Widget itemAt(int i) {
       final isLastInGroup = i == list.length - 1 || startsHostGroup(i + 1);
       return CoverRevealSlot(
         key: ValueKey(list[i].bookSourceUrl),
-        placeholder: SizedBox(height: rowHeight),
+        placeholder: SizedBox(
+          height: SourceListSkeleton.rowHeightFor(
+            context,
+            list[i],
+            progress: p.checkService.progressOf(list[i].bookSourceUrl),
+          ),
+        ),
         child: _buildItem(
           p,
           list[i],
