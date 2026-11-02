@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'public_suffix.dart';
+
 /// NetworkUtils - 網路輔助工具 (原 Android utils/NetworkUtils.kt)
 class NetworkUtils {
   NetworkUtils._();
@@ -57,16 +59,6 @@ class NetworkUtils {
     }
   }
 
-  /// 獲取域名 (對標 getDomain)
-  static String getDomain(String url) {
-    try {
-      final uri = Uri.parse(url);
-      return uri.host;
-    } catch (_) {
-      return url;
-    }
-  }
-
   /// 檢查字串是否為 IP 地址
   static bool isIPAddress(String input) {
     try {
@@ -77,16 +69,23 @@ class NetworkUtils {
     }
   }
 
-  /// 獲取子域名 (對標 getSubDomain)
-  /// 注意：此處為簡易實作，不含 PublicSuffixDatabase
+  /// 書源 Cookie 存放用的網域，同 Legado `NetworkUtils.getSubDomain`：
+  /// `https://www.biquge.com.cn/x` → `biquge.com.cn`（照公共字尾表，
+  /// [registrableDomain]），IP 位址照原樣；不是 http／https 網址或解析失敗時
+  /// 傳回 [url] 本身。
   static String getSubDomain(String url) {
-    final host = getDomain(url);
-    if (isIPAddress(host)) return host;
-
-    final parts = host.split('.');
-    if (parts.length >= 2) {
-      return parts.sublist(parts.length - 2).join('.');
+    final lower = url.toLowerCase();
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      return url;
     }
-    return host;
+    final String host;
+    try {
+      host = Uri.parse(url).host;
+    } on FormatException {
+      return url;
+    }
+    if (host.isEmpty) return url;
+    if (isIPAddress(host)) return host;
+    return registrableDomain(host) ?? host;
   }
 }
