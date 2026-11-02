@@ -48,7 +48,9 @@ class _SourceKind extends SyncKind {
   Future<Map<String, SyncRecord>> local() async => {};
 
   @override
-  Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async => {};
+  Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async {
+    return {};
+  }
 }
 
 class _Auth implements GoogleDriveAuth {
@@ -105,7 +107,8 @@ void main() {
     List<SyncKind> Function(SyncService)? kinds,
   }) async {
     final sync = SyncService(
-      storeFactory: (space, _, _) => space == SyncSpace.none ? null : store ?? _Store(),
+      storeFactory: (space, _, _) =>
+          space == SyncSpace.none ? null : store ?? _Store(),
       bases: bases ?? _MemoryBases(),
       googleAuth: auth,
       kinds: kinds ?? (_) => const [],
