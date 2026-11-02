@@ -90,15 +90,9 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             tempResult = result;
           }
 
-          // 動態規則（含 `{{ }}`）沒結果時用組好的規則文字；JS 規則照 Legado
-          // 就是 JS 交回的結果，空的就是空的，不拿 JS 程式碼當結果。
-          if (sourceRule.isDynamic &&
-              sourceRule.mode != Mode.js &&
-              (tempResult == null || tempResult.toString().isEmpty)) {
-            result = rule;
-          } else {
-            result = tempResult;
-          }
+          // 動態規則（含 `{{ }}`）：正則模式本來就是組好的文字，JS 規則是 JS
+          // 交回的結果，沒值就是空的（同 Legado），不另外退回規則文字。
+          result = tempResult;
 
           if (result != null && sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換: ${sourceRule.replaceRegex}');
