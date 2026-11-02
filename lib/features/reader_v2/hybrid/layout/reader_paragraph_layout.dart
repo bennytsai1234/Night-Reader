@@ -36,12 +36,14 @@ final class ReaderParagraphLayout {
     required double fontSize,
     required double letterSpacing,
     required bool bold,
+    List<String> fontFamilyFallback = kReaderV2FontFamilyFallback,
   }) {
     if (!fontSize.isFinite || fontSize <= 0 || !letterSpacing.isFinite) {
       return null;
     }
     final key =
-        '$fontSize|$letterSpacing|$bold|$kReaderV2CjkTypographyFeatureSignature';
+        '$fontSize|$letterSpacing|$bold|${fontFamilyFallback.join(',')}|'
+        '$kReaderV2CjkTypographyFeatureSignature';
     final cached = _cellWidthCache[key];
     if (cached != null) return cached;
 
@@ -52,6 +54,7 @@ final class ReaderParagraphLayout {
         lineHeight: 1.0,
         letterSpacing: letterSpacing,
         bold: bold,
+        fontFamilyFallback: fontFamilyFallback,
       ),
       textColor: const ui.Color(0xFF000000),
     )..layout(ui.ParagraphConstraints(width: fontSize * 8));
@@ -192,7 +195,8 @@ final class ReaderParagraphLayout {
   /// 就和漢字一樣佔一格。
   double emojiScale(HybridBlockTextStyle style) {
     final key =
-        '${style.fontSize}|${style.bold}|$kReaderV2CjkTypographyFeatureSignature';
+        '${style.fontSize}|${style.bold}|${style.fontFamilyFallback.join(',')}|'
+        '$kReaderV2CjkTypographyFeatureSignature';
     final cached = _emojiScaleCache[key];
     if (cached != null) return cached;
     final plain = HybridBlockTextStyle(
@@ -200,6 +204,7 @@ final class ReaderParagraphLayout {
       lineHeight: 1.0,
       letterSpacing: 0,
       bold: style.bold,
+      fontFamilyFallback: style.fontFamilyFallback,
     );
     double advance(String text) {
       final builder = ui.ParagraphBuilder(ui.ParagraphStyle())
@@ -265,7 +270,7 @@ final class ReaderParagraphLayout {
       height: style.lineHeight,
       strutStyle: ui.StrutStyle(
         fontFamily: kReaderV2PunctFontFamily,
-        fontFamilyFallback: kReaderV2FontFamilyFallback,
+        fontFamilyFallback: style.fontFamilyFallback,
         fontSize: style.fontSize,
         height: style.lineHeight,
         fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
@@ -297,7 +302,7 @@ final class ReaderParagraphLayout {
       letterSpacing: style.letterSpacing,
       fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
       fontFamily: kReaderV2PunctFontFamily,
-      fontFamilyFallback: kReaderV2FontFamilyFallback,
+      fontFamilyFallback: style.fontFamilyFallback,
       fontFeatures: kReaderV2CjkFontFeatures,
       locale: kReaderV2TextLocale,
     );
