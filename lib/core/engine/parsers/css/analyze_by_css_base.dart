@@ -1,6 +1,8 @@
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
+import '../elements_list.dart';
+
 /// AnalyzeByCss 的基礎類別
 /// (原 Android model/analyzeRule/AnalyzeByJSoup.kt)
 abstract class AnalyzeByCssBase {
@@ -12,6 +14,10 @@ abstract class AnalyzeByCssBase {
       element = doc;
     } else if (htmlLike != null) {
       element = _parseRootElement(htmlLike);
+    } else if (doc is List) {
+      // 上一條規則找到的一組元素（同 Legado 交給 Jsoup 的 Elements）。
+      final single = elementsListSingle(doc);
+      element = single ?? _parseRootElement(elementsListHtml(doc));
     } else if (doc is String) {
       element = _parseRootElement(doc);
     } else {
