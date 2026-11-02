@@ -75,4 +75,24 @@ void main() {
     expect(book.name, '乙書');
     expect(book.author, '甲書');
   });
+
+  test('詳情頁 init 用 XPath 找到多個節點時照網頁讀，不當成 JSON', () async {
+    final source = BookSource.fromJson({
+      'bookSourceName': '一組元素',
+      'bookSourceUrl': 'https://ge.test',
+      'ruleBookInfo': {
+        'init': '//ol/li',
+        'name': 'class.t.1@text',
+        'author': '//li[1]/a/text()',
+      },
+    });
+    final book = await BookInfoParser.parse(
+      source: source,
+      book: Book(bookUrl: 'https://ge.test/b/1', origin: 'https://ge.test'),
+      body: html,
+      baseUrl: 'https://ge.test/b/1',
+    );
+    expect(book.name, '乙書');
+    expect(book.author, '甲書');
+  });
 }
