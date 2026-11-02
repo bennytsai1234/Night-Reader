@@ -2,6 +2,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// 目錄解析結果
 class ChapterListResult {
@@ -89,7 +90,17 @@ class ChapterListParser {
           chapter.title = _readString(itemRule, chapterNameRule);
           if (chapter.title.isEmpty) continue;
 
-          chapter.url = _readString(itemRule, chapterUrlRule, isUrl: true);
+          // 同 Legado `bookChapter.url = getString(urlRule)`：先讀原文、不加
+          // isUrl。isUrl 在讀不到時會傳回目錄網址，卷那一列（沒有章節網址）
+          // 就分不出「規則沒抓到」，拿不到下面的「標題＋序號」，之後依網址去重
+          // 還會把所有卷收成一個。
+          final rawUrl = _readString(itemRule, chapterUrlRule);
+          chapter.url = rawUrl.isEmpty
+              ? ''
+              : NetworkUtils.getAbsoluteURL(
+                  itemRule.redirectUrl ?? baseUrl,
+                  rawUrl,
+                );
           chapter.tag = _readString(itemRule, updateTimeRule);
           chapter.isVolume = _isTrue(_readString(itemRule, isVolumeRule));
 
