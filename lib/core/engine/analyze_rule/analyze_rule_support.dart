@@ -22,6 +22,15 @@ class SourceRule {
   List<String> ruleParam = [];
   List<int> ruleType = [];
 
+  static final RegExp _evalPattern = RegExp(
+    r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}',
+    caseSensitive: false,
+  );
+  static final RegExp _evalPatternJson = RegExp(
+    r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}',
+    caseSensitive: false,
+  );
+
   static const int jsonPartRuleType = -3;
   static const int getRuleType = -2;
   static const int jsRuleType = -1;
@@ -91,13 +100,17 @@ class SourceRule {
       } catch (_) {}
     }
     rule = vRuleStr;
-    final evalPattern = RegExp(
-      r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}',
-      caseSensitive: false,
-    );
+    // JSON 模式的 `{$.x}` 由 JSON 解析器替換（同 Legado，它的 evalPattern 沒有
+    // 這一種）；其他模式夜讀在這裡先代入。
+    final evalPattern = mode == Mode.json ? _evalPatternJson : _evalPattern;
     var start = 0;
     final evalMatches = evalPattern.allMatches(rule);
-    if (evalMatches.isNotEmpty) isDynamic = true;
+    if (evalMatches.isNotEmpty) {
+      isDynamic = true;
+      // 同 Legado：含 `@get:`、`{{ }}` 的規則組好就是結果的文字，不再拿去
+      // 解析（`##` 之後的取代已在上面分開）。
+      if (mode != Mode.js && mode != Mode.regex) mode = Mode.regex;
+    }
     for (final match in evalMatches) {
       if (match.start > start) _splitRegex(rule.substring(start, match.start));
       final tmp = match.group(0)!;

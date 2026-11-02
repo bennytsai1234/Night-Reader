@@ -3,12 +3,19 @@ import 'analyze_rule_support.dart';
 
 /// AnalyzeRule 的正則工具與輔助邏輯擴展
 mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
-  /// 同一條規則對 JSON 與網頁解析成不同模式，快取分開放。
-  List<SourceRule> splitSourceRuleCacheString(String ruleStr) {
+  /// 同一條規則對 JSON 與網頁解析成不同模式，快取分開放。模式照目前內容
+  /// 決定（同 Legado）；[mContent] 是規則 JS 交來的物件時照 JSON 讀它的欄位
+  /// （Legado 對 JS 物件直接讀鍵）。
+  List<SourceRule> splitSourceRuleCacheString(
+    String ruleStr, {
+    dynamic mContent,
+  }) {
     if (ruleStr.isEmpty) {
       return [];
     }
-    final isJson = isJsonContent(content);
+    final isJson =
+        isJsonContent(content) ||
+        (mContent is Map && extractHtmlLikeRuleInput(mContent) == null);
     final key = isJson ? '\u0000json:$ruleStr' : ruleStr;
     if (AnalyzeRuleBase.stringRuleCache.containsKey(key)) {
       return AnalyzeRuleBase.stringRuleCache[key]!;
