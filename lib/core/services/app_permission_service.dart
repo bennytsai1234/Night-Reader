@@ -63,6 +63,26 @@ class AppPermissionService {
   final AppPermissionPlatformPredicate _isAndroid;
   final AppPermissionPlatformPredicate _isIOS;
 
+  /// 權限尚未查完時仍能知道固定的五列結構；狀態文字拿到後才換成真值。
+  /// 與 [loadSnapshot] 使用相同的列順序和平台分支。
+  AppPermissionSnapshot loadingSnapshot() => AppPermissionSnapshot(
+    items: [
+      AppPermissionItem(
+        title: '通知',
+        status: _isAndroid() || _isIOS() ? '讀取中…' : '不適用',
+        tone: AppPermissionStatusTone.neutral,
+      ),
+      AppPermissionItem(
+        title: '相簿',
+        status: _isIOS() ? '讀取中…' : '不需授權',
+        tone: AppPermissionStatusTone.neutral,
+      ),
+      _filePickerItem(),
+      _allFilesItem(),
+      _backgroundAudioItem(),
+    ],
+  );
+
   Future<AppPermissionSnapshot> loadSnapshot() async {
     final items = <AppPermissionItem>[
       await _notificationItem(),
