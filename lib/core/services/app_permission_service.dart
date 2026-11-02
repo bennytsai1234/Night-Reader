@@ -65,34 +65,35 @@ class AppPermissionService {
 
   /// 權限尚未查完時仍能知道固定的五列結構；狀態文字拿到後才換成真值。
   /// 與 [loadSnapshot] 使用相同的列順序和平台分支。
-  AppPermissionSnapshot loadingSnapshot() => AppPermissionSnapshot(
+  AppPermissionSnapshot loadingSnapshot() => _snapshot(
+    AppPermissionItem(
+      title: '通知',
+      status: _isAndroid() || _isIOS() ? '讀取中…' : '不適用',
+      tone: AppPermissionStatusTone.neutral,
+    ),
+    AppPermissionItem(
+      title: '相簿',
+      status: _isIOS() ? '讀取中…' : '不需授權',
+      tone: AppPermissionStatusTone.neutral,
+    ),
+  );
+
+  Future<AppPermissionSnapshot> loadSnapshot() async =>
+      _snapshot(await _notificationItem(), await _photoLibraryItem());
+
+  /// 等待中與完成後的五列由同一處組裝，不會因新增權限讓兩邊列數分岔。
+  AppPermissionSnapshot _snapshot(
+    AppPermissionItem notification,
+    AppPermissionItem photos,
+  ) => AppPermissionSnapshot(
     items: [
-      AppPermissionItem(
-        title: '通知',
-        status: _isAndroid() || _isIOS() ? '讀取中…' : '不適用',
-        tone: AppPermissionStatusTone.neutral,
-      ),
-      AppPermissionItem(
-        title: '相簿',
-        status: _isIOS() ? '讀取中…' : '不需授權',
-        tone: AppPermissionStatusTone.neutral,
-      ),
+      notification,
+      photos,
       _filePickerItem(),
       _allFilesItem(),
       _backgroundAudioItem(),
     ],
   );
-
-  Future<AppPermissionSnapshot> loadSnapshot() async {
-    final items = <AppPermissionItem>[
-      await _notificationItem(),
-      await _photoLibraryItem(),
-      _filePickerItem(),
-      _allFilesItem(),
-      _backgroundAudioItem(),
-    ];
-    return AppPermissionSnapshot(items: items);
-  }
 
   Future<bool> requestNotificationForTts() async {
     if (!_isAndroid() && !_isIOS()) return true;
