@@ -139,9 +139,7 @@ void main() {
     expect(find.byType(SkeletonLine), findsNothing);
   });
 
-  testWidgets('發現先沿用上次書源數，資料回來再按真實數量與名稱排骨架', (
-    tester,
-  ) async {
+  testWidgets('發現先沿用上次書源數，資料回來再按真實數量與名稱排骨架', (tester) async {
     await getIt<SharedPreferences>().setString(
       'explore_filter_bar',
       '{"all":2,"groups":[]}',
@@ -173,7 +171,9 @@ void main() {
         of: skeleton,
         matching: find.byWidgetPredicate(
           (widget) =>
-              widget is SkeletonBox && widget.width == 22 && widget.height == 22,
+              widget is SkeletonBox &&
+              widget.width == 22 &&
+              widget.height == 22,
         ),
       ),
       findsNWidgets(2),
