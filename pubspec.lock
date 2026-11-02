@@ -1650,11 +1650,10 @@ packages:
   xpath_selector:
     dependency: "direct main"
     description:
-      name: xpath_selector
-      sha256: "6d8295565a34a6e2821a0721592e584c70421e52a0f54955e0c8e41963db7c90"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.2"
+      path: "third_party/xpath_selector"
+      relative: true
+    source: path
+    version: "3.0.2+nightreader.1"
   xpath_selector_html_parser:
     dependency: "direct main"
     description:
