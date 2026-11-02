@@ -97,7 +97,17 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's10_stats': (const {}, (t) async => openMine(t, '閱讀統計')),
   's11_reading_prefs': (const {}, (t) async => openMine(t, '閱讀偏好')),
   's12_sources': (const {}, (t) async => openMine(t, '書源管理')),
-  's13_downloads': (const {}, (t) async => openMine(t, '背景下載佇列')),
+  's13_downloads': (
+    const {},
+    (t) async {
+      await openMine(t, '關於夜讀');
+      await t.ensureVisible(find.text('背景下載佇列'));
+      await settle(t, const Duration(milliseconds: 300));
+      await tapText(t, '背景下載佇列');
+      await settle(t);
+    },
+  ),
+  's14_bookmarks': (const {}, (t) async => openMine(t, '書籤')),
   's15_appearance': (const {}, (t) async => openMine(t, '外觀與主題')),
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
   's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),

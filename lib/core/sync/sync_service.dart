@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:synchronized/synchronized.dart';
 
+import 'bookmark_sync.dart';
 import 'bookshelf_sync.dart';
 import 'google_drive_auth.dart';
 import 'google_drive_sync_store.dart';
@@ -188,6 +189,7 @@ class SyncService {
     ReplaceRuleSync(),
     BookshelfSync(isOpen: service.isBookOpen),
     service._progress,
+    BookmarkSync(),
     ReadStatsSync(settings: service._settings, bases: service._bases),
     SettingsSync(),
     ...LoginDataSync.kinds(),
@@ -362,7 +364,8 @@ class SyncService {
   /// 改完隔多久同步：連續改好幾個（匯入、批次啟用）合併成一次。
   static const Duration _editDelay = Duration(seconds: 5);
 
-  /// 這台改了幾次，鍵是 [SyncKind.name]；只數書源與替換規則（[_watchEdits]）。
+  /// 這台改了幾次，鍵是 [SyncKind.name]；只數書源、替換規則與書籤
+  /// （[_watchEdits]）。
   final Map<String, int> _localEdits = {};
 
   /// 上次同步時兩邊都沒變的種類：當時雲端檔的版本與這台改了幾次。之後兩邊
@@ -370,7 +373,7 @@ class SyncService {
   /// 太重），只問一次雲端檔的版本。
   final Map<String, ({String version, int edits})> _settled = {};
 
-  /// 書源與替換規則改了就排一次同步。書架與進度不看：讀書時每翻一頁都會
+  /// 書源、替換規則與書籤改了就排一次同步。書架與進度不看：讀書時每翻一頁都會
   /// 寫書，離開閱讀器與 App 退到背景時才同步；設定在 App 退到背景時同步。
   /// 同步自己套用雲端的改動時不排（那時正在同步），但照樣算改過，下次
   /// 同步會整份比一次。
@@ -383,6 +386,7 @@ class SyncService {
     for (final (table, kind) in <(TableInfo, String)>[
       (db.bookSources, SourceSync.kind),
       (db.replaceRules, ReplaceRuleSync.kind),
+      (db.bookmarks, BookmarkSync.kind),
     ]) {
       _localEdits[kind] = 0;
       _edits.add(

@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/services/restore_service.dart';
@@ -34,6 +35,7 @@ void main() {
       ..registerSingleton<BookGroupDao>(BookGroupDao(db))
       ..registerSingleton<DownloadDao>(DownloadDao(db))
       ..registerSingleton<ReadRecordDao>(ReadRecordDao(db))
+      ..registerSingleton<BookmarkDao>(BookmarkDao(db))
       ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db));
     tempDir = await Directory.systemTemp.createTemp('restore_test');
   });
@@ -89,6 +91,52 @@ void main() {
     expect(result.restoredAny, isTrue);
     expect(result.failedFiles, isEmpty);
     expect(await BookSourceDao(db).getByUrl('https://b.example'), isNotNull);
+  });
+
+  test('bookmarks are restored, including ones from backups made before '
+      'bookmarks were rebuilt', () async {
+    final zip = await writeZip('bookmarks.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': 2}),
+      'bookmark.json': jsonEncode([
+        // 2026-09 以前的欄位。
+        {
+          'id': 1,
+          'time': 1758000000000,
+          'bookName': '夜雨聽書',
+          'bookAuthor': '沈知秋',
+          'chapterIndex': 2,
+          'chapterPos': 88,
+          'chapterName': '第三章 松煙墨',
+          'bookUrl': 'https://old.example/book/1',
+          'bookText': '松煙墨',
+          'content': '',
+        },
+        // 現在的欄位。
+        {
+          'id': 1790000000000,
+          'bookName': '夜雨聽書',
+          'bookAuthor': '沈知秋',
+          'chapterIndex': 4,
+          'chapterTitle': '第五章',
+          'charOffset': 10,
+          'excerpt': '雨聲',
+        },
+      ]),
+    });
+
+    final result = await RestoreService().restoreFromZip(zip);
+
+    expect(result.failedFiles, isEmpty);
+    final restored = {
+      for (final bookmark in await BookmarkDao(db).getAll())
+        bookmark.id: bookmark,
+    };
+    expect(restored.keys, unorderedEquals([1758000000000, 1790000000000]));
+    final legacy = restored[1758000000000]!;
+    expect(legacy.chapterTitle, '第三章 松煙墨');
+    expect(legacy.charOffset, 88);
+    expect(legacy.excerpt, '松煙墨');
+    expect(restored[1790000000000]!.excerpt, '雨聲');
   });
 
   test('reading totals and daily seconds are restored together', () async {
