@@ -28,9 +28,7 @@ class _DelayedGateway implements AppPermissionGateway {
 }
 
 void main() {
-  testWidgets('權限先有五列狀態與兩列操作，真正狀態到齊才揭開', (
-    tester,
-  ) async {
+  testWidgets('權限先有五列狀態與兩列操作，真正狀態到齊才揭開', (tester) async {
     tester.view.physicalSize = const Size(393, 852) * 3;
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
