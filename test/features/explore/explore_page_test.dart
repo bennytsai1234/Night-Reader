@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/explore/explore_provider.dart';
+import 'package:night_reader/features/explore/widgets/explore_skeletons.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -138,6 +139,71 @@ void main() {
     expect(find.byType(SkeletonLine), findsNothing);
   });
 
+  testWidgets('發現先沿用上次書源數，資料回來再按真實數量與名稱排骨架', (tester) async {
+    await getIt<SharedPreferences>().setString(
+      'explore_filter_bar',
+      '{"all":2,"groups":[]}',
+    );
+    final sources = StreamController<List<BookSource>>();
+    addTearDown(sources.close);
+    final provider = ExploreProvider(
+      sourceDao: _FakeSourceDao.stream(sources.stream),
+      kindsLoader: (_, {source}) async => const [],
+    );
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ExploreProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const ExplorePage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    final skeleton = find.byType(ExploreSourceListSkeleton);
+    expect(
+      find.descendant(of: skeleton, matching: find.byType(GroupedSliceItem)),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(
+        of: skeleton,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SkeletonBox &&
+              widget.width == 22 &&
+              widget.height == 22,
+        ),
+      ),
+      findsNWidgets(2),
+    );
+
+    sources.add([
+      for (var i = 0; i < 3; i++)
+        BookSource(
+          bookSourceUrl: 'https://s$i.example',
+          bookSourceName: '書源$i',
+          exploreUrl: '/explore',
+        ),
+    ]);
+    await tester.pump();
+    await tester.pump();
+    // 資料到齊但換場未播完的這一幀，骨架已改成真正的三列。
+    expect(provider.skeletonSourceCount, 3);
+    expect(
+      find.descendant(of: skeleton, matching: find.byType(GroupedSliceItem)),
+      findsNWidgets(3),
+    );
+    expect(
+      find.descendant(of: skeleton, matching: find.byType(SkeletonShapes)),
+      findsNWidgets(3),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('書源0'), findsOneWidget);
+    expect(find.text('書源2'), findsOneWidget);
+  });
+
   for (final hasAny in [false, true]) {
     testWidgets(
       hasAny
@@ -264,6 +330,14 @@ void main() {
 
         // 和沒有紀錄一樣：先沒有分組鈕，讀到書源才長出來並重新記下。
         expect(groupButton, findsNothing);
+        // 骨架也照沒有紀錄的樣子鋪滿（null），不是畫 0 列。
+        final pending = StreamController<List<BookSource>>();
+        addTearDown(() => unawaited(pending.close()));
+        final fresh = ExploreProvider(
+          sourceDao: _FakeSourceDao.stream(pending.stream),
+        );
+        addTearDown(fresh.dispose);
+        expect(fresh.skeletonSourceCount, isNull);
         sources.add(groupedSources());
         await tester.pumpAndSettle();
         expect(groupButton, findsOneWidget);

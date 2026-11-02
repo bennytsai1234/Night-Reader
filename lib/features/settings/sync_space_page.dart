@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/features/settings/webdav_settings_page.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -30,6 +32,7 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
   String? _googleAccount;
   String? _webDavUrl;
   bool _connecting = false;
+  bool _loaded = false;
 
   static bool get _googleAvailable =>
       defaultTargetPlatform == TargetPlatform.android;
@@ -37,19 +40,34 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
   @override
   void initState() {
     super.initState();
+    _sync.status.addListener(_onSyncStatus);
     unawaited(_load());
   }
 
+  @override
+  void dispose() {
+    _sync.status.removeListener(_onSyncStatus);
+    super.dispose();
+  }
+
+  void _onSyncStatus() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _load() async {
-    final space = await _settings.space();
-    final google = await _settings.googleAccount();
-    final webDav = await _settings.webDavAccount();
-    if (!mounted) return;
-    setState(() {
+    try {
+      final space = await _settings.space();
+      final google = await _settings.googleAccount();
+      final webDav = await _settings.webDavAccount();
+      if (!mounted) return;
       _space = space;
       _googleAccount = google;
       _webDavUrl = webDav?.url;
-    });
+    } catch (error, stackTrace) {
+      AppLog.e('讀取同步空間失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   void _say(String message) {
@@ -64,8 +82,7 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
       await _sync.useGoogleDrive();
       await _load();
       if (!mounted) return;
-      final error = _sync.status.value.error;
-      _say(error == null ? '已連上 Google 雲端硬碟，同步好了' : '已連上，但同步失敗：$error');
+      _say('已連上 Google 雲端硬碟，開始同步');
     } on SyncStoreException catch (error) {
       if (mounted) _say(error.message);
     } finally {
@@ -102,6 +119,8 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '同步空間'),
       body: GroupedListView(
+        // 等原有設定讀回後，骨架才照最後的文字與區塊換成內容。
+        ready: _loaded,
         children: [
           GroupedSection(
             footer: _googleAvailable
@@ -133,6 +152,11 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
           if (_space != SyncSpace.none)
             GroupedSection(
               children: [
+                GroupedRow(
+                  title: '同步狀態',
+                  subtitle: syncStatusSubtitle(_sync.status.value),
+                  showChevron: false,
+                ),
                 GroupedRow(
                   title: '停用同步',
                   destructive: true,

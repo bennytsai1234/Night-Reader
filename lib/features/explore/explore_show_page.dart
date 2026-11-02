@@ -102,7 +102,11 @@ class ExploreShowView extends StatelessWidget {
       waitForCovers: CoverWait.brief,
       // 書單直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
       backdrop: Theme.of(context).scaffoldBackgroundColor,
-      skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),
+      skeleton: ExploreBookListSkeleton(
+        padding: _listPadding(context),
+        books: provider.books,
+        inBookshelf: provider.isInBookshelf,
+      ),
       builder: (_) => _buildLoaded(context, provider),
     );
   }
@@ -172,8 +176,12 @@ class ExploreShowView extends StatelessWidget {
           final book = provider.books[index];
           return CoverRevealSlot(
             key: ValueKey(book.bookUrl),
-            placeholder: const SizedBox(
-              height: ExploreBookItem.coverHeight + AppSpacing.md * 2,
+            placeholderBuilder: (context) => SizedBox(
+              height: ExploreBookListSkeleton.rowHeightFor(
+                context,
+                book,
+                isInBookshelf: provider.isInBookshelf(book),
+              ),
             ),
             child: _ExploreBookRow(
               book: book,
