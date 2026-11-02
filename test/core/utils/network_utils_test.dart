@@ -29,9 +29,24 @@ void main() {
       );
     });
 
+    // Dart 組相對網址時先把中文主機名百分比編碼。
+    test('百分比編碼過的中文主機名也換成 punycode', () {
+      final absolute = NetworkUtils.getAbsoluteURL(
+        'https://永远的神.com/books/',
+        '../search',
+      );
+      expect(
+        NetworkUtils.toAsciiHost(absolute),
+        'https://xn--5rwq3tukc919a.com/search',
+      );
+    });
+
     test('ASCII 網域與不是網址的照舊', () {
       for (final url in [
         'https://www.example.com/中文路徑',
+        'https://www.example.com/%E4%B8%AD',
+        'https://[2001:db8::1]:8443/a',
+        'https://xn--5rwq3tukc919a.com/a',
         'data:;base64,5aSc',
         '/relative/path',
       ]) {

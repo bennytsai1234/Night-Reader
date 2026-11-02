@@ -75,6 +75,8 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
   var redirects = 0;
   String? previousUrl;
   while (true) {
+    // 每一站（含轉址到的）先換成送出的網址，Cookie 與轉址都照它。
+    url = NetworkUtils.toAsciiHost(url);
     final uri = Uri.parse(url);
     if (uri.scheme != 'http' && uri.scheme != 'https') {
       throw JsoupException('Only http & https protocols supported');
@@ -129,7 +131,7 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
     final response = await (_jsoupDio ??= Dio()).fetch<ResponseBody>(
       RequestOptions(
         method: method,
-        path: NetworkUtils.toAsciiHost(url),
+        path: url,
         data: payload,
         headers: wire,
         connectTimeout: timeout,

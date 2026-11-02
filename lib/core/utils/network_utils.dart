@@ -16,8 +16,8 @@ class NetworkUtils {
   );
 
   /// [url] 的主機名有中文這類非 ASCII 字時換成 punycode（`xn--…`），其他照舊。
-  /// 同 Legado 用的 OkHttp `HttpUrl`；Dart 的 `Uri` 會把這種主機名百分比編碼，
-  /// 連線時查不到網域。
+  /// 同 Legado 用的 OkHttp `HttpUrl`；Dart 的 `Uri` 會把這種主機名百分比編碼
+  /// （組相對網址時也會），連線時查不到網域，所以編碼過的也還原再換。
   static String toAsciiHost(String url) {
     final match = _authority.firstMatch(url);
     if (match == null) return url;
@@ -27,7 +27,15 @@ class NetworkUtils {
     final hostPort = authority.substring(at + 1);
     final colon = hostPort.lastIndexOf(':');
     final hasPort = colon >= 0 && !hostPort.startsWith('[');
-    final host = hasPort ? hostPort.substring(0, colon) : hostPort;
+    var host = hasPort ? hostPort.substring(0, colon) : hostPort;
+    if (host.contains('%') && !host.startsWith('[')) {
+      try {
+        host = Uri.decodeComponent(host);
+      } catch (_) {
+        // 不合法的百分比編碼或不是 UTF-8：不是中文網域，照原樣送。
+        return url;
+      }
+    }
     if (!host.runes.any((c) => c > 0x7f)) return url;
     final ascii = domainToAscii(host, validate: false);
     final port = hasPort ? hostPort.substring(colon) : '';
