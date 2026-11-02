@@ -83,7 +83,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           skeleton: ExploreSourceListSkeleton(
             padding: _listPadding,
             count: provider.skeletonSourceCount,
-            names: [for (final source in provider.sources) source.bookSourceName],
+            names: [
+              for (final source in provider.sources) source.bookSourceName,
+            ],
           ),
           builder: (_) => _buildSourceList(provider),
         );
