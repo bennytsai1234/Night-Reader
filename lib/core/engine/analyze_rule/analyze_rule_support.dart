@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:html/dom.dart';
+import 'package:night_reader/core/models/json_read.dart';
+import 'package:night_reader/core/models/source/lenient_json.dart';
 
 import '../parsers/analyze_by_css.dart';
 import '../parsers/analyze_by_json_path.dart';
@@ -88,16 +90,30 @@ class SourceRule {
         mode = Mode.xpath;
       }
     }
-    final putPattern = RegExp(r'@put:(\{.*?\})', caseSensitive: false);
+    // 同 Legado `splitPutRule`：先照標準 JSON 讀，不行再照 Gson 寬鬆模式讀
+    // （`@put:{bid:id}` 這種鍵和值都沒加引號的寫法）；值照 Gson 轉成文字。
+    final putPattern = RegExp(r'@put:(\{[^}]+?\})', caseSensitive: false);
     var vRuleStr = rule;
     final putMatches = putPattern.allMatches(rule);
     for (final putMatch in putMatches) {
       vRuleStr = vRuleStr.replaceFirst(putMatch.group(0)!, '');
+      final jsonStr = putMatch.group(1)!;
+      Object? decoded;
       try {
-        final jsonStr = putMatch.group(1)!;
-        final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-        map.forEach((k, v) => putMap[k] = v.toString());
-      } catch (_) {}
+        decoded = jsonDecode(jsonStr);
+      } on FormatException {
+        try {
+          decoded = decodeLenientJson(jsonStr);
+        } on FormatException {
+          decoded = null;
+        }
+      }
+      if (decoded is Map) {
+        decoded.forEach((k, v) {
+          final value = readJsonString(v);
+          if (value != null) putMap['$k'] = value;
+        });
+      }
     }
     rule = vRuleStr;
     // JSON 模式的 `{$.x}` 由 JSON 解析器替換（同 Legado，它的 evalPattern 沒有
