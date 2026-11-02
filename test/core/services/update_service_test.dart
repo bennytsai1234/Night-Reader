@@ -233,6 +233,16 @@ void main() {
       },
     );
 
+    test('an empty bullet left in a release note is skipped', () async {
+      final log = await notes([
+        release('v0.3.4-beta.6', '- 甲\n- \n- 乙'),
+        release('v0.3.4-beta.5', '- 丙\n- 丁\n- 戊'),
+        release('v0.3.3', '- 上一版', prerelease: false),
+      ], '0.3.3');
+      expect(log, contains('- 甲'));
+      expect(log, isNot(contains('\n- \n')));
+    });
+
     test('reads further pages until the installed cycle', () async {
       final api = _ReleaseApi(
         latest: stable,

@@ -159,7 +159,9 @@ class AppUpdateService {
     var displayed = 0;
     for (final line in topLevel) {
       var note = line.trim();
-      final content = note.substring(2);
+      final content = note.replaceFirst(_markdownBullet, '').trim();
+      // 空的條列（網頁上編輯常留下的「- 」）不算一項。
+      if (content.isEmpty) continue;
       final colon = content.indexOf('：');
       if (colon > 0 && colon <= 16) {
         if (!topics.add(content.substring(0, colon))) continue;
