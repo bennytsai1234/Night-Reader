@@ -24,9 +24,13 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     log('⇒ 執行 getString: $ruleStr');
     final ruleList = splitSourceRuleCacheString(ruleStr, mContent: mContent);
-    var result = mContent ?? content;
+    // 同 Legado：沒有規則（只有空白的規則拆不出任何一段）就沒有結果，不是
+    // 把整份內容當結果。
+    dynamic result;
+    final input = mContent ?? content;
 
-    if (result != null && ruleList.isNotEmpty) {
+    if (input != null && ruleList.isNotEmpty) {
+      result = input;
       for (final sourceRule in ruleList) {
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
@@ -150,9 +154,13 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     log('⇒ 執行 getStringList: $ruleStr');
 
     final ruleList = splitSourceRuleCacheString(ruleStr, mContent: mContent);
-    var result = mContent ?? content;
+    // 同 Legado：沒有規則（只有空白的規則拆不出任何一段）就沒有結果，不是
+    // 把整份內容當結果。
+    dynamic result;
+    final input = mContent ?? content;
 
-    if (result != null && ruleList.isNotEmpty) {
+    if (input != null && ruleList.isNotEmpty) {
+      result = input;
       for (final sourceRule in ruleList) {
         result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
