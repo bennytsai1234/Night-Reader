@@ -90,7 +90,10 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             tempResult = result;
           }
 
+          // 動態規則（含 `{{ }}`）沒結果時用組好的規則文字；JS 規則照 Legado
+          // 就是 JS 交回的結果，空的就是空的，不拿 JS 程式碼當結果。
           if (sourceRule.isDynamic &&
+              sourceRule.mode != Mode.js &&
               (tempResult == null || tempResult.toString().isEmpty)) {
             result = rule;
           } else {
