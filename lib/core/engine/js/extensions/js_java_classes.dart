@@ -984,11 +984,11 @@ extension JsJavaClasses on JsExtensionsBase {
     }
   });
   /// java.util.Base64：decoder 收文字或位元組。
-  function jdkDecoder() {
+  function jdkDecoder(flags) {
     return {
       decode: function(value) {
         var text = isText(value) ? String(value) : java.bytesToStr(normalizeByteArray(value), 'US-ASCII');
-        return java.base64DecodeToByteArray(text) || [];
+        return java.base64DecodeToByteArray(text, flags) || [];
       }
     };
   }
@@ -1000,7 +1000,9 @@ extension JsJavaClasses on JsExtensionsBase {
     };
   }
   var JdkBase64 = named('Base64', {
-    getDecoder: jdkDecoder, getUrlDecoder: jdkDecoder, getMimeDecoder: jdkDecoder,
+    getDecoder: function() { return jdkDecoder(0); },
+    getUrlDecoder: function() { return jdkDecoder(8); },
+    getMimeDecoder: function() { return jdkDecoder(0); },
     getEncoder: function() { return jdkEncoder(2); },
     getUrlEncoder: function() { return jdkEncoder(10); }
   });
