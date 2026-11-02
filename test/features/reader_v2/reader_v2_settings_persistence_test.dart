@@ -112,6 +112,10 @@ void main() {
       expect(settings.ttsFollow, isTrue);
       expect(settings.volumeKeyReversed, isFalse);
       expect(settings.hideNavigationBar, isFalse);
+      expect(readStyle.bold, isFalse);
+      expect(readStyle.titleBold, isTrue);
+      expect(readStyle.titleCenter, isFalse);
+      expect(settings.infoFontSize, 11);
       settings.dispose();
     });
 
@@ -231,6 +235,57 @@ void main() {
     expect(settings.isPageLayoutDefault, isTrue);
     settings.dispose();
   });
+
+  test(
+    'weights and title alignment persist and reset with typography',
+    () async {
+      final settings = ReaderV2SettingsController();
+      expect(settings.isWeightAndAlignDefault, isTrue);
+      settings
+        ..setBodyBold(true)
+        ..setTitleBold(false)
+        ..setTitleCenter(true);
+      await pumpEventQueue();
+      final saved = await const ReaderV2PrefsRepository().load();
+      expect(saved.bodyBold, isTrue);
+      expect(saved.titleBold, isFalse);
+      expect(saved.titleCenter, isTrue);
+
+      final reopened = ReaderV2SettingsController();
+      final style = reopened.readStyleFor(EdgeInsets.zero, viewportWidth: 393);
+      expect(style.bold, isTrue);
+      expect(style.titleBold, isFalse);
+      expect(style.titleCenter, isTrue);
+      reopened.dispose();
+
+      settings.resetTypography();
+      await pumpEventQueue();
+      expect(settings.isWeightAndAlignDefault, isTrue);
+      settings.dispose();
+    },
+  );
+
+  test(
+    'info font size persists, is clamped and resets with the page layout',
+    () async {
+      final settings = ReaderV2SettingsController();
+      settings.setInfoFontSize(14);
+      await pumpEventQueue();
+      expect((await const ReaderV2PrefsRepository().load()).infoFontSize, 14);
+      expect(settings.isPageLayoutDefault, isFalse);
+
+      settings.setInfoFontSize(40);
+      expect(settings.infoFontSize, ReaderV2PrefsRepository.maxInfoFontSize);
+      settings.setInfoFontSize(2);
+      expect(settings.infoFontSize, ReaderV2PrefsRepository.minInfoFontSize);
+
+      settings.resetPageLayout();
+      await pumpEventQueue();
+      expect(settings.infoFontSize, 11);
+      expect(settings.isPageLayoutDefault, isTrue);
+      settings.dispose();
+    },
+  );
 
   test('line chars persists and reset returns to 32', () async {
     final settings = ReaderV2SettingsController();
