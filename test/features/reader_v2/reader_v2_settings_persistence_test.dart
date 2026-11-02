@@ -1,7 +1,14 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/fonts/app_font.dart';
+import 'package:night_reader/core/fonts/font_library.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
@@ -240,7 +247,7 @@ void main() {
     'weights and title alignment persist and reset with typography',
     () async {
       final settings = ReaderV2SettingsController();
-      expect(settings.isWeightAndAlignDefault, isTrue);
+      expect(settings.isTypographyChoicesDefault, isTrue);
       settings
         ..setBodyBold(true)
         ..setTitleBold(false)
@@ -260,10 +267,70 @@ void main() {
 
       settings.resetTypography();
       await pumpEventQueue();
-      expect(settings.isWeightAndAlignDefault, isTrue);
+      expect(settings.isTypographyChoicesDefault, isTrue);
       settings.dispose();
     },
   );
+
+  test('the reader font persists, switches the text once it is downloaded '
+      'and resets with typography', () async {
+    // 換上假的字型庫：不連網，下載的是一小段假資料，註冊只記下字族。
+    final dir = await Directory.systemTemp.createTemp('fonts');
+    final served = List<int>.generate(2048, (i) => i % 241);
+    final fake = FontLibrary(
+      dio: Dio()..httpClientAdapter = _BytesAdapter(served),
+      directoryLoader: () async => dir,
+      register: (family, bytes) async {},
+      fileOf: (font) => font == AppFont.system
+          ? null
+          : AppFontFile(
+              family: 'Test${font.id}',
+              fileName: '${font.id}.ttf',
+              url: 'https://example.com/${font.id}.ttf',
+              bytes: served.length,
+              sha256: sha256.convert(served).toString(),
+            ),
+    );
+    final previous = FontLibrary.instance;
+    FontLibrary.instance = fake;
+    addTearDown(() async {
+      FontLibrary.instance = previous;
+      await dir.delete(recursive: true);
+    });
+
+    final settings = ReaderV2SettingsController();
+    var notified = 0;
+    settings.addListener(() => notified++);
+    expect(settings.readerFont, AppFont.system);
+    expect(settings.readerFontFamily, isNull);
+
+    settings.setReaderFont(AppFont.wenkaiTc);
+    // 還沒下載好時正文照舊用系統字型。
+    expect(
+      settings.readStyleFor(EdgeInsets.zero, viewportWidth: 393).fontFamily,
+      isNull,
+    );
+    expect(await fake.ensure(AppFont.wenkaiTc), isTrue);
+    await pumpEventQueue();
+    expect(
+      (await const ReaderV2PrefsRepository().load()).readerFont,
+      AppFont.wenkaiTc,
+    );
+    expect(settings.readerFontFamily, 'TestwenkaiTc');
+    expect(
+      settings.readStyleFor(EdgeInsets.zero, viewportWidth: 393).fontFamily,
+      'TestwenkaiTc',
+    );
+    expect(notified, greaterThanOrEqualTo(2), reason: '下載好時通知重排');
+    expect(settings.isTypographyChoicesDefault, isFalse);
+
+    settings.resetTypography();
+    await pumpEventQueue();
+    expect(settings.readerFont, AppFont.system);
+    expect(settings.readerFontFamily, isNull);
+    expect(settings.isTypographyChoicesDefault, isTrue);
+    settings.dispose();
+  });
 
   test(
     'info font size persists, is clamped and resets with the page layout',
@@ -290,7 +357,7 @@ void main() {
   test('reset writes the defaults even when another phone changed them '
       'while the page was open', () async {
     final settings = ReaderV2SettingsController();
-    expect(settings.isWeightAndAlignDefault, isTrue);
+    expect(settings.isTypographyChoicesDefault, isTrue);
     expect(settings.isPageLayoutDefault, isTrue);
     // 頁面開著時同步寫進另一台的值，記憶體裡還是預設。
     final prefs = await SharedPreferences.getInstance();
@@ -455,4 +522,27 @@ void main() {
       ),
     );
   });
+}
+
+/// 回一段固定位元組的假下載。
+class _BytesAdapter implements HttpClientAdapter {
+  _BytesAdapter(this.bytes);
+
+  final List<int> bytes;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody(
+    Stream.value(Uint8List.fromList(bytes)),
+    200,
+    headers: {
+      Headers.contentLengthHeader: ['${bytes.length}'],
+    },
+  );
+
+  @override
+  void close({bool force = false}) {}
 }
