@@ -45,7 +45,7 @@ void main() {
 
   Future<SyncService> pump(WidgetTester tester, _Store store) async {
     final sync = SyncService(
-      storeFactory: (space, _) => space == SyncSpace.none ? null : store,
+      storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
       bases: SyncBaseStorage(directory: () async => bases),
     );
     await tester.pumpWidget(MaterialApp(home: WebDavSettingsPage(sync: sync)));

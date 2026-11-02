@@ -116,7 +116,8 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
                       : null,
                   selected: _space == SyncSpace.googleDrive,
                   enabled: !_connecting,
-                  onTap: _connecting || _space == SyncSpace.googleDrive
+                  // 已經選了也能再點：授權失效時在這裡重新登入（或換帳號）。
+                  onTap: _connecting
                       ? null
                       : () => unawaited(_useGoogleDrive()),
                 ),

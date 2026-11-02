@@ -12,8 +12,14 @@ class _FakeAuth implements GoogleDriveAuth {
   int issued = 0;
   final Set<String> forgotten = {};
 
+  /// 每次取 token 指定的帳號。
+  final Set<String> accounts = {};
+
   @override
-  Future<String> token() async => 'token-$issued';
+  Future<String> token(String account) async {
+    accounts.add(account);
+    return 'token-$issued';
+  }
 
   @override
   Future<void> forget(String token) async {
@@ -33,6 +39,9 @@ class _FakeDrive implements HttpClientAdapter {
   final Map<String, ({String name, String content, int version})> files = {};
   final List<String> log = [];
   Set<String> rejected = {};
+
+  /// 列檔時先回一頁空的、附上下一頁（雲端硬碟會這樣回）。
+  bool emptyFirstPage = false;
   var _nextId = 0;
 
   @override
@@ -53,6 +62,9 @@ class _FakeDrive implements HttpClientAdapter {
     }
     if (uri.path == '/drive/v3/files' && options.method == 'GET') {
       expect(uri.queryParameters['spaces'], 'appDataFolder');
+      if (emptyFirstPage && uri.queryParameters['pageToken'] == null) {
+        return _json(200, {'files': <Object>[], 'nextPageToken': 'page-2'});
+      }
       final q = uri.queryParameters['q'];
       final name = q == null
           ? null
@@ -114,8 +126,11 @@ void main() {
   late _FakeDrive drive;
   late _FakeAuth auth;
 
-  GoogleDriveSyncStore store() =>
-      GoogleDriveSyncStore(auth: auth, dio: Dio()..httpClientAdapter = drive);
+  GoogleDriveSyncStore store() => GoogleDriveSyncStore(
+    auth: auth,
+    account: 'me@example.com',
+    dio: Dio()..httpClientAdapter = drive,
+  );
 
   setUp(() {
     drive = _FakeDrive();
@@ -140,8 +155,17 @@ void main() {
         ifVersion: first.version,
       );
       expect((await store().read('progress.json'))!.content, '{"中文":2}');
+      expect(auth.accounts, {'me@example.com'});
     },
   );
+
+  test('a file behind an empty first page is still found', () async {
+    await store().write('p.json', 'one');
+    drive.emptyFirstPage = true;
+    expect((await store().read('p.json'))!.content, 'one');
+    await store().write('p.json', 'two');
+    expect(drive.files, hasLength(1));
+  });
 
   test('a write over a newer version is a conflict', () async {
     await store().write('p.json', 'one');

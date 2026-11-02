@@ -10,11 +10,12 @@ import 'sync_store.dart';
 /// （`appDataFolder`），使用者在雲端硬碟裡看不到，也只有夜讀讀得到
 /// （ADR 0039）。用 Drive REST v3。
 ///
-/// 雲端硬碟沒有「版本不同就不寫」：寫之前再查一次版本，和讀的時候不同就當
-/// 成被別台搶先（[SyncConflict]）。查完到寫入之間的極短空檔仍可能被蓋掉，
-/// 被蓋掉的那台下次同步會再合併回去（`decideSync` 的「雲端被蓋掉」）。
+/// Drive v3 沒有「版本不同就不寫」：寫之前再查一次版本，和讀的時候不同就當
+/// 成被別台搶先（[SyncConflict]）。查完到寫入落地之間別台寫的會被蓋掉，
+/// 要等被蓋掉的那台再同步一次才合併回去（`decideSync` 的「雲端被蓋掉」，
+/// ADR 0039）。
 class GoogleDriveSyncStore implements SyncStore {
-  GoogleDriveSyncStore({required this._auth, Dio? dio})
+  GoogleDriveSyncStore({required this._auth, required this._account, Dio? dio})
     : _dio =
           dio ??
           Dio(
@@ -26,6 +27,9 @@ class GoogleDriveSyncStore implements SyncStore {
           );
 
   final GoogleDriveAuth _auth;
+
+  /// 同步空間記的 Google 帳號；每次都取這個帳號的授權。
+  final String _account;
   final Dio _dio;
 
   static const String _api = 'https://www.googleapis.com/drive/v3/files';
@@ -48,24 +52,34 @@ class GoogleDriveSyncStore implements SyncStore {
 
   /// 同名的檔：最早建的那個。兩台第一次同時寫入會各建一個，之後都讀寫
   /// 最早的那個；另一個裡的紀錄這台的上次同步紀錄看得出雲端沒有，下次再送。
+  /// 雲端硬碟可能回一頁空的、附上下一頁，要翻到有檔或沒有下一頁才算沒有。
   Future<({String id, String version})?> _find(String name) async {
-    final response = await _send(
-      _api,
-      'GET',
-      query: {
-        'spaces': 'appDataFolder',
-        'q': "name = '${name.replaceAll("'", r"\'")}' and trashed = false",
-        'orderBy': 'createdTime',
-        'fields': 'files(id,version)',
-      },
-    );
-    _ensureOk(response);
-    final json = jsonDecode(utf8.decode(response.data ?? Uint8List(0)));
-    final files = json is Map ? json['files'] : null;
-    if (files is! List || files.isEmpty) return null;
-    final first = files.first;
-    if (first is! Map || first['id'] is! String) return null;
-    return (id: first['id'] as String, version: '${first['version']}');
+    String? pageToken;
+    do {
+      final response = await _send(
+        _api,
+        'GET',
+        query: {
+          'spaces': 'appDataFolder',
+          'q': "name = '${name.replaceAll("'", r"\'")}' and trashed = false",
+          'orderBy': 'createdTime',
+          'fields': 'nextPageToken,files(id,version)',
+          'pageToken': ?pageToken,
+        },
+      );
+      _ensureOk(response);
+      final json = jsonDecode(utf8.decode(response.data ?? Uint8List(0)));
+      if (json is! Map) return null;
+      final files = json['files'];
+      if (files is List && files.isNotEmpty) {
+        final first = files.first;
+        if (first is! Map || first['id'] is! String) return null;
+        return (id: first['id'] as String, version: '${first['version']}');
+      }
+      final next = json['nextPageToken'];
+      pageToken = next is String && next.isNotEmpty ? next : null;
+    } while (pageToken != null);
+    return null;
   }
 
   @override
@@ -166,7 +180,7 @@ class GoogleDriveSyncStore implements SyncStore {
     Map<String, Object?> headers,
     Object? data,
   ) async {
-    final token = await _auth.token();
+    final token = await _auth.token(_account);
     try {
       return await _dio.request<Uint8List>(
         url,

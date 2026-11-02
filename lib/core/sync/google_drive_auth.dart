@@ -1,4 +1,5 @@
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 
 import 'sync_store.dart';
 
@@ -9,9 +10,9 @@ abstract interface class GoogleDriveAuth {
   /// 按鈕時呼叫。
   Future<String> signIn();
 
-  /// 不跳畫面取一個 access token；授權失效（使用者在 Google 帳號撤銷了）時
-  /// 丟 [SyncStoreException]。
-  Future<String> token();
+  /// 不跳畫面取 [account] 這個帳號的 access token；這個帳號的授權失效（使用者
+  /// 在 Google 帳號撤銷了、手機上移除了這個帳號）時丟 [SyncStoreException]。
+  Future<String> token(String account);
 
   /// 這個 token 被 Google 拒絕了，丟掉，下次 [token] 重新取。
   Future<void> forget(String token);
@@ -49,30 +50,49 @@ class GoogleSignInDriveAuth implements GoogleDriveAuth {
       await account.authorizationClient.authorizeScopes(const [scope]);
       return account.email;
     } on GoogleSignInException catch (error) {
-      throw SyncStoreException(switch (error.code) {
-        GoogleSignInExceptionCode.canceled => '沒有登入 Google 帳號',
-        _ => 'Google 登入失敗：${error.description ?? error.code.name}',
-      });
+      throw SyncStoreException(_message('Google 登入失敗', error));
     }
   }
 
+  /// 指定帳號取授權：手機上有好幾個 Google 帳號時，`google_sign_in` 不指定
+  /// 帳號的入口可能拿到另一個帳號的 token，讀寫到另一個帳號的雲端硬碟。
+  /// 綁帳號的入口（`GoogleSignInAccount.authorizationClient`）只在登入當下
+  /// 拿得到，所以背景直接照它的做法帶上帳號問平台。
   @override
-  Future<String> token() async {
+  Future<String> token(String account) async {
     await _ensureInitialized();
-    final GoogleSignInClientAuthorization? authorization;
+    final ClientAuthorizationTokenData? authorization;
     try {
-      authorization = await GoogleSignIn.instance.authorizationClient
-          .authorizationForScopes(const [scope]);
+      authorization = await GoogleSignInPlatform.instance
+          .clientAuthorizationTokensForScopes(
+            ClientAuthorizationTokensForScopesParameters(
+              request: AuthorizationRequestDetails(
+                scopes: const [scope],
+                userId: null,
+                email: account,
+                promptIfUnauthorized: false,
+              ),
+            ),
+          );
     } on GoogleSignInException catch (error) {
-      throw SyncStoreException(
-        'Google 授權失敗：${error.description ?? error.code.name}',
-      );
+      throw SyncStoreException(_message('Google 授權失敗', error));
     }
     if (authorization == null) {
       throw const SyncStoreException('Google 帳號的授權失效了，到「同步空間」重新登入');
     }
     return authorization.accessToken;
   }
+
+  static String _message(String failed, GoogleSignInException error) =>
+      switch (error.code) {
+        GoogleSignInExceptionCode.canceled => '沒有登入 Google 帳號',
+        GoogleSignInExceptionCode.interrupted => 'Google 登入被中斷了，再試一次',
+        GoogleSignInExceptionCode.providerConfigurationError =>
+          '這台手機用不了 Google 登入，確認 Google Play 服務，或改用 WebDAV',
+        GoogleSignInExceptionCode.userMismatch =>
+          'Google 帳號和同步空間記的不同，到「同步空間」重新登入',
+        _ => '$failed：${error.description ?? error.code.name}',
+      };
 
   @override
   Future<void> forget(String token) async {

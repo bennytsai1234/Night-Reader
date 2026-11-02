@@ -32,15 +32,20 @@ class _Auth implements GoogleDriveAuth {
 
   final String? fail;
   bool signedOut = false;
+  int signIns = 0;
+
+  /// 下一次登入選的帳號。
+  String account = 'reader@gmail.com';
 
   @override
   Future<String> signIn() async {
     if (fail != null) throw SyncStoreException(fail!);
-    return 'reader@gmail.com';
+    signIns++;
+    return account;
   }
 
   @override
-  Future<String> token() async => 'token';
+  Future<String> token(String account) async => 'token';
 
   @override
   Future<void> forget(String token) async {}
@@ -68,10 +73,14 @@ class _MemoryBases extends SyncBaseStorage {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<void> pump(WidgetTester tester, _Auth auth) async {
+  Future<void> pump(
+    WidgetTester tester,
+    _Auth auth, {
+    _MemoryBases? bases,
+  }) async {
     final sync = SyncService(
-      storeFactory: (space, _) => space == SyncSpace.none ? null : _Store(),
-      bases: _MemoryBases(),
+      storeFactory: (space, _, _) => space == SyncSpace.none ? null : _Store(),
+      bases: bases ?? _MemoryBases(),
       googleAuth: auth,
       kinds: (_) => const [],
     );
@@ -105,6 +114,29 @@ void main() {
     expect(await SyncSettings().space(), SyncSpace.none);
     expect(auth.signedOut, isTrue);
     expect(find.text('reader@gmail.com'), findsNothing);
+  });
+
+  testWidgets('Google can be signed in again after it is picked: the same '
+      'account keeps the last sync, another account starts over', (
+    tester,
+  ) async {
+    final auth = _Auth();
+    final bases = _MemoryBases();
+    await pump(tester, auth, bases: bases);
+    await tester.tap(find.text('Google 雲端硬碟'));
+    await settle(tester);
+    bases.files['progress'] = {'kept': true};
+
+    await tester.tap(find.text('Google 雲端硬碟'));
+    await settle(tester);
+    expect(auth.signIns, 2);
+    expect(bases.files['progress'], {'kept': true});
+
+    auth.account = 'other@gmail.com';
+    await tester.tap(find.text('Google 雲端硬碟'));
+    await settle(tester);
+    expect(find.text('other@gmail.com'), findsOneWidget);
+    expect(bases.files['progress'], isNull);
   });
 
   testWidgets('a cancelled Google sign-in changes nothing', (tester) async {
