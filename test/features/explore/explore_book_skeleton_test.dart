@@ -8,9 +8,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 
 void main() {
   for (final brightness in [Brightness.light, Brightness.dark]) {
-    testWidgets('分類書單收到資料後只畫真實的文字列（$brightness）', (
-      tester,
-    ) async {
+    testWidgets('分類書單收到資料後只畫真實的文字列（$brightness）', (tester) async {
       final books = [
         SearchBook(
           bookUrl: 'https://book/1',
