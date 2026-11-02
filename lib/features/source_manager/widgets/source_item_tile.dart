@@ -16,6 +16,28 @@ import '../source_manager_provider.dart';
 /// 編輯模式左側勾選圈佔用的寬度（圈 22 + 間距）。
 const double _kCheckSlotWidth = 22 + AppGrouped.iconGap;
 
+/// 書源列和載入骨架共用同一套功能標籤，數量及「停發」寬度不可猜。
+List<String> sourceFunctionTags(BookSourcePart source) => [
+  if (source.hasSearchUrl) '搜',
+  if (source.hasExploreUrl) source.enabledExplore ? '發' : '停發',
+  if (source.hasBookInfoRule) '詳',
+  if (source.hasTocRule) '目',
+  if (source.hasContentRule) '正',
+];
+
+/// 書源列與骨架共用的錯誤提示，遇到長訊息要留出相同的高度。
+String? sourceErrorLine(BookSourcePart source) {
+  final comment = source.bookSourceComment?.trim();
+  if (comment == null || comment.isEmpty) return null;
+  for (final line in comment.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith('// Error:')) {
+      return trimmed.replaceFirst('// Error:', '').trim();
+    }
+  }
+  return null;
+}
+
 /// 書源清單的一列（Telegram 聊天列表式）：左滑置頂／刪除、右滑編輯，
 /// 長按浮起預覽與動作選單；編輯模式左側出現勾選圈，右側換成排序把手。
 class SourceItemTile extends StatelessWidget {
@@ -405,12 +427,7 @@ class _SourceRowContent extends StatelessWidget {
   }
 
   Widget _buildTags(BuildContext context, AppChrome chrome) {
-    final tags = <String>[];
-    if (source.hasSearchUrl) tags.add('搜');
-    if (source.hasExploreUrl) tags.add(source.enabledExplore ? '發' : '停發');
-    if (source.hasBookInfoRule) tags.add('詳');
-    if (source.hasTocRule) tags.add('目');
-    if (source.hasContentRule) tags.add('正');
+    final tags = sourceFunctionTags(source);
 
     return Wrap(
       spacing: AppSpacing.xs,
@@ -483,17 +500,7 @@ class _SourceRowContent extends StatelessWidget {
     );
   }
 
-  String? get _errorLine {
-    final comment = source.bookSourceComment?.trim();
-    if (comment == null || comment.isEmpty) return null;
-    for (final line in comment.split('\n')) {
-      final trimmed = line.trim();
-      if (trimmed.startsWith('// Error:')) {
-        return trimmed.replaceFirst('// Error:', '').trim();
-      }
-    }
-    return null;
-  }
+  String? get _errorLine => sourceErrorLine(source);
 }
 
 /// 列尾的開關、排序把手（或什麼都沒有）互換：兩者交叉淡換，佔的寬度跟著
