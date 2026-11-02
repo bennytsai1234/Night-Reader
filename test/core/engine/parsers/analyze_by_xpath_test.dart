@@ -88,10 +88,49 @@ void main() {
       expect(() => first.getStringList('div[2] div'), throwsFormatException);
     });
 
-    test('整份網頁時從網頁本身找', () {
-      expect(AnalyzeByXPath(html).getStringList('html/body/div/@class'), [
-        'list',
-      ]);
+    test('整份網頁時從 <html> 往下找', () {
+      // JsoupXpath 整份網頁的起點是 doc.children()，也就是 <html>。
+      expect(AnalyzeByXPath(html).getStringList('body/div/@class'), ['list']);
+    });
+  });
+
+  // 轻文库小说（app.wenku8.com）回的是 XML：`<page/>` 自己結束，書是
+  // `<item>`，搜尋規則是 `@XPath:item`、`//data[@name='Title']/text()`。
+  group('XML 照 Legado 用 XML 解析器讀', () {
+    const xml = '''<?xml version="1.0" encoding="utf-8"?>
+<result>
+<page num='1'/>
+<item aid='1973'><data name='Title'><![CDATA[魔法师甲]]></data><data name='Author' value='作者甲'/></item>
+<item aid='2088'><data name='Title'><![CDATA[魔法师乙]]></data><data name='Author' value='作者乙'/></item>
+</result>''';
+
+    test('相對路徑從根元素往下找，自己結束的標籤不會包住後面的', () {
+      final items = AnalyzeByXPath(xml).getElements('item');
+      expect(items, hasLength(2));
+      final second = AnalyzeByXPath(items[1]);
+      expect(second.getString("//data[@name='Title']/text()"), '魔法师乙');
+      expect(second.getString("//data[@name='Author']/@value"), '作者乙');
+      expect(second.getString('//@aid'), '2088');
+    });
+
+    test('標籤名稱照原文，title 這類網頁標籤不被搬走', () {
+      const doc = '''<?xml version="1.0"?>
+<Package><title>書名</title><Chapter id="1"/><Chapter id="2"/></Package>''';
+      final xpath = AnalyzeByXPath(doc);
+      expect(xpath.getStringList('title/text()'), ['書名']);
+      expect(xpath.getStringList('//Chapter/@id'), ['1', '2']);
+    });
+
+    test('text()[n] 取每個元素底下第 n 段文字', () {
+      const page = '<div><p class="m">作者：甲<br>分類：玄幻</p></div>';
+      final xpath = AnalyzeByXPath(page);
+      expect(xpath.getString("//p[@class='m']/text()[2]"), '分類：玄幻');
+      expect(xpath.getString("//p[@class='m']/text()[1]"), '作者：甲');
+    });
+
+    test('寫壞的 XML 照網頁讀', () {
+      const broken = '<?xml version="1.0"?><a><b>x</a>';
+      expect(AnalyzeByXPath(broken).getStringList('//b/text()'), ['x']);
     });
   });
 }

@@ -1,6 +1,8 @@
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
+import '../xml_document.dart';
+
 /// AnalyzeByCss 的基礎類別
 /// (原 Android model/analyzeRule/AnalyzeByJSoup.kt)
 abstract class AnalyzeByCssBase {
@@ -15,7 +17,7 @@ abstract class AnalyzeByCssBase {
     } else if (doc is String) {
       element = _parseRootElement(doc);
     } else {
-      element = html_parser.parse(doc.toString()).documentElement!;
+      element = _parseRootElement(doc.toString());
     }
   }
 
@@ -31,6 +33,10 @@ abstract class AnalyzeByCssBase {
   }
 
   Element _parseRootElement(String html) {
+    // 網站回的是 XML 時照 Legado 用 XML 解析器讀，規則從整份文件往下找
+    // （同 Jsoup 的 Document）。
+    final xml = XmlContent.parse(html);
+    if (xml != null) return xml;
     final trimmed = html.trimLeft();
     if (RegExp(
       r'^<(?:!doctype\s+html|html|body)\b',

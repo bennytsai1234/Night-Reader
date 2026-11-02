@@ -2,6 +2,7 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:xpath_selector/xpath_selector.dart';
 import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
+import 'package:night_reader/core/engine/parsers/xml_document.dart';
 import 'package:night_reader/core/engine/rule_analyzer.dart';
 
 /// AnalyzeByXPath - XPath 解析器
@@ -46,14 +47,35 @@ class AnalyzeByXPath {
   }
 
   void _initFromHtml(String html) {
+    final xml = XmlContent.parse(html);
+    if (xml != null) {
+      _initFromXmlNode(XmlContent.rootOf(xml) ?? xml);
+      return;
+    }
     final document = html_parser.parse(html);
     _domRoot = document.documentElement ?? document.body!;
     _bodyCompatRoot = _buildBodyCompatRoot(html);
     _xpath = HtmlXPath.html(html);
-    _contextXPath = HtmlXPath.node(document);
+    // JsoupXpath 從整份網頁起算時，起點是 `<html>`（`doc.children()`）：
+    // 相對路徑的第一步是它底下的 `head`、`body`。
+    _contextXPath = HtmlXPath.node(_domRoot);
+  }
+
+  /// XML 讀出來的節點（[XmlContent]）：直接從它查，不轉成文字再用網頁的
+  /// 解析器讀一次，免得結構又走樣。整份 XML 時是根元素，同 JsoupXpath
+  /// （`doc.children()`）。
+  void _initFromXmlNode(Element node) {
+    _domRoot = node;
+    _bodyCompatRoot = null;
+    _xpath = HtmlXPath.node(node);
+    _contextXPath = _xpath;
   }
 
   void _initFromElement(Element element) {
+    if (XmlContent.isFromXml(element)) {
+      _initFromXmlNode(element);
+      return;
+    }
     final wrapper = Element.tag('div');
     final fragment = html_parser.parseFragment(element.outerHtml);
     wrapper.nodes.addAll(fragment.nodes);
@@ -194,6 +216,11 @@ class AnalyzeByXPath {
         return _applyCustomFunction(nodes, functionName);
       }
 
+      final textAt = _textAtPattern.firstMatch(rule);
+      if (textAt != null) {
+        return _textAt(textAt.group(1)!, int.parse(textAt.group(2)!));
+      }
+
       final queryResult = _query(rule);
 
       // 1. 處理屬性提取 /@attr 或 /attr()
@@ -285,6 +312,27 @@ class AnalyzeByXPath {
       }
       return textList.isEmpty ? null : textList.join('\n');
     }
+  }
+
+  /// `…/text()[n]`：每個元素底下直接的第 n 段文字（同 JsoupXpath：照
+  /// `textNodes()` 算，只有空白的那段也算一段）。xpath_selector 讀不懂
+  /// `text()` 後面接條件。
+  static final RegExp _textAtPattern = RegExp(r'^(.*?)/text\(\)\[(\d+)\]$');
+
+  List<String> _textAt(String base, int index) {
+    final nodes = base.isEmpty
+        ? <dynamic>[_contextXPath.root]
+        : _queryNodesCompat(base);
+    final results = <String>[];
+    for (final node in nodes) {
+      final element = _extractElement(node);
+      if (element == null) continue;
+      final texts = element.nodes.whereType<Text>().toList();
+      if (index < 1 || index > texts.length) continue;
+      final text = texts[index - 1].text.trim();
+      if (text.isNotEmpty) results.add(text);
+    }
+    return results;
   }
 
   List<String> _applyCustomFunction(List<dynamic> nodes, String functionName) {
