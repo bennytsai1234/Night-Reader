@@ -1,6 +1,7 @@
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/models/cookie.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// CookieStore - Cookie 管理服務
 /// (原 Android help/http/CookieStore.kt)
@@ -31,37 +32,10 @@ class CookieStore {
     }
   }
 
-  /// 獲取二級域名
-  String getSubDomain(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final host = uri.host;
-      final parts = host.split('.');
-
-      if (parts.length >= 3) {
-        final lastPart = parts.last;
-        final secondLastPart = parts[parts.length - 2];
-
-        // 處理常見的兩段式後綴 (例如 .com.cn, .co.uk, .org.tw)
-        final twoPartSuffixes = ['com', 'co', 'org', 'net', 'edu', 'gov'];
-        if (twoPartSuffixes.contains(secondLastPart) && lastPart.length == 2) {
-          return parts.sublist(parts.length - 3).join('.');
-        }
-      }
-
-      if (parts.length >= 2) {
-        return parts.sublist(parts.length - 2).join('.');
-      }
-      return host;
-    } catch (e) {
-      return url;
-    }
-  }
-
   /// 保存 Cookie
   Future<void> setCookie(String url, String? cookie) async {
     if (cookie == null || cookie.isEmpty) return;
-    final domain = getSubDomain(url);
+    final domain = NetworkUtils.getSubDomain(url);
     _memoryCache[domain] = cookie;
     onMemoryWrite?.call(domain, cookie);
     await _cookieDao?.upsert(Cookie(url: domain, cookie: cookie));
@@ -78,11 +52,12 @@ class CookieStore {
   }
 
   /// 記憶體裡 [url] 的 Cookie；沒有時是 null，要連資料庫一起找用 [getCookie]。
-  String? getMemoryCookie(String url) => _memoryCache[getSubDomain(url)];
+  String? getMemoryCookie(String url) =>
+      _memoryCache[NetworkUtils.getSubDomain(url)];
 
   /// 獲取 Cookie
   Future<String> getCookie(String url) async {
-    final domain = getSubDomain(url);
+    final domain = NetworkUtils.getSubDomain(url);
 
     // 優先從記憶體快取獲取
     if (_memoryCache.containsKey(domain)) {
@@ -112,7 +87,7 @@ class CookieStore {
 
   /// 移除 Cookie
   Future<void> removeCookie(String url) async {
-    final domain = getSubDomain(url);
+    final domain = NetworkUtils.getSubDomain(url);
     _memoryCache.remove(domain);
     onMemoryWrite?.call(domain, null);
     await _cookieDao?.deleteByUrl(domain);

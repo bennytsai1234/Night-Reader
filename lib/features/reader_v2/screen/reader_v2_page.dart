@@ -137,6 +137,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       entrance: _entrance.future,
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
+      openLocation: (runtime) => _progressSync.openLocation(runtime),
     );
     _coordinator = ReaderV2PageCoordinator(host: _host, showNotice: _showNotice)
       ..openChapters = _openChapters
@@ -146,6 +147,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       book: widget.book,
       runtime: () => _host.runtime,
       onJumped: _showSyncHint,
+      bookDao: _host.dependencies.bookDao,
+      openTarget: widget.openTarget,
     )..start();
     unawaited(_host.opened.then((_) => _progressSync.bookOpened()));
     _host.menu.controlsVisible.addListener(_dismissSyncHintOnMenu);

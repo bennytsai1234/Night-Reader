@@ -22,12 +22,23 @@ class SourceRule {
   List<String> ruleParam = [];
   List<int> ruleType = [];
 
+  static final RegExp _evalPattern = RegExp(
+    r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}',
+    caseSensitive: false,
+  );
+  static final RegExp _evalPatternJson = RegExp(
+    r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}',
+    caseSensitive: false,
+  );
+
   static const int jsonPartRuleType = -3;
   static const int getRuleType = -2;
   static const int jsRuleType = -1;
   static const int defaultRuleType = 0;
 
-  SourceRule(this.rule, {this.mode = Mode.defaultMode}) {
+  /// [isJson]：要解析的內容是 JSON（[isJsonContent]）。同 Legado，這時沒有
+  /// 前綴的規則一律是 JSON 路徑。
+  SourceRule(this.rule, {this.mode = Mode.defaultMode, bool isJson = false}) {
     rule = _stripLeadingStandaloneCommentLines(rule);
     // 處理 ##regex##replacement 與 ### replaceFirst
     if (rule.contains('##')) {
@@ -71,10 +82,10 @@ class SourceRule {
       } else if (normalizedRule.startsWith('@XPATH:')) {
         mode = Mode.xpath;
         rule = rule.substring(7);
+      } else if (isJson || rule.startsWith(r'$.') || rule.startsWith(r'$[')) {
+        mode = Mode.json;
       } else if (rule.startsWith('/')) {
         mode = Mode.xpath;
-      } else if (rule.startsWith(r'$.') || rule.startsWith(r'$[')) {
-        mode = Mode.json;
       }
     }
     final putPattern = RegExp(r'@put:(\{.*?\})', caseSensitive: false);
@@ -89,13 +100,17 @@ class SourceRule {
       } catch (_) {}
     }
     rule = vRuleStr;
-    final evalPattern = RegExp(
-      r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}',
-      caseSensitive: false,
-    );
+    // JSON 模式的 `{$.x}` 由 JSON 解析器替換（同 Legado，它的 evalPattern 沒有
+    // 這一種）；其他模式夜讀在這裡先代入。
+    final evalPattern = mode == Mode.json ? _evalPatternJson : _evalPattern;
     var start = 0;
     final evalMatches = evalPattern.allMatches(rule);
-    if (evalMatches.isNotEmpty) isDynamic = true;
+    if (evalMatches.isNotEmpty) {
+      isDynamic = true;
+      // 同 Legado：含 `@get:`、`{{ }}` 的規則組好就是結果的文字，不再拿去
+      // 解析（`##` 之後的取代已在上面分開）。
+      if (mode != Mode.js && mode != Mode.regex) mode = Mode.regex;
+    }
     for (final match in evalMatches) {
       if (match.start > start) _splitRegex(rule.substring(start, match.start));
       final tmp = match.group(0)!;
@@ -260,16 +275,16 @@ String stringifyRuleResult(dynamic value) {
   return value.toString();
 }
 
-bool isJsonLikeRuleInput(dynamic value) {
-  if (extractHtmlLikeRuleInput(value) != null) {
-    return false;
-  }
-  if (value is Map || value is List) {
-    return true;
-  }
+/// 要解析的內容是不是 JSON（同 Legado `AnalyzeRule.setContent` 的
+/// `isJSON`）：JSON 物件與陣列，或頭尾是 `{}`、`[]` 的文字；網頁元素不是。
+bool isJsonContent(dynamic value) {
+  if (value is Node || extractHtmlLikeRuleInput(value) != null) return false;
+  if (value is Map) return true;
+  if (value is List) return !value.any((e) => e is Node);
   if (value is String) {
-    final trimmed = value.trimLeft();
-    return trimmed.startsWith('{') || trimmed.startsWith('[');
+    final text = value.trim();
+    return (text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']'));
   }
   return false;
 }
@@ -293,72 +308,5 @@ dynamic coerceNullInterimResult(dynamic result, SourceRule sourceRule) {
   if (sourceRule.mode == Mode.js || sourceRule.isDynamic) {
     return '';
   }
-  return null;
-}
-
-String? buildJsonFallbackRule(String rule) {
-  final trimmed = rule.trim();
-  if (trimmed.isEmpty) {
-    return null;
-  }
-  if (trimmed.startsWith(r'$.') || trimmed.startsWith(r'$[')) {
-    return trimmed;
-  }
-
-  const operatorPattern = r'&&|\|\||%%';
-  final operatorRegex = RegExp(operatorPattern);
-  final matches = operatorRegex.allMatches(trimmed).toList();
-  if (matches.isEmpty) {
-    return _prefixJsonRuleSegment(trimmed);
-  }
-
-  final buffer = StringBuffer();
-  var lastEnd = 0;
-  for (final match in matches) {
-    final segment = trimmed.substring(lastEnd, match.start).trim();
-    final transformed = _prefixJsonRuleSegment(segment);
-    if (transformed == null) {
-      return null;
-    }
-    buffer.write(transformed);
-    buffer.write(match.group(0));
-    lastEnd = match.end;
-  }
-
-  final tail = trimmed.substring(lastEnd).trim();
-  final transformedTail = _prefixJsonRuleSegment(tail);
-  if (transformedTail == null) {
-    return null;
-  }
-  buffer.write(transformedTail);
-  return buffer.toString();
-}
-
-String? _prefixJsonRuleSegment(String segment) {
-  final trimmed = segment.trim();
-  if (trimmed.isEmpty) {
-    return null;
-  }
-  if (trimmed == '*') {
-    return r'$[*]';
-  }
-  if (trimmed.startsWith(r'$.') || trimmed.startsWith(r'$[')) {
-    return trimmed;
-  }
-
-  final barePathPattern = RegExp(
-    r'^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\]|\.[A-Za-z_][A-Za-z0-9_]*)*$',
-  );
-  if (barePathPattern.hasMatch(trimmed)) {
-    return '\$.$trimmed';
-  }
-
-  final indexedPathPattern = RegExp(
-    r'^\[[^\]]+\](?:\[[^\]]+\]|\.[A-Za-z_][A-Za-z0-9_]*)*$',
-  );
-  if (indexedPathPattern.hasMatch(trimmed)) {
-    return '\$$trimmed';
-  }
-
   return null;
 }

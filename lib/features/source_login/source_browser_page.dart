@@ -6,6 +6,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -144,7 +145,8 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
       }
       final pageUrl = _pageUrl;
       if (pageUrl == null ||
-          store.getSubDomain(pageUrl) == store.getSubDomain(widget.sourceUrl)) {
+          NetworkUtils.getSubDomain(pageUrl) ==
+              NetworkUtils.getSubDomain(widget.sourceUrl)) {
         return;
       }
       final pageUri = Uri.tryParse(pageUrl);
