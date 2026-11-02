@@ -135,7 +135,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       entrance: _entrance.future,
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
-      syncedLocation: (runtime) => _progressSync.openLocation(runtime),
+      openLocation: (runtime) => _progressSync.openLocation(runtime),
     );
     _coordinator = ReaderV2PageCoordinator(host: _host, showNotice: _showNotice)
       ..openChapters = _openChapters

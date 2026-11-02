@@ -26,7 +26,7 @@ class ReaderV2ControllerHost {
     required this._entrance,
     required this._onChanged,
     required this._isMounted,
-    this._syncedLocation,
+    this._openLocation,
   }) {
     settings.addListener(_onSettingsChanged);
     menu.controlsVisible.addListener(_onMenuChanged);
@@ -56,10 +56,11 @@ class ReaderV2ControllerHost {
   /// 開書的換頁動畫與骨架淡入都播完時完成；開書載入等它（ADR 0018）。
   final Future<void> _entrance;
 
-  /// 進場播完、開書之前問一次要不要改停在別的位置（另一台同步來的進度，
-  /// 見 `ReaderV2ProgressSync.openLocation`）；null 就停在 [openTarget]。
+  /// 進場播完、開書之前問一次要不要改停在別的位置（剛同步來、比 [book]
+  /// 新的閱讀紀錄，見 `ReaderV2ProgressSync.openLocation`）；null 就停在
+  /// [openTarget]。
   final Future<ReaderV2Location?> Function(ReaderV2Runtime runtime)?
-  _syncedLocation;
+  _openLocation;
   final VoidCallback _onChanged;
   final bool Function() _isMounted;
 
@@ -452,10 +453,10 @@ class ReaderV2ControllerHost {
     unawaited(
       _entrance.then((_) async {
         if (!_isMounted() || runtime.disposed) return;
-        final synced = await _syncedLocation?.call(runtime);
+        final at = await _openLocation?.call(runtime);
         if (!_isMounted() || runtime.disposed) return;
         unawaited(
-          runtime.openBook(at: synced).whenComplete(() {
+          runtime.openBook(at: at).whenComplete(() {
             _opening = false;
             if (!_opened.isCompleted) _opened.complete();
           }),

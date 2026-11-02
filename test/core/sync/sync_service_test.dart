@@ -38,8 +38,12 @@ class _MemoryStore implements SyncStore {
   /// 每份檔整份讀了幾次。
   final Map<String, int> reads = {};
 
+  /// 讀檔前先等它傳回的（模擬網路慢）；傳回 null 就不等。
+  Future<void>? Function(String name)? beforeNextRead;
+
   @override
   Future<SyncFile?> read(String name) async {
+    await beforeNextRead?.call(name);
     reads.update(name, (count) => count + 1, ifAbsent: () => 1);
     final file = files[name];
     return file == null ? null : SyncFile(file.$1, version: '${file.$2}');
@@ -100,7 +104,9 @@ class _Phone {
       chapterDao: chapters,
       database: db,
       clock: clock,
+      // 和 App 一樣的順序：進度最先，書架之後再一次。
       kinds: (service) => [
+        progress(service),
         SourceSync(
           dao: sources,
           bookDao: books,
@@ -115,14 +121,16 @@ class _Phone {
           isOpen: service.isBookOpen,
           download: downloaded.add,
         ),
-        ProgressSync(
-          bookDao: books,
-          chapterDao: chapters,
-          isOpen: service.isBookOpen,
-        ),
+        progress(service),
       ],
     );
   }
+
+  ProgressSync progress(SyncService service) => ProgressSync(
+    bookDao: books,
+    chapterDao: chapters,
+    isOpen: service.isBookOpen,
+  );
 
   final AppDatabase db;
 
@@ -368,8 +376,41 @@ void main() {
     expect(book.charOffset, 5);
   });
 
-  test('opening a book does not wait for the sync running in the '
-      'background', () async {
+  test('after coming back to the app, progress is ready before the rest of '
+      'the sync, and a book added on the other phone gets its progress in the '
+      'same sync', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await b.addBook('b-src', toc: toc, time: 100);
+    await a.books.upsert(
+      Book(
+        bookUrl: 'new',
+        name: '新書',
+        author: '別人',
+        origin: 'src',
+        isInBookshelf: true,
+        chapterIndex: 3,
+        durChapterTitle: '第三章',
+        progressTime: 300,
+      ),
+    );
+    await a.sync.syncNow();
+
+    // B 回到 App：書源那一步卡在讀雲端（例如網路慢）時，進度已經好了。
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) =>
+        name == 'sources.json' ? stuck.future : null;
+    b.sync.syncAfterResume();
+    await b.sync.progressReady!.timeout(const Duration(seconds: 5));
+    expect((await b.book('b-src')).chapterIndex, 2);
+    expect(b.sync.progressReady, isNull);
+
+    stuck.complete();
+    await b.sync.syncNow();
+    expect((await b.book('new')).chapterIndex, 3);
+  });
+
+  test('the open reader pulls its progress without waiting for the sync '
+      'running in the background', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
     await a.sync.syncNow();
