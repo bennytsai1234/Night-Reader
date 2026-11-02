@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -42,16 +43,19 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
   }
 
   Future<void> _load() async {
-    final space = await _settings.space();
-    final google = await _settings.googleAccount();
-    final webDav = await _settings.webDavAccount();
-    if (!mounted) return;
-    setState(() {
+    try {
+      final space = await _settings.space();
+      final google = await _settings.googleAccount();
+      final webDav = await _settings.webDavAccount();
+      if (!mounted) return;
       _space = space;
       _googleAccount = google;
       _webDavUrl = webDav?.url;
-      _loaded = true;
-    });
+    } catch (error, stackTrace) {
+      AppLog.e('讀取同步空間失敗', error: error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _loaded = true);
+    }
   }
 
   void _say(String message) {
