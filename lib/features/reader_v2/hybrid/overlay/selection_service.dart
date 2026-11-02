@@ -102,8 +102,8 @@ final class ReaderTextSelection {
     );
   }
 
-  /// 把選到的字畫上標註：從選取開頭畫到結尾，頭尾的空白不算。位置和
-  /// 書籤同一套（[asBookmark]）。
+  /// 把選到的字畫上標註：從選取開頭畫到結尾，頭尾的空白不算（全是空白時
+  /// [SelectionHighlight.quote] 是空的）。位置和書籤同一套（[asBookmark]）。
   SelectionHighlight get asHighlight {
     final text = blocks.displayText;
     var start = range.start;
@@ -114,10 +114,7 @@ final class ReaderTextSelection {
     while (end > start && _isBlank(text.codeUnitAt(end - 1))) {
       end--;
     }
-    if (start == end) {
-      start = range.start;
-      end = range.end;
-    }
+    // 選到的全是空白時 [quote] 是空的，不畫。
     return (
       location: ReaderV2Location(
         chapterIndex: chapterIndex,

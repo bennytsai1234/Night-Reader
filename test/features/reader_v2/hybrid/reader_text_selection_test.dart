@@ -598,6 +598,14 @@ void main() {
       ).asHighlight;
       expect(highlight.quote, '雨停了。');
       expect(highlight.location.charOffset, display.indexOf('雨停了'));
+
+      final blank = ReaderTextSelection(
+        blocks: chapter,
+        epoch: LayoutEpoch.initial,
+        paragraph: HybridTextRange(start, start + body.length),
+        range: HybridTextRange(start, start + 2),
+      ).asHighlight;
+      expect(blank.quote, isEmpty, reason: '全是空白不畫');
     });
 
     test('a bookmark covers the sentence the selection starts in, or the '

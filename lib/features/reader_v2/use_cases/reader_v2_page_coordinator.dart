@@ -368,6 +368,10 @@ class ReaderV2PageCoordinator {
   /// 個），提示可「復原」。
   Future<void> addHighlight(SelectionHighlight selection) async {
     final highlights = _host.highlights;
+    if (selection.quote.trim().isEmpty) {
+      _showNotice('選到的都是空白，沒有標註');
+      return;
+    }
     final Highlight? saved;
     try {
       saved = await highlights.add(
