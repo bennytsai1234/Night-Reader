@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/toc_volumes.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
@@ -605,11 +606,12 @@ class BookDetailProvider extends ChangeNotifier {
     _applyFilter();
   }
 
+  /// 定位目前這章：清掉搜尋、改回正序，這章所在的卷收著就展開。
   void resetTocViewForCurrentChapter() {
     _searchQuery = '';
     _isReversed = false;
     _debounce?.cancel();
-    _applyFilter();
+    _applyFilter(revealCurrent: true);
   }
 
   int displayIndexForChapter(int chapterIndex) {
@@ -618,16 +620,54 @@ class BookDetailProvider extends ChangeNotifier {
     );
   }
 
-  void _applyFilter() {
-    var list = _allChapters;
-    if (_searchQuery.isNotEmpty) {
-      list = list
-          .where(
-            (c) => c.title.toLowerCase().contains(_searchQuery.toLowerCase()),
-          )
-          .toList();
+  /// 目錄的分卷；位置是在 [allChapters] 裡的第幾個。
+  TocVolumes get tocVolumes => _volumes;
+  TocVolumes _volumes = TocVolumes(const []);
+  Set<int> _collapsedVolumes = {};
+
+  /// [filteredChapters] 第 i 列在 [allChapters] 裡的位置。
+  List<int> _displayPositions = const [];
+  int displayPositionAt(int row) => _displayPositions[row];
+
+  /// 目錄照卷收起：只在正序、沒有搜尋時，章節才照卷排在一起。
+  bool get groupsVolumes =>
+      _volumes.hasVolumes && _searchQuery.isEmpty && !_isReversed;
+
+  bool isVolumeCollapsed(int position) => _collapsedVolumes.contains(position);
+
+  void toggleVolume(int position) {
+    if (!_collapsedVolumes.remove(position)) _collapsedVolumes.add(position);
+    _applyFilter();
+  }
+
+  int get _currentPosition =>
+      _allChapters.indexWhere((chapter) => chapter.index == _book.chapterIndex);
+
+  void _applyFilter({bool revealCurrent = false}) {
+    // 換了一份目錄（載入、換源、檢查更新）且分卷的位置不同時，照目前這章
+    // 重新決定收起哪些卷；位置一樣就照使用者收起的。
+    if (!identical(_volumes.chapters, _allChapters)) {
+      final volumes = TocVolumes(_allChapters);
+      if (!volumes.sameShape(_volumes)) {
+        _collapsedVolumes = volumes.initiallyCollapsed(_currentPosition);
+      }
+      _volumes = volumes;
     }
-    _displayChapters = _isReversed ? list.reversed.toList() : List.from(list);
+    if (revealCurrent) {
+      _collapsedVolumes.remove(_volumes.volumeOf(_currentPosition));
+    }
+    final query = _searchQuery.toLowerCase();
+    var positions = groupsVolumes
+        ? _volumes.rows(_collapsedVolumes)
+        : [
+            for (var i = 0; i < _allChapters.length; i++)
+              if (query.isEmpty ||
+                  _allChapters[i].title.toLowerCase().contains(query))
+                i,
+          ];
+    if (_isReversed) positions = positions.reversed.toList();
+    _displayPositions = positions;
+    _displayChapters = [for (final i in positions) _allChapters[i]];
     notifyListeners();
   }
 

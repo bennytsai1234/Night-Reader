@@ -23,8 +23,11 @@ class BookInfoTocBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final count = provider.filteredChapters.length;
-    final total = provider.totalChapterCount;
+    // 章數不算分卷。
+    final count = provider.filteredChapters
+        .where((chapter) => !chapter.isVolume)
+        .length;
+    final total = provider.tocVolumes.chapterCount;
     final isSearching = provider.hasActiveTocSearch;
     final primary = Theme.of(context).colorScheme.primary;
 
