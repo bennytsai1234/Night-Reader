@@ -108,6 +108,48 @@ void main() {
       );
     });
 
+    // 笔下文学、新八零电子书：選項用 `;` 分隔。Legado 先 GSONStrict、再 GSON
+    // （寬鬆模式），讀得出來；夜讀不能整個丟掉變成沒有 body 的 GET。
+    test('網址選項照 Gson 寬鬆模式讀：; 當逗號', () {
+      final analyzeUrl = AnalyzeUrl(
+        'https://example.com/search.html,'
+        '{"method":"POST";"body":"searchtype=all&searchkey={{key}}"}',
+        key: '西遊',
+      );
+      expect(analyzeUrl.method, 'POST');
+      expect(analyzeUrl.body, 'searchtype=all&searchkey=西遊');
+      expect(
+        analyzeUrl.requestBody,
+        'searchtype=all&searchkey=%E8%A5%BF%E9%81%8A',
+      );
+    });
+
+    test('網址選項照 Gson 寬鬆模式讀：= 與 => 當冒號、單引號、不加引號', () {
+      final eq = AnalyzeUrl(
+        "https://example.com/s,{'method'='POST','body'=>'kw={{key}}'}",
+        key: 'a',
+      );
+      expect(eq.method, 'POST');
+      expect(eq.body, 'kw=a');
+
+      final bare = AnalyzeUrl(
+        'https://example.com/s,{method:POST,body:"kw={{key}}",'
+        'headers:{User-Agent:x}}',
+        key: 'a',
+      );
+      expect(bare.method, 'POST');
+      expect(bare.body, 'kw=a');
+      expect(bare.headerMap['User-Agent'], 'x');
+    });
+
+    test('Gson 讀不了的選項，JS 物件的寫法照舊讀得進去', () {
+      final analyzeUrl = AnalyzeUrl(
+        'https://example.com/s,{method:"PO"+"ST",body:"kw=1"}',
+      );
+      expect(analyzeUrl.method, 'POST');
+      expect(analyzeUrl.body, 'kw=1');
+    }, skip: quickJsSkip);
+
     test('data: 網址直接解出位元組', () async {
       final bytes = await AnalyzeUrl(
         'data:application/octet-stream;base64,5aSc6K6A',
