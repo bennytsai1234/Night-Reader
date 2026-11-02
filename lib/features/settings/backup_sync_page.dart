@@ -33,9 +33,11 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
   void initState() {
     super.initState();
     _sync.status.addListener(_onSyncStatus);
-    unawaited(_sync.load().then((_) {
-      if (mounted) setState(() => _loaded = true);
-    }));
+    unawaited(
+      _sync.load().then((_) {
+        if (mounted) setState(() => _loaded = true);
+      }),
+    );
   }
 
   @override
