@@ -1,0 +1,6 @@
+include: ../../analysis_options.yaml
+
+linter:
+  rules:
+    # 上游原始碼的區域變數以底線開頭（parser.dart），不為了 lint 改上游。
+    no_leading_underscores_for_local_identifiers: false
