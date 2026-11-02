@@ -241,7 +241,7 @@ validate() {
     echo "changelog: 測試版只能使用平鋪的「- 」條列，不要介紹段落或續行。" >&2
     return 1
   fi
-  if printf '%s\n' "$body" | grep -Eiq 'https?://|www\\.|[[:alnum:]-]+\\.(com|net|org|io|cn|tw|cc|vip|top|dev)(/|[[:space:][:punct:]]|$)'; then
+  if printf '%s\n' "$body" | grep -Eiq 'https?://|www\.|[[:alnum:]-]+\.(com|net|org|io|cn|tw|cc|vip|top|dev)(/|[[:space:][:punct:]]|$)'; then
     echo "changelog: 公開更新說明不能列出網址或網域，請改寫成通用功能描述。" >&2
     return 1
   fi
