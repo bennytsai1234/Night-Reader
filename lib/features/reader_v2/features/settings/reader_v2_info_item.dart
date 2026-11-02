@@ -10,12 +10,17 @@ enum ReaderV2InfoItem {
   chapterProgress(5, '本章進度'),
   bookProgress(6, '全書進度'),
   battery(7, '電量'),
-  batteryWithIcon(8, '電量（含圖示）');
+  batteryWithIcon(8, '電量（含圖示）'),
+  batteryInside(9, '電量（數字在電池裡）');
 
   const ReaderV2InfoItem(this.code, this.label);
 
   final int code;
   final String label;
+
+  /// 三種電量的顯示：只有數字、電池加數字、數字在電池裡。
+  bool get isBattery =>
+      this == battery || this == batteryWithIcon || this == batteryInside;
 
   static ReaderV2InfoItem fromCode(int? code) {
     for (final item in values) {
