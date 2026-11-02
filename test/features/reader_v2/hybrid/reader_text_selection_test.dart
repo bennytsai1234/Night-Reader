@@ -266,6 +266,7 @@ void main() {
     Future<SelectionService> pumpSelected(
       WidgetTester tester, {
       ValueChanged<ReaderTextSelection>? onHide,
+      ValueChanged<ReaderTextSelection>? onReplace,
       ValueChanged<ReaderTextSelection>? onBookmark,
       ValueChanged<ReaderTextSelection>? onHighlight,
       HybridLineBox box = const HybridLineBox(
@@ -297,6 +298,7 @@ void main() {
             boxesFor: (_) => <HybridLineBox>[box],
             caretAt: (_, _) => null,
             onHide: onHide,
+            onReplace: onReplace,
             onBookmark: onBookmark,
             onHighlight: onHighlight,
             highlightColor: Colors.amber,
@@ -498,12 +500,40 @@ void main() {
       expect(service.active, isFalse);
     });
 
-    testWidgets('沒有接上隱藏與書籤時不顯示這兩個按鈕', (tester) async {
+    testWidgets('沒有接上隱藏、替換與書籤時不顯示這幾個按鈕', (tester) async {
       await pumpSelected(tester);
 
       expect(find.text('複製'), findsOneWidget);
       expect(find.text('隱藏'), findsNothing);
+      expect(find.text('替換'), findsNothing);
       expect(find.text('書籤'), findsNothing);
+    });
+
+    testWidgets('列上依序是複製、搜尋、隱藏、替換、書籤；按「替換」交出選到的字'
+        '並收起選取', (tester) async {
+      ReaderTextSelection? replaced;
+      final service = await pumpSelected(
+        tester,
+        onHide: (_) {},
+        onReplace: (selection) => replaced = selection,
+        onBookmark: (_) {},
+        onHighlight: (_) {},
+      );
+      await tester.pump();
+      final order = ['複製', '搜尋', '隱藏', '替換', '書籤'];
+      final xs = [
+        for (final label in order) tester.getTopLeft(find.text(label)).dx,
+      ];
+      for (var i = 1; i < xs.length; i++) {
+        expect(xs[i], greaterThan(xs[i - 1]), reason: order[i]);
+      }
+
+      await tester.tap(find.text('替換'));
+      await tester.pump();
+      expect(service.active, isFalse);
+      expect(replaced?.inParagraph.paragraph, '天色漸暗，城門即將關閉。');
+      expect(replaced?.inParagraph.start, 5);
+      expect(replaced?.inParagraph.end, 7);
     });
 
     testWidgets('「書籤」排在隱藏後面，按下在選到的字開頭留書籤並收起選取', (tester) async {

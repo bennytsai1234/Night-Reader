@@ -486,6 +486,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !(_host.tts?.isPlaying ?? false),
               onHideText: (selection) =>
                   unawaited(_coordinator.hideText(selection)),
+              onReplaceText: (selection) =>
+                  unawaited(_coordinator.replaceText(context, selection)),
               onBookmarkText: _host.bookmarks.available
                   ? (selection) =>
                         unawaited(_coordinator.addBookmark(selection))

@@ -56,6 +56,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.controlsVisible,
     this.textSelectionEnabled = false,
     this.onHideText,
+    this.onReplaceText,
     this.onBookmarkText,
     this.marks,
     this.onHighlightText,
@@ -93,6 +94,10 @@ class HybridReaderScreen extends StatefulWidget {
   /// 選字選單的「隱藏」：把選到的字（連同所在段落與段內位置）交給上層
   /// 新增替換規則；沒給就不顯示這個按鈕。
   final ValueChanged<ParagraphSelection>? onHideText;
+
+  /// 選字選單的「替換」：把選到的字（連同所在段落與段內位置）交給上層，
+  /// 打開替換規則的編輯畫面；沒給就不顯示這個按鈕。
+  final ValueChanged<ParagraphSelection>? onReplaceText;
 
   /// 選字選單的「書籤」：在選到的字那一句的開頭留一個書籤
   /// （[ReaderTextSelection.asBookmark]）。沒給就不顯示這個按鈕。
@@ -2211,6 +2216,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             onHide: widget.onHideText == null
                 ? null
                 : (selection) => widget.onHideText!(selection.inParagraph),
+            onReplace: widget.onReplaceText == null
+                ? null
+                : (selection) => widget.onReplaceText!(selection.inParagraph),
             onBookmark: widget.onBookmarkText == null
                 ? null
                 : (selection) => widget.onBookmarkText!(selection.asBookmark),
