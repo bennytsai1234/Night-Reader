@@ -87,11 +87,10 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
   /// 書籤在這台目錄（[chapters]）裡是第幾章：先找同名的章（繁簡不同也
   /// 算），再照章號；目錄還沒讀出來時照記下的序號。
   static int chapterIndexIn(Bookmark bookmark, List<BookChapter> chapters) =>
-      alignChapterIndex(
-        oldIndex: bookmark.chapterIndex,
-        oldTitle: bookmark.chapterTitle,
-        oldTotalCount: 0,
-        newChapters: chapters,
+      chapterIndexByTitle(
+        chapterIndex: bookmark.chapterIndex,
+        chapterTitle: bookmark.chapterTitle,
+        chapters: chapters,
       );
 
   /// 跳回書籤要去的位置：記下的錨點（含前後原文，正文變了照它找回同一
@@ -99,24 +98,11 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
   static ReaderV2Location locationOf(
     Bookmark bookmark, {
     required int chapterIndex,
-  }) {
-    final encoded = bookmark.anchor;
-    if (encoded != null) {
-      try {
-        final decoded = jsonDecode(encoded);
-        if (decoded is Map) {
-          return ReaderV2Location.fromJson(Map<String, dynamic>.from(decoded))
-              .copyWith(chapterIndex: chapterIndex, visualOffsetPx: 0);
-        }
-      } on FormatException {
-        // 讀不懂的錨點照章內第幾個字跳。
-      }
-    }
-    return ReaderV2Location(
-      chapterIndex: chapterIndex,
-      charOffset: bookmark.charOffset,
-    );
-  }
+  }) => locationFromAnchor(
+    bookmark.anchor,
+    chapterIndex: chapterIndex,
+    charOffset: bookmark.charOffset,
+  );
 
   @override
   void dispose() {
@@ -124,4 +110,40 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
     marks.dispose();
     super.dispose();
   }
+}
+
+/// 記下的章（章名與這台目錄的序號）在 [chapters] 裡是第幾章：先找同名的
+/// 章（繁簡不同也算），再照章號；目錄還沒讀出來時照記下的序號。書籤與標註
+/// 共用。
+int chapterIndexByTitle({
+  required int chapterIndex,
+  required String chapterTitle,
+  required List<BookChapter> chapters,
+}) => alignChapterIndex(
+  oldIndex: chapterIndex,
+  oldTitle: chapterTitle,
+  oldTotalCount: 0,
+  newChapters: chapters,
+);
+
+/// 記下的錨點（`ReaderV2Location` 的 JSON，含前後原文）換成閱讀器的位置，
+/// 章節序號換成這台目錄裡的 [chapterIndex]；讀不懂時照章內第幾個字。書籤
+/// 與標註共用。
+ReaderV2Location locationFromAnchor(
+  String? anchor, {
+  required int chapterIndex,
+  required int charOffset,
+}) {
+  if (anchor != null) {
+    try {
+      final decoded = jsonDecode(anchor);
+      if (decoded is Map) {
+        return ReaderV2Location.fromJson(Map<String, dynamic>.from(decoded))
+            .copyWith(chapterIndex: chapterIndex, visualOffsetPx: 0);
+      }
+    } on FormatException {
+      // 讀不懂的錨點照章內第幾個字跳。
+    }
+  }
+  return ReaderV2Location(chapterIndex: chapterIndex, charOffset: charOffset);
 }

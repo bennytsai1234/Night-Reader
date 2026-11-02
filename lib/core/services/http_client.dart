@@ -14,7 +14,7 @@ class HttpClient {
 
   /// 手動保存 Cookie (用於 WebView 同步等場景)
   Future<void> saveCookies(String url, String cookieStr) async {
-    final uri = Uri.parse(NetworkUtils.toAsciiHost(url));
+    final uri = Uri.parse(NetworkUtils.toRequestUrl(url));
     final cookie = parseSetCookieValueLenient(
       cookieStr,
       ignoreInvalidCookies: true,
@@ -25,7 +25,7 @@ class HttpClient {
 
   /// 獲取特定網站的 Cookie
   Future<String> getCookie(String url) async {
-    final uri = Uri.parse(NetworkUtils.toAsciiHost(url));
+    final uri = Uri.parse(NetworkUtils.toRequestUrl(url));
     final cookies = await NetworkService().cookieJar.loadForRequest(uri);
     return cookies.map((c) => '${c.name}=${c.value}').join('; ');
   }

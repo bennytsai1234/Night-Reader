@@ -8,6 +8,7 @@ import '../services/network_service.dart';
 import '../database/app_database.dart';
 import '../database/dao/book_dao.dart';
 import '../database/dao/bookmark_dao.dart';
+import '../database/dao/highlight_dao.dart';
 import '../database/dao/book_source_dao.dart';
 import '../database/dao/chapter_dao.dart';
 import '../database/dao/book_group_dao.dart';
@@ -91,6 +92,9 @@ void registerDatabase(AppDatabase database) {
   );
   getIt.registerLazySingleton<BookmarkDao>(
     () => BookmarkDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<HighlightDao>(
+    () => HighlightDao(getIt<AppDatabase>()),
   );
   getIt.registerLazySingleton<CacheDao>(() => CacheDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<CookieDao>(() => CookieDao(getIt<AppDatabase>()));

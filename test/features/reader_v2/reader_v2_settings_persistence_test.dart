@@ -350,6 +350,15 @@ void main() {
       right: ReaderV2InfoItem.batteryWithIcon,
     );
     expect(ReaderV2InfoSlots.decode(slots.encode()), slots);
+    const inside = ReaderV2InfoSlots(
+      left: ReaderV2InfoItem.none,
+      right: ReaderV2InfoItem.batteryInside,
+    );
+    expect(ReaderV2InfoSlots.decode(inside.encode()), inside);
+    expect(
+      ReaderV2InfoItem.values.where((item) => item.isBattery),
+      hasLength(3),
+    );
   });
 
   test('朗讀高亮的顏色與深淺可保存並讀回；未設定時維持原外觀', () async {

@@ -18,6 +18,7 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_battery_glyph.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -891,12 +892,11 @@ class _InfoRow extends StatelessWidget {
         textAlign: align,
       );
     }
-    if (item == ReaderV2InfoItem.battery ||
-        item == ReaderV2InfoItem.batteryWithIcon) {
+    if (item.isBattery) {
       return _ReaderBattery(
-        showIcon: item == ReaderV2InfoItem.batteryWithIcon,
-        iconColor: shell.infoColor,
-        iconSize: _infoIconSize(shell.infoFontSize),
+        item: item,
+        color: shell.infoColor,
+        fontSize: shell.infoFontSize,
       );
     }
     return Text(
@@ -914,8 +914,7 @@ class _InfoRow extends StatelessWidget {
     if (item == ReaderV2InfoItem.time) {
       return '時間 ${_clockFormat(shell.use24HourClock).format(DateTime.now())}';
     }
-    if (item == ReaderV2InfoItem.battery ||
-        item == ReaderV2InfoItem.batteryWithIcon) {
+    if (item.isBattery) {
       final battery = ReaderV2DeviceChannel.latestBattery;
       return battery == null ? null : '電量 ${battery.percent}%';
     }
@@ -933,7 +932,8 @@ class _InfoRow extends StatelessWidget {
       ReaderV2InfoItem.none ||
       ReaderV2InfoItem.time ||
       ReaderV2InfoItem.battery ||
-      ReaderV2InfoItem.batteryWithIcon => null,
+      ReaderV2InfoItem.batteryWithIcon ||
+      ReaderV2InfoItem.batteryInside => null,
       ReaderV2InfoItem.bookName => context.zh(shell.book.name),
       ReaderV2InfoItem.chapterTitle => title ?? navigation.currentTitle,
       ReaderV2InfoItem.chapterIndex =>
@@ -982,14 +982,16 @@ class _InfoItemSkeleton extends StatelessWidget {
 /// 頁首／頁尾的電量；只在系統回報電量變化時重建。
 class _ReaderBattery extends StatefulWidget {
   const _ReaderBattery({
-    required this.showIcon,
-    required this.iconColor,
-    required this.iconSize,
+    required this.item,
+    required this.color,
+    required this.fontSize,
   });
 
-  final bool showIcon;
-  final Color iconColor;
-  final double iconSize;
+  /// [ReaderV2InfoItem.battery]、[ReaderV2InfoItem.batteryWithIcon] 或
+  /// [ReaderV2InfoItem.batteryInside]。
+  final ReaderV2InfoItem item;
+  final Color color;
+  final double fontSize;
 
   @override
   State<_ReaderBattery> createState() => _ReaderBatteryState();
@@ -1020,30 +1022,31 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
   @override
   Widget build(BuildContext context) {
     final battery = _battery;
-    final text = Text(battery == null ? '…%' : '${battery.percent}%');
-    if (!widget.showIcon) return text;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(_iconFor(battery), size: widget.iconSize, color: widget.iconColor),
-        const SizedBox(width: 2),
-        Flexible(child: text),
-      ],
-    );
-  }
-
-  static IconData _iconFor(ReaderV2Battery? battery) {
-    if (battery == null) return Icons.battery_unknown_outlined;
-    if (battery.charging) return Icons.battery_charging_full;
-    final percent = battery.percent;
-    if (percent >= 95) return Icons.battery_full;
-    if (percent >= 80) return Icons.battery_6_bar;
-    if (percent >= 65) return Icons.battery_5_bar;
-    if (percent >= 50) return Icons.battery_4_bar;
-    if (percent >= 35) return Icons.battery_3_bar;
-    if (percent >= 20) return Icons.battery_2_bar;
-    if (percent >= 8) return Icons.battery_1_bar;
-    return Icons.battery_0_bar;
+    final percent = battery?.percent;
+    final number = percent == null ? '…' : '$percent';
+    return switch (widget.item) {
+      ReaderV2InfoItem.batteryInside => ReaderV2BatteryGlyph(
+        percent: percent,
+        charging: battery?.charging ?? false,
+        color: widget.color,
+        fontSize: widget.fontSize,
+        label: number,
+      ),
+      ReaderV2InfoItem.batteryWithIcon => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ReaderV2BatteryGlyph(
+            percent: percent,
+            charging: battery?.charging ?? false,
+            color: widget.color,
+            fontSize: widget.fontSize,
+          ),
+          SizedBox(width: widget.fontSize * 0.25),
+          Flexible(child: Text('$number%')),
+        ],
+      ),
+      _ => Text('$number%'),
+    };
   }
 }
 
@@ -1219,5 +1222,5 @@ class _ReaderV2ControlsDismissLayerState
   }
 }
 
-/// 頁首頁尾圖示（自動翻頁、電量）的大小：預設字級 11 時是 13，跟著字級等比放大。
+/// 頁首頁尾自動翻頁圖示的大小：預設字級 11 時是 13，跟著字級等比放大。
 double _infoIconSize(double fontSize) => 13 * fontSize / kReaderInfoFontSize;

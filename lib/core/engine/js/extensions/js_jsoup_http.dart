@@ -76,7 +76,7 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
   String? previousUrl;
   while (true) {
     // 每一站（含轉址到的）先換成送出的網址，Cookie 與轉址都照它。
-    url = NetworkUtils.toAsciiHost(url);
+    url = NetworkUtils.toRequestUrl(url);
     final uri = Uri.parse(url);
     if (uri.scheme != 'http' && uri.scheme != 'https') {
       throw JsoupException('Only http & https protocols supported');
