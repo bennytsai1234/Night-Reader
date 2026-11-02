@@ -34,9 +34,8 @@ class ExploreSourceListSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     final rowHeight = math.max(
       AppGrouped.rowMinHeight,
-      MediaQuery.textScalerOf(context)
-              .scale(AppTextStyles.bodyBase.fontSize!) *
-          1.3 +
+      MediaQuery.textScalerOf(context).scale(AppTextStyles.bodyBase.fontSize!) *
+              1.3 +
           AppSpacing.md * 2,
     );
     return ExcludeSemantics(
