@@ -72,28 +72,29 @@ void main() {
     expect(tester.getRect(find.byKey(below)).width, 400);
   });
 
-  testWidgets('a landscape tablet centres the list in a 640 column and the '
-      'header buttons in the margins beside it', (tester) async {
+  testWidgets('a landscape tablet centres the list in a 640 column and lines '
+      'the header buttons up with the cards', (tester) async {
     await pumpPage(tester, const Size(1280, 880));
 
     final list = tester.getRect(find.byKey(row));
     expect(list.left, 320);
     expect(list.width, 640);
-    // 留白 320，按鈕中心在 160。
-    expect(tester.getCenter(find.byKey(back)).dx, 160);
-    expect(tester.getCenter(find.byKey(more)).dx, 1280 - 160);
+    // 卡片在內容欄裡左右各留 16，按鈕外緣和卡片邊切齊。
+    expect(tester.getRect(find.byKey(back)).left, 320 + 16);
+    expect(tester.getRect(find.byKey(more)).right, 960 - 16);
     final bottom = tester.getRect(find.byKey(below));
     expect(bottom.left, 320);
     expect(bottom.width, 640);
   });
 
-  testWidgets('a portrait tablet centres the header buttons in the narrower '
-      'margins', (tester) async {
+  testWidgets('a portrait tablet lines the header buttons up with the cards', (
+    tester,
+  ) async {
     await pumpPage(tester, const Size(880, 1280));
 
     expect(tester.getRect(find.byKey(row)).left, 120);
-    expect(tester.getCenter(find.byKey(back)).dx, 60);
-    expect(tester.getCenter(find.byKey(more)).dx, 880 - 60);
+    expect(tester.getRect(find.byKey(back)).left, 120 + 16);
+    expect(tester.getRect(find.byKey(more)).right, 760 - 16);
   });
 
   testWidgets('a page that fills the screen keeps its header at the edges', (

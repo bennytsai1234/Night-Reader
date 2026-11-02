@@ -794,8 +794,9 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.readable = true,
   });
 
-  /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕置中在
-  /// 兩側留白裡，[bottom] 跟著內容欄。書架這類鋪滿畫面的頁面設 false。
+  /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕的外緣
+  /// 和底下卡片的左右邊切齊，[bottom] 跟著內容欄。書架這類鋪滿畫面的頁面設
+  /// false。
   final bool readable;
 
   /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
@@ -865,13 +866,12 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 onPressed: () => Navigator.maybePop(context),
               )
             : null);
-    // 清單頁在平板上有內容欄（[ReadableWidth]）：頁首下方的搜尋框、分頁
-    // 跟著內容欄，按鈕置中在兩側的留白裡。
-    final width = MediaQuery.sizeOf(context).width;
-    final contentSide = readable ? ReadableWidth.sideOf(width) : 0.0;
-    final buttonInset = readable
-        ? ReadableWidth.headerInsetOf(width)
-        : AppGrouped.margin;
+    // 清單頁在平板上有內容欄（[ReadableWidth]）：兩側按鈕的外緣和底下卡片的
+    // 左右邊切齊，頁首下方的搜尋框、分頁也跟著內容欄。
+    final contentSide = readable
+        ? ReadableWidth.sideOf(MediaQuery.sizeOf(context).width)
+        : 0.0;
+    final buttonInset = contentSide + AppGrouped.margin;
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
