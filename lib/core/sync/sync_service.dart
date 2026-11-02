@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:synchronized/synchronized.dart';
 
+import 'bookmark_sync.dart';
 import 'bookshelf_sync.dart';
 import 'google_drive_auth.dart';
 import 'google_drive_sync_store.dart';
@@ -64,10 +65,18 @@ class SyncStatus {
 /// 同步過，離開時不會再當成新的改動上傳；之後又讀了的話，和它比得出來。
 /// 沒跳成（取不到那一章、被別的操作取代）就不要呼叫，下次還會再抓到。
 class PulledProgress {
-  PulledProgress(this.progress, this._commit);
+  PulledProgress(this.progress, this._commit, {bool Function()? isCurrent})
+    : _isCurrent = isCurrent ?? _always;
 
   final SyncedProgress progress;
   final Future<void> Function(SyncRecord applied) _commit;
+  final bool Function() _isCurrent;
+
+  static bool _always() => true;
+
+  /// 抓的這段時間沒有換同步空間、也沒停用：換過的話抓到的是舊空間的進度，
+  /// 不能跳過去，不然之後會被當成這台的新進度送進新的空間。
+  bool get isCurrent => _isCurrent();
 
   Future<void> commit(SyncRecord applied) => _commit(applied);
 }
@@ -170,13 +179,17 @@ class SyncService {
   /// 書名加作者是 [key] 的書正開在閱讀器裡（[openBook]）。
   bool isBookOpen(String key) => _openBooks.contains(key);
 
-  /// 同步的順序：書源先到，書架上的書才找得到書源；書先加進書架，進度才
-  /// 套用得上。
+  /// 同步的順序：閱讀進度最先，開 App 時書架上的書馬上接上另一台讀到的
+  /// 地方，開書也只等這一步（[progressReady]）。書源先到，書架上新加的書才
+  /// 找得到書源；書先加進書架，進度才套用得上，所以書架之後再同步一次進度
+  /// （只在中間有套用改動時，[_syncOnce]）。
   static List<SyncKind> _defaultKinds(SyncService service) => [
+    service._progress,
     SourceSync(),
     ReplaceRuleSync(),
     BookshelfSync(isOpen: service.isBookOpen),
     service._progress,
+    BookmarkSync(),
     ReadStatsSync(settings: service._settings, bases: service._bases),
     SettingsSync(),
     ...LoginDataSync.kinds(),
@@ -190,8 +203,8 @@ class SyncService {
     );
   }
 
-  /// 目前設定的同步空間。只在 [_lock] 裡呼叫：讀設定到用完同步空間之間，
-  /// 不會被停用或換帳號插進來，寫到已經不用的空間。
+  /// 目前設定的同步空間。要寫入的只在 [_lock] 裡呼叫：讀設定到用完同步空間
+  /// 之間，不會被停用或換帳號插進來，寫到已經不用的空間。
   Future<SyncStore?> _store() async {
     final space = await _settings.space();
     return _storeFactory(
@@ -289,24 +302,54 @@ class SyncService {
   }
 
   Future<void> _runUntilSettled() async {
-    do {
-      _again = false;
-      await _syncOnce();
-    } while (_again);
+    try {
+      do {
+        _again = false;
+        await _syncOnce();
+      } while (_again);
+    } finally {
+      // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
+      _progressDone();
+    }
   }
 
   /// 開 App 進場播完時：讀出設定、同步第一次，之後書源或替換規則一改就
   /// 排一次同步。
   Future<void> start() async {
+    _expectProgress();
     try {
       await load();
     } catch (error, stackTrace) {
       AppLog.e('讀同步設定失敗', error: error, stackTrace: stackTrace);
+      _progressDone();
       return;
     }
     _watchEdits();
     await syncNow();
   }
+
+  /// App 回到前景：同步一次，把別台在這段時間的改動接過來。開書等它的閱讀
+  /// 進度做完（[progressReady]）。
+  void syncAfterResume() {
+    _expectProgress();
+    requestSync();
+  }
+
+  /// 開 App 或回到前景後，閱讀進度還沒同步完時是這次同步做完進度那一步的
+  /// 時候；其他時候是 null。
+  Completer<void>? _progressPending;
+
+  void _expectProgress() => _progressPending ??= Completer<void>();
+
+  void _progressDone() {
+    _progressPending?.complete();
+    _progressPending = null;
+  }
+
+  /// 開 App 或回到前景後的這次同步，閱讀進度那一步做完（不論成功、失敗或
+  /// 沒設定同步空間）時完成；已經做完就是 null。開書等它，書就開在另一台
+  /// 讀到的地方，開書本身不連網。
+  Future<void>? get progressReady => _progressPending?.future;
 
   final List<StreamSubscription<void>> _edits = [];
   Timer? _editTimer;
@@ -321,7 +364,8 @@ class SyncService {
   /// 改完隔多久同步：連續改好幾個（匯入、批次啟用）合併成一次。
   static const Duration _editDelay = Duration(seconds: 5);
 
-  /// 這台改了幾次，鍵是 [SyncKind.name]；只數書源與替換規則（[_watchEdits]）。
+  /// 這台改了幾次，鍵是 [SyncKind.name]；只數書源、替換規則與書籤
+  /// （[_watchEdits]）。
   final Map<String, int> _localEdits = {};
 
   /// 上次同步時兩邊都沒變的種類：當時雲端檔的版本與這台改了幾次。之後兩邊
@@ -329,7 +373,7 @@ class SyncService {
   /// 太重），只問一次雲端檔的版本。
   final Map<String, ({String version, int edits})> _settled = {};
 
-  /// 書源與替換規則改了就排一次同步。書架與進度不看：讀書時每翻一頁都會
+  /// 書源、替換規則與書籤改了就排一次同步。書架與進度不看：讀書時每翻一頁都會
   /// 寫書，離開閱讀器與 App 退到背景時才同步；設定在 App 退到背景時同步。
   /// 同步自己套用雲端的改動時不排（那時正在同步），但照樣算改過，下次
   /// 同步會整份比一次。
@@ -342,6 +386,7 @@ class SyncService {
     for (final (table, kind) in <(TableInfo, String)>[
       (db.bookSources, SourceSync.kind),
       (db.replaceRules, ReplaceRuleSync.kind),
+      (db.bookmarks, BookmarkSync.kind),
     ]) {
       _localEdits[kind] = 0;
       _edits.add(
@@ -369,9 +414,15 @@ class SyncService {
         // 一種資料失敗不擋其他種：都試過一次，再報第一個失敗。
         Object? failure;
         StackTrace? failureStack;
+        // 排了兩次的種類，第二次只在中間有別種套用了改動時才跑。
+        final appliedAfter = <String, bool>{};
         for (final kind in _kinds(this)) {
+          if (appliedAfter[kind.name] == false) continue;
+          appliedAfter[kind.name] = false;
           try {
-            await _syncKind(store, kind);
+            if (await _syncKind(store, kind)) {
+              appliedAfter.updateAll((name, _) => name != kind.name);
+            }
           } on SyncStoreException {
             rethrow;
           } catch (error, stackTrace) {
@@ -382,6 +433,8 @@ class SyncService {
             );
             failure ??= error;
             failureStack ??= stackTrace;
+          } finally {
+            if (kind is ProgressSync) _progressDone();
           }
         }
         if (failure != null) {
@@ -411,13 +464,15 @@ class SyncService {
   };
 
   /// 同步一種資料：讀雲端、每筆和上次同步時三方比對、寫回雲端，再把雲端
-  /// 較新的套用到這台。
-  Future<void> _syncKind(SyncStore store, SyncKind kind) async {
+  /// 較新的套用到這台。傳回有沒有套用到這台。
+  Future<bool> _syncKind(SyncStore store, SyncKind kind) async {
     final edits = _localEdits[kind.name];
     if (_settled[kind.name] case final last? when last.edits == edits) {
       final version = await store.version(kind.fileName);
       // 問版本的這段時間這台又改了，就照常整份比。
-      if (version == last.version && _localEdits[kind.name] == edits) return;
+      if (version == last.version && _localEdits[kind.name] == edits) {
+        return false;
+      }
     }
     _settled.remove(kind.name);
     final fingerprint = kind.fingerprint;
@@ -490,6 +545,7 @@ class SyncService {
         }
       }
 
+      var appliedAny = false;
       if (toApply.isNotEmpty) {
         // 寫雲端的這段時間，這台可能又改了（書被打開讀了幾頁、書源剛編輯
         // 過）：和合併時不同的不套用，上次同步的紀錄留著，下次重新比。
@@ -503,6 +559,7 @@ class SyncService {
         final applied = ready.isEmpty
             ? const <String, SyncRecord>{}
             : await kind.apply(ready);
+        appliedAny = applied.isNotEmpty;
         for (final MapEntry(:key, value: mine) in applied.entries) {
           final theirs = ready[key]!;
           nextBase[key] = SyncBaseEntry(
@@ -517,7 +574,7 @@ class SyncService {
           when !changesRemote && toApply.isEmpty) {
         _settled[kind.name] = (version: version, edits: edits);
       }
-      return;
+      return appliedAny;
     }
   }
 
@@ -578,35 +635,49 @@ class SyncService {
     return true;
   }
 
-  /// 開書或回到前景時抓這本書的雲端進度：比這台的新才傳回，否則 null。
-  /// 連不上、沒設定同步空間也是 null，閱讀器照常停在這台的位置。
+  /// 閱讀器開著、App 回到前景時抓這本書的雲端進度（整次同步不改開著的
+  /// 書）：比這台的新才傳回，否則 null。連不上、沒設定同步空間也是 null，
+  /// 閱讀器照常停在原處。
+  ///
+  /// 不等 [_lock]：回到前景時整次同步也在跑，這本書的進度不排在它後面。
+  /// 這裡只讀不寫；寫上次同步的紀錄在 [PulledProgress.commit]，在鎖裡、
+  /// 換過同步空間就不寫。
   Future<PulledProgress?> pullProgress(String bookUrl) async {
     try {
-      return await _lock.synchronized(() async {
-        final store = await _store();
-        if (store == null) return null;
-        await _claimBases();
-        final generation = _generation;
-        final bookDao = _bookDao ?? getIt<BookDao>();
-        final book = await bookDao.getByUrl(bookUrl);
-        if (book == null) return null;
-        final key = ProgressSync.keyOf(book);
-        final file = await store.read(_progress.fileName);
-        if (file == null) return null;
-        final theirs = SyncDocument.decode(file.content).records[key];
-        final base = await _bases.read(ProgressSync.kind);
-        final decision = decideSync(
-          local: ProgressSync.recordOf(book),
-          remote: theirs,
-          base: base[key],
-          fingerprint: ProgressSync.fingerprintOf,
-        );
-        if (decision != SyncDecision.apply || theirs == null) return null;
-        return PulledProgress(
-          SyncedProgress.fromRecord(theirs),
-          (applied) => _commitPulled(key, theirs, applied, generation),
-        );
-      });
+      final generation = _generation;
+      final store = await _store();
+      if (store == null) return null;
+      final bookDao = _bookDao ?? getIt<BookDao>();
+      final book = await bookDao.getByUrl(bookUrl);
+      if (book == null) return null;
+      final key = ProgressSync.keyOf(book);
+      final file = await store.read(_progress.fileName);
+      if (file == null) return null;
+      final theirs = SyncDocument.decode(file.content).records[key];
+      // 上次同步的紀錄是另一個同步空間的：當成從沒同步過，由下次同步作廢
+      // 它（[_claimBases]）。
+      final owned =
+          (await _bases.readJson(_ownerFile))['space'] ==
+          await _settings.identity();
+      final base = owned
+          ? await _bases.read(ProgressSync.kind)
+          : const <String, SyncBaseEntry>{};
+      final decision = decideSync(
+        local: ProgressSync.recordOf(book),
+        remote: theirs,
+        base: base[key],
+        fingerprint: ProgressSync.fingerprintOf,
+      );
+      if (decision != SyncDecision.apply ||
+          theirs == null ||
+          generation != _generation) {
+        return null;
+      }
+      return PulledProgress(
+        SyncedProgress.fromRecord(theirs),
+        (applied) => _commitPulled(key, theirs, applied, generation),
+        isCurrent: () => generation == _generation,
+      );
     } catch (error, stackTrace) {
       AppLog.e('抓雲端進度失敗', error: error, stackTrace: stackTrace);
       return null;

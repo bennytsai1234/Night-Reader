@@ -141,9 +141,10 @@ class _MainPageState extends State<MainPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // 回到前景抓別台的改動；退到背景把這台的改動（例如剛改的設定）送上去。
-    if ((state == AppLifecycleState.resumed ||
-            state == AppLifecycleState.paused) &&
-        _launchWorkStarted) {
+    if (!_launchWorkStarted) return;
+    if (state == AppLifecycleState.resumed) {
+      SyncService.instance.syncAfterResume();
+    } else if (state == AppLifecycleState.paused) {
       SyncService.instance.requestSync();
     }
   }
@@ -183,13 +184,14 @@ class _MainPageState extends State<MainPage>
   Future<void> _startLaunchWork() async {
     _launchWorkStarted = true;
     final tasks = <void Function()>[
+      // 同步排第一個：開 App 後馬上點書，閱讀器要等它的閱讀進度做完。
+      () => unawaited(SyncService.instance.start()),
       () => unawaited(_initDeferredStartupData()),
       _refreshShelfOnceLoaded,
       () => unawaited(
         context.read<DownloadService?>()?.resumeRestoredDownloads(),
       ),
       () => unawaited(_runAutomaticUpdateCheck()),
-      () => unawaited(SyncService.instance.start()),
       () => widget.onLaunchSettled?.call(),
     ];
     for (final task in tasks) {

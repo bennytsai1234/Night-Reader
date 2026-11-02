@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 import '../encode/charsets.dart';
 import '../jsoup/jsoup_bridge.dart';
@@ -74,6 +75,8 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
   var redirects = 0;
   String? previousUrl;
   while (true) {
+    // 每一站（含轉址到的）先換成送出的網址，Cookie 與轉址都照它。
+    url = NetworkUtils.toAsciiHost(url);
     final uri = Uri.parse(url);
     if (uri.scheme != 'http' && uri.scheme != 'https') {
       throw JsoupException('Only http & https protocols supported');

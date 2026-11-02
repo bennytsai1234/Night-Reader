@@ -28,8 +28,12 @@ class ReaderV2PrefsSnapshot {
   final bool showAddToShelfAlert;
   final List<int> clickActions;
 
-  /// 正文左右邊距（px）。
+  /// 正文兩側最少留白（px）：一行撐滿畫面時的左右邊距。沒有設定項，沿用
+  /// 「左右邊距」還是設定時存下的值。
   final double paddingHorizontal;
+
+  /// 每行最多幾個字；畫面放得下更多時正文欄收窄置中（[lineCharsRange]）。
+  final int lineChars;
 
   /// 左右對齊：一行湊不滿一個字格的空隙攤進字距，正文左右兩緣貼齊邊距。
   final bool justifyText;
@@ -102,6 +106,7 @@ class ReaderV2PrefsSnapshot {
     required this.showAddToShelfAlert,
     required this.clickActions,
     required this.paddingHorizontal,
+    required this.lineChars,
     required this.justifyText,
     required this.paddingTop,
     required this.paddingBottom,
@@ -143,6 +148,7 @@ class ReaderV2PrefsSnapshot {
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
       paddingHorizontal: 12.0,
+      lineChars: 32,
       justifyText: true,
       paddingTop: 0.0,
       paddingBottom: 4.0,
@@ -191,6 +197,7 @@ class ReaderV2PrefsSnapshot {
     bool? showAddToShelfAlert,
     List<int>? clickActions,
     double? paddingHorizontal,
+    int? lineChars,
     bool? justifyText,
     double? paddingTop,
     double? paddingBottom,
@@ -229,6 +236,7 @@ class ReaderV2PrefsSnapshot {
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
       paddingHorizontal: paddingHorizontal ?? this.paddingHorizontal,
+      lineChars: lineChars ?? this.lineChars,
       justifyText: justifyText ?? this.justifyText,
       paddingTop: paddingTop ?? this.paddingTop,
       paddingBottom: paddingBottom ?? this.paddingBottom,
@@ -269,6 +277,11 @@ class ReaderV2PrefsRepository {
   /// 版面邊距的合法範圍（px）。
   static const double minPagePadding = 0.0;
   static const double maxPagePadding = 64.0;
+
+  /// 每行字數存得下的範圍；能調到多少還看畫面放得下幾個字。下限是 1：最大
+  /// 字號、最大字距再加上最寬的最少留白時，手機上一行放不到 6 個字，步進
+  /// 列給的每個數都要存得下（原本下限 6，放得下 5 字時步進列給了存不下的 4）。
+  static const ({int min, int max}) lineCharsRange = (min: 1, max: 120);
 
   /// 章節間距的合法範圍（行）。
   static const double minChapterSpacing = 0.0;
@@ -346,6 +359,9 @@ class ReaderV2PrefsRepository {
       paddingHorizontal: _normalizePagePadding(
         prefs.getDouble(PreferKey.readerPaddingHorizontal),
         defaults.paddingHorizontal,
+      ),
+      lineChars: normalizeLineChars(
+        prefs.getInt(PreferKey.readerLineChars) ?? defaults.lineChars,
       ),
       justifyText:
           prefs.getBool(PreferKey.readerJustifyText) ?? defaults.justifyText,
@@ -510,6 +526,13 @@ class ReaderV2PrefsRepository {
   Future<void> savePaddingHorizontal(double value) {
     return _setDouble(PreferKey.readerPaddingHorizontal, value);
   }
+
+  Future<void> saveLineChars(int value) {
+    return _setInt(PreferKey.readerLineChars, normalizeLineChars(value));
+  }
+
+  static int normalizeLineChars(int value) =>
+      value.clamp(lineCharsRange.min, lineCharsRange.max);
 
   Future<void> savePaddingTop(double value) {
     return _setDouble(PreferKey.readerPaddingTop, value);

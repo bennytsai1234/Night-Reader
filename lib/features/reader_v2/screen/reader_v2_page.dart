@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
@@ -135,6 +137,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       entrance: _entrance.future,
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
+      openLocation: (runtime) => _progressSync.openLocation(runtime),
     );
     _coordinator = ReaderV2PageCoordinator(host: _host, showNotice: _showNotice)
       ..openChapters = _openChapters
@@ -144,6 +147,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       book: widget.book,
       runtime: () => _host.runtime,
       onJumped: _showSyncHint,
+      bookDao: _host.dependencies.bookDao,
+      openTarget: widget.openTarget,
     )..start();
     unawaited(_host.opened.then((_) => _progressSync.bookOpened()));
     _host.menu.controlsVisible.addListener(_dismissSyncHintOnMenu);
@@ -325,6 +330,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   titleFor: _chapterTitleAt,
                   listenable: runtime,
                   onChapterTap: _jumpToChapterFromDrawer,
+                  bookmarks: _host.bookmarks.available ? _host.bookmarks : null,
+                  bookmarkChapter: (bookmark) =>
+                      ReaderV2Bookmarks.chapterIndexIn(
+                        bookmark,
+                        runtime?.chapters ?? widget.initialChapters,
+                      ),
+                  onBookmarkTap: _jumpToBookmarkFromDrawer,
+                  onBookmarkDelete: _deleteBookmark,
                   onClosed: _handleDrawerClosed,
                 ),
                 backgroundColor: palette.readerBackground,
@@ -341,7 +354,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 hideStatusBar: settings.hideStatusBar,
                 headerInfo: settings.headerInfo,
                 footerInfo: settings.footerInfo,
-                paddingHorizontal: settings.paddingHorizontal,
+                // 正文區橫向佔滿畫面，和正文用同一個寬度算。
+                paddingHorizontal: settings.paddingHorizontalFor(
+                  MediaQuery.sizeOf(context).width,
+                ),
                 paddingTop: settings.paddingTop,
                 paddingBottom: settings.paddingBottom,
                 footerOffset: settings.footerOffset,
@@ -420,6 +436,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
         final style = _host.settings.readStyleFor(
           mediaPadding,
+          viewportWidth: size.width,
           topInfoReservedExternally: true,
           bottomInfoReservedExternally: _host.settings.showReadTitleAddition,
         );
@@ -445,6 +462,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !(_host.tts?.isPlaying ?? false),
               onHideText: (selection) =>
                   unawaited(_coordinator.hideText(selection)),
+              onBookmarkText: _host.bookmarks.available
+                  ? (selection) =>
+                        unawaited(_coordinator.addBookmark(selection))
+                  : null,
+              marks: _host.bookmarks.marks,
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
               onContentTapUp: _handleContentTap,
@@ -584,6 +606,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段動畫都播完才開始載入
   /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
   void _jumpToChapterFromDrawer(int index) {
+    final settled = _closeDrawerForJump();
+    unawaited(_coordinator.jumpToChapter(index, settled: settled));
+  }
+
+  void _jumpToBookmarkFromDrawer(Bookmark bookmark) {
+    final settled = _closeDrawerForJump();
+    unawaited(_coordinator.jumpToBookmark(bookmark, settled: settled));
+  }
+
+  /// 從目錄面板跳過去：收起面板與選單、蓋上紙；傳回面板收完、紙蓋好的
+  /// 時候，跳轉等它才開始載入（ADR 0018）。
+  Future<void> _closeDrawerForJump() {
     final scaffold = _scaffoldKey.currentState;
     final drawerClosed = scaffold != null && scaffold.isDrawerOpen
         ? (_drawerClosed ??= Completer<void>()).future
@@ -592,14 +626,21 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _host.menu.dismissControls();
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
-    unawaited(
-      _coordinator.jumpToChapter(
-        index,
-        settled: Future.wait([
-          drawerClosed,
-          if (!reduceMotion)
-            TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
-        ]),
+    return Future.wait([
+      drawerClosed,
+      if (!reduceMotion)
+        TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
+    ]);
+  }
+
+  void _deleteBookmark(Bookmark bookmark) {
+    final bookmarks = _host.bookmarks;
+    unawaited(bookmarks.remove(bookmark));
+    _showNotice(
+      '已刪除書籤',
+      action: (
+        label: '復原',
+        onPressed: () => unawaited(bookmarks.restore(bookmark)),
       ),
     );
   }

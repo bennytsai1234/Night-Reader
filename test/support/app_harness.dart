@@ -22,6 +22,7 @@ import 'package:night_reader/core/database/dao/cookie_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/keyboard_assist_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
@@ -114,6 +115,7 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
     ..registerLazySingleton<CookieDao>(() => CookieDao(_db))
     ..registerLazySingleton<DownloadDao>(() => DownloadDao(_db))
     ..registerLazySingleton<ReadRecordDao>(() => ReadRecordDao(_db))
+    ..registerLazySingleton<BookmarkDao>(() => BookmarkDao(_db))
     ..registerLazySingleton<ReplaceRuleDao>(() => ReplaceRuleDao(_db))
     ..registerLazySingleton<SearchBookDao>(() => SearchBookDao(_db))
     ..registerLazySingleton<SearchHistoryDao>(() => SearchHistoryDao(_db))
@@ -415,7 +417,10 @@ Future<void> waitForText(WidgetTester tester) async {
 
 /// 點正文中央叫出閱讀選單。
 Future<void> showReaderMenu(WidgetTester tester) async {
-  await tester.tapAt(const Offset(196, 420));
+  final view = tester.view;
+  await tester.tapAt(
+    (view.physicalSize / view.devicePixelRatio).center(Offset.zero),
+  );
   await settle(tester, const Duration(milliseconds: 800));
   await waitForText(tester);
 }
@@ -426,8 +431,15 @@ Future<void> shot(WidgetTester tester, String name) async {
   print('SHOT ${file.path}');
 }
 
-void setUpPhone(WidgetTester tester) {
-  setUpScreenshot(tester);
-  tester.view.padding = const FakeViewPadding(top: 32 * 3, bottom: 24 * 3);
-  tester.view.viewPadding = const FakeViewPadding(top: 32 * 3, bottom: 24 * 3);
+/// 預設是手機；[size] 給平板這類其他尺寸（邏輯像素，2 倍）。
+void setUpPhone(WidgetTester tester, {Size? size}) {
+  final ratio = size == null ? 3.0 : 2.0;
+  if (size == null) {
+    setUpScreenshot(tester);
+  } else {
+    setUpScreenshot(tester, size: size, devicePixelRatio: ratio);
+  }
+  final padding = FakeViewPadding(top: 32 * ratio, bottom: 24 * ratio);
+  tester.view.padding = padding;
+  tester.view.viewPadding = padding;
 }
