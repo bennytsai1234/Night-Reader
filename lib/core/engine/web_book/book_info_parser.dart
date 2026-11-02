@@ -17,9 +17,14 @@ class BookInfoParser {
     final infoRule = source.ruleBookInfo;
     if (infoRule == null) return book;
 
+    // 同 Legado（BookInfo.analyzeBookInfo）照書名、作者、分類、字數、最新
+    // 章節、簡介、封面、目錄網址的順序算，每一項算完就寫到書上：後面的規則 JS
+    // 讀 `book.intro` 這類欄位時拿到的是這一頁剛算出來的。用一份複本，交回前
+    // 不動到傳進來的書。
+    final working = book.copyWith();
     final rule = AnalyzeRule(
       source: source,
-      ruleData: book,
+      ruleData: working,
     ).setContent(body, baseUrl: baseUrl);
 
     try {
@@ -36,36 +41,6 @@ class BookInfoParser {
         }
       }
 
-      final name = _format(rule.getString(infoRule.name ?? ''));
-      final author = _format(rule.getString(infoRule.author ?? ''));
-
-      final tocUrl = rule.getString(infoRule.tocUrl ?? '', isUrl: true);
-      final kind = _optional(
-        '分類',
-        () => rule.getStringList(infoRule.kind ?? '').join(','),
-      );
-      final coverUrl = _optional(
-        '封面',
-        () => coverUrlFrom(rule.getString(infoRule.coverUrl ?? ''), baseUrl),
-      );
-      final intro = _optional('簡介', () => rule.getString(infoRule.intro ?? ''));
-      final latestChapterTitle = _optional(
-        '最新章節',
-        () => rule.getString(infoRule.lastChapter ?? ''),
-      );
-      final wordCount = _optional(
-        '字數',
-        () => StringUtils.wordCountFormat(
-          rule.getString(infoRule.wordCount ?? ''),
-        ),
-      );
-      final normalizedTocUrl = _resolveFallbackTocUrl(
-        tocUrl: tocUrl,
-        body: body,
-        baseUrl: baseUrl,
-        bookUrl: book.bookUrl,
-      );
-
       // 書架上的書名與作者以使用者看到（可能改過）的為準，除非書源規則
       // 宣告 canReName（同 legado）；搜尋結果進詳情時仍以詳情頁為準。
       final keepNames =
@@ -76,19 +51,49 @@ class BookInfoParser {
           ? current
           : parsed;
 
-      return book.copyWith(
-        name: pick(name, book.name),
-        author: pick(author, book.author),
-        kind: kind.isEmpty ? book.kind : kind,
-        coverUrl: coverUrl.isEmpty ? book.coverUrl : coverUrl,
-        intro: intro.isEmpty ? book.intro : intro,
-        latestChapterTitle: latestChapterTitle.isEmpty
-            ? book.latestChapterTitle
-            : latestChapterTitle,
-        wordCount: wordCount.isEmpty ? book.wordCount : wordCount,
-        // tocUrl: 若規則解析結果為空，以 bookUrl 作為預設目錄頁 (對標 Android 邏輯)
-        tocUrl: normalizedTocUrl,
+      working.name = pick(
+        _format(rule.getString(infoRule.name ?? '')),
+        working.name,
       );
+      working.author = pick(
+        _format(rule.getString(infoRule.author ?? '')),
+        working.author,
+      );
+      final kind = _optional(
+        '分類',
+        () => rule.getStringList(infoRule.kind ?? '').join(','),
+      );
+      if (kind.isNotEmpty) working.kind = kind;
+      final wordCount = _optional(
+        '字數',
+        () => StringUtils.wordCountFormat(
+          rule.getString(infoRule.wordCount ?? ''),
+        ),
+      );
+      if (wordCount.isNotEmpty) working.wordCount = wordCount;
+      final latestChapterTitle = _optional(
+        '最新章節',
+        () => rule.getString(infoRule.lastChapter ?? ''),
+      );
+      if (latestChapterTitle.isNotEmpty) {
+        working.latestChapterTitle = latestChapterTitle;
+      }
+      final intro = _optional('簡介', () => rule.getString(infoRule.intro ?? ''));
+      if (intro.isNotEmpty) working.intro = intro;
+      final coverUrl = _optional(
+        '封面',
+        () => coverUrlFrom(rule.getString(infoRule.coverUrl ?? ''), baseUrl),
+      );
+      if (coverUrl.isNotEmpty) working.coverUrl = coverUrl;
+
+      // tocUrl: 若規則解析結果為空，以 bookUrl 作為預設目錄頁 (對標 Android 邏輯)
+      working.tocUrl = _resolveFallbackTocUrl(
+        tocUrl: rule.getString(infoRule.tocUrl ?? '', isUrl: true),
+        body: body,
+        baseUrl: baseUrl,
+        bookUrl: book.bookUrl,
+      );
+      return working;
     } finally {
       rule.dispose();
     }
