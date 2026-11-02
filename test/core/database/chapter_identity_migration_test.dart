@@ -4,6 +4,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/chapter.dart';
 
+import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
 
 void main() {
@@ -13,6 +14,7 @@ void main() {
       NativeDatabase.memory(
         setup: (raw) {
           raw.execute(legacyChaptersTable);
+          raw.execute(legacyBooksTable);
           raw.execute(
             'INSERT INTO chapters (url, title, isVolume, bookUrl, "index", '
             'variable) VALUES '

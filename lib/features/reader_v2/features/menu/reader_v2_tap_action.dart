@@ -4,7 +4,10 @@ enum ReaderV2TapAction {
   prevPage(2, '上一頁'),
   nextChapter(3, '下一章'),
   prevChapter(4, '上一章'),
-  toggleTts(5, '朗讀');
+  toggleTts(5, '朗讀'),
+  openChapters(6, '目錄'),
+  toggleAutoPage(7, '自動翻頁'),
+  toggleDayNight(8, '日夜切換');
 
   const ReaderV2TapAction(this.code, this.label);
 

@@ -12,7 +12,7 @@ import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
 
 import 'tts_settings_page.dart';
-import 'backup_settings_page.dart';
+import 'backup_sync_page.dart';
 
 import 'package:night_reader/features/about/about_page.dart';
 import 'package:night_reader/features/about/check_update_row.dart';
@@ -116,8 +116,8 @@ class SettingsPage extends StatelessWidget {
                   Icons.backup_outlined,
                   tint: AppTint.tea,
                 ),
-                title: '備份與還原',
-                onTap: () => _push(context, const BackupSettingsPage()),
+                title: '備份與同步',
+                onTap: () => _push(context, const BackupSyncPage()),
               ),
             ],
           ),

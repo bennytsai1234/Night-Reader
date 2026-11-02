@@ -115,8 +115,8 @@ void main() {
     );
   }, skip: skip);
 
-  // 每一項的答案是真的 Jsoup 1.15.3 跑出來的。
-  test('edge cases match Jsoup 1.15.3', () async {
+  // 每一項的答案是 Legado 帶的 Jsoup 1.16.2 跑出來的。
+  test('edge cases match Jsoup 1.16.2', () async {
     expect(
       await run(r'''
         var J = org.jsoup.Jsoup, out = [];
@@ -149,7 +149,7 @@ void main() {
         out.join('|')
       '''),
       [
-        1,
+        2,
         0,
         '1',
         '作者： 張三',
@@ -168,7 +168,8 @@ void main() {
         1,
         true,
         'https://cdn.test/books/1',
-        'https://site.test/path/1',
+        // 拿出文件的節點沒有網址。
+        '',
         'true p hello',
         'ab',
       ].join('|'),

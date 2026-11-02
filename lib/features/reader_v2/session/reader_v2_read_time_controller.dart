@@ -8,7 +8,9 @@ class ReaderV2ReadTimeController {
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
-  final String bookName;
+  /// 寫入時才問書名：閱讀統計照書名記，閱讀中從書籍詳情改了書名，回來
+  /// 讀的時間要記在新書名下（改名時舊的統計已經搬過去）。
+  final Future<String> Function() bookName;
   final ReadRecordDao readRecordDao;
   final DateTime Function() _now;
 
@@ -50,7 +52,7 @@ class ReaderV2ReadTimeController {
   Future<void> _persist(DateTime startedAt, DateTime stoppedAt) async {
     try {
       await readRecordDao.recordReadActivity(
-        bookName: bookName,
+        bookName: await bookName(),
         startedAt: startedAt,
         stoppedAt: stoppedAt,
       );

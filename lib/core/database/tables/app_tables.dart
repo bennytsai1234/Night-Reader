@@ -209,6 +209,8 @@ class Books extends Table {
       text().named('readerAnchorJson').nullable()();
   IntColumn get durChapterTime =>
       integer().named('durChapterTime').withDefault(const Constant(0))();
+  IntColumn get progressTime =>
+      integer().named('progressTime').withDefault(const Constant(0))();
   TextColumn get wordCount => text().named('wordCount').nullable()();
   BoolColumn get canUpdate =>
       boolean().named('canUpdate').withDefault(const Constant(true))();

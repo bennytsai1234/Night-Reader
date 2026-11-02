@@ -42,6 +42,7 @@ class Book extends BookBase implements RuleDataInterface {
     super.visualOffsetPx,
     super.readerAnchorJson,
     super.durChapterTime,
+    super.progressTime,
     super.wordCount,
     super.canUpdate,
     super.order,
@@ -111,6 +112,10 @@ class Book extends BookBase implements RuleDataInterface {
       ),
       readerAnchorJson: json['readerAnchorJson'],
       durChapterTime: BookSerialization.toInt(json['durChapterTime']),
+      // 舊備份與 Legado 的書沒有這欄，照最近閱讀時間估。
+      progressTime: BookSerialization.toInt(
+        json['progressTime'] ?? json['durChapterTime'],
+      ),
       wordCount: json['wordCount'],
       canUpdate:
           json['canUpdate'] == null ||
@@ -163,6 +168,7 @@ class Book extends BookBase implements RuleDataInterface {
     double? visualOffsetPx,
     String? readerAnchorJson,
     int? durChapterTime,
+    int? progressTime,
     String? wordCount,
     bool? canUpdate,
     int? order,
@@ -201,6 +207,7 @@ class Book extends BookBase implements RuleDataInterface {
       visualOffsetPx: visualOffsetPx ?? this.visualOffsetPx,
       readerAnchorJson: readerAnchorJson ?? this.readerAnchorJson,
       durChapterTime: durChapterTime ?? this.durChapterTime,
+      progressTime: progressTime ?? this.progressTime,
       wordCount: wordCount ?? this.wordCount,
       canUpdate: canUpdate ?? this.canUpdate,
       order: order ?? this.order,

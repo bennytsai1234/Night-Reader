@@ -25,8 +25,23 @@ class SourceManagerMenus {
         label: filter,
         checked: provider.filterGroup == filter,
       ),
-    if (provider.allGroups.isNotEmpty) const GlassMenuDivider(),
-    for (final group in provider.allGroups)
+    // 校驗結果和自己的分組分開：校驗完要挑出失效的書源一起停用或刪掉。
+    if (provider.checkResultTags.isNotEmpty) ...[
+      const GlassMenuDivider(),
+      GlassMenuItem(
+        value: SourceManagerProvider.noAbnormalFilter,
+        label: SourceManagerProvider.noAbnormalFilter,
+        checked: provider.filterGroup == SourceManagerProvider.noAbnormalFilter,
+      ),
+      for (final tag in provider.checkResultTags)
+        GlassMenuItem(
+          value: tag,
+          label: tag,
+          checked: provider.filterGroup == tag,
+        ),
+    ],
+    if (provider.userGroups.isNotEmpty) const GlassMenuDivider(),
+    for (final group in provider.userGroups)
       GlassMenuItem(
         value: group,
         label: group,

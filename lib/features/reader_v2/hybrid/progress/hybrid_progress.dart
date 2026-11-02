@@ -1,4 +1,5 @@
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
+import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
 /// Computes published progress from semantic text coordinates.
@@ -7,9 +8,12 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 /// absent here because a partial chapter extent cannot represent total chapter
 /// progress.
 final class HybridProgress implements HybridProgressCalculator {
-  const HybridProgress({required this.chapterCount});
+  const HybridProgress({required this.chapterCount, this.shares});
 
   final int chapterCount;
+
+  /// 每章佔全書多少；沒給時當每章一樣長。
+  final ReaderV2ChapterShares? shares;
 
   @override
   HybridProgressSnapshot progressForLocation(
@@ -26,10 +30,13 @@ final class HybridProgress implements HybridProgressCalculator {
                   100)
               .clamp(0.0, 100.0)
               .toDouble();
+    final known = shares?.chapterCount == chapterCount ? shares : null;
     return HybridProgressSnapshot(
       chapterIndex: chapterIndex,
       chapterCount: chapterCount,
       chapterPercent: chapterPercent,
+      chapterStart: known?.startOf(chapterIndex),
+      chapterShare: known?.shareOf(chapterIndex),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import '../../session/reader_v2_location.dart';
+import '../progress/chapter_shares.dart';
 import 'hybrid_types.dart';
 
 abstract interface class HybridMeasurementStore {
@@ -55,17 +56,32 @@ abstract interface class HybridProgressCalculator {
 }
 
 final class HybridProgressSnapshot {
+  /// [chapterStart]、[chapterShare] 是這一章開頭在全書的位置與佔全書多少
+  /// （[ReaderV2ChapterShares]）；沒給時當每章一樣長。
   const HybridProgressSnapshot({
     required this.chapterIndex,
     required this.chapterCount,
     required this.chapterPercent,
-  }) : assert(chapterCount >= 0),
+    double? chapterStart,
+    double? chapterShare,
+  }) : _givenStart = chapterStart,
+       _givenShare = chapterShare,
+       assert(chapterCount >= 0),
        assert(chapterPercent >= 0),
        assert(chapterPercent <= 100);
 
   final int chapterIndex;
   final int chapterCount;
   final double chapterPercent;
+  final double? _givenStart;
+  final double? _givenShare;
+
+  double get chapterStart =>
+      _givenStart ??
+      ReaderV2ChapterShares.even(chapterCount).startOf(chapterIndex);
+  double get chapterShare =>
+      _givenShare ??
+      ReaderV2ChapterShares.even(chapterCount).shareOf(chapterIndex);
 
   String get chapterLabel {
     if (chapterCount <= 0) return '第 0/0 章 · 本章 0/10';
@@ -73,14 +89,14 @@ final class HybridProgressSnapshot {
     return '第 ${safeChapterIndex + 1}/$chapterCount 章 · 本章 $chapterSegment/10';
   }
 
-  /// 目前章節在整本書中的進度。
+  /// 讀到的位置在整本書中的進度：這一章開頭的位置，加上這一章讀過的部分
+  /// 佔全書多少。
   double get bookPercent {
     if (chapterCount <= 0) return 0.0;
-    final safeChapterIndex = chapterIndex.clamp(0, chapterCount - 1);
     final safeChapterPercent = chapterPercent.clamp(0.0, 100.0);
-    return ((safeChapterIndex + safeChapterPercent / 100) /
-            chapterCount.toDouble()) *
-        100;
+    return ((chapterStart + chapterShare * safeChapterPercent / 100) * 100)
+        .clamp(0.0, 100.0)
+        .toDouble();
   }
 
   String get percentLabel => '全書 ${bookPercent.toStringAsFixed(1)}%';

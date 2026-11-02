@@ -35,6 +35,7 @@
 | [0015](0015-my-tab-rows-are-navigation-only.md) | 「我的」分頁只放入口，不放開關 |
 | [0020](0020-chosen-transition-everywhere.md) | 選定的換頁動畫用在每一種換頁，拖曳返回與點分頁也一樣 |
 | [0021](0021-covers-are-plain-images.md) | 封面只畫圖片，不做成像一本書 |
+| [0040](0040-day-and-night-styles-pure-black.md) | 淺色、深色各選一個風格，深色預設純黑（可關），風格精簡成六種 |
 
 ## 正文排版
 
