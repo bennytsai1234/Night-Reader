@@ -2,6 +2,7 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:xpath_selector/xpath_selector.dart';
 import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
+import 'package:night_reader/core/engine/parsers/elements_list.dart';
 import 'package:night_reader/core/engine/parsers/xml_document.dart';
 import 'package:night_reader/core/engine/rule_analyzer.dart';
 
@@ -34,6 +35,14 @@ class AnalyzeByXPath {
       }
     } else if (doc is Element) {
       _initFromElement(doc);
+    } else if (doc is List) {
+      // 上一條規則找到的一組元素：只有一個時從它查，多個時接成一份網頁。
+      final single = elementsListSingle(doc);
+      if (single != null) {
+        _initFromElement(single);
+      } else {
+        _initFromHtml(_prepareHtml(elementsListHtml(doc)));
+      }
     } else if (htmlLike != null) {
       final prepared = _prepareHtml(htmlLike);
       _initFromHtml(prepared);

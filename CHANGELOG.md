@@ -73,6 +73,7 @@
   - 章名把「两百」「十二万三千」這類中文數字轉成阿拉伯數字時不再轉錯，簡體、繁體與大寫數字都認得
   - 一次抓好幾頁的書源（`java.ajaxAll`）讀得到每一頁的內容與狀態，不再出錯
   - 目錄規則拿到的一串章節元素可以照 Legado 再篩選、排序（`select`、`attr`），不再出現「not a function」而讀不到目錄
+  - 書源程式用 `java.getElement` 時照 Legado 拿到找到的一整組，讀得到有幾個（哔哩轻小说的搜尋不再出錯）；詳情頁的預處理規則找到多個元素時，後面的規則看得到全部
   - 書源程式用 Jsoup 自己做網頁元素、搬動或取代元素（例如話本小說把留言換成頭像加文字、禁忌書屋自己組章節連結），和用 `Jsoup.connect` 直接抓網頁，都照 Legado 運作，不再出現「not a function」
   - 書源程式可以照 Java 的寫法讀書、章節與書源的欄位（例如 `source.getConcurrentRate()`、`chapter.isVip()`），也能改書名、作者、簡介這類書源本來就能改的欄位（`book.setName(…)`）與自訂變數（`book.putCustomVariable(…)`）
   - 書源程式用到的大數運算（番茄小說的簽章）、陣列複製（`Arrays.copyOf`）、Java 清單的逐項讀取（`iterator().hasNext()`）與刪掉一段（`subList(…).clear()`）照 Java 算
