@@ -26,7 +26,7 @@
 ## Consequences
 
 - 完整備份照舊保留，換手機時整包帶走；備份從這版起含登入資料，還原後不用重新登入。隱私說明照實寫。
-- Google 雲端硬碟登記在使用者 Google 帳號下的 Google Cloud 專案 Night Reader Sync（`night-reader-sync`）：Android 用戶端登記套件名 `com.inkpage.reader` 與正式簽章的 SHA-1 指紋（正式版與測試版 APK 是同一把簽章），網頁用戶端的編號寫在 `GoogleSignInDriveAuth.serverClientId`。換簽章或套件名要回這個專案改登記。手機要有 Google Play 服務。背景取授權一律指定同步空間記的那個帳號，手機上有好幾個 Google 帳號也不會讀寫到別的帳號。
+- Google 雲端硬碟登記在使用者 Google 帳號下的 Google Cloud 專案 Night Reader Sync（`night-reader-sync`）：Android 用戶端登記套件名 `com.inkpage.reader` 與正式簽章的 SHA-1 指紋（正式版與測試版 APK 是同一把簽章），網頁用戶端的編號寫在 `GoogleSignInDriveAuth.serverClientId`。換簽章或套件名要回這個專案改登記。發布狀態是正式（使用者 2026-11-02 選定；留在測試的話授權 7 天到期、要每週重新登入），`drive.appdata` 不敏感、不用送審；同意畫面的首頁是夜讀網站，隱私權政策是 repo 的 `PRIVACY.md`（網站只隨正式版部署，放網站要等下次發版才上得了線）。手機要有 Google Play 服務。背景取授權一律指定同步空間記的那個帳號，手機上有好幾個 Google 帳號也不會讀寫到別的帳號。
 - Google 雲端硬碟（Drive v3）沒有 WebDAV 那種「版本不同就不寫」：寫之前再查一次版本，查到寫之間別台寫的會被蓋掉，等被蓋掉的那台再同步一次才合併回去；那台之後不再同步，它那次的改動就留不下來。舊版 Drive v2 有條件寫入，但 Google 建議用 v3、官方文件查不到 v2 這部分還保證可用，沒有採用。兩台第一次同時建同一份檔時會各建一份，之後都讀寫最早建的那份。
 - 分段做，每段一個 PR：備份含登入資料（#178）；同步核心、WebDAV 與閱讀進度（#194，提示用 App 共用的浮動墨色提示，使用者 2026-11-02 從三個候選選定）；書架、書源、替換規則、設定、登入資料與閱讀統計（#199）；Google 雲端硬碟；本地書指紋與原檔勾選（#193）。
 - 「我的」的「備份與還原」改名「備份與同步」（使用者 2026-11-01 同意），跟著同步那一頁一起改，頁面有同步功能才換名字。
