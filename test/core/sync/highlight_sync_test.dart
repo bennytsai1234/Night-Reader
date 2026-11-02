@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/sync/highlight_sync.dart';
+import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
@@ -99,6 +100,11 @@ void main() {
     expect(onA.color, HighlightColor.blue);
     expect(onA.style, HighlightStyle.underline);
 
+    await a.dao.upsertAll([onA.copyWith(note: '想起外婆的墨盒')]);
+    await a.sync.syncNow();
+    await b.sync.syncNow();
+    expect((await b.dao.getAll()).single.note, '想起外婆的墨盒');
+
     await b.dao.deleteByIds([saved.id]);
     await b.sync.syncNow();
     await a.sync.syncNow();
@@ -129,4 +135,22 @@ void main() {
     expect(await a.dao.getAll(), hasLength(2));
     expect(await b.dao.getAll(), hasLength(2));
   });
+
+  test(
+    'a record from a version without notes keeps the note written here',
+    () async {
+      final a = phone('a');
+      final saved = await a.dao.add(paint().copyWith(note: '想起外婆的墨盒'));
+      final kind = HighlightSync(dao: a.dao);
+      // 舊版改了顏色後上傳的那筆：沒有 note。
+      final old = HighlightSync.recordOf(
+        saved.copyWith(color: HighlightColor.pink),
+      ).data..remove('note');
+      await kind.apply({'${saved.id}': SyncRecord(time: 0, data: old)});
+
+      final after = (await a.dao.getAll()).single;
+      expect(after.color, HighlightColor.pink);
+      expect(after.note, '想起外婆的墨盒');
+    },
+  );
 }

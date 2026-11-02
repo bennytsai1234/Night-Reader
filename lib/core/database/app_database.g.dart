@@ -9190,6 +9190,16 @@ class $HighlightsTable extends Highlights
         requiredDuringInsert: false,
         defaultValue: Constant(HighlightStyle.fill.name),
       ).withConverter<HighlightStyle>($HighlightsTable.$converterstyle);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9202,6 +9212,7 @@ class $HighlightsTable extends Highlights
     quote,
     color,
     style,
+    note,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9268,6 +9279,12 @@ class $HighlightsTable extends Highlights
         quote.isAcceptableOrUnknown(data['quote']!, _quoteMeta),
       );
     }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
     return context;
   }
 
@@ -9321,6 +9338,10 @@ class $HighlightsTable extends Highlights
           data['${effectivePrefix}style'],
         )!,
       ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
     );
   }
 
@@ -9346,6 +9367,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
   final Value<String> quote;
   final Value<HighlightColor> color;
   final Value<HighlightStyle> style;
+  final Value<String> note;
   const HighlightsCompanion({
     this.id = const Value.absent(),
     this.bookName = const Value.absent(),
@@ -9357,6 +9379,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     this.quote = const Value.absent(),
     this.color = const Value.absent(),
     this.style = const Value.absent(),
+    this.note = const Value.absent(),
   });
   HighlightsCompanion.insert({
     this.id = const Value.absent(),
@@ -9369,6 +9392,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     this.quote = const Value.absent(),
     this.color = const Value.absent(),
     this.style = const Value.absent(),
+    this.note = const Value.absent(),
   }) : bookName = Value(bookName);
   static Insertable<Highlight> custom({
     Expression<int>? id,
@@ -9381,6 +9405,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     Expression<String>? quote,
     Expression<String>? color,
     Expression<String>? style,
+    Expression<String>? note,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -9393,6 +9418,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
       if (quote != null) 'quote': quote,
       if (color != null) 'color': color,
       if (style != null) 'style': style,
+      if (note != null) 'note': note,
     });
   }
 
@@ -9407,6 +9433,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
     Value<String>? quote,
     Value<HighlightColor>? color,
     Value<HighlightStyle>? style,
+    Value<String>? note,
   }) {
     return HighlightsCompanion(
       id: id ?? this.id,
@@ -9419,6 +9446,7 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
       quote: quote ?? this.quote,
       color: color ?? this.color,
       style: style ?? this.style,
+      note: note ?? this.note,
     );
   }
 
@@ -9459,6 +9487,9 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
         $HighlightsTable.$converterstyle.toSql(style.value),
       );
     }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
     return map;
   }
 
@@ -9474,7 +9505,8 @@ class HighlightsCompanion extends UpdateCompanion<Highlight> {
           ..write('anchor: $anchor, ')
           ..write('quote: $quote, ')
           ..write('color: $color, ')
-          ..write('style: $style')
+          ..write('style: $style, ')
+          ..write('note: $note')
           ..write(')'))
         .toString();
   }
@@ -9496,6 +9528,7 @@ class _$HighlightInsertable implements Insertable<Highlight> {
       quote: Value(_object.quote),
       color: Value(_object.color),
       style: Value(_object.style),
+      note: Value(_object.note),
     ).toColumns(false);
   }
 }
@@ -15737,6 +15770,7 @@ typedef $$HighlightsTableCreateCompanionBuilder = HighlightsCompanion Function({
   Value<String> quote,
   Value<HighlightColor> color,
   Value<HighlightStyle> style,
+  Value<String> note,
 });
 typedef $$HighlightsTableUpdateCompanionBuilder = HighlightsCompanion Function({
   Value<int> id,
@@ -15749,6 +15783,7 @@ typedef $$HighlightsTableUpdateCompanionBuilder = HighlightsCompanion Function({
   Value<String> quote,
   Value<HighlightColor> color,
   Value<HighlightStyle> style,
+  Value<String> note,
 });
 
 class $$HighlightsTableFilterComposer
@@ -15811,6 +15846,11 @@ class $$HighlightsTableFilterComposer
     column: $table.style,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$HighlightsTableOrderingComposer
@@ -15871,6 +15911,11 @@ class $$HighlightsTableOrderingComposer
     column: $table.style,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HighlightsTableAnnotationComposer
@@ -15919,6 +15964,9 @@ class $$HighlightsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<HighlightStyle, String> get style =>
       $composableBuilder(column: $table.style, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
 }
 
 class $$HighlightsTableTableManager
@@ -15962,6 +16010,7 @@ class $$HighlightsTableTableManager
                 Value<String> quote = const Value.absent(),
                 Value<HighlightColor> color = const Value.absent(),
                 Value<HighlightStyle> style = const Value.absent(),
+                Value<String> note = const Value.absent(),
               }) => HighlightsCompanion(
                 id: id,
                 bookName: bookName,
@@ -15973,6 +16022,7 @@ class $$HighlightsTableTableManager
                 quote: quote,
                 color: color,
                 style: style,
+                note: note,
               ),
           createCompanionCallback:
               ({
@@ -15986,6 +16036,7 @@ class $$HighlightsTableTableManager
                 Value<String> quote = const Value.absent(),
                 Value<HighlightColor> color = const Value.absent(),
                 Value<HighlightStyle> style = const Value.absent(),
+                Value<String> note = const Value.absent(),
               }) => HighlightsCompanion.insert(
                 id: id,
                 bookName: bookName,
@@ -15997,6 +16048,7 @@ class $$HighlightsTableTableManager
                 quote: quote,
                 color: color,
                 style: style,
+                note: note,
               ),
           withReferenceMapper: (p0) => p0
               .map(

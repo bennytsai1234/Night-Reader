@@ -124,6 +124,7 @@ void main() {
         chapterTitle: '第一章',
         charOffset: 5,
         quote: '前面畫的字',
+        note: '自己寫的備忘',
       ),
     ]);
     Highlight? tapped;
@@ -157,6 +158,8 @@ void main() {
       tester.getTopLeft(find.text('前面畫的字')).dy,
       lessThan(tester.getTopLeft(find.text('後面畫的字')).dy),
     );
+
+    expect(find.text('第一章\n自己寫的備忘'), findsOneWidget);
 
     await tester.tap(find.byTooltip('匯出'));
     expect(exported?.map((h) => h.id), [1, 2]);
