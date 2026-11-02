@@ -93,6 +93,13 @@ extension JsJavaObject on JsExtensionsBase {
         if (type !== 'object') {
           return value;
         }
+        // java.md5Encode、digestHex、new java.lang.String(…) 交回的 JavaString：
+        // Legado 交回的是 Java 的 String，規則拿到的就是文字。照一般物件交回
+        // 的話，Dart 那邊是 `{_value: …}`，整段規則是 `@js:java.md5Encode(…)`
+        // 時網址的簽章就壞了。
+        if (typeof JavaString === 'function' && value instanceof JavaString) {
+          return String(value);
+        }
         // 規則在回應物件上加了自己的欄位（`r.name = …`）時，要的是那些欄位，
         // 照一般物件交回。
         if (value.__lrResponse && Object.keys(value).every(function(key) {

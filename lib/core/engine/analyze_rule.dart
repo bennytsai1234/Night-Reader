@@ -46,15 +46,21 @@ class AnalyzeRule extends AnalyzeRuleBase
     return this;
   }
 
-  AnalyzeRule setContent(dynamic content, {String? baseUrl}) {
+  /// [baseUrl] 是送出請求的網址，[redirectUrl] 是網站轉址後實際回應的網址
+  /// （同 Legado `setBaseUrl`、`setRedirectUrl`）。相對網址用 [redirectUrl]
+  /// 補成完整的；網址規則（`isUrl`）沒有結果時用 [baseUrl]。沒有給
+  /// [redirectUrl] 時兩個一樣。
+  AnalyzeRule setContent(
+    dynamic content, {
+    String? baseUrl,
+    String? redirectUrl,
+  }) {
     if (content == null) {
       throw ArgumentError('Content cannot be null');
     }
     this.content = content;
     this.baseUrl = baseUrl;
-    // legado 會在解析鏈中同時維護 baseUrl 與 redirectUrl；若呼叫端尚未
-    // 額外指定 redirectUrl，預設以目前內容所在 URL 作為 redirectUrl。
-    redirectUrl = baseUrl;
+    this.redirectUrl = redirectUrl ?? baseUrl;
     analyzeByXPath = null;
     analyzeByJSoup = null;
     analyzeByJSonPath = null;

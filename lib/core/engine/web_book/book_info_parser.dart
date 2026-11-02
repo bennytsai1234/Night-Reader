@@ -13,6 +13,7 @@ class BookInfoParser {
     required Book book,
     required String body,
     required String baseUrl,
+    String? redirectUrl,
   }) async {
     final infoRule = source.ruleBookInfo;
     if (infoRule == null) return book;
@@ -27,10 +28,13 @@ class BookInfoParser {
     if (readConfig != null) {
       working.readConfig = ReadConfig.fromJson(readConfig.toJson());
     }
+    // [baseUrl] 是請求詳情頁的網址，[redirectUrl] 是網站轉址後回應的網址
+    // （同 Legado）；沒給時是同一個。
+    final pageUrl = redirectUrl ?? baseUrl;
     final rule = AnalyzeRule(
       source: source,
       ruleData: working,
-    ).setContent(body, baseUrl: baseUrl);
+    ).setContent(body, baseUrl: baseUrl, redirectUrl: pageUrl);
 
     try {
       // 執行 init 規則 (對標 Android BookInfoRule.init)
@@ -43,7 +47,7 @@ class BookInfoParser {
             (initResult is! List || initResult.isNotEmpty);
         if (hasInitResult) {
           // init 規則的結果替換為新的解析內容
-          rule.setContent(initResult, baseUrl: baseUrl);
+          rule.setContent(initResult, baseUrl: baseUrl, redirectUrl: pageUrl);
         }
       }
 
@@ -88,7 +92,7 @@ class BookInfoParser {
       if (intro.isNotEmpty) working.intro = intro;
       final coverUrl = _optional(
         '封面',
-        () => coverUrlFrom(rule.getString(infoRule.coverUrl ?? ''), baseUrl),
+        () => coverUrlFrom(rule.getString(infoRule.coverUrl ?? ''), pageUrl),
       );
       if (coverUrl.isNotEmpty) working.coverUrl = coverUrl;
 
@@ -96,7 +100,7 @@ class BookInfoParser {
       working.tocUrl = _resolveFallbackTocUrl(
         tocUrl: rule.getString(infoRule.tocUrl ?? '', isUrl: true),
         body: body,
-        baseUrl: baseUrl,
+        baseUrl: pageUrl,
         bookUrl: book.bookUrl,
       );
       return working;
