@@ -86,7 +86,10 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           );
         }
 
+        // 動態規則（含 `{{ }}`）沒結果時用組好的規則文字；JS 規則照 Legado
+        // 就是 JS 交回的結果，空的就是空的，不拿 JS 程式碼當結果。
         if (sourceRule.isDynamic &&
+            sourceRule.mode != Mode.js &&
             (tempResult == null || tempResult.toString().isEmpty)) {
           result = rule;
         } else {
@@ -177,7 +180,10 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           );
         }
 
+        // 動態規則（含 `{{ }}`）沒結果時用組好的規則文字；JS 規則照 Legado
+        // 就是 JS 交回的結果，空的就是空的，不拿 JS 程式碼當結果。
         if (sourceRule.isDynamic &&
+            sourceRule.mode != Mode.js &&
             (tempResult == null ||
                 (tempResult is List && tempResult.isEmpty) ||
                 (tempResult is String && tempResult.isEmpty))) {
@@ -207,7 +213,8 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     if (result is List) {
       return result;
     }
-    if (result == null) {
+    // 沒有結果（JS 交回空的）就是空的一組，不是一個空字串。
+    if (result == null || (result is String && result.isEmpty)) {
       return [];
     }
     return [result];
