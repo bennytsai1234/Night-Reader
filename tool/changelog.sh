@@ -241,7 +241,9 @@ validate() {
     echo "changelog: 測試版只能使用平鋪的「- 」條列，不要介紹段落或續行。" >&2
     return 1
   fi
-  if printf '%s\n' "$body" | grep -Eiq 'https?://|www\.|[[:alnum:]-]+\.(com|net|org|io|cn|tw|cc|vip|top|dev)([^[:alnum:].-]|$)'; then
+  # 用 C 語系比對：UTF-8 語系的 [:alnum:] 把中文字也算進去，網域後面直接接
+  # 中文（「example.com的」）就漏掉了。
+  if printf '%s\n' "$body" | LC_ALL=C grep -Eiq 'https?://|www\.|[[:alnum:]-]+\.(com|net|org|io|cn|tw|cc|vip|top|dev)([^[:alnum:].-]|$)'; then
     echo "changelog: 公開更新說明不能列出網址或網域，請改寫成通用功能描述。" >&2
     return 1
   fi
