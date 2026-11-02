@@ -49,13 +49,31 @@ void main() {
     expect(volumes.rows({}), List.generate(9, (i) => i));
   });
 
-  test('a fresh copy of the same table of contents keeps the collapsed '
-      'volumes; moved volumes do not', () {
+  test(
+    'a volume row is its own volume when revealing the current position',
+    () {
+      final volumes = TocVolumes(chapters);
+      expect(volumes.volumeAt(4), 4);
+      expect(volumes.volumeAt(6), 4);
+      expect(volumes.volumeAt(0), -1);
+      expect(volumes.volumeAt(99), -1);
+      expect(volumes.initiallyCollapsed(8), {1, 4});
+    },
+  );
+
+  test('a new table of contents keeps the collapsed volumes while the volumes '
+      'stay put, even with new chapters at the end; moved volumes do not', () {
     final volumes = TocVolumes(chapters);
-    expect(volumes.sameShape(TocVolumes(List.of(chapters))), isTrue);
+    expect(volumes.sameVolumes(TocVolumes(List.of(chapters))), isTrue);
     expect(
-      volumes.sameShape(
+      volumes.sameVolumes(
         TocVolumes([...chapters, BookChapter(url: '/9', title: '第6章')]),
+      ),
+      isTrue,
+    );
+    expect(
+      volumes.sameVolumes(
+        TocVolumes([BookChapter(url: '/p', title: '楔子'), ...chapters]),
       ),
       isFalse,
     );

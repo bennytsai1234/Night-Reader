@@ -99,7 +99,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   /// 目前這章所在的卷收著時展開，打勾的那章一定看得到。
   void _revealCurrentChapter() {
-    final volume = _volumes.volumeOf(_currentChapterIndex);
+    final volume = _volumes.volumeAt(_currentChapterIndex);
     if (_collapsed.remove(volume)) _rows = _volumes.rows(_collapsed);
   }
 
@@ -125,11 +125,13 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   @override
   void didUpdateWidget(covariant ReaderV2ChaptersDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 執行階段每次給一份新的清單；分卷的位置沒變就沿用收起的卷。
+    // 執行階段每次給一份新的清單；分卷的位置沒變（例如只多了新章）就
+    // 沿用收起的卷，列照新的目錄重排。
     if (!identical(oldWidget.chapters, widget.chapters)) {
       final volumes = TocVolumes(widget.chapters);
-      if (volumes.sameShape(_volumes)) {
+      if (volumes.sameVolumes(_volumes)) {
         _volumes = volumes;
+        _rows = volumes.rows(_collapsed);
       } else {
         _resetVolumes();
         _lastScrolledChapterIndex = -1;

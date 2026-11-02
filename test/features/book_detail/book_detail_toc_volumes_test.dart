@@ -98,6 +98,40 @@ void main() {
     expect(shown(provider), titles);
   });
 
+  test('coming back from the reader in a collapsed volume expands it; new '
+      'chapters at the end keep what the user collapsed', () async {
+    final provider = await open();
+    expect(provider.isVolumeCollapsed(0), isTrue);
+
+    // 在閱讀器裡改讀第一卷，回到詳情：目前這章看得到。
+    final stored = await db.bookDao.getByUrl(bookUrl);
+    await db.bookDao.upsert(stored!.copyWith(chapterIndex: 1));
+    await provider.reloadAfterReading();
+    expect(provider.displayIndexForChapter(1), greaterThanOrEqualTo(0));
+
+    // 使用者收起第二卷，之後目錄最後多了一章：第二卷照樣收著。
+    provider.toggleVolume(3);
+    await db.chapterDao.insertChapters([
+      BookChapter(url: '$bookUrl/c6', title: '第5章', bookUrl: bookUrl, index: 6),
+    ]);
+    await provider.reloadAfterReading();
+    expect(provider.isVolumeCollapsed(3), isTrue);
+    expect(provider.tocVolumes.countOf(3), 3);
+  });
+
+  test('locating the current position when it is a volume row expands that '
+      'volume', () async {
+    final provider = await open();
+    final stored = await db.bookDao.getByUrl(bookUrl);
+    await db.bookDao.upsert(stored!.copyWith(chapterIndex: 3));
+    await provider.reloadAfterReading();
+    provider.toggleVolume(3);
+    expect(provider.isVolumeCollapsed(3), isTrue);
+
+    provider.resetTocViewForCurrentChapter();
+    expect(provider.isVolumeCollapsed(3), isFalse);
+  });
+
   test('searching or reversing lists every match without grouping, and the '
       'rows still know where they are in the full list', () async {
     final provider = await open();

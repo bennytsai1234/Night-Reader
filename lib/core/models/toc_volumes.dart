@@ -37,22 +37,25 @@ class TocVolumes {
   /// 第 [volume] 個（分卷）底下有幾章。
   int countOf(int volume) => _counts[volume] ?? 0;
 
+  /// 第 [position] 個在哪一卷：分卷本身就是那一卷，其他同 [volumeOf]。
+  /// 要讓目前這章看得到時展開的就是它。
+  int volumeAt(int position) =>
+      position >= 0 && position < chapters.length && chapters[position].isVolume
+      ? position
+      : volumeOf(position);
+
   /// 剛打開時收起的卷：目前這章所在的卷之前的卷（讀過的）；目前這卷與
   /// 之後的展開。
   Set<int> initiallyCollapsed(int current) {
-    final currentVolume = current >= 0 && current < chapters.length
-        ? (chapters[current].isVolume ? current : volumeOf(current))
-        : -1;
+    final currentVolume = volumeAt(current);
     return {
       for (final volume in _counts.keys)
         if (volume < currentVolume) volume,
     };
   }
 
-  /// 和 [other] 的章數與分卷位置都一樣：換了一份同樣的目錄，收起的卷
-  /// 照舊。
-  bool sameShape(TocVolumes other) =>
-      chapters.length == other.chapters.length &&
+  /// 和 [other] 的分卷位置都一樣（例如只在後面多了新章）：收起的卷照舊。
+  bool sameVolumes(TocVolumes other) =>
       _counts.length == other._counts.length &&
       _counts.keys.every(other._counts.containsKey);
 

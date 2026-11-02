@@ -151,4 +151,46 @@ void main() {
     await tester.tap(find.text('第1章 開門'));
     expect(tapped, [1]);
   });
+
+  testWidgets('moving to a volume row expands it; a new copy of the table of '
+      'contents with chapters added at the end keeps what was collapsed', (
+    tester,
+  ) async {
+    BookChapter chapter(String title, {bool volume = false}) =>
+        BookChapter(url: '/$title', title: title, isVolume: volume);
+    var chapters = [
+      chapter('第一卷', volume: true),
+      chapter('第1章'),
+      chapter('第二卷', volume: true),
+      chapter('第2章'),
+    ];
+    final current = ValueNotifier(1);
+    Widget drawer() => MaterialApp(
+      home: Scaffold(
+        body: ReaderV2ChaptersDrawer(
+          chapters: chapters,
+          currentChapter: current,
+          titleFor: (index) => chapters[index].title,
+          onChapterTap: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpWidget(drawer());
+
+    await tester.tap(find.text('第二卷'));
+    await tester.pump();
+    expect(find.text('第2章'), findsNothing);
+    current.value = 2;
+    await tester.pump();
+    expect(find.text('第2章'), findsOneWidget);
+
+    await tester.tap(find.text('第一卷'));
+    await tester.pump();
+    expect(find.text('第1章'), findsNothing);
+    chapters = [...chapters, chapter('第3章')];
+    await tester.pumpWidget(drawer());
+    expect(find.text('第1章'), findsNothing);
+    expect(find.text('第3章'), findsOneWidget);
+    expect(find.text('共 3 章'), findsOneWidget);
+  });
 }

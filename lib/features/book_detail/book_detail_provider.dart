@@ -643,19 +643,25 @@ class BookDetailProvider extends ChangeNotifier {
   int get _currentPosition =>
       _allChapters.indexWhere((chapter) => chapter.index == _book.chapterIndex);
 
+  /// 上次排目錄時目前這章的位置：從閱讀器回來、換源後目前這章換了，就
+  /// 展開它的卷；沒換就照使用者收起的，連目前這卷也可以收起。
+  int _shownCurrent = -1;
+
   void _applyFilter({bool revealCurrent = false}) {
     // 換了一份目錄（載入、換源、檢查更新）且分卷的位置不同時，照目前這章
-    // 重新決定收起哪些卷；位置一樣就照使用者收起的。
+    // 重新決定收起哪些卷；位置一樣（例如只多了新章）就照使用者收起的。
+    final current = _currentPosition;
     if (!identical(_volumes.chapters, _allChapters)) {
       final volumes = TocVolumes(_allChapters);
-      if (!volumes.sameShape(_volumes)) {
-        _collapsedVolumes = volumes.initiallyCollapsed(_currentPosition);
+      if (!volumes.sameVolumes(_volumes)) {
+        _collapsedVolumes = volumes.initiallyCollapsed(current);
       }
       _volumes = volumes;
     }
-    if (revealCurrent) {
-      _collapsedVolumes.remove(_volumes.volumeOf(_currentPosition));
+    if (revealCurrent || current != _shownCurrent) {
+      _collapsedVolumes.remove(_volumes.volumeAt(current));
     }
+    _shownCurrent = current;
     final query = _searchQuery.toLowerCase();
     var positions = groupsVolumes
         ? _volumes.rows(_collapsedVolumes)
