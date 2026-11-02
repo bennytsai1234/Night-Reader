@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
@@ -57,14 +55,23 @@ class _SourceKind extends SyncKind {
   }
 }
 
-void main() {
-  late Directory bases;
+class _MemoryBases extends SyncBaseStorage {
+  final Map<String, Map<String, Object?>> files = {};
 
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
-    bases = Directory.systemTemp.createTempSync('nr-webdav-page');
-    addTearDown(() => bases.delete(recursive: true));
-  });
+  @override
+  Future<Map<String, Object?>> readJson(String name) async =>
+      Map.of(files[name] ?? const {});
+
+  @override
+  Future<void> writeJson(String name, Map<String, Object?> json) async =>
+      files[name] = Map.of(json);
+
+  @override
+  Future<void> clear() async => files.clear();
+}
+
+void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Future<SyncService> pump(
     WidgetTester tester,
@@ -74,7 +81,7 @@ void main() {
   }) async {
     final sync = SyncService(
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
-      bases: SyncBaseStorage(directory: () async => bases),
+      bases: _MemoryBases(),
       kinds: kinds,
     );
     await tester.pumpWidget(
