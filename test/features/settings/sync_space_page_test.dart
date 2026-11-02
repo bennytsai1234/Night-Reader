@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/sync/google_drive_auth.dart';
+import 'package:night_reader/core/sync/sync_kind.dart';
+import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
@@ -9,11 +13,20 @@ import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Store implements SyncStore {
+  _Store({this.beforeRead, this.readError});
+
+  final Future<void>? beforeRead;
+  final String? readError;
+
   @override
   Future<void> check() async {}
 
   @override
-  Future<SyncFile?> read(String name) async => null;
+  Future<SyncFile?> read(String name) async {
+    if (beforeRead != null) await beforeRead;
+    if (readError != null) throw SyncStoreException(readError!);
+    return null;
+  }
 
   @override
   Future<String?> version(String name) async => null;
@@ -25,6 +38,17 @@ class _Store implements SyncStore {
     String? ifVersion,
     bool ifAbsent = false,
   }) async {}
+}
+
+class _SourceKind extends SyncKind {
+  @override
+  String get name => 'sources';
+
+  @override
+  Future<Map<String, SyncRecord>> local() async => {};
+
+  @override
+  Future<Map<String, SyncRecord>> apply(Map<String, SyncRecord> remote) async => {};
 }
 
 class _Auth implements GoogleDriveAuth {
@@ -73,19 +97,22 @@ class _MemoryBases extends SyncBaseStorage {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<void> pump(
+  Future<SyncService> pump(
     WidgetTester tester,
     _Auth auth, {
     _MemoryBases? bases,
+    _Store? store,
+    List<SyncKind> Function(SyncService)? kinds,
   }) async {
     final sync = SyncService(
-      storeFactory: (space, _, _) => space == SyncSpace.none ? null : _Store(),
+      storeFactory: (space, _, _) => space == SyncSpace.none ? null : store ?? _Store(),
       bases: bases ?? _MemoryBases(),
       googleAuth: auth,
-      kinds: (_) => const [],
+      kinds: kinds ?? (_) => const [],
     );
     await tester.pumpWidget(MaterialApp(home: SyncSpacePage(sync: sync)));
     await tester.pumpAndSettle();
+    return sync;
   }
 
   Future<void> settle(WidgetTester tester) async {
@@ -137,6 +164,54 @@ void main() {
     await settle(tester);
     expect(find.text('other@gmail.com'), findsOneWidget);
     expect(bases.files['progress'], isNull);
+  });
+
+  testWidgets('Google selection updates before the initial sync finishes', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final sync = await pump(
+      tester,
+      _Auth(),
+      store: _Store(beforeRead: gate.future),
+      kinds: (_) => [_SourceKind()],
+    );
+
+    await tester.tap(find.text('Google 雲端硬碟'));
+    await settle(tester);
+
+    expect(find.text('reader@gmail.com'), findsOneWidget);
+    expect(find.text('登入中…'), findsNothing);
+    expect(find.text('同步中（1/1）：書源'), findsOneWidget);
+    expect(sync.status.value.running, isTrue);
+
+    gate.complete();
+    await settle(tester);
+
+    expect(sync.status.value.running, isFalse);
+    expect(find.textContaining('上次同步：'), findsOneWidget);
+  });
+
+  testWidgets('Google sync error replaces the progress on the same page', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final sync = await pump(
+      tester,
+      _Auth(),
+      store: _Store(beforeRead: gate.future, readError: '書源暫時不可用'),
+      kinds: (_) => [_SourceKind()],
+    );
+
+    await tester.tap(find.text('Google 雲端硬碟'));
+    await settle(tester);
+    expect(find.text('同步中（1/1）：書源'), findsOneWidget);
+
+    gate.complete();
+    await settle(tester);
+
+    expect(sync.status.value.running, isFalse);
+    expect(find.text('上次同步失敗：書源暫時不可用'), findsOneWidget);
   });
 
   testWidgets('a cancelled Google sign-in changes nothing', (tester) async {
