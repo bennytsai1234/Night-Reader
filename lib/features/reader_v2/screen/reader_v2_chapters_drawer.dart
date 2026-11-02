@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/toc_volumes.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -14,6 +15,7 @@ import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
+import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 
 /// 閱讀器左側的面板：「目錄」與「書籤」兩個分頁，頂端的分段切換。
 class ReaderV2ChaptersDrawer extends StatefulWidget {
@@ -75,16 +77,42 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   int get _currentChapterIndex => widget.currentChapter.value;
 
+  /// 分卷與收起的卷；畫面上第幾列對到第幾章看 [_rows]。每次打開都照
+  /// 目前這章重新決定收起哪些（[TocVolumes.initiallyCollapsed]）。
+  late TocVolumes _volumes;
+  late Set<int> _collapsed;
+  late List<int> _rows;
+
   @override
   void initState() {
     super.initState();
+    _resetVolumes();
     widget.listenable?.addListener(_handleChanged);
     widget.currentChapter.addListener(_handleCurrentChapterChanged);
   }
 
+  void _resetVolumes() {
+    _volumes = TocVolumes(widget.chapters);
+    _collapsed = _volumes.initiallyCollapsed(_currentChapterIndex);
+    _rows = _volumes.rows(_collapsed);
+  }
+
+  /// 目前這章所在的卷收著時展開，打勾的那章一定看得到。
+  void _revealCurrentChapter() {
+    final volume = _volumes.volumeAt(_currentChapterIndex);
+    if (_collapsed.remove(volume)) _rows = _volumes.rows(_collapsed);
+  }
+
+  void _toggleVolume(int volume) {
+    setState(() {
+      if (!_collapsed.remove(volume)) _collapsed.add(volume);
+      _rows = _volumes.rows(_collapsed);
+    });
+  }
+
   void _handleCurrentChapterChanged() {
     if (!mounted) return;
-    setState(() {});
+    setState(_revealCurrentChapter);
     _scheduleScrollToCurrentChapter();
   }
 
@@ -97,6 +125,18 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   @override
   void didUpdateWidget(covariant ReaderV2ChaptersDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // 執行階段每次給一份新的清單；分卷的位置沒變（例如只多了新章）就
+    // 沿用收起的卷，列照新的目錄重排。
+    if (!identical(oldWidget.chapters, widget.chapters)) {
+      final volumes = TocVolumes(widget.chapters);
+      if (volumes.sameVolumes(_volumes)) {
+        _volumes = volumes;
+        _rows = volumes.rows(_collapsed);
+      } else {
+        _resetVolumes();
+        _lastScrolledChapterIndex = -1;
+      }
+    }
     if (oldWidget.listenable != widget.listenable) {
       oldWidget.listenable?.removeListener(_handleChanged);
       widget.listenable?.addListener(_handleChanged);
@@ -120,40 +160,51 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   /// Telegram 式平面列：固定高度（捲動定位依賴 [_tileExtent]），
   /// 目前章節以主色加粗並在右側打勾，付費還沒買的章節右側鎖頭，列間以
-  /// 髮絲線分隔。
-  Widget _buildChapterTile(BuildContext context, int index) {
+  /// 髮絲線分隔。分卷是粗體的一列，點了收起或展開；卷內的章往右縮一個字。
+  Widget _buildChapterTile(BuildContext context, int row) {
     final scheme = Theme.of(context).colorScheme;
+    final index = _rows[row];
     final chapterTitle = widget.titleFor(index);
-    final isCurrentChapter = _currentChapterIndex == index;
-    final Widget? trailing = isCurrentChapter
-        ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
-        : index < widget.chapters.length && widget.chapters[index].isLocked
-        ? const LockedChapterIcon()
-        : null;
-    return Column(
-      children: [
-        Expanded(
-          child: Center(
-            child: GroupedRow(
-              title: chapterTitle,
-              titleWidget: Text(
-                chapterTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.bodyBase.copyWith(
-                  height: 1.3,
-                  color: isCurrentChapter ? scheme.primary : scheme.onSurface,
-                  fontWeight: isCurrentChapter
-                      ? FontWeight.w600
-                      : FontWeight.w400,
-                ),
-              ),
-              trailing: trailing,
-              showChevron: false,
-              onTap: () => widget.onChapterTap(index),
+    final Widget tile;
+    if (widget.chapters[index].isVolume) {
+      tile = TocVolumeRow(
+        title: chapterTitle,
+        count: _volumes.countOf(index),
+        collapsed: _collapsed.contains(index),
+        onToggle: () => _toggleVolume(index),
+      );
+    } else {
+      final isCurrentChapter = _currentChapterIndex == index;
+      final Widget? trailing = isCurrentChapter
+          ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
+          : widget.chapters[index].isLocked
+          ? const LockedChapterIcon()
+          : null;
+      tile = GroupedRow(
+        title: chapterTitle,
+        titleWidget: Padding(
+          padding: EdgeInsets.only(
+            left: _volumes.volumeOf(index) >= 0 ? tocChapterIndent : 0,
+          ),
+          child: Text(
+            chapterTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.bodyBase.copyWith(
+              height: 1.3,
+              color: isCurrentChapter ? scheme.primary : scheme.onSurface,
+              fontWeight: isCurrentChapter ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
         ),
+        trailing: trailing,
+        showChevron: false,
+        onTap: () => widget.onChapterTap(index),
+      );
+    }
+    return Column(
+      children: [
+        Expanded(child: Center(child: tile)),
         Container(
           height: AppGlass.hairline,
           margin: const EdgeInsets.only(left: AppGrouped.rowPadding),
@@ -167,26 +218,27 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     if (!mounted || !_scrollController.hasClients) return;
     final currentChapterIndex = _currentChapterIndex;
     if (currentChapterIndex == _lastScrolledChapterIndex) return;
+    final row = _rows.indexOf(currentChapterIndex);
+    if (row < 0) return;
     _lastScrolledChapterIndex = currentChapterIndex;
 
     final maxExtent = _scrollController.position.maxScrollExtent;
     final viewportDimension = _scrollController.position.viewportDimension;
     final targetOffset =
-        (currentChapterIndex * _tileExtent) -
-        ((viewportDimension - _tileExtent) / 2);
+        (row * _tileExtent) - ((viewportDimension - _tileExtent) / 2);
     final safeOffset = targetOffset.clamp(0.0, maxExtent);
     _scrollController.jumpTo(safeOffset);
   }
 
-  /// 列高固定，畫面上的列直接由捲動位置換算。
+  /// 列高固定，畫面上的列直接由捲動位置換算；右側捲動條數的是列，不是章。
   (int, int)? _visibleRange() {
-    if (!_scrollController.hasClients || widget.chapters.isEmpty) return null;
+    if (!_scrollController.hasClients || _rows.isEmpty) return null;
     final position = _scrollController.position;
     final first = (position.pixels / _tileExtent).floor();
     final last =
         ((position.pixels + position.viewportDimension) / _tileExtent).ceil() -
         1;
-    final maxIndex = widget.chapters.length - 1;
+    final maxIndex = _rows.length - 1;
     return (first.clamp(0, maxIndex), last.clamp(0, maxIndex));
   }
 
@@ -275,7 +327,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
-        _countLabel(theme, '共 ${widget.chapters.length} 章'),
+        _countLabel(theme, '共 ${_volumes.chapterCount} 章'),
       ],
     );
   }
@@ -300,7 +352,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
         switch (_tab) {
           _DrawerTab.chapters => _countLabel(
             theme,
-            '共 ${widget.chapters.length} 章',
+            '共 ${_volumes.chapterCount} 章',
           ),
           _DrawerTab.bookmarks => ValueListenableBuilder(
             valueListenable: widget.bookmarks!,
@@ -403,15 +455,15 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   Widget _buildChapterList(BuildContext context) {
     return ChapterScrollbar(
-      itemCount: widget.chapters.length,
+      itemCount: _rows.length,
       visibleRange: _visibleRange,
       onJumpTo: _jumpToChapterRow,
-      labelFor: widget.titleFor,
+      labelFor: (row) => widget.titleFor(_rows[row]),
       padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
       child: ListView.builder(
         controller: _scrollController,
         padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
-        itemCount: widget.chapters.length,
+        itemCount: _rows.length,
         itemExtent: _tileExtent,
         itemBuilder: _buildChapterTile,
       ),
