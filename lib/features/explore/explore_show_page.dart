@@ -102,7 +102,11 @@ class ExploreShowView extends StatelessWidget {
       waitForCovers: CoverWait.brief,
       // 書單直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
       backdrop: Theme.of(context).scaffoldBackgroundColor,
-      skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),
+      skeleton: ExploreBookListSkeleton(
+        padding: _listPadding(context),
+        books: provider.books,
+        inBookshelf: provider.isInBookshelf,
+      ),
       builder: (_) => _buildLoaded(context, provider),
     );
   }
