@@ -18,8 +18,6 @@
 - 看不到的瀏覽器的 `sourceRegex`（`java.webViewGetSource`、`getStrResponse(js, sourceRegex)`）：87 個書源有這個欄位，79 個是空的，有內容的 7 個多半是影音（mp4、m3u8），文字書源約 3 個。Legado 等網頁載入的資源網址、內文是那個網址；夜讀在拿到的內容裡找，因為 webview_flutter 沒有資源載入的事件，要做得在 Android 端自己接 `WebViewClient.onLoadResource`。
 - 其他 Java 類別：`okhttp3.OkHttpClient`（2，其一是漫畫）、RSA 金鑰物件（`KeyFactory`、`X509EncodedKeySpec`，1，星愿瓶）。直接開網路連線（`java.net.Socket`）做不到，回報「不支援」；rar、7z 壓縮檔沒有 Dart 函式庫，回報「不支援」。
 - 預整理 JS 的 `java.reGetBook()`（精確搜尋同名同作者、換成它的書籍網址再讀詳情）：目前丟出「還不支援」。章節以「書＋網址」為身分（#165），只在抓目錄時換網址會讓章節對不上書架上的書，做的時候要連書架上那本書的網址一起換。
-- 混淆過的 jsLib（半夏小说、69書吧，同一個作者的 JS 虛擬機）搜尋時丟「not a function」：`Function.prototype.bind` 被套在全域物件上（2026-11-02 在 jsLib 前面改寫 `bind` 記下的）。要再追得拆虛擬機，找出它預期拿到的是什麼。
-- XPath 的子節點條件 `//dd[a]`（思兔阅读，1 個）：`xpath_selector` 套件不支援，要做得 fork 套件。
 - 規則引擎和 Legado 還差的（#210 審查時找到，源倉庫沒有書源用到）：頂層 `@` 開頭的 JSON 路徑（`json_path` 套件只收 `$`）；帶 `html`／`outerHtml`／`__html` 欄位的一般物件被當成網頁。
 - 其他改版閱讀 App 才有的功能（`refreshExplore`、`deviceID`、`showBrowser`、`qread` 等，56 個書源）不在 Legado 裡，使用者 2026-11-01 沒要求。一些改版閱讀 App 的登入表單欄位（`toggle` 11、`select` 10 個）照 Legado 不顯示。
 

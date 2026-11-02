@@ -238,6 +238,60 @@ void main() {
       );
     }, skip: skip);
 
+    // Java 8 加進 Map 的方法；JS 函式當 Java 的 Function、BiFunction 傳進去
+    // （Rhino 會轉）。期望值是 Java HashMap 的結果。
+    test('Map compute, merge, putIfAbsent and replace follow Java', () {
+      expect(
+        eval(r'''
+          var m = new Packages.java.util.HashMap();
+          var calls = 0;
+          var a = m.computeIfAbsent("k", function(key) { calls++; return key + "1"; });
+          var b = m.computeIfAbsent("k", function(key) { calls++; return "x"; });
+          var n = m.computeIfAbsent("n", function(key) { return null; });
+          var p = m.computeIfPresent("k", function(key, v) { return v + "2"; });
+          var q = m.computeIfPresent("none", function(key, v) { return "x"; });
+          var c = m.compute("c", function(key, v) { return v == null ? 1 : v + 1; });
+          m.compute("c", function(key, v) { return v + 1; });
+          var g = m.merge("g", 5, function(o, v) { return o + v; });
+          m.merge("g", 5, function(o, v) { return o + v; });
+          m.merge("c", 0, function(o, v) { return null; });
+          var i1 = m.putIfAbsent("i", "first");
+          var i2 = m.putIfAbsent("i", "second");
+          var r1 = m.replace("i", "third");
+          var r2 = m.replace("none", "x");
+          var r3 = m.replace("i", "nope", "x");
+          [a, b, calls, String(n), m.containsKey("n"), p, String(q), c,
+           m.get("g"), m.containsKey("c"), String(i1), i2, r1, String(r2),
+           r3, m.get("i")].join("|")
+        '''),
+        'k1|k1|1|null|false|k12|null|1|10|false|null|first|first|null|'
+        'false|third',
+      );
+    }, skip: skip);
+
+    // 半夏小说把搜尋的限流時間存在 System.getProperties()，跨次執行共用。
+    test('System.getProperties is one Hashtable that keeps its entries', () {
+      eval(r'''
+        Packages.java.lang.System.getProperties().computeIfAbsent(
+          "app.next", function(k) {
+            return new Packages.java.util.concurrent.atomic.AtomicLong(0);
+          });
+        Packages.java.lang.System.getProperties().get("app.next").set(42);
+      ''');
+      expect(
+        eval(r'''
+          var p = Packages.java.lang.System.getProperties();
+          p.setProperty("a", "1");
+          [p.get("app.next").get(), p.getProperty("a"),
+           Packages.java.lang.System.getProperty("a"),
+           p.getProperty("none", "d"), String(p.getProperty("none")),
+           Packages.java.lang.System.getProperty("line.separator") === "\n",
+           Packages.java.lang.System.getProperty("java.vm.name")].join("|")
+        '''),
+        '42|1|1|d|null|true|Dalvik',
+      );
+    }, skip: skip);
+
     test('MessageDigest, ByteBuffer, byte streams', () {
       expect(
         eval(r'''

@@ -80,6 +80,9 @@ extension JsJavaClasses on JsExtensionsBase {
   var JavaSystem = named('System', {
     currentTimeMillis: function() { return JsDate.now(); },
     nanoTime: function() { return JsDate.now() * 1e6; },
+    getProperties: function() { return getSystemProperties(); },
+    getProperty: function(k, d) { return getSystemProperties().getProperty(k, d); },
+    setProperty: function(k, v) { return getSystemProperties().setProperty(k, v); },
     // 先複製來源那一段：來源與目的是同一個陣列、區段重疊時同 Java。
     arraycopy: function(src, srcPos, dest, destPos, length) {
       if (srcPos < 0 || destPos < 0 || length < 0 ||
@@ -181,6 +184,51 @@ extension JsJavaClasses on JsExtensionsBase {
     else Object.keys(map).forEach(function(k) { self.put(k, map[k]); });
   };
   JavaMap.prototype.forEach = function(fn) { var m = this._m; this._order().forEach(function(k) { fn(k, m.get(k)); }); };
+  // Java 8 加進 Map 的方法。函式照 Rhino 把 JS 函式當 Java 的 Function、
+  // BiFunction：直接是函式，或有 apply 方法的物件；交回 undefined 當 null。
+  function callJavaFunction(f, args) {
+    var v = typeof f === 'function' ? f.apply(null, args) : f.apply.apply(f, args);
+    return v === undefined ? null : v;
+  }
+  JavaMap.prototype.putIfAbsent = function(k, v) {
+    var cur = this.get(k);
+    if (cur == null) this.put(k, v);
+    return cur;
+  };
+  JavaMap.prototype.computeIfAbsent = function(k, f) {
+    var cur = this.get(k);
+    if (cur != null) return cur;
+    var v = callJavaFunction(f, [k]);
+    if (v != null) this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.computeIfPresent = function(k, f) {
+    var cur = this.get(k);
+    if (cur == null) return null;
+    var v = callJavaFunction(f, [k, cur]);
+    if (v == null) this.remove(k); else this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.compute = function(k, f) {
+    var v = callJavaFunction(f, [k, this.get(k)]);
+    if (v == null) { this.remove(k); return null; }
+    this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.merge = function(k, value, f) {
+    var cur = this.get(k);
+    var v = cur == null ? value : callJavaFunction(f, [cur, value]);
+    if (v == null) this.remove(k); else this.put(k, v);
+    return v;
+  };
+  JavaMap.prototype.replace = function(k, a, b) {
+    if (arguments.length >= 3) {
+      if (!this._m.has(k) || this._m.get(k) !== a) return false;
+      this.put(k, b);
+      return true;
+    }
+    return this._m.has(k) ? this.put(k, a) : null;
+  };
   JavaMap.prototype.toJSON = function() {
     var o = {}, m = this._m;
     this._order().forEach(function(k) { o[String(k)] = m.get(k); });
@@ -197,6 +245,36 @@ extension JsJavaClasses on JsExtensionsBase {
   function LinkedHashMap(init) { JavaMap.call(this, init); }
   LinkedHashMap.prototype = Object.create(JavaMap.prototype);
   named('LinkedHashMap', LinkedHashMap);
+  /// java.util.Properties（Hashtable）：getProperty 找不到時交出預設值或 null。
+  function Properties() { JavaMap.call(this); }
+  Properties.prototype = Object.create(JavaMap.prototype);
+  Properties.prototype.constructor = Properties;
+  Properties.prototype.getProperty = function(k, d) {
+    var v = this.get(k);
+    return typeof v === 'string' || v instanceof JavaString ? v : (d === undefined ? null : d);
+  };
+  Properties.prototype.setProperty = function(k, v) { return this.put(k, v); };
+  Properties.prototype.stringPropertyNames = function() {
+    var m = this._m;
+    return javaList(this._order().filter(function(k) { return typeof m.get(k) === 'string'; }));
+  };
+  named('Properties', Properties);
+  /// System.getProperties()：整個書源 isolate 共用一份（同 Legado 整個 App
+  /// 共用 JVM 的那一份），書源拿來在每次執行之間存東西（例如限流的時間）。
+  /// 預先放 Android 上固定的幾項。
+  var systemProperties = null;
+  function getSystemProperties() {
+    if (systemProperties == null) {
+      systemProperties = new Properties();
+      var defaults = {
+        'java.vm.name': 'Dalvik', 'java.vendor': 'The Android Project',
+        'os.name': 'Linux', 'file.separator': '/', 'path.separator': ':',
+        'line.separator': '\n', 'user.dir': '/'
+      };
+      Object.keys(defaults).forEach(function(k) { systemProperties.put(k, defaults[k]); });
+    }
+    return systemProperties;
+  }
   /// java.util.TreeMap：鍵照自然順序（數字照大小、文字照 Java 的 compareTo），
   /// 或照給的 comparator。
   function TreeMap(arg) {
@@ -817,6 +895,7 @@ extension JsJavaClasses on JsExtensionsBase {
         Base64: JdkBase64,
         HashMap: HashMap,
         LinkedHashMap: LinkedHashMap,
+        Properties: Properties,
         TreeMap: TreeMap,
         ArrayList: ArrayList,
         LinkedList: LinkedList,
