@@ -9,7 +9,7 @@ description: 動畫儀表板：把一段動畫逐格錄下來，做成可以播�
 
 ## 步驟
 
-1. **錄影**：在 `test/_screens/`（git 忽略）寫一個臨時測試，用 `test/support/frame_recording.dart` 的 `recordAnimation` 錄；寫法、檔名規則與量測的限制在那個檔的檔頭。每個候選（含目前）× 每個變化 × 淺色、深色各錄一段；整個 App 的動畫先開一次暖身再錄。每個候選只錄一次，錄到問題就修，不為了確認穩不穩定連錄好幾次。`phase()` 回傳的段落名稱要和下一步設定檔 `phases` 的鍵一模一樣。測試放背景跑（`FRAME_GC=1 flutter test --enable-vmservice test/_screens/<檔名>_test.dart`，一般一兩分鐘；`FRAME_GC` 讓頁面多一排每格的回收記憶體）。
+1. **錄影**：在 `test/_screens/`（git 忽略）寫一個臨時測試，用 `test/support/frame_recording.dart` 的 `recordAnimation` 錄；寫法、檔名規則與量測的限制在那個檔的檔頭。每個候選（含目前）× 每個變化 × 淺色、深色各錄一段；整個 App 的動畫先開一次暖身再錄。每個候選只錄一次，錄到問題就修，不為了確認穩不穩定連錄好幾次。`phase()` 回傳的段落名稱要和下一步設定檔 `phases` 的鍵一模一樣。測試放背景跑（`FRAME_GC=1 flutter test --enable-vmservice test/_screens/<檔名>_test.dart`，一般一兩分鐘；`FRAME_GC` 讓頁面多一排每格的回收記憶體）。要把整個 App 每個操作一區一區錄下來、找動畫中超過上限的幀時，不另寫臨時測試，用 `test/animation_survey/`（用法在 `survey_support.dart` 檔頭）。
    完成：`%TEMP%\night-reader-frames\` 下每一段都有 `frames.rgba` 與 `meta.json`，從 `meta.json` 的 `phases` 列出每段的起訖格核對過：開頭有動畫開始前的那段，結尾錄到動畫播完後的靜止畫面（`until` 成立時動畫可能還在播，`tailFrames` 要蓋過剩下的時長），每段的格數和程式裡的時長對得上（一格 8.3ms）。
 
 2. **設定檔**：寫在 repo 外（例如 `%TEMP%\night-reader-frames\<主題>.json`），照 `tool/frame_viewer/example.json`（開 App 進場的實例）改；每個欄位的意思在 `tool/frame_viewer/build.py` 的檔頭。每一段都寫說明（`notes`），用使用者的詞講這段畫面在做什麼、主執行緒在忙什麼；這是頁面上讓使用者讀懂時間軸的地方。

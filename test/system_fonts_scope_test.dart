@@ -4,11 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 // loadScreenshotFonts 要系統的中文字型，CI 的 Linux 沒有裝（AGENTS.md「環境」）。
 // 一般測試用了，在 Windows 上本機全過，推上去 CI 才紅（#102）；所以只留給截圖、
-// 量幀數與細節檢查這三組平常跳過的測試。
+// 量幀數、錄全 App 動畫與細節檢查這幾組平常跳過的測試。
 const _allowed = [
   'test/screens/',
   'test/_screens/',
   'test/frame_budget/',
+  'test/animation_survey/',
   'test/polish/',
   'test/support/screenshot.dart',
   // 這支檢查自己的失敗訊息裡有這個名字。
