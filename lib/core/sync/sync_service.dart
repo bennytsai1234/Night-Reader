@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:drift/drift.dart' show TableInfo, TableUpdateQuery;
 import 'package:flutter/foundation.dart';
@@ -673,8 +672,6 @@ class SyncService {
   /// - 改過了（或上次之後才新增的）：算成這次同步的時間 [now]。
   /// - 從沒同步過、雲端也有同一筆：時間算 0，內容不同時雲端的贏。剛開始用
   ///   同步、或重裝後第一次同步的這台，不拿手上可能是舊的資料蓋掉雲端。
-  /// - 從沒同步過、雲端那筆只是別台的刪除紀錄：這台手上的不是別台刪掉的
-  ///   那一份，算成這次同步新加的（比那筆刪除新），兩台的合起來。
   /// - 上次同步時有、現在沒有：這台刪掉了，補一筆刪除紀錄讓別台跟著刪
   ///   （[SyncKind.syncsDeletion]）。
   static Map<String, SyncRecord> _timed(
@@ -687,15 +684,10 @@ class SyncService {
     if (kind.hasOwnTime) return local;
     final timed = <String, SyncRecord>{};
     for (final MapEntry(:key, value: record) in local.entries) {
-      final time = switch ((base[key], remote[key])) {
-        (null, null) => now,
-        (null, SyncRecord(deleted: true, time: final removed)) => max(
-          now,
-          removed + 1,
-        ),
-        (null, _) => 0,
-        (final last?, _) when kind.fingerprint(record) == last.local =>
-          last.time,
+      final last = base[key];
+      final time = switch (last) {
+        null => remote.containsKey(key) ? 0 : now,
+        _ when kind.fingerprint(record) == last.local => last.time,
         _ => now,
       };
       timed[key] = SyncRecord(
