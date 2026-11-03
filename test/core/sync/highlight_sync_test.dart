@@ -82,8 +82,8 @@ void main() {
     final a = phone('a');
     final b = phone('b');
     final saved = await a.dao.add(paint());
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
 
     final onB = (await b.dao.getAll()).single;
     expect(onB.id, saved.id);
@@ -94,20 +94,20 @@ void main() {
     await b.dao.upsertAll([
       onB.copyWith(color: HighlightColor.blue, style: HighlightStyle.underline),
     ]);
-    await b.sync.syncNow();
-    await a.sync.syncNow();
+    await b.sync.syncAll();
+    await a.sync.syncAll();
     final onA = (await a.dao.getAll()).single;
     expect(onA.color, HighlightColor.blue);
     expect(onA.style, HighlightStyle.underline);
 
     await a.dao.upsertAll([onA.copyWith(note: '想起外婆的墨盒')]);
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
     expect((await b.dao.getAll()).single.note, '想起外婆的墨盒');
 
     await b.dao.deleteByIds([saved.id]);
-    await b.sync.syncNow();
-    await a.sync.syncNow();
+    await b.sync.syncAll();
+    await a.sync.syncAll();
     expect(await a.dao.getAll(), isEmpty);
   });
 
@@ -115,12 +115,12 @@ void main() {
     final a = phone('a');
     final b = phone('b');
     final saved = await a.dao.add(paint());
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
     final before = store.files[HighlightSync(dao: b.dao).fileName];
 
     await b.dao.upsertAll([saved.copyWith(chapterIndex: 5)]);
-    await b.sync.syncNow();
+    await b.sync.syncAll();
     expect(store.files[HighlightSync(dao: b.dao).fileName], before);
   });
 
@@ -129,9 +129,9 @@ void main() {
     final b = phone('b');
     await a.dao.add(paint());
     await b.dao.add(paint());
-    await a.sync.syncNow();
-    await b.sync.syncNow();
-    await a.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
+    await a.sync.syncAll();
     expect(await a.dao.getAll(), hasLength(2));
     expect(await b.dao.getAll(), hasLength(2));
   });

@@ -135,7 +135,7 @@ void main() {
       ]);
       bases = await Directory.systemTemp.createTemp('nr-sync-budget');
       // 這台之前同步過：雲端與上次同步的紀錄都有，兩邊一樣。
-      await phone().syncNow();
+      await phone().syncAll();
       // 之後另一台改了一個書源。
       final (content, version) = store.files['sources.json']!;
       final json = jsonDecode(content) as Map<String, dynamic>;

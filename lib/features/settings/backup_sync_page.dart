@@ -114,7 +114,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                 enabled: status.enabled && !status.running,
                 showChevron: false,
                 onTap: status.enabled && !status.running
-                    ? () => unawaited(_sync.syncNow())
+                    ? () => unawaited(_sync.syncAll())
                     : null,
               ),
             ],

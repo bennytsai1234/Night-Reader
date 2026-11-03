@@ -90,7 +90,9 @@ class PulledProgress {
 }
 
 /// 多台手機同步（ADR 0039）：每種資料（[SyncKind]）讀雲端、每筆合併、
-/// 寫回。同一時間只跑一次；跑的途中又有人要同步，跑完再補一次。
+/// 寫回。日常只同步閱讀進度（[syncProgress]），全部種類要使用者按「立即
+/// 全面同步」（[syncAll]，ADR 0046）。同一時間只跑一次；跑的途中又有人要
+/// 同步，跑完再補一次。
 class SyncService {
   SyncService({
     SyncSettings? settings,
@@ -190,8 +192,8 @@ class SyncService {
   /// 書名加作者是 [key] 的書正開在閱讀器裡（[openBook]）。
   bool isBookOpen(String key) => _openBooks.contains(key);
 
-  /// 同步的順序：閱讀進度最先，開 App 時書架上的書馬上接上另一台讀到的
-  /// 地方，開書也只等這一步（[progressReady]）。書源先到，書架上新加的書才
+  /// 全面同步的順序：閱讀進度最先，正在等的閱讀器先拿到另一台讀到的地方
+  /// （[progressReady]）。書源先到，書架上新加的書才
   /// 找得到書源；書先加進書架，進度才套用得上，所以書架之後再同步一次進度
   /// （只在中間有套用改動時，[_syncOnce]）。
   static List<SyncKind> _defaultKinds(SyncService service) => [
@@ -242,7 +244,7 @@ class SyncService {
     await _bases.writeJson(_ownerFile, {'space': identity});
   }
 
-  /// 改用 [account] 的 WebDAV：先試連，連得上才存起來、同步一次。換了空間
+  /// 改用 [account] 的 WebDAV：先試連，連得上才存起來、全面同步一次。換了空間
   /// 照從沒同步過合併；同一個空間（只改了密碼）留著上次同步的紀錄。
   Future<void> useWebDav(WebDavAccount account) async {
     final store = _storeFactory(SyncSpace.webdav, account, null);
@@ -253,12 +255,13 @@ class SyncService {
     });
     // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒同步過」。
     status.value = const SyncStatus(space: SyncSpace.webdav, running: true);
-    // 連線確認後就回報選取成功；資料同步在背景繼續執行。
-    requestSync();
+    // 連線確認後就回報選取成功；全面同步在背景繼續執行（使用者 2026-11-03
+    // 定的：選好同步空間就全面同步一次）。
+    unawaited(syncAll());
   }
 
   /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來、
-  /// 接著排一次同步，不等整批資料跑完。只在使用者按了按鈕時呼叫；授權失效
+  /// 接著全面同步一次，不等整批資料跑完。只在使用者按了按鈕時呼叫；授權失效
   /// 後重新登入同一個帳號也走這裡，留著上次同步的紀錄。
   Future<void> useGoogleDrive() async {
     _authorizingGoogleDrive = true;
@@ -275,8 +278,8 @@ class SyncService {
         space: SyncSpace.googleDrive,
         running: true,
       );
-      // 登入與選取同步空間完成後就讓畫面更新；整批資料接著同步。
-      requestSync();
+      // 登入與選取同步空間完成後就讓畫面更新；整批資料接著全面同步。
+      unawaited(syncAll());
     } finally {
       _authorizingGoogleDrive = false;
     }
@@ -304,29 +307,48 @@ class SyncService {
 
   void closeBook(Book book) => _openBooks.remove(ProgressSync.keyOf(book));
 
-  /// 要同步一次，不等結果：正在同步時，跑完再補一次。
-  void requestSync() => unawaited(syncNow());
+  /// 日常的同步（開 App、回到前景、退到背景、離開閱讀器）：只同步閱讀進度，
+  /// 不等結果。其他資料在主執行緒上比對很重，開書時跟著跑會讓動畫掉幀，
+  /// 只在使用者按「立即全面同步」時同步（[syncAll]，ADR 0046）。正在同步
+  /// 時，跑完再補一次。
+  void syncProgress() => unawaited(_request(full: false));
+
+  /// 全面同步：書架、書源、替換規則、設定、登入資料……全部種類。使用者在
+  /// 「備份與同步」按「立即全面同步」、或剛選好同步空間時呼叫。正在同步時
+  /// 不搶先，等含全部種類的那一輪做完才完成。失敗記在 [status]、不丟出來；
+  /// 沒設定同步空間時什麼都不做。
+  Future<void> syncAll() => _request(full: true);
+
+  /// 取消正在跑的全面同步：目前這一種做完就停，已經寫完的種類留著，不回滾。
+  void cancelSync() {
+    if (_running != null) _cancelled = true;
+  }
 
   /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。
   void syncBeforeBackground() {
     if (_authorizingGoogleDrive) return;
-    requestSync();
+    syncProgress();
   }
 
-  /// 離開閱讀器、App 退到背景、剛存好閱讀進度時用：同步一次，而且閱讀進度
-  /// 優先送出。沒在同步就是一次完整同步，進度本來就排第一個；正在同步的話，
-  /// 不等這一輪全部做完，目前這一種做完就先把進度再同步一次，另一台才在
-  /// 幾秒內拿得到。其餘照 [requestSync]，跑完再補一次。
+  /// 離開閱讀器、剛存好閱讀進度時用：同步閱讀進度，而且優先送出。正在全面
+  /// 同步的話，不等這一輪全部做完，目前這一種做完就先把進度再同步一次，
+  /// 另一台才在幾秒內拿得到。
   void requestSyncProgressFirst() {
     _progressFirst = true;
-    requestSync();
+    syncProgress();
   }
 
   /// 有人要閱讀進度優先送出（[requestSyncProgressFirst]），還沒送。
   bool _progressFirst = false;
 
-  /// 同步一次，失敗記在 [status]、不丟出來。沒設定同步空間時什麼都不做。
-  Future<void> syncNow() {
+  /// 有人要全面同步（[syncAll]），還沒開始那一輪。
+  bool _fullPending = false;
+
+  /// 使用者取消了這次全面同步（[cancelSync]）。
+  bool _cancelled = false;
+
+  Future<void> _request({required bool full}) {
+    if (full) _fullPending = true;
     final running = _running;
     if (running != null) {
       _again = true;
@@ -334,13 +356,7 @@ class SyncService {
     }
     final future = _runUntilSettled();
     _running = future;
-    return future.whenComplete(() {
-      _running = null;
-      if (_editedWhileSyncing) {
-        _editedWhileSyncing = false;
-        _scheduleAfterEdit();
-      }
-    });
+    return future.whenComplete(() => _running = null);
   }
 
   Future<void> _runUntilSettled() async {
@@ -349,10 +365,14 @@ class SyncService {
     try {
       do {
         _again = false;
+        final full = _fullPending;
+        _fullPending = false;
         rounds++;
-        await _syncOnce();
-      } while (_again);
+        await _syncOnce(full: full);
+      } while ((_again || _fullPending) && !_cancelled);
     } finally {
+      _cancelled = false;
+      _fullPending = false;
       if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
         AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
       }
@@ -363,8 +383,8 @@ class SyncService {
     }
   }
 
-  /// 開 App 進場播完時：讀出設定、同步第一次，之後書源或替換規則一改就
-  /// 排一次同步。
+  /// 開 App 進場播完時：讀出設定、同步一次閱讀進度，並開始數這台的改動
+  /// （[_watchEdits]）。
   Future<void> start() async {
     _expectProgress();
     try {
@@ -375,15 +395,15 @@ class SyncService {
       return;
     }
     _watchEdits();
-    await syncNow();
+    await _request(full: false);
   }
 
-  /// App 回到前景：同步一次，把別台在這段時間的改動接過來。開書等它的閱讀
-  /// 進度做完（[progressReady]）。
+  /// App 回到前景：同步閱讀進度，把別台在這段時間讀到的地方接過來。開書等
+  /// 它做完（[progressReady]）。
   void syncAfterResume() {
     if (_authorizingGoogleDrive) return;
     _expectProgress();
-    requestSync();
+    syncProgress();
   }
 
   /// 開 App 或回到前景後，閱讀進度還沒同步完時是這次同步做完進度那一步的
@@ -403,32 +423,18 @@ class SyncService {
   Future<void>? get progressReady => _progressPending?.future;
 
   final List<StreamSubscription<void>> _edits = [];
-  Timer? _editTimer;
-  bool _editedWhileSyncing = false;
-
-  void _scheduleAfterEdit() {
-    if (!status.value.enabled) return;
-    _editTimer?.cancel();
-    _editTimer = Timer(_editDelay, requestSync);
-  }
-
-  /// 改完隔多久同步：連續改好幾個（匯入、批次啟用）合併成一次。
-  static const Duration _editDelay = Duration(seconds: 5);
 
   /// 這台改了幾次，鍵是 [SyncKind.name]；只數書源、替換規則、書籤與標註
   /// （[_watchEdits]）。
   final Map<String, int> _localEdits = {};
 
   /// 上次同步時兩邊都沒變的種類：當時雲端檔的版本與這台改了幾次。之後兩邊
-  /// 都還一樣，就不讀出整份來比（書源可能有幾百個，每次回到 App 都讀一遍
-  /// 太重），只問一次雲端檔的版本。
+  /// 都還一樣，就不讀出整份來比（書源可能有幾百個），只問一次雲端檔的版本。
   final Map<String, ({String version, int edits})> _settled = {};
 
-  /// 書源、替換規則、書籤與標註改了就排一次同步。書架與進度不看：讀書時
-  /// 每翻一頁都會寫書，離開閱讀器與 App 退到背景時才同步；設定在 App 退到
-  /// 背景時同步。
-  /// 同步自己套用雲端的改動時不排（那時正在同步），但照樣算改過，下次
-  /// 同步會整份比一次。
+  /// 數書源、替換規則、書籤與標註改了幾次，給 [_settled] 判斷這台有沒有
+  /// 改過；改了不自動同步，等下次全面同步。同步自己套用雲端的改動也算，
+  /// 下次全面同步會整份比一次。
   void _watchEdits() {
     if (_edits.isNotEmpty) return;
     final db =
@@ -443,21 +449,15 @@ class SyncService {
     ]) {
       _localEdits[kind] = 0;
       _edits.add(
-        db.tableUpdates(TableUpdateQuery.onTable(table)).listen((_) {
-          _localEdits.update(kind, (count) => count + 1);
-          // 同步途中改的（可能這一種已經同步過了），這輪結束再排一次；同步
-          // 自己套用引起的也算，多的那次比不出差異、不寫雲端。
-          if (_running != null) {
-            _editedWhileSyncing = true;
-          } else {
-            _scheduleAfterEdit();
-          }
-        }),
+        db
+            .tableUpdates(TableUpdateQuery.onTable(table))
+            .listen((_) => _localEdits.update(kind, (count) => count + 1)),
       );
     }
   }
 
-  Future<void> _syncOnce() async {
+  /// 同步一輪：[full] 是全部種類，否則只有閱讀進度。
+  Future<void> _syncOnce({required bool full}) async {
     final kindTimes = <String, int>{};
     try {
       await _lock.synchronized(() async {
@@ -467,14 +467,19 @@ class SyncService {
           running: true,
           clearProgress: true,
         );
+        // 換了同步空間就作廢上次同步的紀錄，只同步進度時也要。
         await _claimBases();
         // 一種資料失敗不擋其他種：都試過一次，再報第一個失敗。
         Object? failure;
         StackTrace? failureStack;
         // 排了兩次的種類，第二次只在中間有別種套用了改動時才跑。
         final appliedAfter = <String, bool>{};
-        final kinds = _kinds(this);
+        final kinds = full
+            ? _kinds(this)
+            : _kinds(this).whereType<ProgressSync>().take(1).toList();
         for (final (index, kind) in kinds.indexed) {
+          // 取消在種類之間停：寫到一半的那一種做完，已經寫完的留著。
+          if (_cancelled) return;
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
           // 這一種讀這台資料的時候，要求優先送出的進度已經存好了。
@@ -512,6 +517,11 @@ class SyncService {
         if (failure != null) {
           Error.throwWithStackTrace(failure, failureStack!);
         }
+        if (!full) {
+          status.value = status.value.copyWith(clearError: true);
+          return;
+        }
+        // 「上次全面同步」只記全面同步：其他資料到這時才算同步過。
         final now = _clock();
         await _settings.setLastSyncAt(now);
         status.value = status.value.copyWith(lastSyncAt: now, clearError: true);

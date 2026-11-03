@@ -72,9 +72,6 @@ class _Sync extends Fake implements SyncService {
   @override
   void closeBook(Book book) {}
 
-  @override
-  void requestSync() {}
-
   /// 離開閱讀器、退到背景時要求進度優先同步的次數。
   int progressFirstRequests = 0;
 
