@@ -622,6 +622,49 @@ void main() {
       expect(b.sync.status.value.error, isNull);
     });
 
+    test('three books on one phone and four on the other become seven on '
+        'both', () async {
+      for (final i in [1, 2, 3]) {
+        await a.addBook('a$i', toc: toc, name: 'A 的書 $i', time: 100);
+      }
+      for (final i in [1, 2, 3, 4]) {
+        await b.addBook('b$i', toc: toc, name: 'B 的書 $i', time: 100);
+      }
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+
+      expect(await a.books.getInBookshelf(), hasLength(7));
+      expect(await b.books.getInBookshelf(), hasLength(7));
+    });
+
+    test('a phone joining keeps its books even if the cloud records them as '
+        'removed', () async {
+      // A 加過又移出「夜航」，雲端留著刪除紀錄；B 第一次同步，書架上有它。
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncNow();
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncNow();
+      await b.addBook('b-src', toc: toc, time: 50);
+
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+
+      expect((await b.book('b-src')).isInBookshelf, isTrue);
+      expect(b.discarded, isEmpty);
+      expect(await a.books.getInBookshelf(), hasLength(1));
+
+      // 之後兩台再同步，不會又互相刪掉，也不再寫雲端。
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+      final writes = store.writes;
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+      expect(store.writes, writes);
+      expect((await b.book('b-src')).isInBookshelf, isTrue);
+      expect(await a.books.getInBookshelf(), hasLength(1));
+    });
+
     test('a book removed from one shelf leaves the other shelf too', () async {
       await a.addBook('a-src', toc: toc, time: 200);
       await a.sync.syncNow();
