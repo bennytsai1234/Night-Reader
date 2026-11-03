@@ -93,6 +93,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **同一個資料夾常有好幾個 session**：切分支會影響別人。自己的工作開 repo 外的 worktree 做，開工前 `git branch --show-current` 確認。本機預覽伺服器的 port（例如 8765）被佔用時換一個，不要結束別人的程序。
 - **從 `origin/beta` 開分支會推進 `beta`**：家裡這台的全域設定是 `push.default=upstream`，`git worktree add -b <分支> <路徑> origin/beta` 會把上游設成 `beta`，之後 `git push -u origin <分支>` 直接推進 `beta`，不會建同名分支（2026-10-23 踩過）。開分支加 `--no-track`。
 - **新 worktree 的 sqlite3**：`flutter test` 要下載 sqlite3 的 native asset，公司網路會改掉檔案讓雜湊不符；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就直接用快取。
+- **哪些工作會卡動畫**：判斷掉幀是誰造成的、說某件工作會不會佔主執行緒之前，先讀 `docs/agents/main-thread.md`。檢查書架更新、書架自動下載這些在背景 isolate 跑，曾經被誤當成卡頓的嫌疑。
 - **使用者的手機**：連手機、從手機拿崩潰日誌或書源、在手機上量效能時，先讀 `docs/agents/phone.md`。
 - **其他情況的坑**：用到子代理 worktree 或 T3、在 Linux 跑字型或幀預算測試、Codex 審查、用 Python 或 `jq`、重新產生標點字型、對照 Legado 原始碼、連真網站校驗書源時，先讀 `docs/agents/environment.md`。
 

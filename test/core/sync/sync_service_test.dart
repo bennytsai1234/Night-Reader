@@ -685,6 +685,39 @@ void main() {
       expect(b.sync.status.value.error, isNull);
     });
 
+    test('three books on one phone and four on the other become seven on '
+        'both', () async {
+      for (final i in [1, 2, 3]) {
+        await a.addBook('a$i', toc: toc, name: 'A 的書 $i', time: 100);
+      }
+      for (final i in [1, 2, 3, 4]) {
+        await b.addBook('b$i', toc: toc, name: 'B 的書 $i', time: 100);
+      }
+      await a.sync.syncNow();
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+
+      expect(await a.books.getInBookshelf(), hasLength(7));
+      expect(await b.books.getInBookshelf(), hasLength(7));
+    });
+
+    test('a book removed on one phone is removed on a phone syncing for the '
+        'first time, and is not added back', () async {
+      // A 加過又移出「夜航」，雲端留著刪除紀錄；B 第一次同步，書架上有它。
+      // 使用者 2026-11-03 定的：一台移出，另一台也跟著移出（ADR 0039）。
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncNow();
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncNow();
+      await b.addBook('b-src', toc: toc, time: 50);
+
+      await b.sync.syncNow();
+      await a.sync.syncNow();
+
+      expect(b.discarded, ['b-src']);
+      expect(await a.books.getInBookshelf(), isEmpty);
+    });
+
     test('a book removed from one shelf leaves the other shelf too', () async {
       await a.addBook('a-src', toc: toc, time: 200);
       await a.sync.syncAll();
