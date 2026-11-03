@@ -9,6 +9,7 @@ import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
+import 'package:night_reader/features/settings/full_sync_dialog.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -84,7 +85,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         children: [
           GroupedSection(
             header: '同步',
-            footer: '多台手機選同一個同步空間，書架、閱讀進度、書源、替換規則、設定、登入資料與閱讀統計會自動合併；開書時接上另一台讀到的地方。已下載的正文不同步，另一台照書架自己下載。',
+            footer: '多台手機選同一個同步空間，閱讀進度自動同步，開書時接上另一台讀到的地方。書架、書籤、標註、書源、替換規則、設定、登入資料與閱讀統計按「立即全面同步」才合併，同步時暫時不能操作。已下載的正文不同步，另一台照書架自己下載。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -109,12 +110,13 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                   Icons.sync_rounded,
                   tint: AppTint.azurite,
                 ),
-                title: '立即同步',
+                title: '立即全面同步',
                 subtitle: syncStatusSubtitle(status),
-                enabled: status.enabled && !status.running,
+                // 正在同步閱讀進度時也能按：等那一輪做完接著全面同步。
+                enabled: status.enabled,
                 showChevron: false,
-                onTap: status.enabled && !status.running
-                    ? () => unawaited(_sync.syncNow())
+                onTap: status.enabled
+                    ? () => unawaited(runFullSync(context, _sync))
                     : null,
               ),
             ],

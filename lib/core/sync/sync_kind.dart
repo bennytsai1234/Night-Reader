@@ -21,14 +21,16 @@ abstract class SyncKind {
   /// [hasOwnTime] 為 false 時時間填什麼都可以。
   Future<Map<String, SyncRecord>> local();
 
-  /// 兩筆算不算內容一樣；上次同步的紀錄也用它算。
-  String fingerprint(SyncRecord record) => record.fingerprint;
+  /// 兩筆算不算內容一樣；上次同步的紀錄也用它算。合併在背景 isolate 算
+  /// （ADR 0046），這裡要給頂層或靜態函式，不能是用到這個物件的方法。
+  SyncFingerprint get fingerprint => defaultSyncFingerprint;
 
   /// 雲端的這筆能不能現在套用到這台；不能的留在雲端，下次再比。
   bool canApply(String key, SyncRecord? local) => true;
 
   /// 讀到雲端之後、比對之前，把雲端已經不算數的拿掉（例如過期的登入資料）。
-  Map<String, SyncRecord> prune(Map<String, SyncRecord> remote) => remote;
+  /// 同 [fingerprint]，在背景 isolate 跑，要給頂層或靜態函式。
+  SyncPrune get prune => keepEverySyncRecord;
 
   /// 比對之前把本機和雲端的身分對齊（替換規則的編號）。傳回對齊後的本機。
   Future<Map<String, SyncRecord>> reconcile(

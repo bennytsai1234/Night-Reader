@@ -83,8 +83,8 @@ void main() {
     final a = phone('a');
     final b = phone('b');
     final saved = await a.dao.add(mark());
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
 
     final onB = (await b.dao.getAll()).single;
     expect(onB.id, saved.id);
@@ -94,8 +94,8 @@ void main() {
     expect(onB.excerpt, saved.excerpt);
 
     await b.dao.deleteByIds([saved.id]);
-    await b.sync.syncNow();
-    await a.sync.syncNow();
+    await b.sync.syncAll();
+    await a.sync.syncAll();
     expect(await a.dao.getAll(), isEmpty);
   });
 
@@ -104,16 +104,16 @@ void main() {
     final a = phone('a');
     final b = phone('b');
     final saved = await a.dao.add(mark());
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
     final before = store.files[BookmarkSync(dao: b.dao).fileName];
 
     // B 換了書源，同一章在新目錄是第 5 章。
     await b.dao.upsertAll([saved.copyWith(chapterIndex: 5)]);
-    await b.sync.syncNow();
+    await b.sync.syncAll();
     expect(store.files[BookmarkSync(dao: b.dao).fileName], before);
 
-    await a.sync.syncNow();
+    await a.sync.syncAll();
     expect((await a.dao.getAll()).single.chapterIndex, 3);
   });
 
@@ -142,9 +142,9 @@ void main() {
     final b = phone('b');
     await a.dao.add(mark());
     await b.dao.add(mark(chapterIndex: 7));
-    await a.sync.syncNow();
-    await b.sync.syncNow();
-    await a.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
+    await a.sync.syncAll();
 
     expect(await a.dao.getAll(), hasLength(2));
     expect(await b.dao.getAll(), hasLength(2));

@@ -113,7 +113,9 @@ class BookshelfSync extends SyncKind {
   /// 跟著最近換源、或書源改了網址的那台，之後新加入的手機照它加書拿到
   /// 用得了的書源；套用時仍只寫使用者改的欄位，不動這台的書源。
   @override
-  String fingerprint(SyncRecord record) {
+  SyncFingerprint get fingerprint => _fingerprintOf;
+
+  static String _fingerprintOf(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
     return SyncRecord.fingerprintOf({
       for (final field in [..._userFields, 'bookUrl', 'origin'])
@@ -230,7 +232,8 @@ class BookshelfSync extends SyncKind {
       }
       added.add(incoming.bookUrl);
     }
-    AppEventBus().fire(AppEventBus.upBookshelf);
+    // 沒有套用任何一本就不通知：書架與開著的頁面不必為了沒變的資料重讀。
+    if (applied.isNotEmpty) AppEventBus().fire(AppEventBus.upBookshelf);
     added.forEach(_download);
     return applied;
   }

@@ -6,6 +6,7 @@ import 'package:night_reader/core/sync/google_drive_auth.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
+import 'package:night_reader/core/sync/sync_merge.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -111,6 +112,7 @@ void main() {
     List<SyncKind> Function(SyncService)? kinds,
   }) async {
     final sync = SyncService(
+      runner: runSyncWorkInline,
       storeFactory: (space, _, _) =>
           space == SyncSpace.none ? null : store ?? _Store(),
       bases: bases ?? _MemoryBases(),
@@ -173,9 +175,8 @@ void main() {
     expect(bases.files['progress'], isNull);
   });
 
-  testWidgets('Google selection updates before the initial sync finishes', (
-    tester,
-  ) async {
+  testWidgets('Google selection shows the account, then the first full sync '
+      'covers the app until it is done', (tester) async {
     final gate = Completer<void>();
     final sync = await pump(
       tester,
@@ -190,13 +191,15 @@ void main() {
     expect(find.text('reader@gmail.com'), findsOneWidget);
     expect(find.text('登入中…'), findsNothing);
     expect(find.text('同步中（1/1）：書源'), findsOneWidget);
+    expect(find.text('全面同步中'), findsOneWidget);
     expect(sync.status.value.running, isTrue);
 
     gate.complete();
     await settle(tester);
 
     expect(sync.status.value.running, isFalse);
-    expect(find.textContaining('上次同步：'), findsOneWidget);
+    expect(find.text('全面同步中'), findsNothing);
+    expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
   testWidgets('Google sync error replaces the progress on the same page', (
@@ -249,7 +252,7 @@ void main() {
 
     expect(auth.signIns, 1);
     expect(store.reads, 1);
-    expect(find.textContaining('上次同步：'), findsOneWidget);
+    expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
   testWidgets('a cancelled Google sign-in changes nothing', (tester) async {

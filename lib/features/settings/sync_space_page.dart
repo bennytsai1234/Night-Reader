@@ -6,6 +6,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
+import 'package:night_reader/features/settings/full_sync_dialog.dart';
 import 'package:night_reader/features/settings/webdav_settings_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -82,7 +83,9 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
       await _sync.useGoogleDrive();
       await _load();
       if (!mounted) return;
-      _say('已連上 Google 雲端硬碟，開始同步');
+      // 登入好了就收起「登入中…」，接著開進度框全面同步。
+      setState(() => _connecting = false);
+      await runFullSync(context, _sync);
     } on SyncStoreException catch (error) {
       if (mounted) _say(error.message);
     } finally {

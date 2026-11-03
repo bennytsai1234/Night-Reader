@@ -43,7 +43,7 @@ class ProgressSync extends SyncKind {
   };
 
   @override
-  String fingerprint(SyncRecord record) => fingerprintOf(record);
+  SyncFingerprint get fingerprint => fingerprintOf;
 
   @override
   bool canApply(String key, SyncRecord? local) =>

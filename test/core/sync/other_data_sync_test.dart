@@ -98,7 +98,7 @@ void main() {
       PreferKey.lightStyle: 'tea',
       PreferKey.readerBrightness: 0.3,
     });
-    await phone('a', [SettingsSync(prefs: a)]).syncNow();
+    await phone('a', [SettingsSync(prefs: a)]).syncAll();
     expect(store.files['settings.json'], isNot(contains('reader_brightness')));
 
     final b = await prefsOf({
@@ -107,7 +107,7 @@ void main() {
     });
     final applied = SettingsSync.applied.value;
     final onB = phone('b', [SettingsSync(prefs: b)]);
-    await onB.syncNow();
+    await onB.syncAll();
 
     expect(b.getDouble(PreferKey.readerFontSize), 22.0);
     expect(b.getInt(PreferKey.readerLineChars), 24);
@@ -118,7 +118,7 @@ void main() {
     // B 之後改的字級送上去；改回預設（移除）也跟著同步。
     await b.setDouble(PreferKey.readerFontSize, 20.0);
     await b.remove(PreferKey.lightStyle);
-    await onB.syncNow();
+    await onB.syncAll();
     final records = SyncDocument.decode(store.files['settings.json']!).records;
     expect(records[PreferKey.readerFontSize]!.data['v'], 20.0);
     expect(records[PreferKey.lightStyle]!.deleted, isTrue);
@@ -172,9 +172,9 @@ void main() {
       await read(b, '夜航', 20);
       await read(b, '別本', 10);
 
-      await a.sync.syncNow();
-      await b.sync.syncNow();
-      await a.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
 
       final onA = await a.others();
       expect(onA.books['夜航']!.readTime, 20 * 60);
@@ -190,13 +190,13 @@ void main() {
       final a = await statsPhone('a');
       final b = await statsPhone('b');
       await read(a, '夜航', 10);
-      await a.sync.syncNow();
+      await a.sync.syncAll();
 
       // 停用（上次同步的紀錄清掉）後又讀了 5 分鐘，再打開同一個空間。
       await a.bases.clear();
       await read(a, '夜航', 5);
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       expect((await b.others()).books['夜航']!.readTime, 15 * 60);
     });
@@ -205,7 +205,7 @@ void main() {
         'twice', () async {
       final a = await statsPhone('a');
       await read(a, '夜航', 10);
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       final aId = await SyncSettings(a.prefs).deviceId();
 
       // B 還原了 A 的備份（10 分鐘），之後自己又讀了 5 分鐘。
@@ -220,8 +220,8 @@ void main() {
         days: days,
       );
       await read(b, '夜航', 5);
-      await b.sync.syncNow();
-      await a.sync.syncNow();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
 
       // A：自己的 10 分鐘 + B 自己讀的 5 分鐘。
       expect((await a.others()).books['夜航']!.readTime, 5 * 60);
@@ -250,7 +250,7 @@ void main() {
       await cookies.upsert(
         Cookie(url: 'example.com', cookie: 'token=abc; cf_clearance=mine'),
       );
-      await phone('a', [LoginCookieSync(dao: cookies)]).syncNow();
+      await phone('a', [LoginCookieSync(dao: cookies)]).syncAll();
       final uploaded = store.files['login_cookies.json']!;
       expect(uploaded, contains('token=abc'));
       expect(uploaded, isNot(contains('cf_clearance')));
@@ -259,7 +259,7 @@ void main() {
       await cookies.upsert(
         Cookie(url: 'example.com', cookie: 'cf_clearance=theirs'),
       );
-      await phone('b', [LoginCookieSync(dao: cookies)]).syncNow();
+      await phone('b', [LoginCookieSync(dao: cookies)]).syncAll();
 
       final stored = (await cookies.getByUrl('example.com'))!.cookie;
       expect(
@@ -313,21 +313,21 @@ void main() {
       'both scopes reach the other phone and send the right cookie',
       () async {
         final a = await jarWithBothScopes();
-        await phone('a', [LoginCookieJarSync(cookieJar: a)]).syncNow();
+        await phone('a', [LoginCookieJarSync(cookieJar: a)]).syncAll();
         expect(
           SyncDocument.decode(store.files['login_cookie_jar.json']!).records,
           hasLength(2),
         );
 
         final b = DefaultCookieJar();
-        await phone('b', [LoginCookieJarSync(cookieJar: b)]).syncNow();
+        await phone('b', [LoginCookieJarSync(cookieJar: b)]).syncAll();
 
         expect(await sentBy(b), await sentBy(a));
         // 原主機兩個都帶（路徑相同時主機限定的先送），子網域只有帶 Domain 的。
         expect((await sentBy(b))[site], ['sid=host-only', 'sid=shared']);
         expect((await sentBy(b))[subsite], ['sid=shared']);
         // 再同步一次不增不減。
-        await phone('b', [LoginCookieJarSync(cookieJar: b)]).syncNow();
+        await phone('b', [LoginCookieJarSync(cookieJar: b)]).syncAll();
         expect(await LoginDataBackup.exportCookieJar(b), hasLength(2));
       },
     );
@@ -375,7 +375,7 @@ void main() {
 
       // 這台已經有新內容、雲端只有舊鍵：舊內容照新鍵比，這台沒同步過所以
       // 雲端的贏，但只會是一筆 sid，不會變成兩筆。
-      await phone('b', [kind]).syncNow();
+      await phone('b', [kind]).syncAll();
       final sent = await sentBy(b);
       expect(sent[site]!.where((c) => c.startsWith('sid=')), hasLength(1));
       expect(sent[subsite], ['sid=old']);

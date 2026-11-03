@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
+import 'package:night_reader/core/sync/sync_merge.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -81,6 +82,7 @@ void main() {
     bool inSpace = false,
   }) async {
     final sync = SyncService(
+      runner: runSyncWorkInline,
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
       bases: _MemoryBases(),
       kinds: kinds,
@@ -121,7 +123,7 @@ void main() {
   testWidgets('a wrong password is shown and nothing is saved', (tester) async {
     await pump(tester, _Store(fail: '帳號或密碼不對'));
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
-    await tester.tap(find.text('連線並開始同步'));
+    await tester.tap(find.text('連線並開始全面同步'));
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
 
@@ -129,9 +131,8 @@ void main() {
     expect(await SyncSettings().space(), SyncSpace.none);
   });
 
-  testWidgets('WebDAV returns to sync space before the data sync completes', (
-    tester,
-  ) async {
+  testWidgets('WebDAV returns to sync space, and the first full sync covers '
+      'the app until it is done', (tester) async {
     final gate = Completer<void>();
     final sync = await pump(
       tester,
@@ -143,7 +144,7 @@ void main() {
     await tester.tap(find.text('WebDAV'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
-    await tester.tap(find.text('連線並開始同步'));
+    await tester.tap(find.text('連線並開始全面同步'));
     await waitForStatus(
       tester,
       sync,
@@ -154,6 +155,7 @@ void main() {
     expect(await SyncSettings().space(), SyncSpace.webdav);
     expect(sync.status.value.running, isTrue);
     expect(find.text('同步中（1/1）：書源'), findsOneWidget);
+    expect(find.text('全面同步中'), findsOneWidget);
 
     gate.complete();
     await waitForStatus(
@@ -161,7 +163,9 @@ void main() {
       sync,
       (status) => !status.running && status.lastSyncAt != null,
     );
-    expect(find.textContaining('上次同步：'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('全面同步中'), findsNothing);
+    expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
   testWidgets(
@@ -181,7 +185,7 @@ void main() {
         find.byType(TextField).at(0),
         'https://dav.example',
       );
-      await tester.tap(find.text('連線並開始同步'));
+      await tester.tap(find.text('連線並開始全面同步'));
       await waitForStatus(
         tester,
         sync,
@@ -202,7 +206,7 @@ void main() {
 
   testWidgets('an empty address asks for one first', (tester) async {
     await pump(tester, _Store());
-    await tester.tap(find.text('連線並開始同步'));
+    await tester.tap(find.text('連線並開始全面同步'));
     await tester.pumpAndSettle();
     expect(find.text('先填 WebDAV 的網址'), findsOneWidget);
   });

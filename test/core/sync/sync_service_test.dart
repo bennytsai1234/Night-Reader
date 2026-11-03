@@ -262,8 +262,8 @@ void main() {
     // B 的書源目錄多一章「楔子」，同一章的序號多 1。
     await b.addBook('b-src', toc: ['楔子', ...toc], time: 100);
 
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
 
     final book = await b.book('b-src');
     expect(book.chapterIndex, 4);
@@ -275,14 +275,14 @@ void main() {
   test('opening a book without moving does not upload it again', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
     final writes = store.writes;
 
     // B 開書沒翻頁：位置一樣，時間更新。
     await b.books.updateProgress('b-src', 2, '第二章', 0);
-    await b.sync.syncNow();
-    await a.sync.syncNow();
+    await b.sync.syncAll();
+    await a.sync.syncAll();
 
     expect(store.writes, writes);
     expect((await a.book('a-src')).chapterIndex, 2);
@@ -302,9 +302,9 @@ void main() {
       ),
     );
     // A 讀完雲端、還沒寫回時，B 先寫了一次。
-    store.beforeNextWrite = () => b.sync.syncNow();
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    store.beforeNextWrite = () => b.sync.syncAll();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
 
     expect(store.files['progress.json']!.$1, contains('別本'));
     expect(store.files['progress.json']!.$1, contains('夜航'));
@@ -315,11 +315,11 @@ void main() {
     () async {
       await a.addBook('a-src', toc: toc, chapterIndex: 3, time: 200);
       await b.addBook('b-src', toc: toc, time: 100);
-      await a.sync.syncNow();
+      await a.sync.syncAll();
 
       final opened = await b.book('b-src');
       b.sync.openBook(opened);
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       expect((await b.book('b-src')).chapterIndex, 0, reason: '開著的書不在背景改');
 
       final pulled = await b.sync.pullProgress('b-src');
@@ -331,7 +331,7 @@ void main() {
       await pulled.commit(ProgressSync.recordOf(await b.book('b-src')));
       b.sync.closeBook(opened);
       final writes = store.writes;
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       expect(store.writes, writes);
       expect(await b.sync.pullProgress('b-src'), isNull);
     },
@@ -342,7 +342,7 @@ void main() {
       settings: SyncSettings(),
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
     );
-    await idle.syncNow();
+    await idle.syncAll();
     expect(await idle.pullProgress('x'), isNull);
     expect(store.writes, 0);
   });
@@ -351,8 +351,8 @@ void main() {
       'phones overwrite each other', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 100);
     await b.addBook('b-src', toc: toc, chapterIndex: 1, time: 100);
-    await a.sync.syncNow();
-    await b.sync.syncNow();
+    await a.sync.syncAll();
+    await b.sync.syncAll();
 
     // B 的書源在前面插了一章：同一章的序號從 1 變 2，讀到的地方沒變
     // （書架檢查更新照章節網址重新對位，時間不動）。
@@ -360,8 +360,8 @@ void main() {
     await b.books.upsert(moved);
     final writes = store.writes;
     for (var round = 0; round < 3; round++) {
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
     }
 
     expect(store.writes, writes);
@@ -373,11 +373,11 @@ void main() {
       'the other phone', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 3, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     // B 還沒同步過就開書，沒翻頁：最近閱讀時間變新，位置移動的時間不變。
     expect(await b.books.updateProgress('b-src', 0, '序', 0), isNull);
-    await b.sync.syncNow();
+    await b.sync.syncAll();
 
     expect((await b.book('b-src')).chapterIndex, 3);
     expect(store.files['progress.json']!.$1, contains('第三章'));
@@ -386,7 +386,7 @@ void main() {
   test('reading on after the jump, before commit, is still uploaded', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     final pulled = await b.sync.pullProgress('b-src');
     await b.books.updateProgress('b-src', 2, '第二章', 0);
@@ -394,7 +394,7 @@ void main() {
     // 等 commit 的期間又讀到第三章。
     await b.books.updateProgress('b-src', 3, '第三章', 123);
     await pulled!.commit(saved);
-    await b.sync.syncNow();
+    await b.sync.syncAll();
 
     expect(store.files['progress.json']!.$1, contains('第三章'));
   });
@@ -402,7 +402,7 @@ void main() {
   test('a book opened while the sync is writing is left alone', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
     // B 另一本書讀過，這次同步要寫雲端；寫的時候使用者打開了夜航、讀到第三章。
     await b.books.upsert(
       Book(
@@ -418,16 +418,15 @@ void main() {
       b.sync.openBook(await b.book('b-src'));
       await b.books.updateProgress('b-src', 3, '第三章', 5);
     };
-    await b.sync.syncNow();
+    await b.sync.syncAll();
 
     final book = await b.book('b-src');
     expect(book.chapterIndex, 3);
     expect(book.charOffset, 5);
   });
 
-  test('after coming back to the app, progress is ready before the rest of '
-      'the sync, and a book added on the other phone gets its progress in the '
-      'same sync', () async {
+  test('opening the app, coming back, going to the background and leaving the '
+      'reader sync only progress; the rest waits for a full sync', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
     await a.books.upsert(
@@ -442,26 +441,153 @@ void main() {
         progressTime: 300,
       ),
     );
-    await a.sync.syncNow();
+    await a.sync.syncAll();
+    final read = <String>{};
+    store.beforeNextRead = (name) {
+      read.add(name);
+      return null;
+    };
 
-    // B 回到 App：書源那一步卡在讀雲端（例如網路慢）時，進度已經好了。
-    final stuck = Completer<void>();
-    store.beforeNextRead = (name) =>
-        name == 'sources.json' ? stuck.future : null;
+    await b.sync.start();
+    expect((await b.book('b-src')).chapterIndex, 2);
     b.sync.syncAfterResume();
     await b.sync.progressReady!.timeout(const Duration(seconds: 5));
-    expect((await b.book('b-src')).chapterIndex, 2);
     expect(b.sync.progressReady, isNull);
+    b.sync.syncBeforeBackground();
+    b.sync.requestSyncProgressFirst();
+    await pumpEventQueue();
+    while (b.sync.status.value.running) {
+      await pumpEventQueue();
+    }
 
-    stuck.complete();
-    await b.sync.syncNow();
+    expect(read, {'progress.json'});
+    expect(await b.books.getByUrl('new'), isNull, reason: '書架等全面同步');
+
+    await b.sync.syncAll();
     expect((await b.book('new')).chapterIndex, 3);
+  });
+
+  test('a full sync asked for while progress is syncing finishes only after '
+      'the full round', () async {
+    await a.addBook('a-src', toc: toc, time: 200);
+    await a.sources.upsert(
+      BookSource(bookSourceUrl: 'https://src.example', bookSourceName: '書源'),
+    );
+    await a.sync.syncAll();
+
+    // B 的進度同步卡在讀雲端時，使用者按了全面同步。
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name != 'progress.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    b.sync.syncProgress();
+    await reading.future;
+    var done = false;
+    final full = b.sync.syncAll().then((_) => done = true);
+    stuck.complete();
+    await pumpEventQueue();
+    await full;
+
+    expect(done, isTrue);
+    expect(await b.sources.getByUrl('https://src.example'), isNotNull);
+    expect(b.sync.status.value.running, isFalse);
+  });
+
+  test('progress asked for after cancelling a full sync still runs', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await a.sync.syncAll();
+    await b.addBook('b-src', toc: toc, time: 100);
+    await b.sync.syncAll();
+
+    // B 全面同步讀書源時使用者取消；這一種還沒做完時 A 又讀了、B 回到 App。
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name != 'sources.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    final full = b.sync.syncAll();
+    await reading.future;
+    b.sync.cancelSync();
+    await a.books.updateProgress('a-src', 3, '第三章', 9);
+    await a.sync.syncAll();
+    b.sync.syncAfterResume();
+    final ready = b.sync.progressReady!;
+    stuck.complete();
+    await full;
+    await ready;
+
+    expect((await b.book('b-src')).durChapterTitle, '第三章');
+  });
+
+  test('a full sync asked for when the last round reports done runs, and the '
+      'next daily sync is still progress only', () async {
+    await a.addBook('a-src', toc: toc, time: 200);
+    await a.sync.syncAll();
+    Future<void>? again;
+    void onStatus() {
+      if (!a.sync.status.value.running && again == null) {
+        again = a.sync.syncAll();
+      }
+    }
+
+    a.sync.status.addListener(onStatus);
+    a.sync.syncProgress();
+    await pumpEventQueue();
+    while (again == null) {
+      await pumpEventQueue();
+    }
+    a.sync.status.removeListener(onStatus);
+    final read = <String>[];
+    store.beforeNextRead = (name) {
+      read.add(name);
+      return null;
+    };
+    await again;
+    expect(read, contains('sources.json'), reason: '要求的全面同步真的跑了');
+
+    read.clear();
+    a.sync.syncProgress();
+    await pumpEventQueue();
+    while (a.sync.status.value.running) {
+      await pumpEventQueue();
+    }
+    expect(read, ['progress.json']);
+  });
+
+  test('cancelling a full sync stops before the next kind and keeps what was '
+      'written', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await a.sources.upsert(
+      BookSource(bookSourceUrl: 'https://src.example', bookSourceName: '書源'),
+    );
+    await a.sync.syncAll();
+    await b.addBook('b-src', toc: toc, time: 100);
+
+    // B 全面同步：讀書源那一步時使用者取消。
+    final read = <String>[];
+    store.beforeNextRead = (name) {
+      read.add(name);
+      if (name == 'sources.json') b.sync.cancelSync();
+      return null;
+    };
+    await b.sync.syncAll();
+
+    expect((await b.book('b-src')).chapterIndex, 2, reason: '進度已經寫完');
+    expect(await b.sources.getByUrl('https://src.example'), isNotNull);
+    expect(read, isNot(contains('replace_rules.json')), reason: '下一種不再跑');
+    expect(b.sync.status.value.running, isFalse);
+    expect(b.sync.status.value.lastSyncAt, isNull, reason: '沒有做完不算全面同步過');
   });
 
   test('the status stays running through a round asked for mid-sync, and '
       'only reads finished when every round is done', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     final running = <bool>[];
     void record() => running.add(a.sync.status.value.running);
@@ -474,10 +600,10 @@ void main() {
       reading.complete();
       return stuck.future;
     };
-    final first = a.sync.syncNow();
+    final first = a.sync.syncAll();
     await reading.future;
     // 同步途中又改了東西、再要一次：跑完這輪接著補一輪。
-    final second = a.sync.syncNow();
+    final second = a.sync.syncAll();
     stuck.complete();
     await first;
     await second;
@@ -496,7 +622,7 @@ void main() {
       'running in the background', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     // B 另有一本書要送上去；背景同步卡在寫雲端（例如網路慢）的時候開書。
     await b.books.upsert(
@@ -515,7 +641,7 @@ void main() {
       writing.complete();
       return stuck.future;
     };
-    final background = b.sync.syncNow();
+    final background = b.sync.syncAll();
     await writing.future;
 
     final pulled = await b.sync
@@ -531,7 +657,7 @@ void main() {
       'step in progress, not after the whole sync', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     // A 的完整同步卡在讀書源（例如網路慢）。
     final order = <String>[];
@@ -543,7 +669,7 @@ void main() {
       reading.complete();
       return stuck.future;
     };
-    final running = a.sync.syncNow();
+    final running = a.sync.syncAll();
     await reading.future;
 
     // 這時 A 離開閱讀器：進度存好，要求同步。
@@ -561,7 +687,7 @@ void main() {
     expect(store.files['progress.json']!.$1, contains('第三章'));
 
     store.beforeNextRead = null;
-    await b.sync.syncNow();
+    await b.sync.syncAll();
     final read = await b.book('b-src');
     expect(read.durChapterTitle, '第三章');
     expect(read.charOffset, 77);
@@ -570,7 +696,7 @@ void main() {
   test('progress asked for first while nothing is running is the first thing '
       'uploaded', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 200);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
     await a.books.updateProgress('a-src', 2, '第二章', 5);
     final order = <String>[];
     store.beforeNextRead = (name) {
@@ -579,7 +705,7 @@ void main() {
     };
 
     a.sync.requestSyncProgressFirst();
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     expect(order.first, 'progress.json');
     expect(store.files['progress.json']!.$1, contains('第二章'));
@@ -588,7 +714,7 @@ void main() {
   test('progress pulled before turning sync off is not recorded', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
     await b.addBook('b-src', toc: toc, time: 100);
-    await a.sync.syncNow();
+    await a.sync.syncAll();
 
     final pulled = await b.sync.pullProgress('b-src');
     await b.sync.disable();
@@ -610,8 +736,8 @@ void main() {
         charOffset: 30,
         time: 200,
       );
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       final book = await b.book('a-src');
       expect(book.isInBookshelf, isTrue);
@@ -630,9 +756,9 @@ void main() {
       for (final i in [1, 2, 3, 4]) {
         await b.addBook('b$i', toc: toc, name: 'B 的書 $i', time: 100);
       }
-      await a.sync.syncNow();
-      await b.sync.syncNow();
-      await a.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
 
       expect(await a.books.getInBookshelf(), hasLength(7));
       expect(await b.books.getInBookshelf(), hasLength(7));
@@ -643,13 +769,13 @@ void main() {
       // A 加過又移出「夜航」，雲端留著刪除紀錄；B 第一次同步，書架上有它。
       // 使用者 2026-11-03 定的：一台移出，另一台也跟著移出（ADR 0039）。
       await a.addBook('a-src', toc: toc, time: 100);
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       await a.books.deleteByUrl('a-src');
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       await b.addBook('b-src', toc: toc, time: 50);
 
-      await b.sync.syncNow();
-      await a.sync.syncNow();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
 
       expect(b.discarded, ['b-src']);
       expect(await a.books.getInBookshelf(), isEmpty);
@@ -657,40 +783,40 @@ void main() {
 
     test('a book removed from one shelf leaves the other shelf too', () async {
       await a.addBook('a-src', toc: toc, time: 200);
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
       expect(await b.books.getByUrl('a-src'), isNotNull);
 
       await a.books.deleteByUrl('a-src');
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       expect(await b.books.getByUrl('a-src'), isNull);
     });
 
     test('a book open in the reader is removed only after it closes', () async {
       await a.addBook('a-src', toc: toc, time: 200);
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
       await a.books.deleteByUrl('a-src');
-      await a.sync.syncNow();
+      await a.sync.syncAll();
 
       final open = await b.book('a-src');
       b.sync.openBook(open);
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       expect(await b.books.getByUrl('a-src'), isNotNull);
 
       b.sync.closeBook(open);
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       expect(await b.books.getByUrl('a-src'), isNull);
     });
 
     test('a book opened while the sync is applying is not removed', () async {
       await a.addBook('a-src', toc: toc, time: 200);
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
       await a.books.deleteByUrl('a-src');
-      await a.sync.syncNow();
+      await a.sync.syncAll();
 
       // 合併時還沒開，套用前一刻才打開。
       var checks = 0;
@@ -708,7 +834,7 @@ void main() {
           ),
         ],
       );
-      await late.syncNow();
+      await late.syncAll();
 
       expect(await b.books.getByUrl('a-src'), isNotNull);
     });
@@ -717,14 +843,14 @@ void main() {
         'for the same book are left alone', () async {
       await a.addBook('a-src', toc: toc, time: 200);
       await b.addBook('b-src', toc: toc, time: 100);
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       await a.books.upsert(
         (await a.book('a-src'))..customCoverUrl = 'https://img/cover.jpg',
       );
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       final book = await b.book('b-src');
       expect(book.customCoverUrl, 'https://img/cover.jpg');
@@ -732,8 +858,8 @@ void main() {
     });
     group('renamed on one phone', () {
       Future<void> syncBoth() async {
-        await a.sync.syncNow();
-        await b.sync.syncNow();
+        await a.sync.syncAll();
+        await b.sync.syncAll();
       }
 
       Future<void> rename(
@@ -815,7 +941,7 @@ void main() {
         await syncBoth();
 
         await rename(a, 'src', name: '第二個名字');
-        await a.sync.syncNow();
+        await a.sync.syncAll();
         await rename(a, 'src', name: '第三個名字');
         await syncBoth();
 
@@ -850,7 +976,7 @@ void main() {
         await b.books.updateProgress('src', 3, '第三章', 70);
         await rename(a, 'src', name: '新夜航');
         await syncBoth();
-        await a.sync.syncNow();
+        await a.sync.syncAll();
 
         expect((await b.book('src')).name, '新夜航');
         expect((await b.book('src')).chapterIndex, 3);
@@ -864,15 +990,15 @@ void main() {
         await syncBoth();
 
         await rename(a, 'src', name: '新夜航');
-        await a.sync.syncNow();
+        await a.sync.syncAll();
         final open = await b.book('src');
         b.sync.openBook(open);
-        await b.sync.syncNow();
+        await b.sync.syncAll();
         expect((await b.book('src')).name, '夜航');
         expect(b.discarded, isEmpty);
 
         b.sync.closeBook(open);
-        await b.sync.syncNow();
+        await b.sync.syncAll();
         expect((await b.book('src')).name, '新夜航');
         expect(b.discarded, isEmpty);
         expect(await b.books.getInBookshelf(), hasLength(1));
@@ -890,13 +1016,13 @@ void main() {
           final open = await b.book('other');
           b.sync.openBook(open);
           await rename(a, 'src', name: '新夜航');
-          await a.sync.syncNow();
-          await b.sync.syncNow();
+          await a.sync.syncAll();
+          await b.sync.syncAll();
           expect(b.discarded, isEmpty, reason: '舊名字的書要等新名字的書關掉再改名');
           expect((await b.book('src')).name, '夜航');
 
           b.sync.closeBook(open);
-          await b.sync.syncNow();
+          await b.sync.syncAll();
           expect((await b.book('src')).name, '新夜航');
           expect(await b.chapters.titlesByBook('src'), toc);
           expect(b.discarded, isEmpty);
@@ -909,7 +1035,7 @@ void main() {
         await syncBoth();
 
         await rename(a, 'src', name: '新夜航');
-        await a.sync.syncNow();
+        await a.sync.syncAll();
         await a.books.deleteByUrl('src');
         await syncBoth();
 
@@ -946,18 +1072,18 @@ void main() {
     test('an edited source reaches the other phone; the response time '
         'measured on each phone stays its own', () async {
       await a.sources.upsert(source('書源'));
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       // B 量到的回應時間不算改了書源。
       await b.sources.upsert(source('書源', respondTime: 999));
       final writes = store.writes;
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       expect(store.writes, writes);
 
       await a.sources.upsert(source('改名的書源'));
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
       final synced = (await b.sources.getByUrl('https://src.example'))!;
       expect(synced.bookSourceName, '改名的書源');
       expect(synced.respondTime, 999);
@@ -965,12 +1091,12 @@ void main() {
 
     test('a source deleted on one phone is deleted on the other', () async {
       await a.sources.upsert(source('書源'));
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       await a.sources.deleteByUrl('https://src.example');
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       expect(await b.sources.getByUrl('https://src.example'), isNull);
     });
@@ -979,22 +1105,24 @@ void main() {
         'still sent', () async {
       await a.sources.upsert(source('書源'));
       await a.sync.start();
-      await a.sync.syncNow();
+      // 第一次送上去，第二次讀回來確認兩邊一樣。
+      await a.sync.syncAll();
+      await a.sync.syncAll();
       final reads = store.reads['sources.json'];
 
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       expect(store.reads['sources.json'], reads, reason: '兩邊都沒變，只問版本');
 
       await a.sources.upsert(source('改名的書源'));
       await pumpEventQueue();
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       expect(store.files['sources.json']!.$1, contains('改名的書源'));
 
       // 別台改了雲端：版本不同，整份讀回來。
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       await b.sources.upsert(source('別台改的'));
-      await b.sync.syncNow();
-      await a.sync.syncNow();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
       expect(
         (await a.sources.getByUrl('https://src.example'))!.bookSourceName,
         '別台改的',
@@ -1014,8 +1142,8 @@ void main() {
           isInBookshelf: true,
         ),
       );
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       // A 編輯書源改了網址（同 BookSourceService.saveEditedSource）。
       final moved = BookSource(
@@ -1025,8 +1153,8 @@ void main() {
       await a.sources.saveEdited(moved, previousUrl: 'https://src.example');
       await SourceMoves(a.prefs)
           .record(from: 'https://src.example', to: 'https://new.example');
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       expect(await b.sources.getByUrl('https://src.example'), isNull);
       expect(await b.sources.getByUrl('https://new.example'), isNotNull);
@@ -1036,9 +1164,9 @@ void main() {
     test('a phone syncing for the first time does not overwrite the cloud '
         'with its own copy', () async {
       await a.sources.upsert(source('新的'));
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       await b.sources.upsert(source('舊的'));
-      await b.sync.syncNow();
+      await b.sync.syncAll();
 
       expect(
         (await b.sources.getByUrl('https://src.example'))!.bookSourceName,
@@ -1065,9 +1193,9 @@ void main() {
         ReplaceRule(id: 3, name: '乙', pattern: 'b', order: 5),
       ]);
 
-      await a.sync.syncNow();
-      await b.sync.syncNow();
-      await a.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      await a.sync.syncAll();
 
       Future<Map<int, String>> rulesOf(_Phone phone) async => {
         for (final rule in await phone.rules.getAll()) rule.id: rule.name,
@@ -1088,8 +1216,8 @@ void main() {
         ReplaceRule(id: 1, name: '乙', pattern: 'b'),
         ReplaceRule(id: 2, name: '甲', pattern: 'a'),
       ]);
-      await a.sync.syncNow();
-      await b.sync.syncNow();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
 
       final onB = {
         for (final rule in await b.rules.getAll()) rule.id: rule.name,
@@ -1111,10 +1239,10 @@ void main() {
     test('undoing a hidden selection still works after the rule took the '
         'cloud\'s number', () async {
       await b.rules.insert(ReplaceRule(name: '選字隱藏', pattern: '廣告'));
-      await b.sync.syncNow();
+      await b.sync.syncAll();
       // A 也隱藏了同一段，還沒同步；拿著新增時的編號等使用者按復原。
       final id = await a.rules.insert(ReplaceRule(name: '選字隱藏', pattern: '廣告'));
-      await a.sync.syncNow();
+      await a.sync.syncAll();
       expect(await a.rules.getAll(), hasLength(1));
 
       await a.rules.deleteById(id);
@@ -1147,7 +1275,7 @@ void main() {
 
     await useAccount('https://one.example');
     await a.sources.upsert(named('舊'));
-    await phone.syncNow();
+    await phone.syncAll();
 
     // 另一個空間裡已經有較新的；還原備份直接把設定換成那個空間。
     await b.sources.upsert(named('另一個空間較新的'));
@@ -1160,11 +1288,11 @@ void main() {
       kinds: (_) => [
         SourceSync(dao: b.sources, bookDao: b.books, prefs: prefs),
       ],
-    ).syncNow();
+    ).syncAll();
     useOther = true;
     await useAccount('https://two.example');
     await a.sources.upsert(named('備份裡的舊資料'));
-    await phone.syncNow();
+    await phone.syncAll();
 
     expect(other.files['sources.json']!.$1, contains('另一個空間較新的'));
     expect(
@@ -1203,7 +1331,7 @@ void main() {
         'fails and keeps the first error', () async {
       failing.failing['first.json'] = const SyncStoreException.file('單一檔案拒絕存取');
 
-      await service.syncNow();
+      await service.syncAll();
 
       expect(failing.files['second.json'], isNotNull);
       expect(failing.files['first.json'], isNull);
@@ -1213,7 +1341,7 @@ void main() {
 
       // 好了之後，下一輪補上，錯誤清掉、成功時間更新。
       failing.failing.clear();
-      await service.syncNow();
+      await service.syncAll();
       expect(failing.files['first.json'], isNotNull);
       expect(service.status.value.error, isNull);
       expect(service.status.value.lastSyncAt, syncedAt);
@@ -1223,7 +1351,7 @@ void main() {
       failing.failing['first.json'] = const SyncStoreException.file('第一個');
       failing.failing['second.json'] = const SyncStoreException.file('第二個');
 
-      await service.syncNow();
+      await service.syncAll();
 
       expect(service.status.value.error, '第一個');
     });
@@ -1231,7 +1359,7 @@ void main() {
     test('a space that is down stops the whole round', () async {
       failing.failing['first.json'] = const SyncStoreException('連不上同步空間');
 
-      await service.syncNow();
+      await service.syncAll();
 
       expect(failing.files['second.json'], isNull);
       expect(service.status.value.error, '連不上同步空間');

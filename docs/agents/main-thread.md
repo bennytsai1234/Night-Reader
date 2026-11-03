@@ -9,12 +9,12 @@
 - **書源 isolate**（ADR 0028、0034）：書源的網路、解析、規則 JS。**檢查書架更新**整段（含目錄比對與寫回，`BookUpdateService`）。**書架自動下載**與手動下載的規劃、抓章、存正文（`download_executor.dart` 的 `…InSourceIsolate`）。搜尋、換源、發現的抓取也在這裡。
 - **網路 isolate**（`SourceIo`，ADR 0034）：替停住的書源 isolate 發請求、讀快取。
 - **資料庫 isolate**（drift 的 `DriftIsolate`）：SQL 本身。
-- **一次性的 `Isolate.run`／`compute`**：正文前處理、規則階段的正文替換、排版快取讀寫、繁簡字典解析、EPUB 解析、還原備份解碼、匯入書源解析、字型雜湊。
+- **一次性的 `Isolate.run`／`compute`**：同步的合併計算、正文前處理、規則階段的正文替換、排版快取讀寫、繁簡字典解析、EPUB 解析、還原備份解碼、匯入書源解析、字型雜湊。
 
 ## 在主執行緒（會卡動畫）
 
 - **畫面**：建構、排版、繪製；閱讀器的分頁與量字（要用 `dart:ui`）。
-- **多台手機同步**（`SyncService`）：除了等網路與 SQL，解 JSON、算指紋、比對、套用都在主執行緒（2026-11-03 的狀態）。
+- **多台手機同步**（`SyncService`）：讀這台的資料、套用到資料庫與畫面在主執行緒；解 JSON、算指紋、比對在背景 isolate（`sync_merge.dart`）。日常只同步閱讀進度，其他資料只在全面同步時才同步（ADR 0046）。
 - **背景工作送回主執行緒的那一段**：收到的結果要複製進來（上千章的目錄、正文）；資料表改了，`watch()` 重查的結果要轉成物件、畫面跟著重建；`AppEventBus` 的 `upBookshelf` 會讓書架重讀。這幾件通常很小，懷疑它們之前先量。
 - Cookie 檔與限流、WebView（書源 isolate 經代理用主 isolate 的）；合併搜尋結果、寫搜尋快取（ADR 0028）。
 
