@@ -24,7 +24,9 @@ class BookmarkSync extends SyncKind {
   /// 序號與錨點裡的序號只是這台目錄裡的座標：換源、書源插章時跟著變，讀到
   /// 的地方沒變，不算改過；沒有章名時才看序號。
   @override
-  String fingerprint(SyncRecord record) {
+  SyncFingerprint get fingerprint => _fingerprintOf;
+
+  static String _fingerprintOf(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
     final data = record.data;
     final title = data['chapterTitle'];

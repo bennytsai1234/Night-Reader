@@ -51,7 +51,9 @@ class LoginCacheSync extends LoginDataSync {
   };
 
   @override
-  Map<String, SyncRecord> prune(Map<String, SyncRecord> remote) {
+  SyncPrune get prune => _pruneExpired;
+
+  static Map<String, SyncRecord> _pruneExpired(Map<String, SyncRecord> remote) {
     final now = LoginDataSync._now;
     return {
       for (final entry in remote.entries)
@@ -187,7 +189,9 @@ class LoginCookieJarSync extends LoginDataSync {
   /// 套用，把比較舊的內容蓋到這台已有的同一個 Cookie 上。同一個 Cookie 在
   /// 雲端有新舊兩個鍵時留時間新的，一樣新就留已經是新鍵的那筆。
   @override
-  Map<String, SyncRecord> prune(Map<String, SyncRecord> remote) {
+  SyncPrune get prune => _pruneExpired;
+
+  static Map<String, SyncRecord> _pruneExpired(Map<String, SyncRecord> remote) {
     final now = DateTime.now();
     final pruned = <String, SyncRecord>{};
     for (final MapEntry(key: oldKey, value: record) in remote.entries) {

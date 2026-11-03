@@ -22,7 +22,9 @@ class HighlightSync extends SyncKind {
   /// 標註的內容是「哪本書、哪一章（章名）的第幾個字起、畫了哪段字、什麼
   /// 顏色與樣子、備忘寫了什麼」。章節序號與錨點同書籤，只是這台目錄裡的座標，不算改過。
   @override
-  String fingerprint(SyncRecord record) {
+  SyncFingerprint get fingerprint => _fingerprintOf;
+
+  static String _fingerprintOf(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
     final data = record.data;
     final title = data['chapterTitle'];

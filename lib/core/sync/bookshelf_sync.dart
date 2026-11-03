@@ -113,7 +113,9 @@ class BookshelfSync extends SyncKind {
   /// 跟著最近換源、或書源改了網址的那台，之後新加入的手機照它加書拿到
   /// 用得了的書源；套用時仍只寫使用者改的欄位，不動這台的書源。
   @override
-  String fingerprint(SyncRecord record) {
+  SyncFingerprint get fingerprint => _fingerprintOf;
+
+  static String _fingerprintOf(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
     return SyncRecord.fingerprintOf({
       for (final field in [..._userFields, 'bookUrl', 'origin'])
