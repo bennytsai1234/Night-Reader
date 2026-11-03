@@ -232,7 +232,8 @@ class BookshelfSync extends SyncKind {
       }
       added.add(incoming.bookUrl);
     }
-    AppEventBus().fire(AppEventBus.upBookshelf);
+    // 沒有套用任何一本就不通知：書架與開著的頁面不必為了沒變的資料重讀。
+    if (applied.isNotEmpty) AppEventBus().fire(AppEventBus.upBookshelf);
     added.forEach(_download);
     return applied;
   }

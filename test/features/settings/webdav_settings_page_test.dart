@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
+import 'package:night_reader/core/sync/sync_merge.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -81,6 +82,7 @@ void main() {
     bool inSpace = false,
   }) async {
     final sync = SyncService(
+      runner: runSyncWorkInline,
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
       bases: _MemoryBases(),
       kinds: kinds,

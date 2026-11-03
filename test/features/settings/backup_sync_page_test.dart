@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
+import 'package:night_reader/core/sync/sync_merge.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/features/settings/backup_sync_page.dart';
@@ -83,6 +84,7 @@ void main() {
     });
     store = _Store('sources.json');
     SyncService.instance = SyncService(
+      runner: runSyncWorkInline,
       storeFactory: (_, _, _) => store,
       bases: _MemoryBases(),
       kinds: (_) => [_Kind('sources'), _Kind('settings')],

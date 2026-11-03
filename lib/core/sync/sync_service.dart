@@ -23,6 +23,7 @@ import 'settings_sync.dart';
 import 'source_sync.dart';
 import 'sync_base_storage.dart';
 import 'sync_kind.dart';
+import 'sync_merge.dart';
 import 'sync_records.dart';
 import 'sync_settings.dart';
 import 'sync_store.dart';
@@ -109,6 +110,7 @@ class SyncService {
     List<SyncKind> Function(SyncService service)? kinds,
     GoogleDriveAuth? googleAuth,
     DateTime Function()? clock,
+    SyncRunner? runner,
   }) : _settings = settings ?? SyncSettings(),
        _bases = bases ?? SyncBaseStorage(),
        _googleAuth = googleAuth ?? GoogleSignInDriveAuth.instance,
@@ -121,7 +123,8 @@ class SyncService {
              googleAuth ?? GoogleSignInDriveAuth.instance,
            )),
        _kinds = kinds ?? _defaultKinds,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now,
+       _runner = runner ?? runSyncWorkInBackground;
 
   static SyncService instance = SyncService();
 
@@ -141,6 +144,10 @@ class SyncService {
   final AppDatabase? _database;
   final List<SyncKind> Function(SyncService service) _kinds;
   final DateTime Function() _clock;
+
+  /// 合併計算交給誰跑：預設背景 isolate；元件測試的假時間等不到 isolate
+  /// 回覆，給 [runSyncWorkInline]。
+  final SyncRunner _runner;
   final Lock _lock = Lock();
 
   /// 同一份檔案被別台同時寫入時，重讀再合併的次數。
@@ -571,66 +578,43 @@ class SyncService {
     _settled.remove(kind.name);
     final fingerprint = kind.fingerprint;
     for (var attempt = 1; ; attempt++) {
+      // 讀寫同步空間、讀這台的資料、套用在主執行緒；解 JSON、算指紋、比對
+      // 與編碼在背景 isolate（ADR 0046）。
       final file = await store.read(kind.fileName);
-      final remote = kind.prune(
-        file == null
-            ? <String, SyncRecord>{}
-            : SyncDocument.decode(file.content).records,
-      );
+      final remote = file == null
+          ? <String, SyncRecord>{}
+          : await decodeSyncFileOn(_runner, file.content, kind.prune);
       final base = await _bases.read(kind.name);
       final now = _clock().millisecondsSinceEpoch;
-      final local = _timed(
-        kind,
-        await kind.reconcile(await kind.local(), remote, base),
-        remote,
-        base,
-        now,
+      SyncMergeInput inputFor(Map<String, SyncRecord> local) => SyncMergeInput(
+        remote: remote,
+        local: local,
+        base: base,
+        now: now,
+        fingerprint: fingerprint,
+        hasOwnTime: kind.hasOwnTime,
+        syncsDeletion: kind.syncsDeletion,
       );
+      final plan = await planSyncMergeOn(
+        _runner,
+        inputFor(await kind.reconcile(await kind.local(), remote, base)),
+      );
+      final nextBase = plan.base;
+      final toApply = [
+        for (final MapEntry(:key, value: (:mine, print: _))
+            in plan.incoming.entries)
+          if (kind.canApply(key, mine)) key,
+      ];
 
-      final nextRemote = Map.of(remote);
-      final nextBase = <String, SyncBaseEntry>{};
-      final toApply = <String>[];
-      for (final key in {...local.keys, ...remote.keys}) {
-        final mine = local[key];
-        final theirs = remote[key];
-        switch (decideSync(
-          local: mine,
-          remote: theirs,
-          base: base[key],
-          fingerprint: fingerprint,
-        )) {
-          case SyncDecision.same:
-            if (mine != null && theirs != null) {
-              nextBase[key] = SyncBaseEntry(
-                local: fingerprint(mine),
-                remote: fingerprint(theirs),
-                time: theirs.time,
-              );
-            } else if (base[key] case final kept?) {
-              nextBase[key] = kept;
-            }
-          case SyncDecision.upload:
-            nextRemote[key] = mine!;
-            nextBase[key] = SyncBaseEntry(
-              local: fingerprint(mine),
-              remote: fingerprint(mine),
-              time: mine.time,
-            );
-          case SyncDecision.apply:
-            if (kind.canApply(key, mine)) toApply.add(key);
-            if (base[key] case final kept?) nextBase[key] = kept;
-        }
-      }
-
-      final changesRemote = !_sameRecords(remote, nextRemote);
-      if (changesRemote) {
+      final changesRemote = plan.upload != null;
+      if (plan.upload case final upload?) {
         try {
           // 試到最後一次仍被別台搶先，就不再比版本直接寫：寧可蓋掉別台
           // 剛寫的（下次同步會再合併回來），不讓同步一直失敗。
           final lastTry = attempt >= _maxAttempts;
           await store.write(
             kind.fileName,
-            SyncDocument(nextRemote).encode(),
+            upload,
             ifVersion: lastTry ? null : file?.version,
             ifAbsent: !lastTry && file == null,
           );
@@ -643,10 +627,15 @@ class SyncService {
       if (toApply.isNotEmpty) {
         // 寫雲端的這段時間，這台可能又改了（書被打開讀了幾頁、書源剛編輯
         // 過）：和合併時不同的不套用，上次同步的紀錄留著，下次重新比。
-        final fresh = _timed(kind, await kind.local(), remote, base, now);
+        final fresh = await timedSyncRecordsOn(
+          _runner,
+          inputFor(await kind.local()),
+          toApply,
+        );
         final ready = <String, SyncRecord>{
           for (final key in toApply)
-            if (_printOf(kind, fresh[key]) == _printOf(kind, local[key]) &&
+            if (_printOf(fingerprint, fresh[key]) ==
+                    plan.incoming[key]!.print &&
                 kind.canApply(key, fresh[key]))
               key: remote[key]!,
         };
@@ -672,62 +661,8 @@ class SyncService {
     }
   }
 
-  static String? _printOf(SyncKind kind, SyncRecord? record) =>
-      record == null ? null : kind.fingerprint(record);
-
-  /// 補上本機每筆的修改時間與刪除紀錄。有自己記時間的（[SyncKind.hasOwnTime]）
-  /// 照原樣。其他的照上次同步的紀錄推算：
-  ///
-  /// - 和上次同步時一樣：沿用上次的時間。
-  /// - 改過了（或上次之後才新增的）：算成這次同步的時間 [now]。
-  /// - 從沒同步過、雲端也有同一筆：時間算 0，內容不同時雲端的贏。剛開始用
-  ///   同步、或重裝後第一次同步的這台，不拿手上可能是舊的資料蓋掉雲端。
-  /// - 上次同步時有、現在沒有：這台刪掉了，補一筆刪除紀錄讓別台跟著刪
-  ///   （[SyncKind.syncsDeletion]）。
-  static Map<String, SyncRecord> _timed(
-    SyncKind kind,
-    Map<String, SyncRecord> local,
-    Map<String, SyncRecord> remote,
-    Map<String, SyncBaseEntry> base,
-    int now,
-  ) {
-    if (kind.hasOwnTime) return local;
-    final timed = <String, SyncRecord>{};
-    for (final MapEntry(:key, value: record) in local.entries) {
-      final last = base[key];
-      final time = switch (last) {
-        null => remote.containsKey(key) ? 0 : now,
-        _ when kind.fingerprint(record) == last.local => last.time,
-        _ => now,
-      };
-      timed[key] = SyncRecord(
-        time: time,
-        data: record.data,
-        deleted: record.deleted,
-      );
-    }
-    if (kind.syncsDeletion) {
-      for (final MapEntry(:key, value: last) in base.entries) {
-        if (timed.containsKey(key)) continue;
-        final gone = SyncRecord(time: now, data: const {}, deleted: true);
-        timed[key] = kind.fingerprint(gone) == last.local
-            ? SyncRecord(time: last.time, data: const {}, deleted: true)
-            : gone;
-      }
-    }
-    return timed;
-  }
-
-  static bool _sameRecords(
-    Map<String, SyncRecord> a,
-    Map<String, SyncRecord> b,
-  ) {
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      if (!identical(b[entry.key], entry.value)) return false;
-    }
-    return true;
-  }
+  static String? _printOf(SyncFingerprint fingerprint, SyncRecord? record) =>
+      record == null ? null : fingerprint(record);
 
   /// 閱讀器開著、App 回到前景時抓這本書的雲端進度（整次同步不改開著的
   /// 書）：比這台的新才傳回，否則 null。連不上、沒設定同步空間也是 null，

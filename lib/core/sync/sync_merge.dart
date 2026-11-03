@@ -20,14 +20,31 @@ Future<R> runSyncWorkInline<R>(FutureOr<R> Function() work) async => work();
 Map<String, SyncRecord> decodeSyncFile(String content, SyncPrune prune) =>
     prune(SyncDocument.decode(content).records);
 
-/// 每一筆的指紋。
-Map<String, String> syncFingerprints(
-  Map<String, SyncRecord> records,
-  SyncFingerprint fingerprint,
-) => {
-  for (final MapEntry(:key, value: record) in records.entries)
-    key: fingerprint(record),
-};
+// 下面三個把工作交給 [SyncRunner]。閉包在頂層函式裡建立，只捕捉參數裡的
+// 資料：在 `SyncService` 的方法裡建立的話，會連同同一層別的閉包捕捉的
+// `this`、同步空間一起送出去（CODING_STANDARDS.md）。
+
+Future<Map<String, SyncRecord>> decodeSyncFileOn(
+  SyncRunner run,
+  String content,
+  SyncPrune prune,
+) => run(() => decodeSyncFile(content, prune));
+
+Future<SyncMergePlan> planSyncMergeOn(SyncRunner run, SyncMergeInput input) =>
+    run(() => planSyncMerge(input));
+
+/// 套用前重讀的這台：補過時間後 [keys] 這幾筆的樣子（沒有的是 null）。
+Future<Map<String, SyncRecord?>> timedSyncRecordsOn(
+  SyncRunner run,
+  SyncMergeInput input,
+  Iterable<String> keys,
+) {
+  final wanted = keys.toList();
+  return run(() {
+    final timed = timedSyncRecords(input);
+    return {for (final key in wanted) key: timed[key]};
+  });
+}
 
 /// 一種資料這一輪要合併的東西。都是資料與頂層、靜態函式，整份送得進背景
 /// isolate。

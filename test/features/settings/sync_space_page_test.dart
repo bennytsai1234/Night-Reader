@@ -6,6 +6,7 @@ import 'package:night_reader/core/sync/google_drive_auth.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
+import 'package:night_reader/core/sync/sync_merge.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
@@ -111,6 +112,7 @@ void main() {
     List<SyncKind> Function(SyncService)? kinds,
   }) async {
     final sync = SyncService(
+      runner: runSyncWorkInline,
       storeFactory: (space, _, _) =>
           space == SyncSpace.none ? null : store ?? _Store(),
       bases: bases ?? _MemoryBases(),
