@@ -175,9 +175,8 @@ void main() {
     expect(bases.files['progress'], isNull);
   });
 
-  testWidgets('Google selection updates before the initial sync finishes', (
-    tester,
-  ) async {
+  testWidgets('Google selection shows the account, then the first full sync '
+      'covers the app until it is done', (tester) async {
     final gate = Completer<void>();
     final sync = await pump(
       tester,
@@ -192,12 +191,14 @@ void main() {
     expect(find.text('reader@gmail.com'), findsOneWidget);
     expect(find.text('登入中…'), findsNothing);
     expect(find.text('同步中（1/1）：書源'), findsOneWidget);
+    expect(find.text('全面同步中'), findsOneWidget);
     expect(sync.status.value.running, isTrue);
 
     gate.complete();
     await settle(tester);
 
     expect(sync.status.value.running, isFalse);
+    expect(find.text('全面同步中'), findsNothing);
     expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 

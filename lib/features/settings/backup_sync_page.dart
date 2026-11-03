@@ -9,6 +9,7 @@ import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
+import 'package:night_reader/features/settings/full_sync_dialog.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -114,7 +115,9 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                 // 正在同步閱讀進度時也能按：等那一輪做完接著全面同步。
                 enabled: status.enabled,
                 showChevron: false,
-                onTap: status.enabled ? () => unawaited(_syncAll()) : null,
+                onTap: status.enabled
+                    ? () => unawaited(runFullSync(context, _sync))
+                    : null,
               ),
             ],
           ),
@@ -150,58 +153,6 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         ],
       ),
     );
-  }
-
-  /// 全面同步：開一個點外面、按返回都關不掉的進度框，蓋住整個 App，同步完
-  /// 才關（ADR 0046）。同步途中使用者改的書源或設定，可能在同一輪被雲端的
-  /// 蓋掉或沒送上去，所以這段時間不讓操作。取消在種類之間停。
-  Future<void> _syncAll() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context, rootNavigator: true);
-    var cancelled = false;
-    final done = _sync.syncAll();
-    final dialog = showStatefulAppAlert<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context, setState, _) => PopScope(
-        canPop: false,
-        child: AppAlert<bool>(
-          title: '全面同步中',
-          content: ValueListenableBuilder<SyncStatus>(
-            valueListenable: _sync.status,
-            builder: (context, status, _) => FullSyncProgress(status: status),
-          ),
-          actions: [
-            AppAlertAction(
-              label: cancelled ? '正在停下…' : '取消',
-              value: true,
-              enabled: !cancelled,
-            ),
-          ],
-          onAction: (_) {
-            setState(() => cancelled = true);
-            _sync.cancelSync();
-          },
-        ),
-      ),
-    );
-    await done;
-    navigator.pop();
-    await dialog;
-    final error = _sync.status.value.error;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            error != null
-                ? '全面同步失敗：$error'
-                : cancelled
-                ? '已停下，同步好的資料留著'
-                : '全面同步完成',
-          ),
-        ),
-      );
   }
 
   Future<void> _handleManualBackup() async {

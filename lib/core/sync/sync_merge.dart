@@ -33,19 +33,6 @@ Future<Map<String, SyncRecord>> decodeSyncFileOn(
 Future<SyncMergePlan> planSyncMergeOn(SyncRunner run, SyncMergeInput input) =>
     run(() => planSyncMerge(input));
 
-/// 套用前重讀的這台：補過時間後 [keys] 這幾筆的樣子（沒有的是 null）。
-Future<Map<String, SyncRecord?>> timedSyncRecordsOn(
-  SyncRunner run,
-  SyncMergeInput input,
-  Iterable<String> keys,
-) {
-  final wanted = keys.toList();
-  return run(() {
-    final timed = timedSyncRecords(input);
-    return {for (final key in wanted) key: timed[key]};
-  });
-}
-
 /// 一種資料這一輪要合併的東西。都是資料與頂層、靜態函式，整份送得進背景
 /// isolate。
 class SyncMergeInput {
@@ -155,32 +142,37 @@ SyncMergePlan planSyncMerge(SyncMergeInput input) {
 /// - 上次同步時有、現在沒有：這台刪掉了，補一筆刪除紀錄讓別台跟著刪
 ///   （`syncsDeletion`）。
 Map<String, SyncRecord> timedSyncRecords(SyncMergeInput input) {
-  final SyncMergeInput(:local, :remote, :base, :now, :fingerprint) = input;
-  if (input.hasOwnTime) return local;
-  final timed = <String, SyncRecord>{};
-  for (final MapEntry(:key, value: record) in local.entries) {
-    final last = base[key];
+  if (input.hasOwnTime) return input.local;
+  return {
+    for (final key in {
+      ...input.local.keys,
+      if (input.syncsDeletion) ...input.base.keys,
+    })
+      key: ?timedSyncRecordOf(input, key),
+  };
+}
+
+/// [timedSyncRecords] 的其中一筆；這台沒有、也不算刪掉的是 null。套用前
+/// 重讀這台時只算要套用的那幾筆，在主執行緒讀完就比，中間不等別的執行緒，
+/// 讀到比的這段時間不會讓使用者剛改的被蓋掉。
+SyncRecord? timedSyncRecordOf(SyncMergeInput input, String key) {
+  final SyncMergeInput(:remote, :base, :now, :fingerprint) = input;
+  final record = input.local[key];
+  if (input.hasOwnTime) return record;
+  final last = base[key];
+  if (record != null) {
     final time = switch (last) {
       null => remote.containsKey(key) ? 0 : now,
       _ when fingerprint(record) == last.local => last.time,
       _ => now,
     };
-    timed[key] = SyncRecord(
-      time: time,
-      data: record.data,
-      deleted: record.deleted,
-    );
+    return SyncRecord(time: time, data: record.data, deleted: record.deleted);
   }
-  if (input.syncsDeletion) {
-    for (final MapEntry(:key, value: last) in base.entries) {
-      if (timed.containsKey(key)) continue;
-      final gone = SyncRecord(time: now, data: const {}, deleted: true);
-      timed[key] = fingerprint(gone) == last.local
-          ? SyncRecord(time: last.time, data: const {}, deleted: true)
-          : gone;
-    }
-  }
-  return timed;
+  if (!input.syncsDeletion || last == null) return null;
+  final gone = SyncRecord(time: now, data: const {}, deleted: true);
+  return fingerprint(gone) == last.local
+      ? SyncRecord(time: last.time, data: const {}, deleted: true)
+      : gone;
 }
 
 bool _sameRecords(Map<String, SyncRecord> a, Map<String, SyncRecord> b) {

@@ -496,6 +496,69 @@ void main() {
     expect(b.sync.status.value.running, isFalse);
   });
 
+  test('progress asked for after cancelling a full sync still runs', () async {
+    await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);
+    await a.sync.syncAll();
+    await b.addBook('b-src', toc: toc, time: 100);
+    await b.sync.syncAll();
+
+    // B 全面同步讀書源時使用者取消；這一種還沒做完時 A 又讀了、B 回到 App。
+    final reading = Completer<void>();
+    final stuck = Completer<void>();
+    store.beforeNextRead = (name) {
+      if (name != 'sources.json' || reading.isCompleted) return null;
+      reading.complete();
+      return stuck.future;
+    };
+    final full = b.sync.syncAll();
+    await reading.future;
+    b.sync.cancelSync();
+    await a.books.updateProgress('a-src', 3, '第三章', 9);
+    await a.sync.syncAll();
+    b.sync.syncAfterResume();
+    final ready = b.sync.progressReady!;
+    stuck.complete();
+    await full;
+    await ready;
+
+    expect((await b.book('b-src')).durChapterTitle, '第三章');
+  });
+
+  test('a full sync asked for when the last round reports done runs, and the '
+      'next daily sync is still progress only', () async {
+    await a.addBook('a-src', toc: toc, time: 200);
+    await a.sync.syncAll();
+    Future<void>? again;
+    void onStatus() {
+      if (!a.sync.status.value.running && again == null) {
+        again = a.sync.syncAll();
+      }
+    }
+
+    a.sync.status.addListener(onStatus);
+    a.sync.syncProgress();
+    await pumpEventQueue();
+    while (again == null) {
+      await pumpEventQueue();
+    }
+    a.sync.status.removeListener(onStatus);
+    final read = <String>[];
+    store.beforeNextRead = (name) {
+      read.add(name);
+      return null;
+    };
+    await again;
+    expect(read, contains('sources.json'), reason: '要求的全面同步真的跑了');
+
+    read.clear();
+    a.sync.syncProgress();
+    await pumpEventQueue();
+    while (a.sync.status.value.running) {
+      await pumpEventQueue();
+    }
+    expect(read, ['progress.json']);
+  });
+
   test('cancelling a full sync stops before the next kind and keeps what was '
       'written', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 2, time: 200);

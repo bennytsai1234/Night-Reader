@@ -131,9 +131,8 @@ void main() {
     expect(await SyncSettings().space(), SyncSpace.none);
   });
 
-  testWidgets('WebDAV returns to sync space before the data sync completes', (
-    tester,
-  ) async {
+  testWidgets('WebDAV returns to sync space, and the first full sync covers '
+      'the app until it is done', (tester) async {
     final gate = Completer<void>();
     final sync = await pump(
       tester,
@@ -156,6 +155,7 @@ void main() {
     expect(await SyncSettings().space(), SyncSpace.webdav);
     expect(sync.status.value.running, isTrue);
     expect(find.text('同步中（1/1）：書源'), findsOneWidget);
+    expect(find.text('全面同步中'), findsOneWidget);
 
     gate.complete();
     await waitForStatus(
@@ -163,6 +163,8 @@ void main() {
       sync,
       (status) => !status.running && status.lastSyncAt != null,
     );
+    await tester.pumpAndSettle();
+    expect(find.text('全面同步中'), findsNothing);
     expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 

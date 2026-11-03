@@ -251,8 +251,9 @@ class SyncService {
     await _bases.writeJson(_ownerFile, {'space': identity});
   }
 
-  /// 改用 [account] 的 WebDAV：先試連，連得上才存起來、全面同步一次。換了空間
-  /// 照從沒同步過合併；同一個空間（只改了密碼）留著上次同步的紀錄。
+  /// 改用 [account] 的 WebDAV：先試連，連得上才存起來。換了空間照從沒同步過
+  /// 合併；同一個空間（只改了密碼）留著上次同步的紀錄。接著由畫面開進度框
+  /// 全面同步一次（`runFullSync`；使用者 2026-11-03 定的：選好就全面同步）。
   Future<void> useWebDav(WebDavAccount account) async {
     final store = _storeFactory(SyncSpace.webdav, account, null);
     await store!.check();
@@ -260,16 +261,12 @@ class SyncService {
       await _settings.useWebDav(account);
       await _claimBases();
     });
-    // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒全面同步過」。
-    status.value = const SyncStatus(space: SyncSpace.webdav, running: true);
-    // 連線確認後就回報選取成功；全面同步在背景繼續執行（使用者 2026-11-03
-    // 定的：選好同步空間就全面同步一次）。
-    unawaited(syncAll());
+    status.value = status.value.copyWith(space: SyncSpace.webdav);
   }
 
-  /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來、
-  /// 接著全面同步一次，不等整批資料跑完。只在使用者按了按鈕時呼叫；授權失效
-  /// 後重新登入同一個帳號也走這裡，留著上次同步的紀錄。
+  /// 改用這個 Google 帳號的雲端硬碟：跳出 Google 登入與授權，連得上才存起來；
+  /// 接著由畫面開進度框全面同步一次（同 [useWebDav]）。只在使用者按了按鈕時
+  /// 呼叫；授權失效後重新登入同一個帳號也走這裡，留著上次同步的紀錄。
   Future<void> useGoogleDrive() async {
     _authorizingGoogleDrive = true;
     try {
@@ -280,13 +277,7 @@ class SyncService {
         await _settings.useGoogleDrive(account);
         await _claimBases();
       });
-      // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒全面同步過」。
-      status.value = const SyncStatus(
-        space: SyncSpace.googleDrive,
-        running: true,
-      );
-      // 登入與選取同步空間完成後就讓畫面更新；整批資料接著全面同步。
-      unawaited(syncAll());
+      status.value = status.value.copyWith(space: SyncSpace.googleDrive);
     } finally {
       _authorizingGoogleDrive = false;
     }
@@ -326,9 +317,12 @@ class SyncService {
   /// 沒設定同步空間時什麼都不做。
   Future<void> syncAll() => _request(full: true);
 
-  /// 取消正在跑的全面同步：目前這一種做完就停，已經寫完的種類留著，不回滾。
+  /// 取消全面同步：正在跑的那一輪目前這一種做完就停，已經寫完的種類留著，
+  /// 不回滾；還沒開始的那一輪不跑。之後才要求的進度同步照常補跑。
   void cancelSync() {
-    if (_running != null) _cancelled = true;
+    if (_running == null) return;
+    _fullPending = false;
+    _cancelled = true;
   }
 
   /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。
@@ -351,7 +345,7 @@ class SyncService {
   /// 有人要全面同步（[syncAll]），還沒開始那一輪。
   bool _fullPending = false;
 
-  /// 使用者取消了這次全面同步（[cancelSync]）。
+  /// 使用者取消了正在跑的那一輪全面同步（[cancelSync]）；下一輪開始時清掉。
   bool _cancelled = false;
 
   Future<void> _request({required bool full}) {
@@ -361,33 +355,37 @@ class SyncService {
       _again = true;
       return running;
     }
-    final future = _runUntilSettled();
+    final future = _runUntilSettled().whenComplete(_finishRun);
     _running = future;
-    return future.whenComplete(() => _running = null);
+    return future;
   }
 
   Future<void> _runUntilSettled() async {
     final timer = Stopwatch()..start();
     var rounds = 0;
-    try {
-      do {
-        _again = false;
-        final full = _fullPending;
-        _fullPending = false;
-        rounds++;
-        await _syncOnce(full: full);
-      } while ((_again || _fullPending) && !_cancelled);
-    } finally {
+    do {
+      _again = false;
       _cancelled = false;
+      final full = _fullPending;
       _fullPending = false;
-      if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
-        AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
-      }
-      // 整輪（包含同步途中補跑的輪次）才算結束，避免進度短暫顯示已完成。
-      status.value = status.value.copyWith(running: false, clearProgress: true);
-      // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
-      _progressDone();
+      rounds++;
+      await _syncOnce(full: full);
+      // 取消只停全面同步；取消之後才要求的進度同步（回到前景、退到背景）
+      // 照樣補一輪。
+    } while (_again || _fullPending);
+    if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
+      AppLog.i('同步總耗時：${timer.elapsedMilliseconds}ms，共 $rounds 輪');
     }
+  }
+
+  /// 整輪（包含途中補跑的輪次）結束。先放下 [_running] 再通知畫面：聽到
+  /// 「同步完成」時又要求同步的，會開新的一輪，不會拿到這一輪的 future。
+  void _finishRun() {
+    _running = null;
+    _cancelled = false;
+    status.value = status.value.copyWith(running: false, clearProgress: true);
+    // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
+    _progressDone();
   }
 
   /// 開 App 進場播完時：讀出設定、同步一次閱讀進度，並開始數這台的改動
@@ -486,7 +484,7 @@ class SyncService {
             : _kinds(this).whereType<ProgressSync>().take(1).toList();
         for (final (index, kind) in kinds.indexed) {
           // 取消在種類之間停：寫到一半的那一種做完，已經寫完的留著。
-          if (_cancelled) return;
+          if (full && _cancelled) return;
           if (appliedAfter[kind.name] == false) continue;
           appliedAfter[kind.name] = false;
           // 這一種讀這台資料的時候，要求優先送出的進度已經存好了。
@@ -627,16 +625,15 @@ class SyncService {
       if (toApply.isNotEmpty) {
         // 寫雲端的這段時間，這台可能又改了（書被打開讀了幾頁、書源剛編輯
         // 過）：和合併時不同的不套用，上次同步的紀錄留著，下次重新比。
-        final fresh = await timedSyncRecordsOn(
-          _runner,
-          inputFor(await kind.local()),
-          toApply,
-        );
+        // 讀完馬上比，不交給背景 isolate：等它回覆的空檔裡使用者改的會被
+        // 漏看、蓋掉。只算要套用的那幾筆。
+        final fresh = inputFor(await kind.local());
         final ready = <String, SyncRecord>{
           for (final key in toApply)
-            if (_printOf(fingerprint, fresh[key]) ==
-                    plan.incoming[key]!.print &&
-                kind.canApply(key, fresh[key]))
+            if (timedSyncRecordOf(fresh, key) case final current
+                when _printOf(fingerprint, current) ==
+                        plan.incoming[key]!.print &&
+                    kind.canApply(key, current))
               key: remote[key]!,
         };
         final applied = ready.isEmpty

@@ -5,6 +5,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
+import 'package:night_reader/features/settings/full_sync_dialog.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -85,9 +86,14 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       ));
       if (!mounted) return;
       setState(() => _usingWebDav = true);
-      _say('已連上，開始全面同步');
-      // 回到「同步空間」，那裡看得到選了哪個。
-      unawaited(Navigator.maybePop(context));
+      // 先回到「同步空間」，那裡看得到選了哪個；全面同步的進度框開在導覽
+      // 的圖層上，這一頁離開了照樣在。
+      // 立刻返回（maybePop 要等一下才返回，那時關掉的會是剛開的進度框）。
+      final navigator = Navigator.of(context);
+      final host = navigator.overlay!.context;
+      navigator.pop();
+      if (!host.mounted) return;
+      await runFullSync(host, _sync);
     } on SyncStoreException catch (error) {
       if (mounted) _say(error.message);
     } finally {
