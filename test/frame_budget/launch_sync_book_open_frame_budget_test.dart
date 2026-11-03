@@ -204,6 +204,8 @@ void main() {
       reason: '同步要真的跑完，量到的才是同步的成本',
     );
 
+    // 收尾時推進的時間可能再觸發一次同步，不再等網路，不留計時器。
+    store.latency = Duration.zero;
     await tearDownApp(tester);
     // 上次同步的紀錄檔可能還被開著，刪不掉就留給系統清暫存。
     await tester.runAsync(
