@@ -253,7 +253,7 @@ class SyncService {
       await _settings.useWebDav(account);
       await _claimBases();
     });
-    // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒同步過」。
+    // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒全面同步過」。
     status.value = const SyncStatus(space: SyncSpace.webdav, running: true);
     // 連線確認後就回報選取成功；全面同步在背景繼續執行（使用者 2026-11-03
     // 定的：選好同步空間就全面同步一次）。
@@ -273,7 +273,7 @@ class SyncService {
         await _settings.useGoogleDrive(account);
         await _claimBases();
       });
-      // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒同步過」。
+      // 下一步就排同步：直接寫成同步中，畫面不先閃一格「還沒全面同步過」。
       status.value = const SyncStatus(
         space: SyncSpace.googleDrive,
         running: true,

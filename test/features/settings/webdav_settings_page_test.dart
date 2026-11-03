@@ -121,7 +121,7 @@ void main() {
   testWidgets('a wrong password is shown and nothing is saved', (tester) async {
     await pump(tester, _Store(fail: '帳號或密碼不對'));
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
-    await tester.tap(find.text('連線並開始同步'));
+    await tester.tap(find.text('連線並開始全面同步'));
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
 
@@ -143,7 +143,7 @@ void main() {
     await tester.tap(find.text('WebDAV'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), 'https://dav.example');
-    await tester.tap(find.text('連線並開始同步'));
+    await tester.tap(find.text('連線並開始全面同步'));
     await waitForStatus(
       tester,
       sync,
@@ -161,7 +161,7 @@ void main() {
       sync,
       (status) => !status.running && status.lastSyncAt != null,
     );
-    expect(find.textContaining('上次同步：'), findsOneWidget);
+    expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
   testWidgets(
@@ -181,7 +181,7 @@ void main() {
         find.byType(TextField).at(0),
         'https://dav.example',
       );
-      await tester.tap(find.text('連線並開始同步'));
+      await tester.tap(find.text('連線並開始全面同步'));
       await waitForStatus(
         tester,
         sync,
@@ -202,7 +202,7 @@ void main() {
 
   testWidgets('an empty address asks for one first', (tester) async {
     await pump(tester, _Store());
-    await tester.tap(find.text('連線並開始同步'));
+    await tester.tap(find.text('連線並開始全面同步'));
     await tester.pumpAndSettle();
     expect(find.text('先填 WebDAV 的網址'), findsOneWidget);
   });

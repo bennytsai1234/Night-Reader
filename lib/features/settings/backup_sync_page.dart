@@ -84,7 +84,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         children: [
           GroupedSection(
             header: '同步',
-            footer: '多台手機選同一個同步空間，書架、閱讀進度、書源、替換規則、設定、登入資料與閱讀統計會自動合併；開書時接上另一台讀到的地方。已下載的正文不同步，另一台照書架自己下載。',
+            footer: '多台手機選同一個同步空間，閱讀進度自動同步，開書時接上另一台讀到的地方。書架、書籤、標註、書源、替換規則、設定、登入資料與閱讀統計按「立即全面同步」才合併，同步時暫時不能操作。已下載的正文不同步，另一台照書架自己下載。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -109,13 +109,12 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
                   Icons.sync_rounded,
                   tint: AppTint.azurite,
                 ),
-                title: '立即同步',
+                title: '立即全面同步',
                 subtitle: syncStatusSubtitle(status),
-                enabled: status.enabled && !status.running,
+                // 正在同步閱讀進度時也能按：等那一輪做完接著全面同步。
+                enabled: status.enabled,
                 showChevron: false,
-                onTap: status.enabled && !status.running
-                    ? () => unawaited(_sync.syncAll())
-                    : null,
+                onTap: status.enabled ? () => unawaited(_syncAll()) : null,
               ),
             ],
           ),
@@ -151,6 +150,58 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         ],
       ),
     );
+  }
+
+  /// 全面同步：開一個點外面、按返回都關不掉的進度框，蓋住整個 App，同步完
+  /// 才關（ADR 0046）。同步途中使用者改的書源或設定，可能在同一輪被雲端的
+  /// 蓋掉或沒送上去，所以這段時間不讓操作。取消在種類之間停。
+  Future<void> _syncAll() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    var cancelled = false;
+    final done = _sync.syncAll();
+    final dialog = showStatefulAppAlert<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context, setState, _) => PopScope(
+        canPop: false,
+        child: AppAlert<bool>(
+          title: '全面同步中',
+          content: ValueListenableBuilder<SyncStatus>(
+            valueListenable: _sync.status,
+            builder: (context, status, _) => FullSyncProgress(status: status),
+          ),
+          actions: [
+            AppAlertAction(
+              label: cancelled ? '正在停下…' : '取消',
+              value: true,
+              enabled: !cancelled,
+            ),
+          ],
+          onAction: (_) {
+            setState(() => cancelled = true);
+            _sync.cancelSync();
+          },
+        ),
+      ),
+    );
+    await done;
+    navigator.pop();
+    await dialog;
+    final error = _sync.status.value.error;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            error != null
+                ? '全面同步失敗：$error'
+                : cancelled
+                ? '已停下，同步好的資料留著'
+                : '全面同步完成',
+          ),
+        ),
+      );
   }
 
   Future<void> _handleManualBackup() async {

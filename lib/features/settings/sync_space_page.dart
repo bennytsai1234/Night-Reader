@@ -82,7 +82,7 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
       await _sync.useGoogleDrive();
       await _load();
       if (!mounted) return;
-      _say('已連上 Google 雲端硬碟，開始同步');
+      _say('已連上 Google 雲端硬碟，開始全面同步');
     } on SyncStoreException catch (error) {
       if (mounted) _say(error.message);
     } finally {

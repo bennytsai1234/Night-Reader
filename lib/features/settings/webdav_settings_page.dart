@@ -85,7 +85,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       ));
       if (!mounted) return;
       setState(() => _usingWebDav = true);
-      _say('已連上，開始同步');
+      _say('已連上，開始全面同步');
       // 回到「同步空間」，那裡看得到選了哪個。
       unawaited(Navigator.maybePop(context));
     } on SyncStoreException catch (error) {
@@ -148,8 +148,8 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                 title: _connecting
                     ? '連線中…'
                     : _usingWebDav
-                    ? '重新連線並同步'
-                    : '連線並開始同步',
+                    ? '重新連線並全面同步'
+                    : '連線並開始全面同步',
                 accent: true,
                 showChevron: false,
                 enabled: !_connecting,

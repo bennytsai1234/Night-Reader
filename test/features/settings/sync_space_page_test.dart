@@ -196,7 +196,7 @@ void main() {
     await settle(tester);
 
     expect(sync.status.value.running, isFalse);
-    expect(find.textContaining('上次同步：'), findsOneWidget);
+    expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
   testWidgets('Google sync error replaces the progress on the same page', (
@@ -249,7 +249,7 @@ void main() {
 
     expect(auth.signIns, 1);
     expect(store.reads, 1);
-    expect(find.textContaining('上次同步：'), findsOneWidget);
+    expect(find.textContaining('上次全面同步：'), findsOneWidget);
   });
 
   testWidgets('a cancelled Google sign-in changes nothing', (tester) async {
