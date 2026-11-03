@@ -31,11 +31,13 @@ set -eu
 
 UNRELEASED='未發布'
 
-# 不進 APK 的路徑：文件、網站、測試、Git hook、工具腳本，以及只跑測試的 ci.yml 與部署網站的
+# 不進 APK 的路徑：文件、網站、測試與測試的設定（dart_test.yaml）、靜態檢查的設定
+# （analysis_options.yaml）、Git hook、工具腳本，以及只跑測試的 ci.yml 與部署網站的
 # website-deploy.yml。android-release.yml 算 App 內容：APK 用它固定的 Flutter 版本與參數建置。
 is_app_path() {
   case $1 in
-    *.md | docs/* | website/* | test/* | .githooks/* | tool/* | \
+    *.md | docs/* | website/* | test/* | dart_test.yaml | analysis_options.yaml | \
+      .githooks/* | tool/* | \
       .github/workflows/ci.yml | .github/workflows/website-deploy.yml) return 1 ;;
   esac
   return 0
