@@ -110,7 +110,7 @@ app_files() { (cd "$repo" && sh "$tool" app-files "$@"); }
 base=$(commit init "pubspec.yaml=version: 0.3.3
 " "lib/main.dart=v1" "CHANGELOG.md=$(changelog '')")
 
-docs=$(commit docs "README.md=說明" "docs/adr/0001.md=x" "test/a_test.dart=x" "website/index.html=x")
+docs=$(commit docs "README.md=說明" "docs/adr/0001.md=x" "test/a_test.dart=x" "website/index.html=x" "dart_test.yaml=x" "analysis_options.yaml=x")
 expect_success 'check: 只改文件、網站、測試不需要寫' check "$base" "$docs"
 
 ci=$(commit ci ".github/workflows/ci.yml=x" ".github/workflows/website-deploy.yml=x" ".githooks/pre-push=x" "tool/x.sh=x")
