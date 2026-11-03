@@ -91,8 +91,20 @@ void main() {
           tester,
           area: _area,
           key: 'download02',
+          label: '點「關於夜讀」',
+          action: () => tester.tap(find.text('關於夜讀')),
+        );
+        await surveyStep(
+          tester,
+          area: _area,
+          key: 'download03',
           label: '點「背景下載佇列」，進佇列',
-          action: () => tester.tap(find.text('背景下載佇列')),
+          action: () async {
+            final row = find.text('背景下載佇列');
+            await tester.ensureVisible(row);
+            await tester.pump();
+            await tester.tap(row);
+          },
         );
 
         // 下載中那本每秒抓完一章（同 DownloadExecutor 一章抓完時做的事），
@@ -102,7 +114,7 @@ void main() {
         await surveyStep(
           tester,
           area: _area,
-          key: 'download03',
+          key: 'download04',
           label: '下載中的書每秒抓完一章，進度更新三次',
           action: () async {
             final task = service.tasks.first;
@@ -120,77 +132,77 @@ void main() {
         await surveyStep(
           tester,
           area: _area,
-          key: 'download04',
+          key: 'download05',
           label: '點下載中那本的「暫停」',
           action: () => tester.tap(control('暫停')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download05',
+          key: 'download06',
           label: '點那本的「繼續」',
           action: () => tester.tap(control('繼續')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download06',
+          key: 'download07',
           label: '點頂部「暫停全部」',
           action: () => tester.tap(find.byTooltip('暫停全部')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download07',
+          key: 'download08',
           label: '點頂部「恢復全部」',
           action: () => tester.tap(find.byTooltip('恢復全部')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download08',
+          key: 'download09',
           label: '長按等待中的書，打開任務選單',
           action: () => tester.longPress(find.text('第 2 本書：一個有點長的書名')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download09',
+          key: 'download10',
           label: '選「上移」，任務排到前面',
           action: () => tester.tap(find.text('上移').last),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download10',
+          key: 'download11',
           label: '長按失敗的書，打開任務選單',
           action: () => tester.longPress(find.text('第 6 本書：一個有點長的書名')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download11',
+          key: 'download12',
           label: '選「查看失敗原因」',
           action: () => tester.tap(find.text('查看失敗原因').last),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download12',
+          key: 'download13',
           label: '關閉失敗原因',
           action: () => goBack(tester),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download13',
+          key: 'download14',
           label: '點「清除已完成」',
           action: () => tester.tap(find.byTooltip('清除已完成')),
         );
         await surveyStep(
           tester,
           area: _area,
-          key: 'download14',
+          key: 'download15',
           label: '返回「我的」',
           action: () => goBack(tester),
         );

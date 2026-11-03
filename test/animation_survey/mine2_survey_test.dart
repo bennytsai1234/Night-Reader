@@ -1,7 +1,6 @@
 // 全 App 動畫儀表板探索的「我的」區（下半）：閱讀偏好、朗讀與語音、閱讀
-// 統計、背景下載佇列、備份與還原、關於夜讀。上半（外觀與主題）在
-// `mine_survey_test.dart`。不碰會連網、會開系統分享或選檔、會刪資料的項目（見
-// 報告）。
+// 統計、書籤與標註、備份與同步、關於夜讀（含背景下載佇列）。上半（外觀與主題）在
+// `mine_survey_test.dart`。不碰會連網、會開系統分享或選檔、會刪資料的項目。
 @Tags(['animation_survey'])
 library;
 
@@ -139,11 +138,9 @@ void main() {
         await step('字距：加', () => _tapPlus(tester, '字距'));
         await step('段距：加', () => _tapPlus(tester, '段距'));
         await step('章節間距：加', () => _tapPlus(tester, '章節間距'));
-        for (final indent in const ['0 字', '1 字', '4 字', '2 字']) {
-          await step('首行縮排：選$indent', () => _tapInList(tester, indent));
-        }
+        await step('首行縮排：加', () => _tapPlus(tester, '首行縮排'));
         await step('排版：恢復預設', () => _tapResetOf(tester, '排版'));
-        await step('左右邊距：加', () => _tapPlus(tester, '左右邊距'));
+        await step('每行字數：加', () => _tapPlus(tester, '每行字數'));
         await step('左右對齊：切換', () => _tapInList(tester, '左右對齊'));
         await step('上邊距：加', () => _tapPlus(tester, '上邊距'));
         await step('下邊距：加', () => _tapPlus(tester, '下邊距'));
@@ -220,13 +217,13 @@ void main() {
         await step('返回閱讀統計', () => goBack(tester));
         await step('返回我的（離開閱讀統計）', () => goBack(tester));
 
-        // ---------- 背景下載佇列 ----------
-        await step('進入背景下載佇列', () => _tapInList(tester, '背景下載佇列'));
-        await step('返回我的（離開下載佇列）', () => goBack(tester));
+        // ---------- 書籤與標註 ----------
+        await step('進入書籤與標註', () => _tapInList(tester, '書籤與標註'));
+        await step('返回我的（離開書籤與標註）', () => goBack(tester));
 
-        // ---------- 備份與還原（建立備份、還原會開系統分享與選檔，不碰） ----------
-        await step('進入備份與還原', () => _tapInList(tester, '備份與還原'));
-        await step('返回我的（離開備份與還原）', () => goBack(tester));
+        // ---------- 備份與同步（建立備份、還原會開系統分享與選檔，不碰） ----------
+        await step('進入備份與同步', () => _tapInList(tester, '備份與同步'));
+        await step('返回我的（離開備份與同步）', () => goBack(tester));
 
         // ---------- 關於夜讀 ----------
         await step('進入關於夜讀', () => _tapInList(tester, '關於夜讀'));
@@ -243,6 +240,8 @@ void main() {
         await step('崩潰日誌', () => _tapInList(tester, '崩潰日誌'));
         // 清除日誌的確認框沒有日誌時開不出來（那顆鈕停用），這裡不列。
         await step('返回關於夜讀（崩潰日誌）', () => goBack(tester));
+        await step('進入背景下載佇列', () => _tapInList(tester, '背景下載佇列'));
+        await step('返回關於夜讀（下載佇列）', () => goBack(tester));
         // 自動更新：三種模式各選一次，最後選回自動檢查。
         for (final mode in const ['不自動', 'Wi-Fi 下自動下載', '自動檢查']) {
           await step('自動更新：開選單', () => _tapInList(tester, '自動更新'));

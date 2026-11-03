@@ -33,6 +33,20 @@ Future<void> _tapInList(WidgetTester tester, String text) async {
   await tester.tap(row.first);
 }
 
+/// 點「外觀與主題」裡淺色或深色那一排的風格；兩排的名稱相同，淺色在上。
+Future<void> _tapStyle(
+  WidgetTester tester,
+  String name, {
+  required bool dark,
+}) async {
+  final list = find.byType(GroupedListView).last;
+  final cells = find.descendant(of: list, matching: find.text(name));
+  final cell = dark ? cells.last : cells.first;
+  await tester.ensureVisible(cell);
+  await tester.pump();
+  await tester.tap(cell);
+}
+
 /// 點選單或動作表裡的一項。選單浮在最上層，同一個字在下面的列上也可能有，
 /// 取最後一個（畫在最上面的那個）。
 Future<void> _tapTop(WidgetTester tester, String text) =>
@@ -69,20 +83,24 @@ void main() {
         await step('點分頁：書架→我的', () => tapTab('我的'));
         await step('進入外觀與主題', () => _tapInList(tester, '外觀與主題'));
 
-        // 風格：十種各選一次；最後選回預設的紙墨。
-        for (final style in const [
+        // 風格：在目前深淺那一排（上面淺色、下面深色）六種各選一次，最後選回
+        // 預設（淺色紙墨、深色素色）。改目前深淺用的風格才會從點擊處暈開。
+        final dark = surveyMode == 'dark';
+        for (final style in [
           '竹青',
-          '石青',
           '茶褐',
-          '素色',
-          '胭脂',
-          '藕荷',
-          '黃卷',
-          '琥珀',
-          '霜夜',
-          '紙墨',
+          '牛皮紙',
+          '豆綠',
+          if (dark) '紙墨' else '素色',
+          if (dark) '素色' else '紙墨',
         ]) {
-          await step('風格：選$style', () => _tapInList(tester, style));
+          await step(
+            '${dark ? '深色' : '淺色'}風格：選$style',
+            () => _tapStyle(tester, style, dark: dark),
+          );
+        }
+        for (final on in const ['關', '開']) {
+          await step('深色用純黑：$on', () => _tapInList(tester, '深色用純黑'));
         }
 
         // 強調色：十三種各開一次選單、選一次；最後選回跟隨主題。
