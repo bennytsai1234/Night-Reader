@@ -112,6 +112,14 @@ typedef SyncFingerprint = String Function(SyncRecord record);
 
 String defaultSyncFingerprint(SyncRecord record) => record.fingerprint;
 
+/// 讀到雲端之後，拿掉已經不算數的筆。
+typedef SyncPrune = Map<String, SyncRecord> Function(
+  Map<String, SyncRecord> remote,
+);
+
+Map<String, SyncRecord> keepEverySyncRecord(Map<String, SyncRecord> remote) =>
+    remote;
+
 /// 一筆合併的結果。
 enum SyncDecision {
   /// 兩邊一樣，或都沒改。
