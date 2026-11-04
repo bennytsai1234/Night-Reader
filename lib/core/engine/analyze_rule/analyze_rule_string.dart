@@ -1,7 +1,6 @@
 import 'analyze_rule_base.dart';
 import 'analyze_rule_support.dart';
 import 'analyze_rule_regex_helper.dart';
-import '../parsers/analyze_by_regex.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/css/analyze_by_css_core.dart';
 
@@ -69,15 +68,10 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                     .getAnalyzeByXPath(this, result)
                     .getString(rule);
                 break;
+              // 同 Legado：取字的正則模式只來自 `{{ }}`、`@get:`、`$1` 這類
+              // 組字的規則，組好的就是結果。
               case Mode.regex:
-                if (sourceRule.replaceRegex.isEmpty || sourceRule.isDynamic) {
-                  tempResult = rule;
-                } else {
-                  tempResult = AnalyzeByRegex.getString(
-                    stringifyRuleResult(result),
-                    rule,
-                  );
-                }
+                tempResult = rule;
                 break;
               default:
                 tempResult = isUrl

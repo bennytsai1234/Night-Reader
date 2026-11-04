@@ -239,6 +239,75 @@ void main() {
       },
     );
 
+    test('Legado all-in-one regex rules (leading colon) parse search, detail and toc', () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': '整份正則',
+        'bookSourceUrl': 'https://novels-r.test',
+        'searchUrl': '/s?q={{key}}',
+        'ruleSearch': {
+          'bookList': r':<a href="([^"]+)">([^<]+)</a>',
+          'name': r'$2',
+          'bookUrl': r'$1',
+        },
+        'ruleBookInfo': {
+          'init': r':<h1>([^<]+)</h1>\s*<p>作者：([^<]+)</p>',
+          'name': r'$1',
+          'author': r'$2',
+        },
+        'ruleToc': {
+          'chapterList': r':<li><a href="([^"]+)">(第\d+章)</a></li>',
+          'chapterName': r'$2',
+          'chapterUrl': r'$1',
+        },
+      });
+
+      const searchHtml = '''
+<ul>
+<a href="/b/1">西遊記</a>
+<a href="/b/2">西遊補</a>
+</ul>
+''';
+      final results = await BookListParser.parse(
+        source: source,
+        body: searchHtml,
+        baseUrl: 'https://novels-r.test/s?q=西遊',
+        isSearch: true,
+      );
+      expect(results.map((b) => b.name), ['西遊記', '西遊補']);
+      expect(results.first.bookUrl, 'https://novels-r.test/b/1');
+
+      const detailHtml = '''
+<h1>西遊記</h1>
+<p>作者：吳承恩</p>
+''';
+      final book = await BookInfoParser.parse(
+        source: source,
+        book: Book(
+          bookUrl: 'https://novels-r.test/b/1',
+          origin: 'https://novels-r.test',
+        ),
+        body: detailHtml,
+        baseUrl: 'https://novels-r.test/b/1',
+      );
+      expect(book.name, '西遊記');
+      expect(book.author, '吳承恩');
+
+      const tocHtml = '''
+<ul>
+<li><a href="/c/1">第1章</a></li>
+<li><a href="/c/2">第2章</a></li>
+</ul>
+''';
+      final toc = await ChapterListParser.parse(
+        source: source,
+        book: book,
+        body: tocHtml,
+        baseUrl: 'https://novels-r.test/b/1',
+      );
+      expect(toc.chapters.map((c) => c.title), ['第1章', '第2章']);
+      expect(toc.chapters.last.url, 'https://novels-r.test/c/2');
+    });
+
     test('Legado-style XPath search rules parse HTML results', () async {
       final source = BookSource.fromJson({
         'bookSourceName': '測試書庫',

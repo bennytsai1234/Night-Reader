@@ -4,6 +4,7 @@ import 'package:html_unescape/html_unescape.dart';
 import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
 
 import '../../parsers/css/analyze_by_css_support.dart';
+import '../../parsers/java_regexp.dart';
 import '../../parsers/jsoup_text.dart';
 
 final HtmlUnescape _unescape = HtmlUnescape();

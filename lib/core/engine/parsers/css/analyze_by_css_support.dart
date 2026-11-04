@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:night_reader/core/engine/parsers/java_regexp.dart';
 import 'package:night_reader/core/engine/parsers/jsoup_text.dart';
 import 'package:html/dom.dart';
 
@@ -858,7 +859,7 @@ bool _looksLikeRegexAttributeValue(String value) {
 
 RegExp? _buildRegexAttributePattern(String rawPattern) {
   try {
-    return RegExp(rawPattern.trim());
+    return javaRegExp(rawPattern.trim());
   } catch (_) {
     return null;
   }
@@ -1490,17 +1491,3 @@ bool _isFollowingSibling(Element element, Element anchor) {
 
 /// Jsoup `StringUtil.isBlank`：只有空格、tab、換行、換頁、歸位。
 final RegExp _jsoupBlank = RegExp(r'^[ \t\n\f\r]*$');
-
-/// Jsoup 用 Java 的正規式：開頭的 `(?i)`、`(?s)`、`(?m)`、`(?u)` 這類旗標
-/// Dart 不認得，換成 RegExp 的選項。
-RegExp javaRegExp(String pattern) {
-  final flags = RegExp(r'^\(\?([imsux]+)\)').firstMatch(pattern);
-  final options = flags?.group(1) ?? '';
-  return RegExp(
-    flags == null ? pattern : pattern.substring(flags.end),
-    caseSensitive: !options.contains('i'),
-    multiLine: options.contains('m'),
-    dotAll: options.contains('s'),
-    unicode: options.contains('u'),
-  );
-}
