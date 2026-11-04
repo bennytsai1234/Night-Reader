@@ -103,6 +103,7 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
     if (uri != null) {
       unawaited(_controller.loadRequest(uri, headers: headers));
     }
+    unawaited(WebViewNative.refreshUserAgent());
   }
 
   @override

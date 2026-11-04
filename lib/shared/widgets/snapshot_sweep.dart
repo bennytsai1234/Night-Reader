@@ -16,8 +16,9 @@ import 'skeleton_reveal.dart';
 /// 「之後」那張圖裡畫好一次，不必每一格重新合成；畫面上每個像素都照同一條
 /// 曲線從之前換到之後，頁首按鈕、標題與分頁列不會各有各的時機。代價是換場
 /// 前多畫一格（畫出換好的樣子、拍下來，這一格螢幕上蓋著「之前」那張圖，
-/// 看起來不動），換場期間多佔兩張螢幕大小的圖，也不接點擊與捲動。換場的
-/// 0.6 秒裡底下又有變化（網路封面到了、換深淺色）時照舊播完，播完才一次
+/// 看起來不動），換場期間多佔兩張螢幕大小的圖。拍圖途中不接點擊與捲動；
+/// 換場播放中手指一按下，換場直接播完，這一下交給底下已經換好的畫面（ADR
+/// 0031）。換場的 0.6 秒裡底下又有變化（網路封面到了、換深淺色）時照舊播完，播完才一次
 /// 換到最新的樣子；畫面大小變了（旋轉、視窗縮放）時兩張圖對不上，直接
 /// 結束換場、換回真的畫面。
 ///
@@ -413,6 +414,11 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     if (mounted && _phase == _Phase.playing) _end();
   }
 
+  /// 換場中手指按下：換場直接播完、換回真的畫面，這一下交給底下真的畫面。
+  void _onInterrupt() {
+    if (mounted && _phase == _Phase.playing) _end();
+  }
+
   @override
   Widget build(BuildContext context) => _SnapshotSweepPaint(
     phase: _phase,
@@ -422,6 +428,7 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     sweep: _sweep,
     pixelRatio: _pixelRatio,
     onStale: _onStale,
+    onInterrupt: _onInterrupt,
     child: RepaintBoundary(key: _boundaryKey, child: widget.child),
   );
 }
@@ -435,6 +442,7 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
     required this.sweep,
     required this.pixelRatio,
     required this.onStale,
+    required this.onInterrupt,
     required super.child,
   });
 
@@ -445,10 +453,11 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
   final bool sweep;
   final double pixelRatio;
   final VoidCallback onStale;
+  final VoidCallback onInterrupt;
 
   @override
   _RenderSnapshotSweep createRenderObject(BuildContext context) =>
-      _RenderSnapshotSweep(progress, onStale)
+      _RenderSnapshotSweep(progress, onStale, onInterrupt)
         ..phase = phase
         ..before = before
         ..after = after
@@ -466,17 +475,21 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
       ..after = after
       ..sweep = sweep
       ..pixelRatio = pixelRatio
-      ..onStale = onStale;
+      ..onStale = onStale
+      ..onInterrupt = onInterrupt;
   }
 }
 
 class _RenderSnapshotSweep extends RenderProxyBox {
-  _RenderSnapshotSweep(this._progress, this.onStale);
+  _RenderSnapshotSweep(this._progress, this.onStale, this.onInterrupt);
 
   final Animation<double> _progress;
 
   /// 兩張圖和畫面大小對不上時呼叫：結束這一次換場。
   VoidCallback onStale;
+
+  /// 換場中手指按下時呼叫：換場直接播完。
+  VoidCallback onInterrupt;
 
   /// 拍圖用的裝置像素比，用來判斷兩張圖還對不對得上畫面。
   double _pixelRatio = 1;
@@ -534,15 +547,24 @@ class _RenderSnapshotSweep extends RenderProxyBox {
   @override
   bool get isRepaintBoundary => true;
 
-  /// 換場中不接點擊與捲動：底下的畫面沒有畫出來，點到的會是看不到的東西。
+  /// 拍圖途中不接點擊與捲動：底下可能還是換之前的樣子，點到的會是看不到的
+  /// 東西。換場播放中底下已經是換好的樣子（排好了，只是沒畫出來）：按下就讓
+  /// 換場直接播完（[handleEvent]），這一下交給底下真的畫面。開 App 時書架
+  /// 一換出來就點書，原本會被吃掉、要再點一次（2026-11-05 在手機上量到）。
   @override
   bool hitTest(BoxHitTestResult result, {required Offset position}) {
     if (_phase == _Phase.live || _phase == _Phase.captured) {
       return super.hitTest(result, position: position);
     }
     if (!size.contains(position)) return false;
+    if (_phase == _Phase.playing) hitTestChildren(result, position: position);
     result.add(BoxHitTestEntry(this, position));
     return true;
+  }
+
+  @override
+  void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
+    if (event is PointerDownEvent && _phase == _Phase.playing) onInterrupt();
   }
 
   static final Paint _exact = Paint()..filterQuality = FilterQuality.none;

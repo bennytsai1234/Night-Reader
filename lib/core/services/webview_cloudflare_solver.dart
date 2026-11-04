@@ -24,6 +24,12 @@ abstract final class WebViewNative {
   static Future<String?> defaultUserAgent() =>
       _call<String>('defaultUserAgent', null);
 
+  /// 夜讀自己打開了瀏覽器（瀏覽器元件已經載入，再讀很快）時讀一次新的瀏覽器
+  /// 標識，記下來（[WebViewUserAgent]）：手機的瀏覽器更新後跟著換。
+  static Future<void> refreshUserAgent() async {
+    WebViewUserAgent.value = await defaultUserAgent();
+  }
+
   static Future<T?> _call<T>(String method, Object? arguments) async {
     try {
       return await _channel.invokeMethod<T>(method, arguments);
@@ -71,6 +77,7 @@ class WebViewCloudflareSolver implements CloudflareSolver {
   Future<ClearanceResult> _solve(Uri uri) async {
     final controller = WebViewController();
     await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    unawaited(WebViewNative.refreshUserAgent());
     attached.value = [...attached.value, controller];
     final stopwatch = Stopwatch()..start();
     Duration? humanCheckSeen;

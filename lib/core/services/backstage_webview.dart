@@ -9,6 +9,7 @@ import 'dart:convert';
 
 import 'package:html_unescape/html_unescape.dart';
 import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/services/webview_cloudflare_solver.dart';
 
 class BackstageWebView {
   final String? url;
@@ -76,6 +77,7 @@ class BackstageWebView {
     final controller = WebViewController.fromPlatformCreationParams(params);
 
     await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    unawaited(WebViewNative.refreshUserAgent());
     await controller.setBackgroundColor(const Color(0x00000000));
 
     if (headerMap != null && headerMap!.containsKey('User-Agent')) {

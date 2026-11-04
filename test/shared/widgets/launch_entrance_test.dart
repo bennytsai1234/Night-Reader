@@ -326,9 +326,12 @@ void main() {
     await frame(tester);
     await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
     expect(crossfading(tester), isTrue, reason: '換場的 0.6 秒裡只貼兩張圖');
-    await tester.tap(find.byIcon(Icons.menu), warnIfMissed: false);
-    expect(leftTaps, 0, reason: '換場中不接點擊');
     expect(finished, 0);
+    // 換場中按下：底下已經是換好的真畫面，換場直接播完，這一下交給它。
+    await tester.tap(find.byIcon(Icons.menu), warnIfMissed: false);
+    expect(leftTaps, 1, reason: '換場中按到的是底下真的按鈕');
+    await tester.pump();
+    expect(crossfading(tester), isFalse, reason: '按下就換回真的畫面');
 
     await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
     await tester.pump(const Duration(milliseconds: 16));
@@ -338,7 +341,7 @@ void main() {
     await tester.pump();
     expect(finished, 1, reason: '換場播完才開始背景工作');
     await tester.tap(find.byIcon(Icons.menu));
-    expect(leftTaps, 1);
+    expect(leftTaps, 2, reason: '換場後照常點得到');
   });
 
   testWidgets('pictures taken before the breath: the sweep starts as soon as '

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -72,7 +73,12 @@ class HybridReaderScreen extends StatefulWidget {
     this.paragraphCacheCapacity = 512,
     this.pageTurnOverlap = 1,
     this.pageTurnDuration = const Duration(milliseconds: 260),
+    this.breathPaused,
   });
+
+  /// 紙上骨架的呼吸停住中（掀紙前在紙底下建好正文）時設成 true：呼叫端拿它
+  /// 讓頁首頁尾的骨架一起停（[SkeletonPause]）。
+  final ValueNotifier<bool>? breathPaused;
 
   final ReaderV2Runtime runtime;
   final Color backgroundColor;
@@ -227,7 +233,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _veilPage = null;
       if (mounted) setState(() {});
     },
-  );
+  )..breathHeld.addListener(_syncBreathPaused);
+
+  /// 紙上骨架停住呼吸時，呼叫端的頁首頁尾骨架跟著停（[HybridReaderScreen.breathPaused]）。
+  void _syncBreathPaused() =>
+      widget.breathPaused?.value = _veil.breathHeld.value;
 
   /// 舊正文還在畫面上、紙正在淡入蓋住它時，紙停下來（蓋滿或途中掀開）
   /// 後完成；其他時候為 null（見 [_coverText]）。
@@ -381,6 +391,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _admission.dispose();
     _scrollController?.dispose();
     _selection.dispose();
+    _revealTimer?.cancel();
+    _veil.breathHeld.removeListener(_syncBreathPaused);
+    widget.breathPaused?.value = false;
     _veil.dispose();
     super.dispose();
   }
@@ -392,10 +405,55 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (_initialRestoreCompleted == completed) return;
     _initialRestoreCompleted = completed;
     if (completed) {
-      _veil.reveal(SkeletonReveal.of(context));
+      _revealWhenStill();
     } else {
       _coverUntilFirstPage();
     }
+  }
+
+  /// 等著掀紙的這一次（[_revealWhenStill]）；又蓋紙時作廢。
+  Object? _pendingReveal;
+
+  /// 正文排好、要掀紙：在整張蓋著的紙底下建好、畫出正文，骨架的呼吸停住
+  /// 不動；畫完再停 [AppMotion.stillGap] 才掀紙，掀紙的每一幀都不再做重的
+  /// 工作（ADR 0037 策略一與補充）。原本在建正文的同一幀就開始掀：2026-11-05
+  /// 手機上開書，這一幀主執行緒 12.9ms、第一次畫整頁字的繪製 25.6ms，掀紙
+  /// 一開始就掉 4 幀。
+  void _revealWhenStill() {
+    final reveal = SkeletonReveal.of(context);
+    final pending = _pendingReveal = Object();
+    bool current() => mounted && identical(_pendingReveal, pending);
+    _veil.holdBreath();
+    _scheduleRebuild();
+    unawaited(() async {
+      // 排好的重建在這一幀結束時才 setState，正文在下一幀才建好、畫出：
+      // 停頓從那一幀之後才算，不讓建正文的時間吃掉它。
+      await WidgetsBinding.instance.endOfFrame;
+      if (!current()) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!current()) return;
+      _revealTimer = Timer(AppMotion.stillGap, () {
+        _revealTimer = null;
+        if (!current()) return;
+        _pendingReveal = null;
+        _veil.resumeBreath();
+        _veil.reveal(reveal);
+        // 掀開中的紙不攔觸控：紙上那層的攔不攔照重建時的狀態。
+        _scheduleRebuild();
+      });
+    }());
+  }
+
+  /// [_revealWhenStill] 停 [AppMotion.stillGap] 的計時器。
+  Timer? _revealTimer;
+
+  /// 又要蓋紙：等著掀的那一次作廢，停住的呼吸接著走。
+  void _cancelPendingReveal() {
+    _revealTimer?.cancel();
+    _revealTimer = null;
+    if (_pendingReveal == null) return;
+    _pendingReveal = null;
+    _veil.resumeBreath();
   }
 
   static HybridLayoutDiskCache? _diskCacheFor(HybridReaderScreen widget) {
@@ -949,9 +1007,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _syncStableWorld();
       return;
     }
-    if (!_veilHoldsText) return;
-    _veil.reveal(SkeletonReveal.of(context));
-    _scheduleRebuild();
+    if (!_veilHoldsText || _pendingReveal != null) return;
+    _revealWhenStill();
   }
 
   /// 沒有操作負責正文、Runtime 也有穩定的位置，畫面上卻沒有照目前世代
@@ -1173,8 +1230,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       ..moveToPrevPage = _moveToPrevPage
       ..settleScroll = _settleScroll
       ..ensureCharRangeVisible = _ensureCharRangeVisible
-      ..dismissSelection = _dismissSelection;
+      ..dismissSelection = _dismissSelection
+      ..isTextCovered = _isTextCovered;
   }
+
+  bool _isTextCovered() => _veilHoldsText;
 
   void _detachController(ReaderV2ViewportController? controller) {
     if (controller == null) return;
@@ -1196,6 +1256,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     if (controller.ensureCharRangeVisible == _ensureCharRangeVisible) {
       controller.ensureCharRangeVisible = null;
+    }
+    if (controller.isTextCovered == _isTextCovered) {
+      controller.isTextCovered = null;
     }
   }
 
@@ -1850,6 +1913,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 蓋上紙，中間先空著（頁首頁尾照樣畫成骨架），等第一頁排好才照它淡入
   /// 骨架（ADR 0016）。畫著的骨架照原樣淡掉。開書照紀錄畫時不走這裡。
   void _coverUntilFirstPage() {
+    _cancelPendingReveal();
     _openingPage = null;
     _veil.cover(skeleton: false);
   }
@@ -1861,6 +1925,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// （開書、排版中）時不動，紙由排版流程管。
   void _coverText() {
     if (!_initialRestoreCompleted) return;
+    _cancelPendingReveal();
     if (_veil.isCovered && _covering == null) {
       _coverUntilFirstPage();
       return;

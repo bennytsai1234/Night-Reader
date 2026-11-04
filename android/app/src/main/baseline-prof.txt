@@ -1,0 +1,14 @@
+# 開 App 與第一次觸控會用到的 Java／Kotlin 程式：安裝後由系統預先編譯
+# （profileinstaller 在不經 Google Play 安裝時寫入），不必等第一次用到才
+# 邊跑邊編。2026-11-05 手機上冷啟動後第一次按下，觸控事件在主執行緒上
+# 花了 16–23ms。
+HSPLio/flutter/embedding/**->**(**)**
+Lio/flutter/embedding/**;
+HSPLio/flutter/plugin/**->**(**)**
+Lio/flutter/plugin/**;
+HSPLio/flutter/view/**->**(**)**
+Lio/flutter/view/**;
+HSPLio/flutter/util/**->**(**)**
+Lio/flutter/util/**;
+HSPLcom/inkpage/reader/**->**(**)**
+Lcom/inkpage/reader/**;

@@ -534,8 +534,15 @@ void main() {
     await a.addBook('a-src', toc: toc, time: 200);
     await a.sync.syncAll();
     Future<void>? again;
+    final read = <String>[];
     void onStatus() {
       if (!a.sync.status.value.running && again == null) {
+        // 和要求全面同步同一刻開始記：全面同步一開始就讀，晚一點才記
+        // 會漏掉前幾個（CI 上漏掉書源）。
+        store.beforeNextRead = (name) {
+          read.add(name);
+          return null;
+        };
         again = a.sync.syncAll();
       }
     }
@@ -547,11 +554,6 @@ void main() {
       await pumpEventQueue();
     }
     a.sync.status.removeListener(onStatus);
-    final read = <String>[];
-    store.beforeNextRead = (name) {
-      read.add(name);
-      return null;
-    };
     await again;
     expect(read, contains('sources.json'), reason: '要求的全面同步真的跑了');
 

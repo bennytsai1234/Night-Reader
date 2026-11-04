@@ -149,6 +149,7 @@ Future<void> _startApp() async {
 
     // 第一幀前定下書名的繁簡轉換模式；字典在背景載入，書架等它好了才換場。
     unawaited(ChineseDisplay.start(getIt<SharedPreferences>()));
+    _restoreWebViewUserAgent(getIt<SharedPreferences>());
 
     runApp(
       MultiProvider(
@@ -260,12 +261,14 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
   unawaited(_pruneReaderLayoutCaches());
-  // 第一次讀會載入系統的瀏覽器元件，放到進場之後。
-  unawaited(
-    WebViewNative.defaultUserAgent().then(
-      (userAgent) => WebViewUserAgent.value = userAgent,
-    ),
-  );
+}
+
+/// 用上次存下的手機瀏覽器標識，之後讀到新的就存起來（[WebViewUserAgent]）。
+/// 開 App 時不讀新的：讀一次要載入整個瀏覽器元件。
+void _restoreWebViewUserAgent(SharedPreferences prefs) {
+  WebViewUserAgent.value = prefs.getString(PreferKey.webViewUserAgent);
+  WebViewUserAgent.onStore = (userAgent) =>
+      unawaited(prefs.setString(PreferKey.webViewUserAgent, userAgent));
 }
 
 /// 刪掉資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。

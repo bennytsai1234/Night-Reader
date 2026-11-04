@@ -183,10 +183,22 @@ class _SkeletonState extends State<Skeleton>
       _entrance = entrance;
       if (entrance != null) _clock.holdUntil(entrance);
     }
+    final pause = SkeletonPause.maybeOf(context);
+    if (!identical(pause, _pause)) {
+      _pause?.removeListener(_onPause);
+      _pause = pause?..addListener(_onPause);
+      _onPause();
+    }
   }
+
+  /// 所在的 [SkeletonPause]。
+  ValueListenable<bool>? _pause;
+
+  void _onPause() => _clock.paused = _pause?.value ?? false;
 
   @override
   void dispose() {
+    _pause?.removeListener(_onPause);
     _rest?._clocks.remove(_clock);
     _clock.dispose();
     super.dispose();
@@ -247,6 +259,23 @@ class _RenderSkeletonAnchor extends RenderProxyBox {
   void _release() {
     if (identical(_clock._anchor, this)) _clock._anchor = null;
   }
+}
+
+/// 讓底下所有 [Skeleton] 的呼吸暫停在這一刻的深淺：[paused] 是 true 時停住，
+/// 回到 false 從同一個相位接著呼吸。給一兩幀加 0.1 秒的短停頓用（ADR 0037
+/// 補充：閱讀器掀紙前在紙底下建好正文，頁首頁尾的骨架跟紙一起停）；停得很短，
+/// 看不出凍住。
+class SkeletonPause extends InheritedWidget {
+  const SkeletonPause({super.key, required this.paused, required super.child});
+
+  final ValueListenable<bool> paused;
+
+  static ValueListenable<bool>? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SkeletonPause>()?.paused;
+
+  @override
+  bool updateShouldNotify(SkeletonPause oldWidget) =>
+      !identical(paused, oldWidget.paused);
 }
 
 /// 收住一群 [Skeleton] 的呼吸：每個位置把這一口氣呼完、停在最深，整個畫面
@@ -372,9 +401,24 @@ class _BreathClock extends ChangeNotifier {
   }
 
   void _start() {
-    if (!_allowed || _still || _hold != null || _ticker.isActive) return;
+    if (!_allowed || _still || _paused || _hold != null || _ticker.isActive) {
+      return;
+    }
     _base = _cycles;
     _ticker.start();
+  }
+
+  /// 呼吸暫停在這一刻的深淺（[SkeletonPause]），計時器不走；接著時從同一個
+  /// 相位走下去。
+  bool _paused = false;
+  set paused(bool value) {
+    if (_paused == value) return;
+    _paused = value;
+    if (value) {
+      _ticker.stop();
+    } else {
+      _start();
+    }
   }
 
   /// 呼吸一輪多長：開 App 進場中的骨架照進場的節奏

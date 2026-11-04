@@ -98,7 +98,7 @@ class LaunchEntranceMotion {
   /// 之後才長骨架、長完的重建之後才呼吸、拍完兩張定格畫面之後才換場。
   /// 動畫的每一格都不和工作擠在一起，手機慢的時候工作拖長，間隔照樣在
   /// （使用者 2026-10-24 定的，原本是從開始拍起至少停 0.15 秒）。
-  static const Duration idle = Duration(milliseconds: 100);
+  static const Duration idle = AppMotion.stillGap;
 
   /// 換場前收住骨架的呼吸（[reveal]）：拍定格畫面的那幾格畫面一定停住，
   /// 呼吸到一半定住就是頓一下（使用者 2026-10-23 在手機上看到的）；先讓
