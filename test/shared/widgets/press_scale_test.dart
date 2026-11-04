@@ -59,4 +59,49 @@ void main() {
     await tester.pump();
     expect(scaleOf(tester), 1, reason: '停過預留停頓才回彈');
   });
+
+  testWidgets('a tap that pushes a page springs back once it is covered', (
+    tester,
+  ) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: Center(
+          child: PressScale(
+            onTap: () {
+              busy(const Duration(milliseconds: 40));
+              navigator.currentState!.push(
+                MaterialPageRoute<void>(builder: (_) => const SizedBox()),
+              );
+            },
+            child: const SizedBox.square(dimension: 80),
+          ),
+        ),
+      ),
+    );
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(PressScale)),
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    await tester.pump();
+
+    // 換頁中這一頁正被蓋住：停過預留停頓也不回彈，換頁的每一幀都不重畫它。
+    await tester.pump(AppMotion.stillGap);
+    await tester.pump();
+    double scale() => tester
+        .widget<AnimatedScale>(
+          find.descendant(
+            of: find.byType(PressScale, skipOffstage: false),
+            matching: find.byType(AnimatedScale, skipOffstage: false),
+          ),
+        )
+        .scale;
+    expect(scale(), lessThan(1));
+
+    await tester.pumpAndSettle();
+    expect(scale(), 1, reason: '完全蓋住後才回彈');
+  });
 }

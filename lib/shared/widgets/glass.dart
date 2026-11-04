@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../layout/readable_width.dart';
 import '../navigation/app_page_transition.dart';
+import '../navigation/transition_settled.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
@@ -359,6 +360,10 @@ class _PressScaleState extends State<PressScale> {
   /// 不和它擠在一起：停在按下的大小，那一幀畫完才回彈；那一幀很重時再停
   /// [AppMotion.stillGap]，做工作的那幾幀畫面都不動（ADR 0037 策略一；
   /// 2026-11-05 手機上點書，回彈和建閱讀器的 18.6ms 擠在一起掉了 3 幀）。
+  ///
+  /// 點擊推入了新頁、這一頁正被蓋住時，等完全蓋住才回彈（策略三：等靜止
+  /// 再放）：蓋住的頁不畫，回彈看不到也不花時間；原本停 0.1 秒就回彈，回
+  /// 彈落在換頁中，底下這一頁每一幀都跟著重畫。
   void _releaseAfterTapFrame() {
     final release = ++_release;
     final tapped = Stopwatch()..start();
@@ -366,6 +371,15 @@ class _PressScaleState extends State<PressScale> {
       if (!mounted || release != _release) return;
       if (tapped.elapsed <= _heavyTapFrame) {
         _set(false);
+        return;
+      }
+      final covering = pageRouteOf(context)?.secondaryAnimation;
+      if (covering != null && covering.status == AnimationStatus.forward) {
+        TransitionSettled.until(covering, (status) => !status.isAnimating).then(
+          (_) {
+            if (mounted && release == _release) _set(false);
+          },
+        );
         return;
       }
       _releaseTimer = Timer(AppMotion.stillGap, () {
