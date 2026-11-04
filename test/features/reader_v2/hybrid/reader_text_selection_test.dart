@@ -263,11 +263,10 @@ void main() {
   });
 
   group('選字選單', () {
-    // 一次 App 只查一次系統的文字處理 App：每個測試各自的手機。
-    setUp(ProcessTextActions.reset);
-
     Future<SelectionService> pumpSelected(
       WidgetTester tester, {
+      // 系統的文字處理 App 一次 App 只查一次：沒給時每個測試各自一份。
+      ProcessTextActions? processText,
       ValueChanged<ReaderTextSelection>? onHide,
       ValueChanged<ReaderTextSelection>? onReplace,
       ValueChanged<ReaderTextSelection>? onBookmark,
@@ -305,6 +304,7 @@ void main() {
             onBookmark: onBookmark,
             onHighlight: onHighlight,
             highlightColor: Colors.amber,
+            processText: processText ?? ProcessTextActions(),
             child: const SizedBox.expand(),
           ),
         ),
@@ -400,11 +400,12 @@ void main() {
         ),
       );
 
-      await ProcessTextActions.load();
-      await pumpSelected(tester);
+      final processText = ProcessTextActions();
+      await processText.load();
+      await pumpSelected(tester, processText: processText);
       await tester.pump();
       await tester.pumpWidget(const SizedBox.shrink());
-      await pumpSelected(tester);
+      await pumpSelected(tester, processText: processText);
       await tester.pump();
 
       expect(queries, 1);

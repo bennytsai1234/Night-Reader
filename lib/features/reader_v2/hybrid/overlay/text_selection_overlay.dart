@@ -11,31 +11,32 @@ import 'package:night_reader/features/reader_v2/hybrid/overlay/selection_service
 
 /// 系統可以處理選取文字的 App（翻譯、字典…），放在選字選單的「⋮」裡。
 ///
-/// 查一次要在主執行緒上問系統（手機上約 22ms），一次 App 只查一次：閱讀器
-/// 在掀紙前的預留停頓裡查（[load]），畫面不動；還沒查好就選字時，選單出現
-/// 那一刻補查。
-abstract final class ProcessTextActions {
-  static ProcessTextService service = DefaultProcessTextService();
+/// 查一次要在主執行緒上問系統（手機上約 22ms），App 共用一份（[shared]），
+/// 一次 App 只查一次：閱讀器在掀紙前的預留停頓裡查（[load]），畫面不動；
+/// 還沒查好就選字時，選單出現那一刻補查。
+class ProcessTextActions {
+  ProcessTextActions({ProcessTextService? service})
+    : service = service ?? DefaultProcessTextService();
 
-  static final ValueNotifier<List<ProcessTextAction>> actions = ValueNotifier(
+  /// App 共用的一份。
+  static final ProcessTextActions shared = ProcessTextActions();
+
+  final ProcessTextService service;
+
+  final ValueNotifier<List<ProcessTextAction>> actions = ValueNotifier(
     const <ProcessTextAction>[],
   );
 
-  static Future<void>? _loading;
+  Future<void>? _loading;
 
-  /// 查系統可以處理文字的 App；查過（或正在查）時不再查。
-  static Future<void> load() => _loading ??= service.queryTextActions().then(
+  /// 查系統可以處理文字的 App；查過（或正在查）時不再查，查不到時下次再查。
+  Future<void> load() => _loading ??= service.queryTextActions().then(
     (found) => actions.value = found,
-    onError: (Object error, StackTrace stackTrace) =>
-        AppLog.w('查不到可以處理文字的 App: $error'),
+    onError: (Object error, StackTrace stackTrace) {
+      _loading = null;
+      AppLog.w('查不到可以處理文字的 App: $error');
+    },
   );
-
-  /// 測試用：忘掉查過的結果。
-  @visibleForTesting
-  static void reset() {
-    _loading = null;
-    actions.value = const <ProcessTextAction>[];
-  }
 }
 
 /// 正文選字的反白、兩端把手與選單。
@@ -56,9 +57,14 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
     this.onHighlight,
     required this.highlightColor,
     required this.child,
+    this.processText,
   });
 
   final SelectionService selection;
+
+  /// 「⋮」裡系統可以處理文字的 App；沒給時用 App 共用的那一份
+  /// （[ProcessTextActions.shared]）。
+  final ProcessTextActions? processText;
 
   /// 正文捲動時重算框位置。
   final Listenable repaint;
@@ -98,6 +104,9 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   SelectionEdge? _dragEdge;
   Offset? _dragPoint;
 
+  ProcessTextActions get _processText =>
+      widget.processText ?? ProcessTextActions.shared;
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -110,7 +119,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
           listenable: Listenable.merge(<Listenable>[
             widget.selection,
             widget.repaint,
-            ProcessTextActions.actions,
+            _processText.actions,
           ]),
           builder: (context, _) {
             final selection = widget.selection.selection;
@@ -213,7 +222,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
     List<HybridLineBox> boxes,
   ) {
     // 掀紙前沒有查（例如關掉動畫時）：選單出現時補查，查好選單跟著補上。
-    unawaited(ProcessTextActions.load());
+    unawaited(_processText.load());
     final left = boxes.map((box) => box.left).reduce(math.min);
     final right = boxes.map((box) => box.right).reduce(math.max);
     final centerX = (left + right) / 2;
@@ -265,7 +274,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
             onHighlight(selection);
           },
         ),
-      for (final action in ProcessTextActions.actions.value)
+      for (final action in _processText.actions.value)
         ContextMenuButtonItem(
           label: action.label,
           onPressed: () => _processTextAction(selection, action),
@@ -304,7 +313,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
     // 正文唯讀；對方 App 回傳的文字不需要，結果要等使用者從對方 App 返回
     // 才完成，所以不等待。
     unawaited(
-      ProcessTextActions.service
+      _processText.service
           .processTextAction(action.id, text, true)
           .then<void>(
             (_) {},

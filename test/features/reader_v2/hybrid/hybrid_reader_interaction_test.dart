@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -9,12 +10,14 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/reader_skeleton_page.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/text_selection_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -32,10 +35,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 final Duration _revealTime =
     SkeletonReveal.defaultDuration + AppMotion.stillGap;
 
-/// 正文排好後推進到紙開始掀：停 [AppMotion.stillGap]，下一幀開始掀。
+/// 正文排好後一幀一幀推進到紙開始掀（或已經沒有紙）：正文在紙底下建好、
+/// 畫出，查好系統可以處理文字的 App，再停 [AppMotion.stillGap]。
 Future<void> _pumpUntilRevealing(WidgetTester tester) async {
-  await tester.pump(AppMotion.stillGap);
-  await tester.pump(const Duration(milliseconds: 16));
+  for (var frame = 0; frame < 60; frame++) {
+    final veil = find.byType(LoadingVeil);
+    if (veil.evaluate().isEmpty ||
+        tester.widget<LoadingVeil>(veil).controller.isRevealing) {
+      // 開始掀的那一幀排了重建，紙上那層下一幀才不攔觸控。
+      await tester.pump(const Duration(milliseconds: 16));
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 16));
+  }
 }
 
 /// 正文排好後推進到紙掀完。
@@ -43,6 +55,26 @@ Future<void> _pumpReveal(WidgetTester tester) async {
   await _pumpUntilRevealing(tester);
   await tester.pump(SkeletonReveal.defaultDuration);
   await tester.pump(const Duration(milliseconds: 16));
+}
+
+/// 手機上沒有可以處理文字的 App，系統馬上回覆。
+class _NoProcessTextApps implements ProcessTextService {
+  _NoProcessTextApps({this.onQuery});
+
+  final VoidCallback? onQuery;
+
+  @override
+  Future<List<ProcessTextAction>> queryTextActions() async {
+    onQuery?.call();
+    return const <ProcessTextAction>[];
+  }
+
+  @override
+  Future<String?> processTextAction(
+    String id,
+    String text,
+    bool readOnly,
+  ) async => null;
 }
 
 class _FakeBookDao extends Fake implements BookDao {
@@ -163,6 +195,7 @@ void main() {
     ReaderV2TtsHighlight? ttsHighlight,
     ReaderSkeletonPageStore? skeletonPages,
     ValueNotifier<HybridProgressSnapshot?>? progress,
+    ProcessTextActions? processText,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -175,6 +208,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: HybridReaderScreen(
+          processText:
+              processText ?? ProcessTextActions(service: _NoProcessTextApps()),
           runtime: runtime,
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -243,7 +278,7 @@ void main() {
 
     /// 推進到骨架換場播完（同 [settle]，它定義在後面）。
     Future<void> settleReveal(WidgetTester tester) async {
-      final frames = _revealTime.inMilliseconds ~/ 16 + 8;
+      final frames = _revealTime.inMilliseconds ~/ 16 + 12;
       for (var frame = 0; frame < frames; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
@@ -401,7 +436,7 @@ void main() {
 
   /// 推進到骨架換場（預設時長）播完再多幾幀。
   Future<void> settle(WidgetTester tester) async {
-    final frames = _revealTime.inMilliseconds ~/ 16 + 8;
+    final frames = _revealTime.inMilliseconds ~/ 16 + 12;
     for (var frame = 0; frame < frames; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -1220,6 +1255,70 @@ void main() {
     expect(find.byType(LoadingVeil), findsNothing);
   });
 
+  testWidgets(
+    'the pause before the paper lifts starts after the text is drawn',
+    (tester) async {
+      // 停頓從正文在紙底下建好、畫出之後才算；查系統可以處理文字的 App 也在
+      // 這之後，建正文的時間不吃掉停頓。
+      bool? textBuiltAtQuery;
+      await pumpReader(
+        tester,
+        processText: ProcessTextActions(
+          service: _NoProcessTextApps(
+            onQuery: () => textBuiltAtQuery = find
+                .byType(CustomScrollView)
+                .evaluate()
+                .isNotEmpty,
+          ),
+        ),
+      );
+      expect(textBuiltAtQuery, isTrue);
+      await settle(tester);
+    },
+  );
+
+  testWidgets('auto-scroll waits while the paper rests after a jump', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    await settle(tester);
+    ReaderV2FrameCallback? tick;
+    final auto = ReaderV2AutoPageController(
+      runtime: runtime,
+      viewportController: viewport,
+      viewportExtent: () => _viewport.height,
+      frameSource: (callback) {
+        tick = callback;
+        return () => tick = null;
+      },
+    );
+    addTearDown(auto.dispose);
+    auto.start();
+    tick!(Duration.zero);
+
+    var jumped = false;
+    unawaited(runtime.jumpToChapter(1).then((_) => jumped = true));
+    for (var i = 0; i < 2000 && !jumped; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(jumped, isTrue);
+    expect(
+      tester
+          .widget<LoadingVeil>(find.byType(LoadingVeil))
+          .controller
+          .isRevealing,
+      isFalse,
+      reason: '跳章排好了，紙還在掀紙前的預留停頓',
+    );
+
+    // 紙蓋著正文時這一步跳過，不當成到了書尾而停下。
+    tick!(const Duration(milliseconds: 16));
+    await tester.pump();
+    expect(auto.isRunning, isTrue);
+    auto.stop();
+    await _pumpReveal(tester);
+  });
+
   testWidgets('opening mid-chapter does not wait for adjacent chapters', (
     tester,
   ) async {
@@ -1360,6 +1459,7 @@ void main() {
             style: _style,
             enableDiskCache: false,
             preprocessor: const TextPreprocessor(useIsolate: false),
+            processText: ProcessTextActions(service: _NoProcessTextApps()),
           ),
         ),
       ),

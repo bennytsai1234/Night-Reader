@@ -19,4 +19,8 @@ class ReaderV2ViewportController {
   ReaderV2ViewportSettleCommand? settleScroll;
   ReaderV2ViewportEnsureRangeCommand? ensureCharRangeVisible;
   ReaderV2ViewportDismissCommand? dismissSelection;
+
+  /// 紙正蓋著正文（淡入中、蓋滿，或排好後掀紙前的預留停頓）：這時正文不接
+  /// 移動命令，自動捲動等紙掀開，不當成到了書尾。
+  bool Function()? isTextCovered;
 }

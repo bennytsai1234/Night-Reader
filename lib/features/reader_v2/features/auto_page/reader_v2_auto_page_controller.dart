@@ -130,9 +130,11 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   Future<bool> _step(int run, double seconds) async {
     bool current() => run == _run && !_paused;
-    // 等跳章正文時紙下的正文不動；這一步跳過，不當成到了書尾而停下。
+    // 等跳章正文、或紙還蓋著正文（跳章排好後掀紙前的預留停頓）時紙下的
+    // 正文不動；這一步跳過，不當成到了書尾而停下。
     if (runtime.stateMachine.currentOperation?.kind ==
-        ReaderV2OperationKind.jump) {
+            ReaderV2OperationKind.jump ||
+        (_viewportController?.isTextCovered?.call() ?? false)) {
       return true;
     }
     final delta = _scrollDelta(seconds);
