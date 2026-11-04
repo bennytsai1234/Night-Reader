@@ -33,7 +33,7 @@ void main() {
 
   test('找得到時照舊', () {
     expect(rule(html).getElements("{{'<li>.*?</li>'}}"), isNotEmpty);
-    expect(rule(html).getElement("{{'<li>(.*?)</li>'}}"), '<li>甲</li>甲');
+    expect(rule(html).getElement("{{'<li>(.*?)</li>'}}"), ['<li>甲</li>', '甲']);
   });
 
   test('getString 照舊：組好的文字就是結果', () {

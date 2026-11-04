@@ -71,9 +71,6 @@ class SourceRule {
       final normalizedRule = rule.toUpperCase();
       if (normalizedRule.startsWith('@CSS:')) {
         mode = Mode.defaultMode;
-      } else if (_looksLikeLegacyRegexRule(rule)) {
-        mode = Mode.regex;
-        rule = rule.trimLeft().substring(1);
       } else if (rule.startsWith('@@')) {
         mode = Mode.defaultMode;
         rule = rule.substring(2);
@@ -139,11 +136,6 @@ class SourceRule {
       start = match.end;
     }
     if (rule.length > start) _splitRegex(rule.substring(start));
-  }
-
-  bool _looksLikeLegacyRegexRule(String rawRule) {
-    final trimmed = rawRule.trimLeft();
-    return trimmed.startsWith(':(?');
   }
 
   void _splitRegex(String ruleStr) {
