@@ -94,6 +94,18 @@ void main() {
     await tester.pump();
     expect(find.text('規則「回溯」執行超過 200 毫秒，已停止'), findsOneWidget);
 
+    // 改逾時：還在跑的那次作廢，照新的期限重跑。
+    final timeout = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.controller?.text == '200',
+    );
+    await tester.enterText(timeout, '100');
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump();
+    expect(find.text('規則「回溯」執行超過 100 毫秒，已停止'), findsOneWidget);
+
     final input = find.byWidgetPredicate(
       (widget) => widget is TextField && widget.controller?.text == sample,
     );

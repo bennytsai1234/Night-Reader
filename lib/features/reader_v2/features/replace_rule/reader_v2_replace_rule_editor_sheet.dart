@@ -91,7 +91,14 @@ class _ReaderV2ReplaceRuleEditorSheetState
     _isRegex = rule?.isRegex ?? true;
     _scopeTitle = rule?.scopeTitle ?? false;
     _scopeContent = rule?.scopeContent ?? true;
-    for (final controller in [_patternCtrl, _replacementCtrl, _testInputCtrl]) {
+    // 名稱與逾時也會進試跑（逾時的期限、停下時的說明）。
+    for (final controller in [
+      _nameCtrl,
+      _timeoutCtrl,
+      _patternCtrl,
+      _replacementCtrl,
+      _testInputCtrl,
+    ]) {
       controller.addListener(_runTest);
     }
     _runTest();

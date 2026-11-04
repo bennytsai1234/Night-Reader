@@ -96,9 +96,25 @@ void main() {
     });
 
     // 同 Legado：getString 的規則沒有「整份內容正則」，冒號開頭照網頁選擇器讀。
+    test(r'$ 對得到最後一個換行之前，開頭的旗標可以連寫', () {
+      expect(elements('第1章\n', r':第(\d+)章$'), [
+        ['第1章', '1'],
+      ]);
+      expect(elements('A\nB', ':(?i)(?s)a.b'), [
+        ['A\nB'],
+      ]);
+      expect(elements('ab', ':(?x)a b'), [
+        ['ab'],
+      ]);
+    });
+
     test('getString 不把冒號開頭當正則', () {
       expect(read('<p>內文</p>', r':(?<=p>)[^<]+##文##字'), isNot('內字'));
     });
+  });
+
+  test('## 之後的正則認得 (?x)', () {
+    expect(read('<p>ab</p>', 'p@text##(?x)a b##X'), 'X');
   });
 
   test('## 之後的正則認得開頭的 (?s)', () {

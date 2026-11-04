@@ -308,6 +308,27 @@ void main() {
       expect(toc.chapters.last.url, 'https://novels-r.test/c/2');
     });
 
+    test('bookUrlPattern is a Java regex: leading flags work and the whole url must match', () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': '直達詳情',
+        'bookSourceUrl': 'https://b.test',
+        'searchUrl': '/s?q={{key}}',
+        'bookUrlPattern': r'(?i)https://b\.test/BOOK/\d+',
+        'ruleSearch': {'bookList': 'li', 'name': 'a@text'},
+        'ruleBookInfo': {'name': 'h1@text', 'author': 'p@text'},
+      });
+      const detailHtml = '<h1>西遊記</h1><p>吳承恩</p>';
+
+      final results = await BookListParser.parse(
+        source: source,
+        body: detailHtml,
+        baseUrl: 'https://b.test/book/1',
+        isSearch: true,
+      );
+      expect(results.map((b) => b.name), ['西遊記']);
+      expect(results.single.author, '吳承恩');
+    });
+
     test('Legado-style XPath search rules parse HTML results', () async {
       final source = BookSource.fromJson({
         'bookSourceName': '測試書庫',
