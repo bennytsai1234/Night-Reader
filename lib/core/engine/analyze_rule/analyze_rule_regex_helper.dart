@@ -1,3 +1,4 @@
+import '../parsers/java_regexp.dart';
 import 'analyze_rule_base.dart';
 import 'analyze_rule_support.dart';
 
@@ -5,10 +6,11 @@ import 'analyze_rule_support.dart';
 mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
   /// 同一條規則對 JSON 與網頁解析成不同模式，快取分開放。模式照目前內容
   /// 決定（同 Legado）；[mContent] 是規則 JS 交來的物件時照 JSON 讀它的欄位
-  /// （Legado 對 JS 物件直接讀鍵）。
+  /// （Legado 對 JS 物件直接讀鍵）。[allInOne] 見 [splitSourceRule]。
   List<SourceRule> splitSourceRuleCacheString(
     String ruleStr, {
     dynamic mContent,
+    bool allInOne = false,
   }) {
     if (ruleStr.isEmpty) {
       return [];
@@ -16,31 +18,49 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     final isJson =
         isJsonContent(content) ||
         (mContent is Map && extractHtmlLikeRuleInput(mContent) == null);
-    final key = isJson ? '\u0000json:$ruleStr' : ruleStr;
+    final wholeRegex = allInOne && ruleStr.startsWith(':');
+    final key =
+        '${isJson ? '\u0000json:' : ''}'
+        '${wholeRegex ? '\u0000regex:' : ''}$ruleStr';
     if (AnalyzeRuleBase.stringRuleCache.containsKey(key)) {
       return AnalyzeRuleBase.stringRuleCache[key]!;
     }
-    final ruleList = splitSourceRule(ruleStr, isJson: isJson);
+    final ruleList = splitSourceRule(
+      ruleStr,
+      isJson: isJson,
+      allInOne: allInOne,
+    );
     AnalyzeRuleBase.stringRuleCache[key] = ruleList;
     return ruleList;
   }
 
   /// 拆成一段段規則。[isJson] 是要解析的內容是 JSON（同 Legado 以目前內容
   /// 決定）：沒有前綴的段落是 JSON 路徑。
-  List<SourceRule> splitSourceRule(String ruleStr, {bool isJson = false}) {
+  ///
+  /// [allInOne] 是 getElement、getElements 的規則（同 Legado
+  /// `splitSourceRule(ruleStr, allInOne = true)`）：第一個字是 `:` 時去掉
+  /// 冒號，JS 以外的段落整段是正則（「整份內容正則」）。getString 這類取字
+  /// 的規則沒有這種寫法，冒號開頭照網頁選擇器讀。
+  List<SourceRule> splitSourceRule(
+    String ruleStr, {
+    bool isJson = false,
+    bool allInOne = false,
+  }) {
     final ruleList = <SourceRule>[];
     final jsPattern = RegExp(
       r'@js:|(<js>([\w\W]*?)</js>)',
       caseSensitive: false,
     );
-    var start = 0;
+    final wholeRegex = allInOne && ruleStr.startsWith(':');
+    final mode = wholeRegex ? Mode.regex : Mode.defaultMode;
+    var start = wholeRegex ? 1 : 0;
     final matches = jsPattern.allMatches(ruleStr);
 
     for (final match in matches) {
       if (match.start > start) {
         final tmp = ruleStr.substring(start, match.start).trim();
         if (tmp.isNotEmpty) {
-          ruleList.add(SourceRule(tmp, isJson: isJson));
+          ruleList.add(SourceRule(tmp, mode: mode, isJson: isJson));
         }
       }
       if (match.group(0)!.toLowerCase() == '@js:') {
@@ -56,7 +76,7 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     if (ruleStr.length > start) {
       final tmp = ruleStr.substring(start).trim();
       if (tmp.isNotEmpty) {
-        ruleList.add(SourceRule(tmp, isJson: isJson));
+        ruleList.add(SourceRule(tmp, mode: mode, isJson: isJson));
       }
     }
     return ruleList;
@@ -66,19 +86,7 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     if (rule.replaceRegex.isEmpty) {
       return result;
     }
-    RegExp? regex;
-    if (AnalyzeRuleBase.regexCache.containsKey(rule.replaceRegex)) {
-      regex = AnalyzeRuleBase.regexCache[rule.replaceRegex];
-    } else {
-      try {
-        // Align with Legado's `toRegex()` default behavior: no DOTALL and no
-        // multiline mode unless the rule itself encodes it.
-        regex = RegExp(rule.replaceRegex);
-        AnalyzeRuleBase.regexCache[rule.replaceRegex] = regex;
-      } catch (e) {
-        return result;
-      }
-    }
+    final regex = _buildCachedRegex(rule.replaceRegex);
     if (regex == null) {
       return result;
     }
@@ -132,12 +140,14 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     return replacement;
   }
 
+  /// `##` 之後的正則，同 Legado `toRegex()`：照 Java 的預設與開頭旗標
+  /// （[javaRegExp]）；寫錯的正則不取代。
   RegExp? _buildCachedRegex(String pattern) {
     if (AnalyzeRuleBase.regexCache.containsKey(pattern)) {
       return AnalyzeRuleBase.regexCache[pattern];
     }
     try {
-      final regex = RegExp(pattern);
+      final regex = javaRegExp(pattern);
       AnalyzeRuleBase.regexCache[pattern] = regex;
       return regex;
     } catch (_) {
