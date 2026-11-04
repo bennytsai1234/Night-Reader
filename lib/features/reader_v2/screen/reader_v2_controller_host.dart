@@ -20,6 +20,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.da
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
 class ReaderV2ControllerHost {
   ReaderV2ControllerHost({
@@ -83,6 +84,12 @@ class ReaderV2ControllerHost {
       ReaderV2ViewportController();
 
   late final ReaderV2Dependencies dependencies;
+
+  /// 讀書途中要給讀者的提示，例如替換規則跑太久被停用；閱讀器顯示成浮動
+  /// 提示。
+  Stream<String> get notices => _notices.stream;
+  final StreamController<String> _notices =
+      StreamController<String>.broadcast();
   late final BookStorageService bookStorageService;
 
   /// 這本書的書籤（正文旁的記號、目錄的書籤分頁）。
@@ -185,7 +192,12 @@ class ReaderV2ControllerHost {
     final spec = specFromStyle(size, style);
     // 開書時已經套用目前的繁簡轉換，不必再為設定重載一次正文。
     _appliedContentSettingsGeneration = settings.contentSettingsGeneration;
-    final repository = dependencies.createChapterRepository();
+    final repository = dependencies.createChapterRepository(
+      onReplaceRuleDisabled: (rule) {
+        // 閱讀器關掉後，還在處理的章才發現規則跑太久。
+        if (!_notices.isClosed) _notices.add(replaceRuleDisabledNotice(rule));
+      },
+    );
     final progressController = ReaderV2ProgressController(
       book: book,
       repository: repository,
@@ -525,5 +537,6 @@ class ReaderV2ControllerHost {
     highlights.dispose();
     menu.dispose();
     settings.dispose();
+    unawaited(_notices.close());
   }
 }

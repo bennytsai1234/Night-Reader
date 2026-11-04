@@ -99,6 +99,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
   StreamSubscription<String>? _settingsSaveFailures;
+  StreamSubscription<String>? _hostNotices;
 
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；隱藏狀態列時頁首只依它決定。
   double? _topCutoutExtent;
@@ -147,6 +148,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       ..openChapters = _openChapters
       ..toggleDayNight = _toggleDayNight;
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
+    _hostNotices = _host.notices.listen(_showNotice);
     _progressSync = ReaderV2ProgressSync(
       book: widget.book,
       runtime: () => _host.runtime,
@@ -200,6 +202,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     WidgetsBinding.instance.removeObserver(this);
     _drawerOpen.dispose();
     unawaited(_settingsSaveFailures?.cancel());
+    unawaited(_hostNotices?.cancel());
     _menuDeparture.dispose();
     _coordinator.dispose();
     _progress.dispose();

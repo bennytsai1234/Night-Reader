@@ -8,6 +8,7 @@
 
 - **書源 isolate**（ADR 0028、0034）：書源的網路、解析、規則 JS。**檢查書架更新**整段（含目錄比對與寫回，`BookUpdateService`）。**書架自動下載**與手動下載的規劃、抓章、存正文（`download_executor.dart` 的 `…InSourceIsolate`）。搜尋、換源、發現的抓取也在這裡。
 - **網路 isolate**（`SourceIo`，ADR 0034）：替停住的書源 isolate 發請求、讀快取。
+- **內容轉換 worker**（常駐，`ReaderV2ContentTransformWorker`）：閱讀器每一章的替換規則、重分段、繁簡轉換、切段落與雜湊。替換規則的逾時在主執行緒計時（每開始一條規則收一則訊息、重設計時器），跑超過就結束 worker 重開。
 - **資料庫 isolate**（drift 的 `DriftIsolate`）：SQL 本身。
 - **一次性的 `Isolate.run`／`compute`**：同步的合併計算、正文前處理、規則階段的正文替換、排版快取讀寫、繁簡字典解析、EPUB 解析、還原備份解碼、匯入書源解析、字型雜湊。
 

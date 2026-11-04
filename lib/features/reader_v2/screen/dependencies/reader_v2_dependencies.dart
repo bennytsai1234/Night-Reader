@@ -8,6 +8,7 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/reader_skeleton_page.dart';
@@ -70,7 +71,9 @@ class ReaderV2Dependencies {
   /// 開書骨架照著畫的上一頁紀錄（ADR 0024）；沒有偏好設定時不記。
   final ReaderSkeletonPageStore? skeletonPages;
 
-  ReaderV2ChapterRepository createChapterRepository() {
+  ReaderV2ChapterRepository createChapterRepository({
+    void Function(ReplaceRule rule)? onReplaceRuleDisabled,
+  }) {
     return ReaderV2ChapterRepository(
       book: book,
       initialChapters: initialChapters,
@@ -81,6 +84,7 @@ class ReaderV2Dependencies {
       replaceDao: replaceDao,
       service: service,
       currentChineseConvert: currentChineseConvert,
+      onReplaceRuleDisabled: onReplaceRuleDisabled,
     );
   }
 }

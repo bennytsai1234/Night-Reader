@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
 import 'reader_v2_content.dart';
 
@@ -662,6 +663,9 @@ class ReaderV2ContentTransformer {
   /// 處理一章正文，連同切段落與 contentHash 都在 worker 算好
   /// （[ReaderV2Content.fromRaw]），主 isolate 直接拿到成品：整章跑正規表示式、
   /// 編碼與雜湊在手機上要幾毫秒，開書與跳章時正好疊在骨架呼吸上（ADR 0018）。
+  ///
+  /// 一條規則跑超過它的逾時就略過它、照其他規則處理完，並呼叫
+  /// [onRuleTimedOut]（[ReaderV2ContentTransformWorker.process]）。
   Future<ReaderV2Content> process({
     required int chapterIndex,
     required Book book,
@@ -669,6 +673,7 @@ class ReaderV2ContentTransformer {
     required String rawContent,
     required List<ReplaceRule> enabledRules,
     required int chineseConvertType,
+    void Function(ReplaceRule rule)? onRuleTimedOut,
   }) async {
     final args = <String, Object?>{
       'chapterIndex': chapterIndex,
@@ -682,11 +687,19 @@ class ReaderV2ContentTransformer {
       'chineseConvertType': chineseConvertType,
     };
 
-    final result = await ReaderV2ContentTransformWorker.instance.process(args);
+    final result = await ReaderV2ContentTransformWorker.instance.process(
+      args,
+      onRuleTimedOut: onRuleTimedOut,
+    );
     return result['document']! as ReaderV2Content;
   }
 
-  static Map<String, Object?> _processInBackground(Map<String, Object?> args) {
+  /// [onRule]：每開始套用一條規則就傳它在 `rulesJson` 的位置，一輪規則套完
+  /// 傳 null，worker 拿來讓主 isolate 計時。
+  static Map<String, Object?> _processInBackground(
+    Map<String, Object?> args, {
+    _RuleProgress? onRule,
+  }) {
     final bookName = args['bookName'] as String? ?? '';
     final bookOrigin = args['bookOrigin'] as String? ?? '';
     final chapterTitle = args['chapterTitle'] as String? ?? '';
@@ -704,11 +717,13 @@ class ReaderV2ContentTransformer {
       titleRules: titleRules,
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: reSegmentEnabled,
+      onRule: onRule,
     );
     final displayTitle = _processTitle(
       chapterTitle: chapterTitle,
       rules: titleRules,
       useReplaceRules: useReplaceRules,
+      onRule: onRule,
     );
 
     return <String, Object?>{'displayTitle': displayTitle, 'content': content};
@@ -766,11 +781,32 @@ class ReaderV2ContentTransformer {
   static List<ReplaceRule> _rulesFrom(Map<String, Object?> args) {
     final rulesJson = (args['rulesJson'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
-    return rulesJson
-        .map(ReplaceRule.fromJson)
-        .where((rule) => rule.isEnabled)
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    return [
+      for (var i = 0; i < rulesJson.length; i++)
+        if (ReplaceRule.fromJson(rulesJson[i]) case final rule
+            when rule.isEnabled)
+          rule.._sourceIndex = i,
+    ]..sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  /// 依序套用 [rules]，每開始一條告訴 [onRule]，套完傳 null。[keep] 判斷
+  /// 套用後的字要不要留下。
+  static String _applyEach(
+    String text,
+    Iterable<ReplaceRule> rules, {
+    _RuleProgress? onRule,
+    bool Function(String next)? keep,
+  }) {
+    var result = text;
+    var started = false;
+    for (final rule in rules) {
+      started = true;
+      onRule?.call(rule._sourceIndex);
+      final next = rule.apply(result);
+      if (keep == null || keep(next)) result = next;
+    }
+    if (started) onRule?.call(null);
+    return result;
   }
 
   static List<ReplaceRule> _titleRulesOf(
@@ -796,6 +832,7 @@ class ReaderV2ContentTransformer {
     required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
+    _RuleProgress? onRule,
   }) {
     final content = normalizeTypography(
       _applyRules(
@@ -807,6 +844,7 @@ class ReaderV2ContentTransformer {
         titleRules: titleRules,
         useReplaceRules: useReplaceRules,
         reSegmentEnabled: reSegmentEnabled,
+        onRule: onRule,
       ),
     );
 
@@ -832,6 +870,7 @@ class ReaderV2ContentTransformer {
     required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
+    _RuleProgress? onRule,
   }) {
     if (rawContent.isEmpty) {
       return '';
@@ -855,6 +894,7 @@ class ReaderV2ContentTransformer {
         chapterTitle: chapterTitle,
         rules: titleRules,
         useReplaceRules: true,
+        onRule: onRule,
       );
       if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
         final displayTitleRegex = RegExp.escape(displayTitle)
@@ -883,17 +923,14 @@ class ReaderV2ContentTransformer {
         if (i > 0) buffer.write('\n');
         buffer.write(lines[i].trim());
       }
-      content = buffer.toString();
-      for (final rule in rules) {
-        if (!rule.appliesToContent(
-          bookName: bookName,
-          bookOrigin: bookOrigin,
-        )) {
-          continue;
-        }
-
-        content = rule.apply(content);
-      }
+      content = _applyEach(
+        buffer.toString(),
+        rules.where(
+          (rule) =>
+              rule.appliesToContent(bookName: bookName, bookOrigin: bookOrigin),
+        ),
+        onRule: onRule,
+      );
     }
 
     return content;
@@ -941,19 +978,30 @@ class ReaderV2ContentTransformer {
     required String chapterTitle,
     required List<ReplaceRule> rules,
     required bool useReplaceRules,
+    _RuleProgress? onRule,
   }) {
     var displayTitle = chapterTitle.replaceAll(RegExp(r'[\r\n]'), '');
     if (useReplaceRules) {
-      for (final rule in rules) {
-        if (rule.pattern.isEmpty) continue;
-        final next = rule.apply(displayTitle);
-        if (next.trim().isNotEmpty) {
-          displayTitle = next;
-        }
-      }
+      displayTitle = _applyEach(
+        displayTitle,
+        rules.where((rule) => rule.pattern.isNotEmpty),
+        onRule: onRule,
+        keep: (next) => next.trim().isNotEmpty,
+      );
     }
     return normalizeTypography(displayTitle, preserveCjkSpaces: true);
   }
+}
+
+/// worker 每開始套用一條規則傳它在 `rulesJson` 的位置，一輪套完傳 null。
+typedef _RuleProgress = void Function(int? index);
+
+/// 規則在 `rulesJson` 的位置（[ReaderV2ContentTransformer._rulesFrom] 記下）。
+final Expando<int> _sourceIndexes = Expando('rulesJson index');
+
+extension on ReplaceRule {
+  int? get _sourceIndex => _sourceIndexes[this];
+  set _sourceIndex(int? index) => _sourceIndexes[this] = index;
 }
 
 /// 內容轉換失敗：worker 啟動不了、處理時丟出錯誤，或處理途中意外結束。
@@ -974,6 +1022,12 @@ final class ReaderV2ContentTransformException implements Exception {
 /// 主執行緒對整章正文執行，成本正好落在減速動畫期間。常駐 worker 只 spawn
 /// 一次、字典初始化一次。
 ///
+/// 替換規則照 Legado 有逾時：worker 每開始套用一條規則就說一聲，主 isolate
+/// 計時（[ReplaceRuleDeadline]，同試跑）；跑超過那條的逾時，正則跑到一半只能
+/// 結束 worker。結束後把那條規則從所有等待中的請求拿掉、重新啟動 worker、
+/// 照原順序重送，那一章照其他規則處理完；正在處理的那個請求的
+/// `onRuleTimedOut` 收到那條規則（閱讀器拿來停用它）。
+///
 /// worker 意外結束時，等待中的請求以 [ReaderV2ContentTransformException]
 /// 結束，下一個請求重新啟動 worker。
 class ReaderV2ContentTransformWorker {
@@ -990,8 +1044,11 @@ class ReaderV2ContentTransformWorker {
   ReceivePort? _responses;
   Isolate? _isolate;
   int _nextRequestId = 0;
-  final Map<int, Completer<Map<String, Object?>>> _pending =
-      <int, Completer<Map<String, Object?>>>{};
+  final Map<int, _TransformRequest> _pending = <int, _TransformRequest>{};
+
+  /// worker 正在套用的規則：哪個請求、`rulesJson` 的哪一筆。
+  ({int id, Map<Object?, Object?> json})? _running;
+  late final ReplaceRuleDeadline _deadline = ReplaceRuleDeadline(_ruleTimedOut);
 
   static Future<List<String>?> _loadDictionaryDataFromBundle() async {
     try {
@@ -1003,29 +1060,89 @@ class ReaderV2ContentTransformWorker {
     }
   }
 
-  Future<Map<String, Object?>> process(Map<String, Object?> args) async {
-    final worker = await (_starting ??= _start());
-    // 啟動完成後、送出請求前 worker 已結束：通訊埠已失效，送了也不會有
-    // 回覆。
-    if (worker.generation != _generation) {
-      throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
-    }
-    final commands = worker.commands;
-    final id = _nextRequestId++;
-    final completer = Completer<Map<String, Object?>>();
-    _pending[id] = completer;
-    try {
-      commands.send(<String, Object?>{
-        'type': 'process',
-        'id': id,
-        'args': args,
-      });
-    } catch (error) {
-      _pending.remove(id);
-      throw ReaderV2ContentTransformException(failureMessage('章節內容處理', error));
-    }
-    return completer.future;
+  /// 處理一章；[onRuleTimedOut] 收到這一章跑超過逾時、被略過的規則。
+  Future<Map<String, Object?>> process(
+    Map<String, Object?> args, {
+    void Function(ReplaceRule rule)? onRuleTimedOut,
+  }) {
+    final request = _pending[_nextRequestId++] = _TransformRequest(
+      args,
+      onRuleTimedOut,
+    );
+    unawaited(_sendPending());
+    return request.completer.future;
   }
+
+  /// 把這個 worker 還沒收到的請求照順序送過去。
+  Future<void> _sendPending() async {
+    final ({SendPort commands, int generation}) worker;
+    try {
+      worker = await (_starting ??= _start());
+    } on ReaderV2ContentTransformException {
+      return; // 啟動失敗時等待中的請求已經收到錯誤（_reset）。
+    }
+    // 啟動完成後 worker 又被換掉了：換掉的那一方會再送一次。
+    if (worker.generation != _generation) return;
+    for (final MapEntry(key: id, value: request) in _pending.entries.toList()) {
+      if (request.sentTo == worker.generation) continue;
+      request.sentTo = worker.generation;
+      try {
+        worker.commands.send(<String, Object?>{
+          'type': 'process',
+          'id': id,
+          'args': request.args,
+        });
+      } catch (error) {
+        _pending.remove(id);
+        request.completer.completeError(
+          ReaderV2ContentTransformException(failureMessage('章節內容處理', error)),
+        );
+      }
+    }
+  }
+
+  /// worker 開始套用請求 [id] 的第 [index] 條規則；null 是這一輪套完了。
+  void _onRule(int id, int? index) {
+    final rules = _pending[id]?.args['rulesJson'];
+    if (index == null || rules is! List || index >= rules.length) {
+      _running = null;
+      _deadline.stop();
+      return;
+    }
+    final json = Map<Object?, Object?>.from(rules[index] as Map);
+    _running = (id: id, json: json);
+    _deadline.start(ReplaceRule.fromJson(json.cast<String, dynamic>()));
+  }
+
+  /// 正在套用的規則跑超過逾時：結束 worker，等待中的請求都拿掉這條規則，
+  /// 重新啟動後照順序重送。
+  void _ruleTimedOut(ReplaceRule rule) {
+    final running = _running;
+    if (running == null) return;
+    _discardWorker();
+    for (final request in _pending.values) {
+      final rules = request.args['rulesJson'];
+      if (rules is! List) continue;
+      request.args = <String, Object?>{
+        ...request.args,
+        'rulesJson': [
+          for (final other in rules)
+            if (!_sameRule(other, running.json)) other,
+        ],
+      };
+    }
+    _pending[running.id]?.onRuleTimedOut?.call(rule);
+    unawaited(_sendPending());
+  }
+
+  static bool _sameRule(Object? candidate, Map<Object?, Object?> rule) =>
+      candidate is Map &&
+      candidate.length == rule.length &&
+      rule.entries.every(
+        (entry) =>
+            candidate.containsKey(entry.key) &&
+            candidate[entry.key] == entry.value,
+      );
 
   Future<({SendPort commands, int generation})> _start() async {
     final generation = _generation;
@@ -1037,9 +1154,17 @@ class ReaderV2ContentTransformWorker {
         if (!handshake.isCompleted) handshake.complete(message);
         return;
       }
+      if (message case ('rule', final int id, final int? index)) {
+        _onRule(id, index);
+        return;
+      }
       if (message is Map) {
         final id = message['id'] as int?;
-        final completer = id == null ? null : _pending.remove(id);
+        if (_running?.id == id) {
+          _running = null;
+          _deadline.stop();
+        }
+        final completer = id == null ? null : _pending.remove(id)?.completer;
         if (completer == null || completer.isCompleted) return;
         final result = message['result'];
         if (message['ok'] == true && result is Map) {
@@ -1097,15 +1222,23 @@ class ReaderV2ContentTransformWorker {
   @visibleForTesting
   void stop() => _reset(const ReaderV2ContentTransformException('內容轉換程序已停止'));
 
-  /// 丟掉目前的 worker；下一個請求會重新啟動。
+  /// 丟掉目前的 worker，等待中的請求以 [failure] 結束；下一個請求會重新啟動。
   void _reset(ReaderV2ContentTransformException failure) {
-    _generation += 1;
-    _starting = null;
+    _discardWorker();
     final waiters = _pending.values.toList(growable: false);
     _pending.clear();
     for (final waiter in waiters) {
-      if (!waiter.isCompleted) waiter.completeError(failure);
+      final completer = waiter.completer;
+      if (!completer.isCompleted) completer.completeError(failure);
     }
+  }
+
+  /// 結束目前的 worker，等待中的請求留著。
+  void _discardWorker() {
+    _generation += 1;
+    _starting = null;
+    _running = null;
+    _deadline.stop();
     _responses?.close();
     _responses = null;
     _isolate?.kill(priority: Isolate.immediate);
@@ -1131,6 +1264,7 @@ class ReaderV2ContentTransformWorker {
             final args = Map<String, Object?>.from(rawArgs);
             final result = ReaderV2ContentTransformer._processInBackground(
               args,
+              onRule: (index) => replyPort.send(('rule', id, index)),
             );
             final convertType = args['chineseConvertType'] as int? ?? 0;
             if (convertType != 0) {
@@ -1165,4 +1299,17 @@ class ReaderV2ContentTransformWorker {
       }
     });
   }
+}
+
+/// 一個還沒拿到結果的請求。[args] 在規則逾時後換成拿掉那條規則的版本。
+class _TransformRequest {
+  _TransformRequest(this.args, this.onRuleTimedOut);
+
+  Map<String, Object?> args;
+  final void Function(ReplaceRule rule)? onRuleTimedOut;
+  final Completer<Map<String, Object?>> completer =
+      Completer<Map<String, Object?>>();
+
+  /// 已經送給第幾代的 worker（[ReaderV2ContentTransformWorker._generation]）。
+  int? sentTo;
 }

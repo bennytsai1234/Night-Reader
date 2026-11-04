@@ -13,6 +13,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -47,6 +48,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    this.onReplaceRuleDisabled,
     this.contentLoader,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
        chapterDao = chapterDao ?? getIt<ChapterDao>(),
@@ -73,6 +75,10 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+
+  /// 套用正文時有規則跑太久、被停用了（[_disableTimedOutRule]），閱讀器拿來
+  /// 提示讀者。
+  final void Function(ReplaceRule rule)? onReplaceRuleDisabled;
 
   /// Test-only seam. When absent, the production content pipeline is
   /// unchanged. A supplied loader may hold a chapter future to reproduce a
@@ -479,10 +485,31 @@ class ReaderV2ChapterRepository {
         rawContent: prepared.content,
         enabledRules: enabledRules,
         chineseConvertType: currentChineseConvert(),
+        onRuleTimedOut: _disableTimedOutRule,
       );
     } on ReaderV2ContentTransformException catch (error) {
       throw ReaderV2ContentUnavailableException(error.message);
     }
+  }
+
+  /// 套用正文時跑超過逾時的規則照 Legado 停用：開關關掉、存進資料庫，之後
+  /// 的章不再帶它；這一章照其他規則處理完（[ReaderV2ContentTransformWorker]）。
+  void _disableTimedOutRule(ReplaceRule rule) {
+    _enabledRules = _enabledRules
+        ?.where((enabled) => enabled.id != rule.id)
+        .toList(growable: false);
+    final dao = replaceDao;
+    if (dao != null) {
+      unawaited(
+        dao.updateEnabled(rule.id, false).catchError((
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          AppLog.e('停用跑太久的替換規則失敗', error: error, stackTrace: stackTrace);
+        }),
+      );
+    }
+    onReplaceRuleDisabled?.call(rule);
   }
 
   bool _isValidChapterIndex(int chapterIndex) {
