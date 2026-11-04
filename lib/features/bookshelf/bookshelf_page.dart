@@ -17,6 +17,7 @@ import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/navigation/app_route_observer.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
@@ -239,7 +240,6 @@ class _BookshelfPageState extends State<BookshelfPage>
           _selectedUrls.length == provider.books.length;
       return GlassNavHeader(
         morph: true,
-        readable: false,
         title: '已選 ${_selectedUrls.length} 本',
         leading: GlassTextButton(
           label: '完成',
@@ -267,7 +267,6 @@ class _BookshelfPageState extends State<BookshelfPage>
     // 進出多選時標題淡換、兩側按鈕的玻璃留著只改大小（GlassMorph）。
     return GlassNavHeader(
       morph: true,
-      readable: false,
       title: '書架',
       titleSheen: provider.checkingShelf,
       leading: GlassMenuButton<Object>(
@@ -405,11 +404,9 @@ class _BookshelfPageState extends State<BookshelfPage>
         grid: provider.isGridView,
         bookCount: provider.lastBookCount,
         titles: provider.lastShelfTitles,
-        padding: EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          insets.top + AppSpacing.xs,
-          AppGrouped.margin,
-          insets.bottom + AppSpacing.md,
+        padding: ReadableWidth.cardInsetOf(context).copyWith(
+          top: insets.top + AppSpacing.xs,
+          bottom: insets.bottom + AppSpacing.md,
         ),
       ),
       builder: (_) => _buildLoadedContent(provider, insets),
@@ -735,12 +732,8 @@ class _BookshelfPageState extends State<BookshelfPage>
     double topInset,
     double bottomInset,
   ) {
-    final padding = EdgeInsets.fromLTRB(
-      AppGrouped.margin,
-      topInset + AppSpacing.xs,
-      AppGrouped.margin,
-      bottomInset,
-    );
+    final padding = ReadableWidth.cardInsetOf(context)
+        .copyWith(top: topInset + AppSpacing.xs, bottom: bottomInset);
     // 自訂排序時長按拖曳換位置，不開情境選單；其餘操作走「選取」。多選時
     // 仍是同一個清單、只關掉拖曳：換成另一種清單會丟掉捲動位置，書卡也會
     // 重建，勾選圈直接冒出來而不是滑進來。
@@ -857,15 +850,15 @@ class _BookshelfPageState extends State<BookshelfPage>
     double topInset,
     double bottomInset,
   ) {
-    final width = MediaQuery.sizeOf(context).width - AppGrouped.margin * 2;
+    // 平板上和其他分頁一樣收在內容欄裡，左右和分頁列切齊。
+    final side = ReadableWidth.cardInsetOf(context);
+    final width = MediaQuery.sizeOf(context).width - side.horizontal;
     final columns = BookshelfGridTile.columnsFor(width);
     final cellWidth = BookshelfGridTile.cellWidthFor(width, columns);
     return GridView.builder(
-      padding: EdgeInsets.fromLTRB(
-        AppGrouped.margin,
-        topInset + AppSpacing.xs,
-        AppGrouped.margin,
-        bottomInset,
+      padding: side.copyWith(
+        top: topInset + AppSpacing.xs,
+        bottom: bottomInset,
       ),
       // 每格外面的 BookshelfMotionItem 已經自成一個繪製層，不再多包一層；
       // 格狀書卡沒有要捲出畫面也留著的狀態（按壓回饋是 PressScale，不是
