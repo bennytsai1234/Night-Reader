@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_options.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
@@ -63,6 +66,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
     text: widget.testSample ?? '這是一段測試文字，包含 junk123 內容。',
   );
 
+  final ReplaceRulePreview _preview = ReplaceRulePreview();
   String _testResult = '';
   bool _isEnabled = true;
   bool _isRegex = true;
@@ -95,6 +99,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
 
   @override
   void dispose() {
+    _preview.cancel();
     for (final controller in [
       _nameCtrl,
       _groupCtrl,
@@ -110,15 +115,29 @@ class _ReaderV2ReplaceRuleEditorSheetState
     super.dispose();
   }
 
+  /// 每改一個字就重跑一次；還沒跑完的上一次直接作廢（[ReplaceRulePreview]）。
   void _runTest() {
     final rule = ReplaceRule(
+      name: _nameCtrl.text.trim(),
       pattern: _patternCtrl.text,
       replacement: _replacementCtrl.text,
       isRegex: _isRegex,
+      timeoutMillisecond: int.tryParse(_timeoutCtrl.text) ?? 3000,
     );
-    setState(() {
-      _testResult = rule.apply(_testInputCtrl.text);
-    });
+    unawaited(
+      _preview
+          .run([rule], _testInputCtrl.text)
+          .then(
+            (result) {
+              if (!mounted || result == null) return;
+              setState(() => _testResult = result.display);
+            },
+            onError: (Object error) {
+              if (!mounted) return;
+              setState(() => _testResult = failureMessage('執行測試', error));
+            },
+          ),
+    );
   }
 
   Future<void> _save() async {

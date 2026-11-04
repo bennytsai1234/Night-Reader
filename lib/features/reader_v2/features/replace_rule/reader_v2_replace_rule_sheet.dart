@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -70,6 +71,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     const _RulesState.loading(),
   );
   final TextEditingController _testController = TextEditingController();
+  final ReplaceRulePreview _preview = ReplaceRulePreview();
 
   /// 還沒按「執行測試」時為 null，結果區不顯示。
   String? _testResult;
@@ -99,6 +101,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
 
   @override
   void dispose() {
+    _preview.cancel();
     _testController.dispose();
     _rules.dispose();
     super.dispose();
@@ -157,18 +160,19 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     if (_testing) return;
     setState(() => _testing = true);
     try {
-      var text = _testController.text;
-      if (_useReplaceRule) {
-        final enabledRules = await widget.replaceDao.getEnabledContentForBook(
-          widget.book.name,
-          widget.book.origin,
-        );
-        for (final rule in enabledRules) {
-          text = rule.apply(text);
-        }
-      }
+      final text = _testController.text;
+      final rules = _useReplaceRule
+          ? await widget.replaceDao.getEnabledContentForBook(
+              widget.book.name,
+              widget.book.origin,
+            )
+          : const <ReplaceRule>[];
       if (!mounted) return;
-      setState(() => _testResult = text);
+      // 規則在另一個 isolate 跑，逾時就停（[ReplaceRulePreview]）；面板關掉
+      // 時作廢，傳回 null。
+      final result = await _preview.run(rules, text);
+      if (!mounted || result == null) return;
+      setState(() => _testResult = result.display);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
