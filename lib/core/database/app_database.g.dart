@@ -415,6 +415,17 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _fileFingerprintMeta = const VerificationMeta(
+    'fileFingerprint',
+  );
+  @override
+  late final GeneratedColumn<String> fileFingerprint = GeneratedColumn<String>(
+    'fileFingerprint',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     bookUrl,
@@ -454,6 +465,7 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     readConfig,
     syncTime,
     isInBookshelf,
+    fileFingerprint,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -714,6 +726,15 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         ),
       );
     }
+    if (data.containsKey('fileFingerprint')) {
+      context.handle(
+        _fileFingerprintMeta,
+        fileFingerprint.isAcceptableOrUnknown(
+          data['fileFingerprint']!,
+          _fileFingerprintMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -881,6 +902,10 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.bool,
         data['${effectivePrefix}isInBookshelf'],
       )!,
+      fileFingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fileFingerprint'],
+      ),
     );
   }
 
@@ -939,6 +964,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<ReadConfig?> readConfig;
   final Value<int> syncTime;
   final Value<bool> isInBookshelf;
+  final Value<String?> fileFingerprint;
   final Value<int> rowid;
   const BooksCompanion({
     this.bookUrl = const Value.absent(),
@@ -978,6 +1004,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.readConfig = const Value.absent(),
     this.syncTime = const Value.absent(),
     this.isInBookshelf = const Value.absent(),
+    this.fileFingerprint = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BooksCompanion.insert({
@@ -1018,6 +1045,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.readConfig = const Value.absent(),
     this.syncTime = const Value.absent(),
     this.isInBookshelf = const Value.absent(),
+    this.fileFingerprint = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : bookUrl = Value(bookUrl),
        name = Value(name);
@@ -1059,6 +1087,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<String>? readConfig,
     Expression<int>? syncTime,
     Expression<bool>? isInBookshelf,
+    Expression<String>? fileFingerprint,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1100,6 +1129,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (readConfig != null) 'readConfig': readConfig,
       if (syncTime != null) 'syncTime': syncTime,
       if (isInBookshelf != null) 'isInBookshelf': isInBookshelf,
+      if (fileFingerprint != null) 'fileFingerprint': fileFingerprint,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1142,6 +1172,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<ReadConfig?>? readConfig,
     Value<int>? syncTime,
     Value<bool>? isInBookshelf,
+    Value<String?>? fileFingerprint,
     Value<int>? rowid,
   }) {
     return BooksCompanion(
@@ -1182,6 +1213,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       readConfig: readConfig ?? this.readConfig,
       syncTime: syncTime ?? this.syncTime,
       isInBookshelf: isInBookshelf ?? this.isInBookshelf,
+      fileFingerprint: fileFingerprint ?? this.fileFingerprint,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1312,6 +1344,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (isInBookshelf.present) {
       map['isInBookshelf'] = Variable<bool>(isInBookshelf.value);
     }
+    if (fileFingerprint.present) {
+      map['fileFingerprint'] = Variable<String>(fileFingerprint.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1358,6 +1393,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('readConfig: $readConfig, ')
           ..write('syncTime: $syncTime, ')
           ..write('isInBookshelf: $isInBookshelf, ')
+          ..write('fileFingerprint: $fileFingerprint, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1407,6 +1443,7 @@ class _$BookInsertable implements Insertable<Book> {
       readConfig: Value(_object.readConfig),
       syncTime: Value(_object.syncTime),
       isInBookshelf: Value(_object.isInBookshelf),
+      fileFingerprint: Value(_object.fileFingerprint),
     ).toColumns(false);
   }
 }
@@ -9663,6 +9700,7 @@ typedef $$BooksTableCreateCompanionBuilder = BooksCompanion Function({
   Value<ReadConfig?> readConfig,
   Value<int> syncTime,
   Value<bool> isInBookshelf,
+  Value<String?> fileFingerprint,
   Value<int> rowid,
 });
 typedef $$BooksTableUpdateCompanionBuilder = BooksCompanion Function({
@@ -9703,6 +9741,7 @@ typedef $$BooksTableUpdateCompanionBuilder = BooksCompanion Function({
   Value<ReadConfig?> readConfig,
   Value<int> syncTime,
   Value<bool> isInBookshelf,
+  Value<String?> fileFingerprint,
   Value<int> rowid,
 });
 
@@ -9903,6 +9942,11 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
     column: $table.isInBookshelf,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get fileFingerprint => $composableBuilder(
+    column: $table.fileFingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$BooksTableOrderingComposer
@@ -10098,6 +10142,11 @@ class $$BooksTableOrderingComposer
     column: $table.isInBookshelf,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get fileFingerprint => $composableBuilder(
+    column: $table.fileFingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$BooksTableAnnotationComposer
@@ -10261,6 +10310,11 @@ class $$BooksTableAnnotationComposer
     column: $table.isInBookshelf,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get fileFingerprint => $composableBuilder(
+    column: $table.fileFingerprint,
+    builder: (column) => column,
+  );
 }
 
 class $$BooksTableTableManager
@@ -10328,6 +10382,7 @@ class $$BooksTableTableManager
                 Value<ReadConfig?> readConfig = const Value.absent(),
                 Value<int> syncTime = const Value.absent(),
                 Value<bool> isInBookshelf = const Value.absent(),
+                Value<String?> fileFingerprint = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BooksCompanion(
                 bookUrl: bookUrl,
@@ -10367,6 +10422,7 @@ class $$BooksTableTableManager
                 readConfig: readConfig,
                 syncTime: syncTime,
                 isInBookshelf: isInBookshelf,
+                fileFingerprint: fileFingerprint,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10408,6 +10464,7 @@ class $$BooksTableTableManager
                 Value<ReadConfig?> readConfig = const Value.absent(),
                 Value<int> syncTime = const Value.absent(),
                 Value<bool> isInBookshelf = const Value.absent(),
+                Value<String?> fileFingerprint = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BooksCompanion.insert(
                 bookUrl: bookUrl,
@@ -10447,6 +10504,7 @@ class $$BooksTableTableManager
                 readConfig: readConfig,
                 syncTime: syncTime,
                 isInBookshelf: isInBookshelf,
+                fileFingerprint: fileFingerprint,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

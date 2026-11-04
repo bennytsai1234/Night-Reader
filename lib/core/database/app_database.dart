@@ -132,7 +132,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -207,6 +207,11 @@ class AppDatabase extends _$AppDatabase {
       } else if (from < 12) {
         // 標註的備忘；schema 11 以前的在上面照現在的樣子建表，已經有這欄。
         await m.addColumn(highlights, highlights.note);
+      }
+      if (from < 13) {
+        // 本地書原檔的指紋（ADR 0039）。要讀整個檔才算得出來，升級時先留空，
+        // 由背景 isolate 補算（`fillLocalBookFingerprints`）。
+        await m.addColumn(books, books.fileFingerprint);
       }
     },
     beforeOpen: (_) async {

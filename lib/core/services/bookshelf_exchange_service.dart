@@ -53,7 +53,7 @@ class BookshelfExchangeService {
 
     for (final book in shelfBooks) {
       chapters.addAll(await _chapterDao.getByBook(book.bookUrl));
-      if (book.origin.isNotEmpty && book.origin != 'local') {
+      if (book.origin.isNotEmpty && !book.isLocal) {
         final source = await _sourceDao.getByUrl(book.origin);
         if (source != null) {
           sourcesByUrl[source.bookSourceUrl] = source;

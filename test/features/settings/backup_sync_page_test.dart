@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/sync_store_blobs.dart';
+
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
@@ -14,7 +17,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 讀到 [gated] 那份檔時停住，等 [gate] 放行（模擬網路慢）。
-class _Store implements SyncStore {
+class _Store with SyncStoreBlobs implements SyncStore {
   _Store(this.gated);
 
   final String gated;

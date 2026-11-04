@@ -27,7 +27,8 @@ import 'sync_records.dart';
 /// 收到「舊鍵刪除＋新鍵帶著 `renamedFrom`」就把舊鍵的書原地改名，下載好的
 /// 正文、目錄、封面留著，不是移出書架再重新加回來。
 ///
-/// 本地書的身分是這台手機上的檔案路徑，另一台對不上，先不同步（#193）。
+/// 本地書不在這裡同步：進度照原檔指紋走閱讀進度，書本身由使用者按「同步
+/// 本地書」才上傳下載（`LocalBookSync`，ADR 0039）。
 class BookshelfSync extends SyncKind {
   BookshelfSync({
     BookDao? bookDao,
@@ -127,12 +128,20 @@ class BookshelfSync extends SyncKind {
   /// 跟著最近讀的那本），不含本地書。
   Future<Map<String, List<Book>>> _shelf() async {
     final shelf = <String, List<Book>>{};
+    final localBooks = <String, List<Book>>{};
     for (final book in await _bookDao.getInBookshelf()) {
-      if (book.isLocal) continue;
+      if (book.isLocal) {
+        (localBooks[ProgressSync.nameKeyOf(book)] ??= []).add(book);
+        continue;
+      }
       (shelf[ProgressSync.keyOf(book)] ??= []).add(book);
     }
+    _localBooks = localBooks;
     return shelf;
   }
+
+  /// 這台書架上的本地書，照書名加作者（[_shelf] 最近一次讀到的）。
+  Map<String, List<Book>> _localBooks = const {};
 
   static Book _latest(List<Book> books) =>
       books.reduce((a, b) => b.durChapterTime > a.durChapterTime ? b : a);
@@ -166,8 +175,27 @@ class BookshelfSync extends SyncKind {
     Map<String, SyncBaseEntry> base,
   ) async {
     _cloud = remote;
+    // 舊版把本地書也送進了書架同步，上次同步的紀錄還記著它。這台不再送
+    // 本地書，照常比的話會被當成移出書架、送出刪除紀錄，刪掉另一台同名同
+    // 作者的網路書。這種紀錄作廢，照這台從沒同步過這一筆合併：雲端那筆是
+    // 本地書的舊紀錄，或上次同步時這台送的就是書架上那本本地書。
+    for (final key in [...base.keys]) {
+      if (local.containsKey(key)) continue;
+      final cloud = remote[key];
+      final sentLocalBook = (_localBooks[key] ?? const <Book>[]).any(
+        (book) => _fingerprintOf(recordOf(book)) == base[key]!.local,
+      );
+      if (sentLocalBook || (cloud != null && _isLocalRecord(cloud))) {
+        base.remove(key);
+      }
+    }
     return local;
   }
+
+  /// 舊版把本地書（帶著那台手機上的路徑）也送進了書架同步，另一台加進來是
+  /// 打不開的書。本地書由「同步本地書」處理，書架同步不加、也不刪它們。
+  static bool _isLocalRecord(SyncRecord record) =>
+      !record.deleted && Book(origin: '${record.data['origin'] ?? ''}').isLocal;
 
   /// 閱讀器開著的書不在背景改，下次同步再比。
   @override
@@ -183,7 +211,9 @@ class BookshelfSync extends SyncKind {
     // 先處理改名，下面才不會把舊鍵的書當成「移出書架」刪掉。
     final deferred = await _applyRenames(remote, shelf);
     for (final MapEntry(:key, value: record) in remote.entries) {
-      if (_isOpen(key) || deferred.contains(key)) continue;
+      if (_isOpen(key) || deferred.contains(key) || _isLocalRecord(record)) {
+        continue;
+      }
       final books = shelf[key] ?? const <Book>[];
       if (record.deleted) {
         final storage = _storage ?? BookStorageService();

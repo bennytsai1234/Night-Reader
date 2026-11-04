@@ -227,6 +227,8 @@ class Books extends Table {
       integer().named('syncTime').withDefault(const Constant(0))();
   BoolColumn get isInBookshelf =>
       boolean().named('isInBookshelf').withDefault(const Constant(false))();
+  TextColumn get fileFingerprint =>
+      text().named('fileFingerprint').nullable()();
 
   @override
   Set<Column> get primaryKey => {bookUrl};

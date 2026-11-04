@@ -15,6 +15,7 @@ import 'highlight_sync.dart';
 import 'bookshelf_sync.dart';
 import 'google_drive_auth.dart';
 import 'google_drive_sync_store.dart';
+import 'local_book_sync.dart';
 import 'login_data_sync.dart';
 import 'progress_sync.dart';
 import 'read_stats_sync.dart';
@@ -194,7 +195,29 @@ class SyncService {
     bookDao: _bookDao ?? getIt<BookDao>(),
     chapterDao: _chapterDao ?? getIt<ChapterDao>(),
     isOpen: isBookOpen,
+    run: _runner,
   );
+
+  /// 「同步本地書」用的，綁著目前設定的同步空間；沒設定時是 null。取同步
+  /// 空間與作廢別的空間的紀錄在 [_lock] 裡做，之後的上傳下載不佔這把鎖：
+  /// 一本書要傳好幾分鐘，日常的進度同步照常跑（兩邊讀寫不同的檔）。
+  Future<LocalBookSync?> localBooks() async {
+    final store = await _lock.synchronized(() async {
+      final store = await _store();
+      if (store != null) await _claimBases();
+      return store;
+    });
+    if (store == null) return null;
+    return LocalBookSync(
+      store: store,
+      bases: _bases,
+      bookDao: _bookDao ?? getIt<BookDao>(),
+      chapterDao: _chapterDao ?? getIt<ChapterDao>(),
+      run: _runner,
+      clock: _clock,
+      isOpen: isBookOpen,
+    );
+  }
 
   /// 書名加作者是 [key] 的書正開在閱讀器裡（[openBook]）。
   bool isBookOpen(String key) => _openBooks.contains(key);

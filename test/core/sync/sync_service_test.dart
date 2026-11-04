@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/sync_store_blobs.dart';
+
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -27,7 +30,7 @@ import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 記在記憶體裡的同步空間；版本是寫入次數。
-class _MemoryStore implements SyncStore {
+class _MemoryStore with SyncStoreBlobs implements SyncStore {
   final Map<String, (String, int)> files = {};
   int writes = 0;
 
@@ -204,6 +207,8 @@ class _Phone {
     await books.upsert(
       Book(
         bookUrl: url,
+        // 網路書；沒給書源的書預設是本地書，書架同步不管。
+        origin: 'src',
         name: name,
         author: author,
         isInBookshelf: true,
@@ -779,6 +784,76 @@ void main() {
 
       expect(b.discarded, ['b-src']);
       expect(await a.books.getInBookshelf(), isEmpty);
+    });
+
+    test('local books stay out of the shelf sync; one an older version sent '
+        'is not added elsewhere and does not remove the other phone\'s '
+        'book', () async {
+      // 舊版把 A 的本地書（帶著 A 的路徑）送進了書架同步，A 也記著同步過；
+      // B 有同名同作者的網路書。
+      final local = Book(
+        bookUrl: 'local:///a/夜航.txt',
+        origin: 'local',
+        name: '夜航',
+        author: '某人',
+        isInBookshelf: true,
+      );
+      await a.books.upsert(local);
+      const key = '夜航\t某人';
+      final record = BookshelfSync.recordOf(local);
+      final print = BookshelfSync(bookDao: a.books).fingerprint(record);
+      store.files['bookshelf.json'] = (SyncDocument({key: record}).encode(), 1);
+      await SyncBaseStorage(
+        directory: () async => Directory('${baseDir.path}/a'),
+      ).write('bookshelf', {
+        key: SyncBaseEntry(local: print, remote: print, time: 0),
+      });
+
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      expect(await b.books.getByUrl(local.bookUrl), isNull);
+
+      await b.addBook('b-src', toc: toc, time: 100);
+      await b.sync.syncAll();
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      expect(await b.books.getByUrl('b-src'), isNotNull);
+      expect(b.discarded, isEmpty);
+      // A 沒真的有過 B 那本網路書，照沒同步過那一筆合併：加進來。
+      expect(
+        (await a.books.getInBookshelf()).map((book) => book.bookUrl).toSet(),
+        {local.bookUrl, 'b-src'},
+      );
+      expect(
+        SyncDocument.decode(store.files['bookshelf.json']!.$1)
+            .records[key]!
+            .deleted,
+        isFalse,
+      );
+    });
+
+    test('a network book removed here is still removed elsewhere when a '
+        'local book has the same title and author', () async {
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      expect(await b.books.getByUrl('a-src'), isNotNull);
+
+      await a.books.upsert(
+        Book(
+          bookUrl: 'local:///a/夜航.txt',
+          origin: 'local',
+          name: '夜航',
+          author: '某人',
+          isInBookshelf: true,
+        ),
+      );
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      expect(b.discarded, ['a-src']);
     });
 
     test('a book removed from one shelf leaves the other shelf too', () async {

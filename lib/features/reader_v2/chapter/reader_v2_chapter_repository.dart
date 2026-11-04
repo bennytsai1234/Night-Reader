@@ -127,7 +127,7 @@ class ReaderV2ChapterRepository {
     if (_chapters.isNotEmpty) return chapters;
     final source = await _ensureSource();
     if (source == null) {
-      if (book.origin == 'local') {
+      if (book.isLocal) {
         throw const ReaderV2ContentUnavailableException('本地書籍章節目錄不存在，請重新匯入');
       }
       throw const ReaderV2ContentUnavailableException('章節目錄載入失敗: 找不到書源');
@@ -152,7 +152,7 @@ class ReaderV2ChapterRepository {
     final chapters = _chapters;
     if (chapters.isEmpty) return const ReaderV2ChapterShares.even(0);
     Map<String, int> stored = const <String, int>{};
-    if (book.origin != 'local') {
+    if (!book.isLocal) {
       stored =
           await contentDao?.getStoredContentBytes(
             origin: book.origin,
@@ -411,7 +411,7 @@ class ReaderV2ChapterRepository {
 
   Future<BookSource?> _ensureSource() async {
     if (_source != null) return _source;
-    if (book.origin.isEmpty || book.origin == 'local') return null;
+    if (book.origin.isEmpty || book.isLocal) return null;
     final cacheGeneration = _contentCacheGeneration;
     final source = await sourceDao.getByUrl(book.origin);
     if (cacheGeneration == _contentCacheGeneration) {
@@ -431,7 +431,7 @@ class ReaderV2ChapterRepository {
       chapterIndex: chapterIndex,
       chapter: chapter,
       forceRefresh: true,
-      saveChapterMetadata: book.origin != 'local',
+      saveChapterMetadata: !book.isLocal,
     );
     if (fetched.isFailed) {
       throw ReaderV2ContentUnavailableException(
@@ -468,7 +468,7 @@ class ReaderV2ChapterRepository {
     int cacheGeneration,
   ) async {
     final localExtension = localBookExtensionFromPath(book.bookUrl);
-    if (book.origin == 'local' &&
+    if (book.isLocal &&
         book.bookUrl.startsWith('local://') &&
         localExtension.isNotEmpty &&
         !isSupportedLocalBookPath(book.bookUrl)) {
@@ -481,7 +481,7 @@ class ReaderV2ChapterRepository {
     final prepared = await storage.read(
       chapterIndex: chapterIndex,
       chapter: chapter,
-      saveChapterMetadata: book.origin != 'local',
+      saveChapterMetadata: !book.isLocal,
     );
     if (prepared.isFailed) {
       throw ReaderV2ContentUnavailableException(

@@ -67,6 +67,7 @@ extension BookSerialization on BookBase {
           : null,
       'syncTime': book.syncTime,
       'isInBookshelf': book.isInBookshelf ? 1 : 0,
+      'fileFingerprint': book.fileFingerprint,
     };
   }
 }

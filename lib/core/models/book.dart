@@ -51,6 +51,7 @@ class Book extends BookBase implements RuleDataInterface {
     super.readConfig,
     super.syncTime,
     super.isInBookshelf,
+    super.fileFingerprint,
   });
 
   @override
@@ -134,6 +135,7 @@ class Book extends BookBase implements RuleDataInterface {
       syncTime: BookSerialization.toInt(json['syncTime']),
       isInBookshelf:
           json['isInBookshelf'] == 1 || json['isInBookshelf'] == true,
+      fileFingerprint: json['fileFingerprint'],
     );
   }
 
@@ -177,6 +179,7 @@ class Book extends BookBase implements RuleDataInterface {
     ReadConfig? readConfig,
     int? syncTime,
     bool? isInBookshelf,
+    String? fileFingerprint,
   }) {
     return Book(
       bookUrl: bookUrl ?? this.bookUrl,
@@ -216,6 +219,7 @@ class Book extends BookBase implements RuleDataInterface {
       readConfig: readConfig ?? this.readConfig,
       syncTime: syncTime ?? this.syncTime,
       isInBookshelf: isInBookshelf ?? this.isInBookshelf,
+      fileFingerprint: fileFingerprint ?? this.fileFingerprint,
     );
   }
 }

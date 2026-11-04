@@ -15,6 +15,9 @@ class _FakeWebDav implements HttpClientAdapter {
 
   /// 讀寫這些路徑時回 403（只有這幾份被拒絕）。
   final Set<String> forbidden = {};
+
+  /// 一律回這個狀態碼（模擬限流、伺服器故障）；null 時照常。
+  int? failWith;
   String auth = 'Basic ${base64.encode(utf8.encode('me:pw'))}';
 
   @override
@@ -27,6 +30,7 @@ class _FakeWebDav implements HttpClientAdapter {
     log.add('${options.method} $path');
     if (options.headers['Authorization'] != auth) return _status(401);
     if (forbidden.contains(path)) return _status(403);
+    if (failWith case final status?) return _status(status);
     final parent = path.substring(
       0,
       path.lastIndexOf('/', path.length - 2) + 1,
@@ -66,6 +70,8 @@ class _FakeWebDav implements HttpClientAdapter {
         }
         files[path] = (Uint8List.fromList(body), (current?.$2 ?? 0) + 1);
         return _status(current == null ? 201 : 204);
+      case 'DELETE':
+        return _status(files.remove(path) == null ? 404 : 204);
     }
     return _status(405);
   }
@@ -137,6 +143,20 @@ void main() {
     ]);
   });
 
+  test('a book file is written, read back byte for byte and deleted', () async {
+    final bytes = Uint8List.fromList([0, 255, 31, 139, 8, 0]);
+    expect(await store().readBytes('book_x.epub'), isNull);
+
+    await store().writeBytes('book_x.epub', bytes);
+    expect(await store().readBytes('book_x.epub'), bytes);
+    expect(server.log.where((line) => line.startsWith('MKCOL')), hasLength(1));
+
+    await store().delete('book_x.epub');
+    expect(await store().readBytes('book_x.epub'), isNull);
+    // 本來就沒有也正常結束。
+    await store().delete('book_x.epub');
+  });
+
   test('wrong password and missing address are reported plainly', () async {
     await expectLater(
       store(password: 'bad').check(),
@@ -186,5 +206,21 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('rate limiting and a server failure stop the whole round', () async {
+    for (final status in [429, 503]) {
+      server.failWith = status;
+      await expectLater(
+        store().readBytes('book_x.epub'),
+        throwsA(
+          isA<SyncStoreException>().having(
+            (e) => e.wholeSpace,
+            'wholeSpace',
+            true,
+          ),
+        ),
+      );
+    }
   });
 }

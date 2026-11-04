@@ -50,6 +50,11 @@ class BookBase {
   int syncTime; // 同步時間
   bool isInBookshelf; // 是否在書架上 (iOS 特有標記)
 
+  /// 本地書原檔內容的指紋（SHA-256）：多台手機用它認同一本本地書，對上閱讀
+  /// 進度、同步本地書（ADR 0039）。網路書、還沒算或原檔不見了算不出來的是
+  /// null。
+  String? fileFingerprint;
+
   // --- Transient Properties (Not persisted, Android parity) ---
   String? infoHtml; // 緩存的書籍詳情 HTML
   String? tocHtml; // 緩存的目錄 HTML
@@ -92,6 +97,7 @@ class BookBase {
     this.readConfig,
     this.syncTime = 0,
     this.isInBookshelf = false,
+    this.fileFingerprint,
   });
 }
 

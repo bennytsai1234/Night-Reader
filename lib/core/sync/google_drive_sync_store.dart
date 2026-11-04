@@ -154,6 +154,78 @@ class GoogleDriveSyncStore implements SyncStore {
     _ensureOk(response);
   }
 
+  @override
+  Future<Uint8List?> readBytes(String name) async {
+    final file = await _find(name);
+    if (file == null) return null;
+    final response = await _send(
+      '$_api/${file.id}',
+      'GET',
+      query: {'alt': 'media'},
+      transfer: true,
+    );
+    if (response.statusCode == 404) return null;
+    _ensureOk(response);
+    return response.data ?? Uint8List(0);
+  }
+
+  /// 原檔常超過 5 MB，而 Drive 一次送完的上傳（[write] 用的 multipart、
+  /// media）只收 5 MB 以內，所以用可續傳上傳：先開一個上傳工作，再把整個檔
+  /// 送到它給的網址。
+  @override
+  Future<void> writeBytes(String name, Uint8List bytes) async {
+    final current = await _find(name);
+    final start = await _send(
+      current == null ? _upload : '$_upload/${current.id}',
+      current == null ? 'POST' : 'PATCH',
+      query: {'uploadType': 'resumable'},
+      headers: {
+        Headers.contentTypeHeader: 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': 'application/octet-stream',
+        'X-Upload-Content-Length': '${bytes.length}',
+      },
+      data: utf8.encode(
+        jsonEncode({
+          if (current == null) ...{
+            'name': name,
+            'parents': ['appDataFolder'],
+          },
+        }),
+      ),
+    );
+    _ensureOk(start);
+    final location = start.headers.value('location');
+    if (location == null || location.isEmpty) {
+      throw const SyncStoreException.file('Google 雲端硬碟沒有給上傳的網址');
+    }
+    final response = await _send(
+      location,
+      'PUT',
+      headers: {Headers.contentTypeHeader: 'application/octet-stream'},
+      data: bytes,
+      transfer: true,
+    );
+    _ensureOk(response);
+  }
+
+  /// 同名的檔都刪掉（兩台第一次同時寫入會各建一個，[_find]），刪到查不到
+  /// 為止；刪不完就算這個檔失敗，下次再刪。
+  @override
+  Future<void> delete(String name) async {
+    for (var i = 0; i < 20; i++) {
+      final file = await _find(name);
+      if (file == null) return;
+      final response = await _send('$_api/${file.id}', 'DELETE');
+      // 404：剛被別台刪掉，再查一次還有沒有別的同名檔。
+      if (response.statusCode != 404) _ensureOk(response);
+    }
+    throw const SyncStoreException.file('Google 雲端硬碟裡的同名檔刪不完，稍後再試');
+  }
+
+  /// 傳本地書原檔（[transfer]）時一本可能幾十 MB，行動數據要傳好幾分鐘，
+  /// 不用同步檔的 30 秒上限。
+  static const Duration transferTimeout = Duration(minutes: 10);
+
   /// 帶上授權送出；Google 說 token 失效（401）就丟掉、重取一次再送。
   Future<Response<Uint8List>> _send(
     String url,
@@ -161,14 +233,15 @@ class GoogleDriveSyncStore implements SyncStore {
     Map<String, String> query = const {},
     Map<String, Object?> headers = const {},
     Object? data,
+    bool transfer = false,
   }) async {
-    var response = await _request(url, method, query, headers, data);
+    var response = await _request(url, method, query, headers, data, transfer);
     if (response.statusCode == 401) {
       final stale = response.requestOptions.headers['Authorization'];
       if (stale is String && stale.startsWith('Bearer ')) {
         await _auth.forget(stale.substring(7));
       }
-      response = await _request(url, method, query, headers, data);
+      response = await _request(url, method, query, headers, data, transfer);
     }
     return response;
   }
@@ -179,6 +252,7 @@ class GoogleDriveSyncStore implements SyncStore {
     Map<String, String> query,
     Map<String, Object?> headers,
     Object? data,
+    bool transfer,
   ) async {
     final token = await _auth.token(_account);
     try {
@@ -191,6 +265,8 @@ class GoogleDriveSyncStore implements SyncStore {
           headers: {'Authorization': 'Bearer $token', ...headers},
           responseType: ResponseType.bytes,
           validateStatus: (_) => true,
+          sendTimeout: transfer ? transferTimeout : null,
+          receiveTimeout: transfer ? transferTimeout : null,
         ),
       );
     } on DioException catch (error) {

@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 
+import 'legacy_books_table.dart';
+
 /// 標註的備忘（schema 12）：schema 11 的標註表補上備忘欄，原本的標註留著、
 /// 備忘是空的。
 void main() {
@@ -12,6 +14,12 @@ void main() {
       final db = AppDatabase.forTesting(
         NativeDatabase.memory(
           setup: (raw) {
+            // schema 11 的書架表：比 schema 9 以前的多了 progressTime。
+            raw.execute(legacyBooksTable);
+            raw.execute(
+              'ALTER TABLE books ADD COLUMN progressTime INTEGER NOT NULL '
+              'DEFAULT 0',
+            );
             raw.execute('''
             CREATE TABLE highlights (
               id INTEGER NOT NULL PRIMARY KEY,
