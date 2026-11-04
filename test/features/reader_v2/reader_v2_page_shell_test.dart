@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
@@ -287,6 +288,52 @@ void main() {
     // 頁首左欄只有電池，右欄的「電量」照舊是數字。
     expect(find.byType(ReaderV2BatteryGlyph), findsOneWidget);
     expect(find.textContaining('%'), findsOneWidget);
+  });
+
+  testWidgets('the screen reader hears the latest battery level without the '
+      'row rebuilding', (tester) async {
+    final semantics = tester.ensureSemantics();
+    MockStreamHandlerEventSink? sink;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          const EventChannel('night_reader/battery'),
+          MockStreamHandler.inline(
+            onListen: (arguments, events) {
+              sink = events;
+            },
+          ),
+        );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockStreamHandler(
+            const EventChannel('night_reader/battery'),
+            null,
+          ),
+    );
+    await pumpShell(
+      tester,
+      headerInfo: const ReaderV2InfoSlots(
+        left: ReaderV2InfoItem.batteryIcon,
+        right: ReaderV2InfoItem.time,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 第一個 pump 送達電量（重建排到下一幀），第二個畫出來。
+    Future<void> report(int percent, {bool charging = false}) async {
+      sink!.success({'percent': percent, 'charging': charging});
+      await tester.pump();
+      await tester.pump();
+    }
+
+    await report(80);
+    // 電量與時間合成頁首這一列的一句。
+    expect(find.bySemanticsLabel(RegExp(r'^電量 80%\n時間 \d')), findsOneWidget);
+
+    await report(30, charging: true);
+    expect(find.bySemanticsLabel(RegExp(r'^電量 30%')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('電量 80%')), findsNothing);
+    semantics.dispose();
   });
 
   testWidgets('a chapter change updates the chapter titles and the prev/next '
