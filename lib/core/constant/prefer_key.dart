@@ -61,6 +61,10 @@ class PreferKey {
   static const String bookImportFileName = 'bookImportFileName';
   static const String episodeExportFileName = 'episodeExportFileName';
   static const String recordLog = 'recordLog';
+
+  /// 上次讀到的手機內建瀏覽器標識（`WebViewUserAgent`）：開 App 時先用它，
+  /// 不必為了讀標識載入瀏覽器元件。
+  static const String webViewUserAgent = 'webViewUserAgent';
   static const String processText = 'process_text';
   static const String cleanCache = 'cleanCache';
   static const String saveTabPosition = 'saveTabPosition';

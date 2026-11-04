@@ -23,8 +23,27 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 正文排好到紙掀完：先停 [AppMotion.stillGap]（紙底下建好、畫出正文），再照
+/// 骨架換場的預設時長掀紙。
+final Duration _revealTime =
+    SkeletonReveal.defaultDuration + AppMotion.stillGap;
+
+/// 正文排好後推進到紙開始掀：停 [AppMotion.stillGap]，下一幀開始掀。
+Future<void> _pumpUntilRevealing(WidgetTester tester) async {
+  await tester.pump(AppMotion.stillGap);
+  await tester.pump(const Duration(milliseconds: 16));
+}
+
+/// 正文排好後推進到紙掀完。
+Future<void> _pumpReveal(WidgetTester tester) async {
+  await _pumpUntilRevealing(tester);
+  await tester.pump(SkeletonReveal.defaultDuration);
+  await tester.pump(const Duration(milliseconds: 16));
+}
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
@@ -188,6 +207,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     expect(runtime.state.hasStableWorld, isTrue);
     expect(find.byType(CustomScrollView), findsOneWidget);
+    // 紙停過預留停頓、開始掀（掀開中的紙不攔觸控）。
+    await _pumpUntilRevealing(tester);
   }
 
   ScrollPosition scrollPosition(WidgetTester tester) {
@@ -222,7 +243,7 @@ void main() {
 
     /// 推進到骨架換場播完（同 [settle]，它定義在後面）。
     Future<void> settleReveal(WidgetTester tester) async {
-      final frames = SkeletonReveal.defaultDuration.inMilliseconds ~/ 16 + 8;
+      final frames = _revealTime.inMilliseconds ~/ 16 + 8;
       for (var frame = 0; frame < frames; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
@@ -380,7 +401,7 @@ void main() {
 
   /// 推進到骨架換場（預設時長）播完再多幾幀。
   Future<void> settle(WidgetTester tester) async {
-    final frames = SkeletonReveal.defaultDuration.inMilliseconds ~/ 16 + 8;
+    final frames = _revealTime.inMilliseconds ~/ 16 + 8;
     for (var frame = 0; frame < frames; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -564,7 +585,7 @@ void main() {
     }
     await jump;
     await settle(tester);
-    await tester.pump(SkeletonReveal.defaultDuration);
+    await _pumpReveal(tester);
 
     expect(tester.takeException(), isNull);
     expect(runtime.state.visibleLocation.chapterIndex, 7);
@@ -863,7 +884,7 @@ void main() {
     }
     await jump;
     await settle(tester);
-    await tester.pump(SkeletonReveal.defaultDuration);
+    await _pumpReveal(tester);
   }
 
   group('a paper whose owner gives up never leaves the reader blank', () {
@@ -1186,8 +1207,11 @@ void main() {
     ) {
       await tester.pump(const Duration(milliseconds: 16));
     }
-    expect(find.byType(LoadingVeil), findsOneWidget, reason: '紙還在正文上淡出');
+    expect(find.byType(LoadingVeil), findsOneWidget, reason: '紙還在正文上');
 
+    // 正文在整張紙底下建好、畫出來，停過預留停頓才開始掀。
+    await _pumpUntilRevealing(tester);
+    expect(find.byType(LoadingVeil), findsOneWidget, reason: '紙還在正文上淡出');
     await tester.tapAt(const Offset(200, 300));
     await tester.pump();
     expect(taps, hasLength(1), reason: '淡出中的紙不攔點擊');
@@ -1347,11 +1371,11 @@ void main() {
       frame < 2000 && !runtime.state.hasStableWorld;
       frame++
     ) {
-      // 紙開始掀開時停住的位置已經算好，正文的捲動位置還沒套上。
-      final veil = find.byType(LoadingVeil);
+      // 正文剛在紙底下建好（紙停過預留停頓才掀）：停住的位置已經算好，正文
+      // 的捲動位置還沒套上。
       if (!resized &&
-          veil.evaluate().isNotEmpty &&
-          tester.widget<LoadingVeil>(veil).controller.isRevealing) {
+          find.byType(LoadingVeil).evaluate().isNotEmpty &&
+          find.byType(CustomScrollView).evaluate().isNotEmpty) {
         tester.view.physicalSize = _viewport;
         resized = true;
       }
@@ -1749,7 +1773,7 @@ void main() {
         skeletonPages: store,
         waitForOpen: false,
       );
-      await tester.pump(SkeletonReveal.defaultDuration);
+      await _pumpReveal(tester);
       text.complete(_chapter(0, paragraphs: 1).content);
       final noBars = paintsExactlyCountTimes(#drawRRect, 0);
       var paintedBars = true;

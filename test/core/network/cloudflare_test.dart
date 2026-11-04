@@ -212,6 +212,22 @@ void main() {
     expect(solver.calls, 0);
   });
 
+  test('a newly read browser identity is stored for the next launch', () {
+    // 開 App 時用存下的標識，不為了讀它載入瀏覽器元件；讀到新的才存。
+    final stored = <String>[];
+    WebViewUserAgent.onStore = stored.add;
+    addTearDown(() => WebViewUserAgent.onStore = null);
+
+    const older = 'Mozilla/5.0 (Linux; Android 16) Chrome/1.0';
+    WebViewUserAgent.value = older;
+    WebViewUserAgent.value = older;
+    WebViewUserAgent.value = null;
+    // 最後停在這個檔裡假瀏覽器的標識，之後的測試照常。
+    WebViewUserAgent.value = _webViewUserAgent;
+
+    expect(stored, [older, _webViewUserAgent]);
+  });
+
   test('ordinary error pages are left alone', () async {
     try {
       await NetworkService().dio.get<String>('$baseUrl/missing');

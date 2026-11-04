@@ -102,3 +102,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // 安裝後讓系統照 src/main/baseline-prof.txt 預先編譯開 App 與觸控的程式；
+    // 不經 Google Play 安裝（直接裝 APK）時由它寫入。
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+}

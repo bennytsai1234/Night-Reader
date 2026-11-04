@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../layout/readable_width.dart';
@@ -337,9 +339,45 @@ class PressScale extends StatefulWidget {
 class _PressScaleState extends State<PressScale> {
   bool _pressed = false;
 
+  /// 放開後等點擊那一幀做完才回彈（[_releaseAfterTapFrame]）；再按下或
+  /// 拆掉時作廢。
+  int _release = 0;
+  Timer? _releaseTimer;
+
+  /// 從放開到那一幀畫完超過這麼久，就是點擊做了重的工作（例如推入閱讀器）。
+  /// 一般的一幀含等下一次刷新也不到 12ms。
+  static const Duration _heavyTapFrame = Duration(milliseconds: 16);
+
   void _set(bool value) {
+    _release++;
+    _releaseTimer?.cancel();
     if (_pressed == value) return;
     setState(() => _pressed = value);
+  }
+
+  /// 點擊常在放開的同一刻做重的工作（推入新頁、開面板），那一幀很重。回彈
+  /// 不和它擠在一起：停在按下的大小，那一幀畫完才回彈；那一幀很重時再停
+  /// [AppMotion.stillGap]，做工作的那幾幀畫面都不動（ADR 0037 策略一；
+  /// 2026-11-05 手機上點書，回彈和建閱讀器的 18.6ms 擠在一起掉了 3 幀）。
+  void _releaseAfterTapFrame() {
+    final release = ++_release;
+    final tapped = Stopwatch()..start();
+    SchedulerBinding.instance.endOfFrame.then((_) {
+      if (!mounted || release != _release) return;
+      if (tapped.elapsed <= _heavyTapFrame) {
+        _set(false);
+        return;
+      }
+      _releaseTimer = Timer(AppMotion.stillGap, () {
+        if (mounted && release == _release) _set(false);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _releaseTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -348,7 +386,7 @@ class _PressScaleState extends State<PressScale> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: enabled ? (_) => _set(true) : null,
-      onTapUp: enabled ? (_) => _set(false) : null,
+      onTapUp: enabled ? (_) => _releaseAfterTapFrame() : null,
       onTapCancel: enabled ? () => _set(false) : null,
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,

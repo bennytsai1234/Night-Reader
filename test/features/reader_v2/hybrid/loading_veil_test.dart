@@ -152,6 +152,33 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets(
+    'holding the breath stills the skeleton where it is, then resumes',
+    (tester) async {
+      makeVeil(tester);
+      await pumpVeil(tester);
+      await advance(tester, revealTime + const Duration(milliseconds: 300));
+      expect(tester.hasRunningAnimations, isTrue, reason: '骨架在呼吸');
+
+      // 正文在紙底下建好的那幾幀：畫面不動，骨架照停住那一刻的深淺畫著。
+      veil.holdBreath();
+      await tester.pump(frame);
+      expect(tester.hasRunningAnimations, isFalse);
+      expect(
+        find.byType(LoadingVeil),
+        paints
+          ..rect()
+          ..rrect()
+          ..rrect(),
+      );
+
+      veil.resumeBreath();
+      await tester.pump(frame);
+      expect(tester.hasRunningAnimations, isTrue, reason: '從同一個深淺接著呼吸');
+      await finish(tester);
+    },
+  );
+
   testWidgets('the skeleton only breathes while a veil is on screen', (
     tester,
   ) async {

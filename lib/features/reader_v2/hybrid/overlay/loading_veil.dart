@@ -168,6 +168,25 @@ class LoadingVeilController {
     _syncPulse();
   }
 
+  /// 骨架的呼吸停在這一刻的深淺（[holdBreath]），畫面不動。
+  bool _breathHeld = false;
+
+  /// 掀紙前在紙底下建好、畫出正文時，骨架的呼吸停在這一刻的深淺，畫面不動
+  /// （ADR 0037 策略一：掀紙前建好正文畫面時停一兩幀加 [AppMotion.stillGap]）。
+  /// 停的時間很短，看不出凍住；[resumeBreath] 從同一個深淺接著呼吸。
+  void holdBreath() {
+    if (!_pulse.isAnimating) return;
+    _breathHeld = true;
+    _pulse.stop();
+  }
+
+  /// [holdBreath] 停住的呼吸接著走。
+  void resumeBreath() {
+    if (!_breathHeld) return;
+    _breathHeld = false;
+    _syncPulse();
+  }
+
   /// 正文已排好：照 [reveal] 的方式與時長掀開紙。
   void reveal([SkeletonReveal reveal = const SkeletonReveal()]) {
     if (_reduceMotion) {
@@ -215,6 +234,9 @@ class LoadingVeilController {
         !_reduceMotion &&
         !_cover.isDismissed &&
         (_skeleton.value > 0 || _skeleton.isAnimating);
+    // 停住的呼吸維持停在原處，等 [resumeBreath]。
+    if (run && _breathHeld) return;
+    _breathHeld = false;
     if (run) {
       if (!_pulse.isAnimating) unawaited(_pulse.repeat());
     } else if (_pulse.isAnimating || _pulse.value != 0) {
@@ -289,6 +311,8 @@ class _LoadingVeilState extends State<LoadingVeil> {
           cover: controller._cover,
           skeleton: controller._skeleton,
           pulse: controller._pulse,
+          breathing: () =>
+              controller._pulse.isAnimating || controller._breathHeld,
           look: SkeletonLook.of(context),
           breathSpan: () {
             final box = context.findRenderObject();
@@ -315,6 +339,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.cover,
     required this.skeleton,
     required this.pulse,
+    required this.breathing,
     required this.look,
     required this.breathSpan,
     required this.sweep,
@@ -333,6 +358,10 @@ class _LoadingVeilPainter extends CustomPainter {
 
   /// 呼吸一輪的進度（[Skeleton.breathAt]）；停著時骨架不呼吸。
   final Animation<double> pulse;
+
+  /// 骨架照 [pulse] 的深淺畫：呼吸中，或呼吸暫停在某個深淺
+  /// （[LoadingVeilController.holdBreath]）。
+  final bool Function() breathing;
   final SkeletonLook look;
 
   /// 紙的左右兩緣在螢幕上的位置（[Skeleton.screenSpan]）：呼吸照螢幕位置，
@@ -393,7 +422,7 @@ class _LoadingVeilPainter extends CustomPainter {
         ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
     final base = Skeleton.tint(textColor, dark: dark, strength: look.strength);
-    final breathing = pulse.isAnimating;
+    final breathing = this.breathing();
     // 紙蓋著、骨架由左而右出現時，每個橫向位置照骨架換進來的濃度畫；掀紙
     // 途中照紙的漸層。
     final growing = !sweeping && skeletonSweep() && skeleton.value < 1;

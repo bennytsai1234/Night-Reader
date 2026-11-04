@@ -180,13 +180,18 @@ abstract final class CloudflareClearance {
 }
 
 /// 手機內建瀏覽器的瀏覽器標識。帶著 Cloudflare 通行 Cookie 的請求要用它，
-/// 規則的 `java.getWebViewUA()` 也傳回它。主 isolate 開 App 後讀一次，
-/// 再轉給 worker；還沒讀到時是 null。
+/// 規則的 `java.getWebViewUA()` 也傳回它。主 isolate 開 App 時用上次存下的
+/// （[onStore]），夜讀自己打開瀏覽器時再讀一次新的，轉給 worker；從沒讀過
+/// 時是 null。不為了讀它在開 App 時載入瀏覽器元件：第一次載入在主執行緒上
+/// 要 70–95ms（2026-11-05 在手機上量到，正好卡住書架上的動畫）。
 abstract final class WebViewUserAgent {
   static String? _value;
 
   /// 主 isolate 設定時轉給 worker（[onChanged]）。
   static void Function(String userAgent)? onChanged;
+
+  /// 主 isolate 讀到新的標識時存起來，下次開 App 先用。
+  static void Function(String userAgent)? onStore;
 
   static String? get value => _value;
 
@@ -194,6 +199,7 @@ abstract final class WebViewUserAgent {
     if (userAgent == null || userAgent.isEmpty || userAgent == _value) return;
     _value = userAgent;
     onChanged?.call(userAgent);
+    onStore?.call(userAgent);
   }
 }
 

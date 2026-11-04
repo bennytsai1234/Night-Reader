@@ -188,6 +188,10 @@ class AppMotion {
   /// 骨架載入的呼吸脈動：一次由深到淺（往返一輪 1.6 秒）。比 [fade] 慢
   /// 六倍以上，讀起來是安靜的等待，不像閃爍。
   static const Duration skeletonPulse = Duration(milliseconds: 800);
+
+  /// 預留停頓：主執行緒的一段重工作在靜止的畫面上做完後，隔這麼久才播下一段
+  /// 動畫，動畫的每一幀都不和工作擠在一起（ADR 0036 第 2 條、ADR 0037 策略一）。
+  static const Duration stillGap = Duration(milliseconds: 100);
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受
