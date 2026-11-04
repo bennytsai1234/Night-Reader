@@ -128,10 +128,10 @@ class BookshelfSync extends SyncKind {
   /// 跟著最近讀的那本），不含本地書。
   Future<Map<String, List<Book>>> _shelf() async {
     final shelf = <String, List<Book>>{};
-    final localBooks = <String>{};
+    final localBooks = <String, List<Book>>{};
     for (final book in await _bookDao.getInBookshelf()) {
       if (book.isLocal) {
-        localBooks.add(ProgressSync.nameKeyOf(book));
+        (localBooks[ProgressSync.nameKeyOf(book)] ??= []).add(book);
         continue;
       }
       (shelf[ProgressSync.keyOf(book)] ??= []).add(book);
@@ -140,8 +140,8 @@ class BookshelfSync extends SyncKind {
     return shelf;
   }
 
-  /// 這台書架上本地書的書名加作者（[_shelf] 最近一次讀到的）。
-  Set<String> _localBooks = const {};
+  /// 這台書架上的本地書，照書名加作者（[_shelf] 最近一次讀到的）。
+  Map<String, List<Book>> _localBooks = const {};
 
   static Book _latest(List<Book> books) =>
       books.reduce((a, b) => b.durChapterTime > a.durChapterTime ? b : a);
@@ -177,16 +177,19 @@ class BookshelfSync extends SyncKind {
     _cloud = remote;
     // 舊版把本地書也送進了書架同步，上次同步的紀錄還記著它。這台不再送
     // 本地書，照常比的話會被當成移出書架、送出刪除紀錄，刪掉另一台同名同
-    // 作者的網路書：雲端那筆是本地書的舊紀錄、或這台有同名同作者的本地書
-    // 時，當成這台也有、沒改過。
-    return {
-      ...local,
-      for (final MapEntry(:key, value: record) in remote.entries)
-        if (!local.containsKey(key) &&
-            !record.deleted &&
-            (_isLocalRecord(record) || _localBooks.contains(key)))
-          key: record,
-    };
+    // 作者的網路書。這種紀錄作廢，照這台從沒同步過這一筆合併：雲端那筆是
+    // 本地書的舊紀錄，或上次同步時這台送的就是書架上那本本地書。
+    for (final key in [...base.keys]) {
+      if (local.containsKey(key)) continue;
+      final cloud = remote[key];
+      final sentLocalBook = (_localBooks[key] ?? const <Book>[]).any(
+        (book) => _fingerprintOf(recordOf(book)) == base[key]!.local,
+      );
+      if (sentLocalBook || (cloud != null && _isLocalRecord(cloud))) {
+        base.remove(key);
+      }
+    }
+    return local;
   }
 
   /// 舊版把本地書（帶著那台手機上的路徑）也送進了書架同步，另一台加進來是

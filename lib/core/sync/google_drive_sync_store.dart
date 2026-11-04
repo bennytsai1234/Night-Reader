@@ -208,16 +208,18 @@ class GoogleDriveSyncStore implements SyncStore {
     _ensureOk(response);
   }
 
-  /// 同名的檔都刪掉（兩台第一次同時寫入會各建一個，[_find]）。
+  /// 同名的檔都刪掉（兩台第一次同時寫入會各建一個，[_find]），刪到查不到
+  /// 為止；刪不完就算這個檔失敗，下次再刪。
   @override
   Future<void> delete(String name) async {
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < 20; i++) {
       final file = await _find(name);
       if (file == null) return;
       final response = await _send('$_api/${file.id}', 'DELETE');
-      if (response.statusCode == 404) return;
-      _ensureOk(response);
+      // 404：剛被別台刪掉，再查一次還有沒有別的同名檔。
+      if (response.statusCode != 404) _ensureOk(response);
     }
+    throw const SyncStoreException.file('Google 雲端硬碟裡的同名檔刪不完，稍後再試');
   }
 
   /// 傳本地書原檔（[transfer]）時一本可能幾十 MB，行動數據要傳好幾分鐘，

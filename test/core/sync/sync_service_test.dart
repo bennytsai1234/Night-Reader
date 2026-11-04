@@ -820,13 +820,40 @@ void main() {
 
       expect(await b.books.getByUrl('b-src'), isNotNull);
       expect(b.discarded, isEmpty);
-      expect((await a.books.getInBookshelf()).single.bookUrl, local.bookUrl);
+      // A 沒真的有過 B 那本網路書，照沒同步過那一筆合併：加進來。
+      expect(
+        (await a.books.getInBookshelf()).map((book) => book.bookUrl).toSet(),
+        {local.bookUrl, 'b-src'},
+      );
       expect(
         SyncDocument.decode(store.files['bookshelf.json']!.$1)
             .records[key]!
             .deleted,
         isFalse,
       );
+    });
+
+    test('a network book removed here is still removed elsewhere when a '
+        'local book has the same title and author', () async {
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      expect(await b.books.getByUrl('a-src'), isNotNull);
+
+      await a.books.upsert(
+        Book(
+          bookUrl: 'local:///a/夜航.txt',
+          origin: 'local',
+          name: '夜航',
+          author: '某人',
+          isInBookshelf: true,
+        ),
+      );
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      expect(b.discarded, ['a-src']);
     });
 
     test('a book removed from one shelf leaves the other shelf too', () async {

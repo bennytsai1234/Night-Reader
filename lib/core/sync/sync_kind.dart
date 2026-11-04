@@ -33,6 +33,8 @@ abstract class SyncKind {
   SyncPrune get prune => keepEverySyncRecord;
 
   /// 比對之前把本機和雲端的身分對齊（替換規則的編號）。傳回對齊後的本機。
+  /// 上次同步的紀錄裡已經不算數的（書架裡舊版送出的本地書），可以從
+  /// [base] 拿掉，這一輪照沒同步過那一筆合併。
   Future<Map<String, SyncRecord>> reconcile(
     Map<String, SyncRecord> local,
     Map<String, SyncRecord> remote,

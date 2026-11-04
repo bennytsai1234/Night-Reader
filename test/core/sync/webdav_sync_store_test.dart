@@ -15,6 +15,9 @@ class _FakeWebDav implements HttpClientAdapter {
 
   /// 讀寫這些路徑時回 403（只有這幾份被拒絕）。
   final Set<String> forbidden = {};
+
+  /// 一律回這個狀態碼（模擬限流、伺服器故障）；null 時照常。
+  int? failWith;
   String auth = 'Basic ${base64.encode(utf8.encode('me:pw'))}';
 
   @override
@@ -27,6 +30,7 @@ class _FakeWebDav implements HttpClientAdapter {
     log.add('${options.method} $path');
     if (options.headers['Authorization'] != auth) return _status(401);
     if (forbidden.contains(path)) return _status(403);
+    if (failWith case final status?) return _status(status);
     final parent = path.substring(
       0,
       path.lastIndexOf('/', path.length - 2) + 1,
@@ -202,5 +206,21 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('rate limiting and a server failure stop the whole round', () async {
+    for (final status in [429, 503]) {
+      server.failWith = status;
+      await expectLater(
+        store().readBytes('book_x.epub'),
+        throwsA(
+          isA<SyncStoreException>().having(
+            (e) => e.wholeSpace,
+            'wholeSpace',
+            true,
+          ),
+        ),
+      );
+    }
   });
 }

@@ -191,6 +191,11 @@ class WebDavSyncStore implements SyncStore {
     if (status == 401 || (probe && status == 403)) {
       throw const SyncStoreException('帳號或密碼不對');
     }
+    // 被限流（429）、伺服器故障（5xx）是整個空間暫時用不了，後面的檔也
+    // 一樣，同 Google 雲端硬碟。
+    if (status == 429 || status >= 500) {
+      throw SyncStoreException('同步空間暫時無法使用（HTTP $status），稍後再試');
+    }
     if (status == 403) {
       throw const SyncStoreException.file('同步空間拒絕存取這份檔案（HTTP 403）');
     }

@@ -234,6 +234,17 @@ void main() {
     await store().delete('book_x.epub');
   });
 
+  test('deleting removes every copy with that name', () async {
+    for (var i = 0; i < 6; i++) {
+      drive.files['dup$i'] = (name: 'book_x.epub', content: '', version: 1);
+    }
+    drive.files['other'] = (name: 'p.json', content: '{}', version: 1);
+
+    await store().delete('book_x.epub');
+
+    expect(drive.files.keys, ['other']);
+  });
+
   test('a file behind an empty first page is still found', () async {
     await store().write('p.json', 'one');
     drive.emptyFirstPage = true;

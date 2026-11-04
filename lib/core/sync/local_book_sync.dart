@@ -163,27 +163,25 @@ class LocalBookSync {
   static String originalName(String fingerprint, String extension) =>
       'book_$fingerprint.$extension${extension == 'txt' ? '.gz' : ''}';
 
-  /// 上次同步時兩邊都有的書，上次同步的紀錄裡記的內容（只看有沒有）。
-  static const String _present = 'present';
-
   /// 算出要做的事，還不動手。這一版以前匯入、還沒有指紋的本地書先在背景
-  /// isolate 補算。
+  /// isolate 補算；解析雲端的小紀錄與比對也在背景 isolate（ADR 0046）。
+  ///
+  /// 兩邊都有的書這時就記成同步過（[LocalBookSyncPlan.settled]）：不用做事
+  /// 也要記，之後這台移出書架才分得出是這台移出的。
   Future<LocalBookSyncPlan> plan() async {
     await fillLocalBookFingerprints(_bookDao, run: _run);
     final local = await _shelf();
     final file = await _store.read(fileName);
-    final remote = file == null
-        ? const <String, SyncRecord>{}
-        : SyncDocument.decode(file.content).records;
-    return planLocalBookSync(
-      local: local,
-      remote: remote,
-      base: await _bases.read(kind),
-    );
+    final base = await _bases.read(kind);
+    final plan = await _planOn(_run, file?.content, local, base);
+    if (plan.settled.isNotEmpty) {
+      await _bases.write(kind, {...await _bases.read(kind), ...plan.settled});
+    }
+    return plan;
   }
 
-  /// 書架上每個原檔指紋的本地書。原檔大小這時才量；原檔不見了算 0，上傳時
-  /// 再報失敗。
+  /// 書架上每個原檔指紋的本地書。原檔大小這時才量；原檔不見了的記下來，
+  /// 雲端有就下載補回。
   Future<Map<String, LocalShelfBook>> _shelf() async {
     final shelf = <String, LocalShelfBook>{};
     for (final book in await _bookDao.getInBookshelf()) {
@@ -195,11 +193,13 @@ class LocalBookSync {
       }
       final path = LocalBookService.filePathOf(book);
       final file = File(path);
+      final hasFile = await file.exists();
       shelf[print] = LocalShelfBook(
         name: book.name,
         author: book.author,
         extension: localBookExtensionFromPath(path),
-        size: await file.exists() ? await file.length() : 0,
+        size: hasFile ? await file.length() : 0,
+        hasFile: hasFile,
         addedTime: book.syncTime,
         path: path,
         bookUrls: [book.bookUrl],
@@ -216,8 +216,7 @@ class LocalBookSync {
     void Function(LocalBookSyncProgress progress)? onProgress,
     bool Function()? cancelled,
   }) async {
-    final base = {...await _bases.read(kind), ...plan.settled};
-    await _bases.write(kind, base);
+    final base = await _bases.read(kind);
     final failures = <LocalBookFailure>[];
     var done = 0;
     var shelfChanged = false;
@@ -231,18 +230,27 @@ class LocalBookSync {
       try {
         switch (task.action) {
           case LocalBookAction.upload:
-            base[task.fingerprint] = _entry(await _upload(task));
+            // 原檔傳上去、小紀錄還沒寫成時先記著：這台之後移出書架的話，
+            // 下次按的時候照它刪掉雲端沒人記著的原檔。
+            base[task.fingerprint] = _entry(0, task.extension);
+            await _bases.write(kind, base);
+            base[task.fingerprint] = _entry(
+              await _upload(task),
+              task.extension,
+            );
           case LocalBookAction.download:
             await _download(task);
             shelfChanged = true;
-            base[task.fingerprint] = _entry(task.remoteTime);
+            base[task.fingerprint] = _entry(task.remoteTime, task.extension);
           case LocalBookAction.removeHere:
             await _removeHere(task);
             shelfChanged = true;
             base.remove(task.fingerprint);
           case LocalBookAction.deleteRemote:
             await _deleteRemote(task);
-            base.remove(task.fingerprint);
+            // 留著上次同步的紀錄：刪除紀錄被別台同時寫入蓋回去時，下次按
+            // 的時候還認得出是這台移出的，再刪一次。
+            base[task.fingerprint] = _entry(task.remoteTime, task.extension);
         }
         await _bases.write(kind, base);
         done++;
@@ -270,8 +278,10 @@ class LocalBookSync {
     _ => '$error',
   };
 
-  static SyncBaseEntry _entry(int time) =>
-      SyncBaseEntry(local: _present, remote: _present, time: time);
+  /// 上次同步的紀錄：雲端那筆的時間，與原檔的副檔名（雲端的紀錄不見了時，
+  /// 靠它找到要刪的原檔）。
+  static SyncBaseEntry _entry(int time, String extension) =>
+      SyncBaseEntry(local: extension, remote: extension, time: time);
 
   /// 上傳原檔與小紀錄，傳回小紀錄的時間。
   Future<int> _upload(LocalBookTask task) async {
@@ -370,28 +380,31 @@ class LocalBookSync {
     );
   }
 
-  /// 改雲端小紀錄裡的一筆：讀、改、寫回；被別台搶先就重讀再改。試到最後
-  /// 一次仍被搶先就不比版本直接寫，同其他種類的同步。
+  /// 改雲端小紀錄裡的一筆：讀、改、寫回；被別台搶先就重讀再改。一直被搶先
+  /// 就算這本失敗、下次再做，不比版本直接寫：那會蓋掉別台剛寫的刪除紀錄，
+  /// 而刪除的那台已經不再有那本書，補不回來。
   Future<void> _putRecord(String fingerprint, SyncRecord record) async {
-    for (var attempt = 1; ; attempt++) {
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
       final file = await _store.read(fileName);
-      final records = file == null
-          ? <String, SyncRecord>{}
-          : Map.of(SyncDocument.decode(file.content).records);
-      records[fingerprint] = record;
-      final lastTry = attempt >= _maxAttempts;
+      final content = await _putRecordOn(
+        _run,
+        file?.content,
+        fingerprint,
+        record,
+      );
       try {
         await _store.write(
           fileName,
-          SyncDocument(records).encode(),
-          ifVersion: lastTry ? null : file?.version,
-          ifAbsent: !lastTry && file == null,
+          content,
+          ifVersion: file?.version,
+          ifAbsent: file == null,
         );
         return;
       } on SyncConflict {
         continue;
       }
     }
+    throw const SyncStoreException.file('另一台手機同時在同步本地書，稍後再按一次');
   }
 
   static Future<void> _deleteQuietly(String path) async {
@@ -414,12 +427,16 @@ class LocalShelfBook {
     required this.addedTime,
     required this.path,
     required this.bookUrls,
+    this.hasFile = true,
   });
 
   final String name;
   final String author;
   final String extension;
   final int size;
+
+  /// 原檔還在這台手機上（例如還原備份帶回了書，原檔沒帶回來）。
+  final bool hasFile;
 
   /// 加進書架的時間；和雲端的刪除紀錄比新舊用。
   final int addedTime;
@@ -434,18 +451,20 @@ class LocalShelfBook {
     addedTime: addedTime,
     path: path,
     bookUrls: [...bookUrls, bookUrl],
+    hasFile: hasFile,
   );
 }
 
 /// 每個原檔指紋，這台（[local]）、雲端（[remote]）與上次同步時（[base]）
-/// 比出要做的事。純計算。
+/// 比出要做的事。純計算，在背景 isolate 跑。
 ///
-/// - 兩邊都有：不用做事，記成同步過。
-/// - 只有這台有：雲端從沒有過就上傳；雲端記著刪除時，上次同步過（之後
-///   另一台移出了）或刪除比這台加進書架晚，這台跟著移出，否則這台是之後才
-///   重新加的，再上傳。
-/// - 只有雲端有：上次同步時兩邊都有、雲端那筆之後沒變，是這台移出了，刪掉
-///   雲端的；否則下載。
+/// - 兩邊都有：不用做事，記成同步過；這台的原檔不見了的話下載補回。
+/// - 只有這台有：雲端從沒有過就上傳；雲端記著刪除時，刪除比這台加進書架
+///   晚就跟著移出，否則這台是之後才重新加的，再上傳。
+/// - 只有雲端有：上次同步之後雲端那筆沒變，是這台移出了，刪掉雲端的；
+///   否則下載。
+/// - 兩邊都沒有、上次同步時有：原檔傳上去了、小紀錄沒寫成，這台又移出了，
+///   刪掉雲端沒人記著的原檔。
 LocalBookSyncPlan planLocalBookSync({
   required Map<String, LocalShelfBook> local,
   required Map<String, SyncRecord> remote,
@@ -453,18 +472,21 @@ LocalBookSyncPlan planLocalBookSync({
 }) {
   final tasks = <LocalBookTask>[];
   final settled = <String, SyncBaseEntry>{};
-  for (final print in {...local.keys, ...remote.keys}) {
+  for (final print in {...local.keys, ...remote.keys, ...base.keys}) {
     final mine = local[print];
     final theirs = remote[print];
     final last = base[print];
     final alive = theirs != null && !theirs.deleted;
     if (mine != null) {
-      if (alive) {
-        settled[print] = LocalBookSync._entry(theirs.time);
+      if (alive && mine.hasFile) {
+        settled[print] = LocalBookSync._entry(theirs.time, mine.extension);
         continue;
       }
-      final removedThere =
-          theirs != null && (last != null || theirs.time >= mine.addedTime);
+      if (alive) {
+        tasks.add(_remoteTask(LocalBookAction.download, print, theirs));
+        continue;
+      }
+      final removedThere = theirs != null && theirs.time >= mine.addedTime;
       tasks.add(
         LocalBookTask(
           action: removedThere
@@ -481,27 +503,33 @@ LocalBookSyncPlan planLocalBookSync({
       );
       continue;
     }
-    if (!alive) continue;
-    final data = theirs.data;
-    String text(String field) =>
-        data[field] is String ? data[field] as String : '';
-    final extension = text('ext');
-    if (!isSupportedLocalBookExtension(extension)) continue;
-    final size = data['size'] is int ? data['size'] as int : 0;
-    tasks.add(
-      LocalBookTask(
-        action: last != null && last.time == theirs.time
-            ? LocalBookAction.deleteRemote
-            : LocalBookAction.download,
-        fingerprint: print,
-        name: text('name'),
-        author: text('author'),
-        extension: extension,
-        size: size,
-        remoteTime: theirs.time,
-      ),
-    );
+    if (alive) {
+      final removedHere = last != null && last.time == theirs.time;
+      tasks.add(
+        _remoteTask(
+          removedHere ? LocalBookAction.deleteRemote : LocalBookAction.download,
+          print,
+          theirs,
+        ),
+      );
+      continue;
+    }
+    if (theirs == null &&
+        last != null &&
+        isSupportedLocalBookExtension(last.local)) {
+      tasks.add(
+        LocalBookTask(
+          action: LocalBookAction.deleteRemote,
+          fingerprint: print,
+          name: '沒傳完的原檔',
+          author: '',
+          extension: last.local,
+          size: 0,
+        ),
+      );
+    }
   }
+  tasks.removeWhere((task) => !isSupportedLocalBookExtension(task.extension));
   // 先做這台書架上的事（快），再傳檔；同一種裡照書名排，進度框看得出順序。
   tasks.sort((a, b) {
     final order = a.action.index.compareTo(b.action.index);
@@ -510,8 +538,57 @@ LocalBookSyncPlan planLocalBookSync({
   return LocalBookSyncPlan(tasks: tasks, settled: settled);
 }
 
-// 下面兩個在背景 isolate 讀寫整個原檔。閉包在頂層函式裡建立，只捕捉參數
-// （CODING_STANDARDS.md）。
+/// 照雲端那筆紀錄（[record]）下載或刪掉雲端的一本。
+LocalBookTask _remoteTask(
+  LocalBookAction action,
+  String fingerprint,
+  SyncRecord record,
+) {
+  final data = record.data;
+  String text(String field) =>
+      data[field] is String ? data[field] as String : '';
+  return LocalBookTask(
+    action: action,
+    fingerprint: fingerprint,
+    name: text('name'),
+    author: text('author'),
+    extension: text('ext'),
+    size: data['size'] is int ? data['size'] as int : 0,
+    remoteTime: record.time,
+  );
+}
+
+// 下面幾個在背景 isolate 跑：解析與比對小紀錄、讀寫整個原檔。閉包在頂層
+// 函式裡建立，只捕捉參數（CODING_STANDARDS.md）。
+
+Future<LocalBookSyncPlan> _planOn(
+  LocalBookWorkRunner run,
+  String? content,
+  Map<String, LocalShelfBook> local,
+  Map<String, SyncBaseEntry> base,
+) => run(
+  () => planLocalBookSync(
+    local: local,
+    remote: content == null
+        ? const <String, SyncRecord>{}
+        : SyncDocument.decode(content).records,
+    base: base,
+  ),
+);
+
+/// 雲端小紀錄（[content]，還沒有是 null）改了 [fingerprint] 那一筆之後的
+/// 整份內容。
+Future<String> _putRecordOn(
+  LocalBookWorkRunner run,
+  String? content,
+  String fingerprint,
+  SyncRecord record,
+) => run(
+  () => SyncDocument({
+    if (content != null) ...SyncDocument.decode(content).records,
+    fingerprint: record,
+  }).encode(),
+);
 
 /// 讀原檔，TXT 先壓縮。
 Future<Uint8List> _packOn(LocalBookWorkRunner run, String path, String ext) =>

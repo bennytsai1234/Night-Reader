@@ -58,13 +58,20 @@ class BookStorageService {
     if (book.isLocal) await _deleteLocalOriginal(book);
   }
 
-  /// 本地書移出書架後，App 資料夾裡那份原檔沒有別的書用，跟著刪掉；不在
+  /// 本地書移出書架後，App 資料夾裡那份原檔沒有別的書用就跟著刪掉；不在
   /// App 資料夾裡的（很舊的版本直接指著選檔器給的檔）不動。
-  static Future<void> _deleteLocalOriginal(Book book) async {
+  Future<void> _deleteLocalOriginal(Book book) async {
     final path = LocalBookService.filePathOf(book);
     try {
       final dir = await AppStoragePaths.localBooksDir();
       if (!p.isWithin(dir.path, path)) return;
+      // 還原的舊資料可能有兩本書指著同一個檔。
+      for (final other in await _bookDao.getAll()) {
+        if (other.isLocal &&
+            p.equals(LocalBookService.filePathOf(other), path)) {
+          return;
+        }
+      }
       final file = File(path);
       if (await file.exists()) await file.delete();
     } on FileSystemException catch (error) {

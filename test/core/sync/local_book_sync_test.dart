@@ -43,6 +43,9 @@ class _MemoryStore with SyncStoreBlobs implements SyncStore {
     return file == null ? null : '${file.$2}';
   }
 
+  /// 寫入前先跑它（模擬別台同時寫入）；傳回 null 時照常寫。
+  Future<void> Function(String name)? beforeWrite;
+
   @override
   Future<void> write(
     String name,
@@ -50,6 +53,7 @@ class _MemoryStore with SyncStoreBlobs implements SyncStore {
     String? ifVersion,
     bool ifAbsent = false,
   }) async {
+    await beforeWrite?.call(name);
     final current = files[name];
     if (ifAbsent && current != null) throw const SyncConflict();
     if (ifVersion != null && '${current?.$2}' != ifVersion) {
@@ -260,7 +264,7 @@ void main() {
     SyncRecord gone(int time) =>
         SyncRecord(time: time, data: const {}, deleted: true);
     SyncBaseEntry synced(int time) =>
-        SyncBaseEntry(local: 'present', remote: 'present', time: time);
+        SyncBaseEntry(local: 'txt', remote: 'txt', time: time);
     List<(LocalBookAction, String)> tasksOf(LocalBookSyncPlan plan) => [
       for (final task in plan.tasks) (task.action, task.fingerprint),
     ];
@@ -284,9 +288,10 @@ void main() {
 
     test('a synced book removed here is deleted from the cloud; removed on '
         'the other phone it leaves this shelf', () {
+      // 這台加進書架的時間是 100，另一台 120 移出。
       final plan = planLocalBookSync(
         local: {'kept-here': shelfBook},
-        remote: {'removed-here': alive(50), 'kept-here': gone(80)},
+        remote: {'removed-here': alive(50), 'kept-here': gone(120)},
         base: {'removed-here': synced(50), 'kept-here': synced(60)},
       );
 
@@ -294,6 +299,48 @@ void main() {
         (LocalBookAction.removeHere, 'kept-here'),
         (LocalBookAction.deleteRemote, 'removed-here'),
       ]);
+    });
+
+    test('a book added again here after this phone deleted it from the cloud '
+        'goes up again', () {
+      final plan = planLocalBookSync(
+        local: {'again': shelfBook},
+        remote: {'again': gone(80)},
+        base: {'again': synced(50)},
+      );
+      expect(tasksOf(plan), [(LocalBookAction.upload, 'again')]);
+    });
+
+    test('a book whose file is missing here is downloaded back', () {
+      final plan = planLocalBookSync(
+        local: {
+          'lost': const LocalShelfBook(
+            name: '夜航',
+            author: '本地',
+            extension: 'txt',
+            size: 0,
+            hasFile: false,
+            addedTime: 100,
+            path: '/books/夜航.txt',
+            bookUrls: ['local:///books/夜航.txt'],
+          ),
+        },
+        remote: {'lost': alive(50)},
+        base: {'lost': synced(50)},
+      );
+      expect(tasksOf(plan), [(LocalBookAction.download, 'lost')]);
+      expect(plan.settled, isEmpty);
+    });
+
+    test('a file sent up whose record never made it, then removed here, is '
+        'deleted from the cloud', () {
+      final plan = planLocalBookSync(
+        local: const {},
+        remote: const {},
+        base: {'orphan': synced(0)},
+      );
+      expect(tasksOf(plan), [(LocalBookAction.deleteRemote, 'orphan')]);
+      expect(plan.tasks.single.extension, 'txt');
     });
 
     test('a book re-uploaded after this phone removed it comes back', () {
@@ -416,6 +463,133 @@ void main() {
       b.use();
       await b.sync.syncAll();
       expect((await b.books.getByUrl(theirs.bookUrl))!.chapterIndex, 2);
+    });
+  });
+
+  group('repairs', () {
+    test(
+      'a phone that already had the book remembers it even when there is '
+      'nothing to send, so removing it later deletes it from the cloud',
+      () async {
+        final mine = await a.import('夜航.txt', _novel);
+        await a.syncLocalBooks();
+        await b.import('別的名字.txt', _novel);
+
+        // 兩邊都有：沒有事要做，按了也要記成同步過。
+        expect((await b.localBooks().plan()).isEmpty, isTrue);
+        b.use();
+        await BookStorageService(
+          bookDao: b.books,
+          chapterDao: b.chapters,
+        ).discardBook((await b.shelf()).single);
+
+        final next = await b.localBooks().plan();
+        expect(next.tasks.map((task) => task.action), [
+          LocalBookAction.deleteRemote,
+        ]);
+        expect(next.tasks.single.fingerprint, mine.fileFingerprint);
+      },
+    );
+
+    test(
+      'importing the same file again puts a missing original back',
+      () async {
+        final mine = await a.import('夜航.txt', _novel);
+        final path = LocalBookService.filePathOf(mine);
+        File(path).deleteSync();
+
+        final again = await a.import('夜航 (找回來的).txt', _novel);
+
+        expect(again.bookUrl, mine.bookUrl);
+        expect(File(path).readAsStringSync(), _novel);
+        expect(await a.shelf(), hasLength(1));
+      },
+    );
+
+    test('a missing original is downloaded back into place', () async {
+      await a.import('夜航.txt', _novel);
+      await a.syncLocalBooks();
+      await b.syncLocalBooks();
+      final theirs = (await b.shelf()).single;
+      final path = LocalBookService.filePathOf(theirs);
+      File(path).deleteSync();
+
+      final plan = await b.localBooks().plan();
+      expect(plan.tasks.map((task) => task.action), [LocalBookAction.download]);
+      expect((await b.localBooks().run(plan)).failures, isEmpty);
+
+      expect(File(path).readAsStringSync(), _novel);
+      expect((await b.shelf()).single.bookUrl, theirs.bookUrl);
+      final dir = Directory(p.join(b.root.path, 'docs', 'InkpageBooks'));
+      expect(dir.listSync(), hasLength(1), reason: '下載的那份用完就刪');
+    });
+
+    test('removing one of two books that share an original keeps the '
+        'file', () async {
+      final mine = await a.import('夜航.txt', _novel);
+      // 還原的舊資料：另一筆書指著同一個檔。
+      await a.books.upsert(
+        mine.copyWith(bookUrl: LocalBookService.filePathOf(mine)),
+      );
+
+      a.use();
+      await BookStorageService(
+        bookDao: a.books,
+        chapterDao: a.chapters,
+      ).discardBook(mine);
+
+      expect(File(LocalBookService.filePathOf(mine)).existsSync(), isTrue);
+    });
+
+    test('a file sent up whose record never made it is deleted from the '
+        'cloud once the book is removed here', () async {
+      final mine = await a.import('夜航.txt', _novel);
+      store.beforeWrite = (name) async =>
+          throw const SyncStoreException.file('同步空間拒絕存取這份檔案（HTTP 403）');
+      final failed = await a.syncLocalBooks();
+      expect(failed.failures, hasLength(1));
+      expect(store.blobs, hasLength(1));
+      store.beforeWrite = null;
+
+      a.use();
+      await BookStorageService(
+        bookDao: a.books,
+        chapterDao: a.chapters,
+      ).discardBook(mine);
+      final cleanup = await a.localBooks().plan();
+      expect(cleanup.tasks.map((task) => task.action), [
+        LocalBookAction.deleteRemote,
+      ]);
+      await a.localBooks().run(cleanup);
+      expect(store.blobs, isEmpty);
+    });
+
+    test('a removal another phone wrote at the same moment is not '
+        'overwritten', () async {
+      await a.import('甲.txt', '甲的內容\n');
+      await a.import('乙.txt', '乙的內容\n');
+      await a.syncLocalBooks();
+      await b.syncLocalBooks();
+      // B 移出甲、按下同步本地書；A 同時在改小紀錄，一直被 B 搶先。
+      final bookA = (await b.shelf()).firstWhere((book) => book.name == '甲');
+      b.use();
+      await BookStorageService(
+        bookDao: b.books,
+        chapterDao: b.chapters,
+      ).discardBook(bookA);
+      await b.syncLocalBooks();
+      expect(store.records[bookA.fileFingerprint]!.deleted, isTrue);
+
+      await a.import('丙.txt', '丙的內容\n');
+      store.beforeWrite = (name) async {
+        final current = store.files[name]!;
+        store.files[name] = (current.$1, current.$2 + 1);
+      };
+      final result = await a.syncLocalBooks();
+      store.beforeWrite = null;
+
+      expect(result.failures.single.reason, '另一台手機同時在同步本地書，稍後再按一次');
+      expect(store.records[bookA.fileFingerprint]!.deleted, isTrue);
     });
   });
 

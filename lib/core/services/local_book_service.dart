@@ -72,7 +72,10 @@ class LocalBookService {
     // 這一版以前匯入的書先補上指紋，才認得出是不是同一本。
     await fillLocalBookFingerprints(bookDao);
     final same = await bookDao.getInBookshelfByFingerprint(print);
-    if (same.isNotEmpty) return same.first;
+    if (same.isNotEmpty) {
+      await _restoreMissingOriginal(same, path);
+      return same.first;
+    }
 
     final storedPath = await storeInLibrary(path);
     final existing = await bookDao.getByUrl('local://$storedPath');
@@ -109,6 +112,25 @@ class LocalBookService {
       AppLog.e('匯入本地書籍失敗: $e', error: e);
       await _discardUnusedCopy(storedPath, existing == null);
       rethrow;
+    }
+  }
+
+  /// 書架上已有同一個檔的書，但原檔不見了（例如還原備份帶回了書、沒帶回
+  /// 原檔）：把這次給的檔放回它原本的位置，書、進度、目錄都不動。
+  static Future<void> _restoreMissingOriginal(
+    List<Book> books,
+    String path,
+  ) async {
+    for (final book in books) {
+      final target = File(filePathOf(book));
+      if (await target.exists()) continue;
+      try {
+        await target.parent.create(recursive: true);
+        await File(path).copy(target.path);
+      } on FileSystemException catch (error) {
+        // 原本的位置在別的手機或別的 App 資料夾，寫不進去。
+        AppLog.e('放回本地書原檔失敗: $error', error: error);
+      }
     }
   }
 
