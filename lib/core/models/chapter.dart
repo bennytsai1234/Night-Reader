@@ -3,9 +3,6 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
 
-import 'replace_rule.dart';
-import '../services/chinese_utils.dart';
-
 /// BookChapter - 章節模型
 /// (原 Android data/entities/BookChapter.kt)
 class BookChapter implements RuleDataInterface {
@@ -74,46 +71,6 @@ class BookChapter implements RuleDataInterface {
 
   @override
   String getVariable(String key) => variableMap[key] ?? '';
-
-  /// 獲取顯示標題 (原 Android getDisplayTitle)
-  String getDisplayTitle({
-    List<ReplaceRule>? replaceRules,
-    bool useReplace = true,
-    int chineseConvertType = 0, // 0: 不轉換, 1: 簡轉繁, 2: 繁轉簡
-  }) {
-    var displayTitle = title.replaceAll(RegExp(r'[\r\n]'), '');
-
-    // 繁簡轉換 (純 Dart 同步查表)
-    if (chineseConvertType == 1) {
-      displayTitle = ChineseUtils.s2t(displayTitle);
-    } else if (chineseConvertType == 2) {
-      displayTitle = ChineseUtils.t2s(displayTitle);
-    }
-
-    // 標題淨化規則
-    if (useReplace && replaceRules != null) {
-      for (var rule in replaceRules) {
-        if (rule.pattern.isNotEmpty) {
-          try {
-            if (rule.isRegex) {
-              displayTitle = displayTitle.replaceAll(
-                RegExp(rule.pattern),
-                rule.replacement,
-              );
-            } else {
-              displayTitle = displayTitle.replaceAll(
-                rule.pattern,
-                rule.replacement,
-              );
-            }
-          } catch (e) {
-            // 忽略錯誤的正則
-          }
-        }
-      }
-    }
-    return displayTitle;
-  }
 
   /// 獲取絕對 URL (對標 Android BookChapter.getAbsoluteURL)
   String getAbsoluteURL() {

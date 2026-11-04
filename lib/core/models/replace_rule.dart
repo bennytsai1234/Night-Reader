@@ -1,3 +1,4 @@
+import '../engine/parsers/java_regexp.dart';
 import 'json_read.dart';
 
 /// ReplaceRule - 替換淨化規則模型
@@ -38,7 +39,7 @@ class ReplaceRule {
     if (pattern.isEmpty) return false;
     if (isRegex) {
       try {
-        RegExp(pattern);
+        javaRegExp(pattern);
       } on FormatException {
         return false;
       }
@@ -90,12 +91,14 @@ class ReplaceRule {
     return (group == null || group!.isEmpty) ? name : '$name ($group)';
   }
 
-  /// 執行單條規則替換 (用於調試與預覽)
+  /// 套用這一條規則：正文、標題與試跑都用它。正則照 Java 預設（同
+  /// Legado）：`.` 不跨段、`^`／`$` 不逐行，開頭寫 `(?s)`、`(?m)` 才開
+  /// （[javaRegExp]）。
   String apply(String content) {
     if (pattern.isEmpty) return content;
     try {
       if (isRegex) {
-        final reg = RegExp(pattern, multiLine: true, dotAll: true);
+        final reg = javaRegExp(pattern);
         return content.replaceAllMapped(reg, (match) {
           // 替換 $0 為整個匹配項，替換 $1...$N 為捕獲組
           return replacement.replaceAllMapped(RegExp(r'\\\$|\$(\d+)'), (m) {

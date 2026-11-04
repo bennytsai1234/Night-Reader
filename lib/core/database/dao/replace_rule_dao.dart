@@ -23,6 +23,11 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
     )..orderBy([(t) => OrderingTerm(expression: t.order)])).watch();
   }
 
+  /// 替換規則表有任何寫入（新增、修改、停用、刪除、同步、還原）就通知一次。
+  Stream<void> watchChanges() => attachedDatabase
+      .tableUpdates(TableUpdateQuery.onTable(replaceRules))
+      .map((_) {});
+
   /// 存一條規則；還沒有編號（id 為 0）的是新規則，配一個編號（[_assignIds]）。
   /// 編輯畫面開著時規則被同步換了編號，照新編號存（[_current]）。
   Future<void> upsert(ReplaceRule rule) => transaction(() async {

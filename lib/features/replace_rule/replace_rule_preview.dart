@@ -3,6 +3,8 @@ import 'dart:isolate';
 
 import 'package:night_reader/core/models/replace_rule.dart';
 
+import 'replace_rule_deadline.dart';
+
 /// 一次試跑的結果。
 sealed class ReplaceRulePreviewResult {
   const ReplaceRulePreviewResult();
@@ -93,20 +95,16 @@ class _PreviewRun {
   final ReceivePort _port = ReceivePort();
   final Completer<ReplaceRulePreviewResult?> _completer = Completer();
   Isolate? _isolate;
-  Timer? _deadline;
+  late final ReplaceRuleDeadline _deadline = ReplaceRuleDeadline(
+    (rule) => finish(ReplaceRulePreviewTimedOut(rule)),
+  );
 
   Future<ReplaceRulePreviewResult?> get result => _completer.future;
 
   void _onMessage(Object? message) {
     switch (message) {
-      // 開始套用第 index 條：照這條的期限重新計時。
       case ('rule', final int index):
-        _deadline?.cancel();
-        final rule = _rules[index];
-        _deadline = Timer(
-          Duration(milliseconds: rule.getValidTimeoutMillisecond()),
-          () => finish(ReplaceRulePreviewTimedOut(rule)),
-        );
+        _deadline.start(_rules[index]);
       case ('done', final String text):
         finish(ReplaceRulePreviewDone(text));
       // onError 送來 [錯誤, 堆疊]、onExit 送來 null：還沒交回結果就結束了。
@@ -125,7 +123,7 @@ class _PreviewRun {
   /// 交出 [value]（已經交過就不再交），結束 isolate 與計時。
   void finish(ReplaceRulePreviewResult? value) {
     if (!_completer.isCompleted) _completer.complete(value);
-    _deadline?.cancel();
+    _deadline.stop();
     _port.close();
     _isolate?.kill(priority: Isolate.immediate);
     _isolate = null;
