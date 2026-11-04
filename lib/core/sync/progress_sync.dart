@@ -1,19 +1,22 @@
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/models/book.dart';
 
 import 'sync_kind.dart';
 import 'sync_records.dart';
 
 /// 閱讀進度的同步：書架上一本書一筆，用書名加作者對上另一台的同一本書，
-/// 兩台用不同書源也對得上。記第幾章第幾個字，螢幕大小不同也落在同一個字
-/// （ADR 0039）。書不在書架上就留在雲端；閱讀器開著的書由閱讀器自己跳。
+/// 兩台用不同書源也對得上；本地書用原檔指紋對上，檔名不同也對得上。記第幾
+/// 章第幾個字，螢幕大小不同也落在同一個字（ADR 0039）。書不在書架上就留在
+/// 雲端；閱讀器開著的書由閱讀器自己跳。
 class ProgressSync extends SyncKind {
   ProgressSync({
     required this.bookDao,
     required this.chapterDao,
     bool Function(String key)? isOpen,
+    this._run = runLocalBookWorkInBackground,
   }) : _isOpen = isOpen ?? _never;
 
   static const String kind = 'progress';
@@ -21,6 +24,9 @@ class ProgressSync extends SyncKind {
   final BookDao bookDao;
   final ChapterDao chapterDao;
   final bool Function(String key) _isOpen;
+
+  /// 補算本地書指紋交給誰跑（[fillLocalBookFingerprints]）。
+  final LocalBookWorkRunner _run;
 
   static bool _never(String key) => false;
 
@@ -34,7 +40,15 @@ class ProgressSync extends SyncKind {
   @override
   bool get syncsDeletion => false;
 
-  static String keyOf(Book book) => '${book.name}\t${book.author}';
+  /// 兩台共通的身分：本地書是原檔指紋，其他是書名加作者。還沒算出指紋的
+  /// 本地書（原檔不見了）照書名加作者。
+  static String keyOf(Book book) => switch (book.fileFingerprint) {
+    final print? when book.isLocal => 'local:$print',
+    _ => nameKeyOf(book),
+  };
+
+  /// 書名加作者；書架同步、書籤與標註都照它認書。
+  static String nameKeyOf(Book book) => '${book.name}\t${book.author}';
 
   @override
   Future<Map<String, SyncRecord>> local() async => {
@@ -54,9 +68,10 @@ class ProgressSync extends SyncKind {
     final books = await shelfBooks();
     final applied = <String, SyncRecord>{};
     for (final MapEntry(:key, value: record) in remote.entries) {
-      // 查書架的這段時間剛被打開的，留給閱讀器。
+      // 查書架的這段時間剛被打開的，留給閱讀器。閱讀器拿著的本地書可能是
+      // 補算指紋之前讀的，用書名加作者登記開著，兩個鍵都看。
       if (record.deleted || _isOpen(key)) continue;
-      if (books[key] case final book?) {
+      if (books[key] case final book? when !_isOpen(nameKeyOf(book))) {
         applied[key] = await applyTo(book, record);
       }
     }
@@ -90,11 +105,18 @@ class ProgressSync extends SyncKind {
     });
   }
 
-  /// 書架上每個書名加作者最近讀的那一本。同一本書從兩個書源都加進書架時，
-  /// 同步只跟著最近讀的那本。
+  /// 書架上每個身分（[keyOf]）最近讀的那一本。同一本書從兩個書源都加進書架
+  /// 時，同步只跟著最近讀的那本。還沒有指紋的本地書（這一版以前匯入的）先
+  /// 在背景 isolate 補算，進度才照指紋對上。
   Future<Map<String, Book>> shelfBooks() async {
+    var shelf = await bookDao.getInBookshelf();
+    if (shelf.any((book) => book.isLocal && book.fileFingerprint == null) &&
+        await fillLocalBookFingerprints(bookDao, run: _run) > 0) {
+      // 補到的書換成有指紋的那份。
+      shelf = await bookDao.getInBookshelf();
+    }
     final books = <String, Book>{};
-    for (final book in await bookDao.getInBookshelf()) {
+    for (final book in shelf) {
       final key = keyOf(book);
       final existing = books[key];
       if (existing == null || book.durChapterTime > existing.durChapterTime) {

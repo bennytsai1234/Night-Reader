@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// 同步空間裡讀到的一份檔案，與它目前的版本（WebDAV 的 ETag）。
 class SyncFile {
   const SyncFile(this.content, {this.version});
@@ -31,6 +33,16 @@ abstract interface class SyncStore {
     String? ifVersion,
     bool ifAbsent = false,
   });
+
+  /// 讀一個二進位檔（同步本地書的原檔）；還沒有這個檔時傳回 null。
+  Future<Uint8List?> readBytes(String name);
+
+  /// 寫一個二進位檔，已經有就整個換掉。原檔用指紋命名、內容不會變，不比
+  /// 版本。
+  Future<void> writeBytes(String name, Uint8List bytes);
+
+  /// 刪掉一個檔；本來就沒有也正常結束。
+  Future<void> delete(String name);
 }
 
 /// 寫入時檔案已經被別台改過；重讀、再合併一次。

@@ -43,7 +43,7 @@ class ExportBookService {
         ),
       );
       var content = entry?.isReady == true ? entry?.content : null;
-      if ((content == null || content.isEmpty) && book.origin == 'local') {
+      if ((content == null || content.isEmpty) && book.isLocal) {
         content = await LocalBookService().getContent(book, chapters[i]);
       }
       if ((content == null || content.isEmpty) && source != null) {

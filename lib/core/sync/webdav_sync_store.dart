@@ -78,25 +78,66 @@ class WebDavSyncStore implements SyncStore {
     String? ifVersion,
     bool ifAbsent = false,
   }) async {
-    Future<Response<Uint8List>> put() => _send(
-      _fileUrl(name),
-      'PUT',
+    final response = await _put(
+      name,
+      utf8.encode(content),
       headers: {
         Headers.contentTypeHeader: 'application/json; charset=utf-8',
         'If-Match': ?ifVersion,
         if (ifAbsent) 'If-None-Match': '*',
       },
-      data: utf8.encode(content),
     );
+    if (response.statusCode == 412) throw const SyncConflict();
+    _ensureOk(response);
+  }
 
+  @override
+  Future<Uint8List?> readBytes(String name) async {
+    final response = await _send(_fileUrl(name), 'GET', transfer: true);
+    if (response.statusCode == 404) return null;
+    _ensureOk(response);
+    return response.data ?? Uint8List(0);
+  }
+
+  @override
+  Future<void> writeBytes(String name, Uint8List bytes) async {
+    final response = await _put(
+      name,
+      bytes,
+      headers: {Headers.contentTypeHeader: 'application/octet-stream'},
+      transfer: true,
+    );
+    _ensureOk(response);
+  }
+
+  @override
+  Future<void> delete(String name) async {
+    final response = await _send(_fileUrl(name), 'DELETE');
+    if (response.statusCode == 404) return;
+    _ensureOk(response);
+  }
+
+  /// 資料夾還沒建（第一次同步、或被使用者刪掉）時 WebDAV 回 409 或 404，
+  /// 建好再寫一次。
+  Future<Response<Uint8List>> _put(
+    String name,
+    Uint8List data, {
+    required Map<String, Object?> headers,
+    bool transfer = false,
+  }) async {
+    Future<Response<Uint8List>> put() => _send(
+      _fileUrl(name),
+      'PUT',
+      headers: headers,
+      data: data,
+      transfer: transfer,
+    );
     var response = await put();
-    // 資料夾還沒建（第一次同步、或被使用者刪掉）時 WebDAV 回 409 或 404。
     if (response.statusCode == 409 || response.statusCode == 404) {
       await _makeFolder();
       response = await put();
     }
-    if (response.statusCode == 412) throw const SyncConflict();
-    _ensureOk(response);
+    return response;
   }
 
   Future<void> _makeFolder() async {
@@ -106,11 +147,16 @@ class WebDavSyncStore implements SyncStore {
     _ensureOk(response);
   }
 
+  /// 傳本地書原檔（[transfer]）時一本可能幾十 MB，行動數據要傳好幾分鐘，
+  /// 不用同步檔的 30 秒上限。
+  static const Duration transferTimeout = Duration(minutes: 10);
+
   Future<Response<Uint8List>> _send(
     String url,
     String method, {
     Map<String, Object?> headers = const {},
     Object? data,
+    bool transfer = false,
   }) async {
     try {
       return await _dio.request<Uint8List>(
@@ -122,6 +168,8 @@ class WebDavSyncStore implements SyncStore {
           responseType: ResponseType.bytes,
           validateStatus: (_) => true,
           followRedirects: false,
+          sendTimeout: transfer ? transferTimeout : null,
+          receiveTimeout: transfer ? transferTimeout : null,
         ),
       );
     } on DioException catch (error) {
@@ -142,6 +190,11 @@ class WebDavSyncStore implements SyncStore {
     if (status >= 200 && status < 300) return;
     if (status == 401 || (probe && status == 403)) {
       throw const SyncStoreException('帳號或密碼不對');
+    }
+    // 被限流（429）、伺服器故障（5xx）是整個空間暫時用不了，後面的檔也
+    // 一樣，同 Google 雲端硬碟。
+    if (status == 429 || status >= 500) {
+      throw SyncStoreException('同步空間暫時無法使用（HTTP $status），稍後再試');
     }
     if (status == 403) {
       throw const SyncStoreException.file('同步空間拒絕存取這份檔案（HTTP 403）');

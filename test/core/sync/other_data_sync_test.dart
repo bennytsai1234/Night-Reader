@@ -5,6 +5,9 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/sync_store_blobs.dart';
+
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/cookie_dao.dart';
@@ -23,7 +26,7 @@ import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _MemoryStore implements SyncStore {
+class _MemoryStore with SyncStoreBlobs implements SyncStore {
   final Map<String, String> files = {};
 
   @override
