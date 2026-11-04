@@ -161,14 +161,6 @@ void _mockPlatformChannels() {
       return null;
     });
   }
-  // 手機上可以處理選取文字的 App：測試裡沒有，馬上回覆（不回的話閱讀器掀紙前
-  // 會等到上限）。
-  messenger.setMockMethodCallHandler(
-    SystemChannels.processText,
-    (call) async => call.method == 'ProcessText.queryTextActions'
-        ? <String, String>{}
-        : null,
-  );
   // 外部連結與分享進 App 的事件串流。
   for (final name in [
     'com.llfbandit.app_links/events',

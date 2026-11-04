@@ -73,13 +73,8 @@ class HybridReaderScreen extends StatefulWidget {
     this.paragraphCacheCapacity = 512,
     this.pageTurnOverlap = 1,
     this.pageTurnDuration = const Duration(milliseconds: 260),
-    this.processText,
     this.breathPaused,
   });
-
-  /// 選字選單「⋮」裡系統可以處理文字的 App，掀紙前的預留停頓裡查；沒給時
-  /// 用 App 共用的那一份（[ProcessTextActions.shared]）。
-  final ProcessTextActions? processText;
 
   /// 紙上骨架的呼吸停住中（掀紙前在紙底下建好正文）時設成 true：呼叫端拿它
   /// 讓頁首頁尾的骨架一起停（[SkeletonPause]）。
@@ -420,11 +415,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Object? _pendingReveal;
 
   /// 正文排好、要掀紙：在整張蓋著的紙底下建好、畫出正文，骨架的呼吸停住
-  /// 不動；畫完、也查好系統可以處理文字的 App（[ProcessTextActions]）後，
-  /// 再停 [AppMotion.stillGap] 才掀紙，掀紙的每一幀都不再做重的工作（ADR
-  /// 0037 策略一與補充）。原本在建正文的同一幀就開始掀：2026-11-05 手機上
-  /// 開書，這一幀主執行緒 12.9ms、第一次畫整頁字的繪製 25.6ms，加上查選字
-  /// 選單的動作 22ms，掀紙一開始就掉 4 幀。
+  /// 不動；畫完再停 [AppMotion.stillGap] 才掀紙，掀紙的每一幀都不再做重的
+  /// 工作（ADR 0037 策略一與補充）。原本在建正文的同一幀就開始掀：2026-11-05
+  /// 手機上開書，這一幀主執行緒 12.9ms、第一次畫整頁字的繪製 25.6ms，掀紙
+  /// 一開始就掉 4 幀。
   void _revealWhenStill() {
     final reveal = SkeletonReveal.of(context);
     final pending = _pendingReveal = Object();
@@ -437,16 +431,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       await WidgetsBinding.instance.endOfFrame;
       if (!current()) return;
       await WidgetsBinding.instance.endOfFrame;
-      if (!current()) return;
-      // 第一次查要在主執行緒上問系統；查完才開始停頓。系統一直不回時不讓
-      // 紙卡著，等到上限就照常掀，選字選單出現時再補查。
-      final waited = Completer<void>();
-      _revealTimer = Timer(_processTextWait, waited.complete);
-      await Future.any([
-        (widget.processText ?? ProcessTextActions.shared).load(),
-        waited.future,
-      ]);
-      _revealTimer?.cancel();
       if (!current()) return;
       _revealTimer = Timer(AppMotion.stillGap, () {
         _revealTimer = null;
@@ -462,9 +446,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// [_revealWhenStill] 停 [AppMotion.stillGap] 的計時器。
   Timer? _revealTimer;
-
-  /// 掀紙前最多等系統回覆可以處理文字的 App 多久（手機上第一次約 22ms）。
-  static const Duration _processTextWait = Duration(milliseconds: 300);
 
   /// 又要蓋紙：等著掀的那一次作廢，停住的呼吸接著走。
   void _cancelPendingReveal() {
@@ -2310,7 +2291,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                 ? null
                 : (selection) => widget.onHighlightText!(selection.asHighlight),
             highlightColor: widget.highlightColor,
-            processText: widget.processText,
             child: _whileControls(
               (controlsVisible, child) => ReaderV2PointerTapLayer(
                 onTapUp: widget.onContentTapUp == null || controlsVisible

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -17,7 +16,6 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/reader_skeleton_page.dart';
-import 'package:night_reader/features/reader_v2/hybrid/overlay/text_selection_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -36,7 +34,7 @@ final Duration _revealTime =
     SkeletonReveal.defaultDuration + AppMotion.stillGap;
 
 /// 正文排好後一幀一幀推進到紙開始掀（或已經沒有紙）：正文在紙底下建好、
-/// 畫出，查好系統可以處理文字的 App，再停 [AppMotion.stillGap]。
+/// 畫出，再停 [AppMotion.stillGap]。
 Future<void> _pumpUntilRevealing(WidgetTester tester) async {
   for (var frame = 0; frame < 60; frame++) {
     final veil = find.byType(LoadingVeil);
@@ -55,26 +53,6 @@ Future<void> _pumpReveal(WidgetTester tester) async {
   await _pumpUntilRevealing(tester);
   await tester.pump(SkeletonReveal.defaultDuration);
   await tester.pump(const Duration(milliseconds: 16));
-}
-
-/// 手機上沒有可以處理文字的 App，系統馬上回覆。
-class _NoProcessTextApps implements ProcessTextService {
-  _NoProcessTextApps({this.onQuery});
-
-  final VoidCallback? onQuery;
-
-  @override
-  Future<List<ProcessTextAction>> queryTextActions() async {
-    onQuery?.call();
-    return const <ProcessTextAction>[];
-  }
-
-  @override
-  Future<String?> processTextAction(
-    String id,
-    String text,
-    bool readOnly,
-  ) async => null;
 }
 
 class _FakeBookDao extends Fake implements BookDao {
@@ -195,7 +173,6 @@ void main() {
     ReaderV2TtsHighlight? ttsHighlight,
     ReaderSkeletonPageStore? skeletonPages,
     ValueNotifier<HybridProgressSnapshot?>? progress,
-    ProcessTextActions? processText,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -208,8 +185,6 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: HybridReaderScreen(
-          processText:
-              processText ?? ProcessTextActions(service: _NoProcessTextApps()),
           runtime: runtime,
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -1258,21 +1233,25 @@ void main() {
   testWidgets(
     'the pause before the paper lifts starts after the text is drawn',
     (tester) async {
-      // 停頓從正文在紙底下建好、畫出之後才算；查系統可以處理文字的 App 也在
-      // 這之後，建正文的時間不吃掉停頓。
-      bool? textBuiltAtQuery;
-      await pumpReader(
-        tester,
-        processText: ProcessTextActions(
-          service: _NoProcessTextApps(
-            onQuery: () => textBuiltAtQuery = find
-                .byType(CustomScrollView)
-                .evaluate()
-                .isNotEmpty,
-          ),
-        ),
-      );
-      expect(textBuiltAtQuery, isTrue);
+      // 停頓從正文在紙底下建好、畫出之後才算，建正文的時間不吃掉停頓。
+      await pumpReader(tester, waitForOpen: false);
+      const frame = Duration(milliseconds: 16);
+      Duration elapsed = Duration.zero;
+      Duration? built;
+      for (var i = 0; i < 2000; i++) {
+        await tester.pump(frame);
+        elapsed += frame;
+        built ??= find.byType(CustomScrollView).evaluate().isNotEmpty
+            ? elapsed
+            : null;
+        final veil = find.byType(LoadingVeil);
+        if (veil.evaluate().isNotEmpty &&
+            tester.widget<LoadingVeil>(veil).controller.isRevealing) {
+          break;
+        }
+      }
+      expect(built, isNotNull);
+      expect(elapsed - built!, greaterThanOrEqualTo(AppMotion.stillGap));
       await settle(tester);
     },
   );
@@ -1459,7 +1438,6 @@ void main() {
             style: _style,
             enableDiskCache: false,
             preprocessor: const TextPreprocessor(useIsolate: false),
-            processText: ProcessTextActions(service: _NoProcessTextApps()),
           ),
         ),
       ),

@@ -265,8 +265,6 @@ void main() {
   group('選字選單', () {
     Future<SelectionService> pumpSelected(
       WidgetTester tester, {
-      // 系統的文字處理 App 一次 App 只查一次：沒給時每個測試各自一份。
-      ProcessTextActions? processText,
       ValueChanged<ReaderTextSelection>? onHide,
       ValueChanged<ReaderTextSelection>? onReplace,
       ValueChanged<ReaderTextSelection>? onBookmark,
@@ -304,7 +302,6 @@ void main() {
             onBookmark: onBookmark,
             onHighlight: onHighlight,
             highlightColor: Colors.amber,
-            processText: processText ?? ProcessTextActions(),
             child: const SizedBox.expand(),
           ),
         ),
@@ -380,38 +377,6 @@ void main() {
       expect(calls.last.method, 'ProcessText.processTextAction');
       expect(calls.last.arguments, <Object>['translate', '城門', true]);
       expect(service.active, isFalse);
-    });
-
-    testWidgets('系統的文字處理 App 一次 App 只查一次', (tester) async {
-      // 查一次要在主執行緒上問系統（手機上約 22ms）：關掉一本書再開另一本，
-      // 或選了好幾次字，都不再查。
-      var queries = 0;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.processText,
-        (call) async {
-          if (call.method == 'ProcessText.queryTextActions') queries++;
-          return <String, String>{'translate': '翻譯'};
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.processText,
-          null,
-        ),
-      );
-
-      final processText = ProcessTextActions();
-      await processText.load();
-      await pumpSelected(tester, processText: processText);
-      await tester.pump();
-      await tester.pumpWidget(const SizedBox.shrink());
-      await pumpSelected(tester, processText: processText);
-      await tester.pump();
-
-      expect(queries, 1);
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
-      expect(find.text('翻譯'), findsOneWidget);
     });
 
     void mockApps(WidgetTester tester, Map<String, String> apps) {
