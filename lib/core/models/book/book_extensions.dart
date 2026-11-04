@@ -27,7 +27,10 @@ extension BookExtensions on BookBase {
   bool get isAudio => type == 2; // type 2 = 有聲書 (legacy, audio module removed)
   bool get isImage => (type & BookType.image) != 0;
   bool get isText => (type & BookType.text) != 0;
-  bool get isLocal => origin == BookType.localTag || origin.startsWith('loc_');
+  bool get isLocal =>
+      origin == BookType.localOrigin ||
+      origin == BookType.localTag ||
+      origin.startsWith('loc_');
   bool get isUpdate => lastCheckCount > 0;
 
   // --- 顯示輔助 ---

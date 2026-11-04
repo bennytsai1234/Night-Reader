@@ -169,7 +169,7 @@ class ChapterContentPreparationPipeline {
     required CancelToken? cancelToken,
   }) async {
     try {
-      if (book.origin == 'local') {
+      if (book.isLocal) {
         final raw = await LocalBookService().getContent(book, chapter);
         if (raw.trim().isNotEmpty && !_looksLikeLocalFailureMessage(raw)) {
           return ChapterContentPreparationResult.ready(raw);

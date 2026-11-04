@@ -66,6 +66,8 @@ class _FakeWebDav implements HttpClientAdapter {
         }
         files[path] = (Uint8List.fromList(body), (current?.$2 ?? 0) + 1);
         return _status(current == null ? 201 : 204);
+      case 'DELETE':
+        return _status(files.remove(path) == null ? 404 : 204);
     }
     return _status(405);
   }
@@ -135,6 +137,20 @@ void main() {
       'MKCOL /dav/NightReader/',
       'PUT /dav/NightReader/p.json',
     ]);
+  });
+
+  test('a book file is written, read back byte for byte and deleted', () async {
+    final bytes = Uint8List.fromList([0, 255, 31, 139, 8, 0]);
+    expect(await store().readBytes('book_x.epub'), isNull);
+
+    await store().writeBytes('book_x.epub', bytes);
+    expect(await store().readBytes('book_x.epub'), bytes);
+    expect(server.log.where((line) => line.startsWith('MKCOL')), hasLength(1));
+
+    await store().delete('book_x.epub');
+    expect(await store().readBytes('book_x.epub'), isNull);
+    // 本來就沒有也正常結束。
+    await store().delete('book_x.epub');
   });
 
   test('wrong password and missing address are reported plainly', () async {

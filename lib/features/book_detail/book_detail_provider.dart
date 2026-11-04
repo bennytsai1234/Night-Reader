@@ -174,7 +174,7 @@ class BookDetailProvider extends ChangeNotifier {
   bool get isCacheStatusLoading => _isCacheStatusLoading;
   bool get isCheckingUpdate => _isCheckingUpdate;
   bool get isChangingSource => _isChangingSource;
-  bool get supportsBackgroundDownload => _book.origin != 'local';
+  bool get supportsBackgroundDownload => !_book.isLocal;
   DownloadService get _resolvedDownloadService =>
       _downloadService ??= DownloadService();
   String get sourceStatusLabel {

@@ -42,8 +42,27 @@ class FullSyncProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final progress = status.progress;
+    return SyncProgressView(
+      value: progress == null ? null : progress.step / progress.total,
+      label: progress == null
+          ? '準備中…'
+          : '${syncKindLabel(progress.kind)}（${progress.step}/${progress.total}）',
+    );
+  }
+}
+
+/// 同步進度框裡的一條進度條與一行說明；[value] 是 null 時進度條來回跑。
+/// 全面同步與同步本地書共用。
+class SyncProgressView extends StatelessWidget {
+  const SyncProgressView({super.key, required this.value, required this.label});
+
+  final double? value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -51,16 +70,14 @@ class FullSyncProgress extends StatelessWidget {
         ClipRRect(
           borderRadius: AppRadius.pillShape,
           child: LinearProgressIndicator(
-            value: progress == null ? null : progress.step / progress.total,
+            value: value,
             backgroundColor: AppChrome.of(context).separator,
             minHeight: 4,
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          progress == null
-              ? '準備中…'
-              : '${syncKindLabel(progress.kind)}（${progress.step}/${progress.total}）',
+          label,
           textAlign: TextAlign.center,
           style: AppTextStyles.bodySm.copyWith(
             color: scheme.onSurface.withValues(alpha: 0.8),

@@ -48,6 +48,12 @@ class _FakeDrive implements HttpClientAdapter {
 
   /// 列檔時先回一頁空的、附上下一頁（雲端硬碟會這樣回）。
   bool emptyFirstPage = false;
+
+  /// 二進位檔的內容（檔案編號 → 位元組），可續傳上傳寫進來的。
+  final Map<String, Uint8List> blobs = {};
+
+  /// 開好、還沒送檔的上傳工作：更新的是哪個檔（新建時是 null）、檔名。
+  final Map<String, ({String? id, String name})> sessions = {};
   var _nextId = 0;
 
   @override
@@ -88,7 +94,47 @@ class _FakeDrive implements HttpClientAdapter {
       if (file == null) return _json(404, {});
       if (forbidden.contains(file.name)) return _json(403, {});
       if (failure case (final status, final body)) return _json(status, body);
-      return ResponseBody.fromBytes(utf8.encode(file.content), 200);
+      final raw = blobs[uri.pathSegments.last];
+      return ResponseBody.fromBytes(raw ?? utf8.encode(file.content), 200);
+    }
+    if (uri.path.startsWith('/drive/v3/files/') && options.method == 'DELETE') {
+      final id = uri.pathSegments.last;
+      blobs.remove(id);
+      return files.remove(id) == null ? _json(404, {}) : _json(204, {});
+    }
+    // 可續傳上傳：開工作（新建 POST、更新 PATCH）回上傳網址，再 PUT 整個檔。
+    if (uri.queryParameters['uploadType'] == 'resumable') {
+      expect(options.headers['X-Upload-Content-Length'], isNotNull);
+      final metadata = jsonDecode(utf8.decode(body)) as Map;
+      final session = 's${sessions.length}';
+      if (options.method == 'POST') {
+        expect(metadata['parents'], ['appDataFolder']);
+        sessions[session] = (id: null, name: metadata['name'] as String);
+      } else {
+        final id = uri.pathSegments.last;
+        sessions[session] = (id: id, name: files[id]!.name);
+      }
+      return ResponseBody.fromBytes(
+        Uint8List(0),
+        200,
+        headers: {
+          'location': [
+            'https://www.googleapis.com/upload/drive/v3/files?upload_id=$session',
+          ],
+        },
+      );
+    }
+    if (uri.queryParameters['upload_id'] case final session?
+        when options.method == 'PUT') {
+      final (:id, :name) = sessions.remove(session)!;
+      final target = id ?? 'f${_nextId++}';
+      files[target] = (
+        name: name,
+        content: '',
+        version: (files[target]?.version ?? 0) + 1,
+      );
+      blobs[target] = Uint8List.fromList(body);
+      return _json(200, {'id': target});
     }
     if (uri.path.startsWith('/upload/drive/v3/files/') &&
         options.method == 'PATCH') {
@@ -166,6 +212,27 @@ void main() {
       expect(auth.accounts, {'me@example.com'});
     },
   );
+
+  test('a book file larger than one plain upload goes up resumably, comes '
+      'back byte for byte, is replaced in place and deleted', () async {
+    // Drive 一次送完的上傳只收 5 MB 以內。
+    final big = Uint8List(6 * 1024 * 1024)..[0] = 31;
+    expect(await store().readBytes('book_x.epub'), isNull);
+
+    await store().writeBytes('book_x.epub', big);
+    expect(drive.files, hasLength(1));
+    expect(await store().readBytes('book_x.epub'), big);
+
+    final small = Uint8List.fromList([1, 2, 3]);
+    await store().writeBytes('book_x.epub', small);
+    expect(drive.files, hasLength(1));
+    expect(await store().readBytes('book_x.epub'), small);
+
+    await store().delete('book_x.epub');
+    expect(drive.files, isEmpty);
+    expect(await store().readBytes('book_x.epub'), isNull);
+    await store().delete('book_x.epub');
+  });
 
   test('a file behind an empty first page is still found', () async {
     await store().write('p.json', 'one');

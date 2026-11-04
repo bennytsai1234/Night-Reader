@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
@@ -5,8 +7,12 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/storage/reader_layout_cache.dart';
+import 'package:path/path.dart' as p;
 
 class BookStorageService {
   BookStorageService({
@@ -49,5 +55,20 @@ class BookStorageService {
     await _bookDao.deleteByUrl(book.bookUrl);
     await _coverStorage.deleteBookAssets(book);
     await ReaderLayoutCache.deleteBook(book.bookUrl);
+    if (book.isLocal) await _deleteLocalOriginal(book);
+  }
+
+  /// 本地書移出書架後，App 資料夾裡那份原檔沒有別的書用，跟著刪掉；不在
+  /// App 資料夾裡的（很舊的版本直接指著選檔器給的檔）不動。
+  static Future<void> _deleteLocalOriginal(Book book) async {
+    final path = LocalBookService.filePathOf(book);
+    try {
+      final dir = await AppStoragePaths.localBooksDir();
+      if (!p.isWithin(dir.path, path)) return;
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } on FileSystemException catch (error) {
+      AppLog.e('刪除本地書原檔失敗', error: error);
+    }
   }
 }

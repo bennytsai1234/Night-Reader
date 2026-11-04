@@ -22,12 +22,13 @@ void main() {
     );
     await current.close();
 
-    // 退回 schema 8：還沒有 progressTime。
+    // 退回 schema 8：還沒有 progressTime，也還沒有之後加的原檔指紋。
     final old = AppDatabase.forTesting(
       NativeDatabase(
         file,
         setup: (raw) {
           raw.execute('ALTER TABLE books DROP COLUMN progressTime');
+          raw.execute('ALTER TABLE books DROP COLUMN fileFingerprint');
           raw.execute('PRAGMA user_version = 8');
         },
       ),

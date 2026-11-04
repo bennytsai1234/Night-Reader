@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/constant/book_type.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
@@ -46,6 +50,78 @@ class LocalBookService {
   String? _txtAccessFilePath;
   Future<void> _txtReadChain = Future<void>.value();
 
+  /// 本地書原檔在這台手機上的路徑。
+  static String filePathOf(Book book) =>
+      book.bookUrl.replaceFirst('local://', '');
+
+  /// 把 [path] 的本地書加進書架，傳回書架上的那本；解析不了傳回 null。
+  ///
+  /// 先算原檔指紋（[fingerprint] 給了就不再算）：書架上已經有同一個檔
+  /// （指紋相同，檔名不同也算）就傳回那本，不再加一次。否則複製進本地書
+  /// 資料夾、解析、連同章節寫進資料庫。[name]、[author] 給了就用它們（同步
+  /// 本地書從雲端下載的照另一台的書名）。
+  Future<Book?> addToShelf(
+    String path, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+    String? fingerprint,
+    String? name,
+    String? author,
+  }) async {
+    final print = fingerprint ?? await localBookFingerprint(path);
+    // 這一版以前匯入的書先補上指紋，才認得出是不是同一本。
+    await fillLocalBookFingerprints(bookDao);
+    final same = await bookDao.getInBookshelfByFingerprint(print);
+    if (same.isNotEmpty) return same.first;
+
+    final storedPath = await storeInLibrary(path);
+    final existing = await bookDao.getByUrl('local://$storedPath');
+    if (existing != null && existing.isInBookshelf) return existing;
+    try {
+      final result = await importBook(storedPath);
+      if (result == null) {
+        await _discardUnusedCopy(storedPath, existing == null);
+        return null;
+      }
+      final book = result.book
+        ..fileFingerprint = print
+        ..name = name ?? result.book.name
+        ..author = author ?? result.book.author;
+      if (book.syncTime == 0) {
+        book.syncTime = DateTime.now().millisecondsSinceEpoch;
+      }
+      book.fillChapterTitle(result.chapters);
+      final cover = result.cover;
+      if (cover != null) {
+        await BookCoverStorageService().storeEmbeddedCover(
+          book,
+          cover,
+          extension: result.coverExtension ?? '',
+        );
+      }
+      // 書與章節一起寫：章節寫不進去時書也不留，下面才能放心刪掉複本。
+      await bookDao.transaction(() async {
+        await bookDao.upsert(book);
+        await chapterDao.insertChapters(result.chapters);
+      });
+      return book;
+    } catch (e) {
+      AppLog.e('匯入本地書籍失敗: $e', error: e);
+      await _discardUnusedCopy(storedPath, existing == null);
+      rethrow;
+    }
+  }
+
+  /// 匯入失敗時，沒有任何書指著的那份複本刪掉，不留在本地書資料夾。
+  static Future<void> _discardUnusedCopy(String path, bool unused) async {
+    if (!unused) return;
+    try {
+      await File(path).delete();
+    } on FileSystemException catch (e) {
+      AppLog.e('刪除匯入失敗的本地書複本失敗: $e', error: e);
+    }
+  }
+
   /// 把 [path] 複製進 App 自己的本地書資料夾，回傳複製後的路徑。
   ///
   /// 選檔器與分享給的檔案在暫存區，系統清暫存後書就打不開。同名同內容的
@@ -58,10 +134,7 @@ class LocalBookService {
     final name = p.basenameWithoutExtension(path);
     final extension = p.extension(path);
     for (var copy = 1; ; copy++) {
-      final fileName = copy == 1
-          ? '$name$extension'
-          : '$name ($copy)$extension';
-      final target = File(p.join(dir.path, fileName));
+      final target = File(p.join(dir.path, _copyName(name, extension, copy)));
       if (!await target.exists()) {
         await source.copy(target.path);
         return target.path;
@@ -69,6 +142,21 @@ class LocalBookService {
       if (await _sameContent(source, target)) return target.path;
     }
   }
+
+  /// 本地書資料夾裡還沒被用掉的檔名：「書名.txt」，有了就「書名 (2).txt」。
+  /// 同步本地書從雲端下載的原檔照另一台的書名存在這裡。
+  static Future<String> freeLibraryPath(String name, String extension) async {
+    final dir = await AppStoragePaths.localBooksDir(ensureExists: true);
+    final safe = name.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim();
+    final base = safe.isEmpty ? '本地書' : safe;
+    for (var copy = 1; ; copy++) {
+      final target = p.join(dir.path, _copyName(base, extension, copy));
+      if (!await File(target).exists()) return target;
+    }
+  }
+
+  static String _copyName(String name, String extension, int copy) =>
+      copy == 1 ? '$name$extension' : '$name ($copy)$extension';
 
   static Future<bool> _sameContent(File a, File b) async {
     if (await a.length() != await b.length()) return false;
@@ -146,7 +234,7 @@ class LocalBookService {
       bookUrl: 'local://$path',
       name: p.basenameWithoutExtension(path),
       author: '本地',
-      origin: 'local',
+      origin: BookType.localOrigin,
       originName: '本地',
       isInBookshelf: true,
       type: 0,
@@ -172,7 +260,7 @@ class LocalBookService {
 
   /// 獲取本地書籍章節內容
   Future<String> getContent(Book book, BookChapter chapter) async {
-    final path = book.bookUrl.replaceFirst('local://', '');
+    final path = filePathOf(book);
     if (!await File(path).exists()) return '檔案不存在: $path';
 
     final ext = localBookExtensionFromPath(path);

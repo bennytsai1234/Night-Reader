@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/sync_store_blobs.dart';
+
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_kind.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
@@ -13,7 +16,7 @@ import 'package:night_reader/features/settings/webdav_settings_page.dart';
 import 'package:night_reader/features/settings/sync_space_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _Store implements SyncStore {
+class _Store with SyncStoreBlobs implements SyncStore {
   _Store({this.fail, this.beforeRead, this.readError});
 
   final String? fail;

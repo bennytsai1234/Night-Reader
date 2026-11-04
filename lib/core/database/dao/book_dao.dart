@@ -67,15 +67,19 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   }
 
   Future<void> upsert(Book book) =>
-      into(books).insertOnConflictUpdate(BookToInsertable(book).toInsertable());
+      into(books).insertOnConflictUpdate(_row(book));
 
   Future<void> upsertAll(List<Book> bookList) async {
     await batch(
-      (b) => b.insertAllOnConflictUpdate(
-        books,
-        bookList.map((e) => BookToInsertable(e).toInsertable()).toList(),
-      ),
+      (b) => b.insertAllOnConflictUpdate(books, bookList.map(_row).toList()),
     );
+  }
+
+  /// 整本寫回時不清掉已經算好的原檔指紋：手上的書可能是背景補算指紋之前
+  /// 讀出來的（[updateFileFingerprint]）。
+  static Insertable<Book> _row(Book book) {
+    final row = BookToInsertable(book).toInsertable();
+    return book.fileFingerprint == null ? _KeepFingerprint(row) : row;
   }
 
   Future<void> deleteByUrl(String url) {
@@ -201,6 +205,23 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     );
   }
 
+  /// 記下本地書原檔的指紋（[Book.fileFingerprint]）。
+  Future<void> updateFileFingerprint(String bookUrl, String fingerprint) {
+    return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+      BooksCompanion(fileFingerprint: Value(fingerprint)),
+    );
+  }
+
+  /// 書架上原檔指紋是 [fingerprint] 的本地書。
+  Future<List<Book>> getInBookshelfByFingerprint(String fingerprint) {
+    return (select(books)..where(
+          (t) =>
+              t.isInBookshelf.equals(true) &
+              t.fileFingerprint.equals(fingerprint),
+        ))
+        .get();
+  }
+
   Future<void> updateInBookshelf(String bookUrl, bool inBookshelf) {
     return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
       BooksCompanion(isInBookshelf: Value(inBookshelf)),
@@ -224,4 +245,15 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     if (!value.isFinite || value.isNaN) return 0.0;
     return value.clamp(-120.0, 120.0).toDouble();
   }
+}
+
+/// 寫入時不帶原檔指紋那一欄：新的一筆留空，已有的一筆保留原值。
+class _KeepFingerprint implements Insertable<Book> {
+  const _KeepFingerprint(this._row);
+
+  final Insertable<Book> _row;
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) =>
+      Map.of(_row.toColumns(nullToAbsent))..remove('fileFingerprint');
 }

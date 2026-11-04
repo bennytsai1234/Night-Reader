@@ -138,10 +138,10 @@ Future<DownloadPlan> _planDownload(
   if (book == null) {
     throw Exception('書籍不存在');
   }
-  final source = book.origin == 'local'
+  final source = book.isLocal
       ? null
       : await getIt<BookSourceDao>().getByUrl(book.origin);
-  if (book.origin != 'local' && source == null) {
+  if (!book.isLocal && source == null) {
     throw Exception('書源不存在');
   }
   final chapterDao = getIt<ChapterDao>();

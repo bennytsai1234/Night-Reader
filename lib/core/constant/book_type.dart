@@ -25,7 +25,10 @@ class BookType {
 
   static const int allBookTypeLocal = text | image | webFile | local;
 
-  /// 本地書籍書源標誌
+  /// 夜讀匯入的本地書的書源標誌。
+  static const String localOrigin = 'local';
+
+  /// Legado 的本地書書源標誌，從 Legado 備份還原的書用它。
   static const String localTag = 'loc_book';
 
   static bool isImage(int type) => (type & image) != 0;

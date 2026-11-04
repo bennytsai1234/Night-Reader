@@ -10,6 +10,9 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/sync_store_blobs.dart';
+
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -25,7 +28,7 @@ import '../support/navigation_budget.dart';
 import '../support/screenshot.dart';
 
 /// 記在記憶體裡的同步空間，每次讀寫等 [latency]（假時鐘，跟著測試推進）。
-class _SlowStore implements SyncStore {
+class _SlowStore with SyncStoreBlobs implements SyncStore {
   final Map<String, (String, int)> files = {};
   Duration latency = Duration.zero;
 
