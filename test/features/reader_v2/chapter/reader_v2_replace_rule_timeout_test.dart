@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +18,12 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_reposi
 
 /// 每一章都是一行 30 個 a 接一個「!」，回溯規則遇到就跑不完。
 class _Site extends BookSourceService {
+  /// 只給廣告那一行，回溯規則很快就跑完。
+  bool plain = false;
+
+  /// 設了就等它結束再回覆（重新取得本章用）。
+  Completer<void>? refetchGate;
+
   @override
   Future<String> getContent(
     BookSource source,
@@ -24,7 +32,16 @@ class _Site extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
-  }) async => '${chapter.title}的廣告。\n${'a' * 30}!';
+  }) async {
+    final gate = refetchGate;
+    if (gate != null) {
+      refetchGate = null;
+      await gate.future;
+    }
+    return plain
+        ? '${chapter.title}的廣告。'
+        : '${chapter.title}的廣告。\n${'a' * 30}!';
+  }
 }
 
 class _SourceDao extends Fake implements BookSourceDao {
@@ -38,6 +55,7 @@ class _SourceDao extends Fake implements BookSourceDao {
 
 void main() {
   late AppDatabase db;
+  late _Site site;
   late ReplaceRuleDao replaceDao;
   late ReaderV2ChapterRepository repository;
   late List<ReplaceRule> disabled;
@@ -85,6 +103,7 @@ void main() {
     final chapterDao = ChapterDao(db);
     await chapterDao.insertChapters(chapters);
     disabled = [];
+    site = _Site();
     repository = ReaderV2ChapterRepository(
       book: book,
       initialChapters: chapters,
@@ -93,12 +112,15 @@ void main() {
       replaceDao: replaceDao,
       sourceDao: _SourceDao(source),
       contentDao: ReaderChapterContentDao(db),
-      service: _Site(),
+      service: site,
       onReplaceRuleDisabled: disabled.add,
     );
   });
 
-  tearDown(() => db.close());
+  tearDown(() async {
+    repository.dispose();
+    await db.close();
+  });
 
   test('跑太久的規則被停用，這一章照其他規則套完照常顯示', () async {
     final content = await repository.loadContent(0);
@@ -119,5 +141,53 @@ void main() {
 
     expect(next.plainText, contains('第2章。'));
     expect(disabled.map((rule) => rule.name), ['回溯']);
+  });
+
+  test('另一個閱讀器同時在處理的章也收到停用，之後不再跑那一條', () async {
+    final other = <ReplaceRule>[];
+    final second = ReaderV2ChapterRepository(
+      book: book,
+      initialChapters: chapters,
+      bookDao: BookDao(db),
+      chapterDao: ChapterDao(db),
+      replaceDao: replaceDao,
+      sourceDao: _SourceDao(source),
+      contentDao: ReaderChapterContentDao(db),
+      service: _Site(),
+      onReplaceRuleDisabled: other.add,
+    );
+    addTearDown(second.dispose);
+    // 兩邊同時處理第 1 章，都帶著「回溯」：先跑的那一章逾時，排在後面的
+    // 那一章拿掉它重送。兩個閱讀器都要知道它停用了。
+    await Future.wait([repository.loadContent(0), second.loadContent(0)]);
+    expect(disabled.map((rule) => rule.name), ['回溯']);
+    expect(other.map((rule) => rule.name), ['回溯']);
+
+    disabled.clear();
+    other.clear();
+    await second.loadContent(1);
+    expect(other, isEmpty);
+  });
+
+  test('重載失敗時不放回途中被停用的規則', () async {
+    // 規則快取裡有「回溯」（它只對 a 開頭的行跑，第 1 章先不給 a）。
+    site.plain = true;
+    await repository.loadContent(0);
+    site.plain = false;
+
+    // 重新取得本章時，規則在別處被停用（例如另一個閱讀器），之後重新取得失敗。
+    final gate = site.refetchGate = Completer<void>();
+    final reload = repository.reloadContent(0, refetch: true);
+    final backtracking = (await replaceDao.getAll()).firstWhere(
+      (rule) => rule.name == '回溯',
+    );
+    await replaceDao.updateEnabled(backtracking.id, false);
+    await Future<void>.delayed(Duration.zero);
+    gate.completeError(StateError('連不上'));
+    await expectLater(reload, throwsA(anything));
+
+    final next = await repository.loadContent(1);
+    expect(next.plainText, contains('第2章。'));
+    expect(disabled, isEmpty);
   });
 }

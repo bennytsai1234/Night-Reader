@@ -677,6 +677,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   @override
   void dispose() {
     disposed = true;
+    repository.dispose();
     progressController.dispose();
     _viewportGeometryNotifier.dispose();
     _chapterShares.dispose();

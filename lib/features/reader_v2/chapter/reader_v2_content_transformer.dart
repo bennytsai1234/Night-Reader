@@ -1115,23 +1115,27 @@ class ReaderV2ContentTransformWorker {
   }
 
   /// 正在套用的規則跑超過逾時：結束 worker，等待中的請求都拿掉這條規則，
-  /// 重新啟動後照順序重送。
+  /// 重新啟動後照順序重送。帶著這條規則的請求各自的 `onRuleTimedOut` 都
+  /// 收到（同一個只收一次）：可能是不同的閱讀器（剛關掉的與剛開的）。
   void _ruleTimedOut(ReplaceRule rule) {
     final running = _running;
     if (running == null) return;
     _discardWorker();
+    final notify = <void Function(ReplaceRule rule)>{};
     for (final request in _pending.values) {
       final rules = request.args['rulesJson'];
       if (rules is! List) continue;
-      request.args = <String, Object?>{
-        ...request.args,
-        'rulesJson': [
-          for (final other in rules)
-            if (!_sameRule(other, running.json)) other,
-        ],
-      };
+      final kept = [
+        for (final other in rules)
+          if (!_sameRule(other, running.json)) other,
+      ];
+      if (kept.length == rules.length) continue;
+      request.args = <String, Object?>{...request.args, 'rulesJson': kept};
+      if (request.onRuleTimedOut case final callback?) notify.add(callback);
     }
-    _pending[running.id]?.onRuleTimedOut?.call(rule);
+    for (final callback in notify) {
+      callback(rule);
+    }
     unawaited(_sendPending());
   }
 

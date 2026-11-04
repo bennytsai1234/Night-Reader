@@ -103,11 +103,26 @@ void main() {
         worker.process({...args}, onRuleTimedOut: second.add),
       ]);
 
+      // 兩章可能屬於不同的閱讀器，都要知道它停用了。
       expect(first.map((rule) => rule.name), ['回溯']);
-      expect(second, isEmpty);
+      expect(second.map((rule) => rule.name), ['回溯']);
       for (final result in results) {
         expect(result['content'], '　　開頭。\n　　${'a' * 30}!');
       }
+    });
+
+    test('同一個閱讀器排著好幾章時只通知一次', () async {
+      final timedOut = <ReplaceRule>[];
+      final args = _args(
+        rules: [_backtracking.toJson(), _after.toJson()],
+        rawContent: _backtrackingContent,
+      );
+      await Future.wait([
+        worker.process(args, onRuleTimedOut: timedOut.add),
+        worker.process({...args}, onRuleTimedOut: timedOut.add),
+      ]);
+
+      expect(timedOut.map((rule) => rule.name), ['回溯']);
     });
 
     test('標題規則跑超過逾時也停下那一條', () async {

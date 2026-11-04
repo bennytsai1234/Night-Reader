@@ -98,6 +98,11 @@ class ReaderV2ChapterRepository {
   final Map<int, String> _materializedContentIdentities = <int, String>{};
   List<ReplaceRule>? _enabledRules;
   Future<List<ReplaceRule>>? _enabledRulesInFlight;
+
+  /// 替換規則表每改一次就加一（[_forgetEnabledRules]）：快取的規則清單只在
+  /// 讀的期間沒改過時留著，重載失敗也不放回改之前的那份。
+  int _rulesRevision = 0;
+  StreamSubscription<void>? _ruleChanges;
   // reloadContent owns destructive semantic-cache refreshes. Keep one
   // repository transaction active at a time so a successor can only
   // snapshot a fully committed or fully rolled-back world.
@@ -267,6 +272,7 @@ class ReaderV2ChapterRepository {
     final previousCache = Map<int, ReaderV2Content>.from(_contentCache);
     final previousSource = _source;
     final previousRules = _enabledRules;
+    final previousRulesRevision = _rulesRevision;
     final previousIdentities = Map<int, String>.from(
       _materializedContentIdentities,
     );
@@ -302,7 +308,10 @@ class ReaderV2ChapterRepository {
         _materializedContentIdentities
           ..clear()
           ..addAll(previousIdentities);
-        _enabledRules = previousRules;
+        // 重載途中規則改過（例如跑太久被停用）就重新讀，不放回舊的。
+        _enabledRules = previousRulesRevision == _rulesRevision
+            ? previousRules
+            : null;
         _enabledRulesInFlight = null;
       }
     }
@@ -374,16 +383,19 @@ class ReaderV2ChapterRepository {
     if (dao == null || !book.getUseReplaceRule()) {
       return Future<List<ReplaceRule>>.value(const <ReplaceRule>[]);
     }
+    _ruleChanges ??= dao.watchChanges().listen((_) => _forgetEnabledRules());
     final cached = _enabledRules;
     if (cached != null) return Future<List<ReplaceRule>>.value(cached);
     final inFlight = _enabledRulesInFlight;
     if (inFlight != null) return inFlight;
     final cacheGeneration = _contentCacheGeneration;
+    final rulesRevision = _rulesRevision;
     late final Future<List<ReplaceRule>> task;
     task = () async {
       try {
         final rules = await dao.getEnabledForBook(book.name, book.origin);
-        if (cacheGeneration == _contentCacheGeneration) {
+        if (cacheGeneration == _contentCacheGeneration &&
+            rulesRevision == _rulesRevision) {
           _enabledRules = rules;
         }
         return rules;
@@ -492,12 +504,24 @@ class ReaderV2ChapterRepository {
     }
   }
 
+  /// 規則表改過了：快取的規則清單作廢，下一章重新讀。
+  void _forgetEnabledRules() {
+    _rulesRevision += 1;
+    _enabledRules = null;
+    _enabledRulesInFlight = null;
+  }
+
+  /// 不再用了（閱讀器關掉）：停止跟著規則表的變動。
+  void dispose() {
+    unawaited(_ruleChanges?.cancel());
+    _ruleChanges = null;
+  }
+
   /// 套用正文時跑超過逾時的規則照 Legado 停用：開關關掉、存進資料庫，之後
   /// 的章不再帶它；這一章照其他規則處理完（[ReaderV2ContentTransformWorker]）。
+  /// 快取當下就作廢：重新讀規則排在停用之後，讀到的是停用後的。
   void _disableTimedOutRule(ReplaceRule rule) {
-    _enabledRules = _enabledRules
-        ?.where((enabled) => enabled.id != rule.id)
-        .toList(growable: false);
+    _forgetEnabledRules();
     final dao = replaceDao;
     if (dao != null) {
       unawaited(
