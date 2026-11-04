@@ -795,8 +795,8 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
   });
 
   /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕照
-  /// [ReadableWidth.headerInsetOf] 往內收，[bottom] 跟著內容欄。書架這類
-  /// 鋪滿畫面的頁面設 false。
+  /// [ReadableWidth.headerInsetOf] 往內收，[bottom] 跟著內容欄。書源除錯
+  /// 日誌、網頁登入這類鋪滿畫面的頁面設 false。
   final bool readable;
 
   /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
