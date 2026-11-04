@@ -27,7 +27,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     log('⇒ 執行 getElement: $ruleStr');
     // 同 Legado：只有空白的規則拆不出任何一段，沒有結果，不是整份內容。
     dynamic result;
-    final ruleList = splitSourceRuleCacheString(ruleStr);
+    final ruleList = splitSourceRuleCacheString(ruleStr, allInOne: true);
 
     if (content != null && ruleList.isNotEmpty) {
       result = content;
@@ -53,12 +53,13 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         dynamic tempResult;
         try {
           switch (sourceRule.mode) {
+            // 同 Legado：交回第一筆的分組（詳情頁 `init` 之後的 `$1`、`$2`
+            // 讀的就是它）。
             case Mode.regex:
-              final elements = AnalyzeByRegex.getElement(
+              tempResult = AnalyzeByRegex.getElement(
                 result.toString(),
                 rule.split('&&').where((s) => s.isNotEmpty).toList(),
               );
-              tempResult = elements?.join('');
               break;
             case Mode.json:
               tempResult = sourceRule
@@ -118,7 +119,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     log('⇒ 執行 getElements: $ruleStr');
     // 同 Legado：只有空白的規則拆不出任何一段，沒有結果，不是整份內容。
     dynamic result;
-    final ruleList = splitSourceRuleCacheString(ruleStr);
+    final ruleList = splitSourceRuleCacheString(ruleStr, allInOne: true);
 
     if (content != null && ruleList.isNotEmpty) {
       result = content;
