@@ -452,9 +452,20 @@ void main() {
       right: ReaderV2InfoItem.batteryInside,
     );
     expect(ReaderV2InfoSlots.decode(inside.encode()), inside);
+    const iconOnly = ReaderV2InfoSlots(
+      left: ReaderV2InfoItem.batteryIcon,
+      right: ReaderV2InfoItem.none,
+    );
+    expect(iconOnly.encode(), '10,0');
+    expect(ReaderV2InfoSlots.decode(iconOnly.encode()), iconOnly);
     expect(
       ReaderV2InfoItem.values.where((item) => item.isBattery),
-      hasLength(3),
+      hasLength(4),
+    );
+    // 碼是存下的值，選單順序換了也不能重複。
+    expect(
+      ReaderV2InfoItem.values.map((item) => item.code).toSet(),
+      hasLength(ReaderV2InfoItem.values.length),
     );
   });
 

@@ -804,76 +804,71 @@ class _InfoRow extends StatelessWidget {
     final right = masked(
       _itemWidget(context, slots.right, progress, title, TextAlign.right),
     );
-    final semantics = skeleton
-        ? ''
-        : [
-            if (showAutoPage) '自動翻頁中',
-            ?_itemSemantics(context, slots.left, progress, title),
-            ?_itemSemantics(context, slots.right, progress, title),
-          ].join('，');
-    return Semantics(
-      container: true,
-      label: semantics,
-      child: ExcludeSemantics(
-        child: Padding(
-          // 與正文同一個左右邊距：開「左右對齊」時正文兩緣與資訊列貼齊
-          // （ADR 0019）。
-          padding: EdgeInsets.symmetric(horizontal: shell.paddingHorizontal),
-          child: DefaultTextStyle(
-            style: AppTextStyles.uiXs.copyWith(
-              fontSize: shell.infoFontSize,
-              color: infoColor,
-              fontWeight: FontWeight.w400,
-              fontFamily: kReaderV2PunctFontFamily,
-              fontFamilyFallback: readerV2FontFallback(shell.fontFamily),
-              locale: kReaderV2TextLocale,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            // 被刪節號截掉的章名，寬度照截完的字算，不是整欄：載入時的骨架
-            // 照它量，才會和字一樣長。
-            textWidthBasis: TextWidthBasis.longestLine,
-            child: SizedBox(
-              height: rowHeight ?? readerInfoRowHeightFor(shell.infoFontSize),
-              child: Row(
-                children: [
-                  if (showAutoPage) ...[
-                    ?masked(
-                      Icon(
-                        Icons.auto_stories_outlined,
-                        size: _infoIconSize(shell.infoFontSize),
-                        color: infoColor,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                  ],
-                  // 左欄通常放較長的書名／章節名，佔剩餘空間並先被刪節；
-                  // 右欄放短的進度或時間，最多佔一半寬度，盡量完整顯示。
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => Row(
-                        children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: left ?? const SizedBox.shrink(),
-                            ),
-                          ),
-                          if (left != null && right != null)
-                            const SizedBox(width: AppSpacing.md),
-                          if (right != null)
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: constraints.maxWidth / 2,
-                              ),
-                              child: right,
-                            ),
-                        ],
-                      ),
+    // 整列讀成一句：每個欄位自己帶讀屏文字，時鐘與電量跟著自己的更新重算，
+    // 不必等這一列因為進度或換章重建。骨架不提供語意。
+    Widget semantics({required Widget child}) => skeleton
+        ? ExcludeSemantics(child: child)
+        : MergeSemantics(child: child);
+    return semantics(
+      child: Padding(
+        // 與正文同一個左右邊距：開「左右對齊」時正文兩緣與資訊列貼齊
+        // （ADR 0019）。
+        padding: EdgeInsets.symmetric(horizontal: shell.paddingHorizontal),
+        child: DefaultTextStyle(
+          style: AppTextStyles.uiXs.copyWith(
+            fontSize: shell.infoFontSize,
+            color: infoColor,
+            fontWeight: FontWeight.w400,
+            fontFamily: kReaderV2PunctFontFamily,
+            fontFamilyFallback: readerV2FontFallback(shell.fontFamily),
+            locale: kReaderV2TextLocale,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          // 被刪節號截掉的章名，寬度照截完的字算，不是整欄：載入時的骨架
+          // 照它量，才會和字一樣長。
+          textWidthBasis: TextWidthBasis.longestLine,
+          child: SizedBox(
+            height: rowHeight ?? readerInfoRowHeightFor(shell.infoFontSize),
+            child: Row(
+              children: [
+                if (showAutoPage) ...[
+                  ?masked(
+                    Icon(
+                      Icons.auto_stories_outlined,
+                      size: _infoIconSize(shell.infoFontSize),
+                      color: infoColor,
+                      semanticLabel: '自動翻頁中',
                     ),
                   ),
+                  const SizedBox(width: AppSpacing.xs),
                 ],
-              ),
+                // 左欄通常放較長的書名／章節名，佔剩餘空間並先被刪節；
+                // 右欄放短的進度或時間，最多佔一半寬度，盡量完整顯示。
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Row(
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: left ?? const SizedBox.shrink(),
+                          ),
+                        ),
+                        if (left != null && right != null)
+                          const SizedBox(width: AppSpacing.md),
+                        if (right != null)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: constraints.maxWidth / 2,
+                            ),
+                            child: right,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -909,22 +904,6 @@ class _InfoRow extends StatelessWidget {
     );
   }
 
-  String? _itemSemantics(
-    BuildContext context,
-    ReaderV2InfoItem item,
-    HybridProgressSnapshot? progress,
-    String? title,
-  ) {
-    if (item == ReaderV2InfoItem.time) {
-      return '時間 ${_clockFormat(shell.use24HourClock).format(DateTime.now())}';
-    }
-    if (item.isBattery) {
-      final battery = ReaderV2DeviceChannel.latestBattery;
-      return battery == null ? null : '電量 ${battery.percent}%';
-    }
-    return _itemText(context, item, progress, title);
-  }
-
   String? _itemText(
     BuildContext context,
     ReaderV2InfoItem item,
@@ -936,6 +915,7 @@ class _InfoRow extends StatelessWidget {
       ReaderV2InfoItem.none ||
       ReaderV2InfoItem.time ||
       ReaderV2InfoItem.battery ||
+      ReaderV2InfoItem.batteryIcon ||
       ReaderV2InfoItem.batteryWithIcon ||
       ReaderV2InfoItem.batteryInside => null,
       ReaderV2InfoItem.bookName => context.zh(shell.book.name),
@@ -991,8 +971,7 @@ class _ReaderBattery extends StatefulWidget {
     required this.fontSize,
   });
 
-  /// [ReaderV2InfoItem.battery]、[ReaderV2InfoItem.batteryWithIcon] 或
-  /// [ReaderV2InfoItem.batteryInside]。
+  /// [ReaderV2InfoItem.isBattery] 的其中一種。
   final ReaderV2InfoItem item;
   final Color color;
   final double fontSize;
@@ -1028,7 +1007,22 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
     final battery = _battery;
     final percent = battery?.percent;
     final number = percent == null ? '…' : '$percent';
+    // 四種樣子都讀「電量 N%」；還沒拿到電量時不讀。
+    return Semantics(
+      label: percent == null ? null : '電量 $percent%',
+      excludeSemantics: true,
+      child: _glyph(battery, percent, number),
+    );
+  }
+
+  Widget _glyph(ReaderV2Battery? battery, int? percent, String number) {
     return switch (widget.item) {
+      ReaderV2InfoItem.batteryIcon => ReaderV2BatteryGlyph(
+        percent: percent,
+        charging: battery?.charging ?? false,
+        color: widget.color,
+        fontSize: widget.fontSize,
+      ),
       ReaderV2InfoItem.batteryInside => ReaderV2BatteryGlyph(
         percent: percent,
         charging: battery?.charging ?? false,
@@ -1106,7 +1100,12 @@ class _ReaderClockState extends State<_ReaderClock> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(widget.format.format(_now), textAlign: widget.textAlign);
+    final time = widget.format.format(_now);
+    return Semantics(
+      label: '時間 $time',
+      excludeSemantics: true,
+      child: Text(time, textAlign: widget.textAlign),
+    );
   }
 }
 
