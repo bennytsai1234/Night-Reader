@@ -721,7 +721,13 @@ class AppTransitionSwitch extends StatefulWidget {
     required this.outgoingBackground,
     required this.incomingBackground,
     this.follow = false,
+    this.held = false,
   });
+
+  /// 換頁停在起點準備中：[incoming] 原樣畫在整頁、被墊了底色的 [outgoing]
+  /// 蓋住。新頁的字這時就上過螢幕、建好字的貼圖，開始播的頭幾幀不必再建
+  /// （ADR 0037 策略一）；開始播時兩層只是對調順序、換上姿勢。
+  final bool held;
 
   final AppPageTransition transition;
   final Animation<double> animation;
@@ -781,6 +787,28 @@ class _AppTransitionSwitchState extends State<AppTransitionSwitch> {
               under: const _UnderPose(),
               size: size,
               background: widget.incomingBackground,
+            ),
+          ],
+        );
+      }
+      if (widget.held) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _posed(
+              widget.incoming,
+              top: const _TopPose(),
+              under: const _UnderPose(),
+              size: size,
+              background: widget.incomingBackground,
+            ),
+            _posed(
+              ColoredBox(color: widget.outgoingBackground, child: outgoing),
+              top: const _TopPose(),
+              under: const _UnderPose(),
+              size: size,
+              background: widget.outgoingBackground,
+              key: _outgoingKey,
             ),
           ],
         );

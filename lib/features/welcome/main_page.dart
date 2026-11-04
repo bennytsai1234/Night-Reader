@@ -131,7 +131,6 @@ class _MainPageState extends State<MainPage>
     }
     _backTicker.dispose();
     _holdTimer?.cancel();
-    _disposeWarmIncoming();
     _switchHeld.dispose();
     _switch.dispose();
     _outgoing?.dispose();
@@ -244,21 +243,25 @@ class _MainPageState extends State<MainPage>
             // 換頁與否分頁都包在同一個位置，換頁開始與結束時不搬動、不重建。
             IgnorePointer(
               ignoring: outgoing != null,
-              child: AppTransitionSwitch(
-                trip: _switchCount,
-                transition: AppPageTransition.of(context),
-                animation: _switch,
-                forward: _switchForward,
-                outgoing: outgoing == null
-                    ? null
-                    : ExcludeSemantics(
-                        child: RawImage(image: outgoing, fit: BoxFit.fill),
-                      ),
-                incoming: pages,
-                follow: _follow != _Follow.none,
-                outgoingBackground: _outgoingBackground,
-                incomingBackground: _destinations[_currentIndex].backgroundOf(
-                  context,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _switchHeld,
+                builder: (context, held, _) => AppTransitionSwitch(
+                  trip: _switchCount,
+                  transition: AppPageTransition.of(context),
+                  animation: _switch,
+                  forward: _switchForward,
+                  outgoing: outgoing == null
+                      ? null
+                      : ExcludeSemantics(
+                          child: RawImage(image: outgoing, fit: BoxFit.fill),
+                        ),
+                  incoming: pages,
+                  follow: _follow != _Follow.none,
+                  held: held,
+                  outgoingBackground: _outgoingBackground,
+                  incomingBackground: _destinations[_currentIndex].backgroundOf(
+                    context,
+                  ),
                 ),
               ),
             ),
@@ -353,21 +356,14 @@ class _MainPageState extends State<MainPage>
     _switch
       ..duration = AppPageTransition.of(context).duration
       ..value = 0;
+    // 新分頁的字第一次上螢幕時才建字的貼圖：平移這類換頁的頭幾幀新分頁
+    // 還在畫面外，2026-11-05 手機上第一次切到「發現」，貼圖的 20ms 落在
+    // 第二幀。停著的這段新分頁原樣畫在舊頁的快照底下（[AppTransitionSwitch.held]），
+    // 貼圖這時就建好；再停 [AppMotion.stillGap]，膠囊與換頁才一起開始。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _switchCount != trip || _outgoing == null) return;
-      // 新分頁的字第一次上螢幕時才建字的貼圖：平移這類換頁的頭幾幀新分頁
-      // 還在畫面外，2026-11-05 手機上第一次切到「發現」，貼圖的 20ms 落在
-      // 第二幀。停在起點時先把新分頁畫成一張圖，貼圖這時就建好；再停
-      // [AppMotion.stillGap]，膠囊與換頁才一起開始。
-      final boundary = _pagesKey.currentContext?.findRenderObject();
-      _warmIncoming = boundary is RenderRepaintBoundary && boundary.hasSize
-          ? boundary.toImageSync(
-              pixelRatio: MediaQuery.devicePixelRatioOf(context),
-            )
-          : null;
       _holdTimer = Timer(AppMotion.stillGap, () {
         _holdTimer = null;
-        _disposeWarmIncoming();
         if (!mounted || _switchCount != trip || _outgoing == null) return;
         _switchHeld.value = false;
         _switch.forward(from: 0);
@@ -375,19 +371,12 @@ class _MainPageState extends State<MainPage>
     });
   }
 
-  /// 換頁停在起點、準備新分頁中：分頁列的膠囊留在原分頁，和換頁一起開始。
+  /// 換頁停在起點、準備新分頁中：新分頁畫在舊頁快照底下，分頁列的膠囊留在
+  /// 原分頁，和換頁一起開始。
   final ValueNotifier<bool> _switchHeld = ValueNotifier(false);
 
   /// [_switchTo] 停在起點的計時器。
   Timer? _holdTimer;
-
-  /// 停在起點時把新分頁畫成的圖，只為了先建好字的貼圖；開始播就丟。
-  ui.Image? _warmIncoming;
-
-  void _disposeWarmIncoming() {
-    _warmIncoming?.dispose();
-    _warmIncoming = null;
-  }
 
   /// 拍下換頁前的畫面、把分頁換到 [index]，交給 [AppTransitionSwitch]；
   /// 關閉動畫或還沒畫出來時不開始，回傳 false。
@@ -423,7 +412,6 @@ class _MainPageState extends State<MainPage>
     _stopFollowingBack();
     _holdTimer?.cancel();
     _holdTimer = null;
-    _disposeWarmIncoming();
     _switchHeld.value = false;
     final outgoing = _outgoing;
     if (outgoing == null) return;

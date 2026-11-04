@@ -237,6 +237,12 @@ void main() {
       await tester.pump(AppMotion.stillGap - const Duration(milliseconds: 10));
       expect(left(), 0);
       expect(capsule(), 0);
+      // 新分頁原樣畫在舊頁快照底下：字先上過螢幕。
+      expect(tester.getRect(find.text('丙0')).left, greaterThanOrEqualTo(0));
+      expect(
+        tester.getRect(find.text('丙0')).right,
+        lessThanOrEqualTo(tester.getSize(find.byType(MainPage)).width),
+      );
 
       await tester.pump(const Duration(milliseconds: 10));
       expect(capsule(), 2);
