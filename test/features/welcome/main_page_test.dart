@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/welcome/main_page.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
@@ -219,19 +220,26 @@ void main() {
       expect(builds, before);
     });
 
-    testWidgets('a slow first frame does not make the switch jump', (
+    testWidgets('the switch and the capsule rest, then start together', (
       tester,
     ) async {
       await tester.pumpWidget(threeTabs());
       await tester.pumpAndSettle();
+      double left() => tester.getRect(find.byType(RawImage)).left;
+      int capsule() => tester
+          .widget<FloatingTabBar>(find.byType(FloatingTabBar))
+          .currentIndex;
 
       await tester.tap(find.text('三'));
+      // 第一幀很重（拍快照、排新分頁），之後畫面停住 [AppMotion.stillGap]：
+      // 換頁前的畫面停在原處，膠囊也留在原分頁。
       await tester.pump();
-      // 第一幀很重（拍快照、排新分頁）：下一幀晚了 100ms 才到。
-      await tester.pump(const Duration(milliseconds: 100));
-      double left() => tester.getRect(find.byType(RawImage)).left;
-      // 換頁前的畫面還停在原處，那 100ms 不算進動畫。
+      await tester.pump(AppMotion.stillGap - const Duration(milliseconds: 10));
       expect(left(), 0);
+      expect(capsule(), 0);
+
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(capsule(), 2);
       await tester.pump(const Duration(milliseconds: 16));
       expect(left(), lessThan(0));
       expect(left(), greaterThan(-120));

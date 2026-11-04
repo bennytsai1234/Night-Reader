@@ -20,6 +20,7 @@ import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 
@@ -129,6 +130,9 @@ class _MainPageState extends State<MainPage>
       controller.dispose();
     }
     _backTicker.dispose();
+    _holdTimer?.cancel();
+    _disposeWarmIncoming();
+    _switchHeld.dispose();
     _switch.dispose();
     _outgoing?.dispose();
     _pageController.dispose();
@@ -275,35 +279,41 @@ class _MainPageState extends State<MainPage>
           ],
         ),
         extendBody: true,
-        bottomNavigationBar: FloatingTabBar(
-          // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
-          controller: outgoing == null ? _pageController : null,
-          // 返回手勢還沒確定返回前，膠囊留在原本的分頁。
-          currentIndex:
-              _follow == _Follow.dragging || _follow == _Follow.cancelling
-              ? _outgoingIndex
-              : _currentIndex,
-          hidden: _tabBarHidden.value,
-          items: [
-            for (final destination in _destinations)
-              FloatingTabItem(
-                icon: destination.icon,
-                selectedIcon: destination.selectedIcon,
-                label: destination.label,
-              ),
-          ],
-          onSearch: widget.destinations == null ? _openSearch : null,
-          onTap: (index) {
-            if (_currentIndex == index) {
-              if (DateTime.now().difference(_lastTapTime).inMilliseconds <
-                  300) {
-                _handleDoubleTap(index);
+        bottomNavigationBar: ValueListenableBuilder<bool>(
+          valueListenable: _switchHeld,
+          builder: (context, held, _) => FloatingTabBar(
+            // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
+            controller: outgoing == null ? _pageController : null,
+            // 換頁停在起點準備時、返回手勢還沒確定返回前，膠囊留在原本的
+            // 分頁。
+            currentIndex:
+                held ||
+                    _follow == _Follow.dragging ||
+                    _follow == _Follow.cancelling
+                ? _outgoingIndex
+                : _currentIndex,
+            hidden: _tabBarHidden.value,
+            items: [
+              for (final destination in _destinations)
+                FloatingTabItem(
+                  icon: destination.icon,
+                  selectedIcon: destination.selectedIcon,
+                  label: destination.label,
+                ),
+            ],
+            onSearch: widget.destinations == null ? _openSearch : null,
+            onTap: (index) {
+              if (_currentIndex == index) {
+                if (DateTime.now().difference(_lastTapTime).inMilliseconds <
+                    300) {
+                  _handleDoubleTap(index);
+                }
+                _lastTapTime = DateTime.now();
+                return;
               }
-              _lastTapTime = DateTime.now();
-              return;
-            }
-            _switchTo(index);
-          },
+              _switchTo(index);
+            },
+          ),
         ),
       ),
     );
@@ -334,17 +344,49 @@ class _MainPageState extends State<MainPage>
       _pageController.jumpToPage(index);
       return;
     }
+    _switchHeld.value = true;
     // 換頁的第一幀要拍快照、排新分頁（第一次來還要整頁建起來），常常很重；
-    // 這一幀停在起點，畫完才開始計時。原本一開始就計時，第一幀花掉的時間
-    // 直接被跳過，點下去就掉幀（ADR 0018）。
+    // 這一幀停在起點，膠囊也留在原分頁（[_switchHeld]），畫完才開始準備
+    // （ADR 0037 策略一）。原本一開始就計時，第一幀花掉的時間直接被跳過，點
+    // 下去就掉幀（ADR 0018）。
     final trip = _switchCount;
     _switch
       ..duration = AppPageTransition.of(context).duration
       ..value = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _switchCount != trip || _outgoing == null) return;
-      _switch.forward(from: 0);
+      // 新分頁的字第一次上螢幕時才建字的貼圖：平移這類換頁的頭幾幀新分頁
+      // 還在畫面外，2026-11-05 手機上第一次切到「發現」，貼圖的 20ms 落在
+      // 第二幀。停在起點時先把新分頁畫成一張圖，貼圖這時就建好；再停
+      // [AppMotion.stillGap]，膠囊與換頁才一起開始。
+      final boundary = _pagesKey.currentContext?.findRenderObject();
+      _warmIncoming = boundary is RenderRepaintBoundary && boundary.hasSize
+          ? boundary.toImageSync(
+              pixelRatio: MediaQuery.devicePixelRatioOf(context),
+            )
+          : null;
+      _holdTimer = Timer(AppMotion.stillGap, () {
+        _holdTimer = null;
+        _disposeWarmIncoming();
+        if (!mounted || _switchCount != trip || _outgoing == null) return;
+        _switchHeld.value = false;
+        _switch.forward(from: 0);
+      });
     });
+  }
+
+  /// 換頁停在起點、準備新分頁中：分頁列的膠囊留在原分頁，和換頁一起開始。
+  final ValueNotifier<bool> _switchHeld = ValueNotifier(false);
+
+  /// [_switchTo] 停在起點的計時器。
+  Timer? _holdTimer;
+
+  /// 停在起點時把新分頁畫成的圖，只為了先建好字的貼圖；開始播就丟。
+  ui.Image? _warmIncoming;
+
+  void _disposeWarmIncoming() {
+    _warmIncoming?.dispose();
+    _warmIncoming = null;
   }
 
   /// 拍下換頁前的畫面、把分頁換到 [index]，交給 [AppTransitionSwitch]；
@@ -379,6 +421,10 @@ class _MainPageState extends State<MainPage>
 
   void _endSwitch() {
     _stopFollowingBack();
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _disposeWarmIncoming();
+    _switchHeld.value = false;
     final outgoing = _outgoing;
     if (outgoing == null) return;
     _switch.stop();
