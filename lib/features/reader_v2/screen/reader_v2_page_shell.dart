@@ -936,6 +936,7 @@ class _InfoRow extends StatelessWidget {
       ReaderV2InfoItem.none ||
       ReaderV2InfoItem.time ||
       ReaderV2InfoItem.battery ||
+      ReaderV2InfoItem.batteryIcon ||
       ReaderV2InfoItem.batteryWithIcon ||
       ReaderV2InfoItem.batteryInside => null,
       ReaderV2InfoItem.bookName => context.zh(shell.book.name),
@@ -991,8 +992,7 @@ class _ReaderBattery extends StatefulWidget {
     required this.fontSize,
   });
 
-  /// [ReaderV2InfoItem.battery]、[ReaderV2InfoItem.batteryWithIcon] 或
-  /// [ReaderV2InfoItem.batteryInside]。
+  /// [ReaderV2InfoItem.isBattery] 的其中一種。
   final ReaderV2InfoItem item;
   final Color color;
   final double fontSize;
@@ -1029,6 +1029,12 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
     final percent = battery?.percent;
     final number = percent == null ? '…' : '$percent';
     return switch (widget.item) {
+      ReaderV2InfoItem.batteryIcon => ReaderV2BatteryGlyph(
+        percent: percent,
+        charging: battery?.charging ?? false,
+        color: widget.color,
+        fontSize: widget.fontSize,
+      ),
       ReaderV2InfoItem.batteryInside => ReaderV2BatteryGlyph(
         percent: percent,
         charging: battery?.charging ?? false,

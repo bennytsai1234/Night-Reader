@@ -7,6 +7,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_con
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_battery_glyph.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -270,6 +271,22 @@ void main() {
     ]) {
       expect(rebuilds[type] ?? 0, 0, reason: '選單開關不應重建 $type');
     }
+  });
+
+  testWidgets('the icon-only battery draws the battery without a number', (
+    tester,
+  ) async {
+    await pumpShell(
+      tester,
+      headerInfo: const ReaderV2InfoSlots(
+        left: ReaderV2InfoItem.batteryIcon,
+        right: ReaderV2InfoItem.battery,
+      ),
+    );
+    await tester.pumpAndSettle();
+    // 頁首左欄只有電池，右欄的「電量」照舊是數字。
+    expect(find.byType(ReaderV2BatteryGlyph), findsOneWidget);
+    expect(find.textContaining('%'), findsOneWidget);
   });
 
   testWidgets('a chapter change updates the chapter titles and the prev/next '
