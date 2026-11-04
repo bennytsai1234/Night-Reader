@@ -24,6 +24,34 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  testWidgets('a pause stills every skeleton below it, then it breathes on', (
+    tester,
+  ) async {
+    // 閱讀器掀紙前在紙底下建好正文的那一兩幀：頁首頁尾的骨架跟紙一起停。
+    final paused = ValueNotifier(false);
+    addTearDown(paused.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SkeletonPause(
+          paused: paused,
+          child: const Skeleton(
+            child: SizedBox(width: 100, height: 20, child: SkeletonBox()),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.hasRunningAnimations, isTrue, reason: '骨架在呼吸');
+
+    paused.value = true;
+    await tester.pump();
+    expect(tester.hasRunningAnimations, isFalse, reason: '停在這一刻的深淺');
+
+    paused.value = false;
+    await tester.pump();
+    expect(tester.hasRunningAnimations, isTrue, reason: '接著呼吸');
+  });
+
   testWidgets(
     'every strength is visible in every style and brightness, each a step '
     'deeper than the last',

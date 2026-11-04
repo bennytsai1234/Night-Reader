@@ -51,6 +51,7 @@ import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -112,6 +113,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 目錄開著時音量鍵照常調音量。
   final ValueNotifier<bool> _drawerOpen = ValueNotifier(false);
+
+  /// 正文的紙停住呼吸中（[HybridReaderScreen.breathPaused]）：頁首頁尾的骨架
+  /// 跟著停（[SkeletonPause]）。
+  final ValueNotifier<bool> _breathPaused = ValueNotifier(false);
   bool _entranceWatched = false;
 
   /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
@@ -201,6 +206,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _drawerOpen.dispose();
+    _breathPaused.dispose();
     unawaited(_settingsSaveFailures?.cancel());
     unawaited(_hostNotices?.cancel());
     _menuDeparture.dispose();
@@ -327,129 +333,135 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       maxDim: settings.maxDim,
                     )
                   : 0,
-              child: ReaderV2PageShell(
-                book: widget.book,
-                scaffoldKey: _scaffoldKey,
-                content: _buildContent(context),
-                drawer: ReaderV2ChaptersDrawer(
-                  chapters: runtime?.chapters ?? widget.initialChapters,
-                  currentChapter: navigation.current,
-                  titleFor: _chapterTitleAt,
-                  listenable: runtime,
-                  onChapterTap: _jumpToChapterFromDrawer,
-                  bookmarks: _host.bookmarks.available ? _host.bookmarks : null,
-                  bookmarkChapter: (bookmark) =>
-                      ReaderV2Bookmarks.chapterIndexIn(
-                        bookmark,
-                        runtime?.chapters ?? widget.initialChapters,
-                      ),
-                  onBookmarkTap: _jumpToBookmarkFromDrawer,
-                  onBookmarkDelete: _deleteBookmark,
-                  highlights: _host.highlights.available
-                      ? _host.highlights
+              // 掀紙前在紙底下建好正文時，頁首頁尾的骨架跟紙一起停住呼吸。
+              child: SkeletonPause(
+                paused: _breathPaused,
+                child: ReaderV2PageShell(
+                  book: widget.book,
+                  scaffoldKey: _scaffoldKey,
+                  content: _buildContent(context),
+                  drawer: ReaderV2ChaptersDrawer(
+                    chapters: runtime?.chapters ?? widget.initialChapters,
+                    currentChapter: navigation.current,
+                    titleFor: _chapterTitleAt,
+                    listenable: runtime,
+                    onChapterTap: _jumpToChapterFromDrawer,
+                    bookmarks: _host.bookmarks.available
+                        ? _host.bookmarks
+                        : null,
+                    bookmarkChapter: (bookmark) =>
+                        ReaderV2Bookmarks.chapterIndexIn(
+                          bookmark,
+                          runtime?.chapters ?? widget.initialChapters,
+                        ),
+                    onBookmarkTap: _jumpToBookmarkFromDrawer,
+                    onBookmarkDelete: _deleteBookmark,
+                    highlights: _host.highlights.available
+                        ? _host.highlights
+                        : null,
+                    highlightChapter: (highlight) =>
+                        ReaderV2Highlights.chapterIndexIn(
+                          highlight,
+                          runtime?.chapters ?? widget.initialChapters,
+                        ),
+                    onHighlightTap: _jumpToHighlightFromDrawer,
+                    onHighlightDelete: _coordinator.deleteHighlight,
+                    onHighlightExport: (items) => unawaited(
+                      shareHighlights([
+                        (
+                          bookName: widget.book.name,
+                          bookAuthor: widget.book.author,
+                          items: items,
+                        ),
+                      ]),
+                    ),
+                    onClosed: _handleDrawerClosed,
+                  ),
+                  backgroundColor: palette.readerBackground,
+                  infoColor: palette.readerInfo,
+                  textColor: palette.readerText,
+                  controlsVisible: menu.controlsVisible,
+                  showReadTitleAddition: settings.showReadTitleAddition,
+                  infoState: _infoStateOf(runtime),
+                  loadingTarget: _infoTargetOf(runtime),
+                  originName: widget.book.originName,
+                  progressListenable: _progress,
+                  navigation: navigation,
+                  isAutoPaging: _host.autoPage?.isRunning ?? false,
+                  hideStatusBar: settings.hideStatusBar,
+                  headerInfo: settings.headerInfo,
+                  footerInfo: settings.footerInfo,
+                  // 正文區橫向佔滿畫面，和正文用同一個寬度算。
+                  paddingHorizontal: settings.paddingHorizontalFor(
+                    MediaQuery.sizeOf(context).width,
+                  ),
+                  menuSide: settings.menuSideFor(
+                    MediaQuery.sizeOf(context).width,
+                  ),
+                  paddingTop: settings.paddingTop,
+                  paddingBottom: settings.paddingBottom,
+                  footerOffset: settings.footerOffset,
+                  infoFontSize: settings.infoFontSize,
+                  fontFamily: settings.readerFontFamily,
+                  edgeFade: settings.edgeFade,
+                  use24HourClock: settings.use24HourClock,
+                  progressFractionDigits: settings.progressFractionDigits,
+                  topCutoutExtent: _topCutoutExtent,
+                  dayNightIcon: isDarkBackground
+                      ? Icons.light_mode_rounded
+                      : Icons.dark_mode_rounded,
+                  dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
+                  onExitIntent: _handleExitIntent,
+                  onSystemBack: _handleSystemBack,
+                  onMore: () => unawaited(_showMore()),
+                  onOpenDrawer: _openChapters,
+                  onTts: () => _openPanel(_showTts),
+                  onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
+                  onInterface: () => _openPanel(
+                    () => ReaderV2SettingsSheets.showInterfaceSettings(
+                      context,
+                      settings,
+                    ),
+                  ),
+                  onSettings: () => unawaited(_openReadingPreferences()),
+                  onAutoPage: _coordinator.toggleAutoPage,
+                  onToggleDayNight: _toggleDayNight,
+                  onReplaceRule: () =>
+                      _openPanel(() => _coordinator.openReplaceRule(context)),
+                  onShowControls: menu.showControls,
+                  onDismissControls: menu.dismissControls,
+                  onPrevChapter: () =>
+                      unawaited(_coordinator.jumpRelativeChapter(-1)),
+                  onNextChapter: () =>
+                      unawaited(_coordinator.jumpRelativeChapter(1)),
+                  onScrubStart: menu.onScrubStart,
+                  onScrubbing: (percent) {
+                    menu.onScrubbing(percent);
+                    _coordinator.previewChapterPercent(percent);
+                  },
+                  onScrubEnd: (percent) {
+                    menu.onScrubEnd(percent);
+                    unawaited(_coordinator.commitChapterPercent(percent));
+                  },
+                  brightnessControl:
+                      ReaderV2DeviceChannel.supportsWindowBrightness
+                      ? ReaderV2BrightnessBar(
+                          auto: settings.brightnessAuto,
+                          level: settings.brightness,
+                          onAutoChanged: settings.setBrightnessAuto,
+                          onChanged: (level) =>
+                              settings.setBrightness(level, persist: false),
+                          onChangeEnd: settings.setBrightness,
+                        )
                       : null,
-                  highlightChapter: (highlight) =>
-                      ReaderV2Highlights.chapterIndexIn(
-                        highlight,
-                        runtime?.chapters ?? widget.initialChapters,
-                      ),
-                  onHighlightTap: _jumpToHighlightFromDrawer,
-                  onHighlightDelete: _coordinator.deleteHighlight,
-                  onHighlightExport: (items) => unawaited(
-                    shareHighlights([
-                      (
-                        bookName: widget.book.name,
-                        bookAuthor: widget.book.author,
-                        items: items,
-                      ),
-                    ]),
-                  ),
-                  onClosed: _handleDrawerClosed,
+                  sleepTimer: _host.tts?.sleepTimer,
+                  isTtsPlaying: _host.tts?.isPlaying ?? false,
+                  showTts: true,
+                  showAutoPage: true,
+                  showReplaceRule: true,
+                  onMenuHidden: _handleMenuHidden,
+                  onDrawerChanged: (open) => _drawerOpen.value = open,
                 ),
-                backgroundColor: palette.readerBackground,
-                infoColor: palette.readerInfo,
-                textColor: palette.readerText,
-                controlsVisible: menu.controlsVisible,
-                showReadTitleAddition: settings.showReadTitleAddition,
-                infoState: _infoStateOf(runtime),
-                loadingTarget: _infoTargetOf(runtime),
-                originName: widget.book.originName,
-                progressListenable: _progress,
-                navigation: navigation,
-                isAutoPaging: _host.autoPage?.isRunning ?? false,
-                hideStatusBar: settings.hideStatusBar,
-                headerInfo: settings.headerInfo,
-                footerInfo: settings.footerInfo,
-                // 正文區橫向佔滿畫面，和正文用同一個寬度算。
-                paddingHorizontal: settings.paddingHorizontalFor(
-                  MediaQuery.sizeOf(context).width,
-                ),
-                menuSide: settings.menuSideFor(
-                  MediaQuery.sizeOf(context).width,
-                ),
-                paddingTop: settings.paddingTop,
-                paddingBottom: settings.paddingBottom,
-                footerOffset: settings.footerOffset,
-                infoFontSize: settings.infoFontSize,
-                fontFamily: settings.readerFontFamily,
-                edgeFade: settings.edgeFade,
-                use24HourClock: settings.use24HourClock,
-                progressFractionDigits: settings.progressFractionDigits,
-                topCutoutExtent: _topCutoutExtent,
-                dayNightIcon: isDarkBackground
-                    ? Icons.light_mode_rounded
-                    : Icons.dark_mode_rounded,
-                dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
-                onExitIntent: _handleExitIntent,
-                onSystemBack: _handleSystemBack,
-                onMore: () => unawaited(_showMore()),
-                onOpenDrawer: _openChapters,
-                onTts: () => _openPanel(_showTts),
-                onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
-                onInterface: () => _openPanel(
-                  () => ReaderV2SettingsSheets.showInterfaceSettings(
-                    context,
-                    settings,
-                  ),
-                ),
-                onSettings: () => unawaited(_openReadingPreferences()),
-                onAutoPage: _coordinator.toggleAutoPage,
-                onToggleDayNight: _toggleDayNight,
-                onReplaceRule: () =>
-                    _openPanel(() => _coordinator.openReplaceRule(context)),
-                onShowControls: menu.showControls,
-                onDismissControls: menu.dismissControls,
-                onPrevChapter: () =>
-                    unawaited(_coordinator.jumpRelativeChapter(-1)),
-                onNextChapter: () =>
-                    unawaited(_coordinator.jumpRelativeChapter(1)),
-                onScrubStart: menu.onScrubStart,
-                onScrubbing: (percent) {
-                  menu.onScrubbing(percent);
-                  _coordinator.previewChapterPercent(percent);
-                },
-                onScrubEnd: (percent) {
-                  menu.onScrubEnd(percent);
-                  unawaited(_coordinator.commitChapterPercent(percent));
-                },
-                brightnessControl:
-                    ReaderV2DeviceChannel.supportsWindowBrightness
-                    ? ReaderV2BrightnessBar(
-                        auto: settings.brightnessAuto,
-                        level: settings.brightness,
-                        onAutoChanged: settings.setBrightnessAuto,
-                        onChanged: (level) =>
-                            settings.setBrightness(level, persist: false),
-                        onChangeEnd: settings.setBrightness,
-                      )
-                    : null,
-                sleepTimer: _host.tts?.sleepTimer,
-                isTtsPlaying: _host.tts?.isPlaying ?? false,
-                showTts: true,
-                showAutoPage: true,
-                showReplaceRule: true,
-                onMenuHidden: _handleMenuHidden,
-                onDrawerChanged: (open) => _drawerOpen.value = open,
               ),
             ),
           ),
@@ -481,6 +493,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           clipBehavior: Clip.none,
           children: [
             HybridReaderScreen(
+              breathPaused: _breathPaused,
               runtime: runtime,
               backgroundColor: palette.readerBackground,
               textColor: palette.readerText,

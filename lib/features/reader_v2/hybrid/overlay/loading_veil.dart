@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -169,7 +170,13 @@ class LoadingVeilController {
   }
 
   /// 骨架的呼吸停在這一刻的深淺（[holdBreath]），畫面不動。
-  bool _breathHeld = false;
+  bool get _breathHeld => _breathHeldNotifier.value;
+  set _breathHeld(bool value) => _breathHeldNotifier.value = value;
+  final ValueNotifier<bool> _breathHeldNotifier = ValueNotifier(false);
+
+  /// 紙上骨架的呼吸停住中（[holdBreath]）：頁首頁尾的骨架照它一起停
+  /// （[SkeletonPause]），整個畫面才真的不動。
+  ValueListenable<bool> get breathHeld => _breathHeldNotifier;
 
   /// 掀紙前在紙底下建好、畫出正文時，骨架的呼吸停在這一刻的深淺，畫面不動
   /// （ADR 0037 策略一：掀紙前建好正文畫面時停一兩幀加 [AppMotion.stillGap]）。
@@ -204,6 +211,7 @@ class LoadingVeilController {
     _cover.dispose();
     _skeleton.dispose();
     _pulse.dispose();
+    _breathHeldNotifier.dispose();
   }
 
   void _onCoverStatus(AnimationStatus status) {

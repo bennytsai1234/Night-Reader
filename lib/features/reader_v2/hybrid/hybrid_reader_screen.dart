@@ -74,11 +74,16 @@ class HybridReaderScreen extends StatefulWidget {
     this.pageTurnOverlap = 1,
     this.pageTurnDuration = const Duration(milliseconds: 260),
     this.processText,
+    this.breathPaused,
   });
 
   /// 選字選單「⋮」裡系統可以處理文字的 App，掀紙前的預留停頓裡查；沒給時
   /// 用 App 共用的那一份（[ProcessTextActions.shared]）。
   final ProcessTextActions? processText;
+
+  /// 紙上骨架的呼吸停住中（掀紙前在紙底下建好正文）時設成 true：呼叫端拿它
+  /// 讓頁首頁尾的骨架一起停（[SkeletonPause]）。
+  final ValueNotifier<bool>? breathPaused;
 
   final ReaderV2Runtime runtime;
   final Color backgroundColor;
@@ -233,7 +238,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _veilPage = null;
       if (mounted) setState(() {});
     },
-  );
+  )..breathHeld.addListener(_syncBreathPaused);
+
+  /// 紙上骨架停住呼吸時，呼叫端的頁首頁尾骨架跟著停（[HybridReaderScreen.breathPaused]）。
+  void _syncBreathPaused() =>
+      widget.breathPaused?.value = _veil.breathHeld.value;
 
   /// 舊正文還在畫面上、紙正在淡入蓋住它時，紙停下來（蓋滿或途中掀開）
   /// 後完成；其他時候為 null（見 [_coverText]）。
@@ -388,6 +397,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _scrollController?.dispose();
     _selection.dispose();
     _revealTimer?.cancel();
+    _veil.breathHeld.removeListener(_syncBreathPaused);
+    widget.breathPaused?.value = false;
     _veil.dispose();
     super.dispose();
   }
