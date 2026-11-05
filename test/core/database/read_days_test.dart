@@ -6,6 +6,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_cont
 
 import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
+import 'legacy_download_tasks_table.dart';
 
 void main() {
   test('a session past midnight is split between the two days', () {
@@ -130,6 +131,7 @@ void main() {
           );
           raw.execute(legacyChaptersTable);
           raw.execute(legacyBooksTable);
+          raw.execute(legacyDownloadTasksTable);
           raw.execute('PRAGMA user_version = 6');
         },
       ),

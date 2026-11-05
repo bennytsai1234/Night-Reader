@@ -6,6 +6,7 @@ import 'package:night_reader/core/models/chapter.dart';
 
 import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
+import 'legacy_download_tasks_table.dart';
 
 void main() {
   test('a schema 7 table of contents upgrades whole and then keeps two books '
@@ -15,6 +16,7 @@ void main() {
         setup: (raw) {
           raw.execute(legacyChaptersTable);
           raw.execute(legacyBooksTable);
+          raw.execute(legacyDownloadTasksTable);
           raw.execute(
             'INSERT INTO chapters (url, title, isVolume, bookUrl, "index", '
             'variable) VALUES '

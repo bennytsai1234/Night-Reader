@@ -1,14 +1,9 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/cache.dart';
-import 'package:night_reader/core/storage/app_storage_paths.dart';
-import 'package:path/path.dart' as p;
 
 /// LruMemoryCache - 簡易 LRU 記憶體快取
 /// (原 Android LruCache) (String, Any)
@@ -65,24 +60,20 @@ class LruMemoryCache {
   Iterable<String> get keys => _cache.keys;
 }
 
-/// CacheManager - 檔案與記憶體雙層快取管理器
+/// CacheManager - 記憶體與資料庫兩層的文字快取，期限兩層都記
 /// (原 Android help/CacheManager.kt)
 class CacheManager {
   static final CacheManager _instance = CacheManager._internal();
   factory CacheManager() => _instance;
 
-  /// 背景 isolate（書源批量校驗）內 get_it 容器為空，CacheDao 不會被註冊；
-  /// 此時退化為記憶體 + 檔案快取（不寫 DB），避免建構或讀寫時拋
-  /// 「CacheDao is not registered」。對標 [CookieStore] 的相同處理。
+  /// 主 isolate、書源 isolate 與網路 isolate 都註冊了資料庫；只準備記憶體
+  /// 的測試沒有註冊，這時只用記憶體。
   CacheDao? get _cacheDao =>
       getIt.isRegistered<CacheDao>() ? getIt<CacheDao>() : null;
 
   // 記憶體快取 (50MB)
   final LruMemoryCache _memoryCache = LruMemoryCache(1024 * 1024 * 50);
   final Map<String, int> _memoryDeadlines = <String, int>{};
-  final Map<String, Future<void>> _legacyCleanupByDirectory =
-      <String, Future<void>>{};
-  static final RegExp _digestFileName = RegExp(r'^[0-9a-f]{64}$');
 
   CacheManager._internal();
 
@@ -101,43 +92,7 @@ class CacheManager {
     }
   }
 
-  /// 獲取快取檔案路徑 (對標 js_cache 目錄)
-  Future<String> getCachePath(String key) async {
-    final cacheDir = await AppStoragePaths.jsCacheDir();
-    await _ensureLegacyCacheCleanup(cacheDir);
-    final fileName = sha256.convert(utf8.encode(key)).toString();
-    return p.join(cacheDir.path, fileName);
-  }
-
-  Future<void> _ensureLegacyCacheCleanup(Directory cacheDir) {
-    return _legacyCleanupByDirectory.putIfAbsent(
-      cacheDir.path,
-      () => _deleteLegacyCacheFiles(cacheDir),
-    );
-  }
-
-  Future<void> _deleteLegacyCacheFiles(Directory cacheDir) async {
-    if (!await cacheDir.exists()) return;
-    await for (final entity in cacheDir.list(followLinks: false)) {
-      if (entity is File &&
-          !_digestFileName.hasMatch(p.basename(entity.path))) {
-        await _deleteLegacyFileIfPresent(entity);
-      }
-    }
-  }
-
-  static Future<void> _deleteLegacyFileIfPresent(File file) async {
-    try {
-      await file.delete();
-    } on FileSystemException {
-      if (await file.exists()) rethrow;
-    }
-  }
-
-  String _legacyFileName(String key) =>
-      key.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-
-  /// 讀取快取文本 (優先從記憶體，再從磁碟資料庫，最後從檔案系統)
+  /// 讀取快取文本：先看記憶體，再看資料庫；過期的當作沒有。
   ///
   /// 過期的刪掉但不等它寫完：網路 isolate 替停住的書源 isolate 讀時，寫入
   /// 可能要等那條手上的交易，讀取不能跟著等（ADR 0034）。
@@ -150,34 +105,19 @@ class CacheManager {
     final mem = getFromMemory(key);
     if (mem is String) return mem;
 
-    // 2. 資料庫 (磁碟快取實體)
-    final cacheDao = _cacheDao;
-    if (cacheDao != null) {
-      final cache = await cacheDao.get(key);
-      if (cache != null) {
-        if (cache.deadline == 0 ||
-            cache.deadline > DateTime.now().millisecondsSinceEpoch) {
-          _putMemory(key, cache.value, deadline: cache.deadline);
-          return cache.value;
-        } else {
-          unawaited(delete(key)); // 已過期，清理
-          return null;
-        }
-      }
+    // 2. 資料庫
+    final cache = await _cacheDao?.get(key);
+    if (cache == null) return null;
+    if (cache.deadline != 0 &&
+        cache.deadline <= DateTime.now().millisecondsSinceEpoch) {
+      unawaited(delete(key));
+      return null;
     }
-
-    // 3. 檔案系統 (JS 快取)
-    final path = await getCachePath(key);
-    final file = File(path);
-    if (await file.exists()) {
-      final content = await file.readAsString();
-      _putMemory(key, content);
-      return content;
-    }
-    return null;
+    _putMemory(key, cache.value, deadline: cache.deadline);
+    return cache.value;
   }
 
-  /// 保存快取文本 (記憶體 + 資料庫 + 檔案)。期限給 [saveTimeSeconds]（從現在
+  /// 保存快取文本 (記憶體 + 資料庫)。期限給 [saveTimeSeconds]（從現在
   /// 起算幾秒，0 是永久），或給 [deadline]（到期的時刻，毫秒，0 是永久；從
   /// 備份還原時照原本的時刻）。
   Future<void> put(
@@ -191,20 +131,9 @@ class CacheManager {
         : DateTime.now().millisecondsSinceEpoch + saveTimeSeconds * 1000;
     _putMemory(key, content, deadline: deadline);
     onMemoryWrite?.call(key, content, deadline);
-
-    // 儲存至資料庫
-
     await _cacheDao?.upsert(
       Cache(key: key, value: content, deadline: deadline),
     );
-
-    // 儲存至檔案
-    final path = await getCachePath(key);
-    final file = File(path);
-    if (!await file.parent.exists()) {
-      await file.parent.create(recursive: true);
-    }
-    await file.writeAsString(content);
   }
 
   /// 記憶體快取專用介面
@@ -263,19 +192,9 @@ class CacheManager {
   Future<List<String>> keysStartingWith(String prefix) async =>
       await _cacheDao?.keysStartingWith(prefix) ?? const <String>[];
 
-  /// 刪除快取 (記憶體 + 資料庫 + 檔案)
+  /// 刪除快取 (記憶體 + 資料庫)
   Future<void> delete(String key) async {
     deleteMemory(key);
     await _cacheDao?.deleteByKey(key);
-    final path = await getCachePath(key);
-    final file = File(path);
-    if (await file.exists()) {
-      await file.delete();
-    }
-    final legacyPath = p.join(file.parent.path, _legacyFileName(key));
-    if (legacyPath != path) {
-      final legacyFile = File(legacyPath);
-      if (await legacyFile.exists()) await legacyFile.delete();
-    }
   }
 }

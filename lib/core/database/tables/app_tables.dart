@@ -612,6 +612,15 @@ class DownloadTasks extends Table {
   IntColumn get sortOrder =>
       integer().named('sortOrder').withDefault(const Constant(0))();
 
+  /// 最近一次失敗的類型、訊息與章節（佇列的「查看失敗原因」）；schema 14 起
+  /// 才有，沒有失敗時是 null。
+  TextColumn get lastErrorReason =>
+      text().named('lastErrorReason').nullable()();
+  TextColumn get lastErrorMessage =>
+      text().named('lastErrorMessage').nullable()();
+  IntColumn get lastErrorChapterIndex =>
+      integer().named('lastErrorChapterIndex').nullable()();
+
   @override
   Set<Column> get primaryKey => {bookUrl};
 }

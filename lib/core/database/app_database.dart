@@ -132,7 +132,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -168,16 +168,26 @@ class AppDatabase extends _$AppDatabase {
       if (from < 6) {
         // 下載任務的範圍從章節序號改記章節網址（ADR 0008）。既有任務兩端
         // 都留空，也就是整本：絕大多數本來就是書架自動下載，已下載的章節
-        // 開跑時照樣跳過。
+        // 開跑時照樣跳過。表照現在的樣子重建，schema 14 的失敗欄位也在這裡
+        // 建好、留空。
         await m.alterTable(
           TableMigration(
             downloadTasks,
             newColumns: [
               downloadTasks.startChapterUrl,
               downloadTasks.endChapterUrl,
+              downloadTasks.lastErrorReason,
+              downloadTasks.lastErrorMessage,
+              downloadTasks.lastErrorChapterIndex,
             ],
           ),
         );
+      } else if (from < 14) {
+        // 下載失敗的類型、訊息與章節存進資料庫，重開 App 後「查看失敗原因」
+        // 照樣看得到；升級前失敗的任務沒有記錄，留空。
+        await m.addColumn(downloadTasks, downloadTasks.lastErrorReason);
+        await m.addColumn(downloadTasks, downloadTasks.lastErrorMessage);
+        await m.addColumn(downloadTasks, downloadTasks.lastErrorChapterIndex);
       }
       if (from < 7) {
         // 閱讀統計的「今天／本週」改記每天的秒數；之前只有累計，

@@ -45,12 +45,15 @@ class DownloadDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.status.equals(0) | t.status.equals(1))).get();
   }
 
+  /// 只寫有給的欄位。給 [failureOf] 時也寫回它當下的失敗類型、訊息與章節
+  /// （記錄失敗或清掉失敗之後）。
   Future<void> updateProgress(
     String bookUrl, {
     int? status,
     int? currentChapterIndex,
     int? successCount,
     int? errorCount,
+    DownloadTask? failureOf,
   }) {
     return (update(
       downloadTasks,
@@ -65,6 +68,15 @@ class DownloadDao extends DatabaseAccessor<AppDatabase>
             : const Value.absent(),
         errorCount: errorCount != null
             ? Value(errorCount)
+            : const Value.absent(),
+        lastErrorReason: failureOf != null
+            ? Value(failureOf.lastErrorReason)
+            : const Value.absent(),
+        lastErrorMessage: failureOf != null
+            ? Value(failureOf.lastErrorMessage)
+            : const Value.absent(),
+        lastErrorChapterIndex: failureOf != null
+            ? Value(failureOf.lastErrorChapterIndex)
             : const Value.absent(),
         lastUpdateTime: Value(DateTime.now().millisecondsSinceEpoch),
       ),

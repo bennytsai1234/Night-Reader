@@ -10,6 +10,7 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 import 'package:night_reader/core/di/injection.dart';
 
@@ -61,6 +62,13 @@ class DefaultData {
 
       // 清理過期快取 (對標 Android CacheDao.clearDeadline)
       await getIt<CacheDao>().clearDeadline(now);
+
+      // 0.3.8 以前的快取在資料庫之外另存一份沒有期限的檔案（含書源的登入
+      // 資料）；現在只存資料庫，留下的那份刪掉。
+      final oldCacheFiles = await AppStoragePaths.jsCacheDir();
+      if (await oldCacheFiles.exists()) {
+        await oldCacheFiles.delete(recursive: true);
+      }
     } catch (e) {
       AppLog.e('Maintenance error: $e', error: e);
     }
