@@ -36,15 +36,36 @@ abstract interface class ThemeReveal {
   /// 執行 [change]（例如 `setThemeMode`），新配色從 [origin]（螢幕座標）暈開。
   ///
   /// [origin] 為 null 時用觸發這次切換的那一下點擊位置，沒有點擊時用螢幕
-  /// 中心。[change] 一定會同步執行，不會因為轉場而延後或略過。
-  void run({Offset? origin, required VoidCallback change});
+  /// 中心。沒在暈開時 [change] 同步執行；暈開中又切換時不打斷正在暈開的
+  /// 圓，只記下最後一次，這段播完才執行並暈開（和分頁列連點一樣）。
+  ///
+  /// [current] 表示要換成的就是現在的設定：不換，暈開中則取消記下的那一次
+  /// （例如換到 B、又點 C、再點回 B，停在 B）。
+  void run({
+    Offset? origin,
+    required VoidCallback change,
+    bool current = false,
+  });
+
+  /// 不暈開、直接存的外觀變更（例如改另一個深淺的風格）也算一次操作：
+  /// 暈開中記下的那一次比它舊，作廢，暈完不會把這次存的蓋回去。
+  void discardPending();
 }
 
 class _ImmediateThemeReveal implements ThemeReveal {
   const _ImmediateThemeReveal();
 
   @override
-  void run({Offset? origin, required VoidCallback change}) => change();
+  void run({
+    Offset? origin,
+    required VoidCallback change,
+    bool current = false,
+  }) {
+    if (!current) change();
+  }
+
+  @override
+  void discardPending() {}
 }
 
 /// 墨暈邊緣由濃轉淡的寬度。太窄就只是一個硬邊的圓；太寬則新舊配色在一大片
@@ -80,8 +101,27 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
     super.dispose();
   }
 
+  /// 暈開中又要切換的最後一次，這段播完才執行（[_clear]）。
+  ({Offset? origin, VoidCallback change})? _pending;
+
   @override
-  void run({Offset? origin, required VoidCallback change}) {
+  void discardPending() => _pending = null;
+
+  @override
+  void run({
+    Offset? origin,
+    required VoidCallback change,
+    bool current = false,
+  }) {
+    if (_snapshot != null) {
+      // 重拍一張、整個 App 換色重建、圓從零重來，都會落在正在暈開的這段
+      // 裡，畫面停一下再跳。
+      _pending = current
+          ? null
+          : (origin: origin ?? _lastPointerDown, change: change);
+      return;
+    }
+    if (current) return;
     final boundary = _boundaryKey.currentContext?.findRenderObject();
     if (!mounted ||
         MediaQuery.disableAnimationsOf(context) ||
@@ -91,8 +131,7 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
     }
     ui.Image? snapshot;
     try {
-      // 擷取的是上一幀已經畫好的圖層，就是使用者按下時看到的畫面；蓋圖也在
-      // 這個範圍內，連續切換時從目前看到的半途狀態接著暈開。
+      // 擷取的是上一幀已經畫好的圖層，就是使用者按下時看到的畫面。
       snapshot = boundary.toImageSync(
         pixelRatio: View.of(context).devicePixelRatio,
       );
@@ -113,7 +152,6 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
     final local = point == null
         ? size.center(Offset.zero)
         : boundary.globalToLocal(point);
-    _snapshot?.dispose();
     setState(() {
       _snapshot = snapshot;
       _origin = Offset(
@@ -137,6 +175,15 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
     setState(() => _snapshot = null);
     // 等這一幀不再畫這張圖後再釋放。
     WidgetsBinding.instance.addPostFrameCallback((_) => snapshot.dispose());
+    // 暈開中記下的那一次：這段的最後一幀畫完之後才拍下一張、換色，和播完
+    // 後再點一下一樣，不擠在最後一幀裡。
+    if (_pending == null) return;
+    Timer.run(() {
+      final pending = _pending;
+      _pending = null;
+      if (!mounted || pending == null) return;
+      run(origin: pending.origin, change: pending.change);
+    });
   }
 
   @override

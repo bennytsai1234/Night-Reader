@@ -24,32 +24,69 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
-  testWidgets('a pause stills every skeleton below it, then it breathes on', (
+  testWidgets(
+    'skeletons sharing a breath take it up at its phase, hold and stop with it',
+    (tester) async {
+      // 閱讀器的紙與頁首頁尾：後出現的骨架照已經在走的那口呼吸，不從頭開始。
+      final breath = SharedSkeletonBreath(vsync: tester);
+      addTearDown(breath.dispose);
+      breath.acquire();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      final phase = breath.phase.value;
+      expect(phase, greaterThan(0), reason: '先用的那一邊已經在呼吸');
+
+      const box = SizedBox(width: 100, height: 20, child: SkeletonBox());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SharedSkeletonBreathScope(
+            breath: breath,
+            child: const Skeleton(child: box),
+          ),
+        ),
+      );
+      expect(breath.phase.value, phase, reason: '後出現的骨架不讓呼吸重來');
+
+      // 掀紙前在紙底下建好正文的那一兩幀：整個畫面一起停。
+      breath.hold();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.hasRunningAnimations, isFalse, reason: '停在這一刻的深淺');
+      breath.resume();
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isTrue, reason: '接著呼吸');
+
+      breath.release();
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isTrue, reason: '頁首頁尾的骨架還在用');
+      await tester.pumpWidget(const MaterialApp(home: box));
+      expect(tester.hasRunningAnimations, isFalse, reason: '沒人用就停');
+      expect(breath.phase.value, 0, reason: '停回最深');
+    },
+  );
+
+  testWidgets('a hidden skeleton does not keep a shared breath going', (
     tester,
   ) async {
-    // 閱讀器掀紙前在紙底下建好正文的那一兩幀：頁首頁尾的骨架跟紙一起停。
-    final paused = ValueNotifier(false);
-    addTearDown(paused.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SkeletonPause(
-          paused: paused,
+    final breath = SharedSkeletonBreath(vsync: tester);
+    addTearDown(breath.dispose);
+    Widget app({required bool shown}) => MaterialApp(
+      home: SharedSkeletonBreathScope(
+        breath: breath,
+        child: TickerMode(
+          enabled: shown,
           child: const Skeleton(
             child: SizedBox(width: 100, height: 20, child: SkeletonBox()),
           ),
         ),
       ),
     );
+    await tester.pumpWidget(app(shown: false));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(tester.hasRunningAnimations, isTrue, reason: '骨架在呼吸');
+    expect(breath.isBreathing, isFalse, reason: '藏起來的骨架不讓呼吸走');
 
-    paused.value = true;
-    await tester.pump();
-    expect(tester.hasRunningAnimations, isFalse, reason: '停在這一刻的深淺');
-
-    paused.value = false;
-    await tester.pump();
-    expect(tester.hasRunningAnimations, isTrue, reason: '接著呼吸');
+    await tester.pumpWidget(app(shown: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(breath.isBreathing, isTrue, reason: '出現了才呼吸');
   });
 
   testWidgets(

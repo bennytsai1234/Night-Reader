@@ -103,6 +103,20 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('the paper also covers the gaps above and below the text area', (
+    tester,
+  ) async {
+    // 跨在上下緣的那一行畫進正文與頁首頁尾之間的空隙；紙沒蓋到的話，那
+    // 半行在掀紙前就露出來。
+    makeVeil(tester);
+    await pumpVeil(tester);
+    expect(
+      find.byType(LoadingVeil),
+      paints..rect(rect: const Rect.fromLTRB(0, -600, 800, 1200)),
+    );
+    await finish(tester);
+  });
+
   testWidgets('reveal fades the paper out and stops every animation', (
     tester,
   ) async {

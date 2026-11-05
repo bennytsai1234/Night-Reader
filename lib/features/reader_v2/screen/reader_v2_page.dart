@@ -81,7 +81,7 @@ class ReaderV2Page extends StatefulWidget {
 }
 
 class _ReaderV2PageState extends State<ReaderV2Page>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin
+    with WidgetsBindingObserver, TickerProviderStateMixin
     implements ReaderV2ExitFlowDelegate {
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
@@ -117,9 +117,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 目錄開著時音量鍵照常調音量。
   final ValueNotifier<bool> _drawerOpen = ValueNotifier(false);
 
-  /// 正文的紙停住呼吸中（[HybridReaderScreen.breathPaused]）：頁首頁尾的骨架
-  /// 跟著停（[SkeletonPause]）。
-  final ValueNotifier<bool> _breathPaused = ValueNotifier(false);
+  /// 正文的紙與頁首頁尾的骨架共用的呼吸（[SharedSkeletonBreath]）：誰先
+  /// 出現都照同一個相位，紙停住呼吸時頁首頁尾一起停。
+  late final SharedSkeletonBreath _skeletonBreath = SharedSkeletonBreath(
+    vsync: this,
+  );
   bool _entranceWatched = false;
 
   /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
@@ -210,7 +212,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     WidgetsBinding.instance.removeObserver(this);
     _drawerOpen.dispose();
     _chapterPanel.dispose();
-    _breathPaused.dispose();
+    _skeletonBreath.dispose();
     unawaited(_settingsSaveFailures?.cancel());
     unawaited(_hostNotices?.cancel());
     _menuDeparture.dispose();
@@ -337,9 +339,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       maxDim: settings.maxDim,
                     )
                   : 0,
-              // 掀紙前在紙底下建好正文時，頁首頁尾的骨架跟紙一起停住呼吸。
-              child: SkeletonPause(
-                paused: _breathPaused,
+              // 頁首頁尾的骨架和正文的紙同一口呼吸。
+              child: SharedSkeletonBreathScope(
+                breath: _skeletonBreath,
                 child: ReaderV2PageShell(
                   book: widget.book,
                   content: _buildContent(context),
@@ -498,7 +500,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           clipBehavior: Clip.none,
           children: [
             HybridReaderScreen(
-              breathPaused: _breathPaused,
+              skeletonBreath: _skeletonBreath,
               runtime: runtime,
               backgroundColor: palette.readerBackground,
               textColor: palette.readerText,
@@ -639,10 +641,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
   void _toggleDayNight() {
     final dark = StylePalette.of(context).brightness == Brightness.dark;
+    // 暈開中連按時這一下排到暈完才執行，那時閱讀器可能已經關掉：設定先取好。
+    final settings = context.read<SettingsProvider>();
     ThemeRevealScope.of(context).run(
-      change: () => context.read<SettingsProvider>().setThemeMode(
-        dark ? ThemeMode.light : ThemeMode.dark,
-      ),
+      change: () =>
+          settings.setThemeMode(dark ? ThemeMode.light : ThemeMode.dark),
     );
   }
 
@@ -704,7 +707,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _chapterPanel.close();
     _host.menu.dismissControls();
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
+    // 目錄收起途中又點了一章：骨架淡入照原本那次的時間走完，不重算。
+    if (!reduceMotion && !_skeletonFadeIn.isAnimating) {
+      unawaited(_skeletonFadeIn.forward(from: 0));
+    }
     return Future.wait([
       drawerClosed,
       if (!reduceMotion)
@@ -887,9 +893,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
+  /// 「更多」正在查登入用的書源：第一次要讀資料庫，這段按鈕還點得到，連點
+  /// 兩下會疊兩個選單。選單推上去之後點擊就落在選單上。
+  bool _lookingUpMore = false;
+
   Future<void> _showMore() async {
+    if (_lookingUpMore) return;
     final isLocal = widget.book.isLocal;
-    final loginSource = await _loginSource();
+    _lookingUpMore = true;
+    final BookSource? loginSource;
+    try {
+      loginSource = await _loginSource();
+    } finally {
+      _lookingUpMore = false;
+    }
     if (!mounted) return;
     final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,
