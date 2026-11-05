@@ -1,0 +1,2 @@
+input keyevent BACK
+sleep 2.5

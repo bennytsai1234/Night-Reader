@@ -1,0 +1,6 @@
+am force-stop com.inkpage.reader
+sleep 1
+am start -n com.inkpage.reader/.MainActivity
+sleep 3
+input tap 630 612
+sleep 6
