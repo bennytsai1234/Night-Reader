@@ -83,6 +83,10 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   bool _built = false;
   bool _open = false;
 
+  /// 上次收完之後打開過：收完時才通知 [ReaderV2SidePanel.onClosed]。只是手指
+  /// 按在左緣、或拉一點就放掉彈回去，不算打開過。
+  bool _openedSinceClosed = false;
+
   /// 每次要求打開或收起加一，作廢還沒開始的滑出。
   int _trip = 0;
   Timer? _holdTimer;
@@ -135,6 +139,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   void _setOpen(bool open) {
     if (_open == open) return;
     _open = open;
+    if (open) _openedSinceClosed = true;
     if (!open) {
       _trip++;
       _holdTimer?.cancel();
@@ -185,6 +190,8 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
     if (!_shown.value) return;
     _shown.value = false;
     setState(() {});
+    if (!_openedSinceClosed) return;
+    _openedSinceClosed = false;
     widget.onClosed?.call();
   }
 
@@ -210,11 +217,12 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
     } else if (_position.value < 0.5) {
       _requestClose();
     } else {
-      _setOpen(true);
-      _position.fling();
+      _settleOpen();
     }
   }
 
+  /// 在目錄裡上下捲動時，左右拖曳的手勢在按下時就準備、判定是上下捲之後
+  /// 退出，走到這裡：面板沒被拉動過，停在原處。
   void _handleDragCancel() {
     if (_position.isAnimating) return;
     if (_position.isDismissed) {
@@ -222,9 +230,15 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
     } else if (_position.value < 0.5) {
       _requestClose();
     } else {
-      _setOpen(true);
-      _position.fling();
+      _settleOpen();
     }
+  }
+
+  /// 放手時過了一半：滑到全開。已經全開就不動，不播一段原地的動畫（那幾幀
+  /// 暗幕會跟著重畫）。
+  void _settleOpen() {
+    _setOpen(true);
+    if (!_position.isCompleted) _position.fling();
   }
 
   /// 面板在畫面上或打開中：暗幕與面板接手整個畫面的觸控；否則只有左緣。
@@ -257,7 +271,11 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
                     offstage: !shown,
                     child: TickerMode(
                       enabled: shown,
-                      child: _buildPanel(context, scrim),
+                      // 暗幕與面板自成一層：滑動時每一幀改暗幕濃淡、平移
+                      // 面板，只重畫這一層，底下的閱讀畫面不跟著重畫。
+                      child: RepaintBoundary(
+                        child: _buildPanel(context, scrim),
+                      ),
                     ),
                   )
                 : const SizedBox.expand(),

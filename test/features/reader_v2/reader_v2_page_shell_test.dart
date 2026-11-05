@@ -180,8 +180,10 @@ void main() {
       onDrawerClosed: () => closed += 1,
     );
 
+    // 準備面板那一幀很重時再停 0.1 秒才滑（pumpAndSettle 不等計時器）。
     panel.open();
     await tester.pump();
+    await tester.pump(AppMotion.stillGap);
     await tester.pumpAndSettle();
 
     // 收起動畫一開始就算「收起」的通知不算數：要收到底才完成。
@@ -536,6 +538,8 @@ void main() {
   ) async {
     await pumpShell(tester, controlsVisible: false);
     panel.open();
+    await tester.pump();
+    await tester.pump(AppMotion.stillGap);
     await tester.pumpAndSettle();
     expect(panel.isOpen, isTrue);
 
