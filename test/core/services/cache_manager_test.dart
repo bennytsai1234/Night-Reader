@@ -34,7 +34,18 @@ void main() {
     await getIt<CacheDao>().clearDeadline(now);
 
     expect(await cache.get('nr-expired'), isNull);
-    expect(await cache.get('nr-expired'), isNull);
+  });
+
+  test('text that expired before the launch cleanup ran reads as gone and '
+      'is removed', () async {
+    final cache = CacheManager();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await cache.put('nr-stale', '舊的目錄', deadline: now - 1000);
+    cache.deleteMemory('nr-stale');
+
+    expect(await cache.get('nr-stale'), isNull);
+    await pumpEventQueue();
+    expect(await getIt<CacheDao>().get('nr-stale'), isNull);
   });
 
   test(

@@ -62,15 +62,21 @@ class DefaultData {
 
       // 清理過期快取 (對標 Android CacheDao.clearDeadline)
       await getIt<CacheDao>().clearDeadline(now);
-
-      // 0.3.8 以前的快取在資料庫之外另存一份沒有期限的檔案（含書源的登入
-      // 資料）；現在只存資料庫，留下的那份刪掉。
-      final oldCacheFiles = await AppStoragePaths.jsCacheDir();
-      if (await oldCacheFiles.exists()) {
-        await oldCacheFiles.delete(recursive: true);
-      }
     } catch (e) {
       AppLog.e('Maintenance error: $e', error: e);
+    }
+    await _deleteOldCacheFiles();
+  }
+
+  /// 舊版的快取在資料庫之外另存一份沒有期限的檔案（含書源的登入資料）；
+  /// 現在只存資料庫，留下的那份刪掉。和上面的清理分開：上面哪一步出錯，
+  /// 這份照樣刪。
+  static Future<void> _deleteOldCacheFiles() async {
+    try {
+      final dir = await AppStoragePaths.jsCacheDir();
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (e) {
+      AppLog.e('Delete old cache files error: $e', error: e);
     }
   }
 

@@ -80,7 +80,7 @@ class CacheManager {
   /// 設定後，記憶體層的每次寫入與刪除（[value] 為 null）也交給它。主 isolate
   /// 與書源 isolate 各有一份記憶體快取，書源規則同步讀的變數
   /// （`source.getVariable()`、`@get`）只看記憶體，所以兩邊互相轉送寫入
-  /// （ADR 0028）。從資料庫或檔案讀進記憶體的不轉送。
+  /// （ADR 0028）。從資料庫讀進記憶體的不轉送。
   static void Function(String key, Object? value, int deadline)? onMemoryWrite;
 
   /// 套用另一個 isolate 轉送來的寫入，不再轉送回去。
@@ -144,7 +144,7 @@ class CacheManager {
 
   dynamic getFromMemory(String key) => _memoryCache.get(key);
 
-  /// 記憶體裡還沒過期的文字；沒有時是 null，要連資料庫與檔案一起找用 [get]。
+  /// 記憶體裡還沒過期的文字；沒有時是 null，要連資料庫一起找用 [get]。
   String? getMemoryText(String key) {
     if (_isMemoryExpired(key)) return null;
     final value = _memoryCache.get(key);
@@ -176,7 +176,7 @@ class CacheManager {
         deadline <= DateTime.now().millisecondsSinceEpoch;
   }
 
-  /// 把 [from] 存的內容複製到 [to]（記憶體、資料庫與檔案），保留原本的期限；
+  /// 把 [from] 存的內容複製到 [to]（記憶體與資料庫），保留原本的期限；
   /// [from] 照舊。沒有內容或已經過期時不寫，回傳 false。
   Future<bool> copy(String from, String to) async {
     final stored = await _cacheDao?.get(from);
