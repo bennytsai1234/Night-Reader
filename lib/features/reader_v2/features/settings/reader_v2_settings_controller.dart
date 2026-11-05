@@ -18,6 +18,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ReaderV2SettingsController extends ChangeNotifier {
@@ -281,6 +282,22 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
     return side > paddingHorizontal ? side : null;
   }
+
+  /// 沒收窄時上下選單比正文的左右邊再往外推多少：膠囊兩端連圓角一起蓋住
+  /// 每一行的頭尾（使用者 2026-11-05 從「對齊正文」「外推 4」選定）。
+  static const double menuTextOverhang = 4;
+
+  /// 上下選單離畫面左右邊最少多遠：正文貼著畫面邊時，選單也不貼死。
+  static const double menuMinInset = 4;
+
+  /// 上下選單與亮度條離畫面左右邊多遠（畫面寬 [viewportWidth]）：正文欄
+  /// 收窄時是 [menuSideFor]；沒收窄時比正文的左右邊再往外
+  /// [menuTextOverhang]，正文留白夠寬時照原本離邊 16，最少 [menuMinInset]。
+  double menuInsetFor(double viewportWidth) =>
+      menuSideFor(viewportWidth) ??
+      (paddingHorizontalFor(viewportWidth) - menuTextOverhang)
+          .clamp(menuMinInset, AppGrouped.margin)
+          .toDouble();
 
   ReaderV2Style readStyleFor(
     EdgeInsets mediaPadding, {
