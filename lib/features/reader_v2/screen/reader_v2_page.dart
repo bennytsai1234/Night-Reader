@@ -704,7 +704,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _chapterPanel.close();
     _host.menu.dismissControls();
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
+    // 目錄收起途中又點了一章：骨架淡入照原本那次的時間走完，不重算。
+    if (!reduceMotion && !_skeletonFadeIn.isAnimating) {
+      unawaited(_skeletonFadeIn.forward(from: 0));
+    }
     return Future.wait([
       drawerClosed,
       if (!reduceMotion)
@@ -887,9 +890,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
+  /// 「更多」正在查登入用的書源：第一次要讀資料庫，這段按鈕還點得到，連點
+  /// 兩下會疊兩個選單。選單推上去之後點擊就落在選單上。
+  bool _lookingUpMore = false;
+
   Future<void> _showMore() async {
+    if (_lookingUpMore) return;
     final isLocal = widget.book.isLocal;
-    final loginSource = await _loginSource();
+    _lookingUpMore = true;
+    final BookSource? loginSource;
+    try {
+      loginSource = await _loginSource();
+    } finally {
+      _lookingUpMore = false;
+    }
     if (!mounted) return;
     final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,

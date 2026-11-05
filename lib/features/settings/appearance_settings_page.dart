@@ -78,11 +78,10 @@ class AppearanceSettingsPage extends StatelessWidget {
                 GroupedCheckRow(
                   title: label,
                   selected: appSettings.themeMode == mode,
-                  onTap: () {
-                    if (appSettings.themeMode == mode) return;
-                    ThemeRevealScope.of(context)
-                        .run(change: () => appSettings.setThemeMode(mode));
-                  },
+                  onTap: () => ThemeRevealScope.of(context).run(
+                    current: appSettings.themeMode == mode,
+                    change: () => appSettings.setThemeMode(mode),
+                  ),
                 ),
             ],
           ),
@@ -138,13 +137,15 @@ void _setStyle(
   Brightness brightness,
   AppStyle style,
 ) {
-  if (themeSettings.styleFor(brightness) == style) return;
+  final current = themeSettings.styleFor(brightness) == style;
   if (Theme.of(context).brightness != brightness) {
-    themeSettings.setStyle(brightness, style);
+    if (!current) themeSettings.setStyle(brightness, style);
     return;
   }
-  ThemeRevealScope.of(context)
-      .run(change: () => themeSettings.setStyle(brightness, style));
+  ThemeRevealScope.of(context).run(
+    current: current,
+    change: () => themeSettings.setStyle(brightness, style),
+  );
 }
 
 GroupedContent _styleGrid(
@@ -229,10 +230,11 @@ Future<void> _pickAccent(
         ),
     ],
   );
-  if (accent == null || accent == themeSettings.accent) return;
-  if (!rowContext.mounted) return;
-  ThemeRevealScope.of(rowContext)
-      .run(change: () => themeSettings.setAccent(accent));
+  if (accent == null || !rowContext.mounted) return;
+  ThemeRevealScope.of(rowContext).run(
+    current: accent == themeSettings.accent,
+    change: () => themeSettings.setAccent(accent),
+  );
 }
 
 /// 風格卡：每個風格一張直式小書頁，全部排成一排，顯示各風格在
