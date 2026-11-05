@@ -400,7 +400,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   paddingHorizontal: settings.paddingHorizontalFor(
                     MediaQuery.sizeOf(context).width,
                   ),
-                  menuSide: settings.menuSideFor(
+                  menuInset: settings.menuInsetFor(
                     MediaQuery.sizeOf(context).width,
                   ),
                   paddingTop: settings.paddingTop,
