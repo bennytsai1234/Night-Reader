@@ -5,13 +5,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
-import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
@@ -23,16 +20,17 @@ import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_cont
 import 'anchor/anchor_manager.dart';
 import 'core/hybrid_contracts.dart';
 import 'core/hybrid_types.dart';
-import 'geometry/text_geometry.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'overlay/bookmark_marks.dart';
 import 'overlay/highlight_marks.dart';
 import 'overlay/loading_veil.dart';
+import 'overlay/page_lines.dart';
+import 'overlay/reader_mark_layers.dart';
 import 'overlay/reader_skeleton_page.dart';
+import 'overlay/reader_unavailable_message.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/text_selection_overlay.dart';
-import 'overlay/tts_highlight_overlay.dart';
 import 'pipeline/layout_disk_cache.dart';
 import 'pipeline/layout_pipeline.dart';
 import 'progress/hybrid_progress.dart';
@@ -43,6 +41,7 @@ import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_controller.dart';
 import 'view/hybrid_scroll_view.dart';
+import 'view/viewport_commands.dart';
 
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
@@ -144,18 +143,6 @@ class HybridReaderScreen extends StatefulWidget {
   State<HybridReaderScreen> createState() => _HybridReaderScreenState();
 }
 
-bool isHybridPageMoveComplete({
-  required double requestedDistance,
-  required double actualDistance,
-  required bool atBookBoundary,
-}) {
-  if (!requestedDistance.isFinite || requestedDistance <= 0) return false;
-  if (!actualDistance.isFinite || actualDistance <= 0) return false;
-  const tolerance = 0.5;
-  if (actualDistance + tolerance >= requestedDistance) return true;
-  return atBookBoundary;
-}
-
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with TickerProviderStateMixin {
   static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
@@ -167,7 +154,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
   );
   final BudgetGovernor _governor = BudgetGovernor();
-  final _HybridCommandQueue _commands = _HybridCommandQueue();
+  final ViewportCommandQueue _commands = ViewportCommandQueue();
   final HybridScrollPhysics _physics = const HybridScrollPhysics();
   late HybridChapterRepository _chapterRepo;
   late final AdmissionController _admission;
@@ -178,8 +165,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   late HybridLayoutPipeline _pipeline;
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
   HybridScrollController? _scrollController;
-  _PageTurn? _pageTurn;
+  PageTurn? _pageTurn;
   Size _viewportSize = Size.zero;
+
+  /// 書籤記號、標註與朗讀高亮的行框，照目前這一代排版管線算。
+  late final ReaderMarkGeometry _marks = ReaderMarkGeometry(
+    pipeline: () => _pipeline,
+    documentIndex: _documentIndex,
+    scrollOffset: _effectiveScrollOffset,
+  );
 
   /// 還原已經排好、原生捲動位置還沒套上時要停的錨點。位置不存成數字，
   /// 每次照當下的大小與範圍用 [_restingOffset] 算：等 viewport 的這幾幀
@@ -248,7 +242,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// 紙上的骨架照這一頁畫：開書時的紀錄，或這次排好的第一頁。紙重新
   /// 蓋上時留著，畫著的骨架照原樣淡完才換（見 [_fadeInPageSkeleton]）。
-  _PageLines? _veilPage;
+  PageLines? _veilPage;
 
   /// App 切到背景時記下目前這一頁（之後可能被系統關掉，不會再走到
   /// [dispose]）。
@@ -1370,22 +1364,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return isCurrent();
   }
 
-  /// 一次翻頁的距離：一屏減一行，保留一行重疊（ADR 0006）。
   double? _pageTurnDistance() {
-    final height = _viewportSize.height;
-    if (height <= 0) return null;
     final style = widget.runtime.state.layoutSpec.style;
-    final lines = widget.pageTurnOverlap;
-    // 留下的行至少 24，字很小時也認得出接續的位置；不留行時只留 8 的餘裕。
-    final overlap = lines <= 0
-        ? 0.0
-        : math.max(24.0, lines * style.fontSize * style.effectiveLineHeight);
-    return math.max(height * 0.5, height - overlap - 8.0);
+    return pageTurnDistance(
+      viewportHeight: _viewportSize.height,
+      overlapLines: widget.pageTurnOverlap,
+      lineExtent: style.fontSize * style.effectiveLineHeight,
+    );
   }
 
   /// 把進行中的翻頁再推一頁。只在新目標之前的正文已經排好、而且在目前
   /// 捲動範圍內時才推，否則回傳 false 讓這一下排隊。
-  bool _extendPageTurn(_PageTurn turn) {
+  bool _extendPageTurn(PageTurn turn) {
     final controller = _scrollController;
     final distance = _pageTurnDistance();
     if (controller == null || !controller.hasClients || distance == null) {
@@ -1445,7 +1435,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       return false;
     }
 
-    final turn = _PageTurn(
+    final turn = PageTurn(
       forward: forward,
       target: target,
       requestedDistance: distance,
@@ -1609,7 +1599,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       });
       return const <HybridLineBox>[];
     }
-    return _lineBoxes(
+    return _marks.lineBoxes(
       selection.chapterIndex,
       selection.range.start,
       selection.range.end,
@@ -1678,204 +1668,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     // 點到已畫的標註：打開那個標註，不翻頁、不叫選單。
     if (widget.onHighlightTap case final onHighlightTap?) {
-      final id = _highlightAt(details.localPosition);
+      final id = _marks.highlightAt(
+        widget.highlights?.value,
+        details.localPosition,
+      );
       if (id != null) {
         onHighlightTap(id);
         return;
       }
     }
     widget.onContentTapUp?.call(details);
-  }
-
-  /// 每個書籤那一行在文件上的行框（還沒扣捲動位置）。書籤的位置、那一章
-  /// 的正文與文件索引都沒變就沿用：捲動時每一幀只扣掉捲動位置，不重新照
-  /// 錨點找字、不查字形（幾何的行框只記最近一次，幾個書籤與朗讀高亮輪流
-  /// 查會互相擠掉）。
-  final Map<
-    int,
-    ({
-      ReaderV2Location location,
-      ChapterBlocks blocks,
-      int revision,
-      HybridLineBox box,
-    })
-  >
-  _markBoxes = {};
-
-  /// 書籤那一行在 viewport 上的行框；那一章還沒排好的不畫。
-  List<HybridLineBox> _markLines(List<ReaderMark> marks) {
-    final scroll = _effectiveScrollOffset();
-    if (marks.isEmpty || scroll == null) return const <HybridLineBox>[];
-    final revision = _documentIndex.revisionNumber;
-    final lines = <HybridLineBox>[];
-    final seen = <int>{};
-    for (final (:id, :location) in marks) {
-      seen.add(id);
-      final blocks = _pipeline.blocksOf(location.chapterIndex);
-      if (blocks == null || blocks.displayText.isEmpty) continue;
-      var cached = _markBoxes[id];
-      if (cached == null ||
-          !identical(cached.location, location) ||
-          !identical(cached.blocks, blocks) ||
-          cached.revision != revision) {
-        final text = blocks.displayText;
-        final offset = ReaderV2ContentLocationMapper.offsetIn(
-          location: location,
-          displayText: text,
-          contentHash: blocks.contentHash,
-        ).clamp(0, text.length - 1).toInt();
-        final world = _pipeline.geometry.lineBoxes(
-          location.chapterIndex,
-          offset,
-          offset + 1,
-        );
-        // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
-        if (world.isEmpty) continue;
-        cached = (
-          location: location,
-          blocks: blocks,
-          revision: revision,
-          box: world.first,
-        );
-        _markBoxes[id] = cached;
-      }
-      final box = cached.box;
-      lines.add(
-        HybridLineBox(
-          left: box.left,
-          top: box.top - scroll,
-          right: box.right,
-          bottom: box.bottom - scroll,
-        ),
-      );
-    }
-    _markBoxes.removeWhere((id, _) => !seen.contains(id));
-    return lines;
-  }
-
-  /// 每個標註在那一章正文裡的範圍與文件上的行框（還沒扣捲動位置），沿用
-  /// 的條件同書籤（[_markBoxes]）：捲動時每一幀只扣掉捲動位置。
-  final Map<
-    int,
-    ({
-      ReaderHighlightMark mark,
-      ChapterBlocks blocks,
-      int revision,
-      HybridTextRange range,
-      List<HybridLineBox> boxes,
-    })
-  >
-  _highlightBoxes = {};
-
-  /// 標註在那一章正文裡的範圍：開頭照錨點找回（正文變了照前後原文），往
-  /// 後畫記下的那麼長，不超出那一章。
-  static HybridTextRange _highlightRangeIn(
-    ReaderHighlightMark mark,
-    ChapterBlocks blocks,
-  ) {
-    final text = blocks.displayText;
-    final start = ReaderV2ContentLocationMapper.offsetIn(
-      location: mark.location,
-      displayText: text,
-      contentHash: blocks.contentHash,
-    ).clamp(0, text.length - 1).toInt();
-    return HybridTextRange(
-      start,
-      math.min(text.length, start + math.max(1, mark.length)),
-    );
-  }
-
-  /// 標註在 viewport 上的字形範圍；那一章還沒排好的不畫。
-  List<HighlightPaint> _highlightPaints(List<ReaderHighlightMark> marks) {
-    final scroll = _effectiveScrollOffset();
-    if (marks.isEmpty || scroll == null) return const <HighlightPaint>[];
-    final revision = _documentIndex.revisionNumber;
-    final paints = <HighlightPaint>[];
-    final seen = <int>{};
-    for (final mark in marks) {
-      seen.add(mark.id);
-      final blocks = _pipeline.blocksOf(mark.location.chapterIndex);
-      if (blocks == null || blocks.displayText.isEmpty) continue;
-      var cached = _highlightBoxes[mark.id];
-      if (cached == null ||
-          !identical(cached.mark.location, mark.location) ||
-          cached.mark.length != mark.length ||
-          !identical(cached.blocks, blocks) ||
-          cached.revision != revision) {
-        final range = _highlightRangeIn(mark, blocks);
-        final world = _pipeline.geometry.lineBoxes(
-          mark.location.chapterIndex,
-          range.start,
-          range.end,
-        );
-        // 那一段還沒排好：這次不畫、不記，排好後文件索引換版再算。
-        if (world.isEmpty) continue;
-        cached = (
-          mark: mark,
-          blocks: blocks,
-          revision: revision,
-          range: range,
-          boxes: world,
-        );
-        _highlightBoxes[mark.id] = cached;
-      }
-      paints.add((
-        boxes: [
-          for (final box in cached.boxes)
-            HybridLineBox(
-              left: box.left,
-              top: box.top - scroll,
-              right: box.right,
-              bottom: box.bottom - scroll,
-            ),
-        ],
-        color: mark.color,
-        style: mark.style,
-      ));
-    }
-    _highlightBoxes.removeWhere((id, _) => !seen.contains(id));
-    return paints;
-  }
-
-  /// viewport 上 [point] 點到的標註；同一個字有好幾個標註時取最後畫的。
-  int? _highlightAt(Offset point) {
-    final marks = widget.highlights?.value;
-    final scroll = _effectiveScrollOffset();
-    if (marks == null || marks.isEmpty || scroll == null) return null;
-    final hit = _pipeline.geometry.glyphAt(point.translate(0, scroll));
-    if (hit == null) return null;
-    int? found;
-    for (final mark in marks) {
-      if (mark.location.chapterIndex != hit.blocks.chapterIndex) continue;
-      final cached = _highlightBoxes[mark.id];
-      final range =
-          cached != null &&
-              identical(cached.mark.location, mark.location) &&
-              identical(cached.blocks, hit.blocks)
-          ? cached.range
-          : _highlightRangeIn(mark, hit.blocks);
-      if (hit.offset >= range.start && hit.offset < range.end) {
-        if (found == null || mark.id > found) found = mark.id;
-      }
-    }
-    return found;
-  }
-
-  /// [start, end) 在 viewport 上的字形範圍，每條視覺行一個框（見
-  /// [HybridTextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
-  List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
-    final offset = _effectiveScrollOffset();
-    if (offset == null) return const <HybridLineBox>[];
-    final world = _pipeline.geometry.lineBoxes(chapterIndex, start, end);
-    return <HybridLineBox>[
-      for (final box in world)
-        HybridLineBox(
-          left: box.left,
-          top: box.top - offset,
-          right: box.right,
-          bottom: box.bottom - offset,
-        ),
-    ];
   }
 
   void _scheduleRebuild() {
@@ -2000,55 +1802,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return isCurrent();
   }
 
-  /// 捲動位置在 [offset] 時畫面上每一行字的位置（viewport 座標），與其中
-  /// 章名那幾行的索引。
-  _PageLines _pageLinesAt(double offset) {
-    final height = _viewportSize.height;
-    final lines = <Rect>[];
-    final titleLines = <int>{};
-    final ranges = <int, (int, int)>{};
-    for (final key in _documentIndex.keysInRange(offset, offset + height)) {
-      final blocks = _pipeline.blocksOf(key.chapterIndex);
-      if (blocks == null) continue;
-      final range = blocks
-          .blockForCharOffset(blocks.blockStartOffset(key))
-          .charRange;
-      final previous = ranges[key.chapterIndex];
-      ranges[key.chapterIndex] = previous == null
-          ? (range.start, range.end)
-          : (
-              math.min(previous.$1, range.start),
-              math.max(previous.$2, range.end),
-            );
-    }
-    void addLines(int chapter, int start, int end, {required bool title}) {
-      if (end <= start) return;
-      for (final box in _pipeline.geometry.lineBoxes(chapter, start, end)) {
-        final top = box.top - offset;
-        final bottom = box.bottom - offset;
-        if (bottom <= 0 || top >= height) continue;
-        if (title) titleLines.add(lines.length);
-        lines.add(Rect.fromLTRB(box.left, top, box.right, bottom));
-      }
-    }
-
-    for (final MapEntry(key: chapter, value: (start, end)) in ranges.entries) {
-      // 章名在一章的最前面，和正文不會在同一行。
-      var titleEnd = 0;
-      for (final block in _pipeline.blocksOf(chapter)!.blocks) {
-        if (!block.isTitle) break;
-        titleEnd = block.charRange.end;
-      }
-      addLines(chapter, start, math.min(end, titleEnd), title: true);
-      addLines(chapter, math.max(start, titleEnd), end, title: false);
-    }
-    return (
-      lines: lines,
-      titleLines: titleLines,
-      // 行是這份排版管線排的；改排版的紙還在淡入時，它還是舊的那一代。
-      spec: _pipeline.layoutSpec,
-    );
-  }
+  PageLines _pageLinesAt(double offset) => pageLinesAt(
+    pipeline: _pipeline,
+    documentIndex: _documentIndex,
+    offset: offset,
+    height: _viewportSize.height,
+  );
 
   /// 上次離開這本書時的那一頁，開書的位置與版面都相同時才用。當時的進度
   /// 先放進進度通道，頁尾的進度骨架就照「本章 3/10」這類字樣的寬度畫；
@@ -2122,27 +1881,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           excludeSemantics: true,
           label: message,
           child: unavailable
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          color: widget.textColor.withValues(alpha: 0.72),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          message,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            color: widget.textColor,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
+              ? ReaderUnavailableMessage(
+                  message: message,
+                  textColor: widget.textColor,
                 )
               // 載入中不放轉圈與文字：紙上照一頁真正的每一行畫骨架（見
               // [LoadingVeilController] 與 ADR 0016）。
@@ -2163,7 +1904,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           initialScrollOffset: _pendingScrollOffset ?? 0.0,
           keepScrollOffset: false,
         );
-        final highlight = widget.ttsHighlight;
         // 排版換代了、舊正文還在紙下時，照舊正文那一代的左右邊距畫，不跟著
         // 新設定先跳一下。
         final textSpec = _pipeline.layoutSpec;
@@ -2194,69 +1934,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           clipBehavior: Clip.none,
           children: <Widget>[
             visualContent,
-            if (widget.highlights case final highlights?)
-              Positioned.fill(
-                // 標註只畫在正文可視區內（同朗讀高亮）；沒有標註時不跟著捲動
-                // 每一幀重建。
-                child: ClipRect(
-                  child: ValueListenableBuilder(
-                    valueListenable: highlights,
-                    builder: (context, items, _) => items.isEmpty
-                        ? const SizedBox.shrink()
-                        : ListenableBuilder(
-                            listenable: controller,
-                            builder: (context, _) {
-                              final paints = _highlightPaints(items);
-                              if (paints.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              return HighlightMarksOverlay(items: paints);
-                            },
-                          ),
-                  ),
-                ),
+            Positioned.fill(
+              child: ReaderMarkLayers(
+                geometry: _marks,
+                scroll: controller,
+                textLeft: textSpec.textPaddingLeft,
+                highlightColor: widget.highlightColor,
+                highlightStrength: widget.highlightStrength,
+                highlights: widget.highlights,
+                marks: widget.marks,
+                ttsHighlight: widget.ttsHighlight,
               ),
-            if (widget.marks case final marks?)
-              Positioned.fill(
-                // 沒有書籤時不跟著捲動每一幀重建。
-                child: ValueListenableBuilder(
-                  valueListenable: marks,
-                  builder: (context, items, _) => items.isEmpty
-                      ? const SizedBox.shrink()
-                      : ListenableBuilder(
-                          listenable: controller,
-                          builder: (context, _) {
-                            final lines = _markLines(items);
-                            if (lines.isEmpty) return const SizedBox.shrink();
-                            return BookmarkMarksOverlay(
-                              lines: lines,
-                              textLeft: textSpec.textPaddingLeft,
-                              color: widget.highlightColor,
-                            );
-                          },
-                        ),
-                ),
-              ),
-            if (highlight != null && highlight.isValid)
-              Positioned.fill(
-                // 朗讀高亮只畫在正文可視區內，捲到邊緣的句子不會在邊距與
-                // 頁尾區留下沒有字的色帶。
-                child: ClipRect(
-                  child: ListenableBuilder(
-                    listenable: controller,
-                    builder: (context, _) => HybridTtsHighlightOverlay(
-                      sentence: _lineBoxes(
-                        highlight.chapterIndex,
-                        highlight.sentenceStart,
-                        highlight.sentenceEnd,
-                      ),
-                      color: widget.highlightColor.withValues(
-                        alpha: widget.highlightStrength,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            ),
             // 正文剛排好時，蓋著的紙在上面淡出；等跳章的正文時紙攔下捲動。
             if (_veil.isVisible)
               Positioned.fill(
@@ -2343,66 +2032,3 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     ),
   );
 }
-
-/// 進行中的一次翻頁；連點時目標與距離會一路累加。
-final class _PageTurn {
-  _PageTurn({
-    required this.forward,
-    required this.target,
-    required this.requestedDistance,
-    required this.isCurrent,
-  });
-
-  final bool forward;
-  final bool Function() isCurrent;
-  final Completer<bool> finished = Completer<bool>();
-  double target;
-  double requestedDistance;
-  late Future<void> animation;
-
-  bool finish(bool completed) {
-    if (!finished.isCompleted) finished.complete(completed);
-    return completed;
-  }
-}
-
-final class _HybridCommandQueue {
-  Future<void>? _tail;
-  int _queued = 0;
-  bool get isBusy => _tail != null;
-
-  /// 還沒完成的命令數，包含正在執行的那一個。
-  int get queued => _queued;
-
-  Future<bool> enqueue({
-    required bool Function() isCurrent,
-    required Future<bool> Function() command,
-  }) {
-    if (!isCurrent()) return Future<bool>.value(false);
-    _queued += 1;
-    final result = (_tail ?? Future<void>.value()).then((_) async {
-      if (!isCurrent()) return false;
-      final completed = await command();
-      return isCurrent() && completed;
-    });
-    final drained = result.then<void>(
-      (_) => _queued -= 1,
-      onError: (Object _, StackTrace _) => _queued -= 1,
-    );
-    _tail = drained;
-    unawaited(
-      drained.then((_) {
-        if (identical(_tail, drained)) _tail = null;
-      }),
-    );
-    return result;
-  }
-}
-
-/// 一頁上每一行字的位置（viewport 座標，由上而下）、其中章名那幾行的
-/// 索引，與量這些行時的版面。
-typedef _PageLines = ({
-  List<Rect> lines,
-  Set<int> titleLines,
-  ReaderV2LayoutSpec spec,
-});
