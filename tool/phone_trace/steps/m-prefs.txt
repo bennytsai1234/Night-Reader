@@ -1,0 +1,6 @@
+input tap 630 518
+sleep 2.0
+input swipe 630 2000 630 700 90
+sleep 1.2
+input keyevent BACK
+sleep 1.6
