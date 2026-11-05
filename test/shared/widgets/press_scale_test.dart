@@ -104,4 +104,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(scale(), 1, reason: '完全蓋住後才回彈');
   });
+
+  testWidgets('pressing and springing back repaint only the button, not '
+      'what holds it', (tester) async {
+    var barPaints = 0;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CustomPaint(
+            painter: _CountingPainter(() => barPaints++),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: PressScale(
+                onTap: () {},
+                child: const SizedBox.square(dimension: 80),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    barPaints = 0;
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(PressScale)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(scaleOf(tester), 1);
+    expect(barPaints, 0, reason: '外面那一條在按壓與回彈的每一幀都不重畫');
+  });
+}
+
+class _CountingPainter extends CustomPainter {
+  _CountingPainter(this.onPaint);
+
+  final VoidCallback onPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) => onPaint();
+
+  @override
+  bool shouldRepaint(_CountingPainter oldDelegate) => false;
 }
