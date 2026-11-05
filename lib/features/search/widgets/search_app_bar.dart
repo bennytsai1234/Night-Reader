@@ -41,9 +41,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final scopeDisplay = provider.scopeLoaded
-        ? provider.searchScope.display
-        : '載入中…';
+    final scopeDisplay = provider.searchScope.display;
 
     return GlassNavHeader(
       automaticallyImplyLeading: false,

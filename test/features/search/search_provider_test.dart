@@ -22,7 +22,11 @@ void main() {
     final getIt = GetIt.instance;
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
+    SearchProvider.forgetHistoryForTest();
     getIt
+      ..registerSingleton<SharedPreferences>(
+        await SharedPreferences.getInstance(),
+      )
       ..registerSingleton<BookDao>(BookDao(db))
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
       ..registerSingleton<SearchBookDao>(SearchBookDao(db))
@@ -207,7 +211,9 @@ void main() {
     provider.updateSearchScope(SearchScope.fromGroups(['精選']));
     await Future<void>.delayed(Duration.zero);
 
-    final restored = await SearchScope.load();
+    final restored = SearchScope.fromPrefs(
+      await SharedPreferences.getInstance(),
+    );
     expect(restored.displayNames, ['精選']);
   });
 }

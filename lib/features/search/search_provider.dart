@@ -9,6 +9,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,7 +71,6 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   late final SearchModel _searchModel;
   late SearchScope _searchScope;
   final SearchScope? _initialScope;
-  bool _scopeLoaded = false;
 
   // --- UI State ---
   List<SearchKeyword> _history = [];
@@ -151,7 +151,6 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get precisionSearch => _precisionSearch;
   List<String> get sourceGroups => _sourceGroups;
   SearchScope get searchScope => _searchScope;
-  bool get scopeLoaded => _scopeLoaded;
   SearchResultSortMode get sortMode => _sortMode;
   Set<String> get sourceFilters => Set.unmodifiable(_sourceFilters);
   String get authorFilter => _authorFilter;
@@ -180,6 +179,11 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
        _initialScope = initialScope {
     _searchModel = SearchModel(callback: this, loader: searchLoader);
     _searchScope = initialScope ?? SearchScope();
+    _readPreferences(getIt<SharedPreferences>());
+    if (_lastHistory case final history?) {
+      _history = List.of(history);
+      _historyLoaded = true;
+    }
     _coverSubscription = AppEventBus()
         .onName(AppEventBus.bookCover)
         .listen((event) => _adoptDetailCover(event.data as BookCoverEvent));
@@ -226,13 +230,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   }
 
   Future<void> _init() async {
-    if (_initialScope == null) {
-      _searchScope = await SearchScope.load();
-    }
-    _scopeLoaded = true;
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
-    await _loadPrecisionPreference();
     await loadHistory();
   }
 
@@ -413,11 +412,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // 精準搜尋
   // ═══════════════════════════════════════════
 
-  Future<void> _loadPrecisionPreference() async {
-    final p = await SharedPreferences.getInstance();
-    _precisionSearch = p.getBool('precision_search') ?? false;
-    _blockedWords = p.getString(_blockedWordsKey) ?? '';
-    notifyListeners();
+  /// 範圍、精準搜尋與屏蔽詞都在偏好設定裡，開 App 時已經讀好：推入的第一幀
+  /// 就照它們畫，不等進場播完（原本範圍鈕先寫「載入中…」，播完才換）。
+  void _readPreferences(SharedPreferences prefs) {
+    if (_initialScope == null) _searchScope = SearchScope.fromPrefs(prefs);
+    _precisionSearch = prefs.getBool('precision_search') ?? false;
+    _blockedWords = prefs.getString(_blockedWordsKey) ?? '';
   }
 
   // ═══════════════════════════════════════════
@@ -563,21 +563,58 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // 搜尋歷史管理
   // ═══════════════════════════════════════════
 
+  /// 上次讀到或改過的搜尋紀錄。只有搜尋頁會改紀錄（也不同步），下一次推入
+  /// 搜尋頁的第一幀就照它畫；開 App 進場播完先讀一次（[prefetchHistory]）。
+  /// 原本推入時畫「開始搜尋你想看的書吧」，進場播完才讀、一幀換成紀錄：
+  /// 2026-11-05 手機上那一幀主執行緒 25.7ms，畫面上整區突然換掉。
+  static List<SearchKeyword>? _lastHistory;
+
+  /// 開 App 進場播完時讀一次搜尋紀錄。
+  static Future<void> prefetchHistory() async {
+    try {
+      _lastHistory ??= await getIt<SearchKeywordDao>().getByTime();
+    } catch (error, stackTrace) {
+      AppLog.e('預先讀搜尋紀錄失敗: $error', error: error, stackTrace: stackTrace);
+    }
+  }
+
+  @visibleForTesting
+  static void forgetHistoryForTest() => _lastHistory = null;
+
+  /// 知道有沒有搜尋紀錄了；還不知道時不畫「沒有紀錄」的空頁。
+  bool get historyLoaded => _historyLoaded;
+  bool _historyLoaded = false;
+
+  void _setHistory(List<SearchKeyword> history) {
+    _lastHistory = List.of(history);
+    final unchanged =
+        _historyLoaded &&
+        history.length == _history.length &&
+        [
+          for (var i = 0; i < history.length; i++)
+            history[i].word == _history[i].word,
+        ].every((same) => same);
+    _history = history;
+    _historyLoaded = true;
+    // 和推入時畫的一樣就不重建。
+    if (!unchanged) notifyListeners();
+  }
+
   Future<void> loadHistory() async {
-    _history = await _keywordDao.getByTime();
-    notifyListeners();
+    _setHistory(await _keywordDao.getByTime());
   }
 
   Future<void> clearHistory() async {
     await _keywordDao.clearAll();
-    _history = [];
-    notifyListeners();
+    _setHistory([]);
   }
 
   Future<void> deleteHistoryKeyword(SearchKeyword keyword) async {
     await _keywordDao.deleteByWord(keyword.word);
-    _history.removeWhere((e) => e.word == keyword.word);
-    notifyListeners();
+    _setHistory([
+      for (final e in _history)
+        if (e.word != keyword.word) e,
+    ]);
   }
 
   // ═══════════════════════════════════════════
