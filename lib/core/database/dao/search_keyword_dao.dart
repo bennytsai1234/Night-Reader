@@ -19,17 +19,25 @@ class SearchKeywordDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// 最近一次 [getByTime] 讀到的清單；存、刪過紀錄之後是 null，直到再讀一次。
+  /// 搜尋頁推入的第一幀照它畫搜尋紀錄（只有搜尋頁改紀錄，紀錄也不同步）。
+  List<SearchKeyword>? get latestByTime => _latestByTime;
+  List<SearchKeyword>? _latestByTime;
+
   /// 按最後使用時間降序取得全部 (對標 Legado flowByTime)
-  Future<List<SearchKeyword>> getByTime() {
-    return (select(searchKeywords)
-          ..orderBy([
-            (t) => OrderingTerm(
-              expression: t.lastUseTime,
-              mode: OrderingMode.desc,
-            ),
-          ])
-          ..limit(50))
-        .get();
+  Future<List<SearchKeyword>> getByTime() async {
+    final result =
+        await (select(searchKeywords)
+              ..orderBy([
+                (t) => OrderingTerm(
+                  expression: t.lastUseTime,
+                  mode: OrderingMode.desc,
+                ),
+              ])
+              ..limit(50))
+            .get();
+    _latestByTime = List.unmodifiable(result);
+    return result;
   }
 
   /// 搜尋包含關鍵字的歷史記錄 (對標 Legado flowSearch)
@@ -68,12 +76,21 @@ class SearchKeywordDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  Future<void> upsert(SearchKeyword keyword) => into(
-    searchKeywords,
-  ).insertOnConflictUpdate(SearchKeywordToInsertable(keyword).toInsertable());
+  Future<void> upsert(SearchKeyword keyword) async {
+    _latestByTime = null;
+    await into(
+      searchKeywords,
+    ).insertOnConflictUpdate(SearchKeywordToInsertable(keyword).toInsertable());
+  }
 
-  Future<void> deleteByWord(String word) =>
-      (delete(searchKeywords)..where((t) => t.word.equals(word))).go();
+  Future<void> deleteByWord(String word) async {
+    _latestByTime = null;
+    await (delete(searchKeywords)..where((t) => t.word.equals(word))).go();
+  }
 
-  Future<void> clearAll() => delete(searchKeywords).go();
+  Future<void> clearAll() async {
+    _latestByTime = null;
+    await delete(searchKeywords).go();
+    _latestByTime = const [];
+  }
 }

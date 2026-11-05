@@ -150,9 +150,7 @@ class SearchScope {
     await prefs.setString(_prefKey, _scope);
   }
 
-  /// 從持久化載入
-  static Future<SearchScope> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    return SearchScope(prefs.getString(_prefKey) ?? '');
-  }
+  /// 上次選定的範圍。偏好設定開 App 時已經讀好，搜尋頁推入的第一幀就照它畫。
+  static SearchScope fromPrefs(SharedPreferences prefs) =>
+      SearchScope(prefs.getString(_prefKey) ?? '');
 }

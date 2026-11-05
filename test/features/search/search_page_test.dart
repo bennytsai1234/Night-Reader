@@ -50,6 +50,9 @@ void main() {
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
     getIt
+      ..registerSingleton<SharedPreferences>(
+        await SharedPreferences.getInstance(),
+      )
       ..registerSingleton<BookDao>(BookDao(db))
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
       ..registerSingleton<SearchBookDao>(SearchBookDao(db))
@@ -79,7 +82,7 @@ void main() {
       )
       .any((fade) => fade.opacity.value < 1);
 
-  testWidgets('nothing is read until the page has slid in', (tester) async {
+  Future<SearchProvider Function()> pushSearch(WidgetTester tester) async {
     final navigator = GlobalKey<NavigatorState>();
     await tester.pumpWidget(
       MaterialApp(
@@ -93,22 +96,60 @@ void main() {
         MaterialPageRoute<void>(builder: (_) => const SearchPage()),
       ),
     );
-    SearchProvider provider() => Provider.of<SearchProvider>(
+    return () => Provider.of<SearchProvider>(
       tester.element(find.byType(SearchAppBar)),
       listen: false,
     );
+  }
 
-    // 預設的平移換頁是 0.5 秒：播到一半，搜尋範圍、書架與紀錄都還沒讀。
+  testWidgets('the database is read only after the page has slid in; '
+      'preferences show from the first frame', (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('search_scope', '精選');
+    await prefs.setBool('precision_search', true);
+    final provider = await pushSearch(tester);
+
+    // 預設的平移換頁是 0.5 秒：播到一半，書架、分組與紀錄都還沒讀，範圍與
+    // 精準搜尋已經照偏好設定畫。推入的第一幀 Hero 先把新頁放在畫面外量
+    // 位置，第二幀才在畫面上。
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.textContaining('精選'), findsWidgets);
+    expect(provider().precisionSearch, isTrue);
     await tester.pump(const Duration(milliseconds: 250));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
-    expect(provider().scopeLoaded, isFalse);
+    expect(provider().historyLoaded, isFalse);
+    // 還不知道有沒有紀錄時，不畫「沒有紀錄」的空頁。
+    expect(find.text('開始搜尋你想看的書吧'), findsNothing);
 
     await tester.pumpAndSettle();
     await tester.runAsync(() => provider().ready);
-    expect(provider().scopeLoaded, isTrue);
+    await tester.pump();
+    expect(provider().historyLoaded, isTrue);
+    expect(find.text('開始搜尋你想看的書吧'), findsOneWidget);
+  });
+
+  testWidgets('search history read before shows from the first frame', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await GetIt.instance<SearchKeywordDao>().saveKeyword('夜雨');
+      await SearchProvider.prefetchHistory();
+    });
+    final provider = await pushSearch(tester);
+
+    // 換頁一開始就是紀錄，不先畫空頁、播完才一次換掉。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.text('夜雨'), findsOneWidget);
+    expect(find.text('開始搜尋你想看的書吧'), findsNothing);
+
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => provider().ready);
+    await tester.pump();
+    expect(find.text('夜雨'), findsOneWidget);
   });
 
   testWidgets('streamed results fade in once; reordering does not replay it', (
