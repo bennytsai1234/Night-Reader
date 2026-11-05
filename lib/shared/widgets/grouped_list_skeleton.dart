@@ -90,10 +90,7 @@ class GroupedItemShape {
     bool fill = false,
   }) => _paragraph(
     context,
-    TextSpan(
-      text: text,
-      style: DefaultTextStyle.of(context).style.merge(style),
-    ),
+    skeletonTextSpan(context, text: text, style: style),
     width: width,
     maxLines: maxLines,
     textAlign: textAlign,
@@ -109,7 +106,7 @@ class GroupedItemShape {
     int? maxLines,
   }) => _paragraph(
     context,
-    TextSpan(style: DefaultTextStyle.of(context).style, children: [span]),
+    skeletonTextSpan(context, child: span),
     width: width,
     maxLines: maxLines,
   );
@@ -163,7 +160,7 @@ class GroupedItemShape {
     final shape = GroupedItemShape(
       painter.height,
       width: painter.width,
-      marks: _lineMarks(painter, root.style ?? defaults.style),
+      marks: _lineMarks(painter, scaler.scale(root.style?.fontSize ?? 14)),
     );
     painter.dispose();
     return shape;
@@ -396,14 +393,11 @@ const EdgeInsetsGeometry _defaultMargin = EdgeInsets.symmetric(
 
 /// 一段字每一行的佔位條：照排出來的筆畫範圍（[skeletonTextLines]），高度是
 /// 字號，對齊那一行的中線。圖示也是一個字，畫成和字形一樣大的圓角方塊。
-/// [style] 是排版用的字樣（已合併預設字樣）。
-List<SkeletonShape> _lineMarks(TextPainter painter, TextStyle style) {
-  final fontSize = painter.textScaler.scale(style.fontSize ?? 14);
-  return [
-    for (final line in skeletonTextLines(painter, style))
-      _lineMark(line, fontSize, painter.width),
-  ];
-}
+/// [fontSize] 是這段字根層縮放後的字號。
+List<SkeletonShape> _lineMarks(TextPainter painter, double fontSize) => [
+  for (final line in skeletonTextLines(painter))
+    _lineMark(line, fontSize, painter.width),
+];
 
 SkeletonShape _lineMark(Rect line, double fontSize, double maxWidth) {
   final height = math.min(fontSize, line.height);

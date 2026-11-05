@@ -31,31 +31,31 @@ void main() {
   test('an ellipsized line reaches the end of the ellipsis', () {
     // 一格 10 寬：放得下四個字加「…」。
     final painter = _layout('一二三四五六七八九十', maxWidth: 55, maxLines: 1);
-    final lines = skeletonTextLines(painter, _style);
+    final lines = skeletonTextLines(painter);
     expect(lines, hasLength(1));
     expect(lines.single.left, 0);
     expect(lines.single.right, 50);
   });
 
   test('unmeasured fonts keep the full cells of punctuation', () {
-    final lines = skeletonTextLines(_layout('「你好」'), _style);
+    final lines = skeletonTextLines(_layout('「你好」'));
     expect(lines.single.left, 0);
     expect(lines.single.right, 40);
   });
 
   test('punctuation at the start and end of a line drops its blank part', () {
     PunctuationInk.setTableForTest(_style, _table);
-    final lines = skeletonTextLines(_layout('「你好」'), _style);
+    final lines = skeletonTextLines(_layout('「你好」'));
     expect(lines.single.left, 5);
     expect(lines.single.right, 35);
 
-    final comma = skeletonTextLines(_layout('他說，'), _style);
+    final comma = skeletonTextLines(_layout('他說，'));
     expect(comma.single.right, 23);
   });
 
   test('punctuation inside a line is left alone', () {
     PunctuationInk.setTableForTest(_style, _table);
-    final lines = skeletonTextLines(_layout('你「好」嗎'), _style);
+    final lines = skeletonTextLines(_layout('你「好」嗎'));
     expect(lines.single.left, 0);
     expect(lines.single.right, 50);
   });
@@ -63,7 +63,7 @@ void main() {
   test('each wrapped line is trimmed by its own first and last mark', () {
     PunctuationInk.setTableForTest(_style, _table);
     // 一行四格：「你好，｜「再見」
-    final lines = skeletonTextLines(_layout('「你好，「再見」', maxWidth: 40), _style);
+    final lines = skeletonTextLines(_layout('「你好，「再見」', maxWidth: 40));
     expect(lines, hasLength(2));
     expect(lines[0].left, 5);
     expect(lines[0].right, 33);
@@ -74,9 +74,95 @@ void main() {
   test('an ellipsized line keeps the ellipsis instead of trimming', () {
     PunctuationInk.setTableForTest(_style, _table);
     final painter = _layout('「你好」再見再見再見', maxWidth: 55, maxLines: 1);
-    final lines = skeletonTextLines(painter, _style);
+    final lines = skeletonTextLines(painter);
     expect(lines.single.left, 5);
     expect(lines.single.right, 50);
+  });
+
+  test('a line cut by a hard line break is still trimmed at its end', () {
+    PunctuationInk.setTableForTest(_style, _table);
+    // 超過最大行數是因為後面還有一行，不是放不下：這一行沒有「…」。
+    final painter = _layout('你好」\n第二行', maxWidth: 200, maxLines: 1);
+    expect(painter.didExceedMaxLines, isTrue);
+    expect(skeletonTextLines(painter).single.right, 25);
+  });
+
+  test('each end mark uses its own span style and size', () {
+    const big = TextStyle(fontSize: 20);
+    PunctuationInk.setTableForTest(_style.merge(big), _table);
+    final painter = TextPainter(
+      text: const TextSpan(
+        style: _style,
+        children: [TextSpan(text: '「你好」', style: big)],
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: 1000);
+    final line = skeletonTextLines(painter).single;
+    expect(line.left, 10);
+    expect(line.right, 70);
+  });
+
+  testWidgets('SkeletonText applies the system letter spacing like Text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(letterSpacingOverride: 4),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('一二三', style: _style),
+                SkeletonText('一二三', style: _style),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(SkeletonText)),
+      tester.getSize(find.text('一二三')),
+    );
+  });
+
+  testWidgets('a font first used after launch is measured once the screen '
+      'is still, even with an old table', (tester) async {
+    // 上次存的表（別台或換過字型）：開引號左邊空一半。
+    PunctuationInk.setTableForTest(_style, _table);
+    await PunctuationInk.onLaunchSettled();
+    final painter = _layout('「你好');
+    expect(skeletonTextLines(painter).single.left, 5);
+
+    // 畫面在動的時候不量（量的工作要等真的事件迴圈，每一步都讓它跑一下）。
+    Future<void> step(Duration duration) async {
+      await tester.pump(duration);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+
+    final controller = AnimationController(
+      vsync: tester,
+      duration: const Duration(seconds: 2),
+    )..forward();
+    addTearDown(controller.dispose);
+    for (var i = 0; i < 90; i++) {
+      await step(const Duration(milliseconds: 16));
+    }
+    expect(controller.isAnimating, isTrue);
+    expect(skeletonTextLines(painter).single.left, 5);
+
+    // 停下來之後量：測試字型的開引號沒有空白，長條回到字的左緣附近。
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 20; i++) {
+      await step(const Duration(milliseconds: 200));
+      if (skeletonTextLines(painter).single.left < 5) break;
+    }
+    expect(skeletonTextLines(painter).single.left, lessThan(5));
+    painter.dispose();
   });
 
   testWidgets('SkeletonText sizes itself like Text and draws one bar a line', (

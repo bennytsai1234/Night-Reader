@@ -91,7 +91,7 @@ Rect _inkLine(
   TextStyle style,
   ReaderV2LayoutSpec spec,
 ) {
-  (String, Rect)? glyphAt(double x) {
+  SkeletonGlyph? glyphAt(double x) {
     final hit = pipeline.geometry.glyphAt(Offset(x, line.center.dy));
     if (hit == null) return null;
     final text = hit.blocks.displayText;
@@ -105,13 +105,16 @@ Rect _inkLine(
     );
     if (boxes.isEmpty) return null;
     final box = boxes.first;
-    return (mark, Rect.fromLTRB(box.left, box.top, box.right, box.bottom));
+    return SkeletonGlyph(
+      mark,
+      Rect.fromLTRB(box.left, box.top, box.right, box.bottom),
+      style: style,
+      fontSize: spec.style.fontSize,
+    );
   }
 
   return skeletonInkLine(
     line,
-    style: style,
-    fontSize: spec.style.fontSize,
     first: glyphAt(line.left + 0.5),
     last: glyphAt(line.right - 0.5),
   );

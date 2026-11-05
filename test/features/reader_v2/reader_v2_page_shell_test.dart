@@ -16,6 +16,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/glass_motion.dart';
@@ -626,6 +627,11 @@ void main() {
           element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null,
     );
 
+    /// 骨架裡照 [text] 畫的那一條（字的欄位用 [SkeletonText]，不藏一份字）。
+    Finder infoSkeleton(String text) => find.byWidgetPredicate(
+      (widget) => widget is SkeletonText && widget.text == text,
+    );
+
     Future<ValueNotifier<ReaderV2InfoState>> pumpLoading(
       WidgetTester tester,
     ) async {
@@ -644,25 +650,31 @@ void main() {
     testWidgets('every item is a skeleton bar as wide as its text', (
       tester,
     ) async {
-      await pumpLoading(tester);
+      final states = await pumpLoading(tester);
 
       // 頁首章名、全書進度，頁尾書名。
       expect(find.byType(SkeletonBox), findsNWidgets(3));
-      for (final text in ['第一章', '…%', '殼層測試書']) {
-        final bar = find.descendant(
-          of: find
-              .ancestor(of: infoText(text), matching: find.byType(Stack))
-              .first,
-          matching: find.byType(SkeletonBox),
-        );
+      const texts = ['第一章', '…%', '殼層測試書'];
+      final bars = {
+        for (final text in texts)
+          text: tester.getRect(
+            find.descendant(
+              of: infoSkeleton(text),
+              matching: find.byType(SkeletonBox),
+            ),
+          ),
+      };
+
+      // 換成資訊後，每一條就在那段字的位置、和字一樣寬。
+      states.value = ReaderV2InfoState.ready;
+      await tester.pumpAndSettle();
+      for (final text in texts) {
+        final content = tester.getRect(infoText(text));
+        expect(bars[text]!.left, moreOrLessEquals(content.left), reason: text);
+        expect(bars[text]!.width, content.width, reason: text);
         expect(
-          tester.getSize(bar).width,
-          tester.getSize(infoText(text)).width,
-          reason: text,
-        );
-        expect(
-          tester.getCenter(bar).dy,
-          moreOrLessEquals(tester.getCenter(infoText(text)).dy),
+          bars[text]!.center.dy,
+          moreOrLessEquals(content.center.dy),
           reason: text,
         );
       }
@@ -670,14 +682,15 @@ void main() {
 
     testWidgets('the info fades in where its skeleton was', (tester) async {
       final states = await pumpLoading(tester);
-      final skeletonTitle = tester.getRect(infoText('第一章'));
+      final skeletonTitle = tester.getRect(infoSkeleton('第一章'));
 
       states.value = ReaderV2InfoState.ready;
       await tester.pump();
       await tester.pump(AppMotion.fade ~/ 2);
       // 淡出中的骨架與淡入中的資訊同時在畫面上。
       expect(find.byType(SkeletonBox), findsNWidgets(3));
-      expect(infoText('第一章'), findsNWidgets(2));
+      expect(infoSkeleton('第一章'), findsOneWidget);
+      expect(infoText('第一章'), findsOneWidget);
 
       await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);
@@ -704,17 +717,14 @@ void main() {
       // 變成骨架照骨架換場的時長。
       await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       // 讓開中的資訊與換進來的骨架同時在畫面上，骨架就在資訊的位置。
-      expect(infoText('第一章'), findsNWidgets(2));
+      expect(infoText('第一章'), findsOneWidget);
+      expect(infoSkeleton('第一章'), findsOneWidget);
       expect(find.byType(SkeletonBox), findsNWidgets(3));
 
       await tester.pump(SkeletonReveal.defaultDuration);
-      // 資訊淡出完就移出畫面，只剩骨架裡不畫出的那一份。
-      expect(infoText('第一章'), findsOneWidget);
-      expect(
-        find.ancestor(of: infoText('第一章'), matching: find.byType(Visibility)),
-        findsOneWidget,
-      );
-      expect(tester.getRect(infoText('第一章')), infoTitle);
+      // 資訊淡出完就移出畫面，只剩骨架。
+      expect(infoText('第一章'), findsNothing);
+      expect(tester.getRect(infoSkeleton('第一章')), infoTitle);
     });
 
     testWidgets('the skeleton keeps breathing when the info finishes fading', (
@@ -742,7 +752,8 @@ void main() {
 
       // 資訊淡完移出畫面：骨架留在原本的元素上，呼吸不從頭開始。
       await tester.pump(SkeletonReveal.defaultDuration);
-      expect(infoText('第一章'), findsOneWidget);
+      expect(infoText('第一章'), findsNothing);
+      expect(infoSkeleton('第一章'), findsOneWidget);
       expect([
         for (final element in find.byType(Skeleton).evaluate())
           (element as StatefulElement).state,

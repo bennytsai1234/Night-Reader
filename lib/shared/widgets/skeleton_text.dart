@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -42,15 +43,22 @@ final class PunctuationInk {
     _revision++;
   }
 
-  /// 這次開 App 用過的字型；進場播完後重量一次（系統字型可能換過）。
+  /// 這次開 App 用過的字型，與其中這次已經量過的。存著的表是上次開 App 量的
+  /// （系統字型可能換過、可能是別台的備份），先拿來用，這次用到就再量一次。
   static final Set<String> _used = {};
+  static final Set<String> _measuredThisRun = {};
   static final Map<String, TextStyle> _styles = {};
   static SharedPreferences? _prefs;
   static bool _settled = false;
 
   /// 量測結果每換一次加一；照字畫的骨架據此知道要重算。
   static int _revision = 0;
-  static Timer? _pending;
+
+  /// 等畫面靜止去量的那一次；量完才排下一次。
+  static Future<void>? _pending;
+
+  /// 記憶體裡的表還沒成功寫進偏好設定（寫入失敗時，下次量完再寫）。
+  static bool _unsaved = false;
 
   /// 讀回存在這台手機的量測結果。開 App 讀完偏好設定後呼叫。
   static void restore(SharedPreferences prefs) {
@@ -72,8 +80,8 @@ final class PunctuationInk {
     }
   }
 
-  /// 開 App 的進場播完、畫面靜止了：量這次用過的字型。之後才用到的新字型
-  /// 隔一下再量。
+  /// 開 App 的進場播完、畫面靜止了：量這次用過的字型。之後才用到的字型等
+  /// 下一次畫面靜止再量（[_measureWhenStill]）。
   static Future<void> onLaunchSettled() async {
     if (!_measureEnabled) return;
     _settled = true;
@@ -84,22 +92,32 @@ final class PunctuationInk {
   static PunctuationBlank? _blankOf(TextStyle style, String mark) {
     final key = _keyOf(style);
     if (_used.add(key)) _styles[key] = style;
-    final table = _tables[key];
-    if (table == null) {
-      if (_settled) {
-        _pending ??= Timer(const Duration(seconds: 2), () {
-          _pending = null;
-          unawaited(
-            _measure([
-              for (final k in _used)
-                if (!_tables.containsKey(k)) k,
-            ]),
-          );
-        });
+    if (_settled && !_measuredThisRun.contains(key)) _measureWhenStill();
+    return _tables[key]?[mark];
+  }
+
+  /// 這次用到、還沒量過的字型，等畫面靜止（沒有動畫、沒有要畫的幀）再量：
+  /// 排字與掃像素在主執行緒，不和動畫擠同一幀（ADR 0037「等靜止再放」）。
+  static void _measureWhenStill() {
+    _pending ??= () async {
+      final scheduler = SchedulerBinding.instance;
+      var stillSince = DateTime.now();
+      while (true) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (scheduler.hasScheduledFrame ||
+            scheduler.transientCallbackCount > 0) {
+          stillSince = DateTime.now();
+        } else if (DateTime.now().difference(stillSince) >=
+            const Duration(milliseconds: 400)) {
+          break;
+        }
       }
-      return null;
-    }
-    return table[mark];
+      await _measure([
+        for (final key in _used)
+          if (!_measuredThisRun.contains(key)) key,
+      ]);
+      _pending = null;
+    }();
   }
 
   static String _keyOf(TextStyle style) => [
@@ -110,33 +128,48 @@ final class PunctuationInk {
   ].join('|');
 
   static Future<void> _measure(List<String> keys) async {
-    var changed = false;
     for (final key in keys) {
       final style = _styles[key];
       if (style == null) continue;
+      _measuredThisRun.add(key);
       try {
         final table = await measure(style);
         if (!_sameTable(_tables[key], table)) {
           _tables[key] = table;
           _revision++;
-          changed = true;
+          _unsaved = true;
         }
       } catch (error, stackTrace) {
         AppLog.e('量標點筆畫位置失敗: $error', error: error, stackTrace: stackTrace);
       }
     }
+    await _save();
+  }
+
+  /// 量測結果只是讓骨架更準的快取：寫不進去只記一筆，記憶體裡照用，下次
+  /// 量完再寫。
+  static Future<void> _save() async {
     final prefs = _prefs;
-    if (!changed || prefs == null) return;
-    await prefs.setString(
-      _prefsKey,
-      jsonEncode({
-        for (final MapEntry(key: font, value: table) in _tables.entries)
-          font: {
-            for (final MapEntry(key: mark, value: blank) in table.entries)
-              mark: blank.toJson(),
-          },
-      }),
-    );
+    if (!_unsaved || prefs == null) return;
+    try {
+      final saved = await prefs.setString(
+        _prefsKey,
+        jsonEncode({
+          for (final MapEntry(key: font, value: table) in _tables.entries)
+            font: {
+              for (final MapEntry(key: mark, value: blank) in table.entries)
+                mark: blank.toJson(),
+            },
+        }),
+      );
+      if (saved) {
+        _unsaved = false;
+      } else {
+        AppLog.w('標點筆畫位置沒有寫進偏好設定，下次量完再寫');
+      }
+    } catch (error) {
+      AppLog.w('標點筆畫位置寫入失敗，下次量完再寫: $error');
+    }
   }
 
   static bool _sameTable(
@@ -218,12 +251,13 @@ final class PunctuationInk {
   static void resetForTest({bool measure = true}) {
     _tables.clear();
     _used.clear();
+    _measuredThisRun.clear();
     _styles.clear();
     _prefs = null;
     _settled = false;
     _measureEnabled = measure;
-    _pending?.cancel();
     _pending = null;
+    _unsaved = false;
     _revision++;
   }
 
@@ -268,9 +302,9 @@ final class PunctuationBlank {
 
 /// [painter] 排好的字，每一行在骨架上的長條範圍（painter 座標，上下是那一行
 /// 字形的高度）：從那一行第一個字的筆畫到最後一個字的筆畫。被刪節的那一行
-/// 含「…」；行首、行尾的全形標點扣掉那一格空著的部分（[PunctuationInk]）。
-/// [style] 是排版用的字樣（已合併預設字樣）。
-List<Rect> skeletonTextLines(TextPainter painter, TextStyle style) {
+/// 含「…」；行首、行尾的全形標點扣掉那一格空著的部分（[PunctuationInk]），
+/// 每個字照它自己那一段的字樣（一段字裡可以有不同字級、字型）。
+List<Rect> skeletonTextLines(TextPainter painter) {
   final text = painter.plainText;
   if (text.trim().isEmpty) return const [];
   // 逐字的框含被刪節那一行的「…」；`computeLineMetrics` 的行寬不含。
@@ -289,30 +323,23 @@ List<Rect> skeletonTextLines(TextPainter painter, TextStyle style) {
       lines[index] = lines[index].expandToInclude(rect);
     }
   }
-  final fontSize = painter.textScaler.scale(style.fontSize ?? 14);
-  if (fontSize <= 0) return lines;
-  final lastLine = lines.length - 1;
+  final last = lines.length - 1;
   return [
     for (final (index, line) in lines.indexed)
       _trimPunctuation(
         painter,
-        style,
         text,
         line,
-        fontSize,
-        // 被刪節的最後一行收在「…」上，不看原本那一行最後的字。
-        trimEnd: !(painter.didExceedMaxLines && index == lastLine),
+        lastVisible: painter.didExceedMaxLines && index == last,
       ),
   ];
 }
 
 Rect _trimPunctuation(
   TextPainter painter,
-  TextStyle style,
   String text,
-  Rect line,
-  double fontSize, {
-  required bool trimEnd,
+  Rect line, {
+  required bool lastVisible,
 }) {
   final range = painter.getLineBoundary(
     painter.getPositionForOffset(line.center),
@@ -326,57 +353,148 @@ Rect _trimPunctuation(
     end--;
   }
   if (end <= start) return line;
-  (String, Rect)? glyph(int offset) {
+  // 超過最大行數的最後一行，後面接的不是換行就是放不下被截斷：收在「…」上，
+  // 「…」的寬度併在最後一個看得見的字的格子裡，行尾不扣。後面接換行時這一行
+  // 是完整的，照常扣。
+  final ellipsized = lastVisible && (end >= text.length || text[end] != '\n');
+  SkeletonGlyph? glyph(int offset) {
     final mark = text[offset];
     // 只有標點要看字框；其他字不扣，省下查字框。
     if (!PunctuationInk.marks.contains(mark)) return null;
     final boxes = painter.getBoxesForSelection(
       TextSelection(baseOffset: offset, extentOffset: offset + 1),
     );
-    return boxes.isEmpty ? null : (mark, boxes.first.toRect());
+    if (boxes.isEmpty) return null;
+    final box = boxes.first.toRect();
+    final style = _styleAt(painter.text!, offset);
+    if (style == null) return null;
+    return SkeletonGlyph(
+      mark,
+      box,
+      style: style,
+      fontSize: painter.textScaler.scale(style.fontSize ?? 14),
+    );
   }
 
   return skeletonInkLine(
     line,
-    style: style,
-    fontSize: fontSize,
     first: glyph(start),
-    last: trimEnd ? glyph(end - 1) : null,
+    last: ellipsized ? null : glyph(end - 1),
   );
 }
 
-/// 一行字的骨架長條 [line]，照行首、行尾的字縮到筆畫上：[first]、[last]
-/// 是那一行第一個與最後一個字和它的字框（同 [line] 的座標）。不是全形標點、
-/// 這個字型（[style]，已合併預設字樣）還沒量過、或那一格被擠窄時不縮。
-/// 筆畫的位置從字框左緣算，字距攤在字後面的空白（正文避頭尾）不算進長條。
-Rect skeletonInkLine(
-  Rect line, {
-  required TextStyle style,
-  required double fontSize,
-  (String, Rect)? first,
-  (String, Rect)? last,
+/// 照 [Text] 的方式組出要排的字：疊在頁面的預設字樣上（[style] 不繼承時
+/// 除外），套用系統的粗體與字距、字間距、行高覆寫。骨架量字都經過這裡，
+/// 才會和換上來的 [Text] 排得一樣（[text] 是字，[child] 是 [Text.rich] 的那段）。
+TextSpan skeletonTextSpan(
+  BuildContext context, {
+  String? text,
+  InlineSpan? child,
+  TextStyle? style,
 }) {
-  ({double cell, PunctuationBlank blank})? measured((String, Rect)? glyph) {
-    if (glyph == null || fontSize <= 0) return null;
-    final (mark, box) = glyph;
-    if (!PunctuationInk.marks.contains(mark)) return null;
-    final blank = PunctuationInk._blankOf(style, mark);
+  final defaults = DefaultTextStyle.of(context);
+  var effective = style == null || style.inherit
+      ? defaults.style.merge(style)
+      : style;
+  if (MediaQuery.boldTextOf(context)) {
+    effective = effective.merge(const TextStyle(fontWeight: FontWeight.bold));
+  }
+  final span = TextSpan(
+    style: effective,
+    text: text,
+    children: child == null ? null : [child],
+  );
+  final height = MediaQuery.maybeLineHeightScaleFactorOverrideOf(context);
+  final letterSpacing = MediaQuery.maybeLetterSpacingOverrideOf(context);
+  final wordSpacing = MediaQuery.maybeWordSpacingOverrideOf(context);
+  if (height == null && letterSpacing == null && wordSpacing == null) {
+    return span;
+  }
+  final override = TextStyle(
+    height: height,
+    letterSpacing: letterSpacing,
+    wordSpacing: wordSpacing,
+  );
+  TextSpan apply(TextSpan span) => TextSpan(
+    text: span.text,
+    style: span.style?.merge(override) ?? override,
+    locale: span.locale,
+    children: [
+      for (final child in span.children ?? const <InlineSpan>[])
+        child is TextSpan && child.runtimeType == TextSpan
+            ? apply(child)
+            : child,
+    ],
+  );
+  return apply(span);
+}
+
+/// [root] 裡第 [offset] 個字（UTF-16，佔位符算一個）照繼承合併後的字樣。
+TextStyle? _styleAt(InlineSpan root, int offset) {
+  var cursor = 0;
+  TextStyle? visit(InlineSpan span, TextStyle? inherited) {
+    final style = inherited?.merge(span.style) ?? span.style;
+    switch (span) {
+      case TextSpan(:final text, :final children):
+        if (text != null) {
+          if (offset < cursor + text.length) return style;
+          cursor += text.length;
+        }
+        for (final child in children ?? const <InlineSpan>[]) {
+          if (visit(child, style) case final found?) return found;
+        }
+      case PlaceholderSpan():
+        if (offset == cursor) return style;
+        cursor += 1;
+    }
+    return null;
+  }
+
+  return visit(root, null);
+}
+
+/// 一行頭尾的一個字：那個字、它的字框，和它照繼承合併後的字樣與縮放後的字級。
+@immutable
+final class SkeletonGlyph {
+  const SkeletonGlyph(
+    this.mark,
+    this.box, {
+    required this.style,
+    required this.fontSize,
+  });
+
+  final String mark;
+  final Rect box;
+  final TextStyle style;
+  final double fontSize;
+}
+
+/// 一行字的骨架長條 [line]，照行首、行尾的字縮到筆畫上：[first]、[last]
+/// 是那一行第一個與最後一個字（字框和 [line] 同座標）。不是全形標點、那個字
+/// 的字型還沒量過、或那一格被擠窄時不縮。筆畫的位置從字框左緣算，字距攤在
+/// 字後面的空白（正文避頭尾）不算進長條。
+Rect skeletonInkLine(Rect line, {SkeletonGlyph? first, SkeletonGlyph? last}) {
+  ({double cell, PunctuationBlank blank})? measured(SkeletonGlyph? glyph) {
+    if (glyph == null || glyph.fontSize <= 0) return null;
+    if (!PunctuationInk.marks.contains(glyph.mark)) return null;
+    final blank = PunctuationInk._blankOf(glyph.style, glyph.mark);
     if (blank == null) return null;
-    final cell = blank.advance * fontSize;
-    if (box.width < cell - 0.12 * fontSize) return null;
+    final cell = blank.advance * glyph.fontSize;
+    if (glyph.box.width < cell - 0.12 * glyph.fontSize) return null;
     return (cell: cell, blank: blank);
   }
 
   var left = line.left;
   var right = line.right;
   if (measured(first) case final m?) {
-    left = math.max(left, first!.$2.left + m.blank.left * m.cell);
+    left = math.max(left, first!.box.left + m.blank.left * m.cell);
   }
   if (measured(last) case final m?) {
-    right = math.min(right, last!.$2.left + (1 - m.blank.right) * m.cell);
+    right = math.min(right, last!.box.left + (1 - m.blank.right) * m.cell);
   }
   // 只有一個標點時至少留半個字。
-  if (right - left < fontSize / 2) return line;
+  final minimum = math.min(first?.fontSize ?? 14, last?.fontSize ?? 14) / 2;
+  if (right - left < minimum) return line;
   return Rect.fromLTRB(left, line.top, right, line.bottom);
 }
 
@@ -391,13 +509,21 @@ class SkeletonText extends StatefulWidget {
   const SkeletonText(
     this.text, {
     super.key,
-    required this.style,
+    this.style,
     this.maxLines,
+    this.color,
   });
 
   final String text;
-  final TextStyle style;
+
+  /// 疊在頁面預設字樣上的字樣；null 時就是預設字樣（同 [Text]）。
+  final TextStyle? style;
+
+  /// 最多幾行；null 時照頁面預設字樣的（同 [Text]）。
   final int? maxLines;
+
+  /// 長條的底色；null 時照骨架的樣子（[SkeletonBox]）。
+  final Color? color;
 
   @override
   State<SkeletonText> createState() => _SkeletonTextState();
@@ -408,39 +534,56 @@ class _SkeletonTextState extends State<SkeletonText> {
   ({Size size, List<Rect> lines})? _laidOut;
 
   ({Size size, List<Rect> lines}) _layout(
-    TextStyle merged,
+    TextSpan span,
     TextScaler textScaler,
-    TextHeightBehavior? heightBehavior,
+    DefaultTextStyle defaults,
     double maxWidth,
   ) {
     final locale = Localizations.maybeLocaleOf(context);
     final direction = Directionality.of(context);
+    final maxLines = widget.maxLines ?? defaults.maxLines;
     final key = [
-      widget.text,
-      merged,
+      span,
       textScaler,
-      heightBehavior,
+      defaults.textHeightBehavior,
+      defaults.textWidthBasis,
       locale,
       direction,
-      widget.maxLines,
+      maxLines,
       maxWidth,
       PunctuationInk._revision,
     ];
     final cached = _laidOut;
     if (cached != null && listEquals(_key, key)) return cached;
     final painter = TextPainter(
-      text: TextSpan(text: widget.text, style: merged),
+      text: span,
       textDirection: direction,
       textScaler: textScaler,
-      textHeightBehavior: heightBehavior,
+      textHeightBehavior: defaults.textHeightBehavior,
+      textWidthBasis: defaults.textWidthBasis,
       locale: locale,
-      maxLines: widget.maxLines,
-      ellipsis: widget.maxLines == null ? null : '…',
+      maxLines: maxLines,
+      ellipsis: maxLines == null ? null : '…',
     )..layout(maxWidth: maxWidth);
-    // 和 Text 一樣大：一行放得下時是那一行的寬，換行或截斷時撐滿。
+    // 和 Text 一樣大：一行放得下時是那一行的寬，換行或截斷時撐滿（頁面的
+    // 預設字樣指定照最長一行算時照它）。長條的左右照筆畫，上下置中在那一行
+    // 的行框（含行距）上，和字的行一樣。
+    final metrics = painter.computeLineMetrics();
+    final ink = skeletonTextLines(painter);
+    double bottomOf(int index) => index >= metrics.length - 1
+        ? painter.height
+        : metrics[index].baseline + metrics[index].descent;
     final result = (
       size: Size(painter.width, painter.height),
-      lines: skeletonTextLines(painter, merged),
+      lines: [
+        for (final (index, line) in ink.indexed)
+          Rect.fromLTRB(
+            line.left,
+            index == 0 ? 0 : bottomOf(index - 1),
+            line.right,
+            bottomOf(index),
+          ),
+      ],
     );
     painter.dispose();
     _key = key;
@@ -449,18 +592,21 @@ class _SkeletonTextState extends State<SkeletonText> {
 
   @override
   Widget build(BuildContext context) {
-    // 與 Text 相同：先合併頁面的預設字樣（字族、字距），再照系統字級放大。
     final defaults = DefaultTextStyle.of(context);
-    final merged = defaults.style.merge(widget.style);
+    final span = skeletonTextSpan(
+      context,
+      text: widget.text,
+      style: widget.style,
+    );
     final textScaler = MediaQuery.textScalerOf(context);
     final barHeight =
-        textScaler.scale(merged.fontSize ?? 14) * Skeleton.barHeightFactor;
+        textScaler.scale(span.style?.fontSize ?? 14) * Skeleton.barHeightFactor;
     return LayoutBuilder(
       builder: (context, constraints) {
         final (:size, :lines) = _layout(
-          merged,
+          span,
           textScaler,
-          defaults.textHeightBehavior,
+          defaults,
           constraints.maxWidth,
         );
         return SizedBox(
@@ -472,7 +618,11 @@ class _SkeletonTextState extends State<SkeletonText> {
                 Positioned(
                   left: line.left,
                   top: line.center.dy - barHeight / 2,
-                  child: SkeletonBox(width: line.width, height: barHeight),
+                  child: SkeletonBox(
+                    width: line.width,
+                    height: barHeight,
+                    color: widget.color,
+                  ),
                 ),
             ],
           ),
