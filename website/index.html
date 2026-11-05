@@ -1191,7 +1191,7 @@
               </div>
             </div>
 
-            <p class="demo-note">※ 此為網頁模擬示意。實際 App 由自製 Canvas 排版引擎渲染，採上下連續捲動；另可調整字距、段距、章節間距、首行縮排、標題字號與頁尾位置，隱藏系統狀態列，並自訂頁首與頁尾顯示的時間、電量、章節與進度。</p>
+            <p class="demo-note">※ 此為網頁模擬示意。實際 App 由自製 Canvas 排版引擎渲染，採上下連續捲動；另可調整字距、段距、章節間距、首行縮排、標題字號與頁尾位置，隱藏系統狀態列，並自訂頁首與頁尾顯示的時間、電量（可只顯示電池圖示）、章節與進度。</p>
           </div>
         </div>
       </div>
@@ -1301,7 +1301,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             </div>
             <h3>備份與同步</h3>
-            <p>多台手機可用 Google 雲端硬碟或 WebDAV 同步：閱讀進度自動同步，書架、書籤、標註、書源與設定在選好同步空間或按「立即全面同步」時同步。也可打包備份還原；本地 TXT 與 EPUB 要另外保存原檔、還原後重新匯入。</p>
+            <p>多台手機可用 Google 雲端硬碟或 WebDAV 同步：閱讀進度自動同步，書架、書籤、標註、書源與設定在選好同步空間或按「立即全面同步」時同步；本地 TXT 與 EPUB 按「同步本地書」互傳原檔。也可打包備份還原；備份不含本地書的原檔，要另外保存、還原後重新匯入。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 120ms">
@@ -1309,7 +1309,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
             <h3>本地電子書</h3>
-            <p>匯入 TXT 或 EPUB，自動解析章節，沒有網路也能讀完整本；EPUB 的書名、作者與封面取自書裡，插圖先略過、只讀文字。</p>
+            <p>匯入 TXT 或 EPUB，自動解析章節，沒有網路也能讀完整本；EPUB 的書名、作者與封面取自書裡，插圖先略過、只讀文字。多台手機之間按「同步本地書」就能互傳；另一台自己匯入同一個檔，檔名不同也會接上讀到的地方。</p>
           </div>
 
           <div class="cell reveal">
@@ -1368,7 +1368,7 @@
           <div class="step reveal" style="--rd: 160ms">
             <div class="step-no">三</div>
             <h3>批次校驗</h3>
-            <p>一鍵背景校驗，自動檢測格式與連線狀態，迅速篩除失效的來源。</p>
+            <p>一鍵背景校驗搜尋、目錄與正文，標出失效的書源，再依結果篩選、停用或刪除。</p>
           </div>
           <div class="step reveal" style="--rd: 240ms">
             <div class="step-no">四</div>
@@ -1477,8 +1477,9 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>您可以在「我的」→「備份與同步」選擇 Google 雲端硬碟或 WebDAV，讓多台手機接續閱讀。閱讀進度會自動同步；書架、書籤、標註、書源、替換規則與設定等資料，在剛選好同步空間或按「立即全面同步」時同步。已下載的正文不會同步，另一台會自行下載。</p>
-              <p>也可以在舊手機打包備份，將備份檔移到新手機還原。匯入的本地 TXT 與 EPUB 不在備份裡，請另外保存原檔，還原後重新匯入。</p>
+              <p>您可以在「我的」→「備份與同步」選擇 Google 雲端硬碟或 WebDAV，讓多台手機接續閱讀。閱讀進度會自動同步；書架、書籤、標註、書源、替換規則與設定等資料，在剛選好同步空間或按「立即全面同步」時同步。網路書已下載的正文不會同步，另一台會自行下載。</p>
+              <p>本地 TXT 與 EPUB 按「同步本地書」才會上傳、下載原檔：先列出要傳幾本、多少 MB，確定才開始，可以中途取消；一台移出書架，另一台下次按的時候也跟著移出。</p>
+              <p>也可以在舊手機打包備份，將備份檔移到新手機還原。備份不含本地 TXT 與 EPUB 的原檔，用備份搬家時請另外保存原檔，還原後重新匯入。</p>
             </div>
           </div>
         </div>
