@@ -259,7 +259,14 @@ jobs:
           # Android versionCode 取發版那個提交的提交數：beta 與 main 都禁止強制推送、歷史不改寫，main 又只
           # 快轉到 beta 上的提交，兩邊是同一條歷史，提交數只增不減（ADR 0004、0027）。正式版與測試版共用
           # 同一條序列，裝了測試版也能直接更新到之後的正式版。
-          build_number="$(git rev-list --count "$target_sha")"
+          # 只建測試 APK 時改取 beta 最新提交的提交數：功能分支的提交合併時會 squash 成一個，分支自己的
+          # 提交數常比之後的測試版還大，裝了測試 APK 就裝不回測試版。取 beta 的數字，測試 APK 和目前的
+          # 測試版一樣大（Android 允許同版本號覆蓋安裝），之後的測試版、正式版都比它大。
+          if [[ "$mode" == manual-test ]]; then
+            build_number="$(git rev-list --count origin/beta)"
+          else
+            build_number="$(git rev-list --count "$target_sha")"
+          fi
 
           {
             echo "mode=$mode"
