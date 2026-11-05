@@ -22,14 +22,14 @@ final class ReaderV2Setting<T> {
     required this._fallback,
     required this._read,
     required this._decode,
-    required this._write,
+    required this._prepare,
   });
 
   final String key;
   final T Function() _fallback;
   final T? Function(SharedPreferences prefs) _read;
   final T Function(T? stored) _decode;
-  final Future<bool> Function(SharedPreferences prefs, T value) _write;
+  final ReaderV2SettingWrite Function(T value) _prepare;
 
   /// 預設值。每次都是新的物件，清單不在快照之間共用。
   T get fallback => _fallback();
@@ -37,14 +37,19 @@ final class ReaderV2Setting<T> {
   /// 從 [prefs] 讀出：沒有值的用預設值，讀到的值照 [_decode] 修正到合法範圍。
   T read(SharedPreferences prefs) => _decode(_read(prefs));
 
-  Future<bool> write(SharedPreferences prefs, T value) => _write(prefs, value);
+  /// 把 [value] 轉成要存的樣子（在呼叫的當下，之後清單再被改也不影響），
+  /// 回傳拿到偏好設定後寫入的那一步。
+  ReaderV2SettingWrite prepare(T value) => _prepare(value);
 }
+
+/// 拿到偏好設定後寫入一個已經轉好的值；寫不進去時回傳 false。
+typedef ReaderV2SettingWrite = Future<bool> Function(SharedPreferences prefs);
 
 ReaderV2Setting<T> _setting<T>(
   String key,
   T Function() fallback, {
   required T? Function(SharedPreferences prefs) read,
-  required Future<bool> Function(SharedPreferences prefs, T value) write,
+  required ReaderV2SettingWrite Function(T value) prepare,
   T Function(T? stored)? decode,
 }) {
   return ReaderV2Setting<T>._(
@@ -52,7 +57,7 @@ ReaderV2Setting<T> _setting<T>(
     fallback: fallback,
     read: read,
     decode: decode ?? ((T? stored) => stored ?? fallback()),
-    write: write,
+    prepare: prepare,
   );
 }
 
@@ -68,8 +73,10 @@ ReaderV2Setting<double> _double(
     () => fallback,
     read: read ?? ((prefs) => prefs.getDouble(key)),
     decode: decode,
-    write: (prefs, value) =>
-        prefs.setDouble(key, encode == null ? value : encode(value)),
+    prepare: (value) {
+      final stored = encode == null ? value : encode(value);
+      return (prefs) => prefs.setDouble(key, stored);
+    },
   );
 }
 
@@ -84,8 +91,10 @@ ReaderV2Setting<int> _int(
     () => fallback,
     read: (prefs) => prefs.getInt(key),
     decode: decode,
-    write: (prefs, value) =>
-        prefs.setInt(key, encode == null ? value : encode(value)),
+    prepare: (value) {
+      final stored = encode == null ? value : encode(value);
+      return (prefs) => prefs.setInt(key, stored);
+    },
   );
 }
 
@@ -94,7 +103,8 @@ ReaderV2Setting<bool> _bool(String key, bool fallback) {
     key,
     () => fallback,
     read: (prefs) => prefs.getBool(key),
-    write: (prefs, value) => prefs.setBool(key, value),
+    prepare: (value) =>
+        (prefs) => prefs.setBool(key, value),
   );
 }
 
@@ -109,7 +119,10 @@ ReaderV2Setting<T> _text<T>(
     key,
     fallback,
     read: (prefs) => parse(prefs.getString(key)),
-    write: (prefs, value) => prefs.setString(key, encode(value)),
+    prepare: (value) {
+      final stored = encode(value);
+      return (prefs) => prefs.setString(key, stored);
+    },
   );
 }
 
@@ -483,9 +496,14 @@ class ReaderV2PrefsSnapshot {
   /// [setting] 在這份快照裡的值。
   T valueOf<T>(ReaderV2Setting<T> setting) => _values[setting] as T;
 
-  /// 其餘設定不變、只換掉 [setting] 的值的新快照。
+  /// 其餘設定不變、只換掉 [setting] 的值的新快照。其餘的清單（九宮格）各自
+  /// 複製一份，不和這份快照共用。
   ReaderV2PrefsSnapshot withValue<T>(ReaderV2Setting<T> setting, T value) =>
-      ReaderV2PrefsSnapshot._({..._values, setting: value});
+      ReaderV2PrefsSnapshot._({
+        for (final MapEntry(:key, value: current) in _values.entries)
+          key: current is List<int> ? List<int>.of(current) : current,
+        setting: value,
+      });
 
   double get fontSize => valueOf(ReaderV2Settings.fontSize);
   double get titleFontSize => valueOf(ReaderV2Settings.titleFontSize);
@@ -598,9 +616,11 @@ class ReaderV2PrefsRepository {
       });
 
   /// 寫入一個設定；寫不進去時丟出錯誤，由控制器還原成最後落地的值。
+  /// 存的是呼叫當下的值：清單在等偏好設定的期間又被改也不影響。
   Future<void> save<T>(ReaderV2Setting<T> setting, T value) async {
+    final write = setting.prepare(value);
     final prefs = await SharedPreferences.getInstance();
-    if (!await setting.write(prefs, value)) {
+    if (!await write(prefs)) {
       throw StateError('SharedPreferences rejected ${setting.key}');
     }
   }
