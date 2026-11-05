@@ -559,11 +559,14 @@ void main() {
           xs.add(tester.getCenter(find.text('新頁')).dx);
         }
       }
-      // 開頭留一段給取樣延遲，之後每一格都往右移、步幅一樣。
+      // 開頭留一段給取樣延遲，之後每一格都往右移、步幅一樣。位移對齊到
+      // 實體像素，每一步差在一個實體像素以內，加起來不偏。
+      final pixel = 1 / tester.view.devicePixelRatio;
       final steps = [for (var i = 8; i < xs.length; i++) xs[i] - xs[i - 1]];
       for (final step in steps) {
-        expect(step, closeTo(8 / 4, 0.01));
+        expect(step, closeTo(8 / 4, pixel + 0.01));
       }
+      expect(xs.last - xs[7], closeTo(steps.length * 8 / 4, pixel + 0.01));
       await send(tester, 'cancelBackGesture');
       await tester.pumpAndSettle();
     });
