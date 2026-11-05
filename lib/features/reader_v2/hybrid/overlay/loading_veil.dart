@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -21,21 +20,24 @@ import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 /// 只改紙與骨架顏色的透明度，不對正文做整頁 Opacity：載入期間排版用滿每
 /// 一幀的預算，這一層每幀只多畫幾十個圓角條。
 class LoadingVeilController {
-  LoadingVeilController({required TickerProvider vsync, this.onHidden})
-    : _cover = AnimationController(
-        vsync: vsync,
-        duration: AppMotion.fade,
-        value: 1,
-      ),
-      _skeleton = AnimationController(
-        vsync: vsync,
-        duration: AppMotion.fade,
-        reverseDuration: AppMotion.fade,
-      ),
-      _pulse = AnimationController(
-        vsync: vsync,
-        duration: Skeleton.breathCycle,
-      ) {
+  /// 紙上骨架的呼吸照 [breath] 走，和頁首頁尾的骨架同一口
+  /// （[SharedSkeletonBreathScope]）；沒給時自己一口。
+  LoadingVeilController({
+    required TickerProvider vsync,
+    SharedSkeletonBreath? breath,
+    this.onHidden,
+  }) : _cover = AnimationController(
+         vsync: vsync,
+         duration: AppMotion.fade,
+         value: 1,
+       ),
+       _skeleton = AnimationController(
+         vsync: vsync,
+         duration: AppMotion.fade,
+         reverseDuration: AppMotion.fade,
+       ),
+       _ownsBreath = breath == null,
+       _breath = breath ?? SharedSkeletonBreath(vsync: vsync) {
     _cover.addStatusListener(_onCoverStatus);
   }
 
@@ -53,7 +55,11 @@ class LoadingVeilController {
 
   final AnimationController _cover;
   final AnimationController _skeleton;
-  final AnimationController _pulse;
+  final SharedSkeletonBreath _breath;
+  final bool _ownsBreath;
+
+  /// 紙上的骨架正在用 [_breath]（登記成它的使用者）。
+  bool _usingBreath = false;
   int _attachedVeils = 0;
   bool _reduceMotion = false;
 
@@ -169,30 +175,14 @@ class LoadingVeilController {
     _syncPulse();
   }
 
-  /// 骨架的呼吸停在這一刻的深淺（[holdBreath]），畫面不動。
-  bool get _breathHeld => _breathHeldNotifier.value;
-  set _breathHeld(bool value) => _breathHeldNotifier.value = value;
-  final ValueNotifier<bool> _breathHeldNotifier = ValueNotifier(false);
-
-  /// 紙上骨架的呼吸停住中（[holdBreath]）：頁首頁尾的骨架照它一起停
-  /// （[SkeletonPause]），整個畫面才真的不動。
-  ValueListenable<bool> get breathHeld => _breathHeldNotifier;
-
   /// 掀紙前在紙底下建好、畫出正文時，骨架的呼吸停在這一刻的深淺，畫面不動
   /// （ADR 0037 策略一：掀紙前建好正文畫面時停一兩幀加 [AppMotion.stillGap]）。
-  /// 停的時間很短，看不出凍住；[resumeBreath] 從同一個深淺接著呼吸。
-  void holdBreath() {
-    if (!_pulse.isAnimating) return;
-    _breathHeld = true;
-    _pulse.stop();
-  }
+  /// 停的是共用的那口呼吸，頁首頁尾的骨架一起停，整個畫面才真的不動。停的
+  /// 時間很短，看不出凍住；[resumeBreath] 從同一個深淺接著呼吸。
+  void holdBreath() => _breath.hold();
 
   /// [holdBreath] 停住的呼吸接著走。
-  void resumeBreath() {
-    if (!_breathHeld) return;
-    _breathHeld = false;
-    _syncPulse();
-  }
+  void resumeBreath() => _breath.resume();
 
   /// 正文已排好：照 [reveal] 的方式與時長掀開紙。
   void reveal([SkeletonReveal reveal = const SkeletonReveal()]) {
@@ -208,10 +198,10 @@ class LoadingVeilController {
   void dispose() {
     _cover.removeStatusListener(_onCoverStatus);
     _settleCoverWaiters(covered: false);
+    _setUsingBreath(false);
     _cover.dispose();
     _skeleton.dispose();
-    _pulse.dispose();
-    _breathHeldNotifier.dispose();
+    if (_ownsBreath) _breath.dispose();
   }
 
   void _onCoverStatus(AnimationStatus status) {
@@ -234,28 +224,28 @@ class LoadingVeilController {
     _syncPulse();
   }
 
-  /// 呼吸只在骨架畫在畫面上時跑：載入失敗改顯示錯誤、或紙已淡出時都停，
-  /// 不讓一個看不到的動畫持續要求重畫。
-  void _syncPulse() {
-    final run =
-        _attachedVeils > 0 &&
+  /// 紙上的骨架只在畫在畫面上時用呼吸：載入失敗改顯示錯誤、或紙已淡出時
+  /// 都放掉，不讓一個看不到的動畫持續要求重畫。
+  void _syncPulse() => _setUsingBreath(
+    _attachedVeils > 0 &&
         !_reduceMotion &&
         !_cover.isDismissed &&
-        (_skeleton.value > 0 || _skeleton.isAnimating);
-    // 停住的呼吸維持停在原處，等 [resumeBreath]。
-    if (run && _breathHeld) return;
-    _breathHeld = false;
-    if (run) {
-      if (!_pulse.isAnimating) unawaited(_pulse.repeat());
-    } else if (_pulse.isAnimating || _pulse.value != 0) {
-      _pulse
-        ..stop()
-        ..value = 0;
+        (_skeleton.value > 0 || _skeleton.isAnimating),
+  );
+
+  void _setUsingBreath(bool value) {
+    if (_usingBreath == value) return;
+    _usingBreath = value;
+    if (value) {
+      _breath.acquire();
+    } else {
+      _breath.release();
     }
   }
 }
 
-/// [LoadingVeilController] 的畫面：撐滿正文區，不攔觸控（呼叫端決定）。
+/// [LoadingVeilController] 的畫面：撐滿正文區，紙往上下多畫到正文與頁首
+/// 頁尾之間的空隙；不攔觸控（呼叫端決定）。
 class LoadingVeil extends StatefulWidget {
   const LoadingVeil({
     super.key,
@@ -318,9 +308,9 @@ class _LoadingVeilState extends State<LoadingVeil> {
         painter: _LoadingVeilPainter(
           cover: controller._cover,
           skeleton: controller._skeleton,
-          pulse: controller._pulse,
+          pulse: controller._breath.phase,
           breathing: () =>
-              controller._pulse.isAnimating || controller._breathHeld,
+              controller._usingBreath && controller._breath.isBreathing,
           look: SkeletonLook.of(context),
           breathSpan: () {
             final box = context.findRenderObject();
@@ -414,8 +404,11 @@ class _LoadingVeilPainter extends CustomPainter {
         );
     }
 
+    // 跨在上下緣的那一行畫到正文區外、正文與頁首頁尾之間的空隙裡
+    // （HybridScrollView 不裁切，閱讀頁框架裁到空隙為止）；紙也往上下各多
+    // 蓋一個正文區高，那半行才跟著紙一起掀開，不會先露出來。
     canvas.drawRect(
-      Offset.zero & size,
+      Rect.fromLTRB(0, -size.height, size.width, size.height * 2),
       shade(backgroundColor, sweeping ? 1 : coverStrength),
     );
 
