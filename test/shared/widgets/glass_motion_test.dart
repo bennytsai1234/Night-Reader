@@ -257,18 +257,29 @@ void main() {
     );
     await tester.tap(find.text('開'));
     await tester.pump();
-    final menu = find.ancestor(
-      of: find.text('項目'),
-      matching: find.byType(ScaleTransition),
-    );
-    expect(tester.widget<ScaleTransition>(menu).scale.value, 0);
+    // 選單本身一直是最終大小、字不縮放，露出來的範圍由裁切框決定。
+    const box = Size(200, 100);
+    Rect revealed() => tester
+        .widgetList<ClipRRect>(
+          find.ancestor(of: find.text('項目'), matching: find.byType(ClipRRect)),
+        )
+        .firstWhere((clip) => clip.clipper != null)
+        .clipper!
+        .getClip(box)
+        .outerRect;
+    expect(revealed().height, 0);
+    // 長在錨點那個角（左上）。
+    expect(revealed().topLeft, Offset.zero);
 
     await tester.pump(AppMotion.menu ~/ 2);
-    expect(tester.widget<ScaleTransition>(menu).scale.value, greaterThan(0));
+    expect(revealed().height, greaterThan(0));
+    // 畫面上的字已經在最終的位置與大小（getRect 經過所有的變形）。
+    final label = tester.getRect(find.text('項目'));
     expectNoGlassUnderFade(tester);
 
     await tester.pumpAndSettle();
-    expect(tester.widget<ScaleTransition>(menu).scale.value, 1);
+    expect(revealed(), Offset.zero & box);
+    expect(tester.getRect(find.text('項目')), label);
   });
 
   testWidgets('the long-press preview blur fades by its strength', (

@@ -113,4 +113,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('刪除'), findsNothing);
   });
+
+  testWidgets('the lifted preview keeps its size on whole device pixels', (
+    tester,
+  ) async {
+    const ratio = 2.625;
+    tester.view.devicePixelRatio = ratio;
+    tester.view.physicalSize = const Size(393, 852) * ratio;
+    addTearDown(tester.view.reset);
+    const source = Rect.fromLTWH(40.3, 200.7, 100, 140);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showContextPreviewMenu<String>(
+                context: context,
+                sourceRect: source,
+                preview: const Text('預覽'),
+                entries: const [GlassMenuItem(value: '刪除', label: '刪除')],
+              ),
+              child: const Text('長按'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('長按'));
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      // 預覽不縮放（字不必每一幀重建），位置落在整數個實體像素上；
+      // getRect 經過所有的變形，量到的是畫面上的大小。
+      final rect = tester.getRect(find.text('預覽'));
+      expect(rect.width, moreOrLessEquals(source.width));
+      expect(rect.height, moreOrLessEquals(source.height));
+      final topLeft = rect.topLeft;
+      for (final v in [topLeft.dx, topLeft.dy]) {
+        expect(v * ratio, moreOrLessEquals((v * ratio).roundToDouble()));
+      }
+    }
+    await tester.pumpAndSettle();
+  });
 }

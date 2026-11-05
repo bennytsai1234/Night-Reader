@@ -326,30 +326,32 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           AnimatedBuilder(
             animation: curved,
             builder: (context, child) {
-              final rect = Rect.lerp(anchor, previewRect, curved.value)!;
+              // 預覽只移位、不縮放，位置對齊整數實體像素：縮放或落在像素
+              // 之間時，字每一幀都要重建貼圖（2026-11-05 手機上量到）。
+              final rect = _snapToPixels(
+                Rect.lerp(anchor, previewRect, curved.value)!,
+                MediaQuery.devicePixelRatioOf(context),
+              );
               // 陰影跟著浮起的進度長出、收回：濃淡、模糊與位移都從 0 開始，
               // 第一幀不會整塊冒出陰影，收起的最後一幀也不會突然消失。彈簧
               // 回彈超過 1 的那一段維持滿陰影。
               final lift = curved.value.clamp(0.0, 1.0);
               return Positioned.fromRect(
                 rect: rect,
-                child: Transform.scale(
-                  scale: 1 + 0.03 * curved.value,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: route.previewRadius,
-                      boxShadow: [
-                        BoxShadow(
-                          color: chrome.glassShadow.withValues(
-                            alpha: chrome.glassShadow.a * lift,
-                          ),
-                          blurRadius: 30 * lift,
-                          offset: Offset(0, 10 * lift),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: route.previewRadius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: chrome.glassShadow.withValues(
+                          alpha: chrome.glassShadow.a * lift,
                         ),
-                      ],
-                    ),
-                    child: child,
+                        blurRadius: 30 * lift,
+                        offset: Offset(0, 10 * lift),
+                      ),
+                    ],
                   ),
+                  child: child,
                 ),
               );
             },
@@ -361,15 +363,34 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         Positioned(
           left: menuLeft,
           top: menuTop,
-          // 從靠錨點的那個角長出來，不淡（ADR 0022）：選單是玻璃，淡入時
-          // 模糊到最後一幀才突然糊上去；從 0 長大，第一幀也不會整塊冒出來。
-          child: ScaleTransition(
-            scale: curved,
-            alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
+          // 從靠錨點的那個角展開，不淡（ADR 0022）：選單是玻璃，淡入時模糊
+          // 到最後一幀才突然糊上去。選單一開始就是最終大小，只有圓角的
+          // 裁切框由小長大，字不縮放，不必每一幀重建字的貼圖。
+          child: AnimatedBuilder(
+            animation: curved,
+            builder: (context, child) => ClipRRect(
+              clipper: _MenuRevealClipper(
+                progress: curved.value.clamp(0.0, 1.0),
+                alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
+                radius: AppRadius.cardXl.topLeft,
+              ),
+              child: child,
+            ),
             child: menu,
           ),
         ),
       ],
+    );
+  }
+
+  static Rect _snapToPixels(Rect rect, double devicePixelRatio) {
+    double snap(double v) =>
+        (v * devicePixelRatio).roundToDouble() / devicePixelRatio;
+    return Rect.fromLTWH(
+      snap(rect.left),
+      snap(rect.top),
+      rect.width,
+      rect.height,
     );
   }
 
@@ -508,4 +529,33 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     }
     return widgets;
   }
+}
+
+/// 選單展開時的裁切框：貼著 [alignment] 那個角，寬從四成、高從 0 長到
+/// 整個選單，[progress] 為 1 時就是選單本身的圓角外框。
+class _MenuRevealClipper extends CustomClipper<RRect> {
+  const _MenuRevealClipper({
+    required this.progress,
+    required this.alignment,
+    required this.radius,
+  });
+
+  final double progress;
+  final Alignment alignment;
+  final Radius radius;
+
+  @override
+  RRect getClip(Size size) {
+    final width = size.width * (0.4 + 0.6 * progress);
+    final height = size.height * progress;
+    final rect = alignment.inscribe(Size(width, height), Offset.zero & size);
+    final r = math.min(radius.x, math.min(width, height) / 2);
+    return RRect.fromRectAndRadius(rect, Radius.circular(r));
+  }
+
+  @override
+  bool shouldReclip(_MenuRevealClipper old) =>
+      old.progress != progress ||
+      old.alignment != alignment ||
+      old.radius != radius;
 }
