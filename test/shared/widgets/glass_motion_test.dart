@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -257,18 +258,105 @@ void main() {
     );
     await tester.tap(find.text('開'));
     await tester.pump();
-    final menu = find.ancestor(
-      of: find.text('項目'),
-      matching: find.byType(ScaleTransition),
-    );
-    expect(tester.widget<ScaleTransition>(menu).scale.value, 0);
+    // 選單本身一直是最終大小、字不縮放，露出來的範圍由裁切框決定。
+    const box = Size(200, 100);
+    Rect revealed() => tester
+        .widgetList<ClipRRect>(
+          find.ancestor(of: find.text('項目'), matching: find.byType(ClipRRect)),
+        )
+        .firstWhere((clip) => clip.clipper != null)
+        .clipper!
+        .getClip(box)
+        .outerRect;
+    expect(revealed().height, 0);
+    // 長在錨點那個角（左上）。
+    expect(revealed().topLeft, Offset.zero);
 
     await tester.pump(AppMotion.menu ~/ 2);
-    expect(tester.widget<ScaleTransition>(menu).scale.value, greaterThan(0));
+    expect(revealed().height, greaterThan(0));
+    // 畫面上的字已經在最終的位置與大小（getRect 經過所有的變形）。
+    final label = tester.getRect(find.text('項目'));
     expectNoGlassUnderFade(tester);
 
     await tester.pumpAndSettle();
-    expect(tester.widget<ScaleTransition>(menu).scale.value, 1);
+    expect(revealed(), Offset.zero & box);
+    expect(tester.getRect(find.text('項目')), label);
+  });
+
+  testWidgets('the glass menu shadow follows the revealed frame', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        Builder(
+          builder: (context) => Align(
+            alignment: Alignment.topLeft,
+            child: TextButton(
+              onPressed: () => showGlassMenu<String>(
+                context: context,
+                anchor: const Rect.fromLTWH(20, 20, 44, 44),
+                entries: const [GlassMenuItem(value: 'a', label: '項目')],
+              ),
+              child: const Text('開'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開'));
+    await tester.pumpAndSettle();
+
+    // 展開完：漫射陰影（下移 6）與貼邊陰影（下移 1）都畫在選單外框外，
+    // 沒有被展開的裁切切掉。
+    final shadowed = find
+        .ancestor(of: find.text('項目'), matching: find.byType(CustomPaint))
+        .evaluate()
+        .map((e) => e.renderObject! as RenderCustomPaint)
+        .firstWhere((r) => r.painter != null);
+    final frame = RRect.fromRectAndRadius(
+      Offset.zero & shadowed.size,
+      AppRadius.cardXl.topLeft,
+    );
+    expect(
+      shadowed,
+      paints
+        ..rrect(rrect: frame.shift(const Offset(0, 6)))
+        ..rrect(rrect: frame.shift(const Offset(0, 1))),
+    );
+  });
+
+  testWidgets('rows the reveal has not reached stay hidden from a screen '
+      'reader', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      app(
+        Builder(
+          builder: (context) => Align(
+            alignment: Alignment.topLeft,
+            child: TextButton(
+              onPressed: () => showGlassMenu<String>(
+                context: context,
+                anchor: const Rect.fromLTWH(20, 20, 44, 44),
+                entries: [
+                  for (var i = 0; i < 6; i++)
+                    GlassMenuItem(value: '$i', label: '項目$i'),
+                ],
+              ),
+              child: const Text('開'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 30));
+    // 最後一列還沒露出來：讀屏也摸不到。
+    expect(tester.getSemantics(find.text('項目5')), isSemantics(isHidden: true));
+
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(find.text('項目5')), isSemantics(isHidden: false));
+    semantics.dispose();
   });
 
   testWidgets('the long-press preview blur fades by its strength', (

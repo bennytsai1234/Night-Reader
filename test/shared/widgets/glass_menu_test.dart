@@ -113,4 +113,65 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('刪除'), findsNothing);
   });
+
+  testWidgets('the lifted preview keeps its size on whole device pixels', (
+    tester,
+  ) async {
+    const ratio = 2.625;
+    tester.view.devicePixelRatio = ratio;
+    tester.view.physicalSize = const Size(393, 852) * ratio;
+    addTearDown(tester.view.reset);
+    // 靠近畫面底部：預覽要往上推才放得下選單，途中位置一直在變。
+    const source = Rect.fromLTWH(40.3, 700.7, 100, 140);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showContextPreviewMenu<String>(
+                context: context,
+                sourceRect: source,
+                preview: const Text('預覽'),
+                entries: const [GlassMenuItem(value: '刪除', label: '刪除')],
+              ),
+              child: const Text('長按'),
+            ),
+          ),
+        ),
+      ),
+    );
+    // 預覽不縮放（字不必每一幀重建），位置落在整數個實體像素上；
+    // getRect 經過所有的變形，量到的是畫面上的大小。回傳這一幀的上緣。
+    double expectOnPixels() {
+      final rect = tester.getRect(find.text('預覽'));
+      expect(rect.width, moreOrLessEquals(source.width));
+      expect(rect.height, moreOrLessEquals(source.height));
+      for (final v in [rect.left, rect.top]) {
+        expect(v * ratio, moreOrLessEquals((v * ratio).roundToDouble()));
+      }
+      return rect.top;
+    }
+
+    await tester.tap(find.text('長按'));
+    await tester.pump();
+    final tops = <double>{};
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      tops.add(expectOnPixels());
+    }
+    expect(tops.length, greaterThan(2), reason: '途中預覽要真的在移動');
+    await tester.pumpAndSettle();
+
+    // 收起時沿原路退回，途中一樣不縮放、對齊像素。
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pump();
+    final back = <double>{};
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      back.add(expectOnPixels());
+    }
+    expect(back.length, greaterThan(2));
+    await tester.pumpAndSettle();
+  });
 }

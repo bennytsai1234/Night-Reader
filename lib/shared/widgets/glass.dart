@@ -107,21 +107,38 @@ class GlassSurface extends StatelessWidget {
       decoration: BoxDecoration(
         shape: shape,
         borderRadius: radius,
-        boxShadow: [
-          if (shadow)
-            BoxShadow(
-              color: chrome.glassShadow.withValues(
-                alpha: chrome.glassShadow.a * shown,
-              ),
-              blurRadius: 24,
-              offset: const Offset(0, 6),
-            ),
-          if (floating) AppLayers.contactShadow(dark: dark, shown: shown),
-        ],
+        boxShadow: shadows(
+          chrome,
+          dark: dark,
+          shown: shown,
+          diffuse: shadow,
+          contact: floating,
+        ),
       ),
       child: content,
     );
   }
+
+  /// 玻璃的陰影：[diffuse] 是散開的漫射陰影、[contact] 是貼邊陰影，
+  /// [shown] 0→1 從無到有。玻璃外框會變的地方（選單展開）關掉玻璃自己的
+  /// 陰影，照這一份沿著變動的外框畫。
+  static List<BoxShadow> shadows(
+    AppChrome chrome, {
+    required bool dark,
+    double shown = 1,
+    bool diffuse = true,
+    bool contact = true,
+  }) => [
+    if (diffuse)
+      BoxShadow(
+        color: chrome.glassShadow.withValues(
+          alpha: chrome.glassShadow.a * shown,
+        ),
+        blurRadius: 24,
+        offset: const Offset(0, 6),
+      ),
+    if (contact) AppLayers.contactShadow(dark: dark, shown: shown),
+  ];
 }
 
 /// 讓底下最近的一塊 [GlassSurface] 隨 [animation]（0→1）淡入淡出：色調、

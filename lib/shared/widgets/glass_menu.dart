@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
@@ -273,9 +274,13 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     final menu = ConstrainedBox(
       constraints: BoxConstraints.tightFor(width: menuWidth)
           .copyWith(maxHeight: menuMaxHeight),
+      // 陰影不畫在玻璃上：展開的裁切會把伸出外框的陰影切掉，改由外面
+      // 沿著展開中的外框畫（[_MenuRevealShadow]）。
       child: GlassSurface(
         borderRadius: AppRadius.cardXl,
         grouped: false,
+        shadow: false,
+        floating: false,
         tint: chrome.groupedSurface.withValues(alpha: 0.9),
         child: Material(
           type: MaterialType.transparency,
@@ -326,30 +331,32 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           AnimatedBuilder(
             animation: curved,
             builder: (context, child) {
-              final rect = Rect.lerp(anchor, previewRect, curved.value)!;
+              // 預覽只移位、不縮放，位置對齊整數實體像素：縮放或落在像素
+              // 之間時，字每一幀都要重建貼圖（2026-11-05 手機上量到）。
+              final rect = _snapToPixels(
+                Rect.lerp(anchor, previewRect, curved.value)!,
+                MediaQuery.devicePixelRatioOf(context),
+              );
               // 陰影跟著浮起的進度長出、收回：濃淡、模糊與位移都從 0 開始，
               // 第一幀不會整塊冒出陰影，收起的最後一幀也不會突然消失。彈簧
               // 回彈超過 1 的那一段維持滿陰影。
               final lift = curved.value.clamp(0.0, 1.0);
               return Positioned.fromRect(
                 rect: rect,
-                child: Transform.scale(
-                  scale: 1 + 0.03 * curved.value,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: route.previewRadius,
-                      boxShadow: [
-                        BoxShadow(
-                          color: chrome.glassShadow.withValues(
-                            alpha: chrome.glassShadow.a * lift,
-                          ),
-                          blurRadius: 30 * lift,
-                          offset: Offset(0, 10 * lift),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: route.previewRadius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: chrome.glassShadow.withValues(
+                          alpha: chrome.glassShadow.a * lift,
                         ),
-                      ],
-                    ),
-                    child: child,
+                        blurRadius: 30 * lift,
+                        offset: Offset(0, 10 * lift),
+                      ),
+                    ],
                   ),
+                  child: child,
                 ),
               );
             },
@@ -361,15 +368,46 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         Positioned(
           left: menuLeft,
           top: menuTop,
-          // 從靠錨點的那個角長出來，不淡（ADR 0022）：選單是玻璃，淡入時
-          // 模糊到最後一幀才突然糊上去；從 0 長大，第一幀也不會整塊冒出來。
-          child: ScaleTransition(
-            scale: curved,
-            alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
+          // 從靠錨點的那個角展開，不淡（ADR 0022）：選單是玻璃，淡入時模糊
+          // 到最後一幀才突然糊上去。選單一開始就是最終大小，只有圓角的
+          // 裁切框由小長大，字不縮放，不必每一幀重建字的貼圖。陰影沿著
+          // 同一個外框畫、跟著展開的進度長出，展開完就是玻璃的陰影。
+          child: AnimatedBuilder(
+            animation: curved,
+            builder: (context, child) {
+              final progress = curved.value.clamp(0.0, 1.0);
+              final clipper = _MenuRevealClipper(
+                progress: progress,
+                alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
+                radius: AppRadius.cardXl.topLeft,
+              );
+              return CustomPaint(
+                painter: _MenuRevealShadow(
+                  clipper: clipper,
+                  shadows: GlassSurface.shadows(
+                    chrome,
+                    dark: Theme.of(context).brightness == Brightness.dark,
+                    shown: progress,
+                  ),
+                ),
+                child: ClipRRect(clipper: clipper, child: child),
+              );
+            },
             child: menu,
           ),
         ),
       ],
+    );
+  }
+
+  static Rect _snapToPixels(Rect rect, double devicePixelRatio) {
+    double snap(double v) =>
+        (v * devicePixelRatio).roundToDouble() / devicePixelRatio;
+    return Rect.fromLTWH(
+      snap(rect.left),
+      snap(rect.top),
+      rect.width,
+      rect.height,
     );
   }
 
@@ -508,4 +546,62 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     }
     return widgets;
   }
+}
+
+/// 選單展開時的裁切框：貼著 [alignment] 那個角，寬從四成、高從 0 長到
+/// 整個選單，[progress] 為 1 時就是選單本身的圓角外框。
+class _MenuRevealClipper extends CustomClipper<RRect> {
+  const _MenuRevealClipper({
+    required this.progress,
+    required this.alignment,
+    required this.radius,
+  });
+
+  final double progress;
+  final Alignment alignment;
+  final Radius radius;
+
+  @override
+  RRect getClip(Size size) {
+    final width = size.width * (0.4 + 0.6 * progress);
+    final height = size.height * progress;
+    final rect = alignment.inscribe(Size(width, height), Offset.zero & size);
+    final r = math.min(radius.x, math.min(width, height) / 2);
+    return RRect.fromRectAndRadius(rect, Radius.circular(r));
+  }
+
+  /// 讀屏的範圍跟畫面上露出的一樣：還沒露出的列不能被巡覽到。
+  @override
+  Rect getApproximateClipRect(Size size) => getClip(size).outerRect;
+
+  @override
+  bool shouldReclip(_MenuRevealClipper old) =>
+      old.progress != progress ||
+      old.alignment != alignment ||
+      old.radius != radius;
+}
+
+/// 沿著 [clipper] 當下的外框畫玻璃的陰影（和 [BoxDecoration] 畫陰影的方式
+/// 一樣），畫在選單底下。
+class _MenuRevealShadow extends CustomPainter {
+  const _MenuRevealShadow({required this.clipper, required this.shadows});
+
+  final _MenuRevealClipper clipper;
+  final List<BoxShadow> shadows;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frame = clipper.getClip(size);
+    if (frame.height <= 0) return;
+    for (final shadow in shadows) {
+      canvas.drawRRect(
+        frame.shift(shadow.offset).inflate(shadow.spreadRadius),
+        shadow.toPaint(),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuRevealShadow old) =>
+      clipper.shouldReclip(old.clipper) || !listEquals(old.shadows, shadows);
 }
