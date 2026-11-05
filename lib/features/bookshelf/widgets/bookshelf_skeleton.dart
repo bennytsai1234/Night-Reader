@@ -5,6 +5,7 @@ import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dar
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
 /// 書架初次載入的骨架：依目前的網格或列表畫出同樣幾何的封面與書名佔位，
 /// 書到了之後換成真的書卡時版面不跳動。放在 [Skeleton] 底下才會呼吸。
@@ -86,8 +87,8 @@ class BookshelfSkeleton extends StatelessWidget {
             child: Align(
               alignment: Alignment.topLeft,
               child: index < titles.length
-                  ? _TextBars(
-                      text: context.zh(titles[index].name),
+                  ? SkeletonText(
+                      context.zh(titles[index].name),
                       style: BookshelfGridTile.titleStyle,
                       maxLines: 2,
                     )
@@ -168,15 +169,15 @@ class _ListCardSkeleton extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (title case final title?) ...[
-                    _TextBars(
-                      text: context.zh(title.name),
+                    SkeletonText(
+                      context.zh(title.name),
                       style: BookshelfListCard.titleStyle,
                       maxLines: 1,
                     ),
                     const SizedBox(height: 2),
                     // 沒有作者時和真的書卡一樣只留這一行的高度。
-                    _TextBars(
-                      text: context.zh(title.author).trim(),
+                    SkeletonText(
+                      context.zh(title.author).trim(),
                       style: BookshelfListCard.authorStyle,
                       maxLines: 1,
                     ),
@@ -215,62 +216,4 @@ class _ProgressLineSkeleton extends StatelessWidget {
       borderRadius: AppRadius.pillShape,
     ),
   );
-}
-
-/// 照真正文字的換行畫出每一行的長條，每條與那一行字一樣寬；行高與真正的
-/// 文字相同，所以換成文字時位置不動。空字串時只留一行的高度。
-class _TextBars extends StatelessWidget {
-  const _TextBars({
-    required this.text,
-    required this.style,
-    required this.maxLines,
-  });
-
-  final String text;
-  final TextStyle style;
-  final int maxLines;
-
-  @override
-  Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    final fontSize = textScaler.scale(style.fontSize ?? 14);
-    final lineExtent = fontSize * (style.height ?? 1.3);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          // 和 Text 一樣疊在預設字型上（字族、字距），量出來才一樣寬。
-          text: TextSpan(
-            text: text,
-            style: DefaultTextStyle.of(context).style.merge(style),
-          ),
-          textDirection: Directionality.of(context),
-          textScaler: textScaler,
-          maxLines: maxLines,
-          ellipsis: '…',
-        )..layout(maxWidth: constraints.maxWidth);
-        final widths = [
-          for (final line in painter.computeLineMetrics()) line.width,
-        ];
-        painter.dispose();
-        if (widths.isEmpty || text.isEmpty) return SizedBox(height: lineExtent);
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final width in widths)
-              SizedBox(
-                height: lineExtent,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SkeletonBox(
-                    width: width,
-                    height: fontSize * Skeleton.barHeightFactor,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
 }
