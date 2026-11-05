@@ -5,6 +5,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/features/reader_v2/screen/dependencies/reader_v2_dependencies.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_latest_only_scheduler.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
@@ -21,6 +22,9 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_progress_contr
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
+
+/// 排版設定送出的一筆：送出時用的 Runtime 與版面。
+typedef _PresentationJob = ({ReaderV2Runtime runtime, ReaderV2LayoutSpec spec});
 
 class ReaderV2ControllerHost {
   ReaderV2ControllerHost({
@@ -108,16 +112,31 @@ class ReaderV2ControllerHost {
 
   Size? _lastViewportSize;
   int _appliedContentSettingsGeneration = 0;
-  int? _contentSettingsInFlightGeneration;
   ({int settingsGeneration, int chapterIndex, int contentGeneration})?
   _lastFailedContentSettingsAttempt;
-  bool _contentSettingsCallbackQueued = false;
-  ReaderV2LayoutSpec? _pendingPresentationSpec;
-  ReaderV2LayoutSpec? _presentationInFlightSpec;
   ({int presentationSignature, int chapterIndex, int contentGeneration})?
   _lastFailedPresentationAttempt;
-  bool _presentationCallbackQueued = false;
-  int _presentationRevision = 0;
+
+  /// 內容設定（繁簡、替換規則）送出時，用的 Runtime。
+  late final LatestOnlyScheduler<ReaderV2Runtime> _contentSettings =
+      LatestOnlyScheduler<ReaderV2Runtime>(
+        isMounted: _isMounted,
+        gate: _contentSettingsWanted,
+        send: _applyContentSettings,
+        onSettled: (runtime, {required completed}) {
+          if (completed) _reconcileContentSettings(runtime);
+        },
+      );
+
+  /// 排版設定等一幀沒再變才送（旋轉與 inset 動畫每幀都會變，見
+  /// [LatestOnlyScheduler.quietFrames]）。
+  late final LatestOnlyScheduler<_PresentationJob> _presentation =
+      LatestOnlyScheduler<_PresentationJob>(
+        isMounted: _isMounted,
+        quietFrames: true,
+        send: _applyPresentation,
+      );
+
   bool _opening = false;
   bool _ttsWasPlaying = false;
 
@@ -239,9 +258,9 @@ class ReaderV2ControllerHost {
     final spec = specFromStyle(size, style);
     final committedSignature = runtime.state.layoutSpec.presentationSignature;
     if (committedSignature == spec.presentationSignature) {
-      if (_pendingPresentationSpec?.presentationSignature ==
+      if (_presentation.requested?.spec.presentationSignature ==
           spec.presentationSignature) {
-        _pendingPresentationSpec = null;
+        _presentation.cancelRequest();
       }
       if (_lastFailedPresentationAttempt?.presentationSignature ==
           spec.presentationSignature) {
@@ -250,16 +269,14 @@ class ReaderV2ControllerHost {
     } else {
       final attempt = _presentationAttempt(runtime, spec);
       final alreadyPending =
-          _pendingPresentationSpec?.presentationSignature ==
+          _presentation.requested?.spec.presentationSignature ==
           spec.presentationSignature;
       final alreadyInFlight =
-          _presentationInFlightSpec?.presentationSignature ==
+          _presentation.inFlight?.spec.presentationSignature ==
           spec.presentationSignature;
       final failedForSameWorld = _lastFailedPresentationAttempt == attempt;
       if (!alreadyPending && !alreadyInFlight && !failedForSameWorld) {
-        _pendingPresentationSpec = spec;
-        _presentationRevision += 1;
-        _queuePresentationDispatch(runtime);
+        _presentation.request((runtime: runtime, spec: spec));
       }
     }
     _reconcileContentSettings(runtime);
@@ -274,65 +291,34 @@ class ReaderV2ControllerHost {
       }
       return;
     }
-    if (_contentSettingsInFlightGeneration != null) return;
+    if (_contentSettings.inFlight != null) return;
 
     final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
     if (_lastFailedContentSettingsAttempt == attempt) return;
-    _queueContentSettingsDispatch(runtime);
+    _contentSettings.request(runtime);
   }
 
-  void _queueContentSettingsDispatch(ReaderV2Runtime runtime) {
-    if (_contentSettingsCallbackQueued ||
-        _contentSettingsInFlightGeneration != null) {
-      return;
-    }
-    _contentSettingsCallbackQueued = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _contentSettingsCallbackQueued = false;
-      if (!_isMounted()) return;
-
-      final desiredGeneration = settings.contentSettingsGeneration;
-      if (_appliedContentSettingsGeneration == desiredGeneration) return;
-      final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
-      if (_lastFailedContentSettingsAttempt == attempt) return;
-
-      _contentSettingsInFlightGeneration = desiredGeneration;
-      unawaited(
-        _applyContentSettings(
-          runtime,
-          desiredGeneration: desiredGeneration,
-          attempt: attempt,
-        ),
-      );
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
+  /// 送出當下還要不要送內容設定：還沒生效，且這個 Reader 世界沒有失敗過。
+  bool _contentSettingsWanted(ReaderV2Runtime runtime) {
+    final desiredGeneration = settings.contentSettingsGeneration;
+    if (_appliedContentSettingsGeneration == desiredGeneration) return false;
+    final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
+    return _lastFailedContentSettingsAttempt != attempt;
   }
 
-  Future<void> _applyContentSettings(
-    ReaderV2Runtime runtime, {
-    required int desiredGeneration,
-    required ({int settingsGeneration, int chapterIndex, int contentGeneration})
-    attempt,
-  }) async {
-    try {
-      final applied = await runtime.reloadContentPreservingLocation();
-      if (applied && settings.contentSettingsGeneration == desiredGeneration) {
-        _appliedContentSettingsGeneration = desiredGeneration;
-        if (_lastFailedContentSettingsAttempt?.settingsGeneration ==
-            desiredGeneration) {
-          _lastFailedContentSettingsAttempt = null;
-        }
-      } else if (!applied) {
-        _lastFailedContentSettingsAttempt = attempt;
+  Future<void> _applyContentSettings(ReaderV2Runtime runtime) async {
+    final desiredGeneration = settings.contentSettingsGeneration;
+    final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
+    final applied = await runtime.reloadContentPreservingLocation();
+    if (applied && settings.contentSettingsGeneration == desiredGeneration) {
+      _appliedContentSettingsGeneration = desiredGeneration;
+      if (_lastFailedContentSettingsAttempt?.settingsGeneration ==
+          desiredGeneration) {
+        _lastFailedContentSettingsAttempt = null;
       }
-    } finally {
-      if (_contentSettingsInFlightGeneration == desiredGeneration) {
-        _contentSettingsInFlightGeneration = null;
-      }
+    } else if (!applied) {
+      _lastFailedContentSettingsAttempt = attempt;
     }
-
-    if (!_isMounted()) return;
-    _reconcileContentSettings(runtime);
   }
 
   ({int settingsGeneration, int chapterIndex, int contentGeneration})
@@ -345,76 +331,27 @@ class ReaderV2ControllerHost {
     );
   }
 
-  /// Wait for one quiet frame before dispatching the latest presentation.
+  /// 送出排版設定；送完（含丟例外）都記下成敗，失敗的世界之後不再重送。
   ///
-  /// Rotation and inset animations can produce a new presentation signature
-  /// every frame. Keeping the request pending until a frame arrives without a
-  /// new signature coalesces that stream while still guaranteeing that the
-  /// final size is dispatched. The extra frame is scheduler-based rather than a
-  /// fixed wall-clock debounce, so it does not depend on device speed.
-  void _queuePresentationDispatch(ReaderV2Runtime runtime) {
-    if (_presentationCallbackQueued || _presentationInFlightSpec != null) {
-      return;
+  /// 排程在送出前會等一幀沒有新的版面才呼叫這裡（見 [_presentation]），
+  /// 所以旋轉途中的中間版面不會各送一次。
+  Future<void> _applyPresentation(_PresentationJob job) async {
+    final attempt = _presentationAttempt(job.runtime, job.spec);
+    try {
+      await job.runtime.applyPresentation(spec: job.spec);
+    } finally {
+      final committed =
+          job.runtime.state.layoutSpec.presentationSignature ==
+          job.spec.presentationSignature;
+      if (committed) {
+        if (_lastFailedPresentationAttempt?.presentationSignature ==
+            job.spec.presentationSignature) {
+          _lastFailedPresentationAttempt = null;
+        }
+      } else {
+        _lastFailedPresentationAttempt = attempt;
+      }
     }
-    _presentationCallbackQueued = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_isMounted()) {
-        _presentationCallbackQueued = false;
-        _pendingPresentationSpec = null;
-        return;
-      }
-      _waitForQuietPresentationFrame(runtime, _presentationRevision);
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
-  void _waitForQuietPresentationFrame(
-    ReaderV2Runtime runtime,
-    int observedRevision,
-  ) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_isMounted()) {
-        _presentationCallbackQueued = false;
-        _pendingPresentationSpec = null;
-        return;
-      }
-      if (_presentationRevision != observedRevision) {
-        _waitForQuietPresentationFrame(runtime, _presentationRevision);
-        return;
-      }
-
-      _presentationCallbackQueued = false;
-      final pendingSpec = _pendingPresentationSpec;
-      _pendingPresentationSpec = null;
-      if (pendingSpec == null) return;
-
-      final attempt = _presentationAttempt(runtime, pendingSpec);
-      _presentationInFlightSpec = pendingSpec;
-      unawaited(
-        runtime.applyPresentation(spec: pendingSpec).whenComplete(() {
-          _presentationInFlightSpec = null;
-          final committed =
-              runtime.state.layoutSpec.presentationSignature ==
-              pendingSpec.presentationSignature;
-          if (committed) {
-            if (_lastFailedPresentationAttempt?.presentationSignature ==
-                pendingSpec.presentationSignature) {
-              _lastFailedPresentationAttempt = null;
-            }
-          } else {
-            _lastFailedPresentationAttempt = attempt;
-          }
-          if (!_isMounted()) {
-            _pendingPresentationSpec = null;
-            return;
-          }
-          if (_pendingPresentationSpec != null) {
-            _queuePresentationDispatch(runtime);
-          }
-        }),
-      );
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   ({int presentationSignature, int chapterIndex, int contentGeneration})
