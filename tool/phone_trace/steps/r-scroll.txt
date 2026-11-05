@@ -1,0 +1,6 @@
+input swipe 630 2200 630 700 90
+sleep 1.5
+input swipe 630 2200 630 700 90
+sleep 1.5
+input swipe 630 700 630 2200 90
+sleep 1.5
