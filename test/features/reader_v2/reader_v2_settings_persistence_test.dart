@@ -32,15 +32,12 @@ class _FlakyPrefsRepository extends ReaderV2PrefsRepository {
   bool failWrites = false;
 
   @override
-  Future<void> saveFontSize(double value) async {
-    if (failWrites) throw StateError('disk full');
-    return super.saveFontSize(value);
-  }
-
-  @override
-  Future<void> savePaddingHorizontal(double value) async {
-    if (failWrites) throw StateError('disk full');
-    return super.savePaddingHorizontal(value);
+  Future<void> save<T>(ReaderV2Setting<T> setting, T value) async {
+    final failing =
+        setting.key == PreferKey.readerFontSize ||
+        setting.key == PreferKey.readerPaddingHorizontal;
+    if (failWrites && failing) throw StateError('disk full');
+    return super.save(setting, value);
   }
 }
 
