@@ -42,6 +42,7 @@ void main() {
     Widget? brightnessControl,
     ReaderV2TtsSleepTimer? sleepTimer,
     double paddingHorizontal = 12,
+    double menuInset = AppGrouped.margin,
     VoidCallback? onDrawerClosed,
     VoidCallback? onMenuHidden,
   }) async {
@@ -112,6 +113,7 @@ void main() {
               right: ReaderV2InfoItem.none,
             ),
             paddingHorizontal: paddingHorizontal,
+            menuInset: menuInset,
             paddingTop: 0,
             paddingBottom: 0,
             footerOffset: 4,
@@ -487,6 +489,32 @@ void main() {
     expect(bottom.top - bar.bottom, AppSpacing.xl);
     expect(bar.left, AppGrouped.margin);
   });
+
+  for (final (inset, left) in [(8.0, 8.0), (300.0, AppGrouped.margin)]) {
+    testWidgets('with the menus $inset from the edge the brightness bar sits '
+        '$left from the left and starts fully off screen', (tester) async {
+      const barKey = Key('brightness');
+      final controls = ValueNotifier(false);
+      addTearDown(controls.dispose);
+      await pumpShell(
+        tester,
+        controls: controls,
+        menuInset: inset,
+        brightnessControl: const SizedBox.expand(key: barKey),
+      );
+
+      controls.value = true;
+      await tester.pump();
+      // 剛出發的那一幀（晚上下選單一點出發）：整條還在畫面左邊外面。
+      await tester.pump(
+        AppMotion.readerMenuStagger + const Duration(milliseconds: 2),
+      );
+      expect(tester.getRect(find.byKey(barKey)).right, lessThanOrEqualTo(0));
+
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byKey(barKey)).left, left);
+    });
+  }
 
   testWidgets('system back is handed to the page, not the exit flow', (
     tester,

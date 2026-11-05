@@ -34,6 +34,26 @@ void main() {
     },
   );
 
+  test('on a phone the menus reach 4 past the text so line ends stay covered, '
+      'between 4 and 16 from the screen edge', () async {
+    final settings = await settingsWith(32);
+    addTearDown(settings.dispose);
+
+    // 預設留白（12 起）：選單在正文左右邊再往外 4。
+    final text = settings.paddingHorizontalFor(412);
+    expect(text, lessThan(20));
+    expect(settings.menuInsetFor(412), text - 4);
+
+    // 留白很寬：選單照原本離邊 16。
+    settings.paddingHorizontal = 40;
+    expect(settings.menuInsetFor(412), 16);
+
+    // 正文貼著畫面邊：選單也留 4。
+    settings.paddingHorizontal = 0;
+    expect(settings.paddingHorizontalFor(412), lessThan(8));
+    expect(settings.menuInsetFor(412), 4);
+  });
+
   test('a narrowed text column puts the menus on its edges', () async {
     final settings = await settingsWith(32);
     addTearDown(settings.dispose);
@@ -82,8 +102,12 @@ void main() {
                 onPressed: () => ReaderV2MenuSheet.show<void>(
                   context,
                   settings: settings,
-                  builder: (_) =>
-                      const SizedBox(key: Key('panel'), height: 200),
+                  // 裡面放一層接得到點擊的底，點面板時點到的是面板本身。
+                  builder: (_) => const SizedBox(
+                    key: Key('panel'),
+                    height: 200,
+                    child: ColoredBox(color: Colors.transparent),
+                  ),
                 ),
                 child: const Text('open'),
               ),
