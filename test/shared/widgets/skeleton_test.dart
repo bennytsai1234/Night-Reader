@@ -64,6 +64,31 @@ void main() {
     },
   );
 
+  testWidgets('a hidden skeleton does not keep a shared breath going', (
+    tester,
+  ) async {
+    final breath = SharedSkeletonBreath(vsync: tester);
+    addTearDown(breath.dispose);
+    Widget app({required bool shown}) => MaterialApp(
+      home: SharedSkeletonBreathScope(
+        breath: breath,
+        child: TickerMode(
+          enabled: shown,
+          child: const Skeleton(
+            child: SizedBox(width: 100, height: 20, child: SkeletonBox()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(app(shown: false));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(breath.isBreathing, isFalse, reason: '藏起來的骨架不讓呼吸走');
+
+    await tester.pumpWidget(app(shown: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(breath.isBreathing, isTrue, reason: '出現了才呼吸');
+  });
+
   testWidgets(
     'every strength is visible in every style and brightness, each a step '
     'deeper than the last',

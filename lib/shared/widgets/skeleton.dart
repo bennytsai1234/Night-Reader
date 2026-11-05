@@ -176,6 +176,10 @@ class _SkeletonState extends State<Skeleton>
       ..allowed = _breathing
       ..visible = TickerMode.valuesOf(context).enabled;
     final entrance = LaunchEntrance.maybeOf(context);
+    assert(
+      entrance == null || SharedSkeletonBreathScope.maybeOf(context) == null,
+      '共用的呼吸不和開 App 的進場一起用（見 SharedSkeletonBreathScope）',
+    );
     final rest = entrance?.rest;
     if (!identical(rest, _rest)) {
       _rest?._clocks.remove(_clock);
@@ -318,6 +322,9 @@ class SharedSkeletonBreath {
 }
 
 /// 讓底下的 [Skeleton] 照 [breath] 呼吸，不自己計時。
+///
+/// 不和開 App 的進場（[LaunchEntrance]）疊在一起用：進場的停在最深、收住
+/// 與接著呼吸都照骨架自己的計時器算，共用的呼吸只有一輪裡的位置，接不上。
 class SharedSkeletonBreathScope extends InheritedWidget {
   const SharedSkeletonBreathScope({
     super.key,
@@ -457,7 +464,13 @@ class _BreathClock extends ChangeNotifier {
   /// 最深，等 [resume]。
   set visible(bool value) {
     if (!value && _restFrom != null && !_still) _settle();
+    if (_visible == value) return;
+    _visible = value;
+    _syncShared();
+    if (value && _shared != null) _onShared();
   }
+
+  bool _visible = true;
 
   void _start() {
     if (!_allowed ||
@@ -472,7 +485,8 @@ class _BreathClock extends ChangeNotifier {
   }
 
   /// 照這口共用的呼吸走（[SharedSkeletonBreathScope]），自己的計時器不走；
-  /// 可以呼吸時登記成它的使用者，它才會呼吸。
+  /// 可以呼吸、畫面上也看得到時登記成它的使用者，它才會呼吸。被藏起來時
+  /// 不登記、也不跟著重畫，再出現時接上當下的相位。
   SharedSkeletonBreath? _shared;
   bool _usingShared = false;
 
@@ -493,10 +507,11 @@ class _BreathClock extends ChangeNotifier {
   void _syncShared() {
     final shared = _shared;
     if (shared == null) return;
-    if (_allowed && !_usingShared) {
+    final use = _allowed && _visible;
+    if (use && !_usingShared) {
       _usingShared = true;
       shared.acquire();
-    } else if (!_allowed && _usingShared) {
+    } else if (!use && _usingShared) {
       _usingShared = false;
       shared.release();
     }
@@ -517,7 +532,7 @@ class _BreathClock extends ChangeNotifier {
     // 新的一幀：骨架可能換了位置（換頁平移、捲動），同 [_tick]。
     _anchorStale = true;
     _cycles = _shared!.phase.value;
-    notifyListeners();
+    if (_visible) notifyListeners();
   }
 
   /// 呼吸一輪多長：開 App 進場中的骨架照進場的節奏
