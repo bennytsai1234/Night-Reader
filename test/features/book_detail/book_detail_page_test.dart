@@ -20,6 +20,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
 /// 書籍資料要等 [gate] 打開才回來，用來停在載入中。
 class _FakeBookDao extends Fake implements BookDao {
@@ -158,13 +159,15 @@ void main() {
       return found;
     }
 
+    /// 骨架裡照 [text] 畫的長條（[SkeletonText]），或內容裡的那段字。
     Finder textIn(String text, {required bool skeleton}) =>
-        find.byElementPredicate(
-          (element) =>
-              element.widget is Text &&
-              (element.widget as Text).data == text &&
-              inSkeleton(element) == skeleton,
-        );
+        find.byElementPredicate((element) {
+          final widget = element.widget;
+          final matches = skeleton
+              ? widget is SkeletonText && widget.text == text
+              : widget is Text && widget.data == text;
+          return matches && inSkeleton(element) == skeleton;
+        });
 
     /// 頁首以下那一段的骨架層（頁首的動作列另有自己的骨架）。
     SkeletonRevealLayer skeletonLayer(WidgetTester tester) =>
