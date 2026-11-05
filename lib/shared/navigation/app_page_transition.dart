@@ -1338,21 +1338,28 @@ class _RenderPixelTranslation extends RenderProxyBox {
   set translation(Offset value) {
     if (value == _translation) return;
     _translation = value;
-    markNeedsPaint();
+    _moved();
   }
 
   Offset _fraction;
   set fraction(Offset value) {
     if (value == _fraction) return;
     _fraction = value;
-    markNeedsPaint();
+    _moved();
   }
 
   double _devicePixelRatio;
   set devicePixelRatio(double value) {
     if (value == _devicePixelRatio) return;
     _devicePixelRatio = value;
+    _moved();
+  }
+
+  /// 位移變了：重畫，讀屏的框也跟著移（同 [RenderTransform]、
+  /// [RenderFractionalTranslation]）。
+  void _moved() {
     markNeedsPaint();
+    markNeedsSemanticsUpdate();
   }
 
   Offset get _shift {

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -58,6 +60,64 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('sliding pages move by whole physical pixels and the screen '
+      'reader boxes follow', (tester) async {
+    // 不整除的像素密度：一個實體像素不是整數個邏輯像素。
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.reset);
+    final semantics = tester.ensureSemantics();
+    await pumpApp(tester, AppPageTransition.slide);
+    unawaited(
+      Navigator.push(
+        home,
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    Rect globalSemanticsRect(Finder finder) {
+      final node = tester.getSemantics(finder);
+      var rect = node.rect;
+      for (SemanticsNode? n = node; n != null; n = n.parent) {
+        if (n.transform case final transform?) {
+          rect = MatrixUtils.transformRect(transform, rect);
+        }
+      }
+      // 最外層把邏輯像素放大成實體像素。
+      return Rect.fromLTRB(
+        rect.left / 2.625,
+        rect.top / 2.625,
+        rect.right / 2.625,
+        rect.bottom / 2.625,
+      );
+    }
+
+    bool onPixel(double logical) {
+      final physical = logical * 2.625;
+      return (physical - physical.roundToDouble()).abs() < 0.01;
+    }
+
+    final moving = <double>[];
+    for (var frame = 0; frame < 4; frame++) {
+      await tester.pump(const Duration(milliseconds: 40));
+      final page = tester.getRect(find.text('新頁'));
+      moving.add(page.left);
+      // 讀屏的框和畫面上的字在同一個位置。
+      final box = globalSemanticsRect(find.text('新頁'));
+      expect(box.left, moreOrLessEquals(page.left, epsilon: 0.01));
+      expect(box.top, moreOrLessEquals(page.top, epsilon: 0.01));
+    }
+    await tester.pumpAndSettle();
+    final rest = tester.getTopLeft(find.text('新頁')).dx;
+    for (final left in moving) {
+      expect(left, isNot(rest));
+      expect(onPixel(left - rest), isTrue, reason: '新頁位移 ${left - rest}');
+    }
+    semantics.dispose();
+  });
 
   /// 新頁此刻的樣子：外層透明度（百分比）、裁切範圍與文字位置，攤成一串
   /// 長度固定的數字。
