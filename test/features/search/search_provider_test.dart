@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -9,6 +11,7 @@ import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,7 +25,6 @@ void main() {
     final getIt = GetIt.instance;
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    SearchProvider.forgetHistoryForTest();
     getIt
       ..registerSingleton<SharedPreferences>(
         await SharedPreferences.getInstance(),
@@ -36,6 +38,29 @@ void main() {
   tearDown(() async {
     await db.close();
     await GetIt.instance.reset();
+  });
+
+  test('deleting a keyword keeps what the next page opens with in step with '
+      'the database', () async {
+    final dao = GetIt.instance<SearchKeywordDao>();
+    // 51 筆：一次列最近 50 筆，刪掉一筆後第 51 筆補上來。
+    for (var i = 0; i < 51; i++) {
+      await dao.upsert(SearchKeyword(word: '詞$i', usage: 1, lastUseTime: i));
+    }
+    final provider = SearchProvider(entrance: Future<void>.value());
+    addTearDown(provider.dispose);
+    await provider.ready;
+    expect(provider.history, hasLength(50));
+
+    await provider.deleteHistoryKeyword(provider.historyKeywords.first);
+    expect(provider.history, hasLength(50));
+    expect(provider.history, contains('詞0'));
+
+    // 下一次推入搜尋頁的第一幀就是資料庫會給的那 50 筆。
+    final next = SearchProvider(entrance: Completer<void>().future);
+    addTearDown(next.dispose);
+    expect(next.historyLoaded, isTrue);
+    expect(next.history, provider.history);
   });
 
   test('a submitted search is in progress before the engine starts', () async {

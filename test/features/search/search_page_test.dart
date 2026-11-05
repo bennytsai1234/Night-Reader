@@ -49,7 +49,6 @@ void main() {
     final getIt = GetIt.instance;
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    SearchProvider.forgetHistoryForTest();
     getIt
       ..registerSingleton<SharedPreferences>(
         await SharedPreferences.getInstance(),

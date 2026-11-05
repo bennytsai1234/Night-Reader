@@ -180,7 +180,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _searchModel = SearchModel(callback: this, loader: searchLoader);
     _searchScope = initialScope ?? SearchScope();
     _readPreferences(getIt<SharedPreferences>());
-    if (_lastHistory case final history?) {
+    if (_keywordDao.latestByTime case final history?) {
       _history = List.of(history);
       _historyLoaded = true;
     }
@@ -563,30 +563,24 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // 搜尋歷史管理
   // ═══════════════════════════════════════════
 
-  /// 上次讀到或改過的搜尋紀錄。只有搜尋頁會改紀錄（也不同步），下一次推入
-  /// 搜尋頁的第一幀就照它畫；開 App 進場播完先讀一次（[prefetchHistory]）。
-  /// 原本推入時畫「開始搜尋你想看的書吧」，進場播完才讀、一幀換成紀錄：
-  /// 2026-11-05 手機上那一幀主執行緒 25.7ms，畫面上整區突然換掉。
-  static List<SearchKeyword>? _lastHistory;
-
-  /// 開 App 進場播完時讀一次搜尋紀錄。
+  /// 開 App 進場播完時讀一次搜尋紀錄：資料層記著最近一次讀到的
+  /// （[SearchKeywordDao.latestByTime]），搜尋頁推入的第一幀就照它畫。原本推入
+  /// 時畫「開始搜尋你想看的書吧」，進場播完才讀、一幀換成紀錄：2026-11-05
+  /// 手機上那一幀主執行緒 25.7ms，畫面上整區突然換掉。
   static Future<void> prefetchHistory() async {
     try {
-      _lastHistory ??= await getIt<SearchKeywordDao>().getByTime();
+      final dao = getIt<SearchKeywordDao>();
+      if (dao.latestByTime == null) await dao.getByTime();
     } catch (error, stackTrace) {
       AppLog.e('預先讀搜尋紀錄失敗: $error', error: error, stackTrace: stackTrace);
     }
   }
-
-  @visibleForTesting
-  static void forgetHistoryForTest() => _lastHistory = null;
 
   /// 知道有沒有搜尋紀錄了；還不知道時不畫「沒有紀錄」的空頁。
   bool get historyLoaded => _historyLoaded;
   bool _historyLoaded = false;
 
   void _setHistory(List<SearchKeyword> history) {
-    _lastHistory = List.of(history);
     final unchanged =
         _historyLoaded &&
         history.length == _history.length &&
@@ -609,12 +603,11 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _setHistory([]);
   }
 
+  /// 刪掉一筆後從資料庫重讀：紀錄最多列 50 筆，第 51 筆會補上來，畫面和下次
+  /// 推入時記著的都是資料庫實際會給的那份。
   Future<void> deleteHistoryKeyword(SearchKeyword keyword) async {
     await _keywordDao.deleteByWord(keyword.word);
-    _setHistory([
-      for (final e in _history)
-        if (e.word != keyword.word) e,
-    ]);
+    await loadHistory();
   }
 
   // ═══════════════════════════════════════════
