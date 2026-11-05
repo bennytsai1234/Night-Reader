@@ -25,6 +25,7 @@ import 'measure/measurement_store.dart';
 import 'overlay/bookmark_marks.dart';
 import 'overlay/highlight_marks.dart';
 import 'overlay/loading_veil.dart';
+import 'overlay/paper_owners.dart';
 import 'overlay/page_lines.dart';
 import 'overlay/reader_mark_layers.dart';
 import 'overlay/reader_skeleton_page.dart';
@@ -204,21 +205,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   ReaderV2Location? _restoredLocation;
   bool _initialRestoreCompleted = false;
 
-  /// 正在等正文的跳章：一開始就蓋紙、攔下觸控，排版開始後交給
-  /// [_restoreCore]（見 [_syncJumpVeil]）。
-  ReaderV2OperationToken? _jumpVeil;
+  /// 紙現在歸誰：等正文的跳章（[_syncJumpVeil]）、進行中的還原
+  /// （[_restoreCore]）、重新還原最後的穩定位置（[_syncStableWorld]）；都沒有
+  /// 時由 [_releasePaper] 掀紙或重新還原。
+  final PaperOwners _paper = PaperOwners();
 
   /// 紙開始蓋住正文那一刻的捲動位置；紙下的正文停在這裡，蓋紙的操作
   /// 取消或失敗、掀開紙回到的就是這個位置（見 [_veilHoldsText]）。
   double? _veilHoldOffset;
-
-  /// 正在進行的還原（[_restoreCore]）還有效時，紙歸它管：結束時由它自己
-  /// 決定掀紙或交給下一個（見 [_releasePaper]）。
-  bool Function()? _restoreOwner;
-
-  /// 沒有操作負責、正文卻不在畫面上或已經過時時，重新還原最後的穩定位置
-  /// （見 [_syncStableWorld]）；還原進行中為 true。
-  bool _stableRestoreRunning = false;
   late final LoadingVeilController _veil = LoadingVeilController(
     vsync: this,
     onHidden: () {
@@ -395,7 +389,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 正文是否已排好可以顯示；切換時蓋上或掀開 [_veil]。
   void _setRestoreCompleted(bool completed) {
     // 排版流程接手這張紙，等正文的跳章不再另外管它。
-    _jumpVeil = null;
+    _paper.restoreTookOverJump();
     if (_initialRestoreCompleted == completed) return;
     _initialRestoreCompleted = completed;
     if (completed) {
@@ -513,7 +507,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
-    _restoreOwner = isCurrent;
+    _paper.beginRestore(isCurrent);
     var restored = false;
     try {
       restored = await _runRestore(
@@ -523,12 +517,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       );
       return restored;
     } finally {
-      if (identical(_restoreOwner, isCurrent)) _restoreOwner = null;
+      _paper.endRestore(isCurrent);
       if (!restored) _releasePaper();
     }
   }
-
-  bool get _restoreInFlight => _restoreOwner?.call() ?? false;
 
   Future<bool> _runRestore(
     ReaderV2Location location, {
@@ -947,10 +939,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final jump = operation?.kind == ReaderV2OperationKind.jump
         ? operation
         : null;
-    if (identical(jump, _jumpVeil)) return;
-    _jumpVeil = null;
-    if (jump == null || !_initialRestoreCompleted) return;
-    _jumpVeil = jump;
+    if (!_paper.claimForJump(jump, textShown: _initialRestoreCompleted)) {
+      return;
+    }
     _clearSelection();
     _coverText();
   }
@@ -992,9 +983,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 或過時（新的排版世代已經發布），就重新還原最後的穩定位置再掀紙。
   void _releasePaper() {
     if (!mounted ||
-        widget.runtime.stateMachine.currentOperation != null ||
-        _restoreInFlight ||
-        _stableRestoreRunning) {
+        !_paper.isFree(
+          hasOperation: widget.runtime.stateMachine.currentOperation != null,
+        )) {
       return;
     }
     if (!_initialRestoreCompleted || _textOutdated) {
@@ -1012,14 +1003,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _syncStableWorld() {
     final runtime = widget.runtime;
     if (!mounted ||
-        _stableRestoreRunning ||
-        _restoreInFlight ||
-        runtime.stateMachine.currentOperation != null ||
+        !_paper.isFree(
+          hasOperation: runtime.stateMachine.currentOperation != null,
+        ) ||
         !runtime.state.hasStableWorld ||
         (_initialRestoreCompleted && !_textOutdated)) {
       return;
     }
-    _stableRestoreRunning = true;
+    if (!_paper.beginStableWorld()) return;
     final generations = (
       runtime.state.layoutGeneration,
       runtime.state.contentGeneration,
@@ -1034,7 +1025,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             restored = await _restoreToLocation(runtime.state.visibleLocation);
           }
         } finally {
-          _stableRestoreRunning = false;
+          _paper.endStableWorld();
         }
         // 還原途中又換代（沒有操作時內容換代）而作廢：照新的世代再還原一次。
         // 取不到正文這類失敗不重試，免得一直重抓。
@@ -1280,7 +1271,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         !_sawUserScroll &&
         // 等跳章正文時紙下的正文歸那次跳章：翻頁、自動捲動與朗讀跟隨都
         // 不能移動它，跳章結束後再來。
-        _jumpVeil == null;
+        !_paper.holdsTextForJump;
   }
 
   Future<bool> _enqueueCommand(Future<bool> Function(bool Function()) command) {
@@ -1840,7 +1831,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final store = widget.skeletonPages;
     final bookUrl = widget.bookUrl;
     if (store == null || bookUrl == null) return;
-    if (!_initialRestoreCompleted || _jumpVeil != null) return;
+    if (!_initialRestoreCompleted || _paper.holdsTextForJump) return;
     final location = _captureVisibleLocation();
     final offset = _effectiveScrollOffset();
     if (location == null || offset == null) return;
