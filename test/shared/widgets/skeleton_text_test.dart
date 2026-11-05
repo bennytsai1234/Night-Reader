@@ -155,10 +155,15 @@ void main() {
     expect(controller.isAnimating, isTrue);
     expect(skeletonTextLines(painter).single.left, 5);
 
-    // 停下來之後量：測試字型的開引號沒有空白，長條回到字的左緣附近。
+    // 停下來之後量：測試字型的開引號沒有空白，長條回到字的左緣附近。量的
+    // 時候把字畫成圖、讀回像素，要真的事件迴圈跑完；CI 的機器慢，多給幾輪、
+    // 每輪多等一點，量到就停（原本 20 輪、每輪 20ms，CI 上偶爾不夠）。
     await tester.pumpAndSettle();
-    for (var i = 0; i < 20; i++) {
-      await step(const Duration(milliseconds: 200));
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
       if (skeletonTextLines(painter).single.left < 5) break;
     }
     expect(skeletonTextLines(painter).single.left, lessThan(5));
