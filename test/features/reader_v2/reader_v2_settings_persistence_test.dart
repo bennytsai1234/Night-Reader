@@ -32,15 +32,12 @@ class _FlakyPrefsRepository extends ReaderV2PrefsRepository {
   bool failWrites = false;
 
   @override
-  Future<void> saveFontSize(double value) async {
-    if (failWrites) throw StateError('disk full');
-    return super.saveFontSize(value);
-  }
-
-  @override
-  Future<void> savePaddingHorizontal(double value) async {
-    if (failWrites) throw StateError('disk full');
-    return super.savePaddingHorizontal(value);
+  Future<void> save<T>(ReaderV2Setting<T> setting, T value) async {
+    final failing =
+        setting.key == PreferKey.readerFontSize ||
+        setting.key == PreferKey.readerPaddingHorizontal;
+    if (failWrites && failing) throw StateError('disk full');
+    return super.save(setting, value);
   }
 }
 
@@ -58,6 +55,26 @@ void main() {
 
   setUp(() => usePrefs(<String, Object>{}));
   tearDown(GetIt.instance.reset);
+
+  test('saving stores the value as it was when saved', () async {
+    final actions = List<int>.filled(9, 0);
+    final pending = ReaderV2PrefsRepository().save(
+      ReaderV2Settings.clickActions,
+      actions,
+    );
+    // 等寫入的期間清單又被改：存的照舊是呼叫當下的。
+    actions[0] = 1;
+    await pending;
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(PreferKey.readerClickActions), '0,0,0,0,0,0,0,0,0');
+  });
+
+  test('a snapshot does not share the tap grid with the one it came from', () {
+    final first = ReaderV2PrefsSnapshot.defaults();
+    final second = first.withValue(ReaderV2Settings.fontSize, 24.0);
+    first.clickActions[0] = 1;
+    expect(second.clickActions[0], 0);
+  });
 
   group('loading', () {
     test('a new controller already has the saved settings', () async {
