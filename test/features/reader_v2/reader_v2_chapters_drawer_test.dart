@@ -3,9 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
+
+/// 目錄頂端分段（目錄｜書籤｜標註）選取塊的位置：0 是目錄。
+Animation<double> tabIndicator(WidgetTester tester) {
+  final painter =
+      tester
+              .widget<CustomPaint>(
+                find
+                    .descendant(
+                      of: find.byWidgetPredicate((w) => w is GlassSegmented),
+                      matching: find.byType(CustomPaint),
+                    )
+                    .first,
+              )
+              .painter
+          as dynamic;
+  return painter.position as Animation<double>;
+}
 
 void main() {
   testWidgets('paid chapters not bought yet show a lock, except the current '
@@ -266,5 +284,76 @@ void main() {
     expect(find.text('第1章'), findsNothing);
     expect(find.text('第3章'), findsOneWidget);
     expect(find.text('共 3 章'), findsOneWidget);
+  });
+
+  testWidgets('the panel stays built between openings: each opening starts '
+      'on the chapters tab at the chapter read by then; chapter changes while '
+      'closed are not followed', (tester) async {
+    final chapters = [
+      for (var i = 1; i <= 200; i++) BookChapter(url: '/c/$i', title: '第$i章'),
+    ];
+    final current = ValueNotifier(0);
+    final shown = ValueNotifier(true);
+    final bookmarks = ValueNotifier<List<Bookmark>>(const []);
+    addTearDown(current.dispose);
+    addTearDown(shown.dispose);
+    addTearDown(bookmarks.dispose);
+    var titleCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderV2ChaptersDrawer(
+            chapters: chapters,
+            currentChapter: current,
+            titleFor: (index) {
+              titleCalls++;
+              return chapters[index].title;
+            },
+            onChapterTap: (_) {},
+            bookmarks: bookmarks,
+            shown: shown,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('書籤'));
+    await tester.pumpAndSettle();
+    expect(find.text('沒有書籤'), findsOneWidget);
+
+    // 收起來之後讀到第 151 章：收著的面板不跟著重建。
+    shown.value = false;
+    await tester.pump();
+    titleCalls = 0;
+    current.value = 150;
+    await tester.pumpAndSettle();
+    expect(titleCalls, 0);
+
+    // 再打開：分段的選取塊直接停在目錄，不從書籤滑回來（和面板滑出疊在
+    // 一起）。
+    shown.value = true;
+    await tester.pump();
+    expect(tabIndicator(tester).value, 0);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tabIndicator(tester).value, 0);
+    shown.value = false;
+    await tester.pump();
+
+    // 再打開：回到目錄分頁，捲到第 151 章並打勾。
+    shown.value = true;
+    await tester.pumpAndSettle();
+    expect(find.text('共 200 章'), findsOneWidget);
+    expect(find.text('沒有書籤'), findsNothing);
+    final row = find.ancestor(
+      of: find.text('第151章'),
+      matching: find.byType(Row),
+    );
+    expect(
+      find.descendant(
+        of: row.first,
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsOneWidget,
+    );
   });
 }

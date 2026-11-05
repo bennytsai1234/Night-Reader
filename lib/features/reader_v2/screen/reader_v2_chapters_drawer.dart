@@ -36,7 +36,7 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
     this.onHighlightTap,
     this.onHighlightDelete,
     this.onHighlightExport,
-    this.onClosed,
+    this.shown,
     this.listenable,
   });
 
@@ -76,9 +76,11 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   /// 點了一章。收起目錄、蓋紙與載入都由呼叫端負責。
   final ValueChanged<int> onChapterTap;
 
-  /// 目錄收到底、從畫面上拿掉時呼叫。Scaffold 的抽屜收完才卸下內容；
-  /// [Scaffold.onDrawerChanged] 在收起動畫一開始就發，不能當成收完。
-  final VoidCallback? onClosed;
+  /// 面板在畫面上（`ReaderV2SidePanelController.shown`）。面板收著時一直掛著，
+  /// 每次變成 true 就重設成剛打開的樣子：從目錄分頁開始、照目前這章重新決定
+  /// 收起哪些卷並捲到這章，書籤與標註頁回到頂端；收著時不理會換章。沒給時
+  /// 當作一直在畫面上。
+  final ValueListenable<bool>? shown;
   final Listenable? listenable;
 
   @override
@@ -97,6 +99,15 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   /// 正在看哪個分頁；每次打開都從目錄開始。
   _DrawerTab _tab = _DrawerTab.chapters;
 
+  /// 剛打開、下一次建畫面時重設（[ReaderV2ChaptersDrawer.shown]）。等到建
+  /// 畫面時才做，用的是打開那一刻換上的最新目錄。
+  bool _resetPending = false;
+
+  /// 每次打開加一：書籤與標註清單照它重建，捲動位置與滑開的列回到原樣。
+  int _opening = 0;
+
+  bool get _isShown => widget.shown?.value ?? true;
+
   int get _currentChapterIndex => widget.currentChapter.value;
 
   /// 分卷與收起的卷；畫面上第幾列對到第幾章看 [_rows]。每次打開都照
@@ -111,6 +122,22 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     _resetVolumes();
     widget.listenable?.addListener(_handleChanged);
     widget.currentChapter.addListener(_handleCurrentChapterChanged);
+    widget.shown?.addListener(_handleShown);
+  }
+
+  void _handleShown() {
+    if (!mounted || !_isShown) return;
+    setState(() => _resetPending = true);
+  }
+
+  /// 剛打開：回到從目錄分頁開始的樣子，捲到目前這章。
+  void _resetForOpening() {
+    _resetPending = false;
+    _tab = _DrawerTab.chapters;
+    _opening++;
+    _resetVolumes();
+    _lastScrolledChapterIndex = -1;
+    _scheduleScrollToCurrentChapter();
   }
 
   void _resetVolumes() {
@@ -133,7 +160,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 
   void _handleCurrentChapterChanged() {
-    if (!mounted) return;
+    // 收著時不跟：下次打開時照當時的這章重設。
+    if (!mounted || !_isShown) return;
     setState(_revealCurrentChapter);
     _scheduleScrollToCurrentChapter();
   }
@@ -168,6 +196,10 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
       oldWidget.currentChapter.removeListener(_handleCurrentChapterChanged);
       widget.currentChapter.addListener(_handleCurrentChapterChanged);
     }
+    if (oldWidget.shown != widget.shown) {
+      oldWidget.shown?.removeListener(_handleShown);
+      widget.shown?.addListener(_handleShown);
+    }
     _scheduleScrollToCurrentChapter();
   }
 
@@ -175,8 +207,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   void dispose() {
     widget.listenable?.removeListener(_handleChanged);
     widget.currentChapter.removeListener(_handleCurrentChapterChanged);
+    widget.shown?.removeListener(_handleShown);
     _scrollController.dispose();
-    widget.onClosed?.call();
     super.dispose();
   }
 
@@ -237,7 +269,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 
   void _scrollToCurrentChapter() {
-    if (!mounted || !_scrollController.hasClients) return;
+    if (!mounted || !_isShown || !_scrollController.hasClients) return;
     final currentChapterIndex = _currentChapterIndex;
     if (currentChapterIndex == _lastScrolledChapterIndex) return;
     final row = _rows.indexOf(currentChapterIndex);
@@ -277,7 +309,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 
   void _scheduleScrollToCurrentChapter() {
-    if (!mounted) return;
+    if (!mounted || !_isShown) return;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scrollToCurrentChapter(),
     );
@@ -285,6 +317,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    if (_resetPending) _resetForOpening();
     // 目錄屬於閱讀選單區域，配色取選單配色。
     final theme = ReaderV2MenuStyle.of(context).toSheetTheme(Theme.of(context));
     // 此處的 context 仍在 App 主題下，衍生色直接取選單主題上的擴充。
@@ -324,9 +357,15 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                 children: [
                   _buildChapterList(context),
                   if (widget.bookmarks case final bookmarks?)
-                    _buildBookmarkList(context, bookmarks),
+                    KeyedSubtree(
+                      key: ValueKey(('bookmarks', _opening)),
+                      child: _buildBookmarkList(context, bookmarks),
+                    ),
                   if (widget.highlights case final highlights?)
-                    _buildHighlightList(context, highlights),
+                    KeyedSubtree(
+                      key: ValueKey(('highlights', _opening)),
+                      child: _buildHighlightList(context, highlights),
+                    ),
                 ],
               ),
             ),
@@ -369,6 +408,9 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     return Row(
       children: [
         GlassSegmented<_DrawerTab>(
+          // 每次打開換一份：選取塊直接停在目錄，不從上次的分頁滑回來、和
+          // 面板滑出疊在一起。同一次打開裡切分頁照常滑過去。
+          key: ValueKey(('tabs', _opening)),
           expand: false,
           segments: [for (final tab in _tabs) GlassSegment(tab, tab.label)],
           selected: _tab,
