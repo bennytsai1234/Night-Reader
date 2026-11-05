@@ -141,8 +141,15 @@ void main() {
   }
 
   // 骨架照上次記下的書名畫：每一條長條就是那本書名的一行，寬度與位置都和
-  // 真的文字相同，換場時長條剛好換成字。
-  const names = ['短', '中等長度書名', '一本書名很長很長的小說', '書', '雨夜', '長夜'];
+  // 真的文字相同，換場時長條剛好換成字；放不下被刪節的那一行含「…」。
+  const names = [
+    '短',
+    '中等長度書名',
+    '一本書名很長很長的小說',
+    '都市：我成了富二代反派（快穿之後漫長的好幾十年歲月）',
+    '雨夜',
+    '長夜',
+  ];
   for (final grid in [true, false]) {
     testWidgets('${grid ? 'grid' : 'list'} title bars match the real title '
         'lines', (tester) async {
