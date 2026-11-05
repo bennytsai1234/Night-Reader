@@ -273,8 +273,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 閱讀選單與面板左右對齊的位置（畫面寬 [viewportWidth]）：正文欄照
   /// 每行字數收窄時，上下選單與面板的左右緣對齊正文的左右邊，但不窄過
-  /// [menuMinWidth]；沒收窄（手機直拿）時是 null，選單照原本離邊 16、
-  /// 面板照預設寬度。
+  /// [menuMinWidth]；沒收窄（手機直拿）時是 null，上下選單的位置照
+  /// [menuInsetFor]、面板照預設寬度。
   double? menuSideFor(double viewportWidth) {
     final side = math.min(
       paddingHorizontalFor(viewportWidth),
@@ -290,7 +290,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 上下選單離畫面左右邊最少多遠：正文貼著畫面邊時，選單也不貼死。
   static const double menuMinInset = 4;
 
-  /// 上下選單與亮度條離畫面左右邊多遠（畫面寬 [viewportWidth]）：正文欄
+  /// 上下選單離畫面左右邊多遠（畫面寬 [viewportWidth]）：正文欄
   /// 收窄時是 [menuSideFor]；沒收窄時比正文的左右邊再往外
   /// [menuTextOverhang]，正文留白夠寬時照原本離邊 16，最少 [menuMinInset]。
   double menuInsetFor(double viewportWidth) =>

@@ -206,8 +206,8 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 正文的左右邊距；頁首頁尾資訊列的左右內距也用它。
   final double paddingHorizontal;
 
-  /// 上下選單與亮度條離畫面左右邊多遠
-  /// （`ReaderV2SettingsController.menuInsetFor`）。
+  /// 上下選單離畫面左右邊多遠（`ReaderV2SettingsController.menuInsetFor`）；
+  /// 亮度條和它對齊，但最多離左邊 16。
   final double menuInset;
   final double paddingTop;
   final double paddingBottom;
@@ -293,6 +293,9 @@ class ReaderV2PageShell extends StatelessWidget {
     );
     // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
     final autoPageInFooter = layout.showFooterInfo;
+    // 亮度條和上下選單的左緣對齊，但最多離邊 16：正文欄收窄、選單收到畫面
+    // 中間時，亮度條留在畫面左邊，不壓到正文。
+    final brightnessSide = math.min(menuInset, AppGrouped.margin);
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -402,7 +405,7 @@ class ReaderV2PageShell extends StatelessWidget {
               ),
               Positioned.fill(
                 child: CustomMultiChildLayout(
-                  delegate: _MenuLayoutDelegate(side: menuInset),
+                  delegate: _MenuLayoutDelegate(brightnessSide: brightnessSide),
                   children: [
                     LayoutId(
                       id: _MenuSlot.top,
@@ -454,7 +457,8 @@ class ReaderV2PageShell extends StatelessWidget {
                         child: ReaderV2MenuEntrance(
                           visible: controlsVisible,
                           edge: AxisDirection.left,
-                          gap: AppGrouped.margin,
+                          // 滑出畫面的距離照它離左邊多遠。
+                          gap: brightnessSide,
                           // 比上下選單晚一點出發，三塊錯開。
                           delay: AppMotion.readerMenuStagger,
                           child: Theme(
@@ -479,13 +483,13 @@ class ReaderV2PageShell extends StatelessWidget {
 
 enum _MenuSlot { top, bottom, brightness }
 
-/// 上下選單貼齊畫面上下緣；亮度條離左邊 [side]（和上下選單的左緣對齊），
-/// 撐滿兩者之間的空間、上下各留 [AppSpacing.xl]，在上下選單之間置中。空間
-/// 不夠時亮度條自己不畫（[ReaderV2BrightnessBar.minHeight]）。
+/// 上下選單貼齊畫面上下緣；亮度條離左邊 [brightnessSide]，撐滿兩者之間的
+/// 空間、上下各留 [AppSpacing.xl]，在上下選單之間置中。空間不夠時亮度條
+/// 自己不畫（[ReaderV2BrightnessBar.minHeight]）。
 class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
-  _MenuLayoutDelegate({required this.side});
+  _MenuLayoutDelegate({required this.brightnessSide});
 
-  final double side;
+  final double brightnessSide;
 
   @override
   void performLayout(Size size) {
@@ -506,13 +510,13 @@ class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
     );
     positionChild(
       _MenuSlot.brightness,
-      Offset(side, top.height + AppSpacing.xl),
+      Offset(brightnessSide, top.height + AppSpacing.xl),
     );
   }
 
   @override
   bool shouldRelayout(_MenuLayoutDelegate oldDelegate) =>
-      oldDelegate.side != side;
+      oldDelegate.brightnessSide != brightnessSide;
 }
 
 /// 頁首頁尾資訊列目前要畫什麼。
