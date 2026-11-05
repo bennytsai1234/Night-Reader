@@ -404,13 +404,17 @@ class _PressScaleState extends State<PressScale> {
       onTapCancel: enabled ? () => _set(false) : null,
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
-      child: AnimatedScale(
-        scale: _pressed ? widget.scale : 1,
-        duration: _pressed
-            ? const Duration(milliseconds: 90)
-            : AppMotion.spring,
-        curve: _pressed ? Curves.easeOut : AppMotion.springCurve,
-        child: widget.child,
+      // 縮放自成一層：按下與回彈的每一幀只重畫這顆按鈕，不連帶重畫外面
+      // 整條選單或頁首（閱讀選單一起重畫的有 11 塊玻璃與進度條）。
+      child: RepaintBoundary(
+        child: AnimatedScale(
+          scale: _pressed ? widget.scale : 1,
+          duration: _pressed
+              ? const Duration(milliseconds: 90)
+              : AppMotion.spring,
+          curve: _pressed ? Curves.easeOut : AppMotion.springCurve,
+          child: widget.child,
+        ),
       ),
     );
   }
