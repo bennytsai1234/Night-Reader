@@ -881,8 +881,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       _exitCoordinator.handleExitIntent(
         context: context,
         provider: this,
-        // 閱讀器一律從書架以 App 層級的路由打開。
-        popNavigator: () => Navigator.of(context, rootNavigator: true).pop(),
+        // 閱讀器一律以 App 層級的 BookOpenRoute 打開：先讓底下那頁在閱讀器
+        // 後面畫好才返回（字的貼圖不建在返回動畫裡）。
+        popNavigator: () => switch (pageRouteOf(context)) {
+          final BookOpenRoute route => unawaited(route.popWhenUncovered()),
+          _ => Navigator.of(context, rootNavigator: true).pop(),
+        },
       ),
     );
   }
