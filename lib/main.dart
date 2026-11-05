@@ -39,6 +39,7 @@ import 'core/services/webview_cloudflare_solver.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
+import 'features/search/search_provider.dart';
 import 'shared/widgets/skeleton_text.dart';
 
 Future<bool> runBackgroundTask<T>({
@@ -265,6 +266,8 @@ void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
   unawaited(_pruneReaderLayoutCaches());
   unawaited(PunctuationInk.onLaunchSettled());
+  // 進搜尋頁的第一幀就畫得出搜尋紀錄。
+  unawaited(SearchProvider.prefetchHistory());
 }
 
 /// 用上次存下的手機瀏覽器標識，之後讀到新的就存起來（[WebViewUserAgent]）。

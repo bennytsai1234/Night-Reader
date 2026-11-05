@@ -83,7 +83,8 @@ class SearchHistoryView extends StatelessWidget {
                 ),
             ],
           )
-        else
+        // 還在讀紀錄時不畫「沒有紀錄」的空頁（開 App 後還沒讀到就點進來）。
+        else if (provider.historyLoaded)
           Padding(
             padding: const EdgeInsets.only(top: 80),
             child: Column(
