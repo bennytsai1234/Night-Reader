@@ -132,6 +132,9 @@ class _MainPageState extends State<MainPage>
     _backTicker.dispose();
     _holdTimer?.cancel();
     _switchHeld.dispose();
+    // 返回手勢送完或彈回途中被移除：停下換頁時的收尾（[handleCommitBackGesture]、
+    // [handleCancelBackGesture]）照 [_follow] 判斷，先作廢，不去動已卸下的分頁。
+    _follow = _Follow.none;
     _switch.dispose();
     _outgoing?.dispose();
     _pageController.dispose();
@@ -637,7 +640,9 @@ class _MainPageState extends State<MainPage>
     // 路由會通知所有 PopScope；主頁先於分頁註冊，此時分頁仍在整頁編輯中，
     // 返回鍵留給分頁的 PopScope 退出編輯。
     if (_tabBarHidden.value) return;
-    if (_currentIndex != 0) {
+    // 換頁中（含正在回書架）：回書架和點書架一樣排隊，記下的別頁跟著取消；
+    // 停在書架之後才算連按退出。
+    if (_currentIndex != 0 || _outgoing != null) {
       _switchTo(0);
       return;
     }

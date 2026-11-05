@@ -136,6 +136,37 @@ void main() {
     expect(overlay(), findsNothing);
   });
 
+  testWidgets('暈開中直接存了別的外觀，記下的那一次作廢', (tester) async {
+    var mode = ThemeMode.light;
+    var other = 'A';
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ThemeRevealScope(child: child!),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+
+    ThemeRevealScope.of(pageContext).run(change: () => mode = ThemeMode.dark);
+    await tester.pump();
+    // 暈開中又選了一次，接著直接存了另一個深淺的設定（不暈開）。
+    ThemeRevealScope.of(pageContext).run(change: () => other = 'B');
+    ThemeRevealScope.of(pageContext).discardPending();
+    other = 'C';
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(mode, ThemeMode.dark);
+    expect(other, 'C');
+    expect(overlay(), findsNothing);
+  });
+
   testWidgets('關閉系統動畫時直接換色，不蓋擷取圖', (tester) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);

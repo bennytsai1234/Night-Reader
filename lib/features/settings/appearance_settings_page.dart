@@ -139,6 +139,7 @@ void _setStyle(
 ) {
   final current = themeSettings.styleFor(brightness) == style;
   if (Theme.of(context).brightness != brightness) {
+    ThemeRevealScope.of(context).discardPending();
     if (!current) themeSettings.setStyle(brightness, style);
     return;
   }
@@ -177,6 +178,7 @@ Widget _pureBlackRow(
   value: themeSettings.pureBlack,
   onChanged: (value) {
     if (Theme.of(context).brightness != Brightness.dark) {
+      ThemeRevealScope.of(context).discardPending();
       themeSettings.setPureBlack(value);
       return;
     }

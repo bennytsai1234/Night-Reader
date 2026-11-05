@@ -639,10 +639,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
   void _toggleDayNight() {
     final dark = StylePalette.of(context).brightness == Brightness.dark;
+    // 暈開中連按時這一下排到暈完才執行，那時閱讀器可能已經關掉：設定先取好。
+    final settings = context.read<SettingsProvider>();
     ThemeRevealScope.of(context).run(
-      change: () => context.read<SettingsProvider>().setThemeMode(
-        dark ? ThemeMode.light : ThemeMode.dark,
-      ),
+      change: () =>
+          settings.setThemeMode(dark ? ThemeMode.light : ThemeMode.dark),
     );
   }
 

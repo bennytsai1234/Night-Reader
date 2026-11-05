@@ -46,6 +46,10 @@ abstract interface class ThemeReveal {
     required VoidCallback change,
     bool current = false,
   });
+
+  /// 不暈開、直接存的外觀變更（例如改另一個深淺的風格）也算一次操作：
+  /// 暈開中記下的那一次比它舊，作廢，暈完不會把這次存的蓋回去。
+  void discardPending();
 }
 
 class _ImmediateThemeReveal implements ThemeReveal {
@@ -59,6 +63,9 @@ class _ImmediateThemeReveal implements ThemeReveal {
   }) {
     if (!current) change();
   }
+
+  @override
+  void discardPending() {}
 }
 
 /// 墨暈邊緣由濃轉淡的寬度。太窄就只是一個硬邊的圓；太寬則新舊配色在一大片
@@ -96,6 +103,9 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
 
   /// 暈開中又要切換的最後一次，這段播完才執行（[_clear]）。
   ({Offset? origin, VoidCallback change})? _pending;
+
+  @override
+  void discardPending() => _pending = null;
 
   @override
   void run({
