@@ -1007,10 +1007,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           hasOperation: runtime.stateMachine.currentOperation != null,
         ) ||
         !runtime.state.hasStableWorld ||
-        (_initialRestoreCompleted && !_textOutdated) ||
-        !_paper.beginStableWorld()) {
+        (_initialRestoreCompleted && !_textOutdated)) {
       return;
     }
+    if (!_paper.beginStableWorld()) return;
     final generations = (
       runtime.state.layoutGeneration,
       runtime.state.contentGeneration,
