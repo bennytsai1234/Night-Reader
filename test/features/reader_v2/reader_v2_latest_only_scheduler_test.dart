@@ -131,4 +131,105 @@ void main() {
     await tester.pump();
     expect(sent, [2]);
   });
+
+  testWidgets('a send that throws still settles as not completed and the '
+      'newest waiting value is sent after a quiet frame', (tester) async {
+    final errors = <Object>[];
+    final done = Completer<void>();
+    // 送出丟的例外照舊交給所在的錯誤處理（不吞掉），這裡收起來計數。
+    unawaited(
+      runZonedGuarded(() async {
+        final sent = <int>[];
+        final first = Completer<void>();
+        final settled = <(int, bool)>[];
+        final scheduler = LatestOnlyScheduler<int>(
+          isMounted: () => true,
+          quietFrames: true,
+          send: (value) {
+            sent.add(value);
+            return value == 1 ? first.future : Future<void>.value();
+          },
+          onSettled: (value, {required completed}) =>
+              settled.add((value, completed)),
+        );
+        scheduler.request(1);
+        await tester.pump();
+        await tester.pump();
+        scheduler
+          ..request(2)
+          ..request(3);
+        first.completeError(StateError('expected test error'));
+        await tester.idle();
+        expect(scheduler.inFlight, isNull);
+        expect(settled, [(1, false)]);
+        expect(errors, hasLength(1));
+        // 補送最新的那次，照樣等一幀沒再變。
+        await tester.pump();
+        expect(sent, [1]);
+        await tester.pump();
+        expect(sent, [1, 3]);
+        expect(settled, [(1, false), (3, true)]);
+        done.complete();
+      }, (error, _) => errors.add(error)),
+    );
+    await done.future;
+  });
+
+  testWidgets('leaving the screen while waiting for a quiet frame sends '
+      'nothing', (tester) async {
+    final sent = <int>[];
+    var mounted = true;
+    final scheduler = LatestOnlyScheduler<int>(
+      isMounted: () => mounted,
+      quietFrames: true,
+      send: (value) async => sent.add(value),
+    );
+    scheduler.request(1);
+    await tester.pump();
+    mounted = false;
+    await tester.pump();
+    await tester.pump();
+    expect(sent, isEmpty);
+    expect(scheduler.requested, isNull);
+  });
+
+  testWidgets('leaving the screen during a send does not send the newest '
+      'value afterwards', (tester) async {
+    final sent = <int>[];
+    final settled = <int>[];
+    var mounted = true;
+    final first = Completer<void>();
+    final scheduler = LatestOnlyScheduler<int>(
+      isMounted: () => mounted,
+      send: (value) {
+        sent.add(value);
+        return first.future;
+      },
+      onSettled: (value, {required completed}) => settled.add(value),
+    );
+    scheduler.request(1);
+    await tester.pump();
+    scheduler.request(2);
+    mounted = false;
+    first.complete();
+    await tester.idle();
+    await tester.pump();
+    expect(sent, [1]);
+    expect(settled, isEmpty);
+    expect(scheduler.inFlight, isNull);
+    expect(scheduler.requested, isNull);
+  });
+
+  testWidgets('a cancelled request is not sent', (tester) async {
+    final sent = <int>[];
+    final scheduler = LatestOnlyScheduler<int>(
+      isMounted: () => true,
+      send: (value) async => sent.add(value),
+    );
+    scheduler
+      ..request(1)
+      ..cancelRequest();
+    await tester.pump();
+    expect(sent, isEmpty);
+  });
 }
