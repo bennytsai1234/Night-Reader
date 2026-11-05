@@ -238,6 +238,59 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
+  /// 存一個單純設定；寫入失敗時還原成最後落地的值（經 [restoreAs] 修正）。
+  void _save<T>(
+    ReaderV2Setting<T> setting,
+    T value, {
+    required void Function(T value) put,
+    T Function(T persisted)? restoreAs,
+  }) {
+    _persist(
+      setting.key,
+      () => _prefsRepository.save(setting, value),
+      onSaved: (persisted) => persisted.withValue(setting, value),
+      restore: (persisted) {
+        final restored = persisted.valueOf(setting);
+        put(restoreAs == null ? restored : restoreAs(restored));
+      },
+    );
+  }
+
+  /// 改一個單純設定：與目前值相同就不動（[force] 時照寫）；否則更新欄位、
+  /// 存檔並通知。[same] 決定「相同」的判斷，預設用 `==`。
+  void _set<T>(
+    ReaderV2Setting<T> setting,
+    T value, {
+    required T current,
+    required void Function(T value) put,
+    bool force = false,
+    bool Function(T current, T value)? same,
+    T Function(T persisted)? restoreAs,
+  }) {
+    final unchanged = same == null ? current == value : same(current, value);
+    if (unchanged && !force) return;
+    put(value);
+    _save(setting, value, put: put, restoreAs: restoreAs);
+    notifyListeners();
+  }
+
+  /// 排版的一項：有變才更新欄位，存檔每次都做（排版那幾項每次都寫）。回傳欄位有沒有變。
+  bool _typography<T>(
+    ReaderV2Setting<T> setting,
+    T current,
+    T value,
+    void Function(T value) put, {
+    T Function(T persisted)? restoreAs,
+  }) {
+    final changed = current != value;
+    if (changed) put(value);
+    _save(setting, value, put: put, restoreAs: restoreAs);
+    return changed;
+  }
+
+  static bool _nearlyEqual(double current, double value) =>
+      (current - value).abs() < 0.001;
+
   /// 正文一個字格的寬度（含字距與正文粗細）；量不到時是 null。
   double? get cellWidth => const ReaderParagraphLayout().measureCellWidth(
     fontSize: fontSize,
@@ -351,101 +404,68 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }) {
     var changed = false;
     if (titleSpacing != null) {
-      if (this.titleSpacing != titleSpacing) {
-        this.titleSpacing = titleSpacing;
-        changed = true;
-      }
-      _persist(
-        'titleSpacing',
-        () => _prefsRepository.saveTitleSpacing(titleSpacing),
-        onSaved: (p) => p.copyWith(titleSpacing: titleSpacing),
-        restore: (p) => this.titleSpacing = p.titleSpacing,
+      changed |= _typography(
+        ReaderV2Settings.titleSpacing,
+        this.titleSpacing,
+        titleSpacing,
+        (value) => this.titleSpacing = value,
       );
     }
     if (textIndent != null) {
-      if (this.textIndent != textIndent) {
-        this.textIndent = textIndent;
-        changed = true;
-      }
-      _persist(
-        'textIndent',
-        () => _prefsRepository.saveTextIndent(textIndent),
-        onSaved: (p) => p.copyWith(textIndent: textIndent),
-        restore: (p) => this.textIndent = p.textIndent,
+      changed |= _typography(
+        ReaderV2Settings.textIndent,
+        this.textIndent,
+        textIndent,
+        (value) => this.textIndent = value,
       );
     }
     if (fontSize != null) {
-      if (this.fontSize != fontSize) {
-        this.fontSize = fontSize;
-        changed = true;
-      }
-      _persist(
-        'fontSize',
-        () => _prefsRepository.saveFontSize(fontSize),
-        onSaved: (p) => p.copyWith(fontSize: fontSize),
-        restore: (p) => this.fontSize = p.fontSize,
+      changed |= _typography(
+        ReaderV2Settings.fontSize,
+        this.fontSize,
+        fontSize,
+        (value) => this.fontSize = value,
       );
     }
     if (titleFontSize != null) {
-      if (this.titleFontSize != titleFontSize) {
-        this.titleFontSize = titleFontSize;
-        changed = true;
-      }
-      _persist(
-        'titleFontSize',
-        () => _prefsRepository.saveTitleFontSize(titleFontSize),
-        onSaved: (p) => p.copyWith(titleFontSize: titleFontSize),
-        restore: (p) => this.titleFontSize = p.titleFontSize,
+      changed |= _typography(
+        ReaderV2Settings.titleFontSize,
+        this.titleFontSize,
+        titleFontSize,
+        (value) => this.titleFontSize = value,
       );
     }
     if (lineHeight != null) {
-      final normalized = ReaderV2Style.normalizeLineHeight(lineHeight);
-      if (this.lineHeight != normalized) {
-        this.lineHeight = normalized;
-        changed = true;
-      }
-      _persist(
-        'lineHeight',
-        () => _prefsRepository.saveLineHeight(normalized),
-        onSaved: (p) => p.copyWith(lineHeight: normalized),
-        restore: (p) =>
-            this.lineHeight = ReaderV2Style.normalizeLineHeight(p.lineHeight),
+      changed |= _typography(
+        ReaderV2Settings.lineHeight,
+        this.lineHeight,
+        ReaderV2Style.normalizeLineHeight(lineHeight),
+        (value) => this.lineHeight = value,
+        restoreAs: ReaderV2Style.normalizeLineHeight,
       );
     }
     if (paragraphSpacing != null) {
-      if (this.paragraphSpacing != paragraphSpacing) {
-        this.paragraphSpacing = paragraphSpacing;
-        changed = true;
-      }
-      _persist(
-        'paragraphSpacing',
-        () => _prefsRepository.saveParagraphSpacing(paragraphSpacing),
-        onSaved: (p) => p.copyWith(paragraphSpacing: paragraphSpacing),
-        restore: (p) => this.paragraphSpacing = p.paragraphSpacing,
+      changed |= _typography(
+        ReaderV2Settings.paragraphSpacing,
+        this.paragraphSpacing,
+        paragraphSpacing,
+        (value) => this.paragraphSpacing = value,
       );
     }
     if (chapterSpacing != null) {
-      if (this.chapterSpacing != chapterSpacing) {
-        this.chapterSpacing = chapterSpacing;
-        changed = true;
-      }
-      _persist(
-        'chapterSpacing',
-        () => _prefsRepository.saveChapterSpacing(chapterSpacing),
-        onSaved: (p) => p.copyWith(chapterSpacing: chapterSpacing),
-        restore: (p) => this.chapterSpacing = p.chapterSpacing,
+      changed |= _typography(
+        ReaderV2Settings.chapterSpacing,
+        this.chapterSpacing,
+        chapterSpacing,
+        (value) => this.chapterSpacing = value,
       );
     }
     if (letterSpacing != null) {
-      if (this.letterSpacing != letterSpacing) {
-        this.letterSpacing = letterSpacing;
-        changed = true;
-      }
-      _persist(
-        'letterSpacing',
-        () => _prefsRepository.saveLetterSpacing(letterSpacing),
-        onSaved: (p) => p.copyWith(letterSpacing: letterSpacing),
-        restore: (p) => this.letterSpacing = p.letterSpacing,
+      changed |= _typography(
+        ReaderV2Settings.letterSpacing,
+        this.letterSpacing,
+        letterSpacing,
+        (value) => this.letterSpacing = value,
       );
     }
     if (changed) notifyListeners();
@@ -481,52 +501,35 @@ class ReaderV2SettingsController extends ChangeNotifier {
         readerFont == defaults.readerFont;
   }
 
-  void setBodyBold(bool value, {bool force = false}) {
-    if (bodyBold == value && !force) return;
-    bodyBold = value;
-    _persist(
-      'bodyBold',
-      () => _prefsRepository.saveBodyBold(value),
-      onSaved: (p) => p.copyWith(bodyBold: value),
-      restore: (p) => bodyBold = p.bodyBold,
-    );
-    notifyListeners();
-  }
+  void setBodyBold(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.bodyBold,
+    value,
+    current: bodyBold,
+    put: (v) => bodyBold = v,
+    force: force,
+  );
 
-  void setTitleBold(bool value, {bool force = false}) {
-    if (titleBold == value && !force) return;
-    titleBold = value;
-    _persist(
-      'titleBold',
-      () => _prefsRepository.saveTitleBold(value),
-      onSaved: (p) => p.copyWith(titleBold: value),
-      restore: (p) => titleBold = p.titleBold,
-    );
-    notifyListeners();
-  }
+  void setTitleBold(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.titleBold,
+    value,
+    current: titleBold,
+    put: (v) => titleBold = v,
+    force: force,
+  );
 
-  void setTitleCenter(bool value, {bool force = false}) {
-    if (titleCenter == value && !force) return;
-    titleCenter = value;
-    _persist(
-      'titleCenter',
-      () => _prefsRepository.saveTitleCenter(value),
-      onSaved: (p) => p.copyWith(titleCenter: value),
-      restore: (p) => titleCenter = p.titleCenter,
-    );
-    notifyListeners();
-  }
+  void setTitleCenter(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.titleCenter,
+    value,
+    current: titleCenter,
+    put: (v) => titleCenter = v,
+    force: force,
+  );
 
   /// 正文字型；選了還沒下載的就開始下載，好了才換上（[_onFontsChanged]）。
   void setReaderFont(AppFont value, {bool force = false}) {
     if (readerFont == value && !force) return;
     readerFont = value;
-    _persist(
-      'readerFont',
-      () => _prefsRepository.saveReaderFont(value),
-      onSaved: (p) => p.copyWith(readerFont: value),
-      restore: (p) => readerFont = p.readerFont,
-    );
+    _save(ReaderV2Settings.readerFont, value, put: (v) => readerFont = v);
     unawaited(_fonts.ensure(value));
     notifyListeners();
   }
@@ -534,67 +537,52 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 頁首頁尾資訊的字級；那一列跟著變高，正文區跟著讓出位置。
   void setInfoFontSize(double value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeInfoFontSize(value);
-    if (infoFontSize == normalized && !force) return;
-    infoFontSize = normalized;
-    _persist(
-      'infoFontSize',
-      () => _prefsRepository.saveInfoFontSize(normalized),
-      onSaved: (p) => p.copyWith(infoFontSize: normalized),
-      restore: (p) => infoFontSize = p.infoFontSize,
+    _set(
+      ReaderV2Settings.infoFontSize,
+      normalized,
+      current: infoFontSize,
+      put: (v) => infoFontSize = v,
+      force: force,
     );
-    notifyListeners();
   }
 
   void setAutoPageSpeed(double value) {
     final normalized = _normalizeAutoPageSpeed(value);
-    if ((autoPageSpeed - normalized).abs() < 0.001) return;
-    autoPageSpeed = normalized;
-    _persist(
-      'autoPageSpeed',
-      () => _prefsRepository.saveAutoPageSpeed(normalized),
-      onSaved: (p) => p.copyWith(autoPageSpeed: normalized),
-      restore: (p) => autoPageSpeed = _normalizeAutoPageSpeed(p.autoPageSpeed),
+    _set(
+      ReaderV2Settings.autoPageSpeed,
+      normalized,
+      current: autoPageSpeed,
+      put: (v) => autoPageSpeed = v,
+      same: _nearlyEqual,
+      restoreAs: _normalizeAutoPageSpeed,
     );
-    notifyListeners();
   }
 
-  void setHighlightColor(ReaderV2HighlightColor value) {
-    if (highlightColor == value) return;
-    highlightColor = value;
-    _persist(
-      'highlightColor',
-      () => _prefsRepository.saveHighlightColor(value),
-      onSaved: (p) => p.copyWith(highlightColor: value),
-      restore: (p) => highlightColor = p.highlightColor,
-    );
-    notifyListeners();
-  }
+  void setHighlightColor(ReaderV2HighlightColor value) => _set(
+    ReaderV2Settings.highlightColor,
+    value,
+    current: highlightColor,
+    put: (v) => highlightColor = v,
+  );
 
   void setHighlightStrength(double value) {
     final normalized = ReaderV2HighlightStrength.normalize(value);
-    if ((highlightStrength - normalized).abs() < 0.001) return;
-    highlightStrength = normalized;
-    _persist(
-      'highlightStrength',
-      () => _prefsRepository.saveHighlightStrength(normalized),
-      onSaved: (p) => p.copyWith(highlightStrength: normalized),
-      restore: (p) => highlightStrength = p.highlightStrength,
+    _set(
+      ReaderV2Settings.highlightStrength,
+      normalized,
+      current: highlightStrength,
+      put: (v) => highlightStrength = v,
+      same: _nearlyEqual,
     );
-    notifyListeners();
   }
 
   /// 亮度改回跟隨系統，或改用自己的亮度（沿用上次調的位置）。
-  void setBrightnessAuto(bool value) {
-    if (brightnessAuto == value) return;
-    brightnessAuto = value;
-    _persist(
-      'brightnessAuto',
-      () => _prefsRepository.saveBrightnessAuto(value),
-      onSaved: (p) => p.copyWith(brightnessAuto: value),
-      restore: (p) => brightnessAuto = p.brightnessAuto,
-    );
-    notifyListeners();
-  }
+  void setBrightnessAuto(bool value) => _set(
+    ReaderV2Settings.brightnessAuto,
+    value,
+    current: brightnessAuto,
+    put: (v) => brightnessAuto = v,
+  );
 
   /// 拖動亮度條：改用自己的亮度並立刻套用。拖動中 [persist] 為 false，
   /// 放開時再寫入一次，不在每一格都寫偏好設定。
@@ -604,183 +592,130 @@ class ReaderV2SettingsController extends ChangeNotifier {
     brightness = normalized;
     if (brightnessAuto) setBrightnessAuto(false);
     if (persist) {
-      _persist(
-        'brightness',
-        () => _prefsRepository.saveBrightness(normalized),
-        onSaved: (p) => p.copyWith(brightness: normalized),
-        restore: (p) => brightness = p.brightness,
+      _save(
+        ReaderV2Settings.brightness,
+        normalized,
+        put: (v) => brightness = v,
       );
     }
     if (changed) notifyListeners();
   }
 
-  void setVolumeKeyPage(bool value) {
-    if (volumeKeyPage == value) return;
-    volumeKeyPage = value;
-    _persist(
-      'volumeKeyPage',
-      () => _prefsRepository.saveVolumeKeyPage(value),
-      onSaved: (p) => p.copyWith(volumeKeyPage: value),
-      restore: (p) => volumeKeyPage = p.volumeKeyPage,
-    );
-    notifyListeners();
-  }
+  void setVolumeKeyPage(bool value) => _set(
+    ReaderV2Settings.volumeKeyPage,
+    value,
+    current: volumeKeyPage,
+    put: (v) => volumeKeyPage = v,
+  );
 
-  void setVolumeKeyReversed(bool value) {
-    if (volumeKeyReversed == value) return;
-    volumeKeyReversed = value;
-    _persist(
-      'volumeKeyReversed',
-      () => _prefsRepository.saveVolumeKeyReversed(value),
-      onSaved: (p) => p.copyWith(volumeKeyReversed: value),
-      restore: (p) => volumeKeyReversed = p.volumeKeyReversed,
-    );
-    notifyListeners();
-  }
+  void setVolumeKeyReversed(bool value) => _set(
+    ReaderV2Settings.volumeKeyReversed,
+    value,
+    current: volumeKeyReversed,
+    put: (v) => volumeKeyReversed = v,
+  );
 
-  void setKeepScreenOn(bool value) {
-    if (keepScreenOn == value) return;
-    keepScreenOn = value;
-    _persist(
-      'keepScreenOn',
-      () => _prefsRepository.saveKeepScreenOn(value),
-      onSaved: (p) => p.copyWith(keepScreenOn: value),
-      restore: (p) => keepScreenOn = p.keepScreenOn,
-    );
-    notifyListeners();
-  }
+  void setKeepScreenOn(bool value) => _set(
+    ReaderV2Settings.keepScreenOn,
+    value,
+    current: keepScreenOn,
+    put: (v) => keepScreenOn = v,
+  );
 
-  void setOrientation(ReaderV2Orientation value) {
-    if (orientation == value) return;
-    orientation = value;
-    _persist(
-      'orientation',
-      () => _prefsRepository.saveOrientation(value),
-      onSaved: (p) => p.copyWith(orientation: value),
-      restore: (p) => orientation = p.orientation,
-    );
-    notifyListeners();
-  }
+  void setOrientation(ReaderV2Orientation value) => _set(
+    ReaderV2Settings.orientation,
+    value,
+    current: orientation,
+    put: (v) => orientation = v,
+  );
 
-  void setHideNavigationBar(bool value, {bool force = false}) {
-    if (hideNavigationBar == value && !force) return;
-    hideNavigationBar = value;
-    _persist(
-      'hideNavigationBar',
-      () => _prefsRepository.saveHideNavigationBar(value),
-      onSaved: (p) => p.copyWith(hideNavigationBar: value),
-      restore: (p) => hideNavigationBar = p.hideNavigationBar,
-    );
-    notifyListeners();
-  }
+  void setHideNavigationBar(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.hideNavigationBar,
+    value,
+    current: hideNavigationBar,
+    put: (v) => hideNavigationBar = v,
+    force: force,
+  );
 
   void setPageTurnOverlap(int value) {
     final normalized = ReaderV2PrefsRepository.normalizePageTurnOverlap(value);
-    if (pageTurnOverlap == normalized) return;
-    pageTurnOverlap = normalized;
-    _persist(
-      'pageTurnOverlap',
-      () => _prefsRepository.savePageTurnOverlap(normalized),
-      onSaved: (p) => p.copyWith(pageTurnOverlap: normalized),
-      restore: (p) => pageTurnOverlap = p.pageTurnOverlap,
+    _set(
+      ReaderV2Settings.pageTurnOverlap,
+      normalized,
+      current: pageTurnOverlap,
+      put: (v) => pageTurnOverlap = v,
     );
-    notifyListeners();
   }
 
-  void setPageTurnSpeed(ReaderV2PageTurnSpeed value) {
-    if (pageTurnSpeed == value) return;
-    pageTurnSpeed = value;
-    _persist(
-      'pageTurnSpeed',
-      () => _prefsRepository.savePageTurnSpeed(value),
-      onSaved: (p) => p.copyWith(pageTurnSpeed: value),
-      restore: (p) => pageTurnSpeed = p.pageTurnSpeed,
-    );
-    notifyListeners();
-  }
+  void setPageTurnSpeed(ReaderV2PageTurnSpeed value) => _set(
+    ReaderV2Settings.pageTurnSpeed,
+    value,
+    current: pageTurnSpeed,
+    put: (v) => pageTurnSpeed = v,
+  );
 
-  void setUse24HourClock(bool value, {bool force = false}) {
-    if (use24HourClock == value && !force) return;
-    use24HourClock = value;
-    _persist(
-      'use24HourClock',
-      () => _prefsRepository.saveUse24HourClock(value),
-      onSaved: (p) => p.copyWith(use24HourClock: value),
-      restore: (p) => use24HourClock = p.use24HourClock,
-    );
-    notifyListeners();
-  }
+  void setUse24HourClock(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.use24HourClock,
+    value,
+    current: use24HourClock,
+    put: (v) => use24HourClock = v,
+    force: force,
+  );
 
   void setProgressFractionDigits(int value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeProgressFractionDigits(
       value,
     );
-    if (progressFractionDigits == normalized && !force) return;
-    progressFractionDigits = normalized;
-    _persist(
-      'progressFractionDigits',
-      () => _prefsRepository.saveProgressFractionDigits(normalized),
-      onSaved: (p) => p.copyWith(progressFractionDigits: normalized),
-      restore: (p) => progressFractionDigits = p.progressFractionDigits,
+    _set(
+      ReaderV2Settings.progressFractionDigits,
+      normalized,
+      current: progressFractionDigits,
+      put: (v) => progressFractionDigits = v,
+      force: force,
     );
-    notifyListeners();
   }
 
   void setMaxDim(double value) {
     final normalized = ReaderV2Brightness.normalizeMaxDim(value);
-    if (maxDim == normalized) return;
-    maxDim = normalized;
-    _persist(
-      'maxDim',
-      () => _prefsRepository.saveMaxDim(normalized),
-      onSaved: (p) => p.copyWith(maxDim: normalized),
-      restore: (p) => maxDim = p.maxDim,
+    _set(
+      ReaderV2Settings.maxDim,
+      normalized,
+      current: maxDim,
+      put: (v) => maxDim = v,
     );
-    notifyListeners();
   }
 
   void setEdgeFade(double value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeEdgeFade(value);
-    if (edgeFade == normalized && !force) return;
-    edgeFade = normalized;
-    _persist(
-      'edgeFade',
-      () => _prefsRepository.saveEdgeFade(normalized),
-      onSaved: (p) => p.copyWith(edgeFade: normalized),
-      restore: (p) => edgeFade = p.edgeFade,
+    _set(
+      ReaderV2Settings.edgeFade,
+      normalized,
+      current: edgeFade,
+      put: (v) => edgeFade = v,
+      force: force,
     );
-    notifyListeners();
   }
 
-  void setTtsFollow(bool value) {
-    if (ttsFollow == value) return;
-    ttsFollow = value;
-    _persist(
-      'ttsFollow',
-      () => _prefsRepository.saveTtsFollow(value),
-      onSaved: (p) => p.copyWith(ttsFollow: value),
-      restore: (p) => ttsFollow = p.ttsFollow,
-    );
-    notifyListeners();
-  }
+  void setTtsFollow(bool value) => _set(
+    ReaderV2Settings.ttsFollow,
+    value,
+    current: ttsFollow,
+    put: (v) => ttsFollow = v,
+  );
 
-  void setChineseConvert(int value) {
+  /// 繁簡轉換：換了才讓正文重轉（[_contentSettingsGeneration]）並更新顯示模式。
+  void setChineseConvert(int value) => _set(
+    ReaderV2Settings.chineseConvert,
+    value,
+    current: chineseConvert,
+    put: _putChineseConvert,
+  );
+
+  void _putChineseConvert(int value) {
     if (chineseConvert == value) return;
     chineseConvert = value;
     _contentSettingsGeneration += 1;
     ChineseDisplay.mode.value = value;
-    _persist(
-      'chineseConvert',
-      () => _prefsRepository.saveChineseConvert(value),
-      onSaved: (p) => p.copyWith(chineseConvert: value),
-      restore: (p) {
-        if (chineseConvert == p.chineseConvert) return;
-        chineseConvert = p.chineseConvert;
-        _contentSettingsGeneration += 1;
-        ChineseDisplay.mode.value = p.chineseConvert;
-      },
-    );
-    notifyListeners();
   }
 
   void setClickAction(int zone, int action) {
@@ -794,11 +729,11 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   void _setClickActions(List<int> next) {
     clickActions = next;
-    _persist(
-      'clickActions',
-      () => _prefsRepository.saveClickActions(next),
-      onSaved: (p) => p.copyWith(clickActions: next),
-      restore: (p) => clickActions = List<int>.from(p.clickActions),
+    _save(
+      ReaderV2Settings.clickActions,
+      next,
+      put: (v) => clickActions = v,
+      restoreAs: (v) => List<int>.from(v),
     );
     notifyListeners();
   }
@@ -815,11 +750,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
       if (force || paddingHorizontal != value) {
         paddingHorizontal = value;
         changed = true;
-        _persist(
-          'paddingHorizontal',
-          () => _prefsRepository.savePaddingHorizontal(value),
-          onSaved: (p) => p.copyWith(paddingHorizontal: value),
-          restore: (p) => paddingHorizontal = p.paddingHorizontal,
+        _save(
+          ReaderV2Settings.paddingHorizontal,
+          value,
+          put: (v) => paddingHorizontal = v,
         );
       }
     }
@@ -828,12 +762,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       if (force || paddingTop != value) {
         paddingTop = value;
         changed = true;
-        _persist(
-          'paddingTop',
-          () => _prefsRepository.savePaddingTop(value),
-          onSaved: (p) => p.copyWith(paddingTop: value),
-          restore: (p) => paddingTop = p.paddingTop,
-        );
+        _save(ReaderV2Settings.paddingTop, value, put: (v) => paddingTop = v);
       }
     }
     if (bottom != null) {
@@ -841,11 +770,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
       if (force || paddingBottom != value) {
         paddingBottom = value;
         changed = true;
-        _persist(
-          'paddingBottom',
-          () => _prefsRepository.savePaddingBottom(value),
-          onSaved: (p) => p.copyWith(paddingBottom: value),
-          restore: (p) => paddingBottom = p.paddingBottom,
+        _save(
+          ReaderV2Settings.paddingBottom,
+          value,
+          put: (v) => paddingBottom = v,
         );
       }
     }
@@ -854,42 +782,34 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   void setLineChars(int value, {bool force = false}) {
     final normalized = ReaderV2PrefsRepository.normalizeLineChars(value);
-    if (lineChars == normalized && !force) return;
-    lineChars = normalized;
-    _persist(
-      'lineChars',
-      () => _prefsRepository.saveLineChars(normalized),
-      onSaved: (p) => p.copyWith(lineChars: normalized),
-      restore: (p) => lineChars = p.lineChars,
+    _set(
+      ReaderV2Settings.lineChars,
+      normalized,
+      current: lineChars,
+      put: (v) => lineChars = v,
+      force: force,
     );
-    notifyListeners();
   }
 
   /// 頁尾資訊列底部到畫面底部的距離。
   void setFooterOffset(double value, {bool force = false}) {
     final normalized = _normalizePagePadding(value);
-    if (footerOffset == normalized && !force) return;
-    footerOffset = normalized;
-    _persist(
-      'footerOffset',
-      () => _prefsRepository.saveFooterOffset(normalized),
-      onSaved: (p) => p.copyWith(footerOffset: normalized),
-      restore: (p) => footerOffset = p.footerOffset,
+    _set(
+      ReaderV2Settings.footerOffset,
+      normalized,
+      current: footerOffset,
+      put: (v) => footerOffset = v,
+      force: force,
     );
-    notifyListeners();
   }
 
-  void setJustifyText(bool value, {bool force = false}) {
-    if (justifyText == value && !force) return;
-    justifyText = value;
-    _persist(
-      'justifyText',
-      () => _prefsRepository.saveJustifyText(value),
-      onSaved: (p) => p.copyWith(justifyText: value),
-      restore: (p) => justifyText = p.justifyText,
-    );
-    notifyListeners();
-  }
+  void setJustifyText(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.justifyText,
+    value,
+    current: justifyText,
+    put: (v) => justifyText = v,
+    force: force,
+  );
 
   /// 恢復預設一律把預設值寫入（`force`），不看記憶體裡的值：畫面開著時另一台
   /// 的設定同步進來，記憶體裡還是舊值，看起來已是預設就不寫，另一台的值會
@@ -936,41 +856,29 @@ class ReaderV2SettingsController extends ChangeNotifier {
         infoFontSize == defaults.infoFontSize;
   }
 
-  void setHideStatusBar(bool value, {bool force = false}) {
-    if (hideStatusBar == value && !force) return;
-    hideStatusBar = value;
-    _persist(
-      'hideStatusBar',
-      () => _prefsRepository.saveHideStatusBar(value),
-      onSaved: (p) => p.copyWith(hideStatusBar: value),
-      restore: (p) => hideStatusBar = p.hideStatusBar,
-    );
-    notifyListeners();
-  }
+  void setHideStatusBar(bool value, {bool force = false}) => _set(
+    ReaderV2Settings.hideStatusBar,
+    value,
+    current: hideStatusBar,
+    put: (v) => hideStatusBar = v,
+    force: force,
+  );
 
-  void setHeaderInfo(ReaderV2InfoSlots value, {bool force = false}) {
-    if (headerInfo == value && !force) return;
-    headerInfo = value;
-    _persist(
-      'headerInfo',
-      () => _prefsRepository.saveHeaderInfo(value),
-      onSaved: (p) => p.copyWith(headerInfo: value),
-      restore: (p) => headerInfo = p.headerInfo,
-    );
-    notifyListeners();
-  }
+  void setHeaderInfo(ReaderV2InfoSlots value, {bool force = false}) => _set(
+    ReaderV2Settings.headerInfo,
+    value,
+    current: headerInfo,
+    put: (v) => headerInfo = v,
+    force: force,
+  );
 
-  void setFooterInfo(ReaderV2InfoSlots value, {bool force = false}) {
-    if (footerInfo == value && !force) return;
-    footerInfo = value;
-    _persist(
-      'footerInfo',
-      () => _prefsRepository.saveFooterInfo(value),
-      onSaved: (p) => p.copyWith(footerInfo: value),
-      restore: (p) => footerInfo = p.footerInfo,
-    );
-    notifyListeners();
-  }
+  void setFooterInfo(ReaderV2InfoSlots value, {bool force = false}) => _set(
+    ReaderV2Settings.footerInfo,
+    value,
+    current: footerInfo,
+    put: (v) => footerInfo = v,
+    force: force,
+  );
 
   double _normalizePagePadding(double value) {
     if (!value.isFinite) return 0.0;
