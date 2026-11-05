@@ -513,14 +513,22 @@ class ReaderV2ChapterRepository {
 
   /// 不再用了（閱讀器關掉）：停止跟著規則表的變動。
   void dispose() {
+    _disposed = true;
     unawaited(_ruleChanges?.cancel());
     _ruleChanges = null;
   }
 
+  bool _disposed = false;
+
   /// 套用正文時跑超過逾時的規則照 Legado 停用：開關關掉、存進資料庫，之後
   /// 的章不再帶它；這一章照其他規則處理完（[ReaderV2ContentTransformWorker]）。
   /// 快取當下就作廢：重新讀規則排在停用之後，讀到的是停用後的。
+  ///
+  /// 停用一定要讓讀者看到提示（[onReplaceRuleDisabled]）。閱讀器已經關掉
+  /// 時（還在預載的章才逾時）說不了，就先不停用：下次開書再逾時時，在畫面
+  /// 上停用並提示。
   void _disableTimedOutRule(ReplaceRule rule) {
+    if (_disposed) return;
     _forgetEnabledRules();
     final dao = replaceDao;
     if (dao != null) {

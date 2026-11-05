@@ -8184,6 +8184,38 @@ class $DownloadTasksTable extends DownloadTasks
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _lastErrorReasonMeta = const VerificationMeta(
+    'lastErrorReason',
+  );
+  @override
+  late final GeneratedColumn<String> lastErrorReason = GeneratedColumn<String>(
+    'lastErrorReason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMessageMeta = const VerificationMeta(
+    'lastErrorMessage',
+  );
+  @override
+  late final GeneratedColumn<String> lastErrorMessage = GeneratedColumn<String>(
+    'lastErrorMessage',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorChapterIndexMeta =
+      const VerificationMeta('lastErrorChapterIndex');
+  @override
+  late final GeneratedColumn<int> lastErrorChapterIndex = GeneratedColumn<int>(
+    'lastErrorChapterIndex',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     bookUrl,
@@ -8197,6 +8229,9 @@ class $DownloadTasksTable extends DownloadTasks
     errorCount,
     lastUpdateTime,
     sortOrder,
+    lastErrorReason,
+    lastErrorMessage,
+    lastErrorChapterIndex,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8298,6 +8333,33 @@ class $DownloadTasksTable extends DownloadTasks
         sortOrder.isAcceptableOrUnknown(data['sortOrder']!, _sortOrderMeta),
       );
     }
+    if (data.containsKey('lastErrorReason')) {
+      context.handle(
+        _lastErrorReasonMeta,
+        lastErrorReason.isAcceptableOrUnknown(
+          data['lastErrorReason']!,
+          _lastErrorReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('lastErrorMessage')) {
+      context.handle(
+        _lastErrorMessageMeta,
+        lastErrorMessage.isAcceptableOrUnknown(
+          data['lastErrorMessage']!,
+          _lastErrorMessageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('lastErrorChapterIndex')) {
+      context.handle(
+        _lastErrorChapterIndexMeta,
+        lastErrorChapterIndex.isAcceptableOrUnknown(
+          data['lastErrorChapterIndex']!,
+          _lastErrorChapterIndexMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -8351,6 +8413,18 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.int,
         data['${effectivePrefix}sortOrder'],
       )!,
+      lastErrorReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lastErrorReason'],
+      ),
+      lastErrorMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lastErrorMessage'],
+      ),
+      lastErrorChapterIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastErrorChapterIndex'],
+      ),
     );
   }
 
@@ -8372,6 +8446,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   final Value<int> errorCount;
   final Value<int> lastUpdateTime;
   final Value<int> sortOrder;
+  final Value<String?> lastErrorReason;
+  final Value<String?> lastErrorMessage;
+  final Value<int?> lastErrorChapterIndex;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.bookUrl = const Value.absent(),
@@ -8385,6 +8462,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     this.errorCount = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.lastErrorReason = const Value.absent(),
+    this.lastErrorMessage = const Value.absent(),
+    this.lastErrorChapterIndex = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -8399,6 +8479,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     this.errorCount = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.lastErrorReason = const Value.absent(),
+    this.lastErrorMessage = const Value.absent(),
+    this.lastErrorChapterIndex = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : bookUrl = Value(bookUrl),
        bookName = Value(bookName);
@@ -8414,6 +8497,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     Expression<int>? errorCount,
     Expression<int>? lastUpdateTime,
     Expression<int>? sortOrder,
+    Expression<String>? lastErrorReason,
+    Expression<String>? lastErrorMessage,
+    Expression<int>? lastErrorChapterIndex,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -8429,6 +8515,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
       if (errorCount != null) 'errorCount': errorCount,
       if (lastUpdateTime != null) 'addTime': lastUpdateTime,
       if (sortOrder != null) 'sortOrder': sortOrder,
+      if (lastErrorReason != null) 'lastErrorReason': lastErrorReason,
+      if (lastErrorMessage != null) 'lastErrorMessage': lastErrorMessage,
+      if (lastErrorChapterIndex != null)
+        'lastErrorChapterIndex': lastErrorChapterIndex,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8445,6 +8535,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     Value<int>? errorCount,
     Value<int>? lastUpdateTime,
     Value<int>? sortOrder,
+    Value<String?>? lastErrorReason,
+    Value<String?>? lastErrorMessage,
+    Value<int?>? lastErrorChapterIndex,
     Value<int>? rowid,
   }) {
     return DownloadTasksCompanion(
@@ -8459,6 +8552,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
       errorCount: errorCount ?? this.errorCount,
       lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
       sortOrder: sortOrder ?? this.sortOrder,
+      lastErrorReason: lastErrorReason ?? this.lastErrorReason,
+      lastErrorMessage: lastErrorMessage ?? this.lastErrorMessage,
+      lastErrorChapterIndex:
+          lastErrorChapterIndex ?? this.lastErrorChapterIndex,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8499,6 +8596,15 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     if (sortOrder.present) {
       map['sortOrder'] = Variable<int>(sortOrder.value);
     }
+    if (lastErrorReason.present) {
+      map['lastErrorReason'] = Variable<String>(lastErrorReason.value);
+    }
+    if (lastErrorMessage.present) {
+      map['lastErrorMessage'] = Variable<String>(lastErrorMessage.value);
+    }
+    if (lastErrorChapterIndex.present) {
+      map['lastErrorChapterIndex'] = Variable<int>(lastErrorChapterIndex.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8519,6 +8625,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
           ..write('errorCount: $errorCount, ')
           ..write('lastUpdateTime: $lastUpdateTime, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('lastErrorReason: $lastErrorReason, ')
+          ..write('lastErrorMessage: $lastErrorMessage, ')
+          ..write('lastErrorChapterIndex: $lastErrorChapterIndex, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8542,6 +8651,9 @@ class _$DownloadTaskInsertable implements Insertable<DownloadTask> {
       errorCount: Value(_object.errorCount),
       lastUpdateTime: Value(_object.lastUpdateTime),
       sortOrder: Value(_object.sortOrder),
+      lastErrorReason: Value(_object.lastErrorReason),
+      lastErrorMessage: Value(_object.lastErrorMessage),
+      lastErrorChapterIndex: Value(_object.lastErrorChapterIndex),
     ).toColumns(false);
   }
 }
@@ -15058,6 +15170,9 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<int> errorCount,
       Value<int> lastUpdateTime,
       Value<int> sortOrder,
+      Value<String?> lastErrorReason,
+      Value<String?> lastErrorMessage,
+      Value<int?> lastErrorChapterIndex,
       Value<int> rowid,
     });
 typedef $$DownloadTasksTableUpdateCompanionBuilder =
@@ -15073,6 +15188,9 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<int> errorCount,
       Value<int> lastUpdateTime,
       Value<int> sortOrder,
+      Value<String?> lastErrorReason,
+      Value<String?> lastErrorMessage,
+      Value<int?> lastErrorChapterIndex,
       Value<int> rowid,
     });
 
@@ -15137,6 +15255,21 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastErrorReason => $composableBuilder(
+    column: $table.lastErrorReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastErrorMessage => $composableBuilder(
+    column: $table.lastErrorMessage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastErrorChapterIndex => $composableBuilder(
+    column: $table.lastErrorChapterIndex,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -15204,6 +15337,21 @@ class $$DownloadTasksTableOrderingComposer
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get lastErrorReason => $composableBuilder(
+    column: $table.lastErrorReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastErrorMessage => $composableBuilder(
+    column: $table.lastErrorMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastErrorChapterIndex => $composableBuilder(
+    column: $table.lastErrorChapterIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -15261,6 +15409,21 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get lastErrorReason => $composableBuilder(
+    column: $table.lastErrorReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastErrorMessage => $composableBuilder(
+    column: $table.lastErrorMessage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastErrorChapterIndex => $composableBuilder(
+    column: $table.lastErrorChapterIndex,
+    builder: (column) => column,
+  );
 }
 
 class $$DownloadTasksTableTableManager
@@ -15305,6 +15468,9 @@ class $$DownloadTasksTableTableManager
                 Value<int> errorCount = const Value.absent(),
                 Value<int> lastUpdateTime = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String?> lastErrorReason = const Value.absent(),
+                Value<String?> lastErrorMessage = const Value.absent(),
+                Value<int?> lastErrorChapterIndex = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion(
                 bookUrl: bookUrl,
@@ -15318,6 +15484,9 @@ class $$DownloadTasksTableTableManager
                 errorCount: errorCount,
                 lastUpdateTime: lastUpdateTime,
                 sortOrder: sortOrder,
+                lastErrorReason: lastErrorReason,
+                lastErrorMessage: lastErrorMessage,
+                lastErrorChapterIndex: lastErrorChapterIndex,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15333,6 +15502,9 @@ class $$DownloadTasksTableTableManager
                 Value<int> errorCount = const Value.absent(),
                 Value<int> lastUpdateTime = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String?> lastErrorReason = const Value.absent(),
+                Value<String?> lastErrorMessage = const Value.absent(),
+                Value<int?> lastErrorChapterIndex = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion.insert(
                 bookUrl: bookUrl,
@@ -15346,6 +15518,9 @@ class $$DownloadTasksTableTableManager
                 errorCount: errorCount,
                 lastUpdateTime: lastUpdateTime,
                 sortOrder: sortOrder,
+                lastErrorReason: lastErrorReason,
+                lastErrorMessage: lastErrorMessage,
+                lastErrorChapterIndex: lastErrorChapterIndex,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

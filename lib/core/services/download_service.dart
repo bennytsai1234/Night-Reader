@@ -262,6 +262,7 @@ class DownloadService extends DownloadBase
       currentChapterIndex: 0,
       successCount: 0,
       errorCount: 0,
+      failureOf: task,
     );
     update();
     if (!isDownloading) {

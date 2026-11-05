@@ -193,6 +193,19 @@ void main() {
       expect(await a.shelf(), hasLength(1));
     });
 
+    test('another file with the name of a book whose original is missing is '
+        'a new book; it does not take the old book\'s place', () async {
+      // 還原備份帶回了書、沒帶回原檔。
+      final first = await a.import('夜航.txt', _novel);
+      await File(LocalBookService.filePathOf(first)).delete();
+
+      final other = await a.import('夜航.txt', '第一章 別的書\n不一樣的內容。\n');
+
+      expect(other.bookUrl, isNot(first.bookUrl));
+      expect(await a.shelf(), hasLength(2));
+      expect(await File(LocalBookService.filePathOf(first)).exists(), isFalse);
+    });
+
     test('books imported before this version get a fingerprint; progress, '
         'bookmarks and the book itself stay where they were', () async {
       final imported = await a.import('夜航.txt', _novel);

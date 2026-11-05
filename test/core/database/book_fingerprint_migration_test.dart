@@ -7,6 +7,8 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 
+import 'legacy_download_tasks_table.dart';
+
 void main() {
   // 同一個檔案先後開兩次（建好、再照舊版本重開），是刻意的。
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
@@ -31,12 +33,13 @@ void main() {
     );
     await current.close();
 
-    // 退回 schema 12：還沒有原檔指紋。
+    // 退回 schema 12：還沒有原檔指紋，也還沒有之後加的下載失敗欄位。
     final old = AppDatabase.forTesting(
       NativeDatabase(
         file,
         setup: (raw) {
           raw.execute('ALTER TABLE books DROP COLUMN fileFingerprint');
+          dropDownloadFailureColumns.forEach(raw.execute);
           raw.execute('PRAGMA user_version = 12');
         },
       ),

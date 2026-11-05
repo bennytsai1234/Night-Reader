@@ -287,6 +287,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       status: DownloadTask.statusDownloading,
       successCount: 0,
       errorCount: 0,
+      failureOf: task,
     );
     update();
 
@@ -388,6 +389,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                 currentChapterIndex: chapter.index,
                 successCount: task.successCount,
                 errorCount: task.errorCount,
+                failureOf: result.success ? null : task,
               ),
             );
             update();
@@ -429,6 +431,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         await downloadDao.updateProgress(
           task.bookUrl,
           status: DownloadTask.statusFailed,
+          failureOf: task,
         );
       }
     } finally {

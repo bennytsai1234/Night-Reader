@@ -135,6 +135,20 @@ void main() {
     );
   });
 
+  test('閱讀器關掉後才逾時的規則不停用：說不了，下次開書再停用並提示', () async {
+    final load = repository.loadContent(0);
+    repository.dispose();
+    try {
+      await load;
+    } catch (_) {
+      // 關掉後這一章載不載得完都不要緊。
+    }
+
+    expect(disabled, isEmpty);
+    final rules = await replaceDao.getAll();
+    expect(rules.every((rule) => rule.isEnabled), isTrue);
+  });
+
   test('之後的章不再跑那一條', () async {
     await repository.loadContent(0);
     final next = await repository.loadContent(1);

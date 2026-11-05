@@ -213,6 +213,7 @@ void main() {
       bookName: book.name,
       totalCount: 40,
     );
+    await GetIt.instance<DownloadDao>().upsert(task);
     service.tasks.add(task);
     service.isDownloading = true;
     addTearDown(() {
@@ -227,6 +228,13 @@ void main() {
     expect(finished.successCount, 0);
     // 停下時已在抓的章節（最多 5 章）照樣跑完。
     expect(finished.errorCount, inInclusiveRange(10, 15));
+    // 重開 App 後「查看失敗原因」讀的是資料庫裡的。
+    final stored = (await GetIt.instance<DownloadDao>().getAll()).firstWhere(
+      (t) => t.bookUrl == book.bookUrl,
+    );
+    expect(stored.lastErrorChapterIndex, finished.lastErrorChapterIndex);
+    expect(stored.failureSummary, isNotNull);
+    expect(stored.failureSummary, finished.failureSummary);
   });
 
   group('the range of a task', () {
@@ -344,6 +352,7 @@ void main() {
         endChapterUrl: '$origin/c/2',
         totalCount: 2,
       );
+      await GetIt.instance<DownloadDao>().upsert(task);
       service.tasks.add(task);
       service.isDownloading = true;
       addTearDown(() {
@@ -355,6 +364,10 @@ void main() {
 
       expect(task.isFailed, isTrue);
       expect(task.lastErrorMessage, contains('選的章節已不在目錄裡'));
+      final stored = (await GetIt.instance<DownloadDao>().getAll()).firstWhere(
+        (t) => t.bookUrl == book.bookUrl,
+      );
+      expect(stored.lastErrorMessage, task.lastErrorMessage);
     });
   });
 

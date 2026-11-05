@@ -77,7 +77,7 @@ class LocalBookService {
       return same.first;
     }
 
-    final storedPath = await storeInLibrary(path);
+    final storedPath = await storeInLibrary(path, bookDao: bookDao);
     final existing = await bookDao.getByUrl('local://$storedPath');
     if (existing != null && existing.isInBookshelf) return existing;
     try {
@@ -148,7 +148,7 @@ class LocalBookService {
   ///
   /// 選檔器與分享給的檔案在暫存區，系統清暫存後書就打不開。同名同內容的
   /// 檔案視為同一本、不再複製；同名不同內容的另取「書名 (2)」。
-  Future<String> storeInLibrary(String path) async {
+  Future<String> storeInLibrary(String path, {required BookDao bookDao}) async {
     final dir = await AppStoragePaths.localBooksDir(ensureExists: true);
     if (p.equals(p.dirname(path), dir.path)) return path;
 
@@ -158,6 +158,7 @@ class LocalBookService {
     for (var copy = 1; ; copy++) {
       final target = File(p.join(dir.path, _copyName(name, extension, copy)));
       if (!await target.exists()) {
+        if (await _shelfBookAt(target.path, bookDao)) continue;
         await source.copy(target.path);
         return target.path;
       }
@@ -167,15 +168,26 @@ class LocalBookService {
 
   /// 本地書資料夾裡還沒被用掉的檔名：「書名.txt」，有了就「書名 (2).txt」。
   /// 同步本地書從雲端下載的原檔照另一台的書名存在這裡。
-  static Future<String> freeLibraryPath(String name, String extension) async {
+  static Future<String> freeLibraryPath(
+    String name,
+    String extension, {
+    required BookDao bookDao,
+  }) async {
     final dir = await AppStoragePaths.localBooksDir(ensureExists: true);
     final safe = name.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim();
     final base = safe.isEmpty ? '本地書' : safe;
     for (var copy = 1; ; copy++) {
       final target = p.join(dir.path, _copyName(base, extension, copy));
-      if (!await File(target).exists()) return target;
+      if (await File(target).exists()) continue;
+      if (await _shelfBookAt(target, bookDao)) continue;
+      return target;
     }
   }
+
+  /// 書架上有書指著 [path]：原檔不見了（例如還原備份沒帶回原檔）也還是
+  /// 那本書的位置，別的檔不能放進來，不然那本書會讀到另一本的內容。
+  static Future<bool> _shelfBookAt(String path, BookDao bookDao) async =>
+      (await bookDao.getByUrl('local://$path'))?.isInBookshelf ?? false;
 
   static String _copyName(String name, String extension, int copy) =>
       copy == 1 ? '$name$extension' : '$name ($copy)$extension';

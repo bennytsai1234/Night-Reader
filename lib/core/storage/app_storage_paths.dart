@@ -131,6 +131,7 @@ class AppStoragePaths {
     );
   }
 
+  /// 舊版快取另存檔案的地方，開 App 時刪掉（`DefaultData`）。
   static Future<Directory> jsCacheDir({bool ensureExists = false}) async {
     return _subdirectory(
       await temporaryDir(),
