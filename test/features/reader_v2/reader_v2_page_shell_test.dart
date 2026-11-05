@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep
 import 'package:night_reader/features/reader_v2/screen/reader_v2_battery_glyph.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_side_panel.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -25,7 +26,7 @@ void main() {
   late int systemBacks;
   late int exitIntents;
   late int timedTtsTaps;
-  late GlobalKey<ScaffoldState> scaffoldKey;
+  late ReaderV2SidePanelController panel;
 
   const contentKey = Key('reader-content');
 
@@ -51,7 +52,8 @@ void main() {
     dismissControls = 0;
     systemBacks = 0;
     exitIntents = 0;
-    scaffoldKey = GlobalKey<ScaffoldState>();
+    panel = ReaderV2SidePanelController();
+    addTearDown(panel.dispose);
     final scroll = ScrollController();
     addTearDown(scroll.dispose);
     final menu = ReaderV2MenuController();
@@ -76,7 +78,6 @@ void main() {
               origin: 'local',
               originName: '本地',
             ),
-            scaffoldKey: scaffoldKey,
             content: ListView.builder(
               key: contentKey,
               controller: scroll,
@@ -84,13 +85,15 @@ void main() {
               itemBuilder: (_, index) =>
                   SizedBox(height: 40, child: Text('第 $index 行')),
             ),
-            drawer: ReaderV2ChaptersDrawer(
+            chapterPanelController: panel,
+            chapterPanel: ReaderV2ChaptersDrawer(
               chapters: const [],
               currentChapter: chapter,
               titleFor: (_) => '',
               onChapterTap: (_) {},
-              onClosed: onDrawerClosed,
+              shown: panel.shown,
             ),
+            onChapterPanelClosed: onDrawerClosed,
             backgroundColor: Colors.white,
             infoColor: Colors.black,
             textColor: Colors.black,
@@ -177,12 +180,14 @@ void main() {
       onDrawerClosed: () => closed += 1,
     );
 
-    scaffoldKey.currentState!.openDrawer();
+    // 準備面板那一幀很重時再停 0.1 秒才滑（pumpAndSettle 不等計時器）。
+    panel.open();
     await tester.pump();
+    await tester.pump(AppMotion.stillGap);
     await tester.pumpAndSettle();
 
     // 收起動畫一開始就算「收起」的通知不算數：要收到底才完成。
-    scaffoldKey.currentState!.closeDrawer();
+    panel.close();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(closed, 0);
@@ -532,17 +537,40 @@ void main() {
     tester,
   ) async {
     await pumpShell(tester, controlsVisible: false);
-    scaffoldKey.currentState!.openDrawer();
+    panel.open();
+    await tester.pump();
+    await tester.pump(AppMotion.stillGap);
     await tester.pumpAndSettle();
-    expect(scaffoldKey.currentState!.isDrawerOpen, isTrue);
+    expect(panel.isOpen, isTrue);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(scaffoldKey.currentState!.isDrawerOpen, isFalse);
+    expect(panel.isOpen, isFalse);
+    expect(find.byType(Drawer), findsNothing);
     expect(find.byType(ReaderV2PageShell), findsOneWidget);
     expect(systemBacks, 0);
     expect(exitIntents, 0);
+  });
+
+  testWidgets('system back while the finger is pulling the list out from the '
+      'edge closes the list, not the reader', (tester) async {
+    await pumpShell(tester, controlsVisible: false);
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(panel.isOnScreen, isTrue);
+
+    await tester.binding.handlePopRoute();
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    expect(systemBacks, 0);
+    expect(exitIntents, 0);
+    expect(find.byType(Drawer), findsNothing);
   });
 
   group('timer key above the menu', () {
