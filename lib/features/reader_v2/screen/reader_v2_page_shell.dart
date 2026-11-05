@@ -21,6 +21,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart
 import 'package:night_reader/features/reader_v2/screen/reader_v2_battery_glyph.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_side_panel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -113,9 +114,9 @@ class ReaderV2PageShell extends StatelessWidget {
   const ReaderV2PageShell({
     super.key,
     required this.book,
-    required this.scaffoldKey,
     required this.content,
-    required this.drawer,
+    required this.chapterPanel,
+    required this.chapterPanelController,
     required this.backgroundColor,
     required this.infoColor,
     required this.textColor,
@@ -168,13 +169,16 @@ class ReaderV2PageShell extends StatelessWidget {
     this.showAutoPage = true,
     this.showReplaceRule = true,
     this.onMenuHidden,
-    this.onDrawerChanged,
+    this.onChapterPanelChanged,
+    this.onChapterPanelClosed,
   });
 
   final Book book;
-  final GlobalKey<ScaffoldState> scaffoldKey;
   final Widget content;
-  final ReaderV2ChaptersDrawer drawer;
+
+  /// 左側的目錄面板與開關它的遙控器（[ReaderV2SidePanel]）。
+  final ReaderV2ChaptersDrawer chapterPanel;
+  final ReaderV2SidePanelController chapterPanelController;
   final Color backgroundColor;
 
   /// 頁首／頁尾資訊列的文字與圖示色。
@@ -266,8 +270,11 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 相同，跟著下方選單的收起動畫。
   final VoidCallback? onMenuHidden;
 
-  /// 目錄打開（true）與收起（false）時呼叫。
-  final ValueChanged<bool>? onDrawerChanged;
+  /// 目錄開始打開（true）與開始收起（false）時呼叫。
+  final ValueChanged<bool>? onChapterPanelChanged;
+
+  /// 目錄收到底、離開畫面時呼叫。
+  final VoidCallback? onChapterPanelClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -298,180 +305,186 @@ class ReaderV2PageShell extends StatelessWidget {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // 目錄開著時返回只收目錄。
-        final scaffold = scaffoldKey.currentState;
-        if (scaffold != null && scaffold.isDrawerOpen) {
-          scaffold.closeDrawer();
+        if (chapterPanelController.isOpen) {
+          chapterPanelController.close();
           return;
         }
         onSystemBack();
       },
-      child: Scaffold(
-        key: scaffoldKey,
-        body: Container(
-          color: backgroundColor,
-          child: Stack(
-            children: [
-              // 正文上下緣常露出半行（ADR 0006）。正文區本身不動：跨在邊上
-              // 的那一行畫進正文與頁首頁尾之間的空隙，在空隙裡漸隱，不蓋到
-              // 頁首頁尾，也不淡掉正文區裡的字。
-              Positioned.fill(
-                top: layout.contentTop - fadeTop,
-                bottom: layout.contentBottom - fadeBottom,
-                child: ClipRect(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: fadeTop, bottom: fadeBottom),
-                    child: content,
-                  ),
-                ),
-              ),
-              if (fadeTop > 0)
-                Positioned(
+      // 目錄蓋在整個 Scaffold 上：提示（SnackBar）在暗幕底下，和系統抽屜一樣。
+      child: ReaderV2SidePanel(
+        controller: chapterPanelController,
+        panel: chapterPanel,
+        onOpenChanged: onChapterPanelChanged,
+        onClosed: onChapterPanelClosed,
+        child: Scaffold(
+          body: Container(
+            color: backgroundColor,
+            child: Stack(
+              children: [
+                // 正文上下緣常露出半行（ADR 0006）。正文區本身不動：跨在邊上
+                // 的那一行畫進正文與頁首頁尾之間的空隙，在空隙裡漸隱，不蓋到
+                // 頁首頁尾，也不淡掉正文區裡的字。
+                Positioned.fill(
                   top: layout.contentTop - fadeTop,
-                  left: 0,
-                  right: 0,
-                  child: EdgeFade(
-                    edge: AxisDirection.up,
-                    height: fadeTop,
-                    color: backgroundColor,
-                  ),
-                ),
-              if (fadeBottom > 0)
-                Positioned(
                   bottom: layout.contentBottom - fadeBottom,
-                  left: 0,
-                  right: 0,
-                  child: EdgeFade(
-                    edge: AxisDirection.down,
-                    height: fadeBottom,
-                    color: backgroundColor,
+                  child: ClipRect(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: fadeTop,
+                        bottom: fadeBottom,
+                      ),
+                      child: content,
+                    ),
                   ),
                 ),
-              if (layout.headerExtent > 0)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: layout.headerExtent,
-                  child: _ShowControlsTap(
-                    controlsVisible: controlsVisible,
-                    onShowControls: onShowControls,
-                    child: ColoredBox(
+                if (fadeTop > 0)
+                  Positioned(
+                    top: layout.contentTop - fadeTop,
+                    left: 0,
+                    right: 0,
+                    child: EdgeFade(
+                      edge: AxisDirection.up,
+                      height: fadeTop,
                       color: backgroundColor,
-                      child: layout.showHeaderInfo && infoShown
-                          ? Padding(
-                              padding: EdgeInsets.only(
-                                top: layout.headerRowTop,
-                              ),
-                              child: Center(
-                                child: _InfoLayer(
-                                  state: infoState,
-                                  builder: (skeleton) => _InfoRow(
-                                    shell: this,
-                                    slots: headerInfo,
-                                    showAutoPage:
-                                        isAutoPaging && !autoPageInFooter,
-                                    skeleton: skeleton,
+                    ),
+                  ),
+                if (fadeBottom > 0)
+                  Positioned(
+                    bottom: layout.contentBottom - fadeBottom,
+                    left: 0,
+                    right: 0,
+                    child: EdgeFade(
+                      edge: AxisDirection.down,
+                      height: fadeBottom,
+                      color: backgroundColor,
+                    ),
+                  ),
+                if (layout.headerExtent > 0)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: layout.headerExtent,
+                    child: _ShowControlsTap(
+                      controlsVisible: controlsVisible,
+                      onShowControls: onShowControls,
+                      child: ColoredBox(
+                        color: backgroundColor,
+                        child: layout.showHeaderInfo && infoShown
+                            ? Padding(
+                                padding: EdgeInsets.only(
+                                  top: layout.headerRowTop,
+                                ),
+                                child: Center(
+                                  child: _InfoLayer(
+                                    state: infoState,
+                                    builder: (skeleton) => _InfoRow(
+                                      shell: this,
+                                      slots: headerInfo,
+                                      showAutoPage:
+                                          isAutoPaging && !autoPageInFooter,
+                                      skeleton: skeleton,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
-                          : null,
+                              )
+                            : null,
+                      ),
                     ),
                   ),
-                ),
-              if (layout.showFooterInfo && infoShown)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: layout.footerExtent,
-                  child: _ShowControlsTap(
+                if (layout.showFooterInfo && infoShown)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: layout.footerExtent,
+                    child: _ShowControlsTap(
+                      controlsVisible: controlsVisible,
+                      onShowControls: onShowControls,
+                      child: _PermanentInfoBar(
+                        shell: this,
+                        rowBottom: layout.footerRowBottom,
+                      ),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: _ReaderV2ControlsDismissLayer(
                     controlsVisible: controlsVisible,
-                    onShowControls: onShowControls,
-                    child: _PermanentInfoBar(
-                      shell: this,
-                      rowBottom: layout.footerRowBottom,
-                    ),
+                    onDismiss: onDismissControls,
                   ),
                 ),
-              Positioned.fill(
-                child: _ReaderV2ControlsDismissLayer(
-                  controlsVisible: controlsVisible,
-                  onDismiss: onDismissControls,
-                ),
-              ),
-              Positioned.fill(
-                child: CustomMultiChildLayout(
-                  delegate: _MenuLayoutDelegate(),
-                  children: [
-                    LayoutId(
-                      id: _MenuSlot.top,
-                      child: ReaderV2TopMenu(
-                        horizontalInset: menuSide ?? AppGrouped.margin,
-                        controlsVisible: controlsVisible,
-                        bookName: context.zh(book.name),
-                        navigation: navigation,
-                        originName: originName,
-                        showReadTitleAddition: showReadTitleAddition,
-                        onBack: onExitIntent,
-                        onMore: onMore,
-                      ),
-                    ),
-                    LayoutId(
-                      id: _MenuSlot.bottom,
-                      child: ReaderV2BottomMenu(
-                        horizontalInset: menuSide ?? AppGrouped.margin,
-                        controlsVisible: controlsVisible,
-                        navigation: navigation,
-                        isAutoPaging: isAutoPaging,
-                        dayNightIcon: dayNightIcon,
-                        dayNightTooltip: dayNightTooltip,
-                        onOpenDrawer: onOpenDrawer,
-                        onTts: onTts,
-                        onTimedTts: onTimedTts,
-                        onInterface: onInterface,
-                        onSettings: onSettings,
-                        onAutoPage: onAutoPage,
-                        onToggleDayNight: onToggleDayNight,
-                        onReplaceRule: onReplaceRule,
-                        onPrevChapter: onPrevChapter,
-                        onNextChapter: onNextChapter,
-                        onScrubStart: onScrubStart,
-                        onScrubbing: onScrubbing,
-                        onScrubEnd: onScrubEnd,
-                        progressListenable: progressListenable,
-                        sleepTimer: sleepTimer,
-                        isTtsPlaying: isTtsPlaying,
-                        showTts: showTts,
-                        showAutoPage: showAutoPage,
-                        showReplaceRule: showReplaceRule,
-                        onHidden: onMenuHidden,
-                      ),
-                    ),
-                    if (brightnessControl case final control?)
+                Positioned.fill(
+                  child: CustomMultiChildLayout(
+                    delegate: _MenuLayoutDelegate(),
+                    children: [
                       LayoutId(
-                        id: _MenuSlot.brightness,
-                        child: ReaderV2MenuEntrance(
-                          visible: controlsVisible,
-                          edge: AxisDirection.left,
-                          gap: AppGrouped.margin,
-                          // 比上下選單晚一點出發，三塊錯開。
-                          delay: AppMotion.readerMenuStagger,
-                          child: Theme(
-                            data: ReaderV2MenuStyle.of(context)
-                                .toSheetTheme(Theme.of(context)),
-                            child: control,
-                          ),
+                        id: _MenuSlot.top,
+                        child: ReaderV2TopMenu(
+                          horizontalInset: menuSide ?? AppGrouped.margin,
+                          controlsVisible: controlsVisible,
+                          bookName: context.zh(book.name),
+                          navigation: navigation,
+                          originName: originName,
+                          showReadTitleAddition: showReadTitleAddition,
+                          onBack: onExitIntent,
+                          onMore: onMore,
                         ),
                       ),
-                  ],
+                      LayoutId(
+                        id: _MenuSlot.bottom,
+                        child: ReaderV2BottomMenu(
+                          horizontalInset: menuSide ?? AppGrouped.margin,
+                          controlsVisible: controlsVisible,
+                          navigation: navigation,
+                          isAutoPaging: isAutoPaging,
+                          dayNightIcon: dayNightIcon,
+                          dayNightTooltip: dayNightTooltip,
+                          onOpenDrawer: onOpenDrawer,
+                          onTts: onTts,
+                          onTimedTts: onTimedTts,
+                          onInterface: onInterface,
+                          onSettings: onSettings,
+                          onAutoPage: onAutoPage,
+                          onToggleDayNight: onToggleDayNight,
+                          onReplaceRule: onReplaceRule,
+                          onPrevChapter: onPrevChapter,
+                          onNextChapter: onNextChapter,
+                          onScrubStart: onScrubStart,
+                          onScrubbing: onScrubbing,
+                          onScrubEnd: onScrubEnd,
+                          progressListenable: progressListenable,
+                          sleepTimer: sleepTimer,
+                          isTtsPlaying: isTtsPlaying,
+                          showTts: showTts,
+                          showAutoPage: showAutoPage,
+                          showReplaceRule: showReplaceRule,
+                          onHidden: onMenuHidden,
+                        ),
+                      ),
+                      if (brightnessControl case final control?)
+                        LayoutId(
+                          id: _MenuSlot.brightness,
+                          child: ReaderV2MenuEntrance(
+                            visible: controlsVisible,
+                            edge: AxisDirection.left,
+                            gap: AppGrouped.margin,
+                            // 比上下選單晚一點出發，三塊錯開。
+                            delay: AppMotion.readerMenuStagger,
+                            child: Theme(
+                              data: ReaderV2MenuStyle.of(context)
+                                  .toSheetTheme(Theme.of(context)),
+                              child: control,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        drawer: drawer,
-        onDrawerChanged: onDrawerChanged,
       ),
     );
   }

@@ -40,6 +40,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_she
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_side_panel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_volume_keys.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
@@ -86,7 +87,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   late final SourceSwitchService _sourceSwitchService;
 
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  /// 左側的目錄面板。
+  final ReaderV2SidePanelController _chapterPanel =
+      ReaderV2SidePanelController();
   final ReaderV2PageExitCoordinator _exitCoordinator =
       ReaderV2PageExitCoordinator();
 
@@ -206,6 +209,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _drawerOpen.dispose();
+    _chapterPanel.dispose();
     _breathPaused.dispose();
     unawaited(_settingsSaveFailures?.cancel());
     unawaited(_hostNotices?.cancel());
@@ -338,9 +342,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 paused: _breathPaused,
                 child: ReaderV2PageShell(
                   book: widget.book,
-                  scaffoldKey: _scaffoldKey,
                   content: _buildContent(context),
-                  drawer: ReaderV2ChaptersDrawer(
+                  chapterPanelController: _chapterPanel,
+                  chapterPanel: ReaderV2ChaptersDrawer(
+                    shown: _chapterPanel.shown,
                     chapters: runtime?.chapters ?? widget.initialChapters,
                     currentChapter: navigation.current,
                     titleFor: _chapterTitleAt,
@@ -375,8 +380,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                         ),
                       ]),
                     ),
-                    onClosed: _handleDrawerClosed,
                   ),
+                  onChapterPanelClosed: _handleDrawerClosed,
                   backgroundColor: palette.readerBackground,
                   infoColor: palette.readerInfo,
                   textColor: palette.readerText,
@@ -460,7 +465,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   showAutoPage: true,
                   showReplaceRule: true,
                   onMenuHidden: _handleMenuHidden,
-                  onDrawerChanged: (open) => _drawerOpen.value = open,
+                  onChapterPanelChanged: (open) => _drawerOpen.value = open,
                 ),
               ),
             ),
@@ -629,7 +634,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     await runtime.reloadContentPreservingLocation();
   }
 
-  void _openChapters() => _scaffoldKey.currentState?.openDrawer();
+  void _openChapters() => _chapterPanel.open();
 
   /// 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
   void _toggleDayNight() {
@@ -693,11 +698,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 從目錄面板跳過去：收起面板與選單、蓋上紙；傳回面板收完、紙蓋好的
   /// 時候，跳轉等它才開始載入（ADR 0018）。
   Future<void> _closeDrawerForJump() {
-    final scaffold = _scaffoldKey.currentState;
-    final drawerClosed = scaffold != null && scaffold.isDrawerOpen
+    final drawerClosed = _chapterPanel.isOpen
         ? (_drawerClosed ??= Completer<void>()).future
         : Future<void>.value();
-    scaffold?.closeDrawer();
+    _chapterPanel.close();
     _host.menu.dismissControls();
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
@@ -877,20 +881,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       _exitCoordinator.handleExitIntent(
         context: context,
         provider: this,
-        // The reader is always opened as an app-level route from the
-        // bookshelf.  A Scaffold drawer can leave a LocalHistoryEntry on the
-        // reader route while its closing animation settles; popUntil applies
-        // the predicate to the same route again until that local history is
-        // consumed, then removes only the reader route itself.
-        popNavigator: () {
-          final navigator = Navigator.of(context, rootNavigator: true);
-          final readerRoute = pageRouteOf(context);
-          if (readerRoute == null) {
-            navigator.pop();
-            return;
-          }
-          navigator.popUntil((route) => !identical(route, readerRoute));
-        },
+        // 閱讀器一律從書架以 App 層級的路由打開。
+        popNavigator: () => Navigator.of(context, rootNavigator: true).pop(),
       ),
     );
   }
