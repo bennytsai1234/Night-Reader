@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
@@ -273,9 +274,13 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     final menu = ConstrainedBox(
       constraints: BoxConstraints.tightFor(width: menuWidth)
           .copyWith(maxHeight: menuMaxHeight),
+      // 陰影不畫在玻璃上：展開的裁切會把伸出外框的陰影切掉，改由外面
+      // 沿著展開中的外框畫（[_MenuRevealShadow]）。
       child: GlassSurface(
         borderRadius: AppRadius.cardXl,
         grouped: false,
+        shadow: false,
+        floating: false,
         tint: chrome.groupedSurface.withValues(alpha: 0.9),
         child: Material(
           type: MaterialType.transparency,
@@ -365,17 +370,29 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           top: menuTop,
           // 從靠錨點的那個角展開，不淡（ADR 0022）：選單是玻璃，淡入時模糊
           // 到最後一幀才突然糊上去。選單一開始就是最終大小，只有圓角的
-          // 裁切框由小長大，字不縮放，不必每一幀重建字的貼圖。
+          // 裁切框由小長大，字不縮放，不必每一幀重建字的貼圖。陰影沿著
+          // 同一個外框畫、跟著展開的進度長出，展開完就是玻璃的陰影。
           child: AnimatedBuilder(
             animation: curved,
-            builder: (context, child) => ClipRRect(
-              clipper: _MenuRevealClipper(
-                progress: curved.value.clamp(0.0, 1.0),
+            builder: (context, child) {
+              final progress = curved.value.clamp(0.0, 1.0);
+              final clipper = _MenuRevealClipper(
+                progress: progress,
                 alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
                 radius: AppRadius.cardXl.topLeft,
-              ),
-              child: child,
-            ),
+              );
+              return CustomPaint(
+                painter: _MenuRevealShadow(
+                  clipper: clipper,
+                  shadows: GlassSurface.shadows(
+                    chrome,
+                    dark: Theme.of(context).brightness == Brightness.dark,
+                    shown: progress,
+                  ),
+                ),
+                child: ClipRRect(clipper: clipper, child: child),
+              );
+            },
             child: menu,
           ),
         ),
@@ -553,9 +570,38 @@ class _MenuRevealClipper extends CustomClipper<RRect> {
     return RRect.fromRectAndRadius(rect, Radius.circular(r));
   }
 
+  /// 讀屏的範圍跟畫面上露出的一樣：還沒露出的列不能被巡覽到。
+  @override
+  Rect getApproximateClipRect(Size size) => getClip(size).outerRect;
+
   @override
   bool shouldReclip(_MenuRevealClipper old) =>
       old.progress != progress ||
       old.alignment != alignment ||
       old.radius != radius;
+}
+
+/// 沿著 [clipper] 當下的外框畫玻璃的陰影（和 [BoxDecoration] 畫陰影的方式
+/// 一樣），畫在選單底下。
+class _MenuRevealShadow extends CustomPainter {
+  const _MenuRevealShadow({required this.clipper, required this.shadows});
+
+  final _MenuRevealClipper clipper;
+  final List<BoxShadow> shadows;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frame = clipper.getClip(size);
+    if (frame.height <= 0) return;
+    for (final shadow in shadows) {
+      canvas.drawRRect(
+        frame.shift(shadow.offset).inflate(shadow.spreadRadius),
+        shadow.toPaint(),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuRevealShadow old) =>
+      clipper.shouldReclip(old.clipper) || !listEquals(old.shadows, shadows);
 }
