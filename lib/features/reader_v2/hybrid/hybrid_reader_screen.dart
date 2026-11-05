@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
@@ -73,12 +74,12 @@ class HybridReaderScreen extends StatefulWidget {
     this.paragraphCacheCapacity = 512,
     this.pageTurnOverlap = 1,
     this.pageTurnDuration = const Duration(milliseconds: 260),
-    this.breathPaused,
+    this.skeletonBreath,
   });
 
-  /// 紙上骨架的呼吸停住中（掀紙前在紙底下建好正文）時設成 true：呼叫端拿它
-  /// 讓頁首頁尾的骨架一起停（[SkeletonPause]）。
-  final ValueNotifier<bool>? breathPaused;
+  /// 紙上骨架的呼吸，和呼叫端頁首頁尾的骨架共用（[SharedSkeletonBreathScope]）；
+  /// null 時紙自己一口。建好後不換。
+  final SharedSkeletonBreath? skeletonBreath;
 
   final ReaderV2Runtime runtime;
   final Color backgroundColor;
@@ -215,17 +216,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   double? _veilHoldOffset;
   late final LoadingVeilController _veil = LoadingVeilController(
     vsync: this,
+    breath: widget.skeletonBreath,
     onHidden: () {
       // 紙掀完了；下一次蓋紙另外決定照什麼畫骨架。
       _openingPage = null;
       _veilPage = null;
       if (mounted) setState(() {});
     },
-  )..breathHeld.addListener(_syncBreathPaused);
-
-  /// 紙上骨架停住呼吸時，呼叫端的頁首頁尾骨架跟著停（[HybridReaderScreen.breathPaused]）。
-  void _syncBreathPaused() =>
-      widget.breathPaused?.value = _veil.breathHeld.value;
+  );
 
   /// 舊正文還在畫面上、紙正在淡入蓋住它時，紙停下來（蓋滿或途中掀開）
   /// 後完成；其他時候為 null（見 [_coverText]）。
@@ -380,8 +378,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _scrollController?.dispose();
     _selection.dispose();
     _revealTimer?.cancel();
-    _veil.breathHeld.removeListener(_syncBreathPaused);
-    widget.breathPaused?.value = false;
     _veil.dispose();
     super.dispose();
   }

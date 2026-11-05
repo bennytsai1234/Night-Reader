@@ -169,7 +169,9 @@ class _SkeletonState extends State<Skeleton>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _breathing = !MediaQuery.disableAnimationsOf(context);
+    // 先接上共用的呼吸，可以呼吸時才不會先自己計時一幀。
     _clock
+      ..follow(SharedSkeletonBreathScope.maybeOf(context))
       ..breath = SkeletonLook.of(context).breath
       ..allowed = _breathing
       ..visible = TickerMode.valuesOf(context).enabled;
@@ -183,22 +185,10 @@ class _SkeletonState extends State<Skeleton>
       _entrance = entrance;
       if (entrance != null) _clock.holdUntil(entrance);
     }
-    final pause = SkeletonPause.maybeOf(context);
-    if (!identical(pause, _pause)) {
-      _pause?.removeListener(_onPause);
-      _pause = pause?..addListener(_onPause);
-      _onPause();
-    }
   }
-
-  /// 所在的 [SkeletonPause]。
-  ValueListenable<bool>? _pause;
-
-  void _onPause() => _clock.paused = _pause?.value ?? false;
 
   @override
   void dispose() {
-    _pause?.removeListener(_onPause);
     _rest?._clocks.remove(_clock);
     _clock.dispose();
     super.dispose();
@@ -261,21 +251,89 @@ class _RenderSkeletonAnchor extends RenderProxyBox {
   }
 }
 
-/// 讓底下所有 [Skeleton] 的呼吸暫停在這一刻的深淺：[paused] 是 true 時停住，
-/// 回到 false 從同一個相位接著呼吸。給一兩幀加 0.1 秒的短停頓用（ADR 0037
-/// 補充：閱讀器掀紙前在紙底下建好正文，頁首頁尾的骨架跟紙一起停）；停得很短，
-/// 看不出凍住。
-class SkeletonPause extends InheritedWidget {
-  const SkeletonPause({super.key, required this.paused, required super.child});
+/// 同一個畫面上分開畫的幾塊骨架共用的一口呼吸：閱讀器的紙（自己畫骨架）
+/// 與頁首頁尾（[Skeleton]）照同一個相位呼吸，由左而右的明暗才是同一道走
+/// 過整個畫面。各自計時的話，誰先出現誰先開始，兩邊的明暗就錯開。
+///
+/// 有人要用（[acquire]）才呼吸，最後一個放掉（[release]）就停回最深；
+/// [hold] 停在這一刻的深淺，[resume] 從同一個相位接著走（ADR 0037 補充：
+/// 閱讀器掀紙前在紙底下建好正文的那一兩幀，整個畫面一起停）。
+class SharedSkeletonBreath {
+  SharedSkeletonBreath({required TickerProvider vsync})
+    : _phase = AnimationController(
+        vsync: vsync,
+        duration: Skeleton.breathCycle,
+      );
 
-  final ValueListenable<bool> paused;
+  final AnimationController _phase;
 
-  static ValueListenable<bool>? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<SkeletonPause>()?.paused;
+  /// 這一輪呼吸的進度（0 到 1，[Skeleton.breathAt] 的相位）。
+  Animation<double> get phase => _phase;
+
+  /// 照 [phase] 的深淺畫：呼吸中，或停在某個深淺（[hold]）。
+  bool get isBreathing => _phase.isAnimating || _held;
+
+  int _users = 0;
+  bool _held = false;
+
+  void acquire() {
+    _users += 1;
+    _sync();
+  }
+
+  void release() {
+    _users -= 1;
+    _sync();
+  }
+
+  /// 呼吸停在這一刻的深淺，畫面不動；沒在呼吸時不做事。
+  void hold() {
+    if (!_phase.isAnimating) return;
+    _held = true;
+    _phase.stop();
+  }
+
+  /// [hold] 停住的呼吸接著走。
+  void resume() {
+    if (!_held) return;
+    _held = false;
+    _sync();
+  }
+
+  void _sync() {
+    final run = _users > 0;
+    // 停住的呼吸維持停在原處，等 [resume]。
+    if (run && _held) return;
+    _held = false;
+    if (run) {
+      if (!_phase.isAnimating) unawaited(_phase.repeat());
+    } else if (_phase.isAnimating || _phase.value != 0) {
+      _phase
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  void dispose() => _phase.dispose();
+}
+
+/// 讓底下的 [Skeleton] 照 [breath] 呼吸，不自己計時。
+class SharedSkeletonBreathScope extends InheritedWidget {
+  const SharedSkeletonBreathScope({
+    super.key,
+    required this.breath,
+    required super.child,
+  });
+
+  final SharedSkeletonBreath breath;
+
+  static SharedSkeletonBreath? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<SharedSkeletonBreathScope>()
+      ?.breath;
 
   @override
-  bool updateShouldNotify(SkeletonPause oldWidget) =>
-      !identical(paused, oldWidget.paused);
+  bool updateShouldNotify(SharedSkeletonBreathScope oldWidget) =>
+      !identical(breath, oldWidget.breath);
 }
 
 /// 收住一群 [Skeleton] 的呼吸：每個位置把這一口氣呼完、停在最深，整個畫面
@@ -383,6 +441,7 @@ class _BreathClock extends ChangeNotifier {
   bool _allowed = false;
   set allowed(bool value) {
     _allowed = value;
+    _syncShared();
     if (value) {
       _start();
     } else {
@@ -401,24 +460,64 @@ class _BreathClock extends ChangeNotifier {
   }
 
   void _start() {
-    if (!_allowed || _still || _paused || _hold != null || _ticker.isActive) {
+    if (!_allowed ||
+        _still ||
+        _shared != null ||
+        _hold != null ||
+        _ticker.isActive) {
       return;
     }
     _base = _cycles;
     _ticker.start();
   }
 
-  /// 呼吸暫停在這一刻的深淺（[SkeletonPause]），計時器不走；接著時從同一個
-  /// 相位走下去。
-  bool _paused = false;
-  set paused(bool value) {
-    if (_paused == value) return;
-    _paused = value;
-    if (value) {
-      _ticker.stop();
-    } else {
+  /// 照這口共用的呼吸走（[SharedSkeletonBreathScope]），自己的計時器不走；
+  /// 可以呼吸時登記成它的使用者，它才會呼吸。
+  SharedSkeletonBreath? _shared;
+  bool _usingShared = false;
+
+  void follow(SharedSkeletonBreath? shared) {
+    if (identical(shared, _shared)) return;
+    _leaveShared();
+    _shared = shared;
+    if (shared == null) {
       _start();
+      return;
     }
+    _ticker.stop();
+    shared.phase.addListener(_onShared);
+    _syncShared();
+    _onShared();
+  }
+
+  void _syncShared() {
+    final shared = _shared;
+    if (shared == null) return;
+    if (_allowed && !_usingShared) {
+      _usingShared = true;
+      shared.acquire();
+    } else if (!_allowed && _usingShared) {
+      _usingShared = false;
+      shared.release();
+    }
+  }
+
+  void _leaveShared() {
+    final shared = _shared;
+    if (shared == null) return;
+    shared.phase.removeListener(_onShared);
+    if (_usingShared) {
+      _usingShared = false;
+      shared.release();
+    }
+    _shared = null;
+  }
+
+  void _onShared() {
+    // 新的一幀：骨架可能換了位置（換頁平移、捲動），同 [_tick]。
+    _anchorStale = true;
+    _cycles = _shared!.phase.value;
+    notifyListeners();
   }
 
   /// 呼吸一輪多長：開 App 進場中的骨架照進場的節奏
@@ -600,6 +699,7 @@ class _BreathClock extends ChangeNotifier {
 
   @override
   void dispose() {
+    _leaveShared();
     _releaseHold();
     _ticker.dispose();
     _finishRest();
