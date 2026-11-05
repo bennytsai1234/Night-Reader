@@ -212,8 +212,9 @@ class ReaderV2ControllerHost {
     // 開書時已經套用目前的繁簡轉換，不必再為設定重載一次正文。
     _appliedContentSettingsGeneration = settings.contentSettingsGeneration;
     final repository = dependencies.createChapterRepository(
+      // 閱讀器關掉時先關 repository 才關提示，關掉之後 repository 不再停用
+      // 規則；runtime 還沒接上就關掉時 repository 沒被關，這裡也不送。
       onReplaceRuleDisabled: (rule) {
-        // 閱讀器關掉後，還在處理的章才發現規則跑太久。
         if (!_notices.isClosed) _notices.add(replaceRuleDisabledNotice(rule));
       },
     );

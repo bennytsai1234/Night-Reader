@@ -1188,13 +1188,20 @@ class ReaderV2ContentTransformWorker {
       if (identical(_responses, responses)) _reset(failure);
     });
     try {
-      _isolate = await Isolate.spawn(
+      final isolate = await Isolate.spawn(
         _workerMain,
         responses.sendPort,
         onError: responses.sendPort,
         onExit: responses.sendPort,
         debugName: 'reader-v2-content-transform',
       );
+      // 啟動途中 worker 被丟掉了：這個沒人用，結束它，也不能蓋掉之後啟動
+      // 的那個（逾時要停的是那個）。
+      if (generation != _generation) {
+        isolate.kill(priority: Isolate.immediate);
+        throw const ReaderV2ContentTransformException('內容轉換程序已停止');
+      }
+      _isolate = isolate;
       final commands = await handshake.future;
       final dictionaryData = await _loadDictionaryDataFromBundle();
       // 握手之後、字典載入期間 worker 就結束了。

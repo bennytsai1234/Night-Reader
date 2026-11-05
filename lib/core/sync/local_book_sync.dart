@@ -320,6 +320,7 @@ class LocalBookSync {
     final path = await LocalBookService.freeLibraryPath(
       task.name,
       '.${task.extension}',
+      bookDao: _bookDao,
     );
     final ok = await _unpackOn(
       _run,
