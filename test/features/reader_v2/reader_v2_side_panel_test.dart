@@ -1,4 +1,7 @@
+import 'dart:io' show sleep;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_side_panel.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -255,6 +258,155 @@ void main() {
     expect(panel.isOpen, isTrue);
   });
 
+  testWidgets('dragging the open panel all the way to the edge counts as '
+      'closed: notices go out once and the page takes taps again', (
+    tester,
+  ) async {
+    await pumpPanel(tester);
+    await openPanel(tester);
+    final drag = await tester.startGesture(const Offset(280, 300));
+    await tester.pump(const Duration(milliseconds: 60));
+    for (var i = 0; i < 8; i++) {
+      await drag.moveBy(const Offset(-50, 0));
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(panel.isOpen, isFalse);
+    expect(panel.shown.value, isFalse);
+    expect(openChanges, [true, false]);
+    expect(closes, 1);
+    await tester.tapAt(const Offset(200, 300));
+    expect(bodyTaps, 1);
+  });
+
+  testWidgets('a screen reader skips the covered page whenever the panel is '
+      'on screen, also while the finger pulls it out', (tester) async {
+    final semantics = tester.ensureSemantics();
+    panel = ReaderV2SidePanelController();
+    addTearDown(panel.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReaderV2SidePanel(
+          controller: panel,
+          panel: const Drawer(child: Text('章節')),
+          child: Center(
+            child: TextButton(onPressed: () {}, child: const Text('閱讀正文')),
+          ),
+        ),
+      ),
+    );
+    expect(_semanticsLabels(tester), contains('閱讀正文'));
+
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(panel.isOpen, isFalse, reason: '手指還拉著');
+    expect(_semanticsLabels(tester), isNot(contains('閱讀正文')));
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(panel.isOpen, isTrue);
+    expect(_semanticsLabels(tester), isNot(contains('閱讀正文')));
+
+    panel.close();
+    await tester.pumpAndSettle();
+    expect(_semanticsLabels(tester), contains('閱讀正文'));
+    expect(_semanticsLabels(tester), isNot(contains('章節')));
+    semantics.dispose();
+  });
+
+  testWidgets('a drag that starts while the slide is held hands the panel '
+      'to the finger: the held slide never runs', (tester) async {
+    panel = ReaderV2SidePanelController();
+    addTearDown(panel.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReaderV2SidePanel(
+          controller: panel,
+          // 準備那一幀很重：滑出要停 AppMotion.stillGap。
+          panel: Builder(
+            builder: (_) {
+              sleep(const Duration(milliseconds: 25));
+              return const Drawer(child: SizedBox.expand());
+            },
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    panel.open();
+    await tester.pump();
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await drag.moveBy(const Offset(50, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await drag.moveBy(const Offset(30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    final held = tester.getTopRight(find.byType(Drawer)).dx;
+    await tester.pump(AppMotion.stillGap);
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tester.getTopRight(find.byType(Drawer)).dx, closeTo(held, 0.01));
+    await drag.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('focus moves into the open panel, also one pulled out from the '
+      'edge, and leaves the page underneath', (tester) async {
+    panel = ReaderV2SidePanelController();
+    addTearDown(panel.dispose);
+    final bodyFocus = FocusNode();
+    final panelFocus = FocusNode();
+    addTearDown(bodyFocus.dispose);
+    addTearDown(panelFocus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReaderV2SidePanel(
+          controller: panel,
+          panel: Drawer(
+            child: Center(
+              child: TextButton(
+                focusNode: panelFocus,
+                onPressed: () {},
+                child: const Text('章節'),
+              ),
+            ),
+          ),
+          child: Center(
+            child: TextButton(
+              focusNode: bodyFocus,
+              onPressed: () {},
+              child: const Text('閱讀正文'),
+            ),
+          ),
+        ),
+      ),
+    );
+    bodyFocus.requestFocus();
+    await tester.pump();
+    await openPanel(tester);
+    expect(bodyFocus.hasFocus, isFalse);
+
+    panel.close();
+    await tester.pumpAndSettle();
+    expect(panelFocus.canRequestFocus, isFalse, reason: '收著時不能取得焦點');
+
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(panel.isOpen, isTrue);
+    panelFocus.requestFocus();
+    await tester.pump();
+    expect(panelFocus.hasFocus, isTrue);
+  });
+
   testWidgets('closing before the slide starts never shows the panel', (
     tester,
   ) async {
@@ -266,6 +418,22 @@ void main() {
     expect(openChanges, [true, false]);
     expect(closes, 1);
   });
+}
+
+/// 讀屏實際拿到的每一段標籤（走一遍送出去的無障礙內容；`find.bySemanticsLabel`
+/// 會找到被排除的元件身上留著的舊資料）。
+List<String> _semanticsLabels(WidgetTester tester) {
+  final labels = <String>[];
+  bool visit(SemanticsNode node) {
+    if (node.label.isNotEmpty) labels.add(node.label);
+    node.visitChildren(visit);
+    return true;
+  }
+
+  visit(
+    tester.binding.renderViews.first.owner!.semanticsOwner!.rootSemanticsNode!,
+  );
+  return labels;
 }
 
 class _CountingPanel extends StatelessWidget {

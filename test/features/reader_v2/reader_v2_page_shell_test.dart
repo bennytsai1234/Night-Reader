@@ -553,6 +553,26 @@ void main() {
     expect(exitIntents, 0);
   });
 
+  testWidgets('system back while the finger is pulling the list out from the '
+      'edge closes the list, not the reader', (tester) async {
+    await pumpShell(tester, controlsVisible: false);
+    final drag = await tester.startGesture(const Offset(5, 300));
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      await drag.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(panel.isOnScreen, isTrue);
+
+    await tester.binding.handlePopRoute();
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    expect(systemBacks, 0);
+    expect(exitIntents, 0);
+    expect(find.byType(Drawer), findsNothing);
+  });
+
   group('timer key above the menu', () {
     late DateTime now;
     late ReaderV2TtsSleepTimer timer;

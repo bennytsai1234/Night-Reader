@@ -19,6 +19,10 @@ class ReaderV2SidePanelController {
   /// 打開中：從要求打開到開始收起為止（同 Scaffold 抽屜的 isDrawerOpen）。
   bool get isOpen => _state?._open ?? false;
 
+  /// 面板佔著畫面：打開中，或手指正拉著、正在收起而還在畫面上。返回鍵
+  /// 這時只收面板。
+  bool get isOnScreen => _state?._covering ?? false;
+
   void open() => _state?._requestOpen();
 
   void close() => _state?._requestClose();
@@ -72,12 +76,26 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   /// 回彈的 `PressScale`）。
   static const Duration _heavyFrame = Duration(milliseconds: 16);
 
-  late final AnimationController _position = AnimationController(
-    vsync: this,
-    duration: _settleDuration,
-  )..addStatusListener(_onStatus);
+  late final AnimationController _position =
+      AnimationController(vsync: this, duration: _settleDuration)
+        ..addStatusListener(_onStatus)
+        ..addListener(_onPosition);
+
+  /// 上一次建畫面時面板是否佔著畫面；變了才重建外層（底下閱讀頁的無障礙
+  /// 內容跟著排除或放回），滑動中的其他幀不重建。
+  bool _builtCovering = false;
+
+  void _onPosition() {
+    if (_covering != _builtCovering) setState(() {});
+  }
 
   final GlobalKey _panelKey = GlobalKey();
+
+  /// 面板自己的焦點範圍：打開時焦點移進來，不留在被蓋住的閱讀頁（同系統
+  /// 抽屜）。
+  final FocusScopeNode _focusScope = FocusScopeNode(
+    debugLabel: 'ReaderV2SidePanel',
+  );
 
   /// 面板建過了，之後一直掛著。
   bool _built = false;
@@ -118,6 +136,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
     _holdTimer?.cancel();
     if (widget.controller._state == this) widget.controller._state = null;
     _position.dispose();
+    _focusScope.dispose();
     super.dispose();
   }
 
@@ -138,13 +157,21 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
 
   void _setOpen(bool open) {
     if (_open == open) return;
-    _open = open;
-    if (open) _openedSinceClosed = true;
-    if (!open) {
-      _trip++;
-      _holdTimer?.cancel();
+    // 外層跟著重建，焦點的排除照新的狀態；面板沿用同一個元件，不跟著重建。
+    setState(() => _open = open);
+    if (open) {
+      _openedSinceClosed = true;
+      FocusScope.of(context).setFirstFocus(_focusScope);
+    } else {
+      _cancelPendingSlide();
     }
     widget.onOpenChanged?.call(open);
+  }
+
+  /// 作廢還沒開始的滑出（等準備那一幀畫完、或停頓中）。
+  void _cancelPendingSlide() {
+    _trip++;
+    _holdTimer?.cancel();
   }
 
   void _requestOpen() {
@@ -174,6 +201,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
 
   void _requestClose() {
     if (!_open && _position.isDismissed) return;
+    if (_dragging) _dragAbandoned = true;
     _setOpen(false);
     if (_position.isDismissed) {
       _finishClosed();
@@ -200,13 +228,44 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
     _prepare();
   }
 
+  /// 手指正左右拖著面板。
+  bool _dragging = false;
+
+  /// 拖到一半被要求收起（例如按返回）：這一次拖曳剩下的不再移動面板，
+  /// 放手時也不照速度甩開。
+  bool _dragAbandoned = false;
+
+  /// 手指真的開始左右拖：面板交給手指，還沒開始的滑出作廢。
+  void _handleDragStart(DragStartDetails details) {
+    _dragging = true;
+    _dragAbandoned = false;
+    _cancelPendingSlide();
+  }
+
   void _handleDragUpdate(DragUpdateDetails details) {
+    if (_dragAbandoned) return;
     _position.value += details.primaryDelta! / _width;
   }
 
+  /// 這一次拖曳結束；被收起打斷的話傳回 true，放手不再做別的事。
+  bool _endDrag() {
+    final abandoned = _dragAbandoned;
+    _dragging = false;
+    _dragAbandoned = false;
+    return abandoned;
+  }
+
+  /// 放手時面板已經在左邊外面：拉一點就推回去，或打開後一路拖到底，都算
+  /// 收完。
+  void _closeAtEdge() {
+    _setOpen(false);
+    _finishClosed();
+  }
+
   void _handleDragEnd(DragEndDetails details) {
+    if (_endDrag()) return;
     if (_position.isDismissed) {
-      if (!_open) _finishClosed();
+      _closeAtEdge();
       return;
     }
     final velocity = details.velocity.pixelsPerSecond.dx;
@@ -224,8 +283,10 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   /// 在目錄裡上下捲動時，左右拖曳的手勢在按下時就準備、判定是上下捲之後
   /// 退出，走到這裡：面板沒被拉動過，停在原處。
   void _handleDragCancel() {
+    if (_endDrag()) return;
     if (_position.isAnimating) return;
     if (_position.isDismissed) {
+      // 打開途中（準備或停頓時）按一下又放開，沒有拖動：照原本的打開繼續。
       if (!_open) _finishClosed();
     } else if (_position.value < 0.5) {
       _requestClose();
@@ -250,10 +311,13 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
     if (shown) _panel = widget.panel;
     final scrim = DrawerTheme.of(context).scrimColor ?? Colors.black54;
     final edge = _edgeDragWidth + MediaQuery.paddingOf(context).left;
+    final covering = _builtCovering = _covering;
     return Stack(
       fit: StackFit.expand,
       children: [
-        widget.child,
+        // 面板佔著畫面的整段（含手指拉著、收起途中），讀屏不讀被蓋住的閱讀
+        // 頁。只改這一層的排除，閱讀頁不重建。
+        ExcludeSemantics(excluding: covering, child: widget.child),
         // 同一個手勢偵測一直掛在這裡：從左緣拖出來的那一下，面板出現後
         // 照樣跟著手指。
         _EdgeHitRegion(
@@ -263,6 +327,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
             behavior: HitTestBehavior.translucent,
             excludeFromSemantics: true,
             onHorizontalDragDown: _handleDragDown,
+            onHorizontalDragStart: _handleDragStart,
             onHorizontalDragUpdate: _handleDragUpdate,
             onHorizontalDragEnd: _handleDragEnd,
             onHorizontalDragCancel: _handleDragCancel,
@@ -293,20 +358,17 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
           animation: _position,
           builder: (context, _) => IgnorePointer(
             ignoring: !_covering,
-            child: BlockSemantics(
-              blocking: _open,
-              child: GestureDetector(
-                onTap: _requestClose,
-                child: Semantics(
-                  label: MaterialLocalizations.of(context)
-                      .modalBarrierDismissLabel,
-                  child: ColoredBox(
-                    color: Color.lerp(
-                      scrim.withValues(alpha: 0),
-                      scrim,
-                      _position.value,
-                    )!,
-                  ),
+            child: GestureDetector(
+              onTap: _requestClose,
+              child: Semantics(
+                label: MaterialLocalizations.of(context)
+                    .modalBarrierDismissLabel,
+                child: ColoredBox(
+                  color: Color.lerp(
+                    scrim.withValues(alpha: 0),
+                    scrim,
+                    _position.value,
+                  )!,
                 ),
               ),
             ),
@@ -320,9 +382,12 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
               translation: Offset(_position.value - 1, 0),
               child: child,
             ),
-            child: ExcludeFocus(
-              excluding: !_open,
-              child: RepaintBoundary(key: _panelKey, child: _panel),
+            child: FocusScope(
+              node: _focusScope,
+              child: ExcludeFocus(
+                excluding: !_open,
+                child: RepaintBoundary(key: _panelKey, child: _panel),
+              ),
             ),
           ),
         ),

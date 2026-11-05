@@ -307,8 +307,8 @@ class ReaderV2PageShell extends StatelessWidget {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // 目錄開著時返回只收目錄。
-        if (chapterPanelController.isOpen) {
+        // 目錄在畫面上（含手指正拉著）時返回只收目錄。
+        if (chapterPanelController.isOnScreen) {
           chapterPanelController.close();
           return;
         }

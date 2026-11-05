@@ -3,9 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
+
+/// 目錄頂端分段（目錄｜書籤｜標註）選取塊的位置：0 是目錄。
+Animation<double> tabIndicator(WidgetTester tester) {
+  final painter =
+      tester
+              .widget<CustomPaint>(
+                find
+                    .descendant(
+                      of: find.byWidgetPredicate((w) => w is GlassSegmented),
+                      matching: find.byType(CustomPaint),
+                    )
+                    .first,
+              )
+              .painter
+          as dynamic;
+  return painter.position as Animation<double>;
+}
 
 void main() {
   testWidgets('paid chapters not bought yet show a lock, except the current '
@@ -310,6 +328,16 @@ void main() {
     current.value = 150;
     await tester.pumpAndSettle();
     expect(titleCalls, 0);
+
+    // 再打開：分段的選取塊直接停在目錄，不從書籤滑回來（和面板滑出疊在
+    // 一起）。
+    shown.value = true;
+    await tester.pump();
+    expect(tabIndicator(tester).value, 0);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tabIndicator(tester).value, 0);
+    shown.value = false;
+    await tester.pump();
 
     // 再打開：回到目錄分頁，捲到第 151 章並打勾。
     shown.value = true;

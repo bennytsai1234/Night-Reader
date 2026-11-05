@@ -408,6 +408,9 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     return Row(
       children: [
         GlassSegmented<_DrawerTab>(
+          // 每次打開換一份：選取塊直接停在目錄，不從上次的分頁滑回來、和
+          // 面板滑出疊在一起。同一次打開裡切分頁照常滑過去。
+          key: ValueKey(('tabs', _opening)),
           expand: false,
           segments: [for (final tab in _tabs) GlassSegment(tab, tab.label)],
           selected: _tab,
