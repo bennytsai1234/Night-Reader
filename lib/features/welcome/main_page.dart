@@ -93,7 +93,7 @@ class _MainPageState extends State<MainPage>
   /// [handleCancelBackGesture] 處理。
   late final AnimationController _switch = AnimationController(vsync: this)
     ..addStatusListener((status) {
-      if (status.isCompleted && _follow == _Follow.none) _endSwitch();
+      if (status.isCompleted && _follow == _Follow.none) _finishSwitch();
     });
   ui.Image? _outgoing;
   Color _outgoingBackground = const Color(0x00000000);
@@ -132,6 +132,9 @@ class _MainPageState extends State<MainPage>
     _backTicker.dispose();
     _holdTimer?.cancel();
     _switchHeld.dispose();
+    // 返回手勢送完或彈回途中被移除：停下換頁時的收尾（[handleCommitBackGesture]、
+    // [handleCancelBackGesture]）照 [_follow] 判斷，先作廢，不去動已卸下的分頁。
+    _follow = _Follow.none;
     _switch.dispose();
     _outgoing?.dispose();
     _pageController.dispose();
@@ -306,7 +309,8 @@ class _MainPageState extends State<MainPage>
             ],
             onSearch: widget.destinations == null ? _openSearch : null,
             onTap: (index) {
-              if (_currentIndex == index) {
+              if (_outgoing == null && _currentIndex == index) {
+                _queuedIndex = null;
                 if (DateTime.now().difference(_lastTapTime).inMilliseconds <
                     300) {
                   _handleDoubleTap(index);
@@ -341,7 +345,16 @@ class _MainPageState extends State<MainPage>
   /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播
   /// 「外觀與主題 → 換頁動畫」選的那一種；往右邊的分頁像開新頁，往左像
   /// 返回。手指左右滑動照舊跟手。
+  ///
+  /// 換頁中（含停在起點準備、跟著返回手勢）又要換時不打斷正在播的這段，
+  /// 只記下最後要去的分頁，播完再換過去（[_finishSwitch]）；要去的就是
+  /// 這段正在去的分頁時不必再換。原本馬上把這段跳到終點、重拍快照重播，
+  /// 連點時畫面跳一下、停一下。
   void _switchTo(int index) {
+    if (_outgoing != null) {
+      _queuedIndex = index == _currentIndex ? null : index;
+      return;
+    }
     _endSwitch();
     if (!_beginSwitch(index)) {
       _pageController.jumpToPage(index);
@@ -377,6 +390,23 @@ class _MainPageState extends State<MainPage>
 
   /// [_switchTo] 停在起點的計時器。
   Timer? _holdTimer;
+
+  /// 換頁中又點的分頁（只記最後一個），這段播完才換過去。
+  int? _queuedIndex;
+
+  /// 換頁自己播完（含返回手勢送完或彈回）：收掉這段，有記下的分頁就在
+  /// 這段的最後一幀畫完之後才換過去，和播完後點一下分頁一樣：拍快照
+  /// 不擠在最後一幀裡，排新分頁的那一幀畫面停在原處（ADR 0037 策略一）。
+  void _finishSwitch() {
+    _endSwitch();
+    if (_queuedIndex == null) return;
+    Timer.run(() {
+      final next = _queuedIndex;
+      _queuedIndex = null;
+      if (!mounted || next == null || next == _currentIndex) return;
+      _switchTo(next);
+    });
+  }
 
   /// 拍下換頁前的畫面、把分頁換到 [index]，交給 [AppTransitionSwitch]；
   /// 關閉動畫或還沒畫出來時不開始，回傳 false。
@@ -475,7 +505,7 @@ class _MainPageState extends State<MainPage>
           curve: BackSwipe.curve,
         )
         .whenCompleteOrCancel(() {
-          if (_follow == _Follow.committing) _endSwitch();
+          if (_follow == _Follow.committing) _finishSwitch();
         });
   }
 
@@ -493,7 +523,7 @@ class _MainPageState extends State<MainPage>
         .whenCompleteOrCancel(() {
           if (_follow != _Follow.cancelling) return;
           _pageController.jumpToPage(_outgoingIndex);
-          _endSwitch();
+          _finishSwitch();
         });
   }
 
@@ -610,7 +640,9 @@ class _MainPageState extends State<MainPage>
     // 路由會通知所有 PopScope；主頁先於分頁註冊，此時分頁仍在整頁編輯中，
     // 返回鍵留給分頁的 PopScope 退出編輯。
     if (_tabBarHidden.value) return;
-    if (_currentIndex != 0) {
+    // 換頁中（含正在回書架）：回書架和點書架一樣排隊，記下的別頁跟著取消；
+    // 停在書架之後才算連按退出。
+    if (_currentIndex != 0 || _outgoing != null) {
       _switchTo(0);
       return;
     }

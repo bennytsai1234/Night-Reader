@@ -73,18 +73,97 @@ void main() {
     expect(find.text('dark'), findsOneWidget);
   });
 
-  testWidgets('轉場中照常可以點擊，再切一次接著暈開', (tester) async {
+  /// 正在暈開的圓有多大（蓋圖上挖開的進度）。
+  double progress(WidgetTester tester) {
+    final paint = tester.widget<CustomPaint>(overlay());
+    return (paint.painter! as dynamic).progress.value as double;
+  }
+
+  testWidgets('暈開中再切一次：這圈照常暈完，播完才換回去', (tester) async {
     await pumpToggleApp(tester);
 
     await tester.tap(find.byType(TextButton));
-    await tester.pump(AppMotion.themeReveal ~/ 3);
-    await tester.tap(find.byType(TextButton));
+    // 換色那一幀畫完、下一幀才開始計時。
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(AppMotion.themeReveal ~/ 3);
+    final before = progress(tester);
+    expect(before, greaterThan(0));
 
-    expect(find.text('light'), findsOneWidget);
-    expect(overlay(), findsOneWidget);
+    await tester.tap(find.byType(TextButton));
+    await tester.pump(const Duration(milliseconds: 16));
+    // 不重拍、不換色，圓接著長大。
+    expect(find.text('dark'), findsOneWidget);
+    expect(progress(tester), greaterThan(before));
 
+    // 這圈暈完之前一直是深色；暈完才換回淺色，再暈開一次。
+    await tester.pump(AppMotion.themeReveal ~/ 2);
+    expect(find.text('dark'), findsOneWidget);
     await tester.pumpAndSettle();
+    expect(overlay(), findsNothing);
+    expect(find.text('light'), findsOneWidget);
+  });
+
+  testWidgets('暈開中點回現在的設定，取消記下的那一次', (tester) async {
+    var mode = ThemeMode.light;
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ThemeRevealScope(child: child!),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+    // 和外觀設定的「深淺」一樣：選的是現在的設定時 current。
+    void choose(ThemeMode next) =>
+        ThemeRevealScope.of(pageContext)
+            .run(current: mode == next, change: () => mode = next);
+
+    choose(ThemeMode.dark);
+    await tester.pump();
+    expect(mode, ThemeMode.dark);
+    // 暈開中點「跟隨系統」，又點回「深色」。
+    choose(ThemeMode.system);
+    choose(ThemeMode.dark);
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(mode, ThemeMode.dark);
+    expect(overlay(), findsNothing);
+  });
+
+  testWidgets('暈開中直接存了別的外觀，記下的那一次作廢', (tester) async {
+    var mode = ThemeMode.light;
+    var other = 'A';
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => ThemeRevealScope(child: child!),
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+
+    ThemeRevealScope.of(pageContext).run(change: () => mode = ThemeMode.dark);
+    await tester.pump();
+    // 暈開中又選了一次，接著直接存了另一個深淺的設定（不暈開）。
+    ThemeRevealScope.of(pageContext).run(change: () => other = 'B');
+    ThemeRevealScope.of(pageContext).discardPending();
+    other = 'C';
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(mode, ThemeMode.dark);
+    expect(other, 'C');
     expect(overlay(), findsNothing);
   });
 

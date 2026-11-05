@@ -253,6 +253,93 @@ void main() {
       expect(switching(tester), isFalse);
     });
 
+    testWidgets('a tap during a switch waits for it to finish, then switches', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      AppTransitionSwitch transition() =>
+          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
+      double left() => tester.getRect(find.byType(RawImage)).left;
+
+      await tester.tap(find.text('三'));
+      await tester.pump();
+      await tester.pump(AppMotion.stillGap);
+      await tester.pump(const Duration(milliseconds: 60));
+      final trip = transition().trip as int;
+      final before = left();
+      expect(before, lessThan(0));
+
+      // 播到一半點「二」：這段照常往下播，不跳到終點、不重來。
+      await tester.tap(find.text('二'));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(transition().trip, trip);
+      expect(left(), lessThan(before));
+      expect(find.text('丙0'), findsOneWidget);
+
+      // 這段播完、最後一幀畫完，下一個空檔才換到「二」。
+      await tester.pumpAndSettle();
+      expect(transition().trip, trip);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(transition().trip, trip + 1);
+      expect(switching(tester), isFalse);
+      expect(find.text('乙0'), findsOneWidget);
+      expect(
+        tester.widget<FloatingTabBar>(find.byType(FloatingTabBar)).currentIndex,
+        1,
+      );
+    });
+
+    testWidgets('tapping back to where a switch is going cancels the wait', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      AppTransitionSwitch transition() =>
+          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
+
+      await tester.tap(find.text('三'));
+      await tester.pump();
+      final trip = transition().trip as int;
+      await tester.tap(find.text('二'));
+      await tester.pump();
+      await tester.tap(find.text('三'));
+      // 播完之後的空檔才會換到記下的分頁：多推進一次，取消沒生效就會換過去。
+      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(transition().trip, trip);
+      expect(find.text('丙0'), findsOneWidget);
+    });
+
+    testWidgets('the back key while going back to the first tab cancels the '
+        'wait', (tester) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('三'));
+      await tester.pumpAndSettle();
+      AppTransitionSwitch transition() =>
+          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
+
+      // 正在回「一」時點「二」、又按返回鍵：返回鍵也是回「一」，記下的
+      // 「二」取消，不跳「再按一次退出」。
+      await tester.tap(find.text('一'));
+      await tester.pump();
+      final trip = transition().trip as int;
+      await tester.tap(find.text('二'));
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(transition().trip, trip);
+      expect(find.text('甲0'), findsOneWidget);
+      expect(find.text('再按一次退出'), findsNothing);
+    });
+
     testWidgets('switches at once when animations are off', (tester) async {
       await tester.pumpWidget(threeTabs(disableAnimations: true));
       await tester.pumpAndSettle();
@@ -336,6 +423,20 @@ void main() {
       // 捲動位置還在，沒有因為途中露出書架而捲回頂端。
       expect(find.text('丙0'), findsNothing);
       expect(find.text('丙10'), findsOneWidget);
+    });
+
+    testWidgets('removing the main page while a cancelled gesture springs '
+        'back does not touch the removed tabs', (tester) async {
+      await openThirdTab(tester);
+      await send(tester, 'startBackGesture', event(0, 0));
+      await send(tester, 'updateBackGestureProgress', event(100, 0.3));
+      await tester.pump();
+      await send(tester, 'cancelBackGesture');
+      await tester.pump(const Duration(milliseconds: 16));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('after a gesture the main page is not rebuilt when a page is '

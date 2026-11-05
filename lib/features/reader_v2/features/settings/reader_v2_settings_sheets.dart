@@ -186,12 +186,10 @@ class _ReaderStyleSelector extends StatelessWidget
                   selected: style == themeSettings.styleFor(brightness),
                   scheme: scheme,
                   // 和外觀設定頁一樣，新配色從點擊處像墨水一樣暈開。
-                  onTap: () {
-                    if (style == themeSettings.styleFor(brightness)) return;
-                    ThemeRevealScope.of(context).run(
-                      change: () => themeSettings.setStyle(brightness, style),
-                    );
-                  },
+                  onTap: () => ThemeRevealScope.of(context).run(
+                    current: style == themeSettings.styleFor(brightness),
+                    change: () => themeSettings.setStyle(brightness, style),
+                  ),
                 ),
             ],
           ),
