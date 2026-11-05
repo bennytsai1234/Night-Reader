@@ -6,6 +6,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'grouped_list.dart';
 import 'skeleton.dart';
+import 'skeleton_text.dart';
 import 'swipe_actions.dart';
 
 /// 分組清單裡自己給骨架樣子的一項：一般的列與組已經認得（[GroupedItemShape.of]），
@@ -162,7 +163,7 @@ class GroupedItemShape {
     final shape = GroupedItemShape(
       painter.height,
       width: painter.width,
-      marks: _lineMarks(painter, scaler.scale(root.style?.fontSize ?? 14)),
+      marks: _lineMarks(painter, root.style ?? defaults.style),
     );
     painter.dispose();
     return shape;
@@ -393,27 +394,15 @@ const EdgeInsetsGeometry _defaultMargin = EdgeInsets.symmetric(
   horizontal: AppGrouped.margin,
 );
 
-/// 一段字每一行的佔位條：照排出來的寬度，高度是字號，對齊那一行的中線。
-/// 圖示也是一個字，畫成和字形一樣大的圓角方塊。
-List<SkeletonShape> _lineMarks(TextPainter painter, double fontSize) {
-  final text = painter.text!.toPlainText(includeSemanticsLabels: false);
-  if (text.trim().isEmpty) return const [];
-  final lines = <Rect>[];
-  for (final box in painter.getBoxesForSelection(
-    TextSelection(baseOffset: 0, extentOffset: text.length),
-  )) {
-    final rect = box.toRect();
-    if (rect.top >= painter.height || rect.width <= 0) continue;
-    final index = lines.indexWhere(
-      (line) => (line.center.dy - rect.center.dy).abs() < rect.height / 2,
-    );
-    if (index < 0) {
-      lines.add(rect);
-    } else {
-      lines[index] = lines[index].expandToInclude(rect);
-    }
-  }
-  return [for (final line in lines) _lineMark(line, fontSize, painter.width)];
+/// 一段字每一行的佔位條：照排出來的筆畫範圍（[skeletonTextLines]），高度是
+/// 字號，對齊那一行的中線。圖示也是一個字，畫成和字形一樣大的圓角方塊。
+/// [style] 是排版用的字樣（已合併預設字樣）。
+List<SkeletonShape> _lineMarks(TextPainter painter, TextStyle style) {
+  final fontSize = painter.textScaler.scale(style.fontSize ?? 14);
+  return [
+    for (final line in skeletonTextLines(painter, style))
+      _lineMark(line, fontSize, painter.width),
+  ];
 }
 
 SkeletonShape _lineMark(Rect line, double fontSize, double maxWidth) {
