@@ -1,0 +1,6 @@
+input tap 630 1300
+sleep 1.2
+input tap 630 1300
+sleep 1.2
+input tap 630 1300
+sleep 1.2

@@ -1,0 +1,4 @@
+input tap 630 1576
+sleep 2.2
+input keyevent BACK
+sleep 1.6
