@@ -253,6 +253,64 @@ void main() {
       expect(switching(tester), isFalse);
     });
 
+    testWidgets('a tap during a switch waits for it to finish, then switches', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      AppTransitionSwitch transition() =>
+          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
+      double left() => tester.getRect(find.byType(RawImage)).left;
+
+      await tester.tap(find.text('三'));
+      await tester.pump();
+      await tester.pump(AppMotion.stillGap);
+      await tester.pump(const Duration(milliseconds: 60));
+      final trip = transition().trip as int;
+      final before = left();
+      expect(before, lessThan(0));
+
+      // 播到一半點「二」：這段照常往下播，不跳到終點、不重來。
+      await tester.tap(find.text('二'));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(transition().trip, trip);
+      expect(left(), lessThan(before));
+      expect(find.text('丙0'), findsOneWidget);
+
+      // 這段播完、最後一幀畫完，下一個空檔才換到「二」。
+      await tester.pumpAndSettle();
+      expect(transition().trip, trip);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(transition().trip, trip + 1);
+      expect(switching(tester), isFalse);
+      expect(find.text('乙0'), findsOneWidget);
+      expect(
+        tester.widget<FloatingTabBar>(find.byType(FloatingTabBar)).currentIndex,
+        1,
+      );
+    });
+
+    testWidgets('tapping back to where a switch is going cancels the wait', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      AppTransitionSwitch transition() =>
+          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
+
+      await tester.tap(find.text('三'));
+      await tester.pump();
+      final trip = transition().trip as int;
+      await tester.tap(find.text('二'));
+      await tester.pump();
+      await tester.tap(find.text('三'));
+      await tester.pumpAndSettle();
+
+      expect(transition().trip, trip);
+      expect(find.text('丙0'), findsOneWidget);
+    });
+
     testWidgets('switches at once when animations are off', (tester) async {
       await tester.pumpWidget(threeTabs(disableAnimations: true));
       await tester.pumpAndSettle();
