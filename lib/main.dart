@@ -40,6 +40,7 @@ import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
 import 'features/search/search_provider.dart';
+import 'shared/widgets/skeleton_text.dart';
 
 Future<bool> runBackgroundTask<T>({
   required Future<void> Function() initialize,
@@ -151,6 +152,8 @@ Future<void> _startApp() async {
     // 第一幀前定下書名的繁簡轉換模式；字典在背景載入，書架等它好了才換場。
     unawaited(ChineseDisplay.start(getIt<SharedPreferences>()));
     _restoreWebViewUserAgent(getIt<SharedPreferences>());
+    // 開 App 的骨架照上次量的標點位置畫長條。
+    PunctuationInk.restore(getIt<SharedPreferences>());
 
     runApp(
       MultiProvider(
@@ -262,6 +265,7 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
   unawaited(_pruneReaderLayoutCaches());
+  unawaited(PunctuationInk.onLaunchSettled());
   // 進搜尋頁的第一幀就畫得出搜尋紀錄。
   unawaited(SearchProvider.prefetchHistory());
 }

@@ -1,9 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
+import 'package:flutter/painting.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/pipeline/layout_pipeline.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
 /// 一頁上每一行字的位置（viewport 座標，由上而下）、其中章名那幾行的
 /// 索引，與量這些行時的版面。紙上的骨架照它畫（ADR 0016、0024）。
@@ -38,14 +40,17 @@ PageLines pageLinesAt({
             math.max(previous.$2, range.end),
           );
   }
+  final spec = pipeline.layoutSpec;
+  final bodyStyle = readerSkeletonInkStyle(spec);
   void addLines(int chapter, int start, int end, {required bool title}) {
     if (end <= start) return;
     for (final box in pipeline.geometry.lineBoxes(chapter, start, end)) {
-      final top = box.top - offset;
-      final bottom = box.bottom - offset;
-      if (bottom <= 0 || top >= height) continue;
+      if (box.bottom - offset <= 0 || box.top - offset >= height) continue;
+      var line = Rect.fromLTRB(box.left, box.top, box.right, box.bottom);
+      // 章名的字級與粗細不同，又很少以標點開頭結尾，照字框畫。
+      if (!title) line = _inkLine(pipeline, chapter, line, bodyStyle, spec);
       if (title) titleLines.add(lines.length);
-      lines.add(Rect.fromLTRB(box.left, top, box.right, bottom));
+      lines.add(line.shift(Offset(0, -offset)));
     }
   }
 
@@ -63,6 +68,54 @@ PageLines pageLinesAt({
     lines: lines,
     titleLines: titleLines,
     // 行是這份排版管線排的；改排版的紙還在淡入時，它還是舊的那一代。
-    spec: pipeline.layoutSpec,
+    spec: spec,
+  );
+}
+
+/// 正文的字樣（標點字型在前，與段落排版相同），用來查標點的筆畫位置
+/// （[PunctuationInk]）。
+TextStyle readerSkeletonInkStyle(ReaderV2LayoutSpec spec) => TextStyle(
+  fontFamily: kReaderV2PunctFontFamily,
+  fontFamilyFallback: readerV2FontFallback(spec.style.fontFamily),
+  fontWeight: spec.style.bold ? FontWeight.bold : FontWeight.normal,
+  fontFeatures: kReaderV2CjkFontFeatures,
+  locale: kReaderV2TextLocale,
+);
+
+/// 正文一行（正文座標）縮到行首、行尾標點的筆畫上（[skeletonInkLine]）：
+/// 對話段落以「開頭、」結尾，句子停在行尾的「。」「，」。
+Rect _inkLine(
+  HybridLayoutPipeline pipeline,
+  int chapter,
+  Rect line,
+  TextStyle style,
+  ReaderV2LayoutSpec spec,
+) {
+  SkeletonGlyph? glyphAt(double x) {
+    final hit = pipeline.geometry.glyphAt(Offset(x, line.center.dy));
+    if (hit == null) return null;
+    final text = hit.blocks.displayText;
+    if (hit.offset < 0 || hit.offset >= text.length) return null;
+    final mark = text[hit.offset];
+    if (!PunctuationInk.marks.contains(mark)) return null;
+    final boxes = pipeline.geometry.lineBoxes(
+      chapter,
+      hit.offset,
+      hit.offset + 1,
+    );
+    if (boxes.isEmpty) return null;
+    final box = boxes.first;
+    return SkeletonGlyph(
+      mark,
+      Rect.fromLTRB(box.left, box.top, box.right, box.bottom),
+      style: style,
+      fontSize: spec.style.fontSize,
+    );
+  }
+
+  return skeletonInkLine(
+    line,
+    first: glyphAt(line.left + 0.5),
+    last: glyphAt(line.right - 0.5),
   );
 }

@@ -27,6 +27,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
 ///
@@ -819,9 +820,16 @@ class _InfoRow extends StatelessWidget {
             strength: SkeletonLook.of(context).strength,
           )
         : null;
-    Widget? masked(Widget? child) => skeletonColor == null || child == null
-        ? child
-        : _InfoItemSkeleton(color: skeletonColor, child: child);
+    // 字的欄位（書名、章名、進度）照字畫，左右落在筆畫上（[SkeletonText]）；
+    // 時鐘、電量與圖示照它們自己的大小畫一條。
+    Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
+      (null, _) || (_, null) => child,
+      (final color?, Text(:final data?)) => SkeletonText(data, color: color),
+      (final color?, final child?) => _InfoItemSkeleton(
+        color: color,
+        child: child,
+      ),
+    };
     final left = masked(
       _itemWidget(context, slots.left, progress, title, TextAlign.left),
     );

@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
 import 'book_info_toc_bar.dart';
 
@@ -94,10 +95,7 @@ class BookDetailSkeleton extends StatelessWidget {
                                   ),
                               ],
                             )
-                          : _ParagraphBars(
-                              context.zh(intro),
-                              style: _introStyle,
-                            ),
+                          : SkeletonText(context.zh(intro), style: _introStyle),
                     ),
                   ],
                 ),
@@ -226,8 +224,7 @@ class BookDetailSkeleton extends StatelessWidget {
   }
 }
 
-/// 一行字的骨架：照 [text] 以 [style] 排成一行（放不下時截斷）的寬高佔位，
-/// 中間畫一條和字一樣高的圓角條（同 [SkeletonLine]）。
+/// 一行字的骨架：照 [text] 排成一行、放不下時截斷（同 [Text] 的 `maxLines: 1`）。
 class _TextBar extends StatelessWidget {
   const _TextBar(this.text, {required this.style});
 
@@ -235,83 +232,6 @@ class _TextBar extends StatelessWidget {
   final TextStyle style;
 
   @override
-  Widget build(BuildContext context) {
-    final fontSize = MediaQuery.textScalerOf(context)
-        .scale(style.fontSize ?? AppTextStyles.bodyBase.fontSize!);
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        Visibility.maintain(
-          visible: false,
-          child: Text(
-            text,
-            style: style,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Positioned.fill(
-          child: Center(
-            child: SkeletonBox(
-              width: double.infinity,
-              height: fontSize * Skeleton.barHeightFactor,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 一段字的骨架：照 [text] 以 [style] 在可用寬度裡換行，每一行在那一行字的
-/// 位置與寬度畫一條和字一樣高的圓角條，總高度與那段字相同。
-class _ParagraphBars extends StatelessWidget {
-  const _ParagraphBars(this.text, {required this.style});
-
-  final String text;
-  final TextStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    // 與 Text 相同：先合併頁面的預設字樣（字族等），再照系統字級放大。
-    final defaults = DefaultTextStyle.of(context);
-    final textScaler = MediaQuery.textScalerOf(context);
-    final merged = defaults.style.merge(style);
-    final barHeight =
-        textScaler.scale(merged.fontSize ?? 14) * Skeleton.barHeightFactor;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: merged),
-          textDirection: Directionality.of(context),
-          textScaler: textScaler,
-          textHeightBehavior: defaults.textHeightBehavior,
-          locale: Localizations.maybeLocaleOf(context),
-        )..layout(maxWidth: constraints.maxWidth);
-        final lines = painter.computeLineMetrics();
-        final height = painter.height;
-        painter.dispose();
-        return SizedBox(
-          width: constraints.maxWidth,
-          height: height,
-          child: Stack(
-            children: [
-              for (final line in lines)
-                if (line.width > 0)
-                  Positioned(
-                    left: line.left,
-                    width: line.width,
-                    top:
-                        line.baseline -
-                        line.ascent +
-                        (line.ascent + line.descent - barHeight) / 2,
-                    height: barHeight,
-                    child: const SkeletonBox(),
-                  ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) =>
+      SkeletonText(text, style: style, maxLines: 1);
 }

@@ -49,6 +49,7 @@ import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
+import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
 import 'db_clock.dart';
 import 'screenshot.dart';
@@ -361,6 +362,10 @@ Future<Uint8List> _encodeCover(int seed) async {
 /// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。收住、拍圖都要等某一格
 /// 畫完，一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
 Future<void> pumpApp(WidgetTester tester) async {
+  // 開 App 的進場播完會量標點的筆畫位置；測試字型量出來的和手機無關，
+  // 骨架照字的格子畫，每項測試也不留給下一項。
+  PunctuationInk.resetForTest(measure: false);
+  addTearDown(PunctuationInk.resetForTest);
   await tester.pumpWidget(
     MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
   );
