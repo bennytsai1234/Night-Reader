@@ -575,7 +575,9 @@ class SourceManagerProvider with ChangeNotifier {
       _loadError = null;
       _updateGroups();
       _markVisibleSourcesDirty();
-      _rememberRows(sources);
+      // 記下次打開時的樣子：搜尋、篩選與排序都回到預設，是全部書源照手動
+      // 順序，不是現在篩選過的清單。
+      _rememberRows(allSources);
     } catch (error) {
       if (!_disposed && generation == _loadGeneration) {
         _loadError = error;

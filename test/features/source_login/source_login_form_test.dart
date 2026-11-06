@@ -6,8 +6,6 @@ import 'package:night_reader/features/source_login/source_login_form.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
-import '../../support/screenshot.dart';
-
 SourceLoginRow _button(
   double basis, {
   double grow = 1,
@@ -68,7 +66,6 @@ void main() {
 
   // 照字寬排的按鈕，名稱整個放得下，不被截成「…」。
   testWidgets('an auto button shows its whole name', (tester) async {
-    await loadScreenshotFonts();
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),

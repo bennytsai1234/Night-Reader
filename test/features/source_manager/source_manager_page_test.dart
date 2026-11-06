@@ -633,6 +633,35 @@ void main() {
       expect(loaded, remembered);
     });
 
+    testWidgets('remembers every source even when reloaded while filtered', (
+      tester,
+    ) async {
+      await pumpPage(tester);
+      final provider = Provider.of<SourceManagerProvider>(
+        tester.element(find.byType(SourceItemTile).first),
+        listen: false,
+      );
+      // 搜尋中校驗完成或同步通知重讀：畫面上只剩一個書源。
+      provider.setSearchQuery('書源2');
+      await tester.runAsync(() => provider.loadSources(showLoading: false));
+      await settleQueries(tester);
+      await tester.pumpWidget(const SizedBox());
+
+      // 下次打開搜尋回到空白，骨架照全部書源的手動順序畫。
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester);
+      final reopened = Provider.of<SourceManagerProvider>(
+        tester.element(find.byType(SourceListSkeleton)),
+        listen: false,
+      );
+      expect(
+        [for (final row in reopened.lastRows) row.name],
+        ['書源0', '書源1', '書源2'],
+      );
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+    });
+
     testWidgets('no sources last time: no search box, then the empty page', (
       tester,
     ) async {

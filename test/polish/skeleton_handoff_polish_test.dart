@@ -699,5 +699,6 @@ void main() {
     );
     // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。
     await tester.pump(const Duration(minutes: 1));
-  });
+    // 全部情境淺色深色跑完要十分鐘以上，超過元件測試預設的 10 分鐘上限。
+  }, timeout: const Timeout(Duration(minutes: 30)));
 }

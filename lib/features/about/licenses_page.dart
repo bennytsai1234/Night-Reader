@@ -69,53 +69,40 @@ class _LicensesPageState extends State<LicensesPage> {
       );
     }
     final packages = _packages;
-    // 骨架照一段固定樣子的套件列畫（還不知道有哪些套件），讀到了照真正的
-    // 套件先變一次形狀再換場（[GroupedListView.ready]）。
-    if (packages == null) {
-      return Semantics(
-        liveRegion: true,
-        label: '正在載入開源許可證',
-        child: ExcludeSemantics(
-          child: GroupedListView(
-            ready: false,
-            children: [
-              GroupedSection(
-                topGap: AppSpacing.md,
-                children: [
-                  for (final length in _placeholderLengths)
-                    GroupedRow(
-                      title: 'abcdefghijklmnopqrstuvwxyz'.substring(0, length),
-                      onTap: () {},
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (packages.isEmpty) {
+    if (packages != null && packages.isEmpty) {
       return const AppStateView(
         icon: Icons.description_outlined,
         title: '沒有開源許可證',
       );
     }
+    // 骨架照一段固定樣子的套件列畫（還不知道有哪些套件），讀到了照真正的
+    // 套件先變一次形狀再換場（[GroupedListView.ready]）。
     return GroupedListView(
+      ready: packages != null,
+      loadingLabel: '正在載入開源許可證',
       children: [
         GroupedSection(
           topGap: AppSpacing.md,
           children: [
-            for (final MapEntry(key: name, value: entries) in packages.entries)
-              GroupedRow(
-                title: name,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        PackageLicensePage(package: name, entries: entries),
+            if (packages == null)
+              for (final length in _placeholderLengths)
+                GroupedRow(
+                  title: 'abcdefghijklmnopqrstuvwxyz'.substring(0, length),
+                  onTap: () {},
+                )
+            else
+              for (final MapEntry(key: name, value: entries)
+                  in packages.entries)
+                GroupedRow(
+                  title: name,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          PackageLicensePage(package: name, entries: entries),
+                    ),
                   ),
                 ),
-              ),
           ],
         ),
       ],
@@ -143,8 +130,11 @@ class _LicensesPageState extends State<LicensesPage> {
   ];
 }
 
-/// 一個套件的授權全文：每份授權一組。段落在背景 isolate 切好（大的授權
-/// 上萬字，切段落是逐字掃）。
+/// 一個套件的授權全文：每份授權一組。
+///
+/// 段落在打開頁面的那一幀就切好（點下去的那一幀可以重，ADR 0036），骨架
+/// 直接照真正的全文畫：骨架本來就要把全文排一次才知道形狀，放到背景切也
+/// 省不掉主執行緒的排版，還得先畫一份固定樣子的骨架再變形。
 class PackageLicensePage extends StatefulWidget {
   const PackageLicensePage({
     super.key,
@@ -160,46 +150,23 @@ class PackageLicensePage extends StatefulWidget {
 }
 
 class _PackageLicensePageState extends State<PackageLicensePage> {
-  /// 每份授權的全文，段落之間空一行。null 是還在切。
-  List<String>? _texts;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final texts = await compute(_licenseTexts, widget.entries);
-    if (mounted) setState(() => _texts = texts);
-  }
+  /// 每份授權的全文，段落之間空一行。
+  late final List<String> _texts = [
+    for (final entry in widget.entries)
+      [for (final paragraph in entry.paragraphs) paragraph.text].join('\n\n'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final texts = _texts;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(title: widget.package),
-      body: texts == null
-          // 骨架照一份固定長度的授權畫，切好了照真正的全文變形狀再換場。
-          ? Semantics(
-              liveRegion: true,
-              label: '正在載入授權',
-              child: ExcludeSemantics(
-                child: GroupedListView(
-                  ready: false,
-                  children: [
-                    _buildLicense(context, _placeholderText, first: true),
-                  ],
-                ),
-              ),
-            )
-          : GroupedListView(
-              children: [
-                for (final (index, text) in texts.indexed)
-                  _buildLicense(context, text, first: index == 0),
-              ],
-            ),
+      body: GroupedListView(
+        children: [
+          for (final (index, text) in _texts.indexed)
+            _buildLicense(context, text, first: index == 0),
+        ],
+      ),
     );
   }
 
@@ -227,21 +194,4 @@ class _PackageLicensePageState extends State<PackageLicensePage> {
       ],
     );
   }
-
-  /// 載入中骨架的一份授權：一行標題、幾段長短不一的文字，比一個畫面長。
-  static final _placeholderText = [
-    'Copyright 2014 The Authors',
-    for (final lines in const [3, 5, 2, 6, 4, 3])
-      [
-        for (var i = 0; i < lines; i++)
-          'Permission is hereby granted to use this software in source and binary forms'
-              .substring(0, i == lines - 1 ? 38 : 66),
-      ].join(' '),
-  ].join('\n\n');
 }
-
-/// 每份授權切成段落、段落之間空一行。在背景 isolate 跑（[compute]）。
-List<String> _licenseTexts(List<LicenseEntry> entries) => [
-  for (final entry in entries)
-    [for (final paragraph in entry.paragraphs) paragraph.text].join('\n\n'),
-];

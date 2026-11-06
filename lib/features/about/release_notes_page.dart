@@ -80,50 +80,41 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
   }
 
   Widget _buildBody(BuildContext context) {
-    switch (_status) {
-      // 骨架照幾段固定樣子的版本畫（還不知道有幾版、各寫了多少），資料到了
-      // 先照真正的版本變一次形狀再換場（[GroupedListView.ready]）。
-      case _ReleaseNotesStatus.loading:
-        return Semantics(
-          liveRegion: true,
-          label: '正在載入更新紀錄',
-          child: ExcludeSemantics(
-            child: GroupedListView(
-              ready: false,
-              children: [
-                for (final (index, lines) in const [4, 2, 3, 2].indexed)
-                  _buildPlaceholder(context, lines: lines, first: index == 0),
-              ],
-            ),
-          ),
-        );
-      case _ReleaseNotesStatus.error:
-        return AppStateView(
-          icon: Icons.cloud_off_outlined,
-          title: '更新紀錄載入失敗',
-          description: '請確認網路連線後再試一次。',
-          tone: AppStateTone.error,
-          primaryAction: AppStateAction(
-            label: _retrying ? '重新載入中…' : '重試',
-            icon: Icons.refresh,
-            onPressed: _retrying ? null : _retry,
-          ),
-        );
-      case _ReleaseNotesStatus.loaded:
-        if (_notes.isEmpty) {
-          return const AppStateView(
-            icon: Icons.history_rounded,
-            title: '目前沒有更新紀錄',
-            description: '發布新版後，各版的更新內容會列在這裡。',
-          );
-        }
-        return GroupedListView(
-          children: [
-            for (final (index, note) in _notes.indexed)
-              _buildRelease(context, note, first: index == 0),
-          ],
-        );
+    if (_status == _ReleaseNotesStatus.error) {
+      return AppStateView(
+        icon: Icons.cloud_off_outlined,
+        title: '更新紀錄載入失敗',
+        description: '請確認網路連線後再試一次。',
+        tone: AppStateTone.error,
+        primaryAction: AppStateAction(
+          label: _retrying ? '重新載入中…' : '重試',
+          icon: Icons.refresh,
+          onPressed: _retrying ? null : _retry,
+        ),
+      );
     }
+    final loading = _status == _ReleaseNotesStatus.loading;
+    if (!loading && _notes.isEmpty) {
+      return const AppStateView(
+        icon: Icons.history_rounded,
+        title: '目前沒有更新紀錄',
+        description: '發布新版後，各版的更新內容會列在這裡。',
+      );
+    }
+    // 骨架照幾段固定樣子的版本畫（還不知道有幾版、各寫了多少），資料到了
+    // 先照真正的版本變一次形狀再換場（[GroupedListView.ready]）。
+    return GroupedListView(
+      ready: !loading,
+      loadingLabel: '正在載入更新紀錄',
+      children: [
+        if (loading)
+          for (final (index, lines) in const [4, 2, 3, 2].indexed)
+            _buildPlaceholder(context, lines: lines, first: index == 0)
+        else
+          for (final (index, note) in _notes.indexed)
+            _buildRelease(context, note, first: index == 0),
+      ],
+    );
   }
 
   /// 載入中骨架照的一段版本：和 [_buildRelease] 同樣的標題、日期與 [lines]

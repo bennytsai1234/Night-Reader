@@ -252,13 +252,20 @@ class GroupedListView extends StatelessWidget {
     this.bottomPadding = AppSpacing.xxxl,
     this.physics,
     this.ready = true,
+    this.loadingLabel,
   });
 
   final List<Widget> children;
 
   /// 資料還沒準備好時，進場骨架繼續顯示；資料到了才用最後的列形狀換場。
-  /// 只影響推入頁面的進場，已在畫面上的清單直接顯示內容。
+  /// 只影響推入頁面的進場，已在畫面上的清單直接顯示內容。資料到了要沿用
+  /// 同一個 [GroupedListView]（只改 ready 與 [children]）：換成別的元件，
+  /// 進場骨架會整個重建、不換場。
   final bool ready;
+
+  /// 還沒 [ready] 時螢幕閱讀器讀的話（例如「正在載入更新紀錄」）。給了的話
+  /// 這段期間 [children] 是只給骨架量形狀的佔位，不讀出來。
+  final String? loadingLabel;
   final ScrollController? controller;
   final double bottomPadding;
   final ScrollPhysics? physics;
@@ -272,16 +279,25 @@ class GroupedListView extends StatelessWidget {
           bottom: mediaPadding.bottom + bottomPadding,
         ) +
         ReadableWidth.insetOf(context);
-    return _GroupedEntrance(
-      items: children,
-      ready: ready,
-      padding: padding,
-      background: AppChrome.of(context).groupedBackground,
-      builder: (context, items) => ListView(
-        controller: controller,
-        physics: physics,
-        padding: padding,
-        children: items,
+    final placeholder = !ready && loadingLabel != null;
+    // 準備好前後都是同一串元件，只改屬性，進場的狀態才留得住。
+    return Semantics(
+      liveRegion: placeholder,
+      label: placeholder ? loadingLabel : null,
+      child: ExcludeSemantics(
+        excluding: placeholder,
+        child: _GroupedEntrance(
+          items: children,
+          ready: ready,
+          padding: padding,
+          background: AppChrome.of(context).groupedBackground,
+          builder: (context, items) => ListView(
+            controller: controller,
+            physics: physics,
+            padding: padding,
+            children: items,
+          ),
+        ),
       ),
     );
   }

@@ -38,10 +38,6 @@ void main() {
     expect(titles, ['Alpha', 'zeta']);
 
     await tester.tap(find.text('zeta'));
-    await tester.pump(); // 建出授權頁，段落開始在背景切。
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(seconds: 1)),
-    );
     await tester.pumpAndSettle();
 
     expect(find.text('Zeta license'), findsOneWidget);

@@ -69,10 +69,13 @@ class _Snapshot {
 
 /// 一處換場（一個骨架層和旁邊的內容層）。
 class _Slot {
-  _Slot(this.place, this.area);
+  _Slot(this.place, this.area, this.route);
 
   final String place;
   final Rect area;
+
+  /// 骨架所在的頁面。
+  final ModalRoute<Object?>? route;
   final snapshots = <_Snapshot>[];
 
   /// 換上來的內容，相對內容層左上角（和骨架層疊在同一個位置）。
@@ -94,6 +97,14 @@ class _Slot {
 
   /// 骨架拿掉時整處換場也一起拿掉了（例如退出頁面），量不到內容。
   bool gone = false;
+
+  /// 頁面還在最上面，骨架還濃濃的就整處被拆掉了：骨架沒有換場就消失（例如
+  /// 資料到了換成另一種元件，進場骨架整個重建）。換場播完才拆掉的（清單
+  /// 的 `SliverSkeletonSwitcher`）拆掉前已經淡得差不多，不算。
+  bool lost = false;
+
+  /// 骨架最後一次看到時的濃度（[SkeletonRevealLayer.presence]）。
+  double presence = 0;
 }
 
 /// 一段操作裡每一處骨架換場的紀錄。每推進一格呼叫一次 [observe]。
@@ -110,7 +121,9 @@ class SkeletonHandoffWatch {
   /// 看過至少一處換場，而且每一處都換完了。
   bool get done =>
       _slots.isNotEmpty &&
-      _slots.values.every((slot) => slot.content != null || slot.gone);
+      _slots.values.every(
+        (slot) => slot.content != null || slot.gone || slot.lost,
+      );
 
   bool get sawAny => _slots.isNotEmpty;
 
@@ -124,8 +137,10 @@ class SkeletonHandoffWatch {
       final parent = _parentOf(element);
       final slot = _slots.putIfAbsent(
         parent,
-        () => _Slot(_placeOf(element), _rectOf(element)),
+        () =>
+            _Slot(_placeOf(element), _rectOf(element), ModalRoute.of(element)),
       );
+      slot.presence = layer.presence.value;
       // 骨架完全淡掉的那幾格看不到，不算畫面上的樣子；換完前又出現（例如
       // 換場途中再載入）時從頭等內容。
       if (layer.presence.value <= 0) continue;
@@ -163,10 +178,18 @@ class SkeletonHandoffWatch {
     for (final (index, MapEntry(key: parent, value: slot))
         in _slots.entries.indexed) {
       if (present.contains(parent) || slot.content != null) continue;
-      if (slot.snapshots.isEmpty) continue;
+      if (slot.snapshots.isEmpty || slot.gone || slot.lost) continue;
       final content = parent.mounted ? _contentLayerUnder(parent) : null;
       if (content == null) {
-        slot.gone = true;
+        final route = slot.route;
+        if (!parent.mounted &&
+            slot.presence >= 0.5 &&
+            route != null &&
+            route.isCurrent) {
+          slot.lost = true;
+        } else {
+          slot.gone = true;
+        }
         continue;
       }
       final origin = _rectOf(parent).topLeft;
@@ -197,7 +220,11 @@ class SkeletonHandoffWatch {
     for (final slot in _slots.values) {
       final content = slot.content;
       if (content == null) {
-        if (!slot.gone) out.add('${slot.place}：骨架一直沒換成內容');
+        if (slot.lost) {
+          out.add('${slot.place}：頁面還在，骨架卻沒有換場就整個拿掉了');
+        } else if (!slot.gone) {
+          out.add('${slot.place}：骨架一直沒換成內容');
+        }
         continue;
       }
       final lines = <String>[];
@@ -221,7 +248,7 @@ class SkeletonHandoffWatch {
   /// 格）就是截圖上的位置。
   List<Map<String, Object?>> toJson() => [
     for (final slot in _slots.values)
-      if (!slot.gone || slot.content != null)
+      if (slot.content != null || !(slot.gone || slot.lost))
         {
           'place': slot.place,
           'area': _rectJson(slot.area),
