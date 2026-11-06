@@ -35,6 +35,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';
@@ -68,7 +69,15 @@ class _Scenario {
     this.prefs = _infoA,
     this.before = _none,
     this.textScale = 1.0,
-  });
+  }) : launch = false;
+
+  /// 開 App 這一下本身：不先等書架開好，[action] 是掛上 App（[startApp]）。
+  const _Scenario.launch(this.title)
+    : action = startApp,
+      prefs = _infoA,
+      before = _none,
+      textScale = 1.0,
+      launch = true;
 
   /// 總覽頁上顯示的說明。
   final String title;
@@ -78,9 +87,44 @@ class _Scenario {
 
   /// 系統字型放大倍率（[TestPlatformDispatcher.textScaleFactorTestValue]）。
   final double textScale;
+
+  /// 為 true 時不先開好 App，[action] 自己開。
+  final bool launch;
 }
 
 Future<void> _none(WidgetTester tester) async {}
+
+Finder _tab(String label) => find.descendant(
+  of: find.byType(FloatingTabBar),
+  matching: find.text(label),
+);
+
+Future<void> _toMine(WidgetTester tester) async {
+  await tester.tap(_tab('我的'));
+  await settle(tester, const Duration(milliseconds: 1200));
+}
+
+/// 「我的」裡的一列：捲到看得到再點。
+Steps _tapMineRow(String row) => (tester) async {
+  await tester.ensureVisible(find.text(row));
+  await tester.pump();
+  await tester.tap(find.text(row));
+};
+
+/// 發現分頁展開假網站的書源，分類都看得到。
+Future<void> _toExploreSource(WidgetTester tester) async {
+  await tester.tap(_tab('發現'));
+  await settle(tester, const Duration(milliseconds: 1500));
+  await tester.tap(find.text(kSiteName));
+  await settle(tester, const Duration(milliseconds: 1200));
+}
+
+/// 發現的「最新」書單，書都載入好。
+Future<void> _toExploreList(WidgetTester tester) async {
+  await _toExploreSource(tester);
+  await tester.tap(find.text('最新'));
+  await settle(tester, const Duration(milliseconds: 2500));
+}
 
 /// 書架上的書名照目前的繁簡轉換顯示（繁轉簡時是「夜雨听书」）。
 Future<void> _tapBook(WidgetTester tester) =>
@@ -93,9 +137,14 @@ Future<void> _readOnceAndBack(WidgetTester tester) async {
   await settle(tester, const Duration(milliseconds: 1500));
 }
 
-Future<void> _openDetail(WidgetTester tester) async {
+/// 長按書架上的書，預覽選單開好。
+Future<void> _longPressBook(WidgetTester tester) async {
   await tester.longPress(find.text('夜雨聽書').first);
   await settle(tester, const Duration(milliseconds: 900));
+}
+
+Future<void> _openDetail(WidgetTester tester) async {
+  await _longPressBook(tester);
   await tester.tap(find.text('書籍詳情'));
   await settle(tester, const Duration(milliseconds: 1500));
 }
@@ -279,6 +328,34 @@ final scenarios = <String, _Scenario>{
     (t) => _tapOnShelf(t, _localBook),
   ),
   'textscale-a': _Scenario('系統字型放大到 1.5 倍（A 組欄位）', _tapBook, textScale: 1.5),
+  'launch': _Scenario.launch('開 App：書架的骨架換成書架'),
+  'shelf-detail': _Scenario(
+    '書架長按「書籍詳情」',
+    (t) => t.tap(find.text('書籍詳情')),
+    before: _longPressBook,
+  ),
+  'explore': _Scenario('點「發現」分頁', (t) => t.tap(_tab('發現'))),
+  'explore-list': _Scenario(
+    '發現點分類進書單',
+    (t) => t.tap(find.text('最新')),
+    before: _toExploreSource,
+  ),
+  'explore-detail': _Scenario(
+    '發現的書單點書進書籍詳情（書源要從網路抓）',
+    (t) => t.tap(find.text('夜讀第0卷').first),
+    before: _toExploreList,
+  ),
+  for (final row in const [
+    '閱讀偏好',
+    '外觀與主題',
+    '朗讀與語音',
+    '閱讀統計',
+    '書籤與標註',
+    '書源管理',
+    '備份與同步',
+    '關於夜讀',
+  ])
+    'mine-$row': _Scenario('「我的」點「$row」', _tapMineRow(row), before: _toMine),
 };
 
 /// 一本書放進書架。[readIndex] 是讀到第幾章（null 是剛加入、沒讀過）；
@@ -432,13 +509,14 @@ void main() {
           await _resetBooks();
         });
         tester.platformDispatcher.textScaleFactorTestValue = scenario.textScale;
-        await pumpApp(tester);
+        if (!scenario.launch) await pumpApp(tester);
         // 情境的操作找不到東西（例如按鈕不在畫面上）只記下來，不讓整個測試停掉，
         // 後面的情境照常跑。
         SkeletonHandoffWatch? watch;
         String? error;
         try {
           await scenario.before(tester);
+          await waitForSkeletonsGone(tester);
           watch = await watchSkeletonHandoffs(
             tester,
             () => scenario.action(tester),

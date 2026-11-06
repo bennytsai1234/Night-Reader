@@ -159,10 +159,15 @@ class SkeletonHandoffWatch {
         continue;
       }
       final origin = _rectOf(parent).topLeft;
+      // 骨架只畫到畫面邊（再下面的列捲到才建，`GroupedItemShape`），畫面外
+      // 的內容不比。
+      final view = tester.view;
+      final screen = Offset.zero & view.physicalSize / view.devicePixelRatio;
       slot
         ..content = [
           for (final mark in _marksUnder(tester, content))
-            HandoffMark(mark.rect.shift(-origin), mark.text),
+            if (mark.rect.overlaps(screen))
+              HandoffMark(mark.rect.shift(-origin), mark.text),
         ]
         ..contentOrigin = origin
         ..contentFrame = _frame;
@@ -270,6 +275,27 @@ Future<SkeletonHandoffWatch> watchSkeletonHandoffs(
     quiet = watch.done ? quiet + 1 : 0;
   }
   return watch;
+}
+
+/// 一格一格推進，直到畫面上看不到骨架（之前的換場都播完），最多
+/// [maxFrames] 格。要看的那一下之前先等它：上一段的換場還沒播完就按下去，
+/// 量到的是兩段疊在一起的樣子（例如面板正在換場時改每行字數，面板收窄，
+/// 還沒退完的骨架是舊寬度的）。
+Future<void> waitForSkeletonsGone(
+  WidgetTester tester, {
+  int maxFrames = 300,
+}) async {
+  bool showing() => find
+      .byType(SkeletonRevealLayer)
+      .evaluate()
+      .map((e) => e.widget as SkeletonRevealLayer)
+      .any(
+        (l) => l.side == SkeletonRevealSide.skeleton && l.presence.value > 0,
+      );
+  for (var i = 0; i < maxFrames && showing(); i++) {
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
 }
 
 /// 每一條骨架和換上來的內容比：同一行、橫向有重疊的內容合起來算這一條要
