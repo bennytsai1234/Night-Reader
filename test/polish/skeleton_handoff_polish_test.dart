@@ -22,6 +22,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -374,6 +375,11 @@ final scenarios = <String, _Scenario>{
       _tapMineRow(row),
       before: _through(['關於夜讀']),
     ),
+  'about-license-text': _Scenario(
+    '「開源許可證」點一個套件（授權全文）',
+    _tapMineRow('collection'),
+    before: _through(['關於夜讀', '開源許可證']),
+  ),
   'sync-space': _Scenario(
     '「備份與同步」點「同步空間」',
     _tapMineRow('同步空間'),
@@ -545,6 +551,41 @@ Future<void> _resetBooks() async {
   );
 }
 
+/// 「開源許可證」列的套件：名稱長短不一，授權是 MIT 那樣幾段的全文。
+Stream<LicenseEntry> _fakeLicenses() async* {
+  const packages = [
+    'archive',
+    'async',
+    'characters',
+    'collection',
+    'cupertino_icons',
+    'dio',
+    'drift',
+    'flutter',
+    'html',
+    'intl',
+    'path',
+    'provider',
+    'shared_preferences',
+    'sqlite3',
+    'vector_math',
+    'xml',
+  ];
+  for (final package in packages) {
+    yield LicenseEntryWithLineBreaks(
+      [package],
+      '''
+Copyright 2014, the $package project authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software.
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.''',
+    );
+  }
+}
+
 void main() {
   setUpAll(loadScreenshotFonts);
   final only = Platform.environment['POLISH_ONLY']?.split(',');
@@ -560,6 +601,8 @@ void main() {
       await setUpApp();
       await seedLibrary();
       await _seedExtraBooks();
+      // 測試沒有建置時收集的授權，放幾個像樣的套件。
+      LicenseRegistry.addLicense(_fakeLicenses);
       if (polishDir.existsSync()) polishDir.deleteSync(recursive: true);
       polishDir.createSync(recursive: true);
     });
