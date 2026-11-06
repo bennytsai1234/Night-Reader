@@ -1,32 +1,24 @@
-// 夜讀網站原型，A、B 兩版共用：捲動換天色、星星、導覽膠囊、版本與大小、風格切換、「還有」小標籤。
+// 夜讀網站原型，A、B 兩版共用：捲動換天色、星星、導覽膠囊、版本與大小、風格切換、前後對照、短片、進場。
 
 const root = document.documentElement;
-const darkScheme = matchMedia('(prefers-color-scheme: dark)');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-const isDark = () => (root.dataset.theme ? root.dataset.theme === 'dark' : darkScheme.matches);
 
-// ---------- 天色 ----------
-// 淺色：最濃的黃昏開始，捲到 5%–85% 這段慢慢入夜；深色：一開始就是夜，捲到底再暗一點。
-const nav = document.querySelector('.nav');
-const hero = document.querySelector('.hero');
-function frame() {
+// ---------- 天色：最濃的黃昏開始，捲到 5%–85% 這段慢慢入夜，捲到底再暗一點 ----------
+function sky() {
   const max = root.scrollHeight - innerHeight;
   const p = Math.min(1, Math.max(0, scrollY / Math.max(1, max)));
-  const dark = isDark();
   const t = Math.min(1, Math.max(0, (p - 0.05) / 0.8));
-  root.style.setProperty('--n', (dark ? 1 : t * t * (3 - 2 * t)).toFixed(4));
-  root.style.setProperty('--deep', dark ? p.toFixed(4) : (p * 0.4).toFixed(4));
-  nav?.classList.toggle('min', scrollY > hero.offsetHeight * 0.6);
+  root.style.setProperty('--n', (t * t * (3 - 2 * t)).toFixed(4));
+  root.style.setProperty('--deep', p.toFixed(4));
 }
 let pending = false;
 addEventListener('scroll', () => {
   if (pending) return;
   pending = true;
-  requestAnimationFrame(() => { pending = false; frame(); });
+  requestAnimationFrame(() => { pending = false; sky(); });
 }, { passive: true });
-addEventListener('resize', frame);
-darkScheme.addEventListener('change', frame);
-frame();
+addEventListener('resize', sky);
+sky();
 
 // ---------- 星星：固定的亂數種子，每次看到的星空一樣 ----------
 (function stars() {
@@ -45,12 +37,13 @@ frame();
   box.appendChild(frag);
 })();
 
-// ---------- 導覽膠囊：目前所在的段落有一塊滑動的底色 ----------
+// ---------- 導覽膠囊：捲到哪一卷，那一卷的卷名底下有一塊滑動的底色 ----------
 (function navPill() {
   const links = [...document.querySelectorAll('.nav-links a')];
   const pill = document.querySelector('.nav-pill');
   if (!links.length || !pill) return;
   const targets = links.map((a) => document.querySelector(a.getAttribute('href')));
+  const end = document.querySelector('#download');
   function place(a) {
     links.forEach((l) => l.classList.toggle('on', l === a));
     if (!a) { pill.style.opacity = 0; return; }
@@ -62,6 +55,8 @@ frame();
     const y = innerHeight * 0.45;
     let cur = null;
     targets.forEach((el, i) => { if (el && el.getBoundingClientRect().top <= y) cur = links[i]; });
+    // 捲到下載那段就不屬於任何一卷。
+    if (end && end.getBoundingClientRect().top <= y) cur = null;
     place(cur);
   }
   addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
@@ -78,44 +73,74 @@ frame();
     if (!r.ok) throw new Error(r.status);
     const j = await r.json();
     const apk = (j.assets || []).find((a) => /\.apk$/i.test(a.name));
-    const text = `Android · 版本 ${String(j.tag_name).replace(/^v/, '')}` + (apk ? ` · ${(apk.size / 1048576).toFixed(0)} MB` : '');
+    const text = `Android・${String(j.tag_name).replace(/^v/, '')}` + (apk ? `・${(apk.size / 1048576).toFixed(0)} MB` : '');
     metas.forEach((m) => { m.textContent = text; });
   } catch (_) {
-    metas.forEach((m) => { m.textContent = 'Android 7.0 以上 · arm64'; });
+    metas.forEach((m) => { m.textContent = 'Android 7.0 以上'; });
   }
 })();
 
-// ---------- 風格：點了才換，同一頁正文換成那種風格 ----------
-function showStyle(name) {
-  document.querySelectorAll('.style-stack > picture').forEach((p) => p.classList.toggle('on', p.dataset.style === name));
-  document.querySelectorAll('.styles button').forEach((b) => {
-    const on = b.dataset.style === name;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', on);
-  });
-}
-document.querySelectorAll('.styles button').forEach((b) => b.addEventListener('click', () => showStyle(b.dataset.style)));
-showStyle('kraft');
+// ---------- 風格：白天晚上各選一個，切換白天晚上看那一個 ----------
+(function styles() {
+  const box = document.querySelector('.styles');
+  const shots = [...document.querySelectorAll('.style-stack > [data-style]')];
+  if (!box || !shots.length) return;
+  // 白天牛皮紙、晚上素色：維護者自己讀書用的設定。
+  const chosen = { light: 'kraft', dark: 'plain' };
+  let mode = 'dark';
+  box.querySelectorAll('.swatches button').forEach((b) => b.prepend(document.createElement('i')));
+  function render() {
+    box.dataset.show = mode;
+    box.querySelectorAll('.daynight button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+    box.querySelectorAll('.swatches').forEach((row) => row.querySelectorAll('button').forEach((b) => {
+      const on = b.dataset.style === chosen[row.dataset.mode];
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+    }));
+    shots.forEach((s) => s.classList.toggle('on', s.dataset.mode === mode && s.dataset.style === chosen[mode]));
+  }
+  box.querySelectorAll('.daynight button').forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
+  box.querySelectorAll('.swatches').forEach((row) => row.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    chosen[row.dataset.mode] = b.dataset.style;
+    render();
+  })));
+  render();
+})();
+
+// ---------- 前後對照：同一個 data-toggle 的按鈕與畫面一起換，先顯示第二張（之後） ----------
+document.querySelectorAll('.seg[data-toggle]').forEach((seg) => {
+  const stack = document.querySelector(`.stack[data-toggle="${seg.dataset.toggle}"]`);
+  const buttons = [...seg.querySelectorAll('button')];
+  function show(key) {
+    buttons.forEach((b) => { const on = b.dataset.key === key; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+    stack?.querySelectorAll('[data-key]').forEach((p) => p.classList.toggle('on', p.dataset.key === key));
+  }
+  buttons.forEach((b) => b.addEventListener('click', () => show(b.dataset.key)));
+  show(buttons[buttons.length - 1].dataset.key);
+});
+
+// ---------- 短片：捲進畫面才載入並播放，捲出去就停 ----------
+(function clips() {
+  const videos = [...document.querySelectorAll('video.clip')];
+  if (!videos.length) return;
+  const load = (v) => { if (!v.src && v.dataset.src) v.src = v.dataset.src; };
+  if (reduced.matches || !('IntersectionObserver' in window)) { videos.forEach(load); return; }
+  const io = new IntersectionObserver((entries) => entries.forEach((en) => {
+    const v = en.target;
+    if (en.isIntersecting) { load(v); v.play().catch(() => {}); } else { v.pause(); }
+  }), { threshold: 0.35 });
+  videos.forEach((v) => io.observe(v));
+})();
 
 // ---------- 進場：捲進畫面的段落加上 .in（版型自己決定怎麼動） ----------
 (function reveal() {
   const items = [...document.querySelectorAll('.feature')];
   if (!items.length) return;
+  // 整頁從頭到尾一左一右，跨卷也接著數。
+  items.forEach((e, i) => e.classList.toggle('flip', i % 2 === 1));
   if (reduced.matches || !('IntersectionObserver' in window)) { items.forEach((e) => e.classList.add('in')); return; }
   const io = new IntersectionObserver((entries) => {
     entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
   }, { rootMargin: '0px 0px -12% 0px', threshold: 0.15 });
   items.forEach((e) => io.observe(e));
-})();
-
-// ---------- 「還有」：點小標籤才看說明 ----------
-(function more() {
-  const chips = [...document.querySelectorAll('.more .chips button')];
-  const say = document.querySelector('.more .say');
-  if (!chips.length || !say) return;
-  chips.forEach((b) => b.addEventListener('click', () => {
-    chips.forEach((c) => { c.classList.toggle('on', c === b); c.setAttribute('aria-pressed', c === b); });
-    say.style.opacity = 0;
-    setTimeout(() => { say.textContent = b.dataset.say; say.style.opacity = 1; }, reduced.matches ? 0 : 160);
-  }));
 })();

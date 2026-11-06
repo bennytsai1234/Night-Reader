@@ -54,11 +54,14 @@
 - **標語**：可以換一句更有深度的，由 agent 提候選。
 - **下載段**：不寫「App 會自己檢查新版」這類廢話，也不解釋 iOS；只多一個「iOS 未簽章檔」的連結。
 - **進行方式**：不再逐題問，先做一個相對完整的版本給使用者看一遍，再在上面迭代。
+- **第一版完整原型的意見**（2026-11-06）：左右要整頁從頭到尾一左一右，不能每卷重新數；手機框用黑色，和黑色螢幕融在一起看不出外框是要的；手機太長像遙控器，改成 393×760（截圖照這個尺寸拍，不能拿舊比例的圖裁）。
 - **重點不是基本功能**：字格排版、書籤與標註是閱讀器都有的基本功能，不拿來當重點。真正的重點是原本「還有」裡的那些：聽書、多台手機同步、書源工具（校驗）等；備份還原和同步算同一件事。
 
 產圖的做法：`codex exec` 用內建 `image_gen`（imagegen 技能），一張一個任務檔，寫明尺寸 1536×1024、配色色碼、不要的東西。山景是先產黃昏那張，再拿它當編輯參考、要求「每層稜線一個像素都不要動，只改光線與色彩」產夜景；月亮另產黑底光暈。拿回來轉 webp 放 `website/proto/sky/`。
 
-網頁截圖與量測：`tool/website_preview/`。`node shoot.mjs <website/> <輸出資料夾> [a,b] [light,dark] [desktop,mobile]` 用 Chrome 在固定捲動位置拍整組；`python -I montage.py <資料夾>` 合成總覽圖；`node measure.mjs <website/>` 量傳輸量、頁面長度、全頁字數與捲動每幀時間（兩支腳本自己開 http 伺服器；要自己看頁面時在 `website/` 底下 `python -m http.server`）。截圖重拍：`flutter test --run-skipped -t screens test/screens/website_shots_test.dart`，淺深與風格用 `SHOT_MODE`、`SHOT_STYLE`、`SHOT_ONLY`，圖在系統暫存的 `night-reader-screens/`，縮成 2/3 存 webp 放 `website/proto/shots/`。
+網頁截圖與量測：`tool/website_preview/`。`node shoot.mjs <website/> <輸出資料夾> [a,b] [light,dark] [desktop,mobile]` 用 Chrome 在固定捲動位置拍整組；`python -I montage.py <資料夾>` 合成總覽圖；`node measure.mjs <website/>` 量傳輸量、頁面長度、全頁字數與捲動每幀時間（兩支腳本自己開 http 伺服器；要自己看頁面時在 `website/` 底下 `python -m http.server`）。截圖與短片重拍：`flutter test --run-skipped -t screens test/screens/website_shots_test.dart`（`SHOT_ONLY=名稱,名稱` 只拍幾個；情境清單是檔裡的 `_shots`），圖在系統暫存的 `night-reader-screens/web/`、短片每一格在 `web-clips/`；再跑 `python -I tool/website_preview/shots.py [名稱…]` 轉成 `website/proto/shots/*.webp` 與 `website/proto/clips/*.mp4`。測試裡的坑：沒指定字型的字（選字選單、底部提示）會畫成方塊，所以選字隱藏用前後兩張不錄短片；測試連不上網路，換源面板要等它搜完再把結果塞進去；測試沒有系統狀態列，「藏起狀態列」拍不出對照。
+
+使用者看的頁面發成 claude.ai 的私人網頁：https://claude.ai/artifact/JN6FnPoKNhmUetVZicKekk（`website/proto/a.html` 當首頁，連同 css、js、圖與短片一起發）。
 
 定案後：結果寫進 `DESIGN.md`；從 `beta` 開新分支把定案的版本做成正式的 `website/index.html`（截圖與天空圖一起搬，`app-icon.png` 1MB 要縮）；改寫 `README.md`；B 備案的去留問使用者，沒說要留就刪掉這條分支。
 

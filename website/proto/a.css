@@ -1,33 +1,100 @@
-/* 原型 A：左右交錯，字砍到一句標題加一句說明；進場時手機與字由下浮上來。 */
+/* 原型 A：左右交錯。開頭左字右手機；四卷各有卷名，卷裡每個功能一列，手機與字左右交錯，進場由下浮上來。 */
 
-.feature { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; padding: 88px 0; }
-.feature:nth-of-type(even) .shots { order: 2; }
-.feature h2 { font-size: 36px; line-height: 1.3; margin: 0 0 14px; font-weight: 700; letter-spacing: 0.04em; }
+/* ---------- 開頭：左邊字與下載，右邊手機播開 App ---------- */
+.hero { justify-content: center; gap: 9vw; text-align: left; }
+.hero-copy { max-width: 30em; }
+.hero h1, .hero .tag { text-indent: 0; }
+.hero .lead { margin-left: 0; }
+.hero .fine { margin-top: 18px; }
+.hero-shot .phone { width: 290px; }
+
+/* ---------- 卷名 ---------- */
+.volume { padding-top: 64px; }
+.vol-head { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 40px 0 8px; text-align: center; }
+.vol-head span { font-size: 13px; letter-spacing: 0.5em; text-indent: 0.5em; color: var(--faint); }
+.vol-head h2 { position: relative; margin: 0; font-size: 34px; font-weight: 600; letter-spacing: 0.5em; text-indent: 0.5em; }
+.vol-head h2::before, .vol-head h2::after { content: ""; position: absolute; top: 50%; width: 56px; height: 1px; background: var(--line); }
+.vol-head h2::before { right: calc(100% + 18px); }
+.vol-head h2::after { left: calc(100% + 18px - 0.5em); }
+
+/* ---------- 功能：一列一個 ---------- */
+.feature { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; padding: 72px 0; }
+/* 整頁從頭到尾一左一右（.flip 由 base.js 照整頁的順序加，不照每一卷各自數）。 */
+.feature.flip .shots { order: 2; }
+.feature h3 { font-size: 34px; line-height: 1.3; margin: 0 0 14px; font-weight: 700; letter-spacing: 0.06em; }
 .feature p { font-size: 18px; color: var(--muted); margin: 0; max-width: 20em; }
 .shots { position: relative; display: flex; justify-content: center; }
-.feature:nth-of-type(odd) .text { justify-self: start; }
-.feature:nth-of-type(even) .text { justify-self: end; }
+.feature .text { justify-self: start; }
+.feature.flip .text { justify-self: end; }
 
-/* 第二張疊在後面、略小，露出一角。 */
-.shots .phone + .phone { position: absolute; width: 230px; transform: translate(-46%, 10%); z-index: -1; opacity: 0.9; }
-.shots.pair { padding-left: 90px; }
+/* 手機疊在平板右下角。 */
+.shots.devices { padding: 0 60px 40px 0; }
+.shots.devices .phone { position: absolute; right: 0; bottom: 0; width: 170px; }
 
-/* 進場：捲進畫面時由下浮上來（只改位置與透明度）。 */
+/* 卷四最後一段只有字：置中，和下載之間留一點距離 */
+.source-note { max-width: 30em; margin: 24px auto 0; padding: 48px 0 0; text-align: center; }
+.source-note h3 { font-size: 26px; font-weight: 600; letter-spacing: 0.1em; margin: 0 0 12px; }
+.source-note p { font-size: 17px; color: var(--muted); margin: 0; }
+
+/* ---------- 風格：白天晚上的切換，加兩排風格卡（照 App「外觀與主題」的樣子） ---------- */
+.styles { margin-top: 6px; }
+.swatches { display: none; grid-template-columns: repeat(6, auto); gap: 10px; margin-top: 18px; justify-content: start; }
+.styles[data-show="light"] .swatches[data-mode="light"],
+.styles[data-show="dark"] .swatches[data-mode="dark"] { display: grid; }
+.swatches button {
+  display: grid; justify-items: center; gap: 6px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--muted); transition: color 0.2s linear;
+}
+.swatches button.on { color: var(--text); font-weight: 600; }
+/* 一張摺角的紙，上面一個「永」與幾條字線 */
+.swatches i {
+  position: relative; width: 46px; height: 60px; border-radius: 6px; background: var(--bg);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); transition: box-shadow 0.2s linear, transform 0.2s ease;
+  clip-path: polygon(0 0, 72% 0, 100% 22%, 100% 100%, 0 100%);
+}
+.swatches i::before { content: "永"; position: absolute; left: 7px; top: 3px; font-size: 15px; font-style: normal; font-weight: 600; color: var(--fg); }
+.swatches i::after {
+  content: ""; position: absolute; left: 7px; right: 7px; top: 27px; height: 22px;
+  background: linear-gradient(var(--fg) 0 0) 0 0 / 100% 2px no-repeat, linear-gradient(var(--fg) 0 0) 0 7px / 80% 2px no-repeat,
+              linear-gradient(var(--fg) 0 0) 0 14px / 92% 2px no-repeat, linear-gradient(var(--fg) 0 0) 0 21px / 60% 2px no-repeat;
+  opacity: 0.55;
+}
+.swatches button.on i { box-shadow: inset 0 0 0 2px var(--primary); transform: translateY(-2px); }
+.swatches[data-mode="light"] [data-style="plain"] { --bg: #ffffff; --fg: #1a1a1a; }
+.swatches[data-mode="light"] [data-style="paper"] { --bg: #faf5e9; --fg: #2a241c; }
+.swatches[data-mode="light"] [data-style="tea"] { --bg: #f0e4ca; --fg: #33241a; }
+.swatches[data-mode="light"] [data-style="kraft"] { --bg: #ddc090; --fg: #3e3422; }
+.swatches[data-mode="light"] [data-style="bamboo"] { --bg: #e4ecd6; --fg: #202d21; }
+.swatches[data-mode="light"] [data-style="bean"] { --bg: #c0edc6; --fg: #0b0b0b; }
+/* 晚上預設純黑，每個風格留自己的字色。 */
+.swatches[data-mode="dark"] button { --bg: #000; }
+.swatches[data-mode="dark"] [data-style="plain"] { --fg: #c4c4c4; }
+.swatches[data-mode="dark"] [data-style="paper"] { --fg: #cfc6b2; }
+.swatches[data-mode="dark"] [data-style="tea"] { --fg: #cdb892; }
+.swatches[data-mode="dark"] [data-style="kraft"] { --fg: #d6bf91; }
+.swatches[data-mode="dark"] [data-style="bamboo"] { --fg: #b9d7c2; }
+.swatches[data-mode="dark"] [data-style="bean"] { --fg: #adadad; }
+.swatches[data-mode="dark"] i { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22); }
+
+/* ---------- 進場：捲進畫面時由下浮上來（只改位置與透明度） ---------- */
 .feature .shots, .feature .text { transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .js .feature:not(.in) .shots { opacity: 0; transform: translateY(48px); }
 .js .feature:not(.in) .text { opacity: 0; transform: translateY(28px); }
 .feature .text { transition-delay: 0.12s; }
 
-@media (max-width: 760px) {
-  .feature { grid-template-columns: 1fr; gap: 28px; padding: 44px 0; text-align: center; }
-  .feature:nth-of-type(even) .shots { order: 0; }
+@media (max-width: 860px) {
+  .hero { flex-direction: column; gap: 48px; text-align: center; padding-top: 110px; }
+  .hero .lead { margin-left: auto; }
+  .feature { grid-template-columns: 1fr; gap: 30px; padding: 48px 0; text-align: center; }
+  .feature.flip .shots { order: 0; }
   .feature .text { order: -1; justify-self: center !important; }
-  .feature h2 { font-size: 26px; }
+  .feature h3 { font-size: 26px; }
   .feature p { font-size: 16px; margin: 0 auto; }
-  .styles { justify-content: center; }
-  .phone { width: min(62vw, 250px); }
-  .shots .phone + .phone { display: none; }
-  .shots.pair { padding-left: 0; }
+  .swatches { justify-content: center; gap: 8px; }
+  .swatches i { width: 40px; height: 52px; }
+  .vol-head h2 { font-size: 28px; }
+  .shots.devices { padding: 0 40px 30px 0; }
+  .shots.devices .phone { width: min(36vw, 150px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
