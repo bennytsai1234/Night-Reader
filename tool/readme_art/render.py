@@ -5,8 +5,8 @@
 網站重拍後跟著重跑。
 
 有動畫的格子（cards.js 的 "a"）：先把那一格的螢幕塗成洋紅色拍一張，洋紅色的濃淡就是
-遮罩，再把短片（clip:名稱，website/clips/）或幾張截圖輪流由左而右掃過（seq:a,b,…）
-一幀一幀貼進去，存成會動的 webp。
+遮罩，再把短片（clip:名稱，website/clips/）或幾張截圖輪流（wipe:a,b,… 由左而右掃過、
+fade:a,b,… 淡入淡出）一幀一幀貼進去，存成會動的 webp。
 """
 import json
 import pathlib
@@ -23,10 +23,11 @@ ART = ROOT / 'tool' / 'readme_art'
 WEB = ROOT / 'website'
 OUT = ROOT / 'docs' / 'readme'
 
-FPS = 15
-LOOP = 6.0  # 秒；短片 3 秒播兩次，seq 每張停 LOOP / 張數
-WIPE = 0.45  # 秒，seq 換下一張的掃過時間
+FPS = 30  # 和網站的短片一樣，短片的每一幀都用上
+LOOP = 6.0  # 秒；短片 3 秒播兩次，wipe／fade 每張停 LOOP / 張數
+SWITCH = 0.45  # 秒，wipe／fade 換下一張的時間
 KEY = np.array([255, 0, 255], dtype=np.float32)
+ANIM_ENCODE = {'lossless': True, 'quality': 100, 'method': 4, 'minimize_size': True}
 
 
 def cards():
@@ -66,11 +67,15 @@ def clip_frames(arg, size, n):
     return [src[i % len(src)] for i in range(n)]
 
 
-def seq_frames(names, size, n):
-    """幾張截圖輪流，每張停一段，最後 WIPE 秒由左而右掃成下一張，邊緣柔一點。"""
+def seq_frames(names, size, n, wipe):
+    """幾張截圖輪流，每張停一段，最後 SWITCH 秒換成下一張。
+    wipe：由左而右掃過去，只給版面相同、只換顏色或封面的幾張用。
+    fade：版面會動的（隱藏廣告、正文整理，字的位置前後不同）掃過或交叉淡化都會讓兩頁的字
+    疊在一起、像壞掉，所以前半段淡到只剩紙色、後半段再淡入下一張，兩頁的字不同時出現。"""
     imgs = [ImageOps.fit(Image.open(WEB / 'shots' / f'{s}.webp').convert('RGB'), size, Image.LANCZOS)
             for s in names]
     arrs = [np.asarray(i, dtype=np.float32) for i in imgs]
+    paper = [np.median(a.reshape(-1, 3), axis=0) for a in arrs]  # 字很稀，中位數就是紙色
     w = size[0]
     xs = np.arange(w, dtype=np.float32)[None, :, None]
     soft = w * 0.18
@@ -79,21 +84,33 @@ def seq_frames(names, size, n):
     for f in range(n):
         t = f / FPS
         i = int(t // seg) % len(names)
-        p = (t - i * seg - (seg - WIPE)) / WIPE
+        p = (t - i * seg - (seg - SWITCH)) / SWITCH
         if p <= 0:
             out.append(imgs[i])
             continue
-        p = 1 - (1 - min(p, 1)) ** 3  # 先快後慢
-        edge = -soft + p * (w + 2 * soft)
-        m = np.clip((edge - xs) / soft + 0.5, 0, 1)
-        a, b = arrs[i], arrs[(i + 1) % len(names)]
-        out.append(Image.fromarray((a * (1 - m) + b * m).astype(np.uint8)))
+        p = min(p, 1)
+        j = (i + 1) % len(names)
+        a, b = arrs[i], arrs[j]
+        if wipe:
+            p = 1 - (1 - p) ** 3  # 先快後慢
+            edge = -soft + p * (w + 2 * soft)
+            m = np.clip((edge - xs) / soft + 0.5, 0, 1)
+            mix = a * (1 - m) + b * m
+        elif p < 0.5:
+            k = p * 2
+            mix = a * (1 - k) + paper[i] * k
+        else:
+            k = (p - 0.5) * 2
+            mix = paper[j] * (1 - k) + b * k
+        out.append(Image.fromarray(mix.astype(np.uint8)))
     return out
 
 
 def frames_for(spec, size, n):
     kind, arg = spec.split(':', 1)
-    return clip_frames(arg, size, n) if kind == 'clip' else seq_frames(arg.split(','), size, n)
+    if kind == 'clip':
+        return clip_frames(arg, size, n)
+    return seq_frames(arg.split(','), size, n, wipe=kind == 'wipe')
 
 
 def magenta(img):
@@ -110,7 +127,7 @@ def save(im, frames, name):
         im.save(dst, 'WEBP', quality=86, method=6)
     else:
         frames[0].save(dst, 'WEBP', save_all=True, append_images=frames[1:], duration=round(1000 / FPS),
-                       loop=0, quality=80, method=4, minimize_size=True)
+                       loop=0, **ANIM_ENCODE)
     kb = dst.stat().st_size // 1024
     print(f'{name}: {im.size[0]}x{im.size[1]}' + (f' {len(frames)} 幀' if frames else '') + f' {kb} KB')
 
