@@ -7,6 +7,9 @@
 ///   Dart，不支援的直接丟 [FormatException]。
 /// - 預設 `.` 不跨行、`^` 只對整段開頭；沒開 `(?m)` 時 `$` 同 Java 也對得到
 ///   最後一個換行之前（Dart 只認真正的結尾）。`\A`、`\z`、`\Z` 換成同義的寫法。
+/// - Java 的原子群組 `(?>…)` 換成非捕獲組 `(?:…)`，所有格量詞（`a*+`、
+///   `a++`、`a?+`、`a{2,3}+`）拿掉後面多出來的 `+`：Dart 沒有這兩種寫法，
+///   換掉後只在回溯行為上不同，多數規則的比對結果相同。
 ///
 /// [wholeInput] 同 Java `matches()`：整段都要符合。
 RegExp javaRegExp(String pattern, {bool wholeInput = false}) {
@@ -55,6 +58,7 @@ String _translate(
 }) {
   final out = StringBuffer();
   var inClass = false;
+  var lastWasQuantifier = false;
   for (var i = 0; i < pattern.length; i++) {
     final char = pattern[i];
     if (char == r'\' && i + 1 < pattern.length) {
@@ -68,6 +72,7 @@ String _translate(
               _ => null,
             };
       out.write(anchor ?? '$char$next');
+      lastWasQuantifier = false;
       continue;
     }
     if (comments) {
@@ -81,16 +86,58 @@ String _translate(
     }
     if (inClass) {
       if (char == ']') inClass = false;
-    } else if (char == '[') {
-      inClass = true;
-    } else if (char == r'$' && !multiLine) {
-      out.write(_finalLineEnd);
+      out.write(char);
+      lastWasQuantifier = false;
       continue;
     }
+    if (char == '[') {
+      inClass = true;
+      out.write(char);
+      lastWasQuantifier = false;
+      continue;
+    }
+    if (char == '(' &&
+        i + 2 < pattern.length &&
+        pattern[i + 1] == '?' &&
+        pattern[i + 2] == '>') {
+      // 原子群組不佔捕獲組編號，換成一般的非捕獲組。
+      out.write('(?:');
+      i += 2;
+      lastWasQuantifier = false;
+      continue;
+    }
+    if (char == r'$' && !multiLine) {
+      out.write(_finalLineEnd);
+      lastWasQuantifier = false;
+      continue;
+    }
+    if (char == '+' && lastWasQuantifier) {
+      // 所有格量詞：拿掉多出來的 +，原本的量詞與組號都不變。
+      lastWasQuantifier = false;
+      continue;
+    }
+    if (char == '*' || char == '+' || char == '?') {
+      out.write(char);
+      lastWasQuantifier = true;
+      continue;
+    }
+    if (char == '{') {
+      final quantifier = _quantifier.matchAsPrefix(pattern, i);
+      if (quantifier != null) {
+        out.write(quantifier.group(0));
+        i = quantifier.end - 1;
+        lastWasQuantifier = true;
+        continue;
+      }
+    }
     out.write(char);
+    lastWasQuantifier = false;
   }
   return out.toString();
 }
+
+/// Java 的 `{m}`、`{m,}`、`{m,n}` 量詞。
+final RegExp _quantifier = RegExp(r'\{\d+(?:,\d*)?\}');
 
 /// Java 註解模式略過的空白（`Character.isWhitespace` 的 ASCII 部分）。
 bool _isJavaWhitespace(String char) =>

@@ -74,7 +74,18 @@ class LocalBookService {
     final same = await bookDao.getInBookshelfByFingerprint(print);
     if (same.isNotEmpty) {
       await _restoreMissingOriginal(same, path);
-      return same.first;
+      final missing = <Book>[];
+      for (final book in same) {
+        if (!await File(filePathOf(book)).exists()) missing.add(book);
+      }
+      if (missing.isEmpty) return same.first;
+      return await _moveMissingBooks(
+            missing,
+            path,
+            bookDao: bookDao,
+            chapterDao: chapterDao,
+          ) ??
+          same.first;
     }
 
     final storedPath = await storeInLibrary(path, bookDao: bookDao);
@@ -132,6 +143,77 @@ class LocalBookService {
         AppLog.e('放回本地書原檔失敗: $error', error: error);
       }
     }
+  }
+
+  /// 原檔放不回原本的位置（例如還原另一台手機的備份，App 資料夾的路徑
+  /// 變了）：把這次拿到的原檔留在本地書資料夾，書改指新路徑。章節、封面與
+  /// EPUB 轉好的文字跟著搬；閱讀進度在書這一列，書籤與標註認書名與作者，
+  /// 都不用改。
+  Future<Book?> _moveMissingBooks(
+    List<Book> books,
+    String path, {
+    required BookDao bookDao,
+    required ChapterDao chapterDao,
+  }) async {
+    final stored = await storeInLibrary(path, bookDao: bookDao);
+    final newUrl = 'local://$stored';
+    if (!await File(stored).exists()) {
+      throw FileSystemException('原檔不見了，無法放回書架', path);
+    }
+    Book? moved;
+    for (final book in books) {
+      if (book.bookUrl == newUrl) {
+        moved ??= book;
+        continue;
+      }
+      final chapters = await chapterDao.getByBook(book.bookUrl);
+      final updated = await _moveAssets(book, book.copyWith(bookUrl: newUrl));
+      await bookDao.transaction(() async {
+        // 書的身分是網址：先刪舊的一列再寫新的一列，不能只 upsert，不然會
+        // 留下原本那一列指著不存在的原檔。
+        await bookDao.deleteByUrl(book.bookUrl);
+        await bookDao.upsert(updated);
+        await chapterDao.deleteByBook(book.bookUrl);
+        if (chapters.isNotEmpty) {
+          await chapterDao.insertChapters([
+            for (final chapter in chapters)
+              chapter.copyWith(
+                bookUrl: newUrl,
+                url: chapter.url.startsWith(book.bookUrl)
+                    ? '$newUrl${chapter.url.substring(book.bookUrl.length)}'
+                    : '$newUrl#${chapter.index}',
+              ),
+          ]);
+        }
+      });
+      moved ??= updated;
+    }
+    return moved;
+  }
+
+  /// 書換了網址時，把封面與 EPUB 轉好的文字搬到新網址的資料夾。搬不動也
+  /// 不影響讀這本書：那些是衍生的資料，書照樣回傳新的那一本。
+  static Future<Book> _moveAssets(Book oldBook, Book newBook) async {
+    final oldDir = await AppStoragePaths.bookAssetDir(
+      BookCoverStorageService.bookStorageKey(oldBook),
+    );
+    if (!await oldDir.exists()) return newBook;
+    final newDir = await AppStoragePaths.bookAssetDir(
+      BookCoverStorageService.bookStorageKey(newBook),
+    );
+    try {
+      await oldDir.rename(newDir.path);
+    } on FileSystemException catch (error) {
+      AppLog.e('搬移本地書的封面與轉好的文字失敗: $error', error: error);
+      return newBook;
+    }
+    String? moved(String? path) => path != null && p.isWithin(oldDir.path, path)
+        ? p.join(newDir.path, p.relative(path, from: oldDir.path))
+        : path;
+    return newBook.copyWith(
+      coverLocalPath: moved(oldBook.coverLocalPath),
+      customCoverLocalPath: moved(oldBook.customCoverLocalPath),
+    );
   }
 
   /// 匯入失敗時，沒有任何書指著的那份複本刪掉，不留在本地書資料夾。

@@ -45,6 +45,24 @@ void main() {
     expect(find('(?x)[a b]', ' '), isFalse);
   });
 
+  test('Java 的原子群組與所有格量詞換成 Dart 的等價寫法', () {
+    // 原子群組不佔編號：$1 仍指到後面那個捕獲組。
+    final atomic = javaRegExp(r'(?>廣告)(\d+)').firstMatch('廣告123')!;
+    expect(atomic.group(0), '廣告123');
+    expect(atomic.group(1), '123');
+
+    // 所有格量詞拿掉後面多出來的那個 +，比對結果照規則的意思。
+    expect(find(r'\d++', 'abc123'), isTrue);
+    expect(find(r'a*+b', 'aaab'), isTrue);
+    expect(find(r'a?+b', 'ab'), isTrue);
+    expect(find(r'a{2,3}+b', 'aaab'), isTrue);
+    // 跳脫的加號後面接一般量詞、字元集合裡的加號都不動。
+    expect(find(r'\++', '++'), isTrue);
+    expect(find(r'[+*]+', '+*'), isTrue);
+    // 懶惰量詞照原樣留著。
+    expect(javaRegExp(r'a+?').firstMatch('aaa')!.group(0), 'a');
+  });
+
   test('wholeInput 整段都要符合（Java matches）', () {
     final url = javaRegExp(r'(?i)https://b\.test/BOOK/\d+', wholeInput: true);
     expect(url.hasMatch('https://b.test/book/1'), isTrue);

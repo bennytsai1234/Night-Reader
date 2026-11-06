@@ -537,6 +537,58 @@ void main() {
       expect(dir.listSync(), hasLength(1), reason: '下載的那份用完就刪');
     });
 
+    test('a missing original that cannot be written back is moved into the '
+        'library and the book follows it', () async {
+      await a.import('夜航.txt', _novel);
+      await a.syncLocalBooks();
+      await b.syncLocalBooks();
+      final book = (await b.shelf()).single;
+      await b.books.updateProgress(book.bookUrl, 1, '第二章 霧', 2);
+      final progressed = (await b.books.getByUrl(book.bookUrl))!;
+
+      // 還原另一台的備份：書與目錄指著那台的 App 資料夾，這個路徑在這台
+      // 寫不進去（上層是一個檔，不是資料夾）。
+      final blocked = File(p.join(b.root.path, 'blocked'));
+      await blocked.writeAsString('不是資料夾');
+      final lostPath = p.join(blocked.path, '夜航.txt');
+      final lostUrl = 'local://$lostPath';
+      final chapters = await b.chapters.getByBook(book.bookUrl);
+      await b.db.transaction(() async {
+        await b.books.deleteByUrl(book.bookUrl);
+        await b.books.upsert(progressed.copyWith(bookUrl: lostUrl));
+        await b.chapters.deleteByBook(book.bookUrl);
+        await b.chapters.insertChapters([
+          for (final chapter in chapters)
+            chapter.copyWith(
+              bookUrl: lostUrl,
+              url: '$lostUrl#${chapter.index}',
+            ),
+        ]);
+      });
+      File(LocalBookService.filePathOf(book)).deleteSync();
+
+      final plan = await b.localBooks().plan();
+      expect(plan.tasks.map((task) => task.action), [LocalBookAction.download]);
+      final result = await b.localBooks().run(plan);
+      expect(result.failures, isEmpty);
+
+      final repaired = (await b.shelf()).single;
+      final repairedPath = LocalBookService.filePathOf(repaired);
+      expect(repairedPath, isNot(lostPath));
+      expect(File(repairedPath).readAsStringSync(), _novel);
+      final repairedChapters = await b.chapters.getByBook(repaired.bookUrl);
+      expect(repairedChapters, hasLength(3));
+      expect(
+        repairedChapters.every(
+          (chapter) => chapter.url.startsWith(repaired.bookUrl),
+        ),
+        isTrue,
+      );
+      expect(repaired.chapterIndex, 1);
+      expect(repaired.charOffset, 2);
+      expect((await b.localBooks().plan()).isEmpty, isTrue);
+    });
+
     test('removing one of two books that share an original keeps the '
         'file', () async {
       final mine = await a.import('夜航.txt', _novel);
