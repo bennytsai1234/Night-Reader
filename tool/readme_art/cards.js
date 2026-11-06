@@ -23,24 +23,5 @@ window.CARDS = {
     {"s": "source-check", "h": "書源壞了一眼看出", "p": "批次校驗找出失效的<br>單一書源逐步除錯"}
   ], "note": ["夜讀不附書源", "網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"]},
 
-  "download": {"type": "download"},
-
-  "band1": {"type": "band", "t": 0.35, "no": "卷一", "name": "燈下"},
-  "band2": {"type": "band", "t": 0.6, "no": "卷二", "name": "留白"},
-  "band3": {"type": "band", "t": 0.85, "no": "卷三", "name": "枕邊"},
-  "band4": {"type": "band", "t": 1, "no": "卷四", "name": "尋源"},
-
-  "solo-open": {"type": "solo", "s": "open", "a": "clip:open"},
-  "solo-styles": {"type": "solo", "s": "reader-kraft_light", "a": "seq:reader-kraft_light,reader-bamboo_light,reader-tea_dark,reader-plain_dark"},
-  "solo-tts": {"type": "solo", "s": "tts", "a": "clip:tts"},
-  "solo-hide": {"type": "solo", "s": "hide-before", "a": "seq:hide-before,hide-after"},
-  "solo-clean": {"type": "solo", "s": "clean-before", "a": "seq:clean-before,clean-after"},
-  "solo-statusbar": {"type": "solo", "s": "statusbar-hidden"},
-  "solo-covers": {"type": "solo", "s": "covers-source", "a": "seq:covers-source,covers-unified"},
-  "solo-search": {"type": "solo", "s": "search", "a": "clip:search"},
-  "solo-change": {"type": "solo", "s": "source-change"},
-  "solo-download": {"type": "solo", "s": "download", "a": "clip:download"},
-  "solo-local": {"type": "solo", "s": "local-toc"},
-  "solo-sync": {"type": "solo", "s": "sync-phone"},
-  "solo-check": {"type": "solo", "s": "source-check"}
+  "download": {"type": "download"}
 }
