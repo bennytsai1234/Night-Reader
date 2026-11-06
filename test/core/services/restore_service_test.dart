@@ -9,6 +9,8 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
@@ -32,6 +34,7 @@ void main() {
     getIt
       ..registerSingleton<AppDatabase>(db)
       ..registerSingleton<BookDao>(BookDao(db))
+      ..registerSingleton<ChapterDao>(ChapterDao(db))
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
       ..registerSingleton<ReplaceRuleDao>(ReplaceRuleDao(db))
       ..registerSingleton<BookGroupDao>(BookGroupDao(db))
@@ -231,6 +234,70 @@ void main() {
     expect(restored!.from, 'phone-a');
     expect(restored.books, {'丁': 900});
     expect(restored.days, {'2026-10-20': 900});
+  });
+
+  test('books off the shelf in an old backup are not restored, and chapters '
+      'and downloads for them or for long-gone books are dropped', () async {
+    const origin = 'https://c.example';
+    await BookDao(db).upsert(
+      Book(bookUrl: 'mine', origin: origin, name: '我的', isInBookshelf: true),
+    );
+    Map<String, Object> book(String url, {required bool onShelf}) => {
+      'bookUrl': url,
+      'origin': origin,
+      'name': url,
+      'isInBookshelf': onShelf ? 1 : 0,
+    };
+    Map<String, Object> content(String bookUrl) => {
+      'contentKey': ReaderChapterContentDao.contentKey(
+        origin: origin,
+        bookUrl: bookUrl,
+        chapterUrl: 'c1',
+      ),
+      'origin': origin,
+      'bookUrl': bookUrl,
+      'chapterUrl': 'c1',
+      'chapterIndex': 0,
+      'status': 1,
+      'content': '正文',
+      'updatedAt': 1,
+    };
+    final zip = await writeZip('old_backup.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+      // 正文與下載任務排在書前面：結果不該受 ZIP 裡的檔案順序影響。
+      'downloadTask.json': jsonEncode([
+        {'bookUrl': 'theirs', 'bookName': 'theirs'},
+        {'bookUrl': 'preview', 'bookName': 'preview'},
+      ]),
+      'readerChapterContent.json': jsonEncode([
+        content('theirs'),
+        content('preview'),
+        content('gone'),
+      ]),
+      'bookshelf.json': jsonEncode([
+        book('mine', onShelf: false),
+        book('theirs', onShelf: true),
+        book('preview', onShelf: false),
+      ]),
+    });
+
+    final result = await RestoreService().restoreFromZip(zip);
+
+    expect(result.failedFiles, isEmpty);
+    final restored = {
+      for (final book in await BookDao(db).getAll())
+        book.bookUrl: book.isInBookshelf,
+    };
+    expect(restored, {'mine': true, 'theirs': true});
+    expect(
+      (await db.select(db.readerChapterContents).get()).map(
+        (row) => row.bookUrl,
+      ),
+      ['theirs'],
+    );
+    expect((await DownloadDao(db).getAll()).map((task) => task.bookUrl), [
+      'theirs',
+    ]);
   });
 
   test('a file that is not a backup is reported as invalid', () async {

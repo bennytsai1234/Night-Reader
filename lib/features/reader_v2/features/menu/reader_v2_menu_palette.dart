@@ -126,7 +126,7 @@ class ReaderV2MenuStyle {
           inversePrimary: base.colorScheme.inversePrimary,
           glassStrength:
               base.extension<AppChrome>()?.glassStrength ??
-              GlassStrength.frosted,
+              GlassStrength.unspecified,
         ),
       ],
     );

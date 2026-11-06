@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/fonts/app_font.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
@@ -150,14 +151,19 @@ ReaderV2Setting<double> _pagePadding(String key, double fallback) {
   );
 }
 
+// 閱讀設定的預設照維護者自己讀書用的設定（2026-10-15 首次對齊，2026-11-06
+// 照手機備份的設定再對一次）。
 const double _defaultFontSize = 18.0;
-const double _defaultLineHeight = 1.4;
-const double _defaultParagraphSpacing = 0.0;
-const double _defaultAutoPageSpeed = 0.16;
+const double _defaultLineHeight = 1.2;
+const double _defaultParagraphSpacing = 0.2;
+const double _defaultChapterSpacing = 1.0;
+const double _defaultTitleSpacing = 0.5;
+const int _defaultLineChars = 60;
 
 /// 自動翻頁速度（每秒滾動畫面高的比例）。舊版存的是整數百分比，超過 1 就除以 100。
 double _autoPageSpeedOf(double? value) {
-  if (value == null || !value.isFinite) return _defaultAutoPageSpeed;
+  const fallback = ReaderV2PrefsRepository.defaultAutoPageSpeed;
+  if (value == null || !value.isFinite) return fallback;
   const min = ReaderV2PrefsRepository.minAutoPageSpeed;
   const max = ReaderV2PrefsRepository.maxAutoPageSpeed;
   if (value > 1) return (value / 100).clamp(min, max).toDouble();
@@ -212,7 +218,6 @@ abstract final class ReaderV2Settings {
             kReaderV2DefaultTitleSizeDelta,
   );
 
-  /// 排版與邊距的預設照使用者自己讀書用的設定（2026-10-15）。
   static final lineHeight = _double(
     PreferKey.readerLineHeight,
     _defaultLineHeight,
@@ -225,11 +230,11 @@ abstract final class ReaderV2Settings {
   /// 章末與下一章標題之間的空白（行）。
   static final chapterSpacing = _double(
     PreferKey.readerChapterSpacing,
-    0.5,
+    _defaultChapterSpacing,
     decode: _finiteClamp(
       ReaderV2PrefsRepository.minChapterSpacing,
       ReaderV2PrefsRepository.maxChapterSpacing,
-      0.5,
+      _defaultChapterSpacing,
     ),
   );
   static final letterSpacing = _double(PreferKey.readerLetterSpacing, 0.2);
@@ -238,14 +243,17 @@ abstract final class ReaderV2Settings {
   /// 自動翻頁速度（每秒滾動畫面高的比例）；還讀得到舊版的整數百分比。
   static final autoPageSpeed = _double(
     PreferKey.readerAutoPageSpeed,
-    _defaultAutoPageSpeed,
+    ReaderV2PrefsRepository.defaultAutoPageSpeed,
     read: (prefs) =>
         prefs.getDouble(PreferKey.readerAutoPageSpeed) ??
         prefs.getInt(PreferKey.autoReadSpeed)?.toDouble(),
     decode: _autoPageSpeedOf,
     encode: _autoPageSpeedOf,
   );
-  static final chineseConvert = _int(PreferKey.readerChineseConvert, 0);
+  static final chineseConvert = _int(
+    PreferKey.readerChineseConvert,
+    ChineseDisplay.defaultMode,
+  );
   static final showAddToShelfAlert = _bool(PreferKey.showAddToShelfAlert, true);
   static final clickActions = _text<List<int>>(
     PreferKey.readerClickActions,
@@ -263,9 +271,9 @@ abstract final class ReaderV2Settings {
   /// 每行最多幾個字；畫面放得下更多時正文欄收窄置中。
   static final lineChars = _int(
     PreferKey.readerLineChars,
-    32,
+    _defaultLineChars,
     decode: (stored) =>
-        ReaderV2PrefsRepository.normalizeLineChars(stored ?? 32),
+        ReaderV2PrefsRepository.normalizeLineChars(stored ?? _defaultLineChars),
     encode: ReaderV2PrefsRepository.normalizeLineChars,
   );
 
@@ -282,15 +290,14 @@ abstract final class ReaderV2Settings {
   static final footerOffset = _pagePadding(PreferKey.readerFooterOffset, 4.0);
 
   /// 閱讀時隱藏系統狀態列（時間、訊號、電量）。
-  static final hideStatusBar = _bool(PreferKey.readerHideStatusBar, false);
+  static final hideStatusBar = _bool(PreferKey.readerHideStatusBar, true);
 
-  /// 頁首預設關閉：狀態列顯示時多一條頁首只會重複系統時鐘；
-  /// 隱藏狀態列後由使用者決定鏡頭那一行放什麼。
+  /// 狀態列預設隱藏，頁首接手時間與電量。
   static final headerInfo = _text<ReaderV2InfoSlots>(
     PreferKey.readerHeaderInfo,
     () => const ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.none,
-      right: ReaderV2InfoItem.none,
+      left: ReaderV2InfoItem.time,
+      right: ReaderV2InfoItem.battery,
     ),
     parse: ReaderV2InfoSlots.decode,
     encode: (value) => value.encode(),
@@ -308,7 +315,7 @@ abstract final class ReaderV2Settings {
   /// 朗讀高亮與選字反白的顏色，以及朗讀高亮的深淺。
   static final highlightColor = _text<ReaderV2HighlightColor>(
     PreferKey.readerHighlightColor,
-    () => ReaderV2HighlightColor.theme,
+    () => ReaderV2HighlightColor.defaultColor,
     parse: ReaderV2HighlightColor.parse,
     encode: (value) => value.name,
   );
@@ -331,31 +338,35 @@ abstract final class ReaderV2Settings {
   );
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁；[volumeKeyReversed] 時對調。
-  static final volumeKeyPage = _bool(PreferKey.readerVolumeKeyPage, false);
+  static final volumeKeyPage = _bool(PreferKey.readerVolumeKeyPage, true);
   static final volumeKeyReversed = _bool(
     PreferKey.readerVolumeKeyReversed,
     false,
   );
 
-  /// 章節標題與正文之間的空白（行）。還沒有這個設定時從字號、行高與段距換算。
+  /// 章節標題與正文之間的空白（行）。還沒有這個設定、但存過段距（標題
+  /// 間距出現以前的版本）時從字號、行高與段距換算，升級後版面不變。
   static final titleSpacing = _double(
     PreferKey.readerTitleSpacing,
-    0.0,
-    read: (prefs) =>
-        prefs.getDouble(PreferKey.readerTitleSpacing) ??
-        _legacyTitleSpacing(
-          fontSize:
-              prefs.getDouble(PreferKey.readerFontSize) ?? _defaultFontSize,
-          lineHeight:
-              prefs.getDouble(PreferKey.readerLineHeight) ?? _defaultLineHeight,
-          paragraphSpacing:
-              prefs.getDouble(PreferKey.readerParagraphSpacing) ??
-              _defaultParagraphSpacing,
-        ),
+    _defaultTitleSpacing,
+    read: (prefs) {
+      final stored = prefs.getDouble(PreferKey.readerTitleSpacing);
+      if (stored != null) return stored;
+      final paragraphSpacing = prefs.getDouble(
+        PreferKey.readerParagraphSpacing,
+      );
+      if (paragraphSpacing == null) return null;
+      return _legacyTitleSpacing(
+        fontSize: prefs.getDouble(PreferKey.readerFontSize) ?? _defaultFontSize,
+        lineHeight:
+            prefs.getDouble(PreferKey.readerLineHeight) ?? _defaultLineHeight,
+        paragraphSpacing: paragraphSpacing,
+      );
+    },
     decode: _finiteClamp(
       ReaderV2PrefsRepository.minTitleSpacing,
       ReaderV2PrefsRepository.maxTitleSpacing,
-      0.0,
+      _defaultTitleSpacing,
     ),
   );
 
@@ -371,7 +382,7 @@ abstract final class ReaderV2Settings {
   /// 隱藏狀態列時一起隱藏系統導覽列；[hideStatusBar] 關著時不起作用。
   static final hideNavigationBar = _bool(
     PreferKey.readerHideNavigationBar,
-    false,
+    true,
   );
 
   /// 翻頁時上一屏留在畫面上的行數，與捲過一屏的快慢。
@@ -383,7 +394,7 @@ abstract final class ReaderV2Settings {
   );
   static final pageTurnSpeed = _text<ReaderV2PageTurnSpeed>(
     PreferKey.readerPageTurnSpeed,
-    () => ReaderV2PageTurnSpeed.normal,
+    () => ReaderV2PageTurnSpeed.defaultSpeed,
     parse: ReaderV2PageTurnSpeed.parse,
     encode: (value) => value.name,
   );
@@ -559,6 +570,7 @@ class ReaderV2PrefsRepository {
   /// 所有讀寫端（設定 sheet、全域設定頁、AutoPageController）共用此常數。
   static const double minAutoPageSpeed = 0.02;
   static const double maxAutoPageSpeed = 0.45;
+  static const double defaultAutoPageSpeed = 0.1;
 
   /// 版面邊距的合法範圍（px）。
   static const double minPagePadding = 0.0;

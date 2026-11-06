@@ -20,7 +20,7 @@ void main() {
       'different', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(prefs: const {'bookshelf_is_grid': true});
       await seedLibrary(withContent: false);
     });
     await pumpApp(tester);
@@ -79,7 +79,7 @@ void main() {
   }) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(prefs: const {'bookshelf_is_grid': true});
       await seedLibrary(withContent: withContent);
       await seed?.call();
     });

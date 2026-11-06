@@ -3,7 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// SettingsProvider 的基礎類別與持久化邏輯
 abstract class SettingsProviderBase extends ChangeNotifier {
-  ThemeMode themeMode = ThemeMode.system;
+  /// 沒設定過時的深淺：深色（維護者自己讀書用的設定，2026-11-06）。
+  static const ThemeMode defaultThemeMode = ThemeMode.dark;
+
+  ThemeMode themeMode = defaultThemeMode;
   Locale? locale;
 
   Future<void> save(String key, dynamic value) async {

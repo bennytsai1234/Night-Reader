@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 
 import '../../support/app_harness.dart';
@@ -37,7 +38,7 @@ void main() {
   testWidgets('從閱讀選單的「進階」打開音量鍵翻頁，返回後音量下翻頁、音量上翻回；選單開著時不攔', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(prefs: const {PreferKey.readerVolumeKeyPage: false});
       await seedLibrary();
     });
     await pumpApp(tester);

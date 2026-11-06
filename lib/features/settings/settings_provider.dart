@@ -100,9 +100,10 @@ class SettingsProvider extends SettingsProviderBase {
   /// 從已預載的 SharedPreferences 同步讀取所有設定，在建構子第一幀前完成，消除啟動閃爍。
   void _loadFromPrefs(SharedPreferences prefs) {
     // --- 核心設定 ---
-    themeMode = parseThemeMode(
-      prefs.getString(PreferKey.themeMode) ?? 'system',
-    );
+    final storedThemeMode = prefs.getString(PreferKey.themeMode);
+    themeMode = storedThemeMode == null
+        ? SettingsProviderBase.defaultThemeMode
+        : parseThemeMode(storedThemeMode);
     locale = parseLocale(prefs.getString(PreferKey.language) ?? 'system');
     userAgent = prefs.getString(PreferKey.userAgent) ?? '';
     threadCount = prefs.getInt(PreferKey.threadCount) ?? 4;

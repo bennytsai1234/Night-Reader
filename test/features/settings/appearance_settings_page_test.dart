@@ -126,7 +126,7 @@ void main() {
   testWidgets('從強調色選單選顏色，整個 App 的主色跟著換並保存', (tester) async {
     await pumpPage(tester);
     expect(themeSettings.darkStyle, AppStyle.plain);
-    expect(find.text('跟隨主題'), findsOneWidget);
+    expect(find.text(AppAccent.defaultAccent.label), findsOneWidget);
 
     await tester.tap(find.text('強調色'));
     await tester.pumpAndSettle();

@@ -71,13 +71,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   final ReaderV2PrefsRepository _prefsRepository;
 
-  double fontSize = 18.0;
-  double titleFontSize = 18.0 + kReaderV2DefaultTitleSizeDelta;
+  double fontSize = ReaderV2PrefsSnapshot.defaults().fontSize;
+  double titleFontSize = ReaderV2PrefsSnapshot.defaults().titleFontSize;
   double lineHeight = ReaderV2PrefsSnapshot.defaults().lineHeight;
   double paragraphSpacing = ReaderV2PrefsSnapshot.defaults().paragraphSpacing;
   double chapterSpacing = ReaderV2PrefsSnapshot.defaults().chapterSpacing;
   double letterSpacing = ReaderV2PrefsSnapshot.defaults().letterSpacing;
-  int textIndent = 2;
+  int textIndent = ReaderV2PrefsSnapshot.defaults().textIndent;
 
   /// 正文兩側最少留白；實際的左右邊距照 [lineChars] 算（[paddingHorizontalFor]）。
   double paddingHorizontal = ReaderV2PrefsSnapshot.defaults().paddingHorizontal;
@@ -86,12 +86,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double paddingTop = ReaderV2PrefsSnapshot.defaults().paddingTop;
   double paddingBottom = ReaderV2PrefsSnapshot.defaults().paddingBottom;
   double footerOffset = ReaderV2PrefsSnapshot.defaults().footerOffset;
-  bool hideStatusBar = false;
+  bool hideStatusBar = ReaderV2PrefsSnapshot.defaults().hideStatusBar;
   ReaderV2InfoSlots headerInfo = ReaderV2PrefsSnapshot.defaults().headerInfo;
   ReaderV2InfoSlots footerInfo = ReaderV2PrefsSnapshot.defaults().footerInfo;
-  int chineseConvert = 0;
+  int chineseConvert = ReaderV2PrefsSnapshot.defaults().chineseConvert;
   double autoPageSpeed = ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
-  bool showAddToShelfAlert = true;
+  bool showAddToShelfAlert =
+      ReaderV2PrefsSnapshot.defaults().showAddToShelfAlert;
   List<int> clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
   ReaderV2HighlightColor highlightColor =
       ReaderV2PrefsSnapshot.defaults().highlightColor;
