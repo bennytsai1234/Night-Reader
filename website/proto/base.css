@@ -1,0 +1,171 @@
+/* 夜讀網站原型，A、B 兩版共用的部分：天色背景、浮動導覽膠囊、按鈕、手機框、頁尾。
+   背景是兩張同構圖的整幅山景（sky/scene-dusk、scene-night），固定在視窗後面；
+   往下捲只是從黃昏淡成夜，月亮與星星入夜才出來。深色模式一開始就是夜。 */
+
+:root {
+  --text: #f1e9d6;
+  --muted: rgba(241, 233, 214, 0.78);
+  --primary: #f4e3b5;
+  --on-primary: #1a1612;
+  --chip: rgba(255, 255, 255, 0.12);
+  --glass: rgba(14, 11, 22, 0.5);
+  --raised: #efe5cf;
+  --bezel: #121014;
+  --shot-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --n: 0;
+  --deep: 0;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --raised: #1c1c1c; --bezel: #262626; }
+}
+:root[data-theme="dark"] { --raised: #1c1c1c; --bezel: #262626; }
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: #000;
+  color: var(--text);
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-size: 17px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+img { display: block; max-width: 100%; }
+h1, h2, p { text-wrap: balance; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+
+/* ---------- 背景 ---------- */
+.backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #000; }
+.backdrop .scene {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: 58% bottom;
+}
+.backdrop .night { opacity: var(--n); }
+/* 讓字在濃烈的橘紅地平線上也讀得清楚：整體壓暗一點，捲深了再壓暗。 */
+.backdrop .scrim { position: absolute; inset: 0; background: #07050d; opacity: calc(0.22 + var(--deep) * 0.5); }
+.backdrop .moon {
+  position: absolute; left: 70%; top: 17%;
+  width: min(92vmin, 920px); height: auto; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: screen; opacity: var(--n);
+}
+.backdrop .stars { position: absolute; inset: 0 0 45% 0; opacity: calc(var(--n) * 0.95); }
+.backdrop .stars i {
+  position: absolute; border-radius: 50%; background: #fff6e0;
+  animation: twinkle var(--d, 4s) ease-in-out var(--l, 0s) infinite alternate;
+}
+@keyframes twinkle { from { opacity: var(--a, 0.7); } to { opacity: calc(var(--a, 0.7) * 0.25); } }
+
+/* ---------- 導覽：浮在上方的膠囊，往下捲縮成「圖示＋下載」 ---------- */
+.nav {
+  position: fixed; z-index: 30; top: max(14px, env(safe-area-inset-top)); left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 6px 6px 8px; border-radius: 999px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.nav-logo { display: flex; align-items: center; gap: 8px; padding: 0 10px 0 2px; text-decoration: none; font-weight: 600; letter-spacing: 0.08em; }
+.nav-logo img { width: 28px; height: 28px; border-radius: 7px; }
+.nav-links { position: relative; display: grid; grid-template-columns: 1fr; transition: grid-template-columns 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.nav.min .nav-links { grid-template-columns: 0fr; }
+.nav-links-in { display: flex; min-width: 0; overflow: hidden; }
+.nav-links a { position: relative; z-index: 1; padding: 6px 14px; font-size: 15px; text-decoration: none; white-space: nowrap; color: var(--muted); transition: color 0.2s linear; }
+.nav-links a.on, .nav-links a:hover { color: var(--text); }
+.nav-pill { position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; background: var(--chip); transition: left 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s linear; opacity: 0; }
+.nav-dl {
+  display: inline-flex; align-items: center; height: 36px; padding: 0 18px; border-radius: 999px;
+  font-size: 15px; font-weight: 600; text-decoration: none; background: var(--primary); color: var(--on-primary);
+}
+
+/* ---------- 按鈕：月光色，外圈慢慢呼吸；下面一行寫版本與大小 ---------- */
+.get { display: inline-flex; flex-direction: column; align-items: center; gap: 10px; }
+.btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 54px; padding: 0 32px; border-radius: 999px;
+  font-size: 17px; font-weight: 700; letter-spacing: 0.04em; text-decoration: none;
+  background: linear-gradient(180deg, #fbefc9, #ecd49a); color: var(--on-primary);
+  box-shadow: 0 8px 28px rgba(244, 227, 181, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: transform 0.2s ease;
+}
+.btn::before {
+  content: ""; position: absolute; inset: -7px; border-radius: inherit; z-index: -1;
+  background: radial-gradient(closest-side, rgba(244, 227, 181, 0.55), rgba(244, 227, 181, 0) 100%);
+  filter: blur(8px); animation: breathe 3.2s ease-in-out infinite;
+}
+.btn:hover { transform: translateY(-2px); }
+.btn svg { width: 20px; height: 20px; fill: currentColor; }
+@keyframes breathe { 0%, 100% { opacity: 0.35; transform: scale(0.96); } 50% { opacity: 1; transform: scale(1.06); } }
+.get .meta { font-size: 13px; color: var(--muted); letter-spacing: 0.04em; min-height: 1.4em; }
+
+/* ---------- 手機框：和一般 iPhone 一樣大的 Android 手機，上緣正中一個鏡頭挖孔 ---------- */
+.phone {
+  position: relative; width: 270px; aspect-ratio: 1179 / 2556; padding: 7px; border-radius: 27px;
+  background: var(--bezel); box-shadow: var(--shot-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+.phone .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 20px; background: var(--raised); }
+.phone .screen picture, .phone .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.phone .screen::after {
+  content: ""; position: absolute; z-index: 1; left: 50%; top: 1.1%; width: 3.4%; aspect-ratio: 1;
+  border-radius: 50%; transform: translateX(-50%); background: #050505;
+}
+.stack > picture { opacity: 0; transition: opacity 0.45s linear; }
+.stack > picture.on { opacity: 1; }
+
+.styles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.chips button, .styles button {
+  border: 0; font: inherit; font-size: 14px; cursor: pointer; color: var(--muted);
+  padding: 6px 15px; border-radius: 999px; background: var(--chip);
+  transition: background 0.2s linear, color 0.2s linear;
+}
+.styles button.on, .chips button.on { background: var(--primary); color: var(--on-primary); }
+
+/* ---------- 開頭 ---------- */
+.hero { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 96px 20px 40px; }
+.hero-copy { margin-top: -6vh; }
+.hero .icon { width: 84px; height: 84px; border-radius: 20px; margin: 0 auto 22px; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35); }
+.hero h1 { font-size: 60px; line-height: 1.1; margin: 0 0 14px; font-weight: 700; letter-spacing: 0.2em; text-indent: 0.2em; }
+.hero .tag { font-size: 24px; margin: 0 0 8px; letter-spacing: 0.08em; text-indent: 0.08em; }
+.hero .lead { font-size: 16px; margin: 0 auto 32px; color: var(--muted); }
+.hero .fine { font-size: 13px; margin: 14px 0 0; color: var(--muted); }
+
+/* ---------- 還有、書源、下載、頁尾 ---------- */
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+.more { padding: 56px 0 24px; text-align: center; }
+.more h2 { font-size: 22px; margin: 0 0 20px; }
+.more .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.more .chips button { font-size: 15px; padding: 8px 18px; }
+.more .say { min-height: 3.6em; margin: 18px auto 0; max-width: 28em; color: var(--muted); font-size: 15px; transition: opacity 0.25s linear; }
+.source { padding: 24px 0 24px; text-align: center; }
+.source p { margin: 0 auto; max-width: 30em; color: var(--muted); }
+.source strong { color: var(--text); font-weight: 600; }
+.download { text-align: center; padding: 120px 24px 120px; }
+.download h2 { font-size: 32px; margin: 0 0 28px; letter-spacing: 0.1em; text-indent: 0.1em; }
+.download .note { font-size: 13px; color: var(--muted); margin: 22px auto 0; max-width: 32em; }
+footer { padding: 24px 24px 56px; font-size: 13px; color: var(--muted); text-align: center; }
+footer p { max-width: 40em; margin: 0 auto 8px; }
+
+/* ---------- 窄螢幕 ---------- */
+@media (max-width: 760px) {
+  body { font-size: 15px; }
+  .backdrop .scene { object-position: 64% bottom; }
+  .backdrop .moon { left: 62%; top: 15%; width: 150vw; }
+  .nav-links { display: none; }
+  .hero h1 { font-size: 44px; }
+  .hero .tag { font-size: 19px; }
+  .hero .icon { width: 68px; height: 68px; border-radius: 16px; }
+  .wrap { padding: 0 20px; }
+  .more { padding: 40px 0 16px; }
+  .download { padding: 80px 20px 80px; }
+  .download h2 { font-size: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .backdrop .stars i, .btn::before { animation: none; }
+  .stack > picture, .nav-links, .nav-pill { transition: none; }
+}
