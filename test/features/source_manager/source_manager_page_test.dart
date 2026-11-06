@@ -26,6 +26,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -596,6 +597,40 @@ void main() {
       expect(skeletonRows(), findsNWidgets(3));
       gatedDao.gate!.complete();
       await settleQueries(tester);
+    });
+
+    testWidgets('draws each row from the sources seen last time', (
+      tester,
+    ) async {
+      List<List<Rect>> rowMarks() => [
+        for (final row
+            in find
+                .descendant(
+                  of: find.byType(SourceListSkeleton),
+                  matching: find.byType(SkeletonShapes),
+                )
+                .evaluate())
+          [
+            for (final mark in (row.widget as SkeletonShapes).shapes(row.size!))
+              mark.rect,
+          ],
+      ];
+
+      await pumpPage(tester);
+      await tester.pumpWidget(const SizedBox());
+
+      // 書源還沒讀到：照上次記下的那幾列畫。
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester);
+      final remembered = rowMarks();
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+      await tester.pump();
+      // 讀到後、換場前照真正的書源畫：每一條都沒變，骨架不會先變一次樣子。
+      final loaded = rowMarks();
+
+      expect(remembered, hasLength(3));
+      expect(loaded, remembered);
     });
 
     testWidgets('no sources last time: no search box, then the empty page', (

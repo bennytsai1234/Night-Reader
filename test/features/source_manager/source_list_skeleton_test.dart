@@ -29,7 +29,7 @@ void main() {
             body: SourceListSkeleton(
               padding: EdgeInsets.zero,
               count: sources.length,
-              sources: sources,
+              rows: [for (final source in sources) SourceRowLook.of(source)],
             ),
           ),
         ),

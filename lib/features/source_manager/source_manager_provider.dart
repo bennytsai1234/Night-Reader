@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/import_preview_dialog.dart';
+import 'widgets/source_list_skeleton.dart';
 
 String _normalizeImportJson(String value) {
   var normalized = value.trim();
@@ -381,6 +382,54 @@ class SourceManagerProvider with ChangeNotifier {
     );
   }
 
+  /// 上次讀完時清單前面幾列的字（[SourceRowLook]），存在偏好設定、開頁時
+  /// 同步讀出；第一次讀取完成前骨架照它畫，換場時每一條剛好換成那段字
+  /// （ADR 0024）。沒有紀錄或讀不懂時是空的，骨架畫一般書源列的預覽。
+  List<SourceRowLook> lastRows;
+  static const String _lastRowsKey = 'source_manager_last_rows';
+
+  /// 記下（與骨架照資料畫）的列數：最高的平板一個畫面也放不到 20 列書源，
+  /// 再多也畫不到。
+  static const int lastRowsLimit = 20;
+
+  /// 確定寫進偏好設定的內容；一樣就不再寫。
+  String? _savedRows = switch (getIt<SharedPreferences>().get(_lastRowsKey)) {
+    final String saved => saved,
+    _ => null,
+  };
+
+  static List<SourceRowLook> _readLastRows() {
+    final saved = getIt<SharedPreferences>().get(_lastRowsKey);
+    if (saved == null) return const [];
+    try {
+      return [
+        for (final row in jsonDecode(saved as String) as List<dynamic>)
+          SourceRowLook.fromJson(row),
+      ];
+    } catch (error) {
+      AppLog.w('書源列的紀錄讀不懂，當作沒有紀錄: $error');
+      return const [];
+    }
+  }
+
+  void _rememberRows(List<BookSourcePart> shown) {
+    lastRows = [
+      for (final source in shown.take(lastRowsLimit)) SourceRowLook.of(source),
+    ];
+    final encoded = jsonEncode([for (final row in lastRows) row.toJson()]);
+    if (_savedRows == encoded) return;
+    _savedRows = encoded;
+    unawaited(
+      getIt<SharedPreferences>().setString(_lastRowsKey, encoded).catchError((
+        Object error,
+      ) {
+        AppLog.w('書源列的紀錄寫入失敗: $error');
+        _savedRows = null;
+        return false;
+      }),
+    );
+  }
+
   /// 清單是否照手動順序完整列出；決定清單用可拖曳排序的版面。與一時的忙碌
   /// 狀態無關，切開關時版面才不會整個換掉重建。
   bool get showsManualOrder =>
@@ -430,7 +479,8 @@ class SourceManagerProvider with ChangeNotifier {
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
-       lastSourceCount = _readLastCount() {
+       lastSourceCount = _readLastCount(),
+       lastRows = _readLastRows() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
     unawaited(
@@ -525,6 +575,7 @@ class SourceManagerProvider with ChangeNotifier {
       _loadError = null;
       _updateGroups();
       _markVisibleSourcesDirty();
+      _rememberRows(sources);
     } catch (error) {
       if (!_disposed && generation == _loadGeneration) {
         _loadError = error;

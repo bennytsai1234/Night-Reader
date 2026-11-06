@@ -17,20 +17,85 @@ import 'source_item_tile.dart';
 const List<double> _nameWidths = [0.4, 0.55, 0.3, 0.5, 0.35, 0.45];
 const List<double> _urlWidths = [0.6, 0.45, 0.7, 0.5, 0.65, 0.4];
 
-/// 書源管理的載入骨架。資料尚未讀回時保留一般書源列的預覽；資料讀好而
-/// 換場尚未開始時，以同一份書源的標題、網址、功能標籤及錯誤行計算形狀。
+/// 骨架畫一列書源要知道的字：和 [SourceItemTile] 顯示的同一份。讀完書源時
+/// 記下前面幾列（`SourceManagerProvider`），下次打開書源管理、書源還沒讀到
+/// 前照它畫，換場時每一條剛好換成那段字（ADR 0024，同書架記下書名）。
+@immutable
+class SourceRowLook {
+  const SourceRowLook({
+    required this.name,
+    required this.url,
+    this.group,
+    this.hasExplore = false,
+    this.health,
+    this.tags = const [],
+    this.error,
+  });
+
+  factory SourceRowLook.of(BookSourcePart source) {
+    final group = source.bookSourceGroup?.trim();
+    final health = source.runtimeHealth;
+    return SourceRowLook(
+      name: source.bookSourceName,
+      url: source.bookSourceUrl,
+      group: group == null || group.isEmpty ? null : group,
+      hasExplore: source.hasExploreUrl,
+      health: health.category == SourceHealthCategory.healthy
+          ? null
+          : health.label,
+      tags: sourceFunctionTags(source),
+      error: sourceErrorLine(source),
+    );
+  }
+
+  final String name;
+  final String url;
+
+  /// 名稱右邊的分組膠囊；沒有分組是 null。
+  final String? group;
+
+  /// 名稱右邊的「有發現」小圓點。
+  final bool hasExplore;
+
+  /// 名稱右邊的狀態標記（例如「搜尋失效」）；正常是 null。
+  final String? health;
+  final List<String> tags;
+
+  /// 網址下面的錯誤提示。
+  final String? error;
+
+  List<Object?> toJson() => [name, url, group, hasExplore, health, tags, error];
+
+  /// 讀不懂（型別不對）時丟出例外，由讀紀錄的地方當作沒有紀錄。
+  factory SourceRowLook.fromJson(Object? json) {
+    final list = json! as List<dynamic>;
+    return SourceRowLook(
+      name: list[0] as String,
+      url: list[1] as String,
+      group: list[2] as String?,
+      hasExplore: list[3] as bool,
+      health: list[4] as String?,
+      tags: [for (final tag in list[5] as List<dynamic>) tag as String],
+      error: list[6] as String?,
+    );
+  }
+}
+
+/// 書源管理的載入骨架。[rows] 是要畫的那幾列：書源讀好後是真正的書源，
+/// 還沒讀到時是上次記下的（[SourceRowLook]）；超出 [rows] 的列（第一次
+/// 打開還沒有紀錄）畫一般書源列的預覽。
 class SourceListSkeleton extends StatelessWidget {
   const SourceListSkeleton({
     super.key,
     required this.padding,
     required this.count,
-    this.sources = const [],
+    this.rows = const [],
     this.progressOf,
   });
 
   final EdgeInsets padding;
   final int? count;
-  final List<BookSourcePart> sources;
+  final List<SourceRowLook> rows;
   final SourceCheckProgress? Function(String url)? progressOf;
 
   /// 尚未知資料時估算一列的高度，用於決定要鋪滿多少骨架。
@@ -58,7 +123,7 @@ class SourceListSkeleton extends StatelessWidget {
       context,
       width - AppGrouped.margin * 2,
       seed: 0,
-      source: source,
+      source: SourceRowLook.of(source),
       progress: progress,
     ).height;
   }
@@ -77,27 +142,27 @@ class SourceListSkeleton extends StatelessWidget {
           final fill =
               ((constraints.maxHeight - padding.vertical) / rowHeight).ceil() +
               1;
-          final rows = count == null ? fill : count!.clamp(0, fill);
-          final cardCount = count == null || count! > fill ? rows + 1 : rows;
+          final rowCount = count == null ? fill : count!.clamp(0, fill);
+          final cardCount = count == null || count! > fill
+              ? rowCount + 1
+              : rowCount;
           return ListView.builder(
             addRepaintBoundaries: false,
             physics: const NeverScrollableScrollPhysics(),
             padding: padding,
-            itemCount: rows,
+            itemCount: rowCount,
             itemBuilder: (context, index) => GroupedSliceItem(
               index: index,
               count: cardCount,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final source = index < sources.length ? sources[index] : null;
+                  final look = index < rows.length ? rows[index] : null;
                   final shape = _sourceRowShape(
                     context,
                     constraints.maxWidth,
                     seed: index,
-                    source: source,
-                    progress: source == null
-                        ? null
-                        : progressOf?.call(source.bookSourceUrl),
+                    source: look,
+                    progress: look == null ? null : progressOf?.call(look.url),
                   );
                   return SkeletonShapes(
                     height: shape.height,
@@ -119,7 +184,7 @@ GroupedItemShape _sourceRowShape(
   BuildContext context,
   double width, {
   required int seed,
-  BookSourcePart? source,
+  SourceRowLook? source,
   SourceCheckProgress? progress,
 }) {
   final titleStyle = AppTextStyles.bodyBase.copyWith(
@@ -176,34 +241,29 @@ GroupedItemShape _sourceRowShape(
     return (math.min(maxWidth, shape.width! + horizontal), shape.height + 4);
   }
 
-  final group = source?.bookSourceGroup?.trim();
-  final hasGroup = group != null && group.isNotEmpty;
-  final health = source?.runtimeHealth;
-  final hasHealth =
-      health != null && health.category != SourceHealthCategory.healthy;
+  final group = source?.group;
+  final hasGroup = group != null;
+  final health = source?.health;
+  final hasHealth = health != null;
   final groupSize = hasGroup
       ? pill(group, labelStyle, 120, AppSpacing.sm * 2)
       : (0.0, 0.0);
   final statusSize = hasHealth
       ? pill(
-          health.label,
+          health,
           labelStyle.copyWith(fontWeight: FontWeight.w600),
           textWidth,
           AppSpacing.xs * 2,
         )
       : (0.0, 0.0);
-  final hasExplore = source?.hasExploreUrl ?? false;
+  final hasExplore = source?.hasExplore ?? false;
   final trailingWidth =
       (hasGroup ? AppSpacing.sm + groupSize.$1 : 0) +
       (hasExplore ? AppSpacing.sm + 8 : 0) +
       (hasHealth ? AppSpacing.sm + statusSize.$1 : 0);
   final nameWidth = math.max(0.0, textWidth - trailingWidth);
-  final title = text(source?.bookSourceName ?? '書源', titleStyle, nameWidth);
-  final url = text(
-    source?.bookSourceUrl ?? 'https://example.org',
-    urlStyle,
-    textWidth,
-  );
+  final title = text(source?.name ?? '書源', titleStyle, nameWidth);
+  final url = text(source?.url ?? 'https://example.org', urlStyle, textWidth);
   final titleHeight = [
     title.height,
     if (hasGroup) groupSize.$2,
@@ -271,7 +331,7 @@ GroupedItemShape _sourceRowShape(
 
   final tags = source == null
       ? List<String>.filled(3 + seed % 2, '搜')
-      : sourceFunctionTags(source);
+      : source.tags;
   var tagX = left;
   var tagY = y;
   var rows = 0;
@@ -289,9 +349,7 @@ GroupedItemShape _sourceRowShape(
   }
   if (rows > 0) y = tagY + labelHeight;
 
-  final error = progress == null && source != null
-      ? sourceErrorLine(source)
-      : null;
+  final error = progress == null ? source?.error : null;
   if (progress != null) {
     y += AppSpacing.sm;
     final symbol = progress.isFinal ? 14.0 : 12.0;

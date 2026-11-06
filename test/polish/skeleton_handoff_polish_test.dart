@@ -356,7 +356,21 @@ final scenarios = <String, _Scenario>{
     '關於夜讀',
   ])
     'mine-$row': _Scenario('「我的」點「$row」', _tapMineRow(row), before: _toMine),
+  'mine-書源管理-again': _Scenario(
+    '「我的」第二次點「書源管理」（骨架照上次讀到的書源畫）',
+    _tapMineRow('書源管理'),
+    before: _visitSourcesOnce,
+  ),
 };
+
+/// 打開書源管理一次、讀完再返回「我的」：書源管理記下了這次讀到的書源。
+Future<void> _visitSourcesOnce(WidgetTester tester) async {
+  await _toMine(tester);
+  await _tapMineRow('書源管理')(tester);
+  await settle(tester, const Duration(milliseconds: 2500));
+  await goBack(tester);
+  await settle(tester, const Duration(milliseconds: 1500));
+}
 
 /// 一本書放進書架。[readIndex] 是讀到第幾章（null 是剛加入、沒讀過）；
 /// [withContent] 為 false 時正文不存進資料庫，要從網路抓。
