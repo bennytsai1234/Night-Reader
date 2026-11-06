@@ -1,12 +1,13 @@
-# 網站的畫面與短片
+# 網站與 README 的畫面與短片
 
-網站（`website/`）的規格在 `DESIGN.md`「網站」。畫面與短片都從 App 真的畫面拍，不手做。
+網站（`website/`）的規格在 `DESIGN.md`「網站」，README 的在「README」。畫面與短片都從 App 真的畫面拍，不手做。
 
 ## 重拍
 
 1. `flutter test --run-skipped -t screens test/screens/website_shots_test.dart`：拍檔裡 `_shots` 列的每一張與每一段短片（全部約 3 分鐘）。只拍幾個用 `SHOT_ONLY=名稱,名稱`。圖寫在系統暫存的 `night-reader-screens/web/`，短片的每一格寫在 `night-reader-screens/web-clips/<名稱>/`。
 2. `python -I tool/website_preview/shots.py [名稱…]`：圖縮成寬 786（平板 1000）的 webp 放 `website/shots/`；短片用 ffmpeg 轉成 30 fps 的 mp4 放 `website/clips/`，最後一格另存成 `website/shots/<名稱>.webp` 當封面。要有 ffmpeg 與 Pillow。
 3. 每張圖、每段短片的頭中尾都打開看過再提交。
+4. README 的卡片跟著重拍：`python -I tool/readme_art/render.py [卡片名稱…]`（Windows，要有 Chrome、ffmpeg、Pillow 與 numpy），拍成 `docs/readme/*.webp`。卡片的字與用哪張畫面在 `tool/readme_art/cards.js`，版面在 `card.html`；改了網站的字也要改這裡。會動的卡片把好幾支手機的畫面疊在同一條 6 秒的時間軸上，抽頭、中、尾幾幀看過再提交。
 
 手機照 393×760、3 倍拍（網站上的手機框同比例）；平板 800×1280、2 倍。正文照網站的排版（`_webTypography`：字大、兩側留白、行距寬），不是 App 的預設。
 

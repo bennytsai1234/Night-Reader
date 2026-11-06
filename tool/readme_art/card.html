@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<!-- README 的圖：一張卡片一個 ?k=（清單在 cards.js），render.py 用 Chrome 拍成圖。
+     配色、手機框與天空沿用網站（website/），只有一套配色，GitHub 淺色深色都用同一張。 -->
+<style>
+:root {
+  --text: #f1e9d6;
+  --muted: rgba(241, 233, 214, 0.74);
+  --faint: rgba(241, 233, 214, 0.5);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: transparent; }
+body {
+  color: var(--text);
+  font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.card { position: relative; overflow: hidden; border-radius: 18px; background: #05060a; }
+.sky, .sky img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sky img { object-position: 58% bottom; }
+.sky .moon { inset: auto; width: 560px; height: 560px; mix-blend-mode: screen; }
+.sky .scrim { position: absolute; inset: 0; }
+.in { position: relative; }
+
+/* 手機：網站的黑框，螢幕 393×760 */
+.phone {
+  position: relative; aspect-ratio: 393 / 760; padding: 4px; border-radius: 15px; background: #000;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.phone .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 11.5px; background: #000; }
+.phone .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.phone .screen::after {
+  content: ""; position: absolute; left: 50%; top: 1.1%; width: 3.4%; aspect-ratio: 1;
+  border-radius: 50%; transform: translateX(-50%); background: #050505;
+}
+
+/* 開頭 */
+.hero { width: 830px; height: 500px; }
+.hero .copy { position: absolute; left: 64px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; }
+.hero h1 { margin: 0 0 14px; font-size: 64px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2em; }
+.hero .tag { margin: 0 0 22px; font-size: 23px; letter-spacing: 0.14em; }
+.hero .lead { margin: 0 0 6px; font-size: 14px; color: var(--muted); letter-spacing: 0.04em; }
+.hero .fine { margin: 0; font-size: 12px; color: var(--faint); letter-spacing: 0.12em; }
+.hero .icon { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 22px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.hero .p1 { position: absolute; width: 200px; right: 70px; top: 58px; }
+.hero .p2 { position: absolute; width: 176px; right: 236px; top: 104px; opacity: 0.96; }
+
+/* 卷：卷名在上，手機一排，每支下面一句標題一句說明 */
+.vol { width: 830px; }
+.vol .head { padding: 44px 0 30px; text-align: center; }
+.vol .head span { display: block; font-size: 12px; letter-spacing: 0.6em; text-indent: 0.6em; color: var(--faint); margin-bottom: 6px; }
+.vol .head h2 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: 0.6em; text-indent: 0.6em; }
+.vol .row { display: flex; justify-content: center; gap: var(--gap, 26px); padding: 0 36px 46px; }
+.vol .item { width: var(--w, 200px); }
+.vol .item .phone { width: 100%; }
+.vol .item h3 { margin: 18px 0 5px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; text-align: center; white-space: nowrap; }
+.vol .item p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); text-align: center; }
+.vol .note { margin: -18px auto 0; padding: 0 0 44px; text-align: center; }
+.vol .note h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: 0.12em; }
+.vol .note p { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* 下載 */
+.dl { width: 830px; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.dl h2 { margin: 0 0 26px; font-size: 28px; font-weight: 600; letter-spacing: 0.3em; text-indent: 0.3em; }
+.dl .btn {
+  display: flex; align-items: center; gap: 14px; padding: 12px 26px 12px 12px; border-radius: 999px;
+  background: rgba(244, 227, 181, 0.12); box-shadow: inset 0 0 0 1px rgba(244, 227, 181, 0.35), 0 0 40px rgba(244, 227, 181, 0.18);
+}
+.dl .btn img { width: 44px; height: 44px; border-radius: 11px; }
+.dl .btn b { display: block; font-size: 18px; letter-spacing: 0.12em; }
+.dl .btn small { display: block; font-size: 12px; color: var(--muted); letter-spacing: 0.06em; }
+.dl .fine { margin: 18px 0 0; font-size: 12px; color: var(--faint); letter-spacing: 0.1em; }
+
+body.mask * { visibility: hidden; box-shadow: none !important; background: transparent !important; }
+body.mask .slot, body.mask .slot * { visibility: visible; background: #ff00ff !important; }</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="cards.js"></script>
+<script>
+// ?k= 卡片名稱；?slot= 要塗成洋紅色的動畫格（all 是全部、數字是第幾格、沒給就照截圖畫）。
+// render.py 拿洋紅色的位置當遮罩，把短片一幀一幀貼進去。
+const W = '../../website/';
+const q = new URLSearchParams(location.search);
+const k = q.get('k');
+const slotArg = q.get('slot');
+let slotNo = 0;
+const shot = (n) => W + 'shots/' + n + '.webp';
+// 拍單一格的遮罩時只留那塊螢幕，天空與圖示的紫色才不會被當成洋紅色。
+if (slotArg !== null && slotArg !== 'all') document.body.classList.add('mask');
+function screen(n, a) {
+  if (a) {
+    const i = slotNo++;
+    if (slotArg === 'all' || slotArg === String(i)) return `<div class="screen slot" style="background:#ff00ff"></div>`;
+    if (slotArg !== null) return `<div class="screen"></div>`;
+  }
+  return `<div class="screen"><img src="${shot(n)}"></div>`;
+}
+const phone = (n, a) => `<div class="phone">${screen(n, a)}</div>`;
+
+// t：入夜的程度，0 是黃昏、1 是夜；dim：再壓暗多少；moon：月亮的位置
+function sky(t, dim, moon) {
+  return `<div class="sky">
+    <img src="${W}sky/scene-dusk.webp">
+    <img src="${W}sky/scene-night.webp" style="opacity:${t}">
+    ${moon ? `<img class="moon" src="${W}sky/moon-glow.webp" style="left:${moon[0]}px;top:${moon[1]}px;opacity:${t}">` : ''}
+    <div class="scrim" style="background:#07050d;opacity:${dim}"></div>
+  </div>`;
+}
+
+const c = CARDS[k];
+const root = document.getElementById('root');
+if (c.type === 'hero') {
+  root.innerHTML = `<div class="card hero">${sky(0, 0.18)}
+    <div class="sky" style="background:linear-gradient(90deg, rgba(7,5,13,.62) 0%, rgba(7,5,13,.25) 48%, rgba(7,5,13,0) 70%)"></div>
+    <div class="in copy">
+      <img class="icon" src="${W}icon.webp">
+      <h1>夜讀</h1>
+      <p class="tag">把長夜，留給長篇</p>
+      <p class="lead">讀網路小說、TXT 與 EPUB，書源相容 Legado</p>
+      <p class="fine">免費・開源・沒有廣告</p>
+    </div>
+    <div class="p2">${phone(c.back)}</div>
+    <div class="p1">${phone(c.front, c.a)}</div>
+  </div>`;
+} else if (c.type === 'vol') {
+  root.innerHTML = `<div class="card vol" style="--w:${c.w}px;--gap:${c.gap || 26}px">${sky(c.t, c.dim, c.moon)}
+    <div class="in">
+      <div class="head"><span>${c.no}</span><h2>${c.name}</h2></div>
+      <div class="row">${c.items.map((it) => `<div class="item">${phone(it.s, it.a)}<h3>${it.h}</h3><p>${it.p}</p></div>`).join('')}</div>
+      ${c.note ? `<div class="note"><h3>${c.note[0]}</h3><p>${c.note[1]}</p></div>` : ''}
+    </div>
+  </div>`;
+} else if (c.type === 'download') {
+  root.innerHTML = `<div class="card dl">${sky(1, 0.5, [300, -330])}
+    <div class="in" style="display:flex;flex-direction:column;align-items:center">
+      <h2>今晚，就開始夜讀</h2>
+      <div class="btn"><img src="${W}icon.webp"><span><b>下載夜讀</b><small>Android 7.0 以上・arm64</small></span></div>
+      <p class="fine">另附 iOS 未簽章檔</p>
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
