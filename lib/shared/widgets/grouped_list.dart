@@ -1022,8 +1022,6 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
 /// [CircularProgressIndicator] 沒給大小時的直徑（Material 的最小尺寸）。
 const double _spinnerSize = 36;
 
-/// [Icon] 的骨架：字形撐滿 [size] 見方（[Icon] 的行高是 1），畫成和字條
-/// 一樣圓角的方塊。
 /// 輸入框右側的 [suffix]（[InputDecoration.suffixIcon]）佔的見方：至少
 /// [AppGrouped.rowMinHeight]，圖示按鈕照它的點擊範圍。輸入框至少有這麼高。
 double groupedInputSuffixExtent(Widget suffix) => switch (suffix) {
@@ -1078,6 +1076,8 @@ class PasswordRevealButton extends StatelessWidget {
   );
 }
 
+/// [Icon] 的骨架：字形撐滿 [size] 見方（[Icon] 的行高是 1），畫成和字條
+/// 一樣圓角的方塊。
 GroupedItemShape _glyphShape(double size) => GroupedItemShape(
   size,
   width: size,
