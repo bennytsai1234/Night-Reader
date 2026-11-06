@@ -37,6 +37,7 @@ import 'core/engine/source_isolate/source_isolate.dart';
 import 'core/network/cloudflare.dart';
 import 'core/services/webview_cloudflare_solver.dart';
 import 'core/services/app_log_service.dart';
+import 'core/services/book_storage_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
 import 'features/search/search_provider.dart';
@@ -264,7 +265,7 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 /// 開 App 的進場播完才做的清理，不和進場搶主執行緒（ADR 0018）。
 void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
-  unawaited(_pruneReaderLayoutCaches());
+  unawaited(_pruneStoredBooks());
   unawaited(PunctuationInk.onLaunchSettled());
   // 進搜尋頁的第一幀就畫得出搜尋紀錄。
   unawaited(SearchProvider.prefetchHistory());
@@ -278,8 +279,14 @@ void _restoreWebViewUserAgent(SharedPreferences prefs) {
       unawaited(prefs.setString(PreferKey.webViewUserAgent, userAgent));
 }
 
-/// 刪掉資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
-Future<void> _pruneReaderLayoutCaches() async {
+/// 刪掉書架以外的書留下的資料（剛開 App，還沒有詳情或閱讀器開著），再刪
+/// 資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
+Future<void> _pruneStoredBooks() async {
+  try {
+    await BookStorageService().discardUnshelvedBooks();
+  } catch (e, stack) {
+    AppLog.e('Discard unshelved books failed: $e', error: e, stackTrace: stack);
+  }
   try {
     final books = await getIt<BookDao>().getAll();
     await ReaderLayoutCache.retainOnly(
