@@ -21,6 +21,8 @@ import 'core/storage/app_storage_paths.dart';
 import 'core/storage/reader_layout_cache.dart';
 import 'app_providers.dart';
 import 'shared/layout/tablet_text_scale.dart';
+import 'shared/theme/app_chrome.dart';
+import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
@@ -222,18 +224,24 @@ class _StartupFailureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = '$error\n\n$stackTrace';
-    // 偏好設定可能也讀不到：用預設風格跟隨系統深淺，不要落回 Material 預設紫。
+    // 偏好設定可能也讀不到：照沒設定過時的外觀，接在純黑的啟動畫面後面，
+    // 不要落回 Material 預設紫。
     return MaterialApp(
       title: kAppDisplayName,
       debugShowCheckedModeBanner: false,
+      themeMode: SettingsProviderBase.defaultThemeMode,
       theme: buildAppTheme(
         ThemeSettingsProvider.defaultLightStyle,
         Brightness.light,
+        glassStrength: GlassStrength.defaultStrength,
+        accent: AppAccent.defaultAccent,
       ),
       darkTheme: buildAppTheme(
         ThemeSettingsProvider.defaultDarkStyle,
         Brightness.dark,
-        pureBlack: true,
+        glassStrength: GlassStrength.defaultStrength,
+        accent: AppAccent.defaultAccent,
+        pureBlack: ThemeSettingsProvider.defaultPureBlack,
       ),
       home: Scaffold(
         body: SafeArea(

@@ -49,7 +49,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
       _prefs.getString(PreferKey.darkStyle),
       fallback: defaultDarkStyle,
     );
-    pureBlack = _prefs.getBool(PreferKey.pureBlack) ?? true;
+    pureBlack = _prefs.getBool(PreferKey.pureBlack) ?? defaultPureBlack;
     accent = AppAccent.fromStorage(_prefs.getString(PreferKey.appAccent));
     glassStrength = GlassStrength.fromStorage(
       _prefs.getString(PreferKey.glassStrength),
@@ -78,6 +78,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
 
   static const AppStyle defaultLightStyle = AppStyle.kraft;
   static const AppStyle defaultDarkStyle = AppStyle.plain;
+  static const bool defaultPureBlack = true;
 
   final SharedPreferences _prefs;
 
@@ -90,7 +91,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
   /// 深色時頁面與閱讀紙一律純黑（[StylePalette.toPureBlack]）。
   late bool pureBlack;
 
-  /// 開關、選取與強調按鈕的顏色；預設跟隨風格。
+  /// 開關、選取與強調按鈕的顏色；預設見 [AppAccent.defaultAccent]。
   late AppAccent accent;
 
   /// 浮動列、選單等玻璃材質的強度；App 介面與閱讀選單共用。
