@@ -16,6 +16,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// （0：不轉換、1：簡轉繁、2：繁轉簡），由 ReaderV2SettingsController
 /// 在載入與變更時同步；App 啟動時由 [start] 讀出。
 abstract final class ChineseDisplay {
+  /// 沒設定過時的模式：簡轉繁（維護者自己讀書用的設定，2026-11-06）。
+  static const int defaultMode = 1;
+
   static final ChineseDisplayMode mode = ChineseDisplayMode();
   static const ChineseTextConverter _converter = ChineseTextConverter();
 
@@ -38,7 +41,7 @@ abstract final class ChineseDisplay {
   static Future<void>? _loading;
 
   static Future<void> _start(SharedPreferences prefs) async {
-    mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
+    mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? defaultMode;
     try {
       await ChineseUtils.initialize();
     } catch (e, stack) {

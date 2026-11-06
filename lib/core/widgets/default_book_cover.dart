@@ -8,7 +8,12 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 /// 不用書源的封面（搜尋與發現的結果照舊）。值存在書架設定，由
 /// `BookshelfProvider` 載入與變更時同步；書籍詳情從這裡讀。
 abstract final class UnifiedCovers {
-  static final ValueNotifier<bool> enabled = ValueNotifier<bool>(false);
+  /// 沒設定過時開著（維護者自己讀書用的設定，2026-11-06）。
+  static const bool defaultEnabled = true;
+
+  static final ValueNotifier<bool> enabled = ValueNotifier<bool>(
+    defaultEnabled,
+  );
 
   /// 這本書要畫的封面：統一封面開著、而且書在書架上時為 null，畫預設封面。
   static String? coverOf(Book book) =>

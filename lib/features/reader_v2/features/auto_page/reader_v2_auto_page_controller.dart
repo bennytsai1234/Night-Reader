@@ -36,7 +36,8 @@ class ReaderV2AutoPageController extends ChangeNotifier {
       ReaderV2PrefsRepository.minAutoPageSpeed;
   static const double _maxAutoPageSpeed =
       ReaderV2PrefsRepository.maxAutoPageSpeed;
-  static const double _defaultAutoPageSpeed = 0.16;
+  static const double _defaultAutoPageSpeed =
+      ReaderV2PrefsRepository.defaultAutoPageSpeed;
 
   /// 單幀最多推進的時間。卡頓超過這麼久時不一口氣補上，免得正文跳一大段。
   static const double _maxFrameSeconds = 0.08;

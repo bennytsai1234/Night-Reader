@@ -9,6 +9,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
@@ -294,10 +295,11 @@ void main() {
       await pumpEventQueue();
     }
 
-    // 預設速度每秒捲 0.16 個視窗高：120Hz 每幀 600 × 0.16 × 8.333ms。
+    // 預設速度是每秒捲幾個視窗高：120Hz 每幀 600 × 速度 × 8.333ms。
+    const speed = ReaderV2PrefsRepository.defaultAutoPageSpeed;
     expect(deltas, hasLength(3));
     for (final delta in deltas) {
-      expect(delta, closeTo(600 * 0.16 * 0.008333, 1e-6));
+      expect(delta, closeTo(600 * speed * 0.008333, 1e-6));
     }
   });
 

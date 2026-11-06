@@ -36,7 +36,7 @@ class TTSService extends ChangeNotifier {
 
   bool _isPlaying = false;
   double _pitch = 1.0;
-  double _rate = 1.0;
+  double _rate = defaultRate;
   String? _language;
   List<dynamic> _languages = [];
   List<String> _engines = <String>[];
@@ -105,6 +105,9 @@ class TTSService extends ChangeNotifier {
   /// - 音量：0～1。
   static const double minRate = 0.2;
   static const double maxRate = 3.0;
+
+  /// 沒調過時的語速：2 倍（維護者自己聽書用的設定，2026-11-06）。
+  static const double defaultRate = 2.0;
   static const double rateStep = 0.1;
   static const double minPitch = 0.5;
   static const double maxPitch = 2.0;
@@ -156,7 +159,9 @@ class TTSService extends ChangeNotifier {
       final pitch =
           prefs.getDouble(PreferKey.readerTtsPitch) ??
           prefs.getDouble(PreferKey.speechPitch);
-      if (rate != null) _rate = _clampParam(rate, minRate, maxRate, 1.0);
+      if (rate != null) {
+        _rate = _clampParam(rate, minRate, maxRate, defaultRate);
+      }
       if (pitch != null) _pitch = _clampParam(pitch, minPitch, maxPitch, 1.0);
       _persistedParams
         ..[PreferKey.readerTtsSpeedMultiplier] = _rate
@@ -490,7 +495,10 @@ class TTSService extends ChangeNotifier {
     } catch (e, stack) {
       AppLog.e('TTSService: save $key failed: $e', error: e, stackTrace: stack);
       if (_saveGenerations[key] == generation) {
-        await restore(_persistedParams[key] ?? 1.0);
+        await restore(
+          _persistedParams[key] ??
+              (key == PreferKey.readerTtsSpeedMultiplier ? defaultRate : 1.0),
+        );
         notifyListeners();
       }
       rethrow;

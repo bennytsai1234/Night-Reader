@@ -19,11 +19,14 @@ enum ReaderV2HighlightColor {
 
   Color resolve(StylePalette palette) => _color ?? palette.highlight;
 
+  /// 沒設定過或認不得時：灰（維護者自己讀書用的設定，2026-11-06）。
+  static const ReaderV2HighlightColor defaultColor = gray;
+
   static ReaderV2HighlightColor parse(String? name) {
     for (final value in values) {
       if (value.name == name) return value;
     }
-    return theme;
+    return defaultColor;
   }
 }
 
@@ -31,7 +34,7 @@ enum ReaderV2HighlightColor {
 abstract final class ReaderV2HighlightStrength {
   static const double min = 0.06;
   static const double max = 0.6;
-  static const double defaultValue = 0.16;
+  static const double defaultValue = 0.5;
 
   static double normalize(double? value) {
     if (value == null || !value.isFinite) return defaultValue;

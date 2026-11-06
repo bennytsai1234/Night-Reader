@@ -22,7 +22,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
     required this.toastBackground,
     required this.toastForeground,
     required this.toastAction,
-    this.glassStrength = GlassStrength.frosted,
+    this.glassStrength = GlassStrength.unspecified,
   });
 
   /// 分組清單頁面底色。
@@ -70,7 +70,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
     required Color textSecondary,
     required Color border,
     required Color inversePrimary,
-    GlassStrength glassStrength = GlassStrength.frosted,
+    GlassStrength glassStrength = GlassStrength.unspecified,
   }) {
     final isLight = brightness == Brightness.light;
     return AppChrome(
@@ -229,10 +229,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
 /// 玻璃材質強度（外觀設定中由使用者選擇）：模糊越強、色調越透明，
 /// 背後內容透出越多，繪製成本也越高。
 enum GlassStrength {
-  /// 實色：不模糊，色調完全不透明。
+  /// 實色：不模糊，色調完全不透明。預設（維護者自己讀書用的設定，2026-11-06）。
   solid('實色', blur: 0, lightOpacity: 1, darkOpacity: 1),
 
-  /// 霧面紙：預設。
+  /// 霧面紙。
   frosted('霧面', blur: 12, lightOpacity: 0.84, darkOpacity: 0.82),
 
   /// 通透：較明顯的模糊與透色。
@@ -257,8 +257,15 @@ enum GlassStrength {
 
   double opacity({required bool dark}) => dark ? darkOpacity : lightOpacity;
 
+  /// 使用者沒選過時的玻璃效果。
+  static const GlassStrength defaultStrength = GlassStrength.solid;
+
+  /// 主題沒帶玻璃效果時（元件測試、單獨預覽一個元件）用的：會模糊的霧面，
+  /// 玻璃的進出場與模糊才看得到。App 一律照使用者的設定建主題，用不到它。
+  static const GlassStrength unspecified = GlassStrength.frosted;
+
   static GlassStrength fromStorage(String? value) => GlassStrength.values
-      .firstWhere((s) => s.name == value, orElse: () => GlassStrength.frosted);
+      .firstWhere((s) => s.name == value, orElse: () => defaultStrength);
 }
 
 enum AppTint {

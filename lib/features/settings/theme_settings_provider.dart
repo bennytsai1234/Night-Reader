@@ -76,7 +76,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  static const AppStyle defaultLightStyle = AppStyle.paper;
+  static const AppStyle defaultLightStyle = AppStyle.kraft;
   static const AppStyle defaultDarkStyle = AppStyle.plain;
 
   final SharedPreferences _prefs;

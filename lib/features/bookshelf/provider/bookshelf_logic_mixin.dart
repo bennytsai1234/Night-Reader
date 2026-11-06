@@ -22,7 +22,8 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     showLastUpdate =
         prefs.getBool('bookshelf_show_last_update') ??
         BookshelfProviderBase.defaultShowLastUpdate;
-    UnifiedCovers.enabled.value = prefs.getBool(_unifiedCoversKey) ?? false;
+    UnifiedCovers.enabled.value =
+        prefs.getBool(_unifiedCoversKey) ?? UnifiedCovers.defaultEnabled;
     final savedSort = prefs.getInt(PreferKey.bookshelfSort);
     sortMode =
         savedSort != null &&

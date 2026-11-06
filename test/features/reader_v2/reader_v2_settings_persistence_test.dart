@@ -118,24 +118,24 @@ void main() {
       reopened.dispose();
     });
 
-    test('settings added later open as the reader looked before', () async {
+    test('settings never saved open with the defaults', () async {
       final settings = ReaderV2SettingsController();
       final readStyle = settings.readStyleFor(
         EdgeInsets.zero,
         viewportWidth: 393,
       );
 
-      expect(readStyle.titleSpacing, 0);
+      expect(readStyle.titleSpacing, 0.5);
       expect(settings.keepScreenOn, isTrue);
       expect(settings.pageTurnOverlap, 1);
-      expect(settings.pageTurnSpeed.duration.inMilliseconds, 260);
+      expect(settings.pageTurnSpeed.duration.inMilliseconds, 400);
       expect(settings.use24HourClock, isTrue);
       expect(settings.progressFractionDigits, 1);
       expect(settings.maxDim, 0.6);
       expect(settings.edgeFade, 14);
       expect(settings.ttsFollow, isTrue);
       expect(settings.volumeKeyReversed, isFalse);
-      expect(settings.hideNavigationBar, isFalse);
+      expect(settings.hideNavigationBar, isTrue);
       expect(readStyle.bold, isFalse);
       expect(readStyle.titleBold, isTrue);
       expect(readStyle.titleCenter, isFalse);
@@ -210,12 +210,12 @@ void main() {
     await reader.loadSettings();
     final generation = reader.contentSettingsGeneration;
 
-    // 另一個 controller（閱讀偏好頁）寫入新的繁簡轉換。
-    final page = ReaderV2SettingsController()..setChineseConvert(1);
+    // 另一個 controller（閱讀偏好頁）寫入新的繁簡轉換（預設是簡轉繁）。
+    final page = ReaderV2SettingsController()..setChineseConvert(2);
     await pumpEventQueue();
 
     await reader.loadSettings();
-    expect(reader.chineseConvert, 1);
+    expect(reader.chineseConvert, 2);
     expect(reader.contentSettingsGeneration, greaterThan(generation));
     reader.dispose();
     page.dispose();
@@ -401,10 +401,10 @@ void main() {
     settings.dispose();
   });
 
-  test('line chars persists and reset returns to 32', () async {
+  test('line chars persists and reset returns to 60', () async {
     final settings = ReaderV2SettingsController();
     await settings.loadSettings();
-    expect(settings.lineChars, 32);
+    expect(settings.lineChars, 60);
 
     settings.setLineChars(20);
     await pumpEventQueue();
@@ -413,7 +413,7 @@ void main() {
 
     settings.resetPageLayout();
     await pumpEventQueue();
-    expect(settings.lineChars, 32);
+    expect(settings.lineChars, 60);
     expect(settings.isPageLayoutDefault, isTrue);
     settings.dispose();
   });
@@ -486,9 +486,9 @@ void main() {
     );
   });
 
-  test('朗讀高亮的顏色與深淺可保存並讀回；未設定時維持原外觀', () async {
+  test('朗讀高亮的顏色與深淺可保存並讀回；未設定時用預設', () async {
     final defaults = await const ReaderV2PrefsRepository().load();
-    expect(defaults.highlightColor, ReaderV2HighlightColor.theme);
+    expect(defaults.highlightColor, ReaderV2HighlightColor.gray);
     expect(defaults.highlightStrength, ReaderV2HighlightStrength.defaultValue);
 
     final settings = ReaderV2SettingsController();
@@ -508,7 +508,7 @@ void main() {
     () async {
       final defaults = await const ReaderV2PrefsRepository().load();
       expect(defaults.brightnessAuto, isTrue);
-      expect(defaults.volumeKeyPage, isFalse);
+      expect(defaults.volumeKeyPage, isTrue);
 
       final settings = ReaderV2SettingsController();
       await settings.loadSettings();
@@ -536,7 +536,7 @@ void main() {
       PreferKey.readerHighlightStrength: 5.0,
     });
     final snapshot = await const ReaderV2PrefsRepository().load();
-    expect(snapshot.highlightColor, ReaderV2HighlightColor.theme);
+    expect(snapshot.highlightColor, ReaderV2HighlightColor.defaultColor);
     expect(snapshot.highlightStrength, ReaderV2HighlightStrength.max);
   });
 

@@ -107,7 +107,7 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   BookshelfSortMode sortMode = defaultSortMode;
 
   /// 沒存過（或同步改回預設）時的樣子。
-  static const bool defaultGridView = true;
+  static const bool defaultGridView = false;
   static const bool defaultShowLastUpdate = false;
   static const BookshelfSortMode defaultSortMode = BookshelfSortMode.recentRead;
 

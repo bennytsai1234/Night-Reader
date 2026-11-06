@@ -54,7 +54,10 @@ void main() {
 
   setUp(() async {
     await GetIt.instance.reset();
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    // 這組測的是網格的書卡動畫。
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'bookshelf_is_grid': true,
+    });
     GetIt.instance
       ..registerSingleton<SharedPreferences>(
         await SharedPreferences.getInstance(),

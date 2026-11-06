@@ -291,9 +291,12 @@ enum AppAccent {
   Color? colorFor(Brightness brightness) =>
       brightness == Brightness.dark ? dark : light;
 
+  /// 沒選過時的強調色：茶金（維護者自己讀書用的設定，2026-11-06）。
+  static const AppAccent defaultAccent = AppAccent.tea;
+
   static AppAccent fromStorage(String? value) => AppAccent.values.firstWhere(
     (accent) => accent.name == value,
-    orElse: () => AppAccent.theme,
+    orElse: () => defaultAccent,
   );
 }
 
