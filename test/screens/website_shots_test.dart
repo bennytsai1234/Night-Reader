@@ -41,17 +41,6 @@ Future<void> _tapText(WidgetTester tester, String text) async {
   await settle(tester, const Duration(milliseconds: 900));
 }
 
-Future<void> _tapTooltip(WidgetTester tester, String tooltip) async {
-  final byTooltip = find.byTooltip(tooltip);
-  await tester.tap(
-    byTooltip.evaluate().isNotEmpty
-        ? byTooltip.last
-        : find.bySemanticsLabel(tooltip).last,
-    warnIfMissed: false,
-  );
-  await settle(tester, const Duration(milliseconds: 900));
-}
-
 Future<void> _openMine(WidgetTester tester, String row) async {
   await _tapText(tester, '我的');
   await _tapText(tester, row);
