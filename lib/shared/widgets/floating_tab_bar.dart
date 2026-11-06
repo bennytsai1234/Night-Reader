@@ -95,7 +95,8 @@ class FloatingTabBarFade extends StatelessWidget {
 /// Telegram iOS 26 式浮動膠囊分頁列，右側可附一顆圓形搜尋鈕。
 ///
 /// 選取膠囊跟著 [controller] 的頁面位置連續移動（滑動切頁時同步）；手指
-/// 在分頁列上橫向拖曳時膠囊跟手，放開後選最近的分頁。放在
+/// 在分頁列上橫向拖曳時膠囊跟手，膠囊中心一跨進別的分頁就選它
+/// （[onSelect]），不等放開。放在
 /// [Scaffold.bottomNavigationBar] 並搭配 `extendBody: true`，內容會延伸到
 /// 分頁列底下，浮動 SnackBar 也會自動避開分頁列。
 class FloatingTabBar extends StatefulWidget {
@@ -104,15 +105,21 @@ class FloatingTabBar extends StatefulWidget {
     required this.items,
     required this.currentIndex,
     required this.onTap,
+    ValueChanged<int>? onSelect,
     this.controller,
     this.onSearch,
     this.searchTooltip = '搜尋',
     this.hidden = false,
-  });
+  }) : onSelect = onSelect ?? onTap;
 
   final List<FloatingTabItem> items;
   final int currentIndex;
+
+  /// 點了某個分頁（含點目前的分頁，例如連點兩下回頂端）。
   final ValueChanged<int> onTap;
+
+  /// 拖曳膠囊時跨進了別的分頁；沒給時同 [onTap]。
+  final ValueChanged<int> onSelect;
 
   /// 主頁的 [PageController]；提供時選取膠囊跟著頁面捲動位置。
   final PageController? controller;
@@ -145,6 +152,10 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   /// 放開拖曳後膠囊正用彈簧滑回分頁：放回原本的分頁時頁面沒有動，跟頁
   /// 的膠囊不會自己過去，沒有這段會從手指的位置一幀跳回去。
   bool _settling = false;
+
+  /// 這次拖曳最後選的分頁。同一幀可能收到好幾筆移動，[FloatingTabBar.currentIndex]
+  /// 要等主頁重建才跟上，拿它判斷有沒有跨格會漏掉跨過去又拖回來的那一下。
+  int? _dragSelected;
 
   double _pagePosition() {
     final controller = widget.controller;
@@ -234,6 +245,27 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
     int indexAt(double dx) =>
         ((dx - AppGlass.tabInnerInset) / itemWidth).floor().clamp(0, count - 1);
 
+    // 每個分頁的圖示與字在這裡建好一次（未選的用未選色、選取的用選取色），
+    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）；原本每一幀照新
+    // 顏色重建圖示與字。
+    final scheme = Theme.of(context).colorScheme;
+    final glyphs = [
+      for (final item in widget.items)
+        (
+          idle: _TabGlyph(
+            icon: item.icon,
+            label: item.label,
+            color: scheme.onSurfaceVariant,
+          ),
+          selected: _TabGlyph(
+            icon: item.selectedIcon,
+            label: item.label,
+            color: scheme.primary,
+          ),
+        ),
+    ];
+
+    // 拖曳中膠囊中心跨進別的分頁就換過去，頁面跟著手指換，不等放開。
     void updateDrag(double dx) {
       final position = ((dx - AppGlass.tabInnerInset) / itemWidth - 0.5).clamp(
         0.0,
@@ -243,18 +275,22 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         _dragPosition = position;
         _settling = false;
       });
+      final index = position.round();
+      if (index != (_dragSelected ?? widget.currentIndex)) {
+        _dragSelected = index;
+        AppHaptics.select();
+        widget.onSelect(index);
+      }
     }
 
+    // 放開時頁面已經在手指下的分頁，膠囊從手指的位置用彈簧滑回分頁中央。
     void endDrag() {
-      final position = _dragPosition;
-      if (position == null) return;
-      final index = position.round();
+      _dragSelected = null;
+      if (_dragPosition == null) return;
       setState(() {
         _dragPosition = null;
         _settling = true;
       });
-      if (index != widget.currentIndex) AppHaptics.select();
-      widget.onTap(index);
     }
 
     return GestureDetector(
@@ -316,13 +352,14 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                           for (var i = 0; i < count; i++)
                             Expanded(
                               child: _TabItem(
-                                item: widget.items[i],
                                 // 依膠囊距離漸變選取色，滑頁時顏色跟著過渡。
                                 selection: (1 - (position - i).abs()).clamp(
                                   0.0,
                                   1.0,
                                 ),
                                 selected: i == widget.currentIndex,
+                                label: widget.items[i].label,
+                                glyph: glyphs[i],
                                 onActivate: () => widget.onTap(i),
                               ),
                             ),
@@ -342,15 +379,17 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
 
 class _TabItem extends StatelessWidget {
   const _TabItem({
-    required this.item,
     required this.selection,
     required this.selected,
+    required this.label,
+    required this.glyph,
     required this.onActivate,
   });
 
-  final FloatingTabItem item;
   final double selection;
   final bool selected;
+  final String label;
+  final ({_TabGlyph idle, _TabGlyph selected}) glyph;
 
   /// 讀屏的點擊動作；手指點擊由外層依位置判斷，讀屏沒有位置可用。
   final VoidCallback onActivate;
@@ -366,28 +405,47 @@ class _TabItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: item.label,
+      label: label,
       onTap: onActivate,
       excludeSemantics: true,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            selection > 0.5 ? item.selectedIcon : item.icon,
-            size: 24,
-            color: color,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            item.label,
-            maxLines: 1,
-            style: AppTextStyles.micro.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+      // 圖示與字照字形的透明度染成 [color]；換顏色只重畫這一層，圖示與字
+      // 不重建。染的是用未選色或選取色畫好的那一份：字的反鋸齒照字的顏色調
+      // （白字的邊比深色字實，染回深色後看起來變粗），用端點的顏色畫，靜止時
+      // 染回同一個顏色，和直接用那個顏色畫的一模一樣。
+      child: ColorFiltered(
+        colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        child: selection > 0.5 ? glyph.selected : glyph.idle,
       ),
     );
   }
+}
+
+/// 分頁的圖示與名稱，用 [color] 畫。
+class _TabGlyph extends StatelessWidget {
+  const _TabGlyph({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Icon(icon, size: 24, color: color),
+      const SizedBox(height: 2),
+      Text(
+        label,
+        maxLines: 1,
+        style: AppTextStyles.micro.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  );
 }

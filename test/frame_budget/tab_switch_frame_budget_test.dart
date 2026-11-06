@@ -26,12 +26,11 @@ void main() {
     await pumpApp(tester);
     await rest(tester);
 
-    Future<void> tapTab(String label) => tester.tap(
-      find.descendant(
-        of: find.byType(FloatingTabBar),
-        matching: find.text(label),
-      ),
+    Finder tab(String label) => find.descendant(
+      of: find.byType(FloatingTabBar),
+      matching: find.text(label),
     );
+    Future<void> tapTab(String label) => tester.tap(tab(label));
     bool switched() =>
         tester
             .widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch))
@@ -69,6 +68,27 @@ void main() {
           await tester.pump(const Duration(milliseconds: 16));
         }
         await tapTab('書架');
+      },
+      settled: switched,
+    );
+
+    // 按著膠囊從書架一路拖到我的：經過發現時就換過去，跨進我的再從畫面
+    // 現在的樣子接著換。
+    await rest(tester);
+    await tapTab('書架');
+    await rest(tester);
+    await measureNavigation(
+      tester,
+      '拖著膠囊 書架→發現→我的',
+      action: () async {
+        final from = tester.getCenter(tab('書架'));
+        final to = tester.getCenter(tab('我的'));
+        final gesture = await tester.startGesture(from);
+        for (var i = 1; i <= 24; i++) {
+          await gesture.moveTo(Offset.lerp(from, to, i / 24)!);
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await gesture.up();
       },
       settled: switched,
     );
