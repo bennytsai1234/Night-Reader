@@ -95,6 +95,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **新 worktree 的 sqlite3**：`flutter test` 要下載 sqlite3 的 native asset，公司網路會改掉檔案讓雜湊不符；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就直接用快取。
 - **哪些工作會卡動畫**：判斷掉幀是誰造成的、說某件工作會不會佔主執行緒之前，先讀 `docs/agents/main-thread.md`。檢查書架更新、書架自動下載這些在背景 isolate 跑，曾經被誤當成卡頓的嫌疑。
 - **使用者的手機**：連手機、從手機拿崩潰日誌或書源、在手機上量效能時，先讀 `docs/agents/phone.md`。
+- **網站**：重拍網站上的 App 畫面或短片時，先讀 `docs/agents/website.md`。
 - **其他情況的坑**：用到子代理 worktree 或 T3、在 Linux 跑字型或幀預算測試、Codex 審查、用 Python 或 `jq`、重新產生標點字型、對照 Legado 原始碼、連真網站校驗書源時，先讀 `docs/agents/environment.md`。
 
 ## Agent skills
