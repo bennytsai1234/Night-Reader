@@ -171,19 +171,17 @@ void main() {
     final home = tester.getCenter(pill).dx;
     final step = tester.getCenter(find.text('發現')).dx - home;
 
-    // 拖到第二個分頁附近，再拉回離原分頁四成格寬的地方放開（仍選原分頁）。
+    // 往第二個分頁拖到四成格寬就放開：膠囊中心沒跨進第二個分頁，不換。
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('書架')),
     );
     await gesture.moveBy(const Offset(20, 0));
-    await gesture.moveBy(Offset(step - 20, 0));
-    await tester.pump();
-    await gesture.moveBy(Offset(-step * 0.6, 0));
+    await gesture.moveBy(Offset(step * 0.4 - 20, 0));
     await tester.pump();
     final dropped = tester.getCenter(pill).dx;
     expect(dropped - home, closeTo(step * 0.4, 1));
     await gesture.up();
-    expect(taps, [0]);
+    expect(taps, isEmpty);
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
