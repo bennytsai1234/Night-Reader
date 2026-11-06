@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>夜讀 — 背景甲：開頭一整片夜空</title>
+  <link rel="stylesheet" href="site.css">
+  <style>
+    /* 開頭一整片夜空；最前面那層山用頁面底色，捲過開頭就收進頁面裡。 */
+    .hero {
+      position: relative;
+      height: 100vh; height: 100svh;
+      min-height: 600px; max-height: 1000px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(var(--sky-top), var(--sky-bottom));
+    }
+    .sky > * {
+      position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 100%;
+      object-fit: cover; object-position: center bottom; will-change: transform;
+    }
+    /* 天空比畫面高一點，往下視差時上緣不會露白。 */
+    .sky .sky-base { height: 125%; }
+    /* 月亮在圖的正中間，移到右上方，不壓在開頭的字後面。 */
+    .sky .sky-moon { left: 26%; bottom: 24%; }
+    @media (max-width: 760px) { .sky .sky-moon { left: 22%; bottom: 34%; } }
+    /* 最前面那層山用山的形狀當遮罩、填頁面底色，捲過開頭就融進頁面。 */
+    .sky .sky-near {
+      background: var(--page);
+      -webkit-mask: url(sky/mountains-near.webp) center bottom / cover no-repeat;
+      mask: url(sky/mountains-near.webp) center bottom / cover no-repeat;
+    }
+    .hero-copy { margin-top: -10vh; padding: 0 20px; }
+  </style>
+</head>
+<body data-sky="hero">
+  <header class="bar on-sky">
+    <span></span>
+    <a class="title" href="#">夜讀</a>
+    <nav class="end"><a href="https://github.com/bennytsai1234/Night-Reader">GitHub</a><a class="dl" href="#download">下載</a></nav>
+  </header>
+
+  <section class="hero">
+    <div class="sky" aria-hidden="true">
+      <img class="sky-base" src="sky/sky-night.webp" alt="">
+      <img class="sky-moon" src="sky/moon.webp" alt="">
+      <img class="sky-far" src="sky/mountains-far.webp" alt="">
+      <div class="sky-near"></div>
+    </div>
+    <div class="hero-copy">
+      <img class="icon" src="../app-icon.png" alt="">
+      <h1>夜讀</h1>
+      <p class="lead">讀網路小說，也讀自己的 TXT 與 EPUB。<br>書源自己匯入，排版照中文的規矩。</p>
+      <a class="btn moon" href="#download">下載 Android 版</a>
+      <p class="fine">免費、開源、沒有廣告</p>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <section class="feature">
+      <div class="shots pair">
+        <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/layout_dark.webp"><img src="shots/layout_light.webp" alt="閱讀器的排版面板：字號、行高、段距、每行字數"></picture></div></div>
+        <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/reader-paper_dark.webp"><img src="shots/reader-paper_light.webp" alt="閱讀器的正文"></picture></div></div>
+      </div>
+      <div class="text">
+        <h2>每個字都對齊字格</h2>
+        <p>漢字一格、英數字補半格，左右兩緣切齊。標點不會落在行首行尾，「……」「——」不拆成兩行。字號、行高、每行字數都能調。</p>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots">
+        <div class="phone"><div class="screen style-stack stack">
+          <picture data-style="plain"><source media="(prefers-color-scheme: dark)" srcset="shots/reader-plain_dark.webp"><img src="shots/reader-plain_light.webp" alt="素色風格的正文"></picture>
+          <picture data-style="paper"><source media="(prefers-color-scheme: dark)" srcset="shots/reader-paper_dark.webp"><img src="shots/reader-paper_light.webp" alt="紙墨風格的正文"></picture>
+          <picture data-style="tea"><source media="(prefers-color-scheme: dark)" srcset="shots/reader-tea_dark.webp"><img src="shots/reader-tea_light.webp" alt="茶褐風格的正文"></picture>
+          <picture data-style="kraft"><source media="(prefers-color-scheme: dark)" srcset="shots/reader-kraft_dark.webp"><img src="shots/reader-kraft_light.webp" alt="牛皮紙風格的正文"></picture>
+          <picture data-style="bamboo"><source media="(prefers-color-scheme: dark)" srcset="shots/reader-bamboo_dark.webp"><img src="shots/reader-bamboo_light.webp" alt="竹青風格的正文"></picture>
+          <picture data-style="bean"><source media="(prefers-color-scheme: dark)" srcset="shots/reader-bean_dark.webp"><img src="shots/reader-bean_light.webp" alt="豆綠風格的正文"></picture>
+        </div></div>
+      </div>
+      <div class="text">
+        <h2>白天、晚上各一種風格</h2>
+        <p>六種風格，淺色、深色各選一個，例如白天牛皮紙、晚上素色。深色預設純黑，OLED 螢幕的黑色部分不發光。</p>
+        <div class="styles" role="group" aria-label="試試看各種風格">
+          <button data-style="plain">素色</button><button data-style="paper">紙墨</button><button data-style="tea">茶褐</button><button data-style="kraft">牛皮紙</button><button data-style="bamboo">竹青</button><button data-style="bean">豆綠</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots">
+        <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/shelf_dark.webp"><img src="shots/shelf_light.webp" alt="書架"></picture></div></div>
+      </div>
+      <div class="text">
+        <h2>加進書架，整本就下載好</h2>
+        <p>書架上的網路書會自己整本下載，新章節也跟著補上。搭車、出國、沒網路，照樣讀。</p>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots">
+        <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/search_dark.webp"><img src="shots/search_light.webp" alt="搜尋"></picture></div></div>
+      </div>
+      <div class="text">
+        <h2>一次搜遍你的書源</h2>
+        <p>所有書源一起搜，繁體、簡體一起找，同一本書合成一筆。讀到一半換書源，進度停在同一章。</p>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots pair">
+        <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/reader_dark.webp"><img src="shots/reader_light.webp" alt="正文裡畫了底色與底線的標註，左邊距的短線是書籤"></picture></div></div>
+        <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/marks_dark.webp"><img src="shots/marks_light.webp" alt="書籤與標註清單"></picture></div></div>
+      </div>
+      <div class="text">
+        <h2>留記號，畫重點</h2>
+        <p>選一段字留書籤，或畫上底色、底線，旁邊寫一段備忘。換了書源也找得回同一句，標註可以匯出成 Markdown。</p>
+      </div>
+    </section>
+
+    <section class="more">
+      <h2>還有</h2>
+      <dl>
+        <div><dt>聽書</dt><dd>用手機的語音朗讀，正在讀的那一句會標出來，可以定時停。</dd></div>
+        <div><dt>本地 TXT、EPUB</dt><dd>匯入就自動分章，只讀文字。</dd></div>
+        <div><dt>多台手機接著讀</dt><dd>用 Google 雲端硬碟或 WebDAV 同步閱讀進度。</dd></div>
+        <div><dt>正文整理</dt><dd>替換規則清掉廣告與雜訊，繁簡互轉。</dd></div>
+        <div><dt>書源工具</dt><dd>批次校驗找出失效的書源，單一書源逐步除錯。</dd></div>
+        <div><dt>備份與還原</dt><dd>書架、書籤、標註、書源與設定整包帶走。</dd></div>
+      </dl>
+    </section>
+
+    <section class="source">
+      <p><strong>夜讀不附書源。</strong>安裝後到「我的 → 書源管理」匯入你自己的書源，格式和 Legado（閱讀）相容。沒有書源時，書架與搜尋都是空的。</p>
+    </section>
+  </main>
+
+  <section class="download" id="download">
+    <h2>下載夜讀</h2>
+    <a class="btn" href="https://github.com/bennytsai1234/Night-Reader/releases/latest">下載 Android 版</a>
+    <p>Android 7.0 以上的 arm64 手機。App 會自己檢查新版。同一個版本另附未簽章的 iOS 安裝檔，要自行簽章安裝。</p>
+  </section>
+
+  <footer>
+    <p>夜讀是通用的閱讀與網頁規則解析工具，不提供、不託管也不分發任何小說內容或書源。</p>
+    <p>以 GPL-3.0 授權釋出，原始碼在 <a href="https://github.com/bennytsai1234/Night-Reader">GitHub</a>。</p>
+  </footer>
+
+  <div class="dock"><a class="btn" href="https://github.com/bennytsai1234/Night-Reader/releases/latest">下載 Android 版</a></div>
+  <script src="site.js"></script>
+</body>
+</html>

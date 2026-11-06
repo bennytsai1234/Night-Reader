@@ -1,53 +1,53 @@
-/* 夜讀網站原型共用樣式：配色照 App 的預設風格（淺色紙墨、深色素色純黑），
-   字型用系統字型，頁首是置中小標題的玻璃，卡片圓角 14、靠底色差分層不畫框線。 */
+/* 夜讀網站原型共用樣式。
+   配色照 App 的預設風格（淺色紙墨、深色素色純黑），夜空照 App 預設封面「夜空」：
+   墨色底帶一點石青、一彎月、幾顆星、兩層遠山。夜空是整頁唯一大膽的地方，其他保持安靜。 */
 
 :root {
-  --page: #ddd9d1;
-  --card: #fffbf2;
-  --card-2: #f4efe3;
+  --paper: #faf5e9;
+  --page: #faf5e9;
+  --raised: #f1eadb;
   --text: #100d0a;
   --muted: #5f5a4d;
   --primary: #7e2e2a;
   --on-primary: #fffbf2;
-  --glass: rgba(255, 251, 242, 0.72);
+  --moon: #f4e3b5;
+  --sky-top: #262c30;
+  --sky-bottom: #3c4e5a;
+  --glass: rgba(250, 245, 233, 0.72);
   --bezel: #1b1814;
-  --shadow: 0 1px 2px rgba(16, 13, 10, 0.08);
+  --shot-shadow: 0 18px 50px rgba(38, 44, 48, 0.22);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --page: #000000;
-    --card: #1c1c1c;
-    --card-2: #262626;
+    --raised: #1c1c1c;
     --text: #ededed;
     --muted: #999999;
     --primary: #d6d6d6;
     --on-primary: #000000;
-    --glass: rgba(38, 38, 38, 0.7);
+    --glass: rgba(28, 28, 28, 0.72);
     --bezel: #2a2a2a;
-    --shadow: none;
+    --shot-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
   --page: #000000;
-  --card: #1c1c1c;
-  --card-2: #262626;
+  --raised: #1c1c1c;
   --text: #ededed;
   --muted: #999999;
   --primary: #d6d6d6;
   --on-primary: #000000;
-  --glass: rgba(38, 38, 38, 0.7);
+  --glass: rgba(28, 28, 28, 0.72);
   --bezel: #2a2a2a;
-  --shadow: none;
+  --shot-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
@@ -55,114 +55,158 @@ body {
   color: var(--text);
   font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC",
     "Microsoft JhengHei", sans-serif;
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.75;
   -webkit-font-smoothing: antialiased;
 }
 
 a { color: inherit; }
-
 img { display: block; max-width: 100%; }
+
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
 
 /* ---------- 頁首：玻璃、置中小標題 ---------- */
 .bar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 20;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   height: 52px;
-  padding: 0 16px;
+  padding: 0 20px;
+  color: var(--text);
   background: var(--glass);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   backdrop-filter: blur(20px) saturate(1.4);
+  transition: background-color 0.3s linear, color 0.3s linear;
 }
-.bar .title { font-size: 17px; font-weight: 600; text-decoration: none; }
-.bar .end { justify-self: end; display: flex; gap: 18px; font-size: 15px; }
-.bar .end a { text-decoration: none; color: var(--muted); }
-.bar .end a.dl { color: var(--primary); font-weight: 600; }
+/* 還在夜空上時頁首透明、字是月光色。 */
+.bar.on-sky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--moon); }
+.bar .title { font-size: 17px; font-weight: 600; text-decoration: none; letter-spacing: 0.06em; }
+.bar .end { justify-self: end; display: flex; gap: 20px; font-size: 15px; }
+.bar .end a { text-decoration: none; opacity: 0.75; }
+.bar .end a:hover { opacity: 1; }
 
-/* ---------- 開頭 ---------- */
-.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
 
-.hero { text-align: center; padding: 72px 0 56px; }
-.hero .icon { width: 96px; height: 96px; border-radius: 22px; margin: 0 auto 20px; box-shadow: var(--shadow); }
-.hero h1 { font-size: 40px; line-height: 1.2; margin: 0 0 12px; font-weight: 700; letter-spacing: 0.04em; }
-.hero p.lead { font-size: 18px; color: var(--muted); margin: 0 auto 28px; max-width: 30em; }
-.actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+/* ---------- 開頭的夜空 ---------- */
+.sky-svg { display: block; width: 100%; height: 100%; }
+.hero-copy { position: relative; z-index: 2; text-align: center; color: var(--moon); }
+.hero-copy .icon { width: 88px; height: 88px; border-radius: 20px; margin: 0 auto 22px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35); }
+.hero-copy h1 { font-size: 56px; line-height: 1.1; margin: 0 0 16px; font-weight: 700; letter-spacing: 0.18em; text-indent: 0.18em; }
+.hero-copy .lead { font-size: 19px; line-height: 1.7; margin: 0 auto 30px; max-width: 22em; opacity: 0.88; }
+.hero-copy .fine { font-size: 14px; margin-top: 16px; opacity: 0.7; }
+
 .btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 46px; padding: 0 24px; border-radius: 23px;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 48px; padding: 0 28px; border-radius: 24px;
   font-size: 16px; font-weight: 600; text-decoration: none;
+  background: var(--primary); color: var(--on-primary);
 }
-.btn.primary { background: var(--primary); color: var(--on-primary); }
-.btn.quiet { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
-.meta { margin-top: 14px; font-size: 13px; color: var(--muted); }
+.btn.moon { background: var(--moon); color: #1a1612; }
 
-/* ---------- 手機框 ---------- */
+/* ---------- 功能：左右交錯 ---------- */
+.feature { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; padding: 96px 0; }
+.feature:nth-of-type(even) .shots { order: 2; }
+.feature h2 { font-size: 30px; line-height: 1.35; margin: 0 0 16px; font-weight: 700; letter-spacing: 0.02em; }
+.feature p { color: var(--muted); margin: 0; max-width: 24em; }
+
+.shots { position: relative; display: flex; justify-content: center; }
 .phone {
   position: relative;
-  width: 100%;
-  max-width: 300px;
+  width: 260px;
   aspect-ratio: 1179 / 2556;
-  margin: 0 auto;
-  padding: 9px;
-  border-radius: 46px;
+  padding: 8px;
+  border-radius: 42px;
   background: var(--bezel);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shot-shadow);
 }
-.phone .screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 38px;
-  background: var(--card);
-}
-.phone .screen picture,
-.phone .screen img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* 疊在同一個螢幕裡的幾張圖只淡入淡出（App 的規則：內容只淡）。 */
-.stack > * { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s linear; }
-.stack > .on { opacity: 1; }
+.phone .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 34px; background: var(--raised); }
+.phone .screen picture, .phone .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* 第二張疊在後面、略小，露出一角。 */
+.shots .phone + .phone { position: absolute; width: 220px; transform: translate(-46%, 10%); z-index: -1; opacity: 0.92; }
+.shots.pair { padding-left: 90px; }
 
-/* ---------- 文字段落 ---------- */
-.kicker { font-size: 13px; font-weight: 600; color: var(--primary); letter-spacing: 0.08em; margin: 0 0 8px; }
-h2 { font-size: 30px; line-height: 1.3; margin: 0 0 14px; font-weight: 700; }
-h3 { font-size: 18px; margin: 0 0 6px; }
-.body { color: var(--muted); font-size: 17px; margin: 0; max-width: 26em; }
+.stack > picture { opacity: 0; transition: opacity 0.4s linear; }
+.stack > picture.on { opacity: 1; }
 
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.chip {
+.styles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.styles button {
   border: 0; font: inherit; font-size: 14px; cursor: pointer;
-  padding: 6px 14px; border-radius: 16px;
-  background: var(--card); color: var(--muted); box-shadow: var(--shadow);
+  padding: 5px 14px; border-radius: 16px;
+  background: var(--raised); color: var(--muted);
 }
-.chip.on { background: var(--primary); color: var(--on-primary); }
+.styles button.on { background: var(--primary); color: var(--on-primary); }
 
-/* ---------- 其他功能、書源、下載 ---------- */
-.section { padding: 64px 0; }
-.card { background: var(--card); border-radius: 14px; padding: 22px 24px; box-shadow: var(--shadow); }
-.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.grid .card h3 { font-size: 16px; }
-.grid .card p { margin: 0; color: var(--muted); font-size: 15px; }
-.center { text-align: center; }
-.note { max-width: 640px; margin: 0 auto; }
-.note p { margin: 0; color: var(--muted); }
+/* ---------- 還有這些、書源、下載 ---------- */
+.more { padding: 40px 0 96px; }
+.more h2 { font-size: 22px; margin: 0 0 20px; }
+.more dl { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 56px; margin: 0; }
+.more dt { font-weight: 600; }
+.more dd { margin: 2px 0 0; color: var(--muted); font-size: 15px; }
 
-footer { padding: 40px 0 56px; font-size: 13px; color: var(--muted); text-align: center; }
-footer p { max-width: 640px; margin: 0 auto 10px; }
+.source { padding: 0 0 96px; }
+.source p { margin: 0; max-width: 36em; color: var(--muted); }
+.source strong { color: var(--text); font-weight: 600; }
 
-.fade { opacity: 0; transition: opacity 0.6s linear; }
-.fade.in { opacity: 1; }
+.download { text-align: center; padding: 120px 24px 140px; }
+.download h2 { font-size: 30px; margin: 0 0 24px; letter-spacing: 0.04em; }
+.download p { font-size: 14px; color: var(--muted); margin: 18px auto 0; max-width: 32em; }
+
+footer { padding: 32px 24px 48px; font-size: 13px; color: var(--muted); text-align: center; }
+footer p { max-width: 40em; margin: 0 auto 8px; }
+
+/* 手機上「下載」固定在畫面底部，捲過開頭才出現。 */
+.dock {
+  display: none;
+  position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 20;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s linear;
+}
+.dock.show { opacity: 1; pointer-events: auto; }
+.dock .btn { width: 100%; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
+
+/* ---------- 手機 ---------- */
+@media (max-width: 760px) {
+  body { font-size: 15px; }
+  .wrap { padding: 0 20px; }
+  .bar { padding: 0 16px; }
+  .bar .end .dl { display: none; }
+  .hero-copy .icon { width: 72px; height: 72px; border-radius: 17px; }
+  .hero-copy h1 { font-size: 40px; }
+  .hero-copy .lead { font-size: 16px; padding: 0 12px; }
+
+  .feature { grid-template-columns: 1fr; gap: 24px; padding: 48px 0; }
+  .feature:nth-of-type(even) .shots { order: 0; }
+  .feature .text { order: -1; }
+  .feature h2 { font-size: 24px; margin-bottom: 8px; }
+  .feature p { font-size: 15px; }
+
+  /* 截圖不畫手機外框，同一段的幾張左右滑。 */
+  .shots, .shots.pair {
+    justify-content: flex-start; gap: 14px; padding: 4px 20px 16px; margin: 0 -20px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  }
+  .shots::-webkit-scrollbar { display: none; }
+  .phone, .shots .phone + .phone {
+    position: relative; flex: 0 0 68%; width: auto; padding: 0; border-radius: 18px;
+    background: none; transform: none; z-index: auto; opacity: 1; scroll-snap-align: center;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  }
+  .shots .phone:only-child { margin: 0 auto; }
+  .phone .screen { border-radius: 18px; }
+
+  .more { padding: 32px 0 56px; }
+  .more dl { grid-template-columns: 1fr; gap: 14px; }
+  .source { padding-bottom: 56px; }
+  .download { padding: 72px 20px 96px; }
+  .download h2 { font-size: 24px; }
+  .dock { display: block; }
+  footer { padding-bottom: 96px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .stack > * { transition: none; }
+  .stack > picture, .bar, .dock { transition: none; }
 }
