@@ -10,6 +10,7 @@ library;
 
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -21,7 +22,14 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/features/search/search_provider.dart';
+import 'package:night_reader/features/search/widgets/search_app_bar.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:provider/provider.dart';
 
 import '../support/app_harness.dart';
 import '../support/screenshot.dart';
@@ -58,13 +66,108 @@ final _scenes = <String, Steps>{
   'reader': (t) async => openReader(t),
   'layout': (t) async {
     await openReader(t);
-    await showReaderMenu(t);
+    // 畫面正中間是標註，點了會開標註面板；點中間偏上沒有標註的那行。
+    final size = t.view.physicalSize / t.view.devicePixelRatio;
+    await t.tapAt(Offset(size.width / 2, size.height * 0.42));
+    await settle(t, const Duration(milliseconds: 800));
+    await waitForText(t);
     await _tapText(t, '排版');
   },
-  'search': (t) async => _tapTooltip(t, '搜尋'),
+  'search': _searchResults,
   'marks': (t) async => _openMine(t, '書籤與標註'),
   'appearance': (t) async => _openMine(t, '外觀與主題'),
 };
+
+/// 搜尋「夜」：兩個書源各回幾本，同一本書從兩個書源回來合併成一張卡。
+/// 書源的回應從記憶體給（同 search_frame_budget_test）。
+const _searchAnswers = {
+  kOrigin: [
+    ('夜雨聽書', '沈知秋', '第一百二十章 書頁之間'),
+    ('長夜行舟', '林晚', '第八十六章 渡口'),
+    ('夜航船記', '青衫客', '第四十二章 潮聲'),
+    ('守夜人手記', '周以寧', '第二百零三章 燈'),
+  ],
+  'https://www.sample.org': [
+    ('夜雨聽書', '沈知秋', '第一百二十章 書頁之間'),
+    ('春夜喜雨', '沈默', '第十九章 隨風'),
+    ('夜行者', '陸遠', '第六十章 天亮以前'),
+  ],
+};
+
+Future<List<SearchBook>> _searchLoader(
+  BookSource source,
+  String key, {
+  CancelToken? cancelToken,
+}) => Future.delayed(const Duration(milliseconds: 200), () {
+  final answers = _searchAnswers[source.bookSourceUrl] ?? const [];
+  return [
+    for (final (i, (name, author, latest)) in answers.indexed)
+      SearchBook(
+        bookUrl: '${source.bookSourceUrl}/book/$name',
+        name: name,
+        author: author,
+        kind: '連載',
+        wordCount: '${80 + i * 37}.2萬字',
+        latestChapterTitle: latest,
+        origin: source.bookSourceUrl,
+        originName: source.bookSourceName,
+      ),
+  ];
+});
+
+/// 搜尋頁換成上面那組書源回應，主題沿用 App 這次的主題。
+Future<void> _searchResults(WidgetTester tester) async {
+  final theme = Theme.of(tester.element(find.byType(Scaffold).first));
+  await tester.pumpWidget(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: theme,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ChangeNotifierProvider(
+                  create: (context) => SearchProvider(
+                    entrance: TransitionSettled.entered(context),
+                    searchLoader: _searchLoader,
+                  ),
+                  child: const SearchView(),
+                ),
+              ),
+            ),
+            child: const Text('打開搜尋'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  await _tapText(tester, '打開搜尋');
+  final provider = Provider.of<SearchProvider>(
+    tester.element(find.byType(SearchView)),
+    listen: false,
+  );
+  await tester.runAsync(() => provider.ready);
+  await tester.enterText(find.byType(TextField), '夜');
+  await tester.pump();
+  await tester.tap(
+    find.descendant(of: find.byType(SearchAppBar), matching: find.text('搜尋')),
+  );
+  for (
+    var i = 0;
+    i < 100 && (provider.isSearching || provider.results.isEmpty);
+    i++
+  ) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 30)),
+    );
+    await settle(tester, const Duration(milliseconds: 100));
+  }
+  // 收起鍵盤與建議，只留結果。
+  FocusManager.instance.primaryFocus?.unfocus();
+  await settle(tester, const Duration(milliseconds: 600));
+}
 
 Future<void> _seedShowcase() async {
   await getIt<BookSourceDao>().upsertAll([
@@ -159,6 +262,8 @@ void main() {
       if (only != null && !only.contains(name)) continue;
       await tester.runAsync(
         () => resetPrefs({
+          // 照 App 的預設玻璃（測試環境預設用霧面）。
+          PreferKey.glassStrength: GlassStrength.defaultStrength.name,
           'themeMode': mode,
           PreferKey.lightStyle: ?style,
           PreferKey.darkStyle: ?style,
