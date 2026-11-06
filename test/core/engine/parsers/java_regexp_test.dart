@@ -63,6 +63,14 @@ void main() {
     expect(javaRegExp(r'a+?').firstMatch('aaa')!.group(0), 'a');
   });
 
+  test('Unicode 跳脫與註解模式的量詞不被當成所有格', () {
+    expect(javaRegExp(r'(?u)\u{61}+').firstMatch('aaa')!.group(0), 'aaa');
+    expect(find(r'(?x)a{2, 3}+b', 'aaab'), isTrue);
+    expect(find(r'(?x)a{2, 3}b', 'aaab'), isTrue);
+    // 註解模式裡量詞中的註解也算空白。
+    expect(find('(?x)a{2, # 兩個到\n 3}+b', 'aaab'), isTrue);
+  });
+
   test('wholeInput 整段都要符合（Java matches）', () {
     final url = javaRegExp(r'(?i)https://b\.test/BOOK/\d+', wholeInput: true);
     expect(url.hasMatch('https://b.test/book/1'), isTrue);

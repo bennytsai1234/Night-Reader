@@ -63,6 +63,19 @@ String _translate(
     final char = pattern[i];
     if (char == r'\' && i + 1 < pattern.length) {
       final next = pattern[++i];
+      // Dart 的 \u{…}、\x{…}、\p{…}、\P{…} 整組是一個 token：裡面的
+      // 大括號不是量詞，後面的 + 也不是所有格尾碼。
+      if (_bracketedEscapes.contains(next) &&
+          i + 1 < pattern.length &&
+          pattern[i + 1] == '{') {
+        final close = pattern.indexOf('}', i + 2);
+        if (close != -1) {
+          out.write(pattern.substring(i - 1, close + 1));
+          i = close;
+          lastWasQuantifier = false;
+          continue;
+        }
+      }
       final anchor = inClass
           ? null
           : switch (next) {
@@ -122,9 +135,10 @@ String _translate(
       continue;
     }
     if (char == '{') {
-      final quantifier = _quantifier.matchAsPrefix(pattern, i);
+      final quantifier = _quantifierAt(pattern, i, comments: comments);
       if (quantifier != null) {
-        out.write(quantifier.group(0));
+        // 註解模式會把量詞裡的空白與註解拿掉，寫回正規化後的寫法。
+        out.write(quantifier.text);
         i = quantifier.end - 1;
         lastWasQuantifier = true;
         continue;
@@ -136,8 +150,45 @@ String _translate(
   return out.toString();
 }
 
-/// Java 的 `{m}`、`{m,}`、`{m,n}` 量詞。
-final RegExp _quantifier = RegExp(r'\{\d+(?:,\d*)?\}');
+/// Java 的 `{m}`、`{m,}`、`{m,n}` 量詞；註解模式允許裡面有空白與註解。
+({String text, int end})? _quantifierAt(
+  String pattern,
+  int start, {
+  required bool comments,
+}) {
+  final body = StringBuffer();
+  var digits = 0;
+  for (var i = start + 1; i < pattern.length; i++) {
+    final char = pattern[i];
+    if (comments) {
+      if (_isJavaWhitespace(char)) continue;
+      if (char == '#') {
+        while (i + 1 < pattern.length && pattern[i + 1] != '\n') {
+          i++;
+        }
+        continue;
+      }
+    }
+    if (char == '}') {
+      final text = '{$body}';
+      if (digits == 0 || !_quantifier.hasMatch(text)) return null;
+      return (text: text, end: i + 1);
+    }
+    final code = char.codeUnitAt(0);
+    if ((code >= 0x30 && code <= 0x39) || char == ',') {
+      body.write(char);
+      if (char != ',') digits++;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
+/// 正規化後的量詞（去掉註解模式的有效空白）。
+final RegExp _quantifier = RegExp(r'^\{\d+(?:,\d*)?\}$');
+
+const Set<String> _bracketedEscapes = {'u', 'x', 'p', 'P'};
 
 /// Java 註解模式略過的空白（`Character.isWhitespace` 的 ASCII 部分）。
 bool _isJavaWhitespace(String char) =>

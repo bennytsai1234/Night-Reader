@@ -146,67 +146,154 @@ class LocalBookService {
   }
 
   /// 原檔放不回原本的位置（例如還原另一台手機的備份，App 資料夾的路徑
-  /// 變了）：把這次拿到的原檔留在本地書資料夾，書改指新路徑。章節、封面與
+  /// 變了）：把這次拿到的原檔留在本地書資料夾，書改指新路徑。同一個指紋
+  /// 有好幾本書時，各留一份原檔、各指自己的路徑，不互相蓋掉。章節、封面與
   /// EPUB 轉好的文字跟著搬；閱讀進度在書這一列，書籤與標註認書名與作者，
   /// 都不用改。
+  ///
+  /// 檔案與附件都先準備好，再用同一個交易改所有書列；任何一步失敗就清掉
+  /// 這次準備的檔案，原本的書與附件不動。
   Future<Book?> _moveMissingBooks(
     List<Book> books,
     String path, {
     required BookDao bookDao,
     required ChapterDao chapterDao,
   }) async {
-    final stored = await storeInLibrary(path, bookDao: bookDao);
-    final newUrl = 'local://$stored';
-    if (!await File(stored).exists()) {
+    final source = await storeInLibrary(path, bookDao: bookDao);
+    if (!await File(source).exists()) {
       throw FileSystemException('原檔不見了，無法放回書架', path);
     }
-    Book? moved;
-    for (final book in books) {
-      if (book.bookUrl == newUrl) {
-        moved ??= book;
-        continue;
+    final sourceCreated = !p.equals(source, path);
+    final prepared = <_PreparedMove>[];
+    final createdFiles = <String>[];
+    final createdDirs = <Directory>[];
+    var sourceTaken = false;
+    var sourceUsable =
+        books.isNotEmpty &&
+        await _destinationFree(source, books.first, bookDao, chapterDao);
+    try {
+      for (final oldBook in books) {
+        final useSource = sourceUsable && !sourceTaken;
+        final String target;
+        if (useSource) {
+          target = source;
+          sourceTaken = true;
+        } else {
+          target = await _freeMovePath(oldBook, bookDao, chapterDao);
+          await File(source).copy(target);
+          createdFiles.add(target);
+        }
+        final newUrl = 'local://$target';
+        final chapters = await chapterDao.getByBook(oldBook.bookUrl);
+        var newBook = oldBook.copyWith(bookUrl: newUrl);
+        final oldAssets = await AppStoragePaths.bookAssetDir(
+          BookCoverStorageService.bookStorageKey(oldBook),
+        );
+        Directory? newAssets;
+        if (await oldAssets.exists()) {
+          newAssets = await AppStoragePaths.bookAssetDir(
+            BookCoverStorageService.bookStorageKey(newBook),
+          );
+          createdDirs.add(newAssets);
+          await _copyDirectory(oldAssets, newAssets);
+          newBook = _repointAssets(oldBook, newBook, oldAssets, newAssets);
+        }
+        prepared.add(
+          _PreparedMove(
+            oldBook: oldBook,
+            book: newBook,
+            chapters: chapters,
+            oldAssets: newAssets == null ? null : oldAssets,
+          ),
+        );
       }
-      final chapters = await chapterDao.getByBook(book.bookUrl);
-      final updated = await _moveAssets(book, book.copyWith(bookUrl: newUrl));
+
       await bookDao.transaction(() async {
-        // 書的身分是網址：先刪舊的一列再寫新的一列，不能只 upsert，不然會
-        // 留下原本那一列指著不存在的原檔。
-        await bookDao.deleteByUrl(book.bookUrl);
-        await bookDao.upsert(updated);
-        await chapterDao.deleteByBook(book.bookUrl);
-        if (chapters.isNotEmpty) {
-          await chapterDao.insertChapters([
-            for (final chapter in chapters)
-              chapter.copyWith(
-                bookUrl: newUrl,
-                url: chapter.url.startsWith(book.bookUrl)
-                    ? '$newUrl${chapter.url.substring(book.bookUrl.length)}'
-                    : '$newUrl#${chapter.index}',
-              ),
-          ]);
+        for (final move in prepared) {
+          final newUrl = move.book.bookUrl;
+          // 書的身分是網址：先刪舊的一列再寫新的一列，不能只 upsert，不然會
+          // 留下原本那一列指著不存在的原檔。
+          await bookDao.deleteByUrl(move.oldBook.bookUrl);
+          await bookDao.upsert(move.book);
+          await chapterDao.deleteByBook(move.oldBook.bookUrl);
+          await chapterDao.deleteByBook(newUrl);
+          if (move.chapters.isNotEmpty) {
+            await chapterDao.insertChapters([
+              for (final chapter in move.chapters)
+                chapter.copyWith(
+                  bookUrl: newUrl,
+                  url: chapter.url.startsWith(move.oldBook.bookUrl)
+                      ? '$newUrl${chapter.url.substring(move.oldBook.bookUrl.length)}'
+                      : '$newUrl#${chapter.index}',
+                ),
+            ]);
+          }
         }
       });
-      moved ??= updated;
+    } catch (_) {
+      for (final dir in createdDirs.reversed) {
+        await _removeDirectoryQuietly(dir);
+      }
+      for (final file in createdFiles) {
+        await _removeFileQuietly(file);
+      }
+      if (sourceCreated) await _removeFileQuietly(source);
+      rethrow;
     }
-    return moved;
+
+    for (final move in prepared) {
+      if (move.oldAssets case final dir?) await _removeDirectoryQuietly(dir);
+    }
+    if (sourceCreated && !sourceTaken) await _removeFileQuietly(source);
+    return prepared.isEmpty ? null : prepared.first.book;
   }
 
-  /// 書換了網址時，把封面與 EPUB 轉好的文字搬到新網址的資料夾。搬不動也
-  /// 不影響讀這本書：那些是衍生的資料，書照樣回傳新的那一本。
-  static Future<Book> _moveAssets(Book oldBook, Book newBook) async {
-    final oldDir = await AppStoragePaths.bookAssetDir(
-      BookCoverStorageService.bookStorageKey(oldBook),
+  /// [path] 可以當一本書的新家：沒有書列、沒有章節、附件資料夾也沒有人用。
+  static Future<bool> _destinationFree(
+    String path,
+    Book book,
+    BookDao bookDao,
+    ChapterDao chapterDao,
+  ) async {
+    final url = 'local://$path';
+    if (await bookDao.getByUrl(url) != null) return false;
+    if ((await chapterDao.getByBook(url)).isNotEmpty) return false;
+    final assets = await AppStoragePaths.bookAssetDir(
+      BookCoverStorageService.bookStorageKey(book.copyWith(bookUrl: url)),
     );
-    if (!await oldDir.exists()) return newBook;
-    final newDir = await AppStoragePaths.bookAssetDir(
-      BookCoverStorageService.bookStorageKey(newBook),
-    );
-    try {
-      await oldDir.rename(newDir.path);
-    } on FileSystemException catch (error) {
-      AppLog.e('搬移本地書的封面與轉好的文字失敗: $error', error: error);
-      return newBook;
+    return !await _existsAnything(assets.path);
+  }
+
+  /// 同一個指紋的其他書要各自一份原檔：在本地書資料夾找一個沒有書、章節
+  /// 與附件佔用的名字。
+  static Future<String> _freeMovePath(
+    Book book,
+    BookDao bookDao,
+    ChapterDao chapterDao,
+  ) async {
+    final dir = await AppStoragePaths.localBooksDir(ensureExists: true);
+    final extension = p.extension(filePathOf(book));
+    final safe = book.name
+        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_')
+        .trim();
+    final base = safe.isEmpty ? '本地書' : safe;
+    for (var copy = 1; ; copy++) {
+      final target = p.join(dir.path, _copyName(base, extension, copy));
+      if (await _existsAnything(target)) continue;
+      if (await _destinationFree(target, book, bookDao, chapterDao)) {
+        return target;
+      }
     }
+  }
+
+  /// 書換了網址時，把封面與 EPUB 轉好的文字複製到新網址的資料夾；原本的
+  /// 資料夾等交易成功後才清掉，失敗時回復原狀。
+  static Book _repointAssets(
+    Book oldBook,
+    Book newBook,
+    Directory oldDir,
+    Directory newDir,
+  ) {
     String? moved(String? path) => path != null && p.isWithin(oldDir.path, path)
         ? p.join(newDir.path, p.relative(path, from: oldDir.path))
         : path;
@@ -214,6 +301,43 @@ class LocalBookService {
       coverLocalPath: moved(oldBook.coverLocalPath),
       customCoverLocalPath: moved(oldBook.customCoverLocalPath),
     );
+  }
+
+  static Future<void> _copyDirectory(Directory source, Directory target) async {
+    await target.create(recursive: true);
+    await for (final entity in source.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      final relative = p.relative(entity.path, from: source.path);
+      final destination = p.join(target.path, relative);
+      if (entity is Directory) {
+        await Directory(destination).create(recursive: true);
+      } else if (entity is File) {
+        await entity.copy(destination);
+      }
+    }
+  }
+
+  static Future<bool> _existsAnything(String path) async =>
+      await FileSystemEntity.type(path, followLinks: false) !=
+      FileSystemEntityType.notFound;
+
+  static Future<void> _removeDirectoryQuietly(Directory dir) async {
+    try {
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } on FileSystemException catch (error) {
+      AppLog.e('清除本地書搬移準備的資料夾失敗: $error', error: error);
+    }
+  }
+
+  static Future<void> _removeFileQuietly(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } on FileSystemException catch (error) {
+      AppLog.e('清除本地書搬移準備的檔案失敗: $error', error: error);
+    }
   }
 
   /// 匯入失敗時，沒有任何書指著的那份複本刪掉，不留在本地書資料夾。
@@ -450,4 +574,19 @@ class LocalBookService {
     _txtAccessFilePath = path;
     return _txtAccessFile!;
   }
+}
+
+/// 搬一本本地書到新路徑時先準備好的內容；交易還沒提交前都還不算數。
+class _PreparedMove {
+  const _PreparedMove({
+    required this.oldBook,
+    required this.book,
+    required this.chapters,
+    this.oldAssets,
+  });
+
+  final Book oldBook;
+  final Book book;
+  final List<BookChapter> chapters;
+  final Directory? oldAssets;
 }
