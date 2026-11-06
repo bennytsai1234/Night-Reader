@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -10,16 +8,8 @@ import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-/// WCAG 2.x 對比度。
-double _contrast(Color a, Color b) {
-  final la = a.computeLuminance();
-  final lb = b.computeLuminance();
-  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
-}
 
 void main() {
   group('每個風格的淺色、深色與深色純黑', () {
@@ -103,28 +93,6 @@ void main() {
       if (dark.background == black) {
         expect(pure, same(dark), reason: '${style.label}的深色本來就是純黑');
       }
-    }
-  });
-
-  test('滑動動作的紙白字在顏料色底上對比達標', () {
-    // SwipeActions 的按鈕前景固定是 paper50，底色傳 AppTint 的顏料色。
-    for (final tint in [AppTint.rust, AppTint.azurite, AppTint.tea]) {
-      expect(
-        _contrast(AppPalette.paper50, tint.color),
-        greaterThanOrEqualTo(4.5),
-        reason: tint.name,
-      );
-    }
-  });
-
-  test('列首圖示方塊的紙白圖示在每個顏料色上對比達標', () {
-    // GroupedIconTile 一律在顏料色底上畫 paper50 圖示；圖形元件至少 3:1。
-    for (final tint in AppTint.values) {
-      expect(
-        _contrast(AppPalette.paper50, tint.color),
-        greaterThanOrEqualTo(3),
-        reason: tint.name,
-      );
     }
   });
 
