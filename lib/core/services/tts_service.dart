@@ -35,7 +35,7 @@ class TTSService extends ChangeNotifier {
   final TtsSpeechCoordinator _speechCoordinator = TtsSpeechCoordinator();
 
   bool _isPlaying = false;
-  double _pitch = 1.0;
+  double _pitch = defaultPitch;
   double _rate = defaultRate;
   String? _language;
   List<dynamic> _languages = [];
@@ -109,6 +109,7 @@ class TTSService extends ChangeNotifier {
   /// 沒調過時的語速：2 倍（維護者自己聽書用的設定，2026-11-06）。
   static const double defaultRate = 2.0;
   static const double rateStep = 0.1;
+  static const double defaultPitch = 1.0;
   static const double minPitch = 0.5;
   static const double maxPitch = 2.0;
   static const double pitchStep = 0.1;
@@ -159,10 +160,13 @@ class TTSService extends ChangeNotifier {
       final pitch =
           prefs.getDouble(PreferKey.readerTtsPitch) ??
           prefs.getDouble(PreferKey.speechPitch);
-      if (rate != null) {
-        _rate = _clampParam(rate, minRate, maxRate, defaultRate);
-      }
-      if (pitch != null) _pitch = _clampParam(pitch, minPitch, maxPitch, 1.0);
+      // 沒存過（或同步刪掉了）就回到預設，不留著記憶體裡上一次的值。
+      _rate = rate == null
+          ? defaultRate
+          : _clampParam(rate, minRate, maxRate, defaultRate);
+      _pitch = pitch == null
+          ? defaultPitch
+          : _clampParam(pitch, minPitch, maxPitch, defaultPitch);
       _persistedParams
         ..[PreferKey.readerTtsSpeedMultiplier] = _rate
         ..[PreferKey.readerTtsPitch] = _pitch;
@@ -497,7 +501,9 @@ class TTSService extends ChangeNotifier {
       if (_saveGenerations[key] == generation) {
         await restore(
           _persistedParams[key] ??
-              (key == PreferKey.readerTtsSpeedMultiplier ? defaultRate : 1.0),
+              (key == PreferKey.readerTtsSpeedMultiplier
+                  ? defaultRate
+                  : defaultPitch),
         );
         notifyListeners();
       }
