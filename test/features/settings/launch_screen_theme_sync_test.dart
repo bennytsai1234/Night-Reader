@@ -65,19 +65,19 @@ void main() {
         ),
       );
       expect(calls, [
-        {'light': 'paper', 'dark': 'black', 'mode': 'system'},
+        {'light': 'kraft', 'dark': 'black', 'mode': 'dark'},
       ]);
 
-      themeSettings.setStyle(Brightness.light, AppStyle.kraft);
+      themeSettings.setStyle(Brightness.light, AppStyle.paper);
       themeSettings.setStyle(Brightness.dark, AppStyle.tea);
       themeSettings.setPureBlack(false);
-      settings.setThemeMode(ThemeMode.dark);
+      settings.setThemeMode(ThemeMode.system);
       themeSettings.setGlassStrength(GlassStrength.values.last);
       await tester.pump();
       expect(calls.skip(1), [
-        {'light': 'kraft', 'dark': 'black', 'mode': 'system'},
-        {'light': 'kraft', 'dark': 'tea', 'mode': 'system'},
-        {'light': 'kraft', 'dark': 'tea', 'mode': 'dark'},
+        {'light': 'paper', 'dark': 'black', 'mode': 'dark'},
+        {'light': 'paper', 'dark': 'tea', 'mode': 'dark'},
+        {'light': 'paper', 'dark': 'tea', 'mode': 'system'},
       ], reason: '純黑開著時換深色風格，深色底仍是純黑，不用再送');
     });
 

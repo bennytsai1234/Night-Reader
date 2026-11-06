@@ -10,7 +10,7 @@ import 'app_tokens.dart';
 ThemeData buildAppTheme(
   AppStyle style,
   Brightness brightness, {
-  GlassStrength glassStrength = GlassStrength.frosted,
+  GlassStrength glassStrength = GlassStrength.unspecified,
   AppAccent accent = AppAccent.theme,
   AppPageTransition pageTransition = AppPageTransition.slide,
   bool pureBlack = false,

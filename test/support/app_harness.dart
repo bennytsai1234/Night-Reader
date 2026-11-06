@@ -43,6 +43,7 @@ import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
@@ -99,7 +100,7 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   // 正文：正文轉換的 worker，與 rootBundle 快取的字典字串。
   ReaderV2ContentTransformWorker.instance.stop();
   rootBundle.clear();
-  SharedPreferences.setMockInitialValues(<String, Object>{...prefs});
+  SharedPreferences.setMockInitialValues(_harnessPrefs(prefs));
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
   SyncService.instance = SyncService();
   dbWork.clear();
@@ -135,7 +136,15 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
       await SharedPreferences.getInstance(),
     );
   _mockPlatformChannels();
+  _startChineseDisplay(getIt<SharedPreferences>());
 }
+
+/// 測試環境的偏好設定：玻璃用霧面（預設的實色不模糊，玻璃的進出場檢查與
+/// 幀預算要量有模糊的那種），其餘照 [values]，沒給的照 App 的預設。
+Map<String, Object> _harnessPrefs(Map<String, Object> values) => {
+  PreferKey.glassStrength: GlassStrength.frosted.name,
+  ...values,
+};
 
 void _mockPlatformChannels() {
   final messenger =
@@ -162,6 +171,14 @@ void _mockPlatformChannels() {
       return null;
     });
   }
+  // 閱讀器頁首的電量：和手機上一樣，一訂閱就送出目前的電量。
+  messenger.setMockStreamHandler(
+    const EventChannel('night_reader/battery'),
+    MockStreamHandler.inline(
+      onListen: (arguments, events) =>
+          events.success({'percent': 82, 'charging': false}),
+    ),
+  );
   // 外部連結與分享進 App 的事件串流。
   for (final name in [
     'com.llfbandit.app_links/events',
@@ -180,7 +197,7 @@ void _mockPlatformChannels() {
 Future<void> resetPrefs(Map<String, Object> values) async {
   final prefs = getIt<SharedPreferences>();
   await prefs.clear();
-  for (final MapEntry(:key, :value) in values.entries) {
+  for (final MapEntry(:key, :value) in _harnessPrefs(values).entries) {
     switch (value) {
       case final bool v:
         await prefs.setBool(key, v);
@@ -194,14 +211,20 @@ Future<void> resetPrefs(Map<String, Object> values) async {
         await prefs.setString(key, '$value');
     }
   }
-  // App 開機時從偏好讀進記憶體的值也照新的設定（App 是 ChineseDisplay.start）。
-  // 開著繁簡轉換時書架等字典載好才換成內容，字典要和 App 一樣先載好，不然
-  // 開 App 一直停在骨架。
-  final mode = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
+  _startChineseDisplay(prefs);
+}
+
+/// App 開機時從偏好讀進記憶體的繁簡轉換模式（App 是 ChineseDisplay.start）。
+/// 模式是整個程式共用的，不照偏好重設就沿用上一個測試留下的。開著轉換時
+/// 書架等字典載好才換成內容，字典要和 App 一樣先載好，不然一直停在骨架。
+void _startChineseDisplay(SharedPreferences prefs) {
+  final mode =
+      prefs.getInt(PreferKey.readerChineseConvert) ??
+      ChineseDisplay.defaultMode;
   if (mode != 0 && !ChineseUtils.isInitialized) {
     ChineseUtils.initializeFromDictionaryData([
       for (final path in ChineseUtils.dictionaryAssetPaths)
-        await File(path).readAsString(),
+        File(path).readAsStringSync(),
     ]);
   }
   ChineseDisplay.mode.value = mode;

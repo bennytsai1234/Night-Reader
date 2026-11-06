@@ -66,6 +66,10 @@ void main() {
 
   late _FakeBookDao bookDao;
 
+  // 這組的書都在書架上；除了專門測統一封面的那項，都看書源的封面。
+  setUp(() => UnifiedCovers.enabled.value = false);
+  tearDown(() => UnifiedCovers.enabled.value = UnifiedCovers.defaultEnabled);
+
   void register<T extends Object>(T instance) {
     final getIt = GetIt.instance;
     if (getIt.isRegistered<T>()) getIt.unregister<T>();
@@ -405,7 +409,6 @@ void main() {
     tester,
   ) async {
     UnifiedCovers.enabled.value = true;
-    addTearDown(() => UnifiedCovers.enabled.value = false);
     const cover = 'file:///no/such/cover.jpg';
 
     String? headerCover() => tester

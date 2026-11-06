@@ -127,7 +127,8 @@ class SettingsSync extends SyncKind {
     if (applied.isNotEmpty) {
       if (applied.containsKey(PreferKey.readerChineseConvert)) {
         ChineseDisplay.mode.value =
-            _prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
+            _prefs.getInt(PreferKey.readerChineseConvert) ??
+            ChineseDisplay.defaultMode;
       }
       SettingsSync.applied.value++;
     }

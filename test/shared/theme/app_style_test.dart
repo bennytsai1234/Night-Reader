@@ -101,8 +101,17 @@ void main() {
     Future<void> pump(AppStyle style, ThemeMode mode) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: buildAppTheme(style, Brightness.light),
-          darkTheme: buildAppTheme(style, Brightness.dark),
+          // 強調色跟隨主題，主色才是風格自己的。
+          theme: buildAppTheme(
+            style,
+            Brightness.light,
+            accent: AppAccent.theme,
+          ),
+          darkTheme: buildAppTheme(
+            style,
+            Brightness.dark,
+            accent: AppAccent.theme,
+          ),
           themeMode: mode,
           home: Builder(
             builder: (ctx) {
@@ -208,10 +217,10 @@ void main() {
       return prefs;
     }
 
-    test('預設淺色紙墨、深色素色、純黑開著', () async {
+    test('預設淺色牛皮紙、深色素色、純黑開著', () async {
       await register(<String, Object>{});
       final provider = ThemeSettingsProvider();
-      expect(provider.lightStyle, AppStyle.paper);
+      expect(provider.lightStyle, AppStyle.kraft);
       expect(provider.darkStyle, AppStyle.plain);
       expect(provider.pureBlack, isTrue);
     });
@@ -219,17 +228,17 @@ void main() {
     test('淺色與深色各自保存，改一邊不動另一邊', () async {
       final prefs = await register(<String, Object>{});
       final provider = ThemeSettingsProvider();
-      provider.setStyle(Brightness.light, AppStyle.kraft);
+      provider.setStyle(Brightness.light, AppStyle.bamboo);
       expect(provider.darkStyle, AppStyle.plain);
       provider.setStyle(Brightness.dark, AppStyle.tea);
-      expect(provider.lightStyle, AppStyle.kraft);
+      expect(provider.lightStyle, AppStyle.bamboo);
       provider.setPureBlack(false);
 
-      expect(prefs.getString(PreferKey.lightStyle), AppStyle.kraft.name);
+      expect(prefs.getString(PreferKey.lightStyle), AppStyle.bamboo.name);
       expect(prefs.getString(PreferKey.darkStyle), AppStyle.tea.name);
       expect(prefs.getBool(PreferKey.pureBlack), isFalse);
       final reopened = ThemeSettingsProvider();
-      expect(reopened.lightStyle, AppStyle.kraft);
+      expect(reopened.lightStyle, AppStyle.bamboo);
       expect(reopened.darkStyle, AppStyle.tea);
       expect(reopened.pureBlack, isFalse);
     });
@@ -266,19 +275,19 @@ void main() {
       expect(provider.darkStyle, ThemeSettingsProvider.defaultDarkStyle);
     });
 
-    test('強調色預設跟隨主題，保存後重新開啟仍是同一個', () async {
+    test('強調色預設茶金，保存後重新開啟仍是同一個', () async {
       final prefs = await register(<String, Object>{});
       final provider = ThemeSettingsProvider();
-      expect(provider.accent, AppAccent.theme);
+      expect(provider.accent, AppAccent.tea);
 
       provider.setAccent(AppAccent.bamboo);
       expect(prefs.getString(PreferKey.appAccent), AppAccent.bamboo.name);
       expect(ThemeSettingsProvider().accent, AppAccent.bamboo);
     });
 
-    test('無法辨識的強調色回到跟隨主題', () async {
+    test('無法辨識的強調色回到預設', () async {
       await register(<String, Object>{PreferKey.appAccent: 'rainbow'});
-      expect(ThemeSettingsProvider().accent, AppAccent.theme);
+      expect(ThemeSettingsProvider().accent, AppAccent.defaultAccent);
     });
   });
 }

@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/core/services/login_data_backup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -123,6 +124,12 @@ class RestoreService {
         AppLog.e('Restore failed for $fileName: $e', error: e);
         failedFiles.add(fileName);
       }
+    }
+    // 舊備份帶的正文與目錄可能屬於沒還原的書架以外的書，或早就刪掉的書。
+    try {
+      await BookStorageService().discardUnshelvedBooks();
+    } catch (e) {
+      AppLog.e('Restore: discard unshelved books failed: $e', error: e);
     }
     if (readStatsFiles.isNotEmpty) {
       try {
@@ -259,7 +266,10 @@ class RestoreService {
         switch (fileName) {
           case 'books.json':
           case 'bookshelf.json':
-            await _bookDao.upsert(Book.fromJson(item));
+            // 舊備份也帶著書架以外的書（打開詳情或閱讀器時的暫存）：不還原，
+            // 也不拿它把這台書架上的同一本蓋成不在書架上。
+            final book = Book.fromJson(item);
+            if (book.isInBookshelf) await _bookDao.upsert(book);
             break;
           case 'bookSources.json':
           case 'bookSource.json':

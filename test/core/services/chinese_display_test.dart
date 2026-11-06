@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -19,7 +20,10 @@ void main() {
   });
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    // 從不轉換開始，才看得出切到簡轉繁時畫面跟著換。
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      PreferKey.readerChineseConvert: 0,
+    });
     GetIt.instance.registerSingleton<SharedPreferences>(
       await SharedPreferences.getInstance(),
     );

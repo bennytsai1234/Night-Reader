@@ -21,6 +21,8 @@ import 'core/storage/app_storage_paths.dart';
 import 'core/storage/reader_layout_cache.dart';
 import 'app_providers.dart';
 import 'shared/layout/tablet_text_scale.dart';
+import 'shared/theme/app_chrome.dart';
+import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
@@ -37,6 +39,7 @@ import 'core/engine/source_isolate/source_isolate.dart';
 import 'core/network/cloudflare.dart';
 import 'core/services/webview_cloudflare_solver.dart';
 import 'core/services/app_log_service.dart';
+import 'core/services/book_storage_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
 import 'features/search/search_provider.dart';
@@ -221,18 +224,24 @@ class _StartupFailureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = '$error\n\n$stackTrace';
-    // 偏好設定可能也讀不到：用預設風格跟隨系統深淺，不要落回 Material 預設紫。
+    // 偏好設定可能也讀不到：照沒設定過時的外觀，接在純黑的啟動畫面後面，
+    // 不要落回 Material 預設紫。
     return MaterialApp(
       title: kAppDisplayName,
       debugShowCheckedModeBanner: false,
+      themeMode: SettingsProviderBase.defaultThemeMode,
       theme: buildAppTheme(
         ThemeSettingsProvider.defaultLightStyle,
         Brightness.light,
+        glassStrength: GlassStrength.defaultStrength,
+        accent: AppAccent.defaultAccent,
       ),
       darkTheme: buildAppTheme(
         ThemeSettingsProvider.defaultDarkStyle,
         Brightness.dark,
-        pureBlack: true,
+        glassStrength: GlassStrength.defaultStrength,
+        accent: AppAccent.defaultAccent,
+        pureBlack: ThemeSettingsProvider.defaultPureBlack,
       ),
       home: Scaffold(
         body: SafeArea(
@@ -264,7 +273,7 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 /// 開 App 的進場播完才做的清理，不和進場搶主執行緒（ADR 0018）。
 void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
-  unawaited(_pruneReaderLayoutCaches());
+  unawaited(_pruneStoredBooks());
   unawaited(PunctuationInk.onLaunchSettled());
   // 進搜尋頁的第一幀就畫得出搜尋紀錄。
   unawaited(SearchProvider.prefetchHistory());
@@ -278,8 +287,14 @@ void _restoreWebViewUserAgent(SharedPreferences prefs) {
       unawaited(prefs.setString(PreferKey.webViewUserAgent, userAgent));
 }
 
-/// 刪掉資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
-Future<void> _pruneReaderLayoutCaches() async {
+/// 刪掉書架以外的書留下的資料（剛開 App，還沒有詳情或閱讀器開著），再刪
+/// 資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
+Future<void> _pruneStoredBooks() async {
+  try {
+    await BookStorageService().discardUnshelvedBooks();
+  } catch (e, stack) {
+    AppLog.e('Discard unshelved books failed: $e', error: e, stackTrace: stack);
+  }
   try {
     final books = await getIt<BookDao>().getAll();
     await ReaderLayoutCache.retainOnly(

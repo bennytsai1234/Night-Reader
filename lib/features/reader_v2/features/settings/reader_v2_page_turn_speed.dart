@@ -9,6 +9,11 @@ enum ReaderV2PageTurnSpeed {
   final String label;
   final Duration duration;
 
-  static ReaderV2PageTurnSpeed parse(String? name) =>
-      values.firstWhere((speed) => speed.name == name, orElse: () => normal);
+  /// 沒設定過或認不得時：慢（維護者自己讀書用的設定，2026-11-06）。
+  static const ReaderV2PageTurnSpeed defaultSpeed = slow;
+
+  static ReaderV2PageTurnSpeed parse(String? name) => values.firstWhere(
+    (speed) => speed.name == name,
+    orElse: () => defaultSpeed,
+  );
 }

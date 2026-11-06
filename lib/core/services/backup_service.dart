@@ -54,12 +54,14 @@ class BackupService {
       await File(p.join(backupFolder.path, 'manifest.json'))
           .writeAsString(jsonEncode(manifest));
 
-      // 1. 導出資料庫表為 JSON (對標 Android Backup.kt)
-      await _writeJson(
-        backupFolder,
-        'bookshelf.json',
-        await getIt<BookDao>().getAll(),
-      );
+      // 1. 導出資料庫表為 JSON (對標 Android Backup.kt)。書只帶書架上的，
+      // 下載任務與已下載的正文也只帶它們的：書架以外的書是打開詳情或閱讀器
+      // 時的暫存。抓失敗的章不帶，還原的那台自己重抓。
+      final shelf = await getIt<BookDao>().getInBookshelf();
+      final shelfOrigins = {
+        for (final book in shelf) book.bookUrl: book.origin,
+      };
+      await _writeJson(backupFolder, 'bookshelf.json', shelf);
       await _writeJson(
         backupFolder,
         'bookSource.json',
@@ -85,16 +87,18 @@ class BackupService {
         'bookGroup.json',
         await getIt<BookGroupDao>().getAll(),
       );
-      await _writeJson(
-        backupFolder,
-        'downloadTask.json',
-        await getIt<DownloadDao>().getAll(),
-      );
-      await _writeJson(
-        backupFolder,
-        'readerChapterContent.json',
-        await getIt<ReaderChapterContentDao>().getAllEntries(),
-      );
+      await _writeJson(backupFolder, 'downloadTask.json', [
+        for (final task in await getIt<DownloadDao>().getAll())
+          if (shelfOrigins.containsKey(task.bookUrl)) task,
+      ]);
+      await _writeJson(backupFolder, 'readerChapterContent.json', [
+        for (final entry
+            in await getIt<ReaderChapterContentDao>().getEntriesByBookUrls(
+              shelfOrigins.keys,
+            ))
+          if (entry.isReady && shelfOrigins[entry.bookUrl] == entry.origin)
+            entry,
+      ]);
       await _writeJson(
         backupFolder,
         'readRecord.json',

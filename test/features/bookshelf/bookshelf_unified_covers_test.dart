@@ -51,7 +51,7 @@ void main() {
 
   tearDown(() async {
     provider.dispose();
-    UnifiedCovers.enabled.value = false;
+    UnifiedCovers.enabled.value = UnifiedCovers.defaultEnabled;
     await GetIt.instance.reset();
   });
 
@@ -71,8 +71,16 @@ void main() {
   String? tileCover(WidgetTester tester) =>
       tester.widget<BookCoverWidget>(find.byType(BookCoverWidget)).coverUrl;
 
-  testWidgets('統一封面打勾後書架改畫預設封面，取消後換回書的封面', (tester) async {
+  testWidgets('沒設定過時統一封面開著', (tester) async {
     await setUpShelf({});
+    await pumpShelf(tester);
+
+    expect(provider.unifiedCovers, isTrue);
+    expect(tileCover(tester), isNull);
+  });
+
+  testWidgets('統一封面打勾後書架改畫預設封面，取消後換回書的封面', (tester) async {
+    await setUpShelf({'bookshelf_unified_covers': false});
     await pumpShelf(tester);
     expect(tileCover(tester), cover);
 
