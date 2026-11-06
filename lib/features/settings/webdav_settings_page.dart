@@ -6,7 +6,6 @@ import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/features/settings/full_sync_dialog.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
@@ -103,7 +102,6 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = AppChrome.of(context);
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: 'WebDAV'),
@@ -134,16 +132,9 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                 keyboardType: TextInputType.visiblePassword,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => unawaited(_connect()),
-                suffix: IconButton(
-                  tooltip: _revealed ? '隱藏密碼' : '顯示密碼',
+                suffix: PasswordRevealButton(
+                  revealed: _revealed,
                   onPressed: () => setState(() => _revealed = !_revealed),
-                  icon: Icon(
-                    _revealed
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 18,
-                    color: chrome.sectionText,
-                  ),
                 ),
               ),
             ],

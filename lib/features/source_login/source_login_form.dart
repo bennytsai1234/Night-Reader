@@ -96,21 +96,20 @@ class SourceLoginButtons extends StatelessWidget
 
   List<List<SourceLoginButtonSlot>> _lines(BuildContext context, double width) {
     final style = AppTextStyles.uiSm.copyWith(fontWeight: FontWeight.w500);
-    final scaler = MediaQuery.textScalerOf(context);
     return layoutSourceLoginButtons(
       buttons,
       width,
-      intrinsic: (button) {
-        final painter = TextPainter(
-          text: TextSpan(text: button.name.trim(), style: style),
-          textDirection: TextDirection.ltr,
-          textScaler: scaler,
-          maxLines: 1,
-        )..layout();
-        final textWidth = painter.width;
-        painter.dispose();
-        return textWidth + _capsuleHorizontalPadding;
-      },
+      // 照 [Text] 的方式量（疊上主題的預設字樣）：原本直接拿這個字樣量，少了
+      // 主題的字型，膠囊窄了一點，字被截成「切換線…」。
+      intrinsic: (button) =>
+          GroupedItemShape.textSize(
+            context,
+            button.name.trim(),
+            style: style,
+            maxWidth: double.infinity,
+            maxLines: 1,
+          ).width.ceilToDouble() +
+          _capsuleHorizontalPadding,
     );
   }
 
@@ -214,7 +213,8 @@ class SourceLoginField extends StatefulWidget implements GroupedSkeletonItem {
 
   bool get _password => row.type == SourceLoginRowType.password;
 
-  /// 標題的字，與輸入框裡的字（密碼照點的寬度）。
+  /// 標題的字，與輸入框裡的字（密碼照點的寬度）；密碼框右側的眼睛鈕把輸入框
+  /// 撐到至少和它的點擊範圍一樣高，鈕上的圖示一塊。
   @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
@@ -228,21 +228,31 @@ class SourceLoginField extends StatefulWidget implements GroupedSkeletonItem {
       width: inner,
     );
     final text = controller.text;
+    final suffixWidth = _password ? PasswordRevealButton.extent : 0.0;
     final field = groupedTextFieldShape(
       context,
       style: _inputStyle(context),
-      width: inner - (_password ? AppGrouped.rowMinHeight : 0),
+      width: inner - suffixWidth,
       text: _password ? '•' * text.length : text,
       maxLines: 1,
     );
     final fieldTop = AppSpacing.md + label.height;
+    final box = math.max(field.height + AppSpacing.md * 2, suffixWidth);
     return GroupedItemShape(
-      fieldTop + field.height + AppSpacing.md * 2,
+      fieldTop + box,
       marks: [
         ...label.marksAt(const Offset(AppGrouped.rowPadding, AppSpacing.md)),
         ...field.marksAt(
           Offset(AppGrouped.rowPadding, fieldTop + AppSpacing.md),
         ),
+        if (_password)
+          ...groupedInputSuffixShape(
+            context,
+            PasswordRevealButton(revealed: false, onPressed: () {}),
+            height: box,
+          ).marksAt(
+            Offset(AppGrouped.rowPadding + inner - suffixWidth, fieldTop),
+          ),
       ],
     );
   }
@@ -296,16 +306,9 @@ class _SourceLoginFieldState extends State<SourceLoginField> {
                 vertical: AppSpacing.md,
               ),
               suffixIcon: password
-                  ? IconButton(
-                      tooltip: _revealed ? '隱藏密碼' : '顯示密碼',
+                  ? PasswordRevealButton(
+                      revealed: _revealed,
                       onPressed: () => setState(() => _revealed = !_revealed),
-                      icon: Icon(
-                        _revealed
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        size: 18,
-                        color: chrome.sectionText,
-                      ),
                     )
                   : null,
               suffixIconConstraints: const BoxConstraints(

@@ -26,11 +26,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -361,7 +363,46 @@ final scenarios = <String, _Scenario>{
     _tapMineRow('書源管理'),
     before: _visitSourcesOnce,
   ),
+  'source-login': _Scenario(
+    '書源管理長按書源點「登入」（有登入表單）',
+    (t) => t.tap(find.text('登入')),
+    before: _openLoginSourceMenu,
+  ),
+  for (final row in const ['開源許可證', '隱私說明', '權限', '更新紀錄', '崩潰日誌', '背景下載佇列'])
+    'about-$row': _Scenario(
+      '「關於夜讀」點「$row」',
+      _tapMineRow(row),
+      before: _through(['關於夜讀']),
+    ),
+  'sync-space': _Scenario(
+    '「備份與同步」點「同步空間」',
+    _tapMineRow('同步空間'),
+    before: _through(['備份與同步']),
+  ),
+  'webdav': _Scenario(
+    '「同步空間」點「WebDAV」（有密碼欄）',
+    _tapMineRow('WebDAV'),
+    before: _through(['備份與同步', '同步空間']),
+  ),
 };
+
+/// 從「我的」依序點 [rows]，每一頁都換好。
+Steps _through(List<String> rows) => (tester) async {
+  await _toMine(tester);
+  for (final row in rows) {
+    await _tapMineRow(row)(tester);
+    await settle(tester, const Duration(milliseconds: 1500));
+  }
+};
+
+/// 書源管理長按要登入的書源，選單打開。
+Future<void> _openLoginSourceMenu(WidgetTester tester) async {
+  await _toMine(tester);
+  await _tapMineRow('書源管理')(tester);
+  await settle(tester, const Duration(milliseconds: 2500));
+  await tester.longPress(find.text(_loginSource.bookSourceName));
+  await settle(tester, const Duration(milliseconds: 1000));
+}
 
 /// 打開書源管理一次、讀完再返回「我的」：書源管理記下了這次讀到的書源。
 Future<void> _visitSourcesOnce(WidgetTester tester) async {
@@ -426,6 +467,19 @@ Future<void> _seedBook({
   }
 }
 
+/// 有登入表單的書源（書源管理長按選單裡有「登入」）。表單照書源登入常見的
+/// 樣子：帳號、密碼與一顆切換線路的按鈕。
+final _loginSource = BookSource(
+  bookSourceUrl: 'https://login.example.com',
+  bookSourceName: '要登入的書源',
+  loginUrl: '@js: function login() {}',
+  loginUi: '''[
+    {name: "帳號", type: "text"},
+    {name: "密碼", type: "password"},
+    {name: "切換線路", type: "button", action: "line()"},
+  ]''',
+);
+
 /// 情境用的額外書：剛加入的新書、章名很長的書、網路上的書（正文要抓）、抓
 /// 不到正文的書、本機 TXT。在 `runAsync` 裡、[seedLibrary] 之後呼叫。
 Future<void> _seedExtraBooks() async {
@@ -465,6 +519,7 @@ Future<void> _seedExtraBooks() async {
     titles: [for (var i = 0; i < 12; i++) '第${i + 1}章 抓不到'],
   );
   await seedSiteSource();
+  await getIt<BookSourceDao>().upsertAll([_loginSource]);
   await installFakeSite();
   // 同書架的「匯入本機書」：解析完把書和目錄一起存進書架。
   final imported = (await LocalBookService().importBook(_localTxtPath))!;

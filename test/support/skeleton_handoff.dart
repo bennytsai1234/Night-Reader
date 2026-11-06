@@ -77,6 +77,17 @@ class _Slot {
 
   /// 換上來的內容，相對內容層左上角（和骨架層疊在同一個位置）。
   List<HandoffMark>? content;
+
+  /// 換場後螢幕在這一層的範圍（和 [content] 同一個座標）；只比這裡面的。
+  Rect? visible;
+
+  /// [snapshot] 裡換場後在螢幕裡的骨架條。骨架只畫到畫面邊，畫到邊的那一
+  /// 列可能整列在畫面外；頁面滑進來時整層都還在畫面外，所以照換場後停好的
+  /// 位置算，不照骨架那一格的位置。
+  List<Rect> barsOf(_Snapshot snapshot) => [
+    for (final bar in snapshot.bars)
+      if (visible == null || bar.overlaps(visible!)) bar,
+  ];
   Offset contentOrigin = Offset.zero;
   int? contentFrame;
   String? contentImage;
@@ -161,14 +172,14 @@ class SkeletonHandoffWatch {
       final origin = _rectOf(parent).topLeft;
       // 骨架只畫到畫面邊（再下面的列捲到才建，`GroupedItemShape`），畫面外
       // 的內容不比。
-      final view = tester.view;
-      final screen = Offset.zero & view.physicalSize / view.devicePixelRatio;
+      final screen = _screenOf(tester);
       slot
         ..content = [
           for (final mark in _marksUnder(tester, content))
             if (mark.rect.overlaps(screen))
               HandoffMark(mark.rect.shift(-origin), mark.text),
         ]
+        ..visible = screen.shift(-origin)
         ..contentOrigin = origin
         ..contentFrame = _frame;
       shots.add(('slot$index-content', (file) => slot.contentImage = file));
@@ -191,7 +202,7 @@ class SkeletonHandoffWatch {
       }
       final lines = <String>[];
       for (final (i, snapshot) in slot.snapshots.indexed) {
-        final problems = compareBars(snapshot.bars, content);
+        final problems = compareBars(slot.barsOf(snapshot), content);
         if (problems.isEmpty) continue;
         lines.add(
           '  骨架的第 ${i + 1} 種樣子（共 ${slot.snapshots.length} 種，'
@@ -231,7 +242,7 @@ class SkeletonHandoffWatch {
                 'bars': [for (final bar in snapshot.bars) _rectJson(bar)],
                 'problems': [
                   if (slot.content case final content?)
-                    for (final p in compareBars(snapshot.bars, content))
+                    for (final p in compareBars(slot.barsOf(snapshot), content))
                       {
                         'kind': p.kind,
                         'message': p.message,
@@ -439,6 +450,12 @@ List<Rect> _barsUnder(WidgetTester tester, Element layer) {
     );
   }
   return bars;
+}
+
+/// 整個螢幕（邏輯座標）。
+Rect _screenOf(WidgetTester tester) {
+  final view = tester.view;
+  return Offset.zero & view.physicalSize / view.devicePixelRatio;
 }
 
 /// 內容層裡看得到的每一塊（同 [contentLayoutOf]），字的那幾塊標上是哪段字。

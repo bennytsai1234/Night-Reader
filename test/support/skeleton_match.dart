@@ -94,10 +94,15 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
                 (decoration.color?.a ?? 0) > 0:
           marks.add(rect);
           return;
-        // 文字按鈕按下時的水波紋那一層看不到，不算。
+        // 按鈕按下時的水波紋那一層看不到，不算。圖示按鈕的水波紋比按鈕的
+        // 點擊範圍小一圈，所以看落不落在按鈕裡。
         case RenderCustomPaint(painter: CustomPainter())
             when rect.width < width * 0.5 &&
-                !buttons.any((button) => _near(button, rect)):
+                !buttons.any(
+                  (button) =>
+                      button.inflate(0.5).contains(rect.topLeft) &&
+                      button.inflate(0.5).contains(rect.bottomRight),
+                ):
           marks.add(rect);
           return;
         case RenderPhysicalShape(:final color)

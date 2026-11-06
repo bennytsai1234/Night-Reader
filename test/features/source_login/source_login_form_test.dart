@@ -1,6 +1,12 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/source/source_login_ui.dart';
 import 'package:night_reader/features/source_login/source_login_form.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
+
+import '../../support/screenshot.dart';
 
 SourceLoginRow _button(
   double basis, {
@@ -58,5 +64,28 @@ void main() {
     expect(_layout([_button(1.5, grow: 0)]), [
       [(0, 300.0)],
     ]);
+  });
+
+  // 照字寬排的按鈕，名稱整個放得下，不被截成「…」。
+  testWidgets('an auto button shows its whole name', (tester) async {
+    await loadScreenshotFonts();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Scaffold(
+          body: SourceLoginButtons(
+            buttons: [
+              for (final name in ['切換線路', '登入', 'Get token'])
+                _button(-1, grow: 0, name: name),
+            ],
+            onPressed: (_) {},
+          ),
+        ),
+      ),
+    );
+    for (final name in ['切換線路', '登入', 'Get token']) {
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(name));
+      expect(paragraph.didExceedMaxLines, isFalse, reason: name);
+    }
   });
 }
