@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/sync/local_book_sync.dart';
@@ -149,6 +150,20 @@ class _Phone {
     for (final book in await books.getInBookshelf())
       if (book.isLocal) book,
   ];
+
+  /// 模擬還原另一台手機的備份：書與目錄指著 [url]，原檔不在這台。
+  Future<void> moveBook(Book book, String url) async {
+    final list = await chapters.getByBook(book.bookUrl);
+    await db.transaction(() async {
+      await books.deleteByUrl(book.bookUrl);
+      await books.upsert(book.copyWith(bookUrl: url));
+      await chapters.deleteByBook(book.bookUrl);
+      await chapters.insertChapters([
+        for (final chapter in list)
+          chapter.copyWith(bookUrl: url, url: '$url#${chapter.index}'),
+      ]);
+    });
+  }
 
   Future<LocalBookSyncResult> syncLocalBooks() async {
     final session = localBooks();
@@ -537,6 +552,184 @@ void main() {
       expect(dir.listSync(), hasLength(1), reason: '下載的那份用完就刪');
     });
 
+    test('a missing original that cannot be written back is moved into the '
+        'library and the book follows it', () async {
+      await a.import('夜航.txt', _novel);
+      await a.syncLocalBooks();
+      await b.syncLocalBooks();
+      final book = (await b.shelf()).single;
+      await b.books.updateProgress(book.bookUrl, 1, '第二章 霧', 2);
+      final progressed = (await b.books.getByUrl(book.bookUrl))!;
+
+      // 還原另一台的備份：書與目錄指著那台的 App 資料夾，這個路徑在這台
+      // 寫不進去（上層是一個檔，不是資料夾）。
+      final blocked = File(p.join(b.root.path, 'blocked'));
+      await blocked.writeAsString('不是資料夾');
+      final lostPath = p.join(blocked.path, '夜航.txt');
+      final lostUrl = 'local://$lostPath';
+      final chapters = await b.chapters.getByBook(book.bookUrl);
+      await b.db.transaction(() async {
+        await b.books.deleteByUrl(book.bookUrl);
+        await b.books.upsert(progressed.copyWith(bookUrl: lostUrl));
+        await b.chapters.deleteByBook(book.bookUrl);
+        await b.chapters.insertChapters([
+          for (final chapter in chapters)
+            chapter.copyWith(
+              bookUrl: lostUrl,
+              url: '$lostUrl#${chapter.index}',
+            ),
+        ]);
+      });
+      File(LocalBookService.filePathOf(book)).deleteSync();
+
+      final plan = await b.localBooks().plan();
+      expect(plan.tasks.map((task) => task.action), [LocalBookAction.download]);
+      final result = await b.localBooks().run(plan);
+      expect(result.failures, isEmpty);
+
+      final repaired = (await b.shelf()).single;
+      final repairedPath = LocalBookService.filePathOf(repaired);
+      expect(repairedPath, isNot(lostPath));
+      expect(File(repairedPath).readAsStringSync(), _novel);
+      final repairedChapters = await b.chapters.getByBook(repaired.bookUrl);
+      expect(repairedChapters, hasLength(3));
+      expect(
+        repairedChapters.every(
+          (chapter) => chapter.url.startsWith(repaired.bookUrl),
+        ),
+        isTrue,
+      );
+      expect(repaired.chapterIndex, 1);
+      expect(repaired.charOffset, 2);
+      expect((await b.localBooks().plan()).isEmpty, isTrue);
+    });
+
+    test('two books with the same fingerprint each keep their own file, '
+        'chapters and progress after moving', () async {
+      await a.import('夜航.txt', _novel);
+      await a.syncLocalBooks();
+      await b.syncLocalBooks();
+      final first = (await b.shelf()).single;
+      await b.books.updateProgress(first.bookUrl, 2, '第三章 燈塔', 4);
+      final saved = (await b.books.getByUrl(first.bookUrl))!;
+
+      final blocked = File(p.join(b.root.path, 'blocked'));
+      await blocked.writeAsString('不是資料夾');
+      final lost1 = 'local://${p.join(blocked.path, '夜航.txt')}';
+      final lost2 = 'local://${p.join(blocked.path, '夜航（舊）.txt')}';
+      final chapters = await b.chapters.getByBook(saved.bookUrl);
+      final second = saved.copyWith(
+        bookUrl: lost2,
+        name: '夜航（舊）',
+        chapterIndex: 0,
+        charOffset: 0,
+        durChapterTitle: '第一章 夜航',
+      );
+      await b.books.upsert(second);
+      await b.chapters.insertChapters([
+        for (final chapter in chapters)
+          chapter.copyWith(bookUrl: lost2, url: '$lost2#${chapter.index}'),
+      ]);
+      await b.moveBook(saved, lost1);
+      File(LocalBookService.filePathOf(first)).deleteSync();
+
+      final plan = await b.localBooks().plan();
+      expect(plan.tasks.map((task) => task.action), [LocalBookAction.download]);
+      expect((await b.localBooks().run(plan)).failures, isEmpty);
+
+      final shelf = await b.shelf();
+      expect(shelf, hasLength(2));
+      for (final book in shelf) {
+        final path = LocalBookService.filePathOf(book);
+        expect(File(path).readAsStringSync(), _novel, reason: book.name);
+        expect(await b.chapters.getByBook(book.bookUrl), hasLength(3));
+      }
+      final repaired = shelf.firstWhere((book) => book.name == '夜航');
+      expect(repaired.bookUrl, isNot(lost1));
+      expect(repaired.chapterIndex, 2);
+      expect(repaired.charOffset, 4);
+      final old = shelf.firstWhere((book) => book.name == '夜航（舊）');
+      expect(old.bookUrl, isNot(lost2));
+      expect(old.chapterIndex, 0);
+      expect((await b.localBooks().plan()).isEmpty, isTrue);
+    });
+
+    test('a non-shelf book already at the download path is not overwritten '
+        'or mixed into the repaired chapters', () async {
+      await a.import('夜航.txt', _novel);
+      await a.syncLocalBooks();
+      await b.syncLocalBooks();
+      final book = (await b.shelf()).single;
+      final occupiedPath = LocalBookService.filePathOf(book);
+      final occupiedUrl = book.bookUrl;
+      final blocked = File(p.join(b.root.path, 'blocked'));
+      await blocked.writeAsString('不是資料夾');
+      final lostUrl = 'local://${p.join(blocked.path, '夜航.txt')}';
+      final chapters = await b.chapters.getByBook(book.bookUrl);
+      await b.moveBook(book, lostUrl);
+      // 下載會選到原本的 InkpageBooks/夜航.txt：那裡已經有一本不在書架的
+      // 舊書與它的章節，搬入時不能把它蓋掉或混進新目錄。
+      final stale = book.copyWith(bookUrl: occupiedUrl, isInBookshelf: false);
+      await b.books.upsert(stale);
+      await b.chapters.insertChapters([
+        chapters.first.copyWith(
+          bookUrl: occupiedUrl,
+          url: '$occupiedUrl#99',
+          index: 99,
+        ),
+      ]);
+      File(occupiedPath).deleteSync();
+
+      final plan = await b.localBooks().plan();
+      expect(plan.tasks.map((task) => task.action), [LocalBookAction.download]);
+      expect((await b.localBooks().run(plan)).failures, isEmpty);
+
+      final repaired = (await b.shelf()).single;
+      expect(repaired.bookUrl, isNot(occupiedUrl));
+      expect(
+        File(LocalBookService.filePathOf(repaired)).readAsStringSync(),
+        _novel,
+      );
+      expect(await b.chapters.getByBook(repaired.bookUrl), hasLength(3));
+      expect(await b.books.getByUrl(occupiedUrl), isNotNull);
+      final staleChapters = await b.chapters.getByBook(occupiedUrl);
+      expect(staleChapters, hasLength(1));
+      expect(staleChapters.single.index, 99);
+    });
+
+    test('a failure while moving books leaves every book and file where it '
+        'was', () async {
+      await a.import('夜航.txt', _novel);
+      final book = (await a.shelf()).single;
+      await a.books.updateProgress(book.bookUrl, 1, '第二章 霧', 2);
+      final saved = (await a.books.getByUrl(book.bookUrl))!;
+      final blocked = File(p.join(a.root.path, 'blocked'));
+      await blocked.writeAsString('不是資料夾');
+      final lostUrl = 'local://${p.join(blocked.path, '夜航.txt')}';
+      await a.moveBook(saved, lostUrl);
+      final source = File(p.join(a.root.path, 'picked', '夜航 (再匯入).txt'));
+      await source.parent.create(recursive: true);
+      await source.writeAsString(_novel);
+
+      await expectLater(
+        LocalBookService().addToShelf(
+          source.path,
+          bookDao: a.books,
+          chapterDao: _FailingChapterDao(a.db),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final still = (await a.books.getByUrl(lostUrl))!;
+      expect(still.chapterIndex, 1);
+      expect(still.charOffset, 2);
+      expect(await a.chapters.getByBook(lostUrl), hasLength(3));
+      final copied = File(
+        p.join(a.root.path, 'docs', 'InkpageBooks', '夜航 (再匯入).txt'),
+      );
+      expect(copied.existsSync(), isFalse);
+    });
+
     test('removing one of two books that share an original keeps the '
         'file', () async {
       final mine = await a.import('夜航.txt', _novel);
@@ -685,4 +878,14 @@ void main() {
       expect(dir.existsSync() ? dir.listSync() : const [], isEmpty);
     });
   });
+}
+
+/// 寫章節時一定失敗，用來看搬書的交易有沒有整批回復。
+class _FailingChapterDao extends ChapterDao {
+  _FailingChapterDao(super.db);
+
+  @override
+  Future<void> insertChapters(List<BookChapter> chapterList) async {
+    throw StateError('寫入章節失敗');
+  }
 }

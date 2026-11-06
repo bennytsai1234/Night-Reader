@@ -33,6 +33,14 @@ void main() {
       expect(regex('(?s)廣告.*結束').isValid(), isTrue);
       expect(regex('(?s)(').isValid(), isFalse);
     });
+
+    test('Java 的原子群組與所有格量詞也能取代，分組編號不變', () {
+      expect(regex(r'\d++').apply('abc123'), 'abc');
+      expect(regex(r'(?>廣告)+').apply('廣告廣告正文'), '正文');
+      expect(regex(r'(?>廣告)(\d+)', r'[$1]').apply('廣告123'), '[123]');
+      expect(regex(r'\d++').isValid(), isTrue);
+      expect(regex(r'(?>廣告)+').isValid(), isTrue);
+    });
   });
 
   test('純文字規則照字面替換，. ^ \$ 不是特殊字元', () {
