@@ -1,5 +1,17 @@
 # 交接（2026-11-05）
 
+## 這條分支：網站與 README 重新設計（原型，不合併）
+
+談定的：給路過的人看的短頁；照 App 的設計語言；用 App 真的截圖（`test/screens/website_shots_test.dart`，照 App 預設拍，風格與深淺用 `SHOT_STYLE`、`SHOT_MODE`）；功能一段一段左右交錯；README 縮成短頁加幾條功能、指向網站；背景用 Codex 產生的圖（`website/proto/sky/`），捲動時要動。否決過：自己畫的 SVG 夜空、a／b／c 三種版型裡的上下與橫條。
+
+等使用者選背景（2026-11-06 給了儀表板）：
+- 甲 `website/proto/hero-sky.html`：開頭一整片夜空，各層視差，近山填頁面底色、捲過開頭就融進紙。建議這個。
+- 乙 `website/proto/dusk.html`：背景固定，從黃昏捲到深夜，內容放在玻璃上。
+
+兩份由 `features.html`（共用的五段）加各自的開頭組成。本機預覽要開 http 伺服器（`website/` 底下 `python -m http.server`），用 file:// 開時山的遮罩讀不到。
+
+選定後：結果寫進 `DESIGN.md`；從 `beta` 開新分支把選定的版本做成正式的 `website/index.html`（截圖與天空圖一起搬，`app-icon.png` 1MB 要縮）；改寫 `README.md`；刪掉這條分支。
+
 分支上的工作（含還沒開工的計畫）寫在各分支自己的 `HANDOFF.md`，`git branch -a` 列出所有分支；這裡只寫 `beta` 的事。
 
 ## 先不做
