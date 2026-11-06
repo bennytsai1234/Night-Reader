@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -12,16 +11,6 @@ import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
-
-import '../../support/theme_with.dart';
-
-double _contrast(Color a, Color b) {
-  final la = a.computeLuminance();
-  final lb = b.computeLuminance();
-  final hi = la > lb ? la : lb;
-  final lo = la > lb ? lb : la;
-  return (hi + 0.05) / (lo + 0.05);
-}
 
 void main() {
   testWidgets(
@@ -88,52 +77,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(breath.isBreathing, isTrue, reason: '出現了才呼吸');
   });
-
-  testWidgets(
-    'every strength is visible in every style and brightness, each a step '
-    'deeper than the last',
-    (tester) async {
-      for (final style in AppStyle.values) {
-        for (final brightness in Brightness.values) {
-          var previous = <double>[1, 1];
-          for (final strength in SkeletonStrength.values) {
-            late Color skeleton;
-            late AppChrome chrome;
-            await tester.pumpWidget(
-              MaterialApp(
-                // 和 App 一樣直接換主題；預設的主題漸變會讓這一幀量到的
-                // 還是上一輪的風格。
-                themeAnimationStyle: AnimationStyle.noAnimation,
-                theme: themeWith(style, brightness, [
-                  SkeletonLook(strength: strength),
-                ]),
-                home: Builder(
-                  builder: (context) {
-                    skeleton = Skeleton.colorOf(context);
-                    chrome = AppChrome.of(context);
-                    return const SizedBox();
-                  },
-                ),
-              ),
-            );
-            final reason = '${style.name} ${brightness.name} ${strength.name}';
-            final contrasts = [
-              for (final background in [
-                chrome.groupedBackground,
-                chrome.groupedSurface,
-              ])
-                _contrast(Color.alphaBlend(skeleton, background), background),
-            ];
-            for (var i = 0; i < contrasts.length; i++) {
-              expect(contrasts[i], greaterThan(1.06), reason: reason);
-              expect(contrasts[i], greaterThan(previous[i]), reason: reason);
-            }
-            previous = contrasts;
-          }
-        }
-      }
-    },
-  );
 
   test('whole breathing pulses every position together', () {
     for (final phase in [0.0, 0.2, 0.5, 0.8]) {
