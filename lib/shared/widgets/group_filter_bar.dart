@@ -126,8 +126,9 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
           Expanded(
             // 一次建立所有膠囊，不隨捲動才建：選到遠處的分組時（包括從
             // 「全部分組」面板選的），_revealSelected 要靠每一顆的
-            // GlobalKey.currentContext 才找得到目標；分組數量不多，這條
-            // 篩選列也不長，全部建起來的成本比猜捲動位置可靠。
+            // GlobalKey.currentContext 才找得到目標。這是拿建立成本換任意
+            // 位置都能可靠定位；分組很多時整列建立的工作量跟著增加，需要
+            // 時再改成支援按索引定位的捲動方式。
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
