@@ -432,7 +432,14 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
                   ) +
                   ReadableWidth.insetOf(context),
               count: p.lastSourceCount,
-              sources: p.sources,
+              rows: p.totalSourceCount == 0
+                  ? p.lastRows
+                  : [
+                      for (final source in p.sources.take(
+                        SourceManagerProvider.lastRowsLimit,
+                      ))
+                        SourceRowLook.of(source),
+                    ],
               progressOf: p.checkService.progressOf,
             )
           : const SizedBox.shrink(),

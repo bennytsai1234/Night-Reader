@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
+import 'licenses_page.dart';
 import 'privacy_pages.dart';
 import 'release_notes_page.dart';
 
@@ -235,14 +236,9 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.azurite,
                 ),
                 title: '開源許可證',
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: '夜讀',
-                  applicationVersion: switch (_package.value) {
-                    (version: null || '', buildNumber: _) => null,
-                    (:final version, :final buildNumber) =>
-                      '$version ($buildNumber)',
-                  },
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LicensesPage()),
                 ),
               ),
               GroupedRow(

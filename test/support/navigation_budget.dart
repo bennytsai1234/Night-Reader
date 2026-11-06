@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -244,6 +245,19 @@ class _FakeSite implements HttpClientAdapter {
   ) async {
     await Future<void>.delayed(latency);
     final uri = options.uri;
+    // 「更新紀錄」一次讀 100 筆、不帶 page；檢查更新一頁頁讀（帶 page），照舊
+    // 找不到，開 App 後的自動檢查不會跳出更新視窗。
+    if (uri.host == 'api.github.com' &&
+        uri.path.endsWith('/releases') &&
+        !uri.queryParameters.containsKey('page')) {
+      return ResponseBody.fromBytes(
+        utf8.encode(jsonEncode(_releases)),
+        200,
+        headers: {
+          Headers.contentTypeHeader: ['application/json; charset=utf-8'],
+        },
+      );
+    }
     final body = uri.host == 'explore.test' ? _page(uri.path) : null;
     return ResponseBody.fromBytes(
       utf8.encode(body ?? ''),
@@ -253,6 +267,27 @@ class _FakeSite implements HttpClientAdapter {
       },
     );
   }
+
+  /// 「更新紀錄」的幾個正式版，說明照 `CHANGELOG.md` 的寫法：一兩句介紹加條列。
+  static final _releases = [
+    for (final (index, version) in ['0.3.5', '0.3.4', '0.3.3'].indexed)
+      {
+        'tag_name': 'v$version',
+        'draft': false,
+        'prerelease': false,
+        'published_at': DateTime.utc(
+          2026,
+          10,
+          20 - index * 7,
+        ).toIso8601String(),
+        'body': [
+          '閱讀器與書架的幾項改進。',
+          '',
+          for (final paragraph in kParagraphs.skip(index).take(3 - index))
+            '- ${paragraph.substring(0, math.min(paragraph.length, 40))}',
+        ].join('\n'),
+      },
+  ];
 
   String? _page(String path) {
     final book = RegExp(r'^/book/(\d+)/?$').firstMatch(path);

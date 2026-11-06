@@ -42,6 +42,21 @@ void main() {
     expect(actualHeight, greaterThan(ExploreBookItem.coverHeight));
   });
 
+  testWidgets('書還沒到只畫封面，不畫長條', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const Scaffold(
+          body: ExploreBookListSkeleton(padding: EdgeInsets.zero),
+        ),
+      ),
+    );
+
+    expect(find.byType(SkeletonBox), findsWidgets);
+    expect(find.byType(SkeletonLine), findsNothing);
+    expect(find.byType(SkeletonShapes), findsNothing);
+  });
+
   for (final brightness in [Brightness.light, Brightness.dark]) {
     testWidgets('分類書單收到資料後只畫真實的文字列（$brightness）', (tester) async {
       final books = [

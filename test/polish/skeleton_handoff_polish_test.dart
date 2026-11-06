@@ -22,19 +22,23 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';
@@ -68,7 +72,15 @@ class _Scenario {
     this.prefs = _infoA,
     this.before = _none,
     this.textScale = 1.0,
-  });
+  }) : launch = false;
+
+  /// 開 App 這一下本身：不先等書架開好，[action] 是掛上 App（[startApp]）。
+  const _Scenario.launch(this.title)
+    : action = startApp,
+      prefs = _infoA,
+      before = _none,
+      textScale = 1.0,
+      launch = true;
 
   /// 總覽頁上顯示的說明。
   final String title;
@@ -78,9 +90,44 @@ class _Scenario {
 
   /// 系統字型放大倍率（[TestPlatformDispatcher.textScaleFactorTestValue]）。
   final double textScale;
+
+  /// 為 true 時不先開好 App，[action] 自己開。
+  final bool launch;
 }
 
 Future<void> _none(WidgetTester tester) async {}
+
+Finder _tab(String label) => find.descendant(
+  of: find.byType(FloatingTabBar),
+  matching: find.text(label),
+);
+
+Future<void> _toMine(WidgetTester tester) async {
+  await tester.tap(_tab('我的'));
+  await settle(tester, const Duration(milliseconds: 1200));
+}
+
+/// 「我的」裡的一列：捲到看得到再點。
+Steps _tapMineRow(String row) => (tester) async {
+  await tester.ensureVisible(find.text(row));
+  await tester.pump();
+  await tester.tap(find.text(row));
+};
+
+/// 發現分頁展開假網站的書源，分類都看得到。
+Future<void> _toExploreSource(WidgetTester tester) async {
+  await tester.tap(_tab('發現'));
+  await settle(tester, const Duration(milliseconds: 1500));
+  await tester.tap(find.text(kSiteName));
+  await settle(tester, const Duration(milliseconds: 1200));
+}
+
+/// 發現的「最新」書單，書都載入好。
+Future<void> _toExploreList(WidgetTester tester) async {
+  await _toExploreSource(tester);
+  await tester.tap(find.text('最新'));
+  await settle(tester, const Duration(milliseconds: 2500));
+}
 
 /// 書架上的書名照目前的繁簡轉換顯示（繁轉簡時是「夜雨听书」）。
 Future<void> _tapBook(WidgetTester tester) =>
@@ -93,9 +140,14 @@ Future<void> _readOnceAndBack(WidgetTester tester) async {
   await settle(tester, const Duration(milliseconds: 1500));
 }
 
-Future<void> _openDetail(WidgetTester tester) async {
+/// 長按書架上的書，預覽選單開好。
+Future<void> _longPressBook(WidgetTester tester) async {
   await tester.longPress(find.text('夜雨聽書').first);
   await settle(tester, const Duration(milliseconds: 900));
+}
+
+Future<void> _openDetail(WidgetTester tester) async {
+  await _longPressBook(tester);
   await tester.tap(find.text('書籍詳情'));
   await settle(tester, const Duration(milliseconds: 1500));
 }
@@ -279,7 +331,93 @@ final scenarios = <String, _Scenario>{
     (t) => _tapOnShelf(t, _localBook),
   ),
   'textscale-a': _Scenario('系統字型放大到 1.5 倍（A 組欄位）', _tapBook, textScale: 1.5),
+  'launch': _Scenario.launch('開 App：書架的骨架換成書架'),
+  'shelf-detail': _Scenario(
+    '書架長按「書籍詳情」',
+    (t) => t.tap(find.text('書籍詳情')),
+    before: _longPressBook,
+  ),
+  'explore': _Scenario('點「發現」分頁', (t) => t.tap(_tab('發現'))),
+  'explore-list': _Scenario(
+    '發現點分類進書單',
+    (t) => t.tap(find.text('最新')),
+    before: _toExploreSource,
+  ),
+  'explore-detail': _Scenario(
+    '發現的書單點書進書籍詳情（書源要從網路抓）',
+    (t) => t.tap(find.text('夜讀第0卷').first),
+    before: _toExploreList,
+  ),
+  for (final row in const [
+    '閱讀偏好',
+    '外觀與主題',
+    '朗讀與語音',
+    '閱讀統計',
+    '書籤與標註',
+    '書源管理',
+    '備份與同步',
+    '關於夜讀',
+  ])
+    'mine-$row': _Scenario('「我的」點「$row」', _tapMineRow(row), before: _toMine),
+  'mine-書源管理-again': _Scenario(
+    '「我的」第二次點「書源管理」（骨架照上次讀到的書源畫）',
+    _tapMineRow('書源管理'),
+    before: _visitSourcesOnce,
+  ),
+  'source-login': _Scenario(
+    '書源管理長按書源點「登入」（有登入表單）',
+    (t) => t.tap(find.text('登入')),
+    before: _openLoginSourceMenu,
+  ),
+  for (final row in const ['開源許可證', '隱私說明', '權限', '更新紀錄', '崩潰日誌', '背景下載佇列'])
+    'about-$row': _Scenario(
+      '「關於夜讀」點「$row」',
+      _tapMineRow(row),
+      before: _through(['關於夜讀']),
+    ),
+  'about-license-text': _Scenario(
+    '「開源許可證」點一個套件（授權全文）',
+    _tapMineRow('collection'),
+    before: _through(['關於夜讀', '開源許可證']),
+  ),
+  'sync-space': _Scenario(
+    '「備份與同步」點「同步空間」',
+    _tapMineRow('同步空間'),
+    before: _through(['備份與同步']),
+  ),
+  'webdav': _Scenario(
+    '「同步空間」點「WebDAV」（有密碼欄）',
+    _tapMineRow('WebDAV'),
+    before: _through(['備份與同步', '同步空間']),
+  ),
 };
+
+/// 從「我的」依序點 [rows]，每一頁都換好。
+Steps _through(List<String> rows) => (tester) async {
+  await _toMine(tester);
+  for (final row in rows) {
+    await _tapMineRow(row)(tester);
+    await settle(tester, const Duration(milliseconds: 1500));
+  }
+};
+
+/// 書源管理長按要登入的書源，選單打開。
+Future<void> _openLoginSourceMenu(WidgetTester tester) async {
+  await _toMine(tester);
+  await _tapMineRow('書源管理')(tester);
+  await settle(tester, const Duration(milliseconds: 2500));
+  await tester.longPress(find.text(_loginSource.bookSourceName));
+  await settle(tester, const Duration(milliseconds: 1000));
+}
+
+/// 打開書源管理一次、讀完再返回「我的」：書源管理記下了這次讀到的書源。
+Future<void> _visitSourcesOnce(WidgetTester tester) async {
+  await _toMine(tester);
+  await _tapMineRow('書源管理')(tester);
+  await settle(tester, const Duration(milliseconds: 2500));
+  await goBack(tester);
+  await settle(tester, const Duration(milliseconds: 1500));
+}
 
 /// 一本書放進書架。[readIndex] 是讀到第幾章（null 是剛加入、沒讀過）；
 /// [withContent] 為 false 時正文不存進資料庫，要從網路抓。
@@ -335,6 +473,19 @@ Future<void> _seedBook({
   }
 }
 
+/// 有登入表單的書源（書源管理長按選單裡有「登入」）。表單照書源登入常見的
+/// 樣子：帳號、密碼與一顆切換線路的按鈕。
+final _loginSource = BookSource(
+  bookSourceUrl: 'https://login.example.com',
+  bookSourceName: '要登入的書源',
+  loginUrl: '@js: function login() {}',
+  loginUi: '''[
+    {name: "帳號", type: "text"},
+    {name: "密碼", type: "password"},
+    {name: "切換線路", type: "button", action: "line()"},
+  ]''',
+);
+
 /// 情境用的額外書：剛加入的新書、章名很長的書、網路上的書（正文要抓）、抓
 /// 不到正文的書、本機 TXT。在 `runAsync` 裡、[seedLibrary] 之後呼叫。
 Future<void> _seedExtraBooks() async {
@@ -374,6 +525,7 @@ Future<void> _seedExtraBooks() async {
     titles: [for (var i = 0; i < 12; i++) '第${i + 1}章 抓不到'],
   );
   await seedSiteSource();
+  await getIt<BookSourceDao>().upsertAll([_loginSource]);
   await installFakeSite();
   // 同書架的「匯入本機書」：解析完把書和目錄一起存進書架。
   final imported = (await LocalBookService().importBook(_localTxtPath))!;
@@ -399,6 +551,41 @@ Future<void> _resetBooks() async {
   );
 }
 
+/// 「開源許可證」列的套件：名稱長短不一，授權是 MIT 那樣幾段的全文。
+Stream<LicenseEntry> _fakeLicenses() async* {
+  const packages = [
+    'archive',
+    'async',
+    'characters',
+    'collection',
+    'cupertino_icons',
+    'dio',
+    'drift',
+    'flutter',
+    'html',
+    'intl',
+    'path',
+    'provider',
+    'shared_preferences',
+    'sqlite3',
+    'vector_math',
+    'xml',
+  ];
+  for (final package in packages) {
+    yield LicenseEntryWithLineBreaks(
+      [package],
+      '''
+Copyright 2014, the $package project authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software.
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.''',
+    );
+  }
+}
+
 void main() {
   setUpAll(loadScreenshotFonts);
   final only = Platform.environment['POLISH_ONLY']?.split(',');
@@ -414,6 +601,8 @@ void main() {
       await setUpApp();
       await seedLibrary();
       await _seedExtraBooks();
+      // 測試沒有建置時收集的授權，放幾個像樣的套件。
+      LicenseRegistry.addLicense(_fakeLicenses);
       if (polishDir.existsSync()) polishDir.deleteSync(recursive: true);
       polishDir.createSync(recursive: true);
     });
@@ -432,13 +621,14 @@ void main() {
           await _resetBooks();
         });
         tester.platformDispatcher.textScaleFactorTestValue = scenario.textScale;
-        await pumpApp(tester);
+        if (!scenario.launch) await pumpApp(tester);
         // 情境的操作找不到東西（例如按鈕不在畫面上）只記下來，不讓整個測試停掉，
         // 後面的情境照常跑。
         SkeletonHandoffWatch? watch;
         String? error;
         try {
           await scenario.before(tester);
+          await waitForSkeletonsGone(tester);
           watch = await watchSkeletonHandoffs(
             tester,
             () => scenario.action(tester),
@@ -509,5 +699,6 @@ void main() {
     );
     // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。
     await tester.pump(const Duration(minutes: 1));
-  });
+    // 全部情境淺色深色跑完要十分鐘以上，超過元件測試預設的 10 分鐘上限。
+  }, timeout: const Timeout(Duration(minutes: 30)));
 }

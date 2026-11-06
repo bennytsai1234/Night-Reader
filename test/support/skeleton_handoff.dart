@@ -69,20 +69,42 @@ class _Snapshot {
 
 /// 一處換場（一個骨架層和旁邊的內容層）。
 class _Slot {
-  _Slot(this.place, this.area);
+  _Slot(this.place, this.area, this.route);
 
   final String place;
   final Rect area;
+
+  /// 骨架所在的頁面。
+  final ModalRoute<Object?>? route;
   final snapshots = <_Snapshot>[];
 
   /// 換上來的內容，相對內容層左上角（和骨架層疊在同一個位置）。
   List<HandoffMark>? content;
+
+  /// 換場後螢幕在這一層的範圍（和 [content] 同一個座標）；只比這裡面的。
+  Rect? visible;
+
+  /// [snapshot] 裡換場後在螢幕裡的骨架條。骨架只畫到畫面邊，畫到邊的那一
+  /// 列可能整列在畫面外；頁面滑進來時整層都還在畫面外，所以照換場後停好的
+  /// 位置算，不照骨架那一格的位置。
+  List<Rect> barsOf(_Snapshot snapshot) => [
+    for (final bar in snapshot.bars)
+      if (visible == null || bar.overlaps(visible!)) bar,
+  ];
   Offset contentOrigin = Offset.zero;
   int? contentFrame;
   String? contentImage;
 
   /// 骨架拿掉時整處換場也一起拿掉了（例如退出頁面），量不到內容。
   bool gone = false;
+
+  /// 頁面還在最上面，骨架還濃濃的就整處被拆掉了：骨架沒有換場就消失（例如
+  /// 資料到了換成另一種元件，進場骨架整個重建）。換場播完才拆掉的（清單
+  /// 的 `SliverSkeletonSwitcher`）拆掉前已經淡得差不多，不算。
+  bool lost = false;
+
+  /// 骨架最後一次看到時的濃度（[SkeletonRevealLayer.presence]）。
+  double presence = 0;
 }
 
 /// 一段操作裡每一處骨架換場的紀錄。每推進一格呼叫一次 [observe]。
@@ -99,7 +121,9 @@ class SkeletonHandoffWatch {
   /// 看過至少一處換場，而且每一處都換完了。
   bool get done =>
       _slots.isNotEmpty &&
-      _slots.values.every((slot) => slot.content != null || slot.gone);
+      _slots.values.every(
+        (slot) => slot.content != null || slot.gone || slot.lost,
+      );
 
   bool get sawAny => _slots.isNotEmpty;
 
@@ -113,8 +137,10 @@ class SkeletonHandoffWatch {
       final parent = _parentOf(element);
       final slot = _slots.putIfAbsent(
         parent,
-        () => _Slot(_placeOf(element), _rectOf(element)),
+        () =>
+            _Slot(_placeOf(element), _rectOf(element), ModalRoute.of(element)),
       );
+      slot.presence = layer.presence.value;
       // 骨架完全淡掉的那幾格看不到，不算畫面上的樣子；換完前又出現（例如
       // 換場途中再載入）時從頭等內容。
       if (layer.presence.value <= 0) continue;
@@ -152,18 +178,31 @@ class SkeletonHandoffWatch {
     for (final (index, MapEntry(key: parent, value: slot))
         in _slots.entries.indexed) {
       if (present.contains(parent) || slot.content != null) continue;
-      if (slot.snapshots.isEmpty) continue;
+      if (slot.snapshots.isEmpty || slot.gone || slot.lost) continue;
       final content = parent.mounted ? _contentLayerUnder(parent) : null;
       if (content == null) {
-        slot.gone = true;
+        final route = slot.route;
+        if (!parent.mounted &&
+            slot.presence >= 0.5 &&
+            route != null &&
+            route.isCurrent) {
+          slot.lost = true;
+        } else {
+          slot.gone = true;
+        }
         continue;
       }
       final origin = _rectOf(parent).topLeft;
+      // 骨架只畫到畫面邊（再下面的列捲到才建，`GroupedItemShape`），畫面外
+      // 的內容不比。
+      final screen = _screenOf(tester);
       slot
         ..content = [
           for (final mark in _marksUnder(tester, content))
-            HandoffMark(mark.rect.shift(-origin), mark.text),
+            if (mark.rect.overlaps(screen))
+              HandoffMark(mark.rect.shift(-origin), mark.text),
         ]
+        ..visible = screen.shift(-origin)
         ..contentOrigin = origin
         ..contentFrame = _frame;
       shots.add(('slot$index-content', (file) => slot.contentImage = file));
@@ -181,12 +220,16 @@ class SkeletonHandoffWatch {
     for (final slot in _slots.values) {
       final content = slot.content;
       if (content == null) {
-        if (!slot.gone) out.add('${slot.place}：骨架一直沒換成內容');
+        if (slot.lost) {
+          out.add('${slot.place}：頁面還在，骨架卻沒有換場就整個拿掉了');
+        } else if (!slot.gone) {
+          out.add('${slot.place}：骨架一直沒換成內容');
+        }
         continue;
       }
       final lines = <String>[];
       for (final (i, snapshot) in slot.snapshots.indexed) {
-        final problems = compareBars(snapshot.bars, content);
+        final problems = compareBars(slot.barsOf(snapshot), content);
         if (problems.isEmpty) continue;
         lines.add(
           '  骨架的第 ${i + 1} 種樣子（共 ${slot.snapshots.length} 種，'
@@ -205,7 +248,7 @@ class SkeletonHandoffWatch {
   /// 格）就是截圖上的位置。
   List<Map<String, Object?>> toJson() => [
     for (final slot in _slots.values)
-      if (!slot.gone || slot.content != null)
+      if (slot.content != null || !(slot.gone || slot.lost))
         {
           'place': slot.place,
           'area': _rectJson(slot.area),
@@ -226,7 +269,7 @@ class SkeletonHandoffWatch {
                 'bars': [for (final bar in snapshot.bars) _rectJson(bar)],
                 'problems': [
                   if (slot.content case final content?)
-                    for (final p in compareBars(snapshot.bars, content))
+                    for (final p in compareBars(slot.barsOf(snapshot), content))
                       {
                         'kind': p.kind,
                         'message': p.message,
@@ -270,6 +313,27 @@ Future<SkeletonHandoffWatch> watchSkeletonHandoffs(
     quiet = watch.done ? quiet + 1 : 0;
   }
   return watch;
+}
+
+/// 一格一格推進，直到畫面上看不到骨架（之前的換場都播完），最多
+/// [maxFrames] 格。要看的那一下之前先等它：上一段的換場還沒播完就按下去，
+/// 量到的是兩段疊在一起的樣子（例如面板正在換場時改每行字數，面板收窄，
+/// 還沒退完的骨架是舊寬度的）。
+Future<void> waitForSkeletonsGone(
+  WidgetTester tester, {
+  int maxFrames = 300,
+}) async {
+  bool showing() => find
+      .byType(SkeletonRevealLayer)
+      .evaluate()
+      .map((e) => e.widget as SkeletonRevealLayer)
+      .any(
+        (l) => l.side == SkeletonRevealSide.skeleton && l.presence.value > 0,
+      );
+  for (var i = 0; i < maxFrames && showing(); i++) {
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
 }
 
 /// 每一條骨架和換上來的內容比：同一行、橫向有重疊的內容合起來算這一條要
@@ -413,6 +477,12 @@ List<Rect> _barsUnder(WidgetTester tester, Element layer) {
     );
   }
   return bars;
+}
+
+/// 整個螢幕（邏輯座標）。
+Rect _screenOf(WidgetTester tester) {
+  final view = tester.view;
+  return Offset.zero & view.physicalSize / view.devicePixelRatio;
 }
 
 /// 內容層裡看得到的每一塊（同 [contentLayoutOf]），字的那幾塊標上是哪段字。

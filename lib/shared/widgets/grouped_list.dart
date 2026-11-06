@@ -252,13 +252,20 @@ class GroupedListView extends StatelessWidget {
     this.bottomPadding = AppSpacing.xxxl,
     this.physics,
     this.ready = true,
+    this.loadingLabel,
   });
 
   final List<Widget> children;
 
   /// 資料還沒準備好時，進場骨架繼續顯示；資料到了才用最後的列形狀換場。
-  /// 只影響推入頁面的進場，已在畫面上的清單直接顯示內容。
+  /// 只影響推入頁面的進場，已在畫面上的清單直接顯示內容。資料到了要沿用
+  /// 同一個 [GroupedListView]（只改 ready 與 [children]）：換成別的元件，
+  /// 進場骨架會整個重建、不換場。
   final bool ready;
+
+  /// 還沒 [ready] 時螢幕閱讀器讀的話（例如「正在載入更新紀錄」）。給了的話
+  /// 這段期間 [children] 是只給骨架量形狀的佔位，不讀出來。
+  final String? loadingLabel;
   final ScrollController? controller;
   final double bottomPadding;
   final ScrollPhysics? physics;
@@ -272,16 +279,25 @@ class GroupedListView extends StatelessWidget {
           bottom: mediaPadding.bottom + bottomPadding,
         ) +
         ReadableWidth.insetOf(context);
-    return _GroupedEntrance(
-      items: children,
-      ready: ready,
-      padding: padding,
-      background: AppChrome.of(context).groupedBackground,
-      builder: (context, items) => ListView(
-        controller: controller,
-        physics: physics,
-        padding: padding,
-        children: items,
+    final placeholder = !ready && loadingLabel != null;
+    // 準備好前後都是同一串元件，只改屬性，進場的狀態才留得住。
+    return Semantics(
+      liveRegion: placeholder,
+      label: placeholder ? loadingLabel : null,
+      child: ExcludeSemantics(
+        excluding: placeholder,
+        child: _GroupedEntrance(
+          items: children,
+          ready: ready,
+          padding: padding,
+          background: AppChrome.of(context).groupedBackground,
+          builder: (context, items) => ListView(
+            controller: controller,
+            physics: physics,
+            padding: padding,
+            children: items,
+          ),
+        ),
       ),
     );
   }
@@ -953,6 +969,8 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
       );
     case Icon(:final size):
       return _glyphShape(size ?? IconTheme.of(context).size ?? 24);
+    case PasswordRevealButton():
+      return _glyphShape(PasswordRevealButton.iconSize);
     case Text(:final data?, :final style, :final maxLines):
       return GroupedItemShape.text(
         context,
@@ -1019,6 +1037,60 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
 
 /// [CircularProgressIndicator] 沒給大小時的直徑（Material 的最小尺寸）。
 const double _spinnerSize = 36;
+
+/// 輸入框右側的 [suffix]（[InputDecoration.suffixIcon]）佔的見方：至少
+/// [AppGrouped.rowMinHeight]，圖示按鈕照它的點擊範圍。輸入框至少有這麼高。
+double groupedInputSuffixExtent(Widget suffix) => switch (suffix) {
+  PasswordRevealButton() => PasswordRevealButton.extent,
+  _ => AppGrouped.rowMinHeight,
+};
+
+/// 輸入框右側的 [suffix] 在高 [height] 的輸入框裡的骨架：置中在它佔的那
+/// 一格（[groupedInputSuffixExtent]）。
+GroupedItemShape groupedInputSuffixShape(
+  BuildContext context,
+  Widget suffix, {
+  required double height,
+}) {
+  final part = groupedPartShape(suffix, context);
+  final width = groupedInputSuffixExtent(suffix);
+  return GroupedItemShape(
+    height,
+    width: width,
+    marks: part.marksAt(
+      Offset((width - (part.width ?? width)) / 2, (height - part.height) / 2),
+    ),
+  );
+}
+
+/// 密碼框右側顯示／隱藏密碼的眼睛鈕，放在 [InputDecoration.suffixIcon]。
+class PasswordRevealButton extends StatelessWidget {
+  const PasswordRevealButton({
+    super.key,
+    required this.revealed,
+    required this.onPressed,
+  });
+
+  /// 密碼現在看得到。
+  final bool revealed;
+  final VoidCallback onPressed;
+
+  static const double iconSize = 18;
+
+  /// 點擊範圍（[IconButton] 的最小可點範圍），也是它在輸入框裡佔的見方。
+  static const double extent = kMinInteractiveDimension;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: revealed ? '隱藏密碼' : '顯示密碼',
+    onPressed: onPressed,
+    icon: Icon(
+      revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+      size: iconSize,
+      color: AppChrome.of(context).sectionText,
+    ),
+  );
+}
 
 /// [Icon] 的骨架：字形撐滿 [size] 見方（[Icon] 的行高是 1），畫成和字條
 /// 一樣圓角的方塊。
@@ -1307,10 +1379,15 @@ class GroupedTextFieldRow extends StatelessWidget
     required double width,
   }) {
     final labelWidth = this.label == null ? 0.0 : this.labelWidth;
+    final fieldWidth = width - AppGrouped.rowPadding * 2 - labelWidth;
+    final suffixWidth = switch (suffix) {
+      final suffix? => groupedInputSuffixExtent(suffix),
+      null => 0.0,
+    };
     final field = groupedTextFieldShape(
       context,
       style: _textStyle(context),
-      width: width - AppGrouped.rowPadding * 2 - labelWidth,
+      width: fieldWidth - suffixWidth,
       text: controller?.text ?? '',
       hint: hintText,
       hintStyle: _hintStyle,
@@ -1326,13 +1403,12 @@ class GroupedTextFieldRow extends StatelessWidget
       ),
       null => null,
     };
-    // 標籤只有上方內距，輸入框上下都有。
+    // 標籤只有上方內距，輸入框上下都有；右側的 [suffix] 把輸入框撐到至少
+    // 和它一樣高。
+    final box = math.max(field.height + AppSpacing.md * 2, suffixWidth);
     final height = math.max(
       AppGrouped.rowMinHeight,
-      math.max(
-        field.height + AppSpacing.md * 2,
-        AppSpacing.md + (label?.height ?? 0),
-      ),
+      math.max(box, AppSpacing.md + (label?.height ?? 0)),
     );
     return GroupedItemShape(
       height,
@@ -1341,6 +1417,13 @@ class GroupedTextFieldRow extends StatelessWidget
         ...field.marksAt(
           Offset(AppGrouped.rowPadding + labelWidth, AppSpacing.md),
         ),
+        if (suffix case final suffix?)
+          ...groupedInputSuffixShape(context, suffix, height: box).marksAt(
+            Offset(
+              AppGrouped.rowPadding + labelWidth + fieldWidth - suffixWidth,
+              0,
+            ),
+          ),
       ],
     );
   }

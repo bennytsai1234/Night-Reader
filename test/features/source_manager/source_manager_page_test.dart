@@ -26,6 +26,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -594,6 +595,69 @@ void main() {
       await pumpPage(tester, sources: 0);
       // 上次讀到 3 個書源，骨架就畫 3 列。
       expect(skeletonRows(), findsNWidgets(3));
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+    });
+
+    testWidgets('draws each row from the sources seen last time', (
+      tester,
+    ) async {
+      List<List<Rect>> rowMarks() => [
+        for (final row
+            in find
+                .descendant(
+                  of: find.byType(SourceListSkeleton),
+                  matching: find.byType(SkeletonShapes),
+                )
+                .evaluate())
+          [
+            for (final mark in (row.widget as SkeletonShapes).shapes(row.size!))
+              mark.rect,
+          ],
+      ];
+
+      await pumpPage(tester);
+      await tester.pumpWidget(const SizedBox());
+
+      // 書源還沒讀到：照上次記下的那幾列畫。
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester);
+      final remembered = rowMarks();
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+      await tester.pump();
+      // 讀到後、換場前照真正的書源畫：每一條都沒變，骨架不會先變一次樣子。
+      final loaded = rowMarks();
+
+      expect(remembered, hasLength(3));
+      expect(loaded, remembered);
+    });
+
+    testWidgets('remembers every source even when reloaded while filtered', (
+      tester,
+    ) async {
+      await pumpPage(tester);
+      final provider = Provider.of<SourceManagerProvider>(
+        tester.element(find.byType(SourceItemTile).first),
+        listen: false,
+      );
+      // 搜尋中校驗完成或同步通知重讀：畫面上只剩一個書源。
+      provider.setSearchQuery('書源2');
+      await tester.runAsync(() => provider.loadSources(showLoading: false));
+      await settleQueries(tester);
+      await tester.pumpWidget(const SizedBox());
+
+      // 下次打開搜尋回到空白，骨架照全部書源的手動順序畫。
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester);
+      final reopened = Provider.of<SourceManagerProvider>(
+        tester.element(find.byType(SourceListSkeleton)),
+        listen: false,
+      );
+      expect(
+        [for (final row in reopened.lastRows) row.name],
+        ['書源0', '書源1', '書源2'],
+      );
       gatedDao.gate!.complete();
       await settleQueries(tester);
     });

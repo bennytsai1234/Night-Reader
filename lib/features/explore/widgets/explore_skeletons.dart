@@ -44,10 +44,7 @@ class ExploreSourceListSkeleton extends StatelessWidget {
     return ExcludeSemantics(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final fill = _countToFill(
-            constraints.maxHeight - padding.vertical,
-            rowHeight,
-          );
+          final fill = _countToFill(constraints, padding, rowHeight);
           final rows = count == null ? fill : count!.clamp(0, fill);
           final cardCount = count == null || count! > fill ? rows + 1 : rows;
           return ListView.builder(
@@ -183,10 +180,7 @@ class ExploreBookListSkeleton extends StatelessWidget {
     return ExcludeSemantics(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final fill = _countToFill(
-            constraints.maxHeight - padding.vertical,
-            rowHeight,
-          );
+          final fill = _countToFill(constraints, padding, rowHeight);
           final count = books.isEmpty ? fill : math.min(books.length, fill);
           return ListView.separated(
             // 同書源列表的骨架：整片每一幀都重畫，不每列各一層。
@@ -197,7 +191,6 @@ class ExploreBookListSkeleton extends StatelessWidget {
             separatorBuilder: (_, _) =>
                 const InsetSeparator(indent: ExploreBookItem.textIndent),
             itemBuilder: (context, index) => _BookRowSkeleton(
-              seed: index % _widths.length,
               book: index < books.length ? books[index] : null,
               isInBookshelf:
                   index < books.length &&
@@ -211,13 +204,8 @@ class ExploreBookListSkeleton extends StatelessWidget {
 }
 
 class _BookRowSkeleton extends StatelessWidget {
-  const _BookRowSkeleton({
-    required this.seed,
-    this.book,
-    this.isInBookshelf = false,
-  });
+  const _BookRowSkeleton({this.book, this.isInBookshelf = false});
 
-  final int seed;
   final SearchBook? book;
   final bool isInBookshelf;
 
@@ -230,7 +218,6 @@ class _BookRowSkeleton extends StatelessWidget {
     final meta = AppTextStyles.bodySm.copyWith(height: 1.35);
     final metaHeight =
         MediaQuery.textScalerOf(context).scale(meta.fontSize!) * meta.height!;
-    double width(int offset) => _widths[(seed + offset) % _widths.length];
     final loaded = book;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -251,13 +238,9 @@ class _BookRowSkeleton extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (loaded == null) ...[
-                  SkeletonLine(style: title, widthFactor: width(0) + 0.2),
-                  const SizedBox(height: 2),
-                  SkeletonLine(style: meta, widthFactor: width(1)),
-                  const SizedBox(height: 2),
-                  SkeletonLine(style: meta, widthFactor: width(2) + 0.35),
-                ] else ...[
+                // 書還沒到只畫封面：還不知道書名多長，先畫的長條到了一定要
+                // 變長變短；書到了才照書名補上長條（DESIGN.md「骨架換場」）。
+                if (loaded != null) ...[
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -359,5 +342,9 @@ class _ShelfBadgeSkeleton extends StatelessWidget {
   }
 }
 
-int _countToFill(double extent, double itemExtent) =>
-    extent <= 0 ? 1 : (extent / itemExtent).ceil();
+/// 從頂端內距排到畫面底緣要幾列。底部內距只是捲到底時多留的空白，真正的
+/// 清單在它上面照樣有列，骨架也要畫到底緣。
+int _countToFill(BoxConstraints constraints, EdgeInsets padding, double row) {
+  final extent = constraints.maxHeight - padding.top;
+  return extent <= 0 ? 1 : (extent / row).ceil();
+}

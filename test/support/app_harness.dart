@@ -385,13 +385,7 @@ Future<Uint8List> _encodeCover(int seed) async {
 /// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。收住、拍圖都要等某一格
 /// 畫完，一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
 Future<void> pumpApp(WidgetTester tester) async {
-  // 開 App 的進場播完會量標點的筆畫位置；測試字型量出來的和手機無關，
-  // 骨架照字的格子畫，每項測試也不留給下一項。
-  PunctuationInk.resetForTest(measure: false);
-  addTearDown(PunctuationInk.resetForTest);
-  await tester.pumpWidget(
-    MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
-  );
+  await startApp(tester);
   LaunchEntranceMotion? entrance;
   var finished = false;
   for (var i = 0; i < 1000 && !finished; i++) {
@@ -409,6 +403,18 @@ Future<void> pumpApp(WidgetTester tester) async {
     fail('開 App 的進場推進 1000 格（16 秒）仍沒播完');
   }
   await settle(tester, const Duration(milliseconds: 500));
+}
+
+/// 掛上整個 App（同 `main.dart` 的 runApp）就交回，不等進場；要從開 App
+/// 的第一幀看起的（例如細節檢查開 App 的骨架換場）用它，其他用 [pumpApp]。
+Future<void> startApp(WidgetTester tester) async {
+  // 開 App 的進場播完會量標點的筆畫位置；測試字型量出來的和手機無關，
+  // 骨架照字的格子畫，每項測試也不留給下一項。
+  PunctuationInk.resetForTest(measure: false);
+  addTearDown(PunctuationInk.resetForTest);
+  await tester.pumpWidget(
+    MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
+  );
 }
 
 /// App 有常駐的計時器（時鐘、流光），`pumpAndSettle` 等不完；改成推進
