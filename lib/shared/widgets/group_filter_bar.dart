@@ -124,18 +124,25 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
           _chip(widget.all),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: ListView.separated(
+            // 一次建立所有膠囊，不隨捲動才建：選到遠處的分組時（包括從
+            // 「全部分組」面板選的），_revealSelected 要靠每一顆的
+            // GlobalKey.currentContext 才找得到目標；分組數量不多，這條
+            // 篩選列也不長，全部建起來的成本比猜捲動位置可靠。
+            child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
-              itemCount: widget.groups.length,
-              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-              itemBuilder: (_, index) {
-                final group = widget.groups[index];
-                return _chip(
-                  group,
-                  key: _chipKeys.putIfAbsent(group.value, GlobalKey.new),
-                );
-              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (index, group) in widget.groups.indexed) ...[
+                    if (index > 0) const SizedBox(width: AppSpacing.sm),
+                    _chip(
+                      group,
+                      key: _chipKeys.putIfAbsent(group.value, GlobalKey.new),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
