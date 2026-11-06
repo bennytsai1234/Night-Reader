@@ -31,6 +31,11 @@
 
 沒有決定、不要自己替使用者選：重點要講哪幾個、順序、淺色要不要黃昏開頭、導覽與下載鈕之後要不要改、要不要把 B 的捲動敘事混進 A。
 
+#### 內容設計問答紀錄（2026-11-06 起，逐輪追加；答過的不要再問）
+
+- **寫給誰**：兩種人都要顧到：已經在用 Legado、手上有書源的人，和沒聽過書源、只想找一個好讀的閱讀器的人。實際上多半是使用者自己在看，但還是要設計好。
+- **推薦書源網站**：使用者想推薦源倉庫（`https://www.yckceo.com/yuedu/shuyuan/index.html`），但不確定能不能推薦，還在問。
+
 產圖的做法：`codex exec` 用內建 `image_gen`（imagegen 技能），一張一個任務檔，寫明尺寸 1536×1024、配色色碼、不要的東西。山景是先產黃昏那張，再拿它當編輯參考、要求「每層稜線一個像素都不要動，只改光線與色彩」產夜景；月亮另產黑底光暈。拿回來轉 webp 放 `website/proto/sky/`。
 
 網頁截圖與量測：`tool/website_preview/`。`node shoot.mjs <website/> <輸出資料夾> [a,b] [light,dark] [desktop,mobile]` 用 Chrome 在固定捲動位置拍整組；`python -I montage.py <資料夾>` 合成總覽圖；`node measure.mjs <website/>` 量傳輸量、頁面長度、全頁字數與捲動每幀時間（兩支腳本自己開 http 伺服器；要自己看頁面時在 `website/` 底下 `python -m http.server`）。截圖重拍：`flutter test --run-skipped -t screens test/screens/website_shots_test.dart`，淺深與風格用 `SHOT_MODE`、`SHOT_STYLE`、`SHOT_ONLY`，圖在系統暫存的 `night-reader-screens/`，縮成 2/3 存 webp 放 `website/proto/shots/`。
