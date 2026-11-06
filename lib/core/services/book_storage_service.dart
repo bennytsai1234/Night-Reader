@@ -6,7 +6,9 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
@@ -45,14 +47,57 @@ class BookStorageService {
   final BookCoverStorageService _coverStorage;
 
   Future<void> discardBook(Book book) async {
-    if (_downloadService != null) {
-      await _downloadService.retireBook(book.bookUrl);
-    } else {
-      await _downloadDao?.deleteByUrl(book.bookUrl);
-    }
+    await _retireDownload(book.bookUrl);
     await _contentDao?.deleteByBook(book.origin, book.bookUrl);
     await _chapterDao.deleteByBook(book.bookUrl);
     await _bookDao.deleteByUrl(book.bookUrl);
+    await _discardFiles(book);
+  }
+
+  /// 書架以外的書只在打開它的詳情或閱讀器時暫存，離開時就刪；沒刪到的
+  /// （App 在那時被關掉、還原舊備份帶回來）連同不屬於書架上任何一本書的
+  /// 目錄、正文與下載任務一起刪掉。開著的書（[BooksInUse]）不動。開 App
+  /// 的進場播完、還原備份之後各跑一次。
+  Future<void> discardUnshelvedBooks() async {
+    final shelf = {
+      for (final book in await _bookDao.getInBookshelf()) book.bookUrl,
+    };
+    for (final task in await _downloadDao?.getAll() ?? const <DownloadTask>[]) {
+      if (shelf.contains(task.bookUrl) ||
+          BooksInUse.bookUrls.contains(task.bookUrl)) {
+        continue;
+      }
+      await _retireDownload(task.bookUrl);
+    }
+    // 刪哪些照交易裡讀到的：清理途中加入書架、或剛打開的書都留著。
+    final discarded = await _bookDao.appDatabase.transaction(() async {
+      final inUse = BooksInUse.bookUrls;
+      final books = [
+        for (final book in await _bookDao.getAll())
+          if (!book.isInBookshelf && !inUse.contains(book.bookUrl)) book,
+      ];
+      for (final book in books) {
+        await _bookDao.deleteByUrl(book.bookUrl);
+      }
+      await _contentDao?.deleteNotOnShelf(except: inUse);
+      await _chapterDao.deleteNotOnShelf(except: inUse);
+      return books;
+    });
+    for (final book in discarded) {
+      await _discardFiles(book);
+    }
+  }
+
+  /// 下載服務在跑時連同它記在記憶體裡的任務一起退掉。
+  Future<void> _retireDownload(String bookUrl) async {
+    if (_downloadService != null) {
+      await _downloadService.retireBook(bookUrl);
+    } else {
+      await _downloadDao?.deleteByUrl(bookUrl);
+    }
+  }
+
+  Future<void> _discardFiles(Book book) async {
     await _coverStorage.deleteBookAssets(book);
     await ReaderLayoutCache.deleteBook(book.bookUrl);
     if (book.isLocal) await _deleteLocalOriginal(book);

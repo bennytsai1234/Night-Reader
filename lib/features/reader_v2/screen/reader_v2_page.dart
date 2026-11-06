@@ -17,6 +17,7 @@ import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_hig
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
@@ -137,9 +138,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     duration: AppMotion.fade,
   );
 
+  /// 閱讀器開著時，開 App 或還原備份的清理不動這本書（[BooksInUse]）。
+  late final BookInUse _inUse;
+
   @override
   void initState() {
     super.initState();
+    _inUse = BooksInUse.hold(widget.book.bookUrl);
     _sourceSwitchService = SourceSwitchService(
       operationQuiescer: (oldBook) =>
           DownloadService().quiesceForSourceSwitch(oldBook),
@@ -223,6 +228,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _progressSync.dispose();
     _host.dispose();
     _skeletonFadeIn.dispose();
+    _inUse.release();
     super.dispose();
   }
 

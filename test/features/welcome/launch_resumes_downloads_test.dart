@@ -25,7 +25,8 @@ void main() {
     setUpPhone(tester);
     await tester.runAsync(() async {
       await setUpApp();
-      // 書架上只有本地書：書架補下載不排任何任務，接著下載只能靠主頁面。
+      // 書架上是本地書與書源已經不在的書：書架補下載不排任何任務，接著下載
+      // 只能靠主頁面。
       await getIt<BookDao>().upsertAll([
         Book(
           bookUrl: 'local://夜讀.txt',
@@ -33,12 +34,18 @@ void main() {
           name: '本地書',
           isInBookshelf: true,
         ),
+        Book(
+          bookUrl: gone,
+          origin: 'https://www.example.com/source-gone',
+          name: '書源不在了',
+          isInBookshelf: true,
+        ),
       ]);
-      // 上次關 App 時還在下載；書已經不在，開跑後立刻失敗。
+      // 上次關 App 時還在下載；書源已經不在，開跑後立刻失敗。
       await getIt<DownloadDao>().upsert(
         DownloadTask(
           bookUrl: gone,
-          bookName: '不在了',
+          bookName: '書源不在了',
           status: DownloadTask.statusDownloading,
           totalCount: 10,
         ),

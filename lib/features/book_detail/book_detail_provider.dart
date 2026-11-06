@@ -20,6 +20,7 @@ import 'package:night_reader/core/models/toc_volumes.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/core/services/download_service.dart';
@@ -37,10 +38,13 @@ class StorageDownloadQueueResult {
   final int queuedChapterCount;
   final String message;
 
-  factory StorageDownloadQueueResult.queued(int count) {
+  factory StorageDownloadQueueResult.queued(
+    int count, {
+    bool joinedShelf = false,
+  }) {
     return StorageDownloadQueueResult._(
       queuedChapterCount: count,
-      message: '已加入背景下載佇列，共 $count 章',
+      message: joinedShelf ? '已加入書架與背景下載佇列，共 $count 章' : '已加入背景下載佇列，共 $count 章',
     );
   }
 
@@ -282,6 +286,7 @@ class BookDetailProvider extends ChangeNotifier {
             type: searchBook.book.type,
           );
     _skeletonBook = _book.copyWith();
+    _inUse = BooksInUse.hold(_book.bookUrl);
     _switchSub = AppEventBus()
         .onName(AppEventBus.bookSwitched)
         .listen((event) => _followSwitch(event.data as BookSwitchedEvent));
@@ -291,6 +296,9 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   StreamSubscription<AppEvent>? _switchSub;
+
+  /// 這頁開著時，開 App 或還原備份的清理不動這本書（[BooksInUse]）。
+  late final BookInUse _inUse;
 
   /// 從這裡開的閱讀器換了源：書的網址可能換了，舊的那筆已刪掉；記下新的，
   /// 回到這頁時（[reloadAfterReading]）改顯示它。這頁自己換源時已經換好。
@@ -549,13 +557,18 @@ class BookDetailProvider extends ChangeNotifier {
       return StorageDownloadQueueResult.blocked(emptyMessage);
     }
 
+    final joinsShelf = !_book.isInBookshelf;
+    if (joinsShelf) await _joinShelfForDownload();
     await _resolvedDownloadService.addDownloadTask(
       _book,
       fromFirstResolved || toLastResolved ? chapters : _allChapters,
       from: fromFirstResolved ? chapters.first : null,
       to: toLastResolved ? chapters.last : null,
     );
-    return StorageDownloadQueueResult.queued(chapters.length);
+    return StorageDownloadQueueResult.queued(
+      chapters.length,
+      joinedShelf: joinsShelf,
+    );
   }
 
   Future<String?> _prepareStorageDownloadQueue() async {
@@ -585,6 +598,20 @@ class BookDetailProvider extends ChangeNotifier {
     await _saveChapterMetadataIfPossible();
 
     return null;
+  }
+
+  /// 要下載的書加入書架：書架以外的書只是打開詳情或閱讀器時的暫存，離開
+  /// 閱讀器、開 App 時會清掉（`BookStorageService.discardUnshelvedBooks`）。
+  /// 加入後照書架自動下載補齊整本（ADR 0008），這裡只排使用者選的範圍。
+  Future<void> _joinShelfForDownload() async {
+    _book.isInBookshelf = true;
+    if (_book.syncTime == 0) {
+      _book.syncTime = DateTime.now().millisecondsSinceEpoch;
+    }
+    _book.fillChapterTitle(_allChapters);
+    await _bookDao.upsert(_book);
+    AppEventBus().fire(AppEventBus.upBookshelf);
+    notifyListeners();
   }
 
   void setSearchQuery(String q) {
@@ -1099,6 +1126,7 @@ class BookDetailProvider extends ChangeNotifier {
     _disposed = true;
     _debounce?.cancel();
     _switchSub?.cancel();
+    _inUse.release();
     super.dispose();
   }
 }

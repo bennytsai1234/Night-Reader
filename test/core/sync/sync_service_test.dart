@@ -94,6 +94,9 @@ class _Storage implements BookStorageService {
     discarded.add(book.bookUrl);
     return books.deleteByUrl(book.bookUrl);
   }
+
+  @override
+  Future<void> discardUnshelvedBooks() => throw UnimplementedError();
 }
 
 /// 指定檔案讀不了的同步空間（模擬雲端對某一份檔回 403、或整個連不上）。
