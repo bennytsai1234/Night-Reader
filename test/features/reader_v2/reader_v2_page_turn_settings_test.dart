@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/navigation_budget.dart';
@@ -18,8 +19,9 @@ void main() {
   });
   tearDown(() => messenger().setMockMethodCallHandler(channel, null));
 
-  // 預設排版：字號 18、行高 1.4。
-  const lineExtent = 18 * 1.4;
+  // 一行的高度照預設的字號與行高。
+  final defaults = ReaderV2PrefsSnapshot.defaults();
+  final lineExtent = defaults.fontSize * defaults.lineHeight;
 
   Future<ScrollPosition Function()> open(
     WidgetTester tester,
