@@ -58,6 +58,18 @@ class BookStorageService {
     if (book.isLocal) await _deleteLocalOriginal(book);
   }
 
+  /// 書架以外的書只在打開它的詳情或閱讀器時暫存，離開時就刪；沒刪到的
+  /// （App 在那時被關掉、還原舊備份帶回來）連同不屬於書架上任何一本書的
+  /// 目錄與正文一起刪掉。只在沒有詳情或閱讀器開著時呼叫：開 App 的進場
+  /// 播完、還原備份之後。
+  Future<void> discardUnshelvedBooks() async {
+    for (final book in await _bookDao.getAll()) {
+      if (!book.isInBookshelf) await discardBook(book);
+    }
+    await _contentDao?.deleteNotOnShelf();
+    await _chapterDao.deleteNotOnShelf();
+  }
+
   /// 本地書移出書架後，App 資料夾裡那份原檔沒有別的書用就跟著刪掉；不在
   /// App 資料夾裡的（很舊的版本直接指著選檔器給的檔）不動。
   Future<void> _deleteLocalOriginal(Book book) async {

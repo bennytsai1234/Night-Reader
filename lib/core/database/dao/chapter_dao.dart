@@ -112,4 +112,16 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
   Future<void> deleteByBook(String bookUrl) {
     return (delete(chapters)..where((t) => t.bookUrl.equals(bookUrl))).go();
   }
+
+  /// 刪掉不屬於書架上任何一本書的目錄。
+  Future<int> deleteNotOnShelf() {
+    final books = attachedDatabase.books;
+    final owner = selectOnly(books)
+      ..addColumns([books.bookUrl])
+      ..where(
+        books.isInBookshelf.equals(true) &
+            books.bookUrl.equalsExp(chapters.bookUrl),
+      );
+    return (delete(chapters)..where((_) => notExistsQuery(owner))).go();
+  }
 }
