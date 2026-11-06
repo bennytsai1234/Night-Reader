@@ -220,124 +220,174 @@ void main() {
       expect(builds, before);
     });
 
-    testWidgets('the switch and the capsule rest, then start together', (
-      tester,
-    ) async {
+    int capsule(WidgetTester tester) =>
+        tester.widget<FloatingTabBar>(find.byType(FloatingTabBar)).currentIndex;
+    AppTransitionSwitch transition(WidgetTester tester) =>
+        tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
+    double left(WidgetTester tester) =>
+        tester.getRect(find.byType(RawImage)).left;
+
+    testWidgets('the capsule moves at once; the page rests only the first '
+        'time a tab is shown', (tester) async {
       await tester.pumpWidget(threeTabs());
       await tester.pumpAndSettle();
-      double left() => tester.getRect(find.byType(RawImage)).left;
-      int capsule() => tester
-          .widget<FloatingTabBar>(find.byType(FloatingTabBar))
-          .currentIndex;
 
       await tester.tap(find.text('三'));
-      // 第一幀很重（拍快照、排新分頁），之後畫面停住 [AppMotion.stillGap]：
-      // 換頁前的畫面停在原處，膠囊也留在原分頁。
+      // 第一幀很重（拍快照、排新分頁）；第一次來到「三」時再停
+      // [AppMotion.stillGap]，換頁前的畫面停在原處，膠囊不等、已經往「三」。
       await tester.pump();
+      expect(capsule(tester), 2);
       await tester.pump(AppMotion.stillGap - const Duration(milliseconds: 10));
-      expect(left(), 0);
-      expect(capsule(), 0);
+      expect(left(tester), 0);
       // 新分頁原樣畫在舊頁快照底下：字先上過螢幕。
       expect(tester.getRect(find.text('丙0')).left, greaterThanOrEqualTo(0));
       expect(
         tester.getRect(find.text('丙0')).right,
         lessThanOrEqualTo(tester.getSize(find.byType(MainPage)).width),
       );
-
       await tester.pump(const Duration(milliseconds: 10));
-      expect(capsule(), 2);
       await tester.pump(const Duration(milliseconds: 16));
-      expect(left(), lessThan(0));
-      expect(left(), greaterThan(-120));
+      expect(left(tester), lessThan(0));
+      expect(left(tester), greaterThan(-120));
+      await tester.pumpAndSettle();
+      expect(switching(tester), isFalse);
+
+      // 回到畫過的「一」：畫完第一幀就開始換，不再停。
+      await tester.tap(find.text('一'));
+      await tester.pump();
+      expect(capsule(tester), 0);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(left(tester), greaterThan(0));
       await tester.pumpAndSettle();
       expect(switching(tester), isFalse);
     });
 
-    testWidgets('a tap during a switch waits for it to finish, then switches', (
+    testWidgets('a tap during a switch carries on from where the screen is', (
       tester,
     ) async {
       await tester.pumpWidget(threeTabs());
       await tester.pumpAndSettle();
-      AppTransitionSwitch transition() =>
-          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
-      double left() => tester.getRect(find.byType(RawImage)).left;
 
       await tester.tap(find.text('三'));
       await tester.pump();
       await tester.pump(AppMotion.stillGap);
       await tester.pump(const Duration(milliseconds: 60));
-      final trip = transition().trip as int;
-      final before = left();
-      expect(before, lessThan(0));
+      final trip = transition(tester).trip as int;
+      expect(left(tester), lessThan(0));
 
-      // 播到一半點「二」：這段照常往下播，不跳到終點、不重來。
+      // 播到一半點「二」：換到一半的畫面拍成新一趟的舊頁，從原處接著換到
+      // 「二」，不等這段播完、不跳到「三」；膠囊馬上往「二」。
       await tester.tap(find.text('二'));
-      await tester.pump(const Duration(milliseconds: 16));
-      expect(transition().trip, trip);
-      expect(left(), lessThan(before));
-      expect(find.text('丙0'), findsOneWidget);
-
-      // 這段播完、最後一幀畫完，下一個空檔才換到「二」。
-      await tester.pumpAndSettle();
-      expect(transition().trip, trip);
       await tester.pump();
+      expect(transition(tester).trip, trip + 1);
+      expect(left(tester), 0);
+      expect(capsule(tester), 1);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(left(tester), isNot(0));
+
       await tester.pumpAndSettle();
-      expect(transition().trip, trip + 1);
+      expect(transition(tester).trip, trip + 1);
       expect(switching(tester), isFalse);
       expect(find.text('乙0'), findsOneWidget);
-      expect(
-        tester.widget<FloatingTabBar>(find.byType(FloatingTabBar)).currentIndex,
-        1,
-      );
+      expect(capsule(tester), 1);
     });
 
-    testWidgets('tapping back to where a switch is going cancels the wait', (
+    testWidgets('taps while a switch still rests only change where it goes', (
       tester,
     ) async {
       await tester.pumpWidget(threeTabs());
       await tester.pumpAndSettle();
-      AppTransitionSwitch transition() =>
-          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
 
+      // 還停在起點時點「二」又點「三」：螢幕上一直是換頁前的畫面，最後換到
+      // 「三」。
       await tester.tap(find.text('三'));
       await tester.pump();
-      final trip = transition().trip as int;
       await tester.tap(find.text('二'));
       await tester.pump();
+      expect(left(tester), 0);
       await tester.tap(find.text('三'));
-      // 播完之後的空檔才會換到記下的分頁：多推進一次，取消沒生效就會換過去。
-      await tester.pumpAndSettle();
       await tester.pump();
-      await tester.pumpAndSettle();
+      expect(left(tester), 0);
+      expect(capsule(tester), 2);
 
-      expect(transition().trip, trip);
+      await tester.pumpAndSettle();
+      expect(switching(tester), isFalse);
       expect(find.text('丙0'), findsOneWidget);
     });
 
-    testWidgets('the back key while going back to the first tab cancels the '
-        'wait', (tester) async {
+    testWidgets('tapping the tab a switch is going to changes nothing', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('三'));
+      await tester.pump();
+      final trip = transition(tester).trip as int;
+      await tester.tap(find.text('三'));
+      await tester.pumpAndSettle();
+
+      expect(transition(tester).trip, trip);
+      expect(find.text('丙0'), findsOneWidget);
+    });
+
+    testWidgets('the back key while going back to the first tab goes there', (
+      tester,
+    ) async {
       await tester.pumpWidget(threeTabs());
       await tester.pumpAndSettle();
       await tester.tap(find.text('三'));
       await tester.pumpAndSettle();
-      AppTransitionSwitch transition() =>
-          tester.widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch));
 
-      // 正在回「一」時點「二」、又按返回鍵：返回鍵也是回「一」，記下的
-      // 「二」取消，不跳「再按一次退出」。
+      // 正在回「一」時點「二」、又按返回鍵：返回鍵也是回「一」，接著換回
+      // 「一」，不跳「再按一次退出」。
       await tester.tap(find.text('一'));
       await tester.pump();
-      final trip = transition().trip as int;
       await tester.tap(find.text('二'));
       await tester.pump();
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      await tester.pump();
-      await tester.pumpAndSettle();
 
-      expect(transition().trip, trip);
       expect(find.text('甲0'), findsOneWidget);
+      expect(capsule(tester), 0);
       expect(find.text('再按一次退出'), findsNothing);
+    });
+
+    testWidgets('dragging the capsule switches as it crosses each tab', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      final from = tester.getCenter(find.text('一'));
+      final middle = tester.getCenter(find.text('二'));
+      final to = tester.getCenter(find.text('三'));
+
+      // 手指還按著：跨進「二」就換到「二」，再跨進「三」就從畫面現在的樣子
+      // 接著換到「三」。
+      final gesture = await tester.startGesture(from);
+      await gesture.moveTo(Offset.lerp(from, middle, 0.2)!);
+      await tester.pump();
+      await gesture.moveTo(middle);
+      await tester.pump();
+      expect(capsule(tester), 1);
+      expect(switching(tester), isTrue);
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.moveTo(to);
+      await tester.pump();
+      expect(capsule(tester), 2);
+      await tester.pumpAndSettle();
+      expect(find.text('丙0'), findsOneWidget);
+
+      // 放開時頁面已經在「三」，什麼都不再換。
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(switching(tester), isFalse);
+      expect(capsule(tester), 2);
+      expect(find.text('丙0'), findsOneWidget);
     });
 
     testWidgets('switches at once when animations are off', (tester) async {

@@ -248,22 +248,24 @@ class _MainPageState extends State<MainPage>
               ignoring: outgoing != null,
               child: ValueListenableBuilder<bool>(
                 valueListenable: _switchHeld,
-                builder: (context, held, _) => AppTransitionSwitch(
-                  trip: _switchCount,
-                  transition: AppPageTransition.of(context),
-                  animation: _switch,
-                  forward: _switchForward,
-                  outgoing: outgoing == null
-                      ? null
-                      : ExcludeSemantics(
-                          child: RawImage(image: outgoing, fit: BoxFit.fill),
-                        ),
-                  incoming: pages,
-                  follow: _follow != _Follow.none,
-                  held: held,
-                  outgoingBackground: _outgoingBackground,
-                  incomingBackground: _destinations[_currentIndex].backgroundOf(
-                    context,
+                builder: (context, held, _) => RepaintBoundary(
+                  key: _switchKey,
+                  child: AppTransitionSwitch(
+                    trip: _switchCount,
+                    transition: AppPageTransition.of(context),
+                    animation: _switch,
+                    forward: _switchForward,
+                    outgoing: outgoing == null
+                        ? null
+                        : ExcludeSemantics(
+                            child: RawImage(image: outgoing, fit: BoxFit.fill),
+                          ),
+                    incoming: pages,
+                    follow: _follow != _Follow.none,
+                    held: held,
+                    outgoingBackground: _outgoingBackground,
+                    incomingBackground: _destinations[_currentIndex]
+                        .backgroundOf(context),
                   ),
                 ),
               ),
@@ -285,42 +287,38 @@ class _MainPageState extends State<MainPage>
           ],
         ),
         extendBody: true,
-        bottomNavigationBar: ValueListenableBuilder<bool>(
-          valueListenable: _switchHeld,
-          builder: (context, held, _) => FloatingTabBar(
-            // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
-            controller: outgoing == null ? _pageController : null,
-            // 換頁停在起點準備時、返回手勢還沒確定返回前，膠囊留在原本的
-            // 分頁。
-            currentIndex:
-                held ||
-                    _follow == _Follow.dragging ||
-                    _follow == _Follow.cancelling
-                ? _outgoingIndex
-                : _currentIndex,
-            hidden: _tabBarHidden.value,
-            items: [
-              for (final destination in _destinations)
-                FloatingTabItem(
-                  icon: destination.icon,
-                  selectedIcon: destination.selectedIcon,
-                  label: destination.label,
-                ),
-            ],
-            onSearch: widget.destinations == null ? _openSearch : null,
-            onTap: (index) {
-              if (_outgoing == null && _currentIndex == index) {
-                _queuedIndex = null;
-                if (DateTime.now().difference(_lastTapTime).inMilliseconds <
-                    300) {
-                  _handleDoubleTap(index);
-                }
-                _lastTapTime = DateTime.now();
-                return;
+        bottomNavigationBar: FloatingTabBar(
+          // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去：點下去、
+          // 放開拖曳的當下就往要去的分頁滑，不等頁面準備好。返回手勢還沒
+          // 確定返回前，膠囊留在原本的分頁。
+          controller: outgoing == null ? _pageController : null,
+          currentIndex:
+              _follow == _Follow.dragging || _follow == _Follow.cancelling
+              ? _outgoingIndex
+              : _currentIndex,
+          hidden: _tabBarHidden.value,
+          items: [
+            for (final destination in _destinations)
+              FloatingTabItem(
+                icon: destination.icon,
+                selectedIcon: destination.selectedIcon,
+                label: destination.label,
+              ),
+          ],
+          onSearch: widget.destinations == null ? _openSearch : null,
+          onTap: (index) {
+            if (_outgoing == null && _currentIndex == index) {
+              _queuedIndex = null;
+              if (DateTime.now().difference(_lastTapTime).inMilliseconds <
+                  300) {
+                _handleDoubleTap(index);
               }
-              _switchTo(index);
-            },
-          ),
+              _lastTapTime = DateTime.now();
+              return;
+            }
+            _switchTo(index);
+          },
+          onSelect: _switchTo,
         ),
       ),
     );
@@ -346,13 +344,16 @@ class _MainPageState extends State<MainPage>
   /// 「外觀與主題 → 換頁動畫」選的那一種；往右邊的分頁像開新頁，往左像
   /// 返回。手指左右滑動照舊跟手。
   ///
-  /// 換頁中（含停在起點準備、跟著返回手勢）又要換時不打斷正在播的這段，
-  /// 只記下最後要去的分頁，播完再換過去（[_finishSwitch]）；要去的就是
-  /// 這段正在去的分頁時不必再換。原本馬上把這段跳到終點、重拍快照重播，
-  /// 連點時畫面跳一下、停一下。
+  /// 換頁中又點了別的分頁時，從畫面現在的樣子接著換過去（[_retarget]），
+  /// 不等這段播完、也不跳到這段的終點。跟著返回手勢時照舊記下最後要去的
+  /// 分頁，手勢結束再換（[_finishSwitch]）。
   void _switchTo(int index) {
-    if (_outgoing != null) {
+    if (_follow != _Follow.none) {
       _queuedIndex = index == _currentIndex ? null : index;
+      return;
+    }
+    if (_outgoing != null) {
+      _retarget(index);
       return;
     }
     _endSwitch();
@@ -360,22 +361,29 @@ class _MainPageState extends State<MainPage>
       _pageController.jumpToPage(index);
       return;
     }
+    _startSwitch();
+  }
+
+  /// 換頁的第一幀要拍快照、排新分頁（第一次來還要整頁建起來），常常很重；
+  /// 這一幀停在起點，畫完才開始（ADR 0037 策略一）。原本一開始就計時，第一
+  /// 幀花掉的時間直接被跳過，點下去就掉幀（ADR 0018）。膠囊不等，點下去就
+  /// 滑向要去的分頁。
+  ///
+  /// 新分頁的字第一次上螢幕時才建字的貼圖：平移這類換頁的頭幾幀新分頁還在
+  /// 畫面外，2026-11-05 手機上第一次切到「發現」，貼圖的 20ms 落在第二幀。
+  /// 第一次切到某個分頁時，停著的這段新分頁原樣畫在舊頁的快照底下
+  /// （[AppTransitionSwitch.held]），貼圖這時就建好，再停 [AppMotion.stillGap]
+  /// 才開始換；之後再切到它，貼圖已經在，畫完第一幀就開始。
+  void _startSwitch() {
     _switchHeld.value = true;
-    // 換頁的第一幀要拍快照、排新分頁（第一次來還要整頁建起來），常常很重；
-    // 這一幀停在起點，膠囊也留在原分頁（[_switchHeld]），畫完才開始準備
-    // （ADR 0037 策略一）。原本一開始就計時，第一幀花掉的時間直接被跳過，點
-    // 下去就掉幀（ADR 0018）。
     final trip = _switchCount;
+    final firstVisit = _visited.add(_currentIndex);
     _switch
       ..duration = AppPageTransition.of(context).duration
       ..value = 0;
-    // 新分頁的字第一次上螢幕時才建字的貼圖：平移這類換頁的頭幾幀新分頁
-    // 還在畫面外，2026-11-05 手機上第一次切到「發現」，貼圖的 20ms 落在
-    // 第二幀。停著的這段新分頁原樣畫在舊頁的快照底下（[AppTransitionSwitch.held]），
-    // 貼圖這時就建好；再停 [AppMotion.stillGap]，膠囊與換頁才一起開始。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _switchCount != trip || _outgoing == null) return;
-      _holdTimer = Timer(AppMotion.stillGap, () {
+      _holdTimer = Timer(firstVisit ? AppMotion.stillGap : Duration.zero, () {
         _holdTimer = null;
         if (!mounted || _switchCount != trip || _outgoing == null) return;
         _switchHeld.value = false;
@@ -384,6 +392,60 @@ class _MainPageState extends State<MainPage>
     });
   }
 
+  /// 畫面上已經畫過的分頁（字的貼圖已經建好）；一開始在書架。
+  final Set<int> _visited = {0};
+
+  /// 換頁中改去 [index]。還停在起點準備時，螢幕上仍是舊頁的快照，只換掉
+  /// 要去的分頁。已經在播時，把螢幕上換到一半的樣子原樣拍成一張圖，當作
+  /// 新一趟的舊頁，從這一幀接著換：新一趟的第一幀和螢幕上的一模一樣，不跳到
+  /// 這段的終點（原本跳過去，連點時畫面閃一下），也不等這段播完（等的話
+  /// 連點一下要等最多 0.7 秒）。
+  void _retarget(int index) {
+    if (index == _currentIndex) return;
+    if (_switchHeld.value) {
+      setState(() {
+        _switchForward = index > _outgoingIndex;
+        _currentIndex = index;
+      });
+      _pageController.jumpToPage(index);
+      _holdTimer?.cancel();
+      _holdTimer = null;
+      _switchCount++;
+      _startSwitch();
+      return;
+    }
+    final boundary = _switchKey.currentContext?.findRenderObject();
+    if (boundary is! RenderRepaintBoundary || !boundary.hasSize) {
+      _queuedIndex = index;
+      return;
+    }
+    final image = boundary.toImageSync(
+      pixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
+    final previous = _outgoing;
+    final fade = _fadeColor(context);
+    final background = _destinations[_currentIndex].backgroundOf(context);
+    _switch.stop();
+    setState(() {
+      _outgoing = image;
+      _outgoingBackground = background;
+      _outgoingFade = fade;
+      _switchForward = index > _currentIndex;
+      _switchCount++;
+      _currentIndex = index;
+    });
+    previous?.dispose();
+    _pageController.jumpToPage(index);
+    _visited.add(index);
+    _switch
+      ..duration = AppPageTransition.of(context).duration
+      ..forward(from: 0);
+  }
+
+  /// 主頁換頁的整個畫面（舊頁快照與新分頁疊好的樣子）；換頁中改去別的分頁
+  /// 時從這裡拍下換到一半的樣子（[_retarget]）。
+  final GlobalKey _switchKey = GlobalKey();
+
   /// 換頁停在起點、準備新分頁中：新分頁畫在舊頁快照底下，分頁列的膠囊留在
   /// 原分頁，和換頁一起開始。
   final ValueNotifier<bool> _switchHeld = ValueNotifier(false);
@@ -391,7 +453,7 @@ class _MainPageState extends State<MainPage>
   /// [_switchTo] 停在起點的計時器。
   Timer? _holdTimer;
 
-  /// 換頁中又點的分頁（只記最後一個），這段播完才換過去。
+  /// 跟著返回手勢時又點的分頁（只記最後一個），手勢送完或彈回才換過去。
   int? _queuedIndex;
 
   /// 換頁自己播完（含返回手勢送完或彈回）：收掉這段，有記下的分頁就在

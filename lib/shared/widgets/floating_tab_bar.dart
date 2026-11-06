@@ -95,7 +95,8 @@ class FloatingTabBarFade extends StatelessWidget {
 /// Telegram iOS 26 式浮動膠囊分頁列，右側可附一顆圓形搜尋鈕。
 ///
 /// 選取膠囊跟著 [controller] 的頁面位置連續移動（滑動切頁時同步）；手指
-/// 在分頁列上橫向拖曳時膠囊跟手，放開後選最近的分頁。放在
+/// 在分頁列上橫向拖曳時膠囊跟手，膠囊中心一跨進別的分頁就選它
+/// （[onSelect]），不等放開。放在
 /// [Scaffold.bottomNavigationBar] 並搭配 `extendBody: true`，內容會延伸到
 /// 分頁列底下，浮動 SnackBar 也會自動避開分頁列。
 class FloatingTabBar extends StatefulWidget {
@@ -104,15 +105,21 @@ class FloatingTabBar extends StatefulWidget {
     required this.items,
     required this.currentIndex,
     required this.onTap,
+    ValueChanged<int>? onSelect,
     this.controller,
     this.onSearch,
     this.searchTooltip = '搜尋',
     this.hidden = false,
-  });
+  }) : onSelect = onSelect ?? onTap;
 
   final List<FloatingTabItem> items;
   final int currentIndex;
+
+  /// 點了某個分頁（含點目前的分頁，例如連點兩下回頂端）。
   final ValueChanged<int> onTap;
+
+  /// 拖曳膠囊時跨進了別的分頁；沒給時同 [onTap]。
+  final ValueChanged<int> onSelect;
 
   /// 主頁的 [PageController]；提供時選取膠囊跟著頁面捲動位置。
   final PageController? controller;
@@ -234,6 +241,17 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
     int indexAt(double dx) =>
         ((dx - AppGlass.tabInnerInset) / itemWidth).floor().clamp(0, count - 1);
 
+    // 每個分頁的圖示與字在這裡建好一次，膠囊滑動的每一幀沿用同一份，只換
+    // 上色（[_TabItem]）；原本每一幀照新顏色重建，字也跟著重排。
+    final glyphs = [
+      for (final item in widget.items)
+        (
+          idle: _TabGlyph(icon: item.icon, label: item.label),
+          selected: _TabGlyph(icon: item.selectedIcon, label: item.label),
+        ),
+    ];
+
+    // 拖曳中膠囊中心跨進別的分頁就換過去，頁面跟著手指換，不等放開。
     void updateDrag(double dx) {
       final position = ((dx - AppGlass.tabInnerInset) / itemWidth - 0.5).clamp(
         0.0,
@@ -243,18 +261,20 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         _dragPosition = position;
         _settling = false;
       });
+      final index = position.round();
+      if (index != widget.currentIndex) {
+        AppHaptics.select();
+        widget.onSelect(index);
+      }
     }
 
+    // 放開時頁面已經在手指下的分頁，膠囊從手指的位置用彈簧滑回分頁中央。
     void endDrag() {
-      final position = _dragPosition;
-      if (position == null) return;
-      final index = position.round();
+      if (_dragPosition == null) return;
       setState(() {
         _dragPosition = null;
         _settling = true;
       });
-      if (index != widget.currentIndex) AppHaptics.select();
-      widget.onTap(index);
     }
 
     return GestureDetector(
@@ -316,13 +336,14 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                           for (var i = 0; i < count; i++)
                             Expanded(
                               child: _TabItem(
-                                item: widget.items[i],
                                 // 依膠囊距離漸變選取色，滑頁時顏色跟著過渡。
                                 selection: (1 - (position - i).abs()).clamp(
                                   0.0,
                                   1.0,
                                 ),
                                 selected: i == widget.currentIndex,
+                                label: widget.items[i].label,
+                                glyph: glyphs[i],
                                 onActivate: () => widget.onTap(i),
                               ),
                             ),
@@ -342,15 +363,17 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
 
 class _TabItem extends StatelessWidget {
   const _TabItem({
-    required this.item,
     required this.selection,
     required this.selected,
+    required this.label,
+    required this.glyph,
     required this.onActivate,
   });
 
-  final FloatingTabItem item;
   final double selection;
   final bool selected;
+  final String label;
+  final ({_TabGlyph idle, _TabGlyph selected}) glyph;
 
   /// 讀屏的點擊動作；手指點擊由外層依位置判斷，讀屏沒有位置可用。
   final VoidCallback onActivate;
@@ -366,28 +389,40 @@ class _TabItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: item.label,
+      label: label,
       onTap: onActivate,
       excludeSemantics: true,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            selection > 0.5 ? item.selectedIcon : item.icon,
-            size: 24,
-            color: color,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            item.label,
-            maxLines: 1,
-            style: AppTextStyles.micro.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+      // 白色的圖示與字照字形的透明度染成 [color]，和直接用 [color] 畫的
+      // 一樣；換顏色只重畫這一層，圖示與字不重建。
+      child: ColorFiltered(
+        colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        child: selection > 0.5 ? glyph.selected : glyph.idle,
       ),
     );
   }
+}
+
+/// 分頁的圖示與名稱，用白色畫，由 [_TabItem] 染色。
+class _TabGlyph extends StatelessWidget {
+  const _TabGlyph({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Icon(icon, size: 24, color: Colors.white),
+      const SizedBox(height: 2),
+      Text(
+        label,
+        maxLines: 1,
+        style: AppTextStyles.micro.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  );
 }
