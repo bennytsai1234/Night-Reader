@@ -1,57 +1,52 @@
-/* 夜讀網站原型共用樣式。
-   配色照 App 的預設風格（淺色紙墨、深色素色純黑），夜空照 App 預設封面「夜空」：
-   墨色底帶一點石青、一彎月、幾顆星、兩層遠山。夜空是整頁唯一大膽的地方，其他保持安靜。 */
+/* 夜讀網站原型。
+   背景固定在視窗後面不位移，往下捲時天色從黃昏換成夜裡（深色一開始就是夜，
+   捲到底暗成純黑）；圖是 Codex 生成的（sky/）。內容直接放在天色上，不墊玻璃：
+   天色在頁面中段很快換過去，字色在同一點從墨色切成月光色。
+   配色照 App 的預設風格（淺色牛皮紙、深色純黑），截圖照維護者手機的比例。 */
 
 :root {
-  --paper: #faf5e9;
-  --page: #faf5e9;
-  --raised: #f1eadb;
-  --text: #100d0a;
-  --muted: #5f5a4d;
+  /* 白天的字（黃昏）。 */
+  --text: #17120c;
+  --muted: #5d5444;
   --primary: #7e2e2a;
   --on-primary: #fffbf2;
+  --bar: rgba(247, 238, 220, 0.78);
+  --chip: rgba(23, 18, 12, 0.08);
   --moon: #f4e3b5;
-  --sky-top: #262c30;
-  --sky-bottom: #3c4e5a;
-  --glass: rgba(250, 245, 233, 0.72);
-  --bezel: #1b1814;
-  --shot-shadow: 0 18px 50px rgba(38, 44, 48, 0.22);
+  /* 山：黃昏時是淡紙色，夜裡是暗色剪影；--n 是夜的程度（0 黃昏、1 夜）。 */
+  --hill-far-day: #e8d9bb;
+  --hill-far-night: #1b262d;
+  --hill-near-day: #f6eedc;
+  --hill-near-night: #0a0e11;
+  --raised: #efe5cf;
+  --bezel: #16130f;
+  --shot-shadow: 0 18px 50px rgba(38, 30, 18, 0.24);
+  --n: 0;
+  --deep: 0;
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --page: #000000;
-    --raised: #1c1c1c;
-    --text: #ededed;
-    --muted: #999999;
-    --primary: #d6d6d6;
-    --on-primary: #000000;
-    --glass: rgba(28, 28, 28, 0.72);
-    --bezel: #2a2a2a;
-    --shot-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
-    color-scheme: dark;
-  }
+/* 夜裡的字（月光色）。深色模式一直是這組。 */
+:root[data-ink="night"] {
+  --text: #f1e9d6;
+  --muted: rgba(241, 233, 214, 0.72);
+  --primary: #f4e3b5;
+  --on-primary: #1a1612;
+  --bar: rgba(8, 11, 13, 0.6);
+  --chip: rgba(255, 255, 255, 0.1);
+  --shot-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
 }
 
-:root[data-theme="dark"] {
-  --page: #000000;
-  --raised: #1c1c1c;
-  --text: #ededed;
-  --muted: #999999;
-  --primary: #d6d6d6;
-  --on-primary: #000000;
-  --glass: rgba(28, 28, 28, 0.72);
-  --bezel: #2a2a2a;
-  --shot-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --raised: #1c1c1c; --bezel: #262626; color-scheme: dark; }
 }
+:root[data-theme="dark"] { --raised: #1c1c1c; --bezel: #262626; color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--page);
+  background: #000;
   color: var(--text);
   font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC",
     "Microsoft JhengHei", sans-serif;
@@ -59,13 +54,39 @@ body {
   line-height: 1.75;
   -webkit-font-smoothing: antialiased;
 }
+/* 字色換組時淡過去，不要一下子跳。 */
+body, body * { transition: color 0.3s linear, background-color 0.3s linear; }
 
 a { color: inherit; }
 img { display: block; max-width: 100%; }
 
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
 
-/* ---------- 頁首：玻璃、置中小標題 ---------- */
+/* ---------- 背景：固定不動，只換天色 ---------- */
+.backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #000; }
+.backdrop > * {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center bottom;
+}
+.backdrop .night { opacity: var(--n); }
+.backdrop .black { background: #000; opacity: calc(var(--deep) * 0.7); }
+/* 月亮的圖在畫面正中，移到右上；入夜才出來，位置不動。 */
+.backdrop .moon { left: 26%; top: -24%; opacity: var(--n); }
+/* 山用圖的形狀當遮罩，顏色跟著入夜從淡紙色換成剪影。 */
+.backdrop .far, .backdrop .near {
+  -webkit-mask: var(--shape) center bottom / cover no-repeat;
+  mask: var(--shape) center bottom / cover no-repeat;
+}
+.backdrop .far {
+  --shape: url(sky/mountains-far.webp);
+  background: color-mix(in srgb, var(--hill-far-night) calc(var(--n) * 100%), var(--hill-far-day));
+}
+.backdrop .near {
+  --shape: url(sky/mountains-near.webp);
+  background: color-mix(in srgb, var(--hill-near-night) calc(var(--n) * 100%), var(--hill-near-day));
+}
+
+/* ---------- 頁首：一條窄窄的列 ---------- */
 .bar {
   position: fixed;
   top: 0; left: 0; right: 0;
@@ -76,13 +97,10 @@ img { display: block; max-width: 100%; }
   height: 52px;
   padding: 0 20px;
   color: var(--text);
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
-  transition: background-color 0.3s linear, color 0.3s linear;
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
-/* 還在夜空上時頁首透明、字是月光色。 */
-.bar.on-sky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--moon); }
 .bar .title { font-size: 17px; font-weight: 600; text-decoration: none; letter-spacing: 0.06em; }
 .bar .end { justify-self: end; display: flex; gap: 20px; font-size: 15px; }
 .bar .end a { text-decoration: none; opacity: 0.75; }
@@ -90,13 +108,13 @@ img { display: block; max-width: 100%; }
 
 .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
 
-/* ---------- 開頭的夜空 ---------- */
-.sky-svg { display: block; width: 100%; height: 100%; }
-.hero-copy { position: relative; z-index: 2; text-align: center; color: var(--moon); }
-.hero-copy .icon { width: 88px; height: 88px; border-radius: 20px; margin: 0 auto 22px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35); }
+/* ---------- 開頭 ---------- */
+.hero { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; }
+.hero-copy { text-align: center; padding: 0 20px; margin-top: -8vh; }
+.hero-copy .icon { width: 88px; height: 88px; border-radius: 20px; margin: 0 auto 22px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2); }
 .hero-copy h1 { font-size: 56px; line-height: 1.1; margin: 0 0 16px; font-weight: 700; letter-spacing: 0.18em; text-indent: 0.18em; }
-.hero-copy .lead { font-size: 19px; line-height: 1.7; margin: 0 auto 30px; max-width: 22em; opacity: 0.88; }
-.hero-copy .fine { font-size: 14px; margin-top: 16px; opacity: 0.7; }
+.hero-copy .lead { font-size: 19px; line-height: 1.7; margin: 0 auto 30px; max-width: 22em; color: var(--muted); }
+.hero-copy .fine { font-size: 14px; margin-top: 16px; color: var(--muted); }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -104,7 +122,6 @@ img { display: block; max-width: 100%; }
   font-size: 16px; font-weight: 600; text-decoration: none;
   background: var(--primary); color: var(--on-primary);
 }
-.btn.moon { background: var(--moon); color: #1a1612; }
 
 /* ---------- 功能：左右交錯 ---------- */
 .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; padding: 96px 0; }
@@ -112,20 +129,26 @@ img { display: block; max-width: 100%; }
 .feature h2 { font-size: 30px; line-height: 1.35; margin: 0 0 16px; font-weight: 700; letter-spacing: 0.02em; }
 .feature p { color: var(--muted); margin: 0; max-width: 24em; }
 
+/* 手機框照維護者的手機：1260×2800，螢幕圓角約寬度的 7%，上緣正中一個鏡頭挖孔。 */
 .shots { position: relative; display: flex; justify-content: center; }
 .phone {
   position: relative;
-  width: 260px;
-  aspect-ratio: 1179 / 2556;
-  padding: 8px;
-  border-radius: 42px;
+  width: 250px;
+  aspect-ratio: 1260 / 2800;
+  padding: 6px;
+  border-radius: 24px;
   background: var(--bezel);
   box-shadow: var(--shot-shadow);
 }
-.phone .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 34px; background: var(--raised); }
+.phone .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 18px; background: var(--raised); }
 .phone .screen picture, .phone .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.phone .screen::after {
+  content: ""; position: absolute; z-index: 1; left: 50%; top: 1.45%;
+  width: 3.2%; aspect-ratio: 1; border-radius: 50%; transform: translateX(-50%);
+  background: #050505;
+}
 /* 第二張疊在後面、略小，露出一角。 */
-.shots .phone + .phone { position: absolute; width: 220px; transform: translate(-46%, 10%); z-index: -1; opacity: 0.92; }
+.shots .phone + .phone { position: absolute; width: 210px; transform: translate(-46%, 10%); z-index: -1; opacity: 0.92; }
 .shots.pair { padding-left: 90px; }
 
 .stack > picture { opacity: 0; transition: opacity 0.4s linear; }
@@ -135,7 +158,7 @@ img { display: block; max-width: 100%; }
 .styles button {
   border: 0; font: inherit; font-size: 14px; cursor: pointer;
   padding: 5px 14px; border-radius: 16px;
-  background: var(--raised); color: var(--muted);
+  background: var(--chip); color: var(--muted);
 }
 .styles button.on { background: var(--primary); color: var(--on-primary); }
 
@@ -174,6 +197,8 @@ footer p { max-width: 40em; margin: 0 auto 8px; }
   .wrap { padding: 0 20px; }
   .bar { padding: 0 16px; }
   .bar .end .dl { display: none; }
+  /* 直的畫面照高度放大會讓月亮大到壓住字；改照寬度定大小，小小地放在右上角。 */
+  .backdrop .moon { inset: auto; left: 22vw; top: -6vh; width: 110vw; height: auto; }
   .hero-copy .icon { width: 72px; height: 72px; border-radius: 17px; }
   .hero-copy h1 { font-size: 40px; }
   .hero-copy .lead { font-size: 16px; padding: 0 12px; }
@@ -191,12 +216,12 @@ footer p { max-width: 40em; margin: 0 auto 8px; }
   }
   .shots::-webkit-scrollbar { display: none; }
   .phone, .shots .phone + .phone {
-    position: relative; flex: 0 0 68%; width: auto; padding: 0; border-radius: 18px;
+    position: relative; flex: 0 0 66%; width: auto; padding: 0; border-radius: 14px;
     background: none; transform: none; z-index: auto; opacity: 1; scroll-snap-align: center;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
   }
   .shots .phone:only-child { margin: 0 auto; }
-  .phone .screen { border-radius: 18px; }
+  .phone .screen { border-radius: 14px; }
 
   .more { padding: 32px 0 56px; }
   .more dl { grid-template-columns: 1fr; gap: 14px; }
@@ -208,5 +233,5 @@ footer p { max-width: 40em; margin: 0 auto 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stack > picture, .bar, .dock { transition: none; }
+  body, body *, .stack > picture, .dock { transition: none; }
 }

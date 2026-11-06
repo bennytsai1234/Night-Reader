@@ -55,11 +55,8 @@ final _scenes = <String, Steps>{
   'reader': (t) async => openReader(t),
   'layout': (t) async {
     await openReader(t);
-    // 畫面正中間是標註，點了會開標註面板；點中間偏上沒有標註的那行。
-    final size = t.view.physicalSize / t.view.devicePixelRatio;
-    await t.tapAt(Offset(size.width / 2, size.height * 0.42));
-    await settle(t, const Duration(milliseconds: 800));
-    await waitForText(t);
+    // 維護者手機的版面上，畫面正中間是沒有標註的正文（點到標註會開標註面板）。
+    await showReaderMenu(t);
     await _tapText(t, '排版');
   },
   'search': _searchResults,
@@ -234,6 +231,22 @@ Future<void> _seedShowcase() async {
   ]);
 }
 
+/// 維護者的手機：1260×2800、每個邏輯像素 3.85 個實體像素，閱讀器畫面
+/// 327.27×727.27；鏡頭那一條（隱藏狀態列時頁首所在）高 27。數字取自
+/// 2026-11-06 備份裡閱讀器記下的版面（寬 327.27、正文區高 676.26，扣掉
+/// 頁尾 20 與下邊距 4）。
+void _setUpOwnerPhone(WidgetTester tester) {
+  const ratio = 3.85;
+  setUpScreenshot(
+    tester,
+    size: const Size(1260 / ratio, 2800 / ratio),
+    devicePixelRatio: ratio,
+  );
+  const padding = FakeViewPadding(top: 27 * ratio, bottom: 16 * ratio);
+  tester.view.padding = padding;
+  tester.view.viewPadding = padding;
+}
+
 void main() {
   setUpAll(loadScreenshotFonts);
   final mode = Platform.environment['SHOT_MODE'] ?? 'light';
@@ -241,7 +254,7 @@ void main() {
   final only = Platform.environment['SHOT_ONLY']?.split(',');
 
   testWidgets('website shots', (tester) async {
-    setUpPhone(tester);
+    _setUpOwnerPhone(tester);
     await tester.runAsync(() async {
       await setUpApp();
       await seedLibrary();

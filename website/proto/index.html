@@ -3,59 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>夜讀 — 背景乙：從黃昏捲到深夜</title>
+  <title>夜讀</title>
   <link rel="stylesheet" href="site.css">
-  <style>
-    /* 背景固定在視窗後面，--p 是捲動進度（0 在最上面、1 在最下面）。
-       淺色：紙色的黃昏漸成夜空；深色：夜空漸成純黑。內容放在玻璃上。 */
-    :root { --p: 0; --hero-ink: var(--text); --night-from: 0; }
-    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hero-ink: var(--moon); --night-from: 1; } }
-    body { background: transparent; }
-    .backdrop { position: fixed; inset: 0; z-index: -1; background: #000; overflow: hidden; }
-    .backdrop > * {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      object-fit: cover; object-position: center bottom;
-    }
-    /* 淺色：黃昏的天淡成夜空；深色：一開始就是夜空，捲到底再暗成接近純黑。 */
-    .night { opacity: max(var(--night-from), var(--p)); }
-    .black { background: #000; opacity: calc(var(--night-from) * var(--p) * 0.7); }
-    /* 月亮從山後升起，捲到底時停在天空上方。 */
-    .moon { left: 24%; transform:translate3d(0, calc((1 - var(--p)) * 45vh), 0); opacity: clamp(0, calc(var(--p) * 3 + var(--night-from)), 1); }
-
-    .hero { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; }
-    .hero-copy { color: var(--hero-ink); padding: 0 20px; }
-    .hero .icon { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18); }
-    .hero-copy .btn { background: var(--primary); color: var(--on-primary); }
-
-    /* 內容放在玻璃上，玻璃之間露出天色。 */
-    .feature, .more, .source {
-      background: var(--glass);
-      -webkit-backdrop-filter: blur(24px) saturate(1.3);
-      backdrop-filter: blur(24px) saturate(1.3);
-      border-radius: 28px;
-      padding-left: 56px; padding-right: 56px;
-      margin-bottom: 48px;
-    }
-    .more { padding-top: 48px; padding-bottom: 48px; }
-    .source { padding-top: 32px; padding-bottom: 32px; }
-    .download, footer { color: var(--moon); }
-    .download p, footer { color: rgba(244, 227, 181, 0.7); }
-    .download .btn { background: var(--moon); color: #1a1612; }
-    @media (max-width: 760px) {
-      .feature, .more, .source { padding-left: 20px; padding-right: 20px; border-radius: 22px; margin-bottom: 28px; }
-      .feature { padding-top: 32px; padding-bottom: 32px; }
-      .shots, .shots.pair { margin: 0 -20px; }
-    }
-  </style>
 </head>
-<body data-sky="dusk">
+<body>
   <div class="backdrop" aria-hidden="true">
     <img class="dusk" src="sky/sky-dusk.webp" alt="">
     <img class="night" src="sky/sky-night.webp" alt="">
     <div class="black"></div>
     <img class="moon" src="sky/moon.webp" alt="">
-    <img class="far" src="sky/mountains-far.webp" alt="">
-    <img class="near" src="sky/mountains-near.webp" alt="">
+    <div class="far"></div>
+    <div class="near"></div>
   </div>
 
   <header class="bar">
@@ -75,6 +33,7 @@
   </section>
 
   <main class="wrap">
+
     <section class="feature">
       <div class="shots">
         <div class="phone"><div class="screen"><picture><source media="(prefers-color-scheme: dark)" srcset="shots/layout_dark.webp"><img src="shots/layout_light.webp" alt="閱讀器的排版面板：字號、行高、段距、每行字數，上面是正文"></picture></div></div>
