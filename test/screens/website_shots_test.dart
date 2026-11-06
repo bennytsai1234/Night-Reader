@@ -55,8 +55,12 @@ final _scenes = <String, Steps>{
   'reader': (t) async => openReader(t),
   'layout': (t) async {
     await openReader(t);
-    // 維護者手機的版面上，畫面正中間是沒有標註的正文（點到標註會開標註面板）。
-    await showReaderMenu(t);
+    // 點右邊留白叫出選單：那裡沒有字，不會點到標註（點到會開標註面板），
+    // 九宮格的每一格預設都是叫出選單。
+    final size = t.view.physicalSize / t.view.devicePixelRatio;
+    await t.tapAt(Offset(size.width - 4, size.height / 2));
+    await settle(t, const Duration(milliseconds: 800));
+    await waitForText(t);
     await _tapText(t, '排版');
   },
   'search': _searchResults,
@@ -231,17 +235,12 @@ Future<void> _seedShowcase() async {
   ]);
 }
 
-/// 維護者的手機：1260×2800、每個邏輯像素 3.85 個實體像素，閱讀器畫面
-/// 327.27×727.27；鏡頭那一條（隱藏狀態列時頁首所在）高 27。數字取自
-/// 2026-11-06 備份裡閱讀器記下的版面（寬 327.27、正文區高 676.26，扣掉
-/// 頁尾 20 與下邊距 4）。
-void _setUpOwnerPhone(WidgetTester tester) {
-  const ratio = 3.85;
-  setUpScreenshot(
-    tester,
-    size: const Size(1260 / ratio, 2800 / ratio),
-    devicePixelRatio: ratio,
-  );
+/// 和一般 iPhone 一樣大（393×852、3 倍，1179×2556）的 Android 手機：頂端是
+/// 鏡頭挖孔那一條，高 27（照維護者的手機；隱藏狀態列時頁首在這一條裡），
+/// 底部手勢條 16。
+void _setUpPhone(WidgetTester tester) {
+  const ratio = 3.0;
+  setUpScreenshot(tester, size: const Size(393, 852), devicePixelRatio: ratio);
   const padding = FakeViewPadding(top: 27 * ratio, bottom: 16 * ratio);
   tester.view.padding = padding;
   tester.view.viewPadding = padding;
@@ -254,7 +253,7 @@ void main() {
   final only = Platform.environment['SHOT_ONLY']?.split(',');
 
   testWidgets('website shots', (tester) async {
-    _setUpOwnerPhone(tester);
+    _setUpPhone(tester);
     await tester.runAsync(() async {
       await setUpApp();
       await seedLibrary();

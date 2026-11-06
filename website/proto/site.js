@@ -11,17 +11,16 @@ function isDark() {
   return darkScheme.matches;
 }
 
-// 淺色：前段黃昏、後段夜裡，天色只在捲到 38%–62% 這段換過去，中間調不會停留
-// 太久；字色在一半的地方切換。深色：一開始就是夜，捲到底再暗成接近純黑。
+// 淺色：從最濃的晚霞開始，捲到 5%–85% 這段慢慢入夜，之後停在深夜。
+// 深色：一開始就是夜，捲到底再暗成接近純黑。
 function frame() {
   const max = root.scrollHeight - innerHeight;
   const p = Math.min(1, Math.max(0, scrollY / Math.max(1, max)));
   const dark = isDark();
-  const t = Math.min(1, Math.max(0, (p - 0.38) / 0.24));
+  const t = Math.min(1, Math.max(0, (p - 0.05) / 0.8));
   const night = dark ? 1 : t * t * (3 - 2 * t);
   root.style.setProperty('--n', night.toFixed(4));
   root.style.setProperty('--deep', dark ? p.toFixed(4) : '0');
-  root.dataset.ink = night >= 0.5 ? 'night' : 'day';
   dock?.classList.toggle('show', scrollY > hero.offsetHeight * 0.8);
 }
 
