@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -94,7 +95,7 @@ void main() {
   ];
 
   test('books off the shelf are discarded with their chapters, content and '
-      'downloads; content of no shelf book goes too', () async {
+      'downloads; data of no shelf book goes too, open books stay', () async {
     await addBook('shelf', onShelf: true);
     await addChapter('shelf');
     // 換過書源前留下的正文：鍵含舊書源網址，再也讀不到。
@@ -102,8 +103,14 @@ void main() {
     await addBook('preview', onShelf: false);
     await addChapter('preview');
     await downloads.upsert(DownloadTask(bookUrl: 'preview', bookName: '暫存'));
-    // 書早就不在資料庫裡，正文與目錄還在。
+    // 書早就不在資料庫裡，正文、目錄與下載任務還在。
     await addChapter('gone');
+    await downloads.upsert(DownloadTask(bookUrl: 'gone', bookName: '已刪'));
+    // 正在書籍詳情或閱讀器裡開著的試讀。
+    await addBook('open', onShelf: false);
+    await addChapter('open');
+    final open = BooksInUse.hold('open');
+    addTearDown(open.release);
 
     await BookStorageService(
       bookDao: books,
@@ -112,9 +119,19 @@ void main() {
       downloadDao: downloads,
     ).discardUnshelvedBooks();
 
-    expect((await books.getAll()).map((book) => book.bookUrl), ['shelf']);
-    expect(await contentBooks(), ['https://source.example shelf']);
+    expect(
+      (await books.getAll()).map((book) => book.bookUrl),
+      unorderedEquals(['shelf', 'open']),
+    );
+    expect(
+      await contentBooks(),
+      unorderedEquals([
+        'https://source.example shelf',
+        'https://source.example open',
+      ]),
+    );
     expect(await chapters.getByBook('shelf'), hasLength(1));
+    expect(await chapters.getByBook('open'), hasLength(1));
     expect(await chapters.getByBook('preview'), isEmpty);
     expect(await chapters.getByBook('gone'), isEmpty);
     expect(await downloads.getAll(), isEmpty);

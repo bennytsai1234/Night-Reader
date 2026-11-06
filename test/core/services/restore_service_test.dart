@@ -237,7 +237,7 @@ void main() {
   });
 
   test('books off the shelf in an old backup are not restored, and chapters '
-      'downloaded for them or for long-gone books are dropped', () async {
+      'and downloads for them or for long-gone books are dropped', () async {
     const origin = 'https://c.example';
     await BookDao(db).upsert(
       Book(bookUrl: 'mine', origin: origin, name: '我的', isInBookshelf: true),
@@ -264,7 +264,11 @@ void main() {
     };
     final zip = await writeZip('old_backup.zip', {
       'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
-      // 正文排在書前面：結果不該受 ZIP 裡的檔案順序影響。
+      // 正文與下載任務排在書前面：結果不該受 ZIP 裡的檔案順序影響。
+      'downloadTask.json': jsonEncode([
+        {'bookUrl': 'theirs', 'bookName': 'theirs'},
+        {'bookUrl': 'preview', 'bookName': 'preview'},
+      ]),
       'readerChapterContent.json': jsonEncode([
         content('theirs'),
         content('preview'),
@@ -291,6 +295,9 @@ void main() {
       ),
       ['theirs'],
     );
+    expect((await DownloadDao(db).getAll()).map((task) => task.bookUrl), [
+      'theirs',
+    ]);
   });
 
   test('a file that is not a backup is reported as invalid', () async {

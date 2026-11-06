@@ -265,7 +265,8 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
 
   /// 刪掉不屬於書架上任何一本書的正文：書已經不在資料庫裡，或還在但不在
   /// 書架上、或書換了書源（鍵含書源網址，舊書源的正文再也讀不到）。
-  Future<int> deleteNotOnShelf() {
+  /// [except] 裡的書（正開著）不動。
+  Future<int> deleteNotOnShelf({Set<String> except = const {}}) {
     final books = attachedDatabase.books;
     final owner = selectOnly(books)
       ..addColumns([books.bookUrl])
@@ -276,7 +277,7 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
       );
     return (delete(
       readerChapterContents,
-    )..where((_) => notExistsQuery(owner))).go();
+    )..where((t) => notExistsQuery(owner) & t.bookUrl.isNotIn(except))).go();
   }
 
   Future<void> clearAllContent() {
