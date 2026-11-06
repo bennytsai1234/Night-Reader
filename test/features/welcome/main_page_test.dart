@@ -276,14 +276,18 @@ void main() {
       final trip = transition(tester).trip as int;
       expect(left(tester), lessThan(0));
 
-      // 播到一半點「二」：換到一半的畫面拍成新一趟的舊頁，從原處接著換到
-      // 「二」，不等這段播完、不跳到「三」；膠囊馬上往「二」。
+      // 播到一半點「二」：換到一半的畫面拍成新一趟的舊頁，整張蓋著、從原處
+      // 接著換到「二」，不等這段播完、不跳到「三」；膠囊馬上往「二」。
       await tester.tap(find.text('二'));
       await tester.pump();
       expect(transition(tester).trip, trip + 1);
+      expect(transition(tester).held, isTrue);
       expect(left(tester), 0);
       expect(capsule(tester), 1);
-      await tester.pump(const Duration(milliseconds: 16));
+      // 第一次到「二」：和一般換頁一樣先停 [AppMotion.stillGap]。
+      await tester.pump(AppMotion.stillGap - const Duration(milliseconds: 10));
+      expect(left(tester), 0);
+      await tester.pump(const Duration(milliseconds: 10));
       await tester.pump(const Duration(milliseconds: 16));
       expect(left(tester), isNot(0));
 
@@ -388,6 +392,27 @@ void main() {
       expect(switching(tester), isFalse);
       expect(capsule(tester), 2);
       expect(find.text('丙0'), findsOneWidget);
+    });
+
+    testWidgets('dragging over a tab and back within one frame ends where '
+        'the finger is', (tester) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      final from = tester.getCenter(find.text('一'));
+      final middle = tester.getCenter(find.text('二'));
+
+      // 同一幀收到兩筆移動：跨進「二」又拖回「一」，主頁還沒重建。
+      final gesture = await tester.startGesture(from);
+      await gesture.moveTo(Offset.lerp(from, middle, 0.2)!);
+      await tester.pump();
+      await gesture.moveTo(middle);
+      await gesture.moveTo(from);
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(switching(tester), isFalse);
+      expect(capsule(tester), 0);
+      expect(find.text('甲0'), findsOneWidget);
     });
 
     testWidgets('switches at once when animations are off', (tester) async {

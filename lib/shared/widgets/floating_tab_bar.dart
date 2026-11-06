@@ -153,6 +153,10 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   /// 的膠囊不會自己過去，沒有這段會從手指的位置一幀跳回去。
   bool _settling = false;
 
+  /// 這次拖曳最後選的分頁。同一幀可能收到好幾筆移動，[FloatingTabBar.currentIndex]
+  /// 要等主頁重建才跟上，拿它判斷有沒有跨格會漏掉跨過去又拖回來的那一下。
+  int? _dragSelected;
+
   double _pagePosition() {
     final controller = widget.controller;
     if (controller != null &&
@@ -241,13 +245,23 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
     int indexAt(double dx) =>
         ((dx - AppGlass.tabInnerInset) / itemWidth).floor().clamp(0, count - 1);
 
-    // 每個分頁的圖示與字在這裡建好一次，膠囊滑動的每一幀沿用同一份，只換
-    // 上色（[_TabItem]）；原本每一幀照新顏色重建，字也跟著重排。
+    // 每個分頁的圖示與字在這裡建好一次（未選的用未選色、選取的用選取色），
+    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）；原本每一幀照新
+    // 顏色重建圖示與字。
+    final scheme = Theme.of(context).colorScheme;
     final glyphs = [
       for (final item in widget.items)
         (
-          idle: _TabGlyph(icon: item.icon, label: item.label),
-          selected: _TabGlyph(icon: item.selectedIcon, label: item.label),
+          idle: _TabGlyph(
+            icon: item.icon,
+            label: item.label,
+            color: scheme.onSurfaceVariant,
+          ),
+          selected: _TabGlyph(
+            icon: item.selectedIcon,
+            label: item.label,
+            color: scheme.primary,
+          ),
         ),
     ];
 
@@ -262,7 +276,8 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         _settling = false;
       });
       final index = position.round();
-      if (index != widget.currentIndex) {
+      if (index != (_dragSelected ?? widget.currentIndex)) {
+        _dragSelected = index;
         AppHaptics.select();
         widget.onSelect(index);
       }
@@ -270,6 +285,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
 
     // 放開時頁面已經在手指下的分頁，膠囊從手指的位置用彈簧滑回分頁中央。
     void endDrag() {
+      _dragSelected = null;
       if (_dragPosition == null) return;
       setState(() {
         _dragPosition = null;
@@ -392,8 +408,10 @@ class _TabItem extends StatelessWidget {
       label: label,
       onTap: onActivate,
       excludeSemantics: true,
-      // 白色的圖示與字照字形的透明度染成 [color]，和直接用 [color] 畫的
-      // 一樣；換顏色只重畫這一層，圖示與字不重建。
+      // 圖示與字照字形的透明度染成 [color]；換顏色只重畫這一層，圖示與字
+      // 不重建。染的是用未選色或選取色畫好的那一份：字的反鋸齒照字的顏色調
+      // （白字的邊比深色字實，染回深色後看起來變粗），用端點的顏色畫，靜止時
+      // 染回同一個顏色，和直接用那個顏色畫的一模一樣。
       child: ColorFiltered(
         colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
         child: selection > 0.5 ? glyph.selected : glyph.idle,
@@ -402,24 +420,29 @@ class _TabItem extends StatelessWidget {
   }
 }
 
-/// 分頁的圖示與名稱，用白色畫，由 [_TabItem] 染色。
+/// 分頁的圖示與名稱，用 [color] 畫。
 class _TabGlyph extends StatelessWidget {
-  const _TabGlyph({required this.icon, required this.label});
+  const _TabGlyph({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
 
   final IconData icon;
   final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) => Column(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
-      Icon(icon, size: 24, color: Colors.white),
+      Icon(icon, size: 24, color: color),
       const SizedBox(height: 2),
       Text(
         label,
         maxLines: 1,
         style: AppTextStyles.micro.copyWith(
-          color: Colors.white,
+          color: color,
           fontWeight: FontWeight.w600,
         ),
       ),

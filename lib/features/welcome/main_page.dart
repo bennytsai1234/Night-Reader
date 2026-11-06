@@ -373,16 +373,19 @@ class _MainPageState extends State<MainPage>
   /// 畫面外，2026-11-05 手機上第一次切到「發現」，貼圖的 20ms 落在第二幀。
   /// 第一次切到某個分頁時，停著的這段新分頁原樣畫在舊頁的快照底下
   /// （[AppTransitionSwitch.held]），貼圖這時就建好，再停 [AppMotion.stillGap]
-  /// 才開始換；之後再切到它，貼圖已經在，畫完第一幀就開始。
+  /// 才開始換；之後再切到它，貼圖已經在，畫完第一幀就開始。分頁要真的畫過
+  /// 這一幀才算去過：還沒畫出來就改去別頁，下次來還是第一次。
   void _startSwitch() {
     _switchHeld.value = true;
     final trip = _switchCount;
-    final firstVisit = _visited.add(_currentIndex);
+    final index = _currentIndex;
+    final firstVisit = !_visited.contains(index);
     _switch
       ..duration = AppPageTransition.of(context).duration
       ..value = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _switchCount != trip || _outgoing == null) return;
+      _visited.add(index);
       _holdTimer = Timer(firstVisit ? AppMotion.stillGap : Duration.zero, () {
         _holdTimer = null;
         if (!mounted || _switchCount != trip || _outgoing == null) return;
@@ -397,57 +400,54 @@ class _MainPageState extends State<MainPage>
 
   /// 換頁中改去 [index]。還停在起點準備時，螢幕上仍是舊頁的快照，只換掉
   /// 要去的分頁。已經在播時，把螢幕上換到一半的樣子原樣拍成一張圖，當作
-  /// 新一趟的舊頁，從這一幀接著換：新一趟的第一幀和螢幕上的一模一樣，不跳到
-  /// 這段的終點（原本跳過去，連點時畫面閃一下），也不等這段播完（等的話
-  /// 連點一下要等最多 0.7 秒）。
+  /// 新一趟的舊頁：不跳到這段的終點（原本跳過去，連點時畫面閃一下），也不
+  /// 等這段播完（等的話連點一下要等最多 0.7 秒）。兩種都照一般換頁停在起點
+  /// （[_startSwitch]）：這一幀整張蓋著這張圖、新分頁原樣畫在底下，第一次
+  /// 到的分頁一樣停 [AppMotion.stillGap]，新一趟的第一幀和螢幕上的一模一樣，
+  /// 「展開」這類起點就露出一小塊新頁的動畫也不例外。
   void _retarget(int index) {
     if (index == _currentIndex) return;
+    _holdTimer?.cancel();
+    _holdTimer = null;
     if (_switchHeld.value) {
       setState(() {
         _switchForward = index > _outgoingIndex;
+        _switchCount++;
         _currentIndex = index;
       });
-      _pageController.jumpToPage(index);
-      _holdTimer?.cancel();
-      _holdTimer = null;
-      _switchCount++;
-      _startSwitch();
-      return;
+    } else {
+      final boundary = _switchKey.currentContext?.findRenderObject();
+      if (boundary is! RenderRepaintBoundary || !boundary.hasSize) {
+        _queuedIndex = index;
+        return;
+      }
+      final image = boundary.toImageSync(
+        pixelRatio: MediaQuery.devicePixelRatioOf(context),
+      );
+      final previous = _outgoing;
+      final fade = _fadeColor(context);
+      final background = _destinations[_currentIndex].backgroundOf(context);
+      _switch.stop();
+      setState(() {
+        _outgoing = image;
+        _outgoingBackground = background;
+        _outgoingFade = fade;
+        _outgoingIndex = _currentIndex;
+        _switchForward = index > _currentIndex;
+        _switchCount++;
+        _currentIndex = index;
+      });
+      previous?.dispose();
     }
-    final boundary = _switchKey.currentContext?.findRenderObject();
-    if (boundary is! RenderRepaintBoundary || !boundary.hasSize) {
-      _queuedIndex = index;
-      return;
-    }
-    final image = boundary.toImageSync(
-      pixelRatio: MediaQuery.devicePixelRatioOf(context),
-    );
-    final previous = _outgoing;
-    final fade = _fadeColor(context);
-    final background = _destinations[_currentIndex].backgroundOf(context);
-    _switch.stop();
-    setState(() {
-      _outgoing = image;
-      _outgoingBackground = background;
-      _outgoingFade = fade;
-      _switchForward = index > _currentIndex;
-      _switchCount++;
-      _currentIndex = index;
-    });
-    previous?.dispose();
     _pageController.jumpToPage(index);
-    _visited.add(index);
-    _switch
-      ..duration = AppPageTransition.of(context).duration
-      ..forward(from: 0);
+    _startSwitch();
   }
 
   /// 主頁換頁的整個畫面（舊頁快照與新分頁疊好的樣子）；換頁中改去別的分頁
   /// 時從這裡拍下換到一半的樣子（[_retarget]）。
   final GlobalKey _switchKey = GlobalKey();
 
-  /// 換頁停在起點、準備新分頁中：新分頁畫在舊頁快照底下，分頁列的膠囊留在
-  /// 原分頁，和換頁一起開始。
+  /// 換頁停在起點、準備新分頁中：新分頁畫在舊頁快照底下。
   final ValueNotifier<bool> _switchHeld = ValueNotifier(false);
 
   /// [_switchTo] 停在起點的計時器。
