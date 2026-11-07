@@ -10,7 +10,8 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
 | `docs/agents/` | 只在特定情況用到的做法與坑，下面寫明什麼時候讀哪份 |
-| `HANDOFF.md` | 直接在 `beta` 上做、做到一半要換對話時的交接；做完就刪（`handoff` 技能） |
+| `PLAN.md` | 想好了、還沒開工的計畫；開工時搬走 |
+| `HANDOFF.md` | 對話之間接手用的交接，只在做到一半要換對話時才有（`handoff` 技能），做完就刪 |
 
 ## 和使用者的工作默契
 
