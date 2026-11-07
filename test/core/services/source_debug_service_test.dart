@@ -133,13 +133,10 @@ void main() {
 
   test('requests sent straight through Dio are recorded', () async {
     // 規則 JS 的 `java.get`、`java.post` 不經過 AnalyzeUrl，直接用 Dio 送。
-    final urls = <String>[];
-    await recordRequestUrls(
-      urls,
-      () => HttpClient().client.post<String>('$baseUrl/'),
-    );
+    final log = RequestLog();
+    await log.run(() => HttpClient().client.post<String>('$baseUrl/'));
 
-    expect(urls, ['POST $baseUrl/']);
+    expect(log.lines, ['POST $baseUrl/']);
   });
 
   test('logs from a cancelled run never reach the next run', () async {

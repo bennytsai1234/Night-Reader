@@ -17,6 +17,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
@@ -93,6 +94,25 @@ Future<Object?> _backstageInSourceIsolate(String html) => SourceIsolate.run(
     sourceRegex: 'b+',
   ).getStrResponse())['body'],
 );
+
+/// 在書源 isolate 裡照書源校驗的方式記請求與回應，抓 [chapterUrl] 的正文；
+/// 傳回記下的行與看起來是暫時性失敗的回應數。
+Future<(List<String>, int)> _contentRequestLogInSourceIsolate(
+  Map<String, dynamic> sourceJson,
+  String chapterUrl,
+) => SourceIsolate.run((_) async {
+  final source = BookSource.fromJson(sourceJson);
+  final book = Book(bookUrl: chapterUrl, origin: source.bookSourceUrl);
+  final log = RequestLog(withResponses: true);
+  await log.run(
+    () => BookSourceService().getContent(
+      source,
+      book,
+      BookChapter(title: '第一章', url: chapterUrl, bookUrl: chapterUrl),
+    ),
+  );
+  return (log.lines, log.transientResponses);
+});
 
 Future<void> _logInSourceIsolate(String message) =>
     SourceIsolate.run((_) async => AppLog.put(message, toast: true));
@@ -239,6 +259,8 @@ void main() {
   final arrived = <String, Completer<void>>{};
   // `/count` 收到的請求數。
   var counted = 0;
+  // `/flaky` 收到的請求數。
+  var flaky = 0;
   final released = <String, Completer<void>>{};
   Completer<void> gate(Map<String, Completer<void>> gates, String name) =>
       gates.putIfAbsent(name, Completer<void>.new);
@@ -278,6 +300,16 @@ void main() {
         case '/count':
           counted++;
           request.response.write('數到了');
+        case '/flaky':
+          // 第一次網站忙碌（503），之後正常。
+          if (flaky++ == 0) {
+            request.response.statusCode = HttpStatus.serviceUnavailable;
+            request.response.write('busy');
+          } else {
+            request.response.write(
+              '{"text":"第一章的正文，夜裡讀起來剛好，夜裡讀起來剛好，夜裡讀起來剛好。"}',
+            );
+          }
         case '/bytes':
           request.response.add([0xFF, 0x00, 0xFE]);
         case '/utf8':
@@ -978,6 +1010,30 @@ void main() {
 
       expect(urls, ['$baseUrl/c/1', '$baseUrl/c/2']);
     }, skip: quickJsUnavailableReason());
+
+    // 書源校驗在書源 worker 裡記請求；規則 JS 抓的 API 在網路 isolate 送出，
+    // 網站回 503 的事要跟著結果回來，校驗才知道要重試（ADR 0034）。
+    test(
+      'a busy reply to the rule JS comes back from the network isolate',
+      () async {
+        source.ruleContent!.content = '@js:java.ajax("$baseUrl/flaky")';
+        flaky = 0;
+
+        final (lines, transient) = await _contentRequestLogInSourceIsolate(
+          source.toJson(),
+          '$baseUrl/c/1',
+        );
+
+        expect(transient, 1);
+        expect(
+          lines,
+          contains(
+            '  ← $baseUrl/flaky 503 text/html; charset=utf-8，4 位元組：busy',
+          ),
+        );
+      },
+      skip: quickJsUnavailableReason(),
+    );
 
     test('explore kinds and explore pages', () async {
       final service = BookSourceService();

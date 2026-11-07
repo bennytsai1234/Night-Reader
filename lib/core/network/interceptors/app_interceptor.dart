@@ -72,12 +72,14 @@ class AppInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     _recordRedirects(response);
+    recordResponse(response);
     super.onResponse(response, handler);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     _recordRedirects(err.response);
+    recordResponse(err.response, error: err);
     try {
       final redirected = await _tryFollowRedirect(err);
       if (redirected != null) {

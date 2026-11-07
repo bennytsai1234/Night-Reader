@@ -395,22 +395,20 @@ _Work<_Ran<R>> _tracked<R>(
   final chapterBefore = chapter == null
       ? null
       : _readFields(chapterRuleFields, chapter);
-  final requestUrls = <String>[];
+  final requests = RequestLog();
   // 書源要使用者驗證而失敗時，失敗照實說是要驗證（ADR 0038）。
   Future<R> run() => SourceInteraction.watchVerification(
     () => work(cancelToken),
     cancelToken: cancelToken,
   );
-  final result = recordRequests
-      ? await recordRequestUrls(requestUrls, run)
-      : await run();
+  final result = recordRequests ? await requests.run(run) : await run();
   return _Ran(
     result,
     book == null ? const {} : _changes(bookRuleFields, bookBefore!, book),
     chapter == null
         ? const {}
         : _changes(chapterRuleFields, chapterBefore!, chapter),
-    requestUrls,
+    requests.lines,
   );
 };
 
