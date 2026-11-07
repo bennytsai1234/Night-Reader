@@ -22,7 +22,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 這些是使用者反覆講過、也反覆被漏掉的事，每一條都有過具體的糾正。
 
-- **做到好，不要問**：目標做完、驗證過、沒有要使用者決定的事，就照「Git 流程」開 PR 合併、回報結果，不問「要不要合併」。途中看到的警告、同一原因的其他問題一起收掉。使用者的話：「幫我把事情做到好，像許願機一樣」。
+- **做到好，做到可以合併就停**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問。使用者的話：「幫我把事情做到好，像許願機一樣」。做到一段落問要不要收尾，收尾到「可以合併」就停，使用者說「合併」才合併（「Git 流程」，ADR 0047）。
 - **寫給使用者的字全是繁體中文**：對話、PR 標題與說明、審查摘要、commit 說明的本文都是。#93 的 PR 說明寫成英文，是失誤。
 - **結果寫在對話裡**：使用者不看 PR 頁面與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」；PR 說明是留給之後讀歷史的 agent 看的。
 - **用使用者的詞，不丟代號**：用 `GLOSSARY.md` 的詞，第一次出現先解釋。不寫 P0／P2、`.g.dart`、pre-push 這類沒解釋的代號；不說「未驗證」「實機」。
@@ -58,17 +58,23 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## Git 流程
 
-這一節與發布流程照 ADR 0027（PR 的審查與合併細節在 ADR 0014）；要改流程先改這兩份 ADR。
+這一節與發布流程照 ADR 0027；分支什麼時候收尾、什麼時候合併照 ADR 0047，squash、審查範圍與原型分支照 ADR 0014。要改流程先改這三份 ADR。
 
 - 兩條長期分支：`beta` 是預設分支，日常的改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版，不在 `main` 上提交。
 - 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時，先 `git pull --ff-only`，直接在 `beta` 上改、提交、推上去，不開分支、不審；分支上的工作的交接例外，改在那條分支上。
-- 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在從 `beta` 開的分支上做，照下面的流程開 PR 合併進 `beta`；跟著功能一起改的文件放在同一個 PR。
-- 使用者交代的一件事做完、驗證過、沒有要使用者決定的事，就開 PR 合併進 `beta`，不問、不等使用者說（ADR 0014）。做的途中的修正與小改動疊在同一條分支上、推上去讓 CI 跑，一件事一個 PR，不是每個提交各開一個。做到一半先停下、或還沒開工的工作，交接寫在那條分支自己的 `HANDOFF.md`，`beta` 的不寫（全域指示「交接跟著分支」）。
-- 合併時照這個順序走，讓 CI 盡量只等一次：
-  1. 把這次要合併的分支併成一條，`git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，開一個以 `beta` 為目標的 PR（PR 說明照 `pr` 技能寫，用繁體中文）。
-  2. 改到 App 內容的 PR（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出）開 PR 就派 Codex 審整個 PR 一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的 PR 不審。
-  3. 等審查時把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態（合併後不另外補交接）：`HANDOFF.md` 以 `beta` 那份為底、拿掉這條分支那段；這件事還有下一個 PR 時，從 `beta` 開下一條分支，把剩下的交接搬過去。核對屬實的問題修在同一個 PR，修完只重跑這次修正改到的測試檔，其餘交給 CI；審查摘要（發現了什麼、核對結果、修了哪些、沒修的為什麼）用 `gh pr edit --body-file` 寫進 PR 說明的「審查」一段，不另貼留言。修正、交接一起推一次。
-  4. 合併前再 `git fetch`：`beta` 在這段時間有新提交才再併一次、推上去。CI 通過（`gh pr checks <PR> --watch --fail-fast` 等結果：有一項失敗就馬上停下來看原因、修好重推，不等全部跑完；更新說明的檢查幾秒就跑完）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，PR 的分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `beta`，刪掉本機分支，併進這個 PR 的其他分支也連同遠端一起刪掉，`git worktree prune`。
+- 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在從 `beta` 開的分支上做（repo 外的 worktree，見「環境」），跟著功能一起改的文件放在同一條分支。一件事一條分支、一個 PR，途中的修正與小改動疊在同一條分支上。
+- 開工時先看兩件事：`gh pr list` 有沒有開好、等合併的 PR（有就提醒使用者一次）；`beta` 上最近一次 Android Release 有沒有失敗（失敗就先告訴使用者並修）。
+- 做的途中每段驗證過就 commit 並推上，CI 在背景跑，不等。做到一段落就回報做了什麼，問使用者要不要收尾：「Codex 審查後收尾」「不審直接收尾」「繼續改」。做到一半先停下的工作，交接寫在那條分支自己的 `HANDOFF.md`，`beta` 的不寫（全域指示「交接跟著分支」）。
+- 收尾（ADR 0047），做到「可以合併」就停，不合併：
+  1. 使用者選了審查，而且改到 App 內容（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出），就派 Codex 審整條分支一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的不審。核對屬實的問題修掉，修完只重跑這次修正改到的測試檔。
+  2. 把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態：`HANDOFF.md` 以 `beta` 那份為底、拿掉這條分支的交接；要留給以後的事（等使用者決定、先不做）加進 `beta` 那份的內容。
+  3. `git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，`gh pr checks --watch --fail-fast` 等 CI（有一項失敗就馬上停下來看原因、修好重推）。
+  4. 開以 `beta` 為目標的 PR（說明照 `pr` 技能寫，用繁體中文，有審查就寫一段「審查」：發現了什麼、核對結果、修了哪些、沒修的為什麼）。
+  5. 刪掉 worktree 與本機分支（遠端分支留著給合併用），回報「可以合併」；別的分支要用到這條的修正時，說明「這條要先合」。
+- 合併（使用者說「合併」才做，ADR 0047）：一次只有一個 Agent 合併。`gh pr list` 列出可以合併的 PR，一個一個來：
+  1. `git fetch`；`beta` 在這條 PR 最後一次 CI 之後有新提交，就在 worktree 裡把 `beta` 併進來、解衝突、推上去、等 CI 通過；沒有就跳過這步。
+  2. `gh pr merge <PR> --squash`，squash commit 的標題與說明取 PR 的標題與說明，GitHub 自動刪掉遠端分支。
+  3. 全部合完 `git pull --ff-only` 更新本機 `beta`、`git worktree prune`，確認 Android Release 已經開始，回報合了哪些。合併 Agent 不審查，除了解衝突也不改程式；衝突牽涉到邏輯、自己判斷不了時，停下來問使用者。
 - `beta` 的 `HANDOFF.md` 只寫查不到的事：等使用者決定的事、還沒寫進其他文件的決定；分支上的工作看那條分支的 `HANDOFF.md`（`git branch -a` 列出所有分支），合併了什麼看 PR，發版看 GitHub Actions，環境上的坑寫在本檔「環境」。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
