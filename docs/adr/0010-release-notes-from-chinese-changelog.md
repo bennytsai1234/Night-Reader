@@ -1,5 +1,7 @@
 # Release 說明改由中文 CHANGELOG 提供，發版前檢查一定要寫
 
+> 測試版的說明已由 ADR 0048 取代：改取各 PR 的標題，每個 PR 不再寫「未發布」，`## 未發布` 這一段也拿掉了。正式版照本文取 `CHANGELOG.md` 的 `## X.Y.Z`，公開說明的書源名稱、網址、單項長度與正式版篇幅檢查照本文。
+
 App 的更新視窗與「更新紀錄」顯示的是 GitHub Release 說明。原本 CI 發版時用 `gh release create --generate-notes`，說明就是英文的 commit 標題（例如 `feat(update): add …`），一般使用者看不懂。現在改成在 repo 根目錄維護 `CHANGELOG.md`，用繁體中文寫給一般讀者看：最上面是 `## 未發布`，下面依序是各正式版的 `## X.Y.Z`；每段先用一兩句介紹這次的重點，再條列使用者看得到的改動，不寫內部實作與 commit 前綴。
 
 `android-release.yml` 發版時從 `CHANGELOG.md` 取 Release 說明：

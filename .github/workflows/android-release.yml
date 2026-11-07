@@ -1,11 +1,11 @@
 name: Android Release
 
 on:
-  # 推上 beta 有 App 改動就發測試版；推上 main（只會快轉到 beta 上的提交）在 pubspec
-  # 版號升到還沒發布的版本時發正式版（ADR 0002、0027）。
+  # 測試版由合併的人合完一批、beta 的 CI 通過後手動以 channel=beta 執行，一批發一版
+  # （ADR 0048）；推上 main（只會快轉到 beta 上的提交）在 pubspec 版號升到還沒發布的版本時
+  # 發正式版（ADR 0002、0027）。
   push:
     branches:
-      - beta
       - main
       - "internal-test/**"
     tags:
@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "beta：在 beta 上補發測試版（推上 beta 會自動發，這只用在自動那次沒發出去時）；test：只建置測試 APK，不發布"
+        description: "beta：把上一個發布之後 beta 上的 App 改動發成測試版；test：只建置測試 APK，不發布"
         type: choice
         options:
           - beta
@@ -30,8 +30,8 @@ permissions:
 concurrency:
   group: android-release-${{ (github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/main') && 'publish' || github.ref }}
   cancel-in-progress: false
-  # 預設同一組只留一個等待中的執行，新來的會取消它：連續合併兩次時，前一次的測試版
-  # 會被取消、併進下一版。排成佇列依序執行，每次合併各發一版（ADR 0027）。
+  # 預設同一組只留一個等待中的執行，新來的會取消它。排成佇列依序執行，正式版與之後補發的
+  # 測試版都不會被取消。
   queue: max
 
 jobs:
@@ -126,14 +126,9 @@ jobs:
             exit 1
           fi
 
-          # 推上 beta 時自動發測試版，沒有東西可發是常態（例如只改了文件），照常結束、不發版。
-          # 手動補發時讓這種情況失敗並寫明原因，觸發的人才看得出為什麼沒有新版。
+          # 沒有東西可發（例如這批只合了文件、工具或測試）時照常結束、不發版，在執行頁寫明原因。
           nothing_to_publish() {
-            if [[ "$manual_beta" == "true" ]]; then
-              echo "::error::$1"
-              exit 1
-            fi
-            echo "$1"
+            echo "::notice::$1"
             mode=no-release
           }
 
@@ -201,19 +196,12 @@ jobs:
               nothing_to_publish "測試版 $beta_tag 已經發布過，beta 之後沒有新的提交。"
             elif git show-ref --verify --quiet "refs/tags/$beta_tag"; then
               # 上次推了 tag 但建立 Release 失敗：照那個 tag 補發。這個 tag 本身會被當成
-              # 「上一個發布」，所以不再做下面的改動與更新說明檢查（打 tag 前已經檢查過）。
+              # 「上一個發布」，所以不再做下面的改動判斷。
               mode=recover-beta
               target_sha="$(git rev-list -n 1 "$beta_tag")"
             elif [[ "$commits" == 0 ]] || ! has_unreleased_app_changes; then
               nothing_to_publish "上一個發布之後 beta 沒有改到 App 內容，沒有新的測試版可發。"
             else
-              # 更新說明在發版這一刻檢查（ADR 0010）：上一個發布之後改到 App 內容，
-              # 「未發布」就要跟著寫，且不是空的。自動發的時候也一樣擋，沒寫就讓這次執行失敗。
-              last_tag="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "$GITHUB_SHA")"
-              if ! sh tool/changelog.sh check "$last_tag" "$GITHUB_SHA"; then
-                echo "::error::$last_tag 之後的 App 改動沒有寫進 CHANGELOG.md 的「未發布」，補上後再推一次 beta，或在 beta 上手動執行 channel=beta 補發。"
-                exit 1
-              fi
               mode=beta
             fi
             if [[ "$mode" == beta || "$mode" == recover-beta ]]; then
@@ -226,32 +214,26 @@ jobs:
             fi
           fi
 
-          # Release 說明取 CHANGELOG.md 的段落（ADR 0010）：正式版取「X.Y.Z」整段；測試版取「未發布」
-          # 裡上一個發布（notes_base）還沒有的條列，App 更新時再把中間每一版接起來。
-          # 先在這裡確認段落存在，免得建置完才在發布時失敗。
+          # Release 說明（ADR 0010、0048）：正式版取 CHANGELOG.md 的「X.Y.Z」整段；測試版取上一個
+          # 發布（notes_base）之後每個改到 App 的 PR 標題，App 更新時再把中間每一版接起來。
+          # 先在這裡產生並檢查真正會公開的內容，免得建置完才在發布時失敗。
           notes_heading=""
           notes_base=""
           if [[ "$publish" == "true" ]]; then
             if [[ "$prerelease" == "true" ]]; then
-              notes_heading="未發布"
               notes_base="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "${target_sha}^")"
-            else
-              notes_heading="$app_version"
-            fi
-            if ! notes="$(git show "$target_sha:CHANGELOG.md" | sh tool/changelog.sh section "$notes_heading" -)"; then
-              echo "::error::CHANGELOG.md 找不到「## $notes_heading」段落。正式版的版號 commit 要把「## 未發布」改成「## $notes_heading」，並在上面留一個空的「## 未發布」。"
-              exit 1
-            fi
-            # 發版前就檢查真正會公開的內容；測試版要比較上一個發布的 tag，
-            # 不能拿累積的整段「未發布」代替，否則無法發現重複或過長。
-            if [[ "$prerelease" == "true" ]]; then
-              notes="$(git show "$target_sha:CHANGELOG.md" | sh tool/changelog.sh added "$notes_base" -)"
+              notes="$(sh tool/changelog.sh titles "$notes_base" "$target_sha")"
               notes_mode=beta
             else
+              notes_heading="$app_version"
+              if ! notes="$(git show "$target_sha:CHANGELOG.md" | sh tool/changelog.sh section "$notes_heading" -)"; then
+                echo "::error::CHANGELOG.md 找不到「## $notes_heading」段落。正式版的版號 commit 要在 CHANGELOG.md 最上面加上這一版的段落。"
+                exit 1
+              fi
               notes_mode=stable
             fi
             if ! printf '%s\n' "$notes" | sh tool/changelog.sh validate "$notes_mode" -; then
-              echo "::error::請先精簡更新說明並移除具名書源，再重新發版。"
+              echo "::error::更新說明沒通過檢查（測試版的說明是 beta 上各提交的標題，正式版是 CHANGELOG.md 的段落），看上面的訊息是哪一行。"
               exit 1
             fi
           fi
@@ -387,7 +369,7 @@ jobs:
           asset_name="night-reader-${TAG_NAME}-arm64-v8a.apk"
           notes_path="$RUNNER_TEMP/release-notes.md"
           if [[ "$PRERELEASE" == "true" ]]; then
-            sh tool/changelog.sh added "$NOTES_BASE" > "$notes_path"
+            sh tool/changelog.sh titles "$NOTES_BASE" "$TARGET_SHA" > "$notes_path"
           else
             sh tool/changelog.sh section "$NOTES_HEADING" > "$notes_path"
           fi

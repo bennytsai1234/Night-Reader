@@ -1,0 +1,38 @@
+name: PR title
+
+# 改到 App 內容的 PR，squash 合併後標題就是測試版說明的一行（ADR 0048）：開 PR、改標題、
+# 推新提交時檢查標題去掉前綴後能不能直接給讀者看。和 ci.yml 分開，改標題時只重跑這一項。
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: Title is a release note
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          files="$(sh tool/changelog.sh app-files "$(git merge-base "$BASE" "$HEAD")" "$HEAD")"
+          if [ -z "$files" ]; then
+            echo "沒有改到 App 內容，標題不會出現在測試版說明。"
+            exit 0
+          fi
+          sh tool/changelog.sh check-title "$TITLE"

@@ -11,7 +11,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | `GLOSSARY.md` | 和使用者討論時用的詞 |
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 架構與產品決定：為什麼這樣定、否決過什麼；索引在 `docs/adr/README.md` |
-| `CHANGELOG.md` | 給讀者看的更新說明（ADR 0010） |
+| `CHANGELOG.md` | 給讀者看的正式版更新說明（ADR 0010；測試版說明是 PR 標題，ADR 0048） |
 | `PRIVACY.md` | 公開的隱私權政策，Google 登入的同意畫面連到這裡；和 App 的「隱私說明」一起改 |
 | `HANDOFF.md` | 還沒收尾的事、等使用者決定的事 |
 | 本檔 | 和使用者的工作默契、工具鏈、驗證、Git 與發布流程、環境上的坑 |
@@ -49,7 +49,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機只跑受影響的測試（加 `-r failures-only`，通過的不印，只印失敗的），全套測試只在 CI 跑（ADR 0014）。
+- 自動化驗證就是 `.github/workflows/ci.yml`：開 PR、PR 有新推送、推上 `beta` 時在 Linux 上執行（只改說明文件的推送不跑；做的途中推分支只是備份，不跑），結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發（ADR 0048）。本機只跑受影響的測試（加 `-r failures-only`，通過的不印，只印失敗的），全套測試只在 CI 跑（ADR 0014）。
 - 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze`（只改說明文件，即任何 `.md` 與 `docs/`，以及推的提交已經在本機記錄的 `origin/beta` 上時略過；套件設定檔不存在或比 `pubspec.yaml`、`pubspec.lock` 舊時先照 lock 檔裝好套件）。推送時看 hook 印的 `pre-push:` 開頭那一行是 `pre-push: analyze 通過（全套測試看 CI）`（只改說明文件時是略過的訊息）；Git 會在它後面再印遠端的訊息，只看最後幾行會漏掉它。
 - 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart`（Drift 產生的資料庫程式）一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。要給使用者看畫面時，用 `test/support/screenshot.dart` 把元件測試畫成 PNG（用法寫在檔頭）；改介面前後要對照整個 App 時，重拍 `test/screens/` 那組固定畫面（平常的全套測試會跳過）。
@@ -63,32 +63,34 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 兩條長期分支：`beta` 是預設分支，日常的改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版，不在 `main` 上提交。
 - 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時，先 `git pull --ff-only`，直接在 `beta` 上改、提交、推上去，不開分支、不審；分支上的工作的交接例外，改在那條分支上。
 - 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在從 `beta` 開的分支上做（repo 外的 worktree，見「環境」），跟著功能一起改的文件放在同一條分支。一件事一條分支、一個 PR，途中的修正與小改動疊在同一條分支上。
-- 開工時先看兩件事：`gh pr list` 有沒有開好、等合併的 PR（有就提醒使用者一次）；`beta` 上最近一次 Android Release 有沒有失敗（失敗就先告訴使用者並修）。
-- 做的途中每段驗證過就 commit 並推上，CI 在背景跑，不等。交代的事全部做完、驗證過，手上沒有待辦、也沒有要問使用者的事，才回報做了什麼、問要不要收尾：「Codex 審查後收尾」「不審直接收尾」「繼續改」。還有待辦就繼續做，有要使用者決定的事先問那件事；不是做完一步就問。做到一半先停下的工作，交接寫在那條分支自己的 `HANDOFF.md`，`beta` 的不寫（全域指示「交接跟著分支」）。
+- 開工時先看兩件事：`gh pr list` 有沒有開好、等合併的 PR（有就提醒使用者一次）；`beta` 上最近一次 CI 與 Android Release 有沒有失敗（失敗就先告訴使用者並修）。
+- 做的途中每段驗證過就 commit 並推上；推分支只是備份，這時不跑 CI。交代的事全部做完、驗證過，手上沒有待辦、也沒有要問使用者的事，才回報做了什麼、問要不要收尾：「Codex 審查後收尾」「不審直接收尾」「繼續改」。還有待辦就繼續做，有要使用者決定的事先問那件事；不是做完一步就問。做到一半先停下的工作，交接寫在那條分支自己的 `HANDOFF.md`，`beta` 的不寫（全域指示「交接跟著分支」）。
 - 收尾（ADR 0047），做到「可以合併」就停，不合併：
   1. 使用者選了審查，而且改到 App 內容（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出），就派 Codex 審整條分支一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的不審。核對屬實的問題修掉，修完只重跑這次修正改到的測試檔。
-  2. 把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態：`HANDOFF.md` 以 `beta` 那份為底、拿掉這條分支的交接；要留給以後的事（等使用者決定、先不做）加進 `beta` 那份的內容。
-  3. `git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，`gh pr checks --watch --fail-fast` 等 CI（有一項失敗就馬上停下來看原因、修好重推）。
-  4. 開以 `beta` 為目標的 PR（說明照 `pr` 技能寫，用繁體中文，有審查就寫一段「審查」：發現了什麼、核對結果、修了哪些、沒修的為什麼）。
+  2. 把 `HANDOFF.md` 改成合併後的狀態：以 `beta` 那份為底、拿掉這條分支的交接；要留給以後的事（等使用者決定、先不做）加進 `beta` 那份的內容。
+  3. `git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，開以 `beta` 為目標的 PR（標題照下面「PR 標題」；說明照 `pr` 技能寫，用繁體中文，有審查就寫一段「審查」：發現了什麼、核對結果、修了哪些、沒修的為什麼）。
+  4. `gh pr checks --watch --fail-fast` 等 CI 與標題檢查（有一項失敗就馬上停下來看原因、修好重推）。
   5. 刪掉 worktree 與本機分支（遠端分支留著給合併用），回報「可以合併」；別的分支要用到這條的修正時，說明「這條要先合」。
 - 合併（使用者說「合併」才做，ADR 0047）：一次只有一個 Agent 合併。`gh pr list` 列出可以合併的 PR，一個一個來：
   1. `git fetch`；`beta` 在這條 PR 最後一次 CI 之後有新提交，就在 worktree 裡把 `beta` 併進來、解衝突、推上去、等 CI 通過；沒有就跳過這步。
   2. `gh pr merge <PR> --squash`，squash commit 的標題與說明取 PR 的標題與說明，GitHub 自動刪掉遠端分支。
-  3. 全部合完 `git pull --ff-only` 更新本機 `beta`、`git worktree prune`，確認 Android Release 已經開始，回報合了哪些。合併 Agent 不審查，除了解衝突也不改程式；衝突牽涉到邏輯、自己判斷不了時，停下來問使用者。
+  3. 全部合完：`git pull --ff-only` 更新本機 `beta`、`git worktree prune`，等 `beta` 上最後一次 CI 跑完（中間幾次合併各自的 CI 會被下一次取消）。
+  4. 通過了就執行 `gh workflow run android-release.yml --ref beta -f channel=beta` 發這一批的測試版（沒有 App 改動時它照常結束、不發），確認開始建置就結束，不等 APK。沒通過就留下來修：開小分支修、開 PR、等 CI、合併，再回到第 3 步；某個 PR 本身的邏輯一時修不好，就 `git revert` 它的合併提交推上 `beta`，告訴使用者它要回去重做。
+  5. 回報合了哪些、測試版發了沒。合併 Agent 不審查，除了解衝突與修 `beta` 的 CI 也不改程式；衝突牽涉到邏輯、自己判斷不了時，停下來問使用者。
 - `beta` 的 `HANDOFF.md` 只寫查不到的事：等使用者決定的事、還沒寫進其他文件的決定；分支上的工作看那條分支的 `HANDOFF.md`（`git branch -a` 列出所有分支），合併了什麼看 PR，發版看 GitHub Actions，環境上的坑寫在本檔「環境」。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
-- 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加平鋪條列，不寫內部實作、具名書源、網址與 commit 前綴；測試版最多四項、正式版最多八項，細節留 PR（ADR 0010）；寫的是和上一個正式版相比的最後結果，改到已經寫過的事就改原本那一條，不另外加（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 裡單獨一行寫 `Release-Notes: none`，這種提交也不會發測試版。
+- PR 標題：改到 App 內容的 PR，標題去掉前綴就是測試版說明的一行（ADR 0048）。寫一般讀者看得懂的一句，不寫內部實作、具名書源與網址，145 字以內；`pr-title.yml` 會檢查。App 行為沒變的改動（例如只改註解）在 PR 說明（也就是 squash 後的 commit message）裡單獨一行寫 `Release-Notes: none`，這種提交不算 App 改動，不進測試版說明。
 - `beta` 與 `main` 的分支保護只禁止強制推送與刪除，不強制走 PR：versionCode 取發版那個提交的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004、0027）。
 - 長期有效的內容依性質放：架構與產品決定寫成 `docs/adr/` 的 ADR（並加進 `docs/adr/README.md` 的索引），寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`，畫面與元件規格寫進 `DESIGN.md`；本檔只放從 repo 查不到的事實。
 
 ## 發布流程
 
 - 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004、0027）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取發版那個提交的提交數。
-- 測試版：推上 `beta`（合併 PR 或直接推）時自動把上一個發布之後累積的 App 改動發成 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明取 `CHANGELOG.md` 的 `## 未發布` 裡上一個發布之後新增或改寫的條列。沒有 App 改動就不發；改了 App 卻沒寫「未發布」時這次執行失敗。自動那次沒發出去時，補上原因後執行 `gh workflow run android-release.yml --ref beta -f channel=beta` 補發。日常改進不用升版號。
-- 正式版（使用者說要發才做）：先用 `codex-review` 拿 `website/index.html` 逐段對照 `## 未發布` 與程式，不符的照一般流程開 PR 修好（網站隨 `main` 部署）。接著在 `beta` 推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，同時把 `CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留一個空的 `## 未發布`；這個提交的 CI 通過後，`git push origin <這個提交>:main` 把 `main` 快轉過去。CI 會建置簽章 APK、建立 `vX.Y.Z` tag，並以 `## X.Y.Z` 段落當說明發布 GitHub Release。`main` 收到不在 `beta` 上的提交時 CI 直接失敗。
+- 測試版：合併的人合完一批、`beta` 的 CI 通過後執行 `gh workflow run android-release.yml --ref beta -f channel=beta`，把上一個發布之後累積的 App 改動發成 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明是這段期間改到 App 的 PR 標題，一個一行（ADR 0048）。推上 `beta` 不會自動發；沒有 App 改動就不發。日常改進不用升版號。
+- 正式版（使用者說要發才做）：先用 `sh tool/changelog.sh titles v<上一個正式版> origin/beta` 列出上一個正式版之後的改動，再用 `codex-review` 拿 `website/index.html` 逐段對照這份清單與程式，不符的照一般流程開 PR 修好（網站隨 `main` 部署）。接著在 `beta` 推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，同時在 `CHANGELOG.md` 最上面加上 `## X.Y.Z`：從那份清單整理成一兩句介紹加最多八條平鋪條列，一般讀者看得懂，不寫具名書源與網址（ADR 0010）；這個提交的 CI 通過後，`git push origin <這個提交>:main` 把 `main` 快轉過去。CI 會建置簽章 APK、建立 `vX.Y.Z` tag，並以 `## X.Y.Z` 段落當說明發布 GitHub Release。`main` 收到不在 `beta` 上的提交時 CI 直接失敗。
 - 切勿在本機建立或推送 `v*` tag；tag 的唯一擁有者是 CI。
-- 推上 `beta` 或快轉 `main` 後，檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
+- 發測試版或快轉 `main` 後，檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
 - `channel=test` 的手動執行與 `internal-test/**` 分支只建置測試 APK artifact，不打 tag、不發布。
 - `website/` 隨 `main` 快轉時由 `.github/workflows/website-deploy.yml` 部署到 GitHub Pages，內容跟著正式版走；網站上的功能描述要與正式版的實際行為一致。
 
