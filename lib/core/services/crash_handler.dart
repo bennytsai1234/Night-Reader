@@ -13,6 +13,9 @@ class CrashHandler {
   static const _errorDeduplicationWindow = Duration(seconds: 2);
   static const _maxRecentErrorFingerprints = 64;
 
+  /// 最多留幾份崩潰日誌，多的從最舊的刪起。
+  static const _maxLogFiles = 50;
+
   static String? _userAgent;
   static PackageInfo? _packageInfo;
   static final Map<String, DateTime> _recentErrorFingerprints =
@@ -130,6 +133,7 @@ class CrashHandler {
       // 同時保留一個最新的日誌索引
       final latestFile = File('${directory.path}/crash_log.txt');
       await latestFile.writeAsString(buffer.toString(), flush: true);
+      await _pruneLogs(directory);
 
       AppLog.d('Crash log saved to: ${file.path}');
     } catch (e) {
@@ -140,17 +144,8 @@ class CrashHandler {
   /// 最近的崩潰日誌；沒有任何紀錄時回傳空字串，讀取失敗時丟出例外，
   /// 讓日誌頁顯示對應的空狀態或錯誤狀態。
   static Future<String> readLogs() async {
-    final directory = await _logDirectory();
-    final logs =
-        directory
-            .listSync()
-            .whereType<File>()
-            .where((file) => _isCrashLogFile(file))
-            .toList()
-          ..sort((a, b) => b.path.compareTo(a.path));
-
     final buffer = StringBuffer();
-    for (final file in logs.take(20)) {
+    for (final file in _logsNewestFirst(await _logDirectory()).take(20)) {
       buffer.writeln(await file.readAsString());
     }
     return buffer.toString().trimRight();
@@ -169,10 +164,37 @@ class CrashHandler {
     if (await latest.exists()) await latest.delete();
   }
 
-  static Future<Directory> _logDirectory() async {
-    return await getExternalStorageDirectory() ??
-        await getApplicationDocumentsDirectory();
+  /// 崩潰日誌與書源校驗診斷放的資料夾：手機上是 App 的外部資料夾，電腦
+  /// 接上手機就讀得到。
+  static Future<Directory> logDirectory() => _logDirectory();
+
+  static Future<Directory> Function() _logDirectory = () async =>
+      await getExternalStorageDirectory() ??
+      await getApplicationDocumentsDirectory();
+
+  @visibleForTesting
+  static set logDirectoryForTesting(Future<Directory> Function() directory) =>
+      _logDirectory = directory;
+
+  /// 「版本 X (Build N)」；還沒載入 App 資訊時是空的。
+  static String get appVersionLine {
+    final info = _packageInfo;
+    if (info == null) return '';
+    return '版本 ${info.version} (Build ${info.buildNumber})';
   }
+
+  static List<File> _logsNewestFirst(Directory directory) =>
+      directory.listSync().whereType<File>().where(_isCrashLogFile).toList()
+        ..sort((a, b) => b.path.compareTo(a.path));
+
+  static Future<void> _pruneLogs(Directory directory) async {
+    for (final old in _logsNewestFirst(directory).skip(_maxLogFiles)) {
+      await old.delete();
+    }
+  }
+
+  @visibleForTesting
+  static Future<void> saveLogForTesting(String error) => _saveLog(error, null);
 
   static bool _isCrashLogFile(File file) {
     final name = file.uri.pathSegments.last;

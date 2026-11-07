@@ -90,7 +90,11 @@ class ParsingException extends AppException {
 /// 規則 JS 執行出錯、規則自己沒接住（對標 Rhino 丟出的錯誤）。規則照失敗
 /// 處理，錯誤訊息不會被當成正文、網址或分類。
 class RuleJsException extends AppException {
-  RuleJsException(super.message);
+  RuleJsException(super.message, {this.code});
+
+  /// 出錯時實際執行的 JS：`{{ }}` 這類代換已經做完，書源校驗的診斷拿來
+  /// 看代進去的值長什麼樣。
+  final String? code;
 }
 
 /// 書源要登入才讀得到（目錄或正文被登入牆擋住，見 `LoginWall`）。訊息一律

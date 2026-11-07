@@ -9,7 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/services/source_check_diagnostics.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/js/js_extensions_base.dart';
@@ -396,6 +396,7 @@ class CheckSourceService extends ChangeNotifier {
     // 清除上次校驗殘留的 JS 靜態快取，避免大量 jsLib / TTF 字型佔用記憶體。
     JsEngine.clearCaches();
     JsExtensionsBase.clearCaches();
+    unawaited(SourceCheckDiagnostics.begin());
 
     _appendLog('開始校驗，共 $_totalCount 個書源 (${config.summary})');
     _notifyIfAlive();
@@ -492,21 +493,16 @@ class CheckSourceService extends ChangeNotifier {
     if (_shouldIgnoreSourceUpdate(url)) return null;
     final source = BookSource.fromJson(result.updatedSourceJson);
     for (final log in result.logs) {
-      if (log.startsWith('§DIAG§')) {
-        // 診斷：把未截斷的解析/JS 原始錯誤寫進崩潰日誌（主線程，path_provider 正常）。
-        // 只挑解析/JS 類，避免登入/逾時等已知分類灌爆日誌。
-        if (log.contains('解析') ||
-            log.contains('原始錯誤') ||
-            log.contains('[js]')) {
-          CrashHandler.recordError(
-            '書源校驗解析失敗 [${source.bookSourceName}] (${source.bookSourceUrl})\n$log',
-            null,
-          );
-        }
-        continue;
-      }
       _appendLog(log, sourceUrl: url);
     }
+    unawaited(
+      SourceCheckDiagnostics.record(
+        sourceName: source.bookSourceName,
+        sourceUrl: source.bookSourceUrl,
+        outcome: result.isHealthy ? '校驗成功' : source.runtimeHealth.label,
+        entries: result.diagnostics,
+      ),
+    );
     await _queueStatusWrite(source);
     final hasIssue = !result.isHealthy;
     final progressMsg = result.isHealthy

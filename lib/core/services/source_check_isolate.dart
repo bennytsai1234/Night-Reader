@@ -8,7 +8,9 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
@@ -68,12 +70,17 @@ class SourceCheckIsolateResult {
   final Map<String, dynamic> updatedSourceJson;
   final List<String> logs;
 
+  /// 每個問題一段診斷（`SourceChecker._diagnosis`），主 isolate 寫進
+  /// `SourceCheckDiagnostics`。
+  final List<String> diagnostics;
+
   const SourceCheckIsolateResult({
     required this.stage,
     required this.message,
     required this.isHealthy,
     required this.updatedSourceJson,
     required this.logs,
+    this.diagnostics = const [],
   });
 
   Map<String, dynamic> toMap() => {
@@ -82,6 +89,7 @@ class SourceCheckIsolateResult {
     'isHealthy': isHealthy,
     'updatedSourceJson': updatedSourceJson,
     'logs': logs,
+    'diagnostics': diagnostics,
   };
 
   factory SourceCheckIsolateResult.fromMap(Map<String, dynamic> map) =>
@@ -93,6 +101,7 @@ class SourceCheckIsolateResult {
           map['updatedSourceJson'] as Map,
         ),
         logs: List<String>.from(map['logs'] as List),
+        diagnostics: List<String>.from(map['diagnostics'] as List),
       );
 }
 
@@ -213,10 +222,20 @@ class SourceChecker {
   final IsolateCheckConfig _config;
   final BookSourceService _service;
   final List<String> _logs = [];
+  final List<String> _diagnostics = [];
+
+  /// 校驗送出的請求與網站的回應，依序（`recordRequestUrls`）。
+  final List<String> _requests = [];
+
+  /// 目前這一段（[_fetch]）的請求從 [_requests] 的哪裡開始。
+  int _stageRequestStart = 0;
 
   static const int _validationPageConcurrency = 1;
   static const int _validationChapterLimit = 8;
   static const int _validationContentProbeLimit = 5;
+  static const int _diagnosisRequestLimit = 16;
+  static const int _diagnosisCodeLimit = 3000;
+  static const Duration _transientRetryDelay = Duration(seconds: 1);
 
   SourceChecker({
     required this._source,
@@ -224,7 +243,10 @@ class SourceChecker {
     BookSourceService? service,
   }) : _service = service ?? BookSourceService();
 
-  Future<SourceCheckIsolateResult> run() async {
+  Future<SourceCheckIsolateResult> run() =>
+      recordRequestUrls(_requests, _run, withResponses: true);
+
+  Future<SourceCheckIsolateResult> _run() async {
     _source.removeInvalidGroups();
     _source.removeErrorComment();
     _source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
@@ -286,6 +308,7 @@ class SourceChecker {
       isHealthy: isHealthy,
       updatedSourceJson: _source.toJson(),
       logs: List<String>.from(_logs),
+      diagnostics: List<String>.from(_diagnostics),
     );
   }
 
@@ -352,12 +375,10 @@ class SourceChecker {
 
     _log('  ◇ 測試搜尋: $searchWord');
     try {
-      final searchResults = await _service
-          .searchBooks(_source, searchWord)
-          .timeout(
-            _config.timeoutDuration,
-            onTimeout: () => throw TimeoutException('搜尋超時'),
-          );
+      final searchResults = await _fetch(
+        '搜尋',
+        () => _service.searchBooks(_source, searchWord),
+      );
 
       if (searchResults.isEmpty) {
         _recordIssue(
@@ -379,34 +400,60 @@ class SourceChecker {
         return;
       }
 
-      final seedBook = searchResults.first.toBook().copyWith(
-        origin: _source.bookSourceUrl,
-        originName: _source.bookSourceName,
-        originOrder: _source.customOrder,
-      );
-      await _checkBookFlow(seedBook, mode: _CheckMode.search, issues: issues);
-    } on TimeoutException catch (e) {
-      _recordIssue(
-        issues,
-        _issueFromException(
-          stage: 'search',
-          error: e,
-          fallbackMessage: '搜尋超時',
-          mode: _CheckMode.search,
-        ),
-      );
+      await _checkSearchedBooks(searchResults, issues);
     } catch (e) {
-      _recordIssue(
+      _recordFailure(
         issues,
-        _issueFromException(
-          stage: 'search',
-          error: e,
-          fallbackMessage: e.toString(),
-          mode: _CheckMode.search,
-        ),
+        stage: 'search',
+        error: e,
+        mode: _CheckMode.search,
       );
     }
   }
+
+  /// 拿搜尋到的第一本書測詳情、目錄與正文。這本書打不開時換一本再測：
+  /// 可能只是那本書的問題（例如還沒有章節、書號代進規則後出錯），兩本都
+  /// 打不開才照書源壞了處理。
+  Future<void> _checkSearchedBooks(
+    List<SearchBook> searchResults,
+    List<_IssueData> issues,
+  ) async {
+    final first = searchResults.first;
+    final firstIssues = <_IssueData>[];
+    await _checkBookFlow(
+      _seedBook(first),
+      mode: _CheckMode.search,
+      issues: firstIssues,
+    );
+    final second = searchResults
+        .skip(1)
+        .where((book) => book.bookUrl != first.bookUrl)
+        .firstOrNull;
+    if (second == null || !firstIssues.any(_bookCannotOpen)) {
+      issues.addAll(firstIssues);
+      return;
+    }
+
+    _log('  ◇ 第一本書打不開，改測第二本: ${second.name}');
+    final secondIssues = <_IssueData>[];
+    await _checkBookFlow(
+      _seedBook(second),
+      mode: _CheckMode.search,
+      issues: secondIssues,
+    );
+    if (secondIssues.any(_bookCannotOpen)) {
+      issues.addAll(firstIssues);
+      return;
+    }
+    _log('  ✓ 第二本書打得開，第一本的失敗只算那本書的問題');
+    issues.addAll(secondIssues);
+  }
+
+  Book _seedBook(SearchBook found) => found.toBook().copyWith(
+    origin: _source.bookSourceUrl,
+    originName: _source.bookSourceName,
+    originOrder: _source.customOrder,
+  );
 
   // ── Discovery ───────────────────────────────────────────────────
 
@@ -422,10 +469,10 @@ class SourceChecker {
 
     _log('  ◇ 解析發現規則');
     try {
-      final kinds = await ExploreUrlParser.parseAsync(
-        exploreUrl,
-        source: _source,
-      ).timeout(_config.timeoutDuration);
+      final kinds = await _fetch(
+        '發現',
+        () => ExploreUrlParser.parseAsync(exploreUrl, source: _source),
+      );
 
       String? targetUrl;
       for (final kind in kinds) {
@@ -457,12 +504,10 @@ class SourceChecker {
       }
 
       _log('  ◇ 測試發現: $targetUrl');
-      final books = await _service
-          .exploreBooks(_source, targetUrl)
-          .timeout(
-            _config.timeoutDuration,
-            onTimeout: () => throw TimeoutException('發現檢查超時'),
-          );
+      final books = await _fetch(
+        '發現',
+        () => _service.exploreBooks(_source, targetUrl!),
+      );
 
       if (books.isEmpty) {
         _recordIssue(
@@ -489,35 +534,17 @@ class SourceChecker {
         return;
       }
 
-      final seedBook = books.first.toBook().copyWith(
-        origin: _source.bookSourceUrl,
-        originName: _source.bookSourceName,
-        originOrder: _source.customOrder,
-      );
       await _checkBookFlow(
-        seedBook,
+        _seedBook(books.first),
         mode: _CheckMode.discovery,
         issues: issues,
       );
-    } on TimeoutException catch (e) {
-      _recordIssue(
-        issues,
-        _issueFromException(
-          stage: 'discovery',
-          error: e,
-          fallbackMessage: '發現檢查超時',
-          mode: _CheckMode.discovery,
-        ),
-      );
     } catch (e) {
-      _recordIssue(
+      _recordFailure(
         issues,
-        _issueFromException(
-          stage: 'discovery',
-          error: e,
-          fallbackMessage: e.toString(),
-          mode: _CheckMode.discovery,
-        ),
+        stage: 'discovery',
+        error: e,
+        mode: _CheckMode.discovery,
       );
     }
   }
@@ -534,12 +561,11 @@ class SourceChecker {
     Book book = seedBook;
     try {
       _log('  ◇ 測試${mode.label}詳情: ${book.name}');
-      book = await _service
-          .getBookInfo(_source, book)
-          .timeout(
-            _config.timeoutDuration,
-            onTimeout: () => throw TimeoutException('${mode.label}詳情檢查超時'),
-          );
+      final seed = book;
+      book = await _fetch(
+        '${mode.label}詳情',
+        () => _service.getBookInfo(_source, seed),
+      );
 
       if (book.name.trim().isEmpty || book.bookUrl.trim().isEmpty) {
         _recordIssue(
@@ -552,26 +578,12 @@ class SourceChecker {
         );
         return;
       }
-    } on TimeoutException catch (e) {
-      _recordIssue(
-        issues,
-        _issueFromException(
-          stage: _stageFor(mode, 'detail'),
-          error: e,
-          fallbackMessage: '${mode.label}詳情檢查超時',
-          mode: mode,
-        ),
-      );
-      return;
     } catch (e) {
-      _recordIssue(
+      _recordFailure(
         issues,
-        _issueFromException(
-          stage: _stageFor(mode, 'detail'),
-          error: e,
-          fallbackMessage: e.toString(),
-          mode: mode,
-        ),
+        stage: _stageFor(mode, 'detail'),
+        error: e,
+        mode: mode,
       );
       return;
     }
@@ -581,38 +593,23 @@ class SourceChecker {
     List<BookChapter> readableChapters;
     try {
       _log('  ◇ 測試${mode.label}目錄: ${book.name}');
-      final chapters = await _service
-          .getChapterList(
-            _source,
-            book,
-            chapterLimit: _validationChapterLimit,
-            pageConcurrency: _validationPageConcurrency,
-          )
-          .timeout(
-            _config.timeoutDuration,
-            onTimeout: () => throw TimeoutException('${mode.label}目錄檢查超時'),
-          );
-      readableChapters = chapters.where((c) => !c.isVolume).toList();
-    } on TimeoutException catch (e) {
-      _recordIssue(
-        issues,
-        _issueFromException(
-          stage: _stageFor(mode, 'toc'),
-          error: e,
-          fallbackMessage: '${mode.label}目錄檢查超時',
-          mode: mode,
+      final detailed = book;
+      final chapters = await _fetch(
+        '${mode.label}目錄',
+        () => _service.getChapterList(
+          _source,
+          detailed,
+          chapterLimit: _validationChapterLimit,
+          pageConcurrency: _validationPageConcurrency,
         ),
       );
-      return;
+      readableChapters = chapters.where((c) => !c.isVolume).toList();
     } catch (e) {
-      _recordIssue(
+      _recordFailure(
         issues,
-        _issueFromException(
-          stage: _stageFor(mode, 'toc'),
-          error: e,
-          fallbackMessage: e.toString(),
-          mode: mode,
-        ),
+        stage: _stageFor(mode, 'toc'),
+        error: e,
+        mode: mode,
       );
       return;
     }
@@ -702,42 +699,26 @@ class SourceChecker {
       try {
         probedCount++;
         _log('  ◇ 測試${mode.label}正文: ${chapter.title}');
-        final content = await _service
-            .getContent(
-              _source,
-              book,
-              chapter,
-              nextChapterUrl: nextChapterUrl,
-              pageConcurrency: _validationPageConcurrency,
-            )
-            .timeout(
-              _config.timeoutDuration,
-              onTimeout: () => throw TimeoutException('${mode.label}正文檢查超時'),
-            );
+        final content = await _fetch(
+          '${mode.label}正文',
+          () => _service.getContent(
+            _source,
+            book,
+            chapter,
+            nextChapterUrl: nextChapterUrl,
+            pageConcurrency: _validationPageConcurrency,
+          ),
+        );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
         // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
         if (_looksReadable(content)) return;
-      } on TimeoutException catch (e) {
-        _recordIssue(
-          issues,
-          _issueFromException(
-            stage: _stageFor(mode, 'content'),
-            error: e,
-            fallbackMessage: '${mode.label}正文檢查超時',
-            mode: mode,
-          ),
-        );
-        return;
       } catch (e) {
-        _recordIssue(
+        _recordFailure(
           issues,
-          _issueFromException(
-            stage: _stageFor(mode, 'content'),
-            error: e,
-            fallbackMessage: e.toString(),
-            mode: mode,
-          ),
+          stage: _stageFor(mode, 'content'),
+          error: e,
+          mode: mode,
         );
         return;
       }
@@ -757,11 +738,68 @@ class SourceChecker {
 
   // ── Issue helpers ────────────────────────────────────────────────
 
-  void _recordIssue(List<_IssueData> issues, _IssueData issue) {
+  /// 跑一段抓取，[label] 是這一段的名稱（例如「搜尋詳情」）。暫時性的失敗
+  /// （[_looksTransient]）隔一秒再試一次，網站偶爾回一次空白不會讓書源被
+  /// 隔離；整段超過設定的時間不重試，慢的網站再試多半一樣慢。
+  Future<T> _fetch<T>(String label, Future<T> Function() fetch) async {
+    _stageRequestStart = _requests.length;
+    Future<T> attempt() => fetch().timeout(
+      _config.timeoutDuration,
+      onTimeout: () => throw TimeoutException('$label檢查超時'),
+    );
+    try {
+      return await attempt();
+    } catch (e) {
+      if (e is TimeoutException || !_looksTransient(e)) rethrow;
+      _log('  ↻ $label暫時失敗，重試一次: ${_compactMessage(e.toString())}');
+      await Future<void>.delayed(_transientRetryDelay);
+      return attempt();
+    }
+  }
+
+  void _recordFailure(
+    List<_IssueData> issues, {
+    required String stage,
+    required Object error,
+    required _CheckMode mode,
+  }) => _recordIssue(
+    issues,
+    _issueFromException(stage: stage, error: error, mode: mode),
+    error: error,
+  );
+
+  /// 記下一個問題，連同診斷：沒截斷的錯誤、出錯時實際執行的 JS、這一段
+  /// 送出的請求與網站的回應。診斷寫在崩潰日誌旁的另一個檔
+  /// （`SourceCheckDiagnostics`），不混進崩潰日誌。
+  void _recordIssue(
+    List<_IssueData> issues,
+    _IssueData issue, {
+    Object? error,
+  }) {
     issues.add(issue);
     _log(
       '  ! [${_source.bookSourceName}] ${_stageLabel(issue.stage)}: ${issue.message}',
     );
+    _diagnostics.add(_diagnosis(issue, error));
+  }
+
+  String _diagnosis(_IssueData issue, Object? error) {
+    final buffer = StringBuffer()
+      ..writeln('[${_stageLabel(issue.stage)}] ${issue.message}');
+    if (error != null) buffer.writeln('錯誤: $error');
+    if (_ruleJsError(error)?.code case final code?) {
+      buffer
+        ..writeln('實際執行的 JS:')
+        ..writeln(_clip(code, _diagnosisCodeLimit));
+    }
+    final requests = _requests.sublist(
+      math.max(_stageRequestStart, _requests.length - _diagnosisRequestLimit),
+    );
+    if (requests.isNotEmpty) {
+      buffer.writeln('這一段的請求與回應:');
+      requests.forEach(buffer.writeln);
+    }
+    return buffer.toString().trimRight();
   }
 
   void _log(String msg) => _logs.add(msg);
@@ -769,16 +807,14 @@ class SourceChecker {
   _IssueData _issueFromException({
     required String stage,
     required Object error,
-    required String fallbackMessage,
     required _CheckMode mode,
   }) {
     final normalized = error.toString().toLowerCase();
-    final message = _compactMessage(fallbackMessage);
-
-    // 診斷：保留未截斷的原始錯誤。ParsingException.toString() 內含
-    // originalError（真正的 JS/解析失敗原因），但 _compactMessage 只取首行會
-    // 截掉它。標記後帶回主線程，由主線程過濾寫進崩潰日誌。
-    _log('§DIAG§ [$stage] $error');
+    final message = _compactMessage(
+      error is TimeoutException
+          ? error.message ?? '${_stageLabel(stage)}檢查超時'
+          : error.toString(),
+    );
 
     // 網站要真人勾選、封鎖了目前的網路或瀏覽器檢查沒過（CloudflareInterceptor）：
     // 夜讀不替使用者勾選，當成暫時不能用的書源，換網路或網站改設定後再校驗
@@ -1220,6 +1256,71 @@ bool _looksLikeDownloadOnly(Book book, List<BookChapter> readableChapters) {
   ];
   return urls.any((url) => markers.any(url.contains));
 }
+
+/// 這本書的詳情、目錄或正文打不開（會讓書源被隔離的那幾種）。
+bool _bookCannotOpen(_IssueData issue) => const {
+  SourceHealthCategory.detailBroken,
+  SourceHealthCategory.tocBroken,
+  SourceHealthCategory.contentBroken,
+}.contains(issue.health.category);
+
+/// 再試一次多半就好的失敗：連線中途斷掉、網站一時忙碌（429、5xx），或回應
+/// 空白、不完整（規則 JS 解析 JSON 讀到一半就沒了）。逾時、憑證錯誤、被網站
+/// 擋下都不算。
+bool _looksTransient(Object error) {
+  if (error is DioException) {
+    switch (error.type) {
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.badResponse:
+        final status = error.response?.statusCode ?? 0;
+        return status == 429 || status >= 500;
+      case DioExceptionType.unknown:
+        break;
+      case DioExceptionType.connectionTimeout ||
+          DioExceptionType.sendTimeout ||
+          DioExceptionType.receiveTimeout ||
+          DioExceptionType.transformTimeout ||
+          DioExceptionType.badCertificate ||
+          DioExceptionType.cancel:
+        return false;
+    }
+  }
+  final normalized = error.toString().toLowerCase();
+  return const [
+    'socketexception',
+    'connection reset',
+    'connection closed',
+    'connection abort',
+    'status code of 429',
+    'status code of 500',
+    'status code of 502',
+    'status code of 503',
+    'status code of 504',
+    'unexpected end of input',
+    'unexpected end of json',
+  ].any(normalized.contains);
+}
+
+/// 錯誤裡包著的規則 JS 錯誤（解析錯誤、網路錯誤會把它包在裡面）。
+RuleJsException? _ruleJsError(Object? error) {
+  for (var depth = 0; depth < 6 && error != null; depth++) {
+    switch (error) {
+      case RuleJsException():
+        return error;
+      case ParsingException(originalError: final Object? inner):
+        error = inner;
+      case DioException(error: final inner):
+        error = inner;
+      default:
+        return null;
+    }
+  }
+  return null;
+}
+
+String _clip(String text, int limit) =>
+    text.length > limit ? '${text.substring(0, limit)}…（以下省略）' : text;
 
 bool _looksLikeTimeout(String normalized) =>
     normalized.contains('timeout') ||

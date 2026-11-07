@@ -88,7 +88,9 @@ class JsEngine {
       _injectContext(context);
       _ensureSourceJsLibLoaded();
       final result = _evaluateRuleScript(normalizedJs);
-      if (result.isError) throw RuleJsException(result.stringResult);
+      if (result.isError) {
+        throw RuleJsException(result.stringResult, code: jsCode);
+      }
       return _decodeContextValue(_runtime!.dartValueOf(result));
     } finally {
       if (--_activeRules == 0) _contextResponses.clear();

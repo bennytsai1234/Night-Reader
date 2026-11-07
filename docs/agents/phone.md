@@ -11,7 +11,7 @@
 
 正式版（`com.inkpage.reader`）讀不到內部資料，剪貼簿從電腦也讀不到。
 
-- 崩潰日誌：`/sdcard/Android/data/com.inkpage.reader/files/` 直接讀。
+- 崩潰日誌：`/sdcard/Android/data/com.inkpage.reader/files/` 直接讀（`crash-*.log`，最多留 50 份）。最近一次書源校驗的診斷在同一個資料夾的 `source-check.log`（每個出問題的書源一段：錯誤、實際執行的 JS、請求與網站的回應），使用者也能在「校驗詳情」按「複製診斷」。
 - 書源原文：書源管理多選 →「分享選中」→「儲存到檔案管理員」，檔案在 `/sdcard/Download/分享儲存/`，拿到後用 `test/live/` 在電腦上連真網站校驗。
 - 畫面：`adb exec-out screencap -p` 截圖；`uiautomator dump` 讀得到每一列的文字（Flutter 的 `content-desc`），用來找點的位置。動畫逐幀看用 `adb shell screenrecord` 錄、拉回後 `ffmpeg -fps_mode passthrough` 拆幀（影片標的幀率是 90000，不加會把每幀複製上百份）。
 

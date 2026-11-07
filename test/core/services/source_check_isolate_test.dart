@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/network/cloudflare.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
@@ -20,10 +21,11 @@ class _FakeBookSourceService extends BookSourceService {
 
   final Future<List<SearchBook>> Function()? search;
   final Future<Book> Function(Book book)? info;
-  final Future<List<BookChapter>> Function()? chapters;
+  final Future<List<BookChapter>> Function(Book book)? chapters;
   final Future<String> Function(BookChapter chapter)? content;
 
   final List<String> contentRequests = <String>[];
+  final List<String> tocRequests = <String>[];
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -65,8 +67,9 @@ class _FakeBookSourceService extends BookSourceService {
     CancelToken? cancelToken,
     bool requireComplete = false,
   }) async {
+    tocRequests.add(book.name);
     final chapters = this.chapters;
-    if (chapters != null) return chapters();
+    if (chapters != null) return chapters(book);
     return [
       for (var i = 0; i < 3; i++)
         BookChapter(
@@ -246,7 +249,7 @@ void main() {
     'a locked chapter in the TOC marks the source as needing login',
     () async {
       final service = _FakeBookSourceService(
-        chapters: () async => [
+        chapters: (_) async => [
           BookChapter(url: 'https://site.example/1.html', title: '第一章'),
           BookChapter(
             url: 'https://site.example/2.html',
@@ -303,11 +306,161 @@ void main() {
 
   test('an empty TOC quarantines as TOC broken', () async {
     final (_, checked) = await _check(
-      _FakeBookSourceService(chapters: () async => const <BookChapter>[]),
+      _FakeBookSourceService(chapters: (_) async => const <BookChapter>[]),
     );
 
     expect(checked.groupTags, contains(tocBrokenSourceGroupTag));
     expect(checked.isQuarantined, isTrue);
+  });
+
+  test('a dropped connection is retried once before judging', () async {
+    var attempts = 0;
+    final service = _FakeBookSourceService(
+      content: (_) async {
+        if (attempts++ == 0) {
+          throw DioException(
+            requestOptions: RequestOptions(path: 'https://site.example/1'),
+            type: DioExceptionType.connectionError,
+          );
+        }
+        return _readable;
+      },
+    );
+    final (result, _) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(service.contentRequests, ['第1章', '第1章']);
+    expect(result.logs, contains(contains('重試一次')));
+  });
+
+  test('an empty response that breaks JSON.parse is retried once', () async {
+    var attempts = 0;
+    final service = _FakeBookSourceService(
+      chapters: (book) async {
+        if (attempts++ == 0) {
+          throw ParsingException(
+            '解析字串失敗',
+            originalError: RuleJsException(
+              'SyntaxError: unexpected end of input',
+              code: 'JSON.parse(result)',
+            ),
+          );
+        }
+        return [BookChapter(url: 'https://site.example/1.html', title: '一')];
+      },
+    );
+    final (result, _) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(service.tocRequests, hasLength(2));
+  });
+
+  test('a rule error is not retried and its diagnosis shows the JS', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async => throw ParsingException(
+        '解析字串失敗',
+        originalError: RuleJsException(
+          'SyntaxError: invalid increment/decrement operand',
+          code: 'java.put("bid",2024--01)',
+        ),
+      ),
+    );
+    final (result, checked) = await _check(service);
+
+    expect(checked.groupTags, contains(tocBrokenSourceGroupTag));
+    expect(service.tocRequests, hasLength(1));
+    expect(result.diagnostics.single, contains('java.put("bid",2024--01)'));
+  });
+
+  test('a timeout is not retried: a slow site is just as slow again', () async {
+    var searches = 0;
+    await _check(
+      _FakeBookSourceService(
+        search: () {
+          searches++;
+          return Future.error(TimeoutException('搜尋超時'));
+        },
+      ),
+    );
+
+    expect(searches, 1);
+  });
+
+  group('when the first book will not open', () {
+    final twoBooks = [
+      for (final (i, name) in ['第一本', '第二本'].indexed)
+        SearchBook(
+          bookUrl: 'https://site.example/book/${i + 1}',
+          name: name,
+          origin: 'https://site.example',
+        ),
+    ];
+
+    test('a second book that opens keeps the source healthy', () async {
+      final service = _FakeBookSourceService(
+        search: () async => twoBooks,
+        chapters: (book) async => book.name == '第一本'
+            ? const <BookChapter>[]
+            : [BookChapter(url: 'https://site.example/2/1.html', title: '一')],
+      );
+      final (result, checked) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(checked.isQuarantined, isFalse);
+      expect(service.tocRequests, ['第一本', '第二本']);
+    });
+
+    test('a second book that also fails quarantines the source', () async {
+      final service = _FakeBookSourceService(
+        search: () async => twoBooks,
+        chapters: (_) async => const <BookChapter>[],
+      );
+      final (_, checked) = await _check(service);
+
+      expect(checked.groupTags, contains(tocBrokenSourceGroupTag));
+      expect(checked.isQuarantined, isTrue);
+      expect(service.tocRequests, ['第一本', '第二本']);
+    });
+
+    test('a book needing login is not a reason to try another', () async {
+      final service = _FakeBookSourceService(
+        search: () async => twoBooks,
+        content: (_) async => throw LoginCheckException('正文需要登入後閱讀'),
+      );
+      final (_, checked) = await _check(service);
+
+      expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
+      expect(service.tocRequests, ['第一本']);
+    });
+  });
+
+  test('a diagnosis lists the requests and what the site answered', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async {
+        final uri = Uri.parse('https://mirror.example/api/toc');
+        recordRequestUrl('GET', uri);
+        recordResponse(
+          Response<dynamic>(
+            requestOptions: RequestOptions(path: uri.toString()),
+            statusCode: 200,
+            data: '',
+            headers: Headers.fromMap({
+              Headers.contentTypeHeader: ['application/json'],
+            }),
+          ),
+        );
+        return const <BookChapter>[];
+      },
+    );
+    final (result, _) = await _check(service);
+
+    expect(
+      result.diagnostics.single,
+      allOf(
+        contains('https://mirror.example/api/toc'),
+        contains('← 200 application/json，0 字'),
+      ),
+    );
   });
 
   test('a non-novel source is filtered before any request', () async {

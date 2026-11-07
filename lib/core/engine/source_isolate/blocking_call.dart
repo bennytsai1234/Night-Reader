@@ -36,11 +36,12 @@ abstract final class BlockingCall {
         Zone.current[_taskIdZoneKey] as int?,
         task,
         recordRequests: isRecordingRequestUrls,
+        recordResponses: isRecordingResponses,
       ),
     );
     final outcome = _Outcome.decode(replies.take());
-    // 書源除錯要列出規則 JS 自己送的請求；它們在網路 isolate 送出，記下的
-    // 網址跟著結果回來，照順序接進這裡的清單。
+    // 書源除錯與校驗要列出規則 JS 自己送的請求；它們在網路 isolate 送出，
+    // 記下的網址（與回應）跟著結果回來，照順序接進這裡的清單。
     recordRequestedUrls(outcome.requestUrls);
     if (outcome.error case final error?) throw error;
     return outcome.value;
