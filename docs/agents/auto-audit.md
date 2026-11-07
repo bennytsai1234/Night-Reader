@@ -48,7 +48,7 @@
 | 閱讀器 | 分頁與排版算錯、閱讀進度存錯或還原到錯的位置、排版樣式改了快取沒失效（layout signature）、章節邊界與空章節；對照 ADR 0006、0007、0016、0019、0026 |
 | 資料 | 資料遺失或寫壞、migration 漏寫、SQLite／SharedPreferences／私有檔案三處不同步、下載排程卡住或重複、背景 isolate 用了主 isolate 才有的東西；對照 ADR 0008、0032 |
 | 介面 | `dispose` 漏了（控制器、監聽、計時器）、非同步回來時頁面已關還在 `setState`、動畫最後一幀和靜止畫面不同、玻璃包在淡入淡出裡、畫面和 `DESIGN.md` 規格不符；對照 ADR 0018、0020、0022、0029、0036、0037 與 `CODING_STANDARDS.md`「動畫」 |
-| 文件 | `README.md`、`website/index.html` 和程式實際行為不符；`DESIGN.md` 寫的規格程式裡已經不是那樣；ADR 索引漏列；給 agent 看的文件（`AGENTS.md`、`DESIGN.md`、ADR、`docs/agents/`）寫了日期、來回的經過、程式裡查得到的類別名稱或數值，或同一件事寫在好幾處（照 `writing-for-agents` 的「重複」「沉積」）；`.github/workflows/`、`.githooks/`、`tool/` 的腳本錯誤或彼此不一致（例如兩個 workflow 的 Flutter 版本） |
+| 文件 | `README.md`、`website/index.html` 和程式實際行為不符；`docs/design/` 寫的規格程式裡已經不是那樣；ADR 索引漏列；給 agent 看的文件（`AGENTS.md`、`DESIGN.md`、`docs/design/`、ADR、`docs/agents/`）寫了日期、來回的經過、程式裡查得到的類別名稱或數值，或同一件事寫在好幾處（照 `writing-for-agents` 的「重複」「沉積」）；`.github/workflows/`、`.githooks/`、`tool/` 的腳本錯誤或彼此不一致（例如兩個 workflow 的 Flutter 版本） |
 
 ## 算問題的
 

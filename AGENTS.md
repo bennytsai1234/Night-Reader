@@ -5,7 +5,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | 檔案 | 放什麼 |
 |---|---|
 | `README.md`、`CHANGELOG.md`、`PRIVACY.md` | 給讀者看的產品說明、正式版更新說明、隱私權政策（`PRIVACY.md` 和 App 的「隱私說明」一起改） |
-| `DESIGN.md` | 設計原則、否決過的方向、每個畫面與元件的規格 |
+| `DESIGN.md` | 設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
 | `GLOSSARY.md` | 和使用者討論時用的詞 |
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
@@ -17,7 +17,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - **做到好，做到可以合併就停**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問（使用者的話：「像許願機一樣」）。全部做完才問要不要收尾，收尾到「可以合併」就停，使用者說「合併」才合併（ADR 0049）。
 - **結果寫在對話裡**：使用者不看 PR 與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」。
-- **視覺由使用者在圖上選**：改外觀前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，選了就寫進 `DESIGN.md`，不做成設定（ADR 0030）。版型與動畫只要小修，不要大改。
+- **視覺由使用者在圖上選**：改外觀前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，選了就寫進 `docs/design/` 對應的那份，不做成設定（ADR 0030）。版型與動畫只要小修，不要大改。
 - **動畫用動畫儀表板說明**：說明動畫、轉場與時間軸，或給候選與改前改後時，照 `animation-dashboard` 技能把儀表板放進對話，再補判斷。
 - **淺色與深色一起看**：分析配色、框線、陰影與層次時兩邊都要寫、都要量。
 - **使用者說「(adr)」或「寫進 ADR」就當場寫**：這是「定案、以後不要再提」的標記。
@@ -44,7 +44,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，一件事一條分支、一個 PR，跟著改的文件放同一條分支。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`），本文用繁體中文。
 - **收尾**時讀 `docs/agents/finish.md`；使用者說**合併**時讀 `docs/agents/merge.md`；使用者說要**發正式版**時讀 `docs/agents/release.md`。
-- 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `DESIGN.md`；本檔只放每件工作都用得到的規則。
+- 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `docs/design/`；本檔只放每件工作都用得到的規則。
 
 ## 環境
 
