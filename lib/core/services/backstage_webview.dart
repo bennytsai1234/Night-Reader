@@ -59,6 +59,12 @@ class BackstageWebView {
     if ((html ?? '').isEmpty && (url ?? '').isNotEmpty) {
       if (Uri.tryParse(url!) case final uri?) recordRequestUrl('GET', uri);
     }
+    final result = await _render();
+    recordRenderedPage(result['url'] as String? ?? url, result['body']);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> _render() async {
     final delegate = BackstageWebView.delegate;
     if (delegate != null) return delegate(this);
     final completer = Completer<Map<String, dynamic>>();

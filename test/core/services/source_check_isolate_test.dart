@@ -96,6 +96,19 @@ class _FakeBookSourceService extends BookSourceService {
   }
 }
 
+/// 假裝網路層記下網站的一個回應（真正的請求由 `AppInterceptor` 記）。
+void _siteAnswered(int status, String body) {
+  final uri = Uri.parse('https://site.example/api');
+  recordRequestUrl('GET', uri);
+  recordResponse(
+    Response<dynamic>(
+      requestOptions: RequestOptions(path: uri.toString()),
+      statusCode: status,
+      data: body,
+    ),
+  );
+}
+
 const _searchOnly = IsolateCheckConfig(
   keyword: '我的',
   timeoutSeconds: 5,
@@ -338,6 +351,7 @@ void main() {
     final service = _FakeBookSourceService(
       chapters: (book) async {
         if (attempts++ == 0) {
+          _siteAnswered(200, '');
           throw ParsingException(
             '解析字串失敗',
             originalError: RuleJsException(
@@ -354,6 +368,82 @@ void main() {
     expect(result.isHealthy, isTrue);
     expect(service.tocRequests, hasLength(2));
   });
+
+  test('a 503 the rule JS fetched itself is retried once', () async {
+    // 規則 JS 用 java.ajax 抓 API：503 的錯誤頁交給規則，規則解析 JSON 失敗；
+    // 校驗看的是網站回了 503，不是解析錯誤的文字。
+    var attempts = 0;
+    final service = _FakeBookSourceService(
+      chapters: (book) async {
+        if (attempts++ == 0) {
+          _siteAnswered(503, '<html>Service Unavailable</html>');
+          throw ParsingException(
+            '解析字串失敗',
+            originalError: RuleJsException("SyntaxError: unexpected token '<'"),
+          );
+        }
+        return [BookChapter(url: 'https://site.example/1.html', title: '一')];
+      },
+    );
+    final (result, _) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(service.tocRequests, hasLength(2));
+  });
+
+  test('an empty TOC from an empty page is fetched again', () async {
+    var attempts = 0;
+    final service = _FakeBookSourceService(
+      chapters: (book) async {
+        if (attempts++ == 0) {
+          _siteAnswered(200, '');
+          return const <BookChapter>[];
+        }
+        return [BookChapter(url: 'https://site.example/1.html', title: '一')];
+      },
+    );
+    final (result, _) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(service.tocRequests, hasLength(2));
+  });
+
+  test('an empty TOC from a page with content is not retried', () async {
+    final service = _FakeBookSourceService(
+      chapters: (book) async {
+        _siteAnswered(200, '<html><body>沒有章節</body></html>');
+        return const <BookChapter>[];
+      },
+    );
+    final (_, checked) = await _check(service);
+
+    expect(checked.groupTags, contains(tocBrokenSourceGroupTag));
+    expect(service.tocRequests, hasLength(1));
+  });
+
+  test(
+    'a TOC retry fetches again instead of reusing the stored page',
+    () async {
+      // 詳情頁和目錄是同一頁：詳情那一段網站回了空白，存下的頁面就是壞的。
+      final pagesSeen = <String?>[];
+      final service = _FakeBookSourceService(
+        info: (book) async {
+          _siteAnswered(200, '');
+          return book.copyWith()..tocHtml = '';
+        },
+        chapters: (book) async {
+          pagesSeen.add(book.tocHtml);
+          return book.tocHtml == null
+              ? [BookChapter(url: 'https://site.example/1.html', title: '一')]
+              : const <BookChapter>[];
+        },
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(pagesSeen, ['', null]);
+    },
+  );
 
   test('a rule error is not retried and its diagnosis shows the JS', () async {
     final service = _FakeBookSourceService(
@@ -458,7 +548,7 @@ void main() {
       result.diagnostics.single,
       allOf(
         contains('https://mirror.example/api/toc'),
-        contains('← 200 application/json，0 字'),
+        contains('← https://mirror.example/api/toc 200 application/json，0 字'),
       ),
     );
   });

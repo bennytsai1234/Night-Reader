@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
@@ -225,9 +226,9 @@ class SourceChecker {
   final List<String> _diagnostics = [];
 
   /// 校驗送出的請求與網站的回應，依序（`recordRequestUrls`）。
-  final List<String> _requests = [];
+  final RequestLog _requests = RequestLog(withResponses: true);
 
-  /// 目前這一段（[_fetch]）的請求從 [_requests] 的哪裡開始。
+  /// 目前這一段（[_fetch]）的請求從 [_requests] 的哪一行開始。
   int _stageRequestStart = 0;
 
   static const int _validationPageConcurrency = 1;
@@ -243,8 +244,7 @@ class SourceChecker {
     BookSourceService? service,
   }) : _service = service ?? BookSourceService();
 
-  Future<SourceCheckIsolateResult> run() =>
-      recordRequestUrls(_requests, _run, withResponses: true);
+  Future<SourceCheckIsolateResult> run() => _requests.run(_run);
 
   Future<SourceCheckIsolateResult> _run() async {
     _source.removeInvalidGroups();
@@ -377,7 +377,8 @@ class SourceChecker {
     try {
       final searchResults = await _fetch(
         '搜尋',
-        () => _service.searchBooks(_source, searchWord),
+        (_) => _service.searchBooks(_source, searchWord),
+        cameBackEmpty: (results) => results.isEmpty,
       );
 
       if (searchResults.isEmpty) {
@@ -445,7 +446,7 @@ class SourceChecker {
       issues.addAll(firstIssues);
       return;
     }
-    _log('  ✓ 第二本書打得開，第一本的失敗只算那本書的問題');
+    _log('  ✓ 第二本書的詳情、目錄與正文沒有失效，第一本的失敗只算那本書的問題');
     issues.addAll(secondIssues);
   }
 
@@ -471,7 +472,7 @@ class SourceChecker {
     try {
       final kinds = await _fetch(
         '發現',
-        () => ExploreUrlParser.parseAsync(exploreUrl, source: _source),
+        (_) => ExploreUrlParser.parseAsync(exploreUrl, source: _source),
       );
 
       String? targetUrl;
@@ -506,7 +507,8 @@ class SourceChecker {
       _log('  ◇ 測試發現: $targetUrl');
       final books = await _fetch(
         '發現',
-        () => _service.exploreBooks(_source, targetUrl!),
+        (_) => _service.exploreBooks(_source, targetUrl!),
+        cameBackEmpty: (books) => books.isEmpty,
       );
 
       if (books.isEmpty) {
@@ -559,12 +561,16 @@ class SourceChecker {
     if (!_config.checkInfo) return;
 
     Book book = seedBook;
+    final transientBeforeDetail = _requests.transientResponses;
     try {
       _log('  ◇ 測試${mode.label}詳情: ${book.name}');
       final seed = book;
       book = await _fetch(
         '${mode.label}詳情',
-        () => _service.getBookInfo(_source, seed),
+        (retrying) => _service.getBookInfo(
+          _source,
+          retrying ? _withoutStoredPages(seed) : seed,
+        ),
       );
 
       if (book.name.trim().isEmpty || book.bookUrl.trim().isEmpty) {
@@ -596,12 +602,15 @@ class SourceChecker {
       final detailed = book;
       final chapters = await _fetch(
         '${mode.label}目錄',
-        () => _service.getChapterList(
+        (retrying) => _service.getChapterList(
           _source,
-          detailed,
+          // 詳情頁抓回來時存著的目錄頁可能就是那份壞掉的，重試要重抓。
+          retrying ? _withoutStoredPages(detailed) : detailed,
           chapterLimit: _validationChapterLimit,
           pageConcurrency: _validationPageConcurrency,
         ),
+        cameBackEmpty: (chapters) => chapters.every((c) => c.isVolume),
+        falteredSince: transientBeforeDetail,
       );
       readableChapters = chapters.where((c) => !c.isVolume).toList();
     } catch (e) {
@@ -701,13 +710,14 @@ class SourceChecker {
         _log('  ◇ 測試${mode.label}正文: ${chapter.title}');
         final content = await _fetch(
           '${mode.label}正文',
-          () => _service.getContent(
+          (_) => _service.getContent(
             _source,
             book,
             chapter,
             nextChapterUrl: nextChapterUrl,
             pageConcurrency: _validationPageConcurrency,
           ),
+          cameBackEmpty: (content) => !_looksReadable(content),
         );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
@@ -738,24 +748,52 @@ class SourceChecker {
 
   // ── Issue helpers ────────────────────────────────────────────────
 
-  /// 跑一段抓取，[label] 是這一段的名稱（例如「搜尋詳情」）。暫時性的失敗
-  /// （[_looksTransient]）隔一秒再試一次，網站偶爾回一次空白不會讓書源被
-  /// 隔離；整段超過設定的時間不重試，慢的網站再試多半一樣慢。
-  Future<T> _fetch<T>(String label, Future<T> Function() fetch) async {
-    _stageRequestStart = _requests.length;
-    Future<T> attempt() => fetch().timeout(
+  /// 跑一段抓取，[label] 是這一段的名稱（例如「搜尋詳情」）。這一段網站的
+  /// 回應看起來是暫時性的失敗（[RequestLog.transientResponses]：429、5xx、
+  /// 空白、連不上），或直接丟出這類網路錯誤（[_looksTransient]），而這一段
+  /// 失敗或結果是空的（[cameBackEmpty]），就隔一秒再試一次：網站偶爾回一次
+  /// 空白不會讓書源被隔離。重試時 [fetch] 拿到 true，不沿用存著的頁面。
+  ///
+  /// 整段超過設定的時間不重試（慢的網站再試多半一樣慢）；被網站擋下、要登入
+  /// 或要驗證也不重試。網站好好回了內容、規則自己解析不出來，也不重試。
+  ///
+  /// [falteredSince] 是從哪裡開始算網站的回應：目錄可能用詳情那一段存下的
+  /// 頁面，詳情那一段網站回了空白，目錄才解析不出來，所以從詳情開始算。
+  Future<T> _fetch<T>(
+    String label,
+    Future<T> Function(bool retrying) fetch, {
+    bool Function(T result)? cameBackEmpty,
+    int? falteredSince,
+  }) async {
+    _stageRequestStart = _requests.lines.length;
+    final transientBefore = falteredSince ?? _requests.transientResponses;
+    bool siteFaltered() => _requests.transientResponses > transientBefore;
+    Future<T> attempt(bool retrying) => fetch(retrying).timeout(
       _config.timeoutDuration,
       onTimeout: () => throw TimeoutException('$label檢查超時'),
     );
     try {
-      return await attempt();
+      final result = await attempt(false);
+      if (cameBackEmpty == null || !cameBackEmpty(result) || !siteFaltered()) {
+        return result;
+      }
+      _log('  ↻ $label網站回了空白或錯誤，重試一次');
     } catch (e) {
-      if (e is TimeoutException || !_looksTransient(e)) rethrow;
+      if (_neverRetried(e) || !(_looksTransient(e) || siteFaltered())) {
+        rethrow;
+      }
       _log('  ↻ $label暫時失敗，重試一次: ${_compactMessage(e.toString())}');
-      await Future<void>.delayed(_transientRetryDelay);
-      return attempt();
     }
+    await Future<void>.delayed(_transientRetryDelay);
+    return attempt(true);
   }
+
+  /// 再試也沒用的失敗：整段逾時、網站擋下夜讀、要登入或驗證。
+  bool _neverRetried(Object error) =>
+      error is TimeoutException ||
+      error is SourceVerificationException ||
+      error is LoginCheckException ||
+      _blockedBySite(error, error.toString().toLowerCase());
 
   void _recordFailure(
     List<_IssueData> issues, {
@@ -792,8 +830,9 @@ class SourceChecker {
         ..writeln('實際執行的 JS:')
         ..writeln(_clip(code, _diagnosisCodeLimit));
     }
-    final requests = _requests.sublist(
-      math.max(_stageRequestStart, _requests.length - _diagnosisRequestLimit),
+    final lines = _requests.lines;
+    final requests = lines.sublist(
+      math.max(_stageRequestStart, lines.length - _diagnosisRequestLimit),
     );
     if (requests.isNotEmpty) {
       buffer.writeln('這一段的請求與回應:');
@@ -1264,43 +1303,17 @@ bool _bookCannotOpen(_IssueData issue) => const {
   SourceHealthCategory.contentBroken,
 }.contains(issue.health.category);
 
-/// 再試一次多半就好的失敗：連線中途斷掉、網站一時忙碌（429、5xx），或回應
-/// 空白、不完整（規則 JS 解析 JSON 讀到一半就沒了）。逾時、憑證錯誤、被網站
-/// 擋下都不算。
-bool _looksTransient(Object error) {
-  if (error is DioException) {
-    switch (error.type) {
-      case DioExceptionType.connectionError:
-        return true;
-      case DioExceptionType.badResponse:
-        final status = error.response?.statusCode ?? 0;
-        return status == 429 || status >= 500;
-      case DioExceptionType.unknown:
-        break;
-      case DioExceptionType.connectionTimeout ||
-          DioExceptionType.sendTimeout ||
-          DioExceptionType.receiveTimeout ||
-          DioExceptionType.transformTimeout ||
-          DioExceptionType.badCertificate ||
-          DioExceptionType.cancel:
-        return false;
-    }
-  }
-  final normalized = error.toString().toLowerCase();
-  return const [
-    'socketexception',
-    'connection reset',
-    'connection closed',
-    'connection abort',
-    'status code of 429',
-    'status code of 500',
-    'status code of 502',
-    'status code of 503',
-    'status code of 504',
-    'unexpected end of input',
-    'unexpected end of json',
-  ].any(normalized.contains);
-}
+/// 本身就是再試一次多半就好的網路錯誤：連線中途斷掉、網站一時忙碌（429、
+/// 5xx）。逾時、憑證錯誤、被網站擋下都不算。經過網路層送出的請求另外由
+/// [RequestLog.transientResponses] 認出（規則 JS 自己抓的 503 這類也算）。
+bool _looksTransient(Object error) => switch (error) {
+  DioException(type: DioExceptionType.connectionError) => true,
+  DioException(type: DioExceptionType.badResponse, :final response) =>
+    response?.statusCode == 429 || (response?.statusCode ?? 0) >= 500,
+  DioException(type: DioExceptionType.unknown, error: IOException()) => true,
+  IOException() => true,
+  _ => false,
+};
 
 /// 錯誤裡包著的規則 JS 錯誤（解析錯誤、網路錯誤會把它包在裡面）。
 RuleJsException? _ruleJsError(Object? error) {
@@ -1318,6 +1331,11 @@ RuleJsException? _ruleJsError(Object? error) {
   }
   return null;
 }
+
+/// 同一本書，拿掉詳情與目錄抓回來時存著的頁面，再抓一次就會重新請求。
+Book _withoutStoredPages(Book book) => book.copyWith()
+  ..infoHtml = null
+  ..tocHtml = null;
 
 String _clip(String text, int limit) =>
     text.length > limit ? '${text.substring(0, limit)}…（以下省略）' : text;

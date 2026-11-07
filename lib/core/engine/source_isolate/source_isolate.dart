@@ -432,7 +432,7 @@ final class SourceWorker {
       );
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
     } catch (error) {
-      outcome = _Outcome.failure(error, const []);
+      outcome = _Outcome.failure(error, null);
     }
     _blocked = null;
     if (_killed) return;
@@ -772,17 +772,15 @@ Future<Uint8List> _perform(
   required bool recordRequests,
   required bool recordResponses,
 }) async {
-  final requestUrls = <String>[];
+  final log = RequestLog(withResponses: recordResponses);
   try {
     final value = await _runCancellable(
-      (_) => recordRequests
-          ? recordRequestUrls(requestUrls, task, withResponses: recordResponses)
-          : task(),
+      (_) => recordRequests ? log.run(task) : task(),
       cancelToken,
     );
-    return _Outcome.success(value, requestUrls);
+    return _Outcome.success(value, log);
   } catch (error) {
-    return _Outcome.failure(error, requestUrls);
+    return _Outcome.failure(error, log);
   }
 }
 
@@ -881,10 +879,10 @@ final class _Block {
   final int? taskId;
   final Future<Object?> Function() task;
 
-  /// 書源除錯或校驗正在記這個工作送出的請求網址（`recordRequestUrls`）。
+  /// 書源除錯或校驗正在記這個工作送出的請求網址（`RequestLog`）。
   final bool recordRequests;
 
-  /// 書源校驗連回應也記（`recordRequestUrls` 的 `withResponses`）。
+  /// 書源校驗連回應也記（`RequestLog.withResponses`）。
   final bool recordResponses;
 }
 

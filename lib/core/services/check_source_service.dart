@@ -314,8 +314,14 @@ class CheckSourceService extends ChangeNotifier {
   Timer? _notifyTimer;
   bool _isDisposed = false;
 
-  CheckSourceService({BookSourceDao? sourceDao})
-    : _sourceDao = sourceDao ?? getIt<BookSourceDao>();
+  CheckSourceService({
+    BookSourceDao? sourceDao,
+    SourceCheckDiagnostics? diagnostics,
+  }) : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
+       diagnostics = diagnostics ?? SourceCheckDiagnostics();
+
+  /// 最近一次校驗的診斷（「校驗詳情」的「複製診斷」）。
+  final SourceCheckDiagnostics diagnostics;
 
   bool get isChecking => _isChecking;
 
@@ -396,7 +402,7 @@ class CheckSourceService extends ChangeNotifier {
     // 清除上次校驗殘留的 JS 靜態快取，避免大量 jsLib / TTF 字型佔用記憶體。
     JsEngine.clearCaches();
     JsExtensionsBase.clearCaches();
-    unawaited(SourceCheckDiagnostics.begin());
+    unawaited(diagnostics.begin());
 
     _appendLog('開始校驗，共 $_totalCount 個書源 (${config.summary})');
     _notifyIfAlive();
@@ -496,7 +502,7 @@ class CheckSourceService extends ChangeNotifier {
       _appendLog(log, sourceUrl: url);
     }
     unawaited(
-      SourceCheckDiagnostics.record(
+      diagnostics.record(
         sourceName: source.bookSourceName,
         sourceUrl: source.bookSourceUrl,
         outcome: result.isHealthy ? '校驗成功' : source.runtimeHealth.label,

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
-import 'package:night_reader/core/services/source_check_diagnostics.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -32,7 +31,7 @@ class SourceManagerDialogs {
               if (value == 'cancel') {
                 provider.cancelSourceCheck();
               } else if (value == 'copy') {
-                _copyCheckDiagnostics(context);
+                _copyCheckDiagnostics(context, provider.checkService);
               } else {
                 Navigator.pop(context);
               }
@@ -119,10 +118,13 @@ class SourceManagerDialogs {
 
   /// 複製最近一次校驗的診斷（`SourceCheckDiagnostics`）：每個出問題的
   /// 書源沒截斷的錯誤、實際執行的 JS、請求與網站的回應。
-  static Future<void> _copyCheckDiagnostics(BuildContext context) async {
+  static Future<void> _copyCheckDiagnostics(
+    BuildContext context,
+    CheckSourceService checkService,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final text = await SourceCheckDiagnostics.read();
+      final text = await checkService.diagnostics.read();
       if (text.isEmpty) {
         messenger.showSnackBar(const SnackBar(content: Text('這次校驗沒有診斷')));
         return;

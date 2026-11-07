@@ -41,8 +41,8 @@ abstract final class BlockingCall {
     );
     final outcome = _Outcome.decode(replies.take());
     // 書源除錯與校驗要列出規則 JS 自己送的請求；它們在網路 isolate 送出，
-    // 記下的網址（與回應）跟著結果回來，照順序接進這裡的清單。
-    recordRequestedUrls(outcome.requestUrls);
+    // 記下的網址（與回應）跟著結果回來，照順序接進這裡的紀錄。
+    currentRequestLog?.merge(outcome.requestLines, outcome.transientResponses);
     if (outcome.error case final error?) throw error;
     return outcome.value;
   }
@@ -70,27 +70,32 @@ final class BlockingCallError implements Exception {
 }
 
 /// 停住的 worker 從信箱拿到的結果。信箱只能放位元組，結果在網路 isolate
-/// 編好，在 worker 解開：第一個位元組是種類，接著四個位元組是送出的請求
-/// 網址（JSON）的長度、網址，最後是內容。
+/// 編好，在 worker 解開：第一個位元組是種類，接著四個位元組是請求紀錄
+/// （[RequestLog] 的內容，JSON）的長度、紀錄，最後是內容。
 final class _Outcome {
-  const _Outcome(this.value, this.error, this.requestUrls);
+  const _Outcome(
+    this.value,
+    this.error,
+    this.requestLines,
+    this.transientResponses,
+  );
 
   final Object? value;
   final BlockingCallError? error;
-  final List<String> requestUrls;
+  final List<String> requestLines;
+  final int transientResponses;
 
   static const int _json = 0;
   static const int _bytes = 1;
   static const int _error = 2;
 
-  static Uint8List success(Object? value, List<String> requestUrls) =>
-      value is Uint8List
-      ? _encode(_bytes, requestUrls, value)
-      : _encode(_json, requestUrls, utf8.encode(jsonEncode(value)));
+  static Uint8List success(Object? value, RequestLog? log) => value is Uint8List
+      ? _encode(_bytes, log, value)
+      : _encode(_json, log, utf8.encode(jsonEncode(value)));
 
-  static Uint8List failure(Object error, List<String> requestUrls) => _encode(
+  static Uint8List failure(Object error, RequestLog? log) => _encode(
     _error,
-    requestUrls,
+    log,
     utf8.encode(
       jsonEncode({
         'message': '$error',
@@ -101,20 +106,27 @@ final class _Outcome {
   );
 
   static _Outcome decode(Uint8List outcome) {
-    final urlsLength = ByteData.sublistView(
+    final logLength = ByteData.sublistView(
       outcome,
       1,
       5,
     ).getUint32(0, Endian.little);
-    final requestUrls = (jsonDecode(
-      utf8.decode(Uint8List.sublistView(outcome, 5, 5 + urlsLength)),
-    ) as List).cast<String>();
-    final content = Uint8List.sublistView(outcome, 5 + urlsLength);
+    final log = jsonDecode(
+      utf8.decode(Uint8List.sublistView(outcome, 5, 5 + logLength)),
+    ) as Map;
+    final lines = (log['lines'] as List).cast<String>();
+    final transient = log['transient'] as int;
+    final content = Uint8List.sublistView(outcome, 5 + logLength);
     switch (outcome[0]) {
       case _json:
-        return _Outcome(jsonDecode(utf8.decode(content)), null, requestUrls);
+        return _Outcome(
+          jsonDecode(utf8.decode(content)),
+          null,
+          lines,
+          transient,
+        );
       case _bytes:
-        return _Outcome(content, null, requestUrls);
+        return _Outcome(content, null, lines, transient);
       default:
         final error = jsonDecode(utf8.decode(content)) as Map;
         return _Outcome(
@@ -123,22 +135,24 @@ final class _Outcome {
             '${error['message']}',
             cancelled: error['cancelled'] == true,
           ),
-          requestUrls,
+          lines,
+          transient,
         );
     }
   }
 
-  static Uint8List _encode(
-    int tag,
-    List<String> requestUrls,
-    List<int> content,
-  ) {
-    final urls = utf8.encode(jsonEncode(requestUrls));
-    final out = Uint8List(5 + urls.length + content.length);
+  static Uint8List _encode(int tag, RequestLog? log, List<int> content) {
+    final header = utf8.encode(
+      jsonEncode({
+        'lines': log?.lines ?? const <String>[],
+        'transient': log?.transientResponses ?? 0,
+      }),
+    );
+    final out = Uint8List(5 + header.length + content.length);
     out[0] = tag;
-    ByteData.sublistView(out, 1, 5).setUint32(0, urls.length, Endian.little);
-    out.setRange(5, 5 + urls.length, urls);
-    out.setRange(5 + urls.length, out.length, content);
+    ByteData.sublistView(out, 1, 5).setUint32(0, header.length, Endian.little);
+    out.setRange(5, 5 + header.length, header);
+    out.setRange(5 + header.length, out.length, content);
     return out;
   }
 }

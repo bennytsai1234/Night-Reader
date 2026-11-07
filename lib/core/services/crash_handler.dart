@@ -168,13 +168,21 @@ class CrashHandler {
   /// 接上手機就讀得到。
   static Future<Directory> logDirectory() => _logDirectory();
 
-  static Future<Directory> Function() _logDirectory = () async =>
+  static Future<Directory> _platformLogDirectory() async =>
       await getExternalStorageDirectory() ??
       await getApplicationDocumentsDirectory();
+
+  /// 全域錯誤處理沒有擁有它的物件，資料夾只好放在靜態變數；測試換掉後要
+  /// 用 [resetLogDirectoryForTesting] 換回來。
+  static Future<Directory> Function() _logDirectory = _platformLogDirectory;
 
   @visibleForTesting
   static set logDirectoryForTesting(Future<Directory> Function() directory) =>
       _logDirectory = directory;
+
+  @visibleForTesting
+  static void resetLogDirectoryForTesting() =>
+      _logDirectory = _platformLogDirectory;
 
   /// 「版本 X (Build N)」；還沒載入 App 資訊時是空的。
   static String get appVersionLine {

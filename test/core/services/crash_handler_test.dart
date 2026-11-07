@@ -11,7 +11,10 @@ void main() {
     CrashHandler.logDirectoryForTesting = () async => directory;
   });
 
-  tearDown(() => directory.delete(recursive: true));
+  tearDown(() async {
+    CrashHandler.resetLogDirectoryForTesting();
+    await directory.delete(recursive: true);
+  });
 
   List<String> crashLogs() =>
       directory
