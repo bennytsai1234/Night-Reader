@@ -1,6 +1,6 @@
 # 收尾
 
-照全域 `git-flow` 的收尾，夜讀另外照這些。為什麼見 ADR 0047、0048。
+照全域 `git-flow` 的收尾，夜讀另外照這些。為什麼見 ADR 0049。
 
 - **要不要審**：App 的程式或資源（`lib/`、`android/`、`ios/`、`assets/`、`third_party/`、`pubspec.yaml`）改了、而且不只是註解才審。只改文件、網站、CI 與發版設定、hook、工具腳本、測試、註解，或只是還原先前提交的，不審，也不問。這和發不發測試版是兩回事，不看 `tool/changelog.sh app-files`。
 - **審查**：`codex-review` 技能，沒有 Codex 的環境改派另一個子代理審。核對屬實的修掉，修完只重跑這次修正改到的測試檔。

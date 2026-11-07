@@ -68,19 +68,20 @@
 
 | ADR | 一句話 |
 |---|---|
+| [0049](0049-development-and-release-flow.md) | 開發與發布流程：分支、收尾與合併、審查、CI、測試版與正式版、版號 |
 | [0001](0001-maintain-third-party-plugin-forks.md) | 自行維護 flutter_tts、flutter_js、file_picker 三個 fork |
 | [0002](0002-build-and-release-only-in-github-actions.md) | 建置與發布只在 GitHub Actions，tag 只由 CI 建立 |
 | [0003](0003-android-arm64-only.md) | Android 只發布 arm64-v8a，iOS 只附未簽章 IPA |
-| [0048](0048-beta-notes-from-pr-titles-one-release-per-batch.md) | 測試版說明取 PR 標題、合併一批發一版；CI 只在 PR 與 beta 上跑 |
-| [0027](0027-beta-branch-and-fast-forward-main.md) | 日常改動進 beta、main 只快轉發正式版（發測試版的時機由 0048 取代） |
-| [0047](0047-finish-to-mergeable-merge-on-request.md) | 分支做到「可以合併」就停：收尾由使用者點頭，合併由使用者說 |
-| [0014](0014-manual-beta-and-squash-prs.md) | squash 合併與原型分支；全套測試只在 CI 跑（發版時機由 0027、收尾與合併時機及審查範圍由 0047 取代） |
-| [0010](0010-release-notes-from-chinese-changelog.md) | 正式版說明由中文 CHANGELOG 提供，公開說明的檢查（測試版說明由 0048 取代） |
 
 ## 已取代
 
 | ADR | 取代它的 |
 |---|---|
+| [0010](0010-release-notes-from-chinese-changelog.md) Release 說明改由中文 CHANGELOG 提供，發版前檢查一定要寫 | 0049 |
+| [0014](0014-manual-beta-and-squash-prs.md) 測試版手動發布；功能與維護走 PR、文件直接改 main，改到 App 內容的 PR 合併前 Codex 審查，squash 合併 | 0049 |
+| [0027](0027-beta-branch-and-fast-forward-main.md) 日常改動進 beta、合併就發測試版；main 只快轉到用過的 beta 發正式版 | 0049 |
+| [0047](0047-finish-to-mergeable-merge-on-request.md) 分支做到「可以合併」就停：收尾由使用者點頭，合併由使用者說 | 0049 |
+| [0048](0048-beta-notes-from-pr-titles-one-release-per-batch.md) 測試版說明取 PR 標題、合併一批發一版；CI 只在 PR 與 beta 上跑 | 0049 |
 | [0005](0005-no-kinsoku-line-breaking.md) 正文換行不做避頭尾 | 0026 |
 | [0013](0013-no-source-login-or-interactive-verification.md) 書源不支援登入與互動驗證 | 0038（背景工作不等人照本文） |
-| [0004](0004-beta-channel-from-every-main-merge.md) 每次合併到 main 自動發測試版 | 0014、0027（tag 與 versionCode 的算法照本文） |
+| [0004](0004-beta-channel-from-every-main-merge.md) 每次合併到 main 自動發測試版 | 0049 |
