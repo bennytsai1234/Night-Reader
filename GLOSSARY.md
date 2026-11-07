@@ -36,6 +36,18 @@ _Avoid_: demo、mockup
 ChatGPT 照排程定期讀這個 repo 的一個區塊，把找到的問題開成 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。
 _Avoid_: 定期掃描、AI review、審查（那是合併前派 Codex 審 PR）
 
+**收尾**：
+交代的事全部做完、沒有待辦之後，使用者點頭才做的那一串：要審的分支派 Codex 審查、併入最新 `beta`、開 PR、等 CI 通過、清掉 worktree（ADR 0047）。做到一半不收尾。
+_Avoid_: 完工、結案、送審
+
+**可以合併**：
+分支收尾完的狀態：PR 開好、CI 通過，等使用者說「合併」。開發的 Agent 做到這裡就停（ADR 0047）。
+_Avoid_: 待合併、ready、做完了（指這個狀態時）
+
+**合併 Agent**：
+使用者說「合併」時負責合併的那個對話：把可以合併的 PR 一個一個 squash 合併進 `beta`，等 `beta` 的 CI 通過再發一個測試版，失敗就留下來修。同一時間只有它寫 `beta`，不審查，除了解衝突與修 CI 也不改程式（ADR 0047）。
+_Avoid_: 整合 Agent、merge bot
+
 ### 書源與書架
 
 **書源**：
