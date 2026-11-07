@@ -283,7 +283,8 @@ class AppUpdateService {
   }
 }
 
-/// 把 Release 說明（取自 `CHANGELOG.md` 的段落，見 ADR 0010）整理成給使用者看的純文字：
+/// 把 Release 說明（正式版取自 `CHANGELOG.md` 的段落，測試版是各 PR 的標題，見 ADR 0010、
+/// 0048）整理成給使用者看的純文字：
 /// 保留介紹段落與條列，條列前綴統一成「•」，去掉標題、粗體、行內程式碼與連結的
 /// Markdown 符號；段落之間最多留一個空行。
 String releaseNotesForDisplay(String markdown) {

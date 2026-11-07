@@ -1,10 +1,13 @@
 name: CI
 
 on:
-  # 每條分支都跑，結果也顯示在該分支的 PR 上，通過才合併（AGENTS.md「Git 流程」）。
+  # 開 PR 與 PR 有新推送時跑，測的是分支併進目前 beta 的樣子；做的途中推分支只是備份，不跑
+  # （ADR 0048）。合併後 beta 再跑一次，合併的人等它通過才發測試版。只改文件的推送不跑。
   # 全套測試只在這裡跑：本機推送前只跑 analyze（.githooks/pre-push，ADR 0014）。
+  pull_request:
   push:
-    branches: ["**"]
+    branches: [beta]
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -28,14 +31,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test changelog tool
-        # 有沒有寫更新說明，在推上 beta 發測試版時才檢查（android-release.yml，ADR 0027）。
+        # PR 標題能不能當測試版說明由 pr-title.yml 檢查（ADR 0048）。
         run: sh tool/changelog_test.sh
-      - name: Check unreleased public notes
-        run: |
-          notes="$(sh tool/changelog.sh section 未發布)"
-          if [ -n "$notes" ]; then
-            printf '%s\n' "$notes" | sh tool/changelog.sh validate stable -
-          fi
 
   # 三種檢查分在不同的機器上同時跑，全套測試再切成幾份：原本同一台依序跑約
   # 6 分鐘（測試 3.6 分、重新產生 Drift 1.4 分、analyze 0.5 分），拆開後最久的
