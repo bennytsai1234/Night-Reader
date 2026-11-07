@@ -64,7 +64,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時，先 `git pull --ff-only`，直接在 `beta` 上改、提交、推上去，不開分支、不審；分支上的工作的交接例外，改在那條分支上。
 - 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在從 `beta` 開的分支上做（repo 外的 worktree，見「環境」），跟著功能一起改的文件放在同一條分支。一件事一條分支、一個 PR，途中的修正與小改動疊在同一條分支上。
 - 開工時先看兩件事：`gh pr list` 有沒有開好、等合併的 PR（有就提醒使用者一次）；`beta` 上最近一次 Android Release 有沒有失敗（失敗就先告訴使用者並修）。
-- 做的途中每段驗證過就 commit 並推上，CI 在背景跑，不等。做到一段落就回報做了什麼，問使用者要不要收尾：「Codex 審查後收尾」「不審直接收尾」「繼續改」。做到一半先停下的工作，交接寫在那條分支自己的 `HANDOFF.md`，`beta` 的不寫（全域指示「交接跟著分支」）。
+- 做的途中每段驗證過就 commit 並推上，CI 在背景跑，不等。交代的事全部做完、驗證過，手上沒有待辦、也沒有要問使用者的事，才回報做了什麼、問要不要收尾：「Codex 審查後收尾」「不審直接收尾」「繼續改」。還有待辦就繼續做，有要使用者決定的事先問那件事；不是做完一步就問。做到一半先停下的工作，交接寫在那條分支自己的 `HANDOFF.md`，`beta` 的不寫（全域指示「交接跟著分支」）。
 - 收尾（ADR 0047），做到「可以合併」就停，不合併：
   1. 使用者選了審查，而且改到 App 內容（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出），就派 Codex 審整條分支一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的不審。核對屬實的問題修掉，修完只重跑這次修正改到的測試檔。
   2. 把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態：`HANDOFF.md` 以 `beta` 那份為底、拿掉這條分支的交接；要留給以後的事（等使用者決定、先不做）加進 `beta` 那份的內容。
