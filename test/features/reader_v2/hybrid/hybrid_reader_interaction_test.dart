@@ -25,18 +25,24 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_progress_contr
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 正文排好到紙掀完：先停 [AppMotion.stillGap]（紙底下建好、畫出正文），再照
-/// 骨架換場的預設時長掀紙。
+/// 正文排好到紙掀完：骨架長完後停著等正文（[LoadingVeilController
+/// .restBeforeBreath]），超過才開始呼吸、收住時呼完這一口（從最深起步的
+/// 第一口最多一輪半），紙底下建好、畫出正文後停 [AppMotion.stillGap]，
+/// 再照骨架換場的預設時長掀紙。
 final Duration _revealTime =
-    SkeletonReveal.defaultDuration + AppMotion.stillGap;
+    LoadingVeilController.restBeforeBreath +
+    Skeleton.breathCycle * 1.5 +
+    SkeletonReveal.defaultDuration +
+    AppMotion.stillGap;
 
-/// 正文排好後一幀一幀推進到紙開始掀（或已經沒有紙）：正文在紙底下建好、
-/// 畫出，再停 [AppMotion.stillGap]。
+/// 正文排好後一幀一幀推進到紙開始掀（或已經沒有紙）：呼吸收住，正文在紙
+/// 底下建好、畫出，再停 [AppMotion.stillGap]。
 Future<void> _pumpUntilRevealing(WidgetTester tester) async {
-  for (var frame = 0; frame < 60; frame++) {
+  for (var frame = 0; frame < 200; frame++) {
     final veil = find.byType(LoadingVeil);
     if (veil.evaluate().isEmpty ||
         tester.widget<LoadingVeil>(veil).controller.isRevealing) {
@@ -411,7 +417,8 @@ void main() {
 
   /// 推進到骨架換場（預設時長）播完再多幾幀。
   Future<void> settle(WidgetTester tester) async {
-    final frames = _revealTime.inMilliseconds ~/ 16 + 12;
+    // 跳章時紙先淡入蓋滿。
+    final frames = (_revealTime + AppMotion.fade).inMilliseconds ~/ 16 + 12;
     for (var frame = 0; frame < frames; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
     }

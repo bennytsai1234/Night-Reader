@@ -98,7 +98,8 @@ void main() {
       debugOnRebuildDirtyWidget = previous;
       await gesture.up(timeStamp: const Duration(milliseconds: 64));
     }
-    await settle(tester, const Duration(seconds: 3));
+    // 跳到選定的位置：紙蓋上、呼吸收住、正文排好掀開。
+    await waitForText(tester);
     expect(
       targets,
       contains(
