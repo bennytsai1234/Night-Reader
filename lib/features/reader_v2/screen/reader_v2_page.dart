@@ -863,8 +863,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     ReaderV2NoticeAction? action,
     Duration duration = const Duration(milliseconds: 4000),
   }) {
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
-    if (!mounted || messenger == null) return;
+    if (messenger == null) return;
     if (_visibleNoticeMessage == message) return;
     _visibleNoticeMessage = message;
     messenger.hideCurrentSnackBar();
