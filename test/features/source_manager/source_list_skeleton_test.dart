@@ -7,6 +7,35 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 void main() {
+  test('骨架的分組膠囊和書源列一樣：有狀態標籤時不列校驗結果', () {
+    final checked = BookSource(
+      bookSourceUrl: 'https://checked.example',
+      bookSourceName: '校驗過',
+      bookSourceGroup: '精選，異常;搜尋失效',
+    );
+    expect(SourceRowLook.of(checked).group, '精選');
+    expect(SourceRowLook.of(checked).health, '搜尋失效');
+
+    final onlyAbnormal = BookSource(
+      bookSourceUrl: 'https://abnormal.example',
+      bookSourceName: '只有異常',
+      bookSourceGroup: '異常',
+    );
+    expect(SourceRowLook.of(onlyAbnormal).group, '異常');
+
+    // 舊版記下的是原樣的分組。
+    final remembered = SourceRowLook.fromJson([
+      '校驗過',
+      'https://checked.example',
+      '異常,搜尋失效',
+      false,
+      '搜尋失效',
+      <String>[],
+      null,
+    ]);
+    expect(remembered.group, isNull);
+  });
+
   for (final brightness in [Brightness.light, Brightness.dark]) {
     testWidgets('書源骨架依實際功能數畫標籤（$brightness）', (tester) async {
       final sources = [

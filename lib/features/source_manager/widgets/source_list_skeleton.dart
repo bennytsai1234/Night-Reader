@@ -33,12 +33,11 @@ class SourceRowLook {
   });
 
   factory SourceRowLook.of(BookSourcePart source) {
-    final group = source.bookSourceGroup?.trim();
     final health = source.runtimeHealth;
     return SourceRowLook(
       name: source.bookSourceName,
       url: source.bookSourceUrl,
-      group: group == null || group.isEmpty ? null : group,
+      group: sourceGroupLabel(source),
       hasExplore: source.hasExploreUrl,
       health: health.category == SourceHealthCategory.healthy
           ? null
@@ -69,12 +68,14 @@ class SourceRowLook {
   /// 讀不懂（型別不對）時丟出例外，由讀紀錄的地方當作沒有紀錄。
   factory SourceRowLook.fromJson(Object? json) {
     final list = json! as List<dynamic>;
+    final health = list[4] as String?;
     return SourceRowLook(
       name: list[0] as String,
       url: list[1] as String,
-      group: list[2] as String?,
+      // 舊版記下的是原樣的分組，照現在書源列的顯示整理過才對得上。
+      group: groupLabelOf(list[2] as String?, hasStatus: health != null),
       hasExplore: list[3] as bool,
-      health: list[4] as String?,
+      health: health,
       tags: [for (final tag in list[5] as List<dynamic>) tag as String],
       error: list[6] as String?,
     );
