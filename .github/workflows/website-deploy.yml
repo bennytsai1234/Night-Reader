@@ -2,7 +2,7 @@ name: Deploy website to Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: ["beta"]
     paths: ["website/**", ".github/workflows/website-deploy.yml"]
   workflow_dispatch:
 
