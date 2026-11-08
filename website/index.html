@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>夜讀 Night Reader — 把長夜，留給長篇｜開源小說閱讀器</title>
+  <title>夜讀 Night Reader｜開源小說閱讀器</title>
   <meta name="description" content="夜讀（夜读）是開源的 Android 小說閱讀器，書源相容 Legado（閱讀）：朗讀、多台手機接著讀、整本離線下載、選字隱藏廣告、書源校驗。免費、沒有廣告，GPL-3.0 釋出。">
   <meta name="keywords" content="夜讀, 夜读, Night Reader, 小說閱讀器, 小说阅读器, 書源, 书源, Legado, 閱讀, 阅读, 開源閱讀, 开源阅读, 網路小說, 网络小说, TXT 閱讀器, TXT 阅读器, EPUB 閱讀器, EPUB 阅读器, TTS 朗讀, 听书">
   <link rel="canonical" href="https://bennytsai1234.github.io/Night-Reader/">
@@ -13,12 +13,12 @@
   <meta property="og:type" content="website">
   <meta property="og:locale" content="zh_TW">
   <meta property="og:site_name" content="夜讀 Night Reader">
-  <meta property="og:title" content="夜讀 Night Reader — 把長夜，留給長篇">
+  <meta property="og:title" content="夜讀 Night Reader">
   <meta property="og:description" content="讀網路小說、TXT 與 EPUB，書源相容 Legado。免費、開源、沒有廣告。">
   <meta property="og:url" content="https://bennytsai1234.github.io/Night-Reader/">
   <meta property="og:image" content="https://bennytsai1234.github.io/Night-Reader/app-icon.png">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="夜讀 Night Reader — 把長夜，留給長篇">
+  <meta name="twitter:title" content="夜讀 Night Reader">
   <meta name="twitter:description" content="讀網路小說、TXT 與 EPUB，書源相容 Legado。免費、開源、沒有廣告。">
   <meta name="twitter:image" content="https://bennytsai1234.github.io/Night-Reader/app-icon.png">
 
@@ -57,14 +57,12 @@
 
   <header class="nav" id="nav">
     <a class="nav-logo" href="#top" aria-label="夜讀"><img src="icon.webp" alt=""><span>夜讀</span></a>
-    <nav class="nav-links" aria-label="四卷"><a href="#v1">燈下</a><a href="#v2">留白</a><a href="#v3">枕邊</a><a href="#v4">尋源</a><i class="nav-pill"></i></nav>
     <a class="nav-dl" href="#download">下載</a>
   </header>
 
   <section class="hero">
     <div class="hero-copy">
       <h1>夜讀</h1>
-      <p class="tag">把長夜，留給長篇</p>
       <p class="lead">讀網路小說、TXT 與 EPUB，書源相容 Legado</p>
       <div class="get">
         <a class="dl" href="https://github.com/bennytsai1234/Night-Reader/releases/latest"><img src="icon.webp" alt=""><span><b>下載夜讀</b><small class="meta">Android</small></span></a>
@@ -78,14 +76,11 @@
 
   <main class="wrap">
 
-    <section class="volume" id="v1">
-      <header class="vol-head"><span>卷一</span><h2>燈下</h2></header>
-
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><video class="clip" muted playsinline preload="none" poster="shots/open.webp" data-src="clips/open.mp4" aria-label="從書架打開一本書"></video></div></div></div>
         <div class="text">
-          <h3>每一幀都準時</h3>
-          <p>開 App、開書、換頁，畫面一路順到底</p>
+          <h3>流暢</h3>
+          <p>開 App、開書、換頁都不掉幀</p>
         </div>
       </article>
 
@@ -105,8 +100,8 @@
           <img data-style="bean" data-mode="dark" src="shots/reader-bean_dark.webp" alt="豆綠風格，晚上" loading="lazy">
         </div></div></div>
         <div class="text">
-          <h3>白天一種，晚上一種</h3>
-          <p>六種風格，白天晚上各挑一個，晚上可以純黑</p>
+          <h3>六種風格</h3>
+          <p>白天、晚上各選一個，晚上可以純黑</p>
           <div class="styles">
             <div class="seg daynight" role="group" aria-label="白天或晚上"><button data-mode="light">白天</button><button data-mode="dark">晚上</button></div>
             <div class="swatches" data-mode="light" role="group" aria-label="白天的風格">
@@ -122,14 +117,10 @@
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><video class="clip" muted playsinline preload="none" poster="shots/tts.webp" data-src="clips/tts.mp4" aria-label="朗讀時，正在讀的那一句一句一句標出來"></video></div></div></div>
         <div class="text">
-          <h3>閉上眼睛聽</h3>
-          <p>手機的語音朗讀，讀到哪句標到哪句，可以定時停</p>
+          <h3>朗讀</h3>
+          <p>標出正在讀的那句，可以定時停</p>
         </div>
       </article>
-    </section>
-
-    <section class="volume" id="v2">
-      <header class="vol-head"><span>卷二</span><h2>留白</h2></header>
 
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen stack" data-toggle="hide">
@@ -137,8 +128,8 @@
           <img data-key="after" src="shots/hide-after.webp" alt="選起來按隱藏之後，那段廣告不見了" loading="lazy">
         </div></div></div>
         <div class="text">
-          <h3>廣告，選起來藏掉</h3>
-          <p>長按選字按「隱藏」，每本書都不再出現這段</p>
+          <h3>隱藏廣告</h3>
+          <p>長按選字按「隱藏」，每本書都不再出現</p>
           <div class="seg" data-toggle="hide" role="group" aria-label="隱藏前後"><button data-key="before">隱藏前</button><button data-key="after">隱藏後</button></div>
         </div>
       </article>
@@ -149,8 +140,8 @@
           <img data-key="after" src="shots/clean-after.webp" alt="整理後：乾淨的繁體正文" loading="lazy">
         </div></div></div>
         <div class="text">
-          <h3>正文自己整理</h3>
-          <p>替換規則清掉雜訊，簡體一律轉成繁體</p>
+          <h3>正文整理</h3>
+          <p>替換規則清掉雜訊，簡體轉成繁體</p>
           <div class="seg" data-toggle="clean" role="group" aria-label="整理前後"><button data-key="before">整理前</button><button data-key="after">整理後</button></div>
         </div>
       </article>
@@ -158,8 +149,8 @@
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><img src="shots/statusbar-hidden.webp" alt="藏起狀態列，只剩正文" loading="lazy"></div></div></div>
         <div class="text">
-          <h3>只留下字</h3>
-          <p>藏起狀態列，整個螢幕都是正文</p>
+          <h3>隱藏狀態列</h3>
+          <p>整個螢幕都是正文</p>
         </div>
       </article>
 
@@ -169,20 +160,16 @@
           <img data-key="unified" src="shots/covers-unified.webp" alt="統一封面，每本書都是夜空" loading="lazy">
         </div></div></div>
         <div class="text">
-          <h3>書架一個樣子</h3>
-          <p>統一封面，不用書源五花八門的圖</p>
+          <h3>統一封面</h3>
+          <p>書架上的書不用書源的封面</p>
           <div class="seg" data-toggle="covers" role="group" aria-label="封面"><button data-key="source">書源封面</button><button data-key="unified">統一封面</button></div>
         </div>
       </article>
-    </section>
-
-    <section class="volume" id="v3">
-      <header class="vol-head"><span>卷三</span><h2>枕邊</h2></header>
 
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><video class="clip" muted playsinline preload="none" poster="shots/search.webp" data-src="clips/search.mp4" aria-label="搜尋一個字，幾個書源的結果合成一張張卡片"></video></div></div></div>
         <div class="text">
-          <h3>一次搜遍書源</h3>
+          <h3>多書源搜尋</h3>
           <p>繁簡一起找，同一本書合成一筆</p>
         </div>
       </article>
@@ -190,24 +177,24 @@
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><img src="shots/source-change.webp" alt="閱讀中打開換源，列出其他書源的同一本書" loading="lazy"></div></div></div>
         <div class="text">
-          <h3>換源不迷路</h3>
-          <p>換了書源還在同一章，書籤和標註跟著走</p>
+          <h3>換源</h3>
+          <p>停在同一章，書籤和標註都還在</p>
         </div>
       </article>
 
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><video class="clip" muted playsinline preload="none" poster="shots/download.webp" data-src="clips/download.mp4" aria-label="背景下載佇列裡的書一本一本下載完"></video></div></div></div>
         <div class="text">
-          <h3>整本先下載好</h3>
-          <p>放上書架就整本下載，沒網路照樣讀</p>
+          <h3>整本下載</h3>
+          <p>放上書架就整本下載，沒網路也能讀</p>
         </div>
       </article>
 
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><img src="shots/local-toc.webp" alt="本地 TXT 匯入後自動分好的目錄" loading="lazy"></div></div></div>
         <div class="text">
-          <h3>本地書也能讀</h3>
-          <p>TXT、EPUB 匯入就自動分章</p>
+          <h3>本地書</h3>
+          <p>TXT、EPUB 匯入自動分章</p>
         </div>
       </article>
 
@@ -217,20 +204,16 @@
           <div class="phone"><div class="screen"><img src="shots/sync-phone.webp" alt="手機上讀到一半" loading="lazy"></div></div>
         </div>
         <div class="text">
-          <h3>換一台接著讀</h3>
-          <p>手機讀到一半，平板打開接著讀，經 Google 雲端硬碟或 WebDAV</p>
+          <h3>多台同步</h3>
+          <p>手機讀到一半，平板接著讀，經 Google 雲端硬碟或 WebDAV</p>
         </div>
       </article>
-    </section>
-
-    <section class="volume" id="v4">
-      <header class="vol-head"><span>卷四</span><h2>尋源</h2></header>
 
       <article class="feature">
         <div class="shots"><div class="phone"><div class="screen"><img src="shots/source-check.webp" alt="書源管理裡校驗過的書源，失效的標出來" loading="lazy"></div></div></div>
         <div class="text">
-          <h3>書源壞了一眼看出</h3>
-          <p>批次校驗找出失效的，單一書源逐步除錯</p>
+          <h3>書源校驗</h3>
+          <p>批次找出失效的書源，也能逐步除錯</p>
         </div>
       </article>
 
@@ -238,7 +221,6 @@
         <h3>夜讀不附書源</h3>
         <p>網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀</p>
       </div>
-    </section>
   </main>
 
   <section class="download" id="download">

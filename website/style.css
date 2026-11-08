@@ -1,6 +1,6 @@
 /* 夜讀網站。只有一套配色：背景是兩張同構圖的整幅山景（sky/scene-dusk、scene-night），
    固定在視窗後面，往下捲從黃昏慢慢入夜，月亮與星星入夜才出來；字從頭到尾是月光色。
-   版型：開頭左字右手機；四卷各有卷名，每個功能一列，手機與字整頁一左一右交錯。 */
+   版型：開頭左字右手機；每個功能一列，手機與字整頁一左一右交錯。 */
 
 :root {
   --text: #f1e9d6;
@@ -10,7 +10,6 @@
   --on-primary: #1a1612;
   --chip: rgba(255, 255, 255, 0.1);
   --glass: rgba(14, 11, 22, 0.52);
-  --line: rgba(241, 233, 214, 0.16);
   --shot-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
   --n: 0;
   --deep: 0;
@@ -55,7 +54,7 @@ h1, h2, h3, p { text-wrap: balance; }
 }
 @keyframes twinkle { from { opacity: var(--a, 0.7); } to { opacity: calc(var(--a, 0.7) * 0.25); } }
 
-/* ---------- 導覽：浮在上方的膠囊，四卷的卷名，捲到哪卷底色滑到哪卷 ---------- */
+/* ---------- 導覽：浮在上方的膠囊，圖示與「下載」 ---------- */
 .nav {
   position: fixed; z-index: 30; top: max(14px, env(safe-area-inset-top)); left: 50%;
   transform: translateX(-50%);
@@ -69,16 +68,6 @@ h1, h2, h3, p { text-wrap: balance; }
 .nav > * { flex-shrink: 0; }
 .nav-logo { display: flex; align-items: center; gap: 8px; padding: 0 10px 0 2px; text-decoration: none; font-weight: 600; letter-spacing: 0.08em; white-space: nowrap; }
 .nav-logo img { width: 30px; height: 30px; max-width: none; border-radius: 8px; }
-.nav-links { position: relative; display: flex; }
-.nav-links a {
-  position: relative; z-index: 1; padding: 6px 15px; font-size: 15px; letter-spacing: 0.12em; text-indent: 0.12em;
-  text-decoration: none; white-space: nowrap; color: var(--muted); transition: color 0.2s linear;
-}
-.nav-links a.on, .nav-links a:hover { color: var(--text); }
-.nav-pill {
-  position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; background: var(--chip);
-  transition: left 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s linear; opacity: 0;
-}
 .nav-dl {
   display: inline-flex; align-items: center; height: 36px; padding: 0 18px; margin-left: 4px; border-radius: 999px;
   font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; background: var(--primary); color: var(--on-primary);
@@ -161,20 +150,12 @@ h1, h2, h3, p { text-wrap: balance; }
 }
 .hero-copy { max-width: 30em; }
 .hero h1 { font-size: 60px; line-height: 1.1; margin: 0 0 18px; font-weight: 700; letter-spacing: 0.2em; }
-.hero .tag { font-size: 26px; margin: 0 0 10px; letter-spacing: 0.14em; }
-.hero .lead { font-size: 16px; margin: 0 0 36px; color: var(--muted); letter-spacing: 0.04em; }
+.hero .lead { font-size: 19px; margin: 0 0 36px; color: var(--muted); letter-spacing: 0.04em; }
 .hero .fine { font-size: 13px; margin: 18px 0 0; color: var(--faint); letter-spacing: 0.1em; }
 .hero-shot .phone { width: 290px; }
 
-/* ---------- 卷名 ---------- */
+/* ---------- 內容 ---------- */
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-.volume { padding-top: 64px; }
-.vol-head { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 40px 0 8px; text-align: center; }
-.vol-head span { font-size: 13px; letter-spacing: 0.5em; text-indent: 0.5em; color: var(--faint); }
-.vol-head h2 { position: relative; margin: 0; font-size: 34px; font-weight: 600; letter-spacing: 0.5em; text-indent: 0.5em; }
-.vol-head h2::before, .vol-head h2::after { content: ""; position: absolute; top: 50%; width: 56px; height: 1px; background: var(--line); }
-.vol-head h2::before { right: calc(100% + 18px); }
-.vol-head h2::after { left: calc(100% + 18px - 0.5em); }
 
 /* ---------- 功能：一列一個，整頁一左一右（.flip 由 script.js 照整頁的順序加） ---------- */
 .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; padding: 72px 0; }
@@ -187,7 +168,7 @@ h1, h2, h3, p { text-wrap: balance; }
 .shots.devices { padding: 0 60px 40px 0; }
 .shots.devices .phone { position: absolute; right: 0; bottom: 0; width: 170px; }
 
-/* 卷四最後一段只有字：置中 */
+/* 最後一段只有字：置中 */
 .source-note { max-width: 30em; margin: 24px auto 0; padding: 48px 0 0; text-align: center; }
 .source-note h3 { font-size: 26px; font-weight: 600; letter-spacing: 0.1em; margin: 0 0 12px; }
 .source-note p { font-size: 17px; color: var(--muted); margin: 0; }
@@ -256,7 +237,6 @@ footer a:hover { color: var(--text); }
   .feature p { font-size: 16px; margin: 0 auto; }
   .swatches { justify-content: center; gap: 8px; }
   .swatches i { width: 40px; height: 52px; }
-  .vol-head h2 { font-size: 28px; }
   .shots.devices { padding: 0 40px 30px 0; }
   .shots.devices .phone { width: min(36vw, 150px); }
 }
@@ -265,12 +245,9 @@ footer a:hover { color: var(--text); }
   .backdrop .scene { object-position: 64% bottom; }
   .backdrop .moon { left: 62%; top: 15%; width: 150vw; }
   .nav { gap: 0; padding: 5px; }
-  .nav-logo span { display: none; }
   .nav-logo { padding: 0 4px 0 1px; }
-  .nav-links a { padding: 6px 10px; font-size: 14px; letter-spacing: 0.06em; text-indent: 0.06em; }
   .nav-dl { padding: 0 13px; height: 32px; font-size: 14px; }
   .hero h1 { font-size: 44px; }
-  .hero .tag { font-size: 20px; }
   .phone { width: min(70vw, 280px); }
   .tablet { width: min(82vw, 360px); }
   .wrap { padding: 0 20px; }
@@ -281,7 +258,7 @@ footer a:hover { color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .backdrop .stars i, .dl::before { animation: none; }
-  .stack > *, .nav-pill, .replay { transition: none; }
+  .stack > *, .replay { transition: none; }
   .feature .shots, .feature .text { transition: none; }
   .js .feature:not(.in) .shots, .js .feature:not(.in) .text { opacity: 1; transform: none; }
 }

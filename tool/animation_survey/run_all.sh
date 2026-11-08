@@ -23,7 +23,7 @@ for area in "${areas[@]}"; do
   for mode in light dark; do
     echo "AREA $i/$total $area $mode 開始 $(date +%H:%M:%S)"
     SURVEY_MODE=$mode flutter test --run-skipped -t animation_survey \
-      "test/animation_survey/${area}_survey_test.dart" -r failures-only --timeout 30m > "$root/logs/$area-$mode.log" 2>&1
+      "test/animation_survey/${area}_survey_test.dart" -r expanded --timeout 30m > "$root/logs/$area-$mode.log" 2>&1
     status=$?
     grep -E "^SURVEY|Some tests failed|EXCEPTION|Expected:|Test failed" "$root/logs/$area-$mode.log"
     echo "AREA $i/$total $area $mode 結束 exit=$status $(date +%H:%M:%S)"

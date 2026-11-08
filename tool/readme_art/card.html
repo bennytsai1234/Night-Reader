@@ -39,31 +39,26 @@ body {
 /* 開頭 */
 .hero { width: 830px; height: 500px; }
 .hero .copy { position: absolute; left: 64px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; }
-.hero h1 { margin: 0 0 14px; font-size: 64px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2em; }
-.hero .tag { margin: 0 0 22px; font-size: 23px; letter-spacing: 0.14em; }
-.hero .lead { margin: 0 0 6px; font-size: 14px; color: var(--muted); letter-spacing: 0.04em; }
+.hero h1 { margin: 0 0 18px; font-size: 64px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2em; }
+.hero .lead { margin: 0 0 8px; font-size: 14px; color: var(--muted); letter-spacing: 0.04em; }
 .hero .fine { margin: 0; font-size: 12px; color: var(--faint); letter-spacing: 0.12em; }
 .hero .icon { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 22px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
 .hero .p1 { position: absolute; width: 200px; right: 70px; top: 58px; }
 .hero .p2 { position: absolute; width: 176px; right: 236px; top: 104px; opacity: 0.96; }
 
-/* 卷：卷名在上，手機一排，每支下面一句標題一句說明 */
-.vol { width: 830px; }
-.vol .head { padding: 44px 0 30px; text-align: center; }
-.vol .head span { display: block; font-size: 12px; letter-spacing: 0.6em; text-indent: 0.6em; color: var(--faint); margin-bottom: 6px; }
-.vol .head h2 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: 0.6em; text-indent: 0.6em; }
-.vol .row { display: flex; justify-content: center; gap: var(--gap, 26px); padding: 0 36px 46px; }
-.vol .item { width: var(--w, 200px); }
-.vol .item .phone { width: 100%; }
-.vol .item h3 { margin: 18px 0 5px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; text-align: center; white-space: nowrap; }
-.vol .item p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); text-align: center; }
-.vol .note { margin: -18px auto 0; padding: 0 0 44px; text-align: center; }
-.vol .note h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: 0.12em; }
-.vol .note p { margin: 0; font-size: 13px; color: var(--muted); }
+/* 一排手機，每支下面一句功能名一句說明 */
+.group { width: 830px; }
+.group .row { display: flex; justify-content: center; gap: var(--gap, 26px); padding: 46px 36px; }
+.group .item { width: var(--w, 200px); }
+.group .item .phone { width: 100%; }
+.group .item h3 { margin: 18px 0 5px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; text-align: center; white-space: nowrap; }
+.group .item p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); text-align: center; }
+.group .note { margin: -18px auto 0; padding: 0 0 44px; text-align: center; }
+.group .note h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: 0.12em; }
+.group .note p { margin: 0; font-size: 13px; color: var(--muted); }
 
 /* 下載 */
-.dl { width: 830px; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.dl h2 { margin: 0 0 26px; font-size: 28px; font-weight: 600; letter-spacing: 0.3em; text-indent: 0.3em; }
+.dl { width: 830px; height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .dl .btn {
   display: flex; align-items: center; gap: 14px; padding: 12px 26px 12px 12px; border-radius: 999px;
   background: rgba(244, 227, 181, 0.12); box-shadow: inset 0 0 0 1px rgba(244, 227, 181, 0.35), 0 0 40px rgba(244, 227, 181, 0.18);
@@ -118,17 +113,15 @@ if (c.type === 'hero') {
     <div class="in copy">
       <img class="icon" src="${W}icon.webp">
       <h1>夜讀</h1>
-      <p class="tag">把長夜，留給長篇</p>
       <p class="lead">讀網路小說、TXT 與 EPUB，書源相容 Legado</p>
       <p class="fine">免費・開源・沒有廣告</p>
     </div>
     <div class="p2">${phone(c.back)}</div>
     <div class="p1">${phone(c.front, c.a)}</div>
   </div>`;
-} else if (c.type === 'vol') {
-  root.innerHTML = `<div class="card vol" style="--w:${c.w}px;--gap:${c.gap || 26}px">${sky(c.t, c.dim, c.moon)}
+} else if (c.type === 'row') {
+  root.innerHTML = `<div class="card group" style="--w:${c.w}px;--gap:${c.gap || 26}px">${sky(c.t, c.dim, c.moon)}
     <div class="in">
-      <div class="head"><span>${c.no}</span><h2>${c.name}</h2></div>
       <div class="row">${c.items.map((it) => `<div class="item">${phone(it.s, it.a)}<h3>${it.h}</h3><p>${it.p}</p></div>`).join('')}</div>
       ${c.note ? `<div class="note"><h3>${c.note[0]}</h3><p>${c.note[1]}</p></div>` : ''}
     </div>
@@ -136,8 +129,7 @@ if (c.type === 'hero') {
 } else if (c.type === 'download') {
   root.innerHTML = `<div class="card dl">${sky(1, 0.5, [300, -330])}
     <div class="in" style="display:flex;flex-direction:column;align-items:center">
-      <h2>今晚，就開始夜讀</h2>
-      <div class="btn"><img src="${W}icon.webp"><span><b>下載夜讀</b><small>Android 7.0 以上・arm64</small></span></div>
+      <div class="btn"><img src="${W}icon.webp"><span><b>下載夜讀</b><small>Android</small></span></div>
       <p class="fine">另附 iOS 未簽章檔</p>
     </div>
   </div>`;

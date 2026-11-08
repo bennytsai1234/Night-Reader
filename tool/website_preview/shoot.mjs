@@ -51,7 +51,7 @@ const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id
 const evalJs = async (expr) => (await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result.value;
 
 const sizes = { desktop: { width: 1440, height: 900, dpr: 1, mobile: false }, mobile: { width: 390, height: 844, dpr: 2, mobile: true } };
-// 要拍的捲動位置：開頭、每一卷的卷名、每個功能、書源那段、下載。
+// 要拍的捲動位置：開頭、每個功能、書源那段、下載。
 const stops = `(() => {
   const y = (e, k = 0.18) => e.getBoundingClientRect().top + scrollY - innerHeight * k;
   const out = [['hero', 0]];

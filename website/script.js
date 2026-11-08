@@ -37,33 +37,6 @@ sky();
   box.appendChild(frag);
 })();
 
-// ---------- 導覽膠囊：捲到哪一卷，那一卷的卷名底下有一塊滑動的底色 ----------
-(function navPill() {
-  const links = [...document.querySelectorAll('.nav-links a')];
-  const pill = document.querySelector('.nav-pill');
-  if (!links.length || !pill) return;
-  const targets = links.map((a) => document.querySelector(a.getAttribute('href')));
-  const end = document.querySelector('#download');
-  function place(a) {
-    links.forEach((l) => l.classList.toggle('on', l === a));
-    if (!a) { pill.style.opacity = 0; return; }
-    pill.style.opacity = 1;
-    pill.style.left = a.offsetLeft + 'px';
-    pill.style.width = a.offsetWidth + 'px';
-  }
-  function update() {
-    const y = innerHeight * 0.45;
-    let cur = null;
-    targets.forEach((el, i) => { if (el && el.getBoundingClientRect().top <= y) cur = links[i]; });
-    // 捲到下載那段就不屬於任何一卷。
-    if (end && end.getBoundingClientRect().top <= y) cur = null;
-    place(cur);
-  }
-  addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
-  addEventListener('resize', update);
-  update();
-})();
-
 // ---------- 版本與大小：讀得到才顯示 ----------
 (async function version() {
   const metas = document.querySelectorAll('.get .meta');
@@ -76,7 +49,7 @@ sky();
     const text = `Android・${String(j.tag_name).replace(/^v/, '')}` + (apk ? `・${(apk.size / 1048576).toFixed(0)} MB` : '');
     metas.forEach((m) => { m.textContent = text; });
   } catch (_) {
-    metas.forEach((m) => { m.textContent = 'Android 7.0 以上'; });
+    metas.forEach((m) => { m.textContent = 'Android'; });
   }
 })();
 
@@ -155,7 +128,7 @@ document.querySelectorAll('.seg[data-toggle]').forEach((seg) => {
   videos.forEach((v) => io.observe(v));
 })();
 
-// ---------- 進場：捲進畫面的段落加上 .in；整頁從頭到尾一左一右，跨卷也接著數 ----------
+// ---------- 進場：捲進畫面的段落加上 .in；整頁從頭到尾一左一右 ----------
 (function reveal() {
   const items = [...document.querySelectorAll('.feature')];
   if (!items.length) return;

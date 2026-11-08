@@ -157,7 +157,7 @@ final _shots = <_Shot>[
     clip: (t, r) async {
       await r.run(_ms(400));
       await t.tap(find.text('夜雨聽書').first);
-      await r.run(_ms(2600));
+      await r.run(_ms(5200));
     },
   ),
   for (final style in _styles)
@@ -402,9 +402,13 @@ Future<void> _saveChapter(int index, List<String> paragraphs) async {
   await highlights.deleteByIds((await highlights.getAll()).map((h) => h.id));
   final bookmarks = getIt<BookmarkDao>();
   await bookmarks.deleteByIds((await bookmarks.getAll()).map((b) => b.id));
-  // 從這一章開頭讀起：前面的情境開過這本書會記住別的位置，畫面就對不上。
-  final book = (await getIt<BookDao>().getByUrl(kBookUrl))!
-      .copyWith(chapterIndex: index, charOffset: 0);
+  // 從這一章開頭讀起：前面的情境開過這本書會記住別的位置（連同往上捲了幾
+  // 像素與位置錨點），畫面就對不上，長按的座標會落在段落之間的空白。
+  final book = (await getIt<BookDao>().getByUrl(kBookUrl))!.copyWith(
+    chapterIndex: index,
+    charOffset: 0,
+    visualOffsetPx: 0,
+  )..readerAnchorJson = null;
   await getIt<BookDao>().upsertAll([book]);
   final chapter = (await getIt<ChapterDao>().getByBook(kBookUrl))[index];
   await ReaderChapterContentStore(
@@ -784,6 +788,9 @@ void main() {
       await settle(tester, const Duration(milliseconds: 300));
     }
     _usePhone(tester);
+    // 測試裡沒有網路，書架自動下載排進去的書永遠下載不完，下載排程每秒檢查
+    // 一次、不會自己停；清空佇列，它下一次檢查就結束。
+    DownloadService().tasks.clear();
     await tester.pump(const Duration(minutes: 1));
   });
 }
