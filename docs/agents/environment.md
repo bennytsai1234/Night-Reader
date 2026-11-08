@@ -4,6 +4,7 @@
 
 ## Git 與 worktree
 
+- **Git hook 要自己啟用**：clone 後 `git config core.hooksPath .githooks`。commit 前檢查暫存 Dart 檔的格式；push 前跑 `flutter analyze`，只改 `.md` 與 `docs/`、或推的提交已在本機的 `origin/beta` 上時略過，套件設定檔不存在或比 `pubspec.yaml`、`pubspec.lock` 舊時先裝好套件。
 - **Claude Code 子代理的 worktree**（`isolation: "worktree"`）放在主資料夾的 `.claude/worktrees/`，起點是主資料夾目前的 commit（通常是 `beta`），不是呼叫端所在的分支；要疊在別的分支上，合併時得自己解衝突，或先把那條分支併進 `beta`。
 - **T3 的自動拉取與 worktree 都認 `origin/HEAD`**，`git fetch` 不會更新它。資料夾還停在 `main` 的電腦開工前先 `git fetch`、`git switch beta`、`git remote set-head origin -a`。家裡這台已經是 `beta`，`core.hooksPath` 是相對的 `.githooks`（每個 worktree 跑自己那份 hook）。`main` 收到不在 `beta` 上的提交就讓 Android Release 失敗的檢查，要等 `main` 第一次快轉到 `beta` 才生效。
 

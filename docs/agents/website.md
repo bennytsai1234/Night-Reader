@@ -1,6 +1,6 @@
 # 網站與 README 的畫面與短片
 
-網站（`website/`）的規格在 `DESIGN.md`「網站」，README 的在「README」。畫面與短片都從 App 真的畫面拍，不手做。
+網站（`website/`）與 README 的規格在 `docs/design/website.md`。畫面與短片都從 App 真的畫面拍，不手做。
 
 ## 重拍
 
