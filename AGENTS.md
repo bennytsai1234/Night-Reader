@@ -29,7 +29,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試，加 `-r failures-only`；全套測試只在 CI 跑。
+- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試，加 `-r failures-only`；要加 `--run-skipped` 才跑的（截圖、幀預算、錄影、細節檢查、連網校驗）改用 `-r expanded`，`failures-only` 在這種跑法下會連錯誤一起吞掉。開頭的套件版本清單用 `grep -v "available)$"` 濾掉，其餘整份看。全套測試只在 CI 跑。
 - 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
 - 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。
