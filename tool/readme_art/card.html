@@ -51,6 +51,8 @@ body {
 .group .row { display: flex; justify-content: center; gap: var(--gap, 26px); padding: 46px 36px; }
 .group .item { width: var(--w, 200px); }
 .group .item .phone { width: 100%; }
+/* 舞台（devices:）：手機那格的位置留空，裝置與外框由 render.py 一幀一幀畫上去 */
+.stage { position: relative; width: 100%; aspect-ratio: 393 / 760; }
 .group .item h3 { margin: 18px 0 5px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; text-align: center; white-space: nowrap; }
 .group .item p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); text-align: center; }
 .group .note { margin: -18px auto 0; padding: 0 0 44px; text-align: center; }
@@ -94,6 +96,12 @@ function screen(n, a) {
   return `<div class="screen"><img src="${shot(n)}"></div>`;
 }
 const phone = (n, a) => `<div class="phone">${screen(n, a)}</div>`;
+// 舞台在 slot=all 時留空（底圖要拍到後面的天空），只在拍自己那格的遮罩時塗洋紅色。
+function stage() {
+  const i = slotNo++;
+  return `<div class="stage${slotArg === String(i) ? ' slot' : ''}"${slotArg === String(i) ? ' style="background:#ff00ff"' : ''}></div>`;
+}
+const device = (it) => (it.a && it.a.startsWith('devices:') ? stage() : phone(it.s, it.a));
 
 // t：入夜的程度，0 是黃昏、1 是夜；dim：再壓暗多少；moon：月亮的位置
 function sky(t, dim, moon) {
@@ -122,7 +130,7 @@ if (c.type === 'hero') {
 } else if (c.type === 'row') {
   root.innerHTML = `<div class="card group" style="--w:${c.w}px;--gap:${c.gap || 26}px">${sky(c.t, c.dim, c.moon)}
     <div class="in">
-      <div class="row">${c.items.map((it) => `<div class="item">${phone(it.s, it.a)}<h3>${it.h}</h3><p>${it.p}</p></div>`).join('')}</div>
+      <div class="row">${c.items.map((it) => `<div class="item">${device(it)}<h3>${it.h}</h3><p>${it.p}</p></div>`).join('')}</div>
       ${c.note ? `<div class="note"><h3>${c.note[0]}</h3><p>${c.note[1]}</p></div>` : ''}
     </div>
   </div>`;
