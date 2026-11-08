@@ -394,10 +394,12 @@ class _SourceRowContent extends StatelessWidget {
     );
   }
 
-  /// 書源名稱旁的分組小膠囊；多個分組照原樣以逗號相接。
+  /// 書源名稱旁的分組小膠囊：使用者自己的分組以逗號相接。校驗寫進分組的
+  /// 結果標記（「異常」「搜尋失效」……）不列，校驗結果由右邊的狀態標籤顯示。
   String? get _groupLabel {
-    final group = source.bookSourceGroup?.trim();
-    return group == null || group.isEmpty ? null : group;
+    final groups = splitSourceGroups(source.bookSourceGroup)
+        .where((group) => !sourceRuntimeStatusTags.contains(group));
+    return groups.isEmpty ? null : groups.join(',');
   }
 
   Widget _buildStatusTag(BuildContext context, SourceRuntimeHealth health) {

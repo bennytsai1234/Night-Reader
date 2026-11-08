@@ -476,6 +476,36 @@ void main() {
     expect(find.textContaining('書源0'), findsOneWidget);
   });
 
+  testWidgets('名稱旁的分組只列使用者的分組，校驗結果只在狀態標籤出現一次', (tester) async {
+    final dao = GetIt.instance<BookSourceDao>();
+    await tester.runAsync(() async {
+      await dao.upsert(
+        BookSource(
+          bookSourceUrl: 'https://broken.example',
+          bookSourceName: '壞掉的書源',
+          bookSourceGroup:
+              '精選,$abnormalSourceGroupTag,$searchBrokenSourceGroupTag',
+          customOrder: -1,
+        ),
+      );
+    });
+    await pumpPage(tester);
+
+    final tile = find.ancestor(
+      of: find.text('壞掉的書源'),
+      matching: find.byType(SourceItemTile),
+    );
+    Finder inTile(String text) =>
+        find.descendant(of: tile, matching: find.text(text));
+    expect(inTile('精選'), findsOneWidget);
+    expect(inTile(searchBrokenSourceGroupTag), findsOneWidget);
+    expect(inTile(abnormalSourceGroupTag), findsNothing);
+    expect(
+      find.descendant(of: tile, matching: find.textContaining(',')),
+      findsNothing,
+    );
+  });
+
   testWidgets('the batch toolbar stays at the bottom outside selection mode', (
     tester,
   ) async {
