@@ -25,6 +25,21 @@ List<String> sourceFunctionTags(BookSourcePart source) => [
   if (source.hasContentRule) '正',
 ];
 
+/// 書源名稱旁的分組膠囊，書源列與骨架共用：分組以逗號相接。書源有狀態標籤時，
+/// 校驗寫進分組的結果標記（「異常」「搜尋失效」……）不列，由狀態標籤顯示一次；
+/// 沒有狀態標籤時（例如只有「異常」）照列，提示才不會整個不見。
+String? sourceGroupLabel(BookSourcePart source) => groupLabelOf(
+  source.bookSourceGroup,
+  hasStatus: source.runtimeHealth.category != SourceHealthCategory.healthy,
+);
+
+/// [sourceGroupLabel] 的字串版，骨架讀上次記下的分組時也照這個整理。
+String? groupLabelOf(String? group, {required bool hasStatus}) {
+  final groups = splitSourceGroups(group)
+      .where((tag) => !hasStatus || !sourceRuntimeStatusTags.contains(tag));
+  return groups.isEmpty ? null : groups.join(',');
+}
+
 /// 書源列與骨架共用的錯誤提示，遇到長訊息要留出相同的高度。
 String? sourceErrorLine(BookSourcePart source) {
   final comment = source.bookSourceComment?.trim();
@@ -299,7 +314,7 @@ class _SourceRowContent extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_groupLabel case final group?)
+                    if (sourceGroupLabel(source) case final group?)
                       Padding(
                         padding: const EdgeInsets.only(left: AppSpacing.sm),
                         child: _GroupCapsule(group),
@@ -392,12 +407,6 @@ class _SourceRowContent extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  /// 書源名稱旁的分組小膠囊；多個分組照原樣以逗號相接。
-  String? get _groupLabel {
-    final group = source.bookSourceGroup?.trim();
-    return group == null || group.isEmpty ? null : group;
   }
 
   Widget _buildStatusTag(BuildContext context, SourceRuntimeHealth health) {
