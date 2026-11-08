@@ -17,7 +17,7 @@ window.CARDS = {
     {"s": "source-change", "h": "換源", "p": "停在同一章<br>書籤和標註都還在"},
     {"s": "download", "a": "clip:download", "h": "整本下載", "p": "放上書架就整本下載<br>沒網路也能讀"},
     {"s": "local-toc", "h": "本地書", "p": "TXT、EPUB<br>匯入自動分章"},
-    {"s": "sync-phone", "h": "多台同步", "p": "Google 雲端硬碟<br>或 WebDAV"}
+    {"s": "sync-phone", "a": "devices:sync-phone,sync-tablet", "h": "多台同步", "p": "Google 雲端硬碟<br>或 WebDAV"}
   ]},
   "sources": {"type": "row", "t": 1, "dim": 0.55, "w": 196, "moon": [430, -170], "items": [
     {"s": "source-check", "h": "書源校驗", "p": "批次找出失效的書源<br>也能逐步除錯"}

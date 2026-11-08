@@ -6,7 +6,8 @@
 
 有動畫的格子（cards.js 的 "a"）：先把那一格的螢幕塗成洋紅色拍一張，洋紅色的濃淡就是
 遮罩，再把短片（clip:名稱，website/clips/）或幾張截圖輪流（wipe:a,b,… 由左而右掃過、
-fade:a,b,… 淡入淡出）一幀一幀貼進去，存成會動的 webp。
+fade:a,b,… 淡入淡出）一幀一幀貼進去，存成會動的 webp。devices:手機圖,平板圖 是舞台：
+那格不畫手機框，外框與螢幕都由這裡逐幀畫，手機與平板來回變形。
 """
 import json
 import pathlib
@@ -15,7 +16,7 @@ import sys
 import tempfile
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -113,6 +114,90 @@ def frames_for(spec, size, n):
     return seq_frames(arg.split(','), size, n, wipe=kind == 'wipe')
 
 
+DEVICE_PAD = 110  # 舞台四周多畫的範圍（px，2 倍），裝置變寬與陰影用
+TEXT_GAP = 30  # 舞台下緣往下多少 px 之後是功能名，陰影在這之前淡掉，不壓到字
+TABLET_W = 1.12  # 平板寬是手機的幾倍；再寬會碰到隔壁的手機
+HOLD = (0.4, 0.6)  # 手機、平板各停多久（佔一圈扣掉兩次切換後的比例）
+MORPH = 0.75  # 秒，一次切換
+
+
+def ease(p):
+    return p * p * (3 - 2 * p)
+
+
+def device_layer(size, rect, pad, radius, inner_radius, screen, shadow=True):
+    """在 size 大的透明圖上畫一台裝置：黑框、圓角螢幕、網站同款陰影，screen 是螢幕圖（RGB，已縮好）。"""
+    x, y, w, h = rect
+    layer = Image.new('RGBA', size, (0, 0, 0, 0))
+    if shadow:
+        sh = Image.new('L', size, 0)
+        ImageDraw.Draw(sh).rounded_rectangle((x, y + 36, x + w, y + h + 36), radius, fill=round(255 * 0.55))
+        layer.putalpha(sh.filter(ImageFilter.GaussianBlur(44)))
+    body = Image.new('L', size, 0)
+    ImageDraw.Draw(body).rounded_rectangle((x, y, x + w, y + h), radius, fill=255)
+    layer.paste((0, 0, 0, 255), (0, 0), body)
+    ImageDraw.Draw(layer).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius, outline=(255, 255, 255, 41), width=2)
+    sx, sy = round(x + pad), round(y + pad)
+    m = Image.new('L', screen.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, screen.width - 1, screen.height - 1), inner_radius, fill=255)
+    layer.paste(screen, (sx, sy), m)
+    return layer
+
+
+def devices_frames(names, stage, n):
+    """舞台：手機那格先放手機，再換成平板，停一下換回手機，循環接得起來。
+    外框照網站的手機框與平板框畫，螢幕圖用 website/shots/ 的兩張；兩張字的位置不同，
+    所以外框變形的同時照 fade 的做法先淡到紙色再淡入，兩頁的字不同時出現
+    （使用者 2026-11-08 選定；滑出滑入會讓兩台與兩頁的字疊在一起）。"""
+    w0, h0 = stage
+    size = (w0 + 2 * DEVICE_PAD, h0 + 2 * DEVICE_PAD)
+    k = w0 / 134  # 卡片裡手機寬 134 css px
+    wt = round(w0 * TABLET_W)
+    ht = round(wt * 1280 / 800)
+    phone = dict(rect=(DEVICE_PAD, DEVICE_PAD, w0, h0), pad=4 * k, radius=15 * k, inner=11.5 * k)
+    tablet = dict(rect=(DEVICE_PAD - (wt - w0) / 2, DEVICE_PAD + (h0 - ht) / 2, wt, ht),
+                  pad=5 * k, radius=9 * k, inner=6 * k)
+    src = [Image.open(WEB / 'shots' / f'{s}.webp').convert('RGB') for s in names]
+    paper = [np.median(np.asarray(i).reshape(-1, 3), axis=0) for i in src]
+
+    def screen(spec, img_i, dim):
+        x, y, w, h = spec['rect']
+        sw, sh = round(w - 2 * spec['pad']), round(h - 2 * spec['pad'])
+        img = ImageOps.fit(src[img_i], (sw, sh), Image.LANCZOS)
+        if dim > 0:
+            a = np.asarray(img, dtype=np.float32)
+            img = Image.fromarray((a * (1 - dim) + paper[img_i] * dim).astype(np.uint8))
+        return img
+
+    def lerp(a, b, p):
+        r = tuple(a['rect'][i] + (b['rect'][i] - a['rect'][i]) * p for i in range(4))
+        return dict(rect=tuple(round(v) for v in r),
+                    **{key: a[key] + (b[key] - a[key]) * p for key in ('pad', 'radius', 'inner')})
+
+    def draw(spec, img_i, dim):
+        return device_layer(size, spec['rect'], spec['pad'], spec['radius'], spec['inner'], screen(spec, img_i, dim))
+
+    loop = n / FPS
+    hold = [(loop - 2 * MORPH) * h for h in HOLD]
+    marks = [0, hold[0], hold[0] + MORPH, hold[0] + MORPH + hold[1], loop]
+    devs = [phone, tablet]
+    out = []
+    for f in range(n):
+        t = f / FPS
+        if t < marks[1]:
+            lay = draw(phone, 0, 0)
+        elif marks[2] <= t < marks[3]:
+            lay = draw(tablet, 1, 0)
+        else:
+            fwd = t < marks[2]
+            p = (t - (marks[1] if fwd else marks[3])) / MORPH
+            a, b = (0, 1) if fwd else (1, 0)
+            spec = lerp(devs[a], devs[b], ease(p))
+            lay = draw(spec, a, p * 2) if p < 0.5 else draw(spec, b, 2 - p * 2)
+        out.append(lay)
+    return out
+
+
 def magenta(img):
     """每個像素有多少比例是洋紅色（螢幕圓角邊緣會是洋紅和黑框混出來的）。"""
     a = np.asarray(img, dtype=np.float32)
@@ -140,11 +225,15 @@ def render(name, card, tmp):
     if not slots:
         return save(base, None, name)
     n = int(LOOP * FPS)
-    parts = []
+    parts, stages = [], []
     for i, spec in enumerate(slots):
         alpha = magenta(shoot(name, tmp, i).crop(box))
         ys, xs = np.nonzero(alpha > 0.02)
         y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+        if spec.startswith('devices:'):
+            fr = devices_frames(spec.split(':', 1)[1].split(','), (x1 - x0, y1 - y0), n)
+            stages.append((x0 - DEVICE_PAD, y0 - DEVICE_PAD, y1, fr))
+            continue
         parts.append((y0, y1, x0, x1, alpha[y0:y1, x0:x1, None], frames_for(spec, (x1 - x0, y1 - y0), n)))
     b = np.asarray(base, dtype=np.float32)
     frames = []
@@ -152,7 +241,16 @@ def render(name, card, tmp):
         a = b.copy()
         for y0, y1, x0, x1, al, fr in parts:
             a[y0:y1, x0:x1, :3] += al * (np.asarray(fr[f], dtype=np.float32) - KEY)
-        frames.append(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA'))
+        im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
+        for x, y, bottom, fr in stages:
+            lay = fr[f].copy()
+            # 陰影在舞台下緣到功能名之間淡掉，不蓋到字
+            cut = np.asarray(lay.getchannel('A'), dtype=np.float32)
+            rows = np.arange(lay.height, dtype=np.float32)[:, None] + y - bottom
+            cut = cut * np.clip(1 - rows / TEXT_GAP, 0, 1)
+            lay.putalpha(Image.fromarray(cut.astype(np.uint8)))
+            im.alpha_composite(lay, (x, y))
+        frames.append(im)
     save(base, frames, name)
 
 
