@@ -12,6 +12,7 @@ import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
 import '../../support/app_harness.dart';
+import '../../support/navigation_budget.dart';
 
 class _PendingBookmarkDao extends BookmarkDao {
   _PendingBookmarkDao(super.db);
@@ -91,6 +92,8 @@ void main() {
         highlights.completion.completeError(StateError('標註寫入失敗'));
       }
       await tester.pump();
+      // App 啟動的背景下載與定時工作需照測試外殼的流程收掉。
+      await tearDownApp(tester);
       expect(tester.takeException(), isNull);
     });
   }
