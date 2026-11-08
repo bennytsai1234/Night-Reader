@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://bennytsai1234.github.io/Night-Reader/"><img src="docs/readme/hero.webp" width="100%" alt="夜讀：把長夜，留給長篇。讀網路小說、TXT 與 EPUB，書源相容 Legado。免費、開源、沒有廣告"></a>
+  <a href="https://bennytsai1234.github.io/Night-Reader/"><img src="docs/readme/hero.webp" width="100%" alt="夜讀：讀網路小說、TXT 與 EPUB，書源相容 Legado。免費、開源、沒有廣告"></a>
 </p>
 
 <p align="center">
@@ -12,13 +12,13 @@
 
 <br>
 
-<p align="center"><img src="docs/readme/vol1.webp" width="100%" alt="卷一 燈下：每一幀都準時，開 App、開書、換頁，畫面一路順到底；白天一種，晚上一種，六種風格白天晚上各挑一個，晚上可以純黑；閉上眼睛聽，讀到哪句標到哪句，可以定時停"></p>
+<p align="center"><img src="docs/readme/reading.webp" width="100%" alt="流暢：開 App、開書、換頁都不掉幀；六種風格：白天、晚上各選一個，晚上可以純黑；朗讀：標出正在讀的那句，可以定時停"></p>
 
-<p align="center"><img src="docs/readme/vol2.webp" width="100%" alt="卷二 留白：廣告選起來藏掉；正文自己整理，替換規則清掉雜訊，簡體一律轉成繁體；只留下字，藏起狀態列；書架一個樣子，統一封面"></p>
+<p align="center"><img src="docs/readme/tidy.webp" width="100%" alt="隱藏廣告：長按選字按「隱藏」，每本書都不再出現；正文整理：替換規則清掉雜訊，簡體轉成繁體；隱藏狀態列：整個螢幕都是正文；統一封面：書架上的書不用書源的封面"></p>
 
-<p align="center"><img src="docs/readme/vol3.webp" width="100%" alt="卷三 枕邊：一次搜遍書源；換源不迷路；整本先下載好；本地 TXT、EPUB 也能讀；換一台接著讀，經 Google 雲端硬碟或 WebDAV"></p>
+<p align="center"><img src="docs/readme/library.webp" width="100%" alt="多書源搜尋：繁簡一起找，同一本書合成一筆；換源：停在同一章，書籤和標註都還在；整本下載：放上書架就整本下載，沒網路也能讀；本地書：TXT、EPUB 匯入自動分章；多台同步：經 Google 雲端硬碟或 WebDAV"></p>
 
-<p align="center"><img src="docs/readme/vol4.webp" width="100%" alt="卷四 尋源：書源壞了一眼看出，批次校驗找出失效的，單一書源逐步除錯。夜讀不附書源，網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"></p>
+<p align="center"><img src="docs/readme/sources.webp" width="100%" alt="書源校驗：批次找出失效的書源，也能逐步除錯。夜讀不附書源，網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"></p>
 
 <p align="center"><a href="https://github.com/bennytsai1234/Night-Reader/releases/latest"><img src="docs/readme/download.webp" width="100%" alt="下載夜讀，Android 7.0 以上、arm64"></a></p>
 

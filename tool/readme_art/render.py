@@ -47,7 +47,7 @@ def shoot(name, tmp, slot=None):
 
 
 def slots_of(card):
-    if card['type'] == 'vol':
+    if card['type'] == 'row':
         return [it['a'] for it in card['items'] if it.get('a')]
     return [card['a']] if card.get('a') else []
 

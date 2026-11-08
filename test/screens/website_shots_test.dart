@@ -157,7 +157,7 @@ final _shots = <_Shot>[
     clip: (t, r) async {
       await r.run(_ms(400));
       await t.tap(find.text('夜雨聽書').first);
-      await r.run(_ms(2600));
+      await r.run(_ms(5200));
     },
   ),
   for (final style in _styles)
