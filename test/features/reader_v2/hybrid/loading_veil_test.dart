@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 void main() {
@@ -28,7 +31,6 @@ void main() {
   // 骨架出現與掀紙都照骨架換場的預設時長。
   const revealTime = SkeletonReveal.defaultDuration;
   final noSkeleton = paintsExactlyCountTimes(#drawRRect, 0);
-
   // 一頁的兩行正文。
   const twoLines = [
     Rect.fromLTRB(56, 10, 380, 28),
@@ -36,6 +38,21 @@ void main() {
   ];
 
   late LoadingVeilController veil;
+  final veilKey = GlobalKey();
+
+  /// 紙這一幀畫出來的像素（RGBA）。
+  Future<Uint8List> pixels(WidgetTester tester) async {
+    final boundary =
+        veilKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final bytes = await tester.runAsync(() async {
+      final image = await boundary.toImage();
+      final data = await image.toByteData();
+      image.dispose();
+      return data!.buffer.asUint8List();
+    });
+    return bytes!;
+  }
+
   late int hiddenCount;
 
   void makeVeil(
@@ -59,13 +76,16 @@ void main() {
       Directionality(
         textDirection: TextDirection.ltr,
         child: mounted
-            ? LoadingVeil(
-                controller: veil,
-                spec: spec,
-                lines: lines,
-                titleLines: titleLines,
-                backgroundColor: const Color(0xFFF6F1E7),
-                textColor: const Color(0xFF2B2622),
+            ? RepaintBoundary(
+                key: veilKey,
+                child: LoadingVeil(
+                  controller: veil,
+                  spec: spec,
+                  lines: lines,
+                  titleLines: titleLines,
+                  backgroundColor: const Color(0xFFF6F1E7),
+                  textColor: const Color(0xFF2B2622),
+                ),
               )
             : const SizedBox.shrink(),
       ),
@@ -99,7 +119,9 @@ void main() {
         ..rrect()
         ..rrect(),
     );
-    expect(tester.hasRunningAnimations, isTrue, reason: '骨架在呼吸');
+    expect(tester.hasRunningAnimations, isFalse, reason: '長完先停在最深');
+    await advance(tester, LoadingVeilController.restBeforeBreath + frame);
+    expect(tester.hasRunningAnimations, isTrue, reason: '正文還沒好，開始呼吸');
     await finish(tester);
   });
 
@@ -166,32 +188,130 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets(
-    'holding the breath stills the skeleton where it is, then resumes',
-    (tester) async {
-      makeVeil(tester);
-      await pumpVeil(tester);
-      await advance(tester, revealTime + const Duration(milliseconds: 300));
-      expect(tester.hasRunningAnimations, isTrue, reason: '骨架在呼吸');
+  testWidgets('settling the breath finishes it at the deepest, covering '
+      'again breathes on', (tester) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await advance(tester, revealTime);
+    expect(tester.hasRunningAnimations, isFalse, reason: '長完先停在最深');
+    final deepest = await pixels(tester);
+    await advance(
+      tester,
+      LoadingVeilController.restBeforeBreath +
+          const Duration(milliseconds: 300),
+    );
+    expect(tester.hasRunningAnimations, isTrue, reason: '正文還沒好，開始呼吸');
 
-      // 正文在紙底下建好的那幾幀：畫面不動，骨架照停住那一刻的深淺畫著。
-      veil.holdBreath();
-      await tester.pump(frame);
-      expect(tester.hasRunningAnimations, isFalse);
-      expect(
-        find.byType(LoadingVeil),
-        paints
-          ..rect()
-          ..rrect()
-          ..rrect(),
-      );
+    // 正文排好：這一口呼完、每個位置停在最深才完成，不凍在當下的深淺。
+    var settled = false;
+    unawaited(veil.settleBreath().then((_) => settled = true));
+    await tester.pump(frame);
+    expect(settled, isFalse, reason: '呼吸還在走完這一口');
+    expect(tester.hasRunningAnimations, isTrue);
+    // 骨架長完才從最深起步：第一口的右緣晚半輪，收住最多一輪半。
+    await advance(tester, Skeleton.breathCycle * 1.5);
+    expect(settled, isTrue);
+    expect(tester.hasRunningAnimations, isFalse, reason: '收住後畫面靜止');
+    expect(await pixels(tester), deepest, reason: '整片停在最深，和長完時一樣');
 
-      veil.resumeBreath();
-      await tester.pump(frame);
-      expect(tester.hasRunningAnimations, isTrue, reason: '從同一個深淺接著呼吸');
-      await finish(tester);
-    },
-  );
+    // 這次掀紙作廢、又蓋上紙：停一下，正文還沒好就從最深接著呼吸。
+    veil.cover();
+    await tester.pump(frame);
+    expect(tester.hasRunningAnimations, isFalse);
+    await advance(tester, LoadingVeilController.restBeforeBreath);
+    expect(tester.hasRunningAnimations, isTrue);
+    await finish(tester);
+  });
+
+  testWidgets('the skeleton waits at the deepest while it grows and does not '
+      'breathe when the text is ready by then', (tester) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await tester.pump(frame);
+    expect(veil.isSkeletonFading, isTrue, reason: '骨架在長出');
+
+    // 長出途中正文就排好了：長完停在最深，不開始呼吸。
+    var settled = false;
+    unawaited(veil.settleBreath().then((_) => settled = true));
+    await tester.pump(frame);
+    expect(settled, isFalse, reason: '等骨架長完');
+    await advance(tester, revealTime);
+    expect(settled, isTrue);
+    expect(tester.hasRunningAnimations, isFalse, reason: '沒有呼吸');
+    await finish(tester);
+  });
+
+  testWidgets('the last frame of growing in is the still skeleton', (
+    tester,
+  ) async {
+    // 長出、靜止、收住、掀紙起步都用同一種畫法：換畫法時顏色進位不同，
+    // 銜接那一幀整片差 1 階（ADR 0022）。
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await advance(tester, revealTime - frame);
+    expect(veil.isSkeletonFading, isTrue, reason: '還差最後一幀');
+    final last = await pixels(tester);
+    await tester.pump(frame);
+    expect(veil.isSkeletonFading, isFalse);
+    final still = await pixels(tester);
+    // 最後一幀時左半已經完全長出，比到這裡。
+    const rowBytes = 400 * 4;
+    var compared = 0;
+    for (var y = 10; y < 28; y++) {
+      for (var x = 60; x < 200; x++) {
+        final i = y * rowBytes + x * 4;
+        for (var c = 0; c < 4; c++) {
+          expect(last[i + c], still[i + c], reason: '($x, $y) 第 $c 個通道');
+        }
+        compared++;
+      }
+    }
+    expect(compared, greaterThan(0));
+    await finish(tester);
+  });
+
+  testWidgets('a new skeleton after a breathing one grows in still', (
+    tester,
+  ) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await advance(tester, revealTime + LoadingVeilController.restBeforeBreath);
+    await advance(tester, const Duration(milliseconds: 300));
+    expect(tester.hasRunningAnimations, isTrue, reason: '正文還沒好，在呼吸');
+
+    // 呼吸中又跳章：舊骨架淡掉的同時把這一口呼完。
+    veil.cover(skeleton: false);
+    await advance(tester, Skeleton.breathCycle * 1.5);
+    expect(tester.hasRunningAnimations, isFalse, reason: '淡完也收住了');
+
+    // 新骨架長出時不呼吸，長完在 restBeforeBreath 內排好就直接收住。
+    veil.showSkeleton();
+    await tester.pump();
+    await advance(tester, revealTime);
+    expect(veil.isSkeletonFading, isFalse);
+    expect(tester.hasRunningAnimations, isFalse, reason: '長完停在最深');
+    var settled = false;
+    unawaited(veil.settleBreath().then((_) => settled = true));
+    await tester.pump(frame);
+    expect(settled, isTrue, reason: '不多等一口呼吸');
+    await finish(tester);
+  });
+
+  testWidgets('disposing while the skeleton grows ends the wait and asks '
+      'for no more frames', (tester) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await tester.pump(frame);
+    var settled = false;
+    unawaited(veil.settleBreath().then((_) => settled = true));
+    await tester.pump(frame);
+    expect(settled, isFalse, reason: '等骨架長完');
+
+    await finish(tester);
+    await tester.pump(frame);
+    expect(settled, isTrue, reason: '拆掉時等待結束');
+    expect(tester.binding.hasScheduledFrame, isFalse, reason: '不再要畫面');
+  });
 
   testWidgets('the skeleton only breathes while a veil is on screen', (
     tester,

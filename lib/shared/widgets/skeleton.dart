@@ -259,66 +259,77 @@ class _RenderSkeletonAnchor extends RenderProxyBox {
 /// 與頁首頁尾（[Skeleton]）照同一個相位呼吸，由左而右的明暗才是同一道走
 /// 過整個畫面。各自計時的話，誰先出現誰先開始，兩邊的明暗就錯開。
 ///
-/// 有人要用（[acquire]）才呼吸，最後一個放掉（[release]）就停回最深；
-/// [hold] 停在這一刻的深淺，[resume] 從同一個相位接著走（ADR 0037 補充：
-/// 閱讀器掀紙前在紙底下建好正文的那一兩幀，整個畫面一起停）。
+/// 和開 App 的骨架一樣（ADR 0025、0035）：一開始整片停在最深，[begin] 才
+/// 從最深照由左而右的先後開始呼吸；[settle] 收住，每個位置把這一口呼完、
+/// 停在最深。閱讀器的紙長完骨架才開始呼吸，正文排好就收住，在靜止的紙底下
+/// 建好正文才掀紙（ADR 0037 策略一、二）。最後一個使用者放掉（[release]）
+/// 就回到一開始的樣子。
 class SharedSkeletonBreath {
   SharedSkeletonBreath({required TickerProvider vsync})
-    : _phase = AnimationController(
-        vsync: vsync,
-        duration: Skeleton.breathCycle,
-      );
+    : _clock = _BreathClock(vsync).._waiting = true;
 
-  final AnimationController _phase;
+  final _BreathClock _clock;
 
-  /// 這一輪呼吸的進度（0 到 1，[Skeleton.breathAt] 的相位）。
-  Animation<double> get phase => _phase;
+  /// 呼吸的深淺變了（每一幀，或開始、收住、回到最深）時通知。
+  Listenable get listenable => _clock;
 
-  /// 照 [phase] 的深淺畫：呼吸中，或停在某個深淺（[hold]）。
-  bool get isBreathing => _phase.isAnimating || _held;
+  /// 照 [depthAt] 畫：有人在用、正在呼吸或收住途中。還沒開始或已經收住
+  /// 時整片最深。
+  bool get isBreathing => _users > 0 && !_clock._waiting && !_clock.still;
+
+  /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
+  /// 還沒開始、或收住途中已經呼到最深的位置是 1。
+  double depthAt(double u, SkeletonBreath breath) => _clock.depthAt(u, breath);
 
   int _users = 0;
-  bool _held = false;
+
+  /// [settle] 或 [begin] 一次就加一，作廢等著收住後再開始的那一次。
+  int _requests = 0;
 
   void acquire() {
     _users += 1;
-    _sync();
+    _clock.allowed = true;
   }
 
   void release() {
     _users -= 1;
-    _sync();
-  }
-
-  /// 呼吸停在這一刻的深淺，畫面不動；沒在呼吸時不做事。
-  void hold() {
-    if (!_phase.isAnimating) return;
-    _held = true;
-    _phase.stop();
-  }
-
-  /// [hold] 停住的呼吸接著走。
-  void resume() {
-    if (!_held) return;
-    _held = false;
-    _sync();
-  }
-
-  void _sync() {
-    final run = _users > 0;
-    // 停住的呼吸維持停在原處，等 [resume]。
-    if (run && _held) return;
-    _held = false;
-    if (run) {
-      if (!_phase.isAnimating) unawaited(_phase.repeat());
-    } else if (_phase.isAnimating || _phase.value != 0) {
-      _phase
-        ..stop()
-        ..value = 0;
+    // 拆掉後才放掉的（使用它的骨架比它晚拆）：已經沒有要通知的人。
+    if (_users == 0 && !_disposed) {
+      _requests += 1;
+      _clock.reset();
     }
   }
 
-  void dispose() => _phase.dispose();
+  /// 開始呼吸：還沒開始或已經收住時，從整片最深照由左而右的先後起，接得
+  /// 上、不跳。收住途中時等這一口呼完、停在最深再起，不從半途跳回最深。
+  /// 已經在呼吸時不做事。
+  void begin() {
+    final request = ++_requests;
+    if (_clock._restFrom != null && !_clock.still) {
+      unawaited(
+        _clock.rest().then((_) {
+          if (request == _requests) _clock.begin();
+        }),
+      );
+      return;
+    }
+    _clock.begin();
+  }
+
+  /// 收住呼吸，每個位置都停在最深時完成：最多再一輪（[Skeleton.breathCycle]），
+  /// 從最深剛起步時最多一輪半。還沒開始呼吸時立刻完成。收住後一直停著，
+  /// 到 [begin] 或沒人用為止。
+  Future<void> settle() {
+    _requests += 1;
+    return _users == 0 ? Future<void>.value() : _clock.rest();
+  }
+
+  bool _disposed = false;
+
+  void dispose() {
+    _disposed = true;
+    _clock.dispose();
+  }
 }
 
 /// 讓底下的 [Skeleton] 照 [breath] 呼吸，不自己計時。
@@ -474,6 +485,7 @@ class _BreathClock extends ChangeNotifier {
 
   void _start() {
     if (!_allowed ||
+        _waiting ||
         _still ||
         _shared != null ||
         _hold != null ||
@@ -499,7 +511,7 @@ class _BreathClock extends ChangeNotifier {
       return;
     }
     _ticker.stop();
-    shared.phase.addListener(_onShared);
+    shared._clock.addListener(_onShared);
     _syncShared();
     _onShared();
   }
@@ -520,7 +532,7 @@ class _BreathClock extends ChangeNotifier {
   void _leaveShared() {
     final shared = _shared;
     if (shared == null) return;
-    shared.phase.removeListener(_onShared);
+    shared._clock.removeListener(_onShared);
     if (_usingShared) {
       _usingShared = false;
       shared.release();
@@ -528,10 +540,18 @@ class _BreathClock extends ChangeNotifier {
     _shared = null;
   }
 
+  /// 照共用的那口呼吸的狀態畫（含收住與接著呼吸），[depthAt] 與 [gradient]
+  /// 算出來和它一樣。
   void _onShared() {
     // 新的一幀：骨架可能換了位置（換頁平移、捲動），同 [_tick]。
     _anchorStale = true;
-    _cycles = _shared!.phase.value;
+    final source = _shared!._clock;
+    _cycles = source._cycles;
+    _shift = source._shift;
+    _restFrom = source._restFrom;
+    _still = source._still;
+    _restarted = source._restarted;
+    _waiting = source._waiting;
     if (_visible) notifyListeners();
   }
 
@@ -541,6 +561,10 @@ class _BreathClock extends ChangeNotifier {
 
   /// 開 App 的骨架還沒開始呼吸（[holdUntil]）：整片停在最深、計時器不走。
   ValueListenable<bool>? _hold;
+
+  /// 共用的呼吸還沒開始（[SharedSkeletonBreath.begin]）：整片停在最深、
+  /// 計時器不走。
+  bool _waiting = false;
 
   /// 開 App 的骨架長出時與長完後停的那一下不呼吸、每個位置停在最深；
   /// [LaunchEntranceMotion.breathing] 才照由左而右的先後開始第一口氣，起法
@@ -621,6 +645,36 @@ class _BreathClock extends ChangeNotifier {
     _finishRest();
   }
 
+  /// 不再呼吸、回到還沒開始的樣子（整片最深、等 [begin]，收住的狀態也
+  /// 清掉）：共用的呼吸沒人用時（[SharedSkeletonBreath.release]）。
+  void reset() {
+    _allowed = false;
+    _waiting = true;
+    _ticker.stop();
+    _cycles = _base = _shift = 0;
+    _restarted = false;
+    _restFrom = null;
+    _still = false;
+    _finishRest();
+    _rested = null;
+    notifyListeners();
+  }
+
+  /// 從整片最深開始呼吸，每個位置照由左而右的先後輪到才變淺（同 [resume]）：
+  /// 還沒開始（[_waiting]）或已經收住時。
+  void begin() {
+    if (!_waiting && !_still) return;
+    _waiting = false;
+    _restFrom = null;
+    _finishRest();
+    _rested = null;
+    _still = false;
+    _shift = _cycles;
+    _restarted = true;
+    _start();
+    notifyListeners();
+  }
+
   void _finishRest() {
     final rested = _rested;
     if (rested != null && !rested.isCompleted) rested.complete();
@@ -652,7 +706,7 @@ class _BreathClock extends ChangeNotifier {
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
   /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
   double depthAt(double u, SkeletonBreath breath) {
-    if (_hold != null) return 1;
+    if (_hold != null || _waiting) return 1;
     final phase = _phase;
     final from = _restFrom;
     if (from != null &&
@@ -671,6 +725,7 @@ class _BreathClock extends ChangeNotifier {
   ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth) {
     // `viewWidth <= 0` 對 NaN 不成立，無限大也一起擋下（#203）。
     if (_hold != null ||
+        _waiting ||
         _still ||
         breath.lag == 0 ||
         !viewWidth.isFinite ||

@@ -389,7 +389,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (_initialRestoreCompleted == completed) return;
     _initialRestoreCompleted = completed;
     if (completed) {
-      _revealWhenStill();
+      _revealWhenStill(buildText: true);
     } else {
       _coverUntilFirstPage();
     }
@@ -398,18 +398,28 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 等著掀紙的這一次（[_revealWhenStill]）；又蓋紙時作廢。
   Object? _pendingReveal;
 
-  /// 正文排好、要掀紙：在整張蓋著的紙底下建好、畫出正文，骨架的呼吸停住
-  /// 不動；畫完再停 [AppMotion.stillGap] 才掀紙，掀紙的每一幀都不再做重的
-  /// 工作（ADR 0037 策略一與補充）。原本在建正文的同一幀就開始掀：2026-11-05
-  /// 手機上開書，這一幀主執行緒 12.9ms、第一次畫整頁字的繪製 25.6ms，掀紙
-  /// 一開始就掉 4 幀。
-  void _revealWhenStill() {
+  /// 正文排好、要掀紙，照開 App 換場的順序（ADR 0035、0037 策略一、二）：
+  /// 骨架的呼吸先收住（每個位置把這一口呼完、停在最深），畫面靜止後才在
+  /// 整張蓋著的紙底下建好、畫出正文，畫完再停 [AppMotion.stillGap] 才掀紙；
+  /// 掀紙時骨架停在最深不再呼吸，掀紙的每一幀都不做重的工作。2026-11-05
+  /// 手機上開書，建正文那一幀主執行緒 12.9ms、第一次畫整頁字的繪製
+  /// 25.6ms；原本在呼吸途中把呼吸凍在當下的深淺來建正文，掀紙時再接著
+  /// 呼吸，看起來呼吸播到一半就頓住、和字一起出來（使用者 2026-11-07）。
+  ///
+  /// [buildText]：正文還沒建在紙底下（開書第一次排好）。收住的這段期間
+  /// 正文先不建（[_textWaitsForBreath]），重建也只畫紙。
+  void _revealWhenStill({bool buildText = false}) {
     final reveal = SkeletonReveal.of(context);
     final pending = _pendingReveal = Object();
     bool current() => mounted && identical(_pendingReveal, pending);
-    _veil.holdBreath();
-    _scheduleRebuild();
+    if (buildText) _textWaitsForBreath = true;
     unawaited(() async {
+      await _veil.settleBreath();
+      if (!current()) return;
+      if (_textWaitsForBreath) {
+        _textWaitsForBreath = false;
+        _scheduleRebuild();
+      }
       // 排好的重建在這一幀結束時才 setState，正文在下一幀才建好、畫出：
       // 停頓從那一幀之後才算，不讓建正文的時間吃掉它。
       await WidgetsBinding.instance.endOfFrame;
@@ -420,7 +430,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         _revealTimer = null;
         if (!current()) return;
         _pendingReveal = null;
-        _veil.resumeBreath();
         _veil.reveal(reveal);
         // 掀開中的紙不攔觸控：紙上那層的攔不攔照重建時的狀態。
         _scheduleRebuild();
@@ -428,13 +437,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }());
   }
 
+  /// 正文已排好，但骨架的呼吸還沒收住：這段期間只畫紙，正文等收住才建
+  /// （[_revealWhenStill]）。
+  bool _textWaitsForBreath = false;
+
   /// [_revealWhenStill] 停 [AppMotion.stillGap] 的計時器。
   Timer? _revealTimer;
 
-  /// 又要蓋紙：等著掀的那一次作廢，停住的呼吸接著走。
+  /// 又要蓋紙：等著掀的那一次作廢，收住的呼吸接著走；還沒建的正文照常
+  /// 建在紙底下，之後的流程當它已經在。
   void _cancelPendingReveal() {
     _revealTimer?.cancel();
     _revealTimer = null;
+    if (_textWaitsForBreath) {
+      _textWaitsForBreath = false;
+      _scheduleRebuild();
+    }
     if (_pendingReveal == null) return;
     _pendingReveal = null;
     _veil.resumeBreath();
@@ -1749,9 +1767,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return mounted && (!_initialRestoreCompleted || _veil.isCovered);
   }
 
-  /// 先只排第一頁、照它淡入骨架，淡入播完才回去排前後其他頁（ADR 0016、
-  /// 0023）。第一頁照捲動停住的位置（[_restingOffset]）排，和掀開後的正文
-  /// 一致。
+  /// 先只排第一頁、照它長出骨架，接著排前後其他頁（ADR 0016）。第一頁照
+  /// 捲動停住的位置（[_restingOffset]）排，和掀開後的正文一致。
   Future<bool> _showFirstPage(
     HybridAnchor anchor,
     ChapterBlocks blocks, {
@@ -1770,7 +1787,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   /// 紙上的骨架換成捲動位置在 [offset] 時的那一頁：畫著的骨架先淡完，
-  /// 再淡入新的，播完才回來（ADR 0023）。
+  /// 再長出新的；開始長就回來。
   Future<bool> _fadeInPageSkeleton(
     double offset,
     bool Function() isCurrent,
@@ -1781,11 +1798,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (!isCurrent()) return false;
     }
     setState(() => _veilPage = _pageLinesAt(offset));
+    // 骨架長出的同時接著排前後其他頁（每幀限量，ADR 0037 補充）：長完時
+    // 正文多半已經排好，不用呼吸就掀紙。長完前排好的，掀紙等它長完
+    // （[LoadingVeilController.settleBreath]）。
     _veil.showSkeleton();
-    while (_veil.isSkeletonFading) {
-      await _nextFrame();
-      if (!isCurrent()) return false;
-    }
     return isCurrent();
   }
 
@@ -1886,7 +1902,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       builder: (context, constraints) {
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
-        if (!_initialRestoreCompleted) return _buildLoading(state);
+        if (!_initialRestoreCompleted || _textWaitsForBreath) {
+          return _buildLoading(state);
+        }
         final controller = _scrollController ??= HybridScrollController(
           initialScrollOffset: _pendingScrollOffset ?? 0.0,
           keepScrollOffset: false,

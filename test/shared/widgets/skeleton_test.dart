@@ -14,16 +14,23 @@ import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 void main() {
   testWidgets(
-    'skeletons sharing a breath take it up at its phase, hold and stop with it',
+    'skeletons sharing a breath wait at the deepest, take it up at its phase, '
+    'settle and stop with it',
     (tester) async {
       // 閱讀器的紙與頁首頁尾：後出現的骨架照已經在走的那口呼吸，不從頭開始。
+      const breathKind = SkeletonBreath.gentleSweep;
       final breath = SharedSkeletonBreath(vsync: tester);
       addTearDown(breath.dispose);
       breath.acquire();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.hasRunningAnimations, isFalse, reason: '開始前停在最深');
+      expect(breath.depthAt(0.3, breathKind), 1);
+
+      breath.begin();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      final phase = breath.phase.value;
-      expect(phase, greaterThan(0), reason: '先用的那一邊已經在呼吸');
+      final depth = breath.depthAt(0.3, breathKind);
+      expect(depth, lessThan(1), reason: '先用的那一邊已經在呼吸');
 
       const box = SizedBox(width: 100, height: 20, child: SkeletonBox());
       await tester.pumpWidget(
@@ -34,22 +41,31 @@ void main() {
           ),
         ),
       );
-      expect(breath.phase.value, phase, reason: '後出現的骨架不讓呼吸重來');
+      expect(breath.depthAt(0.3, breathKind), depth, reason: '後出現的骨架不讓呼吸重來');
 
-      // 掀紙前在紙底下建好正文的那一兩幀：整個畫面一起停。
-      breath.hold();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(tester.hasRunningAnimations, isFalse, reason: '停在這一刻的深淺');
-      breath.resume();
+      // 掀紙前收住：這一口呼完、每個位置停在最深，整個畫面一起停。
+      var settled = false;
+      unawaited(breath.settle().then((_) => settled = true));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(settled, isFalse, reason: '還在呼完這一口');
+      // 從最深起步的第一口：右緣晚半輪才開始，收住最多一輪半。
+      await tester.pump(Skeleton.breathCycle * 1.5);
+      expect(settled, isTrue);
+      expect(tester.hasRunningAnimations, isFalse, reason: '收住後畫面靜止');
+      expect(breath.isBreathing, isFalse);
+      for (final u in [0.0, 0.3, 0.7, 1.0]) {
+        expect(breath.depthAt(u, breathKind), 1, reason: '整片停在最深');
+      }
+      breath.begin();
       await tester.pump();
-      expect(tester.hasRunningAnimations, isTrue, reason: '接著呼吸');
+      expect(tester.hasRunningAnimations, isTrue, reason: '從最深接著呼吸');
 
       breath.release();
       await tester.pump();
       expect(tester.hasRunningAnimations, isTrue, reason: '頁首頁尾的骨架還在用');
       await tester.pumpWidget(const MaterialApp(home: box));
       expect(tester.hasRunningAnimations, isFalse, reason: '沒人用就停');
-      expect(breath.phase.value, 0, reason: '停回最深');
+      expect(breath.depthAt(0, breathKind), 1, reason: '停回最深');
     },
   );
 
@@ -74,6 +90,7 @@ void main() {
     expect(breath.isBreathing, isFalse, reason: '藏起來的骨架不讓呼吸走');
 
     await tester.pumpWidget(app(shown: true));
+    breath.begin();
     await tester.pump(const Duration(milliseconds: 100));
     expect(breath.isBreathing, isTrue, reason: '出現了才呼吸');
   });

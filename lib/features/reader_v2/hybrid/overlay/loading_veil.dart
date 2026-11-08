@@ -39,6 +39,7 @@ class LoadingVeilController {
        _ownsBreath = breath == null,
        _breath = breath ?? SharedSkeletonBreath(vsync: vsync) {
     _cover.addStatusListener(_onCoverStatus);
+    _skeleton.addStatusListener(_onSkeletonStatus);
   }
 
   /// 紙完全淡出時呼叫，呼叫端據此把 [LoadingVeil] 移出畫面。
@@ -139,6 +140,7 @@ class LoadingVeilController {
   /// 等 [covered] 再拿掉）；否則直接蓋滿。掀紙途中再淡入時沿用那次掀紙的
   /// 方式倒回來，其他時候整張一起淡。
   void cover({bool skeleton = true, bool fade = false}) {
+    _settling = false;
     if (fade && !_reduceMotion) {
       if (!_cover.isAnimating) _sweep = false;
       unawaited(_cover.forward());
@@ -152,20 +154,28 @@ class LoadingVeilController {
     }
   }
 
-  /// 照 [skeletonReveal] 讓紙上的骨架出現。
+  /// 照 [skeletonReveal] 讓紙上的骨架出現。要長出的新骨架不呼吸（ADR
+  /// 0025）：上一輪還在呼吸（呼吸中又跳章、改排版或重載）就讓這一口自然
+  /// 呼完、停在最深，頁首頁尾的骨架一起收，長完再從最深算
+  /// [restBeforeBreath]。
   void showSkeleton() {
     if (_reduceMotion) {
       _skeleton.value = 1;
     } else {
+      if (!_skeleton.isCompleted) unawaited(_breath.settle());
       _skeletonSweep = _skeletonReveal.sweeps;
       _skeleton.duration = _skeletonReveal.duration;
       unawaited(_skeleton.forward());
     }
     _syncPulse();
+    // 骨架本來就長好了（又蓋一次紙）：不會再有長完的那一刻，從現在算起。
+    if (_skeleton.isCompleted) _waitThenBreathe();
   }
 
-  /// 淡掉紙上的骨架，紙留著。
+  /// 淡掉紙上的骨架，紙留著，之後會長出新的一份（[showSkeleton]）：還在
+  /// 呼吸就從現在起收住，淡掉的同時把這一口呼完，新骨架長出時已經靜止。
   void hideSkeleton() {
+    if (!_reduceMotion) unawaited(_breath.settle());
     _skeletonSweep = false;
     if (_reduceMotion || _skeleton.isDismissed) {
       _skeleton.value = 0;
@@ -175,14 +185,69 @@ class LoadingVeilController {
     _syncPulse();
   }
 
-  /// 掀紙前在紙底下建好、畫出正文時，骨架的呼吸停在這一刻的深淺，畫面不動
-  /// （ADR 0037 策略一：掀紙前建好正文畫面時停一兩幀加 [AppMotion.stillGap]）。
-  /// 停的是共用的那口呼吸，頁首頁尾的骨架一起停，整個畫面才真的不動。停的
-  /// 時間很短，看不出凍住；[resumeBreath] 從同一個深淺接著呼吸。
-  void holdBreath() => _breath.hold();
+  /// 骨架長完後停在最深等正文的時間：這段時間裡排好就不呼吸，直接建正文、
+  /// 掀紙；超過才開始呼吸。讀過的書多半在這之內排好（2026-11-08 電腦上量
+  /// 約 0.37 秒），要上網抓的也不會讓骨架靜止太久、看起來像當掉。
+  static const Duration restBeforeBreath = Duration(milliseconds: 500);
 
-  /// [holdBreath] 停住的呼吸接著走。
-  void resumeBreath() => _breath.resume();
+  Timer? _breathTimer;
+
+  /// 骨架長完：先停在最深 [restBeforeBreath]，正文還沒排好才開始呼吸。
+  void _waitThenBreathe() {
+    _breathTimer?.cancel();
+    if (_settling) return;
+    _breathTimer = Timer(restBeforeBreath, () {
+      _breathTimer = null;
+      if (!_settling && _skeleton.isCompleted) _breath.begin();
+    });
+  }
+
+  /// 正文排好、要掀紙前收住骨架的呼吸，和開 App 換場前一樣（ADR 0035）：
+  /// 骨架還在長出、或長完後還在停著（[restBeforeBreath]）時不開始呼吸，
+  /// 等長完就完成；已經在呼吸時等每個位置把這一口呼完、停在最深。全部
+  /// 靜止時完成，之後才在紙底下建正文，掀紙時骨架不再呼吸（ADR 0037
+  /// 策略一、二）。收的是共用的那口呼吸，頁首頁尾的骨架一起收。
+  Future<void> settleBreath() async {
+    _settling = true;
+    _breathTimer?.cancel();
+    _breathTimer = null;
+    await _grown;
+    if (_disposed) return;
+    await _breath.settle();
+  }
+
+  /// 骨架不再往長完走（長完、改成淡掉、或控制器拆掉）時完成。
+  Future<void> get _grown {
+    if (_disposed || _skeleton.status != AnimationStatus.forward) {
+      return Future<void>.value();
+    }
+    final waiter = Completer<void>();
+    _grownWaiters.add(waiter);
+    return waiter.future;
+  }
+
+  final List<Completer<void>> _grownWaiters = <Completer<void>>[];
+
+  void _settleGrownWaiters() {
+    if (_grownWaiters.isEmpty) return;
+    final waiters = List<Completer<void>>.of(_grownWaiters);
+    _grownWaiters.clear();
+    for (final waiter in waiters) {
+      waiter.complete();
+    }
+  }
+
+  bool _disposed = false;
+
+  /// 這次掀紙作廢、紙還要再等：骨架已經長完就從現在起停 [restBeforeBreath]
+  /// 再呼吸（收住途中時等這一口呼完再起），還在長的等長完才算。
+  void resumeBreath() {
+    _settling = false;
+    if (_skeleton.isCompleted) _waitThenBreathe();
+  }
+
+  /// 正文排好、在等收住（[settleBreath]）：骨架長完時不開始呼吸。
+  bool _settling = false;
 
   /// 正文已排好：照 [reveal] 的方式與時長掀開紙。
   void reveal([SkeletonReveal reveal = const SkeletonReveal()]) {
@@ -196,7 +261,11 @@ class LoadingVeilController {
   }
 
   void dispose() {
+    _disposed = true;
+    _breathTimer?.cancel();
+    _settleGrownWaiters();
     _cover.removeStatusListener(_onCoverStatus);
+    _skeleton.removeStatusListener(_onSkeletonStatus);
     _settleCoverWaiters(covered: false);
     _setUsingBreath(false);
     _cover.dispose();
@@ -212,6 +281,14 @@ class LoadingVeilController {
     _skeleton.value = 0;
     _syncPulse();
     onHidden?.call();
+  }
+
+  /// 骨架長完、停在最深（和開 App 一樣，長出時不呼吸，ADR 0025、0035）：
+  /// 正文在 [restBeforeBreath] 內排好就不呼吸、直接收住掀紙，沒好才開始
+  /// 呼吸。
+  void _onSkeletonStatus(AnimationStatus status) {
+    if (status != AnimationStatus.forward) _settleGrownWaiters();
+    if (status == AnimationStatus.completed) _waitThenBreathe();
   }
 
   void _attach() {
@@ -308,7 +385,8 @@ class _LoadingVeilState extends State<LoadingVeil> {
         painter: _LoadingVeilPainter(
           cover: controller._cover,
           skeleton: controller._skeleton,
-          pulse: controller._breath.phase,
+          pulse: controller._breath.listenable,
+          depthAt: controller._breath.depthAt,
           breathing: () =>
               controller._usingBreath && controller._breath.isBreathing,
           look: SkeletonLook.of(context),
@@ -337,6 +415,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.cover,
     required this.skeleton,
     required this.pulse,
+    required this.depthAt,
     required this.breathing,
     required this.look,
     required this.breathSpan,
@@ -354,11 +433,13 @@ class _LoadingVeilPainter extends CustomPainter {
   final Animation<double> cover;
   final Animation<double> skeleton;
 
-  /// 呼吸一輪的進度（[Skeleton.breathAt]）；停著時骨架不呼吸。
-  final Animation<double> pulse;
+  /// 呼吸的深淺變了時通知，紙跟著重畫。
+  final Listenable pulse;
 
-  /// 骨架照 [pulse] 的深淺畫：呼吸中，或呼吸暫停在某個深淺
-  /// （[LoadingVeilController.holdBreath]）。
+  /// 橫向位置（螢幕上，0 左緣、1 右緣）現在的呼吸深淺比例。
+  final double Function(double u, SkeletonBreath breath) depthAt;
+
+  /// 骨架照 [depthAt] 的深淺畫：呼吸中或收住途中；整片收住了就是最深。
   final bool Function() breathing;
   final SkeletonLook look;
 
@@ -443,11 +524,7 @@ class _LoadingVeilPainter extends CustomPainter {
         base.a *
         layerAt(u) *
         (breathing
-            ? Skeleton.breathAt(
-                pulse.value,
-                screenLeft + (screenRight - screenLeft) * u,
-                look.breath,
-              )
+            ? depthAt(screenLeft + (screenRight - screenLeft) * u, look.breath)
             : 1);
     // 沿橫向會變的有：骨架長出來、掀紙與由左而右的呼吸。換場取
     // [SkeletonReveal.sweepStops] 的停點；呼吸每 1/32 個寬度取一點。
@@ -462,16 +539,14 @@ class _LoadingVeilPainter extends CustomPainter {
         points.add(i / 32);
       }
     }
-    final Paint paint;
-    if (!growing && !sweeping && !breathSweeps) {
-      paint = Paint()..color = base.withValues(alpha: alphaAt(0));
-    } else {
-      final us = points.toList()..sort();
-      paint = Paint()
-        ..shader = ui.Gradient.linear(Offset.zero, Offset(size.width, 0), [
-          for (final u in us) base.withValues(alpha: alphaAt(u)),
-        ], us);
-    }
+    // 靜止時也用漸層（只有兩端同色）：單色和漸層的顏色進位不同，長完、
+    // 收住、掀紙起步這些銜接處換畫法會整片差 1 階（ADR 0022）。靜止時
+    // 只畫一次，多一道漸層不花什麼。
+    final us = points.toList()..sort();
+    final paint = Paint()
+      ..shader = ui.Gradient.linear(Offset.zero, Offset(size.width, 0), [
+        for (final u in us) base.withValues(alpha: alphaAt(u)),
+      ], us);
     final barHeight = style.fontSize * Skeleton.barHeightFactor;
     final titleBarHeight = style.fontSize > 0
         ? barHeight * style.titleFontSize / style.fontSize
