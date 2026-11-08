@@ -20,7 +20,7 @@
 
 <p align="center"><img src="docs/readme/sources.webp" width="100%" alt="書源校驗：批次找出失效的書源，也能逐步除錯。夜讀不附書源，網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"></p>
 
-<p align="center"><a href="https://github.com/bennytsai1234/Night-Reader/releases/latest"><img src="docs/readme/download.webp" width="100%" alt="下載夜讀，Android 7.0 以上、arm64"></a></p>
+<p align="center"><a href="https://github.com/bennytsai1234/Night-Reader/releases/latest"><img src="docs/readme/download.webp" width="100%" alt="下載夜讀"></a></p>
 
 <details>
 <summary><b>iOS 怎麼裝</b></summary>

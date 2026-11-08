@@ -49,7 +49,7 @@ sky();
     const text = `Android・${String(j.tag_name).replace(/^v/, '')}` + (apk ? `・${(apk.size / 1048576).toFixed(0)} MB` : '');
     metas.forEach((m) => { m.textContent = text; });
   } catch (_) {
-    metas.forEach((m) => { m.textContent = 'Android 7.0 以上'; });
+    metas.forEach((m) => { m.textContent = 'Android'; });
   }
 })();
 
