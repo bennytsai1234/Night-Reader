@@ -1,0 +1,182 @@
+/* 夜讀網站原型，A、B 兩版共用的部分：天色背景、導覽、下載、手機框、頁尾。
+   只有一套配色：背景是兩張同構圖的整幅山景（sky/scene-dusk、scene-night），固定在
+   視窗後面，往下捲從黃昏慢慢入夜，月亮與星星入夜才出來；字從頭到尾是月光色。 */
+
+:root {
+  --text: #f1e9d6;
+  --muted: rgba(241, 233, 214, 0.74);
+  --faint: rgba(241, 233, 214, 0.5);
+  --primary: #f4e3b5;
+  --on-primary: #1a1612;
+  --chip: rgba(255, 255, 255, 0.1);
+  --glass: rgba(14, 11, 22, 0.52);
+  --line: rgba(241, 233, 214, 0.16);
+  --shot-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+  --n: 0;
+  --deep: 0;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0;
+  background: #000;
+  color: var(--text);
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-size: 17px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+img, video { display: block; max-width: 100%; }
+h1, h2, h3, p { text-wrap: balance; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+
+/* ---------- 背景 ---------- */
+.backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #000; }
+.backdrop .scene {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: 58% bottom;
+}
+.backdrop .night { opacity: var(--n); }
+/* 讓字在濃烈的橘紅地平線上也讀得清楚：整體壓暗一點，捲深了再壓暗。 */
+.backdrop .scrim { position: absolute; inset: 0; background: #07050d; opacity: calc(0.24 + var(--deep) * 0.42); }
+.backdrop .moon {
+  position: absolute; left: 70%; top: 17%;
+  width: min(92vmin, 920px); height: auto; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: screen; opacity: var(--n);
+}
+.backdrop .stars { position: absolute; inset: 0 0 45% 0; opacity: calc(var(--n) * 0.95); }
+.backdrop .stars i {
+  position: absolute; border-radius: 50%; background: #fff6e0;
+  animation: twinkle var(--d, 4s) ease-in-out var(--l, 0s) infinite alternate;
+}
+@keyframes twinkle { from { opacity: var(--a, 0.7); } to { opacity: calc(var(--a, 0.7) * 0.25); } }
+
+/* ---------- 導覽：浮在上方的膠囊，四卷的卷名，捲到哪卷底色滑到哪卷 ---------- */
+.nav {
+  position: fixed; z-index: 30; top: max(14px, env(safe-area-inset-top)); left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px; border-radius: 999px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.nav-logo { display: flex; align-items: center; gap: 8px; padding: 0 10px 0 2px; text-decoration: none; font-weight: 600; letter-spacing: 0.08em; }
+.nav-logo img { width: 30px; height: 30px; border-radius: 8px; }
+.nav-links { position: relative; display: flex; }
+.nav-links a {
+  position: relative; z-index: 1; padding: 6px 15px; font-size: 15px; letter-spacing: 0.12em; text-indent: 0.12em;
+  text-decoration: none; white-space: nowrap; color: var(--muted); transition: color 0.2s linear;
+}
+.nav-links a.on, .nav-links a:hover { color: var(--text); }
+.nav-pill {
+  position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; background: var(--chip);
+  transition: left 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s linear; opacity: 0;
+}
+.nav-dl {
+  display: inline-flex; align-items: center; height: 36px; padding: 0 18px; margin-left: 4px; border-radius: 999px;
+  font-size: 15px; font-weight: 600; text-decoration: none; background: var(--primary); color: var(--on-primary);
+}
+
+/* ---------- 下載：一張月光色的小卡，左邊 App 圖示，右邊「下載夜讀」與版本、大小 ---------- */
+.get { display: inline-flex; flex-direction: column; align-items: center; gap: 12px; }
+.dl {
+  position: relative; display: inline-flex; align-items: center; gap: 14px;
+  padding: 10px 26px 10px 10px; border-radius: 22px; text-decoration: none; text-align: left;
+  background: linear-gradient(180deg, rgba(251, 239, 201, 0.16), rgba(251, 239, 201, 0.06));
+  box-shadow: inset 0 0 0 1px rgba(244, 227, 181, 0.38), 0 10px 40px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s linear;
+}
+/* 月光從左上角的圖示漫出來，慢慢一明一暗。 */
+.dl::before {
+  content: ""; position: absolute; left: -18px; top: 50%; width: 110px; height: 110px; margin-top: -55px; z-index: -1;
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(244, 227, 181, 0.42), rgba(244, 227, 181, 0));
+  animation: breathe 3.6s ease-in-out infinite;
+}
+.dl:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 1px rgba(244, 227, 181, 0.6), 0 14px 46px rgba(0, 0, 0, 0.4); }
+.dl img { width: 52px; height: 52px; border-radius: 13px; }
+.dl b { display: block; font-size: 18px; letter-spacing: 0.12em; line-height: 1.3; color: var(--text); }
+.dl small { display: block; font-size: 13px; letter-spacing: 0.04em; color: var(--muted); min-height: 1.4em; }
+@keyframes breathe { 0%, 100% { opacity: 0.45; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
+.get .alt { font-size: 13px; color: var(--faint); text-decoration: none; letter-spacing: 0.04em; }
+.get .alt:hover { color: var(--muted); }
+
+/* ---------- 手機框：寬 393、高 760 的 Android 手機（比 iPhone 短一些），黑邊框，上緣正中一個鏡頭挖孔 ---------- */
+.phone {
+  position: relative; width: 300px; aspect-ratio: 1179 / 2280; padding: 6px; border-radius: 22px;
+  background: #000;
+  box-shadow: var(--shot-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.phone .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 17px; background: #000; }
+.phone .screen > img, .phone .screen > video, .phone .screen picture, .phone .screen picture img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+}
+.phone .screen::after {
+  content: ""; position: absolute; z-index: 2; left: 50%; top: 1.1%; width: 3.4%; aspect-ratio: 1;
+  border-radius: 50%; transform: translateX(-50%); background: #050505;
+}
+/* 平板：12 吋、直拿。 */
+.tablet {
+  position: relative; width: 420px; aspect-ratio: 800 / 1280; padding: 9px; border-radius: 24px;
+  background: #000;
+  box-shadow: var(--shot-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.tablet .screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 16px; background: #000; }
+.tablet .screen > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* 疊在一起的幾張，由 .on 決定顯示哪一張。 */
+.stack > * { opacity: 0; transition: opacity 0.45s linear; }
+.stack > .on { opacity: 1; }
+
+/* 小膠囊按鈕：切換前後、白天晚上 */
+.seg { display: inline-flex; gap: 4px; padding: 4px; margin-top: 22px; border-radius: 999px; background: var(--chip); }
+.seg button {
+  border: 0; font: inherit; font-size: 14px; letter-spacing: 0.06em; cursor: pointer; color: var(--muted);
+  padding: 5px 16px; border-radius: 999px; background: transparent; transition: background 0.2s linear, color 0.2s linear;
+}
+.seg button.on { background: var(--primary); color: var(--on-primary); }
+
+/* ---------- 開頭 ---------- */
+.hero { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 96px 20px 40px; }
+.hero h1 { font-size: 60px; line-height: 1.1; margin: 0 0 18px; font-weight: 700; letter-spacing: 0.2em; text-indent: 0.2em; }
+.hero .tag { font-size: 26px; margin: 0 0 10px; letter-spacing: 0.14em; text-indent: 0.14em; }
+.hero .lead { font-size: 16px; margin: 0 auto 36px; color: var(--muted); letter-spacing: 0.04em; }
+.hero .fine { font-size: 13px; margin: 0; color: var(--faint); letter-spacing: 0.1em; }
+
+/* ---------- 下載、頁尾 ---------- */
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+.download { text-align: center; padding: 140px 24px 120px; }
+.download h2 { font-size: 30px; font-weight: 600; margin: 0 0 34px; letter-spacing: 0.24em; text-indent: 0.24em; }
+footer { padding: 24px 24px 56px; font-size: 13px; color: var(--faint); text-align: center; letter-spacing: 0.08em; }
+footer a { text-decoration: none; color: var(--muted); }
+footer a:hover { color: var(--text); }
+
+/* ---------- 窄螢幕 ---------- */
+@media (max-width: 760px) {
+  body { font-size: 15px; }
+  .backdrop .scene { object-position: 64% bottom; }
+  .backdrop .moon { left: 62%; top: 15%; width: 150vw; }
+  .nav { gap: 0; padding: 5px; }
+  .nav-logo span { display: none; }
+  .nav-logo { padding: 0 4px 0 1px; }
+  .nav-links a { padding: 6px 10px; font-size: 14px; letter-spacing: 0.06em; text-indent: 0.06em; }
+  .nav-dl { padding: 0 13px; height: 32px; font-size: 14px; }
+  .hero h1 { font-size: 44px; }
+  .hero .tag { font-size: 20px; }
+  .phone { width: min(70vw, 280px); }
+  .tablet { width: min(82vw, 360px); }
+  .wrap { padding: 0 20px; }
+  .download { padding: 90px 20px 80px; }
+  .download h2 { font-size: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .backdrop .stars i, .dl::before { animation: none; }
+  .stack > *, .nav-pill { transition: none; }
+}

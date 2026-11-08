@@ -2,6 +2,8 @@
 
 網站（`website/`）與 README 的規格在 `docs/design/website.md`。畫面與短片都從 App 真的畫面拍，不手做。
 
+要參考捲動換畫面的版型（手機黏住）時看 `docs/prototypes/website-b/`，不發布的原型。
+
 ## 重拍
 
 1. `flutter test --run-skipped -t screens test/screens/website_shots_test.dart`：拍檔裡 `_shots` 列的每一張與每一段短片（全部約 3 分鐘）。只拍幾個用 `SHOT_ONLY=名稱,名稱`。圖寫在系統暫存的 `night-reader-screens/web/`，短片的每一格寫在 `night-reader-screens/web-clips/<名稱>/`。

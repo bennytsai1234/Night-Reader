@@ -1,0 +1,59 @@
+/* 原型 B：手機黏在畫面中央，往下捲時螢幕與旁邊的字一段換一段（捲動敘事）。 */
+
+.hero .scroll-hint { display: block; width: 22px; height: 36px; margin: 34px auto 0; border: 1.5px solid rgba(241, 233, 214, 0.55); border-radius: 12px; position: relative; }
+.hero .scroll-hint i { position: absolute; left: 50%; top: 7px; width: 3px; height: 7px; margin-left: -1.5px; border-radius: 2px; background: var(--text); animation: wheel 1.8s ease-in-out infinite; }
+@keyframes wheel { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(12px); } }
+
+/* 每一段留 75vh 的捲動距離，最後一段多停一屏讓人看完。 */
+.stage { position: relative; height: calc(var(--steps) * 75vh + 25vh); --sp: 0; }
+.sticky {
+  position: sticky; top: 0; height: 100vh; height: 100svh;
+  display: grid; grid-template-columns: 1fr minmax(0, 1fr); align-items: center; column-gap: 8vw;
+  max-width: 1040px; margin: 0 auto; padding: 0 24px;
+}
+
+.phone-wrap { justify-self: end; perspective: 1400px; }
+.stage .phone {
+  height: min(78vh, 720px); height: min(78svh, 720px); width: auto;
+  transform: rotateY(calc((var(--sp) - 0.5) * -16deg)) rotateX(2deg);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.step-shot { position: absolute; inset: 0; opacity: 0; transform: scale(1.04); transition: opacity 0.5s linear, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.step-shot.on { opacity: 1; transform: none; }
+.step-shot picture, .step-shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* 風格那一頁裡面的 picture 是疊在一起的，由 .stack 控制，不被上面的規則蓋掉。 */
+.step-shot.stack picture { opacity: 0; }
+.step-shot.stack picture.on { opacity: 1; }
+
+.copy { display: grid; justify-items: start; }
+.step-copy {
+  grid-area: 1 / 1; opacity: 0; transform: translateY(26px); pointer-events: none;
+  transition: opacity 0.45s linear, transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.step-copy.on { opacity: 1; transform: none; pointer-events: auto; transition-delay: 0.12s; }
+.step-copy h2 { font-size: 42px; line-height: 1.25; margin: 0 0 14px; font-weight: 700; letter-spacing: 0.04em; }
+.step-copy p { font-size: 19px; margin: 0; color: var(--muted); max-width: 18em; }
+
+/* 左緣的進度點：目前這一段拉長。 */
+.rail { position: absolute; left: 24px; top: 50%; transform: translateY(-50%); display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.rail button { display: block; width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; cursor: pointer; background: rgba(241, 233, 214, 0.38); transition: height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s linear; }
+.rail button.on { height: 26px; background: var(--primary); }
+
+@media (max-width: 760px) {
+  .stage { height: calc(var(--steps) * 62vh + 20vh); }
+  .sticky { grid-template-columns: 1fr; grid-template-rows: auto auto; align-content: center; row-gap: 22px; padding: 64px 20px 16px; text-align: center; }
+  .phone-wrap { justify-self: center; }
+  .stage .phone { height: min(50vh, 440px); height: min(50svh, 440px); }
+  .copy { justify-items: center; min-height: 9.5em; }
+  .step-copy h2 { font-size: 26px; margin-bottom: 8px; }
+  .step-copy p { font-size: 16px; margin: 0 auto; }
+  .styles { justify-content: center; margin-top: 14px; }
+  .rail { left: 10px; gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage .phone { transform: none; }
+  .hero .scroll-hint i { animation: none; opacity: 1; }
+  .step-shot, .step-copy, .rail button { transition: none; }
+}
