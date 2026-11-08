@@ -91,6 +91,10 @@ final kChapterTitles = <String>[
 
 late AppDatabase _db;
 
+/// 上一個測試開的資料庫，下一次 [setUpApp] 開新的之前關掉；不關的話 drift
+/// 每個測試都警告同一個資料庫類別開了好幾次，記憶體裡的資料庫也一直留著。
+AppDatabase? _openDb;
+
 /// 註冊 App 的所有服務，資料庫換成記憶體。放在每個 testWidgets 開頭。
 /// 每次查詢的時間記在 [dbWork]，量動畫時算進那一幀（`db_clock.dart`）。
 Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
@@ -104,7 +108,8 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
   SyncService.instance = SyncService();
   dbWork.clear();
-  _db = AppDatabase.forTesting(
+  await _openDb?.close();
+  _db = _openDb = AppDatabase.forTesting(
     NativeDatabase.memory().interceptWith(DbClock()),
   );
   getIt
