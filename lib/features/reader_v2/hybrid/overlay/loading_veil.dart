@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -155,11 +154,15 @@ class LoadingVeilController {
     }
   }
 
-  /// 照 [skeletonReveal] 讓紙上的骨架出現。
+  /// 照 [skeletonReveal] 讓紙上的骨架出現。要長出的新骨架不呼吸（ADR
+  /// 0025）：上一輪還在呼吸（呼吸中又跳章、改排版或重載）就讓這一口自然
+  /// 呼完、停在最深，頁首頁尾的骨架一起收，長完再從最深算
+  /// [restBeforeBreath]。
   void showSkeleton() {
     if (_reduceMotion) {
       _skeleton.value = 1;
     } else {
+      if (!_skeleton.isCompleted) unawaited(_breath.settle());
       _skeletonSweep = _skeletonReveal.sweeps;
       _skeleton.duration = _skeletonReveal.duration;
       unawaited(_skeleton.forward());
@@ -169,8 +172,10 @@ class LoadingVeilController {
     if (_skeleton.isCompleted) _waitThenBreathe();
   }
 
-  /// 淡掉紙上的骨架，紙留著。
+  /// 淡掉紙上的骨架，紙留著，之後會長出新的一份（[showSkeleton]）：還在
+  /// 呼吸就從現在起收住，淡掉的同時把這一口呼完，新骨架長出時已經靜止。
   void hideSkeleton() {
+    if (!_reduceMotion) unawaited(_breath.settle());
     _skeletonSweep = false;
     if (_reduceMotion || _skeleton.isDismissed) {
       _skeleton.value = 0;
@@ -206,11 +211,33 @@ class LoadingVeilController {
     _settling = true;
     _breathTimer?.cancel();
     _breathTimer = null;
-    while (_skeleton.status == AnimationStatus.forward) {
-      await SchedulerBinding.instance.endOfFrame;
-    }
+    await _grown;
+    if (_disposed) return;
     await _breath.settle();
   }
+
+  /// 骨架不再往長完走（長完、改成淡掉、或控制器拆掉）時完成。
+  Future<void> get _grown {
+    if (_disposed || _skeleton.status != AnimationStatus.forward) {
+      return Future<void>.value();
+    }
+    final waiter = Completer<void>();
+    _grownWaiters.add(waiter);
+    return waiter.future;
+  }
+
+  final List<Completer<void>> _grownWaiters = <Completer<void>>[];
+
+  void _settleGrownWaiters() {
+    if (_grownWaiters.isEmpty) return;
+    final waiters = List<Completer<void>>.of(_grownWaiters);
+    _grownWaiters.clear();
+    for (final waiter in waiters) {
+      waiter.complete();
+    }
+  }
+
+  bool _disposed = false;
 
   /// 這次掀紙作廢、紙還要再等：骨架已經長完就從現在起停 [restBeforeBreath]
   /// 再呼吸（收住途中時等這一口呼完再起），還在長的等長完才算。
@@ -234,7 +261,9 @@ class LoadingVeilController {
   }
 
   void dispose() {
+    _disposed = true;
     _breathTimer?.cancel();
+    _settleGrownWaiters();
     _cover.removeStatusListener(_onCoverStatus);
     _skeleton.removeStatusListener(_onSkeletonStatus);
     _settleCoverWaiters(covered: false);
@@ -258,6 +287,7 @@ class LoadingVeilController {
   /// 正文在 [restBeforeBreath] 內排好就不呼吸、直接收住掀紙，沒好才開始
   /// 呼吸。
   void _onSkeletonStatus(AnimationStatus status) {
+    if (status != AnimationStatus.forward) _settleGrownWaiters();
     if (status == AnimationStatus.completed) _waitThenBreathe();
   }
 
@@ -509,16 +539,14 @@ class _LoadingVeilPainter extends CustomPainter {
         points.add(i / 32);
       }
     }
-    final Paint paint;
-    if (!growing && !sweeping && !breathSweeps) {
-      paint = Paint()..color = base.withValues(alpha: alphaAt(0));
-    } else {
-      final us = points.toList()..sort();
-      paint = Paint()
-        ..shader = ui.Gradient.linear(Offset.zero, Offset(size.width, 0), [
-          for (final u in us) base.withValues(alpha: alphaAt(u)),
-        ], us);
-    }
+    // 靜止時也用漸層（只有兩端同色）：單色和漸層的顏色進位不同，長完、
+    // 收住、掀紙起步這些銜接處換畫法會整片差 1 階（ADR 0022）。靜止時
+    // 只畫一次，多一道漸層不花什麼。
+    final us = points.toList()..sort();
+    final paint = Paint()
+      ..shader = ui.Gradient.linear(Offset.zero, Offset(size.width, 0), [
+        for (final u in us) base.withValues(alpha: alphaAt(u)),
+      ], us);
     final barHeight = style.fontSize * Skeleton.barHeightFactor;
     final titleBarHeight = style.fontSize > 0
         ? barHeight * style.titleFontSize / style.fontSize
