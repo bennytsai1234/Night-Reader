@@ -239,7 +239,7 @@ class _BookRowSkeleton extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 書還沒到只畫封面：還不知道書名多長，先畫的長條到了一定要
-                // 變長變短；書到了才照書名補上長條（DESIGN.md「骨架換場」）。
+                // 變長變短；書到了才照書名補上長條（docs/design/loading.md「骨架換場」）。
                 if (loaded != null) ...[
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,

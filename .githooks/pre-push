@@ -1,7 +1,7 @@
 #!/bin/sh
 # 推送前檢查：只跑 analyze。全套測試交給 CI：CI 分四台同時跑約 2 分鐘，本機在 Windows
-# 上要 5 到 10 分鐘，一個 PR 推三次就多等半小時，合併前本來就要等 CI 通過（ADR 0014）。
-# 改完先跑受影響的測試（AGENTS.md「驗證」）。更新說明在發測試版時才檢查（ADR 0027）。
+# 上要 5 到 10 分鐘，一個 PR 推三次就多等半小時，合併前本來就要等 CI 通過（ADR 0049）。
+# 改完先跑受影響的測試（AGENTS.md「驗證」）。更新說明在發測試版時才檢查（ADR 0049）。
 # 啟用：git config core.hooksPath .githooks
 set -e
 

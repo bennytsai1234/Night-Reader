@@ -10,7 +10,7 @@
 
 ## 測試
 
-- **Linux（雲端 session）跑要字型的測試**（`test/screens`、`test/frame_budget`、`test/polish`）：先 `apt-get install fonts-noto-cjk`。一般測試（含打開真的閱讀器的）用測試預設字型，CI 不裝中文字型。雲端機器比 Windows 那台慢約一倍，frame budget 的數字只能同一台交錯比；量不到手機上的合成（raster）成本，測試的資料庫與書源解析在主執行緒，「幀前」數字比手機上重。
+- **Linux（雲端 session）跑要字型的測試**（`test/screens`、`test/frame_budget`、`test/polish`）：先 `apt-get install fonts-noto-cjk`。一般測試（含打開真的閱讀器的）用測試預設字型，CI 只在跑細節檢查的那一台裝中文字型。雲端機器比 Windows 那台慢約一倍，frame budget 的數字只能同一台交錯比；量不到手機上的合成（raster）成本，測試的資料庫與書源解析在主執行緒，「幀前」數字比手機上重。
 - **測試字型每個字一樣寬**，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(kReaderV2PunctFontFamily)` 載入，範例在 `test/features/reader_v2/hybrid/half_cell_layout_test.dart`）。
 - **`download_service_test` 的「`_dio` 尚未初始化」日誌**不是警告：測試沒準備網路層，只檢查排隊與範圍。
 
@@ -24,4 +24,5 @@
 ## 書源
 
 - **Legado 原始碼**：對照 Legado 的做法時讀使用者的 fork：家裡在 `C:\Users\benny\Desktop\Folder\projects\legado`，公司在 `D:\Migrated\Desktop\Folder\product\legado`；GitHub 上的 `gedoor/legado` 已經清空。
+- **Mihon 原始碼**：對照漫畫閱讀器（條漫捲動、縮放、換章分隔）時讀，公司在 `D:\Migrated\Desktop\Folder\product\mihon`（`git clone --depth 1 https://github.com/mihonapp/mihon.git`，Apache 2.0）；條漫閱讀器在 `app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/`，預設值在 `ui/reader/setting/ReaderPreferences.kt`。
 - **用真的網站校驗書源**：`test/live/`，用法寫在檔頭。源倉庫（yckceo.com）的書源可以照清單頁收集 id，再從 `https://www.yckceo.com/yuedu/shuyuan/json/id/<id>.json` 下載。
