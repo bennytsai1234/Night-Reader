@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'dart:ui' show Rect;
 
 import 'package:night_reader/core/utils/illustration_markers.dart';
@@ -271,6 +272,29 @@ void main() {
       );
       expect(tall.rect.height, 600);
       expect(tall.rect.width, closeTo(175, 0.01));
+    });
+
+    testWidgets('解碼圖檔照畫出來的寬度，讀不到的檔案是 null', (tester) async {
+      await tester.runAsync(() async {
+        final dir = await Directory.systemTemp.createTemp(
+          'illustration_decode',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+        final recorder = ui.PictureRecorder();
+        ui.Canvas(recorder)
+            .drawColor(const ui.Color(0xFF336699), ui.BlendMode.src);
+        final picture = await recorder.endRecording().toImage(120, 80);
+        final png = await picture.toByteData(format: ui.ImageByteFormat.png);
+        final file = File('${dir.path}/a.png');
+        await file.writeAsBytes(png!.buffer.asUint8List());
+
+        final images = IllustrationImages(capacity: 2);
+        addTearDown(images.clear);
+        final image = await images.load(file.path, 60);
+        expect(image?.width, 60);
+        expect(images.peek(file.path, 60), same(image));
+        expect(await images.load('${dir.path}/missing.png', 60), isNull);
+      });
     });
   });
 }

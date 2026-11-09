@@ -84,6 +84,11 @@ class ChapterContentPreparationPipeline {
     if (!forceRefresh && store != null) {
       final entry = await store.getContentEntry(book: book, chapter: chapter);
       if (entry != null && entry.hasDisplayContent && !entry.isFailed) {
+        await fetchStoredIllustrations(
+          entry.content!,
+          sourceOverride: sourceOverride,
+          cancelToken: cancelToken,
+        );
         return ChapterContentPreparationResult.ready(entry.content!);
       }
     }
@@ -114,6 +119,43 @@ class ChapterContentPreparationPipeline {
         _inFlight.remove(key);
       }
     });
+  }
+
+  /// 已存的網路書正文 [content] 裡還沒試過的插圖抓下來，例如還原備份後
+  /// （插圖不在備份裡）圖檔不在、標記還在時（ADR 0050）。確定抓不到的不再
+  /// 抓，要重新取得這一章才再試。回傳是不是每張都抓到或確定抓不到；書源
+  /// 不在、連不上時為 false，下次再試。
+  Future<bool> fetchStoredIllustrations(
+    String content, {
+    BookSource? sourceOverride,
+    CancelToken? cancelToken,
+  }) async {
+    if (book.isLocal || !content.contains('<img')) return true;
+    final dir = await BookIllustrationStorage.dirFor(book);
+    if ((await BookIllustrationStorage.untriedSources(dir, content)).isEmpty) {
+      return true;
+    }
+    final source =
+        sourceOverride ??
+        getSource?.call() ??
+        await sourceDao.getByUrl(book.origin);
+    if (source == null) return false;
+    try {
+      final pending = await service.fetchIllustrations(
+        source,
+        book,
+        content,
+        dir: dir,
+        retryMissing: false,
+        cancelToken: cancelToken,
+      );
+      return pending == 0;
+    } on DioException catch (error) {
+      if (error.type == DioExceptionType.cancel) rethrow;
+      return false;
+    } on Exception {
+      return false;
+    }
   }
 
   void reset() {

@@ -117,7 +117,9 @@ final class HybridLayoutPipeline {
   final Map<int, ChapterBlocks> _blocks = {};
   final Map<int, _ChapterMaterialization> _blocksInFlight = {};
   final Map<BlockKey, ParagraphLease> _viewportLeases = {};
-  final Set<BlockKey> _illustrationsInFlight = {};
+
+  /// 還在解碼的插圖：解好、交給排版之後才拿掉（[waitForProgress] 要等它）。
+  final Map<BlockKey, Future<void>> _illustrationsInFlight = {};
   final IllustrationImages _illustrationImages = IllustrationImages.instance;
   final Set<({int chapter, String layoutIdentity})> _warmedChapters = {};
   bool _disposed = false;
@@ -381,6 +383,13 @@ final class HybridLayoutPipeline {
     if (!isCurrent()) return MaterializationWait.cancelled;
     if (_pump.queueDepth > 0) {
       await _nextFrame();
+      return isCurrent()
+          ? MaterializationWait.progressed
+          : MaterializationWait.cancelled;
+    }
+    // 只剩插圖在解碼時等它解好、交給排版。
+    if (_illustrationsInFlight.isNotEmpty) {
+      await Future.any(_illustrationsInFlight.values);
       return isCurrent()
           ? MaterializationWait.progressed
           : MaterializationWait.cancelled;
@@ -731,7 +740,7 @@ final class HybridLayoutPipeline {
   /// 紙掀開時圖一定畫得出來。解不開的圖照樣交出去，只是不畫。
   void _submitIllustration(ChapterBlocks blocks, ChapterBlock block) {
     final illustration = block.illustration!;
-    if (!_illustrationsInFlight.add(block.key)) return;
+    if (_illustrationsInFlight.containsKey(block.key)) return;
     final spec = layoutSpec;
     final isChapterEnd = block.blockIndex == blocks.blocks.length - 1;
     final box = IllustrationBox.layout(
@@ -750,17 +759,21 @@ final class HybridLayoutPipeline {
           : 0,
     );
     final textColor = _textColor();
-    unawaited(() async {
+    final work = () async {
       await _illustrationImages.load(illustration.path, box.decodeWidth);
-      _illustrationsInFlight.remove(block.key);
       if (!isCurrentGeneration) return;
+      // 完成通知同步送出：回來時排版已經收到這一塊。
       _pump.completeIllustration(
         block: block,
         epoch: _epoch,
         paint: IllustrationPaint(path: illustration.path, box: box),
         textColor: textColor,
       );
-    }());
+    }();
+    _illustrationsInFlight[block.key] = work;
+    unawaited(
+      work.whenComplete(() => _illustrationsInFlight.remove(block.key)),
+    );
   }
 
   static double _devicePixelRatio() {

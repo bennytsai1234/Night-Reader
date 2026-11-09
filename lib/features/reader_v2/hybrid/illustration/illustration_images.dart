@@ -101,12 +101,12 @@ final class IllustrationImages {
   }
 
   static Future<ui.Image?> _decode(String path, int width) async {
-    ui.ImmutableBuffer? buffer;
     ui.Codec? codec;
     try {
-      buffer = await ui.ImmutableBuffer.fromFilePath(path);
+      // 緩衝交給 instantiateImageCodecFromBuffer 之後由它釋放，成功或失敗
+      // 都是，這裡不再釋放。
       codec = await ui.instantiateImageCodecFromBuffer(
-        buffer,
+        await ui.ImmutableBuffer.fromFilePath(path),
         targetWidth: width,
       );
       final frame = await codec.getNextFrame();
@@ -115,7 +115,6 @@ final class IllustrationImages {
       return null;
     } finally {
       codec?.dispose();
-      buffer?.dispose();
     }
   }
 
