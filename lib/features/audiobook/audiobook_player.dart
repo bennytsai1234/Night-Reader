@@ -38,7 +38,7 @@ enum AudiobookPlayMode {
   AudiobookPlayMode get next => values[(index + 1) % values.length];
 }
 
-/// 有聲書的播放（ADR 0050）。整個 App 一個，離開播放器畫面照樣在播；
+/// 有聲書的播放（ADR 0055）。整個 App 一個，離開播放器畫面照樣在播；
 /// 播放器畫面、離開播放器時的圓鈕、通知與鎖定畫面都看它。
 ///
 /// 收聽進度記「章＋第幾毫秒」，毫秒存在 [Book.charOffset]，跟著閱讀進度

@@ -9,7 +9,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_scop
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
 
 /// 開書：漫畫進漫畫閱讀器（[ComicReaderPage]，ADR 0052），有聲書進播放器
-/// （[AudiobookPage]，ADR 0050），其他進 [ReaderV2Page]。轉場與其他換頁相同
+/// （[AudiobookPage]，ADR 0055），其他進 [ReaderV2Page]。轉場與其他換頁相同
 /// （「外觀與主題 → 換頁動畫」）；[ReaderV2Page] 的重排版延後到第一幀後，
 /// 轉場本身每幀都便宜。
 ///

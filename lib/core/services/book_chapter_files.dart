@@ -10,7 +10,7 @@ import '../storage/app_storage_paths.dart';
 import '../storage/storage_metrics.dart';
 import 'book_cover_storage_service.dart';
 
-/// 檔案型章節：正文不是文字、不進 SQLite 的章節（有聲書的音訊，ADR 0050；
+/// 檔案型章節：正文不是文字、不進 SQLite 的章節（有聲書的音訊，ADR 0055；
 /// 漫畫一章一個 CBZ，ADR 0052）存成這本書資料夾裡的檔案：
 /// `book_assets/<書>/chapters/<章節網址的雜湊>.<副檔名>`。
 ///

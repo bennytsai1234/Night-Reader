@@ -62,7 +62,7 @@ ShelfDownloadDecision decideShelfDownload({
 typedef ShelfDownloadNeed = ({String bookName, int totalCount});
 
 /// 書架上這本書還有章節沒下載時回傳 [ShelfDownloadNeed]；不在書架、本地
-/// 書、有聲書（音訊由使用者手動下載，ADR 0050）、書源不能讀，或都下載好了
+/// 書、有聲書（音訊由使用者手動下載，ADR 0055）、書源不能讀，或都下載好了
 /// 時回傳 null。讀整本目錄比對已存的正文，所以
 /// 在書源 isolate 做，只傳回摘要（ADR 0028）；開 App 時書架上每本書都會
 /// 比對一次。

@@ -526,7 +526,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               label: '換封面',
               icon: Icons.image_outlined,
             ),
-            // 漫畫是圖、有聲書是音訊，沒有文字可以匯出（ADR 0050、0052）。
+            // 漫畫是圖、有聲書是音訊，沒有文字可以匯出（ADR 0055、0052）。
             if (provider.book.bookKind == BookSourceKind.novel)
               GlassMenuItem(
                 value: _MenuAction.export,

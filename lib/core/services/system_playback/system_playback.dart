@@ -96,14 +96,14 @@ abstract interface class PlaybackOwner {
 /// 正在播放），整個 App 一份。
 ///
 /// 一次只有一方在播：後開始播的接手，原本在播的那一方收到
-/// [PlaybackOwner.onPause]（ADR 0050）。
+/// [PlaybackOwner.onPause]（ADR 0055）。
 class SystemPlayback {
   SystemPlayback({NowPlayingArtwork? artwork})
     : _artwork = artwork ?? NowPlayingArtwork();
 
   static final SystemPlayback instance = SystemPlayback();
 
-  /// 倒退、快轉按鈕一次跳多少，和有聲書播放器的按鈕一致（ADR 0050）。
+  /// 倒退、快轉按鈕一次跳多少，和有聲書播放器的按鈕一致（ADR 0055）。
   static const Duration skipInterval = Duration(seconds: 10);
 
   final NowPlayingArtwork _artwork;
