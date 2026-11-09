@@ -1,3 +1,25 @@
+import '../models/source/book_source_logic.dart';
+import '../utils/illustration_markers.dart';
+
+/// 這章正文對 [kind] 這類書算不算抓到了：小說要讀得到字，漫畫要有圖，有聲
+/// 要有網址。書源校驗與換源都照它。
+bool chapterContentUsable(BookSourceKind kind, String content) =>
+    switch (kind) {
+      BookSourceKind.comic => ChapterContentShape.of(content).images > 0,
+      BookSourceKind.audio => ChapterContentShape.of(content).urls > 0,
+      _ => chapterTextReadable(content),
+    };
+
+/// 拿掉插圖標記後還有夠多的字：整章是圖（例如把 VIP 章畫成圖的網站）不算
+/// 讀得到（ADR 0050）。
+bool chapterTextReadable(String content) {
+  final trimmed = IllustrationMarkers.strip(content).trim();
+  if (trimmed.isEmpty) return false;
+  if (trimmed.startsWith('加載章節失敗')) return false;
+  if (trimmed.startsWith('章節內容為空')) return false;
+  return trimmed.runes.length >= 20;
+}
+
 /// 書源校驗照抓到的一章正文判斷書源是哪一類（ADR 0051）。正文裡的圖片是
 /// `<img src="網址">`（抓正文時一律留下，ADR 0050）。
 ///

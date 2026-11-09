@@ -18,7 +18,6 @@ import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
-import 'package:night_reader/core/utils/illustration_markers.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 //  Public types
@@ -706,14 +705,14 @@ class SourceChecker {
             pageConcurrency: _validationPageConcurrency,
           ),
           cameBackEmpty: (content) =>
-              !_looksUsable(_kindShownBy(content), content),
+              !chapterContentUsable(_kindShownBy(content), content),
         );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
         // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
         final kind = _kindShownBy(content);
         _reclassify(kind);
-        if (_looksUsable(kind, content)) return;
+        if (chapterContentUsable(kind, content)) return;
       } catch (e) {
         _recordFailure(
           issues,
@@ -1281,24 +1280,6 @@ List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {
   }
 
   return <int>[...preferred, ...fallback].take(maxProbe).toList();
-}
-
-/// 這章正文對 [kind] 這類書源算不算抓到了：小說要讀得到字，漫畫要有圖，
-/// 有聲要有網址。
-bool _looksUsable(BookSourceKind kind, String content) => switch (kind) {
-  BookSourceKind.comic => ChapterContentShape.of(content).images > 0,
-  BookSourceKind.audio => ChapterContentShape.of(content).urls > 0,
-  _ => _looksReadable(content),
-};
-
-/// 拿掉插圖標記後還有夠多的字：整章是圖（例如把 VIP 章畫成圖的網站）
-/// 不算讀得到（ADR 0050）。
-bool _looksReadable(String content) {
-  final trimmed = IllustrationMarkers.strip(content).trim();
-  if (trimmed.isEmpty) return false;
-  if (trimmed.startsWith('加載章節失敗')) return false;
-  if (trimmed.startsWith('章節內容為空')) return false;
-  return trimmed.runes.length >= 20;
 }
 
 bool _looksLikeDownloadOnly(Book book, List<BookChapter> readableChapters) {

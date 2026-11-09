@@ -8,11 +8,18 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
+import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
@@ -25,6 +32,8 @@ import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
@@ -62,7 +71,7 @@ class ComicReaderPage extends StatefulWidget {
   State<ComicReaderPage> createState() => _ComicReaderPageState();
 }
 
-enum _MoreAction { refetchChapter, bookDetail, globalSettings }
+enum _MoreAction { changeSource, refetchChapter, bookDetail, globalSettings }
 
 class _ComicReaderPageState extends State<ComicReaderPage> {
   static const Duration _saveDelay = Duration(milliseconds: 400);
@@ -305,12 +314,18 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
     final action = await showAppActionSheet<_MoreAction>(
       context: context,
       actions: [
-        if (!_book.isLocal)
-          const AppSheetAction(
+        if (!_book.isLocal) ...const [
+          AppSheetAction(
+            label: '換源',
+            icon: Icons.swap_horiz_rounded,
+            value: _MoreAction.changeSource,
+          ),
+          AppSheetAction(
             label: '重新取得本章',
             icon: Icons.refresh_rounded,
             value: _MoreAction.refetchChapter,
           ),
+        ],
         const AppSheetAction(
           label: '書籍詳情',
           icon: Icons.info_outline_rounded,
@@ -326,6 +341,8 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
     if (!mounted || action == null) return;
     _menuVisible.value = false;
     switch (action) {
+      case _MoreAction.changeSource:
+        await _showChangeSource();
       case _MoreAction.refetchChapter:
         await _refetchChapter();
       case _MoreAction.bookDetail:
@@ -335,6 +352,63 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
           context,
         ).push(MaterialPageRoute<void>(builder: (_) => const SettingsPage()));
         if (mounted) unawaited(_settings.loadSettings());
+    }
+  }
+
+  /// 換源：清單只列漫畫源（ADR 0053）；選好後先抓目標那一話確認有圖，
+  /// 再換掉書與目錄，用新書源重開閱讀器，接著讀同一話同一張。
+  Future<void> _showChangeSource() async {
+    PreparedSourceSwitch? prepared;
+    await AppBottomSheet.showCustom<void>(
+      context: context,
+      constraints: ReaderV2MenuSheet.constraintsFor(context, _settings),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeSourceSheet(
+        book: _book,
+        onSelectSource: (candidate) =>
+            _switchSource(candidate, onSuccess: (done) => prepared = done),
+      ),
+    );
+    final done = prepared;
+    if (!mounted || done == null) return;
+    unawaited(
+      Navigator.of(context).pushReplacement(
+        BookOpenRoute(book: done.migratedBook, initialChapters: done.chapters),
+      ),
+    );
+  }
+
+  Future<ChangeSourceOutcome> _switchSource(
+    SearchBook candidate, {
+    required void Function(PreparedSourceSwitch prepared) onSuccess,
+  }) async {
+    final service = SourceSwitchService(
+      operationQuiescer: (oldBook) =>
+          DownloadService().quiesceForSourceSwitch(oldBook),
+      assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
+    );
+    try {
+      await _flush();
+      final location = _progress.value;
+      final title = _titleOf(location.chapterIndex);
+      final prepared = await service.prepareSwitch(
+        _book.copyWith(
+          chapterIndex: location.chapterIndex,
+          durChapterTitle: title,
+          charOffset: location.pageIndex,
+        ),
+        candidate,
+        targetChapterIndex: location.chapterIndex,
+        targetChapterTitle: title.isEmpty ? null : title,
+      );
+      await service.commitSwitch(_book, prepared);
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      onSuccess(prepared);
+      return (success: true, message: '已切換到 ${prepared.source.bookSourceName}');
+    } catch (error) {
+      if (!isSourceSwitchUnavailable(error)) rethrow;
+      return (success: false, message: failureMessage('換源', error));
     }
   }
 
