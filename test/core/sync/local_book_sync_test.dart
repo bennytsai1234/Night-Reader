@@ -525,6 +525,97 @@ void main() {
       expect(await b.shelf(), hasLength(1));
     });
 
+    group('local comics imported on both phones', () {
+      /// 每一話的圖照話名決定，兩台匯入同一話就是同一個檔。
+      Future<Book> importComic(_Phone phone, List<String> chapterNames) async {
+        phone.use();
+        final work = Directory(
+          p.join(phone.root.path, 'picked', chapterNames.join()),
+        );
+        for (final name in chapterNames) {
+          final dir = Directory(p.join(work.path, '夜行', name))
+            ..createSync(recursive: true);
+          File(p.join(dir.path, '1.png')).writeAsBytesSync(
+            stripedPng(4, 10 + name.codeUnits[1], 0x102030, 0x405060),
+          );
+        }
+        return (await LocalComicService(
+          bookDao: phone.books,
+          chapterDao: phone.chapters,
+        ).importPath(p.join(work.path, '夜行')))!;
+      }
+
+      Future<void> sync(_Phone phone) async {
+        final plan = await phone.localBooks().plan();
+        expect(plan.of(LocalBookAction.removeHere), isEmpty);
+        expect((await phone.localBooks().run(plan)).failures, isEmpty);
+      }
+
+      Future<void> expectOneBook(_Phone phone, List<String> titles) async {
+        final shelf = await phone.shelf();
+        expect(shelf, hasLength(1));
+        expect(
+          (await phone.chapters.getByBook(shelf.single.bookUrl))
+              .map((c) => c.title),
+          titles,
+        );
+      }
+
+      test('starting from different chapters, they become one book with the '
+          'same key on both phones, and nothing is deleted', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await sync(a);
+        await importComic(b, ['第0話', '第1話', '第2話']);
+        await sync(b);
+        await sync(a);
+        await sync(b);
+
+        await expectOneBook(a, ['第0話', '第1話', '第2話']);
+        await expectOneBook(b, ['第0話', '第1話', '第2話']);
+        expect(
+          (await a.shelf()).single.fileFingerprint,
+          (await b.shelf()).single.fileFingerprint,
+        );
+        expect(store.records.values.where((r) => !r.deleted), hasLength(1));
+        expect(
+          store.blobs.keys.where((k) => k.startsWith('comic_')),
+          hasLength(3),
+        );
+        expect((await a.localBooks().plan()).isEmpty, isTrue);
+        expect((await b.localBooks().plan()).isEmpty, isTrue);
+      });
+
+      test('both uploaded under their own keys before seeing each other: '
+          'they settle on one key and every chapter file stays', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await importComic(b, ['第0話', '第1話']);
+        final upA = await a.localBooks().plan();
+        final upB = await b.localBooks().plan();
+        expect((await a.localBooks().run(upA)).failures, isEmpty);
+        expect((await b.localBooks().run(upB)).failures, isEmpty);
+        expect(store.records.values.where((r) => !r.deleted), hasLength(2));
+
+        for (var round = 0; round < 3; round++) {
+          await sync(a);
+          await sync(b);
+        }
+
+        await expectOneBook(a, ['第0話', '第1話', '第2話']);
+        await expectOneBook(b, ['第0話', '第1話', '第2話']);
+        expect(
+          (await a.shelf()).single.fileFingerprint,
+          (await b.shelf()).single.fileFingerprint,
+        );
+        expect(store.records.values.where((r) => !r.deleted), hasLength(1));
+        expect(
+          store.blobs.keys.where((k) => k.startsWith('comic_')),
+          hasLength(3),
+        );
+        expect((await a.localBooks().plan()).isEmpty, isTrue);
+        expect((await b.localBooks().plan()).isEmpty, isTrue);
+      });
+    });
+
     test('a book removed on one phone is deleted from the cloud when that '
         'phone syncs, and leaves the other shelf when it does', () async {
       final mine = await a.import('夜航.txt', _novel);

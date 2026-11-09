@@ -20,7 +20,8 @@ import 'local_book_service.dart';
 ///
 /// 書的身分是章指紋的集合：這次匯入的任何一話已經在書架上某本本地漫畫
 /// 裡，新的話就併進那本（補新章不變成另一本），已有的話不重複存。書的
-/// 原檔指紋記第一話的章指紋，進度同步照它對上另一台（ADR 0039）。
+/// 原檔指紋（兩台之間認書的鍵）起初記第一話的章指紋；兩台記成不同的鍵時，
+/// 「同步本地書」統一成同一個（`adoptComicKeys`，ADR 0039、0052）。
 class LocalComicService {
   LocalComicService({
     required this.bookDao,

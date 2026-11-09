@@ -177,8 +177,10 @@ class LocalBookSync {
       'book_$fingerprint.$extension${extension == 'txt' ? '.gz' : ''}';
 
   /// 本地漫畫的副檔名欄位：它不是一個原檔，是一個資料夾、一話一個 CBZ
-  /// （ADR 0052）。雲端每話一個 `comic_<章指紋>.cbz`，每話只傳一次；書的
-  /// 指紋是第一話的章指紋，紀錄裡記著有哪幾話。
+  /// （ADR 0052）。雲端每話一個 `comic_<章指紋>.cbz`，每話只傳一次；紀錄
+  /// 裡記著有哪幾話。書的鍵起初是匯入時第一話的章指紋，兩台的同一本
+  /// （有共同的一話）記在不同的鍵時，同步時統一成較小的那個
+  /// （[adoptComicKeys]）。
   static const String comicExtension = 'comic';
 
   static String comicChapterName(String fingerprint) =>
@@ -191,8 +193,18 @@ class LocalBookSync {
   /// 也要記，之後這台移出書架才分得出是這台移出的。
   Future<LocalBookSyncPlan> plan() async {
     await fillLocalBookFingerprints(_bookDao, run: _run);
-    final local = await _shelf();
+    var local = await _shelf();
     final file = await _store.read(fileName);
+    final adopted = await _adoptionsOn(_run, file?.content, local);
+    if (adopted.isNotEmpty) {
+      for (final MapEntry(key: from, value: to) in adopted.entries) {
+        for (final url in local[from]!.bookUrls) {
+          await _bookDao.updateFileFingerprint(url, to);
+        }
+      }
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      local = await _shelf();
+    }
     final base = await _bases.read(kind);
     final plan = await _planOn(_run, file?.content, local, base);
     if (plan.settled.isNotEmpty) {
@@ -422,7 +434,19 @@ class LocalBookSync {
   /// 已經沒了也正常），不會留下沒人指著的原檔。
   Future<void> _deleteRemote(LocalBookTask task) async {
     if (task.extension == comicExtension) {
+      // 另一筆還記著的話不刪：同一本換過鍵時，舊鍵那筆的每一話新鍵也有。
+      final file = await _store.read(fileName);
+      final kept = <String>{
+        if (file != null)
+          for (final MapEntry(:key, :value) in SyncDocument.decode(
+            file.content,
+          ).records.entries)
+            if (key != task.fingerprint && !value.deleted)
+              for (final chapter in comicChaptersOf(value.data))
+                chapter.fingerprint,
+      };
       for (final chapter in task.chapters) {
+        if (kept.contains(chapter.fingerprint)) continue;
         await _store.delete(comicChapterName(chapter.fingerprint));
       }
     } else {
@@ -734,6 +758,40 @@ LocalBookSyncPlan planLocalBookSync({
   return LocalBookSyncPlan(tasks: tasks, settled: settled);
 }
 
+/// 本地漫畫的鍵怎麼和雲端對上（ADR 0052：有共同的一話就是同一本）。書的
+/// 鍵起初是匯入時第一話的章指紋，兩台從不同話開始匯入、或一台之後補了更
+/// 前面的話，同一本就會記在不同的鍵；不統一的話進度對不上，這台還會把
+/// 另一台那筆當成這台移出的刪掉。
+///
+/// 這台每一本本地漫畫，和雲端記著、沒刪掉、有共同一話的其他紀錄，統一成
+/// 其中最小的鍵（這台自己那筆也在雲端時一起比）；要改鍵的傳回「舊鍵 →
+/// 新鍵」。每台都照同一個規則，最後都落在同一個鍵；舊鍵那筆由記著它的
+/// 那台照「這台移出了」刪掉，共用的章檔留著（[LocalBookSync._deleteRemote]）。
+Map<String, String> adoptComicKeys({
+  required Map<String, LocalShelfBook> local,
+  required Map<String, SyncRecord> remote,
+}) {
+  final adopted = <String, String>{};
+  for (final MapEntry(key: print, value: mine) in local.entries) {
+    if (mine.extension != LocalBookSync.comicExtension) continue;
+    final prints = {for (final c in mine.chapters) c.fingerprint};
+    String? best = remote[print]?.deleted == false ? print : null;
+    for (final MapEntry(:key, :value) in remote.entries) {
+      if (key == print || value.deleted) continue;
+      if (value.data['ext'] != LocalBookSync.comicExtension) continue;
+      if (!comicChaptersOf(value.data)
+          .any((c) => prints.contains(c.fingerprint))) {
+        continue;
+      }
+      if (best == null || key.compareTo(best) < 0) best = key;
+    }
+    if (best != null && best != print && !local.containsKey(best)) {
+      adopted[print] = best;
+    }
+  }
+  return adopted;
+}
+
 /// 照這台書架上的那本（[mine]）上傳或移出。
 LocalBookTask _localTask(
   LocalBookAction action,
@@ -803,6 +861,19 @@ Future<LocalBookSyncPlan> _planOn(
     base: base,
   ),
 );
+
+Future<Map<String, String>> _adoptionsOn(
+  LocalBookWorkRunner run,
+  String? content,
+  Map<String, LocalShelfBook> local,
+) => content == null
+    ? Future.value(const <String, String>{})
+    : run(
+        () => adoptComicKeys(
+          local: local,
+          remote: SyncDocument.decode(content).records,
+        ),
+      );
 
 /// 雲端小紀錄（[content]，還沒有是 null）改了 [fingerprint] 那一筆之後的
 /// 整份內容。
