@@ -930,6 +930,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     final preview = grid
         ? BookCoverWidget(
             bookName: context.zh(book.name),
+            kind: book.bookKind,
             author: book.author,
             coverUrl: UnifiedCovers.coverOf(book),
             width: sourceRect.width,

@@ -74,6 +74,7 @@ class BookInfoHeader extends StatelessWidget {
           child: BookCoverWidget(
             coverUrl: coverUrl,
             bookName: context.zh(book.name),
+            kind: book.bookKind,
             author: author,
             width: coverWidth,
             height: coverHeight,
