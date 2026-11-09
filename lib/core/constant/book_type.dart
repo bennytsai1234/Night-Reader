@@ -5,6 +5,9 @@ class BookType {
   /// 16 更新失敗
   static const int updateError = 0x10;
 
+  /// 32 有聲（Legado 備份裡的書用這個位元；夜讀的書記的是書源類型）
+  static const int audio = 0x20;
+
   /// 64 圖片
   static const int image = 0x40;
 

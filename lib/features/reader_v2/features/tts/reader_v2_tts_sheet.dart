@@ -6,7 +6,7 @@ import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -24,7 +24,7 @@ abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPaused;
   double get rate;
   double get pitch;
-  ReaderV2TtsSleepTimer get sleepTimer;
+  SleepTimer get sleepTimer;
 
   Future<void> toggle();
   Future<void> stop();
@@ -136,7 +136,7 @@ Widget _stepperRow(Widget stepper) => GroupedContent(
 class _SleepTimerSection extends StatefulWidget implements GroupedSkeletonItem {
   const _SleepTimerSection({required this.timer});
 
-  final ReaderV2TtsSleepTimer timer;
+  final SleepTimer timer;
 
   @override
   GroupedItemShape skeletonShape(
@@ -151,7 +151,7 @@ class _SleepTimerSection extends StatefulWidget implements GroupedSkeletonItem {
         radius: AppRadius.pillShape,
       ),
     ];
-    if (timer.option == ReaderV2TtsSleepOption.custom) {
+    if (timer.option == SleepTimerOption.custom) {
       final stepper = _SleepTimerSectionState._customStepper(timer)
           .skeletonShape(context, width: width);
       marks.addAll(stepper.marksAt(Offset(0, height)));
@@ -187,15 +187,14 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
   static const TextStyle statusStyle = AppTextStyles.labelSm;
   static const double statusGap = AppSpacing.sm;
 
-  static NumberStepperRow _customStepper(ReaderV2TtsSleepTimer timer) =>
-      NumberStepperRow(
-        label: '分鐘',
-        value: timer.customMinutes.toDouble(),
-        min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
-        max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
-        step: 1,
-        onChanged: (value) => unawaited(timer.setCustomMinutes(value.round())),
-      );
+  static NumberStepperRow _customStepper(SleepTimer timer) => NumberStepperRow(
+    label: '分鐘',
+    value: timer.customMinutes.toDouble(),
+    min: SleepTimer.minCustomMinutes.toDouble(),
+    max: SleepTimer.maxCustomMinutes.toDouble(),
+    step: 1,
+    onChanged: (value) => unawaited(timer.setCustomMinutes(value.round())),
+  );
 
   late final Timer _ticker;
 
@@ -223,17 +222,16 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GlassSegmented<ReaderV2TtsSleepOption>(
+            GlassSegmented<SleepTimerOption>(
               dense: true,
               segments: [
-                for (final option in ReaderV2TtsSleepOption.values)
+                for (final option in SleepTimerOption.values)
                   GlassSegment(option, option.label),
               ],
               selected: timer.option,
               onChanged: (option) => unawaited(timer.choose(option)),
             ),
-            if (timer.option == ReaderV2TtsSleepOption.custom)
-              _customStepper(timer),
+            if (timer.option == SleepTimerOption.custom) _customStepper(timer),
             if (status != null)
               Padding(
                 padding: const EdgeInsets.only(top: statusGap),
@@ -251,7 +249,7 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
     );
   }
 
-  static String? _status(ReaderV2TtsSleepTimer timer) {
+  static String? _status(SleepTimer timer) {
     final remaining = timer.remaining;
     if (remaining == null) return null;
     // 無條件進位到秒，剛開始倒數時顯示整數分鐘。

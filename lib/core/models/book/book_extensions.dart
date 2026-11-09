@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/book_type.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 
@@ -24,7 +25,9 @@ extension BookExtensions on BookBase {
   }
 
   // --- 類型感知 (對齊 Android BookType 位元) ---
-  bool get isAudio => type == 2; // type 2 = 有聲書 (legacy, audio module removed)
+  /// 有聲書：夜讀的書記書源類型（1 有聲），從 Legado 備份還原的書記
+  /// `BookType.audio` 位元。
+  bool get isAudio => type == SourceType.audio || (type & BookType.audio) != 0;
   bool get isImage => (type & BookType.image) != 0;
   bool get isText => (type & BookType.text) != 0;
   bool get isLocal =>

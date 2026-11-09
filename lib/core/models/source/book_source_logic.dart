@@ -289,9 +289,15 @@ extension BookSourceLogic on BookSourceBase {
         : '$newErrorLine\n\n$bookSourceComment';
   }
 
+  /// 能搜尋、加書架的書源：文字書源與有聲書源（ADR 0050）。
   bool get isNovelTextSource => nonNovelExclusionReason == null;
 
-  bool get isReaderSupportedSourceType => bookSourceType == SourceType.book;
+  /// 有聲書源：正文規則回傳音訊網址，書由有聲書播放器播放（ADR 0050）。
+  /// 只看類型欄位；名稱帶「有聲」「聽書」但類型寫 0 的歸類由書源分類處理。
+  bool get isAudioSource => bookSourceType == SourceType.audio;
+
+  bool get isReaderSupportedSourceType =>
+      bookSourceType == SourceType.book || isAudioSource;
 
   bool get canParticipateInDiscovery =>
       enabled &&
@@ -304,6 +310,8 @@ extension BookSourceLogic on BookSourceBase {
     if (!isReaderSupportedSourceType) {
       return 'sourceType:$bookSourceType';
     }
+    // 有聲書源的名稱、網址本來就帶「有聲」「聽書」，不照字樣排除。
+    if (isAudioSource) return null;
     final marker = detectedNonNovelMarker;
     if (marker != null) {
       return 'marker:$marker';

@@ -7,7 +7,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -91,7 +91,7 @@ class ReaderV2TtsController extends ChangeNotifier
     @visibleForTesting DateTime Function()? now,
   }) : _tts = tts ?? ReaderV2SystemTtsEngine(),
        _ownsTtsEngine = tts == null {
-    sleepTimer = ReaderV2TtsSleepTimer(onExpired: _pauseForSleep, now: now);
+    sleepTimer = SleepTimer(onExpired: _pauseForSleep, now: now);
     _observedContentGeneration = runtime.state.contentGeneration;
     runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
@@ -114,7 +114,7 @@ class ReaderV2TtsController extends ChangeNotifier
   ReaderV2Location? _resumeLocation;
 
   @override
-  late final ReaderV2TtsSleepTimer sleepTimer;
+  late final SleepTimer sleepTimer;
 
   @override
   bool get isPlaying => _tts.isPlaying;
@@ -180,8 +180,8 @@ class ReaderV2TtsController extends ChangeNotifier
       await stop();
       return;
     }
-    if (sleepTimer.option == ReaderV2TtsSleepOption.off) {
-      await sleepTimer.choose(ReaderV2TtsSleepOption.minutes30);
+    if (sleepTimer.option == SleepTimerOption.off) {
+      await sleepTimer.choose(SleepTimerOption.minutes30);
     }
     await toggle();
   }
@@ -317,7 +317,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   /// 每次通知前把播放狀態告訴定時；朗讀中引擎每個字都會通知，
-  /// [ReaderV2TtsSleepTimer.sync] 在狀態沒變時不做事。
+  /// [SleepTimer.sync] 在狀態沒變時不做事。
   @override
   void notifyListeners() {
     if (_disposed) return;

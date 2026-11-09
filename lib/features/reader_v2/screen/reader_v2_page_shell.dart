@@ -14,7 +14,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_m
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
@@ -261,7 +261,7 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueChanged<double> onScrubbing;
   final ValueChanged<double> onScrubEnd;
   final Widget? brightnessControl;
-  final ReaderV2TtsSleepTimer? sleepTimer;
+  final SleepTimer? sleepTimer;
   final bool isTtsPlaying;
   final bool showTts;
   final bool showAutoPage;

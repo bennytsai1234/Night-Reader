@@ -7,7 +7,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_m
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_battery_glyph.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
@@ -42,7 +42,7 @@ void main() {
       right: ReaderV2InfoItem.none,
     ),
     Widget? brightnessControl,
-    ReaderV2TtsSleepTimer? sleepTimer,
+    SleepTimer? sleepTimer,
     double paddingHorizontal = 12,
     double menuInset = AppGrouped.margin,
     VoidCallback? onDrawerClosed,
@@ -576,12 +576,12 @@ void main() {
 
   group('timer key above the menu', () {
     late DateTime now;
-    late ReaderV2TtsSleepTimer timer;
+    late SleepTimer timer;
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
       now = DateTime(2026, 10, 15, 23);
-      timer = ReaderV2TtsSleepTimer(onExpired: () {}, now: () => now);
+      timer = SleepTimer(onExpired: () {}, now: () => now);
     });
 
     tearDown(() => timer.dispose());
@@ -595,7 +595,7 @@ void main() {
       await pumpShell(tester, controlsVisible: true, sleepTimer: timer);
       expect(find.byTooltip('定時朗讀'), findsOneWidget);
 
-      await timer.choose(ReaderV2TtsSleepOption.minutes15);
+      await timer.choose(SleepTimerOption.minutes15);
       timer.sync(active: true, running: true);
       await tester.pump();
       expect(find.text('15分'), findsOneWidget);

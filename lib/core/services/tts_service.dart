@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/foundation.dart';
-import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -223,22 +222,7 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> _ensureAudioHandler() async {
-    if (_audioHandler != null) return;
-    try {
-      _audioHandler = await AudioService.init(
-        builder: () => ReaderAudioHandler(),
-        config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.night_reader.tts',
-          androidNotificationChannelName: '夜讀朗讀',
-          androidNotificationOngoing: true,
-        ),
-      );
-    } catch (e) {
-      AppLog.e(
-        'TTSService: AudioService.init failed (notification disabled): $e',
-        error: e,
-      );
-    }
+    _audioHandler ??= await AppAudioSession.ensure();
   }
 
   Future<void> _initTts() async {

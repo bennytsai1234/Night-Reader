@@ -202,7 +202,11 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
       ORDER BY customOrder ASC
       ''',
       variables: discoveryOnly
-          ? [Variable<int>(SourceType.book), const Variable<String>('')]
+          ? [
+              Variable<int>(SourceType.book),
+              Variable<int>(SourceType.audio),
+              const Variable<String>(''),
+            ]
           : const [],
       readsFrom: {bookSources},
     );
@@ -211,7 +215,7 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   static const String _discoveryWhereClause = '''
       WHERE enabled = 1
         AND enabledExplore = 1
-        AND bookSourceType = ?
+        AND bookSourceType IN (?, ?)
         AND COALESCE(TRIM(exploreUrl), '') <> ?
       ''';
 

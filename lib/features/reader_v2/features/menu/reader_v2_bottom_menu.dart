@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -106,7 +106,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
 
   /// 朗讀定時；朗讀還沒準備好時為 null，不顯示定時鍵。
-  final ReaderV2TtsSleepTimer? sleepTimer;
+  final SleepTimer? sleepTimer;
   final bool isTtsPlaying;
   final bool showTts;
   final bool showAutoPage;
@@ -487,7 +487,7 @@ class _SleepTimerButton extends StatefulWidget {
     required this.onPressed,
   });
 
-  final ReaderV2TtsSleepTimer timer;
+  final SleepTimer timer;
   final bool isPlaying;
   final ReaderV2MenuStyle menuStyle;
   final VoidCallback onPressed;

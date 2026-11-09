@@ -330,7 +330,7 @@ class SourceChecker {
         ),
       );
     }
-    if (_source.bookSourceType != 0) {
+    if (!_source.isReaderSupportedSourceType) {
       return const _IssueData(
         stage: 'filter',
         message: '來源不提供純文字正文',
@@ -677,7 +677,9 @@ class SourceChecker {
       return;
     }
 
-    if (!_config.checkContent) return;
+    // 有聲書源的正文是音訊網址，探測要先解析網址、可能下載整個音訊檔，
+    // 這裡只校驗到目錄。
+    if (!_config.checkContent || _source.isAudioSource) return;
 
     await _runContentProbeCheck(
       book,
