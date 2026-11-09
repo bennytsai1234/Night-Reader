@@ -34,7 +34,6 @@ class BookType {
   /// Legado 的本地書書源標誌，從 Legado 備份還原的書用它。
   static const String localTag = 'loc_book';
 
-  static bool isImage(int type) => (type & image) != 0;
   static bool isLocal(int type) => (type & local) != 0;
   static bool isOnShelf(int type) => (type & notShelf) == 0;
 }

@@ -613,6 +613,7 @@ class GroupedRow extends StatelessWidget
     super.key,
     required this.title,
     this.titleWidget,
+    this.titleMark,
     this.subtitle,
     this.leading,
     this.value,
@@ -631,6 +632,9 @@ class GroupedRow extends StatelessWidget
 
   /// 覆寫標題（例如帶徽章）；[title] 仍作為語意標籤。
   final Widget? titleWidget;
+
+  /// 接在標題字後面的小記號（例如閱讀統計裡漫畫、有聲書的 `BookKindMark`）。
+  final Widget? titleMark;
 
   /// 標題下方的值（網址、最新章節、錯誤訊息），不放功能說明（ADR 0009）。
   final String? subtitle;
@@ -665,6 +669,18 @@ class GroupedRow extends StatelessWidget
   bool get hasLeading => leading != null;
 
   /// 標題與右側數值的字樣、副標的字樣；骨架照同一份排。
+  Widget _withMark(Widget title) {
+    final mark = titleMark;
+    if (mark == null) return title;
+    return Row(
+      children: [
+        Flexible(child: title),
+        const SizedBox(width: AppSpacing.sm),
+        mark,
+      ],
+    );
+  }
+
   static final TextStyle _textStyle = AppTextStyles.bodyBase.copyWith(
     height: 1.3,
   );
@@ -802,17 +818,19 @@ class GroupedRow extends StatelessWidget
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   titleWidget ??
-                      Text(
-                        title,
-                        maxLines: maxTitleLines,
-                        overflow: maxTitleLines == null
-                            ? null
-                            : TextOverflow.ellipsis,
-                        style: _textStyle.copyWith(
-                          color: titleColor,
-                          fontWeight: accent
-                              ? FontWeight.w500
-                              : FontWeight.w400,
+                      _withMark(
+                        Text(
+                          title,
+                          maxLines: maxTitleLines,
+                          overflow: maxTitleLines == null
+                              ? null
+                              : TextOverflow.ellipsis,
+                          style: _textStyle.copyWith(
+                            color: titleColor,
+                            fontWeight: accent
+                                ? FontWeight.w500
+                                : FontWeight.w400,
+                          ),
                         ),
                       ),
                   if (hasSubtitle) ...[

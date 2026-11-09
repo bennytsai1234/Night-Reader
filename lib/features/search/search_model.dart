@@ -37,14 +37,19 @@ final Map<String, String> _normalizedText = {};
 List<String> searchKeyVariants(String key) =>
     {key, ChineseUtils.t2s(key), ChineseUtils.s2t(key)}.toList();
 
-/// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（正規化書名＋
-/// 作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
+/// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（類別前綴＋正規化
+/// 書名＋作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
 ///
 /// 搜尋頁每次重建都會對每張卡問一次；合併卡建立時已把分組鍵記在
 /// [SearchBook.groupIdentity]，直接取用。
 String searchResultIdentity(SearchBook book) =>
     book.groupIdentity ??
-    '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
+    '${_nameKeyOf(book)}\u0000${normalizeSearchText(book.author)}';
+
+/// 合卡用的書名鍵：同名的小說、漫畫、有聲是不同的書，分成不同的卡
+/// （ADR 0053）。
+String _nameKeyOf(SearchBook book) =>
+    '${book.bookKind.keyPrefix}${normalizeSearchText(book.name)}';
 
 /// 書名 [name]、作者 [author] 的結果是不是《[bookName]》這本書：書名正規化後
 /// 相同；[checkAuthor] 時作者正規化後也要相同。正規化和搜尋合併卡
@@ -117,7 +122,7 @@ class _SameSourceIndex {
   }
 }
 
-/// 搜尋結果依正規化書名分組，產生呈現用的合併卡。
+/// 搜尋結果依類別與正規化書名分組，產生呈現用的合併卡。
 ///
 /// 每個書名：有作者的書按正規化作者分組；缺作者的書依同名的相異作者數
 /// 安置——只有 1 個作者時併入那一組，沒有作者時自成一張「作者不詳」卡，
@@ -140,7 +145,7 @@ class _ResultGroups {
   }
 
   void add(SearchBook book) {
-    final nameKey = normalizeSearchText(book.name);
+    final nameKey = _nameKeyOf(book);
     final authorKey = normalizeSearchText(book.author);
     final group = _byName.putIfAbsent(nameKey, _NameGroup.new);
     if (authorKey.isEmpty) {

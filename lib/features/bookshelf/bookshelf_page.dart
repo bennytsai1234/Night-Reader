@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
@@ -1097,9 +1098,10 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   Future<void> _openBook(Book book) async {
-    if (book.type == 2) {
+    // 漫畫閱讀器、有聲書播放器和本分支同一批合併，由它們接手開書。
+    if (book.bookKind != BookSourceKind.novel) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
+          .showSnackBar(const SnackBar(content: Text('漫畫與有聲書還不能打開。')));
       return;
     }
     // 閱讀器只改了這本書的進度，不會通知書架；回來時要重排（最近閱讀）並更新

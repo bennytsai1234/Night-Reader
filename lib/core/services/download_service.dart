@@ -10,6 +10,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -69,7 +70,10 @@ Future<ShelfDownloadNeed?> _shelfDownloadNeedInSourceIsolate(String bookUrl) =>
 
 Future<ShelfDownloadNeed?> _shelfDownloadNeed(String bookUrl) async {
   final book = await getIt<BookDao>().getByUrl(bookUrl);
-  if (book == null || book.isLocal || book.isAudio || !book.isInBookshelf) {
+  if (book == null ||
+      book.isLocal ||
+      book.bookKind == BookSourceKind.audio ||
+      !book.isInBookshelf) {
     return null;
   }
   final source = await getIt<BookSourceDao>().getByUrl(book.origin);

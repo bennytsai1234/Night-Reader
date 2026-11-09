@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/highlight.dart';
@@ -83,10 +84,11 @@ class BookmarksPage extends StatefulWidget {
   }
 
   /// 書籤與標註跟著書名加作者（ADR 0042）：手機上的這本書，書架上的優先，
-  /// 其次最近讀的那本（同閱讀統計）。
+  /// 其次最近讀的那本（同閱讀統計）。[name] 是記錄裡的書名，帶類別前綴
+  /// （ADR 0053）。
   static Future<Book?> _findBook(String name, String author) async {
     Book? book;
-    for (final candidate in await getIt<BookDao>().getByName(name)) {
+    for (final candidate in await getIt<BookDao>().getByRecordName(name)) {
       if (candidate.author != author) continue;
       if (book == null ||
           (candidate.isInBookshelf && !book.isInBookshelf) ||
@@ -214,7 +216,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => SearchPage(initialQuery: entry.bookName),
+          builder: (_) => SearchPage(
+            initialQuery: BookSourceKind.splitRecordName(entry.bookName).name,
+          ),
         ),
       );
       return;
@@ -271,7 +275,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       shareHighlights([
         for (final group in _groups(_highlights, _highlightEntry))
           (
-            bookName: group.first.bookName,
+            bookName: BookSourceKind.splitRecordName(group.first.bookName).name,
             bookAuthor: group.first.bookAuthor,
             items: group,
           ),
@@ -333,7 +337,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
         children: [
           for (final group in _groups(_items, _bookmarkEntry))
             GroupedSection(
-              header: context.zh(group.first.bookName),
+              header: context.zh(
+                BookSourceKind.splitRecordName(group.first.bookName).name,
+              ),
               children: [
                 for (final bookmark in group)
                   SwipeActions(
@@ -381,7 +387,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
         children: [
           for (final group in _groups(_highlights, _highlightEntry))
             GroupedSection(
-              header: context.zh(group.first.bookName),
+              header: context.zh(
+                BookSourceKind.splitRecordName(group.first.bookName).name,
+              ),
               children: [
                 for (final highlight in group)
                   SwipeActions(

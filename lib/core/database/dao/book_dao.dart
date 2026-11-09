@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../models/book.dart';
 import '../../models/book_group.dart';
+import '../../models/source/book_source_logic.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 
@@ -39,9 +40,15 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
         .get();
   }
 
-  /// 書名相同的書；閱讀統計只記書名，點書名時用它找回那本書。
-  Future<List<Book>> getByName(String name) {
-    return (select(books)..where((t) => t.name.equals(name))).get();
+  /// 記錄裡的書名（閱讀統計、書籤、標註的 `bookName`，帶類別前綴，
+  /// ADR 0053）對到的書：書名相同、類別也相同。點紀錄時用它找回那本書。
+  Future<List<Book>> getByRecordName(String recordName) async {
+    final (:kind, :name) = BookSourceKind.splitRecordName(recordName);
+    final rows = await (select(books)..where((t) => t.name.equals(name))).get();
+    return [
+      for (final book in rows)
+        if (book.bookKind == kind) book,
+    ];
   }
 
   Future<Book?> getByUrl(String url) {
@@ -193,16 +200,51 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     );
   }
 
-  /// 只改書名與作者（另一台改了名，同步照著改，ADR 0039）：書的網址、目錄、
-  /// 正文、閱讀進度都不動。
+  /// 只改書名、作者與類別（另一台改了名或換了類別，同步照著改，ADR 0039、
+  /// 0053）：書的網址、目錄、正文、閱讀進度都不動。
   Future<void> renameBook(
     String bookUrl, {
     required String name,
     required String author,
+    int? type,
   }) {
     return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
-      BooksCompanion(name: Value(name), author: Value(author)),
+      BooksCompanion(
+        name: Value(name),
+        author: Value(author),
+        type: type == null ? const Value.absent() : Value(type),
+      ),
     );
+  }
+
+  /// 書源的類型改了（校驗、手動、同步或重新匯入），目前用它的書跟著換類別
+  /// （ADR 0053）。只改類別不同的；閱讀進度、書籤與閱讀統計留在原本那一類。
+  /// 傳回改了幾本。
+  Future<int> followSourceKinds(Map<String, BookSourceKind> kinds) async {
+    if (kinds.isEmpty) return 0;
+    final query = selectOnly(books)
+      ..addColumns([books.bookUrl, books.origin, books.type]);
+    // 一次存幾千個書源（匯入、同步）時整張書表掃一遍，比把網址全塞進條件快。
+    if (kinds.length <= 500) query.where(books.origin.isIn(kinds.keys));
+    final rows = await query.get();
+    final changed = <String, int>{};
+    for (final row in rows) {
+      final kind = kinds[row.read(books.origin)];
+      final type = row.read(books.type) ?? 0;
+      if (kind == null || BookSourceKind.ofBookType(type) == kind) continue;
+      changed[row.read(books.bookUrl)!] = kind.bookType;
+    }
+    if (changed.isEmpty) return 0;
+    await batch((b) {
+      for (final MapEntry(key: bookUrl, value: type) in changed.entries) {
+        b.update(
+          books,
+          BooksCompanion(type: Value(type)),
+          where: (t) => t.bookUrl.equals(bookUrl),
+        );
+      }
+    });
+    return changed.length;
   }
 
   /// 記下本地書原檔的指紋（[Book.fileFingerprint]）。
