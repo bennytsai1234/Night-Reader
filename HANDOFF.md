@@ -31,14 +31,10 @@
 ## 接下來（照順序）
 
 1. **書的類別與認書的鍵**：`feat/source-kinds` 推上「同名不同類是不同的書」（`book.isAudio`、認書的鍵、換源同類篩選）之後再併一次來用；本分支現在的 `book.isAudio` 是自己判的（書源類型 1 或 Legado 的有聲位元），到時換成它的。
-2. **播放器畫面** `lib/features/audiobook/audiobook_page.dart`，照 `docs/design/audiobook.md`「播放器」，畫面聽 `AudiobookPlayer.instance`。
-   - 開書：`lib/shared/navigation/book_open_route.dart` 在 `book.isAudio` 時改開播放器；拿掉 `lib/features/bookshelf/bookshelf_page.dart` 約 1099 行 `book.type == 2` 跳「有聲書播放功能已移除」那段。
-   - 清單右側照現有資料推：目前這集之前寫「聽完」字色淡；在播的主色粗體加音波圖示；沒在播寫「聽到 mm:ss」；已下載畫小勾。
-   - 定時面板 `SleepTimerSection(timer: player.sleepTimer)`；倍速 `NumberStepperRow`，單位「倍」。
-   - `AudiobookPlayMode.inOrder` 的 label 改「播完停」（行為不變）。
-   - 「更多」：複製音訊網址（`_load` 留下 `AudioRequest` 加 getter）、換源（參考 `change_source_sheet.dart`，確認走 source-kinds 的同類篩選，只列有聲書源）、登入（`source_login_page.dart`，書源有登入才出現）、保持喚醒（另查做法）、編輯書源、日誌。
-   - 共用元件：`GlassNavHeader`、`GroupedSection`／`GroupedRow`、`DefaultBookCover`、`SkeletonReveal`、`GroupedListSkeleton`、`AppBottomSheet.showCustom`。
-   - 先用 `test/support/screenshot.dart` 畫淺色、深色各一張給使用者看。
+2. **播放器畫面** `lib/features/audiobook/audiobook_page.dart`（第一版做好、已給使用者看淺色深色截圖，等回覆）。截圖用 git 忽略的 `test/_screens/audiobook_page_test.dart`（假引擎與書源在 `test/features/audiobook/audiobook_test_doubles.dart`）。
+   - 做好的：頁首（書名、「更多」）、小封面與「作者 · 書源」「共 N 集」、集數清單（聽完／聽到 mm:ss／音波／小勾、分卷寫「N 集」）、底部膠囊（集名、可拖的進度條、五顆鍵）、三顆圓鈕（倍速面板、定時面板、播放模式循環）、圓鈕以下墊漸隱帶。「更多」有登入（書源有登入才出現）、保持喚醒（這次開 App 有效）、複製音訊網址、編輯書源、日誌（崩潰日誌頁）。定時鍵和閱讀選單共用 `SleepTimerButton`。
+   - 還沒做：開書接到播放器（`book_open_route.dart` 在 `book.isAudio` 時開播放器，拿掉 `bookshelf_page.dart` 約 1099 行 `book.type == 2` 那段）；換源（等 source-kinds 的同類篩選）；打開時捲到正在播的那集；清單載入的骨架與骨架換場；畫面的元件測試。
+   - 沒封面時頁首畫有聲書預設封面；`BookCoverWidget` 載不到時畫的仍是小說夜空，等書的類別定下來再接 `kind`。
 3. **圓鈕**：離開播放器還在播時，書架、發現、我的的搜尋鈕上方出現；點一下暫停／繼續、上滑展開、下滑停止。動畫先做候選，用動畫儀表板給使用者選。
 4. **手動下載音訊**：照上面「檔案型章節的存法」；書籍詳情與目錄選範圍下載、清單畫小勾、下載管理列出音訊與大小。
 5. **之前漏考慮、要補的**：

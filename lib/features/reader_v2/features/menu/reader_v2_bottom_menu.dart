@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
@@ -7,6 +5,7 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dar
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 
 import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_controller.dart';
@@ -197,10 +196,13 @@ class ReaderV2BottomMenu extends StatelessWidget {
           onPressed: onReplaceRule,
         ),
       if (sleepTimer case final timer? when showTts)
-        _SleepTimerButton(
+        SleepTimerButton(
           timer: timer,
-          isPlaying: isTtsPlaying,
-          menuStyle: menuStyle,
+          tooltip: isTtsPlaying ? '停止朗讀' : '定時朗讀',
+          tint: tint,
+          color: menuStyle.foreground,
+          accent: menuStyle.accent,
+          accentMuted: menuStyle.accentMuted,
           onPressed: onTimedTts,
         ),
       GlassIconButton(
@@ -474,101 +476,5 @@ class _ChapterJumpButtonState extends State<_ChapterJumpButton> {
       style: widget.style,
       child: Text(widget.label),
     );
-  }
-}
-
-/// 定時朗讀鍵：倒數中以強調色顯示剩餘分鐘（無條件進位），沒有在倒數時是
-/// 計時器圖示。倒數不逐秒通知，這裡只在顯示的分鐘數要變的那一刻重建。
-class _SleepTimerButton extends StatefulWidget {
-  const _SleepTimerButton({
-    required this.timer,
-    required this.isPlaying,
-    required this.menuStyle,
-    required this.onPressed,
-  });
-
-  final SleepTimer timer;
-  final bool isPlaying;
-  final ReaderV2MenuStyle menuStyle;
-  final VoidCallback onPressed;
-
-  @override
-  State<_SleepTimerButton> createState() => _SleepTimerButtonState();
-}
-
-class _SleepTimerButtonState extends State<_SleepTimerButton> {
-  Timer? _tick;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.timer.addListener(_refresh);
-    _scheduleTick();
-  }
-
-  @override
-  void didUpdateWidget(_SleepTimerButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.timer == widget.timer) return;
-    oldWidget.timer.removeListener(_refresh);
-    widget.timer.addListener(_refresh);
-    _scheduleTick();
-  }
-
-  @override
-  void dispose() {
-    widget.timer.removeListener(_refresh);
-    _tick?.cancel();
-    super.dispose();
-  }
-
-  void _refresh() {
-    if (!mounted) return;
-    setState(() {});
-    _scheduleTick();
-  }
-
-  /// 排到剩餘時間跨過下一個整分鐘的那一刻。
-  void _scheduleTick() {
-    _tick?.cancel();
-    _tick = null;
-    final remaining = widget.timer.remaining;
-    if (remaining == null || remaining == Duration.zero) return;
-    final intoMinute =
-        remaining.inMicroseconds % Duration.microsecondsPerMinute;
-    _tick = Timer(
-      Duration(
-        microseconds: intoMinute == 0
-            ? Duration.microsecondsPerMinute
-            : intoMinute,
-      ),
-      _refresh,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final timer = widget.timer;
-    final menuStyle = widget.menuStyle;
-    final remaining = timer.remaining;
-    final label = remaining != null ? '${_ceilMinutes(remaining)}分' : null;
-    final tint = menuStyle.glassTintOf(context);
-    return GlassIconButton(
-      icon: Icons.timer_outlined,
-      label: label,
-      tooltip: widget.isPlaying ? '停止朗讀' : '定時朗讀',
-      tint: label != null
-          ? Color.alphaBlend(menuStyle.accentMuted, tint)
-          : tint,
-      color: label != null ? menuStyle.accent : menuStyle.foreground,
-      onPressed: widget.onPressed,
-    );
-  }
-
-  static int _ceilMinutes(Duration remaining) {
-    final minutes =
-        (remaining.inMicroseconds + Duration.microsecondsPerMinute - 1) ~/
-        Duration.microsecondsPerMinute;
-    return minutes < 1 ? 1 : minutes;
   }
 }

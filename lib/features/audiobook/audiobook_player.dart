@@ -24,7 +24,7 @@ import 'audio_engine.dart';
 /// 一集播完之後接著怎麼播（同 Legado `AudioPlay.PlayMode`）。
 enum AudiobookPlayMode {
   /// 播下一集，最後一集播完就停。
-  inOrder('依序播放'),
+  inOrder('播完停'),
   singleLoop('單集循環'),
   shuffle('隨機播放'),
 
@@ -123,11 +123,18 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   DateTime? _lastSaved;
   bool _markedOpen = false;
 
+  /// 這一集的音訊請求（網址與標頭）；還沒解析好時是 null。
+  AudioRequest? _request;
+  bool _keepAwake = false;
+
   /// 預先解析好的下一集音訊請求。
   ({int index, AudioRequest request})? _prefetched;
 
   /// 正在播或暫停中的書；沒有時是 null（還沒開或已經停止）。
   Book? get book => _book;
+
+  /// 這本書的書源；還沒開好時是 null。
+  BookSource? get source => _source;
   List<BookChapter> get chapters => _chapters;
   int get chapterIndex => _index;
   BookChapter? get chapter =>
@@ -142,6 +149,17 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   String? get error => _error;
   double get speed => _speed;
   AudiobookPlayMode get mode => _mode;
+
+  /// 這一集的音訊網址與標頭（「複製音訊網址」）；還沒解析好時是 null。
+  AudioRequest? get request => _request;
+
+  /// 播放器開著時螢幕不熄（「更多」裡的保持喚醒），這次開 App 有效。
+  bool get keepAwake => _keepAwake;
+
+  void toggleKeepAwake() {
+    _keepAwake = !_keepAwake;
+    notifyListeners();
+  }
 
   /// 這本書在播或暫停中。
   bool isCurrent(Book other) => _book?.bookUrl == other.bookUrl;
@@ -272,6 +290,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final chapter = _chapters[index];
     _index = index;
     _duration = null;
+    _request = null;
     _ended = false;
     _error = null;
     _loading = true;
@@ -285,6 +304,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           : await _sourceService.getAudioRequest(source, book, chapter);
       _prefetched = null;
       if (generation != _generation) return;
+      _request = request;
       await engine.open(
         Uri.parse(request.url),
         headers: request.headers,
@@ -429,6 +449,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _source = null;
     _chapters = const [];
     _prefetched = null;
+    _request = null;
     _playing = false;
     _loading = false;
     _buffering = false;
