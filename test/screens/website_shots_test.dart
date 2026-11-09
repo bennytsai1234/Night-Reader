@@ -34,7 +34,6 @@ import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/audio_handler.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
@@ -210,7 +209,7 @@ final _shots = <_Shot>[
     clip: (t, r) => r.run(
       _ms(4800),
       onFrame: (i) {
-        if (i > 0 && i % 36 == 0) ReaderAudioHandler.emitEvent('onComplete');
+        if (i > 0 && i % 36 == 0) _ttsSpeechCompleted();
       },
     ),
   ),
@@ -793,4 +792,16 @@ void main() {
     DownloadService().tasks.clear();
     await tester.pump(const Duration(minutes: 1));
   });
+}
+
+/// 朗讀引擎念完一句：和手機上一樣由 flutter_tts 的頻道送來。
+void _ttsSpeechCompleted() {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .handlePlatformMessage(
+        'flutter_tts',
+        const StandardMethodCodec().encodeMethodCall(
+          const MethodCall('speak.onComplete'),
+        ),
+        (_) {},
+      );
 }

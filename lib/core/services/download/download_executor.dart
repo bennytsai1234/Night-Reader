@@ -18,9 +18,34 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+
+/// 還原備份後（插圖不在備份裡），這本網路書已存的正文裡還有插圖沒試過的
+/// 章節網址：只在還原留下記號時才掃，都試過了就把記號刪掉（ADR 0050）。
+Future<Set<String>> chaptersWithUntriedIllustrations(Book book) async {
+  if (book.isLocal || !await BookIllustrationStorage.isUnfetched(book)) {
+    return const {};
+  }
+  final contents = await getIt<ReaderChapterContentDao>()
+      .getStoredContentsWithIllustrations(
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+      );
+  final dir = await BookIllustrationStorage.dirFor(book);
+  final untried = {
+    for (final MapEntry(key: url, value: content) in contents.entries)
+      if ((await BookIllustrationStorage.untriedSources(
+        dir,
+        content,
+      )).isNotEmpty)
+        url,
+  };
+  if (untried.isEmpty) await BookIllustrationStorage.clearUnfetched(book);
+  return untried;
+}
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
@@ -172,9 +197,10 @@ Future<DownloadPlan> _planDownload(
     origin: book.origin,
     bookUrl: book.bookUrl,
   );
+  final unfetched = await chaptersWithUntriedIllustrations(book);
   final missing = [
     for (final chapter in scope)
-      if (!stored.contains(chapter.url))
+      if (!stored.contains(chapter.url) || unfetched.contains(chapter.url))
         (index: chapter.index, url: chapter.url, title: chapter.title),
   ];
   final run = _nextDownloadRun++;
@@ -208,27 +234,43 @@ Future<DownloadChapterResult> _downloadChapter(
     chapterDao: chapterDao,
     contentDao: getIt<ReaderChapterContentDao>(),
   );
-  // 排進來之後閱讀器可能已經抓好這一章。
-  if (await store.hasReadyContent(book: book, chapter: chapter)) {
-    return DownloadChapterResult.ready();
+  final pipeline = ChapterContentPreparationPipeline(
+    book: book,
+    contentStore: store,
+    sourceDao: getIt<BookSourceDao>(),
+    service: BookSourceService(),
+    getSource: () => source,
+  );
+  // 排進來之後閱讀器可能已經抓好這一章；還原備份帶回的正文則只補抓插圖，
+  // 不換掉正文（ADR 0008、0050）。
+  final stored = await store.getContentEntry(book: book, chapter: chapter);
+  if (stored != null && stored.isReady && stored.hasDisplayContent) {
+    final complete = await pipeline.fetchStoredIllustrations(
+      stored.content!,
+      sourceOverride: source,
+      cancelToken: cancelToken,
+    );
+    return complete
+        ? DownloadChapterResult.ready()
+        : DownloadChapterResult.failed('插圖抓不到');
   }
-  final result =
-      await ChapterContentPreparationPipeline(
-        book: book,
-        contentStore: store,
-        sourceDao: getIt<BookSourceDao>(),
-        service: BookSourceService(),
-        getSource: () => source,
-      ).prepare(
-        chapterIndex: chapter.index,
-        chapter: chapter,
-        sourceOverride: source,
-        forceRefresh: true,
-        maxAttempts: maxAttempts,
-        cancelToken: cancelToken,
-      );
-  if (result.isReady) return DownloadChapterResult.ready();
-  return DownloadChapterResult.failed(result.failureMessage ?? result.content);
+  final result = await pipeline.prepare(
+    chapterIndex: chapter.index,
+    chapter: chapter,
+    sourceOverride: source,
+    forceRefresh: true,
+    maxAttempts: maxAttempts,
+    cancelToken: cancelToken,
+  );
+  if (!result.isReady) {
+    return DownloadChapterResult.failed(
+      result.failureMessage ?? result.content,
+    );
+  }
+  // 正文存好了，但有圖連不上：這章照下載失敗的重試規則再補圖（ADR 0050）。
+  return await pipeline.illustrationsSettled(result.content)
+      ? DownloadChapterResult.ready()
+      : DownloadChapterResult.failed('插圖抓不到');
 }
 
 String classifyDownloadFailureReason(String message) {

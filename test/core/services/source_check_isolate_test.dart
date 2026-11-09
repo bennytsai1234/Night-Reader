@@ -88,7 +88,6 @@ class _FakeBookSourceService extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
-    bool keepImages = false,
   }) async {
     contentRequests.add(chapter.title);
     final content = this.content;

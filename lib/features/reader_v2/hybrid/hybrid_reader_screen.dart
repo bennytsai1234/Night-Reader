@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/features/reader_v2/features/illustration/reader_v2_illustration_viewer.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -33,6 +34,7 @@ import 'overlay/reader_skeleton_page.dart';
 import 'overlay/reader_unavailable_message.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/text_selection_overlay.dart';
+import 'paragraph/paragraph_cache.dart' show IllustrationPaint;
 import 'pipeline/layout_disk_cache.dart';
 import 'pipeline/layout_pipeline.dart';
 import 'progress/hybrid_progress.dart';
@@ -273,6 +275,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _veilPage = (
         lines: page.lines,
         titleLines: page.titleLines,
+        blockLines: page.blockLines,
         spec: widget.runtime.state.layoutSpec,
       );
       _veil.cover();
@@ -1611,9 +1614,43 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
+  /// 文件座標 [point] 上的插圖（落在圖上才算）；沒有時回傳 null。
+  IllustrationPaint? _illustrationAt(Offset point) {
+    final key = _documentIndex.blockAtOffset(point.dy);
+    if (key == null) return null;
+    final blocks = _pipeline.blocksOf(key.chapterIndex);
+    if (blocks == null ||
+        key.blockIndex >= blocks.blocks.length ||
+        !blocks.blocks[key.blockIndex].isIllustration) {
+      return null;
+    }
+    final top = _documentIndex.topOf(key);
+    final paint = _pipeline.paragraphCache
+        .acquireEntry(key, _pipeline.epoch)
+        ?.illustration;
+    if (top == null || paint == null) return null;
+    final rect = paint.box.rect.shift(
+      Offset(_pipeline.layoutSpec.textPaddingLeft, top),
+    );
+    return rect.contains(point) ? paint : null;
+  }
+
   Future<void> _handleLongPressStart(LongPressStartDetails details) async {
     final request = ++_selectionRequest;
     final scrollOffset = _effectiveScrollOffset();
+    // 長按插圖打開大圖，不選字（ADR 0050）。
+    final illustration = scrollOffset == null
+        ? null
+        : _illustrationAt(details.localPosition.translate(0, scrollOffset));
+    if (illustration != null) {
+      _selection.clear();
+      unawaited(Feedback.forLongPress(context));
+      unawaited(
+        Navigator.of(context)
+            .push(ReaderV2IllustrationViewer.route(illustration.path)),
+      );
+      return;
+    }
     final hit = scrollOffset == null
         ? null
         : _pipeline.geometry.glyphAt(
@@ -1712,6 +1749,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       spec: page?.spec ?? state.layoutSpec,
       lines: page?.lines,
       titleLines: page?.titleLines ?? const <int>{},
+      blockLines: page?.blockLines ?? const <int>{},
       backgroundColor: widget.backgroundColor,
       textColor: widget.textColor,
     );
@@ -1848,7 +1886,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final offset = _effectiveScrollOffset();
     if (location == null || offset == null) return;
     final contentHash = _pipeline.blocksOf(location.chapterIndex)?.contentHash;
-    final (:lines, :titleLines, :spec) = _pageLinesAt(offset);
+    final (:lines, :titleLines, :blockLines, :spec) = _pageLinesAt(offset);
     if (lines.isEmpty || contentHash == null) return;
     unawaited(
       store.write(
@@ -1863,6 +1901,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           contentHash: contentHash,
           lines: lines,
           titleLines: titleLines,
+          blockLines: blockLines,
           progress: widget.progressListenable?.value,
         ),
       ),

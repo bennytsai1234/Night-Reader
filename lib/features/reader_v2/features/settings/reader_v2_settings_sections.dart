@@ -625,6 +625,23 @@ class ReaderV2SettingsGroups {
     ],
   );
 
+  /// 顯示插圖（ADR 0050），預設關。
+  GroupedSection illustrations() => GroupedSection(
+    margin: margin,
+    header: '插圖',
+    children: [
+      _Watch<bool>(
+        listenable: settings,
+        select: () => settings.showIllustrations,
+        builder: (context, on) => GroupedSwitchRow(
+          title: '顯示插圖',
+          value: on,
+          onChanged: settings.setShowIllustrations,
+        ),
+      ),
+    ],
+  );
+
   bool get _clickActionsAreDefault {
     final defaults = ReaderV2TapAction.defaultGrid();
     for (var i = 0; i < defaults.length; i++) {

@@ -1,19 +1,21 @@
-# 交接：AI 修書源
+# 交接：中英混排的英文單字之間空格消失
 
-2026-11-09。分支 `feat/source-ai-repair`（從 `feat/source-kinds` 開，上游已改成自己的 `origin/feat/source-ai-repair`），worktree `C:\Users\benny\.t3\worktrees\Night-Reader\feat-source-ai-repair`。決定與理由在 ADR 0054，畫面規格在 `docs/design/screens.md`「AI 修書源」；和 `feat/source-kinds`、`feat/images-comics`、`feat/audiobook-player` 同一批合併，要定期併入 `origin/feat/source-kinds`。
+使用者在《漫威裡的賽亞人》第三章〈雷耶斯集團〉看到英文單字之間的空格不見了，例如 `Lifeitseems`、`willfadeaway`、`Driftingfurthereveryday`、`FadeToBlack`。另一個公開網站的同一章有空格（`Life it seems`、`Fade To Black`），但那個網站擋自動抓取（403），沒對照到。
 
-## 談定
+同一張截圖裡的另一個問題（中文字距被拉開）已經修好，見 PR #319（`fix/reader-kinsoku-latin-spread`），和這件無關。
 
-- 金鑰（服務網址、金鑰、模型名稱）備份、同步都帶。
-- 單一書源，加上多選一批（一批先校驗，跳過沒問題與修不動的）。
-- 畫面選「推一頁、步驟一列一列」；剪貼簿貼回改成修復頁裡的一張卡片。
+## 已經查過、排除的
 
-## 做完的
+讀程式確認以下幾步都**不會**刪掉兩個英文字母之間的半形空格：
 
-- 核心在 `lib/core/ai_repair/`，畫面在 `lib/features/source_manager/ai_repair/`，入口接在書源管理的長按選單、多選「⋯」、頁首「更多」。
-- `PRIVACY.md` 與 App 的「隱私說明」。
+- `HtmlFormatter.format()`（`lib/core/utils/html_formatter.dart`）：`&nbsp;`、`&ensp;`、`&emsp;`、U+00A0 都轉成半形空格。
+- `normalizeTypography()`（`lib/features/reader_v2/chapter/reader_v2_content_transformer.dart`）：tab、U+00A0、U+3000 轉成半形空格，連續空格合成一個；`_removeCjkSpaces` 只刪一側是漢字或全形標點的空格。
+- 換行與繪製（`VisualLineLayoutEngine`、`ReaderParagraphLayout`）：用截圖工具畫過 `Fade To Black`，空格都在。
 
-## 剩下的
+## 還沒查的（照順序）
 
-1. 提議 `GLOSSARY.md` 新詞「AI 修復」，談定再寫。
-2. 問使用者要不要收尾（`docs/agents/finish.md`）；收尾時刪掉本檔。
+1. 問使用者用的是哪個書源。書源原文的取法見 `docs/agents/phone.md`「書源原文」。
+2. 用 `test/live/` 連真網站抓那一章，看書源解析出的正文有沒有空格。
+   - 沒有空格：問題在網站或書源規則（例如規則裡的 `##\s` 替換），不在夜讀。
+   - 有空格：接著查使用者的替換規則（`_applyRules` 會套用），再查不到就在 `ReaderV2ContentTransformer` 每一步印出這段文字，找出哪一步刪掉的。
+3. 查完刪掉本檔。

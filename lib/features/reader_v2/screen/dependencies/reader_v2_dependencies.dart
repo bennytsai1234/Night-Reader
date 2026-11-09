@@ -27,6 +27,7 @@ class ReaderV2Dependencies {
     HighlightDao? highlightDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    bool Function()? currentShowIllustrations,
     ReaderSkeletonPageStore? skeletonPages,
   }) : initialChapters = List<BookChapter>.from(initialChapters),
        bookDao = bookDao ?? getIt<BookDao>(),
@@ -50,6 +51,7 @@ class ReaderV2Dependencies {
            (getIt.isRegistered<HighlightDao>() ? getIt<HighlightDao>() : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
+       currentShowIllustrations = currentShowIllustrations ?? (() => false),
        skeletonPages =
            skeletonPages ??
            (getIt.isRegistered<SharedPreferences>()
@@ -67,6 +69,7 @@ class ReaderV2Dependencies {
   final HighlightDao? highlightDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+  final bool Function() currentShowIllustrations;
 
   /// 開書骨架照著畫的上一頁紀錄（ADR 0024）；沒有偏好設定時不記。
   final ReaderSkeletonPageStore? skeletonPages;
@@ -84,6 +87,7 @@ class ReaderV2Dependencies {
       replaceDao: replaceDao,
       service: service,
       currentChineseConvert: currentChineseConvert,
+      currentShowIllustrations: currentShowIllustrations,
       onReplaceRuleDisabled: onReplaceRuleDisabled,
     );
   }

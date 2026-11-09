@@ -705,17 +705,16 @@ class SourceChecker {
             chapter,
             nextChapterUrl: nextChapterUrl,
             pageConcurrency: _validationPageConcurrency,
-            keepImages: true,
           ),
           cameBackEmpty: (content) =>
-              !_looksUsable(_kindShownBy(content), content),
+              !chapterContentUsable(_kindShownBy(content), content),
         );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
         // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
         final kind = _kindShownBy(content);
         _reclassify(kind);
-        if (_looksUsable(kind, content)) return;
+        if (chapterContentUsable(kind, content)) return;
       } catch (e) {
         _recordFailure(
           issues,
@@ -1283,24 +1282,6 @@ List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {
   }
 
   return <int>[...preferred, ...fallback].take(maxProbe).toList();
-}
-
-/// 這章正文對 [kind] 這類書源算不算抓到了：小說要讀得到字，漫畫要有圖，
-/// 有聲要有網址。
-bool _looksUsable(BookSourceKind kind, String content) => switch (kind) {
-  BookSourceKind.comic => ChapterContentShape.of(content).images > 0,
-  BookSourceKind.audio => ChapterContentShape.of(content).urls > 0,
-  _ => _looksReadable(content.replaceAll(_imgTag, '')),
-};
-
-final RegExp _imgTag = RegExp(r'<img\b[^>]*>', caseSensitive: false);
-
-bool _looksReadable(String content) {
-  final trimmed = content.trim();
-  if (trimmed.isEmpty) return false;
-  if (trimmed.startsWith('加載章節失敗')) return false;
-  if (trimmed.startsWith('章節內容為空')) return false;
-  return trimmed.runes.length >= 20;
 }
 
 bool _looksLikeDownloadOnly(Book book, List<BookChapter> readableChapters) {
