@@ -9,6 +9,7 @@ import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
@@ -1339,7 +1340,7 @@ List<ReaderV2IllustrationSlot?> _illustrationSlots(
   return [
     for (final src in sources)
       () {
-        final path = ReaderV2IllustrationMarkers.pathFor(dir, src);
+        final path = BookIllustrationStorage.pathFor(dir, src);
         final size = ReaderV2ImageSize.ofFile(path);
         if (size == null) return null;
         return (

@@ -1,9 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-
-import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/constant/app_pattern.dart';
 
@@ -50,7 +46,7 @@ final class ReaderV2Illustration {
 abstract final class ReaderV2IllustrationMarkers {
   /// 轉換正文時代替標記的字（私用區），替換規則、繁簡轉換與排版整理都
   /// 不會動它；轉完再拿掉、記下位置（[ReaderV2Content.fromRaw]）。
-  static const String placeholder = '';
+  static const String placeholder = '\uE000';
 
   /// [raw] 裡每個標記換成 [placeholder]，回傳換好的字與依序的網址。
   static ({String text, List<String> sources}) extract(String raw) {
@@ -84,14 +80,6 @@ abstract final class ReaderV2IllustrationMarkers {
         if (match.group(1)?.trim() case final src? when src.isNotEmpty) src,
     ];
   }
-
-  /// 這本書的插圖資料夾裡，[src] 這張圖的檔名。網路書的網址與 EPUB 裡的
-  /// 路徑一律雜湊成檔名，同一張圖只存一份。
-  static String fileNameFor(String src) =>
-      sha1.convert(utf8.encode(src)).toString();
-
-  static String pathFor(String illustrationsDir, String src) =>
-      p.join(illustrationsDir, fileNameFor(src));
 }
 
 /// 從圖檔開頭讀出寬高（PNG、JPEG、GIF、WebP、BMP），不解碼整張圖。

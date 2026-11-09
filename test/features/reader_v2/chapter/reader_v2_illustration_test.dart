@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/illustration/illustration_images.dart';
@@ -34,12 +35,12 @@ void main() {
 
     test('同一個網址同一個檔名', () {
       expect(
-        ReaderV2IllustrationMarkers.fileNameFor('https://a.test/1.jpg'),
-        ReaderV2IllustrationMarkers.fileNameFor('https://a.test/1.jpg'),
+        BookIllustrationStorage.fileNameFor('https://a.test/1.jpg'),
+        BookIllustrationStorage.fileNameFor('https://a.test/1.jpg'),
       );
       expect(
-        ReaderV2IllustrationMarkers.fileNameFor('https://a.test/1.jpg'),
-        isNot(ReaderV2IllustrationMarkers.fileNameFor('https://a.test/2.jpg')),
+        BookIllustrationStorage.fileNameFor('https://a.test/1.jpg'),
+        isNot(BookIllustrationStorage.fileNameFor('https://a.test/2.jpg')),
       );
     });
   });

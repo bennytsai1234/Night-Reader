@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
@@ -130,7 +131,10 @@ class ReaderV2ChapterRepository {
 
   Future<List<BookChapter>> _loadChapters() async {
     _chapters = await chapterDao.getByBook(book.bookUrl);
-    if (_chapters.isNotEmpty) return chapters;
+    if (_chapters.isNotEmpty) {
+      if (book.isLocal) await _syncEpubChapters();
+      return chapters;
+    }
     final source = await _ensureSource();
     if (source == null) {
       if (book.isLocal) {
@@ -149,6 +153,19 @@ class ReaderV2ChapterRepository {
     await chapterDao.insertChapters(fetched);
     _chapters = fetched;
     return chapters;
+  }
+
+  /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050）時重轉，章節範圍跟著
+  /// 換掉，存著的舊正文清掉。章數與每章的字不變，閱讀進度照舊。
+  Future<void> _syncEpubChapters() async {
+    final ranges = await LocalBookService().currentEpubChapters(book);
+    if (ranges == null || LocalBookService.chaptersMatch(_chapters, ranges)) {
+      return;
+    }
+    final refreshed = LocalBookService().chaptersOf(book, ranges);
+    await chapterDao.replaceByBook(book.bookUrl, refreshed);
+    await contentDao?.deleteByBook(book.origin, book.bookUrl);
+    _chapters = refreshed;
   }
 
   /// 每章佔全書多少（全書進度用）。本地書照每章在檔案裡的位元組範圍；
