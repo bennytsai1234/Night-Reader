@@ -567,22 +567,46 @@ class _SkeletonTextState extends State<SkeletonText> {
     )..layout(maxWidth: maxWidth);
     // 和 Text 一樣大：一行放得下時是那一行的寬，換行或截斷時撐滿（頁面的
     // 預設字樣指定照最長一行算時照它）。長條的左右照筆畫，上下置中在那一行
-    // 的行框（含行距）上，和字的行一樣。
+    // 畫出來的字上：取那一行最寬的那一段字的字框中線。一行混了兩種字型時
+    // （閱讀器資訊列先用標點字型、中文退到系統字型），行框的中線和字不在
+    // 同一高度，差多少看這台手機的字型；刪節號這種窄的一小段來自另一個字型，
+    // 不拿來定中線。
     final metrics = painter.computeLineMetrics();
     final ink = skeletonTextLines(painter);
     double bottomOf(int index) => index >= metrics.length - 1
         ? painter.height
         : metrics[index].baseline + metrics[index].descent;
+    final widest = <int, Rect>{};
+    for (final box in painter.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: span.toPlainText().length),
+    )) {
+      final rect = box.toRect();
+      if (rect.top >= painter.height || rect.width <= 0) continue;
+      final index = metrics.indexWhere(
+        (line) => rect.center.dy < line.baseline + line.descent,
+      );
+      if (index < 0) continue;
+      final current = widest[index];
+      if (current == null || rect.width > current.width) widest[index] = rect;
+    }
     final result = (
       size: Size(painter.width, painter.height),
       lines: [
         for (final (index, line) in ink.indexed)
-          Rect.fromLTRB(
-            line.left,
-            index == 0 ? 0 : bottomOf(index - 1),
-            line.right,
-            bottomOf(index),
-          ),
+          switch (widest[index]) {
+            final glyphs? => Rect.fromLTRB(
+              line.left,
+              glyphs.top,
+              line.right,
+              glyphs.bottom,
+            ),
+            null => Rect.fromLTRB(
+              line.left,
+              index == 0 ? 0 : bottomOf(index - 1),
+              line.right,
+              bottomOf(index),
+            ),
+          },
       ],
     );
     painter.dispose();

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui show TextDirection;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
@@ -975,23 +976,53 @@ class _InfoItemSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = MediaQuery.textScalerOf(context)
-        .scale(DefaultTextStyle.of(context).style.fontSize ?? 14);
+    final style = DefaultTextStyle.of(context).style;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final fontSize = textScaler.scale(style.fontSize ?? 14);
     return Stack(
       alignment: Alignment.center,
       children: [
         Visibility.maintain(visible: false, child: child),
         Positioned.fill(
           child: Center(
-            child: SkeletonBox(
-              width: double.infinity,
-              height: fontSize * Skeleton.barHeightFactor,
-              color: color,
+            child: Transform.translate(
+              offset: Offset(
+                0,
+                _digitsOffset(style, textScaler, Directionality.of(context)),
+              ),
+              child: SkeletonBox(
+                width: double.infinity,
+                height: fontSize * Skeleton.barHeightFactor,
+                color: color,
+              ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  /// 時間、電量、進度的數字畫在行框中線上下多少：資訊列先用標點字型、其他
+  /// 字退到系統字型，字和行框的中線不在同一高度，差多少看這台手機的字型。
+  /// 長條移到字上，和照字畫的欄位（[SkeletonText]）一樣。
+  static double _digitsOffset(
+    TextStyle style,
+    TextScaler textScaler,
+    ui.TextDirection direction,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: '0', style: style),
+      textDirection: direction,
+      textScaler: textScaler,
+    )..layout();
+    final boxes = painter.getBoxesForSelection(
+      const TextSelection(baseOffset: 0, extentOffset: 1),
+    );
+    final offset = boxes.isEmpty
+        ? 0.0
+        : boxes.first.toRect().center.dy - painter.height / 2;
+    painter.dispose();
+    return offset;
   }
 }
 
