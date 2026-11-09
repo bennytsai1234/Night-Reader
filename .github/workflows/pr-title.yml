@@ -1,6 +1,6 @@
 name: PR title
 
-# 改到 App 內容的 PR，squash 合併後標題就是測試版說明的一行（ADR 0048）：開 PR、改標題、
+# 改到 App 內容的 PR，squash 合併後標題就是測試版說明的一行（ADR 0049）：開 PR、改標題、
 # 推新提交時檢查標題去掉前綴後能不能直接給讀者看。和 ci.yml 分開，改標題時只重跑這一項。
 on:
   pull_request:

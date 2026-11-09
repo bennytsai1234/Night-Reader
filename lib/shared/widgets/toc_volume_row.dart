@@ -6,7 +6,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 const double tocChapterIndent = 15;
 
 /// 目錄裡分卷那一列：和章節一樣高，粗體卷名，右側章數與收起／展開的
-/// 箭頭，點了收起或展開（DESIGN.md「目錄」）。[collapsed] 為 null 時不能
+/// 箭頭，點了收起或展開（docs/design/components.md「其他元件」）。[collapsed] 為 null 時不能
 /// 收起（目錄在搜尋或倒序），只畫卷名與章數。
 class TocVolumeRow extends StatelessWidget {
   const TocVolumeRow({

@@ -16,6 +16,7 @@ void main() {
     required bool grid,
     int? bookCount,
     List<ShelfSkeletonTitle> titles = const [],
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 16),
   }) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
@@ -29,7 +30,7 @@ void main() {
               grid: grid,
               bookCount: bookCount,
               titles: titles,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: padding,
             ),
           ),
         ),
@@ -64,6 +65,38 @@ void main() {
     expect(covers.length, greaterThanOrEqualTo(6));
     expect(tester.takeException(), isNull);
   });
+
+  // 書架的書排到浮動分頁列底下（底部內距讓的是最後一本捲得上來的位置），
+  // 透過玻璃看得到，骨架也要畫到畫面底。
+  for (final grid in [true, false]) {
+    testWidgets('${grid ? 'grid' : 'list'} skeleton reaches the screen bottom '
+        'under the tab bar', (tester) async {
+      await pump(
+        tester,
+        grid: grid,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 200),
+      );
+      final screen = tester.getSize(find.byType(BookshelfSkeleton));
+      // 每一列封面的頂端：再多一列就會落在畫面外，才算鋪到畫面底。
+      final covers = grid
+          ? find.byWidgetPredicate(
+              (widget) =>
+                  widget is AspectRatio &&
+                  widget.aspectRatio == BookshelfGridTile.coverAspectRatio,
+            )
+          : find.byWidgetPredicate(
+              (widget) =>
+                  widget is SkeletonBox &&
+                  widget.width == BookshelfListCard.coverWidth,
+            );
+      final tops = {
+        for (final cover in covers.evaluate())
+          (cover.renderObject! as RenderBox).localToGlobal(Offset.zero).dy,
+      }.toList()..sort();
+      final step = tops[1] - tops[0];
+      expect(tops.last + step, greaterThanOrEqualTo(screen.height));
+    });
+  }
 
   testWidgets('skeleton draws as many books as the shelf had last time', (
     tester,

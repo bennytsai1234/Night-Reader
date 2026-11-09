@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -47,6 +48,7 @@ void main() {
     double menuInset = AppGrouped.margin,
     VoidCallback? onDrawerClosed,
     VoidCallback? onMenuHidden,
+    ReaderV2InfoTarget? loadingTarget,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
@@ -101,6 +103,7 @@ void main() {
             controlsVisible: visibility,
             showReadTitleAddition: true,
             infoState: infoStates?.value ?? ReaderV2InfoState.ready,
+            loadingTarget: loadingTarget,
             originName: '本地',
             navigation: ReaderV2ChapterNavigationState(
               chapterCount: 3,
@@ -627,6 +630,21 @@ void main() {
           element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null,
     );
 
+    /// [text] 畫出來的字的中線（全域座標）：最寬的那一段字的字框中線。
+    double glyphCenterOf(WidgetTester tester, Finder text) {
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: text, matching: find.byType(RichText)),
+      );
+      final length = paragraph.text.toPlainText().length;
+      final widest = paragraph
+          .getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: length),
+          )
+          .map((box) => box.toRect())
+          .reduce((a, b) => a.width >= b.width ? a : b);
+      return paragraph.localToGlobal(widest.center).dy;
+    }
+
     /// 骨架裡照 [text] 畫的那一條（字的欄位用 [SkeletonText]，不藏一份字）。
     Finder infoSkeleton(String text) => find.byWidgetPredicate(
       (widget) => widget is SkeletonText && widget.text == text,
@@ -665,7 +683,8 @@ void main() {
           ),
       };
 
-      // 換成資訊後，每一條就在那段字的位置、和字一樣寬。
+      // 換成資訊後，每一條就在那段字的位置、和字一樣寬，上下置中在畫出來
+      // 的字上（不是行框：資訊列混了標點字型與退回的字型，兩者中線不同）。
       states.value = ReaderV2InfoState.ready;
       await tester.pumpAndSettle();
       for (final text in texts) {
@@ -674,10 +693,48 @@ void main() {
         expect(bars[text]!.width, content.width, reason: text);
         expect(
           bars[text]!.center.dy,
-          moreOrLessEquals(content.center.dy),
+          moreOrLessEquals(glyphCenterOf(tester, infoText(text))),
           reason: text,
         );
       }
+    });
+
+    testWidgets('the battery-only bar sits on the battery, the clock bar on '
+        'its digits', (tester) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: const ReaderV2InfoSlots(
+          left: ReaderV2InfoItem.batteryIcon,
+          right: ReaderV2InfoItem.time,
+        ),
+      );
+      await tester.pump(SkeletonReveal.defaultDuration);
+      // 頁首的兩條：左邊電池、右邊時間（頁尾的書名在畫面底）。
+      final header =
+          [
+            for (final box in find.byType(SkeletonBox).evaluate())
+              tester.getRect(find.byElementPredicate((e) => identical(e, box))),
+          ].where((bar) => bar.top < 100).toList()..sort(
+            (a, b) => a.left.compareTo(b.left),
+          );
+      expect(header, hasLength(2));
+
+      states.value = ReaderV2InfoState.ready;
+      await tester.pumpAndSettle();
+      expect(
+        header.first.center.dy,
+        moreOrLessEquals(
+          tester.getRect(find.byType(ReaderV2BatteryGlyph)).center.dy,
+        ),
+      );
+      expect(
+        header.last.center.dy,
+        moreOrLessEquals(glyphCenterOf(tester, find.textContaining(':'))),
+      );
     });
 
     testWidgets('the info fades in where its skeleton was', (tester) async {
@@ -793,17 +850,59 @@ void main() {
       expect(opacity.presence.value, 1);
     });
 
-    testWidgets('nothing is drawn when the text is unavailable', (
+    testWidgets('the skeleton fades away when the text is unavailable', (
       tester,
     ) async {
       final states = await pumpLoading(tester);
+      await tester.pump(SkeletonReveal.defaultDuration);
 
       states.value = ReaderV2InfoState.hidden;
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      // 骨架整條淡掉，不是直接拿掉。
+      final fading = tester.widget<SkeletonRevealLayer>(
+        find
+            .ancestor(
+              of: infoSkeleton('第一章'),
+              matching: find.byType(SkeletonRevealLayer),
+            )
+            .first,
+      );
+      expect(fading.sweep, isFalse);
+      expect(fading.presence.value, inExclusiveRange(0, 1));
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
 
+      await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);
       expect(infoText('第一章'), findsNothing);
       expect(infoText('殼層測試書'), findsNothing);
+    });
+
+    testWidgets('the fading skeleton is drawn from the loading target', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+        loadingTarget: const ReaderV2InfoTarget(
+          chapterIndex: 2,
+          chapterCount: 3,
+          title: '第三章　很長很長的章名',
+        ),
+      );
+      await tester.pump(SkeletonReveal.defaultDuration);
+      final loading = tester.getRect(infoSkeleton('第三章　很長很長的章名'));
+
+      // 取不到正文：淡掉的仍是要開的那一章的長條，寬度不跳。
+      states.value = ReaderV2InfoState.hidden;
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      expect(tester.getRect(infoSkeleton('第三章　很長很長的章名')), loading);
+      expect(infoSkeleton('第一章'), findsNothing);
     });
   });
 }

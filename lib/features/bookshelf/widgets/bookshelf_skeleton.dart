@@ -56,7 +56,7 @@ class BookshelfSkeleton extends StatelessWidget {
       MediaQuery.textScalerOf(context),
     );
     final rows = _countToFill(
-      constraints.maxHeight - padding.vertical,
+      constraints.maxHeight - padding.top,
       cellHeight + AppSpacing.md,
     );
     return GridView.builder(
@@ -108,7 +108,7 @@ class BookshelfSkeleton extends StatelessWidget {
   Widget _buildList(BoxConstraints constraints) {
     const cardHeight = BookshelfListCard.coverHeight + AppSpacing.md * 2;
     final count = _countToFill(
-      constraints.maxHeight - padding.vertical,
+      constraints.maxHeight - padding.top,
       cardHeight + AppSpacing.sm,
     );
     return ListView.builder(
@@ -127,7 +127,8 @@ class BookshelfSkeleton extends StatelessWidget {
     );
   }
 
-  /// 鋪滿畫面要 [fill] 個；知道本數時不超過本數。
+  /// 鋪滿畫面要 [fill] 個；知道本數時不超過本數。鋪到畫面底，不扣底部
+  /// 內距：書架的書排到浮動分頁列底下，透過玻璃看得到，骨架也要在那裡。
   int _limit(int fill) {
     final count = bookCount;
     return count == null || count > fill ? fill : count;
