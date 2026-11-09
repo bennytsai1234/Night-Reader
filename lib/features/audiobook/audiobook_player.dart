@@ -1,14 +1,12 @@
-import 'dart:io';
-
-import 'package:night_reader/core/services/book_chapter_files.dart';
-
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/exception/user_error.dart';
@@ -16,12 +14,14 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_controller.dart';
 
 import 'audio_engine.dart';
 
@@ -60,6 +60,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     SystemPlayback? playback,
     Random? random,
     DateTime Function()? now,
+    this._readRecordDao,
   }) : _newEngine = engine ?? JustAudioEngine.new,
        _sourceService = sourceService ?? BookSourceService(),
        _sync = sync ?? SyncService.instance,
@@ -89,6 +90,41 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   static const Duration openGrace = Duration(milliseconds: 500);
 
   final AudioEngine Function() _newEngine;
+  final ReadRecordDao? _readRecordDao;
+
+  /// 收聽時間記進閱讀統計（使用者 2026-11-09 選「算進去、分開顯示」，
+  /// ADR 0055）：只算真的出聲的時間，暫停、緩衝不算。照書的 `recordName`
+  /// 記，有聲書帶類別前綴，統計頁分得出哪些是聽的。
+  ReaderV2ReadTimeController? _listenTime;
+  String? _listenBookUrl;
+
+  /// 開始或停止計時：播著、沒在緩衝時計。
+  void _syncListenTime() {
+    final book = _book;
+    final listening = book != null && _playing && !_buffering && !_loading;
+    if (!listening) {
+      unawaited(_listenTime?.stop());
+      return;
+    }
+    if (_listenBookUrl != book.bookUrl) {
+      unawaited(_listenTime?.close());
+      _listenTime = null;
+      _listenBookUrl = book.bookUrl;
+      final dao =
+          _readRecordDao ??
+          (getIt.isRegistered<ReadRecordDao>() ? getIt<ReadRecordDao>() : null);
+      if (dao == null) return;
+      _listenTime = ReaderV2ReadTimeController(
+        bookName: () async =>
+            (await _books.getByUrl(book.bookUrl))?.recordName ??
+            book.recordName,
+        readRecordDao: dao,
+        now: _now,
+      );
+    }
+    _listenTime?.start();
+  }
+
   final BookDao? _bookDao;
   final ChapterDao? _chapterDao;
   final BookSourceDao? _sourceDao;
@@ -463,6 +499,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (book == null) return;
     _generation++;
     await _saveProgress();
+    await _listenTime?.stop();
     await _engine?.stop();
     _book = null;
     _source = null;
@@ -523,6 +560,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   void _onPlaying(bool playing) {
     if (_playing == playing) return;
     _playing = playing;
+    _syncListenTime();
     sleepTimer.sync(active: _book != null, running: playing);
     if (!playing) unawaited(_saveProgress());
     notifyListeners();
@@ -548,6 +586,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   void _onBuffering(bool buffering) {
     if (_buffering == buffering) return;
     _buffering = buffering;
+    _syncListenTime();
     notifyListeners();
     _publish();
   }

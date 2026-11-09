@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
@@ -104,6 +105,36 @@ void main() {
     expect(player.playing, isTrue);
     expect(player.chapterIndex, 2);
     expect(sync.opened, [book.bookUrl]);
+  });
+
+  test('收聽時間只算出聲的時間，記在有聲書自己的名下（ADR 0055）', () async {
+    var now = DateTime(2026, 11, 9, 20);
+    final records = ReadRecordDao(db);
+    final timed = AudiobookPlayer(
+      engine: () => engine,
+      bookDao: bookDao,
+      chapterDao: ChapterDao(db),
+      sourceDao: BookSourceDao(db),
+      sourceService: source,
+      sync: sync,
+      playback: playback,
+      random: Random(1),
+      now: () => now,
+      readRecordDao: records,
+    );
+
+    await timed.open(book);
+    now = now.add(const Duration(seconds: 90));
+    await timed.pause();
+    now = now.add(const Duration(minutes: 5));
+    await timed.play();
+    now = now.add(const Duration(seconds: 30));
+    await timed.stop();
+
+    final days = await records.getAllDays();
+    expect(days.single.bookName, book.recordName);
+    expect(book.recordName, isNot(book.name));
+    expect(days.single.seconds, 120);
   });
 
   test('暫停時把位置以毫秒存進閱讀進度', () async {
