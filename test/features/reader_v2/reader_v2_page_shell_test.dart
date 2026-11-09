@@ -47,6 +47,7 @@ void main() {
     double menuInset = AppGrouped.margin,
     VoidCallback? onDrawerClosed,
     VoidCallback? onMenuHidden,
+    ReaderV2InfoTarget? loadingTarget,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
@@ -101,6 +102,7 @@ void main() {
             controlsVisible: visibility,
             showReadTitleAddition: true,
             infoState: infoStates?.value ?? ReaderV2InfoState.ready,
+            loadingTarget: loadingTarget,
             originName: '本地',
             navigation: ReaderV2ChapterNavigationState(
               chapterCount: 3,
@@ -793,17 +795,59 @@ void main() {
       expect(opacity.presence.value, 1);
     });
 
-    testWidgets('nothing is drawn when the text is unavailable', (
+    testWidgets('the skeleton fades away when the text is unavailable', (
       tester,
     ) async {
       final states = await pumpLoading(tester);
+      await tester.pump(SkeletonReveal.defaultDuration);
 
       states.value = ReaderV2InfoState.hidden;
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      // 骨架整條淡掉，不是直接拿掉。
+      final fading = tester.widget<SkeletonRevealLayer>(
+        find
+            .ancestor(
+              of: infoSkeleton('第一章'),
+              matching: find.byType(SkeletonRevealLayer),
+            )
+            .first,
+      );
+      expect(fading.sweep, isFalse);
+      expect(fading.presence.value, inExclusiveRange(0, 1));
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
 
+      await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);
       expect(infoText('第一章'), findsNothing);
       expect(infoText('殼層測試書'), findsNothing);
+    });
+
+    testWidgets('the fading skeleton keeps the chapter it was loading', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+        loadingTarget: const ReaderV2InfoTarget(
+          chapterIndex: 2,
+          chapterCount: 3,
+          title: '第三章　很長很長的章名',
+        ),
+      );
+      await tester.pump(SkeletonReveal.defaultDuration);
+      final loading = tester.getRect(infoSkeleton('第三章　很長很長的章名'));
+
+      // 取不到正文：淡掉的仍是要開的那一章的長條，寬度不跳。
+      states.value = ReaderV2InfoState.hidden;
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      expect(tester.getRect(infoSkeleton('第三章　很長很長的章名')), loading);
+      expect(infoSkeleton('第一章'), findsNothing);
     });
   });
 }
