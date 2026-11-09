@@ -89,30 +89,6 @@ class _AudiobookPageState extends State<AudiobookPage> {
             body: Stack(
               children: [
                 Positioned.fill(child: _buildList(context, book)),
-                // 圓鈕與膠囊後方墊一條漸隱帶，同書籍詳情的閱讀鈕：清單捲到
-                // 圓鈕之前就淡出，不會從圓鈕之間透出來。
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: Builder(
-                      builder: (context) {
-                        // 圓鈕上緣以下全實色，上方漸隱一段。
-                        final solid =
-                            _ControlDock.height +
-                            MediaQuery.paddingOf(context).bottom;
-                        const fade = 48.0;
-                        return EdgeFade(
-                          edge: AxisDirection.down,
-                          height: solid + fade,
-                          solidFraction: solid / (solid + fade),
-                          color: chrome.groupedBackground,
-                        );
-                      },
-                    ),
-                  ),
-                ),
                 Positioned(
                   left: 0,
                   right: 0,
