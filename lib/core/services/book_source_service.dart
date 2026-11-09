@@ -156,7 +156,7 @@ class BookSourceService {
     cancelToken: cancelToken,
   );
 
-  /// 有聲書一集的音訊請求（ADR 0050）：跑正文規則拿到音訊網址，組成播放器
+  /// 有聲書一集的音訊請求（ADR 0055）：跑正文規則拿到音訊網址，組成播放器
   /// 要抓的網址與標頭。
   Future<AudioRequest> getAudioRequest(
     BookSource source,

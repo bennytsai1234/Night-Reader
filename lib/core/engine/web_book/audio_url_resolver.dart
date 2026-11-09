@@ -6,7 +6,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 
-/// 有聲書一集的音訊請求：播放器拿它自己抓（ADR 0050）。
+/// 有聲書一集的音訊請求：播放器拿它自己抓（ADR 0055）。
 class AudioRequest {
   const AudioRequest({required this.url, required this.headers});
 
