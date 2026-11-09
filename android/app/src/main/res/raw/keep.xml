@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 發布版會刪掉程式碼裡找不到引用的資源；這些只在 Dart 端用名字指定（audio_service 的 androidNotificationIcon），要留著。 -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_night_reader" />
