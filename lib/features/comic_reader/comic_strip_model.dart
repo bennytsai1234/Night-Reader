@@ -89,11 +89,42 @@ class ComicStripModel extends ChangeNotifier {
     required this.chapterCount,
     required int chapterIndex,
     int pageIndex = 0,
-  }) : _anchorChapter = chapterIndex.clamp(0, chapterCount - 1).toInt(),
-       _anchorPage = pageIndex < 0 ? 0 : pageIndex;
+    bool Function(int chapterIndex)? isReadable,
+  }) : _isReadable = isReadable ?? _always,
+       _anchorChapter = chapterIndex.clamp(0, chapterCount - 1).toInt(),
+       _anchorPage = pageIndex < 0 ? 0 : pageIndex {
+    _anchorChapter = _readableAt(_anchorChapter);
+  }
 
   final ComicPageSource source;
   final int chapterCount;
+
+  /// 目錄裡的分卷標題沒有圖，不是一話：上一話、下一話、預載與換章分隔都
+  /// 跳過它。
+  final bool Function(int chapterIndex) _isReadable;
+
+  static bool _always(int _) => true;
+
+  /// [from] 之後第一個有圖的話；沒有時是 null。
+  int? _nextReadable(int from) {
+    for (var c = from + 1; c < chapterCount; c++) {
+      if (_isReadable(c)) return c;
+    }
+    return null;
+  }
+
+  /// [from] 之前第一個有圖的話；沒有時是 null。
+  int? _previousReadable(int from) {
+    for (var c = from - 1; c >= 0; c--) {
+      if (_isReadable(c)) return c;
+    }
+    return null;
+  }
+
+  /// [index] 本身，或它之後（沒有就之前）第一個有圖的話。
+  int _readableAt(int index) => _isReadable(index)
+      ? index
+      : _nextReadable(index) ?? _previousReadable(index) ?? index;
 
   /// 開書時還不知道有幾張，先畫幾張骨架。
   static const int placeholderPages = 3;
@@ -155,26 +186,34 @@ class ComicStripModel extends ChangeNotifier {
 
   /// 跳到第 [chapterIndex] 話第 [pageIndex] 張：換錨點，已經載好的話留著用。
   void jumpTo(int chapterIndex, {int pageIndex = 0}) {
-    _anchorChapter = chapterIndex.clamp(0, chapterCount - 1).toInt();
+    _anchorChapter = _readableAt(
+      chapterIndex.clamp(0, chapterCount - 1).toInt(),
+    );
     _anchorPage = pageIndex < 0 ? 0 : pageIndex;
     _lo = 0;
     _hi = -1;
     _generation += 1;
+    if (_chapters[_anchorChapter] is ComicChapterFailed) {
+      _chapters.remove(_anchorChapter);
+    }
     _rebuild();
     _notify();
     _load(_anchorChapter);
   }
 
-  /// 往下快捲到底了：接上下一話。
+  /// 往下快捲到底了：接上下一話。上次載不下來的不自動再試：捲動每一幀都
+  /// 會問，失敗、重畫、再試會一直打書源；使用者按「重試」才再載（[retry]）。
   void loadNext() {
-    if (_hi < _lo || _hi + 1 >= chapterCount) return;
-    _load(_hi + 1);
+    final next = _hi < _lo ? null : _nextReadable(_hi);
+    if (next == null || _chapters[next] is ComicChapterFailed) return;
+    _load(next);
   }
 
-  /// 往上快捲到頂了：接上上一話。
+  /// 往上快捲到頂了：接上上一話。上次載不下來的同 [loadNext]。
   void loadPrevious() {
-    if (_hi < _lo || _lo <= 0) return;
-    _load(_lo - 1);
+    final previous = _hi < _lo ? null : _previousReadable(_lo);
+    if (previous == null || _chapters[previous] is ComicChapterFailed) return;
+    _load(previous);
   }
 
   /// 載入失敗的那一話再試一次。
@@ -203,7 +242,10 @@ class ComicStripModel extends ChangeNotifier {
     _notifyPending();
     ComicChapterState result;
     try {
-      result = ComicChapterReady(await source.pagesOf(chapterIndex));
+      final pages = await source.pagesOf(chapterIndex);
+      // 讀不出任何一張（檔案壞了、網站回了空的）：當成載不下來，給「重試」。
+      if (pages.isEmpty) throw StateError('這一話沒有圖');
+      result = ComicChapterReady(pages);
     } catch (error) {
       result = ComicChapterFailed(error);
     }
@@ -227,9 +269,9 @@ class ComicStripModel extends ChangeNotifier {
         _anchorPage = pages.isEmpty ? 0 : pages.length - 1;
       }
       _lo = _hi = chapterIndex;
-    } else if (chapterIndex == _hi + 1) {
+    } else if (chapterIndex == _nextReadable(_hi)) {
       _hi = chapterIndex;
-    } else if (chapterIndex == _lo - 1) {
+    } else if (chapterIndex == _previousReadable(_lo)) {
       _lo = chapterIndex;
     } else {
       return;
@@ -262,32 +304,35 @@ class ComicStripModel extends ChangeNotifier {
     for (var i = _anchorPage; i < anchorPages.length; i++) {
       after.add(ComicPageItem(_anchorChapter, i, anchorPages[i]));
     }
-    for (var c = _anchorChapter + 1; c <= _hi; c++) {
-      after.add(ComicTransitionItem(from: c - 1, to: c));
+    for (
+      var from = _anchorChapter, c = _nextReadable(from);
+      c != null && c <= _hi;
+      from = c, c = _nextReadable(c)
+    ) {
+      after.add(ComicTransitionItem(from: from, to: c));
       final pages = pagesOf(c);
       for (var i = 0; i < pages.length; i++) {
         after.add(ComicPageItem(c, i, pages[i]));
       }
     }
-    after.add(
-      ComicTransitionItem(
-        from: _hi,
-        to: _hi + 1 < chapterCount ? _hi + 1 : null,
-      ),
-    );
+    after.add(ComicTransitionItem(from: _hi, to: _nextReadable(_hi)));
 
     final before = <ComicStripItem>[];
     for (var i = _anchorPage - 1; i >= 0; i--) {
       before.add(ComicPageItem(_anchorChapter, i, anchorPages[i]));
     }
-    for (var c = _anchorChapter - 1; c >= _lo; c--) {
-      before.add(ComicTransitionItem(from: c, to: c + 1));
+    for (
+      var to = _anchorChapter, c = _previousReadable(to);
+      c != null && c >= _lo;
+      to = c, c = _previousReadable(c)
+    ) {
+      before.add(ComicTransitionItem(from: c, to: to));
       final pages = pagesOf(c);
       for (var i = pages.length - 1; i >= 0; i--) {
         before.add(ComicPageItem(c, i, pages[i]));
       }
     }
-    before.add(ComicTransitionItem(from: _lo > 0 ? _lo - 1 : null, to: _lo));
+    before.add(ComicTransitionItem(from: _previousReadable(_lo), to: _lo));
 
     _before = before;
     _after = after;

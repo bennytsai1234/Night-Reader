@@ -1,3 +1,4 @@
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -55,8 +56,28 @@ class ProgressSync extends SyncKind {
   @override
   Future<Map<String, SyncRecord>> local() async => {
     for (final entry in (await shelfBooks()).entries)
-      entry.key: recordOf(entry.value),
+      entry.key: recordOf(
+        entry.value,
+        chapterId: chapterIdOf(
+          entry.value,
+          await _chapterIdsOf(entry.value) ?? const [],
+        ),
+      ),
   };
+
+  /// 本地漫畫每一話的章指紋（目錄的網址，ADR 0052）；其他書是 null。
+  Future<List<String>?> _chapterIdsOf(Book book) async =>
+      book.isLocal && book.bookKind == BookSourceKind.comic
+      ? [for (final c in await chapterDao.getByBook(book.bookUrl)) c.url]
+      : null;
+
+  /// 本地漫畫讀到的那一話的章指紋：兩台的章名、排序可以不同，同一話的
+  /// 指紋一樣（ADR 0052）。[ids] 是這本的 [_chapterIdsOf]；其他書是 null。
+  static String? chapterIdOf(Book book, List<String> ids) {
+    if (!book.isLocal || book.bookKind != BookSourceKind.comic) return null;
+    if (ids.isEmpty) return null;
+    return ids[book.chapterIndex.clamp(0, ids.length - 1)];
+  }
 
   @override
   SyncFingerprint get fingerprint => fingerprintOf;
@@ -84,12 +105,14 @@ class ProgressSync extends SyncKind {
 
   /// 時間用「位置最後移動的時間」，不用最近閱讀時間：開書沒翻頁也會更新
   /// 後者，拿它比新舊，沒動過的這台會蓋掉別台真的讀過的進度。
-  static SyncRecord recordOf(Book book) => SyncRecord(
+  /// [chapterId] 是本地漫畫那一話的章指紋（[chapterIdOf]）。
+  static SyncRecord recordOf(Book book, {String? chapterId}) => SyncRecord(
     time: book.progressTime,
     data: {
       'chapterIndex': book.chapterIndex,
       'charOffset': book.charOffset,
       'chapterTitle': book.durChapterTitle ?? '',
+      'chapterId': ?chapterId,
     },
   );
 
@@ -98,6 +121,14 @@ class ProgressSync extends SyncKind {
   /// 章名時才看序號。
   static String fingerprintOf(SyncRecord record) {
     if (record.deleted) return record.fingerprint;
+    // 本地漫畫照章指紋：兩台的章名可以不同。
+    final id = record.data['chapterId'];
+    if (id is String && id.isNotEmpty) {
+      return SyncRecord.fingerprintOf({
+        'chapterId': id,
+        'charOffset': record.data['charOffset'],
+      });
+    }
     final title = record.data['chapterTitle'];
     final hasTitle = title is String && title.trim().isNotEmpty;
     return SyncRecord.fingerprintOf({
@@ -133,7 +164,8 @@ class ProgressSync extends SyncKind {
   Future<SyncRecord> applyTo(Book book, SyncRecord remote) async {
     final position = SyncedProgress.fromRecord(remote);
     final titles = await chapterDao.titlesByBook(book.bookUrl);
-    final index = position.chapterIndexIn(titles);
+    final ids = await _chapterIdsOf(book);
+    final index = position.chapterIndexIn(titles, ids: ids);
     final title = titles.isEmpty ? position.chapterTitle : titles[index];
     await bookDao.applySyncedProgress(
       book.bookUrl,
@@ -148,6 +180,7 @@ class ProgressSync extends SyncKind {
         'chapterIndex': index,
         'charOffset': position.charOffset,
         'chapterTitle': title,
+        if (ids != null && ids.isNotEmpty) 'chapterId': ids[index],
       },
     );
   }
@@ -160,18 +193,24 @@ class SyncedProgress {
     required this.charOffset,
     required this.chapterTitle,
     required this.time,
+    this.chapterId = '',
   });
 
   factory SyncedProgress.fromRecord(SyncRecord record) {
     int asInt(Object? value) => value is int && value >= 0 ? value : 0;
     final title = record.data['chapterTitle'];
+    final id = record.data['chapterId'];
     return SyncedProgress(
       chapterIndex: asInt(record.data['chapterIndex']),
       charOffset: asInt(record.data['charOffset']),
       chapterTitle: title is String ? title : '',
+      chapterId: id is String ? id : '',
       time: record.time,
     );
   }
+
+  /// 本地漫畫那一話的章指紋；其他書是空的。
+  final String chapterId;
 
   final int chapterIndex;
   final int charOffset;
@@ -181,7 +220,13 @@ class SyncedProgress {
   /// 這台目錄（[titles]）裡對應的章節序號。兩台的書源或目錄版本不同時，
   /// 同一個序號可能是不同章：先找同名的章（離原序號最近的那個），找不到才
   /// 照序號，超出目錄就停在最後一章。
-  int chapterIndexIn(List<String> titles) {
+  ///
+  /// 本地漫畫給了這台每一話的章指紋（[ids]）時先照章指紋找。
+  int chapterIndexIn(List<String> titles, {List<String>? ids}) {
+    if (chapterId.isNotEmpty && ids != null) {
+      final byId = ids.indexOf(chapterId);
+      if (byId >= 0) return byId;
+    }
     if (titles.isEmpty) return chapterIndex;
     final wanted = chapterTitle.trim();
     if (wanted.isNotEmpty) {

@@ -561,6 +561,65 @@ void main() {
         );
       }
 
+      /// 每一話的圖照 [heights] 給的高度，話名可以和圖無關。
+      Future<Book> importNamed(
+        _Phone phone,
+        String folder,
+        Map<String, int> heights,
+      ) async {
+        phone.use();
+        final work = Directory(p.join(phone.root.path, 'picked', folder, '夜行'));
+        for (final MapEntry(key: name, value: height) in heights.entries) {
+          final dir = Directory(p.join(work.path, name))
+            ..createSync(recursive: true);
+          File(p.join(dir.path, '1.png'))
+              .writeAsBytesSync(stripedPng(4, height, 0x102030, 0x405060));
+        }
+        return (await LocalComicService(
+          bookDao: phone.books,
+          chapterDao: phone.chapters,
+        ).importPath(work.path))!;
+      }
+
+      test('a chapter file missing here is downloaded back, not counted as '
+          'already in sync', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await sync(a);
+        await sync(b);
+        final mine = (await b.shelf()).single;
+        final second = (await b.chapters.getByBook(mine.bookUrl)).last;
+        final file = File(LocalComicService.chapterPathOf(mine, second));
+        file.deleteSync();
+
+        final plan = await b.localBooks().plan();
+        expect(plan.of(LocalBookAction.download), hasLength(1));
+        expect((await b.localBooks().run(plan)).failures, isEmpty);
+        expect(file.existsSync(), isTrue);
+      });
+
+      test('reading progress follows the chapter by its fingerprint when the '
+          'two phones name the chapters differently', () async {
+        final mine = await importNamed(a, 'a', {'01': 11, '02': 12});
+        await importNamed(b, 'b', {'Alpha': 12, 'Beta': 11});
+        await sync(a);
+        await sync(b);
+        await sync(a);
+        expect(
+          (await a.shelf()).single.fileFingerprint,
+          (await b.shelf()).single.fileFingerprint,
+        );
+
+        // A 讀到「02」那一話（B 叫它 Alpha，排在第一）第 3 張。
+        await a.books.updateProgress(mine.bookUrl, 1, '02', 3);
+        await a.sync.syncAll();
+        await b.sync.syncAll();
+
+        final theirs = (await b.shelf()).single;
+        final chapters = await b.chapters.getByBook(theirs.bookUrl);
+        expect(chapters[theirs.chapterIndex].title, 'Alpha');
+        expect(theirs.charOffset, 3);
+      });
+
       test('starting from different chapters, they become one book with the '
           'same key on both phones, and nothing is deleted', () async {
         await importComic(a, ['第1話', '第2話']);

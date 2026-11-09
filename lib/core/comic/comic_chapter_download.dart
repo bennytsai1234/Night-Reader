@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
@@ -296,10 +297,26 @@ abstract final class ComicChapterDownload {
     final target = File(
       p.join(dir.path, pageFileName(index, extensionOf(bytes))),
     );
-    final temp = File('${target.path}${BookChapterFiles.partialSuffix}');
-    await temp.writeAsBytes(bytes, flush: true);
-    await temp.rename(target.path);
+    // 閱讀器與下載可能同時存同一張：各寫各的暫存檔，誰先寫好誰算。
+    final temp = File(
+      '${target.path}.${_nextTempId()}${BookChapterFiles.partialSuffix}',
+    );
+    try {
+      await temp.writeAsBytes(bytes, flush: true);
+      await temp.rename(target.path);
+    } on FileSystemException {
+      if (!await target.exists()) rethrow;
+    } finally {
+      if (await temp.exists()) await temp.delete();
+    }
   }
+
+  static int _tempCounter = 0;
+
+  /// 這個 isolate 裡每次都不同的暫存檔名（isolate 之間用雜湊分開）。
+  static String _nextTempId() =>
+      '${Isolate.current.hashCode}-${DateTime.now().microsecondsSinceEpoch}'
+      '-${_tempCounter++}';
 
   /// 照檔頭認副檔名；認不出來當 JPEG。
   static String extensionOf(Uint8List b) {

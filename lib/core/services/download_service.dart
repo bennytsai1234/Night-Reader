@@ -83,7 +83,11 @@ Future<ShelfDownloadNeed?> _shelfDownloadNeed(String bookUrl) async {
   // 記為失敗，照重試規則再試。有目錄而且都下載好了就不排。
   if (chapters.isNotEmpty && book.bookKind == BookSourceKind.comic) {
     final downloaded = await downloadedComicChapterUrls(book, chapters);
-    if (chapters.every((chapter) => downloaded.contains(chapter.url))) {
+    // 分卷標題、還沒買的付費話不下載（[chapterIsDownloadable]），不算缺。
+    if (chapters.every(
+      (chapter) =>
+          !chapterIsDownloadable(chapter) || downloaded.contains(chapter.url),
+    )) {
       return null;
     }
   } else if (chapters.isNotEmpty) {

@@ -38,8 +38,18 @@ class NetworkComicPageSource implements ComicPageSource {
     final chapter = chapters[chapterIndex];
     final cbz = await ComicChapterDownload.cbzFor(book, chapter);
     if (cbz != null) {
-      _cbz[chapterIndex] = cbz.path;
-      return ComicChapterFiles.pagesOf(cbz.path);
+      List<ComicPage> pages;
+      try {
+        pages = await ComicChapterFiles.pagesOf(cbz.path);
+      } catch (_) {
+        pages = const [];
+      }
+      if (pages.isNotEmpty) {
+        _cbz[chapterIndex] = cbz.path;
+        return pages;
+      }
+      // 下載好的檔壞了：刪掉照書源重抓，書架自動下載也會再排這一話。
+      await cbz.delete();
     }
     final urls = await _service.getComicPageUrls(
       source,

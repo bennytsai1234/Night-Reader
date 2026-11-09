@@ -22,6 +22,7 @@ class ComicProgressSync {
     required this.current,
     required this.flush,
     required this.titles,
+    required this.ids,
     required this.jumpTo,
     this.resumes = true,
     SyncService? sync,
@@ -43,6 +44,9 @@ class ComicProgressSync {
 
   /// 這台目錄的章名。
   final List<String> Function() titles;
+
+  /// 這台每一話的章指紋（目錄的網址）：本地漫畫照它對另一台的那一話。
+  final List<String> Function() ids;
 
   /// 跳到另一台的位置。
   final void Function(int chapterIndex, int pageIndex) jumpTo;
@@ -113,12 +117,17 @@ class ComicProgressSync {
         now.pageIndex != since.pageIndex) {
       return;
     }
-    final index = pulled.progress.chapterIndexIn(titles());
+    final index = pulled.progress.chapterIndexIn(titles(), ids: ids());
     final page = pulled.progress.charOffset;
     if (shouldJump(now, index, page)) jumpTo(index, page);
     await flush();
     if (_disposed) return;
-    await pulled.commit(ProgressSync.recordOf(book));
+    await pulled.commit(
+      ProgressSync.recordOf(
+        book,
+        chapterId: ProgressSync.chapterIdOf(book, ids()),
+      ),
+    );
   }
 
   /// 另一台在第 [chapterIndex] 話第 [pageIndex] 張，這台要不要跳過去。

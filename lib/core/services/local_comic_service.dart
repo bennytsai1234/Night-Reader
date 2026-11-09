@@ -104,6 +104,13 @@ class LocalComicService {
           index: index,
         ),
     ];
+    // 補進更前面的話時序號會往後移：照讀到的那一話的章指紋找回它的新序號，
+    // 第幾張不變。
+    if (known.isNotEmpty) {
+      final reading = known[book.chapterIndex.clamp(0, known.length - 1)].url;
+      final moved = ordered.indexOf(reading);
+      if (moved >= 0) book.chapterIndex = moved;
+    }
     book
       ..fileFingerprint ??= fingerprint ?? chapters.first.url
       ..totalChapterNum = chapters.length

@@ -145,6 +145,21 @@ void main() {
       );
     });
 
+    test('補進更前面的一話：讀到的那一話與第幾張不變', () async {
+      imageFolder('第2話', [6]);
+      imageFolder('第3話', [7]);
+      final first = await service.importPath(picked.path);
+      await BookDao(db).updateProgress(first!.bookUrl, 1, '第3話', 4);
+      imageFolder('第1話', [5]);
+      final again = await service.importPath(picked.path);
+
+      final book = (await BookDao(db).getByUrl(again!.bookUrl))!;
+      final chapters = await ChapterDao(db).getByBook(book.bookUrl);
+      expect(chapters.map((c) => c.title), ['第1話', '第2話', '第3話']);
+      expect(chapters[book.chapterIndex].title, '第3話');
+      expect(book.charOffset, 4);
+    });
+
     test('單一個 CBZ 是只有一話的書；沒有圖的不匯入', () async {
       cbz('短篇.cbz', [5]);
       final book = await service.importPath(p.join(picked.path, '短篇.cbz'));
