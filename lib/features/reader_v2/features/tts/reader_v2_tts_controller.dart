@@ -120,7 +120,15 @@ class ReaderV2TtsController extends ChangeNotifier
   int _segmentIndex = -1;
   int _speechGeneration = 0;
   late int _observedContentGeneration;
-  bool _handlingCompletion = false;
+
+  /// 正在處理念完一段的那一輪朗讀（[_speechGeneration]）。同一輪不重複處理；
+  /// 換了一輪（跳章、手動跳轉）時新一輪的念完照常處理，不被還在等下一章的
+  /// 舊一輪擋掉。
+  int? _completionGeneration;
+
+  /// 按了上一章、下一章，還在載入的那一章與那一輪朗讀。連按時從這一章往下
+  /// 算，不從還沒換掉的舊章算；換了一輪就作廢。
+  ({int generation, int chapterIndex})? _skipTarget;
   bool _disposed = false;
 
   /// 停在一句之後（[_pauseAtSentence]），播放鍵從這裡接著念；暫停時已停掉
@@ -280,6 +288,7 @@ class ReaderV2TtsController extends ChangeNotifier
     _segments = segments;
     _segmentIndex = segments.isEmpty ? -1 : 0;
     if (segments.isEmpty) return _SpeechStart.empty;
+    _skipTarget = null;
     return await _speakCurrentSegment(generation)
         ? _SpeechStart.started
         : _SpeechStart.cancelled;
@@ -348,8 +357,7 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 正在念或暫停中：把正在念的章、這本書與做得到的按鈕交給系統播放資訊；
   /// 停了就收掉。
   void _syncSystemPlayback({required bool playing}) {
-    final chapterIndex =
-        _resumeLocation?.chapterIndex ?? _currentSegment?.chapterIndex;
+    final chapterIndex = _speakingChapterIndex;
     if (chapterIndex == null) {
       _playback.release(this);
       return;
@@ -410,35 +418,57 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 上一章、下一章：從那一章開頭接著念，暫停中按了也開始念。畫面跟著
   /// 朗讀的那一句過去，和念完一章自動換章一樣。
   Future<void> _skipChapter(int delta) async {
-    final current =
-        _resumeLocation?.chapterIndex ?? _currentSegment?.chapterIndex;
+    final current = _speakingChapterIndex;
     if (current == null) return;
     final target = current + delta;
     if (target < 0 || target >= runtime.chapterCount) return;
     final generation = ++_speechGeneration;
+    _skipTarget = (generation: generation, chapterIndex: target);
     _resumeLocation = null;
+    notifyListeners();
     await _tts.stop();
-    await _speakFrom(
-      ReaderV2Location(
-        chapterIndex: target,
-        charOffset: 0,
-        visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
-      ),
-      generation: generation,
-    );
+    await _speakFrom(_chapterStart(target), generation: generation);
   }
 
+  /// 正在念、暫停中或按了上一章／下一章正在載入的那一章；沒在朗讀是 null。
+  int? get _speakingChapterIndex =>
+      _pendingSkipTarget ??
+      _resumeLocation?.chapterIndex ??
+      _currentSegment?.chapterIndex;
+
+  int? get _pendingSkipTarget {
+    final skip = _skipTarget;
+    return skip != null && skip.generation == _speechGeneration
+        ? skip.chapterIndex
+        : null;
+  }
+
+  ReaderV2Location _chapterStart(int chapterIndex) => ReaderV2Location(
+    chapterIndex: chapterIndex,
+    charOffset: 0,
+    visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+  );
+
   /// 定時到了、系統或耳機按了暫停、另一方開始播：停在目前這句，播放鍵從
-  /// 這句開頭接著念。用停止而不是引擎的暫停：句與句之間引擎沒有在念，暫停
-  /// 不會生效，下一句照樣會開始。
+  /// 這句開頭接著念；剛按了上一章／下一章、那一章還在載入時，停在那一章
+  /// 開頭。用停止而不是引擎的暫停：句與句之間引擎沒有在念，暫停不會生效，
+  /// 下一句照樣會開始。
   void _pauseAtSentence() {
+    final skipTarget = _pendingSkipTarget;
     final segment = _currentSegment;
-    if (segment == null) return;
+    final ReaderV2Location resumeLocation;
+    if (skipTarget != null) {
+      resumeLocation = _chapterStart(skipTarget);
+    } else if (segment != null) {
+      resumeLocation = ReaderV2Location(
+        chapterIndex: segment.chapterIndex,
+        charOffset: segment.startCharOffset,
+      );
+    } else {
+      return;
+    }
     _speechGeneration += 1;
-    _resumeLocation = ReaderV2Location(
-      chapterIndex: segment.chapterIndex,
-      charOffset: segment.startCharOffset,
-    );
+    _resumeLocation = resumeLocation;
     unawaited(_tts.stop());
     notifyListeners();
   }
@@ -459,14 +489,18 @@ class ReaderV2TtsController extends ChangeNotifier
 
   Future<void> _handleSpeechCompleted() async {
     // 停在一句時停掉了引擎，引擎事後補報的完成不能讓朗讀接著念下去。
-    if (_handlingCompletion || _disposed || _resumeLocation != null) return;
+    if (_completionGeneration == _speechGeneration ||
+        _disposed ||
+        _resumeLocation != null) {
+      return;
+    }
     final completedSegment = _currentSegment;
     if (completedSegment == null) {
       notifyListeners();
       return;
     }
     final generation = _speechGeneration;
-    _handlingCompletion = true;
+    _completionGeneration = generation;
     try {
       if (_advanceSegment()) {
         await _speakCurrentSegment(generation);
@@ -477,14 +511,7 @@ class ReaderV2TtsController extends ChangeNotifier
         _finishSpeech(generation, notice: '已朗讀到書尾');
         return;
       }
-      await _speakFrom(
-        ReaderV2Location(
-          chapterIndex: chapterIndex,
-          charOffset: 0,
-          visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
-        ),
-        generation: generation,
-      );
+      await _speakFrom(_chapterStart(chapterIndex), generation: generation);
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -499,7 +526,7 @@ class ReaderV2TtsController extends ChangeNotifier
         notifyListeners();
       }
     } finally {
-      _handlingCompletion = false;
+      if (_completionGeneration == generation) _completionGeneration = null;
     }
   }
 
@@ -541,6 +568,7 @@ class ReaderV2TtsController extends ChangeNotifier
 
   void _clearSpeechStateWithoutNotify() {
     _resumeLocation = null;
+    _skipTarget = null;
     _speechStartLocation = null;
     _segments = const <ReaderV2TtsSegment>[];
     _segmentIndex = -1;

@@ -203,10 +203,17 @@ class _SessionHandler extends BaseAudioHandler {
       mediaItem.add(_mediaItemOf(item, art));
       if (art == null) {
         unawaited(
-          artwork.resolve(item.coverSource, item.bookName).then((uri) {
-            if (_item != item) return;
-            mediaItem.add(_mediaItemOf(item, uri));
-          }),
+          artwork.resolve(item.coverSource, item.bookName).then(
+            (uri) {
+              if (_item != item) return;
+              mediaItem.add(_mediaItemOf(item, uri));
+            },
+            // 連預設封面都寫不出來（例如儲存空間滿了）：只是沒有封面。
+            onError: (Object error) => AppLog.e(
+              'SystemPlayback: no artwork for ${item.bookName}: $error',
+              error: error,
+            ),
+          ),
         );
       }
     }

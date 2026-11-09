@@ -2,12 +2,21 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/system_playback/now_playing_artwork.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 
 const _pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
 void main() {
   late Directory dir;
   late List<String> downloads;
+
+  /// 一張真的圖（4×4 的 PNG）。
+  late List<int> image;
+
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    image = await DefaultBookCover.renderPng('圖', width: 4, height: 4);
+  });
 
   setUp(() {
     dir = Directory.systemTemp.createTempSync('now_playing_art_');
@@ -16,18 +25,19 @@ void main() {
 
   tearDown(() => dir.deleteSync(recursive: true));
 
-  NowPlayingArtwork artwork({Future<File> Function(String url)? download}) =>
-      NowPlayingArtwork(
-        directory: () async => dir,
-        download:
-            download ??
-            (url) async {
-              downloads.add(url);
-              throw const SocketException('offline');
-            },
-        memoryResource: (key) async =>
-            key == 'memory://cover' ? [1, 2, 3] : null,
-      );
+  NowPlayingArtwork artwork({
+    Future<File> Function(String url)? download,
+    Future<Directory> Function()? directory,
+  }) => NowPlayingArtwork(
+    directory: directory ?? () async => dir,
+    download:
+        download ??
+        (url) async {
+          downloads.add(url);
+          throw const SocketException('offline');
+        },
+    memoryResource: (key) async => key == 'memory://cover' ? image : null,
+  );
 
   Future<File> fileOf(Future<Uri> uri) async => File((await uri).toFilePath());
 
@@ -48,7 +58,7 @@ void main() {
 
   testWidgets('a cover on the phone is handed over as it is', (tester) async {
     await tester.runAsync(() async {
-      final cover = File('${dir.path}/cover.jpg')..writeAsBytesSync([1, 2, 3]);
+      final cover = File('${dir.path}/cover.png')..writeAsBytesSync(image);
 
       final local = await fileOf(
         artwork().resolve('local://${cover.path}', '書'),
@@ -64,7 +74,7 @@ void main() {
     await tester.runAsync(() async {
       final file = await fileOf(artwork().resolve('memory://cover', '書'));
 
-      expect(file.readAsBytesSync(), [1, 2, 3]);
+      expect(file.readAsBytesSync(), image);
     });
   });
 
@@ -90,13 +100,54 @@ void main() {
     tester,
   ) async {
     await tester.runAsync(() async {
-      final cached = File('${dir.path}/cached')..writeAsBytesSync([9]);
+      final cached = File('${dir.path}/cached')..writeAsBytesSync(image);
       final file = await fileOf(
         artwork(download: (url) async => cached)
             .resolve('https://x.test/c.jpg', '書'),
       );
 
       expect(file.uri, cached.uri);
+    });
+  });
+
+  testWidgets('a cover that is not an image falls back to the night sky', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      // 網站回了一頁錯誤訊息當封面。
+      final broken = File('${dir.path}/broken.jpg')
+        ..writeAsBytesSync([1, 2, 3]);
+      final file = await fileOf(
+        artwork(download: (url) async => broken)
+            .resolve('https://x.test/c.jpg', '書'),
+      );
+
+      expect(file.path, isNot(broken.path));
+      expect(file.readAsBytesSync().take(8), _pngSignature);
+    });
+  });
+
+  testWidgets('a cover that could not be written is tried again', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      var full = true;
+      final art = artwork(
+        directory: () async {
+          if (full) throw const FileSystemException('No space left');
+          return dir;
+        },
+      );
+
+      await expectLater(
+        art.resolve(null, '書'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(art.resolved(null, '書'), isNull);
+
+      full = false;
+      final file = await fileOf(art.resolve(null, '書'));
+      expect(file.readAsBytesSync().take(8), _pngSignature);
     });
   });
 }

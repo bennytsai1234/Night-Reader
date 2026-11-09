@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -13,9 +14,10 @@ import 'package:night_reader/core/widgets/default_book_cover.dart';
 /// 系統播放資訊的封面：把書的封面變成手機上的一個圖檔，交給系統去讀。
 ///
 /// 系統（Android 的通知與鎖定畫面、iOS 的正在播放）只讀得到檔案或公開網址，
-/// 讀不到 App 裡的 `local://`、`memory://`；網路封面也要先下載，載不到時
-/// 系統只會留白。這裡一律換成檔案：網路封面用和書架同一個磁碟快取，沒有封面
-/// 或載不到時畫預設封面（夜空，[DefaultBookCover]）。
+/// 讀不到 App 裡的 `local://`、`memory://`；網路封面也要先下載，載不到或
+/// 不是圖時系統只會留白。這裡一律換成解得開的圖檔：網路封面用和書架同一個
+/// 磁碟快取，沒有封面、載不到或解不開時畫預設封面（夜空，[DefaultBookCover]）。
+/// 檔案放在系統的暫存資料夾，空間不夠時由系統清掉。
 class NowPlayingArtwork {
   NowPlayingArtwork({
     Future<Directory> Function()? directory,
@@ -36,7 +38,8 @@ class NowPlayingArtwork {
   static const int defaultCoverHeight = 504;
 
   /// 這次開 App 換過的封面；同一本書換章時直接用，不再找一次檔案。載不到
-  /// 的網路封面也記著用預設封面，不每次換章都重抓。
+  /// 的網路封面也記著用預設封面，不每次換章都重抓；連預設封面都寫不出來時
+  /// 不記，下次再試。
   final Map<String, Future<Uri>> _resolving = {};
   final Map<String, Uri> _resolved = {};
 
@@ -61,9 +64,13 @@ class NowPlayingArtwork {
     final done = _resolved[key];
     if (done != null) return Future<Uri>.value(done);
     return _resolving.putIfAbsent(key, () async {
-      final uri = await _resolve(coverSource, bookName);
-      _resolved[key] = uri;
-      return uri;
+      try {
+        final uri = await _resolve(coverSource, bookName);
+        _resolved[key] = uri;
+        return uri;
+      } finally {
+        unawaited(_resolving.remove(key));
+      }
     });
   }
 
@@ -77,9 +84,7 @@ class NowPlayingArtwork {
     if (source.isNotEmpty) {
       try {
         final file = await _coverFile(source);
-        if (file != null && await file.exists() && await file.length() > 0) {
-          return file.uri;
-        }
+        if (file != null && await _isImage(file)) return file.uri;
       } catch (error) {
         AppLog.d('NowPlayingArtwork: cover unavailable, use default: $error');
       }
@@ -108,6 +113,23 @@ class NowPlayingArtwork {
       return _download(source);
     }
     return null;
+  }
+
+  /// [file] 是解得開的圖：只讀檔頭，不整張解碼。網站有時回一頁錯誤訊息或
+  /// 壞掉的檔案，交給系統只會留白。
+  static Future<bool> _isImage(File file) async {
+    if (!await file.exists() || await file.length() == 0) return false;
+    final buffer = await ui.ImmutableBuffer.fromFilePath(file.path);
+    try {
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      descriptor.dispose();
+      return true;
+    } catch (error) {
+      AppLog.d('NowPlayingArtwork: cover is not an image: $error');
+      return false;
+    } finally {
+      buffer.dispose();
+    }
   }
 
   Future<File> _defaultCover(String bookName) async {
