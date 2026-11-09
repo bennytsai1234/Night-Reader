@@ -790,7 +790,7 @@ class _InfoRow extends StatelessWidget {
     final progressListenable = shell.progressListenable;
     // 和正文一樣不跟手機的字型大小放大，字級只照閱讀器自己的「頁首頁尾字級」：
     // 那一列的高度照這個字級算，跟著手機放大就放不下，會被螢幕底邊切掉
-    // （DESIGN.md「閱讀器」）。
+    // （docs/design/reader.md「正文排版」）。
     return MediaQuery.withNoTextScaling(
       child: ListenableBuilder(
         listenable: Listenable.merge([
