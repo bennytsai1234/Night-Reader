@@ -6,7 +6,7 @@
 //   SKELETON_OUT=<資料夾> …   每一幀的工作量（work_<寬>x<高>.json）與畫面（PNG）存進去
 //   SKELETON_BASE=<資料夾> …  和改前存的同一幀逐像素比
 //
-// 1. 工作量：手機（393 寬，書架 3 欄）與平板（1280 寬，7 欄）各開一次 App，
+// 1. 工作量：手機（393 寬，書架 3 欄）與平板（1280 寬，4 欄）各開一次 App，
 //    每一幀記下哪些骨架元件（[SkeletonBox]、[SkeletonShapes]）重畫了
 //    （[debugOnProfilePaint]），再把它們各畫一次到錄製用的畫布，數畫了幾個
 //    形狀（含卡片底）、用了幾道不同的漸層。兩種寬度要一樣的：骨架長出每一幀
@@ -139,7 +139,7 @@ void main() {
       await seedLibrary();
       await seedMoreBooks(24);
       await seedCovers(covers);
-      // 網格才比得出寬度：手機 3 欄、平板 7 欄（預設的列表兩邊一樣多張）。
+      // 網格才比得出寬度：手機 3 欄、平板 4 欄（預設的列表兩邊一樣多張）。
       await resetPrefs({'bookshelf_is_grid': true});
       await out?.create(recursive: true);
     });
@@ -291,7 +291,7 @@ void main() {
         reason:
             '骨架${_label(segment)}每一幀'
             '${segment == 'grow' ? '重畫的形狀' : '用的漸層'}數跟著書架的方塊數'
-            '變多（手機 3 欄、平板 7 欄）',
+            '變多（手機 3 欄、平板 4 欄）',
       );
     }
 

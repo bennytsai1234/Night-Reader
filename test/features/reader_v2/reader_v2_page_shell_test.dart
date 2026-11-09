@@ -823,7 +823,7 @@ void main() {
       expect(infoText('殼層測試書'), findsNothing);
     });
 
-    testWidgets('the fading skeleton keeps the chapter it was loading', (
+    testWidgets('the fading skeleton is drawn from the loading target', (
       tester,
     ) async {
       final states = ValueNotifier(ReaderV2InfoState.loading);
