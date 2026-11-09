@@ -196,6 +196,35 @@ void main() {
     expect(tester.getSize(find.byType(SkeletonText)).height, 13);
   });
 
+  testWidgets('each bar sits on its own line of glyphs, past empty lines', (
+    tester,
+  ) async {
+    const text = '第一行\n\n第三行';
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: Skeleton(child: SkeletonText(text, style: _style)),
+        ),
+      ),
+    );
+    // 空行沒有長條；第二條在第三行的字上，不是空行上。
+    final bars = [
+      for (final box in find.byType(SkeletonBox).evaluate())
+        tester.getRect(find.byElementPredicate((e) => identical(e, box))),
+    ]..sort((a, b) => a.top.compareTo(b.top));
+    expect(bars, hasLength(2));
+    final painter = _layout(text);
+    double glyphCenter(int start, int end) => painter
+        .getBoxesForSelection(
+          TextSelection(baseOffset: start, extentOffset: end),
+        )
+        .map((box) => box.toRect().center.dy)
+        .first;
+    expect(bars[0].center.dy, moreOrLessEquals(glyphCenter(0, 3)));
+    expect(bars[1].center.dy, moreOrLessEquals(glyphCenter(5, 8)));
+  });
+
   testWidgets('measure finds every mark in the font', (tester) async {
     final table = await tester.runAsync(() => PunctuationInk.measure(_style));
     expect(table!.keys, containsAll(PunctuationInk.marks.split('')));

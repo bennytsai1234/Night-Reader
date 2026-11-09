@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui show TextDirection;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
@@ -824,6 +825,16 @@ class _InfoRow extends StatelessWidget {
     Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
       (null, _) || (_, null) => child,
       (final color?, Text(:final data?)) => SkeletonText(data, color: color),
+      // 只有圖示的欄位（自動翻頁、只有電池、數字畫在電池裡）置中在列上，
+      // 不跟字的位置。
+      (final color?, final Icon child) => _InfoItemSkeleton(
+        color: color,
+        onGlyphs: false,
+        child: child,
+      ),
+      (final color?, final _ReaderBattery child)
+          when !child.drawsDigitsInLine =>
+        _InfoItemSkeleton(color: color, onGlyphs: false, child: child),
       (final color?, final child?) => _InfoItemSkeleton(
         color: color,
         child: child,
@@ -967,30 +978,75 @@ class _InfoRow extends StatelessWidget {
 /// 載入中的一個資訊欄位：照真正內容排版但不畫出，在它佔的寬度上畫一條
 /// 和字一樣高的圓角條（同 [SkeletonLine]），資訊淡入時位置不動。
 class _InfoItemSkeleton extends StatelessWidget {
-  const _InfoItemSkeleton({required this.color, required this.child});
+  const _InfoItemSkeleton({
+    required this.color,
+    required this.child,
+    this.onGlyphs = true,
+  });
 
   final Color color;
   final Widget child;
 
+  /// 欄位裡有和字排在一起的數字（時間、電量）：長條對準字，見
+  /// [_digitsOffset]。
+  final bool onGlyphs;
+
   @override
   Widget build(BuildContext context) {
-    final fontSize = MediaQuery.textScalerOf(context)
-        .scale(DefaultTextStyle.of(context).style.fontSize ?? 14);
+    final style = DefaultTextStyle.of(context).style;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final fontSize = textScaler.scale(style.fontSize ?? 14);
     return Stack(
       alignment: Alignment.center,
       children: [
         Visibility.maintain(visible: false, child: child),
         Positioned.fill(
           child: Center(
-            child: SkeletonBox(
-              width: double.infinity,
-              height: fontSize * Skeleton.barHeightFactor,
-              color: color,
+            child: Transform.translate(
+              offset: Offset(
+                0,
+                onGlyphs
+                    ? _digitsOffset(
+                        style,
+                        textScaler,
+                        Directionality.of(context),
+                      )
+                    : 0,
+              ),
+              child: SkeletonBox(
+                width: double.infinity,
+                height: fontSize * Skeleton.barHeightFactor,
+                color: color,
+              ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  /// 時間、電量的數字畫在行框中線上下多少：行距上下分得不平均、一行混了
+  /// 標點字型與退回的系統字型時，字和行框的中線不在同一高度，差多少看這台
+  /// 手機的字型。
+  /// 長條移到字上，和照字畫的欄位（[SkeletonText]）一樣。
+  static double _digitsOffset(
+    TextStyle style,
+    TextScaler textScaler,
+    ui.TextDirection direction,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: '0', style: style),
+      textDirection: direction,
+      textScaler: textScaler,
+    )..layout();
+    final boxes = painter.getBoxesForSelection(
+      const TextSelection(baseOffset: 0, extentOffset: 1),
+    );
+    final offset = boxes.isEmpty
+        ? 0.0
+        : boxes.first.toRect().center.dy - painter.height / 2;
+    painter.dispose();
+    return offset;
   }
 }
 
@@ -1004,6 +1060,12 @@ class _ReaderBattery extends StatefulWidget {
 
   /// [ReaderV2InfoItem.isBattery] 的其中一種。
   final ReaderV2InfoItem item;
+
+  /// 數字和字排在同一行（只有數字、電池加數字）；只有電池或數字畫在電池
+  /// 裡時，整個欄位置中在電池圖示上。
+  bool get drawsDigitsInLine =>
+      item == ReaderV2InfoItem.battery ||
+      item == ReaderV2InfoItem.batteryWithIcon;
   final Color color;
   final double fontSize;
 

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -629,6 +630,21 @@ void main() {
           element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null,
     );
 
+    /// [text] 畫出來的字的中線（全域座標）：最寬的那一段字的字框中線。
+    double glyphCenterOf(WidgetTester tester, Finder text) {
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: text, matching: find.byType(RichText)),
+      );
+      final length = paragraph.text.toPlainText().length;
+      final widest = paragraph
+          .getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: length),
+          )
+          .map((box) => box.toRect())
+          .reduce((a, b) => a.width >= b.width ? a : b);
+      return paragraph.localToGlobal(widest.center).dy;
+    }
+
     /// 骨架裡照 [text] 畫的那一條（字的欄位用 [SkeletonText]，不藏一份字）。
     Finder infoSkeleton(String text) => find.byWidgetPredicate(
       (widget) => widget is SkeletonText && widget.text == text,
@@ -667,7 +683,8 @@ void main() {
           ),
       };
 
-      // 換成資訊後，每一條就在那段字的位置、和字一樣寬。
+      // 換成資訊後，每一條就在那段字的位置、和字一樣寬，上下置中在畫出來
+      // 的字上（不是行框：資訊列混了標點字型與退回的字型，兩者中線不同）。
       states.value = ReaderV2InfoState.ready;
       await tester.pumpAndSettle();
       for (final text in texts) {
@@ -676,10 +693,48 @@ void main() {
         expect(bars[text]!.width, content.width, reason: text);
         expect(
           bars[text]!.center.dy,
-          moreOrLessEquals(content.center.dy),
+          moreOrLessEquals(glyphCenterOf(tester, infoText(text))),
           reason: text,
         );
       }
+    });
+
+    testWidgets('the battery-only bar sits on the battery, the clock bar on '
+        'its digits', (tester) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: const ReaderV2InfoSlots(
+          left: ReaderV2InfoItem.batteryIcon,
+          right: ReaderV2InfoItem.time,
+        ),
+      );
+      await tester.pump(SkeletonReveal.defaultDuration);
+      // 頁首的兩條：左邊電池、右邊時間（頁尾的書名在畫面底）。
+      final header =
+          [
+            for (final box in find.byType(SkeletonBox).evaluate())
+              tester.getRect(find.byElementPredicate((e) => identical(e, box))),
+          ].where((bar) => bar.top < 100).toList()..sort(
+            (a, b) => a.left.compareTo(b.left),
+          );
+      expect(header, hasLength(2));
+
+      states.value = ReaderV2InfoState.ready;
+      await tester.pumpAndSettle();
+      expect(
+        header.first.center.dy,
+        moreOrLessEquals(
+          tester.getRect(find.byType(ReaderV2BatteryGlyph)).center.dy,
+        ),
+      );
+      expect(
+        header.last.center.dy,
+        moreOrLessEquals(glyphCenterOf(tester, find.textContaining(':'))),
+      );
     });
 
     testWidgets('the info fades in where its skeleton was', (tester) async {
