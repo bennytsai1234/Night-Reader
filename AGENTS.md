@@ -1,6 +1,6 @@
 # 專案規則
 
-Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `arm64-v8a` APK，另附未簽章的 iOS IPA（ADR 0003）。這是使用者自己讀小說用的 App：目標是使用者自己的閱讀體驗，不是使用者數、星星或推廣。
+Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `arm64-v8a` APK，另附未簽章的 iOS IPA（ADR 0003）。
 
 | 檔案 | 放什麼 |
 |---|---|

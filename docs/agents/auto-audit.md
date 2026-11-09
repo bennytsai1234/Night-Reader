@@ -4,7 +4,7 @@
 
 - Repo：<https://github.com/bennytsai1234/Night-Reader>，公開，預設分支 `beta`。
 - 讀檔：有 GitHub 連接器就用它；沒有就讀 `https://raw.githubusercontent.com/bennytsai1234/Night-Reader/beta/<路徑>`，目錄看 `https://github.com/bennytsai1234/Night-Reader/tree/beta/<路徑>`。
-- 這是使用者自己讀小說用的 Android App（Flutter／Dart）。要找的是讀者會碰到的錯，不是讓程式更漂亮。
+- 這是讀網路小說用的 Android App（Flutter／Dart）。要找的是讀者會碰到的錯，不是讓程式更漂亮。
 
 ## 開工前先讀
 
