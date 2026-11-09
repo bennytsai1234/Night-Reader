@@ -1,110 +1,21 @@
-# 交接：漫畫（A）與本地漫畫（D）
+# 交接：中英混排的英文單字之間空格消失
 
-2026-11-09。分支 `feat/images-comics`，worktree `C:\Users\benny\.t3\worktrees\Night-Reader\feat-images-comics`（T3 開的；下面 `D:\Migrated\...` 是另一台電腦的路徑，Mihon、Legado 原始碼在這台的位置看 `docs/agents/environment.md`）。範圍談完、ADR 與規格寫好，開工中。`beta` 上 `PLAN.md` 的「漫畫」已搬走。做完刪掉本檔。
+使用者在《漫威裡的賽亞人》第三章〈雷耶斯集團〉看到英文單字之間的空格不見了，例如 `Lifeitseems`、`willfadeaway`、`Driftingfurthereveryday`、`FadeToBlack`。另一個公開網站的同一章有空格（`Life it seems`、`Fade To Black`），但那個網站擋自動抓取（403），沒對照到。
 
-## 開工前跨分支檢查的調整（2026-11-09，和下面舊段落不一致時以這段為準）
+同一張截圖裡的另一個問題（中文字距被拉開）已經修好，見 PR #319（`fix/reader-kinsoku-latin-spread`），和這件無關。
 
-- **分兩批合併**，本分支屬第二批（和 `feat/source-kinds`、`feat/audiobook-player`、`feat/source-ai-repair` 一起合）。第一批：PR #319、`fix/tts-now-playing`、`feat/text-illustrations`。要用別條還沒進 `beta` 的成果時，併那條的 `origin/<分支>`，不自己再做一份。合併衝突（ADR 0050 兩份、schema 號、同一段程式）留到合併時一次處理。
-- **同名不同類是不同的書**（使用者 2026-11-09）：書名、作者相同的小說、漫畫、有聲書是三本書。搜尋分不同的卡；換源只列同一類書源；書架同步、閱讀進度、書籤、標註、閱讀統計各記各的；可以同時在書架上。共用的部分（書的類別、認書的鍵）由 `feat/source-kinds` 做，推上後再併一次來用。
-- **備份**：下載的漫畫圖不放進備份，還原後照書架自動下載重抓。`PRIVACY.md` 與 App 的「隱私說明」把備份那句寫清楚。
-- **每一類新書都要對過**：備份還原、同步、閱讀統計、下載管理（顯示、清除、佔多少空間）、書籍詳情的按鈕（匯出 TXT、開始閱讀）、檢查新章節、換源、搜尋、隱私說明；用不到的也確定不會壞。
+## 已經查過、排除的
 
-本分支要調整的：
+讀程式確認以下幾步都**不會**刪掉兩個英文字母之間的半形空格：
 
-1. **判斷漫畫源**：已併 `origin/feat/source-kinds`（`446dd9d2`）。用 `source.sourceKind == BookSourceKind.comic`，不做「先只認類型 2」的暫時判斷。
-2. **抓圖沿用文字書插圖那套**：`feat/text-illustrations` 在書源 isolate 做好抓圖（`lib/core/engine/web_book/illustration_fetcher.dart`，標頭、Cookie、限流、`imageDecode` 照 Legado）。藍圖第 3 步不另做，在上面加記寬高、打包 CBZ。已提前併 `origin/feat/text-illustrations`（第一步要用它的 `ImageSize` 讀圖寬高）；它之後有新提交再併一次。併的時候兩條改到同一段：插圖讓正文一律留圖，書源分類加的 `keepImages` 參數就沒作用了，本分支已整串拿掉（解析器、抓正文、校驗、測試替身、ADR 0051 那句）。合併時書源分類那條碰到同一個衝突，照這樣解。
-3. **檔案型章節怎麼存**（漫畫圖、有聲音訊都不進 SQLite）交給 `feat/audiobook-player` 先定（資料夾規則、怎麼算已下載、移出書架就刪、下載管理的顯示與清除、佔多少空間），CBZ 打包疊在上面。走到下載那步時先看 `origin/feat/audiobook-player` 推上了沒；沒有就問使用者要等還是由本分支先定（先定的話在本檔寫清楚介面）。
-4. **預設封面的漫畫、有聲書變體提前做**：單獨一個提交先推上（有聲書那條要用它畫通知封面）。`DefaultBookCover` 用 source-kinds 定的書的類別判斷。書架篩選照舊由本分支做。
-5. **要補進 ADR 0052 或規格的**（要問使用者的一次問一件）：
-   - 閱讀進度存哪一欄、怎麼同步、兩台差多少不跳（有聲書用 `Book.charOffset` 存毫秒、差 10 秒內不跳）；本地漫畫的章指紋集合怎麼放進進度同步的鍵。
-   - 閱讀統計：漫畫的閱讀時間照小說記（現在只有 `reader_v2_read_time_controller.dart` 在記）。
-   - 書籍詳情：漫畫不給「匯出 TXT」；清除正文時刪 CBZ；下載管理列出漫畫的下載和大小。
-   - 檢查新章節：出新的一話時照書架自動下載抓下來。
-   - 搜尋、發現帶上漫畫源（source-kinds 擋在文字書搜尋外，放行由本分支做），結果照同名不同類分開。
-   - `PRIVACY.md` 與「隱私說明」：會向書源下載漫畫圖片、本地漫畫原檔會同步、備份不含漫畫圖。
-   - 新閱讀器的捲動、換章、骨架量幀預算（`tool/frame_budget_compare.sh`，在 `test/frame_budget/` 加測試）。
-6. 做完問使用者要不要收尾，收尾到「可以合併」就停。
+- `HtmlFormatter.format()`（`lib/core/utils/html_formatter.dart`）：`&nbsp;`、`&ensp;`、`&emsp;`、U+00A0 都轉成半形空格。
+- `normalizeTypography()`（`lib/features/reader_v2/chapter/reader_v2_content_transformer.dart`）：tab、U+00A0、U+3000 轉成半形空格，連續空格合成一個；`_removeCjkSpaces` 只刪一側是漢字或全形標點的空格。
+- 換行與繪製（`VisualLineLayoutEngine`、`ReaderParagraphLayout`）：用截圖工具畫過 `Fade To Black`，空格都在。
 
-## 進度（2026-11-09，已推上到 `94f18852`）
+## 還沒查的（照順序）
 
-談定範圍內的事都做完了，等使用者決定要不要收尾。做了什麼看 `git log origin/beta..`；跨分支要注意的：
-
-- 已併 `origin/feat/source-kinds`（到 `28aec9e9`）、`origin/feat/text-illustrations`（到 `d228568c`）、`origin/feat/audiobook-player`（到 `946897b3`）。它們之後的新提交，收尾時再併一次。
-- 併插圖分支時拿掉了書源分類的 `keepImages`（見上第 2 條）；併有聲書分支時把它的 `isAudio` 改成 `bookKind`、搜尋照它放行打得開的書源、換源照書源分類（合併提交 `23f08807`）。
-- **CI 的 Analyze 會擋在「ADR 編號重複：0050」**（有聲書與插圖各一份 0050，本分支兩份都有）。照跨分支約定留給合併時處理，本分支不改號。為了確認原生程式編得過，開過臨時分支 `internal-test/comics-apk`（只把有聲書的 ADR 暫時改成 0054）建測試 APK，建完刪掉。
-- 檔案型章節照有聲書分支的 `BookChapterFiles`：網路漫畫下載中放 `chapters/<雜湊>.part/`（`pages.json` 加 `0001.jpg`…），抓齊打包成 `chapters/<雜湊>.cbz`（`lib/core/comic/comic_chapter_download.dart`）。
-- 本地漫畫：書是本地書資料夾裡的一個資料夾，每話 `<章指紋>.cbz`（`lib/core/services/local_comic_service.dart`）；Android 選資料夾是 `MainActivity` 加 `ComicFolderCopy.kt`。同步本地書雲端每話 `comic_<章指紋>.cbz`。
-
-沒做、要使用者決定或之後看情況的：
-1. 漫畫偏好目前只有自動捲動速度（和文字閱讀器的自動翻頁共用同一個偏好）。Mihon 還有左右留白（0–25%），要不要加由使用者決定。
-2. 很長的條漫切片（例如 800×12000）可能超過 GPU 貼圖上限，等手機上看到再說。
-3. README 與網站的介紹還沒提漫畫：三條一起合併後照 `docs/agents/website.md` 一起改。
-4. 開漫畫閱讀器的那一幀仍重（電腦 debug 約 300ms，已移到換頁動畫之後），照 ADR 0036 等使用者在手機上覺得頓再修。
-
-## 談定的
-
-- 「圖片與漫畫」拆成兩條，兩個都做：
-  - **漫畫**（本分支）：另做一個專給圖片的閱讀器，和 Reader V2 分開（使用者：本質不同）。先做漫畫書源（搜尋、加書架、下載、閱讀）。
-  - **本地漫畫**（D：CBZ、ZIP、圖片資料夾）：A 做完再加，共用同一個閱讀器；藍圖現在就一起談。
-  - **文字書的插圖**（B）：網路書正文 `<img>` 與 EPUB 插圖，預設關閉。另一個對話在談，這裡不碰。
-- **漫畫照 ADR 0008 整本自動下載**（使用者 2026-11-09 選，理由：這樣讀起來才流暢）。不另寫 ADR，ADR 0008 本來就涵蓋書架上所有網路書；實作時從目前讀到的那章往後先抓。
-- **怎麼認出漫畫書源交給 `feat/source-kinds`**（書源分類與保留，worktree `D:\Migrated\Desktop\Folder\product\nr-source-kinds`）：那條決定每個書源屬於哪一類（含類型標錯、使用者怎麼改），對外回答「是不是漫畫源」；本分支只用這個答案（`source.sourceKind == BookSourceKind.comic`），不自己看名稱或類型。
-- **章與章接著捲**（使用者 2026-11-09 選 E1）：一章最後一張圖下面夾一塊分隔（「第 12 話 完／下一話：第 13 話」），繼續往下滑就進下一章，同 Mihon；頁首章名與閱讀進度隨捲動位置換章。
-- **閱讀畫面平常只有圖**（使用者 2026-11-09 選 H1；得知 Mihon 預設顯示頁碼「8 / 24」後仍維持，這點不照 Mihon）：點一下叫出閱讀選單才看到章名、第幾張／共幾張、全書進度；不做頁首頁尾。
-- **漫畫閱讀器的手感與預設以 Mihon 為參考**（使用者：「參考 Mihon 是對的」）。
-- **閱讀選單照 G1**（使用者 2026-11-09）：沿用文字閱讀器的選單外框（`docs/design/reader.md`「閱讀器選單」），鈕的配置交給 agent，目前的提議：上方章名與書源、「更多」（換源、重新取得本章、書籍詳情、設定）；下方圓鈕（日夜切換、自動捲動）、上一話／本話第幾張的進度條／下一話、目錄、漫畫偏好。拿掉替換規則、朗讀、定時朗讀、排版。**自動捲動要做**（使用者：也可以做）。
-- **圖的佔位照 P1**（使用者 2026-11-09）：下載時記下每張圖的寬高，已下載的章節版面一開始就正確、捲動不跳；還沒下載到的先畫固定比例骨架（骨架呼吸），圖到了淡入，高度不同時只調整畫面外的那幾張；載不下來的那張顯示「重試」，不擋其他張。
-- **書卡照 K1**（使用者 2026-11-09）：漫畫和小說混在同一個書架、書卡一樣、不加標記，點開自動進漫畫閱讀器；進度線照章數比例。
-- **書架加「篩選」**（使用者 2026-11-09）：放進「整理」選單，「全部／小說／漫畫／有聲書」，有聲書一開始就加（使用者：預設加、直接加入，之後統一合併），書架上只有一種書時不出現。由本分支做。書架目前沒有分組，篩選是分開它們的唯一辦法。
-- **統一封面畫夜空的變體**：使用者在候選圖上選了漫畫「網點」、有聲書「音量條山脊」，規格已寫進 `docs/design/components.md`「預設封面」，`DESIGN.md` 那條也改了指向它。由本分支一起做（已通知有聲書對話）。
-- **本地漫畫格式照 F1**（使用者 2026-11-09）：ZIP／CBZ 與圖片資料夾，結構照 Mihon（作品資料夾裡一章一個 CBZ 或圖片資料夾，也能單匯入一個 CBZ 當一本一章的書）；用專案已有的 `archive` 套件。RAR／CBR、EPUB 漫畫之後有人要再加。
-- **下載的章節照 S2**（使用者 2026-11-09）：下載中先放這章的暫存資料夾（照樣能讀），抓完在背景打包成一個 CBZ，一章一個檔，同 Mihon；閱讀器讀資料夾與 CBZ 兩種，和本地漫畫同一套。
-- **本地漫畫原檔照 O1**（使用者 2026-11-09）：匯入時複製進 App 的本地書資料夾（同 ADR 0039 的 TXT、EPUB），移出書架時刪掉，「同步本地書」沿用；複製要顯示進度。
-- **本地漫畫的身分照 I1**（使用者 2026-11-09）：每章各算一個原檔指紋，書的身分是章指紋的集合，兩台有共同的章就是同一本，補新章不變成另一本；進度記「哪一章（指紋）第幾張」；同步本地書一章一個檔上傳、每章只傳一次。要改 ADR 0039（那裡是一個原檔一個指紋）。
-- **閱讀畫面的細節直接照 Mihon 的程式碼**（使用者 2026-11-09，不畫候選）。讀的是 `D:\Migrated\Desktop\Folder\product\mihon` commit 7eec566 的條漫閱讀器（`ui/reader/viewer/webtoon/`）：
-  - 圖撐滿寬度（`SCALE_TYPE_FIT_WIDTH`），左右留白預設 0（`webtoonSidePadding` 0–25%），連續模式圖與圖之間不留縫；不裁白邊（`cropBordersWebtoon` 預設關）。
-  - 縮放（`WebtoonRecyclerView`）：雙指 0.5×–3×；點兩下：在 1× 時以點的位置放大到 2×，不是 1× 時回到 1×；動畫 200ms（`ANIMATOR_DURATION_TIME`）。放大時拖動平移。
-  - 換章分隔（`WebtoonTransitionHolder`、`presentation/reader/ChapterTransition.kt`）：上下各留 128dp、左右 32dp，置中兩段字「已閱畢：上一章名」「接下來：下一章名」（標題 titleMedium、章名 bodyMedium），沒有下一章時「以下空白」；中間缺章時加一行缺幾章的提醒；下一章還沒抓好時在這裡顯示狀態與重試。`alwaysShowChapterTransition` 預設開。
-  - 點擊區域預設 L 形（`LNavigation`）：上排與左中是上一屏、右中與下排是下一屏、正中間叫出選單。
-  - 載入失敗（`ReaderPageError`）：佔約八成螢幕高，按鈕「重試」與「用網頁開啟」。
-  - 閱讀底色預設黑（`readerTheme` 1）。夜讀照自己的風格底色，不跟。
-  - 和 Mihon 不同、已談定照夜讀的：圖未到時的佔位照 P1（Mihon 是每張先佔一個螢幕高、在 1/4 高處顯示下載百分比）；選單外框照 G1。
-- **和有聲書分支（`feat/audiobook-player`）的接點**（那邊 2026-11-09 轉告）：
-  - 有聲書不走書架自動下載，改手動下載（使用者特別說「這跟漫畫不一樣」）；ADR 0008 會由有聲書分支加一條「有聲書除外」。漫畫維持整本自動下載、不另寫 ADR 仍成立。
-  - 兩邊都要讓下載服務認得非文字內容（漫畫是圖片、有聲書是音訊，都存成資料夾裡的檔案，不是 SQLite 正文），都會碰 `DownloadService.keepShelfBookDownloaded` 與 `decideShelfDownload`。誰先進 `beta`，另一邊照它接，不各做一套「非文字章節存檔」。
-- **閱讀方式只做直向捲動**（使用者 2026-11-09，不做左右翻頁；夜讀的文字閱讀器也只有一種方式）：可以雙指放大縮小，點兩下回到原本的大小與位置，手感參考 Mihon 的條漫閱讀器。
-- **AI 復判、修復書源**（類型標錯、規則壞掉的書源）由使用者提出，記在 `feat/source-kinds` 的交接檔第 4 題，不在本分支做。
-- `beta` 的 `PLAN.md` 已拆成「漫畫」與「文字書的插圖」兩條。
-
-## 現況（查過的）
-
-- 圖片書源（Legado `bookSourceType` 2）：書源校驗（`lib/core/services/source_check_isolate.dart`）標成「不提供純文字正文」；`BookSourceLogic.nonNovelExclusionReason`（`lib/core/models/source/book_source_logic.dart`）因類型或名稱、分組、網址帶漫畫字樣而排除，不能搜尋與閱讀。
-- Legado 對照（`D:\Migrated\Desktop\Folder\product\legado`）：
-  - 漫畫閱讀器 `ui/book/manga/ReadMangaActivity.kt`，邏輯在 `model/ReadManga.kt`，和文字閱讀器分開；預設直向捲動，可切左右翻頁，有縮放、自動捲動、濾色、電子紙模式等選單項（`res/menu/book_manga.xml`）。
-  - 正文規則回傳一串 `<img>`，圖片網址可帶請求標頭；`ContentRule.imageDecode` 是圖片 bytes 的解密 JS；`imageStyle` 管圖片大小。
-  - 快取：`BookHelp` 依 `AppConfig.imageRetainNum` 往前保留幾章、依 `preDownloadNum` 往後預下載幾章，其餘清掉。
-
-- Mihon 對照（查官方文件 mihon.app/docs，2026-11-09）：
-  - 線上書源下載的章節存成每章一個 CBZ：`downloads/<書源>/<漫畫>/<章名> (<章節網址 MD5 前 6 碼>).cbz`。
-  - 本地漫畫：`local/<作品資料夾>/`，每章是一個圖片資料夾或一個壓縮檔（ZIP／CBZ、RAR／CBR、EPUB，不支援 PDF），一個資料夾或壓縮檔就是一章、不拆，壓縮檔裡的資料夾忽略、檔名當章名；封面放 `cover.jpg`，書名作者等放 `details.json`。文件說資料夾與 ZIP／CBZ 效能最好。
-- Legado 的漫畫下載存成散的圖片檔：`book_cache/<書>/images/`（`BookHelp`）。
-
-## 藍圖草稿（已給使用者看，還沒逐項談定）
-
-1. 書源：放行圖片書源；名稱帶漫畫的文字書源改認成漫畫。
-2. 正文 → 圖片清單：在書源 isolate 解析與解密。
-3. 圖片抓取與快取：網路 isolate 帶標頭抓圖、存磁碟、限流。
-4. 「圖從哪裡來」介面：給第 N 章回一串圖；網路書源與本地漫畫檔是兩種實作（D 的接點）。
-5. 漫畫閱讀器：直向捲動或左右翻頁、縮放、閱讀選單、目錄；進度記章、第幾張、捲動位置。閱讀方式與轉場畫候選圖給使用者選。
-6. 書架、下載、同步：書卡與詳情沿用；下載、同步的進度格式要認得漫畫。
-7. D：匯入 CBZ／ZIP／資料夾，用原檔指紋，走「同步本地書」（ADR 0039）。
-
-## 準備好了的（2026-11-09）
-
-- ADR 0052（`docs/adr/0052-comic-reader.md`，已加進索引）；ADR 0008 與 0039 各補一句指向它。編號跳過 0050、0051：`feat/audiobook-player` 與 `feat/text-illustrations` 都用了 0050，合併時其中一份要改成 0051。
-- 畫面規格 `docs/design/comics.md`（`DESIGN.md` 索引已加）；書架篩選寫進 `docs/design/screens.md`「書架」；封面變體在 `components.md`「預設封面」。
-- 合併時會和 `feat/audiobook-player` 在 ADR 0008 第一段同一句衝突：兩邊的補充句都留。
-
-## 下一步
-
-封面變體先做、單獨推上（上面第 4 條）。之後照順序：「圖從哪裡來」介面與 CBZ／資料夾讀取 → 漫畫閱讀器（條漫、縮放、換章分隔）→ 接上書源（用 `sourceKind`，抓圖沿用插圖分支）→ 下載打包 CBZ 與記寬高（檔案型章節照有聲書分支定的）→ 書架篩選 → 本地漫畫匯入。一步做完驗過就提交推上。新 worktree 開工前照 `AGENTS.md`「環境」複製 sqlite3.dll。
+1. 問使用者用的是哪個書源。書源原文的取法見 `docs/agents/phone.md`「書源原文」。
+2. 用 `test/live/` 連真網站抓那一章，看書源解析出的正文有沒有空格。
+   - 沒有空格：問題在網站或書源規則（例如規則裡的 `##\s` 替換），不在夜讀。
+   - 有空格：接著查使用者的替換規則（`_applyRules` 會套用），再查不到就在 `ReaderV2ContentTransformer` 每一步印出這段文字，找出哪一步刪掉的。
+3. 查完刪掉本檔。
