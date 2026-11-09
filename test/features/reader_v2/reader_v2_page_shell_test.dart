@@ -697,6 +697,44 @@ void main() {
       }
     });
 
+    testWidgets('the battery-only bar sits on the battery, the clock bar on '
+        'its digits', (tester) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: const ReaderV2InfoSlots(
+          left: ReaderV2InfoItem.batteryIcon,
+          right: ReaderV2InfoItem.time,
+        ),
+      );
+      await tester.pump(SkeletonReveal.defaultDuration);
+      // 頁首的兩條：左邊電池、右邊時間（頁尾的書名在畫面底）。
+      final header =
+          [
+            for (final box in find.byType(SkeletonBox).evaluate())
+              tester.getRect(find.byElementPredicate((e) => identical(e, box))),
+          ].where((bar) => bar.top < 100).toList()..sort(
+            (a, b) => a.left.compareTo(b.left),
+          );
+      expect(header, hasLength(2));
+
+      states.value = ReaderV2InfoState.ready;
+      await tester.pumpAndSettle();
+      expect(
+        header.first.center.dy,
+        moreOrLessEquals(
+          tester.getRect(find.byType(ReaderV2BatteryGlyph)).center.dy,
+        ),
+      );
+      expect(
+        header.last.center.dy,
+        moreOrLessEquals(glyphCenterOf(tester, find.textContaining(':'))),
+      );
+    });
+
     testWidgets('the info fades in where its skeleton was', (tester) async {
       final states = await pumpLoading(tester);
       final skeletonTitle = tester.getRect(infoSkeleton('第一章'));
