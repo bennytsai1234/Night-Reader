@@ -607,6 +607,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
         bookName: book.name,
         author: book.getRealAuthor(),
         coverSource: UnifiedCovers.coverOf(book),
+        kind: BookSourceKind.audio,
         duration: _duration,
       ),
       playing: playing ?? _playing,

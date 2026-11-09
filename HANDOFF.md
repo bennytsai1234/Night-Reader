@@ -14,6 +14,7 @@
 - 核心（`b716b63f`）：有聲書源放行、取得音訊網址（`AudioUrlResolver`、`BookSourceService.getAudioRequest`）、定時關閉共用（`lib/core/services/sleep_timer.dart`）、播放器邏輯 `lib/features/audiobook/audiobook_player.dart`。
 - 共用的定時區塊 `lib/shared/widgets/sleep_timer_section.dart`，朗讀面板改用它。
 - **書源放行改用書源分類的判斷**：併入 `origin/feat/source-kinds`。哪幾類書源打得開由 `book_source_logic.dart` 的 `isOpenableSource` 決定（小說、有聲），搜尋、閱讀、發現都照它；發現的資料庫查詢不再自己篩類型。舊的 `isAudioSource`、`isNovelTextSource`、`nonNovelExclusionReason` 已刪。校驗照書源分類的做法跑有聲源（正文要抓得到網址）。
+- **通知封面**：併入 `origin/feat/images-comics`（`b729deac`，預設封面多了 `kind`）。`DefaultBookCover.renderPng` 帶 `kind`，`NowPlaying.kind` 交給 `NowPlayingArtwork`，有聲書沒封面時通知畫「音量條山脊」。書架與書籍詳情的封面要傳 `kind` 等 source-kinds 定出書的類別再接（漫畫分支的約定）。
 - **系統播放控制改用朗讀那套**：併入 `origin/fix/tts-now-playing`，舊的 `audio_handler.dart` 刪掉。有聲書實作 `PlaybackOwner`，開始播時 `SystemPlayback.instance.show(...)` 接手、停了 `release`。`SystemPlayback` 補了倒退／快轉 10 秒（`PlaybackControl.rewind`／`fastForward`，收合時不放）、`NowPlaying.duration`、`show` 的位置、倍速與緩衝；通知頻道名稱改成「夜讀播放」。朗讀的兩支檔案以朗讀分支為準，只把定時換成共用的 `SleepTimer`。
 
 ## 接下來（照順序）
@@ -30,15 +31,14 @@
    - 先用 `test/support/screenshot.dart` 畫淺色、深色各一張給使用者看。
 4. **圓鈕**：離開播放器還在播時，書架、發現、我的的搜尋鈕上方出現；點一下暫停／繼續、上滑展開、下滑停止。動畫先做候選，用動畫儀表板給使用者選。
 5. **手動下載音訊**：照第 2 步的存法；書籍詳情與目錄選範圍下載、清單畫小勾、下載管理列出音訊與大小。
-6. **通知封面**：預設封面的有聲書變體「音量條山脊」由 `feat/images-comics` 做、單獨提交先推上；把那個提交併進來，讓 `NowPlayingArtwork` 在有聲書沒封面時畫這個變體（`NowPlaying` 要帶得出「這是有聲書」）。
-7. **之前漏考慮、要補的**：
+6. **之前漏考慮、要補的**：
    - 閱讀統計：收聽時間要不要算進去（現在只有 Reader V2 在記），問使用者並附建議。
    - 書籍詳情：有聲書不給「匯出 TXT」，「開始閱讀」改成收聽的說法。
    - 檢查新章節：新的一集進目錄，不自動下載。
    - 搜尋帶上有聲書源，結果照同名不同類分開。
    - `PRIVACY.md` 與 App 的「隱私說明」：播放與下載會向書源抓音訊、備份不含下載的音訊。
    - 播放器清單的骨架換場、圓鈕動畫：照 AGENTS「驗證」用 `tool/frame_budget_compare.sh` 量幀預算。
-8. 收尾前：回報裡提議 GLOSSARY 新詞「有聲書」「圓鈕」「系統播放資訊」，使用者同意才寫。
+7. 收尾前：回報裡提議 GLOSSARY 新詞「有聲書」「圓鈕」「系統播放資訊」，使用者同意才寫。
 
 ## 注意
 

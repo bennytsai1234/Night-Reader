@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
 import 'now_playing_artwork.dart';
@@ -16,6 +17,7 @@ class NowPlaying {
     required this.bookName,
     required this.author,
     this.coverSource,
+    this.kind = BookSourceKind.novel,
     this.duration,
   });
 
@@ -31,6 +33,9 @@ class NowPlaying {
   /// 書的封面來源（網址、`local://`、`file://`、`memory://`）；null 是畫
   /// 預設封面（夜空）。
   final String? coverSource;
+
+  /// 這本書是哪一類：沒有封面時照它畫預設封面的變體。
+  final BookSourceKind kind;
 
   /// 這一項的總長；不給（朗讀、還不知道長度）時系統不畫進度條。
   final Duration? duration;
@@ -49,11 +54,12 @@ class NowPlaying {
       other.bookName == bookName &&
       other.author == author &&
       other.coverSource == coverSource &&
+      other.kind == kind &&
       other.duration == duration;
 
   @override
   int get hashCode =>
-      Object.hash(id, title, bookName, author, coverSource, duration);
+      Object.hash(id, title, bookName, author, coverSource, kind, duration);
 }
 
 /// 系統播放資訊上除了播放／暫停以外的按鈕。只宣告當下真的做得到的：系統照
@@ -244,14 +250,20 @@ class _SessionHandler extends BaseAudioHandler {
     if (item != _item) {
       _item = item;
       // 同一本書換章時封面早就換好，和文字一起送出，不會閃一下沒有封面。
-      final art = artwork.resolved(item.coverSource, item.bookName);
+      final art = artwork.resolved(
+        item.coverSource,
+        item.bookName,
+        kind: item.kind,
+      );
       mediaItem.add(_mediaItemOf(item, art));
       if (art == null) {
         unawaited(
-          artwork.resolve(item.coverSource, item.bookName).then((uri) {
-            if (_item != item) return;
-            mediaItem.add(_mediaItemOf(item, uri));
-          }),
+          artwork
+              .resolve(item.coverSource, item.bookName, kind: item.kind)
+              .then((uri) {
+                if (_item != item) return;
+                mediaItem.add(_mediaItemOf(item, uri));
+              }),
         );
       }
     }

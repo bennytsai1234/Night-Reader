@@ -430,6 +430,8 @@ void main() {
       expect(playback.item?.title, '第 2 集');
       expect(playback.item?.subtitle, '${book.name} · ${book.author}');
       expect(playback.item?.duration, const Duration(minutes: 20));
+      // 沒有封面時通知畫有聲書的預設封面。
+      expect(playback.item?.kind, BookSourceKind.audio);
       expect(playback.playing, isTrue);
       expect(playback.controls, {
         PlaybackControl.skipToPrevious,
