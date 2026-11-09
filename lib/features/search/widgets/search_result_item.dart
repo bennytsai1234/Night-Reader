@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/book_kind_mark.dart';
 
 import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
@@ -42,6 +44,7 @@ typedef _ResultContent = ({
   String? latestChapterTitle,
   String? coverUrl,
   bool inBookshelf,
+  BookSourceKind bookKind,
 });
 
 class _SearchResultItemState extends State<SearchResultItem> {
@@ -58,6 +61,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
       latestChapterTitle: book.latestChapterTitle,
       coverUrl: widget.coverUrl ?? book.coverUrl,
       inBookshelf: widget.isInBookshelf,
+      bookKind: BookSourceKind.ofBookType(book.type as int),
     );
   }
 
@@ -137,13 +141,17 @@ class _SearchResultItemState extends State<SearchResultItem> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          BookCoverWidget(
-            coverUrl: book.coverUrl,
-            bookName: context.zh(book.name),
-            author: context.zh(book.author ?? ''),
-            width: ExploreBookItem.coverWidth,
-            height: ExploreBookItem.coverHeight,
-            borderRadius: AppRadius.cardXs,
+          // 同名的漫畫、有聲書是另一張卡，封面左下角放記號分出來（ADR 0053）。
+          BookKindMark.onCover(
+            book.bookKind,
+            BookCoverWidget(
+              coverUrl: book.coverUrl,
+              bookName: context.zh(book.name),
+              author: context.zh(book.author ?? ''),
+              width: ExploreBookItem.coverWidth,
+              height: ExploreBookItem.coverHeight,
+              borderRadius: AppRadius.cardXs,
+            ),
           ),
           const SizedBox(width: AppSpacing.lg),
           // 書名、作者 · 字數 · 分類、最新章節各一行，上下對齊封面的上下

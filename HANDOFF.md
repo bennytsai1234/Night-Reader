@@ -1,23 +1,20 @@
 # 交接：書源分類與保留
 
-2026-11-09。分支 `feat/source-kinds`。決定與理由在 ADR 0051，AI 復判的計畫在 `beta` 的 `PLAN.md`。本分支屬第二批合併（和 `feat/images-comics`、`feat/audiobook-player`、`feat/source-ai-repair` 一起），收尾到「可以合併」就停。
+2026-11-09。分支 `feat/source-kinds`。決定與理由在 ADR 0051（書源分類）與 ADR 0053（同名不同類是不同的書），AI 復判的計畫在 `beta` 的 `PLAN.md`。本分支屬第二批合併（和 `feat/images-comics`、`feat/audiobook-player`、`feat/source-ai-repair` 一起），收尾到「可以合併」就停。
 
-## 這次要做（2026-11-09 跨分支檢查後加的）
+## 剩下的
 
-1. **同名不同類是不同的書**，共用的部分由本分支做：
-   - 書的類別只在一處判斷（`Book` 的類別，回傳 `BookSourceKind`）；加入書架與換源照書源的類別寫入，從 Legado 備份還原的照位元判斷。
-   - 書源類別改了，書架上用它加入的書怎麼處理：問使用者。
-   - 認書的鍵加上類別：搜尋合卡、書架同步、閱讀進度同步、書籤、標註、閱讀統計、「在不在書架上」。小說維持 `書名\t作者`，漫畫、有聲加前綴。
-   - 換源只列同一類的書源。
-   - 搜尋卡（和書架上同名的兩本）分得出類別：畫候選讓使用者選，寫進 `docs/design/`。
-   - 寫 ADR（0051 或新的一份）。
-2. 每做完一段就推上；下面「給其他分支的介面」寫清楚。
-3. 合併注意見下。
-4. 全部做完問使用者要不要收尾。
+- 程式都做完、已推上。問使用者要不要收尾（`docs/agents/finish.md`），收尾時刪掉本檔。
 
-## 給其他分支的介面
+## 給其他分支的介面（漫畫、有聲書分支併 `origin/feat/source-kinds` 後用）
 
-（做完後填）
+- **書源是哪一類**：`source.sourceKind`（`BookSourceKind.novel／comic／audio／unsupported`），不看類型數字或名稱。
+- **書是哪一類**：`book.bookKind`（`SearchBook` 也有）。`isAudio`／`isImage`／`isText` 已拿掉；有聲書分支的 `isAudio`（`book_open_route`、下載跳過有聲書等）改成 `book.bookKind == BookSourceKind.audio`，合併時以這裡為準。寫類別用 `kind.bookType`（小說 0、有聲 1、漫畫 2）。`BookType.audio`（0x20）兩邊都加了，同一行。
+- **認書的鍵**：同步用 `ProgressSync.nameKeyOf(book)`（漫畫 `comic:書名\t作者`、有聲 `audio:…`，小說照舊）；閱讀統計、書籤、標註記 `book.recordName`（漫畫、有聲帶前綴），拆回來用 `BookSourceKind.splitRecordName`，找書用 `BookDao.getByRecordName`。漫畫閱讀器記閱讀時間時 `bookName` 傳 `book.recordName`。
+- **換源**：`source.isSearchableFor(book.bookKind)`。漫畫、有聲搜尋放行時改 `isSearchEnabledByRuntime`（文字搜尋）或另寫一支，換源不用動。
+- **書跟著書源類型**：`BookSourceDao.upsert／upsertAll` 存完會呼叫 `BookDao.followSourceKinds`，不用另外處理。
+- **畫面**：搜尋卡的類別記號是 `BookKindMark`（`lib/shared/widgets/book_kind_mark.dart`）；書架書卡不加，漫畫分支的 `DefaultBookCover(kind:)` 在書架與書籍詳情傳 `book.bookKind`。
+- 本分支的書架遇到漫畫、有聲書先跳「漫畫與有聲書還不能打開。」（`bookshelf_page.dart` 的 `_openBook`），漫畫與有聲書分支接手開書時拿掉。
 
 ## 合併時注意
 
