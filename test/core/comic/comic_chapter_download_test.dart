@@ -9,6 +9,7 @@ import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_chapter_files.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 
@@ -88,6 +89,23 @@ void main() {
       ComicPage(name: '0001.png', width: 10, height: 20),
       ComicPage(name: '0002.png', width: 10, height: 30),
     ]);
+  });
+
+  test('已下載的話只算打包好的 CBZ，下載到一半的不算', () async {
+    final other = BookChapter(
+      url: 'https://comic.test/ch/2',
+      title: '第2話',
+      bookUrl: book.bookUrl,
+    );
+    final dir = await ComicChapterDownload.partialDirFor(book, chapter);
+    dir.createSync(recursive: true);
+    File(p.join(dir.path, '0001.png')).writeAsBytesSync(stripedPng(2, 2, 0, 0));
+    expect(await downloadedComicChapterUrls(book, [chapter, other]), isEmpty);
+
+    await ComicChapterDownload.pack(book, chapter, dir, 1);
+    expect(await downloadedComicChapterUrls(book, [chapter, other]), {
+      chapter.url,
+    });
   });
 
   test('少了一張時不打包', () async {
