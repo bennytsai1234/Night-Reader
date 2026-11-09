@@ -103,16 +103,17 @@ class BookSourceService {
     cancelToken: cancelToken,
   );
 
-  /// [content]（一章的正文）裡還沒存的插圖抓進 [dir]，回傳抓不到的張數
-  /// （[IllustrationFetcher]，ADR 0050）。
+  /// [content]（一章的正文）裡還沒存的插圖抓進 [dir]，回傳還沒抓到、也還
+  /// 不能確定抓不到的張數（[IllustrationFetcher]，ADR 0050）。
   Future<int> fetchIllustrations(
     BookSource source,
     Book book,
     String content, {
     required String dir,
+    bool retryMissing = true,
     CancelToken? cancelToken,
   }) => _runOnSource(
-    _illustrationTask(source, book, content, dir),
+    _illustrationTask(source, book, content, dir, retryMissing),
     source: source,
     book: book,
     cancelToken: cancelToken,
@@ -295,12 +296,14 @@ _Work<int> _illustrationTask(
   Book book,
   String content,
   String dir,
+  bool retryMissing,
 ) =>
     (cancelToken) => IllustrationFetcher.fetch(
       source,
       book,
       content,
       dir,
+      retryMissing: retryMissing,
       cancelToken: cancelToken,
     );
 

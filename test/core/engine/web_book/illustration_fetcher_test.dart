@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
+import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -28,6 +29,9 @@ class _DirPathProvider extends PathProviderPlatform {
   Future<String?> getApplicationSupportPath() async => path;
 }
 
+/// 不用測試環境的假連線。
+class _RealHttp extends HttpOverrides {}
+
 /// 只有開頭的 PNG（寬 300、高 200），夠讀出寬高。
 final _png = Uint8List(24)
   ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
@@ -41,6 +45,8 @@ void main() {
   setupTestDI();
 
   late Directory dir;
+
+  setUpAll(() => NetworkService().init(ephemeral: true));
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('illustration_fetcher_test');
@@ -77,17 +83,17 @@ void main() {
     expect(result.content, contains('後文'));
   });
 
-  test('抓到的圖存進插圖資料夾，不是圖的不存、算抓不到', () async {
+  test('抓到的圖存進插圖資料夾，不是圖的不存、記成確定抓不到', () async {
     final images = p.join(dir.path, 'images');
     final good = _dataUrl(_png);
     final bad = _dataUrl(utf8.encode('<html>404</html>'));
-    final failed = await IllustrationFetcher.fetch(
+    final pending = await IllustrationFetcher.fetch(
       source,
       book,
       '甲\n<img src="$good">\n乙<img src="$bad">\n<img src="$good">',
       images,
     );
-    expect(failed, 1);
+    expect(pending, 0);
     expect(
       await File(BookIllustrationStorage.pathFor(images, good)).readAsBytes(),
       _png,
@@ -96,7 +102,67 @@ void main() {
       File(BookIllustrationStorage.pathFor(images, bad)).existsSync(),
       isFalse,
     );
-    expect(Directory(images).listSync(), hasLength(1));
+    expect(
+      File(BookIllustrationStorage.missingPathFor(images, bad)).existsSync(),
+      isTrue,
+    );
+    expect(
+      await BookIllustrationStorage.untriedSources(
+        images,
+        '<img src="$good"><img src="$bad">',
+      ),
+      isEmpty,
+    );
+  });
+
+  test('連不上的圖不記成確定抓不到，下次再試', () async {
+    final images = p.join(dir.path, 'images');
+    // 這個埠沒有人聽，連線立刻被拒。測試環境預設把每個請求都回 400，
+    // 這裡要真的連線。
+    const unreachable = 'http://127.0.0.1:9/a.png';
+    final pending = await HttpOverrides.runWithHttpOverrides(
+      () => IllustrationFetcher.fetch(
+        source,
+        book,
+        '<img src="$unreachable">',
+        images,
+      ),
+      _RealHttp(),
+    );
+    expect(pending, 1);
+    expect(
+      await BookIllustrationStorage.untriedSources(
+        images,
+        '<img src="$unreachable">',
+      ),
+      [unreachable],
+    );
+  });
+
+  test('確定抓不到的圖：已存的正文不再抓，重新取得這一章時再試', () async {
+    final images = p.join(dir.path, 'images');
+    final src = _dataUrl(_png);
+    final missing = File(BookIllustrationStorage.missingPathFor(images, src));
+    await missing.create(recursive: true);
+
+    await IllustrationFetcher.fetch(
+      source,
+      book,
+      '<img src="$src">',
+      images,
+      retryMissing: false,
+    );
+    expect(
+      File(BookIllustrationStorage.pathFor(images, src)).existsSync(),
+      isFalse,
+    );
+
+    await IllustrationFetcher.fetch(source, book, '<img src="$src">', images);
+    expect(
+      File(BookIllustrationStorage.pathFor(images, src)).existsSync(),
+      isTrue,
+    );
+    expect(missing.existsSync(), isFalse);
   });
 
   test('書源的 imageDecode 先解抓到的位元組，src 是圖的網址', () async {
