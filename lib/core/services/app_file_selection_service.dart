@@ -18,8 +18,9 @@ class AppFileSelectionService {
 
   final AppPickFiles? _picker;
 
+  /// 本地書：TXT、EPUB，以及單一個 CBZ／ZIP 的本地漫畫（ADR 0052）。
   static const _localBook = _FileSelectionSpec(
-    allowedExtensions: ['txt', 'epub'],
+    allowedExtensions: ['txt', 'epub', 'cbz', 'zip'],
   );
 
   static const _bookshelfImport = _FileSelectionSpec(

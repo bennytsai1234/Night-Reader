@@ -7,6 +7,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
@@ -187,6 +188,8 @@ class LocalBookSync {
     for (final book in await _bookDao.getInBookshelf()) {
       final print = book.fileFingerprint;
       if (!book.isLocal || print == null) continue;
+      // 本地漫畫是一個資料夾、一話一個 CBZ（ADR 0052），不照單一原檔同步。
+      if (book.bookKind == BookSourceKind.comic) continue;
       if (shelf[print] case final same?) {
         shelf[print] = same.withBook(book.bookUrl);
         continue;

@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/services/comic_folder_picker.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -71,6 +75,7 @@ enum _ShelfMenuAction {
   export,
   search,
   addLocal,
+  addLocalComic,
   importUrl,
   importFile,
 }
@@ -369,6 +374,11 @@ class _BookshelfPageState extends State<BookshelfPage>
       label: '加入本地書籍',
       icon: Icons.file_open_outlined,
     ),
+    GlassMenuItem(
+      value: _ShelfMenuAction.addLocalComic,
+      label: '加入本地漫畫',
+      icon: Icons.photo_library_outlined,
+    ),
     GlassMenuDivider(),
     GlassMenuItem(
       value: _ShelfMenuAction.importUrl,
@@ -403,6 +413,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         _openSearch();
       case _ShelfMenuAction.addLocal:
         await _pickLocalBook(provider);
+      case _ShelfMenuAction.addLocalComic:
+        await _pickLocalComic(provider);
       case _ShelfMenuAction.importFile:
         await _handleBookshelfImport(context);
       case _ShelfMenuAction.importUrl:
@@ -1127,6 +1139,71 @@ class _BookshelfPageState extends State<BookshelfPage>
     final path = await AppFileSelectionService.instance.pickLocalBookPath();
     if (path != null && mounted) {
       await _importLocalBook(context, provider, path);
+    }
+  }
+
+  /// 加入本地漫畫（ADR 0052）：選一個作品資料夾，複製進 App、每話整理成
+  /// 一個 CBZ。進度框點外面、按返回都關不掉，寫著複製或整理到第幾個。
+  Future<void> _pickLocalComic(BookshelfProvider provider) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final temp = await AppStoragePaths.temporaryDir();
+    final staging = p.join(
+      temp.path,
+      'comic_import',
+      '${DateTime.now().millisecondsSinceEpoch}',
+    );
+    if (!mounted) return;
+    final progress = ValueNotifier<({String label, double? value})>((
+      label: '選好資料夾後開始複製…',
+      value: null,
+    ));
+    final dialog = showStatefulAppAlert<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context, _, _) => PopScope(
+        canPop: false,
+        child: AppAlert<void>(
+          title: '加入本地漫畫',
+          content: ValueListenableBuilder(
+            valueListenable: progress,
+            builder: (context, value, _) =>
+                SyncProgressView(value: value.value, label: value.label),
+          ),
+          actions: const [],
+        ),
+      ),
+    );
+    String message;
+    try {
+      final folder = await ComicFolderPicker.pick(
+        dest: staging,
+        onProgress: (done, total) =>
+            progress.value = (label: '複製中 $done／$total', value: done / total),
+      );
+      if (folder == null) {
+        message = '';
+      } else {
+        final book = await provider.importLocalComic(
+          folder,
+          onProgress: (done, total) => progress.value = (
+            label: '整理第 $done／$total 話',
+            value: done / total,
+          ),
+        );
+        message = book == null ? '這個資料夾裡沒有漫畫' : '已加入《${book.name}》';
+      }
+    } catch (error) {
+      message = failureMessage('加入本地漫畫', error);
+    } finally {
+      navigator.pop();
+      await dialog;
+      progress.dispose();
+      final dir = Directory(staging);
+      if (await dir.exists()) await dir.delete(recursive: true);
+    }
+    if (message.isNotEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
     }
   }
 

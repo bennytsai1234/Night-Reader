@@ -17,6 +17,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/local_comic_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
@@ -173,13 +174,22 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
       final start = widget.startChapter;
       final chapterIndex = (start ?? resume?.chapterIndex ?? _book.chapterIndex)
           .clamp(0, chapters.length - 1);
-      final pageSource =
-          widget.pageSource ??
-          NetworkComicPageSource(
-            book: _book,
-            source: source!,
-            chapters: chapters,
-          );
+      final ComicPageSource pageSource;
+      if (widget.pageSource case final given?) {
+        pageSource = given;
+      } else if (_book.isLocal) {
+        // 本地漫畫：每話是書的資料夾裡的一個 CBZ（ADR 0052）。
+        pageSource = ComicChapterFilesSource(
+          (index) async =>
+              LocalComicService.chapterPathOf(_book, chapters[index]),
+        );
+      } else {
+        pageSource = NetworkComicPageSource(
+          book: _book,
+          source: source!,
+          chapters: chapters,
+        );
+      }
       final model = ComicStripModel(
         source: pageSource,
         chapterCount: chapters.length,
