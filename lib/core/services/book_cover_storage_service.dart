@@ -139,44 +139,6 @@ class BookCoverStorageService {
     book.customCoverLocalPath = null;
   }
 
-  /// 「清除封面快取」：刪掉抓來的封面（書源的、自訂網址的）。書檔自帶的
-  /// 封面、插圖與 EPUB 轉好的文字也在這本書的資料夾，但不是快取，不動。
-  Future<void> deleteCachedCovers(Book book) async {
-    final deleted = <String>{};
-    for (final file in await _cachedCoverFiles(book)) {
-      await file.delete();
-      deleted.add(p.normalize(file.path));
-    }
-    final cover = book.coverLocalPath;
-    if (cover != null && deleted.contains(p.normalize(cover))) {
-      book.coverLocalPath = null;
-    }
-    book.customCoverLocalPath = null;
-  }
-
-  /// [deleteCachedCovers] 會刪掉的檔案共多少位元組。
-  Future<int> getCachedCoverSize(Book book) async {
-    var total = 0;
-    for (final file in await _cachedCoverFiles(book)) {
-      total += await file.length();
-    }
-    return total;
-  }
-
-  Future<List<File>> _cachedCoverFiles(Book book) async {
-    final dir = await AppStoragePaths.bookAssetDir(bookStorageKey(book));
-    if (!await dir.exists()) return const [];
-    return [
-      await for (final entity in dir.list())
-        if (entity is File)
-          if (p.basename(entity.path) case final name
-              when name.startsWith('custom-cover') ||
-                  (name.startsWith('cover') &&
-                      !name.startsWith('cover-embedded')))
-            entity,
-    ];
-  }
-
   static String bookStorageKey(Book book) {
     final material = '${book.origin}\n${book.bookUrl}';
     return sha1.convert(utf8.encode(material)).toString();

@@ -96,33 +96,24 @@ class BookDetailCacheStatus {
     required this.storedChapterCount,
     required this.totalChapterCount,
     required this.contentBytes,
-    required this.coverBytes,
-    required this.latestContentUpdatedAt,
   });
 
   final int storedChapterCount;
   final int totalChapterCount;
-  final int contentBytes;
-  final int coverBytes;
-  final int latestContentUpdatedAt;
 
-  int get totalBytes => contentBytes + coverBytes;
+  /// 已下載的正文加上網路書的插圖，共多少位元組。
+  final int contentBytes;
+
   int get missingChapterCount =>
       math.max(0, totalChapterCount - storedChapterCount);
   bool get hasContentCache => storedChapterCount > 0 || contentBytes > 0;
-  bool get hasCoverCache => coverBytes > 0;
-  bool get hasAnyCache => hasContentCache || hasCoverCache;
 
   static const empty = BookDetailCacheStatus(
     storedChapterCount: 0,
     totalChapterCount: 0,
     contentBytes: 0,
-    coverBytes: 0,
-    latestContentUpdatedAt: 0,
   );
 }
-
-enum BookDetailCacheClearTarget { content, cover, all }
 
 enum BookDetailWorldState { initializing, ready, unavailable }
 
@@ -923,37 +914,21 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
+  /// 清掉已下載的正文與插圖，再排書架自動下載重抓（ADR 0008、0050）。
   Future<BookDetailOperationResult> clearStoredContent() async {
-    await _clearStoredContent();
-    await _refreshCacheStatus();
-    return BookDetailOperationResult.success('已移除本書正文儲存');
-  }
-
-  Future<BookDetailOperationResult> clearBookCache(
-    BookDetailCacheClearTarget target,
-  ) async {
     try {
-      if (target == BookDetailCacheClearTarget.content ||
-          target == BookDetailCacheClearTarget.all) {
-        await _clearStoredContent();
-      }
-      if (target == BookDetailCacheClearTarget.cover ||
-          target == BookDetailCacheClearTarget.all) {
-        await _coverStorage.deleteCachedCovers(_book);
-        await _bookDao.upsert(_book);
-      }
-      await _refreshCacheStatus();
-      notifyListeners();
-      final message = switch (target) {
-        BookDetailCacheClearTarget.content => '已清除本書正文快取',
-        BookDetailCacheClearTarget.cover => '已清除本書封面快取',
-        BookDetailCacheClearTarget.all => '已清除本書全部快取',
-      };
-      return BookDetailOperationResult.success(message);
+      await _clearStoredContent();
     } catch (e) {
-      AppLog.e('清除本書快取失敗: $e', error: e);
-      return BookDetailOperationResult.failure('清除快取失敗：${userErrorReason(e)}');
+      AppLog.e('清除本書正文失敗: $e', error: e);
+      return BookDetailOperationResult.failure('清除失敗：${userErrorReason(e)}');
     }
+    await _refreshCacheStatus();
+    if (_book.isInBookshelf) {
+      unawaited(
+        _resolvedDownloadService.keepShelfBookDownloaded(_book.bookUrl),
+      );
+    }
+    return BookDetailOperationResult.success('已清除，書架會自動重新下載');
   }
 
   Future<void> refreshCacheStatus() => _refreshCacheStatus();
@@ -1072,7 +1047,6 @@ class BookDetailProvider extends ChangeNotifier {
       };
       final storedUrls = <String>{};
       var contentBytes = 0;
-      var latestUpdatedAt = 0;
       for (final entry in entries) {
         if (entry.origin != _book.origin ||
             !entry.isReady ||
@@ -1086,19 +1060,15 @@ class BookDetailProvider extends ChangeNotifier {
         if (content != null && content.isNotEmpty) {
           contentBytes += utf8.encode(content).length;
         }
-        latestUpdatedAt = math.max(latestUpdatedAt, entry.updatedAt);
       }
 
       if (!_book.isLocal) {
         contentBytes += await BookIllustrationStorage.sizeOf(_book);
       }
-      final coverBytes = await _coverStorage.getCachedCoverSize(_book);
       _cacheStatus = BookDetailCacheStatus(
         storedChapterCount: storedUrls.length,
         totalChapterCount: readableUrls.length,
         contentBytes: contentBytes,
-        coverBytes: coverBytes,
-        latestContentUpdatedAt: latestUpdatedAt,
       );
     } finally {
       _isCacheStatusLoading = false;

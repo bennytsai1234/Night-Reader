@@ -73,6 +73,6 @@
 - 書籍詳情的「清除封面快取」（`book_detail_provider.dart` 的 `clearBookCache`，`_coverStorage.deleteBookAssets`）刪掉整個書本資料夾；圖放進去之後要改成只刪封面。
 - Legado 對照（`D:\Migrated\Desktop\Folder\product\legado`）：`ui/book/read/page/provider/TextChapterLayout.kt` 的 `setTypeImage`；`help/book/BookHelp.kt` 的 `saveImages`（下載時存圖）；`model/ReadBook.kt` 的 `upWebBook`（書源的 `imageStyle` 套到書）。
 
-## 待使用者決定（2026-11-09）
+## 已決定（2026-11-09）
 
-書籍詳情的「清除正文快取」「清除封面快取」（`BookDetailProvider.clearBookCache`、`clearStoredContent`）從 v0.2.91 起就沒有畫面入口，是死程式；ADR 0050「整本補圖就在書籍詳情清除正文」因此做不到。要使用者選：加回一個入口，或改 ADR、刪掉死程式。
+書籍詳情的清除正文快取原本沒有入口：使用者選加回入口，放右上「⋯」選單最後一項「清除已下載的正文」（候選 A；另一個候選是放進「預下載章節」動作表）。封面快取的清除程式沒有入口，刪掉。

@@ -8,10 +8,8 @@ import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/network_service.dart';
-import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -193,37 +191,4 @@ void main() {
       _png,
     );
   }, skip: quickJsUnavailableReason());
-
-  test('清除封面快取只刪抓來的封面，插圖、轉好的文字與書檔自帶的封面不動', () async {
-    final folder = await AppStoragePaths.bookAssetDir(
-      BookCoverStorageService.bookStorageKey(book),
-      ensureExists: true,
-    );
-    File p0(String name) => File(p.join(folder.path, name));
-    await p0('cover-abc.jpg').writeAsBytes([1, 2]);
-    await p0('custom-cover-def.png').writeAsBytes([3]);
-    await p0('cover-embedded.png').writeAsBytes([4]);
-    await p0('epub-text.txt').writeAsString('字');
-    final illustration = File(
-      BookIllustrationStorage.pathFor(
-        await BookIllustrationStorage.dirFor(book),
-        'x',
-      ),
-    );
-    await illustration.create(recursive: true);
-
-    book
-      ..coverLocalPath = p0('cover-abc.jpg').path
-      ..customCoverLocalPath = p0('custom-cover-def.png').path;
-    expect(await BookCoverStorageService().getCachedCoverSize(book), 3);
-    await BookCoverStorageService().deleteCachedCovers(book);
-
-    expect(p0('cover-abc.jpg').existsSync(), isFalse);
-    expect(p0('custom-cover-def.png').existsSync(), isFalse);
-    expect(p0('cover-embedded.png').existsSync(), isTrue);
-    expect(p0('epub-text.txt').existsSync(), isTrue);
-    expect(illustration.existsSync(), isTrue);
-    expect(book.coverLocalPath, isNull);
-    expect(book.customCoverLocalPath, isNull);
-  });
 }
