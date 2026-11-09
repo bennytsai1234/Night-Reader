@@ -25,6 +25,29 @@
    - 新閱讀器的捲動、換章、骨架量幀預算（`tool/frame_budget_compare.sh`，在 `test/frame_budget/` 加測試）。
 6. 做完問使用者要不要收尾，收尾到「可以合併」就停。
 
+## 進度（2026-11-09，已推上到 `1186c61f`）
+
+做好的：
+- 預設封面的漫畫、有聲變體（`b729deac`），書架、詳情、搜尋、發現都傳 `book.bookKind`（`e19af315`）。
+- 第 1 條：已併 `origin/feat/source-kinds`（含書的類別 `f5ea1994`、`28aec9e9`）。
+- 第 2 條：已併 `origin/feat/text-illustrations`（到 `d228568c`）。
+- 第 3 條：有聲書分支已定存法並推上（`ab612c9b`，`BookChapterFiles`），已併 `origin/feat/audiobook-player`（到 `946897b3`）。漫畫疊在上面：下載中放 `chapters/<雜湊>.part/`（`pages.json` 加 `0001.jpg`…），抓齊打包成 `chapters/<雜湊>.cbz`（不壓縮、`ComicInfo.xml` 記寬高），見 `lib/core/comic/comic_chapter_download.dart`。併有聲書時它還在用 `isAudio`，照書源分類交接改成 `bookKind`（見合併提交 `23f08807`）。
+- 進度記法（使用者選）：`charOffset` 是第幾張、同一話差 1 張內不跳，寫進 ADR 0052。
+- 閱讀時間：開書路由外層的 `ReaderV2ReadTimeScope` 漫畫也套上，記在 `recordName`。
+- 搜尋、發現：漫畫源算 `isOpenableSource`，放行。
+- 條漫（`lib/features/comic_reader/`）、閱讀頁與選單、網路書的「圖從哪裡來」、下載服務接上 CBZ、開書路由分流。
+
+還沒做（照順序）：
+1. 閱讀器「更多」的換源（`ChangeSourceSheet` 能不能直接用要看）、另一台進度同步過來時的跳轉（照 `reader_v2_progress_sync.dart`，同一話差 1 張內不跳）。
+2. 書籍詳情：漫畫不給匯出 TXT（`export_book_service.dart` 也要擋）、清除正文刪 CBZ（`BookChapterFiles.deleteFor`）、下載管理列出漫畫下載與大小、目錄標已下載。
+3. 檢查新章節：確認 `keepShelfBookDownloaded` 對漫畫會排下載（應該已經會，要寫測試）。
+4. 書架篩選（全部／小說／漫畫／有聲書，只有一種書時不出現）。
+5. 本地漫畫匯入（CBZ／ZIP／資料夾，`ComicChapterFilesSource` 已備好）、每章指紋、同步本地書、改 ADR 0039。本地漫畫的進度同步鍵還沒定。
+6. `PRIVACY.md` 與 App 的「隱私說明」。
+7. 幀預算：在 `test/frame_budget/` 加條漫捲動、換章、骨架的測試，用 `tool/frame_budget_compare.sh` 量。
+8. 漫畫偏好目前只有自動捲動速度（和文字閱讀器的自動翻頁共用同一個偏好）；Mihon 還有左右留白，要不要加問使用者。
+9. 規格還沒寫到的：很長的條漫切片（例如 800×12000）超過 GPU 貼圖上限時要不要切塊，等手機上看到再說。
+
 ## 談定的
 
 - 「圖片與漫畫」拆成兩條，兩個都做：
