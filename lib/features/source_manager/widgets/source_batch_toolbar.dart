@@ -27,6 +27,7 @@ class SelectActionBar extends StatelessWidget {
   final VoidCallback onExport;
   final VoidCallback onShare;
   final VoidCallback onCheckSource;
+  final VoidCallback onAiRepair;
   final VoidCallback onClearCheckMarks;
   final VoidCallback onDelete;
   final bool externallyBusy;
@@ -46,6 +47,7 @@ class SelectActionBar extends StatelessWidget {
     required this.onExport,
     required this.onShare,
     required this.onCheckSource,
+    required this.onAiRepair,
     required this.onClearCheckMarks,
     required this.onDelete,
     this.externallyBusy = false,
@@ -180,6 +182,11 @@ class SelectActionBar extends StatelessWidget {
       label: '校驗選中',
     ),
     GlassMenuItem(
+      value: 'ai_repair',
+      icon: Icons.auto_fix_high_outlined,
+      label: 'AI 修復選中',
+    ),
+    GlassMenuItem(
       value: 'clear_check_marks',
       icon: Icons.layers_clear_outlined,
       label: '清除校驗標記',
@@ -212,6 +219,8 @@ class SelectActionBar extends StatelessWidget {
         onShare();
       case 'check':
         onCheckSource();
+      case 'ai_repair':
+        onAiRepair();
       case 'clear_check_marks':
         onClearCheckMarks();
     }
