@@ -88,6 +88,7 @@ class _FakeBookSourceService extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) async {
     contentRequests.add(chapter.title);
     final content = this.content;
@@ -553,13 +554,79 @@ void main() {
     );
   });
 
-  test('a non-novel source is filtered before any request', () async {
+  test('an unsupported source is filtered before any request', () async {
     final service = _FakeBookSourceService(
-      search: () => fail('non-novel sources should not be searched'),
+      search: () => fail('unsupported sources should not be searched'),
     );
-    final (_, checked) = await _check(service, source: _source(name: '某某漫畫'));
+    final (_, checked) = await _check(service, source: _source(name: '某某影視'));
 
     expect(checked.groupTags, contains(nonNovelSourceGroupTag));
     expect(checked.isCleanupCandidate, isTrue);
+  });
+
+  group('the chapter content decides the kind', () {
+    const pictures =
+        '　　<img src="https://img.example/1.jpg">\n'
+        '　　<img src="https://img.example/2.jpg">\n'
+        '　　<img src="https://img.example/3.jpg">';
+    final prose = '　　${'夜色很深，' * 60}';
+
+    test('a text source whose chapters are pictures becomes a comic '
+        'source', () async {
+      final (result, checked) = await _check(
+        _FakeBookSourceService(content: (_) async => pictures),
+      );
+
+      expect(result.isHealthy, isTrue);
+      expect(checked.sourceKind, BookSourceKind.comic);
+      expect(checked.isCleanupCandidate, isFalse);
+      expect(result.logs.join('\n'), contains('改寫書源類型'));
+    });
+
+    test(
+      'a comic source is checked like any other and stays a comic',
+      () async {
+        final service = _FakeBookSourceService(content: (_) async => pictures);
+        final (result, checked) = await _check(
+          service,
+          source: _source(name: '某某漫畫')..bookSourceType = 2,
+        );
+
+        expect(result.isHealthy, isTrue);
+        expect(service.contentRequests, isNotEmpty);
+        expect(checked.bookSourceType, 2);
+      },
+    );
+
+    test('a comic source whose chapters are prose becomes a novel', () async {
+      final (_, checked) = await _check(
+        _FakeBookSourceService(content: (_) async => prose),
+        source: _source(name: '漫畫小說網')..bookSourceType = 2,
+      );
+
+      expect(checked.sourceKind, BookSourceKind.novel);
+    });
+
+    test('an unclear chapter keeps the type', () async {
+      final (result, checked) = await _check(
+        _FakeBookSourceService(
+          content: (_) async => '<img src="https://img.example/1.jpg">',
+        ),
+        source: _source()..bookSourceType = 2,
+      );
+
+      expect(result.isHealthy, isTrue);
+      expect(checked.bookSourceType, 2);
+    });
+
+    test('a comic source without pictures has broken content', () async {
+      final (_, checked) = await _check(
+        _FakeBookSourceService(content: (_) async => ''),
+        source: _source()..bookSourceType = 2,
+      );
+
+      expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+      expect(checked.bookSourceType, 2);
+    });
   });
 }

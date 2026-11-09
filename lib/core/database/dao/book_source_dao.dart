@@ -116,7 +116,7 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> _deleteRows(List<String> urls) async {
     await (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
-    forgetNonNovelMarkers(urls);
+    forgetSourceMarkers(urls);
   }
 
   Future<List<BookSource>> getAllFull() => getAll();

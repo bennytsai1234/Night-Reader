@@ -341,7 +341,7 @@ class SourceManagerDialogs {
     final confirmed = await showAppConfirm(
       context: context,
       title: '清理建議刪除來源',
-      message: '會刪除目前標記為非小說或下載站的來源。這些來源不會再參與搜尋或閱讀。',
+      message: '會刪除夜讀不支援的書源（影視、文件）與下載站。漫畫、有聲源不會刪。',
       confirmLabel: '確定刪除',
       destructive: true,
     );
@@ -391,23 +391,22 @@ class SourceManagerDialogs {
     }
   }
 
+  /// 「刪除非小說源」：漫畫、有聲、不支援三類各一個勾選，勾了哪幾類刪哪幾類
+  /// （ADR 0051）。
   static Future<void> confirmDeleteNonNovel(
     BuildContext context,
     SourceManagerProvider provider,
   ) async {
-    final confirmed = await showAppConfirm(
-      context: context,
-      title: '刪除非小說源',
-      message: '會直接刪除影音、漫畫、RSS 等非小說源，且無法復原。要繼續嗎？',
-      confirmLabel: '確定刪除',
-      destructive: true,
+    final chosen = await pickNonNovelKindsToDelete(
+      context,
+      provider.nonNovelSourceCounts,
     );
-    if (!confirmed) return;
+    if (chosen == null || chosen.isEmpty) return;
     try {
-      final affected = await provider.deleteNonNovelSources();
+      final affected = await provider.deleteSourcesOfKinds(chosen);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('已刪除 $affected 個非小說源')));
+            .showSnackBar(SnackBar(content: Text('已刪除 $affected 個書源')));
       }
     } catch (error) {
       if (context.mounted) {
@@ -466,4 +465,66 @@ class SourceManagerDialogs {
       ),
     );
   }
+}
+
+/// 問要刪哪幾類非小說書源，[counts] 是各類有幾個；回傳勾選的類別，取消時
+/// 是 null。漫畫、有聲源是留給漫畫閱讀器與有聲書播放器的，預設不勾。
+Future<Set<BookSourceKind>?> pickNonNovelKindsToDelete(
+  BuildContext context,
+  Map<BookSourceKind, int> counts,
+) async {
+  final kinds = [
+    for (final kind in const [
+      BookSourceKind.comic,
+      BookSourceKind.audio,
+      BookSourceKind.unsupported,
+    ])
+      if ((counts[kind] ?? 0) > 0) kind,
+  ];
+  if (kinds.isEmpty) {
+    await showAppAlert<void>(
+      context: context,
+      title: '刪除非小說源',
+      message: '沒有漫畫、有聲或不支援的書源。',
+      actions: const [AppAlertAction(label: '好', value: null)],
+    );
+    return null;
+  }
+  final selected = <BookSourceKind>{
+    if (kinds.contains(BookSourceKind.unsupported)) BookSourceKind.unsupported,
+  };
+  return showStatefulAppAlert<Set<BookSourceKind>>(
+    context: context,
+    builder: (dialogContext, setState, _) => AppAlert<bool>(
+      title: '刪除非小說源',
+      message: '勾選的書源會直接刪除，無法復原。',
+      onAction: (confirmed) => Navigator.pop(
+        dialogContext,
+        confirmed ? Set<BookSourceKind>.of(selected) : null,
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final kind in kinds)
+            AlertCheckRow(
+              title: '${kind.sourceLabel}：${counts[kind]} 個',
+              value: selected.contains(kind),
+              onChanged: (value) => setState(
+                () => value ? selected.add(kind) : selected.remove(kind),
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        const AppAlertAction(label: '取消', value: false),
+        AppAlertAction(
+          label: '刪除',
+          value: true,
+          destructive: true,
+          enabled: selected.isNotEmpty,
+        ),
+      ],
+    ),
+  );
 }

@@ -32,6 +32,7 @@ class _Site extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) async {
     final gate = refetchGate;
     if (gate != null) {
