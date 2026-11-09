@@ -33,6 +33,11 @@
   - 正文規則回傳一串 `<img>`，圖片網址可帶請求標頭；`ContentRule.imageDecode` 是圖片 bytes 的解密 JS；`imageStyle` 管圖片大小。
   - 快取：`BookHelp` 依 `AppConfig.imageRetainNum` 往前保留幾章、依 `preDownloadNum` 往後預下載幾章，其餘清掉。
 
+- Mihon 對照（查官方文件 mihon.app/docs，2026-11-09）：
+  - 線上書源下載的章節存成每章一個 CBZ：`downloads/<書源>/<漫畫>/<章名> (<章節網址 MD5 前 6 碼>).cbz`。
+  - 本地漫畫：`local/<作品資料夾>/`，每章是一個圖片資料夾或一個壓縮檔（ZIP／CBZ、RAR／CBR、EPUB，不支援 PDF），一個資料夾或壓縮檔就是一章、不拆，壓縮檔裡的資料夾忽略、檔名當章名；封面放 `cover.jpg`，書名作者等放 `details.json`。文件說資料夾與 ZIP／CBZ 效能最好。
+- Legado 的漫畫下載存成散的圖片檔：`book_cache/<書>/images/`（`BookHelp`）。
+
 ## 藍圖草稿（已給使用者看，還沒逐項談定）
 
 1. 書源：放行圖片書源；名稱帶漫畫的文字書源改認成漫畫。
