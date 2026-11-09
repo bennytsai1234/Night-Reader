@@ -42,6 +42,27 @@ enum _BookshelfBatchAction { checkUpdate, delete }
 
 /// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
 /// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
+/// 「整理」的篩選選項：選了哪一類（null 是全部）。
+class _KindFilterChoice {
+  const _KindFilterChoice(this.kind);
+  final BookSourceKind? kind;
+
+  String get label => switch (kind) {
+    null => '全部',
+    BookSourceKind.novel => '小說',
+    BookSourceKind.comic => '漫畫',
+    BookSourceKind.audio => '有聲書',
+    BookSourceKind.unsupported => '其他',
+  };
+
+  static const List<_KindFilterChoice> all = [
+    _KindFilterChoice(null),
+    _KindFilterChoice(BookSourceKind.novel),
+    _KindFilterChoice(BookSourceKind.comic),
+    _KindFilterChoice(BookSourceKind.audio),
+  ];
+}
+
 enum _ShelfMenuAction {
   gridView,
   listView,
@@ -236,9 +257,9 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   GlassNavHeader _buildHeader(BookshelfProvider provider) {
     if (_isMultiSelect) {
+      final shown = provider.shownBooks;
       final allSelected =
-          provider.books.isNotEmpty &&
-          _selectedUrls.length == provider.books.length;
+          shown.isNotEmpty && _selectedUrls.length == shown.length;
       return GlassNavHeader(
         morph: true,
         title: '已選 ${_selectedUrls.length} 本',
@@ -256,9 +277,7 @@ class _BookshelfPageState extends State<BookshelfPage>
                     if (allSelected) {
                       _selectedUrls.clear();
                     } else {
-                      _selectedUrls.addAll(
-                        provider.books.map((b) => b.bookUrl),
-                      );
+                      _selectedUrls.addAll(shown.map((b) => b.bookUrl));
                     }
                   }),
           ),
@@ -314,6 +333,16 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: mode.label,
           checked: provider.sortMode == mode,
         ),
+      // 篩選：書架上不只一種書時才有（`docs/design/screens.md`「書架」）。
+      if (provider.canFilterKinds) ...[
+        const GlassMenuDivider(),
+        for (final choice in _KindFilterChoice.all)
+          GlassMenuItem(
+            value: choice,
+            label: choice.label,
+            checked: provider.activeKindFilter == choice.kind,
+          ),
+      ],
       const GlassMenuDivider(),
       GlassMenuItem(
         value: _ShelfMenuAction.select,
@@ -360,6 +389,8 @@ class _BookshelfPageState extends State<BookshelfPage>
     switch (value) {
       case BookshelfSortMode mode:
         await provider.setSortMode(mode);
+      case _KindFilterChoice choice:
+        provider.setKindFilter(choice.kind);
       case _ShelfMenuAction.gridView:
         provider.setGridView(true);
       case _ShelfMenuAction.listView:
@@ -422,14 +453,15 @@ class _BookshelfPageState extends State<BookshelfPage>
     final grid = provider.isGridView;
     final animate = !MediaQuery.disableAnimationsOf(context);
     // 移出的書淡出期間仍在清單裡（已不在書架上，取上次畫的那一本）。
+    final shelfBooks = provider.shownBooks;
     final shownUrls = _motion.update(
-      [for (final book in provider.books) book.bookUrl],
+      [for (final book in shelfBooks) book.bookUrl],
       grid: grid,
       animate: animate,
     );
     final known = {
       ..._shownBooks,
-      for (final book in provider.books) book.bookUrl: book,
+      for (final book in shelfBooks) book.bookUrl: book,
     };
     final books = [for (final url in shownUrls) ?known[url]];
     _shownBooks = {for (final book in books) book.bookUrl: book};
@@ -750,21 +782,36 @@ class _BookshelfPageState extends State<BookshelfPage>
         onReorderItem: (oldIndex, newIndex) {
           // 清單裡可能還有淡出中的書（已不在書架上）：照書換算成書架上的
           // 位置。
+          // 照「拖到哪一本前面」換算成整個書架的位置：篩選中只畫了一部分的
+          // 書，淡出中的書也不在書架上。
           final shown = [...books];
           final moved = shown.removeAt(oldIndex);
           final from = provider.books.indexWhere(
             (book) => book.bookUrl == moved.bookUrl,
           );
           if (from < 0) return;
-          final shelf = {for (final book in provider.books) book.bookUrl};
-          final to = shown
+          final rest = [...provider.books]..removeAt(from);
+          int indexInRest(Book book) =>
+              rest.indexWhere((other) => other.bookUrl == book.bookUrl);
+          final next = shown
+              .skip(newIndex)
+              .where((book) => indexInRest(book) >= 0)
+              .firstOrNull;
+          final previous = shown
               .take(newIndex)
-              .where((book) => shelf.contains(book.bookUrl))
-              .length;
+              .where((book) => indexInRest(book) >= 0)
+              .lastOrNull;
+          final to = next != null
+              ? indexInRest(next)
+              : previous == null
+              ? 0
+              : indexInRest(previous) + 1;
           // reorderBooks 在第一個 await 之前就換好清單順序；清單本身已經把
           // 書卡放到定位，採用新順序，不再播換位動畫。
           unawaited(provider.reorderBooks(from, to));
-          _motion.accept([for (final book in provider.books) book.bookUrl]);
+          _motion.accept([
+            for (final book in provider.shownBooks) book.bookUrl,
+          ]);
         },
         // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
         proxyDecorator: (child, _, animation) => ScaleTransition(
