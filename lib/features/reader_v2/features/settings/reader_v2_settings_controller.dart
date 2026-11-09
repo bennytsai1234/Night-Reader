@@ -90,6 +90,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   ReaderV2InfoSlots headerInfo = ReaderV2PrefsSnapshot.defaults().headerInfo;
   ReaderV2InfoSlots footerInfo = ReaderV2PrefsSnapshot.defaults().footerInfo;
   int chineseConvert = ReaderV2PrefsSnapshot.defaults().chineseConvert;
+  bool showIllustrations = ReaderV2PrefsSnapshot.defaults().showIllustrations;
   double autoPageSpeed = ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
   bool showAddToShelfAlert =
       ReaderV2PrefsSnapshot.defaults().showAddToShelfAlert;
@@ -141,7 +142,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
       final snapshot = await _prefsRepository.load();
       _persisted = snapshot;
       // 別處（例如「閱讀偏好」頁）改了繁簡轉換時，重新載入也必須讓正文重轉。
-      if (snapshot.chineseConvert != chineseConvert) {
+      if (snapshot.chineseConvert != chineseConvert ||
+          snapshot.showIllustrations != showIllustrations) {
         _contentSettingsGeneration += 1;
       }
       _initFromCache(snapshot);
@@ -164,6 +166,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     textIndent = snapshot.textIndent;
     autoPageSpeed = _normalizeAutoPageSpeed(snapshot.autoPageSpeed);
     chineseConvert = snapshot.chineseConvert;
+    showIllustrations = snapshot.showIllustrations;
     showAddToShelfAlert = snapshot.showAddToShelfAlert;
     clickActions = List<int>.from(snapshot.clickActions);
     paddingHorizontal = snapshot.paddingHorizontal;
@@ -718,6 +721,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
     _contentSettingsGeneration += 1;
     ChineseDisplay.mode.value = value;
   }
+
+  /// 顯示插圖（ADR 0050）：換了讓正文重轉，插圖跟著出現或拿掉。
+  void setShowIllustrations(bool value) => _set(
+    ReaderV2Settings.showIllustrations,
+    value,
+    current: showIllustrations,
+    put: (v) {
+      if (showIllustrations == v) return;
+      showIllustrations = v;
+      _contentSettingsGeneration += 1;
+    },
+  );
 
   void setClickAction(int zone, int action) {
     if (zone < 0 || zone >= clickActions.length) return;

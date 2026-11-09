@@ -171,6 +171,7 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
       paragraphs: content.paragraphs,
       displayText: content.displayText,
       contentHash: content.contentHash,
+      illustrations: content.illustrations,
     );
   }
 

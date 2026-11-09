@@ -254,6 +254,10 @@ abstract final class ReaderV2Settings {
     PreferKey.readerChineseConvert,
     ChineseDisplay.defaultMode,
   );
+  static final showIllustrations = _bool(
+    PreferKey.readerShowIllustrations,
+    false,
+  );
   static final showAddToShelfAlert = _bool(PreferKey.showAddToShelfAlert, true);
   static final clickActions = _text<List<int>>(
     PreferKey.readerClickActions,
@@ -457,6 +461,7 @@ abstract final class ReaderV2Settings {
     textIndent,
     autoPageSpeed,
     chineseConvert,
+    showIllustrations,
     showAddToShelfAlert,
     clickActions,
     paddingHorizontal,
@@ -525,6 +530,7 @@ class ReaderV2PrefsSnapshot {
   int get textIndent => valueOf(ReaderV2Settings.textIndent);
   double get autoPageSpeed => valueOf(ReaderV2Settings.autoPageSpeed);
   int get chineseConvert => valueOf(ReaderV2Settings.chineseConvert);
+  bool get showIllustrations => valueOf(ReaderV2Settings.showIllustrations);
   bool get showAddToShelfAlert => valueOf(ReaderV2Settings.showAddToShelfAlert);
   List<int> get clickActions => valueOf(ReaderV2Settings.clickActions);
   double get paddingHorizontal => valueOf(ReaderV2Settings.paddingHorizontal);

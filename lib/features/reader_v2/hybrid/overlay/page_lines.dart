@@ -7,11 +7,13 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dar
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/shared/widgets/skeleton_text.dart';
 
-/// 一頁上每一行字的位置（viewport 座標，由上而下）、其中章名那幾行的
-/// 索引，與量這些行時的版面。紙上的骨架照它畫（ADR 0016、0024）。
+/// 一頁上每一行字的位置（viewport 座標，由上而下）、其中章名那幾行與
+/// 插圖方塊的索引，與量這些行時的版面。紙上的骨架照它畫（ADR 0016、
+/// 0024、0050）。
 typedef PageLines = ({
   List<Rect> lines,
   Set<int> titleLines,
+  Set<int> blockLines,
   ReaderV2LayoutSpec spec,
 });
 
@@ -25,10 +27,27 @@ PageLines pageLinesAt({
 }) {
   final lines = <Rect>[];
   final titleLines = <int>{};
+  final blockLines = <int>{};
+  final illustrations = <Rect>[];
   final ranges = <int, (int, int)>{};
+  final spec = pipeline.layoutSpec;
   for (final key in documentIndex.keysInRange(offset, offset + height)) {
     final blocks = pipeline.blocksOf(key.chapterIndex);
     if (blocks == null) continue;
+    final index = key.blockIndex;
+    if (index < blocks.blocks.length && blocks.blocks[index].isIllustration) {
+      // 插圖的骨架是和圖一樣大的方塊（docs/design/loading.md）。
+      final top = documentIndex.topOf(key);
+      final paint = pipeline.paragraphCache
+          .acquireEntry(key, pipeline.epoch)
+          ?.illustration;
+      if (top != null && paint != null) {
+        illustrations.add(
+          paint.box.rect.shift(Offset(spec.textPaddingLeft, top - offset)),
+        );
+      }
+      continue;
+    }
     final range = blocks
         .blockForCharOffset(blocks.blockStartOffset(key))
         .charRange;
@@ -40,7 +59,6 @@ PageLines pageLinesAt({
             math.max(previous.$2, range.end),
           );
   }
-  final spec = pipeline.layoutSpec;
   final bodyStyle = readerSkeletonInkStyle(spec);
   void addLines(int chapter, int start, int end, {required bool title}) {
     if (end <= start) return;
@@ -64,9 +82,15 @@ PageLines pageLinesAt({
     addLines(chapter, start, math.min(end, titleEnd), title: true);
     addLines(chapter, math.max(start, titleEnd), end, title: false);
   }
+  for (final rect in illustrations) {
+    if (rect.bottom <= 0 || rect.top >= height) continue;
+    blockLines.add(lines.length);
+    lines.add(rect);
+  }
   return (
     lines: lines,
     titleLines: titleLines,
+    blockLines: blockLines,
     // 行是這份排版管線排的；改排版的紙還在淡入時，它還是舊的那一代。
     spec: spec,
   );

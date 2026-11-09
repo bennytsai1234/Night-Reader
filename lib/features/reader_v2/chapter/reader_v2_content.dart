@@ -4,6 +4,17 @@ import 'package:crypto/crypto.dart';
 
 import '../../../core/engine/reader/chinese_text_converter.dart';
 import '../session/reader_v2_location.dart';
+import 'reader_v2_illustration.dart';
+
+export 'reader_v2_illustration.dart';
+
+/// 一張插圖對到的圖檔與大小（[ReaderV2Content.fromRaw]）。
+typedef ReaderV2IllustrationSlot = ({
+  String src,
+  String path,
+  int pixelWidth,
+  int pixelHeight,
+});
 
 class ReaderV2Content {
   const ReaderV2Content({
@@ -13,6 +24,7 @@ class ReaderV2Content {
     required this.plainText,
     required this.displayText,
     required this.contentHash,
+    this.illustrations = const <ReaderV2Illustration>[],
   });
 
   final int chapterIndex;
@@ -22,17 +34,28 @@ class ReaderV2Content {
   final String displayText;
   final String contentHash;
 
+  /// 要顯示的插圖，照位置排（ADR 0050）。圖不在 [displayText] 裡，關掉
+  /// 「顯示插圖」時這裡是空的，字一模一樣。
+  final List<ReaderV2Illustration> illustrations;
+
   int get bodyStartOffset {
     if (title.isEmpty) return 0;
     return plainText.isEmpty ? title.length : title.length + 2;
   }
 
+  /// [rawText] 裡的 [ReaderV2IllustrationMarkers.placeholder] 是插圖的位置：
+  /// 一律拿掉，第 i 個對應 [illustrationSlots] 的第 i 個；是 null（關掉
+  /// 「顯示插圖」、圖檔不在或讀不出大小）的那張不顯示。只有插圖的段落不
+  /// 成段，圖放在下一段前面。
   factory ReaderV2Content.fromRaw({
     required int chapterIndex,
     required String title,
     required String rawText,
+    List<ReaderV2IllustrationSlot?> illustrationSlots =
+        const <ReaderV2IllustrationSlot?>[],
   }) {
-    final paragraphs = paragraphsOf(rawText);
+    final placed = _placeIllustrations(paragraphsOf(rawText));
+    final paragraphs = placed.paragraphs;
     final plainText = paragraphs.join('\n\n');
     final normalizedTitle = title.trim();
     final displayText = normalizedTitle.isEmpty
@@ -40,11 +63,51 @@ class ReaderV2Content {
         : plainText.isEmpty
         ? normalizedTitle
         : '$normalizedTitle\n\n$plainText';
+    final bodyStart = normalizedTitle.isEmpty
+        ? 0
+        : plainText.isEmpty
+        ? normalizedTitle.length
+        : normalizedTitle.length + 2;
+    final paragraphStarts = <int>[];
+    var cursor = bodyStart;
+    for (final paragraph in paragraphs) {
+      paragraphStarts.add(cursor);
+      cursor += paragraph.length + 2;
+    }
+    final illustrations = <ReaderV2Illustration>[];
+    for (var i = 0; i < placed.positions.length; i += 1) {
+      final slot = i < illustrationSlots.length ? illustrationSlots[i] : null;
+      if (slot == null) continue;
+      final position = placed.positions[i];
+      final offset = position.paragraph >= paragraphs.length
+          ? displayText.length
+          : paragraphStarts[position.paragraph] + position.offset;
+      illustrations.add(
+        ReaderV2Illustration(
+          offset: offset,
+          src: slot.src,
+          path: slot.path,
+          pixelWidth: slot.pixelWidth,
+          pixelHeight: slot.pixelHeight,
+        ),
+      );
+    }
     final hashMaterial = jsonEncode(<String, Object>{
       'chapterIndex': chapterIndex,
       'title': normalizedTitle,
       'paragraphs': paragraphs,
       'displayText': displayText,
+      // 沒有插圖的章節雜湊和以前一樣，既有的排版快取照用。
+      if (illustrations.isNotEmpty)
+        'illustrations': [
+          for (final illustration in illustrations)
+            [
+              illustration.offset,
+              illustration.path,
+              illustration.pixelWidth,
+              illustration.pixelHeight,
+            ],
+        ],
     });
     return ReaderV2Content(
       chapterIndex: chapterIndex,
@@ -53,8 +116,65 @@ class ReaderV2Content {
       plainText: plainText,
       displayText: displayText,
       contentHash: sha1.convert(utf8.encode(hashMaterial)).toString(),
+      illustrations: List<ReaderV2Illustration>.unmodifiable(illustrations),
     );
   }
+
+  /// 拿掉段落裡的插圖記號，記下每張圖落在第幾段的第幾個字。圖在段首的
+  /// 空白（縮排）之內算段落開頭，在段尾空白之後算段落結尾；只剩空白的段
+  /// 落不成段，圖算在下一段開頭（後面沒有段落時 paragraph 等於段落數）。
+  static ({
+    List<String> paragraphs,
+    List<({int paragraph, int offset})> positions,
+  })
+  _placeIllustrations(List<String> rawParagraphs) {
+    const mark = ReaderV2IllustrationMarkers.placeholder;
+    final paragraphs = <String>[];
+    final positions = <({int paragraph, int offset})>[];
+    var pendingBefore = 0;
+    for (final raw in rawParagraphs) {
+      if (!raw.contains(mark)) {
+        for (var i = 0; i < pendingBefore; i += 1) {
+          positions.add((paragraph: paragraphs.length, offset: 0));
+        }
+        pendingBefore = 0;
+        paragraphs.add(raw);
+        continue;
+      }
+      final cleaned = raw.replaceAll(mark, '');
+      if (cleaned.replaceAll('　', '').trim().isEmpty) {
+        pendingBefore += mark.allMatches(raw).length;
+        continue;
+      }
+      for (var i = 0; i < pendingBefore; i += 1) {
+        positions.add((paragraph: paragraphs.length, offset: 0));
+      }
+      pendingBefore = 0;
+      final leading =
+          cleaned.length - cleaned.replaceFirst(_leadingSpace, '').length;
+      final trailingStart = cleaned.replaceFirst(_trailingSpace, '').length;
+      var removed = 0;
+      for (var i = 0; i < raw.length; i += 1) {
+        if (raw[i] != mark) continue;
+        final at = i - removed;
+        removed += 1;
+        final offset = at <= leading
+            ? 0
+            : at >= trailingStart
+            ? cleaned.length
+            : at;
+        positions.add((paragraph: paragraphs.length, offset: offset));
+      }
+      paragraphs.add(cleaned);
+    }
+    for (var i = 0; i < pendingBefore; i += 1) {
+      positions.add((paragraph: paragraphs.length, offset: 0));
+    }
+    return (paragraphs: paragraphs, positions: positions);
+  }
+
+  static final RegExp _leadingSpace = RegExp(r'^[\s　]+');
+  static final RegExp _trailingSpace = RegExp(r'[\s　]+$');
 
   /// 原文切成的段落，和 [ReaderV2Content.fromRaw] 的 [paragraphs] 相同。
   /// 只要段落時用這個：[ReaderV2Content.fromRaw] 還會對整章算雜湊，那只在

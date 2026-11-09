@@ -12,6 +12,7 @@ import '../core/chapter_layout_plan.dart';
 import '../core/hybrid_contracts.dart';
 import '../core/hybrid_types.dart';
 import '../geometry/text_geometry.dart';
+import '../illustration/illustration_images.dart';
 import '../measure/document_index.dart';
 import '../measure/measurement_store.dart';
 import '../paragraph/paragraph_cache.dart';
@@ -116,6 +117,8 @@ final class HybridLayoutPipeline {
   final Map<int, ChapterBlocks> _blocks = {};
   final Map<int, _ChapterMaterialization> _blocksInFlight = {};
   final Map<BlockKey, ParagraphLease> _viewportLeases = {};
+  final Set<BlockKey> _illustrationsInFlight = {};
+  final IllustrationImages _illustrationImages = IllustrationImages.instance;
   final Set<({int chapter, String layoutIdentity})> _warmedChapters = {};
   bool _disposed = false;
 
@@ -551,16 +554,26 @@ final class HybridLayoutPipeline {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    final snapshot = _measurementStore.snapshot(_namespace);
     final diskCache = _diskCache;
     if (diskCache != null) {
+      // 有插圖的章節不存尺寸（[HybridLayoutDiskCache.readPlan]）。
+      final withIllustrations = <int>{
+        for (final plan in _layoutPlans.values)
+          if (plan.hasIllustrations) plan.chapterIndex,
+      };
+      final snapshot = <BlockKey, BlockMetrics>{
+        for (final entry in _measurementStore.snapshot(_namespace).entries)
+          if (!withIllustrations.contains(entry.key.chapterIndex))
+            entry.key: entry.value,
+      };
       unawaited(
         diskCache.writeMetrics(
           snapshot,
           fingerprint: _namespace.fingerprint,
           chapterLayoutIdentities: <int, String>{
             for (final plan in _layoutPlans.values)
-              plan.chapterIndex: plan.layoutIdentity,
+              if (!plan.hasIllustrations)
+                plan.chapterIndex: plan.layoutIdentity,
           },
         ),
       );
@@ -681,6 +694,10 @@ final class HybridLayoutPipeline {
     bool anchor = false,
   }) {
     final head = group.first;
+    if (head.illustration != null) {
+      _submitIllustration(blocks, head);
+      return;
+    }
     final headKey = head.key;
     final last = group.last;
     final spec = layoutSpec;
@@ -708,6 +725,47 @@ final class HybridLayoutPipeline {
         readerOwnedLinePlan: true,
       ),
     );
+  }
+
+  /// 插圖塊不排字：照圖的大小算高度，圖解碼好才交給排版（ADR 0050），
+  /// 紙掀開時圖一定畫得出來。解不開的圖照樣交出去，只是不畫。
+  void _submitIllustration(ChapterBlocks blocks, ChapterBlock block) {
+    final illustration = block.illustration!;
+    if (!_illustrationsInFlight.add(block.key)) return;
+    final spec = layoutSpec;
+    final isChapterEnd = block.blockIndex == blocks.blocks.length - 1;
+    final box = IllustrationBox.layout(
+      illustration,
+      contentWidth: spec.textLayoutFrame.width,
+      maxHeight: spec.contentHeight,
+      devicePixelRatio: _devicePixelRatio(),
+      gap: readerV2IllustrationGap(spec.style),
+      // 章末留章節間距，同字的章末塊（[readerV2BlockTrailingSpacing]）。
+      trailingSpacing: isChapterEnd
+          ? readerV2BlockTrailingSpacing(
+              spec.style,
+              isTitle: false,
+              isChapterEnd: true,
+            )
+          : 0,
+    );
+    final textColor = _textColor();
+    unawaited(() async {
+      await _illustrationImages.load(illustration.path, box.decodeWidth);
+      _illustrationsInFlight.remove(block.key);
+      if (!isCurrentGeneration) return;
+      _pump.completeIllustration(
+        block: block,
+        epoch: _epoch,
+        paint: IllustrationPaint(path: illustration.path, box: box),
+        textColor: textColor,
+      );
+    }());
+  }
+
+  static double _devicePixelRatio() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    return views.isEmpty ? 1.0 : views.first.devicePixelRatio;
   }
 
   LayoutTaskPriority _priorityFor(BlockKey key, {required bool anchor}) {

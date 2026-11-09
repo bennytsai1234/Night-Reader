@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_illustration.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -337,7 +338,14 @@ final class ChapterBlock {
     this.layoutBreakBefore = false,
     this.visualLineBreakOffsets = const <int>[],
     this.visualLineSpacers = const <LineSpacer>[],
-  });
+    this.illustration,
+  }) : assert(illustration == null || text == '');
+
+  /// 這一塊是一張插圖（ADR 0050）：沒有字，[charRange] 是插圖位置上的空
+  /// 範圍，高度照圖的大小算，不排字。
+  final ReaderV2Illustration? illustration;
+
+  bool get isIllustration => illustration != null;
 
   final BlockKey key;
   final String text;
@@ -407,16 +415,29 @@ final class ChapterBlocks {
           for (final spacer in block.visualLineSpacers)
             [spacer.offset, spacer.width],
         ],
+        if (block.illustration case final illustration?)
+          [
+            illustration.path,
+            illustration.pixelWidth,
+            illustration.pixelHeight,
+          ],
       ],
   ]);
+
+  bool get hasIllustrations => blocks.any((block) => block.isIllustration);
 
   ChapterBlock blockForCharOffset(int charOffset) {
     final safeOffset = charOffset.clamp(0, displayText.length).toInt();
     for (final block in blocks) {
+      // 插圖不佔字，位置一律落在字上（ADR 0050）。
+      if (block.isIllustration) continue;
       if (block.charRange.containsOffset(safeOffset)) return block;
       if (safeOffset < block.charRange.start) return block;
     }
-    return blocks.last;
+    return blocks.lastWhere(
+      (block) => !block.isIllustration,
+      orElse: () => blocks.last,
+    );
   }
 
   HybridAnchor anchorForCharOffset(int charOffset) {
@@ -725,13 +746,18 @@ final class ChapterText {
     required List<String> paragraphs,
     required this.displayText,
     required this.contentHash,
-  }) : paragraphs = List<String>.unmodifiable(paragraphs);
+    List<ReaderV2Illustration> illustrations = const <ReaderV2Illustration>[],
+  }) : paragraphs = List<String>.unmodifiable(paragraphs),
+       illustrations = List<ReaderV2Illustration>.unmodifiable(illustrations);
 
   final ChapterId id;
   final String title;
   final List<String> paragraphs;
   final String displayText;
   final String contentHash;
+
+  /// 照位置排的插圖（[ReaderV2Content.illustrations]）。
+  final List<ReaderV2Illustration> illustrations;
 }
 
 final class ChapterEvent {

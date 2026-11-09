@@ -42,6 +42,7 @@ class ReaderV2ControllerHost {
       book: book,
       initialChapters: initialChapters,
       currentChineseConvert: () => settings.chineseConvert,
+      currentShowIllustrations: () => settings.showIllustrations,
     );
     bookmarks = ReaderV2Bookmarks(
       book: book,

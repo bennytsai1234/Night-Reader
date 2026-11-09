@@ -14,6 +14,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -48,6 +49,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    bool Function()? currentShowIllustrations,
     this.onReplaceRuleDisabled,
     this.contentLoader,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
@@ -65,6 +67,7 @@ class ReaderV2ChapterRepository {
                : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
+       currentShowIllustrations = currentShowIllustrations ?? (() => false),
        _chapters = List<BookChapter>.from(initialChapters);
 
   final Book book;
@@ -75,6 +78,9 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+
+  /// 「顯示插圖」開著沒（ADR 0050）。
+  final bool Function() currentShowIllustrations;
 
   /// 套用正文時有規則跑太久、被停用了（[_disableTimedOutRule]），閱讀器拿來
   /// 提示讀者。
@@ -497,6 +503,9 @@ class ReaderV2ChapterRepository {
         rawContent: prepared.content,
         enabledRules: enabledRules,
         chineseConvertType: currentChineseConvert(),
+        illustrationsDir: currentShowIllustrations()
+            ? await BookIllustrationStorage.dirFor(book)
+            : null,
         onRuleTimedOut: _disableTimedOutRule,
       );
     } on ReaderV2ContentTransformException catch (error) {

@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
+
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 
 import '../layout/reader_paragraph_layout.dart';
@@ -276,6 +277,35 @@ final class LayoutPump implements HybridLayoutPump {
     }
   }
 
+  /// 插圖塊（ADR 0050）：不排字，高度照 [paint] 的大小，留一個空段落佔住
+  /// 段落快取的位置，畫的時候畫圖（[RenderCachedBlock]）。
+  void completeIllustration({
+    required ChapterBlock block,
+    required LayoutEpoch epoch,
+    required IllustrationPaint paint,
+    required ui.Color textColor,
+  }) {
+    if (_disposed ||
+        epoch != _namespace.epoch ||
+        !_wantsChapter(block.chapterIndex)) {
+      return;
+    }
+    final paragraph =
+        (ui.ParagraphBuilder(ui.ParagraphStyle())..addText('')).build()
+          ..layout(ui.ParagraphConstraints(width: paint.box.rect.right));
+    final metrics = BlockMetrics(height: paint.box.blockHeight, lineCount: 0);
+    _paragraphCache.putGroup(
+      [block.key],
+      const [0.0],
+      epoch,
+      paragraph,
+      bakedColor: textColor,
+      illustration: paint,
+    );
+    _measurementStore.put(_namespace, block.key, metrics);
+    _completed.add(BlockReady(key: block.key, epoch: epoch, metrics: metrics));
+  }
+
   @override
   void dispose() {
     if (_disposed) return;
@@ -315,6 +345,7 @@ final class LayoutPump implements HybridLayoutPump {
             isTitle: head.isTitle,
             isContinuation: head.isContinuation,
             layoutBreakBefore: head.layoutBreakBefore,
+            illustration: head.illustration,
           ),
         );
         yield null;
