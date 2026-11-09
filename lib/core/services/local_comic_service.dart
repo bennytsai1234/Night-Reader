@@ -37,9 +37,16 @@ class LocalComicService {
   /// 匯入 [path]（作品資料夾或單一個 CBZ／ZIP），傳回書架上的那本；找不
   /// 到任何一話時傳回 null。[name] 是新書的書名，沒給就用資料夾或檔名。
   /// [onProgress] 每存好一話呼叫一次（第幾話、共幾話）。
+  ///
+  /// 同步本地書下載時：[related] 是雲端那本的每一話（有其中一話的書就是
+  /// 同一本），[titles] 照章指紋給章名（下載的檔是照順序編號的），
+  /// [fingerprint] 是新書的原檔指紋。
   Future<Book?> importPath(
     String path, {
     String? name,
+    Set<String> related = const {},
+    Map<String, String> titles = const {},
+    String? fingerprint,
     void Function(int done, int total)? onProgress,
   }) async {
     final sources = await _discoverOn(run, path);
@@ -47,7 +54,7 @@ class LocalComicService {
     final prints = await _fingerprintsOn(run, [
       for (final source in sources) source.path,
     ]);
-    final existing = await _bookWithAnyOf(prints.toSet());
+    final existing = await _bookWithAnyOf({...prints, ...related});
     final title = name ?? _nameOf(path);
     final book = existing ?? await _newBook(title);
     final bookDir = LocalBookService.filePathOf(book);
@@ -71,25 +78,24 @@ class LocalComicService {
       return null;
     }
 
-    final titles = <String, String>{
+    final names = <String, String>{
       for (final chapter in known) chapter.url: chapter.title,
-      for (final chapter in added) chapter.fingerprint: chapter.title,
+      for (final chapter in added)
+        chapter.fingerprint: titles[chapter.fingerprint] ?? chapter.title,
     };
-    final ordered = titles.keys.toList()
-      ..sort(
-        (a, b) => ComicChapterFiles.compareNatural(titles[a]!, titles[b]!),
-      );
+    final ordered = names.keys.toList()
+      ..sort((a, b) => ComicChapterFiles.compareNatural(names[a]!, names[b]!));
     final chapters = [
       for (final (index, print) in ordered.indexed)
         BookChapter(
           url: print,
-          title: titles[print]!,
+          title: names[print]!,
           bookUrl: book.bookUrl,
           index: index,
         ),
     ];
     book
-      ..fileFingerprint ??= chapters.first.url
+      ..fileFingerprint ??= fingerprint ?? chapters.first.url
       ..totalChapterNum = chapters.length
       ..latestChapterTitle = chapters.last.title;
     book.fillChapterTitle(chapters);
