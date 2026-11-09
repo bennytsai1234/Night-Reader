@@ -62,6 +62,7 @@
 | [0046](0046-daily-sync-is-progress-only.md) | 日常只同步閱讀進度，其他資料按「立即全面同步」才同步、期間鎖住 App；合併計算在背景 isolate |
 | [0042](0042-bookmarks-follow-the-book-not-the-source.md) | 書籤跟著書名加作者、不跟書源，位置和閱讀進度同一套（章名＋第幾個字＋錨點）；換源跟著搬、同步與備份都帶 |
 | [0044](0044-highlights-mark-content.md) | 標註記畫到的字與顏色、樣子，位置與跟著書走的方式同書籤；從選字選單「⋮」畫，點了換顏色、寫備忘或刪除，可匯出 Markdown |
+| [0052](0052-comic-reader.md) | 漫畫另做條漫閱讀器（照 Mihon、只直向捲動），整本自動下載、章節存成 CBZ，本地漫畫每章一個原檔指紋 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
 
 ## 工程與流程

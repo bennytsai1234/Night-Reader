@@ -1,6 +1,6 @@
 # 交接：漫畫（A）與本地漫畫（D）
 
-2026-11-09。分支 `feat/images-comics`，worktree `D:\Migrated\Desktop\Folder\product\Night-Reader-images-comics`。還在談，沒寫程式。談完開工時把 `beta` 上 `PLAN.md` 的「漫畫」那條搬走，並刪掉本檔。
+2026-11-09。分支 `feat/images-comics`，worktree `D:\Migrated\Desktop\Folder\product\Night-Reader-images-comics`。範圍談完、ADR 與規格寫好，還沒寫程式。`beta` 上 `PLAN.md` 的「漫畫」已搬走。做完刪掉本檔。
 
 ## 談定的
 
@@ -60,6 +60,12 @@
 6. 書架、下載、同步：書卡與詳情沿用；下載、同步的進度格式要認得漫畫。
 7. D：匯入 CBZ／ZIP／資料夾，用原檔指紋，走「同步本地書」（ADR 0039）。
 
-## 等使用者決定的（下一步從這裡接）
+## 準備好了的（2026-11-09）
 
-談完了，等使用者說開工。開工時：照 `domain-modeling` 寫 ADR（漫畫另一個閱讀器、下載的章節存 CBZ、本地漫畫每章一個指紋並改 ADR 0039）；把 `beta` 上 `PLAN.md` 的「漫畫」那條搬走；照 `docs/design/` 寫漫畫閱讀器的規格；刪掉本檔。順序建議：「圖從哪裡來」介面與 CBZ／資料夾讀取 → 漫畫閱讀器（條漫、縮放、換章分隔）→ 書源接上（等 `feat/source-kinds` 的判斷，先只認類型 2）→ 下載打包 → 書架篩選與封面變體 → 本地漫畫匯入。
+- ADR 0052（`docs/adr/0052-comic-reader.md`，已加進索引）；ADR 0008 與 0039 各補一句指向它。編號跳過 0050、0051：`feat/audiobook-player` 與 `feat/text-illustrations` 都用了 0050，合併時其中一份要改成 0051。
+- 畫面規格 `docs/design/comics.md`（`DESIGN.md` 索引已加）；書架篩選寫進 `docs/design/screens.md`「書架」；封面變體在 `components.md`「預設封面」。
+- 合併時會和 `feat/audiobook-player` 在 ADR 0008 第一段同一句衝突：兩邊的補充句都留。
+
+## 下一步（等使用者說開工）
+
+照順序：「圖從哪裡來」介面與 CBZ／資料夾讀取 → 漫畫閱讀器（條漫、縮放、換章分隔）→ 接上書源（等 `feat/source-kinds` 的判斷，先只認類型 2）→ 下載打包 CBZ 與記寬高（和有聲書共用非文字章節存檔，誰先進 `beta` 另一邊照它接）→ 書架篩選與封面變體 → 本地漫畫匯入。一步做完驗過就提交推上。新 worktree 開工前照 `AGENTS.md`「環境」複製 sqlite3.dll。
