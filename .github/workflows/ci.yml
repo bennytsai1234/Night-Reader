@@ -2,9 +2,10 @@ name: CI
 
 on:
   # 開 PR 與 PR 有新推送時跑，測的是分支併進目前 beta 的樣子；做的途中推分支只是備份，不跑
-  # （ADR 0048）。合併後 beta 再跑一次，合併的人等它通過才發測試版。只改文件的推送不跑。
+  # （ADR 0048）。合併後 beta 再跑一次，合併的人等它通過才發測試版。只改文件的 PR 與推送不跑。
   # 全套測試只在這裡跑：本機推送前只跑 analyze（.githooks/pre-push，ADR 0014）。
   pull_request:
+    paths-ignore: ["**.md", "docs/**"]
   push:
     branches: [beta]
     paths-ignore: ["**.md", "docs/**"]
