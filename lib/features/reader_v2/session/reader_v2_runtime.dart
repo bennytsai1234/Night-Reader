@@ -73,6 +73,9 @@ class ReaderV2Runtime extends ChangeNotifier {
   final ReaderV2ChapterRepository repository;
   final ReaderV2ProgressController progressController;
 
+  /// 開著的這本書。
+  Book get book => progressController.book;
+
   /// 開書的位置，開書前跳章失敗時也回到這裡（[openBook]）。
   ReaderV2Location _initialLocation;
 

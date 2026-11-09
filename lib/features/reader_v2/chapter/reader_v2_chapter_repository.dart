@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -14,7 +15,9 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
@@ -48,6 +51,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    bool Function()? currentShowIllustrations,
     this.onReplaceRuleDisabled,
     this.contentLoader,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
@@ -65,6 +69,7 @@ class ReaderV2ChapterRepository {
                : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
+       currentShowIllustrations = currentShowIllustrations ?? (() => false),
        _chapters = List<BookChapter>.from(initialChapters);
 
   final Book book;
@@ -75,6 +80,9 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+
+  /// 「顯示插圖」開著沒（ADR 0050）。
+  final bool Function() currentShowIllustrations;
 
   /// 套用正文時有規則跑太久、被停用了（[_disableTimedOutRule]），閱讀器拿來
   /// 提示讀者。
@@ -113,18 +121,29 @@ class ReaderV2ChapterRepository {
 
   /// 同時有好幾處要目錄（開書排版、讀每章長度）時共用同一次載入，不會
   /// 向書源抓兩次。
+  ///
+  /// 本地書開書時一定先對一次 EPUB 的轉法版本（[_syncEpubChapters]），帶著
+  /// 目錄開書（書籍詳情傳進來的）也一樣，讀章前章節範圍已經是新的。
   Future<List<BookChapter>> ensureChapters() {
-    if (_chapters.isNotEmpty) return Future.value(chapters);
-    return _chaptersInFlight ??= _loadChapters().whenComplete(
-      () => _chaptersInFlight = null,
-    );
+    if (_chapters.isNotEmpty && (!book.isLocal || _localChaptersChecked)) {
+      return Future.value(chapters);
+    }
+    return _chaptersInFlight ??=
+        (_chapters.isNotEmpty
+                ? _syncEpubChapters().then((_) => chapters)
+                : _loadChapters())
+            .whenComplete(() => _chaptersInFlight = null);
   }
 
   Future<List<BookChapter>>? _chaptersInFlight;
+  bool _localChaptersChecked = false;
 
   Future<List<BookChapter>> _loadChapters() async {
     _chapters = await chapterDao.getByBook(book.bookUrl);
-    if (_chapters.isNotEmpty) return chapters;
+    if (_chapters.isNotEmpty) {
+      if (book.isLocal) await _syncEpubChapters();
+      return chapters;
+    }
     final source = await _ensureSource();
     if (source == null) {
       if (book.isLocal) {
@@ -143,6 +162,28 @@ class ReaderV2ChapterRepository {
     await chapterDao.insertChapters(fetched);
     _chapters = fetched;
     return chapters;
+  }
+
+  /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050）時重轉，章節範圍跟著
+  /// 換掉，存著的舊正文清掉。章數與每章的字不變，閱讀進度照舊。
+  Future<void> _syncEpubChapters() async {
+    final List<({String title, int start, int end})>? ranges;
+    try {
+      ranges = await LocalBookService().currentEpubChapters(book);
+    } on FileSystemException catch (error) {
+      // 對不了就照現有的目錄開書，下次開書再對。
+      AppLog.w('EPUB 章節範圍對不上檔案：$error');
+      return;
+    } finally {
+      _localChaptersChecked = true;
+    }
+    if (ranges == null || LocalBookService.chaptersMatch(_chapters, ranges)) {
+      return;
+    }
+    final refreshed = LocalBookService().chaptersOf(book, ranges);
+    await chapterDao.replaceByBook(book.bookUrl, refreshed);
+    await contentDao?.deleteByBook(book.origin, book.bookUrl);
+    _chapters = refreshed;
   }
 
   /// 每章佔全書多少（全書進度用）。本地書照每章在檔案裡的位元組範圍；
@@ -497,6 +538,9 @@ class ReaderV2ChapterRepository {
         rawContent: prepared.content,
         enabledRules: enabledRules,
         chineseConvertType: currentChineseConvert(),
+        illustrationsDir: currentShowIllustrations()
+            ? await BookIllustrationStorage.dirFor(book)
+            : null,
         onRuleTimedOut: _disableTimedOutRule,
       );
     } on ReaderV2ContentTransformException catch (error) {

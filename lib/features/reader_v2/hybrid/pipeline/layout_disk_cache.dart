@@ -19,10 +19,14 @@ final class HybridLayoutDiskCache {
   ChapterPlanDiskCache? _plans;
 
   /// [text] 在 [fingerprint] 下存過的換行計畫；沒有或對不上時回傳 null。
+  ///
+  /// 有插圖的章節不存換行計畫與尺寸：插圖的高度還看正文區多高、手機的
+  /// 像素密度，不在 [StyleFingerprint] 裡（ADR 0050）。
   Future<ChapterBlocks?> readPlan(
     ChapterText text,
     StyleFingerprint fingerprint,
   ) async {
+    if (text.illustrations.isNotEmpty) return null;
     try {
       final cache = await _obtainPlans();
       return await cache.read(
@@ -40,6 +44,7 @@ final class HybridLayoutDiskCache {
     ChapterBlocks blocks,
     StyleFingerprint fingerprint,
   ) async {
+    if (blocks.hasIllustrations) return;
     try {
       final cache = await _obtainPlans();
       await cache.write(
@@ -58,6 +63,7 @@ final class HybridLayoutDiskCache {
     required MeasurementNamespace namespace,
     required void Function(BlockKey key, BlockMetrics metrics) put,
   }) async {
+    if (blocks.hasIllustrations) return;
     try {
       final cache = await _obtainMetrics();
       await cache.warmIntoStore(

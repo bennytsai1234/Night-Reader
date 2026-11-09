@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_handoff.dart';
 
@@ -79,7 +80,12 @@ Future<ShelfDownloadNeed?> _shelfDownloadNeed(String bookUrl) async {
       origin: book.origin,
       bookUrl: bookUrl,
     );
-    if (chaptersMissingContent(chapters, stored).isEmpty) return null;
+    // 還原備份帶回的正文裡有插圖時，正文都在也要排，把插圖抓下來（ADR
+    // 0050）。
+    if (chaptersMissingContent(chapters, stored).isEmpty &&
+        !await BookIllustrationStorage.isUnfetched(book)) {
+      return null;
+    }
   }
   return (
     bookName: book.name,

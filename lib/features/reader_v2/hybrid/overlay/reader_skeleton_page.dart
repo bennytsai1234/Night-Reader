@@ -21,6 +21,7 @@ final class ReaderSkeletonPage {
     required this.contentHash,
     required this.lines,
     this.titleLines = const <int>{},
+    this.blockLines = const <int>{},
     this.progress,
   });
 
@@ -40,6 +41,9 @@ final class ReaderSkeletonPage {
 
   /// [lines] 裡章名那幾行的索引。
   final Set<int> titleLines;
+
+  /// [lines] 裡插圖方塊的索引：照整個範圍畫，不畫成一條字的高度。
+  final Set<int> blockLines;
   final HybridProgressSnapshot? progress;
 
   /// 開書的位置與版面都和記下時相同。位置比到半個像素：存進資料庫再讀
@@ -93,6 +97,7 @@ final class ReaderSkeletonPage {
           (value * 10).round() / 10,
     ],
     if (titleLines.isNotEmpty) 'titles': titleLines.toList()..sort(),
+    if (blockLines.isNotEmpty) 'blocks': blockLines.toList()..sort(),
     if (progress case final progress?)
       'progress': [
         progress.chapterIndex,
@@ -117,6 +122,10 @@ final class ReaderSkeletonPage {
       contentHash: json['content'] as String,
       titleLines: {
         for (final index in json['titles'] as List<dynamic>? ?? const [])
+          index as int,
+      },
+      blockLines: {
+        for (final index in json['blocks'] as List<dynamic>? ?? const [])
           index as int,
       },
       lines: [

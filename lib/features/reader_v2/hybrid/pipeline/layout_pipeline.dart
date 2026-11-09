@@ -12,6 +12,7 @@ import '../core/chapter_layout_plan.dart';
 import '../core/hybrid_contracts.dart';
 import '../core/hybrid_types.dart';
 import '../geometry/text_geometry.dart';
+import '../illustration/illustration_images.dart';
 import '../measure/document_index.dart';
 import '../measure/measurement_store.dart';
 import '../paragraph/paragraph_cache.dart';
@@ -116,6 +117,10 @@ final class HybridLayoutPipeline {
   final Map<int, ChapterBlocks> _blocks = {};
   final Map<int, _ChapterMaterialization> _blocksInFlight = {};
   final Map<BlockKey, ParagraphLease> _viewportLeases = {};
+
+  /// 還在解碼的插圖：解好、交給排版之後才拿掉（[waitForProgress] 要等它）。
+  final Map<BlockKey, Future<void>> _illustrationsInFlight = {};
+  final IllustrationImages _illustrationImages = IllustrationImages.instance;
   final Set<({int chapter, String layoutIdentity})> _warmedChapters = {};
   bool _disposed = false;
 
@@ -382,6 +387,13 @@ final class HybridLayoutPipeline {
           ? MaterializationWait.progressed
           : MaterializationWait.cancelled;
     }
+    // 只剩插圖在解碼時等它解好、交給排版。
+    if (_illustrationsInFlight.isNotEmpty) {
+      await Future.any(_illustrationsInFlight.values);
+      return isCurrent()
+          ? MaterializationWait.progressed
+          : MaterializationWait.cancelled;
+    }
 
     final pending = <int, Future<({int chapter, bool unavailable})>>{
       for (final entry in _blocksInFlight.entries)
@@ -551,16 +563,26 @@ final class HybridLayoutPipeline {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    final snapshot = _measurementStore.snapshot(_namespace);
     final diskCache = _diskCache;
     if (diskCache != null) {
+      // 有插圖的章節不存尺寸（[HybridLayoutDiskCache.readPlan]）。
+      final withIllustrations = <int>{
+        for (final plan in _layoutPlans.values)
+          if (plan.hasIllustrations) plan.chapterIndex,
+      };
+      final snapshot = <BlockKey, BlockMetrics>{
+        for (final entry in _measurementStore.snapshot(_namespace).entries)
+          if (!withIllustrations.contains(entry.key.chapterIndex))
+            entry.key: entry.value,
+      };
       unawaited(
         diskCache.writeMetrics(
           snapshot,
           fingerprint: _namespace.fingerprint,
           chapterLayoutIdentities: <int, String>{
             for (final plan in _layoutPlans.values)
-              plan.chapterIndex: plan.layoutIdentity,
+              if (!plan.hasIllustrations)
+                plan.chapterIndex: plan.layoutIdentity,
           },
         ),
       );
@@ -681,6 +703,10 @@ final class HybridLayoutPipeline {
     bool anchor = false,
   }) {
     final head = group.first;
+    if (head.illustration != null) {
+      _submitIllustration(blocks, head);
+      return;
+    }
     final headKey = head.key;
     final last = group.last;
     final spec = layoutSpec;
@@ -708,6 +734,59 @@ final class HybridLayoutPipeline {
         readerOwnedLinePlan: true,
       ),
     );
+  }
+
+  /// 插圖塊不排字：照圖的大小算高度，圖解碼好才交給排版（ADR 0050），
+  /// 紙掀開時圖一定畫得出來。解不開的圖當作不存在：交出沒有高度的塊（章末
+  /// 的照樣留章節間距），不畫。
+  void _submitIllustration(ChapterBlocks blocks, ChapterBlock block) {
+    final illustration = block.illustration!;
+    if (_illustrationsInFlight.containsKey(block.key)) return;
+    final spec = layoutSpec;
+    final isChapterEnd = block.blockIndex == blocks.blocks.length - 1;
+    // 章末留章節間距，同字的章末塊（[readerV2BlockTrailingSpacing]）。
+    final trailingSpacing = isChapterEnd
+        ? readerV2BlockTrailingSpacing(
+            spec.style,
+            isTitle: false,
+            isChapterEnd: true,
+          )
+        : 0.0;
+    final box = IllustrationBox.layout(
+      illustration,
+      contentWidth: spec.textLayoutFrame.width,
+      maxHeight: spec.contentHeight,
+      devicePixelRatio: _devicePixelRatio(),
+      gap: readerV2IllustrationGap(spec.style),
+      trailingSpacing: trailingSpacing,
+    );
+    final textColor = _textColor();
+    final work = () async {
+      final image = await _illustrationImages.load(
+        illustration.path,
+        box.decodeWidth,
+      );
+      if (!isCurrentGeneration) return;
+      // 完成通知同步送出：回來時排版已經收到這一塊。
+      _pump.completeIllustration(
+        block: block,
+        epoch: _epoch,
+        paint: image == null
+            ? null
+            : IllustrationPaint(path: illustration.path, box: box),
+        height: image == null ? trailingSpacing : box.blockHeight,
+        textColor: textColor,
+      );
+    }();
+    _illustrationsInFlight[block.key] = work;
+    unawaited(
+      work.whenComplete(() => _illustrationsInFlight.remove(block.key)),
+    );
+  }
+
+  static double _devicePixelRatio() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    return views.isEmpty ? 1.0 : views.first.devicePixelRatio;
   }
 
   LayoutTaskPriority _priorityFor(BlockKey key, {required bool anchor}) {

@@ -53,7 +53,8 @@
 
 | ADR | 一句話 |
 |---|---|
-| [0032](0032-epub-read-as-text-converted-on-import.md) | EPUB 只讀文字，匯入時轉成純文字，之後照 TXT 讀；目錄太粗時照 TXT 的章名規則再切 |
+| [0032](0032-epub-read-as-text-converted-on-import.md) | EPUB 匯入時轉成純文字，之後照 TXT 讀；目錄太粗時照 TXT 的章名規則再切（插圖已由 0050 改成留下） |
+| [0050](0050-text-illustrations.md) | 網路書與 EPUB 的插圖存的時候一律留下，「顯示插圖」開了才夾在文字中間顯示，預設關；圖不算字 |
 | [0028](0028-source-work-in-a-source-isolate.md) | 書源工作在常駐的書源 isolate 執行；Cookie 與限流留在主 isolate（條數已由 0034 改成四條） |
 | [0034](0034-rule-js-waits-synchronously.md) | 規則 JS 等網路時整條書源 isolate 停住、拿到的就是結果，和 Legado 一樣；書源 isolate 開四條，網路 isolate 替它們做要等的事 |
 | [0008](0008-shelf-books-download-whole-book.md) | 書架上的網路書整本下載，不限網路、沒有開關 |
