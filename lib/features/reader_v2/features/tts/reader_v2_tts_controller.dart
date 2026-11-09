@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
@@ -18,7 +21,9 @@ abstract class ReaderV2TtsEngine extends ChangeNotifier {
   double get pitch;
   String? get language;
   String get currentSpokenText;
-  Stream<String> get events;
+
+  /// 每念完一段送出一次。
+  Stream<void> get completions;
 
   Future<void> speak(String text);
   Future<void> stop();
@@ -53,7 +58,7 @@ class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
   String get currentSpokenText => _service.currentSpokenText;
 
   @override
-  Stream<String> get events => _service.audioEvents;
+  Stream<void> get completions => _service.completions;
 
   @override
   Future<void> speak(String text) => _service.speak(text);
@@ -84,24 +89,32 @@ class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
 }
 
 class ReaderV2TtsController extends ChangeNotifier
-    implements ReaderV2TtsSheetController {
+    implements ReaderV2TtsSheetController, PlaybackOwner {
   ReaderV2TtsController({
     required this.runtime,
     ReaderV2TtsEngine? tts,
+    SystemPlayback? playback,
     @visibleForTesting DateTime Function()? now,
   }) : _tts = tts ?? ReaderV2SystemTtsEngine(),
-       _ownsTtsEngine = tts == null {
+       _ownsTtsEngine = tts == null,
+       _playback = playback ?? SystemPlayback.instance {
     sleepTimer = ReaderV2TtsSleepTimer(onExpired: _pauseForSleep, now: now);
     _observedContentGeneration = runtime.state.contentGeneration;
     runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
-    _eventSubscription = _tts.events.listen(_handleTtsEvent);
+    _completionSubscription = _tts.completions.listen(
+      (_) => unawaited(_handleSpeechCompleted()),
+    );
   }
 
   final ReaderV2Runtime runtime;
   final ReaderV2TtsEngine _tts;
   final bool _ownsTtsEngine;
-  late final StreamSubscription<String> _eventSubscription;
+  final SystemPlayback _playback;
+  late final StreamSubscription<void> _completionSubscription;
+
+  /// 念過的章節顯示的章名（含繁簡轉換與替換規則），系統播放資訊的標題用。
+  final Map<int, String> _chapterTitles = <int, String>{};
   ReaderV2Location? _speechStartLocation;
   List<ReaderV2TtsSegment> _segments = const <ReaderV2TtsSegment>[];
   int _segmentIndex = -1;
@@ -254,6 +267,7 @@ class ReaderV2TtsController extends ChangeNotifier
           : _SpeechStart.cancelled;
     }
     if (!_isActiveGeneration(generation)) return _SpeechStart.cancelled;
+    _chapterTitles[location.chapterIndex] = content.title;
     final safeOffset = location.charOffset
         .clamp(0, content.displayText.length)
         .toInt();
@@ -316,16 +330,103 @@ class ReaderV2TtsController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// 每次通知前把播放狀態告訴定時；朗讀中引擎每個字都會通知，
-  /// [ReaderV2TtsSleepTimer.sync] 在狀態沒變時不做事。
+  /// 每次通知前把播放狀態告訴定時與系統播放資訊；朗讀中引擎每個字都會
+  /// 通知，兩邊在狀態沒變時都不做事。
   @override
   void notifyListeners() {
     if (_disposed) return;
+    final running = _currentSegment != null && !isPaused;
     sleepTimer.sync(
       active: _currentSegment != null || _resumeLocation != null,
-      running: _currentSegment != null && !isPaused,
+      running: running,
     );
+    _syncSystemPlayback(playing: running);
     super.notifyListeners();
+  }
+
+  /// 正在念或暫停中：把正在念的章、這本書與做得到的按鈕交給系統播放資訊；
+  /// 停了就收掉。
+  void _syncSystemPlayback({required bool playing}) {
+    final chapterIndex =
+        _resumeLocation?.chapterIndex ?? _currentSegment?.chapterIndex;
+    if (chapterIndex == null) {
+      _playback.release(this);
+      return;
+    }
+    final book = runtime.book;
+    _playback.show(
+      this,
+      item: NowPlaying(
+        id: '${book.bookUrl}#$chapterIndex',
+        title: _chapterTitleOf(chapterIndex),
+        bookName: book.name,
+        author: book.getRealAuthor(),
+        coverSource: UnifiedCovers.coverOf(book),
+      ),
+      playing: playing,
+      controls: {
+        if (chapterIndex > 0) PlaybackControl.skipToPrevious,
+        if (chapterIndex + 1 < runtime.chapterCount) PlaybackControl.skipToNext,
+        PlaybackControl.stop,
+      },
+    );
+  }
+
+  String _chapterTitleOf(int chapterIndex) {
+    for (final title in [
+      _chapterTitles[chapterIndex],
+      runtime.chapterAt(chapterIndex)?.title,
+    ]) {
+      final trimmed = title?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+    }
+    return '第 ${chapterIndex + 1} 章';
+  }
+
+  // --- 系統播放資訊、耳機與藍牙的按鍵 ---
+
+  @override
+  void onPlay() {
+    if (!isPlaying) unawaited(toggle());
+  }
+
+  @override
+  void onPause() {
+    if (_tts.isPlaying) unawaited(_tts.pause());
+  }
+
+  @override
+  void onStop() => unawaited(stop());
+
+  @override
+  void onSkipToNext() => unawaited(_skipChapter(1));
+
+  @override
+  void onSkipToPrevious() => unawaited(_skipChapter(-1));
+
+  /// 朗讀不宣告拖動（[PlaybackControl.seek]），系統不會送來。
+  @override
+  void onSeek(Duration position) {}
+
+  /// 上一章、下一章：從那一章開頭接著念，暫停中按了也開始念。畫面跟著
+  /// 朗讀的那一句過去，和念完一章自動換章一樣。
+  Future<void> _skipChapter(int delta) async {
+    final current =
+        _resumeLocation?.chapterIndex ?? _currentSegment?.chapterIndex;
+    if (current == null) return;
+    final target = current + delta;
+    if (target < 0 || target >= runtime.chapterCount) return;
+    final generation = ++_speechGeneration;
+    _resumeLocation = null;
+    await _tts.stop();
+    await _speakFrom(
+      ReaderV2Location(
+        chapterIndex: target,
+        charOffset: 0,
+        visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+      ),
+      generation: generation,
+    );
   }
 
   /// 定時到了：停在目前這句，播放鍵從這句開頭接著念。用停止而不是引擎的
@@ -354,23 +455,6 @@ class ReaderV2TtsController extends ChangeNotifier
     _clearSpeechStateWithoutNotify();
     unawaited(_tts.stop());
     notifyListeners();
-  }
-
-  void _handleTtsEvent(String event) {
-    switch (event) {
-      case 'onComplete':
-        unawaited(_handleSpeechCompleted());
-        return;
-      case 'onPlay':
-        if (!_tts.isPlaying) unawaited(toggle());
-        return;
-      case 'onPause':
-        if (_tts.isPlaying) unawaited(_tts.pause());
-        return;
-      case 'onStop':
-        unawaited(stop());
-        return;
-    }
   }
 
   Future<void> _handleSpeechCompleted() async {
@@ -480,7 +564,8 @@ class ReaderV2TtsController extends ChangeNotifier
     runtime.removeListener(_handleRuntimeChanged);
     _speechGeneration += 1;
     _clearSpeechStateWithoutNotify();
-    unawaited(_eventSubscription.cancel());
+    _playback.release(this);
+    unawaited(_completionSubscription.cancel());
     _tts.removeListener(_handleTtsChanged);
     unawaited(_tts.stop());
     if (_ownsTtsEngine) _tts.dispose();

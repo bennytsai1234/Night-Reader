@@ -3,23 +3,19 @@ import 'dart:convert';
 
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/foundation.dart';
-import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';
 
 import 'app_permission_service.dart';
-import 'audio_handler.dart';
+import 'system_playback/system_playback.dart';
 import 'tts_speech_coordinator.dart';
 
-/// TTSService - 系統 TTS 朗讀服務（單例）
-/// 對應 Android TTSReadAloudService.kt
+/// TTSService - 系統 TTS 朗讀服務（單例），對應 Legado 的 TTSReadAloudService。
 ///
-/// 修復要點：
-/// 1. 唯一 FlutterTts 引擎，避免與 ReaderAudioHandler 雙引擎衝突
-/// 2. 完成事件透過 ReaderAudioHandler.emitEvent('onComplete') 廣播
-/// 3. _audioHandler 改為 nullable，init() 失敗不影響基本 TTS 功能
+/// 整個 App 只有一個 FlutterTts 引擎。這裡只管念與朗讀參數；通知欄、鎖定
+/// 畫面這些系統播放資訊由念的那一方（閱讀器的朗讀）交給 [SystemPlayback]。
 class TTSService extends ChangeNotifier {
   static final TTSService _instance = TTSService._internal();
   factory TTSService() => _instance;
@@ -28,8 +24,6 @@ class TTSService extends ChangeNotifier {
   Future<void>? _initializationFuture;
   bool _notificationPermissionChecked = false;
 
-  /// nullable：init() 失敗時不崩潰，只是缺少系統通知欄控制
-  ReaderAudioHandler? _audioHandler;
   final FlutterTts _flutterTts = FlutterTts();
   final AppPermissionService _permissionService = AppPermissionService();
   final TtsSpeechCoordinator _speechCoordinator = TtsSpeechCoordinator();
@@ -204,7 +198,7 @@ class TTSService extends ChangeNotifier {
     await _loadSavedSpeechParams();
     notifyListeners();
     try {
-      await _ensureAudioHandler();
+      await SystemPlayback.instance.start();
       await _initTts();
       _isInitialized = true;
       // 引擎、音色清單與保存的選擇都載好了：設定頁跟著更新。
@@ -219,25 +213,6 @@ class TTSService extends ChangeNotifier {
       );
     } finally {
       _initializationFuture = null;
-    }
-  }
-
-  Future<void> _ensureAudioHandler() async {
-    if (_audioHandler != null) return;
-    try {
-      _audioHandler = await AudioService.init(
-        builder: () => ReaderAudioHandler(),
-        config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.night_reader.tts',
-          androidNotificationChannelName: '夜讀朗讀',
-          androidNotificationOngoing: true,
-        ),
-      );
-    } catch (e) {
-      AppLog.e(
-        'TTSService: AudioService.init failed (notification disabled): $e',
-        error: e,
-      );
     }
   }
 
@@ -258,26 +233,23 @@ class TTSService extends ChangeNotifier {
 
     _flutterTts.setStartHandler(() {
       _isPlaying = true;
-      _audioHandler?.setPlaying(true);
       notifyListeners();
     });
 
-    // 【關鍵修復】完成時：更新狀態並廣播事件給閱讀器端控制器
+    // 念完一段：閱讀器的朗讀聽 [completions] 接著念下一句。
     _flutterTts.setCompletionHandler(() {
       _isPlaying = false;
       currentSpokenText = '';
       currentWordStart = -1;
       currentWordEnd = -1;
       _resumeOffset = 0;
-      _audioHandler?.setPlaying(false);
-      ReaderAudioHandler.emitEvent('onComplete');
+      _completions.add(null);
       notifyListeners();
     });
 
     _flutterTts.setErrorHandler((msg) {
       AppLog.e('TTSService: TTS error: $msg');
       _isPlaying = false;
-      _audioHandler?.setPlaying(false);
       notifyListeners();
     });
 
@@ -313,19 +285,6 @@ class TTSService extends ChangeNotifier {
     await _loadSystemVoiceOptions();
   }
 
-  /// 更新系統通知欄書名/作者/封面
-  void updateMediaInfo({
-    required String title,
-    required String author,
-    String? coverUrl,
-  }) {
-    _audioHandler?.updateMetadata(
-      title: title,
-      author: author,
-      artUri: coverUrl,
-    );
-  }
-
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
     await _speechCoordinator.speak(
@@ -335,7 +294,7 @@ class TTSService extends ChangeNotifier {
         if (!_notificationPermissionChecked) {
           _notificationPermissionChecked = true;
           await _permissionService.requestNotificationForTts();
-          await _ensureAudioHandler();
+          await SystemPlayback.instance.start();
         }
         return _isInitialized;
       },
@@ -346,7 +305,6 @@ class TTSService extends ChangeNotifier {
         currentWordStart = -1;
         currentWordEnd = -1;
         _isPlaying = true;
-        _audioHandler?.setPlaying(true);
         notifyListeners();
         await _flutterTts.speak(text);
       },
@@ -372,7 +330,6 @@ class TTSService extends ChangeNotifier {
     currentWordEnd = -1;
     _resumeOffset = 0;
     _isPlaying = false;
-    _audioHandler?.setPlaying(false);
     notifyListeners();
   }
 
@@ -381,7 +338,6 @@ class TTSService extends ChangeNotifier {
     if (!_isInitialized) return;
     await _flutterTts.pause();
     _isPlaying = false;
-    _audioHandler?.setPlaying(false);
     notifyListeners();
   }
 
@@ -400,7 +356,6 @@ class TTSService extends ChangeNotifier {
         _resumeOffset = rawStart;
         // 樂觀更新：立即反映播放狀態，避免按鈕在 TTS 非同步啟動前顯示錯誤圖示
         _isPlaying = true;
-        _audioHandler?.setPlaying(true);
         notifyListeners();
         await _flutterTts.speak(remaining);
       }
@@ -619,8 +574,10 @@ class TTSService extends ChangeNotifier {
     return (locale == null || locale.isEmpty) ? name : '$name ($locale)';
   }
 
-  /// 訂閱媒體控制事件 (onComplete / onPlay / onPause / onStop / onSkipToNext…)
-  Stream<String> get audioEvents => ReaderAudioHandler.eventStream;
+  /// 每念完一段送出一次。
+  Stream<void> get completions => _completions.stream;
+  final StreamController<void> _completions =
+      StreamController<void>.broadcast();
 
   Future<void> _loadSystemVoiceOptions() async {
     final prefs = await SharedPreferences.getInstance();
