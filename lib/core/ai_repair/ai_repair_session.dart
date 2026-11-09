@@ -77,7 +77,7 @@ typedef AiRepairAsker = Future<String> Function(
   CancelToken cancelToken,
 );
 
-/// AI 修書源（ADR 0053）：一個或多選的一批書源，一個接一個修。每個先校驗、
+/// AI 修書源（ADR 0054）：一個或多選的一批書源，一個接一個修。每個先校驗、
 /// 抓網頁；有 AI 服務時讓 AI 邊改邊試抓，最多 [aiRepairMaxRounds] 輪，交出後
 /// 再校驗，通過才存進去並留下改前版本。沒有 AI 服務時（只限一個書源）把
 /// 提示詞複製下來，等使用者貼回 AI 修好的書源（[submitPaste]）。

@@ -617,7 +617,7 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  /// 這個書源留著 AI 改之前的版本，長按選單有「還原 AI 修改前」（ADR 0053）。
+  /// 這個書源留著 AI 改之前的版本，長按選單有「還原 AI 修改前」（ADR 0054）。
   bool hasAiRepairBackup(String url) => _aiRepairedUrls.contains(url);
 
   /// 讀完書源後在背景整理改前版本：刪掉的書源它的也刪。不擋清單的讀取，

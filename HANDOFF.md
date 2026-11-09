@@ -1,6 +1,6 @@
 # 交接：AI 修書源
 
-2026-11-09。分支 `feat/source-ai-repair`（從 `feat/source-kinds` 開，上游已改成自己的 `origin/feat/source-ai-repair`），worktree `C:\Users\benny\.t3\worktrees\Night-Reader\feat-source-ai-repair`。決定與理由在 ADR 0053，畫面規格在 `docs/design/screens.md`「AI 修書源」；和 `feat/source-kinds`、`feat/images-comics`、`feat/audiobook-player` 同一批合併，要定期併入 `origin/feat/source-kinds`。
+2026-11-09。分支 `feat/source-ai-repair`（從 `feat/source-kinds` 開，上游已改成自己的 `origin/feat/source-ai-repair`），worktree `C:\Users\benny\.t3\worktrees\Night-Reader\feat-source-ai-repair`。決定與理由在 ADR 0054，畫面規格在 `docs/design/screens.md`「AI 修書源」；和 `feat/source-kinds`、`feat/images-comics`、`feat/audiobook-player` 同一批合併，要定期併入 `origin/feat/source-kinds`。
 
 ## 談定
 

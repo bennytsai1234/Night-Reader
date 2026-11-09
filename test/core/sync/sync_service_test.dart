@@ -206,6 +206,7 @@ class _Phone {
     int time = 0,
     String name = '夜航',
     String author = '某人',
+    int type = 0,
   }) async {
     await books.upsert(
       Book(
@@ -214,6 +215,7 @@ class _Phone {
         origin: 'src',
         name: name,
         author: author,
+        type: type,
         isInBookshelf: true,
         chapterIndex: chapterIndex,
         charOffset: charOffset,
@@ -758,6 +760,33 @@ void main() {
       expect(b.sync.status.value.error, isNull);
     });
 
+    test('a novel and a comic of the same title and author are two books, '
+        'each with its own progress', () async {
+      await a.addBook('novel', toc: toc, chapterIndex: 1, time: 100);
+      await a.addBook('comic', toc: toc, chapterIndex: 3, time: 100, type: 2);
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+
+      final shelf = await b.books.getInBookshelf();
+      expect(
+        {for (final book in shelf) book.bookUrl: book.bookKind},
+        {'novel': BookSourceKind.novel, 'comic': BookSourceKind.comic},
+      );
+
+      // 只在 A 讀漫畫，B 的小說不跟著跳。
+      final comic = await a.book('comic');
+      await a.books.upsert(
+        comic
+          ..chapterIndex = 0
+          ..durChapterTitle = toc[0]
+          ..progressTime = 300,
+      );
+      await a.sync.syncAll();
+      await b.sync.syncAll();
+      expect((await b.book('comic')).chapterIndex, 0);
+      expect((await b.book('novel')).chapterIndex, 1);
+    });
+
     test('three books on one phone and four on the other become seven on '
         'both', () async {
       for (final i in [1, 2, 3]) {
@@ -1013,6 +1042,26 @@ void main() {
         expect(await b.books.getByUrl('a-src'), isNull);
         expect(b.discarded, isEmpty);
         expect(b.downloaded, isEmpty);
+      });
+
+      test('a book whose source turned out to be a comic turns into a comic '
+          'on the other phone too, keeping its chapters', () async {
+        await a.addBook('src', toc: toc, time: 200);
+        await b.addBook('src', toc: toc, time: 100);
+        await syncBoth();
+        b.downloaded.clear();
+
+        // 校驗把書源改成漫畫，書跟著換類別（BookSourceDao 存書源時）。
+        await a.books.upsert((await a.book('src'))..type = 2);
+        await syncBoth();
+
+        final book = await b.book('src');
+        expect(book.bookKind, BookSourceKind.comic);
+        expect(book.isInBookshelf, isTrue);
+        expect(await b.chapters.titlesByBook('src'), toc);
+        expect(b.discarded, isEmpty);
+        expect(b.downloaded, isEmpty);
+        expect(await b.books.getInBookshelf(), hasLength(1));
       });
 
       test('renamed twice before syncing still lands as one rename', () async {

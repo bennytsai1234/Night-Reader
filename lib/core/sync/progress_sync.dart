@@ -48,7 +48,9 @@ class ProgressSync extends SyncKind {
   };
 
   /// 書名加作者；書架同步、書籤與標註都照它認書。
-  static String nameKeyOf(Book book) => '${book.name}\t${book.author}';
+  /// 漫畫、有聲的書名帶類別前綴（`recordName`），和同名的小說是不同的書
+  /// （ADR 0053）；小說的鍵照舊。
+  static String nameKeyOf(Book book) => '${book.recordName}\t${book.author}';
 
   @override
   Future<Map<String, SyncRecord>> local() async => {

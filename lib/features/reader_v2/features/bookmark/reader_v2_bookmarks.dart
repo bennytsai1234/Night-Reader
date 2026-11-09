@@ -21,7 +21,7 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
        _dao = dao,
        super(const <Bookmark>[]) {
     _subscription = dao
-        ?.watchByBook(book.name, book.author)
+        ?.watchByBook(book.recordName, book.author)
         .listen((items) => value = items);
   }
 
@@ -67,7 +67,7 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
     return dao.add(
       Bookmark(
         id: 0,
-        bookName: _book.name,
+        bookName: _book.recordName,
         bookAuthor: _book.author,
         chapterIndex: location.chapterIndex,
         chapterTitle: chapterTitle,

@@ -9,7 +9,7 @@ import 'sync_kind.dart';
 import 'sync_records.dart';
 
 /// 設定的同步：清單裡的每個設定一筆（ADR 0039）。只同步閱讀、外觀、朗讀與
-/// 書架的顯示這類兩台都該一樣的，以及 AI 修書源的服務（ADR 0053）；這台
+/// 書架的顯示這類兩台都該一樣的，以及 AI 修書源的服務（ADR 0054）；這台
 /// 手機自己的（亮度、螢幕方向、朗讀引擎與聲音、上次的骨架紀錄、更新頻道、
 /// 同步空間本身）不在清單裡。設定回到預設值（從偏好設定移除）也跟著同步。
 class SettingsSync extends SyncKind {
@@ -86,7 +86,7 @@ class SettingsSync extends SyncKind {
     PreferKey.readerTtsFollow,
     PreferKey.ttsTimer,
     PreferKey.ttsTimerCustomMinutes,
-    // AI 修書源的服務與金鑰：同書源的登入資料，另一台同步完就能用（ADR 0053）
+    // AI 修書源的服務與金鑰：同書源的登入資料，另一台同步完就能用（ADR 0054）
     ...AiRepairSettings.syncedKeys,
   };
 

@@ -1,10 +1,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 使用者自己的 AI 服務（ADR 0053）：OpenAI 相容的服務網址、金鑰與模型名稱。
+/// 使用者自己的 AI 服務（ADR 0054）：OpenAI 相容的服務網址、金鑰與模型名稱。
 typedef AiService = ({String baseUrl, String apiKey, String model});
 
 /// AI 修書源的設定，存在偏好設定裡：備份帶著（備份收全部偏好設定），同步也
-/// 帶著（`SettingsSync.keys`），和書源的登入資料一樣（ADR 0053）。
+/// 帶著（`SettingsSync.keys`），和書源的登入資料一樣（ADR 0054）。
 class AiRepairSettings {
   AiRepairSettings([this._prefs]);
 

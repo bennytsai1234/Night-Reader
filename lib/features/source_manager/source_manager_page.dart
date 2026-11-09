@@ -804,7 +804,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     }
   }
 
-  /// AI 修復 [urls] 這幾個書源；有改到就重讀清單（ADR 0053）。
+  /// AI 修復 [urls] 這幾個書源；有改到就重讀清單（ADR 0054）。
   Future<void> _aiRepair(SourceManagerProvider p, List<String> urls) async {
     final sources = [for (final url in urls) ?await p.getFullSource(url)];
     if (sources.isEmpty || !mounted) return;

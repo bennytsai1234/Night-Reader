@@ -15,7 +15,7 @@ class AiServiceException implements Exception {
   String toString() => message;
 }
 
-/// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0053）。不經過
+/// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0054）。不經過
 /// 書源的網路設定（Cookie、書源的標頭、限流），送的只有對話。
 class AiChatClient {
   AiChatClient(this.service, {Dio? dio})

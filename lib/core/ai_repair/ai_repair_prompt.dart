@@ -8,7 +8,7 @@ import 'source_probe.dart';
 /// AI 修書源最多來回幾輪（每輪是 AI 回一次、夜讀試抓一次）。
 const int aiRepairMaxRounds = 5;
 
-/// AI 每一輪回的指令（ADR 0053）。
+/// AI 每一輪回的指令（ADR 0054）。
 sealed class AiRepairCommand {
   const AiRepairCommand();
 
@@ -104,7 +104,7 @@ Map<String, dynamic>? pastedSourceJson(String text) {
 
 /// 送給 AI 的書源：去掉校驗加的狀態分組與錯誤註解，空的欄位、排序與開關
 /// 這類夜讀照原本留著的（[candidateFrom]）不送；規則攤開成物件。登入資料、
-/// Cookie 與書源變數不在書源 JSON 裡（ADR 0053）。
+/// Cookie 與書源變數不在書源 JSON 裡（ADR 0054）。
 Map<String, dynamic> sourceForAi(BookSource source) {
   final copy = BookSource.fromJson(source.toJson())
     ..removeInvalidGroups()

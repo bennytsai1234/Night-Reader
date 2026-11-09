@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
-/// AI 改書源之前的那份（ADR 0053）：每個書源留最近一次，可以還原。存在這台
+/// AI 改書源之前的那份（ADR 0054）：每個書源留最近一次，可以還原。存在這台
 /// 手機 App 資料夾的一個檔裡，不進備份、不同步：是上一次操作的復原，不是
 /// 書源的資料。寫入照呼叫的順序排隊。
 class AiRepairBackups {

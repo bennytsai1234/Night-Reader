@@ -1,4 +1,5 @@
 import 'book_source_base.dart';
+import '../../constant/book_type.dart';
 import '../../constant/source_type.dart';
 
 const String searchBrokenSourceGroupTag = '搜尋失效';
@@ -131,6 +132,53 @@ enum BookSourceKind {
     BookSourceKind.audio => '有聲源',
     BookSourceKind.unsupported => '影視、文件源',
   };
+
+  /// 書記在 `type` 的值（[ofBookType] 的反面）：照書源的類型，小說 0、
+  /// 有聲 1、漫畫 2。
+  int get bookType => switch (this) {
+    BookSourceKind.novel => SourceType.book,
+    BookSourceKind.comic => SourceType.image,
+    BookSourceKind.audio => SourceType.audio,
+    BookSourceKind.unsupported => SourceType.file,
+  };
+
+  /// 一本書是哪一類，從它的 `type` 看（ADR 0053）。夜讀的書記書源類型
+  /// （[bookType]）；從 Legado 備份還原的書記 Legado 的位元（[BookType]，
+  /// 文字 8 起跳），兩種都認。認不出來的算小說，交給文字閱讀器。
+  static BookSourceKind ofBookType(int type) {
+    if (type >= BookType.text) {
+      if ((type & BookType.image) != 0) return BookSourceKind.comic;
+      if ((type & BookType.audio) != 0) return BookSourceKind.audio;
+      return BookSourceKind.novel;
+    }
+    return switch (type) {
+      SourceType.image => BookSourceKind.comic,
+      SourceType.audio => BookSourceKind.audio,
+      _ => BookSourceKind.novel,
+    };
+  }
+
+  /// 認書的鍵（同步、閱讀統計、書籤、標註、搜尋合卡）加在書名前面的前綴：
+  /// 書名、作者相同的小說、漫畫、有聲是三本不同的書。小說沒有前綴，沿用
+  /// 原本的鍵，已存、已同步的資料不用搬（ADR 0053）。
+  String get keyPrefix => switch (this) {
+    BookSourceKind.comic => 'comic:',
+    BookSourceKind.audio => 'audio:',
+    BookSourceKind.novel || BookSourceKind.unsupported => '',
+  };
+
+  /// 記錄裡的書名（閱讀統計、書籤、標註的 `bookName`）：[keyPrefix] 加書名。
+  String recordName(String name) => '$keyPrefix$name';
+
+  /// [recordName] 的反面：記錄裡的書名拆回類別與真正的書名。
+  static ({BookSourceKind kind, String name}) splitRecordName(String value) {
+    for (final kind in const [BookSourceKind.comic, BookSourceKind.audio]) {
+      if (value.startsWith(kind.keyPrefix)) {
+        return (kind: kind, name: value.substring(kind.keyPrefix.length));
+      }
+    }
+    return (kind: BookSourceKind.novel, name: value);
+  }
 }
 
 enum SourceHealthCategory {
@@ -551,8 +599,11 @@ extension BookSourceLogic on BookSourceBase {
   }
 
   /// 漫畫、有聲書源的健康狀態照校驗結果，但不進文字書的搜尋與閱讀。
-  bool get isSearchEnabledByRuntime =>
-      enabled && isNovelTextSource && runtimeHealth.allowsSearch;
+  bool get isSearchEnabledByRuntime => isSearchableFor(BookSourceKind.novel);
+
+  /// 能不能拿來搜 [kind] 這一類的書：換源只列和書同一類的書源（ADR 0053）。
+  bool isSearchableFor(BookSourceKind kind) =>
+      enabled && sourceKind == kind && runtimeHealth.allowsSearch;
 
   bool get isReadingEnabledByRuntime =>
       enabled && isNovelTextSource && runtimeHealth.allowsReading;
