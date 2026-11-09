@@ -1,6 +1,6 @@
 # 漫畫另做條漫閱讀器：照 Mihon、章節存成 CBZ、本地漫畫每章一個指紋
 
-使用者 2026-11-09 要讀漫畫書源（Legado `bookSourceType` 2，正文規則回傳一串圖片網址）與手機上的漫畫檔，和文字閱讀器（Reader V2）分開，手感與細節照 Mihon 的條漫閱讀器（`docs/agents/environment.md`「Mihon 原始碼」）。畫面規格在 `docs/design/comics.md`。哪些書源算漫畫源由「書源分類與保留」決定，漫畫這邊只用它的答案；它還沒合併前只認類型 2。和書源分類、有聲書、文字書的插圖同一批合併。
+使用者 2026-11-09 要讀漫畫書源（Legado `bookSourceType` 2，正文規則回傳一串圖片網址）與手機上的漫畫檔，和文字閱讀器（Reader V2）分開，手感與細節照 Mihon 的條漫閱讀器（`docs/agents/environment.md`「Mihon 原始碼」）。畫面規格在 `docs/design/comics.md`。哪些書源算漫畫源由書源分類決定（ADR 0051），漫畫這邊只用它的答案。和書源分類、有聲書、AI 修復書源同一批合併。
 
 ## 決定
 

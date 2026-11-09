@@ -1,6 +1,29 @@
 # 交接：漫畫（A）與本地漫畫（D）
 
-2026-11-09。分支 `feat/images-comics`，worktree `D:\Migrated\Desktop\Folder\product\Night-Reader-images-comics`。範圍談完、ADR 與規格寫好，還沒寫程式。`beta` 上 `PLAN.md` 的「漫畫」已搬走。做完刪掉本檔。
+2026-11-09。分支 `feat/images-comics`，worktree `C:\Users\benny\.t3\worktrees\Night-Reader\feat-images-comics`（T3 開的；下面 `D:\Migrated\...` 是另一台電腦的路徑，Mihon、Legado 原始碼在這台的位置看 `docs/agents/environment.md`）。範圍談完、ADR 與規格寫好，開工中。`beta` 上 `PLAN.md` 的「漫畫」已搬走。做完刪掉本檔。
+
+## 開工前跨分支檢查的調整（2026-11-09，和下面舊段落不一致時以這段為準）
+
+- **分兩批合併**，本分支屬第二批（和 `feat/source-kinds`、`feat/audiobook-player`、`feat/source-ai-repair` 一起合）。第一批：PR #319、`fix/tts-now-playing`、`feat/text-illustrations`。要用別條還沒進 `beta` 的成果時，併那條的 `origin/<分支>`，不自己再做一份。合併衝突（ADR 0050 兩份、schema 號、同一段程式）留到合併時一次處理。
+- **同名不同類是不同的書**（使用者 2026-11-09）：書名、作者相同的小說、漫畫、有聲書是三本書。搜尋分不同的卡；換源只列同一類書源；書架同步、閱讀進度、書籤、標註、閱讀統計各記各的；可以同時在書架上。共用的部分（書的類別、認書的鍵）由 `feat/source-kinds` 做，推上後再併一次來用。
+- **備份**：下載的漫畫圖不放進備份，還原後照書架自動下載重抓。`PRIVACY.md` 與 App 的「隱私說明」把備份那句寫清楚。
+- **每一類新書都要對過**：備份還原、同步、閱讀統計、下載管理（顯示、清除、佔多少空間）、書籍詳情的按鈕（匯出 TXT、開始閱讀）、檢查新章節、換源、搜尋、隱私說明；用不到的也確定不會壞。
+
+本分支要調整的：
+
+1. **判斷漫畫源**：已併 `origin/feat/source-kinds`（`446dd9d2`）。用 `source.sourceKind == BookSourceKind.comic`，不做「先只認類型 2」的暫時判斷。
+2. **抓圖沿用文字書插圖那套**：`feat/text-illustrations` 在書源 isolate 做好抓圖（`lib/core/engine/web_book/illustration_fetcher.dart`，標頭、Cookie、限流、`imageDecode` 照 Legado）。藍圖第 3 步不另做；接書源時，插圖已進 `beta` 就併 `beta`，還沒就併 `origin/feat/text-illustrations`，在上面加記寬高、打包 CBZ。
+3. **檔案型章節怎麼存**（漫畫圖、有聲音訊都不進 SQLite）交給 `feat/audiobook-player` 先定（資料夾規則、怎麼算已下載、移出書架就刪、下載管理的顯示與清除、佔多少空間），CBZ 打包疊在上面。走到下載那步時先看 `origin/feat/audiobook-player` 推上了沒；沒有就問使用者要等還是由本分支先定（先定的話在本檔寫清楚介面）。
+4. **預設封面的漫畫、有聲書變體提前做**：單獨一個提交先推上（有聲書那條要用它畫通知封面）。`DefaultBookCover` 用 source-kinds 定的書的類別判斷。書架篩選照舊由本分支做。
+5. **要補進 ADR 0052 或規格的**（要問使用者的一次問一件）：
+   - 閱讀進度存哪一欄、怎麼同步、兩台差多少不跳（有聲書用 `Book.charOffset` 存毫秒、差 10 秒內不跳）；本地漫畫的章指紋集合怎麼放進進度同步的鍵。
+   - 閱讀統計：漫畫的閱讀時間照小說記（現在只有 `reader_v2_read_time_controller.dart` 在記）。
+   - 書籍詳情：漫畫不給「匯出 TXT」；清除正文時刪 CBZ；下載管理列出漫畫的下載和大小。
+   - 檢查新章節：出新的一話時照書架自動下載抓下來。
+   - 搜尋、發現帶上漫畫源（source-kinds 擋在文字書搜尋外，放行由本分支做），結果照同名不同類分開。
+   - `PRIVACY.md` 與「隱私說明」：會向書源下載漫畫圖片、本地漫畫原檔會同步、備份不含漫畫圖。
+   - 新閱讀器的捲動、換章、骨架量幀預算（`tool/frame_budget_compare.sh`，在 `test/frame_budget/` 加測試）。
+6. 做完問使用者要不要收尾，收尾到「可以合併」就停。
 
 ## 談定的
 
@@ -9,7 +32,7 @@
   - **本地漫畫**（D：CBZ、ZIP、圖片資料夾）：A 做完再加，共用同一個閱讀器；藍圖現在就一起談。
   - **文字書的插圖**（B）：網路書正文 `<img>` 與 EPUB 插圖，預設關閉。另一個對話在談，這裡不碰。
 - **漫畫照 ADR 0008 整本自動下載**（使用者 2026-11-09 選，理由：這樣讀起來才流暢）。不另寫 ADR，ADR 0008 本來就涵蓋書架上所有網路書；實作時從目前讀到的那章往後先抓。
-- **怎麼認出漫畫書源交給 `feat/source-kinds`**（書源分類與保留，worktree `D:\Migrated\Desktop\Folder\product\nr-source-kinds`）：那條決定每個書源屬於哪一類（含類型標錯、使用者怎麼改），對外回答「是不是漫畫源」；本分支只用這個答案，不自己看名稱或類型。漫畫若先開工，暫時只認 `bookSourceType` 2，分類合併後換成它的答案、舊判斷刪掉。
+- **怎麼認出漫畫書源交給 `feat/source-kinds`**（書源分類與保留，worktree `D:\Migrated\Desktop\Folder\product\nr-source-kinds`）：那條決定每個書源屬於哪一類（含類型標錯、使用者怎麼改），對外回答「是不是漫畫源」；本分支只用這個答案（`source.sourceKind == BookSourceKind.comic`），不自己看名稱或類型。
 - **章與章接著捲**（使用者 2026-11-09 選 E1）：一章最後一張圖下面夾一塊分隔（「第 12 話 完／下一話：第 13 話」），繼續往下滑就進下一章，同 Mihon；頁首章名與閱讀進度隨捲動位置換章。
 - **閱讀畫面平常只有圖**（使用者 2026-11-09 選 H1；得知 Mihon 預設顯示頁碼「8 / 24」後仍維持，這點不照 Mihon）：點一下叫出閱讀選單才看到章名、第幾張／共幾張、全書進度；不做頁首頁尾。
 - **漫畫閱讀器的手感與預設以 Mihon 為參考**（使用者：「參考 Mihon 是對的」）。
@@ -66,6 +89,6 @@
 - 畫面規格 `docs/design/comics.md`（`DESIGN.md` 索引已加）；書架篩選寫進 `docs/design/screens.md`「書架」；封面變體在 `components.md`「預設封面」。
 - 合併時會和 `feat/audiobook-player` 在 ADR 0008 第一段同一句衝突：兩邊的補充句都留。
 
-## 下一步（等使用者說開工）
+## 下一步
 
-照順序：「圖從哪裡來」介面與 CBZ／資料夾讀取 → 漫畫閱讀器（條漫、縮放、換章分隔）→ 接上書源（等 `feat/source-kinds` 的判斷，先只認類型 2）→ 下載打包 CBZ 與記寬高（和有聲書共用非文字章節存檔，誰先進 `beta` 另一邊照它接）→ 書架篩選與封面變體 → 本地漫畫匯入。一步做完驗過就提交推上。新 worktree 開工前照 `AGENTS.md`「環境」複製 sqlite3.dll。
+封面變體先做、單獨推上（上面第 4 條）。之後照順序：「圖從哪裡來」介面與 CBZ／資料夾讀取 → 漫畫閱讀器（條漫、縮放、換章分隔）→ 接上書源（用 `sourceKind`，抓圖沿用插圖分支）→ 下載打包 CBZ 與記寬高（檔案型章節照有聲書分支定的）→ 書架篩選 → 本地漫畫匯入。一步做完驗過就提交推上。新 worktree 開工前照 `AGENTS.md`「環境」複製 sqlite3.dll。
