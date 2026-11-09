@@ -12,6 +12,7 @@ import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/change_cover_sheet.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
@@ -174,6 +175,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
             ),
             bottomNavigationBar: BookReadCapsule(
               started: provider.book.hasStartedReading,
+              listen: provider.book.bookKind == BookSourceKind.audio,
               visible: provider.hasReadyWorld,
               onPressed: widget.fromReader
                   ? () => Navigator.of(context).pop()
@@ -520,14 +522,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
               label: '換封面',
               icon: Icons.image_outlined,
             ),
-            GlassMenuItem(
-              value: _MenuAction.export,
-              label: _exportProgress == null
-                  ? '匯出全書'
-                  : '正在匯出 ${(_exportProgress! * 100).round()}%',
-              icon: Icons.ios_share_rounded,
-              enabled: _exportProgress == null,
-            ),
+            // 有聲書沒有文字可以匯出（ADR 0050）。
+            if (provider.book.bookKind == BookSourceKind.novel)
+              GlassMenuItem(
+                value: _MenuAction.export,
+                label: _exportProgress == null
+                    ? '匯出全書'
+                    : '正在匯出 ${(_exportProgress! * 100).round()}%',
+                icon: Icons.ios_share_rounded,
+                enabled: _exportProgress == null,
+              ),
             const GlassMenuItem(
               value: _MenuAction.edit,
               label: '編輯資訊',

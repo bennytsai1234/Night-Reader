@@ -167,9 +167,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   // --- 開書與選集 ---
 
   /// 開 [book] 來聽。同一本已經開著時不打斷，給了 [chapterIndex] 才換到那一集；
-  /// 沒給時接著上次聽的地方。
+  /// 沒給時接著上次聽的地方。同一本上次連目錄都沒開成時重開一次（重試）。
   Future<void> open(Book book, {int? chapterIndex}) async {
-    if (isCurrent(book)) {
+    if (isCurrent(book) && !(_chapters.isEmpty && _error != null)) {
       if (chapterIndex != null && chapterIndex != _index) {
         await playChapter(chapterIndex);
       }
