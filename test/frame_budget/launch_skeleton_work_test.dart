@@ -139,6 +139,8 @@ void main() {
       await seedLibrary();
       await seedMoreBooks(24);
       await seedCovers(covers);
+      // 網格才比得出寬度：手機 3 欄、平板 7 欄（預設的列表兩邊一樣多張）。
+      await resetPrefs({'bookshelf_is_grid': true});
       await out?.create(recursive: true);
     });
 
