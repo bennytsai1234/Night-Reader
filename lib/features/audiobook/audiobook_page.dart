@@ -10,6 +10,7 @@ import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -72,9 +73,23 @@ class _AudiobookPageState extends State<AudiobookPage> {
   ScrollController? _listScroll;
   ScrollController? _skeletonScroll;
 
+  /// 換頁動畫播完了：這之後才開書、才把骨架換成清單（ADR 0037 等靜止
+  /// 再放）。換頁途中建整份清單、播換場，每一幀都超過上限。
+  bool _entered = false;
+
   @override
   void initState() {
     super.initState();
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    // initState 裡還不能查上層的路由：先讓出一次。
+    await Future<void>.value();
+    if (!mounted) return;
+    await TransitionSettled.entered(context);
+    if (!mounted) return;
+    setState(() => _entered = true);
     unawaited(_player.open(widget.book, chapterIndex: widget.chapterIndex));
     unawaited(_loadDownloaded());
   }
@@ -281,7 +296,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
       );
     }
     return SkeletonSwitcher(
-      loading: chapters.isEmpty,
+      loading: chapters.isEmpty || !_entered,
       backdrop: AppChrome.of(context).groupedBackground,
       skeleton: _buildSkeleton(context, book),
       builder: (context) => _buildList(context, book, chapters),
@@ -307,10 +322,10 @@ class _AudiobookPageState extends State<AudiobookPage> {
         rows: SliverFixedExtentList(
           itemExtent: _rowExtent,
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _sliceOf(
-              i,
-              count,
-              _EpisodeSkeletonRow(widthFactor: _skeletonWidths[i % 4]),
+            (context, i) => _SkeletonSlice(
+              index: i,
+              count: count,
+              child: _EpisodeSkeletonRow(widthFactor: _skeletonWidths[i % 4]),
             ),
             childCount: count,
             addRepaintBoundaries: false,
@@ -584,6 +599,49 @@ class _BookHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 骨架那份清單的一列：和分組卡片同樣的底色、圓角與分隔線，但不包
+/// `Material` 與圓角裁切——骨架在換頁途中呼吸，每一列各一層會讓每一幀
+/// 都超過上限。
+class _SkeletonSlice extends StatelessWidget {
+  const _SkeletonSlice({
+    required this.index,
+    required this.count,
+    required this.child,
+  });
+
+  final int index;
+  final int count;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    const corner = Radius.circular(AppGrouped.radius);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: chrome.groupedSurface,
+          borderRadius: BorderRadius.vertical(
+            top: index == 0 ? corner : Radius.zero,
+            bottom: index == count - 1 ? corner : Radius.zero,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (index == 0)
+              const SizedBox(height: AppGlass.hairline)
+            else
+              const InsetSeparator(indent: AppGrouped.rowPadding),
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
   }
