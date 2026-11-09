@@ -12,12 +12,14 @@ import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
+import 'package:night_reader/features/audiobook/audiobook_mini_button.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -284,6 +286,13 @@ class _MainPageState extends State<MainPage>
                 ),
               ),
             ),
+            // 離開播放器還在播時，搜尋鈕上方的圓鈕（ADR 0055）。
+            if (widget.destinations == null)
+              Positioned(
+                right: ReadableWidth.cardInsetOf(context).right,
+                bottom: AudiobookMiniButton.bottomOf(context),
+                child: AudiobookMiniButton(hidden: _tabBarHidden.value),
+              ),
           ],
         ),
         extendBody: true,
