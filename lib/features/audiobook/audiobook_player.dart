@@ -544,6 +544,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
 
   // --- 進度與同步 ---
 
+  /// 現在聽到哪寫進書與資料庫（換源前用：照它對到新書源的同一集）。
+  Future<void> saveProgress() => _saveProgress();
+
   Future<void> _saveProgress() async {
     final book = _book;
     final chapter = this.chapter;

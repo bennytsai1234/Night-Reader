@@ -3,6 +3,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -52,7 +59,7 @@ class AudiobookPage extends StatefulWidget {
   State<AudiobookPage> createState() => _AudiobookPageState();
 }
 
-enum _MoreAction { login, keepAwake, copyUrl, editSource, log }
+enum _MoreAction { changeSource, login, keepAwake, copyUrl, editSource, log }
 
 class _AudiobookPageState extends State<AudiobookPage> {
   late final AudiobookPlayer _player =
@@ -130,6 +137,11 @@ class _AudiobookPageState extends State<AudiobookPage> {
     return GlassMenuButton<_MoreAction>(
       onSelected: (action) => _onMore(context, action),
       entriesBuilder: (_) => [
+        const GlassMenuItem(
+          value: _MoreAction.changeSource,
+          label: '換源',
+          icon: Icons.swap_horiz_rounded,
+        ),
         if (source != null && source.hasLoginUrl)
           const GlassMenuItem(
             value: _MoreAction.login,
@@ -167,6 +179,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
   Future<void> _onMore(BuildContext context, _MoreAction action) async {
     final source = _player.source;
     switch (action) {
+      case _MoreAction.changeSource:
+        await _changeSource(context);
       case _MoreAction.login:
         if (source != null) await openSourceLogin(context, source);
       case _MoreAction.keepAwake:
@@ -189,6 +203,53 @@ class _AudiobookPageState extends State<AudiobookPage> {
           context,
         ).push<void>(MaterialPageRoute(builder: (_) => const CrashLogPage()));
     }
+  }
+
+  /// 換源：只列有聲書源（ADR 0053），選了就存好這一集聽到哪，照閱讀器的
+  /// 換源搬到新書源，再換成新書源的播放器，從同一集接著聽。
+  Future<void> _changeSource(BuildContext context) async {
+    final book = _player.isCurrent(widget.book) ? _player.book! : widget.book;
+    final service = SourceSwitchService(
+      operationQuiescer: (oldBook) =>
+          DownloadService().quiesceForSourceSwitch(oldBook),
+      assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
+    );
+    PreparedSourceSwitch? done;
+    await AppBottomSheet.showCustom<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeSourceSheet(
+        book: book,
+        onSelectSource: (candidate) async {
+          try {
+            await _player.saveProgress();
+            final prepared = await service.prepareSwitch(
+              book,
+              candidate,
+              targetChapterIndex: book.chapterIndex,
+              targetChapterTitle: book.durChapterTitle,
+            );
+            await service.commitSwitch(book, prepared);
+            AppEventBus().fire(AppEventBus.upBookshelf);
+            done = prepared;
+            return (
+              success: true,
+              message: '已切換到 ${prepared.source.bookSourceName}',
+            );
+          } catch (error) {
+            if (!isSourceSwitchUnavailable(error)) rethrow;
+            return (success: false, message: failureMessage('換源', error));
+          }
+        },
+      ),
+    );
+    final prepared = done;
+    if (prepared == null || !context.mounted) return;
+    await _player.stop();
+    if (!context.mounted) return;
+    await Navigator.of(context)
+        .pushReplacement(BookOpenRoute(book: prepared.migratedBook));
   }
 
   /// 目錄還沒到時畫骨架，到了照骨架換場換成清單（ADR 0024）；頁首下的書
