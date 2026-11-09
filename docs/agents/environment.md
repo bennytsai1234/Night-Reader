@@ -23,5 +23,5 @@
 
 ## 書源
 
-- **Legado 原始碼**：對照 Legado 的做法時讀 `C:\Users\benny\Desktop\Folder\projects\legado`（使用者的 fork）；GitHub 上的 `gedoor/legado` 已經清空。
+- **Legado 原始碼**：對照 Legado 的做法時讀使用者的 fork：家裡在 `C:\Users\benny\Desktop\Folder\projects\legado`，公司在 `D:\Migrated\Desktop\Folder\product\legado`；GitHub 上的 `gedoor/legado` 已經清空。
 - **用真的網站校驗書源**：`test/live/`，用法寫在檔頭。源倉庫（yckceo.com）的書源可以照清單頁收集 id，再從 `https://www.yckceo.com/yuedu/shuyuan/json/id/<id>.json` 下載。
