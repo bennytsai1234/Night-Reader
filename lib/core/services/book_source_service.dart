@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
@@ -116,6 +117,21 @@ class BookSourceService {
     _illustrationTask(source, book, content, dir, retryMissing),
     source: source,
     book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 有聲書一集的音訊請求（ADR 0050）：跑正文規則拿到音訊網址，組成播放器
+  /// 要抓的網址與標頭。
+  Future<AudioRequest> getAudioRequest(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _audioRequestTask(source, book, chapter),
+    source: source,
+    book: book,
+    chapter: chapter,
     cancelToken: cancelToken,
   );
 
@@ -304,6 +320,18 @@ _Work<int> _illustrationTask(
       content,
       dir,
       retryMissing: retryMissing,
+      cancelToken: cancelToken,
+    );
+
+_Work<AudioRequest> _audioRequestTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+) =>
+    (cancelToken) => AudioUrlResolver.resolve(
+      source,
+      book,
+      chapter,
       cancelToken: cancelToken,
     );
 

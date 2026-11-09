@@ -51,5 +51,6 @@
 - 骨架、骨架換場、開 App 進場：[`docs/design/loading.md`](docs/design/loading.md)
 - 閱讀器（正文排版、朗讀、選單與面板、載入、書籤與標註）：[`docs/design/reader.md`](docs/design/reader.md)
 - 書架、書籍詳情、搜尋、發現、書源管理與登入、我的與設定頁：[`docs/design/screens.md`](docs/design/screens.md)
+- 有聲書播放器、離開播放器時的圓鈕、通知與鎖定畫面：[`docs/design/audiobook.md`](docs/design/audiobook.md)
 - 漫畫閱讀器與書架上的漫畫：[`docs/design/comics.md`](docs/design/comics.md)
 - 網站與 README：[`docs/design/website.md`](docs/design/website.md)

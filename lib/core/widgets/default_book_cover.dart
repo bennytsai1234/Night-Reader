@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -38,6 +40,33 @@ class DefaultBookCover extends StatelessWidget {
 
   /// 這本書是哪一類；漫畫、有聲畫各自的變體，其他畫原本的夜空。
   final BookSourceKind kind;
+
+  /// 把 [bookName] 的預設封面畫成 [width]×[height] 像素的 PNG，給 App 以外
+  /// 的地方用（系統播放資訊的封面）。
+  static Future<Uint8List> renderPng(
+    String bookName, {
+    required int width,
+    required int height,
+    BookSourceKind kind = BookSourceKind.novel,
+  }) async {
+    final recorder = ui.PictureRecorder();
+    _NightSkyPainter(
+      bookName,
+      kind,
+    ).paint(Canvas(recorder), Size(width.toDouble(), height.toDouble()));
+    final picture = recorder.endRecording();
+    try {
+      final image = await picture.toImage(width, height);
+      try {
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        return data!.buffer.asUint8List();
+      } finally {
+        image.dispose();
+      }
+    } finally {
+      picture.dispose();
+    }
+  }
 
   @override
   Widget build(BuildContext context) => CustomPaint(

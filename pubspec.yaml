@@ -33,6 +33,8 @@ dependencies:
   flutter_tts:
     path: third_party/flutter_tts
   audio_service: ^0.18.19
+  # 有聲書播放（ADR 0050）：Android 是 ExoPlayer、iOS 是 AVPlayer。
+  just_audio: ^0.10.6
 
   # === HTML Parsing (replaces Android Jsoup) ===
   html: ^0.15.7
