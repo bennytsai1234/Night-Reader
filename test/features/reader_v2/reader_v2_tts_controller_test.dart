@@ -67,16 +67,16 @@ class _RecordingPlayback extends SystemPlayback {
 
 /// 另一個在播的（例如之後的有聲書播放器）。
 class _OtherOwner implements PlaybackOwner {
-  int stops = 0;
+  int pauses = 0;
 
   @override
-  void onStop() => stops += 1;
+  void onPause() => pauses += 1;
 
   @override
   void onPlay() {}
 
   @override
-  void onPause() {}
+  void onStop() {}
 
   @override
   void onSkipToNext() {}
@@ -551,28 +551,35 @@ void main() {
       await tts.stop();
     });
 
-    test('another player starting stops reading aloud', () async {
-      await open({0: '第一句。'});
+    test('another player starting pauses reading on its sentence', () async {
+      await open({0: '第一句。第二句。'});
       await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+      final sentenceStart = tts.currentHighlight?.sentenceStart;
 
       final other = _OtherOwner();
-      playback.show(
-        other,
-        item: const NowPlaying(
-          id: 'audio',
-          title: '第一集',
-          bookName: '有聲書',
-          author: '',
-        ),
-        playing: true,
-        controls: const {},
+      const audio = NowPlaying(
+        id: 'audio',
+        title: '第一集',
+        bookName: '有聲書',
+        author: '',
       );
+      playback.show(other, item: audio, playing: true, controls: const {});
       await pumpEventQueue();
 
       expect(tts.isPlaying, isFalse);
-      expect(tts.currentHighlight, isNull);
-      expect(other.stops, 0);
+      expect(tts.isPaused, isTrue);
+      expect(tts.currentHighlight?.sentenceStart, sentenceStart);
+      // 暫停中的朗讀不把系統播放資訊搶回來。
       expect(playback.item?.title, '第一集');
+
+      // 回到朗讀按播放：從那一句開頭接著念，換有聲書暫停。
+      await tts.toggle();
+      expect(engine.spoken.last, '第二句。');
+      expect(other.pauses, 1);
+      expect(playback.item?.title, '第 1 章');
+      expect(playback.playing, isTrue);
     });
   });
 }

@@ -98,7 +98,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }) : _tts = tts ?? ReaderV2SystemTtsEngine(),
        _ownsTtsEngine = tts == null,
        _playback = playback ?? SystemPlayback.instance {
-    sleepTimer = ReaderV2TtsSleepTimer(onExpired: _pauseForSleep, now: now);
+    sleepTimer = ReaderV2TtsSleepTimer(onExpired: _pauseAtSentence, now: now);
     _observedContentGeneration = runtime.state.contentGeneration;
     runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
@@ -123,7 +123,8 @@ class ReaderV2TtsController extends ChangeNotifier
   bool _handlingCompletion = false;
   bool _disposed = false;
 
-  /// 定時暫停後，播放鍵從這裡接著念；暫停時已停掉引擎，只剩這個位置。
+  /// 停在一句之後（[_pauseAtSentence]），播放鍵從這裡接著念；暫停時已停掉
+  /// 引擎，只剩這個位置。
   ReaderV2Location? _resumeLocation;
 
   @override
@@ -391,9 +392,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   @override
-  void onPause() {
-    if (_tts.isPlaying) unawaited(_tts.pause());
-  }
+  void onPause() => _pauseAtSentence();
 
   @override
   void onStop() => unawaited(stop());
@@ -429,9 +428,10 @@ class ReaderV2TtsController extends ChangeNotifier
     );
   }
 
-  /// 定時到了：停在目前這句，播放鍵從這句開頭接著念。用停止而不是引擎的
-  /// 暫停：句與句之間引擎沒有在念，暫停不會生效，下一句照樣會開始。
-  void _pauseForSleep() {
+  /// 定時到了、系統或耳機按了暫停、另一方開始播：停在目前這句，播放鍵從
+  /// 這句開頭接著念。用停止而不是引擎的暫停：句與句之間引擎沒有在念，暫停
+  /// 不會生效，下一句照樣會開始。
+  void _pauseAtSentence() {
     final segment = _currentSegment;
     if (segment == null) return;
     _speechGeneration += 1;
@@ -458,7 +458,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   Future<void> _handleSpeechCompleted() async {
-    // 定時暫停時停掉了引擎，引擎事後補報的完成不能讓朗讀接著念下去。
+    // 停在一句時停掉了引擎，引擎事後補報的完成不能讓朗讀接著念下去。
     if (_handlingCompletion || _disposed || _resumeLocation != null) return;
     final completedSegment = _currentSegment;
     if (completedSegment == null) {

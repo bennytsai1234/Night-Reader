@@ -65,9 +65,9 @@ enum PlaybackControl {
 /// 按鍵都送到它。
 abstract interface class PlaybackOwner {
   void onPlay();
-  void onPause();
 
-  /// 按了停止，或另一方開始播、接手了系統播放資訊。
+  /// 按了暫停，或另一方開始播、接手了系統播放資訊。
+  void onPause();
   void onStop();
   void onSkipToNext();
   void onSkipToPrevious();
@@ -77,8 +77,8 @@ abstract interface class PlaybackOwner {
 /// 系統播放資訊：App 的媒體工作階段（Android 的媒體通知與前景服務、iOS 的
 /// 正在播放），整個 App 一份。
 ///
-/// 一次只有一方在播：最後一個呼叫 [show] 的那一方接手，原本那一方收到
-/// [PlaybackOwner.onStop]。
+/// 一次只有一方在播：後開始播的接手，原本在播的那一方收到
+/// [PlaybackOwner.onPause]（ADR 0050）。
 class SystemPlayback {
   SystemPlayback({NowPlayingArtwork? artwork})
     : _artwork = artwork ?? NowPlayingArtwork();
@@ -130,6 +130,9 @@ class SystemPlayback {
 
   /// [owner] 正在播 [item]（[playing] 為 false 是暫停中）：把標題、副標、
   /// 封面與按鈕交給系統。內容和上一次一樣時不做事，可以每次狀態變動都呼叫。
+  ///
+  /// 不是目前那一方時，開始播才接手；暫停中的狀態不交，免得被接手後暫停時
+  /// 又把系統播放資訊搶回去。
   void show(
     PlaybackOwner owner, {
     required NowPlaying item,
@@ -137,8 +140,11 @@ class SystemPlayback {
     required Set<PlaybackControl> controls,
   }) {
     final previous = _owner;
-    _owner = owner;
-    if (previous != null && !identical(previous, owner)) previous.onStop();
+    if (!identical(previous, owner)) {
+      if (!playing) return;
+      _owner = owner;
+      previous?.onPause();
+    }
     final shown = _Shown(item: item, playing: playing, controls: controls);
     if (shown == _shown) return;
     _shown = shown;
