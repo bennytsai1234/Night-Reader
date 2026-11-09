@@ -122,8 +122,10 @@ final class VisualLineBreakPolicy {
 ///
 /// 字放得下就留在這一行，只有避頭尾例外（ADR 0026）：在某處斷行會讓
 /// 「，。」』」這類標點落在行首、「「『」留在行尾，或拆開成對的刪節號、
-/// 破折號時，往回找可以斷的位置，把前面幾個字一起拉到下一行；這一行空出
-/// 的寬度平均攤進字距，右緣仍然切齊。
+/// 破折號時，往回找可以斷的位置，把前面幾個字一起拉到下一行；英數字段
+/// 只拉最後一個單字。這一行空出的寬度平均攤進字距，右緣仍然切齊；每個
+/// 字距最多多 [_maxKinsokuSpread] 格，攤不完的留在右緣（被拉的是長英文
+/// 單字時）。
 ///
 /// This class never reads SkParagraph soft-wrap line boundaries.
 final class VisualLineLayoutEngine {
@@ -345,8 +347,9 @@ final class VisualLineLayoutEngine {
     }
 
     // 本來要在 brk 之前斷行；違反避頭尾時往回找可以斷的位置，回傳下一行
-    // 的第一個字。整段英數字當成一個字一起拉。找不到（本行會被拉空、或
-    // 要拉超過 [_maxKinsokuPull] 個字）就回傳 null，照原本的位置斷。
+    // 的第一個字。英數字段當成一個字一起拉，有空格時只拉最後一個單字。
+    // 找不到（本行會被拉空、或要拉超過 [_maxKinsokuPull] 個字）就回傳
+    // null，照原本的位置斷。
     int? kinsokuBreak(int brk) {
       var b = brk;
       var pulled = 0;
@@ -354,7 +357,9 @@ final class VisualLineLayoutEngine {
         if (pulled == _maxKinsokuPull) return null;
         var previous = b - 1;
         if (!isCell(previous)) {
-          while (previous > lineStartIndex && !isCell(previous - 1)) {
+          while (previous > lineStartIndex &&
+              !isCell(previous - 1) &&
+              !breakPolicy.isSeparator(text, shaped[previous - 1])) {
             previous -= 1;
           }
         }
@@ -368,7 +373,8 @@ final class VisualLineLayoutEngine {
     // 在 b 之前斷行，並把這一行空出來的寬度平均攤進字距。只攤在旁邊有
     // 整格字的字距上，英文單字裡面不拉開。行寬補到文字框裡最後一條半格
     // 線，和排滿的行同一個右緣：文字框是整數個字格再加一點防浮點誤差的
-    // slack，slack 攤進去會讓原生排版把這一行再折一次。
+    // slack，slack 攤進去會讓原生排版把這一行再折一次。每個字距最多攤
+    // [_maxKinsokuSpread] 格，攤不完的留在右緣。行尾的空白不算寬度。
     void endLineJustified(int b) {
       final breakOffset = shaped[b].start;
       final widths = <int, double>{};
@@ -377,7 +383,13 @@ final class VisualLineLayoutEngine {
           widths[spacer.offset] = (widths[spacer.offset] ?? 0) + spacer.width;
         }
       }
-      var used = shaped[b - 1].right - shaped[lineStartIndex].left;
+      var used = _segmentWidth(
+        shaped,
+        text,
+        lineStartIndex,
+        b,
+        trimTrailingSeparators: true,
+      );
       for (final width in widths.values) {
         used += width;
       }
@@ -388,7 +400,7 @@ final class VisualLineLayoutEngine {
           if (isCell(k) || isCell(k - 1)) k,
       ];
       if (spread > _fitEpsilon && gaps.isNotEmpty) {
-        final each = spread / gaps.length;
+        final each = math.min(spread / gaps.length, cell * _maxKinsokuSpread);
         for (final k in gaps) {
           final offset = shaped[k].start;
           widths[offset] = (widths[offset] ?? 0) + each;
@@ -587,6 +599,11 @@ const Set<String> _noLineStart = {
 const Set<String> _noLineEnd = {
   '「', '『', '（', '【', '《', '〈', '〔', '｛', '“', '‘', '(', '[', '{', //
 };
+
+/// 避頭尾的行每個字距最多多攤幾格。拉一兩個漢字時每個字距只多約 1/15 格；
+/// 被拉的是長英文單字時空出好幾格，全攤進字距會把那一行拉得很開，這時
+/// 攤到上限為止，右緣短一截（ADR 0026）。
+const double _maxKinsokuSpread = 1 / 4;
 
 /// 成對使用、不拆到兩行的符號：刪節號「……」與破折號「——」。
 const Set<String> _unsplittablePairs = {'…', '—'};
