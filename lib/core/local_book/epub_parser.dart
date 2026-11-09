@@ -12,6 +12,7 @@ import 'package:xml/xml.dart';
 
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 
 class EpubBookInfo {
@@ -34,9 +35,46 @@ class EpubBookInfo {
   final String? coverExtension;
 }
 
-/// 只取 EPUB 的文字：插圖略過，封面另外交給書架。
+/// 取 EPUB 的文字與插圖：插圖在字的位置留 `<img src="EPUB 裡的路徑">`
+/// 標記、圖抽到這本書的插圖資料夾（ADR 0050），封面另外交給書架。
 class EpubParser {
   EpubParser._();
+
+  /// 轉檔的版本：轉法改了（例如開始留插圖）就加一，舊的文字檔重轉。
+  static const int textVersion = 2;
+
+  /// 轉好的文字檔旁邊記章節範圍與 [textVersion] 的檔案。閱讀器開書時拿它
+  /// 對資料庫裡的章節（[LocalBookService.currentEpubChapters]）：不管在哪裡
+  /// 重轉過，位元組範圍都對得上。
+  static String chaptersPathFor(String textPath) =>
+      p.join(p.dirname(textPath), 'epub-chapters.json');
+
+  /// [textPath] 這次轉檔記下的章節範圍；沒有、版本不對或壞了時回傳 null。
+  static List<({String title, int start, int end})>? readChapters(
+    String textPath,
+  ) {
+    try {
+      final json = jsonDecode(
+        File(chaptersPathFor(textPath)).readAsStringSync(),
+      );
+      if (json is! Map<String, Object?> || json['version'] != textVersion) {
+        return null;
+      }
+      return [
+        for (final value in json['chapters'] as List<Object?>)
+          if (value case [final String title, final int start, final int end])
+            (title: title, start: start, end: end)
+          else
+            throw const FormatException('Malformed EPUB chapter range.'),
+      ];
+    } on FileSystemException {
+      return null;
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
 
   /// 在另一個 isolate 把 [epubPath] 轉成一段一行的 UTF-8 純文字寫到
   /// [textPath]，回傳書名、作者、封面與章節。
@@ -69,11 +107,25 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
   final package = _Package.read(archive);
   final text = _EpubText(archive, package);
   final pieces = <({String title, String text})>[];
+  // 只有插圖的章（彩頁、插圖頁）不列，圖併到下一章開頭（ADR 0050）。
+  var pendingImages = '';
   for (final range in _chapterRanges(package, text)) {
-    final content = text.range(range);
+    var content = text.range(range);
     text.forgetBefore(range.endSpine);
-    if (content.isEmpty) continue;
-    if (content.length <= TxtParser.maxChapterChars) {
+    final words = _withoutImages(content).trim();
+    if (words.isEmpty) {
+      if (content.isNotEmpty) {
+        pendingImages = pendingImages.isEmpty
+            ? content
+            : '$pendingImages\n$content';
+      }
+      continue;
+    }
+    if (pendingImages.isNotEmpty) {
+      content = '$pendingImages\n$content';
+      pendingImages = '';
+    }
+    if (words.length <= TxtParser.maxChapterChars) {
       pieces.add((title: range.title, text: content));
       continue;
     }
@@ -89,6 +141,12 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
     }
   }
   if (pieces.isEmpty) throw EpubFormatException('EPUB 裡沒有文字');
+  // 書最後面的插圖頁併到最後一章結尾。
+  if (pendingImages.isNotEmpty) {
+    final last = pieces.removeLast();
+    pieces.add((title: last.title, text: '${last.text}\n$pendingImages'));
+  }
+  _extractImages(archive, text.images, textPath);
 
   final chapters = <({String title, int start, int end})>[];
   final temp = File('$textPath.tmp');
@@ -112,6 +170,16 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
     output.closeSync();
   }
   temp.renameSync(textPath);
+  File(EpubParser.chaptersPathFor(textPath)).writeAsStringSync(
+    jsonEncode({
+      'version': EpubParser.textVersion,
+      'chapters': [
+        for (final chapter in chapters)
+          [chapter.title, chapter.start, chapter.end],
+      ],
+    }),
+    flush: true,
+  );
 
   final coverPath = package.coverPath;
   final cover = coverPath == null ? null : archive.bytes(coverPath);
@@ -122,6 +190,26 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
     cover: cover == null || cover.isEmpty ? null : cover,
     coverExtension: coverPath == null ? null : p.url.extension(coverPath),
   );
+}
+
+final _imageMarkerPattern = RegExp(r'<img src="[^"]*">');
+
+String _withoutImages(String text) => text.replaceAll(_imageMarkerPattern, '');
+
+/// 正文用到的插圖抽到這本書的插圖資料夾（[BookIllustrationStorage]，
+/// 和轉好的文字檔在同一個書本資料夾）；已經有的不再寫。
+void _extractImages(_Archive archive, Set<String> images, String textPath) {
+  if (images.isEmpty) return;
+  final dir = Directory(
+    p.join(p.dirname(textPath), BookIllustrationStorage.folderName),
+  )..createSync(recursive: true);
+  for (final path in images) {
+    final target = File(BookIllustrationStorage.pathFor(dir.path, path));
+    if (target.existsSync()) continue;
+    final data = archive.bytes(path);
+    if (data == null || data.isEmpty) continue;
+    target.writeAsBytesSync(data, flush: true);
+  }
 }
 
 /// 一章在 EPUB 閱讀順序（spine）裡的範圍：從第 [startSpine] 個檔案的
@@ -441,6 +529,23 @@ class _EpubText {
   final _Package _package;
   final Map<int, dom.Document?> _documents = {};
 
+  /// 正文用到的插圖（EPUB 裡的路徑），轉完抽出來（[_extractImages]）。
+  final Set<String> images = {};
+
+  /// [href]（相對於第 [spine] 個檔案）這張圖的標記；封面（已是書架封面）、
+  /// 找不到的檔案與 SVG（畫不出來）不留標記。
+  String _imageMarker(int spine, String href) {
+    final path = _resolve(p.url.dirname(_package.spine[spine]), href);
+    if (path.isEmpty ||
+        path == _package.coverPath ||
+        p.url.extension(path).toLowerCase() == '.svg' ||
+        _archive.bytes(path) == null) {
+      return '';
+    }
+    images.add(path);
+    return '<img src="$path">';
+  }
+
   static const _blockTags = {
     'address',
     'article',
@@ -508,6 +613,7 @@ class _EpubText {
         buffer,
         startId: startId != null && _hasId(body, startId) ? startId : null,
         stopId: stopId != null && _hasId(body, stopId) ? stopId : null,
+        imageMarker: (href) => _imageMarker(spine, href),
       ).walk(body);
       buffer.write('\n');
     }
@@ -545,12 +651,19 @@ class _EpubText {
 }
 
 class _TextWalker {
-  _TextWalker(this._buffer, {required this.startId, required this.stopId})
-    : _started = startId == null;
+  _TextWalker(
+    this._buffer, {
+    required this.startId,
+    required this.stopId,
+    required this.imageMarker,
+  }) : _started = startId == null;
 
   final StringBuffer _buffer;
   final String? startId;
   final String? stopId;
+
+  /// 一張圖（`src` 或 SVG 裡 `<image>` 的連結）在正文裡寫成什麼。
+  final String Function(String href) imageMarker;
   bool _started;
   bool _stopped = false;
   int _preDepth = 0;
@@ -579,6 +692,25 @@ class _TextWalker {
     if (!_started && id == startId) _started = true;
 
     final tag = node.localName?.toLowerCase() ?? '';
+    // 插圖在字的位置留標記（ADR 0050）；包在 SVG 裡的（常見於封面與
+    // 插圖頁）取裡面的 <image>。
+    if (tag == 'img') {
+      final src = node.attributes['src'];
+      if (_started && src != null) _buffer.write(imageMarker(src));
+      return;
+    }
+    if (tag == 'svg') {
+      if (!_started) return;
+      for (final image in node.querySelectorAll('image')) {
+        // SVG 裡的 xlink:href 是帶命名空間的屬性，鍵不是字串，照名字找。
+        final href = image.attributes.entries
+            .where((e) => '${e.key}' == 'xlink:href' || '${e.key}' == 'href')
+            .firstOrNull
+            ?.value;
+        if (href != null) _buffer.write('\n${imageMarker(href)}\n');
+      }
+      return;
+    }
     if (_EpubText._skippedTags.contains(tag)) return;
     final block = _EpubText._blockTags.contains(tag);
     if (block && _started) _buffer.write('\n');

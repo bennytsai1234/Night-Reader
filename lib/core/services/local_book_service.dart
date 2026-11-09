@@ -424,6 +424,51 @@ class LocalBookService {
     return p.join(dir.path, 'epub-text.txt');
   }
 
+  /// [book]（EPUB）現在轉好的文字的章節範圍。轉法改過（[EpubParser.textVersion]
+  /// 不同）或轉好的文字不見了就先重轉；不是 EPUB、原檔不在或重轉失敗時
+  /// 回傳 null。閱讀器開書時拿它對資料庫裡的章節（ADR 0050）。
+  Future<List<({String title, int start, int end})>?> currentEpubChapters(
+    Book book,
+  ) async {
+    final path = filePathOf(book);
+    if (localBookExtensionFromPath(path) != 'epub') return null;
+    final textPath = await epubTextPath(book);
+    if (await File(textPath).exists()) {
+      final ranges = EpubParser.readChapters(textPath);
+      if (ranges != null) return ranges;
+    }
+    if (!await File(path).exists()) return null;
+    try {
+      // 讀章時開著的舊文字檔要先關掉，Windows 上才換得掉。
+      await closeOpenFile();
+      return (await EpubParser.convert(path, textPath)).chapters;
+    } on EpubFormatException {
+      return null;
+    }
+  }
+
+  /// [book] 的章節（資料庫裡的）對上 [ranges]：章名與位元組範圍都一樣。
+  static bool chaptersMatch(
+    List<BookChapter> chapters,
+    List<({String title, int start, int end})> ranges,
+  ) {
+    if (chapters.length != ranges.length) return false;
+    for (var i = 0; i < ranges.length; i += 1) {
+      if (chapters[i].title != ranges[i].title ||
+          chapters[i].start != ranges[i].start ||
+          chapters[i].end != ranges[i].end) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// [ranges] 換成存進資料庫的章節。
+  List<BookChapter> chaptersOf(
+    Book book,
+    List<({String title, int start, int end})> ranges,
+  ) => _chapters(book, ranges);
+
   /// 解析本地書籍並回傳 Book + chapters（不做持久化）
   Future<LocalBookImportResult?> importBook(String path) async {
     final file = File(path);

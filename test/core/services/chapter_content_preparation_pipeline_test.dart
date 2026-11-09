@@ -22,7 +22,6 @@ class _PaywalledSite extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
-    bool keepImages = false,
   }) async => '本章為付費章節，請訂閱後閱讀';
 }
 

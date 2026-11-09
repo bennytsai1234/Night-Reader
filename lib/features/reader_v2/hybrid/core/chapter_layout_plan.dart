@@ -1,3 +1,5 @@
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_illustration.dart';
+
 import 'hybrid_types.dart';
 
 /// Text-free segmentation owned by the active document, not the raw cache.
@@ -23,6 +25,7 @@ final class ChapterLayoutPlan {
             visualLineSpacers: List<LineSpacer>.unmodifiable(
               block.visualLineSpacers,
             ),
+            illustration: block.illustration,
           ),
       ];
 
@@ -39,9 +42,13 @@ final class ChapterLayoutPlan {
       bool layoutBreakBefore,
       List<int> visualLineBreakOffsets,
       List<LineSpacer> visualLineSpacers,
+      ReaderV2Illustration? illustration,
     })
   >
   _spans;
+
+  /// 有插圖的章節不存進磁碟快取（[HybridLayoutDiskCache.readPlan]）。
+  bool get hasIllustrations => _spans.any((span) => span.illustration != null);
 
   ChapterBlocks materialize(ChapterText text) {
     if (text.id != chapterIndex ||
@@ -79,6 +86,7 @@ final class ChapterLayoutPlan {
             layoutBreakBefore: _spans[i].layoutBreakBefore,
             visualLineBreakOffsets: _spans[i].visualLineBreakOffsets,
             visualLineSpacers: _spans[i].visualLineSpacers,
+            illustration: _spans[i].illustration,
           ),
       ],
     );

@@ -12,7 +12,7 @@
 本分支要調整的：
 
 1. **判斷漫畫源**：已併 `origin/feat/source-kinds`（`446dd9d2`）。用 `source.sourceKind == BookSourceKind.comic`，不做「先只認類型 2」的暫時判斷。
-2. **抓圖沿用文字書插圖那套**：`feat/text-illustrations` 在書源 isolate 做好抓圖（`lib/core/engine/web_book/illustration_fetcher.dart`，標頭、Cookie、限流、`imageDecode` 照 Legado）。藍圖第 3 步不另做；接書源時，插圖已進 `beta` 就併 `beta`，還沒就併 `origin/feat/text-illustrations`，在上面加記寬高、打包 CBZ。
+2. **抓圖沿用文字書插圖那套**：`feat/text-illustrations` 在書源 isolate 做好抓圖（`lib/core/engine/web_book/illustration_fetcher.dart`，標頭、Cookie、限流、`imageDecode` 照 Legado）。藍圖第 3 步不另做，在上面加記寬高、打包 CBZ。已提前併 `origin/feat/text-illustrations`（第一步要用它的 `ImageSize` 讀圖寬高）；它之後有新提交再併一次。併的時候兩條改到同一段：插圖讓正文一律留圖，書源分類加的 `keepImages` 參數就沒作用了，本分支已整串拿掉（解析器、抓正文、校驗、測試替身、ADR 0051 那句）。合併時書源分類那條碰到同一個衝突，照這樣解。
 3. **檔案型章節怎麼存**（漫畫圖、有聲音訊都不進 SQLite）交給 `feat/audiobook-player` 先定（資料夾規則、怎麼算已下載、移出書架就刪、下載管理的顯示與清除、佔多少空間），CBZ 打包疊在上面。走到下載那步時先看 `origin/feat/audiobook-player` 推上了沒；沒有就問使用者要等還是由本分支先定（先定的話在本檔寫清楚介面）。
 4. **預設封面的漫畫、有聲書變體提前做**：單獨一個提交先推上（有聲書那條要用它畫通知封面）。`DefaultBookCover` 用 source-kinds 定的書的類別判斷。書架篩選照舊由本分支做。
 5. **要補進 ADR 0052 或規格的**（要問使用者的一次問一件）：

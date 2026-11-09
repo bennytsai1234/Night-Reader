@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/epub_parser.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -266,6 +267,86 @@ void main() {
       '第二章 岔路\n岔路口。',
       '第三章 遠方\n上半\n下半',
     ]);
+  });
+
+  test('插圖在原位置留標記、圖抽到插圖資料夾；只有圖的章併到下一章開頭', () async {
+    final path = await write(
+      'pictures.epub',
+      _simple(
+        {
+          'Text/color.xhtml': _xhtml(
+            '<svg><image xlink:href="../Images/color.png"/></svg>',
+          ),
+          'Text/one.xhtml': _xhtml(
+            '<h1>第一章</h1><p>前文</p><p><img src="../Images/in%20line.png"/></p>'
+            '<p>後文<img src="../Images/gone.png"/></p>',
+          ),
+          'Text/end.xhtml': _xhtml('<img src="../Images/color.png"/>'),
+        },
+        [
+          ('彩頁', 'Text/color.xhtml'),
+          ('第一章', 'Text/one.xhtml'),
+          ('後記插圖', 'Text/end.xhtml'),
+        ],
+      )..addAll({
+        'OEBPS/Images/color.png': _png,
+        'OEBPS/Images/in line.png': _png,
+      }),
+    );
+    final (info, texts) = await convert(path);
+
+    expect(info.chapters.map((c) => c.title), ['第一章']);
+    expect(texts, [
+      '<img src="OEBPS/Images/color.png">\n第一章\n前文\n'
+          '<img src="OEBPS/Images/in line.png">\n後文\n'
+          '<img src="OEBPS/Images/color.png">',
+    ]);
+    final images = Directory(
+      p.join(dir.path, 'out', BookIllustrationStorage.folderName),
+    );
+    expect(images.listSync().map((f) => p.basename(f.path)).toSet(), {
+      BookIllustrationStorage.fileNameFor('OEBPS/Images/color.png'),
+      BookIllustrationStorage.fileNameFor('OEBPS/Images/in line.png'),
+    });
+  });
+
+  test('封面那張圖不放進正文', () async {
+    final (_, texts) = await convert(
+      await write(
+        'cover-in-text.epub',
+        _epub3()
+          ..['OEBPS/Text/a.xhtml'] = _xhtml(
+            '<h1>第一章 起點</h1><img src="../images/c%201.png"/><p>正文</p>',
+          ),
+      ),
+    );
+    expect(texts[1], '第一章 起點\n正文');
+  });
+
+  test('轉法改過的舊文字，開書時重轉、換上新的章節範圍', () async {
+    final path = await write('old.epub', _epub3());
+    final result = (await LocalBookService().importBook(path))!;
+    final textPath = await LocalBookService.epubTextPath(result.book);
+    final ranges = EpubParser.readChapters(textPath);
+    expect(ranges, [
+      for (final c in result.chapters)
+        (title: c.title, start: c.start!, end: c.end!),
+    ]);
+    expect(await LocalBookService().currentEpubChapters(result.book), ranges);
+
+    // 舊版轉出來的：沒有章節範圍檔。
+    await File(EpubParser.chaptersPathFor(textPath)).delete();
+    expect(EpubParser.readChapters(textPath), isNull);
+    expect(await LocalBookService().currentEpubChapters(result.book), ranges);
+    expect(EpubParser.readChapters(textPath), ranges);
+    expect(LocalBookService.chaptersMatch(result.chapters, ranges!), isTrue);
+    expect(
+      LocalBookService.chaptersMatch(
+        [...result.chapters]..last = (result.chapters.last..end = 1),
+        ranges,
+      ),
+      isFalse,
+    );
   });
 
   test('EPUB 2 讀 NCX 巢狀目錄，卷名頁照樣是一章', () async {

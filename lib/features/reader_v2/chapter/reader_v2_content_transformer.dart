@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:night_reader/core/utils/illustration_markers.dart';
+
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
@@ -9,6 +11,7 @@ import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
@@ -666,6 +669,10 @@ class ReaderV2ContentTransformer {
   ///
   /// 一條規則跑超過它的逾時就略過它、照其他規則處理完，並呼叫
   /// [onRuleTimedOut]（[ReaderV2ContentTransformWorker.process]）。
+  ///
+  /// 正文裡的插圖標記一律拿掉；[illustrationsDir] 有給（開了「顯示插圖」）
+  /// 時，圖檔在那個資料夾、讀得出大小的才放進
+  /// [ReaderV2Content.illustrations]（ADR 0050）。
   Future<ReaderV2Content> process({
     required int chapterIndex,
     required Book book,
@@ -673,6 +680,7 @@ class ReaderV2ContentTransformer {
     required String rawContent,
     required List<ReplaceRule> enabledRules,
     required int chineseConvertType,
+    String? illustrationsDir,
     void Function(ReplaceRule rule)? onRuleTimedOut,
   }) async {
     final args = <String, Object?>{
@@ -685,6 +693,7 @@ class ReaderV2ContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
       'chineseConvertType': chineseConvertType,
+      'illustrationsDir': ?illustrationsDir,
     };
 
     final result = await ReaderV2ContentTransformWorker.instance.process(
@@ -763,7 +772,10 @@ class ReaderV2ContentTransformer {
       bookName: bookName,
       bookOrigin: bookOrigin,
       chapterTitle: chapterTitle,
-      rawContent: args['rawContent'] as String? ?? '',
+      // 插圖不成段（[ReaderV2Content.fromRaw]），拿掉後只有插圖的行是空行。
+      rawContent: IllustrationMarkers.strip(
+        args['rawContent'] as String? ?? '',
+      ),
       rules: rules,
       titleRules: _titleRulesOf(rules, bookName, bookOrigin),
       useReplaceRules: useReplaceRules,
@@ -1273,6 +1285,10 @@ class ReaderV2ContentTransformWorker {
           if (id == null || rawArgs is! Map) return;
           try {
             final args = Map<String, Object?>.from(rawArgs);
+            final extracted = IllustrationMarkers.extract(
+              args['rawContent'] as String? ?? '',
+            );
+            args['rawContent'] = extracted.text;
             final result = ReaderV2ContentTransformer._processInBackground(
               args,
               onRule: (index) => replyPort.send(('rule', id, index)),
@@ -1294,6 +1310,10 @@ class ReaderV2ContentTransformWorker {
               chapterIndex: args['chapterIndex'] as int? ?? 0,
               title: result['displayTitle'] as String? ?? '',
               rawText: result['content'] as String? ?? '',
+              illustrationSlots: _illustrationSlots(
+                extracted.sources,
+                args['illustrationsDir'] as String?,
+              ),
             );
             replyPort.send(<String, Object?>{
               'id': id,
@@ -1310,6 +1330,29 @@ class ReaderV2ContentTransformWorker {
       }
     });
   }
+}
+
+/// 每張插圖對到的圖檔與大小；沒給資料夾（關掉「顯示插圖」）時都不顯示，
+/// 圖檔不在或讀不出大小的那張不顯示（ADR 0050）。
+List<ReaderV2IllustrationSlot?> _illustrationSlots(
+  List<String> sources,
+  String? dir,
+) {
+  if (dir == null || sources.isEmpty) return const [];
+  return [
+    for (final src in sources)
+      () {
+        final path = BookIllustrationStorage.pathFor(dir, src);
+        final size = ImageSize.ofFile(path);
+        if (size == null) return null;
+        return (
+          src: src,
+          path: path,
+          pixelWidth: size.width,
+          pixelHeight: size.height,
+        );
+      }(),
+  ];
 }
 
 /// 一個還沒拿到結果的請求。[args] 在規則逾時後換成拿掉那條規則的版本。

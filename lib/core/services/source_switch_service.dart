@@ -14,6 +14,8 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
+import 'package:night_reader/core/utils/illustration_markers.dart';
 import 'package:pool/pool.dart';
 
 import 'app_log_service.dart';
@@ -31,7 +33,7 @@ bool Function(String name, String author) _nameEquals(String bookName) =>
     (name, _) => name == bookName;
 
 bool _looksReadableSourceSwitchContent(String content) {
-  final trimmed = content.trim();
+  final trimmed = IllustrationMarkers.strip(content).trim();
   if (trimmed.isEmpty) return false;
   if (trimmed.startsWith('加載章節失敗')) return false;
   if (trimmed.startsWith('章節內容為空')) return false;
@@ -206,6 +208,14 @@ class SourceSwitchService {
     );
     if (!_looksReadableSourceSwitchContent(validatedContent)) {
       throw SourceException('目標章節內容不可讀', sourceUrl: candidate.origin);
+    }
+    if (validatedContent.contains('<img')) {
+      await _service.fetchIllustrations(
+        source,
+        migratedBook,
+        validatedContent,
+        dir: await BookIllustrationStorage.dirFor(migratedBook),
+      );
     }
 
     return PreparedSourceSwitch(
