@@ -149,9 +149,11 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Check skeleton handoffs
+        # 用 expanded：compact 配 --run-skipped 時，測試印的 POLISH 行與失敗的例外
+        # 都不會出現在紀錄裡，只剩「See exception logs above」。
         env:
           POLISH_GATE: '1'
-        run: flutter test --no-pub --reporter compact --run-skipped -t polish test/polish
+        run: flutter test --no-pub --reporter expanded --run-skipped -t polish test/polish
       - name: Verify the check did not modify tracked source
         if: always()
         run: git diff --exit-code
