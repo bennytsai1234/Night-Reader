@@ -1,6 +1,6 @@
 # 交接：書源分類與保留
 
-2026-11-09。分支 `feat/source-kinds`，worktree `D:\Migrated\Desktop\Folder\product\nr-source-kinds`。還在談，沒寫程式。談完開工時把 `beta` 上 `PLAN.md` 的「書源分類與保留」那條搬走，並刪掉本檔。
+2026-11-09。分支 `feat/source-kinds`，worktree `D:\Migrated\Desktop\Folder\product\nr-source-kinds`。問題談完了，還沒寫程式。開工時把 `beta` 上 `PLAN.md` 的「書源分類與保留」那條搬走，並刪掉本檔。
 
 ## 談定的
 
