@@ -40,6 +40,9 @@ SkeletonLayout skeletonLayoutOf(WidgetTester tester, Finder skeleton) {
   );
 }
 
+/// 高度在這以內的色塊是一條線（例如書卡 2 高的進度線）。
+const double _thinLine = 4;
+
 /// [content] 底下排好的畫面量出來的形狀。
 SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
   final root = tester.renderObject<RenderBox>(content);
@@ -87,10 +90,11 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
         case RenderImage():
           marks.add(rect);
           return;
-        // 小塊的色塊整塊畫；大塊的（卡片、分段控制的軌道）往裡面找。
+        // 小塊的色塊整塊畫；大塊的（卡片、分段控制的軌道）往裡面找。細線
+        // （書卡的進度線）再寬都是一塊：骨架照整條底線畫，不照已讀的那段。
         case RenderDecoratedBox(:final Decoration decoration)
             when decoration is BoxDecoration &&
-                rect.width < width * 0.5 &&
+                (rect.width < width * 0.5 || rect.height <= _thinLine) &&
                 (decoration.color?.a ?? 0) > 0:
           marks.add(rect);
           return;
