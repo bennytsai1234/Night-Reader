@@ -48,6 +48,8 @@ import 'widgets/book_read_capsule.dart';
 import 'widgets/change_source_sheet.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/features/settings/local_book_sync_dialog.dart'
+    show formatMegabytes;
 
 class BookDetailPage extends StatefulWidget {
   final Book? book;
@@ -77,6 +79,7 @@ enum _MenuAction {
   changeCover,
   export,
   edit,
+  clearContent,
 }
 
 class _BookDetailPageState extends State<BookDetailPage> {
@@ -237,6 +240,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                           child: BookCoverAmbience(
                             coverUrl: UnifiedCovers.coverOf(currentBook),
                             bookName: context.zh(currentBook.name),
+                            kind: currentBook.bookKind,
                           ),
                         ),
                       Padding(
@@ -522,7 +526,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               label: '換封面',
               icon: Icons.image_outlined,
             ),
-            // 有聲書沒有文字可以匯出（ADR 0050）。
+            // 漫畫是圖、有聲書是音訊，沒有文字可以匯出（ADR 0050、0052）。
             if (provider.book.bookKind == BookSourceKind.novel)
               GlassMenuItem(
                 value: _MenuAction.export,
@@ -537,6 +541,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
               label: '編輯資訊',
               icon: Icons.edit_outlined,
             ),
+            if (!provider.book.isLocal && provider.isInBookshelf)
+              const GlassMenuItem(
+                value: _MenuAction.clearContent,
+                label: '清除已下載的正文',
+                icon: Icons.delete_sweep_outlined,
+                destructive: true,
+              ),
           ],
         ),
       ],
@@ -565,6 +576,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
         _showEditBookInfoDialog(context, provider);
       case _MenuAction.changeCover:
         _showChangeCoverSheet(context, provider);
+      case _MenuAction.clearContent:
+        await _handleClearContent(context, provider);
     }
   }
 
@@ -744,6 +757,36 @@ class _BookDetailPageState extends State<BookDetailPage> {
       case 'range':
         _showDownloadRangeDialog(context, provider);
     }
+  }
+
+  /// 清掉這本書已下載的正文與插圖，書架自動下載重抓（ADR 0008、0050）：
+  /// 插圖功能之前存的章，要這樣才補得到圖。
+  Future<void> _handleClearContent(
+    BuildContext context,
+    BookDetailProvider provider,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await provider.refreshCacheStatus();
+    if (!context.mounted) return;
+    final status = provider.cacheStatus;
+    if (!status.hasContentCache) {
+      messenger.showSnackBar(const SnackBar(content: Text('這本書還沒有下載的正文')));
+      return;
+    }
+    final confirmed = await showAppConfirm(
+      context: context,
+      title: '清除已下載的正文',
+      message:
+          '已下載的 ${status.storedChapterCount} 章正文與插圖'
+          '（${formatMegabytes(status.contentBytes)}）會刪掉，書架會自動重新下載。'
+          '閱讀進度、書籤與標註不受影響。',
+      confirmLabel: '清除',
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+    final result = await provider.clearStoredContent();
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Future<void> _queueDownload(

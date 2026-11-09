@@ -4,7 +4,9 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 void main() {
@@ -39,6 +41,21 @@ void main() {
       ),
       BookSource(bookSourceUrl: 'https://novel.test', bookSourceName: '番茄小说'),
     ]);
+    // 用補判成漫畫的書源加的書跟著換類別；影視源的書不動。
+    await BookDao(current).upsert(
+      Book(
+        bookUrl: 'https://comic.test/b',
+        name: '夜行',
+        origin: 'https://comic.test',
+      ),
+    );
+    await BookDao(current).upsert(
+      Book(
+        bookUrl: 'https://film.test/b',
+        name: '片',
+        origin: 'https://film.test',
+      ),
+    );
     await current.close();
 
     final old = AppDatabase.forTesting(
@@ -65,5 +82,14 @@ void main() {
     expect(film.sourceKind, BookSourceKind.unsupported);
     expect(film.enabled, isFalse);
     expect(sources['https://novel.test']!.sourceKind, BookSourceKind.novel);
+    final books = BookDao(old);
+    expect(
+      (await books.getByUrl('https://comic.test/b'))!.bookKind,
+      BookSourceKind.comic,
+    );
+    expect(
+      (await books.getByUrl('https://film.test/b'))!.bookKind,
+      BookSourceKind.novel,
+    );
   });
 }

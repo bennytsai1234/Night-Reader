@@ -11,7 +11,9 @@ import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/services/local_comic_service.dart';
 import 'package:night_reader/core/sync/local_book_sync.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
@@ -23,6 +25,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/comic_reader/comic_test_pages.dart';
 import '../../support/sync_store_blobs.dart';
 
 /// 記在記憶體裡的同步空間；版本是寫入次數。
@@ -447,6 +450,170 @@ void main() {
       expect(shelf.single.chapterIndex, 1);
       expect(shelf.single.charOffset, 2);
       expect((await b.localBooks().plan()).isEmpty, isTrue);
+    });
+
+    test('a local comic goes up one chapter file each, joins the other '
+        'shelf, and a chapter added later reaches the same book there '
+        '(ADR 0052)', () async {
+      Future<Book> importComic(_Phone phone, List<String> chapterNames) async {
+        phone.use();
+        final work = Directory(p.join(phone.root.path, 'picked', '夜行'));
+        for (final (i, name) in chapterNames.indexed) {
+          final dir = Directory(p.join(work.path, name))
+            ..createSync(recursive: true);
+          File(p.join(dir.path, '1.png'))
+              .writeAsBytesSync(stripedPng(4, 10 + i, 0x102030, 0x405060));
+        }
+        return (await LocalComicService(
+          bookDao: phone.books,
+          chapterDao: phone.chapters,
+        ).importPath(work.path))!;
+      }
+
+      final mine = await importComic(a, ['第1話', '第2話']);
+      final upload = await a.localBooks().plan();
+      expect(upload.of(LocalBookAction.upload), hasLength(1));
+      expect((await a.localBooks().run(upload)).failures, isEmpty);
+      expect(
+        store.blobs.keys.where((k) => k.startsWith('comic_')),
+        hasLength(2),
+      );
+      expect((await a.localBooks().plan()).isEmpty, isTrue);
+
+      final download = await b.localBooks().plan();
+      expect(download.of(LocalBookAction.download), hasLength(1));
+      expect((await b.localBooks().run(download)).failures, isEmpty);
+      final theirs = (await b.shelf()).single;
+      expect(theirs.name, '夜行');
+      expect(theirs.bookKind, BookSourceKind.comic);
+      expect(theirs.fileFingerprint, mine.fileFingerprint);
+      expect((await b.chapters.getByBook(theirs.bookUrl)).map((c) => c.title), [
+        '第1話',
+        '第2話',
+      ]);
+      expect((await b.localBooks().plan()).isEmpty, isTrue);
+
+      // A 補上第 3 話：只傳第 3 話，B 併進同一本。
+      await importComic(a, ['第1話', '第2話', '第3話']);
+      final more = await a.localBooks().plan();
+      expect(more.of(LocalBookAction.upload), hasLength(1));
+      expect((await a.localBooks().run(more)).failures, isEmpty);
+      expect(
+        store.blobs.keys.where((k) => k.startsWith('comic_')),
+        hasLength(3),
+      );
+
+      final follow = await b.localBooks().plan();
+      expect(follow.of(LocalBookAction.download), hasLength(1));
+      expect((await b.localBooks().run(follow)).failures, isEmpty);
+      final shelf = await b.shelf();
+      expect(shelf, hasLength(1));
+      expect(
+        (await b.chapters.getByBook(shelf.single.bookUrl)).map((c) => c.title),
+        ['第1話', '第2話', '第3話'],
+      );
+      expect((await b.localBooks().plan()).isEmpty, isTrue);
+      expect((await a.localBooks().plan()).isEmpty, isTrue);
+
+      // 還原備份帶回了書與目錄、沒帶回圖檔：再按一次把圖抓回原處。
+      final folder = Directory(LocalBookService.filePathOf(shelf.single));
+      folder.deleteSync(recursive: true);
+      final restore = await b.localBooks().plan();
+      expect(restore.of(LocalBookAction.download), hasLength(1));
+      expect((await b.localBooks().run(restore)).failures, isEmpty);
+      expect(folder.listSync().whereType<File>(), hasLength(3));
+      expect(await b.shelf(), hasLength(1));
+    });
+
+    group('local comics imported on both phones', () {
+      /// 每一話的圖照話名決定，兩台匯入同一話就是同一個檔。
+      Future<Book> importComic(_Phone phone, List<String> chapterNames) async {
+        phone.use();
+        final work = Directory(
+          p.join(phone.root.path, 'picked', chapterNames.join()),
+        );
+        for (final name in chapterNames) {
+          final dir = Directory(p.join(work.path, '夜行', name))
+            ..createSync(recursive: true);
+          File(p.join(dir.path, '1.png')).writeAsBytesSync(
+            stripedPng(4, 10 + name.codeUnits[1], 0x102030, 0x405060),
+          );
+        }
+        return (await LocalComicService(
+          bookDao: phone.books,
+          chapterDao: phone.chapters,
+        ).importPath(p.join(work.path, '夜行')))!;
+      }
+
+      Future<void> sync(_Phone phone) async {
+        final plan = await phone.localBooks().plan();
+        expect(plan.of(LocalBookAction.removeHere), isEmpty);
+        expect((await phone.localBooks().run(plan)).failures, isEmpty);
+      }
+
+      Future<void> expectOneBook(_Phone phone, List<String> titles) async {
+        final shelf = await phone.shelf();
+        expect(shelf, hasLength(1));
+        expect(
+          (await phone.chapters.getByBook(shelf.single.bookUrl))
+              .map((c) => c.title),
+          titles,
+        );
+      }
+
+      test('starting from different chapters, they become one book with the '
+          'same key on both phones, and nothing is deleted', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await sync(a);
+        await importComic(b, ['第0話', '第1話', '第2話']);
+        await sync(b);
+        await sync(a);
+        await sync(b);
+
+        await expectOneBook(a, ['第0話', '第1話', '第2話']);
+        await expectOneBook(b, ['第0話', '第1話', '第2話']);
+        expect(
+          (await a.shelf()).single.fileFingerprint,
+          (await b.shelf()).single.fileFingerprint,
+        );
+        expect(store.records.values.where((r) => !r.deleted), hasLength(1));
+        expect(
+          store.blobs.keys.where((k) => k.startsWith('comic_')),
+          hasLength(3),
+        );
+        expect((await a.localBooks().plan()).isEmpty, isTrue);
+        expect((await b.localBooks().plan()).isEmpty, isTrue);
+      });
+
+      test('both uploaded under their own keys before seeing each other: '
+          'they settle on one key and every chapter file stays', () async {
+        await importComic(a, ['第1話', '第2話']);
+        await importComic(b, ['第0話', '第1話']);
+        final upA = await a.localBooks().plan();
+        final upB = await b.localBooks().plan();
+        expect((await a.localBooks().run(upA)).failures, isEmpty);
+        expect((await b.localBooks().run(upB)).failures, isEmpty);
+        expect(store.records.values.where((r) => !r.deleted), hasLength(2));
+
+        for (var round = 0; round < 3; round++) {
+          await sync(a);
+          await sync(b);
+        }
+
+        await expectOneBook(a, ['第0話', '第1話', '第2話']);
+        await expectOneBook(b, ['第0話', '第1話', '第2話']);
+        expect(
+          (await a.shelf()).single.fileFingerprint,
+          (await b.shelf()).single.fileFingerprint,
+        );
+        expect(store.records.values.where((r) => !r.deleted), hasLength(1));
+        expect(
+          store.blobs.keys.where((k) => k.startsWith('comic_')),
+          hasLength(3),
+        );
+        expect((await a.localBooks().plan()).isEmpty, isTrue);
+        expect((await b.localBooks().plan()).isEmpty, isTrue);
+      });
     });
 
     test('a book removed on one phone is deleted from the cloud when that '

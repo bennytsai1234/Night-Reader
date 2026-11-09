@@ -1,15 +1,20 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:night_reader/core/comic/local_comic_library.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/services/local_comic_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:path/path.dart' as p;
 
 import 'progress_sync.dart';
 import 'sync_base_storage.dart';
@@ -43,6 +48,7 @@ class LocalBookTask {
     this.path,
     this.bookUrls = const [],
     this.remoteTime = 0,
+    this.chapters = const [],
   });
 
   final LocalBookAction action;
@@ -50,7 +56,8 @@ class LocalBookTask {
   final String name;
   final String author;
 
-  /// 原檔的副檔名（不含點）：`txt` 或 `epub`。
+  /// 原檔的副檔名（不含點）：`txt`、`epub`，本地漫畫是
+  /// [LocalBookSync.comicExtension]。
   final String extension;
 
   /// 原檔的大小（位元組）。
@@ -64,7 +71,13 @@ class LocalBookTask {
 
   /// 下載：雲端那筆紀錄的時間，記進上次同步的紀錄。
   final int remoteTime;
+
+  /// 本地漫畫的每一話（章指紋、章名）：上傳是這台的，下載與刪除是雲端的。
+  final List<ComicSyncChapter> chapters;
 }
+
+/// 本地漫畫的一話：章指紋與章名（ADR 0052）。
+typedef ComicSyncChapter = ({String fingerprint, String title});
 
 /// 按下「同步本地書」先算好的事，給確認框顯示（[LocalBookSync.plan]）。
 class LocalBookSyncPlan {
@@ -163,6 +176,16 @@ class LocalBookSync {
   static String originalName(String fingerprint, String extension) =>
       'book_$fingerprint.$extension${extension == 'txt' ? '.gz' : ''}';
 
+  /// 本地漫畫的副檔名欄位：它不是一個原檔，是一個資料夾、一話一個 CBZ
+  /// （ADR 0052）。雲端每話一個 `comic_<章指紋>.cbz`，每話只傳一次；紀錄
+  /// 裡記著有哪幾話。書的鍵起初是匯入時第一話的章指紋，兩台的同一本
+  /// （有共同的一話）記在不同的鍵時，同步時統一成較小的那個
+  /// （[adoptComicKeys]）。
+  static const String comicExtension = 'comic';
+
+  static String comicChapterName(String fingerprint) =>
+      'comic_$fingerprint.cbz';
+
   /// 算出要做的事，還不動手。這一版以前匯入、還沒有指紋的本地書先在背景
   /// isolate 補算；解析雲端的小紀錄與比對也在背景 isolate（ADR 0046）。
   ///
@@ -170,8 +193,18 @@ class LocalBookSync {
   /// 也要記，之後這台移出書架才分得出是這台移出的。
   Future<LocalBookSyncPlan> plan() async {
     await fillLocalBookFingerprints(_bookDao, run: _run);
-    final local = await _shelf();
+    var local = await _shelf();
     final file = await _store.read(fileName);
+    final adopted = await _adoptionsOn(_run, file?.content, local);
+    if (adopted.isNotEmpty) {
+      for (final MapEntry(key: from, value: to) in adopted.entries) {
+        for (final url in local[from]!.bookUrls) {
+          await _bookDao.updateFileFingerprint(url, to);
+        }
+      }
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      local = await _shelf();
+    }
     final base = await _bases.read(kind);
     final plan = await _planOn(_run, file?.content, local, base);
     if (plan.settled.isNotEmpty) {
@@ -192,6 +225,10 @@ class LocalBookSync {
         continue;
       }
       final path = LocalBookService.filePathOf(book);
+      if (book.bookKind == BookSourceKind.comic) {
+        shelf[print] = await _comicShelfBook(book, path);
+        continue;
+      }
       final file = File(path);
       final hasFile = await file.exists();
       shelf[print] = LocalShelfBook(
@@ -206,6 +243,30 @@ class LocalBookSync {
       );
     }
     return shelf;
+  }
+
+  /// 書架上的一本本地漫畫：書的資料夾裡每話一個 CBZ。
+  Future<LocalShelfBook> _comicShelfBook(Book book, String path) async {
+    final chapters = await _chapterDao.getByBook(book.bookUrl);
+    var size = 0;
+    for (final chapter in chapters) {
+      final file = File(LocalComicService.chapterPathOf(book, chapter));
+      if (await file.exists()) size += await file.length();
+    }
+    return LocalShelfBook(
+      name: book.name,
+      author: book.author,
+      extension: comicExtension,
+      size: size,
+      hasFile: await Directory(path).exists(),
+      addedTime: book.syncTime,
+      path: path,
+      bookUrls: [book.bookUrl],
+      chapters: [
+        for (final chapter in chapters)
+          (fingerprint: chapter.url, title: chapter.title),
+      ],
+    );
   }
 
   /// 照 [plan] 做，一次一本。[cancelled] 在兩本之間看，傳回 true 就停下；
@@ -285,6 +346,7 @@ class LocalBookSync {
 
   /// 上傳原檔與小紀錄，傳回小紀錄的時間。
   Future<int> _upload(LocalBookTask task) async {
+    if (task.extension == comicExtension) return _uploadComic(task);
     final path = task.path;
     if (path == null || !await File(path).exists()) {
       throw const LocalBookSyncException('這台手機上的原檔不見了，重新匯入這本書再同步');
@@ -311,6 +373,7 @@ class LocalBookSync {
   }
 
   Future<void> _download(LocalBookTask task) async {
+    if (task.extension == comicExtension) return _downloadComic(task);
     final bytes = await _store.readBytes(
       originalName(task.fingerprint, task.extension),
     );
@@ -370,7 +433,25 @@ class LocalBookSync {
   /// 先刪原檔再把小紀錄記成刪除：小紀錄寫不進去時下次按會再刪一次（原檔
   /// 已經沒了也正常），不會留下沒人指著的原檔。
   Future<void> _deleteRemote(LocalBookTask task) async {
-    await _store.delete(originalName(task.fingerprint, task.extension));
+    if (task.extension == comicExtension) {
+      // 另一筆還記著的話不刪：同一本換過鍵時，舊鍵那筆的每一話新鍵也有。
+      final file = await _store.read(fileName);
+      final kept = <String>{
+        if (file != null)
+          for (final MapEntry(:key, :value) in SyncDocument.decode(
+            file.content,
+          ).records.entries)
+            if (key != task.fingerprint && !value.deleted)
+              for (final chapter in comicChaptersOf(value.data))
+                chapter.fingerprint,
+      };
+      for (final chapter in task.chapters) {
+        if (kept.contains(chapter.fingerprint)) continue;
+        await _store.delete(comicChapterName(chapter.fingerprint));
+      }
+    } else {
+      await _store.delete(originalName(task.fingerprint, task.extension));
+    }
     await _putRecord(
       task.fingerprint,
       SyncRecord(
@@ -379,6 +460,121 @@ class LocalBookSync {
         deleted: true,
       ),
     );
+  }
+
+  /// 本地漫畫：雲端還沒有的話一話一話傳上去，紀錄記成兩邊所有的話。
+  Future<int> _uploadComic(LocalBookTask task) async {
+    final path = task.path;
+    if (path == null || !await Directory(path).exists()) {
+      throw const LocalBookSyncException('這台手機上的漫畫不見了，重新匯入再同步');
+    }
+    final file = await _store.read(fileName);
+    final remote = file == null
+        ? null
+        : SyncDocument.decode(file.content).records[task.fingerprint];
+    final known = remote == null || remote.deleted
+        ? const <ComicSyncChapter>[]
+        : comicChaptersOf(remote.data);
+    final uploaded = {for (final chapter in known) chapter.fingerprint};
+    var size = 0;
+    for (final chapter in task.chapters) {
+      final local = File(
+        p.join(
+          path,
+          '${chapter.fingerprint}${LocalComicLibrary.chapterExtension}',
+        ),
+      );
+      if (!await local.exists()) continue;
+      size += await local.length();
+      if (uploaded.contains(chapter.fingerprint)) continue;
+      await _store.writeBytes(
+        comicChapterName(chapter.fingerprint),
+        await local.readAsBytes(),
+      );
+      uploaded.add(chapter.fingerprint);
+    }
+    final mine = {for (final chapter in task.chapters) chapter.fingerprint};
+    final all = [
+      ...task.chapters,
+      for (final chapter in known)
+        if (!mine.contains(chapter.fingerprint)) chapter,
+    ];
+    final time = _clock().millisecondsSinceEpoch;
+    await _putRecord(
+      task.fingerprint,
+      SyncRecord(
+        time: time,
+        data: {
+          'name': task.name,
+          'author': task.author,
+          'ext': comicExtension,
+          'size': size,
+          'chapters': [
+            for (final chapter in all) [chapter.fingerprint, chapter.title],
+          ],
+        },
+      ),
+    );
+    return time;
+  }
+
+  /// 本地漫畫：這台還沒有的話下載下來，併進同一本（有共同的話就是同一本，
+  /// 同匯入）；這台沒有這本就新加一本。
+  Future<void> _downloadComic(LocalBookTask task) async {
+    // 這台檔案還在的話不再下載；還原備份帶回了目錄、沒帶回檔案的照樣抓。
+    final have = <String>{};
+    for (final book in await _bookDao.getInBookshelf()) {
+      if (!book.isLocal || book.bookKind != BookSourceKind.comic) continue;
+      for (final chapter in await _chapterDao.getByBook(book.bookUrl)) {
+        final file = File(LocalComicService.chapterPathOf(book, chapter));
+        if (await file.exists()) have.add(chapter.url);
+      }
+    }
+    final temp = await AppStoragePaths.temporaryDir();
+    final staging = Directory(
+      p.join(temp.path, 'comic_sync', task.fingerprint),
+    );
+    if (await staging.exists()) await staging.delete(recursive: true);
+    await staging.create(recursive: true);
+    try {
+      for (final (index, chapter) in task.chapters.indexed) {
+        if (have.contains(chapter.fingerprint)) continue;
+        final bytes = await _store.readBytes(
+          comicChapterName(chapter.fingerprint),
+        );
+        if (bytes == null) {
+          throw const LocalBookSyncException('雲端少了這本的幾話，請在另一台再按一次「同步本地書」');
+        }
+        // 檔名照原本的順序編號（章名可能重複），章名另外交給匯入。
+        final target = File(
+          p.join(staging.path, '${index.toString().padLeft(5, '0')}.cbz'),
+        );
+        await target.writeAsBytes(bytes, flush: true);
+        if (await _comicFingerprintOn(_run, target.path) !=
+            chapter.fingerprint) {
+          throw const LocalBookSyncException('下載的漫畫不完整，下次再試');
+        }
+      }
+      if (await staging.list().isEmpty) return;
+      final book =
+          await LocalComicService(
+            bookDao: _bookDao,
+            chapterDao: _chapterDao,
+            run: _run,
+          ).importPath(
+            staging.path,
+            name: task.name,
+            fingerprint: task.fingerprint,
+            related: {for (final chapter in task.chapters) chapter.fingerprint},
+            titles: {
+              for (final chapter in task.chapters)
+                chapter.fingerprint: chapter.title,
+            },
+          );
+      if (book == null) throw const LocalBookSyncException('這本漫畫讀不出圖');
+    } finally {
+      if (await staging.exists()) await staging.delete(recursive: true);
+    }
   }
 
   /// 改雲端小紀錄裡的一筆：讀、改、寫回；被別台搶先就重讀再改。一直被搶先
@@ -429,6 +625,7 @@ class LocalShelfBook {
     required this.path,
     required this.bookUrls,
     this.hasFile = true,
+    this.chapters = const [],
   });
 
   final String name;
@@ -444,6 +641,9 @@ class LocalShelfBook {
   final String path;
   final List<String> bookUrls;
 
+  /// 本地漫畫的每一話；其他本地書是空的。
+  final List<ComicSyncChapter> chapters;
+
   LocalShelfBook withBook(String bookUrl) => LocalShelfBook(
     name: name,
     author: author,
@@ -453,6 +653,7 @@ class LocalShelfBook {
     path: path,
     bookUrls: [...bookUrls, bookUrl],
     hasFile: hasFile,
+    chapters: chapters,
   );
 }
 
@@ -479,6 +680,26 @@ LocalBookSyncPlan planLocalBookSync({
     final last = base[print];
     final alive = theirs != null && !theirs.deleted;
     if (mine != null) {
+      if (alive &&
+          mine.hasFile &&
+          mine.extension == LocalBookSync.comicExtension) {
+        // 本地漫畫兩邊都有：這台多的話上傳、雲端多的話下載，一樣就算同步過。
+        final remotePrints = {
+          for (final c in comicChaptersOf(theirs.data)) c.fingerprint,
+        };
+        final localPrints = {for (final c in mine.chapters) c.fingerprint};
+        final uploads = !remotePrints.containsAll(localPrints);
+        final downloads = !localPrints.containsAll(remotePrints);
+        if (!uploads && !downloads) {
+          settled[print] = LocalBookSync._entry(theirs.time, mine.extension);
+          continue;
+        }
+        if (uploads) tasks.add(_localTask(LocalBookAction.upload, print, mine));
+        if (downloads) {
+          tasks.add(_remoteTask(LocalBookAction.download, print, theirs));
+        }
+        continue;
+      }
       if (alive && mine.hasFile) {
         settled[print] = LocalBookSync._entry(theirs.time, mine.extension);
         continue;
@@ -489,17 +710,10 @@ LocalBookSyncPlan planLocalBookSync({
       }
       final removedThere = theirs != null && theirs.time >= mine.addedTime;
       tasks.add(
-        LocalBookTask(
-          action: removedThere
-              ? LocalBookAction.removeHere
-              : LocalBookAction.upload,
-          fingerprint: print,
-          name: mine.name,
-          author: mine.author,
-          extension: mine.extension,
-          size: mine.size,
-          path: mine.path,
-          bookUrls: mine.bookUrls,
+        _localTask(
+          removedThere ? LocalBookAction.removeHere : LocalBookAction.upload,
+          print,
+          mine,
         ),
       );
       continue;
@@ -515,6 +729,7 @@ LocalBookSyncPlan planLocalBookSync({
       );
       continue;
     }
+    // 本地漫畫不知道傳了哪幾話，沒人記著的章檔留在雲端。
     if (theirs == null &&
         last != null &&
         isSupportedLocalBookExtension(last.local)) {
@@ -530,13 +745,82 @@ LocalBookSyncPlan planLocalBookSync({
       );
     }
   }
-  tasks.removeWhere((task) => !isSupportedLocalBookExtension(task.extension));
+  tasks.removeWhere(
+    (task) =>
+        !isSupportedLocalBookExtension(task.extension) &&
+        task.extension != LocalBookSync.comicExtension,
+  );
   // 先做這台書架上的事（快），再傳檔；同一種裡照書名排，進度框看得出順序。
   tasks.sort((a, b) {
     final order = a.action.index.compareTo(b.action.index);
     return order != 0 ? order : a.name.compareTo(b.name);
   });
   return LocalBookSyncPlan(tasks: tasks, settled: settled);
+}
+
+/// 本地漫畫的鍵怎麼和雲端對上（ADR 0052：有共同的一話就是同一本）。書的
+/// 鍵起初是匯入時第一話的章指紋，兩台從不同話開始匯入、或一台之後補了更
+/// 前面的話，同一本就會記在不同的鍵；不統一的話進度對不上，這台還會把
+/// 另一台那筆當成這台移出的刪掉。
+///
+/// 這台每一本本地漫畫，和雲端記著、沒刪掉、有共同一話的其他紀錄，統一成
+/// 其中最小的鍵（這台自己那筆也在雲端時一起比）；要改鍵的傳回「舊鍵 →
+/// 新鍵」。每台都照同一個規則，最後都落在同一個鍵；舊鍵那筆由記著它的
+/// 那台照「這台移出了」刪掉，共用的章檔留著（[LocalBookSync._deleteRemote]）。
+Map<String, String> adoptComicKeys({
+  required Map<String, LocalShelfBook> local,
+  required Map<String, SyncRecord> remote,
+}) {
+  final adopted = <String, String>{};
+  for (final MapEntry(key: print, value: mine) in local.entries) {
+    if (mine.extension != LocalBookSync.comicExtension) continue;
+    final prints = {for (final c in mine.chapters) c.fingerprint};
+    String? best = remote[print]?.deleted == false ? print : null;
+    for (final MapEntry(:key, :value) in remote.entries) {
+      if (key == print || value.deleted) continue;
+      if (value.data['ext'] != LocalBookSync.comicExtension) continue;
+      if (!comicChaptersOf(value.data)
+          .any((c) => prints.contains(c.fingerprint))) {
+        continue;
+      }
+      if (best == null || key.compareTo(best) < 0) best = key;
+    }
+    if (best != null && best != print && !local.containsKey(best)) {
+      adopted[print] = best;
+    }
+  }
+  return adopted;
+}
+
+/// 照這台書架上的那本（[mine]）上傳或移出。
+LocalBookTask _localTask(
+  LocalBookAction action,
+  String fingerprint,
+  LocalShelfBook mine,
+) => LocalBookTask(
+  action: action,
+  fingerprint: fingerprint,
+  name: mine.name,
+  author: mine.author,
+  extension: mine.extension,
+  size: mine.size,
+  path: mine.path,
+  bookUrls: mine.bookUrls,
+  chapters: mine.chapters,
+);
+
+/// 雲端紀錄裡記著的本地漫畫的每一話（`chapters`：`[[章指紋, 章名], …]`）。
+List<ComicSyncChapter> comicChaptersOf(Map<String, Object?> data) {
+  final raw = data['chapters'];
+  if (raw is! List) return const [];
+  return [
+    for (final entry in raw)
+      if (entry is List &&
+          entry.length >= 2 &&
+          entry[0] is String &&
+          entry[1] is String)
+        (fingerprint: entry[0] as String, title: entry[1] as String),
+  ];
 }
 
 /// 照雲端那筆紀錄（[record]）下載或刪掉雲端的一本。
@@ -556,6 +840,7 @@ LocalBookTask _remoteTask(
     extension: text('ext'),
     size: data['size'] is int ? data['size'] as int : 0,
     remoteTime: record.time,
+    chapters: comicChaptersOf(data),
   );
 }
 
@@ -577,6 +862,19 @@ Future<LocalBookSyncPlan> _planOn(
   ),
 );
 
+Future<Map<String, String>> _adoptionsOn(
+  LocalBookWorkRunner run,
+  String? content,
+  Map<String, LocalShelfBook> local,
+) => content == null
+    ? Future.value(const <String, String>{})
+    : run(
+        () => adoptComicKeys(
+          local: local,
+          remote: SyncDocument.decode(content).records,
+        ),
+      );
+
 /// 雲端小紀錄（[content]，還沒有是 null）改了 [fingerprint] 那一筆之後的
 /// 整份內容。
 Future<String> _putRecordOn(
@@ -594,6 +892,9 @@ Future<String> _putRecordOn(
 /// 讀原檔，TXT 先壓縮。
 Future<Uint8List> _packOn(LocalBookWorkRunner run, String path, String ext) =>
     run(() => packLocalBookOriginal(path, ext));
+
+Future<String> _comicFingerprintOn(LocalBookWorkRunner run, String path) =>
+    run(() => LocalComicLibrary.fingerprintOf(path));
 
 Future<bool> _unpackOn(
   LocalBookWorkRunner run,

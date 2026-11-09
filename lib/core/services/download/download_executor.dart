@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'download_base.dart';
 import 'download_scheduler.dart';
 
+import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -18,9 +19,35 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_chapter_files.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+
+/// 還原備份後（插圖不在備份裡），這本網路書已存的正文裡還有插圖沒試過的
+/// 章節網址：只在還原留下記號時才掃，都試過了就把記號刪掉（ADR 0050）。
+Future<Set<String>> chaptersWithUntriedIllustrations(Book book) async {
+  if (book.isLocal || !await BookIllustrationStorage.isUnfetched(book)) {
+    return const {};
+  }
+  final contents = await getIt<ReaderChapterContentDao>()
+      .getStoredContentsWithIllustrations(
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+      );
+  final dir = await BookIllustrationStorage.dirFor(book);
+  final untried = {
+    for (final MapEntry(key: url, value: content) in contents.entries)
+      if ((await BookIllustrationStorage.untriedSources(
+        dir,
+        content,
+      )).isNotEmpty)
+        url,
+  };
+  if (untried.isEmpty) await BookIllustrationStorage.clearUnfetched(book);
+  return untried;
+}
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
@@ -168,15 +195,27 @@ Future<DownloadPlan> _planDownload(
   if (scope == null) {
     throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
   }
-  final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
-    origin: book.origin,
-    bookUrl: book.bookUrl,
-  );
-  final missing = [
-    for (final chapter in scope)
-      if (!stored.contains(chapter.url))
-        (index: chapter.index, url: chapter.url, title: chapter.title),
-  ];
+  final List<({int index, String url, String title})> missing;
+  if (book.bookKind == BookSourceKind.comic) {
+    // 漫畫一話一個 CBZ（ADR 0052），不看資料庫裡的正文。
+    final downloaded = await downloadedComicChapterUrls(book, scope);
+    missing = [
+      for (final chapter in scope)
+        if (!downloaded.contains(chapter.url))
+          (index: chapter.index, url: chapter.url, title: chapter.title),
+    ];
+  } else {
+    final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
+      origin: book.origin,
+      bookUrl: book.bookUrl,
+    );
+    final unfetched = await chaptersWithUntriedIllustrations(book);
+    missing = [
+      for (final chapter in scope)
+        if (!stored.contains(chapter.url) || unfetched.contains(chapter.url))
+          (index: chapter.index, url: chapter.url, title: chapter.title),
+    ];
+  }
   final run = _nextDownloadRun++;
   _downloadRuns[run] = (
     book: book,
@@ -203,32 +242,93 @@ Future<DownloadChapterResult> _downloadChapter(
   final source = state.source;
   final chapter = state.chapters[chapterUrl];
   if (chapter == null) return DownloadChapterResult.failed('章節不存在');
+  if (book.bookKind == BookSourceKind.comic) {
+    return _downloadComicChapter(book, source, chapter, cancelToken);
+  }
   final chapterDao = getIt<ChapterDao>();
   final store = ReaderChapterContentStore(
     chapterDao: chapterDao,
     contentDao: getIt<ReaderChapterContentDao>(),
   );
-  // 排進來之後閱讀器可能已經抓好這一章。
-  if (await store.hasReadyContent(book: book, chapter: chapter)) {
-    return DownloadChapterResult.ready();
+  final pipeline = ChapterContentPreparationPipeline(
+    book: book,
+    contentStore: store,
+    sourceDao: getIt<BookSourceDao>(),
+    service: BookSourceService(),
+    getSource: () => source,
+  );
+  // 排進來之後閱讀器可能已經抓好這一章；還原備份帶回的正文則只補抓插圖，
+  // 不換掉正文（ADR 0008、0050）。
+  final stored = await store.getContentEntry(book: book, chapter: chapter);
+  if (stored != null && stored.isReady && stored.hasDisplayContent) {
+    final complete = await pipeline.fetchStoredIllustrations(
+      stored.content!,
+      sourceOverride: source,
+      cancelToken: cancelToken,
+    );
+    return complete
+        ? DownloadChapterResult.ready()
+        : DownloadChapterResult.failed('插圖抓不到');
   }
-  final result =
-      await ChapterContentPreparationPipeline(
-        book: book,
-        contentStore: store,
-        sourceDao: getIt<BookSourceDao>(),
-        service: BookSourceService(),
-        getSource: () => source,
-      ).prepare(
-        chapterIndex: chapter.index,
-        chapter: chapter,
-        sourceOverride: source,
-        forceRefresh: true,
-        maxAttempts: maxAttempts,
-        cancelToken: cancelToken,
-      );
-  if (result.isReady) return DownloadChapterResult.ready();
-  return DownloadChapterResult.failed(result.failureMessage ?? result.content);
+  final result = await pipeline.prepare(
+    chapterIndex: chapter.index,
+    chapter: chapter,
+    sourceOverride: source,
+    forceRefresh: true,
+    maxAttempts: maxAttempts,
+    cancelToken: cancelToken,
+  );
+  if (!result.isReady) {
+    return DownloadChapterResult.failed(
+      result.failureMessage ?? result.content,
+    );
+  }
+  // 正文存好了，但有圖連不上：這章照下載失敗的重試規則再補圖（ADR 0050）。
+  return await pipeline.illustrationsSettled(result.content)
+      ? DownloadChapterResult.ready()
+      : DownloadChapterResult.failed('插圖抓不到');
+}
+
+/// 漫畫的一話：抓齊圖、打包成 CBZ（[ComicChapterDownload]）。
+Future<DownloadChapterResult> _downloadComicChapter(
+  Book book,
+  BookSource? source,
+  BookChapter chapter,
+  CancelToken cancelToken,
+) async {
+  if (source == null) return DownloadChapterResult.failed('書源不存在');
+  try {
+    await ComicChapterDownload.download(
+      source,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
+    return DownloadChapterResult.ready();
+  } on DioException catch (error) {
+    if (error.type == DioExceptionType.cancel) rethrow;
+    return DownloadChapterResult.failed(error.message ?? '網路錯誤');
+  } on Exception catch (error) {
+    return DownloadChapterResult.failed(error.toString());
+  } on StateError catch (error) {
+    return DownloadChapterResult.failed(error.message);
+  }
+}
+
+/// [chapters] 裡已經下載好（CBZ 在）的漫畫章節網址。
+Future<Set<String>> downloadedComicChapterUrls(
+  Book book,
+  List<BookChapter> chapters,
+) async {
+  final files = await BookChapterFiles.downloaded(book);
+  return {
+    for (final chapter in chapters)
+      if (files[BookChapterFiles.baseNameFor(chapter)]?.path.endsWith(
+            ComicChapterDownload.cbzExtension,
+          ) ??
+          false)
+        chapter.url,
+  };
 }
 
 String classifyDownloadFailureReason(String message) {

@@ -89,7 +89,6 @@ class _FakeBookSourceService extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
-    bool keepImages = false,
   }) async {
     contentCalls++;
     return content;
@@ -643,6 +642,41 @@ void main() {
       expect(movedHighlight.chapterIndex, 6, reason: '標註也跟著搬');
       expect(movedHighlight.charOffset, 30);
       expect(movedHighlight.color, HighlightColor.green);
+    });
+
+    test('漫畫換源：目標那一話只有圖也能換，不寫進正文快取（ADR 0052）', () async {
+      final oldBook = _currentBook()..type = 2;
+      await db.bookDao.upsert(oldBook);
+      final candidate = _candidate('new-origin')..type = 2;
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(
+          chapters: _chapters(candidate.bookUrl, 10),
+          content: '<img src="https://a.test/1.jpg"><img src="https://a.test/2.jpg">',
+        ),
+        sourceDao: db.bookSourceDao,
+      );
+
+      final resolution = await service.prepareSwitch(
+        oldBook,
+        candidate,
+        targetChapterIndex: 5,
+        targetChapterTitle: '第6章',
+      );
+      await service.commitSwitch(
+        oldBook,
+        resolution,
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+      );
+
+      final migrated = await db.bookDao.getByUrl(candidate.bookUrl);
+      expect(migrated?.bookKind, BookSourceKind.comic);
+      expect(
+        await db.readerChapterContentDao.getEntriesByBookUrls([
+          candidate.bookUrl,
+        ]),
+        isEmpty,
+      );
     });
 
     test('operation owner 在 commit transaction 內退休，成功後才 finalize', () async {

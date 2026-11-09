@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
@@ -18,7 +19,10 @@ import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -78,6 +82,44 @@ void main() {
     expect(result.restoredAny, isTrue);
     expect(result.failedFiles, ['replaceRules.json']);
     expect(await BookSourceDao(db).getByUrl('https://a.example'), isNotNull);
+  });
+
+  test('a book follows its source kind whichever file comes first in the '
+      'backup (ADR 0053)', () async {
+    for (final (index, order) in [
+      ['bookSource.json', 'bookshelf.json'],
+      ['bookshelf.json', 'bookSource.json'],
+    ].indexed) {
+      final url = 'https://comic$index.example';
+      final files = {
+        // 舊備份：書源類型寫 0、名稱帶漫畫字樣，還原時補判成漫畫。
+        'bookSource.json': jsonEncode([
+          {'bookSourceUrl': url, 'bookSourceName': '漫畫站'},
+        ]),
+        'bookshelf.json': jsonEncode([
+          {
+            'bookUrl': '$url/b',
+            'name': '夜行',
+            'origin': url,
+            'isInBookshelf': true,
+          },
+        ]),
+      };
+      final zip = await writeZip('kind$index.zip', {
+        'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+        for (final name in order) name: files[name]!,
+      });
+
+      await RestoreService().restoreFromZip(zip);
+
+      expect(
+        (await BookDao(db).getByUrl('$url/b'))!.bookKind,
+        BookSourceKind.comic,
+        reason: order.join(' → '),
+      );
+      await BookDao(db).deleteByUrl('$url/b');
+      await BookSourceDao(db).deleteByUrl(url);
+    }
   });
 
   test('subscription data in an old backup is skipped silently', () async {
@@ -298,6 +340,60 @@ void main() {
     expect((await DownloadDao(db).getAll()).map((task) => task.bookUrl), [
       'theirs',
     ]);
+  });
+
+  test('restored text with illustrations (not in the backup) is queued for '
+      'the shelf download until every illustration was tried', () async {
+    AppStoragePaths.useRoots((
+      documents: tempDir.path,
+      support: tempDir.path,
+      temporary: tempDir.path,
+    ));
+    const origin = 'https://i.example';
+    final book = Book(
+      bookUrl: 'illustrated',
+      origin: origin,
+      name: '有圖',
+      isInBookshelf: true,
+    );
+    Map<String, Object> content(String chapterUrl, String text) => {
+      'contentKey': ReaderChapterContentDao.contentKey(
+        origin: origin,
+        bookUrl: book.bookUrl,
+        chapterUrl: chapterUrl,
+      ),
+      'origin': origin,
+      'bookUrl': book.bookUrl,
+      'chapterUrl': chapterUrl,
+      'chapterIndex': 0,
+      'status': 1,
+      'content': text,
+      'updatedAt': 1,
+    };
+    final zip = await writeZip('illustrated_backup.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': db.schemaVersion}),
+      'bookshelf.json': jsonEncode([book.toJson()]),
+      'readerChapterContent.json': jsonEncode([
+        content('c1', '前文\n<img src="https://i.example/1.png">\n後文'),
+        content('c2', '沒有圖'),
+      ]),
+    });
+
+    final result = await RestoreService().restoreFromZip(zip);
+
+    expect(result.failedFiles, isEmpty);
+    expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+    expect(await chaptersWithUntriedIllustrations(book), {'c1'});
+
+    // 抓過了（這裡當作確定抓不到）：不再排，記號刪掉。
+    await File(
+      BookIllustrationStorage.missingPathFor(
+        await BookIllustrationStorage.dirFor(book),
+        'https://i.example/1.png',
+      ),
+    ).create(recursive: true);
+    expect(await chaptersWithUntriedIllustrations(book), isEmpty);
+    expect(await BookIllustrationStorage.isUnfetched(book), isFalse);
   });
 
   test('a file that is not a backup is reported as invalid', () async {

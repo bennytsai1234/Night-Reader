@@ -177,6 +177,9 @@ class PreferKey {
   static const String readerAutoPageSpeed = 'reader_auto_page_speed';
   static const String readerChineseConvert = 'reader_chinese_convert_v2';
 
+  /// 「顯示插圖」（ADR 0050），預設關。
+  static const String readerShowIllustrations = 'reader_show_illustrations';
+
   /// 舊版語速（flutter_tts 刻度，0.5 = 正常）；僅作遷移來源。
   static const String readerTtsRate = 'reader_tts_rate';
 

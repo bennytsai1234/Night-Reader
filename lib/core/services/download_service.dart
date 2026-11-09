@@ -13,6 +13,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_handoff.dart';
 
@@ -81,12 +82,22 @@ Future<ShelfDownloadNeed?> _shelfDownloadNeed(String bookUrl) async {
   final chapters = await getIt<ChapterDao>().getByBook(bookUrl);
   // 還沒有目錄（例如匯入時沒附）也要排：任務開跑時先抓目錄，抓不到就
   // 記為失敗，照重試規則再試。有目錄而且都下載好了就不排。
-  if (chapters.isNotEmpty) {
+  if (chapters.isNotEmpty && book.bookKind == BookSourceKind.comic) {
+    final downloaded = await downloadedComicChapterUrls(book, chapters);
+    if (chapters.every((chapter) => downloaded.contains(chapter.url))) {
+      return null;
+    }
+  } else if (chapters.isNotEmpty) {
     final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
       origin: book.origin,
       bookUrl: bookUrl,
     );
-    if (chaptersMissingContent(chapters, stored).isEmpty) return null;
+    // 還原備份帶回的正文裡有插圖時，正文都在也要排，把插圖抓下來（ADR
+    // 0050）。
+    if (chaptersMissingContent(chapters, stored).isEmpty &&
+        !await BookIllustrationStorage.isUnfetched(book)) {
+      return null;
+    }
   }
   return (
     bookName: book.name,

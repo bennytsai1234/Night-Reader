@@ -5,9 +5,11 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/utils/illustration_markers.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ExportBookService {
@@ -17,12 +19,16 @@ class ExportBookService {
   BookSourceDao get _sourceDao => getIt<BookSourceDao>();
   final BookSourceService _sourceService = BookSourceService();
 
-  /// 匯出全書為 TXT 檔案
+  /// 匯出全書為 TXT 檔案。漫畫是圖、沒有文字，丟出 [StateError]（書籍詳情
+  /// 不給漫畫這個選項，ADR 0052）。
   Future<void> exportToTxt(
     Book book, {
     Function(double progress)? onProgress,
     bool fetchMissingRemote = false,
   }) async {
+    if (book.bookKind == BookSourceKind.comic) {
+      throw StateError('漫畫沒有文字可以匯出');
+    }
     final chapters = await _chapterDao.getByBook(book.bookUrl);
     if (chapters.isEmpty) return;
     final source = fetchMissingRemote && !book.isLocal
@@ -54,6 +60,14 @@ class ExportBookService {
           nextChapterUrl: _nextReadableChapterUrl(chapters, i),
         );
         if (content.trim().isNotEmpty) {
+          if (content.contains('<img')) {
+            await _sourceService.fetchIllustrations(
+              source,
+              book,
+              content,
+              dir: await BookIllustrationStorage.dirFor(book),
+            );
+          }
           await _chapterContentDao.saveContent(
             contentKey: ReaderChapterContentDao.contentKey(
               origin: book.origin,
@@ -71,7 +85,8 @@ class ExportBookService {
       }
       if (content != null) {
         buffer.writeln('\n${chapters[i].title}\n');
-        buffer.writeln(content);
+        // 匯出的是純文字，插圖不放（ADR 0050）。
+        buffer.writeln(IllustrationMarkers.strip(content));
       }
       if (onProgress != null) {
         onProgress((i + 1) / chapters.length);

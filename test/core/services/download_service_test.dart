@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -11,13 +13,23 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 void main() {
   late AppDatabase db;
+  late Directory root;
 
   setUpAll(() async {
+    // 下載排程會看書本資料夾裡有沒有還原留下的插圖記號（ADR 0050）。
+    root = await Directory.systemTemp.createTemp('download_service_test');
+    AppStoragePaths.useRoots((
+      documents: root.path,
+      support: root.path,
+      temporary: root.path,
+    ));
     final getIt = GetIt.instance;
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -31,6 +43,7 @@ void main() {
 
   tearDownAll(() async {
     await db.close();
+    await root.delete(recursive: true);
     await GetIt.instance.reset();
   });
 
@@ -534,6 +547,56 @@ void main() {
       final after = await stored();
       expect(after.isFailed, isTrue);
       expect(after.lastUpdateTime, failed.lastUpdateTime);
+    });
+
+    test('a comic counts a chapter as downloaded once its CBZ is there '
+        '(ADR 0052)', () async {
+      const comicOrigin = 'https://comic.example';
+      final book = Book(
+        bookUrl: '$comicOrigin/book/1',
+        origin: comicOrigin,
+        name: '漫畫',
+        type: 2,
+        isInBookshelf: true,
+      );
+      final chapters = [
+        for (var i = 0; i < 2; i++)
+          BookChapter(
+            url: '$comicOrigin/book/1/$i',
+            title: '第 $i 話',
+            index: i,
+            bookUrl: book.bookUrl,
+          ),
+      ];
+      await GetIt.instance<BookSourceDao>().upsert(
+        BookSource.fromJson({
+          'bookSourceName': '漫',
+          'bookSourceUrl': comicOrigin,
+          'bookSourceType': 2,
+        }),
+      );
+      await GetIt.instance<BookDao>().upsert(book);
+      await GetIt.instance<ChapterDao>().insertChapters(chapters);
+      for (final chapter in chapters) {
+        await BookChapterFiles.save(
+          book,
+          chapter,
+          '.cbz',
+          (partial) => partial.writeAsBytes([1]),
+        );
+      }
+
+      await DownloadService().keepShelfBookDownloaded(book.bookUrl);
+      final stored = await GetIt.instance<DownloadDao>().getAll();
+      expect(stored.where((t) => t.bookUrl == book.bookUrl), isEmpty);
+
+      // 刪掉一話的 CBZ：排進下載。
+      (await BookChapterFiles.fileFor(book, chapters[1]))!.deleteSync();
+      final service = DownloadService();
+      addTearDown(() => settle(service));
+      await service.keepShelfBookDownloaded(book.bookUrl);
+      final queued = await GetIt.instance<DownloadDao>().getAll();
+      expect(queued.firstWhere((t) => t.bookUrl == book.bookUrl).totalCount, 2);
     });
 
     test('leaves a book that is not on the shelf alone', () async {

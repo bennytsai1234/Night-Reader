@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -8,11 +9,13 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -81,8 +84,7 @@ class BookSourceService {
   /// 獲取正文內容。
   ///
   /// 正文分頁必須完整走完才算成功；達安全上限仍有下一頁時直接失敗，
-  /// 避免只抓到前半章卻被上層當 ready 寫入正文快取。[keepImages] 留下正文
-  /// 裡的圖片（`<img src="網址">`），給書源校驗判斷是不是漫畫源。
+  /// 避免只抓到前半章卻被上層當 ready 寫入正文快取。
   Future<String> getContent(
     BookSource source,
     Book book,
@@ -90,7 +92,6 @@ class BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
-    bool keepImages = false,
   }) => _runOnSource(
     _contentTask(
       source,
@@ -98,8 +99,57 @@ class BookSourceService {
       chapter,
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
-      keepImages: keepImages,
     ),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// [content]（一章的正文）裡還沒存的插圖抓進 [dir]，回傳還沒抓到、也還
+  /// 不能確定抓不到的張數（[IllustrationFetcher]，ADR 0050）。
+  Future<int> fetchIllustrations(
+    BookSource source,
+    Book book,
+    String content, {
+    required String dir,
+    bool retryMissing = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _illustrationTask(source, book, content, dir, retryMissing),
+    source: source,
+    book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 漫畫一話依序的圖片網址（[ComicChapterDownload.pageUrls]，ADR 0052）；
+  /// [remember] 時記進這一話的暫存資料夾。
+  Future<List<String>> getComicPageUrls(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    bool remember = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _comicPageUrlsTask(source, book, chapter, remember),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// 漫畫一話的第 [index] 張（[ComicChapterDownload.pageBytes]）：已經抓到
+  /// 的直接讀，否則照書源抓；[keep] 時存進暫存資料夾。
+  Future<Uint8List> getComicPage(
+    BookSource source,
+    Book book,
+    BookChapter chapter,
+    int index,
+    String url, {
+    bool keep = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _comicPageTask(source, book, chapter, index, url, keep),
     source: source,
     book: book,
     chapter: chapter,
@@ -283,7 +333,6 @@ _Work<String> _contentTask(
   BookChapter chapter, {
   required String? nextChapterUrl,
   required int? pageConcurrency,
-  required bool keepImages,
 }) =>
     (cancelToken) => CompleteContentFetcher.fetch(
       source,
@@ -292,7 +341,54 @@ _Work<String> _contentTask(
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
       cancelToken: cancelToken,
-      keepImages: keepImages,
+    );
+
+_Work<int> _illustrationTask(
+  BookSource source,
+  Book book,
+  String content,
+  String dir,
+  bool retryMissing,
+) =>
+    (cancelToken) => IllustrationFetcher.fetch(
+      source,
+      book,
+      content,
+      dir,
+      retryMissing: retryMissing,
+      cancelToken: cancelToken,
+    );
+
+_Work<List<String>> _comicPageUrlsTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+  bool remember,
+) =>
+    (cancelToken) => ComicChapterDownload.pageUrls(
+      source,
+      book,
+      chapter,
+      remember: remember,
+      cancelToken: cancelToken,
+    );
+
+_Work<Uint8List> _comicPageTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+  int index,
+  String url,
+  bool keep,
+) =>
+    (cancelToken) => ComicChapterDownload.pageBytes(
+      source,
+      book,
+      chapter,
+      index,
+      url,
+      keep: keep,
+      cancelToken: cancelToken,
     );
 
 _Work<AudioRequest> _audioRequestTask(

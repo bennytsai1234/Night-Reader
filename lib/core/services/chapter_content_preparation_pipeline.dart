@@ -8,6 +8,8 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -83,6 +85,11 @@ class ChapterContentPreparationPipeline {
     if (!forceRefresh && store != null) {
       final entry = await store.getContentEntry(book: book, chapter: chapter);
       if (entry != null && entry.hasDisplayContent && !entry.isFailed) {
+        await fetchStoredIllustrations(
+          entry.content!,
+          sourceOverride: sourceOverride,
+          cancelToken: cancelToken,
+        );
         return ChapterContentPreparationResult.ready(entry.content!);
       }
     }
@@ -113,6 +120,55 @@ class ChapterContentPreparationPipeline {
         _inFlight.remove(key);
       }
     });
+  }
+
+  /// 已存的網路書正文 [content] 裡還沒試過的插圖抓下來，例如還原備份後
+  /// （插圖不在備份裡）圖檔不在、標記還在時（ADR 0050）。確定抓不到的不再
+  /// 抓，要重新取得這一章才再試。回傳是不是每張都抓到或確定抓不到；書源
+  /// 不在、連不上時為 false，給這本書留「還沒抓圖」的記號，書架自動下載
+  /// 照重試規則再補。
+  Future<bool> fetchStoredIllustrations(
+    String content, {
+    BookSource? sourceOverride,
+    CancelToken? cancelToken,
+  }) async {
+    if (book.isLocal || !content.contains('<img')) return true;
+    final dir = await BookIllustrationStorage.dirFor(book);
+    if ((await BookIllustrationStorage.untriedSources(dir, content)).isEmpty) {
+      return true;
+    }
+    final source =
+        sourceOverride ??
+        getSource?.call() ??
+        await sourceDao.getByUrl(book.origin);
+    var complete = false;
+    if (source != null) {
+      try {
+        complete =
+            await service.fetchIllustrations(
+              source,
+              book,
+              content,
+              dir: dir,
+              retryMissing: false,
+              cancelToken: cancelToken,
+            ) ==
+            0;
+      } on DioException catch (error) {
+        if (error.type == DioExceptionType.cancel) rethrow;
+      } on Exception catch (error) {
+        AppLog.w('補抓插圖失敗 ${book.bookUrl}: $error');
+      }
+    }
+    if (!complete) await BookIllustrationStorage.markUnfetched(book);
+    return complete;
+  }
+
+  /// [content] 裡的插圖都抓到或確定抓不到了（本地書一律是）。
+  Future<bool> illustrationsSettled(String content) async {
+    if (book.isLocal || !content.contains('<img')) return true;
+    final dir = await BookIllustrationStorage.dirFor(book);
+    return (await BookIllustrationStorage.untriedSources(dir, content)).isEmpty;
   }
 
   void reset() {
@@ -197,10 +253,22 @@ class ChapterContentPreparationPipeline {
         nextChapterUrl: nextChapterUrl,
         cancelToken: cancelToken,
       );
-      if (raw.trim().isNotEmpty) {
-        return ChapterContentPreparationResult.ready(raw);
+      if (raw.trim().isEmpty) {
+        return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
       }
-      return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
+      // 插圖抓完（或確定抓不到）這章才算好，抓不到的不畫（ADR 0050）。
+      // 連不上的圖留記號，書架自動下載之後再補（[fetchStoredIllustrations]）。
+      if (raw.contains('<img')) {
+        final pending = await service.fetchIllustrations(
+          resolvedSource,
+          book,
+          raw,
+          dir: await BookIllustrationStorage.dirFor(book),
+          cancelToken: cancelToken,
+        );
+        if (pending > 0) await BookIllustrationStorage.markUnfetched(book);
+      }
+      return ChapterContentPreparationResult.ready(raw);
     } on DioException catch (error) {
       if (error.type == DioExceptionType.cancel) rethrow;
       return ChapterContentPreparationResult.failed(

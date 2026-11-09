@@ -179,6 +179,17 @@ final class HybridTextGeometry {
     final top = _documentIndex.topOf(key);
     if (top == null) return null;
     final lineTop = resolved?.localTop ?? 0.0;
+    // 錨線落在插圖裡（停在圖中間離開）時對齊那張圖的頂端，回來看到整張
+    // 圖（ADR 0050）。
+    final point = top + lineTop + anchor.visualOffsetPx;
+    final hitKey = _documentIndex.blockAtOffset(point);
+    if (hitKey != null &&
+        hitKey.chapterIndex == blocks.chapterIndex &&
+        hitKey.blockIndex < blocks.blocks.length &&
+        blocks.blocks[hitKey.blockIndex].isIllustration) {
+      final illustrationTop = _documentIndex.topOf(hitKey);
+      if (illustrationTop != null) return illustrationTop - anchorLine;
+    }
     return top + lineTop - anchorLine + anchor.visualOffsetPx;
   }
 
@@ -194,6 +205,30 @@ final class HybridTextGeometry {
       return null;
     }
     final block = blocks.blocks[hit.key.blockIndex];
+    if (block.isIllustration) {
+      // 插圖不佔字：記成圖後面那個字，往上偏到圖裡；還原時錨線落在圖裡
+      // 就對齊圖頂（[scrollOffsetForAnchor]）。
+      final height = _documentIndex.metricsFor(hit.key)?.height ?? 0.0;
+      final visual = (worldY - (hit.blockTop + height))
+          .clamp(
+            ReaderV2Location.minVisualOffsetPx,
+            ReaderV2Location.maxVisualOffsetPx,
+          )
+          .toDouble();
+      return ReaderV2Location(
+            chapterIndex: hit.key.chapterIndex,
+            charOffset: block.charRange.start,
+            visualOffsetPx: visual,
+          )
+          .normalized(
+            chapterCount: chapterCount,
+            chapterLength: blocks.displayText.length,
+          )
+          .withContentIdentity(
+            contentHash: blocks.contentHash,
+            displayText: blocks.displayText,
+          );
+    }
     var lineTop = 0.0;
     var charOffset = block.charRange.start;
     final entry = _paragraphCache.acquireEntry(hit.key, _epoch);

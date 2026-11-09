@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.icu.text.BreakIterator
 import android.net.ConnectivityManager
 import android.os.BatteryManager
@@ -28,6 +29,11 @@ class MainActivity : AudioServiceActivity() {
     // 新的 Activity 從不攔開始。
     private var volumeKeyPaging = false
     private var readerDevice: MethodChannel? = null
+
+    // 本地漫畫的作品資料夾（ComicFolderCopy）：等系統的選資料夾畫面回來。
+    private var comicFolder: MethodChannel? = null
+    private var comicFolderResult: MethodChannel.Result? = null
+    private var comicFolderDest: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +67,27 @@ class MainActivity : AudioServiceActivity() {
         // 引擎由 audio_service 留著，Activity 重建時閱讀器還開著、以為已經
         // 說過要攔；新的 Activity 從不攔開始，請它再說一次。
         readerDevice.invokeMethod("volumeKeyReset", null)
+        val comicFolder = MethodChannel(messenger, "night_reader/comic_folder")
+        this.comicFolder = comicFolder
+        comicFolder.setMethodCallHandler { call, result ->
+            if (call.method != "pickAndCopy") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val dest = call.argument<String>("dest")
+            if (dest == null) {
+                result.error("bad_args", "dest is required", null)
+                return@setMethodCallHandler
+            }
+            if (comicFolderResult != null) {
+                result.error("busy", "already picking", null)
+                return@setMethodCallHandler
+            }
+            comicFolderResult = result
+            comicFolderDest = dest
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK_COMIC_FOLDER)
+        }
         MethodChannel(messenger, "night_reader/system_bars").setMethodCallHandler { call, result ->
             when (call.method) {
                 "statusBarExtent" -> result.success(statusBarExtent())
@@ -229,6 +256,39 @@ class MainActivity : AudioServiceActivity() {
         return listOf(start, end)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_COMIC_FOLDER) return
+        val result = comicFolderResult ?: return
+        val dest = comicFolderDest
+        comicFolderResult = null
+        comicFolderDest = null
+        val tree: Uri? = data?.data
+        if (resultCode != RESULT_OK || tree == null || dest == null) {
+            result.success(null)
+            return
+        }
+        // 複製可能要一陣子，不佔主執行緒；進度與結果交回主執行緒送給 Dart。
+        Thread {
+            try {
+                val target = File(dest, ComicFolderCopy.nameOf(contentResolver, tree))
+                ComicFolderCopy.copy(contentResolver, tree, target) { done, total ->
+                    runOnUiThread {
+                        comicFolder?.invokeMethod(
+                            "progress",
+                            mapOf("done" to done, "total" to total),
+                        )
+                    }
+                }
+                runOnUiThread { result.success(target.path) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("copy_failed", e.message, null) }
+            }
+        }.start()
+    }
+
     // 音量鍵翻頁在這裡攔：這是 App 最早拿到按鍵的地方，不看畫面上哪個元件
     // 有焦點，也不經過 Flutter 的按鍵轉送。按住不放的重複事件也翻頁；放開
     // 不做事，但一樣攔下，系統才不會調音量。
@@ -326,6 +386,10 @@ class MainActivity : AudioServiceActivity() {
             insets.displayCutout?.let { extentPx = maxOf(extentPx, it.waterfallInsets.top) }
         }
         return extentPx / resources.displayMetrics.density.toDouble()
+    }
+
+    private companion object {
+        const val PICK_COMIC_FOLDER = 0x4E52
     }
 
     // 換頁轉場中新頁帶的螢幕圓角（logical px）；Android 12 起才量得到。

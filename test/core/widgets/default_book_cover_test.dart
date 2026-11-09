@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 
 void main() {
@@ -37,5 +38,19 @@ void main() {
     expect(await pixelsOf(tester, BookSourceKind.comic), isNot(novel));
     expect(await pixelsOf(tester, BookSourceKind.audio), isNot(novel));
     expect(await pixelsOf(tester, BookSourceKind.unsupported), novel);
+  });
+
+  testWidgets('沒有封面的書照它的類別畫預設封面', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: BookCoverWidget(bookName: '漫畫', kind: BookSourceKind.comic),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      tester.widget<DefaultBookCover>(find.byType(DefaultBookCover)).kind,
+      BookSourceKind.comic,
+    );
   });
 }

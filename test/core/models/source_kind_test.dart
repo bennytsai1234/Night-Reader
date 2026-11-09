@@ -72,9 +72,9 @@ void main() {
     expect(film.enabled, isFalse);
   });
 
-  test('novel and audio sources search, read and join discovery; comic '
-      'sources wait for the comic reader but are not cleanup candidates', () {
-    for (final type in [0, 1]) {
+  test('novel, audio and comic sources search, read and join discovery; '
+      'unsupported ones are cleanup candidates', () {
+    for (final type in [0, 1, 2]) {
       final source = _source(type: type, url: 'https://$type.test')
         ..exploreUrl = 'https://$type.test/explore';
       expect(source.isOpenableSource, isTrue);
@@ -82,11 +82,7 @@ void main() {
       expect(source.isReadingEnabledByRuntime, isTrue);
       expect(source.canParticipateInDiscovery, isTrue);
     }
-    final comic = _source(type: 2, url: 'https://2.test');
-    expect(comic.isOpenableSource, isFalse);
-    expect(comic.isSearchEnabledByRuntime, isFalse);
-    expect(comic.isReadingEnabledByRuntime, isFalse);
-    expect(comic.isCleanupCandidate, isFalse);
+    expect(_source(type: 2, url: 'https://2.test').isCleanupCandidate, isFalse);
     expect(_source(type: 3).isCleanupCandidate, isTrue);
   });
 }
