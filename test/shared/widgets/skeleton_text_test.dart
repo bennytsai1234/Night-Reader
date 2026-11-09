@@ -1,5 +1,5 @@
 // 照字畫的骨架長條要和換上來的字一樣長：被刪節的一行含「…」，行首與行尾
-// 的全形標點扣掉那一格空著的部分（DESIGN.md「骨架是真實畫面的影子」）。
+// 的全形標點扣掉那一格空著的部分（docs/design/loading.md「骨架的樣子」）。
 //
 // 測試字型的字都是方塊，所以標點空著多少由測試直接給表；
 // 實際字型的量法另外驗證 [PunctuationInk.measure] 量得出每一格的寬。
@@ -194,6 +194,35 @@ void main() {
     expect(bar.width, 50);
     expect(bar.height, 10);
     expect(tester.getSize(find.byType(SkeletonText)).height, 13);
+  });
+
+  testWidgets('each bar sits on its own line of glyphs, past empty lines', (
+    tester,
+  ) async {
+    const text = '第一行\n\n第三行';
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: Skeleton(child: SkeletonText(text, style: _style)),
+        ),
+      ),
+    );
+    // 空行沒有長條；第二條在第三行的字上，不是空行上。
+    final bars = [
+      for (final box in find.byType(SkeletonBox).evaluate())
+        tester.getRect(find.byElementPredicate((e) => identical(e, box))),
+    ]..sort((a, b) => a.top.compareTo(b.top));
+    expect(bars, hasLength(2));
+    final painter = _layout(text);
+    double glyphCenter(int start, int end) => painter
+        .getBoxesForSelection(
+          TextSelection(baseOffset: start, extentOffset: end),
+        )
+        .map((box) => box.toRect().center.dy)
+        .first;
+    expect(bars[0].center.dy, moreOrLessEquals(glyphCenter(0, 3)));
+    expect(bars[1].center.dy, moreOrLessEquals(glyphCenter(5, 8)));
   });
 
   testWidgets('measure finds every mark in the font', (tester) async {

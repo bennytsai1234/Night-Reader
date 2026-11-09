@@ -1,6 +1,6 @@
 # 架構決定（ADR）索引
 
-一份 ADR 記一個定案：為什麼這樣定、考慮過什麼、否決了什麼、後果是什麼。使用者說「(adr)」或「寫進 ADR」就是要寫一份。要推翻就改寫或另寫一份取代，並在被取代的那份開頭標上「已由 ADR xxxx 取代」；不刪舊的。檔名 `NNNN-slug.md`，編號不重複（CI 會檢查）。新增後把它加進下面的索引。
+一份 ADR 記一個定案：為什麼這樣定、考慮過什麼、否決了什麼、後果是什麼。使用者說「(adr)」或「寫進 ADR」就是要寫一份。要推翻就改寫或另寫一份取代，並在被取代的那份開頭標上「已由 ADR xxxx 取代」，留著它自己的理由；整份內容併進另一份的，刪掉舊的，歷史留在 git。檔名 `NNNN-slug.md`，編號不重複（CI 會檢查）。新增後把它加進下面的索引。
 
 ## 原則：怎麼取捨
 
@@ -77,11 +77,5 @@
 
 | ADR | 取代它的 |
 |---|---|
-| [0010](0010-release-notes-from-chinese-changelog.md) Release 說明改由中文 CHANGELOG 提供，發版前檢查一定要寫 | 0049 |
-| [0014](0014-manual-beta-and-squash-prs.md) 測試版手動發布；功能與維護走 PR、文件直接改 main，改到 App 內容的 PR 合併前 Codex 審查，squash 合併 | 0049 |
-| [0027](0027-beta-branch-and-fast-forward-main.md) 日常改動進 beta、合併就發測試版；main 只快轉到用過的 beta 發正式版 | 0049 |
-| [0047](0047-finish-to-mergeable-merge-on-request.md) 分支做到「可以合併」就停：收尾由使用者點頭，合併由使用者說 | 0049 |
-| [0048](0048-beta-notes-from-pr-titles-one-release-per-batch.md) 測試版說明取 PR 標題、合併一批發一版；CI 只在 PR 與 beta 上跑 | 0049 |
 | [0005](0005-no-kinsoku-line-breaking.md) 正文換行不做避頭尾 | 0026 |
 | [0013](0013-no-source-login-or-interactive-verification.md) 書源不支援登入與互動驗證 | 0038（背景工作不等人照本文） |
-| [0004](0004-beta-channel-from-every-main-merge.md) 每次合併到 main 自動發測試版 | 0049 |

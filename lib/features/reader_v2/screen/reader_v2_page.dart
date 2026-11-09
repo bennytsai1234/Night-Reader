@@ -1303,16 +1303,25 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   int get _openChapterIndex =>
       widget.openTarget?.location.chapterIndex ?? widget.book.chapterIndex;
 
+  /// 最後一次載入時頁首頁尾描述的位置，見 [_infoTargetOf]。
+  ReaderV2InfoTarget? _lastInfoTarget;
+
   /// 載入期間頁首頁尾描述的位置（[ReaderV2InfoTarget]）：跳章時是要跳去
   /// 的那一章，開書時是要開的那一章（[_openChapterIndex]）。目錄還沒載入時
-  /// 章數照書的紀錄。
+  /// 章數照書的紀錄。開書取不到正文時，要開的位置跟著那次開書一起清掉，
+  /// 淡掉的骨架照最後一次載入時的位置畫，寬度不跳。
   ReaderV2InfoTarget _infoTargetOf(ReaderV2Runtime? runtime) {
+    final last = _lastInfoTarget;
+    if (last != null &&
+        runtime?.state.lifecycle == ReaderV2Lifecycle.unavailable) {
+      return last;
+    }
     final chapterIndex =
         runtime?.pendingLocation?.chapterIndex ??
         runtime?.state.visibleLocation.chapterIndex ??
         _openChapterIndex;
     final loaded = runtime?.chapterCount ?? widget.initialChapters.length;
-    return ReaderV2InfoTarget(
+    return _lastInfoTarget = ReaderV2InfoTarget(
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
       title: _chapterTitleAt(chapterIndex),

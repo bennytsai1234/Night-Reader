@@ -796,7 +796,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     bool reorderable = false,
   }) {
     final selecting = _isMultiSelect;
-    // 書卡不設左滑動作（使用者 2026-10-23 決定，DESIGN.md「按壓回饋」）：
+    // 書卡不設左滑動作（使用者 2026-10-23 決定，DESIGN.md「否決過的方向」）：
     // 檢查更新、移出書架從長按選單走。
     final card = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),

@@ -99,7 +99,7 @@ class AppUpdateService {
 
   /// 從 [current] 更新到 [target] 會收到的說明：兩者之間每一版的說明，新的在前。
   ///
-  /// 測試版的說明只寫那一版新增的條目（ADR 0010），跳過幾版也不會漏；正式版的說明是
+  /// 測試版的說明只寫那一版新增的條目（ADR 0049），跳過幾版也不會漏；正式版的說明是
   /// 整個版本的改動，[current] 和更早的版本已經列過的行、前面已經列出的行都不再重複。
   /// 只收正式版（[includeBeta] 為 false）時中間的測試版不算，它們的條目都在正式版
   /// 的整段說明裡。[published] 依版本由新到舊排好。
@@ -283,8 +283,8 @@ class AppUpdateService {
   }
 }
 
-/// 把 Release 說明（正式版取自 `CHANGELOG.md` 的段落，測試版是各 PR 的標題，見 ADR 0010、
-/// 0048）整理成給使用者看的純文字：
+/// 把 Release 說明（正式版取自 `CHANGELOG.md` 的段落，測試版是各 PR 的標題，見 ADR 0049）
+/// 整理成給使用者看的純文字：
 /// 保留介紹段落與條列，條列前綴統一成「•」，去掉標題、粗體、行內程式碼與連結的
 /// Markdown 符號；段落之間最多留一個空行。
 String releaseNotesForDisplay(String markdown) {
