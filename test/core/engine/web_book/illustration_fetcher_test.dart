@@ -99,6 +99,35 @@ void main() {
     expect(Directory(images).listSync(), hasLength(1));
   });
 
+  test('書源的 imageDecode 先解抓到的位元組，src 是圖的網址', () async {
+    final images = p.join(dir.path, 'images');
+    // 網站把每個位元組加一，imageDecode 減回來。
+    final scrambled = _dataUrl([for (final b in _png) (b + 1) & 0xFF]);
+    final decoding = BookSource.fromJson({
+      'bookSourceName': '解圖',
+      'bookSourceUrl': 'https://u.test',
+      'ruleContent': {
+        'content': 'id.c@html',
+        'imageDecode':
+            'src.indexOf("data:") == 0 ? '
+            'Array.from(result).map(function (b) { return (b + 255) % 256; }) '
+            ': null',
+      },
+    });
+    final failed = await IllustrationFetcher.fetch(
+      decoding,
+      book,
+      '<img src="$scrambled">',
+      images,
+    );
+    expect(failed, 0);
+    expect(
+      await File(BookIllustrationStorage.pathFor(images, scrambled))
+          .readAsBytes(),
+      _png,
+    );
+  }, skip: quickJsUnavailableReason());
+
   test('清除封面快取只刪抓來的封面，插圖、轉好的文字與書檔自帶的封面不動', () async {
     final folder = await AppStoragePaths.bookAssetDir(
       BookCoverStorageService.bookStorageKey(book),
