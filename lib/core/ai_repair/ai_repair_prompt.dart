@@ -47,13 +47,19 @@ final class AiGiveUp extends AiRepairCommand {
   final String reason;
 }
 
+/// AI 回的話與貼回的內容最多幾個字：一個書源的 JSON 遠小於這個。
+const int aiRepairMaxReplyLength = 300000;
+
 /// [text] 裡第一個讀得懂的 JSON 物件：AI 常在前後加說明、或包在 ``` 裡。
-/// Legado 匯出的書源是陣列，取第一個物件。
+/// Legado 匯出的書源是陣列，取第一個物件。每個 `{` 都要往後數到配對的
+/// `}`，最多試前 [_maxJsonStarts] 個，一堆沒配對的括號不會數很久。
 Map<String, dynamic>? extractJsonObject(String text) {
+  if (text.length > aiRepairMaxReplyLength) return null;
+  var tries = 0;
   for (
     var start = text.indexOf('{');
-    start >= 0;
-    start = text.indexOf('{', start + 1)
+    start >= 0 && tries < _maxJsonStarts;
+    start = text.indexOf('{', start + 1), tries++
   ) {
     final end = _matchingBrace(text, start);
     if (end == null) continue;
@@ -66,6 +72,8 @@ Map<String, dynamic>? extractJsonObject(String text) {
   }
   return null;
 }
+
+const int _maxJsonStarts = 50;
 
 /// 從 [start] 的 `{` 數到配對的 `}`，跳過字串裡的括號。
 int? _matchingBrace(String text, int start) {

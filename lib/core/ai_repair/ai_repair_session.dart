@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'ai_chat_client.dart';
 import 'ai_repair_backups.dart';
 import 'ai_repair_prompt.dart';
+import 'ai_repair_secrets.dart';
 import 'ai_repair_settings.dart';
 import 'source_probe.dart';
 
@@ -57,6 +58,12 @@ class AiRepairJob {
   /// 給 AI 與剪貼簿用的現況：原本的校驗結果與試抓。
   String? _checkResult;
   SourceProbeReport? _probe;
+
+  /// 這個書源的登入資料、Cookie 與變數的值，送出前遮掉（[aiRepairSecretsOf]）。
+  Set<String> _secrets = const {};
+
+  /// 開始存修好的書源了：這時按停止也停不下來，結果照存的結果。
+  bool _committing = false;
 }
 
 /// 一次校驗的結果；逾時是 null（同書源校驗，ADR 0051）。
@@ -88,15 +95,17 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairChecker? check,
     AiRepairProber? probe,
     AiRepairAsker? ask,
-    Future<void> Function(BookSource repaired)? apply,
+    Future<void> Function(BookSource repaired, BookSource original)? apply,
     Future<void> Function(String text)? copy,
     AiRepairBackups? backups,
+    Future<Set<String>> Function(BookSource source)? secrets,
   }) : assert(service != null || sources.length == 1),
        jobs = [for (final source in sources) AiRepairJob(source)],
        _check = check ?? _defaultCheck,
        _probe = probe ?? _defaultProbe,
        _ask = ask ?? (service == null ? null : _defaultAsk(service)),
        _copy = copy ?? _defaultCopy,
+       _secretsOf = secrets ?? aiRepairSecretsOf,
        _backups = backups ?? AiRepairBackups.instance {
     _apply = apply ?? _defaultApply;
   }
@@ -108,8 +117,10 @@ class AiRepairSession extends ChangeNotifier {
   final AiRepairProber _probe;
   final AiRepairAsker? _ask;
   final Future<void> Function(String text) _copy;
+  final Future<Set<String>> Function(BookSource source) _secretsOf;
   final AiRepairBackups _backups;
-  late final Future<void> Function(BookSource repaired) _apply;
+  late final Future<void> Function(BookSource repaired, BookSource original)
+  _apply;
 
   final CancelToken _cancelToken = CancelToken();
   final StringBuffer _transcript = StringBuffer();
@@ -158,6 +169,7 @@ class AiRepairSession extends ChangeNotifier {
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     for (final job in jobs) {
+      if (job._committing) continue;
       for (final step in job.steps) {
         if (step.state == AiRepairStepState.running) {
           step
@@ -179,14 +191,18 @@ class AiRepairSession extends ChangeNotifier {
   Future<String?> submitPaste(String text) async {
     final job = jobs.single;
     if (!job.awaitingPaste || _running) return null;
+    if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
-    if (json == null) return '讀不出書源 JSON';
+    final candidate = json == null
+        ? null
+        : _candidateOrNull(job.original, json);
+    if (candidate == null) return '讀不出書源 JSON';
     job.awaitingPaste = false;
     _running = true;
     _notify();
     try {
       _record('## 貼回的書源\n$text');
-      await _validate(job, candidateFrom(job.original, json), '');
+      await _validate(job, candidate, '');
     } finally {
       _running = false;
       _notify();
@@ -205,6 +221,8 @@ class AiRepairSession extends ChangeNotifier {
   Future<void> _repair(AiRepairJob job) async {
     final original = job.original;
     _record('# ${original.bookSourceName}（${original.bookSourceUrl}）');
+    job._secrets = await _secretsOf(original);
+    if (_stopped) return;
 
     final checkStep = _addStep(job, '校驗原本的書源');
     final checked = await _guard(() => _check(original, _cancelToken));
@@ -213,12 +231,17 @@ class AiRepairSession extends ChangeNotifier {
         ? null
         : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth;
     final checkText = _checkText(checked);
-    job._checkResult = [checkText, ...?checked?.diagnostics].join('\n\n');
+    job._checkResult = _redact(
+      job,
+      [checkText, ...?checked?.diagnostics].join('\n\n'),
+    );
     _finish(checkStep, checkText);
-    _record('校驗原本的書源：$checkText');
+    _record('校驗原本的書源：${job._checkResult}');
 
-    if (jobs.length > 1 && health != null) {
-      final skip = health.category == SourceHealthCategory.healthy
+    if (jobs.length > 1) {
+      final skip = health == null
+          ? '跳過：校驗超過時間'
+          : health.category == SourceHealthCategory.healthy
           ? '沒問題，跳過'
           : _unfixable.contains(health.category)
           ? '跳過：${health.label}'
@@ -238,14 +261,17 @@ class AiRepairSession extends ChangeNotifier {
     if (_stopped || probe == null) return;
     job._probe = probe;
     _finish(fetchStep, _fetchText(probe));
-    _record('抓網頁：${_fetchText(probe)}');
+    _record('抓網頁：${_fetchText(probe)}\n${_probeText(job, probe)}');
 
     if (usesClipboard) {
       await _copy(
-        aiRepairClipboardPrompt(
-          source: original,
-          checkResult: job._checkResult!,
-          probe: probe,
+        _redact(
+          job,
+          aiRepairClipboardPrompt(
+            source: original,
+            checkResult: job._checkResult!,
+            probe: probe,
+          ),
         ),
       );
       _finish(_addStep(job, '已複製給 AI'), null);
@@ -261,11 +287,14 @@ class AiRepairSession extends ChangeNotifier {
   /// 內容不會一輪比一輪長。
   Future<void> _converse(AiRepairJob job) async {
     final original = job.original;
-    final messages = aiRepairOpening(
-      source: original,
-      checkResult: job._checkResult!,
-      probe: job._probe!,
-    );
+    final messages = [
+      for (final message in aiRepairOpening(
+        source: original,
+        checkResult: job._checkResult!,
+        probe: job._probe!,
+      ))
+        (role: message.role, content: _redact(job, message.content)),
+    ];
     final opening = messages.length;
     for (var round = 1; round <= aiRepairMaxRounds; round++) {
       final step = _addStep(job, '第 $round 輪', detail: 'AI 回覆中…');
@@ -296,20 +325,33 @@ class AiRepairSession extends ChangeNotifier {
           _fail(job, reason.isEmpty ? 'AI 說修不好。' : 'AI：$reason');
           return;
         case AiTest(:final source):
-          final candidate = candidateFrom(original, source);
+          final candidate = _candidateOrNull(original, source);
+          if (candidate == null) {
+            _finish(step, '讀不懂 AI 回的書源', failed: true);
+            messages.add((role: 'user', content: aiRepairBadReply));
+            continue;
+          }
           final changed = _changedText(original, candidate);
           step.detail = '$changed，試抓中…';
           _notify();
           final probe = await _guard(() => _probe(candidate, _cancelToken));
           if (_stopped || probe == null) return;
           _finish(step, '$changed，試抓：${probe.summary}');
-          _record('試抓：${probe.summary}');
+          _record('試抓：${probe.summary}\n${_probeText(job, probe)}');
           messages.add((
             role: 'user',
-            content: aiRepairProbeReply(probe, roundsLeft: roundsLeft),
+            content: _redact(
+              job,
+              aiRepairProbeReply(probe, roundsLeft: roundsLeft),
+            ),
           ));
         case AiSubmit(:final source, :final note):
-          final candidate = candidateFrom(original, source);
+          final candidate = _candidateOrNull(original, source);
+          if (candidate == null) {
+            _finish(step, '讀不懂 AI 回的書源', failed: true);
+            messages.add((role: 'user', content: aiRepairBadReply));
+            continue;
+          }
           _finish(step, '${_changedText(original, candidate)}，交出');
           await _validate(job, candidate, note);
           return;
@@ -360,13 +402,23 @@ class AiRepairSession extends ChangeNotifier {
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return;
     }
+    job._committing = true;
     try {
-      await _apply(BookSource.fromJson(checked.updatedSourceJson));
+      await _apply(
+        BookSource.fromJson(checked.updatedSourceJson),
+        job.original,
+      );
+    } on AiRepairConflict catch (error) {
+      _finish(step, error.message, failed: true);
+      _fail(job, error.message);
+      return;
     } catch (error, stack) {
       AppLog.e('存 AI 修好的書源失敗', error: error, stackTrace: stack);
       _finish(step, '存不進去', failed: true);
       _fail(job, '校驗通過了，但存不進去：$error');
       return;
+    } finally {
+      job._committing = false;
     }
     _finish(step, checkText);
     job
@@ -374,6 +426,33 @@ class AiRepairSession extends ChangeNotifier {
       ..explanation = note.isEmpty ? null : 'AI：$note';
     _notify();
   }
+
+  /// AI 回的書源照原本的身分組起來；欄位的型別或數值不對（例如超出範圍的
+  /// 數字）時是 null，當成讀不懂。
+  static BookSource? _candidateOrNull(
+    BookSource original,
+    Map<String, dynamic> json,
+  ) {
+    try {
+      return candidateFrom(original, json);
+    } catch (error) {
+      AppLog.d('AI 回的書源讀不出來: $error');
+      return null;
+    }
+  }
+
+  String _redact(AiRepairJob job, String text) =>
+      redactAiRepairSecrets(text, job._secrets);
+
+  /// 「複製紀錄」裡的試抓全文：遮掉秘密，最長 [_transcriptProbeLength] 字。
+  String _probeText(AiRepairJob job, SourceProbeReport probe) {
+    final text = _redact(job, probe.fullText);
+    return text.length <= _transcriptProbeLength
+        ? text
+        : '${text.substring(0, _transcriptProbeLength)}…（以下省略）';
+  }
+
+  static const int _transcriptProbeLength = 20000;
 
   AiRepairStep _addStep(AiRepairJob job, String title, {String? detail}) {
     final step = AiRepairStep(title, detail: detail);
@@ -489,15 +568,31 @@ class AiRepairSession extends ChangeNotifier {
   static Future<void> _defaultCopy(String text) =>
       Clipboard.setData(ClipboardData(text: text));
 
-  Future<void> _defaultApply(BookSource repaired) async {
+  /// 存修好的書源。修的這段時間書源被刪掉或改過（例如同步）時不存：存了會
+  /// 蓋掉別處的改動、或把刪掉的書源加回來。
+  Future<void> _defaultApply(BookSource repaired, BookSource original) async {
     final current = await getIt<BookSourceDao>().getByUrl(
       repaired.bookSourceUrl,
     );
-    if (current != null) {
-      await _backups.put(current.bookSourceUrl, current.toJson());
+    if (current == null) {
+      throw const AiRepairConflict('修的這段時間書源被刪掉了，沒有存。');
     }
+    if (changedParts(original, current).isNotEmpty ||
+        current.bookSourceName != original.bookSourceName) {
+      throw const AiRepairConflict('修的這段時間書源被改過了（例如同步），沒有存。');
+    }
+    await _backups.put(current.bookSourceUrl, current.toJson());
     await BookSourceService().saveEditedSource(repaired);
   }
+}
+
+/// 修好的書源存不進去：修的這段時間書源被刪掉或改過。
+class AiRepairConflict implements Exception {
+  const AiRepairConflict(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// 把書源還原成 AI 改之前的那份，並刪掉留著的改前版本。
@@ -508,6 +603,11 @@ Future<void> restoreAiRepair(
   final store = backups ?? AiRepairBackups.instance;
   final json = await store.get(sourceUrl);
   if (json == null) return;
+  // 書源已經刪掉了（例如另一台同步刪的）：不還原，免得把它加回來。
+  if (await getIt<BookSourceDao>().getByUrl(sourceUrl) == null) {
+    await store.remove(sourceUrl);
+    return;
+  }
   await BookSourceService().saveEditedSource(BookSource.fromJson(json));
   await store.remove(sourceUrl);
 }

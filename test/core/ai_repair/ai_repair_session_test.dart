@@ -112,19 +112,23 @@ void main() {
     Map<String, SourceRuntimeHealth> broken = const {},
     bool clipboard = false,
     List<String>? copied,
+    Set<String> secretValues = const {},
+    Set<String> timesOut = const {},
   }) {
     var next = 0;
     return AiRepairSession(
       sources: sources,
       service: clipboard ? null : _service,
-      check: (source, _) async =>
-          _checked(source, broken: broken[source.bookSourceUrl]),
+      check: (source, _) async => timesOut.contains(source.bookSourceUrl)
+          ? null
+          : _checked(source, broken: broken[source.bookSourceUrl]),
       probe: (source, _) async => _probe(source),
       ask: (messages, _) async {
         asked.add(List.of(messages));
         return replies[next++];
       },
-      apply: (source) async => applied.add(source),
+      apply: (source, _) async => applied.add(source),
+      secrets: (_) async => secretValues,
       copy: (text) async => copied?.add(text),
       backups: backups,
     );
@@ -282,6 +286,137 @@ void main() {
     },
   );
 
+  test('login data, cookies and variables that show up in the fetched pages '
+      'are blanked out of what goes to the AI and the clipboard', () async {
+    const secret = 'token-1234567';
+    final leaky = _source('https://site.example');
+    final probe = SourceProbeReport(
+      logs: const [(10, '︾開始解析搜尋頁')],
+      requests: ['  → https://site.example/s?q=x&token=$secret'],
+    );
+    final copied = <String>[];
+    for (final clipboard in [false, true]) {
+      final s = AiRepairSession(
+        sources: [leaky],
+        service: clipboard ? null : _service,
+        check: (source, _) async => _checked(source),
+        probe: (_, _) async => probe,
+        ask: (messages, _) async {
+          asked.add(List.of(messages));
+          return jsonEncode({'action': 'give_up', 'reason': '不修'});
+        },
+        apply: (source, _) async => applied.add(source),
+        copy: (text) async => copied.add(text),
+        secrets: (_) async => {secret},
+        backups: backups,
+      );
+      await s.start();
+      expect(s.transcript, isNot(contains(secret)));
+    }
+
+    final sent = [for (final message in asked.single) message.content]
+        .join('\n');
+    expect(sent, isNot(contains(secret)));
+    expect(sent, contains('token=«已遮蔽»'));
+    expect(copied.single, isNot(contains(secret)));
+  });
+
+  test('a batch skips a source whose check runs out of time, without asking '
+      'the AI', () async {
+    final s = session(
+      [_source('https://a.example'), _source('https://b.example')],
+      replies: const [],
+      timesOut: {'https://a.example', 'https://b.example'},
+    );
+
+    await s.start();
+
+    expect(s.count(AiRepairOutcome.skipped), 2);
+    expect(asked, isEmpty);
+  });
+
+  test('a source the AI writes with an impossible number is treated as an '
+      'unreadable reply, not a crash', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [
+        '{"action":"submit","source":{"bookSourceType":1e400},"note":""}',
+        jsonEncode({'action': 'give_up', 'reason': '不修'}),
+      ],
+    );
+
+    await s.start();
+
+    final job = s.jobs.single;
+    expect(job.outcome, AiRepairOutcome.failed);
+    expect(asked, hasLength(2));
+    expect(asked.last.last.content, aiRepairBadReply);
+    expect(s.isRunning, isFalse);
+    expect(applied, isEmpty);
+  });
+
+  test('stopping while the fixed source is being saved reports what was '
+      'saved', () async {
+    late AiRepairSession s;
+    s = AiRepairSession(
+      sources: [_source('https://site.example')],
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (source, _) async => _probe(source),
+      ask: (_, _) async => _command('submit'),
+      apply: (source, _) async {
+        s.stop();
+        applied.add(source);
+      },
+      secrets: (_) async => const {},
+      backups: backups,
+    );
+
+    await s.start();
+
+    expect(applied, hasLength(1));
+    expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+  });
+
+  test('a fix is not saved over a source that changed or was deleted while '
+      'the AI worked on it', () async {
+    for (final conflict in ['修的這段時間書源被改過了（例如同步），沒有存。', '修的這段時間書源被刪掉了，沒有存。']) {
+      final s = AiRepairSession(
+        sources: [_source('https://site.example')],
+        service: _service,
+        check: (source, _) async => _checked(source),
+        probe: (source, _) async => _probe(source),
+        ask: (_, _) async => _command('submit'),
+        apply: (_, _) async => throw AiRepairConflict(conflict),
+        secrets: (_) async => const {},
+        backups: backups,
+      );
+
+      await s.start();
+
+      expect(s.jobs.single.outcome, AiRepairOutcome.failed);
+      expect(s.jobs.single.explanation, conflict);
+    }
+  });
+
+  test('an over-long paste is refused and the paste card stays', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: const [],
+      clipboard: true,
+      copied: [],
+    );
+    await s.start();
+
+    expect(await s.submitPaste('{' * (aiRepairMaxReplyLength + 1)), '貼回的內容太長');
+    expect(s.jobs.single.awaitingPaste, isTrue);
+    expect(
+      await s.submitPaste('{"bookSourceUrl":"x","bookSourceType":1e400}'),
+      '讀不出書源 JSON',
+    );
+    expect(s.jobs.single.awaitingPaste, isTrue);
+  });
+
   test('stopping marks the running step and changes nothing', () async {
     late AiRepairSession s;
     s = AiRepairSession(
@@ -296,7 +431,8 @@ void main() {
           reason: cancelToken.cancelError,
         );
       },
-      apply: (source) async => applied.add(source),
+      apply: (source, _) async => applied.add(source),
+      secrets: (_) async => const {},
       backups: backups,
     );
 

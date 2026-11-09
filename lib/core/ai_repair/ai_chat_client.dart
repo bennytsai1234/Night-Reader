@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
+import 'ai_repair_prompt.dart';
 import 'ai_repair_settings.dart';
 
 /// 對話裡的一句：`system`、`user` 或 `assistant` 說的話。
@@ -43,11 +46,23 @@ class AiChatClient {
     return url.endsWith('/chat/completions') ? url : '$url/chat/completions';
   }
 
+  /// 一次回應最多收多少位元組：書源 JSON 加說明遠小於這個；再多就是服務
+  /// 出了狀況，收下來只會佔滿記憶體。
+  static const int maxResponseBytes = 2 * 1024 * 1024;
+
   /// 送出 [messages]，傳回 AI 回的那段話。
   Future<String> complete(
     List<AiMessage> messages, {
     CancelToken? cancelToken,
   }) async {
+    // 收太多就停：自己的取消記號，外面停下時跟著取消。
+    final guard = CancelToken();
+    var tooLarge = false;
+    unawaited(
+      cancelToken?.whenCancel.then((_) {
+        if (!guard.isCancelled) guard.cancel('已停止');
+      }),
+    );
     final uri = Uri.tryParse(endpoint(service.baseUrl));
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       throw const AiServiceException('服務網址不對，要以 https:// 開頭');
@@ -73,9 +88,16 @@ class AiChatClient {
           responseType: ResponseType.json,
           validateStatus: (_) => true,
         ),
-        cancelToken: cancelToken,
+        cancelToken: guard,
+        onReceiveProgress: (received, _) {
+          if (received > maxResponseBytes && !guard.isCancelled) {
+            tooLarge = true;
+            guard.cancel('回應太大');
+          }
+        },
       );
     } on DioException catch (error) {
+      if (tooLarge) throw const AiServiceException('AI 回的內容太長');
       if (CancelToken.isCancel(error)) rethrow;
       throw AiServiceException(switch (error.type) {
         DioExceptionType.connectionTimeout ||
@@ -96,6 +118,9 @@ class AiChatClient {
     };
     if (content == null || content.trim().isEmpty) {
       throw const AiServiceException('AI 服務回了空的內容');
+    }
+    if (content.length > aiRepairMaxReplyLength) {
+      throw const AiServiceException('AI 回的內容太長');
     }
     return content;
   }

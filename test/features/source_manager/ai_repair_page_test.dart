@@ -61,7 +61,8 @@ void main() {
       check: (source, _) async => _checked(source),
       probe: (_, _) async => _probe,
       ask: (_, _) => reply.future,
-      apply: (_) async {},
+      apply: (_, _) async {},
+      secrets: (_) async => const {},
       backups: AiRepairBackups(),
     );
 
@@ -109,7 +110,8 @@ void main() {
       service: null,
       check: (source, _) async => _checked(source),
       probe: (_, _) async => _probe,
-      apply: (_) async {},
+      apply: (_, _) async {},
+      secrets: (_) async => const {},
       copy: (text) async => copied.add(text),
       backups: AiRepairBackups(),
     );
