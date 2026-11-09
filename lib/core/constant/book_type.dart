@@ -5,6 +5,9 @@ class BookType {
   /// 16 更新失敗
   static const int updateError = 0x10;
 
+  /// 32 有聲（Legado 備份裡的書用這個位元；夜讀的書記的是書源類型）
+  static const int audio = 0x20;
+
   /// 64 圖片
   static const int image = 0x40;
 
@@ -31,7 +34,6 @@ class BookType {
   /// Legado 的本地書書源標誌，從 Legado 備份還原的書用它。
   static const String localTag = 'loc_book';
 
-  static bool isImage(int type) => (type & image) != 0;
   static bool isLocal(int type) => (type & local) != 0;
   static bool isOnShelf(int type) => (type & notShelf) == 0;
 }

@@ -1,13 +1,28 @@
 # 交接：書源分類與保留
 
-2026-11-09。分支 `feat/source-kinds`，worktree `D:\Migrated\Desktop\Folder\product\nr-source-kinds`。程式做完、已推上（`0124d4af`），還沒收尾。決定與理由在 ADR 0051，AI 復判的計畫在 `beta` 的 `PLAN.md`。
+2026-11-09。分支 `feat/source-kinds`。決定與理由在 ADR 0051，AI 復判的計畫在 `beta` 的 `PLAN.md`。本分支屬第二批合併（和 `feat/images-comics`、`feat/audiobook-player`、`feat/source-ai-repair` 一起），收尾到「可以合併」就停。
 
-## 剩下的
+## 這次要做（2026-11-09 跨分支檢查後加的）
 
-1. 問使用者要不要收尾（`docs/agents/finish.md`）；收尾時刪掉本檔。
-2. 使用者要的話，寫一段話給漫畫對話（`feat/images-comics`）：判斷漫畫源用 `source.sourceKind == BookSourceKind.comic`，不看類型數字。
-3. 合併時注意：本分支把 schema 升到 15，漫畫或有聲書分支若也升版會撞號，照先進 `beta` 的往後接；`ContentParser` 加的 `keepImages` 和文字書插圖分支（一律留圖）碰同一段。
-4. 使用者還沒回：`C:\Users\045650\AppData\Local\Temp\Night-Reader-codex-kinsoku-latin`（中英混排對話的 Codex 審查留下的暫存工作樹，乾淨）要不要清。
+1. **同名不同類是不同的書**，共用的部分由本分支做：
+   - 書的類別只在一處判斷（`Book` 的類別，回傳 `BookSourceKind`）；加入書架與換源照書源的類別寫入，從 Legado 備份還原的照位元判斷。
+   - 書源類別改了，書架上用它加入的書怎麼處理：問使用者。
+   - 認書的鍵加上類別：搜尋合卡、書架同步、閱讀進度同步、書籤、標註、閱讀統計、「在不在書架上」。小說維持 `書名\t作者`，漫畫、有聲加前綴。
+   - 換源只列同一類的書源。
+   - 搜尋卡（和書架上同名的兩本）分得出類別：畫候選讓使用者選，寫進 `docs/design/`。
+   - 寫 ADR（0051 或新的一份）。
+2. 每做完一段就推上；下面「給其他分支的介面」寫清楚。
+3. 合併注意見下。
+4. 全部做完問使用者要不要收尾。
+
+## 給其他分支的介面
+
+（做完後填）
+
+## 合併時注意
+
+- 本分支把 schema 升到 15；漫畫或有聲書分支若也升版會撞號，照先進 `beta` 的往後接。ADR 0050 有兩份、多條分支改同一段程式，合併時一次處理。
+- 校驗加的 `keepImages`（`ContentParser`）和 `feat/text-illustrations`（正文一律留圖）碰同一段；兩條都進 `beta` 後這個選項多餘，由後合併的那條拿掉。
 
 ## 使用者可以改的預設
 

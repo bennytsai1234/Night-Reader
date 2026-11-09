@@ -56,17 +56,33 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.bookSourceUrl.equals(url))).getSingleOrNull();
   }
 
-  Future<void> upsert(BookSource source) => into(bookSources)
-      .insertOnConflictUpdate(BookSourceToInsertable(source).toInsertable());
+  /// 存書源。校驗、手動、同步、匯入都經過這裡（和 [upsertAll]），類型改了
+  /// 用它的書就跟著換類別（[_followKinds]）。
+  Future<void> upsert(BookSource source) => transaction(() async {
+    await into(bookSources)
+        .insertOnConflictUpdate(BookSourceToInsertable(source).toInsertable());
+    await _followKinds([source]);
+  });
 
-  Future<void> upsertAll(List<BookSource> sources) async {
+  Future<void> upsertAll(List<BookSource> sources) => transaction(() async {
     await batch(
       (b) => b.insertAllOnConflictUpdate(
         bookSources,
         sources.map((e) => BookSourceToInsertable(e).toInsertable()).toList(),
       ),
     );
-  }
+    await _followKinds(sources);
+  });
+
+  /// 書跟著書源的類型（使用者 2026-11-09 定，ADR 0053）：校驗只在有把握時
+  /// 改類型，改了表示用它加進來的書其實是那一類，留在原本那一類也讀不了。
+  /// 夜讀不支援的類型不動書。
+  Future<void> _followKinds(List<BookSource> sources) =>
+      BookDao(attachedDatabase).followSourceKinds({
+        for (final source in sources)
+          if (source.sourceKind != BookSourceKind.unsupported)
+            source.bookSourceUrl: source.sourceKind,
+      });
 
   /// 儲存編輯後的書源。網址改過時是同一個書源換了身分：在同一個交易裡移除
   /// 原網址那筆，記著原網址的書、搜尋結果與已存的正文一起改記新網址，書架

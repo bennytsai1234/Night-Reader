@@ -243,10 +243,12 @@ class BookshelfSync extends SyncKind {
             existing.bookUrl,
             name: incoming.name,
             author: incoming.author,
+            type: incoming.type,
           );
           existing
             ..name = incoming.name
-            ..author = incoming.author;
+            ..author = incoming.author
+            ..type = incoming.type;
         }
         await _writeUserFields(from: incoming, to: existing);
         await _bookDao.updateInBookshelf(existing.bookUrl, true);
@@ -306,22 +308,30 @@ class BookshelfSync extends SyncKind {
           deferred.addAll([key, old]);
           break;
         }
-        final fromName = books.first.name;
+        // 另一台的書源改了類型，書跟著換類別也是換鍵（ADR 0053）：類別
+        // 一起寫，統計留在原本那一類，不搬。
+        final fromKind = books.first.bookKind;
+        final fromName = books.first.recordName;
         for (final book in books) {
           await _bookDao.renameBook(
             book.bookUrl,
             name: incoming.name,
             author: incoming.author,
+            type: incoming.type,
           );
           book
             ..name = incoming.name
-            ..author = incoming.author;
+            ..author = incoming.author
+            ..type = incoming.type;
         }
         (shelf[key] ??= []).addAll(books);
         shelf.remove(old);
-        if (fromName != incoming.name) {
+        if (fromKind == incoming.bookKind && fromName != incoming.recordName) {
           try {
-            await _readRecords?.renameBook(from: fromName, to: incoming.name);
+            await _readRecords?.renameBook(
+              from: fromName,
+              to: incoming.recordName,
+            );
           } catch (error, stackTrace) {
             AppLog.e('同步改書名時搬閱讀統計失敗', error: error, stackTrace: stackTrace);
           }

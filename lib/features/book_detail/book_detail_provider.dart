@@ -864,13 +864,16 @@ class BookDetailProvider extends ChangeNotifier {
 
     try {
       await _bookDao.upsert(next);
-      final previousName = _book.name;
+      final previousName = _book.recordName;
       _book = next;
-      if (previousName != next.name) {
+      if (previousName != next.recordName) {
         // 閱讀統計照書名記，改名要一起搬，不然會分成兩筆。搬失敗不擋存檔：
         // 書的資訊已經存好，統計只是留在舊名字下。
         try {
-          await _readRecordDao?.renameBook(from: previousName, to: next.name);
+          await _readRecordDao?.renameBook(
+            from: previousName,
+            to: next.recordName,
+          );
         } catch (error) {
           AppLog.e('改書名時搬閱讀統計失敗: $error', error: error);
         }

@@ -93,7 +93,7 @@ class SourceSwitchService {
     final enabledSources = (await _sourceDao.getEnabled())
         .where(
           (source) =>
-              source.isSearchEnabledByRuntime &&
+              source.isSearchableFor(book.bookKind) &&
               source.bookSourceUrl != book.origin,
         )
         .toList();
@@ -253,17 +253,17 @@ class SourceSwitchService {
         await books.upsert(migratedBook);
         await chaptersDao.insertChapters(prepared.chapters);
         await BookmarkDao(db).moveToSource(
-          fromName: oldBook.name,
+          fromName: oldBook.recordName,
           fromAuthor: oldBook.author,
-          toName: migratedBook.name,
+          toName: migratedBook.recordName,
           toAuthor: migratedBook.author,
           oldTotalCount: oldBook.totalChapterNum,
           chapters: prepared.chapters,
         );
         await HighlightDao(db).moveToSource(
-          fromName: oldBook.name,
+          fromName: oldBook.recordName,
           fromAuthor: oldBook.author,
-          toName: migratedBook.name,
+          toName: migratedBook.recordName,
           toAuthor: migratedBook.author,
           oldTotalCount: oldBook.totalChapterNum,
           chapters: prepared.chapters,
