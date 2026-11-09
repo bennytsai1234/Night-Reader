@@ -219,12 +219,39 @@ class ReaderV2BottomMenu extends StatelessWidget {
     );
   }
 
+  /// 選單裡拖動條的樣式（Telegram 式：細圓角軌道、帶柔和陰影的大圓鈕，
+  /// 無光暈與刻度）；漫畫閱讀器的「本話第幾張」也用它。
+  static SliderThemeData sliderThemeOf(
+    BuildContext context,
+    ReaderV2MenuStyle menuStyle,
+  ) {
+    final track = menuStyle.mutedForeground.withValues(alpha: 0.24);
+    return SliderTheme.of(context).copyWith(
+      trackHeight: 4,
+      trackShape: const RoundedRectSliderTrackShape(),
+      thumbShape: const RoundSliderThumbShape(
+        enabledThumbRadius: _thumbRadius,
+        disabledThumbRadius: _thumbRadius,
+        elevation: 2,
+        pressedElevation: 4,
+      ),
+      overlayShape: SliderComponentShape.noOverlay,
+      overlayColor: Colors.transparent,
+      tickMarkShape: SliderTickMarkShape.noTickMark,
+      activeTrackColor: menuStyle.accent,
+      inactiveTrackColor: track,
+      thumbColor: AppPalette.paper50,
+      disabledActiveTrackColor: track,
+      disabledInactiveTrackColor: track,
+      disabledThumbColor: Color.alphaBlend(track, AppPalette.paper50),
+    );
+  }
+
   Widget _buildChapterSlider(
     BuildContext context,
     ReaderV2MenuStyle menuStyle,
   ) {
     final canScrub = navigation.chapterCount > 0;
-    final track = menuStyle.mutedForeground.withValues(alpha: 0.24);
 
     return Row(
       children: [
@@ -235,27 +262,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
           menuStyle,
         ),
         Expanded(
-          // Telegram 式拖動條：細圓角軌道、帶柔和陰影的大圓鈕，無光暈與刻度。
           child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              trackShape: const RoundedRectSliderTrackShape(),
-              thumbShape: const RoundSliderThumbShape(
-                enabledThumbRadius: _thumbRadius,
-                disabledThumbRadius: _thumbRadius,
-                elevation: 2,
-                pressedElevation: 4,
-              ),
-              overlayShape: SliderComponentShape.noOverlay,
-              overlayColor: Colors.transparent,
-              tickMarkShape: SliderTickMarkShape.noTickMark,
-              activeTrackColor: menuStyle.accent,
-              inactiveTrackColor: track,
-              thumbColor: AppPalette.paper50,
-              disabledActiveTrackColor: track,
-              disabledInactiveTrackColor: track,
-              disabledThumbColor: Color.alphaBlend(track, AppPalette.paper50),
-            ),
+            data: sliderThemeOf(context, menuStyle),
             child: SizedBox(
               // 圓鈕本身 26，觸控高度維持 44。
               height: AppGlass.buttonSize,
@@ -388,29 +396,51 @@ class ReaderV2BottomMenu extends StatelessWidget {
     String label,
     VoidCallback onTap,
     ReaderV2MenuStyle menuStyle,
-  ) {
-    return Expanded(
-      child: Semantics(
-        button: true,
-        label: label,
-        excludeSemantics: true,
-        child: PressScale(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: menuStyle.foreground, size: 24),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  label,
-                  style: AppTextStyles.uiXs.copyWith(
-                    color: menuStyle.foreground,
-                  ),
-                ),
-              ],
-            ),
+  ) => Expanded(
+    child: ReaderV2MenuIcon(
+      icon: icon,
+      label: label,
+      onTap: onTap,
+      menuStyle: menuStyle,
+    ),
+  );
+}
+
+/// 下方選單膠囊裡的一個主功能：圖示加小字標籤，按下微縮而不鋪水波紋。
+class ReaderV2MenuIcon extends StatelessWidget {
+  const ReaderV2MenuIcon({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.menuStyle,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final ReaderV2MenuStyle menuStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: PressScale(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: menuStyle.foreground, size: 24),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                label,
+                style: AppTextStyles.uiXs.copyWith(color: menuStyle.foreground),
+              ),
+            ],
           ),
         ),
       ),

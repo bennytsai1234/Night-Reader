@@ -426,10 +426,13 @@ extension BookSourceLogic on BookSourceBase {
   };
 
   /// 夜讀打得開的書源：小說源給 Reader V2，有聲源給有聲書播放器
-  /// （ADR 0050）。搜尋、發現、閱讀、下載與檢查新章節只用這幾類。
+  /// （ADR 0050），漫畫源給漫畫閱讀器（ADR 0052）。搜尋、發現、閱讀、
+  /// 下載與檢查新章節只用這幾類。
   bool get isOpenableSource => switch (sourceKind) {
-    BookSourceKind.novel || BookSourceKind.audio => true,
-    BookSourceKind.comic || BookSourceKind.unsupported => false,
+    BookSourceKind.novel ||
+    BookSourceKind.audio ||
+    BookSourceKind.comic => true,
+    BookSourceKind.unsupported => false,
   };
 
   bool get canParticipateInDiscovery =>

@@ -86,6 +86,13 @@ abstract final class ComicChapterFiles {
     return Isolate.run(() => _readArchivePage(path, name));
   }
 
+  /// [readPage] 的同步版本，給已經在背景 isolate 裡的呼叫端。
+  static Uint8List? readPageSync(String path, String name) {
+    if (isArchive(path)) return _readArchivePage(path, name);
+    final file = File(p.join(path, name));
+    return file.existsSync() ? file.readAsBytesSync() : null;
+  }
+
   /// [pagesOf] 的同步版本，給已經在背景 isolate 裡的呼叫端。
   static List<ComicPage> listPagesSync(String path) =>
       isArchive(path) ? _archivePages(path) : _directoryPages(path);

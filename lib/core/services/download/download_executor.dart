@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'download_base.dart';
 import 'download_scheduler.dart';
 
+import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -18,6 +19,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
@@ -193,16 +195,27 @@ Future<DownloadPlan> _planDownload(
   if (scope == null) {
     throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
   }
-  final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
-    origin: book.origin,
-    bookUrl: book.bookUrl,
-  );
-  final unfetched = await chaptersWithUntriedIllustrations(book);
-  final missing = [
-    for (final chapter in scope)
-      if (!stored.contains(chapter.url) || unfetched.contains(chapter.url))
-        (index: chapter.index, url: chapter.url, title: chapter.title),
-  ];
+  final List<({int index, String url, String title})> missing;
+  if (book.bookKind == BookSourceKind.comic) {
+    // 漫畫一話一個 CBZ（ADR 0052），不看資料庫裡的正文。
+    final downloaded = await downloadedComicChapterUrls(book, scope);
+    missing = [
+      for (final chapter in scope)
+        if (!downloaded.contains(chapter.url))
+          (index: chapter.index, url: chapter.url, title: chapter.title),
+    ];
+  } else {
+    final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
+      origin: book.origin,
+      bookUrl: book.bookUrl,
+    );
+    final unfetched = await chaptersWithUntriedIllustrations(book);
+    missing = [
+      for (final chapter in scope)
+        if (!stored.contains(chapter.url) || unfetched.contains(chapter.url))
+          (index: chapter.index, url: chapter.url, title: chapter.title),
+    ];
+  }
   final run = _nextDownloadRun++;
   _downloadRuns[run] = (
     book: book,
@@ -229,6 +242,9 @@ Future<DownloadChapterResult> _downloadChapter(
   final source = state.source;
   final chapter = state.chapters[chapterUrl];
   if (chapter == null) return DownloadChapterResult.failed('章節不存在');
+  if (book.bookKind == BookSourceKind.comic) {
+    return _downloadComicChapter(book, source, chapter, cancelToken);
+  }
   final chapterDao = getIt<ChapterDao>();
   final store = ReaderChapterContentStore(
     chapterDao: chapterDao,
@@ -264,6 +280,48 @@ Future<DownloadChapterResult> _downloadChapter(
   );
   if (result.isReady) return DownloadChapterResult.ready();
   return DownloadChapterResult.failed(result.failureMessage ?? result.content);
+}
+
+/// 漫畫的一話：抓齊圖、打包成 CBZ（[ComicChapterDownload]）。
+Future<DownloadChapterResult> _downloadComicChapter(
+  Book book,
+  BookSource? source,
+  BookChapter chapter,
+  CancelToken cancelToken,
+) async {
+  if (source == null) return DownloadChapterResult.failed('書源不存在');
+  try {
+    await ComicChapterDownload.download(
+      source,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
+    return DownloadChapterResult.ready();
+  } on DioException catch (error) {
+    if (error.type == DioExceptionType.cancel) rethrow;
+    return DownloadChapterResult.failed(error.message ?? '網路錯誤');
+  } on Exception catch (error) {
+    return DownloadChapterResult.failed(error.toString());
+  } on StateError catch (error) {
+    return DownloadChapterResult.failed(error.message);
+  }
+}
+
+/// [chapters] 裡已經下載好（CBZ 在）的漫畫章節網址。
+Future<Set<String>> downloadedComicChapterUrls(
+  Book book,
+  List<BookChapter> chapters,
+) async {
+  final files = await BookChapterFiles.downloaded(book);
+  return {
+    for (final chapter in chapters)
+      if (files[BookChapterFiles.baseNameFor(chapter)]?.path.endsWith(
+            ComicChapterDownload.cbzExtension,
+          ) ??
+          false)
+        chapter.url,
+  };
 }
 
 String classifyDownloadFailureReason(String message) {

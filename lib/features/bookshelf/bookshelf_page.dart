@@ -1099,10 +1099,10 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   Future<void> _openBook(Book book) async {
-    // 漫畫閱讀器、有聲書播放器和本分支同一批合併，由它們接手開書。
-    if (book.bookKind != BookSourceKind.novel) {
+    // 有聲書播放器和本分支同一批合併，由它接手開書。
+    if (book.bookKind == BookSourceKind.audio) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('漫畫與有聲書還不能打開。')));
+          .showSnackBar(const SnackBar(content: Text('有聲書還不能打開。')));
       return;
     }
     // 閱讀器只改了這本書的進度，不會通知書架；回來時要重排（最近閱讀）並更新

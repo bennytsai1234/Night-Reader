@@ -157,10 +157,33 @@ abstract final class ComicChapterDownload {
   }) async {
     final dir = await partialDirFor(book, chapter);
     if (pageFileIn(dir, index) case final file?) return file.readAsBytes();
+    // 下載剛把這一話打包好、刪了暫存資料夾。
+    if (await cbzFor(book, chapter) case final cbz?) {
+      final prefix = pageFileName(index, '.');
+      final pages = ComicChapterFiles.listPagesSync(cbz.path);
+      final name = [
+        for (final page in pages)
+          if (page.name.startsWith(prefix)) page.name,
+      ].firstOrNull;
+      if (name != null) {
+        final bytes = ComicChapterFiles.readPageSync(cbz.path, name);
+        if (bytes != null) return bytes;
+      }
+    }
     final bytes = await fetchImage(source, book, url, cancelToken: cancelToken);
     if (keep) await _savePage(dir, index, bytes);
     return bytes;
   }
+
+  /// 暫存資料夾 [dir] 裡前 [count] 張已經抓到的圖的寬高；還沒抓到是 null。
+  /// 只讀檔案，可以在任何 isolate 跑。
+  static List<({int width, int height})?> sizesIn(String dir, int count) => [
+    for (var i = 0; i < count; i++)
+      switch (pageFileIn(Directory(dir), i)) {
+        final File file => ImageSize.ofFile(file.path),
+        null => null,
+      },
+  ];
 
   /// 抓齊這一話還沒抓到的圖，打包成 CBZ。已經是 CBZ 就不動。抓不到的圖
   /// 讓整話失敗（下載照重試規則再試），已抓到的留在暫存資料夾。
