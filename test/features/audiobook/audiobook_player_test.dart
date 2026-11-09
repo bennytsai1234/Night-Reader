@@ -14,6 +14,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/audiobook/audio_engine.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
@@ -121,6 +122,79 @@ class _Source extends BookSourceService {
   }
 }
 
+/// 系統播放資訊：不向系統開工作階段，記下最後交出去的內容；收掉時清空。
+class _Playback extends SystemPlayback {
+  NowPlaying? item;
+  bool? playing;
+  Set<PlaybackControl>? controls;
+  Duration? position;
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  void show(
+    PlaybackOwner owner, {
+    required NowPlaying item,
+    required bool playing,
+    required Set<PlaybackControl> controls,
+    Duration? position,
+    double speed = 1.0,
+    bool buffering = false,
+  }) {
+    super.show(
+      owner,
+      item: item,
+      playing: playing,
+      controls: controls,
+      position: position,
+      speed: speed,
+      buffering: buffering,
+    );
+    this.item = item;
+    this.playing = playing;
+    this.controls = controls;
+    this.position = position;
+  }
+
+  @override
+  void release(PlaybackOwner owner) {
+    super.release(owner);
+    item = null;
+    playing = null;
+    controls = null;
+  }
+}
+
+/// 原本在播的另一方（例如朗讀）。
+class _OtherOwner implements PlaybackOwner {
+  int pauses = 0;
+
+  @override
+  void onPause() => pauses += 1;
+
+  @override
+  void onPlay() {}
+
+  @override
+  void onStop() {}
+
+  @override
+  void onSkipToNext() {}
+
+  @override
+  void onSkipToPrevious() {}
+
+  @override
+  void onRewind() {}
+
+  @override
+  void onFastForward() {}
+
+  @override
+  void onSeek(Duration position) {}
+}
+
 class _Sync extends Fake implements SyncService {
   final List<String> opened = [];
   final List<String> closed = [];
@@ -146,6 +220,7 @@ void main() {
   late _Engine engine;
   late _Source source;
   late _Sync sync;
+  late _Playback playback;
   late AudiobookPlayer player;
   late Book book;
 
@@ -192,6 +267,7 @@ void main() {
     engine = _Engine();
     source = _Source();
     sync = _Sync();
+    playback = _Playback();
     player = AudiobookPlayer(
       engine: () => engine,
       bookDao: bookDao,
@@ -199,7 +275,7 @@ void main() {
       sourceDao: sourceDao,
       sourceService: source,
       sync: sync,
-      session: () async => null,
+      playback: playback,
       random: Random(1),
     );
   });
@@ -331,6 +407,82 @@ void main() {
     await player.setSpeed(1.5);
     await player.next();
     expect(engine.lastSpeed, 1.5);
+  });
+
+  group('系統播放資訊', () {
+    test('開始播就接手：原本在播的暫停，交出集名、副標、總長與五顆按鈕', () async {
+      final other = _OtherOwner();
+      playback.show(
+        other,
+        item: const NowPlaying(
+          id: 'tts',
+          title: '第一章',
+          bookName: '小說',
+          author: '',
+        ),
+        playing: true,
+        controls: const {},
+      );
+
+      await player.open(book, chapterIndex: 2);
+
+      expect(other.pauses, 1);
+      expect(playback.item?.title, '第 2 集');
+      expect(playback.item?.subtitle, '${book.name} · ${book.author}');
+      expect(playback.item?.duration, const Duration(minutes: 20));
+      expect(playback.playing, isTrue);
+      expect(playback.controls, {
+        PlaybackControl.skipToPrevious,
+        PlaybackControl.rewind,
+        PlaybackControl.fastForward,
+        PlaybackControl.skipToNext,
+        PlaybackControl.seek,
+      });
+    });
+
+    test('第一集沒有上一集，最後一集沒有下一集（列表循環才有）', () async {
+      await player.open(book, chapterIndex: 1);
+      expect(
+        playback.controls,
+        isNot(contains(PlaybackControl.skipToPrevious)),
+      );
+
+      await player.playChapter(3);
+      expect(playback.controls, isNot(contains(PlaybackControl.skipToNext)));
+
+      while (player.mode != AudiobookPlayMode.listLoop) {
+        player.cycleMode();
+      }
+      expect(playback.controls, contains(PlaybackControl.skipToNext));
+    });
+
+    test('系統的倒退、快轉與拖動照播放器的跳法，暫停時交出停的位置', () async {
+      await player.open(book, chapterIndex: 1);
+      engine.advance(const Duration(minutes: 1));
+
+      player.onRewind();
+      await pumpEventQueue();
+      expect(engine.position, const Duration(seconds: 50));
+      player.onFastForward();
+      await pumpEventQueue();
+      expect(engine.position, const Duration(minutes: 1));
+      player.onSeek(const Duration(minutes: 5));
+      await pumpEventQueue();
+      expect(engine.position, const Duration(minutes: 5));
+
+      player.onPause();
+      await pumpEventQueue();
+      expect(playback.playing, isFalse);
+      expect(playback.position, const Duration(minutes: 5));
+    });
+
+    test('停止就收掉系統播放資訊', () async {
+      await player.open(book);
+      player.onStop();
+      await pumpEventQueue();
+      expect(player.book, isNull);
+      expect(playback.item, isNull);
+    });
   });
 
   test('音訊網址取正文第一個非空行，去掉縮排', () {

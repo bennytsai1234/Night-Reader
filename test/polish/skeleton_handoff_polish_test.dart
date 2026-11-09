@@ -4,10 +4,13 @@
 //   flutter test --run-skipped -t polish test/polish
 //   POLISH_ONLY=open-a flutter test --run-skipped -t polish test/polish
 //   POLISH_MODES=light flutter test --run-skipped -t polish test/polish
+//   POLISH_GATE=1 flutter test --run-skipped -t polish test/polish   （CI 跑的）
 //
 // 結果印在輸出裡（`POLISH` 開頭的行），截圖與資料寫在 [polishDir]
 // （系統暫存區，不在 repo 裡），`tool/polish_viewer/` 拿它做成總覽頁。這組測試
-// 帶 `polish` 標籤，`dart_test.yaml` 讓它平常跳過。
+// 帶 `polish` 標籤，`dart_test.yaml` 讓一般的測試跳過它；CI 另開一個工作照
+// `POLISH_GATE=1` 跑。有情境對不上、沒看到骨架或操作失敗就失敗，規格說好的
+// 例外標在情境的 `exempt`。
 //
 // 每一次執行前都把書的閱讀位置、偏好與快取重設成同一個起點，所以淺色、深色
 // 條件一樣，情境之間互不影響。
@@ -72,6 +75,7 @@ class _Scenario {
     this.prefs = _infoA,
     this.before = _none,
     this.textScale = 1.0,
+    this.exempt,
   }) : launch = false;
 
   /// 開 App 這一下本身：不先等書架開好，[action] 是掛上 App（[startApp]）。
@@ -80,6 +84,7 @@ class _Scenario {
       prefs = _infoA,
       before = _none,
       textScale = 1.0,
+      exempt = null,
       launch = true;
 
   /// 總覽頁上顯示的說明。
@@ -93,6 +98,11 @@ class _Scenario {
 
   /// 為 true 時不先開好 App，[action] 自己開。
   final bool launch;
+
+  /// 規格說好這裡沒有骨架，或骨架和內容本來就不一樣（`docs/design/loading.md`
+  /// 「骨架換場」）：寫理由。這種情境的結果照印，不算失敗；`POLISH_GATE=1`
+  /// 時不跑。
+  final String? exempt;
 }
 
 Future<void> _none(WidgetTester tester) async {}
@@ -231,6 +241,15 @@ const _missBookUrl = '$kSiteOrigin/missing/';
 /// 這次執行加進書架的書（重設時整本寫回去，回到剛加入的樣子）。
 final _extraBooks = <Book>[];
 
+/// 「我的」與「關於夜讀」裡說好的例外（`docs/design/loading.md`「骨架換場」）。
+const _mineExempt = {
+  '閱讀統計': '閱讀統計頂端的骨架對齊大數字，小字的位置差一點',
+  '書籤與標註': '書籤與標註沒有骨架，資料當下就有',
+  '書源管理': '第一次進來還沒有上次的書源可照著畫',
+  '更新紀錄': '更新紀錄先畫固定樣子的骨架',
+  '崩潰日誌': '崩潰日誌沒有骨架，資料當下就有',
+};
+
 /// 情境清單，順序就是執行順序。
 final scenarios = <String, _Scenario>{
   'open-a': _Scenario('書架開書（A 組欄位）', _tapBook),
@@ -328,7 +347,7 @@ final scenarios = <String, _Scenario>{
   ),
   'local-a': _Scenario(
     '本機 TXT 書《西遊記》（A 組欄位）',
-    (t) => _tapOnShelf(t, _localBook),
+    (t) => _tapOnShelf(t, ChineseDisplay.convert(_localBook)),
   ),
   'textscale-a': _Scenario('系統字型放大到 1.5 倍（A 組欄位）', _tapBook, textScale: 1.5),
   'launch': _Scenario.launch('開 App：書架的骨架換成書架'),
@@ -337,11 +356,16 @@ final scenarios = <String, _Scenario>{
     (t) => t.tap(find.text('書籍詳情')),
     before: _longPressBook,
   ),
-  'explore': _Scenario('點「發現」分頁', (t) => t.tap(_tab('發現'))),
+  'explore': _Scenario(
+    '點「發現」分頁',
+    (t) => t.tap(_tab('發現')),
+    exempt: '發現分頁沒有骨架，資料當下就有',
+  ),
   'explore-list': _Scenario(
     '發現點分類進書單',
     (t) => t.tap(find.text('最新')),
     before: _toExploreSource,
+    exempt: '分類書單的骨架只畫封面，書名到了才補長條',
   ),
   'explore-detail': _Scenario(
     '發現的書單點書進書籍詳情（書源要從網路抓）',
@@ -358,7 +382,12 @@ final scenarios = <String, _Scenario>{
     '備份與同步',
     '關於夜讀',
   ])
-    'mine-$row': _Scenario('「我的」點「$row」', _tapMineRow(row), before: _toMine),
+    'mine-$row': _Scenario(
+      '「我的」點「$row」',
+      _tapMineRow(row),
+      before: _toMine,
+      exempt: _mineExempt[row],
+    ),
   'mine-書源管理-again': _Scenario(
     '「我的」第二次點「書源管理」（骨架照上次讀到的書源畫）',
     _tapMineRow('書源管理'),
@@ -374,6 +403,7 @@ final scenarios = <String, _Scenario>{
       '「關於夜讀」點「$row」',
       _tapMineRow(row),
       before: _through(['關於夜讀']),
+      exempt: _mineExempt[row],
     ),
   'about-license-text': _Scenario(
     '「開源許可證」點一個套件（授權全文）',
@@ -589,9 +619,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 void main() {
   setUpAll(loadScreenshotFonts);
   final only = Platform.environment['POLISH_ONLY']?.split(',');
+  // CI 用：只跑淺色（比的是位置與長度，深色的結果和淺色一樣），說好的例外
+  // 不跑。
+  final gate = Platform.environment['POLISH_GATE'] == '1';
   final modes =
       Platform.environment['POLISH_MODES']?.split(',') ??
-      const ['light', 'dark'];
+      (gate ? const ['light'] : const ['light', 'dark']);
 
   // 全部情境在同一個測試裡依序跑，理由同 `test/screens/app_screens_test.dart`。
   testWidgets('skeleton handoff', (tester) async {
@@ -607,9 +640,13 @@ void main() {
       polishDir.createSync(recursive: true);
     });
     final runs = <Map<String, Object?>>[];
+    // 不是說好的例外卻有問題的情境，最後一起列出來讓測試失敗。
+    final failures = <String>[];
     final selected = [
-      for (final name in scenarios.keys)
-        if (only == null || only.any(name.startsWith)) name,
+      for (final MapEntry(key: name, value: scenario) in scenarios.entries)
+        if ((only == null || only.any(name.startsWith)) &&
+            !(gate && scenario.exempt != null))
+          name,
     ];
     var done = 0;
     for (final name in selected) {
@@ -642,11 +679,15 @@ void main() {
           error = '$e'.split('\n').first;
         }
         done += 1;
+        final exempt = scenario.exempt;
+        final note = exempt == null ? '' : '（說好的例外：$exempt）';
         if (watch == null) {
           // ignore: avoid_print
           print(
-            'POLISH $done/${selected.length * modes.length} $run：操作失敗：$error',
+            'POLISH $done/${selected.length * modes.length} $run：'
+            '操作失敗：$error$note',
           );
+          if (exempt == null) failures.add('$run：操作失敗：$error');
           runs.add({
             'scenario': name,
             'title': scenario.title,
@@ -671,8 +712,15 @@ void main() {
               ? '沒看到骨架（最後的畫面：$endImage）'
               : findings.isEmpty
               ? '全部對得上'
-              : '${findings.length} 處對不上'}',
+              : '${findings.length} 處對不上'}'
+          '${!watch.sawAny || findings.isNotEmpty ? note : ''}',
         );
+        if (exempt == null) {
+          if (!watch.sawAny) failures.add('$run：沒看到骨架');
+          if (findings.isNotEmpty) {
+            failures.add('$run：${findings.length} 處對不上');
+          }
+        }
         for (final finding in findings) {
           // ignore: avoid_print
           print('POLISH   ${finding.replaceAll('\n', '\nPOLISH   ')}');
@@ -699,6 +747,13 @@ void main() {
     );
     // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。
     await tester.pump(const Duration(minutes: 1));
+    expect(
+      failures,
+      isEmpty,
+      reason:
+          '這幾個情境的骨架換場有問題（細節印在上面 POLISH 開頭的行）；'
+          '規格說好的例外照 docs/design/loading.md 標在情境的 exempt',
+    );
     // 全部情境淺色深色跑完要十分鐘以上，超過元件測試預設的 10 分鐘上限。
   }, timeout: const Timeout(Duration(minutes: 30)));
 }

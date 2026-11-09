@@ -174,7 +174,7 @@ Future<void> _clearLoginRequiredTag(BookSource source) async {
   }
 }
 
-/// 書源的登入表單（ADR 0038，`DESIGN.md`「書源登入」）：輸入框與書源的
+/// 書源的登入表單（ADR 0038，`docs/design/screens.md`「書源登入」）：輸入框與書源的
 /// 按鈕照書源寫的順序與寬度排，右上角打勾是登入。
 ///
 /// - 輸入框：離開頁面時把改過的存起來（蓋過已存的同名欄位），下次填回。

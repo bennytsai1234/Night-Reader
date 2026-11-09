@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -13,11 +12,12 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/audio_handler.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 
 import 'audio_engine.dart';
 
@@ -45,7 +45,7 @@ enum AudiobookPlayMode {
 /// 同步：播著時每 [saveInterval] 存一次，暫停、換集、停止、App 退到背景
 /// 時也存；回到前景時沒在播就接上另一台較新的進度，同一集差 [nearMs]
 /// 以內不跳。
-class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
+class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   AudiobookPlayer({
     AudioEngine Function()? engine,
     this._bookDao,
@@ -53,13 +53,13 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
     this._sourceDao,
     BookSourceService? sourceService,
     SyncService? sync,
-    Future<ReaderAudioHandler?> Function()? session,
+    SystemPlayback? playback,
     Random? random,
     DateTime Function()? now,
   }) : _newEngine = engine ?? JustAudioEngine.new,
        _sourceService = sourceService ?? BookSourceService(),
        _sync = sync ?? SyncService.instance,
-       _session = session ?? AppAudioSession.ensure,
+       _playback = playback ?? SystemPlayback.instance,
        _random = random ?? Random(),
        _now = now ?? DateTime.now {
     sleepTimer = SleepTimer(onExpired: () => unawaited(pause()), now: now);
@@ -79,7 +79,7 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
   static const int nearMs = 10000;
 
   /// 倒退、快轉一次跳多少，和通知的跳秒一致。
-  static const Duration skipStep = AppAudioSession.skipInterval;
+  static const Duration skipStep = SystemPlayback.skipInterval;
 
   /// 開書時同步的閱讀進度還沒做完，最多等這麼久再照這台的位置開。
   static const Duration openGrace = Duration(milliseconds: 500);
@@ -90,7 +90,7 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
   final BookSourceDao? _sourceDao;
   final BookSourceService _sourceService;
   final SyncService _sync;
-  final Future<ReaderAudioHandler?> Function() _session;
+  final SystemPlayback _playback;
   final Random _random;
   final DateTime Function() _now;
 
@@ -105,7 +105,6 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
 
   AudioEngine? _engine;
   final List<StreamSubscription<Object?>> _subscriptions = [];
-  ReaderAudioHandler? _handler;
   AppLifecycleListener? _lifecycle;
 
   Book? _book;
@@ -295,10 +294,7 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
       await engine.setSpeed(_speed);
       _loading = false;
       _duration = engine.duration;
-      if (autoplay) {
-        await _claim();
-        await engine.play();
-      }
+      if (autoplay) await _startPlaying(engine);
       notifyListeners();
       _publish();
       unawaited(_saveProgress());
@@ -362,8 +358,7 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
       );
       return;
     }
-    await _claim();
-    await engine.play();
+    await _startPlaying(engine);
   }
 
   Future<void> pause() async {
@@ -414,6 +409,7 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
   void cycleMode() {
     _mode = _mode.next;
     notifyListeners();
+    _publish();
   }
 
   /// 停止播放：存好進度，通知與圓鈕收起。從書架點書接著聽。
@@ -438,7 +434,7 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
     _buffering = false;
     _error = null;
     sleepTimer.sync(active: false, running: false);
-    _handler?.release(this);
+    _playback.release(this);
     if (_markedOpen) {
       _sync.closeBook(book);
       _markedOpen = false;
@@ -588,97 +584,70 @@ class AudiobookPlayer extends ChangeNotifier implements MediaSessionOwner {
     await pulled.commit(ProgressSync.recordOf(book));
   }
 
-  // --- 系統播放控制 ---
+  // --- 系統播放資訊 ---
 
-  Future<void> _claim() async {
-    final handler = _handler ??= await _session();
-    handler?.claim(this);
+  /// 開始播：先接手系統播放資訊（原本在播的朗讀收到暫停），再讓引擎播。
+  Future<void> _startPlaying(AudioEngine engine) async {
+    await _playback.start();
+    _publish(playing: true);
+    await engine.play();
   }
 
-  void _publish() {
-    final handler = _handler;
+  /// 把這一集、播到哪裡與按鈕交給系統播放資訊；沒在播也還沒接手時不交
+  /// （[SystemPlayback.show]）。
+  void _publish({bool? playing}) {
     final book = _book;
     final chapter = this.chapter;
-    if (handler == null || book == null || chapter == null) return;
-    handler.publish(
+    if (book == null || chapter == null) return;
+    _playback.show(
       this,
-      item: MediaItem(
-        id: chapter.url,
+      item: NowPlaying(
+        id: '${book.bookUrl}#$_index',
         title: chapter.title,
-        album: book.name,
-        artist: _subtitle(book),
+        bookName: book.name,
+        author: book.getRealAuthor(),
+        coverSource: UnifiedCovers.coverOf(book),
         duration: _duration,
-        artUri: _artUri(book),
       ),
-      state: PlaybackState(
-        controls: [
-          MediaControl.skipToPrevious,
-          MediaControl.rewind,
-          _playing ? MediaControl.pause : MediaControl.play,
-          MediaControl.fastForward,
-          MediaControl.skipToNext,
-        ],
-        androidCompactActionIndices: const [0, 2, 4],
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        processingState: switch (this) {
-          _ when _loading => AudioProcessingState.loading,
-          _ when _buffering => AudioProcessingState.buffering,
-          _ when _error != null => AudioProcessingState.error,
-          _ => AudioProcessingState.ready,
-        },
-        playing: _playing,
-        updatePosition: _engine?.position ?? position.value,
-        speed: _speed,
-        errorMessage: _error,
-      ),
+      playing: playing ?? _playing,
+      controls: {
+        if (_previousPlayable(_index) != null) PlaybackControl.skipToPrevious,
+        PlaybackControl.rewind,
+        PlaybackControl.fastForward,
+        if (_nextPlayable(_index) != null ||
+            _mode == AudiobookPlayMode.listLoop)
+          PlaybackControl.skipToNext,
+        if (_duration != null) PlaybackControl.seek,
+      },
+      position: _engine?.position ?? position.value,
+      speed: _speed,
+      buffering: loading,
     );
   }
 
-  static String _subtitle(Book book) {
-    final author = book.author.trim();
-    return author.isEmpty ? book.name : '${book.name} · $author';
-  }
-
-  static Uri? _artUri(Book book) {
-    final cover = book.getDisplayCover()?.trim();
-    if (cover == null || cover.isEmpty) return null;
-    if (cover.startsWith('local://')) {
-      return Uri.file(cover.substring('local://'.length));
-    }
-    final uri = Uri.tryParse(cover);
-    return uri != null && uri.hasScheme ? uri : null;
-  }
+  @override
+  void onPlay() => unawaited(play());
 
   @override
-  void yieldMedia() => unawaited(pause());
+  void onPause() => unawaited(pause());
 
   @override
-  Future<void> onPlay() => play();
+  void onStop() => unawaited(stop());
 
   @override
-  Future<void> onPause() => pause();
+  void onSkipToNext() => unawaited(next());
 
   @override
-  Future<void> onStop() => stop();
+  void onSkipToPrevious() => unawaited(previous());
 
   @override
-  Future<void> onSkipToNext() => next();
+  void onRewind() => unawaited(skipBy(-skipStep));
 
   @override
-  Future<void> onSkipToPrevious() => previous();
+  void onFastForward() => unawaited(skipBy(skipStep));
 
   @override
-  Future<void> onRewind() => skipBy(-skipStep);
-
-  @override
-  Future<void> onFastForward() => skipBy(skipStep);
-
-  @override
-  Future<void> onSeek(Duration position) => seek(position);
+  void onSeek(Duration position) => unawaited(seek(position));
 
   @override
   void dispose() {

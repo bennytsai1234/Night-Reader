@@ -13,7 +13,7 @@ import 'skeleton.dart';
 
 /// 全形標點的筆畫只佔那一格的一部分：開頭的括號與引號靠右、結尾的靠左，
 /// 句讀依字型靠左或置中。骨架的長條要和換上來的字一樣長，行首與行尾落在
-/// 標點上時要扣掉這段空白（DESIGN.md「骨架是真實畫面的影子」）。
+/// 標點上時要扣掉這段空白（docs/design/loading.md「骨架的樣子」）。
 ///
 /// 每個字型的位置都不一樣（2026-11-05 量：vivo 的系統字型「（」從 0.68 格
 /// 才有筆畫、「，」靠左；Noto Sans CJK 繁中「，」置中；微軟正黑體的括號只空
@@ -567,22 +567,41 @@ class _SkeletonTextState extends State<SkeletonText> {
     )..layout(maxWidth: maxWidth);
     // 和 Text 一樣大：一行放得下時是那一行的寬，換行或截斷時撐滿（頁面的
     // 預設字樣指定照最長一行算時照它）。長條的左右照筆畫，上下置中在那一行
-    // 的行框（含行距）上，和字的行一樣。
-    final metrics = painter.computeLineMetrics();
-    final ink = skeletonTextLines(painter);
-    double bottomOf(int index) => index >= metrics.length - 1
-        ? painter.height
-        : metrics[index].baseline + metrics[index].descent;
+    // 畫出來的字上：取那一行最寬的那一段字的字框中線。行框的中線不一定在字
+    // 上：行距上下分得不平均，或一行混了兩種字型（閱讀器資訊列先用標點字型、
+    // 中文與數字退到系統字型），差多少看這台手機的字型。刪節號這種窄的一小
+    // 段來自另一個字型，不拿來定中線。每一條照組成它的那幾段字找，不照行號：
+    // 空行沒有字，也就沒有長條。
+    final boxes = [
+      for (final box in painter.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: span.toPlainText().length),
+      ))
+        if (box.toRect() case final rect
+            when rect.top < painter.height && rect.width > 0)
+          rect,
+    ];
     final result = (
       size: Size(painter.width, painter.height),
       lines: [
-        for (final (index, line) in ink.indexed)
-          Rect.fromLTRB(
-            line.left,
-            index == 0 ? 0 : bottomOf(index - 1),
-            line.right,
-            bottomOf(index),
-          ),
+        for (final line in skeletonTextLines(painter))
+          switch (boxes
+              .where(
+                (box) =>
+                    box.center.dy >= line.top && box.center.dy <= line.bottom,
+              )
+              .fold<Rect?>(
+                null,
+                (widest, box) =>
+                    widest == null || box.width > widest.width ? box : widest,
+              )) {
+            final glyphs? => Rect.fromLTRB(
+              line.left,
+              glyphs.top,
+              line.right,
+              glyphs.bottom,
+            ),
+            null => line,
+          },
       ],
     );
     painter.dispose();
