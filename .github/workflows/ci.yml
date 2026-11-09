@@ -120,6 +120,44 @@ jobs:
         if: always()
         run: git diff --exit-code
 
+  # 細節檢查（test/polish/）：照真的操作流程看骨架換成內容時長度與位置對不對得上，
+  # 有對不上就失敗。要系統的中文字型（照字畫的長條要真的字寬），一般的測試不裝，
+  # 所以分在自己的機器上，和全套測試同時跑。只跑淺色、略過規格說好的例外
+  # （POLISH_GATE=1）。
+  polish:
+    name: Skeleton handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-polish
+      cancel-in-progress: ${{ !inputs.ref }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Install CJK fonts
+        run: |
+          if [ ! -f /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+          fi
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Check skeleton handoffs
+        # 用 expanded：compact 配 --run-skipped 時，測試印的 POLISH 行與失敗的例外
+        # 都不會出現在紀錄裡，只剩「See exception logs above」。
+        env:
+          POLISH_GATE: '1'
+        run: flutter test --no-pub --reporter expanded --run-skipped -t polish test/polish
+      - name: Verify the check did not modify tracked source
+        if: always()
+        run: git diff --exit-code
+
   verify:
     name: Analyze
     runs-on: ubuntu-latest
