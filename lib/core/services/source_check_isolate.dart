@@ -16,6 +16,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
+import 'package:night_reader/core/utils/illustration_markers.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 //  Public types
@@ -1268,8 +1269,10 @@ List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {
   return <int>[...preferred, ...fallback].take(maxProbe).toList();
 }
 
+/// 拿掉插圖標記後還有夠多的字：整章是圖（例如把 VIP 章畫成圖的網站）
+/// 不算讀得到（ADR 0050）。
 bool _looksReadable(String content) {
-  final trimmed = content.trim();
+  final trimmed = IllustrationMarkers.strip(content).trim();
   if (trimmed.isEmpty) return false;
   if (trimmed.startsWith('加載章節失敗')) return false;
   if (trimmed.startsWith('章節內容為空')) return false;

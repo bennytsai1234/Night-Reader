@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
+import 'package:night_reader/core/utils/illustration_markers.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
@@ -9,7 +11,7 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/illustration/illustration_images.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
-const _mark = ReaderV2IllustrationMarkers.placeholder;
+const _mark = IllustrationMarkers.placeholder;
 
 ReaderV2IllustrationSlot _slot(String src) =>
     (src: src, path: '/images/$src', pixelWidth: 300, pixelHeight: 200);
@@ -17,7 +19,7 @@ ReaderV2IllustrationSlot _slot(String src) =>
 void main() {
   group('插圖標記', () {
     test('標記換成記號，網址依序留下', () {
-      final extracted = ReaderV2IllustrationMarkers.extract(
+      final extracted = IllustrationMarkers.extract(
         '前文<img src="https://a.test/1.jpg">後文\n'
         '<img src="https://a.test/2.png,{\'headers\':{}}">',
       );
@@ -29,8 +31,8 @@ void main() {
     });
 
     test('拿掉標記只留字', () {
-      expect(ReaderV2IllustrationMarkers.strip('一<img src="x.jpg">二'), '一二');
-      expect(ReaderV2IllustrationMarkers.strip('沒有圖'), '沒有圖');
+      expect(IllustrationMarkers.strip('一<img src="x.jpg">二'), '一二');
+      expect(IllustrationMarkers.strip('沒有圖'), '沒有圖');
     });
 
     test('同一個網址同一個檔名', () {
@@ -50,7 +52,7 @@ void main() {
       final bytes = Uint8List(24)
         ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
         ..setAll(16, [0, 0, 0x04, 0xB0, 0, 0, 0x06, 0x40]);
-      expect(ReaderV2ImageSize.ofBytes(bytes), (width: 1200, height: 1600));
+      expect(ImageSize.ofBytes(bytes), (width: 1200, height: 1600));
     });
 
     test('JPEG 跳過前面的區段找到尺寸', () {
@@ -62,7 +64,7 @@ void main() {
         0x03, 0x20, // 寬 800
         0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       ]);
-      expect(ReaderV2ImageSize.ofBytes(bytes), (width: 800, height: 600));
+      expect(ImageSize.ofBytes(bytes), (width: 800, height: 600));
     });
 
     test('GIF', () {
@@ -71,13 +73,13 @@ void main() {
         0x2C, 0x01, // 寬 300
         0xC8, 0x00, // 高 200
       ]);
-      expect(ReaderV2ImageSize.ofBytes(bytes), (width: 300, height: 200));
+      expect(ImageSize.ofBytes(bytes), (width: 300, height: 200));
     });
 
     test('不是圖或檔案不在時是 null', () {
-      expect(ReaderV2ImageSize.ofBytes(Uint8List.fromList([1, 2, 3])), isNull);
+      expect(ImageSize.ofBytes(Uint8List.fromList([1, 2, 3])), isNull);
       expect(
-        ReaderV2ImageSize.ofFile(
+        ImageSize.ofFile(
           '${Directory.systemTemp.path}/night-reader-missing-image',
         ),
         isNull,
@@ -140,6 +142,20 @@ void main() {
       expect(on.illustrations, hasLength(1));
       expect(off.illustrations, isEmpty);
       expect(on.contentHash, isNot(off.contentHash));
+    });
+
+    test('網路書每行前面的全形縮排不影響插圖位置', () {
+      final content = ReaderV2Content.fromRaw(
+        chapterIndex: 0,
+        title: '',
+        rawText: '　　甲\n　　$_mark\n　　乙',
+        illustrationSlots: [_slot('1')],
+      );
+      expect(content.paragraphs, ['甲', '乙']);
+      expect(
+        content.illustrations.single.offset,
+        content.displayText.indexOf('乙'),
+      );
     });
 
     test('讀不到的圖不顯示，其他照常', () {

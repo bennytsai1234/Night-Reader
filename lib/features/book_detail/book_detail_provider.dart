@@ -19,6 +19,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/toc_volumes.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
@@ -938,7 +939,7 @@ class BookDetailProvider extends ChangeNotifier {
       }
       if (target == BookDetailCacheClearTarget.cover ||
           target == BookDetailCacheClearTarget.all) {
-        await _coverStorage.deleteBookAssets(_book);
+        await _coverStorage.deleteCachedCovers(_book);
         await _bookDao.upsert(_book);
       }
       await _refreshCacheStatus();
@@ -1043,6 +1044,9 @@ class BookDetailProvider extends ChangeNotifier {
   Future<void> _clearStoredContent() async {
     // 排版快取由正文算出，正文清掉就一起清。
     await ReaderLayoutCache.deleteBook(_book.bookUrl);
+    // 網路書的插圖跟著正文抓，正文清掉就一起清；本地 EPUB 的插圖是轉檔時
+    // 抽出來的，不是快取。
+    if (!_book.isLocal) await BookIllustrationStorage.deleteFor(_book);
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) return;
     await ReaderChapterContentStore(
@@ -1085,7 +1089,10 @@ class BookDetailProvider extends ChangeNotifier {
         latestUpdatedAt = math.max(latestUpdatedAt, entry.updatedAt);
       }
 
-      final coverBytes = await _coverStorage.getBookAssetSize(_book);
+      if (!_book.isLocal) {
+        contentBytes += await BookIllustrationStorage.sizeOf(_book);
+      }
+      final coverBytes = await _coverStorage.getCachedCoverSize(_book);
       _cacheStatus = BookDetailCacheStatus(
         storedChapterCount: storedUrls.length,
         totalChapterCount: readableUrls.length,

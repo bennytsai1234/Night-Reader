@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -197,10 +198,20 @@ class ChapterContentPreparationPipeline {
         nextChapterUrl: nextChapterUrl,
         cancelToken: cancelToken,
       );
-      if (raw.trim().isNotEmpty) {
-        return ChapterContentPreparationResult.ready(raw);
+      if (raw.trim().isEmpty) {
+        return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
       }
-      return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
+      // 插圖抓完（或確定抓不到）這章才算好，抓不到的不畫（ADR 0050）。
+      if (raw.contains('<img')) {
+        await service.fetchIllustrations(
+          resolvedSource,
+          book,
+          raw,
+          dir: await BookIllustrationStorage.dirFor(book),
+          cancelToken: cancelToken,
+        );
+      }
+      return ChapterContentPreparationResult.ready(raw);
     } on DioException catch (error) {
       if (error.type == DioExceptionType.cancel) rethrow;
       return ChapterContentPreparationResult.failed(

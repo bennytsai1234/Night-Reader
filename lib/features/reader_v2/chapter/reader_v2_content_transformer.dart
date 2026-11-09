@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:night_reader/core/utils/illustration_markers.dart';
+
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
@@ -771,7 +773,7 @@ class ReaderV2ContentTransformer {
       bookOrigin: bookOrigin,
       chapterTitle: chapterTitle,
       // 插圖不成段（[ReaderV2Content.fromRaw]），拿掉後只有插圖的行是空行。
-      rawContent: ReaderV2IllustrationMarkers.strip(
+      rawContent: IllustrationMarkers.strip(
         args['rawContent'] as String? ?? '',
       ),
       rules: rules,
@@ -1283,7 +1285,7 @@ class ReaderV2ContentTransformWorker {
           if (id == null || rawArgs is! Map) return;
           try {
             final args = Map<String, Object?>.from(rawArgs);
-            final extracted = ReaderV2IllustrationMarkers.extract(
+            final extracted = IllustrationMarkers.extract(
               args['rawContent'] as String? ?? '',
             );
             args['rawContent'] = extracted.text;
@@ -1341,7 +1343,7 @@ List<ReaderV2IllustrationSlot?> _illustrationSlots(
     for (final src in sources)
       () {
         final path = BookIllustrationStorage.pathFor(dir, src);
-        final size = ReaderV2ImageSize.ofFile(path);
+        final size = ImageSize.ofFile(path);
         if (size == null) return null;
         return (
           src: src,

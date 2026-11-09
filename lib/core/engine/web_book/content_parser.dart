@@ -49,7 +49,7 @@ class ContentParser {
       if (content.contains('&')) {
         content = AnalyzeRuleBase.htmlUnescape.convert(content);
       }
-      content = HtmlFormatter.format(content);
+      content = HtmlFormatter.formatKeepImg(content, redirectUrl: pageUrl);
 
       final nextUrls = <String>[];
       if (contentRule.nextContentUrl != null &&

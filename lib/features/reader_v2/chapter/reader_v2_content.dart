@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../../../core/engine/reader/chinese_text_converter.dart';
+import '../../../core/utils/illustration_markers.dart';
 import '../session/reader_v2_location.dart';
 import 'reader_v2_illustration.dart';
 
@@ -43,7 +44,7 @@ class ReaderV2Content {
     return plainText.isEmpty ? title.length : title.length + 2;
   }
 
-  /// [rawText] 裡的 [ReaderV2IllustrationMarkers.placeholder] 是插圖的位置：
+  /// [rawText] 裡的 [IllustrationMarkers.placeholder] 是插圖的位置：
   /// 一律拿掉，第 i 個對應 [illustrationSlots] 的第 i 個；是 null（關掉
   /// 「顯示插圖」、圖檔不在或讀不出大小）的那張不顯示。只有插圖的段落不
   /// 成段，圖放在下一段前面。
@@ -128,7 +129,7 @@ class ReaderV2Content {
     List<({int paragraph, int offset})> positions,
   })
   _placeIllustrations(List<String> rawParagraphs) {
-    const mark = ReaderV2IllustrationMarkers.placeholder;
+    const mark = IllustrationMarkers.placeholder;
     final paragraphs = <String>[];
     final positions = <({int paragraph, int offset})>[];
     var pendingBefore = 0;

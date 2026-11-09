@@ -12,6 +12,7 @@ import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -99,6 +100,21 @@ class BookSourceService {
     source: source,
     book: book,
     chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// [content]（一章的正文）裡還沒存的插圖抓進 [dir]，回傳抓不到的張數
+  /// （[IllustrationFetcher]，ADR 0050）。
+  Future<int> fetchIllustrations(
+    BookSource source,
+    Book book,
+    String content, {
+    required String dir,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _illustrationTask(source, book, content, dir),
+    source: source,
+    book: book,
     cancelToken: cancelToken,
   );
 
@@ -271,6 +287,20 @@ _Work<String> _contentTask(
       chapter,
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
+    );
+
+_Work<int> _illustrationTask(
+  BookSource source,
+  Book book,
+  String content,
+  String dir,
+) =>
+    (cancelToken) => IllustrationFetcher.fetch(
+      source,
+      book,
+      content,
+      dir,
       cancelToken: cancelToken,
     );
 
