@@ -5,9 +5,11 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/utils/illustration_markers.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ExportBookService {
@@ -54,6 +56,14 @@ class ExportBookService {
           nextChapterUrl: _nextReadableChapterUrl(chapters, i),
         );
         if (content.trim().isNotEmpty) {
+          if (content.contains('<img')) {
+            await _sourceService.fetchIllustrations(
+              source,
+              book,
+              content,
+              dir: await BookIllustrationStorage.dirFor(book),
+            );
+          }
           await _chapterContentDao.saveContent(
             contentKey: ReaderChapterContentDao.contentKey(
               origin: book.origin,
@@ -71,7 +81,8 @@ class ExportBookService {
       }
       if (content != null) {
         buffer.writeln('\n${chapters[i].title}\n');
-        buffer.writeln(content);
+        // 匯出的是純文字，插圖不放（ADR 0050）。
+        buffer.writeln(IllustrationMarkers.strip(content));
       }
       if (onProgress != null) {
         onProgress((i + 1) / chapters.length);

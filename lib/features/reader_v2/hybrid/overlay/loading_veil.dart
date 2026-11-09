@@ -332,6 +332,7 @@ class LoadingVeil extends StatefulWidget {
     required this.textColor,
     this.lines,
     this.titleLines = const <int>{},
+    this.blockLines = const <int>{},
   });
 
   final LoadingVeilController controller;
@@ -348,6 +349,9 @@ class LoadingVeil extends StatefulWidget {
 
   /// [lines] 裡章名那幾行的索引：長條照章名與正文的字級比放大。
   final Set<int> titleLines;
+
+  /// [lines] 裡插圖方塊的索引：照整個範圍畫成方塊（ADR 0050）。
+  final Set<int> blockLines;
 
   @override
   State<LoadingVeil> createState() => _LoadingVeilState();
@@ -402,6 +406,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
           spec: widget.spec,
           lines: widget.lines,
           titleLines: widget.titleLines,
+          blockLines: widget.blockLines,
           backgroundColor: widget.backgroundColor,
           textColor: widget.textColor,
         ),
@@ -424,6 +429,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.spec,
     required this.lines,
     required this.titleLines,
+    required this.blockLines,
     required this.backgroundColor,
     required this.textColor,
   }) : super(repaint: Listenable.merge([cover, skeleton, pulse]));
@@ -455,6 +461,7 @@ class _LoadingVeilPainter extends CustomPainter {
   final ReaderV2LayoutSpec spec;
   final List<Rect>? lines;
   final Set<int> titleLines;
+  final Set<int> blockLines;
   final Color backgroundColor;
   final Color textColor;
 
@@ -554,6 +561,10 @@ class _LoadingVeilPainter extends CustomPainter {
     final radius = AppRadius.cardXs.topLeft;
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
+      if (blockLines.contains(i)) {
+        canvas.drawRRect(RRect.fromRectAndRadius(line, radius), paint);
+        continue;
+      }
       final height = titleLines.contains(i) ? titleBarHeight : barHeight;
       final top = line.center.dy - height / 2;
       canvas.drawRRect(
@@ -572,6 +583,7 @@ class _LoadingVeilPainter extends CustomPainter {
       oldDelegate.spec != spec ||
       !identical(oldDelegate.lines, lines) ||
       !identical(oldDelegate.titleLines, titleLines) ||
+      !identical(oldDelegate.blockLines, blockLines) ||
       oldDelegate.backgroundColor != backgroundColor ||
       oldDelegate.textColor != textColor;
 }

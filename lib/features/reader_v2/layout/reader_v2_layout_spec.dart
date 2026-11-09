@@ -20,6 +20,10 @@ double readerV2BlockTrailingSpacing(
   return lineExtent * style.chapterSpacing;
 }
 
+/// 插圖上下各留的空白：半行（docs/design/reader.md「插圖」）。
+double readerV2IllustrationGap(ReaderV2LayoutStyle style) =>
+    style.fontSize * style.effectiveLineHeight / 2;
+
 class ReaderV2LayoutStyle {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;

@@ -68,6 +68,7 @@ class SettingsSync extends SyncKind {
     PreferKey.readerUse24HourClock,
     PreferKey.readerProgressFractionDigits,
     PreferKey.readerChineseConvert,
+    PreferKey.readerShowIllustrations,
     PreferKey.readerClickActions,
     PreferKey.readerVolumeKeyPage,
     PreferKey.readerVolumeKeyReversed,

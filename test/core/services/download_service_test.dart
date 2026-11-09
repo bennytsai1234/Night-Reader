@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -13,11 +15,20 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 void main() {
   late AppDatabase db;
+  late Directory root;
 
   setUpAll(() async {
+    // 下載排程會看書本資料夾裡有沒有還原留下的插圖記號（ADR 0050）。
+    root = await Directory.systemTemp.createTemp('download_service_test');
+    AppStoragePaths.useRoots((
+      documents: root.path,
+      support: root.path,
+      temporary: root.path,
+    ));
     final getIt = GetIt.instance;
     await getIt.reset();
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -31,6 +42,7 @@ void main() {
 
   tearDownAll(() async {
     await db.close();
+    await root.delete(recursive: true);
     await GetIt.instance.reset();
   });
 

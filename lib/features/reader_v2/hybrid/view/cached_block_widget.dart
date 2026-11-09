@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart' show PipelineOwner;
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
+import 'package:night_reader/features/reader_v2/hybrid/illustration/illustration_images.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/measurement_store.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
 
@@ -169,6 +170,11 @@ final class RenderCachedBlock extends RenderBox {
     final entry = _paragraph?.entry;
     if (entry == null) return;
     final canvas = context.canvas;
+    final illustration = entry.illustration;
+    if (illustration != null) {
+      _paintIllustration(canvas, offset, illustration);
+      return;
+    }
 
     // 同一個連續排版 group 的多個 block 共用一個 ui.Paragraph；本 block
     // 只是那個 Paragraph 裡 [entry.localTop, entry.localTop + size.height)
@@ -195,6 +201,30 @@ final class RenderCachedBlock extends RenderBox {
     canvas.drawParagraph(entry.paragraph, paragraphOffset);
     canvas.restore();
     canvas.restore();
+  }
+
+  /// 插圖塊畫圖，照原色（ADR 0050）。圖在交給排版前已解碼好；被擠出
+  /// 解碼快取的再解一次，好了才補畫。
+  void _paintIllustration(
+    Canvas canvas,
+    Offset offset,
+    IllustrationPaint illustration,
+  ) {
+    final images = IllustrationImages.instance;
+    final box = illustration.box;
+    final image = images.peek(illustration.path, box.decodeWidth);
+    if (image == null) {
+      images.load(illustration.path, box.decodeWidth).then((loaded) {
+        if (loaded != null && attached) markNeedsPaint();
+      });
+      return;
+    }
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      box.rect.shift(offset),
+      Paint()..filterQuality = FilterQuality.medium,
+    );
   }
 
   @override

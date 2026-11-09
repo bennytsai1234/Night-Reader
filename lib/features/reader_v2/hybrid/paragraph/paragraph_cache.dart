@@ -3,6 +3,15 @@ import 'dart:ui' as ui;
 
 import '../core/hybrid_contracts.dart';
 import '../core/hybrid_types.dart';
+import '../illustration/illustration_images.dart';
+
+/// 插圖塊要畫的那張圖（ADR 0050）：圖檔與它在塊裡的位置。
+final class IllustrationPaint {
+  const IllustrationPaint({required this.path, required this.box});
+
+  final String path;
+  final IllustrationBox box;
+}
 
 final class _SharedParagraph {
   _SharedParagraph(this.paragraph, this.references);
@@ -19,10 +28,18 @@ final class _SharedParagraph {
 }
 
 final class ParagraphEntry {
-  ParagraphEntry._(this._shared, this.bakedColor, this.localTop);
+  ParagraphEntry._(
+    this._shared,
+    this.bakedColor,
+    this.localTop, [
+    this.illustration,
+  ]);
   final _SharedParagraph _shared;
   final ui.Color bakedColor;
   final double localTop;
+
+  /// 插圖塊要畫的圖；字的塊是 null。
+  final IllustrationPaint? illustration;
   ui.Paragraph get paragraph => _shared.paragraph;
 }
 
@@ -122,7 +139,9 @@ final class ParagraphCache implements HybridParagraphCache {
     LayoutEpoch epoch,
     ui.Paragraph paragraph, {
     ui.Color bakedColor = const ui.Color(0xFF000000),
+    IllustrationPaint? illustration,
   }) {
+    assert(illustration == null || keys.length == 1);
     if (_disposed) {
       paragraph.dispose();
       return;
@@ -131,7 +150,12 @@ final class ParagraphCache implements HybridParagraphCache {
     final shared = _SharedParagraph(paragraph, keys.length);
     for (var i = 0; i < keys.length; i += 1) {
       final cacheKey = _ParagraphCacheKey(keys[i], epoch);
-      final entry = ParagraphEntry._(shared, bakedColor, localTops[i]);
+      final entry = ParagraphEntry._(
+        shared,
+        bakedColor,
+        localTops[i],
+        illustration,
+      );
       final previous = _entries.remove(cacheKey);
       _entries[cacheKey] = entry;
       // Acquire consumer references before releasing cache ownership or

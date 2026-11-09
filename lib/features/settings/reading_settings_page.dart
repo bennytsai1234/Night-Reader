@@ -62,6 +62,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
             _groups.pageTurn(),
             _groups.autoPage(),
             _groups.chineseConvert(),
+            _groups.illustrations(),
             _groups.clickActions(),
             if (ReaderV2DeviceChannel.supportsVolumeKeys) _groups.volumeKey(),
             _groups.tts(),
