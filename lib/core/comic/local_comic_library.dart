@@ -5,6 +5,7 @@ import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'comic_chapter_download.dart';
 import 'comic_chapter_files.dart';
 
 /// 匯入時找到的一話：一個 CBZ／ZIP 檔，或一個圖片資料夾。
@@ -103,14 +104,15 @@ abstract final class LocalComicLibrary {
     if (FileSystemEntity.isFileSync(source.path)) {
       File(source.path).copySync(partial.path);
     } else {
-      _pack(source.path, partial.path);
+      _pack(source.path, partial.path, source.title);
     }
     partial.renameSync(target.path);
     return chapter;
   }
 
-  /// 圖片資料夾打包成不壓縮的 CBZ（圖本來就壓縮過）。
-  static void _pack(String dir, String zipPath) {
+  /// 圖片資料夾打包成不壓縮的 CBZ（圖本來就壓縮過），寬高記進 ComicInfo：
+  /// 開這一話時不用把每張圖讀出來量。
+  static void _pack(String dir, String zipPath, String title) {
     final pages = ComicChapterFiles.listPagesSync(dir);
     final encoder = ZipFileEncoder()..create(zipPath);
     try {
@@ -125,6 +127,21 @@ abstract final class LocalComicLibrary {
           input.closeSync();
         }
       }
+      encoder.addArchiveFile(
+        ArchiveFile.string(
+          ComicChapterFiles.comicInfoName,
+          ComicChapterDownload.comicInfoXml(title, [
+            for (final page in pages)
+              if (page.width case final width?)
+                if (page.height case final height?)
+                  (width: width, height: height)
+                else
+                  null
+              else
+                null,
+          ]),
+        ),
+      );
     } finally {
       encoder.closeSync();
     }

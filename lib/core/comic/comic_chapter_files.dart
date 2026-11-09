@@ -128,10 +128,20 @@ abstract final class ComicChapterFiles {
           for (var i = 0; i < images.length; i++)
             _pageWithSize(
               images[i].name,
-              recorded?[i] ?? _sizeOfBytes(images[i].readBytes()),
+              recorded?[i] ?? _measureAndFree(images[i]),
             ),
         ];
       });
+
+  /// 沒記寬高的那張讀出來量，量完就放掉：archive 讀過的內容會留在項目
+  /// 裡，不放掉的話列一話就把整話的圖都留在記憶體。
+  static ({int width, int height})? _measureAndFree(ArchiveFile file) {
+    try {
+      return _sizeOfBytes(file.readBytes());
+    } finally {
+      file.clear();
+    }
+  }
 
   static Uint8List? _readArchivePage(String path, String name) {
     if (!File(path).existsSync()) return null;
