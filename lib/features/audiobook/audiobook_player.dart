@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:night_reader/core/services/book_chapter_files.dart';
+
 import 'dart:async';
 import 'dart:math';
 
@@ -298,8 +302,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     notifyListeners();
     final engine = _ensureEngine();
     try {
+      // 下載好的集放本機檔（ADR 0055），不再問書源。
+      final local = await _downloadedFile(book, chapter);
+      if (generation != _generation) return;
       final prefetched = _prefetched;
-      final request = prefetched != null && prefetched.index == index
+      final request = local != null
+          ? AudioRequest(url: local.uri.toString(), headers: const {})
+          : prefetched != null && prefetched.index == index
           ? prefetched.request
           : await _sourceService.getAudioRequest(source, book, chapter);
       _prefetched = null;
@@ -326,6 +335,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       _error = failureMessage('播放', error, stackTrace);
       notifyListeners();
       _publish();
+    }
+  }
+
+  static Future<File?> _downloadedFile(Book book, BookChapter chapter) async {
+    try {
+      return await BookChapterFiles.fileFor(book, chapter);
+    } catch (error) {
+      // 讀不到資料夾就照網路播。
+      AppLog.e('讀已下載的音訊失敗', error: error);
+      return null;
     }
   }
 
