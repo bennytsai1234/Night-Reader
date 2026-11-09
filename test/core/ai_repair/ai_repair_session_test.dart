@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,18 +92,19 @@ String _command(String action, {String content = 'class.txt@text'}) =>
     });
 
 void main() {
-  late Directory dir;
   late AiRepairBackups backups;
   late List<BookSource> applied;
   late List<List<AiMessage>> asked;
 
-  setUp(() {
-    dir = Directory.systemTemp.createTempSync('ai_repair_');
-    backups = AiRepairBackups(directory: () async => dir);
+  // 改前版本存在全域的假 App 資料夾（test/flutter_test_config.dart），同一個
+  // 測試檔共用，每項測試前清掉。
+  setUp(() async {
+    final file = await AiRepairBackups.file();
+    if (file.existsSync()) file.deleteSync();
+    backups = AiRepairBackups();
     applied = [];
     asked = [];
   });
-  tearDown(() => dir.deleteSync(recursive: true));
 
   AiRepairSession session(
     List<BookSource> sources, {
@@ -319,18 +319,13 @@ void main() {
         'bookSourceUrl': 'https://b.example',
       });
 
-      final reloaded = AiRepairBackups(directory: () async => dir);
+      final reloaded = AiRepairBackups();
       expect(await reloaded.urls(), {'https://a.example', 'https://b.example'});
 
       await reloaded.keepOnly({'https://b.example'});
-      expect(await AiRepairBackups(directory: () async => dir).urls(), {
-        'https://b.example',
-      });
+      expect(await AiRepairBackups().urls(), {'https://b.example'});
       await reloaded.remove('https://b.example');
-      expect(
-        File('${dir.path}/${AiRepairBackups.fileName}').existsSync(),
-        isFalse,
-      );
+      expect((await AiRepairBackups.file()).existsSync(), isFalse);
     },
   );
 }

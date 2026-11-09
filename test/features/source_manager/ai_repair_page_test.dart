@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,10 +38,6 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 void main() {
-  late Directory dir;
-  setUp(() => dir = Directory.systemTemp.createTempSync('ai_repair_page_'));
-  tearDown(() => dir.deleteSync(recursive: true));
-
   Future<void> pumpPage(WidgetTester tester, AiRepairSession session) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -67,7 +62,7 @@ void main() {
       probe: (_, _) async => _probe,
       ask: (_, _) => reply.future,
       apply: (_) async {},
-      backups: AiRepairBackups(directory: () async => dir),
+      backups: AiRepairBackups(),
     );
 
     await pumpPage(tester, session);
@@ -116,7 +111,7 @@ void main() {
       probe: (_, _) async => _probe,
       apply: (_) async {},
       copy: (text) async => copied.add(text),
-      backups: AiRepairBackups(directory: () async => dir),
+      backups: AiRepairBackups(),
     );
 
     await pumpPage(tester, session);

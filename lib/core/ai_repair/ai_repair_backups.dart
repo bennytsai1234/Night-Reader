@@ -9,14 +9,17 @@ import 'package:night_reader/core/services/app_log_service.dart';
 /// 手機 App 資料夾的一個檔裡，不進備份、不同步：是上一次操作的復原，不是
 /// 書源的資料。寫入照呼叫的順序排隊。
 class AiRepairBackups {
-  AiRepairBackups({Future<Directory> Function()? directory})
-    : _directory = directory ?? getApplicationSupportDirectory;
+  AiRepairBackups();
 
   static final AiRepairBackups instance = AiRepairBackups();
 
   static const String fileName = 'ai_repair_previous.json';
 
-  final Future<Directory> Function() _directory;
+  /// 存改前版本的檔：App 資料夾裡的 [fileName]。
+  static Future<File> file() async => File(
+    '${(await getApplicationSupportDirectory()).path}'
+    '${Platform.pathSeparator}$fileName',
+  );
   Future<void> _queue = Future<void>.value();
   Map<String, Map<String, dynamic>>? _cache;
 
@@ -79,6 +82,5 @@ class AiRepairBackups {
     }
   }
 
-  Future<File> _file() async =>
-      File('${(await _directory()).path}${Platform.pathSeparator}$fileName');
+  Future<File> _file() => file();
 }

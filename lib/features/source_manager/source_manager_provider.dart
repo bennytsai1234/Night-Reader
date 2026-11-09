@@ -493,9 +493,7 @@ class SourceManagerProvider with ChangeNotifier {
     this._uncovered,
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
-    AiRepairBackups? aiRepairBackups,
   }) : _importService = importService ?? SourceImportService(),
-       _aiRepairBackups = aiRepairBackups ?? AiRepairBackups.instance,
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
        lastSourceCount = _readLastCount(),
        lastRows = _readLastRows() {
@@ -514,7 +512,6 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   final Future<void> Function()? _uncovered;
-  final AiRepairBackups _aiRepairBackups;
   Set<String> _aiRepairedUrls = const {};
   bool _listeningSync = false;
   bool _syncReloadPending = false;
@@ -624,10 +621,10 @@ class SourceManagerProvider with ChangeNotifier {
   /// 讀不到就當沒有；它只決定長按選單有沒有「還原 AI 修改前」。
   Future<void> _refreshAiRepaired(List<BookSourcePart> sources) async {
     try {
-      await _aiRepairBackups.keepOnly({
+      await AiRepairBackups.instance.keepOnly({
         for (final source in sources) source.bookSourceUrl,
       });
-      final urls = await _aiRepairBackups.urls();
+      final urls = await AiRepairBackups.instance.urls();
       if (_disposed || setEquals(urls, _aiRepairedUrls)) return;
       _aiRepairedUrls = urls;
       notifyListeners();
