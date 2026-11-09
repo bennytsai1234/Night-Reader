@@ -135,6 +135,18 @@ void main() {
     expect(_box(text, plan, 11).right, closeTo(_frame, 0.01), reason: 'b 切齊右緣');
   });
 
+  test('單字前的空格留在行尾時，空格旁不攤字距，右緣仍切齊', () {
+    // ab 陪句號換行，空格留在本行行尾；空出的兩格只攤在十一個漢字之間。
+    const text = '一二三四五六七八九十十 ab。四';
+    final plan = _plan(text);
+    expect(plan.visualLineBreakOffsets, const [12]);
+    expect(
+      plan.spacers.where((s) => s.offset < 12),
+      _spacers([for (var i = 1; i <= 10; i++) LineSpacer(i, 4)]),
+    );
+    expect(_box(text, plan, 10).right, closeTo(_frame, 0.01));
+  });
+
   test('英文單字裡面不拉開字距', () {
     // 一陪句號換行，空出的 30 只攤在漢字旁的十個字距，a、b 之間不攤。
     const text = '一二三四五六七八九ab十一。';

@@ -374,29 +374,30 @@ final class VisualLineLayoutEngine {
     // 整格字的字距上，英文單字裡面不拉開。行寬補到文字框裡最後一條半格
     // 線，和排滿的行同一個右緣：文字框是整數個字格再加一點防浮點誤差的
     // slack，slack 攤進去會讓原生排版把這一行再折一次。每個字距最多攤
-    // [_maxKinsokuSpread] 格，攤不完的留在右緣。行尾的空白不算寬度。
+    // [_maxKinsokuSpread] 格，攤不完的留在右緣。行尾的空白看不見，不算
+    // 寬度也不攤：只算到最後一個看得見的字，空白前後的補白一起拿掉。
     void endLineJustified(int b) {
       final breakOffset = shaped[b].start;
+      var end = b;
+      while (end > lineStartIndex + 1 &&
+          breakPolicy.isSeparator(text, shaped[end - 1])) {
+        end -= 1;
+      }
+      final visibleEnd = shaped[end].start;
       final widths = <int, double>{};
       for (final spacer in spacers) {
-        if (spacer.offset < breakOffset) {
+        if (spacer.offset < visibleEnd) {
           widths[spacer.offset] = (widths[spacer.offset] ?? 0) + spacer.width;
         }
       }
-      var used = _segmentWidth(
-        shaped,
-        text,
-        lineStartIndex,
-        b,
-        trimTrailingSeparators: true,
-      );
+      var used = _segmentWidth(shaped, text, lineStartIndex, end);
       for (final width in widths.values) {
         used += width;
       }
       final lineWidth = ((available + _fitEpsilon) / half).floor() * half;
       final spread = lineWidth - used;
       final gaps = <int>[
-        for (var k = lineStartIndex + 1; k < b; k += 1)
+        for (var k = lineStartIndex + 1; k < end; k += 1)
           if (isCell(k) || isCell(k - 1)) k,
       ];
       if (spread > _fitEpsilon && gaps.isNotEmpty) {
@@ -600,9 +601,9 @@ const Set<String> _noLineEnd = {
   '「', '『', '（', '【', '《', '〈', '〔', '｛', '“', '‘', '(', '[', '{', //
 };
 
-/// 避頭尾的行每個字距最多多攤幾格。拉一兩個漢字時每個字距只多約 1/15 格；
-/// 被拉的是長英文單字時空出好幾格，全攤進字距會把那一行拉得很開，這時
-/// 攤到上限為止，右緣短一截（ADR 0026）。
+/// 避頭尾的行每個字距最多多攤幾格。一行十幾二十格時，拉一兩個漢字每個
+/// 字距只多約 1/15 格；被拉的是長英文單字時空出好幾格，全攤進字距會把
+/// 那一行拉得很開，這時攤到上限為止，右緣短一截（ADR 0026）。
 const double _maxKinsokuSpread = 1 / 4;
 
 /// 成對使用、不拆到兩行的符號：刪節號「……」與破折號「——」。
