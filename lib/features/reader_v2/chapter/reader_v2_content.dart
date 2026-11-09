@@ -44,10 +44,10 @@ class ReaderV2Content {
     return plainText.isEmpty ? title.length : title.length + 2;
   }
 
-  /// [rawText] 裡的 [IllustrationMarkers.placeholder] 是插圖的位置：
-  /// 一律拿掉，第 i 個對應 [illustrationSlots] 的第 i 個；是 null（關掉
-  /// 「顯示插圖」、圖檔不在或讀不出大小）的那張不顯示。只有插圖的段落不
-  /// 成段，圖放在下一段前面。
+  /// [rawText] 裡的 [IllustrationMarkers.placeholder]`(i)` 是第 i 張插圖的
+  /// 位置：一律拿掉，對應 [illustrationSlots] 的第 i 個（每張圖一個，關掉
+  /// 「顯示插圖」時都是 null）；是 null（關掉、圖檔不在或讀不出大小）的那張
+  /// 不顯示。只有插圖的段落不成段，圖放在下一段前面。
   factory ReaderV2Content.fromRaw({
     required int chapterIndex,
     required String title,
@@ -55,7 +55,10 @@ class ReaderV2Content {
     List<ReaderV2IllustrationSlot?> illustrationSlots =
         const <ReaderV2IllustrationSlot?>[],
   }) {
-    final placed = _placeIllustrations(paragraphsOf(rawText));
+    final placed = _placeIllustrations(
+      paragraphsOf(rawText),
+      illustrationSlots.length,
+    );
     final paragraphs = placed.paragraphs;
     final plainText = paragraphs.join('\n\n');
     final normalizedTitle = title.trim();
@@ -76,10 +79,9 @@ class ReaderV2Content {
       cursor += paragraph.length + 2;
     }
     final illustrations = <ReaderV2Illustration>[];
-    for (var i = 0; i < placed.positions.length; i += 1) {
-      final slot = i < illustrationSlots.length ? illustrationSlots[i] : null;
+    for (final position in placed.positions) {
+      final slot = illustrationSlots[position.index];
       if (slot == null) continue;
-      final position = placed.positions[i];
       final offset = position.paragraph >= paragraphs.length
           ? displayText.length
           : paragraphStarts[position.paragraph] + position.offset;
@@ -126,51 +128,59 @@ class ReaderV2Content {
   /// 落不成段，圖算在下一段開頭（後面沒有段落時 paragraph 等於段落數）。
   static ({
     List<String> paragraphs,
-    List<({int paragraph, int offset})> positions,
+    List<({int paragraph, int offset, int index})> positions,
   })
-  _placeIllustrations(List<String> rawParagraphs) {
-    const mark = IllustrationMarkers.placeholder;
+  _placeIllustrations(List<String> rawParagraphs, int count) {
+    int? indexOf(int unit) => IllustrationMarkers.placeholderIndex(unit, count);
     final paragraphs = <String>[];
-    final positions = <({int paragraph, int offset})>[];
-    var pendingBefore = 0;
+    final positions = <({int paragraph, int offset, int index})>[];
+    var pendingBefore = <int>[];
+    void flushPending() {
+      for (final index in pendingBefore) {
+        positions.add((paragraph: paragraphs.length, offset: 0, index: index));
+      }
+      pendingBefore = <int>[];
+    }
+
     for (final raw in rawParagraphs) {
-      if (!raw.contains(mark)) {
-        for (var i = 0; i < pendingBefore; i += 1) {
-          positions.add((paragraph: paragraphs.length, offset: 0));
-        }
-        pendingBefore = 0;
+      final marks = <int>[
+        for (var i = 0; i < raw.length; i += 1)
+          if (indexOf(raw.codeUnitAt(i)) != null) i,
+      ];
+      if (marks.isEmpty) {
+        flushPending();
         paragraphs.add(raw);
         continue;
       }
-      final cleaned = raw.replaceAll(mark, '');
+      final cleaned = String.fromCharCodes(
+        raw.codeUnits.where((unit) => indexOf(unit) == null),
+      );
       if (cleaned.replaceAll('　', '').trim().isEmpty) {
-        pendingBefore += mark.allMatches(raw).length;
+        pendingBefore.addAll([
+          for (final i in marks) indexOf(raw.codeUnitAt(i))!,
+        ]);
         continue;
       }
-      for (var i = 0; i < pendingBefore; i += 1) {
-        positions.add((paragraph: paragraphs.length, offset: 0));
-      }
-      pendingBefore = 0;
+      flushPending();
       final leading =
           cleaned.length - cleaned.replaceFirst(_leadingSpace, '').length;
       final trailingStart = cleaned.replaceFirst(_trailingSpace, '').length;
-      var removed = 0;
-      for (var i = 0; i < raw.length; i += 1) {
-        if (raw[i] != mark) continue;
+      for (final (removed, i) in marks.indexed) {
         final at = i - removed;
-        removed += 1;
         final offset = at <= leading
             ? 0
             : at >= trailingStart
             ? cleaned.length
             : at;
-        positions.add((paragraph: paragraphs.length, offset: offset));
+        positions.add((
+          paragraph: paragraphs.length,
+          offset: offset,
+          index: indexOf(raw.codeUnitAt(i))!,
+        ));
       }
       paragraphs.add(cleaned);
     }
-    for (var i = 0; i < pendingBefore; i += 1) {
-      positions.add((paragraph: paragraphs.length, offset: 0));
-    }
+    flushPending();
     return (paragraphs: paragraphs, positions: positions);
   }
 

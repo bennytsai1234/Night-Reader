@@ -737,36 +737,44 @@ final class HybridLayoutPipeline {
   }
 
   /// 插圖塊不排字：照圖的大小算高度，圖解碼好才交給排版（ADR 0050），
-  /// 紙掀開時圖一定畫得出來。解不開的圖照樣交出去，只是不畫。
+  /// 紙掀開時圖一定畫得出來。解不開的圖當作不存在：交出沒有高度的塊（章末
+  /// 的照樣留章節間距），不畫。
   void _submitIllustration(ChapterBlocks blocks, ChapterBlock block) {
     final illustration = block.illustration!;
     if (_illustrationsInFlight.containsKey(block.key)) return;
     final spec = layoutSpec;
     final isChapterEnd = block.blockIndex == blocks.blocks.length - 1;
+    // 章末留章節間距，同字的章末塊（[readerV2BlockTrailingSpacing]）。
+    final trailingSpacing = isChapterEnd
+        ? readerV2BlockTrailingSpacing(
+            spec.style,
+            isTitle: false,
+            isChapterEnd: true,
+          )
+        : 0.0;
     final box = IllustrationBox.layout(
       illustration,
       contentWidth: spec.textLayoutFrame.width,
       maxHeight: spec.contentHeight,
       devicePixelRatio: _devicePixelRatio(),
       gap: readerV2IllustrationGap(spec.style),
-      // 章末留章節間距，同字的章末塊（[readerV2BlockTrailingSpacing]）。
-      trailingSpacing: isChapterEnd
-          ? readerV2BlockTrailingSpacing(
-              spec.style,
-              isTitle: false,
-              isChapterEnd: true,
-            )
-          : 0,
+      trailingSpacing: trailingSpacing,
     );
     final textColor = _textColor();
     final work = () async {
-      await _illustrationImages.load(illustration.path, box.decodeWidth);
+      final image = await _illustrationImages.load(
+        illustration.path,
+        box.decodeWidth,
+      );
       if (!isCurrentGeneration) return;
       // 完成通知同步送出：回來時排版已經收到這一塊。
       _pump.completeIllustration(
         block: block,
         epoch: _epoch,
-        paint: IllustrationPaint(path: illustration.path, box: box),
+        paint: image == null
+            ? null
+            : IllustrationPaint(path: illustration.path, box: box),
+        height: image == null ? trailingSpacing : box.blockHeight,
         textColor: textColor,
       );
     }();

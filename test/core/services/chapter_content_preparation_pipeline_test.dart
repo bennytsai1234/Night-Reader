@@ -59,6 +59,29 @@ class _IllustratedSite extends BookSourceService {
   }
 }
 
+/// 正文抓得到，裡面的圖連不上。
+class _UnreachableImages extends BookSourceService {
+  @override
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+  }) async => '前文\n<img src="https://s.example/1.png">\n後文';
+
+  @override
+  Future<int> fetchIllustrations(
+    BookSource source,
+    Book book,
+    String content, {
+    required String dir,
+    bool retryMissing = true,
+    CancelToken? cancelToken,
+  }) async => 1;
+}
+
 /// 只有開頭的 PNG（寬 300、高 200），夠讀出寬高。
 final _png = Uint8List(24)
   ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
@@ -145,6 +168,35 @@ void main() {
       (await chapterDao.getByUrl(snapshot.bookUrl, snapshot.url))!.isLocked,
       isTrue,
     );
+  });
+
+  test('a fresh chapter whose illustrations could not be reached is ready, '
+      'and the book is marked for the shelf download to fetch them', () async {
+    final root = await Directory.systemTemp.createTemp('pipeline_unreachable');
+    addTearDown(() => root.delete(recursive: true));
+    AppStoragePaths.useRoots((
+      documents: root.path,
+      support: root.path,
+      temporary: root.path,
+    ));
+    final offline = ChapterContentPreparationPipeline(
+      book: book,
+      contentStore: store,
+      sourceDao: BookSourceDao(db),
+      service: _UnreachableImages(),
+      getSource: () => source,
+    );
+    final chapter = BookChapter(
+      url: 'https://s.example/c/3.html',
+      title: '第三章',
+      bookUrl: book.bookUrl,
+    );
+
+    final result = await offline.prepare(chapterIndex: 0, chapter: chapter);
+
+    expect(result.isReady, isTrue);
+    expect(await BookIllustrationStorage.isUnfetched(book), isTrue);
+    expect(await offline.illustrationsSettled(result.content), isFalse);
   });
 
   test('stored text whose illustrations are not on this phone (restored from '

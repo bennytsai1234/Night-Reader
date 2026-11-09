@@ -1,30 +1,55 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../constant/app_pattern.dart';
 
 /// 存著的正文裡的插圖標記 `<img src="…">`：抽出、拿掉、對應到圖檔。
 abstract final class IllustrationMarkers {
-  /// 轉換正文時代替標記的字（私用區），替換規則、繁簡轉換與排版整理都
-  /// 不會動它；轉完再拿掉、記下位置（閱讀器的 `ReaderV2Content.fromRaw`）。
-  static const String placeholder = '\uE000';
+  static const int _firstPlaceholder = 0xE000;
 
-  /// [raw] 裡每個標記換成 [placeholder]，回傳換好的字與依序的網址。
+  /// 一章最多幾張圖（私用區 U+E000–U+F8FF 的字數），再多的不顯示。
+  static const int maxPerChapter = 0xF8FF - _firstPlaceholder + 1;
+
+  /// 轉換正文時代替第 [index] 張圖的字（私用區，每張不同）：繁簡轉換與排版
+  /// 整理不動它，替換規則刪掉或搬動某張圖時，其他圖照樣對得上；轉完再拿
+  /// 掉、記下位置（閱讀器的 `ReaderV2Content.fromRaw`）。
+  static String placeholder(int index) =>
+      String.fromCharCode(_firstPlaceholder + index);
+
+  /// [codeUnit] 是 [count] 張圖裡第幾張的記號；不是時回傳 null。
+  static int? placeholderIndex(int codeUnit, int count) {
+    final index = codeUnit - _firstPlaceholder;
+    return index >= 0 && index < count ? index : null;
+  }
+
+  /// [raw] 裡第 i 個標記換成 [placeholder]`(i)`，回傳換好的字與依序的網址。
+  /// 原文裡本來就有、和記號同一個字的先拿掉。
   static ({String text, List<String> sources}) extract(String raw) {
-    if (!raw.contains('<img')) {
-      return (text: raw.replaceAll(placeholder, ''), sources: const []);
-    }
-    final sources = <String>[];
-    final text = raw.replaceAll(placeholder, '').replaceAllMapped(
-      AppPattern.imgPattern,
-      (match) {
-        final src = match.group(1)?.trim() ?? '';
-        if (src.isEmpty) return '';
-        sources.add(src);
-        return placeholder;
-      },
+    if (!raw.contains('<img')) return (text: raw, sources: const []);
+    final markers = [
+      for (final match in AppPattern.imgPattern.allMatches(raw))
+        (match: match, src: match.group(1)?.trim() ?? ''),
+    ];
+    final count = math.min(
+      markers.where((marker) => marker.src.isNotEmpty).length,
+      maxPerChapter,
     );
-    return (text: text, sources: sources);
+    String clean(String text) => String.fromCharCodes(
+      text.codeUnits.where((unit) => placeholderIndex(unit, count) == null),
+    );
+    final sources = <String>[];
+    final text = StringBuffer();
+    var cursor = 0;
+    for (final (:match, :src) in markers) {
+      text.write(clean(raw.substring(cursor, match.start)));
+      cursor = match.end;
+      if (src.isEmpty || sources.length == count) continue;
+      text.write(placeholder(sources.length));
+      sources.add(src);
+    }
+    text.write(clean(raw.substring(cursor)));
+    return (text: text.toString(), sources: sources);
   }
 
   /// 拿掉 [raw] 裡所有的標記（匯出、書源校驗、只要字的地方）。

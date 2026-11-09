@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/book_type.dart';
@@ -434,7 +435,8 @@ class LocalBookService {
     if (localBookExtensionFromPath(path) != 'epub') return null;
     final textPath = await epubTextPath(book);
     if (await File(textPath).exists()) {
-      final ranges = EpubParser.readChapters(textPath);
+      // 讀檔與解析整份範圍在背景做，開書時不佔主執行緒。
+      final ranges = await Isolate.run(() => EpubParser.readChapters(textPath));
       if (ranges != null) return ranges;
     }
     if (!await File(path).exists()) return null;

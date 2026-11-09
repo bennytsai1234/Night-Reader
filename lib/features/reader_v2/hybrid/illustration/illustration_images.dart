@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -66,6 +67,9 @@ final class IllustrationImages {
       LinkedHashMap<_ImageKey, ui.Image>();
   final Map<_ImageKey, Future<ui.Image?>> _loading = {};
 
+  /// 解不開的圖（讀得出大小、整張卻壞了）：這次開 App 不再一再重解。
+  final Set<_ImageKey> _failed = {};
+
   /// 已經解碼好的那張；不在時回傳 null。
   ui.Image? peek(String path, int width) {
     final key = _ImageKey(path, width);
@@ -80,10 +84,15 @@ final class IllustrationImages {
     final key = _ImageKey(path, width);
     final ready = peek(path, width);
     if (ready != null) return Future.value(ready);
+    if (_failed.contains(key)) return Future.value();
     return _loading.putIfAbsent(key, () async {
       try {
         final image = await _decode(path, width);
-        if (image != null) _put(key, image);
+        if (image != null) {
+          _put(key, image);
+        } else if (await File(path).exists()) {
+          _failed.add(key);
+        }
         return image;
       } finally {
         unawaited(Future.microtask(() => _loading.remove(key)));

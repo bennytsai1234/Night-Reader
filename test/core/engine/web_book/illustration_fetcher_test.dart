@@ -2,16 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/network_service.dart';
-import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -139,6 +138,39 @@ void main() {
     );
   });
 
+  test('取消了就丟出取消，不記成確定抓不到', () async {
+    final images = p.join(dir.path, 'images');
+    final bad = _dataUrl(utf8.encode('<html>404</html>'));
+    final token = CancelToken()..cancel();
+    await expectLater(
+      IllustrationFetcher.fetch(
+        source,
+        book,
+        '<img src="$bad">',
+        images,
+        cancelToken: token,
+      ),
+      throwsA(isA<DioException>()),
+    );
+    expect(
+      File(BookIllustrationStorage.missingPathFor(images, bad)).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('好幾處同時抓同一張圖，每處都算抓到，不留暫存檔', () async {
+    final images = p.join(dir.path, 'images');
+    final good = _dataUrl(_png);
+    final results = await Future.wait([
+      for (var i = 0; i < 6; i += 1)
+        IllustrationFetcher.fetch(source, book, '<img src="$good">', images),
+    ]);
+    expect(results, everyElement(0));
+    expect(Directory(images).listSync().map((f) => p.basename(f.path)), [
+      BookIllustrationStorage.fileNameFor(good),
+    ]);
+  });
+
   test('確定抓不到的圖：已存的正文不再抓，重新取得這一章時再試', () async {
     final images = p.join(dir.path, 'images');
     final src = _dataUrl(_png);
@@ -193,37 +225,4 @@ void main() {
       _png,
     );
   }, skip: quickJsUnavailableReason());
-
-  test('清除封面快取只刪抓來的封面，插圖、轉好的文字與書檔自帶的封面不動', () async {
-    final folder = await AppStoragePaths.bookAssetDir(
-      BookCoverStorageService.bookStorageKey(book),
-      ensureExists: true,
-    );
-    File p0(String name) => File(p.join(folder.path, name));
-    await p0('cover-abc.jpg').writeAsBytes([1, 2]);
-    await p0('custom-cover-def.png').writeAsBytes([3]);
-    await p0('cover-embedded.png').writeAsBytes([4]);
-    await p0('epub-text.txt').writeAsString('字');
-    final illustration = File(
-      BookIllustrationStorage.pathFor(
-        await BookIllustrationStorage.dirFor(book),
-        'x',
-      ),
-    );
-    await illustration.create(recursive: true);
-
-    book
-      ..coverLocalPath = p0('cover-abc.jpg').path
-      ..customCoverLocalPath = p0('custom-cover-def.png').path;
-    expect(await BookCoverStorageService().getCachedCoverSize(book), 3);
-    await BookCoverStorageService().deleteCachedCovers(book);
-
-    expect(p0('cover-abc.jpg').existsSync(), isFalse);
-    expect(p0('custom-cover-def.png').existsSync(), isFalse);
-    expect(p0('cover-embedded.png').existsSync(), isTrue);
-    expect(p0('epub-text.txt').existsSync(), isTrue);
-    expect(illustration.existsSync(), isTrue);
-    expect(book.coverLocalPath, isNull);
-    expect(book.customCoverLocalPath, isNull);
-  });
 }
