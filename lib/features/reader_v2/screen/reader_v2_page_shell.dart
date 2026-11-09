@@ -291,7 +291,6 @@ class ReaderV2PageShell extends StatelessWidget {
       footerOffset: footerOffset,
       infoFontSize: infoFontSize,
     );
-    final infoShown = infoState != ReaderV2InfoState.hidden;
     // 正文與頁首、頁尾之間的空隙（上下邊距）裡的漸隱，最多 [edgeFade]。
     // 邊距是 0 時沒有空隙，切口照舊。
     final fadeTop = math.min(layout.contentTop - layout.headerExtent, edgeFade);
@@ -375,7 +374,7 @@ class ReaderV2PageShell extends StatelessWidget {
                       onShowControls: onShowControls,
                       child: ColoredBox(
                         color: backgroundColor,
-                        child: layout.showHeaderInfo && infoShown
+                        child: layout.showHeaderInfo
                             ? Padding(
                                 padding: EdgeInsets.only(
                                   top: layout.headerRowTop,
@@ -397,7 +396,7 @@ class ReaderV2PageShell extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (layout.showFooterInfo && infoShown)
+                if (layout.showFooterInfo)
                   Positioned(
                     bottom: 0,
                     left: 0,
@@ -537,7 +536,7 @@ class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
 
 /// 頁首頁尾資訊列目前要畫什麼。
 enum ReaderV2InfoState {
-  /// 不畫：開書取不到正文（正文區改顯示錯誤）。
+  /// 不畫：開書取不到正文（正文區改顯示錯誤）。已經畫出的骨架整條淡掉。
   hidden,
 
   /// 正文還沒排好（開書、跳到別章、改排版或重載內容）：每個欄位畫成骨架。
@@ -804,8 +803,8 @@ class _InfoRow extends StatelessWidget {
 
   Widget _buildRow(BuildContext context, HybridProgressSnapshot? live) {
     // 載入中的骨架照要開的那一章排字（[ReaderV2InfoTarget]）；排好後骨架淡
-    // 出途中照真正的資訊，和底下淡入的字一樣。
-    final target = skeleton && shell.infoState == ReaderV2InfoState.loading
+    // 出途中照真正的資訊，和底下淡入的字一樣。取不到正文時骨架照原樣淡掉。
+    final target = skeleton && shell.infoState != ReaderV2InfoState.ready
         ? shell.loadingTarget
         : null;
     final progress = target?.progressFrom(live) ?? live;
