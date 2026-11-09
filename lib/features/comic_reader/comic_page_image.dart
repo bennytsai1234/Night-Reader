@@ -224,10 +224,16 @@ class _ComicPageViewState extends State<ComicPageView> {
       filterQuality: FilterQuality.medium,
     );
     if (!_fadeIn) return picture;
+    // 淡入播完就拿掉底下的骨架：不然它一直在呼吸、每幀重畫。
     return Stack(
       children: [
         skeleton,
-        _FadeIn(child: picture),
+        _FadeIn(
+          onDone: () {
+            if (mounted) setState(() => _fadeIn = false);
+          },
+          child: picture,
+        ),
       ],
     );
   }
@@ -235,7 +241,8 @@ class _ComicPageViewState extends State<ComicPageView> {
 
 /// 圖到了以 [AppMotion.fade] 淡入，播完不再動。
 class _FadeIn extends StatefulWidget {
-  const _FadeIn({required this.child});
+  const _FadeIn({required this.onDone, required this.child});
+  final VoidCallback onDone;
   final Widget child;
 
   @override
@@ -246,7 +253,7 @@ class _FadeInState extends State<_FadeIn> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
-  )..forward();
+  )..forward().whenCompleteOrCancel(() => widget.onDone());
   late final Animation<double> _opacity = CurvedAnimation(
     parent: _controller,
     curve: AppMotion.fadeCurve,

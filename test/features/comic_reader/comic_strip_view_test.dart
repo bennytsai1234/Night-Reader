@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_model.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'comic_test_pages.dart';
 
@@ -87,6 +88,8 @@ void main() {
     await harness.pump(tester);
 
     expect(harness.last, const ComicLocation(1, 2));
+    // 圖都到了、淡入播完：骨架拿掉，不再呼吸重畫。
+    expect(find.byType(SkeletonBox), findsNothing);
     expect(find.text('已閱畢：'), findsOneWidget);
     expect(find.text('第2話'), findsOneWidget);
     expect(find.text('第3話'), findsOneWidget);

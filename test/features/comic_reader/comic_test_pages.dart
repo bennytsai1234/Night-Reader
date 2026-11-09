@@ -70,6 +70,7 @@ class FakeComicSource implements ComicPageSource {
   final Map<(int, int), Completer<void>> pageGates = {};
 
   final List<int> requestedChapters = [];
+  final Map<int, Uint8List> _images = {};
 
   @override
   Future<List<ComicPage>> pagesOf(int chapterIndex) async {
@@ -96,7 +97,11 @@ class FakeComicSource implements ComicPageSource {
       throw StateError('圖抓不到');
     }
     final top = _palette[(chapterIndex + index) % _palette.length];
-    return stripedPng(width, height, top, top ~/ 2 & 0x7F7F7F);
+    // 每種顏色只產生一次：量幀預算時不把測試自己做圖的時間算進主執行緒。
+    return _images.putIfAbsent(
+      top,
+      () => stripedPng(width, height, top, top ~/ 2 & 0x7F7F7F),
+    );
   }
 
   @override

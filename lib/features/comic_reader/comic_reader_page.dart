@@ -36,6 +36,7 @@ import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -117,6 +118,12 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
   void initState() {
     super.initState();
     _strip.onAutoScrollStopped = () => _autoScrolling.value = false;
+    _menuVisible.addListener(() {
+      final behind = _menuBehind;
+      if (_menuVisible.value && behind != null) {
+        _refreshProgress(behind.chapterIndex, behind.pageIndex);
+      }
+    });
     unawaited(_settings.loadSettings());
     unawaited(_open());
   }
@@ -156,6 +163,9 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
         }
       }
       if (chapters.isEmpty) throw StateError('目錄是空的');
+      // 換頁動畫播完才建條漫：建整條條漫與選單很重，放在動畫途中會掉幀
+      // （ADR 0037 等靜止再放）；動畫期間畫和條漫同比例的骨架。
+      await _routeSettled();
       _sync.start();
       // 接著上次讀的地方開：等開 App 的同步做完一下，照同步後的位置開。
       final resume = await _sync.openLocation();
@@ -195,10 +205,45 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
     }
   }
 
-  void _onModel() =>
-      _refreshProgress(_progress.value.chapterIndex, _progress.value.pageIndex);
+  /// 這一頁的進場動畫播完（沒有動畫時馬上完成）。
+  Future<void> _routeSettled() async {
+    // 開書從 initState 開始，那時還不能查上層的路由：先讓出一次。
+    await Future<void>.value();
+    if (!mounted) return;
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.isCompleted) return;
+    final done = Completer<void>();
+    void listener(AnimationStatus status) {
+      if (status == AnimationStatus.forward ||
+          status == AnimationStatus.reverse) {
+        return;
+      }
+      animation.removeStatusListener(listener);
+      if (!done.isCompleted) done.complete();
+    }
+
+    animation.addStatusListener(listener);
+    await done.future;
+  }
+
+  void _onModel() {
+    final shown = _progress.value;
+    final at =
+        _menuBehind ??
+        (chapterIndex: shown.chapterIndex, pageIndex: shown.pageIndex);
+    _refreshProgress(at.chapterIndex, at.pageIndex);
+  }
+
+  /// 選單要顯示的進度。選單收著時不推給它（收著也在元件樹上，推了就整塊
+  /// 重建，捲動中每換一張就多花幾毫秒），打開的那一刻再補上。
+  ({int chapterIndex, int pageIndex})? _menuBehind;
 
   void _refreshProgress(int chapterIndex, int pageIndex) {
+    if (!_menuVisible.value) {
+      _menuBehind = (chapterIndex: chapterIndex, pageIndex: pageIndex);
+      return;
+    }
+    _menuBehind = null;
     _progress.value = ComicMenuProgress(
       chapterIndex: chapterIndex,
       pageIndex: pageIndex,
@@ -538,7 +583,7 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
     final model = _model;
     if (model == null) {
       return _loadError == null
-          ? const SizedBox.expand()
+          ? const _OpeningSkeleton()
           : Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -629,4 +674,37 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
       ),
     );
   }
+}
+
+/// 開書時（換頁動畫期間、第一話還沒載好）畫的骨架：和條漫還不知道寬高時
+/// 的骨架同比例，條漫接手時看不出換了一層。
+class _OpeningSkeleton extends StatelessWidget {
+  const _OpeningSkeleton();
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final height = width * ComicStripModel.defaultAspectRatio;
+      return ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          maxHeight: double.infinity,
+          child: Skeleton(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < ComicStripModel.placeholderPages; i++)
+                  SkeletonBox(
+                    width: width,
+                    height: height,
+                    borderRadius: BorderRadius.zero,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
