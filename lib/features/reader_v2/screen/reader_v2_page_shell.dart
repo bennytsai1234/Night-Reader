@@ -826,6 +826,12 @@ class _InfoRow extends StatelessWidget {
     Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
       (null, _) || (_, null) => child,
       (final color?, Text(:final data?)) => SkeletonText(data, color: color),
+      // 純圖示（自動翻頁）置中在列上，不跟字的位置。
+      (final color?, final Icon child) => _InfoItemSkeleton(
+        color: color,
+        onGlyphs: false,
+        child: child,
+      ),
       (final color?, final child?) => _InfoItemSkeleton(
         color: color,
         child: child,
@@ -969,10 +975,17 @@ class _InfoRow extends StatelessWidget {
 /// 載入中的一個資訊欄位：照真正內容排版但不畫出，在它佔的寬度上畫一條
 /// 和字一樣高的圓角條（同 [SkeletonLine]），資訊淡入時位置不動。
 class _InfoItemSkeleton extends StatelessWidget {
-  const _InfoItemSkeleton({required this.color, required this.child});
+  const _InfoItemSkeleton({
+    required this.color,
+    required this.child,
+    this.onGlyphs = true,
+  });
 
   final Color color;
   final Widget child;
+
+  /// 欄位裡有字（時間、電量、進度）：長條對準字，見 [_digitsOffset]。
+  final bool onGlyphs;
 
   @override
   Widget build(BuildContext context) {
@@ -988,7 +1001,13 @@ class _InfoItemSkeleton extends StatelessWidget {
             child: Transform.translate(
               offset: Offset(
                 0,
-                _digitsOffset(style, textScaler, Directionality.of(context)),
+                onGlyphs
+                    ? _digitsOffset(
+                        style,
+                        textScaler,
+                        Directionality.of(context),
+                      )
+                    : 0,
               ),
               child: SkeletonBox(
                 width: double.infinity,
