@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
@@ -14,6 +15,7 @@ import 'package:night_reader/core/network/cloudflare.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chapter_content_kind.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 
@@ -314,38 +316,23 @@ class SourceChecker {
 
   // ── Pre-flight ──────────────────────────────────────────────────
 
+  /// 夜讀不支援的書源（影視、文件）不抓任何東西；漫畫、有聲源和小說一樣
+  /// 跑完整流程，正文照抓到的內容判斷類型（ADR 0051）。
   _IssueData? _resolvePreflightStatus() {
-    if (!_source.isNovelTextSource) {
-      return const _IssueData(
-        stage: 'filter',
-        message: '來源不是純文字小說書源',
-        health: SourceRuntimeHealth(
-          category: SourceHealthCategory.nonNovel,
-          label: nonNovelSourceGroupTag,
-          description: '來源不是純文字小說書源',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: true,
-          quarantined: false,
-        ),
-      );
-    }
-    if (_source.bookSourceType != 0) {
-      return const _IssueData(
-        stage: 'filter',
-        message: '來源不提供純文字正文',
-        health: SourceRuntimeHealth(
-          category: SourceHealthCategory.downloadOnly,
-          label: downloadOnlySourceGroupTag,
-          description: '來源不提供純文字正文',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: true,
-          quarantined: false,
-        ),
-      );
-    }
-    return null;
+    if (_source.sourceKind != BookSourceKind.unsupported) return null;
+    return const _IssueData(
+      stage: 'filter',
+      message: '夜讀不支援的書源（影視、文件）',
+      health: SourceRuntimeHealth(
+        category: SourceHealthCategory.nonNovel,
+        label: nonNovelSourceGroupTag,
+        description: '夜讀不支援的書源（影視、文件）',
+        allowsSearch: false,
+        allowsReading: false,
+        cleanupCandidate: true,
+        quarantined: false,
+      ),
+    );
   }
 
   // ── Search ──────────────────────────────────────────────────────
@@ -716,13 +703,17 @@ class SourceChecker {
             chapter,
             nextChapterUrl: nextChapterUrl,
             pageConcurrency: _validationPageConcurrency,
+            keepImages: true,
           ),
-          cameBackEmpty: (content) => !_looksReadable(content),
+          cameBackEmpty: (content) =>
+              !_looksUsable(_kindShownBy(content), content),
         );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
         // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
-        if (_looksReadable(content)) return;
+        final kind = _kindShownBy(content);
+        _reclassify(kind);
+        if (_looksUsable(kind, content)) return;
       } catch (e) {
         _recordFailure(
           issues,
@@ -744,6 +735,30 @@ class SourceChecker {
         health: _contentHealthFor(mode),
       ),
     );
+  }
+
+  /// 這章正文看起來是哪一類書源；判斷不出來就是書源現在的類別。
+  BookSourceKind _kindShownBy(String content) =>
+      switch (ChapterContentKind.of(content)) {
+        ChapterContentKind.text => BookSourceKind.novel,
+        ChapterContentKind.images => BookSourceKind.comic,
+        ChapterContentKind.audio => BookSourceKind.audio,
+        ChapterContentKind.unclear => _source.sourceKind,
+      };
+
+  /// 正文和書源的類型不符時改寫類型（ADR 0051）：手動改的、匯入時照字樣
+  /// 判的都一樣，誰最後改算誰的。
+  void _reclassify(BookSourceKind kind) {
+    if (kind == _source.sourceKind) return;
+    final type = switch (kind) {
+      BookSourceKind.novel => SourceType.book,
+      BookSourceKind.comic => SourceType.image,
+      BookSourceKind.audio => SourceType.audio,
+      BookSourceKind.unsupported => null,
+    };
+    if (type == null) return;
+    _source.bookSourceType = type;
+    _log('  ≡ 正文看起來是${kind.sourceLabel}，改寫書源類型');
   }
 
   // ── Issue helpers ────────────────────────────────────────────────
@@ -1267,6 +1282,16 @@ List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {
 
   return <int>[...preferred, ...fallback].take(maxProbe).toList();
 }
+
+/// 這章正文對 [kind] 這類書源算不算抓到了：小說要讀得到字，漫畫要有圖，
+/// 有聲要有網址。
+bool _looksUsable(BookSourceKind kind, String content) => switch (kind) {
+  BookSourceKind.comic => ChapterContentShape.of(content).images > 0,
+  BookSourceKind.audio => ChapterContentShape.of(content).urls > 0,
+  _ => _looksReadable(content.replaceAll(_imgTag, '')),
+};
+
+final RegExp _imgTag = RegExp(r'<img\b[^>]*>', caseSensitive: false);
 
 bool _looksReadable(String content) {
   final trimmed = content.trim();

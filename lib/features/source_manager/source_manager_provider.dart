@@ -44,7 +44,8 @@ Map<String, List<Map<String, dynamic>>> _parseSourcesPayloadForIsolate(
     if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
       continue;
     }
-    if (!source.isNovelTextSource) {
+    source.prepareIncoming();
+    if (source.sourceKind == BookSourceKind.unsupported) {
       source.enabled = false;
       source.enabledExplore = false;
       source.addGroup(nonNovelSourceGroupTag);
@@ -305,6 +306,8 @@ class SourceManagerProvider with ChangeNotifier {
       list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '已禁用發現') {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
+    } else if (kindFilters[filterGroup] case final kind?) {
+      list = list.where((s) => s.sourceKind == kind).toList();
     } else if (filterGroup == noAbnormalFilter) {
       list = list
           .where((s) => !_hasGroup(s.bookSourceGroup, abnormalSourceGroupTag))
@@ -454,6 +457,18 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 篩選「沒有異常」：校驗沒有標上「異常」的書源（含還沒校驗過的）。
   static const String noAbnormalFilter = '沒有異常';
+
+  /// 篩選某一類非小說書源（ADR 0051），名稱就是類別名稱。
+  static final Map<String, BookSourceKind> kindFilters = {
+    BookSourceKind.comic.sourceLabel: BookSourceKind.comic,
+    BookSourceKind.audio.sourceLabel: BookSourceKind.audio,
+  };
+
+  /// 書源裡有的 [kindFilters]，照漫畫、有聲的順序。
+  List<String> get presentKindFilters => [
+    for (final MapEntry(key: label, value: kind) in kindFilters.entries)
+      if (_sources.any((s) => s.sourceKind == kind)) label,
+  ];
 
   /// 書源上出現的校驗結果標記，照 [sourceRuntimeStatusTags] 的順序
   /// （「異常」在最前）；篩選選單把它們和使用者自己的分組分開列。
@@ -1110,15 +1125,25 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  Future<int> deleteNonNovelSources() async {
-    if (!_beginBatchOperation()) return 0;
+  /// 書源管理裡各類非小說書源各有幾個，給「刪除非小說源」的勾選框。
+  Map<BookSourceKind, int> get nonNovelSourceCounts {
+    final counts = <BookSourceKind, int>{};
+    for (final source in _sources) {
+      final kind = source.sourceKind;
+      if (kind == BookSourceKind.novel) continue;
+      counts[kind] = (counts[kind] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// 刪掉 [kinds] 這幾類的書源，回傳刪了幾個。
+  Future<int> deleteSourcesOfKinds(Set<BookSourceKind> kinds) async {
+    if (kinds.isEmpty || !_beginBatchOperation()) return 0;
     try {
-      final all = await _dao.getAll();
-      final urlsToDelete = <String>[];
-      for (final source in all) {
-        if (source.isNovelTextSource) continue;
-        urlsToDelete.add(source.bookSourceUrl);
-      }
+      final urlsToDelete = [
+        for (final source in await _dao.getAllPart())
+          if (kinds.contains(source.sourceKind)) source.bookSourceUrl,
+      ];
       if (urlsToDelete.isNotEmpty) {
         await _dao.deleteByUrls(urlsToDelete);
         await loadSources();

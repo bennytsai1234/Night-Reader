@@ -29,22 +29,39 @@ class ImportPreviewResult {
 }
 
 /// 顯示匯入預覽：列出新增、更新、無變化與不支援的數量，讓使用者勾選要
-/// 匯入的類別。回傳確認匯入的書源；取消時回傳 null。
+/// 匯入的類別；漫畫源、有聲源各有一個勾選，預設勾著，不勾的不匯入
+/// （ADR 0051）。回傳確認匯入的書源；取消時回傳 null。
 Future<List<BookSource>?> showImportPreviewDialog(
   BuildContext context,
   ImportPreviewResult preview,
 ) {
   var importNew = true;
   var importUpdated = true;
+  var importComic = true;
+  var importAudio = true;
+  final incoming = [...preview.newSources, ...preview.updatedSources];
+  final comicCount = incoming
+      .where((s) => s.sourceKind == BookSourceKind.comic)
+      .length;
+  final audioCount = incoming
+      .where((s) => s.sourceKind == BookSourceKind.audio)
+      .length;
+  bool keptKind(BookSource source) => switch (source.sourceKind) {
+    BookSourceKind.comic => importComic,
+    BookSourceKind.audio => importAudio,
+    _ => true,
+  };
+  List<BookSource> chosen() => [
+    if (importNew) ...preview.newSources,
+    if (importUpdated) ...preview.updatedSources,
+  ].where(keptKind).toList();
   return showStatefulAppAlert<List<BookSource>>(
     context: context,
     builder: (dialogContext, setState, _) {
       final p = preview;
       final chrome = AppChrome.of(dialogContext);
       final scheme = Theme.of(dialogContext).colorScheme;
-      final selectedCount =
-          (importNew ? p.newSources.length : 0) +
-          (importUpdated ? p.updatedSources.length : 0);
+      final selectedCount = chosen().length;
       return AppAlert<bool>(
         title: '匯入預覽',
         message: '共解析 ${p.total} 個書源',
@@ -53,10 +70,7 @@ Future<List<BookSource>?> showImportPreviewDialog(
             Navigator.pop(dialogContext);
             return;
           }
-          final result = <BookSource>[];
-          if (importNew) result.addAll(p.newSources);
-          if (importUpdated) result.addAll(p.updatedSources);
-          Navigator.pop(dialogContext, result);
+          Navigator.pop(dialogContext, chosen());
         },
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -66,7 +80,7 @@ Future<List<BookSource>?> showImportPreviewDialog(
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: Text(
-                  '含非小說/不支援來源：${p.unsupportedSources.length} 個（新增或更新時會以停用狀態匯入）',
+                  '含夜讀不支援的書源（影視、文件）：${p.unsupportedSources.length} 個，會以停用狀態匯入',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodySm.copyWith(
                     color: dialogContext.warning,
@@ -85,6 +99,18 @@ Future<List<BookSource>?> showImportPreviewDialog(
                 subtitle: '本地已存在，將覆蓋更新',
                 value: importUpdated,
                 onChanged: (v) => setState(() => importUpdated = v),
+              ),
+            if (comicCount > 0)
+              AlertCheckRow(
+                title: '漫畫源：$comicCount 個',
+                value: importComic,
+                onChanged: (v) => setState(() => importComic = v),
+              ),
+            if (audioCount > 0)
+              AlertCheckRow(
+                title: '有聲源：$audioCount 個',
+                value: importAudio,
+                onChanged: (v) => setState(() => importAudio = v),
               ),
             if (p.unchangedSources.isNotEmpty)
               Padding(

@@ -132,7 +132,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -223,12 +223,68 @@ class AppDatabase extends _$AppDatabase {
         // 由背景 isolate 補算（`fillLocalBookFingerprints`）。
         await m.addColumn(books, books.fileFingerprint);
       }
+      if (from < 15) {
+        await _classifyExistingSources();
+      }
     },
     beforeOpen: (_) async {
       if (_separateConnection) return;
       await customStatement('PRAGMA optimize');
     },
   );
+
+  /// 書源分成小說、漫畫、有聲（ADR 0051）：類型寫 0 但名稱帶漫畫、有聲字樣
+  /// 的補寫類型；舊版停用並標成「非小說源」的漫畫、有聲書源拿掉標記、重新
+  /// 啟用。影視、文件書源照舊。
+  Future<void> _classifyExistingSources() async {
+    // 只建了部分舊表的測試資料庫沒有書源表。
+    final hasTable = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+      "AND name = 'book_sources'",
+    ).get();
+    if (hasTable.isEmpty) return;
+    final rows = await customSelect(
+      'SELECT bookSourceUrl, bookSourceName, bookSourceType, bookSourceGroup, '
+      'bookSourceComment, enabled, enabledExplore, searchUrl FROM book_sources',
+    ).get();
+    for (final row in rows) {
+      final source = BookSource(
+        bookSourceUrl: row.read<String>('bookSourceUrl'),
+        bookSourceName: row.read<String>('bookSourceName'),
+        bookSourceType: row.read<int>('bookSourceType'),
+        bookSourceGroup: row.read<String?>('bookSourceGroup'),
+        bookSourceComment: row.read<String?>('bookSourceComment'),
+        enabled: row.read<bool>('enabled'),
+        enabledExplore: row.read<bool>('enabledExplore'),
+        searchUrl: row.read<String?>('searchUrl'),
+      );
+      final before = (
+        source.bookSourceType,
+        source.bookSourceGroup,
+        source.enabled,
+        source.enabledExplore,
+      );
+      source.prepareIncoming();
+      final after = (
+        source.bookSourceType,
+        source.bookSourceGroup,
+        source.enabled,
+        source.enabledExplore,
+      );
+      if (before == after) continue;
+      await customStatement(
+        'UPDATE book_sources SET bookSourceType = ?, bookSourceGroup = ?, '
+        'enabled = ?, enabledExplore = ? WHERE bookSourceUrl = ?',
+        [
+          source.bookSourceType,
+          source.bookSourceGroup,
+          source.enabled ? 1 : 0,
+          source.enabledExplore ? 1 : 0,
+          source.bookSourceUrl,
+        ],
+      );
+    }
+  }
 
   Future<void> _createPerformanceIndexes() async {
     for (final statement in _performanceIndexStatements) {

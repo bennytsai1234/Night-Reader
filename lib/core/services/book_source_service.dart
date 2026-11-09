@@ -80,7 +80,8 @@ class BookSourceService {
   /// 獲取正文內容。
   ///
   /// 正文分頁必須完整走完才算成功；達安全上限仍有下一頁時直接失敗，
-  /// 避免只抓到前半章卻被上層當 ready 寫入正文快取。
+  /// 避免只抓到前半章卻被上層當 ready 寫入正文快取。[keepImages] 留下正文
+  /// 裡的圖片（`<img src="網址">`），給書源校驗判斷是不是漫畫源。
   Future<String> getContent(
     BookSource source,
     Book book,
@@ -88,6 +89,7 @@ class BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) => _runOnSource(
     _contentTask(
       source,
@@ -95,6 +97,7 @@ class BookSourceService {
       chapter,
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
+      keepImages: keepImages,
     ),
     source: source,
     book: book,
@@ -264,6 +267,7 @@ _Work<String> _contentTask(
   BookChapter chapter, {
   required String? nextChapterUrl,
   required int? pageConcurrency,
+  required bool keepImages,
 }) =>
     (cancelToken) => CompleteContentFetcher.fetch(
       source,
@@ -272,6 +276,7 @@ _Work<String> _contentTask(
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
       cancelToken: cancelToken,
+      keepImages: keepImages,
     );
 
 _Work<List<SearchBook>> _searchTask(

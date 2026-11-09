@@ -47,6 +47,7 @@ class _EmptyContentService extends BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) async {
     calls++;
     return '';

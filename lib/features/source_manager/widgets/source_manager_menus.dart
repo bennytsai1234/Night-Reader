@@ -25,6 +25,14 @@ class SourceManagerMenus {
         label: filter,
         checked: provider.filterGroup == filter,
       ),
+    // 漫畫、有聲源和小說源混在同一個清單，篩得出來才找得到它們。
+    if (provider.presentKindFilters.isNotEmpty) const GlassMenuDivider(),
+    for (final filter in provider.presentKindFilters)
+      GlassMenuItem(
+        value: filter,
+        label: filter,
+        checked: provider.filterGroup == filter,
+      ),
     // 校驗結果和自己的分組分開：校驗完要挑出失效的書源一起停用或刪掉。
     if (provider.checkResultTags.isNotEmpty) ...[
       const GlassMenuDivider(),

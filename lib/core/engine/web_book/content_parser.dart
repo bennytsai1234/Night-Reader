@@ -31,6 +31,7 @@ class ContentParser {
     required String baseUrl,
     String? redirectUrl,
     String? nextChapterUrl,
+    bool keepImages = false,
   }) async {
     // [baseUrl] 是請求這一頁的網址，[redirectUrl] 是網站轉址後回應的網址
     // （同 Legado）；沒給時是同一個。
@@ -49,7 +50,11 @@ class ContentParser {
       if (content.contains('&')) {
         content = AnalyzeRuleBase.htmlUnescape.convert(content);
       }
-      content = HtmlFormatter.format(content);
+      // 閱讀用的正文只留文字；書源校驗要看正文是不是圖片才判斷得出漫畫源
+      // （ADR 0051），所以可以要求留下圖片。
+      content = keepImages
+          ? HtmlFormatter.formatKeepImg(content, redirectUrl: pageUrl)
+          : HtmlFormatter.format(content);
 
       final nextUrls = <String>[];
       if (contentRule.nextContentUrl != null &&

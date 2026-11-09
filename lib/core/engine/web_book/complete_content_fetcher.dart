@@ -28,6 +28,7 @@ final class CompleteContentFetcher {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) async {
     final contentParts = <String>[];
     final queuedUrls = <String>{chapter.url};
@@ -61,6 +62,7 @@ final class CompleteContentFetcher {
             url,
             nextChapterUrl: nextChapterUrl,
             cancelToken: cancelToken,
+            keepImages: keepImages,
           ),
         ),
       );
@@ -100,6 +102,7 @@ final class CompleteContentFetcher {
     String url, {
     String? nextChapterUrl,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) => SourceInteraction.watchVerification(
     () => _fetchPageContent(
       source,
@@ -108,6 +111,7 @@ final class CompleteContentFetcher {
       url,
       nextChapterUrl: nextChapterUrl,
       cancelToken: cancelToken,
+      keepImages: keepImages,
     ),
     gotNothing: (page) => page.content.trim().isEmpty,
     cancelToken: cancelToken,
@@ -120,6 +124,7 @@ final class CompleteContentFetcher {
     String url, {
     String? nextChapterUrl,
     CancelToken? cancelToken,
+    bool keepImages = false,
   }) async {
     final analyzeUrl = AnalyzeUrl(url, source: source, ruleData: book);
     var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
@@ -133,6 +138,7 @@ final class CompleteContentFetcher {
       baseUrl: url,
       redirectUrl: response.url,
       nextChapterUrl: nextChapterUrl,
+      keepImages: keepImages,
     );
     // 任何一頁被登入牆擋住，整章失敗，不存半章。
     LoginWall.checkContent(response, result.content);
