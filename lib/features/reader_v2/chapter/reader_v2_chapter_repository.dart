@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -120,14 +121,22 @@ class ReaderV2ChapterRepository {
 
   /// 同時有好幾處要目錄（開書排版、讀每章長度）時共用同一次載入，不會
   /// 向書源抓兩次。
+  ///
+  /// 本地書開書時一定先對一次 EPUB 的轉法版本（[_syncEpubChapters]），帶著
+  /// 目錄開書（書籍詳情傳進來的）也一樣，讀章前章節範圍已經是新的。
   Future<List<BookChapter>> ensureChapters() {
-    if (_chapters.isNotEmpty) return Future.value(chapters);
-    return _chaptersInFlight ??= _loadChapters().whenComplete(
-      () => _chaptersInFlight = null,
-    );
+    if (_chapters.isNotEmpty && (!book.isLocal || _localChaptersChecked)) {
+      return Future.value(chapters);
+    }
+    return _chaptersInFlight ??=
+        (_chapters.isNotEmpty
+                ? _syncEpubChapters().then((_) => chapters)
+                : _loadChapters())
+            .whenComplete(() => _chaptersInFlight = null);
   }
 
   Future<List<BookChapter>>? _chaptersInFlight;
+  bool _localChaptersChecked = false;
 
   Future<List<BookChapter>> _loadChapters() async {
     _chapters = await chapterDao.getByBook(book.bookUrl);
@@ -158,7 +167,16 @@ class ReaderV2ChapterRepository {
   /// 本地 EPUB 轉法改過（例如開始留插圖，ADR 0050）時重轉，章節範圍跟著
   /// 換掉，存著的舊正文清掉。章數與每章的字不變，閱讀進度照舊。
   Future<void> _syncEpubChapters() async {
-    final ranges = await LocalBookService().currentEpubChapters(book);
+    final List<({String title, int start, int end})>? ranges;
+    try {
+      ranges = await LocalBookService().currentEpubChapters(book);
+    } on FileSystemException catch (error) {
+      // 對不了就照現有的目錄開書，下次開書再對。
+      AppLog.w('EPUB 章節範圍對不上檔案：$error');
+      return;
+    } finally {
+      _localChaptersChecked = true;
+    }
     if (ranges == null || LocalBookService.chaptersMatch(_chapters, ranges)) {
       return;
     }

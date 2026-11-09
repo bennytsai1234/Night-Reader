@@ -262,8 +262,15 @@ Future<DownloadChapterResult> _downloadChapter(
     maxAttempts: maxAttempts,
     cancelToken: cancelToken,
   );
-  if (result.isReady) return DownloadChapterResult.ready();
-  return DownloadChapterResult.failed(result.failureMessage ?? result.content);
+  if (!result.isReady) {
+    return DownloadChapterResult.failed(
+      result.failureMessage ?? result.content,
+    );
+  }
+  // 正文存好了，但有圖連不上：這章照下載失敗的重試規則再補圖（ADR 0050）。
+  return await pipeline.illustrationsSettled(result.content)
+      ? DownloadChapterResult.ready()
+      : DownloadChapterResult.failed('插圖抓不到');
 }
 
 String classifyDownloadFailureReason(String message) {

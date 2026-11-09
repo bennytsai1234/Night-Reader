@@ -6,13 +6,15 @@ import 'dart:ui' show Rect;
 import 'package:night_reader/core/utils/illustration_markers.dart';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/illustration/illustration_images.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
-const _mark = IllustrationMarkers.placeholder;
+String _m(int index) => IllustrationMarkers.placeholder(index);
 
 ReaderV2IllustrationSlot _slot(String src) =>
     (src: src, path: '/images/$src', pixelWidth: 300, pixelHeight: 200);
@@ -24,7 +26,7 @@ void main() {
         '前文<img src="https://a.test/1.jpg">後文\n'
         '<img src="https://a.test/2.png,{\'headers\':{}}">',
       );
-      expect(extracted.text, '前文$_mark後文\n$_mark');
+      expect(extracted.text, '前文${_m(0)}後文\n${_m(1)}');
       expect(extracted.sources, [
         'https://a.test/1.jpg',
         "https://a.test/2.png,{'headers':{}}",
@@ -98,7 +100,8 @@ void main() {
       final marked = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '第一章',
-        rawText: '甲\n$_mark\n乙',
+        rawText: '甲\n${_m(0)}\n乙',
+        illustrationSlots: const [null],
       );
       expect(marked.displayText, plain.displayText);
       expect(marked.contentHash, plain.contentHash);
@@ -109,7 +112,7 @@ void main() {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '第一章',
-        rawText: '甲甲\n$_mark\n乙$_mark乙\n丙$_mark\n$_mark',
+        rawText: '甲甲\n${_m(0)}\n乙${_m(1)}乙\n丙${_m(2)}\n${_m(3)}',
         illustrationSlots: [_slot('1'), _slot('2'), _slot('3'), _slot('4')],
       );
       expect(content.paragraphs, ['甲甲', '乙乙', '丙']);
@@ -131,13 +134,14 @@ void main() {
       final on = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '',
-        rawText: '甲\n$_mark\n乙',
+        rawText: '甲\n${_m(0)}\n乙',
         illustrationSlots: [_slot('1')],
       );
       final off = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '',
-        rawText: '甲\n$_mark\n乙',
+        rawText: '甲\n${_m(0)}\n乙',
+        illustrationSlots: const [null],
       );
       expect(on.displayText, off.displayText);
       expect(on.illustrations, hasLength(1));
@@ -149,7 +153,7 @@ void main() {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '',
-        rawText: '　　甲\n　　$_mark\n　　乙',
+        rawText: '　　甲\n　　${_m(0)}\n　　乙',
         illustrationSlots: [_slot('1')],
       );
       expect(content.paragraphs, ['甲', '乙']);
@@ -163,7 +167,7 @@ void main() {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '',
-        rawText: '$_mark甲\n$_mark乙',
+        rawText: '${_m(0)}甲\n${_m(1)}乙',
         illustrationSlots: [null, _slot('2')],
       );
       expect(content.illustrations.map((i) => i.src), ['2']);
@@ -188,7 +192,7 @@ void main() {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '第一章',
-        rawText: '甲甲\n$_mark\n乙$_mark乙\n丙$_mark\n$_mark',
+        rawText: '甲甲\n${_m(0)}\n乙${_m(1)}乙\n丙${_m(2)}\n${_m(3)}',
         illustrationSlots: [_slot('1'), _slot('2'), _slot('3'), _slot('4')],
       );
       final blocks = (await blocksOf(content)).blocks;
@@ -216,7 +220,7 @@ void main() {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '',
-        rawText: '甲\n$_mark\n乙\n$_mark',
+        rawText: '甲\n${_m(0)}\n乙\n${_m(1)}',
         illustrationSlots: [_slot('1'), _slot('2')],
       );
       final blocks = await blocksOf(content);
@@ -227,6 +231,62 @@ void main() {
       expect(atSecond.text, '乙');
       final atEnd = blocks.blockForCharOffset(content.displayText.length);
       expect(atEnd.isIllustration, isFalse);
+    });
+  });
+
+  group('轉換正文（背景 worker）', () {
+    late Directory dir;
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('illustration_transform');
+      // 只有開頭的 PNG（寬 300、高 200），讀得出大小。
+      final png = Uint8List(24)
+        ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        ..setAll(16, [0, 0, 0x01, 0x2C, 0, 0, 0, 0xC8]);
+      for (final src in ['a', 'b']) {
+        await File(BookIllustrationStorage.pathFor(dir.path, src))
+            .writeAsBytes(png);
+      }
+    });
+    tearDown(() => dir.delete(recursive: true));
+
+    Future<ReaderV2Content> transform(
+      String raw, {
+      String title = '第一章',
+      List<ReplaceRule> rules = const [],
+      bool show = true,
+    }) async {
+      final result = await ReaderV2ContentTransformWorker.instance.process({
+        'chapterIndex': 0,
+        'bookName': '書',
+        'bookOrigin': 'http://source.test',
+        'chapterTitle': title,
+        'rawContent': raw,
+        'rulesJson': rules.map((rule) => rule.toJson()).toList(),
+        'useReplaceRules': true,
+        'reSegmentEnabled': false,
+        'chineseConvertType': 0,
+        'illustrationsDir': ?(show ? dir.path : null),
+      });
+      return result['document']! as ReaderV2Content;
+    }
+
+    test('替換規則刪掉一張圖，其他圖照樣對得上', () async {
+      final content = await transform(
+        '刪除<img src="a">\n保留<img src="b">後文',
+        rules: [
+          ReplaceRule(pattern: r'刪除[^\n]*', replacement: '', isRegex: true),
+        ],
+      );
+      expect(content.illustrations.map((i) => i.src), ['b']);
+    });
+
+    test('章首的插圖不擋去重複章名；關掉時和沒有圖一樣', () async {
+      final plain = await transform('第一章\n正文');
+      final off = await transform('<img src="a">\n第一章\n正文', show: false);
+      final on = await transform('<img src="a">\n第一章\n正文');
+      expect(off.displayText, plain.displayText);
+      expect(on.displayText, plain.displayText);
+      expect(on.illustrations.single.offset, on.displayText.indexOf('正文'));
     });
   });
 
@@ -294,6 +354,35 @@ void main() {
         expect(image?.width, 60);
         expect(images.peek(file.path, 60), same(image));
         expect(await images.load('${dir.path}/missing.png', 60), isNull);
+      });
+    });
+
+    testWidgets('讀得出大小、整張卻壞了的圖解不開，之後不再重解', (tester) async {
+      await tester.runAsync(() async {
+        final dir = await Directory.systemTemp.createTemp(
+          'illustration_broken',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+        // 只有開頭的 PNG：讀得出寬高，解不開。
+        final file = File('${dir.path}/broken.png');
+        await file.writeAsBytes(
+          Uint8List(24)
+            ..setAll(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+            ..setAll(16, [0, 0, 0x01, 0x2C, 0, 0, 0, 0xC8]),
+        );
+        expect(ImageSize.ofFile(file.path), isNotNull);
+
+        final images = IllustrationImages(capacity: 2);
+        addTearDown(images.clear);
+        expect(await images.load(file.path, 60), isNull);
+        // 換成好的圖也不再解：這次開 App 記住它解不開。
+        final recorder = ui.PictureRecorder();
+        ui.Canvas(recorder)
+            .drawColor(const ui.Color(0xFF336699), ui.BlendMode.src);
+        final picture = await recorder.endRecording().toImage(120, 80);
+        final png = await picture.toByteData(format: ui.ImageByteFormat.png);
+        await file.writeAsBytes(png!.buffer.asUint8List());
+        expect(await images.load(file.path, 60), isNull);
       });
     });
   });

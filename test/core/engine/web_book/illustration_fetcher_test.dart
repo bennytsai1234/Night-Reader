@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
@@ -135,6 +136,39 @@ void main() {
       ),
       [unreachable],
     );
+  });
+
+  test('取消了就丟出取消，不記成確定抓不到', () async {
+    final images = p.join(dir.path, 'images');
+    final bad = _dataUrl(utf8.encode('<html>404</html>'));
+    final token = CancelToken()..cancel();
+    await expectLater(
+      IllustrationFetcher.fetch(
+        source,
+        book,
+        '<img src="$bad">',
+        images,
+        cancelToken: token,
+      ),
+      throwsA(isA<DioException>()),
+    );
+    expect(
+      File(BookIllustrationStorage.missingPathFor(images, bad)).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('好幾處同時抓同一張圖，每處都算抓到，不留暫存檔', () async {
+    final images = p.join(dir.path, 'images');
+    final good = _dataUrl(_png);
+    final results = await Future.wait([
+      for (var i = 0; i < 6; i += 1)
+        IllustrationFetcher.fetch(source, book, '<img src="$good">', images),
+    ]);
+    expect(results, everyElement(0));
+    expect(Directory(images).listSync().map((f) => p.basename(f.path)), [
+      BookIllustrationStorage.fileNameFor(good),
+    ]);
   });
 
   test('確定抓不到的圖：已存的正文不再抓，重新取得這一章時再試', () async {

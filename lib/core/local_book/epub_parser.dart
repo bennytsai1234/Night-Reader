@@ -129,11 +129,7 @@ EpubBookInfo _convert(_Archive archive, String textPath) {
       pieces.add((title: range.title, text: content));
       continue;
     }
-    for (final span in TxtParser.splitText(
-      content,
-      leadTitle: range.title,
-      untitledTitle: range.title,
-    )) {
+    for (final span in _splitKeepingImages(content, range.title)) {
       pieces.add((
         title: span.title,
         text: content.substring(span.start, span.end),
@@ -836,3 +832,41 @@ const _voidTags = {
   'track',
   'wbr',
 };
+
+/// 太長的一章照拿掉插圖標記後的字切（[TxtParser.splitText]），再把切點對回
+/// [content]：標記不算字、不會被切開，切點和沒有插圖時一樣，舊的閱讀進度
+/// 與書籤不錯位。切點前的圖歸前一塊，第一個字之前的圖歸第一塊。
+List<({String title, int start, int end})> _splitKeepingImages(
+  String content,
+  String title,
+) {
+  final plain = StringBuffer();
+  // 拿掉標記後第 i 個字在 [content] 裡的位置；最後一個是 content 的結尾。
+  final offsets = <int>[];
+  var cursor = 0;
+  void keep(int end) {
+    for (var i = cursor; i < end; i += 1) {
+      offsets.add(i);
+    }
+    plain.write(content.substring(cursor, end));
+  }
+
+  for (final match in _imageMarkerPattern.allMatches(content)) {
+    keep(match.start);
+    cursor = match.end;
+  }
+  keep(content.length);
+  offsets.add(content.length);
+  return [
+    for (final span in TxtParser.splitText(
+      plain.toString(),
+      leadTitle: title,
+      untitledTitle: title,
+    ))
+      (
+        title: span.title,
+        start: span.start == 0 ? 0 : offsets[span.start],
+        end: offsets[span.end],
+      ),
+  ];
+}

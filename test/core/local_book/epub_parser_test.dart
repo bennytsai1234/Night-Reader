@@ -3,12 +3,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/epub_parser.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -349,6 +352,33 @@ void main() {
     );
   });
 
+  test('帶著舊目錄開書（書籍詳情傳進來的）也先對轉法版本，讀章前換上新範圍', () async {
+    final path = await write('stale.epub', _epub3());
+    final result = (await LocalBookService().importBook(path))!;
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    // 舊版轉出來的範圍：最後一章的結尾對不上現在的文字檔。
+    final stale = [for (final c in result.chapters) c.copyWith()]
+      ..last.end = result.chapters.last.end! - 1;
+    await db.chapterDao.insertChapters(stale);
+    final repository = ReaderV2ChapterRepository(
+      book: result.book,
+      initialChapters: stale,
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+      sourceDao: db.bookSourceDao,
+      contentDao: db.readerChapterContentDao,
+    );
+
+    final chapters = await repository.ensureChapters();
+
+    expect(chapters.last.end, result.chapters.last.end);
+    expect(
+      (await db.chapterDao.getByBook(result.book.bookUrl)).last.end,
+      result.chapters.last.end,
+    );
+  });
+
   test('EPUB 2 讀 NCX 巢狀目錄，卷名頁照樣是一章', () async {
     final (info, texts) = await convert(await write('book2.epub', _epub2()));
 
@@ -423,6 +453,28 @@ void main() {
     expect(texts[0].trim(), '本書由某站整理');
     expect(texts[1], startsWith('第一回 甲\n字'));
     expect(texts[2], startsWith('第二回 乙\n字'));
+  });
+
+  test('超過五萬字的章照拿掉插圖後的字切：標記不被切開，切點和沒有圖時一樣', () async {
+    final path = await write(
+      'long-picture.epub',
+      _simple(
+        {
+          'Text/one.xhtml': _xhtml(
+            '<p>${'字' * 29998}<img src="../Images/a.png"/>${'字' * 30002}</p>',
+          ),
+        },
+        [('第一章', 'Text/one.xhtml')],
+      )..['OEBPS/Images/a.png'] = _png,
+    );
+    final (info, texts) = await convert(path);
+
+    final marker = RegExp(r'<img src="[^"]*">');
+    expect(info.chapters.map((c) => c.title), ['第一章 (1)', '第一章 (2)']);
+    expect(texts.join().split('<img').length - 1, 1);
+    expect(texts.map((t) => marker.allMatches(t).length).toList(), [1, 0]);
+    // 第一塊拿掉標記後正好三萬字，和沒有插圖時切在同一個地方。
+    expect(texts[0].replaceAll(marker, '').length, 30000);
   });
 
   test('不是 EPUB 的檔案給使用者看得懂的錯誤', () async {

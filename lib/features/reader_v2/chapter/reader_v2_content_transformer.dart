@@ -652,6 +652,10 @@ class ReaderV2ContentTransformer {
   static final Map<String, RegExp> _regexCache = {};
   static const String _duplicateTitleBoundary = r'(?=\s|\p{P}|$)';
 
+  /// 插圖的記號（`IllustrationMarkers.placeholder`）所在的私用區。
+  static final RegExp _illustrationPlaceholder = RegExp(r'[-]');
+  static final RegExp _leadingIllustrations = RegExp(r'^[\s-]*');
+
   static RegExp _getOrCreateRegex(String pattern, {bool unicode = false}) {
     final key = '$pattern|$unicode';
     if (_regexCache.length > 500) {
@@ -888,7 +892,14 @@ class ReaderV2ContentTransformer {
       return '';
     }
 
-    var content = rawContent;
+    // 章首的插圖（例如 EPUB 併進來的彩頁）不擋去重複章名：記號先拿開，
+    // 去完再放回開頭，圖照樣在章名之後、正文之前（ADR 0050）。
+    var leadingIllustrations =
+        _leadingIllustrations.stringMatch(rawContent) ?? '';
+    if (!_illustrationPlaceholder.hasMatch(leadingIllustrations)) {
+      leadingIllustrations = '';
+    }
+    var content = rawContent.substring(leadingIllustrations.length);
 
     final nameRegex = RegExp.escape(bookName);
     final titleRegex = RegExp.escape(chapterTitle)
@@ -923,6 +934,7 @@ class ReaderV2ContentTransformer {
         }
       }
     }
+    content = '$leadingIllustrations$content';
 
     if (reSegmentEnabled) {
       content = _reSegment(content);
@@ -1332,13 +1344,13 @@ class ReaderV2ContentTransformWorker {
   }
 }
 
-/// 每張插圖對到的圖檔與大小；沒給資料夾（關掉「顯示插圖」）時都不顯示，
-/// 圖檔不在或讀不出大小的那張不顯示（ADR 0050）。
+/// 每張插圖對到的圖檔與大小，一張一個；沒給資料夾（關掉「顯示插圖」）時
+/// 都是 null、不顯示，圖檔不在或讀不出大小的那張不顯示（ADR 0050）。
 List<ReaderV2IllustrationSlot?> _illustrationSlots(
   List<String> sources,
   String? dir,
 ) {
-  if (dir == null || sources.isEmpty) return const [];
+  if (dir == null) return List.filled(sources.length, null);
   return [
     for (final src in sources)
       () {
