@@ -28,9 +28,29 @@
 18. **深色不調暗圖**，照原色：嫌亮用閱讀器本來的亮度條（使用者說的）。
 19. **骨架照現有規格**，不另畫候選：圖在紙上的骨架是和圖同大小的方塊（`docs/design/loading.md`「封面、按鈕是方塊」、`reader.md`「照一頁真正的每一行畫」），和字的長條一起長出、呼吸，換場時由左而右換成圖；「照上次那一頁長出骨架」記住的那一頁也要記得圖的方塊。掀紙前圖要解碼好、畫得出來（同第 10 項），換場時不先出現空框。
 
-## 還沒談的
+## 進度（2026-11-09 下班時）
 
-都談完了（2026-11-09）。下一步：寫 ADR（推翻 0032 的插圖略過）、`docs/design/reader.md` 與 `GLOSSARY.md`，再照第 1 項的分層開工。
+分支 `feat/text-illustrations`（worktree `D:\Migrated\Desktop\Folder\product\nr-text-illustrations`），都已推上，工作目錄乾淨。ADR 0050、`docs/design/reader.md` 的插圖規格、`GLOSSARY.md` 已在 `beta` 上。
+
+已提交：
+1. `df0639a9` 閱讀器認得插圖：標記換成記號、插圖各自一塊、照原尺寸畫、長按看大圖、骨架畫方塊、「閱讀偏好 → 顯示插圖」開關（預設關）。
+2. EPUB：轉文字時留標記、圖抽到 `book_assets/<書>/images/`、只有圖的章併到下一章開頭、封面不進正文；旁邊寫 `epub-chapters.json`（章節範圍＋轉法版本），閱讀器開本地書時版本不對就重轉、換章節範圍、清存著的正文。
+3. 網路書：正文改用 `HtmlFormatter.formatKeepImg`；抓到的正文有圖就在書源 isolate 抓圖（標頭、Cookie、限流、`imageDecode` 同 Legado），抓完或確定抓不到才算這章好；換源驗證那章、匯出補抓的章也抓。書源校驗、換源判斷、匯出拿掉標記。順手修「清除封面快取」只刪抓來的封面；網路書插圖算正文快取。
+4. `imageDecode` 測試（桌面 QuickJS 真的跑）。
+
+標記與讀圖檔寬高在 `lib/core/utils/illustration_markers.dart`，插圖資料夾規則在 `lib/core/services/book_illustration_storage.dart`，抓圖在 `lib/core/engine/web_book/illustration_fetcher.dart`。
+
+本機跑過：`test/core/local_book`、`test/features/reader_v2/chapter`、`test/core/services`、`test/core/engine/web_book`、`test/core/engine/url_rule_base_url_test.dart`、`test/features/book_detail`，全過。
+
+## 下一步
+
+1. **幀預算要重量**：跑過一次 `tool/frame_budget_compare.sh ec9fac86 test/frame_budget/reader_jump_frame_budget_test.dart test/frame_budget/reader_interactions_frame_budget_test.dart`，當時電腦上還有別的 flutter_tester 在跑，數字兩個方向都有大跳動（目錄內甩動 60→12、跳到第 10 章 9→21），不可信。用 `FRAME_REPEAT=3` 重量；「跳到第 10 章」若真的變多，查是不是 `layout_pipeline.dart` 的插圖分支或 `page_lines.dart` 的 `blockLines` 造成（沒有插圖的章不該多做事）。表寫進 commit message。
+2. **畫一張有插圖的閱讀畫面**確認整條路徑畫得出來：`test/support/app_harness.dart` 的 `seedLibrary` 把某章正文換成含 `<img src="…">`，對應圖檔放進那本書的 `images/`，開「顯示插圖」，用 `test/support/screenshot.dart` 拍淺色、深色各一張放進對話。還沒有端到端（真的排版到畫出）的測試。
+3. `PRIVACY.md` 與 App 的「隱私說明」：補一句「開啟網路書時也會向書源網站下載正文裡的插圖」（先看現在的寫法夠不夠涵蓋）。
+4. `README.md` 若有「插圖略過」或功能列表要補「插圖」，一起改。
+5. 收尾照 `docs/agents/finish.md`：派 Codex 審查、併最新 `beta`、開 PR、CI 通過就停在「可以合併」；收尾時刪掉這份 `HANDOFF.md`、`PLAN.md` 那條打勾。
+
+已知、接受的邊界：章末的圖上面停下來，重開時不會對齊到圖頂。
 
 ## 畫候選的做法
 
@@ -43,9 +63,3 @@
 - 合流：`lib/features/reader_v2/chapter/reader_v2_content_transformer.dart` 在背景 worker 跑替換規則、重新分段、繁簡、引號整理（`_convertCurlyQuotesLine`）→ 按換行切段 → `hybrid/text/text_preprocessor.dart` 切成文字塊 → 背景量高度排版 → 連續捲動。位置是 `ReaderV2Location`：章、`charOffset`，加 `contentHash` 與前後文字 `anchorBefore`／`anchorAfter`，正文變了可以對回去。
 - 書籍詳情的「清除封面快取」（`book_detail_provider.dart` 的 `clearBookCache`，`_coverStorage.deleteBookAssets`）刪掉整個書本資料夾；圖放進去之後要改成只刪封面。
 - Legado 對照（`D:\Migrated\Desktop\Folder\product\legado`）：`ui/book/read/page/provider/TextChapterLayout.kt` 的 `setTypeImage`；`help/book/BookHelp.kt` 的 `saveImages`（下載時存圖）；`model/ReadBook.kt` 的 `upWebBook`（書源的 `imageStyle` 套到書）。
-
-## 要改的文件
-
-- ADR 0032：推翻「插圖略過」，寫新 ADR 或在 0032 加註（照 `domain-modeling`）。
-- `GLOSSARY.md` 開頭「（只讀文字，插圖略過）」與需要的新詞（例如「插圖」「顯示插圖」），談定後提議。
-- `PRIVACY.md` 若下載圖片涉及新的網路請求說明，和 App 的「隱私說明」一起改。
