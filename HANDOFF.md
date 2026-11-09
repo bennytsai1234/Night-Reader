@@ -30,7 +30,16 @@
 
 ## 進度（2026-11-09 下班時）
 
-分支 `feat/text-illustrations`（worktree `D:\Migrated\Desktop\Folder\product\nr-text-illustrations`），都已推上，工作目錄乾淨。ADR 0050、`docs/design/reader.md` 的插圖規格、`GLOSSARY.md` 已在 `beta` 上。
+分支 `feat/text-illustrations`，都已推上，工作目錄乾淨。ADR 0050、`docs/design/reader.md` 的插圖規格、`GLOSSARY.md` 的「插圖」只在本分支上（不在 `beta`）；`feat/audiobook-player` 也用了 0050 這個號碼，合併時再改號。
+
+## 跨分支調整（2026-11-09 開工前檢查，和上面不一致時以這裡為準）
+
+- 本分支屬第一批（和 PR #319、`fix/tts-now-playing` 一起），可以單獨合併。第二批 `feat/source-kinds`、`feat/images-comics`、`feat/audiobook-player`、`feat/source-ai-repair` 一起合。
+- 合併衝突（兩份 ADR 0050、資料庫 schema 號、幾條分支改同一段程式）留到合併時一次處理。
+- **備份**：插圖、漫畫圖、有聲書音訊、本地書原檔都不進備份。還原後插圖與漫畫照書架自動下載重抓（本分支已做：還原留 `.unfetched` 記號、下載排程補抓、確定抓不到記 `.missing`，規則在 ADR 0050）。
+- **同步**：插圖不同步；另一台的書架自動下載抓正文時一起抓圖（`bookshelf_sync.dart` 加書時呼叫 `keepShelfBookDownloaded`）。
+- **抓圖介面給漫畫分支沿用**：`IllustrationFetcher.fetch(source, book, content, dir, {retryMissing, cancelToken})` 在書源 isolate 裡把 `content` 中 `<img src>` 還沒存的圖抓進 `dir`（檔名 `BookIllustrationStorage.pathFor`），回傳連不上、還要再試的張數；主 isolate 經 `BookSourceService.fetchIllustrations` 呼叫。
+- **合併注意**：`feat/source-kinds` 為了校驗在 `ContentParser` 加了 `keepImages`；本分支讓正文一律留圖。兩條後合併的那條要拿掉 `keepImages` 選項。
 
 已提交：
 1. `df0639a9` 閱讀器認得插圖：標記換成記號、插圖各自一塊、照原尺寸畫、長按看大圖、骨架畫方塊、「閱讀偏好 → 顯示插圖」開關（預設關）。
@@ -46,8 +55,8 @@
 
 1. **幀預算要重量**：跑過一次 `tool/frame_budget_compare.sh ec9fac86 test/frame_budget/reader_jump_frame_budget_test.dart test/frame_budget/reader_interactions_frame_budget_test.dart`，當時電腦上還有別的 flutter_tester 在跑，數字兩個方向都有大跳動（目錄內甩動 60→12、跳到第 10 章 9→21），不可信。用 `FRAME_REPEAT=3` 重量；「跳到第 10 章」若真的變多，查是不是 `layout_pipeline.dart` 的插圖分支或 `page_lines.dart` 的 `blockLines` 造成（沒有插圖的章不該多做事）。表寫進 commit message。
 2. **畫一張有插圖的閱讀畫面**確認整條路徑畫得出來：`test/support/app_harness.dart` 的 `seedLibrary` 把某章正文換成含 `<img src="…">`，對應圖檔放進那本書的 `images/`，開「顯示插圖」，用 `test/support/screenshot.dart` 拍淺色、深色各一張放進對話。還沒有端到端（真的排版到畫出）的測試。
-3. `PRIVACY.md` 與 App 的「隱私說明」：補一句「開啟網路書時也會向書源網站下載正文裡的插圖」（先看現在的寫法夠不夠涵蓋）。
-4. `README.md` 若有「插圖略過」或功能列表要補「插圖」，一起改。
+3. ~~`PRIVACY.md` 與 App 的「隱私說明」~~ 已補：網路請求含正文裡的插圖、正文快取含插圖、備份不含插圖與本地書原檔。
+4. ~~`README.md`~~ 只有圖卡，沒有「插圖略過」，不用改。
 5. 收尾照 `docs/agents/finish.md`：派 Codex 審查、併最新 `beta`、開 PR、CI 通過就停在「可以合併」；收尾時刪掉這份 `HANDOFF.md`、`PLAN.md` 那條打勾。
 
 已知、接受的邊界：章末的圖上面停下來，重開時不會對齊到圖頂。
