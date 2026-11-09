@@ -36,7 +36,7 @@ abstract final class BlockingCall {
         Zone.current[_taskIdZoneKey] as int?,
         task,
         recordRequests: isRecordingRequestUrls,
-        recordResponses: isRecordingResponses,
+        responsePreview: recordingResponsePreview,
       ),
     );
     final outcome = _Outcome.decode(replies.take());
