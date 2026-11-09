@@ -224,6 +224,12 @@ class BookshelfSync extends SyncKind {
         continue;
       }
       final incoming = Book.fromJson(Map<String, dynamic>.of(record.data));
+      // 舊版的鍵不帶類別（ADR 0053）：別台舊版的漫畫、有聲書和這台同名的
+      // 小說對到同一個鍵，不拿它蓋這台那一類不同的書。
+      if (books.isNotEmpty &&
+          books.every((book) => book.bookKind != incoming.bookKind)) {
+        continue;
+      }
       if (books.isNotEmpty) {
         for (final book in books) {
           await _writeUserFields(from: incoming, to: book);

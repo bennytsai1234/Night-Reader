@@ -45,5 +45,12 @@ void main() {
       ChapterContentKind.unclear,
     );
     expect(ChapterContentKind.of(''), ChapterContentKind.unclear);
+    // 音訊和影片連結混在一起：不是只有音訊，不改成有聲。
+    expect(
+      ChapterContentKind.of(
+        'https://cdn.test/one.mp3\nhttps://cdn.test/two.mp4',
+      ),
+      ChapterContentKind.unclear,
+    );
   });
 }

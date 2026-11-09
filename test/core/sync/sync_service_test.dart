@@ -867,6 +867,44 @@ void main() {
       );
     });
 
+    test('a comic an older version sent under the plain title key does not '
+        'overwrite the novel with that title here (ADR 0053)', () async {
+      final novel = Book(
+        bookUrl: 'novel-src',
+        origin: 'https://novel.example',
+        name: '夜航',
+        author: '某人',
+        customIntro: '小說自己的簡介',
+        isInBookshelf: true,
+      );
+      await b.books.upsert(novel);
+      // B 上次同步時雲端是自己這本小說；之後舊版的另一台用同一個鍵寫進漫畫。
+      final mine = BookshelfSync(bookDao: b.books)
+          .fingerprint(BookshelfSync.recordOf(novel));
+      await SyncBaseStorage(
+        directory: () async => Directory('${baseDir.path}/b'),
+      ).write('bookshelf', {
+        '夜航\t某人': SyncBaseEntry(local: mine, remote: mine, time: 0),
+      });
+      final comic = Book(
+        bookUrl: 'comic-src',
+        origin: 'https://comic.example',
+        name: '夜航',
+        author: '某人',
+        type: 2,
+        customIntro: '漫畫自己的簡介',
+        isInBookshelf: true,
+      );
+      store.files['bookshelf.json'] = (
+        SyncDocument({'夜航\t某人': BookshelfSync.recordOf(comic)}).encode(),
+        1,
+      );
+
+      await b.sync.syncAll();
+
+      expect((await b.books.getByUrl('novel-src'))!.customIntro, '小說自己的簡介');
+    });
+
     test('a network book removed here is still removed elsewhere when a '
         'local book has the same title and author', () async {
       await a.addBook('a-src', toc: toc, time: 100);
