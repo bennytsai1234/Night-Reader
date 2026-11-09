@@ -247,6 +247,7 @@ class AppDatabase extends _$AppDatabase {
       'SELECT bookSourceUrl, bookSourceName, bookSourceType, bookSourceGroup, '
       'bookSourceComment, enabled, enabledExplore, searchUrl FROM book_sources',
     ).get();
+    final kinds = <String, BookSourceKind>{};
     for (final row in rows) {
       final source = BookSource(
         bookSourceUrl: row.read<String>('bookSourceUrl'),
@@ -265,6 +266,9 @@ class AppDatabase extends _$AppDatabase {
         source.enabledExplore,
       );
       source.prepareIncoming();
+      if (source.sourceKind != BookSourceKind.unsupported) {
+        kinds[source.bookSourceUrl] = source.sourceKind;
+      }
       final after = (
         source.bookSourceType,
         source.bookSourceGroup,
@@ -284,6 +288,9 @@ class AppDatabase extends _$AppDatabase {
         ],
       );
     }
+    // 用這些書源加的書跟著換類別，同存書源時（ADR 0053）。每個書源都比，
+    // 不只這次改了類型的：重跑也補得到上次漏的。
+    await BookDao(this).followSourceKinds(kinds);
   }
 
   Future<void> _createPerformanceIndexes() async {

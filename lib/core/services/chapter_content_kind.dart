@@ -47,6 +47,7 @@ enum ChapterContentKind {
       return images;
     }
     if (shape.audioUrls > 0 &&
+        shape.audioUrls == shape.urls &&
         shape.images == 0 &&
         shape.textRunes < _audioMaxRunes) {
       return audio;

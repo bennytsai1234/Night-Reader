@@ -74,6 +74,15 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     await _followKinds(sources);
   });
 
+  /// 每本書跟著它的書源現在的類型：還原備份時書與書源分開寫進來，寫的
+  /// 先後照 ZIP 裡的檔案順序，兩邊都寫完再對一次。
+  Future<int> followAllKinds() async =>
+      BookDao(attachedDatabase).followSourceKinds({
+        for (final source in await getAll())
+          if (source.sourceKind != BookSourceKind.unsupported)
+            source.bookSourceUrl: source.sourceKind,
+      });
+
   /// 書跟著書源的類型（使用者 2026-11-09 定，ADR 0053）：校驗只在有把握時
   /// 改類型，改了表示用它加進來的書其實是那一類，留在原本那一類也讀不了。
   /// 夜讀不支援的類型不動書。
@@ -99,6 +108,8 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
           .moveOrigin(previousUrl, to, toName: name);
       await ReaderChapterContentDao(attachedDatabase)
           .moveOrigin(previousUrl, to);
+      // 原網址的書搬過來了才跟著新類型：存書源時它們還記著原網址。
+      await _followKinds([source]);
       // 舊網址存的登入資訊與變數已經搬到新網址（存檔成功後才刪舊的），這裡
       // 只刪書源那一列。
       await _deleteRows([previousUrl]);
