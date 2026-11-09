@@ -233,7 +233,7 @@ class BookshelfExchangeService {
   List<BookSource> _parseSources(List<dynamic> raw) {
     return raw
         .whereType<Map<String, dynamic>>()
-        .map(BookSource.fromJson)
+        .map((json) => BookSource.fromJson(json)..prepareIncoming())
         .toList();
   }
 

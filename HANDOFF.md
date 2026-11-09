@@ -13,11 +13,12 @@
 
 - 核心（`b716b63f`）：有聲書源放行、取得音訊網址（`AudioUrlResolver`、`BookSourceService.getAudioRequest`）、定時關閉共用（`lib/core/services/sleep_timer.dart`）、播放器邏輯 `lib/features/audiobook/audiobook_player.dart`。
 - 共用的定時區塊 `lib/shared/widgets/sleep_timer_section.dart`，朗讀面板改用它。
+- **書源放行改用書源分類的判斷**：併入 `origin/feat/source-kinds`。哪幾類書源打得開由 `book_source_logic.dart` 的 `isOpenableSource` 決定（小說、有聲），搜尋、閱讀、發現都照它；發現的資料庫查詢不再自己篩類型。舊的 `isAudioSource`、`isNovelTextSource`、`nonNovelExclusionReason` 已刪。校驗照書源分類的做法跑有聲源（正文要抓得到網址）。
 - **系統播放控制改用朗讀那套**：併入 `origin/fix/tts-now-playing`，舊的 `audio_handler.dart` 刪掉。有聲書實作 `PlaybackOwner`，開始播時 `SystemPlayback.instance.show(...)` 接手、停了 `release`。`SystemPlayback` 補了倒退／快轉 10 秒（`PlaybackControl.rewind`／`fastForward`，收合時不放）、`NowPlaying.duration`、`show` 的位置、倍速與緩衝；通知頻道名稱改成「夜讀播放」。朗讀的兩支檔案以朗讀分支為準，只把定時換成共用的 `SleepTimer`。
 
 ## 接下來（照順序）
 
-1. **書源放行改用書源分類的判斷**：併入 `origin/feat/source-kinds`，判斷有聲書源用 `source.sourceKind == BookSourceKind.audio`。本分支在 `book_source_logic.dart` 加的 `isAudioSource`、改過的 `isReaderSupportedSourceType`／`nonNovelExclusionReason`，和 `book_source_dao.dart` 發現用的查詢都改成照它，舊的刪掉。書的類別（`book.isAudio`）與認書的鍵等 source-kinds 推上後再併一次來用。
+1. **書的類別與認書的鍵**：`feat/source-kinds` 推上「同名不同類是不同的書」（`book.isAudio`、認書的鍵、換源同類篩選）之後再併一次來用；本分支現在的 `book.isAudio` 是自己判的（書源類型 1 或 Legado 的有聲位元），到時換成它的。
 2. **檔案型章節怎麼存（本分支先定，漫畫照著接）**：音訊、漫畫圖都存成資料夾裡的檔案，不進 SQLite。要定資料夾規則（照插圖分支 `lib/core/services/book_illustration_storage.dart` 的 `book_assets/<書>/` 延伸）、怎麼算已下載、移出書架就刪、下載管理的顯示與清除、佔多少空間。動手前先看 `origin/feat/images-comics` 做了沒，做了就照它的。定好寫在這裡。
 3. **播放器畫面** `lib/features/audiobook/audiobook_page.dart`，照 `docs/design/audiobook.md`「播放器」，畫面聽 `AudiobookPlayer.instance`。
    - 開書：`lib/shared/navigation/book_open_route.dart` 在 `book.isAudio` 時改開播放器；拿掉 `lib/features/bookshelf/bookshelf_page.dart` 約 1099 行 `book.type == 2` 跳「有聲書播放功能已移除」那段。

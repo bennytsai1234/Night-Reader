@@ -273,7 +273,9 @@ class RestoreService {
             break;
           case 'bookSources.json':
           case 'bookSource.json':
-            await _sourceDao.upsert(BookSource.fromJson(item));
+            await _sourceDao.upsert(
+              BookSource.fromJson(item)..prepareIncoming(),
+            );
             break;
           case 'replaceRules.json':
           case 'replaceRule.json':

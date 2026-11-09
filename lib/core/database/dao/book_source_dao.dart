@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 
-import '../../constant/source_type.dart';
 import '../../models/base_source.dart';
 import '../../models/book_source.dart';
 import '../../services/app_log_service.dart';
@@ -116,7 +115,7 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> _deleteRows(List<String> urls) async {
     await (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
-    forgetNonNovelMarkers(urls);
+    forgetSourceMarkers(urls);
   }
 
   Future<List<BookSource>> getAllFull() => getAll();
@@ -201,21 +200,16 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
       ${discoveryOnly ? _discoveryWhereClause : ''}
       ORDER BY customOrder ASC
       ''',
-      variables: discoveryOnly
-          ? [
-              Variable<int>(SourceType.book),
-              Variable<int>(SourceType.audio),
-              const Variable<String>(''),
-            ]
-          : const [],
+      variables: discoveryOnly ? const [Variable<String>('')] : const [],
       readsFrom: {bookSources},
     );
   }
 
+  /// 只先篩開關與發現網址；哪幾類能進發現由
+  /// [BookSourceLogic.canParticipateInDiscovery] 判斷。
   static const String _discoveryWhereClause = '''
       WHERE enabled = 1
         AND enabledExplore = 1
-        AND bookSourceType IN (?, ?)
         AND COALESCE(TRIM(exploreUrl), '') <> ?
       ''';
 
