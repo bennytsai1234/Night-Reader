@@ -497,11 +497,13 @@ class LocalBookSync {
   /// 本地漫畫：這台還沒有的話下載下來，併進同一本（有共同的話就是同一本，
   /// 同匯入）；這台沒有這本就新加一本。
   Future<void> _downloadComic(LocalBookTask task) async {
+    // 這台檔案還在的話不再下載；還原備份帶回了目錄、沒帶回檔案的照樣抓。
     final have = <String>{};
     for (final book in await _bookDao.getInBookshelf()) {
       if (!book.isLocal || book.bookKind != BookSourceKind.comic) continue;
       for (final chapter in await _chapterDao.getByBook(book.bookUrl)) {
-        have.add(chapter.url);
+        final file = File(LocalComicService.chapterPathOf(book, chapter));
+        if (await file.exists()) have.add(chapter.url);
       }
     }
     final temp = await AppStoragePaths.temporaryDir();

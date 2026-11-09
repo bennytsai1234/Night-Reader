@@ -514,6 +514,15 @@ void main() {
       );
       expect((await b.localBooks().plan()).isEmpty, isTrue);
       expect((await a.localBooks().plan()).isEmpty, isTrue);
+
+      // 還原備份帶回了書與目錄、沒帶回圖檔：再按一次把圖抓回原處。
+      final folder = Directory(LocalBookService.filePathOf(shelf.single));
+      folder.deleteSync(recursive: true);
+      final restore = await b.localBooks().plan();
+      expect(restore.of(LocalBookAction.download), hasLength(1));
+      expect((await b.localBooks().run(restore)).failures, isEmpty);
+      expect(folder.listSync().whereType<File>(), hasLength(3));
+      expect(await b.shelf(), hasLength(1));
     });
 
     test('a book removed on one phone is deleted from the cloud when that '

@@ -65,7 +65,16 @@ class LocalComicService {
 
     final added = <LocalComicChapter>[];
     for (var i = 0; i < sources.length; i++) {
-      if (!knownPrints.contains(prints[i])) {
+      // 目錄裡有、檔案不見了（還原備份沒帶回檔案）的那一話也重新存。
+      final missing =
+          knownPrints.contains(prints[i]) &&
+          !await File(
+            p.join(
+              bookDir,
+              '${prints[i]}${LocalComicLibrary.chapterExtension}',
+            ),
+          ).exists();
+      if (!knownPrints.contains(prints[i]) || missing) {
         final stored = await _storeOn(run, sources[i], bookDir);
         if (stored != null && knownPrints.add(stored.fingerprint)) {
           added.add(stored);
