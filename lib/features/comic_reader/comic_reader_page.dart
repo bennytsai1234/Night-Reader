@@ -41,6 +41,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'comic_page_source.dart';
+import 'comic_progress_sync.dart';
 import 'comic_reader_menu.dart';
 import 'comic_strip_model.dart';
 import 'comic_strip_view.dart';
@@ -99,6 +100,16 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
 
   ComicLocation? _pendingSave;
   Timer? _saveTimer;
+  ComicLocation? _location;
+  late final ComicProgressSync _sync = ComicProgressSync(
+    book: _book,
+    bookDao: getIt<BookDao>(),
+    current: () => _location,
+    flush: _flush,
+    titles: () => [for (final chapter in _chapters) chapter.title],
+    jumpTo: (chapter, page) => _jumpTo(chapter, pageIndex: page),
+    resumes: widget.startChapter == null,
+  );
 
   Book get _book => widget.book;
 
@@ -112,9 +123,8 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
-    final pending = _pendingSave;
-    if (pending != null) unawaited(_save(pending));
+    // 存好最後的位置再上傳（[ComicProgressSync.dispose] 會先 flush）。
+    _sync.dispose();
     _model?.dispose();
     _settings.dispose();
     _menuVisible.dispose();
@@ -146,12 +156,13 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
         }
       }
       if (chapters.isEmpty) throw StateError('目錄是空的');
+      _sync.start();
+      // 接著上次讀的地方開：等開 App 的同步做完一下，照同步後的位置開。
+      final resume = await _sync.openLocation();
       if (!mounted) return;
       final start = widget.startChapter;
-      final chapterIndex = (start ?? _book.chapterIndex).clamp(
-        0,
-        chapters.length - 1,
-      );
+      final chapterIndex = (start ?? resume?.chapterIndex ?? _book.chapterIndex)
+          .clamp(0, chapters.length - 1);
       final pageSource =
           widget.pageSource ??
           NetworkComicPageSource(
@@ -163,18 +174,22 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
         source: pageSource,
         chapterCount: chapters.length,
         chapterIndex: chapterIndex,
-        pageIndex: start == null ? _book.charOffset : 0,
+        pageIndex: start == null ? resume?.pageIndex ?? _book.charOffset : 0,
       )..addListener(_onModel);
       setState(() {
         _chapters = chapters;
         _source = source;
         _model = model;
         _initialFraction = start == null
-            ? _book.visualOffsetPx.clamp(0.0, 1.0).toDouble()
+            ? (resume?.fraction ?? _book.visualOffsetPx)
+                  .clamp(0.0, 1.0)
+                  .toDouble()
             : 0;
       });
       _currentChapter.value = chapterIndex;
+      _refreshProgress(chapterIndex, model.anchorPage);
       model.start();
+      _sync.bookOpened();
     } catch (error) {
       if (mounted) setState(() => _loadError = error);
     }
@@ -192,6 +207,7 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
   }
 
   void _onLocation(ComicLocation location) {
+    _location = location;
     _currentChapter.value = location.chapterIndex;
     _refreshProgress(location.chapterIndex, location.pageIndex);
     _pendingSave = location;
