@@ -2,8 +2,8 @@ name: CI
 
 on:
   # 開 PR 與 PR 有新推送時跑，測的是分支併進目前 beta 的樣子；做的途中推分支只是備份，不跑
-  # （ADR 0048）。合併後 beta 再跑一次，合併的人等它通過才發測試版。只改文件的 PR 與推送不跑。
-  # 全套測試只在這裡跑：本機推送前只跑 analyze（.githooks/pre-push，ADR 0014）。
+  # （ADR 0049）。合併後 beta 再跑一次，合併的人等它通過才發測試版。只改文件的 PR 與推送不跑。
+  # 全套測試只在這裡跑：本機推送前只跑 analyze（.githooks/pre-push，ADR 0049）。
   pull_request:
     paths-ignore: ["**.md", "docs/**"]
   push:
@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test changelog tool
-        # PR 標題能不能當測試版說明由 pr-title.yml 檢查（ADR 0048）。
+        # PR 標題能不能當測試版說明由 pr-title.yml 檢查（ADR 0049）。
         run: sh tool/changelog_test.sh
 
   # 三種檢查分在不同的機器上同時跑，全套測試再切成幾份：原本同一台依序跑約
@@ -43,7 +43,7 @@ jobs:
   # 只能跑一個，共用一個群組會讓同一次的幾台互相排隊或取消。推分支直接觸發
   # 的，有新的一次就取消舊的：舊提交的結果已經沒有用，留著只會讓新的一次排在
   # 它後面。發版呼叫的（帶 ref）不取消：每次合併各發一版，發版前的驗證要跑完
-  # （ADR 0027）。
+  # （ADR 0049）。
   codegen:
     name: Drift code is current
     runs-on: ubuntu-latest

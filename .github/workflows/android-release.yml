@@ -2,8 +2,8 @@ name: Android Release
 
 on:
   # 測試版由合併的人合完一批、beta 的 CI 通過後手動以 channel=beta 執行，一批發一版
-  # （ADR 0048）；推上 main（只會快轉到 beta 上的提交）在 pubspec 版號升到還沒發布的版本時
-  # 發正式版（ADR 0002、0027）。
+  # （ADR 0049）；推上 main（只會快轉到 beta 上的提交）在 pubspec 版號升到還沒發布的版本時
+  # 發正式版（ADR 0002、0049）。
   push:
     branches:
       - main
@@ -149,10 +149,10 @@ jobs:
             publish=true
             target_sha="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
           elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
-            # main 只快轉到 beta 上測過的提交（ADR 0027）。main 自己多出提交的話，兩條分支的
+            # main 只快轉到 beta 上測過的提交（ADR 0049）。main 自己多出提交的話，兩條分支的
             # 提交數岔開，versionCode 就不再是測試版與正式版共用、只增不減的同一條序列。
             if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/beta; then
-              echo "::error::main 只能快轉到 beta 上的提交（ADR 0027），$GITHUB_SHA 不在 beta 上。"
+              echo "::error::main 只能快轉到 beta 上的提交（ADR 0049），$GITHUB_SHA 不在 beta 上。"
               exit 1
             fi
             if release_exists "$stable_tag"; then
@@ -214,7 +214,7 @@ jobs:
             fi
           fi
 
-          # Release 說明（ADR 0010、0048）：正式版取 CHANGELOG.md 的「X.Y.Z」整段；測試版取上一個
+          # Release 說明（ADR 0049）：正式版取 CHANGELOG.md 的「X.Y.Z」整段；測試版取上一個
           # 發布（notes_base）之後每個改到 App 的 PR 標題，App 更新時再把中間每一版接起來。
           # 先在這裡產生並檢查真正會公開的內容，免得建置完才在發布時失敗。
           notes_heading=""
@@ -239,7 +239,7 @@ jobs:
           fi
 
           # Android versionCode 取發版那個提交的提交數：beta 與 main 都禁止強制推送、歷史不改寫，main 又只
-          # 快轉到 beta 上的提交，兩邊是同一條歷史，提交數只增不減（ADR 0004、0027）。正式版與測試版共用
+          # 快轉到 beta 上的提交，兩邊是同一條歷史，提交數只增不減（ADR 0049）。正式版與測試版共用
           # 同一條序列，裝了測試版也能直接更新到之後的正式版。
           # 只建測試 APK 時改取 beta 最新提交的提交數：功能分支的提交合併時會 squash 成一個，分支自己的
           # 提交數常比之後的測試版還大，裝了測試 APK 就裝不回測試版。取 beta 的數字，測試 APK 和目前的
