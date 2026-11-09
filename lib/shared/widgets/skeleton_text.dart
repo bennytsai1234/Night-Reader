@@ -567,45 +567,40 @@ class _SkeletonTextState extends State<SkeletonText> {
     )..layout(maxWidth: maxWidth);
     // 和 Text 一樣大：一行放得下時是那一行的寬，換行或截斷時撐滿（頁面的
     // 預設字樣指定照最長一行算時照它）。長條的左右照筆畫，上下置中在那一行
-    // 畫出來的字上：取那一行最寬的那一段字的字框中線。一行混了兩種字型時
-    // （閱讀器資訊列先用標點字型、中文退到系統字型），行框的中線和字不在
-    // 同一高度，差多少看這台手機的字型；刪節號這種窄的一小段來自另一個字型，
-    // 不拿來定中線。
-    final metrics = painter.computeLineMetrics();
-    final ink = skeletonTextLines(painter);
-    double bottomOf(int index) => index >= metrics.length - 1
-        ? painter.height
-        : metrics[index].baseline + metrics[index].descent;
-    final widest = <int, Rect>{};
-    for (final box in painter.getBoxesForSelection(
-      TextSelection(baseOffset: 0, extentOffset: span.toPlainText().length),
-    )) {
-      final rect = box.toRect();
-      if (rect.top >= painter.height || rect.width <= 0) continue;
-      final index = metrics.indexWhere(
-        (line) => rect.center.dy < line.baseline + line.descent,
-      );
-      if (index < 0) continue;
-      final current = widest[index];
-      if (current == null || rect.width > current.width) widest[index] = rect;
-    }
+    // 畫出來的字上：取那一行最寬的那一段字的字框中線。行框的中線不一定在字
+    // 上：行距上下分得不平均，或一行混了兩種字型（閱讀器資訊列先用標點字型、
+    // 中文與數字退到系統字型），差多少看這台手機的字型。刪節號這種窄的一小
+    // 段來自另一個字型，不拿來定中線。每一條照組成它的那幾段字找，不照行號：
+    // 空行沒有字，也就沒有長條。
+    final boxes = [
+      for (final box in painter.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: span.toPlainText().length),
+      ))
+        if (box.toRect() case final rect
+            when rect.top < painter.height && rect.width > 0)
+          rect,
+    ];
     final result = (
       size: Size(painter.width, painter.height),
       lines: [
-        for (final (index, line) in ink.indexed)
-          switch (widest[index]) {
+        for (final line in skeletonTextLines(painter))
+          switch (boxes
+              .where(
+                (box) =>
+                    box.center.dy >= line.top && box.center.dy <= line.bottom,
+              )
+              .fold<Rect?>(
+                null,
+                (widest, box) =>
+                    widest == null || box.width > widest.width ? box : widest,
+              )) {
             final glyphs? => Rect.fromLTRB(
               line.left,
               glyphs.top,
               line.right,
               glyphs.bottom,
             ),
-            null => Rect.fromLTRB(
-              line.left,
-              index == 0 ? 0 : bottomOf(index - 1),
-              line.right,
-              bottomOf(index),
-            ),
+            null => line,
           },
       ],
     );

@@ -825,12 +825,16 @@ class _InfoRow extends StatelessWidget {
     Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
       (null, _) || (_, null) => child,
       (final color?, Text(:final data?)) => SkeletonText(data, color: color),
-      // 純圖示（自動翻頁）置中在列上，不跟字的位置。
+      // 只有圖示的欄位（自動翻頁、只有電池、數字畫在電池裡）置中在列上，
+      // 不跟字的位置。
       (final color?, final Icon child) => _InfoItemSkeleton(
         color: color,
         onGlyphs: false,
         child: child,
       ),
+      (final color?, final _ReaderBattery child)
+          when !child.drawsDigitsInLine =>
+        _InfoItemSkeleton(color: color, onGlyphs: false, child: child),
       (final color?, final child?) => _InfoItemSkeleton(
         color: color,
         child: child,
@@ -983,7 +987,8 @@ class _InfoItemSkeleton extends StatelessWidget {
   final Color color;
   final Widget child;
 
-  /// 欄位裡有字（時間、電量、進度）：長條對準字，見 [_digitsOffset]。
+  /// 欄位裡有和字排在一起的數字（時間、電量）：長條對準字，見
+  /// [_digitsOffset]。
   final bool onGlyphs;
 
   @override
@@ -1020,8 +1025,9 @@ class _InfoItemSkeleton extends StatelessWidget {
     );
   }
 
-  /// 時間、電量、進度的數字畫在行框中線上下多少：資訊列先用標點字型、其他
-  /// 字退到系統字型，字和行框的中線不在同一高度，差多少看這台手機的字型。
+  /// 時間、電量的數字畫在行框中線上下多少：行距上下分得不平均、一行混了
+  /// 標點字型與退回的系統字型時，字和行框的中線不在同一高度，差多少看這台
+  /// 手機的字型。
   /// 長條移到字上，和照字畫的欄位（[SkeletonText]）一樣。
   static double _digitsOffset(
     TextStyle style,
@@ -1054,6 +1060,12 @@ class _ReaderBattery extends StatefulWidget {
 
   /// [ReaderV2InfoItem.isBattery] 的其中一種。
   final ReaderV2InfoItem item;
+
+  /// 數字和字排在同一行（只有數字、電池加數字）；只有電池或數字畫在電池
+  /// 裡時，整個欄位置中在電池圖示上。
+  bool get drawsDigitsInLine =>
+      item == ReaderV2InfoItem.battery ||
+      item == ReaderV2InfoItem.batteryWithIcon;
   final Color color;
   final double fontSize;
 
