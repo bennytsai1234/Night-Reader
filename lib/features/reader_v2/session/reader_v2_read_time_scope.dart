@@ -39,9 +39,10 @@ class _ReaderV2ReadTimeScopeState extends State<ReaderV2ReadTimeScope>
     final book = widget.book;
     _controller = ReaderV2ReadTimeController(
       // 書架上的書照資料庫裡現在的書名（可能在書籍詳情改過）；不在資料庫
-      // 的書照開書時的書名。
+      // 的書照開書時的書名。漫畫、有聲帶類別前綴（ADR 0053）。
       bookName: () async =>
-          (await getIt<BookDao>().getByUrl(book.bookUrl))?.name ?? book.name,
+          (await getIt<BookDao>().getByUrl(book.bookUrl))?.recordName ??
+          book.recordName,
       readRecordDao: getIt<ReadRecordDao>(),
     );
   }

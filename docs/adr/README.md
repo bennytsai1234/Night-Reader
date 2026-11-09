@@ -66,6 +66,7 @@
 | [0052](0052-comic-reader.md) | 漫畫另做條漫閱讀器（照 Mihon、只直向捲動），整本自動下載、章節存成 CBZ，本地漫畫每章一個原檔指紋 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
 | [0051](0051-source-kinds-follow-the-source-type.md) | 書源分成小說、漫畫、有聲，只看類型欄位：匯入照名稱字樣補判、校驗照正文改，手動也能改；漫畫、有聲源留著不停用，影視、文件照舊可刪 |
+| [0053](0053-same-title-different-kind-is-a-different-book.md) | 同名不同類是不同的書：書的類別照書源寫，認書的鍵在漫畫、有聲前加類別，換源只列同一類，書源改了類型書跟著改 |
 
 ## 工程與流程
 

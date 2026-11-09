@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'book.dart';
 
 import 'package:night_reader/core/models/rule_data_interface.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
@@ -30,9 +31,12 @@ class SearchBook implements RuleDataInterface {
   String? infoHtml;
   String? tocHtml;
 
-  /// 搜尋合併卡的身分（正規化書名＋作者），建立合併卡時由搜尋分組填入；
-  /// 原始結果為 null。不存檔。
+  /// 搜尋合併卡的身分（類別前綴＋正規化書名＋作者），建立合併卡時由搜尋
+  /// 分組填入；原始結果為 null。不存檔。
   String? groupIdentity;
+
+  /// 這本書是小說、漫畫還是有聲（同 `Book.bookKind`，ADR 0053）。
+  BookSourceKind get bookKind => BookSourceKind.ofBookType(type);
 
   late final Set<String> origins = {origin};
   late final Map<String, String> _originNames = {
