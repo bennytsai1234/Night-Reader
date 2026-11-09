@@ -53,8 +53,8 @@
 
 ## 下一步
 
-1. **幀預算要重量**：跑過一次 `tool/frame_budget_compare.sh ec9fac86 test/frame_budget/reader_jump_frame_budget_test.dart test/frame_budget/reader_interactions_frame_budget_test.dart`，當時電腦上還有別的 flutter_tester 在跑，數字兩個方向都有大跳動（目錄內甩動 60→12、跳到第 10 章 9→21），不可信。用 `FRAME_REPEAT=3` 重量；「跳到第 10 章」若真的變多，查是不是 `layout_pipeline.dart` 的插圖分支或 `page_lines.dart` 的 `blockLines` 造成（沒有插圖的章不該多做事）。表寫進 commit message。
-2. **畫一張有插圖的閱讀畫面**確認整條路徑畫得出來：`test/support/app_harness.dart` 的 `seedLibrary` 把某章正文換成含 `<img src="…">`，對應圖檔放進那本書的 `images/`，開「顯示插圖」，用 `test/support/screenshot.dart` 拍淺色、深色各一張放進對話。還沒有端到端（真的排版到畫出）的測試。
+1. ~~幀預算重量~~ 已重量（FRAME_REPEAT=3，表在 `3d89be81` 的 commit message）：沒有插圖的章看不出變多，上次的跳動是別的 flutter_tester 干擾。
+2. ~~畫一張有插圖的閱讀畫面~~ 已畫淺色、深色，途中修了兩個開書卡在骨架的問題，並加了端到端測試 `test/features/reader_v2/reader_v2_illustration_open_test.dart`。
 3. ~~`PRIVACY.md` 與 App 的「隱私說明」~~ 已補：網路請求含正文裡的插圖、正文快取含插圖、備份不含插圖與本地書原檔。
 4. ~~`README.md`~~ 只有圖卡，沒有「插圖略過」，不用改。
 5. 收尾照 `docs/agents/finish.md`：派 Codex 審查、併最新 `beta`、開 PR、CI 通過就停在「可以合併」；收尾時刪掉這份 `HANDOFF.md`、`PLAN.md` 那條打勾。
@@ -72,3 +72,7 @@
 - 合流：`lib/features/reader_v2/chapter/reader_v2_content_transformer.dart` 在背景 worker 跑替換規則、重新分段、繁簡、引號整理（`_convertCurlyQuotesLine`）→ 按換行切段 → `hybrid/text/text_preprocessor.dart` 切成文字塊 → 背景量高度排版 → 連續捲動。位置是 `ReaderV2Location`：章、`charOffset`，加 `contentHash` 與前後文字 `anchorBefore`／`anchorAfter`，正文變了可以對回去。
 - 書籍詳情的「清除封面快取」（`book_detail_provider.dart` 的 `clearBookCache`，`_coverStorage.deleteBookAssets`）刪掉整個書本資料夾；圖放進去之後要改成只刪封面。
 - Legado 對照（`D:\Migrated\Desktop\Folder\product\legado`）：`ui/book/read/page/provider/TextChapterLayout.kt` 的 `setTypeImage`；`help/book/BookHelp.kt` 的 `saveImages`（下載時存圖）；`model/ReadBook.kt` 的 `upWebBook`（書源的 `imageStyle` 套到書）。
+
+## 待使用者決定（2026-11-09）
+
+書籍詳情的「清除正文快取」「清除封面快取」（`BookDetailProvider.clearBookCache`、`clearStoredContent`）從 v0.2.91 起就沒有畫面入口，是死程式；ADR 0050「整本補圖就在書籍詳情清除正文」因此做不到。要使用者選：加回一個入口，或改 ADR、刪掉死程式。
