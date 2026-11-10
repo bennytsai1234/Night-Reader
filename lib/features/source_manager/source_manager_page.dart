@@ -13,6 +13,10 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:provider/provider.dart';
 
+import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+
+import 'ai_repair/ai_repair_page.dart';
+import 'ai_repair/ai_repair_settings_page.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
@@ -246,6 +250,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
       onCheckSource: () {
         SourceManagerDialogs.showCheckConfigDialog(context, provider);
       },
+      onAiRepair: () => _runAction(
+        () => _aiRepair(provider, provider.selectedUrls.toList()),
+        errorPrefix: 'AI 修復失敗',
+      ),
       onClearCheckMarks: () => SourceManagerDialogs.clearCheckMarks(
         context,
         provider,
@@ -388,6 +396,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           ),
           onClearCheckMarks: () =>
               SourceManagerDialogs.clearCheckMarks(context, provider),
+          onAiRepairSettings: () => nav.push(
+            MaterialPageRoute<void>(
+              builder: (_) => const AiRepairSettingsPage(),
+            ),
+          ),
           onClearInvalid: (p) =>
               SourceManagerDialogs.confirmClearInvalid(context, p),
           onDeleteNonNovel: (p) =>
@@ -689,6 +702,18 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           label: '除錯書源',
           icon: Icons.bug_report_outlined,
         ),
+        GlassMenuItem(
+          value: 'ai_repair',
+          label: 'AI 修復',
+          icon: Icons.auto_fix_high_outlined,
+          enabled: !p.checkService.isChecking,
+        ),
+        if (p.hasAiRepairBackup(s.bookSourceUrl))
+          const GlassMenuItem(
+            value: 'ai_restore',
+            label: '還原 AI 修改前',
+            icon: Icons.restore_rounded,
+          ),
         if (s.hasExploreUrl)
           GlassMenuItem(
             value: 'explore',
@@ -750,6 +775,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
         if (full != null && mounted) {
           unawaited(SourceManagerDialogs.showDebugInput(context, full));
         }
+      case 'ai_repair':
+        await _runAction(
+          () => _aiRepair(p, [s.bookSourceUrl]),
+          errorPrefix: 'AI 修復失敗',
+        );
+      case 'ai_restore':
+        await _confirmAiRestore(p, s);
       case 'explore':
         await _runAction(
           () => p.toggleEnabledExplore(s),
@@ -770,6 +802,31 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
       case 'delete':
         await _confirmDeleteSource(p, s);
     }
+  }
+
+  /// AI 修復 [urls] 這幾個書源；有改到就重讀清單（ADR 0054）。
+  Future<void> _aiRepair(SourceManagerProvider p, List<String> urls) async {
+    final sources = [for (final url in urls) ?await p.getFullSource(url)];
+    if (sources.isEmpty || !mounted) return;
+    final changed = await openAiRepair(context, sources);
+    if (changed && mounted) await p.loadSources();
+  }
+
+  Future<void> _confirmAiRestore(
+    SourceManagerProvider p,
+    BookSourcePart s,
+  ) async {
+    final confirmed = await showAppConfirm(
+      context: context,
+      title: '還原 AI 修改前',
+      message: '「${s.bookSourceName}」換回 AI 修改之前的版本。',
+      confirmLabel: '還原',
+    );
+    if (!confirmed || !mounted) return;
+    await _runAction(() async {
+      await restoreAiRepair(s.bookSourceUrl);
+      await p.loadSources();
+    }, errorPrefix: '還原書源失敗');
   }
 
   Future<void> _confirmDeleteSource(

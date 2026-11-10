@@ -103,7 +103,7 @@ Future<(List<String>, int)> _contentRequestLogInSourceIsolate(
 ) => SourceIsolate.run((_) async {
   final source = BookSource.fromJson(sourceJson);
   final book = Book(bookUrl: chapterUrl, origin: source.bookSourceUrl);
-  final log = RequestLog(withResponses: true);
+  final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
   await log.run(
     () => BookSourceService().getContent(
       source,

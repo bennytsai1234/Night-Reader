@@ -1,22 +1,31 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/services/encoding_detect.dart';
 
-/// 一段工作實際送出的請求，依序記在 [lines]；[withResponses] 時每個回應
-/// 也記一行（[recordResponse]），並數出看起來是暫時性失敗的回應
-/// （[transientResponses]），書源校驗據此決定要不要重試、失敗時看網站回了
-/// 什麼。書源除錯只記網址。
+/// 一段工作實際送出的請求，依序記在 [lines]；給了 [responsePreview] 時每個
+/// 回應也記一行（[recordResponse]），帶內容開頭的那麼多字，並數出看起來是
+/// 暫時性失敗的回應（[transientResponses]）：書源校驗據此決定要不要重試、
+/// 失敗時看網站回了什麼（[diagnosisPreview]），AI 修書源拿它看網頁現在長
+/// 怎樣（長得多）。書源除錯只記網址。
 ///
 /// 記錄點在所有請求都會經過的地方：Dio 的 `AppInterceptor`（含轉址的每
 /// 一跳，規則 JS 的 `java.ajax`、`java.get` 這類也走這裡：它們在網路 isolate
 /// 送出，記下的內容由 `BlockingCall` 帶回來，[merge] 接上）與兩種 WebView
 /// 的入口。不在 [run] 裡時什麼都不記。
 final class RequestLog {
-  RequestLog({this.withResponses = false});
+  RequestLog({this.responsePreview});
 
-  final bool withResponses;
+  /// 書源校驗的診斷記每個回應的開頭幾個字。
+  static const int diagnosisPreview = 160;
+
+  /// 每個回應記內容開頭的幾個字；null 時不記回應。
+  final int? responsePreview;
+
+  bool get withResponses => responsePreview != null;
   final List<String> lines = [];
   int _transientResponses = 0;
 
@@ -42,8 +51,8 @@ RequestLog? get currentRequestLog =>
 /// 外層已經在 [RequestLog.run] 裡：裡面的請求會記進外層的紀錄。
 bool get isRecordingRequestUrls => currentRequestLog != null;
 
-/// 外層的紀錄連回應也記。
-bool get isRecordingResponses => currentRequestLog?.withResponses ?? false;
+/// 外層的紀錄每個回應記開頭幾個字；不記回應時是 null。
+int? get recordingResponsePreview => currentRequestLog?.responsePreview;
 
 /// 記下一筆送出的請求。網址 `#` 後面不會送出，記的時候去掉；GET 以外標出
 /// 方法，轉址到的網址標出「轉址」。
@@ -76,7 +85,10 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   }
   final status = response.statusCode;
   final type = response.headers.value(Headers.contentTypeHeader);
-  final (length, head, empty) = _bodyPreview(response.data);
+  final (length, head, empty) = _bodyPreview(
+    response.data,
+    log.responsePreview!,
+  );
   log.lines.add(
     '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
     '${type == null ? '' : ' $type'}'
@@ -93,7 +105,7 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
 void recordRenderedPage(String? url, Object? body) {
   final log = currentRequestLog;
   if (log == null || !log.withResponses) return;
-  final (length, head, empty) = _bodyPreview(body);
+  final (length, head, empty) = _bodyPreview(body, log.responsePreview!);
   log.lines.add(
     '  ← ${url ?? '?'} 網頁渲染（沒有狀態碼）'
     '${length == null ? '' : '，$length'}'
@@ -102,11 +114,9 @@ void recordRenderedPage(String? url, Object? body) {
   if (empty) log._transientResponses++;
 }
 
-const int _previewLength = 160;
-
-/// 回應內容的長度、開頭一段（空白合成一格）與是不是空白。位元組照 UTF-8
-/// 解開，其他編碼的網站會是亂碼，只看得出有沒有內容。
-(String?, String, bool) _bodyPreview(Object? data) {
+/// 回應內容的長度、開頭 [previewLength] 個字（空白合成一格）與是不是空白。
+/// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜。
+(String?, String, bool) _bodyPreview(Object? data, int previewLength) {
   final String text;
   final String length;
   switch (data) {
@@ -116,10 +126,15 @@ const int _previewLength = 160;
       text = data;
       length = '${data.length} 字';
     case List<int>():
-      final head = data.length > _previewLength * 4
-          ? data.sublist(0, _previewLength * 4)
-          : data;
-      text = utf8.decode(head, allowMalformed: true);
+      final bytes = Uint8List.fromList(
+        data.length > previewLength * 4
+            ? data.sublist(0, previewLength * 4)
+            : data,
+      );
+      text = EncodingDetect.decodeWithCharset(
+        bytes,
+        EncodingDetect.getHtmlEncode(bytes),
+      );
       length = '${data.length} 位元組';
     case Map() || List():
       text = jsonEncode(data);
@@ -130,8 +145,8 @@ const int _previewLength = 160;
   final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
   return (
     length,
-    collapsed.length > _previewLength
-        ? '${collapsed.substring(0, _previewLength)}…'
+    collapsed.length > previewLength
+        ? '${collapsed.substring(0, previewLength)}…'
         : collapsed,
     collapsed.isEmpty,
   );

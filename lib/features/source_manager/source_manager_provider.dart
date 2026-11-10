@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -511,6 +512,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   final Future<void> Function()? _uncovered;
+  Set<String> _aiRepairedUrls = const {};
   bool _listeningSync = false;
   bool _syncReloadPending = false;
 
@@ -593,6 +595,7 @@ class SourceManagerProvider with ChangeNotifier {
       // 記下次打開時的樣子：搜尋、篩選與排序都回到預設，是全部書源照手動
       // 順序，不是現在篩選過的清單。
       _rememberRows(allSources);
+      unawaited(_refreshAiRepaired(loadedSources));
     } catch (error) {
       if (!_disposed && generation == _loadGeneration) {
         _loadError = error;
@@ -608,6 +611,25 @@ class SourceManagerProvider with ChangeNotifier {
         }
         notifyListeners();
       }
+    }
+  }
+
+  /// 這個書源留著 AI 改之前的版本，長按選單有「還原 AI 修改前」（ADR 0054）。
+  bool hasAiRepairBackup(String url) => _aiRepairedUrls.contains(url);
+
+  /// 讀完書源後在背景整理改前版本：刪掉的書源它的也刪。不擋清單的讀取，
+  /// 讀不到就當沒有；它只決定長按選單有沒有「還原 AI 修改前」。
+  Future<void> _refreshAiRepaired(List<BookSourcePart> sources) async {
+    try {
+      await AiRepairBackups.instance.keepOnly({
+        for (final source in sources) source.bookSourceUrl,
+      });
+      final urls = await AiRepairBackups.instance.urls();
+      if (_disposed || setEquals(urls, _aiRepairedUrls)) return;
+      _aiRepairedUrls = urls;
+      notifyListeners();
+    } catch (error, stack) {
+      AppLog.e('整理 AI 修書源的改前版本失敗', error: error, stackTrace: stack);
     }
   }
 

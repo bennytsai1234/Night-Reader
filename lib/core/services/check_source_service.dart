@@ -190,6 +190,17 @@ class SourceCheckConfig {
 
   Duration get timeoutDuration => Duration(seconds: timeoutSeconds);
 
+  /// 送進校驗 worker 的那一份（[spawnSourceCheck]）。
+  IsolateCheckConfig get forIsolate => IsolateCheckConfig(
+    keyword: keyword,
+    timeoutSeconds: timeoutSeconds,
+    checkSearch: checkSearch,
+    checkDiscovery: checkDiscovery,
+    checkInfo: checkInfo,
+    checkCategory: checkCategory,
+    checkContent: checkContent,
+  );
+
   /// Upper bound for one source check.
   ///
   /// Stage-level checks still use [timeoutDuration]. This budget prevents a
@@ -455,21 +466,11 @@ class CheckSourceService extends ChangeNotifier {
     _setSourceProgress(source, '等待校驗', isFinal: false, hasIssue: false);
     _notifyIfAlive();
 
-    final isoConfig = IsolateCheckConfig(
-      keyword: config.keyword,
-      timeoutSeconds: config.timeoutSeconds,
-      checkSearch: config.checkSearch,
-      checkDiscovery: config.checkDiscovery,
-      checkInfo: config.checkInfo,
-      checkCategory: config.checkCategory,
-      checkContent: config.checkContent,
-    );
-
     SourceCheckIsolateHandle handle;
     try {
       handle = await spawnSourceCheck(
         source,
-        isoConfig,
+        config.forIsolate,
         config.sourceTimeoutDuration,
       );
     } catch (e, stack) {

@@ -228,7 +228,9 @@ class SourceChecker {
   final List<String> _diagnostics = [];
 
   /// 校驗送出的請求與網站的回應，依序（`recordRequestUrls`）。
-  final RequestLog _requests = RequestLog(withResponses: true);
+  final RequestLog _requests = RequestLog(
+    responsePreview: RequestLog.diagnosisPreview,
+  );
 
   /// 目前這一段（[_fetch]）的請求從 [_requests] 的哪一行開始。
   int _stageRequestStart = 0;

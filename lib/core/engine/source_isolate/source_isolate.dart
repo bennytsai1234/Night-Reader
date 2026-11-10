@@ -427,7 +427,7 @@ final class SourceWorker {
           call.id,
           block.task,
           recordRequests: block.recordRequests,
-          recordResponses: block.recordResponses,
+          responsePreview: block.responsePreview,
         ),
       );
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
@@ -664,7 +664,7 @@ void _main(SendPort mainPort) {
           :final id,
           :final task,
           :final recordRequests,
-          :final recordResponses,
+          :final responsePreview,
         ):
           final cancelToken = CancelToken();
           performs[id] = cancelToken;
@@ -674,7 +674,7 @@ void _main(SendPort mainPort) {
                 task,
                 cancelToken,
                 recordRequests: recordRequests,
-                recordResponses: recordResponses,
+                responsePreview: responsePreview,
               ),
             ]);
           } finally {
@@ -770,9 +770,9 @@ Future<Uint8List> _perform(
   Future<Object?> Function() task,
   CancelToken cancelToken, {
   required bool recordRequests,
-  required bool recordResponses,
+  required int? responsePreview,
 }) async {
-  final log = RequestLog(withResponses: recordResponses);
+  final log = RequestLog(responsePreview: responsePreview);
   try {
     final value = await _runCancellable(
       (_) => recordRequests ? log.run(task) : task(),
@@ -873,7 +873,7 @@ final class _Block {
     this.taskId,
     this.task, {
     required this.recordRequests,
-    required this.recordResponses,
+    required this.responsePreview,
   });
 
   final int? taskId;
@@ -882,8 +882,9 @@ final class _Block {
   /// 書源除錯或校驗正在記這個工作送出的請求網址（`RequestLog`）。
   final bool recordRequests;
 
-  /// 書源校驗連回應也記（`RequestLog.withResponses`）。
-  final bool recordResponses;
+  /// 書源校驗與 AI 修書源連回應也記，每個記開頭幾個字
+  /// （`RequestLog.responsePreview`）。
+  final int? responsePreview;
 }
 
 /// 主 isolate 請網路 isolate 做停住的 worker 交來的 [task]。
@@ -892,13 +893,13 @@ final class _Perform {
     this.id,
     this.task, {
     required this.recordRequests,
-    required this.recordResponses,
+    required this.responsePreview,
   });
 
   final int id;
   final Future<Object?> Function() task;
   final bool recordRequests;
-  final bool recordResponses;
+  final int? responsePreview;
 }
 
 final class _CancelPerform {

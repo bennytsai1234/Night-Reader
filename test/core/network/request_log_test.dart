@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:fast_gbk/fast_gbk.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/network/request_log.dart';
 
@@ -14,7 +15,7 @@ Response<dynamic> _response(String url, int status, Object? data) =>
 void main() {
   test('each response names its URL, since replies can come back out of '
       'order', () async {
-    final log = RequestLog(withResponses: true);
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
     await log.run(() async {
       recordResponse(_response('https://site.example/fast', 200, 'FAST'));
       recordResponse(_response('https://site.example/slow', 200, 'SLOW'));
@@ -27,7 +28,7 @@ void main() {
   });
 
   test('busy, empty and unreachable count as the site faltering', () async {
-    final log = RequestLog(withResponses: true);
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
     await log.run(() async {
       recordResponse(_response('https://a.example', 200, '<p>正常</p>'));
       recordResponse(_response('https://b.example', 503, 'busy'));
@@ -56,7 +57,7 @@ void main() {
   });
 
   test('a rendered page says it has no status code', () async {
-    final log = RequestLog(withResponses: true);
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
     await log.run(() async {
       recordRenderedPage('https://site.example/page', '');
     });
@@ -75,5 +76,35 @@ void main() {
 
     expect(log.lines, ['https://site.example/a']);
     expect(log.transientResponses, 0);
+  });
+
+  test('a GBK page reads as Chinese, not mojibake', () async {
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    await log.run(() async {
+      recordResponse(
+        _response(
+          'https://gbk.example',
+          200,
+          gbk.encode('<meta charset="gbk"><p>第一章 夜雨</p>'),
+        ),
+      );
+    });
+
+    expect(log.lines.single, contains('第一章 夜雨'));
+  });
+
+  test('the preview keeps as many characters as asked', () async {
+    final page = 'x' * 5000;
+    final short = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    final long = RequestLog(responsePreview: 4000);
+    for (final log in [short, long]) {
+      await log.run(() async {
+        recordResponse(_response('https://site.example', 200, page));
+      });
+    }
+
+    expect(short.lines.single, endsWith('${'x' * 160}…'));
+    expect(long.lines.single, endsWith('${'x' * 4000}…'));
+    expect(long.lines.single, isNot(contains('x' * 4001)));
   });
 }
