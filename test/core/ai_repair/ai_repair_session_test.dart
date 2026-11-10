@@ -116,6 +116,7 @@ void main() {
     Set<String> timesOut = const {},
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
+    bool Function(BookSource source)? followsKeyword,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -126,6 +127,7 @@ void main() {
           : check?.call(source) ??
                 _checked(source, broken: broken[source.bookSourceUrl]),
       probe: (source, _) async => _probe(source),
+      keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
         return '  ← $url 200：<form action="/s2">';
@@ -232,6 +234,7 @@ void main() {
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (source, _) async => _probe(source),
+      keywordCheck: (_, _) async => true,
       ask: (messages, _) async {
         asked.add(List.of(messages));
         if (calls++ == 0) throw const AiEmptyReply();
@@ -354,6 +357,39 @@ void main() {
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
+  test('a source whose only problem was discovery is not called fixed while '
+      'discovery still fails', () async {
+    final s = session(
+      [_source('https://site.example', content: 'class.txt@text')],
+      replies: [
+        _command('test'),
+        jsonEncode({'action': 'give_up', 'reason': '發現頁修不好'}),
+      ],
+      check: (source) => _checked(source, broken: _discoveryBroken),
+    );
+
+    await s.start();
+
+    expect(asked[1].last.content, startsWith('# 書源校驗沒過：發現失效'));
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(applied, isEmpty);
+  });
+
+  test('a search that returns the same books for any word is not a fix, and '
+      'the AI is told why', () async {
+    var checks = 0;
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test'), _command('test')],
+      followsKeyword: (_) => ++checks > 1,
+    );
+
+    await s.start();
+
+    expect(asked[1].last.content, contains('搜尋結果跟關鍵字無關'));
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+  });
+
   test('a fix is kept when only discovery still fails and the AI did not '
       'touch discovery', () async {
     final s = session(
@@ -418,6 +454,7 @@ void main() {
         service: clipboard ? null : _service,
         check: (source, _) async => _checked(source),
         probe: (_, _) async => probe,
+        keywordCheck: (_, _) async => true,
         ask: (messages, _) async {
           asked.add(List.of(messages));
           return jsonEncode({'action': 'give_up', 'reason': '不修'});
@@ -467,6 +504,7 @@ void main() {
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (source, _) async => _probe(source),
+      keywordCheck: (_, _) async => true,
       ask: (_, _) async => _command('submit'),
       apply: (source, _) async {
         s.stop();
@@ -490,6 +528,7 @@ void main() {
         service: _service,
         check: (source, _) async => _checked(source),
         probe: (source, _) async => _probe(source),
+        keywordCheck: (_, _) async => true,
         ask: (_, _) async => _command('submit'),
         apply: (_, _) async => throw AiRepairConflict(conflict),
         secrets: (_) async => const {},
@@ -528,6 +567,7 @@ void main() {
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (source, _) async => _probe(source),
+      keywordCheck: (_, _) async => true,
       ask: (_, cancelToken) async {
         s.stop();
         throw DioException.requestCancelled(

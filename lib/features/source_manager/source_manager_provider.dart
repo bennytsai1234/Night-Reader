@@ -1200,7 +1200,7 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  /// 清掉校驗留下的狀態分組與錯誤註解，書源回到可用；不給網址就清全部，
+  /// 清掉校驗留下的狀態分組、「AI 修不好」與錯誤註解，書源回到可用；不給網址就清全部，
   /// 連上次的校驗摘要一起收起。回傳實際有變動的書源數。
   Future<int> clearCheckMarks([Set<String>? urls]) async {
     if (!_beginBatchOperation()) return 0;
@@ -1212,8 +1212,10 @@ class SourceManagerProvider with ChangeNotifier {
       for (final source in targets) {
         final group = source.bookSourceGroup;
         final comment = source.bookSourceComment;
-        source.removeInvalidGroups();
-        source.removeErrorComment();
+        source
+          ..removeInvalidGroups()
+          ..removeGroup(aiUnfixableSourceGroupTag)
+          ..removeErrorComment();
         if (source.bookSourceGroup != group ||
             source.bookSourceComment != comment) {
           changed.add(source);

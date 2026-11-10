@@ -63,6 +63,9 @@ class AiRepairJob {
 
   /// 給 AI 與剪貼簿用的現況：原本的校驗結果與試抓。
   String? _checkResult;
+
+  /// 原本的書源校驗出來壞在哪；校驗逾時是 null。
+  SourceHealthCategory? _before;
   SourceProbeReport? _probe;
 
   /// 這個書源的登入資料、Cookie 與變數的值，送出前遮掉（[aiRepairSecretsOf]）。
@@ -94,6 +97,12 @@ typedef AiRepairFetcher = Future<String> Function(
   CancelToken cancelToken,
 );
 
+/// 搜尋結果跟關鍵字有沒有關係（[searchFollowsKeyword]）。
+typedef AiRepairKeywordCheck = Future<bool> Function(
+  BookSource source,
+  CancelToken cancelToken,
+);
+
 /// 問 AI 一次。
 typedef AiRepairAsker = Future<String> Function(
   List<AiMessage> messages,
@@ -112,6 +121,7 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairProber? probe,
     AiRepairAsker? ask,
     AiRepairFetcher? fetchPage,
+    AiRepairKeywordCheck? keywordCheck,
     Future<void> Function(BookSource repaired, BookSource original)? apply,
     Future<void> Function(String text)? copy,
     AiRepairBackups? backups,
@@ -123,6 +133,7 @@ class AiRepairSession extends ChangeNotifier {
        _check = check ?? defaultCheck,
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
+       _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
        _ask = ask ?? (service == null ? null : _defaultAsk(service, onUsage)),
        _hasBudget = hasBudget ?? _always,
        _copy = copy ?? _defaultCopy,
@@ -148,6 +159,7 @@ class AiRepairSession extends ChangeNotifier {
   final AiRepairChecker _check;
   final AiRepairProber _probe;
   final AiRepairFetcher _fetchPage;
+  final AiRepairKeywordCheck _keywordCheck;
   final AiRepairAsker? _ask;
   final Future<void> Function(String text) _copy;
   final Future<Set<String>> Function(BookSource source) _secretsOf;
@@ -249,6 +261,9 @@ class AiRepairSession extends ChangeNotifier {
     final checked = await _guard(() => _check(original, _cancelToken));
     if (_stopped) return;
     final checkText = _checkText(checked);
+    job._before = checked == null
+        ? null
+        : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth.category;
     job._checkResult = _redact(
       job,
       [checkText, ...?checked?.diagnostics].join('\n\n'),
@@ -458,7 +473,7 @@ class AiRepairSession extends ChangeNotifier {
     var checked = await _guard(() => _check(candidate, _cancelToken));
     if (_stopped) return null;
     bool usable(SourceCheckIsolateResult? result) =>
-        usableFix(result, job.original, candidate);
+        usableFix(result, job.original, candidate, before: job._before);
     if (probeSucceeded && !usable(checked)) {
       step.detail = '${_checkText(checked)}；稍後再校驗一次…';
       _record('校驗修好的書源：${_checkText(checked)}，稍後再校驗一次');
@@ -484,6 +499,22 @@ class AiRepairSession extends ChangeNotifier {
         );
       }
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
+      return null;
+    }
+    // 校驗只看搜尋有沒有回書：規則抓的是頁面上固定的推薦書也會過。
+    step.detail = '$checkText；確認搜尋結果跟關鍵字有關…';
+    _notify();
+    final follows = await _guard(() => _keywordCheck(candidate, _cancelToken));
+    if (_stopped) return null;
+    if (follows == false) {
+      const unrelated = '搜尋結果跟關鍵字無關：搜一個不可能有的詞也回同樣的書，抓到的是頁面上固定的推薦書';
+      _record('校驗修好的書源：$unrelated');
+      _finish(step, unrelated, failed: true);
+      if (!last) {
+        return '# 書源校驗沒過：$unrelated（用「$nonsenseKeyword」搜尋也得到同樣的書）。'
+            '要抓的是搜尋結果；網站真的搜不到書時就放棄。';
+      }
+      _fail(job, ['校驗：$unrelated', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }
     job._committing = true;
@@ -513,15 +544,19 @@ class AiRepairSession extends ChangeNotifier {
 
   static String _firstLine(String text) => text.split('\n').first;
 
-  /// 校驗的結果可以存：沒問題，或只剩發現頁失效、而 AI 沒動發現的規則——
-  /// 發現頁原本就壞了，搜尋與閱讀修好了還是比原本好。
+  /// 校驗的結果可以存：沒問題；或原本搜尋、閱讀有壞（[before] 不是只壞
+  /// 發現頁），現在只剩發現頁失效、而 AI 沒動發現的規則——發現頁原本就壞
+  /// 了，搜尋與閱讀修好了還是比原本好。原本就只壞發現頁、或不知道原本壞在
+  /// 哪（[before] 是 null）的，要整個沒問題才算。
   static bool usableFix(
     SourceCheckIsolateResult? result,
     BookSource original,
-    BookSource candidate,
-  ) {
+    BookSource candidate, {
+    required SourceHealthCategory? before,
+  }) {
     if (result == null) return false;
     if (result.isHealthy) return true;
+    if (before == null || _discoveryOnly.contains(before)) return false;
     final category = BookSource.fromJson(result.updatedSourceJson)
         .runtimeHealth
         .category;
@@ -661,6 +696,19 @@ class AiRepairSession extends ChangeNotifier {
     );
   }
 
+  static Future<bool> _defaultKeywordCheck(
+    BookSource source,
+    CancelToken cancelToken,
+  ) async {
+    final config = await _config();
+    return searchFollowsKeyword(
+      source,
+      keyword: source.getCheckKeyword(config.keyword),
+      timeout: config.sourceTimeoutDuration,
+      cancelToken: cancelToken,
+    );
+  }
+
   static Future<String> _defaultFetchPage(
     BookSource source,
     String url,
@@ -707,6 +755,8 @@ Future<void> saveRepairedSource(
       current.bookSourceName != original.bookSourceName) {
     throw const AiRepairConflict('修的這段時間書源被改過了（例如同步），沒有存。');
   }
+  // 修好了：之前標的「AI 修不好」拿掉。
+  repaired.removeGroup(aiUnfixableSourceGroupTag);
   final moved = repaired.bookSourceUrl != original.bookSourceUrl;
   if (moved && await dao.getByUrl(repaired.bookSourceUrl) != null) {
     throw AiRepairConflict('新網址 ${repaired.bookSourceUrl} 已經有別的書源，沒有存。');

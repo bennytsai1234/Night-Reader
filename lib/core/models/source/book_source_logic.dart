@@ -20,6 +20,10 @@ const String loginRequiredSourceGroupTag = '需要登入';
 const String verificationRequiredSourceGroupTag = '需要在網頁驗證';
 const String abnormalSourceGroupTag = '異常';
 
+/// 修復異常書源請 AI 修過、沒修好（ADR 0054）：下次整批修復跳過。不是校驗的
+/// 標記，重新校驗不會拿掉；清除校驗標記、修好、改了規則存檔時拿掉。
+const String aiUnfixableSourceGroupTag = 'AI 修不好';
+
 /// 「需要登入」是書源的狀態，不是壞掉（ADR 0038）：照樣參加搜尋（很多書源
 /// 搜尋不用登入）、照樣能開書，讀到要登入的地方再提示去登入；不列入清理。
 /// 登入成功後拿掉這個標記。

@@ -85,6 +85,7 @@ final _giveUp = jsonEncode({'action': 'give_up', 'reason': '網站關了'});
 void main() {
   late List<BookSource> saved;
   late List<String> gone;
+  late List<String> unfixable;
   late List<String> asked;
   late AiRepairBackups backups;
 
@@ -94,6 +95,7 @@ void main() {
     backups = AiRepairBackups();
     saved = [];
     gone = [];
+    unfixable = [];
     asked = [];
   });
 
@@ -119,6 +121,7 @@ void main() {
       check: (source, _) async => _checked(source),
       save: (repaired, original) async => saved.add(repaired),
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
+      markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
       session: (source, item) {
         final answers = replies?.call(source.bookSourceUrl) ?? [_fix];
         var next = 0;
@@ -127,6 +130,7 @@ void main() {
           service: _service,
           check: (s, _) async => _checked(s),
           probe: (s, _) async => _probe(s),
+          keywordCheck: (_, _) async => true,
           ask: (_, _) async {
             asked.add(source.bookSourceUrl);
             b.tokensUsed += tokensPerAnswer;
@@ -233,6 +237,38 @@ void main() {
     expect(b.items.first.outcome, RepairOutcome.notFixed);
     expect(b.items.last.outcome, RepairOutcome.notFixed);
     expect(b.items.last.detail, contains('沒修好'));
+    expect(unfixable, ['https://a.site.example', 'https://b.site.example']);
+  });
+
+  test('a source the AI already could not fix, and one that never had a '
+      'search, are skipped without asking the AI', () async {
+    final tried = _source('https://tried.example')
+      ..addGroup(aiUnfixableSourceGroupTag);
+    final exploreOnly = BookSource(
+      bookSourceUrl: 'https://explore.example',
+      bookSourceName: '只有發現',
+      exploreUrl: '分類::/list/1',
+    );
+    const searchBroken = SourceRuntimeHealth(
+      category: SourceHealthCategory.searchBroken,
+      label: '搜尋失效',
+      description: '',
+      allowsSearch: false,
+      allowsReading: true,
+      cleanupCandidate: false,
+      quarantined: false,
+    );
+    final b = batch(
+      [tried, exploreOnly],
+      recheck: {'https://explore.example': searchBroken},
+    );
+
+    await b.start();
+
+    expect(b.count(RepairOutcome.skipped), 2);
+    expect(b.items.first.detail, contains('AI 之前試過修不好'));
+    expect(b.items.last.detail, contains('沒有搜尋規則'));
+    expect(asked, isEmpty);
   });
 
   test('sites that answer normally go to the AI before unreachable ones, and '

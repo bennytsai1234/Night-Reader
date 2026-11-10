@@ -85,6 +85,9 @@ class RepairItem {
   /// 這個書源用了多少 token。
   int tokens = 0;
 
+  /// 重新校驗出來壞在哪；判斷修好了沒要用（[AiRepairSession.usableFix]）。
+  SourceHealthCategory? before;
+
   bool get isFinished => outcome != null;
 }
 
@@ -103,13 +106,15 @@ class SourceRepairBatch extends ChangeNotifier {
     AiRepairChecker? check,
     Future<void> Function(BookSource repaired, BookSource original)? save,
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
+    Future<void> Function(BookSource source)? markUnfixable,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
   }) : items = [for (final source in sources) RepairItem(source)],
        _recheck = recheck ?? _defaultRecheck,
        _checkSite = checkSite ?? _defaultCheckSite,
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
-       _markGone = markGone ?? _defaultMarkGone {
+       _markGone = markGone ?? _defaultMarkGone,
+       _markUnfixable = markUnfixable ?? markAiUnfixable {
     _session = session ?? _defaultSession;
   }
 
@@ -137,6 +142,7 @@ class SourceRepairBatch extends ChangeNotifier {
   final AiRepairChecker _check;
   final Future<void> Function(BookSource repaired, BookSource original) _save;
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
+  final Future<void> Function(BookSource source) _markUnfixable;
   late final AiRepairSession Function(BookSource source, RepairItem item)
   _session;
 
@@ -214,10 +220,18 @@ class SourceRepairBatch extends ChangeNotifier {
     for (final item in items) {
       final entry = entries[item.source.bookSourceUrl];
       if (entry == null) continue;
+      item.before = entry.health.category;
+      final source = item.source;
       if (entry.isHealthy) {
         _finish(item, RepairOutcome.healthy, '重新校驗就沒問題了');
       } else if (_notRepairable.contains(entry.health.category)) {
         _finish(item, RepairOutcome.skipped, '${entry.health.label}：不修');
+      } else if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
+        _finish(item, RepairOutcome.skipped, 'AI 之前試過修不好，這次跳過');
+      } else if ((source.searchUrl?.trim() ?? '').isEmpty &&
+          (source.exploreUrl?.trim() ?? '').isNotEmpty &&
+          entry.health.category == SourceHealthCategory.searchBroken) {
+        _finish(item, RepairOutcome.skipped, '沒有搜尋規則，本來就只能從發現頁找書');
       } else {
         item.detail = '${entry.health.label}：${entry.message}';
       }
@@ -293,12 +307,14 @@ class SourceRepairBatch extends ChangeNotifier {
         await _share(lead, others, fixed);
       } else if (!_stopped && _hasBudget) {
         _finish(lead, RepairOutcome.notFixed, job.explanation ?? '沒修好');
+        await _markUnfixable(lead.source);
         for (final item in others) {
           _finish(
             item,
             RepairOutcome.notFixed,
             '同網站的「${lead.source.bookSourceName}」沒修好',
           );
+          await _markUnfixable(item.source);
         }
       }
       stageDone++;
@@ -335,7 +351,12 @@ class SourceRepairBatch extends ChangeNotifier {
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
     final checked = await _check(candidate, _cancelToken);
     if (checked == null ||
-        !AiRepairSession.usableFix(checked, item.source, candidate)) {
+        !AiRepairSession.usableFix(
+          checked,
+          item.source,
+          candidate,
+          before: item.before,
+        )) {
       return false;
     }
     final saved = BookSource.fromJson(checked.updatedSourceJson);
@@ -457,6 +478,16 @@ class SourceRepairBatch extends ChangeNotifier {
           _notify();
         },
       );
+}
+
+/// AI 修過、沒修好：書源標「AI 修不好」，下次整批修復跳過（ADR 0054）；書源
+/// 在這段時間被刪掉了就不寫。
+Future<void> markAiUnfixable(BookSource source) async {
+  final dao = getIt<BookSourceDao>();
+  final current = await dao.getByUrl(source.bookSourceUrl);
+  if (current == null || current.hasGroupTag(aiUnfixableSourceGroupTag)) return;
+  current.addGroup(aiUnfixableSourceGroupTag);
+  await dao.upsert(current);
 }
 
 /// 網站不在了：書源標「網站失效」（ADR 0054），原因寫進錯誤註解；書源在這

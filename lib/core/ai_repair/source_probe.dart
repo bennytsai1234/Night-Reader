@@ -7,7 +7,9 @@ import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 
 /// 一次試抓：照書源除錯從搜尋一路抓到正文（[SourceDebugService]），記下除錯
@@ -254,3 +256,34 @@ Future<List<String>> Function(CancelToken) _fetchTask(
   }
   return requests.lines;
 };
+
+/// 搜尋結果跟關鍵字有沒有關係：用 [keyword] 與一個不可能有的詞各搜一次，
+/// 不可能的詞也搜出書、而且前幾本和 [keyword] 的一模一樣，是 false——規則
+/// 抓到的是頁面上固定的推薦書，不是搜尋結果（實測 AI 這樣「修好」過）。
+/// 搜不到、出錯或逾時都當成有關係，交給書源校驗判斷。
+Future<bool> searchFollowsKeyword(
+  BookSource source, {
+  required String keyword,
+  required Duration timeout,
+  CancelToken? cancelToken,
+}) async {
+  final service = BookSourceService();
+  try {
+    final real = await service
+        .searchBooks(source, keyword, cancelToken: cancelToken)
+        .timeout(timeout);
+    if (real.isEmpty) return true;
+    final nonsense = await service
+        .searchBooks(source, nonsenseKeyword, cancelToken: cancelToken)
+        .timeout(timeout);
+    String names(List<SearchBook> books) =>
+        books.take(5).map((book) => book.name).join('|');
+    return nonsense.isEmpty || names(real) != names(nonsense);
+  } catch (error) {
+    AppLog.d('搜尋與關鍵字的檢查沒做成: $error');
+    return true;
+  }
+}
+
+/// 不可能搜到書的詞。
+const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
