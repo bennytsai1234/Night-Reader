@@ -6,6 +6,8 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/shared/widgets/book_kind_mark.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
@@ -115,10 +117,15 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
     }
   }
 
-  /// 紀錄只有書名。書還在（書架上優先，其次最近讀的那本）就開書籍詳情；
-  /// 已經移除的書找不到，改用書名搜尋。
+  static Widget? _kindMark(String recordName) {
+    final kind = BookSourceKind.splitRecordName(recordName).kind;
+    return BookKindMark.iconOf(kind) == null ? null : BookKindMark(kind);
+  }
+
+  /// 紀錄只有書名（漫畫、有聲帶類別前綴，ADR 0053）。書還在（書架上優先，
+  /// 其次最近讀的那本）就開書籍詳情；已經移除的書找不到，改用書名搜尋。
   Future<void> _openBook(String bookName) async {
-    final books = await getIt<BookDao>().getByName(bookName);
+    final books = await getIt<BookDao>().getByRecordName(bookName);
     if (!mounted) return;
     Book? book;
     for (final candidate in books) {
@@ -135,7 +142,9 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
       MaterialPageRoute(
         builder: (_) => found != null
             ? BookDetailPage(book: found)
-            : SearchPage(initialQuery: bookName),
+            : SearchPage(
+                initialQuery: BookSourceKind.splitRecordName(bookName).name,
+              ),
       ),
     );
   }
@@ -202,8 +211,12 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
                 children: [
                   for (final record in records)
                     GroupedRow(
-                      // 顯示時做繁簡轉換，和書架一致；找書仍用原文。
-                      title: context.zh(record.bookName),
+                      // 顯示時做繁簡轉換，和書架一致；找書仍用原文。同名的
+                      // 漫畫、有聲書書名後面帶記號（ADR 0053）。
+                      title: context.zh(
+                        BookSourceKind.splitRecordName(record.bookName).name,
+                      ),
+                      titleMark: _kindMark(record.bookName),
                       value: _formatDuration(record.readTime),
                       onTap: () => _openBook(record.bookName),
                     ),

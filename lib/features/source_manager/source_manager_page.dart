@@ -965,7 +965,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
         final count = await p.importSources(confirmed);
         if (context.mounted) {
           final unsupportedCount = confirmed
-              .where((source) => !source.isNovelTextSource)
+              .where(
+                (source) => source.sourceKind == BookSourceKind.unsupported,
+              )
               .length;
           messenger.showSnackBar(
             SnackBar(

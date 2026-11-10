@@ -126,6 +126,13 @@ class RestoreService {
         failedFiles.add(fileName);
       }
     }
+    // 書與書源照 ZIP 裡的順序分開寫進來：都寫完再讓書跟著書源的類型
+    // （ADR 0053）。
+    try {
+      await _sourceDao.followAllKinds();
+    } catch (e) {
+      AppLog.e('Restore: books following source kinds failed: $e', error: e);
+    }
     // 舊備份帶的正文與目錄可能屬於沒還原的書架以外的書，或早就刪掉的書。
     try {
       await BookStorageService().discardUnshelvedBooks();
@@ -277,7 +284,9 @@ class RestoreService {
             break;
           case 'bookSources.json':
           case 'bookSource.json':
-            await _sourceDao.upsert(BookSource.fromJson(item));
+            await _sourceDao.upsert(
+              BookSource.fromJson(item)..prepareIncoming(),
+            );
             break;
           case 'replaceRules.json':
           case 'replaceRule.json':

@@ -177,9 +177,6 @@ class BookshelfExchangeService {
       }
     }
 
-    for (final source in sources) {
-      await _sourceDao.upsert(source);
-    }
     for (final book in books) {
       final normalized =
           book.copyWith(
@@ -192,6 +189,10 @@ class BookshelfExchangeService {
               if (chapter.bookUrl == book.bookUrl) chapter,
           ]);
       await _bookDao.upsert(normalized);
+    }
+    // 書源在書之後存：存書源時書跟著它的類型（ADR 0053），書已經在才跟得到。
+    for (final source in sources) {
+      await _sourceDao.upsert(source);
     }
     if (chapters.isNotEmpty) {
       await _chapterDao.insertChapters(chapters);
@@ -233,7 +234,7 @@ class BookshelfExchangeService {
   List<BookSource> _parseSources(List<dynamic> raw) {
     return raw
         .whereType<Map<String, dynamic>>()
-        .map(BookSource.fromJson)
+        .map((json) => BookSource.fromJson(json)..prepareIncoming())
         .toList();
   }
 

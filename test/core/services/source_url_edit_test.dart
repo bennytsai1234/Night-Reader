@@ -149,6 +149,29 @@ void main() {
     },
   );
 
+  test('changing the URL and the type together moves the books and changes '
+      'their kind (ADR 0053)', () async {
+    await getIt<BookSourceDao>().upsert(
+      BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊名'),
+    );
+    await getIt<BookDao>().upsert(
+      Book(bookUrl: '$oldUrl/book/1', name: '甲書', origin: oldUrl),
+    );
+
+    await getIt<BookSourceDao>().saveEdited(
+      BookSource(
+        bookSourceUrl: newUrl,
+        bookSourceName: '新名',
+        bookSourceType: 2,
+      ),
+      previousUrl: oldUrl,
+    );
+
+    final book = (await getIt<BookDao>().getByUrl('$oldUrl/book/1'))!;
+    expect(book.origin, newUrl);
+    expect(book.bookKind, BookSourceKind.comic);
+  });
+
   test('saving without changing the URL leaves the books alone', () async {
     await getIt<BookSourceDao>().upsert(
       BookSource(bookSourceUrl: oldUrl, bookSourceName: '舊名'),

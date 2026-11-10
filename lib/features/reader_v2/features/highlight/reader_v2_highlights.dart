@@ -21,7 +21,7 @@ class ReaderV2Highlights extends ValueNotifier<List<Highlight>> {
        _dao = dao,
        super(const <Highlight>[]) {
     _subscription = dao
-        ?.watchByBook(book.name, book.author)
+        ?.watchByBook(book.recordName, book.author)
         .listen((items) => value = items);
   }
 
@@ -82,7 +82,7 @@ class ReaderV2Highlights extends ValueNotifier<List<Highlight>> {
     return dao.add(
       Highlight(
         id: 0,
-        bookName: _book.name,
+        bookName: _book.recordName,
         bookAuthor: _book.author,
         chapterIndex: location.chapterIndex,
         chapterTitle: chapterTitle,

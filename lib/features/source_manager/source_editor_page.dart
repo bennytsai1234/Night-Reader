@@ -40,6 +40,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
 
   /// 開啟時各欄位的內容；與目前內容不同就是有未儲存的修改。
   late final Map<String, String> _initialTexts;
+  late final int _initialSourceType;
   bool _dirty = false;
 
   @override
@@ -55,15 +56,18 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     _initialTexts = {
       for (final entry in _controllers.entries) entry.key: entry.value.text,
     };
+    _initialSourceType = _editingSource.bookSourceType;
     for (final controller in _controllers.values) {
       controller.addListener(_updateDirty);
     }
   }
 
   void _updateDirty() {
-    final dirty = _controllers.entries.any(
-      (entry) => entry.value.text != _initialTexts[entry.key],
-    );
+    final dirty =
+        _editingSource.bookSourceType != _initialSourceType ||
+        _controllers.entries.any(
+          (entry) => entry.value.text != _initialTexts[entry.key],
+        );
     if (dirty != _dirty) setState(() => _dirty = dirty);
   }
 
@@ -392,7 +396,14 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          SourceEditBasic(source: _editingSource, controllers: _controllers),
+          SourceEditBasic(
+            source: _editingSource,
+            controllers: _controllers,
+            onTypeChanged: (type) {
+              setState(() => _editingSource.bookSourceType = type);
+              _updateDirty();
+            },
+          ),
           SourceEditSearch(controllers: _controllers),
           SourceEditExplore(controllers: _controllers),
           SourceEditBookInfo(controllers: _controllers),
