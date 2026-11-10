@@ -32,12 +32,16 @@ class _Service implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-AiChatClient _client(_Service adapter, {String apiKey = 'sk-1'}) =>
-    AiChatClient((
-      baseUrl: 'https://ai.example/v1/',
-      apiKey: apiKey,
-      model: 'm',
-    ), dio: Dio()..httpClientAdapter = adapter);
+AiChatClient _client(
+  _Service adapter, {
+  String apiKey = 'sk-1',
+  String effort = '',
+}) => AiChatClient((
+  baseUrl: 'https://ai.example/v1/',
+  apiKey: apiKey,
+  model: 'm',
+  effort: effort,
+), dio: Dio()..httpClientAdapter = adapter);
 
 void main() {
   test('the endpoint is the base URL plus chat/completions, once', () {
@@ -72,6 +76,33 @@ void main() {
     );
     expect(service.request!.headers['Authorization'], 'Bearer sk-1');
     expect(service.request!.data, containsPair('model', 'm'));
+  });
+
+  test('the thinking effort is sent only when one is chosen, and the usage '
+      'is reported', () async {
+    Map<String, Object> reply() => {
+      'choices': [
+        {
+          'message': {'role': 'assistant', 'content': 'OK'},
+        },
+      ],
+      'usage': {
+        'prompt_tokens': 100,
+        'completion_tokens': 20,
+        'prompt_cache_hit_tokens': 60,
+      },
+    };
+    final plain = _Service(200, reply());
+    await _client(plain).complete([(role: 'user', content: 'hi')]);
+    expect(plain.request!.data, isNot(contains('reasoning_effort')));
+
+    final low = _Service(200, reply());
+    AiUsage? usage;
+    await _client(low, effort: 'low').complete([
+      (role: 'user', content: 'hi'),
+    ], onUsage: (value) => usage = value);
+    expect(low.request!.data, containsPair('reasoning_effort', 'low'));
+    expect(usage, (prompt: 100, cached: 60, completion: 20));
   });
 
   test('a local service without a key sends no Authorization', () async {

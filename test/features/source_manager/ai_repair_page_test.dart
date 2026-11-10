@@ -12,7 +12,12 @@ import 'package:night_reader/features/source_manager/ai_repair/ai_repair_page.da
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
-const _service = (baseUrl: 'https://ai.example/v1', apiKey: 'k', model: 'm');
+const _service = (
+  baseUrl: 'https://ai.example/v1',
+  apiKey: 'k',
+  model: 'm',
+  effort: '',
+);
 
 SourceCheckIsolateResult _checked(BookSource source) {
   final healthy = source.ruleContent?.content == 'class.txt@text';
@@ -50,16 +55,15 @@ void main() {
   testWidgets('steps fill in as the repair goes, then 完成', (tester) async {
     final reply = Completer<String>();
     final session = AiRepairSession(
-      sources: [
-        BookSource(
-          bookSourceUrl: 'https://site.example',
-          bookSourceName: '筆趣閣',
-          ruleContent: ContentRule(content: 'id.old@text'),
-        ),
-      ],
+      source: BookSource(
+        bookSourceUrl: 'https://site.example',
+        bookSourceName: '筆趣閣',
+        ruleContent: ContentRule(content: 'id.old@text'),
+      ),
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (_, _) async => _probe,
+      keywordCheck: (_, _) async => true,
       ask: (_, _) => reply.future,
       apply: (_, _) async {},
       secrets: (_) async => const {},
@@ -100,16 +104,15 @@ void main() {
   ) async {
     final copied = <String>[];
     final session = AiRepairSession(
-      sources: [
-        BookSource(
-          bookSourceUrl: 'https://site.example',
-          bookSourceName: '筆趣閣',
-          ruleContent: ContentRule(content: 'id.old@text'),
-        ),
-      ],
+      source: BookSource(
+        bookSourceUrl: 'https://site.example',
+        bookSourceName: '筆趣閣',
+        ruleContent: ContentRule(content: 'id.old@text'),
+      ),
       service: null,
       check: (source, _) async => _checked(source),
       probe: (_, _) async => _probe,
+      keywordCheck: (_, _) async => true,
       apply: (_, _) async {},
       secrets: (_) async => const {},
       copy: (text) async => copied.add(text),

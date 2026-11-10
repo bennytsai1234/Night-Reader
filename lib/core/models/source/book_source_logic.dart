@@ -20,6 +20,10 @@ const String loginRequiredSourceGroupTag = '需要登入';
 const String verificationRequiredSourceGroupTag = '需要在網頁驗證';
 const String abnormalSourceGroupTag = '異常';
 
+/// 修復異常書源請 AI 修過、沒修好（ADR 0054）：下次整批修復跳過。不是校驗的
+/// 標記，重新校驗不會拿掉；清除校驗標記、修好、改了規則存檔時拿掉。
+const String aiUnfixableSourceGroupTag = 'AI 修不好';
+
 /// 「需要登入」是書源的狀態，不是壞掉（ADR 0038）：照樣參加搜尋（很多書源
 /// 搜尋不用登入）、照樣能開書，讀到要登入的地方再提示去登入；不列入清理。
 /// 登入成功後拿掉這個標記。
@@ -321,6 +325,31 @@ Set<String> splitSourceGroups(String? value) {
       .toSet();
 }
 
+/// 網站那邊的三種問題，照這個順序認（舊版一次標了好幾個時取前面的）。
+const List<String> _upstreamTags = [
+  siteBrokenSourceGroupTag,
+  upstreamBlockedSourceGroupTag,
+  timeoutSourceGroupTag,
+];
+
+/// 網站那邊的問題：書源先隔離（排出搜尋與閱讀），[tag] 說是哪一種——
+/// 「網站失效」（網域查不到、網站不在了）、「上游異常」（連不上、回錯誤、
+/// 擋下夜讀）、「校驗超時」（太慢）。
+SourceRuntimeHealth upstreamHealth(String tag) => SourceRuntimeHealth(
+  category: SourceHealthCategory.upstreamUnstable,
+  label: tag,
+  description: switch (tag) {
+    siteBrokenSourceGroupTag => '網域查不到或網站已經不在，換了網址才可能恢復',
+    timeoutSourceGroupTag => '網站回應太慢，來源先隔離但不視為永久失效',
+    quarantineSourceGroupTag => '校驗流程異常，先隔離避免影響其他書源',
+    _ => '上游暫時不可用，來源先隔離但不視為永久失效',
+  },
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
 /// BookSource 的業務邏輯擴展
 extension BookSourceLogic on BookSourceBase {
   // 分組操作
@@ -379,9 +408,9 @@ extension BookSourceLogic on BookSourceBase {
         contentBrokenSourceGroupTag,
         quarantineSourceGroupTag,
       ],
-      SourceHealthCategory.upstreamUnstable => const [
-        upstreamBlockedSourceGroupTag,
-        timeoutSourceGroupTag,
+      // 網站那邊的問題分三種，各標各的：網站不在了、連不上或回錯誤、太慢。
+      SourceHealthCategory.upstreamUnstable => [
+        if (_upstreamTags.contains(health.label)) health.label,
         quarantineSourceGroupTag,
       ],
     };
@@ -601,19 +630,8 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (tagged(timeoutSourceGroupTag) ||
-        tagged(siteBrokenSourceGroupTag) ||
-        tagged(upstreamBlockedSourceGroupTag) ||
-        tagged(quarantineSourceGroupTag)) {
-      return const SourceRuntimeHealth(
-        category: SourceHealthCategory.upstreamUnstable,
-        label: quarantineSourceGroupTag,
-        description: '上游暫時不可用，來源先隔離但不視為永久失效',
-        allowsSearch: false,
-        allowsReading: false,
-        cleanupCandidate: false,
-        quarantined: true,
-      );
+    for (final tag in [..._upstreamTags, quarantineSourceGroupTag]) {
+      if (tagged(tag)) return upstreamHealth(tag);
     }
 
     return SourceRuntimeHealth.healthy;

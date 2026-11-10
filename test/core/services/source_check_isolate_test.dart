@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,11 +131,13 @@ BookSource _source({String name = '測試書源', String? group}) => BookSource(
 Future<(SourceCheckIsolateResult, BookSource)> _check(
   _FakeBookSourceService service, {
   BookSource? source,
+  bool networkUp = true,
 }) async {
   final result = await SourceChecker(
     source: source ?? _source(),
     config: _searchOnly,
     service: service,
+    networkCheck: () async => networkUp,
   ).run();
   return (result, BookSource.fromJson(result.updatedSourceJson));
 }
@@ -343,6 +346,47 @@ void main() {
 
     expect(checked.groupTags, contains(tocBrokenSourceGroupTag));
     expect(checked.isQuarantined, isTrue);
+  });
+
+  group('a domain that no longer resolves', () {
+    DioException lookupFailed() => DioException(
+      requestOptions: RequestOptions(path: 'https://gone.example/s'),
+      type: DioExceptionType.connectionError,
+      error: const SocketException(
+        "Failed host lookup: 'gone.example'",
+        osError: OSError('No address associated with hostname', 7),
+      ),
+    );
+
+    test('marks the site gone at once, without retrying', () async {
+      var attempts = 0;
+      final service = _FakeBookSourceService(
+        search: () async {
+          attempts++;
+          throw lookupFailed();
+        },
+      );
+      final (result, source) = await _check(service);
+
+      expect(attempts, 1);
+      expect(result.message, contains('網域查不到'));
+      expect(source.groupTags, containsAll(['異常', '網站失效', '已隔離']));
+      expect(source.groupTags, isNot(contains('校驗超時')));
+      expect(source.runtimeHealth.label, '網站失效');
+    });
+
+    test(
+      'is only a connection problem when the phone itself is offline',
+      () async {
+        final service = _FakeBookSourceService(
+          search: () async => throw lookupFailed(),
+        );
+        final (_, source) = await _check(service, networkUp: false);
+
+        expect(source.groupTags, isNot(contains('網站失效')));
+        expect(source.runtimeHealth.quarantined, isTrue);
+      },
+    );
   });
 
   test('a dropped connection is retried once before judging', () async {

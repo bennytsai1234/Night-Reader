@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 import 'source_debug_page.dart';
@@ -299,6 +300,11 @@ class _SourceEditorPageState extends State<SourceEditorPage>
           );
           if (!overwrite || !mounted) return;
         }
+      }
+      // 規則改了，AI 修不好的判斷就不算數了（ADR 0054）。
+      final before = widget.source;
+      if (before != null && changedParts(before, _editingSource).isNotEmpty) {
+        _editingSource.removeGroup(aiUnfixableSourceGroupTag);
       }
       await _bookSourceService.saveEditedSource(
         _editingSource,
