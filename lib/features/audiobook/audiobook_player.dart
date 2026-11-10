@@ -98,11 +98,14 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   ReaderV2ReadTimeController? _listenTime;
   String? _listenBookUrl;
 
-  /// 開始或停止計時：播著、沒在緩衝時計。
+  /// 真的在出聲：播著、沒在載入或緩衝。收聽時間與定時都只算這段。
+  bool get _sounding => _book != null && _playing && !_buffering && !_loading;
+
+  /// 播放、載入、緩衝或錯誤變了就呼叫：收聽計時與定時倒數跟著出聲與否。
   void _syncListenTime() {
+    sleepTimer.sync(active: _book != null, running: _sounding);
     final book = _book;
-    final listening = book != null && _playing && !_buffering && !_loading;
-    if (!listening) {
+    if (book == null || !_sounding) {
       unawaited(_listenTime?.stop());
       return;
     }
@@ -170,6 +173,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 預先解析好的下一集音訊請求。
   ({int index, AudioRequest request})? _prefetched;
 
+  /// 使用者要不要出聲：載入中按了暫停（或定時到了、別的播放接手），載入完
+  /// 就不自己開始播。和引擎回報的 [playing] 分開記。
+  bool _wantPlay = false;
+
+  /// 定時的選項只在第一次開書時從偏好設定讀一次。
+  bool _timerLoaded = false;
+
   /// 正在播或暫停中的書；沒有時是 null（還沒開或已經停止）。
   Book? get book => _book;
 
@@ -209,10 +219,17 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 開 [book] 來聽。同一本已經開著時不打斷，給了 [chapterIndex] 才換到那一集；
   /// 沒給時接著上次聽的地方。同一本上次連目錄都沒開成時重開一次（重試）。
   Future<void> open(Book book, {int? chapterIndex}) async {
-    if (isCurrent(book) && !(_chapters.isEmpty && _error != null)) {
-      if (chapterIndex != null && chapterIndex != _index) {
-        await playChapter(chapterIndex);
+    if (!_timerLoaded) {
+      _timerLoaded = true;
+      try {
+        await sleepTimer.load();
+      } catch (error) {
+        AppLog.e('讀定時設定失敗', error: error);
       }
+    }
+    if (isCurrent(book) && !(_chapters.isEmpty && _error != null)) {
+      // 從目錄點了某一集：照目錄選集一樣從頭播，點的是正在播的那集也是。
+      if (chapterIndex != null) await playChapter(chapterIndex);
       return;
     }
     await _close();
@@ -326,6 +343,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final book = _book;
     final source = _source;
     if (book == null || source == null) return;
+    // 換集先讓上一集停聲：新的一集抓不到時，不會畫面停在新集、耳朵還聽著
+    // 舊集，舊集的位置也不會記到新集上。
+    final previous = _engine;
+    if (previous != null && previous.playing) await previous.pause();
+    if (autoplay) _wantPlay = true;
     final generation = ++_generation;
     final chapter = _chapters[index];
     _index = index;
@@ -357,9 +379,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       );
       if (generation != _generation) return;
       await engine.setSpeed(_speed);
+      if (generation != _generation) return;
       _loading = false;
       _duration = engine.duration;
-      if (autoplay) await _startPlaying(engine);
+      _syncListenTime();
+      if (autoplay && _wantPlay) await _startPlaying(engine);
       notifyListeners();
       _publish();
       unawaited(_saveProgress());
@@ -368,7 +392,9 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       if (generation != _generation) return;
       _loading = false;
       _playing = false;
+      _wantPlay = false;
       _error = failureMessage('播放', error, stackTrace);
+      _syncListenTime();
       notifyListeners();
       _publish();
     }
@@ -433,10 +459,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       );
       return;
     }
+    _wantPlay = true;
     await _startPlaying(engine);
   }
 
   Future<void> pause() async {
+    _wantPlay = false;
     await _engine?.pause();
     await _saveProgress();
   }
@@ -507,6 +535,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _prefetched = null;
     _request = null;
     _playing = false;
+    _wantPlay = false;
     _loading = false;
     _buffering = false;
     _error = null;
@@ -561,7 +590,6 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (_playing == playing) return;
     _playing = playing;
     _syncListenTime();
-    sleepTimer.sync(active: _book != null, running: playing);
     if (!playing) unawaited(_saveProgress());
     notifyListeners();
     _publish();
@@ -591,11 +619,15 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _publish();
   }
 
+  /// 播放途中出錯：引擎停下、記下原因，按播放時重新載入這一集（[play]）。
   void _onError(Object error) {
     if (_book == null) return;
     _playing = false;
     _loading = false;
+    _wantPlay = false;
     _error = failureMessage('播放', error);
+    unawaited(_engine?.pause());
+    _syncListenTime();
     notifyListeners();
     _publish();
   }
@@ -670,7 +702,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
 
   /// 開始播：先接手系統播放資訊（原本在播的朗讀收到暫停），再讓引擎播。
   Future<void> _startPlaying(AudioEngine engine) async {
+    final generation = _generation;
     await _playback.start();
+    // 等系統播放控制的這段時間按了暫停、換了集或停了：不出聲。
+    if (!_wantPlay || generation != _generation || _book == null) return;
     _publish(playing: true);
     await engine.play();
   }
