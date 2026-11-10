@@ -127,6 +127,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.infoState,
     this.loadingTarget,
     required this.originName,
+    this.onOpenOrigin,
     this.progressListenable,
     required this.navigation,
     required this.isAutoPaging,
@@ -203,6 +204,9 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 畫面上這一章。
   final ReaderV2InfoTarget? loadingTarget;
   final String originName;
+
+  /// 點書源膠囊（見 [ReaderV2TopMenu.onOpenOrigin]）。
+  final VoidCallback? onOpenOrigin;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
 
   /// 章數、目前章（小訊號）與章名；上方選單的章名、上一章／下一章與頁首
@@ -442,6 +446,7 @@ class ReaderV2PageShell extends StatelessWidget {
                           bookName: context.zh(book.name),
                           navigation: navigation,
                           originName: originName,
+                          onOpenOrigin: onOpenOrigin,
                           showReadTitleAddition: showReadTitleAddition,
                           onBack: onExitIntent,
                           onMore: onMore,

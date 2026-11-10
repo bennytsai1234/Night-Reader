@@ -24,6 +24,7 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
@@ -403,6 +404,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   infoState: _infoStateOf(runtime),
                   loadingTarget: _infoTargetOf(runtime),
                   originName: widget.book.originName,
+                  onOpenOrigin: widget.book.isLocal ? null : _openChapterWeb,
                   progressListenable: _progress,
                   navigation: navigation,
                   isAutoPaging: _host.autoPage?.isRunning ?? false,
@@ -1420,6 +1422,23 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       title: _chapterTitleAt(chapterIndex),
       shares: runtime?.chapterShares.value,
     );
+  }
+
+  /// 點書源膠囊：用瀏覽器開正在讀的這一章（同 Legado 點章節網址）。
+  void _openChapterWeb() {
+    final runtime = _host.runtime;
+    final index = _currentChapterIndex(runtime);
+    final chapter =
+        runtime?.chapterAt(index) ??
+        (index < widget.initialChapters.length
+            ? widget.initialChapters[index]
+            : null);
+    final url = chapter?.webPageUrl;
+    if (url == null) {
+      _showNotice('這一章沒有網頁可以開');
+      return;
+    }
+    unawaited(launchExternalUrlWithFeedback(context, url));
   }
 
   String _chapterUrlAt(int index) {
