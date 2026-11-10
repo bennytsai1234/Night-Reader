@@ -32,6 +32,13 @@
             android:name="io.flutter.embedding.android.NormalTheme"
             android:resource="@style/NormalTheme"
             />
+        <!-- 外部連結只交給 app_links（AssociationHandlerService）處理。Flutter
+             預設也會把帶網址的 intent 當成路由推進 Navigator，App 開著時收到
+             legado:// 匯入連結就因為沒有這條路由而崩潰。 -->
+        <meta-data
+            android:name="flutter_deeplinking_enabled"
+            android:value="false"
+            />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
