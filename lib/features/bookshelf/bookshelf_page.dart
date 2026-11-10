@@ -1223,12 +1223,6 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   Future<void> _openBook(Book book) async {
-    // 有聲書播放器和本分支同一批合併，由它接手開書。
-    if (book.bookKind == BookSourceKind.audio) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('有聲書還不能打開。')));
-      return;
-    }
     // 閱讀器只改了這本書的進度，不會通知書架；回來時要重排（最近閱讀）並更新
     // 進度線。記成「露出來要重讀」，和閱讀期間下載完成的重讀併成一次，返回
     // 動畫播完才做（didPopNext，ADR 0018）。

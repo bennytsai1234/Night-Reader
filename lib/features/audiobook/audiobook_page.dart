@@ -1,7 +1,16 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -17,10 +26,12 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 
@@ -30,9 +41,17 @@ import 'audiobook_player.dart';
 /// 控制在底部的浮動玻璃膠囊，膠囊上方是倍速、定時、播放模式三顆圓鈕。
 /// 畫面只看 [AudiobookPlayer]，離開這頁照樣在播。
 class AudiobookPage extends StatefulWidget {
-  const AudiobookPage({super.key, required this.book, this.player});
+  const AudiobookPage({
+    super.key,
+    required this.book,
+    this.chapterIndex,
+    this.player,
+  });
 
   final Book book;
+
+  /// 從目錄點了某一集時是那一集、從頭播；null 時接著上次聽的地方。
+  final int? chapterIndex;
 
   /// 測試換成自己的播放器；平常是 [AudiobookPlayer.instance]。
   final AudiobookPlayer? player;
@@ -41,7 +60,7 @@ class AudiobookPage extends StatefulWidget {
   State<AudiobookPage> createState() => _AudiobookPageState();
 }
 
-enum _MoreAction { login, keepAwake, copyUrl, editSource, log }
+enum _MoreAction { changeSource, login, keepAwake, copyUrl, editSource, log }
 
 class _AudiobookPageState extends State<AudiobookPage> {
   late final AudiobookPlayer _player =
@@ -50,11 +69,35 @@ class _AudiobookPageState extends State<AudiobookPage> {
   /// 已下載的集（[BookChapterFiles.baseNameFor]）；清單畫小勾。
   Set<String> _downloaded = const {};
 
+  /// 這本書的下載做完時重讀已下載的集（清單畫小勾）。
+  StreamSubscription<AppEvent>? _downloads;
+
+  /// 集數清單的捲動；第一次畫清單時照正在播的那集決定起點。
+  ScrollController? _listScroll;
+  ScrollController? _skeletonScroll;
+
+  /// 換頁動畫播完了：這之後才開書、才把骨架換成清單（ADR 0037 等靜止
+  /// 再放）。換頁途中建整份清單、播換場，每一幀都超過上限。
+  bool _entered = false;
+
   @override
   void initState() {
     super.initState();
-    unawaited(_player.open(widget.book));
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    // initState 裡還不能查上層的路由：先讓出一次。
+    await Future<void>.value();
+    if (!mounted) return;
+    await TransitionSettled.entered(context);
+    if (!mounted) return;
+    setState(() => _entered = true);
+    unawaited(_player.open(widget.book, chapterIndex: widget.chapterIndex));
     unawaited(_loadDownloaded());
+    _downloads = AppEventBus().onName(AppEventBus.upBookshelf).listen((event) {
+      if (event.data == widget.book.bookUrl) unawaited(_loadDownloaded());
+    });
   }
 
   Future<void> _loadDownloaded() async {
@@ -64,6 +107,14 @@ class _AudiobookPageState extends State<AudiobookPage> {
     } catch (_) {
       // 讀不到資料夾就當作都沒下載；播放時照樣從網路抓。
     }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_downloads?.cancel());
+    _listScroll?.dispose();
+    _skeletonScroll?.dispose();
+    super.dispose();
   }
 
   @override
@@ -88,31 +139,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
             ),
             body: Stack(
               children: [
-                Positioned.fill(child: _buildList(context, book)),
-                // 圓鈕與膠囊後方墊一條漸隱帶，同書籍詳情的閱讀鈕：清單捲到
-                // 圓鈕之前就淡出，不會從圓鈕之間透出來。
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: Builder(
-                      builder: (context) {
-                        // 圓鈕上緣以下全實色，上方漸隱一段。
-                        final solid =
-                            _ControlDock.height +
-                            MediaQuery.paddingOf(context).bottom;
-                        const fade = 48.0;
-                        return EdgeFade(
-                          edge: AxisDirection.down,
-                          height: solid + fade,
-                          solidFraction: solid / (solid + fade),
-                          color: chrome.groupedBackground,
-                        );
-                      },
-                    ),
-                  ),
-                ),
+                Positioned.fill(child: _buildBody(context, book)),
                 Positioned(
                   left: 0,
                   right: 0,
@@ -132,6 +159,11 @@ class _AudiobookPageState extends State<AudiobookPage> {
     return GlassMenuButton<_MoreAction>(
       onSelected: (action) => _onMore(context, action),
       entriesBuilder: (_) => [
+        const GlassMenuItem(
+          value: _MoreAction.changeSource,
+          label: '換源',
+          icon: Icons.swap_horiz_rounded,
+        ),
         if (source != null && source.hasLoginUrl)
           const GlassMenuItem(
             value: _MoreAction.login,
@@ -169,6 +201,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
   Future<void> _onMore(BuildContext context, _MoreAction action) async {
     final source = _player.source;
     switch (action) {
+      case _MoreAction.changeSource:
+        await _changeSource(context);
       case _MoreAction.login:
         if (source != null) await openSourceLogin(context, source);
       case _MoreAction.keepAwake:
@@ -193,22 +227,201 @@ class _AudiobookPageState extends State<AudiobookPage> {
     }
   }
 
-  Widget _buildList(BuildContext context, Book book) {
-    final padding = MediaQuery.paddingOf(context);
-    final chapters = _player.isCurrent(widget.book)
-        ? _player.chapters
-        : const <BookChapter>[];
-    final episodes = chapters.where((c) => !c.isVolume).length;
+  /// 換源：只列有聲書源（ADR 0053），選了就存好這一集聽到哪，照閱讀器的
+  /// 換源搬到新書源，再換成新書源的播放器，從同一集接著聽。
+  Future<void> _changeSource(BuildContext context) async {
+    final book = _player.isCurrent(widget.book) ? _player.book! : widget.book;
+    final service = SourceSwitchService(
+      operationQuiescer: (oldBook) =>
+          DownloadService().quiesceForSourceSwitch(oldBook),
+      assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
+    );
+    PreparedSourceSwitch? done;
+    await AppBottomSheet.showCustom<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeSourceSheet(
+        book: book,
+        onSelectSource: (candidate) async {
+          try {
+            await _player.saveProgress();
+            final prepared = await service.prepareSwitch(
+              book,
+              candidate,
+              targetChapterIndex: book.chapterIndex,
+              targetChapterTitle: book.durChapterTitle,
+            );
+            await service.commitSwitch(book, prepared);
+            AppEventBus().fire(AppEventBus.upBookshelf);
+            done = prepared;
+            return (
+              success: true,
+              message: '已切換到 ${prepared.source.bookSourceName}',
+            );
+          } catch (error) {
+            if (!isSourceSwitchUnavailable(error)) rethrow;
+            return (success: false, message: failureMessage('換源', error));
+          }
+        },
+      ),
+    );
+    final prepared = done;
+    if (prepared == null || !context.mounted) return;
+    await _player.stop();
+    if (!context.mounted) return;
+    await Navigator.of(context)
+        .pushReplacement(BookOpenRoute(book: prepared.migratedBook));
+  }
+
+  /// 目錄還沒到時畫骨架，到了照骨架換場換成清單（ADR 0024）；頁首下的書
+  /// 資訊開頁就有，兩層一樣，換場時看不出來。
+  Widget _buildBody(BuildContext context, Book book) {
+    final current = _player.isCurrent(widget.book);
+    final chapters = current ? _player.chapters : const <BookChapter>[];
+    final error = current ? _player.error : null;
+    if (chapters.isEmpty && error != null) {
+      final padding = MediaQuery.paddingOf(context);
+      return Padding(
+        padding: EdgeInsets.only(
+          top: padding.top + AppGlass.headerToolbarHeight,
+          bottom: _ControlDock.height + padding.bottom,
+        ),
+        child: AppStateView(
+          icon: Icons.error_outline,
+          title: '有聲書打不開',
+          description: error,
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: '重試',
+            icon: Icons.refresh,
+            onPressed: () => unawaited(
+              _player.open(widget.book, chapterIndex: widget.chapterIndex),
+            ),
+          ),
+        ),
+      );
+    }
+    return SkeletonSwitcher(
+      loading: chapters.isEmpty || !_entered,
+      backdrop: AppChrome.of(context).groupedBackground,
+      skeleton: _buildSkeleton(context, book),
+      builder: (context) => _buildList(context, book, chapters),
+    );
+  }
+
+  /// 清單的骨架：書資訊照真的畫，每集一列一條；捲到和清單一樣的位置。
+  Widget _buildSkeleton(BuildContext context, Book book) {
+    final count = math.max(book.totalChapterNum, 1);
+    final index = (widget.chapterIndex ?? book.chapterIndex).clamp(
+      0,
+      count - 1,
+    );
+    return ExcludeSemantics(
+      child: _scrollView(
+        context,
+        book: book,
+        episodes: book.totalChapterNum,
+        controller: _skeletonScroll ??= ScrollController(
+          initialScrollOffset: _offsetFor(context, book, index, count),
+        ),
+        physics: const NeverScrollableScrollPhysics(),
+        rows: SliverFixedExtentList(
+          itemExtent: _rowExtent,
+          delegate: SliverChildBuilderDelegate(
+            (context, i) => _SkeletonSlice(
+              index: i,
+              count: count,
+              child: _EpisodeSkeletonRow(widthFactor: _skeletonWidths[i % 4]),
+            ),
+            childCount: count,
+            addRepaintBoundaries: false,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 還不知道集名多長：輪流用幾種長度（同書架沒記下書名時）。
+  static const _skeletonWidths = [0.42, 0.3, 0.36, 0.26];
+
+  Widget _buildList(
+    BuildContext context,
+    Book book,
+    List<BookChapter> chapters,
+  ) {
+    final scroll = _listScroll ??= ScrollController(
+      initialScrollOffset: _offsetFor(
+        context,
+        book,
+        _player.chapterIndex,
+        chapters.length,
+      ),
+    );
+    return _scrollView(
+      context,
+      book: book,
+      episodes: chapters.where((c) => !c.isVolume).length,
+      controller: scroll,
+      rows: SliverFixedExtentList(
+        itemExtent: _rowExtent,
+        delegate: SliverChildBuilderDelegate((context, i) {
+          final chapter = chapters[i];
+          return _sliceOf(
+            i,
+            chapters.length,
+            chapter.isVolume
+                ? TocVolumeRow(
+                    title: chapter.title,
+                    count: _volumeSize(chapters, i),
+                    unit: '集',
+                  )
+                : _EpisodeRow(
+                    chapter: chapter,
+                    state: _stateOf(i),
+                    position: _player.position,
+                    downloaded: _downloaded.contains(
+                      BookChapterFiles.baseNameFor(chapter),
+                    ),
+                    onTap: () => unawaited(_player.playChapter(i)),
+                  ),
+          );
+        }, childCount: chapters.length),
+      ),
+    );
+  }
+
+  /// 每列一樣高（含上方的分隔線），清單排好前就算得出正在播的那集在哪裡。
+  static const double _rowExtent = _EpisodeRow.height + AppGlass.hairline;
+
+  /// 分組卡片裡的第 [i] 列；第一列沒有分隔線，那一點高度補在列裡。
+  static Widget _sliceOf(int i, int count, Widget row) => GroupedSliceItem(
+    index: i,
+    count: count,
+    child: SizedBox(
+      height: i == 0 ? _rowExtent : _EpisodeRow.height,
+      child: row,
+    ),
+  );
+
+  Widget _scrollView(
+    BuildContext context, {
+    required Book book,
+    required int episodes,
+    required ScrollController controller,
+    required Widget rows,
+    ScrollPhysics? physics,
+  }) {
     return CustomScrollView(
+      controller: controller,
+      physics: physics,
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.only(
-            top: padding.top + AppGlass.headerToolbarHeight + AppSpacing.sm,
-          ),
+          padding: EdgeInsets.only(top: _headerTop(context)),
           sliver: SliverToBoxAdapter(
             child: _BookHeader(
               book: book,
-              source: _player.source,
+              sourceName: _sourceNameOf(book),
               episodes: episodes,
             ),
           ),
@@ -216,35 +429,51 @@ class _AudiobookPageState extends State<AudiobookPage> {
         const SliverToBoxAdapter(
           child: SizedBox(height: AppGrouped.sectionGap),
         ),
-        SliverList(
-          delegate: SliverChildBuilderDelegate((context, i) {
-            final chapter = chapters[i];
-            return GroupedSliceItem(
-              index: i,
-              count: chapters.length,
-              child: chapter.isVolume
-                  ? TocVolumeRow(
-                      title: chapter.title,
-                      count: _volumeSize(chapters, i),
-                      unit: '集',
-                    )
-                  : _EpisodeRow(
-                      chapter: chapter,
-                      state: _stateOf(i),
-                      position: _player.position,
-                      downloaded: _downloaded.contains(
-                        BookChapterFiles.baseNameFor(chapter),
-                      ),
-                      onTap: () => unawaited(_player.playChapter(i)),
-                    ),
-            );
-          }, childCount: chapters.length),
-        ),
+        rows,
         SliverToBoxAdapter(
-          child: SizedBox(height: _ControlDock.height + padding.bottom),
+          child: SizedBox(
+            height: _ControlDock.height + MediaQuery.paddingOf(context).bottom,
+          ),
         ),
       ],
     );
+  }
+
+  /// 書源名稱：書記著加入書架時的，書源讀到後用書源現在的。
+  String _sourceNameOf(Book book) =>
+      (_player.isCurrent(book) ? _player.source?.bookSourceName : null) ??
+      book.originName;
+
+  static double _headerTop(BuildContext context) =>
+      MediaQuery.paddingOf(context).top +
+      AppGlass.headerToolbarHeight +
+      AppSpacing.sm;
+
+  /// 打開時清單捲到哪裡：正在播的第 [index] 列（共 [count] 列）在第一個
+  /// 畫面就看得到時不捲，否則捲到它在頁首與圓鈕之間約三分之一高的地方。
+  static double _offsetFor(
+    BuildContext context,
+    Book book,
+    int index,
+    int count,
+  ) {
+    final media = MediaQuery.of(context);
+    final listTop =
+        _headerTop(context) +
+        _BookHeader.heightOf(context, book) +
+        AppGrouped.sectionGap;
+    final rowTop = listTop + index * _rowExtent;
+    final visibleTop = media.padding.top + AppGlass.headerToolbarHeight;
+    final visibleBottom =
+        media.size.height - _ControlDock.height - media.padding.bottom;
+    if (rowTop + _rowExtent <= visibleBottom) return 0;
+    final end =
+        listTop +
+        count * _rowExtent +
+        _ControlDock.height +
+        media.padding.bottom;
+    final target = rowTop - visibleTop - (visibleBottom - visibleTop) / 3;
+    return target.clamp(0.0, math.max(0.0, end - media.size.height));
   }
 
   /// 第 [index] 個分卷底下有幾集（到下一個分卷為止）。
@@ -269,24 +498,51 @@ class _AudiobookPageState extends State<AudiobookPage> {
 class _BookHeader extends StatelessWidget {
   const _BookHeader({
     required this.book,
-    required this.source,
+    required this.sourceName,
     required this.episodes,
   });
 
   static const double coverWidth = 72;
+  static const double coverHeight = coverWidth * 7 / 5;
 
   final Book book;
-  final BookSource? source;
+  final String sourceName;
   final int episodes;
+
+  static TextStyle get _titleStyle => AppTextStyles.titleMd;
+  static TextStyle get _metaStyle => AppTextStyles.bodySm;
+
+  /// 這一塊多高：封面與右側文字取高的那個。清單排好前就要知道正在播的
+  /// 那集在哪裡（[_AudiobookPageState._offsetFor]）。
+  static double heightOf(BuildContext context, Book book) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final width =
+        MediaQuery.sizeOf(context).width -
+        AppGrouped.margin * 2 -
+        coverWidth -
+        AppSpacing.lg;
+    final title = TextPainter(
+      text: TextSpan(text: book.name, style: _titleStyle),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 2,
+    )..layout(maxWidth: math.max(0, width));
+    final metaLine = scaler.scale(_metaStyle.fontSize!) * _metaStyle.height!;
+    final text = title.height + AppSpacing.xs + metaLine + 2 + metaLine;
+    title.dispose();
+    return math.max(coverHeight, text);
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final byline = [
       book.getRealAuthor(),
-      ?source?.bookSourceName,
+      sourceName,
     ].where((text) => text.trim().isNotEmpty).join(' · ');
-    return Padding(
+    return Container(
+      height: heightOf(context, book),
+      alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
       child: Row(
         children: [
@@ -301,7 +557,7 @@ class _BookHeader extends StatelessWidget {
                   coverUrl: cover,
                   bookName: book.name,
                   width: coverWidth,
-                  height: coverWidth * 7 / 5,
+                  height: coverHeight,
                 ),
                 _ => ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -353,6 +609,68 @@ class _BookHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 骨架那份清單的一列：和分組卡片同樣的底色、圓角與分隔線，但不包
+/// `Material` 與圓角裁切——骨架在換頁途中呼吸，每一列各一層會讓每一幀
+/// 都超過上限。
+class _SkeletonSlice extends StatelessWidget {
+  const _SkeletonSlice({
+    required this.index,
+    required this.count,
+    required this.child,
+  });
+
+  final int index;
+  final int count;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    const corner = Radius.circular(AppGrouped.radius);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: chrome.groupedSurface,
+          borderRadius: BorderRadius.vertical(
+            top: index == 0 ? corner : Radius.zero,
+            bottom: index == count - 1 ? corner : Radius.zero,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (index == 0)
+              const SizedBox(height: AppGlass.hairline)
+            else
+              const InsetSeparator(indent: AppGrouped.rowPadding),
+            Expanded(child: child),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 集數清單骨架的一列：和 [_EpisodeRow] 同樣的內距與字樣，集名一條。
+class _EpisodeSkeletonRow extends StatelessWidget {
+  const _EpisodeSkeletonRow({required this.widthFactor});
+
+  final double widthFactor;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: SkeletonLine(
+        style: AppTextStyles.bodyBase,
+        widthFactor: widthFactor,
+      ),
+    ),
+  );
 }
 
 enum _EpisodeState { finished, playing, paused, ahead }

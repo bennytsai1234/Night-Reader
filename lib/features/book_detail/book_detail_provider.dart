@@ -927,6 +927,8 @@ class BookDetailProvider extends ChangeNotifier {
       return BookDetailOperationResult.failure('清除失敗：${userErrorReason(e)}');
     }
     await _refreshCacheStatus();
+    // 有聲書的音訊由使用者自己下載（ADR 0008、0055），不會自動抓回來。
+    if (_isAudio) return BookDetailOperationResult.success('已清除下載的音訊');
     if (_book.isInBookshelf) {
       unawaited(
         _resolvedDownloadService.keepShelfBookDownloaded(_book.bookUrl),
@@ -1014,6 +1016,8 @@ class BookDetailProvider extends ChangeNotifier {
   Future<Set<String>> _storedChapterUrls() async {
     // 漫畫一話一個 CBZ（ADR 0052），不看正文快取。
     if (_isComic) return downloadedComicChapterUrls(_book, _allChapters);
+    // 有聲書一集一個音訊檔（ADR 0055）。
+    if (_isAudio) return _downloadedAudioUrls();
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) return <String>{};
     return chapterContentDao.getStoredChapterUrls(
@@ -1023,10 +1027,22 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   bool get _isComic => _book.bookKind == BookSourceKind.comic;
+  bool get _isAudio => _book.bookKind == BookSourceKind.audio;
+
+  /// 有聲書已經下載好的那幾集（章節檔在）。
+  Future<Set<String>> _downloadedAudioUrls() async {
+    final files = await BookChapterFiles.downloaded(_book);
+    return {
+      for (final chapter in _allChapters)
+        if (files.containsKey(BookChapterFiles.baseNameFor(chapter)))
+          chapter.url,
+    };
+  }
 
   Future<void> _clearStoredContent() async {
     // 漫畫下載的圖（CBZ 與下載到一半的）一起刪；書架自動下載會再抓。
-    if (_isComic) await BookChapterFiles.deleteFor(_book);
+    // 有聲書下載的音訊也是章節檔，一起刪。
+    if (_isComic || _isAudio) await BookChapterFiles.deleteFor(_book);
     // 排版快取由正文算出，正文清掉就一起清。
     await ReaderLayoutCache.deleteBook(_book.bookUrl);
     // 網路書的插圖跟著正文抓，正文清掉就一起清；本地 EPUB 的插圖是轉檔時
@@ -1079,6 +1095,10 @@ class BookDetailProvider extends ChangeNotifier {
         storedUrls.addAll(
           await downloadedComicChapterUrls(_book, _allChapters),
         );
+        contentBytes += await BookChapterFiles.sizeOf(_book);
+      }
+      if (_isAudio) {
+        storedUrls.addAll(await _downloadedAudioUrls());
         contentBytes += await BookChapterFiles.sizeOf(_book);
       }
       _cacheStatus = BookDetailCacheStatus(

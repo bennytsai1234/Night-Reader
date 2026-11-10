@@ -1,3 +1,7 @@
+import 'package:night_reader/core/services/sleep_timer.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+
+import 'dart:async';
 import 'dart:math';
 
 import 'package:drift/native.dart';
@@ -5,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
@@ -104,6 +109,110 @@ void main() {
     expect(player.playing, isTrue);
     expect(player.chapterIndex, 2);
     expect(sync.opened, [book.bookUrl]);
+  });
+
+  test('收聽時間只算出聲的時間，記在有聲書自己的名下（ADR 0055）', () async {
+    var now = DateTime(2026, 11, 9, 20);
+    final records = ReadRecordDao(db);
+    final timed = AudiobookPlayer(
+      engine: () => engine,
+      bookDao: bookDao,
+      chapterDao: ChapterDao(db),
+      sourceDao: BookSourceDao(db),
+      sourceService: source,
+      sync: sync,
+      playback: playback,
+      random: Random(1),
+      now: () => now,
+      readRecordDao: records,
+    );
+
+    await timed.open(book);
+    now = now.add(const Duration(seconds: 90));
+    await timed.pause();
+    now = now.add(const Duration(minutes: 5));
+    await timed.play();
+    now = now.add(const Duration(seconds: 30));
+    await timed.stop();
+
+    final days = await records.getAllDays();
+    expect(days.single.bookName, book.recordName);
+    expect(book.recordName, isNot(book.name));
+    expect(days.single.seconds, 120);
+  });
+
+  test('載入中按了暫停，載入完不自己開始播', () async {
+    source.gate = Completer<void>();
+    final opening = player.open(book);
+    await Future<void>.delayed(Duration.zero);
+    while (source.resolved.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    await player.pause();
+    source.gate!.complete();
+    await opening;
+
+    expect(player.playing, isFalse);
+    expect(engine.playing, isFalse);
+  });
+
+  test('換到抓不到的一集時，上一集也停聲，不會畫面停在新集、還聽著舊集', () async {
+    await player.open(book);
+    expect(engine.playing, isTrue);
+    source.failing.add('https://audio.test/ep3');
+
+    await player.playChapter(3);
+
+    expect(player.error, isNotNull);
+    expect(player.playing, isFalse);
+    expect(engine.playing, isFalse);
+  });
+
+  test('播放途中出錯：停下、記下原因，按播放重新載入這一集', () async {
+    await player.open(book);
+    engine.fail(StateError('斷線'));
+    await Future<void>.delayed(Duration.zero);
+    expect(player.error, isNotNull);
+    expect(engine.playing, isFalse);
+
+    await player.play();
+    expect(engine.opened, hasLength(2));
+    expect(player.playing, isTrue);
+  });
+
+  test('從目錄點正在播的那一集：從頭播', () async {
+    await player.open(book);
+    engine.advance(const Duration(minutes: 2));
+    await player.open(book, chapterIndex: 2);
+
+    expect(engine.opened.last.$2, Duration.zero);
+    expect(player.playing, isTrue);
+  });
+
+  test('定時記得上次選的；緩衝沒有聲音時不倒數', () async {
+    SharedPreferences.setMockInitialValues({PreferKey.ttsTimer: 15});
+    var now = DateTime(2026, 11, 10, 22);
+    final timed = AudiobookPlayer(
+      engine: () => engine,
+      bookDao: bookDao,
+      chapterDao: ChapterDao(db),
+      sourceDao: BookSourceDao(db),
+      sourceService: source,
+      sync: sync,
+      playback: playback,
+      random: Random(1),
+      now: () => now,
+    );
+    await timed.open(book);
+    expect(timed.sleepTimer.option, SleepTimerOption.minutes15);
+
+    engine.buffer(true);
+    now = now.add(const Duration(minutes: 5));
+    expect(timed.sleepTimer.remaining, const Duration(minutes: 15));
+    engine.buffer(false);
+    now = now.add(const Duration(minutes: 1));
+    expect(timed.sleepTimer.remaining, const Duration(minutes: 14));
+    await timed.stop();
   });
 
   test('暫停時把位置以毫秒存進閱讀進度', () async {
