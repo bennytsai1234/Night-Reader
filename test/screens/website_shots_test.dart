@@ -38,6 +38,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
@@ -453,13 +454,6 @@ Future<Book> _seedComic() async {
 /// 有聲書一本：書源、十二集目錄，播放器用假的音訊引擎，播到第四集。
 Future<(Book, AudiobookPlayer, FakeAudioEngine)> _seedAudiobook() async {
   const origin = 'https://audio.example.com';
-  await getIt<BookSourceDao>().upsert(
-    BookSource(
-      bookSourceUrl: origin,
-      bookSourceName: '夜雨聽書',
-      bookSourceType: SourceType.audio,
-    ),
-  );
   final book = Book(
     bookUrl: '$origin/book/1',
     origin: origin,
@@ -473,7 +467,6 @@ Future<(Book, AudiobookPlayer, FakeAudioEngine)> _seedAudiobook() async {
     totalChapterNum: 12,
     isInBookshelf: true,
   );
-  await getIt<BookDao>().upsert(book);
   const titles = [
     '山城舊事',
     '渡口',
@@ -488,22 +481,34 @@ Future<(Book, AudiobookPlayer, FakeAudioEngine)> _seedAudiobook() async {
     '長夜',
     '天明',
   ];
-  await getIt<ChapterDao>().insertChapters([
-    BookChapter(
-      url: '$origin/vol1',
-      title: '第一卷 山城',
-      isVolume: true,
-      bookUrl: book.bookUrl,
-      index: 0,
-    ),
-    for (var i = 1; i <= titles.length; i++)
-      BookChapter(
-        url: '$origin/ep$i',
-        title: '第 $i 集 ${titles[i - 1]}',
-        bookUrl: book.bookUrl,
-        index: i,
+  // 一次交易寫完：分開寫的話，第一筆寫完 App 就重新查詢，那個查詢要等
+  // 測試推時鐘才做得完，後面的寫入排在它後面，永遠等不到。
+  await getIt<AppDatabase>().transaction(() async {
+    await getIt<BookSourceDao>().upsert(
+      BookSource(
+        bookSourceUrl: origin,
+        bookSourceName: '夜雨聽書',
+        bookSourceType: SourceType.audio,
       ),
-  ]);
+    );
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters([
+      BookChapter(
+        url: '$origin/vol1',
+        title: '第一卷 山城',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      for (var i = 1; i <= titles.length; i++)
+        BookChapter(
+          url: '$origin/ep$i',
+          title: '第 $i 集 ${titles[i - 1]}',
+          bookUrl: book.bookUrl,
+          index: i,
+        ),
+    ]);
+  });
   final engine = FakeAudioEngine();
   final player = AudiobookPlayer(
     engine: () => engine,
@@ -553,7 +558,11 @@ AiRepairSession _aiRepairSession() {
         ruleContent: ContentRule(content: 'id.content@text'),
       ),
     ],
-    service: (baseUrl: 'https://ai.example.com/v1', apiKey: 'k', model: 'm'),
+    service: (
+      baseUrl: 'https://ai.example.com/v1',
+      apiKey: 'k',
+      model: 'my-model',
+    ),
     check: (source, _) async => checked(source),
     probe: (_, _) async => probe,
     ask: (_, _) async => replies[next++],
