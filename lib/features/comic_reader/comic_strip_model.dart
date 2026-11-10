@@ -223,6 +223,15 @@ class ComicStripModel extends ChangeNotifier {
     _load(chapterIndex);
   }
 
+  /// 載入失敗的都再試一次（登入之後）。
+  void retryFailed() {
+    final failed = [
+      for (final entry in _chapters.entries)
+        if (entry.value is ComicChapterFailed) entry.key,
+    ];
+    failed.forEach(retry);
+  }
+
   /// 換章分隔等著的那一話：往下的分隔是下一話，往上的是上一話；已經放上
   /// 條漫的是 null。
   int? pendingChapterOf(ComicTransitionItem item) {

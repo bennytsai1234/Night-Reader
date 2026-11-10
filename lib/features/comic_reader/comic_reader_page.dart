@@ -37,9 +37,12 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_side_panel.dart
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
+import 'package:night_reader/features/source_login/source_failure_remedy.dart';
+import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
@@ -79,7 +82,13 @@ class ComicReaderPage extends StatefulWidget {
   State<ComicReaderPage> createState() => _ComicReaderPageState();
 }
 
-enum _MoreAction { changeSource, refetchChapter, bookDetail, globalSettings }
+enum _MoreAction {
+  changeSource,
+  refetchChapter,
+  login,
+  bookDetail,
+  globalSettings,
+}
 
 class _ComicReaderPageState extends State<ComicReaderPage>
     implements ReaderV2ExitFlowDelegate {
@@ -169,6 +178,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       if (!_book.isLocal) {
         source = await getIt<BookSourceDao>().getByUrl(_book.origin);
         if (source == null) throw StateError('找不到這本書的書源');
+        // 目錄抓不到也要知道書源，失敗畫面才給得出「登入」「前往驗證」。
+        _source = source;
         if (chapters.isEmpty) {
           chapters = await BookSourceService().getChapterList(source, _book);
           if (_book.isInBookshelf) {
@@ -180,6 +191,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       // 換頁動畫播完才建條漫：建整條條漫與選單很重，放在動畫途中會掉幀
       // （ADR 0037 等靜止再放）；動畫期間畫和條漫同比例的骨架。
       await _routeSettled();
+      if (!mounted) return;
       _sync.start();
       // 接著上次讀的地方開：等開 App 的同步做完一下，照同步後的位置開。
       final resume = await _sync.openLocation();
@@ -228,6 +240,16 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     } catch (error) {
       if (mounted) setState(() => _loadError = error);
     }
+  }
+
+  void _retryOpen() {
+    setState(() => _loadError = null);
+    unawaited(_open());
+  }
+
+  /// 登入或驗證回來：登入資料有變才重開。
+  Future<void> _runOpenRemedy(SourceFailureRemedy remedy) async {
+    if (await remedy.run(context) && mounted) _retryOpen();
   }
 
   /// 這一頁的進場動畫播完（沒有動畫時馬上完成）。
@@ -400,17 +422,23 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     final action = await showAppActionSheet<_MoreAction>(
       context: context,
       actions: [
-        if (!_book.isLocal) ...const [
-          AppSheetAction(
+        if (!_book.isLocal) ...[
+          const AppSheetAction(
             label: '換源',
             icon: Icons.swap_horiz_rounded,
             value: _MoreAction.changeSource,
           ),
-          AppSheetAction(
+          const AppSheetAction(
             label: '重新取得本章',
             icon: Icons.refresh_rounded,
             value: _MoreAction.refetchChapter,
           ),
+          if (_source?.hasLogin ?? false)
+            const AppSheetAction(
+              label: '登入',
+              icon: Icons.login_rounded,
+              value: _MoreAction.login,
+            ),
         ],
         const AppSheetAction(
           label: '書籍詳情',
@@ -431,6 +459,11 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         await _showChangeSource();
       case _MoreAction.refetchChapter:
         await _refetchChapter();
+      case _MoreAction.login:
+        final source = _source;
+        if (source == null) return;
+        final changed = await openSourceLogin(context, source);
+        if (changed && mounted) _model?.retryFailed();
       case _MoreAction.bookDetail:
         await _showBookDetail();
       case _MoreAction.globalSettings:
@@ -707,21 +740,47 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     );
   }
 
+  /// 開書失敗的按鈕：有解法（登入、前往驗證）時排第一，「重試」退成次要。
+  Widget _openFailureActions(Object error) {
+    final remedy = SourceFailureRemedy.of(error.toString(), _source);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (remedy != null) ...[
+          FilledButton(
+            onPressed: () => unawaited(_runOpenRemedy(remedy)),
+            child: Text(remedy.label),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          TextButton(onPressed: _retryOpen, child: const Text('重試')),
+        ] else
+          FilledButton(onPressed: _retryOpen, child: const Text('重試')),
+      ],
+    );
+  }
+
   Widget _buildBody(BuildContext context, StylePalette palette, bool dark) {
     final model = _model;
     if (model == null) {
-      return _loadError == null
-          ? const _OpeningSkeleton()
-          : Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  '打不開這本漫畫：$_loadError',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: palette.readerText),
-                ),
+      final loadError = _loadError;
+      if (loadError == null) return const _OpeningSkeleton();
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '打不開這本漫畫：$loadError',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: palette.readerText),
               ),
-            );
+              const SizedBox(height: 16),
+              _openFailureActions(loadError),
+            ],
+          ),
+        ),
+      );
     }
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: _chapters.length,
@@ -756,6 +815,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               titleOf: _titleOf,
               gapBetween: _gapBetween,
               webUrlOpener: (url) => unawaited(_openWeb(url)),
+              remedyFor: (error) =>
+                  SourceFailureRemedy.of(error.toString(), _source),
             ),
           ),
           Positioned(

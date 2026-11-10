@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/scheduler.dart';
+import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'comic_chapter_transition.dart';
@@ -89,6 +90,7 @@ class ComicStripView extends StatefulWidget {
     this.controller,
     this.initialFraction = 0,
     this.webUrlOpener,
+    this.remedyFor,
   });
 
   final ComicStripModel model;
@@ -113,6 +115,9 @@ class ComicStripView extends StatefulWidget {
 
   /// 載入失敗的「用網頁開啟」。
   final void Function(String url)? webUrlOpener;
+
+  /// 載入失敗時能解決它的那一步（登入、前往驗證）；沒有時是 null。
+  final SourceFailureRemedy? Function(Object error)? remedyFor;
 
   static const double minScale = 0.5;
   static const double maxScale = 3;
@@ -732,6 +737,23 @@ class _ComicStripViewState extends State<ComicStripView>
     return index < 0 ? null : index;
   }
 
+  /// 第 [chapterIndex] 話載入失敗、有解法（登入、前往驗證）時的那一顆按鈕；
+  /// 其他是 null。按了回來、登入資料有變就重抓那一話。
+  ({String label, VoidCallback onPressed})? _remedyOf(int chapterIndex) {
+    final state = _model.stateOf(chapterIndex);
+    if (state is! ComicChapterFailed) return null;
+    final remedy = widget.remedyFor?.call(state.error);
+    if (remedy == null) return null;
+    return (
+      label: remedy.label,
+      onPressed: () => unawaited(_runRemedy(remedy, chapterIndex)),
+    );
+  }
+
+  Future<void> _runRemedy(SourceFailureRemedy remedy, int chapterIndex) async {
+    if (await remedy.run(context) && mounted) _model.retry(chapterIndex);
+  }
+
   Widget _buildItem(ComicStripItem item) {
     final key = ValueKey<ComicStripItem>(item);
     switch (item) {
@@ -748,19 +770,24 @@ class _ComicStripViewState extends State<ComicStripView>
           onAspectRatio: (ratio) => _onAspectRatio(item, ratio),
           onFailed: (failed) => _onPageFailed(item, failed),
           onOpenWeb: url == null || opener == null ? null : () => opener(url),
+          remedyFor: widget.remedyFor,
         );
       case ComicTransitionItem():
         final pending = _model.pendingChapterOf(item);
+        final remedy = pending == null ? null : _remedyOf(pending);
         return ComicChapterTransition(
           key: key,
           content: _transitionContent(item),
           foreground: widget.foreground,
           accent: widget.accent,
           onRetry: pending == null ? null : () => _model.retry(pending),
+          remedyLabel: remedy?.label,
+          onRemedy: remedy?.onPressed,
         );
       case ComicChapterPlaceholderItem():
         final state = _model.stateOf(item.chapterIndex);
         if (state is ComicChapterFailed) {
+          final remedy = _remedyOf(item.chapterIndex);
           return ComicChapterTransition(
             key: key,
             content: ComicTransitionContent(
@@ -773,6 +800,8 @@ class _ComicStripViewState extends State<ComicStripView>
             foreground: widget.foreground,
             accent: widget.accent,
             onRetry: () => _model.retry(item.chapterIndex),
+            remedyLabel: remedy?.label,
+            onRemedy: remedy?.onPressed,
           );
         }
         return SkeletonBox(
