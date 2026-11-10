@@ -244,7 +244,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                 ],
               ),
             ),
-          );
+          ),
         );
       },
     );
