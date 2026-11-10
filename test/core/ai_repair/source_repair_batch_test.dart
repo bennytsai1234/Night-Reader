@@ -426,6 +426,8 @@ void main() {
     expect(asked, isEmpty);
     expect(b.isStopped, isTrue);
     expect(b.isRunning, isFalse);
+    expect(b.isFinished, isTrue);
+    expect(b.count(RepairOutcome.notTried), 1);
   });
 
   test('missing recheck results are not passed to AI', () async {
