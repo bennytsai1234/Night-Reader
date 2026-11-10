@@ -232,6 +232,9 @@ class SourceChecker {
     responsePreview: RequestLog.diagnosisPreview,
   );
 
+  /// 網域查不到時查過網路本身通不通：true 是手機斷網了，null 是還沒查過。
+  bool? _networkDown;
+
   /// 目前這一段（[_fetch]）的請求從 [_requests] 的哪一行開始。
   int _stageRequestStart = 0;
 
@@ -246,7 +249,12 @@ class SourceChecker {
     required this._source,
     required this._config,
     BookSourceService? service,
-  }) : _service = service ?? BookSourceService();
+    Future<bool> Function()? networkCheck,
+  }) : _service = service ?? BookSourceService(),
+       _networkCheck = networkCheck ?? networkReachable;
+
+  /// 網路本身通不通（[networkReachable]）。
+  final Future<bool> Function() _networkCheck;
 
   Future<SourceCheckIsolateResult> run() => _requests.run(_run);
 
@@ -795,6 +803,7 @@ class SourceChecker {
       }
       _log('  ↻ $label網站回了空白或錯誤，重試一次');
     } catch (e) {
+      if (hostNotFound(e)) _networkDown ??= !await _networkCheck();
       if (_neverRetried(e) || !(_looksTransient(e) || siteFaltered())) {
         rethrow;
       }
@@ -804,9 +813,11 @@ class SourceChecker {
     return attempt(true);
   }
 
-  /// 再試也沒用的失敗：整段逾時、網站擋下夜讀、要登入或驗證。
+  /// 再試也沒用的失敗：整段逾時、網域查不到（網路是通的）、網站擋下夜讀、
+  /// 要登入或驗證。
   bool _neverRetried(Object error) =>
       error is TimeoutException ||
+      (hostNotFound(error) && _networkDown != true) ||
       error is SourceVerificationException ||
       error is LoginCheckException ||
       _blockedBySite(error, error.toString().toLowerCase());
@@ -874,19 +885,21 @@ class SourceChecker {
     // 網站要真人勾選、封鎖了目前的網路或瀏覽器檢查沒過（CloudflareInterceptor）：
     // 夜讀不替使用者勾選，當成暫時不能用的書源，換網路或網站改設定後再校驗
     // 就會恢復。
+    // 網域查不到：網站多半已經不在了。手機自己斷網時每個網域都查不到，
+    // 這時當成連不上（[_networkDown]）。
+    if (hostNotFound(error) && _networkDown != true) {
+      return _IssueData(
+        stage: 'upstream',
+        message: '網域查不到，網站可能已經關了',
+        health: upstreamHealth(siteBrokenSourceGroupTag),
+      );
+    }
+
     if (_blockedBySite(error, normalized)) {
       return _IssueData(
         stage: 'upstream',
         message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.upstreamUnstable,
-          label: quarantineSourceGroupTag,
-          description: '網站擋下了夜讀，來源先隔離但不視為永久失效',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: false,
-          quarantined: true,
-        ),
+        health: upstreamHealth(upstreamBlockedSourceGroupTag),
       );
     }
 
@@ -920,18 +933,10 @@ class SourceChecker {
     }
 
     if (_looksLikeTimeout(normalized)) {
-      return const _IssueData(
+      return _IssueData(
         stage: 'timeout',
         message: '校驗超時或來源響應過慢',
-        health: SourceRuntimeHealth(
-          category: SourceHealthCategory.upstreamUnstable,
-          label: quarantineSourceGroupTag,
-          description: '上游暫時不可用，來源先隔離但不視為永久失效',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: false,
-          quarantined: true,
-        ),
+        health: upstreamHealth(timeoutSourceGroupTag),
       );
     }
 
@@ -939,15 +944,7 @@ class SourceChecker {
       return _IssueData(
         stage: 'upstream',
         message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.upstreamUnstable,
-          label: quarantineSourceGroupTag,
-          description: '上游暫時不可用，來源先隔離但不視為永久失效',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: false,
-          quarantined: true,
-        ),
+        health: upstreamHealth(upstreamBlockedSourceGroupTag),
       );
     }
 
@@ -1314,6 +1311,25 @@ bool _bookCannotOpen(_IssueData issue) => const {
 /// 本身就是再試一次多半就好的網路錯誤：連線中途斷掉、網站一時忙碌（429、
 /// 5xx）。逾時、憑證錯誤、被網站擋下都不算。經過網路層送出的請求另外由
 /// [RequestLog.transientResponses] 認出（規則 JS 自己抓的 503 這類也算）。
+/// 網域查不到（DNS 沒有這個名字）：Dart 的訊息一律是 `Failed host lookup`。
+bool hostNotFound(Object error) =>
+    error.toString().contains('Failed host lookup');
+
+/// 網路本身通不通：查兩個大網站的網域，一個查得到就算通。網域查不到時用來
+/// 分辨「網站不在了」和「手機斷網」。
+Future<bool> networkReachable() async {
+  for (final host in const ['www.google.com', 'www.baidu.com']) {
+    try {
+      final found = await InternetAddress.lookup(host)
+          .timeout(const Duration(seconds: 3));
+      if (found.isNotEmpty) return true;
+    } catch (_) {
+      // 換下一個。
+    }
+  }
+  return false;
+}
+
 bool _looksTransient(Object error) => switch (error) {
   DioException(type: DioExceptionType.connectionError) => true,
   DioException(type: DioExceptionType.badResponse, :final response) =>

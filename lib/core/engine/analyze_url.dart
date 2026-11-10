@@ -823,15 +823,17 @@ class AnalyzeUrl {
   }
 
   /// 判斷 Dio 錯誤是否屬於可重試的暫時性網路故障
-  /// (connectionTimeout / sendTimeout / receiveTimeout / connectionError / 未知 SocketException)
+  /// (connectionTimeout / sendTimeout / receiveTimeout / connectionError（網域查不到除外）/ 未知 SocketException)
   /// 不重試: cancel、badResponse (HTTP 4xx/5xx)、badCertificate、transformTimeout (回應轉換逾時)
   bool _isRetryable(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-      case DioExceptionType.connectionError:
         return true;
+      case DioExceptionType.connectionError:
+        // 網域查不到再試也查不到（網站不在了，或手機斷網）。
+        return !'${e.error}'.contains('Failed host lookup');
       case DioExceptionType.unknown:
         // Socket 層級故障也算暫時性；網站擋下來（Cloudflare、封鎖網路）
         // 這類已經判斷過的原因再試也一樣。

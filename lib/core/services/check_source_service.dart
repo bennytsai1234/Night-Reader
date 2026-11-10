@@ -579,15 +579,7 @@ class CheckSourceService extends ChangeNotifier {
     final message = _compactMessage(
       error.toString().trim().isEmpty ? '校驗失敗' : error.toString(),
     );
-    const health = SourceRuntimeHealth(
-      category: SourceHealthCategory.upstreamUnstable,
-      label: quarantineSourceGroupTag,
-      description: '校驗流程異常，先隔離避免影響其他書源',
-      allowsSearch: false,
-      allowsReading: false,
-      cleanupCandidate: false,
-      quarantined: true,
-    );
+    final health = upstreamHealth(upstreamBlockedSourceGroupTag);
 
     await _persistStatus(source, health, message);
     _appendLog('  ✕ [${source.bookSourceName}] $message', sourceUrl: url);

@@ -317,6 +317,30 @@ Set<String> splitSourceGroups(String? value) {
       .toSet();
 }
 
+/// 網站那邊的三種問題，照這個順序認（舊版一次標了好幾個時取前面的）。
+const List<String> _upstreamTags = [
+  siteBrokenSourceGroupTag,
+  upstreamBlockedSourceGroupTag,
+  timeoutSourceGroupTag,
+];
+
+/// 網站那邊的問題：書源先隔離（排出搜尋與閱讀），[tag] 說是哪一種——
+/// 「網站失效」（網域查不到、網站不在了）、「上游異常」（連不上、回錯誤、
+/// 擋下夜讀）、「校驗超時」（太慢）。
+SourceRuntimeHealth upstreamHealth(String tag) => SourceRuntimeHealth(
+  category: SourceHealthCategory.upstreamUnstable,
+  label: tag,
+  description: switch (tag) {
+    siteBrokenSourceGroupTag => '網域查不到或網站已經不在，換了網址才可能恢復',
+    timeoutSourceGroupTag => '網站回應太慢，來源先隔離但不視為永久失效',
+    _ => '上游暫時不可用，來源先隔離但不視為永久失效',
+  },
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
 /// BookSource 的業務邏輯擴展
 extension BookSourceLogic on BookSourceBase {
   // 分組操作
@@ -375,9 +399,12 @@ extension BookSourceLogic on BookSourceBase {
         contentBrokenSourceGroupTag,
         quarantineSourceGroupTag,
       ],
-      SourceHealthCategory.upstreamUnstable => const [
-        upstreamBlockedSourceGroupTag,
-        timeoutSourceGroupTag,
+      // 網站那邊的問題分三種，各標各的：網站不在了、連不上或回錯誤、太慢。
+      SourceHealthCategory.upstreamUnstable => [
+        if (_upstreamTags.contains(health.label))
+          health.label
+        else
+          upstreamBlockedSourceGroupTag,
         quarantineSourceGroupTag,
       ],
     };
@@ -587,19 +614,8 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (tagged(timeoutSourceGroupTag) ||
-        tagged(siteBrokenSourceGroupTag) ||
-        tagged(upstreamBlockedSourceGroupTag) ||
-        tagged(quarantineSourceGroupTag)) {
-      return const SourceRuntimeHealth(
-        category: SourceHealthCategory.upstreamUnstable,
-        label: quarantineSourceGroupTag,
-        description: '上游暫時不可用，來源先隔離但不視為永久失效',
-        allowsSearch: false,
-        allowsReading: false,
-        cleanupCandidate: false,
-        quarantined: true,
-      );
+    for (final tag in [..._upstreamTags, quarantineSourceGroupTag]) {
+      if (tagged(tag)) return upstreamHealth(tag);
     }
 
     return SourceRuntimeHealth.healthy;
