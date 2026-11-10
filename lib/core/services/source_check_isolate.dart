@@ -7,6 +7,7 @@ import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -798,7 +799,7 @@ class SourceChecker {
       if (_neverRetried(e) || !(_looksTransient(e) || siteFaltered())) {
         rethrow;
       }
-      _log('  ↻ $label暫時失敗，重試一次: ${_compactMessage(e.toString())}');
+      _log('  ↻ $label暫時失敗，重試一次: ${_compactMessage(errorText(e))}');
     }
     await Future<void>.delayed(_transientRetryDelay);
     return attempt(true);
@@ -868,7 +869,7 @@ class SourceChecker {
     final message = _compactMessage(
       error is TimeoutException
           ? error.message ?? '${_stageLabel(stage)}檢查超時'
-          : error.toString(),
+          : errorText(error),
     );
 
     // 網站要真人勾選、封鎖了目前的網路或瀏覽器檢查沒過（CloudflareInterceptor）：
