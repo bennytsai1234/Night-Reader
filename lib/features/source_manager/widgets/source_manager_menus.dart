@@ -116,6 +116,7 @@ class SourceManagerMenus {
     required VoidCallback onCheckAllSources,
     required VoidCallback onClearCheckMarks,
     required VoidCallback onAiRepairSettings,
+    required VoidCallback onRepairAbnormal,
     required Function(SourceManagerProvider) onClearInvalid,
     required Function(SourceManagerProvider) onDeleteNonNovel,
     bool importEnabled = true,
@@ -158,6 +159,8 @@ class SourceManagerMenus {
               onCheckAllSources();
             case 'clear_check_marks':
               onClearCheckMarks();
+            case 'repair_abnormal':
+              onRepairAbnormal();
             case 'ai_settings':
               onAiRepairSettings();
             case 'group_domain':
@@ -225,6 +228,12 @@ class SourceManagerMenus {
             icon: Icons.layers_clear_outlined,
             label: '清除校驗標記',
             enabled: provider.totalSourceCount > 0 && mutationEnabled,
+          ),
+          GlassMenuItem(
+            value: 'repair_abnormal',
+            icon: Icons.healing_outlined,
+            label: '修復異常書源',
+            enabled: provider.abnormalSourceUrls.isNotEmpty && mutationEnabled,
           ),
           const GlassMenuItem(
             value: 'ai_settings',

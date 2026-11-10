@@ -8,6 +8,10 @@ import 'ai_repair_settings.dart';
 /// 對話裡的一句：`system`、`user` 或 `assistant` 說的話。
 typedef AiMessage = ({String role, String content});
 
+/// 一次回覆用了多少 token：送出的（其中 [cached] 打中服務的快取）與回覆的。
+/// 服務沒回報的是 0。
+typedef AiUsage = ({int prompt, int cached, int completion});
+
 /// AI 服務回了錯，或回的東西讀不懂；[message] 給使用者看。
 class AiServiceException implements Exception {
   const AiServiceException(this.message);
@@ -16,6 +20,11 @@ class AiServiceException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// AI 服務好好回了，但內容是空的：模型偶爾會這樣，再問一次通常就好。
+class AiEmptyReply extends AiServiceException {
+  const AiEmptyReply() : super('AI 服務回了空的內容');
 }
 
 /// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0054）。不經過
@@ -51,9 +60,13 @@ class AiChatClient {
   static const int maxResponseBytes = 2 * 1024 * 1024;
 
   /// 送出 [messages]，傳回 AI 回的那段話。
+  /// [onUsage] 收到服務回報的用量（OpenAI 的 `usage`；快取打中的照
+  /// DeepSeek 的 `prompt_cache_hit_tokens` 或 OpenAI 的
+  /// `prompt_tokens_details.cached_tokens`）。
   Future<String> complete(
     List<AiMessage> messages, {
     CancelToken? cancelToken,
+    void Function(AiUsage usage)? onUsage,
   }) async {
     // 收太多就停：自己的取消記號，外面停下時跟著取消。
     final guard = CancelToken();
@@ -78,6 +91,7 @@ class AiChatClient {
               {'role': message.role, 'content': message.content},
           ],
           'temperature': 0.2,
+          if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
         },
         options: Options(
           headers: {
@@ -111,18 +125,35 @@ class AiChatClient {
     if (status < 200 || status >= 300) {
       throw AiServiceException(_failure(status, data));
     }
+    if (onUsage != null) onUsage(usageOf(data));
     final content = switch (data) {
       {'choices': [{'message': {'content': final String content}}, ...]} =>
         content,
       _ => null,
     };
-    if (content == null || content.trim().isEmpty) {
-      throw const AiServiceException('AI 服務回了空的內容');
-    }
+    if (content == null || content.trim().isEmpty) throw const AiEmptyReply();
     if (content.length > aiRepairMaxReplyLength) {
       throw const AiServiceException('AI 回的內容太長');
     }
     return content;
+  }
+
+  /// 回應裡的用量；沒有的欄位當 0。
+  static AiUsage usageOf(Object? data) {
+    int read(Object? value) => value is num ? value.toInt() : 0;
+    final usage = switch (data) {
+      {'usage': final Map<String, dynamic> usage} => usage,
+      _ => const <String, dynamic>{},
+    };
+    final details = usage['prompt_tokens_details'];
+    return (
+      prompt: read(usage['prompt_tokens']),
+      cached: read(
+        usage['prompt_cache_hit_tokens'] ??
+            (details is Map ? details['cached_tokens'] : null),
+      ),
+      completion: read(usage['completion_tokens']),
+    );
   }
 
   static String _failure(int status, Object? data) {

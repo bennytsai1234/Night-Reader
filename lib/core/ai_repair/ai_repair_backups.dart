@@ -32,27 +32,34 @@ class AiRepairBackups {
 
   /// 記下 AI 改之前的 [sourceJson]，取代這個書源之前留的。
   Future<void> put(String sourceUrl, Map<String, dynamic> sourceJson) =>
-      _update((all) => all[sourceUrl] = sourceJson);
+      _update((all) {
+        all[sourceUrl] = sourceJson;
+        return true;
+      });
 
   Future<void> remove(String sourceUrl) =>
-      _update((all) => all.remove(sourceUrl));
+      _update((all) => all.remove(sourceUrl) != null);
 
   /// 只留 [existing] 裡還在的書源；刪掉的書源它的改前版本也刪。
-  Future<void> keepOnly(Set<String> existing) =>
-      _update((all) => all.removeWhere((url, _) => !existing.contains(url)));
+  Future<void> keepOnly(Set<String> existing) => _update((all) {
+    final before = all.length;
+    all.removeWhere((url, _) => !existing.contains(url));
+    return all.length != before;
+  });
 
   Future<Map<String, Map<String, dynamic>>> _load() async {
     await _queue;
     return _cache ??= await _read();
   }
 
-  Future<void> _update(void Function(Map<String, Map<String, dynamic>>) edit) {
+  /// [edit] 改 map，傳回有沒有改到內容（只看筆數會漏掉取代同一筆）；沒改到
+  /// 就不寫檔。整份只在寫檔時編碼一次：整批修復一次存上百個書源。
+  Future<void> _update(bool Function(Map<String, Map<String, dynamic>>) edit) {
     final next = _queue.then((_) async {
       final all = _cache ?? await _read();
-      final snapshot = jsonEncode(all);
-      edit(all);
+      final changed = edit(all);
       _cache = all;
-      if (jsonEncode(all) == snapshot) return;
+      if (!changed) return;
       final file = await _file();
       if (all.isEmpty) {
         if (await file.exists()) await file.delete();

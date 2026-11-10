@@ -461,6 +461,13 @@ class SourceManagerProvider with ChangeNotifier {
   /// 篩選「沒有異常」：校驗沒有標上「異常」的書源（含還沒校驗過的）。
   static const String noAbnormalFilter = '沒有異常';
 
+  /// 帶「異常」標記的書源網址（修復異常書源修的就是這些）。
+  List<String> get abnormalSourceUrls => [
+    for (final source in _sources)
+      if (_hasGroup(source.bookSourceGroup, abnormalSourceGroupTag))
+        source.bookSourceUrl,
+  ];
+
   /// 篩選某一類非小說書源（ADR 0051），名稱就是類別名稱。
   static final Map<String, BookSourceKind> kindFilters = {
     BookSourceKind.comic.sourceLabel: BookSourceKind.comic,
@@ -1193,7 +1200,7 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  /// 清掉校驗留下的狀態分組與錯誤註解，書源回到可用；不給網址就清全部，
+  /// 清掉校驗留下的狀態分組、「AI 修不好」與錯誤註解，書源回到可用；不給網址就清全部，
   /// 連上次的校驗摘要一起收起。回傳實際有變動的書源數。
   Future<int> clearCheckMarks([Set<String>? urls]) async {
     if (!_beginBatchOperation()) return 0;
@@ -1205,8 +1212,10 @@ class SourceManagerProvider with ChangeNotifier {
       for (final source in targets) {
         final group = source.bookSourceGroup;
         final comment = source.bookSourceComment;
-        source.removeInvalidGroups();
-        source.removeErrorComment();
+        source
+          ..removeInvalidGroups()
+          ..removeGroup(aiUnfixableSourceGroupTag)
+          ..removeErrorComment();
         if (source.bookSourceGroup != group ||
             source.bookSourceComment != comment) {
           changed.add(source);

@@ -357,7 +357,7 @@ void main() {
       });
     });
 
-    testWidgets('讀得出大小、整張卻壞了的圖解不開，之後不再重解', (tester) async {
+    testWidgets('讀得出大小、整張卻壞了的圖解不開；重抓到好的圖就解得開', (tester) async {
       await tester.runAsync(() async {
         final dir = await Directory.systemTemp.createTemp(
           'illustration_broken',
@@ -375,15 +375,58 @@ void main() {
         final images = IllustrationImages(capacity: 2);
         addTearDown(images.clear);
         expect(await images.load(file.path, 60), isNull);
-        // 換成好的圖也不再解：這次開 App 記住它解不開。
-        final recorder = ui.PictureRecorder();
-        ui.Canvas(recorder)
-            .drawColor(const ui.Color(0xFF336699), ui.BlendMode.src);
-        final picture = await recorder.endRecording().toImage(120, 80);
-        final png = await picture.toByteData(format: ui.ImageByteFormat.png);
-        await file.writeAsBytes(png!.buffer.asUint8List());
         expect(await images.load(file.path, 60), isNull);
+        // 清除正文後重抓，同一個路徑寫進好的圖。
+        await file.writeAsBytes(await _png(const ui.Color(0xFF336699)));
+        expect((await images.load(file.path, 60))?.width, 60);
+      });
+    });
+
+    testWidgets('同一個路徑換了新圖：拿到新圖，不是先前解碼留著的舊圖', (tester) async {
+      await tester.runAsync(() async {
+        final dir = await Directory.systemTemp.createTemp(
+          'illustration_replaced',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+        final file = File('${dir.path}/a.png');
+        await file.writeAsBytes(await _png(const ui.Color(0xFFFF0000)));
+        final images = IllustrationImages(capacity: 2);
+        addTearDown(images.clear);
+        expect(await _firstPixel(await images.load(file.path, 60)), 0xFFFF0000);
+        expect(await _firstPixel(await images.load(file.path, 30)), 0xFFFF0000);
+
+        // 重抓寫回同一個路徑。兩張純色圖可能一樣大，修改時間照實際重抓
+        // （隔了一段時間）往後挪。
+        final before = await file.lastModified();
+        await file.writeAsBytes(await _png(const ui.Color(0xFF0000FF)));
+        await file.setLastModified(before.add(const Duration(minutes: 1)));
+        expect(await _firstPixel(await images.load(file.path, 60)), 0xFF0000FF);
+        // 另一個寬度先前解碼留著的也作廢了。
+        expect(images.peek(file.path, 30), isNull);
+        expect(await _firstPixel(await images.load(file.path, 30)), 0xFF0000FF);
+
+        // 圖檔刪了就讀不到，不拿留著的。
+        await file.delete();
+        expect(await images.load(file.path, 60), isNull);
+        expect(images.peek(file.path, 60), isNull);
       });
     });
   });
+}
+
+/// 120×80 的純色 PNG。
+Future<List<int>> _png(ui.Color color) async {
+  final recorder = ui.PictureRecorder();
+  ui.Canvas(recorder).drawColor(color, ui.BlendMode.src);
+  final picture = await recorder.endRecording().toImage(120, 80);
+  final png = await picture.toByteData(format: ui.ImageByteFormat.png);
+  return png!.buffer.asUint8List();
+}
+
+/// 左上角那一點的顏色（ARGB）。
+Future<int?> _firstPixel(ui.Image? image) async {
+  if (image == null) return null;
+  final data = await image.toByteData();
+  final rgba = data!.getUint32(0);
+  return (rgba & 0xFF) << 24 | rgba >> 8;
 }

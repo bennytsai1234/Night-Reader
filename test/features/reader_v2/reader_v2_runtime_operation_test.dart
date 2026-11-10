@@ -144,6 +144,104 @@ void main() {
     expect(restores.last.charOffset, 2);
   });
 
+  group('opening at a paid chapter (ADR 0057)', () {
+    BookChapter paid(int index) => chapter(index)..isVip = true;
+
+    // 同書源工作入口：付費章節不抓，正文準備回「付費章節」。
+    Future<String?> loader(int index, BookChapter chapter) async {
+      if (chapter.isLocked) {
+        throw const ReaderV2ContentUnavailableException(lockedChapterNotice);
+      }
+      return chapter.content;
+    }
+
+    Future<(ReaderV2Runtime, List<ReaderV2Location>)> open(
+      List<BookChapter> chapters, {
+      required int at,
+    }) async {
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: loader,
+        initialLocation: ReaderV2Location(chapterIndex: at, charOffset: 5),
+      );
+      addTearDown(runtime.dispose);
+      final restores = <ReaderV2Location>[];
+      runtime.registerViewportRestore(Object(), (location) async {
+        restores.add(location);
+        return true;
+      });
+      await runtime.openBook();
+      return (runtime, restores);
+    }
+
+    test('opens at the start of the first free chapter after it', () async {
+      final (runtime, restores) = await open([
+        chapter(0),
+        paid(1),
+        paid(2),
+        chapter(3),
+      ], at: 1);
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(restores.single.chapterIndex, 3);
+      expect(restores.single.charOffset, 0);
+      expect(
+        restores.single.visualOffsetPx,
+        runtime.state.layoutSpec.anchorOffsetInViewport,
+      );
+    });
+
+    test('opens at the nearest free chapter before it when every later '
+        'chapter is paid', () async {
+      final (runtime, restores) = await open([
+        chapter(0),
+        chapter(1),
+        paid(2),
+        paid(3),
+      ], at: 2);
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(restores.single.chapterIndex, 1);
+      expect(restores.single.charOffset, 0);
+    });
+
+    test('jumping back to the paid chapter before the first open is laid '
+        'out reopens at the free chapter', () async {
+      // 例如還在開書就點了停在那一章的書籤：跳不過去，回到開書改開的章。
+      final openRestore = Completer<bool>();
+      final runtime = makeRuntime([
+        paid(0),
+        chapter(1),
+        chapter(2),
+      ], contentLoader: loader);
+      addTearDown(runtime.dispose);
+      final restores = <ReaderV2Location>[];
+      runtime.registerViewportRestore(Object(), (location) {
+        restores.add(location);
+        return restores.length == 1 ? openRestore.future : Future.value(true);
+      });
+
+      final opening = runtime.openBook();
+      await pumpEventQueue();
+      await runtime.jumpToChapter(0);
+      openRestore.complete(true);
+      await opening;
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(restores.map((location) => location.chapterIndex), [1, 1]);
+      expect(runtime.takeUserNotice()?.message, lockedChapterNotice);
+    });
+
+    test('a book of only paid chapters shows it cannot be read', () async {
+      final (runtime, restores) = await open([paid(0), paid(1)], at: 1);
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.unavailable);
+      expect(runtime.state.unavailableMessage, lockedChapterNotice);
+      expect(restores, isEmpty);
+    });
+  });
+
   test('latest operation owns the semantic target', () async {
     final content = Completer<String?>();
     final chapters = List.generate(4, chapter);

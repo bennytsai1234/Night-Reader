@@ -10,6 +10,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_reposi
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/chapter_shares.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 
 import 'reader_v2_location.dart';
 import 'reader_v2_operation_token.dart';
@@ -253,15 +254,18 @@ class ReaderV2Runtime extends ChangeNotifier {
       await repository.ensureChapters();
       await _loadChapterShares();
       if (!isCurrentOperationToken(token)) return;
-      if (jumped == null && chapterTitle != null && chapterTitle.isNotEmpty) {
-        location = location.copyWith(
-          chapterIndex: alignChapterIndex(
-            oldIndex: location.chapterIndex,
-            oldTitle: chapterTitle,
-            oldTotalCount: 0,
-            newChapters: repository.chapters,
-          ),
-        );
+      if (jumped == null) {
+        if (chapterTitle != null && chapterTitle.isNotEmpty) {
+          location = location.copyWith(
+            chapterIndex: alignChapterIndex(
+              oldIndex: location.chapterIndex,
+              oldTitle: chapterTitle,
+              oldTotalCount: 0,
+              newChapters: repository.chapters,
+            ),
+          );
+        }
+        location = _skipLockedChapter(location);
         _initialLocation = location;
       }
       await _positionViewport(location: location, token: token);
@@ -270,6 +274,32 @@ class ReaderV2Runtime extends ChangeNotifier {
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }
+  }
+
+  /// 開書的位置停在付費章節（不抓，ADR 0057）時，改到最近的免費章節章首：
+  /// 先往後找，沒有再往前找，同漫畫與有聲書。整本都是付費章節就不動，排版
+  /// 時照常顯示取不到。存的進度、同步來的進度與書籤都可能停在這種章。
+  ReaderV2Location _skipLockedChapter(ReaderV2Location location) {
+    final count = repository.chapterCount;
+    if (count <= 0) return location;
+    final index = location.chapterIndex.clamp(0, count - 1).toInt();
+    bool locked(int chapterIndex) =>
+        repository.chapterAt(chapterIndex)?.isLocked ?? false;
+    if (!locked(index)) return location;
+    int? nearest(int delta) =>
+        ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+          currentChapterIndex: index,
+          chapterCount: count,
+          delta: delta,
+          skip: locked,
+        );
+    final target = nearest(1) ?? nearest(-1);
+    if (target == null) return location;
+    return ReaderV2Location(
+      chapterIndex: target,
+      charOffset: 0,
+      visualOffsetPx: stateMachine.effectiveLayoutSpec.anchorOffsetInViewport,
+    );
   }
 
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {

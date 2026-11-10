@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 
 /// 一段工作實際送出的請求，依序記在 [lines]；給了 [responsePreview] 時每個
@@ -17,7 +18,10 @@ import 'package:night_reader/core/services/encoding_detect.dart';
 /// 送出，記下的內容由 `BlockingCall` 帶回來，[merge] 接上）與兩種 WebView
 /// 的入口。不在 [run] 裡時什麼都不記。
 final class RequestLog {
-  RequestLog({this.responsePreview});
+  RequestLog({this.responsePreview, this.digestPages = false});
+
+  /// 網頁先精簡（[digestPage]）再取開頭，給 AI 看。
+  final bool digestPages;
 
   /// 書源校驗的診斷記每個回應的開頭幾個字。
   static const int diagnosisPreview = 160;
@@ -88,6 +92,7 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   final (length, head, empty) = _bodyPreview(
     response.data,
     log.responsePreview!,
+    digest: log.digestPages,
   );
   log.lines.add(
     '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
@@ -105,7 +110,11 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
 void recordRenderedPage(String? url, Object? body) {
   final log = currentRequestLog;
   if (log == null || !log.withResponses) return;
-  final (length, head, empty) = _bodyPreview(body, log.responsePreview!);
+  final (length, head, empty) = _bodyPreview(
+    body,
+    log.responsePreview!,
+    digest: log.digestPages,
+  );
   log.lines.add(
     '  ← ${url ?? '?'} 網頁渲染（沒有狀態碼）'
     '${length == null ? '' : '，$length'}'
@@ -116,7 +125,13 @@ void recordRenderedPage(String? url, Object? body) {
 
 /// 回應內容的長度、開頭 [previewLength] 個字（空白合成一格）與是不是空白。
 /// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜。
-(String?, String, bool) _bodyPreview(Object? data, int previewLength) {
+/// [digest] 時整頁解開、精簡過再取開頭（最多解開 [_digestBytes] 位元組）。
+(String?, String, bool) _bodyPreview(
+  Object? data,
+  int previewLength, {
+  bool digest = false,
+}) {
+  final decodeBytes = digest ? _digestBytes : previewLength * 4;
   final String text;
   final String length;
   switch (data) {
@@ -127,9 +142,7 @@ void recordRenderedPage(String? url, Object? body) {
       length = '${data.length} 字';
     case List<int>():
       final bytes = Uint8List.fromList(
-        data.length > previewLength * 4
-            ? data.sublist(0, previewLength * 4)
-            : data,
+        data.length > decodeBytes ? data.sublist(0, decodeBytes) : data,
       );
       text = EncodingDetect.decodeWithCharset(
         bytes,
@@ -142,7 +155,9 @@ void recordRenderedPage(String? url, Object? body) {
     default:
       return (null, '', false);
   }
-  final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  final collapsed = digest
+      ? digestPage(text)
+      : text.replaceAll(RegExp(r'\s+'), ' ').trim();
   return (
     length,
     collapsed.length > previewLength
@@ -151,5 +166,7 @@ void recordRenderedPage(String? url, Object? body) {
     collapsed.isEmpty,
   );
 }
+
+const int _digestBytes = 2 * 1024 * 1024;
 
 final Object _requestLogZoneKey = Object();
