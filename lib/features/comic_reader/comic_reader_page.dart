@@ -94,6 +94,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   );
   final ValueNotifier<ReaderV2ScrubState> _scrub = ValueNotifier((
     isScrubbing: false,
+    holdsSlider: false,
     percent: 0,
   ));
   final ReaderV2SidePanelController _chapterPanel =

@@ -48,6 +48,30 @@ void main() {
     expect(original.name, '搜尋時的書名');
   });
 
+  test('詳情頁的書名、作者拿掉「作者：」「著」這類字樣，同搜尋結果', () async {
+    final source = BookSource.fromJson({
+      'bookSourceName': '字樣',
+      'bookSourceUrl': 'https://label.test',
+      'ruleBookInfo': {'name': '.title@text', 'author': '.author@text'},
+    });
+    final book = await BookInfoParser.parse(
+      source: source,
+      book: Book(
+        bookUrl: 'https://label.test/b/1',
+        origin: 'https://label.test',
+        name: '夜航',
+        author: '某人',
+      ),
+      body:
+          '<html><body><h1 class="title">夜航 作者：某人</h1>'
+          '<p class="author">作者：某人</p></body></html>',
+      baseUrl: 'https://label.test/b/1',
+    );
+
+    expect(book.name, '夜航');
+    expect(book.author, '某人');
+  });
+
   test('規則改閱讀設定時只改交回的書', () async {
     final source = BookSource.fromJson({
       'bookSourceName': '順序',

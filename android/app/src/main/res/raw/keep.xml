@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 發布版會刪掉程式碼裡找不到引用的資源；這些只在 Dart 端用名字指定（audio_service 的 androidNotificationIcon），要留著。 -->
+<!-- 發布版會刪掉程式碼裡找不到引用的資源；這些只在 Dart 端用名字指定，要留著：
+     狀態列圖示（androidNotificationIcon）與 audio_service 的通知按鈕圖示
+     （MediaControl.androidIcon）。按鈕圖示被刪掉時，Android 13 以上建「停止」
+     按鈕會丟錯，整個播放狀態送不進系統，通知與鎖定畫面都不出現。 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_stat_night_reader" />
+    tools:keep="@drawable/ic_stat_night_reader,@drawable/audio_service_*" />

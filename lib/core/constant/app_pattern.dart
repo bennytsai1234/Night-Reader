@@ -24,6 +24,11 @@ class AppPattern {
 
   static final RegExp nameRegex = RegExp(r'\s+作\s*者.*|\s+\S+\s+著');
   static final RegExp authorRegex = RegExp(r'^\s*作\s*者[:：\s]+|\s+著');
+
+  /// 只認開頭的「作者：」：清手機上已經存著的作者用（`BookHelp.stripAuthorLabel`）。
+  /// 不像 [authorRegex] 也拿掉「 著」：那一支不限在結尾，套在既有資料上會
+  /// 改掉「王 著文」這種本來就是名字的字。
+  static final RegExp authorLabelRegex = RegExp(r'^\s*作\s*者[:：\s]+');
   static final RegExp fileNameRegex = RegExp(r'[\\/:*?"<>|.]');
   static final RegExp fileNameRegex2 = RegExp(r'[\\/:*?"<>|]');
   static final RegExp splitGroupRegex = RegExp(r'[,;，；]');

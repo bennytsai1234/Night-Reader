@@ -80,6 +80,17 @@ void main() {
     quote: '百年以上的松煙墨',
   );
 
+  test('a highlight from an older version still carrying "作者：" lands on '
+      'the cleaned book', () async {
+    final a = phone('a');
+    final b = phone('b');
+    await a.dao.add(paint().copyWith(bookAuthor: '作者：沈知秋'));
+    await a.sync.syncAll();
+    await b.sync.syncAll();
+
+    expect((await b.dao.getAll()).single.bookAuthor, '沈知秋');
+  });
+
   test('a highlight added on one phone shows up on the other with its color; '
       'recoloring and deleting it there follow back here', () async {
     final a = phone('a');

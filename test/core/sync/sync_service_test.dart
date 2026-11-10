@@ -298,6 +298,83 @@ void main() {
     expect((await a.book('a-src')).chapterIndex, 2);
   });
 
+  group('a book taken off the shelf and added back', () {
+    /// 雲端那本書的進度：章節序號、第幾個字、時間。
+    Future<(int, int, int)> cloud() async {
+      final records = SyncDocument.decode(store.files['progress.json']!.$1)
+          .records;
+      final record = records['夜航\t某人']!;
+      return (
+        record.data['chapterIndex'] as int,
+        record.data['charOffset'] as int,
+        record.time,
+      );
+    }
+
+    setUp(() async {
+      await a.addBook(
+        'a-src',
+        toc: toc,
+        chapterIndex: 3,
+        charOffset: 120,
+        time: 200,
+      );
+      await a.sync.syncAll();
+    });
+
+    for (final syncedInBetween in [false, true]) {
+      test(
+        'resumes where the cloud left it '
+        '(${syncedInBetween ? 'synced' : 'not synced'} while it was off)',
+        () async {
+          // 移出書架：這台的書沒了，雲端的進度留著。
+          await a.books.deleteByUrl('a-src');
+          if (syncedInBetween) await a.sync.syncAll();
+
+          // 再從書源加回來：新的一本，位置在開頭、從沒移動過。
+          await a.addBook('a-src', toc: toc);
+          await a.sync.syncAll();
+
+          final book = await a.book('a-src');
+          expect((book.chapterIndex, book.charOffset), (3, 120));
+          expect(await cloud(), (3, 120, 200));
+        },
+      );
+    }
+
+    test('and opened before syncing still gets the cloud progress', () async {
+      await a.books.deleteByUrl('a-src');
+      await a.addBook('a-src', toc: toc);
+
+      final pulled = await a.sync.pullProgress('a-src');
+      expect(pulled?.progress.chapterIndex, 3);
+      expect(pulled?.progress.charOffset, 120);
+    });
+
+    test('from another source while the one read last is removed', () async {
+      // 同一本書的另一個書源也在書架上，讀得比較早、停在別處。
+      await a.addBook('a-other', toc: toc, chapterIndex: 1, time: 100);
+      await a.sync.syncAll();
+      expect(await cloud(), (3, 120, 200));
+
+      await a.books.deleteByUrl('a-src');
+      await a.sync.syncAll();
+
+      final book = await a.book('a-other');
+      expect((book.chapterIndex, book.charOffset), (3, 120));
+      expect(await cloud(), (3, 120, 200));
+    });
+
+    test('and read again here still uploads the new position', () async {
+      await a.books.deleteByUrl('a-src');
+      await a.addBook('a-src', toc: toc);
+      await a.books.updateProgress('a-src', 1, '第一章', 30);
+      await a.sync.syncAll();
+
+      expect(await cloud(), (1, 30, (await a.book('a-src')).progressTime));
+    });
+  });
+
   test('two phones syncing at once keep both books', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 200);
     await b.books.upsert(
