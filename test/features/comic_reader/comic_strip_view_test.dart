@@ -163,6 +163,10 @@ void main() {
     );
     expect(find.text('登入'), findsOneWidget);
     expect(find.text('重試'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('登入')).dx,
+      lessThan(tester.getCenter(find.text('重試')).dx),
+    );
 
     await tester.tap(find.text('登入'));
     await harness.settle(tester);

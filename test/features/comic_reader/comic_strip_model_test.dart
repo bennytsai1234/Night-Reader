@@ -33,6 +33,30 @@ void main() {
     model.dispose();
   });
 
+  test('retryFailed loads every chapter that failed and leaves the loaded '
+      'ones alone', () async {
+    final source = FakeComicSource()..failingChapters.addAll([0, 1]);
+    final model = ComicStripModel(
+      source: source,
+      chapterCount: 3,
+      chapterIndex: 0,
+    )..start();
+    await _idle();
+    expect(model.stateOf(0), isA<ComicChapterFailed>());
+
+    source.failingChapters.clear();
+    model.retryFailed();
+    await _idle();
+    expect(model.stateOf(0), isA<ComicChapterReady>());
+    expect(source.requestedChapters, [0, 0]);
+
+    // 沒有失敗的話時不再抓。
+    model.retryFailed();
+    await _idle();
+    expect(source.requestedChapters, [0, 0]);
+    model.dispose();
+  });
+
   test('a chapter with no pages (for example a broken file) is a failure '
       'with a retry, not an empty chapter', () async {
     final model = ComicStripModel(

@@ -81,41 +81,59 @@ class _AudiobookPageState extends State<AudiobookPage> {
   /// 再放）。換頁途中建整份清單、播換場，每一幀都超過上限。
   bool _entered = false;
 
-  /// 已經提示過的播放錯誤：同一個錯誤只跳一次提示。
+  /// 已經提示過的播放錯誤：同一次失敗只跳一次提示（重試又失敗會再跳）。
   String? _noticedError;
+
+  /// 這一頁跳出、還在畫面上的失敗提示；提示掛在整個 App 共用的那一層，
+  /// 離開這一頁時要自己收掉。
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _notice;
 
   @override
   void initState() {
     super.initState();
+    // 進來之前就留著的失敗不再跳一次；按播放重試又失敗才跳。
+    _noticedError = _playbackError;
     _player.addListener(_onPlayerChanged);
     unawaited(_start());
   }
 
   /// 播放失敗：跳一則提示寫原因；能解決時（登入、前往驗證）旁邊給那一顆。
   void _onPlayerChanged() {
-    final error = _player.isCurrent(widget.book) && _player.chapters.isNotEmpty
-        ? _player.error
-        : null;
+    final error = _playbackError;
     if (error == _noticedError) return;
     _noticedError = error;
     if (error == null || !mounted) return;
     final remedy = SourceFailureRemedy.of(error, _player.source);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(error),
-          persist: false,
-          duration: const Duration(seconds: 4),
-          action: remedy == null
-              ? null
-              : SnackBarAction(
-                  label: remedy.label,
-                  onPressed: () => unawaited(_runRemedy(context, remedy)),
-                ),
-        ),
-      );
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    final notice = messenger.showSnackBar(
+      SnackBar(
+        content: Text(error),
+        persist: false,
+        duration: const Duration(seconds: 4),
+        action: remedy == null
+            ? null
+            : SnackBarAction(
+                label: remedy.label,
+                onPressed: () {
+                  if (mounted) unawaited(_runRemedy(context, remedy));
+                },
+              ),
+      ),
+    );
+    _notice = notice;
+    unawaited(
+      notice.closed.then<void>((_) {
+        if (identical(_notice, notice)) _notice = null;
+      }),
+    );
   }
+
+  /// 這本書某一集播不出來的原因；整本打不開（還沒有目錄）由狀態畫面顯示，
+  /// 不算在這裡。
+  String? get _playbackError =>
+      _player.isCurrent(widget.book) && _player.chapters.isNotEmpty
+      ? _player.error
+      : null;
 
   /// 登入或驗證回來：有錯就重試（[_retry]）。
   Future<void> _runRemedy(
@@ -126,8 +144,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
   }
 
   /// 重試：還沒有目錄就重開這本書；有了就重播，[AudiobookPlayer.play] 會重載
-  /// 失敗的那一集。
+  /// 失敗的那一集。播放器已經換成別本書時不動它。
   void _retry() {
+    if (!_player.isCurrent(widget.book)) return;
     if (_player.chapters.isEmpty) {
       unawaited(_player.open(widget.book, chapterIndex: widget.chapterIndex));
     } else {
@@ -161,6 +180,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
   @override
   void dispose() {
     _player.removeListener(_onPlayerChanged);
+    _notice?.close();
     unawaited(_downloads?.cancel());
     _listScroll?.dispose();
     _skeletonScroll?.dispose();

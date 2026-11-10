@@ -56,11 +56,12 @@ class _World {
     random: Random(1),
   );
 
-  Future<void> addSource() => sources.upsert(
+  Future<void> addSource({String? loginUrl}) => sources.upsert(
     BookSource(
       bookSourceUrl: _sourceUrl,
       bookSourceName: '夜雨聽書',
       bookSourceType: SourceType.audio,
+      loginUrl: loginUrl,
     ),
   );
 
@@ -187,6 +188,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.textContaining('播放失敗：需要登入才聽得到這一集'), findsOneWidget);
+    // 這個書源沒有登入，提示旁不給「登入」。
+    expect(find.widgetWithText(SnackBarAction, '登入'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('a source with a login gets 「登入」 beside the reason, and the '
+      'same failure is announced once', (tester) async {
+    final book = _book();
+    world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+    await tester.runAsync(() async {
+      await world.addSource(loginUrl: '$_sourceUrl/login');
+      await world.addBook(book);
+    });
+
+    await open(tester, book);
+    await settle(tester);
+
+    world.engine.fail(LoginCheckException('需要登入才聽得到這一集'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.widgetWithText(SnackBarAction, '登入'), findsOneWidget);
+
+    // 播放器為別的事通知（調倍速），同一次失敗不再跳一則。
+    await tester.runAsync(() => world.player.setSpeed(1.5));
+    await tester.pump();
+    expect(find.byType(SnackBar), findsOneWidget);
     await close(tester);
   });
 }

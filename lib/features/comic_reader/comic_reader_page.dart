@@ -191,6 +191,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       // 換頁動畫播完才建條漫：建整條條漫與選單很重，放在動畫途中會掉幀
       // （ADR 0037 等靜止再放）；動畫期間畫和條漫同比例的骨架。
       await _routeSettled();
+      if (!mounted) return;
       _sync.start();
       // 接著上次讀的地方開：等開 App 的同步做完一下，照同步後的位置開。
       final resume = await _sync.openLocation();
