@@ -49,6 +49,9 @@ class AiRepairJob {
   /// 結果的說明：AI 最後說的話，或卡在哪。
   String? explanation;
 
+  /// AI 明確放棄或兩輪嘗試耗盡時才標「AI 修不好」；網路、金鑰與系統錯誤不標。
+  bool confirmedUnfixable = false;
+
   /// 剪貼簿：已複製給 AI，等使用者貼回修好的書源。
   bool awaitingPaste = false;
 
@@ -409,6 +412,7 @@ class AiRepairSession extends ChangeNotifier {
           answer('$aiRepairTryFirst\n${budget()}');
         case AiGiveUp(:final reason):
           _finish(step, 'AI 說修不好');
+          job.confirmedUnfixable = true;
           _fail(job, reason.isEmpty ? 'AI 說修不好。' : 'AI：$reason');
           return null;
         case AiFetch() when fetches >= aiRepairMaxFetches:
@@ -488,6 +492,7 @@ class AiRepairSession extends ChangeNotifier {
       if (tests >= aiRepairMaxTests) break;
     }
     if (earlier == null && tests > 0) return tried.toString().trimRight();
+    if (earlier != null) job.confirmedUnfixable = true;
     _fail(job, earlier == null ? '試了 $tests 次還沒修好，書源沒有改。' : '試了兩回還沒修好，書源沒有改。');
     return null;
   }
