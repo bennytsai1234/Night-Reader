@@ -186,6 +186,9 @@ class DownloadService extends DownloadBase
         status: DownloadTask.statusWaiting,
       );
     }
+    for (final task in storedTasks) {
+      await rememberKind(task.bookUrl);
+    }
     tasks.clear();
     tasks.addAll(storedTasks);
     update();

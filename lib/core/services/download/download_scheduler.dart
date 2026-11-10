@@ -119,6 +119,7 @@ mixin DownloadScheduler on DownloadBase {
         sortOrder: sortOrder,
       );
       await downloadDao.upsert(task);
+      await rememberKind(bookUrl);
 
       existingIndex = tasks.indexWhere((t) => t.bookUrl == bookUrl);
       if (existingIndex != -1) {

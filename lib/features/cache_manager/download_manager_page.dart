@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -32,6 +33,22 @@ typedef _QueueSummary = ({
   int failed,
   int latestUpdate,
 });
+
+/// 進度與失敗數的用字照書的類別：小說寫章，漫畫寫話，有聲書寫集。
+extension _CountWords on BookSourceKind {
+  /// 數量後面的單位，例如「3 / 10 話」。
+  String get unit => switch (this) {
+    BookSourceKind.comic => '話',
+    BookSourceKind.audio => '集',
+    _ => '章',
+  };
+
+  /// 失敗原因裡「第 n 章」那一列的名稱。
+  String get entryLabel => this == BookSourceKind.novel ? '章節' : unit;
+
+  /// 失敗原因裡失敗數那一列的名稱。
+  String get failedLabel => this == BookSourceKind.novel ? '失敗章節數' : '失敗$unit數';
+}
 
 /// DownloadManagerPage - 全域背景下載管理頁面
 class DownloadManagerPage extends StatelessWidget {
@@ -250,7 +267,11 @@ class DownloadManagerPage extends StatelessWidget {
       child: _TaskRow(
         title: task.bookName,
         progress: progress,
-        status: _statusText(task, globallyPaused: globallyPaused),
+        status: _statusText(
+          task,
+          service.kindOf(task.bookUrl).unit,
+          globallyPaused: globallyPaused,
+        ),
         statusColor: _statusColor(
           context,
           task,
@@ -322,7 +343,7 @@ class DownloadManagerPage extends StatelessWidget {
         service.moveTask(task.bookUrl, 1);
         break;
       case 'details':
-        _showFailureDetails(context, task);
+        _showFailureDetails(context, task, service.kindOf(task.bookUrl));
         break;
       case 'delete':
         service.removeTask(task.bookUrl);
@@ -330,7 +351,11 @@ class DownloadManagerPage extends StatelessWidget {
     }
   }
 
-  void _showFailureDetails(BuildContext context, DownloadTask task) {
+  void _showFailureDetails(
+    BuildContext context,
+    DownloadTask task,
+    BookSourceKind kind,
+  ) {
     final chrome = AppChrome.of(context);
     final scheme = Theme.of(context).colorScheme;
     Widget detailRow(String label, String value) {
@@ -367,8 +392,11 @@ class DownloadManagerPage extends StatelessWidget {
           detailRow('書籍', task.bookName),
           detailRow('失敗類型', task.lastErrorReason ?? '下載失敗'),
           if (task.lastErrorChapterIndex != null)
-            detailRow('章節', '第 ${task.lastErrorChapterIndex! + 1} 章'),
-          detailRow('失敗章節數', '${task.errorCount}'),
+            detailRow(
+              kind.entryLabel,
+              '第 ${task.lastErrorChapterIndex! + 1} ${kind.unit}',
+            ),
+          detailRow(kind.failedLabel, '${task.errorCount}'),
           detailRow('原因', task.lastErrorMessage ?? '未記錄詳細原因'),
         ],
       ),
@@ -378,27 +406,32 @@ class DownloadManagerPage extends StatelessWidget {
     );
   }
 
-  String _statusText(DownloadTask task, {required bool globallyPaused}) {
+  /// [unit] 是這本書的數量單位（章、話、集）。
+  String _statusText(
+    DownloadTask task,
+    String unit, {
+    required bool globallyPaused,
+  }) {
     if (task.isCompleted && task.errorCount == 0) {
       return '下載完成';
     }
     final active = task.isDownloading || task.isWaiting;
     if (task.isFailed || (task.errorCount > 0 && !active)) {
-      // 還沒有目錄（例如抓目錄就失敗）時章數都是 0，不寫「0/0 章」。
+      // 還沒有目錄（例如抓目錄就失敗）時總數是 0，不寫「0/0 章」。
       if (task.totalCount <= 0) return '下載失敗';
-      final failed = task.errorCount > 0 ? '，${task.errorCount} 章失敗' : '';
-      return '下載失敗：已下載 ${task.successCount}/${task.totalCount} 章$failed';
+      final failed = task.errorCount > 0 ? '，${task.errorCount} $unit失敗' : '';
+      return '下載失敗：已下載 ${task.successCount}/${task.totalCount} $unit$failed';
     }
     if (globallyPaused) {
-      return '已暫停全部 ${task.successCount}/${task.totalCount} 章';
+      return '已暫停全部 ${task.successCount}/${task.totalCount} $unit';
     }
     if (task.isPaused) {
-      return '已暫停 ${task.successCount}/${task.totalCount} 章';
+      return '已暫停 ${task.successCount}/${task.totalCount} $unit';
     }
     if (task.isWaiting) {
-      return '等待中 ${task.successCount}/${task.totalCount} 章';
+      return '等待中 ${task.successCount}/${task.totalCount} $unit';
     }
-    return '${task.successCount} / ${task.totalCount} 章';
+    return '${task.successCount} / ${task.totalCount} $unit';
   }
 
   Color _statusColor(
