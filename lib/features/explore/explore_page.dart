@@ -71,8 +71,33 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   /// Scaffold 內容區的系統內距（含玻璃頁首與底部浮動分頁列）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
 
+  /// 監聽的 provider 與上次列的類別：類別一換（從類型鈕，或書源變動跟著
+  /// 換）就回到清單頂端。在 provider 通知時、重建之前捲，新清單第一幀就在
+  /// 頂端。
+  ExploreProvider? _provider;
+  BookSourceKind? _shownKind;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<ExploreProvider>();
+    if (identical(provider, _provider)) return;
+    _provider?.removeListener(_scrollToTopOnKindChange);
+    _provider = provider..addListener(_scrollToTopOnKindChange);
+    _shownKind = provider.kind;
+  }
+
+  void _scrollToTopOnKindChange() {
+    final kind = _provider!.kind;
+    if (kind == _shownKind) return;
+    _shownKind = kind;
+    // 換了一整份清單，從頂端開始看。
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
   @override
   void dispose() {
+    _provider?.removeListener(_scrollToTopOnKindChange);
     _scrollController.dispose();
     super.dispose();
   }
@@ -160,12 +185,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                   checked: kind == provider.kind,
                 ),
             ],
-            onSelected: (kind) {
-              if (kind == provider.kind) return;
-              provider.setKind(kind);
-              // 換了一整份清單，從頂端開始看。
-              if (_scrollController.hasClients) _scrollController.jumpTo(0);
-            },
+            onSelected: provider.setKind,
           ),
       ],
     );

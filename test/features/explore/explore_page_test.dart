@@ -36,6 +36,30 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
   Stream<bool> watchHasAny() => hasAnyStream ?? Stream.value(hasAny);
 }
 
+/// 偏好設定：寫入要等 [finishAll] 才完成，照送出的順序寫進 [values]。
+class _SlowPrefs extends Fake implements SharedPreferences {
+  final Map<String, Object> values = {};
+  final List<(String, String, Completer<bool>)> _pending = [];
+
+  @override
+  Object? get(String key) => values[key];
+
+  @override
+  Future<bool> setString(String key, String value) {
+    final done = Completer<bool>();
+    _pending.add((key, value, done));
+    return done.future;
+  }
+
+  void finishAll() {
+    for (final (key, value, done) in _pending) {
+      values[key] = value;
+      done.complete(true);
+    }
+    _pending.clear();
+  }
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -574,6 +598,101 @@ void main() {
         'audio',
       );
     });
+
+    testWidgets('switching back before the record is written keeps the '
+        'listed kind\'s record', (tester) async {
+      final prefs = _SlowPrefs();
+      getIt.unregister<SharedPreferences>();
+      getIt.registerSingleton<SharedPreferences>(prefs);
+      final provider = ExploreProvider(
+        sourceDao: _FakeSourceDao([
+          source('小說甲', 0, group: '甲'),
+          source('小說乙', 0, order: 1),
+          source('漫畫甲', 2, order: 2),
+        ]),
+        kindsLoader: (_, {source}) async => const [],
+      );
+      addTearDown(provider.dispose);
+      await tester.pump();
+      prefs.finishAll();
+
+      // 漫畫的版面還沒寫完就切回小說：小說的版面要再送一次。
+      provider.setKind(BookSourceKind.comic);
+      provider.setKind(BookSourceKind.novel);
+      prefs.finishAll();
+      await tester.pump();
+
+      expect(
+        prefs.values['explore_filter_bar'],
+        '{"all":2,"groups":[["甲",1]],"kinds":[["novel",2],["comic",1]]}',
+      );
+      expect(prefs.values['explore_source_kind'], 'novel');
+    });
+
+    testWidgets('switching before sources arrive drops the other kind\'s '
+        'groups', (tester) async {
+      await getIt<SharedPreferences>().setString(
+        'explore_filter_bar',
+        '{"all": 3, "groups": [["甲", 3]], '
+            '"kinds": [["novel", 3], ["comic", 1]]}',
+      );
+      final sources = StreamController<List<BookSource>>();
+      addTearDown(sources.close);
+      final provider = await pumpExplore(
+        tester,
+        _FakeSourceDao.stream(sources.stream),
+      );
+      await tester.pump();
+      expect(provider.groups, ['甲']);
+
+      provider.setKind(BookSourceKind.comic);
+      // 分組鈕收回是動畫；骨架一直在呼吸，不能等 settle。
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(provider.kind, BookSourceKind.comic);
+      expect(provider.groups, isEmpty);
+      expect(provider.allGroupCount, 1);
+      expect(provider.skeletonSourceCount, 1);
+      expect(groupButton, findsNothing);
+    });
+
+    testWidgets(
+      'a kind change from the sources collapses and goes to the top',
+      (tester) async {
+        List<BookSource> many(int novelType) => [
+          for (var i = 0; i < 30; i++) source('小說$i', novelType, order: i),
+          for (var i = 0; i < 30; i++) source('漫畫$i', 2, order: 30 + i),
+        ];
+        final sources = StreamController<List<BookSource>>();
+        addTearDown(sources.close);
+        final provider = await pumpExplore(
+          tester,
+          _FakeSourceDao.stream(sources.stream),
+          kinds: [ExploreKind(title: '分類', url: 'https://k.example')],
+        );
+        sources.add(many(0));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('小說0'));
+        await tester.pumpAndSettle();
+        expect(provider.expandedIndex, 0);
+        await tester.drag(find.byType(ListView), const Offset(0, -600));
+        await tester.pumpAndSettle();
+        final list = find.byType(Scrollable).first;
+        expect(
+          tester.state<ScrollableState>(list).position.pixels,
+          greaterThan(500),
+        );
+
+        // 小說源全都改成漫畫：清單換成漫畫源，展開的那一個也收起。
+        sources.add(many(2));
+        await tester.pumpAndSettle();
+
+        expect(provider.kind, BookSourceKind.comic);
+        expect(provider.expandedIndex, -1);
+        expect(tester.state<ScrollableState>(list).position.pixels, 0);
+      },
+    );
 
     testWidgets('is in place from the first frame when kinds were seen', (
       tester,
