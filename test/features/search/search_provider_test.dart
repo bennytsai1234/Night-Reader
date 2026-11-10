@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -9,7 +10,9 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
@@ -233,12 +236,143 @@ void main() {
     final provider = SearchProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
 
-    provider.updateSearchScope(SearchScope.fromGroups(['精選']));
+    await provider.updateSearchScope(SearchScope.fromGroups(['精選']));
     await Future<void>.delayed(Duration.zero);
 
     final restored = SearchScope.fromPrefs(
       await SharedPreferences.getInstance(),
     );
     expect(restored.displayNames, ['精選']);
+  });
+
+  group('search by kind', () {
+    /// 每個書源搜到一本書，書名是書源名；聚合源搜到的是漫畫。
+    final asked = <String>[];
+    Future<List<SearchBook>> loader(
+      BookSource source,
+      String key, {
+      CancelToken? cancelToken,
+    }) async {
+      asked.add(source.bookSourceName);
+      return [
+        SearchBook(
+          bookUrl: '${source.bookSourceUrl}/book',
+          name: source.bookSourceName,
+          author: '作者',
+          origin: source.bookSourceUrl,
+          originName: source.bookSourceName,
+          type: source.isAggregateSource
+              ? SourceType.image
+              : source.bookSourceType,
+        ),
+      ];
+    }
+
+    BookSource source(String name, int type, {bool aggregate = false}) =>
+        BookSource(
+          bookSourceUrl: 'https://$name.example',
+          bookSourceName: name,
+          bookSourceType: type,
+          jsLib: aggregate ? 'function m(){ book.type = 64; }' : null,
+        );
+
+    Future<SearchProvider> provider({BookSourceKind? initialKind}) async {
+      asked.clear();
+      final provider = SearchProvider(
+        entrance: Future<void>.value(),
+        initialKind: initialKind,
+        searchLoader: loader,
+      );
+      // 等離開搜尋頁的清理寫完，才關資料庫。
+      addTearDown(() async {
+        provider.dispose();
+        await pumpEventQueue();
+      });
+      await provider.ready;
+      return provider;
+    }
+
+    List<String> names(SearchProvider provider) =>
+        provider.results.map((b) => b.name).toList();
+
+    test('starts with novels: only novel sources and aggregates are asked, '
+        'and only novels are listed', () async {
+      await GetIt.instance<BookSourceDao>().upsertAll([
+        source('小說站', SourceType.book),
+        source('漫畫站', SourceType.image),
+        source('聽書站', SourceType.audio),
+        source('聚合站', SourceType.book, aggregate: true),
+      ]);
+      final search = await provider();
+      expect(search.kinds, [
+        BookSourceKind.novel,
+        BookSourceKind.comic,
+        BookSourceKind.audio,
+      ]);
+      expect(search.kind, BookSourceKind.novel);
+
+      await search.search('夜');
+      expect(asked..sort(), ['小說站', '聚合站']);
+      expect(names(search), ['小說站']);
+
+      // 換成漫畫就照新的類別重搜：聚合站搜到的漫畫列出來。
+      asked.clear();
+      search.setKind(BookSourceKind.comic);
+      await pumpEventQueue();
+      expect(asked..sort(), ['漫畫站', '聚合站']);
+      expect(names(search)..sort(), ['漫畫站', '聚合站']);
+    });
+
+    test('a search opened for a comic starts with comics', () async {
+      await GetIt.instance<BookSourceDao>().upsertAll([
+        source('小說站', SourceType.book),
+        source('漫畫站', SourceType.image),
+      ]);
+      final search = await provider(initialKind: BookSourceKind.comic);
+      expect(search.kind, BookSourceKind.comic);
+    });
+
+    test('with one kind of source nothing is filtered: an aggregate\'s comic '
+        'is still listed', () async {
+      await GetIt.instance<BookSourceDao>().upsertAll([
+        source('小說站', SourceType.book),
+        source('聚合站', SourceType.book, aggregate: true),
+      ]);
+      final search = await provider();
+      expect(search.kinds, [BookSourceKind.novel]);
+
+      await search.search('夜');
+      expect(names(search)..sort(), ['小說站', '聚合站']);
+    });
+
+    test('a chosen kind with no sources falls back to the first kind there '
+        'is', () async {
+      await GetIt.instance<BookSourceDao>().upsertAll([
+        source('漫畫站', SourceType.image),
+        source('聽書站', SourceType.audio),
+      ]);
+      final search = await provider();
+      expect(search.kind, BookSourceKind.comic);
+    });
+
+    test(
+      'the next search page draws the kind capsule on its first frame',
+      () async {
+        await GetIt.instance<BookSourceDao>().upsertAll([
+          source('小說站', SourceType.book),
+          source('漫畫站', SourceType.image),
+        ]);
+        await provider();
+        await pumpEventQueue();
+
+        final next = SearchProvider(entrance: Completer<void>().future);
+        addTearDown(() async {
+          next.dispose();
+          await pumpEventQueue();
+        });
+        expect(next.kinds, [BookSourceKind.novel, BookSourceKind.comic]);
+        expect(next.kindCounts[BookSourceKind.comic], 1);
+      },
+    );
   });
 }

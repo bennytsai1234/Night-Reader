@@ -246,15 +246,23 @@ class SearchModel {
   SearchModel({required this.callback, SearchBookLoader? loader})
     : _searchSource = loader ?? BookSourceService().searchBooks;
 
-  /// 執行搜尋
+  /// 執行搜尋。給了 [kind] 就只送給那一類的書源；聚合源每一類都送
+  /// （ADR 0056），它搜到的書由搜尋頁照類別篩。
   Future<void> search({
     required String key,
     required SearchScope scope,
     required bool precisionSearch,
+    BookSourceKind? kind,
   }) async {
     cancelSearch();
     final generation = _generation;
-    final sources = await scope.getBookSources();
+    final scoped = await scope.getBookSources();
+    final sources = kind == null
+        ? scoped
+        : [
+            for (final source in scoped)
+              if (source.isSearchableFor(kind, includeAggregates: true)) source,
+          ];
     // 等書源清單時又送出了新的搜尋或被取消，這次就不開始。
     if (generation != _generation) return;
     await _searchSources(

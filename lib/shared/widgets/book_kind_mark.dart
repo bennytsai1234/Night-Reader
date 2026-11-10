@@ -16,6 +16,11 @@ class BookKindMark extends StatelessWidget {
     BookSourceKind.novel || BookSourceKind.unsupported => null,
   };
 
+  /// 切換類別的按鈕與選單用的圖示（發現頁的書源類型、搜尋頁的類別）：
+  /// 小說是文字頁，漫畫、有聲同 [iconOf]。
+  static IconData switchIconOf(BookSourceKind kind) =>
+      iconOf(kind) ?? Icons.article_outlined;
+
   /// 給讀螢幕的人：「漫畫」「有聲書」。
   static String? labelOf(BookSourceKind kind) => switch (kind) {
     BookSourceKind.comic => '漫畫',

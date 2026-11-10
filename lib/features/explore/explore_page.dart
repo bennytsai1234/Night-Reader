@@ -52,9 +52,6 @@ const Object _allGroups = Object();
 
 /// 類型鈕與它的選單上，每一類書源的圖示：漫畫、有聲同搜尋結果封面上的
 /// 類別記號，小說是文字頁。
-IconData _kindIcon(BookSourceKind kind) =>
-    BookKindMark.iconOf(kind) ?? Icons.article_outlined;
-
 class _ExplorePageContentState extends State<_ExplorePageContent> {
   final _scrollController = ScrollController();
 
@@ -174,14 +171,14 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       actions: [
         if (kinds.length > 1)
           GlassMenuButton<BookSourceKind>(
-            icon: _kindIcon(provider.kind),
+            icon: BookKindMark.switchIconOf(provider.kind),
             tooltip: '書源類型',
             entriesBuilder: (_) => [
               for (final kind in kinds)
                 GlassMenuItem(
                   value: kind,
                   label: '${kind.sourceLabel}　${provider.kindCounts[kind]}',
-                  icon: _kindIcon(kind),
+                  icon: BookKindMark.switchIconOf(kind),
                   checked: kind == provider.kind,
                 ),
             ],

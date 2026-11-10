@@ -144,6 +144,7 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
             ? BookDetailPage(book: found)
             : SearchPage(
                 initialQuery: BookSourceKind.splitRecordName(bookName).name,
+                initialKind: BookSourceKind.splitRecordName(bookName).kind,
               ),
       ),
     );

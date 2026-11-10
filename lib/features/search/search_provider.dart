@@ -85,6 +85,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   // --- 搜尋設定 ---
   bool _precisionSearch = false;
+
+  /// 使用者選的類別：每次進搜尋頁從小說開始，從某本漫畫、有聲書或某個
+  /// 書源進來時是它的類別。那一類沒有可搜尋的書源時 [kind] 改用第一個有的。
+  BookSourceKind _chosenKind;
+
+  /// 有可搜尋書源的類別與書源數，照小說、漫畫、有聲的順序；進場播完才讀。
+  /// 推入的第一幀照上次讀到的（[_kindsHintKey]），類別膠囊不在進場後才冒出來。
+  Map<BookSourceKind, int> _kindCounts = const {};
   List<String> _sourceGroups = [];
   SearchResultSortMode _sortMode = SearchResultSortMode.relevance;
   final Set<String> _sourceFilters = {};
@@ -149,6 +157,23 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   int get failedSources => _failedSources;
   int get totalSources => _totalSources;
   bool get precisionSearch => _precisionSearch;
+
+  /// 這次搜的是哪一類書：選的那一類有可搜尋的書源就是它，否則是第一個有的。
+  BookSourceKind get kind {
+    if (_kindCounts.isEmpty || _kindCounts.containsKey(_chosenKind)) {
+      return _chosenKind;
+    }
+    return _kindCounts.keys.first;
+  }
+
+  /// 有可搜尋書源的類別；不只一類時頁首才有類別膠囊、才照類別篩。
+  List<BookSourceKind> get kinds => _kindCounts.keys.toList();
+
+  /// 每一類可搜尋的書源數，給類別選單。
+  Map<BookSourceKind, int> get kindCounts => _kindCounts;
+
+  /// 照類別篩（書源只有一類時不篩：聚合源搜到的其他類別照樣列出）。
+  bool get _filtersByKind => _kindCounts.length > 1;
   List<String> get sourceGroups => _sourceGroups;
   SearchScope get searchScope => _searchScope;
   SearchResultSortMode get sortMode => _sortMode;
@@ -170,13 +195,16 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   /// [entrance] 是搜尋頁的進場動畫；播完才讀書架、分組與搜尋紀錄（ADR 0018）。
   /// [searchLoader] 換掉向書源搜尋的那一步（測試從記憶體回傳）。
+  /// [initialKind] 是一開始搜哪一類書（沒給是小說）。
   SearchProvider({
     required Future<void> entrance,
     BookshelfStateTracker? bookshelfTracker,
     SearchScope? initialScope,
+    BookSourceKind? initialKind,
     SearchBookLoader? searchLoader,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
-       _initialScope = initialScope {
+       _initialScope = initialScope,
+       _chosenKind = initialKind ?? BookSourceKind.novel {
     _searchModel = SearchModel(callback: this, loader: searchLoader);
     _searchScope = initialScope ?? SearchScope();
     _readPreferences(getIt<SharedPreferences>());
@@ -266,6 +294,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     final authorKey = normalizeSearchText(_authorFilter);
     final blocked = _blockedKeys;
     return books.where((book) {
+      if (_filtersByKind && book.bookKind != kind) return false;
       if (blocked.isNotEmpty) {
         final name = normalizeSearchText(book.name);
         final author = normalizeSearchText(book.author);
@@ -395,16 +424,91 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       groups.addAll(splitSourceGroups(s.bookSourceGroup));
     }
     _sourceGroups = groups.toList()..sort();
+    _kindCounts = _countKinds(sources);
+    unawaited(_saveKindsHint());
     notifyListeners();
   }
 
-  void updateSearchScope(SearchScope scope) {
+  /// 類別膠囊的選單照這個順序列。
+  static const List<BookSourceKind> _switchableKinds = [
+    BookSourceKind.novel,
+    BookSourceKind.comic,
+    BookSourceKind.audio,
+  ];
+
+  static Map<BookSourceKind, int> _countKinds(Iterable<BookSource> sources) {
+    final counts = <BookSourceKind, int>{};
+    for (final source in sources) {
+      if (source.isSearchEnabledByRuntime) {
+        counts.update(source.sourceKind, (n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+    return {for (final kind in _switchableKinds) kind: ?counts[kind]};
+  }
+
+  /// 上次讀到的類別與書源數，例如 `novel:42,comic:8`；只用來畫第一幀。
+  static const String _kindsHintKey = 'search_source_kinds';
+
+  static Map<BookSourceKind, int> _readKindsHint(SharedPreferences prefs) {
+    final counts = <BookSourceKind, int>{};
+    for (final entry in (prefs.getString(_kindsHintKey) ?? '').split(',')) {
+      if (entry.split(':') case [final name, final count]) {
+        final kind = BookSourceKind.values.asNameMap()[name];
+        final n = int.tryParse(count);
+        if (kind != null && _switchableKinds.contains(kind) && n != null) {
+          counts[kind] = n;
+        }
+      }
+    }
+    return counts;
+  }
+
+  Future<void> _saveKindsHint() async {
+    final value = [
+      for (final MapEntry(:key, :value) in _kindCounts.entries)
+        '${key.name}:$value',
+    ].join(',');
+    try {
+      await getIt<SharedPreferences>().setString(_kindsHintKey, value);
+    } catch (error) {
+      AppLog.w('搜尋的書源類別沒有寫進偏好設定: $error');
+    }
+  }
+
+  /// 換搜哪一類書；搜過就照新的類別重搜。
+  void setKind(BookSourceKind kind) {
+    if (kind == this.kind) return;
+    _chosenKind = kind;
+    notifyListeners();
+    if (_lastSearchKey.isNotEmpty) {
+      unawaited(search(_lastSearchKey));
+    }
+  }
+
+  /// 只搜 [source] 一個書源時搜哪一類：照書源的類別；聚合源什麼類別都搜得
+  /// 到（ADR 0056）、夜讀打不開的類別，都是 null（不改）。
+  static BookSourceKind? searchKindOf(BookSource source) =>
+      source.isOpenableSource && !source.isAggregateSource
+      ? source.sourceKind
+      : null;
+
+  void _followSourceKind(BookSource source) {
+    _chosenKind = searchKindOf(source) ?? _chosenKind;
+  }
+
+  Future<void> updateSearchScope(SearchScope scope) async {
     _searchScope = scope;
     unawaited(scope.save());
+    if (scope.isSource) {
+      final url = scope.toString().split('::').last;
+      final source = await _sourceDao.getByUrl(url);
+      if (_disposed || _searchScope != scope) return;
+      if (source != null) _followSourceKind(source);
+    }
     notifyListeners();
     // 已經搜尋過就以新範圍重搜；搜尋中也一樣，舊的那次會被取消。
     if (_lastSearchKey.isNotEmpty) {
-      search(_lastSearchKey);
+      unawaited(search(_lastSearchKey));
     }
   }
 
@@ -416,6 +520,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 就照它們畫，不等進場播完（原本範圍鈕先寫「載入中…」，播完才換）。
   void _readPreferences(SharedPreferences prefs) {
     if (_initialScope == null) _searchScope = SearchScope.fromPrefs(prefs);
+    _kindCounts = _readKindsHint(prefs);
     _precisionSearch = prefs.getBool('precision_search') ?? false;
     _blockedWords = prefs.getString(_blockedWordsKey) ?? '';
   }
@@ -482,6 +587,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       key: searchKey,
       scope: _searchScope,
       precisionSearch: _precisionSearch,
+      kind: _filtersByKind ? kind : null,
     );
   }
 
@@ -496,6 +602,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _sourceFailures.clear();
     _markSearchPending();
     clearResultFilters();
+    _followSourceKind(source);
 
     // 使用單一書源的 scope
     final singleScope = SearchScope.fromSource(source);

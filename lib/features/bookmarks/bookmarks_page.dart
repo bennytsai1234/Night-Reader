@@ -216,9 +216,13 @@ class _BookmarksPageState extends State<BookmarksPage> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => SearchPage(
-            initialQuery: BookSourceKind.splitRecordName(entry.bookName).name,
-          ),
+          builder: (_) {
+            final record = BookSourceKind.splitRecordName(entry.bookName);
+            return SearchPage(
+              initialQuery: record.name,
+              initialKind: record.kind,
+            );
+          },
         ),
       );
       return;
