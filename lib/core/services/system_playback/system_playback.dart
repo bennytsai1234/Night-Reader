@@ -106,6 +106,10 @@ class SystemPlayback {
   /// 倒退、快轉按鈕一次跳多少，和有聲書播放器的按鈕一致（ADR 0055）。
   static const Duration skipInterval = Duration(seconds: 10);
 
+  /// 狀態列上的小圖示。和按鈕圖示一樣只用名字指定，發布版要在
+  /// `android/app/src/main/res/raw/keep.xml` 留著。
+  static const String notificationIcon = 'drawable/ic_stat_night_reader';
+
   final NowPlayingArtwork _artwork;
   _SessionHandler? _handler;
   Future<void>? _starting;
@@ -129,13 +133,20 @@ class SystemPlayback {
           androidNotificationChannelId: 'com.night_reader.tts',
           androidNotificationChannelName: '夜讀播放',
           // 狀態列只畫圖示的形狀：App 圖示整張不透明，會變成一塊白色方塊。
-          androidNotificationIcon: 'drawable/ic_stat_night_reader',
+          androidNotificationIcon: notificationIcon,
           androidNotificationOngoing: true,
           // 封面原圖可能上千像素，整張送給系統會超過跨程序傳遞的上限。
           artDownscaleWidth: 512,
           artDownscaleHeight: 512,
           rewindInterval: skipInterval,
           fastForwardInterval: skipInterval,
+        ),
+      );
+      // 播放狀態、標題送不進系統時，audio_service 只把錯誤放進這裡，不丟出來。
+      AudioService.asyncError.listen(
+        (Object error) => AppLog.e(
+          'SystemPlayback: system rejected playback info: $error',
+          error: error,
         ),
       );
       final shown = _shown;
