@@ -66,8 +66,9 @@
 | [0044](0044-highlights-mark-content.md) | 標註記畫到的字與顏色、樣子，位置與跟著書走的方式同書籤；從選字選單「⋮」畫，點了換顏色、寫備忘或刪除，可匯出 Markdown |
 | [0052](0052-comic-reader.md) | 漫畫另做條漫閱讀器（照 Mihon、只直向捲動），整本自動下載、章節存成 CBZ，本地漫畫每章一個原檔指紋 |
 | [0033](0033-cloudflare-checks-pass-in-a-hidden-browser.md) | Cloudflare 檢查由看不到的瀏覽器自動通過，要真人勾選的網站當成不能用；書源校驗在同樣環境的 worker 執行 |
-| [0051](0051-source-kinds-follow-the-source-type.md) | 書源分成小說、漫畫、有聲，只看類型欄位：匯入照名稱字樣補判、校驗照正文改，手動也能改；漫畫、有聲源留著不停用，影視、文件照舊可刪 |
-| [0053](0053-same-title-different-kind-is-a-different-book.md) | 同名不同類是不同的書：書的類別照書源寫，認書的鍵在漫畫、有聲前加類別，換源只列同一類，書源改了類型書跟著改 |
+| [0051](0051-source-kinds-follow-the-source-type.md) | 書源分成小說、漫畫、有聲，只看類型欄位：匯入照名稱字樣補判、校驗照正文改，手動也能改；漫畫、有聲源留著不停用，影視、文件照舊可刪（補判看哪些欄位、聚合源與影視已由 0056 改寫） |
+| [0053](0053-same-title-different-kind-is-a-different-book.md) | 同名不同類是不同的書：書的類別照書源寫，認書的鍵在漫畫、有聲前加類別，換源只列同一類，書源改了類型書跟著改（聚合源的例外見 0056） |
+| [0056](0056-aggregate-sources-keep-their-type.md) | 聚合源照作者寫的類型，書各自的類別由規則寫；匯入字樣只看名稱、分組、網址；影視源匯入時記成類型 4；手動換源每一類都列聚合源 |
 | [0054](0054-ai-repairs-sources-with-the-users-own-key.md) | AI 修書源：使用者自備 OpenAI 相容金鑰（備份、同步都帶），AI 邊改邊試抓，校驗通過才套用、留改前版本；沒金鑰用剪貼簿；單一或多選一批 |
 
 ## 工程與流程

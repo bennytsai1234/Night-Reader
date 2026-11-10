@@ -708,12 +708,12 @@ class SourceChecker {
             pageConcurrency: _validationPageConcurrency,
           ),
           cameBackEmpty: (content) =>
-              !chapterContentUsable(_kindShownBy(content), content),
+              !chapterContentUsable(_kindShownBy(content, book), content),
         );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
         // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
-        final kind = _kindShownBy(content);
+        final kind = _kindShownBy(content, book);
         _reclassify(kind);
         if (chapterContentUsable(kind, content)) return;
       } catch (e) {
@@ -739,19 +739,24 @@ class SourceChecker {
     );
   }
 
-  /// 這章正文看起來是哪一類書源；判斷不出來就是書源現在的類別。
-  BookSourceKind _kindShownBy(String content) =>
+  /// 這章正文看起來是哪一類書源；判斷不出來就是書源現在的類別。聚合源的書
+  /// 各自是哪一類由規則寫在 [book] 上（ADR 0056），判斷不出來就照書。
+  BookSourceKind _kindShownBy(String content, Book book) =>
       switch (ChapterContentKind.of(content)) {
         ChapterContentKind.text => BookSourceKind.novel,
         ChapterContentKind.images => BookSourceKind.comic,
         ChapterContentKind.audio => BookSourceKind.audio,
-        ChapterContentKind.unclear => _source.sourceKind,
+        ChapterContentKind.unclear =>
+          _isAggregate ? book.bookKind : _source.sourceKind,
       };
 
+  late final bool _isAggregate = _source.isAggregateSource;
+
   /// 正文和書源的類型不符時改寫類型（ADR 0051）：手動改的、匯入時照字樣
-  /// 判的都一樣，誰最後改算誰的。
+  /// 判的都一樣，誰最後改算誰的。聚合源照作者寫的類型，不改（ADR 0056）：
+  /// 正文是哪一類看使用者在登入表單選的模式。
   void _reclassify(BookSourceKind kind) {
-    if (kind == _source.sourceKind) return;
+    if (_isAggregate || kind == _source.sourceKind) return;
     final type = switch (kind) {
       BookSourceKind.novel => SourceType.book,
       BookSourceKind.comic => SourceType.image,
