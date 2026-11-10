@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/request_log.dart';
@@ -29,10 +30,10 @@ class SourceProbeReport {
   final bool timedOut;
 
   /// 每個回應記的字數。
-  static const int responsePreview = 3000;
+  static const int responsePreview = 6000;
 
   /// 送給 AI 的請求與回應最多幾個字；超過的後半段截掉。
-  static const int requestBudget = 20000;
+  static const int requestBudget = 30000;
 
   /// 一路抓到正文了。
   bool get succeeded =>
@@ -72,7 +73,7 @@ class SourceProbeReport {
     if (timedOut) buffer.writeln('（試抓超過時間，停在這裡）');
     buffer
       ..writeln()
-      ..writeln('## 請求與網站的回應（每個回應只留開頭 $responsePreview 字）');
+      ..writeln('## 請求與網站的回應（網頁拿掉 <head>、程式與樣式，每個只留開頭 $responsePreview 字）');
     var used = 0;
     for (final line in requests) {
       if (used + line.length > requestBudget) {
@@ -173,6 +174,7 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   );
   final requests = RequestLog(
     responsePreview: SourceProbeReport.responsePreview,
+    digestPages: true,
   );
   try {
     await requests.run(
@@ -184,4 +186,54 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
     await subscription.cancel();
   }
   return SourceProbeReport(logs: logs, requests: requests.lines).toMap();
+};
+
+/// AI 要看的一頁（ADR 0054）：照書源的標頭與 Cookie 抓 [url]，傳回請求與網站
+/// 的回應（精簡過的網頁，最多 [pageLength] 字）。
+Future<String> fetchPageForAi(
+  BookSource source,
+  String url, {
+  required Duration timeout,
+  CancelToken? cancelToken,
+  int pageLength = 12000,
+}) async {
+  final SourceWorker worker;
+  try {
+    worker = await SourceWorker.spawn(
+      debugName: 'SourceFetch',
+      withDictionaries: false,
+    );
+  } catch (error) {
+    return '抓不了：$error';
+  }
+  try {
+    final lines = await worker
+        .run(_fetchTask(source.toJson(), url, pageLength))
+        .timeout(timeout, onTimeout: () => const ['（超過時間，沒抓到）']);
+    return lines.join('\n');
+  } catch (error) {
+    return '抓不了：$error';
+  } finally {
+    worker.kill(StateError('抓網頁已結束'));
+  }
+}
+
+Future<List<String>> Function(CancelToken) _fetchTask(
+  Map<String, dynamic> sourceJson,
+  String url,
+  int pageLength,
+) => (_) async {
+  final requests = RequestLog(responsePreview: pageLength, digestPages: true);
+  try {
+    await requests.run(
+      () => AnalyzeUrl(
+        url,
+        source: BookSource.fromJson(sourceJson),
+        baseUrl: sourceJson['bookSourceUrl'] as String? ?? '',
+      ).getStrResponse(),
+    );
+  } catch (error) {
+    requests.lines.add('錯誤：$error');
+  }
+  return requests.lines;
 };

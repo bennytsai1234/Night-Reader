@@ -55,6 +55,16 @@ const _contentBroken = SourceRuntimeHealth(
   quarantined: true,
 );
 
+const _discoveryBroken = SourceRuntimeHealth(
+  category: SourceHealthCategory.discoveryBroken,
+  label: '發現失效',
+  description: '',
+  allowsSearch: true,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
 const _loginRequired = SourceRuntimeHealth(
   category: SourceHealthCategory.loginRequired,
   label: '需要登入',
@@ -114,6 +124,8 @@ void main() {
     List<String>? copied,
     Set<String> secretValues = const {},
     Set<String> timesOut = const {},
+    List<String>? fetched,
+    SourceCheckIsolateResult? Function(BookSource source)? check,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -121,8 +133,14 @@ void main() {
       service: clipboard ? null : _service,
       check: (source, _) async => timesOut.contains(source.bookSourceUrl)
           ? null
-          : _checked(source, broken: broken[source.bookSourceUrl]),
+          : check?.call(source) ??
+                _checked(source, broken: broken[source.bookSourceUrl]),
       probe: (source, _) async => _probe(source),
+      fetchPage: (source, url, _) async {
+        fetched?.add(url);
+        return '  ← $url 200：<form action="/s2">';
+      },
+      recheckDelay: Duration.zero,
       ask: (messages, _) async {
         asked.add(List.of(messages));
         return replies[next++];
@@ -134,10 +152,11 @@ void main() {
     );
   }
 
-  test('the AI tests a fix, submits it, and the check lets it in', () async {
+  test('a test that reaches the text goes straight to the check, which lets '
+      'it in', () async {
     final s = session(
       [_source('https://site.example')],
-      replies: [_command('test'), _command('submit')],
+      replies: [_command('test')],
     );
 
     await s.start();
@@ -150,8 +169,7 @@ void main() {
       [
         ('校驗原本的書源', '正文失效：正文為空'),
         ('抓網頁', '搜尋、正文，共 1 頁'),
-        ('第 1 輪', 'AI 改了正文，試抓：正文 3214 字'),
-        ('第 2 輪', 'AI 改了正文，交出'),
+        ('第 1 輪', 'AI 改了正文，試抓：正文 3214 字，交出'),
         ('校驗修好的書源', '沒有問題'),
       ],
     );
@@ -167,8 +185,8 @@ void main() {
         [_source('https://site.example')],
         replies: [
           _command('test', content: 'class.a@text'),
+          _command('test', content: 'class.b@text'),
           _command('test'),
-          _command('submit'),
         ],
       );
 
@@ -181,6 +199,7 @@ void main() {
       expect(firstReply.content, isNot(contains('class.a@text')));
       expect(third[3].content, '# 試抓結果：發生錯誤: 正文為空（網頁內容省略）');
       expect(third.last.content, contains('<div class="txt">'));
+      expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
     },
   );
 
@@ -200,29 +219,126 @@ void main() {
   });
 
   test(
-    'giving up and running out of rounds both leave the source alone',
+    'giving up before trying anything is sent back once; giving up again and '
+    'running out of replies both leave the source alone',
     () async {
+      final giveUp = jsonEncode({'action': 'give_up', 'reason': '網站要付費'});
       final gaveUp = session(
         [_source('https://a.example')],
-        replies: [
-          jsonEncode({'action': 'give_up', 'reason': '網站要付費'}),
-        ],
+        replies: [giveUp, giveUp],
       );
       await gaveUp.start();
+      expect(asked, hasLength(2));
+      expect(asked.last.last.content, startsWith(aiRepairTryFirst));
       expect(gaveUp.jobs.single.explanation, 'AI：網站要付費');
 
       final talky = session([
         _source('https://b.example'),
-      ], replies: List.filled(aiRepairMaxRounds, '我再想想'));
+      ], replies: List.filled(aiRepairMaxReplies, '我再想想'));
       await talky.start();
       expect(talky.jobs.single.outcome, AiRepairOutcome.failed);
       expect(
         talky.jobs.single.steps.where((s) => s.title.startsWith('第')),
-        hasLength(aiRepairMaxRounds),
+        hasLength(aiRepairMaxReplies),
       );
       expect(applied, isEmpty);
     },
   );
+
+  test('when the tests run out the AI gets a fresh second try that is told '
+      'what was tried', () async {
+    String wrong(int i) => jsonEncode({
+      'action': 'test',
+      'patch': {
+        'ruleContent': {'content': 'class.w$i@text'},
+      },
+      'note': '試法 $i',
+    });
+    final s = session(
+      [_source('https://site.example')],
+      replies: [
+        for (var i = 0; i < aiRepairMaxTests; i++) wrong(i),
+        _command('test'),
+      ],
+    );
+
+    await s.start();
+
+    final job = s.jobs.single;
+    expect(job.outcome, AiRepairOutcome.repaired);
+    expect(job.steps.map((step) => step.title), contains('重新來一次'));
+    final secondOpening = asked.last[1].content;
+    expect(secondOpening, contains('# 上一回沒修好，試過這些'));
+    expect(secondOpening, contains('試法 0（AI 改了正文）→ 試抓：發生錯誤: 正文為空'));
+    expect(asked.last, hasLength(2), reason: '第二回從頭開始');
+  });
+
+  test(
+    'looking at pages does not use up the tests, and patches add up',
+    () async {
+      final fetched = <String>[];
+      final s = session(
+        [_source('https://site.example')],
+        fetched: fetched,
+        replies: [
+          for (var i = 0; i < aiRepairMaxFetches; i++)
+            jsonEncode({'action': 'fetch', 'url': '/p$i'}),
+          jsonEncode({'action': 'fetch', 'url': '/one-too-many'}),
+          jsonEncode({
+            'action': 'test',
+            'patch': {'searchUrl': '/s2?q={{key}}'},
+          }),
+          jsonEncode({
+            'action': 'test',
+            'patch': {
+              'ruleContent': {'content': 'class.txt@text'},
+            },
+          }),
+        ],
+      );
+
+      await s.start();
+
+      expect(fetched, [for (var i = 0; i < aiRepairMaxFetches; i++) '/p$i']);
+      expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+      expect(applied.single.searchUrl, '/s2?q={{key}}', reason: '前一次的改動留著');
+      expect(applied.single.ruleContent?.content, 'class.txt@text');
+    },
+  );
+
+  test('a fix whose test reached the text is checked once more after a '
+      'pause when the first check fails', () async {
+    var checks = 0;
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test')],
+      check: (source) =>
+          source.ruleContent?.content == 'class.txt@text' && ++checks == 1
+          ? _checked(source, broken: _contentBroken)
+          : null,
+    );
+
+    await s.start();
+
+    expect(checks, 2);
+    expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+  });
+
+  test('a fix is kept when only discovery still fails and the AI did not '
+      'touch discovery', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test')],
+      check: (source) => source.ruleContent?.content == 'class.txt@text'
+          ? _checked(source, broken: _discoveryBroken)
+          : null,
+    );
+
+    await s.start();
+
+    expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+    expect(applied.single.ruleContent?.content, 'class.txt@text');
+  });
 
   test(
     'a batch skips healthy and unfixable sources without asking the AI',
@@ -314,7 +430,7 @@ void main() {
       expect(s.transcript, isNot(contains(secret)));
     }
 
-    final sent = [for (final message in asked.single) message.content]
+    final sent = [for (final message in asked.first) message.content]
         .join('\n');
     expect(sent, isNot(contains(secret)));
     expect(sent, contains('token=«已遮蔽»'));
@@ -342,6 +458,7 @@ void main() {
       replies: [
         '{"action":"submit","source":{"bookSourceType":1e400},"note":""}',
         jsonEncode({'action': 'give_up', 'reason': '不修'}),
+        jsonEncode({'action': 'give_up', 'reason': '不修'}),
       ],
     );
 
@@ -349,8 +466,8 @@ void main() {
 
     final job = s.jobs.single;
     expect(job.outcome, AiRepairOutcome.failed);
-    expect(asked, hasLength(2));
-    expect(asked.last.last.content, aiRepairBadReply);
+    expect(asked, hasLength(3), reason: '讀不懂一次、放棄被退回一次、再放棄');
+    expect(asked[1].last.content, startsWith(aiRepairBadReply));
     expect(s.isRunning, isFalse);
     expect(applied, isEmpty);
   });

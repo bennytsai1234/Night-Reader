@@ -5,8 +5,25 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'ai_chat_client.dart';
 import 'source_probe.dart';
 
-/// AI 修書源最多來回幾輪（每輪是 AI 回一次、夜讀試抓一次）。
-const int aiRepairMaxRounds = 5;
+/// AI 修書源最多試抓幾次。
+const int aiRepairMaxTests = 6;
+
+/// AI 修書源最多看幾頁網頁（不算試抓）。
+const int aiRepairMaxFetches = 5;
+
+/// AI 最多回幾次話（含讀不懂的）：試抓與看網頁之外多留幾次。
+const int aiRepairMaxReplies = aiRepairMaxTests + aiRepairMaxFetches + 3;
+
+/// 每次回給 AI 時附上還剩多少次。
+String aiRepairBudget({required int testsLeft, required int fetchesLeft}) =>
+    testsLeft <= 1
+    ? '這是最後一次試抓的機會；試抓沒成功就算修不好。'
+    : '試抓還剩 $testsLeft 次，看網頁還剩 $fetchesLeft 次。';
+
+/// AI 還沒試過任何修改就要放棄時回它的話。
+const String aiRepairTryFirst =
+    '你還沒試抓過任何修改。除非網站已經不在（網域查不到、整個網站只回錯誤頁），'
+    '請先照你看到的網頁改規則並試抓一次；試過真的不行再放棄。';
 
 /// AI 每一輪回的指令（ADR 0054）。
 sealed class AiRepairCommand {
@@ -18,26 +35,76 @@ sealed class AiRepairCommand {
     if (json == null) return null;
     final note = (json['note'] ?? json['reason'])?.toString().trim() ?? '';
     final source = json['source'];
+    final patch = json['patch'];
+    final change = source is Map<String, dynamic>
+        ? (source: source, patch: null)
+        : patch is Map<String, dynamic>
+        ? (source: null, patch: patch)
+        : null;
     return switch (json['action']) {
-      'test' when source is Map<String, dynamic> => AiTest(source, note),
-      'submit' when source is Map<String, dynamic> => AiSubmit(source, note),
+      'test' when change != null => AiTest(change, note),
+      'submit' when change != null => AiSubmit(change, note),
+      'fetch' when json['url'] is String => AiFetch(
+        json['url'] as String,
+        note,
+      ),
       'give_up' => AiGiveUp(note),
       _ => null,
     };
   }
 }
 
+/// AI 改的書源：整份 [source]，或只有改動的欄位 [patch]（[applyAiChange]）。
+typedef AiChange = ({
+  Map<String, dynamic>? source,
+  Map<String, dynamic>? patch,
+});
+
+/// 把 AI 的改動套到 [current]（[sourceForAi] 的格式）上：整份的照用；改動的
+/// 逐欄蓋上去，規則物件逐項蓋，值是空字串或 null 的那一項拿掉。
+Map<String, dynamic> applyAiChange(
+  Map<String, dynamic> current,
+  AiChange change,
+) {
+  if (change.source case final source?) return source;
+  final out = jsonDecode(jsonEncode(current)) as Map<String, dynamic>;
+  for (final MapEntry(:key, :value) in change.patch!.entries) {
+    final existing = out[key];
+    if (value is Map<String, dynamic> && existing is Map<String, dynamic>) {
+      for (final MapEntry(key: field, value: rule) in value.entries) {
+        if (rule == null || rule == '') {
+          existing.remove(field);
+        } else {
+          existing[field] = rule;
+        }
+      }
+    } else if (value == null || value == '') {
+      out.remove(key);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/// 打開一頁看看（網站首頁、搜尋頁這類），不改書源。
+final class AiFetch extends AiRepairCommand {
+  const AiFetch(this.url, this.note);
+  final String url;
+  final String note;
+}
+
 /// 拿改過的書源試抓一次。
 final class AiTest extends AiRepairCommand {
-  const AiTest(this.source, this.note);
-  final Map<String, dynamic> source;
+  const AiTest(this.change, this.note);
+  final AiChange change;
   final String note;
 }
 
 /// 交出改好的書源，夜讀校驗後套用。
 final class AiSubmit extends AiRepairCommand {
-  const AiSubmit(this.source, this.note);
-  final Map<String, dynamic> source;
+  const AiSubmit(this.change, this.note);
+  final AiChange change;
   final String note;
 }
 
@@ -62,7 +129,18 @@ Map<String, dynamic>? extractJsonObject(String text) {
     start = text.indexOf('{', start + 1), tries++
   ) {
     final end = _matchingBrace(text, start);
-    if (end == null) continue;
+    if (end == null) {
+      // AI 寫長的書源常少了最後幾個 `}`：補上再試。
+      final closed = _closeUnbalanced(text.substring(start));
+      if (closed == null) continue;
+      try {
+        final decoded = jsonDecode(closed);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } on FormatException {
+        continue;
+      }
+      continue;
+    }
     try {
       final decoded = jsonDecode(text.substring(start, end + 1));
       if (decoded is Map<String, dynamic>) return decoded;
@@ -74,6 +152,33 @@ Map<String, dynamic>? extractJsonObject(String text) {
 }
 
 const int _maxJsonStarts = 50;
+
+/// [text] 從 `{` 開始、到結尾都沒配對完：去掉結尾的空白與 ``` 後補上缺的
+/// `}`；字串沒結束、或少的不只 `}` 時是 null。
+String? _closeUnbalanced(String text) {
+  var body = text.trimRight();
+  if (body.endsWith('```'))
+    body = body.substring(0, body.length - 3).trimRight();
+  var depth = 0;
+  var inString = false;
+  for (var i = 0; i < body.length; i++) {
+    final char = body[i];
+    if (inString) {
+      if (char == r'\') {
+        i++;
+      } else if (char == '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char == '"') inString = true;
+    if (char == '{') depth++;
+    if (char == '}') depth--;
+    if (char == '[' || char == ']') return null;
+  }
+  if (inString || depth <= 0 || depth > 3) return null;
+  return body + '}' * depth;
+}
 
 /// 從 [start] 的 `{` 數到配對的 `}`，跳過字串裡的括號。
 int? _matchingBrace(String text, int start) {
@@ -155,12 +260,16 @@ Map<String, dynamic> _withoutEmpty(Map<String, dynamic> json) {
   return out;
 }
 
-/// AI 改過的書源：規則照 AI 的，身分與使用者自己的設定照原本的——網址、
-/// 名稱、分組、排序、開關、權重與註解。
+/// AI 改過的書源：規則照 AI 的，名稱與使用者自己的設定照原本的——名稱、
+/// 分組、排序、開關、權重與註解。網址只接受換開頭（[siteMovedUrl]）：網站
+/// 搬家、或只有 https、沒有 www 的那個開頭能用時。
 BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
   final base = BookSource.fromJson(original.toJson())..removeErrorComment();
   return BookSource.fromJson(json)
-    ..bookSourceUrl = original.bookSourceUrl
+    ..bookSourceUrl = siteMovedUrl(
+      original.bookSourceUrl,
+      json['bookSourceUrl'] as String?,
+    )
     ..bookSourceName = original.bookSourceName
     ..bookSourceGroup = original.bookSourceGroup
     ..bookSourceComment = base.bookSourceComment
@@ -172,6 +281,25 @@ BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
     ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
 }
 
+/// 書源網址換開頭：[proposed] 的協定與主機（含連接埠）接上 [original] 開頭
+/// 之後的部分（路徑與 `#` 後面的標記）。[proposed] 讀不出主機、或開頭一樣
+/// 時照 [original]。
+String siteMovedUrl(String original, String? proposed) {
+  final from = _siteOrigin(original);
+  final to = proposed == null ? null : _siteOrigin(proposed);
+  if (from == null || to == null || from == to) return original;
+  return '$to${original.substring(from.length)}';
+}
+
+/// 網址的開頭：`https://www.example.com:8080` 這段，不含結尾的斜線。
+String? _siteOrigin(String url) {
+  final match = RegExp(
+    r'^(https?://[^/#?,\s]+)',
+    caseSensitive: false,
+  ).firstMatch(url.trim());
+  return match?.group(1)?.toLowerCase();
+}
+
 /// AI 改了哪幾類規則，例如「正文、目錄」；沒改是空字串。
 String changedParts(BookSource before, BookSource after) {
   final a = _flatten(sourceForAi(before));
@@ -180,7 +308,19 @@ String changedParts(BookSource before, BookSource after) {
   final parts = <String>{
     for (final key in keys) _partLabel(key.split('.').first),
   };
-  const order = ['類型', '搜尋', '發現', '詳情', '目錄', '正文', '標頭', '程式庫', '登入', '其他'];
+  const order = [
+    '網址',
+    '類型',
+    '搜尋',
+    '發現',
+    '詳情',
+    '目錄',
+    '正文',
+    '標頭',
+    '程式庫',
+    '登入',
+    '其他',
+  ];
   return [
     for (final part in order)
       if (parts.contains(part)) part,
@@ -188,6 +328,7 @@ String changedParts(BookSource before, BookSource after) {
 }
 
 String _partLabel(String key) => switch (key) {
+  'bookSourceUrl' => '網址',
   'bookSourceType' => '類型',
   'searchUrl' || 'ruleSearch' => '搜尋',
   'exploreUrl' || 'ruleExplore' || 'exploreScreen' => '發現',
@@ -217,29 +358,40 @@ const String _rules = '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
-- 網址、名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。
+- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、key、page、book、source；java.ajax(網址)、java.post(網址, 內文, 標頭)、java.connect(網址)；java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)；java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)；java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。沒有 Android 的類別（android.util.Base64 這類）。
+- 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。
 ''';
 
 const String _commands = '''
 每次只回一個 JSON 物件，前後不要其他文字：
-- 試抓：{"action":"test","source":{完整的書源},"note":"這次改了什麼"}。夜讀會從搜尋一路試抓到第一章正文，把除錯紀錄與每個網頁回給你。
-- 交出：{"action":"submit","source":{完整的書源},"note":"改了什麼、類型為什麼是這個"}。試抓成功之後再交出；夜讀會跑一次書源校驗，通過才套用。
-- 放棄：{"action":"give_up","reason":"為什麼修不好"}。例如網站已經關了、要登入或付費才看得到。
+- 看網頁：{"action":"fetch","url":"網址","note":"想看什麼"}。夜讀照書源的標頭與 Cookie 抓這一頁回給你（網頁拿掉 <head>、程式與樣式）。網址可以是相對書源網址的路徑。規則抓不到東西時，先看網站首頁或搜尋頁現在長怎樣，找新的網址與結構。
+- 試抓：{"action":"test","patch":{只寫要改的欄位},"note":"這次改了什麼"}。patch 會蓋到目前的書源上：規則物件（ruleSearch 這類）逐項蓋，沒寫的項目照舊，值給空字串就拿掉那一項。夜讀從搜尋一路試抓到第一章正文，抓到正文就自動跑書源校驗，通過就套用；沒抓到就把除錯紀錄與每個網頁回給你。
+- 交出：{"action":"submit","patch":{…},"note":"…"}。試抓沒走到正文、但你確定改對了（例如正文要付費）才用；夜讀會跑一次書源校驗，通過才套用。
+- 放棄：{"action":"give_up","reason":"為什麼修不好"}。例如網站已經關了、要登入或付費才看得到。網站擋下所有請求、限流或維護，改規則也過不去時也用這個，reason 寫你在網頁上看到的證據。
 ''';
 
 /// 第一輪送給 AI 的話：系統提示與這個書源的現況。
+///
+/// [earlier] 是上一回沒修好時試過的（每次試抓的說明與結果），讓 AI 換個方向。
 List<AiMessage> aiRepairOpening({
   required BookSource source,
   required String checkResult,
   required SourceProbeReport probe,
+  String? earlier,
 }) => [
   (
     role: 'system',
     content:
         '你幫使用者修好壞掉的書源，並判斷它的類型。\n\n$_rules\n$_commands'
-        '最多 $aiRepairMaxRounds 輪，用完還沒交出就算修不好。',
+        '試抓最多 $aiRepairMaxTests 次、看網頁最多 $aiRepairMaxFetches 次，用完還沒修好就算修不好。',
   ),
-  (role: 'user', content: _situation(source, checkResult, probe)),
+  (
+    role: 'user',
+    content: [
+      _situation(source, checkResult, probe),
+      if (earlier != null) '# 上一回沒修好，試過這些（這次換個方向，別重複）\n$earlier',
+    ].join('\n\n'),
+  ),
 ];
 
 /// 沒有金鑰時複製給 AI 的整段話：使用者貼到任何 AI，再把回的書源貼回來。
@@ -262,10 +414,27 @@ String _situation(
     '# 書源校驗的結果\n$checkResult\n\n'
     '# 試抓這個書源\n${probe.fullText}';
 
+/// 打開一頁之後回給 AI 的話。
+String aiRepairFetchReply(String url, String page) => '# 網頁：$url\n$page';
+
 /// 試抓之後回給 AI 的話。
-String aiRepairProbeReply(SourceProbeReport probe, {required int roundsLeft}) =>
-    '# 試抓結果：${probe.summary}\n${probe.fullText}\n\n'
-    '${roundsLeft > 0 ? '還剩 $roundsLeft 輪。' : '這是最後一輪，請交出或放棄。'}';
+String aiRepairProbeReply(SourceProbeReport probe) =>
+    '# 試抓結果：${probe.summary}\n${probe.fullText}';
 
 /// AI 回的話讀不懂時回給它的話。
 const String aiRepairBadReply = '讀不懂你回的內容。請照說明只回一個 JSON 物件。';
+
+/// AI 回的話讀不懂時回給它的話，說出哪裡不對。
+String aiRepairBadReplyFor(String reply) {
+  final start = reply.indexOf('{');
+  if (start < 0) return '$aiRepairBadReply（裡面沒有 JSON 物件）';
+  try {
+    jsonDecode(reply.substring(start, reply.lastIndexOf('}') + 1));
+    return '$aiRepairBadReply（JSON 讀得懂，但 action 或欄位不對：test 與 submit 要有 patch 物件，fetch 要有 url）';
+  } on FormatException catch (error) {
+    return '$aiRepairBadReply（JSON 格式錯：${error.message}，在第 ${error.offset} 字附近。'
+        '常見原因是括號沒配對完、字串裡的 " 或換行沒跳脫；只寫要改的欄位可以少出錯）';
+  } on RangeError {
+    return '$aiRepairBadReply（JSON 沒有結尾的 }）';
+  }
+}
