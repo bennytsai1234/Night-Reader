@@ -226,6 +226,14 @@ class SourceRepairBatch extends ChangeNotifier {
     for (final session in _sessions) {
       session.stop();
     }
+    if (_startTask == null) {
+      for (final item in items) {
+        item
+          ..outcome = RepairOutcome.notTried
+          ..detail = '已停止';
+      }
+      stage = RepairStage.done;
+    }
     _notify();
   }
 
