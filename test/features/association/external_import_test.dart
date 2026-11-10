@@ -54,6 +54,25 @@ void main() {
       );
     });
 
+    test('替換規則的 regex 別名也是替換規則', () {
+      expect(
+        detectImportContentKind('[{"name":"去廣告","regex":"廣告"}]'),
+        ImportContentKind.replaceRule,
+      );
+    });
+
+    test('陣列前面的空項目略過，看第一個認得的', () {
+      const source = '{"bookSourceName":"A","bookSourceUrl":"https://a.com"}';
+      expect(
+        detectImportContentKind('[null,$source]'),
+        ImportContentKind.bookSource,
+      );
+      expect(
+        detectImportContentKind('[{},$source]'),
+        ImportContentKind.bookSource,
+      );
+    });
+
     test('夜讀的書架匯出與書籍陣列是書架資料', () {
       expect(
         detectImportContentKind(
@@ -116,6 +135,27 @@ void main() {
       expect(find.text('外部匯入'), findsOneWidget);
       expect(find.textContaining('辨識為書源資料'), findsOneWidget);
       expect(find.text('匯入書源'), findsOneWidget);
+      expect(find.text('無法辨識'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('帶 text/plain 類型的匯入連結也只跳一個對話框', (tester) async {
+      final context = await pumpHost(tester);
+      // 指定夜讀、帶 MIME 的 ACTION_VIEW：分享套件把它當成文字分享，path 是
+      // 連結的路徑部分。
+      service.handleUri(context, Uri.parse(_bookSourceLink));
+      await tester.runAsync(
+        () => service.handleSharedMedia(context, [
+          SharedMediaFile(
+            path: '/importonline',
+            type: SharedMediaType.text,
+            mimeType: 'text/plain',
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('外部匯入'), findsOneWidget);
       expect(find.text('無法辨識'), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });

@@ -27,11 +27,14 @@ mixin FileAssociationHandler on AssociationBase {
       if (item.type == SharedMediaType.url) continue;
       // text/plain 分享的可能是檔案（套件存成暫存檔，path 是檔案路徑），也可能
       // 是文字本身（path 就是那段文字）。
-      final isText =
-          item.type == SharedMediaType.text && !await File(path).exists();
+      final isFile =
+          item.type != SharedMediaType.text || await File(path).exists();
       if (!context.mounted) return;
-      if (isText) {
-        _handleSharedText(context, path);
+      if (!isFile) {
+        // 不存在的絕對路徑是套件沒解析出檔案時給的 URI 路徑，不是分享的文字：
+        // 例如帶 text/plain 類型的 yuedu:// 連結會變成 `/importonline`，
+        // 連結本身由 app_links 處理。
+        if (!p.posix.isAbsolute(path)) _handleSharedText(context, path);
         continue;
       }
       AppLog.d('收到分享檔案: $path');
