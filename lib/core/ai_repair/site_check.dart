@@ -202,9 +202,7 @@ Future<SiteCheck> checkSite(
       return const SiteCheck(SiteVerdict.unreachable, '已停止');
     }
     unawaited(
-      cancelToken?.whenCancel.then(
-        (_) => worker.kill(StateError('網站檢查已停止')),
-      ),
+      cancelToken?.whenCancel.then((_) => worker.kill(StateError('網站檢查已停止'))),
     );
     final map = await worker
         .run(_siteTask(source.toJson(), origin), cancelToken: cancelToken)
