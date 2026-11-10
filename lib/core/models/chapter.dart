@@ -98,6 +98,20 @@ class BookChapter implements RuleDataInterface {
     }
   }
 
+  /// 這一章給人看的網頁：絕對網址去掉 Legado 的網址選項（`,{...}`）；
+  /// 不是 http(s)（本地書、`data:`）時為 null。
+  String? get webPageUrl {
+    final absolute = getAbsoluteURL()
+        .split(RegExp(r'\s*,\s*(?=\{)'))
+        .first
+        .trim();
+    final uri = Uri.tryParse(absolute);
+    if (uri == null || !uri.isScheme('http') && !uri.isScheme('https')) {
+      return null;
+    }
+    return absolute;
+  }
+
   /// 獲取緩存文件名 (原 Android getFileName)
   String getFileName({String suffix = 'nb'}) {
     final titleMD5 = md5

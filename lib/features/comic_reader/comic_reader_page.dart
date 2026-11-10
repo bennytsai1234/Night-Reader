@@ -18,6 +18,7 @@ import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_page_exit_coordinator.dart';
@@ -45,7 +46,6 @@ import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'comic_page_source.dart';
 import 'comic_progress_sync.dart';
@@ -598,10 +598,21 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     fresh.start();
   }
 
-  Future<void> _openWeb(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _openWeb(String url) =>
+      launchExternalUrlWithFeedback(context, url);
+
+  /// 點書源膠囊：用瀏覽器開正在看的這一話。
+  void _openChapterWeb() {
+    final index = _currentChapter.value;
+    final url = index >= 0 && index < _chapters.length
+        ? _chapters[index].webPageUrl
+        : null;
+    if (url == null) {
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(const SnackBar(content: Text('這一話沒有網頁可以開')));
+      return;
+    }
+    unawaited(_openWeb(url));
   }
 
   /// 離開：和文字閱讀器同一套（[ReaderV2PageExitCoordinator]）——沒加入
@@ -755,6 +766,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               bookName: _book.name,
               navigation: navigation,
               originName: _book.isLocal ? '' : _book.originName,
+              onOpenOrigin: _book.isLocal ? null : _openChapterWeb,
               showReadTitleAddition: true,
               onBack: () => unawaited(_exit()),
               onMore: () => unawaited(_showMore()),

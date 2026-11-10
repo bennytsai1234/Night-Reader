@@ -20,6 +20,7 @@ class ReaderV2TopMenu extends StatelessWidget {
     required this.showReadTitleAddition,
     required this.onBack,
     required this.onMore,
+    this.onOpenOrigin,
     this.horizontalInset = AppGrouped.margin,
   });
 
@@ -36,6 +37,9 @@ class ReaderV2TopMenu extends StatelessWidget {
   final bool showReadTitleAddition;
   final VoidCallback onBack;
   final VoidCallback onMore;
+
+  /// 點書源膠囊：用瀏覽器開這一章的網頁；null（本地書）時膠囊不能點。
+  final VoidCallback? onOpenOrigin;
 
   @override
   Widget build(BuildContext context) {
@@ -151,22 +155,24 @@ class ReaderV2TopMenu extends StatelessWidget {
               // 才不會被擠掉。
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 140),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.xs / 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: menuStyle.accentMuted,
-                    borderRadius: AppRadius.pillShape,
-                  ),
-                  child: Text(
-                    originName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.micro.copyWith(
-                      color: menuStyle.foreground,
-                      fontWeight: FontWeight.w600,
+                child: _originTap(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.xs / 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: menuStyle.accentMuted,
+                      borderRadius: AppRadius.pillShape,
+                    ),
+                    child: Text(
+                      originName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.micro.copyWith(
+                        color: menuStyle.foreground,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -175,6 +181,16 @@ class ReaderV2TopMenu extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _originTap({required Widget child}) {
+    final onTap = onOpenOrigin;
+    if (onTap == null) return child;
+    return Semantics(
+      button: true,
+      hint: '用瀏覽器開這一章',
+      child: PressScale(onTap: onTap, child: child),
     );
   }
 }
