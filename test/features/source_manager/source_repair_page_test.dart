@@ -80,7 +80,7 @@ void main() {
     await _pump(tester, batch);
     expect(find.text('修復中斷'), findsOneWidget);
     expect(find.text('校驗服務無法啟動'), findsOneWidget);
-    expect(find.text('未處理'), findsOneWidget);
+    expect(find.text('沒輪到'), findsOneWidget);
   });
 
   testWidgets('while the AI works the sites being repaired are listed with '
