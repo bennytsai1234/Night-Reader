@@ -69,7 +69,7 @@ void main() {
     expect(find.text('完成'), findsOneWidget);
   });
 
-  testWidgets('an unexpected failure is visible instead of silently finishing', (
+  testWidgets('an unexpected error is visible', (
     tester,
   ) async {
     final batch = _batch([('甲', RepairOutcome.notTried)])
