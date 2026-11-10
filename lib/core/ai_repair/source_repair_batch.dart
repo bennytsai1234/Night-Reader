@@ -91,6 +91,12 @@ class RepairItem {
   bool get isFinished => outcome != null;
 }
 
+/// 重新校驗時每完成一個書源就回報進度，不必等整批結束。
+typedef BatchRecheck = Future<List<SourceCheckEntry>> Function(
+  List<String> urls,
+  void Function(int completed) onProgress,
+);
+
 /// 修復異常書源（ADR 0054）：一批書源先重新校驗、檢查網站，網站不在了的
 /// 標「網站失效」，搬家的換網址；剩下的每個網站挑一個交給 AI，同時修
 /// [aiConcurrency] 個，修好的規則再套到同網站的其他書源。每一步存進去的
@@ -101,7 +107,7 @@ class SourceRepairBatch extends ChangeNotifier {
     required this.service,
     this.tokenBudget,
     this.siteTokenBudget = defaultSiteTokenBudget,
-    Future<List<SourceCheckEntry>> Function(List<String> urls)? recheck,
+    BatchRecheck? recheck,
     Future<SiteCheck> Function(BookSource source)? checkSite,
     AiRepairChecker? check,
     Future<void> Function(BookSource repaired, BookSource original)? save,
@@ -109,8 +115,8 @@ class SourceRepairBatch extends ChangeNotifier {
     Future<void> Function(BookSource source)? markUnfixable,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
   }) : items = [for (final source in sources) RepairItem(source)],
-       _recheck = recheck ?? _defaultRecheck,
-       _checkSite = checkSite ?? _defaultCheckSite,
+       _recheck = recheck,
+       _checkSite = checkSite,
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
        _markGone = markGone ?? _defaultMarkGone,
@@ -137,8 +143,8 @@ class SourceRepairBatch extends ChangeNotifier {
   final int siteTokenBudget;
 
   final List<RepairItem> items;
-  final Future<List<SourceCheckEntry>> Function(List<String> urls) _recheck;
-  final Future<SiteCheck> Function(BookSource source) _checkSite;
+  final BatchRecheck? _recheck;
+  final Future<SiteCheck> Function(BookSource source)? _checkSite;
   final AiRepairChecker _check;
   final Future<void> Function(BookSource repaired, BookSource original) _save;
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
@@ -156,6 +162,8 @@ class SourceRepairBatch extends ChangeNotifier {
   int tokensUsed = 0;
 
   final CancelToken _cancelToken = CancelToken();
+  CheckSourceService? _activeRecheckService;
+  Future<void>? _startTask;
   bool _running = false;
   bool _stopped = false;
   bool _disposed = false;
@@ -164,14 +172,24 @@ class SourceRepairBatch extends ChangeNotifier {
   bool get isRunning => _running;
   bool get isStopped => _stopped;
   bool get isFinished => stage == RepairStage.done;
+  Future<void> get completion => _startTask ?? Future<void>.value();
+
+  /// 未預期錯誤顯示在結果頁，避免把沒校驗的書源送去 AI。
+  String? errorMessage;
+  RepairStage? failedStage;
 
   int count(RepairOutcome outcome) =>
       items.where((item) => item.outcome == outcome).length;
 
   bool get _hasBudget => tokenBudget == null || tokensUsed < tokenBudget!;
 
-  Future<void> start() async {
-    if (_running) return;
+  Future<void> start() {
+    if (_startTask != null) return _startTask!;
+    if (_stopped || _disposed || isFinished) return Future<void>.value();
+    return _startTask = _run();
+  }
+
+  Future<void> _run() async {
     _running = true;
     _notify();
     try {
@@ -181,12 +199,16 @@ class SourceRepairBatch extends ChangeNotifier {
       if (!_stopped) await _repairWithAi();
     } catch (error, stack) {
       AppLog.e('修復異常書源失敗', error: error, stackTrace: stack);
+      if (!_stopped) {
+        errorMessage = '$error';
+        failedStage = stage;
+      }
     } finally {
       for (final item in items) {
         if (item.outcome == null) {
           item
             ..outcome = RepairOutcome.notTried
-            ..detail = _stopped ? '已停止' : '沒輪到';
+            ..detail = _stopped ? '已停止' : errorMessage ?? '沒輪到';
         }
       }
       stage = RepairStage.done;
@@ -197,13 +219,13 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 停下：做著的那一個 AI 修復停下、書源不改，還沒輪到的不做。
   void stop() {
-    if (_stopped) return;
+    if (_stopped || isFinished) return;
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
+    _activeRecheckService?.cancel();
     for (final session in _sessions) {
       session.stop();
     }
-    if (stage == RepairStage.checking) getIt<CheckSourceService>().cancel();
     _notify();
   }
 
@@ -211,12 +233,22 @@ class SourceRepairBatch extends ChangeNotifier {
 
   Future<void> _recheckAll() async {
     _enter(RepairStage.checking, items.length);
-    final entries = {
-      for (final entry in await _recheck([
-        for (final item in items) item.source.bookSourceUrl,
-      ]))
-        entry.sourceUrl: entry,
-    };
+    final urls = [for (final item in items) item.source.bookSourceUrl];
+    void progress(int completed) {
+      if (_stopped || _disposed || stage != RepairStage.checking) return;
+      final done = completed < 0
+          ? 0
+          : completed > items.length
+          ? items.length
+          : completed;
+      if (stageDone == done) return;
+      stageDone = done;
+      _notify();
+    }
+
+    final checked = await (_recheck ?? _recheckWithProgress)(urls, progress);
+    if (_stopped) return;
+    final entries = {for (final entry in checked) entry.sourceUrl: entry};
     for (final item in items) {
       final entry = entries[item.source.bookSourceUrl];
       if (entry == null) continue;
@@ -246,16 +278,17 @@ class SourceRepairBatch extends ChangeNotifier {
     final bySite = _pendingBySite();
     _enter(RepairStage.checkingSites, bySite.length);
     await _pool(bySite.entries.toList(), siteConcurrency, (entry) async {
-      final site = await _checkSite(entry.value.first.source);
+      final site = await (_checkSite?.call(entry.value.first.source) ??
+          checkSite(entry.value.first.source, cancelToken: _cancelToken));
+      if (_stopped) return;
       for (final item in entry.value) {
+        if (_stopped) return;
         item.site = site;
         if (site.verdict == SiteVerdict.gone) {
           await _markGone(item.source, site);
           _finish(item, RepairOutcome.siteGone, site.detail);
         }
       }
-      stageDone++;
-      _notify();
     });
   }
 
@@ -270,12 +303,11 @@ class SourceRepairBatch extends ChangeNotifier {
     ];
     _enter(RepairStage.moving, moving.length);
     await _pool(moving, siteConcurrency, (item) async {
+      if (_stopped) return;
       final candidate = movedSource(item.source, item.site!.movedTo!);
       if (await _passes(item, candidate)) {
         _finish(item, RepairOutcome.moved, '換成 ${candidate.bookSourceUrl}');
       }
-      stageDone++;
-      _notify();
     });
   }
 
@@ -288,11 +320,7 @@ class SourceRepairBatch extends ChangeNotifier {
     await _pool(bySite, aiConcurrency, (group) async {
       if (_stopped) return;
       final lead = group.first;
-      if (!_hasBudget) {
-        stageDone++;
-        _notify();
-        return;
-      }
+      if (!_hasBudget) return;
       final others = group.skip(1).toList();
       final session = _session(lead.source, lead);
       lead.session = session;
@@ -317,8 +345,6 @@ class SourceRepairBatch extends ChangeNotifier {
           await _markUnfixable(item.source);
         }
       }
-      stageDone++;
-      _notify();
     });
   }
 
@@ -349,8 +375,9 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 校驗 [candidate]，通過（或只剩原本就壞的發現頁）就存進去，傳回存了沒。
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
+    if (_stopped) return false;
     final checked = await _check(candidate, _cancelToken);
-    if (checked == null ||
+    if (_stopped || checked == null ||
         !AiRepairSession.usableFix(
           checked,
           item.source,
@@ -421,6 +448,9 @@ class SourceRepairBatch extends ChangeNotifier {
           await work(value);
         } catch (error, stack) {
           AppLog.e('修復異常書源有一件出錯', error: error, stackTrace: stack);
+        } finally {
+          stageDone++;
+          _notify();
         }
       }
     }
@@ -434,6 +464,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     stop();
     _disposed = true;
     for (final session in _sessions) {
@@ -453,12 +484,25 @@ class SourceRepairBatch extends ChangeNotifier {
 
   // ── 預設的實作 ────────────────────────────────────────────────────────
 
-  static Future<List<SourceCheckEntry>> _defaultRecheck(
+  /// 監看這次校驗的逐筆進度；只取消自己啟動的校驗，不干擾別的頁面。
+  Future<List<SourceCheckEntry>> _recheckWithProgress(
     List<String> urls,
-  ) async => (await getIt<CheckSourceService>().check(urls)).entries;
-
-  static Future<SiteCheck> _defaultCheckSite(BookSource source) =>
-      checkSite(source);
+    void Function(int completed) onProgress,
+  ) async {
+    final checking = getIt<CheckSourceService>();
+    if (checking.isChecking) {
+      throw StateError('目前還有其他書源校驗正在執行，請等它結束後再修復');
+    }
+    _activeRecheckService = checking;
+    void update() => onProgress(checking.currentCount);
+    checking.addListener(update);
+    try {
+      return (await checking.check(urls)).entries;
+    } finally {
+      checking.removeListener(update);
+      _activeRecheckService = null;
+    }
+  }
 
   static Future<SourceCheckIsolateResult?> _defaultCheck(
     BookSource source,
