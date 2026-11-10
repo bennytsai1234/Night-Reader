@@ -422,6 +422,14 @@ String aiRepairFetchReply(String url, String page) => '# 網頁：$url\n$page';
 String aiRepairProbeReply(SourceProbeReport probe) =>
     '# 試抓結果：${probe.summary}\n${probe.fullText}';
 
+/// 交出或試抓到正文、校驗卻沒過時回給 AI 的話：校驗的結論與它的診斷
+/// （出錯的那一段送了什麼請求、網站回了什麼）。
+String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
+  '# 書源校驗沒過：$checkText',
+  if (diagnostics.isNotEmpty) diagnostics.join('\n\n'),
+  '校驗會換第二本書、抽查前幾章；照上面的結果接著改。',
+].join('\n');
+
 /// AI 回的話讀不懂時回給它的話。
 const String aiRepairBadReply = '讀不懂你回的內容。請照說明只回一個 JSON 物件。';
 

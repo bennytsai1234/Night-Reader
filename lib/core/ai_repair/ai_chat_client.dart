@@ -18,6 +18,11 @@ class AiServiceException implements Exception {
   String toString() => message;
 }
 
+/// AI 服務好好回了，但內容是空的：模型偶爾會這樣，再問一次通常就好。
+class AiEmptyReply extends AiServiceException {
+  const AiEmptyReply() : super('AI 服務回了空的內容');
+}
+
 /// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0054）。不經過
 /// 書源的網路設定（Cookie、書源的標頭、限流），送的只有對話。
 class AiChatClient {
@@ -116,9 +121,7 @@ class AiChatClient {
         content,
       _ => null,
     };
-    if (content == null || content.trim().isEmpty) {
-      throw const AiServiceException('AI 服務回了空的內容');
-    }
+    if (content == null || content.trim().isEmpty) throw const AiEmptyReply();
     if (content.length > aiRepairMaxReplyLength) {
       throw const AiServiceException('AI 回的內容太長');
     }

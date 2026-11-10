@@ -176,6 +176,16 @@ void main() {
     expect(aiRepairBudget(testsLeft: 1, fetchesLeft: 3), contains('最後一次試抓'));
   });
 
+  test('a probe that reaches only a line of text has not succeeded', () {
+    const probe = SourceProbeReport(
+      logs: [(40, '︽正文頁解析完成 (內容長度: 11)'), (1000, '︽解析完成')],
+      requests: [],
+    );
+
+    expect(probe.succeeded, isFalse);
+    expect(probe.summary, '正文 11 字');
+  });
+
   test('a failed probe says where it stopped', () {
     const probe = SourceProbeReport(
       logs: [(10, '︾開始解析搜尋頁'), (-1, '︽未獲取到書籍')],

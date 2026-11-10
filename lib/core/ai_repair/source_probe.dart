@@ -35,11 +35,25 @@ class SourceProbeReport {
   /// 送給 AI 的請求與回應最多幾個字；超過的後半段截掉。
   static const int requestBudget = 30000;
 
-  /// 一路抓到正文了。
+  /// 一路抓到正文了，而且正文至少有 [minContentLength] 字（同書源校驗判斷
+  /// 正文讀得到的門檻）：只抓到一行提示的不算。
   bool get succeeded =>
       !timedOut &&
       logs.any((log) => log.$1 == 1000) &&
-      !logs.any((log) => log.$1 == -1);
+      !logs.any((log) => log.$1 == -1) &&
+      (contentLength ?? 0) >= minContentLength;
+
+  /// 書源校驗把正文當成讀得到的最少字數（`chapterTextReadable`）。
+  static const int minContentLength = 20;
+
+  /// 抓到的正文有幾個字；沒走到正文是 null。
+  int? get contentLength {
+    for (final (_, message) in logs.reversed) {
+      final length = RegExp(r'內容長度: (\d+)').firstMatch(message)?.group(1);
+      if (length != null) return int.parse(length);
+    }
+    return null;
+  }
 
   /// 抓到了哪幾段，例如「搜尋、詳情、目錄、正文」。
   String get stagesReached {
@@ -57,10 +71,7 @@ class SourceProbeReport {
     for (final (state, message) in logs.reversed) {
       if (state == -1) return _clean(message);
     }
-    for (final (_, message) in logs.reversed) {
-      final length = RegExp(r'內容長度: (\d+)').firstMatch(message)?.group(1);
-      if (length != null) return '正文 $length 字';
-    }
+    if (contentLength case final length?) return '正文 $length 字';
     return '沒有抓到正文';
   }
 

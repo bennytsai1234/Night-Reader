@@ -178,35 +178,52 @@ void main() {
     expect(applied.single.bookSourceGroup, isNull, reason: '校驗通過，標記拿掉');
   });
 
-  test(
-    'earlier rounds shrink to a line so the conversation stays short',
-    () async {
-      final s = session(
-        [_source('https://site.example')],
-        replies: [
-          _command('test', content: 'class.a@text'),
-          _command('test', content: 'class.b@text'),
-          _command('test'),
-        ],
-      );
-
-      await s.start();
-
-      final third = asked[2];
-      final firstReply = third[2];
-      expect(firstReply.role, 'assistant');
-      expect(firstReply.content, contains('（書源省略）'));
-      expect(firstReply.content, isNot(contains('class.a@text')));
-      expect(third[3].content, '# 試抓結果：發生錯誤: 正文為空（網頁內容省略）');
-      expect(third.last.content, contains('<div class="txt">'));
-      expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
-    },
-  );
-
-  test('when the check still fails nothing is saved', () async {
+  test('the conversation keeps every earlier round word for word and only '
+      'grows at the end', () async {
     final s = session(
       [_source('https://site.example')],
-      replies: [_command('submit', content: 'class.wrong@text')],
+      replies: [
+        _command('test', content: 'class.a@text'),
+        _command('test', content: 'class.b@text'),
+        _command('test'),
+      ],
+    );
+
+    await s.start();
+
+    final second = asked[1];
+    final third = asked[2];
+    expect(third.take(second.length), second, reason: '前面的訊息原樣留著');
+    expect(third[2].content, contains('class.a@text'));
+    expect(third[3].content, contains('<div class="txt">'));
+    expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+  });
+
+  test('when the check fails the AI is told why and keeps going; nothing is '
+      'saved until a check passes', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [
+        _command('submit', content: 'class.wrong@text'),
+        _command('submit'),
+      ],
+    );
+
+    await s.start();
+
+    expect(asked[1].last.content, startsWith('# 書源校驗沒過：正文失效：正文為空'));
+    expect(asked[1].last.content, contains('[正文] 正文為空'));
+    expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+    expect(applied.single.ruleContent?.content, 'class.txt@text');
+  });
+
+  test('a check that fails on the last try leaves the source alone', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [
+        for (var i = 0; i < aiRepairMaxTests; i++)
+          _command('submit', content: 'class.wrong$i@text'),
+      ],
     );
 
     await s.start();
@@ -216,6 +233,29 @@ void main() {
     expect(job.steps.last.state, AiRepairStepState.failed);
     expect(job.explanation, '校驗：正文失效：正文為空\nAI：正文在 div.txt');
     expect(applied, isEmpty);
+  });
+
+  test('an empty reply is asked again instead of ending the repair', () async {
+    var calls = 0;
+    final s = AiRepairSession(
+      sources: [_source('https://site.example')],
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (source, _) async => _probe(source),
+      ask: (messages, _) async {
+        asked.add(List.of(messages));
+        if (calls++ == 0) throw const AiEmptyReply();
+        return _command('test');
+      },
+      apply: (source, _) async => applied.add(source),
+      secrets: (_) async => const {},
+      backups: backups,
+    );
+
+    await s.start();
+
+    expect(s.jobs.single.outcome, AiRepairOutcome.repaired);
+    expect(asked[1], asked[0], reason: '同樣的話再問一次');
   });
 
   test(
@@ -269,7 +309,7 @@ void main() {
     expect(job.steps.map((step) => step.title), contains('重新來一次'));
     final secondOpening = asked.last[1].content;
     expect(secondOpening, contains('# 上一回沒修好，試過這些'));
-    expect(secondOpening, contains('試法 0（AI 改了正文）→ 試抓：發生錯誤: 正文為空'));
+    expect(secondOpening, contains('試法 0（AI 改了正文） → 試抓：發生錯誤: 正文為空'));
     expect(asked.last, hasLength(2), reason: '第二回從頭開始');
   });
 

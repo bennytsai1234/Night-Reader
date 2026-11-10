@@ -313,8 +313,8 @@ class AiRepairSession extends ChangeNotifier {
   /// 和 AI 來回：每一輪 AI 回一個指令，試抓或看網頁的結果回給它，直到交出、
   /// 放棄或次數用完。試抓最多 [aiRepairMaxTests] 次、看網頁最多
   /// [aiRepairMaxFetches] 次，各算各的：先看網頁找出網站現在的樣子，不會
-  /// 用掉試抓的機會。只留最近一輪的書源與網頁全文，前面的換成一句摘要，
-  /// 送出的內容不會一輪比一輪長。
+  /// 用掉試抓的機會。對話照原樣一路接下去，前面的內容不改寫：AI 要靠前面
+  /// 看過的網頁推下一步，開頭不變也讓服務的快取打得中。
   ///
   /// 第一回試抓過、但試抓用完還沒修好時，傳回這一回試過什麼（給下一回的
   /// [earlier]）；其他結果（修好、沒過校驗、放棄、停下、第二回也沒修好）
@@ -331,7 +331,6 @@ class AiRepairSession extends ChangeNotifier {
       ))
         (role: message.role, content: _redact(job, message.content)),
     ];
-    final opening = messages.length;
     var current = sourceForAi(original);
     var tests = 0;
     var fetches = 0;
@@ -346,6 +345,10 @@ class AiRepairSession extends ChangeNotifier {
       final String text;
       try {
         text = await _ask!(messages, _cancelToken);
+      } on AiEmptyReply catch (error) {
+        // 空白回覆不放進對話，同樣的話再問一次。
+        _finish(step, error.message, failed: true);
+        continue;
       } on AiServiceException catch (error) {
         _finish(step, error.message, failed: true);
         _fail(job, error.message);
@@ -358,7 +361,6 @@ class AiRepairSession extends ChangeNotifier {
       }
       if (_stopped) return null;
       _record('## 第 $round 輪 AI 回覆\n$text');
-      _shrinkEarlierRounds(messages, opening);
       messages.add((role: 'assistant', content: text));
       void answer(String text) =>
           messages.add((role: 'user', content: _redact(job, text)));
@@ -406,15 +408,23 @@ class AiRepairSession extends ChangeNotifier {
           final probe = await _guard(() => _probe(candidate, _cancelToken));
           if (_stopped || probe == null) return null;
           _record('試抓：${probe.summary}\n${_probeText(job, probe)}');
+          final what = '- ${note.isEmpty ? changed : note}（$changed）';
           if (probe.succeeded) {
             _finish(step, '$changed，試抓：${probe.summary}，交出');
-            await _validate(job, candidate, note, probeSucceeded: true);
-            return null;
+            final failure = await _validate(
+              job,
+              candidate,
+              note,
+              probeSucceeded: true,
+              last: tests >= aiRepairMaxTests,
+            );
+            if (failure == null) return null;
+            tried.writeln('$what → 試抓到正文，但校驗沒過：${_firstLine(failure)}');
+            answer('$failure\n\n${budget()}');
+            continue;
           }
           _finish(step, '$changed，試抓：${probe.summary}');
-          tried.writeln(
-            '- ${note.isEmpty ? changed : note}（$changed）→ 試抓：${probe.summary}',
-          );
+          tried.writeln('$what → 試抓：${probe.summary}');
           if (tests >= aiRepairMaxTests) break;
           answer('${aiRepairProbeReply(probe)}\n\n${budget()}');
         case AiSubmit(:final change, :final note):
@@ -425,9 +435,22 @@ class AiRepairSession extends ChangeNotifier {
             answer('${aiRepairBadReplyFor(text)}\n${budget()}');
             continue;
           }
-          _finish(step, '${_changedText(original, candidate)}，交出');
-          await _validate(job, candidate, note);
-          return null;
+          tests++;
+          current = json;
+          final changed = _changedText(original, candidate);
+          _finish(step, '$changed，交出');
+          final failure = await _validate(
+            job,
+            candidate,
+            note,
+            last: tests >= aiRepairMaxTests,
+          );
+          if (failure == null) return null;
+          tried.writeln(
+            '- ${note.isEmpty ? changed : note}（$changed）→ 交出，校驗沒過：'
+            '${_firstLine(failure)}',
+          );
+          answer('$failure\n\n${budget()}');
       }
       if (tests >= aiRepairMaxTests) break;
     }
@@ -436,45 +459,23 @@ class AiRepairSession extends ChangeNotifier {
     return null;
   }
 
-  /// 前面幾輪 AI 回的書源與試抓的網頁換成一句話，只留最近一輪的全文。
-  static void _shrinkEarlierRounds(List<AiMessage> messages, int opening) {
-    for (var i = opening; i < messages.length; i++) {
-      final message = messages[i];
-      if (message.role == 'assistant') {
-        final note = switch (AiRepairCommand.parse(message.content)) {
-          AiTest(:final change, :final note) when change.source != null => note,
-          _ => null,
-        };
-        if (note == null) continue;
-        messages[i] = (
-          role: 'assistant',
-          content: '{"action":"test","note":${_quote(note)}}（書源省略）',
-        );
-      } else {
-        final firstLine = message.content.split('\n').first;
-        if (firstLine.startsWith('# 試抓結果') || firstLine.startsWith('# 網頁：')) {
-          messages[i] = (role: 'user', content: '$firstLine（網頁內容省略）');
-        }
-      }
-    }
-  }
-
-  static String _quote(String text) =>
-      '"${text.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll('\n', ' ')}"';
-
   /// 校驗 AI 交出（或貼回）的書源，通過才存進去。
   ///
   /// 試抓一路抓到了正文、校驗卻沒過時（網站限流、偶爾回慢），隔
   /// [recheckDelay] 再校驗一次。
-  Future<void> _validate(
+  ///
+  /// 沒通過時：[last]（AI 沒機會再改了）就記成沒修好，傳回 null；不然傳回
+  /// 要回給 AI 的校驗結果，讓它接著改。修好、存不進去或停下時是 null。
+  Future<String?> _validate(
     AiRepairJob job,
     BookSource candidate,
     String note, {
     bool probeSucceeded = false,
+    bool last = true,
   }) async {
     final step = _addStep(job, '校驗修好的書源');
     var checked = await _guard(() => _check(candidate, _cancelToken));
-    if (_stopped) return;
+    if (_stopped) return null;
     bool usable(SourceCheckIsolateResult? result) =>
         _usableFix(result, job.original, candidate);
     if (probeSucceeded && !usable(checked)) {
@@ -485,18 +486,24 @@ class AiRepairSession extends ChangeNotifier {
         Future<void>.delayed(recheckDelay),
         _cancelToken.whenCancel,
       ]);
-      if (_stopped) return;
+      if (_stopped) return null;
       checked = await _guard<SourceCheckIsolateResult?>(
         () => _check(candidate, _cancelToken),
       );
-      if (_stopped) return;
+      if (_stopped) return null;
     }
     final checkText = _checkText(checked);
     _record('校驗修好的書源：$checkText');
     if (checked == null || !usable(checked)) {
       _finish(step, checkText, failed: true);
+      if (!last) {
+        return _redact(
+          job,
+          aiRepairCheckReply(checkText, checked?.diagnostics ?? const []),
+        );
+      }
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
-      return;
+      return null;
     }
     job._committing = true;
     try {
@@ -507,12 +514,12 @@ class AiRepairSession extends ChangeNotifier {
     } on AiRepairConflict catch (error) {
       _finish(step, error.message, failed: true);
       _fail(job, error.message);
-      return;
+      return null;
     } catch (error, stack) {
       AppLog.e('存 AI 修好的書源失敗', error: error, stackTrace: stack);
       _finish(step, '存不進去', failed: true);
       _fail(job, '校驗通過了，但存不進去：$error');
-      return;
+      return null;
     } finally {
       job._committing = false;
     }
@@ -522,7 +529,10 @@ class AiRepairSession extends ChangeNotifier {
       ..repairedUrl = candidate.bookSourceUrl
       ..explanation = note.isEmpty ? null : 'AI：$note';
     _notify();
+    return null;
   }
+
+  static String _firstLine(String text) => text.split('\n').first;
 
   /// 校驗的結果可以存：沒問題，或只剩發現頁失效、而 AI 沒動發現的規則——
   /// 發現頁原本就壞了，搜尋與閱讀修好了還是比原本好。
