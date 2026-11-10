@@ -550,21 +550,21 @@ AiRepairSession _aiRepairSession() {
   ];
   var next = 0;
   return AiRepairSession(
-    sources: [
-      BookSource(
-        bookSourceUrl: 'https://www.example.com',
-        bookSourceName: '夜雨小說網',
-        searchUrl: '/s?q={{key}}',
-        ruleContent: ContentRule(content: 'id.content@text'),
-      ),
-    ],
+    source: BookSource(
+      bookSourceUrl: 'https://www.example.com',
+      bookSourceName: '夜雨小說網',
+      searchUrl: '/s?q={{key}}',
+      ruleContent: ContentRule(content: 'id.content@text'),
+    ),
     service: (
       baseUrl: 'https://ai.example.com/v1',
       apiKey: 'k',
       model: 'my-model',
+      effort: '',
     ),
     check: (source, _) async => checked(source),
     probe: (_, _) async => probe,
+    keywordCheck: (_, _) async => true,
     ask: (_, _) async => replies[next++],
     apply: (_, _) async {},
     secrets: (_) async => const {},
