@@ -12,7 +12,12 @@ import 'package:night_reader/features/source_manager/ai_repair/ai_repair_page.da
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
-const _service = (baseUrl: 'https://ai.example/v1', apiKey: 'k', model: 'm');
+const _service = (
+  baseUrl: 'https://ai.example/v1',
+  apiKey: 'k',
+  model: 'm',
+  effort: '',
+);
 
 SourceCheckIsolateResult _checked(BookSource source) {
   final healthy = source.ruleContent?.content == 'class.txt@text';

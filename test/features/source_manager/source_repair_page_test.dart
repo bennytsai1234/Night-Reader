@@ -7,7 +7,12 @@ import 'package:night_reader/features/source_manager/ai_repair/source_repair_pag
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
-const _service = (baseUrl: 'https://ai.example/v1', apiKey: 'k', model: 'm');
+const _service = (
+  baseUrl: 'https://ai.example/v1',
+  apiKey: 'k',
+  model: 'm',
+  effort: '',
+);
 
 BookSource _s(String name) =>
     BookSource(bookSourceUrl: 'https://$name.example', bookSourceName: name);
