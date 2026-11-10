@@ -248,9 +248,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     try {
       final source = await _sources.getByUrl(book.origin);
       if (source == null) throw StateError('找不到書源');
-      final chapters = await _loadChapters(source, book);
+      // 目錄抓不到也要知道書源，失敗畫面才給得出「登入」「前往驗證」。
       if (generation != _generation) return;
       _source = source;
+      final chapters = await _loadChapters(source, book);
+      if (generation != _generation) return;
       _chapters = chapters;
       var start = Duration.zero;
       var index = chapterIndex ?? book.chapterIndex;

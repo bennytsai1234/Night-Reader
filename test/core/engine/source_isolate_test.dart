@@ -15,6 +15,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/engine/js/js_encode_utils.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
 import 'package:night_reader/core/network/request_log.dart';
@@ -300,6 +301,10 @@ void main() {
         case '/count':
           counted++;
           request.response.write('數到了');
+        case '/lib.js':
+          request.response.write('function libGreet() { return "夜讀"; }');
+        case '/missing.js':
+          request.response.statusCode = HttpStatus.notFound;
         case '/flaky':
           // 第一次網站忙碌（503），之後正常。
           if (flaky++ == 0) {
@@ -1179,6 +1184,54 @@ void main() {
       },
       skip: quickJsUnavailableReason(),
     );
+  });
+
+  // 和 Legado 的 SharedJsScope、BaseSource 一樣（ADR 0034 的書源 isolate 裡）。
+  group('source jsLib and login data like Legado', () {
+    test('a jsLib fetched from a url is kept in the cache', () async {
+      final url = '$baseUrl/lib.js';
+      expect(
+        await _evaluateSourceJs('libGreet()', jsLib: '{"lib": "$url"}'),
+        '夜讀',
+      );
+      // 存的時候不等它寫完（網路 isolate 照順序寫）。
+      final key = 'jsLib_${JsEncodeUtils.md5Encode(url)}';
+      String? kept;
+      for (var i = 0; i < 50 && kept == null; i++) {
+        kept = await CacheManager().get(key);
+        if (kept == null) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
+      expect(kept, contains('libGreet'));
+    });
+
+    test('a jsLib that cannot be fetched fails the rule and says so', () async {
+      await expectLater(
+        _evaluateSourceJs(
+          'libGreet()',
+          jsLib: '{"lib": "$baseUrl/missing.js"}',
+        ),
+        throwsA(
+          isA<Object>().having(
+            (error) => '$error',
+            'message',
+            contains('書源程式庫（jsLib）下載失敗'),
+          ),
+        ),
+      );
+    });
+
+    test('login info and login header are null before logging in', () async {
+      expect(
+        await _evaluateSourceJs(
+          'String(JSON.parse(source.getLoginInfo())) + "," + '
+          'String(source.getLoginHeader()) + "," + '
+          'JSON.stringify(source.getVariable())',
+        ),
+        'null,null,""',
+      );
+    });
   });
 }
 

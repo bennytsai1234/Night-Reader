@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
 
 /// 付費章節的提示（[BookChapter.isLocked]，ADR 0057），三個閱讀器共用。
@@ -80,30 +81,27 @@ class BookChapter implements RuleDataInterface {
   @override
   String getVariable(String key) => variableMap[key] ?? '';
 
-  /// 獲取絕對 URL (對標 Android BookChapter.getAbsoluteURL)
+  /// 獲取絕對 URL (對標 Android BookChapter.getAbsoluteURL)：相對網址照
+  /// [baseUrl] 補成絕對，章節網址的 Legado 選項（`,{...}`）留在後面；
+  /// [baseUrl] 自己帶的選項不算進網址（[NetworkUtils.getAbsoluteURL]）。
   String getAbsoluteURL() {
     if (url.isEmpty) return baseUrl;
     if (url.startsWith(title) && isVolume) return baseUrl;
+    return NetworkUtils.getAbsoluteURL(baseUrl, url);
+  }
 
-    // 處理帶有參數的 URL, 例如: "http://xxx.com/page1,{\"headers\":...}"
-    // 對標 Android AnalyzeUrl.paramPattern = RegExp(r"\s*,\s*(?=\{)")
-    final paramSplitRegex = RegExp(r'\s*,\s*(?=\{)');
-    final match = paramSplitRegex.firstMatch(url);
-
-    String urlBefore = match != null ? url.substring(0, match.start) : url;
-    String urlAfter = match != null ? url.substring(match.start) : '';
-
-    if (urlBefore.startsWith('http')) {
-      return urlBefore + urlAfter;
+  /// 這一章給人看的網頁：絕對網址去掉 Legado 的網址選項（`,{...}`）；
+  /// 不是 http(s)（本地書、`data:`）時為 null。
+  String? get webPageUrl {
+    final absolute = getAbsoluteURL()
+        .split(RegExp(r'\s*,\s*(?=\{)'))
+        .first
+        .trim();
+    final uri = Uri.tryParse(absolute);
+    if (uri == null || !uri.isScheme('http') && !uri.isScheme('https')) {
+      return null;
     }
-
-    try {
-      final base = Uri.parse(baseUrl);
-      final absolute = base.resolve(urlBefore).toString();
-      return absolute + urlAfter;
-    } catch (e) {
-      return url;
-    }
+    return absolute;
   }
 
   /// 獲取緩存文件名 (原 Android getFileName)

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -187,6 +188,30 @@ BlockingTask cachedText(String url, int saveTimeSeconds) => () async {
   } catch (_) {
     return '';
   }
+};
+
+/// 書源 jsLib 的網址片段（Legado `SharedJsScope`）：抓過的存在快取，不會
+/// 過期，之後網站慢或離線照樣用得到；快取沒有又抓不到時丟出錯誤。存的時候
+/// 不等它寫完，理由同 [cachedText]。
+BlockingTask jsLibText(String url) => () async {
+  final key = 'jsLib_${JsEncodeUtils.md5Encode(url)}';
+  final cached = await CacheManager().get(key);
+  if (cached != null) return cached;
+  final response = await HttpClient().client.get<List<int>>(
+    url,
+    options: Options(
+      responseType: ResponseType.bytes,
+      receiveTimeout: const Duration(seconds: 10),
+      sendTimeout: const Duration(seconds: 10),
+    ),
+    cancelToken: currentSourceCancelToken,
+  );
+  final content = utf8.decode(
+    response.data ?? const <int>[],
+    allowMalformed: true,
+  );
+  unawaited(CacheManager().put(key, content));
+  return content;
 };
 
 /// 看不到的瀏覽器載入網頁（`java.webView` 這一類），傳回內文。
