@@ -118,6 +118,21 @@ class SystemPlayback {
   /// 最後交給系統的內容；開好工作階段時照它補上。
   _Shown? _shown;
 
+  /// 上一次系統拒收的錯誤。
+  String? _lastRejection;
+
+  /// 系統拒收播放資訊：連續相同的錯誤只記第一次，每次播放、暫停、換章都
+  /// 失敗時不會擠掉紀錄裡其他的錯誤。
+  void _logRejection(Object error) {
+    final text = '$error';
+    if (text == _lastRejection) return;
+    _lastRejection = text;
+    AppLog.e(
+      'SystemPlayback: system rejected playback info: $text',
+      error: error,
+    );
+  }
+
   /// 向系統開媒體工作階段。開不起來時只少了系統播放資訊，播放照常；下次
   /// 呼叫再試。
   Future<void> start() {
@@ -143,12 +158,7 @@ class SystemPlayback {
         ),
       );
       // 播放狀態、標題送不進系統時，audio_service 只把錯誤放進這裡，不丟出來。
-      AudioService.asyncError.listen(
-        (Object error) => AppLog.e(
-          'SystemPlayback: system rejected playback info: $error',
-          error: error,
-        ),
-      );
+      AudioService.asyncError.listen(_logRejection);
       final shown = _shown;
       if (shown != null) _handler!.show(shown, _artwork);
     } catch (error) {

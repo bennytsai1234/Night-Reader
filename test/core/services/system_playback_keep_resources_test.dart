@@ -12,13 +12,16 @@ List<RegExp> _keptPatterns() {
   final keep = XmlDocument.parse(
     File('android/app/src/main/res/raw/keep.xml').readAsStringSync(),
   ).rootElement.getAttribute('keep', namespaceUri: _tools);
-  return [
-    for (final entry in (keep ?? '').split(','))
-      if (entry.trim().isNotEmpty)
-        RegExp(
-          '^${RegExp.escape(entry.trim().substring(1)).replaceAll(r'\*', '.*')}\$',
-        ),
-  ];
+  final patterns = <RegExp>[];
+  for (final raw in (keep ?? '').split(',')) {
+    final entry = raw.trim();
+    if (entry.isEmpty) continue;
+    // 不是 `@類型/名稱` 的規則，建置工具不認，等於沒寫。
+    expect(entry, matches(RegExp(r'^@\w+/[\w*]+$')), reason: '無效的保留規則');
+    final escaped = RegExp.escape(entry.substring(1)).replaceAll(r'\*', '.*');
+    patterns.add(RegExp('^$escaped\$'));
+  }
+  return patterns;
 }
 
 void main() {
