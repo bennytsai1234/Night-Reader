@@ -11,14 +11,11 @@ import 'glass.dart';
 import 'launch_entrance.dart';
 
 class FloatingTabItem {
-  const FloatingTabItem({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-  });
+  const FloatingTabItem({required this.icon, required this.label});
 
+  /// 選中與未選都用同一個圖示（空心），只換顏色：選取膠囊滑過中點時圖示
+  /// 的形狀不換。
   final IconData icon;
-  final IconData selectedIcon;
   final String label;
 }
 
@@ -133,13 +130,21 @@ class FloatingTabBar extends StatefulWidget {
 
   /// 分頁列在延伸到其下方的頁面（`extendBody: true`）裡的位置，給取代
   /// 分頁列的工具列與底部浮動膠囊對齊用：左右和清單的卡片切齊（平板上
-  /// 收在內容欄裡，[ReadableWidth.cardInsetOf]）。Scaffold 只改 padding，
-  /// viewPadding 仍是系統區。
-  static EdgeInsets slotOf(BuildContext context) =>
-      ReadableWidth.cardInsetOf(context).copyWith(
-        bottom:
-            MediaQuery.viewPaddingOf(context).bottom + AppGlass.tabBarBottomGap,
-      );
+  /// 收在內容欄裡，[ReadableWidth.cardInsetOf]）。
+  ///
+  /// 底部系統區直接取螢幕（[View]）的值：有底部列的 Scaffold 會把頁面的
+  /// padding 與 viewPadding 底部都扣掉、再只把 padding 加回列的高度，頁面裡
+  /// 讀到的 viewPadding 底部是 0，用它會比分頁列低一個系統區。
+  static EdgeInsets slotOf(BuildContext context) {
+    // 系統區改變時（旋轉、切換手勢導覽）跟著重建：View 本身不通知，頁面裡
+    // 的 viewPadding 底部前後都是 0；padding 底部在分頁列裡是系統區、在頁面
+    // 裡是含系統區的列高，兩邊都會跟著變。
+    MediaQuery.paddingOf(context);
+    final view = View.of(context);
+    final systemBottom = view.viewPadding.bottom / view.devicePixelRatio;
+    return ReadableWidth.cardInsetOf(context)
+        .copyWith(bottom: systemBottom + AppGlass.tabBarBottomGap);
+  }
 
   @override
   State<FloatingTabBar> createState() => _FloatingTabBarState();
@@ -246,8 +251,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         ((dx - AppGlass.tabInnerInset) / itemWidth).floor().clamp(0, count - 1);
 
     // 每個分頁的圖示與字在這裡建好一次（未選的用未選色、選取的用選取色），
-    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）；原本每一幀照新
-    // 顏色重建圖示與字。
+    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）。
     final scheme = Theme.of(context).colorScheme;
     final glyphs = [
       for (final item in widget.items)
@@ -258,7 +262,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             color: scheme.onSurfaceVariant,
           ),
           selected: _TabGlyph(
-            icon: item.selectedIcon,
+            icon: item.icon,
             label: item.label,
             color: scheme.primary,
           ),

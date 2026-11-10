@@ -25,6 +25,10 @@ class ExploreProvider extends ChangeNotifier {
   final ExploreKindsLoader _kindsLoader;
   StreamSubscription<List<BookSource>>? _sourceSubscription;
 
+  /// 所有參與發現的書源，不分類別。
+  List<BookSource> _discoverable = [];
+
+  /// 目前這一類（[kind]）的發現書源；分組與篩選都在這裡面。
   List<BookSource> _allSources = [];
   List<BookSource> _filteredSources = [];
   String _searchQuery = '';
@@ -40,11 +44,43 @@ class ExploreProvider extends ChangeNotifier {
   Map<String, int> _groupCounts = {};
   String? _selectedGroup;
 
+  /// 各類別的發現書源數；還沒讀到書源時是上次記下的。
+  Map<BookSourceKind, int> _kindCounts = {};
+
+  /// 使用者選的類別，記在 [_kindKey]；那一類沒有發現書源時 [kind] 改列
+  /// 第一個有書源的類別，這裡不改。
+  BookSourceKind _chosenKind = BookSourceKind.novel;
+
+  /// 選的類別存在偏好設定的鍵，值是 [BookSourceKind.name]。
+  static const String _kindKey = 'explore_source_kind';
+
+  /// 切換書源類型時可選的類別，照小說、漫畫、有聲的順序。
+  static const List<BookSourceKind> _switchable = [
+    BookSourceKind.novel,
+    BookSourceKind.comic,
+    BookSourceKind.audio,
+  ];
+
   final Map<String, List<ExploreKind>> _kindsCache = {};
   final Map<String, int> _latestKindsRequestByCacheKey = {};
 
   List<BookSource> get sources => _filteredSources;
   List<String> get groups => _groups;
+
+  /// 清單列的是哪一類書源：選的那一類有發現書源就是它，否則是第一個有的。
+  BookSourceKind get kind {
+    if ((_kindCounts[_chosenKind] ?? 0) > 0) return _chosenKind;
+    return kinds.firstOrNull ?? _chosenKind;
+  }
+
+  /// 有發現書源的類別；不只一類時頁首才有類型鈕。
+  List<BookSourceKind> get kinds => [
+    for (final kind in _switchable)
+      if ((_kindCounts[kind] ?? 0) > 0) kind,
+  ];
+
+  /// 各類別的發現書源數。
+  Map<BookSourceKind, int> get kindCounts => _kindCounts;
 
   /// 各分組內的發現書源數。
   Map<String, int> get groupCounts => _groupCounts;
@@ -62,13 +98,17 @@ class ExploreProvider extends ChangeNotifier {
       ? (_savedGroupRecord == null ? null : _lastAllCount)
       : _filteredSources.length;
 
-  /// 上次讀完時的分組：「全部」的書源數與各分組的名稱、書源數，JSON
-  /// `{"all": n, "groups": [[分組, 書源數], ...]}`。開 App 建立時同步讀出，
-  /// 第一次讀到書源前照它決定頁首有沒有分組鈕，不會讀完才長出來。鍵名
+  /// 上次讀完時的版面：目前這一類「全部」的書源數與各分組的名稱、書源數，
+  /// 以及各類別的書源數，JSON `{"all": n, "groups": [[分組, 書源數], ...],
+  /// "kinds": [[類別, 書源數], ...]}`（類別是 [BookSourceKind.name]）。開 App
+  /// 建立時同步讀出，第一次讀到書源前照它決定頁首有沒有分組鈕與類型鈕，
+  /// 不會讀完才長出來。沒有 `kinds` 的舊紀錄照樣用，類型鈕等書源讀完。鍵名
   /// 沿用分組還是一排膠囊時的名字。
   static const String _groupRecordKey = 'explore_filter_bar';
 
-  /// 確定寫進偏好設定的內容；寫入失敗時不更新，下次讀到書源再寫一次。
+  /// 最後一次讀出或送去寫的內容。送出時就記下：寫入還沒完成又換回原本
+  /// 那一類時，比的是最後送出的，不會以為舊的那份還在而略過。偏好設定照
+  /// 送出的順序寫，最後送出的留下；寫入失敗時清掉，下次讀到書源再寫一次。
   String? _savedGroupRecord;
   String? get selectedGroup => _selectedGroup;
   int get expandedIndex => _expandedIndex;
@@ -82,8 +122,17 @@ class ExploreProvider extends ChangeNotifier {
   ExploreProvider({BookSourceDao? sourceDao, ExploreKindsLoader? kindsLoader})
     : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
       _kindsLoader = kindsLoader ?? BookSourceService().exploreKinds {
+    _readChosenKind();
     _readGroupRecord();
     _bindSources();
+  }
+
+  void _readChosenKind() {
+    final stored = getIt<SharedPreferences>().get(_kindKey);
+    _chosenKind = _switchable.firstWhere(
+      (kind) => kind.name == stored,
+      orElse: () => BookSourceKind.novel,
+    );
   }
 
   void _readGroupRecord() {
@@ -102,12 +151,22 @@ class ExploreProvider extends ChangeNotifier {
           entry[0] as String: entry[1] as int,
       };
       final all = json['all'] as int;
-      if (all < 0 || counts.values.any((count) => count < 0)) {
+      final kinds = <BookSourceKind, int>{
+        for (final entry in json['kinds'] as List<dynamic>? ?? const [])
+          _switchable.firstWhere(
+            (kind) => kind.name == entry[0],
+            orElse: () => throw FormatException('不認得的類別', saved),
+          ): entry[1] as int,
+      };
+      if (all < 0 ||
+          counts.values.any((count) => count < 0) ||
+          kinds.values.any((count) => count < 0)) {
         throw FormatException('書源數是負的', saved);
       }
       _lastAllCount = all;
       _groupCounts = counts;
       _groups = counts.keys.toList()..sort();
+      _kindCounts = kinds;
     } catch (error) {
       AppLog.w('發現分組的紀錄讀不懂，這次等書源讀完: $error');
       // 當作沒有紀錄：骨架照第一次的樣子鋪滿畫面，不是畫 0 列。
@@ -115,6 +174,7 @@ class ExploreProvider extends ChangeNotifier {
       _lastAllCount = 0;
       _groupCounts = {};
       _groups = [];
+      _kindCounts = {};
     }
   }
 
@@ -124,24 +184,27 @@ class ExploreProvider extends ChangeNotifier {
       'groups': [
         for (final group in _groups) [group, _groupCounts[group]],
       ],
+      'kinds': [
+        for (final kind in kinds) [kind.name, _kindCounts[kind]],
+      ],
     });
     if (_savedGroupRecord == encoded) return;
+    _savedGroupRecord = encoded;
     unawaited(_saveGroupRecord(encoded));
   }
 
   Future<void> _saveGroupRecord(String encoded) async {
+    var saved = false;
     try {
-      if (await getIt<SharedPreferences>().setString(
+      saved = await getIt<SharedPreferences>().setString(
         _groupRecordKey,
         encoded,
-      )) {
-        _savedGroupRecord = encoded;
-      } else {
-        AppLog.w('發現分組沒有寫進偏好設定');
-      }
+      );
+      if (!saved) AppLog.w('發現分組沒有寫進偏好設定');
     } catch (error, stackTrace) {
       AppLog.e('發現分組寫入失敗: $error', error: error, stackTrace: stackTrace);
     }
+    if (!saved && _savedGroupRecord == encoded) _savedGroupRecord = null;
   }
 
   void _bindSources() {
@@ -189,26 +252,25 @@ class ExploreProvider extends ChangeNotifier {
     final expandedCacheKey = expandedSource == null
         ? null
         : _cacheKeyForSource(expandedSource);
+    final previousKind = kind;
 
-    _allSources =
+    _discoverable =
         sources.where((source) => source.canParticipateInDiscovery).toList()
           ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
-
-    final counts = <String, int>{};
-    for (final source in _allSources) {
-      for (final group in splitSourceGroups(source.bookSourceGroup)) {
-        counts[group] = (counts[group] ?? 0) + 1;
-      }
+    final kindCounts = <BookSourceKind, int>{};
+    for (final source in _discoverable) {
+      final kind = source.sourceKind;
+      kindCounts[kind] = (kindCounts[kind] ?? 0) + 1;
     }
-    _groupCounts = counts;
-    _groups = counts.keys.toList()..sort();
-    _rememberGroupRecord();
-    // 選中的分組已不存在（書源被刪除或改分組）時回到「全部」。
-    if (_selectedGroup != null && !counts.containsKey(_selectedGroup)) {
-      _selectedGroup = null;
+    _kindCounts = kindCounts;
+    if (kind != previousKind) {
+      // 列的類別跟著書源變了（那一類的書源停用、刪除或改了類型，或記下的
+      // 那一類又有書源）：和從類型鈕換的一樣收起、重新篩。
+      _switchKind();
+      notifyListeners();
+      return;
     }
-
-    _applyFilter();
+    _selectKindSources();
     if (expandedSourceUrl != null) {
       final newIndex = _filteredSources.indexWhere(
         (source) => source.bookSourceUrl == expandedSourceUrl,
@@ -236,6 +298,74 @@ class ExploreProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  /// 從 [_discoverable] 取出目前這一類，重算分組並記下版面。
+  void _selectKindSources() {
+    final kind = this.kind;
+    _allSources = _discoverable
+        .where((source) => source.sourceKind == kind)
+        .toList();
+
+    final counts = <String, int>{};
+    for (final source in _allSources) {
+      for (final group in splitSourceGroups(source.bookSourceGroup)) {
+        counts[group] = (counts[group] ?? 0) + 1;
+      }
+    }
+    _groupCounts = counts;
+    _groups = counts.keys.toList()..sort();
+    _rememberGroupRecord();
+    // 選中的分組已不存在（書源被刪除、改分組或換了類別）時回到「全部」。
+    if (_selectedGroup != null && !counts.containsKey(_selectedGroup)) {
+      _selectedGroup = null;
+    }
+
+    _applyFilter();
+  }
+
+  /// 換成列 [kind] 這一類的書源，並記住選擇。展開的書源收起；選的分組在
+  /// 這一類裡沒有就回到「全部」。
+  void setKind(BookSourceKind kind) {
+    if (!_switchable.contains(kind)) return;
+    final changed = kind != this.kind;
+    if (kind != _chosenKind) {
+      _chosenKind = kind;
+      unawaited(_saveChosenKind(kind));
+    }
+    if (!changed) return;
+    _switchKind();
+    notifyListeners();
+  }
+
+  /// 換成列 [kind] 這一類：清掉搜尋、收起展開的書源，再照這一類重新篩。
+  void _switchKind() {
+    _searchQuery = '';
+    _invalidateKindsRequest();
+    _expandedIndex = -1;
+    _expandedKinds = [];
+    if (_isLoadingSources && _discoverable.isEmpty) {
+      // 還沒讀到書源，類型鈕是照上次的紀錄先出現的：記下的分組屬於上一類，
+      // 拿掉；骨架照這一類記下的書源數。版面等讀到書源才記。
+      _allSources = [];
+      _filteredSources = [];
+      _groups = [];
+      _groupCounts = {};
+      _selectedGroup = null;
+      _lastAllCount = _kindCounts[kind] ?? 0;
+      return;
+    }
+    _selectKindSources();
+  }
+
+  Future<void> _saveChosenKind(BookSourceKind kind) async {
+    try {
+      if (!await getIt<SharedPreferences>().setString(_kindKey, kind.name)) {
+        AppLog.w('發現的書源類型沒有寫進偏好設定');
+      }
+    } catch (error, stackTrace) {
+      AppLog.e('發現的書源類型寫入失敗: $error', error: error, stackTrace: stackTrace);
+    }
   }
 
   void setSearchQuery(String query) {
@@ -381,9 +511,9 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   Future<void> topSource(BookSource source) async {
-    final minOrder = _allSources.isEmpty
+    final minOrder = _discoverable.isEmpty
         ? 0
-        : _allSources
+        : _discoverable
               .map((item) => item.customOrder)
               .reduce((a, b) => a < b ? a : b);
     // 清單由 watchDiscoveryPart 推送新快照更新，不必整頁重新載入。

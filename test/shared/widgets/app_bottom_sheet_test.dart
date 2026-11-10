@@ -6,6 +6,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 void main() {
   testWidgets('a bottom sheet sits above the keyboard', (tester) async {
@@ -96,5 +97,61 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.text('第一章 開始')).width, greaterThan(40));
+  });
+
+  testWidgets('點書源膠囊叫 onOpenOrigin；沒給時膠囊不能點', (tester) async {
+    final visible = ValueNotifier(true);
+    addTearDown(visible.dispose);
+    final menu = ReaderV2MenuController();
+    addTearDown(menu.dispose);
+    var opened = 0;
+
+    Future<void> pump(VoidCallback? onOpenOrigin) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              ReaderV2TopMenu(
+                controlsVisible: visible,
+                bookName: '書名',
+                navigation: ReaderV2ChapterNavigationState(
+                  chapterCount: 1,
+                  current: const AlwaysStoppedAnimation(0),
+                  scrub: menu.scrub,
+                  titleFor: (_) => '第一章 開始',
+                ),
+                originName: '七猫小说 · API',
+                showReadTitleAddition: true,
+                onBack: () {},
+                onMore: () {},
+                onOpenOrigin: onOpenOrigin,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await pump(() => opened++);
+    await tester.tap(find.text('七猫小说 · API'));
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+    expect(
+      find.ancestor(
+        of: find.text('七猫小说 · API'),
+        matching: find.byType(PressScale),
+      ),
+      findsOneWidget,
+    );
+
+    await pump(null);
+    expect(
+      find.ancestor(
+        of: find.text('七猫小说 · API'),
+        matching: find.byType(PressScale),
+      ),
+      findsNothing,
+      reason: '本地書沒有網頁，膠囊只是標籤',
+    );
   });
 }

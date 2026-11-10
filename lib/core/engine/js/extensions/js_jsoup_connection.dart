@@ -52,11 +52,12 @@ const String jsoupConnectionJs = r'''
     hide('containsKey', function(k) { return Object.prototype.hasOwnProperty.call(map, k); });
     hide('size', function() { return Object.keys(map).length; });
     hide('isEmpty', function() { return Object.keys(map).length === 0; });
-    hide('keySet', function() { return Object.keys(map); });
-    hide('values', function() { return Object.keys(map).map(function(k) { return map[k]; }); });
+    hide('keySet', function() { return javaCollection(Object.keys(map)); });
+    hide('values', function() { return javaCollection(Object.keys(map).map(function(k) { return map[k]; })); });
     return map;
   }
-  /// Java 的 Collection（Request.data()）：陣列的複本，多了 size、get 這類。
+  /// Java 的 Collection（Request.data()、Map 的 keySet()／values()、同名標頭的
+  /// 值）：陣列的複本，多了 size、get 這類，轉成文字是 `[a, b]`。
   function javaCollection(items) {
     var list = items.slice();
     function hide(name, fn) { Object.defineProperty(list, name, { value: fn, enumerable: false }); }
@@ -64,6 +65,7 @@ const String jsoupConnectionJs = r'''
     hide('isEmpty', function() { return list.length === 0; });
     hide('get', function(i) { return list[i]; });
     hide('toArray', function() { return list.slice(); });
+    hide('toString', function() { return __lrJavaListText(list); });
     return list;
   }
 
@@ -107,7 +109,7 @@ const String jsoupConnectionJs = r'''
     target.multiHeaders = function() {
       var map = {};
       state.headers.forEach(function(h) { (map[h[0]] = map[h[0]] || []).push(h[1]); });
-      return javaMap(Object.keys(map).map(function(k) { return [k, map[k]]; }));
+      return javaMap(Object.keys(map).map(function(k) { return [k, javaCollection(map[k])]; }));
     };
     target.cookie = function(name, value) {
       if (arguments.length < 2) {
@@ -129,7 +131,7 @@ const String jsoupConnectionJs = r'''
         });
         return javaMap(pairs);
       }
-      if (typeof arg === 'string') return values(arg);
+      if (typeof arg === 'string') return javaCollection(values(arg));
       entriesOf(arg).forEach(function(e) { target.header(e[0], e[1]); });
       return target;
     };

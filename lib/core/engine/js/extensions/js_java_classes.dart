@@ -553,6 +553,7 @@ extension JsJavaClasses on JsExtensionsBase {
     hide(list, 'toArray', function() { return list.slice(); });
     hide(list, 'iterator', function() { return global.__lrJavaIterator(list); });
     hide(list, 'subList', function(from, to) { return global.__lrSubList(list, from, to); });
+    hide(list, 'toString', function() { return global.__lrJavaListText(list); });
     return list;
   }
   named('ArrayList', ArrayList);

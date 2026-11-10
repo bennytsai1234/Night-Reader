@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../import_content.dart';
 import 'association_base.dart';
 
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -16,134 +16,120 @@ import 'package:night_reader/features/source_manager/source_manager_provider.dar
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
-/// 外部匯入對話框可選的匯入方式。
-enum _ImportKind { bookSource, bookshelf, replaceRule }
-
 /// AssociationHandlerService 的對話框與 UI 邏輯擴展
 mixin AssociationDialogHelper on AssociationBase {
-  void showImportDialog(
+  @override
+  void showLinkImportDialog(
     BuildContext context,
-    String type,
-    String src, {
-    bool isFile = false,
-    String? jsonData,
-  }) {
-    unawaited(
-      _runImportDialog(context, type, src, isFile: isFile, jsonData: jsonData),
-    );
+    ImportContentKind kind,
+    String url,
+  ) {
+    unawaited(_runImportDialog(context, kind, url, url: url));
   }
 
+  @override
+  Future<void> importUntypedLink(BuildContext context, String url) async {
+    final String text;
+    try {
+      text = await SourceImportService().fetchImportTextFromUrl(url);
+    } catch (error, stackTrace) {
+      final message = failureMessage('讀取匯入內容', error, stackTrace);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    if (!context.mounted) return;
+    importContent(context, url, text);
+  }
+
+  @override
+  void importContent(BuildContext context, String label, String text) {
+    final kind = detectImportContentKind(text);
+    if (kind == null) {
+      showAppAlert<void>(
+        context: context,
+        title: '無法辨識',
+        message: '「$label」不是夜讀能匯入的格式。',
+        actions: const [
+          AppAlertAction(label: '關閉', value: null, isDefault: true),
+        ],
+      );
+      return;
+    }
+    unawaited(_runImportDialog(context, kind, label, text: text));
+  }
+
+  /// 問要不要匯入，按下後才匯入。[text] 是已經拿到的內容；沒有時（類型寫在
+  /// 連結上）按下才從 [url] 下載。
   Future<void> _runImportDialog(
     BuildContext context,
-    String type,
-    String src, {
-    required bool isFile,
-    String? jsonData,
+    ImportContentKind kind,
+    String label, {
+    String? url,
+    String? text,
   }) async {
-    final displaySource = isFile ? src.split(RegExp(r'[/\\]')).last : src;
-    final isAuto = type == 'auto';
-    final kind = await showAppAlert<_ImportKind?>(
+    final action = switch (kind) {
+      ImportContentKind.bookSource => '匯入書源',
+      ImportContentKind.replaceRule => '匯入替換規則',
+      ImportContentKind.bookshelf => '匯入書架',
+      ImportContentKind.rssSource || ImportContentKind.theme => null,
+    };
+    final confirmed = await showAppAlert<bool>(
       context: context,
       title: '外部匯入',
-      message: '偵測到外部內容：\n$displaySource\n\n${_typeDescription(type)}',
+      message: '偵測到外部內容：\n$label\n\n${kind.description}',
       actions: [
-        if (type == 'bookSource' || isAuto)
-          const AppAlertAction(
-            label: '匯入書源',
-            value: _ImportKind.bookSource,
-            isDefault: true,
-          ),
-        if (type == 'book' || isAuto)
-          AppAlertAction(
-            label: '匯入書架',
-            value: _ImportKind.bookshelf,
-            isDefault: !isAuto,
-          ),
-        if (type == 'replaceRule' || isAuto)
-          AppAlertAction(
-            label: '匯入替換規則',
-            value: _ImportKind.replaceRule,
-            isDefault: !isAuto,
-          ),
-        const AppAlertAction(label: '取消', value: null),
+        if (action != null)
+          AppAlertAction(label: action, value: true, isDefault: true),
+        const AppAlertAction(label: '取消', value: false),
       ],
     );
-    if (kind == null || !context.mounted) return;
+    if (confirmed != true || action == null || !context.mounted) return;
 
-    final label = switch (kind) {
-      _ImportKind.bookSource => '匯入書源',
-      _ImportKind.bookshelf => '匯入書架',
-      _ImportKind.replaceRule => '匯入替換規則',
-    };
     try {
+      // 逐步呼叫會丟出原因的方法（網址、HTTP、JSON 錯誤），交給外層顯示
+      // 「匯入書源失敗：原因」。
+      final service = SourceImportService();
+      final content = normalizeImportJson(
+        text ?? await service.fetchImportTextFromUrl(url!),
+      );
+      final String message;
       switch (kind) {
-        case _ImportKind.bookSource:
-          // 逐步呼叫會丟出原因的方法（網址、HTTP、JSON 錯誤），交給外層顯示
-          // 「匯入書源失敗：原因」，不再一律變成「未匯入有效書源」。
-          final service = SourceImportService();
-          final text = isFile
-              ? jsonData!
-              : await service.fetchImportTextFromUrl(src);
-          final parsed = await service.parseSourcesDetailedAsync(text);
+        case ImportContentKind.bookSource:
+          final parsed = await service.parseSourcesDetailedAsync(content);
           final count = await service.importSources(parsed.allSources);
-          if (!context.mounted) return;
-          // 和書源管理的匯入同一套說法：非文字小說的書源會匯入但停用。
+          // 和書源管理的匯入同一套說法：夜讀不支援的書源會匯入但停用。
           final unsupportedCount = parsed.unsupportedSources.length;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                count == 0
-                    ? '未匯入有效書源'
-                    : unsupportedCount > 0
-                    ? '成功匯入 $count 個書源，其中 $unsupportedCount 個已標記為不支援並停用'
-                    : '成功匯入 $count 個書源',
-              ),
-            ),
+          message = count == 0
+              ? '未匯入有效書源'
+              : unsupportedCount > 0
+              ? '成功匯入 $count 個書源，其中 $unsupportedCount 個已標記為不支援並停用'
+              : '成功匯入 $count 個書源';
+        case ImportContentKind.bookshelf:
+          final result = await BookshelfExchangeService().importFromText(
+            content,
           );
-        case _ImportKind.bookshelf:
-          if (isFile) {
-            final result = await BookshelfExchangeService().importFromFile(
-              File(src),
-            );
-            if (!context.mounted) return;
-            await context.read<BookshelfProvider>().loadBooks();
-            if (!context.mounted) return;
-            final total =
-                result.books +
-                result.chapters +
-                result.sources +
-                result.contents;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  total > 0
-                      ? '已匯入 ${result.books} 本書、${result.chapters} 個章節'
-                      : '未找到可匯入的書架資料',
-                ),
-              ),
-            );
-          } else {
-            await context.read<BookshelfProvider>().importBookshelfFromUrl(src);
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('書架匯入完成')));
-          }
-        case _ImportKind.replaceRule:
-          final text = isFile
-              ? jsonData!
-              : await SourceImportService().fetchImportTextFromUrl(src);
-          final count = await _importReplaceRules(text);
           if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(count > 0 ? '成功匯入 $count 個替換規則' : '未匯入有效替換規則'),
-            ),
-          );
+          await context.read<BookshelfProvider>().loadBooks();
+          final total =
+              result.books + result.chapters + result.sources + result.contents;
+          message = total > 0
+              ? '已匯入 ${result.books} 本書、${result.chapters} 個章節'
+              : '未找到可匯入的書架資料';
+        case ImportContentKind.replaceRule:
+          final count = await _importReplaceRules(content);
+          message = count > 0 ? '成功匯入 $count 個替換規則' : '未匯入有效替換規則';
+        case ImportContentKind.rssSource || ImportContentKind.theme:
+          return;
       }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage(label, error))));
+          .showSnackBar(SnackBar(content: Text(failureMessage(action, error))));
     }
   }
 
@@ -166,29 +152,6 @@ mixin AssociationDialogHelper on AssociationBase {
       count += 1;
     }
     return count;
-  }
-
-  void showForceImportDialog(BuildContext context, String path) {
-    showAppAlert<void>(
-      context: context,
-      title: '無法辨識檔案',
-      message:
-          '「${path.split(RegExp(r'[/\\]')).last}」不是可辨識的 Night Reader 匯入格式。',
-      actions: const [
-        AppAlertAction(label: '關閉', value: null, isDefault: true),
-      ],
-    );
-  }
-
-  String _typeDescription(String type) {
-    return switch (type) {
-      'bookSource' => '辨識為書源資料',
-      'replaceRule' => '辨識為替換規則',
-      'book' => '辨識為書架資料',
-      'rssSource' => '這是訂閱源，夜讀只支援書源，無法匯入',
-      'theme' => '辨識為閱讀主題，但目前沒有可用的主題匯入流程',
-      _ => '無法自動判斷類型，請選擇要使用的匯入方式',
-    };
   }
 }
 // AI_PORT: GAP-INTENT-01 extracted from AssociationHandlerService

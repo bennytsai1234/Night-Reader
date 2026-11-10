@@ -20,7 +20,9 @@ import 'package:share_plus/share_plus.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_list_skeleton.dart';
 
-String _normalizeImportJson(String value) {
+/// 匯入的 JSON 文字去掉前後空白與 BOM（有些網站與檔案會帶），書源解析與
+/// 外部匯入的類型判斷都先過這一步。
+String normalizeImportJson(String value) {
   var normalized = value.trim();
   while (normalized.isNotEmpty && normalized.codeUnitAt(0) == 0xFEFF) {
     normalized = normalized.substring(1).trim();
@@ -31,7 +33,7 @@ String _normalizeImportJson(String value) {
 Map<String, List<Map<String, dynamic>>> _parseSourcesPayloadForIsolate(
   String jsonStr,
 ) {
-  final normalized = _normalizeImportJson(jsonStr);
+  final normalized = normalizeImportJson(jsonStr);
   if (normalized.isEmpty) {
     throw const FormatException('匯入內容為空');
   }
@@ -238,7 +240,7 @@ class SourceImportService {
   }
 
   String _stripBom(String value) {
-    return _normalizeImportJson(value);
+    return normalizeImportJson(value);
   }
 }
 

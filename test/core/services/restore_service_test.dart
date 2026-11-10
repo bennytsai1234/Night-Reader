@@ -122,6 +122,43 @@ void main() {
     }
   });
 
+  test('an old backup\'s "作者：" prefixes are cleaned from the book, its '
+      'bookmarks and highlights', () async {
+    final zip = await writeZip('author.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': 15}),
+      'bookshelf.json': jsonEncode([
+        {
+          'bookUrl': 'https://author.example/b',
+          'name': '夜航',
+          'author': '作者：某人',
+          'origin': 'https://author.example',
+          'isInBookshelf': true,
+        },
+      ]),
+      'bookmark.json': jsonEncode([
+        {'id': 41, 'bookName': '夜航', 'bookAuthor': '作者：某人'},
+      ]),
+      'highlight.json': jsonEncode([
+        {'id': 42, 'bookName': '夜航', 'bookAuthor': '作者：某人', 'quote': '雨'},
+      ]),
+    });
+    // 資料庫各測試共用：失敗時也清掉，不影響後面的測試。
+    addTearDown(() async {
+      await BookDao(db).deleteByUrl('https://author.example/b');
+      await BookmarkDao(db).deleteByIds([41]);
+      await HighlightDao(db).deleteByIds([42]);
+    });
+
+    await RestoreService().restoreFromZip(zip);
+
+    expect(
+      (await BookDao(db).getByUrl('https://author.example/b'))!.author,
+      '某人',
+    );
+    expect((await BookmarkDao(db).getAll()).single.bookAuthor, '某人');
+    expect((await HighlightDao(db).getAll()).single.bookAuthor, '某人');
+  });
+
   test('subscription data in an old backup is skipped silently', () async {
     final zip = await writeZip('with_subscriptions.zip', {
       'manifest.json': jsonEncode({'schemaVersion': 4}),

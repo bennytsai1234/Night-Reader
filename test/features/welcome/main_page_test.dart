@@ -39,14 +39,12 @@ void main() {
       destinations: [
         MainDestination(
           icon: Icons.book_outlined,
-          selectedIcon: Icons.book,
           label: '一',
           page: _ListPage('甲', _firstBackground),
           background: _first,
         ),
         MainDestination(
           icon: Icons.explore_outlined,
-          selectedIcon: Icons.explore,
           label: '二',
           page: _ListPage('乙', _secondBackground),
           background: _second,
@@ -113,19 +111,16 @@ void main() {
       destinations: [
         MainDestination(
           icon: Icons.book_outlined,
-          selectedIcon: Icons.book,
           label: '一',
           page: _ListPage('甲', _firstBackground),
         ),
         MainDestination(
           icon: Icons.explore_outlined,
-          selectedIcon: Icons.explore,
           label: '二',
           page: _ListPage('乙', _secondBackground),
         ),
         MainDestination(
           icon: Icons.person_outline,
-          selectedIcon: Icons.person,
           label: '三',
           page: _ListPage('丙', _firstBackground),
           scrollsToTopWhenLeft: true,
@@ -182,7 +177,6 @@ void main() {
             destinations: [
               MainDestination(
                 icon: Icons.book_outlined,
-                selectedIcon: Icons.book,
                 label: '一',
                 page: Builder(
                   builder: (context) {
@@ -197,7 +191,6 @@ void main() {
               ),
               const MainDestination(
                 icon: Icons.explore_outlined,
-                selectedIcon: Icons.explore,
                 label: '二',
                 page: _ListPage('乙', _secondBackground),
               ),
@@ -567,13 +560,11 @@ void main() {
           destinations: [
             MainDestination(
               icon: Icons.book_outlined,
-              selectedIcon: Icons.book,
               label: '一',
               page: _ListPage('甲', _firstBackground),
             ),
             MainDestination(
               icon: Icons.person_outline,
-              selectedIcon: Icons.person,
               label: '二',
               page: _ListPage('乙', _secondBackground),
               scrollsToTopWhenLeft: true,

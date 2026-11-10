@@ -76,21 +76,24 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   /// 每本書跟著它的書源現在的類型：還原備份時書與書源分開寫進來，寫的
   /// 先後照 ZIP 裡的檔案順序，兩邊都寫完再對一次。
   Future<int> followAllKinds() async =>
-      BookDao(attachedDatabase).followSourceKinds({
-        for (final source in await getAll())
-          if (source.sourceKind != BookSourceKind.unsupported)
-            source.bookSourceUrl: source.sourceKind,
-      });
+      BookDao(attachedDatabase)
+          .followSourceKinds(kindsToFollow(await getAll()));
 
   /// 書跟著書源的類型（使用者 2026-11-09 定，ADR 0053）：校驗只在有把握時
   /// 改類型，改了表示用它加進來的書其實是那一類，留在原本那一類也讀不了。
-  /// 夜讀不支援的類型不動書。
   Future<void> _followKinds(List<BookSource> sources) =>
-      BookDao(attachedDatabase).followSourceKinds({
-        for (final source in sources)
-          if (source.sourceKind != BookSourceKind.unsupported)
-            source.bookSourceUrl: source.sourceKind,
-      });
+      BookDao(attachedDatabase).followSourceKinds(kindsToFollow(sources));
+
+  /// 書要跟著的書源類型（[BookDao.followSourceKinds]）。夜讀不支援的類型
+  /// 不動書；聚合源的書各自是哪一類由書源的規則寫（ADR 0056），也不動。
+  static Map<String, BookSourceKind> kindsToFollow(
+    Iterable<BookSource> sources,
+  ) => {
+    for (final source in sources)
+      if (source.sourceKind != BookSourceKind.unsupported &&
+          !source.isAggregateSource)
+        source.bookSourceUrl: source.sourceKind,
+  };
 
   /// 儲存編輯後的書源。網址改過時是同一個書源換了身分：在同一個交易裡移除
   /// 原網址那筆，記著原網址的書、搜尋結果與已存的正文一起改記新網址，書架
@@ -142,7 +145,6 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> _deleteRows(List<String> urls) async {
     await (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
-    forgetSourceMarkers(urls);
   }
 
   Future<List<BookSource>> getAllFull() => getAll();

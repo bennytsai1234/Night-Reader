@@ -8,23 +8,50 @@ import '../js_extensions_base.dart';
 extension JsJavaObject on JsExtensionsBase {
   void injectJavaObjectJs() {
     runtime.evaluate(r'''
-      function __lrJavaList(items) {
+      /// Java List 轉成的文字（AbstractCollection.toString）：`[a, b]`，空的
+      /// 是 `[]`。規則常寫 `JSON.parse(result)`、`"" + list`，拿到的要和
+      /// Legado 一樣；JS 陣列是 `a,b` 與空字串。
+      function __lrJavaListText(list) {
+        var parts = [];
+        for (var i = 0; i < list.length; i++) {
+          parts.push(list[i] === list ? '(this Collection)' : String(list[i]));
+        }
+        return '[' + parts.join(', ') + ']';
+      }
+
+      /// Java 的 List：陣列的複本加上 List 的方法。方法不可列舉，for-in 與
+      /// Object.keys 只看到每一項。[jsArray] 是上一段規則 JS 交回的陣列：
+      /// Legado 原樣交給下一段，還是 JS 陣列，轉成文字是 `a,b`、`get` 不檢查
+      /// 範圍；其他方法照舊留著。
+      function __lrJavaList(items, jsArray) {
         var list = Array.isArray(items) ? items.slice() : [];
-        list.size = function() { return this.length; };
-        list.get = function(index) { return this[index]; };
-        list.first = function() { return this.length ? this[0] : null; };
-        list.last = function() {
+        function hide(name, fn) {
+          Object.defineProperty(list, name, {
+            value: fn, enumerable: false, configurable: true, writable: true
+          });
+        }
+        hide('size', function() { return this.length; });
+        hide('get', function(index) {
+          if (!jsArray && (index < 0 || index >= this.length)) {
+            throw new Error('java.lang.IndexOutOfBoundsException: Index: ' + index + ', Size: ' + this.length);
+          }
+          return this[index];
+        });
+        hide('first', function() { return this.length ? this[0] : null; });
+        hide('last', function() {
           return this.length ? this[this.length - 1] : null;
-        };
-        list.isEmpty = function() { return this.length === 0; };
-        list.contains = function(value) {
+        });
+        hide('isEmpty', function() { return this.length === 0; });
+        hide('contains', function(value) {
           for (var i = 0; i < this.length; i++) {
             if (__lrJavaEquals(this[i], value)) return true;
           }
           return false;
-        };
-        list.iterator = function() { return __lrJavaIterator(this); };
-        list.subList = function(from, to) { return __lrSubList(this, from, to); };
+        });
+        hide('toArray', function() { return this.slice(); });
+        hide('iterator', function() { return __lrJavaIterator(this); });
+        hide('subList', function(from, to) { return __lrSubList(this, from, to); });
+        if (!jsArray) hide('toString', function() { return __lrJavaListText(this); });
         return list;
       }
 

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -105,7 +106,7 @@ class AppInterceptor extends Interceptor {
     }
 
     AppLog.e(
-      'Network Error: ${err.message}',
+      'Network Error: ${errorText(err)}',
       error: err.error,
       stackTrace: err.stackTrace,
     );

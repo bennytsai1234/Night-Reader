@@ -127,6 +127,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.infoState,
     this.loadingTarget,
     required this.originName,
+    this.onOpenOrigin,
     this.progressListenable,
     required this.navigation,
     required this.isAutoPaging,
@@ -157,6 +158,10 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onAutoPage,
     required this.onToggleDayNight,
     required this.onReplaceRule,
+    this.onAutoPageSettings,
+    this.onReplaceRuleSettings,
+    this.onTimedTtsSettings,
+    this.onDayNightSettings,
     required this.onShowControls,
     required this.onDismissControls,
     required this.onPrevChapter,
@@ -199,6 +204,9 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 畫面上這一章。
   final ReaderV2InfoTarget? loadingTarget;
   final String originName;
+
+  /// 點書源膠囊（見 [ReaderV2TopMenu.onOpenOrigin]）。
+  final VoidCallback? onOpenOrigin;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
 
   /// 章數、目前章（小訊號）與章名；上方選單的章名、上一章／下一章與頁首
@@ -254,6 +262,12 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onAutoPage;
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
+
+  /// 圓鈕長按開完整設定頁（見 [ReaderV2BottomMenu.onAutoPageSettings]）。
+  final VoidCallback? onAutoPageSettings;
+  final VoidCallback? onReplaceRuleSettings;
+  final VoidCallback? onTimedTtsSettings;
+  final VoidCallback? onDayNightSettings;
   final VoidCallback onShowControls;
   final VoidCallback onDismissControls;
   final VoidCallback onPrevChapter;
@@ -432,6 +446,7 @@ class ReaderV2PageShell extends StatelessWidget {
                           bookName: context.zh(book.name),
                           navigation: navigation,
                           originName: originName,
+                          onOpenOrigin: onOpenOrigin,
                           showReadTitleAddition: showReadTitleAddition,
                           onBack: onExitIntent,
                           onMore: onMore,
@@ -454,6 +469,10 @@ class ReaderV2PageShell extends StatelessWidget {
                           onAutoPage: onAutoPage,
                           onToggleDayNight: onToggleDayNight,
                           onReplaceRule: onReplaceRule,
+                          onAutoPageSettings: onAutoPageSettings,
+                          onReplaceRuleSettings: onReplaceRuleSettings,
+                          onTimedTtsSettings: onTimedTtsSettings,
+                          onDayNightSettings: onDayNightSettings,
                           onPrevChapter: onPrevChapter,
                           onNextChapter: onNextChapter,
                           onScrubStart: onScrubStart,

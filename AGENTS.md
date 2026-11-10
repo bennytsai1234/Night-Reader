@@ -5,7 +5,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | 檔案 | 放什麼 |
 |---|---|
 | `README.md`、`CHANGELOG.md`、`PRIVACY.md` | 給讀者看的產品說明、正式版更新說明、隱私權政策（`PRIVACY.md` 和 App 的「隱私說明」一起改） |
-| `DESIGN.md` | 設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
+| `DESIGN.md` | 產品界線、設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
 | `GLOSSARY.md` | 和使用者討論時用的詞 |
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
@@ -25,12 +25,12 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 維護範圍
 
-工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出。設計取捨照 `DESIGN.md`「設計原則」與「否決過的方向」，要違反先改對應的 ADR。
+工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出，談定案時照 `docs/agents/new-feature.md` 走一遍觸點。取捨照 `DESIGN.md`「產品界線」「設計原則」與「否決過的方向」，要違反先改對應的 ADR。
 評估需求時考量所有讀者的需求與實際效益，不以使用者本人是否需要為取捨依據。
 
 ## 驗證
 
-- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試，用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
+- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試：在整個 `test/` grep 改到的類別與函式，引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
 - 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
 - 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。

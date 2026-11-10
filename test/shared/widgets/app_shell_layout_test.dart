@@ -4,8 +4,10 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/main.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 class _Broken extends StatelessWidget {
   const _Broken();
@@ -99,21 +101,9 @@ void main() {
             currentIndex: 0,
             onTap: taps.add,
             items: const [
-              FloatingTabItem(
-                icon: Icons.book_outlined,
-                selectedIcon: Icons.book,
-                label: '書架',
-              ),
-              FloatingTabItem(
-                icon: Icons.explore_outlined,
-                selectedIcon: Icons.explore,
-                label: '發現',
-              ),
-              FloatingTabItem(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                label: '我的',
-              ),
+              FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+              FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+              FloatingTabItem(icon: Icons.person_outline, label: '我的'),
             ],
           ),
         ),
@@ -123,6 +113,74 @@ void main() {
     tester.semantics.tap(find.semantics.byLabel('我的'));
     expect(taps, [2]);
     handle.dispose();
+  });
+
+  testWidgets('a toolbar in the page sits where the tab bar does', (
+    tester,
+  ) async {
+    // 有手勢區的手機：頁面裡讀到的 viewPadding 底部被 Scaffold 扣成 0，
+    // 取代分頁列的工具列（書架多選）仍要和分頁列的玻璃底部切齊。
+    tester.view.physicalSize = const Size(1179, 2556);
+    tester.view.devicePixelRatio = 3;
+    tester.view.padding = const FakeViewPadding(bottom: 24 * 3);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 24 * 3);
+    addTearDown(tester.view.reset);
+    final toolbar = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Scaffold(
+          extendBody: true,
+          // 頁面只靠 slotOf 取得系統區，沒有其他依賴。
+          body: Builder(
+            builder: (context) {
+              final slot = FloatingTabBar.slotOf(context);
+              return Stack(
+                children: [
+                  Positioned(
+                    left: slot.left,
+                    right: slot.right,
+                    bottom: slot.bottom,
+                    child: SizedBox(key: toolbar, height: 56),
+                  ),
+                ],
+              );
+            },
+          ),
+          bottomNavigationBar: FloatingTabBar(
+            currentIndex: 0,
+            onTap: (_) {},
+            items: const [
+              FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+              FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    double barBottom() => tester
+        .getRect(
+          find
+              .descendant(
+                of: find.byType(FloatingTabBar),
+                matching: find.byType(GlassSurface),
+              )
+              .first,
+        )
+        .bottom;
+    double toolbarBottom() => tester.getRect(find.byKey(toolbar)).bottom;
+
+    expect(barBottom(), 852 - 24 - AppGlass.tabBarBottomGap);
+    expect(toolbarBottom(), barBottom());
+
+    // 換成三鍵導覽：不重建整頁，工具列也跟著分頁列移上去。
+    tester.view.padding = const FakeViewPadding(bottom: 48 * 3);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 48 * 3);
+    await tester.pump();
+    expect(barBottom(), 852 - 48 - AppGlass.tabBarBottomGap);
+    expect(toolbarBottom(), barBottom());
   });
 
   testWidgets('a pill dragged and dropped back on its tab slides home', (
@@ -144,21 +202,9 @@ void main() {
             currentIndex: 0,
             onTap: taps.add,
             items: const [
-              FloatingTabItem(
-                icon: Icons.book_outlined,
-                selectedIcon: Icons.book,
-                label: '書架',
-              ),
-              FloatingTabItem(
-                icon: Icons.explore_outlined,
-                selectedIcon: Icons.explore,
-                label: '發現',
-              ),
-              FloatingTabItem(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                label: '我的',
-              ),
+              FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+              FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+              FloatingTabItem(icon: Icons.person_outline, label: '我的'),
             ],
           ),
         ),

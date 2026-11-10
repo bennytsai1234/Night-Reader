@@ -12,6 +12,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/book_kind_mark.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
@@ -49,6 +50,11 @@ enum _SourceAction { edit, top, search, refresh, delete }
 /// 分組選單裡「全部」的值；分組名稱都是字串，不會和它撞在一起。
 const Object _allGroups = Object();
 
+/// 類型鈕與它的選單上，每一類書源的圖示：漫畫、有聲同搜尋結果封面上的
+/// 類別記號，小說是文字頁。
+IconData _kindIcon(BookSourceKind kind) =>
+    BookKindMark.iconOf(kind) ?? Icons.article_outlined;
+
 class _ExplorePageContentState extends State<_ExplorePageContent> {
   final _scrollController = ScrollController();
 
@@ -65,8 +71,33 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   /// Scaffold 內容區的系統內距（含玻璃頁首與底部浮動分頁列）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
 
+  /// 監聽的 provider 與上次列的類別：類別一換（從類型鈕，或書源變動跟著
+  /// 換）就回到清單頂端。在 provider 通知時、重建之前捲，新清單第一幀就在
+  /// 頂端。
+  ExploreProvider? _provider;
+  BookSourceKind? _shownKind;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<ExploreProvider>();
+    if (identical(provider, _provider)) return;
+    _provider?.removeListener(_scrollToTopOnKindChange);
+    _provider = provider..addListener(_scrollToTopOnKindChange);
+    _shownKind = provider.kind;
+  }
+
+  void _scrollToTopOnKindChange() {
+    final kind = _provider!.kind;
+    if (kind == _shownKind) return;
+    _shownKind = kind;
+    // 換了一整份清單，從頂端開始看。
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
   @override
   void dispose() {
+    _provider?.removeListener(_scrollToTopOnKindChange);
     _scrollController.dispose();
     super.dispose();
   }
@@ -101,11 +132,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }
 
   /// 頁首和書架一樣是「圓鈕＋置中標題」，清單從頁首下方同一條線開始。
-  /// 有分組時左側是分組鈕；讀到書源前 provider 的分組是上次的紀錄，鈕從
-  /// 第一幀就在，之後有無分組改變時從一個點長出或收回（GlassMorph）。
+  /// 有分組時左側是分組鈕，發現書源不只一類時右側是類型鈕；讀到書源前
+  /// provider 的分組與類別是上次的紀錄，鈕從第一幀就在，之後有無改變時
+  /// 從一個點長出或收回（GlassMorph）。
   GlassNavHeader _buildHeader(ExploreProvider provider) {
     final hasGroups =
         provider.sourceLoadError == null && provider.groups.isNotEmpty;
+    final kinds = provider.sourceLoadError == null
+        ? provider.kinds
+        : const <BookSourceKind>[];
     return GlassNavHeader(
       morph: true,
       title: '發現',
@@ -136,6 +171,23 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
               },
             )
           : null,
+      actions: [
+        if (kinds.length > 1)
+          GlassMenuButton<BookSourceKind>(
+            icon: _kindIcon(provider.kind),
+            tooltip: '書源類型',
+            entriesBuilder: (_) => [
+              for (final kind in kinds)
+                GlassMenuItem(
+                  value: kind,
+                  label: '${kind.sourceLabel}　${provider.kindCounts[kind]}',
+                  icon: _kindIcon(kind),
+                  checked: kind == provider.kind,
+                ),
+            ],
+            onSelected: provider.setKind,
+          ),
+      ],
     );
   }
 
