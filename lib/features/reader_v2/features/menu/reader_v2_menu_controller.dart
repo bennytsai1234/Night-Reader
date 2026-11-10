@@ -27,11 +27,15 @@ class ReaderV2MenuController {
   ValueListenable<ReaderV2ScrubState> get scrub => _scrub;
   bool get isScrubbing => _scrub.value.isScrubbing;
 
+  /// 第幾次拖動；放開後的跳轉做完時拿它對，舊的跳轉不解除新一次的停留。
+  int _drag = 0;
+
   void dismissControls() => _controlsVisible.value = false;
 
   void showControls() => _controlsVisible.value = true;
 
   void onScrubStart(double percent) {
+    _drag += 1;
     _scrub.value = (isScrubbing: true, holdsSlider: true, percent: percent);
   }
 
@@ -39,17 +43,18 @@ class ReaderV2MenuController {
     _scrub.value = (isScrubbing: true, holdsSlider: true, percent: percent);
   }
 
-  /// 放開：提示淡出，拖動條留在 [percent]，等 [onScrubSettled] 才回去跟
-  /// 閱讀進度。
-  void onScrubEnd(double percent) {
+  /// 放開：提示淡出，拖動條留在 [percent]，等這一次的 [onScrubSettled]
+  /// 才回去跟閱讀進度。回傳這一次拖動的編號。
+  int onScrubEnd(double percent) {
     _scrub.value = (isScrubbing: false, holdsSlider: true, percent: percent);
+    return _drag;
   }
 
-  /// 放開後的跳轉做完、頁尾進度已經是新位置：拖動條改回跟閱讀進度。期間
-  /// 又開始拖動時不動。
-  void onScrubSettled() {
+  /// 第 [drag] 次放開後的跳轉做完、頁尾進度已經是新位置：拖動條改回跟
+  /// 閱讀進度。之後又拖過（正在拖，或已經放開、在等自己的跳轉）時不動。
+  void onScrubSettled(int drag) {
     final scrub = _scrub.value;
-    if (scrub.isScrubbing || !scrub.holdsSlider) return;
+    if (drag != _drag || scrub.isScrubbing || !scrub.holdsSlider) return;
     _scrub.value = (
       isScrubbing: false,
       holdsSlider: false,

@@ -118,6 +118,16 @@ void main() {
       (selected / 10).round(),
     }, reason: '放開後拖動條要停在選定的位置，不能先回到原本的 $before');
     expect(
+      tester
+          .widget<ReaderV2BottomMenu>(find.byType(ReaderV2BottomMenu))
+          .navigation
+          .scrub
+          .value
+          .holdsSlider,
+      isFalse,
+      reason: '跳轉做完後拖動條改回跟著閱讀進度',
+    );
+    expect(
       targets,
       contains(
         ReaderV2Location(
