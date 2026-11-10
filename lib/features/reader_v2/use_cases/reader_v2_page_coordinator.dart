@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
 import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
@@ -109,13 +110,25 @@ class ReaderV2PageCoordinator {
   Future<void> jumpRelativeChapter(int delta) async {
     final runtime = _host.runtime;
     if (runtime == null || runtime.chapterCount <= 0) return;
+    final current = runtime.state.visibleLocation.chapterIndex;
+    bool locked(int index) => runtime.chapterAt(index)?.isLocked ?? false;
     final target = ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
-      currentChapterIndex: runtime.state.visibleLocation.chapterIndex,
+      currentChapterIndex: current,
       chapterCount: runtime.chapterCount,
       delta: delta,
+      skip: locked,
     );
     if (target == null) {
-      _showNotice(delta < 0 ? '已經是第一章' : '已經是最後一章');
+      // 這一側還有章卻沒有目標，表示剩下的都是付費章節（ADR 0057）。
+      final neighbor = current + delta.sign;
+      final paidAhead = neighbor >= 0 && neighbor < runtime.chapterCount;
+      _showNotice(
+        paidAhead
+            ? lockedChapterNotice
+            : delta < 0
+            ? '已經是第一章'
+            : '已經是最後一章',
+      );
       return;
     }
     await jumpToChapter(target);

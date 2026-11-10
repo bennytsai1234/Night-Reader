@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
@@ -9,6 +10,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/services/highlight_export.dart';
@@ -22,8 +24,12 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
+import 'package:night_reader/features/settings/appearance_settings_page.dart';
+import 'package:night_reader/features/settings/tts_settings_page.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
@@ -398,6 +404,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   infoState: _infoStateOf(runtime),
                   loadingTarget: _infoTargetOf(runtime),
                   originName: widget.book.originName,
+                  onOpenOrigin: widget.book.isLocal ? null : _openChapterWeb,
                   progressListenable: _progress,
                   navigation: navigation,
                   isAutoPaging: _host.autoPage?.isRunning ?? false,
@@ -441,6 +448,15 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   onToggleDayNight: _toggleDayNight,
                   onReplaceRule: () =>
                       _openPanel(() => _coordinator.openReplaceRule(context)),
+                  onAutoPageSettings: () =>
+                      unawaited(_openReadingPreferences()),
+                  onReplaceRuleSettings: () =>
+                      unawaited(_openReplaceRulePage()),
+                  onTimedTtsSettings: () =>
+                      unawaited(_openSettingsPage(const TtsSettingsPage())),
+                  onDayNightSettings: () => unawaited(
+                    _openSettingsPage(const AppearanceSettingsPage()),
+                  ),
                   onShowControls: menu.showControls,
                   onDismissControls: menu.dismissControls,
                   onPrevChapter: () =>
@@ -453,8 +469,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                     _coordinator.previewChapterPercent(percent);
                   },
                   onScrubEnd: (percent) {
-                    menu.onScrubEnd(percent);
-                    unawaited(_coordinator.commitChapterPercent(percent));
+                    final drag = menu.onScrubEnd(percent);
+                    unawaited(_commitScrub(percent, drag));
                   },
                   brightnessControl:
                       ReaderV2DeviceChannel.supportsWindowBrightness
@@ -672,8 +688,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 點目錄的一章（登入或驗證回來、取不到的是別章時也走這裡）：目錄與選單
   /// 馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段動畫都播完才開始載入
-  /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
+  /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。付費章節不跳，
+  /// 目錄留著、只提示（ADR 0057）。
   void _jumpToChapterFromDrawer(int index) {
+    if (_host.runtime?.chapterAt(index)?.isLocked ?? false) {
+      _showNotice(lockedChapterNotice);
+      return;
+    }
     final settled = _closeDrawerForJump();
     unawaited(_coordinator.jumpToChapter(index, settled: settled));
   }
@@ -980,15 +1001,94 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 下方選單的「進階」：自動翻頁、繁簡、點擊區域、音量鍵這些不常邊讀邊
   /// 調的設定只在「閱讀偏好」一個地方（ADR 0030），不另開一個內容相同的
   /// 面板。和全域系統設定一樣等返回動畫播完才重讀設定（ADR 0018）。
-  Future<void> _openReadingPreferences() async {
+  Future<void> _openReadingPreferences() =>
+      _openSettingsPage(const ReadingSettingsPage());
+
+  /// 推一整頁設定（「進階」與圓鈕長按）：選單先滑出才推，返回動畫播完才
+  /// 重讀閱讀設定、再滑回選單（ADR 0018）。[whenUncovered] 和重讀設定
+  /// 同時做。
+  Future<void> _openSettingsPage(
+    Widget page, {
+    VoidCallback? whenUncovered,
+  }) async {
     final pushed = await _pushOverMenu(
       _departMenu(),
-      MaterialPageRoute<void>(builder: (_) => const ReadingSettingsPage()),
+      MaterialPageRoute<void>(builder: (_) => page),
     );
     if (!mounted || pushed == null) return;
     _restoreMenuWhenUncovered(
-      beforeMenu: () => unawaited(_host.settings.loadSettings()),
+      beforeMenu: () {
+        unawaited(_host.settings.loadSettings());
+        whenUncovered?.call();
+      },
     );
+  }
+
+  /// 替換規則鈕長按：直接進規則管理頁。回來時規則有改動才照新規則重載
+  /// 正文；推頁前讀不到規則時當作有改動。
+  Future<void> _openReplaceRulePage() async {
+    final replaceDao = _host.dependencies.replaceDao;
+    if (replaceDao == null) {
+      _showNotice('替換規則資料庫不可用');
+      return;
+    }
+    Future<String?> snapshot() async {
+      try {
+        return jsonEncode([
+          for (final rule in await replaceDao.getAll()) rule.toJson(),
+        ]);
+      } catch (error) {
+        AppLog.w('讀取替換規則失敗，回來時照樣重載正文: $error');
+        return null;
+      }
+    }
+
+    final before = snapshot();
+    await _openSettingsPage(
+      const ReaderV2ReplaceRulePage(),
+      whenUncovered: () => unawaited(_reloadIfRulesChanged(before, snapshot)),
+    );
+  }
+
+  /// 從規則管理頁回來：規則和推頁前一樣就不動；有改動（或讀不到、比不出）
+  /// 才照新規則重載正文。讀規則的期間閱讀器可能已經關掉或換了一份正文，
+  /// 這時不重載；重載失敗和面板一樣提示，原本的正文留著。
+  Future<void> _reloadIfRulesChanged(
+    Future<String?> before,
+    Future<String?> Function() snapshot,
+  ) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    final previous = await before;
+    if (previous != null && await snapshot() == previous) return;
+    if (!mounted || runtime.disposed || !identical(_host.runtime, runtime)) {
+      return;
+    }
+    try {
+      await runtime.reloadContentPreservingLocation();
+    } catch (error, stackTrace) {
+      AppLog.e('套用替換規則失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('套用替換規則', error));
+    }
+  }
+
+  /// 拖動條放開：跳到選定位置。正文排到新位置的那一幀才發布頁尾進度，
+  /// 所以等跳轉做完再過一幀，拖動條才改回跟閱讀進度。
+  /// [drag] 是這一次拖動的編號：連續放開兩次時，先做完的舊跳轉不解除
+  /// 新一次的停留。
+  Future<void> _commitScrub(double percent, int drag) async {
+    try {
+      await _coordinator.commitChapterPercent(percent);
+    } finally {
+      if (mounted) {
+        WidgetsBinding.instance
+          ..addPostFrameCallback((_) {
+            // 排進來之後、這一幀之前閱讀器可能已經關掉。
+            if (mounted) _host.menu.onScrubSettled(drag);
+          })
+          ..ensureVisualUpdate();
+      }
+    }
   }
 
   void _handleMenuHidden() => _menuDeparture.menusHidden();
@@ -1327,6 +1427,23 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       title: _chapterTitleAt(chapterIndex),
       shares: runtime?.chapterShares.value,
     );
+  }
+
+  /// 點書源膠囊：用瀏覽器開正在讀的這一章（同 Legado 點章節網址）。
+  void _openChapterWeb() {
+    final runtime = _host.runtime;
+    final index = _currentChapterIndex(runtime);
+    final chapter =
+        runtime?.chapterAt(index) ??
+        (index < widget.initialChapters.length
+            ? widget.initialChapters[index]
+            : null);
+    final url = chapter?.webPageUrl;
+    if (url == null) {
+      _showNotice('這一章沒有網頁可以開');
+      return;
+    }
+    unawaited(launchExternalUrlWithFeedback(context, url));
   }
 
   String _chapterUrlAt(int index) {

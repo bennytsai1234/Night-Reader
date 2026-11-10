@@ -152,6 +152,7 @@ class SleepTimerButton extends StatefulWidget {
     required this.accent,
     required this.accentMuted,
     required this.onPressed,
+    this.onLongPress,
   });
 
   final SleepTimer timer;
@@ -163,6 +164,7 @@ class SleepTimerButton extends StatefulWidget {
   /// 倒數中疊在玻璃底色上的淡主色。
   final Color accentMuted;
   final VoidCallback onPressed;
+  final VoidCallback? onLongPress;
 
   @override
   State<SleepTimerButton> createState() => _SleepTimerButtonState();
@@ -231,6 +233,7 @@ class _SleepTimerButtonState extends State<SleepTimerButton> {
           : widget.tint,
       color: label != null ? widget.accent : widget.color,
       onPressed: widget.onPressed,
+      onLongPress: widget.onLongPress,
     );
   }
 

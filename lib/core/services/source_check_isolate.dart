@@ -7,6 +7,7 @@ import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -668,20 +669,20 @@ class SourceChecker {
       return;
     }
 
-    final lockedChapter = _firstLockedChapter(readableChapters);
-    if (lockedChapter != null) {
-      _recordIssue(issues, _lockedChapterIssue(mode, lockedChapter));
+    // 只抽查免費章節（ADR 0057）：後面有付費章節的書照樣讀得到前面。整本
+    // 都是付費章節才記下來。
+    final freeChapters = [
+      for (final chapter in readableChapters)
+        if (!_looksLikeLockedChapter(chapter)) chapter,
+    ];
+    if (freeChapters.isEmpty) {
+      _recordIssue(issues, _lockedChapterIssue(mode, readableChapters.first));
       return;
     }
 
     if (!_config.checkContent) return;
 
-    await _runContentProbeCheck(
-      book,
-      readableChapters,
-      mode: mode,
-      issues: issues,
-    );
+    await _runContentProbeCheck(book, freeChapters, mode: mode, issues: issues);
   }
 
   // ── Content probe ────────────────────────────────────────────────
@@ -715,12 +716,12 @@ class SourceChecker {
             pageConcurrency: _validationPageConcurrency,
           ),
           cameBackEmpty: (content) =>
-              !chapterContentUsable(_kindShownBy(content), content),
+              !chapterContentUsable(_kindShownBy(content, book), content),
         );
 
         // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
         // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
-        final kind = _kindShownBy(content);
+        final kind = _kindShownBy(content, book);
         _reclassify(kind);
         if (chapterContentUsable(kind, content)) return;
       } catch (e) {
@@ -746,19 +747,24 @@ class SourceChecker {
     );
   }
 
-  /// 這章正文看起來是哪一類書源；判斷不出來就是書源現在的類別。
-  BookSourceKind _kindShownBy(String content) =>
+  /// 這章正文看起來是哪一類書源；判斷不出來就是書源現在的類別。聚合源的書
+  /// 各自是哪一類由規則寫在 [book] 上（ADR 0056），判斷不出來就照書。
+  BookSourceKind _kindShownBy(String content, Book book) =>
       switch (ChapterContentKind.of(content)) {
         ChapterContentKind.text => BookSourceKind.novel,
         ChapterContentKind.images => BookSourceKind.comic,
         ChapterContentKind.audio => BookSourceKind.audio,
-        ChapterContentKind.unclear => _source.sourceKind,
+        ChapterContentKind.unclear =>
+          _isAggregate ? book.bookKind : _source.sourceKind,
       };
 
+  late final bool _isAggregate = _source.isAggregateSource;
+
   /// 正文和書源的類型不符時改寫類型（ADR 0051）：手動改的、匯入時照字樣
-  /// 判的都一樣，誰最後改算誰的。
+  /// 判的都一樣，誰最後改算誰的。聚合源照作者寫的類型，不改（ADR 0056）：
+  /// 正文是哪一類看使用者在登入表單選的模式。
   void _reclassify(BookSourceKind kind) {
-    if (kind == _source.sourceKind) return;
+    if (_isAggregate || kind == _source.sourceKind) return;
     final type = switch (kind) {
       BookSourceKind.novel => SourceType.book,
       BookSourceKind.comic => SourceType.image,
@@ -807,7 +813,7 @@ class SourceChecker {
       if (_neverRetried(e) || !(_looksTransient(e) || siteFaltered())) {
         rethrow;
       }
-      _log('  ↻ $label暫時失敗，重試一次: ${_compactMessage(e.toString())}');
+      _log('  ↻ $label暫時失敗，重試一次: ${_compactMessage(errorText(e))}');
     }
     await Future<void>.delayed(_transientRetryDelay);
     return attempt(true);
@@ -879,7 +885,7 @@ class SourceChecker {
     final message = _compactMessage(
       error is TimeoutException
           ? error.message ?? '${_stageLabel(stage)}檢查超時'
-          : error.toString(),
+          : errorText(error),
     );
 
     // 網站要真人勾選、封鎖了目前的網路或瀏覽器檢查沒過（CloudflareInterceptor）：
@@ -1210,18 +1216,9 @@ _IssueData _lockedChapterIssue(_CheckMode mode, BookChapter chapter) {
   final title = _compactChapterTitle(chapter.title);
   return _IssueData(
     stage: _stageFor(mode, 'content'),
-    message: title.isEmpty
-        ? '章節疑似 VIP/鎖章，需要登入或付費'
-        : '章節疑似 VIP/鎖章，需要登入或付費: $title',
+    message: title.isEmpty ? '章節都是付費章節' : '章節都是付費章節: $title',
     health: loginRequiredSourceHealth,
   );
-}
-
-BookChapter? _firstLockedChapter(List<BookChapter> chapters) {
-  for (final chapter in chapters) {
-    if (_looksLikeLockedChapter(chapter)) return chapter;
-  }
-  return null;
 }
 
 bool _looksLikeLockedChapter(BookChapter chapter) {

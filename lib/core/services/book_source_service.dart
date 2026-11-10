@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/base_source.dart';
@@ -482,6 +483,9 @@ Future<R> _runOnSource<R>(
   BookChapter? chapter,
   CancelToken? cancelToken,
 }) async {
+  // 付費章節的正文、圖、音訊都不抓（ADR 0057）：網站只會回付費提示，夜讀
+  // 也不替使用者買。閱讀器、下載、朗讀、校驗都經過這裡。
+  if (chapter != null && chapter.isLocked) throw LockedChapterException();
   // 原地執行時，書源工作裡又叫回來的工作（規則 JS 這類）的請求記進外層
   // 工作的清單，照送出的順序列。
   final onRequest = isRecordingRequestUrls

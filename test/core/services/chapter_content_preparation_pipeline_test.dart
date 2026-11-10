@@ -127,13 +127,24 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('a paid chapter not bought yet is shown but not stored', () async {
-    final result = await pipeline.prepare(
+  /// 真的書源服務：付費章節在送進書源 isolate 前就擋下（ADR 0057）。
+  ChapterContentPreparationPipeline realService() =>
+      ChapterContentPreparationPipeline(
+        book: book,
+        contentStore: store,
+        sourceDao: BookSourceDao(db),
+        service: BookSourceService(),
+        getSource: () => source,
+      );
+
+  test('a paid chapter not bought yet is not fetched nor stored', () async {
+    final result = await realService().prepare(
       chapterIndex: 0,
       chapter: lockedChapter(),
     );
 
-    expect(result.content, '本章為付費章節，請訂閱後閱讀');
+    expect(result.isFailed, isTrue);
+    expect(result.failureMessage, lockedChapterNotice);
     expect(
       await store.getContentEntry(book: book, chapter: lockedChapter()),
       isNull,
@@ -251,14 +262,14 @@ void main() {
     );
 
     final reread = await pipeline.prepare(chapterIndex: 0, chapter: chapter);
-    final refreshed = await pipeline.prepare(
+    final refreshed = await realService().prepare(
       chapterIndex: 0,
       chapter: chapter,
       forceRefresh: true,
     );
 
     expect(reread.content, '免費時的正文');
-    expect(refreshed.content, '本章為付費章節，請訂閱後閱讀');
+    expect(refreshed.failureMessage, lockedChapterNotice);
     expect(
       (await store.getContentEntry(book: book, chapter: chapter))!.content,
       '免費時的正文',

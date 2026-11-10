@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -261,15 +262,33 @@ void main() {
     expect(result.isHealthy, isTrue);
   });
 
+  // 付費章節不抓（ADR 0057）：只抽查免費章節。
+  test('paid chapters are skipped and the free ones are checked', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async => [
+        BookChapter(url: 'https://site.example/1.html', title: '第一章'),
+        BookChapter(
+          url: 'https://site.example/2.html',
+          title: '第二章',
+          isVip: true,
+        ),
+      ],
+    );
+    final (result, checked) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
+    expect(service.contentRequests, ['第一章']);
+  });
+
   test(
-    'a locked chapter in the TOC marks the source as needing login',
+    'a book of only paid chapters marks the source as needing login',
     () async {
       final service = _FakeBookSourceService(
         chapters: (_) async => [
-          BookChapter(url: 'https://site.example/1.html', title: '第一章'),
           BookChapter(
-            url: 'https://site.example/2.html',
-            title: '第二章',
+            url: 'https://site.example/1.html',
+            title: '第一章',
             isVip: true,
           ),
         ],
@@ -277,7 +296,7 @@ void main() {
       final (result, checked) = await _check(service);
 
       expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
-      expect(result.message, contains('第二章'));
+      expect(result.message, contains('付費章節'));
       expect(service.contentRequests, isEmpty);
     },
   );
@@ -601,7 +620,10 @@ void main() {
     final service = _FakeBookSourceService(
       search: () => fail('unsupported sources should not be searched'),
     );
-    final (_, checked) = await _check(service, source: _source(name: '某某影視'));
+    final (_, checked) = await _check(
+      service,
+      source: _source(name: '某某影視')..bookSourceType = SourceType.video,
+    );
 
     expect(checked.groupTags, contains(nonNovelSourceGroupTag));
     expect(checked.isCleanupCandidate, isTrue);
@@ -640,6 +662,21 @@ void main() {
         expect(checked.bookSourceType, 2);
       },
     );
+
+    test('an aggregate source keeps its type whatever its chapters are; '
+        'its book decides an unclear chapter', () async {
+      // 聚合源切在漫畫模式：正文是圖片，書源類型照作者寫的 0。
+      final aggregate = _source(name: '聚合')
+        ..ruleToc = TocRule(chapterList: '<js>book.type = 64; result</js>');
+      final (result, checked) = await _check(
+        _FakeBookSourceService(content: (_) async => pictures),
+        source: aggregate,
+      );
+
+      expect(result.isHealthy, isTrue);
+      expect(checked.bookSourceType, SourceType.book);
+      expect(result.logs.join('\n'), isNot(contains('改寫書源類型')));
+    });
 
     test('a comic source whose chapters are prose becomes a novel', () async {
       final (_, checked) = await _check(

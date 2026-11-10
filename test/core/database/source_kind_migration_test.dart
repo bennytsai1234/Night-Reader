@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -90,6 +91,63 @@ void main() {
     expect(
       (await books.getByUrl('https://film.test/b'))!.bookKind,
       BookSourceKind.novel,
+    );
+  });
+
+  test('upgrading to schema 17 gives aggregate sources their own type back '
+      'and leaves their books alone', () async {
+    final dir = await Directory.systemTemp.createTemp('nr-aggregate-kinds');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/app.db');
+
+    final current = AppDatabase.forTesting(NativeDatabase(file));
+    // schema 15 的夜讀照名稱把聚合源改成有聲、照說明當成影視停用。
+    final toc = TocRule(chapterList: '<js>book.type = 64; result</js>');
+    await BookSourceDao(current).insertOrUpdateAll([
+      BookSource(
+        bookSourceUrl: 'https://aggregate.test',
+        bookSourceName: '小说，漫画，听书',
+        bookSourceType: 1,
+      )..ruleToc = toc,
+      BookSource(
+        bookSourceUrl: 'https://disabled.test',
+        bookSourceName: '大灰狼聚合',
+        bookSourceGroup: nonNovelSourceGroupTag,
+        enabled: false,
+        enabledExplore: false,
+      )..ruleToc = toc,
+      BookSource(bookSourceUrl: 'https://film.test', bookSourceName: '电影天堂'),
+    ]);
+    // 聚合源規則寫的漫畫書（Legado 的位元）。
+    await BookDao(current).upsert(
+      Book(
+        bookUrl: 'https://aggregate.test/b',
+        name: '夜行',
+        origin: 'https://aggregate.test',
+        type: 64,
+      ),
+    );
+    await current.close();
+
+    final old = AppDatabase.forTesting(
+      NativeDatabase(
+        file,
+        setup: (raw) => raw.execute('PRAGMA user_version = 15'),
+      ),
+    );
+    addTearDown(old.close);
+
+    final sources = {
+      for (final s in await BookSourceDao(old).getAll()) s.bookSourceUrl: s,
+    };
+    expect(sources['https://aggregate.test']!.bookSourceType, 0);
+    final disabled = sources['https://disabled.test']!;
+    expect(disabled.groupTags, isEmpty);
+    expect(disabled.enabled, isTrue);
+    expect(sources['https://film.test']!.bookSourceType, SourceType.video);
+    expect(
+      (await BookDao(old).getByUrl('https://aggregate.test/b'))!.bookKind,
+      BookSourceKind.comic,
     );
   });
 }

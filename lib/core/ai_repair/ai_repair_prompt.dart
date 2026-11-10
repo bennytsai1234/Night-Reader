@@ -264,10 +264,15 @@ Map<String, dynamic> _withoutEmpty(Map<String, dynamic> json) {
 
 /// AI 改過的書源：規則照 AI 的，名稱與使用者自己的設定照原本的——名稱、
 /// 分組、排序、開關、權重與註解。網址只接受換開頭（[siteMovedUrl]）：網站
-/// 搬家、或只有 https、沒有 www 的那個開頭能用時。
+/// 搬家、或只有 https、沒有 www 的那個開頭能用時。改完還是聚合源的，類型也
+/// 照原本的（ADR 0056）。
 BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
   final base = BookSource.fromJson(original.toJson())..removeErrorComment();
-  return BookSource.fromJson(json)
+  final candidate = BookSource.fromJson(json);
+  if (candidate.isAggregateSource) {
+    candidate.bookSourceType = original.bookSourceType;
+  }
+  return candidate
     ..bookSourceUrl = siteMovedUrl(
       original.bookSourceUrl,
       json['bookSourceUrl'] as String?,
@@ -349,7 +354,7 @@ Map<String, Object?> _flatten(Map<String, dynamic> json, [String prefix = '']) {
 
 const String _rules = '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
-- bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。
+- bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、key、page、book、source。
   - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。

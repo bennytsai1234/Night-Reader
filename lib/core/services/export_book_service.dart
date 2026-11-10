@@ -29,7 +29,11 @@ class ExportBookService {
     if (book.bookKind == BookSourceKind.comic) {
       throw StateError('漫畫沒有文字可以匯出');
     }
-    final chapters = await _chapterDao.getByBook(book.bookUrl);
+    // 付費章節沒有正文，不匯出（ADR 0057）。
+    final chapters = [
+      for (final chapter in await _chapterDao.getByBook(book.bookUrl))
+        if (!chapter.isLocked) chapter,
+    ];
     if (chapters.isEmpty) return;
     final source = fetchMissingRemote && !book.isLocal
         ? await _resolveReadableSource(book)

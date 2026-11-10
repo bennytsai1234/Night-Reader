@@ -93,7 +93,7 @@ void main() {
         );
 
         expect(hydratedBook.name, '劍鋒問蒼天');
-        expect(hydratedBook.author, '作者：武陵客');
+        expect(hydratedBook.author, '武陵客', reason: '詳情頁的「作者：」拿掉，同搜尋結果');
         expect(
           hydratedBook.coverUrl,
           'https://novels-a.test/data/cover/book.webp',

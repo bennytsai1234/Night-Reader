@@ -452,14 +452,17 @@ class JsExtensions extends JsExtensionsBase {
       return cached(source!.ruleVariableCacheKey(key)) ?? '';
     });
 
+    // 沒存過時是 null（同 Legado 的 `String?`）：書源常寫
+    // `JSON.parse(source.getLoginInfo())` 再接 `?.`，null 會解析成 null 往下
+    // 走，空字串會丟出語法錯誤。書源變數與 `source.get` 沒有時才是空字串。
     onBlocking('sourceGetLoginInfo', (_) {
-      if (source == null) return '';
-      return cached(source!.loginInfoCacheKey) ?? '';
+      if (source == null) return null;
+      return cached(source!.loginInfoCacheKey);
     });
 
     onBlocking('sourceGetLoginHeader', (_) {
-      if (source == null) return '';
-      return cached(source!.loginHeaderCacheKey) ?? '';
+      if (source == null) return null;
+      return cached(source!.loginHeaderCacheKey);
     });
 
     onBlocking('sourceGetVariable', (_) {

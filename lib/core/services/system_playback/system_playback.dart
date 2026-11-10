@@ -106,6 +106,10 @@ class SystemPlayback {
   /// 倒退、快轉按鈕一次跳多少，和有聲書播放器的按鈕一致（ADR 0055）。
   static const Duration skipInterval = Duration(seconds: 10);
 
+  /// 狀態列上的小圖示。和按鈕圖示一樣只用名字指定，發布版要在
+  /// `android/app/src/main/res/raw/keep.xml` 留著。
+  static const String notificationIcon = 'drawable/ic_stat_night_reader';
+
   final NowPlayingArtwork _artwork;
   _SessionHandler? _handler;
   Future<void>? _starting;
@@ -113,6 +117,21 @@ class SystemPlayback {
 
   /// 最後交給系統的內容；開好工作階段時照它補上。
   _Shown? _shown;
+
+  /// 上一次系統拒收的錯誤。
+  String? _lastRejection;
+
+  /// 系統拒收播放資訊：連續相同的錯誤只記第一次，每次播放、暫停、換章都
+  /// 失敗時不會擠掉紀錄裡其他的錯誤。
+  void _logRejection(Object error) {
+    final text = '$error';
+    if (text == _lastRejection) return;
+    _lastRejection = text;
+    AppLog.e(
+      'SystemPlayback: system rejected playback info: $text',
+      error: error,
+    );
+  }
 
   /// 向系統開媒體工作階段。開不起來時只少了系統播放資訊，播放照常；下次
   /// 呼叫再試。
@@ -129,7 +148,7 @@ class SystemPlayback {
           androidNotificationChannelId: 'com.night_reader.tts',
           androidNotificationChannelName: '夜讀播放',
           // 狀態列只畫圖示的形狀：App 圖示整張不透明，會變成一塊白色方塊。
-          androidNotificationIcon: 'drawable/ic_stat_night_reader',
+          androidNotificationIcon: notificationIcon,
           androidNotificationOngoing: true,
           // 封面原圖可能上千像素，整張送給系統會超過跨程序傳遞的上限。
           artDownscaleWidth: 512,
@@ -138,6 +157,8 @@ class SystemPlayback {
           fastForwardInterval: skipInterval,
         ),
       );
+      // 播放狀態、標題送不進系統時，audio_service 只把錯誤放進這裡，不丟出來。
+      AudioService.asyncError.listen(_logRejection);
       final shown = _shown;
       if (shown != null) _handler!.show(shown, _artwork);
     } catch (error) {

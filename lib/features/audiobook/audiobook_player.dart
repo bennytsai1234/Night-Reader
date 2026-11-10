@@ -248,9 +248,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     try {
       final source = await _sources.getByUrl(book.origin);
       if (source == null) throw StateError('找不到書源');
-      final chapters = await _loadChapters(source, book);
+      // 目錄抓不到也要知道書源，失敗畫面才給得出「登入」「前往驗證」。
       if (generation != _generation) return;
       _source = source;
+      final chapters = await _loadChapters(source, book);
+      if (generation != _generation) return;
       _chapters = chapters;
       var start = Duration.zero;
       var index = chapterIndex ?? book.chapterIndex;
@@ -307,29 +309,30 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     }
   }
 
-  /// [index] 或之後第一個不是分卷標題的集；之後都沒有就往前找。
+  /// [index] 或之後第一個不跳過的集（[BookChapter.isSkippedWhenReading]）；
+  /// 之後都沒有就往前找。
   int _playable(int index) {
     if (_chapters.isEmpty) return 0;
     final start = index.clamp(0, _chapters.length - 1);
     for (var i = start; i < _chapters.length; i++) {
-      if (!_chapters[i].isVolume) return i;
+      if (!_chapters[i].isSkippedWhenReading) return i;
     }
     for (var i = start - 1; i >= 0; i--) {
-      if (!_chapters[i].isVolume) return i;
+      if (!_chapters[i].isSkippedWhenReading) return i;
     }
     return start;
   }
 
   int? _nextPlayable(int from) {
     for (var i = from + 1; i < _chapters.length; i++) {
-      if (!_chapters[i].isVolume) return i;
+      if (!_chapters[i].isSkippedWhenReading) return i;
     }
     return null;
   }
 
   int? _previousPlayable(int from) {
     for (var i = from - 1; i >= 0; i--) {
-      if (!_chapters[i].isVolume) return i;
+      if (!_chapters[i].isSkippedWhenReading) return i;
     }
     return null;
   }
@@ -558,7 +561,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       case AudiobookPlayMode.shuffle:
         final candidates = [
           for (var i = 0; i < _chapters.length; i++)
-            if (!_chapters[i].isVolume && i != _index) i,
+            if (!_chapters[i].isSkippedWhenReading && i != _index) i,
         ];
         if (candidates.isEmpty) {
           await seek(Duration.zero);
