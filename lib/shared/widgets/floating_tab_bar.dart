@@ -243,8 +243,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         ((dx - AppGlass.tabInnerInset) / itemWidth).floor().clamp(0, count - 1);
 
     // 每個分頁的圖示與字在這裡建好一次（未選的用未選色、選取的用選取色），
-    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）；原本每一幀照新
-    // 顏色重建圖示與字。
+    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）。
     final scheme = Theme.of(context).colorScheme;
     final glyphs = [
       for (final item in widget.items)

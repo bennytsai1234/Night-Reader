@@ -389,8 +389,8 @@ void main() {
         Scaffold(
           bottomNavigationBar: FloatingTabBar(
             items: const [
-              FloatingTabItem(icon: Icons.book, label: '書架'),
-              FloatingTabItem(icon: Icons.explore, label: '發現'),
+              FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+              FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
             ],
             currentIndex: 0,
             onTap: (_) {},
