@@ -136,8 +136,10 @@ class FloatingTabBar extends StatefulWidget {
   /// padding 與 viewPadding 底部都扣掉、再只把 padding 加回列的高度，頁面裡
   /// 讀到的 viewPadding 底部是 0，用它會比分頁列低一個系統區。
   static EdgeInsets slotOf(BuildContext context) {
-    // 系統區改變時（旋轉、切換手勢導覽）跟著重建。
-    MediaQuery.viewPaddingOf(context);
+    // 系統區改變時（旋轉、切換手勢導覽）跟著重建：View 本身不通知，頁面裡
+    // 的 viewPadding 底部前後都是 0；padding 底部在分頁列裡是系統區、在頁面
+    // 裡是含系統區的列高，兩邊都會跟著變。
+    MediaQuery.paddingOf(context);
     final view = View.of(context);
     final systemBottom = view.viewPadding.bottom / view.devicePixelRatio;
     return ReadableWidth.cardInsetOf(context)
