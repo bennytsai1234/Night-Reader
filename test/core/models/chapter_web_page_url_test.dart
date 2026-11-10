@@ -21,6 +21,18 @@ void main() {
     );
   });
 
+  test('基礎網址帶 Legado 選項時，相對網址照去掉選項的基礎網址補', () {
+    const base = 'https://example.com/book/toc,{"body":"a/b"}';
+    expect(
+      BookChapter(url: '7.html', baseUrl: base).webPageUrl,
+      'https://example.com/book/7.html',
+    );
+    expect(
+      BookChapter(url: '?id=7', baseUrl: base).webPageUrl,
+      'https://example.com/book/toc?id=7',
+    );
+  });
+
   test('去掉 Legado 的網址選項', () {
     expect(
       BookChapter(
