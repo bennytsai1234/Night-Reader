@@ -113,6 +113,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
 
   /// 網站不在了的那組已經停用或刪除了（顯示在那組最後一列）。
   String? _goneHandled;
+  bool _closing = false;
 
   @override
   void initState() {
@@ -142,6 +143,15 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     super.dispose();
   }
 
+  /// 返回時先停止、等在途作業釋放完資源，再關頁；避免關頁後仍有 worker 寫入。
+  Future<void> _stopAndClose() async {
+    if (_closing) return;
+    _closing = true;
+    _batch.stop();
+    await _batch.completion;
+    if (mounted) Navigator.of(context).pop();
+  }
+
   void _openSession(AiRepairSession session) => unawaited(
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -157,78 +167,84 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       builder: (context, _) {
         final service = _batch.service;
         // 修的時候螢幕不關：整批要跑十幾分鐘，關了螢幕 App 可能被系統暫停。
-        return ReaderV2WindowSettings(
-          keepScreenOn: _batch.isRunning,
-          backlight: null,
-          orientation: ReaderV2Orientation.system,
-          child: Scaffold(
-            extendBodyBehindAppBar: true,
-            appBar: GlassNavHeader(
-              title: widget.title,
-              actions: [
-                GlassMenuButton<String>(
-                  entriesBuilder: (_) => const [
-                    GlassMenuItem(
-                      value: 'settings',
-                      icon: Icons.tune_rounded,
-                      label: 'AI 修書源設定',
-                    ),
-                  ],
-                  onSelected: (_) => unawaited(
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AiRepairSettingsPage(),
+        return PopScope(
+          canPop: !_batch.isRunning || _batch.isFinished,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) unawaited(_stopAndClose());
+          },
+          child: ReaderV2WindowSettings(
+            keepScreenOn: _batch.isRunning,
+            backlight: null,
+            orientation: ReaderV2Orientation.system,
+            child: Scaffold(
+              extendBodyBehindAppBar: true,
+              appBar: GlassNavHeader(
+                title: widget.title,
+                actions: [
+                  GlassMenuButton<String>(
+                    entriesBuilder: (_) => const [
+                      GlassMenuItem(
+                        value: 'settings',
+                        icon: Icons.tune_rounded,
+                        label: 'AI 修書源設定',
+                      ),
+                    ],
+                    onSelected: (_) => unawaited(
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AiRepairSettingsPage(),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            body: GroupedListView(
-              children: [
-                GroupedSection(
-                  footer:
-                      '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
-                      ' · ${service.model}',
-                  children: [
-                    for (final stage in _stages)
+                ],
+              ),
+              body: GroupedListView(
+                children: [
+                  GroupedSection(
+                    footer:
+                        '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
+                        ' · ${service.model}',
+                    children: [
+                      for (final stage in _stages)
+                        GroupedRow(
+                          leading: _stageIcon(context, stage),
+                          title: _stageTitle(stage),
+                          subtitle: _stageDetail(stage),
+                          showChevron: false,
+                        ),
                       GroupedRow(
-                        leading: _stageIcon(context, stage),
-                        title: _stageTitle(stage),
-                        subtitle: _stageDetail(stage),
+                        title: 'AI 用量',
+                        value: _batch.tokenBudget == null
+                            ? _tokens(_batch.tokensUsed)
+                            : '${_tokens(_batch.tokensUsed)}／${_tokens(_batch.tokenBudget!)}',
                         showChevron: false,
                       ),
-                    GroupedRow(
-                      title: 'AI 用量',
-                      value: _batch.tokenBudget == null
-                          ? _tokens(_batch.tokensUsed)
-                          : '${_tokens(_batch.tokensUsed)}／${_tokens(_batch.tokenBudget!)}',
-                      showChevron: false,
-                    ),
-                  ],
-                ),
-                ..._results(context),
-                GroupedSection(
-                  children: [
-                    if (_batch.isFinished)
-                      GroupedRow(
-                        title: '完成',
-                        accent: true,
-                        showChevron: false,
-                        onTap: () => Navigator.of(context).maybePop(),
-                      )
-                    else
-                      GroupedRow(
-                        title: _batch.isStopped ? '正在停下…' : '停止',
-                        destructive: true,
-                        showChevron: false,
-                        onTap: _batch.isStopped ? null : _batch.stop,
-                      ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  ..._results(context),
+                  GroupedSection(
+                    children: [
+                      if (_batch.isFinished)
+                        GroupedRow(
+                          title: '完成',
+                          accent: true,
+                          showChevron: false,
+                          onTap: () => Navigator.of(context).maybePop(),
+                        )
+                      else
+                        GroupedRow(
+                          title: _batch.isStopped ? '正在停下…' : '停止',
+                          destructive: true,
+                          showChevron: false,
+                          onTap: _batch.isStopped ? null : _batch.stop,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+          );
         );
       },
     );
@@ -287,6 +303,9 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
   }
 
   Widget _stageIcon(BuildContext context, RepairStage stage) {
+    if (_batch.failedStage == stage) {
+      return aiRepairStepIcon(context, AiRepairStepState.failed);
+    }
     final current = _batch.stage;
     final state = stage.index < current.index || _batch.isFinished
         ? AiRepairStepState.done
@@ -318,6 +337,17 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
         if (item.outcome == null && item.session != null) item,
     ];
     return [
+      if (_batch.errorMessage case final error?)
+        GroupedSection(
+          children: [
+            GroupedRow(
+              title: '修復中斷',
+              subtitle: error,
+              maxSubtitleLines: 3,
+              showChevron: false,
+            ),
+          ],
+        ),
       if (working.isNotEmpty)
         GroupedSection(
           header: '正在修 · ${working.length}',
