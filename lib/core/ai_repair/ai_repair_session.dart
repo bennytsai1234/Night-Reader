@@ -55,8 +55,11 @@ class AiRepairJob {
   /// 修好之後又還原了。
   bool restored = false;
 
-  /// 修好存進去時的網址：AI 換了網址開頭時和原本的不同。
-  String? repairedUrl;
+  /// 修好存進去的那份：AI 換了網址開頭時網址和原本的不同。
+  BookSource? repairedSource;
+
+  /// 修好存進去時的網址。
+  String? get repairedUrl => repairedSource?.bookSourceUrl;
 
   /// 給 AI 與剪貼簿用的現況：原本的校驗結果與試抓。
   String? _checkResult;
@@ -114,20 +117,31 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairBackups? backups,
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
+    bool Function()? hasBudget,
+    void Function(AiUsage usage)? onUsage,
   }) : assert(service != null || sources.length == 1),
        jobs = [for (final source in sources) AiRepairJob(source)],
-       _check = check ?? _defaultCheck,
+       _check = check ?? defaultCheck,
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
-       _ask = ask ?? (service == null ? null : _defaultAsk(service)),
+       _ask = ask ?? (service == null ? null : _defaultAsk(service, onUsage)),
+       _hasBudget = hasBudget ?? _always,
        _copy = copy ?? _defaultCopy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
        _backups = backups ?? AiRepairBackups.instance {
-    _apply = apply ?? _defaultApply;
+    _apply =
+        apply ??
+        (repaired, original) =>
+            saveRepairedSource(repaired, original, backups: _backups);
   }
 
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
   final Duration recheckDelay;
+
+  /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
+  final bool Function() _hasBudget;
+
+  static bool _always() => true;
 
   /// 使用者的 AI 服務；null 時用剪貼簿。
   final AiService? service;
@@ -340,6 +354,10 @@ class AiRepairSession extends ChangeNotifier {
       fetchesLeft: aiRepairMaxFetches - fetches,
     );
     for (var reply = 1; reply <= aiRepairMaxReplies; reply++) {
+      if (!_hasBudget()) {
+        _fail(job, '花費到了上限，沒修完，書源沒有改。');
+        return null;
+      }
       final round = ++job._rounds;
       final step = _addStep(job, '第 $round 輪', detail: 'AI 回覆中…');
       final String text;
@@ -477,7 +495,7 @@ class AiRepairSession extends ChangeNotifier {
     var checked = await _guard(() => _check(candidate, _cancelToken));
     if (_stopped) return null;
     bool usable(SourceCheckIsolateResult? result) =>
-        _usableFix(result, job.original, candidate);
+        usableFix(result, job.original, candidate);
     if (probeSucceeded && !usable(checked)) {
       step.detail = '${_checkText(checked)}；稍後再校驗一次…';
       _record('校驗修好的書源：${_checkText(checked)}，稍後再校驗一次');
@@ -506,11 +524,9 @@ class AiRepairSession extends ChangeNotifier {
       return null;
     }
     job._committing = true;
+    final saved = BookSource.fromJson(checked.updatedSourceJson);
     try {
-      await _apply(
-        BookSource.fromJson(checked.updatedSourceJson),
-        job.original,
-      );
+      await _apply(saved, job.original);
     } on AiRepairConflict catch (error) {
       _finish(step, error.message, failed: true);
       _fail(job, error.message);
@@ -526,7 +542,7 @@ class AiRepairSession extends ChangeNotifier {
     _finish(step, checkText);
     job
       ..outcome = AiRepairOutcome.repaired
-      ..repairedUrl = candidate.bookSourceUrl
+      ..repairedSource = saved
       ..explanation = note.isEmpty ? null : 'AI：$note';
     _notify();
     return null;
@@ -536,7 +552,7 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 校驗的結果可以存：沒問題，或只剩發現頁失效、而 AI 沒動發現的規則——
   /// 發現頁原本就壞了，搜尋與閱讀修好了還是比原本好。
-  static bool _usableFix(
+  static bool usableFix(
     SourceCheckIsolateResult? result,
     BookSource original,
     BookSource candidate,
@@ -662,7 +678,8 @@ class AiRepairSession extends ChangeNotifier {
   static Future<SourceCheckConfig> _config() async =>
       SourceCheckConfig.fromPreferences(await SharedPreferences.getInstance());
 
-  static Future<SourceCheckIsolateResult?> _defaultCheck(
+  /// 照校驗設定校驗一次（在自己的 isolate 裡，ADR 0051）；逾時是 null。
+  static Future<SourceCheckIsolateResult?> defaultCheck(
     BookSource source,
     CancelToken cancelToken,
   ) async {
@@ -703,38 +720,49 @@ class AiRepairSession extends ChangeNotifier {
     );
   }
 
-  static AiRepairAsker _defaultAsk(AiService service) {
+  static AiRepairAsker _defaultAsk(
+    AiService service,
+    void Function(AiUsage usage)? onUsage,
+  ) {
     final client = AiChatClient(service);
     return (messages, cancelToken) =>
-        client.complete(messages, cancelToken: cancelToken);
+        client.complete(messages, cancelToken: cancelToken, onUsage: onUsage);
   }
 
   static Future<void> _defaultCopy(String text) =>
       Clipboard.setData(ClipboardData(text: text));
+}
 
-  /// 存修好的書源。修的這段時間書源被刪掉或改過（例如同步）時不存：存了會
-  /// 蓋掉別處的改動、或把刪掉的書源加回來。AI 換了網址開頭時照書源編輯
-  /// 改網址的做法搬過去，書架上的書跟著搬；新網址已經有別的書源時不存。
-  Future<void> _defaultApply(BookSource repaired, BookSource original) async {
-    final dao = getIt<BookSourceDao>();
-    final current = await dao.getByUrl(original.bookSourceUrl);
-    if (current == null) {
-      throw const AiRepairConflict('修的這段時間書源被刪掉了，沒有存。');
-    }
-    if (changedParts(original, current).isNotEmpty ||
-        current.bookSourceName != original.bookSourceName) {
-      throw const AiRepairConflict('修的這段時間書源被改過了（例如同步），沒有存。');
-    }
-    final moved = repaired.bookSourceUrl != original.bookSourceUrl;
-    if (moved && await dao.getByUrl(repaired.bookSourceUrl) != null) {
-      throw AiRepairConflict('新網址 ${repaired.bookSourceUrl} 已經有別的書源，沒有存。');
-    }
-    await _backups.put(repaired.bookSourceUrl, current.toJson());
-    await BookSourceService().saveEditedSource(
-      repaired,
-      previousUrl: moved ? original.bookSourceUrl : null,
-    );
+/// 存修好的書源（AI 修好、換網址或套用同網站修好的規則，ADR 0054）。修的
+/// 這段時間書源被刪掉或改過（例如同步）時不存：存了會蓋掉別處的改動、或把
+/// 刪掉的書源加回來。網址換了開頭時照書源編輯改網址的做法搬過去，書架上的
+/// 書跟著搬；新網址已經有別的書源時不存。存之前留下改前的版本。
+Future<void> saveRepairedSource(
+  BookSource repaired,
+  BookSource original, {
+  AiRepairBackups? backups,
+}) async {
+  final dao = getIt<BookSourceDao>();
+  final current = await dao.getByUrl(original.bookSourceUrl);
+  if (current == null) {
+    throw const AiRepairConflict('修的這段時間書源被刪掉了，沒有存。');
   }
+  if (changedParts(original, current).isNotEmpty ||
+      current.bookSourceName != original.bookSourceName) {
+    throw const AiRepairConflict('修的這段時間書源被改過了（例如同步），沒有存。');
+  }
+  final moved = repaired.bookSourceUrl != original.bookSourceUrl;
+  if (moved && await dao.getByUrl(repaired.bookSourceUrl) != null) {
+    throw AiRepairConflict('新網址 ${repaired.bookSourceUrl} 已經有別的書源，沒有存。');
+  }
+  await (backups ?? AiRepairBackups.instance).put(
+    repaired.bookSourceUrl,
+    current.toJson(),
+  );
+  await BookSourceService().saveEditedSource(
+    repaired,
+    previousUrl: moved ? original.bookSourceUrl : null,
+  );
 }
 
 /// 修好的書源存不進去：修的這段時間書源被刪掉或改過。
