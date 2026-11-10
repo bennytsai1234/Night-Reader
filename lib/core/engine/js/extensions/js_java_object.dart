@@ -20,8 +20,10 @@ extension JsJavaObject on JsExtensionsBase {
       }
 
       /// Java 的 List：陣列的複本加上 List 的方法。方法不可列舉，for-in 與
-      /// Object.keys 只看到每一項。
-      function __lrJavaList(items) {
+      /// Object.keys 只看到每一項。[jsArray] 是上一段規則 JS 交回的陣列：
+      /// Legado 原樣交給下一段，還是 JS 陣列，轉成文字是 `a,b`、`get` 不檢查
+      /// 範圍；其他方法照舊留著。
+      function __lrJavaList(items, jsArray) {
         var list = Array.isArray(items) ? items.slice() : [];
         function hide(name, fn) {
           Object.defineProperty(list, name, {
@@ -29,7 +31,12 @@ extension JsJavaObject on JsExtensionsBase {
           });
         }
         hide('size', function() { return this.length; });
-        hide('get', function(index) { return this[index]; });
+        hide('get', function(index) {
+          if (!jsArray && (index < 0 || index >= this.length)) {
+            throw new Error('java.lang.IndexOutOfBoundsException: Index: ' + index + ', Size: ' + this.length);
+          }
+          return this[index];
+        });
         hide('first', function() { return this.length ? this[0] : null; });
         hide('last', function() {
           return this.length ? this[this.length - 1] : null;
@@ -44,7 +51,7 @@ extension JsJavaObject on JsExtensionsBase {
         hide('toArray', function() { return this.slice(); });
         hide('iterator', function() { return __lrJavaIterator(this); });
         hide('subList', function(from, to) { return __lrSubList(this, from, to); });
-        hide('toString', function() { return __lrJavaListText(this); });
+        if (!jsArray) hide('toString', function() { return __lrJavaListText(this); });
         return list;
       }
 

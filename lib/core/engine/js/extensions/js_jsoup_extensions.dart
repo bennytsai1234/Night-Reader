@@ -309,7 +309,7 @@ extension JsJsoupExtensions on JsExtensionsBase {
             return '';
           });
           hide('hasKey', function(key) { return list.some(function(a) { return a.key === key; }); });
-          hide('asList', function() { return list.slice(); });
+          hide('asList', function() { return javaList(list); });
           hide('html', function() { return list.map(String).join(' '); });
           return list;
         }

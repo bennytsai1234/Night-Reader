@@ -67,5 +67,52 @@ void main() {
       ),
       '[一, 二]',
     );
+    expect(
+      js(
+        'String(org.jsoup.Jsoup.parse("<p x=1 y=2>a</p>").select("p").first().attributes().asList())',
+      ),
+      '[x="1", y="2"]',
+    );
+  });
+
+  test('Jsoup 請求的集合轉成文字照 Java', () {
+    String js(String code) => rule('<p>x</p>').getString(
+      '@js:var r = org.jsoup.Jsoup.connect("https://unused.test").request(); $code',
+    );
+    expect(
+      js(
+        '[r.cookies().keySet(), r.cookies().values(), r.headers("missing"), r.data()].map(String).join("|")',
+      ),
+      '[]|[]|[]|[]',
+    );
+    expect(
+      js(
+        'r.header("X", "a"); r.cookie("c", "1"); '
+        '[r.cookies().keySet(), r.headers("X"), r.multiHeaders().get("X"), r.cookies().values()].map(String).join("|")',
+      ),
+      '[c]|[a]|[a]|[1]',
+    );
+  });
+
+  test('上一段規則 JS 交回的陣列還是 JS 陣列，轉成文字照 JS', () {
+    List<String> run(String rules) => rule('<p>x</p>').getStringList(rules);
+    expect(run('<js>["a","b"]</js><js>String(result)</js>'), ['a,b']);
+    expect(run('<js>[]</js><js>"X" + result + "Y"</js>'), ['XY']);
+    expect(run('<js>["https://unused.test/a"]</js><js>"" + result</js>'), [
+      'https://unused.test/a',
+    ]);
+  });
+
+  test('Java List 的 get 超出範圍照 Java 丟出例外', () {
+    String js(String code) => rule('<p>甲</p><p>乙</p>').getString('@js:$code');
+    expect(
+      js(
+        'var l = java.getStringList("p@text"); '
+        'var out = []; [-1, 2].forEach(function(i) { '
+        'try { l.get(i); out.push("no"); } catch (e) { out.push(/IndexOutOfBounds/.test(String(e))); } '
+        '}); out.join() + "|" + l.get(1)',
+      ),
+      'true,true|乙',
+    );
   });
 }
