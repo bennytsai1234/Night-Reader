@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -117,7 +118,7 @@ void main() {
       sources: sources,
       service: _service,
       tokenBudget: tokenBudget,
-      recheck: (urls) async => [
+      recheck: (urls, _) async => [
         for (final url in urls) _entry(url, recheck[url] ?? _broken),
       ],
       checkSite: (source) async =>
@@ -322,7 +323,7 @@ void main() {
         _source('https://gone.example'),
       ],
       service: _service,
-      recheck: (urls) async => [for (final url in urls) _entry(url, _broken)],
+      recheck: (urls, _) async => [for (final url in urls) _entry(url, _broken)],
       checkSite: (source) async => source.bookSourceUrl.contains('bad')
           ? throw StateError('壞掉')
           : const SiteCheck(SiteVerdict.gone, '網域查不到'),
@@ -336,6 +337,93 @@ void main() {
 
     expect(gone, ['https://gone.example']);
     expect(b.isFinished, isTrue);
+  });
+
+  test('recheck updates progress before all sources finish', () async {
+    final source1 = _source('https://first.example');
+    final source2 = _source('https://second.example');
+    final gate = Completer<List<SourceCheckEntry>>();
+    late void Function(int) onProgress;
+    final b = SourceRepairBatch(
+      sources: [source1, source2],
+      service: _service,
+      recheck: (urls, progress) {
+        expect(urls, [source1.bookSourceUrl, source2.bookSourceUrl]);
+        onProgress = progress;
+        return gate.future;
+      },
+      checkSite: (_) async => const SiteCheck(SiteVerdict.alive, '網站正常'),
+      markGone: (_, _) async => fail('stopped batch must not mark sources'),
+      markUnfixable: (_) async => fail('stopped batch must not write'),
+    );
+
+    final running = b.start();
+    expect(b.stage, RepairStage.checking);
+    expect(b.stageDone, 0);
+    expect(b.stageTotal, 2);
+    onProgress(1);
+    expect(b.stageDone, 1);
+    b.stop();
+    gate.complete([
+      _entry(source1.bookSourceUrl, _broken),
+      _entry(source2.bookSourceUrl, _broken),
+    ]);
+    await running;
+
+    expect(b.isFinished, isTrue);
+    expect(b.count(RepairOutcome.notTried), 2);
+    expect(b.stageDone, 1);
+    expect(asked, isEmpty);
+  });
+
+  test('stop during site check never marks the site gone', () async {
+    final source = _source('https://stopping.example');
+    final gate = Completer<SiteCheck>();
+    final b = SourceRepairBatch(
+      sources: [source],
+      service: _service,
+      recheck: (urls, progress) async {
+        progress(urls.length);
+        return [_entry(source.bookSourceUrl, _broken)];
+      },
+      checkSite: (_) => gate.future,
+      markGone: (source, site) async => gone.add(source.bookSourceUrl),
+      markUnfixable: (_) async {},
+    );
+
+    final running = b.start();
+    await Future<void>.delayed(Duration.zero);
+    expect(b.stage, RepairStage.checkingSites);
+    b.stop();
+    gate.complete(const SiteCheck(SiteVerdict.gone, '網域查不到'));
+    await running;
+    expect(gone, isEmpty);
+    expect(b.count(RepairOutcome.notTried), 1);
+  });
+
+  test('failed recheck is shown and does not continue to the AI', () async {
+    final b = SourceRepairBatch(
+      sources: [_source('https://broken-check.example')],
+      service: _service,
+      recheck: (_, _) async => throw StateError('校驗服務無法啟動'),
+      checkSite: (_) async => fail('must not proceed after recheck failure'),
+      markUnfixable: (_) async => fail('must not change sources'),
+    );
+    await b.start();
+
+    expect(b.errorMessage, contains('校驗服務無法啟動'));
+    expect(b.failedStage, RepairStage.checking);
+    expect(b.count(RepairOutcome.notTried), 1);
+    expect(b.isFinished, isTrue);
+  });
+
+  test('start after stop does not restart a cancelled batch', () async {
+    final b = batch([_source('https://not-started.example')]);
+    b.stop();
+    await b.start();
+    expect(asked, isEmpty);
+    expect(b.isStopped, isTrue);
+    expect(b.isRunning, isFalse);
   });
 
   test('a moved source has the old domain replaced inside its rules too', () {
