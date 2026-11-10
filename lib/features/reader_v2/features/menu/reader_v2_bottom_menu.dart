@@ -68,6 +68,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
     this.showReplaceRule = true,
     this.onHidden,
     this.horizontalInset = AppGrouped.margin,
+    this.onAutoPageSettings,
+    this.onReplaceRuleSettings,
+    this.onTimedTtsSettings,
+    this.onDayNightSettings,
   });
 
   /// 左右離畫面邊的距離；正文欄照每行字數收窄時對齊正文的左右邊。
@@ -95,6 +99,13 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final VoidCallback onAutoPage;
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
+
+  /// 圓鈕長按：開那顆鈕的完整設定頁（自動翻頁→閱讀偏好、替換規則→規則
+  /// 管理、定時朗讀→朗讀與語音、日夜切換→外觀與主題）。
+  final VoidCallback? onAutoPageSettings;
+  final VoidCallback? onReplaceRuleSettings;
+  final VoidCallback? onTimedTtsSettings;
+  final VoidCallback? onDayNightSettings;
   final VoidCallback onPrevChapter;
   final VoidCallback onNextChapter;
   final ValueChanged<double> onScrubStart;
@@ -186,6 +197,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
               : tint,
           color: isAutoPaging ? menuStyle.accent : menuStyle.foreground,
           onPressed: onAutoPage,
+          onLongPress: onAutoPageSettings,
         ),
       if (showReplaceRule)
         GlassIconButton(
@@ -194,6 +206,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
           tint: tint,
           color: menuStyle.foreground,
           onPressed: onReplaceRule,
+          onLongPress: onReplaceRuleSettings,
         ),
       if (sleepTimer case final timer? when showTts)
         SleepTimerButton(
@@ -204,6 +217,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
           accent: menuStyle.accent,
           accentMuted: menuStyle.accentMuted,
           onPressed: onTimedTts,
+          onLongPress: onTimedTtsSettings,
         ),
       GlassIconButton(
         icon: dayNightIcon,
@@ -211,6 +225,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
         tint: tint,
         color: menuStyle.foreground,
         onPressed: onToggleDayNight,
+        onLongPress: onDayNightSettings,
       ),
     ];
     return Row(
