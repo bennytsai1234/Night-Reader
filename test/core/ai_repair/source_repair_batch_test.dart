@@ -426,6 +426,55 @@ void main() {
     expect(b.isRunning, isFalse);
   });
 
+  test('missing recheck results are not passed to AI', () async {
+    final b = SourceRepairBatch(
+      sources: [_source('https://missing.example')],
+      service: _service,
+      recheck: (urls, progress) async {
+        progress(urls.length);
+        return [];
+      },
+      checkSite: (_) async => fail('must not inspect an unverified source'),
+      markUnfixable: (_) async => fail('must not persist an unverified source'),
+    );
+
+    await b.start();
+    expect(b.count(RepairOutcome.notTried), 1);
+    expect(b.items.single.detail, contains('校驗沒有取得結果'));
+    expect(asked, isEmpty);
+  });
+
+  test('temporary AI service errors do not mark same-site sources unfixable', () async {
+    final b = SourceRepairBatch(
+      sources: [
+        _source('https://unstable.example#a'),
+        _source('https://unstable.example#b'),
+      ],
+      service: _service,
+      recheck: (urls, progress) async {
+        progress(urls.length);
+        return [for (final url in urls) _entry(url, _broken)];
+      },
+      checkSite: (_) async => const SiteCheck(SiteVerdict.alive, '網站正常'),
+      markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
+      session: (source, item) => AiRepairSession(
+        source: source,
+        service: _service,
+        check: (source, _) async => _checked(source),
+        probe: (source, _) async => _probe(source),
+        ask: (_, _) async => throw StateError('AI 服務無法回應'),
+        secrets: (_) async => const {},
+        backups: backups,
+      ),
+    );
+
+    await b.start();
+    expect(unfixable, isEmpty);
+    expect(b.items.first.outcome, RepairOutcome.notFixed);
+    expect(b.items.first.detail, contains('AI 服務無法回應'));
+    expect(b.items.last.outcome, RepairOutcome.notTried);
+  });
+
   test('a moved source has the old domain replaced inside its rules too', () {
     final moved = movedSource(
       BookSource(
