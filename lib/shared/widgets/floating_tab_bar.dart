@@ -130,13 +130,21 @@ class FloatingTabBar extends StatefulWidget {
 
   /// 分頁列在延伸到其下方的頁面（`extendBody: true`）裡的位置，給取代
   /// 分頁列的工具列與底部浮動膠囊對齊用：左右和清單的卡片切齊（平板上
-  /// 收在內容欄裡，[ReadableWidth.cardInsetOf]）。Scaffold 只改 padding，
-  /// viewPadding 仍是系統區。
-  static EdgeInsets slotOf(BuildContext context) =>
-      ReadableWidth.cardInsetOf(context).copyWith(
-        bottom:
-            MediaQuery.viewPaddingOf(context).bottom + AppGlass.tabBarBottomGap,
-      );
+  /// 收在內容欄裡，[ReadableWidth.cardInsetOf]）。
+  ///
+  /// 底部系統區直接取螢幕（[View]）的值：有底部列的 Scaffold 會把頁面的
+  /// padding 與 viewPadding 底部都扣掉、再只把 padding 加回列的高度，頁面裡
+  /// 讀到的 viewPadding 底部是 0，用它會比分頁列低一個系統區。
+  static EdgeInsets slotOf(BuildContext context) {
+    // 系統區改變時（旋轉、切換手勢導覽）跟著重建：View 本身不通知，頁面裡
+    // 的 viewPadding 底部前後都是 0；padding 底部在分頁列裡是系統區、在頁面
+    // 裡是含系統區的列高，兩邊都會跟著變。
+    MediaQuery.paddingOf(context);
+    final view = View.of(context);
+    final systemBottom = view.viewPadding.bottom / view.devicePixelRatio;
+    return ReadableWidth.cardInsetOf(context)
+        .copyWith(bottom: systemBottom + AppGlass.tabBarBottomGap);
+  }
 
   @override
   State<FloatingTabBar> createState() => _FloatingTabBarState();
