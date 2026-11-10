@@ -32,20 +32,17 @@ Color _groupedBackground(BuildContext context) =>
 const List<MainDestination> _defaultDestinations = [
   MainDestination(
     icon: Icons.auto_stories_outlined,
-    selectedIcon: Icons.auto_stories,
     label: '書架',
     page: BookshelfPage(),
   ),
   MainDestination(
     icon: Icons.explore_outlined,
-    selectedIcon: Icons.explore,
     label: '發現',
     page: ExplorePage(),
     background: _groupedBackground,
   ),
   MainDestination(
     icon: Icons.person_outline,
-    selectedIcon: Icons.person,
     label: '我的',
     page: SettingsPage(),
     // 「我的」是 GroupedListView，底色是分組底色。
@@ -308,11 +305,7 @@ class _MainPageState extends State<MainPage>
           hidden: _tabBarHidden.value,
           items: [
             for (final destination in _destinations)
-              FloatingTabItem(
-                icon: destination.icon,
-                selectedIcon: destination.selectedIcon,
-                label: destination.label,
-              ),
+              FloatingTabItem(icon: destination.icon, label: destination.label),
           ],
           onSearch: widget.destinations == null ? _openSearch : null,
           onTap: (index) {
@@ -740,7 +733,6 @@ typedef MainDestinationDoubleTapCallback = void Function(
 class MainDestination {
   const MainDestination({
     required this.icon,
-    required this.selectedIcon,
     required this.label,
     required this.page,
     this.background,
@@ -748,7 +740,6 @@ class MainDestination {
   });
 
   final IconData icon;
-  final IconData selectedIcon;
   final String label;
   final Widget page;
 

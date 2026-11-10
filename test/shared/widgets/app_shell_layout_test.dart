@@ -99,21 +99,9 @@ void main() {
             currentIndex: 0,
             onTap: taps.add,
             items: const [
-              FloatingTabItem(
-                icon: Icons.book_outlined,
-                selectedIcon: Icons.book,
-                label: '書架',
-              ),
-              FloatingTabItem(
-                icon: Icons.explore_outlined,
-                selectedIcon: Icons.explore,
-                label: '發現',
-              ),
-              FloatingTabItem(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                label: '我的',
-              ),
+              FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+              FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+              FloatingTabItem(icon: Icons.person_outline, label: '我的'),
             ],
           ),
         ),
@@ -144,21 +132,9 @@ void main() {
             currentIndex: 0,
             onTap: taps.add,
             items: const [
-              FloatingTabItem(
-                icon: Icons.book_outlined,
-                selectedIcon: Icons.book,
-                label: '書架',
-              ),
-              FloatingTabItem(
-                icon: Icons.explore_outlined,
-                selectedIcon: Icons.explore,
-                label: '發現',
-              ),
-              FloatingTabItem(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                label: '我的',
-              ),
+              FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+              FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+              FloatingTabItem(icon: Icons.person_outline, label: '我的'),
             ],
           ),
         ),

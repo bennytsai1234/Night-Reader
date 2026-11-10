@@ -11,14 +11,11 @@ import 'glass.dart';
 import 'launch_entrance.dart';
 
 class FloatingTabItem {
-  const FloatingTabItem({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-  });
+  const FloatingTabItem({required this.icon, required this.label});
 
+  /// 選中與未選都用同一個圖示（空心），只換顏色：選取膠囊滑過中點時圖示
+  /// 的形狀不換。
   final IconData icon;
-  final IconData selectedIcon;
   final String label;
 }
 
@@ -246,8 +243,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         ((dx - AppGlass.tabInnerInset) / itemWidth).floor().clamp(0, count - 1);
 
     // 每個分頁的圖示與字在這裡建好一次（未選的用未選色、選取的用選取色），
-    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）；原本每一幀照新
-    // 顏色重建圖示與字。
+    // 膠囊滑動的每一幀沿用同一份，只換染色（[_TabItem]）。
     final scheme = Theme.of(context).colorScheme;
     final glyphs = [
       for (final item in widget.items)
@@ -258,7 +254,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             color: scheme.onSurfaceVariant,
           ),
           selected: _TabGlyph(
-            icon: item.selectedIcon,
+            icon: item.icon,
             label: item.label,
             color: scheme.primary,
           ),
