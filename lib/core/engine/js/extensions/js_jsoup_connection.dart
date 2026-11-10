@@ -64,6 +64,7 @@ const String jsoupConnectionJs = r'''
     hide('isEmpty', function() { return list.length === 0; });
     hide('get', function(i) { return list[i]; });
     hide('toArray', function() { return list.slice(); });
+    hide('toString', function() { return __lrJavaListText(list); });
     return list;
   }
 

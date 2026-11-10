@@ -274,6 +274,7 @@ extension JsJsoupExtensions on JsExtensionsBase {
           Object.defineProperty(list, 'get', { value: function(i) { return list[i]; }, enumerable: false });
           Object.defineProperty(list, 'isEmpty', { value: function() { return list.length === 0; }, enumerable: false });
           Object.defineProperty(list, 'contains', { value: function(v) { return list.indexOf(v) >= 0; }, enumerable: false });
+          Object.defineProperty(list, 'toString', { value: function() { return __lrJavaListText(list); }, enumerable: false });
           return list;
         }
         LrNode.prototype.attributes = function() {

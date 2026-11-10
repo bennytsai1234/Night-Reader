@@ -390,25 +390,9 @@ globalThis.__lrStartedRule = -1;
     if (value is Iterable) {
       final nodes = _elementNodes(value);
       if (nodes != null) return _encodeElements(nodes);
+      // Legado 交的是 Java 的 List（`[a, b]` 這樣轉成文字），見 __lrJavaList。
       final encodedItems = value.map(_encodeContextValue).join(',');
-      return '''
-(function() {
-  var arr = [$encodedItems];
-  Object.defineProperty(arr, 'toArray', {
-    value: function() { return arr; },
-    enumerable: false
-  });
-  Object.defineProperty(arr, 'get', {
-    value: function(index) { return arr[index]; },
-    enumerable: false
-  });
-  Object.defineProperty(arr, 'size', {
-    value: function() { return arr.length; },
-    enumerable: false
-  });
-  return arr;
-})()
-''';
+      return '__lrJavaList([$encodedItems])';
     }
     try {
       return jsonEncode(value);
