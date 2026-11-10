@@ -44,6 +44,7 @@
 | | `README.md`、網站、`GLOSSARY.md` 開頭 | `docs/agents/website.md` |
 | | `docs/design/` 的規格 | |
 | | iPhone 上能不能用 | ADR 0003 |
+| | 自動巡檢：新的資料夾與服務排進哪一段 | `docs/agents/auto-audit.md`「舊程式」 |
 
 ## 盤點既有功能時
 

@@ -33,7 +33,7 @@ _Avoid_: 更新日誌、commit 標題
 _Avoid_: demo、mockup
 
 **自動巡檢**：
-ChatGPT 的兩個每日排程：一個看 `beta` 過去 24 小時的改動，一個輪一段舊程式（17 天一圈）；找到的問題寫成一份報告開成一個 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。
+ChatGPT 的兩個每日排程：一個看 `beta` 過去 24 小時的改動，一個輪一段舊程式（20 天一圈）；找到的問題寫成一份報告開成一個 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。
 _Avoid_: 定期掃描、AI review、審查（那是合併前派 Codex 審 PR）
 
 **收尾**：
