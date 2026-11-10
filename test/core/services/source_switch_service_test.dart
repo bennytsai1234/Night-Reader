@@ -1,3 +1,4 @@
+import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,6 +94,17 @@ class _FakeBookSourceService extends BookSourceService {
     contentCalls++;
     return content;
   }
+
+  @override
+  Future<AudioRequest> getAudioRequest(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    CancelToken? cancelToken,
+  }) async => AudioRequest(
+    url: 'https://cdn.test/${chapter.index}.mp3',
+    headers: const {},
+  );
 }
 
 class _SearchTrackingBookSourceService extends BookSourceService {
@@ -386,6 +398,38 @@ void main() {
       expect(resolution.chapters.length, 100);
       expect(resolution.migratedBook.origin, 'new-origin');
       expect(resolution.validatedContent, isNotEmpty);
+    });
+
+    test('有聲書照取音訊網址驗證、不跑文字正文，對到同一集接著同一秒（ADR 0055）', () async {
+      final candidate = SearchBook(
+        bookUrl: 'new-origin/book/1',
+        name: '測試書',
+        author: '作者',
+        origin: 'new-origin',
+        originName: '新源',
+        tocUrl: 'new-origin/toc/1',
+        type: 1,
+      );
+      final chapters = _chapters(candidate.bookUrl, 10);
+      final fake = _FakeBookSourceService(chapters: chapters, content: '');
+      final service = SourceSwitchService(
+        service: fake,
+        sourceDao: db.bookSourceDao,
+      );
+      final listening = _currentBook()
+        ..type = 1
+        ..charOffset = 95000;
+
+      final resolution = await service.prepareSwitch(
+        listening,
+        candidate,
+        targetChapterIndex: 5,
+        targetChapterTitle: '第6章',
+      );
+
+      expect(fake.contentCalls, 0);
+      expect(resolution.validatedContent, startsWith('http'));
+      expect(resolution.migratedBook.charOffset, 95000);
     });
 
     test('新源章節數較少時 clamp 不越界', () async {

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/exception/user_error.dart';
@@ -12,12 +14,14 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_controller.dart';
 
 import 'audio_engine.dart';
 
@@ -56,6 +60,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     SystemPlayback? playback,
     Random? random,
     DateTime Function()? now,
+    this._readRecordDao,
   }) : _newEngine = engine ?? JustAudioEngine.new,
        _sourceService = sourceService ?? BookSourceService(),
        _sync = sync ?? SyncService.instance,
@@ -85,6 +90,44 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   static const Duration openGrace = Duration(milliseconds: 500);
 
   final AudioEngine Function() _newEngine;
+  final ReadRecordDao? _readRecordDao;
+
+  /// 收聽時間記進閱讀統計（使用者 2026-11-09 選「算進去、分開顯示」，
+  /// ADR 0055）：只算真的出聲的時間，暫停、緩衝不算。照書的 `recordName`
+  /// 記，有聲書帶類別前綴，統計頁分得出哪些是聽的。
+  ReaderV2ReadTimeController? _listenTime;
+  String? _listenBookUrl;
+
+  /// 真的在出聲：播著、沒在載入或緩衝。收聽時間與定時都只算這段。
+  bool get _sounding => _book != null && _playing && !_buffering && !_loading;
+
+  /// 播放、載入、緩衝或錯誤變了就呼叫：收聽計時與定時倒數跟著出聲與否。
+  void _syncListenTime() {
+    sleepTimer.sync(active: _book != null, running: _sounding);
+    final book = _book;
+    if (book == null || !_sounding) {
+      unawaited(_listenTime?.stop());
+      return;
+    }
+    if (_listenBookUrl != book.bookUrl) {
+      unawaited(_listenTime?.close());
+      _listenTime = null;
+      _listenBookUrl = book.bookUrl;
+      final dao =
+          _readRecordDao ??
+          (getIt.isRegistered<ReadRecordDao>() ? getIt<ReadRecordDao>() : null);
+      if (dao == null) return;
+      _listenTime = ReaderV2ReadTimeController(
+        bookName: () async =>
+            (await _books.getByUrl(book.bookUrl))?.recordName ??
+            book.recordName,
+        readRecordDao: dao,
+        now: _now,
+      );
+    }
+    _listenTime?.start();
+  }
+
   final BookDao? _bookDao;
   final ChapterDao? _chapterDao;
   final BookSourceDao? _sourceDao;
@@ -130,6 +173,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 預先解析好的下一集音訊請求。
   ({int index, AudioRequest request})? _prefetched;
 
+  /// 使用者要不要出聲：載入中按了暫停（或定時到了、別的播放接手），載入完
+  /// 就不自己開始播。和引擎回報的 [playing] 分開記。
+  bool _wantPlay = false;
+
+  /// 定時的選項只在第一次開書時從偏好設定讀一次。
+  bool _timerLoaded = false;
+
   /// 正在播或暫停中的書；沒有時是 null（還沒開或已經停止）。
   Book? get book => _book;
 
@@ -167,12 +217,19 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   // --- 開書與選集 ---
 
   /// 開 [book] 來聽。同一本已經開著時不打斷，給了 [chapterIndex] 才換到那一集；
-  /// 沒給時接著上次聽的地方。
+  /// 沒給時接著上次聽的地方。同一本上次連目錄都沒開成時重開一次（重試）。
   Future<void> open(Book book, {int? chapterIndex}) async {
-    if (isCurrent(book)) {
-      if (chapterIndex != null && chapterIndex != _index) {
-        await playChapter(chapterIndex);
+    if (!_timerLoaded) {
+      _timerLoaded = true;
+      try {
+        await sleepTimer.load();
+      } catch (error) {
+        AppLog.e('讀定時設定失敗', error: error);
       }
+    }
+    if (isCurrent(book) && !(_chapters.isEmpty && _error != null)) {
+      // 從目錄點了某一集：照目錄選集一樣從頭播，點的是正在播的那集也是。
+      if (chapterIndex != null) await playChapter(chapterIndex);
       return;
     }
     await _close();
@@ -286,6 +343,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final book = _book;
     final source = _source;
     if (book == null || source == null) return;
+    // 換集先讓上一集停聲：新的一集抓不到時，不會畫面停在新集、耳朵還聽著
+    // 舊集，舊集的位置也不會記到新集上。
+    final previous = _engine;
+    if (previous != null && previous.playing) await previous.pause();
+    if (autoplay) _wantPlay = true;
     final generation = ++_generation;
     final chapter = _chapters[index];
     _index = index;
@@ -298,8 +360,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     notifyListeners();
     final engine = _ensureEngine();
     try {
+      // 下載好的集放本機檔（ADR 0055），不再問書源。
+      final local = await _downloadedFile(book, chapter);
+      if (generation != _generation) return;
       final prefetched = _prefetched;
-      final request = prefetched != null && prefetched.index == index
+      final request = local != null
+          ? AudioRequest(url: local.uri.toString(), headers: const {})
+          : prefetched != null && prefetched.index == index
           ? prefetched.request
           : await _sourceService.getAudioRequest(source, book, chapter);
       _prefetched = null;
@@ -312,9 +379,11 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       );
       if (generation != _generation) return;
       await engine.setSpeed(_speed);
+      if (generation != _generation) return;
       _loading = false;
       _duration = engine.duration;
-      if (autoplay) await _startPlaying(engine);
+      _syncListenTime();
+      if (autoplay && _wantPlay) await _startPlaying(engine);
       notifyListeners();
       _publish();
       unawaited(_saveProgress());
@@ -323,9 +392,21 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       if (generation != _generation) return;
       _loading = false;
       _playing = false;
+      _wantPlay = false;
       _error = failureMessage('播放', error, stackTrace);
+      _syncListenTime();
       notifyListeners();
       _publish();
+    }
+  }
+
+  static Future<File?> _downloadedFile(Book book, BookChapter chapter) async {
+    try {
+      return await BookChapterFiles.fileFor(book, chapter);
+    } catch (error) {
+      // 讀不到資料夾就照網路播。
+      AppLog.e('讀已下載的音訊失敗', error: error);
+      return null;
     }
   }
 
@@ -378,10 +459,12 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       );
       return;
     }
+    _wantPlay = true;
     await _startPlaying(engine);
   }
 
   Future<void> pause() async {
+    _wantPlay = false;
     await _engine?.pause();
     await _saveProgress();
   }
@@ -444,6 +527,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (book == null) return;
     _generation++;
     await _saveProgress();
+    await _listenTime?.stop();
     await _engine?.stop();
     _book = null;
     _source = null;
@@ -451,6 +535,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     _prefetched = null;
     _request = null;
     _playing = false;
+    _wantPlay = false;
     _loading = false;
     _buffering = false;
     _error = null;
@@ -504,7 +589,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   void _onPlaying(bool playing) {
     if (_playing == playing) return;
     _playing = playing;
-    sleepTimer.sync(active: _book != null, running: playing);
+    _syncListenTime();
     if (!playing) unawaited(_saveProgress());
     notifyListeners();
     _publish();
@@ -529,20 +614,28 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   void _onBuffering(bool buffering) {
     if (_buffering == buffering) return;
     _buffering = buffering;
+    _syncListenTime();
     notifyListeners();
     _publish();
   }
 
+  /// 播放途中出錯：引擎停下、記下原因，按播放時重新載入這一集（[play]）。
   void _onError(Object error) {
     if (_book == null) return;
     _playing = false;
     _loading = false;
+    _wantPlay = false;
     _error = failureMessage('播放', error);
+    unawaited(_engine?.pause());
+    _syncListenTime();
     notifyListeners();
     _publish();
   }
 
   // --- 進度與同步 ---
+
+  /// 現在聽到哪寫進書與資料庫（換源前用：照它對到新書源的同一集）。
+  Future<void> saveProgress() => _saveProgress();
 
   Future<void> _saveProgress() async {
     final book = _book;
@@ -609,7 +702,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
 
   /// 開始播：先接手系統播放資訊（原本在播的朗讀收到暫停），再讓引擎播。
   Future<void> _startPlaying(AudioEngine engine) async {
+    final generation = _generation;
     await _playback.start();
+    // 等系統播放控制的這段時間按了暫停、換了集或停了：不出聲。
+    if (!_wantPlay || generation != _generation || _book == null) return;
     _publish(playing: true);
     await engine.play();
   }

@@ -88,6 +88,12 @@ class FakeAudioEngine implements AudioEngine {
     _position.add(at);
   }
 
+  /// 開始或結束緩衝（等資料、沒有聲音）。
+  void buffer(bool value) => _buffering.add(value);
+
+  /// 播放途中出錯。
+  void fail(Object error) => _errors.add(error);
+
   /// 這一集播完。
   void finish() {
     _setPlaying(false);
@@ -99,6 +105,12 @@ class FakeAudioEngine implements AudioEngine {
 class FakeAudioSourceService extends BookSourceService {
   final List<String> resolved = [];
 
+  /// 解析音訊網址前要等外面放行（測試載入中）。
+  Completer<void>? gate;
+
+  /// 這幾集的網址解析失敗。
+  final Set<String> failing = {};
+
   @override
   Future<AudioRequest> getAudioRequest(
     BookSource source,
@@ -107,6 +119,8 @@ class FakeAudioSourceService extends BookSourceService {
     CancelToken? cancelToken,
   }) async {
     resolved.add(chapter.url);
+    await gate?.future;
+    if (failing.contains(chapter.url)) throw StateError('抓不到這一集');
     return AudioRequest(
       url: '${chapter.url}.mp3',
       headers: const {'Referer': 'https://audio.test/'},

@@ -6,6 +6,7 @@ import 'download_base.dart';
 import 'download_scheduler.dart';
 
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
+import 'package:night_reader/core/services/audio_chapter_download.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -196,7 +197,15 @@ Future<DownloadPlan> _planDownload(
     throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
   }
   final List<({int index, String url, String title})> missing;
-  if (book.bookKind == BookSourceKind.comic) {
+  if (book.bookKind == BookSourceKind.audio) {
+    // 有聲書一集一個音訊檔（ADR 0055）。
+    final downloaded = await BookChapterFiles.downloaded(book);
+    missing = [
+      for (final chapter in scope)
+        if (!downloaded.containsKey(BookChapterFiles.baseNameFor(chapter)))
+          (index: chapter.index, url: chapter.url, title: chapter.title),
+    ];
+  } else if (book.bookKind == BookSourceKind.comic) {
     // 漫畫一話一個 CBZ（ADR 0052），不看資料庫裡的正文。
     final downloaded = await downloadedComicChapterUrls(book, scope);
     final pending = [
@@ -252,6 +261,9 @@ Future<DownloadChapterResult> _downloadChapter(
   if (book.bookKind == BookSourceKind.comic) {
     return _downloadComicChapter(book, source, chapter, cancelToken);
   }
+  if (book.bookKind == BookSourceKind.audio) {
+    return _downloadAudioChapter(book, source, chapter, cancelToken);
+  }
   final chapterDao = getIt<ChapterDao>();
   final store = ReaderChapterContentStore(
     chapterDao: chapterDao,
@@ -306,6 +318,32 @@ Future<DownloadChapterResult> _downloadComicChapter(
   if (source == null) return DownloadChapterResult.failed('書源不存在');
   try {
     await ComicChapterDownload.download(
+      source,
+      book,
+      chapter,
+      cancelToken: cancelToken,
+    );
+    return DownloadChapterResult.ready();
+  } on DioException catch (error) {
+    if (error.type == DioExceptionType.cancel) rethrow;
+    return DownloadChapterResult.failed(error.message ?? '網路錯誤');
+  } on Exception catch (error) {
+    return DownloadChapterResult.failed(error.toString());
+  } on StateError catch (error) {
+    return DownloadChapterResult.failed(error.message);
+  }
+}
+
+/// 有聲書的一集：整個音訊檔抓下來（[AudioChapterDownload]）。
+Future<DownloadChapterResult> _downloadAudioChapter(
+  Book book,
+  BookSource? source,
+  BookChapter chapter,
+  CancelToken cancelToken,
+) async {
+  if (source == null) return DownloadChapterResult.failed('書源不存在');
+  try {
+    await AudioChapterDownload.download(
       source,
       book,
       chapter,

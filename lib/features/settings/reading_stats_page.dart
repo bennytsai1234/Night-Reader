@@ -193,6 +193,17 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
           }
 
           final total = records.fold<int>(0, (sum, r) => sum + r.readTime);
+          bool isListened(_BookTime record) =>
+              BookSourceKind.splitRecordName(record.bookName).kind ==
+              BookSourceKind.audio;
+          final read = [
+            for (final record in records)
+              if (!isListened(record)) record,
+          ];
+          final listened = [
+            for (final record in records)
+              if (isListened(record)) record,
+          ];
           return GroupedListView(
             children: [
               GroupedSection(
@@ -206,28 +217,43 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
                   ),
                 ],
               ),
-              GroupedSection(
-                header: '累積閱讀時間',
-                children: [
-                  for (final record in records)
-                    GroupedRow(
-                      // 顯示時做繁簡轉換，和書架一致；找書仍用原文。同名的
-                      // 漫畫、有聲書書名後面帶記號（ADR 0053）。
-                      title: context.zh(
-                        BookSourceKind.splitRecordName(record.bookName).name,
-                      ),
-                      titleMark: _kindMark(record.bookName),
-                      value: _formatDuration(record.readTime),
-                      onTap: () => _openBook(record.bookName),
-                    ),
-                ],
-              ),
+              // 收聽時間算進上面的合計，書分「閱讀」「收聽」兩組（使用者
+              // 2026-11-09 在候選圖上選，ADR 0055）；沒聽過有聲書時照舊一組。
+              if (listened.isEmpty)
+                GroupedSection(
+                  header: '累積閱讀時間',
+                  children: [for (final record in read) _row(context, record)],
+                )
+              else ...[
+                if (read.isNotEmpty)
+                  GroupedSection(
+                    header: '閱讀',
+                    children: [
+                      for (final record in read) _row(context, record),
+                    ],
+                  ),
+                GroupedSection(
+                  header: '收聽',
+                  children: [
+                    for (final record in listened) _row(context, record),
+                  ],
+                ),
+              ],
             ],
           );
         },
       ),
     );
   }
+
+  /// 一本書一列：顯示時做繁簡轉換，和書架一致；找書仍用原文。同名的
+  /// 漫畫、有聲書書名後面帶記號（ADR 0053）。
+  Widget _row(BuildContext context, _BookTime record) => GroupedRow(
+    title: context.zh(BookSourceKind.splitRecordName(record.bookName).name),
+    titleMark: _kindMark(record.bookName),
+    value: _formatDuration(record.readTime),
+    onTap: () => _openBook(record.bookName),
+  );
 
   static String _formatDuration(int totalSeconds) {
     final seconds = totalSeconds < 0 ? 0 : totalSeconds;

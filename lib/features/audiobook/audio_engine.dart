@@ -41,11 +41,12 @@ abstract interface class AudioEngine {
 
 class JustAudioEngine implements AudioEngine {
   JustAudioEngine() : _player = AudioPlayer() {
+    // 播放途中的錯誤（分段請求、網路、解碼）just_audio 0.10 起從
+    // errorStream 送，不再當成播放事件的錯誤。
     _subscriptions.add(
-      _player.playbackEventStream.listen(
-        (_) {},
-        onError: (Object error, StackTrace _) => _errors.add(error),
-      ),
+      _player.errorStream.listen((error) {
+        if (!_errors.isClosed) _errors.add(error);
+      }),
     );
   }
 

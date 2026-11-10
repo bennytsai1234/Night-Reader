@@ -113,6 +113,37 @@ void main() {
     expect(find.text('山海經'), findsOneWidget);
   });
 
+  testWidgets('聽過有聲書時，書分成閱讀與收聽兩組，合計含收聽（ADR 0055）', (tester) async {
+    final dao = ReadRecordDao(db);
+    await tester.runAsync(() async {
+      await dao.upsert(
+        ReadRecord(bookName: '長夜將盡', readTime: 600, lastRead: 3),
+      );
+      await dao.upsert(
+        ReadRecord(bookName: 'audio:長夜將盡', readTime: 1200, lastRead: 4),
+      );
+    });
+    await pumpPage(tester);
+
+    expect(find.text('閱讀'), findsOneWidget);
+    expect(find.text('收聽'), findsOneWidget);
+    expect(find.text('累積閱讀時間'), findsNothing);
+    // 總計 30 分鐘：讀 10 加聽 20。
+    expect(find.text('30 分鐘', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('沒聽過有聲書時照舊一組', (tester) async {
+    await tester.runAsync(
+      () =>
+          ReadRecordDao(db)
+              .upsert(ReadRecord(bookName: '長夜將盡', readTime: 600, lastRead: 3)),
+    );
+    await pumpPage(tester);
+
+    expect(find.text('累積閱讀時間'), findsOneWidget);
+    expect(find.text('收聽'), findsNothing);
+  });
+
   testWidgets('同步後重讀時不閃一格轉圈', (tester) async {
     await tester.runAsync(
       () =>
