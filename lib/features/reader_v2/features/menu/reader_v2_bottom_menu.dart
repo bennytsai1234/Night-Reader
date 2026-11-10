@@ -344,7 +344,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
 
   /// 拖動條表示「本章內進度」，與資訊列同樣切成十等份：未拖動時跟隨
   /// 閱讀進度（經 progressListenable 窄通道，不觸發整頁 rebuild）；
-  /// 拖動跨檔位時由外層做預覽跳轉，放開才落定存進度。
+  /// 拖動跨檔位時由外層做預覽跳轉，放開才落定存進度；放開到跳轉做完之前
+  /// 停在選定的位置（[ReaderV2ScrubState.holdsSlider]）。
   Widget _buildProgressSlider(bool canScrub) {
     return ListenableBuilder(
       listenable: Listenable.merge([navigation.scrub, progressListenable]),
@@ -359,7 +360,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
 
   Widget _progressSlider(bool canScrub, {required double currentPercent}) {
     final scrub = navigation.scrub.value;
-    final value = (scrub.isScrubbing ? scrub.percent : currentPercent)
+    final value = (scrub.holdsSlider ? scrub.percent : currentPercent)
         .clamp(0.0, 100.0)
         .toDouble();
     return Semantics(
