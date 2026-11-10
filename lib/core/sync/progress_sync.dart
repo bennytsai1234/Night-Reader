@@ -79,17 +79,26 @@ class ProgressSync extends SyncKind {
     return ids[book.chapterIndex.clamp(0, ids.length - 1)];
   }
 
-  /// 不在這台書架上的書，上次同步的紀錄不留：雲端那筆留著給加回來的時候
-  /// 用。留著的話，加回來的是新的一本、位置在開頭，比對時會當成這台改過、
-  /// 雲端沒變，把開頭送上去蓋掉留著的進度；拿掉之後照從沒同步過合併，
-  /// 新的一本從沒移動過（時間 0），雲端的較新就接上。
+  /// 上次同步的紀錄還是不是這台現在這一本的：書不在書架上、或位置移動的
+  /// 時間比上次同步時記的早，就不是。
+  ///
+  /// 同一本書同步過之後，位置移動的時間不會比紀錄早：上傳時紀錄記的就是
+  /// 它，套用雲端時它改成雲端那筆的時間，之後翻頁只會更晚。比紀錄早，是
+  /// 這個鍵底下換了一本：移出書架又加回來的新一本（從沒移動過，時間 0），
+  /// 或同一本書有兩個書源、最近讀的那本移出了，換成另一本。沿用舊紀錄的話，
+  /// 比對會把換上來的這本當成這台改過、雲端沒變，蓋掉雲端留著的進度；
+  /// 不沿用就照從沒同步過比時間，雲端的較新就接上。雲端那筆照舊留著，
+  /// 給之後加回來的時候用。
+  static bool baseHolds(SyncRecord? local, SyncBaseEntry base) =>
+      local != null && local.time >= base.time;
+
   @override
   Future<Map<String, SyncRecord>> reconcile(
     Map<String, SyncRecord> local,
     Map<String, SyncRecord> remote,
     Map<String, SyncBaseEntry> base,
   ) async {
-    base.removeWhere((key, _) => !local.containsKey(key));
+    base.removeWhere((key, entry) => !baseHolds(local[key], entry));
     return local;
   }
 
