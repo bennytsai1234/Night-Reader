@@ -6,15 +6,15 @@ import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
@@ -24,7 +24,7 @@ abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPaused;
   double get rate;
   double get pitch;
-  ReaderV2TtsSleepTimer get sleepTimer;
+  SleepTimer get sleepTimer;
 
   Future<void> toggle();
   Future<void> stop();
@@ -85,9 +85,7 @@ class ReaderV2TtsPanel extends StatelessWidget {
               margin: EdgeInsets.zero,
               header: '定時',
               children: [
-                GroupedContent(
-                  child: _SleepTimerSection(timer: tts.sleepTimer),
-                ),
+                GroupedContent(child: SleepTimerSection(timer: tts.sleepTimer)),
               ],
             ),
             GroupedSection(
@@ -130,137 +128,6 @@ Widget _stepperRow(Widget stepper) => GroupedContent(
   padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
   child: stepper,
 );
-
-/// 定時選項與倒數。倒數不靠定時器逐秒通知，這裡自己每秒重讀剩餘時間，
-/// 只重建這一小塊。
-class _SleepTimerSection extends StatefulWidget implements GroupedSkeletonItem {
-  const _SleepTimerSection({required this.timer});
-
-  final ReaderV2TtsSleepTimer timer;
-
-  @override
-  GroupedItemShape skeletonShape(
-    BuildContext context, {
-    required double width,
-  }) {
-    // 分段控制的軌道、自訂分鐘的步進列與倒數文字，各自照元件本身的高度。
-    var height = GlassSegmented.trackHeight;
-    final marks = <SkeletonShape>[
-      SkeletonShape(
-        Rect.fromLTWH(0, 0, width, height),
-        radius: AppRadius.pillShape,
-      ),
-    ];
-    if (timer.option == ReaderV2TtsSleepOption.custom) {
-      final stepper = _SleepTimerSectionState._customStepper(timer)
-          .skeletonShape(context, width: width);
-      marks.addAll(stepper.marksAt(Offset(0, height)));
-      height += stepper.height;
-    }
-    final status = _SleepTimerSectionState._status(timer);
-    if (status != null) {
-      final text = GroupedItemShape.text(
-        context,
-        status,
-        style: _SleepTimerSectionState.statusStyle,
-        width: width,
-      );
-      height += _SleepTimerSectionState.statusGap;
-      for (final mark in text.marks) {
-        marks.add(
-          SkeletonShape(
-            mark.rect.shift(Offset((width - mark.rect.width) / 2, height)),
-          ),
-        );
-      }
-      height += text.height;
-    }
-    return GroupedItemShape(height, marks: marks);
-  }
-
-  @override
-  State<_SleepTimerSection> createState() => _SleepTimerSectionState();
-}
-
-class _SleepTimerSectionState extends State<_SleepTimerSection> {
-  /// 倒數文字的字樣與上方間距；骨架照同一份排。
-  static const TextStyle statusStyle = AppTextStyles.labelSm;
-  static const double statusGap = AppSpacing.sm;
-
-  static NumberStepperRow _customStepper(ReaderV2TtsSleepTimer timer) =>
-      NumberStepperRow(
-        label: '分鐘',
-        value: timer.customMinutes.toDouble(),
-        min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
-        max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
-        step: 1,
-        onChanged: (value) => unawaited(timer.setCustomMinutes(value.round())),
-      );
-
-  late final Timer _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (widget.timer.remaining != null) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.timer,
-      builder: (context, _) {
-        final timer = widget.timer;
-        final status = _status(timer);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GlassSegmented<ReaderV2TtsSleepOption>(
-              dense: true,
-              segments: [
-                for (final option in ReaderV2TtsSleepOption.values)
-                  GlassSegment(option, option.label),
-              ],
-              selected: timer.option,
-              onChanged: (option) => unawaited(timer.choose(option)),
-            ),
-            if (timer.option == ReaderV2TtsSleepOption.custom)
-              _customStepper(timer),
-            if (status != null)
-              Padding(
-                padding: const EdgeInsets.only(top: statusGap),
-                child: Text(
-                  status,
-                  textAlign: TextAlign.center,
-                  style: statusStyle.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  static String? _status(ReaderV2TtsSleepTimer timer) {
-    final remaining = timer.remaining;
-    if (remaining == null) return null;
-    // 無條件進位到秒，剛開始倒數時顯示整數分鐘。
-    final seconds = (remaining.inMilliseconds + 999) ~/ 1000;
-    final mm = (seconds ~/ 60).toString().padLeft(2, '0');
-    final ss = (seconds % 60).toString().padLeft(2, '0');
-    return '$mm:$ss 後暫停';
-  }
-}
 
 /// 高亮預覽、色票與深淺。拖動深淺時只更新面板內的暫存值與預覽，放開才
 /// 寫入偏好：每一格都寫入會連帶整個閱讀器重建。

@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/resource_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
@@ -16,7 +17,7 @@ import 'package:night_reader/core/widgets/default_book_cover.dart';
 /// 系統（Android 的通知與鎖定畫面、iOS 的正在播放）只讀得到檔案或公開網址，
 /// 讀不到 App 裡的 `local://`、`memory://`；網路封面也要先下載，載不到或
 /// 不是圖時系統只會留白。這裡一律換成解得開的圖檔：網路封面用和書架同一個
-/// 磁碟快取，沒有封面、載不到或解不開時畫預設封面（夜空，[DefaultBookCover]）。
+/// 磁碟快取，沒有封面、載不到或解不開時畫預設封面（夜空，[DefaultBookCover]；有聲書畫它的變體）。
 /// 檔案放在系統的暫存資料夾，空間不夠時由系統清掉。
 class NowPlayingArtwork {
   NowPlayingArtwork({
@@ -54,18 +55,25 @@ class NowPlayingArtwork {
   }
 
   /// 已經換好的封面；還沒換過的是 null（用 [resolve] 去換）。
-  Uri? resolved(String? coverSource, String bookName) =>
-      _resolved[_keyOf(coverSource, bookName)];
+  Uri? resolved(
+    String? coverSource,
+    String bookName, {
+    BookSourceKind kind = BookSourceKind.novel,
+  }) => _resolved[_keyOf(coverSource, bookName, kind)];
 
   /// 書的封面檔案。[coverSource] 是 null、空的或載不到時，是 [bookName] 的
-  /// 預設封面。
-  Future<Uri> resolve(String? coverSource, String bookName) {
-    final key = _keyOf(coverSource, bookName);
+  /// 預設封面，照 [kind] 畫那一類的變體。
+  Future<Uri> resolve(
+    String? coverSource,
+    String bookName, {
+    BookSourceKind kind = BookSourceKind.novel,
+  }) {
+    final key = _keyOf(coverSource, bookName, kind);
     final done = _resolved[key];
     if (done != null) return Future<Uri>.value(done);
     return _resolving.putIfAbsent(key, () async {
       try {
-        final uri = await _resolve(coverSource, bookName);
+        final uri = await _resolve(coverSource, bookName, kind);
         _resolved[key] = uri;
         return uri;
       } finally {
@@ -74,12 +82,23 @@ class NowPlayingArtwork {
     });
   }
 
-  static String _keyOf(String? coverSource, String bookName) {
+  /// 載不到的封面換成那一類的預設封面，所以有封面時也要分類別記。
+  static String _keyOf(
+    String? coverSource,
+    String bookName,
+    BookSourceKind kind,
+  ) {
     final source = coverSource?.trim() ?? '';
-    return source.isEmpty ? 'default\u0000$bookName' : 'cover\u0000$source';
+    return source.isEmpty
+        ? 'default\u0000${kind.name}\u0000$bookName'
+        : 'cover\u0000${kind.name}\u0000$source';
   }
 
-  Future<Uri> _resolve(String? coverSource, String bookName) async {
+  Future<Uri> _resolve(
+    String? coverSource,
+    String bookName,
+    BookSourceKind kind,
+  ) async {
     final source = coverSource?.trim() ?? '';
     if (source.isNotEmpty) {
       try {
@@ -89,7 +108,7 @@ class NowPlayingArtwork {
         AppLog.d('NowPlayingArtwork: cover unavailable, use default: $error');
       }
     }
-    return (await _defaultCover(bookName)).uri;
+    return (await _defaultCover(bookName, kind)).uri;
   }
 
   Future<File?> _coverFile(String source) async {
@@ -132,15 +151,19 @@ class NowPlayingArtwork {
     }
   }
 
-  Future<File> _defaultCover(String bookName) async {
+  Future<File> _defaultCover(String bookName, BookSourceKind kind) async {
     final file = File(
-      p.join((await _directory()).path, 'night_sky_${_hash(bookName)}.png'),
+      p.join(
+        (await _directory()).path,
+        'night_sky_${kind.name}_${_hash(bookName)}.png',
+      ),
     );
     if (await file.exists() && await file.length() > 0) return file;
     final png = await DefaultBookCover.renderPng(
       bookName,
       width: defaultCoverWidth,
       height: defaultCoverHeight,
+      kind: kind,
     );
     await file.parent.create(recursive: true);
     await file.writeAsBytes(png, flush: true);

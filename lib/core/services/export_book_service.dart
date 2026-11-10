@@ -19,12 +19,16 @@ class ExportBookService {
   BookSourceDao get _sourceDao => getIt<BookSourceDao>();
   final BookSourceService _sourceService = BookSourceService();
 
-  /// 匯出全書為 TXT 檔案
+  /// 匯出全書為 TXT 檔案。漫畫是圖、沒有文字，丟出 [StateError]（書籍詳情
+  /// 不給漫畫這個選項，ADR 0052）。
   Future<void> exportToTxt(
     Book book, {
     Function(double progress)? onProgress,
     bool fetchMissingRemote = false,
   }) async {
+    if (book.bookKind == BookSourceKind.comic) {
+      throw StateError('漫畫沒有文字可以匯出');
+    }
     final chapters = await _chapterDao.getByBook(book.bookUrl);
     if (chapters.isEmpty) return;
     final source = fetchMissingRemote && !book.isLocal

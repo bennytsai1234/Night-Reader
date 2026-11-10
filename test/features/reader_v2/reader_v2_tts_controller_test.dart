@@ -14,7 +14,7 @@ import 'package:night_reader/core/services/system_playback/system_playback.dart'
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
@@ -122,6 +122,12 @@ class _OtherOwner implements PlaybackOwner {
 
   @override
   void onSeek(Duration position) {}
+
+  @override
+  void onRewind() {}
+
+  @override
+  void onFastForward() {}
 }
 
 class _FakeTtsEngine extends ReaderV2TtsEngine {
@@ -375,7 +381,7 @@ void main() {
       tester,
     ) async {
       await open({0: '第一句。第二句。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       engine.complete();
       await tester.pump();
@@ -396,7 +402,7 @@ void main() {
 
     testWidgets('does not count down while paused', (tester) async {
       await open({0: '唯一的一句。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 5));
 
@@ -413,7 +419,7 @@ void main() {
     testWidgets('a custom timer counts down its own minutes', (tester) async {
       await open({0: '唯一的一句。'});
       await tts.sleepTimer.setCustomMinutes(20);
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.custom);
+      await tts.sleepTimer.choose(SleepTimerOption.custom);
       await tts.startFromVisibleLocation();
       expect(tts.sleepTimer.remaining, const Duration(minutes: 20));
 
@@ -430,7 +436,7 @@ void main() {
       tester,
     ) async {
       await open({0: '唯一的一句。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 5));
 
@@ -451,7 +457,7 @@ void main() {
       tester,
     ) async {
       await open({0: '唯一的一句。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes30);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes30);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 10));
 
@@ -486,7 +492,7 @@ void main() {
       await open({0: '唯一的一句。'});
 
       await tts.toggleTimed();
-      expect(tts.sleepTimer.option, ReaderV2TtsSleepOption.minutes30);
+      expect(tts.sleepTimer.option, SleepTimerOption.minutes30);
       expect(tts.sleepTimer.remaining, const Duration(minutes: 30));
       await tts.stop();
     });
@@ -495,7 +501,7 @@ void main() {
       tester,
     ) async {
       await open({0: '第一句。第二句。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 15));
       expect(tts.isPaused, isTrue);
@@ -513,10 +519,10 @@ void main() {
       });
       await open({0: '唯一的一句。'});
       await tts.loadSettings();
-      expect(tts.sleepTimer.option, ReaderV2TtsSleepOption.minutes45);
+      expect(tts.sleepTimer.option, SleepTimerOption.minutes45);
       expect(tts.sleepTimer.customMinutes, 25);
 
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.custom);
+      await tts.sleepTimer.choose(SleepTimerOption.custom);
       await tts.sleepTimer.setCustomMinutes(70);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getInt(PreferKey.ttsTimer), -1);
@@ -596,7 +602,7 @@ void main() {
       tester,
     ) async {
       await open({0: '第一句。', 1: '第二章開頭。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 15));
       expect(tts.isPaused, isTrue);

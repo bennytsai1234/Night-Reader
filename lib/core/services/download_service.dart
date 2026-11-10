@@ -61,7 +61,8 @@ ShelfDownloadDecision decideShelfDownload({
 typedef ShelfDownloadNeed = ({String bookName, int totalCount});
 
 /// 書架上這本書還有章節沒下載時回傳 [ShelfDownloadNeed]；不在書架、本地
-/// 書、書源不能讀，或都下載好了時回傳 null。讀整本目錄比對已存的正文，所以
+/// 書、有聲書（音訊由使用者手動下載，ADR 0055）、書源不能讀，或都下載好了
+/// 時回傳 null。讀整本目錄比對已存的正文，所以
 /// 在書源 isolate 做，只傳回摘要（ADR 0028）；開 App 時書架上每本書都會
 /// 比對一次。
 Future<ShelfDownloadNeed?> _shelfDownloadNeedInSourceIsolate(String bookUrl) =>
@@ -69,13 +70,27 @@ Future<ShelfDownloadNeed?> _shelfDownloadNeedInSourceIsolate(String bookUrl) =>
 
 Future<ShelfDownloadNeed?> _shelfDownloadNeed(String bookUrl) async {
   final book = await getIt<BookDao>().getByUrl(bookUrl);
-  if (book == null || book.isLocal || !book.isInBookshelf) return null;
+  if (book == null ||
+      book.isLocal ||
+      book.bookKind == BookSourceKind.audio ||
+      !book.isInBookshelf) {
+    return null;
+  }
   final source = await getIt<BookSourceDao>().getByUrl(book.origin);
   if (source == null || !source.isReadingEnabledByRuntime) return null;
   final chapters = await getIt<ChapterDao>().getByBook(bookUrl);
   // 還沒有目錄（例如匯入時沒附）也要排：任務開跑時先抓目錄，抓不到就
   // 記為失敗，照重試規則再試。有目錄而且都下載好了就不排。
-  if (chapters.isNotEmpty) {
+  if (chapters.isNotEmpty && book.bookKind == BookSourceKind.comic) {
+    final downloaded = await downloadedComicChapterUrls(book, chapters);
+    // 分卷標題、還沒買的付費話不下載（[chapterIsDownloadable]），不算缺。
+    if (chapters.every(
+      (chapter) =>
+          !chapterIsDownloadable(chapter) || downloaded.contains(chapter.url),
+    )) {
+      return null;
+    }
+  } else if (chapters.isNotEmpty) {
     final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
       origin: book.origin,
       bookUrl: bookUrl,

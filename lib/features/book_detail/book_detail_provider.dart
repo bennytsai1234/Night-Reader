@@ -19,6 +19,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/toc_volumes.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/core/services/books_in_use.dart';
@@ -1011,6 +1012,8 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<Set<String>> _storedChapterUrls() async {
+    // 漫畫一話一個 CBZ（ADR 0052），不看正文快取。
+    if (_isComic) return downloadedComicChapterUrls(_book, _allChapters);
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) return <String>{};
     return chapterContentDao.getStoredChapterUrls(
@@ -1019,7 +1022,11 @@ class BookDetailProvider extends ChangeNotifier {
     );
   }
 
+  bool get _isComic => _book.bookKind == BookSourceKind.comic;
+
   Future<void> _clearStoredContent() async {
+    // 漫畫下載的圖（CBZ 與下載到一半的）一起刪；書架自動下載會再抓。
+    if (_isComic) await BookChapterFiles.deleteFor(_book);
     // 排版快取由正文算出，正文清掉就一起清。
     await ReaderLayoutCache.deleteBook(_book.bookUrl);
     // 網路書的插圖跟著正文抓，正文清掉就一起清；本地 EPUB 的插圖是轉檔時
@@ -1067,6 +1074,12 @@ class BookDetailProvider extends ChangeNotifier {
 
       if (!_book.isLocal) {
         contentBytes += await BookIllustrationStorage.sizeOf(_book);
+      }
+      if (_isComic) {
+        storedUrls.addAll(
+          await downloadedComicChapterUrls(_book, _allChapters),
+        );
+        contentBytes += await BookChapterFiles.sizeOf(_book);
       }
       _cacheStatus = BookDetailCacheStatus(
         storedChapterCount: storedUrls.length,

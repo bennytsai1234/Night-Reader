@@ -76,6 +76,7 @@ class ExploreBookItem extends StatelessWidget {
                 (book) => BookCoverWidget(
                   coverUrl: book.coverUrl,
                   bookName: context.zh(book.name),
+                  kind: book.bookKind,
                   author: context.zh(book.author ?? ''),
                   width: coverWidth,
                   height: coverHeight,

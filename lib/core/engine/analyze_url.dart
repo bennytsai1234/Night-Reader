@@ -521,6 +521,15 @@ class AnalyzeUrl {
 
   bool isPost() => method == 'POST';
 
+  /// 交給播放器自己抓的請求（有聲書的音訊，Legado `getMediaItem`）：網址與
+  /// 送出時會帶的標頭，含存著的 Cookie 與瀏覽器標識。不送出請求。
+  Future<({String url, Map<String, String> headers})> playbackRequest() async {
+    await _mergeStoredCookie();
+    final headers = requestHeaders;
+    if (_header('User-Agent') == null) headers['User-Agent'] = getUserAgent();
+    return (url: requestUrl, headers: headers);
+  }
+
   String _resolveMaybeJsString(String raw) {
     final trimmed = raw.trim();
     if (trimmed.startsWith('@js:')) {

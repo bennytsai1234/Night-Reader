@@ -104,7 +104,8 @@ class BookStorageService {
   }
 
   /// 本地書移出書架後，App 資料夾裡那份原檔沒有別的書用就跟著刪掉；不在
-  /// App 資料夾裡的（很舊的版本直接指著選檔器給的檔）不動。
+  /// App 資料夾裡的（很舊的版本直接指著選檔器給的檔）不動。本地漫畫的原檔
+  /// 是一個資料夾（一話一個 CBZ，ADR 0052），整個刪掉。
   Future<void> _deleteLocalOriginal(Book book) async {
     final path = LocalBookService.filePathOf(book);
     try {
@@ -119,6 +120,8 @@ class BookStorageService {
       }
       final file = File(path);
       if (await file.exists()) await file.delete();
+      final folder = Directory(path);
+      if (await folder.exists()) await folder.delete(recursive: true);
     } on FileSystemException catch (error) {
       AppLog.e('刪除本地書原檔失敗', error: error);
     }

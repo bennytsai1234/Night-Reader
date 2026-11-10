@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
@@ -104,6 +105,9 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
 
   bool isGridView = defaultGridView;
   bool showLastUpdate = defaultShowLastUpdate;
+
+  /// 「整理」的篩選選的類別；null 是全部。只在這次開 App 有效，不存。
+  BookSourceKind? kindFilter;
   BookshelfSortMode sortMode = defaultSortMode;
 
   /// 沒存過（或同步改回預設）時的樣子。

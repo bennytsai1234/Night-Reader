@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 書架「統一封面」：開著時書架上的書與它們的書籍詳情一律畫預設封面，
@@ -25,10 +26,20 @@ abstract final class UnifiedCovers {
 /// 沒有封面（或封面載不到）時的預設封面：夜空。墨色底帶一點顏料色調，
 /// 一彎月、幾顆星與兩層遠山，不放文字。顏色、月亮與星星的位置、山的
 /// 輪廓都由書名決定：不同的書看起來不同，同一本書每次都一樣。
+///
+/// 漫畫與有聲書在同一片夜空加一個記號：漫畫在右上角加一片網點，有聲書把
+/// 前面那層山換成一排音量條（`docs/design/components.md`「預設封面」）。
 class DefaultBookCover extends StatelessWidget {
-  const DefaultBookCover({super.key, required this.bookName});
+  const DefaultBookCover({
+    super.key,
+    required this.bookName,
+    this.kind = BookSourceKind.novel,
+  });
 
   final String bookName;
+
+  /// 這本書是哪一類；漫畫、有聲畫各自的變體，其他畫原本的夜空。
+  final BookSourceKind kind;
 
   /// 把 [bookName] 的預設封面畫成 [width]×[height] 像素的 PNG，給 App 以外
   /// 的地方用（系統播放資訊的封面）。
@@ -36,10 +47,13 @@ class DefaultBookCover extends StatelessWidget {
     String bookName, {
     required int width,
     required int height,
+    BookSourceKind kind = BookSourceKind.novel,
   }) async {
     final recorder = ui.PictureRecorder();
-    _NightSkyPainter(bookName)
-        .paint(Canvas(recorder), Size(width.toDouble(), height.toDouble()));
+    _NightSkyPainter(
+      bookName,
+      kind,
+    ).paint(Canvas(recorder), Size(width.toDouble(), height.toDouble()));
     final picture = recorder.endRecording();
     try {
       final image = await picture.toImage(width, height);
@@ -55,14 +69,17 @@ class DefaultBookCover extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _NightSkyPainter(bookName), size: Size.infinite);
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _NightSkyPainter(bookName, kind),
+    size: Size.infinite,
+  );
 }
 
 class _NightSkyPainter extends CustomPainter {
-  _NightSkyPainter(this.bookName);
+  _NightSkyPainter(this.bookName, this.kind);
 
   final String bookName;
+  final BookSourceKind kind;
 
   static const Color _moonlight = Color(0xFFF4E3B5);
 
@@ -156,8 +173,17 @@ class _NightSkyPainter extends CustomPainter {
       );
     }
 
-    // 遠山兩層，後面的淡、前面的深。
+    if (kind == BookSourceKind.comic) {
+      _paintHalftone(canvas, size, moonCenter, radius);
+    }
+
+    // 遠山兩層，後面的淡、前面的深；有聲書前面那層換成音量條。
     for (final (layer, alpha) in [(0, 0.18), (1, 0.32)]) {
+      final color = const Color(0xFF000000).withValues(alpha: alpha);
+      if (layer == 1 && kind == BookSourceKind.audio) {
+        _paintVolumeBars(canvas, size, random, color);
+        continue;
+      }
       final ridge = Path()..moveTo(0, size.height);
       final baseY = size.height * (0.72 + layer * 0.1);
       for (var x = 0.0; x <= size.width; x += size.width / 6) {
@@ -166,14 +192,61 @@ class _NightSkyPainter extends CustomPainter {
       ridge
         ..lineTo(size.width, size.height)
         ..close();
-      canvas.drawPath(
-        ridge,
-        Paint()..color = const Color(0xFF000000).withValues(alpha: alpha),
+      canvas.drawPath(ridge, Paint()..color = color);
+    }
+  }
+
+  /// 漫畫：右上角一片網點，由角落往外由大到小，避開月亮與月暈。
+  static void _paintHalftone(
+    Canvas canvas,
+    Size size,
+    Offset moonCenter,
+    double moonRadius,
+  ) {
+    final corner = Offset(size.width, 0);
+    final reach = size.width * 0.62;
+    final step = size.width * 0.075;
+    final maxDot = step * 0.46;
+    final paint = Paint()..color = _moonlight.withValues(alpha: 0.28);
+    for (var y = step / 2; y < reach; y += step) {
+      for (var x = size.width - step / 2; x > size.width - reach; x -= step) {
+        final dot = Offset(x, y);
+        final fade = 1 - (dot - corner).distance / reach;
+        if (fade <= 0.08) continue;
+        final r = maxDot * fade;
+        if ((dot - moonCenter).distance < moonRadius * 1.7 + r) continue;
+        canvas.drawCircle(dot, r, paint);
+      }
+    }
+  }
+
+  /// 有聲書：九根頂端圓角的音量條，高低由書名決定，佔前面那層山的位置。
+  static void _paintVolumeBars(
+    Canvas canvas,
+    Size size,
+    math.Random random,
+    Color color,
+  ) {
+    const count = 9;
+    final slot = size.width / count;
+    final barWidth = slot * 0.62;
+    final paint = Paint()..color = color;
+    for (var i = 0; i < count; i++) {
+      final height = size.height * (0.08 + random.nextDouble() * 0.16);
+      final left = slot * i + (slot - barWidth) / 2;
+      final top = size.height - height;
+      canvas.drawRRect(
+        RRect.fromRectAndCorners(
+          Rect.fromLTRB(left, top, left + barWidth, size.height),
+          topLeft: Radius.circular(barWidth / 2),
+          topRight: Radius.circular(barWidth / 2),
+        ),
+        paint,
       );
     }
   }
 
   @override
   bool shouldRepaint(_NightSkyPainter oldDelegate) =>
-      oldDelegate.bookName != bookName;
+      oldDelegate.bookName != bookName || oldDelegate.kind != kind;
 }

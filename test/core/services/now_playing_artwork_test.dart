@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/system_playback/now_playing_artwork.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 
@@ -53,6 +54,23 @@ void main() {
       // 同一本書換章時直接拿到，不再畫一次。
       expect(art.resolved(null, '夜雨'), file.uri);
       expect(art.resolved(null, '天明'), isNull);
+    });
+  });
+
+  testWidgets('an audiobook without a cover gets the audiobook night sky', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final art = artwork();
+      final novel = await fileOf(art.resolve(null, '夜雨'));
+      final audio = await fileOf(
+        art.resolve(null, '夜雨', kind: BookSourceKind.audio),
+      );
+
+      expect(audio.path, isNot(novel.path));
+      expect(audio.readAsBytesSync().take(8), _pngSignature);
+      expect(audio.readAsBytesSync(), isNot(novel.readAsBytesSync()));
+      expect(art.resolved(null, '夜雨', kind: BookSourceKind.audio), audio.uri);
     });
   });
 
