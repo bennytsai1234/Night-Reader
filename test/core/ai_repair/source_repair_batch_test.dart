@@ -323,7 +323,9 @@ void main() {
         _source('https://gone.example'),
       ],
       service: _service,
-      recheck: (urls, _) async => [for (final url in urls) _entry(url, _broken)],
+      recheck: (urls, _) async => [
+        for (final url in urls) _entry(url, _broken),
+      ],
       checkSite: (source) async => source.bookSourceUrl.contains('bad')
           ? throw StateError('壞掉')
           : const SiteCheck(SiteVerdict.gone, '網域查不到'),
@@ -444,7 +446,7 @@ void main() {
     expect(asked, isEmpty);
   });
 
-  test('temporary AI service errors do not mark same-site sources unfixable', () async {
+  test('transient AI errors do not quarantine the site', () async {
     final b = SourceRepairBatch(
       sources: [
         _source('https://unstable.example#a'),
