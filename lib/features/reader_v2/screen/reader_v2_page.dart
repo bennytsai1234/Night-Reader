@@ -467,8 +467,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                     _coordinator.previewChapterPercent(percent);
                   },
                   onScrubEnd: (percent) {
-                    menu.onScrubEnd(percent);
-                    unawaited(_coordinator.commitChapterPercent(percent));
+                    final drag = menu.onScrubEnd(percent);
+                    unawaited(_commitScrub(percent, drag));
                   },
                   brightnessControl:
                       ReaderV2DeviceChannel.supportsWindowBrightness
@@ -1062,6 +1062,25 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     } catch (error, stackTrace) {
       AppLog.e('套用替換規則失敗', error: error, stackTrace: stackTrace);
       _showNotice(failureMessage('套用替換規則', error));
+    }
+  }
+
+  /// 拖動條放開：跳到選定位置。正文排到新位置的那一幀才發布頁尾進度，
+  /// 所以等跳轉做完再過一幀，拖動條才改回跟閱讀進度。
+  /// [drag] 是這一次拖動的編號：連續放開兩次時，先做完的舊跳轉不解除
+  /// 新一次的停留。
+  Future<void> _commitScrub(double percent, int drag) async {
+    try {
+      await _coordinator.commitChapterPercent(percent);
+    } finally {
+      if (mounted) {
+        WidgetsBinding.instance
+          ..addPostFrameCallback((_) {
+            // 排進來之後、這一幀之前閱讀器可能已經關掉。
+            if (mounted) _host.menu.onScrubSettled(drag);
+          })
+          ..ensureVisualUpdate();
+      }
     }
   }
 
