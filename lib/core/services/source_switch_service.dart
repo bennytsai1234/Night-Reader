@@ -192,12 +192,28 @@ class SourceSwitchService {
     );
 
     final targetChapter = chapters[resolvedTargetIndex];
-    final validatedContent = await _service.getContent(
-      source,
-      migratedBook,
-      targetChapter,
-      nextChapterUrl: _nextReadableChapterUrl(chapters, resolvedTargetIndex),
-    );
+    // 有聲書照播放時同一個入口拿音訊網址（正文規則空著時章節網址就是音訊），
+    // 不跑文字正文；對到同一集就接著聽到的那一秒（charOffset 存毫秒，
+    // ADR 0055），文字書的位置規則不適用。
+    final audio = migratedBook.bookKind == BookSourceKind.audio;
+    if (audio && targetChapter.title == alignmentBook.durChapterTitle) {
+      migratedBook.charOffset = alignmentBook.charOffset;
+    }
+    final validatedContent = audio
+        ? (await _service.getAudioRequest(
+            source,
+            migratedBook,
+            targetChapter,
+          )).url
+        : await _service.getContent(
+            source,
+            migratedBook,
+            targetChapter,
+            nextChapterUrl: _nextReadableChapterUrl(
+              chapters,
+              resolvedTargetIndex,
+            ),
+          );
     if (!chapterContentUsable(migratedBook.bookKind, validatedContent)) {
       throw SourceException('目標章節內容不可讀', sourceUrl: candidate.origin);
     }

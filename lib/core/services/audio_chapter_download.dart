@@ -8,6 +8,7 @@ import '../models/book_source.dart';
 import '../models/chapter.dart';
 import 'book_chapter_files.dart';
 import 'book_source_service.dart';
+import 'network_service.dart';
 
 /// 有聲書一集的手動下載（ADR 0055）：照書源拿到音訊網址與標頭，整個檔抓下來
 /// 存成這本書的章節檔（[BookChapterFiles]）。播放器遇到下載好的集放本機檔。
@@ -68,16 +69,16 @@ abstract final class AudioChapterDownload {
       ),
     );
     try {
-      final response = await (dio ?? Dio()).download(
+      // 走共用的網路設定（Cookie、通行檢查、逾時，CODING_STANDARDS.md）。
+      final response = await (dio ?? NetworkService().dio).download(
         request.url,
         temp.path,
         options: Options(headers: request.headers),
         cancelToken: cancelToken,
       );
-      final extension = extensionFor(
-        request.url,
-        response.headers.value(Headers.contentTypeHeader),
-      );
+      final contentType = response.headers.value(Headers.contentTypeHeader);
+      await _checkIsAudio(temp, contentType);
+      final extension = extensionFor(request.url, contentType);
       return await BookChapterFiles.save(
         book,
         chapter,
@@ -89,6 +90,25 @@ abstract final class AudioChapterDownload {
     }
   }
 
+  /// 抓到的是音訊檔才存：m3u8 這類串流只是一份清單（分段另外抓），存下來
+  /// 沒網路時播不了，還會蓋過可以串流播的網址；書源回網頁（錯誤頁、登入
+  /// 頁）也不是音訊。
+  static Future<void> _checkIsAudio(File file, String? contentType) async {
+    final type = contentType?.split(';').first.trim().toLowerCase() ?? '';
+    final head = await file
+        .openRead(0, 16)
+        .fold<List<int>>([], (bytes, chunk) => bytes..addAll(chunk));
+    final text = String.fromCharCodes(head).trimLeft();
+    if (type.contains('mpegurl') || text.startsWith('#EXTM3U')) {
+      throw const AudioDownloadRefused('這一集是串流，不能下載，照樣可以線上聽');
+    }
+    if (type.startsWith('text/') ||
+        text.startsWith('<') ||
+        text.toLowerCase().startsWith('<!doctype')) {
+      throw const AudioDownloadRefused('書源回的是網頁，不是音訊');
+    }
+  }
+
   /// 存檔用的副檔名：網址路徑的副檔名認得就用它，否則看回應的類型。
   static String extensionFor(String url, String? contentType) {
     final path = Uri.tryParse(url)?.path ?? url;
@@ -97,4 +117,13 @@ abstract final class AudioChapterDownload {
     final type = contentType?.split(';').first.trim().toLowerCase();
     return _byContentType[type] ?? '.mp3';
   }
+}
+
+/// 抓到的不是可以離線播的音訊檔（串流清單、網頁），沒有存。
+class AudioDownloadRefused implements Exception {
+  const AudioDownloadRefused(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }

@@ -542,9 +542,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
               icon: Icons.edit_outlined,
             ),
             if (!provider.book.isLocal && provider.isInBookshelf)
-              const GlassMenuItem(
+              GlassMenuItem(
                 value: _MenuAction.clearContent,
-                label: '清除已下載的正文',
+                label: provider.book.bookKind == BookSourceKind.audio
+                    ? '清除已下載的音訊'
+                    : '清除已下載的正文',
                 icon: Icons.delete_sweep_outlined,
                 destructive: true,
               ),
@@ -769,17 +771,24 @@ class _BookDetailPageState extends State<BookDetailPage> {
     await provider.refreshCacheStatus();
     if (!context.mounted) return;
     final status = provider.cacheStatus;
+    // 有聲書的音訊由使用者自己下載，清掉不會自動抓回來（ADR 0055）。
+    final audio = provider.book.bookKind == BookSourceKind.audio;
     if (!status.hasContentCache) {
-      messenger.showSnackBar(const SnackBar(content: Text('這本書還沒有下載的正文')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(audio ? '這本書還沒有下載的音訊' : '這本書還沒有下載的正文')),
+      );
       return;
     }
+    final size = formatMegabytes(status.contentBytes);
     final confirmed = await showAppConfirm(
       context: context,
-      title: '清除已下載的正文',
-      message:
-          '已下載的 ${status.storedChapterCount} 章正文與插圖'
-          '（${formatMegabytes(status.contentBytes)}）會刪掉，書架會自動重新下載。'
-          '閱讀進度、書籤與標註不受影響。',
+      title: audio ? '清除已下載的音訊' : '清除已下載的正文',
+      message: audio
+          ? '已下載的 ${status.storedChapterCount} 集音訊（$size）會刪掉，'
+                '之後線上聽，要離線聽再自己下載。收聽進度不受影響。'
+          : '已下載的 ${status.storedChapterCount} 章正文與插圖'
+                '（$size）會刪掉，書架會自動重新下載。'
+                '閱讀進度、書籤與標註不受影響。',
       confirmLabel: '清除',
       destructive: true,
     );

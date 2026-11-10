@@ -69,6 +69,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
   /// 已下載的集（[BookChapterFiles.baseNameFor]）；清單畫小勾。
   Set<String> _downloaded = const {};
 
+  /// 這本書的下載做完時重讀已下載的集（清單畫小勾）。
+  StreamSubscription<AppEvent>? _downloads;
+
   /// 集數清單的捲動；第一次畫清單時照正在播的那集決定起點。
   ScrollController? _listScroll;
   ScrollController? _skeletonScroll;
@@ -92,6 +95,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
     setState(() => _entered = true);
     unawaited(_player.open(widget.book, chapterIndex: widget.chapterIndex));
     unawaited(_loadDownloaded());
+    _downloads = AppEventBus().onName(AppEventBus.upBookshelf).listen((event) {
+      if (event.data == widget.book.bookUrl) unawaited(_loadDownloaded());
+    });
   }
 
   Future<void> _loadDownloaded() async {
@@ -105,6 +111,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
 
   @override
   void dispose() {
+    unawaited(_downloads?.cancel());
     _listScroll?.dispose();
     _skeletonScroll?.dispose();
     super.dispose();
