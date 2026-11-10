@@ -4,6 +4,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/main.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
@@ -111,6 +112,61 @@ void main() {
     tester.semantics.tap(find.semantics.byLabel('我的'));
     expect(taps, [2]);
     handle.dispose();
+  });
+
+  testWidgets('a toolbar in the page sits where the tab bar does', (
+    tester,
+  ) async {
+    // 有手勢區的手機：頁面裡讀到的 viewPadding 底部被 Scaffold 扣成 0，
+    // 取代分頁列的工具列（書架多選）仍要和分頁列底部切齊。
+    tester.view.physicalSize = const Size(1179, 2556);
+    tester.view.devicePixelRatio = 3;
+    tester.view.padding = const FakeViewPadding(bottom: 24 * 3);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 24 * 3);
+    addTearDown(tester.view.reset);
+    final toolbar = GlobalKey();
+    EdgeInsets? barSlot;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Scaffold(
+          extendBody: true,
+          body: Builder(
+            builder: (context) {
+              final slot = FloatingTabBar.slotOf(context);
+              return Stack(
+                children: [
+                  Positioned(
+                    left: slot.left,
+                    right: slot.right,
+                    bottom: slot.bottom,
+                    child: SizedBox(key: toolbar, height: 56),
+                  ),
+                ],
+              );
+            },
+          ),
+          bottomNavigationBar: Builder(
+            builder: (context) {
+              barSlot = FloatingTabBar.slotOf(context);
+              return FloatingTabBar(
+                currentIndex: 0,
+                onTap: (_) {},
+                items: const [
+                  FloatingTabItem(icon: Icons.book_outlined, label: '書架'),
+                  FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    const barBottom = 852 - 24 - AppGlass.tabBarBottomGap;
+    expect(barSlot!.bottom, 24 + AppGlass.tabBarBottomGap);
+    expect(tester.getRect(find.byKey(toolbar)).bottom, barBottom);
   });
 
   testWidgets('a pill dragged and dropped back on its tab slides home', (
