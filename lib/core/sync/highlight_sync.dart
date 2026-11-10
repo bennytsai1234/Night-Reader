@@ -1,5 +1,6 @@
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/models/highlight.dart';
 
 import 'sync_kind.dart';
@@ -62,7 +63,14 @@ class HighlightSync extends SyncKind {
         deleted.add(id);
         applied[key] = record;
       } else {
-        final data = {...record.data, 'id': id};
+        final data = {
+          ...record.data,
+          'id': id,
+          // 別台舊版還帶著「作者：」：照這台升級時清過的寫法，對得上書。
+          'bookAuthor': BookHelp.stripAuthorLabel(
+            '${record.data['bookAuthor'] ?? ''}',
+          ),
+        };
         if (!data.containsKey('note')) {
           localNotes ??= {
             for (final local in await _dao.getAll()) local.id: local.note,

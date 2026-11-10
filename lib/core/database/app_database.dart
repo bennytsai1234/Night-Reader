@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'tables/app_tables.dart';
+import '../engine/book/book_help.dart';
 // model imports required by app_database.g.dart (part shares this namespace)
 import '../models/book.dart';
 import '../models/chapter.dart';
@@ -132,7 +133,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -225,8 +226,11 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 15) {
         await _classifyExistingSources((source) => source.prepareIncoming());
-      } else if (from < 16) {
+      } else if (from < 17) {
         await _classifyExistingSources(repairSchema15SourceKind);
+      }
+      if (from < 16) {
+        await cleanBookAuthors();
       }
     },
     beforeOpen: (_) async {
@@ -235,8 +239,47 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
+  /// 書、書籤與標註的作者拿掉開頭的「作者：」（[BookHelp.stripAuthorLabel]），
+  /// 傳回改了幾筆。書名加作者是同步、書籤與標註認書的身分，三張表一起改才
+  /// 對得上。以前書籍詳情解析沒拿掉這個字樣，升級時改一次；還原舊備份後
+  /// 再改一次，舊備份帶回來的也清掉；別台舊版送來的書籤、標註在同步套用時
+  /// 清（`BookmarkSync`、`HighlightSync`）。書架上的書換了鍵，書架同步照
+  /// 「改了名」送給別台（`BookRenames`）。
+  Future<int> cleanBookAuthors() async {
+    var changed = 0;
+    for (final (table, key, column) in const [
+      ('books', 'bookUrl', 'author'),
+      ('bookmarks', 'id', 'bookAuthor'),
+      ('highlights', 'id', 'bookAuthor'),
+    ]) {
+      // 只建了部分舊表的測試資料庫沒有這張表。
+      final hasTable = await customSelect(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        variables: [Variable<String>(table)],
+      ).get();
+      if (hasTable.isEmpty) continue;
+      // 先用 SQL 挑出含「作」「者」的，不必整張表讀出來；開頭是「作者：」的
+      // 一定在裡面。
+      final rows = await customSelect(
+        'SELECT $key AS k, $column AS a FROM $table '
+        "WHERE $column LIKE '%作%者%'",
+      ).get();
+      for (final row in rows) {
+        final author = row.read<String?>('a') ?? '';
+        final clean = BookHelp.stripAuthorLabel(author);
+        if (clean == author) continue;
+        await customStatement('UPDATE $table SET $column = ? WHERE $key = ?', [
+          clean,
+          row.data['k'],
+        ]);
+        changed++;
+      }
+    }
+    return changed;
+  }
+
   /// 照現在的分類整理已存的書源：從 schema 14 以前升上來的照匯入的方式
-  /// （[BookSourceLogic.prepareIncoming]，ADR 0051），從 15 升上來的修正
+  /// （[BookSourceLogic.prepareIncoming]，ADR 0051），從 15、16 升上來的修正
   /// 15 分錯的（[repairSchema15SourceKind]，ADR 0056）。只寫類型、分組與
   /// 開關；規則一起讀出來，才認得出聚合源。
   Future<void> _classifyExistingSources(

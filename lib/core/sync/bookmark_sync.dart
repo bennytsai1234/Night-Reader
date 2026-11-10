@@ -1,5 +1,6 @@
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 
 import 'sync_kind.dart';
@@ -59,7 +60,14 @@ class BookmarkSync extends SyncKind {
         deleted.add(id);
         applied[key] = record;
       } else {
-        final bookmark = Bookmark.fromJson({...record.data, 'id': id});
+        final bookmark = Bookmark.fromJson({
+          ...record.data,
+          'id': id,
+          // 別台舊版還帶著「作者：」：照這台升級時清過的寫法，對得上書。
+          'bookAuthor': BookHelp.stripAuthorLabel(
+            '${record.data['bookAuthor'] ?? ''}',
+          ),
+        });
         upserts.add(bookmark);
         applied[key] = recordOf(bookmark);
       }

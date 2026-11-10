@@ -94,7 +94,7 @@ void main() {
     );
   });
 
-  test('upgrading to schema 16 gives aggregate sources their own type back '
+  test('upgrading to schema 17 gives aggregate sources their own type back '
       'and leaves their books alone', () async {
     final dir = await Directory.systemTemp.createTemp('nr-aggregate-kinds');
     addTearDown(() => dir.delete(recursive: true));

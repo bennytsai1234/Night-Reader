@@ -133,6 +133,13 @@ class RestoreService {
     } catch (e) {
       AppLog.e('Restore: books following source kinds failed: $e', error: e);
     }
+    // 舊備份的書、書籤與標註可能還帶著「作者：」這類字樣：照升級時的
+    // 同一套拿掉，書名加作者才和這台、別台對得上。
+    try {
+      await getIt<AppDatabase>().cleanBookAuthors();
+    } catch (e) {
+      AppLog.e('Restore: cleaning book authors failed: $e', error: e);
+    }
     // 舊備份帶的正文與目錄可能屬於沒還原的書架以外的書，或早就刪掉的書。
     try {
       await BookStorageService().discardUnshelvedBooks();
