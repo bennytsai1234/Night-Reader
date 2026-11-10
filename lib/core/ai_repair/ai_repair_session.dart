@@ -169,6 +169,7 @@ class AiRepairSession extends ChangeNotifier {
 
   final CancelToken _cancelToken = CancelToken();
   final StringBuffer _transcript = StringBuffer();
+  Future<void>? _startTask;
   bool _running = false;
   bool _stopped = false;
   bool _disposed = false;
@@ -178,7 +179,8 @@ class AiRepairSession extends ChangeNotifier {
   bool get isStopped => _stopped;
 
   /// 做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished => _stopped || job.outcome != null;
+  bool get isFinished => !_running && (_stopped || job.outcome != null);
+  Future<void> get completion => _startTask ?? Future<void>.value();
 
   /// 「複製紀錄」：每一步、AI 每一輪說的話與試抓結果。
   String get transcript => _transcript.toString().trimRight();
@@ -186,8 +188,13 @@ class AiRepairSession extends ChangeNotifier {
   /// 有紀錄可以複製。
   bool get hasTranscript => _transcript.isNotEmpty;
 
-  Future<void> start() async {
-    if (_running) return;
+  Future<void> start() {
+    if (_startTask != null) return _startTask!;
+    if (_stopped || _disposed || job.outcome != null) return Future<void>.value();
+    return _startTask = _run();
+  }
+
+  Future<void> _run() async {
     _running = true;
     _notify();
     try {
@@ -214,7 +221,7 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 停下：做著的那一步標成停止，修到一半的不改。
   void stop() {
-    if (_stopped || isFinished) return;
+    if (_stopped || job.outcome != null) return;
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     if (!job._committing) {
@@ -237,7 +244,7 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 剪貼簿：使用者貼回 AI 修好的書源。讀不出書源時傳回原因、什麼都不做。
   Future<String?> submitPaste(String text) async {
-    if (!job.awaitingPaste || _running) return null;
+    if (!job.awaitingPaste || _running || _stopped || _disposed) return null;
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
     final candidate = json == null
