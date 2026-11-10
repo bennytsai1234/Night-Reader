@@ -1,3 +1,5 @@
+import 'package:night_reader/core/models/chapter.dart';
+
 /// AppException - 應用程式例外基類 (原 Android exception/NoStackTraceException.kt)
 abstract class AppException implements Exception {
   final String message;
@@ -95,6 +97,11 @@ class RuleJsException extends AppException {
   /// 出錯時實際執行的 JS：`{{ }}` 這類代換已經做完，書源校驗的診斷拿來
   /// 看代進去的值長什麼樣。
   final String? code;
+}
+
+/// 付費章節（`BookChapter.isLocked`）：夜讀不抓、不買（ADR 0057）。
+class LockedChapterException extends AppException {
+  LockedChapterException() : super(lockedChapterNotice);
 }
 
 /// 書源要登入才讀得到（目錄或正文被登入牆擋住，見 `LoginWall`）。訊息一律

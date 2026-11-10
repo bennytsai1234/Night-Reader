@@ -4,6 +4,9 @@ import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
 
+/// 付費章節的提示（[BookChapter.isLocked]，ADR 0057），三個閱讀器共用。
+const String lockedChapterNotice = '付費章節';
+
 /// BookChapter - 章節模型
 /// (原 Android data/entities/BookChapter.kt)
 class BookChapter implements RuleDataInterface {
@@ -45,8 +48,13 @@ class BookChapter implements RuleDataInterface {
     this.content,
   });
 
-  /// 書源標了付費、還沒買：網站只會回付費提示，不是正文。
+  /// 書源標了付費、還沒買：網站只會回付費提示，不是正文。夜讀不抓、不買，
+  /// 目錄留著鎖頭，閱讀、下載時跳過（ADR 0057）。
   bool get isLocked => isVip && !isPay;
+
+  /// 漫畫閱讀器與有聲書播放器換章時跳過的：分卷標題（沒有圖、沒有音訊）
+  /// 與付費章節。
+  bool get isSkippedWhenReading => isVolume || isLocked;
 
   // 變量地圖 (原 Android variableMap)
   @override

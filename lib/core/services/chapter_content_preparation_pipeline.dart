@@ -278,6 +278,9 @@ class ChapterContentPreparationPipeline {
       return ChapterContentPreparationResult.failed(
         '讀取本地書籍失敗: ${error.message}',
       );
+    } on LockedChapterException catch (error) {
+      // 不是載入出錯：閱讀器在它前面停住、照這句說明（ADR 0057）。
+      return ChapterContentPreparationResult.failed(error.message);
     } on AppException catch (error) {
       return ChapterContentPreparationResult.failed('加載章節失敗: ${error.message}');
     }

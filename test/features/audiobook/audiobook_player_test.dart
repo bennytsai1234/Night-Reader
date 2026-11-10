@@ -248,6 +248,25 @@ void main() {
     expect(player.playing, isTrue);
   });
 
+  test('付費的集跳過，不問書源；後面都是付費的就停在結尾（ADR 0057）', () async {
+    await ChapterDao(db).insertChapters([
+      BookChapter(
+        url: 'https://audio.test/ep3',
+        title: '第 3 集',
+        bookUrl: book.bookUrl,
+        index: 3,
+        isVip: true,
+      ),
+    ]);
+    await player.open(book);
+    engine.finish();
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 2);
+    expect(engine.opened, hasLength(1));
+    expect(player.playing, isFalse);
+  });
+
   test('單集循環播完從頭再播同一集', () async {
     await player.open(book);
     player.cycleMode();
