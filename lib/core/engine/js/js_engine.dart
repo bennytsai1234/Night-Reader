@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_js/flutter_js.dart';
-import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:xpath_selector/xpath_selector.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
@@ -11,9 +10,9 @@ import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/network/str_response.dart';
 
+import 'extensions/js_blocking_tasks.dart';
 import 'js_extensions.dart';
 import 'js_response.dart';
 import 'legacy_js_syntax.dart';
@@ -128,7 +127,7 @@ class JsEngine {
       return;
     }
     final resolved = _resolveSourceJsLib(jsLib);
-    if (resolved == null || resolved.trim().isEmpty) {
+    if (resolved.trim().isEmpty) {
       return;
     }
     final result = _runtime!.evaluate(resolved);
@@ -140,8 +139,10 @@ class JsEngine {
   }
 
   /// 書源的 jsLib：一段 JS，或 `{名稱: 片段}`，片段是 JS、檔案路徑或網址。
-  /// 有片段抓不到時傳回 null，這次不載入，下次執行再試。
-  String? _resolveSourceJsLib(String jsLib) {
+  /// 網址片段抓不到時丟出 [RuleJsException]，這條規則失敗、下次執行再試
+  /// （同 Legado `SharedJsScope`）：照跑的話，規則會停在叫不到的函式上，
+  /// 錯誤看不出是程式庫沒抓到。
+  String _resolveSourceJsLib(String jsLib) {
     final cached = _resolvedJsLibCache[jsLib];
     if (cached != null) {
       return cached;
@@ -154,9 +155,6 @@ class JsEngine {
     final buffers = <String>[];
     for (final value in libMap.values) {
       final resolved = _resolveJsLibFragment(value);
-      if (resolved == null) {
-        return null;
-      }
       if (resolved.trim().isNotEmpty) {
         buffers.add(resolved);
       }
@@ -186,7 +184,7 @@ class JsEngine {
     }
   }
 
-  String? _resolveJsLibFragment(String raw) {
+  String _resolveJsLibFragment(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
       return '';
@@ -204,12 +202,12 @@ class JsEngine {
     final uri = Uri.tryParse(trimmed);
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
       try {
-        final content = BlockingCall.run(_jsLibDownload(trimmed)) as String;
+        final content = BlockingCall.run(jsLibText(trimmed)) as String;
         _resolvedJsLibCache[trimmed] = content;
         return content;
       } catch (e) {
         AppLog.e('JsEngine source jsLib fetch error ($trimmed): $e');
-        return null;
+        throw RuleJsException('書源程式庫（jsLib）下載失敗：$trimmed');
       }
     }
     return trimmed;
@@ -707,20 +705,6 @@ var __lrScopedObject = function(scope, seed) {
     _isAvailable = false;
   }
 }
-
-/// 網路 isolate 抓網址形式的 jsLib 片段（[BlockingCall]）。
-Future<Object?> Function() _jsLibDownload(String url) => () async {
-  final response = await HttpClient().client.get<List<int>>(
-    url,
-    options: Options(
-      responseType: ResponseType.bytes,
-      receiveTimeout: const Duration(seconds: 10),
-      sendTimeout: const Duration(seconds: 10),
-    ),
-    cancelToken: currentSourceCancelToken,
-  );
-  return utf8.decode(response.data ?? const <int>[], allowMalformed: true);
-};
 
 /// 規則 JS 交回的陣列。再交給下一段規則 JS 時還是 JS 陣列（同 Legado），
 /// 不當成 Java 的 List，見 [JsEngine._encodeContextValue]。
