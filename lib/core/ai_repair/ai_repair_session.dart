@@ -670,6 +670,7 @@ class AiRepairSession extends ChangeNotifier {
     return fetchPageForAi(
       source,
       url,
+      keyword: source.getCheckKeyword(config.keyword),
       timeout: config.sourceTimeoutDuration,
       cancelToken: cancelToken,
     );

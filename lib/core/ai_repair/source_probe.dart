@@ -200,10 +200,13 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
 };
 
 /// AI 要看的一頁（ADR 0054）：照書源的標頭與 Cookie 抓 [url]，傳回請求與網站
-/// 的回應（精簡過的網頁，最多 [pageLength] 字）。
+/// 的回應（精簡過的網頁，最多 [pageLength] 字）。[url] 照書源網址規則的寫法
+/// 解析：可以接 `,{"method":"POST","body":…}`，`{{key}}` 是 [keyword]，所以
+/// 拿書源的搜尋網址來看，看到的就是書源搜尋實際拿到的那一頁。
 Future<String> fetchPageForAi(
   BookSource source,
   String url, {
+  required String keyword,
   required Duration timeout,
   CancelToken? cancelToken,
   int pageLength = 12000,
@@ -219,7 +222,7 @@ Future<String> fetchPageForAi(
   }
   try {
     final lines = await worker
-        .run(_fetchTask(source.toJson(), url, pageLength))
+        .run(_fetchTask(source.toJson(), url, keyword, pageLength))
         .timeout(timeout, onTimeout: () => const ['（超過時間，沒抓到）']);
     return lines.join('\n');
   } catch (error) {
@@ -232,6 +235,7 @@ Future<String> fetchPageForAi(
 Future<List<String>> Function(CancelToken) _fetchTask(
   Map<String, dynamic> sourceJson,
   String url,
+  String keyword,
   int pageLength,
 ) => (_) async {
   final requests = RequestLog(responsePreview: pageLength, digestPages: true);
@@ -239,6 +243,8 @@ Future<List<String>> Function(CancelToken) _fetchTask(
     await requests.run(
       () => AnalyzeUrl(
         url,
+        key: keyword,
+        page: 1,
         source: BookSource.fromJson(sourceJson),
         baseUrl: sourceJson['bookSourceUrl'] as String? ?? '',
       ).getStrResponse(),

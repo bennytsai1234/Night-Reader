@@ -351,13 +351,19 @@ const String _rules = '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
-- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、key、page、book、source；java.ajax(網址)、java.post(網址, 內文, 標頭)、java.connect(網址)；java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)；java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)；java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。沒有 Android 的類別（android.util.Base64 這類）。
+- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、key、page、book、source。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。
+  - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
+  - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
+  - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
+  - 沒有 Android 的類別（android.util.Base64 這類）。試抓報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()），或用了這裡沒有的函式。
 - 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。
 ''';
 
 const String _commands = '''
 每次只回一個 JSON 物件，前後不要其他文字：
-- 看網頁：{"action":"fetch","url":"網址","note":"想看什麼"}。夜讀照書源的標頭與 Cookie 抓這一頁回給你（網頁拿掉 <head>、程式與樣式）。網址可以是相對書源網址的路徑。規則抓不到東西時，先看網站首頁或搜尋頁現在長怎樣，找新的網址與結構。
+- 看網頁：{"action":"fetch","url":"網址","note":"想看什麼"}。夜讀照書源的標頭與 Cookie 抓這一頁回給你（網頁拿掉 <head>、程式與樣式）。網址照書源網址規則的寫法：可以是相對書源網址的路徑，可以接 ,{"method":"POST","body":"..."}，{{key}} 是試抓用的關鍵字；要看書源搜尋實際拿到什麼，直接用書源的 searchUrl，別自己改成 GET。規則抓不到東西時，先看網站首頁或搜尋頁現在長怎樣，找新的網址與結構。
+- 先看試抓裡網站實際回了什麼再決定改哪裡：網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則（bookList、name、bookUrl 這類），先改解析規則，網址與參數照舊；網站回的是錯誤、提示或驗證頁，才改網址、參數或標頭。
 - 試抓：{"action":"test","patch":{只寫要改的欄位},"note":"這次改了什麼"}。patch 會蓋到目前的書源上：規則物件（ruleSearch 這類）逐項蓋，沒寫的項目照舊，值給空字串就拿掉那一項。夜讀從搜尋一路試抓到第一章正文，抓到正文就自動跑書源校驗，通過就套用；沒抓到就把除錯紀錄與每個網頁回給你。
 - 交出：{"action":"submit","patch":{…},"note":"…"}。試抓沒走到正文、但你確定改對了（例如正文要付費）才用；夜讀會跑一次書源校驗，通過才套用。
 - 放棄：{"action":"give_up","reason":"為什麼修不好"}。例如網站已經關了、要登入或付費才看得到。網站擋下所有請求、限流或維護，改規則也過不去時也用這個，reason 寫你在網頁上看到的證據。
