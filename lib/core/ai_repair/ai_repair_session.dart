@@ -195,7 +195,9 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> start() {
     if (_startTask != null) return _startTask!;
-    if (_stopped || _disposed || job.outcome != null) return Future<void>.value();
+    if (_stopped || _disposed || job.outcome != null) {
+      return Future<void>.value();
+    }
     return _startTask = _run();
   }
 
