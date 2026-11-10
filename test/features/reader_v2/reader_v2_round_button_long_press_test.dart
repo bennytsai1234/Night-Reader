@@ -2,6 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
@@ -65,6 +69,53 @@ void main() {
         reason: '從 $page 回來，選單滑回打開的樣子',
       );
     }
+
+    await tearDownApp(tester);
+  });
+
+  testWidgets('從替換規則鈕長按進去加了規則，回來正文照新規則重排', (tester) async {
+    setUpPhone(tester);
+    await tester.runAsync(() async {
+      await setUpApp();
+      await seedLibrary();
+    });
+    await pumpApp(tester);
+    await openReader(tester);
+    await rest(tester);
+    await showReaderMenu(tester);
+    final runtime = tester
+        .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+        .runtime;
+    final chapter = runtime.state.visibleLocation.chapterIndex;
+    final word = kParagraphs.first.substring(0, 2);
+
+    await tester.longPress(
+      find.descendant(
+        of: find.byType(ReaderV2BottomMenu),
+        matching: find.byTooltip('替換規則'),
+      ),
+    );
+    await rest(tester);
+    expect(find.byType(ReaderV2ReplaceRulePage), findsOneWidget);
+    await tester.runAsync(
+      () => getIt<ReplaceRuleDao>().insert(
+        ReplaceRule(
+          name: '測試',
+          pattern: word,
+          replacement: '★★',
+          isRegex: false,
+        ),
+      ),
+    );
+    await goBack(tester);
+    await rest(tester);
+    await waitForText(tester);
+
+    final content = (await tester.runAsync(
+      () => runtime.loadContentAt(chapter),
+    ))!;
+    expect(content.displayText, contains('★★'));
+    expect(content.displayText, isNot(contains(word)));
 
     await tearDownApp(tester);
   });

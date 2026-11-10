@@ -1039,12 +1039,30 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final before = snapshot();
     await _openSettingsPage(
       const ReaderV2ReplaceRulePage(),
-      whenUncovered: () => unawaited(() async {
-        final previous = await before;
-        if (previous != null && await snapshot() == previous) return;
-        await _host.runtime?.reloadContentPreservingLocation();
-      }()),
+      whenUncovered: () => unawaited(_reloadIfRulesChanged(before, snapshot)),
     );
+  }
+
+  /// 從規則管理頁回來：規則和推頁前一樣就不動；有改動（或讀不到、比不出）
+  /// 才照新規則重載正文。讀規則的期間閱讀器可能已經關掉或換了一份正文，
+  /// 這時不重載；重載失敗和面板一樣提示，原本的正文留著。
+  Future<void> _reloadIfRulesChanged(
+    Future<String?> before,
+    Future<String?> Function() snapshot,
+  ) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return;
+    final previous = await before;
+    if (previous != null && await snapshot() == previous) return;
+    if (!mounted || runtime.disposed || !identical(_host.runtime, runtime)) {
+      return;
+    }
+    try {
+      await runtime.reloadContentPreservingLocation();
+    } catch (error, stackTrace) {
+      AppLog.e('套用替換規則失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('套用替換規則', error));
+    }
   }
 
   void _handleMenuHidden() => _menuDeparture.menusHidden();
