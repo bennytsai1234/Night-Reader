@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:night_reader/core/models/book_source.dart';
 
 import 'ai_chat_client.dart';
+import 'site_check.dart';
 import 'source_probe.dart';
 
 /// AI 修書源最多試抓幾次。
@@ -286,19 +287,10 @@ BookSource candidateFrom(BookSource original, Map<String, dynamic> json) {
 /// 之後的部分（路徑與 `#` 後面的標記）。[proposed] 讀不出主機、或開頭一樣
 /// 時照 [original]。
 String siteMovedUrl(String original, String? proposed) {
-  final from = _siteOrigin(original);
-  final to = proposed == null ? null : _siteOrigin(proposed);
-  if (from == null || to == null || from == to) return original;
-  return '$to${original.substring(from.length)}';
-}
-
-/// 網址的開頭：`https://www.example.com:8080` 這段，不含結尾的斜線。
-String? _siteOrigin(String url) {
-  final match = RegExp(
-    r'^(https?://[^/#?,\s]+)',
-    caseSensitive: false,
-  ).firstMatch(url.trim());
-  return match?.group(1)?.toLowerCase();
+  final from = siteOrigin(original);
+  final to = proposed == null ? null : siteOrigin(proposed)?.toLowerCase();
+  if (from == null || to == null || from.toLowerCase() == to) return original;
+  return '$to${original.trimLeft().substring(from.length)}';
 }
 
 /// AI 改了哪幾類規則，例如「正文、目錄」；沒改是空字串。
