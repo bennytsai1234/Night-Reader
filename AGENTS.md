@@ -5,7 +5,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | 檔案 | 放什麼 |
 |---|---|
 | `README.md`、`CHANGELOG.md`、`PRIVACY.md` | 給讀者看的產品說明、正式版更新說明、隱私權政策（`PRIVACY.md` 和 App 的「隱私說明」一起改） |
-| `DESIGN.md` | 設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
+| `DESIGN.md` | 產品界線、設計原則、否決過的方向；各元件與畫面的規格照區域放在 `docs/design/`，改哪裡讀哪份 |
 | `GLOSSARY.md` | 和使用者討論時用的詞 |
 | `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 決定與理由、否決過什麼；索引在 `docs/adr/README.md` |
@@ -25,7 +25,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 維護範圍
 
-工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出。設計取捨照 `DESIGN.md`「設計原則」與「否決過的方向」，要違反先改對應的 ADR。
+工作重心是打磨現有功能（改進、UI 精修、互動、精簡、效能、相容性、重構）；全新的功能線要使用者明確提出，談定案時照 `docs/agents/new-feature.md` 走一遍觸點。取捨照 `DESIGN.md`「產品界線」「設計原則」與「否決過的方向」，要違反先改對應的 ADR。
 評估需求時考量所有讀者的需求與實際效益，不以使用者本人是否需要為取捨依據。
 
 ## 驗證

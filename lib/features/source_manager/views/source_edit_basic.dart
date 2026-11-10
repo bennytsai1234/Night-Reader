@@ -119,6 +119,7 @@ class SourceEditBasic extends StatelessWidget {
     SourceType.image => '漫畫',
     SourceType.audio => '有聲',
     SourceType.file => '文件',
+    SourceType.video => '影視',
     _ => '其他',
   };
 
