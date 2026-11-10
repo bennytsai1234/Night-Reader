@@ -170,6 +170,7 @@ class AiRepairSession extends ChangeNotifier {
   final CancelToken _cancelToken = CancelToken();
   final StringBuffer _transcript = StringBuffer();
   Future<void>? _startTask;
+  Completer<void>? _pasteCompletion;
   bool _running = false;
   bool _stopped = false;
   bool _disposed = false;
@@ -180,7 +181,8 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 做完（或停下）。剪貼簿等使用者貼回時不算。
   bool get isFinished => !_running && (_stopped || job.outcome != null);
-  Future<void> get completion => _startTask ?? Future<void>.value();
+  Future<void> get completion =>
+      _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
   /// 「複製紀錄」：每一步、AI 每一輪說的話與試抓結果。
   String get transcript => _transcript.toString().trimRight();
@@ -252,14 +254,23 @@ class AiRepairSession extends ChangeNotifier {
         : _candidateOrNull(job.original, json);
     if (candidate == null) return '讀不出書源 JSON';
     job.awaitingPaste = false;
+    final pending = Completer<void>();
+    _pasteCompletion = pending;
     _running = true;
     _notify();
     try {
       _record('## 貼回的書源\n$text');
       await _validate(job, candidate, '');
+    } catch (error, stack) {
+      AppLog.e('AI 貼回書源出錯', error: error, stackTrace: stack);
+      if (!_stopped) {
+        _fail(job, '校驗貼回的書源出錯，書源沒有改：$error');
+      }
     } finally {
       _running = false;
       _notify();
+      pending.complete();
+      if (identical(_pasteCompletion, pending)) _pasteCompletion = null;
     }
     return null;
   }
