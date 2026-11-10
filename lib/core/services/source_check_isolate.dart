@@ -661,20 +661,20 @@ class SourceChecker {
       return;
     }
 
-    final lockedChapter = _firstLockedChapter(readableChapters);
-    if (lockedChapter != null) {
-      _recordIssue(issues, _lockedChapterIssue(mode, lockedChapter));
+    // 只抽查免費章節（ADR 0057）：後面有付費章節的書照樣讀得到前面。整本
+    // 都是付費章節才記下來。
+    final freeChapters = [
+      for (final chapter in readableChapters)
+        if (!_looksLikeLockedChapter(chapter)) chapter,
+    ];
+    if (freeChapters.isEmpty) {
+      _recordIssue(issues, _lockedChapterIssue(mode, readableChapters.first));
       return;
     }
 
     if (!_config.checkContent) return;
 
-    await _runContentProbeCheck(
-      book,
-      readableChapters,
-      mode: mode,
-      issues: issues,
-    );
+    await _runContentProbeCheck(book, freeChapters, mode: mode, issues: issues);
   }
 
   // ── Content probe ────────────────────────────────────────────────
@@ -1219,18 +1219,9 @@ _IssueData _lockedChapterIssue(_CheckMode mode, BookChapter chapter) {
   final title = _compactChapterTitle(chapter.title);
   return _IssueData(
     stage: _stageFor(mode, 'content'),
-    message: title.isEmpty
-        ? '章節疑似 VIP/鎖章，需要登入或付費'
-        : '章節疑似 VIP/鎖章，需要登入或付費: $title',
+    message: title.isEmpty ? '章節都是付費章節' : '章節都是付費章節: $title',
     health: loginRequiredSourceHealth,
   );
-}
-
-BookChapter? _firstLockedChapter(List<BookChapter> chapters) {
-  for (final chapter in chapters) {
-    if (_looksLikeLockedChapter(chapter)) return chapter;
-  }
-  return null;
 }
 
 bool _looksLikeLockedChapter(BookChapter chapter) {

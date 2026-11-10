@@ -688,8 +688,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 點目錄的一章（登入或驗證回來、取不到的是別章時也走這裡）：目錄與選單
   /// 馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段動畫都播完才開始載入
-  /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
+  /// （ADR 0018）。取不到正文時紙掀開回到原處，提示原因。付費章節不跳，
+  /// 目錄留著、只提示（ADR 0057）。
   void _jumpToChapterFromDrawer(int index) {
+    if (_host.runtime?.chapterAt(index)?.isLocked ?? false) {
+      _showNotice(lockedChapterNotice);
+      return;
+    }
     final settled = _closeDrawerForJump();
     unawaited(_coordinator.jumpToChapter(index, settled: settled));
   }

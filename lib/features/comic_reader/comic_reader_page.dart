@@ -220,7 +220,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         chapterCount: chapters.length,
         chapterIndex: chapterIndex,
         pageIndex: start == null ? resume?.pageIndex ?? _book.charOffset : 0,
-        isReadable: (index) => !chapters[index].isVolume,
+        isReadable: (index) => !chapters[index].isSkippedWhenReading,
       )..addListener(_onModel);
       setState(() {
         _chapters = chapters;
@@ -367,6 +367,34 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     _currentChapter.value = chapterIndex;
     _refreshProgress(chapterIndex, pageIndex);
     _onLocation(ComicLocation(chapterIndex, pageIndex));
+  }
+
+  /// 上一話、下一話：跳過分卷標題與付費章節（[BookChapter.isSkippedWhenReading]）。
+  /// 這一側沒有能讀的話時，還有章節就是都要付費（ADR 0057）。
+  void _jumpRelative({required bool forward}) {
+    final model = _model;
+    if (model == null) return;
+    final current = _currentChapter.value;
+    final target = forward
+        ? model.nextReadable(current)
+        : model.previousReadable(current);
+    if (target != null) {
+      _jumpTo(target);
+      return;
+    }
+    final rest = forward
+        ? _chapters.skip(current + 1)
+        : _chapters.take(current);
+    if (rest.any((chapter) => chapter.isLocked)) {
+      _showNotice(lockedChapterNotice);
+    }
+  }
+
+  void _showNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _toggleAutoScroll() {
@@ -559,7 +587,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       source: source,
       chapterCount: _chapters.length,
       chapterIndex: index,
-      isReadable: (i) => !_chapters[i].isVolume,
+      isReadable: (i) => !_chapters[i].isSkippedWhenReading,
     )..addListener(_onModel);
     model
       ..removeListener(_onModel)
@@ -619,7 +647,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       chapterCount: chapters.length,
       chapterIndex: index < 0 ? 0 : index,
       pageIndex: index < 0 ? 0 : here.pageIndex,
-      isReadable: (i) => !chapters[i].isVolume,
+      isReadable: (i) => !chapters[i].isSkippedWhenReading,
     )..addListener(_onModel);
     model
       ..removeListener(_onModel)
@@ -796,6 +824,11 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         currentChapter: _currentChapter,
         titleFor: _titleOf,
         onChapterTap: (index) {
+          // 付費章節不跳，目錄留著、只提示（ADR 0057）。
+          if (_chapters[index].isLocked) {
+            _showNotice(lockedChapterNotice);
+            return;
+          }
           _chapterPanel.close();
           _jumpTo(index);
         },
@@ -849,8 +882,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               dayNightTooltip: dark ? '淺色' : '深色',
               onToggleAutoScroll: _toggleAutoScroll,
               onToggleDayNight: _toggleDayNight,
-              onPrevChapter: () => _jumpTo(_currentChapter.value - 1),
-              onNextChapter: () => _jumpTo(_currentChapter.value + 1),
+              onPrevChapter: () => _jumpRelative(forward: false),
+              onNextChapter: () => _jumpRelative(forward: true),
               onSeekPage: (page) =>
                   _jumpTo(_currentChapter.value, pageIndex: page),
               onOpenChapters: () {

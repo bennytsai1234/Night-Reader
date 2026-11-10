@@ -259,15 +259,33 @@ void main() {
     expect(result.isHealthy, isTrue);
   });
 
+  // 付費章節不抓（ADR 0057）：只抽查免費章節。
+  test('paid chapters are skipped and the free ones are checked', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async => [
+        BookChapter(url: 'https://site.example/1.html', title: '第一章'),
+        BookChapter(
+          url: 'https://site.example/2.html',
+          title: '第二章',
+          isVip: true,
+        ),
+      ],
+    );
+    final (result, checked) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
+    expect(service.contentRequests, ['第一章']);
+  });
+
   test(
-    'a locked chapter in the TOC marks the source as needing login',
+    'a book of only paid chapters marks the source as needing login',
     () async {
       final service = _FakeBookSourceService(
         chapters: (_) async => [
-          BookChapter(url: 'https://site.example/1.html', title: '第一章'),
           BookChapter(
-            url: 'https://site.example/2.html',
-            title: '第二章',
+            url: 'https://site.example/1.html',
+            title: '第一章',
             isVip: true,
           ),
         ],
@@ -275,7 +293,7 @@ void main() {
       final (result, checked) = await _check(service);
 
       expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
-      expect(result.message, contains('第二章'));
+      expect(result.message, contains('付費章節'));
       expect(service.contentRequests, isEmpty);
     },
   );
