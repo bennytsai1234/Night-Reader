@@ -341,7 +341,10 @@ void main() {
         sources.add(groupedSources());
         await tester.pumpAndSettle();
         expect(groupButton, findsOneWidget);
-        expect(prefs.get('explore_filter_bar'), '{"all":3,"groups":[["甲",3]]}');
+        expect(
+          prefs.get('explore_filter_bar'),
+          '{"all":3,"groups":[["甲",3]],"kinds":[["novel",3]]}',
+        );
       });
     }
 
@@ -362,7 +365,7 @@ void main() {
       // 記下這次的分組，下次開 App 從第一幀就留好。
       expect(
         getIt<SharedPreferences>().getString('explore_filter_bar'),
-        '{"all":3,"groups":[["甲",3]]}',
+        '{"all":3,"groups":[["甲",3]],"kinds":[["novel",3]]}',
       );
     });
 
@@ -436,6 +439,160 @@ void main() {
 
       expect(provider.selectedGroup, isNull);
       expect(find.text('書源0'), findsOneWidget);
+    });
+  });
+
+  group('source kind button', () {
+    final kindButton = find.byTooltip('書源類型');
+
+    BookSource source(String name, int type, {String? group, int order = 0}) =>
+        BookSource(
+          bookSourceUrl: 'https://$name.example',
+          bookSourceName: name,
+          bookSourceType: type,
+          bookSourceGroup: group,
+          exploreUrl: 'https://$name.example/explore',
+          customOrder: order,
+        );
+
+    // 型別值：小說 0、有聲 1、漫畫 2。
+    List<BookSource> mixedSources() => [
+      source('小說甲', 0, group: '甲'),
+      source('漫畫甲', 2, group: '乙', order: 1),
+      source('漫畫乙', 2, order: 2),
+      source('小說乙', 0, order: 3),
+      source('有聲甲', 1, order: 4),
+    ];
+
+    Future<void> pick(WidgetTester tester, String label) async {
+      await tester.tap(kindButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('is not there when only one kind has explore sources', (
+      tester,
+    ) async {
+      await pumpExplore(tester, _FakeSourceDao(groupedSources()));
+      await tester.pumpAndSettle();
+
+      expect(kindButton, findsNothing);
+      expect(find.text('書源0'), findsOneWidget);
+    });
+
+    testWidgets('lists one kind at a time and remembers the pick', (
+      tester,
+    ) async {
+      final provider = await pumpExplore(
+        tester,
+        _FakeSourceDao(mixedSources()),
+      );
+      await tester.pumpAndSettle();
+
+      // 預設是小說源；漫畫、有聲不混進來。
+      expect(kindButton, findsOneWidget);
+      expect(find.byIcon(Icons.article_outlined), findsOneWidget);
+      expect(find.text('小說甲'), findsOneWidget);
+      expect(find.text('小說乙'), findsOneWidget);
+      expect(find.text('漫畫甲'), findsNothing);
+      expect(find.text('有聲甲'), findsNothing);
+
+      // 選單寫每一類的書源數。
+      await tester.tap(kindButton);
+      await tester.pumpAndSettle();
+      expect(find.text('小說源　2'), findsOneWidget);
+      expect(find.text('漫畫源　2'), findsOneWidget);
+      expect(find.text('有聲源　1'), findsOneWidget);
+      await tester.tap(find.text('漫畫源　2'));
+      await tester.pumpAndSettle();
+
+      expect(provider.kind, BookSourceKind.comic);
+      expect(find.byIcon(Icons.auto_stories_outlined), findsOneWidget);
+      expect(find.text('漫畫甲'), findsOneWidget);
+      expect(find.text('漫畫乙'), findsOneWidget);
+      expect(find.text('小說甲'), findsNothing);
+      expect(
+        getIt<SharedPreferences>().getString('explore_source_kind'),
+        'comic',
+      );
+      expect(
+        getIt<SharedPreferences>().getString('explore_filter_bar'),
+        '{"all":2,"groups":[["乙",1]],"kinds":'
+        '[["novel",2],["comic",2],["audio",1]]}',
+      );
+
+      // 下次開 App 照記下的類別列。
+      final next = ExploreProvider(
+        sourceDao: _FakeSourceDao(mixedSources()),
+        kindsLoader: (_, {source}) async => const [],
+      );
+      addTearDown(next.dispose);
+      await tester.pumpAndSettle();
+      expect(next.kind, BookSourceKind.comic);
+      expect(next.sources.map((s) => s.bookSourceName), ['漫畫甲', '漫畫乙']);
+    });
+
+    testWidgets('groups count only the listed kind; a missing one resets', (
+      tester,
+    ) async {
+      final provider = await pumpExplore(
+        tester,
+        _FakeSourceDao(mixedSources()),
+      );
+      await tester.pumpAndSettle();
+      provider.setGroupFilter('甲');
+      await tester.pumpAndSettle();
+      expect(provider.groups, ['甲']);
+
+      await pick(tester, '漫畫源　2');
+
+      // 「甲」只在小說源裡，換到漫畫源就回到全部。
+      expect(provider.selectedGroup, isNull);
+      expect(provider.groups, ['乙']);
+      expect(provider.allGroupCount, 2);
+    });
+
+    testWidgets('a remembered kind with no sources left falls back', (
+      tester,
+    ) async {
+      await getIt<SharedPreferences>().setString(
+        'explore_source_kind',
+        'audio',
+      );
+      final provider = await pumpExplore(
+        tester,
+        _FakeSourceDao([source('小說甲', 0), source('漫畫甲', 2, order: 1)]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(provider.kind, BookSourceKind.novel);
+      expect(find.text('小說甲'), findsOneWidget);
+      // 記下的選擇不改，有聲源回來時照它列。
+      expect(
+        getIt<SharedPreferences>().getString('explore_source_kind'),
+        'audio',
+      );
+    });
+
+    testWidgets('is in place from the first frame when kinds were seen', (
+      tester,
+    ) async {
+      await getIt<SharedPreferences>().setString(
+        'explore_filter_bar',
+        '{"all": 2, "groups": [], "kinds": [["novel", 2], ["comic", 2]]}',
+      );
+      final sources = StreamController<List<BookSource>>();
+      addTearDown(sources.close);
+      await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
+      await tester.pump();
+
+      expect(kindButton, findsOneWidget);
+      final before = headerHeight(tester);
+      sources.add(mixedSources());
+      await tester.pumpAndSettle();
+      expect(kindButton, findsOneWidget);
+      expect(headerHeight(tester), before);
     });
   });
 
