@@ -330,7 +330,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     final rest = [
       ('重新校驗就沒問題了', _batch.count(RepairOutcome.healthy)),
       ('不用修（需要登入、驗證、只能下載或 AI 試過修不好）', _batch.count(RepairOutcome.skipped)),
-      ('未處理', _batch.count(RepairOutcome.notTried)),
+      ('沒輪到', _batch.count(RepairOutcome.notTried)),
     ].where((row) => row.$2 > 0).toList();
     final working = [
       for (final item in _batch.items)
