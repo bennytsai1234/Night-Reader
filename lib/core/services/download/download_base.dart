@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -24,6 +26,20 @@ abstract class DownloadBase extends ChangeNotifier {
   final BookSourceService sourceService = BookSourceService();
 
   final List<DownloadTask> tasks = [];
+
+  /// 每個任務的書是哪一類，照書網址記；下載管理照它寫章、話、集。任務存在
+  /// 資料庫裡，類別不另存一欄：載入與加入任務時查一次書（[rememberKind]）。
+  final Map<String, BookSourceKind> _taskKinds = <String, BookSourceKind>{};
+
+  /// [bookUrl] 這個任務的書的類別；沒查到書的算小說。
+  BookSourceKind kindOf(String bookUrl) =>
+      _taskKinds[bookUrl] ?? BookSourceKind.novel;
+
+  Future<void> rememberKind(String bookUrl) async {
+    final book = await bookDao.getByUrl(bookUrl);
+    _taskKinds[bookUrl] = book?.bookKind ?? BookSourceKind.novel;
+  }
+
   bool isDownloading = false;
   bool isPaused = false;
   Completer<void>? pauseCompleter;
