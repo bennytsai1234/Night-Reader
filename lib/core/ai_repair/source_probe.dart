@@ -223,8 +223,17 @@ Future<String> fetchPageForAi(
     return '抓不了：$error';
   }
   try {
+    if (cancelToken?.isCancelled ?? false) return '已停止';
+    unawaited(
+      cancelToken?.whenCancel.then(
+        (_) => worker.kill(StateError('抓網頁已停止')),
+      ),
+    );
     final lines = await worker
-        .run(_fetchTask(source.toJson(), url, keyword, pageLength))
+        .run(
+          _fetchTask(source.toJson(), url, keyword, pageLength),
+          cancelToken: cancelToken,
+        )
         .timeout(timeout, onTimeout: () => const ['（超過時間，沒抓到）']);
     return lines.join('\n');
   } catch (error) {
