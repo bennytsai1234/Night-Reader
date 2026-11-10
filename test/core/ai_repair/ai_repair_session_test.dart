@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -583,6 +584,55 @@ void main() {
       '讀不出書源 JSON',
     );
     expect(s.job.awaitingPaste, isTrue);
+  });
+
+  test('stopped session cannot restart before or after disposal', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('submit')],
+    );
+    s.stop();
+    await s.start();
+    expect(asked, isEmpty);
+    expect(applied, isEmpty);
+    expect(s.isFinished, isTrue);
+  });
+
+  test('clipboard validation keeps its completion pending until cancelled', () async {
+    final source = _source('https://site.example');
+    final gate = Completer<SourceCheckIsolateResult?>();
+    var checks = 0;
+    final s = AiRepairSession(
+      source: source,
+      service: null,
+      check: (source, _) {
+        checks++;
+        return checks == 1 ? Future.value(_checked(source)) : gate.future;
+      },
+      probe: (source, _) async => _probe(source),
+      keywordCheck: (_, _) async => true,
+      copy: (_) async {},
+      secrets: (_) async => const {},
+      apply: (source, _) async => applied.add(source),
+      backups: backups,
+    );
+    await s.start();
+    expect(s.job.awaitingPaste, isTrue);
+    final edited = _source('https://site.example', content: 'class.txt@text');
+    final validating = s.submitPaste(jsonEncode(sourceForAi(edited)));
+    await Future<void>.delayed(Duration.zero);
+    expect(s.isRunning, isTrue);
+    s.stop();
+    expect(s.isFinished, isFalse);
+    var completed = false;
+    final completion = s.completion.then((_) => completed = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(completed, isFalse);
+    gate.complete(_checked(edited));
+    await validating;
+    await completion;
+    expect(s.isFinished, isTrue);
+    expect(applied, isEmpty);
   });
 
   test('stopping marks the running step and changes nothing', () async {
