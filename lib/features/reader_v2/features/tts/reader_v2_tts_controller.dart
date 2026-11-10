@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
@@ -13,6 +14,7 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segme
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ReaderV2TtsEngine extends ChangeNotifier {
@@ -427,8 +429,8 @@ class ReaderV2TtsController extends ChangeNotifier
   Future<void> _skipChapter(int delta) async {
     final current = _speakingChapterIndex;
     if (current == null) return;
-    final target = current + delta;
-    if (target < 0 || target >= runtime.chapterCount) return;
+    final target = _chapterAfter(current, delta);
+    if (target == null) return;
     final generation = ++_speechGeneration;
     _skipTarget = (generation: generation, chapterIndex: target);
     _resumeLocation = null;
@@ -436,6 +438,16 @@ class ReaderV2TtsController extends ChangeNotifier
     await _tts.stop();
     await _speakFrom(_chapterStart(target), generation: generation);
   }
+
+  /// 從 [from] 往 [delta] 的方向數過去、跳過付費章節的那一章（ADR 0057）；
+  /// 沒有時是 null。
+  int? _chapterAfter(int from, int delta) =>
+      ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+        currentChapterIndex: from,
+        chapterCount: runtime.chapterCount,
+        delta: delta,
+        skip: (index) => runtime.chapterAt(index)?.isLocked ?? false,
+      );
 
   /// 正在念、暫停中或按了上一章／下一章正在載入的那一章；沒在朗讀是 null。
   int? get _speakingChapterIndex =>
@@ -513,9 +525,15 @@ class ReaderV2TtsController extends ChangeNotifier
         await _speakCurrentSegment(generation);
         return;
       }
-      final chapterIndex = completedSegment.chapterIndex + 1;
-      if (chapterIndex >= runtime.chapterCount) {
-        _finishSpeech(generation, notice: '已朗讀到書尾');
+      final chapterIndex = _chapterAfter(completedSegment.chapterIndex, 1);
+      if (chapterIndex == null) {
+        // 後面還有章卻沒有能念的，都是付費章節（ADR 0057）。
+        final paidAhead =
+            completedSegment.chapterIndex + 1 < runtime.chapterCount;
+        _finishSpeech(
+          generation,
+          notice: paidAhead ? lockedChapterNotice : '已朗讀到書尾',
+        );
         return;
       }
       await _speakFrom(_chapterStart(chapterIndex), generation: generation);

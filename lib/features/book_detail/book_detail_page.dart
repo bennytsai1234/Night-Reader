@@ -425,7 +425,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       provider.groupsVolumes && volumes.volumeOf(position) >= 0,
                   isCurrent: isCurrent,
                   isLocked: chapter.isLocked,
-                  onTap: widget.fromReader
+                  // 付費章節不開，只提示（ADR 0057）。
+                  onTap: chapter.isLocked
+                      ? () => ScaffoldMessenger.of(context)
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(content: Text(lockedChapterNotice)),
+                          )
+                      : widget.fromReader
                       ? () => Navigator.of(context).pop(chapter.url)
                       : () => _navigateToReader(
                           context,

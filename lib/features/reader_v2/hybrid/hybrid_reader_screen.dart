@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
@@ -39,6 +40,7 @@ import 'pipeline/layout_disk_cache.dart';
 import 'pipeline/layout_pipeline.dart';
 import 'progress/hybrid_progress.dart';
 import 'pump/budget_governor.dart';
+import '../use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
 import 'text/word_segmenter.dart';
@@ -825,11 +827,32 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _retryUnavailableFrontier({required bool forward}) {
     final unavailable = _pipeline.unavailableFrontier(forward: forward);
     if (unavailable == null) return;
+    if (widget.runtime.chapterAt(unavailable.chapter)?.isLocked ?? false) {
+      _skipLockedChapters(from: unavailable.chapter, forward: forward);
+      return;
+    }
     widget.runtime.emitUserNotice(
       unavailable.failure.message,
       chapterIndex: unavailable.chapter,
     );
     _pipeline.retryChapter(unavailable.chapter);
+  }
+
+  /// 捲到或翻到付費章節前（ADR 0057）：這一側還有免費章節就跳過去，
+  /// 都是付費章節就停在這裡說明。付費章節不抓，不用重試。
+  void _skipLockedChapters({required int from, required bool forward}) {
+    final runtime = widget.runtime;
+    final target = ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+      currentChapterIndex: from,
+      chapterCount: runtime.chapterCount,
+      delta: forward ? 1 : -1,
+      skip: (index) => runtime.chapterAt(index)?.isLocked ?? false,
+    );
+    if (target == null) {
+      runtime.emitUserNotice(lockedChapterNotice, chapterIndex: from);
+      return;
+    }
+    unawaited(runtime.jumpToChapter(target));
   }
 
   void _scheduleMotionCapture() {

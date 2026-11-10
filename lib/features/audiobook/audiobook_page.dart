@@ -383,7 +383,16 @@ class _AudiobookPageState extends State<AudiobookPage> {
                     downloaded: _downloaded.contains(
                       BookChapterFiles.baseNameFor(chapter),
                     ),
-                    onTap: () => unawaited(_player.playChapter(i)),
+                    // 付費章節不放，只提示（ADR 0057）。
+                    onTap: chapter.isLocked
+                        ? () => ScaffoldMessenger.of(context)
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              const SnackBar(
+                                content: Text(lockedChapterNotice),
+                              ),
+                            )
+                        : () => unawaited(_player.playChapter(i)),
                   ),
           );
         }, childCount: chapters.length),
