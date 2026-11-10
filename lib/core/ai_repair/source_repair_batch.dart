@@ -281,8 +281,11 @@ class SourceRepairBatch extends ChangeNotifier {
     final bySite = _pendingBySite();
     _enter(RepairStage.checkingSites, bySite.length);
     await _pool(bySite.entries.toList(), siteConcurrency, (entry) async {
-      final site = await (_checkSite?.call(entry.value.first.source) ??
-          checkSite(entry.value.first.source, cancelToken: _cancelToken));
+      final source = entry.value.first.source;
+      final checker = _checkSite;
+      final site = checker == null
+          ? await checkSite(source, cancelToken: _cancelToken)
+          : await checker(source);
       if (_stopped) return;
       for (final item in entry.value) {
         if (_stopped) return;
@@ -387,7 +390,8 @@ class SourceRepairBatch extends ChangeNotifier {
   Future<bool> _passes(RepairItem item, BookSource candidate) async {
     if (_stopped) return false;
     final checked = await _check(candidate, _cancelToken);
-    if (_stopped || checked == null ||
+    if (_stopped ||
+        checked == null ||
         !AiRepairSession.usableFix(
           checked,
           item.source,
