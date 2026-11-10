@@ -15,12 +15,16 @@ class TocVolumeRow extends StatelessWidget {
     required this.count,
     this.collapsed,
     this.onToggle,
+    this.unit = '章',
   });
 
   final String title;
   final int count;
   final bool? collapsed;
   final VoidCallback? onToggle;
+
+  /// 數量的單位：書的目錄是「章」，有聲書是「集」。
+  final String unit;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +44,7 @@ class TocVolumeRow extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        value: '$count 章',
+        value: '$count $unit',
         trailing: collapsed == null
             ? null
             : Icon(

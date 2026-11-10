@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
@@ -21,6 +22,7 @@ class BookCoverAmbience extends StatelessWidget {
     super.key,
     required this.coverUrl,
     required this.bookName,
+    this.kind = BookSourceKind.novel,
   });
 
   /// 詳情頁封面畫的網址；null 或空白時是預設封面。
@@ -28,6 +30,9 @@ class BookCoverAmbience extends StatelessWidget {
 
   /// 預設封面依書名決定樣子。
   final String bookName;
+
+  /// 書的類別，預設封面畫哪一種變體。
+  final BookSourceKind kind;
 
   /// 頂端封面色最多透出的比例；其餘是底色。
   static const double _strength = 0.32;
@@ -70,7 +75,7 @@ class BookCoverAmbience extends StatelessWidget {
     child: SizedBox(
       width: BookInfoHeader.coverWidth,
       height: BookInfoHeader.coverHeight,
-      child: DefaultBookCover(bookName: bookName),
+      child: DefaultBookCover(bookName: bookName, kind: kind),
     ),
   );
 

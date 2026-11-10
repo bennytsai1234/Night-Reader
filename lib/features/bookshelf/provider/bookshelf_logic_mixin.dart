@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 
@@ -112,6 +113,37 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     SharedPreferences.getInstance().then(
       (p) => p.setBool(_unifiedCoversKey, value),
     );
+    notifyListeners();
+  }
+
+  /// 書架上有哪幾類書。
+  Set<BookSourceKind> get shelfKinds => {
+    for (final book in books) book.bookKind,
+  };
+
+  /// 書架上不只一種書時才給篩選（`docs/design/screens.md`「書架」）。
+  bool get canFilterKinds => shelfKinds.length > 1;
+
+  /// 實際在用的篩選：書架上只剩一種書、或選的那類已經沒有書時回到全部。
+  BookSourceKind? get activeKindFilter {
+    final filter = kindFilter;
+    if (filter == null || !canFilterKinds) return null;
+    return shelfKinds.contains(filter) ? filter : null;
+  }
+
+  /// 書架畫出來的書：照篩選。
+  List<Book> get shownBooks {
+    final filter = activeKindFilter;
+    if (filter == null) return books;
+    return [
+      for (final book in books)
+        if (book.bookKind == filter) book,
+    ];
+  }
+
+  void setKindFilter(BookSourceKind? kind) {
+    if (kindFilter == kind) return;
+    kindFilter = kind;
     notifyListeners();
   }
 

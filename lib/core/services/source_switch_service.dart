@@ -15,11 +15,11 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_illustration_storage.dart';
-import 'package:night_reader/core/utils/illustration_markers.dart';
 import 'package:pool/pool.dart';
 
 import 'app_log_service.dart';
 import 'book_source_service.dart';
+import 'chapter_content_kind.dart';
 import 'source_switch_handoff.dart';
 
 bool isSourceSwitchUnavailable(Object error) {
@@ -31,14 +31,6 @@ bool isSourceSwitchUnavailable(Object error) {
 /// 的頂層函式裡建立。
 bool Function(String name, String author) _nameEquals(String bookName) =>
     (name, _) => name == bookName;
-
-bool _looksReadableSourceSwitchContent(String content) {
-  final trimmed = IllustrationMarkers.strip(content).trim();
-  if (trimmed.isEmpty) return false;
-  if (trimmed.startsWith('加載章節失敗')) return false;
-  if (trimmed.startsWith('章節內容為空')) return false;
-  return trimmed.runes.length >= 20;
-}
 
 class PreparedSourceSwitch {
   final SearchBook searchBook;
@@ -57,7 +49,7 @@ class PreparedSourceSwitch {
     required this.targetChapterIndex,
     required this.validatedContent,
   }) : targetChapter = chapters[targetChapterIndex] {
-    if (!_looksReadableSourceSwitchContent(validatedContent)) {
+    if (!chapterContentUsable(migratedBook.bookKind, validatedContent)) {
       throw ArgumentError.value(
         validatedContent,
         'validatedContent',
@@ -206,10 +198,12 @@ class SourceSwitchService {
       targetChapter,
       nextChapterUrl: _nextReadableChapterUrl(chapters, resolvedTargetIndex),
     );
-    if (!_looksReadableSourceSwitchContent(validatedContent)) {
+    if (!chapterContentUsable(migratedBook.bookKind, validatedContent)) {
       throw SourceException('目標章節內容不可讀', sourceUrl: candidate.origin);
     }
-    if (validatedContent.contains('<img')) {
+    // 漫畫的圖由漫畫閱讀器照書源抓（ADR 0052），不當插圖存。
+    if (migratedBook.bookKind == BookSourceKind.novel &&
+        validatedContent.contains('<img')) {
       await _service.fetchIllustrations(
         source,
         migratedBook,
@@ -280,19 +274,22 @@ class SourceSwitchService {
         );
 
         final targetChapter = prepared.targetChapter;
-        await contentDao.saveContent(
-          contentKey: ReaderChapterContentDao.contentKey(
+        // 漫畫的章節存成 CBZ（ADR 0052），不進正文快取。
+        if (migratedBook.bookKind != BookSourceKind.comic) {
+          await contentDao.saveContent(
+            contentKey: ReaderChapterContentDao.contentKey(
+              origin: migratedBook.origin,
+              bookUrl: migratedBook.bookUrl,
+              chapterUrl: targetChapter.url,
+            ),
             origin: migratedBook.origin,
             bookUrl: migratedBook.bookUrl,
             chapterUrl: targetChapter.url,
-          ),
-          origin: migratedBook.origin,
-          bookUrl: migratedBook.bookUrl,
-          chapterUrl: targetChapter.url,
-          chapterIndex: targetChapter.index,
-          content: prepared.validatedContent,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        );
+            chapterIndex: targetChapter.index,
+            content: prepared.validatedContent,
+            updatedAt: DateTime.now().millisecondsSinceEpoch,
+          );
+        }
 
         if (sourceIdentityChanged) {
           await contentDao.deleteByBook(oldBook.origin, oldBook.bookUrl);

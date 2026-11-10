@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
 import 'now_playing_artwork.dart';
@@ -16,6 +17,8 @@ class NowPlaying {
     required this.bookName,
     required this.author,
     this.coverSource,
+    this.kind = BookSourceKind.novel,
+    this.duration,
   });
 
   /// 這一項的識別碼，換章、換書時不同。
@@ -31,6 +34,12 @@ class NowPlaying {
   /// 預設封面（夜空）。
   final String? coverSource;
 
+  /// 這本書是哪一類：沒有封面時照它畫預設封面的變體。
+  final BookSourceKind kind;
+
+  /// 這一項的總長；不給（朗讀、還不知道長度）時系統不畫進度條。
+  final Duration? duration;
+
   /// 副標：「書名 · 作者」，沒有作者時只有書名。
   String get subtitle {
     final name = author.trim();
@@ -44,10 +53,13 @@ class NowPlaying {
       other.title == title &&
       other.bookName == bookName &&
       other.author == author &&
-      other.coverSource == coverSource;
+      other.coverSource == coverSource &&
+      other.kind == kind &&
+      other.duration == duration;
 
   @override
-  int get hashCode => Object.hash(id, title, bookName, author, coverSource);
+  int get hashCode =>
+      Object.hash(id, title, bookName, author, coverSource, kind, duration);
 }
 
 /// 系統播放資訊上除了播放／暫停以外的按鈕。只宣告當下真的做得到的：系統照
@@ -55,6 +67,10 @@ class NowPlaying {
 enum PlaybackControl {
   skipToPrevious,
   skipToNext,
+
+  /// 倒退、快轉 [SystemPlayback.skipInterval]。
+  rewind,
+  fastForward,
   stop,
 
   /// 拖進度條。宣告時系統才畫可以拖的進度條。
@@ -71,6 +87,8 @@ abstract interface class PlaybackOwner {
   void onStop();
   void onSkipToNext();
   void onSkipToPrevious();
+  void onRewind();
+  void onFastForward();
   void onSeek(Duration position);
 }
 
@@ -78,12 +96,15 @@ abstract interface class PlaybackOwner {
 /// 正在播放），整個 App 一份。
 ///
 /// 一次只有一方在播：後開始播的接手，原本在播的那一方收到
-/// [PlaybackOwner.onPause]（ADR 0050）。
+/// [PlaybackOwner.onPause]（ADR 0055）。
 class SystemPlayback {
   SystemPlayback({NowPlayingArtwork? artwork})
     : _artwork = artwork ?? NowPlayingArtwork();
 
   static final SystemPlayback instance = SystemPlayback();
+
+  /// 倒退、快轉按鈕一次跳多少，和有聲書播放器的按鈕一致（ADR 0055）。
+  static const Duration skipInterval = Duration(seconds: 10);
 
   final NowPlayingArtwork _artwork;
   _SessionHandler? _handler;
@@ -106,13 +127,15 @@ class SystemPlayback {
         builder: () => _SessionHandler(this),
         config: const AudioServiceConfig(
           androidNotificationChannelId: 'com.night_reader.tts',
-          androidNotificationChannelName: '夜讀朗讀',
+          androidNotificationChannelName: '夜讀播放',
           // 狀態列只畫圖示的形狀：App 圖示整張不透明，會變成一塊白色方塊。
           androidNotificationIcon: 'drawable/ic_stat_night_reader',
           androidNotificationOngoing: true,
           // 封面原圖可能上千像素，整張送給系統會超過跨程序傳遞的上限。
           artDownscaleWidth: 512,
           artDownscaleHeight: 512,
+          rewindInterval: skipInterval,
+          fastForwardInterval: skipInterval,
         ),
       );
       final shown = _shown;
@@ -131,6 +154,9 @@ class SystemPlayback {
   /// [owner] 正在播 [item]（[playing] 為 false 是暫停中）：把標題、副標、
   /// 封面與按鈕交給系統。內容和上一次一樣時不做事，可以每次狀態變動都呼叫。
   ///
+  /// 有 [position] 時系統畫播到哪裡，之後照 [speed] 自己往前推，所以只在
+  /// 播放、暫停、拖動、換倍速時交一次就好；[buffering] 是正在等資料。
+  ///
   /// 不是目前那一方時，開始播才接手；暫停中的狀態不交，免得被接手後暫停時
   /// 又把系統播放資訊搶回去。
   void show(
@@ -138,6 +164,9 @@ class SystemPlayback {
     required NowPlaying item,
     required bool playing,
     required Set<PlaybackControl> controls,
+    Duration? position,
+    double speed = 1.0,
+    bool buffering = false,
   }) {
     final previous = _owner;
     if (!identical(previous, owner)) {
@@ -145,7 +174,14 @@ class SystemPlayback {
       _owner = owner;
       previous?.onPause();
     }
-    final shown = _Shown(item: item, playing: playing, controls: controls);
+    final shown = _Shown(
+      item: item,
+      playing: playing,
+      controls: controls,
+      position: position,
+      speed: speed,
+      buffering: buffering,
+    );
     if (shown == _shown) return;
     _shown = shown;
     _handler?.show(shown, _artwork);
@@ -166,22 +202,37 @@ class _Shown {
     required this.item,
     required this.playing,
     required this.controls,
+    required this.position,
+    required this.speed,
+    required this.buffering,
   });
 
   final NowPlaying item;
   final bool playing;
   final Set<PlaybackControl> controls;
+  final Duration? position;
+  final double speed;
+  final bool buffering;
 
   @override
   bool operator ==(Object other) =>
       other is _Shown &&
       other.item == item &&
       other.playing == playing &&
-      setEquals(other.controls, controls);
+      setEquals(other.controls, controls) &&
+      other.position == position &&
+      other.speed == speed &&
+      other.buffering == buffering;
 
   @override
-  int get hashCode =>
-      Object.hash(item, playing, Object.hashAllUnordered(controls));
+  int get hashCode => Object.hash(
+    item,
+    playing,
+    Object.hashAllUnordered(controls),
+    position,
+    speed,
+    buffering,
+  );
 }
 
 class _SessionHandler extends BaseAudioHandler {
@@ -199,21 +250,27 @@ class _SessionHandler extends BaseAudioHandler {
     if (item != _item) {
       _item = item;
       // 同一本書換章時封面早就換好，和文字一起送出，不會閃一下沒有封面。
-      final art = artwork.resolved(item.coverSource, item.bookName);
+      final art = artwork.resolved(
+        item.coverSource,
+        item.bookName,
+        kind: item.kind,
+      );
       mediaItem.add(_mediaItemOf(item, art));
       if (art == null) {
         unawaited(
-          artwork.resolve(item.coverSource, item.bookName).then(
-            (uri) {
-              if (_item != item) return;
-              mediaItem.add(_mediaItemOf(item, uri));
-            },
-            // 連預設封面都寫不出來（例如儲存空間滿了）：只是沒有封面。
-            onError: (Object error) => AppLog.e(
-              'SystemPlayback: no artwork for ${item.bookName}: $error',
-              error: error,
-            ),
-          ),
+          artwork
+              .resolve(item.coverSource, item.bookName, kind: item.kind)
+              .then(
+                (uri) {
+                  if (_item != item) return;
+                  mediaItem.add(_mediaItemOf(item, uri));
+                },
+                // 連預設封面都寫不出來（例如儲存空間滿了）：只是沒有封面。
+                onError: (Object error) => AppLog.e(
+                  'SystemPlayback: no artwork for ${item.bookName}: $error',
+                  error: error,
+                ),
+              ),
         );
       }
     }
@@ -235,21 +292,30 @@ class _SessionHandler extends BaseAudioHandler {
     artist: item.subtitle,
     album: item.bookName,
     artUri: art,
+    duration: item.duration,
   );
 
   static PlaybackState _stateOf(_Shown shown) {
     final controls = <MediaControl>[
       if (shown.controls.contains(PlaybackControl.skipToPrevious))
         MediaControl.skipToPrevious,
+      if (shown.controls.contains(PlaybackControl.rewind)) MediaControl.rewind,
       shown.playing ? MediaControl.pause : MediaControl.play,
+      if (shown.controls.contains(PlaybackControl.fastForward))
+        MediaControl.fastForward,
       if (shown.controls.contains(PlaybackControl.skipToNext))
         MediaControl.skipToNext,
       if (shown.controls.contains(PlaybackControl.stop)) MediaControl.stop,
     ];
-    // 收合的通知只放上一章、播放鍵、下一章，停止在展開後才有。
+    // 收合的通知只放上一章、播放鍵、下一章；跳秒與停止在展開後才有。
+    final expandedOnly = {
+      MediaControl.rewind,
+      MediaControl.fastForward,
+      MediaControl.stop,
+    };
     final compact = <int>[
       for (var i = 0; i < controls.length; i++)
-        if (controls[i] != MediaControl.stop) i,
+        if (!expandedOnly.contains(controls[i])) i,
     ];
     return PlaybackState(
       controls: controls,
@@ -259,7 +325,11 @@ class _SessionHandler extends BaseAudioHandler {
         if (shown.controls.contains(PlaybackControl.seek)) MediaAction.seek,
       },
       playing: shown.playing,
-      processingState: AudioProcessingState.ready,
+      processingState: shown.buffering
+          ? AudioProcessingState.buffering
+          : AudioProcessingState.ready,
+      updatePosition: shown.position ?? Duration.zero,
+      speed: shown.speed,
     );
   }
 
@@ -277,6 +347,12 @@ class _SessionHandler extends BaseAudioHandler {
 
   @override
   Future<void> skipToPrevious() async => _owner?.onSkipToPrevious();
+
+  @override
+  Future<void> rewind() async => _owner?.onRewind();
+
+  @override
+  Future<void> fastForward() async => _owner?.onFastForward();
 
   @override
   Future<void> seek(Duration position) async => _owner?.onSeek(position);

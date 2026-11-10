@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/services/comic_folder_picker.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/features/settings/sync_status_text.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -42,6 +46,27 @@ enum _BookshelfBatchAction { checkUpdate, delete }
 
 /// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
 /// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
+/// 「整理」的篩選選項：選了哪一類（null 是全部）。
+class _KindFilterChoice {
+  const _KindFilterChoice(this.kind);
+  final BookSourceKind? kind;
+
+  String get label => switch (kind) {
+    null => '全部',
+    BookSourceKind.novel => '小說',
+    BookSourceKind.comic => '漫畫',
+    BookSourceKind.audio => '有聲書',
+    BookSourceKind.unsupported => '其他',
+  };
+
+  static const List<_KindFilterChoice> all = [
+    _KindFilterChoice(null),
+    _KindFilterChoice(BookSourceKind.novel),
+    _KindFilterChoice(BookSourceKind.comic),
+    _KindFilterChoice(BookSourceKind.audio),
+  ];
+}
+
 enum _ShelfMenuAction {
   gridView,
   listView,
@@ -50,6 +75,7 @@ enum _ShelfMenuAction {
   export,
   search,
   addLocal,
+  addLocalComic,
   importUrl,
   importFile,
 }
@@ -236,9 +262,9 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   GlassNavHeader _buildHeader(BookshelfProvider provider) {
     if (_isMultiSelect) {
+      final shown = provider.shownBooks;
       final allSelected =
-          provider.books.isNotEmpty &&
-          _selectedUrls.length == provider.books.length;
+          shown.isNotEmpty && _selectedUrls.length == shown.length;
       return GlassNavHeader(
         morph: true,
         title: '已選 ${_selectedUrls.length} 本',
@@ -256,9 +282,7 @@ class _BookshelfPageState extends State<BookshelfPage>
                     if (allSelected) {
                       _selectedUrls.clear();
                     } else {
-                      _selectedUrls.addAll(
-                        provider.books.map((b) => b.bookUrl),
-                      );
+                      _selectedUrls.addAll(shown.map((b) => b.bookUrl));
                     }
                   }),
           ),
@@ -314,6 +338,16 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: mode.label,
           checked: provider.sortMode == mode,
         ),
+      // 篩選：書架上不只一種書時才有（`docs/design/screens.md`「書架」）。
+      if (provider.canFilterKinds) ...[
+        const GlassMenuDivider(),
+        for (final choice in _KindFilterChoice.all)
+          GlassMenuItem(
+            value: choice,
+            label: choice.label,
+            checked: provider.activeKindFilter == choice.kind,
+          ),
+      ],
       const GlassMenuDivider(),
       GlassMenuItem(
         value: _ShelfMenuAction.select,
@@ -340,6 +374,11 @@ class _BookshelfPageState extends State<BookshelfPage>
       label: '加入本地書籍',
       icon: Icons.file_open_outlined,
     ),
+    GlassMenuItem(
+      value: _ShelfMenuAction.addLocalComic,
+      label: '加入本地漫畫',
+      icon: Icons.photo_library_outlined,
+    ),
     GlassMenuDivider(),
     GlassMenuItem(
       value: _ShelfMenuAction.importUrl,
@@ -360,6 +399,8 @@ class _BookshelfPageState extends State<BookshelfPage>
     switch (value) {
       case BookshelfSortMode mode:
         await provider.setSortMode(mode);
+      case _KindFilterChoice choice:
+        provider.setKindFilter(choice.kind);
       case _ShelfMenuAction.gridView:
         provider.setGridView(true);
       case _ShelfMenuAction.listView:
@@ -372,6 +413,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         _openSearch();
       case _ShelfMenuAction.addLocal:
         await _pickLocalBook(provider);
+      case _ShelfMenuAction.addLocalComic:
+        await _pickLocalComic(provider);
       case _ShelfMenuAction.importFile:
         await _handleBookshelfImport(context);
       case _ShelfMenuAction.importUrl:
@@ -422,14 +465,15 @@ class _BookshelfPageState extends State<BookshelfPage>
     final grid = provider.isGridView;
     final animate = !MediaQuery.disableAnimationsOf(context);
     // 移出的書淡出期間仍在清單裡（已不在書架上，取上次畫的那一本）。
+    final shelfBooks = provider.shownBooks;
     final shownUrls = _motion.update(
-      [for (final book in provider.books) book.bookUrl],
+      [for (final book in shelfBooks) book.bookUrl],
       grid: grid,
       animate: animate,
     );
     final known = {
       ..._shownBooks,
-      for (final book in provider.books) book.bookUrl: book,
+      for (final book in shelfBooks) book.bookUrl: book,
     };
     final books = [for (final url in shownUrls) ?known[url]];
     _shownBooks = {for (final book in books) book.bookUrl: book};
@@ -750,21 +794,36 @@ class _BookshelfPageState extends State<BookshelfPage>
         onReorderItem: (oldIndex, newIndex) {
           // 清單裡可能還有淡出中的書（已不在書架上）：照書換算成書架上的
           // 位置。
+          // 照「拖到哪一本前面」換算成整個書架的位置：篩選中只畫了一部分的
+          // 書，淡出中的書也不在書架上。
           final shown = [...books];
           final moved = shown.removeAt(oldIndex);
           final from = provider.books.indexWhere(
             (book) => book.bookUrl == moved.bookUrl,
           );
           if (from < 0) return;
-          final shelf = {for (final book in provider.books) book.bookUrl};
-          final to = shown
+          final rest = [...provider.books]..removeAt(from);
+          int indexInRest(Book book) =>
+              rest.indexWhere((other) => other.bookUrl == book.bookUrl);
+          final next = shown
+              .skip(newIndex)
+              .where((book) => indexInRest(book) >= 0)
+              .firstOrNull;
+          final previous = shown
               .take(newIndex)
-              .where((book) => shelf.contains(book.bookUrl))
-              .length;
+              .where((book) => indexInRest(book) >= 0)
+              .lastOrNull;
+          final to = next != null
+              ? indexInRest(next)
+              : previous == null
+              ? 0
+              : indexInRest(previous) + 1;
           // reorderBooks 在第一個 await 之前就換好清單順序；清單本身已經把
           // 書卡放到定位，採用新順序，不再播換位動畫。
           unawaited(provider.reorderBooks(from, to));
-          _motion.accept([for (final book in provider.books) book.bookUrl]);
+          _motion.accept([
+            for (final book in provider.shownBooks) book.bookUrl,
+          ]);
         },
         // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
         proxyDecorator: (child, _, animation) => ScaleTransition(
@@ -930,6 +989,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     final preview = grid
         ? BookCoverWidget(
             bookName: context.zh(book.name),
+            kind: book.bookKind,
             author: book.author,
             coverUrl: UnifiedCovers.coverOf(book),
             width: sourceRect.width,
@@ -1082,6 +1142,71 @@ class _BookshelfPageState extends State<BookshelfPage>
     }
   }
 
+  /// 加入本地漫畫（ADR 0052）：選一個作品資料夾，複製進 App、每話整理成
+  /// 一個 CBZ。進度框點外面、按返回都關不掉，寫著複製或整理到第幾個。
+  Future<void> _pickLocalComic(BookshelfProvider provider) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final temp = await AppStoragePaths.temporaryDir();
+    final staging = p.join(
+      temp.path,
+      'comic_import',
+      '${DateTime.now().millisecondsSinceEpoch}',
+    );
+    if (!mounted) return;
+    final progress = ValueNotifier<({String label, double? value})>((
+      label: '選好資料夾後開始複製…',
+      value: null,
+    ));
+    final dialog = showStatefulAppAlert<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context, _, _) => PopScope(
+        canPop: false,
+        child: AppAlert<void>(
+          title: '加入本地漫畫',
+          content: ValueListenableBuilder(
+            valueListenable: progress,
+            builder: (context, value, _) =>
+                SyncProgressView(value: value.value, label: value.label),
+          ),
+          actions: const [],
+        ),
+      ),
+    );
+    String message;
+    try {
+      final folder = await ComicFolderPicker.pick(
+        dest: staging,
+        onProgress: (done, total) =>
+            progress.value = (label: '複製中 $done／$total', value: done / total),
+      );
+      if (folder == null) {
+        message = '';
+      } else {
+        final book = await provider.importLocalComic(
+          folder,
+          onProgress: (done, total) => progress.value = (
+            label: '整理第 $done／$total 話',
+            value: done / total,
+          ),
+        );
+        message = book == null ? '這個資料夾裡沒有漫畫' : '已加入《${book.name}》';
+      }
+    } catch (error) {
+      message = failureMessage('加入本地漫畫', error);
+    } finally {
+      navigator.pop();
+      await dialog;
+      progress.dispose();
+      final dir = Directory(staging);
+      if (await dir.exists()) await dir.delete(recursive: true);
+    }
+    if (message.isNotEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   /// 書源管理在還沒有書源時，頁面中央就是匯入按鈕。
   void _openSourceManager() {
     Navigator.push(
@@ -1098,10 +1223,10 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   Future<void> _openBook(Book book) async {
-    // 漫畫閱讀器、有聲書播放器和本分支同一批合併，由它們接手開書。
-    if (book.bookKind != BookSourceKind.novel) {
+    // 有聲書播放器和本分支同一批合併，由它接手開書。
+    if (book.bookKind == BookSourceKind.audio) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('漫畫與有聲書還不能打開。')));
+          .showSnackBar(const SnackBar(content: Text('有聲書還不能打開。')));
       return;
     }
     // 閱讀器只改了這本書的進度，不會通知書架；回來時要重排（最近閱讀）並更新

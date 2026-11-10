@@ -10,7 +10,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -90,7 +90,7 @@ void main() {
     // 各面板裡最重的元件：步進列、定時的分段控制、即時測試的輸入框。
     final heavy = switch (label) {
       '排版' => find.byType(NumberStepperRow),
-      '朗讀' => find.byType(GlassSegmented<ReaderV2TtsSleepOption>),
+      '朗讀' => find.byType(GlassSegmented<SleepTimerOption>),
       _ => find.byType(TextField),
     };
     await tester.tap(

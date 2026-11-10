@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -8,9 +9,11 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/illustration_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
@@ -116,6 +119,55 @@ class BookSourceService {
     _illustrationTask(source, book, content, dir, retryMissing),
     source: source,
     book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 漫畫一話依序的圖片網址（[ComicChapterDownload.pageUrls]，ADR 0052）；
+  /// [remember] 時記進這一話的暫存資料夾。
+  Future<List<String>> getComicPageUrls(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    bool remember = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _comicPageUrlsTask(source, book, chapter, remember),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// 漫畫一話的第 [index] 張（[ComicChapterDownload.pageBytes]）：已經抓到
+  /// 的直接讀，否則照書源抓；[keep] 時存進暫存資料夾。
+  Future<Uint8List> getComicPage(
+    BookSource source,
+    Book book,
+    BookChapter chapter,
+    int index,
+    String url, {
+    bool keep = true,
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _comicPageTask(source, book, chapter, index, url, keep),
+    source: source,
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
+
+  /// 有聲書一集的音訊請求（ADR 0055）：跑正文規則拿到音訊網址，組成播放器
+  /// 要抓的網址與標頭。
+  Future<AudioRequest> getAudioRequest(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _audioRequestTask(source, book, chapter),
+    source: source,
+    book: book,
+    chapter: chapter,
     cancelToken: cancelToken,
   );
 
@@ -304,6 +356,50 @@ _Work<int> _illustrationTask(
       content,
       dir,
       retryMissing: retryMissing,
+      cancelToken: cancelToken,
+    );
+
+_Work<List<String>> _comicPageUrlsTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+  bool remember,
+) =>
+    (cancelToken) => ComicChapterDownload.pageUrls(
+      source,
+      book,
+      chapter,
+      remember: remember,
+      cancelToken: cancelToken,
+    );
+
+_Work<Uint8List> _comicPageTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+  int index,
+  String url,
+  bool keep,
+) =>
+    (cancelToken) => ComicChapterDownload.pageBytes(
+      source,
+      book,
+      chapter,
+      index,
+      url,
+      keep: keep,
+      cancelToken: cancelToken,
+    );
+
+_Work<AudioRequest> _audioRequestTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter,
+) =>
+    (cancelToken) => AudioUrlResolver.resolve(
+      source,
+      book,
+      chapter,
       cancelToken: cancelToken,
     );
 

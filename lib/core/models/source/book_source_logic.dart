@@ -425,14 +425,21 @@ extension BookSourceLogic on BookSourceBase {
     _ => BookSourceKind.unsupported,
   };
 
-  /// 文字書源：搜尋、發現、Reader V2 只用這一類。
-  bool get isNovelTextSource => sourceKind == BookSourceKind.novel;
+  /// 夜讀打得開的書源：小說源給 Reader V2，有聲源給有聲書播放器
+  /// （ADR 0055），漫畫源給漫畫閱讀器（ADR 0052）。搜尋、發現、閱讀、
+  /// 下載與檢查新章節只用這幾類。
+  bool get isOpenableSource => switch (sourceKind) {
+    BookSourceKind.novel ||
+    BookSourceKind.audio ||
+    BookSourceKind.comic => true,
+    BookSourceKind.unsupported => false,
+  };
 
   bool get canParticipateInDiscovery =>
       enabled &&
       enabledExplore &&
       hasExploreUrl &&
-      isNovelTextSource &&
+      isOpenableSource &&
       runtimeHealth.allowsReading;
 
   /// 發現、搜尋範圍與書源管理每次重建都會對每個書源問一次，所以結果依書源
@@ -598,15 +605,17 @@ extension BookSourceLogic on BookSourceBase {
     return SourceRuntimeHealth.healthy;
   }
 
-  /// 漫畫、有聲書源的健康狀態照校驗結果，但不進文字書的搜尋與閱讀。
-  bool get isSearchEnabledByRuntime => isSearchableFor(BookSourceKind.novel);
+  /// 一般搜尋放行打得開的書源（[isOpenableSource]）；同名不同類的結果分成
+  /// 不同的卡（ADR 0053）。
+  bool get isSearchEnabledByRuntime =>
+      enabled && isOpenableSource && runtimeHealth.allowsSearch;
 
   /// 能不能拿來搜 [kind] 這一類的書：換源只列和書同一類的書源（ADR 0053）。
   bool isSearchableFor(BookSourceKind kind) =>
       enabled && sourceKind == kind && runtimeHealth.allowsSearch;
 
   bool get isReadingEnabledByRuntime =>
-      enabled && isNovelTextSource && runtimeHealth.allowsReading;
+      enabled && isOpenableSource && runtimeHealth.allowsReading;
 
   bool get isCleanupCandidate => runtimeHealth.cleanupCandidate;
 

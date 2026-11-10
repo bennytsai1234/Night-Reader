@@ -74,7 +74,7 @@ abstract final class IllustrationFetcher {
       throwIfCancelled();
       Uint8List? bytes;
       try {
-        bytes = _decode(source, book, src, fetched);
+        bytes = decode(source, book, src, fetched);
       } on Exception catch (error) {
         AppLog.w('插圖解不出來：$src（$error）');
       }
@@ -108,9 +108,9 @@ abstract final class IllustrationFetcher {
       '${Isolate.current.hashCode}-${DateTime.now().microsecondsSinceEpoch}'
       '-${_tempCounter++}';
 
-  /// 書源的 `imageDecode`（Legado `ImageUtils.decode`）：`result` 是抓到的
+  /// 書源的 `imageDecode`（Legado `ImageUtils.decode`，漫畫的圖也用）：`result` 是抓到的
   /// 位元組、`src` 是圖的網址，傳回解好的位元組。沒有這條規則時原樣傳回。
-  static Uint8List? _decode(
+  static Uint8List? decode(
     BookSource source,
     Book book,
     String src,

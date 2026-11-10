@@ -286,6 +286,7 @@ class BookshelfListCard extends StatelessWidget {
         valueListenable: UnifiedCovers.enabled,
         builder: (context, _, _) => BookCoverWidget(
           bookName: name,
+          kind: book.bookKind,
           author: book.author,
           coverUrl: UnifiedCovers.coverOf(book),
           width: coverWidth,
@@ -524,6 +525,7 @@ class BookshelfGridTile extends StatelessWidget {
                           valueListenable: UnifiedCovers.enabled,
                           builder: (context, _, _) => BookCoverWidget(
                             bookName: name,
+                            kind: book.bookKind,
                             author: book.author,
                             coverUrl: UnifiedCovers.coverOf(book),
                             width: double.infinity,

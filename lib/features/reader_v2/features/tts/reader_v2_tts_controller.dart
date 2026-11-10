@@ -10,7 +10,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
+import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -98,7 +98,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }) : _tts = tts ?? ReaderV2SystemTtsEngine(),
        _ownsTtsEngine = tts == null,
        _playback = playback ?? SystemPlayback.instance {
-    sleepTimer = ReaderV2TtsSleepTimer(onExpired: _pauseAtSentence, now: now);
+    sleepTimer = SleepTimer(onExpired: _pauseAtSentence, now: now);
     _observedContentGeneration = runtime.state.contentGeneration;
     runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
@@ -136,7 +136,7 @@ class ReaderV2TtsController extends ChangeNotifier
   ReaderV2Location? _resumeLocation;
 
   @override
-  late final ReaderV2TtsSleepTimer sleepTimer;
+  late final SleepTimer sleepTimer;
 
   @override
   bool get isPlaying => _tts.isPlaying;
@@ -202,8 +202,8 @@ class ReaderV2TtsController extends ChangeNotifier
       await stop();
       return;
     }
-    if (sleepTimer.option == ReaderV2TtsSleepOption.off) {
-      await sleepTimer.choose(ReaderV2TtsSleepOption.minutes30);
+    if (sleepTimer.option == SleepTimerOption.off) {
+      await sleepTimer.choose(SleepTimerOption.minutes30);
     }
     await toggle();
   }
@@ -411,9 +411,16 @@ class ReaderV2TtsController extends ChangeNotifier
   @override
   void onSkipToPrevious() => unawaited(_skipChapter(-1));
 
-  /// 朗讀不宣告拖動（[PlaybackControl.seek]），系統不會送來。
+  /// 朗讀不宣告拖動與跳秒（[PlaybackControl.seek]、
+  /// [PlaybackControl.rewind]、[PlaybackControl.fastForward]），系統不會送來。
   @override
   void onSeek(Duration position) {}
+
+  @override
+  void onRewind() {}
+
+  @override
+  void onFastForward() {}
 
   /// 上一章、下一章：從那一章開頭接著念，暫停中按了也開始念。畫面跟著
   /// 朗讀的那一句過去，和念完一章自動換章一樣。

@@ -28,7 +28,7 @@
 - **封面轉場**：封面放大翻開、清單與詳情之間的封面共享元素轉場（ADR 0012）。
 - **仿實體書的封面**：書脊、摺痕、亮線、髮絲框（ADR 0021）。
 - **卡片與玻璃的框線**：改成拉大底色差距。
-- **改書卡與分組卡片的圓角、預設封面與進度線**：圓角維持 14 的普通圓弧，預設封面維持「夜空」，進度線維持現狀，不再畫新的候選。
+- **改書卡與分組卡片的圓角、預設封面與進度線**：圓角維持 14 的普通圓弧，預設封面維持「夜空」（漫畫與有聲書的變體見 `docs/design/components.md`「預設封面」），進度線維持現狀，不再畫新的候選。
 - **玻璃淡入**：玻璃包在透明度裡淡入，模糊到最後一幀才生效（ADR 0022）。
 - **調小或拿掉長按書卡預覽選單的背景模糊**：拿掉後封面的月亮與書名會透出來。
 - **動態模糊**：換頁、返回與拖曳返回都不做。
@@ -51,4 +51,6 @@
 - 骨架、骨架換場、開 App 進場：[`docs/design/loading.md`](docs/design/loading.md)
 - 閱讀器（正文排版、朗讀、選單與面板、載入、書籤與標註）：[`docs/design/reader.md`](docs/design/reader.md)
 - 書架、書籍詳情、搜尋、發現、書源管理與登入、我的與設定頁：[`docs/design/screens.md`](docs/design/screens.md)
+- 有聲書播放器、離開播放器時的圓鈕、通知與鎖定畫面：[`docs/design/audiobook.md`](docs/design/audiobook.md)
+- 漫畫閱讀器與書架上的漫畫：[`docs/design/comics.md`](docs/design/comics.md)
 - 網站與 README：[`docs/design/website.md`](docs/design/website.md)

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/resource_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
@@ -16,6 +17,9 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 class BookCoverWidget extends StatefulWidget {
   final String? coverUrl;
   final String bookName;
+
+  /// 書的類別：沒有封面時畫哪一種預設封面（[DefaultBookCover]）。
+  final BookSourceKind kind;
   final String? author;
   final double width;
   final double height;
@@ -25,6 +29,7 @@ class BookCoverWidget extends StatefulWidget {
     super.key,
     this.coverUrl,
     required this.bookName,
+    this.kind = BookSourceKind.novel,
     this.author,
     this.width = 50,
     this.height = 70,
@@ -211,6 +216,7 @@ class _BookCoverWidgetState extends State<BookCoverWidget>
                           child: _CoverImage(
                             source: layer.source,
                             bookName: widget.bookName,
+                            kind: widget.kind,
                             width: widget.width,
                             height: widget.height,
                             constraints: constraints,
@@ -265,6 +271,7 @@ class _CoverImage extends StatefulWidget {
   const _CoverImage({
     required this.source,
     required this.bookName,
+    required this.kind,
     required this.width,
     required this.height,
     required this.constraints,
@@ -274,6 +281,7 @@ class _CoverImage extends StatefulWidget {
 
   final String? source;
   final String bookName;
+  final BookSourceKind kind;
   final double width;
   final double height;
   final BoxConstraints constraints;
@@ -517,7 +525,8 @@ class _CoverImageState extends State<_CoverImage> {
   }
 
   /// 沒有封面或載不到時畫預設封面（[DefaultBookCover]）。
-  Widget _buildDefaultCover() => DefaultBookCover(bookName: bookName);
+  Widget _buildDefaultCover() =>
+      DefaultBookCover(bookName: bookName, kind: widget.kind);
 }
 
 /// 第一次出現時在 [background] 上以 [AppMotion.fade] 淡入 [child]；之後重建
