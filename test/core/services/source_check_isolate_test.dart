@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -557,7 +558,10 @@ void main() {
     final service = _FakeBookSourceService(
       search: () => fail('unsupported sources should not be searched'),
     );
-    final (_, checked) = await _check(service, source: _source(name: '某某影視'));
+    final (_, checked) = await _check(
+      service,
+      source: _source(name: '某某影視')..bookSourceType = SourceType.video,
+    );
 
     expect(checked.groupTags, contains(nonNovelSourceGroupTag));
     expect(checked.isCleanupCandidate, isTrue);
@@ -596,6 +600,21 @@ void main() {
         expect(checked.bookSourceType, 2);
       },
     );
+
+    test('an aggregate source keeps its type whatever its chapters are; '
+        'its book decides an unclear chapter', () async {
+      // 聚合源切在漫畫模式：正文是圖片，書源類型照作者寫的 0。
+      final aggregate = _source(name: '聚合')
+        ..ruleToc = TocRule(chapterList: '<js>book.type = 64; result</js>');
+      final (result, checked) = await _check(
+        _FakeBookSourceService(content: (_) async => pictures),
+        source: aggregate,
+      );
+
+      expect(result.isHealthy, isTrue);
+      expect(checked.bookSourceType, SourceType.book);
+      expect(result.logs.join('\n'), isNot(contains('改寫書源類型')));
+    });
 
     test('a comic source whose chapters are prose becomes a novel', () async {
       final (_, checked) = await _check(

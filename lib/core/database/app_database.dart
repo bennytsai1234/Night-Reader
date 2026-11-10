@@ -132,7 +132,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -224,7 +224,9 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(books, books.fileFingerprint);
       }
       if (from < 15) {
-        await _classifyExistingSources();
+        await _classifyExistingSources((source) => source.prepareIncoming());
+      } else if (from < 16) {
+        await _classifyExistingSources(repairSchema15SourceKind);
       }
     },
     beforeOpen: (_) async {
@@ -233,42 +235,36 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
-  /// 書源分成小說、漫畫、有聲（ADR 0051）：類型寫 0 但名稱帶漫畫、有聲字樣
-  /// 的補寫類型；舊版停用並標成「非小說源」的漫畫、有聲書源拿掉標記、重新
-  /// 啟用。影視、文件書源照舊。
-  Future<void> _classifyExistingSources() async {
+  /// 照現在的分類整理已存的書源：從 schema 14 以前升上來的照匯入的方式
+  /// （[BookSourceLogic.prepareIncoming]，ADR 0051），從 15 升上來的修正
+  /// 15 分錯的（[repairSchema15SourceKind]，ADR 0056）。只寫類型、分組與
+  /// 開關；規則一起讀出來，才認得出聚合源。
+  Future<void> _classifyExistingSources(
+    void Function(BookSource source) classify,
+  ) async {
     // 只建了部分舊表的測試資料庫沒有書源表。
     final hasTable = await customSelect(
       "SELECT 1 FROM sqlite_master WHERE type = 'table' "
       "AND name = 'book_sources'",
     ).get();
     if (hasTable.isEmpty) return;
+    // 欄位照名字列，不用資料表的定義：以後的 schema 加了欄位，升級跑到這步
+    // 時那些欄位還沒建。
     final rows = await customSelect(
       'SELECT bookSourceUrl, bookSourceName, bookSourceType, bookSourceGroup, '
-      'bookSourceComment, enabled, enabledExplore, searchUrl FROM book_sources',
+      'bookSourceComment, enabled, enabledExplore, searchUrl, jsLib, '
+      'ruleSearch, ruleExplore, ruleBookInfo, ruleToc, ruleContent '
+      'FROM book_sources',
     ).get();
-    final kinds = <String, BookSourceKind>{};
-    for (final row in rows) {
-      final source = BookSource(
-        bookSourceUrl: row.read<String>('bookSourceUrl'),
-        bookSourceName: row.read<String>('bookSourceName'),
-        bookSourceType: row.read<int>('bookSourceType'),
-        bookSourceGroup: row.read<String?>('bookSourceGroup'),
-        bookSourceComment: row.read<String?>('bookSourceComment'),
-        enabled: row.read<bool>('enabled'),
-        enabledExplore: row.read<bool>('enabledExplore'),
-        searchUrl: row.read<String?>('searchUrl'),
-      );
+    final sources = [for (final row in rows) BookSource.fromJson(row.data)];
+    for (final source in sources) {
       final before = (
         source.bookSourceType,
         source.bookSourceGroup,
         source.enabled,
         source.enabledExplore,
       );
-      source.prepareIncoming();
-      if (source.sourceKind != BookSourceKind.unsupported) {
-        kinds[source.bookSourceUrl] = source.sourceKind;
-      }
+      classify(source);
       final after = (
         source.bookSourceType,
         source.bookSourceGroup,
@@ -290,7 +286,7 @@ class AppDatabase extends _$AppDatabase {
     }
     // 用這些書源加的書跟著換類別，同存書源時（ADR 0053）。每個書源都比，
     // 不只這次改了類型的：重跑也補得到上次漏的。
-    await BookDao(this).followSourceKinds(kinds);
+    await BookDao(this).followSourceKinds(BookSourceDao.kindsToFollow(sources));
   }
 
   Future<void> _createPerformanceIndexes() async {

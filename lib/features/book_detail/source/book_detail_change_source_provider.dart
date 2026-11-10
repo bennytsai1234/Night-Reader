@@ -323,7 +323,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     var enabledSources = (await _sourceDao.getEnabled())
         .where(
           (source) =>
-              source.isSearchableFor(book.bookKind) &&
+              source.isSearchableFor(book.bookKind, includeAggregates: true) &&
               source.bookSourceUrl != book.origin,
         )
         .toList();
