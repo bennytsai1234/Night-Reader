@@ -42,4 +42,12 @@ class BookHelp {
   static String formatBookAuthor(String author) {
     return author.replaceAll(AppPattern.authorRegex, '').trim();
   }
+
+  /// 手機上已經存著的作者（書、書籤、標註）拿掉開頭的「作者：」；比
+  /// [formatBookAuthor] 保守，只動那一種一定是網站字樣的寫法。開頭不是
+  /// 「作者：」的原樣傳回，前後空白也不動。
+  static String stripAuthorLabel(String author) =>
+      AppPattern.authorLabelRegex.hasMatch(author)
+      ? author.replaceFirst(AppPattern.authorLabelRegex, '').trim()
+      : author;
 }
