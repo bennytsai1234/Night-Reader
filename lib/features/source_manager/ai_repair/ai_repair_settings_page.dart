@@ -10,7 +10,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 /// 會送出什麼：設定頁的說明，與 `PRIVACY.md`、App 的「隱私說明」同一件事
 /// （ADR 0054）。
 const String aiRepairPrivacyNote =
-    '按「AI 修復」時，書源、校驗結果與抓到的網頁會送到這個服務；'
+    '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
     '登入資料、Cookie 與書源變數不送。';
 
 /// AI 修書源設定（docs/design/screens.md「AI 修書源」）：服務網址、金鑰、

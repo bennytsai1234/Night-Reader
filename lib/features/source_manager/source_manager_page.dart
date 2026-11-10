@@ -17,6 +17,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 
 import 'ai_repair/ai_repair_page.dart';
 import 'ai_repair/ai_repair_settings_page.dart';
+import 'ai_repair/source_repair_page.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
@@ -396,6 +397,14 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           ),
           onClearCheckMarks: () =>
               SourceManagerDialogs.clearCheckMarks(context, provider),
+          onRepairAbnormal: () => _runAction(
+            () => _repairBatch(
+              provider,
+              provider.abnormalSourceUrls,
+              title: '修復異常書源',
+            ),
+            errorPrefix: '修復異常書源失敗',
+          ),
           onAiRepairSettings: () => nav.push(
             MaterialPageRoute<void>(
               builder: (_) => const AiRepairSettingsPage(),
@@ -804,11 +813,27 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     }
   }
 
-  /// AI 修復 [urls] 這幾個書源；有改到就重讀清單（ADR 0054）。
+  /// AI 修復 [urls] 這幾個書源：一個用單一書源的修復頁，幾個用整批修復；
+  /// 有改到就重讀清單（ADR 0054）。
   Future<void> _aiRepair(SourceManagerProvider p, List<String> urls) async {
+    if (urls.length > 1) {
+      return _repairBatch(p, urls, title: 'AI 修復 ${urls.length} 個書源');
+    }
+    final source = urls.isEmpty ? null : await p.getFullSource(urls.single);
+    if (source == null || !mounted) return;
+    final changed = await openAiRepair(context, source);
+    if (changed && mounted) await p.loadSources();
+  }
+
+  /// 整批修復 [urls] 這些書源（docs/design/screens.md「修復異常書源」）。
+  Future<void> _repairBatch(
+    SourceManagerProvider p,
+    List<String> urls, {
+    required String title,
+  }) async {
     final sources = [for (final url in urls) ?await p.getFullSource(url)];
     if (sources.isEmpty || !mounted) return;
-    final changed = await openAiRepair(context, sources);
+    final changed = await openSourceRepair(context, sources, title: title);
     if (changed && mounted) await p.loadSources();
   }
 

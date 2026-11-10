@@ -461,6 +461,13 @@ class SourceManagerProvider with ChangeNotifier {
   /// 篩選「沒有異常」：校驗沒有標上「異常」的書源（含還沒校驗過的）。
   static const String noAbnormalFilter = '沒有異常';
 
+  /// 帶「異常」標記的書源網址（修復異常書源修的就是這些）。
+  List<String> get abnormalSourceUrls => [
+    for (final source in _sources)
+      if (_hasGroup(source.bookSourceGroup, abnormalSourceGroupTag))
+        source.bookSourceUrl,
+  ];
+
   /// 篩選某一類非小說書源（ADR 0051），名稱就是類別名稱。
   static final Map<String, BookSourceKind> kindFilters = {
     BookSourceKind.comic.sourceLabel: BookSourceKind.comic,

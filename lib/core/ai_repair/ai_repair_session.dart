@@ -36,7 +36,7 @@ class AiRepairStep {
 }
 
 /// 一個書源修完的結果。
-enum AiRepairOutcome { repaired, failed, skipped }
+enum AiRepairOutcome { repaired, failed }
 
 /// 一個書源的修復：做過的步驟與結果。
 class AiRepairJob {
@@ -100,13 +100,13 @@ typedef AiRepairAsker = Future<String> Function(
   CancelToken cancelToken,
 );
 
-/// AI 修書源（ADR 0054）：一個或多選的一批書源，一個接一個修。每個先校驗、
-/// 抓網頁；有 AI 服務時讓 AI 邊改邊試抓，最多 [aiRepairMaxRounds] 輪，交出後
-/// 再校驗，通過才存進去並留下改前版本。沒有 AI 服務時（只限一個書源）把
-/// 提示詞複製下來，等使用者貼回 AI 修好的書源（[submitPaste]）。
+/// AI 修一個書源（ADR 0054）：先校驗、抓網頁；有 AI 服務時讓 AI 邊看網頁邊
+/// 改、試抓，交出後再校驗，通過才存進去並留下改前版本。沒有 AI 服務時把
+/// 提示詞複製下來，等使用者貼回 AI 修好的書源（[submitPaste]）。一批書源
+/// 由整批修復（[SourceRepairBatch]）每個網站開一個。
 class AiRepairSession extends ChangeNotifier {
   AiRepairSession({
-    required List<BookSource> sources,
+    required BookSource source,
     required this.service,
     AiRepairChecker? check,
     AiRepairProber? probe,
@@ -119,8 +119,7 @@ class AiRepairSession extends ChangeNotifier {
     this.recheckDelay = const Duration(seconds: 30),
     bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
-  }) : assert(service != null || sources.length == 1),
-       jobs = [for (final source in sources) AiRepairJob(source)],
+  }) : job = AiRepairJob(source),
        _check = check ?? defaultCheck,
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
@@ -145,7 +144,7 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 使用者的 AI 服務；null 時用剪貼簿。
   final AiService? service;
-  final List<AiRepairJob> jobs;
+  final AiRepairJob job;
   final AiRepairChecker _check;
   final AiRepairProber _probe;
   final AiRepairFetcher _fetchPage;
@@ -161,49 +160,35 @@ class AiRepairSession extends ChangeNotifier {
   bool _running = false;
   bool _stopped = false;
   bool _disposed = false;
-  int _current = 0;
 
   bool get usesClipboard => service == null;
   bool get isRunning => _running;
   bool get isStopped => _stopped;
 
-  /// 正在修第幾個（從 0 起）。
-  int get current => _current;
-
-  /// 全部做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished => _stopped || jobs.every((job) => job.outcome != null);
-
-  int count(AiRepairOutcome outcome) =>
-      jobs.where((job) => job.outcome == outcome).length;
+  /// 做完（或停下）。剪貼簿等使用者貼回時不算。
+  bool get isFinished => _stopped || job.outcome != null;
 
   /// 「複製紀錄」：每一步、AI 每一輪說的話與試抓結果。
   String get transcript => _transcript.toString().trimRight();
 
-  /// 從第一個書源開始修。
   Future<void> start() async {
     if (_running) return;
     _running = true;
     _notify();
     try {
-      for (var i = 0; i < jobs.length && !_stopped; i++) {
-        _current = i;
-        _notify();
-        await _repair(jobs[i]);
-        if (jobs[i].awaitingPaste) return;
-      }
+      await _repair(job);
     } finally {
       _running = false;
       _notify();
     }
   }
 
-  /// 停下：做著的那一步標成停止，還沒修的書源不修，修到一半的不改。
+  /// 停下：做著的那一步標成停止，修到一半的不改。
   void stop() {
     if (_stopped || isFinished) return;
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
-    for (final job in jobs) {
-      if (job._committing) continue;
+    if (!job._committing) {
       for (final step in job.steps) {
         if (step.state == AiRepairStepState.running) {
           step
@@ -223,7 +208,6 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 剪貼簿：使用者貼回 AI 修好的書源。讀不出書源時傳回原因、什麼都不做。
   Future<String?> submitPaste(String text) async {
-    final job = jobs.single;
     if (!job.awaitingPaste || _running) return null;
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
@@ -245,7 +229,7 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 修好之後還原成改前的版本。
-  Future<void> restore(AiRepairJob job) async {
+  Future<void> restore() async {
     if (job.outcome != AiRepairOutcome.repaired || job.restored) return;
     await restoreAiRepair(
       job.repairedUrl ?? job.original.bookSourceUrl,
@@ -264,9 +248,6 @@ class AiRepairSession extends ChangeNotifier {
     final checkStep = _addStep(job, '校驗原本的書源');
     final checked = await _guard(() => _check(original, _cancelToken));
     if (_stopped) return;
-    final health = checked == null
-        ? null
-        : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth;
     final checkText = _checkText(checked);
     job._checkResult = _redact(
       job,
@@ -274,24 +255,6 @@ class AiRepairSession extends ChangeNotifier {
     );
     _finish(checkStep, checkText);
     _record('校驗原本的書源：${job._checkResult}');
-
-    if (jobs.length > 1) {
-      final skip = health == null
-          ? '跳過：校驗超過時間'
-          : health.category == SourceHealthCategory.healthy
-          ? '沒問題，跳過'
-          : _unfixable.contains(health.category)
-          ? '跳過：${health.label}'
-          : null;
-      if (skip != null) {
-        checkStep.detail = skip;
-        job
-          ..outcome = AiRepairOutcome.skipped
-          ..explanation = skip;
-        _notify();
-        return;
-      }
-    }
 
     final fetchStep = _addStep(job, '抓網頁');
     final probe = await _guard(() => _probe(original, _cancelToken));
@@ -646,14 +609,6 @@ class AiRepairSession extends ChangeNotifier {
     stop();
     super.dispose();
   }
-
-  static const Set<SourceHealthCategory> _unfixable = {
-    SourceHealthCategory.upstreamUnstable,
-    SourceHealthCategory.loginRequired,
-    SourceHealthCategory.verificationRequired,
-    SourceHealthCategory.downloadOnly,
-    SourceHealthCategory.nonNovel,
-  };
 
   static String _checkText(SourceCheckIsolateResult? result) {
     if (result == null) return '校驗超過時間';

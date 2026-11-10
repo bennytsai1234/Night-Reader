@@ -285,7 +285,7 @@ class SourceRepairBatch extends ChangeNotifier {
       _sessions.add(session);
       session.addListener(_notify);
       await session.start();
-      final job = session.jobs.single;
+      final job = session.job;
       final fixed = job.repairedSource;
       if (job.outcome == AiRepairOutcome.repaired && fixed != null) {
         _finish(lead, RepairOutcome.aiFixed, job.explanation ?? 'AI 修好了');
@@ -447,7 +447,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   AiRepairSession _defaultSession(BookSource source, RepairItem item) =>
       AiRepairSession(
-        sources: [source],
+        source: source,
         service: service,
         hasBudget: () => _hasBudget && item.tokens < siteTokenBudget,
         onUsage: (usage) {

@@ -123,7 +123,7 @@ void main() {
         final answers = replies?.call(source.bookSourceUrl) ?? [_fix];
         var next = 0;
         return AiRepairSession(
-          sources: [source],
+          source: source,
           service: _service,
           check: (s, _) async => _checked(s),
           probe: (s, _) async => _probe(s),

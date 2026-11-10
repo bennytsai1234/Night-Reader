@@ -5,44 +5,35 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 import 'ai_repair_settings_page.dart';
+import 'source_repair_page.dart';
 
-/// 從書源管理開始 AI 修復：有 AI 服務就推修復頁；沒有時問要去設定、複製給
-/// AI（只限一個書源）或取消（docs/design/screens.md「AI 修書源」）。傳回有沒有
-/// 改到書源，書源管理據此重讀。
+/// 從書源管理開始 AI 修一個書源：有 AI 服務就推修復頁；沒有時問要去設定、
+/// 複製給 AI 或取消（docs/design/screens.md「AI 修書源」）。傳回有沒有改到
+/// 書源，書源管理據此重讀。一批書源用 [openSourceRepair]。
 Future<bool> openAiRepair(
   BuildContext context,
-  List<BookSource> sources, {
+  BookSource source, {
   AiRepairSettings? settings,
 }) async {
-  if (sources.isEmpty) return false;
   final navigator = Navigator.of(context);
   final service = await (settings ?? AiRepairSettings()).service();
   if (!context.mounted) return false;
   if (service == null) {
-    final single = sources.length == 1;
     final choice = await showAppAlert<String>(
       context: context,
-      title: single
-          ? 'AI 修復「${sources.single.bookSourceName}」'
-          : 'AI 修復 ${sources.length} 個書源',
+      title: 'AI 修復「${source.bookSourceName}」',
       message: '還沒設定 AI 服務。',
-      actions: [
-        const AppAlertAction(
-          label: '設定 AI 服務',
-          value: 'settings',
-          isDefault: true,
-        ),
-        if (single) const AppAlertAction(label: '複製給 AI', value: 'clipboard'),
-        const AppAlertAction(label: '取消', value: 'cancel'),
+      actions: const [
+        AppAlertAction(label: '設定 AI 服務', value: 'settings', isDefault: true),
+        AppAlertAction(label: '複製給 AI', value: 'clipboard'),
+        AppAlertAction(label: '取消', value: 'cancel'),
       ],
     );
     switch (choice) {
@@ -57,20 +48,24 @@ Future<bool> openAiRepair(
         return false;
     }
   }
-  final session = AiRepairSession(sources: sources, service: service);
+  final session = AiRepairSession(source: source, service: service);
   await navigator.push(
     MaterialPageRoute<void>(builder: (_) => AiRepairPage(session: session)),
   );
-  return session.count(AiRepairOutcome.repaired) > 0 ||
-      session.jobs.any((job) => job.restored);
+  return session.job.outcome == AiRepairOutcome.repaired ||
+      session.job.restored;
 }
 
-/// 修復頁：一個書源一張卡片，一步一列；返回等於停止
+/// 修復頁：一步一列；返回等於停止
 /// （docs/design/screens.md「AI 修書源」）。
 class AiRepairPage extends StatefulWidget {
-  const AiRepairPage({super.key, required this.session});
+  const AiRepairPage({super.key, required this.session, this.owned = true});
 
   final AiRepairSession session;
+
+  /// 這一頁開始並收掉 [session]；整批修復點進一個網站看步驟時是 false，
+  /// 修復由整批修復管。
+  final bool owned;
 
   @override
   State<AiRepairPage> createState() => _AiRepairPageState();
@@ -84,6 +79,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
   @override
   void initState() {
     super.initState();
+    if (!widget.owned) return;
     // 推入動畫播完再開始：校驗與試抓開 worker，不和轉場疊在一起（ADR 0018）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final route = ModalRoute.of(context)?.animation;
@@ -104,7 +100,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
   @override
   void dispose() {
     _paste.dispose();
-    _session.dispose();
+    if (widget.owned) _session.dispose();
     super.dispose();
   }
 
@@ -120,10 +116,10 @@ class _AiRepairPageState extends State<AiRepairPage> {
     if (problem != null && mounted) _say(problem);
   }
 
-  Future<void> _restore(AiRepairJob job) async {
+  Future<void> _restore() async {
     try {
-      await _session.restore(job);
-      if (mounted) _say('已還原「${job.original.bookSourceName}」');
+      await _session.restore();
+      if (mounted) _say('已還原「${_session.job.original.bookSourceName}」');
     } catch (error) {
       if (mounted) _say('還原失敗：$error');
     }
@@ -139,8 +135,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
     return ListenableBuilder(
       listenable: _session,
       builder: (context, _) {
-        final jobs = _session.jobs;
-        final batch = jobs.length > 1;
+        final job = _session.job;
         final service = _session.service;
         final sentTo = service == null
             ? null
@@ -149,9 +144,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
         return Scaffold(
           extendBodyBehindAppBar: true,
           appBar: GlassNavHeader(
-            title: batch
-                ? 'AI 修復 · ${jobs.length} 個書源'
-                : 'AI 修復 · ${jobs.single.original.bookSourceName}',
+            title: 'AI 修復 · ${job.original.bookSourceName}',
             actions: [
               GlassMenuButton<String>(
                 entriesBuilder: (_) => [
@@ -186,57 +179,40 @@ class _AiRepairPageState extends State<AiRepairPage> {
           ),
           body: GroupedListView(
             children: [
-              if (batch)
+              if (job.steps.isNotEmpty) ...[
                 GroupedSection(
                   footer: sentTo,
                   children: [
-                    GroupedRow(
-                      title: _session.isFinished
-                          ? '修好 ${_session.count(AiRepairOutcome.repaired)} 個，'
-                                '沒修好 ${_session.count(AiRepairOutcome.failed)} 個，'
-                                '跳過 ${_session.count(AiRepairOutcome.skipped)} 個'
-                          : '第 ${_session.current + 1}／${jobs.length} 個',
-                      showChevron: false,
-                    ),
+                    for (final step in job.steps)
+                      GroupedRow(
+                        leading: aiRepairStepIcon(context, step.state),
+                        title: step.title,
+                        subtitle: step.detail,
+                        showChevron: false,
+                      ),
                   ],
                 ),
-              for (final job in jobs)
-                if (job.steps.isNotEmpty) ...[
+                if (job.awaitingPaste)
                   GroupedSection(
-                    header: batch ? job.original.bookSourceName : null,
-                    footer: batch ? null : sentTo,
                     children: [
-                      for (final step in job.steps)
-                        GroupedRow(
-                          leading: _stepIcon(context, step.state),
-                          title: step.title,
-                          subtitle: step.detail,
-                          showChevron: false,
-                        ),
+                      GroupedTextFieldRow(
+                        controller: _paste,
+                        hintText: '貼上 AI 回的書源 JSON',
+                        keyboardType: TextInputType.multiline,
+                        minLines: 4,
+                        maxLines: 8,
+                      ),
+                      GroupedRow(
+                        title: '校驗並套用',
+                        accent: true,
+                        showChevron: false,
+                        onTap: () => unawaited(_submitPaste()),
+                      ),
                     ],
                   ),
-                  if (job.awaitingPaste)
-                    GroupedSection(
-                      children: [
-                        GroupedTextFieldRow(
-                          controller: _paste,
-                          hintText: '貼上 AI 回的書源 JSON',
-                          keyboardType: TextInputType.multiline,
-                          minLines: 4,
-                          maxLines: 8,
-                        ),
-                        GroupedRow(
-                          title: '校驗並套用',
-                          accent: true,
-                          showChevron: false,
-                          onTap: () => unawaited(_submitPaste()),
-                        ),
-                      ],
-                    ),
-                  if (job.outcome case final outcome?
-                      when outcome != AiRepairOutcome.skipped)
-                    _result(context, job, outcome),
-                ],
+                if (job.outcome case final outcome?)
+                  _result(context, job, outcome),
+              ],
               GroupedSection(
                 children: [
                   if (_session.isFinished)
@@ -284,36 +260,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
           GroupedRow(
             title: '還原改前的版本',
             showChevron: false,
-            onTap: () => unawaited(_restore(job)),
+            onTap: () => unawaited(_restore()),
           ),
       ],
     );
   }
 }
-
-Widget _stepIcon(BuildContext context, AiRepairStepState state) =>
-    switch (state) {
-      AiRepairStepState.done => Icon(
-        Icons.check_circle_rounded,
-        size: 22,
-        color: context.success,
-      ),
-      AiRepairStepState.failed => Icon(
-        Icons.cancel_rounded,
-        size: 22,
-        color: context.danger,
-      ),
-      AiRepairStepState.running => SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-      AiRepairStepState.waiting => Icon(
-        Icons.radio_button_unchecked_rounded,
-        size: 22,
-        color: AppChrome.of(context).sectionText,
-      ),
-    };
