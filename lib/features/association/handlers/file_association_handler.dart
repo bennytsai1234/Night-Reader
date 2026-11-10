@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
@@ -16,33 +15,31 @@ import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
 /// AssociationHandlerService 的檔案分享與解析邏輯擴展
 mixin FileAssociationHandler on AssociationBase {
-  void handleSharedMedia(
+  Future<void> handleSharedMedia(
     BuildContext context,
     List<SharedMediaFile> media,
-    Function(BuildContext, String, String, {bool isFile, String? jsonData})
-    showImportDialog,
-    Function(BuildContext, String) showForceImportDialog,
   ) async {
-    for (var file in media) {
-      AppLog.d('收到分享檔案: ${file.path}');
-      final ext = p.extension(file.path).toLowerCase();
+    for (final item in media) {
+      final path = item.path;
+      // 點了 legado://、yuedu:// 連結（ACTION_VIEW）時，分享套件也會把同一個
+      // 連結回報成一筆 url；連結由 app_links 那條處理，這裡再處理一次會把網址
+      // 當成檔案去讀，跳出「無法辨識」。
+      if (item.type == SharedMediaType.url) continue;
+      // text/plain 分享的可能是檔案（套件存成暫存檔，path 是檔案路徑），也可能
+      // 是文字本身（path 就是那段文字）。
+      final isText =
+          item.type == SharedMediaType.text && !await File(path).exists();
+      if (!context.mounted) return;
+      if (isText) {
+        _handleSharedText(context, path);
+        continue;
+      }
+      AppLog.d('收到分享檔案: $path');
+      final ext = p.extension(path).toLowerCase();
       if (ext == '.json') {
-        if (!context.mounted) {
-          return;
-        }
-        unawaited(
-          _handleSharedFile(
-            context,
-            file.path,
-            showImportDialog,
-            showForceImportDialog,
-          ),
-        );
+        await _handleSharedJsonFile(context, path);
       } else if (isSupportedLocalBookExtension(ext)) {
-        if (!context.mounted) {
-          return;
-        }
-        await handleSharedBook(context, file.path);
+        await handleSharedBook(context, path);
       }
     }
   }
@@ -68,38 +65,31 @@ mixin FileAssociationHandler on AssociationBase {
     }
   }
 
-  Future<void> _handleSharedFile(
-    BuildContext context,
-    String path,
-    Function(BuildContext, String, String, {bool isFile, String? jsonData})
-    showImportDialog,
-    Function(BuildContext, String) showForceImportDialog,
-  ) async {
-    try {
-      final content = await File(path).readAsString();
-      final data = jsonDecode(content);
-      var type = 'auto';
-
-      final dynamic first = (data is List && data.isNotEmpty)
-          ? data.first
-          : data;
-      if (first is Map) {
-        if (first.containsKey('bookSourceUrl')) {
-          type = 'bookSource';
-        } else if (first.containsKey('pattern')) {
-          type = 'replaceRule';
-        } else if (first.containsKey('themeName')) {
-          type = 'theme';
-        }
-      }
-
-      if (context.mounted) {
-        showImportDialog(context, type, path, isFile: true, jsonData: content);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        showForceImportDialog(context, path);
-      }
+  /// 分享的文字是網址時照沒寫類型的連結處理（下載後判斷），否則當成內容判斷。
+  void _handleSharedText(BuildContext context, String text) {
+    final trimmed = text.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty) {
+      unawaited(importUntypedLink(context, trimmed));
+    } else {
+      importContent(context, '分享的文字', text);
     }
+  }
+
+  Future<void> _handleSharedJsonFile(BuildContext context, String path) async {
+    final String content;
+    try {
+      content = await File(path).readAsString();
+    } catch (error, stackTrace) {
+      final message = failureMessage('讀取檔案', error, stackTrace);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    if (!context.mounted) return;
+    importContent(context, p.basename(path), content);
   }
 }
