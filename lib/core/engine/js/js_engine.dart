@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -390,25 +391,12 @@ globalThis.__lrStartedRule = -1;
     if (value is Iterable) {
       final nodes = _elementNodes(value);
       if (nodes != null) return _encodeElements(nodes);
+      // Legado 交的 result 是什麼就是什麼：上一段規則 JS 交回的陣列還是
+      // JS 陣列；Dart 這邊取到的清單（CSS、JSON 規則的結果）是 Java 的 List，
+      // 轉成文字是 `[a, b]`。見 __lrJavaList。
       final encodedItems = value.map(_encodeContextValue).join(',');
-      return '''
-(function() {
-  var arr = [$encodedItems];
-  Object.defineProperty(arr, 'toArray', {
-    value: function() { return arr; },
-    enumerable: false
-  });
-  Object.defineProperty(arr, 'get', {
-    value: function(index) { return arr[index]; },
-    enumerable: false
-  });
-  Object.defineProperty(arr, 'size', {
-    value: function() { return arr.length; },
-    enumerable: false
-  });
-  return arr;
-})()
-''';
+      final jsArray = value is _JsArray ? ', true' : '';
+      return '__lrJavaList([$encodedItems]$jsArray)';
     }
     try {
       return jsonEncode(value);
@@ -659,7 +647,7 @@ var __lrScopedObject = function(scope, seed) {
 
   dynamic _decodeContextValue(dynamic value) {
     if (value is List) {
-      return value.map(_decodeContextValue).toList();
+      return _JsArray(value.map(_decodeContextValue).toList());
     }
     if (value is Map) {
       final response = value['__lrResponse'];
@@ -733,3 +721,23 @@ Future<Object?> Function() _jsLibDownload(String url) => () async {
   );
   return utf8.decode(response.data ?? const <int>[], allowMalformed: true);
 };
+
+/// 規則 JS 交回的陣列。再交給下一段規則 JS 時還是 JS 陣列（同 Legado），
+/// 不當成 Java 的 List，見 [JsEngine._encodeContextValue]。
+class _JsArray extends ListBase<dynamic> {
+  _JsArray(this._items);
+
+  final List<dynamic> _items;
+
+  @override
+  int get length => _items.length;
+
+  @override
+  set length(int value) => _items.length = value;
+
+  @override
+  dynamic operator [](int index) => _items[index];
+
+  @override
+  void operator []=(int index, dynamic value) => _items[index] = value;
+}

@@ -244,8 +244,10 @@ String(clean.outerHtml());''',
 
     final json = AnalyzeRule()..setContent('{"items":[]}');
     expect(
-      json.getElements(r'$.items<js>result.push("c"); String(result)</js>'),
-      ['c'],
+      json.getElements(
+        r'$.items<js>result.push("c"); result.length + ":" + result[0]</js>',
+      ),
+      ['1:c'],
     );
   }, skip: skip);
 
