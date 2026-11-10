@@ -298,6 +298,31 @@ void main() {
     expect((await a.book('a-src')).chapterIndex, 2);
   });
 
+  test('a book taken off the shelf and added back resumes where the cloud '
+      'left it', () async {
+    await a.addBook(
+      'a-src',
+      toc: toc,
+      chapterIndex: 3,
+      charOffset: 120,
+      time: 200,
+    );
+    await a.sync.syncAll();
+
+    // 移出書架：這台的書沒了，雲端的進度留著。
+    await a.books.deleteByUrl('a-src');
+    await a.sync.syncAll();
+
+    // 再從書源加回來：新的一本，位置在開頭、從沒移動過。
+    await a.addBook('a-src', toc: toc);
+    await a.sync.syncAll();
+
+    final book = await a.book('a-src');
+    expect(book.chapterIndex, 3);
+    expect(book.charOffset, 120);
+    expect(store.files['progress.json']!.$1, contains('"chapterIndex":3'));
+  });
+
   test('two phones syncing at once keep both books', () async {
     await a.addBook('a-src', toc: toc, chapterIndex: 1, time: 200);
     await b.books.upsert(

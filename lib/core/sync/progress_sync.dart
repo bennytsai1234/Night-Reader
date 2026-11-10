@@ -79,6 +79,20 @@ class ProgressSync extends SyncKind {
     return ids[book.chapterIndex.clamp(0, ids.length - 1)];
   }
 
+  /// 不在這台書架上的書，上次同步的紀錄不留：雲端那筆留著給加回來的時候
+  /// 用。留著的話，加回來的是新的一本、位置在開頭，比對時會當成這台改過、
+  /// 雲端沒變，把開頭送上去蓋掉留著的進度；拿掉之後照從沒同步過合併，
+  /// 新的一本從沒移動過（時間 0），雲端的較新就接上。
+  @override
+  Future<Map<String, SyncRecord>> reconcile(
+    Map<String, SyncRecord> local,
+    Map<String, SyncRecord> remote,
+    Map<String, SyncBaseEntry> base,
+  ) async {
+    base.removeWhere((key, _) => !local.containsKey(key));
+    return local;
+  }
+
   @override
   SyncFingerprint get fingerprint => fingerprintOf;
 
