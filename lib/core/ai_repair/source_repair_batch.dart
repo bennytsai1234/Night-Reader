@@ -60,7 +60,7 @@ enum RepairOutcome {
   /// 不修：需要登入、在網頁驗證、只能下載、夜讀不支援的類型。
   skipped,
 
-  /// 沒輪到：花費到了上限，或按了停止。
+  /// 未處理：校驗沒有結果、花費到了上限，或按了停止。
   notTried,
 }
 
@@ -251,7 +251,10 @@ class SourceRepairBatch extends ChangeNotifier {
     final entries = {for (final entry in checked) entry.sourceUrl: entry};
     for (final item in items) {
       final entry = entries[item.source.bookSourceUrl];
-      if (entry == null) continue;
+      if (entry == null) {
+        _finish(item, RepairOutcome.notTried, '校驗沒有取得結果，這次不修');
+        continue;
+      }
       item.before = entry.health.category;
       final source = item.source;
       if (entry.isHealthy) {
@@ -335,14 +338,21 @@ class SourceRepairBatch extends ChangeNotifier {
         await _share(lead, others, fixed);
       } else if (!_stopped && _hasBudget) {
         _finish(lead, RepairOutcome.notFixed, job.explanation ?? '沒修好');
-        await _markUnfixable(lead.source);
-        for (final item in others) {
-          _finish(
-            item,
-            RepairOutcome.notFixed,
-            '同網站的「${lead.source.bookSourceName}」沒修好',
-          );
-          await _markUnfixable(item.source);
+        if (job.confirmedUnfixable) {
+          await _markUnfixable(lead.source);
+          for (final item in others) {
+            if (_stopped) return;
+            _finish(
+              item,
+              RepairOutcome.notFixed,
+              '同網站的「${lead.source.bookSourceName}」沒修好',
+            );
+            await _markUnfixable(item.source);
+          }
+        } else {
+          for (final item in others) {
+            item.detail = '同網站的 AI 修復中斷，這次尚未嘗試';
+          }
         }
       }
     });
