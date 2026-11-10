@@ -14,6 +14,7 @@ const _service = (
   baseUrl: 'https://ai.example/v1',
   apiKey: 'sk-test',
   model: 'm',
+  effort: '',
 );
 
 BookSource _source(String url, {String content = 'id.old@text'}) => BookSource(

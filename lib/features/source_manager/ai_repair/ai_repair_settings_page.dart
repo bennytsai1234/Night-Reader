@@ -5,6 +5,7 @@ import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 /// 會送出什麼：設定頁的說明，與 `PRIVACY.md`、App 的「隱私說明」同一件事
@@ -33,10 +34,14 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
   bool _revealed = false;
   bool _testing = false;
 
+  /// 思考程度（[aiEfforts] 的值）。
+  String _effort = '';
+
   AiService get _service => (
     baseUrl: _url.text.trim(),
     apiKey: _key.text.trim(),
     model: _model.text.trim(),
+    effort: _effort,
   );
 
   @override
@@ -51,6 +56,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       _url.text = saved.baseUrl;
       _key.text = saved.apiKey;
       _model.text = saved.model;
+      _effort = saved.effort;
     } catch (error, stack) {
       AppLog.e('讀 AI 修書源設定失敗', error: error, stackTrace: stack);
     } finally {
@@ -71,6 +77,20 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// 思考程度：低的回得快、可能比較常走錯方向；服務預設不送這個參數。
+  Future<void> _pickEffort(BuildContext rowContext) async {
+    FocusScope.of(context).unfocus();
+    final picked = await showGlassMenu<String>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: [
+        for (final MapEntry(key: value, value: label) in aiEfforts.entries)
+          GlassMenuItem(value: value, label: label, checked: value == _effort),
+      ],
+    );
+    if (picked != null && mounted) setState(() => _effort = picked);
   }
 
   Future<void> _test() async {
@@ -127,6 +147,14 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                 label: '模型',
                 controller: _model,
                 textInputAction: TextInputAction.done,
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '思考程度',
+                  value: aiEfforts[_effort],
+                  showChevron: false,
+                  onTap: () => unawaited(_pickEffort(rowContext)),
+                ),
               ),
             ],
           ),

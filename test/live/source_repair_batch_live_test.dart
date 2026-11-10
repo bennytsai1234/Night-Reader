@@ -8,7 +8,8 @@
 /// ```
 ///
 /// - 服務固定是 DeepSeek（`https://api.deepseek.com`），`NR_AI_MODEL` 換模型，
-///   預設 `deepseek-flash`；整批用量上限 100 萬 token。
+///   預設 `deepseek-flash`；`NR_AI_EFFORT` 是思考程度（`low`、`medium`、
+///   `high`，不給是服務預設）；整批用量上限 100 萬 token。
 /// - 書源先存進暫存資料庫，照 App 的流程重新校驗、檢查網站、換網址、問 AI、
 ///   套用到同網站；存的也是暫存資料庫，跑完刪掉。
 /// - 結果檔是總時間、總 token 與每個書源的結果、網站檢查、AI 的每一步。
@@ -103,6 +104,7 @@ void main() {
         baseUrl: 'https://api.deepseek.com',
         apiKey: key,
         model: env['NR_AI_MODEL'] ?? 'deepseek-flash',
+        effort: env['NR_AI_EFFORT'] ?? '',
       ),
       tokenBudget: 1000000,
     );

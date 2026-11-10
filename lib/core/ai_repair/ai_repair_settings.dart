@@ -2,8 +2,23 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 使用者自己的 AI 服務（ADR 0054）：OpenAI 相容的服務網址、金鑰與模型名稱。
-typedef AiService = ({String baseUrl, String apiKey, String model});
+/// 使用者自己的 AI 服務（ADR 0054）：OpenAI 相容的服務網址、金鑰、模型名稱
+/// 與思考程度（[aiEfforts] 的值，空字串是服務預設、不送）。
+typedef AiService = ({
+  String baseUrl,
+  String apiKey,
+  String model,
+  String effort,
+});
+
+/// 思考程度：送給服務的 `reasoning_effort` 與畫面上的名稱。空字串是不送、
+/// 由服務決定（有的服務不認得這個參數，送了會報錯）。
+const Map<String, String> aiEfforts = {
+  '': '服務預設',
+  'low': '低',
+  'medium': '中',
+  'high': '高',
+};
 
 /// AI 修書源的設定，存在偏好設定裡：備份帶著（備份收全部偏好設定），同步也
 /// 帶著（`SettingsSync.keys`），和書源的登入資料一樣（ADR 0054）。
@@ -48,10 +63,12 @@ class AiRepairSettings {
       final String value => value.trim(),
       _ => '',
     };
+    final effort = field('effort');
     return (
       baseUrl: field('baseUrl'),
       apiKey: field('apiKey'),
       model: field('model'),
+      effort: aiEfforts.containsKey(effort) ? effort : '',
     );
   }
 
@@ -61,6 +78,7 @@ class AiRepairSettings {
       baseUrl: service.baseUrl.trim(),
       apiKey: service.apiKey.trim(),
       model: service.model.trim(),
+      effort: service.effort,
     );
     if (value.baseUrl.isEmpty && value.apiKey.isEmpty && value.model.isEmpty) {
       await prefs.remove(serviceKey);
@@ -72,6 +90,7 @@ class AiRepairSettings {
         'baseUrl': value.baseUrl,
         'apiKey': value.apiKey,
         'model': value.model,
+        if (value.effort.isNotEmpty) 'effort': value.effort,
       }),
     );
   }

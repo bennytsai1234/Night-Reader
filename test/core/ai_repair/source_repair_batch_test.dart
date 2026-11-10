@@ -10,7 +10,12 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 
-const _service = (baseUrl: 'https://ai.example/v1', apiKey: 'k', model: 'm');
+const _service = (
+  baseUrl: 'https://ai.example/v1',
+  apiKey: 'k',
+  model: 'm',
+  effort: '',
+);
 
 BookSource _source(String url, {String content = 'id.old@text'}) => BookSource(
   bookSourceUrl: url,

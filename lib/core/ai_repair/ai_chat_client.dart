@@ -91,6 +91,7 @@ class AiChatClient {
               {'role': message.role, 'content': message.content},
           ],
           'temperature': 0.2,
+          if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
         },
         options: Options(
           headers: {

@@ -307,7 +307,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     final notFixed = of(const {RepairOutcome.notFixed});
     final rest = [
       ('重新校驗就沒問題了', _batch.count(RepairOutcome.healthy)),
-      ('不用修（需要登入、驗證或只能下載）', _batch.count(RepairOutcome.skipped)),
+      ('不用修（需要登入、驗證、只能下載或 AI 試過修不好）', _batch.count(RepairOutcome.skipped)),
       ('沒輪到', _batch.count(RepairOutcome.notTried)),
     ].where((row) => row.$2 > 0).toList();
     final working = [
