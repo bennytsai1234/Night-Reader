@@ -596,9 +596,12 @@ void main() {
     expect(asked, isEmpty);
     expect(applied, isEmpty);
     expect(s.isFinished, isTrue);
+    s.dispose();
+    await s.start();
+    expect(asked, isEmpty);
   });
 
-  test('clipboard validation keeps its completion pending until cancelled', () async {
+  test('clipboard validation waits for cancellation', () async {
     final source = _source('https://site.example');
     final gate = Completer<SourceCheckIsolateResult?>();
     var checks = 0;
