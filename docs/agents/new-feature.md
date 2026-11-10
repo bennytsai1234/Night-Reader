@@ -25,7 +25,7 @@
 | 找書 | 搜尋（結果怎麼分、能不能篩） | `docs/design/screens.md` |
 | | 發現 | `docs/design/screens.md` |
 | | 換源 | ADR 0053、0056 |
-| | 手機上的檔案能不能匯入 | ADR 0032、0052 |
+| | 手機上的檔案能不能匯入 | ADR 0032、0052、0055 |
 | 擁有 | 書架（篩選、書卡、預設封面） | `docs/design/screens.md`、`components.md` |
 | | 書籍詳情與它的選單 | `docs/design/screens.md` |
 | | 下載：自動還是手動、存成什麼、下載管理的用詞 | ADR 0008 |
@@ -44,6 +44,7 @@
 | | `README.md`、網站、`GLOSSARY.md` 開頭 | `docs/agents/website.md` |
 | | `docs/design/` 的規格 | |
 | | iPhone 上能不能用 | ADR 0003 |
+| | 自動巡檢：新的資料夾與服務排進哪一段 | `docs/agents/auto-audit.md`「舊程式」 |
 
 ## 盤點既有功能時
 

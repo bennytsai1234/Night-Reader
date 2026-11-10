@@ -1,6 +1,6 @@
 # 夜讀 Night Reader
 
-Android 小說閱讀器：從使用者自行匯入的書源搜尋、閱讀、下載網路小說，也能閱讀本地 TXT 與 EPUB。
+Android 閱讀器：從使用者自行匯入的書源搜尋、閱讀、下載網路小說與漫畫、收聽有聲書，也能閱讀本地 TXT、EPUB 與漫畫。
 
 這裡只收和使用者討論時真的會用到、或在 ADR 裡爭論過的詞。寫給使用者看時用這些詞，第一次出現先解釋；列在 _Avoid_ 的說法不用。
 
@@ -33,7 +33,7 @@ _Avoid_: 更新日誌、commit 標題
 _Avoid_: demo、mockup
 
 **自動巡檢**：
-ChatGPT 的兩個每日排程：一個看 `beta` 過去 24 小時的改動，一個輪一段舊程式（17 天一圈）；找到的問題寫成一份報告開成一個 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。
+ChatGPT 的兩個每日排程：一個看 `beta` 過去 24 小時的改動，一個輪一段舊程式（20 天一圈）；找到的問題寫成一份報告開成一個 GitHub issue，標上 `auto-audit`，由維護者再判斷要不要處理。規則在 `docs/agents/auto-audit.md`。
 _Avoid_: 定期掃描、AI review、審查（那是合併前派 Codex 審 PR）
 
 **收尾**：
