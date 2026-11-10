@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:app_links/app_links.dart';
@@ -36,21 +38,14 @@ class AssociationHandlerService extends AssociationBase
     // 1. Deep Link (legado://、yuedu://)：app_links 6 起這個串流也會送出開啟
     // App 的那個連結，不另外呼叫 getInitialLink()，否則冷啟動會跳兩次匯入。
     linkSubscription = appLinks.uriLinkStream.listen((uri) {
-      if (context.mounted) handleUri(context, uri, showImportDialog);
+      if (context.mounted) handleUri(context, uri);
     });
 
     // 2. Sharing Intent (File/Text)
     sharedMediaSubscription = ReceiveSharingIntent.instance
         .getMediaStream()
         .listen((value) {
-          if (context.mounted) {
-            handleSharedMedia(
-              context,
-              value,
-              showImportDialog,
-              showForceImportDialog,
-            );
-          }
+          if (context.mounted) unawaited(handleSharedMedia(context, value));
         }, onError: (err) => AppLog.e('SharingIntent error: $err', error: err));
 
     // Check initial intents
@@ -61,12 +56,7 @@ class AssociationHandlerService extends AssociationBase
     ReceiveSharingIntent.instance.getInitialMedia().then(
       (value) {
         if (value.isNotEmpty && context.mounted) {
-          handleSharedMedia(
-            context,
-            value,
-            showImportDialog,
-            showForceImportDialog,
-          );
+          unawaited(handleSharedMedia(context, value));
         }
       },
       onError: (Object error, StackTrace stackTrace) {
