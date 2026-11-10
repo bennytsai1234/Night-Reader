@@ -237,11 +237,12 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
-  /// 書、書籤與標註的作者拿掉網站帶的「作者：」「某某 著」字樣
-  /// （[BookHelp.formatBookAuthor]），傳回改了幾筆。書名加作者是同步、書籤
-  /// 與標註認書的身分，三張表一起改才對得上。以前書籍詳情解析沒拿掉這些
-  /// 字樣，升級時改一次；還原舊備份後再改一次，舊備份帶回來的也清掉。
-  /// 書架上的書換了鍵，書架同步照「改了名」送給別台（`BookRenames`）。
+  /// 書、書籤與標註的作者拿掉開頭的「作者：」（[BookHelp.stripAuthorLabel]），
+  /// 傳回改了幾筆。書名加作者是同步、書籤與標註認書的身分，三張表一起改才
+  /// 對得上。以前書籍詳情解析沒拿掉這個字樣，升級時改一次；還原舊備份後
+  /// 再改一次，舊備份帶回來的也清掉；別台舊版送來的書籤、標註在同步套用時
+  /// 清（`BookmarkSync`、`HighlightSync`）。書架上的書換了鍵，書架同步照
+  /// 「改了名」送給別台（`BookRenames`）。
   Future<int> cleanBookAuthors() async {
     var changed = 0;
     for (final (table, key, column) in const [
@@ -255,14 +256,15 @@ class AppDatabase extends _$AppDatabase {
         variables: [Variable<String>(table)],
       ).get();
       if (hasTable.isEmpty) continue;
-      // 先用 SQL 挑出可能帶字樣的，不必整張表讀出來。
+      // 先用 SQL 挑出含「作」「者」的，不必整張表讀出來；開頭是「作者：」的
+      // 一定在裡面。
       final rows = await customSelect(
         'SELECT $key AS k, $column AS a FROM $table '
-        "WHERE $column LIKE '%作%者%' OR $column LIKE '% 著%'",
+        "WHERE $column LIKE '%作%者%'",
       ).get();
       for (final row in rows) {
         final author = row.read<String?>('a') ?? '';
-        final clean = BookHelp.formatBookAuthor(author);
+        final clean = BookHelp.stripAuthorLabel(author);
         if (clean == author) continue;
         await customStatement('UPDATE $table SET $column = ? WHERE $key = ?', [
           clean,

@@ -11,7 +11,7 @@ import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/highlight.dart';
 
 /// 升級到 schema 16：書、書籤與標註的作者拿掉以前書籍詳情解析留下的
-/// 「作者：」字樣，三張表一起改，書名加作者照樣對得上。
+/// 開頭的「作者：」，三張表一起改，書名加作者照樣對得上；「著」不動。
 void main() {
   test('upgrading from schema 15 cleans "作者：" from books, bookmarks and '
       'highlights alike', () async {
@@ -25,7 +25,7 @@ void main() {
       Book(bookUrl: 'b1', name: '夜航', author: '作者：某人', isInBookshelf: true),
     );
     await BookDao(before).upsert(
-      Book(bookUrl: 'b2', name: '白晝', author: '某甲 著', isInBookshelf: true),
+      Book(bookUrl: 'b2', name: '白晝', author: '王 著文', isInBookshelf: true),
     );
     await BookDao(before).upsert(
       Book(bookUrl: 'b3', name: '作者手記', author: '作家', isInBookshelf: true),
@@ -41,7 +41,11 @@ void main() {
     addTearDown(db.close);
     final books = BookDao(db);
     expect((await books.getByUrl('b1'))!.author, '某人');
-    expect((await books.getByUrl('b2'))!.author, '某甲');
+    expect(
+      (await books.getByUrl('b2'))!.author,
+      '王 著文',
+      reason: '「著」可能是名字，升級時不動',
+    );
     expect((await books.getByUrl('b3'))!.author, '作家', reason: '沒有字樣的不動');
     expect((await BookmarkDao(db).getAll()).single.bookAuthor, '某人');
     expect((await HighlightDao(db).getAll()).single.bookAuthor, '某人');
