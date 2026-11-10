@@ -182,6 +182,7 @@ String _short(String text) {
 Future<SiteCheck> checkSite(
   BookSource source, {
   Duration timeout = const Duration(seconds: 20),
+  CancelToken? cancelToken,
 }) async {
   final origin = siteOrigin(source.bookSourceUrl);
   if (origin == null) {
@@ -197,8 +198,16 @@ Future<SiteCheck> checkSite(
     return SiteCheck(SiteVerdict.alive, '檢查不了：$error');
   }
   try {
+    if (cancelToken?.isCancelled ?? false) {
+      return const SiteCheck(SiteVerdict.unreachable, '已停止');
+    }
+    unawaited(
+      cancelToken?.whenCancel.then(
+        (_) => worker.kill(StateError('網站檢查已停止')),
+      ),
+    );
     final map = await worker
-        .run(_siteTask(source.toJson(), origin))
+        .run(_siteTask(source.toJson(), origin), cancelToken: cancelToken)
         .timeout(
           timeout,
           onTimeout: () =>
