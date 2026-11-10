@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/painting.dart';
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -39,6 +40,9 @@ final class HybridTextGeometry {
     required this._blocksOf,
     required this._layoutSpec,
   });
+
+  /// 比這矮的框是對齊補白（零高度的佔位格），不是字。
+  static const double _spacerHeightEpsilon = 0.5;
 
   final ParagraphCache _paragraphCache;
   final LayoutEpoch _epoch;
@@ -399,7 +403,7 @@ final class HybridTextGeometry {
           sourceStart - groupStart,
           sourceEnd - groupStart,
         );
-    final boxes = _boxesPerLine(
+    final boxes = boxesPerLine(
       entry.paragraph,
       entry.paragraph.getBoxesForRange(local.start, local.end),
     );
@@ -450,13 +454,20 @@ final class HybridTextGeometry {
   /// （Noto Sans CJK 約 1.45 em），不隨行高倍率縮放：行高設得比這小時，
   /// 相鄰兩行的框會疊進對方；同一行裡不同字型的 run（中文、拉丁字、
   /// 數字）高度也各不相同。以行格為界，上下兩行的框恰好相接。
-  static List<ui.TextBox> _boxesPerLine(
+  ///
+  /// 對齊補白（[LineSpacer]）是零高度的佔位格，框落在行底，正好是和下一
+  /// 行的交界；照它找最近的字可能找到下一行，下一行的框就被撐到這一行的
+  /// 補白那麼寬。補白夾在字與字之間，這一行的框本來就由兩旁的字撐滿，所以
+  /// 不算它。
+  @visibleForTesting
+  static List<ui.TextBox> boxesPerLine(
     ui.Paragraph paragraph,
     List<ui.TextBox> boxes,
   ) {
     if (boxes.isEmpty) return boxes;
     final lines = <int, ui.TextBox>{};
     for (final box in boxes) {
+      if (box.bottom - box.top < _spacerHeightEpsilon) continue;
       final glyph = paragraph.getClosestGlyphInfoForOffset(
         Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2),
       );
