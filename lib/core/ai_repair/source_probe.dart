@@ -225,9 +225,7 @@ Future<String> fetchPageForAi(
   try {
     if (cancelToken?.isCancelled ?? false) return '已停止';
     unawaited(
-      cancelToken?.whenCancel.then(
-        (_) => worker.kill(StateError('抓網頁已停止')),
-      ),
+      cancelToken?.whenCancel.then((_) => worker.kill(StateError('抓網頁已停止'))),
     );
     final lines = await worker
         .run(
