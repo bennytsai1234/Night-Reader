@@ -208,10 +208,17 @@ Future<DownloadPlan> _planDownload(
   } else if (book.bookKind == BookSourceKind.comic) {
     // 漫畫一話一個 CBZ（ADR 0052），不看資料庫裡的正文。
     final downloaded = await downloadedComicChapterUrls(book, scope);
-    missing = [
+    final pending = [
       for (final chapter in scope)
         if (!downloaded.contains(chapter.url))
           (index: chapter.index, url: chapter.url, title: chapter.title),
+    ];
+    // 從讀到的那話往後先抓，再補前面的（ADR 0052）：還原備份後整本都缺時，
+    // 正在讀的地方不用等前面幾百話。
+    final reading = book.chapterIndex;
+    missing = [
+      ...pending.where((chapter) => chapter.index >= reading),
+      ...pending.where((chapter) => chapter.index < reading),
     ];
   } else {
     final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(

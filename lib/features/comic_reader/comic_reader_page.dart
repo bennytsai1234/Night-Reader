@@ -14,8 +14,13 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
+import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_page_exit_coordinator.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/local_comic_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
@@ -76,7 +81,8 @@ class ComicReaderPage extends StatefulWidget {
 
 enum _MoreAction { changeSource, refetchChapter, bookDetail, globalSettings }
 
-class _ComicReaderPageState extends State<ComicReaderPage> {
+class _ComicReaderPageState extends State<ComicReaderPage>
+    implements ReaderV2ExitFlowDelegate {
   static const Duration _saveDelay = Duration(milliseconds: 400);
 
   final ReaderV2SettingsController _settings = ReaderV2SettingsController();
@@ -109,15 +115,20 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
     current: () => _location,
     flush: _flush,
     titles: () => [for (final chapter in _chapters) chapter.title],
+    ids: () => [for (final chapter in _chapters) chapter.url],
     jumpTo: (chapter, page) => _jumpTo(chapter, pageIndex: page),
     resumes: widget.startChapter == null,
   );
 
   Book get _book => widget.book;
 
+  /// 閱讀器開著時，開 App 或還原備份的清理不動這本書（[BooksInUse]）。
+  late final BookInUse _inUse;
+
   @override
   void initState() {
     super.initState();
+    _inUse = BooksInUse.hold(widget.book.bookUrl);
     _strip.onAutoScrollStopped = () => _autoScrolling.value = false;
     _menuVisible.addListener(() {
       final behind = _menuBehind;
@@ -133,6 +144,7 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
   void dispose() {
     // 存好最後的位置再上傳（[ComicProgressSync.dispose] 會先 flush）。
     _sync.dispose();
+    _inUse.release();
     _model?.dispose();
     _settings.dispose();
     _menuVisible.dispose();
@@ -195,6 +207,7 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
         chapterCount: chapters.length,
         chapterIndex: chapterIndex,
         pageIndex: start == null ? resume?.pageIndex ?? _book.charOffset : 0,
+        isReadable: (index) => !chapters[index].isVolume,
       )..addListener(_onModel);
       setState(() {
         _chapters = chapters;
@@ -206,8 +219,9 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
                   .toDouble()
             : 0;
       });
-      _currentChapter.value = chapterIndex;
-      _refreshProgress(chapterIndex, model.anchorPage);
+      // 存的位置是分卷標題時，模型已經換到它後面那一話。
+      _currentChapter.value = model.anchorChapter;
+      _refreshProgress(model.anchorChapter, model.anchorPage);
       model.start();
       _sync.bookOpened();
     } catch (error) {
@@ -473,6 +487,11 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
         targetChapterIndex: location.chapterIndex,
         targetChapterTitle: title.isEmpty ? null : title,
       );
+      // 換源時文字書照字的位置對，漫畫沒有字：對到同名的那一話就接著同一
+      // 張（新書源張數不同時，開書時夾在範圍內）。
+      prepared.migratedBook.charOffset = prepared.targetChapter.title == title
+          ? location.pageIndex
+          : 0;
       await service.commitSwitch(_book, prepared);
       AppEventBus().fire(AppEventBus.upBookshelf);
       onSuccess(prepared);
@@ -506,6 +525,7 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
       source: source,
       chapterCount: _chapters.length,
       chapterIndex: index,
+      isReadable: (i) => !_chapters[i].isVolume,
     )..addListener(_onModel);
     model
       ..removeListener(_onModel)
@@ -525,9 +545,57 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
         builder: (_) => BookDetailPage(book: _book, fromReader: true),
       ),
     );
-    if (!mounted || targetUrl == null) return;
+    if (!mounted) return;
+    // 書籍詳情可能檢查到新的話：目錄變了就重讀，新的話接得上、點得到。
+    final latest = await getIt<ChapterDao>().getByBook(_book.bookUrl);
+    if (!mounted) return;
+    final changed =
+        latest.isNotEmpty &&
+        (latest.length != _chapters.length ||
+            latest.last.url != _chapters.last.url);
+    if (changed) _reloadChapters(latest);
+    if (targetUrl == null) return;
     final index = _chapters.indexWhere((chapter) => chapter.url == targetUrl);
     if (index >= 0) _jumpTo(index);
+  }
+
+  /// 換成新的目錄 [chapters]，條漫照網址留在原本那一話那一張。
+  void _reloadChapters(List<BookChapter> chapters) {
+    final model = _model;
+    if (model == null) return;
+    final here = _progress.value;
+    final url = _chapters[here.chapterIndex].url;
+    final index = chapters.indexWhere((chapter) => chapter.url == url);
+    final ComicPageSource source;
+    if (widget.pageSource case final given?) {
+      source = given;
+    } else if (_book.isLocal) {
+      source = ComicChapterFilesSource(
+        (i) async => LocalComicService.chapterPathOf(_book, chapters[i]),
+      );
+    } else {
+      source = NetworkComicPageSource(
+        book: _book,
+        source: _source!,
+        chapters: chapters,
+      );
+    }
+    final fresh = ComicStripModel(
+      source: source,
+      chapterCount: chapters.length,
+      chapterIndex: index < 0 ? 0 : index,
+      pageIndex: index < 0 ? 0 : here.pageIndex,
+      isReadable: (i) => !chapters[i].isVolume,
+    )..addListener(_onModel);
+    model
+      ..removeListener(_onModel)
+      ..dispose();
+    setState(() {
+      _chapters = chapters;
+      _model = fresh;
+      _initialFraction = 0;
+    });
+    fresh.start();
   }
 
   Future<void> _openWeb(String url) async {
@@ -536,10 +604,48 @@ class _ComicReaderPageState extends State<ComicReaderPage> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Future<void> _exit() async {
-    await _flush();
-    if (mounted) Navigator.of(context).pop();
+  /// 離開：和文字閱讀器同一套（[ReaderV2PageExitCoordinator]）——沒加入
+  /// 書架的書照「離開時詢問加入書架」問，不留的書清掉它的目錄與暫存。
+  Future<void> _exit() => _exitCoordinator.handleExitIntent(
+    context: context,
+    provider: this,
+    popNavigator: () => Navigator.of(context).pop(),
+  );
+
+  final ReaderV2PageExitCoordinator _exitCoordinator =
+      ReaderV2PageExitCoordinator();
+
+  @override
+  Book get book => _book;
+
+  @override
+  bool shouldPromptAddToBookshelfOnExit() =>
+      !_book.isInBookshelf && _settings.showAddToShelfAlert;
+
+  @override
+  Future<void> persistExitProgress() => _flush();
+
+  @override
+  Future<void> addCurrentBookToBookshelf() async {
+    await const ReaderV2SessionFacade().addCurrentBookToBookshelf(
+      book: _book,
+      chapters: _chapters,
+      location: ReaderV2Location(
+        chapterIndex: _book.chapterIndex,
+        charOffset: _book.charOffset,
+        visualOffsetPx: _book.visualOffsetPx,
+      ),
+      chapterTitle: _titleOf(_book.chapterIndex),
+      bookDao: getIt<BookDao>(),
+      chapterDao: getIt<ChapterDao>(),
+    );
+    // 加入書架的漫畫整本下載（ADR 0008、0052）。
+    unawaited(DownloadService().keepShelfBookDownloaded(_book.bookUrl));
   }
+
+  @override
+  Future<void> discardUnkeptBookStorage() =>
+      BookStorageService().discardBook(_book);
 
   // ─── 畫面 ───────────────────────────────────────────────────────────
 

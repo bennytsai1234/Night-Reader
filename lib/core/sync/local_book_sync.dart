@@ -8,6 +8,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/local_book/local_book_fingerprint.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
@@ -245,13 +246,17 @@ class LocalBookSync {
     return shelf;
   }
 
-  /// 書架上的一本本地漫畫：書的資料夾裡每話一個 CBZ。
+  /// 書架上的一本本地漫畫：書的資料夾裡每話一個 CBZ。只算檔案真的在的
+  /// 話：還原或補檔中斷少了幾話時，雲端有的照常下載補回，也不會把沒有的
+  /// 話記成傳上去了。
   Future<LocalShelfBook> _comicShelfBook(Book book, String path) async {
-    final chapters = await _chapterDao.getByBook(book.bookUrl);
+    final chapters = <BookChapter>[];
     var size = 0;
-    for (final chapter in chapters) {
+    for (final chapter in await _chapterDao.getByBook(book.bookUrl)) {
       final file = File(LocalComicService.chapterPathOf(book, chapter));
-      if (await file.exists()) size += await file.length();
+      if (!await file.exists()) continue;
+      chapters.add(chapter);
+      size += await file.length();
     }
     return LocalShelfBook(
       name: book.name,
