@@ -11,14 +11,11 @@ import 'glass.dart';
 import 'launch_entrance.dart';
 
 class FloatingTabItem {
-  const FloatingTabItem({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-  });
+  const FloatingTabItem({required this.icon, required this.label});
 
+  /// 選中與未選都用同一個圖示（空心），只換顏色：選取膠囊滑過中點時圖示
+  /// 的形狀不換。
   final IconData icon;
-  final IconData selectedIcon;
   final String label;
 }
 
@@ -258,7 +255,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             color: scheme.onSurfaceVariant,
           ),
           selected: _TabGlyph(
-            icon: item.selectedIcon,
+            icon: item.icon,
             label: item.label,
             color: scheme.primary,
           ),

@@ -43,16 +43,8 @@ void main() {
         ),
         bottomNavigationBar: FloatingTabBar(
           items: const [
-            FloatingTabItem(
-              icon: Icons.book_outlined,
-              selectedIcon: Icons.book,
-              label: '書',
-            ),
-            FloatingTabItem(
-              icon: Icons.explore_outlined,
-              selectedIcon: Icons.explore,
-              label: '發現',
-            ),
+            FloatingTabItem(icon: Icons.book_outlined, label: '書'),
+            FloatingTabItem(icon: Icons.explore_outlined, label: '發現'),
           ],
           currentIndex: 0,
           onTap: (_) {},
