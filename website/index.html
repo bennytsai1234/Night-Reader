@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>夜讀 Night Reader｜開源小說閱讀器</title>
-  <meta name="description" content="夜讀（夜读）是開源的 Android 小說閱讀器，書源相容 Legado（閱讀）：朗讀、多台手機接著讀、整本離線下載、選字隱藏廣告、書源校驗。免費、沒有廣告，GPL-3.0 釋出。">
-  <meta name="keywords" content="夜讀, 夜读, Night Reader, 小說閱讀器, 小说阅读器, 書源, 书源, Legado, 閱讀, 阅读, 開源閱讀, 开源阅读, 網路小說, 网络小说, TXT 閱讀器, TXT 阅读器, EPUB 閱讀器, EPUB 阅读器, TTS 朗讀, 听书">
+  <title>夜讀 Night Reader｜開源小說、漫畫、有聲書閱讀器</title>
+  <meta name="description" content="夜讀（夜读）是開源的 Android 小說、漫畫與有聲書閱讀器，書源相容 Legado（閱讀）：朗讀、多台手機接著讀、整本離線下載、選字隱藏廣告、書源校驗與 AI 修書源。免費、沒有廣告，GPL-3.0 釋出。">
+  <meta name="keywords" content="夜讀, 夜读, Night Reader, 小說閱讀器, 小说阅读器, 書源, 书源, Legado, 閱讀, 阅读, 開源閱讀, 开源阅读, 網路小說, 网络小说, TXT 閱讀器, TXT 阅读器, EPUB 閱讀器, EPUB 阅读器, 漫畫閱讀器, 漫画阅读器, CBZ, 有聲書, 有声书, TTS 朗讀, 听书">
   <link rel="canonical" href="https://bennytsai1234.github.io/Night-Reader/">
   <link rel="icon" type="image/png" href="app-icon.png">
   <meta name="theme-color" content="#07050d">
@@ -14,12 +14,12 @@
   <meta property="og:locale" content="zh_TW">
   <meta property="og:site_name" content="夜讀 Night Reader">
   <meta property="og:title" content="夜讀 Night Reader">
-  <meta property="og:description" content="讀網路小說、TXT 與 EPUB，書源相容 Legado。免費、開源、沒有廣告。">
+  <meta property="og:description" content="讀網路小說、漫畫、有聲書與 TXT、EPUB，書源相容 Legado。免費、開源、沒有廣告。">
   <meta property="og:url" content="https://bennytsai1234.github.io/Night-Reader/">
   <meta property="og:image" content="https://bennytsai1234.github.io/Night-Reader/app-icon.png">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="夜讀 Night Reader">
-  <meta name="twitter:description" content="讀網路小說、TXT 與 EPUB，書源相容 Legado。免費、開源、沒有廣告。">
+  <meta name="twitter:description" content="讀網路小說、漫畫、有聲書與 TXT、EPUB，書源相容 Legado。免費、開源、沒有廣告。">
   <meta name="twitter:image" content="https://bennytsai1234.github.io/Night-Reader/app-icon.png">
 
   <script type="application/ld+json">
@@ -28,11 +28,11 @@
     "@type": "SoftwareApplication",
     "name": "夜讀 Night Reader",
     "alternateName": ["夜讀", "夜读", "Night Reader", "夜讀小說閱讀器", "夜读小说阅读器"],
-    "description": "開源小說閱讀器，相容 Legado（閱讀）書源，支援本地 TXT 與 EPUB、語音朗讀、多台手機同步與離線下載。開源小说阅读器，兼容 Legado（阅读）书源。",
+    "description": "開源小說、漫畫與有聲書閱讀器，相容 Legado（閱讀）書源，支援本地 TXT、EPUB 與漫畫、語音朗讀、多台手機同步與離線下載。開源小说阅读器，兼容 Legado（阅读）书源。",
     "operatingSystem": "Android, iOS",
     "applicationCategory": "ReferenceApplication",
     "inLanguage": "zh-Hant",
-    "keywords": "小說閱讀器, 小说阅读器, 書源, 书源, Legado, 網路小說, 网络小说, TXT, EPUB, TTS",
+    "keywords": "小說閱讀器, 小说阅读器, 漫畫閱讀器, 有聲書, 書源, 书源, Legado, 網路小說, 网络小说, TXT, EPUB, CBZ, TTS",
     "license": "https://www.gnu.org/licenses/gpl-3.0.html",
     "url": "https://bennytsai1234.github.io/Night-Reader/",
     "downloadUrl": "https://github.com/bennytsai1234/Night-Reader/releases/latest",
@@ -63,7 +63,7 @@
   <section class="hero">
     <div class="hero-copy">
       <h1>夜讀</h1>
-      <p class="lead">讀網路小說、TXT 與 EPUB，書源相容 Legado</p>
+      <p class="lead">讀網路小說、漫畫、有聲書與 TXT、EPUB，書源相容 Legado</p>
       <div class="get">
         <a class="dl" href="https://github.com/bennytsai1234/Night-Reader/releases/latest"><img src="icon.webp" alt=""><span><b>下載夜讀</b><small class="meta">Android</small></span></a>
       </div>
@@ -155,6 +155,14 @@
       </article>
 
       <article class="feature">
+        <div class="shots"><div class="phone"><div class="screen"><img src="shots/illustration.webp" alt="正文中間夾著一張插圖" loading="lazy"></div></div></div>
+        <div class="text">
+          <h3>插圖</h3>
+          <p>正文裡的圖夾在字中間，EPUB 的插圖也是</p>
+        </div>
+      </article>
+
+      <article class="feature">
         <div class="shots"><div class="phone"><div class="screen stack" data-toggle="covers">
           <img data-key="source" src="shots/covers-source.webp" alt="書架上每本書用書源的封面" loading="lazy">
           <img data-key="unified" src="shots/covers-unified.webp" alt="統一封面，每本書都是夜空" loading="lazy">
@@ -199,6 +207,22 @@
       </article>
 
       <article class="feature">
+        <div class="shots"><div class="phone"><div class="screen"><img src="shots/comic.webp" alt="漫畫一張接一張往下捲" loading="lazy"></div></div></div>
+        <div class="text">
+          <h3>漫畫</h3>
+          <p>漫畫書源一路往下捲，CBZ 與圖片資料夾也能匯入</p>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div class="shots"><div class="phone"><div class="screen"><img src="shots/audiobook.webp" alt="有聲書的集數清單與播放控制" loading="lazy"></div></div></div>
+        <div class="text">
+          <h3>有聲書</h3>
+          <p>一集一集聽，離開播放器也能從書架暫停、繼續</p>
+        </div>
+      </article>
+
+      <article class="feature">
         <div class="shots devices">
           <div class="tablet"><div class="screen"><img src="shots/sync-tablet.webp" alt="平板上打開同一本書，停在同一句" loading="lazy"></div></div>
           <div class="phone"><div class="screen"><img src="shots/sync-phone.webp" alt="手機上讀到一半" loading="lazy"></div></div>
@@ -214,6 +238,14 @@
         <div class="text">
           <h3>書源校驗</h3>
           <p>批次找出失效的書源，也能逐步除錯</p>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div class="shots"><div class="phone"><div class="screen"><img src="shots/ai-repair.webp" alt="AI 一步步試抓、交出，校驗通過才換上修好的書源" loading="lazy"></div></div></div>
+        <div class="text">
+          <h3>AI 修復</h3>
+          <p>用自己的 AI 服務修好壞掉的書源，校驗通過才換上</p>
         </div>
       </article>
 

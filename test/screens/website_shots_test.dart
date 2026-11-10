@@ -10,6 +10,26 @@
 @Tags(['screens'])
 library;
 
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/ai_repair/source_probe.dart';
+import 'package:night_reader/core/constant/source_type.dart';
+import 'package:night_reader/core/services/book_illustration_storage.dart';
+import 'package:night_reader/core/services/local_comic_service.dart';
+import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/features/audiobook/audiobook_page.dart';
+import 'package:night_reader/features/audiobook/audiobook_player.dart';
+import 'package:night_reader/features/source_manager/ai_repair/ai_repair_page.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:path/path.dart' as p;
+
+import '../features/audiobook/audiobook_test_doubles.dart';
+
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -18,6 +38,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
@@ -288,6 +309,14 @@ final _shots = <_Shot>[
       await _openMine(t, '書源管理');
     },
   ),
+  _Shot(
+    'illustration',
+    steps: (t) async {
+      await t.runAsync(_seedIllustration);
+      await openReader(t);
+    },
+    prefs: const {PreferKey.readerShowIllustrations: true},
+  ),
   // 下面三段改了正文與替換規則，放最後。
   // 選字隱藏用前後兩張，不錄短片：選字選單與隱藏後的提示沒有指定字型，
   // 手機上是系統字型，測試裡會畫成方塊。
@@ -328,7 +357,220 @@ final _shots = <_Shot>[
       await openReader(t);
     },
   ),
+  // 下面三段各自加書或開頁，放最後，前面書架的畫面不受影響。
+  _Shot(
+    'comic',
+    mode: 'light',
+    steps: (t) async {
+      final book = await t.runAsync(_seedComic);
+      _push(t, BookOpenRoute(book: book!));
+      await settle(t, _ms(1500));
+      for (var i = 0; i < 20; i++) {
+        await t.runAsync(() => Future<void>.delayed(_ms(50)));
+        await settle(t, _ms(100));
+      }
+    },
+  ),
+  _Shot(
+    'audiobook',
+    steps: (t) async {
+      final (book, player, engine) = (await t.runAsync(_seedAudiobook))!;
+      _push(
+        t,
+        MaterialPageRoute<void>(
+          builder: (_) => AudiobookPage(book: book, player: player),
+        ),
+      );
+      await settle(t, _ms(1200));
+      for (var i = 0; i < 10; i++) {
+        await t.runAsync(() => Future<void>.delayed(_ms(50)));
+        await settle(t, _ms(100));
+      }
+      engine.advance(const Duration(minutes: 8, seconds: 12));
+      await settle(t, _ms(1500));
+    },
+  ),
+  _Shot(
+    'ai-repair',
+    steps: (t) async {
+      final session = _aiRepairSession();
+      _push(
+        t,
+        MaterialPageRoute<void>(builder: (_) => AiRepairPage(session: session)),
+      );
+      await settle(t, _ms(1200));
+      for (var i = 0; i < 20; i++) {
+        await t.runAsync(() => Future<void>.delayed(_ms(30)));
+        await settle(t, _ms(100));
+      }
+    },
+  ),
 ];
+
+void _push(WidgetTester tester, Route<void> route) => unawaited(
+  tester.state<NavigatorState>(find.byType(Navigator).first).push(route),
+);
+
+/// 一章正文中間夾一張插圖（夜空的畫），「顯示插圖」開著。
+Future<void> _seedIllustration() async {
+  const src = 'https://img.example.com/rain-night.jpg';
+  final paragraphs = [...kParagraphs];
+  paragraphs.insert(2, '<img src="$src">');
+  await _saveChapter(2, paragraphs);
+  final book = (await getIt<BookDao>().getByUrl(kBookUrl))!;
+  final dir = await BookIllustrationStorage.dirFor(book);
+  await Directory(dir).create(recursive: true);
+  await File(BookIllustrationStorage.pathFor(dir, src)).writeAsBytes(
+    await DefaultBookCover.renderPng('雨夜的書鋪', width: 960, height: 640),
+  );
+}
+
+/// 本地漫畫一本：三話，每話五張（畫面用漫畫的預設封面當畫），從第一話開。
+Future<Book> _seedComic() async {
+  final root = await AppStoragePaths.temporaryDir();
+  final work = Directory(p.join(root.path, 'web-comic', '星港夜行'));
+  if (work.existsSync()) work.deleteSync(recursive: true);
+  for (var c = 1; c <= 3; c++) {
+    final dir = Directory(p.join(work.path, '第 $c 話'))
+      ..createSync(recursive: true);
+    for (var i = 1; i <= 5; i++) {
+      File(p.join(dir.path, '$i.png')).writeAsBytesSync(
+        await DefaultBookCover.renderPng(
+          '星港夜行 $c-$i',
+          width: 800,
+          height: 1150,
+          kind: BookSourceKind.comic,
+        ),
+      );
+    }
+  }
+  final book = (await LocalComicService(
+    bookDao: getIt<BookDao>(),
+    chapterDao: getIt<ChapterDao>(),
+  ).importPath(work.path))!;
+  return book;
+}
+
+/// 有聲書一本：書源、十二集目錄，播放器用假的音訊引擎，播到第四集。
+Future<(Book, AudiobookPlayer, FakeAudioEngine)> _seedAudiobook() async {
+  const origin = 'https://audio.example.com';
+  final book = Book(
+    bookUrl: '$origin/book/1',
+    origin: origin,
+    originName: '夜雨聽書',
+    name: '長夜將盡',
+    author: '沈墨',
+    type: SourceType.audio,
+    chapterIndex: 4,
+    charOffset: 492000,
+    durChapterTitle: '第 4 集 雨夜來客',
+    totalChapterNum: 12,
+    isInBookshelf: true,
+  );
+  const titles = [
+    '山城舊事',
+    '渡口',
+    '燈下',
+    '雨夜來客',
+    '空屋',
+    '信',
+    '北行',
+    '霧散',
+    '舊識',
+    '歸途',
+    '長夜',
+    '天明',
+  ];
+  // 一次交易寫完：分開寫的話，第一筆寫完 App 就重新查詢，那個查詢要等
+  // 測試推時鐘才做得完，後面的寫入排在它後面，永遠等不到。
+  await getIt<AppDatabase>().transaction(() async {
+    await getIt<BookSourceDao>().upsert(
+      BookSource(
+        bookSourceUrl: origin,
+        bookSourceName: '夜雨聽書',
+        bookSourceType: SourceType.audio,
+      ),
+    );
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters([
+      BookChapter(
+        url: '$origin/vol1',
+        title: '第一卷 山城',
+        isVolume: true,
+        bookUrl: book.bookUrl,
+        index: 0,
+      ),
+      for (var i = 1; i <= titles.length; i++)
+        BookChapter(
+          url: '$origin/ep$i',
+          title: '第 $i 集 ${titles[i - 1]}',
+          bookUrl: book.bookUrl,
+          index: i,
+        ),
+    ]);
+  });
+  final engine = FakeAudioEngine();
+  final player = AudiobookPlayer(
+    engine: () => engine,
+    sourceService: FakeAudioSourceService(),
+    sync: FakeSync(),
+    playback: RecordingPlayback(),
+  );
+  return (book, player, engine);
+}
+
+/// AI 修好一個正文規則壞掉的書源：試抓一次、交出，校驗通過。
+AiRepairSession _aiRepairSession() {
+  SourceCheckIsolateResult checked(BookSource source) {
+    final healthy = source.ruleContent?.content == 'class.txt@text';
+    return SourceCheckIsolateResult(
+      stage: healthy ? 'done' : 'content',
+      message: healthy ? '校驗成功' : '正文為空',
+      isHealthy: healthy,
+      updatedSourceJson: source.toJson(),
+      logs: const [],
+    );
+  }
+
+  const probe = SourceProbeReport(
+    logs: [(10, '︾開始解析搜尋頁'), (40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
+    requests: ['  ← https://www.example.com/c/1 200：<div class="txt">…'],
+  );
+  final replies = [
+    for (final action in ['test', 'submit'])
+      jsonEncode({
+        'action': action,
+        'source': {
+          'bookSourceUrl': 'https://www.example.com',
+          'searchUrl': '/s?q={{key}}',
+          'ruleContent': {'content': 'class.txt@text'},
+        },
+        'note': '網站改版，正文搬到 div.txt',
+      }),
+  ];
+  var next = 0;
+  return AiRepairSession(
+    sources: [
+      BookSource(
+        bookSourceUrl: 'https://www.example.com',
+        bookSourceName: '夜雨小說網',
+        searchUrl: '/s?q={{key}}',
+        ruleContent: ContentRule(content: 'id.content@text'),
+      ),
+    ],
+    service: (
+      baseUrl: 'https://ai.example.com/v1',
+      apiKey: 'k',
+      model: 'my-model',
+    ),
+    check: (source, _) async => checked(source),
+    probe: (_, _) async => probe,
+    ask: (_, _) async => replies[next++],
+    apply: (_, _) async {},
+    secrets: (_) async => const {},
+    backups: AiRepairBackups(),
+  );
+}
 
 const _hideAd = '【夜雨小說網】請記住本站網址 yeyu-novel.example，手機閱讀更方便';
 
