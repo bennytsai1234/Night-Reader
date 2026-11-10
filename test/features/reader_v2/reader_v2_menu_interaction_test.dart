@@ -4,6 +4,7 @@ import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_br
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
@@ -98,8 +99,34 @@ void main() {
       debugOnRebuildDirtyWidget = previous;
       await gesture.up(timeStamp: const Duration(milliseconds: 64));
     }
-    // 跳到選定的位置：紙蓋上、呼吸收住、正文排好掀開。
-    await waitForText(tester);
+    // 跳到選定的位置：紙蓋上、呼吸收住、正文排好掀開。這段期間拖動條每
+    // 一幀都停在放開的那一格，不先彈回原本的進度再跳過去。
+    final releasedTenths = <int>{};
+    bool covered() => find
+        .byType(LoadingVeil)
+        .evaluate()
+        .any((e) => (e.widget as LoadingVeil).controller.isVisible);
+    for (var clear = 0, i = 0; clear < 5 && i < 300; i++) {
+      clear = covered() ? 0 : clear + 1;
+      for (var frame = 0; frame < 6; frame++) {
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump(const Duration(milliseconds: 16));
+        releasedTenths.add((tester.widget<Slider>(slider).value / 10).round());
+      }
+    }
+    expect(releasedTenths, {
+      (selected / 10).round(),
+    }, reason: '放開後拖動條要停在選定的位置，不能先回到原本的 $before');
+    expect(
+      tester
+          .widget<ReaderV2BottomMenu>(find.byType(ReaderV2BottomMenu))
+          .navigation
+          .scrub
+          .value
+          .holdsSlider,
+      isFalse,
+      reason: '跳轉做完後拖動條改回跟著閱讀進度',
+    );
     expect(
       targets,
       contains(

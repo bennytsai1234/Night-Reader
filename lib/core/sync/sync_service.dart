@@ -711,10 +711,15 @@ class SyncService {
       final base = owned
           ? await _bases.read(ProgressSync.kind)
           : const <String, SyncBaseEntry>{};
+      final mine = ProgressSync.recordOf(book);
       final decision = decideSync(
-        local: ProgressSync.recordOf(book),
+        local: mine,
         remote: theirs,
-        base: base[key],
+        // 鍵底下換了一本時舊的紀錄不算數，同整次同步（[ProgressSync.reconcile]）。
+        base: switch (base[key]) {
+          final last? when ProgressSync.baseHolds(mine, last) => last,
+          _ => null,
+        },
         fingerprint: ProgressSync.fingerprintOf,
       );
       if (decision != SyncDecision.apply ||

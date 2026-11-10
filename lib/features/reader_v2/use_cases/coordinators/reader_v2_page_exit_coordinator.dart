@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
-typedef ReaderV2ExitPrompt = Future<bool?> Function(
+/// 「加入書架？」的選擇；沒選（按取消、點框外、返回鍵）是 null，留在閱讀器。
+enum ReaderV2ExitChoice { addToBookshelf, leave }
+
+typedef ReaderV2ExitPrompt = Future<ReaderV2ExitChoice?> Function(
   BuildContext context,
   Book book,
 );
@@ -47,36 +50,40 @@ class ReaderV2PageExitCoordinator {
         return;
       }
 
-      final addToBookshelf = await _promptAddToBookshelf(
-        context,
-        provider.book,
-      );
+      final choice = await _promptAddToBookshelf(context, provider.book);
       if (!context.mounted) return;
-      if (addToBookshelf == true) {
-        await provider.addCurrentBookToBookshelf();
-        if (!context.mounted) return;
-      } else {
-        await provider.discardUnkeptBookStorage();
-        if (!context.mounted) return;
+      switch (choice) {
+        case null:
+          return;
+        case ReaderV2ExitChoice.addToBookshelf:
+          await provider.addCurrentBookToBookshelf();
+        case ReaderV2ExitChoice.leave:
+          await provider.discardUnkeptBookStorage();
       }
+      if (!context.mounted) return;
       popNavigator();
     } finally {
       _isHandlingExit = false;
     }
   }
 
-  static Future<bool?> _showAddToBookshelfDialog(
+  /// 三顆按鈕直排：加入書架、直接退出、取消（留在閱讀器）。
+  static Future<ReaderV2ExitChoice?> _showAddToBookshelfDialog(
     BuildContext context,
     Book book,
   ) {
-    return showAppAlert<bool>(
+    return showAppAlert<ReaderV2ExitChoice?>(
       context: context,
-      barrierDismissible: false,
       title: '加入書架？',
       message: '《${book.name}》尚未加入書架，是否在退出前加入書架以保留目前閱讀進度？',
       actions: const [
-        AppAlertAction(label: '直接退出', value: false),
-        AppAlertAction(label: '加入書架', value: true, isDefault: true),
+        AppAlertAction(
+          label: '加入書架',
+          value: ReaderV2ExitChoice.addToBookshelf,
+          isDefault: true,
+        ),
+        AppAlertAction(label: '直接退出', value: ReaderV2ExitChoice.leave),
+        AppAlertAction(label: '取消', value: null),
       ],
     );
   }

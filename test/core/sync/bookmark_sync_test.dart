@@ -102,6 +102,21 @@ void main() {
     expect(await a.dao.getAll(), isEmpty);
   });
 
+  test('a bookmark from an older version still carrying "作者：" lands on '
+      'the cleaned book, and is not sent back', () async {
+    final a = phone('a');
+    final b = phone('b');
+    // A 是還沒升級的舊版：作者帶著字樣。
+    await a.dao.add(mark().copyWith(bookAuthor: '作者：沈知秋'));
+    await a.sync.syncAll();
+    final sent = store.files[BookmarkSync(dao: b.dao).fileName];
+
+    await b.sync.syncAll();
+    expect((await b.dao.getAll()).single.bookAuthor, '沈知秋');
+    await b.sync.syncAll();
+    expect(store.files[BookmarkSync(dao: b.dao).fileName], sent);
+  });
+
   test('the chapter number alone is not a change: a phone whose source '
       'numbers chapters differently does not send its copy back', () async {
     final a = phone('a');
