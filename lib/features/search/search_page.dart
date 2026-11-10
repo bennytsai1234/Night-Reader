@@ -40,7 +40,16 @@ class SearchPage extends StatefulWidget {
   final String? initialQuery;
   final BookSource? initialSource;
 
-  const SearchPage({super.key, this.initialQuery, this.initialSource});
+  /// 一開始搜哪一類書：從某本漫畫、有聲書帶書名進來時是它的類別；沒給時
+  /// 是小說，給了 [initialSource] 時照那個書源。
+  final BookSourceKind? initialKind;
+
+  const SearchPage({
+    super.key,
+    this.initialQuery,
+    this.initialSource,
+    this.initialKind,
+  });
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -65,6 +74,11 @@ class _SearchPageState extends State<SearchPage> {
         initialScope: initialSource != null
             ? SearchScope.fromSource(initialSource)
             : null,
+        initialKind:
+            widget.initialKind ??
+            (initialSource == null
+                ? null
+                : SearchProvider.searchKindOf(initialSource)),
       ),
       child: SearchView(
         initialQuery: widget.initialQuery,
@@ -207,7 +221,7 @@ class _SearchViewState extends State<SearchView> {
       currentScope: provider.searchScope,
       groups: provider.sourceGroups,
       onScopeChanged: (newScope) {
-        provider.updateSearchScope(newScope);
+        unawaited(provider.updateSearchScope(newScope));
       },
     );
   }
@@ -352,10 +366,14 @@ class _SearchViewState extends State<SearchView> {
 
     if (provider.lastSearchKey.isNotEmpty && provider.totalSources == 0) {
       final scoped = !provider.searchScope.isAll;
+      // 照類別搜時（頁首有類別膠囊）寫出是哪一類的書源。
+      final sources = provider.kinds.length > 1
+          ? provider.kind.sourceLabel
+          : '書源';
       return AppStateView(
         icon: Icons.source_outlined,
-        title: scoped ? '目前範圍沒有可搜尋的書源' : '尚未加入可搜尋的書源',
-        description: scoped ? '切換搜尋範圍，或到書源管理調整書源。' : '先加入書源，再回來搜尋書籍。',
+        title: scoped ? '目前範圍沒有可搜尋的$sources' : '尚未加入可搜尋的書源',
+        description: scoped ? '切換搜尋範圍或類別，或到書源管理調整書源。' : '先加入書源，再回來搜尋書籍。',
         primaryAction: scoped
             ? AppStateAction(
                 label: '切換至全部書源',
@@ -565,7 +583,7 @@ class _SearchViewState extends State<SearchView> {
         onPressed: () {
           if (p.precisionSearch) p.togglePrecisionSearch();
           if (!p.searchScope.isAll) {
-            p.updateSearchScope(SearchScope());
+            unawaited(p.updateSearchScope(SearchScope()));
           }
         },
       ),

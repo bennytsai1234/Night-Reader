@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/shared/widgets/book_kind_mark.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -10,7 +13,9 @@ import 'package:night_reader/shared/widgets/search_field.dart';
 /// SearchAppBar - 搜尋頁面頂部欄
 /// (對標 Legado SearchActivity 的 TitleBar + SearchView)
 ///
-/// Telegram 式搜尋頁首：上排是圓角搜尋框與「取消」，下排是玻璃膠囊：
+/// Telegram 式搜尋頁首：上排是圓角搜尋框與「取消」，下排是玻璃膠囊，
+/// 字都是兩個字（docs/design/screens.md「搜尋」）：
+/// - 搜哪一類書（書源不只一類時才有）
 /// - 搜尋範圍（點擊觸發 onScopePressed）
 /// - 精準搜尋切換
 /// - 開始／停止搜尋
@@ -38,10 +43,38 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize =>
       const GlassNavHeader(bottomHeight: _bottomHeight).preferredSize;
 
+  /// 類別膠囊上的字，兩個字。
+  static String _shortLabel(BookSourceKind kind) => switch (kind) {
+    BookSourceKind.comic => '漫畫',
+    BookSourceKind.audio => '有聲',
+    _ => '小說',
+  };
+
+  /// 類別選單同發現頁的書源類型：書源數、勾選目前那一類、右側圖示。
+  Future<void> _pickKind(BuildContext capsuleContext) async {
+    final current = provider.kind;
+    final picked = await showGlassMenu<BookSourceKind>(
+      context: capsuleContext,
+      anchor: globalRectOf(capsuleContext),
+      entries: [
+        for (final option in provider.kinds)
+          GlassMenuItem(
+            value: option,
+            label: '${option.sourceLabel}　${provider.kindCounts[option]}',
+            icon: BookKindMark.switchIconOf(option),
+            checked: option == current,
+          ),
+      ],
+    );
+    if (picked != null) provider.setKind(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final scopeDisplay = provider.searchScope.display;
+    final scope = provider.searchScope;
+    final scopeDisplay = scope.display;
+    final kind = provider.kind;
 
     return GlassNavHeader(
       automaticallyImplyLeading: false,
@@ -84,19 +117,32 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             Expanded(
               child: Row(
                 children: [
+                  if (provider.kinds.length > 1) ...[
+                    Builder(
+                      builder: (capsuleContext) => GlassCapsule(
+                        label: _shortLabel(kind),
+                        icon: BookKindMark.switchIconOf(kind),
+                        trailingIcon: Icons.expand_more_rounded,
+                        selected: kind != provider.kinds.first,
+                        tooltip: '搜尋的類別：${kind.sourceLabel}',
+                        onTap: () => _pickKind(capsuleContext),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                   Flexible(
                     child: GlassCapsule(
-                      label: scopeDisplay,
+                      label: scope.isAll ? '全部' : scopeDisplay,
                       icon: Icons.layers_outlined,
                       trailingIcon: Icons.expand_more_rounded,
-                      selected: !provider.searchScope.isAll,
+                      selected: !scope.isAll,
                       tooltip: '選擇搜尋範圍：$scopeDisplay',
                       onTap: onScopePressed,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   GlassCapsule(
-                    label: '精準搜尋',
+                    label: '精準',
                     icon: provider.precisionSearch
                         ? Icons.check_rounded
                         : Icons.text_fields_rounded,
