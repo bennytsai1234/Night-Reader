@@ -155,13 +155,14 @@ Map<String, dynamic>? extractJsonObject(String text) {
 const int _maxJsonStarts = 50;
 
 /// [text] 從 `{` 開始、到結尾都沒配對完：去掉結尾的空白與 ``` 後補上缺的
-/// `}`；字串沒結束、或少的不只 `}` 時是 null。
+/// `]` 與 `}`（最多六層）；字串沒結束、或括號配錯時是 null。
 String? _closeUnbalanced(String text) {
   var body = text.trimRight();
   if (body.endsWith('```')) {
     body = body.substring(0, body.length - 3).trimRight();
   }
-  var depth = 0;
+  // 照順序記下還沒關的 { 與 [，最後倒著補上。
+  final open = <String>[];
   var inString = false;
   for (var i = 0; i < body.length; i++) {
     final char = body[i];
@@ -173,13 +174,20 @@ String? _closeUnbalanced(String text) {
       }
       continue;
     }
-    if (char == '"') inString = true;
-    if (char == '{') depth++;
-    if (char == '}') depth--;
-    if (char == '[' || char == ']') return null;
+    switch (char) {
+      case '"':
+        inString = true;
+      case '{' || '[':
+        open.add(char);
+      case '}' || ']':
+        if (open.isEmpty || open.removeLast() != (char == '}' ? '{' : '[')) {
+          return null;
+        }
+    }
   }
-  if (inString || depth <= 0 || depth > 3) return null;
-  return body + '}' * depth;
+  if (inString || open.isEmpty || open.length > 6) return null;
+  return body +
+      [for (final char in open.reversed) char == '{' ? '}' : ']'].join();
 }
 
 /// 從 [start] 的 `{` 數到配對的 `}`，跳過字串裡的括號。

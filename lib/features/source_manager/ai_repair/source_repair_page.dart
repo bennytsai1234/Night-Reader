@@ -76,11 +76,13 @@ Future<bool> openSourceRepair(
   return batch.items.any((item) => _changed.contains(item.outcome));
 }
 
+/// 改到書源的結果：書源管理要重讀。沒修好的也算：標了「AI 修不好」。
 const Set<RepairOutcome> _changed = {
   RepairOutcome.moved,
   RepairOutcome.aiFixed,
   RepairOutcome.shared,
   RepairOutcome.siteGone,
+  RepairOutcome.notFixed,
 };
 
 String _tokens(int count) => count >= 10000
@@ -118,6 +120,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     if (!widget.autoStart) return;
     // 推入動畫播完再開始：校驗開 worker，不和轉場疊在一起（ADR 0018）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final route = ModalRoute.of(context)?.animation;
       if (route == null || route.isCompleted) {
         unawaited(_batch.start());
@@ -395,6 +398,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     await getIt<BookSourceDao>().updateEnabledByUrls([
       for (final item in items) item.source.bookSourceUrl,
     ], false);
+    if (!mounted) return;
     setState(() => _goneHandled = '已停用');
     _say('已停用 ${items.length} 個書源');
   }

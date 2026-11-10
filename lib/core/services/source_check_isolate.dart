@@ -1305,9 +1305,6 @@ bool _bookCannotOpen(_IssueData issue) => const {
   SourceHealthCategory.contentBroken,
 }.contains(issue.health.category);
 
-/// 本身就是再試一次多半就好的網路錯誤：連線中途斷掉、網站一時忙碌（429、
-/// 5xx）。逾時、憑證錯誤、被網站擋下都不算。經過網路層送出的請求另外由
-/// [RequestLog.transientResponses] 認出（規則 JS 自己抓的 503 這類也算）。
 /// 網域查不到（DNS 沒有這個名字）：Dart 的訊息一律是 `Failed host lookup`。
 bool hostNotFound(Object error) =>
     error.toString().contains('Failed host lookup');
@@ -1327,6 +1324,9 @@ Future<bool> networkReachable() async {
   return false;
 }
 
+/// 本身就是再試一次多半就好的網路錯誤：連線中途斷掉、網站一時忙碌（429、
+/// 5xx）。逾時、憑證錯誤、被網站擋下都不算。經過網路層送出的請求另外由
+/// [RequestLog.transientResponses] 認出（規則 JS 自己抓的 503 這類也算）。
 bool _looksTransient(Object error) => switch (error) {
   DioException(type: DioExceptionType.connectionError) => true,
   DioException(type: DioExceptionType.badResponse, :final response) =>

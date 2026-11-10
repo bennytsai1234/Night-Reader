@@ -176,14 +176,14 @@ void main() {
 
   test('a site that is gone is marked, without asking the AI', () async {
     final b = batch(
-      [_source('https://gone.example'), _source('https://m.gone.example')],
+      [_source('https://gone.example#a'), _source('https://gone.example#b')],
       sites: {'gone.example': const SiteCheck(SiteVerdict.gone, '網域查不到')},
     );
 
     await b.start();
 
     expect(b.count(RepairOutcome.siteGone), 2);
-    expect(gone, ['https://gone.example', 'https://m.gone.example']);
+    expect(gone, ['https://gone.example#a', 'https://gone.example#b']);
     expect(asked, isEmpty);
   });
 
@@ -191,7 +191,7 @@ void main() {
     final b = batch(
       [_source('https://www.old.example#mark')],
       sites: {
-        'old.example': const SiteCheck(
+        'www.old.example': const SiteCheck(
           SiteVerdict.moved,
           '首頁轉到 www.new.example',
           movedTo: 'https://www.new.example',
@@ -212,7 +212,7 @@ void main() {
       'the fix', () async {
     final b = batch([
       _source('https://www.site.example#a'),
-      _source('https://m.site.example#b'),
+      _source('https://www.site.example#b'),
       _source('https://other.example'),
     ]);
 
@@ -227,14 +227,14 @@ void main() {
       'https://other.example',
     });
     final borrowed = b.items[1].source;
-    expect(borrowed.bookSourceName, 'm.site.example#b');
+    expect(borrowed.bookSourceName, 'www.site.example#b');
     expect(borrowed.ruleContent?.content, 'class.txt@text');
   });
 
   test('when the AI cannot fix a site, the rest of the site says so', () async {
     final b = batch([
-      _source('https://a.site.example'),
-      _source('https://b.site.example'),
+      _source('https://site.example#a'),
+      _source('https://site.example#b'),
     ], replies: (_) => [_giveUp]);
 
     await b.start();
@@ -242,7 +242,7 @@ void main() {
     expect(b.items.first.outcome, RepairOutcome.notFixed);
     expect(b.items.last.outcome, RepairOutcome.notFixed);
     expect(b.items.last.detail, contains('沒修好'));
-    expect(unfixable, ['https://a.site.example', 'https://b.site.example']);
+    expect(unfixable, ['https://site.example#a', 'https://site.example#b']);
   });
 
   test('a source the AI already could not fix, and one that never had a '
@@ -303,6 +303,41 @@ void main() {
     );
   });
 
+  test('the mobile and desktop sites are repaired separately', () async {
+    final b = batch([
+      _source('https://www.two.example'),
+      _source('https://m.two.example'),
+    ]);
+
+    await b.start();
+
+    expect(b.count(RepairOutcome.aiFixed), 2);
+    expect(asked.toSet(), {'https://www.two.example', 'https://m.two.example'});
+  });
+
+  test('one site going wrong does not end the batch early', () async {
+    final b = SourceRepairBatch(
+      sources: [
+        _source('https://bad.example'),
+        _source('https://gone.example'),
+      ],
+      service: _service,
+      recheck: (urls) async => [for (final url in urls) _entry(url, _broken)],
+      checkSite: (source) async => source.bookSourceUrl.contains('bad')
+          ? throw StateError('壞掉')
+          : const SiteCheck(SiteVerdict.gone, '網域查不到'),
+      check: (source, _) async => _checked(source),
+      save: (_, _) async {},
+      markGone: (source, _) async => gone.add(source.bookSourceUrl),
+      markUnfixable: (_) async {},
+    );
+
+    await b.start();
+
+    expect(gone, ['https://gone.example']);
+    expect(b.isFinished, isTrue);
+  });
+
   test('a moved source has the old domain replaced inside its rules too', () {
     final moved = movedSource(
       BookSource(
@@ -316,5 +351,19 @@ void main() {
     expect(moved.bookSourceUrl, 'https://www.new.net/#x');
     expect(moved.searchUrl, 'https://m.new.net/s?q={{key}}');
     expect(moved.bookSourceName, '舊站 old.cc', reason: '名稱照舊');
+
+    final careful = movedSource(
+      BookSource(
+        bookSourceUrl: 'https://old.cc',
+        bookSourceName: 'x',
+        searchUrl: 'https://cdn.bold.cc/s?from=old.cc.cn&q={{key}}',
+      ),
+      'https://new.net',
+    );
+    expect(
+      careful.searchUrl,
+      'https://cdn.bold.cc/s?from=old.cc.cn&q={{key}}',
+      reason: '只換完整的網域',
+    );
   });
 }

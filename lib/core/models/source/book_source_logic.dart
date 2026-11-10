@@ -341,6 +341,7 @@ SourceRuntimeHealth upstreamHealth(String tag) => SourceRuntimeHealth(
   description: switch (tag) {
     siteBrokenSourceGroupTag => '網域查不到或網站已經不在，換了網址才可能恢復',
     timeoutSourceGroupTag => '網站回應太慢，來源先隔離但不視為永久失效',
+    quarantineSourceGroupTag => '校驗流程異常，先隔離避免影響其他書源',
     _ => '上游暫時不可用，來源先隔離但不視為永久失效',
   },
   allowsSearch: false,
@@ -409,10 +410,7 @@ extension BookSourceLogic on BookSourceBase {
       ],
       // 網站那邊的問題分三種，各標各的：網站不在了、連不上或回錯誤、太慢。
       SourceHealthCategory.upstreamUnstable => [
-        if (_upstreamTags.contains(health.label))
-          health.label
-        else
-          upstreamBlockedSourceGroupTag,
+        if (_upstreamTags.contains(health.label)) health.label,
         quarantineSourceGroupTag,
       ],
     };

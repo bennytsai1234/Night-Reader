@@ -79,16 +79,20 @@ class SitePage {
 }
 
 /// 照網站的首頁 [home] 與一個不存在的網址 [missing] 的回應判斷網站的狀況。
-/// [origin] 是書源網址的開頭（`https://www.site.com`）。
+/// [origin] 是書源網址的開頭（`https://www.site.com`）。[networkUp] 是手機的
+/// 網路通不通（[networkReachable]）：斷網時每個網域都查不到，不算網站不在了。
 SiteCheck judgeSite({
   required String origin,
   required SitePage home,
   SitePage? missing,
+  bool networkUp = true,
 }) {
   final error = home.error;
   if (error != null) {
     if (error.contains('Failed host lookup')) {
-      return const SiteCheck(SiteVerdict.gone, '網域查不到');
+      return networkUp
+          ? const SiteCheck(SiteVerdict.gone, '網域查不到')
+          : const SiteCheck(SiteVerdict.unreachable, '手機連不上網路');
     }
     if (_blockedError.hasMatch(error)) {
       return SiteCheck(SiteVerdict.blocked, _short(error));
@@ -101,7 +105,9 @@ SiteCheck judgeSite({
   if (_challenge.hasMatch(body)) {
     return const SiteCheck(SiteVerdict.blocked, '要在瀏覽器裡通過驗證才放行');
   }
-  if (_parked.hasMatch(body)) {
+  final shell = digestPage(body);
+  // 停放頁都很短；長的頁面剛好有「一口价」這類字樣不算。
+  if (shell.length < _parkedLength && _parked.hasMatch(body)) {
     return const SiteCheck(SiteVerdict.gone, '網域停放或出售中');
   }
   if (status >= 500) {
@@ -117,11 +123,13 @@ SiteCheck judgeSite({
       movedTo: '${target.scheme}://${target.authority}',
     );
   }
-  final shell = digestPage(body);
+  // 單頁式網站的首頁也是一個小殼、每個網址都回同一頁，但殼裡有載入內容的
+  // 程式；停放頁、假資料與空殼沒有。
   if (missing != null &&
       missing.error == null &&
       (missing.status ?? 0) < 400 &&
       shell.length < _shellLength &&
+      !body.contains('<script') &&
       digestPage(missing.body) == shell) {
     return SiteCheck(
       SiteVerdict.gone,
@@ -154,6 +162,9 @@ final RegExp _challenge = RegExp(
 /// 夜讀抓網頁時網站擋下的錯誤（`CloudflareInterceptor`）。
 final RegExp _blockedError = RegExp(r'瀏覽器檢查沒有通過|真人驗證|封鎖了目前的網路');
 
+/// 精簡後短於這個字數的頁面才看停放頁的字樣。
+const int _parkedLength = 4000;
+
 /// 精簡後短於這個字數的頁面才算空殼：每個網址都回同一份大網頁的，可能是
 /// 單頁式網站，交給 AI 判斷。
 const int _shellLength = 1000;
@@ -165,8 +176,9 @@ String _short(String text) {
   return line.length <= 60 ? line : '${line.substring(0, 60)}…';
 }
 
-/// 檢查 [source] 的網站：照書源的標頭與 Cookie 抓首頁與一個不存在的網址
-/// （在書源 worker 裡，和試抓一樣），交給 [judgeSite]。
+/// 檢查 [source] 的網站：照書源的標頭與 Cookie 抓首頁與一個不存在的網址，
+/// 交給 [judgeSite]；都在書源 worker 裡做（和試抓一樣），網頁的精簡不佔主
+/// 執行緒。
 Future<SiteCheck> checkSite(
   BookSource source, {
   Duration timeout = const Duration(seconds: 20),
@@ -189,16 +201,10 @@ Future<SiteCheck> checkSite(
         .run(_siteTask(source.toJson(), origin))
         .timeout(
           timeout,
-          onTimeout: () => {'home': const SitePage(error: '檢查超過時間').toMap()},
+          onTimeout: () =>
+              const SiteCheck(SiteVerdict.unreachable, '連不上：檢查超過時間').toMap(),
         );
-    return judgeSite(
-      origin: origin,
-      home: SitePage.fromMap(map['home']! as Map<Object?, Object?>),
-      missing: switch (map['missing']) {
-        final Map<Object?, Object?> page => SitePage.fromMap(page),
-        _ => null,
-      },
-    );
+    return SiteCheck.fromMap(map);
   } catch (error) {
     return SiteCheck(SiteVerdict.alive, '檢查不了：$error');
   } finally {
@@ -242,8 +248,14 @@ Future<Map<String, Object?>> Function(CancelToken) _siteTask(
   final missing = home.error == null
       ? await fetch('$origin/nr-missing-$probe.html')
       : null;
-  return {'home': home.toMap(), 'missing': missing?.toMap()};
+  final lookupFailed = home.error?.contains('Failed host lookup') ?? false;
+  return judgeSite(
+    origin: origin,
+    home: home,
+    missing: missing,
+    networkUp: !lookupFailed || await networkReachable(),
+  ).toMap();
 };
 
-/// 每頁留多少字回主程式判斷：停放頁與防護頁的字樣都在開頭。
+/// 每頁最多看多少字：停放頁與防護頁的字樣都在開頭。
 const int _keptBody = 200000;

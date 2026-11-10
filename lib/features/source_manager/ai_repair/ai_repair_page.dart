@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
+import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -48,7 +49,14 @@ Future<bool> openAiRepair(
         return false;
     }
   }
-  final session = AiRepairSession(source: source, service: service);
+  // 一個書源也照整批修復每個網站的上限：模型一直回讀不懂的話不會一直花下去。
+  var tokens = 0;
+  final session = AiRepairSession(
+    source: source,
+    service: service,
+    hasBudget: () => tokens < SourceRepairBatch.defaultSiteTokenBudget,
+    onUsage: (usage) => tokens += usage.prompt + usage.completion,
+  );
   await navigator.push(
     MaterialPageRoute<void>(builder: (_) => AiRepairPage(session: session)),
   );
@@ -118,8 +126,13 @@ class _AiRepairPageState extends State<AiRepairPage> {
 
   Future<void> _restore() async {
     try {
-      await _session.restore();
-      if (mounted) _say('已還原「${_session.job.original.bookSourceName}」');
+      final restored = await _session.restore();
+      if (!mounted) return;
+      _say(
+        restored
+            ? '已還原「${_session.job.original.bookSourceName}」'
+            : '書源已經不在了，沒有還原',
+      );
     } catch (error) {
       if (mounted) _say('還原失敗：$error');
     }
@@ -157,7 +170,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                     value: 'copy',
                     icon: Icons.copy_rounded,
                     label: '複製紀錄',
-                    enabled: _session.transcript.isNotEmpty,
+                    enabled: _session.hasTranscript,
                   ),
                 ],
                 onSelected: (value) {

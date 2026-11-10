@@ -46,6 +46,14 @@ void main() {
       expect((unclosed! as AiTest).change.source!['ruleContent'], {
         'content': 'a{b}c',
       });
+
+      final withList = AiRepairCommand.parse(
+        '{"action":"test","patch":{"ruleSearch":{"bookList":"[x]"},"x":[1,{"a":2',
+      );
+      expect((withList! as AiTest).change.patch!['x'], [
+        1,
+        {'a': 2},
+      ]);
     });
 
     test('an unreadable reply is told what was wrong', () {

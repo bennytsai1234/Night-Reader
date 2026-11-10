@@ -844,7 +844,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     final confirmed = await showAppConfirm(
       context: context,
       title: '還原 AI 修改前',
-      message: '「${s.bookSourceName}」換回 AI 修改之前的版本。',
+      message: '「${s.bookSourceName}」換回 AI 修改之前的版本；AI 修好之後的改動也會一起換掉。',
       confirmLabel: '還原',
     );
     if (!confirmed || !mounted) return;

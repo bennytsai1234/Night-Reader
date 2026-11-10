@@ -197,7 +197,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 停下：做著的那一個 AI 修復停下、書源不改，還沒輪到的不做。
   void stop() {
-    if (_stopped || isFinished) return;
+    if (_stopped) return;
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     for (final session in _sessions) {
@@ -415,7 +415,13 @@ class SourceRepairBatch extends ChangeNotifier {
     var next = 0;
     Future<void> worker() async {
       while (next < list.length && !_stopped) {
-        await work(list[next++]);
+        final value = list[next++];
+        // 一件出錯只算那一件：其他工人照做，整批等全部做完才結束。
+        try {
+          await work(value);
+        } catch (error, stack) {
+          AppLog.e('修復異常書源有一件出錯', error: error, stackTrace: stack);
+        }
       }
     }
 
@@ -505,13 +511,13 @@ Future<void> markSiteGone(BookSource source, String detail) async {
   await dao.upsert(current);
 }
 
-/// 書源屬於哪個網站：網址主機的可註冊網域（`m.site.com` 與 `www.site.com`
-/// 是同一個）。
+/// 書源屬於哪個網站：網址的主機（`m.site.com` 與 `www.site.com` 算兩個：
+/// 手機版與電腦版的網頁常不一樣，共用規則會把電腦版的書源改成手機版）。
 String siteKey(BookSource source) {
   final origin = siteOrigin(source.bookSourceUrl);
   final host = origin == null ? null : Uri.tryParse(origin)?.host;
   if (host == null || host.isEmpty) return source.bookSourceUrl;
-  return registrableDomain(host) ?? host;
+  return host.toLowerCase();
 }
 
 /// 網站搬到 [movedTo]（`https://www.new.com`）：書源網址換開頭，規則裡寫死的
@@ -531,11 +537,25 @@ BookSource movedSource(BookSource source, String movedTo) {
       key: json[key],
   };
   final moved = jsonDecode(
-    jsonEncode(json).replaceAll(from, to).replaceAll(fromSite, toSite),
+    _replaceDomain(
+      _replaceDomain(jsonEncode(json), from, to),
+      fromSite,
+      toSite,
+    ),
   ) as Map<String, dynamic>..addAll(keep);
   return BookSource.fromJson(moved)
     ..bookSourceUrl = siteMovedUrl(source.bookSourceUrl, movedTo);
 }
+
+/// [text] 裡完整的網域 [from] 換成 [to]：前後不能接著網域的字，`old.com`
+/// 不會改到 `ebook.com` 或 `old.com.cn`。
+String _replaceDomain(String text, String from, String to) => text.replaceAll(
+  RegExp(
+    '(?<![A-Za-z0-9-])${RegExp.escape(from)}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])',
+    caseSensitive: false,
+  ),
+  to,
+);
 
 /// [source] 套用同網站 [fixed] 的規則：規則、標頭、程式庫與類型照 [fixed]，
 /// 網址開頭跟著 [fixed] 換；名稱、分組、網址後面的標記與使用者的設定照

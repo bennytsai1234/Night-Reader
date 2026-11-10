@@ -183,12 +183,29 @@ class AiRepairSession extends ChangeNotifier {
   /// 「複製紀錄」：每一步、AI 每一輪說的話與試抓結果。
   String get transcript => _transcript.toString().trimRight();
 
+  /// 有紀錄可以複製。
+  bool get hasTranscript => _transcript.isNotEmpty;
+
   Future<void> start() async {
     if (_running) return;
     _running = true;
     _notify();
     try {
       await _repair(job);
+    } catch (error, stack) {
+      // 校驗、試抓或存檔丟出沒料到的錯：記成沒修好，做著的步驟標失敗，
+      // 不讓畫面停在轉圈。
+      AppLog.e('AI 修書源出錯', error: error, stackTrace: stack);
+      if (job.outcome == null && !_stopped) {
+        for (final step in job.steps) {
+          if (step.state == AiRepairStepState.running) {
+            step
+              ..state = AiRepairStepState.failed
+              ..detail = '出錯';
+          }
+        }
+        _fail(job, '修復出錯，書源沒有改：$error');
+      }
     } finally {
       _running = false;
       _notify();
@@ -241,14 +258,16 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 修好之後還原成改前的版本。
-  Future<void> restore() async {
-    if (job.outcome != AiRepairOutcome.repaired || job.restored) return;
-    await restoreAiRepair(
+  /// 傳回真的還原了沒：書源在這段時間被刪掉了就沒有。
+  Future<bool> restore() async {
+    if (job.outcome != AiRepairOutcome.repaired || job.restored) return false;
+    final restored = await restoreAiRepair(
       job.repairedUrl ?? job.original.bookSourceUrl,
       backups: _backups,
     );
-    job.restored = true;
+    job.restored = restored;
     _notify();
+    return restored;
   }
 
   Future<void> _repair(AiRepairJob job) async {
@@ -630,8 +649,9 @@ class AiRepairSession extends ChangeNotifier {
     }
   }
 
+  /// 記進「複製紀錄」：一律先遮掉登入資料、Cookie 與變數的值（ADR 0054）。
   void _record(String text) => _transcript
-    ..writeln(text)
+    ..writeln(redactAiRepairSecrets(text, job._secrets))
     ..writeln();
 
   void _notify() {
@@ -755,8 +775,14 @@ Future<void> saveRepairedSource(
       current.bookSourceName != original.bookSourceName) {
     throw const AiRepairConflict('修的這段時間書源被改過了（例如同步），沒有存。');
   }
-  // 修好了：之前標的「AI 修不好」拿掉。
-  repaired.removeGroup(aiUnfixableSourceGroupTag);
+  // 修好了：之前標的「AI 修不好」拿掉。開關、排序與權重照現在的：修的這段
+  // 時間在別處（例如同步）改了，不蓋回修之前的值。
+  repaired
+    ..removeGroup(aiUnfixableSourceGroupTag)
+    ..enabled = current.enabled
+    ..enabledExplore = current.enabledExplore
+    ..customOrder = current.customOrder
+    ..weight = current.weight;
   final moved = repaired.bookSourceUrl != original.bookSourceUrl;
   if (moved && await dao.getByUrl(repaired.bookSourceUrl) != null) {
     throw AiRepairConflict('新網址 ${repaired.bookSourceUrl} 已經有別的書源，沒有存。');
@@ -782,17 +808,19 @@ class AiRepairConflict implements Exception {
 
 /// 把書源還原成 AI 改之前的那份，並刪掉留著的改前版本。AI 換過網址開頭
 /// 的，網址也換回去，書架上的書跟著搬回去。
-Future<void> restoreAiRepair(
+///
+/// 傳回真的還原了沒：沒有改前版本、或書源已經刪掉了是 false。
+Future<bool> restoreAiRepair(
   String sourceUrl, {
   AiRepairBackups? backups,
 }) async {
   final store = backups ?? AiRepairBackups.instance;
   final json = await store.get(sourceUrl);
-  if (json == null) return;
+  if (json == null) return false;
   // 書源已經刪掉了（例如另一台同步刪的）：不還原，免得把它加回來。
   if (await getIt<BookSourceDao>().getByUrl(sourceUrl) == null) {
     await store.remove(sourceUrl);
-    return;
+    return false;
   }
   final previous = BookSource.fromJson(json);
   await BookSourceService().saveEditedSource(
@@ -800,4 +828,5 @@ Future<void> restoreAiRepair(
     previousUrl: previous.bookSourceUrl == sourceUrl ? null : sourceUrl,
   );
   await store.remove(sourceUrl);
+  return true;
 }

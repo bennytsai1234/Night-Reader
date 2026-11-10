@@ -14,10 +14,18 @@ const _bookSite =
     '<a href="/b/2">第二本書</a></div></body></html>';
 
 void main() {
-  test('a domain that does not resolve is gone', () {
+  test('a domain that does not resolve is gone, unless the phone itself is '
+      'offline', () {
     final check = _judge(const SitePage(error: 'Failed host lookup'));
     expect(check.verdict, SiteVerdict.gone);
     expect(check.detail, '網域查不到');
+
+    final offline = judgeSite(
+      origin: _origin,
+      home: const SitePage(error: 'Failed host lookup'),
+      networkUp: false,
+    );
+    expect(offline.verdict, SiteVerdict.unreachable);
   });
 
   test('a refused or dropped connection and a 5xx are unreachable', () {
@@ -82,6 +90,22 @@ void main() {
       ).verdict,
       SiteVerdict.alive,
     );
+  });
+
+  test('a long page that happens to mention a domain sale is not a parked '
+      'domain', () {
+    final page =
+        '$_bookSite${'<p class="ad">本站域名一口价出售中</p>' * 20}'
+        '${'<a href="/b/9">好看的書</a>' * 200}';
+    expect(_judge(_page(page)).verdict, SiteVerdict.alive);
+  });
+
+  test('a small shell that loads its content with a script is left to the '
+      'AI', () {
+    const app =
+        '<html><body><div id="app"></div>'
+        '<script src="/main.js"></script></body></html>';
+    expect(_judge(_page(app), missing: _page(app)).verdict, SiteVerdict.alive);
   });
 
   test('a large page served for every address may be a single-page app, so '

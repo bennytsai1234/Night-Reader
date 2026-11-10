@@ -228,6 +228,30 @@ void main() {
     expect(applied, isEmpty);
   });
 
+  test(
+    'an unexpected error ends as not fixed instead of a spinning step',
+    () async {
+      final s = AiRepairSession(
+        source: _source('https://site.example'),
+        service: _service,
+        check: (_, _) async => throw StateError('isolate 掛了'),
+        probe: (source, _) async => _probe(source),
+        keywordCheck: (_, _) async => true,
+        ask: (_, _) async => _command('test'),
+        apply: (source, _) async => applied.add(source),
+        secrets: (_) async => const {},
+        backups: backups,
+      );
+
+      await s.start();
+
+      expect(s.job.outcome, AiRepairOutcome.failed);
+      expect(s.job.explanation, contains('isolate 掛了'));
+      expect(s.job.steps.single.state, AiRepairStepState.failed);
+      expect(s.isRunning, isFalse);
+    },
+  );
+
   test('an empty reply is asked again instead of ending the repair', () async {
     var calls = 0;
     final s = AiRepairSession(
