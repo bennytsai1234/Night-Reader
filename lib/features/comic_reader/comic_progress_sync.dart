@@ -60,9 +60,10 @@ class ComicProgressSync {
   bool _opened = false;
   bool _disposed = false;
 
+  /// 開書失敗後重試會再呼叫一次，只註冊一次。
   void start() {
     if (!resumes) _markOpen();
-    _lifecycle = AppLifecycleListener(onShow: _onShow, onHide: _onHide);
+    _lifecycle ??= AppLifecycleListener(onShow: _onShow, onHide: _onHide);
   }
 
   void _markOpen() {

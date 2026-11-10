@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
+import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -83,6 +84,7 @@ class ComicPageView extends StatefulWidget {
     required this.onAspectRatio,
     required this.onFailed,
     this.onOpenWeb,
+    this.remedyFor,
   });
 
   final ComicPageSource source;
@@ -101,6 +103,10 @@ class ComicPageView extends StatefulWidget {
 
   /// 「用網頁開啟」；沒有網址時不顯示這個鈕。
   final VoidCallback? onOpenWeb;
+
+  /// 載入失敗時能解決它的那一步（登入、前往驗證）；沒有時是 null。有的話
+  /// 「用網頁開啟」讓位給它。
+  final SourceFailureRemedy? Function(Object error)? remedyFor;
 
   @override
   State<ComicPageView> createState() => _ComicPageViewState();
@@ -189,6 +195,11 @@ class _ComicPageViewState extends State<ComicPageView> {
     _resolve();
   }
 
+  /// 登入或驗證回來：登入資料有變才重試這一張。
+  Future<void> _runRemedy(SourceFailureRemedy remedy) async {
+    if (await remedy.run(context) && mounted) _retry();
+  }
+
   @override
   void dispose() {
     _stopListening();
@@ -200,12 +211,15 @@ class _ComicPageViewState extends State<ComicPageView> {
   Widget build(BuildContext context) {
     final size = Size(widget.width, widget.height);
     if (_error case final error?) {
+      final remedy = widget.remedyFor?.call(error);
       return SizedBox.fromSize(
         size: size,
         child: _PageError(
           error: error,
           onRetry: _retry,
           onOpenWeb: widget.onOpenWeb,
+          remedy: remedy,
+          onRemedy: remedy == null ? null : () => unawaited(_runRemedy(remedy)),
         ),
       );
     }
@@ -277,11 +291,17 @@ class _PageError extends StatelessWidget {
     required this.error,
     required this.onRetry,
     this.onOpenWeb,
+    this.remedy,
+    this.onRemedy,
   });
 
   final Object error;
   final VoidCallback onRetry;
   final VoidCallback? onOpenWeb;
+
+  /// 有解法（登入、前往驗證）時排第一，「用網頁開啟」不顯示。
+  final SourceFailureRemedy? remedy;
+  final VoidCallback? onRemedy;
 
   @override
   Widget build(BuildContext context) {
@@ -306,16 +326,26 @@ class _PageError extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FilledButton(onPressed: onRetry, child: const Text('重試')),
-                if (onOpenWeb case final open?) ...[
+            if (remedy case final remedy?)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton(onPressed: onRemedy, child: Text(remedy.label)),
                   const SizedBox(width: AppSpacing.md),
-                  TextButton(onPressed: open, child: const Text('用網頁開啟')),
+                  TextButton(onPressed: onRetry, child: const Text('重試')),
                 ],
-              ],
-            ),
+              )
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton(onPressed: onRetry, child: const Text('重試')),
+                  if (onOpenWeb case final open?) ...[
+                    const SizedBox(width: AppSpacing.md),
+                    TextButton(onPressed: open, child: const Text('用網頁開啟')),
+                  ],
+                ],
+              ),
           ],
         ),
       ),

@@ -8,6 +8,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -166,6 +167,26 @@ void main() {
 
     expect(find.text('有聲書打不開'), findsNothing);
     expect(find.text('第 1 集'), findsWidgets);
+    await close(tester);
+  });
+
+  testWidgets('an episode that fails to play shows the reason', (tester) async {
+    final book = _book();
+    world = _World(AppDatabase.forTesting(NativeDatabase.memory()));
+    await tester.runAsync(() async {
+      await world.addSource();
+      await world.addBook(book);
+    });
+
+    await open(tester, book);
+    await settle(tester);
+    expect(find.text('第 1 集'), findsWidgets);
+
+    world.engine.fail(LoginCheckException('需要登入才聽得到這一集'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('播放失敗：需要登入才聽得到這一集'), findsOneWidget);
     await close(tester);
   });
 }

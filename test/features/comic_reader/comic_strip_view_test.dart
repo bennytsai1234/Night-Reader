@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/comic/comic_chapter_files.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_model.dart';
 import 'package:night_reader/features/comic_reader/comic_strip_view.dart';
+import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'comic_test_pages.dart';
@@ -26,7 +29,10 @@ class _Harness {
 
   ComicLocation get last => locations.last;
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    SourceFailureRemedy? Function(Object error)? remedyFor,
+  }) async {
     tester.view.physicalSize = _screen;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -41,6 +47,7 @@ class _Harness {
             onTap: taps.add,
             titleOf: (i) => '第${i + 1}話',
             gapBetween: (a, b) => 0,
+            remedyFor: remedyFor,
           ),
         ),
       ),
@@ -62,6 +69,20 @@ class _Harness {
 
 double _scrollPixels(WidgetTester tester) =>
     tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels;
+
+/// 沒登入時每一話都要登入才讀得到；登入後（[locked] 改成 false）照常給圖。
+class _LockedSource extends FakeComicSource {
+  bool locked = true;
+
+  @override
+  Future<List<ComicPage>> pagesOf(int chapterIndex) async {
+    if (locked) {
+      requestedChapters.add(chapterIndex);
+      throw LoginCheckException('第 $chapterIndex 話需要登入才看得到');
+    }
+    return super.pagesOf(chapterIndex);
+  }
+}
 
 void main() {
   test('點擊區域照 Mihon 的 L 形', () {
@@ -121,6 +142,32 @@ void main() {
     await tester.tap(find.text('重試'));
     await harness.settle(tester);
     expect(find.textContaining('抓不到'), findsNothing);
+    expect(harness.last, const ComicLocation(0, 0));
+  });
+
+  testWidgets('要登入才讀得到的一話：給「登入」排在「重試」前面，登入後重抓', (tester) async {
+    final source = _LockedSource();
+    var runs = 0;
+    final harness = _Harness(source);
+    await harness.pump(
+      tester,
+      remedyFor: (error) => SourceFailureRemedy(
+        label: '登入',
+        icon: Icons.login_rounded,
+        run: (context) async {
+          runs += 1;
+          source.locked = false;
+          return true;
+        },
+      ),
+    );
+    expect(find.text('登入'), findsOneWidget);
+    expect(find.text('重試'), findsOneWidget);
+
+    await tester.tap(find.text('登入'));
+    await harness.settle(tester);
+    expect(runs, 1);
+    expect(source.requestedChapters, [0, 0]);
     expect(harness.last, const ComicLocation(0, 0));
   });
 

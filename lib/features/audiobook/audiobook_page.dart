@@ -20,6 +20,7 @@ import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/about/crash_log_page.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
+import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -80,10 +81,58 @@ class _AudiobookPageState extends State<AudiobookPage> {
   /// 再放）。換頁途中建整份清單、播換場，每一幀都超過上限。
   bool _entered = false;
 
+  /// 已經提示過的播放錯誤：同一個錯誤只跳一次提示。
+  String? _noticedError;
+
   @override
   void initState() {
     super.initState();
+    _player.addListener(_onPlayerChanged);
     unawaited(_start());
+  }
+
+  /// 播放失敗：跳一則提示寫原因；能解決時（登入、前往驗證）旁邊給那一顆。
+  void _onPlayerChanged() {
+    final error = _player.isCurrent(widget.book) && _player.chapters.isNotEmpty
+        ? _player.error
+        : null;
+    if (error == _noticedError) return;
+    _noticedError = error;
+    if (error == null || !mounted) return;
+    final remedy = SourceFailureRemedy.of(error, _player.source);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(error),
+          persist: false,
+          duration: const Duration(seconds: 4),
+          action: remedy == null
+              ? null
+              : SnackBarAction(
+                  label: remedy.label,
+                  onPressed: () => unawaited(_runRemedy(context, remedy)),
+                ),
+        ),
+      );
+  }
+
+  /// 登入或驗證回來：有錯就重試（[_retry]）。
+  Future<void> _runRemedy(
+    BuildContext context,
+    SourceFailureRemedy remedy,
+  ) async {
+    if (await remedy.run(context) && mounted) _retry();
+  }
+
+  /// 重試：還沒有目錄就重開這本書；有了就重播，[AudiobookPlayer.play] 會重載
+  /// 失敗的那一集。
+  void _retry() {
+    if (_player.chapters.isEmpty) {
+      unawaited(_player.open(widget.book, chapterIndex: widget.chapterIndex));
+    } else {
+      unawaited(_player.play());
+    }
   }
 
   Future<void> _start() async {
@@ -111,6 +160,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
 
   @override
   void dispose() {
+    _player.removeListener(_onPlayerChanged);
     unawaited(_downloads?.cancel());
     _listScroll?.dispose();
     _skeletonScroll?.dispose();
@@ -164,7 +214,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
           label: '換源',
           icon: Icons.swap_horiz_rounded,
         ),
-        if (source != null && source.hasLoginUrl)
+        if (source != null && source.hasLogin)
           const GlassMenuItem(
             value: _MoreAction.login,
             label: '登入',
@@ -204,7 +254,14 @@ class _AudiobookPageState extends State<AudiobookPage> {
       case _MoreAction.changeSource:
         await _changeSource(context);
       case _MoreAction.login:
-        if (source != null) await openSourceLogin(context, source);
+        if (source == null) return;
+        final changed = await openSourceLogin(context, source);
+        if (changed &&
+            mounted &&
+            _player.isCurrent(widget.book) &&
+            _player.error != null) {
+          _retry();
+        }
       case _MoreAction.keepAwake:
         _player.toggleKeepAwake();
       case _MoreAction.copyUrl:
@@ -282,6 +339,12 @@ class _AudiobookPageState extends State<AudiobookPage> {
     final error = current ? _player.error : null;
     if (chapters.isEmpty && error != null) {
       final padding = MediaQuery.paddingOf(context);
+      final remedy = SourceFailureRemedy.of(error, _player.source);
+      final retry = AppStateAction(
+        label: '重試',
+        icon: Icons.refresh,
+        onPressed: _retry,
+      );
       return Padding(
         padding: EdgeInsets.only(
           top: padding.top + AppGlass.headerToolbarHeight,
@@ -292,13 +355,15 @@ class _AudiobookPageState extends State<AudiobookPage> {
           title: '有聲書打不開',
           description: error,
           tone: AppStateTone.error,
-          primaryAction: AppStateAction(
-            label: '重試',
-            icon: Icons.refresh,
-            onPressed: () => unawaited(
-              _player.open(widget.book, chapterIndex: widget.chapterIndex),
-            ),
-          ),
+          // 有解法（登入、前往驗證）時排第一，重試退成次要。
+          primaryAction: remedy == null
+              ? retry
+              : AppStateAction(
+                  label: remedy.label,
+                  icon: remedy.icon,
+                  onPressed: () => unawaited(_runRemedy(context, remedy)),
+                ),
+          secondaryAction: remedy == null ? null : retry,
         ),
       );
     }
