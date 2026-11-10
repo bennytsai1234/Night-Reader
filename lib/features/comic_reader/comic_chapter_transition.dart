@@ -47,6 +47,8 @@ class ComicTransitionContent {
 /// 載好時在最下面顯示載入中或原因與「重試」。
 ///
 /// 高度由 [extentOf] 照同樣的版面算出來，條漫在排版前就知道每一塊多高。
+/// 失敗是要登入或驗證時，[remedyLabel] 與 [onRemedy] 另給一顆「登入」或
+/// 「前往驗證」，排在「重試」前面。
 class ComicChapterTransition extends StatelessWidget {
   const ComicChapterTransition({
     super.key,
@@ -54,12 +56,18 @@ class ComicChapterTransition extends StatelessWidget {
     required this.foreground,
     required this.accent,
     this.onRetry,
+    this.remedyLabel,
+    this.onRemedy,
   });
 
   final ComicTransitionContent content;
   final Color foreground;
   final Color accent;
   final VoidCallback? onRetry;
+
+  /// 解決失敗的那一顆按鈕的字；沒有時是 null。
+  final String? remedyLabel;
+  final VoidCallback? onRemedy;
 
   static const double paddingVertical = 128;
   static const double paddingHorizontal = 32;
@@ -270,11 +278,22 @@ class ComicChapterTransition extends StatelessWidget {
       ),
       const SizedBox(height: _messageGap),
       Center(
-        child: SizedBox(
-          height: _retryHeight,
-          child: TextButton(onPressed: onRetry, child: const Text('重試')),
-        ),
+        child: SizedBox(height: _retryHeight, child: _failedActions()),
       ),
     ],
   };
+
+  Widget _failedActions() {
+    final remedy = remedyLabel;
+    final retry = TextButton(onPressed: onRetry, child: const Text('重試'));
+    if (remedy == null) return retry;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FilledButton(onPressed: onRemedy, child: Text(remedy)),
+        const SizedBox(width: _messageGap),
+        retry,
+      ],
+    );
+  }
 }

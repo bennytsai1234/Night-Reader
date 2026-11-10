@@ -65,7 +65,6 @@ abstract class BookSourceBase extends BaseSource {
   String getKey() => bookSourceUrl;
 
   // --- 便利布林 getter ---
-  bool get hasLoginUrl => loginUrl != null && loginUrl!.isNotEmpty;
   bool get hasSearchUrl => searchUrl != null && searchUrl!.isNotEmpty;
   bool get hasExploreUrl => exploreUrl != null && exploreUrl!.isNotEmpty;
   bool get hasBookInfoRule => ruleBookInfo != null;
