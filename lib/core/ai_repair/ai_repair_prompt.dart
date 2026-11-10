@@ -157,8 +157,9 @@ const int _maxJsonStarts = 50;
 /// `}`；字串沒結束、或少的不只 `}` 時是 null。
 String? _closeUnbalanced(String text) {
   var body = text.trimRight();
-  if (body.endsWith('```'))
+  if (body.endsWith('```')) {
     body = body.substring(0, body.length - 3).trimRight();
+  }
   var depth = 0;
   var inString = false;
   for (var i = 0; i < body.length; i++) {
