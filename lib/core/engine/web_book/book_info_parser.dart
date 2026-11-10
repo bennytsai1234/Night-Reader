@@ -2,6 +2,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
@@ -61,12 +62,17 @@ class BookInfoParser {
           ? current
           : parsed;
 
+      // 書名、作者拿掉網站常帶的「作者：」「某某 著」這類字樣，和搜尋結果
+      // 同一套（同 Legado BookInfo）：書名加作者是同步、書籤認書的身分，帶著
+      // 字樣的話，另一個書源的同一本書對不上。
       working.name = pick(
-        _format(rule.getString(infoRule.name ?? '')),
+        BookHelp.formatBookName(_format(rule.getString(infoRule.name ?? ''))),
         working.name,
       );
       working.author = pick(
-        _format(rule.getString(infoRule.author ?? '')),
+        BookHelp.formatBookAuthor(
+          _format(rule.getString(infoRule.author ?? '')),
+        ),
         working.author,
       );
       final kind = _optional(
