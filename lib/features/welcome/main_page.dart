@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/tts_service.dart';
@@ -197,6 +198,8 @@ class _MainPageState extends State<MainPage>
         context.read<DownloadService?>()?.resumeRestoredDownloads(),
       ),
       () => unawaited(_runAutomaticUpdateCheck()),
+      // 上次是不是系統層的閃退：照系統記的原因寫進崩潰日誌。
+      () => unawaited(CrashHandler.recordPreviousExits()),
       () => widget.onLaunchSettled?.call(),
     ];
     for (final task in tasks) {

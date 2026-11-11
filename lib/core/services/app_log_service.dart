@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
 import '../di/injection.dart';
+import 'crash_trail.dart';
 
 /// AppLog - 全域日誌記錄器 (原 Android constant/AppLog.kt)
 class AppLog {
@@ -49,6 +50,7 @@ class AppLog {
     );
 
     _logs.addFirst(entry);
+    CrashTrail.log(error == null ? message : '$message: $error');
 
     if (kDebugMode) {
       if (getIt.isRegistered<Logger>()) {

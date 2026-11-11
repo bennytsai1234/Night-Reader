@@ -1,5 +1,6 @@
 package com.inkpage.reader
 
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -39,6 +40,7 @@ class MainActivity : AudioServiceActivity() {
         super.onCreate(savedInstanceState)
         requestHighestRefreshRate()
         openBackgroundWorkIfAsked(intent)
+        deleteRetiredNotificationChannels()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -55,11 +57,28 @@ class MainActivity : AudioServiceActivity() {
         BackgroundWork.requestOpen()
     }
 
+    /**
+     * 不再用的通知頻道：播放通知換成 `com.night_reader.playback`（`SystemPlayback`），
+     * 舊的兩個留著的話，通知設定裡會多出兩個空的類別。
+     */
+    private fun deleteRetiredNotificationChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        for (id in RETIRED_NOTIFICATION_CHANNELS) {
+            try {
+                manager.deleteNotificationChannel(id)
+            } catch (e: SecurityException) {
+                // 前景服務還用著它（例如舊版的播放還沒停）：下次開 App 再刪。
+            }
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         CachedProcessText.install(flutterEngine)
         BackgroundWork.install(this, flutterEngine.dartExecutor.binaryMessenger)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
+        ProcessExits.install(this, messenger)
         val readerDevice = MethodChannel(messenger, "night_reader/reader_device")
         this.readerDevice = readerDevice
         readerDevice.setMethodCallHandler { call, result ->
@@ -406,6 +425,12 @@ class MainActivity : AudioServiceActivity() {
 
     private companion object {
         const val PICK_COMIC_FOLDER = 0x4E52
+
+        /** 舊的播放通知頻道：改名前的 inkpage，與 2026-11-11 換掉的那個。 */
+        val RETIRED_NOTIFICATION_CHANNELS = listOf(
+            "com.inkpage.reader.tts",
+            "com.night_reader.tts",
+        )
     }
 
     // 換頁轉場中新頁帶的螢幕圓角（logical px）；Android 12 起才量得到。

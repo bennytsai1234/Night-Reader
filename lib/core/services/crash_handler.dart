@@ -2,13 +2,22 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'crash_trail.dart';
+import 'process_exits.dart';
 
 /// CrashHandler - 全域異常捕獲與日誌記錄
 /// (原 Android help/CrashHandler.kt)
+///
+/// 寫兩種崩潰日誌：Dart 的錯誤當場寫；系統層的結束（原生崩潰、記憶體不足、
+/// 沒有回應）夜讀來不及寫，下次開啟時照系統記的原因寫（[recordPreviousExits]）。
+/// 兩種都附上崩潰前的紀錄（[CrashTrail]）。
 class CrashHandler {
   static const _errorDeduplicationWindow = Duration(seconds: 2);
   static const _maxRecentErrorFingerprints = 64;
@@ -16,22 +25,19 @@ class CrashHandler {
   /// 最多留幾份崩潰日誌，多的從最舊的刪起。
   static const _maxLogFiles = 50;
 
-  static String? _userAgent;
+  /// 第一次讀系統的結束紀錄時，寫進崩潰日誌的最遠到幾天前。
+  static const Duration _firstExitWindow = Duration(days: 14);
+
+  /// 系統的結束紀錄讀到哪個時刻（毫秒），之前的不再寫。
+  static const String exitsSeenKey = 'crash_process_exits_seen_at';
+
   static PackageInfo? _packageInfo;
   static final Map<String, DateTime> _recentErrorFingerprints =
       <String, DateTime>{};
+  static AppLifecycleListener? _lifecycle;
 
   static Future<void> init() async {
-    // 預先加載應用資訊
     _packageInfo = await PackageInfo.fromPlatform();
-
-    // 異步獲取 WebView UA (Android 端對標 WebSettings.getDefaultUserAgent)
-    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      try {
-        // 在 Flutter 中獲取 UA 通常需要一個隱藏的 WebView 或使用插件
-        // 這裡暫時預留接口，或從基礎配置中獲取
-      } catch (_) {}
-    }
 
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
@@ -42,6 +48,15 @@ class CrashHandler {
       recordError(error, stack);
       return true;
     };
+
+    // 進出背景記成動作：系統常在背景時收掉夜讀，看得出當時在不在前景。
+    _lifecycle ??= AppLifecycleListener(
+      onResume: () => CrashTrail.action('回到前景'),
+      onPause: () => CrashTrail.action('進到背景'),
+    );
+    try {
+      await CrashTrail.start(await _logDirectory());
+    } catch (_) {}
   }
 
   static void recordFlutterError(FlutterErrorDetails details) {
@@ -94,12 +109,91 @@ class CrashHandler {
   }
 
   static Future<void> _saveLog(String error, StackTrace? stack) async {
+    final now = DateTime.now();
+    final body = StringBuffer()
+      ..writeln('=== Error Info ===')
+      ..writeln('Crash Time: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(now)}')
+      ..writeln('Error: $error');
+    if (stack != null) {
+      body
+        ..writeln('\n=== StackTrace ===')
+        ..writeln(stack.toString());
+    }
+    body
+      ..writeln('\n=== 最近的紀錄 ===')
+      ..writeln(CrashTrail.render());
+    await _writeLog(now, body.toString(), memory: true);
+  }
+
+  /// 讀系統記下的上次結束，該寫的寫成崩潰日誌：開 App 的進場播完後呼叫。
+  /// 最新的那一次附上上次開啟留下的紀錄。
+  static Future<void> recordPreviousExits({
+    ProcessExitSource? source,
+    SharedPreferences? preferences,
+    DateTime? now,
+  }) async {
+    try {
+      final exits = await (source ?? ProcessExitSource.platform).recent();
+      if (exits.isEmpty) return;
+      final prefs = preferences ?? await SharedPreferences.getInstance();
+      final seen =
+          prefs.getInt(exitsSeenKey) ??
+          (now ?? DateTime.now())
+              .subtract(_firstExitWindow)
+              .millisecondsSinceEpoch;
+      var handled = exits
+          .map((exit) => exit.timestamp)
+          .reduce((a, b) => a > b ? a : b);
+      final reportable =
+          exits
+              .where((exit) => exit.timestamp > seen && exit.isReportable)
+              .toList()
+            ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      final previous = CrashTrail.previous;
+      for (final exit in reportable) {
+        final body = StringBuffer()
+          ..writeln('=== 上次結束（系統記的） ===')
+          ..writeln('（上面的版本是寫這份日誌時的，結束時可能是更早的版本）')
+          ..writeln(exit.render());
+        if (identical(exit, reportable.last) &&
+            previous != null &&
+            previous.start <= exit.timestamp) {
+          body
+            ..writeln('\n=== 結束前的紀錄 ===')
+            ..writeln(previous.text);
+        }
+        final written = await _writeLog(
+          DateTime.fromMillisecondsSinceEpoch(exit.timestamp),
+          body.toString(),
+        );
+        if (!written) {
+          // 寫不進去的這一筆與之後的，下次開 App 再寫；寫過的檔名照結束時間，
+          // 再寫一次是同一份。
+          handled = exit.timestamp - 1;
+          break;
+        }
+      }
+      // 寫完才記下處理到哪：先記的話，這次寫不進去的就永遠不會再寫。
+      if (handled > seen) await prefs.setInt(exitsSeenKey, handled);
+    } catch (error, stack) {
+      AppLog.e('讀系統的結束紀錄失敗: $error', error: error, stackTrace: stack);
+    }
+  }
+
+  /// 寫一份崩潰日誌：檔名照 [time] 排，崩潰日誌頁照檔名從新到舊列。
+  /// [memory] 是現在這個程序用的記憶體，系統層的結束寫的是當時的，不附。
+  /// 傳回寫進去了沒有。
+  static Future<bool> _writeLog(
+    DateTime time,
+    String body, {
+    bool memory = false,
+  }) async {
     try {
       final directory = await _logDirectory();
-      // 檔名加入時間戳 (原 Android crash-yyyy-MM-dd-HH-mm-ss.log)
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final timeStr = DateFormat('yyyy-MM-dd-HH-mm-ss').format(DateTime.now());
-      final file = File('${directory.path}/crash-$timeStr-$timestamp.log');
+      final timeStr = DateFormat('yyyy-MM-dd-HH-mm-ss').format(time);
+      final file = File(
+        '${directory.path}/crash-$timeStr-${time.millisecondsSinceEpoch}.log',
+      );
 
       final buffer = StringBuffer();
       buffer.writeln('=== Device & App Info ===');
@@ -110,23 +204,15 @@ class CrashHandler {
       }
       buffer.writeln('Platform: ${Platform.operatingSystem}');
       buffer.writeln('OS Version: ${Platform.operatingSystemVersion}');
-      if (_userAgent != null) {
-        buffer.writeln('WebView UA: $_userAgent');
+      if (memory) {
+        buffer.writeln(
+          'Memory Usage: ${ProcessInfo.currentRss ~/ (1024 * 1024)} MB',
+        );
       }
-      buffer.writeln(
-        'Memory Usage: ${ProcessInfo.currentRss ~/ (1024 * 1024)} MB',
-      );
-
-      buffer.writeln('\n=== Error Info ===');
-      buffer.writeln(
-        'Crash Time: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}',
-      );
-      buffer.writeln('Error: $error');
-      if (stack != null) {
-        buffer.writeln('\n=== StackTrace ===');
-        buffer.writeln(stack.toString());
-      }
-      buffer.writeln('========================================\n');
+      buffer
+        ..writeln()
+        ..write(body.trimRight())
+        ..writeln('\n========================================\n');
 
       await file.writeAsString(buffer.toString(), flush: true);
 
@@ -136,8 +222,10 @@ class CrashHandler {
       await _pruneLogs(directory);
 
       AppLog.d('Crash log saved to: ${file.path}');
+      return true;
     } catch (e) {
       AppLog.e('Failed to save crash log: $e', error: e);
+      return false;
     }
   }
 
@@ -145,7 +233,7 @@ class CrashHandler {
   /// 讓日誌頁顯示對應的空狀態或錯誤狀態。
   static Future<String> readLogs() async {
     final buffer = StringBuffer();
-    for (final file in _logsNewestFirst(await _logDirectory()).take(20)) {
+    for (final file in _logsNewestFirst(await _logDirectory())) {
       buffer.writeln(await file.readAsString());
     }
     return buffer.toString().trimRight();

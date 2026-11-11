@@ -220,6 +220,20 @@ Future<Object?> Function() _limitedFetchTask(BookSource source, String url) =>
       () async => (await app_http.HttpClient().client.get<String>(url)).data,
     );
 
+/// 規則 JS 先送出「開始跑了」（`java.toast` 會回到主 isolate 的紀錄），再
+/// 一直回呼 Dart（`java.md5Encode`），跑上好幾秒。
+Future<void> _ruleJsCallingDart(CancelToken _) async {
+  final engine = JsEngine();
+  try {
+    engine.evaluate(
+      'java.toast("規則 JS 開始跑了");'
+      'for (var i = 0; i < 2000000; i++) { java.md5Encode("夜讀" + i); }',
+    );
+  } finally {
+    engine.dispose();
+  }
+}
+
 Future<String?> _isolateNameOn(String affinity) => SourceIsolate.run(
   (_) async => Isolate.current.debugName,
   affinity: affinity,
@@ -366,6 +380,31 @@ void main() {
   test('work with the same affinity runs on the same source isolate', () async {
     final names = {for (var i = 0; i < 8; i++) await _isolateNameOn('同一個')};
     expect(names, hasLength(1));
+  });
+
+  test('a worker stopped while rule JS calls back into Dart does not take the '
+      'app down', () async {
+    final worker = await SourceWorker.spawn(
+      debugName: 'Stopped',
+      withDictionaries: false,
+      database: Future.value(databaseIsolate),
+    );
+    final started = Completer<void>();
+    AppLog.delegate = (message, error, stackTrace, toast) {
+      if (message.contains('規則 JS 開始跑了') && !started.isCompleted) {
+        started.complete();
+      }
+    };
+    addTearDown(() => AppLog.delegate = null);
+
+    final work = worker.run(_ruleJsCallingDart);
+    // 等規則 JS 真的在 QuickJS 裡跑、正在回呼 Dart，才結束 worker。
+    await started.future.timeout(const Duration(seconds: 10));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    worker.kill(StateError('已停止'));
+
+    await expectLater(work, throwsStateError);
+    expect(await _isolateName(), startsWith('SourceIsolate '));
   });
 
   group('blocking calls', () {
