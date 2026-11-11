@@ -3,7 +3,7 @@
 想好了、還沒開工的事。開工時把那條搬進分支的工作、從這裡刪掉；決定不做也刪掉。
 
 - **播放通知在使用者的 vivo 上顯示不對**：使用者 2026-11-11 在 beta.72 回報三件，還沒分清是朗讀還是有聲書：
-  - 播放時多跳一個通知；要的是只在通知欄裡有、不跳出來。2026-11-11 用 adb 查到原因：手機上夜讀的朗讀頻道（`com.night_reader.tts` 與舊的 `com.inkpage.reader.tts`）建立時是「低」，被改成「重要」（`mImportance=4`、`mOriginalImp=2`、`mUserLockedFields=4`，鎖成使用者設定，App 改不回來），頻道還帶通知音效。201 個 App 裡只有夜讀的頻道被調高，不是 OriginOS 一律調高。audio_service 0.18.19 每換一章、每次播放或暫停都重發通知，沒有 `setOnlyAlertOnce`／`setSilent`，所以每次都跳橫幅。可選：使用者自己把頻道調回、換一個新頻道 ID（刪舊的，重建時是「低」）、或 fork audio_service 加只提醒一次。
+  - 播放時多跳一個通知：原因是朗讀頻道被改成「重要」並鎖成使用者設定（201 個 App 裡只有夜讀這樣），audio_service 每次更新都重發、沒有只提醒一次。使用者 2026-11-11 選換新頻道（分支 fix/playback-notification-channel）。
   - 只有上一段、暫停、下一段三顆。朗讀交出的是上一章、播放／暫停、下一章、停止，有聲書另有倒退、快轉 10 秒；Android 13 起停止與跳秒走 `PlaybackState` 的自訂按鈕，系統可以不畫。要分清是 OriginOS 不畫還是沒送到。
   - 播放、暫停不流暢：還不知道是按了要等（朗讀繼續時要先載入那一章才變成播放）還是按鈕閃。
   - 線索：Android 17 起背景播聲音要有「使用者操作或 App 看得到時啟動」的前景服務（while-in-use）；朗讀暫停時 audio_service 退出前景（`androidStopForegroundOnPause`），從通知按播放時再啟動，可能和不流暢有關。
