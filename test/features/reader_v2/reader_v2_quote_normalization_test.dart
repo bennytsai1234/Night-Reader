@@ -28,6 +28,16 @@ void main() {
     expect(normalizeTypography('他說(第一行\n第二行)'), '他說(第一行\n第二行)');
   });
 
+  test('deeply nested brackets are paired in one pass', () {
+    // 每層都重掃括號內文的話，五萬層要掃十二億次，桌機要五秒多。
+    const depth = 50000;
+    final nested = '中${'(' * depth}x${')' * depth}';
+    final stopwatch = Stopwatch()..start();
+    final result = normalizeTypography(nested);
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(result, '中（${'(' * (depth - 1)}x${')' * (depth - 1)}）');
+  });
+
   test('pure Latin lines keep their quotes', () {
     expect(normalizeTypography('He said “hello”.'), 'He said “hello”.');
     expect(normalizeTypography("don't"), "don't");

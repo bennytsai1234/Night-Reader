@@ -346,12 +346,26 @@ bool _isLatinLetterOrDigit(int? rune) {
       (rune >= 0x61 && rune <= 0x7A);
 }
 
-bool _quotePairHasCjkContext(List<int> runes, int openIndex, int closeIndex) {
-  for (var cursor = openIndex + 1; cursor < closeIndex; cursor += 1) {
-    if (_isCjkContextRune(runes[cursor])) return true;
-  }
+/// [cjkBefore] 的第 i 項是 `runes[0..i)` 裡 CJK 脈絡字元的個數（見
+/// [_cjkContextCounts]），括號內有沒有中文用相減判斷，巢狀再深也只掃一遍。
+bool _quotePairHasCjkContext(
+  List<int> runes,
+  List<int> cjkBefore,
+  int openIndex,
+  int closeIndex,
+) {
+  if (cjkBefore[closeIndex] > cjkBefore[openIndex + 1]) return true;
   return _isCjkContextRune(_neighborRune(runes, openIndex, -1)) ||
       _isCjkContextRune(_neighborRune(runes, closeIndex, 1));
+}
+
+List<int> _cjkContextCounts(List<int> runes) {
+  final counts = List<int>.filled(runes.length + 1, 0);
+  for (var index = 0; index < runes.length; index += 1) {
+    counts[index + 1] =
+        counts[index] + (_isCjkContextRune(runes[index]) ? 1 : 0);
+  }
+  return counts;
 }
 
 /// CJK 脈絡字元：漢字之外也涵蓋 CJK 標點/全形區段與常見中文標點
@@ -531,6 +545,7 @@ void _convertBracketPairs(
   // 巢狀的照層次配對（`(她想(真的嗎)還是假的)` 內外兩對都轉）；換行時沒配到
   // 的左括號、多出來的右括號原樣留著。
   final opens = <int>[];
+  final cjkBefore = _cjkContextCounts(runes);
   for (var index = 0; index < runes.length; index += 1) {
     final rune = runes[index];
     if (rune == 0x0A) {
@@ -539,7 +554,7 @@ void _convertBracketPairs(
       opens.add(index);
     } else if (rune == close && opens.isNotEmpty) {
       final openIndex = opens.removeLast();
-      if (_quotePairHasCjkContext(runes, openIndex, index)) {
+      if (_quotePairHasCjkContext(runes, cjkBefore, openIndex, index)) {
         output[openIndex] = openReplacement;
         output[index] = closeReplacement;
       }
