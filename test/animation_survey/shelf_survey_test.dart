@@ -120,6 +120,7 @@ Future<void> _steps(WidgetTester tester) async {
   // 排序：每一項各選一次（最後以預設的「最近閱讀」收尾）。
   for (final mode in ['書名', '作者', '更新時間', '加入時間', '自訂排序', '最近閱讀']) {
     await step('整理書架：打開', openArrange);
+    await step('整理書架：排序與篩選', () => _text(tester, '排序與篩選'));
     await step('排序：$mode', () => _text(tester, mode));
   }
 

@@ -71,6 +71,7 @@ enum _ShelfMenuAction {
   gridView,
   listView,
   unifiedCovers,
+  sortFilter,
   select,
   export,
   search,
@@ -294,11 +295,15 @@ class _BookshelfPageState extends State<BookshelfPage>
       morph: true,
       title: '書架',
       titleSheen: provider.checkingShelf,
-      leading: GlassMenuButton<Object>(
-        icon: Icons.swap_vert_rounded,
-        tooltip: '整理書架',
-        entriesBuilder: (_) => _arrangeMenuEntries(provider),
-        onSelected: (value) => _onShelfMenuSelected(provider, value),
+      leading: Builder(
+        builder: (buttonContext) => GlassMenuButton<Object>(
+          icon: Icons.swap_vert_rounded,
+          tooltip: '整理書架',
+          entriesBuilder: (_) => _arrangeMenuEntries(provider),
+          onSelected: (value) => value == _ShelfMenuAction.sortFilter
+              ? _openSortFilterMenu(buttonContext, provider)
+              : _onShelfMenuSelected(provider, value),
+        ),
       ),
       actions: [
         GlassMenuButton<Object>(
@@ -332,6 +337,30 @@ class _BookshelfPageState extends State<BookshelfPage>
         checked: provider.unifiedCovers,
       ),
       const GlassMenuDivider(),
+      const GlassMenuItem(
+        value: _ShelfMenuAction.sortFilter,
+        label: '排序與篩選',
+        icon: Icons.sort_rounded,
+      ),
+      const GlassMenuDivider(),
+      GlassMenuItem(
+        value: _ShelfMenuAction.select,
+        label: '選取',
+        icon: Icons.check_circle_outline,
+        enabled: provider.books.isNotEmpty,
+      ),
+      const GlassMenuItem(
+        value: _ShelfMenuAction.export,
+        label: '匯出書架',
+        icon: Icons.file_upload_outlined,
+      ),
+    ];
+  }
+
+  /// 「整理」第二層：排序與篩選收在同一個選單，第一層才不會長到半個螢幕
+  /// 以上（使用者選的，見 docs/design/screens.md「書架」）。
+  List<GlassMenuEntry<Object>> _sortFilterEntries(BookshelfProvider provider) {
+    return [
       for (final mode in BookshelfSortMode.values)
         GlassMenuItem(
           value: mode,
@@ -350,19 +379,20 @@ class _BookshelfPageState extends State<BookshelfPage>
               (provider.canFilterKinds &&
                   provider.shelfKinds.contains(choice.kind)),
         ),
-      const GlassMenuDivider(),
-      GlassMenuItem(
-        value: _ShelfMenuAction.select,
-        label: '選取',
-        icon: Icons.check_circle_outline,
-        enabled: provider.books.isNotEmpty,
-      ),
-      const GlassMenuItem(
-        value: _ShelfMenuAction.export,
-        label: '匯出書架',
-        icon: Icons.file_upload_outlined,
-      ),
     ];
+  }
+
+  /// 在「整理」鈕的位置接著開出第二層（同書源管理「更多」）。
+  Future<void> _openSortFilterMenu(
+    BuildContext buttonContext,
+    BookshelfProvider provider,
+  ) async {
+    final value = await showGlassMenu<Object>(
+      context: buttonContext,
+      anchor: globalRectOf(buttonContext),
+      entries: _sortFilterEntries(provider),
+    );
+    if (value != null && mounted) await _onShelfMenuSelected(provider, value);
   }
 
   static const List<GlassMenuEntry<Object>> _addMenuEntries = [
@@ -409,6 +439,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setGridView(false);
       case _ShelfMenuAction.unifiedCovers:
         provider.setUnifiedCovers(!provider.unifiedCovers);
+      case _ShelfMenuAction.sortFilter:
+        break;
       case _ShelfMenuAction.select:
         _enterEditMode();
       case _ShelfMenuAction.search:

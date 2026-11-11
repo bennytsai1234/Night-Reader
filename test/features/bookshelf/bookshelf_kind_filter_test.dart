@@ -62,8 +62,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 篩選在「整理」的第二層「排序與篩選」裡。
   Future<void> openMenu(WidgetTester tester) async {
     await tester.tap(find.byTooltip('整理書架'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('排序與篩選'));
     await tester.pumpAndSettle();
   }
 
