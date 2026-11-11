@@ -44,6 +44,7 @@ import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
 import 'features/search/search_provider.dart';
 import 'shared/widgets/skeleton_text.dart';
+import 'shared/navigation/root_navigator.dart';
 
 Future<bool> runBackgroundTask<T>({
   required Future<void> Function() initialize,
@@ -78,7 +79,6 @@ void callbackDispatcher() {
 
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
-final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 const String kAppDisplayName = '夜讀';
 final StartupRetryGate _startupRetryGate = StartupRetryGate();
 

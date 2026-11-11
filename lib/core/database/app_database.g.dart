@@ -2918,6 +2918,18 @@ class $BookSourcesTable extends BookSources
     requiredDuringInsert: false,
     defaultValue: const Constant(180000),
   );
+  static const VerificationMeta _lastCheckTimeMeta = const VerificationMeta(
+    'lastCheckTime',
+  );
+  @override
+  late final GeneratedColumn<int> lastCheckTime = GeneratedColumn<int>(
+    'lastCheckTime',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _jsLibMeta = const VerificationMeta('jsLib');
   @override
   late final GeneratedColumn<String> jsLib = GeneratedColumn<String>(
@@ -3046,6 +3058,7 @@ class $BookSourcesTable extends BookSources
     enabledCookieJar,
     lastUpdateTime,
     respondTime,
+    lastCheckTime,
     jsLib,
     concurrentRate,
     exploreUrl,
@@ -3230,6 +3243,15 @@ class $BookSourcesTable extends BookSources
         ),
       );
     }
+    if (data.containsKey('lastCheckTime')) {
+      context.handle(
+        _lastCheckTimeMeta,
+        lastCheckTime.isAcceptableOrUnknown(
+          data['lastCheckTime']!,
+          _lastCheckTimeMeta,
+        ),
+      );
+    }
     if (data.containsKey('jsLib')) {
       context.handle(
         _jsLibMeta,
@@ -3355,6 +3377,10 @@ class $BookSourcesTable extends BookSources
         DriftSqlType.int,
         data['${effectivePrefix}respondTime'],
       )!,
+      lastCheckTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastCheckTime'],
+      )!,
       weight: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}weight'],
@@ -3449,6 +3475,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
   final Value<bool> enabledCookieJar;
   final Value<int> lastUpdateTime;
   final Value<int> respondTime;
+  final Value<int> lastCheckTime;
   final Value<String?> jsLib;
   final Value<String?> concurrentRate;
   final Value<String?> exploreUrl;
@@ -3481,6 +3508,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
     this.enabledCookieJar = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
     this.respondTime = const Value.absent(),
+    this.lastCheckTime = const Value.absent(),
     this.jsLib = const Value.absent(),
     this.concurrentRate = const Value.absent(),
     this.exploreUrl = const Value.absent(),
@@ -3514,6 +3542,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
     this.enabledCookieJar = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
     this.respondTime = const Value.absent(),
+    this.lastCheckTime = const Value.absent(),
     this.jsLib = const Value.absent(),
     this.concurrentRate = const Value.absent(),
     this.exploreUrl = const Value.absent(),
@@ -3548,6 +3577,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
     Expression<bool>? enabledCookieJar,
     Expression<int>? lastUpdateTime,
     Expression<int>? respondTime,
+    Expression<int>? lastCheckTime,
     Expression<String>? jsLib,
     Expression<String>? concurrentRate,
     Expression<String>? exploreUrl,
@@ -3581,6 +3611,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
       if (enabledCookieJar != null) 'enabledCookieJar': enabledCookieJar,
       if (lastUpdateTime != null) 'lastUpdateTime': lastUpdateTime,
       if (respondTime != null) 'respondTime': respondTime,
+      if (lastCheckTime != null) 'lastCheckTime': lastCheckTime,
       if (jsLib != null) 'jsLib': jsLib,
       if (concurrentRate != null) 'concurrentRate': concurrentRate,
       if (exploreUrl != null) 'exploreUrl': exploreUrl,
@@ -3616,6 +3647,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
     Value<bool>? enabledCookieJar,
     Value<int>? lastUpdateTime,
     Value<int>? respondTime,
+    Value<int>? lastCheckTime,
     Value<String?>? jsLib,
     Value<String?>? concurrentRate,
     Value<String?>? exploreUrl,
@@ -3649,6 +3681,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
       enabledCookieJar: enabledCookieJar ?? this.enabledCookieJar,
       lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
       respondTime: respondTime ?? this.respondTime,
+      lastCheckTime: lastCheckTime ?? this.lastCheckTime,
       jsLib: jsLib ?? this.jsLib,
       concurrentRate: concurrentRate ?? this.concurrentRate,
       exploreUrl: exploreUrl ?? this.exploreUrl,
@@ -3724,6 +3757,9 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
     if (respondTime.present) {
       map['respondTime'] = Variable<int>(respondTime.value);
     }
+    if (lastCheckTime.present) {
+      map['lastCheckTime'] = Variable<int>(lastCheckTime.value);
+    }
     if (jsLib.present) {
       map['jsLib'] = Variable<String>(jsLib.value);
     }
@@ -3797,6 +3833,7 @@ class BookSourcesCompanion extends UpdateCompanion<BookSource> {
           ..write('enabledCookieJar: $enabledCookieJar, ')
           ..write('lastUpdateTime: $lastUpdateTime, ')
           ..write('respondTime: $respondTime, ')
+          ..write('lastCheckTime: $lastCheckTime, ')
           ..write('jsLib: $jsLib, ')
           ..write('concurrentRate: $concurrentRate, ')
           ..write('exploreUrl: $exploreUrl, ')
@@ -3839,6 +3876,7 @@ class _$BookSourceInsertable implements Insertable<BookSource> {
       enabledCookieJar: Value(_object.enabledCookieJar),
       lastUpdateTime: Value(_object.lastUpdateTime),
       respondTime: Value(_object.respondTime),
+      lastCheckTime: Value(_object.lastCheckTime),
       jsLib: Value(_object.jsLib),
       concurrentRate: Value(_object.concurrentRate),
       exploreUrl: Value(_object.exploreUrl),
@@ -11406,6 +11444,7 @@ typedef $$BookSourcesTableCreateCompanionBuilder =
       Value<bool> enabledCookieJar,
       Value<int> lastUpdateTime,
       Value<int> respondTime,
+      Value<int> lastCheckTime,
       Value<String?> jsLib,
       Value<String?> concurrentRate,
       Value<String?> exploreUrl,
@@ -11440,6 +11479,7 @@ typedef $$BookSourcesTableUpdateCompanionBuilder =
       Value<bool> enabledCookieJar,
       Value<int> lastUpdateTime,
       Value<int> respondTime,
+      Value<int> lastCheckTime,
       Value<String?> jsLib,
       Value<String?> concurrentRate,
       Value<String?> exploreUrl,
@@ -11555,6 +11595,11 @@ class $$BookSourcesTableFilterComposer
 
   ColumnFilters<int> get respondTime => $composableBuilder(
     column: $table.respondTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastCheckTime => $composableBuilder(
+    column: $table.lastCheckTime,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11724,6 +11769,11 @@ class $$BookSourcesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get lastCheckTime => $composableBuilder(
+    column: $table.lastCheckTime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get jsLib => $composableBuilder(
     column: $table.jsLib,
     builder: (column) => ColumnOrderings(column),
@@ -11874,6 +11924,11 @@ class $$BookSourcesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get lastCheckTime => $composableBuilder(
+    column: $table.lastCheckTime,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get jsLib =>
       $composableBuilder(column: $table.jsLib, builder: (column) => column);
 
@@ -11979,6 +12034,7 @@ class $$BookSourcesTableTableManager
                 Value<bool> enabledCookieJar = const Value.absent(),
                 Value<int> lastUpdateTime = const Value.absent(),
                 Value<int> respondTime = const Value.absent(),
+                Value<int> lastCheckTime = const Value.absent(),
                 Value<String?> jsLib = const Value.absent(),
                 Value<String?> concurrentRate = const Value.absent(),
                 Value<String?> exploreUrl = const Value.absent(),
@@ -12011,6 +12067,7 @@ class $$BookSourcesTableTableManager
                 enabledCookieJar: enabledCookieJar,
                 lastUpdateTime: lastUpdateTime,
                 respondTime: respondTime,
+                lastCheckTime: lastCheckTime,
                 jsLib: jsLib,
                 concurrentRate: concurrentRate,
                 exploreUrl: exploreUrl,
@@ -12045,6 +12102,7 @@ class $$BookSourcesTableTableManager
                 Value<bool> enabledCookieJar = const Value.absent(),
                 Value<int> lastUpdateTime = const Value.absent(),
                 Value<int> respondTime = const Value.absent(),
+                Value<int> lastCheckTime = const Value.absent(),
                 Value<String?> jsLib = const Value.absent(),
                 Value<String?> concurrentRate = const Value.absent(),
                 Value<String?> exploreUrl = const Value.absent(),
@@ -12077,6 +12135,7 @@ class $$BookSourcesTableTableManager
                 enabledCookieJar: enabledCookieJar,
                 lastUpdateTime: lastUpdateTime,
                 respondTime: respondTime,
+                lastCheckTime: lastCheckTime,
                 jsLib: jsLib,
                 concurrentRate: concurrentRate,
                 exploreUrl: exploreUrl,

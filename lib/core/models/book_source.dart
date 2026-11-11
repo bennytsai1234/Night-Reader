@@ -32,6 +32,7 @@ class BookSource extends BookSourceBase {
     String? variableComment,
     int lastUpdateTime = 0,
     int respondTime = 180000,
+    int lastCheckTime = 0,
     int weight = 0,
     String? exploreUrl,
     String? exploreScreen,
@@ -63,6 +64,7 @@ class BookSource extends BookSourceBase {
     this.variableComment = variableComment;
     this.lastUpdateTime = lastUpdateTime;
     this.respondTime = respondTime;
+    this.lastCheckTime = lastCheckTime;
     this.weight = weight;
     this.exploreUrl = exploreUrl;
     this.exploreScreen = exploreScreen;
