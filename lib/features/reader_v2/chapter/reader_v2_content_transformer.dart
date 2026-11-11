@@ -528,31 +528,22 @@ void _convertBracketPairs(
   required String openReplacement,
   required String closeReplacement,
 }) {
-  var index = 0;
-  while (index < runes.length) {
-    if (runes[index] != open) {
-      index += 1;
-      continue;
-    }
-    var closeIndex = -1;
-    var cursor = index + 1;
-    for (; cursor < runes.length; cursor += 1) {
-      final rune = runes[cursor];
-      if (rune == 0x0A || rune == open) break;
-      if (rune == close) {
-        closeIndex = cursor;
-        break;
+  // 巢狀的照層次配對（`(她想(真的嗎)還是假的)` 內外兩對都轉）；換行時沒配到
+  // 的左括號、多出來的右括號原樣留著。
+  final opens = <int>[];
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune == 0x0A) {
+      opens.clear();
+    } else if (rune == open) {
+      opens.add(index);
+    } else if (rune == close && opens.isNotEmpty) {
+      final openIndex = opens.removeLast();
+      if (_quotePairHasCjkContext(runes, openIndex, index)) {
+        output[openIndex] = openReplacement;
+        output[index] = closeReplacement;
       }
     }
-    if (closeIndex < 0) {
-      index = cursor > index ? cursor : index + 1;
-      continue;
-    }
-    if (_quotePairHasCjkContext(runes, index, closeIndex)) {
-      output[index] = openReplacement;
-      output[closeIndex] = closeReplacement;
-    }
-    index = closeIndex + 1;
   }
 }
 

@@ -11,6 +11,23 @@ void main() {
     expect(normalizeTypography('他說＇不要＇。'), '他說『不要』。');
   });
 
+  test('half-width brackets in Chinese become full-width, nested ones too', () {
+    expect(normalizeTypography('他說(真的)。'), '他說（真的）。');
+    expect(normalizeTypography('他說(她想(真的嗎)還是假的)'), '他說（她想（真的嗎）還是假的）');
+    expect(
+      normalizeTypography('他說[她想[真的嗎]還是假的]'),
+      normalizeTypography('他說【她想【真的嗎】還是假的】'),
+    );
+  });
+
+  test('Latin and unpaired brackets stay as they are', () {
+    expect(normalizeTypography('f(g(x)) + [1]'), 'f(g(x)) + [1]');
+    expect(normalizeTypography('他說(f(x))'), '他說（f(x)）');
+    expect(normalizeTypography('他說(真的'), '他說(真的');
+    expect(normalizeTypography('真的)他說'), '真的)他說');
+    expect(normalizeTypography('他說(第一行\n第二行)'), '他說(第一行\n第二行)');
+  });
+
   test('pure Latin lines keep their quotes', () {
     expect(normalizeTypography('He said “hello”.'), 'He said “hello”.');
     expect(normalizeTypography("don't"), "don't");
