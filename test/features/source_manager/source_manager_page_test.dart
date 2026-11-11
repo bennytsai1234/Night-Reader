@@ -716,7 +716,7 @@ void main() {
       await settleQueries(tester);
     });
 
-    testWidgets('no sources last time: no search box, then the empty page', (
+    testWidgets('no sources last time: search box and toolbar stay, greyed', (
       tester,
     ) async {
       await GetIt.instance<SharedPreferences>().setInt(
@@ -726,16 +726,22 @@ void main() {
       gatedDao.gate = Completer<void>();
       await pumpPage(tester, sources: 0);
 
+      // 一律畫出（ADR 0059）：沒有書源時搜尋框與工具列也在，搜尋框灰掉。
       expect(skeletonRows(), findsNothing);
-      expect(find.byType(SearchField), findsNothing);
-      expect(find.byType(SelectActionBar), findsNothing);
+      expect(
+        tester.widget<SearchField>(find.byType(SearchField)).enabled,
+        isFalse,
+      );
+      expect(find.byType(SelectActionBar), findsOneWidget);
+      expect(find.text('還沒校驗過'), findsOneWidget);
       expect(find.text('尚未加入書源'), findsNothing);
 
       gatedDao.gate!.complete();
       await settleQueries(tester);
       await tester.pumpAndSettle();
       expect(find.text('尚未加入書源'), findsOneWidget);
-      expect(find.byType(SearchField), findsNothing);
+      expect(find.byType(SearchField), findsOneWidget);
+      expect(find.byType(SelectActionBar), findsOneWidget);
     });
 
     for (final (label, record) in [('a string', 'bad'), ('negative', -3)]) {
@@ -765,40 +771,7 @@ void main() {
       });
     }
 
-    testWidgets('the toolbar takes its shadow off screen before it goes', (
-      tester,
-    ) async {
-      // 沒有紀錄時當作有書源，工具列先在；讀完發現沒有書源才收起。
-      gatedDao.gate = Completer<void>();
-      await pumpPage(tester, sources: 0);
-      expect(find.byType(SelectActionBar), findsOneWidget);
-      final screen = tester.getSize(find.byType(Scaffold)).height;
-      final glass = find.descendant(
-        of: find.byType(SelectActionBar),
-        matching: find.byType(GlassSurface),
-      );
-
-      gatedDao.gate!.complete();
-      await settleQueries(tester);
-      // 每一幀陰影伸進畫面的距離（玻璃上緣再往上 [AppGlass.shadowReach]）。
-      final intrusions = <double>[];
-      while (glass.evaluate().isNotEmpty) {
-        intrusions.add(
-          screen - (tester.getTopLeft(glass).dy - AppGlass.shadowReach),
-        );
-        await tester.pump(const Duration(milliseconds: 1));
-      }
-
-      expect(intrusions.length, greaterThan(100));
-      // 拿掉前最後一幀（還差 1ms），陰影只剩一點點在畫面內，跟著動畫收到
-      // 底，不會留著整段陰影到拿掉時才一下消失。
-      expect(intrusions.last, lessThan(4));
-      for (var i = 1; i < intrusions.length; i++) {
-        expect(intrusions[i], lessThanOrEqualTo(intrusions[i - 1]));
-      }
-    });
-
-    testWidgets('search box grows in when the record was wrong', (
+    testWidgets('the header keeps its height when the record was wrong', (
       tester,
     ) async {
       await GetIt.instance<SharedPreferences>().setInt(
@@ -808,18 +781,21 @@ void main() {
       gatedDao.gate = Completer<void>();
       await pumpPage(tester);
       final before = tester.getSize(find.byType(GlassNavHeader)).height;
+      expect(
+        tester.widget<SearchField>(find.byType(SearchField)).enabled,
+        isFalse,
+      );
 
       gatedDao.gate!.complete();
       await settleQueries(tester);
-      await tester.pump(const Duration(milliseconds: 60));
-      final mid = tester.getSize(find.byType(GlassNavHeader)).height;
       await tester.pumpAndSettle();
-      final after = tester.getSize(find.byType(GlassNavHeader)).height;
 
-      expect(after, greaterThan(before));
-      expect(mid, greaterThan(before));
-      expect(mid, lessThan(after));
-      expect(find.byType(SearchField), findsOneWidget);
+      // 搜尋框一直在，讀完發現有書源只是變成能用，頁首不長高、清單不讓位。
+      expect(tester.getSize(find.byType(GlassNavHeader)).height, before);
+      expect(
+        tester.widget<SearchField>(find.byType(SearchField)).enabled,
+        isTrue,
+      );
       expect(find.byType(SelectActionBar), findsOneWidget);
     });
   });
