@@ -41,6 +41,30 @@ void main() {
     expect(line.length, lessThan(CrashTrail.maxLineLength + 20));
   });
 
+  test('login details in URLs and headers are masked', () {
+    CrashTrail.log(
+      'Network Request: [GET] https://user:pass@example.com/api'
+      '?q=夜雨&token=abc123&page=2&Password=hunter2',
+    );
+    CrashTrail.log('書源標頭 {"Cookie": "sid=xyz; uid=42", "User-Agent": "夜讀"}');
+    CrashTrail.log('Authorization: Bearer secret-value');
+
+    final text = CrashTrail.render();
+    for (final secret in [
+      'user:pass',
+      'abc123',
+      'hunter2',
+      'sid=xyz',
+      'uid=42',
+      'secret-value',
+    ]) {
+      expect(text, isNot(contains(secret)));
+    }
+    expect(text, contains('q=夜雨'));
+    expect(text, contains('page=2'));
+    expect(text, contains('"User-Agent": "夜讀"'));
+  });
+
   test('what was recorded is on disk, and the next start reads it back as '
       'last time', () async {
     await CrashTrail.start(directory);

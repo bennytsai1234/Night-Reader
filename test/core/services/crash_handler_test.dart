@@ -160,6 +160,32 @@ void main() {
       expect(crashLogs(), hasLength(1));
     });
 
+    test(
+      'an exit that could not be written is written the next time',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        final source = _Exits([nativeCrash]);
+        CrashHandler.logDirectoryForTesting = () async =>
+            throw const FileSystemException('儲存空間暫時不能用');
+
+        await CrashHandler.recordPreviousExits(
+          source: source,
+          preferences: prefs,
+          now: now,
+        );
+        expect(crashLogs(), isEmpty);
+
+        CrashHandler.logDirectoryForTesting = () async => directory;
+        await CrashHandler.recordPreviousExits(
+          source: source,
+          preferences: prefs,
+          now: now,
+        );
+        expect(crashLogs(), hasLength(1));
+        expect(prefs.getInt(CrashHandler.exitsSeenKey), nativeCrash.timestamp);
+      },
+    );
+
     test('the first time, exits older than two weeks are left out', () async {
       await CrashHandler.recordPreviousExits(
         source: _Exits([

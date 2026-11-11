@@ -141,10 +141,9 @@ class CrashHandler {
           (now ?? DateTime.now())
               .subtract(_firstExitWindow)
               .millisecondsSinceEpoch;
-      final latest = exits
+      var handled = exits
           .map((exit) => exit.timestamp)
           .reduce((a, b) => a > b ? a : b);
-      await prefs.setInt(exitsSeenKey, latest > seen ? latest : seen);
       final reportable =
           exits
               .where((exit) => exit.timestamp > seen && exit.isReportable)
@@ -163,11 +162,19 @@ class CrashHandler {
             ..writeln('\n=== 結束前的紀錄 ===')
             ..writeln(previous.text);
         }
-        await _writeLog(
+        final written = await _writeLog(
           DateTime.fromMillisecondsSinceEpoch(exit.timestamp),
           body.toString(),
         );
+        if (!written) {
+          // 寫不進去的這一筆與之後的，下次開 App 再寫；寫過的檔名照結束時間，
+          // 再寫一次是同一份。
+          handled = exit.timestamp - 1;
+          break;
+        }
       }
+      // 寫完才記下處理到哪：先記的話，這次寫不進去的就永遠不會再寫。
+      if (handled > seen) await prefs.setInt(exitsSeenKey, handled);
     } catch (error, stack) {
       AppLog.e('讀系統的結束紀錄失敗: $error', error: error, stackTrace: stack);
     }
@@ -175,7 +182,8 @@ class CrashHandler {
 
   /// 寫一份崩潰日誌：檔名照 [time] 排，崩潰日誌頁照檔名從新到舊列。
   /// [memory] 是現在這個程序用的記憶體，系統層的結束寫的是當時的，不附。
-  static Future<void> _writeLog(
+  /// 傳回寫進去了沒有。
+  static Future<bool> _writeLog(
     DateTime time,
     String body, {
     bool memory = false,
@@ -214,8 +222,10 @@ class CrashHandler {
       await _pruneLogs(directory);
 
       AppLog.d('Crash log saved to: ${file.path}');
+      return true;
     } catch (e) {
       AppLog.e('Failed to save crash log: $e', error: e);
+      return false;
     }
   }
 

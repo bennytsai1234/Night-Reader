@@ -11,7 +11,8 @@ import 'package:intl/intl.dart';
 /// Dart 的錯誤當場附上這次的。
 ///
 /// 動作與日誌分開留：書源校驗時規則 JS 的訊息一下就幾十則，不能把「按了
-/// 停止」這種動作擠掉。只存在手機上，要使用者自己複製才會送出。
+/// 停止」這種動作擠掉。只存在手機上，要使用者自己複製才會送出；網址裡的
+/// 帳號密碼、token 這類參數與 Cookie、Authorization 的值先遮掉再記。
 abstract final class CrashTrail {
   static const int maxActions = 30;
   static const int maxLogs = 60;
@@ -29,6 +30,9 @@ abstract final class CrashTrail {
 
   static File? _file;
   static bool _dirty = false;
+
+  /// 還沒存的裡面有動作：寫完正在寫的那次就接著寫，不等日誌的間隔。
+  static bool _urgent = false;
   static Future<void>? _writing;
   static Timer? _timer;
   static ({int start, String text})? _previous;
@@ -73,7 +77,7 @@ abstract final class CrashTrail {
   }
 
   static void _add(ListQueue<String> list, int max, String text) {
-    var line = text.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
+    var line = redact(text.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim());
     if (line.length > maxLineLength) {
       line = '${line.substring(0, maxLineLength)}…';
     }
@@ -87,6 +91,7 @@ abstract final class CrashTrail {
     if (_file == null) return;
     _dirty = true;
     if (immediately) {
+      _urgent = true;
       _timer?.cancel();
       _timer = null;
       unawaited(_write());
@@ -98,27 +103,50 @@ abstract final class CrashTrail {
     }
   }
 
-  /// 同一時間只寫一次；寫的時候又有新的，寫完再寫一次。
-  static Future<void> _write() => _writing ??= _drain().whenComplete(() {
+  /// 同一時間只寫一次。寫的時候又有新的：有動作就接著寫，只有日誌就隔
+  /// [logWriteDelay] 再寫。
+  static Future<void> _write() => _writing ??= _writeOnce().whenComplete(() {
     _writing = null;
-    if (_dirty) unawaited(_write());
+    if (_dirty) _schedule(immediately: _urgent);
   });
 
-  static Future<void> _drain() async {
+  /// 先寫到暫存檔再換掉正式的那份：寫到一半被系統結束或空間不夠時，上一份
+  /// 完整的還在。
+  static Future<void> _writeOnce() async {
     final file = _file;
     if (file == null) return;
+    _dirty = false;
+    _urgent = false;
     try {
-      while (_dirty) {
-        _dirty = false;
-        await file.writeAsString(
-          '$_sessionTag$_sessionStart\n${render()}\n',
-          flush: true,
-        );
-      }
+      final temp = File('${file.path}.tmp');
+      await temp.writeAsString(
+        '$_sessionTag$_sessionStart\n${render()}\n',
+        flush: true,
+      );
+      await temp.rename(file.path);
     } catch (_) {
       // 存不進去也不影響使用；崩潰日誌少一段紀錄而已。
     }
   }
+
+  static final RegExp _urlUserInfo = RegExp(r'(\w+://)[^/\s@]+@');
+  static final RegExp _secretParameter = RegExp(
+    r'([?&;]\s*(?:access_?token|token|auth|password|passwd|pwd|secret|'
+    r'session_?id|sid|ticket|sign|signature|api_?key)=)[^&#\s"]*',
+    caseSensitive: false,
+  );
+  static final RegExp _secretHeader = RegExp(
+    r'''((?:set-)?cookie|authorization)(["']?\s*[:=]\s*["']?)[^"'\n}]+''',
+    caseSensitive: false,
+  );
+
+  /// 遮掉 [text] 裡網址的帳號密碼、看起來像登入資料的參數，與 Cookie、
+  /// Authorization 的值。
+  @visibleForTesting
+  static String redact(String text) => text
+      .replaceAllMapped(_urlUserInfo, (m) => '${m[1]}***@')
+      .replaceAllMapped(_secretParameter, (m) => '${m[1]}***')
+      .replaceAllMapped(_secretHeader, (m) => '${m[1]}${m[2]}***');
 
   static const String _sessionTag = 'session ';
 
@@ -138,10 +166,11 @@ abstract final class CrashTrail {
   /// 寫完正在寫的那一次（測試用）。
   @visibleForTesting
   static Future<void> flushForTesting() async {
-    _timer?.cancel();
-    _timer = null;
-    await _writing;
-    if (_dirty) await _write();
+    while (_writing != null || _dirty) {
+      _timer?.cancel();
+      _timer = null;
+      await (_writing ?? _write());
+    }
   }
 
   @visibleForTesting
@@ -150,6 +179,7 @@ abstract final class CrashTrail {
     _logs.clear();
     _file = null;
     _dirty = false;
+    _urgent = false;
     _writing = null;
     _timer?.cancel();
     _timer = null;
