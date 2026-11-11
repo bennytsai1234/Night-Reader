@@ -90,9 +90,78 @@ class SourceManagerMenus {
         label: _sortModes[i],
         checked: provider.sortMode == i,
       ),
+    // 每個網域一張卡也是清單怎麼排，和排序收在一起。
+    const GlassMenuDivider(),
+    GlassMenuItem(
+      value: 'group_domain',
+      label: '按域名分組',
+      icon: Icons.dns_outlined,
+      checked: provider.groupByDomain,
+    ),
   ];
 
-  /// 在「更多」鈕的位置接著開出第二層選單（分組與篩選、排序方式）。
+  /// 加入書源的選單項目：三種匯入與新建。
+  static List<GlassMenuEntry<String>> _addEntries({
+    required bool importEnabled,
+    required bool mutationEnabled,
+  }) => [
+    GlassMenuItem(
+      value: 'import_url',
+      icon: Icons.language,
+      label: '網路匯入',
+      enabled: importEnabled && mutationEnabled,
+    ),
+    GlassMenuItem(
+      value: 'import_file',
+      icon: Icons.file_open_outlined,
+      label: '本地匯入',
+      enabled: importEnabled && mutationEnabled,
+    ),
+    GlassMenuItem(
+      value: 'import_clipboard',
+      icon: Icons.content_paste,
+      label: '剪貼簿匯入',
+      enabled: importEnabled && mutationEnabled,
+    ),
+    GlassMenuItem(
+      value: 'new_source',
+      icon: Icons.add_circle_outline,
+      label: '新建書源',
+      enabled: mutationEnabled,
+    ),
+  ];
+
+  /// 校驗與修復的選單項目；AI 修書源設定放這裡當快速入口。
+  static List<GlassMenuEntry<String>> _checkEntries(
+    SourceManagerProvider provider, {
+    required bool mutationEnabled,
+  }) => [
+    GlassMenuItem(
+      value: 'check_all',
+      icon: Icons.playlist_add_check,
+      label: '校驗所有書源',
+      enabled: provider.totalSourceCount > 0 && mutationEnabled,
+    ),
+    GlassMenuItem(
+      value: 'clear_check_marks',
+      icon: Icons.layers_clear_outlined,
+      label: '清除校驗標記',
+      enabled: provider.totalSourceCount > 0 && mutationEnabled,
+    ),
+    GlassMenuItem(
+      value: 'repair_abnormal',
+      icon: Icons.healing_outlined,
+      label: '修復異常書源',
+      enabled: provider.abnormalSourceUrls.isNotEmpty && mutationEnabled,
+    ),
+    const GlassMenuItem(
+      value: 'ai_settings',
+      icon: Icons.auto_fix_high_outlined,
+      label: 'AI 修書源設定',
+    ),
+  ];
+
+  /// 在「更多」鈕的位置接著開出第二層選單。
   static Future<void> _openSubmenu(
     BuildContext buttonContext,
     List<GlassMenuEntry<String>> entries,
@@ -137,96 +206,51 @@ class SourceManagerMenus {
               });
             case 'sort':
               _openSubmenu(buttonContext, _sortEntries(provider), (value) {
-                if (value == 'desc') {
-                  provider.toggleSortDesc();
-                } else {
-                  provider.setSortMode(int.parse(value));
+                switch (value) {
+                  case 'desc':
+                    provider.toggleSortDesc();
+                  case 'group_domain':
+                    provider.toggleGroupByDomain();
+                  default:
+                    provider.setSortMode(int.parse(value));
                 }
               });
-            case 'import_url':
-              onImportUrl();
-            case 'import_file':
-              onImportFile();
-            case 'import_clipboard':
-              onImportClipboard();
-            case 'new_source':
-              onNewSource();
-            case 'check_all':
-              onCheckAllSources();
-            case 'clear_check_marks':
-              onClearCheckMarks();
-            case 'repair_abnormal':
-              onRepairAbnormal();
-            case 'ai_settings':
-              onAiRepairSettings();
-            case 'group_domain':
-              provider.toggleGroupByDomain();
+            case 'add':
+              _openSubmenu(
+                buttonContext,
+                _addEntries(
+                  importEnabled: importEnabled,
+                  mutationEnabled: mutationEnabled,
+                ),
+                (value) => switch (value) {
+                  'import_url' => onImportUrl(),
+                  'import_file' => onImportFile(),
+                  'import_clipboard' => onImportClipboard(),
+                  _ => onNewSource(),
+                },
+              );
+            case 'check':
+              _openSubmenu(
+                buttonContext,
+                _checkEntries(provider, mutationEnabled: mutationEnabled),
+                (value) => switch (value) {
+                  'check_all' => onCheckAllSources(),
+                  'clear_check_marks' => onClearCheckMarks(),
+                  'repair_abnormal' => onRepairAbnormal(),
+                  _ => onAiRepairSettings(),
+                },
+              );
             case 'delete_by_tags':
               onDeleteByTags();
           }
         },
+        // 會展開的四項右邊是「›」；直接動作的只有刪除。
         entriesBuilder: (_) => [
-          GlassMenuItem(
-            value: 'filter',
-            icon: Icons.folder_outlined,
-            label: '分組與篩選',
-          ),
-          GlassMenuItem(value: 'sort', icon: Icons.sort_rounded, label: '排序方式'),
+          const GlassMenuItem(value: 'filter', label: '分組與篩選', submenu: true),
+          const GlassMenuItem(value: 'sort', label: '排序方式', submenu: true),
           const GlassMenuDivider(),
-          GlassMenuItem(
-            value: 'import_url',
-            icon: Icons.language,
-            label: '網路匯入',
-            enabled: importEnabled && mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'import_file',
-            icon: Icons.file_open_outlined,
-            label: '本地匯入',
-            enabled: importEnabled && mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'import_clipboard',
-            icon: Icons.content_paste,
-            label: '剪貼簿匯入',
-            enabled: importEnabled && mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'new_source',
-            icon: Icons.add_circle_outline,
-            label: '新建書源',
-            enabled: mutationEnabled,
-          ),
-          const GlassMenuDivider(),
-          GlassMenuItem(
-            value: 'check_all',
-            icon: Icons.playlist_add_check,
-            label: '校驗所有書源',
-            enabled: provider.totalSourceCount > 0 && mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'clear_check_marks',
-            icon: Icons.layers_clear_outlined,
-            label: '清除校驗標記',
-            enabled: provider.totalSourceCount > 0 && mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'repair_abnormal',
-            icon: Icons.healing_outlined,
-            label: '修復異常書源',
-            enabled: provider.abnormalSourceUrls.isNotEmpty && mutationEnabled,
-          ),
-          const GlassMenuItem(
-            value: 'ai_settings',
-            icon: Icons.auto_fix_high_outlined,
-            label: 'AI 修書源設定',
-          ),
-          GlassMenuItem(
-            value: 'group_domain',
-            icon: Icons.dns_outlined,
-            label: '按域名分組',
-            checked: provider.groupByDomain,
-          ),
+          const GlassMenuItem(value: 'add', label: '加入書源', submenu: true),
+          const GlassMenuItem(value: 'check', label: '校驗與修復', submenu: true),
           const GlassMenuDivider(),
           GlassMenuItem(
             value: 'delete_by_tags',

@@ -340,7 +340,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       const GlassMenuItem(
         value: _ShelfMenuAction.sortFilter,
         label: '排序與篩選',
-        icon: Icons.sort_rounded,
+        submenu: true,
       ),
       const GlassMenuDivider(),
       GlassMenuItem(

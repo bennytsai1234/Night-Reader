@@ -187,6 +187,54 @@ void main() {
     }
   });
 
+  testWidgets('「更多」第一層五項，會展開的四項點了開第二層', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    Future<void> openMore() async {
+      await tester.tap(find.bySemanticsLabel('更多操作'));
+      await tester.pumpAndSettle();
+    }
+
+    await openMore();
+    for (final label in ['分組與篩選', '排序方式', '加入書源', '校驗與修復']) {
+      expect(
+        find.descendant(
+          of: find.ancestor(of: find.text(label), matching: find.byType(Row)),
+          matching: find.byIcon(Icons.chevron_right_rounded),
+        ),
+        findsOneWidget,
+        reason: label,
+      );
+    }
+    expect(find.text('刪除書源'), findsOneWidget);
+    expect(find.text('網路匯入'), findsNothing);
+
+    await tester.tap(find.text('加入書源'));
+    await tester.pumpAndSettle();
+    expect(find.text('網路匯入'), findsOneWidget);
+    expect(find.text('新建書源'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 590));
+    await tester.pumpAndSettle();
+
+    await openMore();
+    await tester.tap(find.text('校驗與修復'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI 修書源設定'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 590));
+    await tester.pumpAndSettle();
+
+    await openMore();
+    await tester.tap(find.text('排序方式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('按域名分組'));
+    await tester.pumpAndSettle();
+    expect(provider.groupByDomain, isTrue);
+  });
+
   testWidgets('rows stay laid out in selection mode', (tester) async {
     await pumpPage(tester);
 

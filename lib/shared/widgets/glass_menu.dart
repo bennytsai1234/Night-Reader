@@ -25,7 +25,8 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     this.destructive = false,
     this.checked,
     this.enabled = true,
-  });
+    this.submenu = false,
+  }) : assert(!submenu || (icon == null && swatch == null));
 
   final T value;
   final String label;
@@ -42,6 +43,10 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   /// 選單裡有切換類選項時，每一列都留勾號欄，切換時字不會左右移。
   final bool? checked;
   final bool enabled;
+
+  /// 點了在同一處開出第二層：右側畫「›」，不另給圖示（使用者 2026-11-11
+  /// 選的，會展開的一眼分得出來）。
+  final bool submenu;
 }
 
 /// 群組之間的粗分隔。
@@ -519,9 +524,15 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                               ],
                             ),
                           ),
-                          if (entry.icon != null) ...[
+                          if (entry.submenu || entry.icon != null) ...[
                             const SizedBox(width: AppSpacing.md),
-                            Icon(entry.icon, size: 20, color: color),
+                            Icon(
+                              entry.submenu
+                                  ? Icons.chevron_right_rounded
+                                  : entry.icon,
+                              size: 20,
+                              color: color,
+                            ),
                           ] else if (entry.swatch != null) ...[
                             const SizedBox(width: AppSpacing.md),
                             SizedBox.square(

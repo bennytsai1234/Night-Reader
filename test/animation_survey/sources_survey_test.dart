@@ -146,9 +146,11 @@ void main() {
 
         // 更多選單：按域名分組開與關。
         await step('更多操作：開選單', () => _openMore(tester));
-        await step('更多操作：按域名分組（開）', () => _tapTop(tester, '按域名分組'));
+        await step('排序方式：開子選單', () => _tapTop(tester, '排序方式'));
+        await step('排序方式：按域名分組（開）', () => _tapTop(tester, '按域名分組'));
         await step('更多操作：開選單', () => _openMore(tester));
-        await step('更多操作：按域名分組（關）', () => _tapTop(tester, '按域名分組'));
+        await step('排序方式：開子選單', () => _tapTop(tester, '排序方式'));
+        await step('排序方式：按域名分組（關）', () => _tapTop(tester, '按域名分組'));
 
         // 排序方式（第二層）：開、選按名稱、再選回手動排序。
         await step('更多操作：開選單', () => _openMore(tester));
