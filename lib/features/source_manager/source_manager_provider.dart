@@ -17,6 +17,8 @@ import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'ai_repair/repair_runs.dart';
+import 'source_check_job.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_list_skeleton.dart';
 
@@ -506,12 +508,15 @@ class SourceManagerProvider with ChangeNotifier {
     this._uncovered,
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
+    RepairRuns? repairRuns,
   }) : _importService = importService ?? SourceImportService(),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
+       _repairRuns = repairRuns ?? RepairRuns.instance,
        lastSourceCount = _readLastCount(),
        lastRows = _readLastRows() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
+    _repairRuns.addListener(_handleRepairRunsChanged);
     unawaited(
       entrance.then((_) {
         if (_disposed) return;
@@ -525,6 +530,10 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   final Future<void> Function()? _uncovered;
+  final RepairRuns _repairRuns;
+
+  /// 已經為它重讀過清單的那一件修復。
+  RepairRun? _reloadedRun;
   Set<String> _aiRepairedUrls = const {};
   bool _listeningSync = false;
   bool _syncReloadPending = false;
@@ -547,6 +556,15 @@ class SourceManagerProvider with ChangeNotifier {
     _syncReloadPending = false;
     if (_disposed) return;
     await loadSources(showLoading: false);
+  }
+
+  /// 修復在背景做完了（ADR 0058）：存進去的、標了「AI 修不好」的都要重讀。
+  void _handleRepairRunsChanged() {
+    if (_disposed) return;
+    final run = _repairRuns.current;
+    if (run == null || !run.isFinished || identical(run, _reloadedRun)) return;
+    _reloadedRun = run;
+    unawaited(loadSources(showLoading: false));
   }
 
   void _handleCheckServiceChanged() {
@@ -576,6 +594,7 @@ class SourceManagerProvider with ChangeNotifier {
     _loadGeneration++;
     _checkNotifyTimer?.cancel();
     checkService.removeListener(_handleCheckServiceChanged);
+    _repairRuns.removeListener(_handleRepairRunsChanged);
     if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
     super.dispose();
   }
@@ -1079,17 +1098,18 @@ class SourceManagerProvider with ChangeNotifier {
       if (config != null) {
         await checkService.updateConfig(config);
       }
-      await checkService.check(selectedUrls.toList(growable: false));
+      await SourceCheckJob.of(checkService)
+          .run(() => checkService.check(selectedUrls.toList(growable: false)));
     } finally {
       _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
     }
   }
 
-  /// 校驗一個書源（登入完用）。和批次校驗一樣先鎖住清單；已有其他工作或
-  /// 校驗在跑時不跑。
+  /// 校驗一個書源（登入完用）。和批次校驗一樣先鎖住清單；已有其他工作、
+  /// 校驗或背景工作（修書源，ADR 0058）在跑時不跑。
   Future<void> checkSource(String url) async {
-    if (!_beginBatchOperation()) return;
+    if (!backgroundWorkIdle() || !_beginBatchOperation()) return;
     try {
       await checkService.check([url]);
     } catch (error, stackTrace) {
@@ -1199,7 +1219,7 @@ class SourceManagerProvider with ChangeNotifier {
       if (config != null) {
         await checkService.updateConfig(config);
       }
-      await checkService.check(urls);
+      await SourceCheckJob.of(checkService).run(() => checkService.check(urls));
     } finally {
       _selectedUrls.removeAll(selectedAtStart);
       _endBatchOperation();
@@ -1207,7 +1227,8 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// 清掉校驗留下的狀態分組、「AI 修不好」與錯誤註解，書源回到可用；不給網址就清全部，
-  /// 連上次的校驗摘要一起收起。回傳實際有變動的書源數。
+  /// 連上次的校驗摘要一起收起。有清掉標記的書源連校驗時間一起歸零：那次校驗的
+  /// 結論已經不算數，整批修復要重新校驗它（ADR 0054）。回傳實際有變動的書源數。
   Future<int> clearCheckMarks([Set<String>? urls]) async {
     if (!_beginBatchOperation()) return 0;
     try {
@@ -1224,6 +1245,7 @@ class SourceManagerProvider with ChangeNotifier {
           ..removeErrorComment();
         if (source.bookSourceGroup != group ||
             source.bookSourceComment != comment) {
+          source.lastCheckTime = 0;
           changed.add(source);
         }
       }

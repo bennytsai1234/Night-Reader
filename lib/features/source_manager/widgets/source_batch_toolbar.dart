@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -157,7 +158,8 @@ class SelectActionBar extends StatelessWidget {
     const GlassMenuItem(value: 'menu_check', label: '校驗與修復', submenu: true),
   ];
 
-  static const Map<String, List<GlassMenuEntry<String>>> _submenus = {
+  /// 第二層；校驗與 AI 修復在有背景工作跑的時候是灰的：一次一件（ADR 0058）。
+  static Map<String, List<GlassMenuEntry<String>>> _submenus() => {
     'menu_toggle': [
       GlassMenuItem(
         value: 'enable',
@@ -204,11 +206,13 @@ class SelectActionBar extends StatelessWidget {
     'menu_check': [
       GlassMenuItem(
         value: 'check',
+        enabled: backgroundWorkIdle(),
         icon: Icons.playlist_add_check,
         label: '校驗選中',
       ),
       GlassMenuItem(
         value: 'ai_repair',
+        enabled: backgroundWorkIdle(),
         icon: Icons.auto_fix_high_outlined,
         label: 'AI 修復選中',
       ),
@@ -221,7 +225,7 @@ class SelectActionBar extends StatelessWidget {
   };
 
   Future<void> _onMenuSelected(BuildContext buttonContext, String value) async {
-    if (_submenus[value] case final entries?) {
+    if (_submenus()[value] case final entries?) {
       final picked = await showGlassSubmenu<String>(buttonContext, entries);
       if (picked != null) _runAction(picked);
       return;

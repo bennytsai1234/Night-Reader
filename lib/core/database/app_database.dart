@@ -133,7 +133,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -232,12 +232,33 @@ class AppDatabase extends _$AppDatabase {
       if (from < 16) {
         await cleanBookAuthors();
       }
+      if (from < 18) {
+        // 書源記上次校驗的時間（ADR 0054）。
+        await _addColumnIfMissing(m, bookSources, bookSources.lastCheckTime);
+      }
     },
     beforeOpen: (_) async {
       if (_separateConnection) return;
       await customStatement('PRAGMA optimize');
     },
   );
+
+  /// 加欄位；已經有了就不加（測試會把新建的資料庫標成舊版本重開，欄位
+  /// 已經在了）。只建了部分舊表的測試資料庫沒有這張表，也不加。
+  Future<void> _addColumnIfMissing(
+    Migrator m,
+    TableInfo<Table, Object?> table,
+    GeneratedColumn<Object> column,
+  ) async {
+    final columns = await customSelect(
+      'PRAGMA table_info(${table.actualTableName})',
+    ).get();
+    if (columns.isEmpty ||
+        columns.any((row) => row.read<String>('name') == column.name)) {
+      return;
+    }
+    await m.addColumn(table, column);
+  }
 
   /// 書、書籤與標註的作者拿掉開頭的「作者：」（[BookHelp.stripAuthorLabel]），
   /// 傳回改了幾筆。書名加作者是同步、書籤與標註認書的身分，三張表一起改才

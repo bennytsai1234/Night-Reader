@@ -224,8 +224,9 @@ bool _sendable(Object task) {
 /// - 規則 JS 要等的呼叫：worker 整條停住，交給網路 isolate（[SourceIo]）
 ///   做，結果由主 isolate 放進 worker 的 [_replies]（[BlockingCall]）。
 ///
-/// 書源 isolate 是常駐的 worker；書源校驗每個書源開一個，逾時就直接
-/// 結束它，卡住的同步規則 JS 也停得下來。
+/// 書源 isolate 是常駐的 worker；書源校驗每個書源開一個，逾時就結束它。
+/// 結束時手上的工作立刻以失敗結束，isolate 本身等目前這段規則 JS 跑完
+/// 才結束（見 [kill]），卡在迴圈裡的規則 JS 停不下來。
 final class SourceWorker {
   SourceWorker._(
     this._isolate,
@@ -390,7 +391,13 @@ final class SourceWorker {
   /// （它在停住時排在後面），接著同步再發的要等的呼叫由這裡擋下。
   final Set<int> _cancelledTasks = {};
 
-  /// 立刻結束 worker；還在等的工作以 [error] 結束。
+  /// 結束 worker：還在等的工作立刻以 [error] 結束，isolate 等它手上這段
+  /// 同步的程式（規則 JS）跑完才真的結束。
+  ///
+  /// 不能用 [Isolate.immediate]：規則 JS 跑在 QuickJS 的原生程式裡，常常
+  /// 回呼 Dart（`java.*`、`source.*` 這類）；isolate 在回呼中途被結束，
+  /// QuickJS 下一次回呼就進到已經不在的 isolate，整個 App 原生閃退
+  /// （2026-11-11 beta.73 在修書源時按停止的閃退）。
   void kill(Object error) {
     if (_killed) return;
     _killed = true;
@@ -404,7 +411,7 @@ final class SourceWorker {
     // 停在原生的等待裡時 isolate 結束不了；關掉信箱叫醒它。
     _replies.close();
     _channel.close(error);
-    _isolate.kill(priority: Isolate.immediate);
+    _isolate.kill(priority: Isolate.beforeNextEvent);
     _inbox.close();
     _errors.close();
     _onExit?.call();

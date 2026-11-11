@@ -145,7 +145,10 @@ class SystemPlayback {
       _handler = await AudioService.init(
         builder: () => _SessionHandler(this),
         config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.night_reader.tts',
+          // 重要性只在頻道建立時給得了（低：不跳出、不出聲），之後被改成
+          // 「重要」就改不回來。舊的頻道在使用者手機上被改成重要、每次更新
+          // 都跳橫幅，換一個新的，舊的由 MainActivity 刪掉。
+          androidNotificationChannelId: 'com.night_reader.playback',
           androidNotificationChannelName: '夜讀播放',
           // 狀態列只畫圖示的形狀：App 圖示整張不透明，會變成一塊白色方塊。
           androidNotificationIcon: notificationIcon,
@@ -354,27 +357,44 @@ class _SessionHandler extends BaseAudioHandler {
     );
   }
 
-  @override
-  Future<void> play() async => _owner?.onPlay();
+  /// 系統（通知、鎖定畫面、耳機、藍牙）按了 [command]：記一筆再交給目前
+  /// 那一方。崩潰日誌與崩潰前紀錄看得到按了什麼、有沒有人接。
+  PlaybackOwner? _received(String command) {
+    final owner = _owner;
+    AppLog.d('系統播放按了 $command（${owner?.runtimeType ?? '沒有人在播'}）');
+    return owner;
+  }
 
   @override
-  Future<void> pause() async => _owner?.onPause();
+  Future<void> click([MediaButton button = MediaButton.media]) {
+    AppLog.d(
+      '系統播放按了媒體鍵 ${button.name}（狀態：${playbackState.value.playing ? '播放中' : '暫停'}）',
+    );
+    return super.click(button);
+  }
 
   @override
-  Future<void> stop() async => _owner?.onStop();
+  Future<void> play() async => _received('播放')?.onPlay();
 
   @override
-  Future<void> skipToNext() async => _owner?.onSkipToNext();
+  Future<void> pause() async => _received('暫停')?.onPause();
 
   @override
-  Future<void> skipToPrevious() async => _owner?.onSkipToPrevious();
+  Future<void> stop() async => _received('停止')?.onStop();
 
   @override
-  Future<void> rewind() async => _owner?.onRewind();
+  Future<void> skipToNext() async => _received('下一個')?.onSkipToNext();
 
   @override
-  Future<void> fastForward() async => _owner?.onFastForward();
+  Future<void> skipToPrevious() async => _received('上一個')?.onSkipToPrevious();
 
+  @override
+  Future<void> rewind() async => _received('倒退')?.onRewind();
+
+  @override
+  Future<void> fastForward() async => _received('快轉')?.onFastForward();
+
+  /// 拖動不記：拖一次系統可能連送好幾次，會把崩潰前紀錄的日誌擠掉。
   @override
   Future<void> seek(Duration position) async => _owner?.onSeek(position);
 }

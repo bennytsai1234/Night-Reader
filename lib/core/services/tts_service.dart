@@ -287,7 +287,7 @@ class TTSService extends ChangeNotifier {
         if (!_isInitialized) return false;
         if (!_notificationPermissionChecked) {
           _notificationPermissionChecked = true;
-          await _permissionService.requestNotificationForTts();
+          await _permissionService.requestNotification();
           await SystemPlayback.instance.start();
         }
         return _isInitialized;

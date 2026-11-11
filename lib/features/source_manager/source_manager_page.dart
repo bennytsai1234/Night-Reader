@@ -17,6 +17,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 
 import 'ai_repair/ai_repair_page.dart';
 import 'ai_repair/ai_repair_settings_page.dart';
+import 'ai_repair/repair_runs.dart';
 import 'ai_repair/source_repair_page.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
@@ -47,6 +48,11 @@ import 'widgets/source_manager_dialogs.dart';
 class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
 
+  /// 開著的書源管理頁；點校驗的通知時，已經在最上面就不再推一頁。
+  static final Set<ModalRoute<Object?>> _routes = {};
+
+  static bool get isShowing => _routes.any((route) => route.isCurrent);
+
   @override
   State<SourceManagerPage> createState() => _SourceManagerPageState();
 }
@@ -54,11 +60,22 @@ class SourceManagerPage extends StatefulWidget {
 class _SourceManagerPageState extends State<SourceManagerPage> {
   /// 進場動畫播完時完成；書源等它才讀（ADR 0018）。
   Future<void>? _entrance;
+  ModalRoute<Object?>? _route;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _entrance ??= TransitionSettled.entered(context);
+    if (_route == null) {
+      _route = ModalRoute.of(context);
+      if (_route case final route?) SourceManagerPage._routes.add(route);
+    }
+  }
+
+  @override
+  void dispose() {
+    SourceManagerPage._routes.remove(_route);
+    super.dispose();
   }
 
   @override
@@ -643,7 +660,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           value: 'ai_repair',
           label: 'AI 修復',
           icon: Icons.auto_fix_high_outlined,
-          enabled: !p.checkService.isChecking,
+          enabled: canAiRepair(
+            s.bookSourceUrl,
+            checking: p.checkService.isChecking,
+          ),
         ),
         GlassMenuItem(
           value: 'ai_restore',
@@ -739,16 +759,17 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     }
   }
 
-  /// AI 修復 [urls] 這幾個書源：一個用單一書源的修復頁，幾個用整批修復；
-  /// 有改到就重讀清單（ADR 0054）。
+  /// AI 修復 [urls] 這幾個書源：一個用單一書源的修復頁，幾個用整批修復
+  /// （ADR 0054）。修復頁關了照修；修完時清單由 provider 重讀，這裡在頁面
+  /// 關掉時再讀一次（例如按了還原）。
   Future<void> _aiRepair(SourceManagerProvider p, List<String> urls) async {
     if (urls.length > 1) {
       return _repairBatch(p, urls, title: 'AI 修復 ${urls.length} 個書源');
     }
     final source = urls.isEmpty ? null : await p.getFullSource(urls.single);
     if (source == null || !mounted) return;
-    final changed = await openAiRepair(context, source);
-    if (changed && mounted) await p.loadSources();
+    await openAiRepair(context, source);
+    if (mounted) await p.loadSources(showLoading: false);
   }
 
   /// 整批修復 [urls] 這些書源（docs/design/screens.md「修復異常書源」）。
@@ -758,9 +779,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     required String title,
   }) async {
     final sources = [for (final url in urls) ?await p.getFullSource(url)];
-    if (sources.isEmpty || !mounted) return;
-    final changed = await openSourceRepair(context, sources, title: title);
-    if (changed && mounted) await p.loadSources();
+    if (!mounted) return;
+    await openSourceRepair(context, sources, title: title);
+    if (mounted) await p.loadSources(showLoading: false);
   }
 
   Future<void> _confirmAiRestore(

@@ -6,11 +6,21 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _Job implements BackgroundJob {
+  @override
+  void stopFromSystem() {}
+
+  @override
+  void openFromNotification() {}
+}
+
 void main() {
+  final checkedAt = DateTime(2026, 11, 11).millisecondsSinceEpoch;
   late AppDatabase db;
   late BookSourceDao dao;
 
@@ -40,11 +50,13 @@ void main() {
         bookSourceName: '登入書源',
         bookSourceGroup: '$abnormalSourceGroupTag,$loginRequiredSourceGroupTag',
         bookSourceComment: '// Error: 正文需要登入後閱讀',
+        lastCheckTime: checkedAt,
       ),
       BookSource(
         bookSourceUrl: 'https://clean.example',
         bookSourceName: '正常書源',
         bookSourceGroup: '精選',
+        lastCheckTime: checkedAt,
       ),
     ]);
   });
@@ -108,6 +120,38 @@ void main() {
     expect(login.bookSourceGroup, isNull);
     final quarantined = (await dao.getByUrl('https://quarantined.example'))!;
     expect(quarantined.isQuarantined, isTrue);
+  });
+
+  test('clearing marks also forgets when the source was checked, so a batch '
+      'repair checks it again', () async {
+    final provider = await loadedProvider();
+
+    await provider.clearCheckMarks();
+
+    expect((await dao.getByUrl('https://login.example'))!.lastCheckTime, 0);
+    // 沒有標記可清的書源，那次校驗的結論照樣算數。
+    expect(
+      (await dao.getByUrl('https://clean.example'))!.lastCheckTime,
+      checkedAt,
+    );
+  });
+
+  test('a check after logging in waits out a repair running in the '
+      'background', () async {
+    final provider = await loadedProvider();
+    final job = _Job();
+    BackgroundWork.instance.begin(
+      job,
+      const BackgroundWorkStatus(title: '修書源', text: '', progress: 0),
+    );
+    addTearDown(() => BackgroundWork.instance.end(job));
+    var changes = 0;
+    provider.addListener(() => changes++);
+
+    await provider.checkSource('https://login.example');
+
+    expect(changes, 0);
+    expect(provider.checkService.isChecking, isFalse);
   });
 
   test(

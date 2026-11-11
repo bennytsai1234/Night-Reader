@@ -313,6 +313,8 @@ class BookSources extends Table {
       integer().named('lastUpdateTime').withDefault(const Constant(0))();
   IntColumn get respondTime =>
       integer().named('respondTime').withDefault(const Constant(180000))();
+  IntColumn get lastCheckTime =>
+      integer().named('lastCheckTime').withDefault(const Constant(0))();
   TextColumn get jsLib => text().named('jsLib').nullable()();
   TextColumn get concurrentRate => text().named('concurrentRate').nullable()();
   TextColumn get exploreUrl => text().named('exploreUrl').nullable()();

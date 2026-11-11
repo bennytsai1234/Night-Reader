@@ -93,6 +93,7 @@ void main() {
   late List<String> gone;
   late List<String> unfixable;
   late List<String> asked;
+  late List<String> rechecked;
   late AiRepairBackups backups;
 
   setUp(() async {
@@ -103,6 +104,7 @@ void main() {
     gone = [];
     unfixable = [];
     asked = [];
+    rechecked = [];
   });
 
   SourceRepairBatch batch(
@@ -112,15 +114,18 @@ void main() {
     List<String> Function(String url)? replies,
     int? tokenBudget,
     int tokensPerAnswer = 0,
+    DateTime Function()? now,
   }) {
     late SourceRepairBatch b;
     b = SourceRepairBatch(
       sources: sources,
       service: _service,
       tokenBudget: tokenBudget,
-      recheck: (urls, _) async => [
-        for (final url in urls) _entry(url, recheck[url] ?? _broken),
-      ],
+      now: now,
+      recheck: (urls, _) async {
+        rechecked.addAll(urls);
+        return [for (final url in urls) _entry(url, recheck[url] ?? _broken)];
+      },
       checkSite: (source) async =>
           sites[siteKey(source)] ??
           const SiteCheck(SiteVerdict.alive, '網站正常回應'),
@@ -275,6 +280,56 @@ void main() {
     expect(b.items.first.detail, contains('AI 之前試過修不好'));
     expect(b.items.last.detail, contains('沒有搜尋規則'));
     expect(asked, isEmpty);
+  });
+
+  test('sources already marked as not worth repairing are not checked '
+      'again', () async {
+    final tried = _source('https://tried.example')
+      ..addHealthGroups(_broken)
+      ..addGroup(aiUnfixableSourceGroupTag);
+    final siteGone = _source('https://gone.example')
+      ..addHealthGroups(upstreamHealth(siteBrokenSourceGroupTag))
+      ..addErrorComment('網站: 網域查不到');
+    final login = _source('https://login.example')..addHealthGroups(_login);
+    final b = batch([tried, siteGone, login, _source('https://stale.example')]);
+
+    await b.start();
+
+    expect(rechecked, ['https://stale.example']);
+    expect(
+      [for (final item in b.items) item.outcome],
+      [
+        RepairOutcome.skipped,
+        RepairOutcome.siteGone,
+        RepairOutcome.skipped,
+        RepairOutcome.aiFixed,
+      ],
+    );
+    expect(b.items[1].detail, '網站: 網域查不到');
+    expect(gone, isEmpty, reason: '已經標過了，不再標一次');
+  });
+
+  test('a source checked within a day goes on with that result; an older '
+      'one is checked again', () async {
+    final now = DateTime(2026, 11, 11, 12);
+    BookSource checkedAgo(String url, Duration ago) => _source(url)
+      ..addHealthGroups(_broken)
+      ..addErrorComment('正文為空')
+      ..lastCheckTime = now.subtract(ago).millisecondsSinceEpoch;
+    final b = batch([
+      checkedAgo('https://fresh.example', const Duration(hours: 1)),
+      checkedAgo('https://old.example', const Duration(hours: 25)),
+    ], now: () => now);
+
+    await b.start();
+
+    expect(rechecked, ['https://old.example']);
+    expect(b.reusedChecks, 1);
+    expect(
+      asked,
+      containsAll(['https://fresh.example', 'https://old.example']),
+    );
+    expect(b.count(RepairOutcome.aiFixed), 2);
   });
 
   test('sites that answer normally go to the AI before unreachable ones, and '

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:audio_service_platform_interface/audio_service_platform_interface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/system_playback/now_playing_artwork.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
@@ -72,6 +73,20 @@ class _Owner implements PlaybackOwner {
   void onSeek(Duration position) {}
 }
 
+/// 不畫封面：這裡只看拒收的紀錄。畫預設封面是在背景寫檔，測試結束時還在
+/// 寫的話，Windows 刪不掉暫存資料夾。給絕對路徑的 file 網址，audio_service
+/// 才直接讀檔、不交給下載快取去連網。
+class _NoArtwork extends NowPlayingArtwork {
+  @override
+  Future<Uri> resolve(
+    String? coverSource,
+    String bookName, {
+    BookSourceKind kind = BookSourceKind.novel,
+  }) async => Uri.file(
+    '${Directory.systemTemp.path}${Platform.pathSeparator}cover.png',
+  );
+}
+
 void main() {
   test('系統一直拒收播放資訊時，同一個錯誤只記一筆', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -83,9 +98,7 @@ void main() {
     AppLog.delegate = (message, error, stackTrace, toast) => logs.add(message);
     addTearDown(() => AppLog.delegate = null);
 
-    final playback = SystemPlayback(
-      artwork: NowPlayingArtwork(directory: () async => tempDir),
-    );
+    final playback = SystemPlayback(artwork: _NoArtwork());
     await playback.start();
     final owner = _Owner();
     NowPlaying chapter(int index) => NowPlaying(

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- 修書源、校驗書源離開夜讀也繼續（BackgroundWorkService，ADR 0058）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- App 內更新：把下載好的新版 APK 交給系統安裝程式。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- App 內更新：判斷目前網路是否計流量，不計流量才在背景先下載新版。 -->
@@ -64,6 +66,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- 修書源、校驗書源的前景服務（ADR 0058）。stopWithTask="false"：
+             滑掉夜讀時系統不直接停掉服務，改呼叫 onTaskRemoved，由它請 Dart
+             停下工作、停好再收掉通知。 -->
+        <service android:name=".BackgroundWorkService"
+                 android:foregroundServiceType="dataSync"
+                 android:exported="false"
+                 android:stopWithTask="false" />
 
         <service android:name="com.ryanheise.audioservice.AudioService"
                  android:foregroundServiceType="mediaPlayback"

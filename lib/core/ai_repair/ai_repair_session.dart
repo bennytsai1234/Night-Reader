@@ -9,6 +9,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/crash_trail.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -205,6 +206,7 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> _run() async {
     _running = true;
+    CrashTrail.action('開始 AI 修復：${job.original.bookSourceName}');
     _notify();
     try {
       await _repair(job);
@@ -224,6 +226,9 @@ class AiRepairSession extends ChangeNotifier {
       }
     } finally {
       _running = false;
+      CrashTrail.action(
+        'AI 修復${_stopped ? '停下了' : '做完了'}：${job.original.bookSourceName}',
+      );
       _notify();
     }
   }
@@ -231,6 +236,7 @@ class AiRepairSession extends ChangeNotifier {
   /// 停下：做著的那一步標成停止，修到一半的不改。
   void stop() {
     if (_stopped || job.outcome != null) return;
+    CrashTrail.action('按了停止：AI 修復 ${job.original.bookSourceName}');
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     if (!job._committing) {
