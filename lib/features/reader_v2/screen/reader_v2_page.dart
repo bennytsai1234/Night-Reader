@@ -632,12 +632,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             icon: const Icon(Icons.refresh),
             label: const Text('重試'),
           ),
-        if (!widget.book.isLocal)
-          OutlinedButton.icon(
-            onPressed: _showChangeSource,
-            icon: const Icon(Icons.swap_horiz),
-            label: const Text('換源'),
-          ),
+        // 本地書沒有換源，灰著留在原位（ADR 0059）。
+        OutlinedButton.icon(
+          onPressed: widget.book.isLocal ? null : _showChangeSource,
+          icon: const Icon(Icons.swap_horiz),
+          label: const Text('換源'),
+        ),
         TextButton.icon(
           onPressed: _handleExitIntent,
           icon: const Icon(Icons.arrow_back),

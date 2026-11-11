@@ -81,38 +81,9 @@ class _SourceManagerPageContent extends StatefulWidget {
       _SourceManagerPageContentState();
 }
 
-class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
-    with SingleTickerProviderStateMixin {
+class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   final _searchController = TextEditingController();
   bool _isImporting = false;
-
-  /// 「有書源」的版面（頁首搜尋框、底部工具列）出現的進度，1 是完整出現。
-  /// 第一幀照上次的紀錄直接到位（`SourceManagerProvider.expectsSources`）；
-  /// 之後有無書源改變（讀完發現和紀錄不同、刪光、第一次匯入）時，搜尋框
-  /// 從頁首下緣長出來、工具列從底部滑進來，清單跟著連續讓位，不在一幀內
-  /// 被推開。
-  late final AnimationController _chrome = AnimationController(
-    vsync: this,
-    duration: AppMotion.menu,
-  );
-  late final Animation<double> _chromeShown = CurvedAnimation(
-    parent: _chrome,
-    curve: AppMotion.menuCurve,
-  );
-  bool? _chromeTarget;
-
-  void _syncChrome(BuildContext context, bool shown) {
-    if (_chromeTarget == shown) return;
-    final first = _chromeTarget == null;
-    _chromeTarget = shown;
-    if (first || MediaQuery.disableAnimationsOf(context)) {
-      _chrome.value = shown ? 1 : 0;
-    } else if (shown) {
-      _chrome.forward();
-    } else {
-      _chrome.reverse();
-    }
-  }
 
   /// Telegram 式編輯模式：左側勾選圈。底部批次工具列有書源時一直在，
   /// 沒選書源時按鈕灰著。有選取時也視為編輯模式，避免選取狀態沒有出口。
@@ -120,7 +91,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
 
   @override
   void dispose() {
-    _chrome.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -151,7 +121,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           _editMode = false;
         }
         final editing = _isEditing(provider) && provider.totalSourceCount > 0;
-        _syncChrome(context, provider.expectsSources);
         final body = Builder(
           builder: (bodyContext) => _buildMainContent(bodyContext, provider),
         );
@@ -160,47 +129,21 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           onPopInvokedWithResult: (didPop, _) {
             if (!didPop) _exitEditMode(provider);
           },
-          // 頁首與底部工具列的高度跟著 [_chrome] 變，Scaffold 要每一幀
-          // 重新量；清單是同一個 [body]，只隨讓位的內距重排。
-          child: AnimatedBuilder(
-            animation: _chromeShown,
-            builder: (context, _) => Scaffold(
-              extendBodyBehindAppBar: true,
-              extendBody: true,
-              appBar: _buildHeader(
-                context,
-                nav,
-                provider,
-                editing: editing,
-                mutationEnabled: mutationEnabled,
-              ),
-              body: body,
-              bottomNavigationBar: _buildBottomBar(context, provider),
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            extendBody: true,
+            appBar: _buildHeader(
+              context,
+              nav,
+              provider,
+              editing: editing,
+              mutationEnabled: mutationEnabled,
             ),
+            body: body,
+            bottomNavigationBar: _buildSelectActionBar(context, provider),
           ),
         );
       },
-    );
-  }
-
-  /// 有書源就常駐底部；反選可以直接選起目前篩出的全部書源。出現與收起時
-  /// 從底部滑進滑出：佔的高度跟著 [_chrome] 縮放，清單底部的讓位也連續
-  /// 變化。畫的位置再多移開陰影伸出的 [AppGlass.shadowReach]，收到底時
-  /// 陰影也完全在畫面外才拿掉（同 [GlassSlide]，ADR 0022）。
-  Widget? _buildBottomBar(
-    BuildContext context,
-    SourceManagerProvider provider,
-  ) {
-    final shown = _chromeShown.value;
-    if (shown == 0) return null;
-    return Align(
-      alignment: Alignment.topCenter,
-      heightFactor: shown,
-      // 佔的高度已含安全區與離底的距離，收到 0 時工具列整個在畫面下緣外。
-      child: Transform.translate(
-        offset: Offset(0, AppGlass.shadowReach * (1 - shown)),
-        child: _buildSelectActionBar(context, provider),
-      ),
     );
   }
 
@@ -273,58 +216,47 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     required bool editing,
     required bool mutationEnabled,
   }) {
-    // 搜尋框跟著「有書源」的版面從頁首下緣長出、收回（見 [_chrome]）；
-    // 讀取完成前照上次的紀錄先留好。
-    final search = _chromeShown.value;
-    final showSearch = search > 0;
-    final showStatus =
-        provider.checkService.isChecking || provider.hasLastCheckReport;
+    // 搜尋框與校驗狀態列一直在（ADR 0059）：沒有書源時搜尋框灰掉，
+    // 還沒校驗過時狀態列寫「還沒校驗過」、不能點。
     final bottomChildren = <Widget>[
-      if (showSearch)
-        ClipRect(
-          // 完整出現時不裁，玻璃的陰影照常伸出去。
-          clipBehavior: search < 1 ? Clip.hardEdge : Clip.none,
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            heightFactor: search,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppGrouped.margin,
-                AppSpacing.xs,
-                AppGrouped.margin,
-                AppSpacing.xs,
-              ),
-              child: SearchField(
-                controller: _searchController,
-                hintText: '搜尋書源名稱、網址',
-                glass: true,
-                onChanged: provider.setSearchQuery,
-              ),
-            ),
-          ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppGrouped.margin,
+          AppSpacing.xs,
+          AppGrouped.margin,
+          AppSpacing.xs,
         ),
-      if (showStatus)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppGrouped.margin,
-            AppSpacing.xs,
-            AppGrouped.margin,
-            AppSpacing.xs,
-          ),
-          child: SourceCheckStatusBar(
-            provider: provider,
-            onTap: () {
-              // 有異常就篩出異常書源；校驗中或全部可用時打開校驗日誌，
-              // 狀態列的箭頭才不會點了沒反應。
-              if (!provider.checkService.isChecking &&
-                  provider.lastCheckReport.affectedCount > 0) {
-                provider.setFilterGroup(abnormalSourceGroupTag);
-              } else {
-                SourceManagerDialogs.showCheckLog(context, provider);
-              }
-            },
-          ),
+        child: SearchField(
+          controller: _searchController,
+          hintText: '搜尋書源名稱、網址',
+          glass: true,
+          enabled: provider.expectsSources,
+          onChanged: provider.setSearchQuery,
         ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppGrouped.margin,
+          AppSpacing.xs,
+          AppGrouped.margin,
+          AppSpacing.xs,
+        ),
+        child: SourceCheckStatusBar(
+          provider: provider,
+          onTap: provider.checkService.isChecking || provider.hasLastCheckReport
+              ? () {
+                  // 有異常就篩出異常書源；校驗中或全部可用時打開校驗日誌，
+                  // 狀態列的箭頭才不會點了沒反應。
+                  if (!provider.checkService.isChecking &&
+                      provider.lastCheckReport.affectedCount > 0) {
+                    provider.setFilterGroup(abnormalSourceGroupTag);
+                  } else {
+                    SourceManagerDialogs.showCheckLog(context, provider);
+                  }
+                }
+              : null,
+        ),
+      ),
       if (_isImporting)
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: AppGrouped.margin),
@@ -338,8 +270,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
         ),
     ];
     final double bottomHeight =
-        (SearchField.height + AppSpacing.xs * 2) * search +
-        (showStatus ? SourceCheckStatusBar.height + AppSpacing.xs * 2 : 0.0) +
+        SearchField.height +
+        AppSpacing.xs * 2 +
+        SourceCheckStatusBar.height +
+        AppSpacing.xs * 2 +
         (_isImporting ? 2.0 : 0.0);
     final bottom = bottomChildren.isEmpty
         ? null

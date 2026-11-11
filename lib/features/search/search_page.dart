@@ -563,8 +563,12 @@ class _SearchViewState extends State<SearchView> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (namesWaiting)
-            PlainTextAction(label: '略過', small: true, onPressed: p.stopSearch),
+          // 一直在，剩不到三個書源、列出名字時才能按（ADR 0059）。
+          PlainTextAction(
+            label: '略過',
+            small: true,
+            onPressed: namesWaiting ? p.stopSearch : null,
+          ),
         ],
       ),
     );
@@ -646,16 +650,21 @@ class _SearchViewState extends State<SearchView> {
               blur: false,
               onTap: p.hasActiveResultFilters ? p.clearResultFilters : null,
             ),
-            if (p.failedSources > 0) ...[
-              const SizedBox(width: AppSpacing.sm),
-              GlassCapsule(
-                label: '${p.failedSources} 個書源失敗',
-                icon: Icons.warning_amber_rounded,
-                foregroundColor: Theme.of(context).colorScheme.error,
-                blur: false,
-                onTap: () => _showFailureSheet(context),
-              ),
-            ],
+            // 一直在，沒有失敗的書源時灰掉（ADR 0059）。
+            const SizedBox(width: AppSpacing.sm),
+            GlassCapsule(
+              label: p.failedSources > 0
+                  ? '${p.failedSources} 個書源失敗'
+                  : '沒有書源失敗',
+              icon: Icons.warning_amber_rounded,
+              foregroundColor: p.failedSources > 0
+                  ? Theme.of(context).colorScheme.error
+                  : null,
+              blur: false,
+              onTap: p.failedSources > 0
+                  ? () => _showFailureSheet(context)
+                  : null,
+            ),
           ],
         ),
       ),

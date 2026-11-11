@@ -234,22 +234,23 @@ class DownloadManagerPage extends StatelessWidget {
     final globallyPaused = service.isPaused && active;
     final failureSummary = task.failureSummary;
 
-    Widget? control;
-    if (globallyPaused) {
-      control = null;
-    } else if (canRetry) {
+    // 控制鈕一直在（ADR 0059）：全部暫停中、已完成時灰掉。
+    final Widget control;
+    if (canRetry && !globallyPaused) {
       control = _TaskControlButton(
         icon: Icons.refresh_rounded,
         tooltip: '重試',
         onPressed: () => service.retryTask(task.bookUrl),
       );
-    } else if (!task.isCompleted) {
+    } else {
       control = _TaskControlButton(
         icon: task.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
         tooltip: task.isPaused ? '繼續' : '暫停',
-        onPressed: () => task.isPaused
-            ? service.resumeTask(task.bookUrl)
-            : service.pauseTask(task.bookUrl),
+        onPressed: globallyPaused || task.isCompleted
+            ? null
+            : () => task.isPaused
+                  ? service.resumeTask(task.bookUrl)
+                  : service.pauseTask(task.bookUrl),
       );
     }
 
@@ -779,7 +780,9 @@ class _TaskControlButton extends StatelessWidget
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onPressed;
+
+  /// null 時灰掉、點了沒反應。
+  final VoidCallback? onPressed;
 
   static const double _circle = 34;
 
@@ -812,21 +815,25 @@ class _TaskControlButton extends StatelessWidget
         button: true,
         label: tooltip,
         excludeSemantics: true,
+        enabled: onPressed != null,
         child: PressScale(
           onTap: onPressed,
           // 命中區放大到 44（設計系統的圓形按鈕尺寸），圓鈕維持 34 置中；
           // 點偏一點不會打開整列的選單。
-          child: SizedBox.square(
-            dimension: AppGlass.buttonSize,
-            child: Center(
-              child: Container(
-                width: _circle,
-                height: _circle,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: scheme.primary.withValues(alpha: 0.12),
+          child: Opacity(
+            opacity: onPressed == null ? 0.38 : 1,
+            child: SizedBox.square(
+              dimension: AppGlass.buttonSize,
+              child: Center(
+                child: Container(
+                  width: _circle,
+                  height: _circle,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primary.withValues(alpha: 0.12),
+                  ),
+                  child: Icon(icon, size: 20, color: scheme.primary),
                 ),
-                child: Icon(icon, size: 20, color: scheme.primary),
               ),
             ),
           ),

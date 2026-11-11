@@ -1104,7 +1104,7 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Widget button(IconData icon, String tooltip, VoidCallback onPressed) =>
+    Widget button(IconData icon, String tooltip, VoidCallback? onPressed) =>
         IconButton(
           icon: Icon(icon, size: 28),
           tooltip: tooltip,
@@ -1114,10 +1114,11 @@ class _Controls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        // 頭尾沒有上一集、下一集時灰掉（ADR 0059）。
         button(
           Icons.skip_previous_rounded,
           '上一集',
-          () => unawaited(player.previous()),
+          player.hasPrevious ? () => unawaited(player.previous()) : null,
         ),
         button(
           Icons.replay_10_rounded,
@@ -1160,7 +1161,11 @@ class _Controls extends StatelessWidget {
           '快轉 10 秒',
           () => unawaited(player.skipBy(AudiobookPlayer.skipStep)),
         ),
-        button(Icons.skip_next_rounded, '下一集', () => unawaited(player.next())),
+        button(
+          Icons.skip_next_rounded,
+          '下一集',
+          player.hasNext ? () => unawaited(player.next()) : null,
+        ),
       ],
     );
   }

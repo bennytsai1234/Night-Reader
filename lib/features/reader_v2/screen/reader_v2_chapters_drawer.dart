@@ -343,9 +343,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                   AppGrouped.margin,
                   AppSpacing.md,
                 ),
-                child: _tabs.length == 1
-                    ? _buildTitle(theme)
-                    : _buildTabs(theme),
+                child: _buildTabs(theme),
               ),
             ),
             Container(height: AppGlass.hairline, color: chrome.separator),
@@ -360,12 +358,16 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                     KeyedSubtree(
                       key: ValueKey(('bookmarks', _opening)),
                       child: _buildBookmarkList(context, bookmarks),
-                    ),
+                    )
+                  else
+                    const SizedBox.shrink(),
                   if (widget.highlights case final highlights?)
                     KeyedSubtree(
                       key: ValueKey(('highlights', _opening)),
                       child: _buildHighlightList(context, highlights),
-                    ),
+                    )
+                  else
+                    const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -375,32 +377,14 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     );
   }
 
-  Widget _buildTitle(ThemeData theme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Semantics(
-          header: true,
-          child: Text(
-            '目錄',
-            style: AppTextStyles.titleLg.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        _countLabel(theme, '共 ${_volumes.chapterCount} 章'),
-      ],
-    );
-  }
+  /// 三個分頁一直在；沒給書籤或標註（漫畫）時那一段灰掉（ADR 0059）。
+  static const List<_DrawerTab> _tabs = _DrawerTab.values;
 
-  /// 有哪些分頁：目錄一定有，書籤與標註有給才有。
-  List<_DrawerTab> get _tabs => [
-    _DrawerTab.chapters,
-    if (widget.bookmarks != null) _DrawerTab.bookmarks,
-    if (widget.highlights != null) _DrawerTab.highlights,
-  ];
+  bool _tabEnabled(_DrawerTab tab) => switch (tab) {
+    _DrawerTab.chapters => true,
+    _DrawerTab.bookmarks => widget.bookmarks != null,
+    _DrawerTab.highlights => widget.highlights != null,
+  };
 
   /// 頂端分段切換目錄、書籤與標註，右側寫這一頁有幾章、幾個書籤或標註；
   /// 標註頁另有「匯出」。
@@ -412,7 +396,10 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
           // 面板滑出疊在一起。同一次打開裡切分頁照常滑過去。
           key: ValueKey(('tabs', _opening)),
           expand: false,
-          segments: [for (final tab in _tabs) GlassSegment(tab, tab.label)],
+          segments: [
+            for (final tab in _tabs)
+              GlassSegment(tab, tab.label, enabled: _tabEnabled(tab)),
+          ],
           selected: _tab,
           onChanged: (tab) {
             setState(() => _tab = tab);

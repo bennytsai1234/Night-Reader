@@ -22,7 +22,8 @@ class BookDetailChangeSourceFilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (provider.groups.isNotEmpty) ...[
+          // 一直在，沒有分組時只有「全部」（ADR 0059）。
+          ...[
             GroupFilterBar<String>(
               all: GroupFilterOption(
                 BookDetailChangeSourceProvider.allGroups,

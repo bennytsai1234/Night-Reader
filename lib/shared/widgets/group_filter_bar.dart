@@ -152,7 +152,8 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
             tooltip: '全部分組',
             size: height,
             iconSize: 17,
-            onPressed: _openPicker,
+            // 沒有分組時灰掉（ADR 0059）。
+            onPressed: widget.groups.isEmpty ? null : _openPicker,
           ),
         ],
       ),
