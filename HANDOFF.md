@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `feat/background-work` | `../Night-Reader-bgwork` | ADR 0058：修書源、校驗書源離開夜讀也繼續，前景服務加通知欄進度，一次一件。另含整批修復第一段的分流（ADR 0054 改寫）：帶「AI 修不好」「網站失效」、需要登入這類的照標記定案，24 小時內校驗過的沿用（書源新欄位 `lastCheckTime`，schema 18，只在本機、不進 JSON） | `channel=test` 建置在 `059adaa0` 通過；之後的 `075fb444` 沒改 Kotlin |
 | `fix/nested-cjk-brackets` | `../Night-Reader-brackets` | #312：巢狀半形括號外層也轉全形（`_convertBracketPairs` 改用堆疊配對） | 做完 |
-| `feat/crash-exit-reasons` | `../Night-Reader-crash` | 系統層的閃退寫進崩潰日誌：`ProcessExits.kt` 讀 `ApplicationExitInfo`，開 App 進場播完後寫；`CrashTrail` 把最近的動作與日誌隨時存進 `trail.log`，附進每份崩潰日誌；崩潰日誌頁讀全部 50 份；順手修了 Windows 上一直失敗的 `system_playback_rejection_log_test` | `channel=test` 建置 run 42987636619 跑到一半，沒過就讀 `gh run view 42987636619 --log-failed` |
+| `feat/crash-exit-reasons` | `../Night-Reader-crash` | 系統層的閃退寫進崩潰日誌：`ProcessExits.kt` 讀 `ApplicationExitInfo`，開 App 進場播完後寫；`CrashTrail` 把最近的動作與日誌隨時存進 `trail.log`，附進每份崩潰日誌；崩潰日誌頁讀全部 50 份；順手修了 Windows 上一直失敗的 `system_playback_rejection_log_test` | `channel=test` 建置在 `33844cb0` 通過（全套測試、APK、IPA） |
 
 兩條 `feat/` 都改到 `source_repair_batch.dart`、`check_source_service.dart`、`ai_repair_session.dart`、`MainActivity.kt`、`docs/agents/auto-audit.md`，後合併的那條要解衝突。
 
