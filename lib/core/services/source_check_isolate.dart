@@ -122,7 +122,7 @@ class SourceCheckIsolateHandle {
 
 /// 開一個書源 worker（[SourceWorker]）校驗 [source]：和閱讀時一樣的環境，
 /// 網頁渲染、Cloudflare 檢查、Cookie 與資料庫都交給主 isolate。到了
-/// [timeout] 還沒做完就結束 worker，卡在同步規則 JS 裡也停得下來。
+/// [timeout] 還沒做完就結束 worker，結果不再等它（[SourceWorker.kill]）。
 /// 逾時、取消或開不起來時結果是 null，呼叫端當成逾時或異常。
 Future<SourceCheckIsolateHandle> spawnSourceCheck(
   BookSource source,

@@ -220,6 +220,18 @@ Future<Object?> Function() _limitedFetchTask(BookSource source, String url) =>
       () async => (await app_http.HttpClient().client.get<String>(url)).data,
     );
 
+/// 規則 JS 一直回呼 Dart（`java.md5Encode`），跑上好幾秒。
+Future<void> _ruleJsCallingDart(CancelToken _) async {
+  final engine = JsEngine();
+  try {
+    engine.evaluate(
+      'for (var i = 0; i < 2000000; i++) { java.md5Encode("夜讀" + i); }',
+    );
+  } finally {
+    engine.dispose();
+  }
+}
+
 Future<String?> _isolateNameOn(String affinity) => SourceIsolate.run(
   (_) async => Isolate.current.debugName,
   affinity: affinity,
@@ -366,6 +378,21 @@ void main() {
   test('work with the same affinity runs on the same source isolate', () async {
     final names = {for (var i = 0; i < 8; i++) await _isolateNameOn('同一個')};
     expect(names, hasLength(1));
+  });
+
+  test('a worker stopped while rule JS calls back into Dart does not take the '
+      'app down', () async {
+    final worker = await SourceWorker.spawn(
+      debugName: 'Stopped',
+      withDictionaries: false,
+      database: Future.value(databaseIsolate),
+    );
+    final work = worker.run(_ruleJsCallingDart);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    worker.kill(StateError('已停止'));
+
+    await expectLater(work, throwsStateError);
+    expect(await _isolateName(), startsWith('SourceIsolate '));
   });
 
   group('blocking calls', () {
