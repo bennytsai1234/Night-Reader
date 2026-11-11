@@ -31,11 +31,6 @@ class BackgroundWorkService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        BackgroundWork.service = this
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             // 通知上的「停止」：交給 Dart 停，停好了它會叫 hide。
@@ -43,7 +38,9 @@ class BackgroundWorkService : Service() {
             return START_NOT_STICKY
         }
         BackgroundWork.starting = false
-        // 停下後還沒銷毀就又開始一件時，系統把這次交給同一個服務，onCreate 不會再跑。
+        // 在這裡才登記、不在 onCreate：登記之後 hide 會叫 finish，要先進了前景
+        // 才能 stopSelf，不然系統讓 App 崩潰。停下後還沒銷毀就又開始一件時，
+        // 系統也把這次交給同一個服務。
         BackgroundWork.service = this
         // 用 startForegroundService 啟動的，一定要先 startForeground，不然
         // 系統過幾秒就讓 App 崩潰；工作在服務起來前就結束了也一樣。
