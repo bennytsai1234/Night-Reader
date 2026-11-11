@@ -81,6 +81,7 @@ class AiRepairPage extends StatefulWidget {
 
 class _AiRepairPageState extends State<AiRepairPage> {
   final TextEditingController _paste = TextEditingController();
+  bool _closing = false;
 
   AiRepairSession get _session => widget.session;
 
@@ -90,6 +91,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
     if (!widget.owned) return;
     // 推入動畫播完再開始：校驗與試抓開 worker，不和轉場疊在一起（ADR 0018）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final route = ModalRoute.of(context)?.animation;
       if (route == null || route.isCompleted) {
         unawaited(_session.start());
@@ -103,6 +105,15 @@ class _AiRepairPageState extends State<AiRepairPage> {
 
       route.addStatusListener(begin);
     });
+  }
+
+  /// 自己啟動的修復先停止並等執行中工作退出，才能從頁面返回。
+  Future<void> _stopAndClose() async {
+    if (_closing) return;
+    _closing = true;
+    _session.stop();
+    await _session.completion;
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -154,97 +165,103 @@ class _AiRepairPageState extends State<AiRepairPage> {
             ? null
             : '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
                   ' · ${service.model}';
-        return Scaffold(
-          extendBodyBehindAppBar: true,
-          appBar: GlassNavHeader(
-            title: 'AI 修復 · ${job.original.bookSourceName}',
-            actions: [
-              GlassMenuButton<String>(
-                entriesBuilder: (_) => [
-                  const GlassMenuItem(
-                    value: 'settings',
-                    icon: Icons.tune_rounded,
-                    label: 'AI 修書源設定',
-                  ),
-                  GlassMenuItem(
-                    value: 'copy',
-                    icon: Icons.copy_rounded,
-                    label: '複製紀錄',
-                    enabled: _session.hasTranscript,
-                  ),
-                ],
-                onSelected: (value) {
-                  switch (value) {
-                    case 'settings':
-                      unawaited(
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const AiRepairSettingsPage(),
+        return PopScope(
+          canPop: !widget.owned || !_session.isRunning,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && widget.owned) unawaited(_stopAndClose());
+          },
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: GlassNavHeader(
+              title: 'AI 修復 · ${job.original.bookSourceName}',
+              actions: [
+                GlassMenuButton<String>(
+                  entriesBuilder: (_) => [
+                    const GlassMenuItem(
+                      value: 'settings',
+                      icon: Icons.tune_rounded,
+                      label: 'AI 修書源設定',
+                    ),
+                    GlassMenuItem(
+                      value: 'copy',
+                      icon: Icons.copy_rounded,
+                      label: '複製紀錄',
+                      enabled: _session.hasTranscript,
+                    ),
+                  ],
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'settings':
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AiRepairSettingsPage(),
+                            ),
                           ),
+                        );
+                      case 'copy':
+                        unawaited(_copyTranscript());
+                    }
+                  },
+                ),
+              ],
+            ),
+            body: GroupedListView(
+              children: [
+                if (job.steps.isNotEmpty) ...[
+                  GroupedSection(
+                    footer: sentTo,
+                    children: [
+                      for (final step in job.steps)
+                        GroupedRow(
+                          leading: aiRepairStepIcon(context, step.state),
+                          title: step.title,
+                          subtitle: step.detail,
+                          showChevron: false,
                         ),
-                      );
-                    case 'copy':
-                      unawaited(_copyTranscript());
-                  }
-                },
-              ),
-            ],
-          ),
-          body: GroupedListView(
-            children: [
-              if (job.steps.isNotEmpty) ...[
+                    ],
+                  ),
+                  if (job.awaitingPaste)
+                    GroupedSection(
+                      children: [
+                        GroupedTextFieldRow(
+                          controller: _paste,
+                          hintText: '貼上 AI 回的書源 JSON',
+                          keyboardType: TextInputType.multiline,
+                          minLines: 4,
+                          maxLines: 8,
+                        ),
+                        GroupedRow(
+                          title: '校驗並套用',
+                          accent: true,
+                          showChevron: false,
+                          onTap: () => unawaited(_submitPaste()),
+                        ),
+                      ],
+                    ),
+                  if (job.outcome case final outcome?)
+                    _result(context, job, outcome),
+                ],
                 GroupedSection(
-                  footer: sentTo,
                   children: [
-                    for (final step in job.steps)
+                    if (_session.isFinished)
                       GroupedRow(
-                        leading: aiRepairStepIcon(context, step.state),
-                        title: step.title,
-                        subtitle: step.detail,
+                        title: '完成',
+                        accent: true,
                         showChevron: false,
+                        onTap: () => Navigator.of(context).maybePop(),
+                      )
+                    else
+                      GroupedRow(
+                        title: _session.isStopped ? '正在停下…' : '停止',
+                        destructive: true,
+                        showChevron: false,
+                        onTap: _session.isStopped ? null : _session.stop,
                       ),
                   ],
                 ),
-                if (job.awaitingPaste)
-                  GroupedSection(
-                    children: [
-                      GroupedTextFieldRow(
-                        controller: _paste,
-                        hintText: '貼上 AI 回的書源 JSON',
-                        keyboardType: TextInputType.multiline,
-                        minLines: 4,
-                        maxLines: 8,
-                      ),
-                      GroupedRow(
-                        title: '校驗並套用',
-                        accent: true,
-                        showChevron: false,
-                        onTap: () => unawaited(_submitPaste()),
-                      ),
-                    ],
-                  ),
-                if (job.outcome case final outcome?)
-                  _result(context, job, outcome),
               ],
-              GroupedSection(
-                children: [
-                  if (_session.isFinished)
-                    GroupedRow(
-                      title: '完成',
-                      accent: true,
-                      showChevron: false,
-                      onTap: () => Navigator.of(context).maybePop(),
-                    )
-                  else
-                    GroupedRow(
-                      title: '停止',
-                      destructive: true,
-                      showChevron: false,
-                      onTap: _session.stop,
-                    ),
-                ],
-              ),
-            ],
+            ),
           ),
         );
       },

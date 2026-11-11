@@ -49,6 +49,11 @@ class AiRepairJob {
   /// 結果的說明：AI 最後說的話，或卡在哪。
   String? explanation;
 
+  /// AI 明確放棄，或第二回的試抓次數用完（含最後一次交出沒過校驗）時才標
+  /// 「AI 修不好」；網路、金鑰、系統錯誤、校驗超過時間，以及空白或讀不懂的
+  /// 回覆把回覆次數用完的都不標。
+  bool confirmedUnfixable = false;
+
   /// 剪貼簿：已複製給 AI，等使用者貼回修好的書源。
   bool awaitingPaste = false;
 
@@ -169,6 +174,8 @@ class AiRepairSession extends ChangeNotifier {
 
   final CancelToken _cancelToken = CancelToken();
   final StringBuffer _transcript = StringBuffer();
+  Future<void>? _startTask;
+  Completer<void>? _pasteCompletion;
   bool _running = false;
   bool _stopped = false;
   bool _disposed = false;
@@ -178,7 +185,9 @@ class AiRepairSession extends ChangeNotifier {
   bool get isStopped => _stopped;
 
   /// 做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished => _stopped || job.outcome != null;
+  bool get isFinished => !_running && (_stopped || job.outcome != null);
+  Future<void> get completion =>
+      _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
   /// 「複製紀錄」：每一步、AI 每一輪說的話與試抓結果。
   String get transcript => _transcript.toString().trimRight();
@@ -186,8 +195,15 @@ class AiRepairSession extends ChangeNotifier {
   /// 有紀錄可以複製。
   bool get hasTranscript => _transcript.isNotEmpty;
 
-  Future<void> start() async {
-    if (_running) return;
+  Future<void> start() {
+    if (_startTask != null) return _startTask!;
+    if (_stopped || _disposed || job.outcome != null) {
+      return Future<void>.value();
+    }
+    return _startTask = _run();
+  }
+
+  Future<void> _run() async {
     _running = true;
     _notify();
     try {
@@ -214,7 +230,7 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 停下：做著的那一步標成停止，修到一半的不改。
   void stop() {
-    if (_stopped || isFinished) return;
+    if (_stopped || job.outcome != null) return;
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     if (!job._committing) {
@@ -237,7 +253,7 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 剪貼簿：使用者貼回 AI 修好的書源。讀不出書源時傳回原因、什麼都不做。
   Future<String?> submitPaste(String text) async {
-    if (!job.awaitingPaste || _running) return null;
+    if (!job.awaitingPaste || _running || _stopped || _disposed) return null;
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
     final candidate = json == null
@@ -245,14 +261,23 @@ class AiRepairSession extends ChangeNotifier {
         : _candidateOrNull(job.original, json);
     if (candidate == null) return '讀不出書源 JSON';
     job.awaitingPaste = false;
+    final pending = Completer<void>();
+    _pasteCompletion = pending;
     _running = true;
     _notify();
     try {
       _record('## 貼回的書源\n$text');
       await _validate(job, candidate, '');
+    } catch (error, stack) {
+      AppLog.e('AI 貼回書源出錯', error: error, stackTrace: stack);
+      if (!_stopped) {
+        _fail(job, '校驗貼回的書源出錯，書源沒有改：$error');
+      }
     } finally {
       _running = false;
       _notify();
+      pending.complete();
+      if (identical(_pasteCompletion, pending)) _pasteCompletion = null;
     }
     return null;
   }
@@ -391,6 +416,7 @@ class AiRepairSession extends ChangeNotifier {
           answer('$aiRepairTryFirst\n${budget()}');
         case AiGiveUp(:final reason):
           _finish(step, 'AI 說修不好');
+          job.confirmedUnfixable = true;
           _fail(job, reason.isEmpty ? 'AI 說修不好。' : 'AI：$reason');
           return null;
         case AiFetch() when fetches >= aiRepairMaxFetches:
@@ -432,6 +458,7 @@ class AiRepairSession extends ChangeNotifier {
               note,
               probeSucceeded: true,
               last: tests >= aiRepairMaxTests,
+              lastRound: earlier != null,
             );
             if (failure == null) return null;
             tried.writeln('$what → 試抓到正文，但校驗沒過：${_firstLine(failure)}');
@@ -459,6 +486,7 @@ class AiRepairSession extends ChangeNotifier {
             candidate,
             note,
             last: tests >= aiRepairMaxTests,
+            lastRound: earlier != null,
           );
           if (failure == null) return null;
           tried.writeln(
@@ -470,6 +498,9 @@ class AiRepairSession extends ChangeNotifier {
       if (tests >= aiRepairMaxTests) break;
     }
     if (earlier == null && tests > 0) return tried.toString().trimRight();
+    if (earlier != null && tests >= aiRepairMaxTests) {
+      job.confirmedUnfixable = true;
+    }
     _fail(job, earlier == null ? '試了 $tests 次還沒修好，書源沒有改。' : '試了兩回還沒修好，書源沒有改。');
     return null;
   }
@@ -481,12 +512,15 @@ class AiRepairSession extends ChangeNotifier {
   ///
   /// 沒通過時：[last]（AI 沒機會再改了）就記成沒修好，傳回 null；不然傳回
   /// 要回給 AI 的校驗結果，讓它接著改。修好、存不進去或停下時是 null。
+  /// [lastRound] 時最後一次沒過就是兩回都試完了，標「AI 修不好」（校驗超過
+  /// 時間除外）。
   Future<String?> _validate(
     AiRepairJob job,
     BookSource candidate,
     String note, {
     bool probeSucceeded = false,
     bool last = true,
+    bool lastRound = false,
   }) async {
     final step = _addStep(job, '校驗修好的書源');
     var checked = await _guard(() => _check(candidate, _cancelToken));
@@ -517,6 +551,8 @@ class AiRepairSession extends ChangeNotifier {
           aiRepairCheckReply(checkText, checked?.diagnostics ?? const []),
         );
       }
+      // 校驗超過時間不算修不好：可能只是網站一時慢。
+      job.confirmedUnfixable = lastRound && checked != null;
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }
@@ -533,6 +569,7 @@ class AiRepairSession extends ChangeNotifier {
         return '# 書源校驗沒過：$unrelated（用「$nonsenseKeyword」搜尋也得到同樣的書）。'
             '要抓的是搜尋結果；網站真的搜不到書時就放棄。';
       }
+      job.confirmedUnfixable = lastRound;
       _fail(job, ['校驗：$unrelated', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }

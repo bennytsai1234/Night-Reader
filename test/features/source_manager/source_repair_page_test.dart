@@ -69,6 +69,18 @@ void main() {
     expect(find.text('完成'), findsOneWidget);
   });
 
+  testWidgets('an unexpected error is visible', (tester) async {
+    final batch = _batch([('甲', RepairOutcome.notTried)])
+      ..stage = RepairStage.done
+      ..failedStage = RepairStage.checking
+      ..errorMessage = '校驗服務無法啟動';
+
+    await _pump(tester, batch);
+    expect(find.text('修復中斷'), findsOneWidget);
+    expect(find.text('校驗服務無法啟動'), findsOneWidget);
+    expect(find.text('沒輪到'), findsOneWidget);
+  });
+
   testWidgets('while the AI works the sites being repaired are listed with '
       'their latest step', (tester) async {
     final batch = _batch([('甲', null), ('乙', RepairOutcome.healthy)])
