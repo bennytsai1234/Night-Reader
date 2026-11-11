@@ -36,8 +36,9 @@ AiChatClient _client(
   _Service adapter, {
   String apiKey = 'sk-1',
   String effort = '',
+  String baseUrl = 'https://ai.example/v1/',
 }) => AiChatClient((
-  baseUrl: 'https://ai.example/v1/',
+  baseUrl: baseUrl,
   apiKey: apiKey,
   model: 'm',
   effort: effort,
@@ -120,6 +121,65 @@ void main() {
     ).complete([(role: 'user', content: 'hi')]);
 
     expect(service.request!.headers.containsKey('Authorization'), isFalse);
+  });
+
+  test('OpenCode requests reuse a session within one conversation', () async {
+    final service = _Service(200, {
+      'choices': [
+        {
+          'message': {'content': 'OK'},
+        },
+      ],
+    });
+    const baseUrl = 'https://opencode.ai/inference/go/openai/v1';
+    final client = _client(service, baseUrl: baseUrl);
+
+    await client.complete([(role: 'user', content: 'first')]);
+    final firstSession = service.request!.headers['x-opencode-session'];
+    expect(firstSession, isA<String>());
+    expect(firstSession, startsWith('ses_'));
+    expect(service.request!.headers['User-Agent'], 'NightReader-AIRepair/1.0');
+    expect(service.request!.uri.toString(), '$baseUrl/chat/completions');
+
+    await client.complete([(role: 'user', content: 'second')]);
+    expect(service.request!.headers['x-opencode-session'], firstSession);
+
+    await _client(
+      service,
+      baseUrl: baseUrl,
+    ).complete([(role: 'user', content: 'a different repair')]);
+    expect(service.request!.headers['x-opencode-session'], isNot(firstSession));
+  });
+
+  test('the OpenCode header never leaks to other providers', () async {
+    final response = {
+      'choices': [
+        {
+          'message': {'content': 'OK'},
+        },
+      ],
+    };
+    final regular = _Service(200, response);
+    await _client(regular).complete([(role: 'user', content: 'hi')]);
+    expect(regular.request!.headers.containsKey('x-opencode-session'), isFalse);
+    expect(regular.request!.headers.containsKey('User-Agent'), isFalse);
+
+    final unrelatedPath = _Service(200, response);
+    await _client(
+      unrelatedPath,
+      baseUrl: 'https://opencode.ai/another-api/v1',
+    ).complete([(role: 'user', content: 'hi')]);
+    expect(
+      unrelatedPath.request!.headers.containsKey('x-opencode-session'),
+      isFalse,
+    );
+
+    final payg = _Service(200, response);
+    await _client(
+      payg,
+      baseUrl: 'https://opencode.ai/inference/openai/v1',
+    ).complete([(role: 'user', content: 'hi')]);
+    expect(payg.request!.headers['x-opencode-session'], startsWith('ses_'));
   });
 
   test('errors say what to fix, with the service message', () async {
