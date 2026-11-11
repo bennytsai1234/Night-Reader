@@ -107,16 +107,14 @@ class SourceRepairBatch extends ChangeNotifier {
     required this.service,
     this.tokenBudget,
     this.siteTokenBudget = defaultSiteTokenBudget,
-    BatchRecheck? recheck,
-    Future<SiteCheck> Function(BookSource source)? checkSite,
+    this._recheck,
+    this._checkSite,
     AiRepairChecker? check,
     Future<void> Function(BookSource repaired, BookSource original)? save,
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
     Future<void> Function(BookSource source)? markUnfixable,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
   }) : items = [for (final source in sources) RepairItem(source)],
-       _recheck = recheck,
-       _checkSite = checkSite,
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
        _markGone = markGone ?? _defaultMarkGone,
@@ -362,7 +360,7 @@ class SourceRepairBatch extends ChangeNotifier {
           }
         } else {
           for (final item in others) {
-            item.detail = '同網站的 AI 修復中斷，這次尚未嘗試';
+            _finish(item, RepairOutcome.notTried, '同網站的 AI 修復中斷，這次尚未嘗試');
           }
         }
       }

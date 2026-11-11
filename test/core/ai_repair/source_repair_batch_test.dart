@@ -333,6 +333,15 @@ void main() {
       save: (_, _) async {},
       markGone: (source, _) async => gone.add(source.bookSourceUrl),
       markUnfixable: (_) async {},
+      session: (source, _) => AiRepairSession(
+        source: source,
+        service: _service,
+        check: (s, _) async => _checked(s),
+        probe: (s, _) async => _probe(s),
+        ask: (_, _) async => _giveUp,
+        secrets: (_) async => const {},
+        backups: backups,
+      ),
     );
 
     await b.start();
@@ -477,6 +486,7 @@ void main() {
     expect(b.items.first.outcome, RepairOutcome.notFixed);
     expect(b.items.first.detail, contains('AI 服務無法回應'));
     expect(b.items.last.outcome, RepairOutcome.notTried);
+    expect(b.items.last.detail, contains('同網站的 AI 修復中斷'));
   });
 
   test('a moved source has the old domain replaced inside its rules too', () {
