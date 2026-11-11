@@ -114,7 +114,9 @@ class SourceRepairBatch extends ChangeNotifier {
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
     Future<void> Function(BookSource source)? markUnfixable,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
+    DateTime Function()? now,
   }) : items = [for (final source in sources) RepairItem(source)],
+       _now = now ?? DateTime.now,
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
        _markGone = markGone ?? _defaultMarkGone,
@@ -132,6 +134,10 @@ class SourceRepairBatch extends ChangeNotifier {
   /// 同時檢查幾個網站。
   static const int siteConcurrency = 8;
 
+  /// 這段時間內校驗過的書源沿用那次的結果，不重新校驗：剛按完「校驗所有
+  /// 書源」、或修到一半停了再按一次時不重跑（ADR 0054）。
+  static const Duration freshCheck = Duration(hours: 24);
+
   final AiService service;
 
   /// 整批的 AI 花費上限（token）；null 是不限。
@@ -147,6 +153,7 @@ class SourceRepairBatch extends ChangeNotifier {
   final Future<void> Function(BookSource repaired, BookSource original) _save;
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
   final Future<void> Function(BookSource source) _markUnfixable;
+  final DateTime Function() _now;
   late final AiRepairSession Function(BookSource source, RepairItem item)
   _session;
 
@@ -158,6 +165,9 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// AI 一共用了多少 token。
   int tokensUsed = 0;
+
+  /// 沿用上次校驗結果、沒有重新校驗的書源數（[freshCheck]）。
+  int reusedChecks = 0;
 
   final CancelToken _cancelToken = CancelToken();
   CheckSourceService? _activeRecheckService;
@@ -237,48 +247,80 @@ class SourceRepairBatch extends ChangeNotifier {
 
   // ── 1. 重新校驗 ────────────────────────────────────────────────────────
 
+  /// 先分出不用重新校驗的：AI 試過修不好、網站不在了、需要登入這類本來
+  /// 就不修的，照書源上的標記直接定案；[freshCheck] 內校驗過的沿用那次的
+  /// 結果。剩下的才重新校驗（ADR 0054）。
   Future<void> _recheckAll() async {
-    _enter(RepairStage.checking, items.length);
-    final urls = [for (final item in items) item.source.bookSourceUrl];
+    final now = _now().millisecondsSinceEpoch;
+    final toCheck = <RepairItem>[];
+    for (final item in items) {
+      final source = item.source;
+      final health = source.runtimeHealth;
+      if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
+        _finish(item, RepairOutcome.skipped, 'AI 之前試過修不好，這次跳過');
+      } else if (source.hasGroupTag(siteBrokenSourceGroupTag)) {
+        _finish(
+          item,
+          RepairOutcome.siteGone,
+          source.errorComment ?? health.description,
+        );
+      } else if (_notRepairable.contains(health.category)) {
+        _finish(item, RepairOutcome.skipped, '${health.label}：不修');
+      } else if (source.lastCheckTime > 0 &&
+          now - source.lastCheckTime < freshCheck.inMilliseconds) {
+        reusedChecks++;
+        _judge(item, health, source.errorComment ?? health.description);
+      } else {
+        toCheck.add(item);
+      }
+    }
+
+    _enter(RepairStage.checking, toCheck.length);
+    if (toCheck.isEmpty) return;
     void progress(int completed) {
       if (_stopped || _disposed || stage != RepairStage.checking) return;
-      final done = completed < 0
-          ? 0
-          : completed > items.length
-          ? items.length
-          : completed;
+      final done = completed.clamp(0, toCheck.length);
       if (stageDone == done) return;
       stageDone = done;
       _notify();
     }
 
-    final checked = await (_recheck ?? _recheckWithProgress)(urls, progress);
+    final checked = await (_recheck ?? _recheckWithProgress)([
+      for (final item in toCheck) item.source.bookSourceUrl,
+    ], progress);
     if (_stopped) return;
     final entries = {for (final entry in checked) entry.sourceUrl: entry};
-    for (final item in items) {
+    for (final item in toCheck) {
       final entry = entries[item.source.bookSourceUrl];
       if (entry == null) {
         _finish(item, RepairOutcome.notTried, '校驗沒有取得結果，這次不修');
-        continue;
-      }
-      item.before = entry.health.category;
-      final source = item.source;
-      if (entry.isHealthy) {
+      } else if (entry.isHealthy) {
+        item.before = entry.health.category;
         _finish(item, RepairOutcome.healthy, '重新校驗就沒問題了');
-      } else if (_notRepairable.contains(entry.health.category)) {
-        _finish(item, RepairOutcome.skipped, '${entry.health.label}：不修');
-      } else if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
-        _finish(item, RepairOutcome.skipped, 'AI 之前試過修不好，這次跳過');
-      } else if ((source.searchUrl?.trim() ?? '').isEmpty &&
-          (source.exploreUrl?.trim() ?? '').isNotEmpty &&
-          entry.health.category == SourceHealthCategory.searchBroken) {
-        _finish(item, RepairOutcome.skipped, '沒有搜尋規則，本來就只能從發現頁找書');
       } else {
-        item.detail = '${entry.health.label}：${entry.message}';
+        _judge(item, entry.health, entry.message);
       }
     }
-    stageDone = items.length;
+    stageDone = toCheck.length;
     _notify();
+  }
+
+  /// 照校驗的結論決定這個書源送不送 AI；送的話 [RepairItem.detail] 是壞在
+  /// 哪裡。
+  void _judge(RepairItem item, SourceRuntimeHealth health, String message) {
+    item.before = health.category;
+    final source = item.source;
+    if (health.category == SourceHealthCategory.healthy) {
+      _finish(item, RepairOutcome.healthy, '校驗過了，沒問題');
+    } else if (_notRepairable.contains(health.category)) {
+      _finish(item, RepairOutcome.skipped, '${health.label}：不修');
+    } else if ((source.searchUrl?.trim() ?? '').isEmpty &&
+        (source.exploreUrl?.trim() ?? '').isNotEmpty &&
+        health.category == SourceHealthCategory.searchBroken) {
+      _finish(item, RepairOutcome.skipped, '沒有搜尋規則，本來就只能從發現頁找書');
+    } else {
+      item.detail = '${health.label}：$message';
+    }
   }
 
   // ── 2. 檢查網站 ────────────────────────────────────────────────────────

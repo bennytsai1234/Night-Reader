@@ -238,6 +238,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     int n(RepairOutcome outcome) => _batch.count(outcome);
     return switch (stage) {
       RepairStage.checking => _counts([
+        ('沿用校驗結果', _batch.reusedChecks),
         ('沒問題', n(RepairOutcome.healthy)),
         ('不修', n(RepairOutcome.skipped)),
       ]),

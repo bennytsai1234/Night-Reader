@@ -498,7 +498,8 @@ class CheckSourceService extends ChangeNotifier {
     SourceCheckIsolateResult result,
   ) async {
     if (_shouldIgnoreSourceUpdate(url)) return null;
-    final source = BookSource.fromJson(result.updatedSourceJson);
+    final source = BookSource.fromJson(result.updatedSourceJson)
+      ..lastCheckTime = DateTime.now().millisecondsSinceEpoch;
     for (final log in result.logs) {
       _appendLog(log, sourceUrl: url);
     }
@@ -604,7 +605,10 @@ class CheckSourceService extends ChangeNotifier {
     if (!force && _shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
     source.removeInvalidGroups();
     source.removeErrorComment();
-    source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    source
+      ..lastUpdateTime = now
+      ..lastCheckTime = now;
 
     final seenCategories = <SourceHealthCategory>{};
     for (final nextHealth in <SourceRuntimeHealth>[health, ...extraHealths]) {

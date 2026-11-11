@@ -32,6 +32,11 @@ abstract class BookSourceBase extends BaseSource {
   String? variableComment; // 變量說明
   int lastUpdateTime = 0; // 最後更新時間
   int respondTime = 180000; // 響應時間
+
+  /// 上次校驗書源的時間（毫秒）；0 是沒有紀錄。只存在這台手機，不進書源
+  /// JSON：書源被匯入、同步或編輯蓋過時歸零，整批修復就會重新校驗它
+  /// （ADR 0054）。
+  int lastCheckTime = 0;
   int weight = 0; // 權重
   String? exploreUrl; // 發現 URL
   String? exploreScreen; // 發現篩選規則
