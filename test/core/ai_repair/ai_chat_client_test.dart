@@ -123,7 +123,6 @@ void main() {
     expect(service.request!.headers.containsKey('Authorization'), isFalse);
   });
 
-
   test('OpenCode requests reuse a session within one conversation', () async {
     final service = _Service(200, {
       'choices': [
@@ -139,21 +138,16 @@ void main() {
     final firstSession = service.request!.headers['x-opencode-session'];
     expect(firstSession, isA<String>());
     expect(firstSession, startsWith('ses_'));
-    expect(
-      service.request!.headers['User-Agent'],
-      'NightReader-AIRepair/1.0',
-    );
-    expect(
-      service.request!.uri.toString(),
-      '$baseUrl/chat/completions',
-    );
+    expect(service.request!.headers['User-Agent'], 'NightReader-AIRepair/1.0');
+    expect(service.request!.uri.toString(), '$baseUrl/chat/completions');
 
     await client.complete([(role: 'user', content: 'second')]);
     expect(service.request!.headers['x-opencode-session'], firstSession);
 
-    await _client(service, baseUrl: baseUrl).complete([
-      (role: 'user', content: 'a different repair'),
-    ]);
+    await _client(
+      service,
+      baseUrl: baseUrl,
+    ).complete([(role: 'user', content: 'a different repair')]);
     expect(service.request!.headers['x-opencode-session'], isNot(firstSession));
   });
 
@@ -167,10 +161,7 @@ void main() {
     };
     final regular = _Service(200, response);
     await _client(regular).complete([(role: 'user', content: 'hi')]);
-    expect(
-      regular.request!.headers.containsKey('x-opencode-session'),
-      isFalse,
-    );
+    expect(regular.request!.headers.containsKey('x-opencode-session'), isFalse);
     expect(regular.request!.headers.containsKey('User-Agent'), isFalse);
 
     final unrelatedPath = _Service(200, response);
