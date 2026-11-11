@@ -136,12 +136,32 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      # 中文字型存在快取裡；沒有時從 Ubuntu 套件裝，套件伺服器連不上時改從
+      # Noto 的 GitHub 倉庫下載同一版（Sans 2.004）。2026-11-11 Ubuntu 的伺服器
+      # 一度查不到網域，這一項連續失敗、擋住發版。
+      - name: Restore CJK fonts
+        id: cjk-fonts
+        uses: actions/cache@v4
+        with:
+          path: ~/cjk-fonts
+          key: noto-sans-cjk-2.004
       - name: Install CJK fonts
         run: |
-          if [ ! -f /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc ]; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+          fonts=/usr/share/fonts/opentype/noto
+          if [ ! -f ~/cjk-fonts/NotoSansCJK-Regular.ttc ]; then
+            mkdir -p ~/cjk-fonts
+            if [ -f $fonts/NotoSansCJK-Regular.ttc ] || { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk; }; then
+              cp $fonts/NotoSansCJK-Regular.ttc $fonts/NotoSansCJK-Bold.ttc ~/cjk-fonts/
+            else
+              for weight in Regular Bold; do
+                curl -fsSL --retry 3 -o ~/cjk-fonts/NotoSansCJK-$weight.ttc \
+                  "https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTC/NotoSansCJK-$weight.ttc"
+              done
+            fi
           fi
+          sudo mkdir -p $fonts
+          sudo cp ~/cjk-fonts/NotoSansCJK-*.ttc $fonts/
+          fc-cache -f >/dev/null || true
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.0'
