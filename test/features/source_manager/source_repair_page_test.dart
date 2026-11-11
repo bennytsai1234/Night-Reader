@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -39,7 +41,14 @@ Future<void> _pump(WidgetTester tester, SourceRepairBatch batch) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: buildAppTheme(AppStyle.paper, Brightness.light),
-      home: SourceRepairPage(batch: batch, title: '修復異常書源', autoStart: false),
+      home: SourceRepairPage(
+        run: BatchRepairRun(
+          batch,
+          title: '修復異常書源',
+          work: BackgroundWork(platform: null),
+        ),
+        autoStart: false,
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 100));

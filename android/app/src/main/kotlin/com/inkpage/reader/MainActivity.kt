@@ -39,7 +39,22 @@ class MainActivity : AudioServiceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestHighestRefreshRate()
+        openBackgroundWorkIfAsked(intent)
         deleteRetiredNotificationChannels()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openBackgroundWorkIfAsked(intent)
+    }
+
+    // 點了背景工作的通知（BackgroundWorkService）：回到那件工作的頁面。
+    // 只認自己的動作，匯入連結與分享照舊交給各自的套件。
+    private fun openBackgroundWorkIfAsked(intent: Intent?) {
+        if (intent?.action != BackgroundWorkService.ACTION_OPEN) return
+        // 同一個 intent 在 Activity 重建時會再交一次，處理過就換掉動作。
+        intent.action = Intent.ACTION_MAIN
+        BackgroundWork.requestOpen()
     }
 
     /**
@@ -61,6 +76,7 @@ class MainActivity : AudioServiceActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         CachedProcessText.install(flutterEngine)
+        BackgroundWork.install(this, flutterEngine.dartExecutor.binaryMessenger)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         ProcessExits.install(this, messenger)
         val readerDevice = MethodChannel(messenger, "night_reader/reader_device")

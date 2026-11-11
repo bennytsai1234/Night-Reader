@@ -95,7 +95,8 @@ class AppPermissionService {
     ],
   );
 
-  Future<bool> requestNotificationForTts() async {
+  /// 通知權限：朗讀的播放控制與背景工作的進度（ADR 0058）都要；第一次用到時才問。
+  Future<bool> requestNotification() async {
     if (!_isAndroid() && !_isIOS()) return true;
     return _requestIfNeeded(AppPermissionTarget.notification);
   }

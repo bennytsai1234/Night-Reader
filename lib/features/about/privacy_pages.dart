@@ -114,7 +114,7 @@ class _PermissionsPageState extends State<PermissionsPage>
               ),
               _NoticeSection(
                 title: '通知與背景任務',
-                body: 'TTS 朗讀的媒體控制會使用通知權限；若使用者拒絕，朗讀仍可執行，但通知列控制可能無法顯示。背景任務會受到系統省電與背景執行設定限制。',
+                body: '朗讀的播放控制，與修書源、校驗書源時的進度會使用通知權限；拒絕時朗讀、修復與校驗照常進行，只是通知欄看不到。修書源與校驗書源跑的時候會開前景服務，離開夜讀、關螢幕也繼續；其他背景任務會受到系統省電與背景執行設定限制。',
               ),
               _NoticeSection(
                 title: '相簿',

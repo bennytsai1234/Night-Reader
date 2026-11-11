@@ -432,6 +432,18 @@ extension BookSourceLogic on BookSourceBase {
         .join('\n');
   }
 
+  /// 校驗寫在註解裡的那句錯誤（[addErrorComment]）；沒有時是 null。
+  String? get errorComment {
+    for (final line in (bookSourceComment ?? '').split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('// Error:')) {
+        final error = trimmed.substring('// Error:'.length).trim();
+        return error.isEmpty ? null : error;
+      }
+    }
+    return null;
+  }
+
   void addErrorComment(String error) {
     removeErrorComment();
     final newErrorLine = '// Error: $error';

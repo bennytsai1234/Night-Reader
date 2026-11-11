@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 
 import '../source_manager_provider.dart';
@@ -221,7 +222,10 @@ class SourceManagerMenus {
             value: 'check_all',
             icon: Icons.playlist_add_check,
             label: '校驗所有書源',
-            enabled: provider.totalSourceCount > 0 && mutationEnabled,
+            enabled:
+                provider.totalSourceCount > 0 &&
+                mutationEnabled &&
+                backgroundWorkIdle(),
           ),
           GlassMenuItem(
             value: 'clear_check_marks',
@@ -233,7 +237,11 @@ class SourceManagerMenus {
             value: 'repair_abnormal',
             icon: Icons.healing_outlined,
             label: '修復異常書源',
-            enabled: provider.abnormalSourceUrls.isNotEmpty && mutationEnabled,
+            enabled:
+                RepairRuns.instance.current is BatchRepairRun ||
+                (provider.abnormalSourceUrls.isNotEmpty &&
+                    mutationEnabled &&
+                    canRepairBatch()),
           ),
           const GlassMenuItem(
             value: 'ai_settings',
