@@ -145,7 +145,10 @@ class SystemPlayback {
       _handler = await AudioService.init(
         builder: () => _SessionHandler(this),
         config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.night_reader.tts',
+          // 重要性只在頻道建立時給得了（低：不跳出、不出聲），之後被改成
+          // 「重要」就改不回來。舊的頻道在使用者手機上被改成重要、每次更新
+          // 都跳橫幅，換一個新的，舊的由 MainActivity 刪掉。
+          androidNotificationChannelId: 'com.night_reader.playback',
           androidNotificationChannelName: '夜讀播放',
           // 狀態列只畫圖示的形狀：App 圖示整張不透明，會變成一塊白色方塊。
           androidNotificationIcon: notificationIcon,
