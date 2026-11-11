@@ -49,7 +49,9 @@ class AiRepairJob {
   /// 結果的說明：AI 最後說的話，或卡在哪。
   String? explanation;
 
-  /// AI 明確放棄或兩輪嘗試耗盡時才標「AI 修不好」；網路、金鑰與系統錯誤不標。
+  /// AI 明確放棄，或第二回的試抓次數用完（含最後一次交出沒過校驗）時才標
+  /// 「AI 修不好」；網路、金鑰、系統錯誤、校驗超過時間，以及空白或讀不懂的
+  /// 回覆把回覆次數用完的都不標。
   bool confirmedUnfixable = false;
 
   /// 剪貼簿：已複製給 AI，等使用者貼回修好的書源。
@@ -456,6 +458,7 @@ class AiRepairSession extends ChangeNotifier {
               note,
               probeSucceeded: true,
               last: tests >= aiRepairMaxTests,
+              lastRound: earlier != null,
             );
             if (failure == null) return null;
             tried.writeln('$what → 試抓到正文，但校驗沒過：${_firstLine(failure)}');
@@ -483,6 +486,7 @@ class AiRepairSession extends ChangeNotifier {
             candidate,
             note,
             last: tests >= aiRepairMaxTests,
+            lastRound: earlier != null,
           );
           if (failure == null) return null;
           tried.writeln(
@@ -494,7 +498,9 @@ class AiRepairSession extends ChangeNotifier {
       if (tests >= aiRepairMaxTests) break;
     }
     if (earlier == null && tests > 0) return tried.toString().trimRight();
-    if (earlier != null) job.confirmedUnfixable = true;
+    if (earlier != null && tests >= aiRepairMaxTests) {
+      job.confirmedUnfixable = true;
+    }
     _fail(job, earlier == null ? '試了 $tests 次還沒修好，書源沒有改。' : '試了兩回還沒修好，書源沒有改。');
     return null;
   }
@@ -506,12 +512,15 @@ class AiRepairSession extends ChangeNotifier {
   ///
   /// 沒通過時：[last]（AI 沒機會再改了）就記成沒修好，傳回 null；不然傳回
   /// 要回給 AI 的校驗結果，讓它接著改。修好、存不進去或停下時是 null。
+  /// [lastRound] 時最後一次沒過就是兩回都試完了，標「AI 修不好」（校驗超過
+  /// 時間除外）。
   Future<String?> _validate(
     AiRepairJob job,
     BookSource candidate,
     String note, {
     bool probeSucceeded = false,
     bool last = true,
+    bool lastRound = false,
   }) async {
     final step = _addStep(job, '校驗修好的書源');
     var checked = await _guard(() => _check(candidate, _cancelToken));
@@ -542,6 +551,8 @@ class AiRepairSession extends ChangeNotifier {
           aiRepairCheckReply(checkText, checked?.diagnostics ?? const []),
         );
       }
+      // 校驗超過時間不算修不好：可能只是網站一時慢。
+      job.confirmedUnfixable = lastRound && checked != null;
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }
@@ -558,6 +569,7 @@ class AiRepairSession extends ChangeNotifier {
         return '# 書源校驗沒過：$unrelated（用「$nonsenseKeyword」搜尋也得到同樣的書）。'
             '要抓的是搜尋結果；網站真的搜不到書時就放棄。';
       }
+      job.confirmedUnfixable = lastRound;
       _fail(job, ['校驗：$unrelated', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }

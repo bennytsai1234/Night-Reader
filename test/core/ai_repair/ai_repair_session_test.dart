@@ -227,6 +227,71 @@ void main() {
     expect(job.steps.last.state, AiRepairStepState.failed);
     expect(job.explanation, '校驗：正文失效：正文為空\nAI：正文在 div.txt');
     expect(applied, isEmpty);
+    expect(job.confirmedUnfixable, isFalse);
+  });
+
+  test('both rounds used up, the last one on a hand-in that fails the check, '
+      'counts as not fixable', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [
+        for (var i = 0; i < aiRepairMaxTests; i++)
+          _command('test', content: 'class.wrong$i@text'),
+        for (var i = 0; i < aiRepairMaxTests; i++)
+          _command('submit', content: 'class.again$i@text'),
+      ],
+    );
+
+    await s.start();
+
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.confirmedUnfixable, isTrue);
+    expect(applied, isEmpty);
+  });
+
+  test('a last hand-in whose check times out is not counted as not '
+      'fixable', () async {
+    final s = session(
+      [_source('https://site.example')],
+      timesOut: {'https://site.example'},
+      replies: [
+        for (var i = 0; i < aiRepairMaxTests; i++)
+          _command('test', content: 'class.wrong$i@text'),
+        for (var i = 0; i < aiRepairMaxTests; i++)
+          _command('submit', content: 'class.again$i@text'),
+      ],
+    );
+
+    await s.start();
+
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.explanation, contains('校驗超過時間'));
+    expect(s.job.confirmedUnfixable, isFalse);
+  });
+
+  test('a second round that only gets empty replies is not counted as not '
+      'fixable', () async {
+    var calls = 0;
+    final s = AiRepairSession(
+      source: _source('https://site.example'),
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (source, _) async => _probe(source),
+      keywordCheck: (_, _) async => true,
+      ask: (_, _) async {
+        if (calls++ >= aiRepairMaxTests) throw const AiEmptyReply();
+        return _command('test', content: 'class.wrong$calls@text');
+      },
+      apply: (source, _) async => applied.add(source),
+      secrets: (_) async => const {},
+      backups: backups,
+    );
+
+    await s.start();
+
+    expect(calls, aiRepairMaxTests + aiRepairMaxReplies);
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.confirmedUnfixable, isFalse);
   });
 
   test(
