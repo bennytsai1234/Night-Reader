@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -110,7 +111,7 @@ class SelectActionBar extends StatelessWidget {
               GlassMenuButton<String>(
                 enabled: actionsEnabled,
                 tooltip: isBusy ? '操作進行中' : '更多批次操作',
-                entriesBuilder: (_) => _entries,
+                entriesBuilder: (_) => _entriesFor(idle: backgroundWorkIdle()),
                 onSelected: _onMenuSelected,
                 child: SizedBox.square(
                   dimension: AppGlass.buttonSize,
@@ -128,65 +129,80 @@ class SelectActionBar extends StatelessWidget {
     );
   }
 
-  static const List<GlassMenuEntry<String>> _entries = [
-    GlassMenuItem(
+  /// 校驗與 AI 修復在有背景工作跑的時候是灰的：一次一件（ADR 0058）。
+  static List<GlassMenuEntry<String>> _entriesFor({required bool idle}) => [
+    const GlassMenuItem(
       value: 'enable',
       icon: Icons.toggle_on_outlined,
       label: '啟用選中',
     ),
-    GlassMenuItem(
+    const GlassMenuItem(
       value: 'disable',
       icon: Icons.toggle_off_outlined,
       label: '禁用選中',
     ),
-    GlassMenuDivider(),
-    GlassMenuItem(value: 'add_group', icon: Icons.playlist_add, label: '加入分組'),
-    GlassMenuItem(
+    const GlassMenuDivider(),
+    const GlassMenuItem(
+      value: 'add_group',
+      icon: Icons.playlist_add,
+      label: '加入分組',
+    ),
+    const GlassMenuItem(
       value: 'remove_group',
       icon: Icons.playlist_remove,
       label: '移出分組',
     ),
-    GlassMenuItem(
+    const GlassMenuItem(
       value: 'enable_explore',
       icon: Icons.travel_explore,
       label: '啟用發現',
     ),
-    GlassMenuItem(
+    const GlassMenuItem(
       value: 'disable_explore',
       icon: Icons.explore_off_outlined,
       label: '禁用發現',
     ),
-    GlassMenuDivider(),
-    GlassMenuItem(
+    const GlassMenuDivider(),
+    const GlassMenuItem(
       value: 'select_interval',
       icon: Icons.select_all,
       label: '連續選取',
     ),
-    GlassMenuItem(value: 'top', icon: Icons.vertical_align_top, label: '置頂'),
-    GlassMenuItem(
+    const GlassMenuItem(
+      value: 'top',
+      icon: Icons.vertical_align_top,
+      label: '置頂',
+    ),
+    const GlassMenuItem(
       value: 'bottom',
       icon: Icons.vertical_align_bottom,
       label: '置底',
     ),
-    GlassMenuDivider(),
-    GlassMenuItem(
+    const GlassMenuDivider(),
+    const GlassMenuItem(
       value: 'export',
       icon: Icons.file_download_outlined,
       label: '匯出選中',
     ),
-    GlassMenuItem(value: 'share', icon: Icons.share_outlined, label: '分享選中'),
-    GlassMenuDivider(),
+    const GlassMenuItem(
+      value: 'share',
+      icon: Icons.share_outlined,
+      label: '分享選中',
+    ),
+    const GlassMenuDivider(),
     GlassMenuItem(
       value: 'check',
+      enabled: idle,
       icon: Icons.playlist_add_check,
       label: '校驗選中',
     ),
     GlassMenuItem(
       value: 'ai_repair',
+      enabled: idle,
       icon: Icons.auto_fix_high_outlined,
       label: 'AI 修復選中',
     ),
-    GlassMenuItem(
+    const GlassMenuItem(
       value: 'clear_check_marks',
       icon: Icons.layers_clear_outlined,
       label: '清除校驗標記',

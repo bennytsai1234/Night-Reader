@@ -28,14 +28,14 @@
 | 書源 3 | `lib/features/source_manager/`（`ai_repair/` 在書源 4）、`search/`、`explore/`、`lib/core/engine/book/`、`app_event_bus.dart`；服務 `book_source_service`、`check_source_service`、`source_check_isolate`、`source_check_diagnostics`、`source_check_js_worker_probe`、`source_debug_service`、`source_switch_service`、`source_switch_handoff`、`rule_big_data_service` |
 | 書源 4 | 登入、網頁驗證與 AI 修書源：`lib/features/source_login/`、`lib/core/ai_repair/`、`lib/features/source_manager/ai_repair/`；服務 `source_login_session`、`source_interaction`、`cookie_store`、`login_data_backup`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` |
 | 閱讀器 0 | `lib/features/reader_v2/hybrid/` |
-| 閱讀器 1 | `reader_v2/features/`、`lib/features/bookmarks/`、`lib/core/engine/reader/`；服務 `tts_speech_coordinator`、`sleep_timer`、`chinese_display`、`chinese_utils` |
+| 閱讀器 1 | `reader_v2/features/`、`lib/features/bookmarks/`、`lib/core/engine/reader/`、`lib/core/services/system_playback/`；服務 `tts_speech_coordinator`、`sleep_timer`、`chinese_display`、`chinese_utils` |
 | 閱讀器 2 | `reader_v2/screen/`、`viewport/` |
 | 閱讀器 3 | `reader_v2/chapter/`、`session/`、`layout/`、`use_cases/`；`lib/core/utils/` 的 `illustration_markers`、`html_formatter`、`string_utils`；服務 `chapter_content_preparation_pipeline`、`chapter_content_kind`、`book_toc_replacer` |
 | 閱讀器 4 | 漫畫與有聲書：`lib/features/comic_reader/`、`audiobook/`、`lib/core/comic/`；服務 `local_comic_service`、`comic_folder_picker`、`audio_chapter_download` |
 | 資料 0 | `lib/core/database/`（不看 `*.g.dart`）、`storage/`、`models/` |
 | 資料 1 | `lib/core/services/download/`、`lib/features/cache_manager/`；服務 `download_service`、`cache_manager`、`book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`book_update_service`、`bookshelf_state_tracker`、`books_in_use` |
 | 資料 2 | 備份、還原、匯出、本地書、更新：`lib/core/local_book/`；服務 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`、`local_book_service`、`update_service`、`update_preferences`、`app_update_installer`、`app_version`、`tts_service` |
-| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；服務 `crash_handler`、`app_log_service`、`app_permission_service`、`app_file_selection_service`、`event_bus`、`default_data`、`resource_service` |
+| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`lib/core/services/background_work/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；服務 `crash_handler`、`app_log_service`、`app_permission_service`、`app_file_selection_service`、`event_bus`、`default_data`、`resource_service` |
 | 資料 4 | 同步：`lib/core/sync/` |
 | 介面 0 | `lib/shared/widgets/` 裡的 `skeleton*`、`snapshot_sweep`、`launch_entrance` |
 | 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/` |

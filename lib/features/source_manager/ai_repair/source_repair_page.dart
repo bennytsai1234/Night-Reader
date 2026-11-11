@@ -7,8 +7,6 @@ import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -18,19 +16,30 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 import 'ai_repair_page.dart';
 import 'ai_repair_settings_page.dart';
+import 'repair_runs.dart';
 
-/// 修復一批書源（docs/design/screens.md「修復異常書源」）：沒設定 AI 服務時
-/// 先去設定；問整批的 AI 用量上限後推整批頁。傳回有沒有改到書源。
-Future<bool> openSourceRepair(
+/// 修復一批書源（docs/design/screens.md「修復異常書源」）：已經有一批在修、
+/// 或修完還沒看過結果時推回那一批（ADR 0058）；不然沒設定 AI 服務時先去設定，
+/// 問整批的 AI 用量上限後開始新的一批。書源管理在一批修完時重讀清單。
+Future<void> openSourceRepair(
   BuildContext context,
   List<BookSource> sources, {
   required String title,
   AiRepairSettings? settings,
+  RepairRuns? runs,
 }) async {
-  if (sources.isEmpty) return false;
   final navigator = Navigator.of(context);
+  final repairs = runs ?? RepairRuns.instance;
+  if (repairs.current case final BatchRepairRun current) {
+    await navigator.push(
+      MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: current)),
+    );
+    return;
+  }
+  // 一次一件：別的工作在跑時入口是灰的，這裡再擋一次。
+  if (sources.isEmpty || !backgroundWorkIdle()) return;
   final service = await (settings ?? AiRepairSettings()).service();
-  if (!context.mounted) return false;
+  if (!context.mounted) return;
   if (service == null) {
     final go = await showAppAlert<bool>(
       context: context,
@@ -46,7 +55,7 @@ Future<bool> openSourceRepair(
         MaterialPageRoute<void>(builder: (_) => const AiRepairSettingsPage()),
       );
     }
-    return false;
+    return;
   }
   final budget = await showAppAlert<int>(
     context: context,
@@ -62,44 +71,31 @@ Future<bool> openSourceRepair(
       AppAlertAction(label: '取消', value: -1),
     ],
   );
-  if (budget == null || budget < 0) return false;
-  final batch = SourceRepairBatch(
-    sources: sources,
-    service: service,
-    tokenBudget: budget == 0 ? null : budget,
-  );
-  await navigator.push(
-    MaterialPageRoute<void>(
-      builder: (_) => SourceRepairPage(batch: batch, title: title),
+  if (budget == null || budget < 0) return;
+  final run = BatchRepairRun(
+    SourceRepairBatch(
+      sources: sources,
+      service: service,
+      tokenBudget: budget == 0 ? null : budget,
     ),
+    title: title,
   );
-  return batch.items.any((item) => _changed.contains(item.outcome));
+  repairs.adopt(run);
+  await navigator.push(
+    MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: run)),
+  );
 }
-
-/// 改到書源的結果：書源管理要重讀。沒修好的也算：標了「AI 修不好」。
-const Set<RepairOutcome> _changed = {
-  RepairOutcome.moved,
-  RepairOutcome.aiFixed,
-  RepairOutcome.shared,
-  RepairOutcome.siteGone,
-  RepairOutcome.notFixed,
-};
 
 String _tokens(int count) => count >= 10000
     ? '${(count / 10000).toStringAsFixed(count % 10000 == 0 ? 0 : 1)} 萬 token'
     : '$count token';
 
-/// 整批修復頁：上面是四段進度與 AI 用量，下面照結果分組；返回等於停止。
+/// 整批修復頁：上面是四段進度與 AI 用量，下面照結果分組。返回時修復照跑，
+/// 通知欄有進度（ADR 0058）。
 class SourceRepairPage extends StatefulWidget {
-  const SourceRepairPage({
-    super.key,
-    required this.batch,
-    required this.title,
-    this.autoStart = true,
-  });
+  const SourceRepairPage({super.key, required this.run, this.autoStart = true});
 
-  final SourceRepairBatch batch;
-  final String title;
+  final BatchRepairRun run;
 
   /// 推入動畫播完就開始；截圖與測試傳 false。
   final bool autoStart;
@@ -109,47 +105,41 @@ class SourceRepairPage extends StatefulWidget {
 }
 
 class _SourceRepairPageState extends State<SourceRepairPage> {
-  SourceRepairBatch get _batch => widget.batch;
+  BatchRepairRun get _run => widget.run;
+  SourceRepairBatch get _batch => _run.batch;
 
   /// 網站不在了的那組已經停用或刪除了（顯示在那組最後一列）。
   String? _goneHandled;
-  bool _closing = false;
 
   @override
   void initState() {
     super.initState();
-    if (!widget.autoStart) return;
-    // 推入動畫播完再開始：校驗開 worker，不和轉場疊在一起（ADR 0018）。
+    _run.attach();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final route = ModalRoute.of(context)?.animation;
-      if (route == null || route.isCompleted) {
-        unawaited(_batch.start());
+      final route = ModalRoute.of(context);
+      _run.route = route;
+      if (!widget.autoStart) return;
+      // 推入動畫播完再開始：校驗開 worker，不和轉場疊在一起（ADR 0018）。
+      final animation = route?.animation;
+      if (animation == null || animation.isCompleted) {
+        _run.start();
         return;
       }
       void begin(AnimationStatus status) {
         if (status != AnimationStatus.completed) return;
-        route.removeStatusListener(begin);
-        if (mounted) unawaited(_batch.start());
+        animation.removeStatusListener(begin);
+        if (mounted) _run.start();
       }
 
-      route.addStatusListener(begin);
+      animation.addStatusListener(begin);
     });
   }
 
   @override
   void dispose() {
-    _batch.dispose();
+    _run.detach();
     super.dispose();
-  }
-
-  /// 返回時先停止、等在途作業釋放完資源，再關頁；避免關頁後仍有 worker 寫入。
-  Future<void> _stopAndClose() async {
-    if (_closing) return;
-    _closing = true;
-    _batch.stop();
-    await _batch.completion;
-    if (mounted) Navigator.of(context).pop();
   }
 
   void _openSession(AiRepairSession session) => unawaited(
@@ -166,125 +156,95 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       listenable: _batch,
       builder: (context, _) {
         final service = _batch.service;
-        // 修的時候螢幕不關：整批要跑十幾分鐘，關了螢幕 App 可能被系統暫停。
-        return PopScope(
-          canPop: !_batch.isRunning || _batch.isFinished,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) unawaited(_stopAndClose());
-          },
-          child: ReaderV2WindowSettings(
-            keepScreenOn: _batch.isRunning,
-            backlight: null,
-            orientation: ReaderV2Orientation.system,
-            child: Scaffold(
-              extendBodyBehindAppBar: true,
-              appBar: GlassNavHeader(
-                title: widget.title,
-                actions: [
-                  GlassMenuButton<String>(
-                    entriesBuilder: (_) => const [
-                      GlassMenuItem(
-                        value: 'settings',
-                        icon: Icons.tune_rounded,
-                        label: 'AI 修書源設定',
-                      ),
-                    ],
-                    onSelected: (_) => unawaited(
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const AiRepairSettingsPage(),
-                        ),
-                      ),
+        return Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: GlassNavHeader(
+            title: _run.title,
+            actions: [
+              GlassMenuButton<String>(
+                entriesBuilder: (_) => const [
+                  GlassMenuItem(
+                    value: 'settings',
+                    icon: Icons.tune_rounded,
+                    label: 'AI 修書源設定',
+                  ),
+                ],
+                onSelected: (_) => unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AiRepairSettingsPage(),
                     ),
                   ),
-                ],
+                ),
               ),
-              body: GroupedListView(
+            ],
+          ),
+          body: GroupedListView(
+            children: [
+              GroupedSection(
+                footer:
+                    '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
+                    ' · ${service.model}',
                 children: [
-                  GroupedSection(
-                    footer:
-                        '送到 ${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl}'
-                        ' · ${service.model}',
-                    children: [
-                      for (final stage in _stages)
-                        GroupedRow(
-                          leading: _stageIcon(context, stage),
-                          title: _stageTitle(stage),
-                          subtitle: _stageDetail(stage),
-                          showChevron: false,
-                        ),
-                      GroupedRow(
-                        title: 'AI 用量',
-                        value: _batch.tokenBudget == null
-                            ? _tokens(_batch.tokensUsed)
-                            : '${_tokens(_batch.tokensUsed)}／${_tokens(_batch.tokenBudget!)}',
-                        showChevron: false,
-                      ),
-                    ],
-                  ),
-                  ..._results(context),
-                  GroupedSection(
-                    children: [
-                      if (_batch.isFinished)
-                        GroupedRow(
-                          title: '完成',
-                          accent: true,
-                          showChevron: false,
-                          onTap: () => Navigator.of(context).maybePop(),
-                        )
-                      else
-                        GroupedRow(
-                          title: _batch.isStopped ? '正在停下…' : '停止',
-                          destructive: true,
-                          showChevron: false,
-                          onTap: _batch.isStopped ? null : _batch.stop,
-                        ),
-                    ],
+                  for (final stage in repairStages)
+                    GroupedRow(
+                      leading: _stageIcon(context, stage),
+                      title: repairStageTitle(stage),
+                      subtitle: _stageDetail(stage),
+                      showChevron: false,
+                    ),
+                  GroupedRow(
+                    title: 'AI 用量',
+                    value: _batch.tokenBudget == null
+                        ? _tokens(_batch.tokensUsed)
+                        : '${_tokens(_batch.tokensUsed)}／${_tokens(_batch.tokenBudget!)}',
+                    showChevron: false,
                   ),
                 ],
               ),
-            ),
+              ..._results(context),
+              GroupedSection(
+                children: [
+                  if (_batch.isFinished)
+                    GroupedRow(
+                      title: '完成',
+                      accent: true,
+                      showChevron: false,
+                      onTap: () => Navigator.of(context).maybePop(),
+                    )
+                  else
+                    GroupedRow(
+                      title: _batch.isStopped ? '正在停下…' : '停止',
+                      destructive: true,
+                      showChevron: false,
+                      onTap: _batch.isStopped ? null : _batch.stop,
+                    ),
+                ],
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  static const _stages = [
-    RepairStage.checking,
-    RepairStage.checkingSites,
-    RepairStage.moving,
-    RepairStage.repairing,
-  ];
-
-  String _stageTitle(RepairStage stage) => switch (stage) {
-    RepairStage.checking => '重新校驗',
-    RepairStage.checkingSites => '檢查網站',
-    RepairStage.moving => '網站搬家的換網址',
-    RepairStage.repairing => 'AI 修，每個網站一個',
-    RepairStage.sharing || RepairStage.done => '',
-  };
-
-  /// 這一段的副標：做著時是進度，做完是結果。
+  /// 這一段的副標：做著時是進度（和通知內文同一句），做完是結果。
   String? _stageDetail(RepairStage stage) {
     final current = _batch.stage;
     if (stage.index > current.index) return null;
-    final running = stage == current && !_batch.isFinished;
-    final progress = '${_batch.stageDone}／${_batch.stageTotal}';
+    if (stage == current && !_batch.isFinished) {
+      return repairStageProgress(_batch);
+    }
     int n(RepairOutcome outcome) => _batch.count(outcome);
     return switch (stage) {
-      RepairStage.checking when running => '第 $progress 個',
       RepairStage.checking => _counts([
         ('沒問題', n(RepairOutcome.healthy)),
         ('不修', n(RepairOutcome.skipped)),
       ]),
-      RepairStage.checkingSites when running => '$progress 個網站',
       RepairStage.checkingSites => _counts([
         ('網站不在了', n(RepairOutcome.siteGone)),
       ]),
-      RepairStage.moving when running => '$progress 個',
       RepairStage.moving => _counts([('換好', n(RepairOutcome.moved))]),
-      RepairStage.repairing when running => '$progress 個網站',
       RepairStage.repairing => _counts([
         ('AI 修好', n(RepairOutcome.aiFixed)),
         ('套用到同網站', n(RepairOutcome.shared)),

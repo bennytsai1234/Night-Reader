@@ -17,6 +17,8 @@ import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'ai_repair/repair_runs.dart';
+import 'source_check_job.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_list_skeleton.dart';
 
@@ -502,12 +504,15 @@ class SourceManagerProvider with ChangeNotifier {
     this._uncovered,
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
+    RepairRuns? repairRuns,
   }) : _importService = importService ?? SourceImportService(),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
+       _repairRuns = repairRuns ?? RepairRuns.instance,
        lastSourceCount = _readLastCount(),
        lastRows = _readLastRows() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
+    _repairRuns.addListener(_handleRepairRunsChanged);
     unawaited(
       entrance.then((_) {
         if (_disposed) return;
@@ -521,6 +526,10 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   final Future<void> Function()? _uncovered;
+  final RepairRuns _repairRuns;
+
+  /// 已經為它重讀過清單的那一件修復。
+  RepairRun? _reloadedRun;
   Set<String> _aiRepairedUrls = const {};
   bool _listeningSync = false;
   bool _syncReloadPending = false;
@@ -543,6 +552,15 @@ class SourceManagerProvider with ChangeNotifier {
     _syncReloadPending = false;
     if (_disposed) return;
     await loadSources(showLoading: false);
+  }
+
+  /// 修復在背景做完了（ADR 0058）：存進去的、標了「AI 修不好」的都要重讀。
+  void _handleRepairRunsChanged() {
+    if (_disposed) return;
+    final run = _repairRuns.current;
+    if (run == null || !run.isFinished || identical(run, _reloadedRun)) return;
+    _reloadedRun = run;
+    unawaited(loadSources(showLoading: false));
   }
 
   void _handleCheckServiceChanged() {
@@ -572,6 +590,7 @@ class SourceManagerProvider with ChangeNotifier {
     _loadGeneration++;
     _checkNotifyTimer?.cancel();
     checkService.removeListener(_handleCheckServiceChanged);
+    _repairRuns.removeListener(_handleRepairRunsChanged);
     if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
     super.dispose();
   }
@@ -1075,7 +1094,8 @@ class SourceManagerProvider with ChangeNotifier {
       if (config != null) {
         await checkService.updateConfig(config);
       }
-      await checkService.check(selectedUrls.toList(growable: false));
+      await SourceCheckJob.of(checkService)
+          .run(() => checkService.check(selectedUrls.toList(growable: false)));
     } finally {
       _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
@@ -1193,7 +1213,7 @@ class SourceManagerProvider with ChangeNotifier {
       if (config != null) {
         await checkService.updateConfig(config);
       }
-      await checkService.check(urls);
+      await SourceCheckJob.of(checkService).run(() => checkService.check(urls));
     } finally {
       _selectedUrls.removeAll(selectedAtStart);
       _endBatchOperation();

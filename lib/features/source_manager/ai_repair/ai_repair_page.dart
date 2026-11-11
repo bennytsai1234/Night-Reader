@@ -13,19 +13,32 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 import 'ai_repair_settings_page.dart';
+import 'repair_runs.dart';
 import 'source_repair_page.dart';
 
-/// 從書源管理開始 AI 修一個書源：有 AI 服務就推修復頁；沒有時問要去設定、
-/// 複製給 AI 或取消（docs/design/screens.md「AI 修書源」）。傳回有沒有改到
-/// 書源，書源管理據此重讀。一批書源用 [openSourceRepair]。
-Future<bool> openAiRepair(
+/// 從書源管理開始 AI 修一個書源：這個書源正在修、或修完還沒看過結果時推回
+/// 那一頁（ADR 0058）；有 AI 服務就開始修、推修復頁，返回時照修；沒有時問要
+/// 去設定、複製給 AI 或取消（docs/design/screens.md「AI 修書源」）。書源管理在
+/// 修完、頁面關掉時重讀。一批書源用 [openSourceRepair]。
+Future<void> openAiRepair(
   BuildContext context,
   BookSource source, {
   AiRepairSettings? settings,
+  RepairRuns? runs,
 }) async {
   final navigator = Navigator.of(context);
+  final repairs = runs ?? RepairRuns.instance;
+  if (repairs.current case final SingleRepairRun current
+      when current.sourceUrl == source.bookSourceUrl) {
+    await navigator.push(
+      MaterialPageRoute<void>(builder: (_) => current.page()),
+    );
+    return;
+  }
+  // 一次一件：別的工作在跑時入口是灰的，這裡再擋一次。
+  if (!backgroundWorkIdle()) return;
   final service = await (settings ?? AiRepairSettings()).service();
-  if (!context.mounted) return false;
+  if (!context.mounted) return;
   if (service == null) {
     final choice = await showAppAlert<String>(
       context: context,
@@ -42,11 +55,18 @@ Future<bool> openAiRepair(
         await navigator.push(
           MaterialPageRoute<void>(builder: (_) => const AiRepairSettingsPage()),
         );
-        return false;
+        return;
       case 'clipboard':
-        break;
+        // 剪貼簿要使用者來回貼，留在這一頁：返回等於停止。
+        final session = AiRepairSession(source: source, service: null);
+        await navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => AiRepairPage(session: session),
+          ),
+        );
+        return;
       default:
-        return false;
+        return;
     }
   }
   // 一個書源也照整批修復每個網站的上限：模型一直回讀不懂的話不會一直花下去。
@@ -57,23 +77,29 @@ Future<bool> openAiRepair(
     hasBudget: () => tokens < SourceRepairBatch.defaultSiteTokenBudget,
     onUsage: (usage) => tokens += usage.prompt + usage.completion,
   );
-  await navigator.push(
-    MaterialPageRoute<void>(builder: (_) => AiRepairPage(session: session)),
-  );
-  return session.job.outcome == AiRepairOutcome.repaired ||
-      session.job.restored;
+  final run = SingleRepairRun(session);
+  repairs.adopt(run);
+  await navigator.push(MaterialPageRoute<void>(builder: (_) => run.page()));
 }
 
-/// 修復頁：一步一列；返回等於停止
-/// （docs/design/screens.md「AI 修書源」）。
+/// 修復頁：一步一列（docs/design/screens.md「AI 修書源」）。
 class AiRepairPage extends StatefulWidget {
-  const AiRepairPage({super.key, required this.session, this.owned = true});
+  const AiRepairPage({
+    super.key,
+    required this.session,
+    this.owned = true,
+    this.run,
+  });
 
   final AiRepairSession session;
 
-  /// 這一頁開始並收掉 [session]；整批修復點進一個網站看步驟時是 false，
-  /// 修復由整批修復管。
+  /// 剪貼簿的修復：這一頁開始並收掉 [session]，返回等於停止。整批修復點進
+  /// 一個網站看步驟時是 false，修復由整批修復管。
   final bool owned;
+
+  /// 用 AI 服務的修復：由 [run] 在背景跑，這一頁開始它、返回時照修
+  /// （ADR 0058）。
+  final SingleRepairRun? run;
 
   @override
   State<AiRepairPage> createState() => _AiRepairPageState();
@@ -88,23 +114,36 @@ class _AiRepairPageState extends State<AiRepairPage> {
   @override
   void initState() {
     super.initState();
-    if (!widget.owned) return;
-    // 推入動畫播完再開始：校驗與試抓開 worker，不和轉場疊在一起（ADR 0018）。
+    final run = widget.run;
+    run?.attach();
+    if (!widget.owned && run == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final route = ModalRoute.of(context)?.animation;
-      if (route == null || route.isCompleted) {
-        unawaited(_session.start());
+      final route = ModalRoute.of(context);
+      run?.route = route;
+      // 推入動畫播完再開始：校驗與試抓開 worker，不和轉場疊在一起（ADR 0018）。
+      final animation = route?.animation;
+      if (animation == null || animation.isCompleted) {
+        _start();
         return;
       }
       void begin(AnimationStatus status) {
         if (status != AnimationStatus.completed) return;
-        route.removeStatusListener(begin);
-        if (mounted) unawaited(_session.start());
+        animation.removeStatusListener(begin);
+        if (mounted) _start();
       }
 
-      route.addStatusListener(begin);
+      animation.addStatusListener(begin);
     });
+  }
+
+  void _start() {
+    final run = widget.run;
+    if (run != null) {
+      run.start();
+    } else {
+      unawaited(_session.start());
+    }
   }
 
   /// 自己啟動的修復先停止並等執行中工作退出，才能從頁面返回。
@@ -119,7 +158,8 @@ class _AiRepairPageState extends State<AiRepairPage> {
   @override
   void dispose() {
     _paste.dispose();
-    if (widget.owned) _session.dispose();
+    widget.run?.detach();
+    if (widget.owned && widget.run == null) _session.dispose();
     super.dispose();
   }
 
