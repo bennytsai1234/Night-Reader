@@ -35,7 +35,7 @@
 | 資料 0 | `lib/core/database/`（不看 `*.g.dart`）、`storage/`、`models/` |
 | 資料 1 | `lib/core/services/download/`、`lib/features/cache_manager/`；服務 `download_service`、`cache_manager`、`book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`book_update_service`、`bookshelf_state_tracker`、`books_in_use` |
 | 資料 2 | 備份、還原、匯出、本地書、更新：`lib/core/local_book/`；服務 `backup_service`、`restore_service`、`bookshelf_exchange_service`、`export_book_service`、`highlight_export`、`local_book_service`、`update_service`、`update_preferences`、`app_update_installer`、`app_version`、`tts_service` |
-| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；服務 `crash_handler`、`app_log_service`、`app_permission_service`、`app_file_selection_service`、`event_bus`、`default_data`、`resource_service` |
+| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；服務 `crash_handler`、`crash_trail`、`process_exits`、`app_log_service`、`app_permission_service`、`app_file_selection_service`、`event_bus`、`default_data`、`resource_service` |
 | 資料 4 | 同步：`lib/core/sync/` |
 | 介面 0 | `lib/shared/widgets/` 裡的 `skeleton*`、`snapshot_sweep`、`launch_entrance` |
 | 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/` |

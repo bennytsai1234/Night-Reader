@@ -44,6 +44,7 @@ class MainActivity : AudioServiceActivity() {
         super.configureFlutterEngine(flutterEngine)
         CachedProcessText.install(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
+        ProcessExits.install(this, messenger)
         val readerDevice = MethodChannel(messenger, "night_reader/reader_device")
         this.readerDevice = readerDevice
         readerDevice.setMethodCallHandler { call, result ->
