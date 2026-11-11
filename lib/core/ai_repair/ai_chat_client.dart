@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 
 import 'ai_repair_prompt.dart';
 import 'ai_repair_settings.dart';
@@ -44,6 +45,9 @@ class AiChatClient {
 
   final AiService service;
   final Dio _dio;
+
+  // 同一次 AI 修復共用，讓 OpenCode 將多輪對話路由到同一個 session。
+  final String _opencodeSession = 'ses_${const Uuid().v4()}';
 
   /// 送出的網址：服務網址後面接 `/chat/completions`；使用者已經填到這一段
   /// 的照用。
@@ -97,6 +101,13 @@ class AiChatClient {
           headers: {
             if (service.apiKey.isNotEmpty)
               'Authorization': 'Bearer ${service.apiKey}',
+            // OpenCode Go 必須帶 session；一般額度也能用來維持路由與快取。
+            // 僅對 OpenCode 官方推理端點送出，不影響其他相容服務。
+            if (uri.host == 'opencode.ai' &&
+                uri.path.startsWith('/inference/')) ...{
+              'x-opencode-session': _opencodeSession,
+              'User-Agent': 'NightReader-AIRepair/1.0',
+            },
           },
           contentType: Headers.jsonContentType,
           responseType: ResponseType.json,
