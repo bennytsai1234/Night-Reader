@@ -24,7 +24,7 @@
 
 # 交接：選單一律畫出與設計審查（分支 `feat/stable-menus`）
 
-worktree 在 `D:\Migrated\Desktop\Folder\product\Night-Reader-menus`，從 `beta` 開、`--no-track`。開工前 `git branch --show-current` 確認。
+從 `beta` 開、`--no-track`；原本的 worktree 已不在，接手時自己開一個。開工前 `git branch --show-current` 確認。
 
 ## 目標
 
@@ -41,14 +41,9 @@ worktree 在 `D:\Migrated\Desktop\Folder\product\Night-Reader-menus`，從 `beta
 
 1. 第一輪已提交、推上（`feat(menus): 選單與頁首的項目一律畫出，不能用的灰掉`）：書架、書籍詳情、搜尋、發現、書源管理、登入、書籤、下載、閱讀器／漫畫／有聲書的「更多」等。
 2. 第二輪（使用者選「A 和 B 都做」，把原本列為不算的也露出）：有聲書頭尾的上一集／下一集灰掉、開書失敗頁的「換源」、搜尋的「略過」與失敗書源膠囊（0 個時寫「沒有書源失敗」）、書源管理的搜尋框／校驗狀態列（「還沒校驗過」）／底部工具列一直在（拿掉了 `_chrome` 長出收回動畫）、漫畫目錄的書籤標註分段灰掉（`GlassSegment.enabled`）、換源面板分組列一直在、下載佇列每列控制鈕一直在。規格與 ADR 已同步。看這條分支最新的提交確認有沒有提交。
-3. 補拍截圖（下一步，還沒開始寫）：在 `test/screens/app_screens_test.dart` 的 `scenarios` **最後面**加情境（要插本地書的放最後，前面的圖才不受影響）：
-   - 書籍詳情「⋯」（`s09` 後點 tooltip「更多」）
-   - 書源管理「更多」、第二層「分組與篩選」、書源長按（「筆趣閣」）
-   - 搜尋類別膠囊選單（tooltip「搜尋的類別：小說源」）、發現「書源類型」
-   - 插一本本地書（`origin: BookType.localOrigin`、`originName: '本地'`）後拍書架長按與書籍詳情「⋯」
-   - 漫畫、有聲書：測試資料（`seedLibrary`）只有網路小說，要另外備資料，量大時先問使用者要不要。
-   淺色、深色各跑一次：`SHOT_MODE=dark SHOT_ONLY=s20 tool/flutter_test.sh --run-skipped -t screens test/screens/app_screens_test.dart`，圖在 `%TEMP%\night-reader-screens`。
-4. 拍完列出每個選單的項目數，挑最長的畫整理候選（照 `docs/agents/candidates.md`，淺深各一）。目前已知最長：書架「整理」15 項加 4 條分隔，手機上幾乎一整個螢幕高；書源管理「更多」15 項、批次「更多」14 項、書源長按 11 項。
+3. 補拍截圖：已完成。`test/screens/app_screens_test.dart` 最後面的 `m01`–`m09`（`SHOT_ONLY=m`）。漫畫、有聲書的選單還沒拍（要另備測試資料，先問使用者）。
+4. 整理（進行中）：項目數——書架「整理」15 項 4 分隔（約 692pt，手機八成高）、書源管理「更多」15 項、批次「更多」14 項、書源長按 11 項、書籍詳情「更多」7 項、有聲書「更多」6 項，其餘 5 項以下。選單比畫面高時可以捲。書架「整理」的候選 A 現狀／B 排序與篩選各開第二層（建議，同書源管理）／C 只收排序／D 排序與篩選合成一個第二層，原型在 `test/_screens/shelf_menu_candidates_test.dart`（git 忽略），等使用者選。選定後依序整理書源管理「更多」、批次「更多」、書源長按。
+5. 順手修了：選單有勾選項目時，勾號欄原本只在有一項正勾著時才留，開關會讓整個選單的字左右跳；已改成有切換類項目就一直留（`GlassMenuItem.checked` 改成 `bool?`）。
 
 ## 狀態檢查的發現（還沒改，整理時一起談）
 
