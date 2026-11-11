@@ -1127,7 +1127,8 @@ class _Controls extends StatelessWidget {
         ),
         Semantics(
           button: true,
-          label: player.playing ? '暫停' : '播放',
+          // 接著聽一律叫「繼續」，同朗讀與下載。
+          label: player.playing ? '暫停' : '繼續',
           excludeSemantics: true,
           child: PressScale(
             onTap: () => unawaited(player.toggle()),

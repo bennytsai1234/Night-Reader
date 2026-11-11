@@ -528,8 +528,8 @@ class _SearchViewState extends State<SearchView> {
     ),
   );
 
-  /// 剩下的書源不超過這個數時，改列出還在等哪幾個並可略過；三個名稱
-  /// 大致排得進一行。
+  /// 剩下的書源不超過這個數時，改列出還在等哪幾個；三個名稱大致排得進
+  /// 一行。不想等了按頁首的「停止」，已找到的結果留著。
   static const _namedWaitingLimit = 3;
 
   Widget _buildSearchProgress(SearchProvider p) => ListenableBuilder(
@@ -562,12 +562,6 @@ class _SearchViewState extends State<SearchView> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-          ),
-          // 一直在，剩不到三個書源、列出名字時才能按（ADR 0059）。
-          PlainTextAction(
-            label: '略過',
-            small: true,
-            onPressed: namesWaiting ? p.stopSearch : null,
           ),
         ],
       ),

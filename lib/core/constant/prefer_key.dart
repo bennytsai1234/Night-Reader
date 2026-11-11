@@ -104,6 +104,10 @@ class PreferKey {
   static const String bitmapCacheSize = 'bitmapCacheSize';
   static const String imageRetainNum = 'imageRetainNum';
   static const String preDownloadNum = 'preDownloadNum';
+
+  /// 背景下載佇列按了「暫停全部」（bool）：重開 App 也照樣停著，按「繼續
+  /// 全部」才接著下載。
+  static const String downloadsPausedAll = 'downloads_paused_all';
   static const String mangaPreDownloadNum = 'mangaPreDownloadNum';
   static const String mangaAutoPageSpeed = 'mangaAutoPageSpeed';
   static const String mangaFooterConfig = 'mangaFooterConfig';

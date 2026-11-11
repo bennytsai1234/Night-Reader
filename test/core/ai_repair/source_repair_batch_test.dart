@@ -410,6 +410,8 @@ void main() {
     await running;
     expect(gone, isEmpty);
     expect(b.count(RepairOutcome.notTried), 1);
+    // 畫面照這個把被打斷的那一步畫成停下，不是綠勾。
+    expect(b.stoppedStage, RepairStage.checkingSites);
   });
 
   test('failed recheck is shown and does not continue to the AI', () async {

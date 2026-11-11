@@ -172,6 +172,7 @@ class ReaderV2PageShell extends StatelessWidget {
     this.brightnessControl,
     this.sleepTimer,
     this.isTtsPlaying = false,
+    this.isTtsPaused = false,
     this.onMenuHidden,
     this.onChapterPanelChanged,
     this.onChapterPanelClosed,
@@ -275,6 +276,7 @@ class ReaderV2PageShell extends StatelessWidget {
   final Widget? brightnessControl;
   final SleepTimer? sleepTimer;
   final bool isTtsPlaying;
+  final bool isTtsPaused;
 
   /// 上下選單與亮度條收完、完全移出畫面時呼叫。三塊同時出發、收起時長
   /// 相同，跟著下方選單的收起動畫。
@@ -475,6 +477,7 @@ class ReaderV2PageShell extends StatelessWidget {
                           progressListenable: progressListenable,
                           sleepTimer: sleepTimer,
                           isTtsPlaying: isTtsPlaying,
+                          isTtsPaused: isTtsPaused,
                           onHidden: onMenuHidden,
                         ),
                       ),

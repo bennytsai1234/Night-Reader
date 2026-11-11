@@ -63,6 +63,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     this.progressListenable,
     this.sleepTimer,
     this.isTtsPlaying = false,
+    this.isTtsPaused = false,
     this.onHidden,
     this.horizontalInset = AppGrouped.margin,
     this.onAutoPageSettings,
@@ -115,6 +116,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 朗讀定時；朗讀還沒準備好時為 null，定時鍵灰著（ADR 0059）。
   final SleepTimer? sleepTimer;
   final bool isTtsPlaying;
+  final bool isTtsPaused;
 
   /// 收起動畫播完、選單完全移出畫面時呼叫（見 [ReaderV2MenuEntrance]）。
   final VoidCallback? onHidden;
@@ -203,7 +205,11 @@ class ReaderV2BottomMenu extends StatelessWidget {
       if (sleepTimer case final timer?)
         SleepTimerButton(
           timer: timer,
-          tooltip: isTtsPlaying ? '停止朗讀' : '定時朗讀',
+          tooltip: isTtsPlaying
+              ? '暫停朗讀'
+              : isTtsPaused
+              ? '繼續朗讀'
+              : '定時朗讀',
           tint: tint,
           color: menuStyle.foreground,
           accent: menuStyle.accent,

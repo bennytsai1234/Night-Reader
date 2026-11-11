@@ -170,19 +170,6 @@ class _FakeTtsEngine extends ReaderV2TtsEngine {
     notifyListeners();
   }
 
-  @override
-  Future<void> pause() async {
-    _playing = false;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> resume() async {
-    spoken.add('（接續）$_text');
-    _playing = true;
-    notifyListeners();
-  }
-
   /// 引擎念完目前這句。
   void complete() {
     _text = '';
@@ -480,10 +467,14 @@ void main() {
       expect(engine.spoken, ['唯一的一句。']);
       expect(tts.sleepTimer.remaining, const Duration(minutes: 45));
 
+      // 念著時再按是暫停在這一句，再按一次從這句接著念。
       await tts.toggleTimed();
       expect(tts.isPlaying, isFalse);
-      expect(tts.isPaused, isFalse);
-      expect(tts.sleepTimer.remaining, isNull);
+      expect(tts.isPaused, isTrue);
+
+      await tts.toggleTimed();
+      expect(engine.spoken, ['唯一的一句。', '唯一的一句。']);
+      await tts.stop();
     });
 
     testWidgets('the timer key uses 30 minutes when the timer is off', (

@@ -485,6 +485,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       : null,
                   sleepTimer: _host.tts?.sleepTimer,
                   isTtsPlaying: _host.tts?.isPlaying ?? false,
+                  isTtsPaused: _host.tts?.isPaused ?? false,
                   onMenuHidden: _handleMenuHidden,
                   onChapterPanelChanged: (open) => _drawerOpen.value = open,
                 ),

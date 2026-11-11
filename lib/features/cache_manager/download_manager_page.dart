@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book/book_extensions.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -90,7 +93,7 @@ class DownloadManagerPage extends StatelessWidget {
             icon: service.isPaused
                 ? Icons.play_arrow_rounded
                 : Icons.pause_rounded,
-            tooltip: service.isPaused ? '恢復全部' : '暫停全部',
+            tooltip: service.isPaused ? '繼續全部' : '暫停全部',
             onPressed: queue.hasActive ? service.togglePause : null,
           ),
           GlassIconButton(
@@ -262,7 +265,7 @@ class DownloadManagerPage extends StatelessWidget {
           icon: Icons.delete_outline_rounded,
           color: AppTint.rust.color,
           destructive: true,
-          onPressed: () => service.removeTask(task.bookUrl),
+          onPressed: () => _removeTask(context, service, task),
         ),
       ],
       child: _TaskRow(
@@ -347,9 +350,32 @@ class DownloadManagerPage extends StatelessWidget {
         _showFailureDetails(context, task, service.kindOf(task.bookUrl));
         break;
       case 'delete':
-        service.removeTask(task.bookUrl);
+        _removeTask(context, service, task);
         break;
     }
+  }
+
+  /// 刪除任務。書架上的書（本地書、有聲書除外）沒下載完的章，下次開 App
+  /// 書架自動下載會再排回來（ADR 0008），不想下載要按暫停，所以刪的時候說
+  /// 一聲留下什麼。
+  Future<void> _removeTask(
+    BuildContext context,
+    DownloadService service,
+    DownloadTask task,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    service.removeTask(task.bookUrl);
+    if (task.isCompleted) return;
+    final book = await getIt<BookDao>().getByUrl(task.bookUrl);
+    if (book == null ||
+        !book.isInBookshelf ||
+        book.isLocal ||
+        book.bookKind == BookSourceKind.audio) {
+      return;
+    }
+    messenger.showSnackBar(
+      const SnackBar(content: Text('已刪除。書架上的書下次開 App 會再排回下載，不想下載請改按暫停')),
+    );
   }
 
   void _showFailureDetails(

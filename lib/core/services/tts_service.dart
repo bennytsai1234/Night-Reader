@@ -73,7 +73,6 @@ class TTSService extends ChangeNotifier {
   String currentSpokenText = '';
   int currentWordStart = 0;
   int currentWordEnd = 0;
-  int _resumeOffset = 0;
 
   TTSService._internal() {
     SettingsSync.applied.addListener(_reloadSyncedParams);
@@ -242,7 +241,6 @@ class TTSService extends ChangeNotifier {
       currentSpokenText = '';
       currentWordStart = -1;
       currentWordEnd = -1;
-      _resumeOffset = 0;
       _completions.add(null);
       notifyListeners();
     });
@@ -259,14 +257,10 @@ class TTSService extends ChangeNotifier {
       int end,
       String word,
     ) {
-      final adjustedStart = start + _resumeOffset;
-      final adjustedEnd = end + _resumeOffset;
-      if (adjustedStart == currentWordStart && adjustedEnd == currentWordEnd) {
-        return;
-      }
+      if (start == currentWordStart && end == currentWordEnd) return;
       currentSpokenText = text;
-      currentWordStart = adjustedStart;
-      currentWordEnd = adjustedEnd;
+      currentWordStart = start;
+      currentWordEnd = end;
       notifyListeners();
     });
 
@@ -299,7 +293,6 @@ class TTSService extends ChangeNotifier {
         return _isInitialized;
       },
       speak: () async {
-        _resumeOffset = 0;
         currentSpokenText = text;
         // 重置進度位置，防止 startHandler 的 notifyListeners 用舊值觸發錯誤高亮
         currentWordStart = -1;
@@ -328,38 +321,8 @@ class TTSService extends ChangeNotifier {
     currentSpokenText = '';
     currentWordStart = -1;
     currentWordEnd = -1;
-    _resumeOffset = 0;
     _isPlaying = false;
     notifyListeners();
-  }
-
-  Future<void> pause() async {
-    await init();
-    if (!_isInitialized) return;
-    await _flutterTts.pause();
-    _isPlaying = false;
-    notifyListeners();
-  }
-
-  Future<void> resume() async {
-    await init();
-    if (!_isInitialized) return;
-    if (currentSpokenText.isNotEmpty) {
-      // 從暫停位置繼續，而非從段落開頭重播
-      // 注意：currentWordStart 已包含 _resumeOffset，需還原為原始文本位置
-      final rawStart = (currentWordStart - _resumeOffset).clamp(
-        0,
-        currentSpokenText.length,
-      );
-      final remaining = currentSpokenText.substring(rawStart);
-      if (remaining.trim().isNotEmpty) {
-        _resumeOffset = rawStart;
-        // 樂觀更新：立即反映播放狀態，避免按鈕在 TTS 非同步啟動前顯示錯誤圖示
-        _isPlaying = true;
-        notifyListeners();
-        await _flutterTts.speak(remaining);
-      }
-    }
   }
 
   Future<void> setLanguage(String lang) async {

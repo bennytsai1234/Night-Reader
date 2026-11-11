@@ -302,9 +302,15 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     return shown.isEmpty ? '沒有' : shown.join('，');
   }
 
+  /// 出錯或按了停止的那一步畫紅叉（同單一書源的 AI 修），後面的步驟沒做，
+  /// 畫成還沒輪到。
   Widget _stageIcon(BuildContext context, RepairStage stage) {
-    if (_batch.failedStage == stage) {
-      return aiRepairStepIcon(context, AiRepairStepState.failed);
+    final cut = _batch.failedStage ?? _batch.stoppedStage;
+    if (cut != null && stage.index >= cut.index) {
+      return aiRepairStepIcon(
+        context,
+        stage == cut ? AiRepairStepState.failed : AiRepairStepState.waiting,
+      );
     }
     final current = _batch.stage;
     final state = stage.index < current.index || _batch.isFinished

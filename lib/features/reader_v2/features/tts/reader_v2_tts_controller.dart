@@ -29,8 +29,6 @@ abstract class ReaderV2TtsEngine extends ChangeNotifier {
 
   Future<void> speak(String text);
   Future<void> stop();
-  Future<void> pause();
-  Future<void> resume();
   Future<void> setRate(double value);
   Future<void> setPitch(double value);
   Future<void> setLanguage(String value);
@@ -67,12 +65,6 @@ class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
 
   @override
   Future<void> stop() => _service.stop();
-
-  @override
-  Future<void> pause() => _service.pause();
-
-  @override
-  Future<void> resume() => _service.resume();
 
   @override
   Future<void> setRate(double value) => _service.setRate(value);
@@ -143,10 +135,9 @@ class ReaderV2TtsController extends ChangeNotifier
   @override
   bool get isPlaying => _tts.isPlaying;
 
+  /// 暫停一律停在一句（[_pauseAtSentence]），播放鍵從那句開頭接著念。
   @override
-  bool get isPaused =>
-      _resumeLocation != null ||
-      (!_tts.isPlaying && _tts.currentSpokenText.isNotEmpty);
+  bool get isPaused => _resumeLocation != null;
 
   @override
   double get rate => _tts.rate;
@@ -181,7 +172,7 @@ class ReaderV2TtsController extends ChangeNotifier
   @override
   Future<void> toggle() async {
     if (_tts.isPlaying) {
-      await _tts.pause();
+      _pauseAtSentence();
       return;
     }
     final resumeLocation = _resumeLocation;
@@ -190,18 +181,14 @@ class ReaderV2TtsController extends ChangeNotifier
       await _speakFrom(resumeLocation, generation: ++_speechGeneration);
       return;
     }
-    if (isPaused) {
-      await _tts.resume();
-      return;
-    }
     await startFromVisibleLocation();
   }
 
-  /// 選單上的定時鍵：正在念就停止；否則照記住的定時開始朗讀（定時是關閉
-  /// 時改用 30 分），暫停中則從暫停處接著念。
+  /// 選單上的定時鍵：正在念就暫停在這一句；否則照記住的定時開始朗讀
+  /// （定時是關閉時改用 30 分），暫停中則從暫停處接著念。
   Future<void> toggleTimed() async {
     if (_tts.isPlaying) {
-      await stop();
+      _pauseAtSentence();
       return;
     }
     if (sleepTimer.option == SleepTimerOption.off) {
@@ -222,10 +209,7 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 下次播放從新位置開始。
   Future<void> followManualJump() async {
     final wasPlaying = _tts.isPlaying;
-    if (!wasPlaying &&
-        _currentSegment == null &&
-        _resumeLocation == null &&
-        _tts.currentSpokenText.isEmpty) {
+    if (!wasPlaying && _currentSegment == null && _resumeLocation == null) {
       return;
     }
     await stop();
@@ -468,8 +452,8 @@ class ReaderV2TtsController extends ChangeNotifier
     visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
   );
 
-  /// 定時到了、系統或耳機按了暫停、另一方開始播：停在目前這句，播放鍵從
-  /// 這句開頭接著念；剛按了上一章／下一章、那一章還在載入時，停在那一章
+  /// 暫停（面板、定時鍵、定時到了、系統或耳機按了暫停、另一方開始播）：
+  /// 停在目前這句，播放鍵從這句開頭接著念；剛按了上一章／下一章、那一章還在載入時，停在那一章
   /// 開頭。用停止而不是引擎的暫停：句與句之間引擎沒有在念，暫停不會生效，
   /// 下一句照樣會開始。
   void _pauseAtSentence() {

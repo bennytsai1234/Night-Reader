@@ -105,7 +105,7 @@ class SourceCheckStatusBar extends StatelessWidget {
                     child: Center(
                       widthFactor: 1,
                       child: Text(
-                        '取消',
+                        '停止',
                         style: AppTextStyles.uiSm.copyWith(
                           color: scheme.primary,
                           fontWeight: FontWeight.w600,

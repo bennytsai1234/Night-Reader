@@ -43,6 +43,8 @@ class SourceManagerDialogs {
                 Text(
                   provider.checkService.isChecking
                       ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
+                      : provider.checkService.lastReport.stopped
+                      ? '已停止'
                       : '已完成',
                   style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
                 ),
@@ -98,7 +100,7 @@ class SourceManagerDialogs {
             actions: [
               if (provider.checkService.isChecking)
                 const AppAlertAction(
-                  label: '取消校驗',
+                  label: '停止校驗',
                   value: 'cancel',
                   destructive: true,
                 )

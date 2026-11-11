@@ -178,6 +178,7 @@ class DownloadService extends DownloadBase
   /// 從資料庫恢復任務：上次關 App 時還在下載的改回排隊，先不開跑
   /// （[resumeRestoredDownloads]）。
   Future<void> _loadTasks() async {
+    await restorePausedAll();
     final storedTasks = await downloadDao.getAll();
     for (final task in storedTasks.where((task) => task.isDownloading)) {
       task.status = DownloadTask.statusWaiting;

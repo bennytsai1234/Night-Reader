@@ -36,7 +36,13 @@ class SourceCheckEntry {
 class SourceCheckReport {
   final List<SourceCheckEntry> entries;
 
-  const SourceCheckReport(this.entries);
+  const SourceCheckReport(this.entries, {this.plannedCount});
+
+  /// 中途停止時這次本來要校驗幾個書源；跑完是 null。
+  final int? plannedCount;
+
+  /// 這次是按「停止」中途結束的：[entries] 只有停下前校驗完的那些。
+  bool get stopped => plannedCount != null;
 
   static const empty = SourceCheckReport(<SourceCheckEntry>[]);
 
@@ -60,6 +66,7 @@ class SourceCheckReport {
   bool get hasEntries => entries.isNotEmpty;
 
   String get summary =>
+      '${stopped ? '已停止，校驗了 $total/$plannedCount 個：' : ''}'
       '可用 $healthyCount / 異常 $affectedCount / 建議清理 $cleanupCandidateCount';
 }
 
@@ -438,8 +445,9 @@ class CheckSourceService extends ChangeNotifier {
       JsExtensionsBase.clearCaches();
     }
 
-    if (!_isChecking) {
-      _appendLog('校驗已取消，已完成 $_currentCount / $_totalCount');
+    final stopped = !_isChecking;
+    if (stopped) {
+      _appendLog('校驗已停止，校驗了 $_currentCount / $_totalCount 個，結果照留');
     }
 
     _isChecking = false;
@@ -447,6 +455,7 @@ class CheckSourceService extends ChangeNotifier {
     await _flushPendingStatusWrites();
     _lastReport = SourceCheckReport(
       results.whereType<SourceCheckEntry>().toList(growable: false),
+      plannedCount: stopped ? _totalCount : null,
     );
     _statusMsg = _lastReport.summary;
     _appendLog('校驗完成：${_lastReport.summary}');

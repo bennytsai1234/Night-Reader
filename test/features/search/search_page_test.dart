@@ -397,7 +397,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the last few sources are named and can be skipped', (
+  testWidgets('the last few sources are named; stop keeps the results', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -432,9 +432,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('還在等：甲源、乙源'), findsOneWidget);
 
-    await tester.tap(find.text('略過'));
+    // 不想等了按頁首的「停止」，已找到的結果留著。
+    await tester.tap(find.text('停止'));
     await tester.pumpAndSettle();
     expect(provider.isSearching, isFalse);
+    expect(find.text('甲書'), findsOneWidget);
   });
 
   testWidgets('the filter sheet updates as filters are toggled', (
