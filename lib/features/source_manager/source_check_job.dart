@@ -52,7 +52,8 @@ class SourceCheckJob implements BackgroundJob {
   /// 跑 [check]（裡面呼叫 [CheckSourceService.check]），跑的時候佔著背景
   /// 工作的位置、更新通知。
   Future<void> run(Future<void> Function() check) async {
-    _work.begin(this, status);
+    // 一次一件（ADR 0058）：入口已經擋住，這裡是最後一道。
+    if (!_work.begin(this, status)) return;
     void update() => _work.update(this, status);
     _changes.addListener(update);
     try {

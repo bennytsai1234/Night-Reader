@@ -54,9 +54,14 @@ class BackgroundWorkService : Service() {
         return START_NOT_STICKY
     }
 
-    /** 從最近使用滑掉夜讀等於停止（ADR 0058）：引擎還在，請 Dart 停下。 */
+    /**
+     * 從最近使用滑掉夜讀等於終止（ADR 0058）：請 Dart 停下，通知、喚醒鎖與服務
+     * 在這裡就收掉，不等 Dart 回 hide。沒在播音時 audio_service 會跟著 Activity
+     * 把 Flutter 引擎拆掉，Dart 的 hide 可能永遠不會來。
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        BackgroundWork.requestStop()
+        BackgroundWork.terminate()
+        finish()
         super.onTaskRemoved(rootIntent)
     }
 
@@ -197,15 +202,26 @@ object BackgroundWork {
     /** 已經叫系統啟動服務、服務還沒起來。 */
     var starting = false
 
+    /**
+     * 滑掉夜讀終止了這件工作，原生端已經收掉：Dart 停好之前晚到的 show
+     * 不再把通知與服務叫回來，等 Dart 的 hide（或新的引擎重新 install）。
+     */
+    private var terminated = false
+
     var service: BackgroundWorkService? = null
 
     fun install(context: Context, messenger: BinaryMessenger) {
         val app = context.applicationContext
         val channel = MethodChannel(messenger, "night_reader/background_work")
         this.channel = channel
+        terminated = false
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "show" -> {
+                    if (terminated) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
                     val next = Content(
                         call.argument<String>("title") ?: "",
                         call.argument<String>("text") ?: "",
@@ -235,6 +251,7 @@ object BackgroundWork {
                     }
                 }
                 "hide" -> {
+                    terminated = false
                     content = null
                     service?.finish()
                     result.success(null)
@@ -246,6 +263,14 @@ object BackgroundWork {
 
     fun requestStop() {
         channel?.invokeMethod("stop", null)
+    }
+
+    /** 滑掉夜讀：請 Dart 停下，之後到 Dart 停好之前的 show 都不理。 */
+    fun terminate() {
+        terminated = true
+        content = null
+        starting = false
+        requestStop()
     }
 
     fun requestOpen() {

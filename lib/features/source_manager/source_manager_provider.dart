@@ -1102,10 +1102,10 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  /// 校驗一個書源（登入完用）。和批次校驗一樣先鎖住清單；已有其他工作或
-  /// 校驗在跑時不跑。
+  /// 校驗一個書源（登入完用）。和批次校驗一樣先鎖住清單；已有其他工作、
+  /// 校驗或背景工作（修書源，ADR 0058）在跑時不跑。
   Future<void> checkSource(String url) async {
-    if (!_beginBatchOperation()) return;
+    if (!backgroundWorkIdle() || !_beginBatchOperation()) return;
     try {
       await checkService.check([url]);
     } catch (error, stackTrace) {
@@ -1221,7 +1221,8 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// 清掉校驗留下的狀態分組、「AI 修不好」與錯誤註解，書源回到可用；不給網址就清全部，
-  /// 連上次的校驗摘要一起收起。回傳實際有變動的書源數。
+  /// 連上次的校驗摘要一起收起。有清掉標記的書源連校驗時間一起歸零：那次校驗的
+  /// 結論已經不算數，整批修復要重新校驗它（ADR 0054）。回傳實際有變動的書源數。
   Future<int> clearCheckMarks([Set<String>? urls]) async {
     if (!_beginBatchOperation()) return 0;
     try {
@@ -1238,6 +1239,7 @@ class SourceManagerProvider with ChangeNotifier {
           ..removeErrorComment();
         if (source.bookSourceGroup != group ||
             source.bookSourceComment != comment) {
+          source.lastCheckTime = 0;
           changed.add(source);
         }
       }
