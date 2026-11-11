@@ -170,19 +170,6 @@ class _FakeTtsEngine extends ReaderV2TtsEngine {
     notifyListeners();
   }
 
-  @override
-  Future<void> pause() async {
-    _playing = false;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> resume() async {
-    spoken.add('（接續）$_text');
-    _playing = true;
-    notifyListeners();
-  }
-
   /// 引擎念完目前這句。
   void complete() {
     _text = '';
@@ -480,10 +467,14 @@ void main() {
       expect(engine.spoken, ['唯一的一句。']);
       expect(tts.sleepTimer.remaining, const Duration(minutes: 45));
 
+      // 念著時再按是暫停在這一句，再按一次從這句接著念。
       await tts.toggleTimed();
       expect(tts.isPlaying, isFalse);
-      expect(tts.isPaused, isFalse);
-      expect(tts.sleepTimer.remaining, isNull);
+      expect(tts.isPaused, isTrue);
+
+      await tts.toggleTimed();
+      expect(engine.spoken, ['唯一的一句。', '唯一的一句。']);
+      await tts.stop();
     });
 
     testWidgets('the timer key uses 30 minutes when the timer is off', (
@@ -700,6 +691,25 @@ void main() {
       await pumpEventQueue();
       expect(engine.spoken, ['第一句。']);
       expect(system.playing, isFalse);
+
+      await tts.toggle();
+      expect(engine.spoken.last, '第二句。');
+    });
+
+    test('the panel pauses while the picked chapter loads', () async {
+      final second = Completer<void>();
+      await open({0: '第一句。', 1: '第二句。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+
+      tts.onSkipToNext();
+      await pumpEventQueue();
+      // 引擎停著等第二章，朗讀還在進行：面板按下去是暫停，不是從畫面重念。
+      expect(tts.isPlaying, isTrue);
+      await tts.toggle();
+      expect(tts.isPaused, isTrue);
+      second.complete();
+      await pumpEventQueue();
+      expect(engine.spoken, ['第一句。']);
 
       await tts.toggle();
       expect(engine.spoken.last, '第二句。');

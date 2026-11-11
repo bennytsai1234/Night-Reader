@@ -20,6 +20,7 @@ class SearchField extends StatelessWidget {
     this.autofocus = false,
     this.textInputAction = TextInputAction.search,
     this.glass = false,
+    this.enabled = true,
   });
 
   static const double height = 36.0;
@@ -35,6 +36,9 @@ class SearchField extends StatelessWidget {
   /// 以玻璃膠囊取代填色底。
   final bool glass;
 
+  /// 停用時變淡、不能輸入（例如還沒有書源可搜，ADR 0059）。
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -48,6 +52,7 @@ class SearchField extends StatelessWidget {
           child: TextField(
             controller: controller,
             focusNode: focusNode,
+            enabled: enabled,
             autofocus: autofocus,
             textInputAction: textInputAction,
             onChanged: onChanged,
@@ -106,13 +111,14 @@ class SearchField extends StatelessWidget {
         ),
       ],
     );
+    final field = enabled ? content : Opacity(opacity: 0.45, child: content);
     return SizedBox(
       height: height,
       child: glass
           ? GlassSurface(
               borderRadius: AppRadius.pillShape,
               shadow: false,
-              child: content,
+              child: field,
             )
           : DecoratedBox(
               decoration: BoxDecoration(
@@ -123,7 +129,7 @@ class SearchField extends StatelessWidget {
                 ),
                 borderRadius: AppRadius.pillShape,
               ),
-              child: content,
+              child: field,
             ),
     );
   }

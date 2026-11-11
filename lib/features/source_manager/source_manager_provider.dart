@@ -246,6 +246,10 @@ class SourceImportService {
   }
 }
 
+/// 書源身上的一個標籤：類別（[kind]）或分組名稱（[group]，含校驗標記），
+/// 兩者擇一。
+typedef SourceTag = ({BookSourceKind? kind, String? group});
+
 class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
   final SourceImportService _importService;
@@ -305,11 +309,11 @@ class SourceManagerProvider with ChangeNotifier {
 
     if (filterGroup == '已啟用') {
       list = list.where((s) => s.enabled).toList();
-    } else if (filterGroup == '已禁用') {
+    } else if (filterGroup == '已停用') {
       list = list.where((s) => !s.enabled).toList();
     } else if (filterGroup == '已啟用發現') {
       list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
-    } else if (filterGroup == '已禁用發現') {
+    } else if (filterGroup == '已停用發現') {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
     } else if (kindFilters[filterGroup] case final kind?) {
       list = list.where((s) => s.sourceKind == kind).toList();
@@ -488,6 +492,10 @@ class SourceManagerProvider with ChangeNotifier {
     for (final tag in sourceRuntimeStatusTags)
       if (_allGroups.contains(tag)) tag,
   ];
+
+  /// 有沒有書源校驗過（有校驗時間或校驗標記）：「沒有異常」篩選據此能不能選。
+  bool get anySourceChecked =>
+      checkResultTags.isNotEmpty || _sources.any((s) => s.lastCheckTime > 0);
 
   /// 使用者自己的分組，不含校驗結果標記。
   List<String> get userGroups => [
@@ -1157,43 +1165,45 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  Future<void> clearInvalidSources() async {
-    if (!_beginBatchOperation()) return;
-    try {
-      final all = await _dao.getAll();
-      final urlsToDelete = <String>[];
-      for (final s in all) {
-        if (s.isCleanupCandidate) {
-          urlsToDelete.add(s.bookSourceUrl);
-        }
-      }
-      if (urlsToDelete.isNotEmpty) {
-        await _dao.deleteByUrls(urlsToDelete);
-        await loadSources();
-      }
-    } finally {
-      _endBatchOperation();
-    }
-  }
-
-  /// 書源管理裡各類非小說書源各有幾個，給「刪除非小說源」的勾選框。
-  Map<BookSourceKind, int> get nonNovelSourceCounts {
-    final counts = <BookSourceKind, int>{};
+  /// 「刪除書源」可勾的標籤，各有幾個書源：先是類別（小說、漫畫、有聲、
+  /// 影視與文件），再是校驗標記，最後是自己的分組；沒有書源的標籤不列。
+  List<({SourceTag tag, int count})> get sourceTagCounts {
+    final counts = <SourceTag, int>{};
     for (final source in _sources) {
-      final kind = source.sourceKind;
-      if (kind == BookSourceKind.novel) continue;
-      counts[kind] = (counts[kind] ?? 0) + 1;
+      final kindTag = (kind: source.sourceKind, group: null);
+      counts[kindTag] = (counts[kindTag] ?? 0) + 1;
+      for (final group in _groupLabels(source.bookSourceGroup)) {
+        final groupTag = (kind: null, group: group);
+        counts[groupTag] = (counts[groupTag] ?? 0) + 1;
+      }
     }
-    return counts;
+    return [
+      for (final kind in BookSourceKind.values)
+        if (counts[(kind: kind, group: null)] case final count?)
+          (tag: (kind: kind, group: null), count: count),
+      for (final group in [...checkResultTags, ...userGroups])
+        if (counts[(kind: null, group: group)] case final count?)
+          (tag: (kind: null, group: group), count: count),
+    ];
   }
 
-  /// 刪掉 [kinds] 這幾類的書源，回傳刪了幾個。
-  Future<int> deleteSourcesOfKinds(Set<BookSourceKind> kinds) async {
-    if (kinds.isEmpty || !_beginBatchOperation()) return 0;
+  /// 帶 [tags] 任一個標籤的書源有幾個。
+  int countSourcesWithTags(Set<SourceTag> tags) =>
+      _sources.where((source) => _hasAnyTag(source, tags)).length;
+
+  bool _hasAnyTag(BookSourcePart source, Set<SourceTag> tags) => tags.any(
+    (tag) => tag.kind != null
+        ? source.sourceKind == tag.kind
+        : _hasGroup(source.bookSourceGroup, tag.group!),
+  );
+
+  /// 刪掉帶 [tags] 任一個標籤的書源，回傳刪了幾個。
+  Future<int> deleteSourcesWithTags(Set<SourceTag> tags) async {
+    if (tags.isEmpty || !_beginBatchOperation()) return 0;
     try {
       final urlsToDelete = [
         for (final source in await _dao.getAllPart())
-          if (kinds.contains(source.sourceKind)) source.bookSourceUrl,
+          if (_hasAnyTag(source, tags)) source.bookSourceUrl,
       ];
       if (urlsToDelete.isNotEmpty) {
         await _dao.deleteByUrls(urlsToDelete);

@@ -229,7 +229,7 @@ void main() {
       expect(find.text('在網站登入'), findsOneWidget);
     });
 
-    testWidgets('is not offered when the source URL is a name', (tester) async {
+    testWidgets('is greyed out when the source URL is a name', (tester) async {
       setupTestDI();
       final named = BookSource.fromJson({
         ...source.toJson(),
@@ -241,7 +241,11 @@ void main() {
       await openMenu(tester);
 
       expect(find.text('登入標頭'), findsOneWidget);
-      expect(find.text('在網站登入'), findsNothing);
+      // 一律畫出、灰掉（ADR 0059）。
+      final row = tester.widget<InkWell>(
+        find.ancestor(of: find.text('在網站登入'), matching: find.byType(InkWell)),
+      );
+      expect(row.onTap, isNull);
     });
 
     test('opens the login URL when it is a URL, else the source URL', () {

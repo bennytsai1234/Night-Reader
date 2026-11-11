@@ -430,7 +430,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   }
 
   /// 類別膠囊的選單照這個順序列。
-  static const List<BookSourceKind> _switchableKinds = [
+  static const List<BookSourceKind> switchableKinds = [
     BookSourceKind.novel,
     BookSourceKind.comic,
     BookSourceKind.audio,
@@ -443,7 +443,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
         counts.update(source.sourceKind, (n) => n + 1, ifAbsent: () => 1);
       }
     }
-    return {for (final kind in _switchableKinds) kind: ?counts[kind]};
+    return {for (final kind in switchableKinds) kind: ?counts[kind]};
   }
 
   /// 上次讀到的類別與書源數，例如 `novel:42,comic:8`；只用來畫第一幀。
@@ -455,7 +455,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       if (entry.split(':') case [final name, final count]) {
         final kind = BookSourceKind.values.asNameMap()[name];
         final n = int.tryParse(count);
-        if (kind != null && _switchableKinds.contains(kind) && n != null) {
+        if (kind != null && switchableKinds.contains(kind) && n != null) {
           counts[kind] = n;
         }
       }

@@ -234,12 +234,13 @@ class _AudiobookPageState extends State<AudiobookPage> {
           label: '換源',
           icon: Icons.swap_horiz_rounded,
         ),
-        if (source != null && source.hasLogin)
-          const GlassMenuItem(
-            value: _MoreAction.login,
-            label: '登入',
-            icon: Icons.login_rounded,
-          ),
+        // 書源沒有登入、或還沒載入時灰著（ADR 0059）。
+        GlassMenuItem(
+          value: _MoreAction.login,
+          label: '登入',
+          icon: Icons.login_rounded,
+          enabled: source != null && source.hasLogin,
+        ),
         GlassMenuItem(
           value: _MoreAction.keepAwake,
           label: '保持喚醒',
@@ -1103,7 +1104,7 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Widget button(IconData icon, String tooltip, VoidCallback onPressed) =>
+    Widget button(IconData icon, String tooltip, VoidCallback? onPressed) =>
         IconButton(
           icon: Icon(icon, size: 28),
           tooltip: tooltip,
@@ -1113,10 +1114,11 @@ class _Controls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        // 頭尾沒有上一集、下一集時灰掉（ADR 0059）。
         button(
           Icons.skip_previous_rounded,
           '上一集',
-          () => unawaited(player.previous()),
+          player.hasPrevious ? () => unawaited(player.previous()) : null,
         ),
         button(
           Icons.replay_10_rounded,
@@ -1125,7 +1127,8 @@ class _Controls extends StatelessWidget {
         ),
         Semantics(
           button: true,
-          label: player.playing ? '暫停' : '播放',
+          // 接著聽一律叫「繼續」，同朗讀與下載。
+          label: player.playing ? '暫停' : '繼續',
           excludeSemantics: true,
           child: PressScale(
             onTap: () => unawaited(player.toggle()),
@@ -1159,7 +1162,11 @@ class _Controls extends StatelessWidget {
           '快轉 10 秒',
           () => unawaited(player.skipBy(AudiobookPlayer.skipStep)),
         ),
-        button(Icons.skip_next_rounded, '下一集', () => unawaited(player.next())),
+        button(
+          Icons.skip_next_rounded,
+          '下一集',
+          player.hasNext ? () => unawaited(player.next()) : null,
+        ),
       ],
     );
   }

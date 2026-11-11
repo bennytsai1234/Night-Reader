@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
@@ -130,8 +131,12 @@ class BackupService {
       // 2. 導出偏好設定 (對標 config.xml)
       final Map<String, dynamic> config = {};
       for (var key in prefs.getKeys()) {
-        // 這台手機在同步裡的名字只屬於這台，還原到另一台不能沿用。
-        if (key == SyncSettings.deviceIdKey) continue;
+        // 這台手機在同步裡的名字、下載佇列的「暫停全部」只屬於這台，還原
+        // 到另一台不能沿用。
+        if (key == SyncSettings.deviceIdKey ||
+            key == PreferKey.downloadsPausedAll) {
+          continue;
+        }
         config[key] = prefs.get(key);
       }
       await File(p.join(backupFolder.path, 'config.json'))

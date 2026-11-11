@@ -125,7 +125,7 @@ class _AudiobookMiniButtonState extends State<AudiobookMiniButton>
     final button = Semantics(
       button: true,
       label: '有聲書：${book.name}',
-      hint: '點兩下暫停或繼續，往上滑打開播放器，往下滑停止',
+      hint: '點兩下暫停或繼續，往上滑打開播放器，往下滑停止（記住聽到哪裡）',
       child: GestureDetector(
         onTap: () => unawaited(_player.toggle()),
         onVerticalDragEnd: _onVerticalDragEnd,

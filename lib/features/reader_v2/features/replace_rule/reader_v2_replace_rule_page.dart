@@ -219,37 +219,19 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     final action = await showGlassMenu<String>(
       context: rowContext,
       anchor: globalRectOf(rowContext),
-      entries: [
-        const GlassMenuItem(
-          value: 'edit',
-          label: '編輯規則',
-          icon: Icons.edit_outlined,
-        ),
+      // 編輯（點一下那一列）與啟用、停用（列尾的開關）列上就有，這裡只放
+      // 刪除，同書源的長按選單。
+      entries: const [
         GlassMenuItem(
-          value: 'toggle',
-          label: rule.isEnabled ? '停用規則' : '啟用規則',
-          icon: rule.isEnabled
-              ? Icons.toggle_off_outlined
-              : Icons.toggle_on_outlined,
-        ),
-        const GlassMenuDivider(),
-        const GlassMenuItem(
           value: 'delete',
-          label: '刪除',
+          label: '刪除規則',
           icon: Icons.delete_outline_rounded,
           destructive: true,
         ),
       ],
     );
     if (action == null || !mounted) return;
-    switch (action) {
-      case 'edit':
-        await _openEditor(rule: rule);
-      case 'toggle':
-        await _toggleEnabled(rule, !rule.isEnabled);
-      case 'delete':
-        await _confirmDelete(rule);
-    }
+    if (action == 'delete') await _confirmDelete(rule);
   }
 
   Future<void> _confirmDelete(ReplaceRule rule) async {

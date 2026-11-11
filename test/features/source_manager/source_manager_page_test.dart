@@ -187,15 +187,110 @@ void main() {
     }
   });
 
+  testWidgets('「更多」第一層五項，會展開的四項點了開第二層', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    Future<void> openMore() async {
+      await tester.tap(find.bySemanticsLabel('更多操作'));
+      await tester.pumpAndSettle();
+    }
+
+    await openMore();
+    for (final label in ['分組與篩選', '排序方式', '加入書源', '校驗與修復']) {
+      expect(
+        find.descendant(
+          of: find.ancestor(of: find.text(label), matching: find.byType(Row)),
+          matching: find.byIcon(Icons.chevron_right_rounded),
+        ),
+        findsOneWidget,
+        reason: label,
+      );
+    }
+    expect(find.text('按標籤刪除'), findsOneWidget);
+    expect(find.text('網路匯入'), findsNothing);
+
+    await tester.tap(find.text('加入書源'));
+    await tester.pumpAndSettle();
+    expect(find.text('網路匯入'), findsOneWidget);
+    expect(find.text('新建書源'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 590));
+    await tester.pumpAndSettle();
+
+    await openMore();
+    await tester.tap(find.text('校驗與修復'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI 修書源設定'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 590));
+    await tester.pumpAndSettle();
+
+    await openMore();
+    await tester.tap(find.text('排序方式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('按域名分組'));
+    await tester.pumpAndSettle();
+    expect(provider.groupByDomain, isTrue);
+  });
+
+  testWidgets('多選「⋯」收成七項，連續選取要選兩個以上', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('書源0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('選取'));
+    await tester.pumpAndSettle();
+    bool enabled(String label) =>
+        tester
+            .widget<InkWell>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(InkWell),
+              ),
+            )
+            .onTap !=
+        null;
+    Future<void> openBatch() async {
+      await tester.tap(find.bySemanticsLabel('更多批次操作'));
+      await tester.pumpAndSettle();
+    }
+
+    await openBatch();
+    expect(enabled('連續選取'), isFalse);
+    for (final label in ['啟用與停用', '分組', '匯出與分享', '校驗與修復']) {
+      expect(
+        find.descendant(
+          of: find.ancestor(of: find.text(label), matching: find.byType(Row)),
+          matching: find.byIcon(Icons.chevron_right_rounded),
+        ),
+        findsOneWidget,
+        reason: label,
+      );
+    }
+    await tester.tapAt(const Offset(5, 300));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('書源2'));
+    await tester.pumpAndSettle();
+    await openBatch();
+    expect(enabled('連續選取'), isTrue);
+    await tester.tap(find.text('啟用與停用'));
+    await tester.pumpAndSettle();
+    expect(find.text('停用選中'), findsOneWidget);
+    expect(find.text('停用發現'), findsOneWidget);
+  });
+
   testWidgets('rows stay laid out in selection mode', (tester) async {
     await pumpPage(tester);
 
-    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.longPress(find.text('書源0'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('選取書源'));
+    await tester.tap(find.text('選取'));
     await tester.pumpAndSettle();
 
-    expect(find.text('選取書源'), findsOneWidget);
+    expect(find.text('已選 1 項'), findsOneWidget);
     for (var i = 0; i < 3; i++) {
       expect(find.text('書源$i'), findsOneWidget);
     }
@@ -335,9 +430,9 @@ void main() {
         tester.getSize(find.byType(GlassMorph).last).width;
     final menuWidth = trailingWidth();
 
-    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.longPress(find.text('書源0'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('選取書源'));
+    await tester.tap(find.text('選取'));
     await tester.pump();
     await tester.pump(AppMotion.fade ~/ 2);
     // 淡換途中新舊標題都在；玻璃按鈕不在淡入裡，寬度在半路。
@@ -346,7 +441,7 @@ void main() {
       matching: find.text(text),
     );
     expect(header('書源管理'), findsOneWidget);
-    expect(header('選取書源'), findsOneWidget);
+    expect(header('已選 1 項'), findsOneWidget);
     expectNoGlassUnderFade(tester);
     final midway = trailingWidth();
     expect(midway, greaterThan(menuWidth));
@@ -716,7 +811,7 @@ void main() {
       await settleQueries(tester);
     });
 
-    testWidgets('no sources last time: no search box, then the empty page', (
+    testWidgets('no sources last time: search box and toolbar stay, greyed', (
       tester,
     ) async {
       await GetIt.instance<SharedPreferences>().setInt(
@@ -726,16 +821,22 @@ void main() {
       gatedDao.gate = Completer<void>();
       await pumpPage(tester, sources: 0);
 
+      // 一律畫出（ADR 0059）：沒有書源時搜尋框與工具列也在，搜尋框灰掉。
       expect(skeletonRows(), findsNothing);
-      expect(find.byType(SearchField), findsNothing);
-      expect(find.byType(SelectActionBar), findsNothing);
+      expect(
+        tester.widget<SearchField>(find.byType(SearchField)).enabled,
+        isFalse,
+      );
+      expect(find.byType(SelectActionBar), findsOneWidget);
+      expect(find.text('還沒校驗過'), findsOneWidget);
       expect(find.text('尚未加入書源'), findsNothing);
 
       gatedDao.gate!.complete();
       await settleQueries(tester);
       await tester.pumpAndSettle();
       expect(find.text('尚未加入書源'), findsOneWidget);
-      expect(find.byType(SearchField), findsNothing);
+      expect(find.byType(SearchField), findsOneWidget);
+      expect(find.byType(SelectActionBar), findsOneWidget);
     });
 
     for (final (label, record) in [('a string', 'bad'), ('negative', -3)]) {
@@ -765,40 +866,7 @@ void main() {
       });
     }
 
-    testWidgets('the toolbar takes its shadow off screen before it goes', (
-      tester,
-    ) async {
-      // 沒有紀錄時當作有書源，工具列先在；讀完發現沒有書源才收起。
-      gatedDao.gate = Completer<void>();
-      await pumpPage(tester, sources: 0);
-      expect(find.byType(SelectActionBar), findsOneWidget);
-      final screen = tester.getSize(find.byType(Scaffold)).height;
-      final glass = find.descendant(
-        of: find.byType(SelectActionBar),
-        matching: find.byType(GlassSurface),
-      );
-
-      gatedDao.gate!.complete();
-      await settleQueries(tester);
-      // 每一幀陰影伸進畫面的距離（玻璃上緣再往上 [AppGlass.shadowReach]）。
-      final intrusions = <double>[];
-      while (glass.evaluate().isNotEmpty) {
-        intrusions.add(
-          screen - (tester.getTopLeft(glass).dy - AppGlass.shadowReach),
-        );
-        await tester.pump(const Duration(milliseconds: 1));
-      }
-
-      expect(intrusions.length, greaterThan(100));
-      // 拿掉前最後一幀（還差 1ms），陰影只剩一點點在畫面內，跟著動畫收到
-      // 底，不會留著整段陰影到拿掉時才一下消失。
-      expect(intrusions.last, lessThan(4));
-      for (var i = 1; i < intrusions.length; i++) {
-        expect(intrusions[i], lessThanOrEqualTo(intrusions[i - 1]));
-      }
-    });
-
-    testWidgets('search box grows in when the record was wrong', (
+    testWidgets('the header keeps its height when the record was wrong', (
       tester,
     ) async {
       await GetIt.instance<SharedPreferences>().setInt(
@@ -808,18 +876,21 @@ void main() {
       gatedDao.gate = Completer<void>();
       await pumpPage(tester);
       final before = tester.getSize(find.byType(GlassNavHeader)).height;
+      expect(
+        tester.widget<SearchField>(find.byType(SearchField)).enabled,
+        isFalse,
+      );
 
       gatedDao.gate!.complete();
       await settleQueries(tester);
-      await tester.pump(const Duration(milliseconds: 60));
-      final mid = tester.getSize(find.byType(GlassNavHeader)).height;
       await tester.pumpAndSettle();
-      final after = tester.getSize(find.byType(GlassNavHeader)).height;
 
-      expect(after, greaterThan(before));
-      expect(mid, greaterThan(before));
-      expect(mid, lessThan(after));
-      expect(find.byType(SearchField), findsOneWidget);
+      // 搜尋框一直在，讀完發現有書源只是變成能用，頁首不長高、清單不讓位。
+      expect(tester.getSize(find.byType(GlassNavHeader)).height, before);
+      expect(
+        tester.widget<SearchField>(find.byType(SearchField)).enabled,
+        isTrue,
+      );
       expect(find.byType(SelectActionBar), findsOneWidget);
     });
   });

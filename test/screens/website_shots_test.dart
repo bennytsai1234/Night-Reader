@@ -219,7 +219,7 @@ final _shots = <_Shot>[
       await openReader(t);
       await _showMenu(t);
       await _tapText(t, '朗讀');
-      await _tapText(t, '從目前位置朗讀');
+      await _tapText(t, '開始朗讀');
       // 關掉朗讀面板，只留正文與正在唸的那一句。
       await t.tap(find.byIcon(Icons.close_rounded).last);
       await settle(t, _ms(900));

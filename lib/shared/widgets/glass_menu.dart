@@ -23,9 +23,10 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     this.swatch,
     this.subtitle,
     this.destructive = false,
-    this.checked = false,
+    this.checked,
     this.enabled = true,
-  });
+    this.submenu = false,
+  }) : assert(!submenu || (icon == null && swatch == null));
 
   final T value;
   final String label;
@@ -38,9 +39,14 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   final String? subtitle;
   final bool destructive;
 
-  /// 顯示在左側的勾號（切換類選項）。
-  final bool checked;
+  /// 左側的勾號：切換類選項給 true 或 false，一般項目不給（null）。
+  /// 選單裡有切換類選項時，每一列都留勾號欄，切換時字不會左右移。
+  final bool? checked;
   final bool enabled;
+
+  /// 點了在同一處開出第二層：右側畫「›」，不另給圖示（使用者 2026-11-11
+  /// 選的，會展開的一眼分得出來）。
+  final bool submenu;
 }
 
 /// 群組之間的粗分隔。
@@ -65,6 +71,17 @@ Future<T?> showGlassMenu<T>({
     ),
   );
 }
+
+/// 在 [buttonContext] 那顆鈕的位置接著開出第二層（第一層那一項給
+/// `submenu: true`），同一處換一個選單，不疊兩層。
+Future<T?> showGlassSubmenu<T>(
+  BuildContext buttonContext,
+  List<GlassMenuEntry<T>> entries,
+) => showGlassMenu<T>(
+  context: buttonContext,
+  anchor: globalRectOf(buttonContext),
+  entries: entries,
+);
 
 /// 長按預覽選單：[preview] 從 [sourceRect] 浮起，旁邊列出動作
 /// （Telegram 長按聊天的 context preview）。
@@ -432,7 +449,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         ? AppPalette.rustDark
         : AppPalette.rust;
     final hasChecks = route.entries.any(
-      (e) => e is GlassMenuItem<T> && e.checked,
+      (e) => e is GlassMenuItem<T> && e.checked != null,
     );
     final widgets = <Widget>[];
     GlassMenuEntry<T>? previous;
@@ -460,7 +477,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
             Semantics(
               button: true,
               enabled: entry.enabled,
-              checked: hasChecks ? entry.checked : null,
+              checked: hasChecks ? entry.checked ?? false : null,
               inMutuallyExclusiveGroup: hasChecks,
               child: InkWell(
                 onTap: entry.enabled
@@ -483,7 +500,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                           if (hasChecks)
                             SizedBox(
                               width: 26,
-                              child: entry.checked
+                              child: entry.checked == true
                                   ? Icon(
                                       Icons.check_rounded,
                                       size: 18,
@@ -518,9 +535,15 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                               ],
                             ),
                           ),
-                          if (entry.icon != null) ...[
+                          if (entry.submenu || entry.icon != null) ...[
                             const SizedBox(width: AppSpacing.md),
-                            Icon(entry.icon, size: 20, color: color),
+                            Icon(
+                              entry.submenu
+                                  ? Icons.chevron_right_rounded
+                                  : entry.icon,
+                              size: 20,
+                              color: color,
+                            ),
                           ] else if (entry.swatch != null) ...[
                             const SizedBox(width: AppSpacing.md),
                             SizedBox.square(

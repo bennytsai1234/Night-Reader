@@ -102,6 +102,9 @@ void main() {
   Future<void> enterSelect(WidgetTester tester) async {
     await tester.tap(find.byTooltip('整理書架'));
     await tester.pumpAndSettle();
+    // 選單一律畫出所有項目（ADR 0059），測試的畫面較矮，要捲到「選取」。
+    await tester.ensureVisible(find.text('選取', skipOffstage: false));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('選取'));
     await tester.pump();
   }

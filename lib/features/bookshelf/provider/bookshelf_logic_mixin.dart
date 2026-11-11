@@ -121,7 +121,7 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     for (final book in books) book.bookKind,
   };
 
-  /// 書架上不只一種書時才給篩選（`docs/design/screens.md`「書架」）。
+  /// 書架上不只一種書時，篩選的各類才能選（`docs/design/screens.md`「書架」）。
   bool get canFilterKinds => shelfKinds.length > 1;
 
   /// 實際在用的篩選：書架上只剩一種書、或選的那類已經沒有書時回到全部。

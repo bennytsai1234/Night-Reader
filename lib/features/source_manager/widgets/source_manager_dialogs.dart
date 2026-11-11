@@ -43,6 +43,8 @@ class SourceManagerDialogs {
                 Text(
                   provider.checkService.isChecking
                       ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
+                      : provider.checkService.lastReport.stopped
+                      ? '已停止'
                       : '已完成',
                   style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
                 ),
@@ -98,7 +100,7 @@ class SourceManagerDialogs {
             actions: [
               if (provider.checkService.isChecking)
                 const AppAlertAction(
-                  label: '取消校驗',
+                  label: '停止校驗',
                   value: 'cancel',
                   destructive: true,
                 )
@@ -334,32 +336,6 @@ class SourceManagerDialogs {
     );
   }
 
-  static Future<void> confirmClearInvalid(
-    BuildContext context,
-    SourceManagerProvider provider,
-  ) async {
-    final confirmed = await showAppConfirm(
-      context: context,
-      title: '清理建議刪除來源',
-      message: '會刪除夜讀不支援的書源（影視、文件）與下載站。漫畫、有聲源不會刪。',
-      confirmLabel: '確定刪除',
-      destructive: true,
-    );
-    if (!confirmed) return;
-    try {
-      await provider.clearInvalidSources();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('清理完成')));
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failureMessage('清理', error))));
-      }
-    }
-  }
-
   /// 清除校驗標記：不給網址是清全部書源，先確認；選中的書源直接清。
   static Future<void> clearCheckMarks(
     BuildContext context,
@@ -391,28 +367,23 @@ class SourceManagerDialogs {
     }
   }
 
-  /// 「刪除非小說源」：漫畫、有聲、不支援三類各一個勾選，勾了哪幾類刪哪幾類
-  /// （ADR 0051）。
-  static Future<void> confirmDeleteNonNovel(
+  /// 「按標籤刪除」：列出書源身上的標籤，勾了哪幾個，帶任一個的書源都刪掉。
+  static Future<void> confirmDeleteByTags(
     BuildContext context,
     SourceManagerProvider provider,
   ) async {
-    final chosen = await pickNonNovelKindsToDelete(
-      context,
-      provider.nonNovelSourceCounts,
-    );
+    final chosen = await pickSourceTagsToDelete(context, provider);
     if (chosen == null || chosen.isEmpty) return;
     try {
-      final affected = await provider.deleteSourcesOfKinds(chosen);
+      final affected = await provider.deleteSourcesWithTags(chosen);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('已刪除 $affected 個書源')));
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failureMessage('刪除非小說源', error))),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(failureMessage('刪除', error))));
       }
     }
   }
@@ -467,64 +438,87 @@ class SourceManagerDialogs {
   }
 }
 
-/// 問要刪哪幾類非小說書源，[counts] 是各類有幾個；回傳勾選的類別，取消時
-/// 是 null。漫畫、有聲源是留給漫畫閱讀器與有聲書播放器的，預設不勾。
-Future<Set<BookSourceKind>?> pickNonNovelKindsToDelete(
+/// 問要刪帶哪些標籤的書源：類別、校驗標記、自己的分組各一段，每個標籤
+/// 寫有幾個書源，預設都不勾；回傳勾選的標籤，取消時是 null。
+Future<Set<SourceTag>?> pickSourceTagsToDelete(
   BuildContext context,
-  Map<BookSourceKind, int> counts,
-) async {
-  final kinds = [
-    for (final kind in const [
-      BookSourceKind.comic,
-      BookSourceKind.audio,
-      BookSourceKind.unsupported,
-    ])
-      if ((counts[kind] ?? 0) > 0) kind,
-  ];
-  if (kinds.isEmpty) {
-    await showAppAlert<void>(
-      context: context,
-      title: '刪除非小說源',
-      message: '沒有漫畫、有聲或不支援的書源。',
-      actions: const [AppAlertAction(label: '好', value: null)],
-    );
-    return null;
-  }
-  final selected = <BookSourceKind>{
-    if (kinds.contains(BookSourceKind.unsupported)) BookSourceKind.unsupported,
-  };
-  return showStatefulAppAlert<Set<BookSourceKind>>(
-    context: context,
-    builder: (dialogContext, setState, _) => AppAlert<bool>(
-      title: '刪除非小說源',
-      message: '勾選的書源會直接刪除，無法復原。',
-      onAction: (confirmed) => Navigator.pop(
-        dialogContext,
-        confirmed ? Set<BookSourceKind>.of(selected) : null,
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final kind in kinds)
-            AlertCheckRow(
-              title: '${kind.sourceLabel}：${counts[kind]} 個',
-              value: selected.contains(kind),
-              onChanged: (value) => setState(
-                () => value ? selected.add(kind) : selected.remove(kind),
-              ),
-            ),
-        ],
-      ),
-      actions: [
-        const AppAlertAction(label: '取消', value: false),
-        AppAlertAction(
-          label: '刪除',
-          value: true,
-          destructive: true,
-          enabled: selected.isNotEmpty,
-        ),
+  SourceManagerProvider provider,
+) {
+  final tags = provider.sourceTagCounts;
+  final checkTags = provider.checkResultTags.toSet();
+  final sections = <(String, List<({SourceTag tag, int count})>)>[
+    (
+      '類別',
+      [
+        for (final t in tags)
+          if (t.tag.kind != null) t,
       ],
     ),
+    (
+      '校驗標記',
+      [
+        for (final t in tags)
+          if (checkTags.contains(t.tag.group)) t,
+      ],
+    ),
+    (
+      '分組',
+      [
+        for (final t in tags)
+          if (t.tag.group != null && !checkTags.contains(t.tag.group)) t,
+      ],
+    ),
+  ];
+  final selected = <SourceTag>{};
+  return showStatefulAppAlert<Set<SourceTag>>(
+    context: context,
+    builder: (dialogContext, setState, _) {
+      final count = provider.countSourcesWithTags(selected);
+      final sectionStyle = AppTextStyles.bodySm.copyWith(
+        color: AppChrome.of(dialogContext).sectionText,
+      );
+      return AppAlert<bool>(
+        title: '按標籤刪除',
+        message: '勾選標籤，帶任一個標籤的書源都會刪除，無法復原。',
+        onAction: (confirmed) => Navigator.pop(
+          dialogContext,
+          confirmed ? Set<SourceTag>.of(selected) : null,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (title, rows) in sections)
+              if (rows.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Text(title, style: sectionStyle),
+                ),
+                for (final row in rows)
+                  AlertCheckRow(
+                    title:
+                        '${row.tag.kind?.sourceLabel ?? row.tag.group}：'
+                        '${row.count} 個',
+                    value: selected.contains(row.tag),
+                    onChanged: (value) => setState(
+                      () => value
+                          ? selected.add(row.tag)
+                          : selected.remove(row.tag),
+                    ),
+                  ),
+              ],
+          ],
+        ),
+        actions: [
+          const AppAlertAction(label: '取消', value: false),
+          AppAlertAction(
+            label: count == 0 ? '刪除' : '刪除 $count 個',
+            value: true,
+            destructive: true,
+            enabled: count > 0,
+          ),
+        ],
+      );
+    },
   );
 }

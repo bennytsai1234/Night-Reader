@@ -24,13 +24,13 @@ class BookInfoHeader extends StatelessWidget {
   final BookDetailProvider provider;
   final void Function(BuildContext context, String url) showPhotoView;
 
-  /// null 時不顯示加入／移出書架（從閱讀器開的詳情，見 BookDetailPage）。
+  /// null 時加入／移出書架灰掉（從閱讀器開的詳情，見 BookDetailPage）。
   final VoidCallback? onToggleBookshelf;
 
   /// 書籍資料還在載入：書架狀態等還不確定，動作按鈕先畫骨架。
   final bool loading;
 
-  /// 本機書沒有換源，傳 null 隱藏按鈕。
+  /// 本機書沒有換源，傳 null 時按鈕灰掉（ADR 0059）。
   final VoidCallback? onChangeSource;
   final VoidCallback onShowToc;
 
@@ -113,7 +113,7 @@ class BookInfoHeader extends StatelessWidget {
             child: SkeletonSwitcher(
               loading: loading,
               skeleton: _actionRow([
-                for (var i = 0; i < _actionCount; i++)
+                for (var i = 0; i < 3; i++)
                   const SkeletonBox(
                     height: _ActionButton.height,
                     borderRadius: AppRadius.cardMd,
@@ -127,11 +127,6 @@ class BookInfoHeader extends StatelessWidget {
     );
   }
 
-  int get _actionCount =>
-      1 +
-      (onToggleBookshelf == null ? 0 : 1) +
-      (onChangeSource == null ? 0 : 1);
-
   Widget _actionRow(List<Widget> buttons) => Row(
     children: [
       for (final (i, button) in buttons.indexed) ...[
@@ -142,21 +137,19 @@ class BookInfoHeader extends StatelessWidget {
   );
 
   List<Widget> _actionButtons() => [
-    if (onToggleBookshelf case final toggle?)
-      _ActionButton(
-        icon: provider.isInBookshelf
-            ? Icons.library_add_check_rounded
-            : Icons.library_add_outlined,
-        label: provider.isInBookshelf ? '已在書架' : '加入書架',
-        tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
-        onTap: toggle,
-      ),
-    if (onChangeSource != null)
-      _ActionButton(
-        icon: Icons.swap_horiz_rounded,
-        label: '換源',
-        onTap: onChangeSource!,
-      ),
+    _ActionButton(
+      icon: provider.isInBookshelf
+          ? Icons.library_add_check_rounded
+          : Icons.library_add_outlined,
+      label: provider.isInBookshelf ? '已在書架' : '加入書架',
+      tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
+      onTap: onToggleBookshelf,
+    ),
+    _ActionButton(
+      icon: Icons.swap_horiz_rounded,
+      label: '換源',
+      onTap: onChangeSource,
+    ),
     _ActionButton(
       icon: Icons.format_list_bulleted_rounded,
       label: '目錄',
@@ -176,7 +169,9 @@ class _ActionButton extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+
+  /// null 時停用：變淡、點了沒反應。
+  final VoidCallback? onTap;
   final String? tooltip;
 
   static const double height = 58;
@@ -186,6 +181,7 @@ class _ActionButton extends StatelessWidget {
     final color = Theme.of(context).colorScheme.primary;
     Widget button = Semantics(
       button: true,
+      enabled: onTap != null,
       label: tooltip ?? label,
       excludeSemantics: true,
       child: PressScale(
@@ -221,6 +217,8 @@ class _ActionButton extends StatelessWidget {
         ),
       ),
     );
+    // 停用透明度同 [GlassIconButton]。
+    if (onTap == null) button = Opacity(opacity: 0.38, child: button);
     if (tooltip != null && tooltip != label) {
       button = Tooltip(message: tooltip!, child: button);
     }

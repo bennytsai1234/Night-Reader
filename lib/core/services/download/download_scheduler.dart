@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'download_base.dart';
 
 import 'package:night_reader/core/models/book.dart';
@@ -25,15 +29,45 @@ mixin DownloadScheduler on DownloadBase {
     return !isTaskRetiring(bookUrl);
   }
 
+  /// 暫停全部／繼續全部；記在偏好設定，重開 App 照樣停著（[restorePausedAll]）。
   void togglePause() {
-    isPaused = !isPaused;
-    if (!isPaused) {
+    _setPausedAll(!isPaused);
+    update();
+    unawaited(_savePausedAll(isPaused));
+    // 暫停中排程不開新任務、沒有在跑的就收掉（[startDownloads]），繼續時
+    // 叫它起來。
+    if (!isPaused && tasks.any((t) => t.isWaiting)) unawaited(startDownloads());
+  }
+
+  /// 開 App 讀回上次的「暫停全部」，在任務開跑之前呼叫。
+  Future<void> restorePausedAll() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(PreferKey.downloadsPausedAll) ?? false) {
+        _setPausedAll(true);
+      }
+    } catch (error) {
+      AppLog.w('讀不到「暫停全部」的紀錄，照常下載: $error');
+    }
+  }
+
+  void _setPausedAll(bool paused) {
+    isPaused = paused;
+    if (!paused) {
       pauseCompleter?.complete();
       pauseCompleter = null;
     } else {
-      pauseCompleter = Completer<void>();
+      pauseCompleter ??= Completer<void>();
     }
-    update();
+  }
+
+  Future<void> _savePausedAll(bool paused) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(PreferKey.downloadsPausedAll, paused);
+    } catch (error) {
+      AppLog.w('「暫停全部」沒有記下來，重開 App 會照常下載: $error');
+    }
   }
 
   /// 使用者明確要下載的章節。[chapters] 是範圍裡的章節（已下載的也算），
@@ -150,7 +184,11 @@ mixin DownloadScheduler on DownloadBase {
         final activeTasks = tasks
             .where((t) => t.isDownloading || activeTaskUrls.contains(t.bookUrl))
             .toList();
-        if (activeTasks.length < maxConcurrent) {
+        // 暫停全部時不開新任務：還沒開跑的任務連目錄都不抓（開跑後抓目錄
+        // 在 [processTask] 裡、逐章才看暫停）；跑著的會停在下一章之前。
+        if (isPaused) {
+          if (activeTasks.isEmpty) break;
+        } else if (activeTasks.length < maxConcurrent) {
           final nextTask = tasks.cast<DownloadTask?>().firstWhere((t) {
             if (t == null || !t.isWaiting) return false;
             return !activeTaskUrls.contains(t.bookUrl) &&

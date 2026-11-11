@@ -10,7 +10,7 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 
 import '../source_manager_provider.dart';
 
-/// 編輯模式底部的浮動玻璃工具列 — 對標 legado SelectActionBar。
+/// 書源管理底部的浮動玻璃工具列（有書源時一直在）— 對標 legado SelectActionBar。
 /// 提供反選、刪除與其餘批次操作選單；全選放在導航頁首。
 class SelectActionBar extends StatelessWidget {
   final SourceManagerProvider provider;
@@ -108,17 +108,19 @@ class SelectActionBar extends StatelessWidget {
                 color: context.danger,
                 onTap: actionsEnabled ? onDelete : null,
               ),
-              GlassMenuButton<String>(
-                enabled: actionsEnabled,
-                tooltip: isBusy ? '操作進行中' : '更多批次操作',
-                entriesBuilder: (_) => _entriesFor(idle: backgroundWorkIdle()),
-                onSelected: _onMenuSelected,
-                child: SizedBox.square(
-                  dimension: AppGlass.buttonSize,
-                  child: Icon(
-                    Icons.more_horiz_rounded,
-                    size: 22,
-                    color: scheme.onSurface,
+              Builder(
+                builder: (buttonContext) => GlassMenuButton<String>(
+                  enabled: actionsEnabled,
+                  tooltip: isBusy ? '操作進行中' : '更多批次操作',
+                  entriesBuilder: (_) => _entries(selectCount),
+                  onSelected: (value) => _onMenuSelected(buttonContext, value),
+                  child: SizedBox.square(
+                    dimension: AppGlass.buttonSize,
+                    child: Icon(
+                      Icons.more_horiz_rounded,
+                      size: 22,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ),
               ),
@@ -129,44 +131,17 @@ class SelectActionBar extends StatelessWidget {
     );
   }
 
-  /// 校驗與 AI 修復在有背景工作跑的時候是灰的：一次一件（ADR 0058）。
-  static List<GlassMenuEntry<String>> _entriesFor({required bool idle}) => [
-    const GlassMenuItem(
-      value: 'enable',
-      icon: Icons.toggle_on_outlined,
-      label: '啟用選中',
-    ),
-    const GlassMenuItem(
-      value: 'disable',
-      icon: Icons.toggle_off_outlined,
-      label: '禁用選中',
-    ),
+  /// 第一層：會展開的四項右邊是「›」（同書源管理「更多」）；連續選取、
+  /// 置頂、置底直接做。連續選取要選了兩個以上才有範圍。
+  static List<GlassMenuEntry<String>> _entries(int selectCount) => [
+    const GlassMenuItem(value: 'menu_toggle', label: '啟用與停用', submenu: true),
+    const GlassMenuItem(value: 'menu_group', label: '分組', submenu: true),
     const GlassMenuDivider(),
-    const GlassMenuItem(
-      value: 'add_group',
-      icon: Icons.playlist_add,
-      label: '加入分組',
-    ),
-    const GlassMenuItem(
-      value: 'remove_group',
-      icon: Icons.playlist_remove,
-      label: '移出分組',
-    ),
-    const GlassMenuItem(
-      value: 'enable_explore',
-      icon: Icons.travel_explore,
-      label: '啟用發現',
-    ),
-    const GlassMenuItem(
-      value: 'disable_explore',
-      icon: Icons.explore_off_outlined,
-      label: '禁用發現',
-    ),
-    const GlassMenuDivider(),
-    const GlassMenuItem(
+    GlassMenuItem(
       value: 'select_interval',
       icon: Icons.select_all,
       label: '連續選取',
+      enabled: selectCount >= 2,
     ),
     const GlassMenuItem(
       value: 'top',
@@ -179,37 +154,86 @@ class SelectActionBar extends StatelessWidget {
       label: '置底',
     ),
     const GlassMenuDivider(),
-    const GlassMenuItem(
-      value: 'export',
-      icon: Icons.file_download_outlined,
-      label: '匯出選中',
-    ),
-    const GlassMenuItem(
-      value: 'share',
-      icon: Icons.share_outlined,
-      label: '分享選中',
-    ),
-    const GlassMenuDivider(),
-    GlassMenuItem(
-      value: 'check',
-      enabled: idle,
-      icon: Icons.playlist_add_check,
-      label: '校驗選中',
-    ),
-    GlassMenuItem(
-      value: 'ai_repair',
-      enabled: idle,
-      icon: Icons.auto_fix_high_outlined,
-      label: 'AI 修復選中',
-    ),
-    const GlassMenuItem(
-      value: 'clear_check_marks',
-      icon: Icons.layers_clear_outlined,
-      label: '清除校驗標記',
-    ),
+    const GlassMenuItem(value: 'menu_share', label: '匯出與分享', submenu: true),
+    const GlassMenuItem(value: 'menu_check', label: '校驗與修復', submenu: true),
   ];
 
-  void _onMenuSelected(String value) {
+  /// 第二層；校驗與 AI 修復在有背景工作跑的時候是灰的：一次一件（ADR 0058）。
+  static Map<String, List<GlassMenuEntry<String>>> _submenus() => {
+    'menu_toggle': [
+      GlassMenuItem(
+        value: 'enable',
+        icon: Icons.toggle_on_outlined,
+        label: '啟用選中',
+      ),
+      GlassMenuItem(
+        value: 'disable',
+        icon: Icons.toggle_off_outlined,
+        label: '停用選中',
+      ),
+      GlassMenuDivider(),
+      GlassMenuItem(
+        value: 'enable_explore',
+        icon: Icons.travel_explore,
+        label: '啟用發現',
+      ),
+      GlassMenuItem(
+        value: 'disable_explore',
+        icon: Icons.explore_off_outlined,
+        label: '停用發現',
+      ),
+    ],
+    'menu_group': [
+      GlassMenuItem(
+        value: 'add_group',
+        icon: Icons.playlist_add,
+        label: '加入分組',
+      ),
+      GlassMenuItem(
+        value: 'remove_group',
+        icon: Icons.playlist_remove,
+        label: '移出分組',
+      ),
+    ],
+    'menu_share': [
+      GlassMenuItem(
+        value: 'export',
+        icon: Icons.file_download_outlined,
+        label: '匯出選中',
+      ),
+      GlassMenuItem(value: 'share', icon: Icons.share_outlined, label: '分享選中'),
+    ],
+    'menu_check': [
+      GlassMenuItem(
+        value: 'check',
+        enabled: backgroundWorkIdle(),
+        icon: Icons.playlist_add_check,
+        label: '校驗選中',
+      ),
+      GlassMenuItem(
+        value: 'ai_repair',
+        enabled: backgroundWorkIdle(),
+        icon: Icons.auto_fix_high_outlined,
+        label: 'AI 修復選中',
+      ),
+      GlassMenuItem(
+        value: 'clear_check_marks',
+        icon: Icons.layers_clear_outlined,
+        label: '清除校驗標記',
+      ),
+    ],
+  };
+
+  Future<void> _onMenuSelected(BuildContext buttonContext, String value) async {
+    if (_submenus()[value] case final entries?) {
+      final picked = await showGlassSubmenu<String>(buttonContext, entries);
+      if (picked != null) _runAction(picked);
+      return;
+    }
+    _runAction(value);
+  }
+
+  void _runAction(String value) {
     switch (value) {
       case 'enable':
         onEnable();

@@ -62,16 +62,37 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 篩選在「整理」的第二層「排序與篩選」裡。
   Future<void> openMenu(WidgetTester tester) async {
     await tester.tap(find.byTooltip('整理書架'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('排序與篩選'));
+    await tester.pumpAndSettle();
   }
 
-  testWidgets('書架上只有一種書時整理選單沒有篩選', (tester) async {
+  bool enabled(WidgetTester tester, String label) =>
+      tester
+          .widget<InkWell>(
+            find.ancestor(of: find.text(label), matching: find.byType(InkWell)),
+          )
+          .onTap !=
+      null;
+
+  testWidgets('書架上只有一種書時篩選還在，各類灰掉（ADR 0059）', (tester) async {
     await pumpShelf(tester, [_book('甲', 0), _book('乙', 0)]);
     await openMenu(tester);
-    expect(find.text('漫畫'), findsNothing);
-    expect(find.text('全部'), findsNothing);
+    expect(enabled(tester, '全部'), isTrue);
+    expect(enabled(tester, '小說'), isFalse);
+    expect(enabled(tester, '漫畫'), isFalse);
+    expect(enabled(tester, '有聲書'), isFalse);
+  });
+
+  testWidgets('書架上沒有的那一類灰掉', (tester) async {
+    await pumpShelf(tester, [_book('小說甲', 0), _book('漫畫乙', 2)]);
+    await openMenu(tester);
+    expect(enabled(tester, '小說'), isTrue);
+    expect(enabled(tester, '漫畫'), isTrue);
+    expect(enabled(tester, '有聲書'), isFalse);
   });
 
   testWidgets('選漫畫只畫漫畫，選全部畫回全部', (tester) async {

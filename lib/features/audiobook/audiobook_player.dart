@@ -489,6 +489,13 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 倒退或快轉 [delta]（負的是倒退）。
   Future<void> skipBy(Duration delta) => seek(position.value + delta);
 
+  /// 有上一集可以換（播放器的上一集鈕、系統播放控制都照它）。
+  bool get hasPrevious => _previousPlayable(_index) != null;
+
+  /// 有下一集可以換；列表循環時最後一集的下一集是第一集。
+  bool get hasNext =>
+      _nextPlayable(_index) != null || _mode == AudiobookPlayMode.listLoop;
+
   Future<void> next() async {
     final next =
         _nextPlayable(_index) ??
@@ -732,12 +739,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       ),
       playing: playing ?? _playing,
       controls: {
-        if (_previousPlayable(_index) != null) PlaybackControl.skipToPrevious,
+        if (hasPrevious) PlaybackControl.skipToPrevious,
         PlaybackControl.rewind,
         PlaybackControl.fastForward,
-        if (_nextPlayable(_index) != null ||
-            _mode == AudiobookPlayMode.listLoop)
-          PlaybackControl.skipToNext,
+        if (hasNext) PlaybackControl.skipToNext,
         if (_duration != null) PlaybackControl.seek,
       },
       position: _engine?.position ?? position.value,

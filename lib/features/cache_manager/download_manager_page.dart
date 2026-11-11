@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book/book_extensions.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -90,7 +93,7 @@ class DownloadManagerPage extends StatelessWidget {
             icon: service.isPaused
                 ? Icons.play_arrow_rounded
                 : Icons.pause_rounded,
-            tooltip: service.isPaused ? '恢復全部' : '暫停全部',
+            tooltip: service.isPaused ? '繼續全部' : '暫停全部',
             onPressed: queue.hasActive ? service.togglePause : null,
           ),
           GlassIconButton(
@@ -234,22 +237,23 @@ class DownloadManagerPage extends StatelessWidget {
     final globallyPaused = service.isPaused && active;
     final failureSummary = task.failureSummary;
 
-    Widget? control;
-    if (globallyPaused) {
-      control = null;
-    } else if (canRetry) {
+    // 控制鈕一直在（ADR 0059）：全部暫停中、已完成時灰掉。
+    final Widget control;
+    if (canRetry && !globallyPaused) {
       control = _TaskControlButton(
         icon: Icons.refresh_rounded,
         tooltip: '重試',
         onPressed: () => service.retryTask(task.bookUrl),
       );
-    } else if (!task.isCompleted) {
+    } else {
       control = _TaskControlButton(
         icon: task.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
         tooltip: task.isPaused ? '繼續' : '暫停',
-        onPressed: () => task.isPaused
-            ? service.resumeTask(task.bookUrl)
-            : service.pauseTask(task.bookUrl),
+        onPressed: globallyPaused || task.isCompleted
+            ? null
+            : () => task.isPaused
+                  ? service.resumeTask(task.bookUrl)
+                  : service.pauseTask(task.bookUrl),
       );
     }
 
@@ -261,7 +265,7 @@ class DownloadManagerPage extends StatelessWidget {
           icon: Icons.delete_outline_rounded,
           color: AppTint.rust.color,
           destructive: true,
-          onPressed: () => service.removeTask(task.bookUrl),
+          onPressed: () => _removeTask(context, service, task),
         ),
       ],
       child: _TaskRow(
@@ -309,12 +313,12 @@ class DownloadManagerPage extends StatelessWidget {
           icon: Icons.arrow_downward_rounded,
           enabled: index < taskCount - 1,
         ),
-        if (task.failureSummary != null)
-          const GlassMenuItem(
-            value: 'details',
-            label: '查看失敗原因',
-            icon: Icons.info_outline_rounded,
-          ),
+        GlassMenuItem(
+          value: 'details',
+          label: '查看失敗原因',
+          icon: Icons.info_outline_rounded,
+          enabled: task.failureSummary != null,
+        ),
         const GlassMenuDivider(),
         const GlassMenuItem(
           value: 'delete',
@@ -346,9 +350,32 @@ class DownloadManagerPage extends StatelessWidget {
         _showFailureDetails(context, task, service.kindOf(task.bookUrl));
         break;
       case 'delete':
-        service.removeTask(task.bookUrl);
+        _removeTask(context, service, task);
         break;
     }
+  }
+
+  /// 刪除任務。書架上的書（本地書、有聲書除外）沒下載完的章，下次開 App
+  /// 書架自動下載會再排回來（ADR 0008），不想下載要按暫停，所以刪的時候說
+  /// 一聲留下什麼。
+  Future<void> _removeTask(
+    BuildContext context,
+    DownloadService service,
+    DownloadTask task,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    service.removeTask(task.bookUrl);
+    if (task.isCompleted) return;
+    final book = await getIt<BookDao>().getByUrl(task.bookUrl);
+    if (book == null ||
+        !book.isInBookshelf ||
+        book.isLocal ||
+        book.bookKind == BookSourceKind.audio) {
+      return;
+    }
+    messenger.showSnackBar(
+      const SnackBar(content: Text('已刪除。書架上的書下次開 App 會再排回下載，不想下載請改按暫停')),
+    );
   }
 
   void _showFailureDetails(
@@ -779,7 +806,9 @@ class _TaskControlButton extends StatelessWidget
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onPressed;
+
+  /// null 時灰掉、點了沒反應。
+  final VoidCallback? onPressed;
 
   static const double _circle = 34;
 
@@ -812,21 +841,25 @@ class _TaskControlButton extends StatelessWidget
         button: true,
         label: tooltip,
         excludeSemantics: true,
+        enabled: onPressed != null,
         child: PressScale(
           onTap: onPressed,
           // 命中區放大到 44（設計系統的圓形按鈕尺寸），圓鈕維持 34 置中；
           // 點偏一點不會打開整列的選單。
-          child: SizedBox.square(
-            dimension: AppGlass.buttonSize,
-            child: Center(
-              child: Container(
-                width: _circle,
-                height: _circle,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: scheme.primary.withValues(alpha: 0.12),
+          child: Opacity(
+            opacity: onPressed == null ? 0.38 : 1,
+            child: SizedBox.square(
+              dimension: AppGlass.buttonSize,
+              child: Center(
+                child: Container(
+                  width: _circle,
+                  height: _circle,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primary.withValues(alpha: 0.12),
+                  ),
+                  child: Icon(icon, size: 20, color: scheme.primary),
                 ),
-                child: Icon(icon, size: 20, color: scheme.primary),
               ),
             ),
           ),

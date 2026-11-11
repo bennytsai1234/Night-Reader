@@ -154,8 +154,8 @@ void main() {
           tester,
           area: _area,
           key: 'download08',
-          label: '點頂部「恢復全部」',
-          action: () => tester.tap(find.byTooltip('恢復全部')),
+          label: '點頂部「繼續全部」',
+          action: () => tester.tap(find.byTooltip('繼續全部')),
         );
         await surveyStep(
           tester,

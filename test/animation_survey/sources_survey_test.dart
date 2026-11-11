@@ -146,9 +146,11 @@ void main() {
 
         // 更多選單：按域名分組開與關。
         await step('更多操作：開選單', () => _openMore(tester));
-        await step('更多操作：按域名分組（開）', () => _tapTop(tester, '按域名分組'));
+        await step('排序方式：開子選單', () => _tapTop(tester, '排序方式'));
+        await step('排序方式：按域名分組（開）', () => _tapTop(tester, '按域名分組'));
         await step('更多操作：開選單', () => _openMore(tester));
-        await step('更多操作：按域名分組（關）', () => _tapTop(tester, '按域名分組'));
+        await step('排序方式：開子選單', () => _tapTop(tester, '排序方式'));
+        await step('排序方式：按域名分組（關）', () => _tapTop(tester, '按域名分組'));
 
         // 排序方式（第二層）：開、選按名稱、再選回手動排序。
         await step('更多操作：開選單', () => _openMore(tester));
@@ -185,9 +187,8 @@ void main() {
         });
 
         // 多選：進入、勾兩筆、批次停用、批次啟用、完成離開。
-        await step('更多操作：開選單', () => _openMore(tester));
-        await step('進入多選（選取書源）', () => _tapTop(tester, '選取書源'));
-        await step('多選：勾第一筆', () => tester.tap(_firstTile));
+        await step('長按第一筆書源：開選單', () => tester.longPress(_firstTile));
+        await step('進入多選（長按選單的選取，勾第一筆）', () => _tapTop(tester, '選取'));
         await step('多選：勾第二筆', () async {
           await tester.tap(
             find

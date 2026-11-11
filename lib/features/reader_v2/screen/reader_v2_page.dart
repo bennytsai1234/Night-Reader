@@ -485,9 +485,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       : null,
                   sleepTimer: _host.tts?.sleepTimer,
                   isTtsPlaying: _host.tts?.isPlaying ?? false,
-                  showTts: true,
-                  showAutoPage: true,
-                  showReplaceRule: true,
+                  isTtsPaused: _host.tts?.isPaused ?? false,
                   onMenuHidden: _handleMenuHidden,
                   onChapterPanelChanged: (open) => _drawerOpen.value = open,
                 ),
@@ -635,12 +633,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             icon: const Icon(Icons.refresh),
             label: const Text('重試'),
           ),
-        if (!widget.book.isLocal)
-          OutlinedButton.icon(
-            onPressed: _showChangeSource,
-            icon: const Icon(Icons.swap_horiz),
-            label: const Text('換源'),
-          ),
+        // 本地書沒有換源，灰著留在原位（ADR 0059）。
+        OutlinedButton.icon(
+          onPressed: widget.book.isLocal ? null : _showChangeSource,
+          icon: const Icon(Icons.swap_horiz),
+          label: const Text('換源'),
+        ),
         TextButton.icon(
           onPressed: _handleExitIntent,
           icon: const Icon(Icons.arrow_back),
@@ -938,25 +936,26 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (!mounted) return;
     final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,
+      // 本地書與沒有登入的書源用不到的項目灰著留在原位（ADR 0059）。
       actions: [
-        if (!isLocal) ...const [
-          AppSheetAction(
-            label: '換源',
-            icon: Icons.swap_horiz_rounded,
-            value: _ReaderMoreAction.changeSource,
-          ),
-          AppSheetAction(
-            label: '重新取得本章',
-            icon: Icons.refresh_rounded,
-            value: _ReaderMoreAction.refetchChapter,
-          ),
-        ],
-        if (loginSource != null)
-          const AppSheetAction(
-            label: '登入',
-            icon: Icons.login_rounded,
-            value: _ReaderMoreAction.login,
-          ),
+        AppSheetAction(
+          label: '換源',
+          icon: Icons.swap_horiz_rounded,
+          value: _ReaderMoreAction.changeSource,
+          enabled: !isLocal,
+        ),
+        AppSheetAction(
+          label: '重新取得本章',
+          icon: Icons.refresh_rounded,
+          value: _ReaderMoreAction.refetchChapter,
+          enabled: !isLocal,
+        ),
+        AppSheetAction(
+          label: '登入',
+          icon: Icons.login_rounded,
+          value: _ReaderMoreAction.login,
+          enabled: loginSource != null,
+        ),
         const AppSheetAction(
           label: '書籍詳情',
           icon: Icons.info_outline_rounded,

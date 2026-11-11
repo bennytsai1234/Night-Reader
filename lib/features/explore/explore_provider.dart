@@ -55,7 +55,7 @@ class ExploreProvider extends ChangeNotifier {
   static const String _kindKey = 'explore_source_kind';
 
   /// 切換書源類型時可選的類別，照小說、漫畫、有聲的順序。
-  static const List<BookSourceKind> _switchable = [
+  static const List<BookSourceKind> switchableKinds = [
     BookSourceKind.novel,
     BookSourceKind.comic,
     BookSourceKind.audio,
@@ -75,7 +75,7 @@ class ExploreProvider extends ChangeNotifier {
 
   /// 有發現書源的類別；不只一類時頁首才有類型鈕。
   List<BookSourceKind> get kinds => [
-    for (final kind in _switchable)
+    for (final kind in switchableKinds)
       if ((_kindCounts[kind] ?? 0) > 0) kind,
   ];
 
@@ -129,7 +129,7 @@ class ExploreProvider extends ChangeNotifier {
 
   void _readChosenKind() {
     final stored = getIt<SharedPreferences>().get(_kindKey);
-    _chosenKind = _switchable.firstWhere(
+    _chosenKind = switchableKinds.firstWhere(
       (kind) => kind.name == stored,
       orElse: () => BookSourceKind.novel,
     );
@@ -153,7 +153,7 @@ class ExploreProvider extends ChangeNotifier {
       final all = json['all'] as int;
       final kinds = <BookSourceKind, int>{
         for (final entry in json['kinds'] as List<dynamic>? ?? const [])
-          _switchable.firstWhere(
+          switchableKinds.firstWhere(
             (kind) => kind.name == entry[0],
             orElse: () => throw FormatException('不認得的類別', saved),
           ): entry[1] as int,
@@ -327,7 +327,7 @@ class ExploreProvider extends ChangeNotifier {
   /// 換成列 [kind] 這一類的書源，並記住選擇。展開的書源收起；選的分組在
   /// 這一類裡沒有就回到「全部」。
   void setKind(BookSourceKind kind) {
-    if (!_switchable.contains(kind)) return;
+    if (!switchableKinds.contains(kind)) return;
     final changed = kind != this.kind;
     if (kind != _chosenKind) {
       _chosenKind = kind;

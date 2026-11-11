@@ -13,11 +13,14 @@ import 'skeleton.dart';
 /// [GlassSegmented] 的單一分段。
 @immutable
 class GlassSegment<T> {
-  const GlassSegment(this.value, this.label, {this.icon});
+  const GlassSegment(this.value, this.label, {this.icon, this.enabled = true});
 
   final T value;
   final String label;
   final IconData? icon;
+
+  /// 停用的分段灰掉、點了或拖到上面都不選（ADR 0059）。
+  final bool enabled;
 }
 
 /// Telegram 式分段控制：膠囊軌道上滑動的選取塊。
@@ -168,8 +171,9 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
   }
 
   void _select(int index) {
-    final value = widget.segments[index].value;
-    if (value != widget.selected) {
+    final segment = widget.segments[index];
+    final value = segment.value;
+    if (segment.enabled && value != widget.selected) {
       AppHaptics.select();
       widget.onChanged(value);
     }
@@ -246,7 +250,9 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
               selected: i == selectedIndex,
               emphasized: i == emphasized,
               dense: widget.dense,
-              color: scheme.onSurface,
+              color: widget.segments[i].enabled
+                  ? scheme.onSurface
+                  : scheme.onSurface.withValues(alpha: 0.38),
               onTap: () => _select(i),
             ),
           ),
@@ -343,9 +349,10 @@ class _SegmentLabel extends StatelessWidget {
     final icon = segment.icon;
     return Semantics(
       button: true,
+      enabled: segment.enabled,
       selected: selected,
       inMutuallyExclusiveGroup: true,
-      onTap: onTap,
+      onTap: segment.enabled ? onTap : null,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: _padding(dense: dense)),
         child: Center(

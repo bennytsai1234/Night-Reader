@@ -71,6 +71,7 @@ enum _ShelfMenuAction {
   gridView,
   listView,
   unifiedCovers,
+  sortFilter,
   select,
   export,
   search,
@@ -294,11 +295,15 @@ class _BookshelfPageState extends State<BookshelfPage>
       morph: true,
       title: '書架',
       titleSheen: provider.checkingShelf,
-      leading: GlassMenuButton<Object>(
-        icon: Icons.swap_vert_rounded,
-        tooltip: '整理書架',
-        entriesBuilder: (_) => _arrangeMenuEntries(provider),
-        onSelected: (value) => _onShelfMenuSelected(provider, value),
+      leading: Builder(
+        builder: (buttonContext) => GlassMenuButton<Object>(
+          icon: Icons.swap_vert_rounded,
+          tooltip: '整理書架',
+          entriesBuilder: (_) => _arrangeMenuEntries(provider),
+          onSelected: (value) => value == _ShelfMenuAction.sortFilter
+              ? _openSortFilterMenu(buttonContext, provider)
+              : _onShelfMenuSelected(provider, value),
+        ),
       ),
       actions: [
         GlassMenuButton<Object>(
@@ -332,22 +337,11 @@ class _BookshelfPageState extends State<BookshelfPage>
         checked: provider.unifiedCovers,
       ),
       const GlassMenuDivider(),
-      for (final mode in BookshelfSortMode.values)
-        GlassMenuItem(
-          value: mode,
-          label: mode.label,
-          checked: provider.sortMode == mode,
-        ),
-      // 篩選：書架上不只一種書時才有（`docs/design/screens.md`「書架」）。
-      if (provider.canFilterKinds) ...[
-        const GlassMenuDivider(),
-        for (final choice in _KindFilterChoice.all)
-          GlassMenuItem(
-            value: choice,
-            label: choice.label,
-            checked: provider.activeKindFilter == choice.kind,
-          ),
-      ],
+      const GlassMenuItem(
+        value: _ShelfMenuAction.sortFilter,
+        label: '排序與篩選',
+        submenu: true,
+      ),
       const GlassMenuDivider(),
       GlassMenuItem(
         value: _ShelfMenuAction.select,
@@ -361,6 +355,43 @@ class _BookshelfPageState extends State<BookshelfPage>
         icon: Icons.file_upload_outlined,
       ),
     ];
+  }
+
+  /// 「整理」第二層：排序與篩選收在同一個選單，第一層才不會長到半個螢幕
+  /// 以上（使用者選的，見 docs/design/screens.md「書架」）。
+  List<GlassMenuEntry<Object>> _sortFilterEntries(BookshelfProvider provider) {
+    return [
+      for (final mode in BookshelfSortMode.values)
+        GlassMenuItem(
+          value: mode,
+          label: mode.label,
+          checked: provider.sortMode == mode,
+        ),
+      // 篩選一直在；書架上沒有的那一類、或書架上只有一種書時灰掉（ADR 0059）。
+      const GlassMenuDivider(),
+      for (final choice in _KindFilterChoice.all)
+        GlassMenuItem(
+          value: choice,
+          label: choice.label,
+          checked: provider.activeKindFilter == choice.kind,
+          enabled:
+              choice.kind == null ||
+              (provider.canFilterKinds &&
+                  provider.shelfKinds.contains(choice.kind)),
+        ),
+    ];
+  }
+
+  /// 在「整理」鈕的位置接著開出第二層（同書源管理「更多」）。
+  Future<void> _openSortFilterMenu(
+    BuildContext buttonContext,
+    BookshelfProvider provider,
+  ) async {
+    final value = await showGlassSubmenu<Object>(
+      buttonContext,
+      _sortFilterEntries(provider),
+    );
+    if (value != null && mounted) await _onShelfMenuSelected(provider, value);
   }
 
   static const List<GlassMenuEntry<Object>> _addMenuEntries = [
@@ -407,6 +438,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setGridView(false);
       case _ShelfMenuAction.unifiedCovers:
         provider.setUnifiedCovers(!provider.unifiedCovers);
+      case _ShelfMenuAction.sortFilter:
+        break;
       case _ShelfMenuAction.select:
         _enterEditMode();
       case _ShelfMenuAction.search:
@@ -1013,21 +1046,21 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: '選取',
           icon: Icons.check_circle_outline,
         ),
-        if (!book.isLocal) ...[
-          const GlassMenuDivider(),
-          GlassMenuItem(
-            value: _BookMenuAction.checkUpdate,
-            label: '檢查更新',
-            icon: Icons.update,
-            enabled: !busy,
-          ),
-          GlassMenuItem(
-            value: _BookMenuAction.autoUpdate,
-            label: '自動檢查更新',
-            icon: Icons.autorenew_rounded,
-            checked: book.canUpdate,
-          ),
-        ],
+        // 本地書沒有更新可查，兩項灰著留在原位（ADR 0059）。
+        const GlassMenuDivider(),
+        GlassMenuItem(
+          value: _BookMenuAction.checkUpdate,
+          label: '檢查更新',
+          icon: Icons.update,
+          enabled: !book.isLocal && !busy,
+        ),
+        GlassMenuItem(
+          value: _BookMenuAction.autoUpdate,
+          label: '自動檢查更新',
+          icon: Icons.autorenew_rounded,
+          checked: !book.isLocal && book.canUpdate,
+          enabled: !book.isLocal,
+        ),
         const GlassMenuDivider(),
         const GlassMenuItem(
           value: _BookMenuAction.remove,

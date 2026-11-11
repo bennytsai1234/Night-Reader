@@ -294,12 +294,12 @@ class _BookmarksPageState extends State<BookmarksPage> {
       appBar: GlassNavHeader(
         title: '書籤與標註',
         actions: [
-          if (_tab == _Tab.highlights && _highlights.isNotEmpty)
-            GlassIconButton(
-              tooltip: '匯出標註',
-              icon: Icons.ios_share_rounded,
-              onPressed: _exportHighlights,
-            ),
+          // 兩個分頁都在，沒有標註時灰掉（ADR 0059）。
+          GlassIconButton(
+            tooltip: '匯出標註',
+            icon: Icons.ios_share_rounded,
+            onPressed: _highlights.isNotEmpty ? _exportHighlights : null,
+          ),
         ],
         bottomHeight: _tabsHeight,
         bottom: Padding(

@@ -7,10 +7,12 @@ import 'package:night_reader/shared/widgets/glass.dart';
 
 import '../source_manager_provider.dart';
 
-/// 校驗進度／上次校驗摘要的玻璃膠囊，放在導航頁首搜尋框下方。
+/// 校驗進度／上次校驗摘要的玻璃膠囊，放在導航頁首搜尋框下方。一直在
+/// （ADR 0059）：還沒校驗過時寫「還沒校驗過」，[onTap] 為 null、灰掉；
+/// 右側「取消」只有校驗中能按。
 class SourceCheckStatusBar extends StatelessWidget {
   final SourceManagerProvider provider;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const SourceCheckStatusBar({
     super.key,
@@ -28,6 +30,7 @@ class SourceCheckStatusBar extends StatelessWidget {
     final isChecking = provider.checkService.isChecking;
     final report = provider.lastCheckReport;
     final accent = isChecking ? scheme.primary : context.warning;
+    final idle = onTap == null;
 
     return SizedBox(
       height: height,
@@ -41,54 +44,60 @@ class SourceCheckStatusBar extends StatelessWidget {
               Expanded(
                 child: InkWell(
                   onTap: onTap,
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      left: AppSpacing.lg,
-                      right: AppSpacing.sm,
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: isChecking
-                              ? CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: accent,
-                                )
-                              : Icon(
-                                  Icons.rule_folder_outlined,
-                                  size: 16,
-                                  color: accent,
-                                ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Text(
-                            isChecking
-                                // statusMsg 已經是「正在校驗: 書源名」，前面只補進度。
-                                ? '(${provider.checkService.currentCount}/${provider.checkService.totalCount}) ${provider.checkService.statusMsg}'
-                                : '上次校驗摘要: ${report.summary}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.uiSm.copyWith(
-                              color: scheme.onSurface,
+                  child: Opacity(
+                    opacity: idle ? 0.45 : 1,
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: AppSpacing.lg,
+                        right: AppSpacing.sm,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: isChecking
+                                ? CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: accent,
+                                  )
+                                : Icon(
+                                    Icons.rule_folder_outlined,
+                                    size: 16,
+                                    color: accent,
+                                  ),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Text(
+                              isChecking
+                                  // statusMsg 已經是「正在校驗: 書源名」，前面只補進度。
+                                  ? '(${provider.checkService.currentCount}/${provider.checkService.totalCount}) ${provider.checkService.statusMsg}'
+                                  : idle
+                                  ? '還沒校驗過'
+                                  : '上次校驗摘要: ${report.summary}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.uiSm.copyWith(
+                                color: scheme.onSurface,
+                              ),
                             ),
                           ),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 18,
-                          color: chrome.sectionText,
-                        ),
-                      ],
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: chrome.sectionText,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-              if (isChecking)
-                InkWell(
-                  onTap: provider.cancelSourceCheck,
+              InkWell(
+                onTap: isChecking ? provider.cancelSourceCheck : null,
+                child: Opacity(
+                  opacity: isChecking ? 1 : 0.45,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.lg,
@@ -96,7 +105,7 @@ class SourceCheckStatusBar extends StatelessWidget {
                     child: Center(
                       widthFactor: 1,
                       child: Text(
-                        '取消',
+                        '停止',
                         style: AppTextStyles.uiSm.copyWith(
                           color: scheme.primary,
                           fontWeight: FontWeight.w600,
@@ -105,6 +114,7 @@ class SourceCheckStatusBar extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         ),

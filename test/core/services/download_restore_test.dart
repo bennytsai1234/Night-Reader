@@ -11,9 +11,13 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   setUpAll(() async {
     final getIt = GetIt.instance;

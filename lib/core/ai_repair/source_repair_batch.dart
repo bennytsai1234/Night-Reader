@@ -187,6 +187,9 @@ class SourceRepairBatch extends ChangeNotifier {
   String? errorMessage;
   RepairStage? failedStage;
 
+  /// 按「停止」時做到的那一步；它和後面的步驟沒做完。
+  RepairStage? stoppedStage;
+
   int count(RepairOutcome outcome) =>
       items.where((item) => item.outcome == outcome).length;
 
@@ -233,6 +236,7 @@ class SourceRepairBatch extends ChangeNotifier {
     if (_stopped || isFinished) return;
     CrashTrail.action('按了停止：修復異常書源（做到${_stageName(stage)}）');
     _stopped = true;
+    if (_startTask != null) stoppedStage = stage;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     _activeRecheckService?.cancel();
     for (final session in _sessions) {
