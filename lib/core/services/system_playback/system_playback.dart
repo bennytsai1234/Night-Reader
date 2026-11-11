@@ -394,7 +394,7 @@ class _SessionHandler extends BaseAudioHandler {
   @override
   Future<void> fastForward() async => _received('快轉')?.onFastForward();
 
+  /// 拖動不記：拖一次系統可能連送好幾次，會把崩潰前紀錄的日誌擠掉。
   @override
-  Future<void> seek(Duration position) async =>
-      _received('拖到 $position')?.onSeek(position);
+  Future<void> seek(Duration position) async => _owner?.onSeek(position);
 }
