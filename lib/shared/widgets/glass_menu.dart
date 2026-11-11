@@ -72,6 +72,17 @@ Future<T?> showGlassMenu<T>({
   );
 }
 
+/// 在 [buttonContext] 那顆鈕的位置接著開出第二層（第一層那一項給
+/// `submenu: true`），同一處換一個選單，不疊兩層。
+Future<T?> showGlassSubmenu<T>(
+  BuildContext buttonContext,
+  List<GlassMenuEntry<T>> entries,
+) => showGlassMenu<T>(
+  context: buttonContext,
+  anchor: globalRectOf(buttonContext),
+  entries: entries,
+);
+
 /// 長按預覽選單：[preview] 從 [sourceRect] 浮起，旁邊列出動作
 /// （Telegram 長按聊天的 context preview）。
 Future<T?> showContextPreviewMenu<T>({

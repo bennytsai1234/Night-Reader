@@ -736,15 +736,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
           value: 'next_50',
           icon: Icons.filter_5_outlined,
         ),
+        // 已下載的章會跳過，所以不另放「下載全部未下載章節」。
         AppSheetAction(
           label: '下載全書',
           value: 'all',
           icon: Icons.library_books_outlined,
-        ),
-        AppSheetAction(
-          label: '下載全部未下載章節',
-          value: 'missing',
-          icon: Icons.download_done_outlined,
         ),
         AppSheetAction(
           label: '指定章節範圍',
@@ -763,8 +759,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
         unawaited(_queueDownload(context, provider.queueDownloadNext(50)));
       case 'all':
         unawaited(_queueDownload(context, provider.queueDownloadAll()));
-      case 'missing':
-        unawaited(_queueDownload(context, provider.queueDownloadMissing()));
       case 'range':
         _showDownloadRangeDialog(context, provider);
     }

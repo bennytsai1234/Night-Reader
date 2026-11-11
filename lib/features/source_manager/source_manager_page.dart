@@ -626,12 +626,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           label: '在此書源中搜尋',
           icon: Icons.search_rounded,
         ),
-        const GlassMenuItem(
-          value: 'edit',
-          label: '編輯書源',
-          icon: Icons.edit_outlined,
-        ),
-        // 這個書源用不到的項目灰著留在原位（ADR 0059）。
+        // 編輯不放這裡：點一下那一列、往右滑都會打開。這個書源用不到的
+        // 項目灰著留在原位（ADR 0059）。
         GlassMenuItem(
           value: 'login',
           label: '登入',
@@ -666,12 +662,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         const GlassMenuDivider(),
         const GlassMenuItem(
           value: 'top',
-          label: '移至最頂',
+          label: '置頂',
           icon: Icons.vertical_align_top_rounded,
         ),
         const GlassMenuItem(
           value: 'bottom',
-          label: '移至最底',
+          label: '置底',
           icon: Icons.vertical_align_bottom_rounded,
         ),
         const GlassMenuItem(
@@ -697,8 +693,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
           );
         }
-      case 'edit':
-        await _openEditor(p, s.bookSourceUrl);
       case 'login':
         final full = await p.getFullSource(s.bookSourceUrl);
         if (full != null && mounted) {

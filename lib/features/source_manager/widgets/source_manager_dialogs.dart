@@ -365,7 +365,7 @@ class SourceManagerDialogs {
     }
   }
 
-  /// 「刪除書源」：列出書源身上的標籤，勾了哪幾個，帶任一個的書源都刪掉。
+  /// 「按標籤刪除」：列出書源身上的標籤，勾了哪幾個，帶任一個的書源都刪掉。
   static Future<void> confirmDeleteByTags(
     BuildContext context,
     SourceManagerProvider provider,
@@ -380,9 +380,8 @@ class SourceManagerDialogs {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(failureMessage('刪除書源', error))));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(failureMessage('刪除', error))));
       }
     }
   }
@@ -477,7 +476,7 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
         color: AppChrome.of(dialogContext).sectionText,
       );
       return AppAlert<bool>(
-        title: '刪除書源',
+        title: '按標籤刪除',
         message: '勾選標籤，帶任一個標籤的書源都會刪除，無法復原。',
         onAction: (confirmed) => Navigator.pop(
           dialogContext,

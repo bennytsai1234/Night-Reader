@@ -107,17 +107,19 @@ class SelectActionBar extends StatelessWidget {
                 color: context.danger,
                 onTap: actionsEnabled ? onDelete : null,
               ),
-              GlassMenuButton<String>(
-                enabled: actionsEnabled,
-                tooltip: isBusy ? '操作進行中' : '更多批次操作',
-                entriesBuilder: (_) => _entries,
-                onSelected: _onMenuSelected,
-                child: SizedBox.square(
-                  dimension: AppGlass.buttonSize,
-                  child: Icon(
-                    Icons.more_horiz_rounded,
-                    size: 22,
-                    color: scheme.onSurface,
+              Builder(
+                builder: (buttonContext) => GlassMenuButton<String>(
+                  enabled: actionsEnabled,
+                  tooltip: isBusy ? '操作進行中' : '更多批次操作',
+                  entriesBuilder: (_) => _entries(selectCount),
+                  onSelected: (value) => _onMenuSelected(buttonContext, value),
+                  child: SizedBox.square(
+                    dimension: AppGlass.buttonSize,
+                    child: Icon(
+                      Icons.more_horiz_rounded,
+                      size: 22,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ),
               ),
@@ -128,72 +130,106 @@ class SelectActionBar extends StatelessWidget {
     );
   }
 
-  static const List<GlassMenuEntry<String>> _entries = [
-    GlassMenuItem(
-      value: 'enable',
-      icon: Icons.toggle_on_outlined,
-      label: '啟用選中',
-    ),
-    GlassMenuItem(
-      value: 'disable',
-      icon: Icons.toggle_off_outlined,
-      label: '禁用選中',
-    ),
-    GlassMenuDivider(),
-    GlassMenuItem(value: 'add_group', icon: Icons.playlist_add, label: '加入分組'),
-    GlassMenuItem(
-      value: 'remove_group',
-      icon: Icons.playlist_remove,
-      label: '移出分組',
-    ),
-    GlassMenuItem(
-      value: 'enable_explore',
-      icon: Icons.travel_explore,
-      label: '啟用發現',
-    ),
-    GlassMenuItem(
-      value: 'disable_explore',
-      icon: Icons.explore_off_outlined,
-      label: '禁用發現',
-    ),
-    GlassMenuDivider(),
+  /// 第一層：會展開的四項右邊是「›」（同書源管理「更多」）；連續選取、
+  /// 置頂、置底直接做。連續選取要選了兩個以上才有範圍。
+  static List<GlassMenuEntry<String>> _entries(int selectCount) => [
+    const GlassMenuItem(value: 'menu_toggle', label: '啟用與停用', submenu: true),
+    const GlassMenuItem(value: 'menu_group', label: '分組', submenu: true),
+    const GlassMenuDivider(),
     GlassMenuItem(
       value: 'select_interval',
       icon: Icons.select_all,
       label: '連續選取',
+      enabled: selectCount >= 2,
     ),
-    GlassMenuItem(value: 'top', icon: Icons.vertical_align_top, label: '置頂'),
-    GlassMenuItem(
+    const GlassMenuItem(
+      value: 'top',
+      icon: Icons.vertical_align_top,
+      label: '置頂',
+    ),
+    const GlassMenuItem(
       value: 'bottom',
       icon: Icons.vertical_align_bottom,
       label: '置底',
     ),
-    GlassMenuDivider(),
-    GlassMenuItem(
-      value: 'export',
-      icon: Icons.file_download_outlined,
-      label: '匯出選中',
-    ),
-    GlassMenuItem(value: 'share', icon: Icons.share_outlined, label: '分享選中'),
-    GlassMenuDivider(),
-    GlassMenuItem(
-      value: 'check',
-      icon: Icons.playlist_add_check,
-      label: '校驗選中',
-    ),
-    GlassMenuItem(
-      value: 'ai_repair',
-      icon: Icons.auto_fix_high_outlined,
-      label: 'AI 修復選中',
-    ),
-    GlassMenuItem(
-      value: 'clear_check_marks',
-      icon: Icons.layers_clear_outlined,
-      label: '清除校驗標記',
-    ),
+    const GlassMenuDivider(),
+    const GlassMenuItem(value: 'menu_share', label: '匯出與分享', submenu: true),
+    const GlassMenuItem(value: 'menu_check', label: '校驗與修復', submenu: true),
   ];
 
-  void _onMenuSelected(String value) {
+  static const Map<String, List<GlassMenuEntry<String>>> _submenus = {
+    'menu_toggle': [
+      GlassMenuItem(
+        value: 'enable',
+        icon: Icons.toggle_on_outlined,
+        label: '啟用選中',
+      ),
+      GlassMenuItem(
+        value: 'disable',
+        icon: Icons.toggle_off_outlined,
+        label: '停用選中',
+      ),
+      GlassMenuDivider(),
+      GlassMenuItem(
+        value: 'enable_explore',
+        icon: Icons.travel_explore,
+        label: '啟用發現',
+      ),
+      GlassMenuItem(
+        value: 'disable_explore',
+        icon: Icons.explore_off_outlined,
+        label: '停用發現',
+      ),
+    ],
+    'menu_group': [
+      GlassMenuItem(
+        value: 'add_group',
+        icon: Icons.playlist_add,
+        label: '加入分組',
+      ),
+      GlassMenuItem(
+        value: 'remove_group',
+        icon: Icons.playlist_remove,
+        label: '移出分組',
+      ),
+    ],
+    'menu_share': [
+      GlassMenuItem(
+        value: 'export',
+        icon: Icons.file_download_outlined,
+        label: '匯出選中',
+      ),
+      GlassMenuItem(value: 'share', icon: Icons.share_outlined, label: '分享選中'),
+    ],
+    'menu_check': [
+      GlassMenuItem(
+        value: 'check',
+        icon: Icons.playlist_add_check,
+        label: '校驗選中',
+      ),
+      GlassMenuItem(
+        value: 'ai_repair',
+        icon: Icons.auto_fix_high_outlined,
+        label: 'AI 修復選中',
+      ),
+      GlassMenuItem(
+        value: 'clear_check_marks',
+        icon: Icons.layers_clear_outlined,
+        label: '清除校驗標記',
+      ),
+    ],
+  };
+
+  Future<void> _onMenuSelected(BuildContext buttonContext, String value) async {
+    if (_submenus[value] case final entries?) {
+      final picked = await showGlassSubmenu<String>(buttonContext, entries);
+      if (picked != null) _runAction(picked);
+      return;
+    }
+    _runAction(value);
+  }
+
+  void _runAction(String value) {
     switch (value) {
       case 'enable':
         onEnable();

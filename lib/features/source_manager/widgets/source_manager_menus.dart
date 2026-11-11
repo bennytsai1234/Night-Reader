@@ -9,9 +9,9 @@ class SourceManagerMenus {
   static const List<String> _statusFilters = [
     '全部',
     '已啟用',
-    '已禁用',
+    '已停用',
     '已啟用發現',
-    '已禁用發現',
+    '已停用發現',
     '無分組',
   ];
 
@@ -167,11 +167,7 @@ class SourceManagerMenus {
     List<GlassMenuEntry<String>> entries,
     ValueChanged<String> onSelected,
   ) async {
-    final value = await showGlassMenu<String>(
-      context: buttonContext,
-      anchor: globalRectOf(buttonContext),
-      entries: entries,
-    );
+    final value = await showGlassSubmenu<String>(buttonContext, entries);
     if (value != null) onSelected(value);
   }
 
@@ -255,7 +251,7 @@ class SourceManagerMenus {
           GlassMenuItem(
             value: 'delete_by_tags',
             icon: Icons.delete_sweep_outlined,
-            label: '刪除書源',
+            label: '按標籤刪除',
             destructive: true,
             enabled: provider.totalSourceCount > 0 && mutationEnabled,
           ),

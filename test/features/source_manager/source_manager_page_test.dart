@@ -210,7 +210,7 @@ void main() {
         reason: label,
       );
     }
-    expect(find.text('刪除書源'), findsOneWidget);
+    expect(find.text('按標籤刪除'), findsOneWidget);
     expect(find.text('網路匯入'), findsNothing);
 
     await tester.tap(find.text('加入書源'));
@@ -233,6 +233,53 @@ void main() {
     await tester.tap(find.text('按域名分組'));
     await tester.pumpAndSettle();
     expect(provider.groupByDomain, isTrue);
+  });
+
+  testWidgets('多選「⋯」收成七項，連續選取要選兩個以上', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('書源0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('選取'));
+    await tester.pumpAndSettle();
+    bool enabled(String label) =>
+        tester
+            .widget<InkWell>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(InkWell),
+              ),
+            )
+            .onTap !=
+        null;
+    Future<void> openBatch() async {
+      await tester.tap(find.bySemanticsLabel('更多批次操作'));
+      await tester.pumpAndSettle();
+    }
+
+    await openBatch();
+    expect(enabled('連續選取'), isFalse);
+    for (final label in ['啟用與停用', '分組', '匯出與分享', '校驗與修復']) {
+      expect(
+        find.descendant(
+          of: find.ancestor(of: find.text(label), matching: find.byType(Row)),
+          matching: find.byIcon(Icons.chevron_right_rounded),
+        ),
+        findsOneWidget,
+        reason: label,
+      );
+    }
+    await tester.tapAt(const Offset(5, 300));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('書源2'));
+    await tester.pumpAndSettle();
+    await openBatch();
+    expect(enabled('連續選取'), isTrue);
+    await tester.tap(find.text('啟用與停用'));
+    await tester.pumpAndSettle();
+    expect(find.text('停用選中'), findsOneWidget);
+    expect(find.text('停用發現'), findsOneWidget);
   });
 
   testWidgets('rows stay laid out in selection mode', (tester) async {

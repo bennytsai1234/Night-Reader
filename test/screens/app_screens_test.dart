@@ -222,9 +222,9 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
     const {},
     (t) async {
       await openMine(t, '書源管理');
-      await tapTooltip(t, '更多操作');
-      await tapText(t, '選取書源');
-      await tapText(t, '筆趣閣');
+      await t.longPress(find.text('筆趣閣').first);
+      await settle(t, const Duration(milliseconds: 900));
+      await tapText(t, '選取');
       await tapTooltip(t, '更多批次操作');
     },
   ),
@@ -247,7 +247,7 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
     (t) async {
       await openMine(t, '書源管理');
       await tapTooltip(t, '更多操作');
-      await tapText(t, '刪除書源');
+      await tapText(t, '按標籤刪除');
       await tapText(t, '常用：1 個');
     },
   ),

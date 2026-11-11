@@ -387,10 +387,9 @@ class _BookshelfPageState extends State<BookshelfPage>
     BuildContext buttonContext,
     BookshelfProvider provider,
   ) async {
-    final value = await showGlassMenu<Object>(
-      context: buttonContext,
-      anchor: globalRectOf(buttonContext),
-      entries: _sortFilterEntries(provider),
+    final value = await showGlassSubmenu<Object>(
+      buttonContext,
+      _sortFilterEntries(provider),
     );
     if (value != null && mounted) await _onShelfMenuSelected(provider, value);
   }

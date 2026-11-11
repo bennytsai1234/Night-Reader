@@ -307,11 +307,11 @@ class SourceManagerProvider with ChangeNotifier {
 
     if (filterGroup == '已啟用') {
       list = list.where((s) => s.enabled).toList();
-    } else if (filterGroup == '已禁用') {
+    } else if (filterGroup == '已停用') {
       list = list.where((s) => !s.enabled).toList();
     } else if (filterGroup == '已啟用發現') {
       list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
-    } else if (filterGroup == '已禁用發現') {
+    } else if (filterGroup == '已停用發現') {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
     } else if (kindFilters[filterGroup] case final kind?) {
       list = list.where((s) => s.sourceKind == kind).toList();
