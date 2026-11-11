@@ -24,7 +24,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import '../support/app_harness.dart';
@@ -181,7 +185,106 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
     const {'hideStatusBar': true, 'reader_header_info': '1,4'},
     openReaderMenu,
   ),
+  // 各處的選單（ADR 0059：項目一律畫出，不能用的灰掉）。
+  'm01_detail_more': (
+    const {},
+    (t) async {
+      await t.longPress(find.text('夜雨聽書').first);
+      await settle(t, const Duration(milliseconds: 900));
+      await tapText(t, '書籍詳情');
+      await tapTooltip(t, '更多');
+    },
+  ),
+  'm02_sources_more': (
+    const {},
+    (t) async {
+      await openMine(t, '書源管理');
+      await tapTooltip(t, '更多操作');
+    },
+  ),
+  'm03_sources_filter': (
+    const {},
+    (t) async {
+      await openMine(t, '書源管理');
+      await tapTooltip(t, '更多操作');
+      await tapText(t, '分組與篩選');
+    },
+  ),
+  'm04_source_longpress': (
+    const {},
+    (t) async {
+      await openMine(t, '書源管理');
+      await t.longPress(find.text('筆趣閣').first);
+      await settle(t, const Duration(milliseconds: 900));
+    },
+  ),
+  'm05_sources_batch_more': (
+    const {},
+    (t) async {
+      await openMine(t, '書源管理');
+      await tapTooltip(t, '更多操作');
+      await tapText(t, '選取書源');
+      await tapText(t, '筆趣閣');
+      await tapTooltip(t, '更多批次操作');
+    },
+  ),
+  'm06_search_kind': (
+    const {},
+    (t) async {
+      await tapTooltip(t, '搜尋');
+      await tapTooltip(t, '搜尋的類別：小說源');
+    },
+  ),
+  'm07_explore_kind': (
+    const {},
+    (t) async {
+      await tapText(t, '發現');
+      await tapTooltip(t, '書源類型');
+    },
+  ),
+  // 插一本本地書：留在資料庫裡，所以放最後，前面的圖才不受影響。
+  'm08_local_longpress': (
+    const {},
+    (t) async {
+      await addLocalBook(t);
+      await t.longPress(find.text(_localBookName).first);
+      await settle(t, const Duration(milliseconds: 900));
+    },
+  ),
+  'm09_local_detail_more': (
+    const {},
+    (t) async {
+      await addLocalBook(t);
+      await t.longPress(find.text(_localBookName).first);
+      await settle(t, const Duration(milliseconds: 900));
+      await tapText(t, '書籍詳情');
+      await tapTooltip(t, '更多');
+    },
+  ),
 };
+
+const _localBookName = '本地藏書';
+
+/// 書架上插一本本地 TXT（重複呼叫只會覆寫同一本），再重建 App 讓書架讀到。
+Future<void> addLocalBook(WidgetTester tester) async {
+  await tester.runAsync(
+    () => getIt<BookDao>().upsert(
+      Book(
+        bookUrl: '/storage/emulated/0/Books/本地藏書.txt',
+        origin: BookType.localOrigin,
+        originName: '本地',
+        name: _localBookName,
+        author: '佚名',
+        totalChapterNum: 12,
+        durChapterTime: DateTime(2026, 10, 15, 22).millisecondsSinceEpoch,
+        isInBookshelf: true,
+      ),
+    ),
+  );
+  await tester.pumpWidget(const SizedBox.shrink());
+  await settle(tester, const Duration(milliseconds: 300));
+  await pumpApp(tester);
+}
 
 void main() {
   setUpAll(loadScreenshotFonts);
