@@ -696,6 +696,25 @@ void main() {
       expect(engine.spoken.last, '第二句。');
     });
 
+    test('the panel pauses while the picked chapter loads', () async {
+      final second = Completer<void>();
+      await open({0: '第一句。', 1: '第二句。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+
+      tts.onSkipToNext();
+      await pumpEventQueue();
+      // 引擎停著等第二章，朗讀還在進行：面板按下去是暫停，不是從畫面重念。
+      expect(tts.isPlaying, isTrue);
+      await tts.toggle();
+      expect(tts.isPaused, isTrue);
+      second.complete();
+      await pumpEventQueue();
+      expect(engine.spoken, ['第一句。']);
+
+      await tts.toggle();
+      expect(engine.spoken.last, '第二句。');
+    });
+
     test('a picked chapter that fails to load takes the info away', () async {
       await open({0: '第一句。', 1: null});
       await tts.startFromVisibleLocation();

@@ -34,6 +34,9 @@ mixin DownloadScheduler on DownloadBase {
     _setPausedAll(!isPaused);
     update();
     unawaited(_savePausedAll(isPaused));
+    // 暫停中排程不開新任務、沒有在跑的就收掉（[startDownloads]），繼續時
+    // 叫它起來。
+    if (!isPaused && tasks.any((t) => t.isWaiting)) unawaited(startDownloads());
   }
 
   /// 開 App 讀回上次的「暫停全部」，在任務開跑之前呼叫。
@@ -181,7 +184,11 @@ mixin DownloadScheduler on DownloadBase {
         final activeTasks = tasks
             .where((t) => t.isDownloading || activeTaskUrls.contains(t.bookUrl))
             .toList();
-        if (activeTasks.length < maxConcurrent) {
+        // 暫停全部時不開新任務：還沒開跑的任務連目錄都不抓（開跑後抓目錄
+        // 在 [processTask] 裡、逐章才看暫停）；跑著的會停在下一章之前。
+        if (isPaused) {
+          if (activeTasks.isEmpty) break;
+        } else if (activeTasks.length < maxConcurrent) {
           final nextTask = tasks.cast<DownloadTask?>().firstWhere((t) {
             if (t == null || !t.isWaiting) return false;
             return !activeTaskUrls.contains(t.bookUrl) &&

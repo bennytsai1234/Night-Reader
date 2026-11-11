@@ -66,6 +66,10 @@ class SourceCheckReport {
 
   bool get hasEntries => entries.isNotEmpty;
 
+  /// 有這次校驗的結果可看：校驗了至少一個，或一個都還沒校驗完就停止（摘要
+  /// 寫「已停止，校驗了 0/N 個」）。
+  bool get isPresent => hasEntries || stopped;
+
   String get summary =>
       '${stopped ? '已停止，校驗了 $total/$plannedCount 個：' : ''}'
       '可用 $healthyCount / 異常 $affectedCount / 建議清理 $cleanupCandidateCount';
@@ -351,7 +355,7 @@ class CheckSourceService extends ChangeNotifier {
   int get currentCount => _currentCount;
   String get statusMsg => _statusMsg;
   SourceCheckReport get lastReport => _lastReport;
-  bool get hasLastReport => _lastReport.hasEntries;
+  bool get hasLastReport => _lastReport.isPresent;
   SourceCheckConfig get config => _config;
   UnmodifiableListView<SourceCheckLogEntry> get logs =>
       UnmodifiableListView<SourceCheckLogEntry>(_logs);
@@ -652,7 +656,7 @@ class CheckSourceService extends ChangeNotifier {
 
   /// 書源的校驗標記被清掉後，上次的摘要已經對不上，一併收起。
   void clearLastReport() {
-    if (_isChecking || !_lastReport.hasEntries) return;
+    if (_isChecking || !_lastReport.isPresent) return;
     _lastReport = SourceCheckReport.empty;
     _statusMsg = '';
     _logs.clear();

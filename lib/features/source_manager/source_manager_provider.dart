@@ -493,6 +493,10 @@ class SourceManagerProvider with ChangeNotifier {
       if (_allGroups.contains(tag)) tag,
   ];
 
+  /// 有沒有書源校驗過（有校驗時間或校驗標記）：「沒有異常」篩選據此能不能選。
+  bool get anySourceChecked =>
+      checkResultTags.isNotEmpty || _sources.any((s) => s.lastCheckTime > 0);
+
   /// 使用者自己的分組，不含校驗結果標記。
   List<String> get userGroups => [
     for (final group in _allGroups)

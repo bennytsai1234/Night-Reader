@@ -128,7 +128,10 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
                           provider.kinds.isNotEmpty &&
                           kind != provider.kinds.first,
                       tooltip: '搜尋的類別：${kind.sourceLabel}',
-                      onTap: () => _pickKind(capsuleContext),
+                      // 三類都沒有書源時整顆停用（ADR 0059）。
+                      onTap: provider.kindCounts.isEmpty
+                          ? null
+                          : () => _pickKind(capsuleContext),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),

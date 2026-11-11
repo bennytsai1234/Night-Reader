@@ -133,8 +133,11 @@ class ReaderV2TtsController extends ChangeNotifier
   @override
   late final SleepTimer sleepTimer;
 
+  /// 正在朗讀：有正在念（或按了上一章、下一章正在載入）的那一章，而且沒
+  /// 暫停。不看引擎有沒有在發聲：句與句之間、換章載入時引擎是停的。面板、
+  /// 定時鍵、定時器與系統播放資訊都照這個。
   @override
-  bool get isPlaying => _tts.isPlaying;
+  bool get isPlaying => _speakingChapterIndex != null && !isPaused;
 
   /// 暫停一律停在一句（[_pauseAtSentence]），播放鍵從那句開頭接著念。
   @override
@@ -172,7 +175,7 @@ class ReaderV2TtsController extends ChangeNotifier
 
   @override
   Future<void> toggle() async {
-    if (_tts.isPlaying) {
+    if (isPlaying) {
       _pauseAtSentence();
       return;
     }
@@ -188,7 +191,7 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 選單上的定時鍵：正在念就暫停在這一句；否則照記住的定時開始朗讀
   /// （定時是關閉時改用 30 分），暫停中則從暫停處接著念。
   Future<void> toggleTimed() async {
-    if (_tts.isPlaying) {
+    if (isPlaying) {
       _pauseAtSentence();
       return;
     }
@@ -209,7 +212,7 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 使用者手動跳到別處：正在朗讀就從新位置接著念；暫停中則丟掉舊句，
   /// 下次播放從新位置開始。
   Future<void> followManualJump() async {
-    final wasPlaying = _tts.isPlaying;
+    final wasPlaying = isPlaying;
     if (!wasPlaying && _currentSegment == null && _resumeLocation == null) {
       return;
     }
@@ -332,7 +335,7 @@ class ReaderV2TtsController extends ChangeNotifier
   @override
   void notifyListeners() {
     if (_disposed) return;
-    final running = _currentSegment != null && !isPaused;
+    final running = isPlaying;
     sleepTimer.sync(
       active: _currentSegment != null || _resumeLocation != null,
       running: running,

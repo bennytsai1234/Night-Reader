@@ -43,7 +43,7 @@ class SourceManagerMenus {
       value: SourceManagerProvider.noAbnormalFilter,
       label: SourceManagerProvider.noAbnormalFilter,
       checked: provider.filterGroup == SourceManagerProvider.noAbnormalFilter,
-      enabled: provider.checkResultTags.isNotEmpty,
+      enabled: provider.anySourceChecked,
     ),
     for (final tag in provider.checkResultTags)
       GlassMenuItem(

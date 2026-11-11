@@ -170,7 +170,8 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         GlassMenuButton<BookSourceKind>(
           icon: BookKindMark.switchIconOf(provider.kind),
           tooltip: '書源類型',
-          enabled: provider.sourceLoadError == null,
+          // 三類都沒有發現書源（或讀取失敗）時整顆停用（ADR 0059）。
+          enabled: kinds.isNotEmpty,
           entriesBuilder: (_) => [
             for (final kind in ExploreProvider.switchableKinds)
               GlassMenuItem(
