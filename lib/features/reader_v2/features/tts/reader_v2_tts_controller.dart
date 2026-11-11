@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
@@ -398,6 +399,14 @@ class ReaderV2TtsController extends ChangeNotifier
 
   @override
   void onPlay() {
+    AppLog.d(
+      '朗讀收到系統的播放：引擎${isPlaying ? '在念' : '沒在念'}、'
+      '${_resumeLocation != null
+          ? '停在一句'
+          : isPaused
+          ? '暫停中'
+          : '沒有暫停處'}',
+    );
     if (!isPlaying) unawaited(toggle());
   }
 

@@ -357,27 +357,44 @@ class _SessionHandler extends BaseAudioHandler {
     );
   }
 
-  @override
-  Future<void> play() async => _owner?.onPlay();
+  /// 系統（通知、鎖定畫面、耳機、藍牙）按了 [command]：記一筆再交給目前
+  /// 那一方。崩潰日誌與崩潰前紀錄看得到按了什麼、有沒有人接。
+  PlaybackOwner? _received(String command) {
+    final owner = _owner;
+    AppLog.d('系統播放按了 $command（${owner?.runtimeType ?? '沒有人在播'}）');
+    return owner;
+  }
 
   @override
-  Future<void> pause() async => _owner?.onPause();
+  Future<void> click([MediaButton button = MediaButton.media]) {
+    AppLog.d(
+      '系統播放按了媒體鍵 ${button.name}（狀態：${playbackState.value.playing ? '播放中' : '暫停'}）',
+    );
+    return super.click(button);
+  }
 
   @override
-  Future<void> stop() async => _owner?.onStop();
+  Future<void> play() async => _received('播放')?.onPlay();
 
   @override
-  Future<void> skipToNext() async => _owner?.onSkipToNext();
+  Future<void> pause() async => _received('暫停')?.onPause();
 
   @override
-  Future<void> skipToPrevious() async => _owner?.onSkipToPrevious();
+  Future<void> stop() async => _received('停止')?.onStop();
 
   @override
-  Future<void> rewind() async => _owner?.onRewind();
+  Future<void> skipToNext() async => _received('下一個')?.onSkipToNext();
 
   @override
-  Future<void> fastForward() async => _owner?.onFastForward();
+  Future<void> skipToPrevious() async => _received('上一個')?.onSkipToPrevious();
 
   @override
-  Future<void> seek(Duration position) async => _owner?.onSeek(position);
+  Future<void> rewind() async => _received('倒退')?.onRewind();
+
+  @override
+  Future<void> fastForward() async => _received('快轉')?.onFastForward();
+
+  @override
+  Future<void> seek(Duration position) async =>
+      _received('拖到 $position')?.onSeek(position);
 }
