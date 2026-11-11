@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/crash_trail.dart';
 import 'package:night_reader/core/services/source_check_diagnostics.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
@@ -401,6 +402,7 @@ class CheckSourceService extends ChangeNotifier {
     ).toList(growable: false);
     final config = _config.normalized();
     _isChecking = true;
+    CrashTrail.action('開始校驗書源（${normalizedUrls.length} 個）');
     _totalCount = normalizedUrls.length;
     _currentCount = 0;
     _statusMsg = '準備校驗';
@@ -450,6 +452,7 @@ class CheckSourceService extends ChangeNotifier {
     );
     _statusMsg = _lastReport.summary;
     _appendLog('校驗完成：${_lastReport.summary}');
+    CrashTrail.action('校驗書源結束：${_lastReport.summary}');
     _finishedRunCount++;
     _notifyIfAlive();
     return _lastReport;
@@ -646,6 +649,7 @@ class CheckSourceService extends ChangeNotifier {
 
   void cancel() {
     if (!_isChecking) return;
+    CrashTrail.action('取消校驗書源（做完 $_currentCount／$_totalCount 個）');
     _isChecking = false;
     for (final handle in _activeTasks.values) {
       handle.abort();

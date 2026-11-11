@@ -8,6 +8,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/crash_trail.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 
@@ -189,6 +190,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   Future<void> _run() async {
     _running = true;
+    CrashTrail.action('開始修復異常書源（${items.length} 個）');
     _notify();
     try {
       await _recheckAll();
@@ -211,6 +213,7 @@ class SourceRepairBatch extends ChangeNotifier {
       }
       stage = RepairStage.done;
       _running = false;
+      CrashTrail.action(_stopped ? '修復異常書源停下了' : '修復異常書源做完了');
       _notify();
     }
   }
@@ -218,6 +221,7 @@ class SourceRepairBatch extends ChangeNotifier {
   /// 停下：做著的那一個 AI 修復停下、書源不改，還沒輪到的不做。
   void stop() {
     if (_stopped || isFinished) return;
+    CrashTrail.action('按了停止：修復異常書源（做到${_stageName(stage)}）');
     _stopped = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
     _activeRecheckService?.cancel();
@@ -234,6 +238,14 @@ class SourceRepairBatch extends ChangeNotifier {
     }
     _notify();
   }
+
+  static String _stageName(RepairStage stage) => switch (stage) {
+    RepairStage.checking => '重新校驗',
+    RepairStage.checkingSites => '檢查網站',
+    RepairStage.moving => '換網址',
+    RepairStage.repairing || RepairStage.sharing => 'AI 修',
+    RepairStage.done => '做完',
+  };
 
   // ── 1. 重新校驗 ────────────────────────────────────────────────────────
 
