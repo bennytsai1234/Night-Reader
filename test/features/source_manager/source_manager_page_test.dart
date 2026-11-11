@@ -190,12 +190,12 @@ void main() {
   testWidgets('rows stay laid out in selection mode', (tester) async {
     await pumpPage(tester);
 
-    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.longPress(find.text('書源0'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('選取書源'));
+    await tester.tap(find.text('選取'));
     await tester.pumpAndSettle();
 
-    expect(find.text('選取書源'), findsOneWidget);
+    expect(find.text('已選 1 項'), findsOneWidget);
     for (var i = 0; i < 3; i++) {
       expect(find.text('書源$i'), findsOneWidget);
     }
@@ -335,9 +335,9 @@ void main() {
         tester.getSize(find.byType(GlassMorph).last).width;
     final menuWidth = trailingWidth();
 
-    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.longPress(find.text('書源0'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('選取書源'));
+    await tester.tap(find.text('選取'));
     await tester.pump();
     await tester.pump(AppMotion.fade ~/ 2);
     // 淡換途中新舊標題都在；玻璃按鈕不在淡入裡，寬度在半路。
@@ -346,7 +346,7 @@ void main() {
       matching: find.text(text),
     );
     expect(header('書源管理'), findsOneWidget);
-    expect(header('選取書源'), findsOneWidget);
+    expect(header('已選 1 項'), findsOneWidget);
     expectNoGlassUnderFade(tester);
     final midway = trailingWidth();
     expect(midway, greaterThan(menuWidth));

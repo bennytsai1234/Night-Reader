@@ -318,7 +318,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         SourceManagerMenus.buildMoreMenu(
           context,
           provider,
-          onSelect: () => _enterEditMode(provider),
           onImportUrl: () => _showImportDialog(context, true),
           onImportFile: () => _importFromFile(context),
           onImportClipboard: () => _importFromClipboard(context),
@@ -344,10 +343,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
               builder: (_) => const AiRepairSettingsPage(),
             ),
           ),
-          onClearInvalid: (p) =>
-              SourceManagerDialogs.confirmClearInvalid(context, p),
-          onDeleteNonNovel: (p) =>
-              SourceManagerDialogs.confirmDeleteNonNovel(context, p),
+          onDeleteByTags: () =>
+              SourceManagerDialogs.confirmDeleteByTags(context, provider),
           importEnabled: !_isImporting,
           mutationEnabled: mutationEnabled,
         ),

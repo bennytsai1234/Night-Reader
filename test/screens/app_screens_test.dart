@@ -242,6 +242,15 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
       await tapTooltip(t, '書源類型');
     },
   ),
+  'm10_sources_delete': (
+    const {},
+    (t) async {
+      await openMine(t, '書源管理');
+      await tapTooltip(t, '更多操作');
+      await tapText(t, '刪除書源');
+      await tapText(t, '常用：1 個');
+    },
+  ),
   // 插一本本地書：留在資料庫裡，所以放最後，前面的圖才不受影響。
   'm08_local_longpress': (
     const {},

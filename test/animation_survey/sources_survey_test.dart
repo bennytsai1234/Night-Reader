@@ -185,9 +185,8 @@ void main() {
         });
 
         // 多選：進入、勾兩筆、批次停用、批次啟用、完成離開。
-        await step('更多操作：開選單', () => _openMore(tester));
-        await step('進入多選（選取書源）', () => _tapTop(tester, '選取書源'));
-        await step('多選：勾第一筆', () => tester.tap(_firstTile));
+        await step('長按第一筆書源：開選單', () => tester.longPress(_firstTile));
+        await step('進入多選（長按選單的選取，勾第一筆）', () => _tapTop(tester, '選取'));
         await step('多選：勾第二筆', () async {
           await tester.tap(
             find

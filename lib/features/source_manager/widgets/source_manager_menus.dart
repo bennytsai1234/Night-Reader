@@ -109,7 +109,6 @@ class SourceManagerMenus {
   static Widget buildMoreMenu(
     BuildContext context,
     SourceManagerProvider provider, {
-    required VoidCallback onSelect,
     required VoidCallback onImportUrl,
     required VoidCallback onImportFile,
     required VoidCallback onImportClipboard,
@@ -119,8 +118,7 @@ class SourceManagerMenus {
     required VoidCallback onClearCheckMarks,
     required VoidCallback onAiRepairSettings,
     required VoidCallback onRepairAbnormal,
-    required Function(SourceManagerProvider) onClearInvalid,
-    required Function(SourceManagerProvider) onDeleteNonNovel,
+    required VoidCallback onDeleteByTags,
     bool importEnabled = true,
     bool mutationEnabled = true,
   }) {
@@ -145,8 +143,6 @@ class SourceManagerMenus {
                   provider.setSortMode(int.parse(value));
                 }
               });
-            case 'select':
-              onSelect();
             case 'import_url':
               onImportUrl();
             case 'import_file':
@@ -155,8 +151,6 @@ class SourceManagerMenus {
               onImportClipboard();
             case 'new_source':
               onNewSource();
-            case 'manage_groups':
-              onManageGroups();
             case 'check_all':
               onCheckAllSources();
             case 'clear_check_marks':
@@ -167,10 +161,8 @@ class SourceManagerMenus {
               onAiRepairSettings();
             case 'group_domain':
               provider.toggleGroupByDomain();
-            case 'clear_invalid':
-              onClearInvalid(provider);
-            case 'clean_non_novel':
-              onDeleteNonNovel(provider);
+            case 'delete_by_tags':
+              onDeleteByTags();
           }
         },
         entriesBuilder: (_) => [
@@ -180,13 +172,6 @@ class SourceManagerMenus {
             label: '分組與篩選',
           ),
           GlassMenuItem(value: 'sort', icon: Icons.sort_rounded, label: '排序方式'),
-          const GlassMenuDivider(),
-          GlassMenuItem(
-            value: 'select',
-            icon: Icons.checklist_rounded,
-            label: '選取書源',
-            enabled: provider.totalSourceCount > 0,
-          ),
           const GlassMenuDivider(),
           GlassMenuItem(
             value: 'import_url',
@@ -210,12 +195,6 @@ class SourceManagerMenus {
             value: 'new_source',
             icon: Icons.add_circle_outline,
             label: '新建書源',
-            enabled: mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'manage_groups',
-            icon: Icons.edit_note_outlined,
-            label: '管理分組',
             enabled: mutationEnabled,
           ),
           const GlassMenuDivider(),
@@ -250,18 +229,11 @@ class SourceManagerMenus {
           ),
           const GlassMenuDivider(),
           GlassMenuItem(
-            value: 'clear_invalid',
+            value: 'delete_by_tags',
             icon: Icons.delete_sweep_outlined,
-            label: '清理建議刪除來源',
+            label: '刪除書源',
             destructive: true,
-            enabled: mutationEnabled,
-          ),
-          GlassMenuItem(
-            value: 'clean_non_novel',
-            icon: Icons.delete_forever_outlined,
-            label: '刪除非小說源',
-            destructive: true,
-            enabled: mutationEnabled,
+            enabled: provider.totalSourceCount > 0 && mutationEnabled,
           ),
         ],
       ),
