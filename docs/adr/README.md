@@ -14,6 +14,7 @@
 | [0022](0022-glass-moves-content-fades.md) | 一個元件的進出場只做一件事：玻璃只動、內容只淡，最後一幀等於靜止 |
 | [0009](0009-no-explanatory-copy-in-ui.md) | 介面不放解釋性文案 |
 | [0030](0030-settings-hierarchy-and-option-inventory.md) | 設定的分級規則與全部選項的去留 |
+| [0059](0059-menus-show-every-item.md) | 選單與頁首的項目一律畫出，不能用的灰掉、不寫原因；設定頁依賴開關的子設定照舊隱藏 |
 
 ## 開 App 與載入
 

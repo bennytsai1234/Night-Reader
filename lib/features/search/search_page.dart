@@ -637,16 +637,15 @@ class _SearchViewState extends State<SearchView> {
               blur: false,
               onTap: () => _showResultFilterSheet(context),
             ),
-            if (p.hasActiveResultFilters) ...[
-              const SizedBox(width: AppSpacing.sm),
-              GlassCapsule(
-                label: '清除',
-                icon: Icons.close_rounded,
-                tooltip: '清除篩選',
-                blur: false,
-                onTap: p.clearResultFilters,
-              ),
-            ],
+            // 一直在，沒有篩選時灰掉（ADR 0059）。
+            const SizedBox(width: AppSpacing.sm),
+            GlassCapsule(
+              label: '清除',
+              icon: Icons.close_rounded,
+              tooltip: '清除篩選',
+              blur: false,
+              onTap: p.hasActiveResultFilters ? p.clearResultFilters : null,
+            ),
             if (p.failedSources > 0) ...[
               const SizedBox(width: AppSpacing.sm),
               GlassCapsule(

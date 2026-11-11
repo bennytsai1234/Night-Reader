@@ -129,9 +129,8 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }
 
   /// 頁首和書架一樣是「圓鈕＋置中標題」，清單從頁首下方同一條線開始。
-  /// 有分組時左側是分組鈕，發現書源不只一類時右側是類型鈕；讀到書源前
-  /// provider 的分組與類別是上次的紀錄，鈕從第一幀就在，之後有無改變時
-  /// 從一個點長出或收回（GlassMorph）。
+  /// 左側分組鈕、右側類型鈕一直在（ADR 0059）：沒有分組或書源讀取失敗時
+  /// 分組鈕灰掉；類型選單裡沒有發現書源的那一類灰掉。
   GlassNavHeader _buildHeader(ExploreProvider provider) {
     final hasGroups =
         provider.sourceLoadError == null && provider.groups.isNotEmpty;
@@ -142,48 +141,48 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       morph: true,
       title: '發現',
       backgroundColor: AppChrome.of(context).groupedBackground,
-      leading: hasGroups
-          ? GlassMenuButton<Object>(
-              icon: Icons.filter_list_rounded,
-              tooltip: '分組',
-              entriesBuilder: (_) => [
-                GlassMenuItem(
-                  value: _allGroups,
-                  label: '全部　${provider.allGroupCount}',
-                  checked: provider.selectedGroup == null,
-                ),
-                for (final group in provider.groups)
-                  GlassMenuItem(
-                    value: group,
-                    label: '$group　${provider.groupCounts[group] ?? 0}',
-                    checked: provider.selectedGroup == group,
-                  ),
-              ],
-              onSelected: (value) {
-                final group = value == _allGroups ? null : value as String;
-                // provider 對同一分組是切換語意；再點一次已選的分組不取消。
-                if (group != provider.selectedGroup) {
-                  provider.setGroupFilter(group);
-                }
-              },
-            )
-          : null,
-      actions: [
-        if (kinds.length > 1)
-          GlassMenuButton<BookSourceKind>(
-            icon: BookKindMark.switchIconOf(provider.kind),
-            tooltip: '書源類型',
-            entriesBuilder: (_) => [
-              for (final kind in kinds)
-                GlassMenuItem(
-                  value: kind,
-                  label: '${kind.sourceLabel}　${provider.kindCounts[kind]}',
-                  icon: BookKindMark.switchIconOf(kind),
-                  checked: kind == provider.kind,
-                ),
-            ],
-            onSelected: provider.setKind,
+      leading: GlassMenuButton<Object>(
+        icon: Icons.filter_list_rounded,
+        tooltip: '分組',
+        enabled: hasGroups,
+        entriesBuilder: (_) => [
+          GlassMenuItem(
+            value: _allGroups,
+            label: '全部　${provider.allGroupCount}',
+            checked: provider.selectedGroup == null,
           ),
+          for (final group in provider.groups)
+            GlassMenuItem(
+              value: group,
+              label: '$group　${provider.groupCounts[group] ?? 0}',
+              checked: provider.selectedGroup == group,
+            ),
+        ],
+        onSelected: (value) {
+          final group = value == _allGroups ? null : value as String;
+          // provider 對同一分組是切換語意；再點一次已選的分組不取消。
+          if (group != provider.selectedGroup) {
+            provider.setGroupFilter(group);
+          }
+        },
+      ),
+      actions: [
+        GlassMenuButton<BookSourceKind>(
+          icon: BookKindMark.switchIconOf(provider.kind),
+          tooltip: '書源類型',
+          enabled: provider.sourceLoadError == null,
+          entriesBuilder: (_) => [
+            for (final kind in ExploreProvider.switchableKinds)
+              GlassMenuItem(
+                value: kind,
+                label: '${kind.sourceLabel}　${provider.kindCounts[kind] ?? 0}',
+                icon: BookKindMark.switchIconOf(kind),
+                checked: kind == provider.kind,
+                enabled: kinds.contains(kind),
+              ),
+          ],
+          onSelected: provider.setKind,
+        ),
       ],
     );
   }

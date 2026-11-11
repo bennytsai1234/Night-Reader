@@ -25,29 +25,31 @@ class SourceManagerMenus {
         label: filter,
         checked: provider.filterGroup == filter,
       ),
-    // 漫畫、有聲源和小說源混在同一個清單，篩得出來才找得到它們。
-    if (provider.presentKindFilters.isNotEmpty) const GlassMenuDivider(),
-    for (final filter in provider.presentKindFilters)
+    // 漫畫、有聲源和小說源混在同一個清單，篩得出來才找得到它們；沒有
+    // 這類書源時灰掉（ADR 0059）。
+    const GlassMenuDivider(),
+    for (final filter in SourceManagerProvider.kindFilters.keys)
       GlassMenuItem(
         value: filter,
         label: filter,
         checked: provider.filterGroup == filter,
+        enabled: provider.presentKindFilters.contains(filter),
       ),
     // 校驗結果和自己的分組分開：校驗完要挑出失效的書源一起停用或刪掉。
-    if (provider.checkResultTags.isNotEmpty) ...[
-      const GlassMenuDivider(),
+    // 「沒有異常」一直在，還沒校驗過時灰掉；下面的標記照書源上有的列。
+    const GlassMenuDivider(),
+    GlassMenuItem(
+      value: SourceManagerProvider.noAbnormalFilter,
+      label: SourceManagerProvider.noAbnormalFilter,
+      checked: provider.filterGroup == SourceManagerProvider.noAbnormalFilter,
+      enabled: provider.checkResultTags.isNotEmpty,
+    ),
+    for (final tag in provider.checkResultTags)
       GlassMenuItem(
-        value: SourceManagerProvider.noAbnormalFilter,
-        label: SourceManagerProvider.noAbnormalFilter,
-        checked: provider.filterGroup == SourceManagerProvider.noAbnormalFilter,
+        value: tag,
+        label: tag,
+        checked: provider.filterGroup == tag,
       ),
-      for (final tag in provider.checkResultTags)
-        GlassMenuItem(
-          value: tag,
-          label: tag,
-          checked: provider.filterGroup == tag,
-        ),
-    ],
     if (provider.userGroups.isNotEmpty) const GlassMenuDivider(),
     for (final group in provider.userGroups)
       GlassMenuItem(

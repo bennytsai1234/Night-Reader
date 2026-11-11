@@ -114,8 +114,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     }
   }
 
-  /// Telegram 式編輯模式：左側勾選圈、底部批次工具列。有選取時也視為
-  /// 編輯模式，避免選取狀態沒有出口。
+  /// Telegram 式編輯模式：左側勾選圈。底部批次工具列有書源時一直在，
+  /// 沒選書源時按鈕灰著。有選取時也視為編輯模式，避免選取狀態沒有出口。
   bool _editMode = false;
 
   @override
@@ -700,12 +700,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           label: '編輯書源',
           icon: Icons.edit_outlined,
         ),
-        if (s.hasLogin)
-          const GlassMenuItem(
-            value: 'login',
-            label: '登入',
-            icon: Icons.login_rounded,
-          ),
+        // 這個書源用不到的項目灰著留在原位（ADR 0059）。
+        GlassMenuItem(
+          value: 'login',
+          label: '登入',
+          icon: Icons.login_rounded,
+          enabled: s.hasLogin,
+        ),
         const GlassMenuItem(
           value: 'debug',
           label: '除錯書源',
@@ -717,20 +718,20 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
           icon: Icons.auto_fix_high_outlined,
           enabled: !p.checkService.isChecking,
         ),
-        if (p.hasAiRepairBackup(s.bookSourceUrl))
-          const GlassMenuItem(
-            value: 'ai_restore',
-            label: '還原 AI 修改前',
-            icon: Icons.restore_rounded,
-          ),
-        if (s.hasExploreUrl)
-          GlassMenuItem(
-            value: 'explore',
-            label: s.enabledExplore ? '停用發現' : '啟用發現',
-            icon: s.enabledExplore
-                ? Icons.explore_off_outlined
-                : Icons.travel_explore,
-          ),
+        GlassMenuItem(
+          value: 'ai_restore',
+          label: '還原 AI 修改前',
+          icon: Icons.restore_rounded,
+          enabled: p.hasAiRepairBackup(s.bookSourceUrl),
+        ),
+        GlassMenuItem(
+          value: 'explore',
+          label: s.hasExploreUrl && s.enabledExplore ? '停用發現' : '啟用發現',
+          icon: s.hasExploreUrl && s.enabledExplore
+              ? Icons.explore_off_outlined
+              : Icons.travel_explore,
+          enabled: s.hasExploreUrl,
+        ),
         const GlassMenuDivider(),
         const GlassMenuItem(
           value: 'top',

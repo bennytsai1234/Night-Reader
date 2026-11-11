@@ -573,13 +573,13 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         actions: [
           GlassMenuButton<String>(
             entriesBuilder: (_) => [
-              if (websiteUrl != null)
-                GlassMenuItem(
-                  value: 'website',
-                  label: '在網站登入',
-                  icon: Icons.open_in_browser_rounded,
-                  enabled: !_busy,
-                ),
+              // 書源網址不是 http(s) 時灰掉（ADR 0059）。
+              GlassMenuItem(
+                value: 'website',
+                label: '在網站登入',
+                icon: Icons.open_in_browser_rounded,
+                enabled: websiteUrl != null && !_busy,
+              ),
               const GlassMenuItem(
                 value: 'header',
                 label: '登入標頭',

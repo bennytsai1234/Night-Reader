@@ -485,9 +485,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       : null,
                   sleepTimer: _host.tts?.sleepTimer,
                   isTtsPlaying: _host.tts?.isPlaying ?? false,
-                  showTts: true,
-                  showAutoPage: true,
-                  showReplaceRule: true,
                   onMenuHidden: _handleMenuHidden,
                   onChapterPanelChanged: (open) => _drawerOpen.value = open,
                 ),
@@ -938,25 +935,26 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (!mounted) return;
     final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,
+      // 本地書與沒有登入的書源用不到的項目灰著留在原位（ADR 0059）。
       actions: [
-        if (!isLocal) ...const [
-          AppSheetAction(
-            label: '換源',
-            icon: Icons.swap_horiz_rounded,
-            value: _ReaderMoreAction.changeSource,
-          ),
-          AppSheetAction(
-            label: '重新取得本章',
-            icon: Icons.refresh_rounded,
-            value: _ReaderMoreAction.refetchChapter,
-          ),
-        ],
-        if (loginSource != null)
-          const AppSheetAction(
-            label: '登入',
-            icon: Icons.login_rounded,
-            value: _ReaderMoreAction.login,
-          ),
+        AppSheetAction(
+          label: '換源',
+          icon: Icons.swap_horiz_rounded,
+          value: _ReaderMoreAction.changeSource,
+          enabled: !isLocal,
+        ),
+        AppSheetAction(
+          label: '重新取得本章',
+          icon: Icons.refresh_rounded,
+          value: _ReaderMoreAction.refetchChapter,
+          enabled: !isLocal,
+        ),
+        AppSheetAction(
+          label: '登入',
+          icon: Icons.login_rounded,
+          value: _ReaderMoreAction.login,
+          enabled: loginSource != null,
+        ),
         const AppSheetAction(
           label: '書籍詳情',
           icon: Icons.info_outline_rounded,

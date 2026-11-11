@@ -338,16 +338,18 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: mode.label,
           checked: provider.sortMode == mode,
         ),
-      // 篩選：書架上不只一種書時才有（`docs/design/screens.md`「書架」）。
-      if (provider.canFilterKinds) ...[
-        const GlassMenuDivider(),
-        for (final choice in _KindFilterChoice.all)
-          GlassMenuItem(
-            value: choice,
-            label: choice.label,
-            checked: provider.activeKindFilter == choice.kind,
-          ),
-      ],
+      // 篩選一直在；書架上沒有的那一類、或書架上只有一種書時灰掉（ADR 0059）。
+      const GlassMenuDivider(),
+      for (final choice in _KindFilterChoice.all)
+        GlassMenuItem(
+          value: choice,
+          label: choice.label,
+          checked: provider.activeKindFilter == choice.kind,
+          enabled:
+              choice.kind == null ||
+              (provider.canFilterKinds &&
+                  provider.shelfKinds.contains(choice.kind)),
+        ),
       const GlassMenuDivider(),
       GlassMenuItem(
         value: _ShelfMenuAction.select,
@@ -1013,21 +1015,21 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: '選取',
           icon: Icons.check_circle_outline,
         ),
-        if (!book.isLocal) ...[
-          const GlassMenuDivider(),
-          GlassMenuItem(
-            value: _BookMenuAction.checkUpdate,
-            label: '檢查更新',
-            icon: Icons.update,
-            enabled: !busy,
-          ),
-          GlassMenuItem(
-            value: _BookMenuAction.autoUpdate,
-            label: '自動檢查更新',
-            icon: Icons.autorenew_rounded,
-            checked: book.canUpdate,
-          ),
-        ],
+        // 本地書沒有更新可查，兩項灰著留在原位（ADR 0059）。
+        const GlassMenuDivider(),
+        GlassMenuItem(
+          value: _BookMenuAction.checkUpdate,
+          label: '檢查更新',
+          icon: Icons.update,
+          enabled: !book.isLocal && !busy,
+        ),
+        GlassMenuItem(
+          value: _BookMenuAction.autoUpdate,
+          label: '自動檢查更新',
+          icon: Icons.autorenew_rounded,
+          checked: !book.isLocal && book.canUpdate,
+          enabled: !book.isLocal,
+        ),
         const GlassMenuDivider(),
         const GlassMenuItem(
           value: _BookMenuAction.remove,

@@ -493,6 +493,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     required bool failed,
   }) {
     final actionsEnabled = !provider.isLoading && !failed;
+    final onlineShelfBook = !provider.book.isLocal && provider.isInBookshelf;
     return GlassNavHeader(
       backgroundColor: background,
       titleWidget: ValueListenableBuilder<bool>(
@@ -507,56 +508,57 @@ class _BookDetailPageState extends State<BookDetailPage> {
         GlassMenuButton<_MenuAction>(
           enabled: actionsEnabled,
           onSelected: (v) => _handleMenuSelection(context, provider, v),
+          // 每一項都在；這本書用不到的灰掉（ADR 0059）。
           entriesBuilder: (ctx) => [
-            if (!provider.book.isLocal)
-              GlassMenuItem(
-                value: _MenuAction.checkUpdate,
-                label: provider.isCheckingUpdate ? '正在檢查更新…' : '檢查更新',
-                icon: Icons.update_rounded,
-                enabled: !provider.isCheckingUpdate,
-              ),
-            if (!provider.book.isLocal && provider.isInBookshelf)
-              GlassMenuItem(
-                value: _MenuAction.autoUpdate,
-                label: '自動檢查更新',
-                icon: Icons.autorenew_rounded,
-                checked: provider.book.canUpdate,
-              ),
-            if (!provider.book.isLocal)
-              const GlassMenuItem(
-                value: _MenuAction.download,
-                label: '預下載章節',
-                icon: Icons.download_rounded,
-              ),
+            GlassMenuItem(
+              value: _MenuAction.checkUpdate,
+              label: provider.isCheckingUpdate ? '正在檢查更新…' : '檢查更新',
+              icon: Icons.update_rounded,
+              enabled: !provider.book.isLocal && !provider.isCheckingUpdate,
+            ),
+            GlassMenuItem(
+              value: _MenuAction.autoUpdate,
+              label: '自動檢查更新',
+              icon: Icons.autorenew_rounded,
+              checked: onlineShelfBook && provider.book.canUpdate,
+              enabled: onlineShelfBook,
+            ),
+            GlassMenuItem(
+              value: _MenuAction.download,
+              label: '預下載章節',
+              icon: Icons.download_rounded,
+              enabled: !provider.book.isLocal,
+            ),
             const GlassMenuItem(
               value: _MenuAction.changeCover,
               label: '換封面',
               icon: Icons.image_outlined,
             ),
             // 漫畫是圖、有聲書是音訊，沒有文字可以匯出（ADR 0055、0052）。
-            if (provider.book.bookKind == BookSourceKind.novel)
-              GlassMenuItem(
-                value: _MenuAction.export,
-                label: _exportProgress == null
-                    ? '匯出全書'
-                    : '正在匯出 ${(_exportProgress! * 100).round()}%',
-                icon: Icons.ios_share_rounded,
-                enabled: _exportProgress == null,
-              ),
+            GlassMenuItem(
+              value: _MenuAction.export,
+              label: _exportProgress == null
+                  ? '匯出全書'
+                  : '正在匯出 ${(_exportProgress! * 100).round()}%',
+              icon: Icons.ios_share_rounded,
+              enabled:
+                  provider.book.bookKind == BookSourceKind.novel &&
+                  _exportProgress == null,
+            ),
             const GlassMenuItem(
               value: _MenuAction.edit,
               label: '編輯資訊',
               icon: Icons.edit_outlined,
             ),
-            if (!provider.book.isLocal && provider.isInBookshelf)
-              GlassMenuItem(
-                value: _MenuAction.clearContent,
-                label: provider.book.bookKind == BookSourceKind.audio
-                    ? '清除已下載的音訊'
-                    : '清除已下載的正文',
-                icon: Icons.delete_sweep_outlined,
-                destructive: true,
-              ),
+            GlassMenuItem(
+              value: _MenuAction.clearContent,
+              label: provider.book.bookKind == BookSourceKind.audio
+                  ? '清除已下載的音訊'
+                  : '清除已下載的正文',
+              icon: Icons.delete_sweep_outlined,
+              destructive: true,
+              enabled: onlineShelfBook,
+            ),
           ],
         ),
       ],

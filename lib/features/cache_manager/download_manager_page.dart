@@ -309,12 +309,12 @@ class DownloadManagerPage extends StatelessWidget {
           icon: Icons.arrow_downward_rounded,
           enabled: index < taskCount - 1,
         ),
-        if (task.failureSummary != null)
-          const GlassMenuItem(
-            value: 'details',
-            label: '查看失敗原因',
-            icon: Icons.info_outline_rounded,
-          ),
+        GlassMenuItem(
+          value: 'details',
+          label: '查看失敗原因',
+          icon: Icons.info_outline_rounded,
+          enabled: task.failureSummary != null,
+        ),
         const GlassMenuDivider(),
         const GlassMenuItem(
           value: 'delete',

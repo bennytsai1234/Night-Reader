@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -301,6 +302,16 @@ void main() {
 
   final groupButton = find.byTooltip('分組');
 
+  /// 頁首的鈕一直在，沒有東西可選時灰掉（ADR 0059）。
+  bool enabled(WidgetTester tester, Finder button) => tester
+      .widget<GlassMenuButton<dynamic>>(
+        find.ancestor(
+          of: button,
+          matching: find.byWidgetPredicate((w) => w is GlassMenuButton),
+        ),
+      )
+      .enabled;
+
   group('group button', () {
     testWidgets('is in place from the first frame when groups were seen', (
       tester,
@@ -352,8 +363,8 @@ void main() {
         await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
         await tester.pump();
 
-        // 和沒有紀錄一樣：先沒有分組鈕，讀到書源才長出來並重新記下。
-        expect(groupButton, findsNothing);
+        // 和沒有紀錄一樣：分組鈕先灰著，讀到書源才能按並重新記下。
+        expect(enabled(tester, groupButton), isFalse);
         // 骨架也照沒有紀錄的樣子鋪滿（null），不是畫 0 列。
         final pending = StreamController<List<BookSource>>();
         addTearDown(() => unawaited(pending.close()));
@@ -364,7 +375,7 @@ void main() {
         expect(fresh.skeletonSourceCount, isNull);
         sources.add(groupedSources());
         await tester.pumpAndSettle();
-        expect(groupButton, findsOneWidget);
+        expect(enabled(tester, groupButton), isTrue);
         expect(
           prefs.get('explore_filter_bar'),
           '{"all":3,"groups":[["甲",3]],"kinds":[["novel",3]]}',
@@ -372,19 +383,19 @@ void main() {
       });
     }
 
-    testWidgets('grows in when the record had no groups', (tester) async {
+    testWidgets('turns on when the record had no groups', (tester) async {
       final sources = StreamController<List<BookSource>>();
       addTearDown(sources.close);
       await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
       await tester.pump();
-      expect(groupButton, findsNothing);
+      expect(enabled(tester, groupButton), isFalse);
       final before = headerHeight(tester);
 
       sources.add(groupedSources());
       await tester.pumpAndSettle();
 
-      // 鈕長在頁首原有的位置上，頁首不變高，清單不讓位。
-      expect(groupButton, findsOneWidget);
+      // 鈕一直在原位，頁首不變高，清單不讓位。
+      expect(enabled(tester, groupButton), isTrue);
       expect(headerHeight(tester), before);
       // 記下這次的分組，下次開 App 從第一幀就留好。
       expect(
@@ -495,14 +506,27 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('is not there when only one kind has explore sources', (
-      tester,
-    ) async {
+    testWidgets('greys out the other kinds when only one has explore '
+        'sources', (tester) async {
       await pumpExplore(tester, _FakeSourceDao(groupedSources()));
       await tester.pumpAndSettle();
 
-      expect(kindButton, findsNothing);
       expect(find.text('書源0'), findsOneWidget);
+      await tester.tap(kindButton);
+      await tester.pumpAndSettle();
+      bool row(String label) =>
+          tester
+              .widget<InkWell>(
+                find.ancestor(
+                  of: find.textContaining(label),
+                  matching: find.byType(InkWell),
+                ),
+              )
+              .onTap !=
+          null;
+      expect(row('小說源'), isTrue);
+      expect(row('漫畫源'), isFalse);
+      expect(row('有聲源'), isFalse);
     });
 
     testWidgets('lists one kind at a time and remembers the pick', (
@@ -646,7 +670,7 @@ void main() {
       expect(provider.groups, ['甲']);
 
       provider.setKind(BookSourceKind.comic);
-      // 分組鈕收回是動畫；骨架一直在呼吸，不能等 settle。
+      // 骨架一直在呼吸，不能等 settle。
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
@@ -654,7 +678,7 @@ void main() {
       expect(provider.groups, isEmpty);
       expect(provider.allGroupCount, 1);
       expect(provider.skeletonSourceCount, 1);
-      expect(groupButton, findsNothing);
+      expect(enabled(tester, groupButton), isFalse);
     });
 
     testWidgets(

@@ -9,7 +9,7 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 
 import '../source_manager_provider.dart';
 
-/// 編輯模式底部的浮動玻璃工具列 — 對標 legado SelectActionBar。
+/// 書源管理底部的浮動玻璃工具列（有書源時一直在）— 對標 legado SelectActionBar。
 /// 提供反選、刪除與其餘批次操作選單；全選放在導航頁首。
 class SelectActionBar extends StatelessWidget {
   final SourceManagerProvider provider;

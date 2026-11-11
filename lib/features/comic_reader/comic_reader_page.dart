@@ -449,25 +449,26 @@ class _ComicReaderPageState extends State<ComicReaderPage>
   Future<void> _showMore() async {
     final action = await showAppActionSheet<_MoreAction>(
       context: context,
+      // 本地漫畫與沒有登入的書源用不到的項目灰著留在原位（ADR 0059）。
       actions: [
-        if (!_book.isLocal) ...[
-          const AppSheetAction(
-            label: '換源',
-            icon: Icons.swap_horiz_rounded,
-            value: _MoreAction.changeSource,
-          ),
-          const AppSheetAction(
-            label: '重新取得本章',
-            icon: Icons.refresh_rounded,
-            value: _MoreAction.refetchChapter,
-          ),
-          if (_source?.hasLogin ?? false)
-            const AppSheetAction(
-              label: '登入',
-              icon: Icons.login_rounded,
-              value: _MoreAction.login,
-            ),
-        ],
+        AppSheetAction(
+          label: '換源',
+          icon: Icons.swap_horiz_rounded,
+          value: _MoreAction.changeSource,
+          enabled: !_book.isLocal,
+        ),
+        AppSheetAction(
+          label: '重新取得本章',
+          icon: Icons.refresh_rounded,
+          value: _MoreAction.refetchChapter,
+          enabled: !_book.isLocal,
+        ),
+        AppSheetAction(
+          label: '登入',
+          icon: Icons.login_rounded,
+          value: _MoreAction.login,
+          enabled: !_book.isLocal && (_source?.hasLogin ?? false),
+        ),
         const AppSheetAction(
           label: '書籍詳情',
           icon: Icons.info_outline_rounded,
@@ -860,7 +861,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
               controlsVisible: _menuVisible,
               bookName: _book.name,
               navigation: navigation,
-              originName: _book.isLocal ? '' : _book.originName,
+              // 本地漫畫同本地書寫「本地」（ADR 0059），不能點。
+              originName: _book.isLocal ? '本地' : _book.originName,
               onOpenOrigin: _book.isLocal ? null : _openChapterWeb,
               showReadTitleAddition: true,
               onBack: () => unawaited(_exit()),

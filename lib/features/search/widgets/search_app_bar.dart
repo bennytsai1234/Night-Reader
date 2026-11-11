@@ -50,19 +50,21 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     _ => '小說',
   };
 
-  /// 類別選單同發現頁的書源類型：書源數、勾選目前那一類、右側圖示。
+  /// 類別選單同發現頁的書源類型：書源數、勾選目前那一類、右側圖示；
+  /// 沒有書源的那一類灰掉（ADR 0059）。
   Future<void> _pickKind(BuildContext capsuleContext) async {
     final current = provider.kind;
     final picked = await showGlassMenu<BookSourceKind>(
       context: capsuleContext,
       anchor: globalRectOf(capsuleContext),
       entries: [
-        for (final option in provider.kinds)
+        for (final option in SearchProvider.switchableKinds)
           GlassMenuItem(
             value: option,
-            label: '${option.sourceLabel}　${provider.kindCounts[option]}',
+            label: '${option.sourceLabel}　${provider.kindCounts[option] ?? 0}',
             icon: BookKindMark.switchIconOf(option),
             checked: option == current,
+            enabled: provider.kindCounts.containsKey(option),
           ),
       ],
     );
@@ -117,19 +119,19 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             Expanded(
               child: Row(
                 children: [
-                  if (provider.kinds.length > 1) ...[
-                    Builder(
-                      builder: (capsuleContext) => GlassCapsule(
-                        label: _shortLabel(kind),
-                        icon: BookKindMark.switchIconOf(kind),
-                        trailingIcon: Icons.expand_more_rounded,
-                        selected: kind != provider.kinds.first,
-                        tooltip: '搜尋的類別：${kind.sourceLabel}',
-                        onTap: () => _pickKind(capsuleContext),
-                      ),
+                  Builder(
+                    builder: (capsuleContext) => GlassCapsule(
+                      label: _shortLabel(kind),
+                      icon: BookKindMark.switchIconOf(kind),
+                      trailingIcon: Icons.expand_more_rounded,
+                      selected:
+                          provider.kinds.isNotEmpty &&
+                          kind != provider.kinds.first,
+                      tooltip: '搜尋的類別：${kind.sourceLabel}',
+                      onTap: () => _pickKind(capsuleContext),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                  ],
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
                   Flexible(
                     child: GlassCapsule(
                       label: scope.isAll ? '全部' : scopeDisplay,

@@ -234,12 +234,13 @@ class _AudiobookPageState extends State<AudiobookPage> {
           label: '換源',
           icon: Icons.swap_horiz_rounded,
         ),
-        if (source != null && source.hasLogin)
-          const GlassMenuItem(
-            value: _MoreAction.login,
-            label: '登入',
-            icon: Icons.login_rounded,
-          ),
+        // 書源沒有登入、或還沒載入時灰著（ADR 0059）。
+        GlassMenuItem(
+          value: _MoreAction.login,
+          label: '登入',
+          icon: Icons.login_rounded,
+          enabled: source != null && source.hasLogin,
+        ),
         GlassMenuItem(
           value: _MoreAction.keepAwake,
           label: '保持喚醒',
