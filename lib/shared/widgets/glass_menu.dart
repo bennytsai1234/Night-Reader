@@ -23,7 +23,7 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     this.swatch,
     this.subtitle,
     this.destructive = false,
-    this.checked = false,
+    this.checked,
     this.enabled = true,
   });
 
@@ -38,8 +38,9 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   final String? subtitle;
   final bool destructive;
 
-  /// 顯示在左側的勾號（切換類選項）。
-  final bool checked;
+  /// 左側的勾號：切換類選項給 true 或 false，一般項目不給（null）。
+  /// 選單裡有切換類選項時，每一列都留勾號欄，切換時字不會左右移。
+  final bool? checked;
   final bool enabled;
 }
 
@@ -432,7 +433,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         ? AppPalette.rustDark
         : AppPalette.rust;
     final hasChecks = route.entries.any(
-      (e) => e is GlassMenuItem<T> && e.checked,
+      (e) => e is GlassMenuItem<T> && e.checked != null,
     );
     final widgets = <Widget>[];
     GlassMenuEntry<T>? previous;
@@ -460,7 +461,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
             Semantics(
               button: true,
               enabled: entry.enabled,
-              checked: hasChecks ? entry.checked : null,
+              checked: hasChecks ? entry.checked ?? false : null,
               inMutuallyExclusiveGroup: hasChecks,
               child: InkWell(
                 onTap: entry.enabled
@@ -483,7 +484,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                           if (hasChecks)
                             SizedBox(
                               width: 26,
-                              child: entry.checked
+                              child: entry.checked == true
                                   ? Icon(
                                       Icons.check_rounded,
                                       size: 18,

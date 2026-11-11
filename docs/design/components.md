@@ -44,7 +44,7 @@
 
 ## 選單與提示
 
-- 彈出選單用 `showGlassMenu`（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。
+- 彈出選單用 `showGlassMenu`（寬 250、列高 44、圖示在右；有可勾選的項目時每一列左邊都留勾號欄，勾不勾字都不移位）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。
 - **選單只有一種樣子**（ADR 0059）：選單、動作表、多選工具列與頁首的鈕，項目一律畫出，當下不能用的灰掉、不寫原因；哪些不算（同一格換字、跟著資料長的清單、裝置做不到的）見 ADR。
 - 置中提示框用 `showAppAlert`／`showAppConfirm`（按鈕以髮絲線分隔，兩個以內橫排）；帶輸入框或勾選的用 `showStatefulAppAlert`。
 - 底部動作表用 `showAppActionSheet`，加獨立的「取消」卡。

@@ -5,6 +5,41 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 
 void main() {
+  testWidgets('labels stay put whether a toggle item is on or off', (
+    tester,
+  ) async {
+    Future<double> labelLeft({required bool on}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showGlassMenu<String>(
+                  context: context,
+                  anchor: const Rect.fromLTWH(20, 20, 40, 40),
+                  entries: [
+                    const GlassMenuItem(value: '檢查更新', label: '檢查更新'),
+                    GlassMenuItem(value: '自動', label: '自動檢查更新', checked: on),
+                  ],
+                ),
+                child: const Text('開'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('開'));
+      await tester.pumpAndSettle();
+      final left = tester.getTopLeft(find.text('檢查更新')).dx;
+      await tester.tapAt(const Offset(5, 590));
+      await tester.pumpAndSettle();
+      return left;
+    }
+
+    expect(await labelLeft(on: false), await labelLeft(on: true));
+  });
+
   testWidgets('a tall preview in landscape leaves every menu item reachable', (
     tester,
   ) async {
