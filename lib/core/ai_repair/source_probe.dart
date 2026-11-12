@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -371,4 +372,65 @@ String? probeStart(String from, {required String keyword, String? url}) {
     'content' => '--$url',
     _ => null,
   };
+}
+
+/// 試抓到的正文頁有同一章的下一頁、[source] 卻沒接上時，下一頁的網址；
+/// 沒有是 null。沒接上：`ruleContent.nextContentUrl` 是空的，正文規則也沒有
+/// 自己抓網頁（`java.ajax` 這類）。2026-11-12 下書網的 AI 交出的規則只抓到
+/// 每章的前半頁（95393.html，後半在 95393_2.html），校驗照樣通過。
+String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
+  final rule = source.ruleContent;
+  if ((rule?.nextContentUrl ?? '').trim().isNotEmpty) return null;
+  if (_fetchesItself.hasMatch(rule?.content ?? '')) return null;
+  String? chapterUrl;
+  for (final (_, message) in probe.logs) {
+    final url = RegExp(r'^\s*正文 URL: (\S+)').firstMatch(message)?.group(1);
+    if (url != null) chapterUrl = url;
+  }
+  final chapter = chapterUrl == null ? null : Uri.tryParse(chapterUrl);
+  if (chapter == null) return null;
+  final body = [
+    for (final page in probe.pages)
+      if (page.body != null &&
+          page.line.trimLeft().startsWith('← ${chapter.removeFragment()} '))
+        page.body!,
+  ].lastOrNull;
+  if (body == null) return null;
+  for (final link in html_parser.parse(body).querySelectorAll('a[href]')) {
+    final href = link.attributes['href']!.trim();
+    if (href.isEmpty || href.startsWith('javascript:')) continue;
+    final Uri target;
+    try {
+      target = chapter.resolve(href);
+    } on FormatException {
+      continue;
+    }
+    if (isNextPageOfChapter(chapter, target)) {
+      return '${target.removeFragment()}';
+    }
+  }
+  return null;
+}
+
+final RegExp _fetchesItself = RegExp(
+  r'java\.(ajax|ajaxAll|get|post|connect)\(',
+);
+
+/// [link] 是不是 [chapter] 這一章的下一頁：同一個網站，檔名是這一頁的接
+/// `_2`、`-2` 這類（95393.html → 95393_2.html），或同一個路徑換了 page、p
+/// 這類頁碼參數。下一章（95394.html）不算。
+@visibleForTesting
+bool isNextPageOfChapter(Uri chapter, Uri link) {
+  if (link.host != chapter.host) return false;
+  final parts = RegExp(r'^(.*?)(\.[A-Za-z0-9]+)?$').firstMatch(chapter.path)!;
+  final stem = RegExp.escape(parts.group(1)!);
+  final extension = RegExp.escape(parts.group(2) ?? '');
+  if (RegExp('^$stem[_-]\\d+$extension\$').hasMatch(link.path)) return true;
+  if (link.path != chapter.path) return false;
+  for (final name in const ['page', 'p', 'pn', 'pg']) {
+    final next = int.tryParse(link.queryParameters[name] ?? '');
+    final current = int.tryParse(chapter.queryParameters[name] ?? '1') ?? 1;
+    if (next != null && next > current) return true;
+  }
+  return false;
 }

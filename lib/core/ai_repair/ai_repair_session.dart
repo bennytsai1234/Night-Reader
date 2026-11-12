@@ -1176,6 +1176,14 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           s._finish(step, '$changed，$where試抓：${probe.summary}');
           return answer(aiRepairProbeReply(s._withPageIds(probe)));
         }
+        if (unjoinedContentPage(probe, candidate) case final next?) {
+          final fact =
+              '正文頁有指向同一章下一頁的連結（$next），ruleContent 沒有 '
+              'nextContentUrl，每章只抓到第一頁';
+          s._finish(step, '$changed，$where試抓：$fact', failed: true);
+          s.log.both('試抓：$fact');
+          return AgentRejected(redact('# 書源校驗沒過：$fact'));
+        }
         s._finish(step, '$changed，$where試抓：${probe.summary}，交出');
         return submitted(
           await s._validate(
