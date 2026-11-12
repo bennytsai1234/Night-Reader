@@ -12,6 +12,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_speech_text.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
@@ -574,7 +575,7 @@ class ReaderV2TtsController extends ChangeNotifier
       chapterIndex: segment.chapterIndex,
       charOffset: segment.startCharOffset,
     );
-    await _tts.speak(segment.text);
+    await _tts.speak(ReaderV2TtsSpeechText.prepare(segment.text));
     if (!_isActiveGeneration(generation)) return false;
     notifyListeners();
     return true;
@@ -600,11 +601,19 @@ class ReaderV2TtsController extends ChangeNotifier
     required int chapterIndex,
     required int startOffset,
   }) {
-    return const ReaderV2TtsSegmenter().segment(
+    final segments = const ReaderV2TtsSegmenter().segment(
       text: text,
       chapterIndex: chapterIndex,
       startOffset: startOffset,
     );
+    // 刪節號獨立成行時沒有可念的文字；保留原文排版與座標，
+    // 只從朗讀隊列略過，避免 TTS 一個個念「點」。
+    return segments
+        .where(
+          (segment) =>
+              ReaderV2TtsSpeechText.prepare(segment.text).isNotEmpty,
+        )
+        .toList(growable: false);
   }
 
   @override
