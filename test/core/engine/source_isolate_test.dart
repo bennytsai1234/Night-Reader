@@ -159,6 +159,31 @@ Future<String> _evaluateJs(String code) => SourceIsolate.run((_) async {
   }
 });
 
+/// 在書源 isolate 用 [call]（`url` 是會照實回 Cookie 標頭的那一頁）送出
+/// 請求，傳回網站收到的 Cookie。
+Future<String> _echoCookie(
+  String baseUrl,
+  String call, {
+  required bool cookieJar,
+}) => SourceIsolate.run((_) async {
+  final engine = JsEngine(
+    source: BookSource(
+      bookSourceUrl: baseUrl,
+      bookSourceName: 'cookie',
+      enabledCookieJar: cookieJar,
+    ),
+  );
+  try {
+    return '${engine.evaluate('var url = "$baseUrl/echo-cookie";'
+    'cookie.setCookie(url, "search_pass=1");'
+    'var sent = $call.body();'
+    'cookie.removeCookie(url);'
+    'sent;')}';
+  } finally {
+    engine.dispose();
+  }
+});
+
 /// 在書源 isolate 用帶著 [jsLib] 的書源跑一段規則 JS。
 Future<String> _evaluateSourceJs(String code, {String? jsLib}) =>
     SourceIsolate.run((_) async {
@@ -341,6 +366,8 @@ void main() {
             '<script>location="https://ads.example/go"</script></head>'
             '<body><p>第一章的正文，夜裡讀起來剛好。</p></body></html>',
           );
+        case '/echo-cookie':
+          request.response.write(request.headers.value('cookie') ?? '');
         case '/count':
           counted++;
           request.response.write('數到了');
@@ -859,6 +886,30 @@ void main() {
         '夜讀文字',
       );
     });
+
+    // 同 Legado（JsExtensions.get/post/head）：書源開了 Cookie 罐時，送出前帶上
+    // 網站存著的 Cookie。2026-11-12 AI 修下书网：寫入 search_pass
+    // 之後 java.ajax 過得了防搜刮驗證，java.get 過不了，AI 為此繞了 4 輪。
+    for (final (method, call) in [
+      ('get', 'java.get(url, {})'),
+      ('post', 'java.post(url, "a=1", {})'),
+    ]) {
+      test('java.$method sends the cookies the site has stored when the '
+          'source keeps cookies', () async {
+        // 規則的 cookie.setCookie、登入存的都在這裡；在主 isolate 存，書源與
+        // 網路 isolate 照常讀得到（ADR 0028）。
+        await CookieStore().setCookie(baseUrl, 'search_pass=1');
+        addTearDown(() => CookieStore().removeCookie(baseUrl));
+        expect(
+          await _echoCookie(baseUrl, call, cookieJar: true),
+          contains('search_pass=1'),
+        );
+        expect(
+          await _echoCookie(baseUrl, call, cookieJar: false),
+          isNot(contains('search_pass=1')),
+        );
+      });
+    }
 
     test('inside a callback', () async {
       expect(

@@ -91,13 +91,19 @@ BlockingTask connectResponse(AnalyzeUrl url) => () async {
 
 /// `java.get`、`java.post`、`java.head`：照給的方法與標頭發，不自動跟著
 /// 跳轉。失敗時傳回 500 與錯誤訊息。
+///
+/// [storedCookies]：書源開了 Cookie 罐時，送出前併進這個網站存著的 Cookie
+/// （`cookie.setCookie`、登入存的），同名的以存著的為準（同 Legado：
+/// JsExtensions.get 加上 CookieJar 標頭，CookieManager.loadRequest 併進去）。
 BlockingTask rawResponse({
   required String method,
   required String url,
   Object? data,
   required Map<String, dynamic> headers,
+  bool storedCookies = false,
 }) => () async {
   try {
+    if (storedCookies) await _mergeStoredCookies(url, headers);
     final response = await HttpClient().client.fetch<dynamic>(
       RequestOptions(
         method: method,
@@ -129,6 +135,22 @@ BlockingTask rawResponse({
     return failedResponse(url, e);
   }
 };
+
+Future<void> _mergeStoredCookies(
+  String url,
+  Map<String, dynamic> headers,
+) async {
+  final store = CookieStore();
+  final stored = await store.getCookie(url);
+  if (stored.isEmpty) return;
+  final key = headers.keys
+      .where((k) => k.toLowerCase() == 'cookie')
+      .firstOrNull;
+  final given = key == null ? '' : '${headers.remove(key)}';
+  headers['Cookie'] = store.mapToCookie(
+    store.cookieToMap(given)..addAll(store.cookieToMap(stored)),
+  );
+}
 
 /// 請求失敗時給規則 JS 的回應：狀態碼 500，內文是錯誤訊息。
 Map<String, Object?> failedResponse(String url, Object error) => {
