@@ -67,7 +67,7 @@ void main() {
 
     test('braces inside strings do not end the object early', () {
       final command = AiRepairCommand.parse(
-        r'{"action":"give_up","reason":"規則 {{key}} 的 \"}\" 不對"}',
+        r'{"action":"give_up","why":"blocked","reason":"規則 {{key}} 的 \"}\" 不對"}',
       );
 
       expect((command! as AiGiveUp).reason, r'規則 {{key}} 的 "}" 不對');

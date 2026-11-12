@@ -121,9 +121,11 @@ void main() {
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
     bool Function(BookSource source)? followsKeyword,
+    Directory? logs,
   }) {
     var next = 0;
     return AiRepairSession(
+      logDirectory: logs == null ? null : () async => logs,
       source: sources.single,
       service: clipboard ? null : _service,
       check: (source, _) async => timesOut.contains(source.bookSourceUrl)
@@ -378,23 +380,24 @@ void main() {
     expect(applied.single.ruleContent?.content, 'class.txt@text');
   });
 
-  test('a failing check goes back to the AI with no limit on tries; giving '
-      'up after trying marks it not fixable', () async {
+  test('a failing check goes back to the AI; giving up after trying marks it '
+      'not fixable', () async {
     final s = session(
       [_source('https://site.example')],
       replies: [
-        for (var i = 0; i < 8; i++)
+        for (var i = 0; i < 4; i++)
           _command('submit', content: 'class.wrong$i@text'),
-        jsonEncode({'action': 'give_up', 'reason': '正文要付費'}),
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '正文要付費'}),
       ],
     );
 
     await s.start();
 
     final job = s.job;
-    expect(asked, hasLength(9), reason: '超過以前的 6 次試抓也接著問');
+    expect(asked, hasLength(5));
+    expect(asked[1].last.content, startsWith('# 書源校驗沒過'));
     expect(job.outcome, AiRepairOutcome.failed);
-    expect(job.explanation, 'AI：正文要付費');
+    expect(job.explanation, 'AI：要付費。正文要付費');
     expect(job.confirmedUnfixable, isTrue);
     expect(applied, isEmpty);
   });
@@ -405,7 +408,7 @@ void main() {
       timesOut: {'https://site.example'},
       replies: [
         _command('submit', content: 'class.again@text'),
-        jsonEncode({'action': 'give_up', 'reason': '網站太慢'}),
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '網站太慢'}),
       ],
     );
 
@@ -463,17 +466,86 @@ void main() {
     expect(asked[1], asked[0], reason: '同樣的話再問一次');
   });
 
+  test(
+    'an AI going in circles is restarted with a fresh conversation; after '
+    'the last try the source is left as not finished, not as unfixable',
+    () async {
+      final logs = Directory.systemTemp.createTempSync('ai-repair-log');
+      addTearDown(() => logs.deleteSync(recursive: true));
+      final look = jsonEncode({'action': 'fetch', 'url': '/s', 'note': '再看看'});
+      final s = session(
+        [_source('https://site.example')],
+        replies: List.filled(
+          AiAgentKnobs.attempts * AiAgentKnobs.sameCallLimit,
+          look,
+        ),
+        logs: logs,
+      );
+
+      await s.start();
+
+      final job = s.job;
+      expect(
+        asked,
+        hasLength(AiAgentKnobs.attempts * AiAgentKnobs.sameCallLimit),
+      );
+      expect(
+        asked[AiAgentKnobs.sameCallLimit],
+        asked.first,
+        reason: '重跑從同一個開場、全新的對話開始',
+      );
+      expect(asked[2].last.content, contains('這是同樣參數的第 2 次'));
+      expect(job.outcome, AiRepairOutcome.failed);
+      expect(job.confirmedUnfixable, isFalse);
+      expect(job.explanation, contains('跑了 ${AiAgentKnobs.attempts} 次都沒有結果'));
+      expect([
+        for (final step in job.steps) step.title,
+      ], containsAll(['重新開始（第 2 次）', '重新開始（第 3 次）']));
+      expect(s.log.summary, contains('無法確認'));
+      final full = (await s.log.file())!.readAsStringSync();
+      final stats = full
+          .split('\n')
+          .singleWhere((line) => line.startsWith(aiRepairStatsMarker));
+      final map = jsonDecode(
+        stats.substring(aiRepairStatsMarker.length),
+      ) as Map<String, dynamic>;
+      expect(map['end'], 'unconfirmed');
+      expect(map['attempts'], AiAgentKnobs.attempts);
+      expect(map['promptVersion'], aiRepairPromptVersion);
+    },
+  );
+
+  test('giving up because the site is gone is taken at once, without a '
+      'try', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [
+        jsonEncode({'action': 'give_up', 'why': 'site_gone', 'reason': '停放頁'}),
+      ],
+    );
+
+    await s.start();
+
+    expect(asked, hasLength(1));
+    expect(s.job.explanation, 'AI：網站不在了。停放頁');
+    expect(s.job.confirmedUnfixable, isTrue);
+  });
+
   test('giving up before trying anything is sent back once; giving up again '
       'ends it', () async {
-    final giveUp = jsonEncode({'action': 'give_up', 'reason': '網站要付費'});
+    final giveUp = jsonEncode({
+      'action': 'give_up',
+      'why': 'paid',
+      'reason': '網站要付費',
+    });
     final gaveUp = session(
       [_source('https://a.example')],
       replies: [giveUp, giveUp],
     );
     await gaveUp.start();
     expect(asked, hasLength(2));
-    expect(asked.last.last.content, aiRepairTryFirst);
-    expect(gaveUp.job.explanation, 'AI：網站要付費');
+    expect(asked.last.last.content, '# 放棄被退回：還沒有試抓或交出過任何修改');
+    expect(gaveUp.job.explanation, 'AI：要付費。網站要付費');
   });
 
   test('an unreadable reply is answered with what is wrong and the repair '
@@ -485,7 +557,7 @@ void main() {
 
     await s.start();
 
-    expect(asked[1].last.content, startsWith(aiRepairBadReply));
+    expect(asked[1].last.content, startsWith('# 這一輪沒有收到指令'));
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
@@ -560,7 +632,7 @@ void main() {
       [_source('https://site.example', content: 'class.txt@text')],
       replies: [
         _command('test'),
-        jsonEncode({'action': 'give_up', 'reason': '發現頁修不好'}),
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '發現頁修不好'}),
       ],
       check: (source) => _checked(source, broken: _discoveryBroken),
     );
@@ -657,7 +729,11 @@ void main() {
         keywordCheck: (_, _) async => true,
         ask: (messages, _) async {
           asked.add(List.of(messages));
-          return jsonEncode({'action': 'give_up', 'reason': '不修'});
+          return jsonEncode({
+            'action': 'give_up',
+            'why': 'paid',
+            'reason': '不修',
+          });
         },
         apply: (source, _) async => applied.add(source),
         copy: (text) async => copied.add(text),
@@ -685,8 +761,8 @@ void main() {
       [_source('https://site.example')],
       replies: [
         '{"action":"submit","source":{"bookSourceType":1e400},"note":""}',
-        jsonEncode({'action': 'give_up', 'reason': '不修'}),
-        jsonEncode({'action': 'give_up', 'reason': '不修'}),
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
       ],
     );
 

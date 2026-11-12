@@ -87,7 +87,11 @@ final _fix = jsonEncode({
     'ruleContent': {'content': 'class.txt@text'},
   },
 });
-final _giveUp = jsonEncode({'action': 'give_up', 'reason': '網站關了'});
+final _giveUp = jsonEncode({
+  'action': 'give_up',
+  'why': 'site_gone',
+  'reason': '網站關了',
+});
 
 void main() {
   late List<BookSource> saved;

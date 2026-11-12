@@ -1,9 +1,59 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
+
+/// 照 `text/event-stream` 一段一段送 [chunks] 的服務；[hangAfter] 段之後就
+/// 不再送（卡住）。
+class _Stream implements HttpClientAdapter {
+  _Stream(this.chunks, {this.hangAfter});
+
+  final List<String> chunks;
+  final int? hangAfter;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final controller = StreamController<Uint8List>();
+    unawaited(() async {
+      for (final (i, chunk) in chunks.indexed) {
+        if (hangAfter != null && i >= hangAfter!) return;
+        await Future<void>.delayed(Duration.zero);
+        if (controller.isClosed) return;
+        controller.add(Uint8List.fromList(utf8.encode(chunk)));
+      }
+      await controller.close();
+    }());
+    unawaited(cancelFuture?.then((_) => controller.close()));
+    return ResponseBody(
+      controller.stream,
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['text/event-stream'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+String _event(Map<String, Object?> data) => 'data: ${jsonEncode(data)}\n\n';
+
+String _delta({String? content, String? reasoning, String? finish}) => _event({
+  'choices': [
+    {
+      'delta': {'content': ?content, 'reasoning_content': ?reasoning},
+      'finish_reason': finish,
+    },
+  ],
+});
 
 class _Service implements HttpClientAdapter {
   _Service(this.status, this.body);
@@ -33,7 +83,7 @@ class _Service implements HttpClientAdapter {
 }
 
 AiChatClient _client(
-  _Service adapter, {
+  HttpClientAdapter adapter, {
   String apiKey = 'sk-1',
   String effort = '',
   String baseUrl = 'https://ai.example/v1/',
@@ -70,13 +120,15 @@ void main() {
       (role: 'user', content: '書源'),
     ]);
 
-    expect(reply, '{"action":"give_up"}');
+    expect(reply.content, '{"action":"give_up"}');
     expect(
       service.request!.uri.toString(),
       'https://ai.example/v1/chat/completions',
     );
     expect(service.request!.headers['Authorization'], 'Bearer sk-1');
     expect(service.request!.data, containsPair('model', 'm'));
+    expect(service.request!.data, containsPair('stream', true));
+    expect(service.request!.data, isNot(contains('temperature')));
   });
 
   test('the thinking effort is sent only when one is chosen, and the usage '
@@ -98,12 +150,17 @@ void main() {
     expect(plain.request!.data, isNot(contains('reasoning_effort')));
 
     final low = _Service(200, reply());
-    AiUsage? usage;
-    await _client(low, effort: 'low').complete([
-      (role: 'user', content: 'hi'),
-    ], onUsage: (value) => usage = value);
+    final answer = await _client(
+      low,
+      effort: 'low',
+    ).complete([(role: 'user', content: 'hi')]);
     expect(low.request!.data, containsPair('reasoning_effort', 'low'));
-    expect(usage, (prompt: 100, cached: 60, completion: 20));
+    expect(answer.usage, (
+      prompt: 100,
+      cached: 60,
+      completion: 20,
+      reasoning: 0,
+    ));
   });
 
   test('a local service without a key sends no Authorization', () async {
@@ -197,5 +254,134 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('streaming', () {
+    const limits = (
+      stall: Duration(milliseconds: 200),
+      total: Duration(seconds: 5),
+      maxOutputChars: 2000,
+      repeatedSentences: 5,
+    );
+
+    test('the reply and the thinking are put together from the chunks, with '
+        'the usage from the last one', () async {
+      final service = _Stream([
+        _delta(reasoning: '先看搜尋頁。'),
+        _delta(reasoning: '規則選錯了。'),
+        _delta(content: '{"action":'),
+        // 一段資料切在一行的中間。
+        _delta(content: '"read"}').substring(0, 10),
+        _delta(content: '"read"}').substring(10),
+        _event({
+          'choices': <Object>[],
+          'usage': {
+            'prompt_tokens': 50,
+            'completion_tokens': 30,
+            'completion_tokens_details': {'reasoning_tokens': 12},
+          },
+        }),
+        'data: [DONE]\n\n',
+      ]);
+
+      final reply = await _client(service)
+          .complete([(role: 'user', content: 'hi')], limits: limits);
+
+      expect(reply.content, '{"action":"read"}');
+      expect(reply.reasoning, '先看搜尋頁。規則選錯了。');
+      expect(reply.usage, (
+        prompt: 50,
+        cached: 0,
+        completion: 30,
+        reasoning: 12,
+      ));
+    });
+
+    test('no data for the stall time is a stall, retried with the same '
+        'conversation', () async {
+      final service = _Stream([
+        _delta(reasoning: '想一下。'),
+        _delta(content: '{}'),
+      ], hangAfter: 1);
+
+      await expectLater(
+        _client(service)
+            .complete([(role: 'user', content: 'hi')], limits: limits),
+        throwsA(
+          isA<AiStalled>().having((e) => e.retryable, 'retryable', isTrue),
+        ),
+      );
+    });
+
+    test('the same sentences over and over is a runaway, with the tail '
+        'kept', () async {
+      final service = _Stream([
+        _delta(reasoning: '我要先檢查搜尋規則。'),
+        for (var i = 0; i < 8; i++) _delta(reasoning: '我要先檢查搜尋規則。'),
+        _delta(content: '{}'),
+      ]);
+
+      await expectLater(
+        _client(service)
+            .complete([(role: 'user', content: 'hi')], limits: limits),
+        throwsA(
+          isA<AiRunaway>().having((e) => e.tail, 'tail', contains('檢查搜尋規則')),
+        ),
+      );
+    });
+
+    test('quoting the same line now and then is not a runaway', () async {
+      final service = _Stream([
+        for (var i = 0; i < 8; i++) ...[
+          _delta(reasoning: '規則是 class.txt@text。'),
+          _delta(reasoning: '第 $i 次試的是新的寫法。'),
+        ],
+        _delta(content: '{"action":"read"}'),
+      ]);
+
+      final reply = await _client(service)
+          .complete([(role: 'user', content: 'hi')], limits: limits);
+      expect(reply.content, '{"action":"read"}');
+    });
+
+    test(
+      'hitting the output limit, ours or the service\'s, is a runaway',
+      () async {
+        await expectLater(
+          _client(_Stream([_delta(content: 'x' * 2500)]))
+              .complete([(role: 'user', content: 'hi')], limits: limits),
+          throwsA(isA<AiRunaway>()),
+        );
+        await expectLater(
+          _client(_Stream([_delta(content: '{"a":', finish: 'length')]))
+              .complete([(role: 'user', content: 'hi')], limits: limits),
+          throwsA(isA<AiRunaway>()),
+        );
+      },
+    );
+
+    test('busy and server errors can be retried; a wrong key cannot', () async {
+      for (final (status, retryable) in [
+        (429, true),
+        (503, true),
+        (401, false),
+      ]) {
+        await expectLater(
+          _client(
+            _Service(status, {
+              'error': {'message': 'x'},
+            }),
+          ).complete([(role: 'user', content: 'hi')], limits: limits),
+          throwsA(
+            isA<AiServiceException>().having(
+              (e) => e.retryable,
+              'retryable',
+              retryable,
+            ),
+          ),
+          reason: '$status',
+        );
+      }
+    });
   });
 }

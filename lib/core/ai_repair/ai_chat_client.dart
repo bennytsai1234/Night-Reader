@@ -1,23 +1,34 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
-import 'ai_repair_prompt.dart';
 import 'ai_repair_settings.dart';
 
 /// 對話裡的一句：`system`、`user` 或 `assistant` 說的話。
 typedef AiMessage = ({String role, String content});
 
-/// 一次回覆用了多少 token：送出的（其中 [cached] 打中服務的快取）與回覆的。
-/// 服務沒回報的是 0。
-typedef AiUsage = ({int prompt, int cached, int completion});
+/// 一次回覆用了多少 token：送出的（其中 [cached] 打中服務的快取）、回覆的
+/// （其中 [reasoning] 是思考）。服務沒回報的是 0。
+typedef AiUsage = ({int prompt, int cached, int completion, int reasoning});
 
-/// AI 服務回了錯，或回的東西讀不懂；[message] 給使用者看。
+/// 一次回覆：[content] 是回的話，[reasoning] 是服務送出的思考（沒有是空字串），
+/// [firstData] 是送出後多久收到第一段資料。
+typedef AiReply = ({
+  String content,
+  String reasoning,
+  AiUsage? usage,
+  Duration firstData,
+});
+
+/// AI 服務回了錯，或回的東西讀不懂；[message] 給使用者看。[retryable] 是
+/// 一時的狀況（連線中斷、HTTP 408／429／5xx），整件重跑可能就好。
 class AiServiceException implements Exception {
-  const AiServiceException(this.message);
+  const AiServiceException(this.message, {this.retryable = false});
 
   final String message;
+  final bool retryable;
 
   @override
   String toString() => message;
@@ -28,8 +39,33 @@ class AiEmptyReply extends AiServiceException {
   const AiEmptyReply() : super('AI 服務回了空的內容');
 }
 
-/// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0054）。不經過
-/// 書源的網路設定（Cookie、書源的標頭、限流），送的只有對話。
+/// 卡住：[AiCallLimits.stall] 沒有任何資料，或到了總時限還沒有任何輸出。
+/// 多半是服務端的事，同一段對話原封不動重送。
+class AiStalled extends AiServiceException {
+  const AiStalled(super.message) : super(retryable: true);
+}
+
+/// 失控：碰到單次輸出上限、超過總時限還在輸出，或連續好幾句都是前面出現
+/// 過的句子。出在對話本身，整件換新對話重跑。[tail] 是輸出的最後一段。
+class AiRunaway extends AiServiceException {
+  const AiRunaway(super.message, {required this.tail}) : super(retryable: true);
+
+  final String tail;
+}
+
+/// 一次呼叫的界線（`agent-harness` 技能的迴圈旋鈕），預設值的依據寫在
+/// [AiAgentKnobs]。
+typedef AiCallLimits = ({
+  Duration stall,
+  Duration total,
+  int maxOutputChars,
+  int repeatedSentences,
+});
+
+/// 呼叫使用者自己的 OpenAI 相容服務（`chat/completions`，ADR 0054），串流
+/// 接收：不串流時分不出是斷線還是還在生成。服務不理 `stream`、回整份 JSON
+/// 的也照收。不經過書源的網路設定（Cookie、書源的標頭、限流），送的只有
+/// 對話。
 class AiChatClient {
   AiChatClient(this.service, {Dio? dio})
     : _dio =
@@ -38,8 +74,6 @@ class AiChatClient {
             BaseOptions(
               connectTimeout: const Duration(seconds: 20),
               sendTimeout: const Duration(seconds: 60),
-              // 大模型讀幾萬字的網頁再回一整份書源，要等一陣子。
-              receiveTimeout: const Duration(minutes: 4),
             ),
           );
 
@@ -59,22 +93,22 @@ class AiChatClient {
     return url.endsWith('/chat/completions') ? url : '$url/chat/completions';
   }
 
-  /// 一次回應最多收多少位元組：書源 JSON 加說明遠小於這個；再多就是服務
-  /// 出了狀況，收下來只會佔滿記憶體。
+  /// 不串流的回應最多收多少位元組：書源 JSON 加說明遠小於這個；再多就是
+  /// 服務出了狀況，收下來只會佔滿記憶體。
   static const int maxResponseBytes = 2 * 1024 * 1024;
 
-  /// 送出 [messages]，傳回 AI 回的那段話。
-  /// [onUsage] 收到服務回報的用量（OpenAI 的 `usage`；快取打中的照
-  /// DeepSeek 的 `prompt_cache_hit_tokens` 或 OpenAI 的
-  /// `prompt_tokens_details.cached_tokens`）。
-  Future<String> complete(
+  /// 送出 [messages]，傳回 AI 回的話與思考。[limits] 沒給時用
+  /// [AiAgentKnobs.call]。
+  ///
+  /// 不送 `temperature`（用模型預設）與 `max_tokens`（OpenAI 的新模型只認
+  /// `max_completion_tokens`，送錯會被拒）：輸出上限在這裡數收到的字。
+  Future<AiReply> complete(
     List<AiMessage> messages, {
     CancelToken? cancelToken,
-    void Function(AiUsage usage)? onUsage,
+    AiCallLimits? limits,
   }) async {
-    // 收太多就停：自己的取消記號，外面停下時跟著取消。
+    final bounds = limits ?? AiAgentKnobs.call;
     final guard = CancelToken();
-    var tooLarge = false;
     unawaited(
       cancelToken?.whenCancel.then((_) {
         if (!guard.isCancelled) guard.cancel('已停止');
@@ -84,69 +118,141 @@ class AiChatClient {
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       throw const AiServiceException('服務網址不對，要以 https:// 開頭');
     }
-    final Response<dynamic> response;
-    try {
-      response = await _dio.postUri<dynamic>(
-        uri,
-        data: {
-          'model': service.model,
-          'messages': [
-            for (final message in messages)
-              {'role': message.role, 'content': message.content},
-          ],
-          'temperature': 0.2,
-          if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
-        },
-        options: Options(
-          headers: {
-            if (service.apiKey.isNotEmpty)
-              'Authorization': 'Bearer ${service.apiKey}',
-            // OpenCode Go 必須帶 session；一般額度也能用來維持路由與快取。
-            // 僅對 OpenCode 官方推理端點送出，不影響其他相容服務。
-            if (uri.host == 'opencode.ai' &&
-                uri.path.startsWith('/inference/')) ...{
-              'x-opencode-session': _opencodeSession,
-              'User-Agent': 'NightReader-AIRepair/1.0',
-            },
-          },
-          contentType: Headers.jsonContentType,
-          responseType: ResponseType.json,
-          validateStatus: (_) => true,
-        ),
-        cancelToken: guard,
-        onReceiveProgress: (received, _) {
-          if (received > maxResponseBytes && !guard.isCancelled) {
-            tooLarge = true;
-            guard.cancel('回應太大');
-          }
-        },
-      );
-    } on DioException catch (error) {
-      if (tooLarge) throw const AiServiceException('AI 回的內容太長');
-      if (CancelToken.isCancel(error)) rethrow;
-      throw AiServiceException(switch (error.type) {
-        DioExceptionType.connectionTimeout ||
-        DioExceptionType.sendTimeout ||
-        DioExceptionType.receiveTimeout => 'AI 服務太久沒回應',
-        _ => '連不上 AI 服務（${uri.host}）',
+    final watch = Stopwatch()..start();
+    final reader = _StreamReader(bounds);
+    Timer? stall;
+    Timer? total;
+    AiServiceException? stopped;
+    void stop(AiServiceException reason) {
+      stopped ??= reason;
+      if (!guard.isCancelled) guard.cancel(reason.message);
+    }
+
+    void armStall() {
+      stall?.cancel();
+      stall = Timer(bounds.stall, () {
+        stop(AiStalled('AI 服務 ${bounds.stall.inSeconds} 秒沒有送任何資料'));
       });
     }
-    final status = response.statusCode ?? 0;
-    final data = response.data;
-    if (status < 200 || status >= 300) {
-      throw AiServiceException(_failure(status, data));
+
+    total = Timer(bounds.total, () {
+      stop(
+        reader.hasOutput
+            ? AiRunaway(
+                'AI 回覆超過 ${bounds.total.inSeconds} 秒還在輸出',
+                tail: reader.tail,
+              )
+            : AiStalled('AI 服務 ${bounds.total.inSeconds} 秒都沒有回覆'),
+      );
+    });
+    armStall();
+    try {
+      final Response<ResponseBody> response;
+      try {
+        response = await _dio.postUri<ResponseBody>(
+          uri,
+          data: {
+            'model': service.model,
+            'messages': [
+              for (final message in messages)
+                {'role': message.role, 'content': message.content},
+            ],
+            'stream': true,
+            // 串流時用量只在要了才給（OpenAI、DeepSeek）；整批的用量上限靠它。
+            'stream_options': {'include_usage': true},
+            if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
+          },
+          options: Options(
+            headers: {
+              if (service.apiKey.isNotEmpty)
+                'Authorization': 'Bearer ${service.apiKey}',
+              // OpenCode Go 必須帶 session；一般額度也能用來維持路由與快取。
+              // 僅對 OpenCode 官方推理端點送出，不影響其他相容服務。
+              if (uri.host == 'opencode.ai' &&
+                  uri.path.startsWith('/inference/')) ...{
+                'x-opencode-session': _opencodeSession,
+                'User-Agent': 'NightReader-AIRepair/1.0',
+              },
+            },
+            contentType: Headers.jsonContentType,
+            responseType: ResponseType.stream,
+            validateStatus: (_) => true,
+          ),
+          cancelToken: guard,
+        );
+      } on DioException catch (error) {
+        if (stopped case final reason?) throw reason;
+        if (CancelToken.isCancel(error)) rethrow;
+        throw AiServiceException(switch (error.type) {
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.sendTimeout ||
+          DioExceptionType.receiveTimeout => 'AI 服務太久沒回應',
+          _ => '連不上 AI 服務（${uri.host}）',
+        }, retryable: true);
+      }
+      final status = response.statusCode ?? 0;
+      final body = response.data!;
+      final type = response.headers.value(Headers.contentTypeHeader) ?? '';
+      Duration? firstData;
+      final bytes = <int>[];
+      final decoder = const Utf8Decoder(allowMalformed: true)
+          .startChunkedConversion(reader);
+      try {
+        await for (final chunk in body.stream) {
+          firstData ??= watch.elapsed;
+          armStall();
+          if (status < 200 || status >= 300 || !type.contains('event-stream')) {
+            bytes.addAll(chunk);
+            if (bytes.length > maxResponseBytes) {
+              throw const AiServiceException('AI 回的內容太長');
+            }
+          } else {
+            decoder.add(chunk);
+            if (reader.runaway case final reason?) throw reason;
+          }
+        }
+        decoder.close();
+      } on DioException catch (error) {
+        if (stopped case final reason?) throw reason;
+        if (CancelToken.isCancel(error)) rethrow;
+        throw const AiServiceException('AI 服務的連線中斷了', retryable: true);
+      }
+      if (stopped case final reason?) throw reason;
+      if (status < 200 || status >= 300) {
+        throw AiServiceException(
+          _failure(status, _json(bytes)),
+          retryable: status == 408 || status == 429 || status >= 500,
+        );
+      }
+      if (!type.contains('event-stream')) reader.whole(_json(bytes));
+      if (reader.error case final message?) {
+        throw AiServiceException('AI 服務出錯：$message', retryable: true);
+      }
+      if (reader.runaway case final reason?) throw reason;
+      final content = reader.content.toString();
+      if (content.trim().isEmpty) throw const AiEmptyReply();
+      return (
+        content: content,
+        reasoning: reader.reasoning.toString(),
+        usage: reader.usage,
+        firstData: firstData ?? watch.elapsed,
+      );
+    } on DioException catch (error) {
+      if (stopped case final reason?) throw reason;
+      if (CancelToken.isCancel(error)) rethrow;
+      throw AiServiceException('連不上 AI 服務（${uri.host}）', retryable: true);
+    } finally {
+      stall?.cancel();
+      total.cancel();
     }
-    if (onUsage != null) onUsage(usageOf(data));
-    final content = switch (data) {
-      {'choices': [{'message': {'content': final String content}}, ...]} =>
-        content,
-      _ => null,
-    };
-    if (content == null || content.trim().isEmpty) throw const AiEmptyReply();
-    if (content.length > aiRepairMaxReplyLength) {
-      throw const AiServiceException('AI 回的內容太長');
+  }
+
+  static Object? _json(List<int> bytes) {
+    try {
+      return jsonDecode(utf8.decode(bytes, allowMalformed: true));
+    } on FormatException {
+      return null;
     }
-    return content;
   }
 
   /// 回應裡的用量；沒有的欄位當 0。
@@ -156,14 +262,18 @@ class AiChatClient {
       {'usage': final Map<String, dynamic> usage} => usage,
       _ => const <String, dynamic>{},
     };
-    final details = usage['prompt_tokens_details'];
+    final prompt = usage['prompt_tokens_details'];
+    final completion = usage['completion_tokens_details'];
     return (
       prompt: read(usage['prompt_tokens']),
       cached: read(
         usage['prompt_cache_hit_tokens'] ??
-            (details is Map ? details['cached_tokens'] : null),
+            (prompt is Map ? prompt['cached_tokens'] : null),
       ),
       completion: read(usage['completion_tokens']),
+      reasoning: read(
+        completion is Map ? completion['reasoning_tokens'] : null,
+      ),
     );
   }
 
@@ -177,11 +287,183 @@ class AiChatClient {
     final reason = switch (status) {
       401 || 403 => '金鑰不對或沒有權限',
       404 => '服務網址或模型名稱不對',
-      402 || 429 => '額度用完或請求太頻繁',
+      402 => '額度用完',
+      429 => '請求太頻繁或額度用完',
       _ => 'AI 服務出錯（$status）',
     };
     if (detail == null || detail.trim().isEmpty) return reason;
     final short = detail.trim().replaceAll(RegExp(r'\s+'), ' ');
     return '$reason：${short.length > 120 ? '${short.substring(0, 120)}…' : short}';
   }
+}
+
+/// 一律照做的迴圈機制用的數值（`agent-harness` 技能的旋鈕）。修復紀錄的開頭
+/// 寫下實際生效的值。
+abstract final class AiAgentKnobs {
+  /// 一次呼叫：
+  /// - 60 秒沒有任何資料（思考片段也算）就是卡住：技能的預設。
+  /// - 總時限 300 秒：技能的預設；2026-11-10 對 12 個網站實跑 DeepSeek 時
+  ///   最長的一輪不到 2 分鐘（當時的接收逾時是 4 分鐘，沒有碰到過）。
+  /// - 輸出上限 10 萬字：技能的預設是 24,576 token，這裡數收到的字（不送
+  ///   `max_tokens`）。中文約一字一 token、英文約四字母一 token，取英文那
+  ///   一頭，寧可寬：正常輸出撞到上限會被當成失控重跑到失敗。一個書源的
+  ///   改動加說明不到 1 萬字。
+  /// - 連續 30 句都是前面出現過的句子是失控：技能的預設。還沒有這個迴圈的
+  ///   實跑紀錄可以量，量到之後照正常回答最長的連續重複調。
+  static const AiCallLimits call = (
+    stall: Duration(seconds: 60),
+    total: Duration(seconds: 300),
+    maxOutputChars: 100000,
+    repeatedSentences: 30,
+  );
+
+  /// 一件最多幾輪（技能的預設；之後照紀錄裡實際用到的輪數調）。
+  static const int maxRounds = 36;
+
+  /// 剩這麼多輪時，結果後面附上「剩 N 輪」。
+  static const int warnRoundsLeft = 5;
+
+  /// 一件含第一次最多跑幾次（技能的預設）。
+  static const int attempts = 3;
+
+  /// 判未收斂的門檻（技能的預設）：連續幾輪沒有指令、連續幾輪指令讀不懂、
+  /// 同樣的指令與參數第幾次、交出連續被退幾次、連續卡住幾次就整件重跑。
+  static const int noCommandLimit = 3;
+  static const int badCommandLimit = 3;
+  static const int sameCallLimit = 4;
+  static const int rejectionLimit = 5;
+  static const int stallLimit = 2;
+
+  /// 思考不放回對話：每家服務的模板不同，DeepSeek 的推理模型在送出的對話裡
+  /// 看到 `reasoning_content` 會回 400；思考全文寫進完整紀錄。
+  static const bool replayReasoning = false;
+
+  /// 寫進紀錄開頭的一行。
+  static String get summary =>
+      '卡住 ${call.stall.inSeconds} 秒、單次總時限 ${call.total.inSeconds} 秒、'
+      '輸出上限 ${call.maxOutputChars} 字、重複 ${call.repeatedSentences} 句算失控、'
+      '每件最多 $maxRounds 輪、剩 $warnRoundsLeft 輪起提醒、含第一次跑 $attempts 次、'
+      '未收斂：沒有指令連續 $noCommandLimit 輪、讀不懂連續 $badCommandLimit 輪、'
+      '同樣參數第 $sameCallLimit 次、交出連續被退 $rejectionLimit 次、'
+      '卡住連續 $stallLimit 次重跑、思考${replayReasoning ? '' : '不'}放回對話';
+}
+
+/// 讀 `text/event-stream`：每行 `data: {...}`，`[DONE]` 結束。邊讀邊數輸出
+/// 的字與重複的句子，失控時記下原因（[runaway]），呼叫的地方停掉連線。
+final class _StreamReader implements Sink<String> {
+  _StreamReader(this.limits);
+
+  final AiCallLimits limits;
+  final StringBuffer content = StringBuffer();
+  final StringBuffer reasoning = StringBuffer();
+  AiUsage? usage;
+  String? error;
+  AiRunaway? runaway;
+  String _pending = '';
+  String _sentence = '';
+  final Set<String> _seen = {};
+  int _repeats = 0;
+
+  bool get hasOutput => content.isNotEmpty || reasoning.isNotEmpty;
+
+  /// 輸出的最後 1,000 字（思考接著回覆）。
+  String get tail {
+    final all = '$reasoning$content';
+    return all.length <= 1000 ? all : all.substring(all.length - 1000);
+  }
+
+  @override
+  void add(String data) {
+    final text = _pending + data;
+    final lines = text.split('\n');
+    _pending = lines.removeLast();
+    for (final line in lines) {
+      _line(line.trimRight());
+    }
+  }
+
+  @override
+  void close() {
+    if (_pending.isNotEmpty) _line(_pending.trimRight());
+    _pending = '';
+  }
+
+  void _line(String line) {
+    if (!line.startsWith('data:')) return;
+    final payload = line.substring(5).trim();
+    if (payload.isEmpty || payload == '[DONE]') return;
+    final Object? json;
+    try {
+      json = jsonDecode(payload);
+    } on FormatException {
+      return;
+    }
+    _chunk(json);
+  }
+
+  void _chunk(Object? json) {
+    if (json is! Map) return;
+    if (json['error'] case final Object failure) {
+      error = switch (failure) {
+        {'message': final String message} => message,
+        _ => '$failure',
+      };
+      return;
+    }
+    if (json['usage'] is Map) usage = AiChatClient.usageOf(json);
+    final choices = json['choices'];
+    if (choices is! List || choices.isEmpty || choices.first is! Map) return;
+    final choice = choices.first as Map;
+    final delta = choice['delta'] ?? choice['message'];
+    if (delta is Map) {
+      // DeepSeek 的 reasoning_content、OpenRouter 的 reasoning。
+      final thought = delta['reasoning_content'] ?? delta['reasoning'];
+      if (thought is String && thought.isNotEmpty) _out(reasoning, thought);
+      final said = delta['content'];
+      if (said is String && said.isNotEmpty) _out(content, said);
+    }
+    if (choice['finish_reason'] == 'length') {
+      runaway ??= AiRunaway('AI 回覆碰到服務的單次輸出上限', tail: tail);
+    }
+  }
+
+  /// 整份 JSON 的回應（服務不理 `stream`）。
+  void whole(Object? json) {
+    if (json is Map && json['usage'] is Map) usage = AiChatClient.usageOf(json);
+    _chunk(json is Map ? {...json, 'usage': null} : json);
+  }
+
+  void _out(StringBuffer into, String text) {
+    into.write(text);
+    if (content.length + reasoning.length > limits.maxOutputChars) {
+      runaway ??= AiRunaway('AI 回覆超過 ${limits.maxOutputChars} 字', tail: tail);
+      return;
+    }
+    for (final char in text.split('')) {
+      if (_ends.contains(char)) {
+        _endSentence();
+      } else {
+        _sentence += char;
+      }
+    }
+  }
+
+  void _endSentence() {
+    final sentence = _sentence.trim();
+    _sentence = '';
+    // 太短的（「好。」「}」）正常也一直出現，不算。
+    if (sentence.length < 8) return;
+    if (_seen.add(sentence)) {
+      _repeats = 0;
+      return;
+    }
+    if (++_repeats >= limits.repeatedSentences) {
+      runaway ??= AiRunaway(
+        'AI 連續 ${limits.repeatedSentences} 句都是前面說過的',
+        tail: tail,
+      );
+    }
+  }
+
+  static const Set<String> _ends = {'。', '！', '？', '\n', '.', '!', '?'};
 }

@@ -107,10 +107,11 @@ class SourceProbeReport {
       ..writeln()
       ..writeln('## 請求與網站的回應（網頁拿掉 <head>、程式與樣式，每個只留開頭 $responsePreview 字）');
     var used = 0;
-    for (final line in requests) {
+    for (final (i, line) in requests.indexed) {
       if (used + line.length > requestBudget) {
         buffer.writeln(
-          '（後面還有 ${requests.length - requests.indexOf(line)} 行，省略）',
+          '（後面還有 ${requests.length - i} 行請求與回應沒列出：共 '
+          '${requests.length} 行，這裡給前 $i 行；每個回應的整頁都有頁碼，用 read 讀）',
         );
         break;
       }

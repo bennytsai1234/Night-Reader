@@ -12,7 +12,9 @@
 ///   `high`，不給是服務預設）；整批用量上限 100 萬 token。
 /// - 書源先存進暫存資料庫，照 App 的流程重新校驗、檢查網站、換網址、問 AI、
 ///   套用到同網站；存的也是暫存資料庫，跑完刪掉。
-/// - 結果檔是總時間、總 token 與每個書源的結果、網站檢查、AI 的每一步。
+/// - 結果檔是總時間、總 token 與每個書源的結果、網站檢查、AI 的每一步與
+///   統計；每個書源的完整修復紀錄寫在最後印出的資料夾，用
+///   `dart run tool/ai_repair_table.dart <資料夾>` 整理成評估表。
 ///
 /// 書源的拿法同 `source_check_live_test.dart` 檔頭。金鑰放在 repo 外的檔案，
 /// 用完刪掉。
@@ -30,6 +32,7 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -131,6 +134,7 @@ void main() {
             for (final step in item.session?.job.steps ?? const [])
               '${step.title}：${step.detail}',
           ],
+          'stats': item.session?.stats?.toMap(),
         },
     ];
     File(out).writeAsStringSync(
@@ -143,5 +147,8 @@ void main() {
     for (final row in rows) {
       debugPrint('##### ${row['name']} => ${row['outcome']} ${row['detail']}');
     }
+    debugPrint(
+      '##### 完整修復紀錄：${(await CrashHandler.logDirectory()).path}/ai-repair',
+    );
   }, timeout: const Timeout(Duration(minutes: 40)));
 }

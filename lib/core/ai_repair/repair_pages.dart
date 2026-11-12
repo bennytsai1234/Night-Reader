@@ -63,7 +63,8 @@ Future<String> readRepairPage(
   final start = from.clamp(0, text.length);
   final end = (start + length.clamp(1, maxReadLength)).clamp(0, text.length);
   final kind = raw ? '原文' : '精簡後';
-  return '# 頁 ${page.id}（$kind）第 $start–$end 字，共 ${text.length} 字\n'
+  final next = end < text.length ? '；下一段從 "from":$end 接著讀' : '，讀到結尾了';
+  return '# 頁 ${page.id}（$kind）第 $start–$end 字，共 ${text.length} 字$next\n'
       '${text.substring(start, end)}';
 }
 
@@ -74,34 +75,45 @@ const int defaultReadLength = 8000;
 const int maxReadLength = 20000;
 
 /// 找字：在 [page] 找 [query]，在背景 isolate 解析網頁（[findInPage]）。
-Future<String> findInRepairPage(RepairPage page, String query) {
+Future<String> findInRepairPage(RepairPage page, String query, {int from = 0}) {
   final body = page.body;
   final id = page.id;
-  return Isolate.run(() => '# 在頁 $id 找「$query」：${findInPage(body, query)}');
+  return Isolate.run(
+    () => '# 在頁 $id 找「$query」：${findInPage(body, query, from: from)}',
+  );
 }
 
-/// 在網頁 [body] 裡找 [query]：最多 [_maxFinds] 處，每處給那個元素的選擇器
-/// 路徑與它的 HTML（太長只留開頭）；字在屬性值裡的也算。不是 HTML 的（JSON、
-/// 純文字）只給前後文。
-String findInPage(String body, String query) {
+/// 在網頁 [body] 裡找 [query]：[query] 當正則，編不了時當純文字（回覆寫明）。
+/// 每處給那個元素的選擇器路徑與它的 HTML（太長只留開頭）；字在屬性值裡的
+/// 也算。不是 HTML 的（JSON、純文字）給前後文。從第 [from] 處起最多
+/// [_maxFinds] 處，寫出共幾處與下一段怎麼拿。
+String findInPage(String body, String query, {int from = 0}) {
   if (query.isEmpty) return '沒有要找的字';
-  final total = query.allMatches(body).length;
-  if (total == 0) return '沒有找到';
+  RegExp pattern;
+  var note = '';
+  try {
+    pattern = RegExp(query);
+    if (pattern.hasMatch('')) {
+      return '這個正則連空字串都對得上，找不出位置';
+    }
+  } on FormatException {
+    pattern = RegExp(RegExp.escape(query));
+    note = '（不是合法的正則，照純文字找）';
+  }
   final found = <String>[];
   if (!body.trimLeft().startsWith('<')) {
-    for (final match in query.allMatches(body).take(_maxFinds)) {
-      found.add(_around(body, match.start, query.length));
+    for (final match in pattern.allMatches(body)) {
+      found.add(_around(body, match.start, match.end - match.start));
     }
   } else {
     final document = html_parser.parse(body);
     void visit(Node node) {
-      if (found.length >= _maxFinds) return;
-      if (node is Text && node.text.contains(query)) {
+      if (node is Text && pattern.hasMatch(node.text)) {
         final parent = node.parent;
         if (parent != null) found.add(_element(parent));
       } else if (node is Element) {
         for (final MapEntry(:key, :value) in node.attributes.entries) {
-          if (value.contains(query)) {
+          if (pattern.hasMatch(value)) {
             found.add(_element(node, attribute: '$key'));
             break;
           }
@@ -114,9 +126,12 @@ String findInPage(String body, String query) {
 
     visit(document);
   }
-  final shown = found.length < total ? '（列出前 ${found.length} 處）' : '';
-  return '原文裡共 $total 處$shown\n'
-      '${[for (final (i, text) in found.indexed) '${i + 1}. $text'].join('\n')}';
+  if (found.isEmpty) return '$note沒有找到';
+  final start = from.clamp(0, found.length);
+  final end = (start + _maxFinds).clamp(0, found.length);
+  final more = end < found.length ? '；從 "from":$end 接著拿' : '';
+  return '$note共 ${found.length} 處，這裡給第 ${start + 1}–$end 處$more\n'
+      '${[for (var i = start; i < end; i++) '${i + 1}. ${found[i]}'].join('\n')}';
 }
 
 const int _maxFinds = 10;

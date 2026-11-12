@@ -36,7 +36,7 @@ void main() {
   test('find gives the selector path and the element of each match', () {
     final found = findInPage(_toc, '第一章');
 
-    expect(found, startsWith('原文裡共 1 處'));
+    expect(found, startsWith('共 1 處，這裡給第 1–1 處\n'));
     expect(
       found,
       contains(
@@ -58,6 +58,18 @@ void main() {
       contains('"name":"夜讀"'),
     );
     expect(findInPage(_toc, '不在這裡'), '沒有找到');
+  });
+
+  test('find takes a regex, falls back to plain text when it does not '
+      'compile, and says how to get the rest', () {
+    final many =
+        '<ul>${[for (var i = 1; i <= 12; i++) '<li>第$i章</li>'].join()}</ul>';
+    final first = findInPage(many, r'第\d+章');
+    expect(first, startsWith('共 12 處，這裡給第 1–10 處；從 "from":10 接著拿'));
+    expect(findInPage(many, r'第\d+章', from: 10), contains('11. ul > li'));
+
+    final literal = findInPage('<p>StatusCode(404)</p>', 'StatusCode(');
+    expect(literal, startsWith('（不是合法的正則，照純文字找）共 1 處'));
   });
 
   test('read gives a range of the digested page, or of the raw page with '

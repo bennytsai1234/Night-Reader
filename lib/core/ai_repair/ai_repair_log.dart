@@ -50,12 +50,13 @@ final class AiRepairLog {
   /// 還沒寫任何一段。
   bool get isEmpty => _blocks.isEmpty;
 
-  /// 開頭：版本、AI 服務與開始時間。
-  void header(String details) {
+  /// 開頭：版本、AI 服務、提示詞的版本與開始時間。
+  void header(String details, {String prompt = ''}) {
     final line = [
       if (CrashHandler.appVersionLine.isNotEmpty)
         '夜讀${CrashHandler.appVersionLine}',
       details,
+      if (prompt.isNotEmpty) '提示詞 $prompt',
       DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
     ].join(' · ');
     _blocks.add(_Block(redact('$_title\n$line'), round: false));
@@ -104,6 +105,9 @@ final class AiRepairLog {
   /// 照原樣送給 AI 的一句話（只寫進完整紀錄）。
   void message(String role, String content) =>
       full('### 送給 AI（$role，${content.length} 字）\n$content');
+
+  /// AI 的思考：只寫進完整紀錄，全文。
+  void thinking(String text) => full('### AI 的思考（${text.length} 字）\n$text');
 
   /// AI 回的話：完整紀錄寫全文，摘要只留開頭 [_replyHead] 字。
   void reply(String text) {
