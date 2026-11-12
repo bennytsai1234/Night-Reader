@@ -16,10 +16,7 @@ void main() {
   });
 
   test('句中刪節號只保留一次自然停頓', () {
-    expect(
-      ReaderV2TtsSpeechText.prepare('他想了......接著說……好吧⋯⋯'),
-      '他想了，接著說，好吧，',
-    );
+    expect(ReaderV2TtsSpeechText.prepare('他想了......接著說……好吧⋯⋯'), '他想了，接著說，好吧，');
     expect(ReaderV2TtsSpeechText.prepare('等等．．．再說。'), '等等，再說。');
   });
 

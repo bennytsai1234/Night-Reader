@@ -610,8 +610,7 @@ class ReaderV2TtsController extends ChangeNotifier
     // 只從朗讀隊列略過，避免 TTS 一個個念「點」。
     return segments
         .where(
-          (segment) =>
-              ReaderV2TtsSpeechText.prepare(segment.text).isNotEmpty,
+          (segment) => ReaderV2TtsSpeechText.prepare(segment.text).isNotEmpty,
         )
         .toList(growable: false);
   }
