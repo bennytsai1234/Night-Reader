@@ -1,26 +1,27 @@
 {
-  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
+  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定）；unfixable 的 why 是放棄的原因（give_up 的 why，或網站檢查判成 site_gone）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
   "cases": [
     {
       "name": "蜘蛛小说网",
       "url": "https://www.zhizhuxs.com",
       "expected": "unfixable",
       "evidence": "2026-11-12 curl：首頁列著《九阳武神》，網站的搜尋 GET 與 POST、手機與電腦版標識都回空的搜尋頁。網站的搜尋本身壞了。",
-      "confirmed": false
+      "confirmed": true,
+      "why": "site_broken"
     },
     {
       "name": "话本小说",
       "url": "https://so.ihuaben.com/search?keyword=我是#",
       "expected": "fixed",
-      "evidence": "2026-11-12 修好一次（目錄規則換了），校驗與不可能的詞重搜都過。",
-      "confirmed": false
+      "evidence": "2026-11-13 curl：搜「我是」有 30 本（.searchresult），不可能的詞回「没有搜索到相关内容」；書頁的「章节目录」連到 /list/<id>.html。目錄頁改版了：章節在 .chapter-row.hb-chapter-item 的 .col-title a，原本的 .chapters p 抓不到；正文 #contentsource 正常。",
+      "confirmed": true
     },
     {
       "name": "涨姿势",
       "url": "http://120.25.175.92",
       "expected": "fixed",
-      "evidence": "2026-11-12 修好一次（正文改抓 data-original 的圖、搜尋改走 WordPress API）。根本原因是引擎把懶載入的圖片抓成佔位圖（另一條分支在修），修好後重新校驗就好。",
-      "confirmed": false
+      "evidence": "2026-11-13 curl（帶 Host: www.zhangzs.com 打 IP）：?s= 不理關鍵字，2025、狗、希腊棺材之谜與不可能的詞都回同一份 83592 位元組的首頁；WordPress API /wp-json/wp/v2/posts?search= 正常，不可能的詞回 []。正文是懶載入圖（src 是佔位圖，真圖在 data-original，另一條分支在修引擎）。修好要：搜尋改走 API、正文拿到真圖；發現頁借用搜尋規則，搜尋改成 JSON 後要補自己的書單規則。2026-11-12 AI 這樣修好過兩次（22、35 輪）。",
+      "confirmed": true
     },
     {
       "name": "下书网",
@@ -28,28 +29,31 @@
       "expected": "fixed",
       "minContentChars": 1500,
       "evidence": "2026-11-12 curl：搜尋帶 Cookie search_pass=1 就有 100 本；一章分兩頁（95393.html、95393_2.html），只抓前半頁約 900 字，整章 1700 字以上。",
-      "confirmed": false
+      "confirmed": true
     },
     {
       "name": "顶点小说",
       "url": "http://m.dibanyou.com",
-      "expected": "unknown",
-      "evidence": "原本的毛病：搜尋結果為空。",
-      "confirmed": false
+      "expected": "fixed",
+      "evidence": "2026-11-13 curl：http 轉 https；搜尋回「防搜刮安全验证」頁，頁面程式只寫入 Cookie search_pass=1（答案隨便填），帶上 Cookie 搜「我的」有 100 本、不可能的詞回「未搜索到相关的小说」。書頁、目錄、正文都抓得到；一章分兩頁（第1/2页），第一頁約 1800 字。",
+      "confirmed": true,
+      "minContentChars": 1500
     },
     {
       "name": "涩涩俱乐部",
       "url": "https://seseclub.com",
-      "expected": "unknown",
-      "evidence": "原本的毛病：校驗超時。",
-      "confirmed": false
+      "expected": "unfixable",
+      "evidence": "2026-11-13 curl：seseclub.com 與 novel.seseclub.com 的首頁、搜尋都回同一份 6990 位元組的「This domain is for sale」出售頁；頁面程式只在帶了轉址目標時轉走，現在目標是空的（換手機、電腦、App 的標識各試兩次都一樣）。網站不在了。",
+      "confirmed": true,
+      "why": "site_gone"
     },
     {
       "name": "涩涩俱乐部🎃",
       "url": "https://novel.seseclub.com#🎃",
-      "expected": "unknown",
-      "evidence": "原本的毛病：校驗超時。",
-      "confirmed": false
+      "expected": "unfixable",
+      "evidence": "2026-11-13 curl：seseclub.com 與 novel.seseclub.com 的首頁、搜尋都回同一份 6990 位元組的「This domain is for sale」出售頁；頁面程式只在帶了轉址目標時轉走，現在目標是空的（換手機、電腦、App 的標識各試兩次都一樣）。網站不在了。",
+      "confirmed": true,
+      "why": "site_gone"
     }
   ]
 }
