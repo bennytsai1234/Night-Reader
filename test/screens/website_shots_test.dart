@@ -534,6 +534,7 @@ AiRepairSession _aiRepairSession() {
 
   const probe = SourceProbeReport(
     logs: [(10, '︾開始解析搜尋頁'), (40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
+    contentUsable: true,
     requests: ['  ← https://www.example.com/c/1 200：<div class="txt">…'],
   );
   final replies = [

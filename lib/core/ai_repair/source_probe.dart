@@ -10,6 +10,7 @@ import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chapter_content_kind.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 
 /// 一次試抓：照書源除錯從搜尋一路抓到正文（[SourceDebugService]），記下除錯
@@ -21,6 +22,7 @@ class SourceProbeReport {
     required this.requests,
     this.pages = const [],
     this.timedOut = false,
+    this.contentUsable,
   });
 
   /// 除錯紀錄，`(狀態, 訊息)`；狀態同 [DebugLog.state]。
@@ -34,8 +36,12 @@ class SourceProbeReport {
   final List<LoggedPage> pages;
 
   /// 不帶整頁原文的同一份：寫進完整紀錄之後留著給 AI 的只要這份。
-  SourceProbeReport get withoutPages =>
-      SourceProbeReport(logs: logs, requests: requests, timedOut: timedOut);
+  SourceProbeReport get withoutPages => SourceProbeReport(
+    logs: logs,
+    requests: requests,
+    timedOut: timedOut,
+    contentUsable: contentUsable,
+  );
 
   /// 整段試抓超過時間被停下。
   final bool timedOut;
@@ -46,16 +52,16 @@ class SourceProbeReport {
   /// 送給 AI 的請求與回應最多幾個字；超過的後半段截掉。
   static const int requestBudget = 30000;
 
-  /// 一路抓到正文了，而且正文至少有 [minContentLength] 字（同書源校驗判斷
-  /// 正文讀得到的門檻）：只抓到一行提示的不算。
+  /// 抓到的正文照書源校驗的判斷算不算抓到了（[sourceContentUsable]）：
+  /// 只有一行提示、只有佔位圖的不算。沒走到正文是 null。
+  final bool? contentUsable;
+
+  /// 一路抓到正文了，而且照書源校驗的判斷算抓到了（[contentUsable]）。
   bool get succeeded =>
       !timedOut &&
       logs.any((log) => log.$1 == 1000) &&
       !logs.any((log) => log.$1 == -1) &&
-      (contentLength ?? 0) >= minContentLength;
-
-  /// 書源校驗把正文當成讀得到的最少字數（`chapterTextReadable`）。
-  static const int minContentLength = 20;
+      contentUsable == true;
 
   /// 抓到的正文有幾個字；沒走到正文是 null。
   int? get contentLength {
@@ -82,7 +88,11 @@ class SourceProbeReport {
     for (final (state, message) in logs.reversed) {
       if (state == -1) return _clean(message);
     }
-    if (contentLength case final length?) return '正文 $length 字';
+    if (contentLength case final length?) {
+      return contentUsable == false
+          ? '正文 $length 字，書源校驗不算抓到（去掉圖片與網址後字太少，或沒有圖、網址）'
+          : '正文 $length 字';
+    }
     return '沒有抓到正文';
   }
 
@@ -120,6 +130,7 @@ class SourceProbeReport {
     'requests': requests,
     'pages': [for (final page in pages) loggedPageToJson(page)],
     'timedOut': timedOut,
+    'contentUsable': contentUsable,
   };
 
   factory SourceProbeReport.fromMap(Map<Object?, Object?> map) =>
@@ -134,6 +145,7 @@ class SourceProbeReport {
             loggedPageFromJson(page),
         ],
         timedOut: map['timedOut'] as bool? ?? false,
+        contentUsable: map['contentUsable'] as bool?,
       );
 }
 
@@ -214,10 +226,14 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   } finally {
     await subscription.cancel();
   }
+  final content = debug.lastContent;
   return SourceProbeReport(
     logs: logs,
     requests: requests.lines,
     pages: requests.pages,
+    contentUsable: content == null
+        ? null
+        : sourceContentUsable(content.source, content.book, content.content),
   ).toMap();
 };
 

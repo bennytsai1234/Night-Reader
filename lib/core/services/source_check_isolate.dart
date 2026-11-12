@@ -747,16 +747,8 @@ class SourceChecker {
     );
   }
 
-  /// 這章正文看起來是哪一類書源；判斷不出來就是書源現在的類別。聚合源的書
-  /// 各自是哪一類由規則寫在 [book] 上（ADR 0056），判斷不出來就照書。
   BookSourceKind _kindShownBy(String content, Book book) =>
-      switch (ChapterContentKind.of(content)) {
-        ChapterContentKind.text => BookSourceKind.novel,
-        ChapterContentKind.images => BookSourceKind.comic,
-        ChapterContentKind.audio => BookSourceKind.audio,
-        ChapterContentKind.unclear =>
-          _isAggregate ? book.bookKind : _source.sourceKind,
-      };
+      chapterKindShownBy(_source, book, content);
 
   late final bool _isAggregate = _source.isAggregateSource;
 

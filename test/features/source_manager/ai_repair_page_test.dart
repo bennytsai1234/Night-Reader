@@ -32,6 +32,7 @@ SourceCheckIsolateResult _checked(BookSource source) {
 
 const _probe = SourceProbeReport(
   logs: [(40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
+  contentUsable: true,
   requests: ['  ← https://site.example/c/1 200：…'],
 );
 

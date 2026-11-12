@@ -76,6 +76,7 @@ SourceCheckIsolateResult _checked(BookSource source) {
 SourceProbeReport _probe(BookSource source) => _good(source)
     ? const SourceProbeReport(
         logs: [(40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
+        contentUsable: true,
         requests: [],
       )
     : const SourceProbeReport(logs: [(-1, '❌ 正文為空')], requests: []);

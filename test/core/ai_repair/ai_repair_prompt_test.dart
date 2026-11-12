@@ -174,6 +174,7 @@ void main() {
     const probe = SourceProbeReport(
       logs: [(10, '︾開始解析搜尋頁'), (40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
       requests: ['https://site.example/s', '  ← https://site.example/s 200'],
+      contentUsable: true,
     );
 
     expect(probe.succeeded, isTrue);
@@ -187,10 +188,11 @@ void main() {
     const probe = SourceProbeReport(
       logs: [(40, '︽正文頁解析完成 (內容長度: 11)'), (1000, '︽解析完成')],
       requests: [],
+      contentUsable: false,
     );
 
     expect(probe.succeeded, isFalse);
-    expect(probe.summary, '正文 11 字');
+    expect(probe.summary, startsWith('正文 11 字，書源校驗不算抓到'));
   });
 
   test('a failed probe says where it stopped', () {

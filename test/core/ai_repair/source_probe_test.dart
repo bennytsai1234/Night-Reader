@@ -51,6 +51,10 @@ void main() {
               '<li><a href="/book/1/1.html">第一章</a></li>'
               '<li><a href="/book/1/2.html">第二章</a></li></ul>',
         '/book/1/1.html' => '<div id="content">$_chapter</div>',
+        // 懶載入的網站：正文只有一張佔位圖，含標籤 95 字（漲姿勢）。
+        '/book/2/1.html' =>
+          '<div id="content"><img src="/static/lazy.png" '
+              'data-original="/img/chapter-1-page-1.jpg"></div>',
         _ => '',
       };
       request.response
@@ -115,6 +119,21 @@ void main() {
       expect(report.fullText, contains('<div id="content">'));
     },
   );
+
+  test('a chapter that is only a placeholder image is not counted as '
+      'content, the same as the source check', () async {
+    // 正文規則留下 HTML：抓到的是佔位圖的標籤，原本照長度算成抓到了。
+    final report = await probeSource(
+      source(content: 'id.content@html'),
+      keyword: probeStart('content', keyword: '', url: '$site/book/2/1.html')!,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(report.contentUsable, isFalse, reason: report.fullText);
+    expect(report.succeeded, isFalse);
+    expect(report.summary, contains('書源校驗不算抓到'));
+  });
 
   test('a probe can start from the table of contents', () async {
     final report = await probeSource(

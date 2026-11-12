@@ -1,4 +1,5 @@
-import '../models/source/book_source_logic.dart';
+import '../models/book.dart';
+import '../models/book_source.dart';
 import '../utils/illustration_markers.dart';
 
 /// 這章正文對 [kind] 這類書算不算抓到了：小說要讀得到字，漫畫要有圖，有聲
@@ -9,6 +10,27 @@ bool chapterContentUsable(BookSourceKind kind, String content) =>
       BookSourceKind.audio => ChapterContentShape.of(content).urls > 0,
       _ => chapterTextReadable(content),
     };
+
+/// [source] 抓到的這章正文算不算抓到了：照正文看起來是哪一類
+/// （[chapterKindShownBy]）判斷。書源校驗與 AI 修復的試抓都照它，兩邊的
+/// 結論才一樣。
+bool sourceContentUsable(BookSource source, Book book, String content) =>
+    chapterContentUsable(chapterKindShownBy(source, book, content), content);
+
+/// 這章正文看起來是哪一類書源（[ChapterContentKind]）；判斷不出來就是書源
+/// 現在的類別。聚合源的書各自是哪一類由規則寫在 [book] 上（ADR 0056），判斷
+/// 不出來就照書。
+BookSourceKind chapterKindShownBy(
+  BookSource source,
+  Book book,
+  String content,
+) => switch (ChapterContentKind.of(content)) {
+  ChapterContentKind.text => BookSourceKind.novel,
+  ChapterContentKind.images => BookSourceKind.comic,
+  ChapterContentKind.audio => BookSourceKind.audio,
+  ChapterContentKind.unclear =>
+    source.isAggregateSource ? book.bookKind : source.sourceKind,
+};
 
 /// 拿掉插圖標記後還有夠多的字：整章是圖（例如把 VIP 章畫成圖的網站）不算
 /// 讀得到（ADR 0050）。

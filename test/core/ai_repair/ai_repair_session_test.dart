@@ -77,6 +77,7 @@ SourceProbeReport _probe(BookSource source) =>
           (1000, '︽解析完成'),
         ],
         requests: ['  ← https://site.example/c/1 200：<div class="txt">…'],
+        contentUsable: true,
       )
     : const SourceProbeReport(
         logs: [(10, '︾開始解析搜尋頁'), (40, '︾開始解析正文頁'), (-1, '❌ 發生錯誤: 正文為空')],
@@ -226,6 +227,7 @@ void main() {
           logs: _probe(source).logs,
           requests: _probe(source).requests,
           pages: [(line: _probe(source).requests.single, body: raw)],
+          contentUsable: _probe(source).contentUsable,
         ),
         keywordCheck: (_, _) async => true,
         fetchPage: (_, url, _) async => (
@@ -320,6 +322,7 @@ void main() {
           logs: report.logs,
           requests: report.requests,
           pages: [(line: report.requests.single, body: tocPage)],
+          contentUsable: report.contentUsable,
         );
       },
       keywordCheck: (_, _) async => true,

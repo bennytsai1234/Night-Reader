@@ -64,9 +64,14 @@ class SourceDebugService {
     _runId++;
   }
 
+  /// 這一輪抓到的正文與它的書源、書；還沒抓到正文是 null。AI 修復的試抓
+  /// 照它判斷抓到了沒，和書源校驗同一套（[sourceContentUsable]）。
+  ({BookSource source, Book book, String content})? lastContent;
+
   Future<void> startDebug(BookSource source, String key) {
     final runId = ++_runId;
     _runFailed = false;
+    lastContent = null;
     return runZoned(
       () => withSourceRequestLog(
         (url) => log('  實際請求: $url'),
@@ -224,6 +229,7 @@ class SourceDebugService {
       nextChapterUrl: nextUrl,
     );
 
+    lastContent = (source: source, book: targetBook, content: content);
     log('︽正文頁解析完成 (內容長度: ${content.length})', state: 1000);
     if (content.length > 100) {
       log('正文預覽: ${content.substring(0, 100)}...');

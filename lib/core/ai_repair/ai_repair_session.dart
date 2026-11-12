@@ -420,6 +420,7 @@ class AiRepairSession extends ChangeNotifier {
     logs: probe.logs,
     requests: _pages.add(probe.requests, probe.pages),
     timedOut: probe.timedOut,
+    contentUsable: probe.contentUsable,
   );
 
   /// 和 AI 來回（ADR 0054）：每一輪 AI 回一個指令，夜讀做完把結果接在對話
