@@ -103,7 +103,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     setState(() => _testing = true);
     try {
       await _settings.save(service);
-      await AiChatClient(service).complete([(role: 'user', content: '只回覆 OK')]);
+      await AiChatClient(service).complete([const AiMessage.user('只回覆 OK')]);
       if (mounted) _say('連得上：${service.model}');
     } on AiServiceException catch (error) {
       if (mounted) _say(error.message);

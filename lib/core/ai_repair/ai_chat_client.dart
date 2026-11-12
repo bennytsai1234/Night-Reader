@@ -6,17 +6,80 @@ import 'package:uuid/uuid.dart';
 
 import 'ai_repair_settings.dart';
 
-/// 對話裡的一句：`system`、`user` 或 `assistant` 說的話。
-typedef AiMessage = ({String role, String content});
+/// 對話裡的一句：`system`、`user`、`assistant` 說的話，或 `tool`（工具的
+/// 結果，[toolCallId] 是它回應的那個呼叫）。AI 呼叫工具的那一句帶著
+/// [toolCalls]，話可以是空的。
+final class AiMessage {
+  const AiMessage(
+    this.role,
+    this.content, {
+    this.toolCalls = const [],
+    this.toolCallId,
+  });
+
+  const AiMessage.system(String content) : this('system', content);
+  const AiMessage.user(String content) : this('user', content);
+  const AiMessage.assistant(
+    String content, {
+    List<AiToolCall> toolCalls = const [],
+  }) : this('assistant', content, toolCalls: toolCalls);
+  const AiMessage.tool(String toolCallId, String content)
+    : this('tool', content, toolCallId: toolCallId);
+
+  final String role;
+  final String content;
+  final List<AiToolCall> toolCalls;
+  final String? toolCallId;
+
+  /// 送給服務的樣子（OpenAI 的 `chat/completions`）。
+  Map<String, Object?> toJson() => {
+    'role': role,
+    'content': toolCalls.isNotEmpty && content.isEmpty ? null : content,
+    if (toolCalls.isNotEmpty)
+      'tool_calls': [
+        for (final call in toolCalls)
+          {
+            'id': call.id,
+            'type': 'function',
+            'function': {'name': call.name, 'arguments': call.arguments},
+          },
+      ],
+    'tool_call_id': ?toolCallId,
+  };
+}
+
+/// AI 呼叫的一個工具：[arguments] 是服務原樣給的參數 JSON 字串。
+typedef AiToolCall = ({String id, String name, String arguments});
+
+/// 給 AI 用的工具：名稱、做什麼與參數（JSON Schema）。
+typedef AiTool = ({
+  String name,
+  String description,
+  Map<String, Object?> parameters,
+});
+
+/// 送給服務的工具清單（OpenAI 的 `tools`）。
+List<Map<String, Object?>> aiToolsJson(List<AiTool> tools) => [
+  for (final tool in tools)
+    {
+      'type': 'function',
+      'function': {
+        'name': tool.name,
+        'description': tool.description,
+        'parameters': tool.parameters,
+      },
+    },
+];
 
 /// 一次回覆用了多少 token：送出的（其中 [cached] 打中服務的快取）、回覆的
 /// （其中 [reasoning] 是思考）。服務沒回報的是 0。
 typedef AiUsage = ({int prompt, int cached, int completion, int reasoning});
 
-/// 一次回覆：[content] 是回的話，[reasoning] 是服務送出的思考（沒有是空字串），
-/// [firstData] 是送出後多久收到第一段資料。
+/// 一次回覆：[content] 是回的話，[toolCalls] 是呼叫的工具，[reasoning] 是
+/// 服務送出的思考（沒有是空字串），[firstData] 是送出後多久收到第一段資料。
 typedef AiReply = ({
   String content,
+  List<AiToolCall> toolCalls,
   String reasoning,
   AiUsage? usage,
   Duration firstData,
@@ -102,13 +165,16 @@ class AiChatClient {
   /// 服務出了狀況，收下來只會佔滿記憶體。
   static const int maxResponseBytes = 2 * 1024 * 1024;
 
-  /// 送出 [messages]，傳回 AI 回的話與思考。[limits] 沒給時用
+  /// 送出 [messages]，傳回 AI 回的話、呼叫的工具與思考。給了 [tools] 時
+  /// 每次回覆都要呼叫工具（`tool_choice: required`）：模型照它訓練時的方式
+  /// 呼叫工具，服務解析好再交給我們（ADR 0054）。[limits] 沒給時用
   /// [AiAgentKnobs.call]。
   ///
   /// 不送 `temperature`（用模型預設）與 `max_tokens`（OpenAI 的新模型只認
   /// `max_completion_tokens`，送錯會被拒）：輸出上限在這裡數收到的字。
   Future<AiReply> complete(
     List<AiMessage> messages, {
+    List<AiTool> tools = const [],
     CancelToken? cancelToken,
     AiCallLimits? limits,
   }) async {
@@ -126,7 +192,13 @@ class AiChatClient {
     final watch = Stopwatch()..start();
     final reader = _StreamReader(
       bounds,
-      promptChars: messages.fold(0, (sum, m) => sum + m.content.length),
+      promptChars: messages.fold(
+        0,
+        (sum, m) =>
+            sum +
+            m.content.length +
+            m.toolCalls.fold(0, (n, call) => n + call.arguments.length),
+      ),
     );
     Timer? stall;
     Timer? total;
@@ -167,10 +239,11 @@ class AiChatClient {
           uri,
           data: {
             'model': service.model,
-            'messages': [
-              for (final message in messages)
-                {'role': message.role, 'content': message.content},
-            ],
+            'messages': [for (final message in messages) message.toJson()],
+            if (tools.isNotEmpty) ...{
+              'tools': aiToolsJson(tools),
+              'tool_choice': 'required',
+            },
             'stream': true,
             // 串流時用量只在要了才給（OpenAI、DeepSeek）；整批的用量上限靠它。
             'stream_options': {'include_usage': true},
@@ -248,9 +321,13 @@ class AiChatClient {
       }
       if (reader.runaway case final reason?) throw reason;
       final content = reader.content.toString();
-      if (content.trim().isEmpty) throw const AiEmptyReply();
+      final toolCalls = reader.toolCalls;
+      if (content.trim().isEmpty && toolCalls.isEmpty) {
+        throw const AiEmptyReply();
+      }
       return (
         content: content,
+        toolCalls: toolCalls,
         reasoning: reader.reasoning.toString(),
         usage: reader.usage,
         firstData: firstData ?? watch.elapsed,
@@ -346,7 +423,7 @@ abstract final class AiAgentKnobs {
   /// 等一次跑得通再談。
   static const int attempts = 1;
 
-  /// 判未收斂的門檻（技能的預設）：連續幾輪沒有指令、連續幾輪指令讀不懂、
+  /// 判未收斂的門檻（技能的預設）：連續幾輪沒有呼叫工具、連續幾次工具呼叫讀不懂、
   /// 同樣的指令與參數第幾次、交出連續被退幾次、連續卡住幾次就整件重跑。
   static const int noCommandLimit = 3;
   static const int badCommandLimit = 3;
@@ -363,7 +440,7 @@ abstract final class AiAgentKnobs {
       '卡住 ${call.stall.inSeconds} 秒、單次總時限 ${call.total.inSeconds} 秒、'
       '輸出上限 ${call.maxOutputChars} 字、重複 ${call.repeatedSentences} 句算失控、'
       '每件最多 $maxRounds 輪、剩 $warnRoundsLeft 輪起提醒、含第一次跑 $attempts 次、'
-      '未收斂：沒有指令連續 $noCommandLimit 輪、讀不懂連續 $badCommandLimit 輪、'
+      '未收斂：沒有呼叫工具連續 $noCommandLimit 輪、呼叫讀不懂連續 $badCommandLimit 次、'
       '同樣參數第 $sameCallLimit 次、交出連續被退 $rejectionLimit 次、'
       '卡住連續 $stallLimit 次重跑、思考${replayReasoning ? '' : '不'}放回對話';
 }
@@ -379,6 +456,10 @@ final class _StreamReader implements Sink<String> {
   final int promptChars;
   final StringBuffer content = StringBuffer();
   final StringBuffer reasoning = StringBuffer();
+
+  /// 工具呼叫照 `index` 一段一段接起來：id、名稱與參數。
+  final Map<int, ({StringBuffer id, StringBuffer name, StringBuffer arguments})>
+  _calls = {};
   AiUsage? usage;
   String? error;
   AiRunaway? runaway;
@@ -387,18 +468,34 @@ final class _StreamReader implements Sink<String> {
   final Set<String> _seen = {};
   int _repeats = 0;
 
-  bool get hasOutput => content.isNotEmpty || reasoning.isNotEmpty;
+  bool get hasOutput =>
+      content.isNotEmpty || reasoning.isNotEmpty || _calls.isNotEmpty;
 
-  /// 思考與回覆各自的最後 1,000 字，分開標出來：看得出失控出在哪一段。
+  /// 呼叫的工具，照服務給的順序。
+  List<AiToolCall> get toolCalls => [
+    for (final index in _calls.keys.toList()..sort())
+      (
+        id: _calls[index]!.id.toString(),
+        name: _calls[index]!.name.toString(),
+        arguments: _calls[index]!.arguments.toString(),
+      ),
+  ];
+
+  int get _argumentChars =>
+      _calls.values.fold(0, (sum, call) => sum + call.arguments.length);
+
+  /// 思考、回覆與工具呼叫各自的最後 1,000 字，分開標出來：看得出失控出在
+  /// 哪一段。
   String get tail {
-    String last(StringBuffer buffer) {
-      final text = buffer.toString();
-      return text.length <= 1000 ? text : text.substring(text.length - 1000);
-    }
-
+    String last(String text) =>
+        text.length <= 1000 ? text : text.substring(text.length - 1000);
+    final calls = [
+      for (final call in toolCalls) '${call.name} ${call.arguments}',
+    ].join('\n');
     return [
-      if (reasoning.isNotEmpty) '思考的最後一段：\n${last(reasoning)}',
-      if (content.isNotEmpty) '回覆的最後一段：\n${last(content)}',
+      if (reasoning.isNotEmpty) '思考的最後一段：\n${last('$reasoning')}',
+      if (content.isNotEmpty) '回覆的最後一段：\n${last('$content')}',
+      if (calls.isNotEmpty) '工具呼叫的最後一段：\n${last(calls)}',
     ].join('\n\n');
   }
 
@@ -415,7 +512,7 @@ final class _StreamReader implements Sink<String> {
     return (
       prompt: tokens(promptChars),
       cached: 0,
-      completion: tokens(content.length + reasoning.length),
+      completion: tokens(content.length + reasoning.length + _argumentChars),
       reasoning: tokens(reasoning.length),
     );
   }
@@ -471,6 +568,12 @@ final class _StreamReader implements Sink<String> {
       if (thought is String && thought.isNotEmpty) _out(reasoning, thought);
       final said = delta['content'];
       if (said is String && said.isNotEmpty) _out(content, said);
+      final calls = delta['tool_calls'];
+      if (calls is List) {
+        for (final (position, call) in calls.indexed) {
+          if (call is Map) _callPiece(call, position);
+        }
+      }
     }
     if (choice['finish_reason'] == 'length') {
       runaway ??= AiRunaway('AI 回覆碰到服務的單次輸出上限', tail: tail, usage: estimate);
@@ -483,16 +586,41 @@ final class _StreamReader implements Sink<String> {
     _chunk(json is Map ? {...json, 'usage': null} : json);
   }
 
-  void _out(StringBuffer into, String text) {
-    into.write(text);
-    if (content.length + reasoning.length > limits.maxOutputChars) {
+  /// 一段工具呼叫：串流時每段帶 `index`；整份回應的沒有，照位置。參數只數
+  /// 字數（輸出上限），不數重複的句子。
+  void _callPiece(Map<dynamic, dynamic> call, int position) {
+    final index = call['index'] is int ? call['index'] as int : position;
+    final into = _calls.putIfAbsent(
+      index,
+      () =>
+          (id: StringBuffer(), name: StringBuffer(), arguments: StringBuffer()),
+    );
+    if (call['id'] case final String id) into.id.write(id);
+    final function = call['function'];
+    if (function is Map) {
+      if (function['name'] case final String name) into.name.write(name);
+      if (function['arguments'] case final String arguments) {
+        into.arguments.write(arguments);
+      }
+    }
+    _checkLength();
+  }
+
+  void _checkLength() {
+    if (content.length + reasoning.length + _argumentChars >
+        limits.maxOutputChars) {
       runaway ??= AiRunaway(
         'AI 回覆超過 ${limits.maxOutputChars} 字',
         tail: tail,
         usage: estimate,
       );
-      return;
     }
+  }
+
+  void _out(StringBuffer into, String text) {
+    into.write(text);
+    _checkLength();
+    if (runaway != null) return;
     for (final char in text.split('')) {
       if (_ends.contains(char)) {
         _endSentence();

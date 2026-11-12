@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -15,104 +16,68 @@ BookSource _source() => BookSource(
 
 void main() {
   group('reading the AI reply', () {
-    test('finds the command inside prose and code fences', () {
-      final command = AiRepairCommand.parse('''
-好的，我改了正文規則：
-```json
-{"action":"test","source":{"bookSourceUrl":"x","ruleContent":{"content":"class.txt@text"}},"note":"正文換成 class.txt"}
-```
-''');
+    AiToolCall call(String name, String arguments) =>
+        (id: 'call_1', name: name, arguments: arguments);
 
-      expect(command, isA<AiTest>());
-      final test = command! as AiTest;
-      expect(test.note, '正文換成 class.txt');
-      expect(test.change.source!['ruleContent'], {'content': 'class.txt@text'});
-    });
+    test(
+      'a tool call is read into a command, with a key for its arguments',
+      () {
+        final test = readAiRepairCall(
+          call(
+            'test',
+            '{"patch":{"ruleSearch":{"bookList":".item"}},"note":"列表換了"}',
+          ),
+        );
+        final command = test.command! as AiTest;
+        expect(command.note, '列表換了');
+        expect(command.change.patch, {
+          'ruleSearch': {'bookList': '.item'},
+        });
+        expect(
+          test.key,
+          readAiRepairCall(
+            call(
+              'test',
+              '{"note":"說明不同","patch":{"ruleSearch":{"bookList":".item"}}}',
+            ),
+          ).key,
+          reason: '同樣的參數、說明不同，key 一樣',
+        );
 
-    test('a patch, a page to look at, and a reply missing its last braces', () {
-      final patch = AiRepairCommand.parse(
-        '{"action":"test","patch":{"ruleSearch":{"bookList":".item"}},"note":"列表換了"}',
-      );
-      expect((patch! as AiTest).change.patch, {
-        'ruleSearch': {'bookList': '.item'},
-      });
+        final read = readAiRepairCall(call('read', '{"page":"3"}'));
+        expect((read.command! as AiRead).page, 3, reason: '頁碼寫成字串也認');
+        final fetch = readAiRepairCall(call('fetch', '{"url":"/"}'));
+        expect((fetch.command! as AiFetch).url, '/');
+      },
+    );
 
-      final fetch = AiRepairCommand.parse('{"action":"fetch","url":"/"}');
-      expect((fetch! as AiFetch).url, '/');
-
-      final unclosed = AiRepairCommand.parse(
-        '{"action":"test","source":{"ruleContent":{"content":"a{b}c"}},"note":"x"',
-      );
-      expect((unclosed! as AiTest).change.source!['ruleContent'], {
-        'content': 'a{b}c',
-      });
-
-      final withList = AiRepairCommand.parse(
-        '{"action":"test","patch":{"ruleSearch":{"bookList":"[x]"},"x":[1,{"a":2',
-      );
-      expect((withList! as AiTest).change.patch!['x'], [
-        1,
-        {'a': 2},
-      ]);
-    });
-
-    test('an unreadable reply is told what was wrong', () {
-      expect(aiRepairBadReplyFor('沒有 JSON'), contains('裡面沒有 JSON 物件'));
-      expect(aiRepairBadReplyFor('{"a":1,}'), contains('JSON 格式錯'));
+    test('an unreadable call is told what was wrong', () {
       expect(
-        aiRepairBadReplyFor('{"action":"test"}'),
-        contains('action 或欄位不對'),
+        readAiRepairCall(call('dance', '{}')).fact,
+        allOf(startsWith(aiRepairBadCall), contains('沒有叫 dance 的工具')),
       );
-    });
-
-    test('braces inside strings do not end the object early', () {
-      final command = AiRepairCommand.parse(
-        r'{"action":"give_up","why":"blocked","reason":"規則 {{key}} 的 \"}\" 不對"}',
+      expect(
+        readAiRepairCall(call('fetch', '{"url":')).fact,
+        contains('參數不是合法的 JSON'),
       );
-
-      expect((command! as AiGiveUp).reason, r'規則 {{key}} 的 "}" 不對');
+      expect(
+        readAiRepairCall(call('fetch', '["/"]')).fact,
+        contains('參數要是一個 JSON 物件'),
+      );
+      expect(
+        readAiRepairCall(call('submit', '{}')).fact,
+        allOf(contains('少了必要的參數'), contains('patch')),
+      );
+      expect(readAiRepairCall(call('submit', '{}')).command, isNull);
     });
 
-    test('a command in the model\'s own tool-call format is read too', () {
-      // 2026-11-12 deepseek-v4.1-flash 第 1 輪回的原樣。
-      const reply =
-          '<｜｜DSML｜｜ calls>\n'
-          '<｜｜DSML｜｜ invoke name="fetch">\n'
-          '<｜｜DSML｜｜ parameter name="url" string="true">/search/</｜｜DSML｜｜ parameter>\n'
-          '<｜｜DSML｜｜ parameter name="note" string="true">看表單</｜｜DSML｜｜ parameter>\n'
-          '</｜｜DSML｜｜ invoke>\n'
-          '</｜｜DSML｜｜ calls>';
-      final command = AiRepairCommand.parse(reply);
-      expect((command! as AiFetch).url, '/search/');
-
-      const read =
-          '<｜DSML｜invoke name="read"><｜DSML｜parameter name="page" '
-          'string="false">3</｜DSML｜parameter></｜DSML｜invoke>';
-      expect((AiRepairCommand.parse(read)! as AiRead).page, 3);
-
-      // 參數裡夾著 JSON（2026-11-12 話本小說第 1 輪的原樣）。
-      const parse =
-          '<｜DSML｜ calls>\n'
-          '<｜DSML｜ invoke name="parse">\n'
-          '<｜DSML｜ parameter name="page" string="false">3</｜DSML｜ parameter>\n'
-          '<｜DSML｜ parameter name="as" string="true">toc</｜DSML｜ parameter>\n'
-          '<｜DSML｜ parameter name="patch" string="false">{"ruleToc": '
-          '{"chapterList": ".chapter-row", "chapterName": "a@text"}}'
-          '</｜DSML｜ parameter>\n'
-          '</｜DSML｜ invoke>\n'
-          '</｜DSML｜ calls>';
-      final parsed = AiRepairCommand.parse(parse)! as AiParse;
-      expect(parsed.page, 3);
-      expect(parsed.stage, 'toc');
-      expect(parsed.change!.patch, {
-        'ruleToc': {'chapterList': '.chapter-row', 'chapterName': 'a@text'},
-      });
-    });
-
-    test('unknown actions and broken JSON are not commands', () {
-      expect(AiRepairCommand.parse('我覺得是正文規則的問題'), isNull);
-      expect(AiRepairCommand.parse('{"action":"dance"}'), isNull);
-      expect(AiRepairCommand.parse('{"action":"submit"}'), isNull);
+    test('every tool says which arguments it needs', () {
+      for (final tool in aiRepairTools) {
+        final properties = tool.parameters['properties']! as Map;
+        for (final name in tool.parameters['required']! as List) {
+          expect(properties, contains(name), reason: tool.name);
+        }
+      }
     });
 
     test('a pasted source may be bare, a command, or a Legado array', () {
@@ -127,6 +92,23 @@ void main() {
         'bookSourceUrl': 'c',
       });
       expect(pastedSourceJson('{"name":"不是書源"}'), isNull);
+    });
+
+    test('a pasted source missing its last braces, or with braces inside '
+        'strings, is still read', () {
+      expect(
+        pastedSourceJson(
+          '好的：\n{"bookSourceUrl":"a","ruleContent":{"content":"a{b}c"}',
+        ),
+        {
+          'bookSourceUrl': 'a',
+          'ruleContent': {'content': 'a{b}c'},
+        },
+      );
+      expect(
+        pastedSourceJson(r'{"bookSourceUrl":"b","searchUrl":"{{key}} \"}\""}'),
+        {'bookSourceUrl': 'b', 'searchUrl': r'{{key}} "}"'},
+      );
     });
   });
 

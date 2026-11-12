@@ -12,6 +12,8 @@ import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 
+import '../../support/fake_ai.dart';
+
 const _service = (
   baseUrl: 'https://ai.example/v1',
   apiKey: 'sk-test',
@@ -87,8 +89,7 @@ SourceProbeReport _probe(BookSource source) =>
 String _command(String action, {String content = 'class.txt@text'}) =>
     jsonEncode({
       'action': action,
-      'source': {
-        'bookSourceUrl': 'whatever',
+      'patch': {
         'searchUrl': '/s?q={{key}}',
         'ruleContent': {'content': content},
       },
@@ -151,7 +152,7 @@ void main() {
         asked.add(List.of(messages));
         // 回覆用完：測試寫錯了，不讓它一直問下去。
         if (next >= replies.length) throw StateError('沒有更多回覆');
-        return replies[next++];
+        return fakeAiReply(replies[next++]);
       },
       apply: (source, _) async => applied.add(source),
       secrets: (_) async => secretValues,
@@ -202,7 +203,7 @@ void main() {
     final second = asked[1];
     final third = asked[2];
     expect(third.take(second.length), second, reason: '前面的訊息原樣留著');
-    expect(third[2].content, contains('class.a@text'));
+    expect(third[2].toolCalls.single.arguments, contains('class.a@text'));
     expect(third[3].content, contains('<div class="txt">'));
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
@@ -244,7 +245,7 @@ void main() {
         recheckDelay: Duration.zero,
         ask: (messages, _) async {
           asked.add(List.of(messages));
-          return replies[next++];
+          return fakeAiReply(replies[next++]);
         },
         apply: (source, _) async => applied.add(source),
         secrets: (_) async => const {},
@@ -256,16 +257,21 @@ void main() {
 
       expect(s.job.outcome, AiRepairOutcome.repaired);
       final full = (await s.log.file())!.readAsStringSync();
+      // 每一句話與每個工具呼叫的參數都照原樣、只寫一次。
       final conversation = [
-        ...asked.last,
-        (role: 'assistant', content: replies.last),
+        for (final message in [
+          ...asked.last,
+          AiMessage.assistant(
+            '',
+            toolCalls: fakeAiReply(replies.last).toolCalls,
+          ),
+        ]) ...[
+          if (message.content.isNotEmpty) (message.role, message.content),
+          for (final call in message.toolCalls) (message.role, call.arguments),
+        ],
       ];
-      for (final message in conversation) {
-        expect(
-          message.content.allMatches(full).length,
-          1,
-          reason: '${message.role} 的話照原樣、只寫一次',
-        );
+      for (final (role, text) in conversation) {
+        expect(text.allMatches(full).length, 1, reason: '$role 的話照原樣、只寫一次');
       }
       expect(full, contains(raw), reason: '網頁原文不精簡、不截');
       expect(full, contains('<html>首頁原文</html>'));
@@ -339,7 +345,7 @@ void main() {
       recheckDelay: Duration.zero,
       ask: (messages, _) async {
         asked.add(List.of(messages));
-        return replies[next++];
+        return fakeAiReply(replies[next++]);
       },
       apply: (source, _) async => applied.add(source),
       secrets: (_) async => const {},
@@ -427,7 +433,7 @@ void main() {
         check: (_, _) async => throw StateError('isolate 掛了'),
         probe: (source, _, {start}) async => _probe(source),
         keywordCheck: (_, _) async => true,
-        ask: (_, _) async => _command('test'),
+        ask: (_, _) async => fakeAiReply(_command('test')),
         apply: (source, _) async => applied.add(source),
         secrets: (_) async => const {},
         backups: backups,
@@ -453,7 +459,7 @@ void main() {
       ask: (messages, _) async {
         asked.add(List.of(messages));
         if (calls++ == 0) throw const AiEmptyReply();
-        return _command('test');
+        return fakeAiReply(_command('test'));
       },
       apply: (source, _) async => applied.add(source),
       secrets: (_) async => const {},
@@ -484,7 +490,7 @@ void main() {
     expect(asked[2].last.content, contains('這是同樣參數的第 2 次，結果與前幾次相同'));
     expect(job.outcome, AiRepairOutcome.failed);
     expect(job.confirmedUnfixable, isFalse);
-    expect(job.explanation, contains('同樣的指令與參數第 4 次'));
+    expect(job.explanation, contains('同樣的工具與參數第 4 次'));
     expect(s.log.summary, contains('無法確認'));
     final full = (await s.log.file())!.readAsStringSync();
     final stats = full
@@ -540,7 +546,7 @@ void main() {
 
     await s.start();
 
-    expect(asked[1].last.content, startsWith('# 這一輪沒有收到指令'));
+    expect(asked[1].last.content, startsWith('# 這一輪沒有呼叫工具'));
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
@@ -750,11 +756,9 @@ void main() {
         keywordCheck: (_, _) async => true,
         ask: (messages, _) async {
           asked.add(List.of(messages));
-          return jsonEncode({
-            'action': 'give_up',
-            'why': 'paid',
-            'reason': '不修',
-          });
+          return fakeAiReply(
+            jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
+          );
         },
         apply: (source, _) async => applied.add(source),
         copy: (text) async => copied.add(text),
@@ -781,7 +785,7 @@ void main() {
     final s = session(
       [_source('https://site.example')],
       replies: [
-        '{"action":"submit","source":{"bookSourceType":1e400},"note":""}',
+        '{"action":"submit","patch":{"bookSourceType":1e400},"note":""}',
         jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
         jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
       ],
@@ -792,7 +796,7 @@ void main() {
     final job = s.job;
     expect(job.outcome, AiRepairOutcome.failed);
     expect(asked, hasLength(3), reason: '讀不懂一次、放棄被退回一次、再放棄');
-    expect(asked[1].last.content, startsWith(aiRepairBadReply));
+    expect(asked[1].last.content, startsWith(aiRepairBadCall));
     expect(s.isRunning, isFalse);
     expect(applied, isEmpty);
   });
@@ -806,7 +810,7 @@ void main() {
       check: (source, _) async => _checked(source),
       probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (_, _) async => true,
-      ask: (_, _) async => _command('submit'),
+      ask: (_, _) async => fakeAiReply(_command('submit')),
       apply: (source, _) async {
         s.stop();
         applied.add(source);
@@ -830,7 +834,7 @@ void main() {
         check: (source, _) async => _checked(source),
         probe: (source, _, {start}) async => _probe(source),
         keywordCheck: (_, _) async => true,
-        ask: (_, _) async => _command('submit'),
+        ask: (_, _) async => fakeAiReply(_command('submit')),
         apply: (_, _) async => throw AiRepairConflict(conflict),
         secrets: (_) async => const {},
         backups: backups,

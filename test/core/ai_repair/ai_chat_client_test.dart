@@ -115,10 +115,8 @@ void main() {
       ],
     });
 
-    final reply = await _client(service).complete([
-      (role: 'system', content: '說明'),
-      (role: 'user', content: '書源'),
-    ]);
+    final reply = await _client(service)
+        .complete([const AiMessage.system('說明'), const AiMessage.user('書源')]);
 
     expect(reply.content, '{"action":"give_up"}');
     expect(
@@ -129,6 +127,112 @@ void main() {
     expect(service.request!.data, containsPair('model', 'm'));
     expect(service.request!.data, containsPair('stream', true));
     expect(service.request!.data, isNot(contains('temperature')));
+  });
+
+  test('tools are sent and must be called; earlier calls and their results '
+      'go back in the conversation', () async {
+    final service = _Service(200, {
+      'choices': [
+        {
+          'message': {
+            'role': 'assistant',
+            'content': null,
+            'tool_calls': [
+              {
+                'id': 'call_2',
+                'type': 'function',
+                'function': {'name': 'read', 'arguments': '{"page":1}'},
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const fetch = (id: 'call_1', name: 'fetch', arguments: '{"url":"/"}');
+
+    final reply = await _client(service).complete(
+      [
+        const AiMessage.user('書源'),
+        const AiMessage.assistant('', toolCalls: [fetch]),
+        const AiMessage.tool('call_1', '頁 1'),
+      ],
+      tools: [
+        (
+          name: 'read',
+          description: '讀頁',
+          parameters: {'type': 'object', 'properties': {}},
+        ),
+      ],
+    );
+
+    expect(reply.content, '');
+    expect(reply.toolCalls, [
+      (id: 'call_2', name: 'read', arguments: '{"page":1}'),
+    ]);
+    final data = service.request!.data as Map<String, dynamic>;
+    expect(data['tool_choice'], 'required');
+    expect((data['tools'] as List).single, {
+      'type': 'function',
+      'function': {
+        'name': 'read',
+        'description': '讀頁',
+        'parameters': {'type': 'object', 'properties': {}},
+      },
+    });
+    expect((data['messages'] as List).skip(1), [
+      {
+        'role': 'assistant',
+        'content': null,
+        'tool_calls': [
+          {
+            'id': 'call_1',
+            'type': 'function',
+            'function': {'name': 'fetch', 'arguments': '{"url":"/"}'},
+          },
+        ],
+      },
+      {'role': 'tool', 'content': '頁 1', 'tool_call_id': 'call_1'},
+    ]);
+  });
+
+  test('a streamed tool call is put together from its pieces', () async {
+    Map<String, Object?> piece(Map<String, Object?> call) => {
+      'choices': [
+        {
+          'delta': {
+            'tool_calls': [call],
+          },
+        },
+      ],
+    };
+    final service = _Stream([
+      _event(
+        piece({
+          'index': 0,
+          'id': 'call_9',
+          'function': {'name': 'fetch', 'arguments': ''},
+        }),
+      ),
+      _event(
+        piece({
+          'index': 0,
+          'function': {'arguments': '{"url":'},
+        }),
+      ),
+      _event(
+        piece({
+          'index': 0,
+          'function': {'arguments': '"/s"}'},
+        }),
+      ),
+      'data: [DONE]\n\n',
+    ]);
+
+    final reply = await _client(service).complete([const AiMessage.user('hi')]);
+
+    expect(reply.toolCalls, [
+      (id: 'call_9', name: 'fetch', arguments: '{"url":"/s"}'),
+    ]);
   });
 
   test('the thinking effort is sent only when one is chosen, and the usage '
@@ -146,14 +250,14 @@ void main() {
       },
     };
     final plain = _Service(200, reply());
-    await _client(plain).complete([(role: 'user', content: 'hi')]);
+    await _client(plain).complete([const AiMessage.user('hi')]);
     expect(plain.request!.data, isNot(contains('reasoning_effort')));
 
     final low = _Service(200, reply());
     final answer = await _client(
       low,
       effort: 'low',
-    ).complete([(role: 'user', content: 'hi')]);
+    ).complete([const AiMessage.user('hi')]);
     expect(low.request!.data, containsPair('reasoning_effort', 'low'));
     expect(answer.usage, (
       prompt: 100,
@@ -172,10 +276,7 @@ void main() {
       ],
     });
 
-    await _client(
-      service,
-      apiKey: '',
-    ).complete([(role: 'user', content: 'hi')]);
+    await _client(service, apiKey: '').complete([const AiMessage.user('hi')]);
 
     expect(service.request!.headers.containsKey('Authorization'), isFalse);
   });
@@ -191,20 +292,20 @@ void main() {
     const baseUrl = 'https://opencode.ai/inference/go/openai/v1';
     final client = _client(service, baseUrl: baseUrl);
 
-    await client.complete([(role: 'user', content: 'first')]);
+    await client.complete([const AiMessage.user('first')]);
     final firstSession = service.request!.headers['x-opencode-session'];
     expect(firstSession, isA<String>());
     expect(firstSession, startsWith('ses_'));
     expect(service.request!.headers['User-Agent'], 'NightReader-AIRepair/1.0');
     expect(service.request!.uri.toString(), '$baseUrl/chat/completions');
 
-    await client.complete([(role: 'user', content: 'second')]);
+    await client.complete([const AiMessage.user('second')]);
     expect(service.request!.headers['x-opencode-session'], firstSession);
 
     await _client(
       service,
       baseUrl: baseUrl,
-    ).complete([(role: 'user', content: 'a different repair')]);
+    ).complete([const AiMessage.user('a different repair')]);
     expect(service.request!.headers['x-opencode-session'], isNot(firstSession));
   });
 
@@ -217,7 +318,7 @@ void main() {
       ],
     };
     final regular = _Service(200, response);
-    await _client(regular).complete([(role: 'user', content: 'hi')]);
+    await _client(regular).complete([const AiMessage.user('hi')]);
     expect(regular.request!.headers.containsKey('x-opencode-session'), isFalse);
     expect(regular.request!.headers.containsKey('User-Agent'), isFalse);
 
@@ -225,7 +326,7 @@ void main() {
     await _client(
       unrelatedPath,
       baseUrl: 'https://opencode.ai/another-api/v1',
-    ).complete([(role: 'user', content: 'hi')]);
+    ).complete([const AiMessage.user('hi')]);
     expect(
       unrelatedPath.request!.headers.containsKey('x-opencode-session'),
       isFalse,
@@ -235,7 +336,7 @@ void main() {
     await _client(
       payg,
       baseUrl: 'https://opencode.ai/inference/openai/v1',
-    ).complete([(role: 'user', content: 'hi')]);
+    ).complete([const AiMessage.user('hi')]);
     expect(payg.request!.headers['x-opencode-session'], startsWith('ses_'));
   });
 
@@ -245,7 +346,7 @@ void main() {
     });
 
     expect(
-      () => _client(service).complete([(role: 'user', content: 'hi')]),
+      () => _client(service).complete([const AiMessage.user('hi')]),
       throwsA(
         isA<AiServiceException>().having(
           (e) => e.message,
@@ -285,7 +386,7 @@ void main() {
       ]);
 
       final reply = await _client(service)
-          .complete([(role: 'user', content: 'hi')], limits: limits);
+          .complete([const AiMessage.user('hi')], limits: limits);
 
       expect(reply.content, '{"action":"read"}');
       expect(reply.reasoning, '先看搜尋頁。規則選錯了。');
@@ -305,8 +406,7 @@ void main() {
       ], hangAfter: 1);
 
       await expectLater(
-        _client(service)
-            .complete([(role: 'user', content: 'hi')], limits: limits),
+        _client(service).complete([const AiMessage.user('hi')], limits: limits),
         throwsA(
           isA<AiStalled>().having((e) => e.retryable, 'retryable', isTrue),
         ),
@@ -322,8 +422,7 @@ void main() {
       ]);
 
       await expectLater(
-        _client(service)
-            .complete([(role: 'user', content: 'hi')], limits: limits),
+        _client(service).complete([const AiMessage.user('hi')], limits: limits),
         throwsA(
           isA<AiRunaway>()
               .having((e) => e.tail, 'tail', startsWith('思考的最後一段：\n'))
@@ -346,7 +445,7 @@ void main() {
       ]);
 
       final reply = await _client(service)
-          .complete([(role: 'user', content: 'hi')], limits: limits);
+          .complete([const AiMessage.user('hi')], limits: limits);
       expect(reply.content, '{"action":"read"}');
     });
 
@@ -355,12 +454,12 @@ void main() {
       () async {
         await expectLater(
           _client(_Stream([_delta(content: 'x' * 2500)]))
-              .complete([(role: 'user', content: 'hi')], limits: limits),
+              .complete([const AiMessage.user('hi')], limits: limits),
           throwsA(isA<AiRunaway>()),
         );
         await expectLater(
           _client(_Stream([_delta(content: '{"a":', finish: 'length')]))
-              .complete([(role: 'user', content: 'hi')], limits: limits),
+              .complete([const AiMessage.user('hi')], limits: limits),
           throwsA(isA<AiRunaway>()),
         );
       },
@@ -377,7 +476,7 @@ void main() {
             _Service(status, {
               'error': {'message': 'x'},
             }),
-          ).complete([(role: 'user', content: 'hi')], limits: limits),
+          ).complete([const AiMessage.user('hi')], limits: limits),
           throwsA(
             isA<AiServiceException>().having(
               (e) => e.retryable,

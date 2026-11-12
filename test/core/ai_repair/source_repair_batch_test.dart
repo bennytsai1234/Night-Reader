@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 
+import '../../support/fake_ai.dart';
+
 const _service = (
   baseUrl: 'https://ai.example/v1',
   apiKey: 'k',
@@ -150,7 +152,7 @@ void main() {
           ask: (_, _) async {
             asked.add(source.bookSourceUrl);
             b.tokensUsed += tokensPerAnswer;
-            return answers[next++ % answers.length];
+            return fakeAiReply(answers[next++ % answers.length]);
           },
           apply: (repaired, original) async => saved.add(repaired),
           secrets: (_) async => const {},
@@ -398,7 +400,7 @@ void main() {
         service: _service,
         check: (s, _) async => _checked(s),
         probe: (s, _, {start}) async => _probe(s),
-        ask: (_, _) async => _giveUp,
+        ask: (_, _) async => fakeAiReply(_giveUp),
         secrets: (_) async => const {},
         backups: backups,
       ),

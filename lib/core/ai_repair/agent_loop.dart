@@ -5,13 +5,14 @@ import 'package:dio/dio.dart';
 import 'ai_chat_client.dart';
 
 /// 和任務無關的 AI 迴圈（`agent-harness` 技能「做迴圈」）：程式把一件事交給
-/// AI，AI 每輪回一個指令，程式執行、把結果接在對話最後，直到交出的東西通過
-/// 驗收。任務相關的部分（開場、怎麼讀指令、怎麼執行與驗收）由 [AgentTask]
+/// AI，AI 每輪呼叫工具（服務的 function calling），程式執行、把每個呼叫的
+/// 結果接在對話最後，直到交出的東西通過驗收。任務相關的部分（開場、怎麼讀指令、怎麼執行與驗收）由 [AgentTask]
 /// 提供，AI 修書源是第一個任務。
 ///
 /// 一律照做的機制：
 /// - 執行中只回事實：結果後面附上跑的狀態（同樣的參數第幾次、剩幾輪），
-///   不附指示。這輪沒有結果可接（沒有指令、讀不懂）時才另發一句。
+///   不附指示。每個呼叫都有一句工具結果（參數讀不懂的也回哪裡不對）；這輪
+///   沒有呼叫工具時才另發一句。
 /// - 卡住（[AiStalled]）：同一段對話原封不動重送；連續卡住
 ///   [AiAgentKnobs.stallLimit] 次就整件重跑。
 /// - 失控（[AiRunaway]）、可重試的服務錯誤、未收斂：整件用全新的對話與工具
@@ -27,8 +28,11 @@ abstract class AgentTask<C> {
   /// 接著要跑的第幾次，[why] 是上一次為什麼沒跑完。
   void restart(int attempt, String why);
 
-  /// 讀出 AI 這輪回的指令。
-  AgentParse<C> parse(String reply);
+  /// 讀出 AI 呼叫的一個工具。
+  AgentParse<C> parse(AiToolCall call);
+
+  /// AI 這輪沒有呼叫工具：傳回要接進對話的那句事實。
+  String noToolCall(AiReply reply);
 
   /// 執行一個指令；傳回的文字是要接進對話的事實，秘密已經遮掉。
   Future<AgentResult> execute(C command);
@@ -71,13 +75,8 @@ final class AgentCommand<C> extends AgentParse<C> {
   final String key;
 }
 
-/// 回覆裡沒有指令（[fact] 說看到什麼）。
-final class AgentNoCommand<C> extends AgentParse<C> {
-  const AgentNoCommand(this.fact);
-  final String fact;
-}
-
-/// 有指令但讀不懂：JSON 不合法、少了欄位（[fact] 說哪裡不對）。
+/// 呼叫讀不懂：沒有這個工具、參數不是合法的 JSON、少了欄位（[fact] 說
+/// 哪裡不對）。
 final class AgentBadCommand<C> extends AgentParse<C> {
   const AgentBadCommand(this.fact);
   final String fact;
@@ -281,9 +280,13 @@ Future<_AttemptEnd> _attempt<C>(
     return left <= AiAgentKnobs.warnRoundsLeft ? '\n\n（剩 $left 輪）' : '';
   }
 
-  void fact(String text) {
+  /// 接進對話的一句事實：工具的結果（[callId] 是它回應的那個呼叫），或這輪
+  /// 沒有呼叫工具時的一句話。
+  void fact(String text, {String? callId}) {
     final line = '$text${status()}';
-    messages.add((role: 'user', content: line));
+    messages.add(
+      callId == null ? AiMessage.user(line) : AiMessage.tool(callId, line),
+    );
     task.factAdded(line);
   }
 
@@ -298,7 +301,13 @@ Future<_AttemptEnd> _attempt<C>(
     round++;
     stats.rounds++;
     task.roundStarted(attempt, round, messages);
-    final sentChars = messages.fold(0, (sum, m) => sum + m.content.length);
+    final sentChars = messages.fold(
+      0,
+      (sum, m) =>
+          sum +
+          m.content.length +
+          m.toolCalls.fold(0, (n, call) => n + call.arguments.length),
+    );
     final watch = Stopwatch()..start();
     void record({AiReply? reply, AiServiceException? failure, String? error}) {
       stats.model += watch.elapsed;
@@ -336,7 +345,7 @@ Future<_AttemptEnd> _attempt<C>(
       record(failure: error);
       stats.noCommands++;
       if (++noCommand >= AiAgentKnobs.noCommandLimit) {
-        return _Retry('連續 $noCommand 輪沒有收到指令');
+        return _Retry('連續 $noCommand 輪沒有呼叫工具');
       }
       continue;
     } on AiServiceException catch (error) {
@@ -354,61 +363,68 @@ Future<_AttemptEnd> _attempt<C>(
     record(reply: reply);
     stalls = 0;
     if (cancelToken.isCancelled) return cancelled;
-    messages.add((role: 'assistant', content: reply.content));
+    messages.add(
+      AiMessage.assistant(reply.content, toolCalls: reply.toolCalls),
+    );
 
-    switch (task.parse(reply.content)) {
-      case AgentNoCommand(fact: final text):
-        stats.noCommands++;
-        if (++noCommand >= AiAgentKnobs.noCommandLimit) {
-          return _Retry('連續 $noCommand 輪沒有收到指令');
-        }
-        fact(text);
-      case AgentBadCommand(fact: final text):
-        noCommand = 0;
-        stats.badCommands++;
-        if (++badCommand >= AiAgentKnobs.badCommandLimit) {
-          return _Retry('連續 $badCommand 輪的指令讀不懂');
-        }
-        fact(text);
-      case AgentCommand(:final command, :final key):
-        noCommand = 0;
-        final count = calls[key] = (calls[key] ?? 0) + 1;
-        if (count >= AiAgentKnobs.sameCallLimit) {
-          return _Retry('同樣的指令與參數第 $count 次');
-        }
-        stats.toolCalls++;
-        final toolWatch = Stopwatch()..start();
-        final result = await task.execute(command);
-        stats.tools += toolWatch.elapsed;
-        if (cancelToken.isCancelled) return cancelled;
-        switch (result) {
-          case AgentAccepted():
-            return const _Finished(AgentEndKind.completed, '交出的通過了');
-          case AgentStopped(:final kind, :final reason):
-            return _Finished(kind, reason);
-          case AgentInvalid(fact: final text):
-            stats.badCommands++;
-            if (++badCommand >= AiAgentKnobs.badCommandLimit) {
-              return _Retry('連續 $badCommand 輪的指令讀不懂');
-            }
-            fact(text);
-          case AgentRejected(:final reason):
-            badCommand = 0;
-            stats.rejections++;
-            // 交出之間的查證不重算：數的是交出的那幾次連續被退。
-            if (++rejections >= AiAgentKnobs.rejectionLimit) {
-              return _Retry('交出連續被退 $rejections 次');
-            }
-            fact('$reason${_repeated(count, lastResult, key, reason)}');
-          case AgentToolResult(:final text, :final same):
-            badCommand = 0;
-            fact('$text${_repeated(count, lastResult, key, same ?? text)}');
-        }
+    if (reply.toolCalls.isEmpty) {
+      stats.noCommands++;
+      if (++noCommand >= AiAgentKnobs.noCommandLimit) {
+        return _Retry('連續 $noCommand 輪沒有呼叫工具');
+      }
+      fact(task.noToolCall(reply));
+      continue;
+    }
+    noCommand = 0;
+    // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
+    for (final call in reply.toolCalls) {
+      void answer(String text) => fact(text, callId: call.id);
+      switch (task.parse(call)) {
+        case AgentBadCommand(fact: final text):
+          stats.badCommands++;
+          if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+            return _Retry('連續 $badCommand 次工具呼叫讀不懂');
+          }
+          answer(text);
+        case AgentCommand(:final command, :final key):
+          final count = calls[key] = (calls[key] ?? 0) + 1;
+          if (count >= AiAgentKnobs.sameCallLimit) {
+            return _Retry('同樣的工具與參數第 $count 次');
+          }
+          stats.toolCalls++;
+          final toolWatch = Stopwatch()..start();
+          final result = await task.execute(command);
+          stats.tools += toolWatch.elapsed;
+          if (cancelToken.isCancelled) return cancelled;
+          switch (result) {
+            case AgentAccepted():
+              return const _Finished(AgentEndKind.completed, '交出的通過了');
+            case AgentStopped(:final kind, :final reason):
+              return _Finished(kind, reason);
+            case AgentInvalid(fact: final text):
+              stats.badCommands++;
+              if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+                return _Retry('連續 $badCommand 次工具呼叫讀不懂');
+              }
+              answer(text);
+            case AgentRejected(:final reason):
+              badCommand = 0;
+              stats.rejections++;
+              // 交出之間的查證不重算：數的是交出的那幾次連續被退。
+              if (++rejections >= AiAgentKnobs.rejectionLimit) {
+                return _Retry('交出連續被退 $rejections 次');
+              }
+              answer('$reason${_repeated(count, lastResult, key, reason)}');
+            case AgentToolResult(:final text, :final same):
+              badCommand = 0;
+              answer('$text${_repeated(count, lastResult, key, same ?? text)}');
+          }
+      }
     }
   }
 }
 
-/// 同樣的指令與參數又來一次時附上的狀態。
+/// 同樣的工具與參數又來一次時附上的狀態。
 String _repeated(
   int count,
   Map<String, String> lastResult,

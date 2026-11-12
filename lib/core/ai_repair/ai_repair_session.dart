@@ -139,12 +139,9 @@ typedef AiRepairKeywordCheck = Future<bool> Function(
   CancelToken cancelToken,
 );
 
-/// 問 AI 一次，只要回的話（測試用的假 AI）；真的服務用 [AiChatClient]，
-/// 連思考與用量一起拿。
-typedef AiRepairAsker = Future<String> Function(
-  List<AiMessage> messages,
-  CancelToken cancelToken,
-);
+/// 問 AI 一次（測試用的假 AI）；真的服務用 [AiChatClient]，帶著
+/// [aiRepairTools]。
+typedef AiRepairAsker = AgentAsk;
 
 /// AI 修一個書源（ADR 0054）：先校驗、抓網頁；有 AI 服務時讓 AI 邊看網頁邊
 /// 改、試抓，交出後再校驗，通過才存進去並留下改前版本。沒有 AI 服務時把
@@ -190,14 +187,7 @@ class AiRepairSession extends ChangeNotifier {
         (repaired, original) =>
             saveRepairedSource(repaired, original, backups: _backups);
     _onUsage = onUsage;
-    _ask = ask != null
-        ? (messages, cancelToken) async => (
-            content: await ask(messages, cancelToken),
-            reasoning: '',
-            usage: null,
-            firstData: Duration.zero,
-          )
-        : (service == null ? null : _defaultAsk(service!));
+    _ask = ask ?? (service == null ? null : _defaultAsk(service!));
   }
 
   void Function(AiUsage usage)? _onUsage;
@@ -442,6 +432,9 @@ class AiRepairSession extends ChangeNotifier {
   Future<void> _converse(AiRepairJob job) async {
     final agent = _RepairAgent(this, job);
     log.full('（迴圈的設定：${AiAgentKnobs.summary}）');
+    log.tools(
+      const JsonEncoder.withIndent('  ').convert(aiToolsJson(aiRepairTools)),
+    );
     final end = await runAgent(
       agent,
       ask: _ask!,
@@ -900,8 +893,11 @@ class AiRepairSession extends ChangeNotifier {
 
   static AgentAsk _defaultAsk(AiService service) {
     final client = AiChatClient(service);
-    return (messages, cancelToken) =>
-        client.complete(messages, cancelToken: cancelToken);
+    return (messages, cancelToken) => client.complete(
+      messages,
+      tools: aiRepairTools,
+      cancelToken: cancelToken,
+    );
   }
 
   static Future<void> _defaultCopy(String text) =>
@@ -943,7 +939,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       checkResult: job._checkResult!,
       probe: job._probe!,
     ))
-      (role: message.role, content: redact(message.content)),
+      AiMessage(message.role, redact(message.content)),
   ];
 
   @override
@@ -991,7 +987,10 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       return;
     }
     if (reply.reasoning.isNotEmpty) s.log.thinking(reply.reasoning);
-    s.log.reply(reply.content);
+    if (reply.content.trim().isNotEmpty) s.log.reply(reply.content);
+    for (final call in reply.toolCalls) {
+      s.log.toolCall(call.name, call.arguments);
+    }
     // AI 回的話接進對話（迴圈做），完整紀錄已經寫了。
     logged = record.sentMessages + 1;
   }
@@ -1000,19 +999,21 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   void factAdded(String fact) {}
 
   @override
-  AgentParse<AiRepairCommand> parse(String reply) {
-    final json = aiRepairCommandJson(reply);
-    final command = json == null ? null : AiRepairCommand.parse(reply);
-    if (command == null) {
-      final noJson = json == null && !reply.contains('{');
-      final what = noJson ? '沒有收到指令' : '讀不懂 AI 回的內容';
-      if (step case final step?) s._finish(step, what, failed: true);
-      s.log.both(what);
-      return noJson
-          ? const AgentNoCommand('# 這一輪沒有收到指令：回覆裡沒有 JSON 物件')
-          : AgentBadCommand(aiRepairBadReplyFor(reply));
+  AgentParse<AiRepairCommand> parse(AiToolCall call) {
+    final read = readAiRepairCall(call);
+    if (read.command case final command?) {
+      return AgentCommand(command, read.key);
     }
-    return AgentCommand(command, aiRepairCommandKey(json!));
+    if (step case final step?) s._finish(step, '讀不懂工具呼叫', failed: true);
+    s.log.both('讀不懂工具呼叫：${read.fact}');
+    return AgentBadCommand(redact(read.fact));
+  }
+
+  @override
+  String noToolCall(AiReply reply) {
+    if (step case final step?) s._finish(step, '沒有呼叫工具', failed: true);
+    s.log.both('沒有呼叫工具');
+    return '# 這一輪沒有呼叫工具';
   }
 
   /// 讀不懂指令裡的東西：步驟標失敗，回 AI 哪裡不對。

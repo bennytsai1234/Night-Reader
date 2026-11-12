@@ -71,6 +71,7 @@ import 'package:provider/provider.dart';
 
 import '../support/app_harness.dart';
 import '../support/screenshot.dart';
+import '../support/fake_ai.dart';
 
 typedef Steps = Future<void> Function(WidgetTester tester);
 
@@ -541,8 +542,7 @@ AiRepairSession _aiRepairSession() {
     for (final action in ['test', 'submit'])
       jsonEncode({
         'action': action,
-        'source': {
-          'bookSourceUrl': 'https://www.example.com',
+        'patch': {
           'searchUrl': '/s?q={{key}}',
           'ruleContent': {'content': 'class.txt@text'},
         },
@@ -566,7 +566,7 @@ AiRepairSession _aiRepairSession() {
     check: (source, _) async => checked(source),
     probe: (_, _, {start}) async => probe,
     keywordCheck: (_, _) async => true,
-    ask: (_, _) async => replies[next++],
+    ask: (_, _) async => fakeAiReply(replies[next++]),
     apply: (_, _) async {},
     secrets: (_) async => const {},
     backups: AiRepairBackups(),

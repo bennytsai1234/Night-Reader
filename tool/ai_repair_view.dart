@@ -1,6 +1,6 @@
 // 把一份 AI 修復的完整紀錄（.txt）轉成可以點開看的 HTML：每一步一張卡片，
-// 每一輪收起來時看得到 AI 下的指令與這輪的用量，點開看送給 AI 的話、AI 的
-// 思考、回覆與夜讀做的事。
+// 每一輪收起來時看得到 AI 呼叫的工具與這輪的用量，點開看送給 AI 的話、AI 的
+// 思考、回覆、呼叫的工具與夜讀做的事。
 //
 //   dart run tool/ai_repair_view.dart <紀錄.txt> <輸出.html>
 //
@@ -22,7 +22,9 @@ void main(List<String> args) {
 /// 段落的標題：`## 第 3 輪（+0:06）` 這種，結尾是從修復開始算的時間。送給
 /// AI 的話裡也有 `## 怎麼查` 這類小標題，不算。
 final RegExp _section = RegExp(r'^## (.*（\+\d+:\d\d）)$');
-final RegExp _part = RegExp(r'^### ((送給 AI|AI 的思考|AI 回覆|請求與網站回的原文|程式).*)$');
+final RegExp _part = RegExp(
+  r'^### ((送給 AI|AI 的思考|AI 回覆|AI 呼叫工具|工具$|請求與網站回的原文|程式).*)$',
+);
 final RegExp _usage = RegExp(
   r'AI 回覆 ([\d.]+) 秒.*?送出 ([\d,]+) token（打中快取 ([\d,]+)）、回覆 ([\d,]+)（思考 ([\d,]+)）',
 );
@@ -76,15 +78,16 @@ String _card(_Section section) {
             '<span class="pill">送出 ${usage.group(2)} token（快取 ${usage.group(3)}）</span>'
             '<span class="pill">回覆 ${usage.group(4)}（思考 ${usage.group(5)}）</span>';
   var gist = '';
-  for (final part in section.parts) {
-    if (!part.title.startsWith('AI 回覆')) continue;
-    final body = part.body.join('\n');
-    final action =
-        RegExp(r'"action"\s*:\s*"(\w+)"').firstMatch(body) ??
-        RegExp(r'invoke name="(\w+)"').firstMatch(body);
-    final event = part.body.firstWhere(_event.hasMatch, orElse: () => '');
+  if (round) {
+    final calls = [
+      for (final part in section.parts)
+        if (RegExp(r'^AI 呼叫工具 (\w+)').firstMatch(part.title) case final m?)
+          m.group(1)!,
+    ];
+    final event = [for (final part in section.parts) ...part.body]
+        .firstWhere(_event.hasMatch, orElse: () => '');
     gist =
-        '${action?.group(1) ?? '沒有指令'}'
+        '${calls.isEmpty ? '沒有呼叫工具' : calls.join('、')}'
         '${event.isEmpty ? '' : '：${event.length > 70 ? event.substring(0, 70) : event}'}';
   }
   return '<details class="card ${round ? 'round' : 'step'}"${round ? '' : ' open'}>'
@@ -100,6 +103,8 @@ String _partHtml(_Part part) {
     final t when t.startsWith('送給 AI') => ('user', '送給 AI'),
     final t when t.startsWith('AI 的思考') => ('think', 'AI 的思考'),
     final t when t.startsWith('AI 回覆') => ('reply', 'AI 回覆'),
+    final t when t.startsWith('AI 呼叫工具') => ('reply', t),
+    '工具' => ('sys', '工具清單'),
     final t when t.startsWith('請求與網站回的原文') => ('raw', '網站回的原文'),
     _ => ('raw', '程式'),
   };

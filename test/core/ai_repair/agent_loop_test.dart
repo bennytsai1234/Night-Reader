@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/agent_loop.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 
-/// 假任務：AI 回 `tool:x` 是呼叫工具 x、`submit:ok` 交出通過、`submit:bad`
-/// 交出被退、`bad` 讀不懂、其他是沒有指令。
+/// 假任務：AI 呼叫 `tool:x` 是工具 x、`submit:ok` 交出通過、`submit:bad`
+/// 交出被退、`bad` 讀不懂；回的話沒有呼叫工具是沒有指令（[_reply]）。
 final class _Task extends AgentTask<String> {
   final List<String> restarts = [];
   final List<String> facts = [];
@@ -13,20 +13,20 @@ final class _Task extends AgentTask<String> {
   @override
   List<AiMessage> opening() {
     openings++;
-    return [(role: 'system', content: '規則'), (role: 'user', content: '這一件')];
+    return [const AiMessage.system('規則'), const AiMessage.user('這一件')];
   }
 
   @override
   void restart(int attempt, String why) => restarts.add(why);
 
   @override
-  AgentParse<String> parse(String reply) {
-    if (reply == 'bad') return const AgentBadCommand('讀不懂');
-    if (reply.startsWith('tool:') || reply.startsWith('submit:')) {
-      return AgentCommand(reply, reply);
-    }
-    return const AgentNoCommand('沒有指令');
+  AgentParse<String> parse(AiToolCall call) {
+    if (call.name == 'bad') return const AgentBadCommand('讀不懂');
+    return AgentCommand(call.name, call.name);
   }
+
+  @override
+  String noToolCall(AiReply reply) => '沒有指令';
 
   @override
   Future<AgentResult> execute(String command) async => switch (command) {
@@ -48,8 +48,26 @@ final class _Recording extends _Task {
   void roundEnded(AgentRoundRecord record) => rounds.add(record);
 }
 
-AiReply _reply(String content) =>
-    (content: content, reasoning: '', usage: null, firstData: Duration.zero);
+/// 假 AI 回的一次：`tool:`、`submit:` 開頭或 `bad` 是呼叫那個工具，用 `|`
+/// 隔開是同一次呼叫好幾個；其他是沒有呼叫工具的話。
+AiReply _reply(String content) {
+  final calls = content.split('|');
+  final isCall = calls.every(
+    (name) =>
+        name == 'bad' || name.startsWith('tool:') || name.startsWith('submit:'),
+  );
+  return (
+    content: isCall ? '' : content,
+    toolCalls: [
+      if (isCall)
+        for (final (i, name) in calls.indexed)
+          (id: 'call_$i', name: name, arguments: '{}'),
+    ],
+    reasoning: '',
+    usage: null,
+    firstData: Duration.zero,
+  );
+}
 
 /// 照順序回 [script] 的假 AI：字串是回的話，例外就丟出來；用完了一直回
 /// [rest]。
@@ -141,17 +159,46 @@ void main() {
     expect(rounds.single.estimated, isTrue);
   });
 
+  test('every call of a reply gets its own tool result, in order', () async {
+    final seen = <List<AiMessage>>[];
+    final end = await run((messages, _) async {
+      seen.add(List.of(messages));
+      return _reply(seen.length == 1 ? 'tool:a|bad|tool:b' : 'submit:ok');
+    });
+    expect(end.kind, AgentEndKind.completed);
+    final second = seen[1];
+    final asked = second[second.length - 4];
+    expect(asked.role, 'assistant');
+    expect(asked.toolCalls.map((call) => call.id), [
+      'call_0',
+      'call_1',
+      'call_2',
+    ]);
+    expect(
+      [
+        for (final message in second.skip(second.length - 3))
+          (message.role, message.toolCallId, message.content),
+      ],
+      [
+        ('tool', 'call_0', 'tool:a 的結果'),
+        ('tool', 'call_1', '讀不懂'),
+        ('tool', 'call_2', 'tool:b 的結果'),
+      ],
+      reason: '讀不懂的呼叫也回哪裡不對，服務才收下一輪的對話',
+    );
+  });
+
   test('three rounds without a command restart the case', () async {
     final end = await run(_ai(['我想想', '我想想', '我想想'], rest: 'submit:ok'));
     expect(end.kind, AgentEndKind.completed);
-    expect(task.restarts.single, '連續 3 輪沒有收到指令');
+    expect(task.restarts.single, '連續 3 輪沒有呼叫工具');
     expect(task.facts.first, '沒有指令', reason: '只回事實，不加指示');
   });
 
   test('three unreadable commands in a row restart the case', () async {
     final end = await run(_ai(['bad', 'bad', 'bad'], rest: 'submit:ok'));
     expect(end.kind, AgentEndKind.completed);
-    expect(task.restarts.single, '連續 3 輪的指令讀不懂');
+    expect(task.restarts.single, '連續 3 次工具呼叫讀不懂');
   });
 
   test('the same call again says so; the fourth time restarts', () async {
@@ -160,7 +207,7 @@ void main() {
     );
     expect(end.kind, AgentEndKind.completed);
     expect(task.facts[1], contains('這是同樣參數的第 2 次，結果與前幾次相同'));
-    expect(task.restarts.single, '同樣的指令與參數第 4 次');
+    expect(task.restarts.single, '同樣的工具與參數第 4 次');
   });
 
   test('five rejected submissions restart the case, even with checks in '

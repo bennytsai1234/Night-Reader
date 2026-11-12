@@ -106,6 +106,15 @@ final class AiRepairLog {
   void message(String role, String content) =>
       full('### 送給 AI（$role，${content.length} 字）\n$content');
 
+  /// 給 AI 用的工具清單（每件寫一次，只寫進完整紀錄）。
+  void tools(String json) => full('### 工具\n$json');
+
+  /// AI 呼叫的一個工具：完整紀錄寫名稱與參數全文，摘要只留開頭 [_replyHead] 字。
+  void toolCall(String name, String arguments) {
+    note('AI 呼叫 $name：${_clip(arguments.trim(), _replyHead)}');
+    full('### AI 呼叫工具 $name（${arguments.length} 字）\n$arguments');
+  }
+
   /// AI 的思考：只寫進完整紀錄，全文。
   void thinking(String text) => full('### AI 的思考（${text.length} 字）\n$text');
 
