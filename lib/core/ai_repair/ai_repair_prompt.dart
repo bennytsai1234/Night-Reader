@@ -220,6 +220,7 @@ const Map<String, String> aiGiveUpLabels = {
   'paid': '要付費',
   'human_check': '要真人在網頁上驗證',
   'blocked': '網站擋下所有請求',
+  'site_broken': '網站的功能壞了',
 };
 
 /// 同樣的指令與參數用同一個 key（迴圈數第幾次，`AgentCommand.key`）：指令的
@@ -508,7 +509,7 @@ const String _method =
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
 - 改規則前先用 parse 在已經抓到的頁面上試，抓得到再 test：parse 不連網站，test 會連，網站可能限流。
 - 請求紀錄裡回應後面括號寫著「網站防護頁」或「用程式轉到…」時，那頁不是內容：防護頁看能不能照它要的（例如寫入 Cookie）通過，轉址頁照轉去的網址查。
-- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站真的搜不到書時放棄。
+- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 - 書源規則只放書源要用的規則；要跑程式查東西用 js。
 ''';
@@ -666,7 +667,10 @@ final List<AiTool> aiRepairTools = [
           'enum': aiGiveUpLabels.keys.toList(),
           'description':
               '原因：site_gone 網站不在了或只剩停放頁、login 要登入、paid 要付費、'
-              'human_check 要真人在網頁上驗證、blocked 擋下所有請求',
+              'human_check 要真人在網頁上驗證、blocked 擋下所有請求、'
+              'site_broken 網站在、其他頁面正常，書源要用的功能網站自己也做不到'
+              '（例如搜什麼都回空的搜尋頁；網站另有做得到的地方，像 API 或別的網址，'
+              '就不算）',
         },
         'reason': {'type': 'string', 'description': '看到的證據：哪一頁、什麼內容'},
       },

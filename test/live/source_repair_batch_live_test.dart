@@ -181,6 +181,7 @@ void main() {
     for (final row in score) {
       debugPrint(
         '##### 案件 ${row['name']}：預期 ${row['expected']}，實際 ${row['verdict']}'
+        '${row['why'] == null ? '' : '（${row['why']}）'}'
         '${row['contentChars'] == null ? '' : '（正文 ${row['contentChars']} 字）'}'
         ' => ${switch (row['pass']) {
           true => '對',
@@ -199,7 +200,8 @@ void main() {
 }
 
 /// 一件案件照預期答案算對錯：修好了沒有（[_verdict]），預期修得好、又寫了
-/// `minContentChars` 的，最後一次試抓到的正文要夠長（只抓到半章的不算）。
+/// `minContentChars` 的，最後一次試抓到的正文要夠長（只抓到半章的不算）；
+/// 預期修不好、又寫了 `why` 的，放棄的原因要一樣（[_why]）。
 Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
   final repaired = items.firstWhere(
     (i) =>
@@ -215,17 +217,25 @@ Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
   ].lastOrNull;
   final expected = item['expected'] as String;
   final min = item['minContentChars'] as int?;
+  final why = item['why'] as String?;
   return {
     'name': item['name'],
     'expected': expected,
     'verdict': verdict,
+    'why': _why(repaired),
     'contentChars': chars,
     'pass': expected == 'unknown'
         ? null
         : expected == verdict &&
-              (verdict != 'fixed' || min == null || (chars ?? 0) >= min),
+              (verdict != 'fixed' || min == null || (chars ?? 0) >= min) &&
+              (verdict != 'unfixable' || why == null || why == _why(repaired)),
   };
 }
+
+/// 修不好的原因：網站檢查判成不在了是 site_gone，其他是 AI 放棄時選的。
+String? _why(RepairItem item) => item.outcome == RepairOutcome.siteGone
+    ? 'site_gone'
+    : item.session?.job.giveUpWhy;
 
 /// 這件的結果：fixed（修好了，含換網址、套用同網站的、重新校驗就好）、
 /// unfixable（網站不在了，或 AI 拿出證據說修不好），其他是 unfinished。

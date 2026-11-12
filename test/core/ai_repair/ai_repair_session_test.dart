@@ -537,6 +537,28 @@ void main() {
     expect(gaveUp.job.explanation, 'AI：要付費。網站要付費');
   });
 
+  test('a site whose own search is broken can be given up on, after one '
+      'send-back like the other reasons', () async {
+    // 2026-11-12 蜘蛛小说网：網站的搜尋 GET、POST 都回空的搜尋頁，原因只能選
+    // 「擋下所有請求」。
+    final giveUp = jsonEncode({
+      'action': 'give_up',
+      'why': 'site_broken',
+      'reason': '搜什麼都回空的搜尋頁',
+    });
+    final s = session(
+      [_source('https://a.example')],
+      replies: [giveUp, giveUp],
+    );
+
+    await s.start();
+
+    expect(asked, hasLength(2));
+    expect(s.job.explanation, 'AI：網站的功能壞了。搜什麼都回空的搜尋頁');
+    expect(s.job.giveUpWhy, 'site_broken');
+    expect(s.job.confirmedUnfixable, isTrue);
+  });
+
   test('an unreadable reply is answered with what is wrong and the repair '
       'goes on', () async {
     final s = session(

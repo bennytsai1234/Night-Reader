@@ -62,6 +62,9 @@ class AiRepairJob {
   /// 按停止都不標。
   bool confirmedUnfixable = false;
 
+  /// AI 放棄時選的原因（[aiGiveUpLabels] 的 key）。
+  String? giveUpWhy;
+
   /// 剪貼簿：已複製給 AI，等使用者貼回修好的書源。
   bool awaitingPaste = false;
 
@@ -1061,7 +1064,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       case AiGiveUp(:final reason, :final why):
         s._finish(step, 'AI 說修不好');
         s.log.both('AI 說修不好（$why）');
-        job.confirmedUnfixable = true;
+        job
+          ..confirmedUnfixable = true
+          ..giveUpWhy = why;
         final label = aiGiveUpLabels[why] ?? why;
         s._fail(job, 'AI：$label${reason.isEmpty ? '' : '。$reason'}');
         return const AgentAccepted();
