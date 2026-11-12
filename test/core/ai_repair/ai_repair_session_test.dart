@@ -642,6 +642,44 @@ void main() {
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
+  test(
+    'changing the search rules that discovery uses counts as touching '
+    'discovery: not kept when discovery then fails, and the AI is told why',
+    () async {
+      final original = BookSource(
+        bookSourceUrl: 'https://site.example',
+        bookSourceName: 'site.example',
+        searchUrl: '/s?q={{key}}',
+        exploreUrl: '全部::/all',
+        ruleSearch: SearchRule(bookList: 'class.old', name: 'a@text'),
+        ruleContent: ContentRule(content: 'id.old@text'),
+      );
+      final s = session(
+        [original],
+        replies: [
+          jsonEncode({
+            'action': 'test',
+            'patch': {
+              'searchUrl': '/api?q={{key}}',
+              'ruleSearch': {'bookList': r'$[*]', 'name': r'$.title'},
+              'ruleContent': {'content': 'class.txt@text'},
+            },
+          }),
+          jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '發現頁修不好'}),
+        ],
+        check: (source) => source.ruleContent?.content == 'class.txt@text'
+            ? _checked(source, broken: _discoveryBroken)
+            : null,
+      );
+
+      await s.start();
+
+      expect(asked[1].last.content, startsWith('# 書源校驗沒過：發現失效'));
+      expect(asked[1].last.content, contains('發現頁用搜尋規則解析'));
+      expect(applied, isEmpty);
+    },
+  );
+
   test('a fix is kept when only discovery still fails and the AI did not '
       'touch discovery', () async {
     final s = session(
