@@ -18,8 +18,8 @@
 ///   統計；每個書源的完整修復紀錄寫在最後印出的資料夾，用
 ///   `dart run tool/ai_repair_table.dart <資料夾>` 整理成評估表。
 ///
-/// 書源的拿法同 `source_check_live_test.dart` 檔頭。金鑰放在 repo 外的檔案，
-/// 用完刪掉。
+/// 書源的拿法同 `source_check_live_test.dart` 檔頭。金鑰固定放在主資料夾的
+/// `.local/ai-repair.key`（git 忽略、不上傳；`docs/agents/ai-repair-runs.md`）。
 @Tags(['live'])
 library;
 

@@ -47,6 +47,9 @@ android/build/
 *.jks
 *.keystore
 
+# 只在這台電腦的設定與金鑰（AI 修復實跑的金鑰在 .local/ai-repair.key）
+/.local/
+
 # Tools
 .codex
 android/.kotlin/
