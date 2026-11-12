@@ -7,11 +7,14 @@
 ///   flutter test --run-skipped -t live test/live/source_repair_batch_live_test.dart
 /// ```
 ///
+/// - 給了 `NR_CASES`（案件集，`test/live/ai_repair_cases.json`）時，`NR_SOURCES`
+///   是使用者的整份匯出檔，照案件集的名稱與網址挑出書源；跑完每件照預期答案
+///   算對錯（修好了沒有、正文夠不夠長），印出表、寫進結果檔的 `score`。
+///   `NR_TOKEN_BUDGET` 是整批的用量上限（預設 100 萬，0 是不限）。
 /// - `NR_AI_URL` 是服務網址，預設 DeepSeek（`https://api.deepseek.com`）；
 ///   OpenCode Go 是 `https://opencode.ai/inference/go/openai/v1`。`NR_AI_MODEL`
 ///   換模型，預設 `deepseek-flash`（服務的 `/models` 列得出有哪些）；
 ///   `NR_AI_EFFORT` 是思考程度（`low`、`medium`、`high`，不給是服務預設）；
-///   整批用量上限 100 萬 token。
 /// - 書源先存進暫存資料庫，照 App 的流程重新校驗、檢查網站、換網址、問 AI、
 ///   套用到同網站；存的也是暫存資料庫，跑完刪掉。
 /// - 結果檔是總時間、總 token 與每個書源的結果、網站檢查、AI 的每一步與
@@ -31,6 +34,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
@@ -96,10 +100,31 @@ void main() {
   if (path == null) return;
   final key = File(env['NR_AI_KEY_FILE']!).readAsStringSync().trim();
   final out = env['NR_OUT']!;
-  final sources = [
+  final all = [
     for (final json in (jsonDecode(File(path).readAsStringSync()) as List))
       BookSource.fromJson(json as Map<String, dynamic>),
   ];
+  final casesPath = env['NR_CASES'];
+  final cases = casesPath == null
+      ? const <Map<String, dynamic>>[]
+      : [
+          for (final item
+              in (jsonDecode(File(casesPath).readAsStringSync())
+                      as Map<String, dynamic>)['cases']
+                  as List)
+            item as Map<String, dynamic>,
+        ];
+  final sources = cases.isEmpty
+      ? all
+      : [
+          for (final item in cases)
+            all.firstWhere(
+              (s) =>
+                  s.bookSourceName == item['name'] &&
+                  s.bookSourceUrl == item['url'],
+            ),
+        ];
+  final budget = int.tryParse(env['NR_TOKEN_BUDGET'] ?? '') ?? 1000000;
 
   test('整批修復 ${sources.length} 個書源', () async {
     await getIt<BookSourceDao>().upsertAll(sources);
@@ -111,7 +136,7 @@ void main() {
         model: env['NR_AI_MODEL'] ?? 'deepseek-flash',
         effort: env['NR_AI_EFFORT'] ?? '',
       ),
-      tokenBudget: 1000000,
+      tokenBudget: budget == 0 ? null : budget,
     );
     var lastStage = '';
     batch.addListener(() {
@@ -144,13 +169,26 @@ void main() {
           'stats': item.session?.stats?.toMap(),
         },
     ];
+    final score = [for (final item in cases) _score(item, batch.items)];
     File(out).writeAsStringSync(
       jsonEncode({
         'ms': watch.elapsedMilliseconds,
         'tokens': batch.tokensUsed,
         'items': rows,
+        if (cases.isNotEmpty) 'score': score,
       }),
     );
+    for (final row in score) {
+      debugPrint(
+        '##### 案件 ${row['name']}：預期 ${row['expected']}，實際 ${row['verdict']}'
+        '${row['contentChars'] == null ? '' : '（正文 ${row['contentChars']} 字）'}'
+        ' => ${switch (row['pass']) {
+          true => '對',
+          false => '錯',
+          _ => '還沒定預期答案',
+        }}',
+      );
+    }
     for (final row in rows) {
       debugPrint('##### ${row['name']} => ${row['outcome']} ${row['detail']}');
     }
@@ -159,3 +197,45 @@ void main() {
     );
   }, timeout: const Timeout(Duration(minutes: 40)));
 }
+
+/// 一件案件照預期答案算對錯：修好了沒有（[_verdict]），預期修得好、又寫了
+/// `minContentChars` 的，最後一次試抓到的正文要夠長（只抓到半章的不算）。
+Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
+  final repaired = items.firstWhere(
+    (i) =>
+        i.source.bookSourceName == item['name'] &&
+        (i.source.bookSourceUrl == item['url'] ||
+            i.session?.job.original.bookSourceUrl == item['url']),
+  );
+  final verdict = _verdict(repaired);
+  final chars = [
+    for (final step in repaired.session?.job.steps ?? const <AiRepairStep>[])
+      for (final m in RegExp(r'正文 (\d+) 字').allMatches(step.detail ?? ''))
+        int.parse(m.group(1)!),
+  ].lastOrNull;
+  final expected = item['expected'] as String;
+  final min = item['minContentChars'] as int?;
+  return {
+    'name': item['name'],
+    'expected': expected,
+    'verdict': verdict,
+    'contentChars': chars,
+    'pass': expected == 'unknown'
+        ? null
+        : expected == verdict &&
+              (verdict != 'fixed' || min == null || (chars ?? 0) >= min),
+  };
+}
+
+/// 這件的結果：fixed（修好了，含換網址、套用同網站的、重新校驗就好）、
+/// unfixable（網站不在了，或 AI 拿出證據說修不好），其他是 unfinished。
+String _verdict(RepairItem item) => switch (item.outcome) {
+  RepairOutcome.aiFixed ||
+  RepairOutcome.moved ||
+  RepairOutcome.shared ||
+  RepairOutcome.healthy => 'fixed',
+  RepairOutcome.siteGone => 'unfixable',
+  RepairOutcome.notFixed when item.session?.job.confirmedUnfixable == true =>
+    'unfixable',
+  _ => 'unfinished',
+};

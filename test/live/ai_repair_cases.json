@@ -1,0 +1,55 @@
+{
+  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
+  "cases": [
+    {
+      "name": "蜘蛛小说网",
+      "url": "https://www.zhizhuxs.com",
+      "expected": "unfixable",
+      "evidence": "2026-11-12 curl：首頁列著《九阳武神》，網站的搜尋 GET 與 POST、手機與電腦版標識都回空的搜尋頁。網站的搜尋本身壞了。",
+      "confirmed": false
+    },
+    {
+      "name": "话本小说",
+      "url": "https://so.ihuaben.com/search?keyword=我是#",
+      "expected": "fixed",
+      "evidence": "2026-11-12 修好一次（目錄規則換了），校驗與不可能的詞重搜都過。",
+      "confirmed": false
+    },
+    {
+      "name": "涨姿势",
+      "url": "http://120.25.175.92",
+      "expected": "fixed",
+      "evidence": "2026-11-12 修好一次（正文改抓 data-original 的圖、搜尋改走 WordPress API）。根本原因是引擎把懶載入的圖片抓成佔位圖（另一條分支在修），修好後重新校驗就好。",
+      "confirmed": false
+    },
+    {
+      "name": "下书网",
+      "url": "https://m.dayuzc.com/",
+      "expected": "fixed",
+      "minContentChars": 1500,
+      "evidence": "2026-11-12 curl：搜尋帶 Cookie search_pass=1 就有 100 本；一章分兩頁（95393.html、95393_2.html），只抓前半頁約 900 字，整章 1700 字以上。",
+      "confirmed": false
+    },
+    {
+      "name": "顶点小说",
+      "url": "http://m.dibanyou.com",
+      "expected": "unknown",
+      "evidence": "原本的毛病：搜尋結果為空。",
+      "confirmed": false
+    },
+    {
+      "name": "涩涩俱乐部",
+      "url": "https://seseclub.com",
+      "expected": "unknown",
+      "evidence": "原本的毛病：校驗超時。",
+      "confirmed": false
+    },
+    {
+      "name": "涩涩俱乐部🎃",
+      "url": "https://novel.seseclub.com#🎃",
+      "expected": "unknown",
+      "evidence": "原本的毛病：校驗超時。",
+      "confirmed": false
+    }
+  ]
+}
