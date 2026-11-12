@@ -36,10 +36,32 @@ void main() {
       );
     });
 
-    test('懶載入屬性是空的就取 src', () {
+    test('懶載入屬性是空的、空白或 javascript: 就往下取', () {
       expect(
         keepImg('<img src="a.jpg" data-original="">'),
         '<img src="a.jpg">',
+      );
+      expect(
+        keepImg('<img data-original="   " src="a.jpg">'),
+        '<img src="a.jpg">',
+      );
+      expect(
+        keepImg('<img src="a.jpg" data-src="javascript:void(0)">'),
+        '<img src="a.jpg">',
+      );
+      expect(
+        keepImg('<img data-original="b.jpg" data-src=" " src="a.jpg">'),
+        '<img src="b.jpg">',
+      );
+    });
+
+    test('懶載入屬性帶網址選項時，選項接在補好的網址後面', () {
+      expect(
+        keepImg(
+          '<img data-original="/b.jpg,{}" src="a.jpg">',
+          redirectUrl: 'https://site.com/book/1.html',
+        ),
+        '<img src="https://site.com/b.jpg,{}">',
       );
     });
 

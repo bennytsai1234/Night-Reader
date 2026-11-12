@@ -27,9 +27,10 @@ class HtmlFormatter {
   /// 屬性（`data-original`、`data-src`、`data-lazy-src`）、`src`、其他
   /// `data-*`。懶載入的網頁把佔位圖放在 `src`、真的圖放在懶載入屬性，所以
   /// 懶載入屬性排在 `src` 前面；這點和 Legado 不同，Legado 只在 `data-src`
-  /// 寫在 `src` 後面時才取 `data-src`。
+  /// 寫在 `src` 後面時才取 `data-src`。懶載入屬性的值以空白或 `javascript:`
+  /// 開頭時不算，往下取。
   static final RegExp formatImageRegex = RegExp(
-    r'''<img[^>]*\ssrc\s*=\s*['"]([^'"{>]*\{(?:[^{}]|\{[^}>]+\})+\})['"][^>]*>|<img[^>]*\s(?:data-original|data-src|data-lazy-src)\s*=\s*['"]([^'">]+)['"][^>]*>|<img[^>]*\ssrc\s*=\s*['"]([^'">]+)['"][^>]*>|<img[^>]*\sdata-[^=>]*=\s*['"]([^'">]*)['"][^>]*>''',
+    r'''<img[^>]*\ssrc\s*=\s*['"]([^'"{>]*\{(?:[^{}]|\{[^}>]+\})+\})['"][^>]*>|<img[^>]*\s(?:data-original|data-src|data-lazy-src)\s*=\s*['"](?!\s|javascript:)([^'">]+)['"][^>]*>|<img[^>]*\ssrc\s*=\s*['"]([^'">]+)['"][^>]*>|<img[^>]*\sdata-[^=>]*=\s*['"]([^'">]*)['"][^>]*>''',
     caseSensitive: false,
   );
   static final RegExp _urlOptionRegex = RegExp(r'\s*,\s*(?=\{)');
@@ -65,15 +66,12 @@ class HtmlFormatter {
     final keepImgHtml = format(html, otherRegex: notImgHtmlRegex);
     return keepImgHtml.replaceAllMapped(formatImageRegex, (match) {
       var param = '';
-      var src = match.group(1);
-      if (src != null) {
-        final option = _urlOptionRegex.firstMatch(src);
-        if (option != null) {
-          param = ',${src.substring(option.end)}';
-          src = src.substring(0, option.start);
-        }
-      } else {
-        src = match.group(2) ?? match.group(3) ?? match.group(4)!;
+      var src =
+          match.group(1) ?? match.group(2) ?? match.group(3) ?? match.group(4)!;
+      final option = _urlOptionRegex.firstMatch(src);
+      if (option != null) {
+        param = ',${src.substring(option.end)}';
+        src = src.substring(0, option.start);
       }
       final base = redirectUrl == null ? null : Uri.tryParse(redirectUrl);
       var absolute = src;
