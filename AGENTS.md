@@ -56,6 +56,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
   - 判斷掉幀是誰造成的、某件工作佔不佔主執行緒：`docs/agents/main-thread.md`
   - 連手機、拿崩潰日誌或書源、在手機上量效能：`docs/agents/phone.md`
   - 重拍網站畫面或短片、改 README 卡片：`docs/agents/website.md`
+  - 用真的書源實跑 AI 修復、回報實跑結果：`docs/agents/ai-repair-runs.md`
   - 子代理 worktree 或 T3、Linux 上跑字型或幀預算測試、Codex 審查、Python 或 `jq`、重新產生標點字型、對照 Legado、連真網站校驗書源：`docs/agents/environment.md`
 
 ## Agent skills
