@@ -533,8 +533,27 @@ void main() {
     );
     await gaveUp.start();
     expect(asked, hasLength(2));
-    expect(asked.last.last.content, '# 放棄被退回：還沒有試抓或交出過任何修改');
+    expect(asked.last.last.content, aiRepairGiveUpPushBack);
     expect(gaveUp.job.explanation, 'AI：要付費。網站要付費');
+  });
+
+  test('giving up after looking at the site is taken at once', () async {
+    final s = session(
+      [_source('https://a.example')],
+      replies: [
+        jsonEncode({'action': 'fetch', 'url': '/s', 'note': '看搜尋'}),
+        jsonEncode({
+          'action': 'give_up',
+          'why': 'site_broken',
+          'reason': '搜什麼都回空的搜尋頁',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(asked, hasLength(2));
+    expect(s.job.giveUpWhy, 'site_broken');
   });
 
   test('a site whose own search is broken can be given up on, after one '
@@ -661,13 +680,37 @@ void main() {
     final s = session(
       [_source('https://site.example')],
       replies: [_command('test'), _command('test')],
-      followsKeyword: (_) => ++checks > 1,
+      // 原本的書源（開場）照常；AI 第一次交的搜尋抓到固定的書，第二次對了。
+      followsKeyword: (source) =>
+          source.ruleContent?.content == 'id.old@text' || ++checks > 1,
     );
 
     await s.start();
 
     expect(asked[1].last.content, contains('搜尋結果跟關鍵字無關'));
     expect(s.job.outcome, AiRepairOutcome.repaired);
+  });
+
+  test('the opening says when the original search returns the same books for '
+      'any word, and when discovery borrows the search rules', () async {
+    final s = session(
+      [
+        _source('https://site.example')
+          ..exploreUrl = '全部::/all'
+          ..ruleSearch = SearchRule(bookList: 'class.book', name: 'a@text'),
+      ],
+      replies: [
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
+      ],
+      followsKeyword: (_) => false,
+    );
+
+    await s.start();
+
+    final opening = asked.first.last.content;
+    expect(opening, contains(aiRepairUnrelatedSearch));
+    expect(opening, contains(aiRepairExploreBorrowsSearch));
   });
 
   test(

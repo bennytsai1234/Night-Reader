@@ -382,6 +382,18 @@ class AiRepairSession extends ChangeNotifier {
     log
       ..both('${_seconds(checkWatch)}：$checkText')
       ..both([...?checked?.diagnostics].join('\n\n'));
+    // 校驗只看搜尋有沒有回書：原本的書源抓的就是頁面上固定的書時，開場就
+    // 說，AI 才會連搜尋一起修（2026-11-12 涨姿势兩次都是修好正文、交出被退
+    // 才知道網站的 ?s= 一律回首頁）。搜不到書時不多搜。
+    if ((original.searchUrl ?? '').trim().isNotEmpty) {
+      final follows = await _guard(() => _keywordCheck(original, _cancelToken));
+      if (_stopped) return;
+      if (follows == false) {
+        const fact = '$aiRepairUnrelatedSearch（用「$nonsenseKeyword」搜尋也得到同樣的書）';
+        job._checkResult = '${job._checkResult}\n\n$fact';
+        log.both(fact);
+      }
+    }
 
     final fetchStep = _addStep(job, '抓網頁');
     log.section('抓網頁');
@@ -576,7 +588,7 @@ class AiRepairSession extends ChangeNotifier {
     final follows = await _guard(() => _keywordCheck(candidate, _cancelToken));
     if (_stopped) return null;
     if (follows == false) {
-      const unrelated = '搜尋結果跟關鍵字無關：搜一個不可能有的詞也回同樣的書，抓到的是頁面上固定的推薦書';
+      const unrelated = aiRepairUnrelatedSearch;
       log.both('確認搜尋結果跟關鍵字有關（${_seconds(keywordWatch)}）：$unrelated');
       _finish(step, unrelated, failed: true);
       if (!last) {
@@ -655,8 +667,7 @@ class AiRepairSession extends ChangeNotifier {
     final parts = changedParts(original, candidate);
     if (parts.contains('發現') || !parts.contains('搜尋')) return null;
     if (!touchedDiscovery(original, candidate)) return null;
-    return '這個書源的發現沒有自己的書單規則，發現頁用搜尋規則解析：改了搜尋'
-        '規則，發現頁跟著受影響';
+    return aiRepairExploreBorrowsSearch;
   }
 
   static const Set<SourceHealthCategory> _discoveryOnly = {
@@ -919,6 +930,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 試抓或交出過修改了。
   bool tested = false;
 
+  /// 自己查過網站了：看過網頁或跑過程式。
+  bool looked = false;
+
   /// 沒試過就放棄、已經退回過一次了。
   bool pushedBack = false;
 
@@ -947,6 +961,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     job._probe = s._withPageIds(job._firstProbe!);
     current = sourceForAi(original);
     tested = false;
+    looked = false;
     pushedBack = false;
     logged = 0;
     s._finish(s._addStep(job, '重新開始（第 $attempt 次）', detail: why), why);
@@ -1055,12 +1070,14 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     final step = this.step!;
     switch (command) {
       case AiGiveUp(:final reason, :final why)
-          when !tested && !pushedBack && why != 'site_gone':
-        // 還沒試過任何修改就放棄，多半是看了一眼就下結論：退回一次。
+          when !tested && !looked && !pushedBack && why != 'site_gone':
+        // 只看了開場就放棄，多半是看了一眼就下結論：退回一次。查過網站的
+        // 不退：2026-11-13 蜘蛛小说网查了 33 輪才放棄，被退回後只好交一個
+        // 沒改的書源去試抓，多花 2 輪。
         pushedBack = true;
         s._finish(step, 'AI 想放棄，退回一次');
-        s.log.both('AI 想放棄（$why：$reason），還沒試過修改，退回一次');
-        return const AgentRejected('# 放棄被退回：還沒有試抓或交出過任何修改');
+        s.log.both('AI 想放棄（$why：$reason），還沒查過網站，退回一次');
+        return const AgentRejected(aiRepairGiveUpPushBack);
       case AiGiveUp(:final reason, :final why):
         s._finish(step, 'AI 說修不好');
         s.log.both('AI 說修不好（$why）');
@@ -1071,6 +1088,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         s._fail(job, 'AI：$label${reason.isEmpty ? '' : '。$reason'}');
         return const AgentAccepted();
       case AiFetch(:final url):
+        looked = true;
         step.detail = '看網頁 $url…';
         s._notify();
         final base =
@@ -1133,6 +1151,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         s._local(step, '解析頁 $page（$stage）', reply);
         return answer(reply);
       case AiJs(:final code):
+        looked = true;
         final source =
             AiRepairSession._candidateOrNull(original, current) ?? original;
         final pages = {

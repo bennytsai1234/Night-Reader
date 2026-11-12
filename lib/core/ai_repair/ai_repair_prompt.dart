@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 import 'ai_chat_client.dart';
@@ -493,8 +494,8 @@ const String _rules = '''
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
-- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、key、page、book、source。
-  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
+- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，書源開了 Cookie 罐（enabledCookieJar）時再加上網站存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
@@ -509,7 +510,7 @@ const String _method =
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
 - 改規則前先用 parse 在已經抓到的頁面上試，抓得到再 test：parse 不連網站，test 會連，網站可能限流。
 - 請求紀錄裡回應後面括號寫著「網站防護頁」或「用程式轉到…」時，那頁不是內容：防護頁看能不能照它要的（例如寫入 Cookie）通過，轉址頁照轉去的網址查。
-- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄。
+- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 - 書源規則只放書源要用的規則；要跑程式查東西用 js。
 ''';
@@ -658,8 +659,8 @@ final List<AiTool> aiRepairTools = [
   (
     name: 'give_up',
     description:
-        '放棄：拿出修不好的證據。除了 site_gone，還沒試抓或交出過任何修改就'
-        '放棄會被退回一次。',
+        '放棄：拿出修不好的證據。除了 site_gone，還沒看網頁、跑程式、試抓或交出'
+        '過就放棄會被退回一次。',
     parameters: _object(
       {
         'why': {
@@ -725,8 +726,25 @@ String aiRepairClipboardPrompt({
 String _situation(BookSource source, String checkResult, String probe) =>
     '# 書源\n```json\n'
     '${const JsonEncoder.withIndent('  ').convert(sourceForAi(source))}\n```\n\n'
+    // 改了搜尋規則、發現頁跟著壞，原本要等交件被退才知道（2026-11-12、13
+    // 涨姿势三次都是這樣）。
+    '${_exploreBorrowsSearch(source) ? '$aiRepairExploreBorrowsSearch\n\n' : ''}'
     '# 書源校驗的結果\n$checkResult\n\n'
     '# 試抓這個書源\n$probe';
+
+bool _exploreBorrowsSearch(BookSource source) =>
+    (source.exploreUrl ?? '').trim().isNotEmpty &&
+    BookListParser.exploreUsesSearchRule(source);
+
+/// 發現頁沒有自己的書單規則、借用搜尋規則時告訴 AI 的話：開場一次，改了
+/// 搜尋規則、只剩發現頁壞時再說一次。
+const String aiRepairExploreBorrowsSearch =
+    '這個書源的發現沒有自己的書單規則，發現頁用搜尋規則解析：改了搜尋規則，'
+    '發現頁跟著受影響';
+
+/// 搜尋規則抓到的是頁面上固定的書時的話：交出的書源，與開場原本的書源。
+const String aiRepairUnrelatedSearch =
+    '搜尋結果跟關鍵字無關：搜一個不可能有的詞也回同樣的書，抓到的是頁面上固定的推薦書';
 
 /// 看網頁之後回給 AI 的話：[lines] 是送出的請求與標了頁碼的回應。
 String aiRepairFetchReply(String url, List<String> lines) =>
@@ -745,6 +763,9 @@ String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
 
 /// 工具呼叫讀不懂時回給 AI 的話的開頭。
 const String aiRepairBadCall = '# 讀不懂這個工具呼叫';
+
+/// 只看了開場就放棄時退回的話。
+const String aiRepairGiveUpPushBack = '# 放棄被退回：還沒有自己查過網站或試過修改（看網頁、跑程式、試抓、交出）';
 
 /// 改過的書源組不起來時回給它的話。
 const String aiRepairBadSourceReply =
