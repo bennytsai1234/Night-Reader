@@ -22,8 +22,14 @@ class HtmlFormatter {
     r'</?(?!img)[a-zA-Z]+(?=[ >])[^<>]*>',
     caseSensitive: false,
   );
+
+  /// 一張圖挑哪個網址，照這個順序：帶網址選項（`,{…}`）的 `src`、懶載入
+  /// 屬性（`data-original`、`data-src`、`data-lazy-src`）、`src`、其他
+  /// `data-*`。懶載入的網頁把佔位圖放在 `src`、真的圖放在懶載入屬性，所以
+  /// 懶載入屬性排在 `src` 前面；這點和 Legado 不同，Legado 只在 `data-src`
+  /// 寫在 `src` 後面時才取 `data-src`。
   static final RegExp formatImageRegex = RegExp(
-    r'''<img[^>]*\ssrc\s*=\s*['"]([^'"{>]*\{(?:[^{}]|\{[^}>]+\})+\})['"][^>]*>|<img[^>]*\s(?:data-src|src)\s*=\s*['"]([^'">]+)['"][^>]*>|<img[^>]*\sdata-[^=>]*=\s*['"]([^'">]*)['"][^>]*>''',
+    r'''<img[^>]*\ssrc\s*=\s*['"]([^'"{>]*\{(?:[^{}]|\{[^}>]+\})+\})['"][^>]*>|<img[^>]*\s(?:data-original|data-src|data-lazy-src)\s*=\s*['"]([^'">]+)['"][^>]*>|<img[^>]*\ssrc\s*=\s*['"]([^'">]+)['"][^>]*>|<img[^>]*\sdata-[^=>]*=\s*['"]([^'">]*)['"][^>]*>''',
     caseSensitive: false,
   );
   static final RegExp _urlOptionRegex = RegExp(r'\s*,\s*(?=\{)');
@@ -50,9 +56,10 @@ class HtmlFormatter {
         .replaceAll(lastRegex, '');
   }
 
-  /// 同 [format]，但保留圖片：每張圖整理成 `<img src="網址">`，網址照
-  /// [redirectUrl] 補成完整網址，網址選項（`,{…}`）照原樣接在後面（Legado
-  /// `HtmlFormatter.formatKeepImg`，規則 JS 的 `java.htmlFormat`）。
+  /// 同 [format]，但保留圖片：每張圖照 [formatImageRegex] 挑一個網址，整理成
+  /// `<img src="網址">`，網址照 [redirectUrl] 補成完整網址，網址選項（`,{…}`）
+  /// 照原樣接在後面（Legado `HtmlFormatter.formatKeepImg`，規則 JS 的
+  /// `java.htmlFormat`）。
   static String formatKeepImg(String? html, {String? redirectUrl}) {
     if (html == null) return '';
     final keepImgHtml = format(html, otherRegex: notImgHtmlRegex);
@@ -66,7 +73,7 @@ class HtmlFormatter {
           src = src.substring(0, option.start);
         }
       } else {
-        src = match.group(2) ?? match.group(3)!;
+        src = match.group(2) ?? match.group(3) ?? match.group(4)!;
       }
       final base = redirectUrl == null ? null : Uri.tryParse(redirectUrl);
       var absolute = src;
