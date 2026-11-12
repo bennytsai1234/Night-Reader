@@ -16,6 +16,20 @@ void main() {
     expect(pageNoteOf(_mathCheck), contains('網站防護頁'));
   });
 
+  test('a page that only pops up "wait between searches", or a 429, is the '
+      'site limiting requests', () {
+    // 2026-11-13 蜘蛛小說網的搜尋（59 字）。
+    const interval =
+        '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>';
+    expect(pageNoteOf(interval), '網站限流：「搜索间隔: 30 秒」');
+    expect(pageNoteOf('<p>busy</p>', status: 429), contains('網站限流'));
+    expect(
+      pageNoteOf('<script>alert("请输入关键字");history.go(-1)</script>'),
+      isNull,
+      reason: '別的提示不是限流',
+    );
+  });
+
   test('a long page that happens to mention a security check is content', () {
     final article =
         '<html><body><div class="txt">'

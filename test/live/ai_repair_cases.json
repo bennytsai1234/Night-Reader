@@ -5,9 +5,9 @@
       "name": "蜘蛛小说网",
       "url": "https://www.zhizhuxs.com",
       "expected": "unfixable",
-      "evidence": "2026-11-12 curl：首頁列著《九阳武神》，網站的搜尋 GET 與 POST、手機與電腦版標識都回空的搜尋頁。網站的搜尋本身壞了。",
+      "evidence": "2026-11-13 curl（冷卻 10 分鐘後，每次隔 2 分鐘）：原本書源用的 https://www.zhizhuxs.com/search/ 拿站上有的書名「剑仙转生」搜，回空的搜尋頁（CDN 快取的同一頁，x-cache HIT）；不帶 www 的 https://zhizhuxs.com/search 搜同一個詞有結果、搜不可能的詞回空的。網站每 30 秒只准搜一次（回 alert「搜索间隔: 30 秒」），連續觸發會拉長，70 秒後再搜照樣被擋。使用者 2026-11-13 定：規則改得對，但限流嚴到一般搜尋常拿不到結果，算修不好，原因是網站限流。11-12 寫的「網站的搜尋本身壞了」是查錯了（那次打的是帶 www 的網址，拿到 CDN 快取）。",
       "confirmed": true,
-      "why": "site_broken"
+      "why": "rate_limited"
     },
     {
       "name": "话本小说",

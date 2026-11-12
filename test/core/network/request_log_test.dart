@@ -102,7 +102,8 @@ void main() {
 
     expect(
       log.lines.single,
-      '  ← https://site.example/search/ 200，59 字，太短不精簡：'
+      '  ← https://site.example/search/ 200，59 字，太短不精簡'
+      '（網站限流：「搜索间隔: 30 秒」）：'
       '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
     );
   });

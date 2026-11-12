@@ -538,14 +538,15 @@ void main() {
   });
 
   test('giving up after looking at the site is taken at once', () async {
+    // 2026-11-13 蜘蛛小说网：搜尋每 30 秒只准一次，連續觸發會拉長。
     final s = session(
       [_source('https://a.example')],
       replies: [
         jsonEncode({'action': 'fetch', 'url': '/s', 'note': '看搜尋'}),
         jsonEncode({
           'action': 'give_up',
-          'why': 'site_broken',
-          'reason': '搜什麼都回空的搜尋頁',
+          'why': 'rate_limited',
+          'reason': '搜尋回「搜索间隔: 30 秒」',
         }),
       ],
     );
@@ -553,7 +554,8 @@ void main() {
     await s.start();
 
     expect(asked, hasLength(2));
-    expect(s.job.giveUpWhy, 'site_broken');
+    expect(s.job.giveUpWhy, 'rate_limited');
+    expect(s.job.explanation, 'AI：網站限流。搜尋回「搜索间隔: 30 秒」');
   });
 
   test('a site whose own search is broken can be given up on, after one '

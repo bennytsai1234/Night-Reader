@@ -4,19 +4,49 @@ import 'package:night_reader/core/network/page_digest.dart';
 /// 說明；正常的頁面是 null。請求紀錄（`RequestLog`）在每個回應後面接上它，
 /// 網站檢查（`judgeSite`）也照它判斷，兩邊認的是同一套。
 ///
-/// 認兩種：
+/// 認三種：
+/// - **網站限流**（[rateLimitOf]）：狀態碼 429，或短短一頁只跳出「搜索间隔:
+///   30 秒」這類提示就返回。
 /// - **網站防護頁**（[isProtectionPage]）：要瀏覽器算題目、勾選或答算術題
 ///   才放行的頁面。
 /// - **用程式轉址的頁面**（[scriptRedirectOf]）：短短一頁，有一段改
 ///   `location` 的程式或 `<meta http-equiv="refresh">`，瀏覽器打開就轉走。
 ///   精簡網頁會拿掉 `<head>` 與程式，不寫出來的話看精簡後的頁面只看到一片
 ///   空白或幾個字。
-String? pageNoteOf(String body) {
+String? pageNoteOf(String body, {int? status}) {
+  if (rateLimitOf(body, status: status) case final limit?) {
+    return '網站限流：$limit';
+  }
   if (isProtectionPage(body)) return '看起來是網站防護頁，要先通過驗證才給內容';
   final target = scriptRedirectOf(body);
   if (target != null) return '這頁用程式轉到 $target';
   return null;
 }
+
+/// 網站限流時它說的話：狀態碼 429，或短短一頁只用程式跳出「搜索间隔: 30 秒」
+/// 「操作太频繁」這類提示。2026-11-13 蜘蛛小說網的搜尋每 30 秒只能一次、連續
+/// 觸發會拉長，回的是 `<script>alert("搜索间隔: 30 秒");history.go(-1)</script>`；
+/// 不寫出來，AI 要花好幾輪寫空轉等待的程式才確認。不是限流是 null。
+String? rateLimitOf(String body, {int? status}) {
+  if (digestPage(body).length < _shortPageLength) {
+    for (final match in _alert.allMatches(body)) {
+      final text = match.group(1)!.trim();
+      if (_tooOften.hasMatch(text)) return '「$text」';
+    }
+  }
+  if (status == 429) return '狀態碼 429（要求太多次）';
+  return null;
+}
+
+/// `alert("…")` 跳出的那句話。
+final RegExp _alert = RegExp(r'''alert\(\s*["']([^"']{1,200})["']''');
+
+/// 要隔一段時間再來的說法。
+final RegExp _tooOften = RegExp(
+  r'间隔|間隔|频繁|頻繁|太快|过快|過快|稍后再|稍後再|秒后再|秒後再|'
+  r'too many requests|rate limit|try again later',
+  caseSensitive: false,
+);
 
 /// 要瀏覽器算題目、人工勾選或答題才放行的防護頁。Cloudflare 的五秒盾夜讀
 /// 會在背景的瀏覽器裡過（ADR 0033），過不了才會還是這一頁。防搜刮的算術

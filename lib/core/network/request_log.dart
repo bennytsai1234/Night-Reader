@@ -235,7 +235,7 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   final head =
       '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
       '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}';
-  final empty = _recordBody(log, head, response.data);
+  final empty = _recordBody(log, head, response.data, status: status);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
@@ -262,7 +262,7 @@ void recordRenderedPage(String? url, Object? body) {
 
 /// 回應那一行：[head] 接上長度與內容開頭；[RequestLog.pages] 那份接上整頁。
 /// 傳回內容是不是空白。
-bool _recordBody(RequestLog log, String head, Object? data) {
+bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
   final full = log.keepPages;
   final decoded = _decode(
     data,
@@ -296,8 +296,8 @@ bool _recordBody(RequestLog log, String head, Object? data) {
       : tooShort
       ? '，太短不精簡'
       : '，精簡後 ${collapsed.length} 字';
-  // 防護頁與轉址頁精簡後幾乎是空的，寫出它是什麼（[pageNoteOf]）。
-  final note = pageNoteOf(text);
+  // 限流、防護頁與轉址頁精簡後幾乎是空的，寫出它是什麼（[pageNoteOf]）。
+  final note = pageNoteOf(text, status: status);
   log._add(
     '$head，$length$digested${note == null ? '' : '（$note）'}'
     '${shown.isEmpty ? '' : '：$shown'}',
