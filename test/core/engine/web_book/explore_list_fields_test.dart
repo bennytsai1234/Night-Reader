@@ -70,6 +70,22 @@ void main() {
     },
   );
 
+  test('an explore rule of its own that finds nothing stays empty, without '
+      'trying the search rule (as Legado)', () async {
+    final books = await BookListParser.parse(
+      source: BookSource.fromJson({
+        'bookSourceName': '發現',
+        'bookSourceUrl': 'https://s.example',
+        'ruleExplore': {...listRule, 'bookList': 'div.nothing'},
+        'ruleSearch': listRule,
+      }),
+      body: html,
+      baseUrl: 'https://s.example/explore',
+      isSearch: false,
+    );
+    expect(books, isEmpty);
+  });
+
   test('a cover rule that matches nothing leaves the cover empty', () async {
     // getString 帶 isUrl 時沒抓到會回傳頁面網址；封面若變成這個網址，清單
     // 上載不出來，書籍詳情抓到的封面也會被它蓋掉。
@@ -95,20 +111,6 @@ void main() {
     );
     expect(info.coverUrl, 'https://s.example/cover/1.jpg');
   });
-
-  test(
-    'an explore list that finds nothing retries with the search rule',
-    () async {
-      await expectFields(
-        BookSource.fromJson({
-          'bookSourceName': '發現',
-          'bookSourceUrl': 'https://s.example',
-          'ruleExplore': {...listRule, 'bookList': 'class.missing'},
-          'ruleSearch': listRule,
-        }),
-      );
-    },
-  );
 
   test('a word count only in the detail page kind still comes back', () async {
     // 書籍詳情顯示字數時，字數欄沒有就從分類取；補到清單上的要一樣。
