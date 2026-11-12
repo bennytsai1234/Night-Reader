@@ -217,6 +217,7 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
     responsePreview: SourceProbeReport.responsePreview,
     digestPages: true,
     keepPages: true,
+    sentHeaders: true,
   );
   try {
     await requests.run(
@@ -305,6 +306,7 @@ Future<Map<String, Object?>> Function(CancelToken) _fetchTask(
     responsePreview: pageLength,
     digestPages: true,
     keepPages: true,
+    sentHeaders: true,
   );
   try {
     await requests.run(

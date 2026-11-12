@@ -27,6 +27,43 @@ void main() {
     ]);
   });
 
+  test(
+    'the AI repair log writes the headers sent, cookies by name only',
+    () async {
+      final log = RequestLog(responsePreview: 6000, sentHeaders: true);
+      await log.run(() async {
+        recordRequestUrl(
+          'GET',
+          Uri.parse('https://m.site.example/s?q=1'),
+          headers: {
+            'User-Agent': 'Mobile',
+            'cookie': 'search_pass=1; PHPSESSID=abc123',
+            'Authorization': 'Bearer sk-secret',
+          },
+        );
+      });
+      final plain = RequestLog(responsePreview: 6000);
+      await plain.run(() async {
+        recordRequestUrl(
+          'GET',
+          Uri.parse('https://m.site.example/s'),
+          headers: {'cookie': 'a=1'},
+        );
+      });
+
+      expect(
+        log.lines.single,
+        'https://m.site.example/s?q=1 標頭：User-Agent: Mobile；'
+        'Cookie（search_pass、PHPSESSID）；Authorization（有送，值不列）',
+      );
+      expect(
+        plain.lines.single,
+        'https://m.site.example/s',
+        reason: '只有 AI 修復記',
+      );
+    },
+  );
+
   test('a page that only redirects by script says where it goes, even after '
       'the script is digested away', () async {
     final log = RequestLog(responsePreview: 6000, digestPages: true);

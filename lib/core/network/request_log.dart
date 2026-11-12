@@ -14,6 +14,7 @@ typedef RequestLogSettings = ({
   int? responsePreview,
   bool digestPages,
   bool keepPages,
+  bool sentHeaders,
 });
 
 /// [RequestLog.pages] 的一筆：請求或回應的那一行（同 [RequestLog.lines]），
@@ -45,6 +46,7 @@ final class RequestLog {
     this.responsePreview,
     this.digestPages = false,
     this.keepPages = false,
+    this.sentHeaders = false,
   });
 
   RequestLog.from(RequestLogSettings settings)
@@ -52,6 +54,7 @@ final class RequestLog {
         responsePreview: settings.responsePreview,
         digestPages: settings.digestPages,
         keepPages: settings.keepPages,
+        sentHeaders: settings.sentHeaders,
       );
 
   /// 網頁先精簡（[digestPage]）再取開頭，給 AI 看。
@@ -66,10 +69,15 @@ final class RequestLog {
   /// 另外記一份完整的（[pages]）。只在 [withResponses] 時有用。
   final bool keepPages;
 
+  /// 每個請求也記實際送出的標頭（[recordRequestUrl]）：AI 修書源看得出
+  /// Cookie 這類有沒有真的送出去。
+  final bool sentHeaders;
+
   RequestLogSettings get settings => (
     responsePreview: responsePreview,
     digestPages: digestPages,
     keepPages: keepPages,
+    sentHeaders: sentHeaders,
   );
 
   bool get withResponses => responsePreview != null;
@@ -119,22 +127,60 @@ bool get isRecordingRequestUrls => currentRequestLog != null;
 /// 記下一筆送出的請求。網址 `#` 後面不會送出，記的時候去掉；GET 以外標出
 /// 方法，轉址到的網址標出「轉址」。記回應的紀錄（`withResponses`）也記
 /// 送出的內容 [body]（POST 的表單這類）：看得出規則實際送了什麼。
+/// [RequestLog.sentHeaders] 時也記送出的標頭 [headers]（[_sentHeaders]）。
 void recordRequestUrl(
   String method,
   Uri uri, {
   bool redirect = false,
   Object? body,
+  Map<String, dynamic>? headers,
 }) {
   final log = currentRequestLog;
   if (log == null) return;
   final upper = method.toUpperCase();
   final sent = log.withResponses ? _sentBody(body) : null;
+  final sentHeaders = log.sentHeaders && headers != null
+      ? _sentHeaders(headers)
+      : null;
   log._add(
     '${upper == 'GET' ? '' : '$upper '}${uri.removeFragment()}'
     '${redirect ? '（轉址）' : ''}'
-    '${sent == null ? '' : ' 送出：$sent'}',
+    '${sent == null ? '' : ' 送出：$sent'}'
+    '${sentHeaders == null ? '' : ' 標頭：$sentHeaders'}',
   );
 }
+
+/// 送出的標頭寫成一行。Cookie 只寫名稱、Authorization 這類只寫有送：值可能
+/// 是網站的登入狀態（ADR 0054 不送 Cookie）；看得出「有沒有送出去」就夠。
+/// 沒有標頭是 null。
+String? _sentHeaders(Map<String, dynamic> headers) {
+  final parts = <String>[];
+  for (final MapEntry(:key, :value) in headers.entries) {
+    if (value == null) continue;
+    final text = value is Iterable ? value.join('; ') : '$value';
+    final name = key.toLowerCase();
+    if (name == 'cookie') {
+      final names = [
+        for (final pair in text.split(';'))
+          if (pair.split('=').first.trim() case final cookie
+              when cookie.isNotEmpty)
+            cookie,
+      ];
+      parts.add('Cookie（${names.join('、')}）');
+    } else if (_hiddenHeaders.contains(name)) {
+      parts.add('$key（有送，值不列）');
+    } else {
+      parts.add('$key: $text');
+    }
+  }
+  return parts.isEmpty ? null : parts.join('；');
+}
+
+const Set<String> _hiddenHeaders = {
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+};
 
 /// 送出的內容寫成一行，最長 [_sentBodyLength] 字；沒有內容是 null。
 String? _sentBody(Object? body) {

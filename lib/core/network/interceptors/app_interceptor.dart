@@ -43,6 +43,7 @@ class AppInterceptor extends Interceptor {
       options.uri,
       redirect: options.extra.containsKey(manualRedirectCountKey),
       body: options.data,
+      headers: options.headers,
     );
     super.onRequest(options, handler);
   }
