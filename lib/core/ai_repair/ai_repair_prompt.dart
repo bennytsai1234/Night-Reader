@@ -638,7 +638,7 @@ List<AiMessage> aiRepairOpening({
   required SourceProbeReport probe,
 }) => [
   const AiMessage.system(aiRepairSystemPrompt),
-  AiMessage.user(_situation(source, checkResult, probe)),
+  AiMessage.user(_situation(source, checkResult, probe.indexText)),
 ];
 
 /// 系統提示：每個書源都一樣，服務的快取每次都打得中。
@@ -670,17 +670,14 @@ String aiRepairClipboardPrompt({
 }) =>
     '幫我修好這個書源，並判斷它的類型。\n\n$_rules\n'
     '修好後只回完整的書源 JSON（一個物件），不用其他說明。\n\n'
-    '${_situation(source, checkResult, probe)}';
+    // 貼給網頁版 AI：沒有讀頁的工具，照舊附網頁開頭。
+    '${_situation(source, checkResult, probe.fullText)}';
 
-String _situation(
-  BookSource source,
-  String checkResult,
-  SourceProbeReport probe,
-) =>
+String _situation(BookSource source, String checkResult, String probe) =>
     '# 書源\n```json\n'
     '${const JsonEncoder.withIndent('  ').convert(sourceForAi(source))}\n```\n\n'
     '# 書源校驗的結果\n$checkResult\n\n'
-    '# 試抓這個書源\n${probe.fullText}';
+    '# 試抓這個書源\n$probe';
 
 /// 看網頁之後回給 AI 的話：[lines] 是送出的請求與標了頁碼的回應。
 String aiRepairFetchReply(String url, List<String> lines) =>

@@ -15,6 +15,35 @@ BookSource _source() => BookSource(
 );
 
 void main() {
+  test('the opening lists the fetched pages without their text; the '
+      'clipboard prompt keeps the text', () {
+    const probe = SourceProbeReport(
+      logs: [(10, '︾開始解析搜尋頁')],
+      requests: [
+        'https://site.example/s?q=1',
+        '  ← 頁 1｜https://site.example/s?q=1 200 text/html，900 位元組，精簡後 '
+            '300 字：<div class="list">第一本書</div>',
+      ],
+    );
+    final opening = aiRepairOpening(
+      source: _source(),
+      checkResult: '搜尋失效',
+      probe: probe,
+    ).last.content;
+    expect(opening, contains('頁 1｜https://site.example/s?q=1 200 text/html'));
+    expect(opening, contains('（內容沒放進開場）'));
+    expect(opening, isNot(contains('第一本書')));
+    expect(
+      aiRepairClipboardPrompt(
+        source: _source(),
+        checkResult: '搜尋失效',
+        probe: probe,
+      ),
+      contains('第一本書'),
+      reason: '網頁版 AI 沒有讀頁的工具',
+    );
+  });
+
   group('reading the AI reply', () {
     AiToolCall call(String name, String arguments) =>
         (id: 'call_1', name: name, arguments: arguments);

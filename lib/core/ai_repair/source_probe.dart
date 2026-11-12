@@ -98,7 +98,14 @@ class SourceProbeReport {
   }
 
   /// 給 AI 看的全文：除錯紀錄，與截到 [requestBudget] 字的請求與回應。
-  String get fullText {
+  String get fullText => _text(excerpts: true);
+
+  /// 開場用的：同 [fullText]，但每個回應只寫頁碼、網址與大小，不附網頁開頭，
+  /// 內容讓 AI 用讀頁、找字自己看（`agent-harness` 技能：開場只給位置）。
+  /// 2026-11-12 比過：话本、涨姿势兩種都修好，要付全價的送出量少一半。
+  String get indexText => _text(excerpts: false);
+
+  String _text({required bool excerpts}) {
     final buffer = StringBuffer()..writeln('## 除錯紀錄');
     for (final (_, message) in logs) {
       buffer.writeln(message);
@@ -116,8 +123,9 @@ class SourceProbeReport {
         );
         break;
       }
-      buffer.writeln(line);
-      used += line.length;
+      final shown = excerpts ? line : _withoutExcerpt(line);
+      buffer.writeln(shown);
+      used += shown.length;
     }
     return buffer.toString().trimRight();
   }
@@ -433,4 +441,12 @@ bool isNextPageOfChapter(Uri chapter, Uri link) {
     if (next != null && next > current) return true;
   }
   return false;
+}
+
+/// 回應那一行只留到大小為止：「  ← 頁 2｜網址 200 text/html，41940 位元組，
+/// 精簡後 15479 字」。
+String _withoutExcerpt(String line) {
+  if (!line.trimLeft().startsWith('←')) return line;
+  final colon = line.indexOf('：', line.indexOf('←'));
+  return colon < 0 ? line : '${line.substring(0, colon)}（內容沒放進開場）';
 }
