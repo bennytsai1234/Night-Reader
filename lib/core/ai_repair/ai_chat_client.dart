@@ -36,7 +36,7 @@ class AiChatClient {
           dio ??
           Dio(
             BaseOptions(
-              connectTimeout: const Duration(seconds: 15),
+              connectTimeout: const Duration(seconds: 20),
               sendTimeout: const Duration(seconds: 60),
               // 大模型讀幾萬字的網頁再回一整份書源，要等一陣子。
               receiveTimeout: const Duration(minutes: 4),
