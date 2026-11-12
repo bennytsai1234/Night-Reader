@@ -39,6 +39,20 @@ final class _Task extends AgentTask<String> {
   void factAdded(String fact) => facts.add(fact);
 }
 
+/// 開場與工具結果都帶著金鑰的假任務：遮蔽要在迴圈接進對話時做。
+final class _Leaky extends _Task {
+  @override
+  List<AiMessage> opening() => [const AiMessage.user('金鑰 sk-secret')];
+
+  @override
+  Future<AgentResult> execute(String command) async => command == 'submit:ok'
+      ? const AgentAccepted()
+      : const AgentToolResult('回應裡有 sk-secret');
+
+  @override
+  String redact(String text) => text.replaceAll('sk-secret', '***');
+}
+
 /// 記下每一輪紀錄的假任務。
 final class _Recording extends _Task {
   _Recording(this.rounds);
@@ -157,6 +171,25 @@ void main() {
     expect(end.stats.completion, 40);
     expect(rounds.single.usage?.prompt, 100);
     expect(rounds.single.estimated, isTrue);
+  });
+
+  test('everything put into the conversation passes through the task\'s '
+      'redaction, the opening and every tool result', () async {
+    final seen = <List<AiMessage>>[];
+    final leaky = _Leaky();
+    await runAgent(
+      leaky,
+      ask: (messages, _) async {
+        seen.add(List.of(messages));
+        return _reply(seen.length == 1 ? 'tool:a' : 'submit:ok');
+      },
+      cancelToken: CancelToken(),
+      attempts: 1,
+    );
+    final sent = [for (final m in seen.last) m.content].join('\n');
+    expect(sent, isNot(contains('sk-secret')));
+    expect(sent, contains('***'));
+    expect(seen.last.last.role, 'tool');
   });
 
   test('the thinking goes back in the conversation as it was', () async {

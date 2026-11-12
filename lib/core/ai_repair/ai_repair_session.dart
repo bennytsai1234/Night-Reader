@@ -374,10 +374,7 @@ class AiRepairSession extends ChangeNotifier {
     job._before = checked == null
         ? null
         : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth.category;
-    job._checkResult = _redact(
-      job,
-      [checkText, ...?checked?.diagnostics].join('\n\n'),
-    );
+    job._checkResult = [checkText, ...?checked?.diagnostics].join('\n\n');
     _finish(checkStep, checkText);
     log
       ..both('${_seconds(checkWatch)}：$checkText')
@@ -561,10 +558,10 @@ class AiRepairSession extends ChangeNotifier {
       _finish(step, checkText, failed: true);
       if (!last) {
         final discovery = _discoveryNote(checked, job.original, candidate);
-        return _redact(
-          job,
-          aiRepairCheckReply(checkText, [?discovery, ...?checked?.diagnostics]),
-        );
+        return aiRepairCheckReply(checkText, [
+          ?discovery,
+          ...?checked?.diagnostics,
+        ]);
       }
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
@@ -930,17 +927,15 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   BookSource get original => job.original;
 
+  @override
   String redact(String text) => s._redact(job, text);
 
   @override
-  List<AiMessage> opening() => [
-    for (final message in aiRepairOpening(
-      source: original,
-      checkResult: job._checkResult!,
-      probe: job._probe!,
-    ))
-      AiMessage(message.role, redact(message.content)),
-  ];
+  List<AiMessage> opening() => aiRepairOpening(
+    source: original,
+    checkResult: job._checkResult!,
+    probe: job._probe!,
+  );
 
   @override
   void restart(int attempt, String why) {
@@ -1006,7 +1001,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     }
     if (step case final step?) s._finish(step, '讀不懂工具呼叫', failed: true);
     s.log.both('讀不懂工具呼叫：${read.fact}');
-    return AgentBadCommand(redact(read.fact));
+    return AgentBadCommand(read.fact);
   }
 
   @override
@@ -1039,8 +1034,8 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 多一個頁碼（2026-11-12 實跑時，一樣的回應因為頁 4、頁 6 被說成不同）。
   /// [same] 是拿來比的那一份，沒給時比 [text]。
   AgentToolResult answer(String text, {String? same}) => AgentToolResult(
-    redact(text),
-    same: redact(same ?? text).replaceAll(RegExp(r'頁 \d+'), '頁 N'),
+    text,
+    same: (same ?? text).replaceAll(RegExp(r'頁 \d+'), '頁 N'),
   );
 
   @override
@@ -1182,7 +1177,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
               'nextContentUrl，每章只抓到第一頁';
           s._finish(step, '$changed，$where試抓：$fact', failed: true);
           s.log.both('試抓：$fact');
-          return AgentRejected(redact('# 書源校驗沒過：$fact'));
+          return AgentRejected('# 書源校驗沒過：$fact');
         }
         s._finish(step, '$changed，$where試抓：${probe.summary}，交出');
         return submitted(

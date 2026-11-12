@@ -10,6 +10,7 @@ import 'ai_chat_client.dart';
 /// 提供，AI 修書源是第一個任務。
 ///
 /// 一律照做的機制：
+/// - 接進對話的每一句（開場、工具結果、狀態）先經過 [AgentTask.redact]。
 /// - 執行中只回事實：結果後面附上跑的狀態（同樣的參數第幾次、剩幾輪），
 ///   不附指示。每個呼叫都有一句工具結果（參數讀不懂的也回哪裡不對）；這輪
 ///   沒有呼叫工具時才另發一句。
@@ -23,6 +24,10 @@ import 'ai_chat_client.dart';
 abstract class AgentTask<C> {
   /// 每次（含重跑）的開場：系統提示與這一件的第一則訊息。
   List<AiMessage> opening();
+
+  /// 接進對話前遮掉秘密（金鑰、Cookie、登入資料）：開場與每一句事實都經過
+  /// 這裡，新加的工具不用自己遮（`agent-harness` 技能：遮蔽放在共用的出口）。
+  String redact(String text) => text;
 
   /// 整件重跑前把工具的狀態清掉（抓過的頁、改到一半的書源）。[attempt] 是
   /// 接著要跑的第幾次，[why] 是上一次為什麼沒跑完。
@@ -264,7 +269,10 @@ Future<_AttemptEnd> _attempt<C>(
   CancelToken cancelToken,
   bool Function()? hasBudget,
 ) async {
-  final messages = [...task.opening()];
+  final messages = [
+    for (final message in task.opening())
+      AiMessage(message.role, task.redact(message.content)),
+  ];
   var round = 0;
   var noCommand = 0;
   var badCommand = 0;
@@ -283,7 +291,7 @@ Future<_AttemptEnd> _attempt<C>(
   /// 接進對話的一句事實：工具的結果（[callId] 是它回應的那個呼叫），或這輪
   /// 沒有呼叫工具時的一句話。
   void fact(String text, {String? callId}) {
-    final line = '$text${status()}';
+    final line = task.redact('$text${status()}');
     messages.add(
       callId == null ? AiMessage.user(line) : AiMessage.tool(callId, line),
     );
