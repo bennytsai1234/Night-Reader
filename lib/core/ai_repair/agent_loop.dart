@@ -44,13 +44,17 @@ abstract class AgentTask<C> {
   void factAdded(String fact) {}
 }
 
-/// 一輪問 AI 的紀錄（寫進修復紀錄）。
+/// 一輪問 AI 的紀錄（寫進修復紀錄）。[usage] 是這輪的用量：回完的照服務
+/// 回報的；沒回完就斷了的是估的（[AiServiceException.usage]），[estimated]
+/// 是 true。
 typedef AgentRoundRecord = ({
   int attempt,
   int round,
   int sentMessages,
   int sentChars,
   AiReply? reply,
+  AiUsage? usage,
+  bool estimated,
   Duration elapsed,
   String? error,
 });
@@ -296,16 +300,20 @@ Future<_AttemptEnd> _attempt<C>(
     task.roundStarted(attempt, round, messages);
     final sentChars = messages.fold(0, (sum, m) => sum + m.content.length);
     final watch = Stopwatch()..start();
-    void record({AiReply? reply, String? error}) {
+    void record({AiReply? reply, AiServiceException? failure, String? error}) {
       stats.model += watch.elapsed;
+      final usage = reply?.usage ?? failure?.usage;
+      if (usage != null) stats.add(usage);
       task.roundEnded((
         attempt: attempt,
         round: stats.rounds,
         sentMessages: messages.length,
         sentChars: sentChars,
         reply: reply,
+        usage: usage,
+        estimated: reply == null && usage != null,
         elapsed: watch.elapsed,
-        error: error,
+        error: error ?? failure?.message,
       ));
     }
 
@@ -313,7 +321,7 @@ Future<_AttemptEnd> _attempt<C>(
     try {
       reply = await ask(messages, cancelToken);
     } on AiStalled catch (error) {
-      record(error: error.message);
+      record(failure: error);
       if (cancelToken.isCancelled) return cancelled;
       stats.stalls++;
       if (++stalls >= AiAgentKnobs.stallLimit) {
@@ -321,18 +329,18 @@ Future<_AttemptEnd> _attempt<C>(
       }
       continue;
     } on AiRunaway catch (error) {
-      record(error: '${error.message}\n輸出的最後一段：\n${error.tail}');
+      record(failure: error, error: '${error.message}\n${error.tail}');
       return _Retry(error.message);
     } on AiEmptyReply catch (error) {
       // 空白的回覆不放進對話，同一段對話再問一次。
-      record(error: error.message);
+      record(failure: error);
       stats.noCommands++;
       if (++noCommand >= AiAgentKnobs.noCommandLimit) {
         return _Retry('連續 $noCommand 輪沒有收到指令');
       }
       continue;
     } on AiServiceException catch (error) {
-      record(error: error.message);
+      record(failure: error);
       if (cancelToken.isCancelled) return cancelled;
       if (error.retryable) return _Retry(error.message);
       return _Finished(AgentEndKind.failed, error.message);
@@ -345,7 +353,6 @@ Future<_AttemptEnd> _attempt<C>(
     }
     record(reply: reply);
     stalls = 0;
-    if (reply.usage case final usage?) stats.add(usage);
     if (cancelToken.isCancelled) return cancelled;
     messages.add((role: 'assistant', content: reply.content));
 

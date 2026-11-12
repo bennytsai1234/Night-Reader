@@ -39,6 +39,15 @@ final class _Task extends AgentTask<String> {
   void factAdded(String fact) => facts.add(fact);
 }
 
+/// 記下每一輪紀錄的假任務。
+final class _Recording extends _Task {
+  _Recording(this.rounds);
+  final List<AgentRoundRecord> rounds;
+
+  @override
+  void roundEnded(AgentRoundRecord record) => rounds.add(record);
+}
+
 AiReply _reply(String content) =>
     (content: content, reasoning: '', usage: null, firstData: Duration.zero);
 
@@ -109,6 +118,27 @@ void main() {
     final end = await run(_ai([const AiRunaway('重複', tail: '…'), 'submit:ok']));
     expect(end.kind, AgentEndKind.completed);
     expect(task.restarts, ['重複']);
+  });
+
+  test('the estimated usage of a reply cut off midway still counts', () async {
+    final rounds = <AgentRoundRecord>[];
+    final recording = _Recording(rounds);
+    final end = await runAgent(
+      recording,
+      ask: _ai([
+        const AiRunaway(
+          '重複',
+          tail: '…',
+          usage: (prompt: 100, cached: 0, completion: 40, reasoning: 30),
+        ),
+      ]),
+      cancelToken: CancelToken(),
+      attempts: 1,
+    );
+    expect(end.stats.prompt, 100);
+    expect(end.stats.completion, 40);
+    expect(rounds.single.usage?.prompt, 100);
+    expect(rounds.single.estimated, isTrue);
   });
 
   test('three rounds without a command restart the case', () async {

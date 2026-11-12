@@ -33,6 +33,29 @@ void main() {
     ], reason: '對不上的不登記');
   });
 
+  test('the same address with the same page points back at the first one '
+      'instead of sending it again', () {
+    final pages = RepairPages();
+    const line = '  ← https://site.example/1.html 200，40 位元組，精簡後 20 字：<p>正文…';
+    final lines = pages.add(
+      [line, line, line],
+      [
+        (line: line, body: _toc),
+        (line: line, body: _toc),
+        (line: line, body: '$_toc<p>新的</p>'),
+      ],
+    );
+
+    expect(lines[0], contains('頁 1｜'));
+    expect(
+      lines[1],
+      '  ← 頁 1｜https://site.example/1.html 200，40 位元組，精簡後 20 字：'
+      '和頁 1 一樣（網址與內容都相同），內容不再重複',
+    );
+    expect(lines[2], contains('頁 2｜'), reason: '內容不同是另一頁');
+    expect(pages.length, 2);
+  });
+
   test('find gives the selector path and the element of each match', () {
     final found = findInPage(_toc, '第一章');
 

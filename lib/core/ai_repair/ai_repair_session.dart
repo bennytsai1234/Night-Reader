@@ -694,18 +694,20 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 一輪問 AI 的紀錄：送出多少、等到第一段資料的時間、花的時間與這輪的
-  /// 用量（服務有回報時）。
+  /// 用量（服務有回報時；沒回完就斷了時是估的）。
   static String _askText(AgentRoundRecord record) {
     final reply = record.reply;
     final seconds =
         '${(record.elapsed.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
     final sent = '送出 ${record.sentMessages} 句 ${_tokens(record.sentChars)} 字';
-    if (reply == null) return 'AI 回覆 $seconds（$sent）';
-    final first =
-        '第一段資料 ${(reply.firstData.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
-    final usage = reply.usage;
-    if (usage == null) return 'AI 回覆 $seconds（$sent，$first）';
-    return 'AI 回覆 $seconds（$sent，$first）；送出 ${_tokens(usage.prompt)} token'
+    final head = reply == null
+        ? 'AI 回覆 $seconds（$sent）'
+        : 'AI 回覆 $seconds（$sent，第一段資料 '
+              '${(reply.firstData.inMilliseconds / 1000).toStringAsFixed(1)} 秒）';
+    final usage = record.usage;
+    if (usage == null) return head;
+    return '$head；${record.estimated ? '沒回完，照字數估：' : ''}'
+        '送出 ${_tokens(usage.prompt)} token'
         '（打中快取 ${_tokens(usage.cached)}）、回覆 ${_tokens(usage.completion)}'
         '（思考 ${_tokens(usage.reasoning)}）';
   }
@@ -948,7 +950,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     // 按了停止：做著的那一步已經標成停止（[AiRepairSession.stop]）。
     if (s._stopped) return;
     final reply = record.reply;
-    if (reply?.usage case final usage?) s._onUsage?.call(usage);
+    if (record.usage case final usage?) s._onUsage?.call(usage);
     s.log.both(AiRepairSession._askText(record));
     if (reply == null) {
       final error = record.error ?? '沒有回覆';
@@ -1004,13 +1006,11 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   /// 工具的結果；比「結果與前幾次相同」時不看頁碼：同樣的網頁每抓一次就
   /// 多一個頁碼（2026-11-12 實跑時，一樣的回應因為頁 4、頁 6 被說成不同）。
-  AgentToolResult answer(String text) {
-    final redacted = redact(text);
-    return AgentToolResult(
-      redacted,
-      same: redacted.replaceAll(RegExp(r'頁 \d+'), '頁 N'),
-    );
-  }
+  /// [same] 是拿來比的那一份，沒給時比 [text]。
+  AgentToolResult answer(String text, {String? same}) => AgentToolResult(
+    redact(text),
+    same: redact(same ?? text).replaceAll(RegExp(r'頁 \d+'), '頁 N'),
+  );
 
   @override
   Future<AgentResult> execute(AiRepairCommand command) async {
@@ -1044,8 +1044,11 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         s.log
           ..both('看網頁 $url（${AiRepairSession._seconds(watch)}）')
           ..requests(page.lines, pages: page.pages);
+        // 和抓過的同一頁只給頁碼（[RepairPages.add]）；比前後結果時照完整
+        // 的回應比。
         return answer(
           aiRepairFetchReply(url, s._pages.add(page.lines, page.pages)),
+          same: aiRepairFetchReply(url, page.lines),
         );
       case AiRead(:final page, :final from, :final length, :final raw):
         final found = s._pages[page];

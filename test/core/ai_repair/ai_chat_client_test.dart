@@ -325,7 +325,13 @@ void main() {
         _client(service)
             .complete([(role: 'user', content: 'hi')], limits: limits),
         throwsA(
-          isA<AiRunaway>().having((e) => e.tail, 'tail', contains('檢查搜尋規則')),
+          isA<AiRunaway>()
+              .having((e) => e.tail, 'tail', startsWith('思考的最後一段：\n'))
+              .having((e) => e.tail, 'tail', contains('檢查搜尋規則'))
+              // 服務來不及回報用量：照字數估，送出的 2 字、失控時思考的
+              // 60 字（第 6 句是第 5 次重複），每 token 2.5 字。
+              .having((e) => e.usage?.prompt, 'prompt', 1)
+              .having((e) => e.usage?.reasoning, 'reasoning', 24),
         ),
       );
     });

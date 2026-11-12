@@ -23,12 +23,15 @@ typedef AiReply = ({
 });
 
 /// AI 服務回了錯，或回的東西讀不懂；[message] 給使用者看。[retryable] 是
-/// 一時的狀況（連線中斷、HTTP 408／429／5xx），整件重跑可能就好。
+/// 一時的狀況（連線中斷、HTTP 408／429／5xx），整件重跑可能就好。[usage]
+/// 是已經有輸出、還沒回完就斷了時估的用量（[_StreamReader.estimate]）：
+/// 服務照樣計費，卻來不及回報。
 class AiServiceException implements Exception {
-  const AiServiceException(this.message, {this.retryable = false});
+  const AiServiceException(this.message, {this.retryable = false, this.usage});
 
   final String message;
   final bool retryable;
+  final AiUsage? usage;
 
   @override
   String toString() => message;
@@ -42,13 +45,15 @@ class AiEmptyReply extends AiServiceException {
 /// 卡住：[AiCallLimits.stall] 沒有任何資料，或到了總時限還沒有任何輸出。
 /// 多半是服務端的事，同一段對話原封不動重送。
 class AiStalled extends AiServiceException {
-  const AiStalled(super.message) : super(retryable: true);
+  const AiStalled(super.message, {super.usage}) : super(retryable: true);
 }
 
 /// 失控：碰到單次輸出上限、超過總時限還在輸出，或連續好幾句都是前面出現
-/// 過的句子。出在對話本身，整件換新對話重跑。[tail] 是輸出的最後一段。
+/// 過的句子。出在對話本身，整件換新對話重跑。[tail] 是思考與回覆各自的最後
+/// 一段（[_StreamReader.tail]）。
 class AiRunaway extends AiServiceException {
-  const AiRunaway(super.message, {required this.tail}) : super(retryable: true);
+  const AiRunaway(super.message, {required this.tail, super.usage})
+    : super(retryable: true);
 
   final String tail;
 }
@@ -119,7 +124,10 @@ class AiChatClient {
       throw const AiServiceException('服務網址不對，要以 https:// 開頭');
     }
     final watch = Stopwatch()..start();
-    final reader = _StreamReader(bounds);
+    final reader = _StreamReader(
+      bounds,
+      promptChars: messages.fold(0, (sum, m) => sum + m.content.length),
+    );
     Timer? stall;
     Timer? total;
     AiServiceException? stopped;
@@ -131,7 +139,12 @@ class AiChatClient {
     void armStall() {
       stall?.cancel();
       stall = Timer(bounds.stall, () {
-        stop(AiStalled('AI 服務 ${bounds.stall.inSeconds} 秒沒有送任何資料'));
+        stop(
+          AiStalled(
+            'AI 服務 ${bounds.stall.inSeconds} 秒沒有送任何資料',
+            usage: reader.estimate,
+          ),
+        );
       });
     }
 
@@ -141,6 +154,7 @@ class AiChatClient {
             ? AiRunaway(
                 'AI 回覆超過 ${bounds.total.inSeconds} 秒還在輸出',
                 tail: reader.tail,
+                usage: reader.estimate,
               )
             : AiStalled('AI 服務 ${bounds.total.inSeconds} 秒都沒有回覆'),
       );
@@ -215,7 +229,11 @@ class AiChatClient {
       } on DioException catch (error) {
         if (stopped case final reason?) throw reason;
         if (CancelToken.isCancel(error)) rethrow;
-        throw const AiServiceException('AI 服務的連線中斷了', retryable: true);
+        throw AiServiceException(
+          'AI 服務的連線中斷了',
+          retryable: true,
+          usage: reader.estimate,
+        );
       }
       if (stopped case final reason?) throw reason;
       if (status < 200 || status >= 300) {
@@ -353,9 +371,12 @@ abstract final class AiAgentKnobs {
 /// 讀 `text/event-stream`：每行 `data: {...}`，`[DONE]` 結束。邊讀邊數輸出
 /// 的字與重複的句子，失控時記下原因（[runaway]），呼叫的地方停掉連線。
 final class _StreamReader implements Sink<String> {
-  _StreamReader(this.limits);
+  _StreamReader(this.limits, {required this.promptChars});
 
   final AiCallLimits limits;
+
+  /// 送出的對話共幾字，估用量用（[estimate]）。
+  final int promptChars;
   final StringBuffer content = StringBuffer();
   final StringBuffer reasoning = StringBuffer();
   AiUsage? usage;
@@ -368,11 +389,38 @@ final class _StreamReader implements Sink<String> {
 
   bool get hasOutput => content.isNotEmpty || reasoning.isNotEmpty;
 
-  /// 輸出的最後 1,000 字（思考接著回覆）。
+  /// 思考與回覆各自的最後 1,000 字，分開標出來：看得出失控出在哪一段。
   String get tail {
-    final all = '$reasoning$content';
-    return all.length <= 1000 ? all : all.substring(all.length - 1000);
+    String last(StringBuffer buffer) {
+      final text = buffer.toString();
+      return text.length <= 1000 ? text : text.substring(text.length - 1000);
+    }
+
+    return [
+      if (reasoning.isNotEmpty) '思考的最後一段：\n${last(reasoning)}',
+      if (content.isNotEmpty) '回覆的最後一段：\n${last(content)}',
+    ].join('\n\n');
   }
+
+  /// 還沒回完就斷了時的用量：服務回報過的照用；沒有輸出時是 null（多半還沒
+  /// 開始計費）；其他照字數估，打中快取算 0。
+  ///
+  /// 每 token 算 2.5 字，寧可估多、讓整批的用量上限早點到：2026-11-12 實跑
+  /// 涨姿势（deepseek-v4.1-flash）第 1 輪送出 23,786 字是 9,180 token（2.6
+  /// 字），思考加回覆 2,776 字是 738 token（3.8 字）。
+  AiUsage? get estimate {
+    if (usage case final reported?) return reported;
+    if (!hasOutput) return null;
+    int tokens(int chars) => (chars / _charsPerToken).ceil();
+    return (
+      prompt: tokens(promptChars),
+      cached: 0,
+      completion: tokens(content.length + reasoning.length),
+      reasoning: tokens(reasoning.length),
+    );
+  }
+
+  static const double _charsPerToken = 2.5;
 
   @override
   void add(String data) {
@@ -425,7 +473,7 @@ final class _StreamReader implements Sink<String> {
       if (said is String && said.isNotEmpty) _out(content, said);
     }
     if (choice['finish_reason'] == 'length') {
-      runaway ??= AiRunaway('AI 回覆碰到服務的單次輸出上限', tail: tail);
+      runaway ??= AiRunaway('AI 回覆碰到服務的單次輸出上限', tail: tail, usage: estimate);
     }
   }
 
@@ -438,7 +486,11 @@ final class _StreamReader implements Sink<String> {
   void _out(StringBuffer into, String text) {
     into.write(text);
     if (content.length + reasoning.length > limits.maxOutputChars) {
-      runaway ??= AiRunaway('AI 回覆超過 ${limits.maxOutputChars} 字', tail: tail);
+      runaway ??= AiRunaway(
+        'AI 回覆超過 ${limits.maxOutputChars} 字',
+        tail: tail,
+        usage: estimate,
+      );
       return;
     }
     for (final char in text.split('')) {
@@ -463,6 +515,7 @@ final class _StreamReader implements Sink<String> {
       runaway ??= AiRunaway(
         'AI 連續 ${limits.repeatedSentences} 句都是前面說過的',
         tail: tail,
+        usage: estimate,
       );
     }
   }

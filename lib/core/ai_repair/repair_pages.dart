@@ -40,8 +40,17 @@ final class RepairPages {
     ];
   }
 
+  /// 網址與原文都和已經登記的某頁一樣時（例如詳情、目錄、正文是同一個網址），
+  /// 標上那一頁的頁碼，內容不再給一次：同一段字每輪都要重送。
   String _register(String line, String body) {
     final url = RegExp(r'^\s*← (\S+)').firstMatch(line)?.group(1) ?? '';
+    for (final seen in _pages) {
+      if (seen.url != url || seen.body != body) continue;
+      final labeled = line.replaceFirst('← ', '← 頁 ${seen.id}｜');
+      final colon = labeled.indexOf('：', labeled.indexOf('← '));
+      final head = colon < 0 ? labeled : labeled.substring(0, colon);
+      return '$head：和頁 ${seen.id} 一樣（網址與內容都相同），內容不再重複';
+    }
     final page = RepairPage(_pages.length + 1, url, body);
     _pages.add(page);
     return line.replaceFirst('← ', '← 頁 ${page.id}｜');
