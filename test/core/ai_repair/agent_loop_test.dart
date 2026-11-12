@@ -159,6 +159,23 @@ void main() {
     expect(rounds.single.estimated, isTrue);
   });
 
+  test('the thinking goes back in the conversation as it was', () async {
+    final seen = <List<AiMessage>>[];
+    await run((messages, _) async {
+      seen.add(List.of(messages));
+      final reply = _reply(seen.length == 1 ? 'tool:a' : 'submit:ok');
+      return (
+        content: reply.content,
+        toolCalls: reply.toolCalls,
+        reasoning: '第 ${seen.length} 輪的思考',
+        usage: null,
+        firstData: Duration.zero,
+      );
+    });
+    final assistant = seen[1].firstWhere((m) => m.role == 'assistant');
+    expect(assistant.reasoning, '第 1 輪的思考');
+  });
+
   test('every call of a reply gets its own tool result, in order', () async {
     final seen = <List<AiMessage>>[];
     final end = await run((messages, _) async {

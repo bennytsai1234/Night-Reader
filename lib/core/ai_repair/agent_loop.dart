@@ -306,6 +306,7 @@ Future<_AttemptEnd> _attempt<C>(
       (sum, m) =>
           sum +
           m.content.length +
+          m.reasoning.length +
           m.toolCalls.fold(0, (n, call) => n + call.arguments.length),
     );
     final watch = Stopwatch()..start();
@@ -364,7 +365,11 @@ Future<_AttemptEnd> _attempt<C>(
     stalls = 0;
     if (cancelToken.isCancelled) return cancelled;
     messages.add(
-      AiMessage.assistant(reply.content, toolCalls: reply.toolCalls),
+      AiMessage.assistant(
+        reply.content,
+        toolCalls: reply.toolCalls,
+        reasoning: reply.reasoning,
+      ),
     );
 
     if (reply.toolCalls.isEmpty) {

@@ -8,13 +8,15 @@ import 'ai_repair_settings.dart';
 
 /// 對話裡的一句：`system`、`user`、`assistant` 說的話，或 `tool`（工具的
 /// 結果，[toolCallId] 是它回應的那個呼叫）。AI 呼叫工具的那一句帶著
-/// [toolCalls]，話可以是空的。
+/// [toolCalls]，話可以是空的；AI 說的話帶著它的思考 [reasoning]，原樣放回
+/// 對話（`agent-harness` 技能）：模型下一輪接著自己的推理，不用重想。
 final class AiMessage {
   const AiMessage(
     this.role,
     this.content, {
     this.toolCalls = const [],
     this.toolCallId,
+    this.reasoning = '',
   });
 
   const AiMessage.system(String content) : this('system', content);
@@ -22,7 +24,8 @@ final class AiMessage {
   const AiMessage.assistant(
     String content, {
     List<AiToolCall> toolCalls = const [],
-  }) : this('assistant', content, toolCalls: toolCalls);
+    String reasoning = '',
+  }) : this('assistant', content, toolCalls: toolCalls, reasoning: reasoning);
   const AiMessage.tool(String toolCallId, String content)
     : this('tool', content, toolCallId: toolCallId);
 
@@ -30,11 +33,15 @@ final class AiMessage {
   final String content;
   final List<AiToolCall> toolCalls;
   final String? toolCallId;
+  final String reasoning;
 
-  /// 送給服務的樣子（OpenAI 的 `chat/completions`）。
+  /// 送給服務的樣子（OpenAI 的 `chat/completions`）。思考放在
+  /// `reasoning_content`（DeepSeek 的欄位；2026-11-12 OpenCode Go 的
+  /// deepseek-v4.1-flash 實測收）。
   Map<String, Object?> toJson() => {
     'role': role,
     'content': toolCalls.isNotEmpty && content.isEmpty ? null : content,
+    if (reasoning.isNotEmpty) 'reasoning_content': reasoning,
     if (toolCalls.isNotEmpty)
       'tool_calls': [
         for (final call in toolCalls)
@@ -197,6 +204,7 @@ class AiChatClient {
         (sum, m) =>
             sum +
             m.content.length +
+            m.reasoning.length +
             m.toolCalls.fold(0, (n, call) => n + call.arguments.length),
       ),
     );
@@ -431,10 +439,6 @@ abstract final class AiAgentKnobs {
   static const int rejectionLimit = 5;
   static const int stallLimit = 2;
 
-  /// 思考不放回對話：每家服務的模板不同，DeepSeek 的推理模型在送出的對話裡
-  /// 看到 `reasoning_content` 會回 400；思考全文寫進完整紀錄。
-  static const bool replayReasoning = false;
-
   /// 寫進紀錄開頭的一行。
   static String get summary =>
       '卡住 ${call.stall.inSeconds} 秒、單次總時限 ${call.total.inSeconds} 秒、'
@@ -442,7 +446,7 @@ abstract final class AiAgentKnobs {
       '每件最多 $maxRounds 輪、剩 $warnRoundsLeft 輪起提醒、含第一次跑 $attempts 次、'
       '未收斂：沒有呼叫工具連續 $noCommandLimit 輪、呼叫讀不懂連續 $badCommandLimit 次、'
       '同樣參數第 $sameCallLimit 次、交出連續被退 $rejectionLimit 次、'
-      '卡住連續 $stallLimit 次重跑、思考${replayReasoning ? '' : '不'}放回對話';
+      '卡住連續 $stallLimit 次重跑、思考原樣放回對話';
 }
 
 /// 讀 `text/event-stream`：每行 `data: {...}`，`[DONE]` 結束。邊讀邊數輸出

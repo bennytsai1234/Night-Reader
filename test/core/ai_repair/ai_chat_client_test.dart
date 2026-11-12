@@ -129,8 +129,8 @@ void main() {
     expect(service.request!.data, isNot(contains('temperature')));
   });
 
-  test('tools are sent and must be called; earlier calls and their results '
-      'go back in the conversation', () async {
+  test('tools are sent and must be called; earlier calls, their thinking '
+      'and results go back in the conversation', () async {
     final service = _Service(200, {
       'choices': [
         {
@@ -153,7 +153,7 @@ void main() {
     final reply = await _client(service).complete(
       [
         const AiMessage.user('書源'),
-        const AiMessage.assistant('', toolCalls: [fetch]),
+        const AiMessage.assistant('', toolCalls: [fetch], reasoning: '先看首頁'),
         const AiMessage.tool('call_1', '頁 1'),
       ],
       tools: [
@@ -183,6 +183,7 @@ void main() {
       {
         'role': 'assistant',
         'content': null,
+        'reasoning_content': '先看首頁',
         'tool_calls': [
           {
             'id': 'call_1',
