@@ -7,18 +7,39 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 
+/// 一份 [RequestLog] 記什麼；跨 isolate 送得過去（規則 JS 要等的請求在網路
+/// isolate 照同樣的設定記，`BlockingCall`）。
+typedef RequestLogSettings = ({
+  int? responsePreview,
+  bool digestPages,
+  bool keepPages,
+});
+
 /// 一段工作實際送出的請求，依序記在 [lines]；給了 [responsePreview] 時每個
-/// 回應也記一行（[recordResponse]），帶內容開頭的那麼多字，並數出看起來是
-/// 暫時性失敗的回應（[transientResponses]）：書源校驗據此決定要不要重試、
-/// 失敗時看網站回了什麼（[diagnosisPreview]），AI 修書源拿它看網頁現在長
-/// 怎樣（長得多）。書源除錯只記網址。
+/// 回應也記一行（[recordResponse]），帶內容開頭的那麼多字，POST 這類記下
+/// 送出的內容，並數出看起來是暫時性失敗的回應（[transientResponses]）：
+/// 書源校驗據此決定要不要重試、失敗時看網站回了什麼（[diagnosisPreview]），
+/// AI 修書源拿它看網頁現在長怎樣（長得多）。書源除錯只記網址。
+/// [keepPages] 時另外照順序記一份不截、不精簡的（[pages]），給 AI 修復的
+/// 完整紀錄。
 ///
 /// 記錄點在所有請求都會經過的地方：Dio 的 `AppInterceptor`（含轉址的每
 /// 一跳，規則 JS 的 `java.ajax`、`java.get` 這類也走這裡：它們在網路 isolate
 /// 送出，記下的內容由 `BlockingCall` 帶回來，[merge] 接上）與兩種 WebView
 /// 的入口。不在 [run] 裡時什麼都不記。
 final class RequestLog {
-  RequestLog({this.responsePreview, this.digestPages = false});
+  RequestLog({
+    this.responsePreview,
+    this.digestPages = false,
+    this.keepPages = false,
+  });
+
+  RequestLog.from(RequestLogSettings settings)
+    : this(
+        responsePreview: settings.responsePreview,
+        digestPages: settings.digestPages,
+        keepPages: settings.keepPages,
+      );
 
   /// 網頁先精簡（[digestPage]）再取開頭，給 AI 看。
   final bool digestPages;
@@ -29,8 +50,25 @@ final class RequestLog {
   /// 每個回應記內容開頭的幾個字；null 時不記回應。
   final int? responsePreview;
 
+  /// 另外記一份完整的（[pages]）。只在 [withResponses] 時有用。
+  final bool keepPages;
+
+  RequestLogSettings get settings => (
+    responsePreview: responsePreview,
+    digestPages: digestPages,
+    keepPages: keepPages,
+  );
+
   bool get withResponses => responsePreview != null;
   final List<String> lines = [];
+
+  /// 同 [lines]，但每個回應帶整頁原本的內容（照編碼解開，最多
+  /// [fullPageBytes] 位元組，不精簡）；[keepPages] 才記。
+  final List<String> pages = [];
+
+  /// [pages] 每個回應最多記多少位元組。
+  static const int fullPageBytes = 2 * 1024 * 1024;
+
   int _transientResponses = 0;
 
   /// 看起來是暫時性失敗的回應數：網站忙碌（429、5xx）、回了空白、連不上。
@@ -42,9 +80,19 @@ final class RequestLog {
 
   /// 接上在別的 isolate 記下的內容（規則 JS 要等的請求在網路 isolate 送出，
   /// ADR 0034）。
-  void merge(List<String> otherLines, int transientResponses) {
+  void merge(
+    List<String> otherLines,
+    int transientResponses, {
+    List<String> otherPages = const [],
+  }) {
     lines.addAll(otherLines);
+    pages.addAll(otherPages);
     _transientResponses += transientResponses;
+  }
+
+  void _add(String line, [String? page]) {
+    lines.add(line);
+    if (keepPages && withResponses) pages.add(page ?? line);
   }
 }
 
@@ -55,20 +103,55 @@ RequestLog? get currentRequestLog =>
 /// 外層已經在 [RequestLog.run] 裡：裡面的請求會記進外層的紀錄。
 bool get isRecordingRequestUrls => currentRequestLog != null;
 
-/// 外層的紀錄每個回應記開頭幾個字；不記回應時是 null。
-int? get recordingResponsePreview => currentRequestLog?.responsePreview;
-
 /// 記下一筆送出的請求。網址 `#` 後面不會送出，記的時候去掉；GET 以外標出
-/// 方法，轉址到的網址標出「轉址」。
-void recordRequestUrl(String method, Uri uri, {bool redirect = false}) {
+/// 方法，轉址到的網址標出「轉址」。記回應的紀錄（`withResponses`）也記
+/// 送出的內容 [body]（POST 的表單這類）：看得出規則實際送了什麼。
+void recordRequestUrl(
+  String method,
+  Uri uri, {
+  bool redirect = false,
+  Object? body,
+}) {
   final log = currentRequestLog;
   if (log == null) return;
   final upper = method.toUpperCase();
-  log.lines.add(
+  final sent = log.withResponses ? _sentBody(body) : null;
+  log._add(
     '${upper == 'GET' ? '' : '$upper '}${uri.removeFragment()}'
-    '${redirect ? '（轉址）' : ''}',
+    '${redirect ? '（轉址）' : ''}'
+    '${sent == null ? '' : ' 送出：$sent'}',
   );
 }
+
+/// 送出的內容寫成一行，最長 [_sentBodyLength] 字；沒有內容是 null。
+String? _sentBody(Object? body) {
+  final String text;
+  switch (body) {
+    case null:
+      return null;
+    case String():
+      text = body;
+    case List<int>():
+      return '${body.length} 位元組';
+    case FormData():
+      text = [
+        for (final MapEntry(:key, :value) in body.fields) '$key=$value',
+        for (final MapEntry(:key, :value) in body.files)
+          '$key=（檔案 ${value.length} 位元組）',
+      ].join('&');
+    case Map() || List():
+      text = jsonEncode(body);
+    default:
+      text = '$body';
+  }
+  final line = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (line.isEmpty) return null;
+  return line.length > _sentBodyLength
+      ? '${line.substring(0, _sentBodyLength)}…'
+      : line;
+}
+
+const int _sentBodyLength = 2000;
 
 /// 記下一個回應：哪個網址、狀態碼、內容類型、長度與開頭一段（同時送出的
 /// 請求回來的順序不一定，所以每行都帶網址）。沒有回應的失敗（連不上、
@@ -79,7 +162,7 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   if (response == null) {
     final type = error?.type;
     final uri = error?.requestOptions.uri.removeFragment();
-    log.lines.add('  ← $uri 沒有回應（${type?.name ?? '未知'}）');
+    log._add('  ← $uri 沒有回應（${type?.name ?? '未知'}）');
     // 網站擋下夜讀（Cloudflare 那幾種）也包成 unknown，只算真的連線斷掉的。
     if (type == DioExceptionType.connectionError ||
         (type == DioExceptionType.unknown && error?.error is IOException)) {
@@ -89,17 +172,10 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   }
   final status = response.statusCode;
   final type = response.headers.value(Headers.contentTypeHeader);
-  final (length, head, empty) = _bodyPreview(
-    response.data,
-    log.responsePreview!,
-    digest: log.digestPages,
-  );
-  log.lines.add(
-    '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
-    '${type == null ? '' : ' $type'}'
-    '${length == null ? '' : '，$length'}'
-    '${head.isEmpty ? '' : '：$head'}',
-  );
+  final head =
+      '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
+      '${type == null ? '' : ' $type'}';
+  final empty = _recordBody(log, head, response.data);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
@@ -110,63 +186,69 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
 void recordRenderedPage(String? url, Object? body) {
   final log = currentRequestLog;
   if (log == null || !log.withResponses) return;
-  final (length, head, empty) = _bodyPreview(
-    body,
-    log.responsePreview!,
-    digest: log.digestPages,
-  );
-  log.lines.add(
-    '  ← ${url ?? '?'} 網頁渲染（沒有狀態碼）'
-    '${length == null ? '' : '，$length'}'
-    '${head.isEmpty ? '' : '：$head'}',
-  );
+  final empty = _recordBody(log, '  ← ${url ?? '?'} 網頁渲染（沒有狀態碼）', body);
   if (empty) log._transientResponses++;
 }
 
-/// 回應內容的長度、開頭 [previewLength] 個字（空白合成一格）與是不是空白。
-/// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜。
-/// [digest] 時整頁解開、精簡過再取開頭（最多解開 [_digestBytes] 位元組）。
-(String?, String, bool) _bodyPreview(
-  Object? data,
-  int previewLength, {
-  bool digest = false,
-}) {
-  final decodeBytes = digest ? _digestBytes : previewLength * 4;
-  final String text;
-  final String length;
-  switch (data) {
-    case null:
-      return ('沒有內容', '', true);
-    case String():
-      text = data;
-      length = '${data.length} 字';
-    case List<int>():
-      final bytes = Uint8List.fromList(
-        data.length > decodeBytes ? data.sublist(0, decodeBytes) : data,
-      );
-      text = EncodingDetect.decodeWithCharset(
-        bytes,
-        EncodingDetect.getHtmlEncode(bytes),
-      );
-      length = '${data.length} 位元組';
-    case Map() || List():
-      text = jsonEncode(data);
-      length = '${text.length} 字';
-    default:
-      return (null, '', false);
+/// 回應那一行：[head] 接上長度與內容開頭；[RequestLog.pages] 那份接上整頁。
+/// 傳回內容是不是空白。
+bool _recordBody(RequestLog log, String head, Object? data) {
+  final full = log.keepPages;
+  final decoded = _decode(
+    data,
+    full || log.digestPages ? _digestBytes : log.responsePreview! * 4,
+  );
+  if (decoded == null) {
+    log._add(head);
+    return false;
   }
-  final collapsed = digest
+  final (length, text) = decoded;
+  if (length == null) {
+    log._add('$head，沒有內容');
+    return true;
+  }
+  final collapsed = log.digestPages
       ? digestPage(text)
       : text.replaceAll(RegExp(r'\s+'), ' ').trim();
-  return (
-    length,
-    collapsed.length > previewLength
-        ? '${collapsed.substring(0, previewLength)}…'
-        : collapsed,
-    collapsed.isEmpty,
+  final preview = log.responsePreview!;
+  final shown = collapsed.length > preview
+      ? '${collapsed.substring(0, preview)}…'
+      : collapsed;
+  log._add(
+    '$head，$length${shown.isEmpty ? '' : '：$shown'}',
+    full ? '$head，$length\n$text' : null,
   );
+  return collapsed.isEmpty;
 }
 
-const int _digestBytes = 2 * 1024 * 1024;
+/// 回應內容的長度與文字；不認得的型別是 null，沒有內容時長度是 null。
+/// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜，最多
+/// 解開 [maxBytes] 位元組。
+(String?, String)? _decode(Object? data, int maxBytes) {
+  switch (data) {
+    case null:
+      return (null, '');
+    case String():
+      return ('${data.length} 字', data);
+    case List<int>():
+      final bytes = Uint8List.fromList(
+        data.length > maxBytes ? data.sublist(0, maxBytes) : data,
+      );
+      return (
+        '${data.length} 位元組',
+        EncodingDetect.decodeWithCharset(
+          bytes,
+          EncodingDetect.getHtmlEncode(bytes),
+        ),
+      );
+    case Map() || List():
+      final text = jsonEncode(data);
+      return ('${text.length} 字', text);
+    default:
+      return null;
+  }
+}
+
+const int _digestBytes = RequestLog.fullPageBytes;
 
 final Object _requestLogZoneKey = Object();

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -15,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ai_chat_client.dart';
 import 'ai_repair_backups.dart';
+import 'ai_repair_log.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_secrets.dart';
 import 'ai_repair_settings.dart';
@@ -97,7 +100,7 @@ typedef AiRepairProber = Future<SourceProbeReport> Function(
 );
 
 /// AI 要看的一頁（[fetchPageForAi]）。
-typedef AiRepairFetcher = Future<String> Function(
+typedef AiRepairFetcher = Future<AiPage> Function(
   BookSource source,
   String url,
   CancelToken cancelToken,
@@ -135,12 +138,17 @@ class AiRepairSession extends ChangeNotifier {
     this.recheckDelay = const Duration(seconds: 30),
     bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
+    Future<Directory> Function()? logDirectory,
   }) : job = AiRepairJob(source),
+       log = AiRepairLog(
+         sourceName: source.bookSourceName,
+         sourceUrl: source.bookSourceUrl,
+         directory: logDirectory,
+       ),
        _check = check ?? defaultCheck,
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
        _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
-       _ask = ask ?? (service == null ? null : _defaultAsk(service, onUsage)),
        _hasBudget = hasBudget ?? _always,
        _copy = copy ?? _defaultCopy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
@@ -149,6 +157,12 @@ class AiRepairSession extends ChangeNotifier {
         apply ??
         (repaired, original) =>
             saveRepairedSource(repaired, original, backups: _backups);
+    void usage(AiUsage usage) {
+      _lastUsage = usage;
+      onUsage?.call(usage);
+    }
+
+    _ask = ask ?? (service == null ? null : _defaultAsk(service!, usage));
   }
 
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
@@ -166,7 +180,7 @@ class AiRepairSession extends ChangeNotifier {
   final AiRepairProber _probe;
   final AiRepairFetcher _fetchPage;
   final AiRepairKeywordCheck _keywordCheck;
-  final AiRepairAsker? _ask;
+  late final AiRepairAsker? _ask;
   final Future<void> Function(String text) _copy;
   final Future<Set<String>> Function(BookSource source) _secretsOf;
   final AiRepairBackups _backups;
@@ -174,7 +188,18 @@ class AiRepairSession extends ChangeNotifier {
   _apply;
 
   final CancelToken _cancelToken = CancelToken();
-  final StringBuffer _transcript = StringBuffer();
+
+  /// 這次修復的紀錄：「複製摘要」與「分享完整紀錄」（[AiRepairLog]）。
+  final AiRepairLog log;
+
+  /// 最近一次問 AI 服務回報的用量；服務沒回報、或問的不是服務時是 null。
+  AiUsage? _lastUsage;
+
+  /// 這次修復累計的用量。
+  var _usedPrompt = 0;
+  var _usedCached = 0;
+  var _usedCompletion = 0;
+  var _usageReported = false;
   Future<void>? _startTask;
   Completer<void>? _pasteCompletion;
   bool _running = false;
@@ -190,11 +215,8 @@ class AiRepairSession extends ChangeNotifier {
   Future<void> get completion =>
       _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
-  /// 「複製紀錄」：每一步、AI 每一輪說的話與試抓結果。
-  String get transcript => _transcript.toString().trimRight();
-
-  /// 有紀錄可以複製。
-  bool get hasTranscript => _transcript.isNotEmpty;
+  /// 有紀錄可以複製、分享。
+  bool get hasLog => !log.isEmpty;
 
   Future<void> start() {
     if (_startTask != null) return _startTask!;
@@ -252,6 +274,7 @@ class AiRepairSession extends ChangeNotifier {
           ..awaitingPaste = false
           ..outcome = AiRepairOutcome.failed
           ..explanation = '已停止，書源沒有改。';
+        _logOutcome('已停止，書源沒有改。');
       }
     }
     _notify();
@@ -272,7 +295,9 @@ class AiRepairSession extends ChangeNotifier {
     _running = true;
     _notify();
     try {
-      _record('## 貼回的書源\n$text');
+      log
+        ..section('貼回的書源')
+        ..both(text);
       await _validate(job, candidate, '');
     } catch (error, stack) {
       AppLog.e('AI 貼回書源出錯', error: error, stackTrace: stack);
@@ -303,11 +328,15 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> _repair(AiRepairJob job) async {
     final original = job.original;
-    _record('# ${original.bookSourceName}（${original.bookSourceUrl}）');
     job._secrets = await _secretsOf(original);
+    log
+      ..redact = ((text) => _redact(job, text))
+      ..header(_serviceText);
     if (_stopped) return;
 
     final checkStep = _addStep(job, '校驗原本的書源');
+    log.section('校驗原本的書源');
+    final checkWatch = Stopwatch()..start();
     final checked = await _guard(() => _check(original, _cancelToken));
     if (_stopped) return;
     final checkText = _checkText(checked);
@@ -319,26 +348,33 @@ class AiRepairSession extends ChangeNotifier {
       [checkText, ...?checked?.diagnostics].join('\n\n'),
     );
     _finish(checkStep, checkText);
-    _record('校驗原本的書源：${job._checkResult}');
+    log
+      ..both('${_seconds(checkWatch)}：$checkText')
+      ..both([...?checked?.diagnostics].join('\n\n'));
 
     final fetchStep = _addStep(job, '抓網頁');
+    log.section('抓網頁');
+    final probeWatch = Stopwatch()..start();
     final probe = await _guard(() => _probe(original, _cancelToken));
     if (_stopped || probe == null) return;
-    job._probe = probe;
+    job._probe = probe.withoutPages;
     _finish(fetchStep, _fetchText(probe));
-    _record('抓網頁：${_fetchText(probe)}\n${_probeText(job, probe)}');
+    _logProbe('${_seconds(probeWatch)}：${_fetchText(probe)}', probe);
 
     if (usesClipboard) {
-      await _copy(
-        _redact(
-          job,
-          aiRepairClipboardPrompt(
-            source: original,
-            checkResult: job._checkResult!,
-            probe: probe,
-          ),
+      final prompt = _redact(
+        job,
+        aiRepairClipboardPrompt(
+          source: original,
+          checkResult: job._checkResult!,
+          probe: probe,
         ),
       );
+      log
+        ..section('複製給 AI')
+        ..note('${prompt.length} 字，全文見完整紀錄')
+        ..full(prompt);
+      await _copy(prompt);
       _finish(_addStep(job, '已複製給 AI'), null);
       job.awaitingPaste = true;
       _notify();
@@ -349,6 +385,9 @@ class AiRepairSession extends ChangeNotifier {
     // 試抓用完還沒修好：AI 常卡在同一個方向，重開一段對話、告訴它上一次
     // 試過什麼，再給一次機會。
     _finish(_addStep(job, '重新來一次', detail: '換個方向再試'), '換個方向再試');
+    log
+      ..section('重新來一次：換一段新的對話')
+      ..both('上一回試過的：\n$tried');
     await _converse(job, earlier: tried);
   }
 
@@ -373,6 +412,16 @@ class AiRepairSession extends ChangeNotifier {
       ))
         (role: message.role, content: _redact(job, message.content)),
     ];
+    // 完整紀錄照順序寫下每一句，每句只寫一次：對話照原樣一路接下去，每輪
+    // 送出的就是到那時為止的全部。
+    var logged = 0;
+    void logNewMessages() {
+      for (final message in messages.skip(logged)) {
+        log.message(message.role, message.content);
+      }
+      logged = messages.length;
+    }
+
     var current = sourceForAi(original);
     var tests = 0;
     var fetches = 0;
@@ -388,62 +437,83 @@ class AiRepairSession extends ChangeNotifier {
       }
       final round = ++job._rounds;
       final step = _addStep(job, '第 $round 輪', detail: 'AI 回覆中…');
+      log.section('第 $round 輪', round: true);
+      logNewMessages();
+      log.full(
+        '（這一輪送出對話裡全部 ${messages.length} 句，共 '
+        '${messages.fold(0, (sum, m) => sum + m.content.length)} 字）',
+      );
+      final askWatch = Stopwatch()..start();
+      _lastUsage = null;
       final String text;
       try {
         text = await _ask!(messages, _cancelToken);
       } on AiEmptyReply catch (error) {
         // 空白回覆不放進對話，同樣的話再問一次。
         _finish(step, error.message, failed: true);
+        log.both('${_askText(askWatch)}：${error.message}，再問一次');
         continue;
       } on AiServiceException catch (error) {
         _finish(step, error.message, failed: true);
+        log.both('${_askText(askWatch)}：${error.message}');
         _fail(job, error.message);
         return null;
       } on DioException catch (error) {
         if (_stopped) return null;
         _finish(step, '連不上 AI 服務', failed: true);
+        log.both('${_askText(askWatch)}：連不上 AI 服務：${error.message}');
         _fail(job, '連不上 AI 服務：${error.message}');
         return null;
       }
       if (_stopped) return null;
-      _record('## 第 $round 輪 AI 回覆\n$text');
+      log
+        ..both(_askText(askWatch))
+        ..reply(text);
       messages.add((role: 'assistant', content: text));
+      logged = messages.length;
       void answer(String text) =>
           messages.add((role: 'user', content: _redact(job, text)));
       switch (AiRepairCommand.parse(text)) {
         case null:
           _finish(step, '讀不懂 AI 回的內容', failed: true);
+          log.both('讀不懂 AI 回的內容');
           answer('${aiRepairBadReplyFor(text)}\n${budget()}');
         case AiGiveUp(:final reason) when tests == 0 && !pushedBack:
           // 還沒試過任何修改就放棄，多半是看了一眼就下結論：退回一次。
           pushedBack = true;
           _finish(step, 'AI 想放棄，請它先試一次');
-          _record('AI 想放棄：$reason');
+          log.both('AI 想放棄（$reason），退回請它先試一次');
           answer('$aiRepairTryFirst\n${budget()}');
         case AiGiveUp(:final reason):
           _finish(step, 'AI 說修不好');
+          log.both('AI 說修不好');
           job.confirmedUnfixable = true;
           _fail(job, reason.isEmpty ? 'AI 說修不好。' : 'AI：$reason');
           return null;
         case AiFetch() when fetches >= aiRepairMaxFetches:
           _finish(step, '看網頁的次數用完了', failed: true);
+          log.both('看網頁的次數用完了');
           answer('看網頁的次數用完了，請試抓或放棄。\n${budget()}');
         case AiFetch(:final url):
           fetches++;
           step.detail = '看網頁 $url…';
           _notify();
           final base = _candidateOrNull(original, current) ?? original;
+          final fetchWatch = Stopwatch()..start();
           final page = await _guard(() => _fetchPage(base, url, _cancelToken));
           if (_stopped || page == null) return null;
           _finish(step, '看網頁 $url');
           tried.writeln('- 看了 $url');
-          _record('看網頁 $url\n${_redact(job, page)}');
-          answer('${aiRepairFetchReply(url, page)}\n\n${budget()}');
+          log
+            ..both('看網頁 $url（${_seconds(fetchWatch)}）')
+            ..requests(page.text.split('\n'), pages: page.pages);
+          answer('${aiRepairFetchReply(url, page.text)}\n\n${budget()}');
         case AiTest(:final change, :final note):
           final json = applyAiChange(current, change);
           final candidate = _candidateOrNull(original, json);
           if (candidate == null) {
             _finish(step, '讀不懂 AI 回的書源', failed: true);
+            log.both('讀不懂 AI 回的書源');
             answer('${aiRepairBadReplyFor(text)}\n${budget()}');
             continue;
           }
@@ -452,9 +522,13 @@ class AiRepairSession extends ChangeNotifier {
           final changed = _changedText(original, candidate);
           step.detail = '$changed，試抓中…';
           _notify();
+          final probeWatch = Stopwatch()..start();
           final probe = await _guard(() => _probe(candidate, _cancelToken));
           if (_stopped || probe == null) return null;
-          _record('試抓：${probe.summary}\n${_probeText(job, probe)}');
+          _logProbe(
+            '$changed，試抓（${_seconds(probeWatch)}）：${probe.summary}',
+            probe,
+          );
           final what = '- ${note.isEmpty ? changed : note}（$changed）';
           if (probe.succeeded) {
             _finish(step, '$changed，試抓：${probe.summary}，交出');
@@ -480,6 +554,7 @@ class AiRepairSession extends ChangeNotifier {
           final candidate = _candidateOrNull(original, json);
           if (candidate == null) {
             _finish(step, '讀不懂 AI 回的書源', failed: true);
+            log.both('讀不懂 AI 回的書源');
             answer('${aiRepairBadReplyFor(text)}\n${budget()}');
             continue;
           }
@@ -487,6 +562,7 @@ class AiRepairSession extends ChangeNotifier {
           current = json;
           final changed = _changedText(original, candidate);
           _finish(step, '$changed，交出');
+          log.both('$changed，交出');
           final failure = await _validate(
             job,
             candidate,
@@ -529,26 +605,37 @@ class AiRepairSession extends ChangeNotifier {
     bool lastRound = false,
   }) async {
     final step = _addStep(job, '校驗修好的書源');
+    log.section('校驗修好的書源');
+    final checkWatch = Stopwatch()..start();
     var checked = await _guard(() => _check(candidate, _cancelToken));
     if (_stopped) return null;
     bool usable(SourceCheckIsolateResult? result) =>
         usableFix(result, job.original, candidate, before: job._before);
     if (probeSucceeded && !usable(checked)) {
       step.detail = '${_checkText(checked)}；稍後再校驗一次…';
-      _record('校驗修好的書源：${_checkText(checked)}，稍後再校驗一次');
+      log
+        ..both(
+          '${_seconds(checkWatch)}：${_checkText(checked)}，'
+          '${recheckDelay.inSeconds} 秒後再校驗一次',
+        )
+        ..full([...?checked?.diagnostics].join('\n\n'));
       _notify();
       await Future.any<Object?>([
         Future<void>.delayed(recheckDelay),
         _cancelToken.whenCancel,
       ]);
       if (_stopped) return null;
+      checkWatch.reset();
       checked = await _guard<SourceCheckIsolateResult?>(
         () => _check(candidate, _cancelToken),
       );
       if (_stopped) return null;
     }
     final checkText = _checkText(checked);
-    _record('校驗修好的書源：$checkText');
+    log.both('${_seconds(checkWatch)}：$checkText');
+    if (checked != null && !usable(checked)) {
+      log.both(checked.diagnostics.join('\n\n'));
+    }
     if (checked == null || !usable(checked)) {
       _finish(step, checkText, failed: true);
       if (!last) {
@@ -565,11 +652,12 @@ class AiRepairSession extends ChangeNotifier {
     // 校驗只看搜尋有沒有回書：規則抓的是頁面上固定的推薦書也會過。
     step.detail = '$checkText；確認搜尋結果跟關鍵字有關…';
     _notify();
+    final keywordWatch = Stopwatch()..start();
     final follows = await _guard(() => _keywordCheck(candidate, _cancelToken));
     if (_stopped) return null;
     if (follows == false) {
       const unrelated = '搜尋結果跟關鍵字無關：搜一個不可能有的詞也回同樣的書，抓到的是頁面上固定的推薦書';
-      _record('校驗修好的書源：$unrelated');
+      log.both('確認搜尋結果跟關鍵字有關（${_seconds(keywordWatch)}）：$unrelated');
       _finish(step, unrelated, failed: true);
       if (!last) {
         return '# 書源校驗沒過：$unrelated（用「$nonsenseKeyword」搜尋也得到同樣的書）。'
@@ -600,6 +688,7 @@ class AiRepairSession extends ChangeNotifier {
       ..outcome = AiRepairOutcome.repaired
       ..repairedSource = saved
       ..explanation = note.isEmpty ? null : 'AI：$note';
+    _logOutcome('修好了，已套用${note.isEmpty ? '' : '\nAI：$note'}');
     _notify();
     return null;
   }
@@ -650,15 +739,54 @@ class AiRepairSession extends ChangeNotifier {
   String _redact(AiRepairJob job, String text) =>
       redactAiRepairSecrets(text, job._secrets);
 
-  /// 「複製紀錄」裡的試抓全文：遮掉秘密，最長 [_transcriptProbeLength] 字。
-  String _probeText(AiRepairJob job, SourceProbeReport probe) {
-    final text = _redact(job, probe.fullText);
-    return text.length <= _transcriptProbeLength
-        ? text
-        : '${text.substring(0, _transcriptProbeLength)}…（以下省略）';
+  /// 一次試抓寫進紀錄：[title] 一句結果、除錯紀錄與送出的請求；完整紀錄
+  /// 另外寫每個回應的整頁原文。
+  void _logProbe(String title, SourceProbeReport probe) {
+    log.both(title);
+    if (probe.logs.isNotEmpty) {
+      log.both(probe.logs.map((entry) => entry.$2).join('\n'));
+    }
+    log.requests(probe.requests, pages: probe.pages);
   }
 
-  static const int _transcriptProbeLength = 20000;
+  /// 結果與這次的用量，寫在紀錄最後。
+  void _logOutcome(String result) {
+    log
+      ..section('結果')
+      ..both(result);
+    if (job._rounds == 0) return;
+    final usage = _usageReported
+        ? '；用量：送出 ${_tokens(_usedPrompt)} token（打中快取 '
+              '${_tokens(_usedCached)}）、回覆 ${_tokens(_usedCompletion)}'
+        : '';
+    log.both('AI 回了 ${job._rounds} 次$usage');
+  }
+
+  String get _serviceText {
+    final service = this.service;
+    if (service == null) return '沒有 AI 服務，用剪貼簿';
+    final host = Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl;
+    return 'AI：$host · ${service.model}'
+        '${service.effort.isEmpty ? '' : '（思考程度 ${service.effort}）'}';
+  }
+
+  /// 問 AI 花的時間與這次的用量（服務有回報時）。
+  String _askText(Stopwatch watch) {
+    final usage = _lastUsage;
+    if (usage == null) return 'AI 回覆 ${_seconds(watch)}';
+    _usageReported = true;
+    _usedPrompt += usage.prompt;
+    _usedCached += usage.cached;
+    _usedCompletion += usage.completion;
+    return 'AI 回覆 ${_seconds(watch)}；送出 ${_tokens(usage.prompt)} token'
+        '（打中快取 ${_tokens(usage.cached)}）、回覆 ${_tokens(usage.completion)}';
+  }
+
+  static String _seconds(Stopwatch watch) =>
+      '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒';
+
+  static String _tokens(int count) =>
+      NumberFormat.decimalPattern().format(count);
 
   AiRepairStep _addStep(AiRepairJob job, String title, {String? detail}) {
     final step = AiRepairStep(title, detail: detail);
@@ -678,7 +806,7 @@ class AiRepairSession extends ChangeNotifier {
     job
       ..outcome = AiRepairOutcome.failed
       ..explanation = explanation;
-    _record('沒修好：$explanation');
+    _logOutcome('沒修好：$explanation');
     _notify();
   }
 
@@ -691,11 +819,6 @@ class AiRepairSession extends ChangeNotifier {
       rethrow;
     }
   }
-
-  /// 記進「複製紀錄」：一律先遮掉登入資料、Cookie 與變數的值（ADR 0054）。
-  void _record(String text) => _transcript
-    ..writeln(redactAiRepairSecrets(text, job._secrets))
-    ..writeln();
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -772,7 +895,7 @@ class AiRepairSession extends ChangeNotifier {
     );
   }
 
-  static Future<String> _defaultFetchPage(
+  static Future<AiPage> _defaultFetchPage(
     BookSource source,
     String url,
     CancelToken cancelToken,

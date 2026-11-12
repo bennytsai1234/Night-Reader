@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -132,7 +133,10 @@ void main() {
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
-        return '  ← $url 200：<form action="/s2">';
+        return (
+          text: '  ← $url 200：<form action="/s2">',
+          pages: ['  ← $url 200\n<html><form action="/s2"></html>'],
+        );
       },
       recheckDelay: Duration.zero,
       ask: (messages, _) async {
@@ -192,6 +196,77 @@ void main() {
     expect(third[3].content, contains('<div class="txt">'));
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
+
+  test(
+    'the full log holds every message sent to the AI word for word, each '
+    'once, and the raw pages; the summary holds each round in short',
+    () async {
+      final logs = Directory.systemTemp.createTempSync('ai-repair-log');
+      addTearDown(() => logs.deleteSync(recursive: true));
+      const raw =
+          '<html><head><script>location="https://ads.example"</script>'
+          '</head><body><div class="txt">正文</div></body></html>';
+      final replies = [
+        jsonEncode({'action': 'fetch', 'url': '/', 'note': '看首頁'}),
+        _command('test'),
+      ];
+      var next = 0;
+      final s = AiRepairSession(
+        source: _source('https://site.example'),
+        service: _service,
+        check: (source, _) async => _checked(source),
+        probe: (source, _) async => SourceProbeReport(
+          logs: _probe(source).logs,
+          requests: _probe(source).requests,
+          pages: const ['  ← https://site.example/c/1 200，99 字\n$raw'],
+        ),
+        keywordCheck: (_, _) async => true,
+        fetchPage: (_, url, _) async => (
+          text: '  ← $url 200：<form action="/s2">',
+          pages: const ['  ← https://site.example/ 200\n<html>首頁原文</html>'],
+        ),
+        recheckDelay: Duration.zero,
+        ask: (messages, _) async {
+          asked.add(List.of(messages));
+          return replies[next++];
+        },
+        apply: (source, _) async => applied.add(source),
+        secrets: (_) async => const {},
+        backups: backups,
+        logDirectory: () async => logs,
+      );
+
+      await s.start();
+
+      expect(s.job.outcome, AiRepairOutcome.repaired);
+      final full = (await s.log.file())!.readAsStringSync();
+      final conversation = [
+        ...asked.last,
+        (role: 'assistant', content: replies.last),
+      ];
+      for (final message in conversation) {
+        expect(
+          message.content.allMatches(full).length,
+          1,
+          reason: '${message.role} 的話照原樣、只寫一次',
+        );
+      }
+      expect(full, contains(raw), reason: '網頁原文不精簡、不截');
+      expect(full, contains('<html>首頁原文</html>'));
+      final summary = s.log.summary;
+      expect(summary, contains('## 第 1 輪'));
+      expect(summary, contains('看網頁 /'));
+      expect(summary, contains('## 第 2 輪'));
+      expect(summary, contains('AI 改了正文，試抓'));
+      expect(summary, contains('## 結果'));
+      expect(summary, isNot(contains(raw)));
+      expect(
+        summary,
+        isNot(contains(asked.first.first.content)),
+        reason: '提示詞不進摘要',
+      );
+    },
+  );
 
   test('when the check fails the AI is told why and keeps going; nothing is '
       'saved until a check passes', () async {
@@ -539,8 +614,11 @@ void main() {
       requests: ['  → https://site.example/s?q=x&token=$secret'],
     );
     final copied = <String>[];
+    final logs = Directory.systemTemp.createTempSync('ai-repair-log');
+    addTearDown(() => logs.deleteSync(recursive: true));
     for (final clipboard in [false, true]) {
       final s = AiRepairSession(
+        logDirectory: () async => logs,
         source: leaky,
         service: clipboard ? null : _service,
         check: (source, _) async => _checked(source),
@@ -556,7 +634,11 @@ void main() {
         backups: backups,
       );
       await s.start();
-      expect(s.transcript, isNot(contains(secret)));
+      expect(s.log.summary, contains('token=«已遮蔽»'));
+      expect(s.log.summary, isNot(contains(secret)));
+      final full = (await s.log.file())!.readAsStringSync();
+      expect(full, contains('token=«已遮蔽»'));
+      expect(full, isNot(contains(secret)));
     }
 
     final sent = [for (final message in asked.first) message.content]

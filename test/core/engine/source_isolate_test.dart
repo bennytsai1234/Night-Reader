@@ -115,6 +115,29 @@ Future<(List<String>, int)> _contentRequestLogInSourceIsolate(
   return (log.lines, log.transientResponses);
 });
 
+/// 同 [_contentRequestLogInSourceIsolate]，照 AI 修書源試抓的方式記：網頁
+/// 精簡過給 AI 看，另外留整頁原文；傳回兩份。
+Future<(List<String>, List<String>)> _probeRequestLogInSourceIsolate(
+  Map<String, dynamic> sourceJson,
+  String chapterUrl,
+) => SourceIsolate.run((_) async {
+  final source = BookSource.fromJson(sourceJson);
+  final book = Book(bookUrl: chapterUrl, origin: source.bookSourceUrl);
+  final log = RequestLog(
+    responsePreview: 6000,
+    digestPages: true,
+    keepPages: true,
+  );
+  await log.run(
+    () => BookSourceService().getContent(
+      source,
+      book,
+      BookChapter(title: '第一章', url: chapterUrl, bookUrl: chapterUrl),
+    ),
+  );
+  return (log.lines, log.pages);
+});
+
 Future<void> _logInSourceIsolate(String message) =>
     SourceIsolate.run((_) async => AppLog.put(message, toast: true));
 
@@ -312,6 +335,12 @@ void main() {
           request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
         case '/c/2':
           request.response.write('<p>第二章的正文，夜裡讀起來剛好。</p>');
+        case '/scripted':
+          request.response.write(
+            '<html><head><title>轉址</title>'
+            '<script>location="https://ads.example/go"</script></head>'
+            '<body><p>第一章的正文，夜裡讀起來剛好。</p></body></html>',
+          );
         case '/count':
           counted++;
           request.response.write('數到了');
@@ -1078,6 +1107,26 @@ void main() {
       },
       skip: quickJsUnavailableReason(),
     );
+
+    // AI 修書源的試抓：規則 JS 抓的網頁在網路 isolate 也照同樣的設定記，
+    // 給 AI 的精簡過，完整紀錄留整頁原文（含程式）。
+    test('a page the rule JS fetches is digested for the AI and kept whole for '
+        'the full log', () async {
+      source.ruleContent!.content = '@js:java.ajax("$baseUrl/scripted")';
+
+      final (lines, pages) = await _probeRequestLogInSourceIsolate(
+        source.toJson(),
+        '$baseUrl/c/1',
+      );
+
+      final reply = lines.singleWhere((l) => l.contains('/scripted '));
+      expect(reply, contains('第一章的正文'));
+      expect(reply, isNot(contains('ads.example')));
+      expect(
+        pages.singleWhere((l) => l.contains('/scripted ')),
+        contains('<script>location="https://ads.example/go"</script>'),
+      );
+    }, skip: quickJsUnavailableReason());
 
     test('explore kinds and explore pages', () async {
       final service = BookSourceService();

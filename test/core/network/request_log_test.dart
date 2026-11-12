@@ -78,6 +78,52 @@ void main() {
     expect(log.transientResponses, 0);
   });
 
+  test('a POST shows what it sent when responses are recorded too', () async {
+    final checked = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    final debugged = RequestLog();
+    for (final log in [checked, debugged]) {
+      await log.run(() async {
+        recordRequestUrl(
+          'POST',
+          Uri.parse('https://site.example/search/'),
+          body: 'searchkey=%E6%88%91&searchtype=all&submit=',
+        );
+        recordRequestUrl('GET', Uri.parse('https://site.example/'), body: '');
+      });
+    }
+
+    expect(checked.lines, [
+      'POST https://site.example/search/ 送出：'
+          'searchkey=%E6%88%91&searchtype=all&submit=',
+      'https://site.example/',
+    ]);
+    expect(debugged.lines.first, 'POST https://site.example/search/');
+  });
+
+  test('the full copy keeps the whole page as sent, the preview stays short '
+      'and digested', () async {
+    final page =
+        '<html><head><script>go()</script></head>'
+        '<body><p>${'正文' * 4000}</p></body></html>';
+    final log = RequestLog(
+      responsePreview: 100,
+      digestPages: true,
+      keepPages: true,
+    );
+    await log.run(() async {
+      recordRequestUrl('GET', Uri.parse('https://site.example/c/1'));
+      recordResponse(_response('https://site.example/c/1', 200, page));
+    });
+
+    expect(log.pages.first, 'https://site.example/c/1');
+    expect(
+      log.pages.last,
+      '  ← https://site.example/c/1 200，${page.length} 字\n$page',
+    );
+    expect(log.lines.last, isNot(contains('go()')));
+    expect(log.lines.last.length, lessThan(200));
+  });
+
   test('a GBK page reads as Chinese, not mojibake', () async {
     final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
     await log.run(() async {

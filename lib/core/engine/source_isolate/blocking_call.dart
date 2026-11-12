@@ -35,14 +35,17 @@ abstract final class BlockingCall {
       _Block(
         Zone.current[_taskIdZoneKey] as int?,
         task,
-        recordRequests: isRecordingRequestUrls,
-        responsePreview: recordingResponsePreview,
+        requestLog: currentRequestLog?.settings,
       ),
     );
     final outcome = _Outcome.decode(replies.take());
     // 書源除錯與校驗要列出規則 JS 自己送的請求；它們在網路 isolate 送出，
     // 記下的網址（與回應）跟著結果回來，照順序接進這裡的紀錄。
-    currentRequestLog?.merge(outcome.requestLines, outcome.transientResponses);
+    currentRequestLog?.merge(
+      outcome.requestLines,
+      outcome.transientResponses,
+      otherPages: outcome.requestPages,
+    );
     if (outcome.error case final error?) throw error;
     return outcome.value;
   }
@@ -78,12 +81,16 @@ final class _Outcome {
     this.error,
     this.requestLines,
     this.transientResponses,
+    this.requestPages,
   );
 
   final Object? value;
   final BlockingCallError? error;
   final List<String> requestLines;
   final int transientResponses;
+
+  /// 完整的請求紀錄（`RequestLog.pages`）。
+  final List<String> requestPages;
 
   static const int _json = 0;
   static const int _bytes = 1;
@@ -116,6 +123,7 @@ final class _Outcome {
     ) as Map;
     final lines = (log['lines'] as List).cast<String>();
     final transient = log['transient'] as int;
+    final pages = (log['pages'] as List).cast<String>();
     final content = Uint8List.sublistView(outcome, 5 + logLength);
     switch (outcome[0]) {
       case _json:
@@ -124,9 +132,10 @@ final class _Outcome {
           null,
           lines,
           transient,
+          pages,
         );
       case _bytes:
-        return _Outcome(content, null, lines, transient);
+        return _Outcome(content, null, lines, transient, pages);
       default:
         final error = jsonDecode(utf8.decode(content)) as Map;
         return _Outcome(
@@ -137,6 +146,7 @@ final class _Outcome {
           ),
           lines,
           transient,
+          pages,
         );
     }
   }
@@ -146,6 +156,7 @@ final class _Outcome {
       jsonEncode({
         'lines': log?.lines ?? const <String>[],
         'transient': log?.transientResponses ?? 0,
+        'pages': log?.pages ?? const <String>[],
       }),
     );
     final out = Uint8List(5 + header.length + content.length);

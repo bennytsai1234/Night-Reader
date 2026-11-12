@@ -430,12 +430,7 @@ final class SourceWorker {
       if (call.cancelled) throw _cancelled();
       call.io = io;
       final reply = await io._channel.request(
-        _Perform(
-          call.id,
-          block.task,
-          recordRequests: block.recordRequests,
-          responsePreview: block.responsePreview,
-        ),
+        _Perform(call.id, block.task, requestLog: block.requestLog),
       );
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
     } catch (error) {
@@ -667,22 +662,12 @@ void _main(SendPort mainPort) {
           } finally {
             tasks.remove(id);
           }
-        case _Perform(
-          :final id,
-          :final task,
-          :final recordRequests,
-          :final responsePreview,
-        ):
+        case _Perform(:final id, :final task, :final requestLog):
           final cancelToken = CancelToken();
           performs[id] = cancelToken;
           try {
             return TransferableTypedData.fromList([
-              await _perform(
-                task,
-                cancelToken,
-                recordRequests: recordRequests,
-                responsePreview: responsePreview,
-              ),
+              await _perform(task, cancelToken, requestLog: requestLog),
             ]);
           } finally {
             performs.remove(id);
@@ -776,13 +761,12 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
 Future<Uint8List> _perform(
   Future<Object?> Function() task,
   CancelToken cancelToken, {
-  required bool recordRequests,
-  required int? responsePreview,
+  required RequestLogSettings? requestLog,
 }) async {
-  final log = RequestLog(responsePreview: responsePreview);
+  final log = requestLog == null ? null : RequestLog.from(requestLog);
   try {
     final value = await _runCancellable(
-      (_) => recordRequests ? log.run(task) : task(),
+      (_) => log == null ? task() : log.run(task),
       cancelToken,
     );
     return _Outcome.success(value, log);
@@ -876,37 +860,23 @@ final class _CancelTask {
 /// worker 停住了，請主 isolate 交給網路 isolate 做 [task]。[taskId] 是它
 /// 停在哪一個書源工作裡。
 final class _Block {
-  const _Block(
-    this.taskId,
-    this.task, {
-    required this.recordRequests,
-    required this.responsePreview,
-  });
+  const _Block(this.taskId, this.task, {required this.requestLog});
 
   final int? taskId;
   final Future<Object?> Function() task;
 
-  /// 書源除錯或校驗正在記這個工作送出的請求網址（`RequestLog`）。
-  final bool recordRequests;
-
-  /// 書源校驗與 AI 修書源連回應也記，每個記開頭幾個字
-  /// （`RequestLog.responsePreview`）。
-  final int? responsePreview;
+  /// 書源除錯、校驗或 AI 修書源正在記這個工作送出的請求時，照同樣的設定記
+  /// （`RequestLog`）；沒在記是 null。
+  final RequestLogSettings? requestLog;
 }
 
 /// 主 isolate 請網路 isolate 做停住的 worker 交來的 [task]。
 final class _Perform {
-  const _Perform(
-    this.id,
-    this.task, {
-    required this.recordRequests,
-    required this.responsePreview,
-  });
+  const _Perform(this.id, this.task, {required this.requestLog});
 
   final int id;
   final Future<Object?> Function() task;
-  final bool recordRequests;
-  final int? responsePreview;
+  final RequestLogSettings? requestLog;
 }
 
 final class _CancelPerform {

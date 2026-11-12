@@ -11,6 +11,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'ai_repair_settings_page.dart';
 import 'repair_runs.dart';
@@ -189,9 +190,23 @@ class _AiRepairPageState extends State<AiRepairPage> {
     }
   }
 
-  Future<void> _copyTranscript() async {
-    await Clipboard.setData(ClipboardData(text: _session.transcript));
-    if (mounted) _say('已複製紀錄');
+  Future<void> _copySummary() async {
+    await Clipboard.setData(ClipboardData(text: _session.log.summary));
+    if (mounted) _say('已複製摘要');
+  }
+
+  Future<void> _shareFullLog() async {
+    final file = await _session.log.file();
+    if (file == null) {
+      if (mounted) _say('完整紀錄沒有存成檔案');
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'text/plain')],
+        subject: 'AI 修復紀錄：${_session.job.original.bookSourceName}',
+      ),
+    );
   }
 
   @override
@@ -225,8 +240,14 @@ class _AiRepairPageState extends State<AiRepairPage> {
                     GlassMenuItem(
                       value: 'copy',
                       icon: Icons.copy_rounded,
-                      label: '複製紀錄',
-                      enabled: _session.hasTranscript,
+                      label: '複製摘要',
+                      enabled: _session.hasLog,
+                    ),
+                    GlassMenuItem(
+                      value: 'share',
+                      icon: Icons.ios_share_rounded,
+                      label: '分享完整紀錄',
+                      enabled: _session.hasLog,
                     ),
                   ],
                   onSelected: (value) {
@@ -240,7 +261,9 @@ class _AiRepairPageState extends State<AiRepairPage> {
                           ),
                         );
                       case 'copy':
-                        unawaited(_copyTranscript());
+                        unawaited(_copySummary());
+                      case 'share':
+                        unawaited(_shareFullLog());
                     }
                   },
                 ),

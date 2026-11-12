@@ -19,6 +19,7 @@ class SourceProbeReport {
   const SourceProbeReport({
     required this.logs,
     required this.requests,
+    this.pages = const [],
     this.timedOut = false,
   });
 
@@ -27,6 +28,14 @@ class SourceProbeReport {
 
   /// 請求與網站的回應，照送出的順序（[RequestLog.lines]）。
   final List<String> requests;
+
+  /// 同 [requests]，但每個回應是整頁原文（[RequestLog.pages]）：只寫進 AI
+  /// 修復的完整紀錄，不送給 AI。
+  final List<String> pages;
+
+  /// 不帶整頁原文的同一份：寫進完整紀錄之後留著給 AI 的只要這份。
+  SourceProbeReport get withoutPages =>
+      SourceProbeReport(logs: logs, requests: requests, timedOut: timedOut);
 
   /// 整段試抓超過時間被停下。
   final bool timedOut;
@@ -109,6 +118,7 @@ class SourceProbeReport {
       for (final (state, message) in logs) [state, message],
     ],
     'requests': requests,
+    'pages': pages,
     'timedOut': timedOut,
   };
 
@@ -119,6 +129,7 @@ class SourceProbeReport {
             ((entry as List)[0] as int, entry[1] as String),
         ],
         requests: List<String>.from(map['requests']! as List),
+        pages: List<String>.from(map['pages'] as List? ?? const []),
         timedOut: map['timedOut'] as bool? ?? false,
       );
 }
@@ -188,6 +199,7 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   final requests = RequestLog(
     responsePreview: SourceProbeReport.responsePreview,
     digestPages: true,
+    keepPages: true,
   );
   try {
     await requests.run(
@@ -198,14 +210,22 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   } finally {
     await subscription.cancel();
   }
-  return SourceProbeReport(logs: logs, requests: requests.lines).toMap();
+  return SourceProbeReport(
+    logs: logs,
+    requests: requests.lines,
+    pages: requests.pages,
+  ).toMap();
 };
 
+/// AI 看的一頁：給 AI 的 [text]（請求與精簡過的回應）與寫進完整紀錄的
+/// [pages]（同樣的請求與整頁原文）。
+typedef AiPage = ({String text, List<String> pages});
+
 /// AI 要看的一頁（ADR 0054）：照書源的標頭與 Cookie 抓 [url]，傳回請求與網站
-/// 的回應（精簡過的網頁，最多 [pageLength] 字）。[url] 照書源網址規則的寫法
+/// 的回應（精簡過的網頁，最多 [pageLength] 字），與整頁原文。[url] 照書源網址規則的寫法
 /// 解析：可以接 `,{"method":"POST","body":…}`，`{{key}}` 是 [keyword]，所以
 /// 拿書源的搜尋網址來看，看到的就是書源搜尋實際拿到的那一頁。
-Future<String> fetchPageForAi(
+Future<AiPage> fetchPageForAi(
   BookSource source,
   String url, {
   required String keyword,
@@ -220,34 +240,49 @@ Future<String> fetchPageForAi(
       withDictionaries: false,
     );
   } catch (error) {
-    return '抓不了：$error';
+    return (text: '抓不了：$error', pages: const <String>[]);
   }
   try {
-    if (cancelToken?.isCancelled ?? false) return '已停止';
+    if (cancelToken?.isCancelled ?? false) {
+      return (text: '已停止', pages: const <String>[]);
+    }
     unawaited(
       cancelToken?.whenCancel.then((_) => worker.kill(StateError('抓網頁已停止'))),
     );
-    final lines = await worker
+    final map = await worker
         .run(
           _fetchTask(source.toJson(), url, keyword, pageLength),
           cancelToken: cancelToken,
         )
-        .timeout(timeout, onTimeout: () => const ['（超過時間，沒抓到）']);
-    return lines.join('\n');
+        .timeout(
+          timeout,
+          onTimeout: () => const {
+            'lines': ['（超過時間，沒抓到）'],
+            'pages': <String>[],
+          },
+        );
+    return (
+      text: (map['lines']! as List).join('\n'),
+      pages: List<String>.from(map['pages']! as List),
+    );
   } catch (error) {
-    return '抓不了：$error';
+    return (text: '抓不了：$error', pages: const <String>[]);
   } finally {
     worker.kill(StateError('抓網頁已結束'));
   }
 }
 
-Future<List<String>> Function(CancelToken) _fetchTask(
+Future<Map<String, Object?>> Function(CancelToken) _fetchTask(
   Map<String, dynamic> sourceJson,
   String url,
   String keyword,
   int pageLength,
 ) => (_) async {
-  final requests = RequestLog(responsePreview: pageLength, digestPages: true);
+  final requests = RequestLog(
+    responsePreview: pageLength,
+    digestPages: true,
+    keepPages: true,
+  );
   try {
     await requests.run(
       () => AnalyzeUrl(
@@ -260,8 +295,9 @@ Future<List<String>> Function(CancelToken) _fetchTask(
     );
   } catch (error) {
     requests.lines.add('錯誤：$error');
+    requests.pages.add('錯誤：$error');
   }
-  return requests.lines;
+  return {'lines': requests.lines, 'pages': requests.pages};
 };
 
 /// 搜尋結果跟關鍵字有沒有關係：用 [keyword] 與一個不可能有的詞各搜一次，
