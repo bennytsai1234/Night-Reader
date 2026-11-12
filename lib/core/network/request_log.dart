@@ -15,6 +15,18 @@ typedef RequestLogSettings = ({
   bool keepPages,
 });
 
+/// [RequestLog.pages] 的一筆：請求或回應的那一行（同 [RequestLog.lines]），
+/// 回應另帶整頁原文 [body]。
+typedef LoggedPage = ({String line, String? body});
+
+/// [LoggedPage] 跨 isolate 送的樣子。
+List<Object?> loggedPageToJson(LoggedPage page) => [page.line, page.body];
+
+LoggedPage loggedPageFromJson(Object? json) {
+  final list = json! as List;
+  return (line: list[0]! as String, body: list[1] as String?);
+}
+
 /// 一段工作實際送出的請求，依序記在 [lines]；給了 [responsePreview] 時每個
 /// 回應也記一行（[recordResponse]），帶內容開頭的那麼多字，POST 這類記下
 /// 送出的內容，並數出看起來是暫時性失敗的回應（[transientResponses]）：
@@ -62,9 +74,9 @@ final class RequestLog {
   bool get withResponses => responsePreview != null;
   final List<String> lines = [];
 
-  /// 同 [lines]，但每個回應帶整頁原本的內容（照編碼解開，最多
+  /// 和 [lines] 一筆對一筆，回應另帶整頁原本的內容（照編碼解開，最多
   /// [fullPageBytes] 位元組，不精簡）；[keepPages] 才記。
-  final List<String> pages = [];
+  final List<LoggedPage> pages = [];
 
   /// [pages] 每個回應最多記多少位元組。
   static const int fullPageBytes = 2 * 1024 * 1024;
@@ -83,16 +95,16 @@ final class RequestLog {
   void merge(
     List<String> otherLines,
     int transientResponses, {
-    List<String> otherPages = const [],
+    List<LoggedPage> otherPages = const [],
   }) {
     lines.addAll(otherLines);
     pages.addAll(otherPages);
     _transientResponses += transientResponses;
   }
 
-  void _add(String line, [String? page]) {
+  void _add(String line, [String? body]) {
     lines.add(line);
-    if (keepPages && withResponses) pages.add(page ?? line);
+    if (keepPages && withResponses) pages.add((line: line, body: body));
   }
 }
 
@@ -214,9 +226,11 @@ bool _recordBody(RequestLog log, String head, Object? data) {
   final shown = collapsed.length > preview
       ? '${collapsed.substring(0, preview)}…'
       : collapsed;
+  // 給 AI 看的寫出精簡後共幾字：它才知道後面還有沒有。
+  final digested = log.digestPages ? '，精簡後 ${collapsed.length} 字' : '';
   log._add(
-    '$head，$length${shown.isEmpty ? '' : '：$shown'}',
-    full ? '$head，$length\n$text' : null,
+    '$head，$length$digested${shown.isEmpty ? '' : '：$shown'}',
+    full ? text : null,
   );
   return collapsed.isEmpty;
 }

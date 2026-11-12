@@ -7,12 +7,15 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/ai_repair/repair_rule_tools.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../test_helper.dart';
 
 class _MinimalServicesBinding extends BindingBase
     with SchedulerBinding, ServicesBinding {
@@ -112,4 +115,63 @@ void main() {
       expect(report.fullText, contains('<div id="content">'));
     },
   );
+
+  test('a probe can start from the table of contents', () async {
+    final report = await probeSource(
+      source(),
+      keyword: probeStart('toc', keyword: '夜雨', url: '$site/book/1')!,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(report.succeeded, isTrue, reason: report.fullText);
+    expect(report.stagesReached, '目錄、正文');
+  });
+
+  test('parse runs the stage parser on a page already fetched', () async {
+    const toc =
+        '<html><body><ul class="toc"><li><a href="/book/1/1.html">第一章</a>'
+        '</li><li><a href="/book/1/2.html">第二章</a></li></ul></body></html>';
+    Future<String> parse(BookSource source, String stage, String body) =>
+        parseRepairPage(
+          source,
+          stage: stage,
+          body: body,
+          url: '$site/book/1',
+          timeout: const Duration(seconds: 30),
+          database: Future.value(databaseIsolate),
+        );
+
+    expect(
+      await parse(source(), 'toc', toc),
+      '解析成目錄頁：2 章\n'
+      '1. 第一章 → $site/book/1/1.html\n'
+      '2. 第二章 → $site/book/1/2.html',
+    );
+    expect(
+      await parse(source(), 'content', '<div id="content">$_chapter</div>'),
+      startsWith('解析成正文頁：${_chapter.length} 字'),
+    );
+    expect(
+      await parse(
+        source(),
+        'search',
+        '<div class="book"><a href="/b/2">夜讀</a></div>',
+      ),
+      contains('書名：夜讀｜網址：$site/b/2'),
+    );
+    expect(await parse(source(), 'nope', toc), startsWith('不認得的段'));
+  });
+
+  test('js runs in the rule JS world and can read fetched pages', () async {
+    final result = await runRepairJs(
+      source(),
+      code: 'page(2).length + ":" + source.bookSourceName',
+      pages: {2: '夜讀'},
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(result, '傳回：2:本機書源');
+  }, skip: quickJsUnavailableReason());
 }

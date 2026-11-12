@@ -90,7 +90,7 @@ final class _Outcome {
   final int transientResponses;
 
   /// 完整的請求紀錄（`RequestLog.pages`）。
-  final List<String> requestPages;
+  final List<LoggedPage> requestPages;
 
   static const int _json = 0;
   static const int _bytes = 1;
@@ -123,7 +123,9 @@ final class _Outcome {
     ) as Map;
     final lines = (log['lines'] as List).cast<String>();
     final transient = log['transient'] as int;
-    final pages = (log['pages'] as List).cast<String>();
+    final pages = [
+      for (final page in log['pages'] as List) loggedPageFromJson(page),
+    ];
     final content = Uint8List.sublistView(outcome, 5 + logLength);
     switch (outcome[0]) {
       case _json:
@@ -156,7 +158,7 @@ final class _Outcome {
       jsonEncode({
         'lines': log?.lines ?? const <String>[],
         'transient': log?.transientResponses ?? 0,
-        'pages': log?.pages ?? const <String>[],
+        'pages': [...?log?.pages.map(loggedPageToJson)],
       }),
     );
     final out = Uint8List(5 + header.length + content.length);

@@ -129,18 +129,25 @@ void main() {
           ? null
           : check?.call(source) ??
                 _checked(source, broken: broken[source.bookSourceUrl]),
-      probe: (source, _) async => _probe(source),
+      probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
         return (
-          text: '  ← $url 200：<form action="/s2">',
-          pages: ['  ← $url 200\n<html><form action="/s2"></html>'],
+          lines: ['  ← $url 200：<form action="/s2">'],
+          pages: [
+            (
+              line: '  ← $url 200：<form action="/s2">',
+              body: '<html><form action="/s2"></html>',
+            ),
+          ],
         );
       },
       recheckDelay: Duration.zero,
       ask: (messages, _) async {
         asked.add(List.of(messages));
+        // 回覆用完：測試寫錯了，不讓它一直問下去。
+        if (next >= replies.length) throw StateError('沒有更多回覆');
         return replies[next++];
       },
       apply: (source, _) async => applied.add(source),
@@ -215,15 +222,20 @@ void main() {
         source: _source('https://site.example'),
         service: _service,
         check: (source, _) async => _checked(source),
-        probe: (source, _) async => SourceProbeReport(
+        probe: (source, _, {start}) async => SourceProbeReport(
           logs: _probe(source).logs,
           requests: _probe(source).requests,
-          pages: const ['  ← https://site.example/c/1 200，99 字\n$raw'],
+          pages: [(line: _probe(source).requests.single, body: raw)],
         ),
         keywordCheck: (_, _) async => true,
         fetchPage: (_, url, _) async => (
-          text: '  ← $url 200：<form action="/s2">',
-          pages: const ['  ← https://site.example/ 200\n<html>首頁原文</html>'],
+          lines: ['  ← $url 200：<form action="/s2">'],
+          pages: [
+            (
+              line: '  ← $url 200：<form action="/s2">',
+              body: '<html>首頁原文</html>',
+            ),
+          ],
         ),
         recheckDelay: Duration.zero,
         ask: (messages, _) async {
@@ -268,6 +280,83 @@ void main() {
     },
   );
 
+  test('pages carry numbers; read, find, parse and js work on them without '
+      'fetching, and a test can start from the table of contents', () async {
+    const tocPage = '<div class="list"><a href="/c/1">第一章</a></div>';
+    final parsed = <(String, String, String?)>[];
+    final ran = <(String, Map<int, String>)>[];
+    final starts = <String?>[];
+    final replies = [
+      jsonEncode({'action': 'read', 'page': 1, 'raw': true}),
+      jsonEncode({'action': 'find', 'page': 1, 'text': '第一章'}),
+      jsonEncode({
+        'action': 'parse',
+        'page': 1,
+        'as': 'toc',
+        'patch': {
+          'ruleToc': {'chapterList': '.list a'},
+        },
+      }),
+      jsonEncode({'action': 'read', 'page': 9}),
+      jsonEncode({'action': 'js', 'code': 'page(1).length'}),
+      jsonEncode({
+        'action': 'test',
+        'from': 'toc',
+        'url': 'https://site.example/book/1/',
+        'patch': {
+          'ruleContent': {'content': 'class.txt@text'},
+        },
+      }),
+    ];
+    var next = 0;
+    final s = AiRepairSession(
+      source: _source('https://site.example'),
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (source, _, {start}) async {
+        starts.add(start);
+        final report = _probe(source);
+        return SourceProbeReport(
+          logs: report.logs,
+          requests: report.requests,
+          pages: [(line: report.requests.single, body: tocPage)],
+        );
+      },
+      keywordCheck: (_, _) async => true,
+      parsePage: (source, stage, page, _) async {
+        parsed.add((stage, page.body, source.ruleToc?.chapterList));
+        return '解析成目錄頁：1 章';
+      },
+      runJs: (_, code, pages, _) async {
+        ran.add((code, pages));
+        return '傳回：${pages[1]!.length}';
+      },
+      recheckDelay: Duration.zero,
+      ask: (messages, _) async {
+        asked.add(List.of(messages));
+        return replies[next++];
+      },
+      apply: (source, _) async => applied.add(source),
+      secrets: (_) async => const {},
+      backups: backups,
+    );
+
+    await s.start();
+
+    expect(asked.first[1].content, contains('← 頁 1｜https://site.example/c/1'));
+    String answer(int round) => asked[round].last.content;
+    expect(answer(1), contains(tocPage), reason: '讀頁給原文');
+    expect(answer(2), contains('div.list > a'));
+    expect(parsed.single, ('toc', tocPage, '.list a'));
+    expect(answer(3), contains('解析成目錄頁：1 章'));
+    expect(answer(4), startsWith('# 沒有頁 9'));
+    expect(ran.single.$1, 'page(1).length');
+    expect(ran.single.$2, {1: tocPage}, reason: '只送程式用到的那頁');
+    expect(answer(5), contains('傳回：${tocPage.length}'));
+    expect(starts, [null, '++https://site.example/book/1/']);
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+  });
+
   test('when the check fails the AI is told why and keeps going; nothing is '
       'saved until a check passes', () async {
     final s = session(
@@ -286,87 +375,41 @@ void main() {
     expect(applied.single.ruleContent?.content, 'class.txt@text');
   });
 
-  test('a check that fails on the last try leaves the source alone', () async {
+  test('a failing check goes back to the AI with no limit on tries; giving '
+      'up after trying marks it not fixable', () async {
     final s = session(
       [_source('https://site.example')],
       replies: [
-        for (var i = 0; i < aiRepairMaxTests; i++)
+        for (var i = 0; i < 8; i++)
           _command('submit', content: 'class.wrong$i@text'),
+        jsonEncode({'action': 'give_up', 'reason': '正文要付費'}),
       ],
     );
 
     await s.start();
 
     final job = s.job;
+    expect(asked, hasLength(9), reason: '超過以前的 6 次試抓也接著問');
     expect(job.outcome, AiRepairOutcome.failed);
-    expect(job.steps.last.state, AiRepairStepState.failed);
-    expect(job.explanation, '校驗：正文失效：正文為空\nAI：正文在 div.txt');
-    expect(applied, isEmpty);
-    expect(job.confirmedUnfixable, isFalse);
-  });
-
-  test('both rounds used up, the last one on a hand-in that fails the check, '
-      'counts as not fixable', () async {
-    final s = session(
-      [_source('https://site.example')],
-      replies: [
-        for (var i = 0; i < aiRepairMaxTests; i++)
-          _command('test', content: 'class.wrong$i@text'),
-        for (var i = 0; i < aiRepairMaxTests; i++)
-          _command('submit', content: 'class.again$i@text'),
-      ],
-    );
-
-    await s.start();
-
-    expect(s.job.outcome, AiRepairOutcome.failed);
-    expect(s.job.confirmedUnfixable, isTrue);
+    expect(job.explanation, 'AI：正文要付費');
+    expect(job.confirmedUnfixable, isTrue);
     expect(applied, isEmpty);
   });
 
-  test('a last hand-in whose check times out is not counted as not '
-      'fixable', () async {
+  test('a hand-in whose check times out goes back to the AI', () async {
     final s = session(
       [_source('https://site.example')],
       timesOut: {'https://site.example'},
       replies: [
-        for (var i = 0; i < aiRepairMaxTests; i++)
-          _command('test', content: 'class.wrong$i@text'),
-        for (var i = 0; i < aiRepairMaxTests; i++)
-          _command('submit', content: 'class.again$i@text'),
+        _command('submit', content: 'class.again@text'),
+        jsonEncode({'action': 'give_up', 'reason': '網站太慢'}),
       ],
     );
 
     await s.start();
 
+    expect(asked[1].last.content, contains('校驗超過時間'));
     expect(s.job.outcome, AiRepairOutcome.failed);
-    expect(s.job.explanation, contains('校驗超過時間'));
-    expect(s.job.confirmedUnfixable, isFalse);
-  });
-
-  test('a second round that only gets empty replies is not counted as not '
-      'fixable', () async {
-    var calls = 0;
-    final s = AiRepairSession(
-      source: _source('https://site.example'),
-      service: _service,
-      check: (source, _) async => _checked(source),
-      probe: (source, _) async => _probe(source),
-      keywordCheck: (_, _) async => true,
-      ask: (_, _) async {
-        if (calls++ >= aiRepairMaxTests) throw const AiEmptyReply();
-        return _command('test', content: 'class.wrong$calls@text');
-      },
-      apply: (source, _) async => applied.add(source),
-      secrets: (_) async => const {},
-      backups: backups,
-    );
-
-    await s.start();
-
-    expect(calls, aiRepairMaxTests + aiRepairMaxReplies);
-    expect(s.job.outcome, AiRepairOutcome.failed);
-    expect(s.job.confirmedUnfixable, isFalse);
   });
 
   test(
@@ -376,7 +419,7 @@ void main() {
         source: _source('https://site.example'),
         service: _service,
         check: (_, _) async => throw StateError('isolate 掛了'),
-        probe: (source, _) async => _probe(source),
+        probe: (source, _, {start}) async => _probe(source),
         keywordCheck: (_, _) async => true,
         ask: (_, _) async => _command('test'),
         apply: (source, _) async => applied.add(source),
@@ -399,7 +442,7 @@ void main() {
       source: _source('https://site.example'),
       service: _service,
       check: (source, _) async => _checked(source),
-      probe: (source, _) async => _probe(source),
+      probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (_, _) async => true,
       ask: (messages, _) async {
         asked.add(List.of(messages));
@@ -417,93 +460,78 @@ void main() {
     expect(asked[1], asked[0], reason: '同樣的話再問一次');
   });
 
-  test(
-    'giving up before trying anything is sent back once; giving up again and '
-    'running out of replies both leave the source alone',
-    () async {
-      final giveUp = jsonEncode({'action': 'give_up', 'reason': '網站要付費'});
-      final gaveUp = session(
-        [_source('https://a.example')],
-        replies: [giveUp, giveUp],
-      );
-      await gaveUp.start();
-      expect(asked, hasLength(2));
-      expect(asked.last.last.content, startsWith(aiRepairTryFirst));
-      expect(gaveUp.job.explanation, 'AI：網站要付費');
+  test('giving up before trying anything is sent back once; giving up again '
+      'ends it', () async {
+    final giveUp = jsonEncode({'action': 'give_up', 'reason': '網站要付費'});
+    final gaveUp = session(
+      [_source('https://a.example')],
+      replies: [giveUp, giveUp],
+    );
+    await gaveUp.start();
+    expect(asked, hasLength(2));
+    expect(asked.last.last.content, aiRepairTryFirst);
+    expect(gaveUp.job.explanation, 'AI：網站要付費');
+  });
 
-      final talky = session([
-        _source('https://b.example'),
-      ], replies: List.filled(aiRepairMaxReplies, '我再想想'));
-      await talky.start();
-      expect(talky.job.outcome, AiRepairOutcome.failed);
-      expect(
-        talky.job.steps.where((s) => s.title.startsWith('第')),
-        hasLength(aiRepairMaxReplies),
-      );
-      expect(applied, isEmpty);
-    },
-  );
+  test('an unreadable reply is answered with what is wrong and the repair '
+      'goes on', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: ['我再想想', '我再想想', _command('test')],
+    );
 
-  test('when the tests run out the AI gets a fresh second try that is told '
-      'what was tried', () async {
-    String wrong(int i) => jsonEncode({
-      'action': 'test',
-      'patch': {
-        'ruleContent': {'content': 'class.w$i@text'},
-      },
-      'note': '試法 $i',
-    });
+    await s.start();
+
+    expect(asked[1].last.content, startsWith(aiRepairBadReply));
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+  });
+
+  test('more tries than the old limit stay in one conversation that only '
+      'grows at the end', () async {
     final s = session(
       [_source('https://site.example')],
       replies: [
-        for (var i = 0; i < aiRepairMaxTests; i++) wrong(i),
+        for (var i = 0; i < 7; i++) _command('test', content: 'class.w$i@text'),
         _command('test'),
       ],
     );
 
     await s.start();
 
-    final job = s.job;
-    expect(job.outcome, AiRepairOutcome.repaired);
-    expect(job.steps.map((step) => step.title), contains('重新來一次'));
-    final secondOpening = asked.last[1].content;
-    expect(secondOpening, contains('# 上一回沒修好，試過這些'));
-    expect(secondOpening, contains('試法 0（AI 改了正文） → 試抓：發生錯誤: 正文為空'));
-    expect(asked.last, hasLength(2), reason: '第二回從頭開始');
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(s.job.steps.map((step) => step.title), isNot(contains('重新來一次')));
+    expect(asked.last, hasLength(2 + 7 * 2), reason: '同一段對話一路接下去');
+    expect(asked.last.take(2), asked.first, reason: '開頭沒變');
   });
 
-  test(
-    'looking at pages does not use up the tests, and patches add up',
-    () async {
-      final fetched = <String>[];
-      final s = session(
-        [_source('https://site.example')],
-        fetched: fetched,
-        replies: [
-          for (var i = 0; i < aiRepairMaxFetches; i++)
-            jsonEncode({'action': 'fetch', 'url': '/p$i'}),
-          jsonEncode({'action': 'fetch', 'url': '/one-too-many'}),
-          jsonEncode({
-            'action': 'test',
-            'patch': {'searchUrl': '/s2?q={{key}}'},
-          }),
-          jsonEncode({
-            'action': 'test',
-            'patch': {
-              'ruleContent': {'content': 'class.txt@text'},
-            },
-          }),
-        ],
-      );
+  test('looking at pages has no limit, and patches add up', () async {
+    final fetched = <String>[];
+    final s = session(
+      [_source('https://site.example')],
+      fetched: fetched,
+      replies: [
+        for (var i = 0; i < 7; i++)
+          jsonEncode({'action': 'fetch', 'url': '/p$i'}),
+        jsonEncode({
+          'action': 'test',
+          'patch': {'searchUrl': '/s2?q={{key}}'},
+        }),
+        jsonEncode({
+          'action': 'test',
+          'patch': {
+            'ruleContent': {'content': 'class.txt@text'},
+          },
+        }),
+      ],
+    );
 
-      await s.start();
+    await s.start();
 
-      expect(fetched, [for (var i = 0; i < aiRepairMaxFetches; i++) '/p$i']);
-      expect(s.job.outcome, AiRepairOutcome.repaired);
-      expect(applied.single.searchUrl, '/s2?q={{key}}', reason: '前一次的改動留著');
-      expect(applied.single.ruleContent?.content, 'class.txt@text');
-    },
-  );
+    expect(fetched, [for (var i = 0; i < 7; i++) '/p$i']);
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(applied.single.searchUrl, '/s2?q={{key}}', reason: '前一次的改動留著');
+    expect(applied.single.ruleContent?.content, 'class.txt@text');
+  });
 
   test('a fix whose test reached the text is checked once more after a '
       'pause when the first check fails', () async {
@@ -622,7 +650,7 @@ void main() {
         source: leaky,
         service: clipboard ? null : _service,
         check: (source, _) async => _checked(source),
-        probe: (_, _) async => probe,
+        probe: (_, _, {start}) async => probe,
         keywordCheck: (_, _) async => true,
         ask: (messages, _) async {
           asked.add(List.of(messages));
@@ -676,7 +704,7 @@ void main() {
       source: _source('https://site.example'),
       service: _service,
       check: (source, _) async => _checked(source),
-      probe: (source, _) async => _probe(source),
+      probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (_, _) async => true,
       ask: (_, _) async => _command('submit'),
       apply: (source, _) async {
@@ -700,7 +728,7 @@ void main() {
         source: _source('https://site.example'),
         service: _service,
         check: (source, _) async => _checked(source),
-        probe: (source, _) async => _probe(source),
+        probe: (source, _, {start}) async => _probe(source),
         keywordCheck: (_, _) async => true,
         ask: (_, _) async => _command('submit'),
         apply: (_, _) async => throw AiRepairConflict(conflict),
@@ -759,7 +787,7 @@ void main() {
         checks++;
         return checks == 1 ? Future.value(_checked(source)) : gate.future;
       },
-      probe: (source, _) async => _probe(source),
+      probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (_, _) async => true,
       copy: (_) async {},
       secrets: (_) async => const {},
@@ -791,7 +819,7 @@ void main() {
       source: _source('https://site.example'),
       service: _service,
       check: (source, _) async => _checked(source),
-      probe: (source, _) async => _probe(source),
+      probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (_, _) async => true,
       ask: (_, cancelToken) async {
         s.stop();

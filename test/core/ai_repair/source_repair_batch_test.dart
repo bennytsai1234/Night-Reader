@@ -140,7 +140,7 @@ void main() {
           source: source,
           service: _service,
           check: (s, _) async => _checked(s),
-          probe: (s, _) async => _probe(s),
+          probe: (s, _, {start}) async => _probe(s),
           keywordCheck: (_, _) async => true,
           ask: (_, _) async {
             asked.add(source.bookSourceUrl);
@@ -392,7 +392,7 @@ void main() {
         source: source,
         service: _service,
         check: (s, _) async => _checked(s),
-        probe: (s, _) async => _probe(s),
+        probe: (s, _, {start}) async => _probe(s),
         ask: (_, _) async => _giveUp,
         secrets: (_) async => const {},
         backups: backups,
@@ -531,7 +531,7 @@ void main() {
         source: source,
         service: _service,
         check: (source, _) async => _checked(source),
-        probe: (source, _) async => _probe(source),
+        probe: (source, _, {start}) async => _probe(source),
         ask: (_, _) async => throw StateError('AI 服務無法回應'),
         secrets: (_) async => const {},
         backups: backups,

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
-import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -70,14 +69,7 @@ Future<void> openAiRepair(
         return;
     }
   }
-  // 一個書源也照整批修復每個網站的上限：模型一直回讀不懂的話不會一直花下去。
-  var tokens = 0;
-  final session = AiRepairSession(
-    source: source,
-    service: service,
-    hasBudget: () => tokens < SourceRepairBatch.defaultSiteTokenBudget,
-    onUsage: (usage) => tokens += usage.prompt + usage.completion,
-  );
+  final session = AiRepairSession(source: source, service: service);
   final run = SingleRepairRun(session);
   repairs.adopt(run);
   await navigator.push(MaterialPageRoute<void>(builder: (_) => run.page()));

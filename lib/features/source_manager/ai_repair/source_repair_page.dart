@@ -61,8 +61,7 @@ Future<void> openSourceRepair(
     context: context,
     title: title,
     message:
-        '先重新校驗、檢查網站，網站不在了的不送 AI；同一個網站只問 AI 一次，'
-        '每個網站最多用 ${_tokens(SourceRepairBatch.defaultSiteTokenBudget)}。\n\n'
+        '先重新校驗、檢查網站，網站不在了的不送 AI；同一個網站只問 AI 一次。\n\n'
         '整批的 AI 用量上限：',
     actions: const [
       AppAlertAction(label: '100 萬 token', value: 1000000, isDefault: true),

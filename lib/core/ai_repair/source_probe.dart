@@ -31,7 +31,7 @@ class SourceProbeReport {
 
   /// 同 [requests]，但每個回應是整頁原文（[RequestLog.pages]）：只寫進 AI
   /// 修復的完整紀錄，不送給 AI。
-  final List<String> pages;
+  final List<LoggedPage> pages;
 
   /// 不帶整頁原文的同一份：寫進完整紀錄之後留著給 AI 的只要這份。
   SourceProbeReport get withoutPages =>
@@ -118,7 +118,7 @@ class SourceProbeReport {
       for (final (state, message) in logs) [state, message],
     ],
     'requests': requests,
-    'pages': pages,
+    'pages': [for (final page in pages) loggedPageToJson(page)],
     'timedOut': timedOut,
   };
 
@@ -129,13 +129,17 @@ class SourceProbeReport {
             ((entry as List)[0] as int, entry[1] as String),
         ],
         requests: List<String>.from(map['requests']! as List),
-        pages: List<String>.from(map['pages'] as List? ?? const []),
+        pages: [
+          for (final page in map['pages'] as List? ?? const [])
+            loggedPageFromJson(page),
+        ],
         timedOut: map['timedOut'] as bool? ?? false,
       );
 }
 
 /// 開一個書源 worker 試抓 [source]（同書源校驗，ADR 0033）：用 [keyword]
-/// 搜尋，從第一本書一路抓到第一章正文。到了 [timeout] 還沒抓完就結束
+/// 搜尋，從第一本書一路抓到第一章正文。[keyword] 照書源除錯的寫法也可以
+/// 從中間開始：詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
 /// worker，傳回 [SourceProbeReport.timedOut]；[cancelToken] 取消時也是。
 Future<SourceProbeReport> probeSource(
   BookSource source, {
@@ -217,9 +221,9 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   ).toMap();
 };
 
-/// AI 看的一頁：給 AI 的 [text]（請求與精簡過的回應）與寫進完整紀錄的
-/// [pages]（同樣的請求與整頁原文）。
-typedef AiPage = ({String text, List<String> pages});
+/// AI 看的一頁：給 AI 的 [lines]（請求與精簡過的回應）與一筆對一筆、帶整頁
+/// 原文的 [pages]（[RequestLog.pages]）。
+typedef AiPage = ({List<String> lines, List<LoggedPage> pages});
 
 /// AI 要看的一頁（ADR 0054）：照書源的標頭與 Cookie 抓 [url]，傳回請求與網站
 /// 的回應（精簡過的網頁，最多 [pageLength] 字），與整頁原文。[url] 照書源網址規則的寫法
@@ -240,11 +244,11 @@ Future<AiPage> fetchPageForAi(
       withDictionaries: false,
     );
   } catch (error) {
-    return (text: '抓不了：$error', pages: const <String>[]);
+    return (lines: ['抓不了：$error'], pages: const <LoggedPage>[]);
   }
   try {
     if (cancelToken?.isCancelled ?? false) {
-      return (text: '已停止', pages: const <String>[]);
+      return (lines: const ['已停止'], pages: const <LoggedPage>[]);
     }
     unawaited(
       cancelToken?.whenCancel.then((_) => worker.kill(StateError('抓網頁已停止'))),
@@ -258,15 +262,17 @@ Future<AiPage> fetchPageForAi(
           timeout,
           onTimeout: () => const {
             'lines': ['（超過時間，沒抓到）'],
-            'pages': <String>[],
+            'pages': <Object?>[],
           },
         );
     return (
-      text: (map['lines']! as List).join('\n'),
-      pages: List<String>.from(map['pages']! as List),
+      lines: List<String>.from(map['lines']! as List),
+      pages: [
+        for (final page in map['pages']! as List) loggedPageFromJson(page),
+      ],
     );
   } catch (error) {
-    return (text: '抓不了：$error', pages: const <String>[]);
+    return (lines: ['抓不了：$error'], pages: const <LoggedPage>[]);
   } finally {
     worker.kill(StateError('抓網頁已結束'));
   }
@@ -295,9 +301,12 @@ Future<Map<String, Object?>> Function(CancelToken) _fetchTask(
     );
   } catch (error) {
     requests.lines.add('錯誤：$error');
-    requests.pages.add('錯誤：$error');
+    requests.pages.add((line: '錯誤：$error', body: null));
   }
-  return {'lines': requests.lines, 'pages': requests.pages};
+  return {
+    'lines': requests.lines,
+    'pages': [for (final page in requests.pages) loggedPageToJson(page)],
+  };
 };
 
 /// 搜尋結果跟關鍵字有沒有關係：用 [keyword] 與一個不可能有的詞各搜一次，
@@ -330,3 +339,17 @@ Future<bool> searchFollowsKeyword(
 
 /// 不可能搜到書的詞。
 const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
+
+/// 試抓從哪一段開始時傳給 [probeSource] 的 keyword：`search` 用 [keyword]
+/// 搜尋，`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的寫法）。
+/// 不認得的段或少了網址是 null。
+String? probeStart(String from, {required String keyword, String? url}) {
+  if (from == 'search') return keyword;
+  if (url == null || url.trim().isEmpty) return null;
+  return switch (from) {
+    'info' => url,
+    'toc' => '++$url',
+    'content' => '--$url',
+    _ => null,
+  };
+}

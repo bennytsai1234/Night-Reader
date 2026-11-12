@@ -181,7 +181,6 @@ void main() {
     expect(probe.stagesReached, '搜尋、正文');
     expect(probe.pageCount, 1);
     expect(aiRepairProbeReply(probe), startsWith('# 試抓結果：正文 3214 字'));
-    expect(aiRepairBudget(testsLeft: 1, fetchesLeft: 3), contains('最後一次試抓'));
   });
 
   test('a probe that reaches only a line of text has not succeeded', () {

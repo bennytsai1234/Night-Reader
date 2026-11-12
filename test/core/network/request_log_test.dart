@@ -115,10 +115,18 @@ void main() {
       recordResponse(_response('https://site.example/c/1', 200, page));
     });
 
-    expect(log.pages.first, 'https://site.example/c/1');
+    expect(log.pages, hasLength(log.lines.length), reason: '一筆對一筆');
+    expect(log.pages.first, (line: 'https://site.example/c/1', body: null));
+    expect(log.pages.last.line, log.lines.last);
+    expect(log.pages.last.body, page);
     expect(
-      log.pages.last,
-      '  ← https://site.example/c/1 200，${page.length} 字\n$page',
+      log.lines.last,
+      matches(
+        RegExp(
+          '^  ← https://site.example/c/1 200，${page.length} 字，精簡後 \\d+ 字：',
+        ),
+      ),
+      reason: 'AI 看得到精簡後整頁有多長',
     );
     expect(log.lines.last, isNot(contains('go()')));
     expect(log.lines.last.length, lessThan(200));

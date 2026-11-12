@@ -28,7 +28,13 @@ void main() {
           'https://www.zhizhuxs.com/search/?searchkey=x',
           '  ← https://www.zhizhuxs.com/search/ 200 text/html，10837 位元組：$page',
         ],
-        pages: ['  ← https://www.zhizhuxs.com/search/ 200 text/html\n$page'],
+        pages: [
+          (line: 'POST https://www.zhizhuxs.com/search/', body: null),
+          (
+            line: '  ← https://www.zhizhuxs.com/search/ 200 text/html',
+            body: page,
+          ),
+        ],
       );
 
     final summary = record.summary;

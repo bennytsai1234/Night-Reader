@@ -117,7 +117,7 @@ Future<(List<String>, int)> _contentRequestLogInSourceIsolate(
 
 /// 同 [_contentRequestLogInSourceIsolate]，照 AI 修書源試抓的方式記：網頁
 /// 精簡過給 AI 看，另外留整頁原文；傳回兩份。
-Future<(List<String>, List<String>)> _probeRequestLogInSourceIsolate(
+Future<(List<String>, List<LoggedPage>)> _probeRequestLogInSourceIsolate(
   Map<String, dynamic> sourceJson,
   String chapterUrl,
 ) => SourceIsolate.run((_) async {
@@ -1123,7 +1123,7 @@ void main() {
       expect(reply, contains('第一章的正文'));
       expect(reply, isNot(contains('ads.example')));
       expect(
-        pages.singleWhere((l) => l.contains('/scripted ')),
+        pages.singleWhere((p) => p.line.contains('/scripted ')).body,
         contains('<script>location="https://ads.example/go"</script>'),
       );
     }, skip: quickJsUnavailableReason());

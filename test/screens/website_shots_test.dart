@@ -563,7 +563,7 @@ AiRepairSession _aiRepairSession() {
       effort: '',
     ),
     check: (source, _) async => checked(source),
-    probe: (_, _) async => probe,
+    probe: (_, _, {start}) async => probe,
     keywordCheck: (_, _) async => true,
     ask: (_, _) async => replies[next++],
     apply: (_, _) async {},

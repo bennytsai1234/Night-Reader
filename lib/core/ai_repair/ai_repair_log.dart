@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:intl/intl.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 
@@ -87,10 +88,14 @@ final class AiRepairLog {
 
   /// 送出的請求與網站的回應：摘要裡每個回應只留開頭 [_responseHead] 字，
   /// 前面出現過一樣的回應寫「內容同前」；完整紀錄寫 [pages] 的整頁原文。
-  void requests(List<String> lines, {List<String> pages = const []}) {
+  void requests(List<String> lines, {List<LoggedPage> pages = const []}) {
     if (lines.isNotEmpty) note(lines.map(_shortLine).join('\n'));
     if (pages.isNotEmpty) {
-      full('### 請求與網站回的原文\n${pages.join('\n')}');
+      final text = [
+        for (final page in pages)
+          page.body == null ? page.line : '${page.line}\n${page.body}',
+      ].join('\n');
+      full('### 請求與網站回的原文\n$text');
     } else if (lines.isNotEmpty) {
       full(lines.join('\n'));
     }
