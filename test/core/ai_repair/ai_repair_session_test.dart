@@ -466,54 +466,37 @@ void main() {
     expect(asked[1], asked[0], reason: '同樣的話再問一次');
   });
 
-  test(
-    'an AI going in circles is restarted with a fresh conversation; after '
-    'the last try the source is left as not finished, not as unfixable',
-    () async {
-      final logs = Directory.systemTemp.createTempSync('ai-repair-log');
-      addTearDown(() => logs.deleteSync(recursive: true));
-      final look = jsonEncode({'action': 'fetch', 'url': '/s', 'note': '再看看'});
-      final s = session(
-        [_source('https://site.example')],
-        replies: List.filled(
-          AiAgentKnobs.attempts * AiAgentKnobs.sameCallLimit,
-          look,
-        ),
-        logs: logs,
-      );
+  test('an AI going in circles stops as not finished, not as unfixable, with '
+      'the stats line for the evaluation table', () async {
+    final logs = Directory.systemTemp.createTempSync('ai-repair-log');
+    addTearDown(() => logs.deleteSync(recursive: true));
+    final look = jsonEncode({'action': 'fetch', 'url': '/s', 'note': '再看看'});
+    final s = session(
+      [_source('https://site.example')],
+      replies: List.filled(AiAgentKnobs.sameCallLimit, look),
+      logs: logs,
+    );
 
-      await s.start();
+    await s.start();
 
-      final job = s.job;
-      expect(
-        asked,
-        hasLength(AiAgentKnobs.attempts * AiAgentKnobs.sameCallLimit),
-      );
-      expect(
-        asked[AiAgentKnobs.sameCallLimit],
-        asked.first,
-        reason: '重跑從同一個開場、全新的對話開始',
-      );
-      expect(asked[2].last.content, contains('這是同樣參數的第 2 次'));
-      expect(job.outcome, AiRepairOutcome.failed);
-      expect(job.confirmedUnfixable, isFalse);
-      expect(job.explanation, contains('跑了 ${AiAgentKnobs.attempts} 次都沒有結果'));
-      expect([
-        for (final step in job.steps) step.title,
-      ], containsAll(['重新開始（第 2 次）', '重新開始（第 3 次）']));
-      expect(s.log.summary, contains('無法確認'));
-      final full = (await s.log.file())!.readAsStringSync();
-      final stats = full
-          .split('\n')
-          .singleWhere((line) => line.startsWith(aiRepairStatsMarker));
-      final map = jsonDecode(
-        stats.substring(aiRepairStatsMarker.length),
-      ) as Map<String, dynamic>;
-      expect(map['end'], 'unconfirmed');
-      expect(map['attempts'], AiAgentKnobs.attempts);
-      expect(map['promptVersion'], aiRepairPromptVersion);
-    },
-  );
+    final job = s.job;
+    expect(asked, hasLength(AiAgentKnobs.sameCallLimit));
+    expect(asked[2].last.content, contains('這是同樣參數的第 2 次，結果與前幾次相同'));
+    expect(job.outcome, AiRepairOutcome.failed);
+    expect(job.confirmedUnfixable, isFalse);
+    expect(job.explanation, contains('同樣的指令與參數第 4 次'));
+    expect(s.log.summary, contains('無法確認'));
+    final full = (await s.log.file())!.readAsStringSync();
+    final stats = full
+        .split('\n')
+        .singleWhere((line) => line.startsWith(aiRepairStatsMarker));
+    final map = jsonDecode(
+      stats.substring(aiRepairStatsMarker.length),
+    ) as Map<String, dynamic>;
+    expect(map['end'], 'unconfirmed');
+    expect(map['attempts'], AiAgentKnobs.attempts);
+    expect(map['promptVersion'], aiRepairPromptVersion);
+  });
 
   test('giving up because the site is gone is taken at once, without a '
       'try', () async {

@@ -14,7 +14,7 @@ sealed class AiRepairCommand {
 
   /// 從 AI 回的話取出指令；讀不懂時是 null。
   static AiRepairCommand? parse(String reply) {
-    final json = extractJsonObject(reply);
+    final json = aiRepairCommandJson(reply);
     if (json == null) return null;
     final note = (json['note'] ?? json['reason'])?.toString().trim() ?? '';
     final source = json['source'];
@@ -200,6 +200,37 @@ String aiRepairCommandKey(Map<String, dynamic> json) {
     return '${sorted(command)}';
   }
 }
+
+/// AI 回的指令（JSON 物件）。模型有時照自己內建的工具呼叫格式回，例如
+/// DeepSeek V4 的 `<｜DSML｜invoke name="fetch"><｜DSML｜parameter name="url"
+/// string="true">/s</｜DSML｜parameter>`（2026-11-12 實跑蜘蛛小說網的第 1
+/// 輪）：沒有 JSON 物件時照這種格式讀成 `{"action":"fetch","url":"/s"}`。
+Map<String, dynamic>? aiRepairCommandJson(String reply) {
+  final json = extractJsonObject(reply);
+  if (json != null) return json;
+  final invoke = _invoke.firstMatch(reply);
+  if (invoke == null) return null;
+  final command = <String, dynamic>{'action': invoke.group(1)};
+  for (final parameter in _parameter.allMatches(reply, invoke.end)) {
+    final value = parameter.group(3)!.trim();
+    if (parameter.group(2) == 'true') {
+      command[parameter.group(1)!] = value;
+      continue;
+    }
+    try {
+      command[parameter.group(1)!] = jsonDecode(value);
+    } on FormatException {
+      command[parameter.group(1)!] = value;
+    }
+  }
+  return command;
+}
+
+final RegExp _invoke = RegExp(r'invoke name="(\w+)"');
+final RegExp _parameter = RegExp(
+  r'parameter name="(\w+)"(?:\s+string="(true|false)")?\s*>(.*?)</[^>]*?parameter>',
+  dotAll: true,
+);
 
 /// AI 回的話與貼回的內容最多幾個字：一個書源的 JSON 遠小於這個。
 const int aiRepairMaxReplyLength = 300000;
@@ -455,7 +486,7 @@ const String _rules = '''
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
-  - 沒有 Android 的類別（android.util.Base64 這類）。試抓報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()），或用了這裡沒有的函式。
+  - 沒有 Android 的類別（android.util.Base64 這類）。字串是 JS 字串：長度是 .length，不是 Java 的 .length()。報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()）、對字串呼叫 Java 的方法，或用了這裡沒有的函式。
 - 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。
 ''';
 

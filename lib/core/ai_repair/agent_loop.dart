@@ -33,9 +33,9 @@ abstract class AgentTask<C> {
   /// 執行一個指令；傳回的文字是要接進對話的事實，秘密已經遮掉。
   Future<AgentResult> execute(C command);
 
-  /// 一輪開始：[round] 從 1 數起，跨重跑接著數；[messages] 是這輪要送出的
-  /// 全部對話。
-  void roundStarted(int round, List<AiMessage> messages) {}
+  /// 一輪開始：第 [attempt] 次的第 [round] 輪（每次從 1 數起）；[messages]
+  /// 是這輪要送出的全部對話。
+  void roundStarted(int attempt, int round, List<AiMessage> messages) {}
 
   /// 一輪問完：成功時有 [reply]，沒有時 [error] 說出了什麼事。
   void roundEnded(AgentRoundRecord record) {}
@@ -84,10 +84,12 @@ sealed class AgentResult {
   const AgentResult();
 }
 
-/// 工具的結果，接進對話。
+/// 工具的結果，接進對話。[same] 是拿來比「結果與前幾次相同」的那一份
+/// （例如去掉每次都不同的頁碼）；沒給時比 [text]。
 final class AgentToolResult extends AgentResult {
-  const AgentToolResult(this.text);
+  const AgentToolResult(this.text, {this.same});
   final String text;
+  final String? same;
 }
 
 /// 參數讀得懂 JSON、但內容用不了（例如改過的書源組不起來）：和讀不懂的指令
@@ -197,12 +199,13 @@ typedef AgentAsk = Future<AiReply> Function(
 
 /// 跑一件：照 [AgentTask] 開場，一輪一輪問 [ask]，直到有結果。
 /// [cancelToken] 取消時是 [AgentEndKind.cancelled]；[hasBudget] 不再成立時
-/// 不再問，是 [AgentEndKind.failed]。
+/// 不再問，是 [AgentEndKind.failed]。[attempts] 是含第一次最多跑幾次。
 Future<AgentEnd> runAgent<C>(
   AgentTask<C> task, {
   required AgentAsk ask,
   required CancelToken cancelToken,
   bool Function()? hasBudget,
+  int attempts = AiAgentKnobs.attempts,
 }) async {
   final stats = AgentStats();
   AgentEnd end(AgentEndKind kind, String reason) =>
@@ -223,10 +226,10 @@ Future<AgentEnd> runAgent<C>(
         return end(kind, reason);
       case _Retry(:final reason):
         stats.restarts.add(reason);
-        if (attempt >= AiAgentKnobs.attempts) {
+        if (attempt >= attempts) {
           return end(
             AgentEndKind.unconfirmed,
-            '跑了 $attempt 次都沒有結果，最後一次：$reason',
+            attempt == 1 ? '沒有結果：$reason' : '跑了 $attempt 次都沒有結果，最後一次：$reason',
           );
         }
         task.restart(attempt + 1, reason);
@@ -290,7 +293,7 @@ Future<_AttemptEnd> _attempt<C>(
     }
     round++;
     stats.rounds++;
-    task.roundStarted(stats.rounds, messages);
+    task.roundStarted(attempt, round, messages);
     final sentChars = messages.fold(0, (sum, m) => sum + m.content.length);
     final watch = Stopwatch()..start();
     void record({AiReply? reply, String? error}) {
@@ -390,9 +393,9 @@ Future<_AttemptEnd> _attempt<C>(
               return _Retry('交出連續被退 $rejections 次');
             }
             fact('$reason${_repeated(count, lastResult, key, reason)}');
-          case AgentToolResult(:final text):
+          case AgentToolResult(:final text, :final same):
             badCommand = 0;
-            fact('$text${_repeated(count, lastResult, key, text)}');
+            fact('$text${_repeated(count, lastResult, key, same ?? text)}');
         }
     }
   }

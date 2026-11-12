@@ -57,8 +57,13 @@ void main() {
   late _Task task;
   setUp(() => task = _Task());
 
-  Future<AgentEnd> run(AgentAsk ask, {CancelToken? cancel}) =>
-      runAgent(task, ask: ask, cancelToken: cancel ?? CancelToken());
+  // 重跑的機制照技能的預設 3 次測；目前設定是一次（AiAgentKnobs.attempts）。
+  Future<AgentEnd> run(AgentAsk ask, {CancelToken? cancel}) => runAgent(
+    task,
+    ask: ask,
+    cancelToken: cancel ?? CancelToken(),
+    attempts: 3,
+  );
 
   test('a submission that passes completes the case', () async {
     final end = await run(_ai(['tool:a', 'submit:ok']));
@@ -89,6 +94,7 @@ void main() {
     final stalls = await runAgent(
       again,
       cancelToken: CancelToken(),
+      attempts: 3,
       ask: _ai([
         const AiStalled('卡住'),
         const AiStalled('卡住'),
@@ -145,16 +151,24 @@ void main() {
       task,
       cancelToken: CancelToken(),
       ask: (_, _) async => _reply('tool:${n++}'),
+      attempts: 3,
     );
     expect(task.restarts.first, '用完 ${AiAgentKnobs.maxRounds} 輪還沒交出');
     expect(task.facts, contains(endsWith('（剩 1 輪）')));
-    expect(
-      end.kind,
-      AgentEndKind.unconfirmed,
-      reason: '每次都用完，跑滿 ${AiAgentKnobs.attempts} 次',
+    expect(end.kind, AgentEndKind.unconfirmed, reason: '每次都用完，跑滿 3 次');
+    expect(end.stats.attempts, 3);
+    expect(end.reason, startsWith('跑了 3 次都沒有結果'));
+
+    // 目前的設定只跑一次：用完就結束，不重跑。
+    var m = 0;
+    final once = await runAgent(
+      _Task(),
+      cancelToken: CancelToken(),
+      ask: (_, _) async => _reply('tool:${m++}'),
     );
-    expect(end.stats.attempts, AiAgentKnobs.attempts);
-    expect(end.reason, startsWith('跑了 ${AiAgentKnobs.attempts} 次都沒有結果'));
+    expect(once.stats.attempts, 1);
+    expect(once.stats.rounds, AiAgentKnobs.maxRounds);
+    expect(once.reason, '沒有結果：用完 ${AiAgentKnobs.maxRounds} 輪還沒交出');
   });
 
   test('a busy service is retried with a fresh conversation; a wrong key '

@@ -185,13 +185,24 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   }
   final status = response.statusCode;
   final type = response.headers.value(Headers.contentTypeHeader);
+  final cache = _cacheNote(response.headers);
   final head =
       '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
-      '${type == null ? '' : ' $type'}';
+      '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}';
   final empty = _recordBody(log, head, response.data);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
+}
+
+/// 回應是網站前面的快取伺服器給的時，寫出快取的狀態，例如「（快取 HIT，
+/// 存了 120 秒）」：被快取住的錯誤頁（2026-11-12 蜘蛛小說網的「搜索间隔」）
+/// 不管怎麼改參數都一樣，看標頭才知道。沒有這些標頭是 null。
+String? _cacheNote(Headers headers) {
+  final hit = headers.value('cf-cache-status') ?? headers.value('x-cache');
+  if (hit == null || hit.trim().isEmpty) return null;
+  final age = headers.value('age');
+  return '（快取 ${hit.trim()}${age == null ? '' : '，存了 ${age.trim()} 秒'}）';
 }
 
 /// 記下 WebView 渲染出的網頁：網址、內容長度與開頭。WebView 拿不到狀態碼，
@@ -220,15 +231,25 @@ bool _recordBody(RequestLog log, String head, Object? data) {
     log._add('$head，沒有內容');
     return true;
   }
-  final collapsed = log.digestPages
-      ? digestPage(text)
-      : text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  final raw = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  var collapsed = log.digestPages ? digestPage(text) : raw;
+  // 很短的頁面精簡後沒有任何字（整頁只有一段 alert 程式，例如「搜索间隔:
+  // 30 秒」）：給原文，不然看的人要再讀一次原文才知道網站回了什麼。
+  final tooShort =
+      log.digestPages &&
+      raw.length <= 2000 &&
+      collapsed.replaceAll(RegExp(r'<[^>]*>|\s'), '').isEmpty;
+  if (tooShort) collapsed = raw;
   final preview = log.responsePreview!;
   final shown = collapsed.length > preview
       ? '${collapsed.substring(0, preview)}…'
       : collapsed;
   // 給 AI 看的寫出精簡後共幾字：它才知道後面還有沒有。
-  final digested = log.digestPages ? '，精簡後 ${collapsed.length} 字' : '';
+  final digested = !log.digestPages
+      ? ''
+      : tooShort
+      ? '，太短不精簡'
+      : '，精簡後 ${collapsed.length} 字';
   // 防護頁與轉址頁精簡後幾乎是空的，寫出它是什麼（[pageNoteOf]）。
   final note = pageNoteOf(text);
   log._add(

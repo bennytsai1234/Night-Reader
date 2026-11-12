@@ -73,6 +73,24 @@ void main() {
       expect((command! as AiGiveUp).reason, r'規則 {{key}} 的 "}" 不對');
     });
 
+    test('a command in the model\'s own tool-call format is read too', () {
+      // 2026-11-12 deepseek-v4.1-flash 第 1 輪回的原樣。
+      const reply =
+          '<｜｜DSML｜｜ calls>\n'
+          '<｜｜DSML｜｜ invoke name="fetch">\n'
+          '<｜｜DSML｜｜ parameter name="url" string="true">/search/</｜｜DSML｜｜ parameter>\n'
+          '<｜｜DSML｜｜ parameter name="note" string="true">看表單</｜｜DSML｜｜ parameter>\n'
+          '</｜｜DSML｜｜ invoke>\n'
+          '</｜｜DSML｜｜ calls>';
+      final command = AiRepairCommand.parse(reply);
+      expect((command! as AiFetch).url, '/search/');
+
+      const read =
+          '<｜DSML｜invoke name="read"><｜DSML｜parameter name="page" '
+          'string="false">3</｜DSML｜parameter></｜DSML｜invoke>';
+      expect((AiRepairCommand.parse(read)! as AiRead).page, 3);
+    });
+
     test('unknown actions and broken JSON are not commands', () {
       expect(AiRepairCommand.parse('我覺得是正文規則的問題'), isNull);
       expect(AiRepairCommand.parse('{"action":"dance"}'), isNull);

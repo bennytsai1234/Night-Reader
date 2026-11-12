@@ -44,9 +44,51 @@ void main() {
     expect(
       log.lines.single,
       startsWith(
-        '  ← https://site.example/ 200，92 字，精簡後 26 字'
-        '（這頁用程式轉到 https://new.example/）',
+        '  ← https://site.example/ 200，92 字，太短不精簡'
+        '（這頁用程式轉到 https://new.example/）：<html><head><script>',
       ),
+    );
+  });
+
+  test('a tiny page that is only a script shows its text instead of an empty '
+      'digest', () async {
+    final log = RequestLog(responsePreview: 6000, digestPages: true);
+    await log.run(() async {
+      recordResponse(
+        _response(
+          'https://site.example/search/',
+          200,
+          '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
+        ),
+      );
+    });
+
+    expect(
+      log.lines.single,
+      '  ← https://site.example/search/ 200，59 字，太短不精簡：'
+      '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
+    );
+  });
+
+  test('a reply from a cache in front of the site says so', () async {
+    final log = RequestLog(responsePreview: 6000, digestPages: true);
+    await log.run(() async {
+      recordResponse(
+        Response<dynamic>(
+          requestOptions: RequestOptions(path: 'https://site.example/search/'),
+          statusCode: 200,
+          data: '<p>搜索间隔</p>',
+          headers: Headers.fromMap({
+            'x-cache': ['HIT'],
+            'age': ['120'],
+          }),
+        ),
+      );
+    });
+
+    expect(
+      log.lines.single,
+      startsWith('  ← https://site.example/search/ 200 （快取 HIT，存了 120 秒）'),
     );
   });
 

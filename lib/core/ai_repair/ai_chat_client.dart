@@ -323,8 +323,10 @@ abstract final class AiAgentKnobs {
   /// 剩這麼多輪時，結果後面附上「剩 N 輪」。
   static const int warnRoundsLeft = 5;
 
-  /// 一件含第一次最多跑幾次（技能的預設）。
-  static const int attempts = 3;
+  /// 一件含第一次最多跑幾次。技能的預設是 3；使用者 2026-11-12 看了實跑
+  /// （蜘蛛小說網第 1 次 36 輪沒結果，再跑兩次多半一樣白燒）要先只跑一次，
+  /// 等一次跑得通再談。
+  static const int attempts = 1;
 
   /// 判未收斂的門檻（技能的預設）：連續幾輪沒有指令、連續幾輪指令讀不懂、
   /// 同樣的指令與參數第幾次、交出連續被退幾次、連續卡住幾次就整件重跑。

@@ -930,10 +930,11 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   }
 
   @override
-  void roundStarted(int round, List<AiMessage> messages) {
-    job._rounds = round;
-    step = s._addStep(job, '第 $round 輪', detail: 'AI 回覆中…');
-    s.log.section('第 $round 輪', round: true);
+  void roundStarted(int attempt, int round, List<AiMessage> messages) {
+    job._rounds++;
+    final title = attempt == 1 ? '第 $round 輪' : '第 $attempt 次 · 第 $round 輪';
+    step = s._addStep(job, title, detail: 'AI 回覆中…');
+    s.log.section(title, round: true);
     // 完整紀錄照順序寫下每一句，每句只寫一次：對話照原樣一路接下去，每輪
     // 送出的就是到那時為止的全部。
     for (final message in messages.skip(logged)) {
@@ -968,7 +969,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   @override
   AgentParse<AiRepairCommand> parse(String reply) {
-    final json = extractJsonObject(reply);
+    final json = aiRepairCommandJson(reply);
     final command = json == null ? null : AiRepairCommand.parse(reply);
     if (command == null) {
       final noJson = json == null && !reply.contains('{');
@@ -1001,7 +1002,15 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     '已停止',
   );
 
-  AgentToolResult answer(String text) => AgentToolResult(redact(text));
+  /// 工具的結果；比「結果與前幾次相同」時不看頁碼：同樣的網頁每抓一次就
+  /// 多一個頁碼（2026-11-12 實跑時，一樣的回應因為頁 4、頁 6 被說成不同）。
+  AgentToolResult answer(String text) {
+    final redacted = redact(text);
+    return AgentToolResult(
+      redacted,
+      same: redacted.replaceAll(RegExp(r'頁 \d+'), '頁 N'),
+    );
+  }
 
   @override
   Future<AgentResult> execute(AiRepairCommand command) async {
