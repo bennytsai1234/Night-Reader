@@ -204,12 +204,14 @@ String aiRepairCommandKey(Map<String, dynamic> json) {
 /// AI 回的指令（JSON 物件）。模型有時照自己內建的工具呼叫格式回，例如
 /// DeepSeek V4 的 `<｜DSML｜invoke name="fetch"><｜DSML｜parameter name="url"
 /// string="true">/s</｜DSML｜parameter>`（2026-11-12 實跑蜘蛛小說網的第 1
-/// 輪）：沒有 JSON 物件時照這種格式讀成 `{"action":"fetch","url":"/s"}`。
+/// 輪）：照這種格式讀成 `{"action":"fetch","url":"/s"}`。參數裡可能夾著
+/// JSON（parse 的 patch，同一天話本小說的第 1 輪），所以先找到的 JSON 物件
+/// 沒有 action 時也照這種格式讀。
 Map<String, dynamic>? aiRepairCommandJson(String reply) {
   final json = extractJsonObject(reply);
-  if (json != null) return json;
+  if (json != null && json.containsKey('action')) return json;
   final invoke = _invoke.firstMatch(reply);
-  if (invoke == null) return null;
+  if (invoke == null) return json;
   final command = <String, dynamic>{'action': invoke.group(1)};
   for (final parameter in _parameter.allMatches(reply, invoke.end)) {
     final value = parameter.group(3)!.trim();

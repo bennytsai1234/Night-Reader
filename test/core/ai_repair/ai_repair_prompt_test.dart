@@ -89,6 +89,24 @@ void main() {
           '<｜DSML｜invoke name="read"><｜DSML｜parameter name="page" '
           'string="false">3</｜DSML｜parameter></｜DSML｜invoke>';
       expect((AiRepairCommand.parse(read)! as AiRead).page, 3);
+
+      // 參數裡夾著 JSON（2026-11-12 話本小說第 1 輪的原樣）。
+      const parse =
+          '<｜DSML｜ calls>\n'
+          '<｜DSML｜ invoke name="parse">\n'
+          '<｜DSML｜ parameter name="page" string="false">3</｜DSML｜ parameter>\n'
+          '<｜DSML｜ parameter name="as" string="true">toc</｜DSML｜ parameter>\n'
+          '<｜DSML｜ parameter name="patch" string="false">{"ruleToc": '
+          '{"chapterList": ".chapter-row", "chapterName": "a@text"}}'
+          '</｜DSML｜ parameter>\n'
+          '</｜DSML｜ invoke>\n'
+          '</｜DSML｜ calls>';
+      final parsed = AiRepairCommand.parse(parse)! as AiParse;
+      expect(parsed.page, 3);
+      expect(parsed.stage, 'toc');
+      expect(parsed.change!.patch, {
+        'ruleToc': {'chapterList': '.chapter-row', 'chapterName': 'a@text'},
+      });
     });
 
     test('unknown actions and broken JSON are not commands', () {
