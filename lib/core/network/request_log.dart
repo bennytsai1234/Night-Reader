@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/page_digest.dart';
+import 'package:night_reader/core/network/page_notes.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 
 /// 一份 [RequestLog] 記什麼；跨 isolate 送得過去（規則 JS 要等的請求在網路
@@ -228,8 +229,11 @@ bool _recordBody(RequestLog log, String head, Object? data) {
       : collapsed;
   // 給 AI 看的寫出精簡後共幾字：它才知道後面還有沒有。
   final digested = log.digestPages ? '，精簡後 ${collapsed.length} 字' : '';
+  // 防護頁與轉址頁精簡後幾乎是空的，寫出它是什麼（[pageNoteOf]）。
+  final note = pageNoteOf(text);
   log._add(
-    '$head，$length$digested${shown.isEmpty ? '' : '：$shown'}',
+    '$head，$length$digested${note == null ? '' : '（$note）'}'
+    '${shown.isEmpty ? '' : '：$shown'}',
     full ? text : null,
   );
   return collapsed.isEmpty;

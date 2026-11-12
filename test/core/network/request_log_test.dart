@@ -27,6 +27,29 @@ void main() {
     ]);
   });
 
+  test('a page that only redirects by script says where it goes, even after '
+      'the script is digested away', () async {
+    final log = RequestLog(responsePreview: 6000, digestPages: true);
+    await log.run(() async {
+      recordResponse(
+        _response(
+          'https://site.example/',
+          200,
+          '<html><head><script>location.href="https://new.example/"</script>'
+              '</head><body></body></html>',
+        ),
+      );
+    });
+
+    expect(
+      log.lines.single,
+      startsWith(
+        '  ← https://site.example/ 200，92 字，精簡後 26 字'
+        '（這頁用程式轉到 https://new.example/）',
+      ),
+    );
+  });
+
   test('busy, empty and unreachable count as the site faltering', () async {
     final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
     await log.run(() async {

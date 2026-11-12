@@ -1121,7 +1121,9 @@ void main() {
 
       final reply = lines.singleWhere((l) => l.contains('/scripted '));
       expect(reply, contains('第一章的正文'));
-      expect(reply, isNot(contains('ads.example')));
+      // 程式拿掉了，只寫出它會轉到哪裡（page_notes）。
+      expect(reply, isNot(contains('<script')));
+      expect(reply, contains('（這頁用程式轉到 https://ads.example/go）'));
       expect(
         pages.singleWhere((p) => p.line.contains('/scripted ')).body,
         contains('<script>location="https://ads.example/go"</script>'),
