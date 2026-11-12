@@ -10,6 +10,7 @@
 /// - 給了 `NR_CASES`（案件集，`test/live/ai_repair_cases.json`）時，`NR_SOURCES`
 ///   是使用者的整份匯出檔，照案件集的名稱與網址挑出書源；跑完每件照預期答案
 ///   算對錯（修好了沒有、正文夠不夠長），印出表、寫進結果檔的 `score`。
+///   `NR_ONLY=<名稱,名稱>` 只跑案件集裡這幾件（照 `name`）。
 ///   `NR_TOKEN_BUDGET` 是整批的用量上限（預設 100 萬，0 是不限）。
 /// - `NR_AI_URL` 是服務網址，預設 DeepSeek（`https://api.deepseek.com`）；
 ///   OpenCode Go 是 `https://opencode.ai/inference/go/openai/v1`。`NR_AI_MODEL`
@@ -105,6 +106,7 @@ void main() {
       BookSource.fromJson(json as Map<String, dynamic>),
   ];
   final casesPath = env['NR_CASES'];
+  final only = env['NR_ONLY']?.split(',').map((name) => name.trim()).toSet();
   final cases = casesPath == null
       ? const <Map<String, dynamic>>[]
       : [
@@ -112,7 +114,8 @@ void main() {
               in (jsonDecode(File(casesPath).readAsStringSync())
                       as Map<String, dynamic>)['cases']
                   as List)
-            item as Map<String, dynamic>,
+            if (only == null || only.contains((item as Map)['name']))
+              item as Map<String, dynamic>,
         ];
   final sources = cases.isEmpty
       ? all
