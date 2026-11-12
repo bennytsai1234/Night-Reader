@@ -123,6 +123,11 @@ void main() {
     });
     final watch = Stopwatch()..start();
     await batch.start();
+    // 修復紀錄是排隊寫進檔案的：等最後幾段（結果、統計）寫完再結束，不然
+    // 測試一結束程序就關了，紀錄停在最後一輪的中間。
+    for (final item in batch.items) {
+      await item.session?.log.file();
+    }
     final rows = [
       for (final item in batch.items)
         {
