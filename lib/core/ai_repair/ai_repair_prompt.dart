@@ -99,6 +99,51 @@ Map<String, dynamic> applyAiChange(
   return out;
 }
 
+/// AI 的改動用了書源沒有的欄位時，說哪一個不對、可以用哪些；沒有是 null。
+/// 不擋的話寫錯的欄位照收、什麼都沒改，解析與試抓的結果一片空白：2026-11-12
+/// AI 修涨姿势把詳情規則寫成 `ruleInfo`（Legado 叫 `ruleBookInfo`），兩次各
+/// 繞了好幾輪才發現。
+String? aiChangeProblem(AiChange change) {
+  final fields = change.source ?? change.patch ?? const {};
+  final unknown = [
+    for (final key in fields.keys)
+      if (!_sourceFields.contains(key)) key,
+  ];
+  if (unknown.isNotEmpty) {
+    return '書源沒有 ${unknown.join('、')} 這個欄位。規則物件是 '
+        '${_ruleFields.keys.join('、')}；其他欄位：'
+        '${_sourceFields.where((key) => !_ruleFields.containsKey(key)).join('、')}';
+  }
+  for (final MapEntry(:key, :value) in fields.entries) {
+    final allowed = _ruleFields[key];
+    if (allowed == null || value is! Map<String, dynamic>) continue;
+    final wrong = [
+      for (final item in value.keys)
+        if (!allowed.contains(item)) item,
+    ];
+    if (wrong.isNotEmpty) {
+      return '$key 沒有 ${wrong.join('、')} 這一項，可以用的：${allowed.join('、')}';
+    }
+  }
+  return null;
+}
+
+/// 書源 JSON 的欄位（Legado 3.0 格式，[BookSource.toJson]）。
+final Set<String> _sourceFields = BookSource.fromJson(const {
+  'bookSourceUrl': '',
+  'bookSourceName': '',
+}).toJson().keys.toSet();
+
+/// 每個規則物件可以寫的項目。
+final Map<String, Set<String>> _ruleFields = {
+  'ruleSearch': SearchRule().toJson().keys.toSet(),
+  'ruleExplore': ExploreRule().toJson().keys.toSet(),
+  'ruleBookInfo': BookInfoRule().toJson().keys.toSet(),
+  'ruleToc': TocRule().toJson().keys.toSet(),
+  'ruleContent': ContentRule().toJson().keys.toSet(),
+  'ruleReview': ReviewRule().toJson().keys.toSet(),
+};
+
 /// 打開一頁看看（網站首頁、搜尋頁這類），不改書源。
 final class AiFetch extends AiRepairCommand {
   const AiFetch(this.url, this.note);

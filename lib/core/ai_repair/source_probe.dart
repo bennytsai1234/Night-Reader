@@ -13,6 +13,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// 一次試抓：照書源除錯從搜尋一路抓到正文（[SourceDebugService]），記下除錯
 /// 紀錄與每個請求、網站回了什麼（每個回應留開頭 [responsePreview] 字），給
@@ -370,14 +371,22 @@ const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
 
 /// 試抓從哪一段開始時傳給 [probeSource] 的 keyword：`search` 用 [keyword]
 /// 搜尋，`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的寫法）。
-/// 不認得的段或少了網址是 null。
-String? probeStart(String from, {required String keyword, String? url}) {
+/// [url] 是相對網址時照 [baseUrl]（書源網址）補成完整的：書源除錯同 Legado，
+/// 不是 http 開頭的會當成搜尋關鍵字（2026-11-12 AI 給 `/551874.html` 從詳情頁
+/// 試抓，結果拿它去搜尋）。不認得的段或少了網址是 null。
+String? probeStart(
+  String from, {
+  required String keyword,
+  String? url,
+  String? baseUrl,
+}) {
   if (from == 'search') return keyword;
   if (url == null || url.trim().isEmpty) return null;
+  final page = NetworkUtils.getAbsoluteURL(baseUrl, url);
   return switch (from) {
-    'info' => url,
-    'toc' => '++$url',
-    'content' => '--$url',
+    'info' => page,
+    'toc' => '++$page',
+    'content' => '--$page',
     _ => null,
   };
 }

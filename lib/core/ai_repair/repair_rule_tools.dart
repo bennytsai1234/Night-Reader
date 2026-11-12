@@ -153,8 +153,21 @@ Future<String> _toc(BookSource source, String body, String url) async {
     if (chapters.length > _shownItems)
       '末章：${chapters.last.title} → ${chapters.last.url}',
     if (result.nextUrls.isNotEmpty) '下一頁：${result.nextUrls.join('、')}',
+    if (_usesBook(source.ruleToc?.toJson())) _noBook,
   ].join('\n');
 }
+
+/// 規則用到書的變數（`book.name`、`{{book.…}}` 這類）。
+bool _usesBook(Map<String, dynamic>? rule) =>
+    rule != null &&
+    rule.values.any((value) => value is String && value.contains('book.'));
+
+/// 解析只拿一頁、沒有書：規則用到書的變數時寫明，不然 AI 看到 0 章會以為規則
+/// 錯了（2026-11-12 涨姿势的章名是 `{{book.name}}`，解析成 0 章，AI 改了兩輪
+/// 規則才想到）。
+const String _noBook =
+    '（規則用到 book 的變數：解析只拿這一頁，沒有書，book.name 這類都是空的，'
+    '章名空的章節會被丟掉；要照真的書跑用 test）';
 
 Future<String> _content(BookSource source, String body, String url) async {
   final result = await ContentParser.parse(
@@ -174,6 +187,7 @@ Future<String> _content(BookSource source, String body, String url) async {
     '解析成正文頁：${content.length} 字，看起來是$kind',
     _clip(content, 300),
     if (result.nextUrls.isNotEmpty) '下一頁：${result.nextUrls.join('、')}',
+    if (_usesBook(source.ruleContent?.toJson())) _noBook,
   ].join('\n');
 }
 

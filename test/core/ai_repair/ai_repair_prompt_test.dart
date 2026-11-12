@@ -185,6 +185,39 @@ void main() {
     expect(current['searchUrl'], '/search?q={{key}}', reason: '原本的不動');
   });
 
+  test('a change naming a field the source does not have is turned back, '
+      'with the fields it can use', () {
+    // 2026-11-12 涨姿势：AI 把詳情規則寫成 ruleInfo，照收的話什麼都沒改。
+    final wrongRule = aiChangeProblem((
+      source: null,
+      patch: {
+        'ruleInfo': {'name': 'h1@text'},
+      },
+    ));
+    expect(wrongRule, contains('ruleInfo'));
+    expect(wrongRule, contains('ruleBookInfo'));
+    expect(
+      aiChangeProblem((
+        source: null,
+        patch: {
+          'ruleToc': {'chapterTitle': 'text'},
+        },
+      )),
+      allOf(contains('chapterTitle'), contains('chapterName')),
+    );
+    expect(
+      aiChangeProblem((
+        source: null,
+        patch: {
+          'ruleBookInfo': {'tocUrl': ''},
+          'searchUrl': '/s?q={{key}}',
+          'ruleSearch': '',
+        },
+      )),
+      isNull,
+    );
+  });
+
   test('the site address may only change at its start', () {
     expect(
       siteMovedUrl('http://www.a.cc/#🎃', 'https://a.cc/whatever'),

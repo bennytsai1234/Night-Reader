@@ -1018,12 +1018,21 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     return AgentInvalid(fact);
   }
 
-  /// 指令改過的書源；組不起來是 null。
+  /// 指令改過的書源；用了書源沒有的欄位或組不起來是 null（[badChangeReply]
+  /// 說哪裡不對）。
   (Map<String, dynamic>, BookSource)? candidateOf(AiChange change) {
+    if (aiChangeProblem(change) != null) return null;
     final json = applyAiChange(current, change);
     final candidate = AiRepairSession._candidateOrNull(original, json);
     return candidate == null ? null : (json, candidate);
   }
+
+  /// [candidateOf] 是 null 時回給 AI 的話。
+  static String badChangeReply(AiChange change) =>
+      switch (aiChangeProblem(change)) {
+        final problem? => '$aiRepairBadCall：$problem',
+        null => aiRepairBadSourceReply,
+      };
 
   static const AgentStopped _cancelled = AgentStopped(
     AgentEndKind.cancelled,
@@ -1103,7 +1112,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         } else {
           final parsed = candidateOf(change);
           if (parsed == null) {
-            return invalid('讀不懂 AI 回的書源', aiRepairBadSourceReply);
+            return invalid('讀不懂 AI 回的書源', badChangeReply(change));
           }
           source = parsed.$2;
         }
@@ -1138,12 +1147,17 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       case AiTest(:final change, :final note, :final from, :final url):
         final parsed = candidateOf(change);
         if (parsed == null) {
-          return invalid('讀不懂 AI 回的書源', aiRepairBadSourceReply);
+          return invalid('讀不懂 AI 回的書源', badChangeReply(change));
         }
         final (json, candidate) = parsed;
         final start = from == 'search'
             ? null
-            : probeStart(from, keyword: '', url: url);
+            : probeStart(
+                from,
+                keyword: '',
+                url: url,
+                baseUrl: candidate.bookSourceUrl,
+              );
         if (from != 'search' && start == null) {
           return invalid(
             '試抓的 from 不對，或少了 url',
@@ -1192,7 +1206,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       case AiSubmit(:final change, :final note):
         final parsed = candidateOf(change);
         if (parsed == null) {
-          return invalid('讀不懂 AI 回的書源', aiRepairBadSourceReply);
+          return invalid('讀不懂 AI 回的書源', badChangeReply(change));
         }
         final (json, candidate) = parsed;
         tested = true;

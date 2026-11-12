@@ -147,6 +147,43 @@ void main() {
     expect(report.stagesReached, '目錄、正文');
   });
 
+  test('a probe from a relative address starts on that page', () async {
+    // 書源除錯同 Legado：不是 http 開頭的當成搜尋關鍵字。2026-11-12 AI 給
+    // /551874.html 從詳情頁試抓，結果拿它去搜尋。
+    expect(
+      probeStart('info', keyword: '', url: '/book/1', baseUrl: site),
+      '$site/book/1',
+    );
+    final report = await probeSource(
+      source(),
+      keyword: probeStart('toc', keyword: '', url: '/book/1', baseUrl: site)!,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+    expect(report.stagesReached, '目錄、正文', reason: report.fullText);
+  });
+
+  test(
+    'parse says the book variables are empty when the rule uses them',
+    () async {
+      final result = await parseRepairPage(
+        source()
+          ..ruleToc = TocRule(
+            chapterList: 'title',
+            chapterName: '{{book.name}}',
+          ),
+        stage: 'toc',
+        body: '<html><head><title>一篇</title></head><body></body></html>',
+        url: '$site/1.html',
+        timeout: const Duration(seconds: 30),
+        database: Future.value(databaseIsolate),
+      );
+
+      expect(result, startsWith('解析成目錄頁：0 章'));
+      expect(result, contains('book.name 這類都是空的'));
+    },
+  );
+
   test('parse runs the stage parser on a page already fetched', () async {
     const toc =
         '<html><body><ul class="toc"><li><a href="/book/1/1.html">第一章</a>'
