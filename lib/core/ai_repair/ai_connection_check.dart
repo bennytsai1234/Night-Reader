@@ -27,21 +27,23 @@ Future<void> verifyAiToolConnection(AiChatClient client) async {
   ];
 
   final first = await client.complete(opening, tools: const [tool]);
-  if (first.toolCalls.length != 1) {
-    throw const AiServiceException('模型沒有回傳單一工具呼叫，無法確認工具功能正常');
+  if (first.toolCalls.isEmpty) {
+    throw const AiServiceException('模型沒有回傳工具呼叫，無法確認工具功能正常');
   }
 
-  final call = first.toolCalls.single;
-  if (call.id.isEmpty || call.name != tool.name) {
-    throw const AiServiceException('模型回傳的工具名稱或呼叫 ID 不正確');
-  }
-  try {
-    final args = jsonDecode(call.arguments);
-    if (args is! Map<String, dynamic> || args['value'] != 'ping') {
-      throw const FormatException('參數不正確');
+  // 模型可能在同一輪呼叫多次；每個呼叫都要驗證並回覆，才能繼續對話。
+  for (final call in first.toolCalls) {
+    if (call.id.isEmpty || call.name != tool.name) {
+      throw const AiServiceException('模型回傳的工具名稱或呼叫 ID 不正確');
     }
-  } on FormatException {
-    throw const AiServiceException('模型回傳的工具參數不是正確的 JSON 或缺少 value');
+    try {
+      final args = jsonDecode(call.arguments);
+      if (args is! Map<String, dynamic> || args['value'] != 'ping') {
+        throw const FormatException('參數不正確');
+      }
+    } on FormatException {
+      throw const AiServiceException('模型回傳的工具參數不是正確的 JSON 或缺少 value');
+    }
   }
 
   // 驗證值只出現在工具結果，不能讓模型只憑前面的提示詞回答成功。
@@ -53,7 +55,8 @@ Future<void> verifyAiToolConnection(AiChatClient client) async {
       toolCalls: first.toolCalls,
       reasoning: first.reasoning,
     ),
-    AiMessage.tool(call.id, jsonEncode({'nonce': nonce})),
+    for (final call in first.toolCalls)
+      AiMessage.tool(call.id, jsonEncode({'nonce': nonce})),
     const AiMessage.user('請只回覆剛才工具結果中的 nonce 原值，不加引號或說明。'),
   ]);
   if (second.toolCalls.isNotEmpty || second.content.trim() != nonce) {
