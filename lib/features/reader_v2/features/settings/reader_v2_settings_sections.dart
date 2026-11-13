@@ -1259,17 +1259,19 @@ class _ClickActionGrid extends StatelessWidget implements GroupedSkeletonItem {
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                child: DragOverflowText(child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  style: AppTextStyles.uiSm.copyWith(
-                    color: isCenter
-                        ? colorScheme.primary
-                        : colorScheme.onSurface,
-                    fontWeight: isCenter ? FontWeight.w600 : FontWeight.w500,
+                child: DragOverflowText(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    style: AppTextStyles.uiSm.copyWith(
+                      color: isCenter
+                          ? colorScheme.primary
+                          : colorScheme.onSurface,
+                      fontWeight: isCenter ? FontWeight.w600 : FontWeight.w500,
+                    ),
                   ),
-                )),
+                ),
               ),
             ),
           ),
