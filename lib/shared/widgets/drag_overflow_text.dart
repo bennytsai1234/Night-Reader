@@ -35,31 +35,37 @@ class DragOverflowText extends StatelessWidget {
           ellipsis: '…',
         )..layout(maxWidth: constraints.maxWidth);
         final exceeds = painter.didExceedMaxLines;
+        final reservedHeight = painter.height;
         painter.dispose();
 
         if (!exceeds) return child;
 
-        return SingleChildScrollView(
-          // 清單重用卡片時，新書名不沿用上一個書名的橫向位置。
-          key: ValueKey(child.textSpan?.toPlainText() ?? child.data),
-          scrollDirection: Axis.horizontal,
-          physics: const ClampingScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minWidth: constraints.maxWidth),
-            child: Text.rich(
-              child.textSpan ?? TextSpan(text: child.data),
-              style: child.style,
-              strutStyle: child.strutStyle,
-              textAlign: child.textAlign,
-              textDirection: child.textDirection,
-              locale: child.locale,
-              softWrap: false,
-              overflow: TextOverflow.visible,
-              textScaler: child.textScaler,
-              semanticsLabel: child.semanticsLabel,
-              textWidthBasis: child.textWidthBasis,
-              textHeightBehavior: child.textHeightBehavior,
-              selectionColor: child.selectionColor,
+        // 超出時改成可拖動的完整文字，但維持原本多行欄位的高度，
+        // 避免書卡、分組清單與漫畫換章分隔的上下內容突然移位。
+        return SizedBox(
+          height: reservedHeight,
+          child: SingleChildScrollView(
+            // 清單重用卡片時，新書名不沿用上一個書名的橫向位置。
+            key: ValueKey(child.textSpan?.toPlainText() ?? child.data),
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Text.rich(
+                child.textSpan ?? TextSpan(text: child.data),
+                style: child.style,
+                strutStyle: child.strutStyle,
+                textAlign: child.textAlign,
+                textDirection: child.textDirection,
+                locale: child.locale,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                textScaler: child.textScaler,
+                semanticsLabel: child.semanticsLabel,
+                textWidthBasis: child.textWidthBasis,
+                textHeightBehavior: child.textHeightBehavior,
+                selectionColor: child.selectionColor,
+              ),
             ),
           ),
         );
