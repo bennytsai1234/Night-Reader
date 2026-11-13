@@ -17,6 +17,8 @@ import 'press_ink.dart';
 import 'skeleton.dart';
 import 'swipe_actions.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 /// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方附註。
 ///
 /// 列與列之間自動插入髮絲分隔線；有任一列（[GroupedRowLike]，可包在
@@ -819,27 +821,29 @@ class GroupedRow extends StatelessWidget
                 children: [
                   titleWidget ??
                       _withMark(
-                        Text(
-                          title,
-                          maxLines: maxTitleLines,
-                          overflow: maxTitleLines == null
-                              ? null
-                              : TextOverflow.ellipsis,
-                          style: _textStyle.copyWith(
-                            color: titleColor,
-                            fontWeight: accent
-                                ? FontWeight.w500
-                                : FontWeight.w400,
+                        DragOverflowText(
+                          child: Text(
+                            title,
+                            maxLines: maxTitleLines,
+                            style: _textStyle.copyWith(
+                              color: titleColor,
+                              fontWeight: accent
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                            ),
                           ),
                         ),
                       ),
                   if (hasSubtitle) ...[
                     const SizedBox(height: _subtitleGap),
-                    Text(
-                      subtitle!,
-                      maxLines: maxSubtitleLines,
-                      overflow: TextOverflow.ellipsis,
-                      style: _subtitleStyle.copyWith(color: chrome.sectionText),
+                    DragOverflowText(
+                      child: Text(
+                        subtitle!,
+                        maxLines: maxSubtitleLines,
+                        style: _subtitleStyle.copyWith(
+                          color: chrome.sectionText,
+                        ),
+                      ),
                     ),
                   ],
                 ],
@@ -849,12 +853,13 @@ class GroupedRow extends StatelessWidget
               const SizedBox(width: AppSpacing.md),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: _valueMaxWidth(context)),
-                child: Text(
-                  value!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: _textStyle.copyWith(color: chrome.sectionText),
+                child: DragOverflowText(
+                  child: Text(
+                    value!,
+                    maxLines: 1,
+                    textAlign: TextAlign.end,
+                    style: _textStyle.copyWith(color: chrome.sectionText),
+                  ),
                 ),
               ),
             ],
@@ -1313,6 +1318,7 @@ GroupedItemShape groupedTextFieldShape(
       width: width,
       maxLines: maxLines,
       strutStyle: StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+      ellipsized: true,
     ),
     (_, final hint?) when hint.isNotEmpty => () {
       final shape = GroupedItemShape.text(
@@ -1321,6 +1327,7 @@ GroupedItemShape groupedTextFieldShape(
         style: style.merge(hintStyle),
         width: width,
         maxLines: maxLines,
+        ellipsized: true,
       );
       return GroupedItemShape(
         shape.height,

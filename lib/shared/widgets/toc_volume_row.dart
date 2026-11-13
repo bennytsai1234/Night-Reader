@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 卷內的章往右縮的寬度：一個字。
 const double tocChapterIndent = 15;
@@ -34,14 +35,15 @@ class TocVolumeRow extends StatelessWidget {
       expanded: collapsed == null ? null : !collapsed,
       child: GroupedRow(
         title: title,
-        titleWidget: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTextStyles.bodyBase.copyWith(
-            height: 1.3,
-            color: scheme.onSurface,
-            fontWeight: FontWeight.w600,
+        titleWidget: DragOverflowText(
+          child: Text(
+            title,
+            maxLines: 1,
+            style: AppTextStyles.bodyBase.copyWith(
+              height: 1.3,
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         value: '$count $unit',

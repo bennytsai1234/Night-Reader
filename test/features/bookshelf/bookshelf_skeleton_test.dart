@@ -10,6 +10,8 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
+import '../../support/skeleton_match.dart';
+
 void main() {
   Future<void> pump(
     WidgetTester tester, {
@@ -173,8 +175,9 @@ void main() {
     }
   }
 
-  // 骨架照上次記下的書名畫：每一條長條就是那本書名的一行，寬度與位置都和
-  // 真的文字相同，換場時長條剛好換成字；放不下被刪節的那一行含「…」。
+  // 骨架照上次記下的書名畫：每一條長條就是那本書名露出的一行，寬度與位置
+  // 都和真的文字相同，換場時長條剛好換成字；放不下時最後一行可以左右拖，
+  // 長條對準視窗露出的那一段。
   const names = [
     '短',
     '中等長度書名',
@@ -242,20 +245,34 @@ List<Rect> _perCard(WidgetTester tester, List<String> names) {
   ];
 }
 
-/// [text] 在畫面上每一行的範圍（同一行的字框併成一個）。
+/// [text] 在畫面上每一行的範圍（同一行的字框併成一個）。放不下時書名分成
+/// 照常換行的前幾行與可拖的最後一行兩段字（[DragOverflowText]），兩段都算，
+/// 可拖那一行只算視窗露出的部分。
 List<Rect> textLines(WidgetTester tester, String text) {
-  final finder = find.text(text).first;
-  final paragraph = tester.renderObject<RenderParagraph>(finder);
-  final origin = tester.getTopLeft(finder);
-  final lines = <double, Rect>{};
-  for (final box in paragraph.getBoxesForSelection(
-    TextSelection(baseOffset: 0, extentOffset: text.length),
-  )) {
-    final rect = box.toRect().shift(origin);
-    final line = lines[rect.top];
-    lines[rect.top] = line == null ? rect : line.expandToInclude(rect);
+  final rects = <Rect>[];
+  for (final element in find.byWidgetPredicate((widget) {
+    if (widget is! RichText) return false;
+    final shown = widget.text.toPlainText();
+    return shown.isNotEmpty &&
+        (shown == text || text.startsWith(shown) || text.endsWith(shown));
+  }).evaluate()) {
+    final paragraph = element.renderObject! as RenderParagraph;
+    final shown = paragraph.text.toPlainText();
+    final origin = paragraph.localToGlobal(Offset.zero);
+    final lines = <double, Rect>{};
+    for (final box in paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: shown.length),
+    )) {
+      final rect = box.toRect().shift(origin);
+      final line = lines[rect.top];
+      lines[rect.top] = line == null ? rect : line.expandToInclude(rect);
+    }
+    for (final line
+        in (lines.values.toList()..sort((a, b) => a.top.compareTo(b.top)))) {
+      rects.add(horizontallyClippedPaintRect(paragraph, line));
+    }
   }
-  return lines.values.toList()..sort((a, b) => a.top.compareTo(b.top));
+  return rects..sort((a, b) => a.top.compareTo(b.top));
 }
 
 /// 與書架頁同樣排法的真書卡（左右內距與 [pump] 的骨架相同）。

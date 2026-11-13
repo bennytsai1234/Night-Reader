@@ -45,6 +45,8 @@ import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
 
@@ -939,13 +941,14 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                           child: Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  g,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodyBase.copyWith(
-                                    height: 1.3,
-                                    color: scheme.onSurface,
+                                child: DragOverflowText(
+                                  child: Text(
+                                    g,
+                                    maxLines: 1,
+                                    style: AppTextStyles.bodyBase.copyWith(
+                                      height: 1.3,
+                                      color: scheme.onSurface,
+                                    ),
                                   ),
                                 ),
                               ),

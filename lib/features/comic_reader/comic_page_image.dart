@@ -9,6 +9,8 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'comic_page_images.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 /// 條漫上的一張圖：已經解碼好的直接畫；還沒到時畫骨架（照骨架呼吸），
 /// 到了淡入；載不到時寫原因，下面「重試」與「用網頁開啟」，其他張照常
 /// （`docs/design/comics.md`）。圖從 [ComicPageImages] 來，這裡不讀檔。
@@ -229,13 +231,14 @@ class _PageError extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             Text('這張圖載不到', style: AppTextStyles.titleSm.copyWith(color: color)),
             const SizedBox(height: AppSpacing.xs),
-            Text(
-              ComicLoadError.describe(error),
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.labelSm.copyWith(
-                color: color?.withValues(alpha: 0.7),
+            DragOverflowText(
+              child: Text(
+                ComicLoadError.describe(error),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                style: AppTextStyles.labelSm.copyWith(
+                  color: color?.withValues(alpha: 0.7),
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -273,6 +276,7 @@ abstract final class ComicLoadError {
       RegExp(r'^\w*(Exception|Error): '),
       '',
     );
-    return text.length > 120 ? '${text.substring(0, 120)}…' : text;
+    // 放不下的部分由顯示的地方讓讀者拖動看完，這裡不截。
+    return text;
   }
 }

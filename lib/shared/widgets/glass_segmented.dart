@@ -10,6 +10,8 @@ import '../theme/app_tokens.dart';
 import 'grouped_list_skeleton.dart';
 import 'skeleton.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 /// [GlassSegmented] 的單一分段。
 @immutable
 class GlassSegment<T> {
@@ -258,7 +260,30 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
           ),
       ],
     );
-    if (!widget.expand) row = IntrinsicWidth(child: row);
+    if (!widget.expand) {
+      // 非撐滿模式的段寬照文字原寬計算，避免 IntrinsicWidth 向
+      // DragOverflowText 的 LayoutBuilder 要求無法提供的 intrinsic 尺寸。
+      final widest = widget.segments.indexed
+          .map(
+            (entry) => _SegmentLabel.widthOf(
+              context,
+              entry.$2,
+              emphasized: entry.$1 == emphasized,
+              dense: widget.dense,
+            ),
+          )
+          .fold<double>(0, math.max);
+      final naturalWidth = widest * widget.segments.length;
+      final content = row;
+      row = LayoutBuilder(
+        builder: (context, constraints) => SizedBox(
+          width: constraints.hasBoundedWidth
+              ? math.min(naturalWidth, constraints.maxWidth)
+              : naturalWidth,
+          child: content,
+        ),
+      );
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -339,12 +364,13 @@ class _SegmentLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _style(emphasized: emphasized).copyWith(color: color);
-    final text = Text(
-      segment.label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: TextAlign.center,
-      style: style,
+    final text = DragOverflowText(
+      child: Text(
+        segment.label,
+        maxLines: 1,
+        textAlign: TextAlign.center,
+        style: style,
+      ),
     );
     final icon = segment.icon;
     return Semantics(

@@ -20,6 +20,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class ReadingStatsPage extends StatefulWidget {
   const ReadingStatsPage({super.key});
@@ -380,11 +381,7 @@ class _StatTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: _padding),
         child: Column(
           children: [
-            Text.rich(
-              _valueSpan(scheme),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            DragOverflowText(child: Text.rich(_valueSpan(scheme), maxLines: 1)),
             const SizedBox(height: _labelGap),
             Text(
               label,

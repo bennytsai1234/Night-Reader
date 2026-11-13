@@ -9,6 +9,8 @@ import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 /// 列滑動後露出的單一動作按鈕。
 @immutable
 class SwipeAction {
@@ -523,12 +525,13 @@ class _ActionButton extends StatelessWidget {
                 children: [
                   Icon(action.icon, size: 22, color: foreground),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    action.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.uiXs.copyWith(color: foreground),
+                  DragOverflowText(
+                    child: Text(
+                      action.label,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.uiXs.copyWith(color: foreground),
+                    ),
                   ),
                 ],
               ),

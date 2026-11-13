@@ -10,6 +10,8 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 /// 情境選單的一個項目。
 sealed class GlassMenuEntry<T> {
   const GlassMenuEntry();
@@ -513,23 +515,25 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  entry.label,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodyBase.copyWith(
-                                    height: 1.25,
-                                    color: color,
+                                DragOverflowText(
+                                  child: Text(
+                                    entry.label,
+                                    maxLines: 2,
+                                    style: AppTextStyles.bodyBase.copyWith(
+                                      height: 1.25,
+                                      color: color,
+                                    ),
                                   ),
                                 ),
                                 if (entry.subtitle != null)
-                                  Text(
-                                    entry.subtitle!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.bodySm.copyWith(
-                                      height: 1.25,
-                                      color: chrome.sectionText,
+                                  DragOverflowText(
+                                    child: Text(
+                                      entry.subtitle!,
+                                      maxLines: 1,
+                                      style: AppTextStyles.bodySm.copyWith(
+                                        height: 1.25,
+                                        color: chrome.sectionText,
+                                      ),
                                     ),
                                   ),
                               ],

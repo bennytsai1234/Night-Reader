@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'drag_overflow_text.dart';
 import 'skeleton.dart';
 
 /// 全形標點的筆畫只佔那一格的一部分：開頭的括號與引號靠右、結尾的靠左，
@@ -301,10 +302,22 @@ final class PunctuationBlank {
 }
 
 /// [painter] 排好的字，每一行在骨架上的長條範圍（painter 座標，上下是那一行
-/// 字形的高度）：從那一行第一個字的筆畫到最後一個字的筆畫。被刪節的那一行
-/// 含「…」；行首、行尾的全形標點扣掉那一格空著的部分（[PunctuationInk]），
-/// 每個字照它自己那一段的字樣（一段字裡可以有不同字級、字型）。
-List<Rect> skeletonTextLines(TextPainter painter) {
+/// 字形的高度）：從那一行第一個字的筆畫到最後一個字的筆畫。行首、行尾的全形
+/// 標點扣掉那一格空著的部分（[PunctuationInk]），每個字照它自己那一段的字樣
+/// （一段字裡可以有不同字級、字型）。
+///
+/// 超過行數上限時，換上來的字是 [DragOverflowText]：最後一行接著排剩下的字、
+/// 可以左右拖，露出的是這一欄 [maxWidth] 寬的那一段，長條照它畫；前幾行
+/// 照撐滿這一欄後的對齊畫（[painter] 會以這個寬度重排）。沒給 [maxWidth]
+/// 時照 [painter] 刪節後的樣子（含「…」）。
+List<Rect> skeletonTextLines(TextPainter painter, {double? maxWidth}) {
+  if (painter.didExceedMaxLines &&
+      maxWidth != null &&
+      maxWidth.isFinite &&
+      painter.width < maxWidth) {
+    // 換上來的字撐滿這一欄，前幾行照這個寬度對齊（置中、靠後）。
+    painter.layout(minWidth: maxWidth, maxWidth: maxWidth);
+  }
   final text = painter.plainText;
   if (text.trim().isEmpty) return const [];
   // 逐字的框含被刪節那一行的「…」；`computeLineMetrics` 的行寬不含。
@@ -324,6 +337,27 @@ List<Rect> skeletonTextLines(TextPainter painter) {
     }
   }
   final last = lines.length - 1;
+  if (painter.didExceedMaxLines && maxWidth != null) {
+    // 混合字樣的字整段排在可拖的那一行（[DragOverflowText]）。
+    final root = painter.text;
+    final plain =
+        root is TextSpan && (root.children == null || root.children!.isEmpty);
+    final cut = plain ? dragOverflowCut(painter) : 0;
+    final metrics = painter.computeLineMetrics();
+    // 可拖那一行的行框上緣：前面幾行的行高加起來。
+    final dragTop = cut == 0
+        ? 0.0
+        : metrics
+              .take(metrics.length - 1)
+              .fold<double>(0, (top, line) => top + line.height);
+    final dragged = _draggedLine(painter, text, cut, maxWidth);
+    return [
+      for (final line in lines)
+        if (line.center.dy < dragTop)
+          _trimPunctuation(painter, text, line, lastVisible: false),
+      if (dragged != null) dragged.shift(Offset(0, dragTop)),
+    ];
+  }
   return [
     for (final (index, line) in lines.indexed)
       _trimPunctuation(
@@ -333,6 +367,53 @@ List<Rect> skeletonTextLines(TextPainter painter) {
         lastVisible: painter.didExceedMaxLines && index == last,
       ),
   ];
+}
+
+/// [DragOverflowText] 可拖的那一行在 [maxWidth] 寬的視窗裡露出的範圍（以那
+/// 一行的行框上緣為 0）：從第 [cut] 個字起的字照各段字樣排成一行，比視窗寬
+/// 時從視窗左緣排起、右緣切掉，放得下時照對齊方式擺。
+Rect? _draggedLine(TextPainter painter, String text, int cut, double maxWidth) {
+  final root = painter.text!;
+  final span = cut == 0
+      ? dragOverflowTailSpan(root)
+      : TextSpan(
+          text: dragOverflowTailSpan(TextSpan(text: text.substring(cut)))
+              .toPlainText(),
+          style: _styleAt(root, cut),
+        );
+  if (span.toPlainText().trim().isEmpty) return null;
+  final row = TextPainter(
+    text: span,
+    textDirection: painter.textDirection,
+    textScaler: painter.textScaler,
+    strutStyle: painter.strutStyle,
+    textHeightBehavior: painter.textHeightBehavior,
+    locale: painter.locale,
+    maxLines: 1,
+  )..layout();
+  final width = row.width;
+  final lines = skeletonTextLines(row);
+  row.dispose();
+  if (lines.isEmpty) return null;
+  final ltr = painter.textDirection != TextDirection.rtl;
+  final factor = switch (painter.textAlign) {
+    TextAlign.center => 0.5,
+    TextAlign.right => 1.0,
+    TextAlign.left => 0.0,
+    TextAlign.end => ltr ? 1.0 : 0.0,
+    TextAlign.start || TextAlign.justify => ltr ? 0.0 : 1.0,
+  };
+  final dx = width >= maxWidth ? 0.0 : (maxWidth - width) * factor;
+  // 一行裡字級不同的幾段字框高低不一，併成一條。
+  final line = lines
+      .reduce((a, b) => a.expandToInclude(b))
+      .shift(Offset(dx, 0));
+  return Rect.fromLTRB(
+    math.max(0, line.left),
+    line.top,
+    math.min(maxWidth, line.right),
+    line.bottom,
+  );
 }
 
 Rect _trimPunctuation(
@@ -580,10 +661,14 @@ class _SkeletonTextState extends State<SkeletonText> {
             when rect.top < painter.height && rect.width > 0)
           rect,
     ];
+    // 放不下時換上來的字撐滿這一欄（[DragOverflowText]）。
+    final width = painter.didExceedMaxLines && maxWidth.isFinite
+        ? maxWidth
+        : painter.width;
     final result = (
-      size: Size(painter.width, painter.height),
+      size: Size(width, painter.height),
       lines: [
-        for (final line in skeletonTextLines(painter))
+        for (final line in skeletonTextLines(painter, maxWidth: maxWidth))
           switch (boxes
               .where(
                 (box) =>

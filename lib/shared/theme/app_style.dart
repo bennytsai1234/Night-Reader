@@ -126,7 +126,7 @@ enum AppStyle {
   /// 閱讀紙與字取自 Legado 內建的「预设2」；深色是 Legado 的灰底，這裡
   /// 換成和茶褐同一類的近黑暖底。
   kraft(
-    '牛皮紙',
+    '牛皮',
     light: StylePalette(
       brightness: Brightness.light,
       background: Color(0xFFD2C5AD),

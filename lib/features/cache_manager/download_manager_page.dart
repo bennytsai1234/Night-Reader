@@ -21,6 +21,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
@@ -732,11 +733,12 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: _titleStyle.copyWith(color: scheme.onSurface),
+                      DragOverflowText(
+                        child: Text(
+                          title,
+                          maxLines: 2,
+                          style: _titleStyle.copyWith(color: scheme.onSurface),
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       ClipRRect(
@@ -752,11 +754,12 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
-                              status,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: _smallStyle.copyWith(color: statusColor),
+                            child: DragOverflowText(
+                              child: Text(
+                                status,
+                                maxLines: 2,
+                                style: _smallStyle.copyWith(color: statusColor),
+                              ),
                             ),
                           ),
                           if (downloading) ...[
@@ -772,11 +775,12 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                       ),
                       if (failure != null) ...[
                         const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          failure,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: _smallStyle.copyWith(color: context.danger),
+                        DragOverflowText(
+                          child: Text(
+                            failure,
+                            maxLines: 2,
+                            style: _smallStyle.copyWith(color: context.danger),
+                          ),
                         ),
                       ],
                     ],

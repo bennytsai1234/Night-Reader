@@ -206,6 +206,8 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
                     ),
                     child: Center(
                       widthFactor: 1,
+                      // 泡泡只在按住捲軸時出現、不接觸控，拖不動：章名放不下
+                      // 照舊加「…」（docs/design/components.md「過長文字」）。
                       child: Text(
                         widget.labelFor(_dragIndex),
                         maxLines: 1,

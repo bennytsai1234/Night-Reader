@@ -85,7 +85,10 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
       }
       switch (object) {
         case RenderParagraph():
-          marks.addAll(_lines(object));
+          for (final line in _lines(object)) {
+            final clipped = horizontallyClippedPaintRect(object, line);
+            if (!clipped.isEmpty) marks.add(clipped);
+          }
           return;
         case RenderImage():
           marks.add(rect);
@@ -139,6 +142,33 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
         tester.getRect(find.byWidget(clip.widget)),
   ];
   return SkeletonLayout(marks: marks, cards: cards);
+}
+
+/// 拖動文字的段落以完整寬度排版，但螢幕只能看到視窗裡的一部分。
+/// 骨架量測要照實際畫出的左右範圍；上下仍交給頁面可見區判斷。
+Rect horizontallyClippedPaintRect(RenderObject object, Rect line) {
+  Rect? horizontalClip;
+  RenderObject current = object;
+  while (true) {
+    final parent = current.parent;
+    if (parent is! RenderObject) break;
+    final localClip = parent.describeApproximatePaintClip(current);
+    if (localClip != null) {
+      final globalClip = MatrixUtils.transformRect(
+        parent.getTransformTo(null),
+        localClip,
+      );
+      horizontalClip = horizontalClip == null
+          ? globalClip
+          : horizontalClip.intersect(globalClip);
+    }
+    current = parent;
+  }
+  final clip = horizontalClip;
+  if (clip == null) return line;
+  final left = math.max(line.left, clip.left);
+  final right = math.min(line.right, clip.right);
+  return Rect.fromLTRB(left, line.top, math.max(left, right), line.bottom);
 }
 
 bool _near(Rect a, Rect b, [double tolerance = 0.5]) =>

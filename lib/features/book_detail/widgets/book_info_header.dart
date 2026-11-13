@@ -11,6 +11,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import '../book_detail_provider.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// Telegram 個人資料頁式的書籍頁首：置中封面、書名與作者，下方一排圓角
 /// 玻璃動作按鈕（圖示在上、小字在下）。「開始閱讀」不在這裡，是頁面底部
@@ -84,24 +85,28 @@ class BookInfoHeader extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-          child: Text(
-            context.zh(book.name),
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
+          child: DragOverflowText(
+            child: Text(
+              context.zh(book.name),
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
+            ),
           ),
         ),
         if (author.isNotEmpty) ...[
           const SizedBox(height: 2),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-            child: Text(
-              author,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.bodyBase.copyWith(color: chrome.sectionText),
+            child: DragOverflowText(
+              child: Text(
+                author,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: AppTextStyles.bodyBase.copyWith(
+                  color: chrome.sectionText,
+                ),
+              ),
             ),
           ),
         ],
@@ -204,11 +209,12 @@ class _ActionButton extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.xs,
                   ),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.uiXs.copyWith(color: color),
+                  child: DragOverflowText(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: AppTextStyles.uiXs.copyWith(color: color),
+                    ),
                   ),
                 ),
               ],
