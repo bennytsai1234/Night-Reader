@@ -170,15 +170,17 @@ class _SearchResultItemState extends State<SearchResultItem> {
                   Row(
                     children: [
                       Expanded(
-                        child: DragOverflowText(child: Text(
-                          context.zh(book.name),
-                          maxLines: 1,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w600,
+                        child: DragOverflowText(
+                          child: Text(
+                            context.zh(book.name),
+                            maxLines: 1,
+                            style: AppTextStyles.bodyBase.copyWith(
+                              height: 1.3,
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        )),
+                        ),
                       ),
                       if (book.inBookshelf) ...[
                         const SizedBox(width: AppSpacing.sm),
@@ -188,17 +190,17 @@ class _SearchResultItemState extends State<SearchResultItem> {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  DragOverflowText(child: Text(
-                    metadata,
-                    maxLines: 1,
-                    style: secondaryStyle,
-                  )),
+                  DragOverflowText(
+                    child: Text(metadata, maxLines: 1, style: secondaryStyle),
+                  ),
                   const SizedBox(height: 2),
-                  DragOverflowText(child: Text(
-                    '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
-                    maxLines: 1,
-                    style: secondaryStyle,
-                  )),
+                  DragOverflowText(
+                    child: Text(
+                      '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
+                      maxLines: 1,
+                      style: secondaryStyle,
+                    ),
+                  ),
                 ],
               ),
             ),
