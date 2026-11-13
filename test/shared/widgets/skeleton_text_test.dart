@@ -189,9 +189,10 @@ void main() {
         ),
       ),
     );
+    // 放不下的字換上來時可以拖（DragOverflowText），露出整欄寬的字。
     final bar = tester.getRect(find.byType(SkeletonBox));
     expect(bar.left, 0);
-    expect(bar.width, 50);
+    expect(bar.width, 55);
     expect(bar.height, 10);
     expect(tester.getSize(find.byType(SkeletonText)).height, 13);
   });

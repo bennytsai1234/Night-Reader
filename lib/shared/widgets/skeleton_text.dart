@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'drag_overflow_text.dart';
 import 'skeleton.dart';
 
 /// 全形標點的筆畫只佔那一格的一部分：開頭的括號與引號靠右、結尾的靠左，
@@ -301,10 +302,14 @@ final class PunctuationBlank {
 }
 
 /// [painter] 排好的字，每一行在骨架上的長條範圍（painter 座標，上下是那一行
-/// 字形的高度）：從那一行第一個字的筆畫到最後一個字的筆畫。被刪節的那一行
-/// 含「…」；行首、行尾的全形標點扣掉那一格空著的部分（[PunctuationInk]），
-/// 每個字照它自己那一段的字樣（一段字裡可以有不同字級、字型）。
-List<Rect> skeletonTextLines(TextPainter painter) {
+/// 字形的高度）：從那一行第一個字的筆畫到最後一個字的筆畫。行首、行尾的全形
+/// 標點扣掉那一格空著的部分（[PunctuationInk]），每個字照它自己那一段的字樣
+/// （一段字裡可以有不同字級、字型）。
+///
+/// 超過行數上限時，換上來的字是 [DragOverflowText]：最後一行接著排剩下的字、
+/// 可以左右拖，露出的是這一欄 [maxWidth] 寬的那一段，長條照它畫；沒給
+/// [maxWidth] 時照 [painter] 刪節後的樣子（含「…」）。
+List<Rect> skeletonTextLines(TextPainter painter, {double? maxWidth}) {
   final text = painter.plainText;
   if (text.trim().isEmpty) return const [];
   // 逐字的框含被刪節那一行的「…」；`computeLineMetrics` 的行寬不含。
@@ -324,6 +329,36 @@ List<Rect> skeletonTextLines(TextPainter painter) {
     }
   }
   final last = lines.length - 1;
+  if (painter.didExceedMaxLines && maxWidth != null && lines.isNotEmpty) {
+    // 混合字樣的字整段排在可拖的那一行（[DragOverflowText]）。
+    final root = painter.text;
+    final plain =
+        root is TextSpan && (root.children == null || root.children!.isEmpty);
+    final cut = plain ? dragOverflowCut(painter) : 0;
+    final dragged = _draggedLine(painter, text, cut, maxWidth);
+    if (cut == 0) {
+      return [
+        if (dragged != null)
+          Rect.fromLTRB(
+            dragged.left,
+            lines.first.top,
+            dragged.right,
+            lines.first.bottom,
+          ),
+      ];
+    }
+    return [
+      for (final line in lines.take(last))
+        _trimPunctuation(painter, text, line, lastVisible: false),
+      if (dragged != null)
+        Rect.fromLTRB(
+          dragged.left,
+          lines[last].top,
+          dragged.right,
+          lines[last].bottom,
+        ),
+    ];
+  }
   return [
     for (final (index, line) in lines.indexed)
       _trimPunctuation(
@@ -333,6 +368,44 @@ List<Rect> skeletonTextLines(TextPainter painter) {
         lastVisible: painter.didExceedMaxLines && index == last,
       ),
   ];
+}
+
+/// [DragOverflowText] 可拖的那一行在 [maxWidth] 寬的視窗裡露出的左右範圍
+/// （上下不準，由呼叫端換成那一行的）：從第 [cut] 個字起的字排成一行，比
+/// 視窗寬時從視窗左緣排起、右緣切掉，放得下時照對齊方式擺。
+Rect? _draggedLine(TextPainter painter, String text, int cut, double maxWidth) {
+  final tail = dragOverflowTail(text.substring(cut));
+  if (tail.trim().isEmpty) return null;
+  final style = _styleAt(painter.text!, cut);
+  final row = TextPainter(
+    text: TextSpan(text: tail, style: style),
+    textDirection: painter.textDirection,
+    textScaler: painter.textScaler,
+    strutStyle: painter.strutStyle,
+    textHeightBehavior: painter.textHeightBehavior,
+    locale: painter.locale,
+    maxLines: 1,
+  )..layout();
+  final width = row.width;
+  final lines = skeletonTextLines(row);
+  row.dispose();
+  if (lines.isEmpty) return null;
+  final ltr = painter.textDirection != TextDirection.rtl;
+  final factor = switch (painter.textAlign) {
+    TextAlign.center => 0.5,
+    TextAlign.right => 1.0,
+    TextAlign.left => 0.0,
+    TextAlign.end => ltr ? 1.0 : 0.0,
+    TextAlign.start || TextAlign.justify => ltr ? 0.0 : 1.0,
+  };
+  final dx = width >= maxWidth ? 0.0 : (maxWidth - width) * factor;
+  final line = lines.single.shift(Offset(dx, 0));
+  return Rect.fromLTRB(
+    math.max(0, line.left),
+    line.top,
+    math.min(maxWidth, line.right),
+    line.bottom,
+  );
 }
 
 Rect _trimPunctuation(
@@ -580,10 +653,14 @@ class _SkeletonTextState extends State<SkeletonText> {
             when rect.top < painter.height && rect.width > 0)
           rect,
     ];
+    // 放不下時換上來的字撐滿這一欄（[DragOverflowText]）。
+    final width = painter.didExceedMaxLines && maxWidth.isFinite
+        ? maxWidth
+        : painter.width;
     final result = (
-      size: Size(painter.width, painter.height),
+      size: Size(width, painter.height),
       lines: [
-        for (final line in skeletonTextLines(painter))
+        for (final line in skeletonTextLines(painter, maxWidth: maxWidth))
           switch (boxes
               .where(
                 (box) =>

@@ -1318,6 +1318,7 @@ GroupedItemShape groupedTextFieldShape(
       width: width,
       maxLines: maxLines,
       strutStyle: StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+      ellipsized: true,
     ),
     (_, final hint?) when hint.isNotEmpty => () {
       final shape = GroupedItemShape.text(
@@ -1326,6 +1327,7 @@ GroupedItemShape groupedTextFieldShape(
         style: style.merge(hintStyle),
         width: width,
         maxLines: maxLines,
+        ellipsized: true,
       );
       return GroupedItemShape(
         shape.height,
