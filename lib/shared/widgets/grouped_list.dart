@@ -16,6 +16,7 @@ import 'grouped_list_skeleton.dart';
 import 'press_ink.dart';
 import 'skeleton.dart';
 import 'swipe_actions.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方附註。
 ///
@@ -819,28 +820,24 @@ class GroupedRow extends StatelessWidget
                 children: [
                   titleWidget ??
                       _withMark(
-                        Text(
+                        DragOverflowText(child: Text(
                           title,
                           maxLines: maxTitleLines,
-                          overflow: maxTitleLines == null
-                              ? null
-                              : TextOverflow.ellipsis,
                           style: _textStyle.copyWith(
                             color: titleColor,
                             fontWeight: accent
                                 ? FontWeight.w500
                                 : FontWeight.w400,
                           ),
-                        ),
+                        )),
                       ),
                   if (hasSubtitle) ...[
                     const SizedBox(height: _subtitleGap),
-                    Text(
+                    DragOverflowText(child: Text(
                       subtitle!,
                       maxLines: maxSubtitleLines,
-                      overflow: TextOverflow.ellipsis,
                       style: _subtitleStyle.copyWith(color: chrome.sectionText),
-                    ),
+                    )),
                   ],
                 ],
               ),
@@ -849,13 +846,12 @@ class GroupedRow extends StatelessWidget
               const SizedBox(width: AppSpacing.md),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: _valueMaxWidth(context)),
-                child: Text(
+                child: DragOverflowText(child: Text(
                   value!,
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
                   style: _textStyle.copyWith(color: chrome.sectionText),
-                ),
+                )),
               ),
             ],
             if (trailing != null) ...[
