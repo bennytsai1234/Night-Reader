@@ -35,15 +35,17 @@ class TocVolumeRow extends StatelessWidget {
       expanded: collapsed == null ? null : !collapsed,
       child: GroupedRow(
         title: title,
-        titleWidget: DragOverflowText(child: Text(
-          title,
-          maxLines: 1,
-          style: AppTextStyles.bodyBase.copyWith(
-            height: 1.3,
-            color: scheme.onSurface,
-            fontWeight: FontWeight.w600,
+        titleWidget: DragOverflowText(
+          child: Text(
+            title,
+            maxLines: 1,
+            style: AppTextStyles.bodyBase.copyWith(
+              height: 1.3,
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        )),
+        ),
         value: '$count $unit',
         trailing: collapsed == null
             ? null
