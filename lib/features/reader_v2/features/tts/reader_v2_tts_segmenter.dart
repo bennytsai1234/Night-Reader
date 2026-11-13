@@ -68,7 +68,7 @@ final class ReaderV2TtsSegmenter {
         .toInt();
     for (var index = start; index < preferredLimit; index += 1) {
       final codeUnit = text.codeUnitAt(index);
-      if (_isSegmentBoundary(codeUnit)) {
+      if (_isSegmentBoundaryAt(text, index)) {
         // 「走吧。」的句號之後還有收引號：收引號屬於這一句，不能留到
         // 下一句開頭，否則下一句的高亮會從一個孤立的「」」開始。
         var end = index + 1;
@@ -96,7 +96,7 @@ final class ReaderV2TtsSegmenter {
     final floor = math.max(0, safeOffset - maxSegmentLength);
     var boundary = -1;
     for (var index = safeOffset - 1; index >= floor; index -= 1) {
-      if (_isSegmentBoundary(text.codeUnitAt(index))) {
+      if (_isSegmentBoundaryAt(text, index)) {
         boundary = index;
         break;
       }
@@ -154,6 +154,33 @@ final class ReaderV2TtsSegmenter {
     }
     return false;
   }
+
+  /// 一串連續句點是刪節號，不可以把它們拆成多個朗讀句段。
+  /// 小數中的句點也不是句尾。
+  bool _isSegmentBoundaryAt(String text, int index) {
+    final codeUnit = text.codeUnitAt(index);
+    if (codeUnit == 0x2E) {
+      final before = index > 0 && text.codeUnitAt(index - 1) == 0x2E;
+      final after =
+          index + 1 < text.length && text.codeUnitAt(index + 1) == 0x2E;
+      if ((before && index > 1 && text.codeUnitAt(index - 2) == 0x2E) ||
+          (before && after) ||
+          (after &&
+              index + 2 < text.length &&
+              text.codeUnitAt(index + 2) == 0x2E)) {
+        return false;
+      }
+      if (index > 0 &&
+          index + 1 < text.length &&
+          _isAsciiDigit(text.codeUnitAt(index - 1)) &&
+          _isAsciiDigit(text.codeUnitAt(index + 1))) {
+        return false;
+      }
+    }
+    return _isSegmentBoundary(codeUnit);
+  }
+
+  bool _isAsciiDigit(int codeUnit) => codeUnit >= 0x30 && codeUnit <= 0x39;
 
   bool _isSegmentBoundary(int codeUnit) {
     switch (codeUnit) {

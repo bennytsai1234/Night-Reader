@@ -45,6 +45,46 @@ void main() {
     }
   });
 
+  test('連續句點是刪節號，不拆成逐個句段', () {
+    const text = '他停了一下......繼續說。\n......\n……\n下一句。';
+    final segments = segmenter.segment(
+      text: text,
+      chapterIndex: 0,
+      startOffset: 0,
+    );
+    expect(segments.map((segment) => segment.text), <String>[
+      '他停了一下......繼續說。',
+      '......',
+      '……',
+      '下一句。',
+    ]);
+    for (final segment in segments) {
+      expect(
+        text.substring(segment.startCharOffset, segment.endCharOffset),
+        segment.text,
+      );
+    }
+    final fromDots = segmenter.segment(
+      text: text,
+      chapterIndex: 0,
+      startOffset: text.indexOf('......') + 3,
+    );
+    expect(fromDots.first.text, '他停了一下......繼續說。');
+  });
+
+  test('小數中的句點不分段', () {
+    const text = '圓周率是 3.14。下一句。';
+    final segments = segmenter.segment(
+      text: text,
+      chapterIndex: 0,
+      startOffset: 0,
+    );
+    expect(segments.map((segment) => segment.text), <String>[
+      '圓周率是 3.14。',
+      '下一句。',
+    ]);
+  });
+
   group('從畫面上的位置開始念，從那一句的句首念起', () {
     const text = '天黑了。「走吧！」他轉身離開了院子。\n　　風很大，吹得門窗作響。';
 

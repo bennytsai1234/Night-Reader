@@ -301,6 +301,38 @@ void main() {
     );
   }
 
+  test('獨立成行的刪節號不發聲，接著念下一句', () async {
+    const text = '第一句。\n\n......\n\n……\n\n下一句。';
+    await open({0: text});
+    await tts.startFromVisibleLocation();
+    expect(engine.spoken, <String>['第一句。']);
+
+    engine.complete();
+    await pumpEventQueue();
+
+    expect(engine.spoken, <String>['第一句。', '下一句。']);
+    expect(tts.currentHighlight?.sentenceStart, text.indexOf('下一句'));
+    expect(tts.currentHighlight?.sentenceEnd, text.length);
+  });
+
+  test('句中刪節號用停頓取代，原文高亮範圍不變', () async {
+    const text = '他想了......接著說……好吧。';
+    await open({0: text});
+    await tts.startFromVisibleLocation();
+
+    expect(engine.spoken, <String>['他想了，接著說，好吧。']);
+    expect(tts.currentHighlight?.sentenceStart, 0);
+    expect(tts.currentHighlight?.sentenceEnd, text.length);
+  });
+
+  test('整章只有刪節號時跳到下一章朗讀', () async {
+    await open({0: '......\n……', 1: '第二章開始。'});
+    await tts.startFromVisibleLocation();
+
+    expect(engine.spoken, <String>['第二章開始。']);
+    expect(tts.currentHighlight?.chapterIndex, 1);
+  });
+
   test('a manual jump while reading continues from the new place', () async {
     await open({0: '第一章開頭。', 1: '第二章開頭。'});
     await tts.startFromVisibleLocation();
