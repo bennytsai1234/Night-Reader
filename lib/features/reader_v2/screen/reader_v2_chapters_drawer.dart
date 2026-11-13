@@ -241,15 +241,19 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
           padding: EdgeInsets.only(
             left: _volumes.volumeOf(index) >= 0 ? tocChapterIndent : 0,
           ),
-          child: DragOverflowText(child: Text(
-            chapterTitle,
-            maxLines: 1,
-            style: AppTextStyles.bodyBase.copyWith(
-              height: 1.3,
-              color: isCurrentChapter ? scheme.primary : scheme.onSurface,
-              fontWeight: isCurrentChapter ? FontWeight.w600 : FontWeight.w400,
+          child: DragOverflowText(
+            child: Text(
+              chapterTitle,
+              maxLines: 1,
+              style: AppTextStyles.bodyBase.copyWith(
+                height: 1.3,
+                color: isCurrentChapter ? scheme.primary : scheme.onSurface,
+                fontWeight: isCurrentChapter
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
             ),
-          )),
+          ),
         ),
         trailing: trailing,
         showChevron: false,
