@@ -104,15 +104,17 @@ class AppBottomSheet extends StatelessWidget {
                 ),
                 middle: Semantics(
                   header: true,
-                  child: DragOverflowText(child: Text(
-                    title,
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.titleSm.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
+                  child: DragOverflowText(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.titleSm.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface,
+                      ),
                     ),
-                  )),
+                  ),
                 ),
                 trailing: Padding(
                   padding: const EdgeInsets.only(right: AppGrouped.margin),
@@ -246,13 +248,15 @@ class SheetHeader extends StatelessWidget {
           trailing: trailing,
           middle: Semantics(
             header: true,
-            child: DragOverflowText(child: Text(
-              title,
-              maxLines: 1,
-              style: AppTextStyles.titleMd.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
+            child: DragOverflowText(
+              child: Text(
+                title,
+                maxLines: 1,
+                style: AppTextStyles.titleMd.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
-            )),
+            ),
           ),
         ),
       ),
