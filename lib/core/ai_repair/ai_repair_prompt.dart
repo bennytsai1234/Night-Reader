@@ -503,6 +503,7 @@ const String _rules = '''
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
+  - result 是這條規則前一段的結果。書單裡每本書的欄位規則（name、bookUrl 這類）直接用 JS 時，result 是這本書那一塊網頁元素（接成字串是它的 HTML），java.getString(規則) 也在這一塊裡找。
   - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
@@ -521,7 +522,7 @@ const String _method =
 - 要試的是書源本身的設定（Cookie 罐、標頭、網址參數、編碼）時，寫進 patch 直接 test：比自己寫程式一步步模擬快，送出的也是夜讀實際會送的樣子。
 - 網站對請求直接斷線、逾時或連回應都沒有時，先換送出的條件試：User-Agent（手機、桌機）、http 或 https、有沒有 www；換了哪一項就通，就把那一項寫進書源。
 - 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，還是被擋就用 give_up 的 rate_limited 放棄，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
-- 這個網站做不到書源要的某一段時，開場列出的別的網域可能是同一個網站的其他網址（鏡像、新網域、姊妹站）：先拿同一本書到那個網域看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域。
+- 這個網站做不到書源要的某一段，或慢到超過校驗的時限時（回應那一行寫了花幾秒，超時的訊息寫了時限），開場列出的別的網域與同一個網站的其他開頭可能做得到：鏡像、新網域、姊妹站，或同一個網站的電腦版（www.）與手機版（m.），這兩版常是不同的程式，同一段的網址與快慢都不一樣。先拿同一本書到那裡看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改；只有一段換到另一版時，那一段抓到的書籍網址要轉成書源其他段用的那一版。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域；同一個網站換成 www. 或 m. 開頭不算猜。
 - 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
 - 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上或都轉到別處時，開場列出的別的網域試過就夠。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。

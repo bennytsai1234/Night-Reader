@@ -132,10 +132,11 @@ Future<(SourceCheckIsolateResult, BookSource)> _check(
   _FakeBookSourceService service, {
   BookSource? source,
   bool networkUp = true,
+  IsolateCheckConfig config = _searchOnly,
 }) async {
   final result = await SourceChecker(
     source: source ?? _source(),
-    config: _searchOnly,
+    config: config,
     service: service,
     networkCheck: () async => networkUp,
   ).run();
@@ -210,6 +211,33 @@ void main() {
     expect(checked.isQuarantined, isTrue);
     expect(checked.runtimeHealth.allowsReading, isFalse);
   });
+
+  test(
+    'a stage running past the time limit says the limit and the keyword',
+    () async {
+      // 2026-11-13 御书屋：搜尋要 48 秒，AI 不知道校驗只等 20 秒。
+      const quick = IsolateCheckConfig(
+        keyword: '我的',
+        timeoutSeconds: 1,
+        checkSearch: true,
+        checkDiscovery: false,
+        checkInfo: true,
+        checkCategory: true,
+        checkContent: true,
+      );
+      final (result, _) = await _check(
+        _FakeBookSourceService(
+          search: () => Completer<List<SearchBook>>().future,
+        ),
+        config: quick,
+      );
+
+      expect(
+        result.diagnostics.join('\n'),
+        contains('搜尋「我的」檢查超時：超過 1 秒（校驗設定的時限）'),
+      );
+    },
+  );
 
   test('a rule asking for web verification only marks the source', () async {
     final (_, checked) = await _check(

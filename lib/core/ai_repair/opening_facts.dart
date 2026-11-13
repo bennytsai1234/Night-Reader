@@ -103,10 +103,14 @@ final RegExp _metaCharset = RegExp(
 /// 開場抓到的網頁裡，連到書源以外網域的網址（圖片、連結、表單、轉址程式）
 /// 照出現次數列前幾個；沒有是 null。2026-11-13 肉肉屋：目錄頁拿掉了章節
 /// 連結，同一套書庫的姊妹站有完整目錄，封面圖一直放在那個網域，AI 猜了十幾
-/// 種網址才想到它。
+/// 種網址才想到它。同一個網站的其他開頭（電腦版 www.、手機版 m.）另外列：
+/// 2026-11-13 御书屋的手機版搜尋要 48 秒，電腦版 2 秒，AI 到第 10 輪才想到。
 String? otherDomainsFact(BookSource source, SourceProbeReport probe) {
   final own = NetworkUtils.getSubDomain(source.bookSourceUrl);
+  final ownHost = Uri.tryParse(source.bookSourceUrl.split('#').first)?.host
+      .toLowerCase();
   final counts = <String, int>{};
+  final siteCounts = <String, int>{};
   void count(String? raw, Uri base) {
     final value = raw?.trim() ?? '';
     if (value.isEmpty || value.startsWith('#') || value.startsWith('data:')) {
@@ -120,6 +124,10 @@ String? otherDomainsFact(BookSource source, SourceProbeReport probe) {
     }
     if (!target.scheme.startsWith('http') || target.host.isEmpty) return;
     if (NetworkUtils.getSubDomain('${target.scheme}://${target.host}') == own) {
+      final host = target.host.toLowerCase();
+      if (host != ownHost) {
+        siteCounts.update(host, (n) => n + 1, ifAbsent: () => 1);
+      }
       return;
     }
     counts.update(target.host, (n) => n + 1, ifAbsent: () => 1);
@@ -160,11 +168,18 @@ String? otherDomainsFact(BookSource source, SourceProbeReport probe) {
       count(match.group(0), base);
     }
   }
-  if (counts.isEmpty) return null;
-  final top = counts.entries.toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
-  return '開場抓到的網頁連到這些別的網域（出現次數）：'
-      '${top.take(_maxDomains).map((e) => '${e.key} ${e.value}').join('、')}';
+  String listed(Map<String, int> counts) {
+    final top = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return top.take(_maxDomains).map((e) => '${e.key} ${e.value}').join('、');
+  }
+
+  final lines = [
+    if (counts.isNotEmpty) '開場抓到的網頁連到這些別的網域（出現次數）：${listed(counts)}',
+    if (siteCounts.isNotEmpty)
+      '開場抓到的網頁連到同一個網站的其他開頭（出現次數）：${listed(siteCounts)}',
+  ];
+  return lines.isEmpty ? null : lines.join('\n');
 }
 
 /// 寫在程式裡的完整網址（轉址程式、`uaredirect("…")` 這類）。

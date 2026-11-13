@@ -38,6 +38,7 @@ class AppInterceptor extends Interceptor {
     }
 
     AppLog.i('Network Request: [${options.method}] ${options.uri}');
+    options.extra[requestStartedKey] = DateTime.now().microsecondsSinceEpoch;
     recordRequestUrl(
       options.method,
       options.uri,

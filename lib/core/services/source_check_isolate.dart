@@ -374,7 +374,7 @@ class SourceChecker {
     _log('  ◇ 測試搜尋: $searchWord');
     try {
       final searchResults = await _fetch(
-        '搜尋',
+        '搜尋「$searchWord」',
         (_) => _service.searchBooks(_source, searchWord),
         cameBackEmpty: (results) => results.isEmpty,
       );
@@ -792,7 +792,11 @@ class SourceChecker {
     bool siteFaltered() => _requests.transientResponses > transientBefore;
     Future<T> attempt(bool retrying) => fetch(retrying).timeout(
       _config.timeoutDuration,
-      onTimeout: () => throw TimeoutException('$label檢查超時'),
+      // 寫出時限：2026-11-13 御书屋的搜尋要 48 秒，AI 不知道校驗只等 20 秒，
+      // 原樣重跑、改 Cookie 猜了好幾輪。
+      onTimeout: () => throw TimeoutException(
+        '$label檢查超時：超過 ${_config.timeoutSeconds} 秒（校驗設定的時限）',
+      ),
     );
     try {
       final result = await attempt(false);
