@@ -217,12 +217,31 @@ final class AiRepairLog {
   Future<File> _open() async {
     final directory = await _directory();
     await directory.create(recursive: true);
-    await _prune(directory);
+    await _prune(directory, room: 1);
     return File('${directory.path}/$_fileName');
   }
 
-  /// 只留最近的 [_keptFiles] 個、合計 [_keptBytes] 以內（為新的這份騰出位置）。
-  static Future<void> _prune(Directory directory) async {
+  /// 這一件寫完了：再修剪一次資料夾，這份寫完後合計超過 [_keptBytes] 的，
+  /// 刪掉較舊的（這一份留著）。開檔時只量得到舊的，寫完才知道這份多大。
+  void finish() {
+    _queue = _queue.then((_) async {
+      final file = _file;
+      if (_fileFailed || file == null) return;
+      try {
+        await _prune(file.parent, keep: file.path);
+      } catch (error) {
+        AppLog.w('AI 修復的完整紀錄修剪不了: $error');
+      }
+    });
+  }
+
+  /// 只留最近的 [_keptFiles] 個、合計 [_keptBytes] 以內：從新的往舊的數，
+  /// 超過的刪掉。[room] 是要騰出的位置（開新檔時是 1）；[keep] 那份不刪。
+  static Future<void> _prune(
+    Directory directory, {
+    int room = 0,
+    String? keep,
+  }) async {
     final files = [
       for (final entity in directory.listSync())
         if (entity is File && entity.path.endsWith('.txt')) entity,
@@ -230,7 +249,13 @@ final class AiRepairLog {
     var bytes = 0;
     for (final (i, file) in files.indexed) {
       bytes += file.lengthSync();
-      if (i >= _keptFiles - 1 || bytes > _keptBytes) {
+      if (file.path == keep) continue;
+      // 寫完時修剪：同時修的別件還在寫自己那份，最近動過的不刪。
+      if (keep != null &&
+          DateTime.now().difference(file.lastModifiedSync()) < _stillWriting) {
+        continue;
+      }
+      if (i >= _keptFiles - room || bytes > _keptBytes) {
         try {
           file.deleteSync();
         } on FileSystemException {
@@ -242,6 +267,9 @@ final class AiRepairLog {
 
   static const int _keptFiles = 100;
   static const int _keptBytes = 50 * 1024 * 1024;
+
+  /// 這麼久內動過的紀錄檔當成還在寫。
+  static const Duration _stillWriting = Duration(minutes: 10);
 
   static const int _responseHead = 200;
   static const int _replyHead = 800;

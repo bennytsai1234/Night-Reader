@@ -296,7 +296,23 @@ class AiRepairSession extends ChangeNotifier {
     } finally {
       _running = false;
       // 抓到的網頁只給這次的 AI 用；整批修復一次開幾十段，不留在記憶體。
+      // 開場試抓的報告也帶著整頁原文：做完了（等貼回書源的不算）一起放掉。
       _pages.clear();
+      if (job.outcome != null) {
+        log.finish();
+        job
+          .._firstProbe = null
+          .._probe = null;
+        // 迴圈到了未收斂的門檻直接結束，那一輪的步驟還是執行中：標成沒做完，
+        // 畫面不停在轉圈。
+        for (final step in job.steps) {
+          if (step.state == AiRepairStepState.running) {
+            step
+              ..state = AiRepairStepState.failed
+              ..detail = step.detail ?? '沒有做完';
+          }
+        }
+      }
       CrashTrail.action(
         'AI 修復${_stopped ? '停下了' : '做完了'}：${job.original.bookSourceName}',
       );
@@ -377,7 +393,7 @@ class AiRepairSession extends ChangeNotifier {
 
   Future<void> _repair(AiRepairJob job) async {
     final original = job.original;
-    job._secrets = await _secretsOf(original);
+    await _refreshSecrets(job);
     log
       ..redact = ((text) => _redact(job, text))
       ..header(_serviceText, prompt: aiRepairPromptVersion);
@@ -796,8 +812,22 @@ class AiRepairSession extends ChangeNotifier {
     }
   }
 
-  String _redact(AiRepairJob job, String text) =>
-      redactAiRepairSecrets(text, job._secrets);
+  /// 送給 AI、寫進紀錄的文字都經過這裡：開始時讀到的秘密、修復途中重讀
+  /// 的（[_refreshSecrets]），加上記憶體裡現在的 Cookie 值。
+  String _redact(AiRepairJob job, String text) => redactAiRepairSecrets(text, {
+    ...job._secrets,
+    ...aiRepairLiveCookieSecrets({job.original.getKey(), ?job.repairedUrl}),
+  });
+
+  /// 重讀這個書源的秘密，併進已知的：修復途中規則可能寫了新的 Cookie、登入
+  /// 標頭或書源變數，舊的也照樣遮（ADR 0054）。AI 服務的金鑰也算。
+  Future<void> _refreshSecrets(AiRepairJob job) async {
+    job._secrets = {
+      ...job._secrets,
+      ...await _secretsOf(job.original),
+      if (service?.apiKey case final key? when key.length >= 6) key,
+    };
+  }
 
   /// 一次試抓寫進紀錄：[title] 一句結果、除錯紀錄與送出的請求；完整紀錄
   /// 另外寫每個回應的整頁原文。
@@ -1184,6 +1214,13 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   @override
   Future<AgentResult> execute(AiRepairCommand command) async {
+    final result = await _run(command);
+    // 工具跑完、結果接進對話之前重讀秘密：這一步可能寫了新的 Cookie 或變數。
+    await s._refreshSecrets(job);
+    return result;
+  }
+
+  Future<AgentResult> _run(AiRepairCommand command) async {
     final step = this.step!;
     switch (command) {
       case AiGiveUp(:final reason, :final why)

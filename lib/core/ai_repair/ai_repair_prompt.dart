@@ -23,12 +23,17 @@ sealed class AiRepairCommand {
         : null;
     final page = _int(json['page']);
     return switch (name) {
-      'test' when change != null => AiTest(
-        change,
-        note,
-        from: json['from'] as String? ?? 'search',
-        url: json['url'] as String?,
-      ),
+      // 選填的參數型別不對也算讀不懂，不讓轉型丟出例外中止整件。
+      'test'
+          when change != null &&
+              _stringOrNull(json['from']) &&
+              _stringOrNull(json['url']) =>
+        AiTest(
+          change,
+          note,
+          from: json['from'] as String? ?? 'search',
+          url: json['url'] as String?,
+        ),
       'submit' when change != null => AiSubmit(change, note),
       'fetch' when json['url'] is String => AiFetch(
         json['url'] as String,
@@ -58,6 +63,8 @@ sealed class AiRepairCommand {
       _ => null,
     };
   }
+
+  static bool _stringOrNull(Object? value) => value == null || value is String;
 
   /// JSON 裡的整數：數字或寫成字串的數字。
   static int? _int(Object? value) => switch (value) {
@@ -620,7 +627,8 @@ final List<AiTool> aiRepairTools = [
     name: 'js',
     description:
         '跑程式：在書源規則 JS 的環境跑，可用系統提示列的 java.* 與 source；'
-        'page(頁碼) 傳回那一頁的原文。回傳回值與錯誤。',
+        'page(頁碼) 傳回那一頁的原文，頁碼直接寫成數字（程式先照寫出的數字把'
+        '那幾頁帶進來，用變數算出來的頁碼讀不到）。回傳回值與錯誤。',
     parameters: _object(
       {
         'code': {'type': 'string', 'description': '要跑的 JS'},

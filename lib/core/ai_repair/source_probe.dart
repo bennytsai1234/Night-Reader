@@ -526,11 +526,22 @@ String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
       final fetched = [
         ...probe.requests,
         for (final page in probe.pages) page.line,
-      ].any((line) => line.contains(next));
+      ].map(_requestedUrl).contains(next);
       return fetched ? null : next;
     }
   }
   return null;
+}
+
+/// 請求紀錄裡請求那一行（`GET` 不寫方法、其他寫在前面，轉址到的標「（轉址）」）
+/// 送出的網址；回應那一行（`←` 開頭，內容裡可能正好有下一頁的連結）是 null。
+String? _requestedUrl(String line) {
+  final words = line.trim().split(' ');
+  if (words.first.startsWith('←')) return null;
+  final url = RegExp(r'^[A-Z]+$').hasMatch(words.first) && words.length > 1
+      ? words[1]
+      : words.first;
+  return url.replaceAll('（轉址）', '');
 }
 
 final RegExp _fetchesItself = RegExp(

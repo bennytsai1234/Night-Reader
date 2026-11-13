@@ -341,6 +341,24 @@ void main() {
     expect(payg.request!.headers['x-opencode-session'], startsWith('ses_'));
   });
 
+  test('a service message that echoes the key does not carry it out', () async {
+    // 審查：相容服務的 401 會把收到的金鑰原樣寫回錯誤訊息。
+    const key = 'sk-secret-key-123456';
+    final service = _Service(401, {
+      'error': {'message': 'Incorrect API key provided: $key'},
+    });
+
+    await expectLater(
+      () =>
+          _client(service, apiKey: key).complete([const AiMessage.user('hi')]),
+      throwsA(
+        isA<AiServiceException>()
+            .having((e) => e.message, 'message', isNot(contains(key)))
+            .having((e) => e.message, 'message', contains('«已遮蔽»')),
+      ),
+    );
+  });
+
   test('errors say what to fix, with the service message', () async {
     final service = _Service(401, {
       'error': {'message': 'Incorrect API key provided'},

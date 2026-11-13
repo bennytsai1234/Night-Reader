@@ -93,6 +93,10 @@ void main() {
         readAiRepairCall(call('fetch', '["/"]')).fact,
         contains('參數要是一個 JSON 物件'),
       );
+      // 審查：選填參數的型別不對時是讀不懂，不是丟出例外中止整件。
+      final wrongType = readAiRepairCall(call('test', '{"patch":{},"from":7}'));
+      expect(wrongType.command, isNull);
+      expect(wrongType.fact, contains('值不對'));
       expect(
         readAiRepairCall(call('submit', '{}')).fact,
         allOf(contains('少了必要的參數'), contains('patch')),

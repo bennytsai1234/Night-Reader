@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
+import 'ai_repair_secrets.dart';
 import 'ai_repair_settings.dart';
 
 /// 對話裡的一句：`system`、`user`、`assistant` 說的話，或 `tool`（工具的
@@ -319,13 +320,16 @@ class AiChatClient {
       if (stopped case final reason?) throw reason;
       if (status < 200 || status >= 300) {
         throw AiServiceException(
-          _failure(status, _json(bytes)),
+          _failure(status, _json(bytes), service.apiKey),
           retryable: status == 408 || status == 429 || status >= 500,
         );
       }
       if (!type.contains('event-stream')) reader.whole(_json(bytes));
       if (reader.error case final message?) {
-        throw AiServiceException('AI 服務出錯：$message', retryable: true);
+        throw AiServiceException(
+          'AI 服務出錯：${_withoutKey(message, service.apiKey)}',
+          retryable: true,
+        );
       }
       if (reader.runaway case final reason?) throw reason;
       final content = reader.content.toString();
@@ -380,7 +384,12 @@ class AiChatClient {
     );
   }
 
-  static String _failure(int status, Object? data) {
+  /// 服務的錯誤訊息有時把收到的金鑰原樣回顯（「Incorrect API key provided:
+  /// sk-…」）：錯誤離開這裡之前換掉，畫面、紀錄與結果都看不到。
+  static String _withoutKey(String text, String key) =>
+      key.isEmpty ? text : text.replaceAll(key, aiRepairRedacted);
+
+  static String _failure(int status, Object? data, String key) {
     final detail = switch (data) {
       {'error': {'message': final String message}} => message,
       {'error': final String message} => message,
@@ -395,7 +404,11 @@ class AiChatClient {
       _ => 'AI 服務出錯（$status）',
     };
     if (detail == null || detail.trim().isEmpty) return reason;
-    final short = detail.trim().replaceAll(RegExp(r'\s+'), ' ');
+    // 先換掉金鑰再截短：截掉一半的金鑰認不出來。
+    final short = _withoutKey(
+      detail,
+      key,
+    ).trim().replaceAll(RegExp(r'\s+'), ' ');
     return '$reason：${short.length > 120 ? '${short.substring(0, 120)}…' : short}';
   }
 }

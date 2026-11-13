@@ -3,6 +3,7 @@ import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 const _chapter = 'https://www.site.example/book/149032/95393.html';
+const _chapterNext = 'https://www.site.example/book/149032/95393_2.html';
 
 /// 試抓到正文的報告：正文頁是 [body]（下書網 2026-11-12 的結構）。
 SourceProbeReport _probe(String body, {bool fetchedNext = false}) =>
@@ -13,8 +14,12 @@ SourceProbeReport _probe(String body, {bool fetchedNext = false}) =>
         (1000, '︽解析完成'),
       ],
       requests: [
-        '  ← $_chapter 200：…',
-        if (fetchedNext) '  ← ${_chapter.replaceAll('.html', '_2.html')} 200：…',
+        _chapter,
+        '  ← $_chapter 200：$body',
+        if (fetchedNext) ...[
+          _chapter.replaceAll('.html', '_2.html'),
+          '  ← ${_chapter.replaceAll('.html', '_2.html')} 200：…',
+        ],
       ],
       pages: [
         (line: _chapter, body: null),
@@ -40,6 +45,21 @@ void main() {
     expect(
       unjoinedContentPage(_probe(_halfChapter), _source()),
       'https://www.site.example/book/149032/95393_2.html',
+    );
+  });
+
+  test('the next-page link written in the first page does not count as '
+      'fetching it', () {
+    // 審查：回應那一行的內容裡正好有下一頁的絕對網址。
+    expect(
+      unjoinedContentPage(
+        _probe(
+          '<div id="content">前半章</div>'
+          '<a href="$_chapterNext">下一页</a>',
+        ),
+        _source(),
+      ),
+      _chapterNext,
     );
   });
 

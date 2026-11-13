@@ -130,6 +130,7 @@ void main() {
     bool clipboard = false,
     List<String>? copied,
     Set<String> secretValues = const {},
+    Future<Set<String>> Function(BookSource source)? secrets,
     Set<String> timesOut = const {},
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
@@ -180,7 +181,7 @@ void main() {
         return fakeAiReply(replies[next++]);
       },
       apply: (source, _) async => applied.add(source),
-      secrets: (_) async => secretValues,
+      secrets: secrets ?? (_) async => secretValues,
       copy: (text) async => copied?.add(text),
       backups: backups,
     );
@@ -497,6 +498,29 @@ void main() {
     expect(asked[1], asked[0], reason: '同樣的話再問一次');
   });
 
+  test(
+    'a secret that shows up only after a tool ran is hidden from then on',
+    () async {
+      // 審查：開始時讀到的秘密是快照，修到一半規則才寫進的 Cookie 或變數照樣
+      // 要遮。這裡讓第二次讀秘密才多出一個值，網站回的頁面正好帶著它。
+      const secret = 'late-session-987654';
+      var reads = 0;
+      final s = session(
+        [_source('https://site.example')],
+        replies: [
+          jsonEncode({'action': 'fetch', 'url': '/s?t=$secret'}),
+          _command('test'),
+        ],
+        secrets: (_) async => reads++ == 0 ? const {} : {secret},
+      );
+
+      await s.start();
+
+      expect(asked[1].last.content, isNot(contains(secret)));
+      expect(asked[1].last.content, contains('«已遮蔽»'));
+    },
+  );
+
   test('an AI going in circles stops as not finished, not as unfixable, with '
       'the stats line for the evaluation table', () async {
     final logs = Directory.systemTemp.createTempSync('ai-repair-log');
@@ -516,6 +540,11 @@ void main() {
     expect(job.outcome, AiRepairOutcome.failed);
     expect(job.confirmedUnfixable, isFalse);
     expect(job.explanation, contains('同樣的工具與參數第 4 次'));
+    expect(
+      job.steps.where((step) => step.state == AiRepairStepState.running),
+      isEmpty,
+      reason: '審查：到了門檻直接結束，最後一輪不停在轉圈',
+    );
     expect(s.log.summary, contains('無法確認'));
     final full = (await s.log.file())!.readAsStringSync();
     final stats = full

@@ -15,6 +15,20 @@ void main() {
     directory: () async => directory,
   );
 
+  test('finishing a log prunes the folder again, keeping this one', () async {
+    // 審查：上限原本只在開新檔前檢查，寫完後合計可以一直超過。
+    final old = File('${directory.path}/20260101-000000-000-old.txt')
+      ..writeAsBytesSync(List.filled(49 * 1024 * 1024, 32));
+    old.setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 1)));
+    final record = log()..section('大' * (2 * 1024 * 1024));
+    final file = (await record.file())!;
+    record.finish();
+    await record.file();
+
+    expect(file.existsSync(), isTrue);
+    expect(old.existsSync(), isFalse);
+  });
+
   test('the summary keeps the start of each response and writes a repeated '
       'one only once; the full log keeps the whole page', () async {
     final page = '<p>${'大家都在搜索' * 100}</p>';
