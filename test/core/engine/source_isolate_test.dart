@@ -115,6 +115,29 @@ Future<(List<String>, int)> _contentRequestLogInSourceIsolate(
   return (log.lines, log.transientResponses);
 });
 
+/// 同 [_contentRequestLogInSourceIsolate]，照 AI 修書源試抓的方式記：網頁
+/// 精簡過給 AI 看，另外留整頁原文；傳回兩份。
+Future<(List<String>, List<LoggedPage>)> _probeRequestLogInSourceIsolate(
+  Map<String, dynamic> sourceJson,
+  String chapterUrl,
+) => SourceIsolate.run((_) async {
+  final source = BookSource.fromJson(sourceJson);
+  final book = Book(bookUrl: chapterUrl, origin: source.bookSourceUrl);
+  final log = RequestLog(
+    responsePreview: 6000,
+    digestPages: true,
+    keepPages: true,
+  );
+  await log.run(
+    () => BookSourceService().getContent(
+      source,
+      book,
+      BookChapter(title: '第一章', url: chapterUrl, bookUrl: chapterUrl),
+    ),
+  );
+  return (log.lines, log.pages);
+});
+
 Future<void> _logInSourceIsolate(String message) =>
     SourceIsolate.run((_) async => AppLog.put(message, toast: true));
 
@@ -131,6 +154,31 @@ Future<String> _evaluateJs(String code) => SourceIsolate.run((_) async {
   final engine = JsEngine();
   try {
     return '${engine.evaluate(code)}';
+  } finally {
+    engine.dispose();
+  }
+});
+
+/// 在書源 isolate 用 [call]（`url` 是會照實回 Cookie 標頭的那一頁）送出
+/// 請求，傳回網站收到的 Cookie。
+Future<String> _echoCookie(
+  String baseUrl,
+  String call, {
+  required bool cookieJar,
+}) => SourceIsolate.run((_) async {
+  final engine = JsEngine(
+    source: BookSource(
+      bookSourceUrl: baseUrl,
+      bookSourceName: 'cookie',
+      enabledCookieJar: cookieJar,
+    ),
+  );
+  try {
+    return '${engine.evaluate('var url = "$baseUrl/echo-cookie";'
+    'cookie.setCookie(url, "search_pass=1");'
+    'var sent = $call.body();'
+    'cookie.removeCookie(url);'
+    'sent;')}';
   } finally {
     engine.dispose();
   }
@@ -312,6 +360,14 @@ void main() {
           request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
         case '/c/2':
           request.response.write('<p>第二章的正文，夜裡讀起來剛好。</p>');
+        case '/scripted':
+          request.response.write(
+            '<html><head><title>轉址</title>'
+            '<script>location="https://ads.example/go"</script></head>'
+            '<body><p>第一章的正文，夜裡讀起來剛好。</p></body></html>',
+          );
+        case '/echo-cookie':
+          request.response.write(request.headers.value('cookie') ?? '');
         case '/count':
           counted++;
           request.response.write('數到了');
@@ -831,6 +887,30 @@ void main() {
       );
     });
 
+    // 同 Legado（JsExtensions.get/post/head）：書源開了 Cookie 罐時，送出前帶上
+    // 網站存著的 Cookie。2026-11-12 AI 修下书网：寫入 search_pass
+    // 之後 java.ajax 過得了防搜刮驗證，java.get 過不了，AI 為此繞了 4 輪。
+    for (final (method, call) in [
+      ('get', 'java.get(url, {})'),
+      ('post', 'java.post(url, "a=1", {})'),
+    ]) {
+      test('java.$method sends the cookies the site has stored when the '
+          'source keeps cookies', () async {
+        // 規則的 cookie.setCookie、登入存的都在這裡；在主 isolate 存，書源與
+        // 網路 isolate 照常讀得到（ADR 0028）。
+        await CookieStore().setCookie(baseUrl, 'search_pass=1');
+        addTearDown(() => CookieStore().removeCookie(baseUrl));
+        expect(
+          await _echoCookie(baseUrl, call, cookieJar: true),
+          contains('search_pass=1'),
+        );
+        expect(
+          await _echoCookie(baseUrl, call, cookieJar: false),
+          isNot(contains('search_pass=1')),
+        );
+      });
+    }
+
     test('inside a callback', () async {
       expect(
         await _evaluateJs('''
@@ -1078,6 +1158,28 @@ void main() {
       },
       skip: quickJsUnavailableReason(),
     );
+
+    // AI 修書源的試抓：規則 JS 抓的網頁在網路 isolate 也照同樣的設定記，
+    // 給 AI 的精簡過，完整紀錄留整頁原文（含程式）。
+    test('a page the rule JS fetches is digested for the AI and kept whole for '
+        'the full log', () async {
+      source.ruleContent!.content = '@js:java.ajax("$baseUrl/scripted")';
+
+      final (lines, pages) = await _probeRequestLogInSourceIsolate(
+        source.toJson(),
+        '$baseUrl/c/1',
+      );
+
+      final reply = lines.singleWhere((l) => l.contains('/scripted '));
+      expect(reply, contains('第一章的正文'));
+      // 程式拿掉了，只寫出它會轉到哪裡（page_notes）。
+      expect(reply, isNot(contains('<script')));
+      expect(reply, contains('（這頁用程式轉到 https://ads.example/go）'));
+      expect(
+        pages.singleWhere((p) => p.line.contains('/scripted ')).body,
+        contains('<script>location="https://ads.example/go"</script>'),
+      );
+    }, skip: quickJsUnavailableReason());
 
     test('explore kinds and explore pages', () async {
       final service = BookSourceService();

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -14,69 +15,102 @@ BookSource _source() => BookSource(
 );
 
 void main() {
+  test('the opening lists the fetched pages without their text; the '
+      'clipboard prompt keeps the text', () {
+    const probe = SourceProbeReport(
+      logs: [(10, '︾開始解析搜尋頁')],
+      requests: [
+        'https://site.example/s?q=1',
+        '  ← 頁 1｜https://site.example/s?q=1 200 text/html，900 位元組，精簡後 '
+            '300 字：<div class="list">第一本書</div>',
+      ],
+    );
+    final opening = aiRepairOpening(
+      source: _source(),
+      checkResult: '搜尋失效',
+      probe: probe,
+    ).last.content;
+    expect(opening, contains('頁 1｜https://site.example/s?q=1 200 text/html'));
+    expect(opening, contains('（內容沒放進開場）'));
+    expect(opening, isNot(contains('第一本書')));
+    expect(
+      aiRepairClipboardPrompt(
+        source: _source(),
+        checkResult: '搜尋失效',
+        probe: probe,
+      ),
+      contains('第一本書'),
+      reason: '網頁版 AI 沒有讀頁的工具',
+    );
+  });
+
   group('reading the AI reply', () {
-    test('finds the command inside prose and code fences', () {
-      final command = AiRepairCommand.parse('''
-好的，我改了正文規則：
-```json
-{"action":"test","source":{"bookSourceUrl":"x","ruleContent":{"content":"class.txt@text"}},"note":"正文換成 class.txt"}
-```
-''');
+    AiToolCall call(String name, String arguments) =>
+        (id: 'call_1', name: name, arguments: arguments);
 
-      expect(command, isA<AiTest>());
-      final test = command! as AiTest;
-      expect(test.note, '正文換成 class.txt');
-      expect(test.change.source!['ruleContent'], {'content': 'class.txt@text'});
-    });
+    test(
+      'a tool call is read into a command, with a key for its arguments',
+      () {
+        final test = readAiRepairCall(
+          call(
+            'test',
+            '{"patch":{"ruleSearch":{"bookList":".item"}},"note":"列表換了"}',
+          ),
+        );
+        final command = test.command! as AiTest;
+        expect(command.note, '列表換了');
+        expect(command.change.patch, {
+          'ruleSearch': {'bookList': '.item'},
+        });
+        expect(
+          test.key,
+          readAiRepairCall(
+            call(
+              'test',
+              '{"note":"說明不同","patch":{"ruleSearch":{"bookList":".item"}}}',
+            ),
+          ).key,
+          reason: '同樣的參數、說明不同，key 一樣',
+        );
 
-    test('a patch, a page to look at, and a reply missing its last braces', () {
-      final patch = AiRepairCommand.parse(
-        '{"action":"test","patch":{"ruleSearch":{"bookList":".item"}},"note":"列表換了"}',
-      );
-      expect((patch! as AiTest).change.patch, {
-        'ruleSearch': {'bookList': '.item'},
-      });
+        final read = readAiRepairCall(call('read', '{"page":"3"}'));
+        expect((read.command! as AiRead).page, 3, reason: '頁碼寫成字串也認');
+        final fetch = readAiRepairCall(call('fetch', '{"url":"/"}'));
+        expect((fetch.command! as AiFetch).url, '/');
+      },
+    );
 
-      final fetch = AiRepairCommand.parse('{"action":"fetch","url":"/"}');
-      expect((fetch! as AiFetch).url, '/');
-
-      final unclosed = AiRepairCommand.parse(
-        '{"action":"test","source":{"ruleContent":{"content":"a{b}c"}},"note":"x"',
-      );
-      expect((unclosed! as AiTest).change.source!['ruleContent'], {
-        'content': 'a{b}c',
-      });
-
-      final withList = AiRepairCommand.parse(
-        '{"action":"test","patch":{"ruleSearch":{"bookList":"[x]"},"x":[1,{"a":2',
-      );
-      expect((withList! as AiTest).change.patch!['x'], [
-        1,
-        {'a': 2},
-      ]);
-    });
-
-    test('an unreadable reply is told what was wrong', () {
-      expect(aiRepairBadReplyFor('沒有 JSON'), contains('裡面沒有 JSON 物件'));
-      expect(aiRepairBadReplyFor('{"a":1,}'), contains('JSON 格式錯'));
+    test('an unreadable call is told what was wrong', () {
       expect(
-        aiRepairBadReplyFor('{"action":"test"}'),
-        contains('action 或欄位不對'),
+        readAiRepairCall(call('dance', '{}')).fact,
+        allOf(startsWith(aiRepairBadCall), contains('沒有叫 dance 的工具')),
       );
+      expect(
+        readAiRepairCall(call('fetch', '{"url":')).fact,
+        contains('參數不是合法的 JSON'),
+      );
+      expect(
+        readAiRepairCall(call('fetch', '["/"]')).fact,
+        contains('參數要是一個 JSON 物件'),
+      );
+      // 審查：選填參數的型別不對時是讀不懂，不是丟出例外中止整件。
+      final wrongType = readAiRepairCall(call('test', '{"patch":{},"from":7}'));
+      expect(wrongType.command, isNull);
+      expect(wrongType.fact, contains('值不對'));
+      expect(
+        readAiRepairCall(call('submit', '{}')).fact,
+        allOf(contains('少了必要的參數'), contains('patch')),
+      );
+      expect(readAiRepairCall(call('submit', '{}')).command, isNull);
     });
 
-    test('braces inside strings do not end the object early', () {
-      final command = AiRepairCommand.parse(
-        r'{"action":"give_up","reason":"規則 {{key}} 的 \"}\" 不對"}',
-      );
-
-      expect((command! as AiGiveUp).reason, r'規則 {{key}} 的 "}" 不對');
-    });
-
-    test('unknown actions and broken JSON are not commands', () {
-      expect(AiRepairCommand.parse('我覺得是正文規則的問題'), isNull);
-      expect(AiRepairCommand.parse('{"action":"dance"}'), isNull);
-      expect(AiRepairCommand.parse('{"action":"submit"}'), isNull);
+    test('every tool says which arguments it needs', () {
+      for (final tool in aiRepairTools) {
+        final properties = tool.parameters['properties']! as Map;
+        for (final name in tool.parameters['required']! as List) {
+          expect(properties, contains(name), reason: tool.name);
+        }
+      }
     });
 
     test('a pasted source may be bare, a command, or a Legado array', () {
@@ -91,6 +125,23 @@ void main() {
         'bookSourceUrl': 'c',
       });
       expect(pastedSourceJson('{"name":"不是書源"}'), isNull);
+    });
+
+    test('a pasted source missing its last braces, or with braces inside '
+        'strings, is still read', () {
+      expect(
+        pastedSourceJson(
+          '好的：\n{"bookSourceUrl":"a","ruleContent":{"content":"a{b}c"}',
+        ),
+        {
+          'bookSourceUrl': 'a',
+          'ruleContent': {'content': 'a{b}c'},
+        },
+      );
+      expect(
+        pastedSourceJson(r'{"bookSourceUrl":"b","searchUrl":"{{key}} \"}\""}'),
+        {'bookSourceUrl': 'b', 'searchUrl': r'{{key}} "}"'},
+      );
     });
   });
 
@@ -138,6 +189,39 @@ void main() {
     expect(current['searchUrl'], '/search?q={{key}}', reason: '原本的不動');
   });
 
+  test('a change naming a field the source does not have is turned back, '
+      'with the fields it can use', () {
+    // 2026-11-12 涨姿势：AI 把詳情規則寫成 ruleInfo，照收的話什麼都沒改。
+    final wrongRule = aiChangeProblem((
+      source: null,
+      patch: {
+        'ruleInfo': {'name': 'h1@text'},
+      },
+    ));
+    expect(wrongRule, contains('ruleInfo'));
+    expect(wrongRule, contains('ruleBookInfo'));
+    expect(
+      aiChangeProblem((
+        source: null,
+        patch: {
+          'ruleToc': {'chapterTitle': 'text'},
+        },
+      )),
+      allOf(contains('chapterTitle'), contains('chapterName')),
+    );
+    expect(
+      aiChangeProblem((
+        source: null,
+        patch: {
+          'ruleBookInfo': {'tocUrl': ''},
+          'searchUrl': '/s?q={{key}}',
+          'ruleSearch': '',
+        },
+      )),
+      isNull,
+    );
+  });
+
   test('the site address may only change at its start', () {
     expect(
       siteMovedUrl('http://www.a.cc/#🎃', 'https://a.cc/whatever'),
@@ -174,6 +258,7 @@ void main() {
     const probe = SourceProbeReport(
       logs: [(10, '︾開始解析搜尋頁'), (40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
       requests: ['https://site.example/s', '  ← https://site.example/s 200'],
+      contentUsable: true,
     );
 
     expect(probe.succeeded, isTrue);
@@ -181,17 +266,17 @@ void main() {
     expect(probe.stagesReached, '搜尋、正文');
     expect(probe.pageCount, 1);
     expect(aiRepairProbeReply(probe), startsWith('# 試抓結果：正文 3214 字'));
-    expect(aiRepairBudget(testsLeft: 1, fetchesLeft: 3), contains('最後一次試抓'));
   });
 
   test('a probe that reaches only a line of text has not succeeded', () {
     const probe = SourceProbeReport(
       logs: [(40, '︽正文頁解析完成 (內容長度: 11)'), (1000, '︽解析完成')],
       requests: [],
+      contentUsable: false,
     );
 
     expect(probe.succeeded, isFalse);
-    expect(probe.summary, '正文 11 字');
+    expect(probe.summary, startsWith('正文 11 字，書源校驗不算抓到'));
   });
 
   test('a failed probe says where it stopped', () {

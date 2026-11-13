@@ -26,7 +26,12 @@ extension JsFontExtensions on JsExtensionsBase {
         if (useCache && JsExtensionsBase.ttfCache.containsKey(key)) return key;
 
         final buffer = dataStr.startsWith('http')
-            ? BlockingCall.run(plainBytes(dataStr)) as Uint8List
+            ? BlockingCall.run(
+                plainBytes(
+                  dataStr,
+                  cookieJar: source?.enabledCookieJar == true,
+                ),
+              ) as Uint8List
             : EncodeUtilsBase64.decodeAndroid(dataStr);
         final qTTF = QueryTTF(buffer);
         final cacheKey = key.isNotEmpty ? key : md5.convert(buffer).toString();

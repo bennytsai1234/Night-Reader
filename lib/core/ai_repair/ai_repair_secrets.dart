@@ -60,13 +60,32 @@ String redactAiRepairSecrets(String text, Set<String> secrets) {
     ..sort((a, b) => b.length.compareTo(a.length));
   var out = text;
   for (final secret in ordered) {
-    out = out.replaceAll(secret, aiRepairRedacted);
-    // 網址裡的值是編碼過的。
-    final encoded = Uri.encodeQueryComponent(secret);
-    if (encoded != secret) out = out.replaceAll(encoded, aiRepairRedacted);
+    for (final form in _forms(secret)) {
+      out = out.replaceAll(form, aiRepairRedacted);
+    }
   }
   return out;
 }
+
+/// 秘密在送出的文字裡可能長的樣子：原樣、網址編碼，與放進 JSON 字串後跳脫
+/// 一層、兩層的（書源標頭本身是 JSON 字串，放進書源 JSON 又跳脫一層）。
+Set<String> _forms(String secret) {
+  String escaped(String value) {
+    final json = jsonEncode(value);
+    return json.substring(1, json.length - 1);
+  }
+
+  final once = escaped(secret);
+  return {secret, Uri.encodeQueryComponent(secret), once, escaped(once)};
+}
+
+/// 這個書源在記憶體裡現在的 Cookie 值：修復途中規則或網站驗證才寫進來的
+/// （[aiRepairSecretsOf] 只在開始時讀一次）。同步讀，每次遮蔽前都看。
+Set<String> aiRepairLiveCookieSecrets(Iterable<String> urls) => {
+  for (final url in urls)
+    for (final value in _cookieValues(CookieStore().getMemoryCookie(url) ?? ''))
+      if (value.trim().length >= _minSecretLength) value.trim(),
+};
 
 /// 書源標頭（JSON 物件）裡的 Cookie 與 Authorization：整段與 Cookie 的每個值。
 Iterable<String> _sensitiveHeaderValues(String? header) sync* {

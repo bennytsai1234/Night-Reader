@@ -16,6 +16,16 @@ class LenientCookieManager extends Interceptor {
   final CookieJar cookieJar;
   bool ignoreInvalidCookies;
 
+  /// 請求的 `extra` 裡這一項是 false 時，回應的 Cookie 不存：書源沒開
+  /// Cookie 罐（同 Legado：`HttpHelper` 的網路攔截器只在請求帶著 CookieJar
+  /// 標頭時 `CookieManager.saveResponse`）。存著的 Cookie 照樣帶上。
+  static const String saveResponseCookiesKey = 'saveResponseCookies';
+
+  /// 書源請求的 `extra`：照 [enabledCookieJar] 決定存不存回應的 Cookie。
+  static Map<String, dynamic> sourceExtra(bool enabledCookieJar) => {
+    if (!enabledCookieJar) saveResponseCookiesKey: false,
+  };
+
   static String getCookies(List<Cookie> cookies) {
     cookies.sort((a, b) {
       if (a.path == null && b.path == null) {
@@ -120,20 +130,27 @@ class LenientCookieManager extends Interceptor {
     );
   }
 
+  /// 請求自己帶的 Cookie（規則給的、併進來的 `CookieStore`）加上 Cookie 罐裡
+  /// 符合網址的；同名的以請求帶的為準，罐裡的舊值不再附上（同 Legado
+  /// `CookieManager.mergeCookies` 照名稱合成一份）：不然網站同時收到
+  /// `sid=新; sid=舊`。
   Future<String> loadCookies(RequestOptions options) async {
     final savedCookies = await cookieJar.loadForRequest(options.uri);
-    final cookies = getCookies([
-      ..._cookieHeaderValues(options.headers)
-          .expand((value) => value.split(';'))
-          .where((e) => e.isNotEmpty)
-          .map((c) => _fromSetCookieValue(c))
-          .whereType<Cookie>(),
-      ...savedCookies,
+    final given = _cookieHeaderValues(options.headers)
+        .expand((value) => value.split(';'))
+        .where((e) => e.trim().isNotEmpty)
+        .map((c) => _fromSetCookieValue(c))
+        .whereType<Cookie>()
+        .toList();
+    final givenNames = {for (final cookie in given) cookie.name};
+    return getCookies([
+      ...given,
+      ...savedCookies.where((cookie) => !givenNames.contains(cookie.name)),
     ]);
-    return cookies;
   }
 
   Future<void> saveCookies(Response response) async {
+    if (response.requestOptions.extra[saveResponseCookiesKey] == false) return;
     final setCookies = response.headers[HttpHeaders.setCookieHeader];
     if (setCookies == null || setCookies.isEmpty) {
       return;

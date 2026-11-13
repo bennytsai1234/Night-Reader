@@ -6,6 +6,7 @@ import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/page_digest.dart';
+import 'package:night_reader/core/network/page_notes.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/utils/public_suffix.dart';
 
@@ -102,7 +103,7 @@ SiteCheck judgeSite({
   final status = home.status ?? 0;
   final body = home.body;
   // 防護頁先認：它的腳本裡可能剛好有停放頁的字樣。
-  if (_challenge.hasMatch(body)) {
+  if (isProtectionPage(body)) {
     return const SiteCheck(SiteVerdict.blocked, '要在瀏覽器裡通過驗證才放行');
   }
   final shell = digestPage(body);
@@ -147,15 +148,6 @@ final RegExp _parked = RegExp(
   r'parking-lander|/lander\b|LANDER_SYSTEM|parklogic|sedoparking|bodis\.com|'
   r'dan\.com|afternic|hugedomains|domain (?:is )?for sale|'
   r'域名(?:出售|转让|轉讓|已过期|已到期)|此域名|该域名|一口价',
-  caseSensitive: false,
-);
-
-/// 要瀏覽器算題目或人工勾選的防護頁。Cloudflare 的五秒盾夜讀會在背景的
-/// 瀏覽器裡過（ADR 0033），過不了才會還是這一頁。
-final RegExp _challenge = RegExp(
-  r'anubis|making sure you(?:&#39;|’|'
-  ')re not a bot|正在确认你是不是机器人|'
-  r'<title>\s*just a moment|cf-chl-|challenge-platform',
   caseSensitive: false,
 );
 
@@ -250,7 +242,19 @@ Future<Map<String, Object?>> Function(CancelToken) _siteTask(
     }
   }
 
-  final home = await fetch('$origin/');
+  var home = await fetch('$origin/');
+  // 首頁用程式轉址的（例如停放後轉到出售頁）照它轉去的那頁判斷，和抓網頁
+  // 的轉址一樣：精簡後看不到程式，只看首頁會當成空殼。
+  if (home.error == null) {
+    final target = scriptRedirectOf(home.body);
+    final base = Uri.tryParse(home.finalUrl ?? '$origin/');
+    final next = target == null ? null : base?.resolve(target).toString();
+    if (next != null && next.startsWith('http')) {
+      // 轉去的網址抓不到時照首頁判斷：網站本身是在的。
+      final followed = await fetch(next);
+      if (followed.error == null) home = followed;
+    }
+  }
   final probe = Random().nextInt(1 << 30).toRadixString(36);
   final missing = home.error == null
       ? await fetch('$origin/nr-missing-$probe.html')

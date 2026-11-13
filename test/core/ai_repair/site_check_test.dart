@@ -60,6 +60,10 @@ void main() {
       _judge(const SitePage(error: '網站的瀏覽器檢查沒有通過')).verdict,
       SiteVerdict.blocked,
     );
+    expect(
+      _judge(_page('<h3>防搜刮安全验证</h3><div>请计算 3 + 4 = ?</div>')).verdict,
+      SiteVerdict.blocked,
+    );
   });
 
   test('a home page that lands on another site means the site moved', () {

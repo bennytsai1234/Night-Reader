@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
@@ -11,6 +12,8 @@ import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/features/source_manager/ai_repair/ai_repair_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+
+import '../../support/fake_ai.dart';
 
 const _service = (
   baseUrl: 'https://ai.example/v1',
@@ -32,6 +35,7 @@ SourceCheckIsolateResult _checked(BookSource source) {
 
 const _probe = SourceProbeReport(
   logs: [(40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
+  contentUsable: true,
   requests: ['  ← https://site.example/c/1 200：…'],
 );
 
@@ -53,7 +57,7 @@ void main() {
   }
 
   testWidgets('steps fill in as the repair goes, then 完成', (tester) async {
-    final reply = Completer<String>();
+    final reply = Completer<AiReply>();
     final session = AiRepairSession(
       source: BookSource(
         bookSourceUrl: 'https://site.example',
@@ -62,7 +66,7 @@ void main() {
       ),
       service: _service,
       check: (source, _) async => _checked(source),
-      probe: (_, _) async => _probe,
+      probe: (_, _, {start}) async => _probe,
       keywordCheck: (_, _) async => true,
       ask: (_, _) => reply.future,
       apply: (_, _) async {},
@@ -81,13 +85,15 @@ void main() {
     expect(find.text('送到 ai.example · m'), findsOneWidget);
 
     reply.complete(
-      jsonEncode({
-        'action': 'submit',
-        'source': {
-          'ruleContent': {'content': 'class.txt@text'},
-        },
-        'note': '正文在 div.txt',
-      }),
+      fakeAiReply(
+        jsonEncode({
+          'action': 'submit',
+          'patch': {
+            'ruleContent': {'content': 'class.txt@text'},
+          },
+          'note': '正文在 div.txt',
+        }),
+      ),
     );
     await _settle(tester);
 
@@ -111,7 +117,7 @@ void main() {
       ),
       service: null,
       check: (source, _) async => _checked(source),
-      probe: (_, _) async => _probe,
+      probe: (_, _, {start}) async => _probe,
       keywordCheck: (_, _) async => true,
       apply: (_, _) async {},
       secrets: (_) async => const {},

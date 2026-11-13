@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 
+import '../../support/fake_ai.dart';
+
 const _service = (
   baseUrl: 'https://ai.example/v1',
   apiKey: 'k',
@@ -76,6 +78,7 @@ SourceCheckIsolateResult _checked(BookSource source) {
 SourceProbeReport _probe(BookSource source) => _good(source)
     ? const SourceProbeReport(
         logs: [(40, '︽正文頁解析完成 (內容長度: 3214)'), (1000, '︽解析完成')],
+        contentUsable: true,
         requests: [],
       )
     : const SourceProbeReport(logs: [(-1, '❌ 正文為空')], requests: []);
@@ -86,7 +89,11 @@ final _fix = jsonEncode({
     'ruleContent': {'content': 'class.txt@text'},
   },
 });
-final _giveUp = jsonEncode({'action': 'give_up', 'reason': '網站關了'});
+final _giveUp = jsonEncode({
+  'action': 'give_up',
+  'why': 'site_gone',
+  'reason': '網站關了',
+});
 
 void main() {
   late List<BookSource> saved;
@@ -140,12 +147,13 @@ void main() {
           source: source,
           service: _service,
           check: (s, _) async => _checked(s),
-          probe: (s, _) async => _probe(s),
+          probe: (s, _, {start}) async => _probe(s),
           keywordCheck: (_, _) async => true,
+          knownTitleSearch: (_, _) async => null,
           ask: (_, _) async {
             asked.add(source.bookSourceUrl);
             b.tokensUsed += tokensPerAnswer;
-            return answers[next++ % answers.length];
+            return fakeAiReply(answers[next++ % answers.length]);
           },
           apply: (repaired, original) async => saved.add(repaired),
           secrets: (_) async => const {},
@@ -392,8 +400,10 @@ void main() {
         source: source,
         service: _service,
         check: (s, _) async => _checked(s),
-        probe: (s, _) async => _probe(s),
-        ask: (_, _) async => _giveUp,
+        probe: (s, _, {start}) async => _probe(s),
+        keywordCheck: (_, _) async => true,
+        knownTitleSearch: (_, _) async => null,
+        ask: (_, _) async => fakeAiReply(_giveUp),
         secrets: (_) async => const {},
         backups: backups,
       ),
@@ -531,7 +541,9 @@ void main() {
         source: source,
         service: _service,
         check: (source, _) async => _checked(source),
-        probe: (source, _) async => _probe(source),
+        probe: (source, _, {start}) async => _probe(source),
+        keywordCheck: (_, _) async => true,
+        knownTitleSearch: (_, _) async => null,
         ask: (_, _) async => throw StateError('AI 服務無法回應'),
         secrets: (_) async => const {},
         backups: backups,

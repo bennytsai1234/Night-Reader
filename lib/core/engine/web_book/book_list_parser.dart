@@ -32,7 +32,6 @@ class BookListParser {
     required bool isSearch,
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
-    dynamic listRuleOverride,
   }) async {
     // 1. 偵測 bookUrlPattern (對標 Android BookList.analyzeBookList)
     if (isSearch && source.bookUrlPattern?.isNotEmpty == true) {
@@ -56,9 +55,9 @@ class BookListParser {
 
     final rule = AnalyzeRule(source: source).setContent(body, baseUrl: baseUrl);
     try {
-      dynamic listRule =
-          listRuleOverride ??
-          (isSearch ? source.ruleSearch : _resolveExploreRule(source));
+      final dynamic listRule = isSearch
+          ? source.ruleSearch
+          : _resolveExploreRule(source);
       if (listRule == null) return [];
 
       String ruleList = listRule.bookList ?? '';
@@ -71,26 +70,7 @@ class BookListParser {
         ruleList = ruleList.substring(1);
       }
 
-      var elements = rule.getElements(ruleList);
-
-      if (!isSearch &&
-          elements.isEmpty &&
-          _shouldFallbackToSearchRule(source, listRule)) {
-        final fallbackRule = source.ruleSearch;
-        if (fallbackRule != null) {
-          listRule = fallbackRule;
-          ruleList = fallbackRule.bookList ?? '';
-          isReverse = false;
-          if (ruleList.startsWith('-')) {
-            isReverse = true;
-            ruleList = ruleList.substring(1);
-          }
-          if (ruleList.startsWith('+')) {
-            ruleList = ruleList.substring(1);
-          }
-          elements = rule.getElements(ruleList);
-        }
-      }
+      final elements = rule.getElements(ruleList);
 
       // 2. 如果列表為空且未配置 bookUrlPattern，嘗試按詳情頁解析 (對標 Android 邏輯)
       if (elements.isEmpty &&
@@ -180,20 +160,6 @@ class BookListParser {
         }
       }
 
-      if (!isSearch &&
-          books.isEmpty &&
-          _shouldFallbackToSearchRule(source, listRule)) {
-        return await _parse(
-          source: source,
-          body: body,
-          baseUrl: baseUrl,
-          isSearch: false,
-          filter: filter,
-          shouldBreak: shouldBreak,
-          listRuleOverride: _copySearchRuleAsExploreRule(source.ruleSearch!),
-        );
-      }
-
       return isReverse ? books.reversed.toList() : books;
     } finally {
       rule.dispose();
@@ -256,6 +222,13 @@ class BookListParser {
     return rule.getStringList(ruleText);
   }
 
+  /// 發現頁用搜尋規則解析：發現沒有自己的書單規則時（[_resolveExploreRule]）。
+  static bool exploreUsesSearchRule(BookSource source) =>
+      source.ruleSearch != null &&
+      identical(_resolveExploreRule(source), source.ruleSearch);
+
+  /// 發現頁用的書單規則：發現有自己的書單規則就用它，沒有時用搜尋規則（同
+  /// Legado `BookList.analyzeBookList`）。自己的規則抓不到書時照實是空的。
   static dynamic _resolveExploreRule(BookSource source) {
     final exploreRule = source.ruleExplore;
     final exploreBookList = exploreRule?.bookList?.trim() ?? '';
@@ -263,33 +236,5 @@ class BookListParser {
       return exploreRule;
     }
     return source.ruleSearch ?? exploreRule;
-  }
-
-  static bool _shouldFallbackToSearchRule(
-    BookSource source,
-    dynamic activeRule,
-  ) {
-    final searchRule = source.ruleSearch;
-    if (searchRule == null) return false;
-    final searchBookList = searchRule.bookList?.trim() ?? '';
-    if (searchBookList.isEmpty) return false;
-    if (identical(activeRule, searchRule)) return false;
-    final activeBookList = (activeRule?.bookList as String?)?.trim() ?? '';
-    return activeBookList != searchBookList;
-  }
-
-  static ExploreRule _copySearchRuleAsExploreRule(SearchRule rule) {
-    return ExploreRule(
-      bookList: rule.bookList,
-      name: rule.name,
-      author: rule.author,
-      intro: rule.intro,
-      kind: rule.kind,
-      lastChapter: rule.lastChapter,
-      updateTime: rule.updateTime,
-      bookUrl: rule.bookUrl,
-      coverUrl: rule.coverUrl,
-      wordCount: rule.wordCount,
-    );
   }
 }

@@ -16,8 +16,9 @@ class BookInfoParser {
     required String baseUrl,
     String? redirectUrl,
   }) async {
-    final infoRule = source.ruleBookInfo;
-    if (infoRule == null) return book;
+    // 沒有詳情規則時照一份空的算（同 Legado BookSource.getBookInfoRule）：
+    // 書名這類沿用書上的，目錄網址照樣退回詳情頁網址。
+    final infoRule = source.ruleBookInfo ?? BookInfoRule();
 
     // 同 Legado（BookInfo.analyzeBookInfo）照書名、作者、分類、字數、最新
     // 章節、簡介、封面、目錄網址的順序算，每一項算完就寫到書上：後面的規則 JS

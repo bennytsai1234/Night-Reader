@@ -1,58 +1,77 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 import 'ai_chat_client.dart';
+import 'repair_pages.dart';
 import 'site_check.dart';
 import 'source_probe.dart';
 
-/// AI 修書源最多試抓幾次。
-const int aiRepairMaxTests = 6;
-
-/// AI 修書源最多看幾頁網頁（不算試抓）。
-const int aiRepairMaxFetches = 5;
-
-/// AI 最多回幾次話（含讀不懂的）：試抓與看網頁之外多留幾次。
-const int aiRepairMaxReplies = aiRepairMaxTests + aiRepairMaxFetches + 3;
-
-/// 每次回給 AI 時附上還剩多少次。
-String aiRepairBudget({required int testsLeft, required int fetchesLeft}) =>
-    testsLeft <= 1
-    ? '這是最後一次試抓的機會；試抓沒成功就算修不好。'
-    : '試抓還剩 $testsLeft 次，看網頁還剩 $fetchesLeft 次。';
-
-/// AI 還沒試過任何修改就要放棄時回它的話。
-const String aiRepairTryFirst =
-    '你還沒試抓過任何修改。除非網站已經不在（網域查不到、整個網站只回錯誤頁），'
-    '請先照你看到的網頁改規則並試抓一次；試過真的不行再放棄。';
-
-/// AI 每一輪回的指令（ADR 0054）。
+/// AI 呼叫的工具（[aiRepairTools]，ADR 0054）。
 sealed class AiRepairCommand {
   const AiRepairCommand();
 
-  /// 從 AI 回的話取出指令；讀不懂時是 null。
-  static AiRepairCommand? parse(String reply) {
-    final json = extractJsonObject(reply);
-    if (json == null) return null;
+  /// 呼叫工具 [name]、參數 [json] 是哪個指令；沒有這個工具或少了必要的
+  /// 參數時是 null（[aiRepairBadCall] 說哪裡不對）。
+  static AiRepairCommand? fromCall(String name, Map<String, dynamic> json) {
     final note = (json['note'] ?? json['reason'])?.toString().trim() ?? '';
-    final source = json['source'];
     final patch = json['patch'];
-    final change = source is Map<String, dynamic>
-        ? (source: source, patch: null)
-        : patch is Map<String, dynamic>
+    final AiChange? change = patch is Map<String, dynamic>
         ? (source: null, patch: patch)
         : null;
-    return switch (json['action']) {
-      'test' when change != null => AiTest(change, note),
+    final page = _int(json['page']);
+    return switch (name) {
+      // 選填的參數型別不對也算讀不懂，不讓轉型丟出例外中止整件。
+      'test'
+          when change != null &&
+              _stringOrNull(json['from']) &&
+              _stringOrNull(json['url']) =>
+        AiTest(
+          change,
+          note,
+          from: json['from'] as String? ?? 'search',
+          url: json['url'] as String?,
+        ),
       'submit' when change != null => AiSubmit(change, note),
       'fetch' when json['url'] is String => AiFetch(
         json['url'] as String,
         note,
       ),
-      'give_up' => AiGiveUp(note),
+      'read' when page != null => AiRead(
+        page,
+        from: _int(json['from']) ?? 0,
+        length: _int(json['length']) ?? defaultReadLength,
+        raw: json['raw'] == true,
+      ),
+      'find' when page != null && json['text'] is String => AiFind(
+        page,
+        json['text'] as String,
+        from: _int(json['from']) ?? 0,
+      ),
+      'parse' when page != null && json['as'] is String => AiParse(
+        page,
+        json['as'] as String,
+        change,
+      ),
+      'js' when json['code'] is String => AiJs(json['code'] as String),
+      'give_up' when aiGiveUpLabels.containsKey(json['why']) => AiGiveUp(
+        note,
+        why: json['why'] as String,
+      ),
       _ => null,
     };
   }
+
+  static bool _stringOrNull(Object? value) => value == null || value is String;
+
+  /// JSON 裡的整數：數字或寫成字串的數字。
+  static int? _int(Object? value) => switch (value) {
+    final num number => number.toInt(),
+    final String text => int.tryParse(text.trim()),
+    _ => null,
+  };
 }
 
 /// AI 改的書源：整份 [source]，或只有改動的欄位 [patch]（[applyAiChange]）。
@@ -88,6 +107,51 @@ Map<String, dynamic> applyAiChange(
   return out;
 }
 
+/// AI 的改動用了書源沒有的欄位時，說哪一個不對、可以用哪些；沒有是 null。
+/// 不擋的話寫錯的欄位照收、什麼都沒改，解析與試抓的結果一片空白：2026-11-12
+/// AI 修涨姿势把詳情規則寫成 `ruleInfo`（Legado 叫 `ruleBookInfo`），兩次各
+/// 繞了好幾輪才發現。
+String? aiChangeProblem(AiChange change) {
+  final fields = change.source ?? change.patch ?? const {};
+  final unknown = [
+    for (final key in fields.keys)
+      if (!_sourceFields.contains(key)) key,
+  ];
+  if (unknown.isNotEmpty) {
+    return '書源沒有 ${unknown.join('、')} 這個欄位。規則物件是 '
+        '${_ruleFields.keys.join('、')}；其他欄位：'
+        '${_sourceFields.where((key) => !_ruleFields.containsKey(key)).join('、')}';
+  }
+  for (final MapEntry(:key, :value) in fields.entries) {
+    final allowed = _ruleFields[key];
+    if (allowed == null || value is! Map<String, dynamic>) continue;
+    final wrong = [
+      for (final item in value.keys)
+        if (!allowed.contains(item)) item,
+    ];
+    if (wrong.isNotEmpty) {
+      return '$key 沒有 ${wrong.join('、')} 這一項，可以用的：${allowed.join('、')}';
+    }
+  }
+  return null;
+}
+
+/// 書源 JSON 的欄位（Legado 3.0 格式，[BookSource.toJson]）。
+final Set<String> _sourceFields = BookSource.fromJson(const {
+  'bookSourceUrl': '',
+  'bookSourceName': '',
+}).toJson().keys.toSet();
+
+/// 每個規則物件可以寫的項目。
+final Map<String, Set<String>> _ruleFields = {
+  'ruleSearch': SearchRule().toJson().keys.toSet(),
+  'ruleExplore': ExploreRule().toJson().keys.toSet(),
+  'ruleBookInfo': BookInfoRule().toJson().keys.toSet(),
+  'ruleToc': TocRule().toJson().keys.toSet(),
+  'ruleContent': ContentRule().toJson().keys.toSet(),
+  'ruleReview': ReviewRule().toJson().keys.toSet(),
+};
+
 /// 打開一頁看看（網站首頁、搜尋頁這類），不改書源。
 final class AiFetch extends AiRepairCommand {
   const AiFetch(this.url, this.note);
@@ -95,11 +159,51 @@ final class AiFetch extends AiRepairCommand {
   final String note;
 }
 
-/// 拿改過的書源試抓一次。
+/// 拿改過的書源試抓一次：從 [from]（`search`、`info`、`toc`、`content`）
+/// 開始，搜尋以外的段從 [url] 那一頁開始。
 final class AiTest extends AiRepairCommand {
-  const AiTest(this.change, this.note);
+  const AiTest(this.change, this.note, {this.from = 'search', this.url});
   final AiChange change;
   final String note;
+  final String from;
+  final String? url;
+}
+
+/// 讀已經抓到的第 [page] 頁的一段。
+final class AiRead extends AiRepairCommand {
+  const AiRead(
+    this.page, {
+    this.from = 0,
+    this.length = defaultReadLength,
+    this.raw = false,
+  });
+  final int page;
+  final int from;
+  final int length;
+  final bool raw;
+}
+
+/// 在第 [page] 頁找 [text]（正則，編不了時當純文字），從第 [from] 處起列。
+final class AiFind extends AiRepairCommand {
+  const AiFind(this.page, this.text, {this.from = 0});
+  final int page;
+  final String text;
+  final int from;
+}
+
+/// 用改過的規則（[change]，沒給是目前的書源）把第 [page] 頁當成 [stage]
+/// 解析。
+final class AiParse extends AiRepairCommand {
+  const AiParse(this.page, this.stage, this.change);
+  final int page;
+  final String stage;
+  final AiChange? change;
+}
+
+/// 在書源規則 JS 的環境跑 [code]。
+final class AiJs extends AiRepairCommand {
+  const AiJs(this.code);
+  final String code;
 }
 
 /// 交出改好的書源，夜讀校驗後套用。
@@ -109,10 +213,43 @@ final class AiSubmit extends AiRepairCommand {
   final String note;
 }
 
-/// 修不好。
+/// 修不好：[why] 是 [aiGiveUpLabels] 的其中一個，[reason] 是看到的證據。
 final class AiGiveUp extends AiRepairCommand {
-  const AiGiveUp(this.reason);
+  const AiGiveUp(this.reason, {required this.why});
   final String reason;
+  final String why;
+}
+
+/// 放棄的原因，固定這幾種（`agent-harness`：判定用固定選項）。修復頁照它寫
+/// 「AI：要登入」這類。
+const Map<String, String> aiGiveUpLabels = {
+  'site_gone': '網站不在了',
+  'login': '要登入',
+  'paid': '要付費',
+  'human_check': '要真人在網頁上驗證',
+  'blocked': '網站擋下所有請求',
+  'site_broken': '網站的功能壞了',
+  'rate_limited': '網站限流',
+};
+
+/// 同樣的指令與參數用同一個 key（迴圈數第幾次，`AgentCommand.key`）：指令的
+/// JSON 拿掉說明（note、reason），欄位照名稱排序。
+String aiRepairCommandKey(Map<String, dynamic> json) {
+  Object? sorted(Object? value) => switch (value) {
+    final Map<String, dynamic> map => {
+      for (final key in map.keys.toList()..sort()) key: sorted(map[key]),
+    },
+    final List<dynamic> list => [for (final item in list) sorted(item)],
+    _ => value,
+  };
+  final command = {...json}
+    ..removeWhere((key, _) => key == 'note' || key == 'reason');
+  try {
+    return jsonEncode(sorted(command));
+  } on JsonUnsupportedObjectError {
+    // 數字超出範圍這類寫不回 JSON 的值。
+    return '${sorted(command)}';
+  }
 }
 
 /// AI 回的話與貼回的內容最多幾個字：一個書源的 JSON 遠小於這個。
@@ -364,47 +501,231 @@ const String _rules = '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
-- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、key、page、book、source。
-  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。
+- 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
+- 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
-  - 沒有 Android 的類別（android.util.Base64 這類）。試抓報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()），或用了這裡沒有的函式。
+  - 沒有 Android 的類別（android.util.Base64 這類）。字串是 JS 字串：長度是 .length，不是 Java 的 .length()。報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()）、對字串呼叫 Java 的方法，或用了這裡沒有的函式。
+- enabledCookieJar（Cookie 罐）：1 時網站回的 Cookie 存下來，這個書源之後的請求都帶上，網站靠工作階段 Cookie 記住驗證、登入或搜尋狀態時要開；0 時網站回的 Cookie 不存，每個請求都像第一次來（請求紀錄會寫出沒存的 Cookie）。cookie.setCookie 存的兩種都帶。
 - 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。
 ''';
 
-const String _commands = '''
-每次只回一個 JSON 物件，前後不要其他文字：
-- 看網頁：{"action":"fetch","url":"網址","note":"想看什麼"}。夜讀照書源的標頭與 Cookie 抓這一頁回給你（網頁拿掉 <head>、程式與樣式）。網址照書源網址規則的寫法：可以是相對書源網址的路徑，可以接 ,{"method":"POST","body":"..."}，{{key}} 是試抓用的關鍵字；要看書源搜尋實際拿到什麼，直接用書源的 searchUrl，別自己改成 GET。規則抓不到東西時，先看網站首頁或搜尋頁現在長怎樣，找新的網址與結構。
-- 先看試抓裡網站實際回了什麼再決定改哪裡：網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則（bookList、name、bookUrl 這類），先改解析規則，網址與參數照舊；網站回的是錯誤、提示或驗證頁，才改網址、參數或標頭。
-- 試抓：{"action":"test","patch":{只寫要改的欄位},"note":"這次改了什麼"}。patch 會蓋到目前的書源上：規則物件（ruleSearch 這類）逐項蓋，沒寫的項目照舊，值給空字串就拿掉那一項。夜讀從搜尋一路試抓到第一章正文，抓到正文就自動跑書源校驗，通過就套用；沒抓到就把除錯紀錄與每個網頁回給你。
-- 交出：{"action":"submit","patch":{…},"note":"…"}。試抓沒走到正文、但你確定改對了（例如正文要付費）才用；夜讀會跑一次書源校驗，通過才套用。
-- 放棄：{"action":"give_up","reason":"為什麼修不好"}。例如網站已經關了、要登入或付費才看得到。網站擋下所有請求、限流或維護，改規則也過不去時也用這個，reason 寫你在網頁上看到的證據。
+const String _method =
+    '''
+## 怎麼查
+- 先看開場的校驗結果與試抓：哪一段失敗、網站實際回了什麼。網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，才查網址、參數、標頭或網站本身。
+- 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
+- 改規則前先用 parse 在已經抓到的頁面上試，抓得到再 test：parse 不連網站，test 會連，網站可能限流。
+- 請求紀錄裡回應後面括號寫著「網站防護頁」「用程式轉到…」或「網站限流」時，那頁不是內容：防護頁看能不能照它要的（例如寫入 Cookie）通過，轉址頁照轉去的網址查，限流的等它說的間隔過了再送一次同一個請求（試抓與校驗也會送，算在裡面）；還是限流就用 give_up 的 rate_limited 放棄：限流到這樣，一般使用拿不到結果，找得到繞過的寫法也算壞了。
+- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
+- 書源規則只放書源要用的規則；要跑程式查東西用 js。
 ''';
 
-/// 第一輪送給 AI 的話：系統提示與這個書源的現況。
-///
-/// [earlier] 是上一回沒修好時試過的（每次試抓的說明與結果），讓 AI 換個方向。
+/// 改規則的參數：蓋到目前的書源上的欄位。
+const Map<String, Object?> _patch = {
+  'type': 'object',
+  'description':
+      '要改的欄位，蓋到目前的書源上：規則物件（ruleSearch 這類）逐項蓋，'
+      '沒寫的項目照舊，值給空字串就拿掉那一項。只寫要改的欄位。',
+};
+
+const Map<String, Object?> _note = {
+  'type': 'string',
+  'description': '這一步想確認什麼',
+};
+
+const Map<String, Object?> _page = {
+  'type': 'integer',
+  'description': '頁碼：每個抓到的網頁都有一個（頁 N）',
+};
+
+Map<String, Object?> _object(
+  Map<String, Object?> properties, [
+  List<String> required = const [],
+]) => {'type': 'object', 'properties': properties, 'required': required};
+
+/// AI 修書源用的工具（服務的 function calling，ADR 0054）。說明寫這個工具
+/// 做什麼、參數的意思；怎麼查寫在系統提示。
+final List<AiTool> aiRepairTools = [
+  (
+    name: 'fetch',
+    description:
+        '看網頁：照書源的標頭與 Cookie 抓一頁。回覆寫出實際送出的方法與內容，'
+        '回應標上頁碼，只給精簡後的開頭。',
+    parameters: _object(
+      {
+        'url': {
+          'type': 'string',
+          'description':
+              '網址，照書源網址規則的寫法：可以是相對書源網址的路徑，可以接 '
+              ',{"method":"POST","body":"..."}；{{key}} 是試抓用的關鍵字。要看書源'
+              '搜尋實際拿到什麼，直接用書源的 searchUrl。',
+        },
+        'note': _note,
+      },
+      ['url'],
+    ),
+  ),
+  (
+    name: 'read',
+    description: '讀頁：讀已經抓到的一頁的一段，一次最多 $maxReadLength 字。',
+    parameters: _object(
+      {
+        'page': _page,
+        'from': {'type': 'integer', 'description': '從第幾字讀起，預設 0'},
+        'length': {
+          'type': 'integer',
+          'description': '讀幾字，預設 $defaultReadLength',
+        },
+        'raw': {
+          'type': 'boolean',
+          'description': 'true 給原文（含程式、<head> 與所有屬性），預設給精簡後的',
+        },
+      },
+      ['page'],
+    ),
+  ),
+  (
+    name: 'find',
+    description:
+        '找字：在一頁的文字與屬性值裡找，回共幾處與從第 from 處起最多 10 處：'
+        '那個元素的選擇器路徑與它的 HTML。',
+    parameters: _object(
+      {
+        'page': _page,
+        'text': {'type': 'string', 'description': '要找的正則；編不了時當純文字找，回覆會說'},
+        'from': {'type': 'integer', 'description': '從第幾處起列，預設 0'},
+      },
+      ['page', 'text'],
+    ),
+  ),
+  (
+    name: 'parse',
+    description:
+        '解析：用夜讀的解析程式把已經抓到的一頁當成某一段解析，不連網站。回解析'
+        '到幾筆與前 5 筆的每個欄位；正文回字數、類型與開頭。',
+    parameters: _object(
+      {
+        'page': _page,
+        'as': {
+          'type': 'string',
+          'enum': ['search', 'explore', 'info', 'toc', 'content'],
+          'description': '當成哪一段',
+        },
+        'patch': {
+          ..._patch,
+          'description': '${_patch['description']}沒給就用目前的書源。',
+        },
+      },
+      ['page', 'as'],
+    ),
+  ),
+  (
+    name: 'js',
+    description:
+        '跑程式：在書源規則 JS 的環境跑，可用系統提示列的 java.* 與 source；'
+        'page(頁碼) 傳回那一頁的原文，頁碼直接寫成數字（程式先照寫出的數字把'
+        '那幾頁帶進來，用變數算出來的頁碼讀不到）。回傳回值與錯誤。',
+    parameters: _object(
+      {
+        'code': {'type': 'string', 'description': '要跑的 JS'},
+      },
+      ['code'],
+    ),
+  ),
+  (
+    name: 'test',
+    description:
+        '試抓：拿改過的書源從某一段一路抓到第一章正文。抓到正文（照書源校驗的'
+        '判斷）就自動跑書源校驗（換第二本書、抽查前幾章），通過就套用；沒過會'
+        '回校驗的結論與診斷。',
+    parameters: _object(
+      {
+        'patch': _patch,
+        'from': {
+          'type': 'string',
+          'enum': ['search', 'info', 'toc', 'content'],
+          'description': '從哪一段開始，預設 search（用試抓的關鍵字搜尋）',
+        },
+        'url': {
+          'type': 'string',
+          'description': 'from 不是 search 時要給：詳情頁、目錄頁或正文頁的網址',
+        },
+        'note': _note,
+      },
+      ['patch'],
+    ),
+  ),
+  (
+    name: 'submit',
+    description:
+        '交出：試抓走不到正文、但確定改對了才用（例如正文要付費）；夜讀跑一次'
+        '書源校驗，通過才套用。',
+    parameters: _object({'patch': _patch, 'note': _note}, ['patch']),
+  ),
+  (
+    name: 'give_up',
+    description:
+        '放棄：拿出修不好的證據。除了 site_gone，還沒看網頁、跑程式、試抓或交出'
+        '過就放棄會被退回一次。',
+    parameters: _object(
+      {
+        'why': {
+          'type': 'string',
+          'enum': aiGiveUpLabels.keys.toList(),
+          'description':
+              '原因：照順序問，第一個答「是」的就選它。'
+              'site_gone：網域查不到、只剩停放頁，或每個網址最後落到的頁面都沒有這個'
+              '書源的書？login：內容要登入帳號才給？paid：內容要付費才給？'
+              'human_check：這個網站自己的頁面要真人驗證，驗證過後給的是這個網站的內容？'
+              'blocked：網站擋下夜讀的所有請求？'
+              'rate_limited：請求紀錄寫著「網站限流」，等過它說的間隔再送還是被擋'
+              '（功能壞掉的一種：一般使用拿不到結果）？'
+              'site_broken：網站在、其他頁面正常，書源要用的功能網站自己也做不到'
+              '（例如搜什麼都回空的搜尋頁；網站另有做得到的地方，像 API 或別的網址，'
+              '就不算）？',
+        },
+        'reason': {'type': 'string', 'description': '看到的證據：哪一頁、什麼內容'},
+      },
+      ['why', 'reason'],
+    ),
+  ),
+];
+
+/// 第一輪送給 AI 的話：系統提示與這個書源的現況。[probe] 的回應已經標上
+/// 頁碼（[RepairPages.add]）。
 List<AiMessage> aiRepairOpening({
   required BookSource source,
   required String checkResult,
   required SourceProbeReport probe,
-  String? earlier,
 }) => [
-  (
-    role: 'system',
-    content:
-        '你幫使用者修好壞掉的書源，並判斷它的類型。\n\n$_rules\n$_commands'
-        '試抓最多 $aiRepairMaxTests 次、看網頁最多 $aiRepairMaxFetches 次，用完還沒修好就算修不好。',
-  ),
-  (
-    role: 'user',
-    content: [
-      _situation(source, checkResult, probe),
-      if (earlier != null) '# 上一回沒修好，試過這些（這次換個方向，別重複）\n$earlier',
-    ].join('\n\n'),
-  ),
+  const AiMessage.system(aiRepairSystemPrompt),
+  AiMessage.user(_situation(source, checkResult, probe.indexText)),
 ];
+
+/// 系統提示：每個書源都一樣，服務的快取每次都打得中。
+const String aiRepairSystemPrompt =
+    '你是夜讀的書源修復員：書源壞了，你要查出原因、改好規則，再用試抓證明修好了；'
+    '或拿出證據說明修不好。也要判斷書源的類型。互不相依的查詢放在同一次回覆一起呼叫，要看前一個結果才知道下一步的留到下一次。\n\n'
+    '$_rules\n$_method';
+
+/// 提示詞的版本：系統提示與工具清單的雜湊開頭，寫進修復紀錄，比較前後時
+/// 知道兩次用的是不是同一份。
+final String aiRepairPromptVersion = sha1
+    .convert(
+      utf8.encode(
+        '$aiRepairSystemPrompt\n${jsonEncode(aiToolsJson(aiRepairTools))}',
+      ),
+    )
+    .toString()
+    .substring(0, 8);
+
+/// 完整紀錄裡一件的統計那一行的開頭，後面接 JSON（`tool/ai_repair_table.dart`
+/// 照它整理成表）。
+const String aiRepairStatsMarker = 'NR-AI-REPAIR-STATS ';
 
 /// 沒有金鑰時複製給 AI 的整段話：使用者貼到任何 AI，再把回的書源貼回來。
 String aiRepairClipboardPrompt({
@@ -414,20 +735,35 @@ String aiRepairClipboardPrompt({
 }) =>
     '幫我修好這個書源，並判斷它的類型。\n\n$_rules\n'
     '修好後只回完整的書源 JSON（一個物件），不用其他說明。\n\n'
-    '${_situation(source, checkResult, probe)}';
+    // 貼給網頁版 AI：沒有讀頁的工具，照舊附網頁開頭。
+    '${_situation(source, checkResult, probe.fullText)}';
 
-String _situation(
-  BookSource source,
-  String checkResult,
-  SourceProbeReport probe,
-) =>
+String _situation(BookSource source, String checkResult, String probe) =>
     '# 書源\n```json\n'
     '${const JsonEncoder.withIndent('  ').convert(sourceForAi(source))}\n```\n\n'
+    // 改了搜尋規則、發現頁跟著壞，原本要等交件被退才知道（2026-11-12、13
+    // 涨姿势三次都是這樣）。
+    '${_exploreBorrowsSearch(source) ? '$aiRepairExploreBorrowsSearch\n\n' : ''}'
     '# 書源校驗的結果\n$checkResult\n\n'
-    '# 試抓這個書源\n${probe.fullText}';
+    '# 試抓這個書源\n$probe';
 
-/// 打開一頁之後回給 AI 的話。
-String aiRepairFetchReply(String url, String page) => '# 網頁：$url\n$page';
+bool _exploreBorrowsSearch(BookSource source) =>
+    (source.exploreUrl ?? '').trim().isNotEmpty &&
+    BookListParser.exploreUsesSearchRule(source);
+
+/// 發現頁沒有自己的書單規則、借用搜尋規則時告訴 AI 的話：開場一次，改了
+/// 搜尋規則、只剩發現頁壞時再說一次。
+const String aiRepairExploreBorrowsSearch =
+    '這個書源的發現沒有自己的書單規則，發現頁用搜尋規則解析：改了搜尋規則，'
+    '發現頁跟著受影響';
+
+/// 搜尋規則抓到的是頁面上固定的書時的話：交出的書源，與開場原本的書源。
+const String aiRepairUnrelatedSearch =
+    '搜尋結果跟關鍵字無關：搜一個不可能有的詞也回同樣的書，抓到的是頁面上固定的推薦書';
+
+/// 看網頁之後回給 AI 的話：[lines] 是送出的請求與標了頁碼的回應。
+String aiRepairFetchReply(String url, List<String> lines) =>
+    '# 看網頁 $url（精簡後，每頁只給開頭；其他段用 read）\n${lines.join('\n')}';
 
 /// 試抓之後回給 AI 的話。
 String aiRepairProbeReply(SourceProbeReport probe) =>
@@ -438,23 +774,69 @@ String aiRepairProbeReply(SourceProbeReport probe) =>
 String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
   '# 書源校驗沒過：$checkText',
   if (diagnostics.isNotEmpty) diagnostics.join('\n\n'),
-  '校驗會換第二本書、抽查前幾章；照上面的結果接著改。',
 ].join('\n');
 
-/// AI 回的話讀不懂時回給它的話。
-const String aiRepairBadReply = '讀不懂你回的內容。請照說明只回一個 JSON 物件。';
+/// 工具呼叫讀不懂時回給 AI 的話的開頭。
+const String aiRepairBadCall = '# 讀不懂這個工具呼叫';
 
-/// AI 回的話讀不懂時回給它的話，說出哪裡不對。
-String aiRepairBadReplyFor(String reply) {
-  final start = reply.indexOf('{');
-  if (start < 0) return '$aiRepairBadReply（裡面沒有 JSON 物件）';
-  try {
-    jsonDecode(reply.substring(start, reply.lastIndexOf('}') + 1));
-    return '$aiRepairBadReply（JSON 讀得懂，但 action 或欄位不對：test 與 submit 要有 patch 物件，fetch 要有 url）';
-  } on FormatException catch (error) {
-    return '$aiRepairBadReply（JSON 格式錯：${error.message}，在第 ${error.offset} 字附近。'
-        '常見原因是括號沒配對完、字串裡的 " 或換行沒跳脫；只寫要改的欄位可以少出錯）';
-  } on RangeError {
-    return '$aiRepairBadReply（JSON 沒有結尾的 }）';
+/// 只看了開場就放棄時退回的話。
+const String aiRepairGiveUpPushBack = '# 放棄被退回：還沒有自己查過網站或試過修改（看網頁、跑程式、試抓、交出）';
+
+/// 改過的書源組不起來時回給它的話。
+const String aiRepairBadSourceReply =
+    '$aiRepairBadCall：改過的書源組不起來（欄位的型別或數值不對，例如數字超出範圍）';
+
+/// 讀 AI 呼叫的一個工具：讀得懂時是指令與它的 key（[aiRepairCommandKey]），
+/// 讀不懂時 [fact] 說哪裡不對（沒有這個工具、參數不是 JSON 物件、少了必要
+/// 的參數）。
+({AiRepairCommand? command, String key, String fact}) readAiRepairCall(
+  AiToolCall call,
+) {
+  final tool = aiRepairTools
+      .where((tool) => tool.name == call.name)
+      .firstOrNull;
+  if (tool == null) {
+    return (
+      command: null,
+      key: '',
+      fact:
+          '$aiRepairBadCall：沒有叫 ${call.name} 的工具，有的是 '
+          '${aiRepairTools.map((tool) => tool.name).join('、')}',
+    );
   }
+  final Object? args;
+  try {
+    args = call.arguments.trim().isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(call.arguments);
+  } on FormatException catch (error) {
+    return (
+      command: null,
+      key: '',
+      fact: '$aiRepairBadCall（${call.name}）：參數不是合法的 JSON：${error.message}',
+    );
+  }
+  if (args is! Map<String, dynamic>) {
+    return (
+      command: null,
+      key: '',
+      fact: '$aiRepairBadCall（${call.name}）：參數要是一個 JSON 物件',
+    );
+  }
+  final command = AiRepairCommand.fromCall(call.name, args);
+  if (command == null) {
+    final required = tool.parameters['required']! as List<String>;
+    return (
+      command: null,
+      key: '',
+      fact:
+          '$aiRepairBadCall（${call.name}）：少了必要的參數或值不對，'
+          '要有 ${required.join('、')}',
+    );
+  }
+  return (
+    command: command,
+    key: aiRepairCommandKey({...args, 'action': call.name}),
+    fact: '',
+  );
 }

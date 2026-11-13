@@ -7,6 +7,7 @@ import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cancellation.dart';
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
@@ -91,13 +92,20 @@ BlockingTask connectResponse(AnalyzeUrl url) => () async {
 
 /// `java.get`、`java.post`、`java.head`：照給的方法與標頭發，不自動跟著
 /// 跳轉。失敗時傳回 500 與錯誤訊息。
+///
+/// [cookieJar]：書源開了 Cookie 罐時，送出前併進這個網站存著的 Cookie
+/// （`cookie.setCookie`、登入存的），同名的以存著的為準（同 Legado：
+/// JsExtensions.get 加上 CookieJar 標頭，CookieManager.loadRequest 併進去）；
+/// 也只有這時網站回的 Cookie 才存下來（CookieManager.saveResponse）。
 BlockingTask rawResponse({
   required String method,
   required String url,
   Object? data,
   required Map<String, dynamic> headers,
+  bool cookieJar = false,
 }) => () async {
   try {
+    if (cookieJar) await _mergeStoredCookies(url, headers);
     final response = await HttpClient().client.fetch<dynamic>(
       RequestOptions(
         method: method,
@@ -111,6 +119,7 @@ BlockingTask rawResponse({
         responseType: ResponseType.plain,
         extra: <String, dynamic>{
           AppInterceptor.disableManualRedirectHandlingKey: true,
+          ...LenientCookieManager.sourceExtra(cookieJar),
         },
         cancelToken: currentSourceCancelToken,
       ),
@@ -129,6 +138,22 @@ BlockingTask rawResponse({
     return failedResponse(url, e);
   }
 };
+
+Future<void> _mergeStoredCookies(
+  String url,
+  Map<String, dynamic> headers,
+) async {
+  final store = CookieStore();
+  final stored = await store.getCookie(url);
+  if (stored.isEmpty) return;
+  final key = headers.keys
+      .where((k) => k.toLowerCase() == 'cookie')
+      .firstOrNull;
+  final given = key == null ? '' : '${headers.remove(key)}';
+  headers['Cookie'] = store.mapToCookie(
+    store.cookieToMap(given)..addAll(store.cookieToMap(stored)),
+  );
+}
 
 /// 請求失敗時給規則 JS 的回應：狀態碼 500，內文是錯誤訊息。
 Map<String, Object?> failedResponse(String url, Object error) => {
@@ -157,25 +182,36 @@ List<String> _redirectsOf(Response<dynamic> response) {
 BlockingTask responseBytes(AnalyzeUrl url) =>
     () => url.getByteArray();
 
-/// [url] 的位元組，不經書源設定（字型這類資源）。
-BlockingTask plainBytes(String url) => () async {
+/// [url] 的位元組，不經書源設定（字型這類資源）；網站回的 Cookie 照書源的
+/// Cookie 罐開關 [cookieJar] 存（同 Legado `queryTTF` 經書源的 AnalyzeUrl）。
+BlockingTask plainBytes(String url, {required bool cookieJar}) => () async {
   final response = await HttpClient().client.get<List<int>>(
     url,
-    options: Options(responseType: ResponseType.bytes),
+    options: Options(
+      responseType: ResponseType.bytes,
+      extra: LenientCookieManager.sourceExtra(cookieJar),
+    ),
     cancelToken: currentSourceCancelToken,
   );
   return Uint8List.fromList(response.data ?? const []);
 };
 
 /// `java.cacheFile`：快取裡有就用，沒有就抓回來存進快取。存的時候不等它
-/// 寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等這裡。
-BlockingTask cachedText(String url, int saveTimeSeconds) => () async {
+/// 寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等這裡。網站
+/// 回的 Cookie 照書源的 Cookie 罐開關 [cookieJar] 存（同 Legado
+/// `downloadFile` 經書源的 AnalyzeUrl）。
+BlockingTask cachedText(
+  String url,
+  int saveTimeSeconds, {
+  required bool cookieJar,
+}) => () async {
   final key = JsEncodeUtils.md5Encode16(url);
   final cached = await CacheManager().get(key);
   if (cached != null) return cached;
   try {
     final response = await HttpClient().client.get<String>(
       url,
+      options: Options(extra: LenientCookieManager.sourceExtra(cookieJar)),
       cancelToken: currentSourceCancelToken,
     );
     final content = response.data.toString();

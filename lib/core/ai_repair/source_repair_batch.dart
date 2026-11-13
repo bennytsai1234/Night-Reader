@@ -107,7 +107,6 @@ class SourceRepairBatch extends ChangeNotifier {
     required List<BookSource> sources,
     required this.service,
     this.tokenBudget,
-    this.siteTokenBudget = defaultSiteTokenBudget,
     this._recheck,
     this._checkSite,
     AiRepairChecker? check,
@@ -125,10 +124,6 @@ class SourceRepairBatch extends ChangeNotifier {
     _session = session ?? _defaultSession;
   }
 
-  /// 每個網站的 AI 花費上限（token，含打中快取的）：實測修好的網站多半在
-  /// 15 萬以內，超過的多半修不好。
-  static const int defaultSiteTokenBudget = 300000;
-
   /// 同時交給 AI 修幾個網站。
   static const int aiConcurrency = 3;
 
@@ -143,9 +138,6 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 整批的 AI 花費上限（token）；null 是不限。
   final int? tokenBudget;
-
-  /// 每個網站的 AI 花費上限（token）。
-  final int siteTokenBudget;
 
   final List<RepairItem> items;
   final BatchRecheck? _recheck;
@@ -598,7 +590,7 @@ class SourceRepairBatch extends ChangeNotifier {
       AiRepairSession(
         source: source,
         service: service,
-        hasBudget: () => _hasBudget && item.tokens < siteTokenBudget,
+        hasBudget: () => _hasBudget,
         onUsage: (usage) {
           final used = usage.prompt + usage.completion;
           item.tokens += used;

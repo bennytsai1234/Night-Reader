@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:fast_gbk/fast_gbk.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/request_log.dart';
 
 Response<dynamic> _response(String url, int status, Object? data) =>
@@ -13,6 +15,91 @@ Response<dynamic> _response(String url, int status, Object? data) =>
     );
 
 void main() {
+  group('審查補的邊界', () {
+    test('經過幾層快取、同一個快取標頭有好幾個值時照樣記，不丟出例外', () async {
+      final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+      await log.run(() async {
+        recordResponse(
+          Response<dynamic>(
+            requestOptions: RequestOptions(path: 'https://site.example/s'),
+            statusCode: 200,
+            data: 'ok',
+            headers: Headers.fromMap({
+              'x-cache': ['MISS', 'HIT'],
+              'age': ['3', '5'],
+            }),
+          ),
+        );
+      });
+      expect(log.lines.single, contains('（快取 MISS、HIT，存了 3、5 秒）'));
+    });
+
+    test('只記開頭時，開頭有轉址程式的長網頁不當成轉址頁', () async {
+      final page =
+          '<html><script>if(isMobile)location.href="/m/";</script>'
+          '<body>${'<p>正文段落內容很長。</p>' * 300}</body></html>';
+      final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+      await log.run(() async {
+        recordResponse(
+          _response('https://site.example/', 200, utf8.encode(page)),
+        );
+      });
+      expect(log.lines.single, isNot(contains('這頁用程式轉到')));
+      expect(isContentResponseLine(log.lines.single), isTrue);
+    });
+
+    test('空字串、空位元組與全是空白的回應寫成沒有內容，不算內容', () async {
+      final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+      await log.run(() async {
+        for (final data in <Object>['', <int>[], '  \n ']) {
+          recordResponse(_response('https://site.example/all', 200, data));
+        }
+      });
+      expect(log.lines, everyElement(contains('，沒有內容')));
+      expect(log.lines.where(isContentResponseLine), isEmpty);
+    });
+
+    test('POST 的內容太長時截在欄位之間，不切在值的中間', () async {
+      const secret = 'PRIVATEPASSWORD123456789';
+      final body = '${'x' * 1985}&password=$secret';
+      final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+      await log.run(() async {
+        recordRequestUrl(
+          'POST',
+          Uri.parse('https://site.example/login'),
+          body: body,
+        );
+      });
+      expect(log.lines.single, isNot(contains('PRIVA')));
+      expect(log.lines.single, endsWith('…'));
+    });
+  });
+
+  test('網站寫了 Cookie、書源沒開 Cookie 罐時，回應那一行寫出沒存的 Cookie 名稱', () async {
+    Response<dynamic> withCookie({required bool jar}) => Response<dynamic>(
+      requestOptions: RequestOptions(
+        path: 'http://m.site.example/shuku/1.html',
+        extra: LenientCookieManager.sourceExtra(jar),
+      ),
+      statusCode: 200,
+      data: 'ok',
+      headers: Headers.fromMap({
+        HttpHeaders.setCookieHeader: ['PHPSESSID=abc; path=/', 'v=1'],
+      }),
+    );
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    await log.run(() async {
+      recordResponse(withCookie(jar: false));
+      recordResponse(withCookie(jar: true));
+    });
+
+    expect(log.lines, [
+      '  ← http://m.site.example/shuku/1.html 200 '
+          '（網站寫了 Cookie PHPSESSID、v，書源沒開 Cookie 罐，沒存），2 字：ok',
+      '  ← http://m.site.example/shuku/1.html 200，2 字：ok',
+    ]);
+  });
+
   test('each response names its URL, since replies can come back out of '
       'order', () async {
     final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
@@ -25,6 +112,109 @@ void main() {
       '  ← https://site.example/fast 200，4 字：FAST',
       '  ← https://site.example/slow 200，4 字：SLOW',
     ]);
+  });
+
+  test(
+    'the AI repair log writes the headers sent, cookies by name only',
+    () async {
+      final log = RequestLog(responsePreview: 6000, sentHeaders: true);
+      await log.run(() async {
+        recordRequestUrl(
+          'GET',
+          Uri.parse('https://m.site.example/s?q=1'),
+          headers: {
+            'User-Agent': 'Mobile',
+            'cookie': 'search_pass=1; PHPSESSID=abc123',
+            'Authorization': 'Bearer sk-secret',
+          },
+        );
+      });
+      final plain = RequestLog(responsePreview: 6000);
+      await plain.run(() async {
+        recordRequestUrl(
+          'GET',
+          Uri.parse('https://m.site.example/s'),
+          headers: {'cookie': 'a=1'},
+        );
+      });
+
+      expect(
+        log.lines.single,
+        'https://m.site.example/s?q=1 標頭：User-Agent: Mobile；'
+        'Cookie（search_pass、PHPSESSID）；Authorization（有送，值不列）',
+      );
+      expect(
+        plain.lines.single,
+        'https://m.site.example/s',
+        reason: '只有 AI 修復記',
+      );
+    },
+  );
+
+  test('a page that only redirects by script says where it goes, even after '
+      'the script is digested away', () async {
+    final log = RequestLog(responsePreview: 6000, digestPages: true);
+    await log.run(() async {
+      recordResponse(
+        _response(
+          'https://site.example/',
+          200,
+          '<html><head><script>location.href="https://new.example/"</script>'
+              '</head><body></body></html>',
+        ),
+      );
+    });
+
+    expect(
+      log.lines.single,
+      startsWith(
+        '  ← https://site.example/ 200，92 字，太短不精簡'
+        '（這頁用程式轉到 https://new.example/）：<html><head><script>',
+      ),
+    );
+  });
+
+  test('a tiny page that is only a script shows its text instead of an empty '
+      'digest', () async {
+    final log = RequestLog(responsePreview: 6000, digestPages: true);
+    await log.run(() async {
+      recordResponse(
+        _response(
+          'https://site.example/search/',
+          200,
+          '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
+        ),
+      );
+    });
+
+    expect(
+      log.lines.single,
+      '  ← https://site.example/search/ 200，59 字，太短不精簡'
+      '（網站限流：「搜索间隔: 30 秒」）：'
+      '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
+    );
+  });
+
+  test('a reply from a cache in front of the site says so', () async {
+    final log = RequestLog(responsePreview: 6000, digestPages: true);
+    await log.run(() async {
+      recordResponse(
+        Response<dynamic>(
+          requestOptions: RequestOptions(path: 'https://site.example/search/'),
+          statusCode: 200,
+          data: '<p>搜索间隔</p>',
+          headers: Headers.fromMap({
+            'x-cache': ['HIT'],
+            'age': ['120'],
+          }),
+        ),
+      );
+    });
+
+    expect(
+      log.lines.single,
+      startsWith('  ← https://site.example/search/ 200 （快取 HIT，存了 120 秒）'),
+    );
   });
 
   test('busy, empty and unreachable count as the site faltering', () async {
@@ -76,6 +266,60 @@ void main() {
 
     expect(log.lines, ['https://site.example/a']);
     expect(log.transientResponses, 0);
+  });
+
+  test('a POST shows what it sent when responses are recorded too', () async {
+    final checked = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    final debugged = RequestLog();
+    for (final log in [checked, debugged]) {
+      await log.run(() async {
+        recordRequestUrl(
+          'POST',
+          Uri.parse('https://site.example/search/'),
+          body: 'searchkey=%E6%88%91&searchtype=all&submit=',
+        );
+        recordRequestUrl('GET', Uri.parse('https://site.example/'), body: '');
+      });
+    }
+
+    expect(checked.lines, [
+      'POST https://site.example/search/ 送出：'
+          'searchkey=%E6%88%91&searchtype=all&submit=',
+      'https://site.example/',
+    ]);
+    expect(debugged.lines.first, 'POST https://site.example/search/');
+  });
+
+  test('the full copy keeps the whole page as sent, the preview stays short '
+      'and digested', () async {
+    final page =
+        '<html><head><script>go()</script></head>'
+        '<body><p>${'正文' * 4000}</p></body></html>';
+    final log = RequestLog(
+      responsePreview: 100,
+      digestPages: true,
+      keepPages: true,
+    );
+    await log.run(() async {
+      recordRequestUrl('GET', Uri.parse('https://site.example/c/1'));
+      recordResponse(_response('https://site.example/c/1', 200, page));
+    });
+
+    expect(log.pages, hasLength(log.lines.length), reason: '一筆對一筆');
+    expect(log.pages.first, (line: 'https://site.example/c/1', body: null));
+    expect(log.pages.last.line, log.lines.last);
+    expect(log.pages.last.body, page);
+    expect(
+      log.lines.last,
+      matches(
+        RegExp(
+          '^  ← https://site.example/c/1 200，${page.length} 字，精簡後 \\d+ 字：',
+        ),
+      ),
+      reason: 'AI 看得到精簡後整頁有多長',
+    );
+    expect(log.lines.last, isNot(contains('go()')));
+    expect(log.lines.last.length, lessThan(200));
   });
 
   test('a GBK page reads as Chinese, not mojibake', () async {
