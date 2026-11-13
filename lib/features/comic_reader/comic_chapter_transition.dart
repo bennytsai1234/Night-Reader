@@ -214,11 +214,13 @@ class ComicChapterTransition extends StatelessWidget {
     children: [
       Text(label, style: _labelStyle.copyWith(color: foreground)),
       const SizedBox(height: _labelGap),
-      DragOverflowText(child: Text(
-        name,
-        maxLines: _maxNameLines,
-        style: _nameStyle.copyWith(color: foreground),
-      )),
+      DragOverflowText(
+        child: Text(
+          name,
+          maxLines: _maxNameLines,
+          style: _nameStyle.copyWith(color: foreground),
+        ),
+      ),
     ],
   );
 
@@ -266,14 +268,16 @@ class ComicChapterTransition extends StatelessWidget {
       const SizedBox(height: _sectionGap),
       SizedBox(
         width: double.infinity,
-        child: DragOverflowText(child: Text(
-          message,
-          maxLines: _maxMessageLines,
-          textAlign: TextAlign.center,
-          style: _messageStyle.copyWith(
-            color: foreground.withValues(alpha: 0.7),
+        child: DragOverflowText(
+          child: Text(
+            message,
+            maxLines: _maxMessageLines,
+            textAlign: TextAlign.center,
+            style: _messageStyle.copyWith(
+              color: foreground.withValues(alpha: 0.7),
+            ),
           ),
-        )),
+        ),
       ),
       const SizedBox(height: _messageGap),
       Center(
