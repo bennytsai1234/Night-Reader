@@ -131,6 +131,7 @@ void main() {
     Directory? logs,
     bool searchLimited = false,
     bool stillLimited = false,
+    KnownTitleSearch? knownTitle,
   }) {
     var next = 0;
     var probes = 0;
@@ -150,6 +151,7 @@ void main() {
             )
           : _probe(source),
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
+      knownTitleSearch: (_, _) async => knownTitle,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
         if (stillLimited) return (lines: [_limited], pages: <LoggedPage>[]);
@@ -573,6 +575,20 @@ void main() {
     expect(s.job.confirmedUnfixable, isTrue);
     expect(s.job.giveUpWhy, 'rate_limited');
     expect(s.job.explanation, startsWith('網站限流：搜尋等過'));
+  });
+
+  test('when the search finds nothing, the opening says whether a book the '
+      "site lists can be found with the source's search", () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test')],
+      searchLimited: true,
+      knownTitle: (title: '剑仙转生', from: '玄幻', found: false),
+    );
+
+    await s.start();
+
+    expect(asked.first.last.content, contains('發現頁「玄幻」的第一本書《剑仙转生》搜尋，也搜不到'));
   });
 
   test('a search that answers after waiting goes on to the AI', () async {

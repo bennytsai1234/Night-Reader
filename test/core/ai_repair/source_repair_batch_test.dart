@@ -149,6 +149,7 @@ void main() {
           check: (s, _) async => _checked(s),
           probe: (s, _, {start}) async => _probe(s),
           keywordCheck: (_, _) async => true,
+          knownTitleSearch: (_, _) async => null,
           ask: (_, _) async {
             asked.add(source.bookSourceUrl);
             b.tokensUsed += tokensPerAnswer;
@@ -401,6 +402,7 @@ void main() {
         check: (s, _) async => _checked(s),
         probe: (s, _, {start}) async => _probe(s),
         keywordCheck: (_, _) async => true,
+        knownTitleSearch: (_, _) async => null,
         ask: (_, _) async => fakeAiReply(_giveUp),
         secrets: (_) async => const {},
         backups: backups,
@@ -541,6 +543,7 @@ void main() {
         check: (source, _) async => _checked(source),
         probe: (source, _, {start}) async => _probe(source),
         keywordCheck: (_, _) async => true,
+        knownTitleSearch: (_, _) async => null,
         ask: (_, _) async => throw StateError('AI 服務無法回應'),
         secrets: (_) async => const {},
         backups: backups,

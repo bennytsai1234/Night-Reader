@@ -142,6 +142,12 @@ typedef AiRepairKeywordCheck = Future<bool> Function(
   CancelToken cancelToken,
 );
 
+/// 用網站發現頁上有的書名搜一次（[searchKnownTitle]）。
+typedef AiRepairKnownTitleSearch = Future<KnownTitleSearch?> Function(
+  BookSource source,
+  CancelToken cancelToken,
+);
+
 /// 問 AI 一次（測試用的假 AI）；真的服務用 [AiChatClient]，帶著
 /// [aiRepairTools]。
 typedef AiRepairAsker = AgentAsk;
@@ -159,6 +165,7 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairAsker? ask,
     AiRepairFetcher? fetchPage,
     AiRepairKeywordCheck? keywordCheck,
+    AiRepairKnownTitleSearch? knownTitleSearch,
     AiRepairPageParser? parsePage,
     AiRepairJsRunner? runJs,
     Future<void> Function(BookSource repaired, BookSource original)? apply,
@@ -180,6 +187,7 @@ class AiRepairSession extends ChangeNotifier {
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
        _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
+       _knownTitleSearch = knownTitleSearch ?? _defaultKnownTitleSearch,
        _parsePage = parsePage ?? _defaultParsePage,
        _runJs = runJs ?? _defaultRunJs,
        _hasBudget = hasBudget ?? _always,
@@ -215,6 +223,7 @@ class AiRepairSession extends ChangeNotifier {
   final AiRepairProber _probe;
   final AiRepairFetcher _fetchPage;
   final AiRepairKeywordCheck _keywordCheck;
+  final AiRepairKnownTitleSearch _knownTitleSearch;
   final AiRepairPageParser _parsePage;
   final AiRepairJsRunner _runJs;
   late final AgentAsk? _ask;
@@ -413,6 +422,8 @@ class AiRepairSession extends ChangeNotifier {
 
     if (await _searchStaysLimited(job, probe)) return;
     if (_stopped) return;
+    await _searchKnownTitle(job, probe);
+    if (_stopped) return;
 
     if (usesClipboard) {
       final prompt = _redact(
@@ -474,6 +485,28 @@ class AiRepairSession extends ChangeNotifier {
       ..giveUpWhy = 'rate_limited';
     _fail(job, '${aiGiveUpLabels['rate_limited']}：$why');
     return true;
+  }
+
+  /// 開場試抓搜不到書時，拿網站自己發現頁上的一本書名搜一次，結果寫進給 AI
+  /// 的校驗結果：只給事實，修不修得好還是 AI 判斷。蜘蛛小說網的 AI 每次要
+  /// 花 5 到 10 輪自己比「站上有的書」與「不可能的詞」，才確定搜尋不理關鍵字。
+  Future<void> _searchKnownTitle(
+    AiRepairJob job,
+    SourceProbeReport probe,
+  ) async {
+    final noBooks = probe.logs.any((entry) => entry.$2.contains('未獲取到書籍'));
+    if (!noBooks) return;
+    final result = await _guard(
+      () => _knownTitleSearch(job.original, _cancelToken),
+    );
+    if (_stopped || result == null) return;
+    final fact = result.found
+        ? '用網站自己發現頁「${result.from}」的第一本書《${result.title}》搜尋，'
+              '搜得到：搜尋規則與網站都能搜，原本的關鍵字剛好沒有書'
+        : '用網站自己發現頁「${result.from}」的第一本書《${result.title}》搜尋，'
+              '也搜不到：網站上有的書，這個搜尋規則找不到';
+    job._checkResult = '${job._checkResult}\n\n$fact';
+    log.both(fact);
   }
 
   /// 請求紀錄裡第一個標著「網站限流」的回應：網站說的話與它要等的秒數。
@@ -914,6 +947,18 @@ class AiRepairSession extends ChangeNotifier {
     return searchFollowsKeyword(
       source,
       keyword: source.getCheckKeyword(config.keyword),
+      timeout: config.sourceTimeoutDuration,
+      cancelToken: cancelToken,
+    );
+  }
+
+  static Future<KnownTitleSearch?> _defaultKnownTitleSearch(
+    BookSource source,
+    CancelToken cancelToken,
+  ) async {
+    final config = await _config();
+    return searchKnownTitle(
+      source,
       timeout: config.sourceTimeoutDuration,
       cancelToken: cancelToken,
     );
