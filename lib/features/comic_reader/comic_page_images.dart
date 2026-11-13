@@ -61,8 +61,8 @@ class ComicPageImages {
   final Map<ComicImageKey, Object> _failed = {};
   final Set<ComicImageKey> _running = {};
 
-  /// 預載時（沒有人在畫）載不到的：不記成失敗、也不再排進預載，免得一再
-  /// 打書源；捲到、開始畫它時（[want]）再試一次。
+  /// 不在畫面上時載不到的：不記成失敗、也不再排進預載，免得一再打書源；
+  /// 捲進畫面時（[demand]、[want]）再試一次。
   final Set<ComicImageKey> _speculativeFailed = {};
 
   /// 範圍內要準備的，照順序（看得到的、往下的、往上的）。
@@ -103,12 +103,16 @@ class ComicPageImages {
   }
 
   /// 有人要畫 [key]：還沒開始的排到最前面，在畫面上的馬上開始（見
-  /// [concurrency]）。預載時載不到的再試一次。
+  /// [concurrency]）。預載時載不到的，在畫面上才再試一次；畫面外建好的
+  /// 元件不提早用掉這一次。
   void want(ComicImageKey key) {
     if (_disposed || _ready.containsKey(key) || _failed.containsKey(key)) {
       return;
     }
-    _speculativeFailed.remove(key);
+    if (_speculativeFailed.contains(key)) {
+      if (!_visible.contains(key)) return;
+      _speculativeFailed.remove(key);
+    }
     if (_running.contains(key)) return;
     _queue.remove(key);
     if (_visible.contains(key)) {
@@ -130,12 +134,17 @@ class ComicPageImages {
   bool isVisible(ComicImageKey key) => _visible.contains(key);
 
   /// 範圍內要準備的圖換成 [ordered]（照先後，前 [visibleCount] 張在畫面
-  /// 上）：範圍外、沒有人在畫的放掉，還沒開始的照新的順序排。
+  /// 上）：範圍外、沒有人在畫的放掉，還沒開始的照新的順序排。預載時載不到
+  /// 的，捲進畫面那一次再試；一直在畫面上的不再自己試，免得每幀打書源。
   void demand(List<ComicImageKey> ordered, {int visibleCount = 0}) {
     if (_disposed) return;
     final window = ordered.toSet();
     _window = window;
-    _visible = ordered.take(visibleCount).toSet();
+    final visible = ordered.take(visibleCount).toSet();
+    for (final key in visible) {
+      if (!_visible.contains(key)) _speculativeFailed.remove(key);
+    }
+    _visible = visible;
     _ready.keys
         .where((key) => !window.contains(key))
         .toList()
@@ -192,9 +201,11 @@ class ComicPageImages {
       } else {
         image.dispose();
       }
-    } else if (_listeners.containsKey(key)) {
+    } else if (_visible.contains(key) && _listeners.containsKey(key)) {
+      // 在畫面上、有人在畫：讀者看得到，記成失敗，給「重試」。
       _failed[key] = failure!;
     } else {
+      // 畫面外（含已經建好元件、還沒捲到的）：當作預載失敗，捲到時再試。
       _speculativeFailed.add(key);
     }
     _notify(key);

@@ -127,24 +127,33 @@ void main() {
     images.dispose();
   });
 
-  testWidgets('預載時載不到的不記成失敗、不再預載；開始畫它時再試一次', (tester) async {
+  testWidgets('畫面外載不到的不記成失敗、不再預載；捲進畫面時再試一次', (tester) async {
     final source = _GatedSource()..failing.add('a');
     final images = ComicPageImages(source: source);
+    var notified = 0;
+    void listener() => notified += 1;
     images.demand([_key('a')]);
+    // 畫面外已經建好、在畫的元件：失敗也不提早顯示。
+    images.addListener(_key('a'), listener);
+    images.want(_key('a'));
     source.release('a');
     await _settle(tester);
     expect(images.error(_key('a')), isNull);
     images.demand([_key('a')]);
+    images.want(_key('a'));
     expect(source.requested, ['a']);
 
-    // 捲到了、開始畫：再試一次，這次失敗就記著，給「重試」。
-    void listener() {}
-    images.addListener(_key('a'), listener);
-    images.want(_key('a'));
+    // 捲進畫面：再試一次，這次失敗就記著，給「重試」。
+    images.demand([_key('a')], visibleCount: 1);
     expect(source.requested, ['a', 'a']);
     source.release('a');
     await _settle(tester);
     expect(images.error(_key('a')), isA<StateError>());
+    expect(notified, 2);
+    // 一直在畫面上：不再自己試。
+    images.demand([_key('a')], visibleCount: 1);
+    images.want(_key('a'));
+    expect(source.requested, ['a', 'a']);
 
     source.failing.clear();
     images.retry(_key('a'));
@@ -153,6 +162,29 @@ void main() {
     await _settle(tester);
     expect(images.error(_key('a')), isNull);
     images.image(_key('a'))!.dispose();
+    images.removeListener(_key('a'), listener);
+    images.dispose();
+  });
+
+  testWidgets('在畫面上、還沒有元件在畫時載不到：元件建好時再試一次', (tester) async {
+    final source = _GatedSource()..failing.add('a');
+    final images = ComicPageImages(source: source);
+    images.demand([_key('a')], visibleCount: 1);
+    source.release('a');
+    await _settle(tester);
+    // 沒有元件回報失敗高度，不記成失敗。
+    expect(images.error(_key('a')), isNull);
+    images.demand([_key('a')], visibleCount: 1);
+    expect(source.requested, ['a']);
+
+    void listener() {}
+    images.addListener(_key('a'), listener);
+    images.want(_key('a'));
+    expect(source.requested, ['a', 'a']);
+    source.release('a');
+    await _settle(tester);
+    expect(images.error(_key('a')), isA<StateError>());
+    images.removeListener(_key('a'), listener);
     images.dispose();
   });
 }

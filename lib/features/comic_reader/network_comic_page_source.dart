@@ -34,15 +34,16 @@ class NetworkComicPageSource implements ComicPageSource {
   /// 還沒下載好的那幾話的圖片網址。
   final Map<int, List<String>> _urls = {};
 
-  /// 列清單時還沒下載好、之後打包好的那幾話打開的 CBZ。
-  final Map<int, ComicChapterContents> _packed = {};
+  /// 列清單時還沒下載好、之後打包好的那幾話打開的 CBZ；同時來的幾張共用
+  /// 同一次打開。還沒打包好、打不開的不留著，下一張再看一次。
+  final Map<int, Future<ComicChapterContents?>> _packed = {};
 
   @override
   Future<List<ComicPage>> pagesOf(int chapterIndex) async {
     final chapter = chapters[chapterIndex];
     final cbz = await ComicChapterDownload.cbzFor(book, chapter);
     _cbz.remove(chapterIndex);
-    _packed.remove(chapterIndex);
+    _packed.remove(chapterIndex)?.ignore();
     if (cbz != null) {
       ComicChapterContents? opened;
       try {
@@ -103,25 +104,29 @@ class NetworkComicPageSource implements ComicPageSource {
   /// 列清單之後才下載完、打包好的那一話：第 [index] 張從 CBZ 讀，打開一次
   /// 留著；還沒打包好是 null。
   Future<Uint8List?> _packedPage(int chapterIndex, int index) async {
-    var opened = _packed[chapterIndex];
+    final opening = _packed[chapterIndex] ??= _openPacked(chapterIndex);
+    final opened = await opening;
     if (opened == null) {
-      final cbz = await ComicChapterDownload.cbzFor(
-        book,
-        chapters[chapterIndex],
-      );
-      if (cbz == null) return null;
-      try {
-        opened = await ComicChapterFiles.open(cbz.path);
-      } catch (_) {
-        return null;
+      if (identical(_packed[chapterIndex], opening)) {
+        _packed.remove(chapterIndex)?.ignore();
       }
-      _packed[chapterIndex] = opened;
+      return null;
     }
     final prefix = ComicChapterDownload.pageFileName(index, '.');
     for (final page in opened.pages) {
       if (page.name.startsWith(prefix)) return opened.read(page.name);
     }
     return null;
+  }
+
+  Future<ComicChapterContents?> _openPacked(int chapterIndex) async {
+    final cbz = await ComicChapterDownload.cbzFor(book, chapters[chapterIndex]);
+    if (cbz == null) return null;
+    try {
+      return await ComicChapterFiles.open(cbz.path);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
