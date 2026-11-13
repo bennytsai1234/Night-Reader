@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
@@ -752,13 +753,22 @@ class AiRepairSession extends ChangeNotifier {
             BookListParser.exploreUsesSearchRule(candidate));
   }
 
-  /// 只剩發現頁沒過、是 AI 改搜尋規則連帶弄壞的時，回給 AI 的那一句。
+  /// 只剩發現頁沒過、是 AI 改搜尋規則連帶弄壞的時，回給 AI 的那一句。發現頁
+  /// 要真的回了內容（[isContentResponseLine]）才說：回的是驗證轉址頁、防護頁
+  /// 或錯誤時，解析規則抓不到書不是搜尋規則的事（2026-11-13 QQ文学网的發現頁
+  /// 回「验证中」轉址頁，附上這句讓人以為是改搜尋弄壞的）。
   static String? _discoveryNote(
     SourceCheckIsolateResult? result,
     BookSource original,
     BookSource candidate,
   ) {
     if (result == null || !_onlyDiscoveryFails(result)) return null;
+    final discoveryAnswered = result.diagnostics.any(
+      (text) =>
+          text.startsWith('[發現]') &&
+          text.split('\n').any(isContentResponseLine),
+    );
+    if (!discoveryAnswered) return null;
     final parts = changedParts(original, candidate);
     if (parts.contains('發現') || !parts.contains('搜尋')) return null;
     if (!touchedDiscovery(original, candidate)) return null;

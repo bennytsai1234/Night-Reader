@@ -34,6 +34,7 @@ BookSource _source(String url, {String content = 'id.old@text'}) => BookSource(
 SourceCheckIsolateResult _checked(
   BookSource source, {
   SourceRuntimeHealth? broken,
+  List<String> diagnostics = const ['[正文] 正文為空'],
 }) {
   final healthy =
       broken == null && source.ruleContent?.content == 'class.txt@text';
@@ -47,9 +48,14 @@ SourceCheckIsolateResult _checked(
     isHealthy: healthy,
     updatedSourceJson: copy.toJson(),
     logs: const [],
-    diagnostics: const ['[正文] 正文為空'],
+    diagnostics: diagnostics,
   );
 }
+
+/// 發現頁那一段的診斷：網站回了 [response] 那一行。
+List<String> _discoveryDiagnostics(String response) => [
+  '[發現] 發現頁沒有結果\n這一段的請求與回應:\nhttps://site.example/all\n$response',
+];
 
 const _contentBroken = SourceRuntimeHealth(
   category: SourceHealthCategory.contentBroken,
@@ -830,7 +836,14 @@ void main() {
           jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '發現頁修不好'}),
         ],
         check: (source) => source.ruleContent?.content == 'class.txt@text'
-            ? _checked(source, broken: _discoveryBroken)
+            ? _checked(
+                source,
+                broken: _discoveryBroken,
+                diagnostics: _discoveryDiagnostics(
+                  '  ← https://site.example/all 200 text/html，9000 位元組：'
+                  '<div class="book">…',
+                ),
+              )
             : null,
       );
 
@@ -839,6 +852,52 @@ void main() {
       expect(asked[1].last.content, startsWith('# 書源校驗沒過：發現失效'));
       expect(asked[1].last.content, contains('發現頁用搜尋規則解析'));
       expect(applied, isEmpty);
+    },
+  );
+
+  test(
+    'the discovery-borrows-search note is left out when the discovery page '
+    'is not content: a verification redirect is not the search rules',
+    () async {
+      // 2026-11-13 QQ文学网：發現頁回「验证中」轉址頁，附上這句讓 AI 以為是
+      // 改搜尋規則弄壞的。
+      final original = BookSource(
+        bookSourceUrl: 'https://site.example',
+        bookSourceName: 'site.example',
+        searchUrl: '/s?q={{key}}',
+        exploreUrl: '全部::/all',
+        ruleSearch: SearchRule(bookList: 'class.old', name: 'a@text'),
+        ruleContent: ContentRule(content: 'id.old@text'),
+      );
+      final s = session(
+        [original],
+        replies: [
+          jsonEncode({
+            'action': 'test',
+            'patch': {
+              'searchUrl': '/s2?q={{key}}',
+              'ruleContent': {'content': 'class.txt@text'},
+            },
+          }),
+          jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
+        ],
+        check: (source) => source.ruleContent?.content == 'class.txt@text'
+            ? _checked(
+                source,
+                broken: _discoveryBroken,
+                diagnostics: _discoveryDiagnostics(
+                  '  ← https://site.example/all 200 text/html，377 位元組'
+                  '（這頁用程式轉到 /all?_js_verify=1）：<!DOCTYPE html>',
+                ),
+              )
+            : null,
+      );
+
+      await s.start();
+
+      expect(asked[1].last.content, startsWith('# 書源校驗沒過：發現失效'));
+      expect(asked[1].last.content, isNot(contains('發現頁用搜尋規則解析')));
+      expect(asked[1].last.content, contains('這頁用程式轉到'));
     },
   );
 

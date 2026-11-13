@@ -329,6 +329,19 @@ bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
   return collapsed.isEmpty;
 }
 
+/// [recordResponse] 記的回應那一行，網站給的是內容：狀態碼 2xx、有內容，
+/// 也不是限流、防護頁或轉址頁（[pageNoteOf] 寫在括號裡的說明）。不是回應
+/// 那一行的是 false。
+bool isContentResponseLine(String line) {
+  final match = _responseLine.firstMatch(line);
+  if (match == null) return false;
+  final status = int.parse(match.group(1)!);
+  if (status < 200 || status >= 300 || line.contains('，沒有內容')) return false;
+  return !pageNoteOpenings.any((note) => line.contains('（$note'));
+}
+
+final RegExp _responseLine = RegExp(r'^\s*← \S+ (\d{3})\b');
+
 /// 回應內容的長度與文字；不認得的型別是 null，沒有內容時長度是 null。
 /// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜，最多
 /// 解開 [maxBytes] 位元組。

@@ -15,13 +15,24 @@ import 'package:night_reader/core/network/page_digest.dart';
 ///   空白或幾個字。
 String? pageNoteOf(String body, {int? status}) {
   if (rateLimitOf(body, status: status) case final limit?) {
-    return '網站限流：$limit';
+    return '$_rateLimitNote：$limit';
   }
-  if (isProtectionPage(body)) return '看起來是網站防護頁，要先通過驗證才給內容';
+  if (isProtectionPage(body)) return '$_protectionNote，要先通過驗證才給內容';
   final target = scriptRedirectOf(body);
-  if (target != null) return '這頁用程式轉到 $target';
+  if (target != null) return '$_redirectNote $target';
   return null;
 }
+
+const String _rateLimitNote = '網站限流';
+const String _protectionNote = '看起來是網站防護頁';
+const String _redirectNote = '這頁用程式轉到';
+
+/// [pageNoteOf] 寫出的說明都以這幾句開頭：看到其中一句，那頁就不是內容。
+const List<String> pageNoteOpenings = [
+  _rateLimitNote,
+  _protectionNote,
+  _redirectNote,
+];
 
 /// 網站限流時它說的話：狀態碼 429，或短短一頁只用程式跳出「搜索间隔: 30 秒」
 /// 「操作太频繁」這類提示。2026-11-13 蜘蛛小說網的搜尋每 30 秒只能一次、連續
