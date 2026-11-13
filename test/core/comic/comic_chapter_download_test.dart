@@ -81,11 +81,9 @@ void main() {
       archive.files.firstWhere((f) => f.name == '0001.png').compression,
       CompressionType.none,
     );
-    expect(
-      await ComicChapterFiles.readPage(cbz.path, '0002.png'),
-      stripedPng(10, 30, 0, 0),
-    );
-    expect(await ComicChapterFiles.pagesOf(cbz.path), const [
+    final opened = await ComicChapterFiles.open(cbz.path);
+    expect(await opened.read('0002.png'), stripedPng(10, 30, 0, 0));
+    expect(opened.pages, const [
       ComicPage(name: '0001.png', width: 10, height: 20),
       ComicPage(name: '0002.png', width: 10, height: 30),
     ]);

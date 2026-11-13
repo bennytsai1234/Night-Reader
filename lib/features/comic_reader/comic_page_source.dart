@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
@@ -26,16 +27,38 @@ class ComicChapterFilesSource implements ComicPageSource {
   /// 第幾話的資料夾或 CBZ 路徑。
   final Future<String> Function(int chapterIndex) pathOf;
 
+  /// 打開過的那幾話；讀圖用打開時記下的位置。
+  final Map<int, Future<ComicChapterContents>> _opened = {};
+
+  Future<ComicChapterContents> _open(int chapterIndex) {
+    final opened = _opened[chapterIndex];
+    if (opened != null) return opened;
+    final opening = pathOf(chapterIndex).then(ComicChapterFiles.open);
+    _opened[chapterIndex] = opening;
+    // 打不開的不留著：下次（「重試」）重新打開。
+    unawaited(
+      opening.then<void>(
+        (_) {},
+        onError: (Object _) {
+          if (identical(_opened[chapterIndex], opening)) {
+            _opened.remove(chapterIndex);
+          }
+        },
+      ),
+    );
+    return opening;
+  }
+
   @override
-  Future<List<ComicPage>> pagesOf(int chapterIndex) async =>
-      ComicChapterFiles.pagesOf(await pathOf(chapterIndex));
+  Future<List<ComicPage>> pagesOf(int chapterIndex) async {
+    // 列清單是開書、換話、「重試」時，照目前的檔重新打開。
+    _opened.remove(chapterIndex)?.ignore();
+    return (await _open(chapterIndex)).pages;
+  }
 
   @override
   Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) async {
-    final bytes = await ComicChapterFiles.readPage(
-      await pathOf(chapterIndex),
-      page.name,
-    );
+    final bytes = await (await _open(chapterIndex)).read(page.name);
     if (bytes == null) throw StateError('這張圖不見了：${page.name}');
     return bytes;
   }

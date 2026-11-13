@@ -27,8 +27,8 @@ class NetworkComicPageSource implements ComicPageSource {
   final List<BookChapter> chapters;
   final BookSourceService _service;
 
-  /// 下載好的那幾話的 CBZ。
-  final Map<int, String> _cbz = {};
+  /// 下載好的那幾話打開的 CBZ；讀圖用打開時記下的位置。
+  final Map<int, ComicChapterContents> _cbz = {};
 
   /// 還沒下載好的那幾話的圖片網址。
   final Map<int, List<String>> _urls = {};
@@ -37,16 +37,17 @@ class NetworkComicPageSource implements ComicPageSource {
   Future<List<ComicPage>> pagesOf(int chapterIndex) async {
     final chapter = chapters[chapterIndex];
     final cbz = await ComicChapterDownload.cbzFor(book, chapter);
+    _cbz.remove(chapterIndex);
     if (cbz != null) {
-      List<ComicPage> pages;
+      ComicChapterContents? opened;
       try {
-        pages = await ComicChapterFiles.pagesOf(cbz.path);
+        opened = await ComicChapterFiles.open(cbz.path);
       } catch (_) {
-        pages = const [];
+        opened = null;
       }
-      if (pages.isNotEmpty) {
-        _cbz[chapterIndex] = cbz.path;
-        return pages;
+      if (opened != null && opened.pages.isNotEmpty) {
+        _cbz[chapterIndex] = opened;
+        return opened.pages;
       }
       // 下載好的檔壞了：刪掉照書源重抓，書架自動下載也會再排這一話。
       await cbz.delete();
@@ -76,7 +77,7 @@ class NetworkComicPageSource implements ComicPageSource {
   @override
   Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) async {
     if (_cbz[chapterIndex] case final cbz?) {
-      final bytes = await ComicChapterFiles.readPage(cbz, page.name);
+      final bytes = await cbz.read(page.name);
       if (bytes == null) throw StateError('這張圖不見了：${page.name}');
       return bytes;
     }

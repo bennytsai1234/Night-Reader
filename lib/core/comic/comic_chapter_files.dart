@@ -38,6 +38,146 @@ class ComicPage {
   String toString() => 'ComicPage($name, ${width}x$height)';
 }
 
+/// CBZ 裡一張圖的資料在檔案裡的哪一段。
+final class ComicArchiveEntry {
+  const ComicArchiveEntry({
+    required this.offset,
+    required this.compressedSize,
+    required this.size,
+    required this.deflated,
+  });
+
+  /// 資料從檔案第幾個位元組開始。
+  final int offset;
+
+  /// 檔案裡佔幾個位元組。
+  final int compressedSize;
+
+  /// 解開後幾個位元組。
+  final int size;
+
+  /// Deflate 壓縮的要先解開；否則是原樣存著（夜讀打包的 CBZ 都是）。
+  final bool deflated;
+}
+
+/// 檔案的大小與修改時間：開章後檔案換了（重抓這一話、下載完重新打包），
+/// 記下的位置就不能用。
+final class _FileStamp {
+  const _FileStamp(this.length, this.modified);
+
+  final int length;
+  final DateTime modified;
+
+  static _FileStamp? of(File file) {
+    try {
+      final stat = file.statSync();
+      if (stat.type != FileSystemEntityType.file) return null;
+      return _FileStamp(stat.size, stat.modified);
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  static Future<_FileStamp?> ofAsync(File file) async {
+    try {
+      final stat = await file.stat();
+      if (stat.type != FileSystemEntityType.file) return null;
+      return _FileStamp(stat.size, stat.modified);
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _FileStamp &&
+      other.length == length &&
+      other.modified == modified;
+
+  @override
+  int get hashCode => Object.hash(length, modified);
+}
+
+/// 打開的一章漫畫（[ComicChapterFiles.open]）：依序的每一張圖，以及讀出
+/// 其中一張。
+///
+/// CBZ 打開時記下每張圖的資料在檔案裡的哪一段，讀圖時直接讀那一段，不再
+/// 每張都重新解析整個 ZIP（同 Mihon 的 `ArchiveReader` 一話只開一次）。原樣
+/// 存著的（夜讀打包的 CBZ）讀完就是圖；Deflate 壓縮的在另一個 isolate 解開。
+/// 檔案的大小或修改時間和打開時不同、或這張沒記到位置（加密、其他壓縮
+/// 方式）時，照整個 ZIP 解析讀。
+final class ComicChapterContents {
+  ComicChapterContents._(this.path, this.pages, this._archive);
+
+  /// 這一章的資料夾或 CBZ。
+  final String path;
+
+  /// 依序的每一張圖。
+  final List<ComicPage> pages;
+
+  /// CBZ 打開時的檔案狀態與每張圖的位置；資料夾是 null。
+  final ({_FileStamp stamp, Map<String, ComicArchiveEntry> entries})? _archive;
+
+  /// 讀出 [name] 這張圖；章節或這張圖不見了時是 null。
+  Future<Uint8List?> read(String name) async {
+    final archive = _archive;
+    if (!ComicChapterFiles.isArchive(path)) {
+      final file = File(p.join(path, name));
+      return await file.exists() ? file.readAsBytes() : null;
+    }
+    final entry = archive?.entries[name];
+    final file = File(path);
+    if (entry == null || await _FileStamp.ofAsync(file) != archive!.stamp) {
+      return Isolate.run(() => ComicChapterFiles._readArchivePage(path, name));
+    }
+    if (entry.deflated) {
+      final path = this.path;
+      return Isolate.run(() => _inflateEntry(path, entry));
+    }
+    return _readRange(file, entry.offset, entry.compressedSize);
+  }
+
+  static Future<Uint8List?> _readRange(
+    File file,
+    int offset,
+    int length,
+  ) async {
+    final RandomAccessFile handle;
+    try {
+      handle = await file.open();
+    } on FileSystemException {
+      return null;
+    }
+    try {
+      await handle.setPosition(offset);
+      final bytes = await handle.read(length);
+      return bytes.length == length ? bytes : null;
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /// 在另一個 isolate 裡讀出 Deflate 壓縮的那一段並解開。
+  static Uint8List? _inflateEntry(String path, ComicArchiveEntry entry) {
+    final RandomAccessFile handle;
+    try {
+      handle = File(path).openSync();
+    } on FileSystemException {
+      return null;
+    }
+    final Uint8List raw;
+    try {
+      handle.setPositionSync(entry.offset);
+      raw = handle.readSync(entry.compressedSize);
+    } finally {
+      handle.closeSync();
+    }
+    if (raw.length != entry.compressedSize) return null;
+    final bytes = Inflate(raw, uncompressedSize: entry.size).getBytes();
+    return bytes.length == entry.size ? bytes : null;
+  }
+}
+
 /// 存在手機上的一章漫畫：一個圖片資料夾或一個 CBZ／ZIP 檔（ADR 0052）。
 /// 下載中的章節、下載完打包的 CBZ 與本地漫畫都是這兩種，閱讀器只讀它們。
 ///
@@ -70,30 +210,37 @@ abstract final class ComicChapterFiles {
   static bool isArchive(String path) =>
       archiveExtensions.contains(p.extension(path).toLowerCase());
 
-  /// 這一章依序的每一張圖與寬高。CBZ 有 [comicInfoName] 記著每張的寬高時
-  /// 直接用，否則讀每張圖的檔頭。資料夾或檔案不存在時丟出
-  /// [FileSystemException]，ZIP 壞掉時丟出 [FormatException]；不是 ZIP 的檔
-  /// 讀不到任何圖，回傳空的。
-  static Future<List<ComicPage>> pagesOf(String path) =>
-      Isolate.run(() => listPagesSync(path));
+  /// 打開這一章：依序的每一張圖與寬高，CBZ 另外記下每張圖在檔案裡的位置，
+  /// 之後讀圖（[ComicChapterContents.read]）直接讀那一段。CBZ 有
+  /// [comicInfoName] 記著每張的寬高時直接用，否則讀每張圖的檔頭。資料夾或
+  /// 檔案不存在時丟出 [FileSystemException]，ZIP 壞掉時丟出
+  /// [FormatException]；不是 ZIP 的檔讀不到任何圖，回傳沒有圖的一章。
+  static Future<ComicChapterContents> open(String path) =>
+      Isolate.run(() => _openSync(path));
 
-  /// 讀出 [name] 這張圖；章節或這張圖不見了時是 null。
-  static Future<Uint8List?> readPage(String path, String name) {
+  static ComicChapterContents _openSync(String path) {
     if (!isArchive(path)) {
-      final file = File(p.join(path, name));
-      return file.exists().then((exists) => exists ? file.readAsBytes() : null);
+      return ComicChapterContents._(path, _directoryPages(path), null);
     }
-    return Isolate.run(() => _readArchivePage(path, name));
+    final stamp = _FileStamp.of(File(path));
+    final (pages, entries) = _archiveIndex(path);
+    return ComicChapterContents._(
+      path,
+      pages,
+      stamp == null ? null : (stamp: stamp, entries: entries),
+    );
   }
 
-  /// [readPage] 的同步版本，給已經在背景 isolate 裡的呼叫端。
+  /// 讀出 [path] 這一章的 [name] 這張圖，給已經在背景 isolate 裡的呼叫端；
+  /// 章節或這張圖不見了時是 null。閱讀器用 [open]。
   static Uint8List? readPageSync(String path, String name) {
     if (isArchive(path)) return _readArchivePage(path, name);
     final file = File(p.join(path, name));
     return file.existsSync() ? file.readAsBytesSync() : null;
   }
 
-  /// [pagesOf] 的同步版本，給已經在背景 isolate 裡的呼叫端。
+  /// 這一章依序的每一張圖與寬高，給已經在背景 isolate 裡的呼叫端（規則同
+  /// [open]）。
   static List<ComicPage> listPagesSync(String path) =>
       isArchive(path) ? _archivePages(path) : _directoryPages(path);
 
@@ -114,24 +261,83 @@ abstract final class ComicChapterFiles {
     ];
   }
 
-  static List<ComicPage> _archivePages(String path) =>
-      _withArchive(path, (archive) {
-        final images = <ArchiveFile>[
-          for (final file in archive.files)
-            if (file.isFile &&
-                !_isHidden(file.name) &&
-                _isImageFile(file.name, () => _archiveHeadOf(file)))
-              file,
-        ]..sort((a, b) => compareNatural(a.name, b.name));
-        final recorded = _recordedSizes(archive, images.length);
-        return [
-          for (var i = 0; i < images.length; i++)
-            _pageWithSize(
-              images[i].name,
-              recorded?[i] ?? _measureAndFree(images[i]),
-            ),
-        ];
-      });
+  static List<ComicPage> _archivePages(String path) => _archiveIndex(path).$1;
+
+  /// CBZ 依序的每一張圖，以及每張圖的資料在檔案裡的哪一段（讀不了那一段的
+  /// 不列：加密的、不是「不壓縮」或 Deflate 的）。
+  static (List<ComicPage>, Map<String, ComicArchiveEntry>) _archiveIndex(
+    String path,
+  ) => _withArchive(path, (archive, directory) {
+    final images = <ArchiveFile>[
+      for (final file in archive.files)
+        if (file.isFile &&
+            !_isHidden(file.name) &&
+            _isImageFile(file.name, () => _archiveHeadOf(file)))
+          file,
+    ]..sort((a, b) => compareNatural(a.name, b.name));
+    final recorded = _recordedSizes(archive, images.length);
+    final pages = [
+      for (var i = 0; i < images.length; i++)
+        _pageWithSize(
+          images[i].name,
+          recorded?[i] ?? _measureAndFree(images[i]),
+        ),
+    ];
+    return (
+      pages,
+      _entriesOf(path, directory, {for (final f in images) f.name}),
+    );
+  });
+
+  /// [names] 每一張的資料在 [path] 裡的位置。同名的照 [ZipDecoder] 用第一個；
+  /// 資料從項目開頭的固定 30 位元組、檔名與附加欄位之後開始，後兩者的長度
+  /// 要讀項目開頭才知道（目錄裡記的附加欄位可能和項目開頭的不同）。
+  static Map<String, ComicArchiveEntry> _entriesOf(
+    String path,
+    ZipDirectory directory,
+    Set<String> names,
+  ) {
+    final headers = <String, ZipFileHeader>{};
+    for (final header in directory.fileHeaders) {
+      final name = header.file?.filename;
+      if (name != null && names.contains(name)) {
+        headers.putIfAbsent(name, () => header);
+      }
+    }
+    final entries = <String, ComicArchiveEntry>{};
+    final handle = File(path).openSync();
+    try {
+      final length = handle.lengthSync();
+      for (final MapEntry(key: name, value: header) in headers.entries) {
+        final deflated = switch (header.compressionMethod) {
+          0 => false,
+          8 => true,
+          _ => null,
+        };
+        final encrypted = (header.generalPurposeBitFlag & 0x1) != 0;
+        if (deflated == null || encrypted) continue;
+        handle.setPositionSync(header.localHeaderOffset + 26);
+        final lengths = handle.readSync(4);
+        if (lengths.length < 4) continue;
+        final view = ByteData.sublistView(lengths);
+        final offset =
+            header.localHeaderOffset +
+            30 +
+            view.getUint16(0, Endian.little) +
+            view.getUint16(2, Endian.little);
+        if (offset + header.compressedSize > length) continue;
+        entries[name] = ComicArchiveEntry(
+          offset: offset,
+          compressedSize: header.compressedSize,
+          size: header.uncompressedSize,
+          deflated: deflated,
+        );
+      }
+    } finally {
+      handle.closeSync();
+    }
+    return entries;
+  }
 
   /// 沒記寬高的那張讀出來量，量完就放掉：archive 讀過的內容會留在項目
   /// 裡，不放掉的話列一話就把整話的圖都留在記憶體。
@@ -145,16 +351,21 @@ abstract final class ComicChapterFiles {
 
   static Uint8List? _readArchivePage(String path, String name) {
     if (!File(path).existsSync()) return null;
-    return _withArchive(path, (archive) => archive.find(name)?.readBytes());
+    return _withArchive(path, (archive, _) => archive.find(name)?.readBytes());
   }
 
-  static T _withArchive<T>(String path, T Function(Archive archive) action) {
+  static T _withArchive<T>(
+    String path,
+    T Function(Archive archive, ZipDirectory directory) action,
+  ) {
     if (!File(path).existsSync()) {
       throw FileSystemException('章節檔不存在', path);
     }
     final input = InputFileStream(path);
     try {
-      return action(ZipDecoder().decodeStream(input));
+      final decoder = ZipDecoder();
+      final archive = decoder.decodeStream(input);
+      return action(archive, decoder.directory);
     } on ArchiveException catch (error) {
       throw FormatException('不是 ZIP 檔：$error', path);
     } finally {

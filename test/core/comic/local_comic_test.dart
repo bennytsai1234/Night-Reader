@@ -121,7 +121,7 @@ void main() {
       expect(book.fileFingerprint, chapters.first.url);
       final first = LocalComicService.chapterPathOf(book, chapters.first);
       expect(
-        (await ComicChapterFiles.pagesOf(first)).map((page) => page.height),
+        (await ComicChapterFiles.open(first)).pages.map((page) => page.height),
         [5, 6],
       );
     });
