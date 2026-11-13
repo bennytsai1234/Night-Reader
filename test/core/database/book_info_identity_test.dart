@@ -20,7 +20,11 @@ void main() {
     type: type,
   )..isInBookshelf = true;
 
-  Future<void> addMarks(Book book, {int bookmarkId = 101, int highlightId = 201}) async {
+  Future<void> addMarks(
+    Book book, {
+    int bookmarkId = 101,
+    int highlightId = 201,
+  }) async {
     await db.bookmarkDao.upsertAll([
       Bookmark(
         id: bookmarkId,
@@ -114,14 +118,20 @@ void main() {
     final renamedComic = comic.copyWith(name: '新版漫畫');
     await db.bookDao.upsertEditedBookInfo(comic, renamedComic);
 
-    final bookmarks = {for (final item in await db.bookmarkDao.getAll()) item.id: item};
-    final highlights = {for (final item in await db.highlightDao.getAll()) item.id: item};
+    final bookmarks = {
+      for (final item in await db.bookmarkDao.getAll()) item.id: item,
+    };
+    final highlights = {
+      for (final item in await db.highlightDao.getAll()) item.id: item,
+    };
     expect(bookmarks[11]?.bookName, novel.recordName);
     expect(bookmarks[12]?.bookName, renamedComic.recordName);
     expect(highlights[21]?.bookName, novel.recordName);
     expect(highlights[22]?.bookName, renamedComic.recordName);
     expect(
-      (await db.bookDao.getByRecordName(renamedComic.recordName)).single.bookUrl,
+      (await db.bookDao.getByRecordName(renamedComic.recordName))
+          .single
+          .bookUrl,
       comic.bookUrl,
     );
   });
