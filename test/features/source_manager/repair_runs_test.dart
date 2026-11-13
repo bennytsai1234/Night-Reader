@@ -151,39 +151,42 @@ void main() {
     expect(runs.current, isNull);
   });
 
-  test('an unread batch result cannot be replaced by a single repair', () async {
-    final first = runOf(_batch());
-    expect(runs.adopt(first), isTrue);
-    first.start();
-    await first.batch.completion;
-    await _flush();
-    expect(first.isFinished, isTrue);
-    expect(first.isDone, isFalse);
+  test(
+    'an unread batch result cannot be replaced by a single repair',
+    () async {
+      final first = runOf(_batch());
+      expect(runs.adopt(first), isTrue);
+      first.start();
+      await first.batch.completion;
+      await _flush();
+      expect(first.isFinished, isTrue);
+      expect(first.isDone, isFalse);
 
-    final attempted = SingleRepairRun(
-      AiRepairSession(source: _s('different'), service: null),
-      work: work,
-      navigator: () => null,
-    );
-    expect(runs.adopt(attempted), isFalse);
-    expect(runs.current, same(first), reason: '還沒看過的結果不能被取代');
-    attempted.disposeWork();
-    attempted.dispose();
+      final attempted = SingleRepairRun(
+        AiRepairSession(source: _s('different'), service: null),
+        work: work,
+        navigator: () => null,
+      );
+      expect(runs.adopt(attempted), isFalse);
+      expect(runs.current, same(first), reason: '還沒看過的結果不能被取代');
+      attempted.disposeWork();
+      attempted.dispose();
 
-    // 回到結果頁再關掉，下一件工作才可以開始。
-    first
-      ..attach()
-      ..detach();
-    await _flush();
-    expect(runs.current, isNull);
+      // 回到結果頁再關掉，下一件工作才可以開始。
+      first
+        ..attach()
+        ..detach();
+      await _flush();
+      expect(runs.current, isNull);
 
-    final next = runOf(_batch());
-    expect(runs.adopt(next), isTrue);
-    expect(runs.current, same(next));
-    next.disposeWork();
-    next.dispose();
-    runs.dispose();
-  });
+      final next = runOf(_batch());
+      expect(runs.adopt(next), isTrue);
+      expect(runs.current, same(next));
+      next.disposeWork();
+      next.dispose();
+      runs.dispose();
+    },
+  );
 
   test('an in-progress result also cannot be replaced directly', () async {
     final gate = Completer<void>();
