@@ -84,7 +84,7 @@ SourceProbeReport _probe(BookSource source) => _good(source)
     : const SourceProbeReport(logs: [(-1, '❌ 正文為空')], requests: []);
 
 final _fix = jsonEncode({
-  'action': 'test',
+  'action': 'submit',
   'patch': {
     'ruleContent': {'content': 'class.txt@text'},
   },

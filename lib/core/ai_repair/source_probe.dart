@@ -398,8 +398,7 @@ String? probeStart(
 /// 試抓從搜尋走進詳情時，搜尋結果第一本的書名、作者和詳情頁抓到的不一樣：
 /// 寫成一句告訴 AI 的事實；一樣或沒走到詳情是 null。書名加作者是夜讀認一本
 /// 書的依據（搜尋結果合併、換源、書籤）。2026-11-13 肉肉屋#3 的搜尋書名規則
-/// 抓到每一列的「目录」連結，20 本都叫「目录」，詳情頁卻是「《救命！…》」；
-/// 試抓與校驗都過，AI 沒有下一輪看到。
+/// 抓到每一列的「目录」連結，20 本都叫「目录」，詳情頁卻是「《救命！…》」。
 String? searchInfoMismatch(SourceProbeReport probe) {
   String? searchName, searchAuthor, infoName, infoAuthor;
   var listed = false;

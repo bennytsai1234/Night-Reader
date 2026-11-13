@@ -522,7 +522,7 @@ const String _method =
 ## 怎麼查
 - 先看開場的校驗結果與試抓：哪一段失敗、網站實際回了什麼。網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，才查網址、參數、標頭或網站本身。
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
-- 改了規則就 test：一次從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；要確認後面幾段，從那一段 test。parse 不連網站，只在已經抓到的那頁試解析，網站在限流時用它。
+- 改了規則就 test：一次從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；要確認後面幾段，從那一段 test。test 不會交出：看過結果（書名、作者、目錄、正文都對）再用 submit 交出。parse 不連網站，只在已經抓到的那頁試解析，網站在限流時用它。
 - 要試的是書源本身的設定（Cookie 罐、標頭、網址參數、編碼）時，寫進 patch 直接 test：比自己寫程式一步步模擬快，送出的也是夜讀實際會送的樣子。
 - 網站對請求直接斷線、逾時或連回應都沒有時，先換送出的條件試：User-Agent（手機、桌機）、http 或 https、有沒有 www；換了哪一項就通，就把那一項寫進書源。
 - 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，還是被擋就用 give_up 的 rate_limited 放棄，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
@@ -650,9 +650,8 @@ final List<AiTool> aiRepairTools = [
   (
     name: 'test',
     description:
-        '試抓：拿改過的書源從某一段一路抓到第一章正文。抓到正文（照書源校驗的'
-        '判斷）就自動跑書源校驗（換第二本書、抽查前幾章），通過就套用；沒過會'
-        '回校驗的結論與診斷。',
+        '試抓：拿改過的書源從某一段一路抓到第一章正文，回每一段送了什麼、抓到'
+        '什麼。不會交出。',
     parameters: _object(
       {
         'patch': _patch,
@@ -675,8 +674,9 @@ final List<AiTool> aiRepairTools = [
   (
     name: 'submit',
     description:
-        '交出：試抓走不到正文、但確定改對了才用（例如正文要付費）；夜讀跑一次'
-        '書源校驗，通過才套用。',
+        '交出：看過試抓結果、確定改對了就用（試抓走不到正文但確定改對了也用，'
+        '例如正文要付費）。夜讀跑一次書源校驗（換第二本書、抽查前幾章），通過'
+        '才套用；沒過會回校驗的結論與診斷。',
     parameters: _object({'patch': _patch, 'note': _note}, ['patch']),
   ),
   (
@@ -776,18 +776,11 @@ const String aiRepairUnrelatedSearch =
 String aiRepairFetchReply(String url, List<String> lines) =>
     '# 看網頁 $url（精簡後，每頁只給開頭；其他段用 read）\n${lines.join('\n')}';
 
-/// 試抓之後回給 AI 的話。
-String aiRepairProbeReply(SourceProbeReport probe) =>
-    '# 試抓結果：${probe.summary}\n${probe.fullText}';
-
-/// 試抓到正文、搜尋與詳情的書名或作者卻不一樣時回給 AI 的話（[fact] 是
-/// `searchInfoMismatch`）：先不交出，讓 AI 看一次；它照原樣再 test 或
-/// submit 就照常校驗。
-String aiRepairNameMismatchReply(SourceProbeReport probe, String fact) =>
-    '${aiRepairProbeReply(probe)}\n\n'
-    '# 還沒交出：$fact\n'
-    '書名加作者是夜讀認一本書的依據（搜尋結果合併、換源、書籤），搜尋與詳情要'
-    '抓出一樣的。這樣是對的，就照原樣再 test 或 submit。';
+/// 試抓之後回給 AI 的話；搜尋與詳情的書名或作者不一樣時寫在最後
+/// （[mismatch]，`searchInfoMismatch`）。
+String aiRepairProbeReply(SourceProbeReport probe, {String? mismatch}) =>
+    '# 試抓結果：${probe.summary}\n${probe.fullText}'
+    '${mismatch == null ? '' : '\n\n# 書名或作者對不上：$mismatch'}';
 
 /// 交出或試抓到正文、校驗卻沒過時回給 AI 的話：校驗的結論與它的診斷
 /// （出錯的那一段送了什麼請求、網站回了什麼）。

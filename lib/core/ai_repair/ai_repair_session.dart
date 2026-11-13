@@ -970,9 +970,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 完整紀錄寫到對話的第幾句：每句只寫一次。
   int logged = 0;
 
-  /// 已經告訴過 AI 的書名、作者對不上（[searchInfoMismatch]）：同一件只說
-  /// 一次，AI 照原樣再試抓就照常交出。
-  final Set<String> _toldMismatches = {};
+  /// 最後一次試抓到正文的那份書源（JSON 字串）：AI 交出的是同一份時，校驗
+  /// 照「試抓抓到過正文」做（沒過先隔一段時間再校驗一次）。
+  String? _probedOk;
 
   BookSource get original => job.original;
 
@@ -993,7 +993,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     job._probe = s._withPageIds(job._firstProbe!);
     current = sourceForAi(original);
     logged = 0;
-    _toldMismatches.clear();
+    _probedOk = null;
     s._finish(s._addStep(job, '重新開始（第 $attempt 次）', detail: why), why);
     s.log
       ..section('重新開始（第 $attempt 次）')
@@ -1194,7 +1194,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         s.log.full('### 程式\n$code');
         s._local(step, '跑程式', '# 程式結果\n$result');
         return answer('# 程式結果\n$result');
-      case AiTest(:final change, :final note, :final from, :final url):
+      case AiTest(:final change, :final from, :final url):
         final parsed = candidateOf(change);
         if (parsed == null) {
           return invalid('讀不懂 AI 回的書源', badChangeReply(change));
@@ -1246,21 +1246,13 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           s.log.both('試抓：$fact');
           return AgentRejected('# 書源校驗沒過：$fact');
         }
-        if (searchInfoMismatch(probe) case final fact?
-            when _toldMismatches.add(fact)) {
-          s._finish(step, '$changed，$where試抓：$fact');
-          s.log.both('試抓：$fact');
-          return answer(aiRepairNameMismatchReply(s._withPageIds(probe), fact));
-        }
-        s._finish(step, '$changed，$where試抓：${probe.summary}，交出');
-        return submitted(
-          await s._validate(
-            job,
-            candidate,
-            note,
-            probeSucceeded: true,
-            last: false,
-          ),
+        // 試抓不交出：AI 看過結果自己 submit（使用者 2026-11-13，ADR 0054）。
+        _probedOk = jsonEncode(json);
+        final mismatch = searchInfoMismatch(probe);
+        s._finish(step, '$changed，$where試抓：${probe.summary}');
+        if (mismatch != null) s.log.both('試抓：$mismatch');
+        return answer(
+          aiRepairProbeReply(s._withPageIds(probe), mismatch: mismatch),
         );
       case AiSubmit(:final change, :final note):
         final parsed = candidateOf(change);
@@ -1272,7 +1264,15 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         final changed = AiRepairSession._changedText(original, candidate);
         s._finish(step, '$changed，交出');
         s.log.both('$changed，交出');
-        return submitted(await s._validate(job, candidate, note, last: false));
+        return submitted(
+          await s._validate(
+            job,
+            candidate,
+            note,
+            probeSucceeded: _probedOk == jsonEncode(json),
+            last: false,
+          ),
+        );
     }
   }
 
