@@ -116,7 +116,6 @@ void main() {
     expect(provider.book.bookUrl, oldUrl);
   });
 
-
   test(
     'editing book info and cover refreshes the bookshelf once per save',
     () async {
