@@ -28,6 +28,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'widgets/explore_skeletons.dart';
 import 'widgets/legado_explore_kind_flow.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
@@ -621,16 +622,15 @@ class _SourceRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: DragOverflowText(child: Text(
                 name,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.bodyBase.copyWith(
                   height: 1.3,
                   color: scheme.onSurface,
                   fontWeight: expanded ? FontWeight.w600 : FontWeight.w400,
                 ),
-              ),
+              )),
             ),
             if (loading) ...[
               SizedBox.square(
