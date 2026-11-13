@@ -16,9 +16,9 @@
 
 <p align="center"><img src="docs/readme/tidy.webp" width="100%" alt="隱藏廣告：長按選字按「隱藏」，每本書都不再出現；正文整理：替換規則清掉雜訊，簡體轉成繁體；隱藏狀態列：整個螢幕都是正文；統一封面：書架上的書不用書源的封面"></p>
 
-<p align="center"><img src="docs/readme/kinds.webp" width="100%" alt="漫畫：漫畫書源一路往下捲，CBZ 與圖片資料夾也能匯入；有聲書：一集一集聽，離開播放器也能從書架暫停、繼續；插圖：正文裡的圖夾在字中間，EPUB 的插圖也是"></p>
+<p align="center"><img src="docs/readme/kinds.webp" width="100%" alt="漫畫：漫畫書源一路往下捲，CBZ 與圖片資料夾也能匯入；有聲書：一集一集聽，離開播放器也能從書架暫停、繼續；插圖：打開「顯示插圖」，正文與 EPUB 的圖夾在字中間"></p>
 
-<p align="center"><img src="docs/readme/library.webp" width="100%" alt="多書源搜尋：繁簡一起找，同一本書合成一筆；換源：停在同一章，書籤和標註都還在；整本下載：放上書架就整本下載，沒網路也能讀；本地書：TXT、EPUB 匯入自動分章；多台同步：經 Google 雲端硬碟或 WebDAV"></p>
+<p align="center"><img src="docs/readme/library.webp" width="100%" alt="多書源搜尋：繁簡一起找，同一本書合成一筆；換源：照章名找回讀到的那一章，書籤和標註都還在；整本下載：小說與漫畫放上書架就整本下載，沒網路也能讀；本地書：TXT、EPUB 匯入自動分章；多台同步：經 Google 雲端硬碟或 WebDAV"></p>
 
 <p align="center"><img src="docs/readme/sources.webp" width="100%" alt="書源校驗：批次找出失效的書源，也能逐步除錯；AI 修復：用自己的 AI 服務修好壞掉的書源，校驗通過才換上。夜讀不附書源，網路上搜「Legado 書源」，在書源網站點「一鍵導入」就會打開夜讀"></p>
 
