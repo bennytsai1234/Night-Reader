@@ -10,6 +10,8 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
+import '../../support/skeleton_match.dart';
+
 void main() {
   Future<void> pump(
     WidgetTester tester, {
@@ -173,8 +175,8 @@ void main() {
     }
   }
 
-  // 骨架照上次記下的書名畫：每一條長條就是那本書名的一行，寬度與位置都和
-  // 真的文字相同，換場時長條剛好換成字；放不下被刪節的那一行含「…」。
+  // 骨架照上次記下的書名畫：每一條長條對準書名實際露出的筆畫；
+  // 太長時讀者可以左右拖動，但骨架只需要對準視窗可見的文字。
   const names = [
     '短',
     '中等長度書名',
@@ -255,7 +257,11 @@ List<Rect> textLines(WidgetTester tester, String text) {
     final line = lines[rect.top];
     lines[rect.top] = line == null ? rect : line.expandToInclude(rect);
   }
-  return lines.values.toList()..sort((a, b) => a.top.compareTo(b.top));
+  return [
+    for (final line in (lines.values.toList()
+      ..sort((a, b) => a.top.compareTo(b.top))))
+      horizontallyClippedPaintRect(paragraph, line),
+  ];
 }
 
 /// 與書架頁同樣排法的真書卡（左右內距與 [pump] 的骨架相同）。
