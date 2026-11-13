@@ -1193,15 +1193,17 @@ class _ChapterRow extends StatelessWidget {
       title: title,
       titleWidget: Padding(
         padding: EdgeInsets.only(left: indented ? tocChapterIndent : 0),
-        child: DragOverflowText(child: Text(
-          title,
-          maxLines: 1,
-          style: AppTextStyles.bodyBase.copyWith(
-            height: 1.3,
-            color: isCurrent ? scheme.primary : scheme.onSurface,
-            fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
+        child: DragOverflowText(
+          child: Text(
+            title,
+            maxLines: 1,
+            style: AppTextStyles.bodyBase.copyWith(
+              height: 1.3,
+              color: isCurrent ? scheme.primary : scheme.onSurface,
+              fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
-        )),
+        ),
       ),
       showChevron: false,
       trailing: isCurrent
