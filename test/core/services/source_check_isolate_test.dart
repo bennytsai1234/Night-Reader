@@ -440,6 +440,53 @@ void main() {
     );
   });
 
+  group('a site that refuses the connection or has a bad certificate', () {
+    // 2026-11-13 色欲文、鲤鱼乡①：連線被拒與憑證過期原本都標「校驗超時」。
+    DioException refused() => DioException(
+      requestOptions: RequestOptions(path: 'https://m.site.example/s'),
+      type: DioExceptionType.connectionError,
+      message: 'The connection errored: Connection refused',
+      error: SocketException(
+        'Connection refused',
+        osError: const OSError('Connection refused', 111),
+        address: InternetAddress('38.63.223.204'),
+        port: 54550,
+      ),
+    );
+    DioException expired() => DioException(
+      requestOptions: RequestOptions(path: 'https://m.site.example/s'),
+      error: const HandshakeException(
+        'Handshake error in client',
+        OSError('CERTIFICATE_VERIFY_FAILED: certificate has expired', 1),
+      ),
+    );
+
+    for (final (name, error) in [
+      ('refused', refused),
+      ('expired certificate', expired),
+    ]) {
+      test('$name is a site problem, not a timeout', () async {
+        final (result, source) = await _check(
+          _FakeBookSourceService(search: () async => throw error()),
+        );
+
+        expect(source.runtimeHealth.label, '上游異常');
+        expect(source.groupTags, isNot(contains('校驗超時')));
+        expect(result.message, isNot(contains('超時')));
+      });
+    }
+
+    test('the local port is not written as the site\'s port', () async {
+      final (result, _) = await _check(
+        _FakeBookSourceService(search: () async => throw refused()),
+      );
+
+      expect(result.message, contains('Connection refused'));
+      expect(result.message, isNot(contains('54550')));
+      expect(result.message, contains('m.site.example:443'));
+    });
+  });
+
   test('a dropped connection is retried once before judging', () async {
     var attempts = 0;
     final service = _FakeBookSourceService(

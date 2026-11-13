@@ -7,6 +7,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -329,8 +330,8 @@ Future<Map<String, Object?>> Function(CancelToken) _fetchTask(
       ).getStrResponse(),
     );
   } catch (error) {
-    requests.lines.add('錯誤：$error');
-    requests.pages.add((line: '錯誤：$error', body: null));
+    requests.lines.add('錯誤：${errorText(error)}');
+    requests.pages.add((line: '錯誤：${errorText(error)}', body: null));
   }
   return {
     'lines': requests.lines,

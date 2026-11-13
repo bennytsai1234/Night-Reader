@@ -1375,10 +1375,6 @@ String _clip(String text, int limit) =>
 bool _looksLikeTimeout(String normalized) =>
     normalized.contains('timeout') ||
     normalized.contains('timed out') ||
-    normalized.contains('socketexception') ||
-    normalized.contains('handshakeexception') ||
-    normalized.contains('ssl') ||
-    normalized.contains('receivetimeout') ||
     normalized.contains('future not completed');
 
 bool _looksLikeBlockedUpstream(String normalized) =>
@@ -1390,6 +1386,9 @@ bool _looksLikeBlockedUpstream(String normalized) =>
     normalized.contains(' 503') ||
     normalized.contains('forbidden') ||
     normalized.contains('cloudflare') ||
+    // 連不上（連線被拒、憑證不受信任）：網站那邊的問題，不是太慢。
+    normalized.contains('socketexception') ||
+    normalized.contains('handshakeexception') ||
     normalized.contains('certificate_verify_failed');
 
 int _issuePriority(SourceHealthCategory category) {
