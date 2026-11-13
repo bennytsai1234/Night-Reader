@@ -18,6 +18,7 @@ class DragOverflowText extends StatelessWidget {
         }
 
         final defaults = DefaultTextStyle.of(context);
+        final maxLines = child.maxLines ?? defaults.maxLines;
         final painter = TextPainter(
           text: TextSpan(
             style: defaults.style.merge(child.style),
@@ -31,8 +32,10 @@ class DragOverflowText extends StatelessWidget {
           textHeightBehavior:
               child.textHeightBehavior ?? defaults.textHeightBehavior,
           textWidthBasis: child.textWidthBasis ?? defaults.textWidthBasis,
-          maxLines: child.maxLines ?? defaults.maxLines,
-          ellipsis: '…',
+          maxLines: maxLines,
+          // 沒有限制行數的文字原本會自然換行，不能因為量測時給了
+          // ellipsis 就誤判成截斷，進而把整列壓成一行。
+          ellipsis: maxLines == null ? null : '…',
         )..layout(maxWidth: constraints.maxWidth);
         final exceeds = painter.didExceedMaxLines;
         final reservedHeight = painter.height;
