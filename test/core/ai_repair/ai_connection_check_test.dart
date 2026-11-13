@@ -74,10 +74,7 @@ Map<String, Object?> _echoToolNonce(RequestOptions request) {
 
 void main() {
   test('tests a complete tool call and result round trip', () async {
-    final service = _ProbeService([
-      (_) => _toolCall(),
-      _echoToolNonce,
-    ]);
+    final service = _ProbeService([(_) => _toolCall(), _echoToolNonce]);
 
     await verifyAiToolConnection(_client(service));
 
@@ -85,8 +82,9 @@ void main() {
     final first = service.requests.first.data as Map<String, dynamic>;
     expect(first['tool_choice'], 'required');
     final tools = first['tools'] as List<dynamic>;
-    final function = (tools.single as Map<String, dynamic>)['function']
-        as Map<String, dynamic>;
+    final function =
+        (tools.single as Map<String, dynamic>)['function']
+            as Map<String, dynamic>;
     expect(function['name'], 'connection_ping');
     expect(function['parameters'], containsPair('required', ['value']));
 
@@ -100,8 +98,8 @@ void main() {
     final toolMessage = messages[3] as Map<String, dynamic>;
     expect(toolMessage['role'], 'tool');
     expect(toolMessage['tool_call_id'], 'call_1');
-    final result = jsonDecode(toolMessage['content'] as String)
-        as Map<String, dynamic>;
+    final result =
+        jsonDecode(toolMessage['content'] as String) as Map<String, dynamic>;
     final nonce = result['nonce'] as String;
     expect(nonce, isNotEmpty);
     final followup = messages[4] as Map<String, dynamic>;
@@ -122,10 +120,7 @@ void main() {
       'type': 'function',
       'function': {'name': 'connection_ping', 'arguments': '{"value":"ping"}'},
     });
-    final service = _ProbeService([
-      (_) => multi,
-      _echoToolNonce,
-    ]);
+    final service = _ProbeService([(_) => multi, _echoToolNonce]);
 
     await verifyAiToolConnection(_client(service));
 
