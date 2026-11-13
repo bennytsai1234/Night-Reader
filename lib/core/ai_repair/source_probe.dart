@@ -191,11 +191,14 @@ Future<SourceProbeReport> probeSource(
   }
 
   const stopped = SourceProbeReport(logs: [], requests: [], timedOut: true);
-  final timer = Timer(timeout, () => finish(stopped));
+  // worker 自己到 [timeout] 就停，交回走到哪裡的紀錄（2026-11-13 肉肉屋⑥
+  // 試抓四次超過時間，每次紀錄都是空的，AI 不知道停在哪一步）；規則 JS
+  // 同步等網路時 worker 的計時器要等那個請求結束，外層多等一個請求的時限。
+  final timer = Timer(timeout + _workerGrace, () => finish(stopped));
   unawaited(cancelToken?.whenCancel.then((_) => finish(stopped)));
   unawaited(
     worker
-        .run(_probeTask(source.toJson(), keyword))
+        .run(_probeTask(source.toJson(), keyword, timeout))
         .then(
           (map) => finish(SourceProbeReport.fromMap(map)),
           onError: (Object error, StackTrace stack) {
@@ -214,10 +217,16 @@ Future<SourceProbeReport> probeSource(
   return report;
 }
 
+/// worker 到時限沒交回時，外層再多等多久才結束它：一個請求的時限（規則 JS
+/// 同步等網路時，worker 的計時器要等那個請求結束才跑得到）。
+const Duration _workerGrace = Duration(seconds: 16);
+
 /// 在 worker 裡跑的試抓；只捕捉書源與關鍵字的資料（`CODING_STANDARDS.md`）。
+/// 到 [timeout] 還沒抓完就停下，交回到那裡為止的紀錄。
 Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   Map<String, dynamic> sourceJson,
   String keyword,
+  Duration timeout,
 ) => (_) async {
   final debug = SourceDebugService();
   final logs = <(int, String)>[];
@@ -230,20 +239,24 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
     keepPages: true,
     sentHeaders: true,
   );
+  var timedOut = false;
   try {
-    await requests.run(
-      () => debug.startDebug(BookSource.fromJson(sourceJson), keyword),
-    );
+    await requests
+        .run(() => debug.startDebug(BookSource.fromJson(sourceJson), keyword))
+        .timeout(timeout);
+  } on TimeoutException {
+    timedOut = true;
+  } finally {
     // 紀錄經過 broadcast stream，讓最後幾筆送到。
     await Future<void>.delayed(Duration.zero);
-  } finally {
     await subscription.cancel();
   }
-  final content = debug.lastContent;
+  final content = timedOut ? null : debug.lastContent;
   return SourceProbeReport(
     logs: logs,
     requests: requests.lines,
     pages: requests.pages,
+    timedOut: timedOut,
     contentUsable: content == null
         ? null
         : sourceContentUsable(content.source, content.book, content.content),

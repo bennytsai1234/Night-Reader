@@ -44,6 +44,10 @@ void main() {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     site = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
+      // 很慢的正文頁：試抓的時限內回不來。
+      if (request.uri.path == '/book/9/1.html') {
+        await Future<void>.delayed(const Duration(seconds: 3));
+      }
       final body = switch (request.uri.path) {
         '/search' => '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
         '/book/1' =>
@@ -141,6 +145,21 @@ void main() {
     expect(report.pageCount, greaterThanOrEqualTo(3));
     expect(report.fullText, contains('<a href="/book/1/1.html">第一章</a>'));
     expect(report.fullText, contains(_chapter));
+  });
+
+  test('a probe that runs out of time says how far it got', () async {
+    // 2026-11-13 肉肉屋⑥：四次超過時間，紀錄都是空的。
+    final report = await probeSource(
+      source(),
+      keyword: probeStart('content', keyword: '', url: '$site/book/9/1.html')!,
+      timeout: const Duration(seconds: 1),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(report.timedOut, isTrue);
+    expect(report.fullText, contains('正文 URL: $site/book/9/1.html'));
+    expect(report.requests, contains(startsWith('$site/book/9/1.html')));
+    expect(report.fullText, contains('（試抓超過時間，停在這裡）'));
   });
 
   test(
