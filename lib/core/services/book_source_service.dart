@@ -266,19 +266,24 @@ class BookSourceService {
         .record(from: previousUrl, to: source.bookSourceUrl);
   }
 
-  /// 同網站、規則一樣的幾個書源 [from] 併進 [into]（整批修復套用同網站修好的
-  /// 規則之後，ADR 0054）：書架上的書、搜尋紀錄與快取的正文搬到 [into]，
-  /// [from] 自己的分組併過去，[from] 刪掉。[into] 已經不在了就不動。
+  /// 重複書源 [from] 併進 [into]（ADR 0062）：書架上的書、搜尋紀錄與快取的
+  /// 正文搬到 [into]，[from] 自己的分組併過去，[from] 刪掉。[into] 已經不在
+  /// 了就不動。
   Future<void> mergeSources(List<String> from, String into) async {
     final sourceDao = getIt<BookSourceDao>();
     final target = await sourceDao.getByUrl(into);
     if (target == null) return;
     final merging = <String>[];
+    final books = <String>[];
     for (final url in from) {
       if (url == into) continue;
       final source = await sourceDao.getByUrl(url);
-      if (source == null) continue;
+      final its = await getIt<BookDao>().bookUrlsFromOrigin(url);
+      // 書源已經刪了、書還記著它（同步先刪了它）也搬。
+      if (source == null && its.isEmpty) continue;
       merging.add(url);
+      books.addAll(its);
+      if (source == null) continue;
       target.addGroup(
         (splitSourceGroups(source.bookSourceGroup)..removeAll([
               ...sourceRuntimeStatusTags,
@@ -288,10 +293,6 @@ class BookSourceService {
       );
     }
     if (merging.isEmpty) return;
-    final books = [
-      for (final url in merging)
-        ...await getIt<BookDao>().bookUrlsFromOrigin(url),
-    ];
     final release = books.isEmpty
         ? null
         : await DownloadService().holdBooks(books);

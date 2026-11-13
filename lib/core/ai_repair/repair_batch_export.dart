@@ -49,7 +49,6 @@ Future<File> exportRepairBatch(
         'movedTo': item.site?.movedTo,
         'tokens': item.tokens,
         'sharedFrom': item.sharedFrom?.source.bookSourceUrl,
-        'merged': item.merged,
         if (item.session case final session?) ...{
           'rounds': session.stats?.rounds,
           'log': logName(item) ?? (logs[item] == null ? null : '（已被清掉）'),
@@ -132,7 +131,6 @@ String _summary(
       final parts = [
         if (item.detail case final detail? when detail.isNotEmpty) detail,
         if (item.tokens > 0) '${item.tokens} token',
-        if (item.merged) '已併進「${item.sharedFrom!.source.bookSourceName}」',
         if (item.session != null) '紀錄：${logName(item) ?? '已被清掉'}',
       ];
       lines.add(

@@ -16,21 +16,26 @@ import 'sync_records.dart';
 /// 書源改了網址是同一個書源換了身分：這台以前的網址記在 [SourceMoves]，
 /// 跟著新網址那筆送上去（`movedFrom`）；另一台套用時，舊網址記著的書、
 /// 正文與登入資料照編輯書源時的同一套搬過去，不是新增一個、刪掉一個。
+/// 重複書源併進一個（ADR 0062）也記在這裡：另一台已經有留下的那一個時，
+/// 照合併的那一套把併掉的書源與它們的書併過去。
 class SourceSync extends SyncKind {
   SourceSync({
     BookSourceDao? dao,
     BookDao? bookDao,
     SharedPreferences? prefs,
     Future<void> Function(BookSource source, String previousUrl)? move,
+    Future<void> Function(List<String> from, String into)? merge,
   }) : _dao = dao ?? getIt<BookSourceDao>(),
        _bookDao = bookDao ?? getIt<BookDao>(),
        _moves = SourceMoves(prefs ?? getIt<SharedPreferences>()),
-       _move = move ?? _saveEdited;
+       _move = move ?? _saveEdited,
+       _merge = merge ?? BookSourceService().mergeSources;
 
   final BookSourceDao _dao;
   final BookDao _bookDao;
   final SourceMoves _moves;
   final Future<void> Function(BookSource source, String previousUrl) _move;
+  final Future<void> Function(List<String> from, String into) _merge;
 
   static Future<void> _saveEdited(BookSource source, String previousUrl) =>
       BookSourceService().saveEditedSource(source, previousUrl: previousUrl);
@@ -110,6 +115,21 @@ class SourceSync extends SyncKind {
         changed = true;
       } else {
         upserts.add(source);
+      }
+      // 另一台把重複書源併進這一個（ADR 0062）：這台也有這一個，併掉的那些
+      // 這台還有、或還有書記著它們，照樣併過來，書才不會留在刪掉的書源上。
+      if (existing != null) {
+        final merged = <String>[];
+        for (final url in movedFrom) {
+          if (before.containsKey(url) ||
+              (await _bookDao.bookUrlsFromOrigin(url)).isNotEmpty) {
+            merged.add(url);
+          }
+        }
+        if (merged.isNotEmpty) {
+          await _merge(merged, key);
+          changed = true;
+        }
       }
       if (movedFrom.isNotEmpty) await _moves.set(key, movedFrom);
       // 這次寫進去的樣子，不重讀：寫完才又被編輯的，下次同步比得出來。

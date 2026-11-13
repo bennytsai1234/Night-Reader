@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/crash_trail.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
@@ -100,9 +100,6 @@ class RepairItem {
   /// 套用了同網站哪一個 AI 修好的規則（[RepairOutcome.shared]）。
   RepairItem? sharedFrom;
 
-  /// 已經併進 [sharedFrom]、書源刪掉了（[SourceRepairBatch.mergeShared]）。
-  bool merged = false;
-
   bool get isFinished => outcome != null;
 }
 
@@ -118,7 +115,7 @@ typedef BatchRecheck = Future<List<SourceCheckEntry>> Function(
 /// 標「網站失效」，搬家的換網址；剩下的每個網站挑一個交給 AI，同時修
 /// [aiConcurrency] 個，修好的規則再套到同網站的其他書源。每一步存進去的
 /// 都是校驗通過的，留改前版本可以還原。做完之後可以刪掉網站不在了的
-/// （[deleteGone]）、把套用了同網站規則的併進修好的那個（[mergeShared]）。
+/// （[deleteGone]）；同網站的重複書源回到書源管理時自動併成一個（ADR 0062）。
 class SourceRepairBatch extends ChangeNotifier {
   SourceRepairBatch({
     required List<BookSource> sources,
@@ -131,7 +128,6 @@ class SourceRepairBatch extends ChangeNotifier {
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
     Future<void> Function(BookSource source)? markUnfixable,
     Future<void> Function(List<String> urls)? delete,
-    Future<void> Function(List<String> from, String into)? merge,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
     DateTime Function()? now,
   }) : items = [for (final source in sources) RepairItem(source)],
@@ -140,8 +136,7 @@ class SourceRepairBatch extends ChangeNotifier {
        _save = save ?? _defaultSave,
        _markGone = markGone ?? _defaultMarkGone,
        _markUnfixable = markUnfixable ?? markAiUnfixable,
-       _delete = delete ?? _defaultDelete,
-       _merge = merge ?? _defaultMerge {
+       _delete = delete ?? _defaultDelete {
     _session = session ?? _defaultSession;
   }
 
@@ -168,7 +163,6 @@ class SourceRepairBatch extends ChangeNotifier {
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
   final Future<void> Function(BookSource source) _markUnfixable;
   final Future<void> Function(List<String> urls) _delete;
-  final Future<void> Function(List<String> from, String into) _merge;
   final DateTime Function() _now;
   late final AiRepairSession Function(BookSource source, RepairItem item)
   _session;
@@ -188,12 +182,12 @@ class SourceRepairBatch extends ChangeNotifier {
   /// 網站不在了的那些已經刪掉（[deleteGone]）。
   bool goneDeleted = false;
 
-  /// 做完之後刪了、併了幾次書源：書源管理看到它變了就重讀清單。
+  /// 做完之後刪了幾次書源：書源管理看到它變了就重讀清單。
   int sourceEdits = 0;
 
   bool _editing = false;
 
-  /// 正在刪或併：按鈕先不能再按。
+  /// 正在刪：按鈕先不能再按。
   bool get isEditing => _editing;
 
   final CancelToken _cancelToken = CancelToken();
@@ -520,7 +514,7 @@ class SourceRepairBatch extends ChangeNotifier {
     return true;
   }
 
-  // ── 做完之後：刪掉網站不在了的、併掉同網站重複的 ─────────────────────
+  // ── 做完之後：刪掉網站不在了的 ───────────────────────────────────────
 
   /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。
   Future<void> deleteGone() async {
@@ -532,40 +526,6 @@ class SourceRepairBatch extends ChangeNotifier {
     await _edit(() => _delete(gone));
     goneDeleted = true;
     _notify();
-  }
-
-  /// 還沒併掉的「套用到同網站」書源：規則和 AI 修好的那個一樣。
-  List<RepairItem> get mergeable => [
-    for (final item in items)
-      if (item.outcome == RepairOutcome.shared &&
-          item.sharedFrom != null &&
-          !item.merged)
-        item,
-  ];
-
-  /// 套用了同網站修好規則的書源併進修好的那個（使用者 2026-11-13）：規則
-  /// 一樣，留著只會重複搜同一個網站。書架上的書搬過去，重複的刪掉。
-  Future<void> mergeShared() async {
-    final groups = <RepairItem, List<RepairItem>>{};
-    for (final item in mergeable) {
-      groups.putIfAbsent(item.sharedFrom!, () => []).add(item);
-    }
-    if (groups.isEmpty || _editing) return;
-    await _edit(() async {
-      for (final MapEntry(key: lead, value: siblings) in groups.entries) {
-        try {
-          await _merge([
-            for (final item in siblings) item.source.bookSourceUrl,
-          ], lead.source.bookSourceUrl);
-        } catch (error, stack) {
-          AppLog.e('合併同網站的書源失敗', error: error, stackTrace: stack);
-          continue;
-        }
-        for (final item in siblings) {
-          item.merged = true;
-        }
-      }
-    });
   }
 
   Future<void> _edit(Future<void> Function() work) async {
@@ -704,9 +664,6 @@ class SourceRepairBatch extends ChangeNotifier {
   static Future<void> _defaultDelete(List<String> urls) =>
       getIt<BookSourceDao>().deleteByUrls(urls);
 
-  static Future<void> _defaultMerge(List<String> from, String into) =>
-      BookSourceService().mergeSources(from, into);
-
   AiRepairSession _defaultSession(BookSource source, RepairItem item) =>
       AiRepairSession(
         source: source,
@@ -745,15 +702,6 @@ Future<void> markSiteGone(BookSource source, String detail) async {
     ..addErrorComment('網站: $detail')
     ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
   await dao.upsert(current);
-}
-
-/// 書源屬於哪個網站：網址的主機（`m.site.com` 與 `www.site.com` 算兩個：
-/// 手機版與電腦版的網頁常不一樣，共用規則會把電腦版的書源改成手機版）。
-String siteKey(BookSource source) {
-  final origin = siteOrigin(source.bookSourceUrl);
-  final host = origin == null ? null : Uri.tryParse(origin)?.host;
-  if (host == null || host.isEmpty) return source.bookSourceUrl;
-  return host.toLowerCase();
 }
 
 /// 網站搬到 [movedTo]（`https://www.new.com`）：書源網址換開頭，規則裡寫死的

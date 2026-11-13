@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
 import 'ai_chat_client.dart';
 import 'repair_pages.dart';
-import 'site_check.dart';
 import 'source_probe.dart';
 
 /// AI 呼叫的工具（[aiRepairTools]，ADR 0054）。
