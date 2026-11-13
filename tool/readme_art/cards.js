@@ -15,12 +15,12 @@ window.CARDS = {
   "kinds": {"type": "row", "t": 0.7, "dim": 0.5, "w": 196, "items": [
     {"s": "comic", "h": "漫畫", "p": "一路往下捲<br>CBZ 也能匯入"},
     {"s": "audiobook", "h": "有聲書", "p": "一集一集聽<br>書架上也能暫停"},
-    {"s": "illustration", "h": "插圖", "p": "正文裡的圖<br>夾在字中間"}
+    {"s": "illustration", "h": "插圖", "p": "打開「顯示插圖」<br>圖夾在字中間"}
   ]},
   "library": {"type": "row", "t": 0.85, "dim": 0.5, "w": 134, "gap": 18, "items": [
     {"s": "search", "a": "clip:search", "h": "多書源搜尋", "p": "繁簡一起找<br>同一本書合成一筆"},
-    {"s": "source-change", "h": "換源", "p": "停在同一章<br>書籤和標註都還在"},
-    {"s": "download", "a": "clip:download", "h": "整本下載", "p": "放上書架就整本下載<br>沒網路也能讀"},
+    {"s": "source-change", "h": "換源", "p": "照章名找回那一章<br>書籤和標註都還在"},
+    {"s": "download", "a": "clip:download", "h": "整本下載", "p": "小說、漫畫放上書架<br>就整本下載"},
     {"s": "local-toc", "h": "本地書", "p": "TXT、EPUB<br>匯入自動分章"},
     {"s": "sync-phone", "a": "devices:sync-phone,sync-tablet", "h": "多台同步", "p": "Google 雲端硬碟<br>或 WebDAV"}
   ]},
