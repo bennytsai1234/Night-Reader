@@ -856,7 +856,7 @@ class BookDetailProvider extends ChangeNotifier {
     }
 
     try {
-      await _bookDao.upsert(next);
+      await _bookDao.upsertEditedBookInfo(_book, next);
       final previousName = _book.recordName;
       _book = next;
       if (previousName != next.recordName) {
