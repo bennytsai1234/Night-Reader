@@ -12,6 +12,7 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../../book_detail/book_detail_page.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
 /// (對標 Android ExploreShowAdapter + item_search 佈局)
@@ -92,7 +93,7 @@ class ExploreBookItem extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text(
+                          child: DragOverflowText(child: Text(
                             context.zh(book.name),
                             style: AppTextStyles.bodyBase.copyWith(
                               height: 1.3,
@@ -100,8 +101,7 @@ class ExploreBookItem extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                             maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          )),
                         ),
                         if (isInBookshelf) ...[
                           const SizedBox(width: AppSpacing.sm),
@@ -114,23 +114,21 @@ class ExploreBookItem extends StatelessWidget {
                       width: double.infinity,
                       height: metaLineHeight,
                       child: _withExtras(
-                        (book) => Text(
+                        (book) => DragOverflowText(child: Text(
                           metaOf(context, book),
                           style: metaStyle,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        )),
                       ),
                     ),
                     if (book.latestChapterTitle != null &&
                         book.latestChapterTitle!.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(
+                      DragOverflowText(child: Text(
                         '最新：${context.zh(book.latestChapterTitle!)}',
                         style: metaStyle,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      )),
                     ],
                   ],
                 ),
