@@ -27,7 +27,7 @@
 | [0024](0024-skeleton-drawn-from-last-screen.md) | 骨架照上次的畫面畫，骨架換場由左而右 |
 | [0041](0041-skeleton-breath-shared-gradient.md) | 骨架呼吸的漸層每個骨架每幀一道，形狀照舊各自畫；否決整個骨架蓋遮罩與開 App 整段定格畫面 |
 | [0016](0016-reader-skeleton-from-the-real-page.md) | 閱讀器的正文骨架照一頁真正的行畫 |
-| [0060](0060-comic-preload-follows-the-text-reader.md) | 漫畫預載照文字閱讀器：前後各 2 話的圖片清單、畫面上下各 3000 點的圖先解碼，範圍外放掉；解碼好的圖自己管、不用 Flutter 圖片快取；CBZ 記住每張的位置直接讀 |
+| [0061](0061-comic-preload-follows-the-text-reader.md) | 漫畫預載照文字閱讀器：前後各 2 話的圖片清單、畫面上下各 3000 點的圖先解碼，範圍外放掉；解碼好的圖自己管、不用 Flutter 圖片快取；CBZ 記住每張的位置直接讀 |
 
 ## 介面與動畫
 
