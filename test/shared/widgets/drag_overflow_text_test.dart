@@ -216,4 +216,108 @@ void main() {
     await tester.pumpAndSettle();
     expect(taps, 1);
   });
+
+  testWidgets('at its edge a dragged line hands the drag to the row', (
+    tester,
+  ) async {
+    var outer = 0.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: GestureDetector(
+              onHorizontalDragUpdate: (details) => outer += details.delta.dx,
+              child: const SizedBox(
+                width: 112,
+                child: DragOverflowText(
+                  child: Text('這是一個非常非常長的書籍名稱，需要讓讀者手動拖動查看', maxLines: 1),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position;
+    // 在左邊往右拖：文字拖不動，交給外層。
+    await tester.drag(find.byType(DragOverflowText), const Offset(80, 0));
+    await tester.pumpAndSettle();
+    expect(outer, greaterThan(0));
+    expect(position.pixels, 0);
+    // 往左拖：拖的是文字。
+    outer = 0;
+    await tester.drag(find.byType(DragOverflowText), const Offset(-80, 0));
+    await tester.pumpAndSettle();
+    expect(outer, 0);
+    expect(position.pixels, greaterThan(0));
+  });
+
+  testWidgets('the system letter spacing counts when measuring', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(letterSpacingOverride: 4),
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 100,
+                child: DragOverflowText(
+                  child: Text(
+                    '12345678',
+                    maxLines: 1,
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
+
+  testWidgets('line breaks in mixed-style text become spaces too', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 112,
+              child: DragOverflowText(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: '第一段很長很長很長\n'),
+                      TextSpan(text: '第二段', style: TextStyle(fontSize: 20)),
+                    ],
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final shown = tester
+        .widget<RichText>(
+          find.descendant(
+            of: find.byType(SingleChildScrollView),
+            matching: find.byType(RichText),
+          ),
+        )
+        .text
+        .toPlainText();
+    expect(shown, '第一段很長很長很長 第二段');
+  });
 }

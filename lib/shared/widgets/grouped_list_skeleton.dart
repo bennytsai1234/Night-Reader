@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'drag_overflow_text.dart';
 import 'grouped_list.dart';
 import 'skeleton.dart';
 import 'skeleton_text.dart';
@@ -79,8 +80,8 @@ class GroupedItemShape {
   /// 寬度，[fill] 時撐滿 [width]，和父層給了固定寬度的 [Text] 一樣，
   /// [textAlign] 在這個寬度裡對齊）。每一行一條，和那一行字一樣寬、字號
   /// 一樣高，對著那一行字的中線。放不下時照 [DragOverflowText] 的排法
-  /// （最後一行可拖、撐滿 [width]）；[ellipsized] 給輸入框裡的字與提示字，
-  /// 它們照 [TextField] 的規則截斷加「…」。
+  /// （最後一行可拖、撐滿 [width]）；[ellipsized] 給輸入框裡的字、提示字與
+  /// 一般的 [Text]，它們照原本的規則截斷。
   static GroupedItemShape text(
     BuildContext context,
     String text, {
@@ -230,6 +231,24 @@ class GroupedItemShape {
         padding.resolve(Directionality.of(context)),
       ),
       SizedBox(:final height?, child: null) => GroupedItemShape(height),
+      DragOverflowText(
+        child: Text(
+          :final data?,
+          :final style,
+          :final maxLines,
+          :final textAlign,
+        ),
+      ) =>
+        GroupedItemShape.text(
+          context,
+          data,
+          style: style ?? const TextStyle(),
+          width: width,
+          maxLines: maxLines,
+          textAlign: textAlign ?? TextAlign.start,
+          fill: true,
+        ),
+      // 一般的字放不下時照 [Text] 的截斷畫。
       Text(:final data?, :final style, :final maxLines, :final textAlign) ||
       SelectableText(
         :final data?,
@@ -244,6 +263,7 @@ class GroupedItemShape {
         maxLines: maxLines,
         textAlign: textAlign ?? TextAlign.start,
         fill: true,
+        ellipsized: true,
       ),
       // 置中的小元件（轉圈）照它本身的大小放在中間。
       Center(:final child?) => switch (groupedPartShape(child, context)) {

@@ -276,6 +276,7 @@ abstract final class ComicLoadError {
       RegExp(r'^\w*(Exception|Error): '),
       '',
     );
-    return text.length > 120 ? '${text.substring(0, 120)}…' : text;
+    // 放不下的部分由顯示的地方讓讀者拖動看完，這裡不截。
+    return text;
   }
 }
