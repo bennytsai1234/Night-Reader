@@ -162,27 +162,6 @@ void main() {
     );
   });
 
-  test('a title the site lists in discovery is searched with the source, and '
-      'a limited answer is told apart from not found', () async {
-    final listed = source()..exploreUrl = '全部::/explore';
-    final found = await searchKnownTitle(
-      listed,
-      timeout: const Duration(seconds: 30),
-      database: Future.value(databaseIsolate),
-    );
-    expect(found, (title: '夜雨聽書', from: '全部', found: true, limited: null));
-
-    final limited = await searchKnownTitle(
-      source()
-        ..exploreUrl = '全部::/explore'
-        ..searchUrl = '/limited?q={{key}}',
-      timeout: const Duration(seconds: 30),
-      database: Future.value(databaseIsolate),
-    );
-    expect(limited?.found, isFalse);
-    expect(limited?.limited, '「搜索间隔: 30 秒」');
-  });
-
   test('a probe can start from the table of contents', () async {
     final report = await probeSource(
       source(),

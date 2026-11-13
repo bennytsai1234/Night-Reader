@@ -1,85 +1,8 @@
 import 'package:night_reader/core/network/page_digest.dart';
 
-/// 網站回的這一頁不是內容、而是擋在內容前面的東西時，給人與 AI 看的一句
-/// 說明；正常的頁面是 null。請求紀錄（`RequestLog`）在每個回應後面接上它，
-/// 網站檢查（`judgeSite`）也照它判斷，兩邊認的是同一套。
-///
-/// 認三種：
-/// - **網站限流**（[rateLimitOf]）：狀態碼 429，或短短一頁只跳出「搜索间隔:
-///   30 秒」這類提示就返回。
-/// - **網站防護頁**（[isProtectionPage]）：要瀏覽器算題目、勾選或答算術題
-///   才放行的頁面。
-/// - **用程式轉址的頁面**（[scriptRedirectOf]）：短短一頁，有一段改
-///   `location` 的程式或 `<meta http-equiv="refresh">`，瀏覽器打開就轉走。
-///   精簡網頁會拿掉 `<head>` 與程式，不寫出來的話看精簡後的頁面只看到一片
-///   空白或幾個字。
-String? pageNoteOf(String body, {int? status}) {
-  if (rateLimitOf(body, status: status) case final limit?) {
-    return '$_rateLimitNote：$limit';
-  }
-  if (isProtectionPage(body)) return '$_protectionNote，要先通過驗證才給內容';
-  final target = scriptRedirectOf(body);
-  if (target != null) return '$_redirectNote $target';
-  return null;
-}
-
-const String _rateLimitNote = '網站限流';
-const String _protectionNote = '看起來是網站防護頁';
-const String _redirectNote = '這頁用程式轉到';
-
-/// [pageNoteOf] 寫出的說明都以這幾句開頭：看到其中一句，那頁就不是內容。
-const List<String> pageNoteOpenings = [
-  _rateLimitNote,
-  _protectionNote,
-  _redirectNote,
-];
-
-/// 網站限流時它說的話：狀態碼 429，或短短一頁只用程式跳出「搜索间隔: 30 秒」
-/// 「操作太频繁」這類提示。2026-11-13 蜘蛛小說網的搜尋每 30 秒只能一次、連續
-/// 觸發會拉長，回的是 `<script>alert("搜索间隔: 30 秒");history.go(-1)</script>`；
-/// 不寫出來，AI 要花好幾輪寫空轉等待的程式才確認。不是限流是 null。
-String? rateLimitOf(String body, {int? status}) {
-  final digested = digestPage(body);
-  if (digested.length < _shortPageLength) {
-    for (final match in _alert.allMatches(body)) {
-      final text = match.group(1)!.trim();
-      if (_tooOften.hasMatch(text)) return '「$text」';
-    }
-  }
-  // 寫在網頁裡的搜尋錯誤（2026-11-13 肉肉屋「对不起，两次搜索的间隔时间不得
-  // 少于 5 秒」在一整頁的導覽列中間；神话之后「系统限制的搜索时间间隔为 30
-  // 秒」在 <p> 裡）：一句裡同時有搜尋這類動作、間隔與秒數才算。
-  final text = digested.replaceAll(RegExp(r'<[^>]*>'), ' ');
-  for (final sentence in text.split(_sentenceEnd)) {
-    final line = sentence.trim();
-    if (line.length <= _maxLimitSentence &&
-        _action.hasMatch(line) &&
-        _interval.hasMatch(line)) {
-      return '「$line」';
-    }
-  }
-  if (status == 429) return '狀態碼 429（要求太多次）';
-  return null;
-}
-
-/// 句子的結尾：句號、驚嘆號、換行與網頁上多個空白隔開的區塊。
-final RegExp _sentenceEnd = RegExp(r'[。！!\n]|\s{2,}|請 返 回|请 返 回');
-
-/// 限流那句不會太長；整段文章剛好有這幾個字不算。
-const int _maxLimitSentence = 80;
-
-final RegExp _action = RegExp(r'搜索|搜尋|搜寻|查询|查詢|访问|訪問|请求|請求|刷新|操作');
-final RegExp _interval = RegExp(r'(间隔|間隔)[^0-9]{0,12}\d+\s*秒');
-
-/// `alert("…")` 跳出的那句話。
-final RegExp _alert = RegExp(r'''alert\(\s*["']([^"']{1,200})["']''');
-
-/// 要隔一段時間再來的說法。
-final RegExp _tooOften = RegExp(
-  r'间隔|間隔|频繁|頻繁|太快|过快|過快|稍后再|稍後再|秒后再|秒後再|'
-  r'too many requests|rate limit|try again later',
-  caseSensitive: false,
-);
+// 網站檢查（`judgeSite`）認首頁是不是防護頁、是不是只有一段轉址程式時用
+// 的判斷。AI 修書源讀到的網頁不貼這些標記：頁面是限流、防護還是轉址，交給
+// AI 讀了自己判斷（使用者 2026-11-13：要讀頁面才知道的是判斷題，交給 AI）。
 
 /// 要瀏覽器算題目、人工勾選或答題才放行的防護頁。Cloudflare 的五秒盾夜讀
 /// 會在背景的瀏覽器裡過（ADR 0033），過不了才會還是這一頁。防搜刮的算術

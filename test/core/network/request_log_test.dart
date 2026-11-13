@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -34,21 +33,7 @@ void main() {
       expect(log.lines.single, contains('（快取 MISS、HIT，存了 3、5 秒）'));
     });
 
-    test('只記開頭時，開頭有轉址程式的長網頁不當成轉址頁', () async {
-      final page =
-          '<html><script>if(isMobile)location.href="/m/";</script>'
-          '<body>${'<p>正文段落內容很長。</p>' * 300}</body></html>';
-      final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
-      await log.run(() async {
-        recordResponse(
-          _response('https://site.example/', 200, utf8.encode(page)),
-        );
-      });
-      expect(log.lines.single, isNot(contains('這頁用程式轉到')));
-      expect(isContentResponseLine(log.lines.single), isTrue);
-    });
-
-    test('空字串、空位元組與全是空白的回應寫成沒有內容，不算內容', () async {
+    test('空字串、空位元組與全是空白的回應寫成沒有內容', () async {
       final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
       await log.run(() async {
         for (final data in <Object>['', <int>[], '  \n ']) {
@@ -56,7 +41,6 @@ void main() {
         }
       });
       expect(log.lines, everyElement(contains('，沒有內容')));
-      expect(log.lines.where(isContentResponseLine), isEmpty);
     });
 
     test('POST 的內容太長時截在欄位之間，不切在值的中間', () async {
@@ -151,8 +135,8 @@ void main() {
     },
   );
 
-  test('a page that only redirects by script says where it goes, even after '
-      'the script is digested away', () async {
+  test('a page that is only a redirect script shows its text instead of an '
+      'empty digest', () async {
     final log = RequestLog(responsePreview: 6000, digestPages: true);
     await log.run(() async {
       recordResponse(
@@ -168,8 +152,7 @@ void main() {
     expect(
       log.lines.single,
       startsWith(
-        '  ← https://site.example/ 200，92 字，太短不精簡'
-        '（這頁用程式轉到 https://new.example/）：<html><head><script>',
+        '  ← https://site.example/ 200，92 字，太短不精簡：<html><head><script>',
       ),
     );
   });
@@ -189,8 +172,7 @@ void main() {
 
     expect(
       log.lines.single,
-      '  ← https://site.example/search/ 200，59 字，太短不精簡'
-      '（網站限流：「搜索间隔: 30 秒」）：'
+      '  ← https://site.example/search/ 200，59 字，太短不精簡：'
       '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
     );
   });

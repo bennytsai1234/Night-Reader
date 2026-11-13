@@ -10,7 +10,6 @@ import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 
 import '../../support/fake_ai.dart';
@@ -93,11 +92,6 @@ SourceProbeReport _probe(BookSource source) =>
         requests: ['  ← https://site.example/c/1 200：<div class="txt">…'],
       );
 
-/// 被網站限流的搜尋回應（2026-11-13 蜘蛛小說網）。
-const _limited =
-    '  ← https://site.example/s 200，59 字，太短不精簡（網站限流：「搜索间隔: 30 秒」）：'
-    '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>';
-
 String _command(String action, {String content = 'class.txt@text'}) =>
     jsonEncode({
       'action': action,
@@ -136,13 +130,8 @@ void main() {
     SourceCheckIsolateResult? Function(BookSource source)? check,
     bool Function(BookSource source)? followsKeyword,
     Directory? logs,
-    bool searchLimited = false,
-    bool stillLimited = false,
-    bool noBooks = false,
-    KnownTitleSearch? knownTitle,
   }) {
     var next = 0;
-    var probes = 0;
     return AiRepairSession(
       logDirectory: logs == null ? null : () async => logs,
       source: sources.single,
@@ -151,25 +140,10 @@ void main() {
           ? null
           : check?.call(source) ??
                 _checked(source, broken: broken[source.bookSourceUrl]),
-      // 只有開場那次試抓被限流。
-      // 開場那次試抓被限流；stillLimited 時等過之後重新試抓也一樣。
-      probe: (source, _, {start}) async =>
-          searchLimited && (probes++ == 0 || stillLimited)
-          ? const SourceProbeReport(
-              logs: [(10, '︾開始解析搜尋頁'), (20, '︽未獲取到書籍')],
-              requests: [_limited],
-            )
-          : noBooks && start == null
-          ? const SourceProbeReport(
-              logs: [(10, '︾開始解析搜尋頁'), (20, '︽未獲取到書籍')],
-              requests: ['  ← https://site.example/s 200，30 字：<p>沒有結果</p>'],
-            )
-          : _probe(source),
+      probe: (source, _, {start}) async => _probe(source),
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
-      knownTitleSearch: (_, _) async => knownTitle,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
-        if (stillLimited) return (lines: [_limited], pages: <LoggedPage>[]);
         return (
           lines: ['  ← $url 200：<form action="/s2">'],
           pages: [
@@ -181,7 +155,6 @@ void main() {
         );
       },
       recheckDelay: Duration.zero,
-      rateLimitWait: Duration.zero,
       ask: (messages, _) async {
         asked.add(List.of(messages));
         // 回覆用完：測試寫錯了，不讓它一直問下去。
@@ -582,96 +555,16 @@ void main() {
     expect(s.job.confirmedUnfixable, isTrue);
   });
 
-  test('giving up before trying anything is sent back once; giving up again '
-      'ends it', () async {
-    final giveUp = jsonEncode({
-      'action': 'give_up',
-      'why': 'paid',
-      'reason': '網站要付費',
-    });
+  test('giving up is taken at once, even right after the opening', () async {
     final gaveUp = session(
       [_source('https://a.example')],
-      replies: [giveUp, giveUp],
+      replies: [
+        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '網站要付費'}),
+      ],
     );
     await gaveUp.start();
-    expect(asked, hasLength(2));
-    expect(asked.last.last.content, aiRepairGiveUpPushBack);
-    expect(gaveUp.job.explanation, 'AI：要付費。網站要付費');
-  });
-
-  test('a search the site still limits after waiting is judged broken by the '
-      'program, without asking the AI', () async {
-    final fetched = <String>[];
-    final s = session(
-      [_source('https://site.example')],
-      replies: const [],
-      searchLimited: true,
-      stillLimited: true,
-      fetched: fetched,
-    );
-
-    await s.start();
-
-    expect(asked, isEmpty);
-    expect(fetched, isEmpty, reason: '等過之後重新試抓，不另外送搜尋');
-    expect(s.job.outcome, AiRepairOutcome.failed);
-    expect(s.job.confirmedUnfixable, isTrue);
-    expect(s.job.giveUpWhy, 'rate_limited');
-    expect(s.job.explanation, startsWith('網站限流：搜尋等過'));
-  });
-
-  test('when the search finds nothing, the opening says whether a book the '
-      "site lists can be found with the source's search", () async {
-    final s = session(
-      [_source('https://site.example')],
-      replies: [_command('test')],
-      noBooks: true,
-      knownTitle: (title: '剑仙转生', from: '玄幻', found: false, limited: null),
-    );
-
-    await s.start();
-
-    expect(asked.first.last.content, contains('發現頁「玄幻」的第一本書《剑仙转生》搜尋，也搜不到'));
-  });
-
-  test('a listed title the site would not search because of the limit is '
-      'told as limited, not as not found', () async {
-    final s = session(
-      [_source('https://site.example')],
-      replies: [_command('test')],
-      noBooks: true,
-      knownTitle: (
-        title: '剑仙转生',
-        from: '玄幻',
-        found: false,
-        limited: '「搜索间隔: 30 秒」',
-      ),
-    );
-
-    await s.start();
-
-    final opening = asked.first.last.content;
-    expect(opening, contains('被網站限流擋住（「搜索间隔: 30 秒」）'));
-    expect(opening, isNot(contains('這個搜尋規則找不到')));
-  });
-
-  test('a search that answers after waiting goes on to the AI with the new '
-      'probe', () async {
-    final s = session(
-      [_source('https://site.example')],
-      replies: [_command('test')],
-      searchLimited: true,
-    );
-
-    await s.start();
-
     expect(asked, hasLength(1));
-    expect(
-      asked.first.last.content,
-      isNot(contains('搜索间隔')),
-      reason: '開場給的是等過之後重新試抓的那份',
-    );
-    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(gaveUp.job.explanation, 'AI：要付費。網站要付費');
   });
 
   test('giving up after looking at the site is taken at once', () async {
@@ -696,8 +589,7 @@ void main() {
     expect(s.job.explanation, 'AI：網站限流。搜尋回「搜索间隔: 30 秒」');
   });
 
-  test('a site whose own search is broken can be given up on, after one '
-      'send-back like the other reasons', () async {
+  test('a site whose own search is broken can be given up on', () async {
     // 2026-11-12 蜘蛛小说网：網站的搜尋 GET、POST 都回空的搜尋頁，原因只能選
     // 「擋下所有請求」。
     final giveUp = jsonEncode({
@@ -705,14 +597,11 @@ void main() {
       'why': 'site_broken',
       'reason': '搜什麼都回空的搜尋頁',
     });
-    final s = session(
-      [_source('https://a.example')],
-      replies: [giveUp, giveUp],
-    );
+    final s = session([_source('https://a.example')], replies: [giveUp]);
 
     await s.start();
 
-    expect(asked, hasLength(2));
+    expect(asked, hasLength(1));
     expect(s.job.explanation, 'AI：網站的功能壞了。搜什麼都回空的搜尋頁');
     expect(s.job.giveUpWhy, 'site_broken');
     expect(s.job.confirmedUnfixable, isTrue);
@@ -898,52 +787,6 @@ void main() {
     },
   );
 
-  test(
-    'the discovery-borrows-search note is left out when the discovery page '
-    'is not content: a verification redirect is not the search rules',
-    () async {
-      // 2026-11-13 QQ文学网：發現頁回「验证中」轉址頁，附上這句讓 AI 以為是
-      // 改搜尋規則弄壞的。
-      final original = BookSource(
-        bookSourceUrl: 'https://site.example',
-        bookSourceName: 'site.example',
-        searchUrl: '/s?q={{key}}',
-        exploreUrl: '全部::/all',
-        ruleSearch: SearchRule(bookList: 'class.old', name: 'a@text'),
-        ruleContent: ContentRule(content: 'id.old@text'),
-      );
-      final s = session(
-        [original],
-        replies: [
-          jsonEncode({
-            'action': 'test',
-            'patch': {
-              'searchUrl': '/s2?q={{key}}',
-              'ruleContent': {'content': 'class.txt@text'},
-            },
-          }),
-          jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
-        ],
-        check: (source) => source.ruleContent?.content == 'class.txt@text'
-            ? _checked(
-                source,
-                broken: _discoveryBroken,
-                diagnostics: _discoveryDiagnostics(
-                  '  ← https://site.example/all 200 text/html，377 位元組'
-                  '（這頁用程式轉到 /all?_js_verify=1）：<!DOCTYPE html>',
-                ),
-              )
-            : null,
-      );
-
-      await s.start();
-
-      expect(asked[1].last.content, startsWith('# 書源校驗沒過：發現失效'));
-      expect(asked[1].last.content, isNot(contains('發現頁用搜尋規則解析')));
-      expect(asked[1].last.content, contains('這頁用程式轉到'));
-    },
-  );
-
   test('a fix is kept when only discovery still fails and the AI did not '
       'touch discovery', () async {
     final s = session(
@@ -1045,7 +888,6 @@ void main() {
       replies: [
         '{"action":"submit","patch":{"bookSourceType":1e400},"note":""}',
         jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
-        jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
       ],
     );
 
@@ -1053,7 +895,7 @@ void main() {
 
     final job = s.job;
     expect(job.outcome, AiRepairOutcome.failed);
-    expect(asked, hasLength(3), reason: '讀不懂一次、放棄被退回一次、再放棄');
+    expect(asked, hasLength(2), reason: '讀不懂一次、再放棄');
     expect(asked[1].last.content, startsWith(aiRepairBadCall));
     expect(s.isRunning, isFalse);
     expect(applied, isEmpty);
