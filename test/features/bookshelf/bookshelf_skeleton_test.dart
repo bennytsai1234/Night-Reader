@@ -258,8 +258,8 @@ List<Rect> textLines(WidgetTester tester, String text) {
     lines[rect.top] = line == null ? rect : line.expandToInclude(rect);
   }
   return [
-    for (final line in (lines.values.toList()
-      ..sort((a, b) => a.top.compareTo(b.top))))
+    for (final line
+        in (lines.values.toList()..sort((a, b) => a.top.compareTo(b.top))))
       horizontallyClippedPaintRect(paragraph, line),
   ];
 }
