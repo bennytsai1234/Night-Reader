@@ -2,61 +2,88 @@
   "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定）；unfixable 的 why 是放棄的原因（一個或一串，同一個判定底下的細分類都算對）（give_up 的 why，或網站檢查判成 site_gone）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
   "cases": [
     {
-      "name": "蜘蛛小说网",
-      "url": "https://www.zhizhuxs.com",
+      "name": "圣墟小说网",
+      "url": "http://www.shengxuxu.net#🎃",
+      "expected": "fixed",
+      "evidence": "2026-11-13 curl：www.shengxuxu.net 一律 301 轉到 www.shengxuxu.info；搜尋是 POST /search.html，跟著 301 走會變成 GET，回不帶結果的 14398 位元組頁（搜「圣墟」「我的」與不可能的詞都一樣）。直接 POST 到 shengxuxu.info：「圣墟」「我的」各有一整頁結果（.librarylist li），不可能的詞回空頁。書頁 /714/ 的 og: 標籤與 .dirlist 目錄都在，正文 /714/read_1.html 的 #chaptercontent 約 2000 字。修好要：網址換成 shengxuxu.info。",
+      "confirmed": true
+    },
+    {
+      "name": "❤️神话之后",
+      "url": "https://www.shenhuazhihou.com",
+      "expected": "fixed",
+      "evidence": "2026-11-13 curl：網站對桌機的瀏覽器標識（夜讀與 Legado 在書源沒寫標識時預設送的 Windows Chrome）直接斷線（server closed abruptly），沒帶標識也斷；帶手機標識就正常：搜尋 POST /e/search/index.php 轉到結果頁，「我的」20 本、不可能的詞回「信息提示」頁，書庫頁 /book/ 有書單。在書源加手機標識後用 source_check_live_test 跑，搜尋、詳情、目錄、正文、發現都通過。修好要：書源的標頭加手機標識。",
+      "confirmed": true
+    },
+    {
+      "name": "酷匠网吧（优+）",
+      "url": "https://app.kujiang.com",
+      "expected": "fixed",
+      "evidence": "2026-11-13 curl：原本的搜尋介面 /v1/book/search202107 回 20 個空白字元；同一台的 /v1/book/search?keyword= 正常，「我的」1798 本、「大明」653 本，不可能的詞只回 1 本不相干的（模糊比對），回應的書單直接在 $.body（不是 $.body.list）。把搜尋網址換成 /v1/book/search、書單改 $.body 後用 source_check_live_test 跑，搜尋、詳情、目錄、正文都通過。修好要：換搜尋介面與書單路徑。",
+      "confirmed": true
+    },
+    {
+      "name": "🎃QQ文学网🎃",
+      "url": "http://m.qqwx.win#🎃",
+      "expected": "fixed",
+      "evidence": "2026-11-13 curl：搜尋、詳情、目錄、正文都正常（夜讀校驗也只卡在發現）。發現頁網址全在 /shuku/ 底下，/shuku/ 現在回 404；首頁連到的 /novel/lastupdate.html、/novel/allvisit.html 這類書單頁各有 100 本，/sort.html 有 50 本，書單是 ul.list（書源沒有自己的發現規則，借用搜尋規則）。修好要：發現網址換成網站現在的書單頁。",
+      "confirmed": true
+    },
+    {
+      "name": "🎃肉肉屋🎃#3",
+      "url": "https://www.rourouwu1.com#🎃",
       "expected": "unfixable",
-      "evidence": "2026-11-13 curl（冷卻 10 分鐘後，每次隔 2 分鐘）：原本書源用的 https://www.zhizhuxs.com/search/ 拿站上有的書名「剑仙转生」搜，回空的搜尋頁（CDN 快取的同一頁，x-cache HIT）；不帶 www 的 https://zhizhuxs.com/search 搜同一個詞有結果、搜不可能的詞回空的。網站每 30 秒只准搜一次（回 alert「搜索间隔: 30 秒」），連續觸發會拉長，70 秒後再搜照樣被擋。使用者 2026-11-13 定：限流就是壞掉、根本不能用，算修不好；「網站限流」是功能壞掉的一種，原因判成功能壞了或網站限流都對。11-12 寫的「網站的搜尋本身壞了」是查錯了（那次打的是帶 www 的網址，拿到 CDN 快取）。",
+      "evidence": "2026-11-13 curl：搜尋與書頁正常；目錄頁 /index/<id> 列了 144 個章名，但每個 <dd> 裡只有章名和 </a>，連結被拿掉了（換手機標識、帶首頁 Cookie 與來源頁都一樣，手機站 m.s3wx.com 回「出現錯誤」）。書頁只列最新 6 章的連結；目錄頁程式裡 ReadParams.url_next 指到一個章節頁，章節頁有「上一章」「下一章」連結，正文約 5900 字。要湊出完整目錄只能從那一章沿「下一章」一頁一頁走（這本 144 次請求）。使用者 2026-11-13 定：每開一本書要上百次請求，一般讀者用不了，算網站的功能壞了、修不好。",
       "confirmed": true,
-      "why": [
-        "site_broken",
-        "rate_limited"
-      ]
+      "why": "site_broken"
     },
     {
-      "name": "话本小说",
-      "url": "https://so.ihuaben.com/search?keyword=我是#",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl：搜「我是」有 30 本（.searchresult），不可能的詞回「没有搜索到相关内容」；書頁的「章节目录」連到 /list/<id>.html。目錄頁改版了：章節在 .chapter-row.hb-chapter-item 的 .col-title a，原本的 .chapters p 抓不到；正文 #contentsource 正常。",
-      "confirmed": true
-    },
-    {
-      "name": "涨姿势",
-      "url": "http://120.25.175.92",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl（帶 Host: www.zhangzs.com 打 IP）：?s= 不理關鍵字，2025、狗、希腊棺材之谜與不可能的詞都回同一份 83592 位元組的首頁；WordPress API /wp-json/wp/v2/posts?search= 正常，不可能的詞回 []。正文是懶載入圖（src 是佔位圖，真圖在 data-original，另一條分支在修引擎）。修好要：搜尋改走 API、正文拿到真圖；發現頁借用搜尋規則，搜尋改成 JSON 後要補自己的書單規則。2026-11-12 AI 這樣修好過兩次（22、35 輪）。",
-      "confirmed": true
-    },
-    {
-      "name": "下书网",
-      "url": "https://m.dayuzc.com/",
+      "name": "八叉书库",
+      "url": "https://bcshuku.com/",
       "expected": "fixed",
       "minContentChars": 1500,
-      "evidence": "2026-11-12 curl：搜尋帶 Cookie search_pass=1 就有 100 本；一章分兩頁（95393.html、95393_2.html），只抓前半頁約 900 字，整章 1700 字以上。",
+      "evidence": "2026-11-13 curl：章節頁的正文由頁面程式 POST /conapi.php 取得，參數現在除了 url、mobile、isk、novel、chapter 還有 t、n、sign（每次載入不同）；書源的正文規則用舊格式的正規式找參數，找不到。照章節頁上的參數全部帶上 POST，回 success 與約 2800 字正文；拿掉 sign 回「访问异常，请稍后再试！」。修好要：正文規則從頁面程式抓出全部參數再送。",
       "confirmed": true
     },
     {
-      "name": "顶点小说",
-      "url": "http://m.dibanyou.com",
+      "name": "52书库（po5.net）",
+      "url": "https://www.po5.net#77",
       "expected": "fixed",
-      "evidence": "2026-11-13 curl：http 轉 https；搜尋回「防搜刮安全验证」頁，頁面程式只寫入 Cookie search_pass=1（答案隨便填），帶上 Cookie 搜「我的」有 100 本、不可能的詞回「未搜索到相关的小说」。書頁、目錄、正文都抓得到；一章分兩頁（第1/2页），第一頁約 1800 字。",
-      "confirmed": true,
-      "minContentChars": 1500
+      "minContentChars": 1500,
+      "evidence": "2026-11-13 curl：po5.net 301 轉到 www.52shuku.net；搜尋「综漫」20 本、不可能的詞回空頁，目錄 .list .mulu a 正常。章節頁沒有 #nr1 了，正文在 .article-content 的 p 裡，一頁約 2900 字。修好要：正文規則改抓 .article-content。",
+      "confirmed": true
     },
     {
-      "name": "涩涩俱乐部",
-      "url": "https://seseclub.com",
+      "name": "🙈PO站",
+      "url": "https://www.jile1.com",
       "expected": "unfixable",
-      "evidence": "2026-11-13 curl：seseclub.com 與 novel.seseclub.com 的首頁、搜尋都回同一份 6990 位元組的「This domain is for sale」出售頁；頁面程式只在帶了轉址目標時轉走，現在目標是空的（換手機、電腦、App 的標識各試兩次都一樣）。網站不在了。",
-      "confirmed": true,
-      "why": "site_gone"
+      "why": "site_gone",
+      "evidence": "2026-11-13 curl：https（www.jile1.com 與 jile1.com）連線被拒；http 的首頁、搜尋（GET 與 POST）、不存在的網址都回同一份 2191 位元組的頁，內容只有混淆過的轉址程式，用 node 執行後轉到亂數子網域的 .xyz 垃圾站（網域被拿去轉址了）。網站不在了。",
+      "confirmed": true
     },
     {
-      "name": "涩涩俱乐部🎃",
-      "url": "https://novel.seseclub.com#🎃",
+      "name": "趣书",
+      "url": "https://qubook.org/",
       "expected": "unfixable",
-      "evidence": "2026-11-13 curl：seseclub.com 與 novel.seseclub.com 的首頁、搜尋都回同一份 6990 位元組的「This domain is for sale」出售頁；頁面程式只在帶了轉址目標時轉走，現在目標是空的（換手機、電腦、App 的標識各試兩次都一樣）。網站不在了。",
-      "confirmed": true,
-      "why": "site_gone"
+      "why": "site_gone",
+      "evidence": "2026-11-13 curl：qubook.org、www.qubook.org 與 http 版都回 Cloudflare 522（Cloudflare 連不到網站本身的主機），等 20 秒才回。網站不在了（跑整批前會再測一次，522 也可能是暫時的）。",
+      "confirmed": true
+    },
+    {
+      "name": "一曲书斋",
+      "url": "https://www.cowxs.com",
+      "expected": "unfixable",
+      "why": "site_gone",
+      "evidence": "2026-11-13 curl：首頁回 114 位元組，只有轉到 /lander 的程式；/lander 是 GoDaddy 的停放頁（img1.wsimg.com/parking-lander）；搜尋 POST /s.php 回 405。網域停放了，網站不在了。",
+      "confirmed": true
+    },
+    {
+      "name": "哔咔漫画〔自包含〕",
+      "url": "https://picaapi.picacomic.com##防同",
+      "expected": "unfixable",
+      "why": "login",
+      "evidence": "2026-11-13 夜讀校驗：書源類型是漫畫，搜尋就回 401；書源自己寫了登入（loginUrl 的 login() 要帳號密碼），官方 App 介面要登入後的 token 才回內容。沒登入資料，修不了（ADR 0013 不做書源登入）。",
+      "confirmed": true
     }
   ]
 }
