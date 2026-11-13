@@ -86,6 +86,23 @@ void main() {
     expect(await get('/echo', source(jar: true)), 'cookie=last=4');
   });
 
+  test('請求自己帶的同名 Cookie 為準，Cookie 罐裡的舊值不再附上', () async {
+    await get('/set?v=OLD', source(jar: true));
+    final response = await rawResponse(
+      method: 'GET',
+      url: '$baseUrl/echo',
+      headers: {'Cookie': 'last=NEW'},
+    )();
+    expect((response as Map)['body'], 'cookie=last=NEW');
+  });
+
+  test('規則抓快取檔（java.cacheFile、importScript）也照書源的 Cookie 罐開關存', () async {
+    await cachedText('$baseUrl/set?v=6', 0, cookieJar: false)();
+    expect(await get('/echo', source(jar: true)), 'cookie=');
+    await cachedText('$baseUrl/set?v=7', 0, cookieJar: true)();
+    expect(await get('/echo', source(jar: true)), 'cookie=last=7');
+  });
+
   test('不經書源規則的請求（App 自己抓的）照舊存 Cookie', () async {
     await HttpClient().client.get<String>('$baseUrl/set?v=5');
     expect(await get('/echo', source(jar: false)), 'cookie=last=5');

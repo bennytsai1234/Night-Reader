@@ -130,17 +130,23 @@ class LenientCookieManager extends Interceptor {
     );
   }
 
+  /// 請求自己帶的 Cookie（規則給的、併進來的 `CookieStore`）加上 Cookie 罐裡
+  /// 符合網址的；同名的以請求帶的為準，罐裡的舊值不再附上（同 Legado
+  /// `CookieManager.mergeCookies` 照名稱合成一份）：不然網站同時收到
+  /// `sid=新; sid=舊`。
   Future<String> loadCookies(RequestOptions options) async {
     final savedCookies = await cookieJar.loadForRequest(options.uri);
-    final cookies = getCookies([
-      ..._cookieHeaderValues(options.headers)
-          .expand((value) => value.split(';'))
-          .where((e) => e.isNotEmpty)
-          .map((c) => _fromSetCookieValue(c))
-          .whereType<Cookie>(),
-      ...savedCookies,
+    final given = _cookieHeaderValues(options.headers)
+        .expand((value) => value.split(';'))
+        .where((e) => e.trim().isNotEmpty)
+        .map((c) => _fromSetCookieValue(c))
+        .whereType<Cookie>()
+        .toList();
+    final givenNames = {for (final cookie in given) cookie.name};
+    return getCookies([
+      ...given,
+      ...savedCookies.where((cookie) => !givenNames.contains(cookie.name)),
     ]);
-    return cookies;
   }
 
   Future<void> saveCookies(Response response) async {

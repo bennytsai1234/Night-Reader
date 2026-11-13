@@ -182,25 +182,36 @@ List<String> _redirectsOf(Response<dynamic> response) {
 BlockingTask responseBytes(AnalyzeUrl url) =>
     () => url.getByteArray();
 
-/// [url] 的位元組，不經書源設定（字型這類資源）。
-BlockingTask plainBytes(String url) => () async {
+/// [url] 的位元組，不經書源設定（字型這類資源）；網站回的 Cookie 照書源的
+/// Cookie 罐開關 [cookieJar] 存（同 Legado `queryTTF` 經書源的 AnalyzeUrl）。
+BlockingTask plainBytes(String url, {required bool cookieJar}) => () async {
   final response = await HttpClient().client.get<List<int>>(
     url,
-    options: Options(responseType: ResponseType.bytes),
+    options: Options(
+      responseType: ResponseType.bytes,
+      extra: LenientCookieManager.sourceExtra(cookieJar),
+    ),
     cancelToken: currentSourceCancelToken,
   );
   return Uint8List.fromList(response.data ?? const []);
 };
 
 /// `java.cacheFile`：快取裡有就用，沒有就抓回來存進快取。存的時候不等它
-/// 寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等這裡。
-BlockingTask cachedText(String url, int saveTimeSeconds) => () async {
+/// 寫完：停住的書源 isolate 手上若有交易，寫入要等它，它又在等這裡。網站
+/// 回的 Cookie 照書源的 Cookie 罐開關 [cookieJar] 存（同 Legado
+/// `downloadFile` 經書源的 AnalyzeUrl）。
+BlockingTask cachedText(
+  String url,
+  int saveTimeSeconds, {
+  required bool cookieJar,
+}) => () async {
   final key = JsEncodeUtils.md5Encode16(url);
   final cached = await CacheManager().get(key);
   if (cached != null) return cached;
   try {
     final response = await HttpClient().client.get<String>(
       url,
+      options: Options(extra: LenientCookieManager.sourceExtra(cookieJar)),
       cancelToken: currentSourceCancelToken,
     );
     final content = response.data.toString();

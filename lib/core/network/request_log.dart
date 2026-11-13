@@ -206,9 +206,12 @@ String? _sentBody(Object? body) {
   }
   final line = text.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (line.isEmpty) return null;
-  return line.length > _sentBodyLength
-      ? '${line.substring(0, _sentBodyLength)}…'
-      : line;
+  if (line.length <= _sentBodyLength) return line;
+  // 截在欄位之間（`&`、`,`、空白），不切在一個值的中間：值可能是登入資料，
+  // 切掉一半的秘密後面的遮蔽認不出來，會留下前綴。
+  final cut = line.substring(0, _sentBodyLength);
+  final boundary = cut.lastIndexOf(RegExp(r'[&, ]'));
+  return '${boundary > 0 ? cut.substring(0, boundary) : ''}…';
 }
 
 const int _sentBodyLength = 2000;
@@ -268,10 +271,20 @@ String? _droppedCookieNote(Response<dynamic> response) {
 /// 存了 120 秒）」：被快取住的錯誤頁（2026-11-12 蜘蛛小說網的「搜索间隔」）
 /// 不管怎麼改參數都一樣，看標頭才知道。沒有這些標頭是 null。
 String? _cacheNote(Headers headers) {
-  final hit = headers.value('cf-cache-status') ?? headers.value('x-cache');
-  if (hit == null || hit.trim().isEmpty) return null;
-  final age = headers.value('age');
-  return '（快取 ${hit.trim()}${age == null ? '' : '，存了 ${age.trim()} 秒'}）';
+  // 經過幾層快取的網站同一個標頭會有好幾個值，全部寫出（`Headers.value`
+  // 遇到多個值會丟出例外）。
+  String? all(String name) {
+    final values = [
+      for (final value in headers[name] ?? const <String>[])
+        if (value.trim().isNotEmpty) value.trim(),
+    ];
+    return values.isEmpty ? null : values.join('、');
+  }
+
+  final hit = all('cf-cache-status') ?? all('x-cache');
+  if (hit == null) return null;
+  final age = all('age');
+  return '（快取 $hit${age == null ? '' : '，存了 $age 秒'}）';
 }
 
 /// 記下 WebView 渲染出的網頁：網址、內容長度與開頭。WebView 拿不到狀態碼，
@@ -287,9 +300,11 @@ void recordRenderedPage(String? url, Object? body) {
 /// 傳回內容是不是空白。
 bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
   final full = log.keepPages;
+  // 只記開頭幾個字時也解開夠長的一段：認限流、防護頁與轉址頁（[pageNoteOf]）
+  // 要看頁面有多長，拿截短的開頭量，長網頁會被當成只有一段轉址程式的短頁。
   final decoded = _decode(
     data,
-    full || log.digestPages ? _digestBytes : log.responsePreview! * 4,
+    full || log.digestPages ? _digestBytes : _noteBytes,
   );
   if (decoded == null) {
     log._add(head);
@@ -301,6 +316,10 @@ bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
     return true;
   }
   final raw = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (raw.isEmpty) {
+    log._add('$head，$length，沒有內容', full ? text : null);
+    return true;
+  }
   var collapsed = log.digestPages ? digestPage(text) : raw;
   // 很短的頁面精簡後沒有任何字（整頁只有一段 alert 程式，例如「搜索间隔:
   // 30 秒」）：給原文，不然看的人要再讀一次原文才知道網站回了什麼。
@@ -371,5 +390,8 @@ final RegExp _responseLine = RegExp(r'^\s*← \S+ (\d{3})\b');
 }
 
 const int _digestBytes = RequestLog.fullPageBytes;
+
+/// 只記開頭時解開多少位元組來認頁面種類：比 [pageNoteOf] 認短頁的門檻長得多。
+const int _noteBytes = 64 * 1024;
 
 final Object _requestLogZoneKey = Object();

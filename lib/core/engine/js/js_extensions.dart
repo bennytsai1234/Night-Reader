@@ -430,14 +430,18 @@ class JsExtensions extends JsExtensionsBase {
       final saveTime = payload is List && payload.length > 1
           ? int.tryParse(payload[1].toString()) ?? 0
           : 0;
-      return BlockingCall.run(cachedText(url, saveTime));
+      return BlockingCall.run(
+        cachedText(url, saveTime, cookieJar: source?.enabledCookieJar == true),
+      );
     });
 
     onBlocking('importScript', (payload) {
       final path = payload.toString();
       // 網址抓回來存著；其他是快取資料夾裡的相對路徑（同 Legado）。
       final content = path.startsWith('http')
-          ? BlockingCall.run(cachedText(path, 0)) as String
+          ? BlockingCall.run(
+              cachedText(path, 0, cookieJar: source?.enabledCookieJar == true),
+            ) as String
           : readCacheText(path);
       if (content.trim().isEmpty) {
         throw Exception('$path 內容獲取失敗或者為空');
