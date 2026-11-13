@@ -18,6 +18,7 @@ import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/engine/js/extensions/js_blocking_tasks.dart';
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/redirects.dart';
 import 'package:night_reader/core/network/str_response.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -756,6 +757,8 @@ class AnalyzeUrl {
       method: method,
       headers: requestHeaders,
       responseType: ResponseType.bytes,
+      // 書源沒開 Cookie 罐時網站回的 Cookie 不存（同 Legado `setCookie`）。
+      extra: LenientCookieManager.sourceExtra(source?.enabledCookieJar == true),
     );
     const maxAttempts = 3;
     for (var attempt = 1; ; attempt++) {

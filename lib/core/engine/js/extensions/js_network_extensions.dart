@@ -73,7 +73,7 @@ extension JsNetworkExtensions on JsExtensions {
           method: 'GET',
           url: payload[0].toString(),
           headers: _headersAt(payload, 1),
-          storedCookies: source?.enabledCookieJar == true,
+          cookieJar: source?.enabledCookieJar == true,
         ),
       );
     });
@@ -99,7 +99,7 @@ extension JsNetworkExtensions on JsExtensions {
           url: payload[0].toString(),
           data: body,
           headers: headers,
-          storedCookies: source?.enabledCookieJar == true,
+          cookieJar: source?.enabledCookieJar == true,
         ),
       );
     });
@@ -114,7 +114,7 @@ extension JsNetworkExtensions on JsExtensions {
           method: 'HEAD',
           url: payload[0].toString(),
           headers: _headersAt(payload, 1),
-          storedCookies: source?.enabledCookieJar == true,
+          cookieJar: source?.enabledCookieJar == true,
         ),
       );
     });

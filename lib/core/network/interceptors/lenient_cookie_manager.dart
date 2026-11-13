@@ -16,6 +16,16 @@ class LenientCookieManager extends Interceptor {
   final CookieJar cookieJar;
   bool ignoreInvalidCookies;
 
+  /// 請求的 `extra` 裡這一項是 false 時，回應的 Cookie 不存：書源沒開
+  /// Cookie 罐（同 Legado：`HttpHelper` 的網路攔截器只在請求帶著 CookieJar
+  /// 標頭時 `CookieManager.saveResponse`）。存著的 Cookie 照樣帶上。
+  static const String saveResponseCookiesKey = 'saveResponseCookies';
+
+  /// 書源請求的 `extra`：照 [enabledCookieJar] 決定存不存回應的 Cookie。
+  static Map<String, dynamic> sourceExtra(bool enabledCookieJar) => {
+    if (!enabledCookieJar) saveResponseCookiesKey: false,
+  };
+
   static String getCookies(List<Cookie> cookies) {
     cookies.sort((a, b) {
       if (a.path == null && b.path == null) {
@@ -134,6 +144,7 @@ class LenientCookieManager extends Interceptor {
   }
 
   Future<void> saveCookies(Response response) async {
+    if (response.requestOptions.extra[saveResponseCookiesKey] == false) return;
     final setCookies = response.headers[HttpHeaders.setCookieHeader];
     if (setCookies == null || setCookies.isEmpty) {
       return;

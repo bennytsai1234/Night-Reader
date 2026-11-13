@@ -7,6 +7,7 @@ import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cancellation.dart';
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
@@ -92,18 +93,19 @@ BlockingTask connectResponse(AnalyzeUrl url) => () async {
 /// `java.get`、`java.post`、`java.head`：照給的方法與標頭發，不自動跟著
 /// 跳轉。失敗時傳回 500 與錯誤訊息。
 ///
-/// [storedCookies]：書源開了 Cookie 罐時，送出前併進這個網站存著的 Cookie
+/// [cookieJar]：書源開了 Cookie 罐時，送出前併進這個網站存著的 Cookie
 /// （`cookie.setCookie`、登入存的），同名的以存著的為準（同 Legado：
-/// JsExtensions.get 加上 CookieJar 標頭，CookieManager.loadRequest 併進去）。
+/// JsExtensions.get 加上 CookieJar 標頭，CookieManager.loadRequest 併進去）；
+/// 也只有這時網站回的 Cookie 才存下來（CookieManager.saveResponse）。
 BlockingTask rawResponse({
   required String method,
   required String url,
   Object? data,
   required Map<String, dynamic> headers,
-  bool storedCookies = false,
+  bool cookieJar = false,
 }) => () async {
   try {
-    if (storedCookies) await _mergeStoredCookies(url, headers);
+    if (cookieJar) await _mergeStoredCookies(url, headers);
     final response = await HttpClient().client.fetch<dynamic>(
       RequestOptions(
         method: method,
@@ -117,6 +119,7 @@ BlockingTask rawResponse({
         responseType: ResponseType.plain,
         extra: <String, dynamic>{
           AppInterceptor.disableManualRedirectHandlingKey: true,
+          ...LenientCookieManager.sourceExtra(cookieJar),
         },
         cancelToken: currentSourceCancelToken,
       ),
