@@ -128,6 +128,7 @@ void main() {
     int? tokenBudget,
     int tokensPerAnswer = 0,
     DateTime Function()? now,
+    List<String> Function(List<String> from)? merged,
   }) {
     late SourceRepairBatch b;
     b = SourceRepairBatch(
@@ -153,7 +154,10 @@ void main() {
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
       markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
       delete: (urls) async => deleted.add(urls),
-      merge: (from, into) async => mergedInto.add((from, into)),
+      merge: (from, into) async {
+        mergedInto.add((from, into));
+        return merged?.call(from) ?? from;
+      },
       session: (source, item) {
         final answers = replies?.call(source.bookSourceUrl) ?? [_fix];
         var next = 0;
@@ -634,8 +638,41 @@ void main() {
     expect(deleted, [
       ['https://gone.example#a', 'https://gone.example#b'],
     ]);
-    expect(b.goneDeleted, isTrue);
+    expect(b.goneLeft, isEmpty);
     expect(b.sourceEdits, 1);
+  });
+
+  test('a site found gone after an earlier delete can still be deleted, '
+      'and only it is', () async {
+    final b = batch(
+      [_source('https://gone.example'), _source('https://later.example')],
+      sites: {'gone.example': const SiteCheck(SiteVerdict.gone, '網域查不到')},
+    );
+    await b.start();
+    await b.deleteGone();
+    // 修到一半就刪了；之後才判定網站不在了的那一個。
+    b.items[1].outcome = RepairOutcome.siteGone;
+
+    expect(b.goneLeft, [b.items[1]]);
+    await b.deleteGone();
+
+    expect(deleted, [
+      ['https://gone.example'],
+      ['https://later.example'],
+    ]);
+  });
+
+  test('a merge that did not happen is not shown as merged', () async {
+    final b = batch([
+      _source('https://site.example#a'),
+      _source('https://site.example#b'),
+    ], merged: (_) => const []);
+    await b.start();
+
+    await b.mergeShared();
+
+    expect(b.items[1].merged, isFalse);
+    expect(b.mergeable, [b.items[1]]);
   });
 
   test('sources that took the rules fixed for another source of the same site '

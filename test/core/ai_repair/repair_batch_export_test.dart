@@ -47,13 +47,16 @@ void main() {
       ..both('正文失效：正文為空');
     batch.items.last
       ..outcome = RepairOutcome.skipped
-      ..detail = '需要登入：不修';
+      ..detail = '需要登入：不修（token=secret-token-123）';
 
     final zip = await exportRepairBatch(
       batch,
       title: '修復異常書源',
       into: Directory('${directory.path}/out'),
       now: DateTime(2026, 11, 13, 20),
+      secrets: (source) async => {
+        if (source.bookSourceName == '乙') 'secret-token-123',
+      },
     );
 
     final archive = ZipDecoder().decodeBytes(zip.readAsBytesSync());
@@ -63,6 +66,8 @@ void main() {
     expect(summary, contains('## AI 修好 · 1'));
     expect(summary, contains('甲（https://a.example）：AI：正文在 div.txt；1234 token'));
     expect(summary, contains('## 不用修 · 1'));
+    expect(summary, isNot(contains('secret-token-123')), reason: '秘密要遮掉');
+    expect(text('整批結果.json'), isNot(contains('secret-token-123')));
     final json = jsonDecode(text('整批結果.json')) as Map<String, dynamic>;
     expect(json['tokensUsed'], 1234);
     final rows = json['sources'] as List;

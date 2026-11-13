@@ -250,4 +250,19 @@ void main() {
       keep: ['https://old.example', dupB, dupC],
     });
   });
+
+  test('nothing is merged once the source to keep is gone', () async {
+    final dao = getIt<BookSourceDao>();
+    await dao.upsert(
+      BookSource(bookSourceUrl: 'https://site.example#b', bookSourceName: '乙'),
+    );
+
+    final merged = await BookSourceService().mergeSources([
+      'https://site.example#b',
+    ], 'https://site.example#a');
+
+    expect(merged, isEmpty);
+    expect(await dao.getByUrl('https://site.example#b'), isNotNull);
+    expect(await dao.getByUrl('https://site.example#a'), isNull, reason: '不復活');
+  });
 }

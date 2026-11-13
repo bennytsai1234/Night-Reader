@@ -172,7 +172,7 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairBackups? backups,
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
-    this.priorCheck,
+    this._priorCheck,
     bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
@@ -205,8 +205,9 @@ class AiRepairSession extends ChangeNotifier {
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
   final Duration recheckDelay;
 
-  /// 整批修復剛做的校驗；null 時修復頁自己校驗原本的書源。
-  final AiRepairPriorCheck? priorCheck;
+  /// 整批修復剛做的校驗；null 時修復頁自己校驗原本的書源。開場用完就放掉
+  /// （帶著整份診斷與書源 JSON）。
+  AiRepairPriorCheck? _priorCheck;
 
   /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
   final bool Function() _hasBudget;
@@ -397,7 +398,8 @@ class AiRepairSession extends ChangeNotifier {
     final checkStep = _addStep(job, '校驗原本的書源');
     log.section('校驗原本的書源');
     final checkWatch = Stopwatch()..start();
-    final prior = priorCheck;
+    final prior = _priorCheck;
+    _priorCheck = null;
     final checked = prior != null
         ? prior.result
         : await _guard(() => _check(original, _cancelToken));

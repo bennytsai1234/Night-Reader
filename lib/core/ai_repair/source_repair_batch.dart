@@ -103,6 +103,9 @@ class RepairItem {
   /// 已經併進 [sharedFrom]、書源刪掉了（[SourceRepairBatch.mergeShared]）。
   bool merged = false;
 
+  /// 網站不在了、已經刪掉了（[SourceRepairBatch.deleteGone]）。
+  bool deleted = false;
+
   bool get isFinished => outcome != null;
 }
 
@@ -131,7 +134,7 @@ class SourceRepairBatch extends ChangeNotifier {
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
     Future<void> Function(BookSource source)? markUnfixable,
     Future<void> Function(List<String> urls)? delete,
-    Future<void> Function(List<String> from, String into)? merge,
+    Future<List<String>> Function(List<String> from, String into)? merge,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
     DateTime Function()? now,
   }) : items = [for (final source in sources) RepairItem(source)],
@@ -168,7 +171,7 @@ class SourceRepairBatch extends ChangeNotifier {
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
   final Future<void> Function(BookSource source) _markUnfixable;
   final Future<void> Function(List<String> urls) _delete;
-  final Future<void> Function(List<String> from, String into) _merge;
+  final Future<List<String>> Function(List<String> from, String into) _merge;
   final DateTime Function() _now;
   late final AiRepairSession Function(BookSource source, RepairItem item)
   _session;
@@ -184,9 +187,6 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 沿用上次校驗結果、沒有重新校驗的書源數（[freshCheck]）。
   int reusedChecks = 0;
-
-  /// 網站不在了的那些已經刪掉（[deleteGone]）。
-  bool goneDeleted = false;
 
   /// 做完之後刪了、併了幾次書源：書源管理看到它變了就重讀清單。
   int sourceEdits = 0;
@@ -244,6 +244,7 @@ class SourceRepairBatch extends ChangeNotifier {
       }
     } finally {
       for (final item in items) {
+        item.priorCheck = null;
         if (item.outcome == null) {
           item
             ..outcome = RepairOutcome.notTried
@@ -522,16 +523,23 @@ class SourceRepairBatch extends ChangeNotifier {
 
   // ── 做完之後：刪掉網站不在了的、併掉同網站重複的 ─────────────────────
 
-  /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。
+  /// 網站不在了、還沒刪的書源。
+  List<RepairItem> get goneLeft => [
+    for (final item in items)
+      if (item.outcome == RepairOutcome.siteGone && !item.deleted) item,
+  ];
+
+  /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。修到
+  /// 一半就刪的，之後才判定網站不在了的照樣列著、可以再刪。
   Future<void> deleteGone() async {
-    final gone = [
-      for (final item in items)
-        if (item.outcome == RepairOutcome.siteGone) item.source.bookSourceUrl,
-    ];
-    if (gone.isEmpty || goneDeleted || _editing) return;
-    await _edit(() => _delete(gone));
-    goneDeleted = true;
-    _notify();
+    final gone = goneLeft;
+    if (gone.isEmpty || _editing) return;
+    await _edit(() async {
+      await _delete([for (final item in gone) item.source.bookSourceUrl]);
+      for (final item in gone) {
+        item.deleted = true;
+      }
+    });
   }
 
   /// 還沒併掉的「套用到同網站」書源：規則和 AI 修好的那個一樣。
@@ -553,16 +561,18 @@ class SourceRepairBatch extends ChangeNotifier {
     if (groups.isEmpty || _editing) return;
     await _edit(() async {
       for (final MapEntry(key: lead, value: siblings) in groups.entries) {
+        final List<String> merged;
         try {
-          await _merge([
+          merged = await _merge([
             for (final item in siblings) item.source.bookSourceUrl,
           ], lead.source.bookSourceUrl);
         } catch (error, stack) {
           AppLog.e('合併同網站的書源失敗', error: error, stackTrace: stack);
           continue;
         }
+        // 只標真的併掉的：修好的那個或它們自己這段時間被刪掉了就沒併。
         for (final item in siblings) {
-          item.merged = true;
+          if (merged.contains(item.source.bookSourceUrl)) item.merged = true;
         }
       }
     });
@@ -704,7 +714,7 @@ class SourceRepairBatch extends ChangeNotifier {
   static Future<void> _defaultDelete(List<String> urls) =>
       getIt<BookSourceDao>().deleteByUrls(urls);
 
-  static Future<void> _defaultMerge(List<String> from, String into) =>
+  static Future<List<String>> _defaultMerge(List<String> from, String into) =>
       BookSourceService().mergeSources(from, into);
 
   AiRepairSession _defaultSession(BookSource source, RepairItem item) =>

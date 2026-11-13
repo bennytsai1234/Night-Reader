@@ -131,10 +131,13 @@ void main() {
 
   testWidgets('after deleting, the gone sites fold into one line, also when '
       'the page is opened again', (tester) async {
-    final batch =
-        _batch([('甲', RepairOutcome.siteGone), ('乙', RepairOutcome.siteGone)])
-          ..stage = RepairStage.done
-          ..goneDeleted = true;
+    final batch = _batch([
+      ('甲', RepairOutcome.siteGone),
+      ('乙', RepairOutcome.siteGone),
+    ])..stage = RepairStage.done;
+    for (final item in batch.items) {
+      item.deleted = true;
+    }
 
     await _pump(tester, batch);
 
