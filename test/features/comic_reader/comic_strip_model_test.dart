@@ -15,16 +15,21 @@ void main() {
       chapterIndex: 0,
     )..start();
     await _idle();
+    // 錨點放上去後先拿前後兩話：第 1 話這時就失敗了。
+    expect(model.stateOf(1), isA<ComicChapterFailed>());
+    expect(source.requestedChapters.where((c) => c == 1), hasLength(1));
 
+    // 先拿時失敗的，預載範圍伸到那裡時再試一次。
     model.loadNext();
     await _idle();
     expect(model.stateOf(1), isA<ComicChapterFailed>());
-    // 捲動每一幀都會問：失敗過的不再自己去抓。
+    expect(source.requestedChapters.where((c) => c == 1), hasLength(2));
+    // 捲動每一幀都會問：再失敗的不再自己去抓。
     for (var i = 0; i < 5; i++) {
       model.loadNext();
     }
     await _idle();
-    expect(source.requestedChapters.where((c) => c == 1), hasLength(1));
+    expect(source.requestedChapters.where((c) => c == 1), hasLength(2));
 
     source.failingChapters.clear();
     model.retry(1);

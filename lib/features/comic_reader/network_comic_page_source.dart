@@ -12,8 +12,9 @@ import 'comic_page_source.dart';
 
 /// 網路漫畫的圖從哪裡來（ADR 0052）：
 /// - 下載好的話讀 CBZ；
-/// - 還沒下載好的照書源拿這一話的圖片網址，每張先看暫存資料夾抓到了沒有，
-///   沒有就照書源抓。書架上的書抓到的存進暫存資料夾，書架自動下載接著用。
+/// - 還沒下載好的照書源拿這一話的圖片網址，每張先看這一話後來打包好了沒有、
+///   暫存資料夾抓到了沒有，沒有就照書源抓。書架上的書抓到的存進暫存資料夾，
+///   書架自動下載接著用。
 class NetworkComicPageSource implements ComicPageSource {
   NetworkComicPageSource({
     required this.book,
@@ -33,11 +34,15 @@ class NetworkComicPageSource implements ComicPageSource {
   /// 還沒下載好的那幾話的圖片網址。
   final Map<int, List<String>> _urls = {};
 
+  /// 列清單時還沒下載好、之後打包好的那幾話打開的 CBZ。
+  final Map<int, ComicChapterContents> _packed = {};
+
   @override
   Future<List<ComicPage>> pagesOf(int chapterIndex) async {
     final chapter = chapters[chapterIndex];
     final cbz = await ComicChapterDownload.cbzFor(book, chapter);
     _cbz.remove(chapterIndex);
+    _packed.remove(chapterIndex);
     if (cbz != null) {
       ComicChapterContents? opened;
       try {
@@ -84,6 +89,7 @@ class NetworkComicPageSource implements ComicPageSource {
     final urls = _urls[chapterIndex] ?? const <String>[];
     final index = urls.indexOf(page.name);
     if (index < 0) throw StateError('這一話沒有這張圖');
+    if (await _packedPage(chapterIndex, index) case final bytes?) return bytes;
     return _service.getComicPage(
       source,
       book,
@@ -92,6 +98,30 @@ class NetworkComicPageSource implements ComicPageSource {
       page.name,
       keep: book.isInBookshelf,
     );
+  }
+
+  /// 列清單之後才下載完、打包好的那一話：第 [index] 張從 CBZ 讀，打開一次
+  /// 留著；還沒打包好是 null。
+  Future<Uint8List?> _packedPage(int chapterIndex, int index) async {
+    var opened = _packed[chapterIndex];
+    if (opened == null) {
+      final cbz = await ComicChapterDownload.cbzFor(
+        book,
+        chapters[chapterIndex],
+      );
+      if (cbz == null) return null;
+      try {
+        opened = await ComicChapterFiles.open(cbz.path);
+      } catch (_) {
+        return null;
+      }
+      _packed[chapterIndex] = opened;
+    }
+    final prefix = ComicChapterDownload.pageFileName(index, '.');
+    for (final page in opened.pages) {
+      if (page.name.startsWith(prefix)) return opened.read(page.name);
+    }
+    return null;
   }
 
   @override

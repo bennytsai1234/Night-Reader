@@ -51,7 +51,8 @@ class ComicPageImages {
   /// 一張圖解碼好時，回報它的比例（高 ÷ 寬）。
   final void Function(ComicImageKey key, double aspectRatio)? onSize;
 
-  /// 同時讀圖、解碼幾張：看得到的那張不被預載搶走。
+  /// 預載同時讀圖、解碼幾張。有人要畫的（[want]）不受這個限制、馬上開始：
+  /// 快速甩過之後，佔著位置的常是已經用不到的圖，眼前那張不排在它們後面。
   final int concurrency;
 
   final Map<ComicImageKey, ui.Image> _ready = {};
@@ -99,17 +100,16 @@ class ComicPageImages {
     }
   }
 
-  /// 有人要畫 [key]：還沒開始的排到最前面。預載時載不到的再試一次。
+  /// 有人要畫 [key]：還沒開始的馬上開始，不等 [concurrency]。預載時載不到
+  /// 的再試一次。
   void want(ComicImageKey key) {
     if (_disposed || _ready.containsKey(key) || _failed.containsKey(key)) {
       return;
     }
     _speculativeFailed.remove(key);
     if (_running.contains(key)) return;
-    _queue
-      ..remove(key)
-      ..addFirst(key);
-    _pump();
+    _queue.remove(key);
+    _start(key);
   }
 
   /// 載不到的 [key] 再試一次（「重試」、登入回來）。
@@ -133,13 +133,7 @@ class ComicPageImages {
         .where((key) => !window.contains(key))
         .toList()
         .forEach(_releaseIfUnneeded);
-    final urgent = [
-      for (final key in _queue)
-        if (_listeners.containsKey(key) && !window.contains(key)) key,
-    ];
-    _queue
-      ..clear()
-      ..addAll(urgent);
+    _queue.clear();
     for (final key in ordered) {
       if (_ready.containsKey(key) ||
           _failed.containsKey(key) ||
@@ -154,10 +148,13 @@ class ComicPageImages {
 
   void _pump() {
     while (!_disposed && _running.length < concurrency && _queue.isNotEmpty) {
-      final key = _queue.removeFirst();
-      _running.add(key);
-      unawaited(_load(key));
+      _start(_queue.removeFirst());
     }
+  }
+
+  void _start(ComicImageKey key) {
+    _running.add(key);
+    unawaited(_load(key));
   }
 
   bool _needed(ComicImageKey key) =>

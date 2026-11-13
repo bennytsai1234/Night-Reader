@@ -201,19 +201,26 @@ class ComicStripModel extends ChangeNotifier {
     _load(_anchorChapter);
   }
 
-  /// 往下快捲到底了：接上下一話。上次載不下來的不自動再試：捲動每一幀都
-  /// 會問，失敗、重畫、再試會一直打書源；使用者按「重試」才再載（[retry]）。
+  /// 預載範圍伸到內容下面了：接上下一話。上次載不下來的不自動再試：捲動
+  /// 每一幀都會問，失敗、重畫、再試會一直打書源；使用者按「重試」才再載
+  /// （[retry]）。只在 [prefetchAround] 先拿時失敗的，捲到這裡再試一次。
   void loadNext() {
     final next = _hi < _lo ? null : nextReadable(_hi);
-    if (next == null || _chapters[next] is ComicChapterFailed) return;
-    _load(next);
+    if (next != null) _loadAtEdge(next);
   }
 
-  /// 往上快捲到頂了：接上上一話。上次載不下來的同 [loadNext]。
+  /// 預載範圍伸到內容上面了：接上上一話。上次載不下來的同 [loadNext]。
   void loadPrevious() {
     final previous = _hi < _lo ? null : previousReadable(_lo);
-    if (previous == null || _chapters[previous] is ComicChapterFailed) return;
-    _load(previous);
+    if (previous != null) _loadAtEdge(previous);
+  }
+
+  void _loadAtEdge(int chapterIndex) {
+    if (_chapters[chapterIndex] is ComicChapterFailed) {
+      if (!_prefetchFailed.remove(chapterIndex)) return;
+      _chapters.remove(chapterIndex);
+    }
+    _load(chapterIndex);
   }
 
   /// 先拿第 [chapterIndex] 話前後各 [prefetchRadius] 話的圖片清單（同文字
@@ -227,7 +234,7 @@ class ComicStripModel extends ChangeNotifier {
       forward = forward == null ? null : nextReadable(forward);
       backward = backward == null ? null : previousReadable(backward);
       for (final c in [forward, backward]) {
-        if (c != null && _chapters[c] == null) _load(c);
+        if (c != null && _chapters[c] == null) _load(c, prefetch: true);
       }
     }
   }
@@ -235,10 +242,14 @@ class ComicStripModel extends ChangeNotifier {
   /// [prefetchAround] 前後各拿幾話。
   static const int prefetchRadius = 2;
 
+  /// [prefetchAround] 先拿時載不下來的那幾話：捲到那裡時再試一次。
+  final Set<int> _prefetchFailed = {};
+
   /// 載入失敗的那一話再試一次。
   void retry(int chapterIndex) {
     if (_chapters[chapterIndex] is! ComicChapterFailed) return;
     _chapters.remove(chapterIndex);
+    _prefetchFailed.remove(chapterIndex);
     _load(chapterIndex);
   }
 
@@ -259,7 +270,7 @@ class ComicStripModel extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _load(int chapterIndex) async {
+  Future<void> _load(int chapterIndex, {bool prefetch = false}) async {
     final existing = _chapters[chapterIndex];
     if (existing is ComicChapterReady) {
       _place(chapterIndex);
@@ -279,6 +290,9 @@ class ComicStripModel extends ChangeNotifier {
     }
     if (_disposed) return;
     _chapters[chapterIndex] = result;
+    if (prefetch && result is ComicChapterFailed) {
+      _prefetchFailed.add(chapterIndex);
+    }
     if (result is ComicChapterReady) {
       // 載的途中跳了章時，這一話接得上新的錨點才放上去（[_place]）。
       _place(chapterIndex);

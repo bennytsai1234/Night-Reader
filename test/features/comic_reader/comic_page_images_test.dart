@@ -78,28 +78,38 @@ void main() {
     images.dispose();
   });
 
-  testWidgets('有人在畫的排最前面，離開範圍也留著', (tester) async {
+  testWidgets('有人在畫的不等預載的位置、馬上開始，離開範圍也留著', (tester) async {
     final source = _GatedSource();
-    final images = ComicPageImages(source: source, concurrency: 1);
+    final images = ComicPageImages(source: source, concurrency: 3);
     var notified = 0;
     void listener() => notified += 1;
-    images.demand([_key('a'), _key('b')]);
-    images.addListener(_key('b'), listener);
-    images.want(_key('b'));
-    expect(source.requested, ['a']);
-    source.release('a');
-    await _settle(tester);
-    // a 讀完之後先讀被要畫的 b。
-    expect(source.requested, ['a', 'b']);
-    source.release('b');
+    images.demand([_key('a'), _key('b'), _key('c'), _key('d'), _key('e')]);
+    expect(source.requested, ['a', 'b', 'c']);
+    // 三個位置都被預載佔著：要畫的 e 不排在 d 後面，馬上開始。
+    images.addListener(_key('e'), listener);
+    images.want(_key('e'));
+    expect(source.requested, ['a', 'b', 'c', 'e']);
+    source.release('e');
     await _settle(tester);
     expect(notified, 1);
+    for (final name in ['a', 'b', 'c']) {
+      source.release(name);
+    }
+    await _settle(tester);
+    expect(source.requested, ['a', 'b', 'c', 'e', 'd']);
+    source.release('d');
+    await _settle(tester);
+    for (final name in ['a', 'b', 'c', 'd']) {
+      images.image(_key(name))!.dispose();
+    }
+    // 範圍移走：沒有人在畫的放掉，在畫的 e 留著，畫完才放。
     images.demand(const []);
-    final image = images.image(_key('b'));
+    expect(images.image(_key('a')), isNull);
+    final image = images.image(_key('e'));
     expect(image, isNotNull);
     image!.dispose();
-    images.removeListener(_key('b'), listener);
-    expect(images.image(_key('b')), isNull);
+    images.removeListener(_key('e'), listener);
+    expect(images.image(_key('e')), isNull);
     images.dispose();
   });
 
