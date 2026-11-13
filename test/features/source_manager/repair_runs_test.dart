@@ -45,7 +45,7 @@ SourceRepairBatch _batch({Completer<void>? gate, int count = 2}) =>
     SourceRepairBatch(
       sources: [for (var i = 0; i < count; i++) _s('s$i')],
       service: _service,
-      recheck: (urls, progress) async {
+      recheck: (urls, progress, _) async {
         if (gate != null) {
           progress(1);
           await gate.future;

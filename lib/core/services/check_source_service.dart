@@ -34,6 +34,12 @@ class SourceCheckEntry {
   bool get cleanupCandidate => health.cleanupCandidate;
 }
 
+/// 一個書源這次校驗的完整結果；逾時是 null（[CheckSourceService.check]）。
+typedef SourceCheckResultListener = void Function(
+  String sourceUrl,
+  SourceCheckIsolateResult? result,
+);
+
 class SourceCheckReport {
   final List<SourceCheckEntry> entries;
 
@@ -401,13 +407,21 @@ class CheckSourceService extends ChangeNotifier {
     _notifyIfAlive();
   }
 
-  Future<SourceCheckReport> check(List<String> urls) async {
+  /// 校驗 [urls]。[onResult] 收到每個書源這次校驗的完整結果（含診斷），
+  /// 逾時是 null：整批修復交給 AI 那段沿用，不再校驗一次。
+  Future<SourceCheckReport> check(
+    List<String> urls, {
+    SourceCheckResultListener? onResult,
+  }) async {
     if (_isChecking) return _lastReport;
 
-    return _checkAll(urls);
+    return _checkAll(urls, onResult);
   }
 
-  Future<SourceCheckReport> _checkAll(List<String> urls) async {
+  Future<SourceCheckReport> _checkAll(
+    List<String> urls,
+    SourceCheckResultListener? onResult,
+  ) async {
     final normalizedUrls = LinkedHashSet<String>.from(
       urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
     ).toList(growable: false);
@@ -435,7 +449,8 @@ class CheckSourceService extends ChangeNotifier {
     try {
       results = await _SourceCheckExecutionPool(
         workerCount: _sourceCheckConcurrency,
-        checkSource: (url) => _checkSingleSourceWithBudget(url, config),
+        checkSource: (url) =>
+            _checkSingleSourceWithBudget(url, config, onResult),
         recordFailure: _recordUnexpectedSourceFailure,
         onTaskDone: () {
           _currentCount++;
@@ -474,6 +489,7 @@ class CheckSourceService extends ChangeNotifier {
   Future<SourceCheckEntry?> _checkSingleSourceWithBudget(
     String url,
     SourceCheckConfig config,
+    SourceCheckResultListener? onResult,
   ) async {
     final source = await _sourceDao.getByUrl(url);
     if (source == null || _shouldIgnoreSourceUpdate(url)) return null;
@@ -502,8 +518,11 @@ class CheckSourceService extends ChangeNotifier {
     _activeTasks[url] = handle;
     try {
       final result = await handle.result;
-      if (result == null) return await _recordSourceTimeout(url, config);
-      return await _applyIsolateResult(url, result);
+      final entry = result == null
+          ? await _recordSourceTimeout(url, config)
+          : await _applyIsolateResult(url, result);
+      if (entry != null) onResult?.call(url, result);
+      return entry;
     } finally {
       _activeTasks.remove(url);
     }

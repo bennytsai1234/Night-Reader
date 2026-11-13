@@ -129,19 +129,29 @@ void main() {
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
     bool Function(BookSource source)? followsKeyword,
+    List<String>? keywordChecked,
+    List<String>? checked,
+    AiRepairPriorCheck? priorCheck,
     Directory? logs,
   }) {
     var next = 0;
     return AiRepairSession(
       logDirectory: logs == null ? null : () async => logs,
+      priorCheck: priorCheck,
       source: sources.single,
       service: clipboard ? null : _service,
-      check: (source, _) async => timesOut.contains(source.bookSourceUrl)
-          ? null
-          : check?.call(source) ??
-                _checked(source, broken: broken[source.bookSourceUrl]),
+      check: (source, _) async {
+        checked?.add(source.ruleContent?.content ?? '');
+        return timesOut.contains(source.bookSourceUrl)
+            ? null
+            : check?.call(source) ??
+                  _checked(source, broken: broken[source.bookSourceUrl]);
+      },
       probe: (source, _, {start}) async => _probe(source),
-      keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
+      keywordCheck: (source, _) async {
+        keywordChecked?.add(source.ruleContent?.content ?? '');
+        return followsKeyword?.call(source) ?? true;
+      },
       fetchPage: (source, url, _) async {
         fetched?.add(url);
         return (
@@ -709,9 +719,8 @@ void main() {
     final s = session(
       [_source('https://site.example')],
       replies: [_command('test'), _command('test')],
-      // 原本的書源（開場）照常；AI 第一次交的搜尋抓到固定的書，第二次對了。
-      followsKeyword: (source) =>
-          source.ruleContent?.content == 'id.old@text' || ++checks > 1,
+      // AI 第一次交的搜尋抓到固定的書，第二次對了。
+      followsKeyword: (_) => ++checks > 1,
     );
 
     await s.start();
@@ -720,8 +729,10 @@ void main() {
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
-  test('the opening says when the original search returns the same books for '
-      'any word, and when discovery borrows the search rules', () async {
+  test('the opening says when discovery borrows the search rules; whether the '
+      'search follows the keyword is only tested on what the AI hands in '
+      '(the source being repaired is broken anyway)', () async {
+    final keywordChecked = <String>[];
     final s = session(
       [
         _source('https://site.example')
@@ -733,13 +744,34 @@ void main() {
         jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
       ],
       followsKeyword: (_) => false,
+      keywordChecked: keywordChecked,
     );
 
     await s.start();
 
     final opening = asked.first.last.content;
-    expect(opening, contains(aiRepairUnrelatedSearch));
+    expect(opening, isNot(contains(aiRepairUnrelatedSearch)));
     expect(opening, contains(aiRepairExploreBorrowsSearch));
+    expect(keywordChecked, isEmpty);
+  });
+
+  test('a check the batch just made is used as it is: the original source is '
+      'not checked again', () async {
+    final source = _source('https://site.example');
+    final checked = <String>[];
+    final s = session(
+      [source],
+      replies: [_command('test')],
+      checked: checked,
+      priorCheck: (result: _checked(source, broken: null)),
+    );
+
+    await s.start();
+
+    expect(checked, ['class.txt@text'], reason: '只校驗 AI 修好的那份');
+    expect(s.job.steps.first.detail, '沿用剛才的校驗：正文失效：正文為空');
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(asked.first.last.content, contains('正文為空'));
   });
 
   test(

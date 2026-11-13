@@ -118,12 +118,41 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// 幾個書源 [from] 併進 [into]：用它們的書、搜尋紀錄與快取的正文搬到
+  /// [into]，[from] 刪掉，連同以它們的身分存的登入資訊與變數（留 [into] 的）。
+  Future<void> mergeInto(List<String> from, BookSource into) async {
+    await transaction(() async {
+      await upsert(into);
+      final to = into.bookSourceUrl;
+      final name = into.bookSourceName;
+      for (final url in from) {
+        if (url == to) continue;
+        await BookDao(attachedDatabase).moveOrigin(url, to, toName: name);
+        await SearchBookDao(attachedDatabase).moveOrigin(url, to, toName: name);
+        await ReaderChapterContentDao(attachedDatabase).moveOrigin(url, to);
+      }
+      await _followKinds([into]);
+      await _deleteRows([
+        for (final url in from)
+          if (url != to) url,
+      ]);
+    });
+    await _forgetIdentities([
+      for (final url in from)
+        if (url != into.bookSourceUrl) url,
+    ]);
+  }
+
   /// 刪掉書源，連同以它的身分存的登入資訊、登入標頭與變數
   /// （[BaseSource.forgetCachedIdentity]）。
   Future<void> deleteByUrl(String url) => deleteByUrls([url]);
 
   Future<void> deleteByUrls(List<String> urls) async {
     await _deleteRows(urls);
+    await _forgetIdentities(urls);
+  }
+
+  Future<void> _forgetIdentities(List<String> urls) async {
     final remaining = await (selectOnly(
       bookSources,
     )..addColumns([bookSources.bookSourceUrl])).get();

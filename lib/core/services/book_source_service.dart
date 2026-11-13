@@ -266,6 +266,47 @@ class BookSourceService {
         .record(from: previousUrl, to: source.bookSourceUrl);
   }
 
+  /// 同網站、規則一樣的幾個書源 [from] 併進 [into]（整批修復套用同網站修好的
+  /// 規則之後，ADR 0054）：書架上的書、搜尋紀錄與快取的正文搬到 [into]，
+  /// [from] 自己的分組併過去，[from] 刪掉。[into] 已經不在了就不動。
+  Future<void> mergeSources(List<String> from, String into) async {
+    final sourceDao = getIt<BookSourceDao>();
+    final target = await sourceDao.getByUrl(into);
+    if (target == null) return;
+    final merging = <String>[];
+    for (final url in from) {
+      if (url == into) continue;
+      final source = await sourceDao.getByUrl(url);
+      if (source == null) continue;
+      merging.add(url);
+      target.addGroup(
+        (splitSourceGroups(source.bookSourceGroup)..removeAll([
+              ...sourceRuntimeStatusTags,
+              aiUnfixableSourceGroupTag,
+            ]))
+            .join(','),
+      );
+    }
+    if (merging.isEmpty) return;
+    final books = [
+      for (final url in merging)
+        ...await getIt<BookDao>().bookUrlsFromOrigin(url),
+    ];
+    final release = books.isEmpty
+        ? null
+        : await DownloadService().holdBooks(books);
+    try {
+      await sourceDao.mergeInto(merging, target);
+    } finally {
+      release?.call();
+    }
+    // 同步時別台照這份紀錄把併掉的書源的書搬過去（ADR 0039）。
+    final moves = SourceMoves(await SharedPreferences.getInstance());
+    for (final url in merging) {
+      await moves.record(from: url, to: into);
+    }
+  }
+
   /// 依 URL 取得書源
   Future<BookSource?> getSourceByUrl(String url) =>
       getIt<BookSourceDao>().getByUrl(url);
