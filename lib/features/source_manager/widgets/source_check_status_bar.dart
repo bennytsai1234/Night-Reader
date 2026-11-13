@@ -6,6 +6,7 @@ import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
 import '../source_manager_provider.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 校驗進度／上次校驗摘要的玻璃膠囊，放在導航頁首搜尋框下方。一直在
@@ -70,18 +71,20 @@ class SourceCheckStatusBar extends StatelessWidget {
                           ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
-                            child: DragOverflowText(child: Text(
-                              isChecking
-                                  // statusMsg 已經是「正在校驗: 書源名」，前面只補進度。
-                                  ? '(${provider.checkService.currentCount}/${provider.checkService.totalCount}) ${provider.checkService.statusMsg}'
-                                  : idle
-                                  ? '還沒校驗過'
-                                  : '上次校驗摘要: ${report.summary}',
-                              maxLines: 1,
-                              style: AppTextStyles.uiSm.copyWith(
-                                color: scheme.onSurface,
+                            child: DragOverflowText(
+                              child: Text(
+                                isChecking
+                                    // statusMsg 已經是「正在校驗: 書源名」，前面只補進度。
+                                    ? '(${provider.checkService.currentCount}/${provider.checkService.totalCount}) ${provider.checkService.statusMsg}'
+                                    : idle
+                                    ? '還沒校驗過'
+                                    : '上次校驗摘要: ${report.summary}',
+                                maxLines: 1,
+                                style: AppTextStyles.uiSm.copyWith(
+                                  color: scheme.onSurface,
+                                ),
                               ),
-                            )),
+                            ),
                           ),
                           Icon(
                             Icons.chevron_right_rounded,
