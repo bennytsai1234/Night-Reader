@@ -73,34 +73,6 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
             .evaluate())
       tester.getRect(find.byWidget(element.widget)),
   ];
-  // 可手動拖動的長文字在 ScrollView 裡仍以完整寬度排字，
-  // 但實際只畫出視窗裡的一段；骨架比對要照真正看得見的寬度。
-  // 只裁左右，保留原本的上下界判定（清單上下捲動時仍由 visible 過濾）。
-  Rect clippedLine(RenderParagraph paragraph, Rect line) {
-    Rect? horizontalClip;
-    RenderObject current = paragraph;
-    while (!identical(current, root)) {
-      final parent = current.parent;
-      if (parent is! RenderObject) break;
-      final localClip = parent.describeApproximatePaintClip(current);
-      if (localClip != null) {
-        final globalClip = MatrixUtils.transformRect(
-          parent.getTransformTo(null),
-          localClip,
-        );
-        horizontalClip = horizontalClip == null
-            ? globalClip
-            : horizontalClip.intersect(globalClip);
-      }
-      current = parent;
-    }
-    final clip = horizontalClip;
-    if (clip == null) return line;
-    final left = math.max(line.left, clip.left);
-    final right = math.min(line.right, clip.right);
-    return Rect.fromLTRB(left, line.top, math.max(left, right), line.bottom);
-  }
-
   void collect(RenderObject object) {
     if (object is RenderBox && object.hasSize && !object.size.isEmpty) {
       final rect = MatrixUtils.transformRect(
@@ -114,7 +86,7 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
       switch (object) {
         case RenderParagraph():
           for (final line in _lines(object)) {
-            final clipped = clippedLine(object, line);
+            final clipped = horizontallyClippedPaintRect(object, line);
             if (!clipped.isEmpty) marks.add(clipped);
           }
           return;
@@ -170,6 +142,31 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
         tester.getRect(find.byWidget(clip.widget)),
   ];
   return SkeletonLayout(marks: marks, cards: cards);
+}
+
+/// 拖動文字的段落以完整寬度排版，但螢幕只能看到視窗裡的一部分。
+/// 骨架量測要照實際畫出的左右範圍；上下仍交給頁面可見區判斷。
+Rect horizontallyClippedPaintRect(RenderObject object, Rect line) {
+  Rect? horizontalClip;
+  RenderObject current = object;
+  while (current.parent case final RenderObject parent) {
+    final localClip = parent.describeApproximatePaintClip(current);
+    if (localClip != null) {
+      final globalClip = MatrixUtils.transformRect(
+        parent.getTransformTo(null),
+        localClip,
+      );
+      horizontalClip = horizontalClip == null
+          ? globalClip
+          : horizontalClip.intersect(globalClip);
+    }
+    current = parent;
+  }
+  final clip = horizontalClip;
+  if (clip == null) return line;
+  final left = math.max(line.left, clip.left);
+  final right = math.min(line.right, clip.right);
+  return Rect.fromLTRB(left, line.top, math.max(left, right), line.bottom);
 }
 
 bool _near(Rect a, Rect b, [double tolerance = 0.5]) =>
