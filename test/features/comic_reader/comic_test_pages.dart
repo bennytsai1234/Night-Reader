@@ -50,12 +50,16 @@ class FakeComicSource implements ComicPageSource {
     this.width = 60,
     this.height = 90,
     this.knownSizes = true,
+    this.pageLatency = Duration.zero,
   });
 
   final int pagesPerChapter;
   final int width;
   final int height;
   final bool knownSizes;
+
+  /// 每張圖晚多久才回（假時間，跟著 pump 前進），模擬讀檔或抓圖的時間。
+  final Duration pageLatency;
 
   /// 這幾話抓目錄時失敗。
   final Set<int> failingChapters = {};
@@ -93,6 +97,7 @@ class FakeComicSource implements ComicPageSource {
   Future<Uint8List> bytesOf(int chapterIndex, ComicPage page) async {
     final index = int.parse(page.name.split('-').last.split('.').first);
     await pageGates[(chapterIndex, index)]?.future;
+    if (pageLatency > Duration.zero) await Future<void>.delayed(pageLatency);
     if (failingPages.contains((chapterIndex, index))) {
       throw StateError('圖抓不到');
     }
