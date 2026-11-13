@@ -30,16 +30,20 @@ Future<void> openSourceRepair(
 }) async {
   final navigator = Navigator.of(context);
   final repairs = runs ?? RepairRuns.instance;
-  if (repairs.current case final BatchRepairRun current) {
+  if (repairs.current case final BatchRepairRun current when !current.isDone) {
     await navigator.push(
       MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: current)),
     );
     return;
   }
-  // 一次一件：別的工作在跑時入口是灰的，這裡再擋一次。
-  if (sources.isEmpty || !backgroundWorkIdle()) return;
+  // 工作結束但結果還沒看過時，不能從另一個入口蓋掉它。
+  if (sources.isEmpty || !repairs.canStartNew || !backgroundWorkIdle()) {
+    return;
+  }
   final service = await (settings ?? AiRepairSettings()).service();
-  if (!context.mounted) return;
+  if (!context.mounted || !repairs.canStartNew || !backgroundWorkIdle()) {
+    return;
+  }
   if (service == null) {
     final go = await showAppAlert<bool>(
       context: context,
@@ -70,7 +74,12 @@ Future<void> openSourceRepair(
       AppAlertAction(label: '取消', value: -1),
     ],
   );
-  if (budget == null || budget < 0) return;
+  if (budget == null ||
+      budget < 0 ||
+      !repairs.canStartNew ||
+      !backgroundWorkIdle()) {
+    return;
+  }
   final run = BatchRepairRun(
     SourceRepairBatch(
       sources: sources,
@@ -79,7 +88,11 @@ Future<void> openSourceRepair(
     ),
     title: title,
   );
-  repairs.adopt(run);
+  if (!repairs.adopt(run)) {
+    run.disposeWork();
+    run.dispose();
+    return;
+  }
   await navigator.push(
     MaterialPageRoute<void>(builder: (_) => SourceRepairPage(run: run)),
   );
