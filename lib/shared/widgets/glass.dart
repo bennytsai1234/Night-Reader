@@ -14,6 +14,7 @@ import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'launch_entrance.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 霧面紙材質：紙／墨色調、輕度背景模糊、貼邊陰影與漫射陰影。
 ///
@@ -714,13 +715,12 @@ class GlassCapsule extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
               ],
               Flexible(
-                child: Text(
+                child: DragOverflowText(child: Text(
                   label,
                   maxLines: maxLines,
-                  overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: style,
-                ),
+                )),
               ),
               if (count != null) ...[
                 const SizedBox(width: AppSpacing.xs),
@@ -1100,15 +1100,14 @@ class NavHeaderTitle extends StatelessWidget {
           curve: AppMotion.fadeCurve,
           child: InkSheen(
             active: sheen,
-            child: Text(
+            child: DragOverflowText(child: Text(
               title,
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: AppTextStyles.titleSm.copyWith(
                 fontWeight: FontWeight.w600,
                 color: color ?? Theme.of(context).colorScheme.onSurface,
               ),
-            ),
+            )),
           ),
         ),
       ),
