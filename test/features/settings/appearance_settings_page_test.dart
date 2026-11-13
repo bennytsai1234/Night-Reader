@@ -83,7 +83,7 @@ void main() {
     for (final style in AppStyle.values) {
       for (final element in find.text(style.label).evaluate()) {
         final label = element.renderObject! as RenderParagraph;
-        expect(label.maxLines, 1, reason: style.label);
+        expect(label.text.toPlainText(), style.label);
         expect(label.didExceedMaxLines, isFalse, reason: style.label);
       }
     }
