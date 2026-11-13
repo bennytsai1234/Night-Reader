@@ -298,6 +298,7 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
         style.label,
         style: _StyleCard.labelStyle(selected: isSelected),
         width: cardWidth,
+        maxLines: 1,
         textAlign: TextAlign.center,
       ).centeredIn(cardWidth);
       final labelTop = top + pageHeight + _StyleCard.labelGap;
@@ -425,12 +426,23 @@ class _StyleCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: labelGap),
-            Text(
-              style.label,
-              // 窄螢幕加大字級時換行，不省略成「…」。
-              textAlign: TextAlign.center,
-              style: labelStyle(selected: selected).copyWith(
-                color: selected ? scheme.onSurface : chrome.sectionText,
+            // 風格名稱固定一行；超出卡寬時可拖動查看，不折行或省略。
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Text(
+                    style.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    textAlign: TextAlign.center,
+                    style: labelStyle(selected: selected).copyWith(
+                      color: selected ? scheme.onSurface : chrome.sectionText,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
