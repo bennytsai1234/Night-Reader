@@ -33,6 +33,7 @@ import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
 import 'widgets/search_scope_sheet.dart';
 import 'widgets/search_suggestion_view.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// SearchPage - 搜尋頁面
@@ -550,18 +551,20 @@ class _SearchViewState extends State<SearchView> {
       child: Row(
         children: [
           Expanded(
-            child: DragOverflowText(child: Text(
-              namesWaiting
-                  ? '還在等：${waiting.join('、')}'
-                  : p.totalSources > 0
-                  ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
-                  : '正在搜尋',
-              style: AppTextStyles.labelXs.copyWith(
-                height: 1.3,
-                color: AppChrome.of(context).sectionText,
+            child: DragOverflowText(
+              child: Text(
+                namesWaiting
+                    ? '還在等：${waiting.join('、')}'
+                    : p.totalSources > 0
+                    ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
+                    : '正在搜尋',
+                style: AppTextStyles.labelXs.copyWith(
+                  height: 1.3,
+                  color: AppChrome.of(context).sectionText,
+                ),
+                maxLines: 1,
               ),
-              maxLines: 1,
-            )),
+            ),
           ),
         ],
       ),
