@@ -75,16 +75,39 @@ void main() {
     expect(glass.dy, lessThan(852), reason: '不用往下捲就看得到玻璃效果');
   });
 
-  testWidgets('窄螢幕加大字級時，風格名稱換行而不省略', (tester) async {
+  testWidgets('窄螢幕加大字級時，風格名稱維持單行且可左右拖動', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await pumpPage(tester, size: const Size(320, 640));
+    expect(AppStyle.kraft.label, '牛皮');
     for (final style in AppStyle.values) {
       for (final element in find.text(style.label).evaluate()) {
         final label = element.renderObject! as RenderParagraph;
+        expect(label.maxLines, 1, reason: style.label);
         expect(label.didExceedMaxLines, isFalse, reason: style.label);
       }
     }
+
+    final horizontalView = find.ancestor(
+      of: find.text(AppStyle.kraft.label).last,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.horizontal,
+      ),
+    );
+    expect(horizontalView, findsOneWidget);
+    final scrollable = find.descendant(
+      of: horizontalView,
+      matching: find.byType(Scrollable),
+    );
+    final position = tester.state<ScrollableState>(scrollable).position;
+    expect(position.maxScrollExtent, greaterThan(0));
+
+    await tester.drag(horizontalView, const Offset(-40, 0));
+    await tester.pumpAndSettle();
+    expect(position.pixels, greaterThan(0));
+    expect(themeSettings.darkStyle, ThemeSettingsProvider.defaultDarkStyle);
   });
 
   testWidgets('上面那排只改淺色的風格，下面那排只改深色的風格', (tester) async {
@@ -104,7 +127,7 @@ void main() {
     expect(
       Theme.of(context).scaffoldBackgroundColor,
       const Color(0xFF000000),
-      reason: '純黑開著，深色換成牛皮紙仍是純黑底',
+      reason: '純黑開著，深色換成牛皮仍是純黑底',
     );
   });
 
