@@ -5,6 +5,7 @@ import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 換源清單的一列：來源名稱、作者、最新章節與字數／分類；目前來源右側打勾
 /// 且不可點。
@@ -55,32 +56,29 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      DragOverflowText(child: Text(
                         searchBook.originName ?? '未知來源',
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.bodyBase.copyWith(
                           height: 1.3,
                           color: scheme.onSurface,
                           fontWeight: FontWeight.w600,
                         ),
-                      ),
+                      )),
                       if (meta.isNotEmpty) ...[
                         const SizedBox(height: 2),
-                        Text(
+                        DragOverflowText(child: Text(
                           meta,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: secondaryStyle,
-                        ),
+                        )),
                       ],
                       const SizedBox(height: 2),
-                      Text(
+                      DragOverflowText(child: Text(
                         '最新：${context.zh(searchBook.latestChapterTitle ?? '無最新章節資訊')}',
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: secondaryStyle,
-                      ),
+                      )),
                     ],
                   ),
                 ),
