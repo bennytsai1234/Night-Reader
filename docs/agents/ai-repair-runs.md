@@ -6,11 +6,17 @@
 
 `test/live/ai_repair_cases.json` 列每件書源的預期答案（`fixed` 修得好、`unfixable` 書源本身修不了、`unknown` 還沒定）與證據。預期答案要有 AI 修復以外的證據（curl 打網站、網站本身的行為），不拿 AI 修復自己的判定當答案；寫好請使用者確認，`confirmed` 改成 true。書源 JSON 是使用者的資料，不進 repo：整份匯出檔放在主資料夾的 `.local/ai-repair/export_589_sources.json`，跑的時候照名稱與網址挑。
 
+查預期答案時這幾處容易漏（2026-11-13 第二批漏了三件，都是 AI 先查到）：
+
+- 搜尋要拿站上有的書名和不可能的詞各搜一次、比結果：夜讀的書源校驗只看搜得到書，網站不理關鍵字、回固定推薦書也算過。
+- 送出的編碼與 Cookie 照書源的來：curl 預設不存 Cookie，書源開了 Cookie 罐（或網站靠工作階段 Cookie 驗證、限流）時用 `-c`／`-b` 帶著走，關鍵字照書源的 `charset` 編碼。
+- 主站的功能壞了時，看同一套網站的姊妹站或鏡像（書源裡圖片、轉址指到的網域）有沒有完整的版本。
+
 ## 一輪怎麼跑
 
 1. 跑案件：`NR_SOURCES` 給匯出檔、`NR_CASES` 給案件集（測試檔頭有寫），跑完印出每件預期與實際、對或錯。一個改動只重跑它要改善的那幾件（`NR_ONLY=蜘蛛小说网,涨姿势`）；累積一批改動再跑整個案件集看有沒有退化（使用者 2026-11-13：每個小改動都跑全部，額度與時間花在沒改到的案件上）。匯出檔要更新時從手機拿（`docs/agents/phone.md`「書源原文」）。
 2. 金鑰固定放在主資料夾的 `.local/ai-repair.key`（`C:\Users\benny\Desktop\Folder\projects\Night-Reader\.local\ai-repair.key`，git 忽略、不上傳，worktree 也讀這一份）。已經有就直接用；沒有或服務回金鑰不對時，用 `request_secret`（`delivery: "file"`）跟使用者要，存到這裡，不刪。
-3. 跑 `test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在它的檔頭；要跑幾分鐘，所以放背景。使用者 2026-11-12 定的服務：`NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。
+3. 跑 `test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在它的檔頭；要跑幾分鐘，所以放背景。使用者 2026-11-12 定的服務：`NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`；用量不設上限，給 `NR_TOKEN_BUDGET=0`（使用者 2026-11-13，十一件全量要兩百萬以上）。
 4. 讀結果檔（`NR_OUT`）與最後印出的完整修復紀錄。紀錄裡找每一輪的「讀不懂」、重複的指令、失控與校驗沒過，打開那幾輪 AI 實際回的話。
 
 ## 歸因
