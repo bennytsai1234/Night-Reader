@@ -12,7 +12,7 @@
       "name": "❤️神话之后",
       "url": "https://www.shenhuazhihou.com",
       "expected": "fixed",
-      "evidence": "2026-11-13 curl：網站對桌機的瀏覽器標識（夜讀與 Legado 在書源沒寫標識時預設送的 Windows Chrome）直接斷線（server closed abruptly），沒帶標識也斷；帶手機標識就正常：搜尋 POST /e/search/index.php 轉到結果頁，「我的」20 本、不可能的詞回「信息提示」頁，書庫頁 /book/ 有書單。在書源加手機標識後用 source_check_live_test 跑，搜尋、詳情、目錄、正文、發現都通過。修好要：書源的標頭加手機標識。",
+      "evidence": "2026-11-13 curl：網站對桌機的瀏覽器標識（夜讀與 Legado 在書源沒寫標識時預設送的 Windows Chrome）直接斷線（server closed abruptly），沒帶標識也斷；帶手機標識就正常：搜尋 POST /e/search/index.php 轉到結果頁，「我的」20 本、不可能的詞回「没有搜索到相关的内容」，書庫頁 /book/ 有書單。搜尋回應寫入 Cookie vbemnlastsearchtime（上次搜尋時間），帶著它 30 秒內再搜回「系统限制的搜索时间间隔为 30 秒」；不帶就不擋（curl 連搜四次都正常）。書源沒開 Cookie 罐，照 Legado 不存這個 Cookie（夜讀原本會存，2026-11-13 照 Legado 修了引擎）。在書源加手機標識後用 source_check_live_test 跑，搜尋、詳情、目錄、正文、發現都通過。修好要：書源的標頭加手機標識。",
       "confirmed": true
     },
     {
@@ -26,7 +26,7 @@
       "name": "🎃QQ文学网🎃",
       "url": "http://m.qqwx.win#🎃",
       "expected": "fixed",
-      "evidence": "2026-11-13 curl：搜尋、詳情、目錄、正文都正常（夜讀校驗也只卡在發現）。發現頁網址全在 /shuku/ 底下，/shuku/ 現在回 404；首頁連到的 /novel/lastupdate.html、/novel/allvisit.html 這類書單頁各有 100 本，/sort.html 有 50 本，書單是 ul.list（書源沒有自己的發現規則，借用搜尋規則）。修好要：發現網址換成網站現在的書單頁。",
+      "evidence": "2026-11-13 curl：搜尋、詳情、目錄、正文都正常（夜讀校驗也只卡在發現）。發現頁網址在 /shuku/ 底下：不帶來源頁（Referer）回 404；帶來源頁先回「验证中」頁（程式轉到同一網址加 ?_js_verify=1），帶同一個工作階段 Cookie PHPSESSID 打 ?_js_verify=1 會 302 回原網址，再抓才有 50 本書單；不帶 Cookie 只會一直回驗證頁。夜讀會自動帶來源頁；書源沒開 Cookie 罐，照 Legado 不存 PHPSESSID。修好要：打開 Cookie 罐（enabledCookieJar），發現網址照舊或改到 ?_js_verify=1。",
       "confirmed": true
     },
     {
