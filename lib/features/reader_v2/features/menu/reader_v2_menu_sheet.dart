@@ -153,15 +153,17 @@ class ReaderV2SheetScaffold extends StatelessWidget {
                     ),
                     child: Semantics(
                       header: true,
-                      child: DragOverflowText(child: Text(
-                        title,
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.titleSm.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurface,
+                      child: DragOverflowText(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.titleSm.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurface,
+                          ),
                         ),
-                      )),
+                      ),
                     ),
                   ),
                   Positioned(
