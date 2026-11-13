@@ -12,6 +12,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import '../source_manager_provider.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 編輯模式左側勾選圈佔用的寬度（圈 22 + 間距）。
 const double _kCheckSlotWidth = 22 + AppGrouped.iconGap;
@@ -303,7 +304,7 @@ class _SourceRowContent extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
+                      child: DragOverflowText(child: Text(
                         source.bookSourceName,
                         style: AppTextStyles.bodyBase.copyWith(
                           height: 1.3,
@@ -311,8 +312,7 @@ class _SourceRowContent extends StatelessWidget {
                           color: scheme.onSurface,
                         ),
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      )),
                     ),
                     if (sourceGroupLabel(source) case final group?)
                       Padding(
@@ -339,15 +339,14 @@ class _SourceRowContent extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text(
+                DragOverflowText(child: Text(
                   source.bookSourceUrl,
                   style: AppTextStyles.bodySm.copyWith(
                     height: 1.3,
                     color: chrome.sectionText,
                   ),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                )),
                 const SizedBox(height: AppSpacing.xs),
                 _buildTags(context, chrome),
                 if (checkProgress != null) ...[
@@ -356,15 +355,14 @@ class _SourceRowContent extends StatelessWidget {
                 ],
                 if (errorLine != null) ...[
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
+                  DragOverflowText(child: Text(
                     errorLine,
                     style: AppTextStyles.labelSm.copyWith(
                       height: 1.3,
                       color: context.warning,
                     ),
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  )),
                 ],
               ],
             ),
@@ -494,7 +492,7 @@ class _SourceRowContent extends StatelessWidget {
                 ),
         ),
         Expanded(
-          child: Text(
+          child: DragOverflowText(child: Text(
             progress.message,
             style: AppTextStyles.labelSm.copyWith(
               height: 1.3,
@@ -502,8 +500,7 @@ class _SourceRowContent extends StatelessWidget {
               fontWeight: progress.isFinal ? FontWeight.w600 : FontWeight.w500,
             ),
             maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          )),
         ),
       ],
     );
@@ -593,15 +590,14 @@ class _GroupCapsule extends StatelessWidget {
           color: chrome.sectionText.withValues(alpha: 0.1),
           borderRadius: AppRadius.pillShape,
         ),
-        child: Text(
+        child: DragOverflowText(child: Text(
           label,
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: AppTextStyles.labelXs.copyWith(
             height: 1.15,
             color: chrome.sectionText,
           ),
-        ),
+        )),
       ),
     );
   }
