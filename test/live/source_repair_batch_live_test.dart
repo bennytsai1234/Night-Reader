@@ -217,7 +217,12 @@ Map<String, Object?> _score(Map<String, dynamic> item, RepairItem repaired) {
       for (final m in RegExp(r'正文 (\d+) 字').allMatches(step.detail ?? ''))
         int.parse(m.group(1)!),
   ].lastOrNull;
-  final expected = item['expected'] as String;
+  // 一個，或一串都算對的（網站狀態在變、兩種結論都有當下的事實撐著時）。
+  final expected = switch (item['expected']) {
+    final String one => [one],
+    final List<dynamic> many => many.cast<String>(),
+    _ => const ['unknown'],
+  };
   final min = item['minContentChars'] as int?;
   final why = switch (item['why']) {
     final String one => [one],
@@ -226,13 +231,13 @@ Map<String, Object?> _score(Map<String, dynamic> item, RepairItem repaired) {
   };
   return {
     'name': item['name'],
-    'expected': expected,
+    'expected': expected.join('／'),
     'verdict': verdict,
     'why': _why(repaired),
     'contentChars': chars,
-    'pass': expected == 'unknown'
+    'pass': expected.contains('unknown')
         ? null
-        : expected == verdict &&
+        : expected.contains(verdict) &&
               (verdict != 'fixed' || min == null || (chars ?? 0) >= min) &&
               (verdict != 'unfixable' ||
                   why == null ||

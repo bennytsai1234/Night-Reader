@@ -1,5 +1,5 @@
 {
-  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定）；unfixable 的 why 是放棄的原因（一個或一串，同一個判定底下的細分類都算對）（give_up 的 why，或網站檢查判成 site_gone）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
+  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定），也可以是一串（網站狀態在變、幾種結論都算對）；unfixable 的 why 是放棄的原因（一個或一串，同一個判定底下的細分類都算對）（give_up 的 why，或網站檢查判成 site_gone）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
   "cases": [
     {
       "name": "圣墟小说网",
@@ -32,9 +32,13 @@
     {
       "name": "🎃肉肉屋🎃#3",
       "url": "https://www.rourouwu1.com#🎃",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl：搜尋與書頁正常；rourouwu1.com 的目錄頁 /index/<id> 列了 144 個章名，但每個 <dd> 裡只有章名和 </a>，連結被拿掉了（換標識、帶 Cookie 與來源頁都一樣）。同一套書庫的姊妹站 www.17ed.com（書源的封面圖本來就在 img.17ed.com）的同一本 /index/124859 有完整 144 章連結，章節頁 .acontent 約 2300 字。第一輪 AI 改用 17ed.com 修好、校驗通過（我原本漏查了這個站）。使用者 2026-11-13 改定：修得好。修好要：網址換到 17ed.com，搜尋與詳情規則跟著它的版型。",
-      "confirmed": true
+      "expected": [
+        "fixed",
+        "unfixable"
+      ],
+      "evidence": "2026-11-13 curl：搜尋與書頁正常；rourouwu1.com 的目錄頁 /index/<id> 列了 144 個章名，但每個 <dd> 裡只有章名和 </a>，連結被拿掉了（換標識、帶 Cookie 與來源頁都一樣）。同一套書庫的姊妹站 www.17ed.com（書源的封面圖本來就在 img.17ed.com）的同一本 /index/124859 有完整 144 章連結，章節頁 .acontent 約 2300 字。第一輪 AI 改用 17ed.com 修好、校驗通過（我原本漏查了這個站）。使用者 2026-11-13 改定：修得好。修好要：網址換到 17ed.com，搜尋與詳情規則跟著它的版型。2026-11-13 13:58 再查：兩站搜站上確實有的書名都回 0 本、好幾次吐出 MySQL 錯誤，只有「我的」還有 20 本（像是快取的舊結果）。使用者 2026-11-13 定：修得好、修不好（網站的功能壞了）都算對，重點是快速找到答案。",
+      "confirmed": true,
+      "why": "site_broken"
     },
     {
       "name": "八叉书库",
