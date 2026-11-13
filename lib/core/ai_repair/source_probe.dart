@@ -464,6 +464,10 @@ String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
   }
   final chapter = chapterUrl == null ? null : Uri.tryParse(chapterUrl);
   if (chapter == null) return null;
+  final nextUri = nextChapterUrl == null ? null : Uri.tryParse(nextChapterUrl);
+  final nextChapter = nextUri == null
+      ? null
+      : '${chapter.resolveUri(nextUri).removeFragment()}';
   final body = [
     for (final page in probe.pages)
       if (page.body != null &&
@@ -482,10 +486,7 @@ String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
     }
     if (isNextPageOfChapter(chapter, target)) {
       final next = '${target.removeFragment()}';
-      if (nextChapterUrl != null &&
-          next == '${chapter.resolve(nextChapterUrl).removeFragment()}') {
-        continue;
-      }
+      if (next == nextChapter) continue;
       final fetched = [
         ...probe.requests,
         for (final page in probe.pages) page.line,
