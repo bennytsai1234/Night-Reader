@@ -437,7 +437,8 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 開場試抓的搜尋被網站限流時（請求紀錄標著「網站限流」），照網站說的
-  /// 間隔等一次、原樣再送一次搜尋；還是限流就由程式判定「網站的功能壞了」，
+  /// 間隔等一次、原樣再送一次搜尋；還是限流就由程式判定「網站限流」（功能
+  /// 壞掉的一種，修不好），
   /// 不送 AI，傳回 true。使用者 2026-11-13 定「限流就是壞掉，根本不能用」：
   /// 判定算得出來就由程式算（agent-harness），交給 AI 時它會一直找繞過的
   /// 寫法，蜘蛛小說網每次 30 輪、70 到 100 萬 token。
@@ -466,12 +467,12 @@ class AiRepairSession extends ChangeNotifier {
       _finish(step, '等過之後搜尋有回應，交給 AI');
       return false;
     }
-    final why = '搜尋等過 ${wait.inSeconds} 秒還是被網站限流（${limit.note}）';
+    final why = '搜尋等過 ${wait.inSeconds} 秒還是被擋（${limit.note}）';
     _finish(step, why, failed: true);
     job
       ..confirmedUnfixable = true
-      ..giveUpWhy = 'site_broken';
-    _fail(job, '${aiGiveUpLabels['site_broken']}：$why');
+      ..giveUpWhy = 'rate_limited';
+    _fail(job, '${aiGiveUpLabels['rate_limited']}：$why');
     return true;
   }
 

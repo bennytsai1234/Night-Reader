@@ -204,7 +204,8 @@ void main() {
 
 /// 一件案件照預期答案算對錯：修好了沒有（[_verdict]），預期修得好、又寫了
 /// `minContentChars` 的，最後一次試抓到的正文要夠長（只抓到半章的不算）；
-/// 預期修不好、又寫了 `why` 的，放棄的原因要一樣（[_why]）。
+/// 預期修不好、又寫了 `why` 的，放棄的原因要是其中一個（[_why]；`why` 是一個
+/// 或一串：同一個判定底下的細分類都算對，例如網站限流是功能壞掉的一種）。
 Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
   final repaired = items.firstWhere(
     (i) =>
@@ -220,7 +221,11 @@ Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
   ].lastOrNull;
   final expected = item['expected'] as String;
   final min = item['minContentChars'] as int?;
-  final why = item['why'] as String?;
+  final why = switch (item['why']) {
+    final String one => [one],
+    final List<dynamic> many => many.cast<String>(),
+    _ => null,
+  };
   return {
     'name': item['name'],
     'expected': expected,
@@ -231,7 +236,9 @@ Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
         ? null
         : expected == verdict &&
               (verdict != 'fixed' || min == null || (chars ?? 0) >= min) &&
-              (verdict != 'unfixable' || why == null || why == _why(repaired)),
+              (verdict != 'unfixable' ||
+                  why == null ||
+                  why.contains(_why(repaired))),
   };
 }
 
