@@ -18,6 +18,7 @@
 
 - **Codex 審查的暫存** `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時擋掉 Codex 最後一次連線，`codex exec` 回非零但報告通常已經寫好；先看報告檔再決定要不要重跑。
 - **Windows 上用 Python 寫檔**要給 `newline='\n'`，不然會寫成 CRLF。
+- **改含中文的檔案用編輯工具（Edit）**：在 Bash 用 heredoc 把含中文的比對字串交給 Python 時，常常比對不到、檔案沒改（2026-11-13 好幾次）；英文與程式碼的比對不受影響。
 - **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
 - **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 
