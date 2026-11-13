@@ -260,7 +260,30 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
           ),
       ],
     );
-    if (!widget.expand) row = IntrinsicWidth(child: row);
+    if (!widget.expand) {
+      // 非撐滿模式的段寬照文字原寬計算，避免 IntrinsicWidth 向
+      // DragOverflowText 的 LayoutBuilder 要求無法提供的 intrinsic 尺寸。
+      final widest = widget.segments.indexed
+          .map(
+            (entry) => _SegmentLabel.widthOf(
+              context,
+              entry.$2,
+              emphasized: entry.$1 == emphasized,
+              dense: widget.dense,
+            ),
+          )
+          .fold<double>(0, math.max);
+      final naturalWidth = widest * widget.segments.length;
+      final content = row;
+      row = LayoutBuilder(
+        builder: (context, constraints) => SizedBox(
+          width: constraints.hasBoundedWidth
+              ? math.min(naturalWidth, constraints.maxWidth)
+              : naturalWidth,
+          child: content,
+        ),
+      );
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
