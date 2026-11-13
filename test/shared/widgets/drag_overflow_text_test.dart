@@ -78,9 +78,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.pumpWidget(
-      testPage('兩行也放不下的特別特別長的書名與作者資訊', maxLines: 2),
-    );
+    await tester.pumpWidget(testPage('兩行也放不下的特別特別長的書名與作者資訊', maxLines: 2));
     expect(
       find.descendant(
         of: find.byType(DragOverflowText),
