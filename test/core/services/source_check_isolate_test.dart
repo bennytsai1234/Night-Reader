@@ -291,7 +291,9 @@ void main() {
   });
 
   // 付費章節不抓（ADR 0057）：只抽查免費章節。
-  test('paid chapters are skipped and the free ones are checked', () async {
+  test('a paid chapter in the table of contents marks the whole source as '
+      'paid, left out and up for removal, without reading it', () async {
+    // 使用者 2026-11-13：只要有付費、VIP 章節就丟掉（ADR 0057）。
     final service = _FakeBookSourceService(
       chapters: (_) async => [
         BookChapter(url: 'https://site.example/1.html', title: '第一章'),
@@ -304,15 +306,17 @@ void main() {
     );
     final (result, checked) = await _check(service);
 
-    expect(result.isHealthy, isTrue);
-    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
-    expect(service.contentRequests, ['第一章']);
+    expect(checked.groupTags, contains(paidSourceGroupTag));
+    expect(checked.isCleanupCandidate, isTrue);
+    expect(checked.runtimeHealth.allowsSearch, isFalse);
+    expect(checked.runtimeHealth.allowsReading, isFalse);
+    expect(result.message, contains('目錄有付費章節: 第二章'));
+    expect(service.contentRequests, isEmpty);
   });
 
-  test(
-    'a book of only paid chapters marks the source as needing login',
-    () async {
-      final service = _FakeBookSourceService(
+  test('a book of only paid chapters is paid too', () async {
+    final (_, checked) = await _check(
+      _FakeBookSourceService(
         chapters: (_) async => [
           BookChapter(
             url: 'https://site.example/1.html',
@@ -320,14 +324,33 @@ void main() {
             isVip: true,
           ),
         ],
-      );
-      final (result, checked) = await _check(service);
+      ),
+    );
 
-      expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
-      expect(result.message, contains('付費章節'));
-      expect(service.contentRequests, isEmpty);
-    },
-  );
+    expect(checked.groupTags, contains(paidSourceGroupTag));
+    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
+  });
+
+  test('a VIP chapter the source marks as bought, or a title that only says '
+      'VIP, keeps the source', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async => [
+        BookChapter(url: 'https://site.example/1.html', title: '第一章'),
+        BookChapter(
+          url: 'https://site.example/2.html',
+          title: '第二章',
+          isVip: true,
+          isPay: true,
+        ),
+        BookChapter(url: 'https://site.example/3.html', title: '第三章 VIP包厢'),
+      ],
+    );
+    final (result, checked) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(checked.groupTags, isNot(contains(paidSourceGroupTag)));
+    expect(service.contentRequests, contains('第一章'));
+  });
 
   test(
     'a book served as a download file marks a download-only source',

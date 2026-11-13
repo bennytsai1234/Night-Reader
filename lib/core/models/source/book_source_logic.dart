@@ -14,6 +14,7 @@ const String timeoutSourceGroupTag = '校驗超時';
 const String siteBrokenSourceGroupTag = '網站失效';
 const String upstreamBlockedSourceGroupTag = '上游異常';
 const String downloadOnlySourceGroupTag = '下載站';
+const String paidSourceGroupTag = '付費';
 const String quarantineSourceGroupTag = '已隔離';
 const String nonNovelSourceGroupTag = '非小說源';
 const String loginRequiredSourceGroupTag = '需要登入';
@@ -34,6 +35,18 @@ const SourceRuntimeHealth loginRequiredSourceHealth = SourceRuntimeHealth(
   allowsSearch: true,
   allowsReading: true,
   cleanupCandidate: false,
+  quarantined: false,
+);
+
+/// 「付費」：校驗抽查的書，目錄有書源標了付費、還沒買的章節（ADR 0057）。
+/// 夜讀不接付費內容，這樣的書源整個不用：不參加搜尋、不能開書，列入清理。
+const SourceRuntimeHealth paidSourceHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.paid,
+  label: paidSourceGroupTag,
+  description: '書源有付費章節，夜讀不接付費內容',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: true,
   quarantined: false,
 );
 
@@ -66,6 +79,7 @@ const List<String> sourceRuntimeStatusTags = <String>[
   siteBrokenSourceGroupTag,
   upstreamBlockedSourceGroupTag,
   downloadOnlySourceGroupTag,
+  paidSourceGroupTag,
   quarantineSourceGroupTag,
   nonNovelSourceGroupTag,
   loginRequiredSourceGroupTag,
@@ -191,6 +205,7 @@ enum SourceHealthCategory {
   loginRequired,
   verificationRequired,
   downloadOnly,
+  paid,
   searchBroken,
   discoveryBroken,
   discoveryDetailBroken,
@@ -383,6 +398,7 @@ extension BookSourceLogic on BookSourceBase {
         verificationRequiredSourceGroupTag,
       ],
       SourceHealthCategory.downloadOnly => const [downloadOnlySourceGroupTag],
+      SourceHealthCategory.paid => const [paidSourceGroupTag],
       SourceHealthCategory.searchBroken => const [searchBrokenSourceGroupTag],
       SourceHealthCategory.discoveryBroken => const [
         discoveryBrokenSourceGroupTag,
@@ -540,6 +556,8 @@ extension BookSourceLogic on BookSourceBase {
         quarantined: false,
       );
     }
+
+    if (tagged(paidSourceGroupTag)) return paidSourceHealth;
 
     if (tagged(loginRequiredSourceGroupTag)) return loginRequiredSourceHealth;
     if (tagged(verificationRequiredSourceGroupTag)) {
