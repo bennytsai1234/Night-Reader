@@ -48,6 +48,7 @@ import 'widgets/book_read_capsule.dart';
 import 'widgets/change_source_sheet.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/features/settings/local_book_sync_dialog.dart'
     show formatMegabytes;
 
@@ -1192,16 +1193,15 @@ class _ChapterRow extends StatelessWidget {
       title: title,
       titleWidget: Padding(
         padding: EdgeInsets.only(left: indented ? tocChapterIndent : 0),
-        child: Text(
+        child: DragOverflowText(child: Text(
           title,
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: AppTextStyles.bodyBase.copyWith(
             height: 1.3,
             color: isCurrent ? scheme.primary : scheme.onSurface,
             fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
           ),
-        ),
+        )),
       ),
       showChevron: false,
       trailing: isCurrent
