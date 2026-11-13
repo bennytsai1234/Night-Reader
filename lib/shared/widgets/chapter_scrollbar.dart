@@ -207,13 +207,15 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
                     ),
                     child: Center(
                       widthFactor: 1,
-                      child: DragOverflowText(child: Text(
-                        widget.labelFor(_dragIndex),
-                        maxLines: 1,
-                        style: AppTextStyles.uiMd.copyWith(
-                          color: scheme.onSurface,
+                      child: DragOverflowText(
+                        child: Text(
+                          widget.labelFor(_dragIndex),
+                          maxLines: 1,
+                          style: AppTextStyles.uiMd.copyWith(
+                            color: scheme.onSurface,
+                          ),
                         ),
-                      )),
+                      ),
                     ),
                   ),
                 ),
