@@ -162,7 +162,7 @@ class SourceProbeReport {
 
 /// 開一個書源 worker 試抓 [source]（同書源校驗，ADR 0033）：用 [keyword]
 /// 搜尋，從第一本書一路抓到第一章正文。[keyword] 照書源除錯的寫法也可以
-/// 從中間開始：詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
+/// 從中間開始：`::發現頁網址`、詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
 /// worker，傳回 [SourceProbeReport.timedOut]；[cancelToken] 取消時也是。
 Future<SourceProbeReport> probeSource(
   BookSource source, {
@@ -370,7 +370,8 @@ Future<bool> searchFollowsKeyword(
 const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
 
 /// 試抓從哪一段開始時傳給 [probeSource] 的 keyword：`search` 用 [keyword]
-/// 搜尋，`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的寫法）。
+/// 搜尋，`explore`、`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的
+/// 寫法；發現頁照 exploreUrl 的寫法原樣交給除錯解析）。
 /// [url] 是相對網址時照 [baseUrl]（書源網址）補成完整的：書源除錯同 Legado，
 /// 不是 http 開頭的會當成搜尋關鍵字（2026-11-12 AI 給 `/551874.html` 從詳情頁
 /// 試抓，結果拿它去搜尋）。不認得的段或少了網址是 null。

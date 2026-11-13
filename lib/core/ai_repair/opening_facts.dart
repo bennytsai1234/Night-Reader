@@ -1,4 +1,5 @@
 import 'package:html/parser.dart' as html_parser;
+import 'package:night_reader/core/engine/js/encode/charsets.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
@@ -14,31 +15,70 @@ List<String> openingFacts(BookSource source, SourceProbeReport probe) => [
 /// 搜尋送關鍵字的編碼和網站搜尋頁宣告的不同時的那一句；相同、讀不出來或
 /// 沒有搜尋時是 null。2026-11-13 QQ文学网：書源用 GBK 送，網站改成 UTF-8
 /// 後不認得關鍵字、回固定推薦書，AI 試了二十幾輪別的網址與方法才想到編碼。
+///
+/// 兩邊都照試抓實際發生的讀，不讀規則：送出的編碼看搜尋請求裡關鍵字被編成
+/// 哪一種（規則可能用 JS 組網址、寫寬鬆的選項，引擎也可能把認不得的編碼
+/// 退回 UTF-8）；宣告的編碼看那個搜尋請求跟著轉址之後最後一個回應。
 String? searchCharsetFact(BookSource source, SourceProbeReport probe) {
-  final searchUrl = source.searchUrl ?? '';
-  if (!searchUrl.contains('key')) return null;
-  final written = _optionCharset.firstMatch(searchUrl)?.group(1)?.toLowerCase();
-  final sent = _family(written ?? 'utf-8');
-  final declared = _declaredCharset(probe);
-  if (declared == null || _family(declared) == sent) return null;
-  final how = written == null ? '網址沒寫編碼，照 UTF-8' : '網址寫了 $written';
-  return '搜尋送關鍵字的編碼和網站不同：書源的搜尋$how送，網站的搜尋頁宣告的是 '
-      '$declared';
+  final keyword = _probeKeyword(probe);
+  if (keyword == null) return null;
+  final sent = _sentCharset(probe.requests, keyword);
+  if (sent == null) return null;
+  final declared = _declaredCharset(probe, sent.index);
+  if (declared == null || _family(declared) == sent.charset) return null;
+  return '搜尋送關鍵字的編碼和網站不同：試抓的搜尋照 ${sent.charset} 送「$keyword」，'
+      '網站的搜尋頁宣告的是 $declared';
 }
 
-/// 試抓的第一個回應（搜尋頁）宣告的編碼：回應標頭的 charset，沒有時看網頁
-/// 的 `<meta charset>`。
-String? _declaredCharset(SourceProbeReport probe) {
-  for (final line in probe.requests) {
-    if (!line.trimLeft().startsWith('←')) continue;
-    final header = _headerCharset.firstMatch(line.split('：').first)?.group(1);
-    if (header != null) return header.toLowerCase();
-    break;
+/// 書源除錯記下的搜尋關鍵字（「⇒開始搜尋關鍵字: 我的」）；不是從搜尋開始的
+/// 試抓是 null。
+String? _probeKeyword(SourceProbeReport probe) {
+  for (final (_, message) in probe.logs) {
+    final match = RegExp(r'開始搜尋關鍵字: (.+)$').firstMatch(message.trim());
+    if (match != null) return match.group(1)!.trim();
   }
-  for (final page in probe.pages) {
-    if (page.body case final body?) {
-      return _metaCharset.firstMatch(body)?.group(1)?.toLowerCase();
+  return null;
+}
+
+/// 第一個帶著關鍵字的請求，關鍵字被編成哪一種（utf-8 或 gbk）與它在請求
+/// 紀錄的位置；關鍵字是純英數、或兩種都對不上時是 null。
+({String charset, int index})? _sentCharset(List<String> lines, String key) {
+  final forms = {
+    'utf-8': Charsets.urlEncode(key, 'utf-8'),
+    'gbk': Charsets.urlEncode(key, 'gbk'),
+  };
+  if (forms['utf-8'] == forms['gbk']) return null;
+  for (final (i, line) in lines.indexed) {
+    if (line.trimLeft().startsWith('←')) continue;
+    for (final MapEntry(:key, :value) in forms.entries) {
+      if (line.toUpperCase().contains(value.toUpperCase())) {
+        return (charset: key, index: i);
+      }
     }
+  }
+  return null;
+}
+
+/// 從 [from] 那個請求起，跟著轉址走到底的最後一個回應宣告的編碼：回應標頭
+/// 的 charset，沒有時看那一頁的 `<meta>`。
+String? _declaredCharset(SourceProbeReport probe, int from) {
+  String? last;
+  for (final line in probe.requests.skip(from + 1)) {
+    if (line.trimLeft().startsWith('←')) {
+      last = line;
+    } else if (!line.contains('（轉址）')) {
+      break;
+    }
+  }
+  if (last == null) return null;
+  final head = last.split('：').first;
+  final header = _headerCharset.firstMatch(head)?.group(1);
+  if (header != null) return header.toLowerCase();
+  final url = RegExp(r'←\s*(\S+)').firstMatch(last)?.group(1);
+  for (final page in probe.pages) {
+    final body = page.body;
+    if (body == null || url == null || !page.line.contains('← $url ')) continue;
+    return _metaCharset.firstMatch(body)?.group(1)?.toLowerCase();
   }
   return null;
 }
@@ -50,13 +90,13 @@ String _family(String charset) => switch (charset.toLowerCase()) {
   final other => other,
 };
 
-final RegExp _optionCharset = RegExp(
-  r'''["']charset["']\s*:\s*["']([\w-]+)["']''',
+/// 同 AnalyzeUrl 讀回應編碼的寫法：容許空白與引號。
+final RegExp _headerCharset = RegExp(
+  r'''charset\s*=\s*["']?([^;\s"'，]+)''',
   caseSensitive: false,
 );
-final RegExp _headerCharset = RegExp(r'charset=([\w-]+)', caseSensitive: false);
 final RegExp _metaCharset = RegExp(
-  r'''<meta[^>]+charset=["']?([\w-]+)''',
+  r'''<meta[^>]+charset\s*=\s*["']?([\w-]+)''',
   caseSensitive: false,
 );
 

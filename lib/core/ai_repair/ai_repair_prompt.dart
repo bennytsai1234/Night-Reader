@@ -159,7 +159,7 @@ final class AiFetch extends AiRepairCommand {
   final String note;
 }
 
-/// 拿改過的書源試抓一次：從 [from]（`search`、`info`、`toc`、`content`）
+/// 拿改過的書源試抓一次：從 [from]（`search`、`explore`、`info`、`toc`、`content`）
 /// 開始，搜尋以外的段從 [url] 那一頁開始。
 final class AiTest extends AiRepairCommand {
   const AiTest(this.change, this.note, {this.from = 'search', this.url});

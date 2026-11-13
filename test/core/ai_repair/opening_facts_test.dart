@@ -4,58 +4,104 @@ import 'package:night_reader/core/ai_repair/repair_pages.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
-SourceProbeReport _probe(String header, String body) => SourceProbeReport(
-  logs: const [],
+/// 「我的」照 UTF-8 與 GBK 編碼的樣子。
+const _utf8Key = '%E6%88%91%E7%9A%84';
+const _gbkKey = '%CE%D2%B5%C4';
+
+/// 從搜尋開始的試抓：搜尋請求把關鍵字編成 [sentKey]，網站回 [header]。
+/// [redirectFirst] 時先回一個宣告 UTF-8 的 302，再轉到結果頁。
+SourceProbeReport _probe(
+  String header,
+  String body, {
+  String sentKey = _utf8Key,
+  bool redirectFirst = false,
+}) => SourceProbeReport(
+  logs: const [(10, '⇒開始搜尋關鍵字: 我的')],
   requests: [
-    'http://m.site.example/s?q=x',
-    '  ← http://m.site.example/s?q=x 200 $header，900 位元組：…',
+    'POST http://m.site.example/s 送出：searchkey=$sentKey',
+    if (redirectFirst) ...[
+      '  ← http://m.site.example/s 302 text/html; charset=utf-8，0 位元組',
+      'http://m.site.example/result（轉址）',
+      '  ← http://m.site.example/result 200 $header，900 位元組：…',
+    ] else
+      '  ← http://m.site.example/s 200 $header，900 位元組：…',
+    'http://m.site.example/book/1',
+    '  ← http://m.site.example/book/1 200 text/html; charset=big5，900 位元組：…',
   ],
   pages: [
-    (line: 'http://m.site.example/s?q=x', body: null),
-    (line: '  ← http://m.site.example/s?q=x 200 $header', body: body),
+    (
+      line: redirectFirst
+          ? '  ← http://m.site.example/result 200 $header'
+          : '  ← http://m.site.example/s 200 $header',
+      body: body,
+    ),
   ],
 );
 
 void main() {
   group('搜尋的編碼', () {
-    BookSource source(String searchUrl) => BookSource(
-      bookSourceUrl: 'http://m.site.example',
-      searchUrl: searchUrl,
-    );
+    final source = BookSource(bookSourceUrl: 'http://m.site.example');
 
-    test('書源用 GBK 送、網站宣告 UTF-8 時寫出來', () {
-      // 2026-11-13 QQ文学网。
+    test('照試抓實際送出的編碼比：送 GBK、網站宣告 UTF-8 時寫出來', () {
+      // 2026-11-13 QQ文学网。不管規則怎麼寫（寬鬆的選項、JS 組網址），看的
+      // 是請求裡關鍵字被編成哪一種。
       expect(
         searchCharsetFact(
-          source('/s?q={{key}},{"charset": "gbk"}'),
-          _probe('text/html; charset=UTF-8', '<html></html>'),
+          source,
+          _probe('text/html; charset=UTF-8', '<html></html>', sentKey: _gbkKey),
         ),
-        allOf(contains('網址寫了 gbk'), contains('utf-8')),
+        allOf(contains('照 gbk 送「我的」'), contains('utf-8')),
       );
     });
 
-    test('沒寫編碼時照 UTF-8 送，網站宣告 GBK 也寫；宣告在 meta 也認', () {
+    test('送 UTF-8、網站在 meta 宣告 GBK 也寫；宣告帶引號與空白也認', () {
       expect(
         searchCharsetFact(
-          source('/s?q={{key}}'),
-          _probe('text/html', '<meta charset="gb2312"><p>x</p>'),
+          source,
+          _probe('text/html', '<meta charset = "gb2312"><p>x</p>'),
         ),
-        allOf(contains('網址沒寫編碼，照 UTF-8'), contains('gb2312')),
+        allOf(contains('照 utf-8 送'), contains('gb2312')),
+      );
+      expect(
+        searchCharsetFact(
+          source,
+          _probe('text/html; charset="GBK"', '<p>x</p>'),
+        ),
+        contains('gbk'),
       );
     });
 
-    test('同一類的編碼不算不同', () {
+    test('同一類的編碼不算不同；看的是搜尋跟著轉址之後的結果頁', () {
       expect(
         searchCharsetFact(
-          source('/s?q={{key}},{"charset":"GB2312"}'),
-          _probe('text/html; charset=GBK', '<p>x</p>'),
+          source,
+          _probe('text/html; charset=GB2312', '<p>x</p>', sentKey: _gbkKey),
         ),
         isNull,
       );
       expect(
         searchCharsetFact(
-          source('/s?q={{key}}'),
-          _probe('text/html; charset=utf8', '<p>x</p>'),
+          source,
+          _probe(
+            'text/html; charset=gbk',
+            '<p>x</p>',
+            sentKey: _gbkKey,
+            redirectFirst: true,
+          ),
+        ),
+        isNull,
+        reason: '302 宣告的 UTF-8 不算，結果頁是 GBK',
+      );
+    });
+
+    test('不是從搜尋開始、或關鍵字對不上時不寫', () {
+      expect(
+        searchCharsetFact(
+          source,
+          const SourceProbeReport(
+            logs: [],
+            requests: ['  ← x 200 charset=gbk'],
+          ),
         ),
         isNull,
       );

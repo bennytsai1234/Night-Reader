@@ -240,7 +240,7 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
       '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
       '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}'
       '${dropped == null ? '' : ' $dropped'}';
-  final empty = _recordBody(log, head, response.data, status: status);
+  final empty = _recordBody(log, head, response.data);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
@@ -297,7 +297,7 @@ void recordRenderedPage(String? url, Object? body) {
 
 /// 回應那一行：[head] 接上長度與內容開頭；[RequestLog.pages] 那份接上整頁。
 /// 傳回內容是不是空白。
-bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
+bool _recordBody(RequestLog log, String head, Object? data) {
   final full = log.keepPages;
   final decoded = _decode(
     data,

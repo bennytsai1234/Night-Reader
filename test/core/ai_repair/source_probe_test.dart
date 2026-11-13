@@ -55,9 +55,8 @@ void main() {
         '/book/2/1.html' =>
           '<div id="content"><img src="/static/lazy.png" '
               'data-original="/img/chapter-1-page-1.jpg"></div>',
-        '/explore' => '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
-        '/limited' =>
-          '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
+        '/explore/1.html' =>
+          '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
         // 一章分兩頁（下書網）：第一頁有指向第二頁的連結。
         '/book/3/1.html' =>
           '<div id="content">$_chapter</div><a href="/book/3/1_2.html">下一页</a>',
@@ -160,6 +159,23 @@ void main() {
       isNull,
       reason: '抓過了就算接上',
     );
+  });
+
+  test('a probe can start from a discovery page written like exploreUrl, '
+      'relative and with {{page}}', () async {
+    final report = await probeSource(
+      source(),
+      keyword: probeStart(
+        'explore',
+        keyword: '',
+        url: '/explore/{{page}}.html',
+      )!,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(report.succeeded, isTrue, reason: report.fullText);
+    expect(report.requests.first, contains('/explore/1.html'));
   });
 
   test('a probe can start from the table of contents', () async {

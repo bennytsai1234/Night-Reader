@@ -1172,9 +1172,10 @@ void main() {
 
       final reply = lines.singleWhere((l) => l.contains('/scripted '));
       expect(reply, contains('第一章的正文'));
-      // 程式拿掉了，只寫出它會轉到哪裡（page_notes）。
+      // 給 AI 的拿掉了程式，也不替它判斷這頁是不是轉址頁（交給 AI 讀）；
+      // 完整紀錄留著原文。
       expect(reply, isNot(contains('<script')));
-      expect(reply, contains('（這頁用程式轉到 https://ads.example/go）'));
+      expect(reply, isNot(contains('這頁用程式轉到')));
       expect(
         pages.singleWhere((p) => p.line.contains('/scripted ')).body,
         contains('<script>location="https://ads.example/go"</script>'),
