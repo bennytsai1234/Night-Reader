@@ -351,19 +351,23 @@ class BookshelfListCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DragOverflowText(child: Text(
-                    name,
-                    maxLines: 1,
-                    style: titleStyle.copyWith(color: scheme.onSurface),
-                  )),
+                  DragOverflowText(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      style: titleStyle.copyWith(color: scheme.onSurface),
+                    ),
+                  ),
                   // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
                   // 載入骨架（不知道哪本沒有作者）才對得上。
                   const SizedBox(height: 2),
-                  DragOverflowText(child: Text(
-                    author,
-                    maxLines: 1,
-                    style: authorStyle.copyWith(color: chrome.sectionText),
-                  )),
+                  DragOverflowText(
+                    child: Text(
+                      author,
+                      maxLines: 1,
+                      style: authorStyle.copyWith(color: chrome.sectionText),
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   BookshelfProgressLine(book: book),
                 ],
@@ -583,11 +587,13 @@ class BookshelfGridTile extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
-                      child: DragOverflowText(child: Text(
-                        name,
-                        maxLines: 2,
-                        style: titleStyle.copyWith(color: scheme.onSurface),
-                      )),
+                      child: DragOverflowText(
+                        child: Text(
+                          name,
+                          maxLines: 2,
+                          style: titleStyle.copyWith(color: scheme.onSurface),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     BookshelfProgressLine(book: book),
@@ -663,13 +669,17 @@ class BookshelfEditToolbar extends StatelessWidget {
                         color: action.destructive ? danger : scheme.onSurface,
                       ),
                       const SizedBox(height: 2),
-                      DragOverflowText(child: Text(
-                        action.label,
-                        maxLines: 1,
-                        style: AppTextStyles.uiXs.copyWith(
-                          color: action.destructive ? danger : scheme.onSurface,
+                      DragOverflowText(
+                        child: Text(
+                          action.label,
+                          maxLines: 1,
+                          style: AppTextStyles.uiXs.copyWith(
+                            color: action.destructive
+                                ? danger
+                                : scheme.onSurface,
+                          ),
                         ),
-                      )),
+                      ),
                     ],
                   ),
                 ),
@@ -692,11 +702,13 @@ class BookshelfEditToolbar extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.md),
         Flexible(
-          child: DragOverflowText(child: Text(
-            progressLabel ?? '',
-            maxLines: 1,
-            style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
-          )),
+          child: DragOverflowText(
+            child: Text(
+              progressLabel ?? '',
+              maxLines: 1,
+              style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
+            ),
+          ),
         ),
       ],
     );
