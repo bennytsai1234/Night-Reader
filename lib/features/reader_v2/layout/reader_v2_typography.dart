@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:characters/characters.dart';
+
 const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
   FontFeature.enable('fwid'),
 ];
@@ -63,32 +65,21 @@ bool isReaderV2CjkRune(int rune) =>
     (rune >= 0xFF00 && rune <= 0xFFEF) ||
     (rune >= 0x20000 && rune <= 0x3FFFF);
 
-/// 接在前一個字後面、和它組成同一個字的碼位：異體字選擇符與組合符號。
-/// 不能和前一個字拆成兩段字樣，否則異體字選不到。
-bool _continuesGrapheme(int rune) =>
-    (rune >= 0xFE00 && rune <= 0xFE0F) ||
-    (rune >= 0xE0100 && rune <= 0xE01EF) ||
-    (rune >= 0x0300 && rune <= 0x036F) ||
-    (rune >= 0x1AB0 && rune <= 0x1AFF) ||
-    (rune >= 0x1DC0 && rune <= 0x1DFF) ||
-    (rune >= 0x20D0 && rune <= 0x20FF) ||
-    (rune >= 0xFE20 && rune <= 0xFE2F);
-
-/// [text] 裡連續的中日文字範圍（UTF-16，遞增、不重疊）；接在中日文字後面的
-/// 異體字選擇符與組合符號算進同一段。
+/// [text] 裡連續的中日文字範圍（UTF-16，遞增、不重疊）。照字素（使用者
+/// 看到的一個字）切，由字素的第一個碼位決定歸哪一段：異體字選擇符、組合
+/// 符號與零寬連接符跟著前面的字，不會把一個字拆成兩段字樣。
 List<({int start, int end})> readerV2CjkRuns(String text) {
   final result = <({int start, int end})>[];
   var index = 0;
   int? runStart;
-  for (final rune in text.runes) {
-    if (isReaderV2CjkRune(rune) ||
-        (runStart != null && _continuesGrapheme(rune))) {
+  for (final grapheme in text.characters) {
+    if (isReaderV2CjkRune(grapheme.runes.first)) {
       runStart ??= index;
     } else if (runStart != null) {
       result.add((start: runStart, end: index));
       runStart = null;
     }
-    index += rune > 0xFFFF ? 2 : 1;
+    index += grapheme.length;
   }
   if (runStart != null) result.add((start: runStart, end: index));
   return result;

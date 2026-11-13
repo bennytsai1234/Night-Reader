@@ -107,8 +107,11 @@ void main() {
       (start: 10, end: 12),
     ]);
     expect(readerV2CjkRuns('Abc 123'), isEmpty);
-    // 異體字選擇符跟著前面的漢字，不拆成兩段。
+    // 照字素切：附加的記號跟著前面的字，不拆成兩段字樣。
     expect(readerV2CjkRuns('葛\u{E0100}a'), [(start: 0, end: 3)]);
+    expect(readerV2CjkRuns('漢\u0483a'), [(start: 0, end: 2)]);
+    expect(readerV2CjkRuns('漢\u200Da'), [(start: 0, end: 2)]);
+    expect(readerV2CjkRuns('a\u302Ab'), isEmpty, reason: 'CJK 範圍的聲調記號接在西文後');
     expect(readerV2CjkRuns('e\u0301'), isEmpty);
   });
 }

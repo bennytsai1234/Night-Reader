@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader_v2/hybrid/layout/visual_line_layout_engine.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/page_lines.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 
 /// 章節標題的粗細與對齊：只有標題吃這兩個設定，置中只移動畫出來的行，
@@ -119,6 +120,22 @@ void main() {
     // 英數字照舊用系統字型；中日文字讓下載的字型先選，系統字型自帶漢字也輪得到。
     expect(kai.fontFamilyFallback, ['sans-serif', 'NightReaderWenKaiTC']);
     expect(kai.cjkFontFamilyFallback, ['NightReaderWenKaiTC', 'sans-serif']);
+  });
+
+  test('the skeleton measures CJK punctuation and Latin quotes in the same '
+      'font order the body draws them', () {
+    final spec = ReaderV2LayoutSpec.fromViewport(
+      viewportSize: const ui.Size(400, 800),
+      style: _layoutStyle(fontFamily: 'NightReaderWenKaiTC'),
+    );
+    expect(readerSkeletonInkStyle(spec, cjk: true).fontFamilyFallback, [
+      'NightReaderWenKaiTC',
+      'sans-serif',
+    ]);
+    expect(readerSkeletonInkStyle(spec, cjk: false).fontFamilyFallback, [
+      'sans-serif',
+      'NightReaderWenKaiTC',
+    ]);
   });
 
   test('only titles take the title weight and alignment', () {
