@@ -28,6 +28,18 @@ final class AiRepairLog {
     _title = '# AI 修復：$sourceName（$sourceUrl）';
   }
 
+  /// 一次 AI 找書的紀錄（ADR 0060）：和修復紀錄同一個資料夾、同樣的兩份，
+  /// 檔名接 `find`。
+  AiRepairLog.find({
+    required String description,
+    Future<Directory> Function()? directory,
+  }) : _directory = directory ?? _defaultDirectory,
+       _fileName =
+           '${DateFormat('yyyyMMdd-HHmmss-SSS').format(DateTime.now())}-'
+           'find-${_opened++}.txt' {
+    _title = '# AI 找書：$description';
+  }
+
   /// 這次開 App 以來開了幾份：同一毫秒開的兩份（整批修復同時修好幾個）
   /// 檔名也不同。
   static int _opened = 0;

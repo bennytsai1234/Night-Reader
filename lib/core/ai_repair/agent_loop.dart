@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
 
 import 'ai_chat_client.dart';
 
@@ -67,6 +69,94 @@ typedef AgentRoundRecord = ({
   Duration elapsed,
   String? error,
 });
+
+/// 讀 AI 的一個工具呼叫的參數：讀得懂時 [args] 是參數物件；讀不懂時 [fact]
+/// 說哪裡不對（沒有這個工具、參數不是 JSON 物件），開頭是 [badCall]。
+({Map<String, dynamic>? args, String fact}) decodeToolCall(
+  AiToolCall call,
+  List<AiTool> tools, {
+  required String badCall,
+}) {
+  if (!tools.any((tool) => tool.name == call.name)) {
+    return (
+      args: null,
+      fact:
+          '$badCall：沒有叫 ${call.name} 的工具，有的是 '
+          '${tools.map((tool) => tool.name).join('、')}',
+    );
+  }
+  final Object? args;
+  try {
+    args = call.arguments.trim().isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(call.arguments);
+  } on FormatException catch (error) {
+    return (
+      args: null,
+      fact: '$badCall（${call.name}）：參數不是合法的 JSON：${error.message}',
+    );
+  }
+  if (args is! Map<String, dynamic>) {
+    return (args: null, fact: '$badCall（${call.name}）：參數要是一個 JSON 物件');
+  }
+  return (args: args, fact: '');
+}
+
+/// 參數讀得懂、但少了必要的參數或值不對時的那句話。
+String missingToolArguments(
+  AiToolCall call,
+  List<AiTool> tools,
+  String badCall,
+) {
+  final tool = tools.firstWhere((tool) => tool.name == call.name);
+  final required = (tool.parameters['required'] as List?)?.cast<String>() ?? [];
+  return '$badCall（${call.name}）：少了必要的參數或值不對'
+      '${required.isEmpty ? '' : '，要有 ${required.join('、')}'}';
+}
+
+/// 一個指令的 key：工具名稱與參數，鍵照名稱排；[ignore] 是不算進去的頂層
+/// 參數（例如給人看的說明）。同樣的工具與參數 key 相同
+/// （[AiAgentKnobs.sameCallLimit]）。
+String agentCommandKey(
+  String name,
+  Map<String, dynamic> args, {
+  Set<String> ignore = const {},
+}) {
+  Object? sorted(Object? value) => switch (value) {
+    final Map<dynamic, dynamic> map => {
+      for (final key in map.keys.map((k) => '$k').toList()..sort())
+        key: sorted(map[key]),
+    },
+    final List<dynamic> list => [for (final item in list) sorted(item)],
+    _ => value,
+  };
+  final command = sorted({...args}..removeWhere((k, _) => ignore.contains(k)));
+  try {
+    return '$name ${jsonEncode(command)}';
+  } on JsonUnsupportedObjectError {
+    // 數字超出範圍這類寫不回 JSON 的值。
+    return '$name $command';
+  }
+}
+
+/// 一輪寫進紀錄的那行：花的時間、送出多少、服務回報的用量。
+String agentRoundText(AgentRoundRecord record) {
+  String tokens(int count) => NumberFormat.decimalPattern().format(count);
+  final reply = record.reply;
+  final seconds =
+      '${(record.elapsed.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
+  final sent = '送出 ${record.sentMessages} 句 ${tokens(record.sentChars)} 字';
+  final head = reply == null
+      ? 'AI 回覆 $seconds（$sent）'
+      : 'AI 回覆 $seconds（$sent，第一段資料 '
+            '${(reply.firstData.inMilliseconds / 1000).toStringAsFixed(1)} 秒）';
+  final usage = record.usage;
+  if (usage == null) return head;
+  return '$head；${record.estimated ? '沒回完，照字數估：' : ''}'
+      '送出 ${tokens(usage.prompt)} token'
+      '（打中快取 ${tokens(usage.cached)}）、回覆 ${tokens(usage.completion)}'
+      '（思考 ${tokens(usage.reasoning)}）';
+}
 
 /// AI 這輪回的話讀出來的樣子。
 sealed class AgentParse<C> {
