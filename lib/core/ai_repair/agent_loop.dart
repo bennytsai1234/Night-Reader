@@ -411,7 +411,7 @@ Future<_AttemptEnd> _attempt<C>(
           if (cancelToken.isCancelled) return cancelled;
           switch (result) {
             case AgentAccepted():
-              return const _Finished(AgentEndKind.completed, '交出的通過了');
+              return const _Finished(AgentEndKind.completed, '交件被收下');
             case AgentStopped(:final kind, :final reason):
               return _Finished(kind, reason);
             case AgentInvalid(fact: final text):

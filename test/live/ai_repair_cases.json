@@ -32,10 +32,9 @@
     {
       "name": "🎃肉肉屋🎃#3",
       "url": "https://www.rourouwu1.com#🎃",
-      "expected": "unfixable",
-      "evidence": "2026-11-13 curl：搜尋與書頁正常；目錄頁 /index/<id> 列了 144 個章名，但每個 <dd> 裡只有章名和 </a>，連結被拿掉了（換手機標識、帶首頁 Cookie 與來源頁都一樣，手機站 m.s3wx.com 回「出現錯誤」）。書頁只列最新 6 章的連結；目錄頁程式裡 ReadParams.url_next 指到一個章節頁，章節頁有「上一章」「下一章」連結，正文約 5900 字。要湊出完整目錄只能從那一章沿「下一章」一頁一頁走（這本 144 次請求）。使用者 2026-11-13 定：每開一本書要上百次請求，一般讀者用不了，算網站的功能壞了、修不好。",
-      "confirmed": true,
-      "why": "site_broken"
+      "expected": "fixed",
+      "evidence": "2026-11-13 curl：搜尋與書頁正常；rourouwu1.com 的目錄頁 /index/<id> 列了 144 個章名，但每個 <dd> 裡只有章名和 </a>，連結被拿掉了（換標識、帶 Cookie 與來源頁都一樣）。同一套書庫的姊妹站 www.17ed.com（書源的封面圖本來就在 img.17ed.com）的同一本 /index/124859 有完整 144 章連結，章節頁 .acontent 約 2300 字。第一輪 AI 改用 17ed.com 修好、校驗通過（我原本漏查了這個站）。使用者 2026-11-13 改定：修得好。修好要：網址換到 17ed.com，搜尋與詳情規則跟著它的版型。",
+      "confirmed": true
     },
     {
       "name": "八叉书库",
