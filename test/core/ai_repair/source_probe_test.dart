@@ -95,6 +95,38 @@ void main() {
     ruleContent: ContentRule(content: content),
   );
 
+  test('a search name that differs from the detail page is spelled out', () {
+    // 2026-11-13 肉肉屋#3：搜尋的書名規則抓到「目录」連結。
+    SourceProbeReport walked(String listed, String info, String author) =>
+        SourceProbeReport(
+          logs: [
+            (10, '︽搜尋頁解析完成，獲取到 20 本書籍'),
+            (10, '  [0] $listed - 连山会'),
+            (10, '  [1] 目录 - 陌筱欷'),
+            (20, '︽詳情頁解析完成: $info'),
+            (20, '  作者: $author, 目錄: https://a.example/index/1'),
+          ],
+          requests: const [],
+        );
+
+    expect(
+      searchInfoMismatch(walked('目录', '《救命！》', '连山会')),
+      '搜尋結果第一本進了詳情頁，書名搜尋是「目录」、詳情頁是「《救命！》」',
+    );
+    expect(
+      searchInfoMismatch(walked('救命！', '救命！', '别人')),
+      '搜尋結果第一本進了詳情頁，作者搜尋是「连山会」、詳情頁是「别人」',
+    );
+    expect(searchInfoMismatch(walked('救命！', '救命！', '连山会')), isNull);
+    expect(
+      searchInfoMismatch(
+        const SourceProbeReport(logs: [(20, '︽詳情頁解析完成: 救命！')], requests: []),
+      ),
+      isNull,
+      reason: '從詳情開始試抓，沒有搜尋結果可比',
+    );
+  });
+
   test('a probe walks from search to content and keeps each page', () async {
     final report = await probeSource(
       source(),

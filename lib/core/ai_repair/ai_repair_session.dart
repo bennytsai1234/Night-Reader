@@ -970,6 +970,10 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 完整紀錄寫到對話的第幾句：每句只寫一次。
   int logged = 0;
 
+  /// 已經告訴過 AI 的書名、作者對不上（[searchInfoMismatch]）：同一件只說
+  /// 一次，AI 照原樣再試抓就照常交出。
+  final Set<String> _toldMismatches = {};
+
   BookSource get original => job.original;
 
   @override
@@ -989,6 +993,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     job._probe = s._withPageIds(job._firstProbe!);
     current = sourceForAi(original);
     logged = 0;
+    _toldMismatches.clear();
     s._finish(s._addStep(job, '重新開始（第 $attempt 次）', detail: why), why);
     s.log
       ..section('重新開始（第 $attempt 次）')
@@ -1240,6 +1245,12 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           s._finish(step, '$changed，$where試抓：$fact', failed: true);
           s.log.both('試抓：$fact');
           return AgentRejected('# 書源校驗沒過：$fact');
+        }
+        if (searchInfoMismatch(probe) case final fact?
+            when _toldMismatches.add(fact)) {
+          s._finish(step, '$changed，$where試抓：$fact');
+          s.log.both('試抓：$fact');
+          return answer(aiRepairNameMismatchReply(s._withPageIds(probe), fact));
         }
         s._finish(step, '$changed，$where試抓：${probe.summary}，交出');
         return submitted(

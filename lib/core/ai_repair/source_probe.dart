@@ -395,6 +395,42 @@ String? probeStart(
   };
 }
 
+/// 試抓從搜尋走進詳情時，搜尋結果第一本的書名、作者和詳情頁抓到的不一樣：
+/// 寫成一句告訴 AI 的事實；一樣或沒走到詳情是 null。書名加作者是夜讀認一本
+/// 書的依據（搜尋結果合併、換源、書籤）。2026-11-13 肉肉屋#3 的搜尋書名規則
+/// 抓到每一列的「目录」連結，20 本都叫「目录」，詳情頁卻是「《救命！…》」；
+/// 試抓與校驗都過，AI 沒有下一輪看到。
+String? searchInfoMismatch(SourceProbeReport probe) {
+  String? searchName, searchAuthor, infoName, infoAuthor;
+  var listed = false;
+  for (final (_, message) in probe.logs) {
+    if (message.startsWith('︽搜尋頁解析完成') || message.startsWith('︽發現頁解析完成')) {
+      listed = true;
+      continue;
+    }
+    if (listed && searchName == null) {
+      final first = RegExp(r'^\s*\[0\] (.*) - (.*)$').firstMatch(message);
+      if (first != null) {
+        searchName = first.group(1)!.trim();
+        searchAuthor = first.group(2)!.trim();
+      }
+    }
+    final info = RegExp(r'^︽詳情頁解析完成: (.*)$').firstMatch(message);
+    if (info != null) infoName = info.group(1)!.trim();
+    final author = RegExp(r'^\s*作者: (.*), 目錄: ').firstMatch(message);
+    if (author != null) infoAuthor = author.group(1)!.trim();
+  }
+  if (searchName == null || infoName == null) return null;
+  final parts = [
+    if (searchName != infoName) '書名搜尋是「$searchName」、詳情頁是「$infoName」',
+    if (infoAuthor != null &&
+        searchAuthor != '未知' &&
+        searchAuthor != infoAuthor)
+      '作者搜尋是「$searchAuthor」、詳情頁是「$infoAuthor」',
+  ];
+  return parts.isEmpty ? null : '搜尋結果第一本進了詳情頁，${parts.join('；')}';
+}
+
 /// 試抓到的正文頁有同一章的下一頁、試抓卻沒抓那一頁時，下一頁的網址；
 /// 沒有是 null。2026-11-12 下書網的 AI 交出的規則只抓到每章的前半頁
 /// （95393.html，後半在 95393_2.html），校驗照樣通過；11-13 另一次寫了

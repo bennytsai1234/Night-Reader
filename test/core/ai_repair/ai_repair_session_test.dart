@@ -130,6 +130,7 @@ void main() {
     SourceCheckIsolateResult? Function(BookSource source)? check,
     bool Function(BookSource source)? followsKeyword,
     Directory? logs,
+    SourceProbeReport Function(BookSource source)? probe,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -140,7 +141,7 @@ void main() {
           ? null
           : check?.call(source) ??
                 _checked(source, broken: broken[source.bookSourceUrl]),
-      probe: (source, _, {start}) async => _probe(source),
+      probe: (source, _, {start}) async => (probe ?? _probe)(source),
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
@@ -167,6 +168,37 @@ void main() {
       backups: backups,
     );
   }
+
+  test('a test whose search name differs from the detail page is shown to '
+      'the AI once before it goes in', () async {
+    // 2026-11-13 肉肉屋#3：20 本都叫「目录」，試抓與校驗都過，AI 沒有下一輪。
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test'), _command('test')],
+      probe: (_) => const SourceProbeReport(
+        logs: [
+          (10, '︽搜尋頁解析完成，獲取到 20 本書籍'),
+          (10, '  [0] 目录 - 连山会'),
+          (20, '︽詳情頁解析完成: 《救命！》'),
+          (20, '  作者: 连山会, 目錄: https://site.example/index/1'),
+          (40, '︽正文頁解析完成 (內容長度: 3214)'),
+          (1000, '︽解析完成'),
+        ],
+        requests: [],
+        contentUsable: true,
+      ),
+    );
+
+    await s.start();
+
+    expect(asked, hasLength(2));
+    expect(
+      asked.last.last.content,
+      contains('# 還沒交出：搜尋結果第一本進了詳情頁，書名搜尋是「目录」、詳情頁是「《救命！》」'),
+    );
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(applied, hasLength(1));
+  });
 
   test('a test that reaches the text goes straight to the check, which lets '
       'it in', () async {
