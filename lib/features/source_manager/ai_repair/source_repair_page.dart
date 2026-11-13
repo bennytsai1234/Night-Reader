@@ -321,6 +321,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       RepairOutcome.shared,
     });
     final gone = of(const {RepairOutcome.siteGone});
+    final goneLeft = _batch.goneLeft;
     final notFixed = of(const {RepairOutcome.notFixed});
     final skipped = of(const {RepairOutcome.skipped});
     final unfixable = of(const {RepairOutcome.aiUnfixable});
@@ -363,32 +364,33 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
           header: '修好了 · ${fixed.length}',
           children: [for (final item in fixed) _itemRow(item)],
         ),
-      if (gone.isNotEmpty)
-        if (_batch.goneDeleted)
-          GroupedSection(
-            children: [
+      if (gone.isNotEmpty && goneLeft.isEmpty)
+        GroupedSection(
+          children: [
+            GroupedRow(title: '網站不在了的 ${gone.length} 個已刪除', showChevron: false),
+          ],
+        )
+      else if (goneLeft.isNotEmpty)
+        GroupedSection(
+          header: '網站不在了 · ${goneLeft.length}',
+          footer: '已標「網站失效」，搜尋與閱讀不會用到。',
+          children: [
+            for (final item in goneLeft) _itemRow(item),
+            if (gone.length > goneLeft.length)
               GroupedRow(
-                title: '網站不在了的 ${gone.length} 個已刪除',
+                title: '已刪除 ${gone.length - goneLeft.length} 個',
                 showChevron: false,
               ),
-            ],
-          )
-        else
-          GroupedSection(
-            header: '網站不在了 · ${gone.length}',
-            footer: '已標「網站失效」，搜尋與閱讀不會用到。',
-            children: [
-              for (final item in gone) _itemRow(item),
-              GroupedRow(
-                title: '刪除這 ${gone.length} 個',
-                destructive: true,
-                showChevron: false,
-                onTap: _batch.isEditing
-                    ? null
-                    : () => unawaited(_delete(gone.length)),
-              ),
-            ],
-          ),
+            GroupedRow(
+              title: '刪除這 ${goneLeft.length} 個',
+              destructive: true,
+              showChevron: false,
+              onTap: _batch.isEditing
+                  ? null
+                  : () => unawaited(_delete(goneLeft.length)),
+            ),
+          ],
+        ),
       if (notFixed.isNotEmpty)
         GroupedSection(
           header: '沒修好 · ${notFixed.length}',

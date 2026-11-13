@@ -100,6 +100,9 @@ class RepairItem {
   /// 套用了同網站哪一個 AI 修好的規則（[RepairOutcome.shared]）。
   RepairItem? sharedFrom;
 
+  /// 網站不在了、已經刪掉了（[SourceRepairBatch.deleteGone]）。
+  bool deleted = false;
+
   bool get isFinished => outcome != null;
 }
 
@@ -179,9 +182,6 @@ class SourceRepairBatch extends ChangeNotifier {
   /// 沿用上次校驗結果、沒有重新校驗的書源數（[freshCheck]）。
   int reusedChecks = 0;
 
-  /// 網站不在了的那些已經刪掉（[deleteGone]）。
-  bool goneDeleted = false;
-
   /// 做完之後刪了幾次書源：書源管理看到它變了就重讀清單。
   int sourceEdits = 0;
 
@@ -238,6 +238,7 @@ class SourceRepairBatch extends ChangeNotifier {
       }
     } finally {
       for (final item in items) {
+        item.priorCheck = null;
         if (item.outcome == null) {
           item
             ..outcome = RepairOutcome.notTried
@@ -516,16 +517,23 @@ class SourceRepairBatch extends ChangeNotifier {
 
   // ── 做完之後：刪掉網站不在了的 ───────────────────────────────────────
 
-  /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。
+  /// 網站不在了、還沒刪的書源。
+  List<RepairItem> get goneLeft => [
+    for (final item in items)
+      if (item.outcome == RepairOutcome.siteGone && !item.deleted) item,
+  ];
+
+  /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。修到
+  /// 一半就刪的，之後才判定網站不在了的照樣列著、可以再刪。
   Future<void> deleteGone() async {
-    final gone = [
-      for (final item in items)
-        if (item.outcome == RepairOutcome.siteGone) item.source.bookSourceUrl,
-    ];
-    if (gone.isEmpty || goneDeleted || _editing) return;
-    await _edit(() => _delete(gone));
-    goneDeleted = true;
-    _notify();
+    final gone = goneLeft;
+    if (gone.isEmpty || _editing) return;
+    await _edit(() async {
+      await _delete([for (final item in gone) item.source.bookSourceUrl]);
+      for (final item in gone) {
+        item.deleted = true;
+      }
+    });
   }
 
   Future<void> _edit(Future<void> Function() work) async {

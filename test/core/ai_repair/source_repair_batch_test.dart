@@ -632,8 +632,28 @@ void main() {
     expect(deleted, [
       ['https://gone.example#a', 'https://gone.example#b'],
     ]);
-    expect(b.goneDeleted, isTrue);
+    expect(b.goneLeft, isEmpty);
     expect(b.sourceEdits, 1);
+  });
+
+  test('a site found gone after an earlier delete can still be deleted, '
+      'and only it is', () async {
+    final b = batch(
+      [_source('https://gone.example'), _source('https://later.example')],
+      sites: {'gone.example': const SiteCheck(SiteVerdict.gone, '網域查不到')},
+    );
+    await b.start();
+    await b.deleteGone();
+    // 修到一半就刪了；之後才判定網站不在了的那一個。
+    b.items[1].outcome = RepairOutcome.siteGone;
+
+    expect(b.goneLeft, [b.items[1]]);
+    await b.deleteGone();
+
+    expect(deleted, [
+      ['https://gone.example'],
+      ['https://later.example'],
+    ]);
   });
 
   test('sources that took the rules fixed for another source of the same site '

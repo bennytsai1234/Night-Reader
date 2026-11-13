@@ -266,46 +266,29 @@ class BookSourceService {
         .record(from: previousUrl, to: source.bookSourceUrl);
   }
 
-  /// 重複書源 [from] 併進 [into]（ADR 0062）：書架上的書、搜尋紀錄與快取的
-  /// 正文搬到 [into]，[from] 自己的分組併過去，[from] 刪掉。[into] 已經不在
-  /// 了就不動。
-  Future<void> mergeSources(List<String> from, String into) async {
-    final sourceDao = getIt<BookSourceDao>();
-    final target = await sourceDao.getByUrl(into);
-    if (target == null) return;
-    final merging = <String>[];
-    final books = <String>[];
-    for (final url in from) {
-      if (url == into) continue;
-      final source = await sourceDao.getByUrl(url);
-      final its = await getIt<BookDao>().bookUrlsFromOrigin(url);
-      // 書源已經刪了、書還記著它（同步先刪了它）也搬。
-      if (source == null && its.isEmpty) continue;
-      merging.add(url);
-      books.addAll(its);
-      if (source == null) continue;
-      target.addGroup(
-        (splitSourceGroups(source.bookSourceGroup)..removeAll([
-              ...sourceRuntimeStatusTags,
-              aiUnfixableSourceGroupTag,
-            ]))
-            .join(','),
-      );
-    }
-    if (merging.isEmpty) return;
+  /// 重複書源 [from] 併進 [into]（ADR 0062；做法見
+  /// [BookSourceDao.mergeInto]）。合併時暫停這些
+  /// 書的下載，記一筆書源搬家給同步。傳回真的併掉的網址。
+  Future<List<String>> mergeSources(List<String> from, String into) async {
+    final books = [
+      for (final url in from)
+        if (url != into) ...await getIt<BookDao>().bookUrlsFromOrigin(url),
+    ];
     final release = books.isEmpty
         ? null
         : await DownloadService().holdBooks(books);
+    final List<String> merged;
     try {
-      await sourceDao.mergeInto(merging, target);
+      merged = await getIt<BookSourceDao>().mergeInto(from, into);
     } finally {
       release?.call();
     }
     // 同步時別台照這份紀錄把併掉的書源的書搬過去（ADR 0039）。
     final moves = SourceMoves(await SharedPreferences.getInstance());
-    for (final url in merging) {
+    for (final url in merged) {
       await moves.record(from: url, to: into);
     }
+    return merged;
   }
 
   /// 依 URL 取得書源
