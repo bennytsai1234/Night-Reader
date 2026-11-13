@@ -17,6 +17,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
 /// 換頁動畫與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
@@ -427,21 +428,14 @@ class _StyleCard extends StatelessWidget {
             ),
             const SizedBox(height: labelGap),
             // 風格名稱固定一行；超出卡寬時可拖動查看，不折行或省略。
-            LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const ClampingScrollPhysics(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: Text(
-                    style.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    textAlign: TextAlign.center,
-                    style: labelStyle(selected: selected).copyWith(
-                      color: selected ? scheme.onSurface : chrome.sectionText,
-                    ),
-                  ),
+            DragOverflowText(
+              child: Text(
+                style.label,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: labelStyle(selected: selected).copyWith(
+                  color: selected ? scheme.onSurface : chrome.sectionText,
                 ),
               ),
             ),
