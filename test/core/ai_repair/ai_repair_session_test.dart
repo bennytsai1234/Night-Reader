@@ -138,6 +138,7 @@ void main() {
     bool Function(BookSource source)? followsKeyword,
     Directory? logs,
     SourceProbeReport Function(BookSource source)? probe,
+    bool stopWhenHealthy = false,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -163,6 +164,7 @@ void main() {
         );
       },
       recheckDelay: Duration.zero,
+      stopWhenHealthy: stopWhenHealthy,
       ask: (messages, _) async {
         asked.add(List.of(messages));
         // 回覆用完：測試寫錯了，不讓它一直問下去。
@@ -175,6 +177,28 @@ void main() {
       backups: backups,
     );
   }
+
+  test(
+    'a batch repair whose opening check passes ends without asking the AI',
+    () async {
+      // 2026-11-13 手機實跑：整批沿用一天內的校驗結論，4 件開場就沒問題，照樣
+      // 問了 32 輪。
+      final s = session(
+        [_source('https://site.example', content: 'class.txt@text')],
+        replies: const [],
+        stopWhenHealthy: true,
+      );
+
+      await s.start();
+
+      expect(asked, isEmpty);
+      expect(s.job.foundHealthy, isTrue);
+      expect(s.job.explanation, '重新校驗就沒問題了');
+      expect(s.job.outcome, isNull);
+      expect(applied, isEmpty);
+      expect([for (final step in s.job.steps) step.title], ['校驗原本的書源']);
+    },
+  );
 
   test(
     'a test whose search name differs from the detail page says so',

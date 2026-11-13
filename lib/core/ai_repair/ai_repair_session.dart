@@ -56,6 +56,9 @@ class AiRepairJob {
   final List<AiRepairStep> steps = [];
   AiRepairOutcome? outcome;
 
+  /// 開場重新校驗就沒問題了，沒有問 AI（[AiRepairSession.stopWhenHealthy]）。
+  bool foundHealthy = false;
+
   /// 結果的說明：AI 最後說的話，或卡在哪。
   String? explanation;
 
@@ -167,6 +170,7 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairBackups? backups,
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
+    this.stopWhenHealthy = false,
     bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
@@ -198,6 +202,12 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
   final Duration recheckDelay;
+
+  /// 開場重新校驗沒問題就結束、不問 AI（[AiRepairJob.foundHealthy]）：整批
+  /// 修復用。整批沿用一天內的校驗結論送來，這裡是第二次校驗；2026-11-13 手機
+  /// 實跑有 4 件開場就沒問題，照樣問了 32 輪（笔趣阁#81 還套用了沒有用的改動）。
+  /// 使用者自己點的單件修復照樣問：校驗看不出的問題（例如書名抓錯）也要修。
+  final bool stopWhenHealthy;
 
   /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
   final bool Function() _hasBudget;
@@ -402,14 +412,24 @@ class AiRepairSession extends ChangeNotifier {
     // 校驗只看搜尋有沒有回書：原本的書源抓的就是頁面上固定的書時，開場就
     // 說，AI 才會連搜尋一起修（2026-11-12 涨姿势兩次都是修好正文、交出被退
     // 才知道網站的 ?s= 一律回首頁）。搜不到書時不多搜。
+    bool? follows;
     if ((original.searchUrl ?? '').trim().isNotEmpty) {
-      final follows = await _guard(() => _keywordCheck(original, _cancelToken));
+      follows = await _guard(() => _keywordCheck(original, _cancelToken));
       if (_stopped) return;
       if (follows == false) {
         const fact = '$aiRepairUnrelatedSearch（用「$nonsenseKeyword」搜尋也得到同樣的書）';
         job._checkResult = '${job._checkResult}\n\n$fact';
         log.both(fact);
       }
+    }
+
+    if (stopWhenHealthy && (checked?.isHealthy ?? false) && follows != false) {
+      job
+        ..foundHealthy = true
+        ..explanation = '重新校驗就沒問題了';
+      _logOutcome('重新校驗就沒問題了，沒有問 AI');
+      _notify();
+      return;
     }
 
     final fetchStep = _addStep(job, '抓網頁');

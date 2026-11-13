@@ -391,7 +391,16 @@ class SourceRepairBatch extends ChangeNotifier {
       await session.start();
       final job = session.job;
       final fixed = job.repairedSource;
-      if (job.outcome == AiRepairOutcome.repaired && fixed != null) {
+      if (job.foundHealthy) {
+        _finish(lead, RepairOutcome.healthy, '重新校驗就沒問題了');
+        for (final item in others) {
+          _finish(
+            item,
+            RepairOutcome.notTried,
+            '同網站的「${lead.source.bookSourceName}」重新校驗就沒問題了，這次沒修',
+          );
+        }
+      } else if (job.outcome == AiRepairOutcome.repaired && fixed != null) {
         _finish(lead, RepairOutcome.aiFixed, job.explanation ?? 'AI 修好了');
         lead.source = fixed;
         await _share(lead, others, fixed);
@@ -591,6 +600,7 @@ class SourceRepairBatch extends ChangeNotifier {
       AiRepairSession(
         source: source,
         service: service,
+        stopWhenHealthy: true,
         hasBudget: () => _hasBudget,
         onUsage: (usage) {
           final used = usage.prompt + usage.completion;
