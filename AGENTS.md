@@ -31,7 +31,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試：在整個 `test/` grep 改到的類別與函式，引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
+- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試：在整個 `test/` grep 改到的類別與函式，改掉或拿掉的輸出文字也 grep 那段字本身（測試常直接比對它），引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
 - 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
 - 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。

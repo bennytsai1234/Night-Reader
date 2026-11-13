@@ -162,7 +162,7 @@ class SourceProbeReport {
 
 /// 開一個書源 worker 試抓 [source]（同書源校驗，ADR 0033）：用 [keyword]
 /// 搜尋，從第一本書一路抓到第一章正文。[keyword] 照書源除錯的寫法也可以
-/// 從中間開始：詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
+/// 從中間開始：`::發現頁網址`、詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
 /// worker，傳回 [SourceProbeReport.timedOut]；[cancelToken] 取消時也是。
 Future<SourceProbeReport> probeSource(
   BookSource source, {
@@ -366,109 +366,12 @@ Future<bool> searchFollowsKeyword(
   }
 }
 
-/// 用網站自己發現頁上確實有的一本書搜一次的結果（[searchKnownTitle]）：
-/// [limited] 是搜那本書時網站限流說的話（請求紀錄的「網站限流」），沒被擋
-/// 是 null。
-typedef KnownTitleSearch = ({
-  String title,
-  String from,
-  bool found,
-  String? limited,
-});
-
-/// 原本的關鍵字搜不到書時，從網站自己的發現頁拿第一本書的書名，用 [source]
-/// 的搜尋規則搜它：搜不到，表示網站上有的書這個搜尋規則找不到（規則錯，或
-/// 網站的搜尋本身不理關鍵字）；搜得到，表示規則與網站都正常。2026-11-13
-/// 蜘蛛小說網的 AI 每次要花 5 到 10 輪自己做這個比對。在書源 worker 裡做、
-/// 記下請求：開場已經搜了好幾次，限流的網站這次可能被擋，被擋的寫成限流，
-/// 不寫成規則找不到。沒有發現頁、發現頁沒有書、出錯或逾時是 null。
-Future<KnownTitleSearch?> searchKnownTitle(
-  BookSource source, {
-  required Duration timeout,
-  CancelToken? cancelToken,
-  @visibleForTesting Future<DriftIsolate>? database,
-}) async {
-  if ((source.searchUrl ?? '').trim().isEmpty) return null;
-  final SourceWorker worker;
-  try {
-    worker = await SourceWorker.spawn(
-      debugName: 'KnownTitle',
-      withDictionaries: false,
-      database: database,
-    );
-  } catch (error) {
-    AppLog.d('用發現頁的書名搜尋開不起來: $error');
-    return null;
-  }
-  try {
-    if (cancelToken?.isCancelled ?? false) return null;
-    unawaited(
-      cancelToken?.whenCancel.then((_) => worker.kill(StateError('已停止'))),
-    );
-    final map = await worker
-        .run(_knownTitleTask(source.toJson(), timeout))
-        .timeout(timeout * 3, onTimeout: () => const {});
-    final title = map['title'] as String?;
-    if (title == null) return null;
-    return (
-      title: title,
-      from: map['from'] as String? ?? '',
-      found: map['found'] == true,
-      limited: map['limited'] as String?,
-    );
-  } catch (error) {
-    AppLog.d('用發現頁的書名搜尋沒做成: $error');
-    return null;
-  } finally {
-    worker.kill(StateError('用發現頁的書名搜尋已結束'));
-  }
-}
-
-/// 只捕捉資料（`CODING_STANDARDS.md` 背景執行）。
-Future<Map<String, Object?>> Function(CancelToken) _knownTitleTask(
-  Map<String, dynamic> sourceJson,
-  Duration timeout,
-) => (cancelToken) async {
-  final source = BookSource.fromJson(sourceJson);
-  final service = BookSourceService();
-  final kinds = await service
-      .exploreKinds(source.exploreUrl, source: source)
-      .timeout(timeout);
-  for (final kind in kinds) {
-    final url = kind.url?.trim() ?? '';
-    if (url.isEmpty) continue;
-    final books = await service
-        .exploreBooks(source, url, cancelToken: cancelToken)
-        .timeout(timeout);
-    final title = books.firstOrNull?.name.trim() ?? '';
-    if (title.isEmpty) continue;
-    final requests = RequestLog(
-      responsePreview: SourceProbeReport.responsePreview,
-    );
-    final found = await requests.run(
-      () => service
-          .searchBooks(source, title, cancelToken: cancelToken)
-          .timeout(timeout),
-    );
-    final limited = [
-      for (final line in requests.lines)
-        ?RegExp(r'網站限流：([^）]*)').firstMatch(line)?.group(1),
-    ].firstOrNull;
-    return {
-      'title': title,
-      'from': kind.title,
-      'found': found.any((book) => book.name.trim() == title),
-      'limited': limited,
-    };
-  }
-  return const {};
-};
-
 /// 不可能搜到書的詞。
 const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
 
 /// 試抓從哪一段開始時傳給 [probeSource] 的 keyword：`search` 用 [keyword]
-/// 搜尋，`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的寫法）。
+/// 搜尋，`explore`、`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的
+/// 寫法；發現頁照 exploreUrl 的寫法原樣交給除錯解析）。
 /// [url] 是相對網址時照 [baseUrl]（書源網址）補成完整的：書源除錯同 Legado，
 /// 不是 http 開頭的會當成搜尋關鍵字（2026-11-12 AI 給 `/551874.html` 從詳情頁
 /// 試抓，結果拿它去搜尋）。不認得的段或少了網址是 null。
@@ -480,6 +383,9 @@ String? probeStart(
 }) {
   if (from == 'search') return keyword;
   if (url == null || url.trim().isEmpty) return null;
+  // 發現頁照 exploreUrl 的寫法（可以是相對網址、帶 {{page}}），由除錯照書源
+  // 解析（同 Legado `Debug` 的 `::網址`）。
+  if (from == 'explore') return '::${url.trim()}';
   final page = NetworkUtils.getAbsoluteURL(baseUrl, url);
   return switch (from) {
     'info' => page,

@@ -159,7 +159,7 @@ final class AiFetch extends AiRepairCommand {
   final String note;
 }
 
-/// 拿改過的書源試抓一次：從 [from]（`search`、`info`、`toc`、`content`）
+/// 拿改過的書源試抓一次：從 [from]（`search`、`explore`、`info`、`toc`、`content`）
 /// 開始，搜尋以外的段從 [url] 那一頁開始。
 final class AiTest extends AiRepairCommand {
   const AiTest(this.change, this.note, {this.from = 'search', this.url});
@@ -517,9 +517,13 @@ const String _method =
 ## 怎麼查
 - 先看開場的校驗結果與試抓：哪一段失敗、網站實際回了什麼。網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，才查網址、參數、標頭或網站本身。
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
-- 改規則前先用 parse 在已經抓到的頁面上試，抓得到再 test：parse 不連網站，test 會連，網站可能限流。
-- 請求紀錄裡回應後面括號寫著「網站防護頁」「用程式轉到…」或「網站限流」時，那頁不是內容：防護頁看能不能照它要的（例如寫入 Cookie）通過，轉址頁照轉去的網址查，限流的等它說的間隔過了再送一次同一個請求（試抓與校驗也會送，算在裡面）；還是限流就用 give_up 的 rate_limited 放棄：限流到這樣，一般使用拿不到結果，找得到繞過的寫法也算壞了。
+- 改了規則就 test：一次從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；要確認後面幾段，從那一段 test。parse 不連網站，只在已經抓到的那頁試解析，網站在限流時用它。
+- 要試的是書源本身的設定（Cookie 罐、標頭、網址參數、編碼）時，寫進 patch 直接 test：比自己寫程式一步步模擬快，送出的也是夜讀實際會送的樣子。
+- 網站對請求直接斷線、逾時或連回應都沒有時，先換送出的條件試：User-Agent（手機、桌機）、http 或 https、有沒有 www；換了哪一項就通，就把那一項寫進書源。
+- 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，還是被擋就用 give_up 的 rate_limited 放棄，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
+- 這個網站做不到書源要的某一段時，開場列出的別的網域可能是同一個網站的其他網址（鏡像、新網域、姊妹站）：先拿同一本書到那個網域看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域。
 - 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上或都轉到別處時，開場列出的別的網域試過就夠。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 - 書源規則只放書源要用的規則；要跑程式查東西用 js。
 ''';
@@ -647,12 +651,14 @@ final List<AiTool> aiRepairTools = [
         'patch': _patch,
         'from': {
           'type': 'string',
-          'enum': ['search', 'info', 'toc', 'content'],
+          'enum': ['search', 'explore', 'info', 'toc', 'content'],
           'description': '從哪一段開始，預設 search（用試抓的關鍵字搜尋）',
         },
         'url': {
           'type': 'string',
-          'description': 'from 不是 search 時要給：詳情頁、目錄頁或正文頁的網址',
+          'description':
+              'from 不是 search 時要給：發現頁（照 exploreUrl 裡的寫法）、詳情頁、'
+              '目錄頁或正文頁的網址',
         },
         'note': _note,
       },
@@ -668,9 +674,7 @@ final List<AiTool> aiRepairTools = [
   ),
   (
     name: 'give_up',
-    description:
-        '放棄：拿出修不好的證據。除了 site_gone，還沒看網頁、跑程式、試抓或交出'
-        '過就放棄會被退回一次。',
+    description: '放棄：拿出修不好的證據。',
     parameters: _object(
       {
         'why': {
@@ -682,8 +686,8 @@ final List<AiTool> aiRepairTools = [
               '書源的書？login：內容要登入帳號才給？paid：內容要付費才給？'
               'human_check：這個網站自己的頁面要真人驗證，驗證過後給的是這個網站的內容？'
               'blocked：網站擋下夜讀的所有請求？'
-              'rate_limited：請求紀錄寫著「網站限流」，等過它說的間隔再送還是被擋'
-              '（功能壞掉的一種：一般使用拿不到結果）？'
+              'rate_limited：網站要你隔一段時間再來，等過它說的間隔再送同一個請求'
+              '還是被擋（功能壞掉的一種：一般使用拿不到結果）？'
               'site_broken：網站在、其他頁面正常，書源要用的功能網站自己也做不到'
               '（例如搜什麼都回空的搜尋頁；網站另有做得到的地方，像 API 或別的網址，'
               '就不算）？',
@@ -753,9 +757,7 @@ bool _exploreBorrowsSearch(BookSource source) =>
 
 /// 發現頁沒有自己的書單規則、借用搜尋規則時告訴 AI 的話：開場一次，改了
 /// 搜尋規則、只剩發現頁壞時再說一次。
-const String aiRepairExploreBorrowsSearch =
-    '這個書源的發現沒有自己的書單規則，發現頁用搜尋規則解析：改了搜尋規則，'
-    '發現頁跟著受影響';
+const String aiRepairExploreBorrowsSearch = '這個書源的發現沒有自己的書單規則，發現頁用搜尋規則解析';
 
 /// 搜尋規則抓到的是頁面上固定的書時的話：交出的書源，與開場原本的書源。
 const String aiRepairUnrelatedSearch =
@@ -778,9 +780,6 @@ String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
 
 /// 工具呼叫讀不懂時回給 AI 的話的開頭。
 const String aiRepairBadCall = '# 讀不懂這個工具呼叫';
-
-/// 只看了開場就放棄時退回的話。
-const String aiRepairGiveUpPushBack = '# 放棄被退回：還沒有自己查過網站或試過修改（看網頁、跑程式、試抓、交出）';
 
 /// 改過的書源組不起來時回給它的話。
 const String aiRepairBadSourceReply =
