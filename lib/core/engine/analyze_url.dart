@@ -757,6 +757,10 @@ class AnalyzeUrl {
       method: method,
       headers: requestHeaders,
       responseType: ResponseType.bytes,
+      // 轉址由 AppInterceptor 一跳一跳跟（同 Legado 的 OkHttp）：每一跳照它的
+      // 網址載入 Cookie 罐、記進請求紀錄，書源給的 Cookie 跟著走。HTTP 套件
+      // 自己跟時，換了網址的開頭就把 Cookie 丟掉。
+      followRedirects: false,
       // 書源沒開 Cookie 罐時網站回的 Cookie 不存（同 Legado `setCookie`）。
       extra: LenientCookieManager.sourceExtra(source?.enabledCookieJar == true),
     );

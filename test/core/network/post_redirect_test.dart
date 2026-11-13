@@ -43,6 +43,41 @@ void main() {
     await server.close(force: true);
   });
 
+  test('the cookie the source sends follows a GET redirect to another site, '
+      'like Legado', () async {
+    // 2026-11-13 美亿言情：書源帶 Cookie __sc_clearance=1 過網站的檢查頁，
+    // http 轉到 https 時 Cookie 被丟掉，照樣被擋。Legado（OkHttp）轉址只拿掉
+    // Authorization。這裡用另一個連接埠當成換了網址的開頭。
+    final other = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => other.close(force: true));
+    final otherUrl = 'http://${other.address.address}:${other.port}';
+    String? cookieThere;
+    String? authorizationThere;
+    other.listen((request) async {
+      cookieThere = request.headers.value(HttpHeaders.cookieHeader);
+      authorizationThere = request.headers.value(
+        HttpHeaders.authorizationHeader,
+      );
+      request.response.write('passed');
+      await request.response.close();
+    });
+    requestHandler = (request) async {
+      request.response.statusCode = HttpStatus.found;
+      request.response.headers.set(HttpHeaders.locationHeader, '$otherUrl/s');
+      await request.response.close();
+    };
+
+    final response = await AnalyzeUrl(
+      '$baseUrl/s,{"headers":{"Cookie":"__sc_clearance=1",'
+      '"Authorization":"Bearer x"}}',
+    ).getStrResponse();
+
+    expect(response.body, 'passed');
+    expect(cookieThere, contains('__sc_clearance=1'));
+    expect(authorizationThere, isNull, reason: '換了網址只拿掉 Authorization');
+    expect(response.isRedirect, isTrue);
+  });
+
   test('AnalyzeUrl follows POST 302 redirect as GET', () async {
     final requests = <String>[];
     String? postBody;

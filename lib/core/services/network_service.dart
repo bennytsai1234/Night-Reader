@@ -57,6 +57,7 @@ class NetworkService {
       InterceptorsWrapper(
         onRequest: (options, handler) {
           options.path = NetworkUtils.toRequestUrl(options.path);
+          AppInterceptor.rememberSourceCookie(options);
           handler.next(options);
         },
       ),
