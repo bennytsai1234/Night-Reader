@@ -56,8 +56,11 @@
       "name": "🙈PO站",
       "url": "https://www.jile1.com",
       "expected": "unfixable",
-      "why": "site_gone",
-      "evidence": "2026-11-13 curl：https（www.jile1.com 與 jile1.com）連線被拒；http 的首頁、搜尋（GET 與 POST）、不存在的網址都回同一份 2191 位元組的頁，內容只有混淆過的轉址程式，用 node 執行後轉到亂數子網域的 .xyz 垃圾站（網域被拿去轉址了）。網站不在了。",
+      "why": [
+        "site_gone",
+        "human_check"
+      ],
+      "evidence": "2026-11-13 curl：https（www.jile1.com 與 jile1.com）連線被拒；http 的首頁、搜尋（GET 與 POST）、不存在的網址都回同一份 2191 位元組的頁，內容只有混淆過的轉址程式，用 node 執行後轉到亂數子網域的 .xyz 垃圾站（網域被拿去轉址了）。網站不在了。每個網址最後落到另一個網域的「Ages 18+」掃碼驗證頁：可能是網域被拿去轉址，也可能是網站自己的防封鎖跳轉（掃碼後回原站），curl 分不出來。使用者 2026-11-13 定：網站不在了與要真人驗證都算對。",
       "confirmed": true
     },
     {

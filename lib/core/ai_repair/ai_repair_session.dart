@@ -27,6 +27,7 @@ import 'ai_repair_secrets.dart';
 import 'ai_repair_settings.dart';
 import 'repair_pages.dart';
 import 'repair_rule_tools.dart';
+import 'opening_facts.dart';
 import 'source_probe.dart';
 
 /// 一步的狀態：還沒開始、做著、做完、失敗。
@@ -436,6 +437,11 @@ class AiRepairSession extends ChangeNotifier {
       .._probe = _withPageIds(probe);
     _finish(fetchStep, _fetchText(probe));
     _logProbe('${_seconds(probeWatch)}：${_fetchText(probe)}', probe);
+    // 程式讀得到、AI 要好幾輪才推得出來的事實，寫進開場。
+    for (final fact in openingFacts(original, probe)) {
+      job._checkResult = '${job._checkResult}\n\n$fact';
+      log.both(fact);
+    }
 
     if (await _searchStaysLimited(job, probe)) return;
     if (_stopped) return;
@@ -1339,7 +1345,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         if (from != 'search' && start == null) {
           return invalid(
             '試抓的 from 不對，或少了 url',
-            '# 讀不懂這個 test：from 要是 search、info、toc 或 content，'
+            '# 讀不懂這個 test：from 要是 search、explore、info、toc 或 content，'
                 '不是 search 時要有 url',
           );
         }

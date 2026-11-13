@@ -480,6 +480,9 @@ String? probeStart(
 }) {
   if (from == 'search') return keyword;
   if (url == null || url.trim().isEmpty) return null;
+  // 發現頁照 exploreUrl 的寫法（可以是相對網址、帶 {{page}}），由除錯照書源
+  // 解析（同 Legado `Debug` 的 `::網址`）。
+  if (from == 'explore') return '::${url.trim()}';
   final page = NetworkUtils.getAbsoluteURL(baseUrl, url);
   return switch (from) {
     'info' => page,
