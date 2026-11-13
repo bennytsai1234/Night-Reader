@@ -93,15 +93,17 @@ class ExploreBookItem extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: DragOverflowText(child: Text(
-                            context.zh(book.name),
-                            style: AppTextStyles.bodyBase.copyWith(
-                              height: 1.3,
-                              color: scheme.onSurface,
-                              fontWeight: FontWeight.w600,
+                          child: DragOverflowText(
+                            child: Text(
+                              context.zh(book.name),
+                              style: AppTextStyles.bodyBase.copyWith(
+                                height: 1.3,
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 2,
                             ),
-                            maxLines: 2,
-                          )),
+                          ),
                         ),
                         if (isInBookshelf) ...[
                           const SizedBox(width: AppSpacing.sm),
@@ -114,21 +116,25 @@ class ExploreBookItem extends StatelessWidget {
                       width: double.infinity,
                       height: metaLineHeight,
                       child: _withExtras(
-                        (book) => DragOverflowText(child: Text(
-                          metaOf(context, book),
-                          style: metaStyle,
-                          maxLines: 1,
-                        )),
+                        (book) => DragOverflowText(
+                          child: Text(
+                            metaOf(context, book),
+                            style: metaStyle,
+                            maxLines: 1,
+                          ),
+                        ),
                       ),
                     ),
                     if (book.latestChapterTitle != null &&
                         book.latestChapterTitle!.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      DragOverflowText(child: Text(
-                        '最新：${context.zh(book.latestChapterTitle!)}',
-                        style: metaStyle,
-                        maxLines: 1,
-                      )),
+                      DragOverflowText(
+                        child: Text(
+                          '最新：${context.zh(book.latestChapterTitle!)}',
+                          style: metaStyle,
+                          maxLines: 1,
+                        ),
+                      ),
                     ],
                   ],
                 ),
