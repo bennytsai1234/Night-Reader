@@ -24,7 +24,7 @@ class SourceSync extends SyncKind {
     BookDao? bookDao,
     SharedPreferences? prefs,
     Future<void> Function(BookSource source, String previousUrl)? move,
-    Future<void> Function(List<String> from, String into)? merge,
+    Future<List<String>> Function(List<String> from, String into)? merge,
   }) : _dao = dao ?? getIt<BookSourceDao>(),
        _bookDao = bookDao ?? getIt<BookDao>(),
        _moves = SourceMoves(prefs ?? getIt<SharedPreferences>()),
@@ -35,7 +35,7 @@ class SourceSync extends SyncKind {
   final BookDao _bookDao;
   final SourceMoves _moves;
   final Future<void> Function(BookSource source, String previousUrl) _move;
-  final Future<void> Function(List<String> from, String into) _merge;
+  final Future<List<String>> Function(List<String> from, String into) _merge;
 
   static Future<void> _saveEdited(BookSource source, String previousUrl) =>
       BookSourceService().saveEditedSource(source, previousUrl: previousUrl);
@@ -89,6 +89,7 @@ class SourceSync extends SyncKind {
     ];
     final before = await _byUrl();
     final upserts = <BookSource>[];
+    final merges = <String, List<String>>{};
     final applied = <String, SyncRecord>{};
     var changed = deleted.any(before.containsKey);
     for (final MapEntry(:key, value: record) in remote.entries) {
@@ -116,26 +117,36 @@ class SourceSync extends SyncKind {
       } else {
         upserts.add(source);
       }
-      // 另一台把重複書源併進這一個（ADR 0062）：這台也有這一個，併掉的那些
-      // 這台還有、或還有書記著它們，照樣併過來，書才不會留在刪掉的書源上。
-      if (existing != null) {
-        final merged = <String>[];
-        for (final url in movedFrom) {
-          if (before.containsKey(url) ||
-              (await _bookDao.bookUrlsFromOrigin(url)).isNotEmpty) {
-            merged.add(url);
-          }
-        }
-        if (merged.isNotEmpty) {
-          await _merge(merged, key);
-          changed = true;
+      // 這台記的和另一台記的取聯集：各自併過不同的書源時，兩邊的歷史都留著，
+      // 送回去之後兩台一樣。
+      final history = {...?_moves.read()[key], ...movedFrom}.toList()
+        ..remove(key);
+      if (history.isNotEmpty) await _moves.set(key, history);
+      // 另一台把重複書源併進這一個（ADR 0062）：搬家只搬一個以前的網址，
+      // 其他這台還有、或還有書記著的，等這一個寫進去之後照合併併過來，書
+      // 才不會留在刪掉的書源上。
+      final others = <String>[];
+      for (final url in movedFrom) {
+        if (url == previous) continue;
+        if (before.containsKey(url) ||
+            (await _bookDao.bookUrlsFromOrigin(url)).isNotEmpty) {
+          others.add(url);
         }
       }
-      if (movedFrom.isNotEmpty) await _moves.set(key, movedFrom);
+      if (others.isNotEmpty) merges[key] = others;
       // 這次寫進去的樣子，不重讀：寫完才又被編輯的，下次同步比得出來。
-      applied[key] = recordOf(source, movedFrom: movedFrom);
+      applied[key] = recordOf(source, movedFrom: history);
     }
     if (upserts.isNotEmpty) await _dao.upsertAll(upserts);
+    for (final MapEntry(key: into, value: from) in merges.entries) {
+      if ((await _merge(from, into)).isEmpty) continue;
+      changed = true;
+      // 併過來的分組與搬家紀錄（合併記的是兩台的聯集）都在這一筆裡。
+      final merged = await _dao.getByUrl(into);
+      if (merged != null) {
+        applied[into] = recordOf(merged, movedFrom: _moves.read()[into]);
+      }
+    }
     if (deleted.isNotEmpty) await _dao.deleteByUrls(deleted);
     for (final url in deleted) {
       applied[url] = const SyncRecord(time: 0, data: {}, deleted: true);

@@ -9,6 +9,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/services/source_dedupe.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
@@ -56,6 +57,28 @@ void main() {
         _s('https://m.site.example'),
         _s('本地書源'),
         _s('本地書源#2'),
+      ]);
+
+      expect(groups, isEmpty);
+    });
+
+    test('the site is the host: options after a comma, the user part before '
+        '@ and the port do not count', () {
+      expect(
+        siteHost('https://www.site.example,{"webView":true}'),
+        'www.site.example',
+      );
+      expect(siteHost('https://reader,one@alpha.example/x'), 'alpha.example');
+      expect(siteHost('https://reader,two@beta.example/x'), 'beta.example');
+      expect(siteHost('HTTPS://Site.Example:8080#a'), 'site.example');
+      expect(siteHost('本地書源'), isNull);
+    });
+
+    test('an aggregate source and an ordinary one of the same site are not '
+        'duplicates', () {
+      final groups = duplicateSourceGroups([
+        _s('https://site.example#a'),
+        _s('https://site.example#b')..jsLib = 'function m(){ book.type = 64; }',
       ]);
 
       expect(groups, isEmpty);
@@ -128,6 +151,25 @@ void main() {
       expect(book!.origin, 'https://site.example#a');
     });
 
+    test('nothing is merged while a batch job works on the sources', () async {
+      await getIt<BookSourceDao>().upsertAll([
+        _s('https://site.example#a'),
+        _s('https://site.example#b'),
+      ]);
+
+      expect(await mergeDuplicateSources(idle: () => false), 0);
+      expect(await getIt<BookSourceDao>().getAllPart(), hasLength(2));
+    });
+
+    test('only what was really merged is counted', () async {
+      await getIt<BookSourceDao>().upsertAll([
+        _s('https://site.example#a'),
+        _s('https://site.example#b'),
+      ]);
+
+      expect(await mergeDuplicateSources(merge: (_, _) async => const []), 0);
+    });
+
     test('opening the source manager merges duplicates and says so', () async {
       await getIt<BookSourceDao>().upsertAll([
         _s('https://site.example#a'),
@@ -194,6 +236,74 @@ void main() {
         'https://site.example/book/1',
       );
       expect(book!.origin, 'https://site.example#a');
+    });
+
+    test('a merge from the other phone into a source new here keeps every '
+        'merged source\'s books, the groups only this phone had, and the '
+        'history of earlier merges', () async {
+      final dao = getIt<BookSourceDao>();
+      final prefs = getIt<SharedPreferences>();
+      await dao.upsertAll([
+        _s('https://site.example#b', group: '只在這台'),
+        _s('https://site.example#c'),
+      ]);
+      await SourceMoves(prefs)
+          .record(from: 'https://site.example#x', to: 'https://site.example#c');
+      for (final (i, origin) in [
+        'https://site.example#b',
+        'https://site.example#c',
+      ].indexed) {
+        await getIt<BookDao>().upsert(
+          Book(
+            bookUrl: 'https://site.example/book/$i',
+            name: '書$i',
+            origin: origin,
+          ),
+        );
+      }
+
+      final applied = await SourceSync(prefs: prefs).apply({
+        'https://site.example#a': SourceSync.recordOf(
+          _s('https://site.example#a', group: '遠端'),
+          movedFrom: ['https://site.example#b', 'https://site.example#c'],
+        ),
+        'https://site.example#b': const SyncRecord(
+          time: 0,
+          data: {},
+          deleted: true,
+        ),
+        'https://site.example#c': const SyncRecord(
+          time: 0,
+          data: {},
+          deleted: true,
+        ),
+      });
+
+      expect(
+        [for (final s in await dao.getAllPart()) s.bookSourceUrl],
+        ['https://site.example#a'],
+      );
+      for (final i in [0, 1]) {
+        final book = await getIt<BookDao>().getByUrl(
+          'https://site.example/book/$i',
+        );
+        expect(book!.origin, 'https://site.example#a');
+      }
+      final kept = (await dao.getByUrl('https://site.example#a'))!;
+      expect(kept.bookSourceGroup, contains('只在這台'));
+      expect(
+        SourceMoves(prefs).read()['https://site.example#a'],
+        containsAll([
+          'https://site.example#b',
+          'https://site.example#c',
+          'https://site.example#x',
+        ]),
+      );
+      expect(
+        applied['https://site.example#a']!.data['bookSourceGroup'],
+        contains('只在這台'),
+        reason: '送回同步的是合併後的樣子',
+      );
     });
   });
 }

@@ -8,6 +8,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/services/source_dedupe.dart';
@@ -353,9 +354,13 @@ class SourceManagerProvider with ChangeNotifier {
   bool _isBatchOperationInProgress = false;
   bool get isBatchOperationInProgress => _isBatchOperationInProgress;
   final Set<String> _pendingSourceMutations = <String>{};
+
+  /// 讀清單時正在併重複書源（ADR 0062）：這段時間其他改書源的動作等它。
+  bool _mergingDuplicates = false;
   bool get _hasActiveMutation =>
       _isBatchOperationInProgress ||
       checkService.isChecking ||
+      _mergingDuplicates ||
       _pendingSourceMutations.isNotEmpty;
   bool get isMutationBusy => _isLoading || _hasActiveMutation;
 
@@ -635,17 +640,25 @@ class SourceManagerProvider with ChangeNotifier {
     try {
       var loadedSources = await _dao.getAllPart();
       if (_disposed || generation != _loadGeneration) return;
-      // 重複書源每次讀清單都併（ADR 0062）；校驗、修復這類批次工作在改
-      // 書源時不動，等它們做完重讀時再併。
-      if (!checkService.isChecking &&
-          !_hasActiveMutation &&
-          backgroundWorkIdle() &&
+      // 重複書源每次讀清單都併（ADR 0062）。書源管理自己在改書源時不併；
+      // 校驗、修復這類批次工作在跑時由 [mergeDuplicateSources] 擋下，等它們
+      // 做完重讀時再併。
+      if (!_hasActiveMutation &&
           duplicateSourceGroups(loadedSources).isNotEmpty) {
-        final merged = await _mergeDuplicates(loadedSources);
+        _mergingDuplicates = true;
+        final int merged;
+        try {
+          merged = await _mergeDuplicates(loadedSources);
+        } finally {
+          _mergingDuplicates = false;
+        }
         if (_disposed) return;
         if (merged > 0) {
           lastMergedDuplicates = merged;
           duplicatesMerged.value++;
+        }
+        if (generation != _loadGeneration) return;
+        if (merged > 0) {
           loadedSources = await _dao.getAllPart();
           if (_disposed || generation != _loadGeneration) return;
         }
@@ -744,15 +757,8 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  String getSourceHost(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final host = uri.host.trim();
-      return host.isEmpty ? '其他' : host;
-    } catch (_) {
-      return '其他';
-    }
-  }
+  /// 「按域名分組」的組：和重複書源同一個分法（[siteHost]，ADR 0062）。
+  String getSourceHost(String url) => siteHost(url) ?? '其他';
 
   bool shouldShowHostHeaderAt(int index) {
     final visible = sources;
