@@ -733,11 +733,13 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      DragOverflowText(child: Text(
-                        title,
-                        maxLines: 2,
-                        style: _titleStyle.copyWith(color: scheme.onSurface),
-                      )),
+                      DragOverflowText(
+                        child: Text(
+                          title,
+                          maxLines: 2,
+                          style: _titleStyle.copyWith(color: scheme.onSurface),
+                        ),
+                      ),
                       const SizedBox(height: AppSpacing.sm),
                       ClipRRect(
                         borderRadius: AppRadius.pillShape,
@@ -752,11 +754,13 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: DragOverflowText(child: Text(
-                              status,
-                              maxLines: 2,
-                              style: _smallStyle.copyWith(color: statusColor),
-                            )),
+                            child: DragOverflowText(
+                              child: Text(
+                                status,
+                                maxLines: 2,
+                                style: _smallStyle.copyWith(color: statusColor),
+                              ),
+                            ),
                           ),
                           if (downloading) ...[
                             const SizedBox(width: AppSpacing.md),
@@ -771,11 +775,13 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                       ),
                       if (failure != null) ...[
                         const SizedBox(height: AppSpacing.xs),
-                        DragOverflowText(child: Text(
-                          failure,
-                          maxLines: 2,
-                          style: _smallStyle.copyWith(color: context.danger),
-                        )),
+                        DragOverflowText(
+                          child: Text(
+                            failure,
+                            maxLines: 2,
+                            style: _smallStyle.copyWith(color: context.danger),
+                          ),
+                        ),
                       ],
                     ],
                   ),
