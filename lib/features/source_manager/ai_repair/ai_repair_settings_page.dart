@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/ai_repair/ai_connection_check.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -103,8 +104,8 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     setState(() => _testing = true);
     try {
       await _settings.save(service);
-      await AiChatClient(service).complete([const AiMessage.user('只回覆 OK')]);
-      if (mounted) _say('連得上：${service.model}');
+      await verifyAiToolConnection(AiChatClient(service));
+      if (mounted) _say('連線與工具呼叫正常：${service.model}');
     } on AiServiceException catch (error) {
       if (mounted) _say(error.message);
     } catch (error) {
