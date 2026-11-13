@@ -20,6 +20,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});
@@ -385,21 +386,19 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      DragOverflowText(child: Text(
                         _name,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: _nameStyle.copyWith(color: scheme.onSurface),
-                      ),
+                      )),
                       const SizedBox(height: _patternGap),
-                      Text(
+                      DragOverflowText(child: Text(
                         _pattern,
                         maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: _patternStyle.copyWith(
                           color: chrome.sectionText,
                         ),
-                      ),
+                      )),
                       const SizedBox(height: _chipGap),
                       Wrap(
                         spacing: _chipGap,
