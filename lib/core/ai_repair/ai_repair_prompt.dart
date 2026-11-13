@@ -496,11 +496,12 @@ const String _rules = '''
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
-  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，書源開了 Cookie 罐（enabledCookieJar）時再加上網站存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
   - 沒有 Android 的類別（android.util.Base64 這類）。字串是 JS 字串：長度是 .length，不是 Java 的 .length()。報「TypeError: not a function」多半是把回應物件當字串用（少了 .body()）、對字串呼叫 Java 的方法，或用了這裡沒有的函式。
+- enabledCookieJar（Cookie 罐）：1 時網站回的 Cookie 存下來，這個書源之後的請求都帶上，網站靠工作階段 Cookie 記住驗證、登入或搜尋狀態時要開；0 時網站回的 Cookie 不存，每個請求都像第一次來（請求紀錄會寫出沒存的 Cookie）。cookie.setCookie 存的兩種都帶。
 - 名稱、分組這些不用改，夜讀會照原本的；只改需要改的規則，其他照原樣留著。網站搬了家，或只有某個開頭（https、有沒有 www、新網域）連得上時，可以改 bookSourceUrl 的開頭（https://網域），後面的部分夜讀照原本的；書架上用這個書源的書會跟著搬。
 ''';
 
@@ -668,8 +669,9 @@ final List<AiTool> aiRepairTools = [
           'type': 'string',
           'enum': aiGiveUpLabels.keys.toList(),
           'description':
-              '原因：site_gone 網站不在了或只剩停放頁、login 要登入、paid 要付費、'
-              'human_check 要真人在網頁上驗證、blocked 擋下所有請求、'
+              '原因：site_gone 網站不在了：網域查不到、只剩停放頁，或每個網址最後落到的'
+              '頁面都沒有這個書源的書、login 要登入、paid 要付費、'
+              'human_check 要真人在這個網站的網頁上驗證、blocked 擋下所有請求、'
               'site_broken 網站在、其他頁面正常，書源要用的功能網站自己也做不到'
               '（例如搜什麼都回空的搜尋頁；網站另有做得到的地方，像 API 或別的網址，'
               '就不算）、rate_limited 網站限流：功能壞掉的一種，被限流到一般使用拿'

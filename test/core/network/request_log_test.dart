@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:fast_gbk/fast_gbk.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/request_log.dart';
 
 Response<dynamic> _response(String url, int status, Object? data) =>
@@ -13,6 +14,31 @@ Response<dynamic> _response(String url, int status, Object? data) =>
     );
 
 void main() {
+  test('網站寫了 Cookie、書源沒開 Cookie 罐時，回應那一行寫出沒存的 Cookie 名稱', () async {
+    Response<dynamic> withCookie({required bool jar}) => Response<dynamic>(
+      requestOptions: RequestOptions(
+        path: 'http://m.site.example/shuku/1.html',
+        extra: LenientCookieManager.sourceExtra(jar),
+      ),
+      statusCode: 200,
+      data: 'ok',
+      headers: Headers.fromMap({
+        HttpHeaders.setCookieHeader: ['PHPSESSID=abc; path=/', 'v=1'],
+      }),
+    );
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    await log.run(() async {
+      recordResponse(withCookie(jar: false));
+      recordResponse(withCookie(jar: true));
+    });
+
+    expect(log.lines, [
+      '  ← http://m.site.example/shuku/1.html 200 '
+          '（網站寫了 Cookie PHPSESSID、v，書源沒開 Cookie 罐，沒存），2 字：ok',
+      '  ← http://m.site.example/shuku/1.html 200，2 字：ok',
+    ]);
+  });
+
   test('each response names its URL, since replies can come back out of '
       'order', () async {
     final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);

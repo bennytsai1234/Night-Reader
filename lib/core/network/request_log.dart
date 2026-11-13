@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/network/page_notes.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
@@ -232,13 +233,35 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   final status = response.statusCode;
   final type = response.headers.value(Headers.contentTypeHeader);
   final cache = _cacheNote(response.headers);
+  final dropped = _droppedCookieNote(response);
   final head =
       '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
-      '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}';
+      '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}'
+      '${dropped == null ? '' : ' $dropped'}';
   final empty = _recordBody(log, head, response.data, status: status);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
+}
+
+/// 網站寫了 Cookie、書源沒開 Cookie 罐所以沒存時（[LenientCookieManager.
+/// saveResponseCookiesKey]），寫出是哪幾個，例如「（網站寫了 Cookie
+/// PHPSESSID，書源沒開 Cookie 罐，沒存）」：靠工作階段過驗證頁的網站
+/// （2026-11-13 QQ文学网的發現頁）每次都像第一次來，看不到這句不知道為什麼。
+/// 只寫名稱，值可能是登入狀態（ADR 0054）。
+String? _droppedCookieNote(Response<dynamic> response) {
+  if (response.requestOptions.extra[LenientCookieManager
+          .saveResponseCookiesKey] !=
+      false) {
+    return null;
+  }
+  final names = {
+    for (final value in response.headers[HttpHeaders.setCookieHeader] ?? [])
+      if (value.split('=').first.trim() case final name when name.isNotEmpty)
+        name,
+  };
+  if (names.isEmpty) return null;
+  return '（網站寫了 Cookie ${names.join('、')}，書源沒開 Cookie 罐，沒存）';
 }
 
 /// 回應是網站前面的快取伺服器給的時，寫出快取的狀態，例如「（快取 HIT，

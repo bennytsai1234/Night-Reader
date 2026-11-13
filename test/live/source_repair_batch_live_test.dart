@@ -172,7 +172,11 @@ void main() {
           'stats': item.session?.stats?.toMap(),
         },
     ];
-    final score = [for (final item in cases) _score(item, batch.items)];
+    // 書源照案件集的順序挑出來，修復項目也是同樣的順序：照位置配對（換了網址
+    // 的書源沒有 AI 的修復紀錄，網址已經跟案件集的不一樣）。
+    final score = [
+      for (final (i, item) in cases.indexed) _score(item, batch.items[i]),
+    ];
     File(out).writeAsStringSync(
       jsonEncode({
         'ms': watch.elapsedMilliseconds,
@@ -206,13 +210,7 @@ void main() {
 /// `minContentChars` 的，最後一次試抓到的正文要夠長（只抓到半章的不算）；
 /// 預期修不好、又寫了 `why` 的，放棄的原因要是其中一個（[_why]；`why` 是一個
 /// 或一串：同一個判定底下的細分類都算對，例如網站限流是功能壞掉的一種）。
-Map<String, Object?> _score(Map<String, dynamic> item, List<RepairItem> items) {
-  final repaired = items.firstWhere(
-    (i) =>
-        i.source.bookSourceName == item['name'] &&
-        (i.source.bookSourceUrl == item['url'] ||
-            i.session?.job.original.bookSourceUrl == item['url']),
-  );
+Map<String, Object?> _score(Map<String, dynamic> item, RepairItem repaired) {
   final verdict = _verdict(repaired);
   final chars = [
     for (final step in repaired.session?.job.steps ?? const <AiRepairStep>[])
