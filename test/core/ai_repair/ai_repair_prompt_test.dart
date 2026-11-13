@@ -3,6 +3,7 @@ import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/chapter_content_kind.dart';
 
 BookSource _source() => BookSource(
   bookSourceUrl: 'https://site.example',
@@ -112,6 +113,31 @@ void main() {
         }
       }
     });
+
+    test('every give-up reason is explained where the AI picks it', () {
+      final giveUp = aiRepairTools.singleWhere((t) => t.name == 'give_up');
+      final why = (giveUp.parameters['properties']! as Map)['why'] as Map;
+      expect(why['enum'], aiGiveUpLabels.keys.toList());
+      for (final key in aiGiveUpLabels.keys) {
+        expect(why['description'], contains('$key：'), reason: key);
+      }
+    });
+
+    test(
+      'the AI is told how fetched content counts, with the check numbers',
+      () {
+        // 2026-11-13 涨姿势：AI 不知道正文怎樣算抓到，花四輪猜門檻。
+        expect(
+          aiRepairSystemPrompt,
+          allOf(
+            contains('小說去掉圖片後至少 $chapterTextMinRunes 字'),
+            contains('至少 ${ChapterContentKind.novelMinRunes} 字是小說'),
+            contains('至少 ${ChapterContentKind.comicMinImages} 張圖'),
+            contains('give_up 的 not_a_book'),
+          ),
+        );
+      },
+    );
 
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {

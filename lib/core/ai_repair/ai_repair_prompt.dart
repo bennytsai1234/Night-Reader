@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/chapter_content_kind.dart';
 
 import 'ai_chat_client.dart';
 import 'repair_pages.dart';
@@ -228,6 +229,7 @@ const Map<String, String> aiGiveUpLabels = {
   'paid': '要付費',
   'human_check': '要真人在網頁上驗證',
   'blocked': '網站擋下所有請求',
+  'not_a_book': '內容不是書',
   'site_broken': '網站的功能壞了',
   'rate_limited': '網站限流',
 };
@@ -497,9 +499,11 @@ Map<String, Object?> _flatten(Map<String, dynamic> json, [String prefix = '']) {
   return out;
 }
 
-const String _rules = '''
+const String _rules =
+    '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
+  - 正文怎樣算抓到（試抓與校驗都照這個）：小說去掉圖片後至少 $chapterTextMinRunes 字，整章只有圖不算；漫畫至少一張圖；有聲至少一個網址。校驗也照抓到的正文改類型：去掉圖片與網址後至少 ${ChapterContentKind.novelMinRunes} 字是小說，至少 ${ChapterContentKind.comicMinImages} 張圖、不到 ${ChapterContentKind.comicMaxRunes} 字是漫畫，其他照書源原本的類型。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
@@ -523,6 +527,7 @@ const String _method =
 - 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，還是被擋就用 give_up 的 rate_limited 放棄，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
 - 這個網站做不到書源要的某一段時，開場列出的別的網域可能是同一個網站的其他網址（鏡像、新網域、姊妹站）：先拿同一本書到那個網域看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域。
 - 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 網站的內容不是小說、漫畫或有聲書時（例如一篇貼文當一本書的段子、新聞站，有的文章只有圖、有的只有字），用 give_up 的 not_a_book 放棄：不為了過校驗改類型，也不只抓其中一種文章。
 - 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上或都轉到別處時，開場列出的別的網域試過就夠。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 - 書源規則只放書源要用的規則；要跑程式查東西用 js。
@@ -686,6 +691,8 @@ final List<AiTool> aiRepairTools = [
               '書源的書？login：內容要登入帳號才給？paid：內容要付費才給？'
               'human_check：這個網站自己的頁面要真人驗證，驗證過後給的是這個網站的內容？'
               'blocked：網站擋下夜讀的所有請求？'
+              'not_a_book：網站的內容不是小說、漫畫或有聲書（例如一篇貼文當一本書的'
+              '段子、新聞站）？'
               'rate_limited：網站要你隔一段時間再來，等過它說的間隔再送同一個請求'
               '還是被擋（功能壞掉的一種：一般使用拿不到結果）？'
               'site_broken：網站在、其他頁面正常，書源要用的功能網站自己也做不到'
