@@ -16,6 +16,28 @@ BookSource _source() => BookSource(
 );
 
 void main() {
+  test(
+    'the opening says why the source was sent: what the last check found',
+    () {
+      // 2026-11-13 品书楼：開場重新校驗沒問題，AI 不知道為什麼送來，每段都查。
+      const probe = SourceProbeReport(logs: [], requests: []);
+      String opening(BookSource source) => aiRepairOpening(
+        source: source,
+        checkResult: '沒有問題',
+        probe: probe,
+      ).last.content;
+
+      final sent = _source()
+        ..bookSourceGroup = '異常,搜尋失效'
+        ..bookSourceComment = '// Error: 搜尋: 搜尋結果為空 (我的)';
+      expect(
+        opening(sent),
+        contains('# 送來修的原因\n上一次校驗的結論：搜尋失效：搜尋: 搜尋結果為空 (我的)。'),
+      );
+      expect(opening(_source()), isNot(contains('送來修的原因')));
+    },
+  );
+
   test('the opening lists the fetched pages without their text; the '
       'clipboard prompt keeps the text', () {
     const probe = SourceProbeReport(

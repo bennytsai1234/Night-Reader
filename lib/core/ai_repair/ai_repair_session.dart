@@ -637,11 +637,19 @@ class AiRepairSession extends ChangeNotifier {
       job._committing = false;
     }
     _finish(step, checkText);
+    // 交出的規則和原本一樣（2026-11-13 品书楼：AI 查過每一段都沒問題）：照樣
+    // 存回去拿掉舊的標記，但不說修好了。
+    final unchanged = changedParts(job.original, candidate).isEmpty;
+    final result = unchanged ? 'AI 查過，沒有要改的規則；重新校驗沒有問題' : '修好了，已套用';
+    final explanation = [
+      if (unchanged) 'AI 查過，沒有要改的規則',
+      if (note.isNotEmpty) 'AI：$note',
+    ].join('\n');
     job
       ..outcome = AiRepairOutcome.repaired
       ..repairedSource = saved
-      ..explanation = note.isEmpty ? null : 'AI：$note';
-    _logOutcome('修好了，已套用${note.isEmpty ? '' : '\nAI：$note'}');
+      ..explanation = explanation.isEmpty ? null : explanation;
+    _logOutcome('$result${note.isEmpty ? '' : '\nAI：$note'}');
     _notify();
     return null;
   }

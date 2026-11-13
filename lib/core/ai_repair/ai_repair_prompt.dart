@@ -758,8 +758,27 @@ String _situation(BookSource source, String checkResult, String probe) =>
     // 改了搜尋規則、發現頁跟著壞，原本要等交件被退才知道（2026-11-12、13
     // 涨姿势三次都是這樣）。
     '${_exploreBorrowsSearch(source) ? '$aiRepairExploreBorrowsSearch\n\n' : ''}'
+    '${_sentBecause(source)}'
     '# 書源校驗的結果\n$checkResult\n\n'
     '# 試抓這個書源\n$probe';
+
+/// 書源上次校驗留下的結論（狀態標記與錯誤註解）：整批修復沿用一天內的
+/// 校驗送來，開場那次校驗可能已經沒問題（網站時好時壞）。2026-11-13 品书楼
+/// 開場就沒問題，AI 不知道為什麼送來，把每一段都查了一遍（8 輪）。沒有留下
+/// 結論是空字串。
+String _sentBecause(BookSource source) {
+  final health = source.runtimeHealth;
+  final error = source.errorComment;
+  if (health.category == SourceHealthCategory.healthy && error == null) {
+    return '';
+  }
+  final label = health.category == SourceHealthCategory.healthy
+      ? ''
+      : health.label;
+  final detail = [label, ?error].join('：');
+  return '# 送來修的原因\n上一次校驗的結論：$detail。開場重新校驗的結果在下面；'
+      '兩次不一樣時，先照上一次壞的那一段查。\n\n';
+}
 
 bool _exploreBorrowsSearch(BookSource source) =>
     (source.exploreUrl ?? '').trim().isNotEmpty &&

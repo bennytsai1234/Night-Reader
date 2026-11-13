@@ -176,6 +176,26 @@ void main() {
     );
   }
 
+  test('a hand-in that changes no rule is not called fixed', () async {
+    // 2026-11-13 品书楼：AI 查過每一段都沒問題，原本照樣寫「修好了」。
+    final s = session(
+      [_source('https://site.example', content: 'class.txt@text')],
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(s.job.outcome, AiRepairOutcome.repaired);
+    expect(s.job.explanation, 'AI 查過，沒有要改的規則\nAI：每一段都正常');
+    expect(s.log.summary, contains('AI 查過，沒有要改的規則；重新校驗沒有問題'));
+  });
+
   test(
     'a test whose search name differs from the detail page says so',
     () async {
