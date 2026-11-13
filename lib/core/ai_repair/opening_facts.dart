@@ -111,6 +111,14 @@ String? otherDomainsFact(BookSource source, SourceProbeReport probe) {
         count(match.group(1), base);
       }
     }
+    // 網頁文字裡寫出來的網址也算：肉肉屋的姊妹站只出現在頁尾的「Powered by
+    // 免费小说网（https://www.17ed.com）」。
+    for (final element in document.querySelectorAll('script, style')) {
+      element.remove();
+    }
+    for (final match in _textUrl.allMatches(document.body?.text ?? '')) {
+      count(match.group(0), base);
+    }
   }
   if (counts.isEmpty) return null;
   final top = counts.entries.toList()
@@ -121,5 +129,8 @@ String? otherDomainsFact(BookSource source, SourceProbeReport probe) {
 
 /// 寫在程式裡的完整網址（轉址程式、`uaredirect("…")` 這類）。
 final RegExp _scriptUrl = RegExp(r'''["'](https?://[^"'\s<>]+)["']''');
+
+/// 文字裡的網址：到空白、引號、括號或全形標點為止。
+final RegExp _textUrl = RegExp(r'''https?://[^\s"'<>()（）、，。]+''');
 
 const int _maxDomains = 6;

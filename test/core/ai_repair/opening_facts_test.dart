@@ -65,19 +65,22 @@ void main() {
   test('開場的網頁連到的別的網域照次數列，同一個網站的子網域不算', () {
     // 2026-11-13 肉肉屋：封面圖在姊妹站的網域。
     final fact = otherDomainsFact(
-      BookSource(bookSourceUrl: 'https://www.rourou.example'),
+      BookSource(bookSourceUrl: 'https://www.site.example'),
       _probe(
         'text/html',
         '<img src="https://img.sister.example/a.jpg">'
             '<img src="https://img.sister.example/b.jpg">'
-            '<a href="https://m.rourou.example/x">手機版</a>'
+            '<a href="https://m2.site.example/x">手機版</a>'
             '<a href="/book/1">書</a>'
-            '<script>uaredirect("https://m.mirror.example/book/1");</script>',
+            '<script>uaredirect("https://m.mirror.example/book/1");</script>'
+            '<p>Powered by 免费小说网（https://www.footer.example）</p>',
       ),
     );
     expect(fact, contains('img.sister.example 2'));
     expect(fact, contains('m.mirror.example 1'));
-    expect(fact, isNot(contains('rourou.example')));
+    expect(fact, contains('www.footer.example 1'), reason: '文字裡寫出的網址也算');
+    expect(fact, isNot(contains('site.example 1')));
+    expect(fact, isNot(contains('m2.site.example')));
   });
 
   test('網址不同、內容一字不差的頁面標出是哪一頁', () {
