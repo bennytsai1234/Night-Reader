@@ -76,6 +76,31 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   Future<void> upsert(Book book) =>
       into(books).insertOnConflictUpdate(_row(book));
 
+  /// 編輯書名／作者時，書籤與標註跟著同一筆書改身分。
+  /// 三者在同一交易內，避免書已改名但標記還留在舊名字。
+  Future<void> upsertEditedBookInfo(Book previous, Book next) {
+    return transaction(() async {
+      await upsert(next);
+      if (previous.recordName == next.recordName &&
+          previous.author == next.author) {
+        return;
+      }
+      await appDatabase.bookmarkDao.renameBook(
+        fromName: previous.recordName,
+        fromAuthor: previous.author,
+        toName: next.recordName,
+        toAuthor: next.author,
+      );
+      await appDatabase.highlightDao.renameBook(
+        fromName: previous.recordName,
+        fromAuthor: previous.author,
+        toName: next.recordName,
+        toAuthor: next.author,
+      );
+    });
+  }
+
+
   Future<void> upsertAll(List<Book> bookList) async {
     await batch(
       (b) => b.insertAllOnConflictUpdate(books, bookList.map(_row).toList()),
