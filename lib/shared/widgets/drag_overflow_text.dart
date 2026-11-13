@@ -23,9 +23,7 @@ class DragOverflowText extends StatelessWidget {
         final painter = TextPainter(
           text: TextSpan(
             style: defaults.style.merge(child.style),
-            children: [
-              child.textSpan ?? TextSpan(text: child.data),
-            ],
+            children: [child.textSpan ?? TextSpan(text: child.data)],
           ),
           textAlign: child.textAlign ?? defaults.textAlign ?? TextAlign.start,
           textDirection: child.textDirection ?? Directionality.of(context),
@@ -34,8 +32,7 @@ class DragOverflowText extends StatelessWidget {
           strutStyle: child.strutStyle,
           textHeightBehavior:
               child.textHeightBehavior ?? defaults.textHeightBehavior,
-          textWidthBasis:
-              child.textWidthBasis ?? defaults.textWidthBasis,
+          textWidthBasis: child.textWidthBasis ?? defaults.textWidthBasis,
           maxLines: child.maxLines ?? defaults.maxLines,
           ellipsis: '…',
         )..layout(maxWidth: constraints.maxWidth);
