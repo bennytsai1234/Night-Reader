@@ -865,12 +865,14 @@ class _InfoRow extends StatelessWidget {
       final Text text when !skeleton => DragOverflowText(child: text),
       _ => item,
     };
-    final left = reveal(masked(
-      _itemWidget(context, slots.left, progress, title, TextAlign.left),
-    ));
-    final right = reveal(masked(
-      _itemWidget(context, slots.right, progress, title, TextAlign.right),
-    ));
+    final left = reveal(
+      masked(_itemWidget(context, slots.left, progress, title, TextAlign.left)),
+    );
+    final right = reveal(
+      masked(
+        _itemWidget(context, slots.right, progress, title, TextAlign.right),
+      ),
+    );
     // 整列讀成一句：每個欄位自己帶讀屏文字，時鐘與電量跟著自己的更新重算，
     // 不必等這一列因為進度或換章重建。骨架不提供語意。
     Widget semantics({required Widget child}) => skeleton
