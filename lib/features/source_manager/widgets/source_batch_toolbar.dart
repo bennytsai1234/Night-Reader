@@ -9,6 +9,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 
 import '../source_manager_provider.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 書源管理底部的浮動玻璃工具列（有書源時一直在）— 對標 legado SelectActionBar。
 /// 提供反選、刪除與其餘批次操作選單；全選放在導航頁首。
@@ -95,13 +96,12 @@ class SelectActionBar extends StatelessWidget {
                     : null,
               ),
               Expanded(
-                child: Text(
+                child: DragOverflowText(child: Text(
                   selectionLabel,
                   textAlign: TextAlign.center,
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.uiSm.copyWith(color: chrome.sectionText),
-                ),
+                )),
               ),
               _BarTextButton(
                 label: '刪除',
