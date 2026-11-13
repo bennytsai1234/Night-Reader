@@ -30,13 +30,69 @@ const String kReaderV2PunctFontFamily = 'NightReaderPunct';
 /// 數字維持原本的系統字型。
 const List<String> kReaderV2FontFamilyFallback = <String>['sans-serif'];
 
-/// 標點字型之後的字族清單：選了下載的字型（[family]，ADR 0045）時排在
-/// 平台預設（Android 的 `sans-serif` 只有 Roboto，沒有漢字）後面，英數字照舊
-/// 用系統字型、照 ADR 0007 補半格，漢字才落到下載的字型；思源宋體自己的英數字
-/// 吃了 `fwid` 會變成全形。那套字型沒有的字（例如子集外的罕見字）照樣交給平台。
+/// 英數字與符號在標點字型之後的字族清單：選了下載的字型（[family]，
+/// ADR 0045）時排在平台預設後面，英數字照舊用系統字型、照 ADR 0007 補
+/// 半格；思源宋體自己的英數字吃了 `fwid` 會變成全形。漢字等中日文字改用
+/// [readerV2CjkFontFallback]，見 [readerV2CjkRuns]。
 List<String> readerV2FontFallback(String? family) => family == null
     ? kReaderV2FontFamilyFallback
     : <String>[...kReaderV2FontFamilyFallback, family];
+
+/// 中日文字（[isReaderV2CjkRune]）在標點字型之後的字族清單：下載的字型
+/// 排在平台預設前面。字型清單是「第一套有這個字的勝出」，有些手機的
+/// `sans-serif` 自己就有漢字，排在後面的下載字型就輪不到。那套字型沒有的
+/// 字（例如子集外的罕見字）照樣交給平台。
+List<String> readerV2CjkFontFallback(String? family) => family == null
+    ? kReaderV2FontFamilyFallback
+    : <String>[family, ...kReaderV2FontFamilyFallback];
+
+/// 字族進排版身分（版面簽章、骨架版面鍵、段落量測的指紋）時用的名字；
+/// 系統字型是 null。下載的字型帶上分段選字的版本：舊的換行是照「系統
+/// 字型在前」量的。
+String? readerV2FontFamilySignature(String? family) =>
+    family == null ? null : '$family+cjk-first-v1';
+
+/// 中日文字：CJK 部首、符號與標點、假名、注音、漢字（含擴充區與相容
+/// 字）、直排與相容形式、全形與半形字形。其餘的字（英數字、西文標點、
+/// 一般符號）照舊系統字型在前。
+bool isReaderV2CjkRune(int rune) =>
+    (rune >= 0x2E80 && rune <= 0x9FFF) ||
+    (rune >= 0xF900 && rune <= 0xFAFF) ||
+    (rune >= 0xFE10 && rune <= 0xFE1F) ||
+    (rune >= 0xFE30 && rune <= 0xFE4F) ||
+    (rune >= 0xFF00 && rune <= 0xFFEF) ||
+    (rune >= 0x20000 && rune <= 0x3FFFF);
+
+/// 接在前一個字後面、和它組成同一個字的碼位：異體字選擇符與組合符號。
+/// 不能和前一個字拆成兩段字樣，否則異體字選不到。
+bool _continuesGrapheme(int rune) =>
+    (rune >= 0xFE00 && rune <= 0xFE0F) ||
+    (rune >= 0xE0100 && rune <= 0xE01EF) ||
+    (rune >= 0x0300 && rune <= 0x036F) ||
+    (rune >= 0x1AB0 && rune <= 0x1AFF) ||
+    (rune >= 0x1DC0 && rune <= 0x1DFF) ||
+    (rune >= 0x20D0 && rune <= 0x20FF) ||
+    (rune >= 0xFE20 && rune <= 0xFE2F);
+
+/// [text] 裡連續的中日文字範圍（UTF-16，遞增、不重疊）；接在中日文字後面的
+/// 異體字選擇符與組合符號算進同一段。
+List<({int start, int end})> readerV2CjkRuns(String text) {
+  final result = <({int start, int end})>[];
+  var index = 0;
+  int? runStart;
+  for (final rune in text.runes) {
+    if (isReaderV2CjkRune(rune) ||
+        (runStart != null && _continuesGrapheme(rune))) {
+      runStart ??= index;
+    } else if (runStart != null) {
+      result.add((start: runStart, end: index));
+      runStart = null;
+    }
+    index += rune > 0xFFFF ? 2 : 1;
+  }
+  if (runStart != null) result.add((start: runStart, end: index));
+  return result;
+}
 
 // lastline-v1 為已移除的末行字距補償所留；保留字串以免無謂地讓既有
 // metrics 快取失效。

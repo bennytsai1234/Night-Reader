@@ -76,7 +76,7 @@ final class ReaderSkeletonPage {
       style.bold,
       style.titleBold,
       style.titleCenter,
-      style.fontFamily,
+      readerV2FontFamilySignature(style.fontFamily),
       style.textIndent,
       style.titleFontSize,
       style.titleSpacing,

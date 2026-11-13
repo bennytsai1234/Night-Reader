@@ -97,10 +97,10 @@ PageLines pageLinesAt({
 }
 
 /// 正文的字樣（標點字型在前，與段落排版相同），用來查標點的筆畫位置
-/// （[PunctuationInk]）。
+/// （[PunctuationInk]）。量的標點幾乎都是中日文字，用中日文字的字族。
 TextStyle readerSkeletonInkStyle(ReaderV2LayoutSpec spec) => TextStyle(
   fontFamily: kReaderV2PunctFontFamily,
-  fontFamilyFallback: readerV2FontFallback(spec.style.fontFamily),
+  fontFamilyFallback: readerV2CjkFontFallback(spec.style.fontFamily),
   fontWeight: spec.style.bold ? FontWeight.bold : FontWeight.normal,
   fontFeatures: kReaderV2CjkFontFeatures,
   locale: kReaderV2TextLocale,

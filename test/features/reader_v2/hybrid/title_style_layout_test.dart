@@ -107,15 +107,18 @@ void main() {
     paragraph.dispose();
   });
 
-  test('a downloaded font comes after the system Latin font', () {
+  test('a downloaded font comes after the system font for Latin and before '
+      'it for CJK', () {
     final system = HybridBlockTextStyle.fromLayoutStyle(_layoutStyle());
     final kai = HybridBlockTextStyle.fromLayoutStyle(
       _layoutStyle(fontFamily: 'NightReaderWenKaiTC'),
       isTitle: true,
     );
     expect(system.fontFamilyFallback, ['sans-serif']);
-    // 英數字照舊用系統字型（Android 的 sans-serif 沒有漢字），漢字才落到下載的字型。
+    expect(system.cjkFontFamilyFallback, ['sans-serif']);
+    // 英數字照舊用系統字型；中日文字讓下載的字型先選，系統字型自帶漢字也輪得到。
     expect(kai.fontFamilyFallback, ['sans-serif', 'NightReaderWenKaiTC']);
+    expect(kai.cjkFontFamilyFallback, ['NightReaderWenKaiTC', 'sans-serif']);
   });
 
   test('only titles take the title weight and alignment', () {

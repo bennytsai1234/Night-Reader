@@ -352,7 +352,7 @@ class ReaderV2LayoutSpec {
       style.bold,
       style.titleBold,
       style.titleCenter,
-      style.fontFamily,
+      readerV2FontFamilySignature(style.fontFamily),
       style.titleFontSize,
       style.titleSpacing,
       kReaderV2CjkTypographyFeatureSignature,

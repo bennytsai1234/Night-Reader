@@ -944,6 +944,7 @@ class _InfoRow extends StatelessWidget {
       return _ReaderClock(
         format: _clockFormat(shell.use24HourClock),
         textAlign: align,
+        fontFamily: shell.fontFamily,
       );
     }
     if (item.isBattery) {
@@ -953,9 +954,10 @@ class _InfoRow extends StatelessWidget {
         fontSize: shell.infoFontSize,
       );
     }
-    return Text(
+    return _infoText(
       _itemText(context, item, progress, title) ?? '',
-      textAlign: align,
+      align,
+      shell.fontFamily,
     );
   }
 
@@ -1161,11 +1163,36 @@ final DateFormat _clock12 = DateFormat('h:mm');
 DateFormat _clockFormat(bool use24HourClock) =>
     use24HourClock ? _clock24 : _clock12;
 
+/// 資訊列的一段字。選了下載的字型（[fontFamily]）時，中日文字另用下載
+/// 字型在前的字族，英數字照舊系統字型在前，同正文（[readerV2CjkRuns]）。
+Widget _infoText(String text, TextAlign align, String? fontFamily) {
+  if (fontFamily == null) return Text(text, textAlign: align);
+  final cjk = TextStyle(
+    fontFamilyFallback: readerV2CjkFontFallback(fontFamily),
+  );
+  final spans = <InlineSpan>[];
+  var cursor = 0;
+  for (final run in readerV2CjkRuns(text)) {
+    if (run.start > cursor) {
+      spans.add(TextSpan(text: text.substring(cursor, run.start)));
+    }
+    spans.add(TextSpan(text: text.substring(run.start, run.end), style: cjk));
+    cursor = run.end;
+  }
+  if (cursor < text.length) spans.add(TextSpan(text: text.substring(cursor)));
+  return Text.rich(TextSpan(children: spans), textAlign: align);
+}
+
 class _ReaderClock extends StatefulWidget {
-  const _ReaderClock({required this.format, required this.textAlign});
+  const _ReaderClock({
+    required this.format,
+    required this.textAlign,
+    required this.fontFamily,
+  });
 
   final DateFormat format;
   final TextAlign textAlign;
+  final String? fontFamily;
 
   @override
   State<_ReaderClock> createState() => _ReaderClockState();
@@ -1210,7 +1237,7 @@ class _ReaderClockState extends State<_ReaderClock> {
     return Semantics(
       label: '時間 $time',
       excludeSemantics: true,
-      child: Text(time, textAlign: widget.textAlign),
+      child: _infoText(time, widget.textAlign, widget.fontFamily),
     );
   }
 }
