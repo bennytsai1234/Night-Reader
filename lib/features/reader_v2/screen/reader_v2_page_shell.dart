@@ -838,6 +838,12 @@ class _InfoRow extends StatelessWidget {
     Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
       (null, _) || (_, null) => child,
       (final color?, Text(:final data?)) => SkeletonText(data, color: color),
+      // 選了下載字型時字分段（[_infoText]）；骨架照系統字型在前量，中文字
+      // 在中文字型裡都是一格寬，長度不變。
+      (final color?, Text(:final textSpan?)) => SkeletonText(
+        textSpan.toPlainText(),
+        color: color,
+      ),
       // 只有圖示的欄位（自動翻頁、只有電池、數字畫在電池裡）置中在列上，
       // 不跟字的位置。
       (final color?, final Icon child) => _InfoItemSkeleton(
@@ -944,7 +950,6 @@ class _InfoRow extends StatelessWidget {
       return _ReaderClock(
         format: _clockFormat(shell.use24HourClock),
         textAlign: align,
-        fontFamily: shell.fontFamily,
       );
     }
     if (item.isBattery) {
@@ -1163,8 +1168,9 @@ final DateFormat _clock12 = DateFormat('h:mm');
 DateFormat _clockFormat(bool use24HourClock) =>
     use24HourClock ? _clock24 : _clock12;
 
-/// 資訊列的一段字。選了下載的字型（[fontFamily]）時，中日文字另用下載
-/// 字型在前的字族，英數字照舊系統字型在前，同正文（[readerV2CjkRuns]）。
+/// 資訊列的一段字（書名、章名、進度）。選了下載的字型（[fontFamily]）時，
+/// 中日文字另用下載字型在前的字族，英數字照舊系統字型在前，同正文
+/// （[readerV2CjkRuns]）。時鐘只有數字，不必分段。
 Widget _infoText(String text, TextAlign align, String? fontFamily) {
   if (fontFamily == null) return Text(text, textAlign: align);
   final cjk = TextStyle(
@@ -1184,15 +1190,10 @@ Widget _infoText(String text, TextAlign align, String? fontFamily) {
 }
 
 class _ReaderClock extends StatefulWidget {
-  const _ReaderClock({
-    required this.format,
-    required this.textAlign,
-    required this.fontFamily,
-  });
+  const _ReaderClock({required this.format, required this.textAlign});
 
   final DateFormat format;
   final TextAlign textAlign;
-  final String? fontFamily;
 
   @override
   State<_ReaderClock> createState() => _ReaderClockState();
@@ -1237,7 +1238,7 @@ class _ReaderClockState extends State<_ReaderClock> {
     return Semantics(
       label: '時間 $time',
       excludeSemantics: true,
-      child: _infoText(time, widget.textAlign, widget.fontFamily),
+      child: Text(time, textAlign: widget.textAlign),
     );
   }
 }
