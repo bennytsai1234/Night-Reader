@@ -100,7 +100,6 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     });
   }
 
-
   Future<void> upsertAll(List<Book> bookList) async {
     await batch(
       (b) => b.insertAllOnConflictUpdate(books, bookList.map(_row).toList()),
