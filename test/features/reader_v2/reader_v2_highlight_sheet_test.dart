@@ -67,6 +67,24 @@ void main() {
     expect(deleted, isEmpty);
   });
 
+  testWidgets('leaving the app saves the note once; closing afterwards does '
+      'not save it again', (tester) async {
+    final (:saved, deleted: _) = await pumpSheet(tester);
+    await tester.enterText(find.byType(TextField), '寫到一半切走');
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    expect(saved.single.note, '寫到一半切走');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    Navigator.of(tester.element(find.text('燈下的字句'))).pop();
+    await tester.pumpAndSettle();
+    expect(saved, hasLength(1), reason: '沒再改就不重存');
+  });
+
   testWidgets('刪除 hands over the highlight and does not save it back', (
     tester,
   ) async {
