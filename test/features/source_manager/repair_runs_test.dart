@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
@@ -148,6 +149,67 @@ void main() {
       ..detach();
     await _flush();
     expect(runs.current, isNull);
+  });
+
+  test(
+    'an unread batch result cannot be replaced by a single repair',
+    () async {
+      final first = runOf(_batch());
+      expect(runs.adopt(first), isTrue);
+      first.start();
+      await first.batch.completion;
+      await _flush();
+      expect(first.isFinished, isTrue);
+      expect(first.isDone, isFalse);
+
+      final attempted = SingleRepairRun(
+        AiRepairSession(source: _s('different'), service: null),
+        work: work,
+        navigator: () => null,
+      );
+      expect(runs.adopt(attempted), isFalse);
+      expect(runs.current, same(first), reason: '還沒看過的結果不能被取代');
+      attempted.disposeWork();
+      attempted.dispose();
+
+      // 回到結果頁再關掉，下一件工作才可以開始。
+      first
+        ..attach()
+        ..detach();
+      await _flush();
+      expect(runs.current, isNull);
+
+      final next = runOf(_batch());
+      expect(runs.adopt(next), isTrue);
+      expect(runs.current, same(next));
+      next.disposeWork();
+      next.dispose();
+      runs.dispose();
+    },
+  );
+
+  test('an in-progress result also cannot be replaced directly', () async {
+    final gate = Completer<void>();
+    final first = runOf(_batch(gate: gate));
+    expect(runs.adopt(first), isTrue);
+    first.start();
+    await _flush();
+
+    final attempted = runOf(_batch());
+    expect(runs.adopt(attempted), isFalse);
+    expect(runs.current, same(first));
+    attempted.disposeWork();
+    attempted.dispose();
+
+    gate.complete();
+    await first.batch.completion;
+    await _flush();
+    first
+      ..attach()
+      ..detach();
+    await _flush();
+    expect(runs.current, isNull);
+    runs.dispose();
   });
 
   test('stop on the notification stops the batch and says so', () async {
