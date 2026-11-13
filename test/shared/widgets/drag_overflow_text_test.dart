@@ -37,6 +37,30 @@ void main() {
     expect(find.text('短文字'), findsOneWidget);
   });
 
+  testWidgets('unlimited long text still wraps and never becomes a marquee', (
+    tester,
+  ) async {
+    const label = '可換行的長篇說明應保留原本的自然段落，不應因為寬度不足被誤判成單行拖動';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 100,
+            child: DragOverflowText(child: Text(label)),
+          ),
+        ),
+      ),
+    );
+    expect(
+      find.descendant(
+        of: find.byType(DragOverflowText),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+    expect(find.text(label), findsOneWidget);
+  });
+
   testWidgets('long labels have no ellipsis and scroll only when dragged', (
     tester,
   ) async {
