@@ -73,7 +73,7 @@ Map<String, Object?> _echoToolNonce(RequestOptions request) {
 }
 
 void main() {
-  test('tests tool calling, sends its result, and checks the second reply', () async {
+  test('tests a complete tool call and result round trip', () async {
     final service = _ProbeService([
       (_) => _toolCall(),
       _echoToolNonce,
@@ -113,6 +113,27 @@ void main() {
       service.requests.first.headers['x-opencode-session'],
       service.requests.last.headers['x-opencode-session'],
     );
+  });
+
+  test('every tool call in the first reply gets a matching result', () async {
+    final multi = _toolCall();
+    (multi['tool_calls'] as List<dynamic>).add({
+      'id': 'call_2',
+      'type': 'function',
+      'function': {'name': 'connection_ping', 'arguments': '{"value":"ping"}'},
+    });
+    final service = _ProbeService([
+      (_) => multi,
+      _echoToolNonce,
+    ]);
+
+    await verifyAiToolConnection(_client(service));
+
+    final second = service.requests.last.data as Map<String, dynamic>;
+    final messages = second['messages'] as List<dynamic>;
+    expect(messages, hasLength(6));
+    expect((messages[3] as Map<String, dynamic>)['tool_call_id'], 'call_1');
+    expect((messages[4] as Map<String, dynamic>)['tool_call_id'], 'call_2');
   });
 
   test('plain text without a tool call is not reported as connected', () async {
