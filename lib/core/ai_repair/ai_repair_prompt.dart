@@ -229,7 +229,7 @@ const Map<String, String> aiGiveUpLabels = {
   'paid': '要付費',
   'human_check': '要真人在網頁上驗證',
   'blocked': '網站擋下所有請求',
-  'not_a_book': '內容不是書',
+  'not_a_book': '不是小說、漫畫或有聲書',
   'site_broken': '網站的功能壞了',
   'rate_limited': '網站限流',
 };
