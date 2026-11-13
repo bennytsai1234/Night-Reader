@@ -7,6 +7,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 import '../../change_cover_provider.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class CoverHeader extends StatelessWidget {
@@ -46,13 +47,15 @@ class CoverHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DragOverflowText(child: Text(
-                  '搜尋關鍵字：$bookName $author',
-                  maxLines: 1,
-                  style: AppTextStyles.bodySm.copyWith(
-                    color: chrome.sectionText,
+                DragOverflowText(
+                  child: Text(
+                    '搜尋關鍵字：$bookName $author',
+                    maxLines: 1,
+                    style: AppTextStyles.bodySm.copyWith(
+                      color: chrome.sectionText,
+                    ),
                   ),
-                )),
+                ),
                 if (!provider.isInitialized || provider.isSearching) ...[
                   const SizedBox(height: AppSpacing.sm),
                   ClipRRect(
