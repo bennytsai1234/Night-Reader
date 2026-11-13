@@ -84,8 +84,7 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
   }) async {
     if (fromName == toName && fromAuthor == toAuthor) return;
     await (update(highlights)..where(
-          (t) =>
-              t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
+          (t) => t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
         ))
         .write(
           HighlightsCompanion(
@@ -94,7 +93,6 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
           ),
         );
   }
-
 
   /// 一本書換了書源：標註跟著搬到新書源那本，每個對到新目錄裡的同一章
   /// （同 [BookmarkDao.moveToSource]）。
