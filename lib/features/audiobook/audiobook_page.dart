@@ -37,6 +37,7 @@ import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 
 import 'audiobook_player.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 有聲書播放器（`docs/design/audiobook.md`「播放器」）：集數清單是主體，
@@ -670,22 +671,26 @@ class _BookHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DragOverflowText(child: Text(
-                  book.name,
-                  maxLines: 2,
-                  style: AppTextStyles.titleMd.copyWith(
-                    color: scheme.onSurface,
+                DragOverflowText(
+                  child: Text(
+                    book.name,
+                    maxLines: 2,
+                    style: AppTextStyles.titleMd.copyWith(
+                      color: scheme.onSurface,
+                    ),
                   ),
-                )),
+                ),
                 if (byline.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.xs),
-                  DragOverflowText(child: Text(
-                    byline,
-                    maxLines: 1,
-                    style: AppTextStyles.bodySm.copyWith(
-                      color: scheme.onSurfaceVariant,
+                  DragOverflowText(
+                    child: Text(
+                      byline,
+                      maxLines: 1,
+                      style: AppTextStyles.bodySm.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                  )),
+                  ),
                 ],
                 if (episodes > 0) ...[
                   const SizedBox(height: 2),
@@ -831,14 +836,16 @@ class _EpisodeRow extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: DragOverflowText(child: Text(
-                    chapter.title,
-                    maxLines: 1,
-                    style: AppTextStyles.bodyBase.copyWith(
-                      color: titleColor,
-                      fontWeight: current ? FontWeight.w600 : null,
+                  child: DragOverflowText(
+                    child: Text(
+                      chapter.title,
+                      maxLines: 1,
+                      style: AppTextStyles.bodyBase.copyWith(
+                        color: titleColor,
+                        fontWeight: current ? FontWeight.w600 : null,
+                      ),
                     ),
-                  )),
+                  ),
                 ),
                 if (status != null) ...[
                   const SizedBox(width: AppSpacing.md),
@@ -945,14 +952,16 @@ class _ControlDock extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    DragOverflowText(child: Text(
-                      player.chapter?.title ?? '',
-                      maxLines: 1,
-                      style: AppTextStyles.uiMd.copyWith(
-                        color: scheme.onSurface,
-                        fontWeight: FontWeight.w600,
+                    DragOverflowText(
+                      child: Text(
+                        player.chapter?.title ?? '',
+                        maxLines: 1,
+                        style: AppTextStyles.uiMd.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    )),
+                    ),
                     _ProgressBar(player: player),
                     const Spacer(),
                     _Controls(player: player),
