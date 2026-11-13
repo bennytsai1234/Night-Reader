@@ -21,6 +21,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
@@ -732,12 +733,11 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      DragOverflowText(child: Text(
                         title,
                         maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: _titleStyle.copyWith(color: scheme.onSurface),
-                      ),
+                      )),
                       const SizedBox(height: AppSpacing.sm),
                       ClipRRect(
                         borderRadius: AppRadius.pillShape,
@@ -752,12 +752,11 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
+                            child: DragOverflowText(child: Text(
                               status,
                               maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                               style: _smallStyle.copyWith(color: statusColor),
-                            ),
+                            )),
                           ),
                           if (downloading) ...[
                             const SizedBox(width: AppSpacing.md),
@@ -772,12 +771,11 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                       ),
                       if (failure != null) ...[
                         const SizedBox(height: AppSpacing.xs),
-                        Text(
+                        DragOverflowText(child: Text(
                           failure,
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           style: _smallStyle.copyWith(color: context.danger),
-                        ),
+                        )),
                       ],
                     ],
                   ),
