@@ -5,6 +5,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// Telegram 式底部面板：分組底色、拖曳把手、置中標題與右側圓形關閉鈕，
 /// 下方為可捲動內容。
@@ -103,16 +104,15 @@ class AppBottomSheet extends StatelessWidget {
                 ),
                 middle: Semantics(
                   header: true,
-                  child: Text(
+                  child: DragOverflowText(child: Text(
                     title,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: AppTextStyles.titleSm.copyWith(
                       fontWeight: FontWeight.w600,
                       color: scheme.onSurface,
                     ),
-                  ),
+                  )),
                 ),
                 trailing: Padding(
                   padding: const EdgeInsets.only(right: AppGrouped.margin),
@@ -246,14 +246,13 @@ class SheetHeader extends StatelessWidget {
           trailing: trailing,
           middle: Semantics(
             header: true,
-            child: Text(
+            child: DragOverflowText(child: Text(
               title,
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: AppTextStyles.titleMd.copyWith(
                 color: Theme.of(context).colorScheme.onSurface,
               ),
-            ),
+            )),
           ),
         ),
       ),
