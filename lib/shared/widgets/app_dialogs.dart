@@ -6,6 +6,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
 import 'grouped_list.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 提示框的一個按鈕。
@@ -219,17 +220,19 @@ class AppAlert<T> extends StatelessWidget {
           child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: DragOverflowText(child: Text(
-                action.label,
-                maxLines: 1,
-                style: AppTextStyles.bodyMd.copyWith(
-                  height: 1.2,
-                  color: color.withValues(alpha: action.enabled ? 1 : 0.4),
-                  fontWeight: action.isDefault
-                      ? FontWeight.w600
-                      : FontWeight.w400,
+              child: DragOverflowText(
+                child: Text(
+                  action.label,
+                  maxLines: 1,
+                  style: AppTextStyles.bodyMd.copyWith(
+                    height: 1.2,
+                    color: color.withValues(alpha: action.enabled ? 1 : 0.4),
+                    fontWeight: action.isDefault
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                  ),
                 ),
-              )),
+              ),
             ),
           ),
         ),
