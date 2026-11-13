@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 長目錄的快速捲軸（取法 Telegram Android 的 fast scroller）：清單捲動時
 /// 右緣浮出一顆細長的拖曳鈕，停下一會兒後淡出；按住拖動時依位置跳到對應的
@@ -206,14 +207,13 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
                     ),
                     child: Center(
                       widthFactor: 1,
-                      child: Text(
+                      child: DragOverflowText(child: Text(
                         widget.labelFor(_dragIndex),
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.uiMd.copyWith(
                           color: scheme.onSurface,
                         ),
-                      ),
+                      )),
                     ),
                   ),
                 ),
