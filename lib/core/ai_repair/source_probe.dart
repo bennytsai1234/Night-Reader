@@ -391,13 +391,14 @@ String? probeStart(
   };
 }
 
-/// 試抓到的正文頁有同一章的下一頁、[source] 卻沒接上時，下一頁的網址；
-/// 沒有是 null。沒接上：`ruleContent.nextContentUrl` 是空的，正文規則也沒有
-/// 自己抓網頁（`java.ajax` 這類）。2026-11-12 下書網的 AI 交出的規則只抓到
-/// 每章的前半頁（95393.html，後半在 95393_2.html），校驗照樣通過。
+/// 試抓到的正文頁有同一章的下一頁、試抓卻沒抓那一頁時，下一頁的網址；
+/// 沒有是 null。2026-11-12 下書網的 AI 交出的規則只抓到每章的前半頁
+/// （95393.html，後半在 95393_2.html），校驗照樣通過；11-13 另一次寫了
+/// `nextContentUrl`，選擇器卻抓不到連結，同樣只有前半頁，所以看的是請求
+/// 紀錄裡有沒有那一頁，不是規則有沒有寫。正文規則自己抓網頁（`java.ajax`
+/// 這類）的不看。
 String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
   final rule = source.ruleContent;
-  if ((rule?.nextContentUrl ?? '').trim().isNotEmpty) return null;
   if (_fetchesItself.hasMatch(rule?.content ?? '')) return null;
   String? chapterUrl;
   for (final (_, message) in probe.logs) {
@@ -423,7 +424,12 @@ String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
       continue;
     }
     if (isNextPageOfChapter(chapter, target)) {
-      return '${target.removeFragment()}';
+      final next = '${target.removeFragment()}';
+      final fetched = [
+        ...probe.requests,
+        for (final page in probe.pages) page.line,
+      ].any((line) => line.contains(next));
+      return fetched ? null : next;
     }
   }
   return null;

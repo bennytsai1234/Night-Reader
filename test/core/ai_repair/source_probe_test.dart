@@ -55,6 +55,10 @@ void main() {
         '/book/2/1.html' =>
           '<div id="content"><img src="/static/lazy.png" '
               'data-original="/img/chapter-1-page-1.jpg"></div>',
+        // 一章分兩頁（下書網）：第一頁有指向第二頁的連結。
+        '/book/3/1.html' =>
+          '<div id="content">$_chapter</div><a href="/book/3/1_2.html">下一页</a>',
+        '/book/3/1_2.html' => '<div id="content">後半章</div>',
         _ => '',
       };
       request.response
@@ -133,6 +137,26 @@ void main() {
     expect(report.contentUsable, isFalse, reason: report.fullText);
     expect(report.succeeded, isFalse);
     expect(report.summary, contains('書源校驗不算抓到'));
+  });
+
+  test('the second page of a chapter that nextContentUrl follows is in the '
+      'request log, so the joined-page check sees it', () async {
+    final paged = source(content: 'id.content@text')
+      ..ruleContent!.nextContentUrl = 'text.下一页@href';
+    final report = await probeSource(
+      paged,
+      keyword: probeStart('content', keyword: '', url: '$site/book/3/1.html')!,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(report.fullText, contains('$site/book/3/1_2.html'));
+    expect(unjoinedContentPage(report, paged), isNull);
+    expect(
+      unjoinedContentPage(report, source(content: 'id.content@text')),
+      isNull,
+      reason: '抓過了就算接上',
+    );
   });
 
   test('a probe can start from the table of contents', () async {
