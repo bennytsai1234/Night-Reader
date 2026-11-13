@@ -216,6 +216,25 @@ class ComicStripModel extends ChangeNotifier {
     _load(previous);
   }
 
+  /// 先拿第 [chapterIndex] 話前後各 [prefetchRadius] 話的圖片清單（同文字
+  /// 閱讀器前後各留兩章）：捲到換章時下一話已經在條漫上，圖的預載不會因為
+  /// 下一話還沒放上而停住。拿到的、接得上已放上範圍的就放上去；上次載不
+  /// 下來的不自動再試（同 [loadNext]）。
+  void prefetchAround(int chapterIndex) {
+    int? forward = chapterIndex;
+    int? backward = chapterIndex;
+    for (var i = 0; i < prefetchRadius; i++) {
+      forward = forward == null ? null : nextReadable(forward);
+      backward = backward == null ? null : previousReadable(backward);
+      for (final c in [forward, backward]) {
+        if (c != null && _chapters[c] == null) _load(c);
+      }
+    }
+  }
+
+  /// [prefetchAround] 前後各拿幾話。
+  static const int prefetchRadius = 2;
+
   /// 載入失敗的那一話再試一次。
   void retry(int chapterIndex) {
     if (_chapters[chapterIndex] is! ComicChapterFailed) return;
@@ -278,12 +297,24 @@ class ComicStripModel extends ChangeNotifier {
         _anchorPage = pages.isEmpty ? 0 : pages.length - 1;
       }
       _lo = _hi = chapterIndex;
+      prefetchAround(chapterIndex);
     } else if (chapterIndex == nextReadable(_hi)) {
       _hi = chapterIndex;
     } else if (chapterIndex == previousReadable(_lo)) {
       _lo = chapterIndex;
     } else {
       return;
+    }
+    // 先拿到、還沒接上的鄰話這時接得上了，一起放上去。
+    while (true) {
+      final next = nextReadable(_hi);
+      if (next == null || _chapters[next] is! ComicChapterReady) break;
+      _hi = next;
+    }
+    while (true) {
+      final previous = previousReadable(_lo);
+      if (previous == null || _chapters[previous] is! ComicChapterReady) break;
+      _lo = previous;
     }
     _rebuild();
     _notify();

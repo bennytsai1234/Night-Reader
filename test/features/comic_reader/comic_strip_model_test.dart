@@ -48,12 +48,13 @@ void main() {
     model.retryFailed();
     await _idle();
     expect(model.stateOf(0), isA<ComicChapterReady>());
-    expect(source.requestedChapters, [0, 0]);
+    // 錨點那一話放上去後，先拿前後各兩話的圖片清單。
+    expect(source.requestedChapters, [0, 0, 1, 2]);
 
     // 沒有失敗的話時不再抓。
     model.retryFailed();
     await _idle();
-    expect(source.requestedChapters, [0, 0]);
+    expect(source.requestedChapters, [0, 0, 1, 2]);
     model.dispose();
   });
 
