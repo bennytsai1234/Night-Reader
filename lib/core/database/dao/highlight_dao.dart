@@ -75,6 +75,27 @@ class HighlightDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteByIds(Iterable<int> ids) =>
       (delete(highlights)..where((t) => t.id.isIn(ids))).go();
 
+  /// 讀者修改書籍資訊：標註只換書的身分，保留文字、顏色、備忘與位置。
+  Future<void> renameBook({
+    required String fromName,
+    required String fromAuthor,
+    required String toName,
+    required String toAuthor,
+  }) async {
+    if (fromName == toName && fromAuthor == toAuthor) return;
+    await (update(highlights)..where(
+          (t) =>
+              t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
+        ))
+        .write(
+          HighlightsCompanion(
+            bookName: Value(toName),
+            bookAuthor: Value(toAuthor),
+          ),
+        );
+  }
+
+
   /// 一本書換了書源：標註跟著搬到新書源那本，每個對到新目錄裡的同一章
   /// （同 [BookmarkDao.moveToSource]）。
   Future<void> moveToSource({
