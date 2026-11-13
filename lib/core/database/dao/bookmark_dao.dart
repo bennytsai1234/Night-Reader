@@ -81,8 +81,7 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
   }) async {
     if (fromName == toName && fromAuthor == toAuthor) return;
     await (update(bookmarks)..where(
-          (t) =>
-              t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
+          (t) => t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
         ))
         .write(
           BookmarksCompanion(
@@ -91,7 +90,6 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
           ),
         );
   }
-
 
   /// 一本書換了書源：書籤跟著搬到新書源那本（書名、作者照新書源的寫法），
   /// 每個書籤對到新目錄裡的同一章（同換源時的閱讀進度：先找同名的章，再照
