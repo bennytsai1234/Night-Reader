@@ -51,8 +51,10 @@ class ComicPageImages {
   /// 一張圖解碼好時，回報它的比例（高 ÷ 寬）。
   final void Function(ComicImageKey key, double aspectRatio)? onSize;
 
-  /// 預載同時讀圖、解碼幾張。有人要畫的（[want]）不受這個限制、馬上開始：
+  /// 同時讀圖、解碼幾張。在畫面上的（[isVisible]）不受這個限制、馬上開始：
   /// 快速甩過之後，佔著位置的常是已經用不到的圖，眼前那張不排在它們後面。
+  /// 畫面外已經建好、要畫的只排到最前面，照樣受限：甩動時一次建好一整個
+  /// 螢幕，全部馬上開始會讓解碼擠在一起。
   final int concurrency;
 
   final Map<ComicImageKey, ui.Image> _ready = {};
@@ -100,8 +102,8 @@ class ComicPageImages {
     }
   }
 
-  /// 有人要畫 [key]：還沒開始的馬上開始，不等 [concurrency]。預載時載不到
-  /// 的再試一次。
+  /// 有人要畫 [key]：還沒開始的排到最前面，在畫面上的馬上開始（見
+  /// [concurrency]）。預載時載不到的再試一次。
   void want(ComicImageKey key) {
     if (_disposed || _ready.containsKey(key) || _failed.containsKey(key)) {
       return;
@@ -109,7 +111,12 @@ class ComicPageImages {
     _speculativeFailed.remove(key);
     if (_running.contains(key)) return;
     _queue.remove(key);
-    _start(key);
+    if (_visible.contains(key)) {
+      _start(key);
+    } else {
+      _queue.addFirst(key);
+      _pump();
+    }
   }
 
   /// 載不到的 [key] 再試一次（「重試」、登入回來）。
@@ -142,6 +149,9 @@ class ComicPageImages {
         continue;
       }
       _queue.add(key);
+    }
+    for (final key in _visible) {
+      if (_queue.remove(key)) _start(key);
     }
     _pump();
   }
