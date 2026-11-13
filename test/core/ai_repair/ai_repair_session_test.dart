@@ -10,6 +10,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 
 import '../../support/fake_ai.dart';
@@ -86,6 +87,11 @@ SourceProbeReport _probe(BookSource source) =>
         requests: ['  ← https://site.example/c/1 200：<div class="txt">…'],
       );
 
+/// 被網站限流的搜尋回應（2026-11-13 蜘蛛小說網）。
+const _limited =
+    '  ← https://site.example/s 200，59 字，太短不精簡（網站限流：「搜索间隔: 30 秒」）：'
+    '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>';
+
 String _command(String action, {String content = 'class.txt@text'}) =>
     jsonEncode({
       'action': action,
@@ -123,8 +129,11 @@ void main() {
     SourceCheckIsolateResult? Function(BookSource source)? check,
     bool Function(BookSource source)? followsKeyword,
     Directory? logs,
+    bool searchLimited = false,
+    bool stillLimited = false,
   }) {
     var next = 0;
+    var probes = 0;
     return AiRepairSession(
       logDirectory: logs == null ? null : () async => logs,
       source: sources.single,
@@ -133,10 +142,17 @@ void main() {
           ? null
           : check?.call(source) ??
                 _checked(source, broken: broken[source.bookSourceUrl]),
-      probe: (source, _, {start}) async => _probe(source),
+      // 只有開場那次試抓被限流。
+      probe: (source, _, {start}) async => searchLimited && probes++ == 0
+          ? const SourceProbeReport(
+              logs: [(10, '︾開始解析搜尋頁'), (20, '︽未獲取到書籍')],
+              requests: [_limited],
+            )
+          : _probe(source),
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
       fetchPage: (source, url, _) async {
         fetched?.add(url);
+        if (stillLimited) return (lines: [_limited], pages: <LoggedPage>[]);
         return (
           lines: ['  ← $url 200：<form action="/s2">'],
           pages: [
@@ -148,6 +164,7 @@ void main() {
         );
       },
       recheckDelay: Duration.zero,
+      rateLimitWait: Duration.zero,
       ask: (messages, _) async {
         asked.add(List.of(messages));
         // 回覆用完：測試寫錯了，不讓它一直問下去。
@@ -535,6 +552,40 @@ void main() {
     expect(asked, hasLength(2));
     expect(asked.last.last.content, aiRepairGiveUpPushBack);
     expect(gaveUp.job.explanation, 'AI：要付費。網站要付費');
+  });
+
+  test('a search the site still limits after waiting is judged broken by the '
+      'program, without asking the AI', () async {
+    final fetched = <String>[];
+    final s = session(
+      [_source('https://site.example')],
+      replies: const [],
+      searchLimited: true,
+      stillLimited: true,
+      fetched: fetched,
+    );
+
+    await s.start();
+
+    expect(asked, isEmpty);
+    expect(fetched, ['/s?q={{key}}'], reason: '原樣再送一次搜尋');
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.confirmedUnfixable, isTrue);
+    expect(s.job.giveUpWhy, 'site_broken');
+    expect(s.job.explanation, startsWith('網站的功能壞了：搜尋等過'));
+  });
+
+  test('a search that answers after waiting goes on to the AI', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test')],
+      searchLimited: true,
+    );
+
+    await s.start();
+
+    expect(asked, hasLength(1));
+    expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
   test('giving up after looking at the site is taken at once', () async {

@@ -166,6 +166,7 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairBackups? backups,
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
+    this.rateLimitWait,
     bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
@@ -197,6 +198,10 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
   final Duration recheckDelay;
+
+  /// 開場的搜尋被網站限流時等多久再送：沒給時照網站說的秒數多等 2 秒
+  /// （[_rateLimitedSearch]）。
+  final Duration? rateLimitWait;
 
   /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
   final bool Function() _hasBudget;
@@ -406,6 +411,9 @@ class AiRepairSession extends ChangeNotifier {
     _finish(fetchStep, _fetchText(probe));
     _logProbe('${_seconds(probeWatch)}：${_fetchText(probe)}', probe);
 
+    if (await _searchStaysLimited(job, probe)) return;
+    if (_stopped) return;
+
     if (usesClipboard) {
       final prompt = _redact(
         job,
@@ -426,6 +434,56 @@ class AiRepairSession extends ChangeNotifier {
       return;
     }
     await _converse(job);
+  }
+
+  /// 開場試抓的搜尋被網站限流時（請求紀錄標著「網站限流」），照網站說的
+  /// 間隔等一次、原樣再送一次搜尋；還是限流就由程式判定「網站的功能壞了」，
+  /// 不送 AI，傳回 true。使用者 2026-11-13 定「限流就是壞掉，根本不能用」：
+  /// 判定算得出來就由程式算（agent-harness），交給 AI 時它會一直找繞過的
+  /// 寫法，蜘蛛小說網每次 30 輪、70 到 100 萬 token。
+  Future<bool> _searchStaysLimited(
+    AiRepairJob job,
+    SourceProbeReport probe,
+  ) async {
+    final searchUrl = job.original.searchUrl ?? '';
+    final limit = _rateLimitedSearch(probe.requests);
+    if (limit == null || searchUrl.trim().isEmpty) return false;
+    final wait = rateLimitWait ?? Duration(seconds: (limit.seconds ?? 30) + 2);
+    final step = _addStep(job, '搜尋被網站限流', detail: '等 ${wait.inSeconds} 秒再搜一次…');
+    log.both('搜尋被網站限流（${limit.note}），等 ${wait.inSeconds} 秒再搜一次');
+    _notify();
+    await Future.any<Object?>([
+      Future<void>.delayed(wait),
+      _cancelToken.whenCancel,
+    ]);
+    if (_stopped) return false;
+    final again = await _guard(
+      () => _fetchPage(job.original, searchUrl, _cancelToken),
+    );
+    if (_stopped || again == null) return false;
+    log.requests(again.lines, pages: again.pages);
+    if (_rateLimitedSearch(again.lines) == null) {
+      _finish(step, '等過之後搜尋有回應，交給 AI');
+      return false;
+    }
+    final why = '搜尋等過 ${wait.inSeconds} 秒還是被網站限流（${limit.note}）';
+    _finish(step, why, failed: true);
+    job
+      ..confirmedUnfixable = true
+      ..giveUpWhy = 'site_broken';
+    _fail(job, '${aiGiveUpLabels['site_broken']}：$why');
+    return true;
+  }
+
+  /// 請求紀錄裡第一個標著「網站限流」的回應：網站說的話與它要等的秒數。
+  static ({String note, int? seconds})? _rateLimitedSearch(List<String> lines) {
+    for (final line in lines) {
+      final note = RegExp(r'網站限流：([^）]*)').firstMatch(line)?.group(1);
+      if (note == null) continue;
+      final seconds = RegExp(r'(\d+)\s*秒').firstMatch(note)?.group(1);
+      return (note: note, seconds: seconds == null ? null : int.parse(seconds));
+    }
+    return null;
   }
 
   /// 試抓抓到的網頁登記進 [_pages]，給 AI 的那份每個回應標上頁碼；整頁原文
