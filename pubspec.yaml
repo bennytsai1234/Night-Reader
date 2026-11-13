@@ -23,6 +23,10 @@ dependencies:
   cookie_jar: ^4.0.9
   convert: ^3.1.2
 
+  # === Text ===
+  # 照使用者看到的一個字（字素）切段：下載字型的中日文字分段（ADR 0045）。
+  characters: ^1.4.1
+
   # === Database ===
   drift: ^2.35.2
   path: ^1.9.1

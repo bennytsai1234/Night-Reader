@@ -49,6 +49,7 @@ void main() {
     VoidCallback? onDrawerClosed,
     VoidCallback? onMenuHidden,
     ReaderV2InfoTarget? loadingTarget,
+    String? fontFamily,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
@@ -126,6 +127,7 @@ void main() {
             footerOffset: 4,
             edgeFade: 14,
             use24HourClock: true,
+            fontFamily: fontFamily,
             progressFractionDigits: 1,
             dayNightIcon: Icons.dark_mode_rounded,
             dayNightTooltip: '切換深色模式',
@@ -735,6 +737,33 @@ void main() {
         header.last.center.dy,
         moreOrLessEquals(glyphCenterOf(tester, find.textContaining(':'))),
       );
+    });
+
+    testWidgets('with a downloaded font the chapter title draws CJK with that '
+        'font first and keeps a skeleton bar on its text', (tester) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: const ReaderV2InfoSlots(
+          left: ReaderV2InfoItem.chapterTitle,
+          right: ReaderV2InfoItem.none,
+        ),
+        fontFamily: 'TestKai',
+      );
+      await tester.pump(AppMotion.fade);
+      expect(infoSkeleton('第一章'), findsOneWidget);
+
+      states.value = ReaderV2InfoState.ready;
+      await tester.pumpAndSettle();
+      final title = tester
+          .widgetList<Text>(find.byType(Text))
+          .firstWhere((text) => text.textSpan?.toPlainText() == '第一章');
+      final spans = (title.textSpan! as TextSpan).children!.cast<TextSpan>();
+      expect(spans.single.text, '第一章');
+      expect(spans.single.style!.fontFamilyFallback, ['TestKai', 'sans-serif']);
     });
 
     testWidgets('the info fades in where its skeleton was', (tester) async {
