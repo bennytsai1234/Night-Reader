@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// A text label that retains its normal line layout when it fits, but lets the
-/// reader drag horizontally to reveal the entire label when it would be
-/// truncated. Scrolling is always manual; there is no marquee or timer.
+/// 文字未超出欄寬時保留原本的行數與排版；真的放不下時，讀者可以左右
+/// 拖動查看完整文字，不會自動跑馬燈，也不把卡片撐寬。
 ///
-/// Keep the original [Text] so multi-line labels remain unchanged unless the
-/// actual available width and text scale would produce an ellipsis.
+/// 以實際欄寬與字級量測 [Text]，避免原本可正常換行的文字被改成單行。
 class DragOverflowText extends StatelessWidget {
   const DragOverflowText({super.key, required this.child});
 
@@ -42,6 +40,8 @@ class DragOverflowText extends StatelessWidget {
         if (!exceeds) return child;
 
         return SingleChildScrollView(
+          // 清單重用卡片時，新書名不沿用上一個書名的橫向位置。
+          key: ValueKey(child.textSpan?.toPlainText() ?? child.data),
           scrollDirection: Axis.horizontal,
           physics: const ClampingScrollPhysics(),
           child: ConstrainedBox(
