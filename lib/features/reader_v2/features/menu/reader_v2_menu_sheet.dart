@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 閱讀器內設定面板的唯一開啟入口。
 ///
@@ -152,16 +153,15 @@ class ReaderV2SheetScaffold extends StatelessWidget {
                     ),
                     child: Semantics(
                       header: true,
-                      child: Text(
+                      child: DragOverflowText(child: Text(
                         title,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: AppTextStyles.titleSm.copyWith(
                           fontWeight: FontWeight.w600,
                           color: scheme.onSurface,
                         ),
-                      ),
+                      )),
                     ),
                   ),
                   Positioned(
