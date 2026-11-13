@@ -45,6 +45,7 @@ import 'core/startup/startup_retry_gate.dart';
 import 'features/search/search_provider.dart';
 import 'shared/widgets/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 Future<bool> runBackgroundTask<T>({
   required Future<void> Function() initialize,
@@ -188,13 +189,12 @@ Widget buildFlutterErrorWidget(FlutterErrorDetails details) {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),
-            child: Text(
+            child: DragOverflowText(child: Text(
               kDebugMode ? '這部分無法顯示：${details.exception}' : '這部分無法顯示',
               maxLines: 4,
-              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppPalette.ink50, fontSize: 13),
-            ),
+            )),
           ),
         ),
       ),
