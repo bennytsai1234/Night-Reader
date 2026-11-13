@@ -7,6 +7,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'reader_v2_bottom_menu.dart' show ReaderV2ChapterNavigationState;
 import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_palette.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 閱讀器上方選單：浮在狀態列下方的玻璃列——兩側圓形玻璃按鈕、中間書名膠囊，
@@ -98,14 +99,16 @@ class ReaderV2TopMenu extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Center(
-                  child: DragOverflowText(child: Text(
-                    bookName,
-                    style: AppTextStyles.titleSm.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: menuStyle.foreground,
+                  child: DragOverflowText(
+                    child: Text(
+                      bookName,
+                      style: AppTextStyles.titleSm.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: menuStyle.foreground,
+                      ),
+                      maxLines: 1,
                     ),
-                    maxLines: 1,
-                  )),
+                  ),
                 ),
               ),
             ),
@@ -139,13 +142,15 @@ class ReaderV2TopMenu extends StatelessWidget {
               // 只有章名聽換章（捲動途中換章不重建選單）。
               child: ValueListenableBuilder<int>(
                 valueListenable: navigation.current,
-                builder: (context, _, _) => DragOverflowText(child: Text(
-                  navigation.currentTitle,
-                  style: AppTextStyles.labelSm.copyWith(
-                    color: menuStyle.foreground,
+                builder: (context, _, _) => DragOverflowText(
+                  child: Text(
+                    navigation.currentTitle,
+                    style: AppTextStyles.labelSm.copyWith(
+                      color: menuStyle.foreground,
+                    ),
+                    maxLines: 1,
                   ),
-                  maxLines: 1,
-                )),
+                ),
               ),
             ),
             if (originName.isNotEmpty) ...[
@@ -164,14 +169,16 @@ class ReaderV2TopMenu extends StatelessWidget {
                       color: menuStyle.accentMuted,
                       borderRadius: AppRadius.pillShape,
                     ),
-                    child: DragOverflowText(child: Text(
-                      originName,
-                      maxLines: 1,
-                      style: AppTextStyles.micro.copyWith(
-                        color: menuStyle.foreground,
-                        fontWeight: FontWeight.w600,
+                    child: DragOverflowText(
+                      child: Text(
+                        originName,
+                        maxLines: 1,
+                        style: AppTextStyles.micro.copyWith(
+                          color: menuStyle.foreground,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    )),
+                    ),
                   ),
                 ),
               ),
