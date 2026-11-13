@@ -85,23 +85,29 @@ class BookInfoHeader extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-          child: DragOverflowText(child: Text(
-            context.zh(book.name),
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
-          )),
+          child: DragOverflowText(
+            child: Text(
+              context.zh(book.name),
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
+            ),
+          ),
         ),
         if (author.isNotEmpty) ...[
           const SizedBox(height: 2),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-            child: DragOverflowText(child: Text(
-              author,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              style: AppTextStyles.bodyBase.copyWith(color: chrome.sectionText),
-            )),
+            child: DragOverflowText(
+              child: Text(
+                author,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: AppTextStyles.bodyBase.copyWith(
+                  color: chrome.sectionText,
+                ),
+              ),
+            ),
           ),
         ],
         const SizedBox(height: AppSpacing.xl),
@@ -203,11 +209,13 @@ class _ActionButton extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.xs,
                   ),
-                  child: DragOverflowText(child: Text(
-                    label,
-                    maxLines: 1,
-                    style: AppTextStyles.uiXs.copyWith(color: color),
-                  )),
+                  child: DragOverflowText(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: AppTextStyles.uiXs.copyWith(color: color),
+                    ),
+                  ),
                 ),
               ],
             ),
