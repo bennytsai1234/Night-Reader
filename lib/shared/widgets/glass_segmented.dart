@@ -9,6 +9,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'grouped_list_skeleton.dart';
 import 'skeleton.dart';
+
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// [GlassSegmented] 的單一分段。
@@ -340,12 +341,14 @@ class _SegmentLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _style(emphasized: emphasized).copyWith(color: color);
-    final text = DragOverflowText(child: Text(
-      segment.label,
-      maxLines: 1,
-      textAlign: TextAlign.center,
-      style: style,
-    ));
+    final text = DragOverflowText(
+      child: Text(
+        segment.label,
+        maxLines: 1,
+        textAlign: TextAlign.center,
+        style: style,
+      ),
+    );
     final icon = segment.icon;
     return Semantics(
       button: true,
