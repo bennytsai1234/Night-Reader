@@ -30,6 +30,28 @@ void main() {
     );
   });
 
+  test('a search error written in the page, not popped up, is the site '
+      'limiting requests too', () {
+    // 2026-11-13 肉肉屋（整頁 9282 位元組）與神话之后的搜尋。
+    final jieqi =
+        '<html><body><div class="nav">${'首页 书库 排行 ' * 60}</div>'
+        '<div class="err">出现错误！ 错误原因：对不起，两次搜索的间隔时间不得少于 5 秒'
+        ' 请 返 回 并修正</div></body></html>';
+    expect(
+      pageNoteOf(jieqi),
+      allOf(startsWith('網站限流：'), contains('两次搜索的间隔时间不得少于 5 秒')),
+    );
+    expect(
+      rateLimitOf('<p>系统限制的搜索时间间隔为 30 秒,请稍后再搜索</p>'),
+      '「系统限制的搜索时间间隔为 30 秒,请稍后再搜索」',
+    );
+    expect(
+      pageNoteOf('<p>他屏住呼吸，間隔三秒才敢再看一眼。</p>'),
+      isNull,
+      reason: '故事裡的間隔不是限流',
+    );
+  });
+
   test('a long page that happens to mention a security check is content', () {
     final article =
         '<html><body><div class="txt">'

@@ -138,6 +138,7 @@ void main() {
     Directory? logs,
     bool searchLimited = false,
     bool stillLimited = false,
+    bool noBooks = false,
     KnownTitleSearch? knownTitle,
   }) {
     var next = 0;
@@ -151,10 +152,17 @@ void main() {
           : check?.call(source) ??
                 _checked(source, broken: broken[source.bookSourceUrl]),
       // 只有開場那次試抓被限流。
-      probe: (source, _, {start}) async => searchLimited && probes++ == 0
+      // 開場那次試抓被限流；stillLimited 時等過之後重新試抓也一樣。
+      probe: (source, _, {start}) async =>
+          searchLimited && (probes++ == 0 || stillLimited)
           ? const SourceProbeReport(
               logs: [(10, '︾開始解析搜尋頁'), (20, '︽未獲取到書籍')],
               requests: [_limited],
+            )
+          : noBooks && start == null
+          ? const SourceProbeReport(
+              logs: [(10, '︾開始解析搜尋頁'), (20, '︽未獲取到書籍')],
+              requests: ['  ← https://site.example/s 200，30 字：<p>沒有結果</p>'],
             )
           : _probe(source),
       keywordCheck: (source, _) async => followsKeyword?.call(source) ?? true,
@@ -605,7 +613,7 @@ void main() {
     await s.start();
 
     expect(asked, isEmpty);
-    expect(fetched, ['/s?q={{key}}'], reason: '原樣再送一次搜尋');
+    expect(fetched, isEmpty, reason: '等過之後重新試抓，不另外送搜尋');
     expect(s.job.outcome, AiRepairOutcome.failed);
     expect(s.job.confirmedUnfixable, isTrue);
     expect(s.job.giveUpWhy, 'rate_limited');
@@ -617,7 +625,7 @@ void main() {
     final s = session(
       [_source('https://site.example')],
       replies: [_command('test')],
-      searchLimited: true,
+      noBooks: true,
       knownTitle: (title: '剑仙转生', from: '玄幻', found: false, limited: null),
     );
 
@@ -631,7 +639,7 @@ void main() {
     final s = session(
       [_source('https://site.example')],
       replies: [_command('test')],
-      searchLimited: true,
+      noBooks: true,
       knownTitle: (
         title: '剑仙转生',
         from: '玄幻',
@@ -647,7 +655,8 @@ void main() {
     expect(opening, isNot(contains('這個搜尋規則找不到')));
   });
 
-  test('a search that answers after waiting goes on to the AI', () async {
+  test('a search that answers after waiting goes on to the AI with the new '
+      'probe', () async {
     final s = session(
       [_source('https://site.example')],
       replies: [_command('test')],
@@ -657,6 +666,11 @@ void main() {
     await s.start();
 
     expect(asked, hasLength(1));
+    expect(
+      asked.first.last.content,
+      isNot(contains('搜索间隔')),
+      reason: '開場給的是等過之後重新試抓的那份',
+    );
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 

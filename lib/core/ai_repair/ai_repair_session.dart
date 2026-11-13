@@ -437,15 +437,17 @@ class AiRepairSession extends ChangeNotifier {
       .._probe = _withPageIds(probe);
     _finish(fetchStep, _fetchText(probe));
     _logProbe('${_seconds(probeWatch)}：${_fetchText(probe)}', probe);
-    // 程式讀得到、AI 要好幾輪才推得出來的事實，寫進開場。
-    for (final fact in openingFacts(original, probe)) {
-      job._checkResult = '${job._checkResult}\n\n$fact';
-      log.both(fact);
-    }
 
     if (await _searchStaysLimited(job, probe)) return;
     if (_stopped) return;
-    await _searchKnownTitle(job, probe);
+    // 限流等過之後重新試抓過的，開場用新的那份。
+    final opening = job._firstProbe!;
+    // 程式讀得到、AI 要好幾輪才推得出來的事實，寫進開場。
+    for (final fact in openingFacts(original, opening)) {
+      job._checkResult = '${job._checkResult}\n\n$fact';
+      log.both(fact);
+    }
+    await _searchKnownTitle(job, opening);
     if (_stopped) return;
 
     if (usesClipboard) {
@@ -471,8 +473,10 @@ class AiRepairSession extends ChangeNotifier {
   }
 
   /// 開場試抓的搜尋被網站限流時（請求紀錄標著「網站限流」），照網站說的
-  /// 間隔等一次、原樣再送一次搜尋；還是限流就由程式判定「網站限流」（功能
-  /// 壞掉的一種，修不好），
+  /// 間隔等一次、重新試抓一次（試抓會再搜一次）：不再被擋就用新的試抓當
+  /// 開場，AI 才看得到搜尋之後壞掉的那一段（2026-11-13 肉肉屋：開場停在被
+  /// 限流的搜尋，AI 花十幾輪自己找書頁）；還是限流就由程式判定「網站限流」
+  /// （功能壞掉的一種，修不好），
   /// 不送 AI，傳回 true。使用者 2026-11-13 定「限流就是壞掉，根本不能用」：
   /// 判定算得出來就由程式算（agent-harness），交給 AI 時它會一直找繞過的
   /// 寫法，蜘蛛小說網每次 30 輪、70 到 100 萬 token。
@@ -492,15 +496,17 @@ class AiRepairSession extends ChangeNotifier {
       _cancelToken.whenCancel,
     ]);
     if (_stopped) return false;
-    final again = await _guard(
-      () => _fetchPage(job.original, searchUrl, _cancelToken),
-    );
+    final again = await _guard(() => _probe(job.original, _cancelToken));
     if (_stopped || again == null) return false;
-    log.requests(again.lines, pages: again.pages);
-    if (_rateLimitedSearch(again.lines) == null) {
-      _finish(step, '等過之後搜尋有回應，交給 AI');
+    if (_rateLimitedSearch(again.requests) == null) {
+      job
+        .._firstProbe = again
+        .._probe = _withPageIds(again);
+      _finish(step, '等過之後重新試抓：${_fetchText(again)}');
+      _logProbe('等過限流重新試抓：${_fetchText(again)}', again);
       return false;
     }
+    log.requests(again.requests, pages: again.pages);
     final why = '搜尋等過 ${wait.inSeconds} 秒還是被擋（${limit.note}）';
     _finish(step, why, failed: true);
     job

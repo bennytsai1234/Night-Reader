@@ -39,15 +39,37 @@ const List<String> pageNoteOpenings = [
 /// 觸發會拉長，回的是 `<script>alert("搜索间隔: 30 秒");history.go(-1)</script>`；
 /// 不寫出來，AI 要花好幾輪寫空轉等待的程式才確認。不是限流是 null。
 String? rateLimitOf(String body, {int? status}) {
-  if (digestPage(body).length < _shortPageLength) {
+  final digested = digestPage(body);
+  if (digested.length < _shortPageLength) {
     for (final match in _alert.allMatches(body)) {
       final text = match.group(1)!.trim();
       if (_tooOften.hasMatch(text)) return '「$text」';
     }
   }
+  // 寫在網頁裡的搜尋錯誤（2026-11-13 肉肉屋「对不起，两次搜索的间隔时间不得
+  // 少于 5 秒」在一整頁的導覽列中間；神话之后「系统限制的搜索时间间隔为 30
+  // 秒」在 <p> 裡）：一句裡同時有搜尋這類動作、間隔與秒數才算。
+  final text = digested.replaceAll(RegExp(r'<[^>]*>'), ' ');
+  for (final sentence in text.split(_sentenceEnd)) {
+    final line = sentence.trim();
+    if (line.length <= _maxLimitSentence &&
+        _action.hasMatch(line) &&
+        _interval.hasMatch(line)) {
+      return '「$line」';
+    }
+  }
   if (status == 429) return '狀態碼 429（要求太多次）';
   return null;
 }
+
+/// 句子的結尾：句號、驚嘆號、換行與網頁上多個空白隔開的區塊。
+final RegExp _sentenceEnd = RegExp(r'[。！!\n]|\s{2,}|請 返 回|请 返 回');
+
+/// 限流那句不會太長；整段文章剛好有這幾個字不算。
+const int _maxLimitSentence = 80;
+
+final RegExp _action = RegExp(r'搜索|搜尋|搜寻|查询|查詢|访问|訪問|请求|請求|刷新|操作');
+final RegExp _interval = RegExp(r'(间隔|間隔)[^0-9]{0,12}\d+\s*秒');
 
 /// `alert("…")` 跳出的那句話。
 final RegExp _alert = RegExp(r'''alert\(\s*["']([^"']{1,200})["']''');
