@@ -20,6 +20,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 // 閱讀設定的各組：閱讀器內的外觀與排版面板與「閱讀偏好」頁共用，都透過
 // ReaderV2SettingsController 讀寫，兩處行為與資料一致。
@@ -1258,18 +1259,17 @@ class _ClickActionGrid extends StatelessWidget implements GroupedSkeletonItem {
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                child: Text(
+                child: DragOverflowText(child: Text(
                   label,
                   textAlign: TextAlign.center,
                   maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.uiSm.copyWith(
                     color: isCenter
                         ? colorScheme.primary
                         : colorScheme.onSurface,
                     fontWeight: isCenter ? FontWeight.w600 : FontWeight.w500,
                   ),
-                ),
+                )),
               ),
             ),
           ),
