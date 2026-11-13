@@ -6,27 +6,31 @@ const _chapter = 'https://www.site.example/book/149032/95393.html';
 const _chapterNext = 'https://www.site.example/book/149032/95393_2.html';
 
 /// 試抓到正文的報告：正文頁是 [body]（下書網 2026-11-12 的結構）。
-SourceProbeReport _probe(String body, {bool fetchedNext = false}) =>
-    SourceProbeReport(
-      logs: const [
-        (40, '︾開始解析正文頁: 第一章 车祸'),
-        (40, '  正文 URL: $_chapter'),
-        (1000, '︽解析完成'),
-      ],
-      requests: [
-        _chapter,
-        '  ← $_chapter 200：$body',
-        if (fetchedNext) ...[
-          _chapter.replaceAll('.html', '_2.html'),
-          '  ← ${_chapter.replaceAll('.html', '_2.html')} 200：…',
-        ],
-      ],
-      pages: [
-        (line: _chapter, body: null),
-        (line: '  ← $_chapter 200 text/html，7752 位元組：…', body: body),
-      ],
-      contentUsable: true,
-    );
+SourceProbeReport _probe(
+  String body, {
+  bool fetchedNext = false,
+  String? nextChapter,
+}) => SourceProbeReport(
+  logs: [
+    (40, '︾開始解析正文頁: 第一章 车祸'),
+    (40, '  正文 URL: $_chapter'),
+    if (nextChapter != null) (40, '  下一章 URL: $nextChapter'),
+    (1000, '︽解析完成'),
+  ],
+  requests: [
+    _chapter,
+    '  ← $_chapter 200：$body',
+    if (fetchedNext) ...[
+      _chapter.replaceAll('.html', '_2.html'),
+      '  ← ${_chapter.replaceAll('.html', '_2.html')} 200：…',
+    ],
+  ],
+  pages: [
+    (line: _chapter, body: null),
+    (line: '  ← $_chapter 200 text/html，7752 位元組：…', body: body),
+  ],
+  contentUsable: true,
+);
 
 const _halfChapter =
     '<div id="content">前半章</div>'
@@ -96,6 +100,19 @@ void main() {
       unjoinedContentPage(
         _probe('<div id="content">整章</div><a href="95394.html">下一章</a>'),
         _source(),
+      ),
+      isNull,
+    );
+  });
+
+  test('a next page that the table of contents lists as the next chapter '
+      'is not missing', () {
+    // 2026-11-13 腐文小说：整本書一頁一章，目錄的第二章就是 27752_2.html，
+    // 引擎照 Legado 不把下一章當同一章的下一頁抓。
+    expect(
+      unjoinedContentPage(
+        _probe(_halfChapter, nextChapter: _chapterNext),
+        _source(next: 'text.下一页@href'),
       ),
       isNull,
     );

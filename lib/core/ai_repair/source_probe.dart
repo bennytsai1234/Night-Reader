@@ -435,14 +435,18 @@ String? searchInfoMismatch(SourceProbeReport probe) {
 /// （95393.html，後半在 95393_2.html），校驗照樣通過；11-13 另一次寫了
 /// `nextContentUrl`，選擇器卻抓不到連結，同樣只有前半頁，所以看的是請求
 /// 紀錄裡有沒有那一頁，不是規則有沒有寫。正文規則自己抓網頁（`java.ajax`
-/// 這類）的不看。
+/// 這類）的不看。下一頁就是目錄的下一章時不算（2026-11-13 腐文小说一頁
+/// 一章）：引擎照 Legado 不把下一章當同一章的下一頁抓。
 String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
   final rule = source.ruleContent;
   if (_fetchesItself.hasMatch(rule?.content ?? '')) return null;
   String? chapterUrl;
+  String? nextChapterUrl;
   for (final (_, message) in probe.logs) {
     final url = RegExp(r'^\s*正文 URL: (\S+)').firstMatch(message)?.group(1);
     if (url != null) chapterUrl = url;
+    final next = RegExp(r'^\s*下一章 URL: (\S+)').firstMatch(message)?.group(1);
+    if (next != null) nextChapterUrl = next;
   }
   final chapter = chapterUrl == null ? null : Uri.tryParse(chapterUrl);
   if (chapter == null) return null;
@@ -464,6 +468,10 @@ String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
     }
     if (isNextPageOfChapter(chapter, target)) {
       final next = '${target.removeFragment()}';
+      if (nextChapterUrl != null &&
+          next == '${chapter.resolve(nextChapterUrl).removeFragment()}') {
+        continue;
+      }
       final fetched = [
         ...probe.requests,
         for (final page in probe.pages) page.line,
