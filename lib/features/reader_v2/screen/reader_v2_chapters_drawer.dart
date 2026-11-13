@@ -18,6 +18,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/toc_volume_row.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 閱讀器左側的面板：「目錄」「書籤」「標註」三個分頁，頂端的分段切換。
 class ReaderV2ChaptersDrawer extends StatefulWidget {
@@ -240,16 +241,15 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
           padding: EdgeInsets.only(
             left: _volumes.volumeOf(index) >= 0 ? tocChapterIndent : 0,
           ),
-          child: Text(
+          child: DragOverflowText(child: Text(
             chapterTitle,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.3,
               color: isCurrentChapter ? scheme.primary : scheme.onSurface,
               fontWeight: isCurrentChapter ? FontWeight.w600 : FontWeight.w400,
             ),
-          ),
+          )),
         ),
         trailing: trailing,
         showChevron: false,
