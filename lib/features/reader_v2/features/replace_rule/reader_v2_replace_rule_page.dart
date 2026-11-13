@@ -386,19 +386,23 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      DragOverflowText(child: Text(
-                        _name,
-                        maxLines: 1,
-                        style: _nameStyle.copyWith(color: scheme.onSurface),
-                      )),
-                      const SizedBox(height: _patternGap),
-                      DragOverflowText(child: Text(
-                        _pattern,
-                        maxLines: 2,
-                        style: _patternStyle.copyWith(
-                          color: chrome.sectionText,
+                      DragOverflowText(
+                        child: Text(
+                          _name,
+                          maxLines: 1,
+                          style: _nameStyle.copyWith(color: scheme.onSurface),
                         ),
-                      )),
+                      ),
+                      const SizedBox(height: _patternGap),
+                      DragOverflowText(
+                        child: Text(
+                          _pattern,
+                          maxLines: 2,
+                          style: _patternStyle.copyWith(
+                            color: chrome.sectionText,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: _chipGap),
                       Wrap(
                         spacing: _chipGap,
