@@ -583,12 +583,33 @@ void main() {
       [_source('https://site.example')],
       replies: [_command('test')],
       searchLimited: true,
-      knownTitle: (title: '剑仙转生', from: '玄幻', found: false),
+      knownTitle: (title: '剑仙转生', from: '玄幻', found: false, limited: null),
     );
 
     await s.start();
 
     expect(asked.first.last.content, contains('發現頁「玄幻」的第一本書《剑仙转生》搜尋，也搜不到'));
+  });
+
+  test('a listed title the site would not search because of the limit is '
+      'told as limited, not as not found', () async {
+    final s = session(
+      [_source('https://site.example')],
+      replies: [_command('test')],
+      searchLimited: true,
+      knownTitle: (
+        title: '剑仙转生',
+        from: '玄幻',
+        found: false,
+        limited: '「搜索间隔: 30 秒」',
+      ),
+    );
+
+    await s.start();
+
+    final opening = asked.first.last.content;
+    expect(opening, contains('被網站限流擋住（「搜索间隔: 30 秒」）'));
+    expect(opening, isNot(contains('這個搜尋規則找不到')));
   });
 
   test('a search that answers after waiting goes on to the AI', () async {

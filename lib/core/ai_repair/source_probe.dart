@@ -366,47 +366,103 @@ Future<bool> searchFollowsKeyword(
   }
 }
 
-/// 用網站自己發現頁上確實有的一本書搜一次的結果（[searchKnownTitle]）。
-typedef KnownTitleSearch = ({String title, String from, bool found});
+/// 用網站自己發現頁上確實有的一本書搜一次的結果（[searchKnownTitle]）：
+/// [limited] 是搜那本書時網站限流說的話（請求紀錄的「網站限流」），沒被擋
+/// 是 null。
+typedef KnownTitleSearch = ({
+  String title,
+  String from,
+  bool found,
+  String? limited,
+});
 
 /// 原本的關鍵字搜不到書時，從網站自己的發現頁拿第一本書的書名，用 [source]
 /// 的搜尋規則搜它：搜不到，表示網站上有的書這個搜尋規則找不到（規則錯，或
 /// 網站的搜尋本身不理關鍵字）；搜得到，表示規則與網站都正常。2026-11-13
-/// 蜘蛛小說網的 AI 每次要花 5 到 10 輪自己做這個比對。沒有發現頁、發現頁
-/// 沒有書、出錯或逾時是 null。
+/// 蜘蛛小說網的 AI 每次要花 5 到 10 輪自己做這個比對。在書源 worker 裡做、
+/// 記下請求：開場已經搜了好幾次，限流的網站這次可能被擋，被擋的寫成限流，
+/// 不寫成規則找不到。沒有發現頁、發現頁沒有書、出錯或逾時是 null。
 Future<KnownTitleSearch?> searchKnownTitle(
   BookSource source, {
   required Duration timeout,
   CancelToken? cancelToken,
+  @visibleForTesting Future<DriftIsolate>? database,
 }) async {
   if ((source.searchUrl ?? '').trim().isEmpty) return null;
-  final service = BookSourceService();
+  final SourceWorker worker;
   try {
-    final kinds = await service
-        .exploreKinds(source.exploreUrl, source: source)
-        .timeout(timeout);
-    for (final kind in kinds) {
-      final url = kind.url?.trim() ?? '';
-      if (url.isEmpty) continue;
-      final books = await service
-          .exploreBooks(source, url, cancelToken: cancelToken)
-          .timeout(timeout);
-      final title = books.firstOrNull?.name.trim() ?? '';
-      if (title.isEmpty) continue;
-      final found = await service
-          .searchBooks(source, title, cancelToken: cancelToken)
-          .timeout(timeout);
-      return (
-        title: title,
-        from: kind.title,
-        found: found.any((book) => book.name.trim() == title),
-      );
-    }
+    worker = await SourceWorker.spawn(
+      debugName: 'KnownTitle',
+      withDictionaries: false,
+      database: database,
+    );
+  } catch (error) {
+    AppLog.d('用發現頁的書名搜尋開不起來: $error');
+    return null;
+  }
+  try {
+    if (cancelToken?.isCancelled ?? false) return null;
+    unawaited(
+      cancelToken?.whenCancel.then((_) => worker.kill(StateError('已停止'))),
+    );
+    final map = await worker
+        .run(_knownTitleTask(source.toJson(), timeout))
+        .timeout(timeout * 3, onTimeout: () => const {});
+    final title = map['title'] as String?;
+    if (title == null) return null;
+    return (
+      title: title,
+      from: map['from'] as String? ?? '',
+      found: map['found'] == true,
+      limited: map['limited'] as String?,
+    );
   } catch (error) {
     AppLog.d('用發現頁的書名搜尋沒做成: $error');
+    return null;
+  } finally {
+    worker.kill(StateError('用發現頁的書名搜尋已結束'));
   }
-  return null;
 }
+
+/// 只捕捉資料（`CODING_STANDARDS.md` 背景執行）。
+Future<Map<String, Object?>> Function(CancelToken) _knownTitleTask(
+  Map<String, dynamic> sourceJson,
+  Duration timeout,
+) => (cancelToken) async {
+  final source = BookSource.fromJson(sourceJson);
+  final service = BookSourceService();
+  final kinds = await service
+      .exploreKinds(source.exploreUrl, source: source)
+      .timeout(timeout);
+  for (final kind in kinds) {
+    final url = kind.url?.trim() ?? '';
+    if (url.isEmpty) continue;
+    final books = await service
+        .exploreBooks(source, url, cancelToken: cancelToken)
+        .timeout(timeout);
+    final title = books.firstOrNull?.name.trim() ?? '';
+    if (title.isEmpty) continue;
+    final requests = RequestLog(
+      responsePreview: SourceProbeReport.responsePreview,
+    );
+    final found = await requests.run(
+      () => service
+          .searchBooks(source, title, cancelToken: cancelToken)
+          .timeout(timeout),
+    );
+    final limited = [
+      for (final line in requests.lines)
+        ?RegExp(r'網站限流：([^）]*)').firstMatch(line)?.group(1),
+    ].firstOrNull;
+    return {
+      'title': title,
+      'from': kind.title,
+      'found': found.any((book) => book.name.trim() == title),
+      'limited': limited,
+    };
+  }
+  return const {};
+};
 
 /// 不可能搜到書的詞。
 const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';

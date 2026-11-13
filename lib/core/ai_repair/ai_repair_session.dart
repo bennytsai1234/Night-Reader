@@ -500,11 +500,14 @@ class AiRepairSession extends ChangeNotifier {
       () => _knownTitleSearch(job.original, _cancelToken),
     );
     if (_stopped || result == null) return;
-    final fact = result.found
-        ? '用網站自己發現頁「${result.from}」的第一本書《${result.title}》搜尋，'
-              '搜得到：搜尋規則與網站都能搜，原本的關鍵字剛好沒有書'
-        : '用網站自己發現頁「${result.from}」的第一本書《${result.title}》搜尋，'
-              '也搜不到：網站上有的書，這個搜尋規則找不到';
+    final searched = '用網站自己發現頁「${result.from}」的第一本書《${result.title}》搜尋，';
+    final fact = switch (result) {
+      (found: true, limited: _, title: _, from: _) =>
+        '$searched搜得到：搜尋規則與網站都能搜，原本的關鍵字剛好沒有書',
+      (limited: final String note, found: false, title: _, from: _) =>
+        '$searched被網站限流擋住（$note），搜不搜得到還不知道',
+      _ => '$searched也搜不到：網站上有的書，這個搜尋規則找不到',
+    };
     job._checkResult = '${job._checkResult}\n\n$fact';
     log.both(fact);
   }

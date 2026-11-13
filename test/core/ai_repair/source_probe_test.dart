@@ -55,6 +55,9 @@ void main() {
         '/book/2/1.html' =>
           '<div id="content"><img src="/static/lazy.png" '
               'data-original="/img/chapter-1-page-1.jpg"></div>',
+        '/explore' => '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
+        '/limited' =>
+          '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
         // 一章分兩頁（下書網）：第一頁有指向第二頁的連結。
         '/book/3/1.html' =>
           '<div id="content">$_chapter</div><a href="/book/3/1_2.html">下一页</a>',
@@ -157,6 +160,27 @@ void main() {
       isNull,
       reason: '抓過了就算接上',
     );
+  });
+
+  test('a title the site lists in discovery is searched with the source, and '
+      'a limited answer is told apart from not found', () async {
+    final listed = source()..exploreUrl = '全部::/explore';
+    final found = await searchKnownTitle(
+      listed,
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+    expect(found, (title: '夜雨聽書', from: '全部', found: true, limited: null));
+
+    final limited = await searchKnownTitle(
+      source()
+        ..exploreUrl = '全部::/explore'
+        ..searchUrl = '/limited?q={{key}}',
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+    expect(limited?.found, isFalse);
+    expect(limited?.limited, '「搜索间隔: 30 秒」');
   });
 
   test('a probe can start from the table of contents', () async {
