@@ -13,6 +13,7 @@ import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class SearchResultItem extends StatefulWidget {
   final AggregatedSearchBook result;
@@ -169,16 +170,15 @@ class _SearchResultItemState extends State<SearchResultItem> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
+                        child: DragOverflowText(child: Text(
                           context.zh(book.name),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
                             color: scheme.onSurface,
                             fontWeight: FontWeight.w600,
                           ),
-                        ),
+                        )),
                       ),
                       if (book.inBookshelf) ...[
                         const SizedBox(width: AppSpacing.sm),
@@ -188,19 +188,17 @@ class _SearchResultItemState extends State<SearchResultItem> {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  DragOverflowText(child: Text(
                     metadata,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: secondaryStyle,
-                  ),
+                  )),
                   const SizedBox(height: 2),
-                  Text(
+                  DragOverflowText(child: Text(
                     '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: secondaryStyle,
-                  ),
+                  )),
                 ],
               ),
             ),
