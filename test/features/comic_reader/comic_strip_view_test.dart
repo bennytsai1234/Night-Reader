@@ -114,8 +114,8 @@ void main() {
     expect(find.text('已閱畢：'), findsOneWidget);
     expect(find.text('第2話'), findsOneWidget);
     expect(find.text('第3話'), findsOneWidget);
-    // 離下面的盡頭不到兩個螢幕，先載下一話；上面還有兩張，不急。
-    expect(harness.source.requestedChapters, [1, 2]);
+    // 錨點那一話放上去後，先拿前後各兩話（下一話先、上一話後）。
+    expect(harness.source.requestedChapters, [1, 2, 0, 3]);
 
     await tester.drag(find.byType(ComicStripView), const Offset(0, -1200));
     await harness.settle(tester);
@@ -171,7 +171,8 @@ void main() {
     await tester.tap(find.text('登入'));
     await harness.settle(tester);
     expect(runs, 1);
-    expect(source.requestedChapters, [0, 0]);
+    // 重抓錨點那一話，放上去後先拿後面兩話。
+    expect(source.requestedChapters, [0, 0, 1, 2]);
     expect(harness.last, const ComicLocation(0, 0));
   });
 

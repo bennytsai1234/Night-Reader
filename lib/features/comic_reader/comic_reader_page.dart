@@ -573,7 +573,6 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     if (cbz != null) await cbz.delete();
     final partial = await ComicChapterDownload.partialDirFor(_book, chapter);
     if (await partial.exists()) await partial.delete(recursive: true);
-    imageCache.clear();
     if (!mounted) return;
     final model = _model;
     if (model == null) return;

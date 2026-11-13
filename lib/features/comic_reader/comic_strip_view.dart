@@ -10,6 +10,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'comic_chapter_transition.dart';
 import 'comic_page_image.dart';
+import 'comic_page_images.dart';
 import 'comic_strip_model.dart';
 
 /// 畫面頂端讀到哪：第幾話第幾張，在那張的幾成。
@@ -127,6 +128,10 @@ class ComicStripView extends StatefulWidget {
   /// 失敗的那一張佔螢幕高的比例。
   static const double failedPageHeight = 0.8;
 
+  /// 畫面上下各這麼遠（點）以內的圖先讀好、解碼好，範圍外的放掉；同文字
+  /// 閱讀器的 `AdmissionController.guaranteedWindow`。
+  static const double preloadExtent = 3000;
+
   @override
   State<ComicStripView> createState() => _ComicStripViewState();
 }
@@ -146,6 +151,17 @@ class _ComicStripViewState extends State<ComicStripView>
   // 開始；[_before] 第 i 塊往上佔 _beforeEnds[i] 到 _beforeEnds[i + 1]）。
   List<double> _afterTops = const [0];
   List<double> _beforeEnds = const [0];
+
+  /// [_afterTops]、[_beforeEnds] 是照哪一份內容量的：條漫內容在同一幀裡
+  /// 變了好幾次時，重建前高度表還是舊的。
+  List<ComicStripItem>? _measuredAfter;
+  List<ComicStripItem>? _measuredBefore;
+
+  /// 高度表和現在的內容對得上；對不上時重建已經排好，重建完會再捲一次
+  /// [_onScroll]。
+  bool get _measured =>
+      identical(_measuredAfter, _model.after) &&
+      identical(_measuredBefore, _model.before);
   final Map<ComicTransitionItem, (Object, double)> _transitionExtents = {};
   final Map<ComicPageItem, bool> _failedPages = {};
 
@@ -162,6 +178,13 @@ class _ComicStripViewState extends State<ComicStripView>
   Duration _autoScrollLast = Duration.zero;
   ComicLocation? _lastLocation;
 
+  /// 解碼好的圖；換一個條漫內容（[ComicStripModel]）就換一份。
+  late ComicPageImages _images = _createImages();
+
+  /// 上次交給 [_images] 的範圍內的圖，圖解碼好回報比例時找回是哪一塊。
+  Map<ComicImageKey, ComicPageItem> _windowItems = const {};
+  Object? _windowSignature;
+
   @override
   void initState() {
     super.initState();
@@ -169,6 +192,9 @@ class _ComicStripViewState extends State<ComicStripView>
     widget.model.addListener(_onModel);
     _resetScroll(widget.initialFraction);
   }
+
+  ComicPageImages _createImages() =>
+      ComicPageImages(source: widget.model.source, onSize: _onImageSize);
 
   @override
   void didUpdateWidget(ComicStripView oldWidget) {
@@ -180,6 +206,10 @@ class _ComicStripViewState extends State<ComicStripView>
     if (!identical(oldWidget.model, widget.model)) {
       oldWidget.model.removeListener(_onModel);
       widget.model.addListener(_onModel);
+      _images.dispose();
+      _images = _createImages();
+      _windowItems = const {};
+      _windowSignature = null;
       _resetScroll(0);
     }
   }
@@ -192,6 +222,7 @@ class _ComicStripViewState extends State<ComicStripView>
     _panAnimation?.dispose();
     _autoScroll?.dispose();
     _scroll.dispose();
+    _images.dispose();
     super.dispose();
   }
 
@@ -309,6 +340,8 @@ class _ComicStripViewState extends State<ComicStripView>
     }
     _afterTops = tops;
     _beforeEnds = ends;
+    _measuredAfter = _model.after;
+    _measuredBefore = _model.before;
   }
 
   // ─── 位置 ───────────────────────────────────────────────────────────
@@ -324,8 +357,9 @@ class _ComicStripViewState extends State<ComicStripView>
 
   /// 捲動位置 [pixels]（畫面頂端）落在哪一塊，以及在那塊裡的距離。用整數
   /// 位置 g：g >= 0 是往下第 g 塊，g < 0 是往上第 -g-1 塊。
+  /// 上面沒有內容時，落在上面的位置算第 0 塊。
   (int, double) _itemAt(double pixels) {
-    if (pixels >= 0) {
+    if (pixels >= 0 || _model.before.isEmpty) {
       final i = _upperBound(_afterTops, pixels) - 1;
       final index = i.clamp(0, math.max(0, _model.after.length - 1)).toInt();
       return (index, pixels - _afterTops[index]);
@@ -369,20 +403,82 @@ class _ComicStripViewState extends State<ComicStripView>
   }
 
   void _onScroll() {
-    if (!_scroll.hasClients || _screen.isEmpty) return;
+    if (!_scroll.hasClients || _screen.isEmpty || !_measured) return;
     final position = _scroll.position;
     final pixels = position.pixels;
     final location = _locationAt(pixels);
     if (location != null && location != _lastLocation) {
+      if (location.chapterIndex != _lastLocation?.chapterIndex) {
+        _model.prefetchAround(location.chapterIndex);
+      }
       _lastLocation = location;
       widget.onLocation(location);
     }
-    // 離已放上的內容盡頭不到兩個螢幕就接上下一話、上一話。
-    final reach = _viewportHeight * 2;
+    // 預載範圍伸到已放上的內容外面就接上下一話、上一話。
+    const reach = ComicStripView.preloadExtent;
     if (_afterTops.last - (pixels + _viewportHeight) < reach) {
       _model.loadNext();
     }
     if (_beforeEnds.last + pixels < reach) _model.loadPrevious();
+    _demandImages(pixels);
+  }
+
+  int get _decodeWidth =>
+      (_width * MediaQuery.devicePixelRatioOf(context)).ceil();
+
+  ComicImageKey _imageKeyOf(ComicPageItem item) =>
+      ComicImageKey(item.chapterIndex, item.page, _decodeWidth);
+
+  /// 畫面上下 [ComicStripView.preloadExtent] 以內的圖交給 [_images]：看得到
+  /// 的先，接著往下的（近的先），最後往上的。
+  void _demandImages(double pixels) {
+    if (_model.after.isEmpty) return;
+    final (first, _) = _itemAt(pixels - ComicStripView.preloadExtent);
+    final (last, _) = _itemAt(
+      pixels + _viewportHeight + ComicStripView.preloadExtent,
+    );
+    final (visibleFirst, _) = _itemAt(pixels);
+    final (visibleLast, _) = _itemAt(pixels + _viewportHeight);
+    final signature = Object.hash(
+      identityHashCode(_afterTops),
+      identityHashCode(_beforeEnds),
+      first,
+      last,
+      visibleFirst,
+      visibleLast,
+      _decodeWidth,
+    );
+    if (signature == _windowSignature) return;
+    _windowSignature = signature;
+    final items = <ComicImageKey, ComicPageItem>{};
+    void add(int g) {
+      if (_itemOf(g) case final ComicPageItem item) {
+        items[_imageKeyOf(item)] = item;
+      }
+    }
+
+    for (var g = visibleFirst; g <= visibleLast; g++) {
+      add(g);
+    }
+    final visibleCount = items.length;
+    for (var g = visibleLast + 1; g <= last; g++) {
+      add(g);
+    }
+    for (var g = visibleFirst - 1; g >= first; g--) {
+      add(g);
+    }
+    _windowItems = items;
+    _images.demand(
+      items.keys.toList(growable: false),
+      visibleCount: visibleCount,
+    );
+  }
+
+  /// 一張圖解碼好了：量到的比例和現在畫的不同就改高度（畫面上看到的不動）。
+  void _onImageSize(ComicImageKey key, double ratio) {
+    if (!mounted) return;
+    final item = _windowItems[key];
+    if (item != null) _onAspectRatio(item, ratio);
   }
 
   /// 圖到了、或載入失敗改成八成螢幕高：高度變了。畫面頂端看到的內容不動：
@@ -659,6 +755,10 @@ class _ComicStripViewState extends State<ComicStripView>
         if (screen != _screen) {
           _screen = screen;
           _tx = _clampTx(_tx, _scale);
+          // 寬度變了，解碼寬度與範圍跟著換。
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _onScroll();
+          });
         }
         _measure();
         return Listener(
@@ -704,8 +804,8 @@ class _ComicStripViewState extends State<ComicStripView>
       controller: _scroll,
       physics: const _ComicScrollPhysics(),
       center: _centerKey,
-      // 上下各多排一個螢幕高（Mihon 的 extraLayoutSpace 是四分之三），
-      // 捲到之前圖已經在解碼。
+      // 上下各多排一個螢幕高（Mihon 的 extraLayoutSpace 是四分之三）；
+      // 圖本身由 [_demandImages] 在更遠的地方就先解碼好。
       scrollCacheExtent: const ScrollCacheExtent.viewport(1),
       slivers: [
         SliverVariedExtentList(
@@ -762,12 +862,10 @@ class _ComicStripViewState extends State<ComicStripView>
         final opener = widget.webUrlOpener;
         return ComicPageView(
           key: key,
-          source: _model.source,
-          chapterIndex: item.chapterIndex,
-          page: item.page,
+          images: _images,
+          imageKey: _imageKeyOf(item),
           width: _width,
           height: _extentOf(item),
-          onAspectRatio: (ratio) => _onAspectRatio(item, ratio),
           onFailed: (failed) => _onPageFailed(item, failed),
           onOpenWeb: url == null || opener == null ? null : () => opener(url),
           remedyFor: widget.remedyFor,

@@ -1,102 +1,35 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
-import 'comic_page_source.dart';
+import 'comic_page_images.dart';
 
-/// 一張漫畫圖，照畫面寬度解碼（比畫面寬的圖縮小，省記憶體），放進 Flutter
-/// 的圖片快取，捲回來不用再讀檔。
-@immutable
-class ComicPageImage extends ImageProvider<ComicPageImage> {
-  const ComicPageImage({
-    required this.source,
-    required this.chapterIndex,
-    required this.page,
-    required this.targetWidth,
-  });
-
-  final ComicPageSource source;
-  final int chapterIndex;
-  final ComicPage page;
-
-  /// 解碼寬度（實體像素）。
-  final int targetWidth;
-
-  @override
-  Future<ComicPageImage> obtainKey(ImageConfiguration configuration) =>
-      SynchronousFuture<ComicPageImage>(this);
-
-  @override
-  ImageStreamCompleter loadImage(
-    ComicPageImage key,
-    ImageDecoderCallback decode,
-  ) => MultiFrameImageStreamCompleter(
-    codec: _load(decode),
-    scale: 1,
-    debugLabel: '${page.name}@$chapterIndex',
-  );
-
-  Future<ui.Codec> _load(ImageDecoderCallback decode) async {
-    final bytes = await source.bytesOf(chapterIndex, page);
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    return decode(
-      buffer,
-      getTargetSize: (width, height) => width > targetWidth
-          ? ui.TargetImageSize(width: targetWidth)
-          : const ui.TargetImageSize(),
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is ComicPageImage &&
-      identical(other.source, source) &&
-      other.chapterIndex == chapterIndex &&
-      other.page.name == page.name &&
-      other.targetWidth == targetWidth;
-
-  @override
-  int get hashCode => Object.hash(
-    identityHashCode(source),
-    chapterIndex,
-    page.name,
-    targetWidth,
-  );
-}
-
-/// 條漫上的一張圖：還沒到時畫骨架（照骨架呼吸），到了淡入；載不到時寫原因，
-/// 下面「重試」與「用網頁開啟」，其他張照常（`docs/design/comics.md`）。
+/// 條漫上的一張圖：已經解碼好的直接畫；還沒到時畫骨架（照骨架呼吸），
+/// 到了淡入；載不到時寫原因，下面「重試」與「用網頁開啟」，其他張照常
+/// （`docs/design/comics.md`）。圖從 [ComicPageImages] 來，這裡不讀檔。
 class ComicPageView extends StatefulWidget {
   const ComicPageView({
     super.key,
-    required this.source,
-    required this.chapterIndex,
-    required this.page,
+    required this.images,
+    required this.imageKey,
     required this.width,
     required this.height,
-    required this.onAspectRatio,
     required this.onFailed,
     this.onOpenWeb,
     this.remedyFor,
   });
 
-  final ComicPageSource source;
-  final int chapterIndex;
-  final ComicPage page;
+  final ComicPageImages images;
+  final ComicImageKey imageKey;
 
   /// 這張畫的寬高（邏輯像素），由條漫決定。
   final double width;
   final double height;
-
-  /// 圖到了，回報量到的比例（高 ÷ 寬）。
-  final ValueChanged<double> onAspectRatio;
 
   /// 載入失敗或重試時呼叫：失敗那一張要佔約八成螢幕高。
   final ValueChanged<bool> onFailed;
@@ -113,86 +46,66 @@ class ComicPageView extends StatefulWidget {
 }
 
 class _ComicPageViewState extends State<ComicPageView> {
-  ImageStream? _stream;
-  ImageStreamListener? _listener;
-  ImageInfo? _image;
+  ui.Image? _image;
   Object? _error;
 
-  /// 第一次解碼時已經在快取裡的圖直接顯示，不淡入。
+  /// 圖到的時候這張在畫面上才淡入；畫上去時已經解碼好、或在畫面外解碼
+  /// 好的直接顯示。
   bool _fadeIn = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _resolve();
+  void initState() {
+    super.initState();
+    _attach();
   }
 
   @override
   void didUpdateWidget(ComicPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.source, widget.source) ||
-        oldWidget.chapterIndex != widget.chapterIndex ||
-        oldWidget.page.name != widget.page.name ||
-        _targetWidthChanged(oldWidget)) {
-      _resolve();
+    if (!identical(oldWidget.images, widget.images) ||
+        oldWidget.imageKey != widget.imageKey) {
+      oldWidget.images.removeListener(oldWidget.imageKey, _onChanged);
+      _image?.dispose();
+      _image = null;
+      _error = null;
+      _fadeIn = false;
+      _attach();
     }
   }
 
-  int _targetWidth() =>
-      (widget.width * MediaQuery.devicePixelRatioOf(context)).ceil();
-
-  bool _targetWidthChanged(ComicPageView oldWidget) =>
-      (oldWidget.width - widget.width).abs() > 0.5;
-
-  ComicPageImage _provider() => ComicPageImage(
-    source: widget.source,
-    chapterIndex: widget.chapterIndex,
-    page: widget.page,
-    targetWidth: _targetWidth(),
-  );
-
-  void _resolve() {
-    final stream = _provider().resolve(ImageConfiguration.empty);
-    if (stream.key == _stream?.key) return;
-    _stopListening();
-    _stream = stream;
-    var synchronous = true;
-    final listener = ImageStreamListener(
-      (info, _) {
-        if (!mounted) return;
-        final first = _image == null;
-        setState(() {
-          _image?.dispose();
-          _image = info;
-          _error = null;
-          if (first) _fadeIn = !synchronous;
-        });
-        final image = info.image;
-        if (image.width > 0) widget.onAspectRatio(image.height / image.width);
-      },
-      onError: (error, _) {
-        if (!mounted) return;
-        setState(() => _error = error);
-        widget.onFailed(true);
-      },
-    );
-    _listener = listener;
-    stream.addListener(listener);
-    synchronous = false;
+  /// 開始畫 [ComicPageView.imageKey]：好了的直接拿，沒好的登記等通知。這裡
+  /// 不回報失敗（建構中不能改條漫的高度）；失敗的高度條漫在通知時已經改過。
+  void _attach() {
+    final images = widget.images;
+    final key = widget.imageKey;
+    images.addListener(key, _onChanged);
+    _image = images.image(key);
+    _error = _image == null ? images.error(key) : null;
+    if (_image == null && _error == null) images.want(key);
   }
 
-  void _stopListening() {
-    final listener = _listener;
-    if (listener != null) _stream?.removeListener(listener);
-    _listener = null;
+  void _onChanged() {
+    if (!mounted) return;
+    final images = widget.images;
+    final key = widget.imageKey;
+    final image = _image == null ? images.image(key) : null;
+    final error = images.error(key);
+    if (image != null) {
+      setState(() {
+        _image = image;
+        _error = null;
+        _fadeIn = images.isVisible(key);
+      });
+    } else if (error != null && _error == null) {
+      setState(() => _error = error);
+      widget.onFailed(true);
+    }
   }
 
   void _retry() {
-    unawaited(_provider().evict());
     setState(() => _error = null);
     widget.onFailed(false);
-    _stream = null;
-    _resolve();
+    widget.images.retry(widget.imageKey);
   }
 
   /// 登入或驗證回來：登入資料有變才重試這一張。
@@ -202,7 +115,7 @@ class _ComicPageViewState extends State<ComicPageView> {
 
   @override
   void dispose() {
-    _stopListening();
+    widget.images.removeListener(widget.imageKey, _onChanged);
     _image?.dispose();
     super.dispose();
   }
@@ -231,7 +144,7 @@ class _ComicPageViewState extends State<ComicPageView> {
     );
     if (image == null) return skeleton;
     final picture = RawImage(
-      image: image.image,
+      image: image,
       width: size.width,
       height: size.height,
       fit: BoxFit.fill,
