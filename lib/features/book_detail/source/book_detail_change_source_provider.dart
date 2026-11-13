@@ -15,6 +15,7 @@ import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
+import 'package:night_reader/core/constant/source_wait.dart';
 
 /// 換源搜尋的過濾條件，跟著搜尋送進書源 isolate，所以在只捕捉書名與作者的
 /// 頂層函式裡建立。
@@ -37,7 +38,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     BookSourceService? service,
     BookSourceDao? sourceDao,
     SearchBookDao? searchBookDao,
-    this._sourceSearchTimeout = const Duration(seconds: 15),
+    this._sourceSearchTimeout = const Duration(seconds: sourceWaitSeconds),
     bool autoStart = true,
   }) : service = service ?? BookSourceService(),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),

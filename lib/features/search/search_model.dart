@@ -16,6 +16,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/search_scope.dart';
 
+import 'package:night_reader/core/constant/source_wait.dart';
+
 /// 比對用的書名、作者與關鍵字：全形轉半形、去空白、轉小寫，繁體轉成簡體，
 /// 繁體站與簡體站回傳的同一本書才會併成一張、照同樣的相關度排。
 String normalizeSearchText(String? value) {
@@ -461,7 +463,7 @@ class SearchModel {
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
         _searchSource(source, variant, cancelToken: cancelToken)
-            .timeout(const Duration(seconds: 30))
+            .timeout(const Duration(seconds: sourceWaitSeconds))
             .then<List<SearchBook>?>(
               (books) => books,
               onError: (Object error, StackTrace stackTrace) {
