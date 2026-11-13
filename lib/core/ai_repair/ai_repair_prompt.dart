@@ -669,13 +669,16 @@ final List<AiTool> aiRepairTools = [
           'type': 'string',
           'enum': aiGiveUpLabels.keys.toList(),
           'description':
-              '原因：site_gone 網站不在了：網域查不到、只剩停放頁，或每個網址最後落到的'
-              '頁面都沒有這個書源的書、login 要登入、paid 要付費、'
-              'human_check 要真人在這個網站的網頁上驗證、blocked 擋下所有請求、'
-              'site_broken 網站在、其他頁面正常，書源要用的功能網站自己也做不到'
+              '原因：照順序問，第一個答「是」的就選它。'
+              'site_gone：網域查不到、只剩停放頁，或每個網址最後落到的頁面都沒有這個'
+              '書源的書？login：內容要登入帳號才給？paid：內容要付費才給？'
+              'human_check：這個網站自己的頁面要真人驗證，驗證過後給的是這個網站的內容？'
+              'blocked：網站擋下夜讀的所有請求？'
+              'rate_limited：請求紀錄寫著「網站限流」，等過它說的間隔再送還是被擋'
+              '（功能壞掉的一種：一般使用拿不到結果）？'
+              'site_broken：網站在、其他頁面正常，書源要用的功能網站自己也做不到'
               '（例如搜什麼都回空的搜尋頁；網站另有做得到的地方，像 API 或別的網址，'
-              '就不算）、rate_limited 網站限流：功能壞掉的一種，被限流到一般使用拿'
-              '不到結果（請求紀錄寫著「網站限流」）',
+              '就不算）？',
         },
         'reason': {'type': 'string', 'description': '看到的證據：哪一頁、什麼內容'},
       },

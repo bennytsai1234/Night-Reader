@@ -26,7 +26,7 @@
       "name": "🎃QQ文学网🎃",
       "url": "http://m.qqwx.win#🎃",
       "expected": "fixed",
-      "evidence": "2026-11-13 curl：搜尋、詳情、目錄、正文都正常（夜讀校驗也只卡在發現）。發現頁網址在 /shuku/ 底下：不帶來源頁（Referer）回 404；帶來源頁先回「验证中」頁（程式轉到同一網址加 ?_js_verify=1），帶同一個工作階段 Cookie PHPSESSID 打 ?_js_verify=1 會 302 回原網址，再抓才有 50 本書單；不帶 Cookie 只會一直回驗證頁。夜讀會自動帶來源頁；書源沒開 Cookie 罐，照 Legado 不存 PHPSESSID。修好要：打開 Cookie 罐（enabledCookieJar），發現網址照舊或改到 ?_js_verify=1。",
+      "evidence": "2026-11-13 curl：搜尋其實也壞了：書源用 GBK 送關鍵字，網站不理，「我的」與不可能的詞都回同樣 30 本推薦書（夜讀校驗只看有沒有書，所以只卡在發現）；改用 UTF-8 送，「我的」10 本、不可能的詞 0 本。詳情、目錄、正文正常。發現頁網址在 /shuku/ 底下：不帶來源頁（Referer）回 404；帶來源頁先回「验证中」頁（程式轉到同一網址加 ?_js_verify=1），帶同一個工作階段 Cookie PHPSESSID 打 ?_js_verify=1 會 302 回原網址，再抓才有 50 本書單；不帶 Cookie 只會一直回驗證頁。夜讀會自動帶來源頁；書源沒開 Cookie 罐，照 Legado 不存 PHPSESSID。修好要：搜尋改用 UTF-8；發現打開 Cookie 罐（enabledCookieJar），發現網址照舊或改到 ?_js_verify=1；或把發現換成不用驗證的書單頁（/sort.html、/novel/ 底下的排行）。",
       "confirmed": true
     },
     {
