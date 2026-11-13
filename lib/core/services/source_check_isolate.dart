@@ -669,8 +669,14 @@ class SourceChecker {
       return;
     }
 
-    // 只抽查免費章節（ADR 0057）：後面有付費章節的書照樣讀得到前面。整本
-    // 都是付費章節才記下來。
+    // 書源標了付費、還沒買的章節（ADR 0057）：夜讀不接付費內容，整個書源
+    // 標成付費。只看書源自己標的；章名的「VIP」這類字樣只用來挑抽查的章，
+    // 猜錯不會丟掉整個書源。
+    if (readableChapters.where((c) => c.isLocked).firstOrNull case final c?) {
+      _recordIssue(issues, _paidChapterIssue(mode, c));
+      return;
+    }
+
     final freeChapters = [
       for (final chapter in readableChapters)
         if (!_looksLikeLockedChapter(chapter)) chapter,
@@ -1204,6 +1210,15 @@ SourceRuntimeHealth _contentHealthFor(_CheckMode mode) {
   );
 }
 
+_IssueData _paidChapterIssue(_CheckMode mode, BookChapter chapter) {
+  final title = _compactChapterTitle(chapter.title);
+  return _IssueData(
+    stage: _stageFor(mode, 'toc'),
+    message: title.isEmpty ? '目錄有付費章節' : '目錄有付費章節: $title',
+    health: paidSourceHealth,
+  );
+}
+
 _IssueData _lockedChapterIssue(_CheckMode mode, BookChapter chapter) {
   final title = _compactChapterTitle(chapter.title);
   return _IssueData(
@@ -1383,6 +1398,8 @@ int _issuePriority(SourceHealthCategory category) {
       return 94;
     case SourceHealthCategory.downloadOnly:
       return 90;
+    case SourceHealthCategory.paid:
+      return 89;
     case SourceHealthCategory.contentBroken:
       return 80;
     case SourceHealthCategory.tocBroken:

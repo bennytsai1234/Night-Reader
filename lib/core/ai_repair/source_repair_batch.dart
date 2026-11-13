@@ -549,6 +549,7 @@ class SourceRepairBatch extends ChangeNotifier {
     SourceHealthCategory.loginRequired,
     SourceHealthCategory.verificationRequired,
     SourceHealthCategory.downloadOnly,
+    SourceHealthCategory.paid,
     SourceHealthCategory.nonNovel,
   };
 
