@@ -56,29 +56,31 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DragOverflowText(child: Text(
-                        searchBook.originName ?? '未知來源',
-                        maxLines: 1,
-                        style: AppTextStyles.bodyBase.copyWith(
-                          height: 1.3,
-                          color: scheme.onSurface,
-                          fontWeight: FontWeight.w600,
+                      DragOverflowText(
+                        child: Text(
+                          searchBook.originName ?? '未知來源',
+                          maxLines: 1,
+                          style: AppTextStyles.bodyBase.copyWith(
+                            height: 1.3,
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      )),
+                      ),
                       if (meta.isNotEmpty) ...[
                         const SizedBox(height: 2),
-                        DragOverflowText(child: Text(
-                          meta,
-                          maxLines: 1,
-                          style: secondaryStyle,
-                        )),
+                        DragOverflowText(
+                          child: Text(meta, maxLines: 1, style: secondaryStyle),
+                        ),
                       ],
                       const SizedBox(height: 2),
-                      DragOverflowText(child: Text(
-                        '最新：${context.zh(searchBook.latestChapterTitle ?? '無最新章節資訊')}',
-                        maxLines: 1,
-                        style: secondaryStyle,
-                      )),
+                      DragOverflowText(
+                        child: Text(
+                          '最新：${context.zh(searchBook.latestChapterTitle ?? '無最新章節資訊')}',
+                          maxLines: 1,
+                          style: secondaryStyle,
+                        ),
+                      ),
                     ],
                   ),
                 ),
