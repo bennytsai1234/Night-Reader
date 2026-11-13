@@ -149,7 +149,9 @@ SkeletonLayout contentLayoutOf(WidgetTester tester, Finder content) {
 Rect horizontallyClippedPaintRect(RenderObject object, Rect line) {
   Rect? horizontalClip;
   RenderObject current = object;
-  while (current.parent case final RenderObject parent) {
+  while (true) {
+    final parent = current.parent;
+    if (parent is! RenderObject) break;
     final localClip = parent.describeApproximatePaintClip(current);
     if (localClip != null) {
       final globalClip = MatrixUtils.transformRect(
