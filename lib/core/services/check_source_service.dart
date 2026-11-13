@@ -120,7 +120,7 @@ class SourceCheckConfig {
 
   static const SourceCheckConfig defaults = SourceCheckConfig(
     keyword: '我的',
-    timeoutSeconds: 15,
+    timeoutSeconds: 20,
     checkSearch: true,
     checkDiscovery: true,
     checkInfo: true,
