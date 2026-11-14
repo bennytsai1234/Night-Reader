@@ -262,12 +262,12 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('removeCookie', (args) {
-      final url = args.toString();
-      _track(CookieStore().removeCookie(url));
-      // 網站寫的也清（同 Legado：它的 CookieStore 就是 Cookie 罐）。2026-11-13
-      // 手机小说每次搜尋前清掉網站寫的搜尋間隔 Cookie，原本清不到，被擋 120 秒。
-      BlockingCall.run(cookieJarDelete(url));
+    // 網站寫的也清（同 Legado：它的 CookieStore 就是 Cookie 罐），規則等清完
+    // 才往下：2026-11-13 手机小说每次搜尋前清掉網站寫的搜尋間隔 Cookie，原本
+    // 清不到，被擋 120 秒。要等，所以走 onBlocking（停止時的錯誤照 JS 錯誤丟）。
+    onBlocking('removeCookie', (url) {
+      _track(CookieStore().removeCookie('$url'));
+      BlockingCall.run(cookieJarDelete('$url'));
       return null;
     });
     runtime.onMessage('clearCookies', (_) {

@@ -16,6 +16,7 @@ import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 import '../js_encode_utils.dart';
 import '../js_response.dart';
@@ -60,9 +61,14 @@ BlockingTask cookieJarDelete(String url) => () async {
 };
 
 /// 規則給的網址換成 Cookie 罐查得到的網址：去掉 `#` 後面（書源網址常帶
-/// `#註記`），沒有主機的是 null。
+/// `#註記`），網域照送出請求時換成 punycode（Cookie 罐照送出的網址存）；只給
+/// 網域時當成那個網域的首頁（同 Legado 的 Cookie API 收網址或網域）。沒有
+/// 主機的是 null。
 Uri? cookieJarUri(String url) {
-  final uri = Uri.tryParse(url.split('#').first.trim());
+  var text = url.split('#').first.trim();
+  if (text.isEmpty) return null;
+  if (!text.contains('://')) text = 'https://$text';
+  final uri = Uri.tryParse(NetworkUtils.toRequestUrl(text));
   if (uri == null || uri.host.isEmpty) return null;
   return uri;
 }
