@@ -4,13 +4,13 @@
 
 ## 決定
 
-- **不驗的**：Legado 不驗的地方都不驗：
+- **不驗的**（同 Legado；例外是有聲書線上播放，見後果）：
   - 書源的請求（搜尋、詳情、目錄、正文、下載（含有聲書）、登入），規則 JS 的 `java.ajax` 這類與 Jsoup 連線。
   - 從網址匯入書源與書架。
   - 網路封面（顯示與存進手機）。
   - 書源用的看不到的瀏覽器、Cloudflare 檢查與網站登入頁：遇到憑證錯誤照樣載入，同 Legado 的 `onReceivedSslError` 都 `proceed()`。
 - **照常驗的**：App 更新（查版本、下載 APK）、同步空間（WebDAV、Google 雲端硬碟）、AI 服務、字型下載。這些各用自己的連線，不經過書源的那一條。
-- 書源的連線全部從 `lib/core/network/source_tls.dart` 拿，新的書源請求也從那裡拿；夜讀自己的服務不要用書源的連線（`NetworkService().dio`）。
+- 書源的請求用 `NetworkService().dio`，或從 `lib/core/network/source_tls.dart` 拿連線；夜讀自己的新服務用 `NetworkService().appDio` 或自己開的連線。
 
 ## 考慮過的做法
 
