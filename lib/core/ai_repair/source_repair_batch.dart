@@ -550,7 +550,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   Iterable<RepairItem> _pending() => items.where((item) => !item.isFinished);
 
-  /// 還沒結果的書源照網站（可註冊網域）分組，照原本的順序。
+  /// 還沒結果的書源照網站（書源網址的主機，[siteKey]）分組，照原本的順序。
   Map<String, List<RepairItem>> _pendingBySite() {
     final groups = <String, List<RepairItem>>{};
     for (final item in _pending()) {
