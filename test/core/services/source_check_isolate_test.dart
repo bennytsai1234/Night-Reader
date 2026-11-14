@@ -390,6 +390,114 @@ void main() {
     expect(service.contentRequests, ['第1章', '第2章']);
   });
 
+  group('chapters past the first are sampled too', () {
+    // 使用者 2026-11-14：只看前段正文時，前幾章免費、後面付費，或後半段全是
+    // 別本書的廣告的書源都會過。第 1 章照舊在前 5 章裡找第一個讀得到的，
+    // 再抽中段、後段（50%、75%、90%）；章名寫了 VIP 這類字樣的優先抽。
+    List<BookChapter> book(int count, {Set<int> vipTitles = const {}}) => [
+      for (var i = 0; i < count; i++)
+        BookChapter(
+          url: 'https://site.example/book/1/$i.html',
+          title: '第${i + 1}章${vipTitles.contains(i) ? ' VIP' : ''}',
+          index: i,
+        ),
+    ];
+    // 真正的章節有幾千字，跟別章共用的一句只佔一小段。
+    String chapterText(BookChapter chapter) {
+      final i = chapter.index;
+      return '${chapter.title}的正文。$_readable這一章講的是第$i件事：主角在第$i天'
+          '走進第$i座城，遇見第$i個人，聽他說了第$i個故事，跟別章都不一樣。';
+    }
+
+    test('a whole book that reads fine at every sample is healthy', () async {
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async => chapterText(chapter),
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(service.contentRequests, ['第1章', '第21章', '第31章', '第37章']);
+    });
+
+    test('a broken chapter in the middle marks the content broken', () async {
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async => chapter.index == 20 || chapter.index == 21
+            ? ''
+            : chapterText(chapter),
+      );
+      final (result, checked) = await _check(service);
+
+      expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+      expect(result.message, contains('第21章'));
+    });
+
+    test('a short sampled chapter is followed by the next one', () async {
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async =>
+            chapter.index == 20 ? '請假一天' : chapterText(chapter),
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(service.contentRequests, contains('第22章'));
+    });
+
+    test(
+      'later chapters that are the same paid notice mark the source paid',
+      () async {
+        const notice =
+            '本章为VIP章节，订阅后即可阅读全文。开通会员可免费阅读全站作品，'
+            '每日签到还能领取阅读币，快来支持作者吧！';
+        final service = _FakeBookSourceService(
+          chapters: (_) async => book(40),
+          content: (chapter) async => chapter.index < 25
+              ? chapterText(chapter)
+              : '${chapter.title}\n$notice',
+        );
+        final (result, checked) = await _check(service);
+
+        expect(checked.groupTags, contains(paidSourceGroupTag));
+        expect(result.message, contains('付費提示'));
+      },
+    );
+
+    test('later chapters repeating the same other text mark the content '
+        'broken', () async {
+      // 看到後半段整章是別本書的廣告、一章一章重複的書。
+      const ad =
+          '推荐阅读：《都市至尊神医》林凡意外获得上古传承，从此纵横都市。'
+          '《万古神帝》少年张若尘重回八百年后。《斗破苍穹》萧炎三十年河东。';
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async =>
+            chapter.index < 25 ? chapterText(chapter) : ad,
+      );
+      final (result, checked) = await _check(service);
+
+      expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+      expect(result.message, contains('重複'));
+    });
+
+    test('chapters titled VIP are sampled first and their shared notice '
+        'marks the source paid', () async {
+      const notice =
+          '该章节为付费章节，请购买后阅读。购买后可永久阅读本章内容，'
+          '支持正版，支持作者，感谢您的支持与理解。';
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40, vipTitles: {32, 33}),
+        content: (chapter) async =>
+            chapter.title.contains('VIP') ? notice : chapterText(chapter),
+      );
+      final (_, checked) = await _check(service);
+
+      expect(service.contentRequests, containsAll(['第33章 VIP', '第34章 VIP']));
+      expect(checked.groupTags, contains(paidSourceGroupTag));
+    });
+  });
+
   test('an empty TOC quarantines as TOC broken', () async {
     final (_, checked) = await _check(
       _FakeBookSourceService(chapters: (_) async => const <BookChapter>[]),
