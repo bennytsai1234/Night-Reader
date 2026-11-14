@@ -123,6 +123,7 @@ class SourceRepairBatch extends ChangeNotifier {
   SourceRepairBatch({
     required List<BookSource> sources,
     required this.service,
+    this.aiConcurrency = defaultAiConcurrency,
     this._recheck,
     this._checkSite,
     AiRepairChecker? check,
@@ -142,8 +143,12 @@ class SourceRepairBatch extends ChangeNotifier {
     _session = session ?? _defaultSession;
   }
 
-  /// 同時交給 AI 修幾個網站。
-  static const int aiConcurrency = 3;
+  /// App 同時交給 AI 修幾個網站：讀者接的服務能同時接幾個請求不一定，
+  /// 取保守的值。
+  static const int defaultAiConcurrency = 3;
+
+  /// 同時交給 AI 修幾個網站；實跑測試照服務調（`NR_AI_CONCURRENCY`）。
+  final int aiConcurrency;
 
   /// 同時檢查幾個網站。
   static const int siteConcurrency = 8;

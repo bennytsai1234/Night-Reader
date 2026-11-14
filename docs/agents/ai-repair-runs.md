@@ -7,7 +7,7 @@
 - **案件集**：`test/live/ai_repair_cases.json`，一件只有 `name` 與 `url`，取自 2026-11-13 手機上整批修復時交給 AI 的 67 件。不附預期答案，評的是過程。
 - **書源 JSON**：使用者的資料，不進 repo。整份匯出檔在主資料夾的 `.local/ai-repair/export_589_sources.json`，實跑測試照案件的名稱與網址從裡面挑；要更新時從手機拿（`docs/agents/phone.md`「書源原文」）。
 - **金鑰**：主資料夾的 `.local/ai-repair.key`（`C:\Users\benny\Desktop\Folder\projects\Night-Reader\.local\ai-repair.key`），git 忽略，worktree 也讀這一份。已經有就直接用；沒有或服務回金鑰不對時，用 `request_secret`（`delivery: "file"`）跟使用者要，存到這裡。不刪、不上傳、不印出。
-- **服務**：使用者 2026-11-12 定的 `NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。
+- **服務**：使用者 2026-11-12 定的 `NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。實跑用 `NR_AI_CONCURRENCY=6`（App 是 3）：OpenCode Go 官方文件沒寫並行上限，限制是 5 小時、每週、每月的用量額度；出現 429、「無法確認」或每輪等 AI 明顯變長就退回 4。平日台灣時間 09:00–12:00、14:00–18:00 是它的尖峰，要比耗時的兩輪都在非尖峰跑。
 
 ## 一輪怎麼跑
 

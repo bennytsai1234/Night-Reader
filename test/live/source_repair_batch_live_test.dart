@@ -18,7 +18,8 @@
 /// - `NR_AI_URL` 是服務網址，預設 DeepSeek（`https://api.deepseek.com`）；
 ///   OpenCode Go 是 `https://opencode.ai/inference/go/openai/v1`。`NR_AI_MODEL`
 ///   換模型，預設 `deepseek-flash`（服務的 `/models` 列得出有哪些）；
-///   `NR_AI_EFFORT` 是思考程度（`low`、`medium`、`high`，不給是服務預設）。
+///   `NR_AI_EFFORT` 是思考程度（`low`、`medium`、`high`，不給是服務預設）；
+///   `NR_AI_CONCURRENCY` 是同時交給 AI 修幾個網站，不給是 App 的預設值。
 /// - 書源先存進暫存資料庫，照 App 的流程重新校驗、檢查網站、換網址、問 AI、
 ///   套用到同網站；存的也是暫存資料庫，跑完刪掉。
 /// - 結果檔是總時間與每個書源的結果、網站檢查、AI 的每一步與統計（含用量）。
@@ -156,6 +157,9 @@ void main() {
         model: env['NR_AI_MODEL'] ?? 'deepseek-flash',
         effort: env['NR_AI_EFFORT'] ?? '',
       ),
+      aiConcurrency:
+          int.tryParse(env['NR_AI_CONCURRENCY'] ?? '') ??
+          SourceRepairBatch.defaultAiConcurrency,
     );
     final logs = '${(await CrashHandler.logDirectory()).path}/ai-repair';
     debugPrint('##### 完整修復紀錄：$logs');

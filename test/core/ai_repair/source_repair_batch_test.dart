@@ -125,11 +125,14 @@ void main() {
     Map<String, SiteCheck> sites = const {},
     List<String> Function(String url)? replies,
     DateTime Function()? now,
+    int aiConcurrency = SourceRepairBatch.defaultAiConcurrency,
+    Future<void> Function()? beforeAsk,
   }) {
     return SourceRepairBatch(
       sources: sources,
       service: _service,
       now: now,
+      aiConcurrency: aiConcurrency,
       recheck: (urls, _, onResult) async {
         rechecked.addAll(urls);
         for (final url in urls) {
@@ -162,6 +165,7 @@ void main() {
           probe: (s, _, {start}) async => _probe(s),
           keywordCheck: (_, _) async => true,
           ask: (_, _) async {
+            await beforeAsk?.call();
             asked.add(source.bookSourceUrl);
             return fakeAiReply(answers[next++ % answers.length]);
           },
@@ -195,6 +199,28 @@ void main() {
       expect(b.isFinished, isTrue);
     },
   );
+
+  test('the AI repairs as many sites at once as the batch is given', () async {
+    // 實跑測試照服務調同時修幾個網站（NR_AI_CONCURRENCY），App 用預設值。
+    Future<int> mostAtOnce(int? concurrency) async {
+      var running = 0;
+      var most = 0;
+      final b = batch(
+        [for (var i = 0; i < 6; i++) _source('https://s$i.example')],
+        aiConcurrency: concurrency ?? SourceRepairBatch.defaultAiConcurrency,
+        beforeAsk: () async {
+          most = ++running > most ? running : most;
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          running--;
+        },
+      );
+      await b.start();
+      return most;
+    }
+
+    expect(await mostAtOnce(null), SourceRepairBatch.defaultAiConcurrency);
+    expect(await mostAtOnce(5), 5);
+  });
 
   test('a site that is gone is marked, without asking the AI', () async {
     final b = batch(
