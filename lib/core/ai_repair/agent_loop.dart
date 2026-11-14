@@ -20,7 +20,7 @@ import 'ai_chat_client.dart';
 ///   狀態重跑，含第一次最多 [AiAgentKnobs.attempts] 次，仍不行是
 ///   [AgentEndKind.unconfirmed]。
 /// - 每件都有結果：完成、無法確認、取消，或服務出了重跑也不會好的錯
-///   （金鑰、網址、額度）、整批的用量上限到了。
+///   （金鑰、網址、額度）。
 abstract class AgentTask<C> {
   /// 每次（含重跑）的開場：系統提示與這一件的第一則訊息。
   List<AiMessage> opening();
@@ -135,7 +135,7 @@ enum AgentEndKind {
   /// 使用者停下。
   cancelled,
 
-  /// 重跑也不會好的錯（金鑰、網址、額度），或整批的用量上限到了。
+  /// 重跑也不會好的錯（金鑰、網址、額度）。
   failed,
 }
 
@@ -206,13 +206,12 @@ typedef AgentAsk = Future<AiReply> Function(
 );
 
 /// 跑一件：照 [AgentTask] 開場，一輪一輪問 [ask]，直到有結果。
-/// [cancelToken] 取消時是 [AgentEndKind.cancelled]；[hasBudget] 不再成立時
-/// 不再問，是 [AgentEndKind.failed]。[attempts] 是含第一次最多跑幾次。
+/// [cancelToken] 取消時是 [AgentEndKind.cancelled]。[attempts] 是含第一次
+/// 最多跑幾次。
 Future<AgentEnd> runAgent<C>(
   AgentTask<C> task, {
   required AgentAsk ask,
   required CancelToken cancelToken,
-  bool Function()? hasBudget,
   int attempts = AiAgentKnobs.attempts,
 }) async {
   final stats = AgentStats();
@@ -221,14 +220,7 @@ Future<AgentEnd> runAgent<C>(
 
   for (var attempt = 1; ; attempt++) {
     stats.attempts = attempt;
-    final why = await _attempt(
-      task,
-      attempt,
-      stats,
-      ask,
-      cancelToken,
-      hasBudget,
-    );
+    final why = await _attempt(task, attempt, stats, ask, cancelToken);
     switch (why) {
       case _Finished(:final kind, :final reason):
         return end(kind, reason);
@@ -267,7 +259,6 @@ Future<_AttemptEnd> _attempt<C>(
   AgentStats stats,
   AgentAsk ask,
   CancelToken cancelToken,
-  bool Function()? hasBudget,
 ) async {
   final messages = [
     for (final message in task.opening())
@@ -300,9 +291,6 @@ Future<_AttemptEnd> _attempt<C>(
 
   while (true) {
     if (cancelToken.isCancelled) return cancelled;
-    if (!(hasBudget?.call() ?? true)) {
-      return const _Finished(AgentEndKind.failed, '整批的 AI 用量到了上限');
-    }
     if (round >= AiAgentKnobs.maxRounds) {
       return _Retry('用完 ${AiAgentKnobs.maxRounds} 輪還沒交出');
     }

@@ -119,15 +119,11 @@ void main() {
     Map<String, SourceRuntimeHealth> recheck = const {},
     Map<String, SiteCheck> sites = const {},
     List<String> Function(String url)? replies,
-    int? tokenBudget,
-    int tokensPerAnswer = 0,
     DateTime Function()? now,
   }) {
-    late SourceRepairBatch b;
-    b = SourceRepairBatch(
+    return SourceRepairBatch(
       sources: sources,
       service: _service,
-      tokenBudget: tokenBudget,
       now: now,
       recheck: (urls, _) async {
         rechecked.addAll(urls);
@@ -151,18 +147,15 @@ void main() {
           keywordCheck: (_, _) async => true,
           ask: (_, _) async {
             asked.add(source.bookSourceUrl);
-            b.tokensUsed += tokensPerAnswer;
             return fakeAiReply(answers[next++ % answers.length]);
           },
           apply: (repaired, original) async => saved.add(repaired),
           secrets: (_) async => const {},
           backups: backups,
           recheckDelay: Duration.zero,
-          hasBudget: () => tokenBudget == null || b.tokensUsed < tokenBudget,
         );
       },
     );
-    return b;
   }
 
   test(
@@ -340,7 +333,7 @@ void main() {
   });
 
   test('sites that answer normally go to the AI before unreachable ones, and '
-      'the spending limit stops the rest', () async {
+      'every site gets its turn', () async {
     final b = batch(
       [
         _source('https://down.example'),
@@ -350,20 +343,13 @@ void main() {
       ],
       sites: {'down.example': const SiteCheck(SiteVerdict.unreachable, '連不上')},
       replies: (_) => [_giveUp],
-      tokenBudget: 1,
-      tokensPerAnswer: 1,
     );
 
     await b.start();
 
     expect(asked.first, isNot('https://down.example'));
-    expect(b.count(RepairOutcome.notTried), greaterThan(0));
-    expect(
-      b.items
-          .firstWhere((i) => i.source.bookSourceUrl == 'https://down.example')
-          .outcome,
-      RepairOutcome.notTried,
-    );
+    expect(asked, contains('https://down.example'));
+    expect(b.count(RepairOutcome.notTried), 0);
   });
 
   test('the mobile and desktop sites are repaired separately', () async {

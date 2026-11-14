@@ -16,7 +16,7 @@
 
 1. 跑案件：`NR_SOURCES` 給匯出檔、`NR_CASES` 給案件集（測試檔頭有寫），跑完印出每件預期與實際、對或錯。一個改動只重跑它要改善的那幾件（`NR_ONLY=蜘蛛小说网,涨姿势`）；累積一批改動再跑整個案件集看有沒有退化（使用者 2026-11-13：每個小改動都跑全部，額度與時間花在沒改到的案件上）。匯出檔要更新時從手機拿（`docs/agents/phone.md`「書源原文」）。
 2. 金鑰固定放在主資料夾的 `.local/ai-repair.key`（`C:\Users\benny\Desktop\Folder\projects\Night-Reader\.local\ai-repair.key`，git 忽略、不上傳，worktree 也讀這一份）。已經有就直接用；沒有或服務回金鑰不對時，用 `request_secret`（`delivery: "file"`）跟使用者要，存到這裡，不刪。
-3. 跑 `test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在它的檔頭；要跑幾分鐘，所以放背景。使用者 2026-11-12 定的服務：`NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`；用量不設上限，給 `NR_TOKEN_BUDGET=0`（使用者 2026-11-13，十一件全量要兩百萬以上）。
+3. 跑 `test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在它的檔頭；要跑幾分鐘，所以放背景。使用者 2026-11-12 定的服務：`NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。
 4. 讀結果檔（`NR_OUT`）與最後印出的完整修復紀錄。紀錄裡找每一輪的「讀不懂」、重複的指令、失控與校驗沒過，打開那幾輪 AI 實際回的話。
 
 ## 歸因

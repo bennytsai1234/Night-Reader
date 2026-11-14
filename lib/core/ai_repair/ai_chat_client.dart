@@ -254,7 +254,7 @@ class AiChatClient {
               'tool_choice': 'required',
             },
             'stream': true,
-            // 串流時用量只在要了才給（OpenAI、DeepSeek）；整批的用量上限靠它。
+            // 串流時用量只在要了才給（OpenAI、DeepSeek）；修復頁的 AI 用量靠它。
             'stream_options': {'include_usage': true},
             if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
           },
@@ -523,7 +523,7 @@ final class _StreamReader implements Sink<String> {
   /// 還沒回完就斷了時的用量：服務回報過的照用；沒有輸出時是 null（多半還沒
   /// 開始計費）；其他照字數估，打中快取算 0。
   ///
-  /// 每 token 算 2.5 字，寧可估多、讓整批的用量上限早點到：2026-11-12 實跑
+  /// 每 token 算 2.5 字，寧可估多：2026-11-12 實跑
   /// 涨姿势（deepseek-v4.1-flash）第 1 輪送出 23,786 字是 9,180 token（2.6
   /// 字），思考加回覆 2,776 字是 738 token（3.8 字）。
   AiUsage? get estimate {

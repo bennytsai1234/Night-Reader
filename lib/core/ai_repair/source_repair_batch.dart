@@ -106,7 +106,6 @@ class SourceRepairBatch extends ChangeNotifier {
   SourceRepairBatch({
     required List<BookSource> sources,
     required this.service,
-    this.tokenBudget,
     this._recheck,
     this._checkSite,
     AiRepairChecker? check,
@@ -135,9 +134,6 @@ class SourceRepairBatch extends ChangeNotifier {
   static const Duration freshCheck = Duration(hours: 24);
 
   final AiService service;
-
-  /// 整批的 AI 花費上限（token）；null 是不限。
-  final int? tokenBudget;
 
   final List<RepairItem> items;
   final BatchRecheck? _recheck;
@@ -184,8 +180,6 @@ class SourceRepairBatch extends ChangeNotifier {
 
   int count(RepairOutcome outcome) =>
       items.where((item) => item.outcome == outcome).length;
-
-  bool get _hasBudget => tokenBudget == null || tokensUsed < tokenBudget!;
 
   Future<void> start() {
     if (_startTask != null) return _startTask!;
@@ -382,7 +376,6 @@ class SourceRepairBatch extends ChangeNotifier {
     await _pool(bySite, aiConcurrency, (group) async {
       if (_stopped) return;
       final lead = group.first;
-      if (!_hasBudget) return;
       final others = group.skip(1).toList();
       final session = _session(lead.source, lead);
       lead.session = session;
@@ -395,7 +388,7 @@ class SourceRepairBatch extends ChangeNotifier {
         _finish(lead, RepairOutcome.aiFixed, job.explanation ?? 'AI 修好了');
         lead.source = fixed;
         await _share(lead, others, fixed);
-      } else if (!_stopped && _hasBudget) {
+      } else if (!_stopped) {
         _finish(lead, RepairOutcome.notFixed, job.explanation ?? '沒修好');
         if (job.confirmedUnfixable) {
           await _markUnfixable(lead.source);
@@ -591,7 +584,6 @@ class SourceRepairBatch extends ChangeNotifier {
       AiRepairSession(
         source: source,
         service: service,
-        hasBudget: () => _hasBudget,
         onUsage: (usage) {
           final used = usage.prompt + usage.completion;
           item.tokens += used;

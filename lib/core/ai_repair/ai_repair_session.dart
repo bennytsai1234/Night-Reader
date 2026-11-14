@@ -167,7 +167,6 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairBackups? backups,
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
-    bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
   }) : job = AiRepairJob(source),
@@ -182,7 +181,6 @@ class AiRepairSession extends ChangeNotifier {
        _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
        _parsePage = parsePage ?? _defaultParsePage,
        _runJs = runJs ?? _defaultRunJs,
-       _hasBudget = hasBudget ?? _always,
        _copy = copy ?? _defaultCopy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
        _backups = backups ?? AiRepairBackups.instance {
@@ -198,11 +196,6 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
   final Duration recheckDelay;
-
-  /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
-  final bool Function() _hasBudget;
-
-  static bool _always() => true;
 
   /// 使用者的 AI 服務；null 時用剪貼簿。
   final AiService? service;
@@ -470,12 +463,7 @@ class AiRepairSession extends ChangeNotifier {
     log.tools(
       const JsonEncoder.withIndent('  ').convert(aiToolsJson(aiRepairTools)),
     );
-    final end = await runAgent(
-      agent,
-      ask: _ask!,
-      cancelToken: _cancelToken,
-      hasBudget: _hasBudget,
-    );
+    final end = await runAgent(agent, ask: _ask!, cancelToken: _cancelToken);
     _stats = end.stats;
     if (_stopped || job.outcome != null) {
       _logStats(end);

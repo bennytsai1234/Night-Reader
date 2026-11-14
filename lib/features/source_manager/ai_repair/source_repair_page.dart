@@ -20,7 +20,7 @@ import 'repair_runs.dart';
 
 /// 修復一批書源（docs/design/screens.md「修復異常書源」）：已經有一批在修、
 /// 或修完還沒看過結果時推回那一批（ADR 0058）；不然沒設定 AI 服務時先去設定，
-/// 問整批的 AI 用量上限後開始新的一批。書源管理在一批修完時重讀清單。
+/// 開始新的一批，AI 用量不設上限。書源管理在一批修完時重讀清單。
 Future<void> openSourceRepair(
   BuildContext context,
   List<BookSource> sources, {
@@ -61,31 +61,8 @@ Future<void> openSourceRepair(
     }
     return;
   }
-  final budget = await showAppAlert<int>(
-    context: context,
-    title: title,
-    message:
-        '先重新校驗、檢查網站，網站不在了的不送 AI；同一個網站只問 AI 一次。\n\n'
-        '整批的 AI 用量上限：',
-    actions: const [
-      AppAlertAction(label: '100 萬 token', value: 1000000, isDefault: true),
-      AppAlertAction(label: '300 萬 token', value: 3000000),
-      AppAlertAction(label: '不限', value: 0),
-      AppAlertAction(label: '取消', value: -1),
-    ],
-  );
-  if (budget == null ||
-      budget < 0 ||
-      !repairs.canStartNew ||
-      !backgroundWorkIdle()) {
-    return;
-  }
   final run = BatchRepairRun(
-    SourceRepairBatch(
-      sources: sources,
-      service: service,
-      tokenBudget: budget == 0 ? null : budget,
-    ),
+    SourceRepairBatch(sources: sources, service: service),
     title: title,
   );
   if (!repairs.adopt(run)) {
@@ -207,9 +184,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                     ),
                   GroupedRow(
                     title: 'AI 用量',
-                    value: _batch.tokenBudget == null
-                        ? _tokens(_batch.tokensUsed)
-                        : '${_tokens(_batch.tokensUsed)}／${_tokens(_batch.tokenBudget!)}',
+                    value: _tokens(_batch.tokensUsed),
                     showChevron: false,
                   ),
                 ],

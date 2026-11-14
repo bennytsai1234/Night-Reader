@@ -326,15 +326,4 @@ void main() {
     );
     expect(end.kind, AgentEndKind.cancelled);
   });
-
-  test('an exhausted batch budget stops before asking', () async {
-    final end = await runAgent(
-      task,
-      cancelToken: CancelToken(),
-      ask: _ai(['tool:x']),
-      hasBudget: () => false,
-    );
-    expect(end.kind, AgentEndKind.failed);
-    expect(end.stats.rounds, 0);
-  });
 }
