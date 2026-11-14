@@ -726,6 +726,8 @@ class SourceChecker {
     // 中段、後段互不相依，同時抓：一章等一章時，章短的書（8 章抽 1、6、7、
     // 8）就超過總時限。
     final taken = <String>{head.chapter.url};
+    // 同時抓的幾章都失敗時，結論只寫第一章（紀錄與診斷照樣每章都有）。
+    final laterIssues = <_IssueData>[];
     final later = await Future.wait([
       for (final index in _laterSampleIndexes(readableChapters))
         _probeLater(
@@ -734,9 +736,10 @@ class SourceChecker {
           index,
           taken,
           mode: mode,
-          issues: issues,
+          issues: laterIssues,
         ),
     ]);
+    if (laterIssues.isNotEmpty) issues.add(laterIssues.first);
     if (later.contains(null)) return;
     _checkRepeatedText([head, ...later.nonNulls], mode: mode, issues: issues);
   }

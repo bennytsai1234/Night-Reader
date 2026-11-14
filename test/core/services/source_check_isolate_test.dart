@@ -449,6 +449,21 @@ void main() {
       expect(result.message, contains('第21章'));
     });
 
+    test(
+      'when several later chapters fail at once, the result names one',
+      () async {
+        // 2026-11-14 整批校驗：三章同時抓都失敗時，結論串成三段一長串。
+        final service = _FakeBookSourceService(
+          chapters: (_) async => book(40),
+          content: (chapter) async =>
+              chapter.index < 5 ? chapterText(chapter) : '',
+        );
+        final (result, _) = await _check(service);
+
+        expect('正文內容過短或為空'.allMatches(result.message).length, 1);
+      },
+    );
+
     test('a short sampled chapter is followed by the next one', () async {
       final service = _FakeBookSourceService(
         chapters: (_) async => book(40),
