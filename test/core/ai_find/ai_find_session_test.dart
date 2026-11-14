@@ -12,6 +12,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
     show AiRepairStepState;
+import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -359,6 +360,37 @@ void main() {
     expect(none.toolResults(2).single, contains('沒有搜到書'));
   });
 
+  test('searches in one reply run at the same time, the same search runs '
+      'once, and the results come back in call order', () async {
+    final library = _Library({
+      '穿越': [_book('獵魔人')],
+      '爽文': [_book('斬妖')],
+    })..searchGate = Completer<void>();
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+        ('search', {'keyword': '爽文'}),
+        ('search', {'keyword': '穿越'}),
+      ]),
+    ]);
+    final find = session(library, ai);
+    final running = find.start();
+    await pumpEventQueue();
+    expect(library.calls, [
+      'search 穿越 novel',
+      'search 爽文 novel',
+    ], reason: '兩個都已經送出，第三個等第一個');
+    library.searchGate!.complete();
+    await running;
+    final results = ai.toolResults(2);
+    expect(results, hasLength(3));
+    expect(results[0], contains('搜尋「穿越」'));
+    expect(results[1], contains('搜尋「爽文」'));
+    expect(results[2], contains('b1｜獵魔人'));
+    expect(find.rounds.first.detail, contains('搜尋「穿越」小說，找到 1 本'));
+    expect(find.rounds.first.detail, isNot(contains('…')));
+  });
+
   test('stop cancels the search that is running', () async {
     final library = _Library({})..searchGate = Completer<void>();
     final ai = _Ai([
@@ -415,6 +447,37 @@ void main() {
     expect(
       ai.toolResults(2).single,
       matches(RegExp(r'送了 3 個書源，1 個出錯或逾時，花 \d+\.\d 秒')),
+    );
+  });
+
+  test('only books the AI was shown get a number, and a field with a line '
+      'break stays on its book line', () async {
+    final library = _Library({
+      '穿越': [for (var i = 0; i < 40; i++) _book('穿越$i')],
+      '爽文': [
+        SearchBook(
+          bookUrl: 'https://a.test/爽',
+          name: '爽文',
+          author: '作者',
+          origin: 'https://a.test',
+          kind: '完结\n{{\$..shortName',
+        ),
+      ],
+    });
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+        ('search', {'keyword': '爽文'}),
+      ]),
+    ]);
+    await session(library, ai).start();
+    final results = ai.toolResults(2);
+    expect(results.first, contains('b30｜穿越29'));
+    expect(results.first, isNot(contains('b31')));
+    expect(
+      results.last,
+      contains('b31｜爽文｜作者｜完结 {{\$..shortName｜1 個書源'),
+      reason: '第一次只給看了 30 本，下一本接 b31',
     );
   });
 

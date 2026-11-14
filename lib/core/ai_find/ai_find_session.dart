@@ -10,28 +10,14 @@ import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
     show AiRepairStep, AiRepairStepState;
+import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:uuid/uuid.dart';
 
 import 'ai_find_library.dart';
 import 'ai_find_prompt.dart';
-
-/// 推薦的一本：[book] 是工具找到的那張卡（點了照它的來源進書籍詳情），
-/// [reason] 是 AI 寫的推薦理由。
-typedef AiFindPick = ({SearchBook book, String reason});
-
-/// 一次找書怎麼結束的。
-enum AiFindOutcome {
-  /// AI 交出了推薦（可能是零本）。
-  found,
-
-  /// 使用者按了停止。
-  stopped,
-
-  /// 沒找完：輪數用完、卡住、失控，或服務出了錯。
-  unfinished,
-}
 
 /// 完整紀錄裡統計那一行的開頭，後面接 JSON（同 AI 修復的評估表）。
 const String aiFindStatsMarker = 'NR-AI-FIND-STATS ';
@@ -47,7 +33,12 @@ class AiFindSession extends ChangeNotifier {
     required this._ask,
     this.serviceLabel = '',
     AiRepairLog? log,
-  }) : log = log ?? AiRepairLog.find(description: description);
+    String? id,
+  }) : log = log ?? AiRepairLog.find(description: description),
+       id = id ?? const Uuid().v4();
+
+  /// 這次找書的編號：存成「過去的找書」那一筆時用（兩台不會撞號）。
+  final String id;
 
   /// 問使用者的 AI 服務，帶著找書的工具。
   static AgentAsk askService(AiService service) {
@@ -127,6 +118,25 @@ class AiFindSession extends ChangeNotifier {
     _logStats(end);
   }
 
+  /// 這次找書的報告（「過去的找書」的一筆）；還沒結束時是 null。停止與沒
+  /// 找完的也留著（ADR 0060：每一次找書都留著）。
+  AiFindRecord? get record {
+    final value = outcome;
+    if (value == null) return null;
+    return AiFindRecord(
+      id: id,
+      description: description,
+      depth: depth.name,
+      createdAt: startedAt.millisecondsSinceEpoch,
+      outcome: value,
+      failure: failure ?? '',
+      summary: summary,
+      picks: picks,
+      rounds: rounds.length,
+      tokens: tokens,
+    );
+  }
+
   /// 停下：正在跑的搜尋與抓取跟著取消。
   void stop() {
     if (_stopped || isFinished) return;
@@ -202,9 +212,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   final Map<String, _Found> _books = {};
   final Map<String, String> _idByIdentity = {};
 
-  /// 搜過的關鍵字：結果的編號與那次搜尋實際的情況（送了幾個書源、花多久），
-  /// 接著拿下一批時不再搜一次。
-  final Map<String, ({List<String> ids, String facts})> _searches = {};
+  /// 搜過的關鍵字：結果與那次搜尋實際的情況（送了幾個書源、花多久），接著
+  /// 拿下一批時不再搜一次。編號在給 AI 看到時才給：一次搜尋常有上萬本，
+  /// 全部編號的話後面的書編到 b15226（2026-11-15 實跑）。
+  final Map<String, Future<({List<SearchBook> books, String facts})>>
+  _searches = {};
   List<AiFindExploreSource>? _exploreSources;
   final Map<String, List<String>> _categories = {};
   AiRepairStep? _round;
@@ -299,6 +311,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     return '# 這一輪沒有呼叫工具';
   }
 
+  /// 交出以外都是只讀的查詢：同一則回覆的幾個搜尋一起送（一次搜尋要等
+  /// 全部書源，約 70 到 90 秒）。交出要看前面查過哪幾本，照順序。
+  @override
+  bool runsAlongside(AiFindCommand command) => command is! AiFindSubmit;
+
   @override
   Future<AgentResult> execute(AiFindCommand command) async {
     try {
@@ -326,33 +343,44 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     final label = '搜尋「${command.keyword}」${_kindLabel(command.kind)}';
     _say('$label…');
     final cacheKey = '${command.kind.name}\u0000${command.keyword}';
-    var search = _searches[cacheKey];
-    if (search == null) {
-      final watch = Stopwatch()..start();
-      final result = await _library.search(
-        command.keyword,
-        command.kind,
-        _cancel,
-      );
-      search = (
-        ids: [for (final book in result.books) _register(book).id],
-        facts:
-            '送了 ${result.sources} 個書源'
-            '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}，'
-            '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
-      );
-      _searches[cacheKey] = search;
+    // 存的是搜尋本身：同一則回覆裡同樣的搜尋一起開始時，第二個等第一個。
+    final pending = _searches.putIfAbsent(cacheKey, () => _runSearch(command));
+    final ({List<SearchBook> books, String facts}) search;
+    try {
+      search = await pending;
+    } catch (_) {
+      // 出錯的不留著：下次同樣的搜尋重搜。
+      _searches.remove(cacheKey)?.ignore();
+      rethrow;
     }
-    final ids = search.ids;
-    _say('$label，找到 ${ids.length} 本');
+    final books = search.books;
+    _say('$label，找到 ${books.length} 本', replacing: '$label…');
     final text = _bookPage(
       '# 搜尋「${command.keyword}」（${_kindLabel(command.kind)}，${search.facts}）',
-      ids,
+      books,
       command.page,
       empty: '沒有搜到書',
     );
     s.log.note(_head(text));
     return AgentToolResult(text);
+  }
+
+  Future<({List<SearchBook> books, String facts})> _runSearch(
+    AiFindSearch command,
+  ) async {
+    final watch = Stopwatch()..start();
+    final result = await _library.search(
+      command.keyword,
+      command.kind,
+      _cancel,
+    );
+    return (
+      books: result.books,
+      facts:
+          '送了 ${result.sources} 個書源'
+          '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}，'
+          '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
+    );
   }
 
   Future<AgentResult> _detail(AiFindDetail command) async {
@@ -571,25 +599,30 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   String _bookPage(
     String heading,
-    List<String> ids,
+    List<SearchBook> books,
     int page, {
     required String empty,
   }) {
-    if (ids.isEmpty) return '$heading：$empty';
+    if (books.isEmpty) return '$heading：$empty';
     final from = (page - 1) * aiFindSearchPageSize;
-    if (from >= ids.length) {
-      return '$heading：共 ${ids.length} 本，沒有第 $page 批';
+    if (from >= books.length) {
+      return '$heading：共 ${books.length} 本，沒有第 $page 批';
     }
-    final to = (from + aiFindSearchPageSize).clamp(0, ids.length);
-    final more = to < ids.length ? '，還有，用 page ${page + 1} 接著拿' : '';
-    return '$heading：共 ${ids.length} 本，這是第 ${from + 1} 到 $to 本$more\n'
-        '${ids.sublist(from, to).map((id) => _bookLine(_books[id]!)).join('\n')}';
+    final to = (from + aiFindSearchPageSize).clamp(0, books.length);
+    final more = to < books.length ? '，還有，用 page ${page + 1} 接著拿' : '';
+    return '$heading：共 ${books.length} 本，這是第 ${from + 1} 到 $to 本$more\n'
+        '${books.sublist(from, to).map((book) => _bookLine(_register(book))).join('\n')}';
   }
 
   static String _bookLine(_Found found) {
     final b = found.book;
-    String? clean(String? value) =>
-        (value ?? '').trim().isEmpty ? null : value!.trim();
+    // 欄位裡的換行與連續空白合成一個空格：書源規則抓到的字串有時帶換行，
+    // 一本一行的格式就斷了（2026-11-15 實跑：「完结\n{{$..shortName」）。
+    String? clean(String? value) {
+      final text = (value ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+      return text.isEmpty ? null : text;
+    }
+
     return [
       found.id,
       b.name,
@@ -619,14 +652,20 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       text.length <= 400 ? text : '${text.substring(0, 400)}…';
 
   /// 這一輪在做的事寫進頁面的副標：同一輪的幾個呼叫用「；」接起來。
-  void _say(String text) {
+  ///
+  /// [replacing] 是這個工具進行中的那句（結尾「…」）：換成做完的這句。同一輪
+  /// 的幾個搜尋一起跑，做完的順序不一定，照那句找、不照位置。
+  void _say(String text, {String? replacing}) {
     final round = _round;
     if (round == null) return;
     final done = round.detail ?? '';
     final parts = done.isEmpty ? <String>[] : done.split('；');
-    // 同一個工具的進行中那句（結尾「…」）換成做完的那句。
-    if (parts.isNotEmpty && parts.last.endsWith('…')) parts.removeLast();
-    parts.add(text);
+    final at = replacing == null ? -1 : parts.indexOf(replacing);
+    if (at >= 0) {
+      parts[at] = text;
+    } else {
+      parts.add(text);
+    }
     round.detail = parts.join('；');
     s._notify();
   }

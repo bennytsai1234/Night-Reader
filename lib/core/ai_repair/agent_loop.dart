@@ -44,6 +44,11 @@ abstract class AgentTask<C> {
   /// 執行一個指令；傳回的文字是要接進對話的事實，秘密已經遮掉。
   Future<AgentResult> execute(C command);
 
+  /// [command] 和同一則回覆裡的其他呼叫同時執行也不會改變結果（只讀的
+  /// 查詢）：迴圈一收到回覆就一起開始，結果照呼叫的順序接回對話。交出這類
+  /// 要看前面查過什麼的，照順序執行。預設都照順序。
+  bool runsAlongside(C command) => false;
+
   /// 一輪開始：第 [attempt] 次的第 [round] 輪（每次從 1 數起）；[messages]
   /// 是這輪要送出的全部對話。
   void roundStarted(int attempt, int round, List<AiMessage> messages) {}
@@ -504,50 +509,69 @@ Future<_AttemptEnd> _attempt<C>(
       continue;
     }
     noCommand = 0;
-    // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
-    for (final (i, call) in reply.toolCalls.indexed) {
-      void answer(String text) => fact(text, callId: call.id);
-      switch (parsed[i]) {
-        case AgentBadCommand(fact: final text):
-          stats.badCommands++;
-          if (++badCommand >= AiAgentKnobs.badCommandLimit) {
-            return _Retry('連續 $badCommand 次工具呼叫讀不懂');
-          }
-          answer(text);
-        case AgentCommand(:final command, :final key):
-          final count = calls[key] = (calls[key] ?? 0) + 1;
-          if (count >= AiAgentKnobs.sameCallLimit) {
-            return _Retry('同樣的工具與參數第 $count 次');
-          }
-          stats.toolCalls++;
-          final toolWatch = Stopwatch()..start();
-          final result = await task.execute(command);
-          stats.tools += toolWatch.elapsed;
-          if (cancelToken.isCancelled) return cancelled;
-          switch (result) {
-            case AgentAccepted(:final reason):
-              return _Finished(AgentEndKind.completed, reason);
-            case AgentStopped(:final kind, :final reason):
-              return _Finished(kind, reason);
-            case AgentInvalid(fact: final text):
-              stats.badCommands++;
-              if (++badCommand >= AiAgentKnobs.badCommandLimit) {
-                return _Retry('連續 $badCommand 次工具呼叫讀不懂');
-              }
-              answer(text);
-            case AgentRejected(:final reason):
-              badCommand = 0;
-              stats.rejections++;
-              // 交出之間的查證不重算：數的是交出的那幾次連續被退。
-              if (++rejections >= AiAgentKnobs.rejectionLimit) {
-                return _Retry('交出連續被退 $rejections 次');
-              }
-              answer('$reason${_repeated(count, lastResult, key, reason)}');
-            case AgentToolResult(:final text, :final same):
-              badCommand = 0;
-              answer('$text${_repeated(count, lastResult, key, same ?? text)}');
-          }
+    // 互不影響的查詢一起開始（AI 一則回覆常叫好幾個搜尋，一個接一個等的話
+    // 一輪要好幾分鐘，2026-11-15 AI 找書實跑）；同樣的參數到上限的那個和它
+    // 後面的不先開始，照順序那段會在那裡停下。
+    final early = <int, Future<AgentResult>>{};
+    final counted = Map.of(calls);
+    for (final (i, parse) in parsed.indexed) {
+      if (parse is! AgentCommand<C>) continue;
+      final count = counted[parse.key] = (counted[parse.key] ?? 0) + 1;
+      if (count >= AiAgentKnobs.sameCallLimit) break;
+      if (task.runsAlongside(parse.command)) {
+        early[i] = task.execute(parse.command)..ignore();
       }
+    }
+    final toolWatch = Stopwatch()..start();
+    try {
+      // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
+      for (final (i, call) in reply.toolCalls.indexed) {
+        void answer(String text) => fact(text, callId: call.id);
+        switch (parsed[i]) {
+          case AgentBadCommand(fact: final text):
+            stats.badCommands++;
+            if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+              return _Retry('連續 $badCommand 次工具呼叫讀不懂');
+            }
+            answer(text);
+          case AgentCommand(:final command, :final key):
+            final count = calls[key] = (calls[key] ?? 0) + 1;
+            if (count >= AiAgentKnobs.sameCallLimit) {
+              return _Retry('同樣的工具與參數第 $count 次');
+            }
+            stats.toolCalls++;
+            final result = await (early[i] ?? task.execute(command));
+            if (cancelToken.isCancelled) return cancelled;
+            switch (result) {
+              case AgentAccepted(:final reason):
+                return _Finished(AgentEndKind.completed, reason);
+              case AgentStopped(:final kind, :final reason):
+                return _Finished(kind, reason);
+              case AgentInvalid(fact: final text):
+                stats.badCommands++;
+                if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+                  return _Retry('連續 $badCommand 次工具呼叫讀不懂');
+                }
+                answer(text);
+              case AgentRejected(:final reason):
+                badCommand = 0;
+                stats.rejections++;
+                // 交出之間的查證不重算：數的是交出的那幾次連續被退。
+                if (++rejections >= AiAgentKnobs.rejectionLimit) {
+                  return _Retry('交出連續被退 $rejections 次');
+                }
+                answer('$reason${_repeated(count, lastResult, key, reason)}');
+              case AgentToolResult(:final text, :final same):
+                badCommand = 0;
+                answer(
+                  '$text${_repeated(count, lastResult, key, same ?? text)}',
+                );
+            }
+        }
+      }
+    } finally {
+      // 一起跑的幾個重疊的時間只算一次：工具秒是這一輪等工具的時間。
+      stats.tools += toolWatch.elapsed;
     }
   }
 }

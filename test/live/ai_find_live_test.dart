@@ -13,9 +13,13 @@
 /// - `NR_CASES` 是案件集：每件 `id`、`description`、`depth`（quick、normal、
 ///   deep），可以有 `shelf`（書架與閱讀紀錄，欄位同 `AiFindShelfEntry`，
 ///   `kind` 寫 novel、comic、audio）。`NR_ONLY=<id,id>` 只跑這幾件。
-/// - 只給 `NR_SEARCH=<關鍵字>`、不給 `NR_CASES` 時不問 AI：照找書的搜尋工具
-///   搜一次，印出送了幾個書源、幾個出錯、花多久、搜到幾本（量一次搜尋要等
-///   多久用）。`NR_SEARCH_KIND` 給 comic、audio 換類別。
+/// - 只給 `NR_SEARCH=<關鍵字,關鍵字>`、不給 `NR_CASES` 時不問 AI：照找書的
+///   搜尋工具搜，印出每次送了幾個書源、幾個出錯、花多久、搜到幾本，與全部
+///   花多久（量搜尋要等多久用）。`NR_SEARCH_PARALLEL=1` 時幾個一起搜（同一輪
+///   的幾個搜尋一起送時是不是比較快）。`NR_SEARCH_KIND` 給 comic、audio 換類別。
+/// - 給了 `NR_FIRST_ROUND=<次數>` 時不跑工具：每件只照現在的提示詞問第一輪
+///   這麼多次，印出 AI 的思考開頭與呼叫了什麼（改了開場或提示詞，先看第一步
+///   有沒有改過來，比整件重跑便宜；agent-harness 第 5 步「重放」）。
 /// - `NR_AI_URL`、`NR_AI_MODEL`、`NR_AI_EFFORT` 同修書源的實跑
 ///   （`docs/agents/ai-repair-runs.md`）。
 /// - 一件接一件跑：每件的搜尋都送全部書源，同時跑會互搶書源 isolate，量到
@@ -165,6 +169,9 @@ void main() {
     SourceIsolate.start();
   });
   tearDownAll(() async {
+    // 搜尋完把每個書源的回應時間寫回資料庫，不等寫完（SearchModel 的
+    // unawaited）：關資料庫前讓它寫完，不然最後一次搜尋的寫入撞上已關的庫。
+    await Future<void>.delayed(const Duration(seconds: 3));
     await SourceIsolate.stop();
     await AppDatabase().close();
   });
@@ -181,23 +188,40 @@ void main() {
 
   if (casesPath == null) {
     if (searchOnly == null) throw StateError('要給 NR_CASES 或 NR_SEARCH');
-    test('只搜一次「$searchOnly」', () async {
+    test('只搜「$searchOnly」', () async {
       await getIt<BookSourceDao>().upsertAll(sources);
       final kind = _kinds[env['NR_SEARCH_KIND'] ?? 'novel']!;
       final library = AppAiFindLibrary(scope: SearchScope());
-      final watch = Stopwatch()..start();
-      final result = await library.search(searchOnly, kind, CancelToken());
-      debugPrint(
-        '##### 搜尋「$searchOnly」${kind.name}：送了 ${result.sources} 個書源，'
-        '${result.failed} 個出錯或逾時，花 '
-        '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒，'
-        '合併後 ${result.books.length} 本',
-      );
-      for (final book in result.books.take(10)) {
+      final keywords = searchOnly.split(',').map((k) => k.trim()).toList();
+      final parallel = env['NR_SEARCH_PARALLEL'] == '1';
+      final total = Stopwatch()..start();
+      Future<void> one(String keyword) async {
+        final watch = Stopwatch()..start();
+        final result = await library.search(keyword, kind, CancelToken());
         debugPrint(
-          '#####   ${book.name}｜${book.author}｜${book.origins.length} 個書源',
+          '##### 搜尋「$keyword」${kind.name}：送了 ${result.sources} 個書源，'
+          '${result.failed} 個出錯或逾時，花 '
+          '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒，'
+          '合併後 ${result.books.length} 本',
         );
+        for (final book in result.books.take(5)) {
+          debugPrint(
+            '#####   ${book.name}｜${book.author}｜${book.origins.length} 個書源',
+          );
+        }
       }
+
+      if (parallel) {
+        await Future.wait(keywords.map(one));
+      } else {
+        for (final keyword in keywords) {
+          await one(keyword);
+        }
+      }
+      debugPrint(
+        '##### ${keywords.length} 個搜尋${parallel ? '同時' : '一個接一個'}，共 '
+        '${(total.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
+      );
     }, timeout: const Timeout(Duration(minutes: 20)));
     return;
   }
@@ -220,6 +244,37 @@ void main() {
     throw StateError('NR_ONLY 在案件集裡找不到：${unmatched.join('、')}');
   }
   if (cases.isEmpty) throw StateError('案件集裡沒有案件');
+
+  final firstRounds = int.tryParse(env['NR_FIRST_ROUND'] ?? '');
+  if (firstRounds != null) {
+    test('只問第一輪 ${cases.length} 件 × $firstRounds 次', () async {
+      final ask = AiFindSession.askService((
+        baseUrl: env['NR_AI_URL'] ?? 'https://api.deepseek.com',
+        apiKey: key,
+        model: env['NR_AI_MODEL'] ?? 'deepseek-flash',
+        effort: env['NR_AI_EFFORT'] ?? '',
+      ));
+      for (final item in cases) {
+        for (var i = 1; i <= firstRounds; i++) {
+          final reply = await ask(
+            aiFindOpening(
+              description: item['description'] as String,
+              depth: AiFindDepth.fromName(item['depth'] as String?),
+            ),
+            CancelToken(),
+          );
+          debugPrint(
+            '##### ${item['id']} 第 $i 次：'
+            '${[for (final call in reply.toolCalls) '${call.name} ${call.arguments}'].join('；')}',
+          );
+          debugPrint(
+            '#####   思考：${reply.reasoning.replaceAll('\n', ' ').substring(0, reply.reasoning.length.clamp(0, 600))}',
+          );
+        }
+      }
+    }, timeout: const Timeout(Duration(minutes: 20)));
+    return;
+  }
 
   test('AI 找書 ${cases.length} 件', () async {
     await getIt<BookSourceDao>().upsertAll(sources);

@@ -1092,6 +1092,10 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   @override
   void factAdded(String fact) {}
 
+  /// 修書源的工具會改正在修的書源（改了再試抓），照順序執行。
+  @override
+  bool runsAlongside(AiRepairCommand command) => false;
+
   @override
   AgentParse<AiRepairCommand> parse(AiToolCall call) {
     final read = readAiRepairCall(call);
