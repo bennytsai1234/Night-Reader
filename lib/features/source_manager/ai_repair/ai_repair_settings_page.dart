@@ -11,14 +11,19 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 /// 會送出什麼：設定頁的說明，與 `PRIVACY.md`、App 的「隱私說明」同一件事
-/// （ADR 0054）。
+/// （ADR 0054、0060），修書源與找書各一段。
 const String aiRepairPrivacyNote =
     '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
-    '登入資料、Cookie 的值與書源變數不送。';
+    '登入資料、Cookie 的值與書源變數不送。\n'
+    '按「AI 找書」時，你寫的描述、書架與閱讀紀錄的書名與進度，和搜尋、詳情、'
+    '正文的結果會送到這個服務。';
+
+/// 「找書的模型」選單裡「同修書源」那一項的值（空字串是自己輸入）。
+const String _sameAsRepair = '\u0000same';
 
 /// AI 服務設定（docs/design/screens.md「AI 服務」）：常用服務、服務網址、
-/// 金鑰、模型（從服務列出的清單選）、思考程度、同時修幾個網站，離開頁面
-/// 就存。
+/// 金鑰、模型（從服務列出的清單選）、找書的模型、思考程度、同時修幾個網站，
+/// 離開頁面就存。
 class AiRepairSettingsPage extends StatefulWidget {
   const AiRepairSettingsPage({super.key, this.settings, this.listModels});
 
@@ -46,6 +51,9 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
 
   String _model = '';
 
+  /// 找書的模型；空字串是同修書源的模型（ADR 0060）。
+  String _findModel = '';
+
   /// 思考程度（[aiEfforts] 的值）。
   String _effort = '';
 
@@ -70,6 +78,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       _url.text = saved.baseUrl;
       _key.text = saved.apiKey;
       _model = saved.model;
+      _findModel = await _settings.findModel();
       _effort = saved.effort;
       _concurrency = await _settings.concurrency();
     } catch (error, stack) {
@@ -81,7 +90,9 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
 
   @override
   void dispose() {
-    if (_loaded) unawaited(_settings.save(_service));
+    if (_loaded) {
+      unawaited(_settings.save(_service, findModel: _findModel));
+    }
     _url.dispose();
     _key.dispose();
     super.dispose();
@@ -141,12 +152,15 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       _serviceVersion++;
       _url.text = preset.baseUrl;
       _model = preset.model ?? '';
+      _findModel = '';
     });
   }
 
   /// 模型從服務列出的清單選；列不出來（網址錯、服務不給清單）或清單裡沒有
-  /// 時，自己輸入。
-  Future<void> _pickModel(BuildContext rowContext) async {
+  /// 時，自己輸入。[find] 是選找書的模型：多一項「同修書源」。
+  Future<void> _pickModel(BuildContext rowContext, {bool find = false}) async {
+    final current = find ? _findModel : _model;
+    void choose(String model) => find ? _findModel = model : _model = model;
     FocusScope.of(context).unfocus();
     final service = _service;
     if (service.baseUrl.isEmpty) {
@@ -179,20 +193,30 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                   subtitle: aiModelTested(service.baseUrl, model)
                       ? '夜讀實測過'
                       : null,
-                  checked: model == _model,
+                  checked: model == current,
                 ),
               const GlassMenuDivider(),
+              if (find)
+                GlassMenuItem(
+                  value: _sameAsRepair,
+                  label: '同修書源',
+                  checked: current.isEmpty,
+                ),
               const GlassMenuItem(value: '', label: '自己輸入模型名稱'),
             ],
           );
     if (picked == null || !mounted || version != _serviceVersion) return;
+    if (picked == _sameAsRepair) {
+      setState(() => choose(''));
+      return;
+    }
     if (picked.isNotEmpty) {
-      setState(() => _model = picked);
+      setState(() => choose(picked));
       return;
     }
     final typed = await showStatefulAppAlert<String>(
       context: context,
-      fieldTexts: [_model],
+      fieldTexts: [current],
       builder: (dialogContext, _, fields) {
         void submit() => Navigator.of(dialogContext).pop(fields.single.text);
         return AppAlert<bool>(
@@ -208,7 +232,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       },
     );
     if (typed != null && mounted && version == _serviceVersion) {
-      setState(() => _model = typed.trim());
+      setState(() => choose(typed.trim()));
     }
   }
 
@@ -244,9 +268,26 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     FocusScope.of(context).unfocus();
     setState(() => _testing = true);
     try {
-      await _settings.save(service);
+      await _settings.save(service, findModel: _findModel);
       await verifyAiToolConnection(AiChatClient(service));
-      if (mounted) _say('連線與工具呼叫正常：${service.model}');
+      // 找書另選了模型時一起驗：那個模型不一定支援工具呼叫。
+      final find = _findModel;
+      if (find.isNotEmpty && find != service.model) {
+        await verifyAiToolConnection(
+          AiChatClient((
+            baseUrl: service.baseUrl,
+            apiKey: service.apiKey,
+            model: find,
+            effort: service.effort,
+          )),
+        );
+      }
+      if (mounted) {
+        _say(
+          '連線與工具呼叫正常：${service.model}'
+          '${find.isNotEmpty && find != service.model ? '、$find' : ''}',
+        );
+      }
     } on AiServiceException catch (error) {
       if (mounted) _say(error.message);
     } catch (error) {
@@ -306,6 +347,19 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                   showChevron: false,
                   enabled: !_listing,
                   onTap: () => unawaited(_pickModel(rowContext)),
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '找書的模型',
+                  value: _listing
+                      ? '讀取中…'
+                      : _findModel.isEmpty
+                      ? '同修書源'
+                      : _findModel,
+                  showChevron: false,
+                  enabled: !_listing,
+                  onTap: () => unawaited(_pickModel(rowContext, find: true)),
                 ),
               ),
               Builder(

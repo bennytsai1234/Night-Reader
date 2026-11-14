@@ -89,23 +89,48 @@ class AiRepairSettings {
     return saved;
   }
 
+  /// AI 找書用的服務（ADR 0060）：網址、金鑰、思考程度同修書源，模型是
+  /// 「找書的模型」，留空就用修書源的模型。沒填好是 null。
+  Future<AiService?> findService() async {
+    final saved = await service();
+    if (saved == null) return null;
+    final model = await findModel();
+    return model.isEmpty
+        ? saved
+        : (
+            baseUrl: saved.baseUrl,
+            apiKey: saved.apiKey,
+            model: model,
+            effort: saved.effort,
+          );
+  }
+
+  /// 「找書的模型」；空字串是同修書源的模型。
+  Future<String> findModel() async => _field(await _json(), 'findModel');
+
+  Future<Map<String, dynamic>> _json() async {
+    final raw = (await _ensure()).getString(serviceKey);
+    if (raw == null) return const {};
+    try {
+      if (jsonDecode(raw) case final Map<String, dynamic> decoded) {
+        return decoded;
+      }
+    } on FormatException {
+      // 讀不懂就當作沒填。
+    }
+    return const {};
+  }
+
+  static String _field(Map<String, dynamic> json, String name) =>
+      switch (json[name]) {
+        final String value => value.trim(),
+        _ => '',
+      };
+
   /// 畫面上填的內容，沒填的是空字串。
   Future<AiService> read() async {
-    final raw = (await _ensure()).getString(serviceKey);
-    Map<String, dynamic> json = const {};
-    if (raw != null) {
-      try {
-        if (jsonDecode(raw) case final Map<String, dynamic> decoded) {
-          json = decoded;
-        }
-      } on FormatException {
-        // 讀不懂就當作沒填。
-      }
-    }
-    String field(String name) => switch (json[name]) {
-      final String value => value.trim(),
-      _ => '',
-    };
+    final json = await _json();
+    String field(String name) => _field(json, name);
     final effort = field('effort');
     return (
       baseUrl: field('baseUrl'),
@@ -115,7 +140,9 @@ class AiRepairSettings {
     );
   }
 
-  Future<void> save(AiService service) async {
+  /// 存服務；[findModel] 沒給時留著原本的「找書的模型」。兩個模型和網址、
+  /// 金鑰存在同一筆（理由見類別說明）。
+  Future<void> save(AiService service, {String? findModel}) async {
     final prefs = await _ensure();
     final value = (
       baseUrl: service.baseUrl.trim(),
@@ -123,7 +150,11 @@ class AiRepairSettings {
       model: service.model.trim(),
       effort: service.effort,
     );
-    if (value.baseUrl.isEmpty && value.apiKey.isEmpty && value.model.isEmpty) {
+    final find = (findModel ?? await this.findModel()).trim();
+    if (value.baseUrl.isEmpty &&
+        value.apiKey.isEmpty &&
+        value.model.isEmpty &&
+        find.isEmpty) {
       await prefs.remove(serviceKey);
       return;
     }
@@ -134,6 +165,7 @@ class AiRepairSettings {
         'apiKey': value.apiKey,
         'model': value.model,
         if (value.effort.isNotEmpty) 'effort': value.effort,
+        if (find.isNotEmpty) 'findModel': find,
       }),
     );
   }
