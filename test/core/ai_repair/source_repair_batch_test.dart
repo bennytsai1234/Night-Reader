@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
@@ -103,7 +104,6 @@ void main() {
   late List<String> rechecked;
   late List<String> checkedOriginals;
   late List<List<String>> deleted;
-  late List<(List<String>, String)> mergedInto;
   late AiRepairBackups backups;
 
   setUp(() async {
@@ -117,7 +117,6 @@ void main() {
     rechecked = [];
     checkedOriginals = [];
     deleted = [];
-    mergedInto = [];
   });
 
   SourceRepairBatch batch(
@@ -128,7 +127,6 @@ void main() {
     int? tokenBudget,
     int tokensPerAnswer = 0,
     DateTime Function()? now,
-    List<String> Function(List<String> from)? merged,
   }) {
     late SourceRepairBatch b;
     b = SourceRepairBatch(
@@ -154,10 +152,6 @@ void main() {
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
       markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
       delete: (urls) async => deleted.add(urls),
-      merge: (from, into) async {
-        mergedInto.add((from, into));
-        return merged?.call(from) ?? from;
-      },
       session: (source, item) {
         final answers = replies?.call(source.bookSourceUrl) ?? [_fix];
         var next = 0;
@@ -662,45 +656,17 @@ void main() {
     ]);
   });
 
-  test('a merge that did not happen is not shown as merged', () async {
-    final b = batch([
-      _source('https://site.example#a'),
-      _source('https://site.example#b'),
-    ], merged: (_) => const []);
-    await b.start();
-
-    await b.mergeShared();
-
-    expect(b.items[1].merged, isFalse);
-    expect(b.mergeable, [b.items[1]]);
-  });
-
   test('sources that took the rules fixed for another source of the same site '
-      'are merged into it', () async {
+      'remember which one they took them from', () async {
     final b = batch([
       _source('https://site.example#a'),
       _source('https://site.example#b'),
-      _source('https://site.example#c'),
       _source('https://other.example'),
     ]);
     await b.start();
-    expect(b.count(RepairOutcome.shared), 2);
-    expect(b.mergeable, hasLength(2));
 
-    await b.mergeShared();
-
-    expect(
-      [for (final (from, into) in mergedInto) '$from → $into'],
-      [
-        '[https://site.example#b, https://site.example#c] → '
-            'https://site.example#a',
-      ],
-    );
-    expect(b.mergeable, isEmpty);
-    expect(
-      [for (final item in b.items) item.merged],
-      [false, true, true, false],
-    );
-    expect(b.sourceEdits, 1);
+    expect(b.count(RepairOutcome.shared), 1);
+    expect(b.items[1].sharedFrom, same(b.items[0]));
+    expect(b.items[2].sharedFrom, isNull);
   });
 }

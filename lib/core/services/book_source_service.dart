@@ -266,8 +266,8 @@ class BookSourceService {
         .record(from: previousUrl, to: source.bookSourceUrl);
   }
 
-  /// 同網站、規則一樣的幾個書源 [from] 併進 [into]（整批修復套用同網站修好的
-  /// 規則之後，ADR 0054；做法見 [BookSourceDao.mergeInto]）。合併時暫停這些
+  /// 重複書源 [from] 併進 [into]（ADR 0062；做法見
+  /// [BookSourceDao.mergeInto]）。合併時暫停這些
   /// 書的下載，記一筆書源搬家給同步。傳回真的併掉的網址。
   Future<List<String>> mergeSources(List<String> from, String into) async {
     final books = [

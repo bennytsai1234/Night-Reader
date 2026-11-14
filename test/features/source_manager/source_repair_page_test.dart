@@ -145,27 +145,4 @@ void main() {
     expect(find.text('甲'), findsNothing);
     expect(find.text('刪除這 2 個'), findsNothing);
   });
-
-  testWidgets(
-    'sources that took the fixed rules of the same site can be merged; '
-    'merged ones leave the list',
-    (tester) async {
-      final batch = _batch([
-        ('甲', RepairOutcome.aiFixed),
-        ('乙', RepairOutcome.shared),
-        ('丙', RepairOutcome.shared),
-      ])..stage = RepairStage.done;
-      batch.items[1].sharedFrom = batch.items[0];
-      batch.items[2]
-        ..sharedFrom = batch.items[0]
-        ..merged = true;
-
-      await _pump(tester, batch);
-
-      expect(find.text('修好了 · 2'), findsOneWidget);
-      expect(find.text('合併同網站重複的 1 個'), findsOneWidget);
-      expect(find.text('已合併同網站重複的 1 個'), findsOneWidget);
-      expect(find.text('丙'), findsNothing);
-    },
-  );
 }

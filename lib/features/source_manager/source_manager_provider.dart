@@ -8,8 +8,10 @@ import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/services/source_dedupe.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -78,6 +80,19 @@ class ParsedSourceImportResult {
     ...importableSources,
     ...unsupportedSources,
   ];
+}
+
+/// 一次匯入：匯入幾個書源，接著併掉幾個重複書源（ADR 0062）。
+typedef SourceImportCount = ({int imported, int merged});
+
+/// 匯入完的一句話，書源管理與從外部打開的匯入共用。
+String sourceImportMessage(SourceImportCount count, {int unsupported = 0}) {
+  if (count.imported == 0) return '未匯入有效書源';
+  return [
+    '成功匯入 ${count.imported} 個書源',
+    if (unsupported > 0) '其中 $unsupported 個已標記為不支援並停用',
+    if (count.merged > 0) '合併了 ${count.merged} 個同網站重複的書源',
+  ].join('，');
 }
 
 class SourceImportService {
@@ -158,29 +173,13 @@ class SourceImportService {
     );
   }
 
-  Future<int> importSources(List<BookSource> sources) async {
-    if (sources.isEmpty) return 0;
+  /// 匯入書源，接著把重複書源併成一個（ADR 0062）。
+  Future<SourceImportCount> importSources(List<BookSource> sources) async {
+    if (sources.isEmpty) return (imported: 0, merged: 0);
     final preparedSources = await _prepareImportSources(sources);
     await _dao.insertOrUpdateAll(preparedSources);
-    return preparedSources.length;
-  }
-
-  Future<int> importFromJson(String jsonStr) async {
-    try {
-      final parsed = await parseSourcesDetailedAsync(jsonStr);
-      if (parsed.allSources.isEmpty) return 0;
-      return await importSources(parsed.allSources);
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  Future<int> importFromUrl(String url) async {
-    try {
-      final text = await fetchImportTextFromUrl(url);
-      return await importFromJson(text);
-    } catch (_) {}
-    return 0;
+    final merged = await mergeDuplicateSources();
+    return (imported: preparedSources.length, merged: merged);
   }
 
   Future<String> fetchImportTextFromUrl(String url) async {
@@ -355,9 +354,13 @@ class SourceManagerProvider with ChangeNotifier {
   bool _isBatchOperationInProgress = false;
   bool get isBatchOperationInProgress => _isBatchOperationInProgress;
   final Set<String> _pendingSourceMutations = <String>{};
+
+  /// 讀清單時正在併重複書源（ADR 0062）：這段時間其他改書源的動作等它。
+  bool _mergingDuplicates = false;
   bool get _hasActiveMutation =>
       _isBatchOperationInProgress ||
       checkService.isChecking ||
+      _mergingDuplicates ||
       _pendingSourceMutations.isNotEmpty;
   bool get isMutationBusy => _isLoading || _hasActiveMutation;
 
@@ -513,7 +516,11 @@ class SourceManagerProvider with ChangeNotifier {
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
     RepairRuns? repairRuns,
+    Future<int> Function(List<BookSource> sources)? mergeDuplicates,
   }) : _importService = importService ?? SourceImportService(),
+       _mergeDuplicates =
+           mergeDuplicates ??
+           ((sources) => mergeDuplicateSources(sources: sources)),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
        _repairRuns = repairRuns ?? RepairRuns.instance,
        lastSourceCount = _readLastCount(),
@@ -535,6 +542,12 @@ class SourceManagerProvider with ChangeNotifier {
 
   final Future<void> Function()? _uncovered;
   final RepairRuns _repairRuns;
+  final Future<int> Function(List<BookSource> sources) _mergeDuplicates;
+
+  /// 讀清單時併掉了重複書源（ADR 0062）：每併一次加一，頁面聽它從底部提示
+  /// 「已合併 [lastMergedDuplicates] 個同網站重複的書源」。
+  final ValueNotifier<int> duplicatesMerged = ValueNotifier(0);
+  int lastMergedDuplicates = 0;
 
   /// 已經為它重讀過清單的那一件修復，與那時它刪、併過幾次書源。
   RepairRun? _reloadedRun;
@@ -606,6 +619,7 @@ class SourceManagerProvider with ChangeNotifier {
     checkService.removeListener(_handleCheckServiceChanged);
     _repairRuns.removeListener(_handleRepairRunsChanged);
     if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
+    duplicatesMerged.dispose();
     super.dispose();
   }
 
@@ -624,8 +638,31 @@ class SourceManagerProvider with ChangeNotifier {
       notifyListeners();
     }
     try {
-      final loadedSources = await _dao.getAllPart();
+      var loadedSources = await _dao.getAllPart();
       if (_disposed || generation != _loadGeneration) return;
+      // 重複書源每次讀清單都併（ADR 0062）。書源管理自己在改書源時不併；
+      // 校驗、修復這類批次工作在跑時由 [mergeDuplicateSources] 擋下，等它們
+      // 做完重讀時再併。
+      if (!_hasActiveMutation &&
+          duplicateSourceGroups(loadedSources).isNotEmpty) {
+        _mergingDuplicates = true;
+        final int merged;
+        try {
+          merged = await _mergeDuplicates(loadedSources);
+        } finally {
+          _mergingDuplicates = false;
+        }
+        if (_disposed) return;
+        if (merged > 0) {
+          lastMergedDuplicates = merged;
+          duplicatesMerged.value++;
+        }
+        if (generation != _loadGeneration) return;
+        if (merged > 0) {
+          loadedSources = await _dao.getAllPart();
+          if (_disposed || generation != _loadGeneration) return;
+        }
+      }
       _sources = loadedSources;
       _rememberCount(loadedSources.length);
       _selectedUrls.retainAll(
@@ -720,15 +757,8 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  String getSourceHost(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final host = uri.host.trim();
-      return host.isEmpty ? '其他' : host;
-    } catch (_) {
-      return '其他';
-    }
-  }
+  /// 「按域名分組」的組：和重複書源同一個分法（[siteHost]，ADR 0062）。
+  String getSourceHost(String url) => siteHost(url) ?? '其他';
 
   bool shouldShowHostHeaderAt(int index) {
     final visible = sources;
@@ -1304,8 +1334,8 @@ class SourceManagerProvider with ChangeNotifier {
   );
 
   /// 直接匯入書源列表（跳過預覽）
-  Future<int> importSources(List<BookSource> sources) async {
-    if (sources.isEmpty || isMutationBusy) return 0;
+  Future<SourceImportCount> importSources(List<BookSource> sources) async {
+    if (sources.isEmpty || isMutationBusy) return (imported: 0, merged: 0);
     _isLoading = true;
     notifyListeners();
     try {
@@ -1318,37 +1348,8 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  Future<int> importFromJson(String jsonStr) async {
-    if (isMutationBusy) return 0;
-    _isLoading = true;
-    notifyListeners();
-    try {
-      final count = await _importService.importFromJson(jsonStr);
-      if (count <= 0) return 0;
-      await loadSources(showLoading: false);
-      return count;
-    } catch (_) {
-      return 0;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<int> importFromUrl(String url) async {
-    try {
-      final text = await fetchImportTextFromUrl(url);
-      return await importFromJson(text);
-    } catch (_) {}
-    return 0;
-  }
-
   Future<String> fetchImportTextFromUrl(String url) async {
     return _importService.fetchImportTextFromUrl(url);
-  }
-
-  Future<int> importFromText(String text) async {
-    return await importFromJson(text);
   }
 
   void _markVisibleSourcesDirty() {

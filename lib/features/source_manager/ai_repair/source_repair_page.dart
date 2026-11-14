@@ -313,15 +313,13 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
   List<Widget> _results(BuildContext context) {
     List<RepairItem> of(Set<RepairOutcome> outcomes) => [
       for (final item in _batch.items)
-        if (outcomes.contains(item.outcome) && !item.merged) item,
+        if (outcomes.contains(item.outcome)) item,
     ];
     final fixed = of(const {
       RepairOutcome.moved,
       RepairOutcome.aiFixed,
       RepairOutcome.shared,
     });
-    final merged = _batch.items.where((item) => item.merged).length;
-    final mergeable = _batch.isFinished ? _batch.mergeable.length : 0;
     final gone = of(const {RepairOutcome.siteGone});
     final goneLeft = _batch.goneLeft;
     final notFixed = of(const {RepairOutcome.notFixed});
@@ -361,27 +359,10 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
               ),
           ],
         ),
-      if (fixed.isNotEmpty || merged > 0)
+      if (fixed.isNotEmpty)
         GroupedSection(
           header: '修好了 · ${fixed.length}',
-          footer: mergeable > 0
-              ? '套用同網站修好的規則的，規則和修好的那個一樣，留著只會重複搜同一個網站；'
-                    '合併後書架上的書搬到修好的那個。'
-              : null,
-          children: [
-            for (final item in fixed) _itemRow(item),
-            if (mergeable > 0)
-              GroupedRow(
-                title: '合併同網站重複的 $mergeable 個',
-                accent: true,
-                showChevron: false,
-                onTap: _batch.isEditing
-                    ? null
-                    : () => unawaited(_merge(mergeable)),
-              ),
-            if (merged > 0)
-              GroupedRow(title: '已合併同網站重複的 $merged 個', showChevron: false),
-          ],
+          children: [for (final item in fixed) _itemRow(item)],
         ),
       if (gone.isNotEmpty && goneLeft.isEmpty)
         GroupedSection(
@@ -482,18 +463,6 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     if (ok != true) return;
     await _batch.deleteGone();
     if (mounted) _say('已刪除 $count 個書源');
-  }
-
-  Future<void> _merge(int count) async {
-    final before = _batch.mergeable.length;
-    await _batch.mergeShared();
-    final merged = before - _batch.mergeable.length;
-    if (!mounted) return;
-    _say(
-      merged == count
-          ? '已合併 $merged 個重複的書源'
-          : '合併了 $merged 個，$count 個裡有的已經不在或出錯，沒有合併',
-    );
   }
 
   static bool _hasResult(RepairItem item) =>
