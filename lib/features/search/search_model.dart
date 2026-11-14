@@ -245,8 +245,16 @@ class SearchModel {
   /// 暫停中時不為 null，[resume] 時完成。
   Completer<void>? _resumed;
 
-  SearchModel({required this.callback, SearchBookLoader? loader})
-    : _searchSource = loader ?? BookSourceService().searchBooks;
+  /// [persist] 是 false 時搜到的書不存進搜尋快取：快取給從搜尋頁進詳情後換源、
+  /// 換封面先列剛搜到的來源；AI 找書一次搜好幾十次全部書源，存了用不到、
+  /// 還在主執行緒寫幾萬列。
+  SearchModel({
+    required this.callback,
+    SearchBookLoader? loader,
+    this.persist = true,
+  }) : _searchSource = loader ?? BookSourceService().searchBooks;
+
+  final bool persist;
 
   /// 執行搜尋。給了 [kind] 就只送給那一類的書源；聚合源每一類都送
   /// （ADR 0056），它搜到的書由搜尋頁照類別篩。
@@ -422,8 +430,10 @@ class SearchModel {
 
       if (filteredBooks.isNotEmpty) {
         // 持久化到搜尋快取
-        await getIt<SearchBookDao>().insertList(filteredBooks);
-        if (stale()) return;
+        if (persist) {
+          await getIt<SearchBookDao>().insertList(filteredBooks);
+          if (stale()) return;
+        }
         // 合併結果：書源常常幾個一起回來，合併與通知頁面集中在一段時間內
         // 做一次（見 [_publishDelay]）。
         _appendRawBooks(filteredBooks);

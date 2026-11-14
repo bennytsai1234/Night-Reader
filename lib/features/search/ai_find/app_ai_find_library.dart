@@ -55,7 +55,11 @@ class AppAiFindLibrary implements AiFindLibrary {
     CancelToken cancelToken,
   ) async {
     final collector = _SearchCollector();
-    final model = SearchModel(callback: collector, loader: _searchLoader);
+    final model = SearchModel(
+      callback: collector,
+      loader: _searchLoader,
+      persist: false,
+    );
     cancelToken.whenCancel.then((_) => model.cancelSearch()).ignore();
     try {
       await model.search(
