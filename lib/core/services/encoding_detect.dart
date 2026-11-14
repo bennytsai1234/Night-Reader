@@ -30,17 +30,42 @@ class EncodingDetect {
       if (normalized == 'GBK' ||
           normalized == 'GB2312' ||
           normalized == 'GB18030') {
-        try {
-          return gbk.decode(data);
-        } catch (_) {
-          return utf8.decode(data, allowMalformed: true);
-        }
+        return decodeGbk(data);
       }
       final offset = _hasUtf8Bom(data) ? 3 : 0;
       return utf8.decode(data.sublist(offset), allowMalformed: true);
     } catch (_) {
       return utf8.decode(data, allowMalformed: true);
     }
+  }
+
+  /// 解 GBK：壞掉的位元組只換成一個替代字元，後面的照常解（同 Legado 的
+  /// `String(bytes, charset)`）。2026-11-14 86读书的正文頁有一個孤立的
+  /// 0xD0，原本整頁改用 UTF-8 解成亂碼；fast_gbk 自己的 `allowMalformed`
+  /// 會把孤立位元組後面那個 `<` 一起吃掉，弄壞標籤，所以先挑出孤立的雙位元組
+  /// 開頭（0x81–0xFE 後面不是 0x40–0xFE、或已經到結尾），前後分段解。
+  static String decodeGbk(List<int> bytes) {
+    final out = StringBuffer();
+    var start = 0;
+    var i = 0;
+    while (i < bytes.length) {
+      final b = bytes[i];
+      if (b < 0x81 || b > 0xFE) {
+        i++;
+        continue;
+      }
+      final next = i + 1 < bytes.length ? bytes[i + 1] : -1;
+      if (next >= 0x40 && next <= 0xFE && next != 0x7F) {
+        i += 2;
+        continue;
+      }
+      out
+        ..write(gbk.decode(bytes.sublist(start, i), allowMalformed: true))
+        ..writeCharCode(0xFFFD);
+      start = ++i;
+    }
+    out.write(gbk.decode(bytes.sublist(start), allowMalformed: true));
+    return out.toString();
   }
 
   /// 將字串編成指定格式，不附加 BOM；用於把字元索引映射回檔案位元組位置。
