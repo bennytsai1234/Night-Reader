@@ -10,7 +10,7 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 abstract interface class AiFindLibrary {
   /// 照搜尋頁的搜尋範圍（開始找書時的那一份）搜 [keyword]，只回 [kind]
   /// 這一類的書；同一本合併成一張卡（[SearchBook.origins] 是有這本的書源）。
-  Future<List<SearchBook>> search(
+  Future<AiFindSearchResult> search(
     String keyword,
     BookSourceKind kind,
     CancelToken cancelToken,
@@ -46,7 +46,19 @@ abstract interface class AiFindLibrary {
 
   /// 書架上的書與閱讀紀錄（含已經移出書架的）。
   Future<List<AiFindShelfEntry>> shelf();
+
+  /// 這次抓過的書源的秘密（登入資料、Cookie、書源變數，ADR 0054）：工具結果
+  /// 接進對話、寫進紀錄前換掉（`AgentTask.redact`）。
+  Set<String> get secrets;
 }
+
+/// 一次搜尋：[books] 是合併後的書，[sources] 是送了幾個書源，[failed] 是
+/// 其中幾個出錯或逾時（書源自己的問題，AI 拿它判斷搜不到是不是因為書源）。
+typedef AiFindSearchResult = ({
+  List<SearchBook> books,
+  int sources,
+  int failed,
+});
 
 /// 讀不到這一章：[message] 照實回給 AI。
 class AiFindUnreadable implements Exception {
@@ -64,12 +76,12 @@ typedef AiFindChapter = ({String title, String text, int total});
 typedef AiFindExploreSource = ({String url, String name, BookSourceKind kind});
 
 /// 書架上的一本或一筆閱讀紀錄。[readSeconds] 是讀了多久（各台加總），
-/// [chapter] 是讀到哪一章的章名，[chapterIndex]／[chapterTotal] 從 1 數，
-/// 不知道的是 null。
+/// [chapter] 是讀到哪一章的章名，[chapterIndex]／[chapterTotal] 從 1 數；
+/// 不知道的是 null（只剩閱讀紀錄、書已經不在資料庫的，作者與類別都不知道）。
 typedef AiFindShelfEntry = ({
   String name,
   String author,
-  BookSourceKind kind,
+  BookSourceKind? kind,
   bool onShelf,
   bool local,
   int readSeconds,

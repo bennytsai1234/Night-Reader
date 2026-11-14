@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/ai_repair/agent_loop.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
     show AiRepairStep, AiRepairStepState;
 import 'package:night_reader/core/models/book.dart';
@@ -90,6 +91,7 @@ class AiFindSession extends ChangeNotifier {
     _started = true;
     _notify();
     log
+      ..redact = ((text) => redactAiRepairSecrets(text, _library.secrets))
       ..header('$serviceLabel · 深度 ${depth.label}', prompt: aiFindPromptVersion)
       ..full('（迴圈的設定：${AiAgentKnobs.summary}）')
       ..tools(
@@ -191,7 +193,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   final Map<String, _Found> _books = {};
   final Map<String, String> _idByIdentity = {};
-  final Map<String, List<String>> _searches = {};
+
+  /// 搜過的關鍵字：結果的編號與那次搜尋實際的情況（送了幾個書源、花多久），
+  /// 接著拿下一批時不再搜一次。
+  final Map<String, ({List<String> ids, String facts})> _searches = {};
   List<AiFindExploreSource>? _exploreSources;
   final Map<String, List<String>> _categories = {};
   AiRepairStep? _round;
@@ -205,7 +210,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       aiFindOpening(description: s.description, depth: s.depth);
 
   @override
-  String redact(String text) => text;
+  String redact(String text) => redactAiRepairSecrets(text, _library.secrets);
 
   @override
   void restart(int attempt, String why) {
@@ -313,19 +318,27 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     final label = '搜尋「${command.keyword}」${_kindLabel(command.kind)}';
     _say('$label…');
     final cacheKey = '${command.kind.name}\u0000${command.keyword}';
-    var ids = _searches[cacheKey];
-    if (ids == null) {
-      final books = await _library.search(
+    var search = _searches[cacheKey];
+    if (search == null) {
+      final watch = Stopwatch()..start();
+      final result = await _library.search(
         command.keyword,
         command.kind,
         _cancel,
       );
-      ids = [for (final book in books) _register(book).id];
-      _searches[cacheKey] = ids;
+      search = (
+        ids: [for (final book in result.books) _register(book).id],
+        facts:
+            '送了 ${result.sources} 個書源'
+            '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}，'
+            '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
+      );
+      _searches[cacheKey] = search;
     }
+    final ids = search.ids;
     _say('$label，找到 ${ids.length} 本');
     final text = _bookPage(
-      '# 搜尋「${command.keyword}」（${_kindLabel(command.kind)}）',
+      '# 搜尋「${command.keyword}」（${_kindLabel(command.kind)}，${search.facts}）',
       ids,
       command.page,
       empty: '沒有搜到書',
@@ -446,8 +459,12 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     final entries = await _library.shelf();
     String line(AiFindShelfEntry e) {
       final parts = [
-        '${e.name}｜${e.author.isEmpty ? '作者不明' : e.author}｜'
-            '${_kindLabel(e.kind)}${e.local ? '（手機上的檔案）' : ''}',
+        [
+          e.name,
+          e.author.isEmpty ? '作者不明' : e.author,
+          if (e.kind case final kind?)
+            '${_kindLabel(kind)}${e.local ? '（手機上的檔案）' : ''}',
+        ].join('｜'),
         if (e.readSeconds > 0) '讀了 ${_duration(e.readSeconds)}',
         if (e.chapterIndex != null && e.chapterTotal != null)
           '讀到第 ${e.chapterIndex}／${e.chapterTotal} 章'

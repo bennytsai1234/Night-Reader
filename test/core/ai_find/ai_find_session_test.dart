@@ -9,6 +9,9 @@ import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
+    show AiRepairStepState;
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -31,11 +34,13 @@ class _Library implements AiFindLibrary {
 
   final Map<String, List<SearchBook>> results;
   final List<String> calls = [];
+  @override
+  final Set<String> secrets = {};
   Completer<void>? searchGate;
   bool searchCancelled = false;
 
   @override
-  Future<List<SearchBook>> search(
+  Future<AiFindSearchResult> search(
     String keyword,
     BookSourceKind kind,
     CancelToken cancelToken,
@@ -52,7 +57,11 @@ class _Library implements AiFindLibrary {
         );
       }
     }
-    return results[keyword] ?? const [];
+    return (
+      books: results[keyword] ?? const <SearchBook>[],
+      sources: 3,
+      failed: 1,
+    );
   }
 
   @override
@@ -388,6 +397,130 @@ void main() {
       allOf(startsWith(aiFindBadCall), contains('沒有叫 dance 的工具')),
     );
     expect(results[2], allOf(contains('少了必要的參數'), contains('keyword')));
+  });
+
+  test('a search says how many sources were asked, how many failed and '
+      'how long it took', () async {
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+    ]);
+    await session(
+      _Library({
+        '穿越': [_book('獵魔人')],
+      }),
+      ai,
+    ).start();
+    expect(
+      ai.toolResults(2).single,
+      matches(RegExp(r'送了 3 個書源，1 個出錯或逾時，花 \d+\.\d 秒')),
+    );
+  });
+
+  test('secrets of the sources the tools touched are masked in what the AI '
+      'reads and in the log', () async {
+    const secret = 'token-abc-123456';
+    final library = _Library({
+      '穿越': [_book('獵魔人$secret')],
+    })..secrets.add(secret);
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+    ]);
+    final find = session(library, ai);
+    await find.start();
+    final result = ai.toolResults(2).single;
+    expect(result, isNot(contains(secret)));
+    expect(result, contains(aiRepairRedacted));
+    final log = await (await find.log.file())!.readAsString();
+    expect(log, isNot(contains(secret)));
+  });
+
+  test('arguments that are not JSON are dropped and the same conversation '
+      'is sent again', () async {
+    final ai = _Ai([
+      (
+        content: '',
+        toolCalls: [(id: 'bad', name: 'search', arguments: '{"keyword">"x"}')],
+        reasoning: '',
+        usage: null,
+        firstData: Duration.zero,
+      ),
+    ]);
+    final find = session(_Library({}), ai);
+    await find.start();
+    expect(find.outcome, AiFindOutcome.found);
+    expect(ai.seen[1], hasLength(ai.seen[0].length), reason: '寫壞的那則沒有接進對話');
+  });
+
+  group('every way of not converging ends as unfinished', () {
+    AiReply noTool() => (
+      content: '我想想',
+      toolCalls: const [],
+      reasoning: '',
+      usage: null,
+      firstData: Duration.zero,
+    );
+    // 每次交不同的編號：同樣的交出算同一個呼叫，第 4 次就先停了。
+    AiReply submitUnknown(int i) => _calls([
+      (
+        'submit',
+        {
+          'books': [
+            {'book': 'b${90 + i}', 'reason': '編的'},
+          ],
+          'summary': '交',
+        },
+      ),
+    ]);
+
+    for (final (name, script, reason) in [
+      (
+        'no tool call three rounds in a row',
+        [for (var i = 0; i < 3; i++) noTool()],
+        '連續 3 輪沒有呼叫工具',
+      ),
+      (
+        'the same search four times',
+        [
+          for (var i = 0; i < 4; i++)
+            _calls([
+              ('search', {'keyword': '穿越'}),
+            ]),
+        ],
+        '同樣的工具與參數第 4 次',
+      ),
+      (
+        'a submit rejected five times',
+        [for (var i = 0; i < 5; i++) submitUnknown(i)],
+        '交出連續被退 5 次',
+      ),
+      (
+        'rounds running out',
+        [
+          for (var i = 0; i < AiAgentKnobs.maxRounds; i++)
+            _calls([
+              ('search', {'keyword': '關鍵字$i'}),
+            ]),
+        ],
+        '用完 ${AiAgentKnobs.maxRounds} 輪還沒交出',
+      ),
+    ]) {
+      test(name, () async {
+        final find = session(_Library({}), _Ai(script));
+        await find.start();
+        expect(find.outcome, AiFindOutcome.unfinished);
+        expect(find.failure, contains(reason));
+        expect(find.isRunning, isFalse);
+        expect(
+          find.rounds.where((r) => r.state == AiRepairStepState.running),
+          isEmpty,
+          reason: '頁面上沒有停在進行中的那一輪',
+        );
+      });
+    }
   });
 
   test('every tool says which arguments it needs', () {
