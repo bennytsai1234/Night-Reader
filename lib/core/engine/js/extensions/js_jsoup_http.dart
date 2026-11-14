@@ -6,6 +6,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
+import 'package:night_reader/core/network/source_tls.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
@@ -128,21 +129,24 @@ BlockingTask jsoupExecute(Map<String, Object?> request) => () async {
         : null;
 
     final started = DateTime.now();
-    final response = await (_jsoupDio ??= Dio()).fetch<ResponseBody>(
-      RequestOptions(
-        method: method,
-        path: url,
-        data: payload,
-        headers: wire,
-        connectTimeout: timeout,
-        receiveTimeout: timeout,
-        sendTimeout: payload == null ? null : timeout,
-        followRedirects: false,
-        validateStatus: (_) => true,
-        responseType: ResponseType.stream,
-        cancelToken: currentSourceCancelToken,
-      ),
-    );
+    final response =
+        await (_jsoupDio ??= Dio()
+              ..httpClientAdapter = sourceHttpClientAdapter())
+            .fetch<ResponseBody>(
+              RequestOptions(
+                method: method,
+                path: url,
+                data: payload,
+                headers: wire,
+                connectTimeout: timeout,
+                receiveTimeout: timeout,
+                sendTimeout: payload == null ? null : timeout,
+                followRedirects: false,
+                validateStatus: (_) => true,
+                responseType: ResponseType.stream,
+                cancelToken: currentSourceCancelToken,
+              ),
+            );
     final status = response.statusCode ?? 0;
     final responseHeaders = response.headers.map;
 
