@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
@@ -101,6 +102,8 @@ void main() {
   late List<String> unfixable;
   late List<String> asked;
   late List<String> rechecked;
+  late List<String> checkedOriginals;
+  late List<List<String>> deleted;
   late AiRepairBackups backups;
 
   setUp(() async {
@@ -112,6 +115,8 @@ void main() {
     unfixable = [];
     asked = [];
     rechecked = [];
+    checkedOriginals = [];
+    deleted = [];
   });
 
   SourceRepairBatch batch(
@@ -125,8 +130,14 @@ void main() {
       sources: sources,
       service: _service,
       now: now,
-      recheck: (urls, _) async {
+      recheck: (urls, _, onResult) async {
         rechecked.addAll(urls);
+        for (final url in urls) {
+          final source = sources.firstWhere((s) => s.bookSourceUrl == url);
+          if ((recheck[url] ?? _broken) != SourceRuntimeHealth.healthy) {
+            onResult(url, _checked(source));
+          }
+        }
         return [for (final url in urls) _entry(url, recheck[url] ?? _broken)];
       },
       checkSite: (source) async =>
@@ -136,13 +147,18 @@ void main() {
       save: (repaired, original) async => saved.add(repaired),
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
       markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
+      delete: (urls) async => deleted.add(urls),
       session: (source, item) {
         final answers = replies?.call(source.bookSourceUrl) ?? [_fix];
         var next = 0;
         return AiRepairSession(
           source: source,
           service: _service,
-          check: (s, _) async => _checked(s),
+          priorCheck: item.priorCheck,
+          check: (s, _) async {
+            if (identical(s, source)) checkedOriginals.add(s.bookSourceUrl);
+            return _checked(s);
+          },
           probe: (s, _, {start}) async => _probe(s),
           keywordCheck: (_, _) async => true,
           ask: (_, _) async {
@@ -276,8 +292,9 @@ void main() {
 
     await b.start();
 
-    expect(b.count(RepairOutcome.skipped), 2);
-    expect(b.items.first.detail, contains('AI 之前試過修不好'));
+    expect(b.count(RepairOutcome.aiUnfixable), 1);
+    expect(b.count(RepairOutcome.skipped), 1);
+    expect(b.items.first.detail, contains('AI 之前試過說修不好'));
     expect(b.items.last.detail, contains('沒有搜尋規則'));
     expect(asked, isEmpty);
   });
@@ -299,7 +316,7 @@ void main() {
     expect(
       [for (final item in b.items) item.outcome],
       [
-        RepairOutcome.skipped,
+        RepairOutcome.aiUnfixable,
         RepairOutcome.siteGone,
         RepairOutcome.skipped,
         RepairOutcome.aiFixed,
@@ -371,7 +388,7 @@ void main() {
         _source('https://gone.example'),
       ],
       service: _service,
-      recheck: (urls, _) async => [
+      recheck: (urls, _, _) async => [
         for (final url in urls) _entry(url, _broken),
       ],
       checkSite: (source) async => source.bookSourceUrl.contains('bad')
@@ -407,7 +424,7 @@ void main() {
     final b = SourceRepairBatch(
       sources: [source1, source2],
       service: _service,
-      recheck: (urls, progress) {
+      recheck: (urls, progress, _) {
         expect(urls, [source1.bookSourceUrl, source2.bookSourceUrl]);
         onProgress = progress;
         return gate.future;
@@ -442,7 +459,7 @@ void main() {
     final b = SourceRepairBatch(
       sources: [source],
       service: _service,
-      recheck: (urls, progress) async {
+      recheck: (urls, progress, _) async {
         progress(urls.length);
         return [_entry(source.bookSourceUrl, _broken)];
       },
@@ -467,7 +484,7 @@ void main() {
     final b = SourceRepairBatch(
       sources: [_source('https://broken-check.example')],
       service: _service,
-      recheck: (_, _) async => throw StateError('校驗服務無法啟動'),
+      recheck: (_, _, _) async => throw StateError('校驗服務無法啟動'),
       checkSite: (_) async => fail('must not proceed after recheck failure'),
       markUnfixable: (_) async => fail('must not change sources'),
     );
@@ -494,7 +511,7 @@ void main() {
     final b = SourceRepairBatch(
       sources: [_source('https://missing.example')],
       service: _service,
-      recheck: (urls, progress) async {
+      recheck: (urls, progress, _) async {
         progress(urls.length);
         return [];
       },
@@ -515,7 +532,7 @@ void main() {
         _source('https://unstable.example#b'),
       ],
       service: _service,
-      recheck: (urls, progress) async {
+      recheck: (urls, progress, _) async {
         progress(urls.length);
         return [for (final url in urls) _entry(url, _broken)];
       },
@@ -568,5 +585,74 @@ void main() {
       'https://cdn.bold.cc/s?from=old.cc.cn&q={{key}}',
       reason: '只換完整的網域',
     );
+  });
+
+  test('the AI repair goes on with the check this batch just made; a result '
+      'reused from an earlier check is checked again', () async {
+    final now = DateTime(2026, 11, 13, 12);
+    final fresh = _source('https://fresh.example')
+      ..addHealthGroups(_broken)
+      ..addErrorComment('正文為空')
+      ..lastCheckTime = now
+          .subtract(const Duration(hours: 1))
+          .millisecondsSinceEpoch;
+    final b = batch([_source('https://stale.example'), fresh], now: () => now);
+
+    await b.start();
+
+    expect(b.count(RepairOutcome.aiFixed), 2);
+    expect(checkedOriginals, ['https://fresh.example']);
+    expect([for (final item in b.items) item.priorCheck], [null, null]);
+  });
+
+  test('the sources whose site is gone are deleted in one go', () async {
+    final b = batch(
+      [_source('https://gone.example#a'), _source('https://gone.example#b')],
+      sites: {'gone.example': const SiteCheck(SiteVerdict.gone, '網域查不到')},
+    );
+    await b.start();
+
+    await b.deleteGone();
+    await b.deleteGone();
+
+    expect(deleted, [
+      ['https://gone.example#a', 'https://gone.example#b'],
+    ]);
+    expect(b.goneLeft, isEmpty);
+    expect(b.sourceEdits, 1);
+  });
+
+  test('a site found gone after an earlier delete can still be deleted, '
+      'and only it is', () async {
+    final b = batch(
+      [_source('https://gone.example'), _source('https://later.example')],
+      sites: {'gone.example': const SiteCheck(SiteVerdict.gone, '網域查不到')},
+    );
+    await b.start();
+    await b.deleteGone();
+    // 修到一半就刪了；之後才判定網站不在了的那一個。
+    b.items[1].outcome = RepairOutcome.siteGone;
+
+    expect(b.goneLeft, [b.items[1]]);
+    await b.deleteGone();
+
+    expect(deleted, [
+      ['https://gone.example'],
+      ['https://later.example'],
+    ]);
+  });
+
+  test('sources that took the rules fixed for another source of the same site '
+      'remember which one they took them from', () async {
+    final b = batch([
+      _source('https://site.example#a'),
+      _source('https://site.example#b'),
+      _source('https://other.example'),
+    ]);
+    await b.start();
+
+    expect(b.count(RepairOutcome.shared), 1);
+    expect(b.items[1].sharedFrom, same(b.items[0]));
+    expect(b.items[2].sharedFrom, isNull);
   });
 }

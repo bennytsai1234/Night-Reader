@@ -99,6 +99,9 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 這一件的頁面。
   Widget page();
 
+  /// 做完之後在結果頁刪了、併了幾次書源：書源管理看到它變了就重讀清單。
+  int get sourceEdits => 0;
+
   /// 工作本身（批次、單一修復）做完之後放掉資源。
   void disposeWork();
 
@@ -165,11 +168,23 @@ class BatchRepairRun extends RepairRun {
     super.work,
     super.navigator,
   }) {
-    batch.addListener(changed);
+    batch
+      ..addListener(changed)
+      ..addListener(_watchEdits);
   }
 
   final SourceRepairBatch batch;
   final String title;
+  int _seenEdits = 0;
+
+  @override
+  int get sourceEdits => batch.sourceEdits;
+
+  void _watchEdits() {
+    if (batch.sourceEdits == _seenEdits) return;
+    _seenEdits = batch.sourceEdits;
+    notifyListeners();
+  }
 
   @override
   BackgroundWorkStatus get status => BackgroundWorkStatus(
@@ -191,8 +206,10 @@ class BatchRepairRun extends RepairRun {
 
   @override
   void disposeWork() {
-    batch.removeListener(changed);
-    batch.dispose();
+    batch
+      ..removeListener(changed)
+      ..removeListener(_watchEdits)
+      ..dispose();
   }
 }
 

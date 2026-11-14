@@ -266,6 +266,31 @@ class BookSourceService {
         .record(from: previousUrl, to: source.bookSourceUrl);
   }
 
+  /// 重複書源 [from] 併進 [into]（ADR 0062；做法見
+  /// [BookSourceDao.mergeInto]）。合併時暫停這些
+  /// 書的下載，記一筆書源搬家給同步。傳回真的併掉的網址。
+  Future<List<String>> mergeSources(List<String> from, String into) async {
+    final books = [
+      for (final url in from)
+        if (url != into) ...await getIt<BookDao>().bookUrlsFromOrigin(url),
+    ];
+    final release = books.isEmpty
+        ? null
+        : await DownloadService().holdBooks(books);
+    final List<String> merged;
+    try {
+      merged = await getIt<BookSourceDao>().mergeInto(from, into);
+    } finally {
+      release?.call();
+    }
+    // 同步時別台照這份紀錄把併掉的書源的書搬過去（ADR 0039）。
+    final moves = SourceMoves(await SharedPreferences.getInstance());
+    for (final url in merged) {
+      await moves.record(from: url, to: into);
+    }
+    return merged;
+  }
+
   /// 依 URL 取得書源
   Future<BookSource?> getSourceByUrl(String url) =>
       getIt<BookSourceDao>().getByUrl(url);

@@ -7,7 +7,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/io_client.dart';
 
 /// 連書源網站的連線不驗憑證：過期、自簽、網域對不上的憑證都照樣連（同
-/// Legado：書源的 OkHttp、Jsoup、封面與 WebView 都不驗，ADR 0062）。書源網站
+/// Legado：書源的 OkHttp、Jsoup、封面與 WebView 都不驗，ADR 0063）。書源網站
 /// 常放著憑證過期不管，驗了書就讀不到。夜讀自己的服務（App 更新、同步、AI）
 /// 各用自己的連線，照常驗。閒置的連線 3 秒就關，同 dio 預設的連線。
 HttpClient sourceHttpClient() => HttpClient()

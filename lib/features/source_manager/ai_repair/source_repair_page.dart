@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
+import 'package:night_reader/core/ai_repair/repair_batch_export.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
-import 'package:night_reader/core/database/dao/book_source_dao.dart';
-import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
@@ -13,6 +13,8 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'ai_repair_page.dart';
 import 'ai_repair_settings_page.dart';
@@ -97,8 +99,8 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
   BatchRepairRun get _run => widget.run;
   SourceRepairBatch get _batch => _run.batch;
 
-  /// 網站不在了的那組已經停用或刪除了（顯示在那組最後一列）。
-  String? _goneHandled;
+  /// 正在打包這批的紀錄：選單那一項先灰掉。
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -151,20 +153,33 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
             title: _run.title,
             actions: [
               GlassMenuButton<String>(
-                entriesBuilder: (_) => const [
-                  GlassMenuItem(
+                entriesBuilder: (_) => [
+                  const GlassMenuItem(
                     value: 'settings',
                     icon: Icons.tune_rounded,
                     label: 'AI 服務設定',
                   ),
-                ],
-                onSelected: (_) => unawaited(
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AiRepairSettingsPage(),
-                    ),
+                  GlassMenuItem(
+                    value: 'export',
+                    icon: Icons.ios_share_rounded,
+                    label: '分享這批的全部紀錄',
+                    enabled: !_exporting && _batch.items.any(_hasResult),
                   ),
-                ),
+                ],
+                onSelected: (value) {
+                  switch (value) {
+                    case 'settings':
+                      unawaited(
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AiRepairSettingsPage(),
+                          ),
+                        ),
+                      );
+                    case 'export':
+                      unawaited(_export());
+                  }
+                },
               ),
             ],
           ),
@@ -227,7 +242,8 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       RepairStage.checking => _counts([
         ('沿用校驗結果', _batch.reusedChecks),
         ('沒問題', n(RepairOutcome.healthy)),
-        ('不修', n(RepairOutcome.skipped)),
+        ('不用修', n(RepairOutcome.skipped)),
+        ('AI 之前修不好', n(RepairOutcome.aiUnfixable)),
       ]),
       RepairStage.checkingSites => _counts([
         ('網站不在了', n(RepairOutcome.siteGone)),
@@ -280,10 +296,12 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       RepairOutcome.shared,
     });
     final gone = of(const {RepairOutcome.siteGone});
+    final goneLeft = _batch.goneLeft;
     final notFixed = of(const {RepairOutcome.notFixed});
+    final skipped = of(const {RepairOutcome.skipped});
+    final unfixable = of(const {RepairOutcome.aiUnfixable});
     final rest = [
       ('重新校驗就沒問題了', _batch.count(RepairOutcome.healthy)),
-      ('不用修（需要登入、驗證、只能下載或 AI 試過修不好）', _batch.count(RepairOutcome.skipped)),
       ('沒輪到', _batch.count(RepairOutcome.notTried)),
     ].where((row) => row.$2 > 0).toList();
     final working = [
@@ -321,34 +339,47 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
           header: '修好了 · ${fixed.length}',
           children: [for (final item in fixed) _itemRow(item)],
         ),
-      if (gone.isNotEmpty)
+      if (gone.isNotEmpty && goneLeft.isEmpty)
         GroupedSection(
-          header: '網站不在了 · ${gone.length}',
-          footer: '已標「網站失效」，搜尋與閱讀不會用到。',
           children: [
-            for (final item in gone) _itemRow(item),
-            if (_goneHandled case final done?)
-              GroupedRow(title: done, showChevron: false)
-            else ...[
+            GroupedRow(title: '網站不在了的 ${gone.length} 個已刪除', showChevron: false),
+          ],
+        )
+      else if (goneLeft.isNotEmpty)
+        GroupedSection(
+          header: '網站不在了 · ${goneLeft.length}',
+          footer: '已標「網站失效」',
+          children: [
+            for (final item in goneLeft) _itemRow(item),
+            if (gone.length > goneLeft.length)
               GroupedRow(
-                title: '停用這 ${gone.length} 個',
-                accent: true,
+                title: '已刪除 ${gone.length - goneLeft.length} 個',
                 showChevron: false,
-                onTap: () => unawaited(_disable(gone)),
               ),
-              GroupedRow(
-                title: '刪除這 ${gone.length} 個',
-                destructive: true,
-                showChevron: false,
-                onTap: () => unawaited(_delete(gone)),
-              ),
-            ],
+            GroupedRow(
+              title: '刪除這 ${goneLeft.length} 個',
+              destructive: true,
+              showChevron: false,
+              onTap: _batch.isEditing
+                  ? null
+                  : () => unawaited(_delete(goneLeft.length)),
+            ),
           ],
         ),
       if (notFixed.isNotEmpty)
         GroupedSection(
           header: '沒修好 · ${notFixed.length}',
           children: [for (final item in notFixed) _itemRow(item)],
+        ),
+      if (skipped.isNotEmpty)
+        GroupedSection(
+          header: '不用修',
+          children: [for (final item in skipped) _nameRow(item)],
+        ),
+      if (unfixable.isNotEmpty)
+        GroupedSection(
+          header: 'AI 之前修不好',
+          children: [for (final item in unfixable) _nameRow(item)],
         ),
       if (rest.isNotEmpty)
         GroupedSection(
@@ -367,6 +398,22 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     return step.detail == null ? step.title : '${step.title}：${step.detail}';
   }
 
+  /// 只列名稱，點了看原因。
+  Widget _nameRow(RepairItem item) => GroupedRow(
+    title: item.source.bookSourceName,
+    showChevron: true,
+    onTap: () => unawaited(
+      showAppAlert<void>(
+        context: context,
+        title: item.source.bookSourceName,
+        message: item.detail ?? '',
+        actions: const [
+          AppAlertAction(label: '知道了', value: null, isDefault: true),
+        ],
+      ),
+    ),
+  );
+
   Widget _itemRow(RepairItem item) {
     final session = item.session;
     return GroupedRow(
@@ -378,19 +425,10 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     );
   }
 
-  Future<void> _disable(List<RepairItem> items) async {
-    await getIt<BookSourceDao>().updateEnabledByUrls([
-      for (final item in items) item.source.bookSourceUrl,
-    ], false);
-    if (!mounted) return;
-    setState(() => _goneHandled = '已停用');
-    _say('已停用 ${items.length} 個書源');
-  }
-
-  Future<void> _delete(List<RepairItem> items) async {
+  Future<void> _delete(int count) async {
     final ok = await showAppAlert<bool>(
       context: context,
-      title: '刪除 ${items.length} 個書源？',
+      title: '刪除 $count 個書源？',
       message: '網站已經不在了。刪掉之後要再用得重新匯入。',
       actions: const [
         AppAlertAction(label: '刪除', value: true, destructive: true),
@@ -398,12 +436,34 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       ],
     );
     if (ok != true) return;
-    await getIt<BookSourceDao>().deleteByUrls([
-      for (final item in items) item.source.bookSourceUrl,
-    ]);
-    if (!mounted) return;
-    setState(() => _goneHandled = '已刪除');
-    _say('已刪除 ${items.length} 個書源');
+    await _batch.deleteGone();
+    if (mounted) _say('已刪除 $count 個書源');
+  }
+
+  static bool _hasResult(RepairItem item) =>
+      item.outcome != null || item.session != null;
+
+  Future<void> _export() async {
+    setState(() => _exporting = true);
+    try {
+      final file = await exportRepairBatch(
+        _batch,
+        title: _run.title,
+        into: Directory(
+          '${(await getTemporaryDirectory()).path}/repair-export',
+        ),
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'application/zip')],
+          subject: '${_run.title}：全部紀錄',
+        ),
+      );
+    } catch (error) {
+      if (mounted) _say('打包紀錄失敗：$error');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   void _say(String message) {

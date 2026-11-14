@@ -118,12 +118,58 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// 幾個書源 [from] 併進 [into]：它們的書、搜尋紀錄與快取的正文搬到
+  /// [into]，它們自己的分組併過去（校驗標記與「AI 修不好」不併），它們刪掉，
+  /// 連同以它們的身分存的登入資訊與變數（留 [into] 的）。書源與書都在交易
+  /// 裡重讀：[into] 這時已經不在了就不併；[from] 裡書源已經刪了、書還記著它
+  /// 的也搬。傳回真的併掉的網址。
+  Future<List<String>> mergeInto(List<String> from, String into) async {
+    final merged = await transaction(() async {
+      final target = await getByUrl(into);
+      if (target == null) return const <String>[];
+      final books = BookDao(attachedDatabase);
+      final done = <String>[];
+      for (final url in from) {
+        if (url == into || done.contains(url)) continue;
+        final source = await getByUrl(url);
+        if (source == null && (await books.bookUrlsFromOrigin(url)).isEmpty) {
+          continue;
+        }
+        done.add(url);
+        if (source != null) {
+          target.addGroup(
+            (splitSourceGroups(source.bookSourceGroup)..removeAll([
+                  ...sourceRuntimeStatusTags,
+                  aiUnfixableSourceGroupTag,
+                ]))
+                .join(','),
+          );
+        }
+        final name = target.bookSourceName;
+        await books.moveOrigin(url, into, toName: name);
+        await SearchBookDao(attachedDatabase)
+            .moveOrigin(url, into, toName: name);
+        await ReaderChapterContentDao(attachedDatabase).moveOrigin(url, into);
+      }
+      if (done.isEmpty) return done;
+      await upsert(target);
+      await _deleteRows(done);
+      return done;
+    });
+    await _forgetIdentities(merged);
+    return merged;
+  }
+
   /// 刪掉書源，連同以它的身分存的登入資訊、登入標頭與變數
   /// （[BaseSource.forgetCachedIdentity]）。
   Future<void> deleteByUrl(String url) => deleteByUrls([url]);
 
   Future<void> deleteByUrls(List<String> urls) async {
     await _deleteRows(urls);
+    await _forgetIdentities(urls);
+  }
+
+  Future<void> _forgetIdentities(List<String> urls) async {
     final remaining = await (selectOnly(
       bookSources,
     )..addColumns([bookSources.bookSourceUrl])).get();
