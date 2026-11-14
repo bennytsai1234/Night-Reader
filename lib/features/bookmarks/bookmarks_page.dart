@@ -28,9 +28,12 @@ import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
-/// 「我的 → 書籤與標註」：頂端分段切換書籤與標註，兩頁都是一本書一組
-/// （最近留過的書在上），組裡照在書裡的先後排。點了開那本書、跳過去；書不
-/// 在手機上時用書名搜尋。往左滑刪除，提示可「復原」。標註頁可以匯出。
+import 'reading_stats_view.dart';
+
+/// 「我的 → 閱讀紀錄」：頂端分段切換書籤、標註與統計。書籤與標註都是一本書
+/// 一組（最近留過的書在上），組裡照在書裡的先後排。點了開那本書、跳過去；
+/// 書不在手機上時用書名搜尋。往左滑刪除，提示可「復原」。標註可以匯出。
+/// 統計見 [ReadingStatsView]。
 ///
 /// 書籤、標註與每本書在這台的目錄在推入前讀好（[open]），骨架照真的內容
 /// 畫、排序照這台目錄的章（ADR 0029、0042）；之後資料表一變（閱讀器裡
@@ -104,7 +107,7 @@ class BookmarksPage extends StatefulWidget {
   State<BookmarksPage> createState() => _BookmarksPageState();
 }
 
-enum _Tab { bookmarks, highlights }
+enum _Tab { bookmarks, highlights, stats }
 
 /// 一列要的東西：書籤與標註共用分組、排序與開書。
 typedef _Entry = ({
@@ -292,9 +295,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(
-        title: '書籤與標註',
+        title: '閱讀紀錄',
         actions: [
-          // 兩個分頁都在，沒有標註時灰掉（ADR 0059）。
+          // 每個分頁都在，沒有標註時灰掉（ADR 0059）。
           GlassIconButton(
             tooltip: '匯出標註',
             icon: Icons.ios_share_rounded,
@@ -313,6 +316,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
             segments: const [
               GlassSegment(_Tab.bookmarks, '書籤'),
               GlassSegment(_Tab.highlights, '標註'),
+              GlassSegment(_Tab.stats, '統計'),
             ],
             selected: _tab,
             onChanged: (tab) => setState(() => _tab = tab),
@@ -322,6 +326,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       body: switch (_tab) {
         _Tab.bookmarks => _buildBookmarks(context),
         _Tab.highlights => _buildHighlights(context),
+        _Tab.stats => const ReadingStatsView(),
       },
     );
   }

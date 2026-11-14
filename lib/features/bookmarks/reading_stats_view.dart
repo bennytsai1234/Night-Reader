@@ -17,16 +17,17 @@ import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
-class ReadingStatsPage extends StatefulWidget {
-  const ReadingStatsPage({super.key});
+/// 閱讀紀錄頁的「統計」（`BookmarksPage`）：頂端今天、本週、總計三格，下面
+/// 各書讀了多久，含有聲書的收聽時間（docs/design/screens.md）。
+class ReadingStatsView extends StatefulWidget {
+  const ReadingStatsView({super.key});
 
   @override
-  State<ReadingStatsPage> createState() => _ReadingStatsPageState();
+  State<ReadingStatsView> createState() => _ReadingStatsViewState();
 }
 
 typedef _Stats = ({List<_BookTime> records, int today, int week});
@@ -34,7 +35,7 @@ typedef _Stats = ({List<_BookTime> records, int today, int week});
 /// 一本書在所有手機上加起來讀了多久。
 typedef _BookTime = ({String bookName, int readTime, int lastRead});
 
-class _ReadingStatsPageState extends State<ReadingStatsPage> {
+class _ReadingStatsViewState extends State<ReadingStatsView> {
   late final ReadRecordDao _readRecordDao;
   late Future<_Stats> _stats;
 
@@ -151,23 +152,31 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
     );
   }
 
+  /// 載入中、失敗、沒有紀錄時的畫面，放在頁首下面（同書籤、標註）。
+  Widget _state(BuildContext context, Widget child) => Padding(
+    padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+    child: child,
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const GlassNavHeader(title: '閱讀統計'),
-      body: FutureBuilder<_Stats>(
-        future: _stats,
-        builder: (context, snapshot) {
-          // 同步後換上重讀好的統計時，FutureBuilder 第一格仍是 waiting：
-          // 有上一次的資料就先照它畫，不閃一格轉圈。
-          if (snapshot.connectionState != ConnectionState.done &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return FutureBuilder<_Stats>(
+      future: _stats,
+      builder: (context, snapshot) {
+        // 同步後換上重讀好的統計時，FutureBuilder 第一格仍是 waiting：
+        // 有上一次的資料就先照它畫，不閃一格轉圈。
+        if (snapshot.connectionState != ConnectionState.done &&
+            !snapshot.hasData) {
+          return _state(
+            context,
+            const Center(child: CircularProgressIndicator()),
+          );
+        }
 
-          if (snapshot.hasError) {
-            return AppStateView(
+        if (snapshot.hasError) {
+          return _state(
+            context,
+            AppStateView(
               icon: Icons.error_outline,
               title: '閱讀統計載入失敗',
               description: userErrorReason(snapshot.error!),
@@ -181,70 +190,67 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
                   });
                 },
               ),
-            );
-          }
+            ),
+          );
+        }
 
-          final stats = snapshot.data!;
-          final records = stats.records;
-          if (records.isEmpty) {
-            return const AppStateView(
-              icon: Icons.history_rounded,
-              title: '尚無閱讀紀錄',
-              description: '開始閱讀一本書之後，這裡會顯示你的累積閱讀時間。',
-            );
-          }
+        final stats = snapshot.data!;
+        final records = stats.records;
+        if (records.isEmpty) {
+          return _state(
+            context,
+            const AppStateView(icon: Icons.history_rounded, title: '沒有閱讀紀錄'),
+          );
+        }
 
-          final total = records.fold<int>(0, (sum, r) => sum + r.readTime);
-          bool isListened(_BookTime record) =>
-              BookSourceKind.splitRecordName(record.bookName).kind ==
-              BookSourceKind.audio;
-          final read = [
-            for (final record in records)
-              if (!isListened(record)) record,
-          ];
-          final listened = [
-            for (final record in records)
-              if (isListened(record)) record,
-          ];
-          return GroupedListView(
-            children: [
-              GroupedSection(
-                children: [
-                  GroupedContent(
-                    child: _StatTiles([
-                      _StatTile(label: '今天', seconds: stats.today),
-                      _StatTile(label: '本週', seconds: stats.week),
-                      _StatTile(label: '總計', seconds: total),
-                    ]),
-                  ),
-                ],
-              ),
-              // 收聽時間算進上面的合計，書分「閱讀」「收聽」兩組（使用者
-              // 2026-11-09 在候選圖上選，ADR 0055）；沒聽過有聲書時照舊一組。
-              if (listened.isEmpty)
-                GroupedSection(
-                  header: '累積閱讀時間',
-                  children: [for (final record in read) _row(context, record)],
-                )
-              else ...[
-                if (read.isNotEmpty)
-                  GroupedSection(
-                    header: '閱讀',
-                    children: [
-                      for (final record in read) _row(context, record),
-                    ],
-                  ),
-                GroupedSection(
-                  header: '收聽',
-                  children: [
-                    for (final record in listened) _row(context, record),
-                  ],
+        final total = records.fold<int>(0, (sum, r) => sum + r.readTime);
+        bool isListened(_BookTime record) =>
+            BookSourceKind.splitRecordName(record.bookName).kind ==
+            BookSourceKind.audio;
+        final read = [
+          for (final record in records)
+            if (!isListened(record)) record,
+        ];
+        final listened = [
+          for (final record in records)
+            if (isListened(record)) record,
+        ];
+        return GroupedListView(
+          children: [
+            GroupedSection(
+              children: [
+                GroupedContent(
+                  child: _StatTiles([
+                    _StatTile(label: '今天', seconds: stats.today),
+                    _StatTile(label: '本週', seconds: stats.week),
+                    _StatTile(label: '總計', seconds: total),
+                  ]),
                 ),
               ],
+            ),
+            // 收聽時間算進上面的合計，書分「閱讀」「收聽」兩組（使用者
+            // 2026-11-09 在候選圖上選，ADR 0055）；沒聽過有聲書時照舊一組。
+            if (listened.isEmpty)
+              GroupedSection(
+                header: '累積閱讀時間',
+                children: [for (final record in read) _row(context, record)],
+              )
+            else ...[
+              if (read.isNotEmpty)
+                GroupedSection(
+                  header: '閱讀',
+                  children: [for (final record in read) _row(context, record)],
+                ),
+              GroupedSection(
+                header: '收聽',
+                children: [
+                  for (final record in listened) _row(context, record),
+                ],
+              ),
             ],
-          );
-        },
-      ),
+          ],
+        );
+      },
     );
   }
 

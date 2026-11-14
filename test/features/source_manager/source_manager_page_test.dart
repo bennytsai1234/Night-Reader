@@ -223,7 +223,7 @@ void main() {
     await openMore();
     await tester.tap(find.text('校驗與修復'));
     await tester.pumpAndSettle();
-    expect(find.text('AI 修書源設定'), findsOneWidget);
+    expect(find.text('AI 服務設定'), findsOneWidget);
     await tester.tapAt(const Offset(5, 590));
     await tester.pumpAndSettle();
 

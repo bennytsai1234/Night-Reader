@@ -155,7 +155,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                   GlassMenuItem(
                     value: 'settings',
                     icon: Icons.tune_rounded,
-                    label: 'AI 修書源設定',
+                    label: 'AI 服務設定',
                   ),
                 ],
                 onSelected: (_) => unawaited(

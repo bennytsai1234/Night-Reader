@@ -132,7 +132,7 @@ class SourceManagerMenus {
     ),
   ];
 
-  /// 校驗與修復的選單項目；AI 修書源設定放這裡當快速入口。
+  /// 校驗與修復的選單項目；AI 服務設定放這裡當快速入口。
   static List<GlassMenuEntry<String>> _checkEntries(
     SourceManagerProvider provider, {
     required bool mutationEnabled,
@@ -166,7 +166,7 @@ class SourceManagerMenus {
     const GlassMenuItem(
       value: 'ai_settings',
       icon: Icons.auto_fix_high_outlined,
-      label: 'AI 修書源設定',
+      label: 'AI 服務設定',
     ),
   ];
 

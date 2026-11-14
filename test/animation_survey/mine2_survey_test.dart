@@ -1,5 +1,5 @@
 // 全 App 動畫儀表板探索的「我的」區（下半）：閱讀偏好、朗讀與語音、閱讀
-// 統計、書籤與標註、備份與同步、關於夜讀（含背景下載佇列）。上半（外觀與主題）在
+// 紀錄（含統計）、備份與同步、關於夜讀（含背景下載佇列）。上半（外觀與主題）在
 // `mine_survey_test.dart`。不碰會連網、會開系統分享或選檔、會刪資料的項目。
 @Tags(['animation_survey'])
 library;
@@ -206,7 +206,8 @@ void main() {
             ),
           ),
         );
-        await step('進入閱讀統計', () => _tapInList(tester, '閱讀統計'));
+        await step('進入閱讀紀錄', () => _tapInList(tester, '閱讀紀錄'));
+        await step('切到統計', () => _tapTop(tester, '統計'));
         await step(
           '點第一筆閱讀紀錄',
           () => _tap(
@@ -214,12 +215,8 @@ void main() {
             find.descendant(of: _list, matching: find.byType(GroupedRow)).first,
           ),
         );
-        await step('返回閱讀統計', () => goBack(tester));
-        await step('返回我的（離開閱讀統計）', () => goBack(tester));
-
-        // ---------- 書籤與標註 ----------
-        await step('進入書籤與標註', () => _tapInList(tester, '書籤與標註'));
-        await step('返回我的（離開書籤與標註）', () => goBack(tester));
+        await step('返回閱讀紀錄', () => goBack(tester));
+        await step('返回我的（離開閱讀紀錄）', () => goBack(tester));
 
         // ---------- 備份與同步（建立備份、還原會開系統分享與選檔，不碰） ----------
         await step('進入備份與同步', () => _tapInList(tester, '備份與同步'));

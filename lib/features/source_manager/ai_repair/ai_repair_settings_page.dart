@@ -15,7 +15,7 @@ const String aiRepairPrivacyNote =
     '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
     '登入資料、Cookie 的值與書源變數不送。';
 
-/// AI 修書源設定（docs/design/screens.md「AI 修書源」）：服務網址、金鑰、
+/// AI 服務設定（docs/design/screens.md「AI 服務」）：服務網址、金鑰、
 /// 模型，離開頁面就存。
 class AiRepairSettingsPage extends StatefulWidget {
   const AiRepairSettingsPage({super.key, this.settings});
@@ -59,7 +59,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       _model.text = saved.model;
       _effort = saved.effort;
     } catch (error, stack) {
-      AppLog.e('讀 AI 修書源設定失敗', error: error, stackTrace: stack);
+      AppLog.e('讀 AI 服務設定失敗', error: error, stackTrace: stack);
     } finally {
       if (mounted) setState(() => _loaded = true);
     }
@@ -119,7 +119,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const GlassNavHeader(title: 'AI 修書源'),
+      appBar: const GlassNavHeader(title: 'AI 服務'),
       body: GroupedListView(
         ready: _loaded,
         children: [

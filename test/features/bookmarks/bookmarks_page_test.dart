@@ -5,6 +5,7 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
@@ -23,6 +24,7 @@ void main() {
     GetIt.instance.registerSingleton<BookmarkDao>(dao);
     highlightDao = HighlightDao(db);
     GetIt.instance.registerSingleton<HighlightDao>(highlightDao);
+    GetIt.instance.registerSingleton<ReadRecordDao>(ReadRecordDao(db));
   });
 
   tearDown(() async {
@@ -140,7 +142,7 @@ void main() {
         highlight(11, '夜雨聽書', chapter: 0, quote: '前面畫的字'),
       ],
     );
-    expect(find.text('書籤與標註'), findsOneWidget);
+    expect(find.text('閱讀紀錄'), findsOneWidget);
     expect(find.text('書籤那一句'), findsOneWidget);
     expect(find.text('前面畫的字'), findsNothing);
 
@@ -150,6 +152,14 @@ void main() {
     expect(find.text('書籤那一句'), findsNothing);
     expect(top('前面畫的字'), lessThan(top('後面畫的字')));
     expect(find.byTooltip('匯出標註'), findsOneWidget);
+    await closePage(tester);
+  });
+
+  testWidgets('「統計」分段顯示閱讀統計', (tester) async {
+    await pumpPage(tester, const []);
+    await tester.tap(find.text('統計'));
+    await settle(tester);
+    expect(find.text('沒有閱讀紀錄'), findsOneWidget);
     await closePage(tester);
   });
 

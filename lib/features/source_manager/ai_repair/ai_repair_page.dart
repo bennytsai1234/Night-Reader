@@ -233,7 +233,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                     const GlassMenuItem(
                       value: 'settings',
                       icon: Icons.tune_rounded,
-                      label: 'AI 修書源設定',
+                      label: 'AI 服務設定',
                     ),
                     GlassMenuItem(
                       value: 'copy',
