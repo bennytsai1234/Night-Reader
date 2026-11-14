@@ -143,11 +143,11 @@ class SourceRepairBatch extends ChangeNotifier {
     _session = session ?? _defaultSession;
   }
 
-  /// App 同時交給 AI 修幾個網站：讀者接的服務能同時接幾個請求不一定，
-  /// 取保守的值。
-  static const int defaultAiConcurrency = 3;
+  /// 沒指定時同時交給 AI 修幾個網站（[aiDefaultConcurrency]）。
+  static const int defaultAiConcurrency = aiDefaultConcurrency;
 
-  /// 同時交給 AI 修幾個網站；實跑測試照服務調（`NR_AI_CONCURRENCY`）。
+  /// 同時交給 AI 修幾個網站：App 照 AI 服務頁的設定，實跑測試照
+  /// `NR_AI_CONCURRENCY`。
   final int aiConcurrency;
 
   /// 同時檢查幾個網站。

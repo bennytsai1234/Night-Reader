@@ -5,6 +5,7 @@ import 'package:night_reader/core/ai_repair/ai_connection_check.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -15,8 +16,9 @@ const String aiRepairPrivacyNote =
     '按「AI 修復」或「修復異常書源」時，書源、校驗結果與抓到的網頁會送到這個服務；'
     '登入資料、Cookie 的值與書源變數不送。';
 
-/// AI 服務設定（docs/design/screens.md「AI 服務」）：服務網址、金鑰、
-/// 模型，離開頁面就存。
+/// AI 服務設定（docs/design/screens.md「AI 服務」）：常用服務、服務網址、
+/// 金鑰、模型（從服務列出的清單選）、思考程度、同時修幾個網站，離開頁面
+/// 就存。
 class AiRepairSettingsPage extends StatefulWidget {
   const AiRepairSettingsPage({super.key, this.settings});
 
@@ -29,19 +31,23 @@ class AiRepairSettingsPage extends StatefulWidget {
 class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
   final TextEditingController _url = TextEditingController();
   final TextEditingController _key = TextEditingController();
-  final TextEditingController _model = TextEditingController();
   late final AiRepairSettings _settings = widget.settings ?? AiRepairSettings();
   bool _loaded = false;
   bool _revealed = false;
   bool _testing = false;
+  bool _listing = false;
+
+  String _model = '';
 
   /// 思考程度（[aiEfforts] 的值）。
   String _effort = '';
 
+  int _concurrency = aiDefaultConcurrency;
+
   AiService get _service => (
     baseUrl: _url.text.trim(),
     apiKey: _key.text.trim(),
-    model: _model.text.trim(),
+    model: _model,
     effort: _effort,
   );
 
@@ -56,8 +62,9 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       final saved = await _settings.read();
       _url.text = saved.baseUrl;
       _key.text = saved.apiKey;
-      _model.text = saved.model;
+      _model = saved.model;
       _effort = saved.effort;
+      _concurrency = await _settings.concurrency();
     } catch (error, stack) {
       AppLog.e('讀 AI 服務設定失敗', error: error, stackTrace: stack);
     } finally {
@@ -70,7 +77,6 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     if (_loaded) unawaited(_settings.save(_service));
     _url.dispose();
     _key.dispose();
-    _model.dispose();
     super.dispose();
   }
 
@@ -92,6 +98,124 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       ],
     );
     if (picked != null && mounted) setState(() => _effort = picked);
+  }
+
+  Future<void> _pickPreset(BuildContext rowContext) async {
+    FocusScope.of(context).unfocus();
+    final current = aiServicePresetOf(_url.text);
+    final picked = await showGlassMenu<String>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: [
+        for (final preset in aiServicePresets)
+          GlassMenuItem(
+            value: preset.name,
+            label: preset.name,
+            subtitle: preset.model == null ? null : '${preset.model}，夜讀實測過',
+            checked: identical(preset, current),
+          ),
+        const GlassMenuDivider(),
+        GlassMenuItem(value: '', label: '自己填網址', checked: current == null),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    if (picked.isEmpty) {
+      setState(() => _url.clear());
+      return;
+    }
+    final preset = aiServicePresets.firstWhere((p) => p.name == picked);
+    if (identical(preset, current)) return;
+    // 換了服務，原本的模型多半不在新服務上：有實測過的就填它，沒有的讓
+    // 使用者從新服務列出的模型選。
+    setState(() {
+      _url.text = preset.baseUrl;
+      _model = preset.model ?? '';
+    });
+  }
+
+  /// 模型從服務列出的清單選；列不出來（網址錯、服務不給清單）或清單裡沒有
+  /// 時，自己輸入。
+  Future<void> _pickModel(BuildContext rowContext) async {
+    FocusScope.of(context).unfocus();
+    final service = _service;
+    if (service.baseUrl.isEmpty) {
+      _say('先選服務或填服務網址');
+      return;
+    }
+    setState(() => _listing = true);
+    List<String> models = const [];
+    try {
+      models = await AiChatClient(service).listModels();
+    } on AiServiceException catch (error) {
+      if (mounted) _say('列不出模型：${error.message}');
+    } catch (error) {
+      if (mounted) _say('列不出模型：$error');
+    } finally {
+      if (mounted) setState(() => _listing = false);
+    }
+    if (!mounted || !rowContext.mounted) return;
+    final picked = models.isEmpty
+        ? ''
+        : await showGlassMenu<String>(
+            context: rowContext,
+            anchor: globalRectOf(rowContext),
+            entries: [
+              for (final model in models)
+                GlassMenuItem(
+                  value: model,
+                  label: model,
+                  subtitle: aiModelTested(service.baseUrl, model)
+                      ? '夜讀實測過'
+                      : null,
+                  checked: model == _model,
+                ),
+              const GlassMenuDivider(),
+              const GlassMenuItem(value: '', label: '自己輸入模型名稱'),
+            ],
+          );
+    if (picked == null || !mounted) return;
+    if (picked.isNotEmpty) {
+      setState(() => _model = picked);
+      return;
+    }
+    final typed = await showStatefulAppAlert<String>(
+      context: context,
+      fieldTexts: [_model],
+      builder: (dialogContext, _, fields) {
+        void submit() => Navigator.of(dialogContext).pop(fields.single.text);
+        return AppAlert<bool>(
+          title: '模型名稱',
+          content: AlertTextField(controller: fields.single, autofocus: true),
+          actions: const [
+            AppAlertAction(label: '取消', value: false),
+            AppAlertAction(label: '確定', value: true, isDefault: true),
+          ],
+          onAction: (confirmed) =>
+              confirmed ? submit() : Navigator.of(dialogContext).pop(),
+        );
+      },
+    );
+    if (typed != null && mounted) setState(() => _model = typed.trim());
+  }
+
+  Future<void> _pickConcurrency(BuildContext rowContext) async {
+    FocusScope.of(context).unfocus();
+    final picked = await showGlassMenu<int>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: [
+        for (final value in aiConcurrencyChoices)
+          GlassMenuItem(
+            value: value,
+            label: '$value 個',
+            subtitle: value == aiDefaultConcurrency ? '預設' : null,
+            checked: value == _concurrency,
+          ),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _concurrency = picked);
+    unawaited(_settings.saveConcurrency(picked));
   }
 
   Future<void> _test() async {
@@ -126,8 +250,17 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
           GroupedSection(
             footer: aiRepairPrivacyNote,
             children: [
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '常用服務',
+                  value: aiServicePresetOf(_url.text)?.name ?? '自己填網址',
+                  showChevron: false,
+                  onTap: () => unawaited(_pickPreset(rowContext)),
+                ),
+              ),
               GroupedTextFieldRow(
                 label: '服務網址',
+                onChanged: (_) => setState(() {}),
                 controller: _url,
                 hintText: 'https://api.openai.com/v1',
                 keyboardType: TextInputType.url,
@@ -138,16 +271,24 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                 controller: _key,
                 obscureText: !_revealed,
                 keyboardType: TextInputType.visiblePassword,
-                textInputAction: TextInputAction.next,
+                textInputAction: TextInputAction.done,
                 suffix: PasswordRevealButton(
                   revealed: _revealed,
                   onPressed: () => setState(() => _revealed = !_revealed),
                 ),
               ),
-              GroupedTextFieldRow(
-                label: '模型',
-                controller: _model,
-                textInputAction: TextInputAction.done,
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '模型',
+                  value: _listing
+                      ? '讀取中…'
+                      : _model.isEmpty
+                      ? '選擇'
+                      : _model,
+                  showChevron: false,
+                  enabled: !_listing,
+                  onTap: () => unawaited(_pickModel(rowContext)),
+                ),
               ),
               Builder(
                 builder: (rowContext) => GroupedRow(
@@ -155,6 +296,14 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
                   value: aiEfforts[_effort],
                   showChevron: false,
                   onTap: () => unawaited(_pickEffort(rowContext)),
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '同時修幾個網站',
+                  value: '$_concurrency',
+                  showChevron: false,
+                  onTap: () => unawaited(_pickConcurrency(rowContext)),
                 ),
               ),
             ],
