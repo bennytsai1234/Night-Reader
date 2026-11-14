@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -9,6 +10,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
+import '../ai_find/ai_find_page.dart';
 import '../search_provider.dart';
 
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -55,6 +57,31 @@ class SearchHistoryView extends StatelessWidget {
           ReadableWidth.insetOf(context),
       children: [
         ...leading,
+        if (provider.pastFinds.isNotEmpty)
+          GroupedSection(
+            topGap: AppSpacing.lg,
+            header: '過去的找書',
+            separatorIndent: _separatorIndent,
+            children: [
+              for (final find in provider.pastFinds)
+                GroupedRow(
+                  title: find.description,
+                  maxTitleLines: 1,
+                  leading: Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 20,
+                    color: chrome.sectionText,
+                  ),
+                  value: aiFindDateLabel(find.createdAt, DateTime.now()),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AiFindPage(record: find),
+                    ),
+                  ),
+                  onLongPress: () => _confirmDeleteFind(context, find),
+                ),
+            ],
+          ),
         if (provider.historyKeywords.isNotEmpty)
           GroupedSection(
             topGap: AppSpacing.lg,
@@ -84,7 +111,7 @@ class SearchHistoryView extends StatelessWidget {
             ],
           )
         // 還在讀紀錄時不畫「沒有紀錄」的空頁（開 App 後還沒讀到就點進來）。
-        else if (provider.historyLoaded)
+        else if (provider.historyLoaded && provider.pastFinds.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 80),
             child: Column(
@@ -120,6 +147,20 @@ class SearchHistoryView extends StatelessWidget {
       destructive: true,
     );
     if (confirmed) unawaited(provider.deleteHistoryKeyword(keyword));
+  }
+
+  Future<void> _confirmDeleteFind(
+    BuildContext context,
+    AiFindRecord find,
+  ) async {
+    final confirmed = await showAppConfirm(
+      context: context,
+      title: '刪除找書紀錄',
+      message: '確定要刪除「${find.description}」這次的找書嗎？',
+      confirmLabel: '刪除',
+      destructive: true,
+    );
+    if (confirmed) unawaited(provider.deletePastFind(find));
   }
 
   Future<void> _confirmClearHistory(BuildContext context) async {
