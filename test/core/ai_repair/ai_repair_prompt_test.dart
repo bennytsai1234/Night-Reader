@@ -336,6 +336,22 @@ void main() {
     expect(current['searchUrl'], '/search?q={{key}}', reason: '原本的不動');
   });
 
+  test('a header that is not a JSON object is turned back', () {
+    // 2026-11-14 腐书网：AI 把 header 寫成「User-Agent: …」，夜讀與 Legado 都
+    // 只認 JSON 物件（BaseSource.getHeaderMap），讀不出來就整個不送；它看不出
+    // 為什麼，第 5～16 輪都在試 header 有沒有生效。
+    String? problem(String header) =>
+        aiChangeProblem((source: null, patch: {'header': header}));
+    expect(
+      problem('User-Agent: Mozilla/5.0 (Linux; Android 10)'),
+      contains('JSON 物件'),
+    );
+    expect(problem('{"User-Agent":"Mozilla/5.0"}'), isNull);
+    expect(problem('@js:JSON.stringify({a:1})'), isNull);
+    expect(problem('<js>({a:1})</js>'), isNull);
+    expect(problem(''), isNull);
+  });
+
   test('a change naming a field the source does not have is turned back, '
       'with the fields it can use', () {
     // 2026-11-12 涨姿势：AI 把詳情規則寫成 ruleInfo，照收的話什麼都沒改。

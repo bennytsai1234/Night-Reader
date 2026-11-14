@@ -134,7 +134,29 @@ String? aiChangeProblem(AiChange change) {
       return '$key 沒有 ${wrong.join('、')} 這一項，可以用的：${allowed.join('、')}';
     }
   }
+  if (fields['header'] case final String header when !_headerReadable(header)) {
+    return 'header 要寫成 JSON 物件的字串，例如 {"User-Agent":"…"}，或用 @js:、'
+        '<js></js> 算出這樣的物件；寫成「名稱: 值」夜讀與 Legado 都讀不出來，'
+        '整個標頭不會送出';
+  }
   return null;
+}
+
+/// 書源標頭讀得出來：空的、`@js:`、`<js>`，或 JSON 物件（同 Legado
+/// `BaseSource.getHeaderMap`：讀不出來就整個不送）。2026-11-14 腐书网：AI 寫成
+/// 「User-Agent: …」，標頭沒送出、它看不出為什麼，繞了十二輪。
+bool _headerReadable(String header) {
+  final text = header.trim();
+  if (text.isEmpty) return true;
+  final lower = text.toLowerCase();
+  if (lower.startsWith('@js:') || lower.startsWith('<js>')) return true;
+  try {
+    return jsonDecode(text) is Map;
+  } on FormatException {
+    // Legado 另外用寬鬆的 GSON 再讀一次（單引號、沒加引號的名稱）：開頭是
+    // 物件的照收，不在這裡擋。
+    return text.startsWith('{');
+  }
 }
 
 /// 書源 JSON 的欄位（Legado 3.0 格式，[BookSource.toJson]）。
