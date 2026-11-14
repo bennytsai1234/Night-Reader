@@ -24,13 +24,22 @@ import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 /// 閱讀紀錄頁的「統計」（`BookmarksPage`）：頂端今天、本週、總計三格，下面
 /// 各書讀了多久，含有聲書的收聽時間（docs/design/screens.md）。
 class ReadingStatsView extends StatefulWidget {
-  const ReadingStatsView({super.key});
+  const ReadingStatsView({super.key, this.memory});
+
+  /// 上一次讀到的統計：閱讀紀錄頁切到別段再切回來時，先畫上一次的，讀完
+  /// 再換上（不閃載入圈）。
+  final ReadingStatsMemory? memory;
 
   @override
   State<ReadingStatsView> createState() => _ReadingStatsViewState();
 }
 
 typedef _Stats = ({List<_BookTime> records, int today, int week});
+
+/// [ReadingStatsView] 上一次讀到的統計，由放它的頁面留著。
+class ReadingStatsMemory {
+  _Stats? _last;
+}
 
 /// 一本書在所有手機上加起來讀了多久。
 typedef _BookTime = ({String bookName, int readTime, int lastRead});
@@ -43,7 +52,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
   void initState() {
     super.initState();
     _readRecordDao = getIt<ReadRecordDao>();
-    _stats = _load();
+    _stats = _remembered(_load());
     ReadStatsSync.applied.addListener(_othersSynced);
   }
 
@@ -64,7 +73,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
     _syncReloadPending = false;
     if (!mounted) return;
     try {
-      final next = _load();
+      final next = _remembered(_load());
       await next;
       if (mounted) {
         setState(() {
@@ -75,6 +84,12 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
       AppLog.e('同步後重讀閱讀統計失敗', error: error, stackTrace: stackTrace);
     }
   }
+
+  /// 讀好的統計記進 [ReadingStatsView.memory]。
+  Future<_Stats> _remembered(Future<_Stats> stats) => stats.then((value) {
+    widget.memory?._last = value;
+    return value;
+  });
 
   /// 這台的加上同步來的別台的（ADR 0039）。
   Future<_Stats> _load() async {
@@ -162,6 +177,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
   Widget build(BuildContext context) {
     return FutureBuilder<_Stats>(
       future: _stats,
+      initialData: widget.memory?._last,
       builder: (context, snapshot) {
         // 同步後換上重讀好的統計時，FutureBuilder 第一格仍是 waiting：
         // 有上一次的資料就先照它畫，不閃一格轉圈。
@@ -186,7 +202,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
                 icon: Icons.refresh,
                 onPressed: () {
                   setState(() {
-                    _stats = _load();
+                    _stats = _remembered(_load());
                   });
                 },
               ),

@@ -8,6 +8,7 @@ import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -160,6 +161,32 @@ void main() {
     await tester.tap(find.text('統計'));
     await settle(tester);
     expect(find.text('沒有閱讀紀錄'), findsOneWidget);
+    await closePage(tester);
+  });
+
+  testWidgets('切回「統計」先畫上一次的統計，不閃載入圈', (tester) async {
+    await tester.runAsync(
+      () => GetIt.instance<ReadRecordDao>().upsert(
+        ReadRecord(
+          id: 1,
+          bookName: '夜雨聽書',
+          readTime: 1234,
+          lastRead: DateTime.now().millisecondsSinceEpoch,
+        ),
+      ),
+    );
+    await pumpPage(tester, const []);
+    await tester.tap(find.text('統計'));
+    await settle(tester);
+    expect(find.text('夜雨聽書'), findsOneWidget);
+
+    await tester.tap(find.text('書籤'));
+    await settle(tester);
+    await tester.tap(find.text('統計'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('夜雨聽書'), findsOneWidget);
+    await settle(tester);
     await closePage(tester);
   });
 

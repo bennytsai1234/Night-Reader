@@ -128,6 +128,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
   StreamSubscription<List<Bookmark>>? _subscription;
   StreamSubscription<List<Highlight>>? _highlightSubscription;
   _Tab _tab = _Tab.bookmarks;
+  final _statsMemory = ReadingStatsMemory();
 
   @override
   void initState() {
@@ -326,7 +327,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       body: switch (_tab) {
         _Tab.bookmarks => _buildBookmarks(context),
         _Tab.highlights => _buildHighlights(context),
-        _Tab.stats => const ReadingStatsView(),
+        _Tab.stats => ReadingStatsView(memory: _statsMemory),
       },
     );
   }

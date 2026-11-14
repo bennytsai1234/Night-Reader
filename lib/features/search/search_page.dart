@@ -357,7 +357,6 @@ class _SearchViewState extends State<SearchView> {
       return AppStateView(
         icon: Icons.filter_alt_off,
         title: '沒有符合篩選的結果',
-        description: '目前的結果都被篩選條件排除了。',
         primaryAction: AppStateAction(
           label: '清除篩選',
           icon: Icons.clear,

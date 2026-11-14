@@ -291,7 +291,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         AppStateView(
           icon: Icons.search_off,
           title: '找不到符合條件的書源',
-          description: '清除搜尋或分組條件後再試一次。',
           primaryAction: AppStateAction(
             label: '清除條件',
             icon: Icons.clear,
