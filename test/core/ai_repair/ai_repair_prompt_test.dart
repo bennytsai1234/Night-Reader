@@ -204,6 +204,8 @@ void main() {
         // 第 6 次重跑：每次成功就接著修別段，程式改成把這件修復裡同一個網址
         // 回過的狀態碼列在結果後面，提示詞要說拿它做什麼。
         expect(aiRepairSystemPrompt, contains('「同一個網址這次回過不同的結果」'));
+        // 第 7 次重跑：思怡第 1 輪就看出搜尋時好時壞，還是先修正文 15 輪。
+        expect(aiRepairSystemPrompt, contains('也不先修其他段'));
         final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
         final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
         expect(why['description'], contains('時好時壞'));
