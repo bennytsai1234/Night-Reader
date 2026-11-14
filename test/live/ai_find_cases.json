@@ -1,0 +1,70 @@
+{
+  "note": "AI 找書的案件集（docs/agents/ai-find-runs.md）：每件是一段讀者會打的描述與深度，評的是過程，不附標準答案。書架是編的，不是使用者的資料。",
+  "cases": [
+    {
+      "id": "adr-example",
+      "description": "爽文、穿越，我在看《咒術迴戰》和《鏈鋸人》，想要更刺激的",
+      "depth": "normal"
+    },
+    {
+      "id": "xianxia-finished",
+      "description": "修仙，要已經完結的，不要後宮",
+      "depth": "normal"
+    },
+    {
+      "id": "like-lord-of-mysteries",
+      "description": "像《詭秘之主》那種克蘇魯加蒸汽朋克的",
+      "depth": "deep"
+    },
+    {
+      "id": "from-shelf",
+      "description": "照我的書架推薦幾本",
+      "depth": "normal",
+      "shelf": [
+        { "name": "詭秘之主", "author": "愛潛水的烏賊", "kind": "novel", "readSeconds": 180000, "chapterIndex": 1394, "chapterTotal": 1394 },
+        { "name": "道詭異仙", "author": "狐尾的筆", "kind": "novel", "readSeconds": 54000, "chapterIndex": 420, "chapterTotal": 1100 },
+        { "name": "宿命之環", "author": "愛潛水的烏賊", "kind": "novel", "readSeconds": 7200, "chapterIndex": 35, "chapterTotal": 1200, "onShelf": false }
+      ]
+    },
+    {
+      "id": "comic-shonen",
+      "description": "熱血的少年漫畫，打鬥多一點",
+      "depth": "normal"
+    },
+    {
+      "id": "audio-mystery",
+      "description": "睡前想聽的有聲書，懸疑推理",
+      "depth": "quick"
+    },
+    {
+      "id": "probably-none",
+      "description": "用文言文寫的太空歌劇",
+      "depth": "normal"
+    },
+    {
+      "id": "palace-female",
+      "description": "女主視角的宮鬥，已完結，三百萬字以內",
+      "depth": "normal"
+    },
+    {
+      "id": "infinite-quick",
+      "description": "無限流",
+      "depth": "quick"
+    },
+    {
+      "id": "history-deep",
+      "description": "文筆好的歷史架空，開頭就要抓人",
+      "depth": "deep"
+    },
+    {
+      "id": "book-famine",
+      "description": "最近書荒，隨便推薦幾本好看的",
+      "depth": "normal"
+    },
+    {
+      "id": "isekai-lightnovel",
+      "description": "日本輕小說，異世界轉生，輕鬆搞笑的",
+      "depth": "normal"
+    }
+  ]
+}

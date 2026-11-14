@@ -7,6 +7,7 @@ import 'package:night_reader/core/ai_repair/agent_loop.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
     show AiRepairStep, AiRepairStepState;
 import 'package:night_reader/core/models/book.dart';
@@ -47,6 +48,13 @@ class AiFindSession extends ChangeNotifier {
     this.serviceLabel = '',
     AiRepairLog? log,
   }) : log = log ?? AiRepairLog.find(description: description);
+
+  /// 問使用者的 AI 服務，帶著找書的工具。
+  static AgentAsk askService(AiService service) {
+    final client = AiChatClient(service);
+    return (messages, cancelToken) =>
+        client.complete(messages, tools: aiFindTools, cancelToken: cancelToken);
+  }
 
   final String description;
   final AiFindDepth depth;
