@@ -141,6 +141,7 @@ void main() {
     AiRepairPriorCheck? priorCheck,
     Directory? logs,
     SourceProbeReport Function(BookSource source)? probe,
+    String Function(String url)? fetchStatus,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -162,11 +163,12 @@ void main() {
       },
       fetchPage: (source, url, _) async {
         fetched?.add(url);
+        final status = fetchStatus?.call(url) ?? '200';
         return (
-          lines: ['  ← $url 200：<form action="/s2">'],
+          lines: ['  ← $url $status：<form action="/s2">'],
           pages: [
             (
-              line: '  ← $url 200：<form action="/s2">',
+              line: '  ← $url $status：<form action="/s2">',
               body: '<html><form action="/s2"></html>',
             ),
           ],
@@ -185,6 +187,44 @@ void main() {
       backups: backups,
     );
   }
+
+  test(
+    'a page that answers now and then is said so after the result',
+    () async {
+      // 2026-11-14 白光小说：同一個搜尋網址一下 200、一下 502，AI 每次成功就
+      // 接著修別段，36 輪用完；思怡、读客书库同樣。程式把這件修復裡這個網址
+      // 回過的狀態碼列在結果後面，AI 不用自己記。
+      final statuses = ['200', '502', '502'];
+      var call = 0;
+      final s = session(
+        [_source('https://site.example')],
+        fetchStatus: (_) => statuses[call++],
+        replies: [
+          for (var i = 0; i < 3; i++)
+            jsonEncode({
+              'action': 'fetch',
+              'url': 'https://site.example/s',
+              'note': '第 $i 次',
+            }),
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'rate_limited',
+            'reason': '時好時壞',
+          }),
+        ],
+      );
+
+      await s.start();
+
+      String result(int i) => asked[i + 1].last.content;
+      expect(result(0), isNot(contains('同一個網址這次回過不同的結果')));
+      expect(
+        result(1),
+        contains('# 同一個網址這次回過不同的結果\nhttps://site.example/s：200、502'),
+      );
+      expect(result(2), contains('https://site.example/s：200、502、502'));
+    },
+  );
 
   test('a hand-in that changes no rule is not called fixed', () async {
     // 2026-11-13 品书楼：AI 查過每一段都沒問題，原本照樣寫「修好了」。

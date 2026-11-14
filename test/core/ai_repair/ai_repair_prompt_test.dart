@@ -201,6 +201,9 @@ void main() {
         expect(aiRepairSystemPrompt, contains('同一個網址時好時壞'));
         // 白光第 4 輪：第 11 輪才把同一個請求再送一次，前 10 輪在試各頁、各主機。
         expect(aiRepairSystemPrompt, contains('第一步是把同一個請求再送一次'));
+        // 第 6 次重跑：每次成功就接著修別段，程式改成把這件修復裡同一個網址
+        // 回過的狀態碼列在結果後面，提示詞要說拿它做什麼。
+        expect(aiRepairSystemPrompt, contains('「同一個網址這次回過不同的結果」'));
         final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
         final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
         expect(why['description'], contains('時好時壞'));

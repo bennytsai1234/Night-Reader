@@ -981,6 +981,42 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   BookSource get original => job.original;
 
+  /// 這件修復裡每個網址回過什麼（狀態碼或「沒有回應」），照工具結果的順序、
+  /// 同一次結果裡一樣的只記一次：一下成功、一下 429 或 5xx 的網站，AI 每次
+  /// 成功就以為好了、接著修別段（2026-11-14 白光小说 36 輪用完），程式把
+  /// 這個事實列在結果後面，判斷照舊交給 AI。
+  final Map<String, List<String>> _answered = {};
+
+  static final RegExp _responseLine = RegExp(
+    r'^ *← (?:頁 \d+｜)?(\S+) (\d{3}|沒有回應)',
+    multiLine: true,
+  );
+
+  static bool _ok(String status) =>
+      status.length == 3 && (status.startsWith('2') || status.startsWith('3'));
+
+  static bool _failed(String status) =>
+      status == '沒有回應' || status == '429' || status.startsWith('5');
+
+  /// 記下 [text] 裡的回應；其中有網址回過成功也回過失敗時，傳回列出它們的
+  /// 一段，沒有是空字串。
+  String _mixedAnswers(String text) {
+    final seen = <String, Set<String>>{};
+    for (final match in _responseLine.allMatches(text)) {
+      seen.putIfAbsent(match.group(1)!, () => {}).add(match.group(2)!);
+    }
+    for (final MapEntry(key: url, value: statuses) in seen.entries) {
+      _answered.putIfAbsent(url, () => []).addAll(statuses);
+    }
+    final lines = [
+      for (final url in seen.keys)
+        if (_answered[url]! case final all
+            when all.any(_ok) && all.any(_failed))
+          '$url：${all.join('、')}',
+    ];
+    return lines.isEmpty ? '' : '\n\n# 同一個網址這次回過不同的結果\n${lines.join('\n')}';
+  }
+
   @override
   String redact(String text) => s._redact(job, text);
 
@@ -1105,7 +1141,17 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     final result = await _run(command);
     // 工具跑完、結果接進對話之前重讀秘密：這一步可能寫了新的 Cookie 或變數。
     await s._refreshSecrets(job);
-    return result;
+    return switch (result) {
+      // 比「結果與前幾次相同」照工具本身的結果，不算後面附的這段。
+      AgentToolResult(:final text, :final same) => AgentToolResult(
+        '$text${_mixedAnswers(text)}',
+        same: same ?? text,
+      ),
+      AgentRejected(:final reason) => AgentRejected(
+        '$reason${_mixedAnswers(reason)}',
+      ),
+      _ => result,
+    };
   }
 
   Future<AgentResult> _run(AiRepairCommand command) async {
