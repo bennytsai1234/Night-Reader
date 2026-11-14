@@ -1,6 +1,6 @@
 // AI 修復的評估表（agent-harness 技能 references/evaluation.md「評估模組」）：把
 // 完整修復紀錄裡每一件的統計那一行（NR-AI-REPAIR-STATS）整理成一件一列的
-// Markdown 表，後面接第 5 步的分組抽樣。比的是回合數、耗時、快取命中率；用量
+// Markdown 表，最後一行是總計。比的是回合數、耗時、快取命中率；用量
 // 只拿來算命中率（命中快取的輸入 ÷ 全部輸入）。
 //
 //   dart run tool/ai_repair_table.dart <紀錄資料夾或檔案…> [--out 表.md]
@@ -11,13 +11,6 @@ import 'dart:convert';
 import 'dart:io';
 
 const _marker = 'NR-AI-REPAIR-STATS ';
-
-/// 分組抽樣（agent-harness 第 5 步）：成功、失敗各照回合數排，長的從頭取、
-/// 短的從剩下的尾端取，一組不夠就整組拿。
-const _successLong = 7;
-const _successShort = 3;
-const _failureLong = 20;
-const _failureShort = 10;
 
 void main(List<String> args) {
   String? out;
@@ -55,7 +48,7 @@ void main(List<String> args) {
       }
     }
   }
-  final table = '${_table(rows)}\n${_sample(rows)}';
+  final table = _table(rows);
   if (out == null) {
     stdout.write(table);
   } else {
@@ -127,32 +120,5 @@ String _table(List<Map<String, dynamic>> rows) {
       '工具 ${_seconds(sum('toolsMs'))} 秒、其他 ${_seconds(sum('otherMs'))} 秒；'
       '快取命中 ${_hitRate(sum('cached'), sum('prompt'))}；提示詞 $versions。',
     );
-  return buffer.toString();
-}
-
-String _sample(List<Map<String, dynamic>> rows) {
-  final buffer = StringBuffer()..writeln('## 抽樣');
-  void group(bool success, int long, int short) {
-    final sorted = [
-      for (final row in rows)
-        if (_succeeded(row) == success) row,
-    ]..sort((a, b) => _int(b, 'rounds').compareTo(_int(a, 'rounds')));
-    final longs = sorted.take(long).toList();
-    final rest = sorted.skip(long).toList();
-    final shorts = rest.skip(rest.length > short ? rest.length - short : 0);
-    final label = success ? '成功' : '失敗';
-    for (final (name, picked) in [
-      ('$label、回合長', longs),
-      ('$label、回合短', shorts.toList()),
-    ]) {
-      buffer.writeln(
-        '- $name（${picked.length} 件）：'
-        '${picked.map((row) => '${row['source']}（${row['rounds']} 輪）').join('、')}',
-      );
-    }
-  }
-
-  group(true, _successLong, _successShort);
-  group(false, _failureLong, _failureShort);
   return buffer.toString();
 }
