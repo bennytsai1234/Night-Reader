@@ -45,6 +45,11 @@ class EncodingDetect {
   /// 會把孤立位元組後面那個 `<` 一起吃掉，弄壞標籤，所以先挑出孤立的雙位元組
   /// 開頭（0x81–0xFE 後面不是 0x40–0xFE、或已經到結尾），前後分段解。
   static String decodeGbk(List<int> bytes) {
+    try {
+      return gbk.decode(bytes);
+    } on FormatException {
+      // 有壞掉的位元組才逐一挑，正常的頁面照原本的速度。
+    }
     final out = StringBuffer();
     var start = 0;
     var i = 0;
