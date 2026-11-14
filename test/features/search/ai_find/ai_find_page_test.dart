@@ -216,6 +216,60 @@ void main() {
     await settle(tester, () => written);
   });
 
+  testWidgets('while it runs, each round shows up with what it is doing', (
+    tester,
+  ) async {
+    final hold = Completer<AiReply>();
+    var asked = 0;
+    late AiFindRun run;
+    await show(
+      tester,
+      AiFindPage(
+        prefs: await prefs(),
+        startRun:
+            ({
+              required description,
+              required depth,
+              required service,
+              required scope,
+            }) => run = AiFindRun(
+              AiFindSession(
+                description: description,
+                depth: depth,
+                library: _Library(),
+                ask: (_, _) async => ++asked == 1
+                    ? _call('search', {'keyword': '穿越'})
+                    : hold.future,
+                log: AiRepairLog.find(
+                  description: description,
+                  directory: () async => logs,
+                ),
+              ),
+              save: (_) async {},
+              work: BackgroundWork(platform: _Platform()),
+            ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), '穿越');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始找書'));
+    await settle(tester, () => asked >= 2);
+    await tester.pump();
+
+    expect(find.text('第 1 輪'), findsOneWidget);
+    expect(find.text('搜尋「穿越」小說，找到 1 本'), findsOneWidget);
+    expect(find.text('第 2 輪'), findsOneWidget);
+    expect(find.text('3.2 萬 token'), findsOneWidget);
+
+    run.session.stop();
+    hold.complete(_call('submit', {'books': [], 'summary': ''}));
+    await settle(tester, () => run.isFinished);
+    await tester.pumpWidget(const SizedBox.shrink());
+    var written = false;
+    unawaited(run.session.log.file().then((_) => written = true));
+    await settle(tester, () => written);
+  });
+
   testWidgets('starting without an AI service asks to set one up', (
     tester,
   ) async {

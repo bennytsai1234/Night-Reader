@@ -137,6 +137,8 @@ class _AiFindPageState extends State<AiFindPage> {
 
   /// 頁面看著這一次：通知點了不再推一頁；推入動畫播完才開始（ADR 0018）。
   void _attach(AiFindRun run) {
+    // 每一輪的進度從找書本身來（背景工作只在做完時通知頁面）。
+    run.session.addListener(_redraw);
     run
       ..attach()
       ..addListener(_redraw);
@@ -165,6 +167,7 @@ class _AiFindPageState extends State<AiFindPage> {
     BackgroundWork.instance.removeListener(_redraw);
     final run = _run;
     if (run != null) {
+      run.session.removeListener(_redraw);
       run
         ..removeListener(_redraw)
         ..detach();
