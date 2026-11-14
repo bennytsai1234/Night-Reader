@@ -7,6 +7,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/crash_trail.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
@@ -58,8 +59,11 @@ enum RepairOutcome {
   /// 試過了沒修好。
   notFixed,
 
-  /// 不修：需要登入、在網頁驗證、只能下載、夜讀不支援的類型。
+  /// 不修：需要登入、在網頁驗證、只能下載、夜讀不支援的類型、只有發現頁。
   skipped,
+
+  /// AI 之前試過修不好（書源帶「AI 修不好」），這次跳過。
+  aiUnfixable,
 
   /// 未處理：校驗沒有結果、花費到了上限，或按了停止。
   notTried,
@@ -89,19 +93,35 @@ class RepairItem {
   /// 重新校驗出來壞在哪；判斷修好了沒要用（[AiRepairSession.usableFix]）。
   SourceHealthCategory? before;
 
+  /// 這一批剛重新校驗的完整結果，交給 AI 時沿用（沿用 24 小時內校驗的沒有）；
+  /// 交出去就放掉。
+  AiRepairPriorCheck? priorCheck;
+
+  /// 套用了同網站哪一個 AI 修好的規則（[RepairOutcome.shared]）。
+  RepairItem? sharedFrom;
+
+  /// 已經併進 [sharedFrom]、書源刪掉了（[SourceRepairBatch.mergeShared]）。
+  bool merged = false;
+
+  /// 網站不在了、已經刪掉了（[SourceRepairBatch.deleteGone]）。
+  bool deleted = false;
+
   bool get isFinished => outcome != null;
 }
 
-/// 重新校驗時每完成一個書源就回報進度，不必等整批結束。
+/// 重新校驗時每完成一個書源就回報進度，不必等整批結束；[onResult] 收到
+/// 每個書源的完整結果（含診斷），交給 AI 時沿用。
 typedef BatchRecheck = Future<List<SourceCheckEntry>> Function(
   List<String> urls,
   void Function(int completed) onProgress,
+  SourceCheckResultListener onResult,
 );
 
 /// 修復異常書源（ADR 0054）：一批書源先重新校驗、檢查網站，網站不在了的
 /// 標「網站失效」，搬家的換網址；剩下的每個網站挑一個交給 AI，同時修
 /// [aiConcurrency] 個，修好的規則再套到同網站的其他書源。每一步存進去的
-/// 都是校驗通過的，留改前版本可以還原。
+/// 都是校驗通過的，留改前版本可以還原。做完之後可以刪掉網站不在了的
+/// （[deleteGone]）、把套用了同網站規則的併進修好的那個（[mergeShared]）。
 class SourceRepairBatch extends ChangeNotifier {
   SourceRepairBatch({
     required List<BookSource> sources,
@@ -113,6 +133,8 @@ class SourceRepairBatch extends ChangeNotifier {
     Future<void> Function(BookSource repaired, BookSource original)? save,
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
     Future<void> Function(BookSource source)? markUnfixable,
+    Future<void> Function(List<String> urls)? delete,
+    Future<List<String>> Function(List<String> from, String into)? merge,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
     DateTime Function()? now,
   }) : items = [for (final source in sources) RepairItem(source)],
@@ -120,7 +142,9 @@ class SourceRepairBatch extends ChangeNotifier {
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
        _markGone = markGone ?? _defaultMarkGone,
-       _markUnfixable = markUnfixable ?? markAiUnfixable {
+       _markUnfixable = markUnfixable ?? markAiUnfixable,
+       _delete = delete ?? _defaultDelete,
+       _merge = merge ?? _defaultMerge {
     _session = session ?? _defaultSession;
   }
 
@@ -146,6 +170,8 @@ class SourceRepairBatch extends ChangeNotifier {
   final Future<void> Function(BookSource repaired, BookSource original) _save;
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
   final Future<void> Function(BookSource source) _markUnfixable;
+  final Future<void> Function(List<String> urls) _delete;
+  final Future<List<String>> Function(List<String> from, String into) _merge;
   final DateTime Function() _now;
   late final AiRepairSession Function(BookSource source, RepairItem item)
   _session;
@@ -161,6 +187,14 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 沿用上次校驗結果、沒有重新校驗的書源數（[freshCheck]）。
   int reusedChecks = 0;
+
+  /// 做完之後刪了、併了幾次書源：書源管理看到它變了就重讀清單。
+  int sourceEdits = 0;
+
+  bool _editing = false;
+
+  /// 正在刪或併：按鈕先不能再按。
+  bool get isEditing => _editing;
 
   final CancelToken _cancelToken = CancelToken();
   CheckSourceService? _activeRecheckService;
@@ -210,6 +244,7 @@ class SourceRepairBatch extends ChangeNotifier {
       }
     } finally {
       for (final item in items) {
+        item.priorCheck = null;
         if (item.outcome == null) {
           item
             ..outcome = RepairOutcome.notTried
@@ -265,7 +300,11 @@ class SourceRepairBatch extends ChangeNotifier {
       final source = item.source;
       final health = source.runtimeHealth;
       if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
-        _finish(item, RepairOutcome.skipped, 'AI 之前試過修不好，這次跳過');
+        _finish(
+          item,
+          RepairOutcome.aiUnfixable,
+          'AI 之前試過說修不好，這次跳過、不花用量。要再試，先清除這個書源的校驗標記。',
+        );
       } else if (source.hasGroupTag(siteBrokenSourceGroupTag)) {
         _finish(
           item,
@@ -293,9 +332,18 @@ class SourceRepairBatch extends ChangeNotifier {
       _notify();
     }
 
-    final checked = await (_recheck ?? _recheckWithProgress)([
-      for (final item in toCheck) item.source.bookSourceUrl,
-    ], progress);
+    final byUrl = {for (final item in toCheck) item.source.bookSourceUrl: item};
+    void keep(String url, SourceCheckIsolateResult? result) {
+      // 沒問題的不送 AI，不留。
+      if (result?.isHealthy ?? false) return;
+      byUrl[url]?.priorCheck = (result: result);
+    }
+
+    final checked = await (_recheck ?? _recheckWithProgress)(
+      [for (final item in toCheck) item.source.bookSourceUrl],
+      progress,
+      keep,
+    );
     if (_stopped) return;
     final entries = {for (final entry in checked) entry.sourceUrl: entry};
     for (final item in toCheck) {
@@ -385,7 +433,12 @@ class SourceRepairBatch extends ChangeNotifier {
       if (!_hasBudget) return;
       final others = group.skip(1).toList();
       final session = _session(lead.source, lead);
-      lead.session = session;
+      lead
+        ..session = session
+        ..priorCheck = null;
+      for (final item in others) {
+        item.priorCheck = null;
+      }
       _sessions.add(session);
       session.addListener(_notify);
       await session.start();
@@ -427,6 +480,7 @@ class SourceRepairBatch extends ChangeNotifier {
       if (_stopped) return;
       final candidate = sharedSource(item.source, fixed);
       if (await _passes(item, candidate)) {
+        item.sharedFrom = lead;
         _finish(
           item,
           RepairOutcome.shared,
@@ -467,6 +521,75 @@ class SourceRepairBatch extends ChangeNotifier {
     return true;
   }
 
+  // ── 做完之後：刪掉網站不在了的、併掉同網站重複的 ─────────────────────
+
+  /// 網站不在了、還沒刪的書源。
+  List<RepairItem> get goneLeft => [
+    for (final item in items)
+      if (item.outcome == RepairOutcome.siteGone && !item.deleted) item,
+  ];
+
+  /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。修到
+  /// 一半就刪的，之後才判定網站不在了的照樣列著、可以再刪。
+  Future<void> deleteGone() async {
+    final gone = goneLeft;
+    if (gone.isEmpty || _editing) return;
+    await _edit(() async {
+      await _delete([for (final item in gone) item.source.bookSourceUrl]);
+      for (final item in gone) {
+        item.deleted = true;
+      }
+    });
+  }
+
+  /// 還沒併掉的「套用到同網站」書源：規則和 AI 修好的那個一樣。
+  List<RepairItem> get mergeable => [
+    for (final item in items)
+      if (item.outcome == RepairOutcome.shared &&
+          item.sharedFrom != null &&
+          !item.merged)
+        item,
+  ];
+
+  /// 套用了同網站修好規則的書源併進修好的那個（使用者 2026-11-13）：規則
+  /// 一樣，留著只會重複搜同一個網站。書架上的書搬過去，重複的刪掉。
+  Future<void> mergeShared() async {
+    final groups = <RepairItem, List<RepairItem>>{};
+    for (final item in mergeable) {
+      groups.putIfAbsent(item.sharedFrom!, () => []).add(item);
+    }
+    if (groups.isEmpty || _editing) return;
+    await _edit(() async {
+      for (final MapEntry(key: lead, value: siblings) in groups.entries) {
+        final List<String> merged;
+        try {
+          merged = await _merge([
+            for (final item in siblings) item.source.bookSourceUrl,
+          ], lead.source.bookSourceUrl);
+        } catch (error, stack) {
+          AppLog.e('合併同網站的書源失敗', error: error, stackTrace: stack);
+          continue;
+        }
+        // 只標真的併掉的：修好的那個或它們自己這段時間被刪掉了就沒併。
+        for (final item in siblings) {
+          if (merged.contains(item.source.bookSourceUrl)) item.merged = true;
+        }
+      }
+    });
+  }
+
+  Future<void> _edit(Future<void> Function() work) async {
+    _editing = true;
+    _notify();
+    try {
+      await work();
+    } finally {
+      _editing = false;
+      sourceEdits++;
+      _notify();
+    }
+  }
+
   // ── 工具 ──────────────────────────────────────────────────────────────
 
   Iterable<RepairItem> _pending() => items.where((item) => !item.isFinished);
@@ -499,7 +622,8 @@ class SourceRepairBatch extends ChangeNotifier {
   void _finish(RepairItem item, RepairOutcome outcome, String detail) {
     item
       ..outcome = outcome
-      ..detail = detail;
+      ..detail = detail
+      ..priorCheck = null;
     _notify();
   }
 
@@ -558,6 +682,7 @@ class SourceRepairBatch extends ChangeNotifier {
   Future<List<SourceCheckEntry>> _recheckWithProgress(
     List<String> urls,
     void Function(int completed) onProgress,
+    SourceCheckResultListener onResult,
   ) async {
     final checking = getIt<CheckSourceService>();
     if (checking.isChecking) {
@@ -567,7 +692,7 @@ class SourceRepairBatch extends ChangeNotifier {
     void update() => onProgress(checking.currentCount);
     checking.addListener(update);
     try {
-      return (await checking.check(urls)).entries;
+      return (await checking.check(urls, onResult: onResult)).entries;
     } finally {
       checking.removeListener(update);
       _activeRecheckService = null;
@@ -586,10 +711,17 @@ class SourceRepairBatch extends ChangeNotifier {
   static Future<void> _defaultMarkGone(BookSource source, SiteCheck site) =>
       markSiteGone(source, site.detail);
 
+  static Future<void> _defaultDelete(List<String> urls) =>
+      getIt<BookSourceDao>().deleteByUrls(urls);
+
+  static Future<List<String>> _defaultMerge(List<String> from, String into) =>
+      BookSourceService().mergeSources(from, into);
+
   AiRepairSession _defaultSession(BookSource source, RepairItem item) =>
       AiRepairSession(
         source: source,
         service: service,
+        priorCheck: item.priorCheck,
         hasBudget: () => _hasBudget,
         onUsage: (usage) {
           final used = usage.prompt + usage.completion;

@@ -147,7 +147,12 @@ typedef AiRepairKeywordCheck = Future<bool> Function(
 /// [aiRepairTools]。
 typedef AiRepairAsker = AgentAsk;
 
-/// AI 修一個書源（ADR 0054）：先校驗、抓網頁；有 AI 服務時讓 AI 邊看網頁邊
+/// 整批修復剛校驗過原本的書源：修復頁沿用，不再校驗一次；`result` 是 null
+/// 表示那次校驗逾時。
+typedef AiRepairPriorCheck = ({SourceCheckIsolateResult? result});
+
+/// AI 修一個書源（ADR 0054）：先校驗（整批修復剛校驗過的沿用 [priorCheck]）、
+/// 抓網頁；有 AI 服務時讓 AI 邊看網頁邊
 /// 改、試抓，交出後再校驗，通過才存進去並留下改前版本。沒有 AI 服務時把
 /// 提示詞複製下來，等使用者貼回 AI 修好的書源（[submitPaste]）。一批書源
 /// 由整批修復（[SourceRepairBatch]）每個網站開一個。
@@ -167,6 +172,7 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairBackups? backups,
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
+    this._priorCheck,
     bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
@@ -198,6 +204,10 @@ class AiRepairSession extends ChangeNotifier {
 
   /// 試抓成功、校驗沒過時，隔多久再校驗一次。
   final Duration recheckDelay;
+
+  /// 整批修復剛做的校驗；null 時修復頁自己校驗原本的書源。開場用完就放掉
+  /// （帶著整份診斷與書源 JSON）。
+  AiRepairPriorCheck? _priorCheck;
 
   /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
   final bool Function() _hasBudget;
@@ -388,29 +398,25 @@ class AiRepairSession extends ChangeNotifier {
     final checkStep = _addStep(job, '校驗原本的書源');
     log.section('校驗原本的書源');
     final checkWatch = Stopwatch()..start();
-    final checked = await _guard(() => _check(original, _cancelToken));
+    final prior = _priorCheck;
+    _priorCheck = null;
+    final checked = prior != null
+        ? prior.result
+        : await _guard(() => _check(original, _cancelToken));
     if (_stopped) return;
     final checkText = _checkText(checked);
     job._before = checked == null
         ? null
         : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth.category;
     job._checkResult = [checkText, ...?checked?.diagnostics].join('\n\n');
-    _finish(checkStep, checkText);
+    _finish(checkStep, prior == null ? checkText : '沿用剛才的校驗：$checkText');
     log
-      ..both('${_seconds(checkWatch)}：$checkText')
+      ..both(
+        prior == null
+            ? '${_seconds(checkWatch)}：$checkText'
+            : '沿用整批修復剛才的校驗：$checkText',
+      )
       ..both([...?checked?.diagnostics].join('\n\n'));
-    // 校驗只看搜尋有沒有回書：原本的書源抓的就是頁面上固定的書時，開場就
-    // 說，AI 才會連搜尋一起修（2026-11-12 涨姿势兩次都是修好正文、交出被退
-    // 才知道網站的 ?s= 一律回首頁）。搜不到書時不多搜。
-    if ((original.searchUrl ?? '').trim().isNotEmpty) {
-      final follows = await _guard(() => _keywordCheck(original, _cancelToken));
-      if (_stopped) return;
-      if (follows == false) {
-        const fact = '$aiRepairUnrelatedSearch（用「$nonsenseKeyword」搜尋也得到同樣的書）';
-        job._checkResult = '${job._checkResult}\n\n$fact';
-        log.both(fact);
-      }
-    }
 
     final fetchStep = _addStep(job, '抓網頁');
     log.section('抓網頁');
@@ -884,6 +890,8 @@ class AiRepairSession extends ChangeNotifier {
     );
   }
 
+  /// 每次搜尋等一步校驗的時間（[SourceCheckConfig.timeoutDuration]）：修好的
+  /// 書源剛搜過一次，網站慢到等不到就不擋（[searchFollowsKeyword] 當成有關）。
   static Future<bool> _defaultKeywordCheck(
     BookSource source,
     CancelToken cancelToken,
@@ -892,7 +900,7 @@ class AiRepairSession extends ChangeNotifier {
     return searchFollowsKeyword(
       source,
       keyword: source.getCheckKeyword(config.keyword),
-      timeout: config.sourceTimeoutDuration,
+      timeout: config.timeoutDuration,
       cancelToken: cancelToken,
     );
   }

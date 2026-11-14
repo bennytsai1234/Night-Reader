@@ -167,10 +167,11 @@ class SourceMoves {
     }
   }
 
-  /// [from] 改成 [to]：[from] 以前的網址也一起記到 [to] 底下。
+  /// [from] 改成 [to]：[from] 以前的網址也一起記到 [to] 底下；[to] 原本記的
+  /// 照留（幾個書源併成一個時，每個都記在 [to] 底下）。
   Future<void> record({required String from, required String to}) {
     final moves = read();
-    final history = [...?moves.remove(from), from]..remove(to);
+    final history = [...?moves[to], ...?moves.remove(from), from]..remove(to);
     return _write(moves..[to] = history.toSet().toList());
   }
 

@@ -536,8 +536,9 @@ class SourceManagerProvider with ChangeNotifier {
   final Future<void> Function()? _uncovered;
   final RepairRuns _repairRuns;
 
-  /// 已經為它重讀過清單的那一件修復。
+  /// 已經為它重讀過清單的那一件修復，與那時它刪、併過幾次書源。
   RepairRun? _reloadedRun;
+  int _reloadedEdits = 0;
   Set<String> _aiRepairedUrls = const {};
   bool _listeningSync = false;
   bool _syncReloadPending = false;
@@ -562,12 +563,17 @@ class SourceManagerProvider with ChangeNotifier {
     await loadSources(showLoading: false);
   }
 
-  /// 修復在背景做完了（ADR 0058）：存進去的、標了「AI 修不好」的都要重讀。
+  /// 修復在背景做完了（ADR 0058）：存進去的、標了「AI 修不好」的都要重讀；
+  /// 做完之後在結果頁刪了或併了書源也重讀。
   void _handleRepairRunsChanged() {
     if (_disposed) return;
     final run = _repairRuns.current;
-    if (run == null || !run.isFinished || identical(run, _reloadedRun)) return;
+    if (run == null || !run.isFinished) return;
+    if (identical(run, _reloadedRun) && run.sourceEdits == _reloadedEdits) {
+      return;
+    }
     _reloadedRun = run;
+    _reloadedEdits = run.sourceEdits;
     unawaited(loadSources(showLoading: false));
   }
 
