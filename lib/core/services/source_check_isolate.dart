@@ -718,21 +718,22 @@ class SourceChecker {
       issues: issues,
     );
     if (head == null) return;
-    final samples = [head];
+    // 中段、後段互不相依，同時抓：一章等一章時，章短的書（8 章抽 1、6、7、
+    // 8）就超過總時限。
     final taken = <String>{head.chapter.url};
-    for (final index in _laterSampleIndexes(readableChapters)) {
-      final sample = await _probeLater(
-        book,
-        readableChapters,
-        index,
-        taken,
-        mode: mode,
-        issues: issues,
-      );
-      if (sample == null) return;
-      samples.add(sample);
-    }
-    _checkRepeatedText(samples, mode: mode, issues: issues);
+    final later = await Future.wait([
+      for (final index in _laterSampleIndexes(readableChapters))
+        _probeLater(
+          book,
+          readableChapters,
+          index,
+          taken,
+          mode: mode,
+          issues: issues,
+        ),
+    ]);
+    if (later.contains(null)) return;
+    _checkRepeatedText([head, ...later.nonNulls], mode: mode, issues: issues);
   }
 
   Future<({BookChapter chapter, String content})?> _probeHead(
@@ -849,10 +850,14 @@ class SourceChecker {
     }
   }
 
-  /// 抽到的章裡有兩章一半以上是同一段文字：不是這一章的正文。那段文字
-  /// 帶付費字樣是付費提示（整個書源標付費，ADR 0057），其他是重複的內容
-  /// （別本書的廣告這類），記成正文失效。真正的章節兩章不會一半以上一樣，
-  /// 作者的話這類固定文字只佔一小段；只比文字，圖與音訊網址不比。
+  /// 抽到的章裡有兩章一半以上是同一段文字，就不是這一章該有的正文：
+  /// - 一章的正文裡有另一章的開頭：下一頁的規則抓過頭、跨到別章（2026-11-14
+  ///   独步小说第 97 章 26,810 字，把第 98 章也抓進來），記成正文失效；
+  /// - 共同的句子三分之一以上帶付費字樣：付費提示（整個書源標付費，ADR
+  ///   0057）；
+  /// - 其他（別本書的廣告這類一章一章重複的）：記成正文失效。
+  /// 真正的章節兩章不會一半以上一樣，作者的話這類固定文字只佔一小段；只比
+  /// 文字，圖與音訊網址不比。
   void _checkRepeatedText(
     List<({BookChapter chapter, String content})> samples, {
     required _CheckMode mode,
@@ -860,29 +865,70 @@ class SourceChecker {
   }) {
     for (var i = 0; i < samples.length; i++) {
       for (var j = i + 1; j < samples.length; j++) {
-        final shared = _sharedText(samples[i].content, samples[j].content);
+        final shared = _sharedSentences(samples[i].content, samples[j].content);
         if (shared == null) continue;
-        final titles =
-            '${_compactChapterTitle(samples[i].chapter.title)}與'
-            '${_compactChapterTitle(samples[j].chapter.title)}';
-        final prefix = mode == _CheckMode.search ? '' : '發現書籍';
+        for (final sample in [samples[i], samples[j]]) {
+          final text = _flat(sample.content);
+          _log(
+            '  ◇ ${sample.chapter.title}：${text.length} 字，開頭「'
+            '${text.length > 40 ? text.substring(0, 40) : text}」',
+          );
+        }
         _recordIssue(
           issues,
-          _hasPaidMarker(shared)
-              ? _IssueData(
-                  stage: _stageFor(mode, 'content'),
-                  message: '$prefix$titles的正文一半以上是同一段付費提示',
-                  health: paidSourceHealth,
-                )
-              : _IssueData(
-                  stage: _stageFor(mode, 'content'),
-                  message: '$prefix$titles的正文一半以上是同一段文字（重複的內容，不是這一章的正文）',
-                  health: _contentHealthFor(mode),
-                ),
+          _repeatedTextIssue(samples[i], samples[j], shared, mode),
         );
         return;
       }
     }
+  }
+
+  _IssueData _repeatedTextIssue(
+    ({BookChapter chapter, String content}) a,
+    ({BookChapter chapter, String content}) b,
+    List<String> shared,
+    _CheckMode mode,
+  ) {
+    final prefix = mode == _CheckMode.search ? '' : '發現書籍';
+    String title(BookChapter chapter) => _compactChapterTitle(chapter.title);
+    String quote(String text) =>
+        text.length > 30 ? '${text.substring(0, 30)}…' : text;
+    // 一章把另一章的開頭也抓進來：說哪一章跨到哪一章。
+    for (final (whole, part) in [(a, b), (b, a)]) {
+      final opening = _flat(part.content);
+      final head = opening.length > 30 ? opening.substring(0, 30) : opening;
+      if (head.isNotEmpty &&
+          !_flat(whole.content).startsWith(head) &&
+          _flat(whole.content).contains(head)) {
+        return _IssueData(
+          stage: _stageFor(mode, 'content'),
+          message:
+              '$prefix${title(whole.chapter)}的正文把${title(part.chapter)}也抓進來了'
+              '（下一頁的規則抓過頭，跨到別章）：「${quote(head)}」',
+          health: _contentHealthFor(mode),
+        );
+      }
+    }
+    final both = '${title(a.chapter)}與${title(b.chapter)}';
+    final sharedText = shared.join('。');
+    // 付費提示的句子不一定每句都有付費字樣（「開通會員可免費閱讀全站作品」），
+    // 照句數算：三分之一以上帶付費字樣才算。故事重複時，帶「訂閱」的頁尾只是
+    // 幾百句裡的一句。
+    final paid = shared.where(_hasPaidMarker).length;
+    if (paid * 3 >= shared.length) {
+      return _IssueData(
+        stage: _stageFor(mode, 'content'),
+        message: '$prefix$both的正文一半以上是同一段付費提示：「${quote(sharedText)}」',
+        health: paidSourceHealth,
+      );
+    }
+    return _IssueData(
+      stage: _stageFor(mode, 'content'),
+      message:
+          '$prefix$both的正文一半以上是同一段文字（一章一章重複的內容）：'
+          '「${quote(sharedText)}」',
+      health: _contentHealthFor(mode),
+    );
   }
 
   BookSourceKind _kindShownBy(String content, Book book) =>
@@ -1393,9 +1439,9 @@ List<int> _laterSampleIndexes(List<BookChapter> chapters) {
   return positions.toSet().toList();
 }
 
-/// 兩段文字有一半以上（各自的字數）是同一些句子時，傳回共同的那些句子；
+/// 兩段文字有一半以上（各自的字數）是同一些句子時，傳回共同的句子；
 /// 是圖或音訊網址的、或沒有共同到一半的是 null。
-String? _sharedText(String a, String b) {
+List<String>? _sharedSentences(String a, String b) {
   // 付費提示只有幾十字，類型看不出來（不到小說的字數）也要比。
   bool media(String text) => switch (ChapterContentKind.of(text)) {
     ChapterContentKind.images || ChapterContentKind.audio => true,
@@ -1416,8 +1462,11 @@ String? _sharedText(String a, String b) {
   if (sharedLength * 2 < length(left) || sharedLength * 2 < length(right)) {
     return null;
   }
-  return shared.join('。');
+  return shared.toList();
 }
+
+/// 拿掉空白，比對開頭用。
+String _flat(String text) => text.replaceAll(RegExp(r'\s+'), '');
 
 /// 付費提示的字樣（章名與正文共用）。
 const List<String> _paidMarkers = [

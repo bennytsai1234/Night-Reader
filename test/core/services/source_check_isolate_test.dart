@@ -461,8 +461,52 @@ void main() {
 
         expect(checked.groupTags, contains(paidSourceGroupTag));
         expect(result.message, contains('付費提示'));
+        // 結論附上那段共同文字的開頭，人和 AI 都核對得了。
+        expect(result.message, contains('本章为VIP章节'));
       },
     );
+
+    test(
+      'a chapter that runs on into another is told so, not called paid',
+      () async {
+        // 2026-11-14 改後整批校驗：独步小说第 97 章 26,810 字、把第 98 章也抓
+        // 進來（下一頁的規則跨到下一章）；何以笙箫默同樣，共同的故事裡有一句
+        // 頁尾帶「訂閱」，原本被判成付費提示。
+        final service = _FakeBookSourceService(
+          chapters: (_) async => book(40),
+          content: (chapter) async {
+            if (chapter.index != 30) return chapterText(chapter);
+            final next = book(40)[36];
+            return '${chapterText(chapter)}${chapterText(next)}歡迎訂閱本書。';
+          },
+        );
+        final (result, checked) = await _check(service);
+
+        expect(checked.groupTags, isNot(contains(paidSourceGroupTag)));
+        expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+        expect(result.message, contains('第31章的正文把第37章也抓進來了'));
+      },
+    );
+
+    test('the later chapters are fetched at once', () async {
+      // 2026-11-14 改後整批校驗：一章等一章抓，8 章的書抽完第 1、6、7、8 章
+      // 就超過整個書源的總時限，40 個書源因此判成逾時。
+      var running = 0;
+      var most = 0;
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async {
+          most = ++running > most ? running : most;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          running--;
+          return chapterText(chapter);
+        },
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(most, 3);
+    });
 
     test('later chapters repeating the same other text mark the content '
         'broken', () async {

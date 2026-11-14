@@ -220,19 +220,19 @@ class SourceCheckConfig {
     checkContent: checkContent,
   );
 
-  /// Upper bound for one source check.
-  ///
-  /// Stage-level checks still use [timeoutDuration]. This budget prevents a
-  /// single source from occupying a worker for the full sum of every stage.
+  /// 一個書源整個校驗的時限：每一段各自照 [timeoutDuration]，這個上限讓
+  /// 一個書源不會把每段的時限加總佔滿 worker。正文抽查的中段、後段算多一段
+  /// （三章同時抓）：2026-11-14 只算正文一段時，40 個書源在抽後段時撞到
+  /// 總時限、判成逾時。
   Duration get sourceTimeoutDuration {
     final activeFlows = (checkSearch ? 1 : 0) + (checkDiscovery ? 1 : 0);
     final stageBudget =
         activeFlows +
         (checkInfo ? activeFlows : 0) +
         (checkCategory ? activeFlows : 0) +
-        (checkContent ? activeFlows : 0);
+        (checkContent ? activeFlows * 2 : 0);
     final multiplier = math.max(2, math.min(stageBudget, 6));
-    final seconds = math.min(timeoutSeconds * multiplier, 90);
+    final seconds = math.min(timeoutSeconds * multiplier, 120);
     return Duration(seconds: math.max(timeoutSeconds, seconds));
   }
 
