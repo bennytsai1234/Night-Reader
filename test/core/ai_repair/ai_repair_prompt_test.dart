@@ -217,6 +217,34 @@ void main() {
       },
     );
 
+    test('the AI sends every variant of one question at once, stops trying '
+        'one site after a database error, and may use domains from the '
+        'source comment', () {
+      // 2026-11-14 新御书屋 18 輪：還原對話問 AI，它說「互不相依的一起送」
+      // 沒說同一個問題的各種寫法要一次送完、36 輪讓它覺得輪數很寬裕；SQL
+      // 逾時還換關鍵字與搜尋類型再試；三九書屋只寫在書源註解裡，不確定能不能
+      // 用，先把主站試到無話可說；拿另一本書把已確認的失敗再驗一次。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('同一個問題的各種寫法'),
+          contains('輪數越少越好'),
+          contains('資料庫錯誤'),
+          contains('書源註解（bookSourceComment）'),
+          contains('不算新的證據'),
+        ),
+      );
+    });
+
+    test('the AI is told how ## and @css: split a rule, as Legado does', () {
+      // 2026-11-14 虫虫书屋接了兩組 ##、第一版主在 || 後面又寫 @css:，各繞
+      // 好幾輪（Legado AnalyzeRule.splitRegex、AnalyzeByJSoup.SourceRule）。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(contains('一條規則只取一組 ##正則##替換'), contains('@css: 只看整條規則最前面')),
+      );
+    });
+
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {
         'bookSourceUrl': 'a',
