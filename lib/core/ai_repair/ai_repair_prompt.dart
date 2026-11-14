@@ -508,7 +508,7 @@ const String _rules =
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
   - result 是這條規則前一段的結果。書單裡每本書的欄位規則（name、bookUrl 這類）直接用 JS 時，result 是這本書那一塊網頁元素（接成字串是它的 HTML），java.getString(規則) 也在這一塊裡找。
-  - 抓網頁：java.ajax(網址) 直接傳回內容字串，只收網址一個參數，方法、內文、標頭寫在網址後面（網址,{"method":"POST","body":"...","headers":{"名稱":"值"}}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 或 java.connect(網址, 標頭物件) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。標頭物件直接是 {"名稱":"值"}，外面不包 headers。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串，只收網址一個參數，方法、內文、標頭寫在網址後面（網址,{"method":"POST","body":"...","headers":{"名稱":"值"}}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 或 java.connect(網址, 標頭物件) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。連不上（沒有回應、連線被拒）時不丟例外：.code() 是夜讀填的 500、.body() 是錯誤訊息，不是網站回的；網站實際回了什麼，看結果下面「這段程式送出的請求」。標頭物件直接是 {"名稱":"值"}，外面不包 headers。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
@@ -532,7 +532,7 @@ const String _method =
 - 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前 5 本書名和用試抓關鍵字搜到的前 5 本一樣，就不算修好；網站搜不到時回固定的推薦書也沒關係，只要和搜得到時不一樣。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
 - 試抓與校驗搜尋用的關鍵字是書源的 ruleSearch.checkKeyWord，沒寫時是開場除錯紀錄寫的那個（「開始搜尋關鍵字」）。站上搜不到這個詞，或這個詞的結果多到網站要很久才回時，把 checkKeyWord 改成站上確實有的書名（首頁、排行列出的）再 test，不用為這個詞改搜尋規則。
 - 網站的內容不是小說、漫畫或有聲書時（例如一篇貼文當一本書的段子、新聞站，有的文章只有圖、有的只有字），用 give_up 的 not_a_book 放棄：不為了過校驗改類型，也不只抓其中一種文章。
-- 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上或都轉到別處時，開場列出的別的網域試過就夠。
+- 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上、或每一頁都不是這個書源的內容時（例如整個換成別的網站）：同一個網域的 https、http、有沒有 www、m. 的首頁各看一次（同一次回覆一起呼叫），加上開場列出的別的網域，都一樣就夠，同樣的失敗不再換路徑重試。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 - 書源規則只放書源要用的規則；要跑程式查東西用 js。
 ''';

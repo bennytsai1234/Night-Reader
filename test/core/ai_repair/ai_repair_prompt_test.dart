@@ -161,6 +161,30 @@ void main() {
       },
     );
 
+    test('the AI is told a failed connect is not the site answering 500', () {
+      // 2026-11-14 實跑：望书阁、大白、色情小说、趣书网、饿狼小说兩件，AI 把
+      // java.connect 連不上時夜讀填的 500 當成網站回的，多花一兩輪。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(contains('夜讀填的 500'), contains('這段程式送出的請求')),
+      );
+    });
+
+    test(
+      'before saying a site is gone, the AI tries each opening of it once',
+      () {
+        // 2026-11-14 實跑：躺着看只看裸網域就判網站不在了（www 還是小說站）；
+        // 色情小说、趣书网同樣的逾時試了 9、7 輪。
+        expect(
+          aiRepairSystemPrompt,
+          allOf(
+            contains('https、http、有沒有 www、m. 的首頁各看一次'),
+            contains('同樣的失敗不再換路徑重試'),
+          ),
+        );
+      },
+    );
+
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {
         'bookSourceUrl': 'a',
