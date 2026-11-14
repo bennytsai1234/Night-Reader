@@ -10,6 +10,7 @@ import 'package:night_reader/core/services/login_data_backup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -17,6 +18,7 @@ import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
@@ -67,6 +69,7 @@ class RestoreService {
   final BookGroupDao _groupDao = getIt<BookGroupDao>();
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final HighlightDao _highlightDao = getIt<HighlightDao>();
+  final AiFindDao _aiFindDao = getIt<AiFindDao>();
   final DownloadDao _downloadDao = getIt<DownloadDao>();
   final ReadRecordDao _readRecordDao = getIt<ReadRecordDao>();
   final ReaderChapterContentDao _chapterContentDao =
@@ -256,6 +259,7 @@ class RestoreService {
       'bookmark.json',
       'bookmarks.json',
       'highlight.json',
+      'aiFind.json',
       'downloadTask.json',
       'downloadTasks.json',
       'readerChapterContent.json',
@@ -318,6 +322,10 @@ class RestoreService {
                 highlight.quote.isNotEmpty) {
               await _highlightDao.upsertAll([highlight]);
             }
+            break;
+          case 'aiFind.json':
+            final find = AiFindRecord.fromJson(item);
+            if (find.id.isNotEmpty) await _aiFindDao.upsert(find);
             break;
           case 'downloadTask.json':
           case 'downloadTasks.json':

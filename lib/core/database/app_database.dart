@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'tables/app_tables.dart';
 import '../engine/book/book_help.dart';
 // model imports required by app_database.g.dart (part shares this namespace)
+import '../models/ai_find_record.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
 import '../models/replace_rule.dart';
@@ -28,6 +29,7 @@ import '../models/keyboard_assist.dart';
 import '../models/search_book.dart';
 import '../models/download_task.dart';
 import '../models/search_keyword.dart';
+import 'dao/ai_find_dao.dart';
 import 'dao/book_dao.dart';
 import 'dao/chapter_dao.dart';
 import 'dao/book_source_dao.dart';
@@ -74,6 +76,7 @@ part 'app_database.g.dart';
     SearchKeywords,
     Bookmarks,
     Highlights,
+    AiFindRecords,
   ],
   daos: [
     BookDao,
@@ -96,6 +99,7 @@ part 'app_database.g.dart';
     ReaderChapterContentDao,
     BookmarkDao,
     HighlightDao,
+    AiFindDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -133,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -235,6 +239,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 18) {
         // 書源記上次校驗的時間（ADR 0054）。
         await _addColumnIfMissing(m, bookSources, bookSources.lastCheckTime);
+      }
+      if (from < 19) {
+        // 過去的找書（ADR 0060）。
+        await m.createTable(aiFindRecords);
       }
     },
     beforeOpen: (_) async {

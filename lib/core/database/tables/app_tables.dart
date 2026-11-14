@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../../models/ai_find_record.dart';
 import '../../models/book.dart';
 import '../../models/bookmark.dart';
 import '../../models/chapter.dart';
@@ -637,4 +638,26 @@ class SearchKeywords extends Table {
 
   @override
   Set<Column> get primaryKey => {word};
+}
+
+// ───────────── AiFindRecords ─────────────
+/// 過去的找書（[AiFindRecord]，ADR 0060）：一次找書一列，編號開始時配。
+@UseRowClass(AiFindRecord, constructor: 'row', generateInsertable: true)
+class AiFindRecords extends Table {
+  TextColumn get id => text()();
+  TextColumn get description => text()();
+  TextColumn get depth => text()();
+  IntColumn get createdAt => integer().named('createdAt')();
+  TextColumn get outcome => textEnum<AiFindOutcome>()();
+  TextColumn get failure => text().withDefault(const Constant(''))();
+  TextColumn get summary => text().withDefault(const Constant(''))();
+
+  /// 推薦的每本書卡與理由（JSON）。
+  TextColumn get picksJson =>
+      text().named('picks').withDefault(const Constant('[]'))();
+  IntColumn get rounds => integer().withDefault(const Constant(0))();
+  IntColumn get tokens => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }

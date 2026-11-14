@@ -11,6 +11,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'bookmark_sync.dart';
+import 'ai_find_sync.dart';
 import 'highlight_sync.dart';
 import 'bookshelf_sync.dart';
 import 'google_drive_auth.dart';
@@ -234,6 +235,7 @@ class SyncService {
     service._progress,
     BookmarkSync(),
     HighlightSync(),
+    AiFindSync(),
     ReadStatsSync(settings: service._settings, bases: service._bases),
     SettingsSync(),
     ...LoginDataSync.kinds(),
