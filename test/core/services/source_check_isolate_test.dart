@@ -28,6 +28,7 @@ class _FakeBookSourceService extends BookSourceService {
 
   final List<String> contentRequests = <String>[];
   final List<String> tocRequests = <String>[];
+  final List<int?> tocLimits = <int?>[];
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -70,6 +71,7 @@ class _FakeBookSourceService extends BookSourceService {
     bool requireComplete = false,
   }) async {
     tocRequests.add(book.name);
+    tocLimits.add(chapterLimit);
     final chapters = this.chapters;
     if (chapters != null) return chapters(book);
     return [
@@ -408,6 +410,20 @@ void main() {
       return '${chapter.title}的正文。$_readable這一章講的是第$i件事：主角在第$i天'
           '走進第$i座城，遇見第$i個人，聽他說了第$i個故事，跟別章都不一樣。';
     }
+
+    test('the whole table of contents is read, so the samples are the '
+        'book\'s middle and end', () async {
+      // 2026-11-14 改前改後整批校驗：目錄原本只讀前 8 章，「中後段」抽到的是
+      // 第 6～8 章；第 8 章沒有下一章當停止點，跟著「下一章」走的翻頁規則一路
+      // 翻到 100 頁上限，47 個書源判成逾時。
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async => chapterText(chapter),
+      );
+      await _check(service);
+
+      expect(service.tocLimits, everyElement(isNull));
+    });
 
     test('a whole book that reads fine at every sample is healthy', () async {
       final service = _FakeBookSourceService(

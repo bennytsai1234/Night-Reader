@@ -604,8 +604,13 @@ class SourceChecker {
           _source,
           // 詳情頁抓回來時存著的目錄頁可能就是那份壞掉的，重試要重抓。
           retrying ? _withoutStoredPages(detailed) : detailed,
-          chapterLimit: _validationChapterLimit,
-          pageConcurrency: _validationPageConcurrency,
+          // 要抽中段、後段的正文時讀完整目錄，分頁照讀書時同時抓：只讀前 8
+          // 章時，「中後段」是第 6～8 章，第 8 章也沒有下一章當翻頁的停止點
+          // （2026-11-14 改前改後整批校驗，47 個書源因此逾時）。
+          chapterLimit: _config.checkContent ? null : _validationChapterLimit,
+          pageConcurrency: _config.checkContent
+              ? null
+              : _validationPageConcurrency,
         ),
         cameBackEmpty: (chapters) => chapters.every((c) => c.isVolume),
         falteredSince: transientBeforeDetail,
