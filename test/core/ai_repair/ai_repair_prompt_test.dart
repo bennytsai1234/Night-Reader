@@ -112,6 +112,13 @@ void main() {
         readAiRepairCall(call('fetch', '{"url":')).fact,
         contains('參數不是合法的 JSON'),
       );
+      // 2026-11-14 读客书库：模型把內建的工具標記寫進參數，只回「Unexpected
+      // character」時它看不出壞在哪，照樣再送兩次，三次讀不懂就停下。
+      final broken = readAiRepairCall(
+        call('test', '{"note">試抓</parameter>, "patch": {}}'),
+      ).fact;
+      expect(broken, contains('第 8 個字'));
+      expect(broken, contains('{"note">試抓</parameter>'));
       expect(
         readAiRepairCall(call('fetch', '["/"]')).fact,
         contains('參數要是一個 JSON 物件'),
@@ -192,6 +199,8 @@ void main() {
         // 一下 200、一下 429 或 502，AI 一直重試、換主機，各花 30～35 輪。
         // 86读书時快時慢，同一個搜尋量了 4 次被停下；第 1 輪拖 23 輪。
         expect(aiRepairSystemPrompt, contains('同一個網址時好時壞'));
+        // 白光第 4 輪：第 11 輪才把同一個請求再送一次，前 10 輪在試各頁、各主機。
+        expect(aiRepairSystemPrompt, contains('第一步是把同一個請求再送一次'));
         final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
         final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
         expect(why['description'], contains('時好時壞'));
