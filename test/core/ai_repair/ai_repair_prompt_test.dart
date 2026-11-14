@@ -195,17 +195,21 @@ void main() {
     test(
       'a site that answers only now and then is given up as rate limited',
       () {
-        // 2026-11-14 第 3 輪：白光、读客书库、思怡小说的網站從整站 502 恢復成
-        // 一下 200、一下 429 或 502，AI 一直重試、換主機，各花 30～35 輪。
-        // 86读书時快時慢，同一個搜尋量了 4 次被停下；第 1 輪拖 23 輪。
-        expect(aiRepairSystemPrompt, contains('同一個網址時好時壞'));
-        // 白光第 4 輪：第 11 輪才把同一個請求再送一次，前 10 輪在試各頁、各主機。
-        expect(aiRepairSystemPrompt, contains('第一步是把同一個請求再送一次'));
-        // 第 6 次重跑：每次成功就接著修別段，程式改成把這件修復裡同一個網址
-        // 回過的狀態碼列在結果後面，提示詞要說拿它做什麼。
-        expect(aiRepairSystemPrompt, contains('「同一個網址這次回過不同的結果」'));
-        // 第 7 次重跑：思怡第 1 輪就看出搜尋時好時壞，還是先修正文 15 輪。
-        expect(aiRepairSystemPrompt, contains('也不先修其他段'));
+        // 2026-11-14 白光、读客书库、思怡小说的網站一下 200、一下 429 或 502，
+        // 86读书時快時慢，AI 一直重試、換主機、先修別段，各花二三十輪。還原
+        // 读客书库的對話問 AI：「再送一次」沒寫上限、跟「不再等第二次」打架，
+        // 換網域與查其他段它當成診斷。工具結果後面列出「同一個網址這次回過
+        // 不同的結果」時當下放棄，蓋過其他每一條；還沒列出時只重送一次。
+        expect(
+          aiRepairSystemPrompt,
+          allOf(
+            contains('「同一個網址這次回過不同的結果」'),
+            contains('這一次回覆就用 give_up 的 rate_limited 放棄'),
+            contains('這條蓋過下面每一條'),
+            contains('也不查其他段'),
+            contains('只送這一次'),
+          ),
+        );
         final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
         final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
         expect(why['description'], contains('時好時壞'));
