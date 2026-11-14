@@ -38,6 +38,7 @@ class _Library implements AiFindLibrary {
   @override
   final Set<String> secrets = {};
   Completer<void>? searchGate;
+  String? detailIntro;
   bool searchCancelled = false;
 
   @override
@@ -71,7 +72,7 @@ class _Library implements AiFindLibrary {
     return Book(
       name: book.name,
       author: book.author ?? '',
-      intro: '${book.name}：穿越後獵魔升級',
+      intro: detailIntro ?? '${book.name}：穿越後獵魔升級',
       kind: '玄幻,完結',
     );
   }
@@ -479,6 +480,24 @@ void main() {
       contains('b31｜爽文｜作者｜完结 {{\$..shortName｜1 個書源'),
       reason: '第一次只給看了 30 本，下一本接 b31',
     );
+  });
+
+  test('a detail with HTML tags and line breaks reads as plain text', () async {
+    final library = _Library({
+      '穿越': [_book('獵魔人')],
+    })..detailIntro = '<div class="intro">獵魔人：<br>穿越後<b>獵魔</b>升級</div>';
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        ('detail', {'book': 'b1'}),
+      ]),
+    ]);
+    await session(library, ai).start();
+    final detail = ai.toolResults(3).single;
+    expect(detail, contains('簡介：獵魔人：\n穿越後獵魔升級'));
+    expect(detail, isNot(contains('<')));
   });
 
   test('secrets of the sources the tools touched are masked in what the AI '

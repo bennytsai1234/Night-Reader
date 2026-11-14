@@ -14,6 +14,7 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:pool/pool.dart';
 import 'package:uuid/uuid.dart';
 
 import 'ai_find_library.dart';
@@ -218,6 +219,12 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   final Map<String, Future<({List<SearchBook> books, String facts})>>
   _searches = {};
   List<AiFindExploreSource>? _exploreSources;
+
+  /// 同時跑幾個搜尋：一個搜尋就同時問 thread_count 個書源（預設 8）。
+  /// 2026-11-15 量的：三個一起搜共 132 秒、一個接一個 252 秒，出錯或逾時的書源
+  /// 從 4.5% 變 7.7%；AI 一則回覆有時叫五六個，全部一起送更多書源逾時，其餘
+  /// 排隊。
+  final Pool _searchSlots = Pool(3);
   final Map<String, List<String>> _categories = {};
   AiRepairStep? _round;
   int _logged = 0;
@@ -367,21 +374,23 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   Future<({List<SearchBook> books, String facts})> _runSearch(
     AiFindSearch command,
-  ) async {
-    final watch = Stopwatch()..start();
-    final result = await _library.search(
-      command.keyword,
-      command.kind,
-      _cancel,
-    );
-    return (
-      books: result.books,
-      facts:
-          '送了 ${result.sources} 個書源'
-          '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}，'
-          '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
-    );
-  }
+  ) =>
+      // 計時從輪到它開始：排隊等的時間不算這次搜尋花的。
+      _searchSlots.withResource(() async {
+        final watch = Stopwatch()..start();
+        final result = await _library.search(
+          command.keyword,
+          command.kind,
+          _cancel,
+        );
+        return (
+          books: result.books,
+          facts:
+              '送了 ${result.sources} 個書源'
+              '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}，'
+              '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
+        );
+      });
 
   Future<AgentResult> _detail(AiFindDetail command) async {
     final found = _books[command.book];
@@ -396,10 +405,16 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       return AgentToolResult('# ${found.id} 的詳情抓不到：$error');
     }
     found.detail = book;
-    String field(String label, String? value) =>
-        (value ?? '').trim().isEmpty ? '' : '$label：${value!.trim()}\n';
-    final intro = (book.customIntro ?? book.intro ?? found.book.intro ?? '')
-        .trim();
+    // 書源規則抓到的欄位常帶 HTML 標籤與換行（2026-11-15 實跑：簡介是
+    // `<div class=…>`、分類跨好幾行），照正文一樣清成純文字。
+    String field(String label, String? value) {
+      final text = aiFindPlainText(value ?? '').replaceAll('\n', ' ');
+      return text.isEmpty ? '' : '$label：$text\n';
+    }
+
+    final intro = aiFindPlainText(
+      book.customIntro ?? book.intro ?? found.book.intro ?? '',
+    );
     final text =
         '# ${found.id} 的詳情\n'
         '書名：${book.name.isEmpty ? found.book.name : book.name}\n'

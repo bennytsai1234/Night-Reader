@@ -79,9 +79,57 @@ class AppAiFindLibrary implements AiFindLibrary {
     );
   }
 
+  /// 詳情照卡片的來源抓；簡介是空的或抓不到時，到有這本的其他書源（最多
+  /// 再兩個）照書名與作者精確搜一次再抓（換源的做法），第一個有簡介的為準。
+  /// 只問主要來源時，同一本書在別的書源有簡介、AI 拿到空的就跳過它
+  /// （2026-11-15 實跑：蠱真人）。
   @override
   Future<Book> detail(SearchBook book, CancelToken cancelToken) =>
-      _describeFailure(cancelToken, () => _info(book, cancelToken));
+      _describeFailure(cancelToken, () async {
+        Object? failure;
+        Book? first;
+        try {
+          first = await _info(book, cancelToken);
+          if (_hasIntro(first)) return first;
+        } on DioException catch (error) {
+          if (CancelToken.isCancel(error)) rethrow;
+          failure = error;
+        } on AppException catch (error) {
+          failure = error;
+        }
+        final others = [
+          for (final origin in book.origins)
+            if (origin != book.origin) origin,
+        ].take(2);
+        for (final origin in others) {
+          try {
+            final source = await _source(origin);
+            final candidate = (await _service.preciseSearch(
+              source,
+              book.name,
+              book.author ?? '',
+            )).firstOrNull;
+            if (candidate == null) continue;
+            final info = await _service.getBookInfo(
+              source,
+              candidate.toBook(),
+              cancelToken: cancelToken,
+            );
+            if (_hasIntro(info)) return info;
+          } on DioException catch (error) {
+            if (CancelToken.isCancel(error) || cancelToken.isCancelled) rethrow;
+          } on AppException {
+            // 這個書源也不行，換下一個。
+          } on AiFindUnreadable {
+            // 書源已經不在了。
+          }
+        }
+        if (first != null) return first;
+        throw failure!;
+      });
+
+  static bool _hasIntro(Book book) =>
+      aiFindPlainText(book.customIntro ?? book.intro ?? '').isNotEmpty;
 
   @override
   Future<AiFindChapter> chapter(
@@ -309,15 +357,6 @@ String aiFindNetworkFailure(DioException error) {
     _ => '網路錯誤：${error.message ?? error.type.name}',
   };
 }
-
-/// 正文給 AI 讀的純文字：插圖換成「（插圖）」、其他標籤拿掉、空行合併。
-String aiFindPlainText(String raw) => raw
-    .replaceAll(RegExp(r'<img\b[^>]*>', caseSensitive: false), '（插圖）')
-    .replaceAll(RegExp(r'<[^>]+>'), '')
-    .split('\n')
-    .map((line) => line.trim())
-    .where((line) => line.isNotEmpty)
-    .join('\n');
 
 /// 收一次搜尋的結果：最後一份合併卡、送了幾個書源、幾個失敗。
 class _SearchCollector implements SearchModelCallback {
