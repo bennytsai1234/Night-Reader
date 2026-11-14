@@ -185,6 +185,20 @@ void main() {
       },
     );
 
+    test(
+      'a site that answers only now and then is given up as rate limited',
+      () {
+        // 2026-11-14 第 3 輪：白光、读客书库、思怡小说的網站從整站 502 恢復成
+        // 一下 200、一下 429 或 502，AI 一直重試、換主機，各花 30～35 輪。
+        // 86读书時快時慢，同一個搜尋量了 4 次被停下；第 1 輪拖 23 輪。
+        expect(aiRepairSystemPrompt, contains('同一個網址時好時壞'));
+        final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
+        final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
+        expect(why['description'], contains('時好時壞'));
+        expect(why['description'], contains('慢到超過校驗的時限'));
+      },
+    );
+
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {
         'bookSourceUrl': 'a',
