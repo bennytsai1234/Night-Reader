@@ -274,6 +274,20 @@ void main() {
       );
     });
 
+    test('a whole site turned into another one is its own case, with why to '
+        'look at www. and m.', () {
+      // 2026-11-14 躺着看第 13 次：裸網域換成影片站，AI 讀到「各開頭看一次」
+      // 卻判斷那是講連不上的（那句放在「連不上」底下），網站回 200 就跳過；
+      // 其實 www. 還是原本的小說站。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('4. 網站回了內容，但每一頁都不是這個書源的內容'),
+          contains('裸網域被別人接走時，www. 可能還是原本的網站'),
+        ),
+      );
+    });
+
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {
         'bookSourceUrl': 'a',
