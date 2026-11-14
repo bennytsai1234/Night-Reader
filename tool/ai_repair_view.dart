@@ -1,6 +1,7 @@
 // 把一份 AI 修復的完整紀錄（.txt）轉成可以點開看的 HTML：每一步一張卡片，
-// 每一輪收起來時看得到 AI 呼叫的工具與這輪的用量，點開看送給 AI 的話、AI 的
-// 思考、回覆、呼叫的工具與夜讀做的事。
+// 每一輪收起來時看得到 AI 呼叫的工具、這輪的耗時與快取命中率（命中快取的
+// 輸入 ÷ 全部輸入；某一輪掉下來，先查前面的對話有沒有被改寫），點開看送給 AI
+// 的話、AI 的思考、回覆、呼叫的工具與夜讀做的事。
 //
 //   dart run tool/ai_repair_view.dart <紀錄.txt> <輸出.html>
 //
@@ -33,6 +34,14 @@ final RegExp _event = RegExp(
 );
 
 const int _rawLimit = 4000;
+
+/// 紀錄裡的數字有千分位逗號；沒有輸入時是空的。
+String _hitRate(String cached, String prompt) {
+  final total = int.parse(prompt.replaceAll(',', ''));
+  if (total == 0) return '';
+  final hit = int.parse(cached.replaceAll(',', ''));
+  return '${(hit * 100 / total).toStringAsFixed(0)}%';
+}
 
 String render(List<String> lines) {
   final title = lines.isEmpty
@@ -75,7 +84,7 @@ String _card(_Section section) {
   final pills = usage == null
       ? ''
       : '<span class="pill">AI ${usage.group(1)} 秒</span>'
-            '<span class="pill">送出 ${usage.group(2)} token（快取 ${usage.group(3)}）</span>'
+            '<span class="pill">快取命中 ${_hitRate(usage.group(3)!, usage.group(2)!)}</span>'
             '<span class="pill">回覆 ${usage.group(4)}（思考 ${usage.group(5)}）</span>';
   var gist = '';
   if (round) {

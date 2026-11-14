@@ -1,6 +1,6 @@
 /// 用真的網站與使用者自己的 AI 服務跑一次修復異常書源（ADR 0054），看整批
-/// 每個書源走到哪一步、花了多少 token；調 AI 修書源的提示詞或流程時拿來比
-/// 前後。會呼叫 AI 服務、花使用者的額度。
+/// 每個書源走到哪一步；調 AI 修書源的提示詞或流程時拿來比前後
+/// （`docs/agents/ai-repair-runs.md`）。會呼叫 AI 服務、花使用者的額度。
 ///
 /// ```sh
 /// NR_SOURCES=<書源 JSON> NR_AI_KEY_FILE=<只放金鑰的檔> NR_OUT=<結果 JSON> \
@@ -8,21 +8,21 @@
 /// ```
 ///
 /// - 給了 `NR_CASES`（案件集，`test/live/ai_repair_cases.json`）時，`NR_SOURCES`
-///   是使用者的整份匯出檔，照案件集的名稱與網址挑出書源；跑完每件照預期答案
-///   算對錯（修好了沒有、正文夠不夠長），印出表、寫進結果檔的 `score`。
-///   `NR_ONLY=<名稱,名稱>` 只跑案件集裡這幾件（照 `name`）。
+///   是使用者的整份匯出檔，照案件集的名稱與網址挑出書源；
+///   `NR_ONLY=<名稱,名稱>` 只跑案件集裡這幾件（照 `name` 整個比對，含表情符號）。
+///   案件集裡有、匯出檔找不到的，或 `NR_ONLY` 有對不上的名稱，直接停下，不跑。
 /// - `NR_AI_URL` 是服務網址，預設 DeepSeek（`https://api.deepseek.com`）；
 ///   OpenCode Go 是 `https://opencode.ai/inference/go/openai/v1`。`NR_AI_MODEL`
 ///   換模型，預設 `deepseek-flash`（服務的 `/models` 列得出有哪些）；
-///   `NR_AI_EFFORT` 是思考程度（`low`、`medium`、`high`，不給是服務預設）；
+///   `NR_AI_EFFORT` 是思考程度（`low`、`medium`、`high`，不給是服務預設）。
 /// - 書源先存進暫存資料庫，照 App 的流程重新校驗、檢查網站、換網址、問 AI、
 ///   套用到同網站；存的也是暫存資料庫，跑完刪掉。
-/// - 結果檔是總時間、總 token 與每個書源的結果、網站檢查、AI 的每一步與
-///   統計；每個書源的完整修復紀錄寫在最後印出的資料夾，用
-///   `dart run tool/ai_repair_table.dart <資料夾>` 整理成評估表。
+/// - 結果檔是總時間與每個書源的結果、網站檢查、AI 的每一步與統計（含用量）。
+///   每個書源的完整修復紀錄寫在開頭與最後印出的資料夾，用
+///   `dart run tool/ai_repair_table.dart <資料夾>` 整理成評估表與分組抽樣。
 ///
 /// 書源的拿法同 `source_check_live_test.dart` 檔頭。金鑰固定放在主資料夾的
-/// `.local/ai-repair.key`（git 忽略、不上傳；`docs/agents/ai-repair-runs.md`）。
+/// `.local/ai-repair.key`（git 忽略、不上傳）。
 @Tags(['live'])
 library;
 
@@ -34,7 +34,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
-import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
@@ -116,7 +115,16 @@ void main() {
             if (only == null || only.contains((item as Map)['name']))
               item as Map<String, dynamic>,
         ];
-  final sources = cases.isEmpty
+  // 名稱打錯時不能退回整份匯出檔：那是好幾百個書源打真的網站與 AI 服務。
+  if (casesPath != null) {
+    final unmatched = {
+      ...?only?.difference({for (final item in cases) item['name']}),
+    };
+    if (unmatched.isNotEmpty || cases.isEmpty) {
+      throw StateError('NR_ONLY 在案件集裡找不到：${unmatched.join('、')}');
+    }
+  }
+  final sources = casesPath == null
       ? all
       : [
           for (final item in cases)
@@ -124,6 +132,8 @@ void main() {
               (s) =>
                   s.bookSourceName == item['name'] &&
                   s.bookSourceUrl == item['url'],
+              orElse: () =>
+                  throw StateError('匯出檔裡沒有案件 ${item['name']}（${item['url']}）'),
             ),
         ];
 
@@ -138,12 +148,14 @@ void main() {
         effort: env['NR_AI_EFFORT'] ?? '',
       ),
     );
+    final logs = '${(await CrashHandler.logDirectory()).path}/ai-repair';
+    debugPrint('##### 完整修復紀錄：$logs');
     var lastStage = '';
     batch.addListener(() {
       final now = '${batch.stage.name} ${batch.stageDone}/${batch.stageTotal}';
       if (now != lastStage) {
         lastStage = now;
-        debugPrint('##### 進度 $now token ${batch.tokensUsed}');
+        debugPrint('##### 進度 $now');
       }
     });
     final watch = Stopwatch()..start();
@@ -169,93 +181,18 @@ void main() {
           'stats': item.session?.stats?.toMap(),
         },
     ];
-    // 書源照案件集的順序挑出來，修復項目也是同樣的順序：照位置配對（換了網址
-    // 的書源沒有 AI 的修復紀錄，網址已經跟案件集的不一樣）。
-    final score = [
-      for (final (i, item) in cases.indexed) _score(item, batch.items[i]),
-    ];
     File(out).writeAsStringSync(
       jsonEncode({
         'ms': watch.elapsedMilliseconds,
         'tokens': batch.tokensUsed,
         'items': rows,
-        if (cases.isNotEmpty) 'score': score,
       }),
     );
-    for (final row in score) {
-      debugPrint(
-        '##### 案件 ${row['name']}：預期 ${row['expected']}，實際 ${row['verdict']}'
-        '${row['why'] == null ? '' : '（${row['why']}）'}'
-        '${row['contentChars'] == null ? '' : '（正文 ${row['contentChars']} 字）'}'
-        ' => ${switch (row['pass']) {
-          true => '對',
-          false => '錯',
-          _ => '還沒定預期答案',
-        }}',
-      );
-    }
     for (final row in rows) {
       debugPrint('##### ${row['name']} => ${row['outcome']} ${row['detail']}');
     }
-    debugPrint(
-      '##### 完整修復紀錄：${(await CrashHandler.logDirectory()).path}/ai-repair',
-    );
-  }, timeout: const Timeout(Duration(minutes: 40)));
+    debugPrint('##### 完整修復紀錄：$logs');
+    // 2026-11-13 手機那批 67 件的等 AI 加跑工具共 221 分鐘，AI 同時修 3 個網站
+    // 約 74 分鐘，翻一倍。
+  }, timeout: const Timeout(Duration(minutes: 150)));
 }
-
-/// 一件案件照預期答案算對錯：修好了沒有（[_verdict]），預期修得好、又寫了
-/// `minContentChars` 的，最後一次試抓到的正文要夠長（只抓到半章的不算）；
-/// 預期修不好、又寫了 `why` 的，放棄的原因要是其中一個（[_why]；`why` 是一個
-/// 或一串：同一個判定底下的細分類都算對，例如網站限流是功能壞掉的一種）。
-Map<String, Object?> _score(Map<String, dynamic> item, RepairItem repaired) {
-  final verdict = _verdict(repaired);
-  final chars = [
-    for (final step in repaired.session?.job.steps ?? const <AiRepairStep>[])
-      for (final m in RegExp(r'正文 (\d+) 字').allMatches(step.detail ?? ''))
-        int.parse(m.group(1)!),
-  ].lastOrNull;
-  // 一個，或一串都算對的（網站狀態在變、兩種結論都有當下的事實撐著時）。
-  final expected = switch (item['expected']) {
-    final String one => [one],
-    final List<dynamic> many => many.cast<String>(),
-    _ => const ['unknown'],
-  };
-  final min = item['minContentChars'] as int?;
-  final why = switch (item['why']) {
-    final String one => [one],
-    final List<dynamic> many => many.cast<String>(),
-    _ => null,
-  };
-  return {
-    'name': item['name'],
-    'expected': expected.join('／'),
-    'verdict': verdict,
-    'why': _why(repaired),
-    'contentChars': chars,
-    'pass': expected.contains('unknown')
-        ? null
-        : expected.contains(verdict) &&
-              (verdict != 'fixed' || min == null || (chars ?? 0) >= min) &&
-              (verdict != 'unfixable' ||
-                  why == null ||
-                  why.contains(_why(repaired))),
-  };
-}
-
-/// 修不好的原因：網站檢查判成不在了是 site_gone，其他是 AI 放棄時選的。
-String? _why(RepairItem item) => item.outcome == RepairOutcome.siteGone
-    ? 'site_gone'
-    : item.session?.job.giveUpWhy;
-
-/// 這件的結果：fixed（修好了，含換網址、套用同網站的、重新校驗就好）、
-/// unfixable（網站不在了，或 AI 拿出證據說修不好），其他是 unfinished。
-String _verdict(RepairItem item) => switch (item.outcome) {
-  RepairOutcome.aiFixed ||
-  RepairOutcome.moved ||
-  RepairOutcome.shared ||
-  RepairOutcome.healthy => 'fixed',
-  RepairOutcome.siteGone => 'unfixable',
-  RepairOutcome.notFixed when item.session?.job.confirmedUnfixable == true =>
-    'unfixable',
-  _ => 'unfinished',
-};

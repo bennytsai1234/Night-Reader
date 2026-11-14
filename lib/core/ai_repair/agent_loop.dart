@@ -113,9 +113,12 @@ final class AgentRejected extends AgentResult {
   final String reason;
 }
 
-/// 交出的東西通過驗收（或確定的放棄被接受），這件做完。
+/// 交出的東西通過驗收（或確定的放棄被接受），這件做完。[reason] 是寫進紀錄
+/// 的結束原因：交件與放棄分開記，評估表上放棄的件才不會看起來像做好了。
 final class AgentAccepted extends AgentResult {
-  const AgentAccepted();
+  const AgentAccepted() : reason = '交件被收下';
+  const AgentAccepted.gaveUp() : reason = '放棄被收下';
+  final String reason;
 }
 
 /// 做到一半停下了（使用者按停止），或任務自己結束了這件（例如存不進去）。
@@ -398,8 +401,8 @@ Future<_AttemptEnd> _attempt<C>(
           stats.tools += toolWatch.elapsed;
           if (cancelToken.isCancelled) return cancelled;
           switch (result) {
-            case AgentAccepted():
-              return const _Finished(AgentEndKind.completed, '交件被收下');
+            case AgentAccepted(:final reason):
+              return _Finished(AgentEndKind.completed, reason);
             case AgentStopped(:final kind, :final reason):
               return _Finished(kind, reason);
             case AgentInvalid(fact: final text):

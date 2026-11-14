@@ -517,6 +517,7 @@ class AiRepairSession extends ChangeNotifier {
       'reason': end.reason,
       'outcome': job.outcome?.name,
       'unfixable': job.confirmedUnfixable,
+      'why': job.giveUpWhy,
       'promptVersion': aiRepairPromptVersion,
       ...stats.toMap(),
     };
@@ -1118,7 +1119,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           ..giveUpWhy = why;
         final label = aiGiveUpLabels[why] ?? why;
         s._fail(job, 'AI：$label${reason.isEmpty ? '' : '。$reason'}');
-        return const AgentAccepted();
+        return const AgentAccepted.gaveUp();
       case AiFetch(:final url):
         step.detail = '看網頁 $url…';
         s._notify();

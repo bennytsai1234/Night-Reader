@@ -630,6 +630,15 @@ void main() {
     expect(asked, hasLength(1));
     expect(s.job.explanation, 'AI：網站不在了。停放頁');
     expect(s.job.confirmedUnfixable, isTrue);
+    // 評估表的「交件」欄照統計那一行的放棄原因寫。
+    final stats = (await s.log.file())!.readAsLinesSync().singleWhere(
+      (line) => line.startsWith(aiRepairStatsMarker),
+    );
+    final map = jsonDecode(
+      stats.substring(aiRepairStatsMarker.length),
+    ) as Map<String, dynamic>;
+    expect(map['why'], 'site_gone');
+    expect(map['reason'], '放棄被收下');
   });
 
   test('giving up is taken at once, even right after the opening', () async {
