@@ -125,7 +125,6 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
             children: [
               GroupedTextFieldRow(
                 controller: _note,
-                hintText: '寫下自己的話',
                 minLines: 2,
                 maxLines: 6,
                 keyboardType: TextInputType.multiline,

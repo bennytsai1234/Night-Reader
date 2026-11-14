@@ -479,7 +479,7 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
       );
       return AppAlert<bool>(
         title: '按標籤刪除',
-        message: '勾選標籤，帶任一個標籤的書源都會刪除，無法復原。',
+        message: '帶任一個標籤的書源都會刪除，無法復原。',
         onAction: (confirmed) => Navigator.pop(
           dialogContext,
           confirmed ? Set<SourceTag>.of(selected) : null,

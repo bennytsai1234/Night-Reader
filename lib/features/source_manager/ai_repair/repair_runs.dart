@@ -25,8 +25,8 @@ const List<RepairStage> repairStages = [
 String repairStageTitle(RepairStage stage) => switch (stage) {
   RepairStage.checking => '重新校驗',
   RepairStage.checkingSites => '檢查網站',
-  RepairStage.moving => '網站搬家的換網址',
-  RepairStage.repairing || RepairStage.sharing => 'AI 修，每個網站一個',
+  RepairStage.moving => '換網址',
+  RepairStage.repairing || RepairStage.sharing => 'AI 修',
   RepairStage.done => '',
 };
 

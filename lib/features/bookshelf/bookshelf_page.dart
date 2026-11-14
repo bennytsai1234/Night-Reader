@@ -542,7 +542,6 @@ class _BookshelfPageState extends State<BookshelfPage>
               key: const ValueKey('has-sources'),
               icon: Icons.auto_stories_outlined,
               title: '書架還是空的',
-              description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
               primaryAction: AppStateAction(
                 label: '搜尋書籍',
                 icon: Icons.search,
@@ -553,7 +552,6 @@ class _BookshelfPageState extends State<BookshelfPage>
               key: const ValueKey('no-sources'),
               icon: Icons.auto_stories_outlined,
               title: '書架還是空的',
-              description: '匯入書源後就能搜尋網路小說，手機裡的 TXT、EPUB 也能直接加入。',
               primaryAction: AppStateAction(
                 label: '匯入書源',
                 icon: Icons.download_rounded,

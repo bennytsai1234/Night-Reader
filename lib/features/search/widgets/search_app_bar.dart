@@ -152,7 +152,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
                         ? Icons.check_rounded
                         : Icons.text_fields_rounded,
                     selected: provider.precisionSearch,
-                    tooltip: '精準搜尋（完全匹配）',
+                    tooltip: '精準搜尋',
                     onTap: provider.togglePrecisionSearch,
                   ),
                 ],

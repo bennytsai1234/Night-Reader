@@ -144,10 +144,7 @@ String localBookSyncSummary(LocalBookSyncPlan plan) {
       '下載 $downloads 本，共 ${formatMegabytes(plan.bytesOf(LocalBookAction.download))}',
     if (removals > 0) '從這台書架移出 $removals 本（另一台移出了）',
     if (deletions > 0) '刪掉雲端的 $deletions 本（這台移出了）',
-    if (uploads + downloads > 0) ...[
-      '',
-      '沒連 Wi-Fi 時用行動數據傳。TXT 傳的時候會壓縮，實際用量比這少。',
-    ],
+    if (uploads + downloads > 0) ...['', '沒連 Wi-Fi 時用行動數據傳。'],
   ].join('\n');
 }
 

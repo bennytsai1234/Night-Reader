@@ -244,7 +244,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 key: const ValueKey('noSources'),
                 icon: Icons.travel_explore_outlined,
                 title: '還沒有書源',
-                description: '匯入書源後，這裡會列出可以瀏覽分類的書源。',
                 primaryAction: AppStateAction(
                   label: '匯入書源',
                   icon: Icons.download_rounded,

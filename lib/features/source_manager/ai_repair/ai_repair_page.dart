@@ -287,7 +287,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                       children: [
                         GroupedTextFieldRow(
                           controller: _paste,
-                          hintText: '貼上 AI 回的書源 JSON',
+                          hintText: '書源 JSON',
                           keyboardType: TextInputType.multiline,
                           minLines: 4,
                           maxLines: 8,

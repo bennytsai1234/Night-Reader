@@ -120,7 +120,6 @@ class _CrashLogPageState extends State<CrashLogPage> {
           return const AppStateView(
             icon: Icons.article_outlined,
             title: '目前沒有崩潰日誌',
-            description: '發生崩潰時，日誌會記錄在這裡供你複製回報。',
           );
         }
         return GroupedListView(
