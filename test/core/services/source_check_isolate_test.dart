@@ -28,6 +28,8 @@ class _FakeBookSourceService extends BookSourceService {
 
   final List<String> contentRequests = <String>[];
   final List<String> tocRequests = <String>[];
+  final List<int?> tocLimits = <int?>[];
+  final List<bool> tocComplete = <bool>[];
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -70,6 +72,8 @@ class _FakeBookSourceService extends BookSourceService {
     bool requireComplete = false,
   }) async {
     tocRequests.add(book.name);
+    tocLimits.add(chapterLimit);
+    tocComplete.add(requireComplete);
     final chapters = this.chapters;
     if (chapters != null) return chapters(book);
     return [
@@ -388,6 +392,201 @@ void main() {
 
     expect(result.isHealthy, isTrue);
     expect(service.contentRequests, ['第1章', '第2章']);
+  });
+
+  group('chapters past the first are sampled too', () {
+    // 使用者 2026-11-14：只看前段正文時，前幾章免費、後面付費，或後半段全是
+    // 別本書的廣告的書源都會過。第 1 章照舊在前 5 章裡找第一個讀得到的，
+    // 再抽中段、後段（50%、75%、90%）；章名寫了 VIP 這類字樣的優先抽。
+    List<BookChapter> book(int count, {Set<int> vipTitles = const {}}) => [
+      for (var i = 0; i < count; i++)
+        BookChapter(
+          url: 'https://site.example/book/1/$i.html',
+          title: '第${i + 1}章${vipTitles.contains(i) ? ' VIP' : ''}',
+          index: i,
+        ),
+    ];
+    // 真正的章節有幾千字，跟別章共用的一句只佔一小段。
+    String chapterText(BookChapter chapter) {
+      final i = chapter.index;
+      return '${chapter.title}的正文。$_readable這一章講的是第$i件事：主角在第$i天'
+          '走進第$i座城，遇見第$i個人，聽他說了第$i個故事，跟別章都不一樣。';
+    }
+
+    test('the whole table of contents is read, so the samples are the '
+        'book\'s middle and end', () async {
+      // 2026-11-14 改前改後整批校驗：目錄原本只讀前 8 章，「中後段」抽到的是
+      // 第 6～8 章；第 8 章沒有下一章當停止點，跟著「下一章」走的翻頁規則一路
+      // 翻到 100 頁上限，47 個書源判成逾時。
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async => chapterText(chapter),
+      );
+      await _check(service);
+
+      expect(service.tocLimits, everyElement(isNull));
+      // 目錄有一頁抓不到時不拿殘缺的目錄抽樣（Codex 審查）。
+      expect(service.tocComplete, everyElement(isTrue));
+    });
+
+    test('a whole book that reads fine at every sample is healthy', () async {
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async => chapterText(chapter),
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(service.contentRequests, ['第1章', '第21章', '第31章', '第37章']);
+    });
+
+    test('a broken chapter in the middle marks the content broken', () async {
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async => chapter.index == 20 || chapter.index == 21
+            ? ''
+            : chapterText(chapter),
+      );
+      final (result, checked) = await _check(service);
+
+      expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+      expect(result.message, contains('第21章'));
+    });
+
+    test(
+      'when several later chapters fail at once, the result names one',
+      () async {
+        // 2026-11-14 整批校驗：三章同時抓都失敗時，結論串成三段一長串。
+        final service = _FakeBookSourceService(
+          chapters: (_) async => book(40),
+          content: (chapter) async =>
+              chapter.index < 5 ? chapterText(chapter) : '',
+        );
+        final (result, _) = await _check(service);
+
+        expect('正文內容過短或為空'.allMatches(result.message).length, 1);
+      },
+    );
+
+    test('a short notice among the samples of a short book falls back to the '
+        'next chapter', () async {
+      // Codex 審查：8 章的書抽第 6、7、8 章，第 6 章是短公告；同時抓時第 7 章
+      // 已被別的抽樣佔走，往後試不到，就判失效。
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(8),
+        content: (chapter) async =>
+            chapter.index == 5 ? '請假一天' : chapterText(chapter),
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+    });
+
+    test('an author\'s note shared by chapters with repeated lines is not '
+        'half of them', () async {
+      // Codex 審查：章內重複的句子先去重再算比例，作者的話實際只佔 18%，
+      // 卻算成 70%，還因為「訂閱」被判成付費。
+      const note = '作者的話：感謝各位讀者長期以來的支持與鼓勵，歡迎訂閱並繼續關注本書';
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async {
+          final line = '第${chapter.index}章的主角又說了同一句台詞';
+          return '${List.filled(10, line).join('。')}。$note';
+        },
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+    });
+
+    test('a short sampled chapter is followed by the next one', () async {
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async =>
+            chapter.index == 20 ? '請假一天' : chapterText(chapter),
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+      expect(service.contentRequests, contains('第22章'));
+    });
+
+    test(
+      'later chapters that are the same paid notice mark the source paid',
+      () async {
+        const notice =
+            '本章为VIP章节，订阅后即可阅读全文。开通会员可免费阅读全站作品，'
+            '每日签到还能领取阅读币，快来支持作者吧！';
+        final service = _FakeBookSourceService(
+          chapters: (_) async => book(40),
+          content: (chapter) async => chapter.index < 25
+              ? chapterText(chapter)
+              : '${chapter.title}\n$notice',
+        );
+        final (result, checked) = await _check(service);
+
+        expect(checked.groupTags, contains(paidSourceGroupTag));
+        expect(result.message, contains('付費提示'));
+        // 結論附上那段共同文字的開頭，人和 AI 都核對得了。
+        expect(result.message, contains('本章为VIP章节'));
+      },
+    );
+
+    test(
+      'a chapter that runs on into another is told so, not called paid',
+      () async {
+        // 2026-11-14 改後整批校驗：独步小说第 97 章 26,810 字、把第 98 章也抓
+        // 進來（下一頁的規則跨到下一章）；何以笙箫默同樣，共同的故事裡有一句
+        // 頁尾帶「訂閱」，原本被判成付費提示。
+        final service = _FakeBookSourceService(
+          chapters: (_) async => book(40),
+          content: (chapter) async {
+            if (chapter.index != 30) return chapterText(chapter);
+            // 真的跨章：第 97 章 26,810 字裡 23,723 字是第 98 章。
+            final next = book(40)[36];
+            return '${chapter.title}的開頭。${chapterText(next)}歡迎訂閱本書。';
+          },
+        );
+        final (result, checked) = await _check(service);
+
+        expect(checked.groupTags, isNot(contains(paidSourceGroupTag)));
+        expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+        expect(result.message, contains('第31章的正文把第37章也抓進來了'));
+      },
+    );
+
+    test('later chapters repeating the same other text mark the content '
+        'broken', () async {
+      // 看到後半段整章是別本書的廣告、一章一章重複的書。
+      const ad =
+          '推荐阅读：《都市至尊神医》林凡意外获得上古传承，从此纵横都市。'
+          '《万古神帝》少年张若尘重回八百年后。《斗破苍穹》萧炎三十年河东。';
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async =>
+            chapter.index < 25 ? chapterText(chapter) : ad,
+      );
+      final (result, checked) = await _check(service);
+
+      expect(checked.groupTags, contains(contentBrokenSourceGroupTag));
+      expect(result.message, contains('重複'));
+    });
+
+    test('chapters titled VIP are sampled first and their shared notice '
+        'marks the source paid', () async {
+      const notice =
+          '该章节为付费章节，请购买后阅读。购买后可永久阅读本章内容，'
+          '支持正版，支持作者，感谢您的支持与理解。';
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40, vipTitles: {32, 33}),
+        content: (chapter) async =>
+            chapter.title.contains('VIP') ? notice : chapterText(chapter),
+      );
+      final (_, checked) = await _check(service);
+
+      expect(service.contentRequests, containsAll(['第33章 VIP', '第34章 VIP']));
+      expect(checked.groupTags, contains(paidSourceGroupTag));
+    });
   });
 
   test('an empty TOC quarantines as TOC broken', () async {

@@ -134,7 +134,29 @@ String? aiChangeProblem(AiChange change) {
       return '$key 沒有 ${wrong.join('、')} 這一項，可以用的：${allowed.join('、')}';
     }
   }
+  if (fields['header'] case final String header when !_headerReadable(header)) {
+    return 'header 要寫成 JSON 物件的字串，例如 {"User-Agent":"…"}，或用 @js:、'
+        '<js></js> 算出這樣的物件；寫成「名稱: 值」夜讀與 Legado 都讀不出來，'
+        '整個標頭不會送出';
+  }
   return null;
+}
+
+/// 書源標頭讀得出來：空的、`@js:`、`<js>`，或 JSON 物件（同 Legado
+/// `BaseSource.getHeaderMap`：讀不出來就整個不送）。2026-11-14 腐书网：AI 寫成
+/// 「User-Agent: …」，標頭沒送出、它看不出為什麼，繞了十二輪。
+bool _headerReadable(String header) {
+  final text = header.trim();
+  if (text.isEmpty) return true;
+  final lower = text.toLowerCase();
+  if (lower.startsWith('@js:') || lower.startsWith('<js>')) return true;
+  try {
+    return jsonDecode(text) is Map;
+  } on FormatException {
+    // Legado 另外用寬鬆的 GSON 再讀一次（單引號、沒加引號的名稱）：開頭是
+    // 物件的照收，不在這裡擋。
+    return text.startsWith('{');
+  }
 }
 
 /// 書源 JSON 的欄位（Legado 3.0 格式，[BookSource.toJson]）。
@@ -504,11 +526,11 @@ const String _rules =
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
   - 正文怎樣算抓到（試抓與校驗都照這個）：小說去掉圖片後至少 $chapterTextMinRunes 字，整章只有圖不算；漫畫至少一張圖；有聲至少一個網址。校驗也照抓到的正文改類型：去掉圖片與網址後至少 ${ChapterContentKind.novelMinRunes} 字是小說，至少 ${ChapterContentKind.comicMinImages} 張圖、不到 ${ChapterContentKind.comicMaxRunes} 字是漫畫，其他照書源原本的類型。
-- 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
+- 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。一條規則只取一組 ##正則##替換：再接第三個 ## 是只換第一個，後面的段不會套用。@css: 只看整條規則最前面，拿掉之後才照 ||、&&、%% 分段，每一段都是 CSS，段中間再寫 @css: 會被當成選擇器的一部分。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
   - result 是這條規則前一段的結果。書單裡每本書的欄位規則（name、bookUrl 這類）直接用 JS 時，result 是這本書那一塊網頁元素（接成字串是它的 HTML），java.getString(規則) 也在這一塊裡找。
-  - 抓網頁：java.ajax(網址) 直接傳回內容字串，只收網址一個參數，方法、內文、標頭寫在網址後面（網址,{"method":"POST","body":"...","headers":{"名稱":"值"}}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 或 java.connect(網址, 標頭物件) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。標頭物件直接是 {"名稱":"值"}，外面不包 headers。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串，只收網址一個參數，方法、內文、標頭寫在網址後面（網址,{"method":"POST","body":"...","headers":{"名稱":"值"}}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 或 java.connect(網址, 標頭物件) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。連不上（沒有回應、連線被拒）時不丟例外：.code() 是夜讀填的 500、.body() 是錯誤訊息，不是網站回的；網站實際回了什麼，看結果下面「這段程式送出的請求」。標頭物件直接是 {"名稱":"值"}，外面不包 headers。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
@@ -520,21 +542,44 @@ const String _rules =
 const String _method =
     '''
 ## 怎麼查
-- 先看開場的校驗結果與試抓：哪一段失敗、網站實際回了什麼。網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，才查網址、參數、標頭或網站本身。
+
+### 先看開場
+- 開場有書源、送來修的原因（上一次校驗的結論）、這次校驗的結果與試抓。先看哪一段失敗、網站實際回了什麼：網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，照下面「網站回的不是內容時」查。
+
+### 用哪個工具
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
-- 改了規則就 test：一次從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；要確認後面幾段，從那一段 test。test 不會交出：看過結果（書名、作者、目錄、正文都對）再用 submit 交出。試抓與校驗都從搜尋結果的第一本往下走；校驗遇到第一本打不開（詳情、目錄或正文失效）會改試第二本，兩本都打不開才算壞。第一本是下架或打不開的書時，用 test 的 from info 拿另一本試，不用為它改規則。parse 不連網站，只在已經抓到的那頁試解析，網站在限流時用它。
-- 要試的是書源本身的設定（Cookie 罐、標頭、網址參數、編碼）時，寫進 patch 直接 test：比自己寫程式一步步模擬快，送出的也是夜讀實際會送的樣子。
-- 網站對請求直接斷線、逾時或連回應都沒有時，先換送出的條件試：User-Agent（手機、桌機）、http 或 https、有沒有 www；換了哪一項就通，就把那一項寫進書源。
-- 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，等過一次還是被擋就用 give_up 的 rate_limited 放棄，不再等第二次，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
-- 這個網站做不到書源要的某一段，或慢到超過校驗的時限時（回應那一行寫了花幾秒，超時的訊息寫了時限），開場列出的別的網域與同一個網站的其他開頭可能做得到：鏡像、新網域、姊妹站，或同一個網站的電腦版（www.）與手機版（m.），這兩版常是不同的程式，同一段的網址與快慢都不一樣。先拿同一本書到那裡看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改；只有一段換到另一版時，那一段抓到的書籍網址要轉成書源其他段用的那一版。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域；同一個網站換成 www. 或 m. 開頭不算猜。
-- 搜尋與詳情抓到的書名、作者要一樣：書名加作者是夜讀認一本書的依據（搜尋結果合併、換源、書籤）。同一套網站的搜尋頁、分類頁常長得不一樣，借用同一份規則時兩種頁都要看。
-- 回應那一行寫了（快取 HIT…）時，那頁是網站前面的快取伺服器存著的舊頁面：換關鍵字、加網址參數、等多久都一樣。搜尋頁這樣時，拿站上有的書名與不可能的詞各搜一次，回的一樣就是網站的搜尋壞了（site_broken）。
-- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前 5 本書名和用試抓關鍵字搜到的前 5 本一樣，就不算修好；網站搜不到時回固定的推薦書也沒關係，只要和搜得到時不一樣。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 要確認規則在一頁上解析得對不對，用 parse：不連網站，網站在限流時也能用。
+- 改了規則、或要試書源本身的設定（Cookie 罐、標頭、網址參數、編碼），寫進 patch 直接 test：從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；比自己寫程式一步步模擬快，送出的也是夜讀實際會送的樣子。要確認後面幾段，從那一段 test。第一本是下架或打不開的書時，用 test 的 from info 拿另一本試，不用為它改規則。
+- 要跑程式查東西（解碼、算參數）用 js；書源規則只放書源要用的規則。
+- test 不會交出：看過結果（書名、作者、目錄、正文都對）再用 submit。submit 後夜讀跑一次書源校驗才套用：試抓與校驗都從搜尋結果的第一本往下走，第一本打不開（詳情、目錄或正文失效）會改試第二本，兩本都打不開才算壞。
+
+### 網站回的不是內容時
+照順序認，第一個對得上的就照它做：
+1. 工具結果後面列出「同一個請求這次回過不同的結果」（方法、網址與送出的內容都一樣）：那個請求時好時壞（中間成功過的也算），這一次回覆就用 give_up 的 rate_limited 放棄，證據寫那幾行狀態碼。這條蓋過其他每一條：不再送任何請求，不換開頭、網域或版本，也不查其他段（查目錄、正文也算）：書源要用的一段時好時壞，其他段修好也過不了校驗。
+2. 回 429、5xx，或要你隔一段時間再來的頁（「请求过于频繁」「搜索间隔」這類）：把同一個請求再送一次（和首頁一起，同一次回覆呼叫），只送這一次；頁面寫了要隔多久再來的，等過那段時間再送。還是被擋就用 rate_limited 放棄，寫出網站說的話；限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。每次都一樣的 5xx 照第 4 條或功能壞了查。
+3. 連不上（直接斷線、逾時、沒有回應）：先換送出的條件試：User-Agent（手機、桌機）、http 或 https、有沒有 www；換了哪一項就通，就把那一項寫進書源。整個網域都連不上時照第 4 條。
+4. 網站回了內容，但每一頁都不是這個書源的內容（例如整個換成別的網站），或整個網域都連不上：同一個網域的 https、http、有沒有 www、m. 的首頁各看一次（同一次回覆一起呼叫），加上別的網域（下面「別的網域與版本」）。裸網域、www.、m. 常是不同的主機，裸網域被別人接走時，www. 可能還是原本的網站，是的話換書源網址的開頭修。都一樣才用 site_gone 放棄，同樣的失敗不再換路徑重試。
+5. 回應那一行寫了（快取 HIT…）：那頁是網站前面的快取伺服器存著的舊頁面，換關鍵字、加網址參數、等多久都一樣。搜尋頁這樣時，拿站上有的書名與不可能的詞各搜一次，回的一樣就是網站的搜尋壞了（site_broken）。
+6. 資料庫錯誤（SQL 逾時、查詢失敗這類）：那一段在這個網域、這個版本上就是壞了。照網站自己的表單送過就夠，不換關鍵字、搜尋類型或參數再試，接著到別的網域或版本看同一段。
+7. 驗證頁：網頁自己的程式跑完、不用人操作就放行的（寫入 Cookie 的 JS 驗證、工作量證明），照它要的做（例如寫入同一個 Cookie）。要人回答或操作才放行的（算術題、驗證碼、勾選框、拼圖），用 human_check 放棄：就算直接寫入它答對後才給的 Cookie 或參數就過得去也不寫，那是替讀者偽造已經回答。
+8. 用程式轉走的頁：照轉去的網址查。
+
+### 別的網域與版本
+- 這個網站做不到書源要的某一段，或慢到超過校驗的時限時（回應那一行寫了花幾秒，超時的訊息寫了時限），別的網域與版本可能做得到：開場列出的、網頁裡寫到的，或書源註解（bookSourceComment）裡寫的同一套網站（鏡像、新網域、姊妹站），以及同一個網站的電腦版（www.）與手機版（m.）。電腦版與手機版常是不同的程式，同一段的網址與快慢都不一樣。不自己猜新網域；換成 www. 或 m. 開頭不算猜。
+- 先拿同一本書到那裡看同一段，做得到就換書源網址的開頭（bookSourceUrl）、規則照舊直接 test，沒過再看是哪一段要改。規則裡寫死完整網址的（以 http 開頭的 searchUrl、exploreUrl 這類），換網域時一起改，夜讀只換書源網址開頭；只有一段換到另一版時，那一段抓到的書籍網址要轉成書源其他段用的那一版。
+
+### 正文是頁面程式填進去的
+- 正文頁抓到的字很少、頁面裡有程式時：先用 find 找誰把正文填進容器（innerHTML、document.write、initTxt 這類），用 read 的 raw 讀那段程式。資料在頁內的（base64、十六進位、替換表）照它的寫法解，例如 java.base64Decode；資料在別的網址的，用 java.ajax 抓那個網址。把它照抄成正文規則的 JS，用 parse 在那一頁確認，再 test。
+
+### 搜尋
 - 試抓與校驗搜尋用的關鍵字是書源的 ruleSearch.checkKeyWord，沒寫時是開場除錯紀錄寫的那個（「開始搜尋關鍵字」）。站上搜不到這個詞，或這個詞的結果多到網站要很久才回時，把 checkKeyWord 改成站上確實有的書名（首頁、排行列出的）再 test，不用為這個詞改搜尋規則。
+- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前 5 本書名和用試抓關鍵字搜到的前 5 本一樣，就不算修好；網站搜不到時回固定的推薦書也沒關係，只要和搜得到時不一樣。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 搜尋與詳情抓到的書名、作者要一樣：書名加作者是夜讀認一本書的依據（搜尋結果合併、換源、書籤）。同一套網站的搜尋頁、分類頁常長得不一樣，借用同一份規則時兩種頁都要看。
+
+### 放棄
 - 網站的內容不是小說、漫畫或有聲書時（例如一篇貼文當一本書的段子、新聞站，有的文章只有圖、有的只有字），用 give_up 的 not_a_book 放棄：不為了過校驗改類型，也不只抓其中一種文章。
-- 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上或都轉到別處時，開場列出的別的網域試過就夠。
+- 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與別的網域都試過，都做不到；不用把網站每個入口都試一遍。拿另一本書把已經確認的失敗再驗一次，不算新的證據。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
-- 書源規則只放書源要用的規則；要跑程式查東西用 js。
 ''';
 
 /// 改規則的參數：蓋到目前的書源上的欄位。
@@ -695,12 +740,15 @@ final List<AiTool> aiRepairTools = [
               '停放頁，或每個網址最後落到的頁面都沒有這個書源的書（例如整站都回同一個'
               '錯誤頁：5xx、資料庫連不上）？login：內容要登入帳號才給？'
               'paid：有要付費、VIP 或解鎖才給的章節（前面幾章免費也算）？'
-              'human_check：這個網站自己的頁面要真人驗證，驗證過後給的是這個網站的內容？'
+              'human_check：這個網站自己的頁面要人回答或操作才給內容（算術題、'
+              '驗證碼、勾選框、拼圖），就算帶上答對後才給的 Cookie 過得去也算？'
               'blocked：網站擋下夜讀的所有請求？'
               'not_a_book：網站的內容不是小說、漫畫或有聲書（例如一篇貼文當一本書的'
               '段子、新聞站）？'
               'rate_limited：網站要你隔一段時間再來，等過它說的間隔再送同一個請求'
-              '還是被擋（功能壞掉的一種：一般使用拿不到結果）？'
+              '還是被擋；或同一個網址時好時壞（一下回內容、一下回 429 或 5xx，'
+              '或慢到超過校驗的時限），'
+              '隔一段時間再送還是一樣（功能壞掉的一種：一般使用拿不到結果）？'
               'site_broken：網站在、其他頁面正常，書源要用的功能網站自己也做不到'
               '（例如搜什麼都回空的搜尋頁；網站另有做得到的地方，像 API 或別的網址，'
               '就不算）？',
@@ -726,7 +774,10 @@ List<AiMessage> aiRepairOpening({
 /// 系統提示：每個書源都一樣，服務的快取每次都打得中。
 const String aiRepairSystemPrompt =
     '你是夜讀的書源修復員：書源壞了，你要查出原因、改好規則，再用試抓證明修好了；'
-    '或拿出證據說明修不好。也要判斷書源的類型。互不相依的查詢放在同一次回覆一起呼叫，要看前一個結果才知道下一步的留到下一次。\n\n'
+    '或拿出證據說明修不好。也要判斷書源的類型。\n'
+    '每一輪都要等你回覆，輪數越少越好：互不相依的查詢放在同一次回覆一起呼叫，'
+    '同一個問題的各種寫法（不同網域、www. 或 m.、GET 或 POST、參數、關鍵字）'
+    '一次全部送出；要看前一個結果才算得出網址或參數的，才留到下一次。\n\n'
     '$_rules\n$_method';
 
 /// 提示詞的版本：系統提示與工具清單的雜湊開頭，寫進修復紀錄，比較前後時
@@ -812,6 +863,28 @@ String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
   if (diagnostics.isNotEmpty) diagnostics.join('\n\n'),
 ].join('\n');
 
+/// 工具呼叫的參數根本不是 JSON（迴圈丟掉這則、同一段對話重送）。
+bool aiRepairArgumentsMalformed(AiToolCall call) {
+  if (call.arguments.trim().isEmpty) return false;
+  try {
+    jsonDecode(call.arguments);
+    return false;
+  } on FormatException {
+    return true;
+  }
+}
+
+/// JSON 壞在哪：第幾個字與那一段原文。只寫「Unexpected character」時，AI
+/// 看不出自己寫錯什麼，同樣的錯再送一次（2026-11-14 读客书库，模型把內建的
+/// 工具標記寫進參數，連續三次讀不懂）。
+String _badJsonSpot(String text, int? offset) {
+  if (offset == null) return '';
+  final at = offset.clamp(0, text.length);
+  final from = (at - 20).clamp(0, text.length);
+  final to = (at + 20).clamp(0, text.length);
+  return '，第 ${at + 1} 個字附近：${text.substring(from, to)}';
+}
+
 /// 工具呼叫讀不懂時回給 AI 的話的開頭。
 const String aiRepairBadCall = '# 讀不懂這個工具呼叫';
 
@@ -846,7 +919,9 @@ const String aiRepairBadSourceReply =
     return (
       command: null,
       key: '',
-      fact: '$aiRepairBadCall（${call.name}）：參數不是合法的 JSON：${error.message}',
+      fact:
+          '$aiRepairBadCall（${call.name}）：參數不是合法的 JSON：'
+          '${error.message}${_badJsonSpot(call.arguments, error.offset)}',
     );
   }
   if (args is! Map<String, dynamic>) {

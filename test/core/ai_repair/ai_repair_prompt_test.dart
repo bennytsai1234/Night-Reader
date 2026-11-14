@@ -112,6 +112,13 @@ void main() {
         readAiRepairCall(call('fetch', '{"url":')).fact,
         contains('參數不是合法的 JSON'),
       );
+      // 2026-11-14 读客书库：模型把內建的工具標記寫進參數，只回「Unexpected
+      // character」時它看不出壞在哪，照樣再送兩次，三次讀不懂就停下。
+      final broken = readAiRepairCall(
+        call('test', '{"note">試抓</parameter>, "patch": {}}'),
+      ).fact;
+      expect(broken, contains('第 8 個字'));
+      expect(broken, contains('{"note">試抓</parameter>'));
       expect(
         readAiRepairCall(call('fetch', '["/"]')).fact,
         contains('參數要是一個 JSON 物件'),
@@ -160,6 +167,126 @@ void main() {
         );
       },
     );
+
+    test('the AI is told a failed connect is not the site answering 500', () {
+      // 2026-11-14 實跑：望书阁、大白、色情小说、趣书网、饿狼小说兩件，AI 把
+      // java.connect 連不上時夜讀填的 500 當成網站回的，多花一兩輪。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(contains('夜讀填的 500'), contains('這段程式送出的請求')),
+      );
+    });
+
+    test(
+      'before saying a site is gone, the AI tries each opening of it once',
+      () {
+        // 2026-11-14 實跑：躺着看只看裸網域就判網站不在了（www 還是小說站）；
+        // 色情小说、趣书网同樣的逾時試了 9、7 輪。
+        expect(
+          aiRepairSystemPrompt,
+          allOf(
+            contains('https、http、有沒有 www、m. 的首頁各看一次'),
+            contains('同樣的失敗不再換路徑重試'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'a site that answers only now and then is given up as rate limited',
+      () {
+        // 2026-11-14 白光、读客书库、思怡小说的網站一下 200、一下 429 或 502，
+        // 86读书時快時慢，AI 一直重試、換主機、先修別段，各花二三十輪。還原
+        // 读客书库的對話問 AI：「再送一次」沒寫上限、跟「不再等第二次」打架，
+        // 換網域與查其他段它當成診斷。工具結果後面列出「同一個請求這次回過
+        // 不同的結果」時當下放棄，蓋過其他每一條；還沒列出時只重送一次。
+        expect(
+          aiRepairSystemPrompt,
+          allOf(
+            contains('「同一個請求這次回過不同的結果」'),
+            contains('這一次回覆就用 give_up 的 rate_limited 放棄'),
+            contains('這條蓋過其他每一條'),
+            contains('也不查其他段'),
+            contains('只送這一次'),
+          ),
+        );
+        final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
+        final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
+        expect(why['description'], contains('時好時壞'));
+        expect(why['description'], contains('慢到超過校驗的時限'));
+      },
+    );
+
+    test('the AI sends every variant of one question at once, stops trying '
+        'one site after a database error, and may use domains from the '
+        'source comment', () {
+      // 2026-11-14 新御书屋 18 輪：還原對話問 AI，它說「互不相依的一起送」
+      // 沒說同一個問題的各種寫法要一次送完、36 輪讓它覺得輪數很寬裕；SQL
+      // 逾時還換關鍵字與搜尋類型再試；三九書屋只寫在書源註解裡，不確定能不能
+      // 用，先把主站試到無話可說；拿另一本書把已確認的失敗再驗一次。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('同一個問題的各種寫法'),
+          contains('輪數越少越好'),
+          contains('資料庫錯誤'),
+          contains('書源註解（bookSourceComment）'),
+          contains('不算新的證據'),
+        ),
+      );
+    });
+
+    test('the AI is told how ## and @css: split a rule, as Legado does', () {
+      // 2026-11-14 虫虫书屋接了兩組 ##、第一版主在 || 後面又寫 @css:，各繞
+      // 好幾輪（Legado AnalyzeRule.splitRegex、AnalyzeByJSoup.SourceRule）。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(contains('一條規則只取一組 ##正則##替換'), contains('@css: 只看整條規則最前面')),
+      );
+    });
+
+    test('a page that asks a person to answer is given up, even when its '
+        'pass cookie would let the source through', () {
+      // 2026-11-14 秋田书屋「6 + 6 = ?」、西瓜书屋「安全人机验证」：答案在網頁
+      // 上檢查，伺服器只認答對後寫的 Cookie，AI 直接寫入那個 Cookie 就過。
+      // 使用者定 B：那是替讀者偽造已經回答，跟 ADR 0033 不替使用者勾真人
+      // 勾選框同一類，判要真人驗證放棄；網頁程式自己跑完的檢查照常通過。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(contains('要人回答或操作才放行的'), contains('偽造已經回答')),
+      );
+      final giveUp = aiRepairTools.singleWhere((t) => t.name == 'give_up');
+      final why = (giveUp.parameters['properties']! as Map)['why'] as Map;
+      expect(why['description'], contains('算術題'));
+    });
+
+    test('the AI is told how to find text a page fills in with a script, and '
+        'that full addresses in rules move with the site', () {
+      // 2026-11-14 躺着看 25 輪：第 4 輪只改書源網址開頭，搜尋網址寫死裸網域，
+      // 試抓 403；第 6～17 輪摸索正文藏在頁面程式的 base64 裡該從哪下手。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('規則裡寫死完整網址的'),
+          contains('誰把正文填進'),
+          contains('照抄成正文規則的 JS'),
+        ),
+      );
+    });
+
+    test('a whole site turned into another one is its own case, with why to '
+        'look at www. and m.', () {
+      // 2026-11-14 躺着看第 13 次：裸網域換成影片站，AI 讀到「各開頭看一次」
+      // 卻判斷那是講連不上的（那句放在「連不上」底下），網站回 200 就跳過；
+      // 其實 www. 還是原本的小說站。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('4. 網站回了內容，但每一頁都不是這個書源的內容'),
+          contains('裸網域被別人接走時，www. 可能還是原本的網站'),
+        ),
+      );
+    });
 
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {
@@ -235,6 +362,22 @@ void main() {
     });
     expect(next['header'], '{"Referer":"x"}');
     expect(current['searchUrl'], '/search?q={{key}}', reason: '原本的不動');
+  });
+
+  test('a header that is not a JSON object is turned back', () {
+    // 2026-11-14 腐书网：AI 把 header 寫成「User-Agent: …」，夜讀與 Legado 都
+    // 只認 JSON 物件（BaseSource.getHeaderMap），讀不出來就整個不送；它看不出
+    // 為什麼，第 5～16 輪都在試 header 有沒有生效。
+    String? problem(String header) =>
+        aiChangeProblem((source: null, patch: {'header': header}));
+    expect(
+      problem('User-Agent: Mozilla/5.0 (Linux; Android 10)'),
+      contains('JSON 物件'),
+    );
+    expect(problem('{"User-Agent":"Mozilla/5.0"}'), isNull);
+    expect(problem('@js:JSON.stringify({a:1})'), isNull);
+    expect(problem('<js>({a:1})</js>'), isNull);
+    expect(problem(''), isNull);
   });
 
   test('a change naming a field the source does not have is turned back, '

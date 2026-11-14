@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fast_gbk/fast_gbk.dart';
+import 'package:night_reader/core/services/encoding_detect.dart';
 
 /// 規則 JS 裡文字與位元組互轉（`java.strToBytes`、`bytesToStr`、加解密的
 /// 字元集參數），照 Java 的 `String.getBytes(charset)`、`new String(bytes,
@@ -67,7 +68,7 @@ abstract final class Charsets {
   static String decode(List<int> bytes, [String? charset]) =>
       switch (_name(charset)) {
         'UTF-8' => utf8.decode(bytes, allowMalformed: true),
-        'GBK' => gbk.decode(bytes),
+        'GBK' => EncodingDetect.decodeGbk(bytes),
         'UTF-16LE' => _fromUtf16(bytes, littleEndian: true),
         'UTF-16BE' => _fromUtf16(bytes, littleEndian: false),
         'UTF-16' => _fromUtf16WithBom(bytes),

@@ -22,6 +22,9 @@ final class _Task extends AgentTask<String> {
   @override
   AgentParse<String> parse(AiToolCall call) {
     if (call.name == 'bad') return const AgentBadCommand('讀不懂');
+    if (call.name == 'broken') {
+      return const AgentBadCommand('參數寫壞', malformed: true);
+    }
     return AgentCommand(call.name, call.name);
   }
 
@@ -68,7 +71,10 @@ AiReply _reply(String content) {
   final calls = content.split('|');
   final isCall = calls.every(
     (name) =>
-        name == 'bad' || name.startsWith('tool:') || name.startsWith('submit:'),
+        name == 'bad' ||
+        name == 'broken' ||
+        name.startsWith('tool:') ||
+        name.startsWith('submit:'),
   );
   return (
     content: isCall ? '' : content,
@@ -111,6 +117,30 @@ void main() {
     expect(end.kind, AgentEndKind.completed);
     expect(end.stats.rounds, 2);
     expect(end.stats.toolCalls, 2);
+  });
+
+  test('a reply whose arguments are not JSON is dropped and the same '
+      'conversation is sent again', () async {
+    // 2026-11-14 读客书库：寫壞的回覆留在對話裡，模型下一輪照抄自己寫壞的
+    // 開頭，連續三次一字不差。丟掉它重送，模型從還沒寫壞的地方重寫。
+    final sent = <int>[];
+    final script = ['tool:a', 'broken', 'broken', 'submit:ok'];
+    var next = 0;
+    final end = await run((messages, _) async {
+      sent.add(messages.length);
+      return _reply(script[next++]);
+    });
+    expect(end.kind, AgentEndKind.completed);
+    expect(sent, [2, 4, 4, 4], reason: '寫壞的兩次都沒接進對話');
+    expect(end.stats.badCommands, 2);
+  });
+
+  test('arguments broken three times in a row restart the case', () async {
+    final end = await run(
+      _ai(['broken', 'broken', 'broken'], rest: 'submit:ok'),
+    );
+    expect(task.restarts, ['連續 3 次工具參數寫壞']);
+    expect(end.kind, AgentEndKind.completed);
   });
 
   test('a stall is sent again with the same conversation; two in a row '

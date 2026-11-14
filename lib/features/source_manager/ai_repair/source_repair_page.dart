@@ -42,7 +42,9 @@ Future<void> openSourceRepair(
   if (sources.isEmpty || !repairs.canStartNew || !backgroundWorkIdle()) {
     return;
   }
-  final service = await (settings ?? AiRepairSettings()).service();
+  final aiSettings = settings ?? AiRepairSettings();
+  final service = await aiSettings.service();
+  final concurrency = await aiSettings.concurrency();
   if (!context.mounted || !repairs.canStartNew || !backgroundWorkIdle()) {
     return;
   }
@@ -64,7 +66,11 @@ Future<void> openSourceRepair(
     return;
   }
   final run = BatchRepairRun(
-    SourceRepairBatch(sources: sources, service: service),
+    SourceRepairBatch(
+      sources: sources,
+      service: service,
+      aiConcurrency: concurrency,
+    ),
     title: title,
   );
   if (!repairs.adopt(run)) {

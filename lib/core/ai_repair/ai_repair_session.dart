@@ -517,6 +517,7 @@ class AiRepairSession extends ChangeNotifier {
       'reason': end.reason,
       'outcome': job.outcome?.name,
       'unfixable': job.confirmedUnfixable,
+      'why': job.giveUpWhy,
       'promptVersion': aiRepairPromptVersion,
       ...stats.toMap(),
     };
@@ -980,6 +981,69 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   BookSource get original => job.original;
 
+  /// 這件修復裡每個請求回過什麼（狀態碼或「沒有回應」），照工具結果的順序、
+  /// 同一次結果裡一樣的只記一次：一下成功、一下 429 或 5xx 的網站，AI 每次
+  /// 成功就以為好了、接著修別段（2026-11-14 白光小说 36 輪用完），程式把
+  /// 這個事實列在結果後面，判斷照舊交給 AI。同一個請求是方法、網址與送出的
+  /// 內容都一樣：只看網址時，白光的 POST 少帶 submit 回 502、帶了 301，
+  /// 兩個不同的請求被當成時好時壞。
+  final Map<String, List<String>> _answered = {};
+
+  /// 請求那一行：GET 只寫網址，其他寫方法；轉址的下一跳在網址後面接
+  /// 「（轉址）」，送出的內容寫在「送出：」後面，標頭寫在「標頭：」後面
+  /// （`recordRequestUrl`）。
+  static final RegExp _requestLine = RegExp(
+    r'^(?:(POST|PUT|PATCH|DELETE|HEAD) )?(https?://[^\s（]+)(?:（轉址）)?'
+    r'(?: 送出：(.*?))?(?: 標頭：.*)?$',
+  );
+
+  static final RegExp _responseLine = RegExp(
+    r'^ *← (?:頁 \d+｜)?(\S+) (\d{3}|沒有回應)',
+  );
+
+  static bool _ok(String status) =>
+      status.length == 3 && (status.startsWith('2') || status.startsWith('3'));
+
+  static bool _failed(String status) =>
+      status == '沒有回應' || status == '429' || status.startsWith('5');
+
+  /// 記下 [text] 裡的回應；其中有請求回過成功也回過失敗時，傳回列出它們的
+  /// 一段，沒有是空字串。回應前面沒有請求那一行的不算（認不出是哪個請求）；
+  /// 轉址後的下一跳是對新網址的 GET。
+  String _mixedAnswers(String text) {
+    final seen = <String, Set<String>>{};
+    ({String url, String key})? request;
+    for (final line in text.split('\n')) {
+      if (_requestLine.firstMatch(line) case final match?) {
+        final method = match.group(1);
+        final url = match.group(2)!;
+        final body = match.group(3);
+        request = (
+          url: url,
+          key:
+              '${method == null ? '' : '$method '}$url'
+              '${body == null ? '' : ' 送出：$body'}',
+        );
+        continue;
+      }
+      final response = _responseLine.firstMatch(line);
+      if (response == null || request == null) continue;
+      final url = response.group(1)!;
+      final key = url == request.url ? request.key : url;
+      seen.putIfAbsent(key, () => {}).add(response.group(2)!);
+    }
+    for (final MapEntry(key: key, value: statuses) in seen.entries) {
+      _answered.putIfAbsent(key, () => []).addAll(statuses);
+    }
+    final lines = [
+      for (final key in seen.keys)
+        if (_answered[key]! case final all
+            when all.any(_ok) && all.any(_failed))
+          '$key：${all.join('、')}',
+    ];
+    return lines.isEmpty ? '' : '\n\n# 同一個請求這次回過不同的結果\n${lines.join('\n')}';
+  }
+
   @override
   String redact(String text) => s._redact(job, text);
 
@@ -1051,9 +1115,13 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     if (read.command case final command?) {
       return AgentCommand(command, read.key);
     }
+    final malformed = aiRepairArgumentsMalformed(call);
     if (step case final step?) s._finish(step, '讀不懂工具呼叫', failed: true);
-    s.log.both('讀不懂工具呼叫：${read.fact}');
-    return AgentBadCommand(read.fact);
+    s.log.both(
+      '讀不懂工具呼叫：${read.fact}'
+      '${malformed ? '（這則回覆不接進對話，同一段對話重送）' : ''}',
+    );
+    return AgentBadCommand(read.fact, malformed: malformed);
   }
 
   @override
@@ -1104,7 +1172,17 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     final result = await _run(command);
     // 工具跑完、結果接進對話之前重讀秘密：這一步可能寫了新的 Cookie 或變數。
     await s._refreshSecrets(job);
-    return result;
+    return switch (result) {
+      // 比「結果與前幾次相同」照工具本身的結果，不算後面附的這段。
+      AgentToolResult(:final text, :final same) => AgentToolResult(
+        '$text${_mixedAnswers(text)}',
+        same: same ?? text,
+      ),
+      AgentRejected(:final reason) => AgentRejected(
+        '$reason${_mixedAnswers(reason)}',
+      ),
+      _ => result,
+    };
   }
 
   Future<AgentResult> _run(AiRepairCommand command) async {
@@ -1118,7 +1196,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           ..giveUpWhy = why;
         final label = aiGiveUpLabels[why] ?? why;
         s._fail(job, 'AI：$label${reason.isEmpty ? '' : '。$reason'}');
-        return const AgentAccepted();
+        return const AgentAccepted.gaveUp();
       case AiFetch(:final url):
         step.detail = '看網頁 $url…';
         s._notify();

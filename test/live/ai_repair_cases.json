@@ -1,95 +1,273 @@
 {
-  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：每件書源的預期答案，跑法見 docs/agents/ai-repair-runs.md。expected 是 fixed（修得好）、unfixable（書源本身修不了）或 unknown（還沒定），也可以是一串（網站狀態在變、幾種結論都算對）；unfixable 的 why 是放棄的原因（一個或一串，同一個判定底下的細分類都算對）（give_up 的 why，或網站檢查判成 site_gone）；預期答案要有 AI 修復以外的證據（curl、網站本身），confirmed 是使用者確認過了。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
+  "說明": "AI 修復的案件集（agent-harness 技能第 1 步）：一批固定拿來重跑的真實任務，取自 2026-11-13 手機上整批修復異常書源時交給 AI 的 67 件；不附預期答案，評的是過程（第 5 步）。跑法見 docs/agents/ai-repair-runs.md。書源 JSON 不在這裡，照 name 與 url 從使用者的匯出檔挑。",
   "cases": [
     {
-      "name": "圣墟小说网",
-      "url": "http://www.shengxuxu.net#🎃",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl：www.shengxuxu.net 一律 301 轉到 www.shengxuxu.info；搜尋是 POST /search.html，跟著 301 走會變成 GET，回不帶結果的 14398 位元組頁（搜「圣墟」「我的」與不可能的詞都一樣）。直接 POST 到 shengxuxu.info：「圣墟」「我的」各有一整頁結果（.librarylist li），不可能的詞回空頁。書頁 /714/ 的 og: 標籤與 .dirlist 目錄都在，正文 /714/read_1.html 的 #chaptercontent 約 2000 字。修好要：網址換成 shengxuxu.info。",
-      "confirmed": true
+      "name": "🎃涨姿势🎃",
+      "url": "http://120.25.175.92#🎃"
     },
     {
-      "name": "❤️神话之后",
-      "url": "https://www.shenhuazhihou.com",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl：網站對桌機的瀏覽器標識（夜讀與 Legado 在書源沒寫標識時預設送的 Windows Chrome）直接斷線（server closed abruptly），沒帶標識也斷；帶手機標識就正常：搜尋 POST /e/search/index.php 轉到結果頁，「我的」20 本、不可能的詞回「没有搜索到相关的内容」，書庫頁 /book/ 有書單。搜尋回應寫入 Cookie vbemnlastsearchtime（上次搜尋時間），帶著它 30 秒內再搜回「系统限制的搜索时间间隔为 30 秒」；不帶就不擋（curl 連搜四次都正常）。書源沒開 Cookie 罐，照 Legado 不存這個 Cookie（夜讀原本會存，2026-11-13 照 Legado 修了引擎）。在書源加手機標識後用 source_check_live_test 跑，搜尋、詳情、目錄、正文、發現都通過。修好要：書源的標頭加手機標識。",
-      "confirmed": true
+      "name": "🎃御书屋🎃",
+      "url": "https://m.rourouwu16.com#🎃"
     },
     {
-      "name": "酷匠网吧（优+）",
-      "url": "https://app.kujiang.com",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl：原本的搜尋介面 /v1/book/search202107 回 20 個空白字元；同一台的 /v1/book/search?keyword= 正常，「我的」1798 本、「大明」653 本，不可能的詞只回 1 本不相干的（模糊比對），回應的書單直接在 $.body（不是 $.body.list）。把搜尋網址換成 /v1/book/search、書單改 $.body 後用 source_check_live_test 跑，搜尋、詳情、目錄、正文都通過。修好要：換搜尋介面與書單路徑。",
-      "confirmed": true
-    },
-    {
-      "name": "🎃QQ文学网🎃",
-      "url": "http://m.qqwx.win#🎃",
-      "expected": "fixed",
-      "evidence": "2026-11-13 curl：搜尋其實也壞了：書源用 GBK 送關鍵字，網站不理，「我的」與不可能的詞都回同樣 30 本推薦書（夜讀校驗只看有沒有書，所以只卡在發現）；改用 UTF-8 送，「我的」10 本、不可能的詞 0 本。詳情、目錄、正文正常。發現頁網址在 /shuku/ 底下：不帶來源頁（Referer）回 404；帶來源頁先回「验证中」頁（程式轉到同一網址加 ?_js_verify=1），帶同一個工作階段 Cookie PHPSESSID 打 ?_js_verify=1 會 302 回原網址，再抓才有 50 本書單；不帶 Cookie 只會一直回驗證頁。夜讀會自動帶來源頁；書源沒開 Cookie 罐，照 Legado 不存 PHPSESSID。修好要：搜尋改用 UTF-8；發現打開 Cookie 罐（enabledCookieJar），發現網址照舊或改到 ?_js_verify=1；或把發現換成不用驗證的書單頁（/sort.html、/novel/ 底下的排行）。",
-      "confirmed": true
+      "name": "🎃酷匠阅读🎃",
+      "url": "https://app.kujiang.com#🎃"
     },
     {
       "name": "🎃肉肉屋🎃#3",
-      "url": "https://www.rourouwu1.com#🎃",
-      "expected": [
-        "fixed",
-        "unfixable"
-      ],
-      "evidence": "2026-11-13 curl：搜尋與書頁正常；rourouwu1.com 的目錄頁 /index/<id> 列了 144 個章名，但每個 <dd> 裡只有章名和 </a>，連結被拿掉了（換標識、帶 Cookie 與來源頁都一樣）。同一套書庫的姊妹站 www.17ed.com（書源的封面圖本來就在 img.17ed.com）的同一本 /index/124859 有完整 144 章連結，章節頁 .acontent 約 2300 字。第一輪 AI 改用 17ed.com 修好、校驗通過（我原本漏查了這個站）。使用者 2026-11-13 改定：修得好。修好要：網址換到 17ed.com，搜尋與詳情規則跟著它的版型。2026-11-13 13:58 再查：兩站搜站上確實有的書名都回 0 本、好幾次吐出 MySQL 錯誤，只有「我的」還有 20 本（像是快取的舊結果）。使用者 2026-11-13 定：修得好、修不好（網站的功能壞了）都算對，重點是快速找到答案。",
-      "confirmed": true,
-      "why": "site_broken"
+      "url": "https://www.rourouwu1.com#🎃"
     },
     {
-      "name": "八叉书库",
-      "url": "https://bcshuku.com/",
-      "expected": "fixed",
-      "minContentChars": 1500,
-      "evidence": "2026-11-13 curl：章節頁的正文由頁面程式 POST /conapi.php 取得，參數現在除了 url、mobile、isk、novel、chapter 還有 t、n、sign（每次載入不同）；書源的正文規則用舊格式的正規式找參數，找不到。照章節頁上的參數全部帶上 POST，回 success 與約 2800 字正文；拿掉 sign 回「访问异常，请稍后再试！」。修好要：正文規則從頁面程式抓出全部參數再送。",
-      "confirmed": true
+      "name": "🎃笔趣阁🎃#81",
+      "url": "https://m.biquge.one#🎃"
+    },
+    {
+      "name": "🎃美亿言情🎃",
+      "url": "http://www.meiyi.org#🎃"
+    },
+    {
+      "name": "🎃品书楼小说网🎃",
+      "url": "http://www.pinshulou.com#🎃"
+    },
+    {
+      "name": "🎃QQ文学网🎃",
+      "url": "http://m.qqwx.win#🎃"
+    },
+    {
+      "name": "po18文学",
+      "url": "https://wap.po18.work/##彩虹"
+    },
+    {
+      "name": "虫虫书屋",
+      "url": "http://www.51menu.com##修正"
+    },
+    {
+      "name": "蜘蛛小说网",
+      "url": "https://www.zhizhuxs.com"
+    },
+    {
+      "name": "逐浪小说",
+      "url": "https://m.zhulang.com#"
+    },
+    {
+      "name": "鲤鱼乡🎗",
+      "url": "http://www.liyuxiang123.com"
+    },
+    {
+      "name": "🎃手机小说🎃",
+      "url": "https://m.shoujixsw.com#🎃"
+    },
+    {
+      "name": "🎃太子爷小说网🎃",
+      "url": "http://www.tzy2.com#🎃"
+    },
+    {
+      "name": "86读书🎃",
+      "url": "http://www.86dushu.com#🎃"
+    },
+    {
+      "name": "秋田书屋",
+      "url": "https://m.qiutiandog.com/"
+    },
+    {
+      "name": "🔰 新御书屋",
+      "url": "https://m.ayushuwu.com/"
+    },
+    {
+      "name": "🎃笔趣阁🎃#77",
+      "url": "https://www.xyuzhaiwu2.com#🎃"
+    },
+    {
+      "name": "必读居",
+      "url": "http://www.biduju.net"
+    },
+    {
+      "name": "露露书",
+      "url": "https://m.lulushu18.com/"
+    },
+    {
+      "name": "📖 欲望社网",
+      "url": "http://www.yuwangshe.net/"
+    },
+    {
+      "name": "污书屋",
+      "url": "https://www.miaoquan2016.com/"
+    },
+    {
+      "name": "环安小说网",
+      "url": "https://www.savilletailor.com/"
+    },
+    {
+      "name": "夜伴书屋",
+      "url": "http://yeban360.com"
+    },
+    {
+      "name": "夜伴书屋（优）",
+      "url": "https://www.yeban360.com"
+    },
+    {
+      "name": "开心文学网🎃",
+      "url": "https://www.kxwx.org#🎃"
     },
     {
       "name": "52书库（po5.net）",
-      "url": "https://www.po5.net#77",
-      "expected": "fixed",
-      "minContentChars": 1500,
-      "evidence": "2026-11-13 curl：po5.net 301 轉到 www.52shuku.net；搜尋「综漫」20 本、不可能的詞回空頁，目錄 .list .mulu a 正常。章節頁沒有 #nr1 了，正文在 .article-content 的 p 裡，一頁約 2900 字。修好要：正文規則改抓 .article-content。",
-      "confirmed": true
+      "url": "https://www.po5.net#77"
+    },
+    {
+      "name": "🎃第一版主🎃#8",
+      "url": "https://m.diyibanzhu.buzz#🎃"
+    },
+    {
+      "name": "古诗词网（优+）",
+      "url": "https://m.gushici.net/"
+    },
+    {
+      "name": "集书阁",
+      "url": "https://xn--yu725ajisgecom-2z4y408c0i8ffa6452kztvb.jishuge-vip.com"
+    },
+    {
+      "name": "盐选文库（优+）",
+      "url": "https://www.yanxuanwk.com#"
+    },
+    {
+      "name": "🍑腐小说2🍑(作者abyssesml)",
+      "url": "http://www.fuxs2.cc/"
+    },
+    {
+      "name": "🍊巴卡漫画",
+      "url": "https://baka3.cfd"
+    },
+    {
+      "name": "🍑 腐小说",
+      "url": "http://www.jiqinw.com/🐤"
+    },
+    {
+      "name": "Requiem",
+      "url": "https://requiemtls.com/"
+    },
+    {
+      "name": "西瓜书屋",
+      "url": "https://www.xiguashuwu.com"
     },
     {
       "name": "🙈PO站",
-      "url": "https://www.jile1.com",
-      "expected": "unfixable",
-      "why": [
-        "site_gone",
-        "human_check"
-      ],
-      "evidence": "2026-11-13 curl：https（www.jile1.com 與 jile1.com）連線被拒；http 的首頁、搜尋（GET 與 POST）、不存在的網址都回同一份 2191 位元組的頁，內容只有混淆過的轉址程式，用 node 執行後轉到亂數子網域的 .xyz 垃圾站（網域被拿去轉址了）。網站不在了。每個網址最後落到另一個網域的「Ages 18+」掃碼驗證頁：可能是網域被拿去轉址，也可能是網站自己的防封鎖跳轉（掃碼後回原站），curl 分不出來。使用者 2026-11-13 定：網站不在了與要真人驗證都算對。",
-      "confirmed": true
+      "url": "https://www.jile1.com"
     },
     {
-      "name": "趣书",
-      "url": "https://qubook.org/",
-      "expected": "unfixable",
-      "why": "site_gone",
-      "evidence": "2026-11-13 curl：qubook.org、www.qubook.org 與 http 版都回 Cloudflare 522（Cloudflare 連不到網站本身的主機），等 20 秒才回。網站不在了（跑整批前會再測一次，522 也可能是暫時的）。",
-      "confirmed": true
+      "name": "🎃去读读小说网🎃",
+      "url": "http://www.qududu.com#🎃"
     },
     {
-      "name": "一曲书斋",
-      "url": "https://www.cowxs.com",
-      "expected": "unfixable",
-      "why": "site_gone",
-      "evidence": "2026-11-13 curl：首頁回 114 位元組，只有轉到 /lander 的程式；/lander 是 GoDaddy 的停放頁（img1.wsimg.com/parking-lander）；搜尋 POST /s.php 回 405。網域停放了，網站不在了。",
-      "confirmed": true
+      "name": "腐文小说",
+      "url": "http://www.fuxsb.cc/"
+    },
+    {
+      "name": "PO18全本🎃#2",
+      "url": "https://www.isex.work#🎃"
+    },
+    {
+      "name": "躺着看🎃",
+      "url": "https://tangzhekan8.cc#🎃"
+    },
+    {
+      "name": "书旗小说网🎃",
+      "url": "http://www.shuqi.cc#🎃"
+    },
+    {
+      "name": "白光小说",
+      "url": "https://m.bgxs8.cc/"
+    },
+    {
+      "name": "就爱言情",
+      "url": "https://m.92yanqing.com"
+    },
+    {
+      "name": "🎃歪歪书库🎃",
+      "url": "http://www.yysk.net#🎃"
+    },
+    {
+      "name": "饿狼小说",
+      "url": "http://m.elkoparts.com"
+    },
+    {
+      "name": "🎃色欲文🎃",
+      "url": "https://m.seyuwen.com#🎃"
+    },
+    {
+      "name": "七星阁小说网",
+      "url": "http://www.qixinge.net"
+    },
+    {
+      "name": "猴子小说网",
+      "url": "https://www.hzxsw.com"
+    },
+    {
+      "name": "鲤鱼乡①",
+      "url": "https://www.liyuxiangku.com/#🚀"
+    },
+    {
+      "name": "❤️读客书库🎃",
+      "url": "https://m.dukesk.com"
+    },
+    {
+      "name": "🎃腐万小说🎃",
+      "url": "http://www.fxshu.top#🎃"
+    },
+    {
+      "name": "❤️思怡小说🎃",
+      "url": "https://m.siyixs.com"
+    },
+    {
+      "name": "🎃腐书网🎃",
+      "url": "http://www.fushubook.com#🎃"
+    },
+    {
+      "name": "大白小说",
+      "url": "https://www.dabaipc.com#🎃"
+    },
+    {
+      "name": "望书阁网",
+      "url": "http://wap.wangshugu.net#"
+    },
+    {
+      "name": "🎃鲤鱼乡🎃#2",
+      "url": "https://www.liyuxiangall.com#🎃"
+    },
+    {
+      "name": "❤️神话之后",
+      "url": "https://www.shenhuazhihou.com"
+    },
+    {
+      "name": "植物小说",
+      "url": "http://api.xingliangglobal.com/"
+    },
+    {
+      "name": "色情小说",
+      "url": "https://yazhouseba.co/"
+    },
+    {
+      "name": "饿狼小说",
+      "url": "http://m.elkoparts.net"
+    },
+    {
+      "name": "趣书网🎃",
+      "url": "https://qubook.org#🎃"
+    },
+    {
+      "name": "肉肉屋⑥",
+      "url": "https://wap.powenwu6.com/#🚀"
     },
     {
       "name": "哔咔漫画〔自包含〕",
-      "url": "https://picaapi.picacomic.com##防同",
-      "expected": "unfixable",
-      "why": "login",
-      "evidence": "2026-11-13 夜讀校驗：書源類型是漫畫，搜尋就回 401；書源自己寫了登入（loginUrl 的 login() 要帳號密碼），官方 App 介面要登入後的 token 才回內容。沒登入資料，修不了（ADR 0013 不做書源登入）。",
-      "confirmed": true
+      "url": "https://picaapi.picacomic.com##防同"
+    },
+    {
+      "name": "🍅蕃茄小说",
+      "url": "https://m.dzrjk.com"
+    },
+    {
+      "name": "🎉 绾书文学",
+      "url": "http://app.wanshu.com"
     }
   ]
 }

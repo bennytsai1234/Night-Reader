@@ -604,8 +604,15 @@ class SourceChecker {
           _source,
           // 詳情頁抓回來時存著的目錄頁可能就是那份壞掉的，重試要重抓。
           retrying ? _withoutStoredPages(detailed) : detailed,
-          chapterLimit: _validationChapterLimit,
-          pageConcurrency: _validationPageConcurrency,
+          // 要抽中段、後段的正文時讀完整目錄，分頁照讀書時同時抓：只讀前 8
+          // 章時，「中後段」是第 6～8 章，第 8 章也沒有下一章當翻頁的停止點
+          // （2026-11-14 改前改後整批校驗，47 個書源因此逾時）。
+          chapterLimit: _config.checkContent ? null : _validationChapterLimit,
+          pageConcurrency: _config.checkContent
+              ? null
+              : _validationPageConcurrency,
+          // 有一頁抓不到時不拿殘缺的目錄抽樣（Codex 審查）。
+          requireComplete: _config.checkContent,
         ),
         cameBackEmpty: (chapters) => chapters.every((c) => c.isVolume),
         falteredSince: transientBeforeDetail,
@@ -688,12 +695,58 @@ class SourceChecker {
 
     if (!_config.checkContent) return;
 
-    await _runContentProbeCheck(book, freeChapters, mode: mode, issues: issues);
+    await _runContentProbeCheck(
+      book,
+      freeChapters,
+      readableChapters,
+      mode: mode,
+      issues: issues,
+    );
   }
 
   // ── Content probe ────────────────────────────────────────────────
 
+  /// 正文抽查：第 1 章在 [freeChapters] 的前幾章裡找第一個讀得到的（開頭常
+  /// 是公告、楔子這種短章）；章數多於 [_headProbeSpan] 時再抽中段、後段
+  /// （[_laterSampleIndexes]），每一章都要讀得到，最後比對抽到的章有沒有
+  /// 一半以上是同一段文字（[_checkRepeatedText]）。使用者 2026-11-14：只看
+  /// 前段時，前幾章免費、後面付費，或後半段全是別本書的廣告的書源都會過。
   Future<void> _runContentProbeCheck(
+    Book book,
+    List<BookChapter> freeChapters,
+    List<BookChapter> readableChapters, {
+    required _CheckMode mode,
+    required List<_IssueData> issues,
+  }) async {
+    final head = await _probeHead(
+      book,
+      freeChapters,
+      mode: mode,
+      issues: issues,
+    );
+    if (head == null) return;
+    // 一章一章抓：同時抓時，往後試的那一章可能被別的抽樣佔走，共用的
+    // 「這一段的請求從哪開始」也會讓診斷列出別章的請求（Codex 審查）。
+    final taken = <String>{head.chapter.url};
+    final later = <({BookChapter chapter, String content})>[];
+    for (final index in _laterSampleIndexes(readableChapters)) {
+      // 前一個位置往後試時已經抽過這一章。
+      if (taken.contains(readableChapters[index].url)) continue;
+      final sample = await _probeLater(
+        book,
+        readableChapters,
+        index,
+        taken,
+        mode: mode,
+        issues: issues,
+      );
+      if (sample == null) return;
+      later.add(sample);
+    }
+    _checkRepeatedText([head, ...later], mode: mode, issues: issues);
+  }
+
+  Future<({BookChapter chapter, String content})?> _probeHead(
     Book book,
     List<BookChapter> readableChapters, {
     required _CheckMode mode,
@@ -707,38 +760,16 @@ class SourceChecker {
 
     for (final chapterIndex in probeIndexes) {
       final chapter = readableChapters[chapterIndex];
-      final nextChapterUrl = _nextReadableChapterUrl(readableChapters, chapter);
-
-      try {
-        probedCount++;
-        _log('  ◇ 測試${mode.label}正文: ${chapter.title}');
-        final content = await _fetch(
-          '${mode.label}正文',
-          (_) => _service.getContent(
-            _source,
-            book,
-            chapter,
-            nextChapterUrl: nextChapterUrl,
-            pageConcurrency: _validationPageConcurrency,
-          ),
-          cameBackEmpty: (content) =>
-              !chapterContentUsable(_kindShownBy(content, book), content),
-        );
-
-        // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
-        // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
-        final kind = _kindShownBy(content, book);
-        _reclassify(kind);
-        if (chapterContentUsable(kind, content)) return;
-      } catch (e) {
-        _recordFailure(
-          issues,
-          stage: _stageFor(mode, 'content'),
-          error: e,
-          mode: mode,
-        );
-        return;
-      }
+      probedCount++;
+      final content = await _probeContent(
+        book,
+        readableChapters,
+        chapter,
+        mode: mode,
+        issues: issues,
+      );
+      if (content == null) return null;
+      if (content.usable) return (chapter: chapter, content: content.text);
     }
 
     _recordIssue(
@@ -750,6 +781,163 @@ class SourceChecker {
             : '發現書籍前 $probedCount 個候選章節正文內容過短或為空',
         health: _contentHealthFor(mode),
       ),
+    );
+    return null;
+  }
+
+  /// 中段、後段的一章：讀不到時往後試一章（抽到請假條、短番外不算壞），
+  /// 兩章都讀不到就記成正文失效。
+  Future<({BookChapter chapter, String content})?> _probeLater(
+    Book book,
+    List<BookChapter> chapters,
+    int index,
+    Set<String> taken, {
+    required _CheckMode mode,
+    required List<_IssueData> issues,
+  }) async {
+    for (final at in [index, index + 1]) {
+      if (at >= chapters.length || !taken.add(chapters[at].url)) continue;
+      final content = await _probeContent(
+        book,
+        chapters,
+        chapters[at],
+        mode: mode,
+        issues: issues,
+      );
+      if (content == null) return null;
+      if (content.usable) return (chapter: chapters[at], content: content.text);
+    }
+    final title = _compactChapterTitle(chapters[index].title);
+    _recordIssue(
+      issues,
+      _IssueData(
+        stage: _stageFor(mode, 'content'),
+        message:
+            '${mode == _CheckMode.search ? '' : '發現書籍'}'
+            '$title（與下一章）正文內容過短或為空',
+        health: _contentHealthFor(mode),
+      ),
+    );
+    return null;
+  }
+
+  /// 抓一章正文：抓到的內容與讀不讀得到；出錯時記下、傳回 null。
+  Future<({String text, bool usable})?> _probeContent(
+    Book book,
+    List<BookChapter> chapters,
+    BookChapter chapter, {
+    required _CheckMode mode,
+    required List<_IssueData> issues,
+  }) async {
+    final nextChapterUrl = _nextReadableChapterUrl(chapters, chapter);
+    try {
+      _log('  ◇ 測試${mode.label}正文: ${chapter.title}');
+      final content = await _fetch(
+        '${mode.label}正文',
+        (_) => _service.getContent(
+          _source,
+          book,
+          chapter,
+          nextChapterUrl: nextChapterUrl,
+          pageConcurrency: _validationPageConcurrency,
+        ),
+        cameBackEmpty: (content) =>
+            !chapterContentUsable(_kindShownBy(content, book), content),
+      );
+      // 被登入牆擋住的正文在抓的時候就丟出 LoginCheckException（ADR 0038），
+      // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
+      final kind = _kindShownBy(content, book);
+      _reclassify(kind);
+      return (text: content, usable: chapterContentUsable(kind, content));
+    } catch (e) {
+      _recordFailure(
+        issues,
+        stage: _stageFor(mode, 'content'),
+        error: e,
+        mode: mode,
+      );
+      return null;
+    }
+  }
+
+  /// 抽到的章裡有兩章一半以上是同一段文字，就不是這一章該有的正文：
+  /// - 一章的正文裡有另一章的開頭：下一頁的規則抓過頭、跨到別章（2026-11-14
+  ///   独步小说第 97 章 26,810 字，把第 98 章也抓進來），記成正文失效；
+  /// - 共同的句子三分之一以上帶付費字樣：付費提示（整個書源標付費，ADR
+  ///   0057）；
+  /// - 其他（別本書的廣告這類一章一章重複的）：記成正文失效。
+  /// 真正的章節兩章不會一半以上一樣，作者的話這類固定文字只佔一小段；只比
+  /// 文字，圖與音訊網址不比。
+  void _checkRepeatedText(
+    List<({BookChapter chapter, String content})> samples, {
+    required _CheckMode mode,
+    required List<_IssueData> issues,
+  }) {
+    for (var i = 0; i < samples.length; i++) {
+      for (var j = i + 1; j < samples.length; j++) {
+        final shared = _sharedSentences(samples[i].content, samples[j].content);
+        if (shared == null) continue;
+        for (final sample in [samples[i], samples[j]]) {
+          final text = _flat(sample.content);
+          _log(
+            '  ◇ ${sample.chapter.title}：${text.length} 字，開頭「'
+            '${text.length > 40 ? text.substring(0, 40) : text}」',
+          );
+        }
+        _recordIssue(
+          issues,
+          _repeatedTextIssue(samples[i], samples[j], shared, mode),
+        );
+        return;
+      }
+    }
+  }
+
+  _IssueData _repeatedTextIssue(
+    ({BookChapter chapter, String content}) a,
+    ({BookChapter chapter, String content}) b,
+    List<String> shared,
+    _CheckMode mode,
+  ) {
+    final prefix = mode == _CheckMode.search ? '' : '發現書籍';
+    String title(BookChapter chapter) => _compactChapterTitle(chapter.title);
+    String quote(String text) =>
+        text.length > 30 ? '${text.substring(0, 30)}…' : text;
+    // 一章把另一章的開頭也抓進來：說哪一章跨到哪一章。
+    for (final (whole, part) in [(a, b), (b, a)]) {
+      final opening = _flat(part.content);
+      final head = opening.length > 30 ? opening.substring(0, 30) : opening;
+      if (head.isNotEmpty &&
+          !_flat(whole.content).startsWith(head) &&
+          _flat(whole.content).contains(head)) {
+        return _IssueData(
+          stage: _stageFor(mode, 'content'),
+          message:
+              '$prefix${title(whole.chapter)}的正文把${title(part.chapter)}也抓進來了'
+              '（下一頁的規則抓過頭，跨到別章）：「${quote(head)}」',
+          health: _contentHealthFor(mode),
+        );
+      }
+    }
+    final both = '${title(a.chapter)}與${title(b.chapter)}';
+    final sharedText = shared.join('。');
+    // 付費提示的句子不一定每句都有付費字樣（「開通會員可免費閱讀全站作品」），
+    // 照句數算：三分之一以上帶付費字樣才算。故事重複時，帶「訂閱」的頁尾只是
+    // 幾百句裡的一句。
+    final paid = shared.where(_hasPaidMarker).length;
+    if (paid * 3 >= shared.length) {
+      return _IssueData(
+        stage: _stageFor(mode, 'content'),
+        message: '$prefix$both的正文一半以上是同一段付費提示：「${quote(sharedText)}」',
+        health: paidSourceHealth,
+      );
+    }
+    return _IssueData(
+      stage: _stageFor(mode, 'content'),
+      message:
+          '$prefix$both的正文一半以上是同一段文字（一章一章重複的內容）：'
+          '「${quote(sharedText)}」',
+      health: _contentHealthFor(mode),
     );
   }
 
@@ -1236,30 +1424,99 @@ bool _looksLikeLockedChapter(BookChapter chapter) {
   if (chapter.isVip && !chapter.isPay) return true;
   final normalized = chapter.title.trim().toLowerCase();
   if (normalized.isEmpty) return false;
-  const markers = <String>[
-    '🔒',
-    '[vip]',
-    'vip',
-    ' vip',
-    'vip ',
-    'vip章',
-    'vip章节',
-    'vip章節',
-    'isvip',
-    '鎖章',
-    '锁章',
-    '解鎖',
-    '解锁',
-    '付費',
-    '付费',
-    '收費',
-    '收费',
-    '訂閱',
-    '订阅',
-    '購買',
-    '购买',
+  return _hasPaidMarker(normalized);
+}
+
+/// 第 1 章在前幾章裡找；比這多章的書才抽中段、後段。
+const int _headProbeSpan = 5;
+
+/// 中段、後段抽哪幾章：50%、75%、90% 的位置；章名寫了 VIP 這類字樣的
+/// （書源沒標付費，只是章名這樣寫）優先，頂替後兩個位置。
+List<int> _laterSampleIndexes(List<BookChapter> chapters) {
+  final count = chapters.length;
+  if (count <= _headProbeSpan) return const [];
+  int at(double share) =>
+      math.max(_headProbeSpan, (count * share).floor()).clamp(0, count - 1);
+  final positions = [at(0.5), at(0.75), at(0.9)];
+  final titled = [
+    for (var i = _headProbeSpan; i < count; i++)
+      if (_looksLikeLockedChapter(chapters[i])) i,
   ];
-  return markers.any(normalized.contains);
+  if (titled.isNotEmpty) {
+    positions[2] = titled.last;
+    if (titled.length > 1) positions[1] = titled.first;
+  }
+  return positions.toSet().toList();
+}
+
+/// 兩段文字有一半以上（各自的字數）是同一些句子時，傳回共同的句子；
+/// 是圖或音訊網址的、或沒有共同到一半的是 null。
+List<String>? _sharedSentences(String a, String b) {
+  // 付費提示只有幾十字，類型看不出來（不到小說的字數）也要比。
+  bool media(String text) => switch (ChapterContentKind.of(text)) {
+    ChapterContentKind.images || ChapterContentKind.audio => true,
+    _ => false,
+  };
+  if (media(a) || media(b)) return null;
+  // 照每句出現的次數算：章內重複的台詞先去重的話，作者的話只佔一小段也會
+  // 算成一半以上（Codex 審查）。
+  Map<String, int> sentences(String text) {
+    final counts = <String, int>{};
+    for (final part in text.split(RegExp(r'[\n。！？!?；;]'))) {
+      final sentence = part.trim();
+      if (sentence.isNotEmpty) {
+        counts.update(sentence, (n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+    return counts;
+  }
+
+  final left = sentences(a);
+  final right = sentences(b);
+  int length(Map<String, int> counts) => counts.entries.fold(
+    0,
+    (sum, entry) => sum + entry.key.length * entry.value,
+  );
+  final shared = [
+    for (final sentence in left.keys)
+      if (right.containsKey(sentence)) sentence,
+  ];
+  if (shared.isEmpty) return null;
+  final sharedLength = shared.fold(
+    0,
+    (sum, sentence) =>
+        sum + sentence.length * math.min(left[sentence]!, right[sentence]!),
+  );
+  if (sharedLength * 2 < length(left) || sharedLength * 2 < length(right)) {
+    return null;
+  }
+  return shared;
+}
+
+/// 拿掉空白，比對開頭用。
+String _flat(String text) => text.replaceAll(RegExp(r'\s+'), '');
+
+/// 付費提示的字樣（章名與正文共用）。
+const List<String> _paidMarkers = [
+  '🔒',
+  'vip',
+  '鎖章',
+  '锁章',
+  '解鎖',
+  '解锁',
+  '付費',
+  '付费',
+  '收費',
+  '收费',
+  '訂閱',
+  '订阅',
+  '購買',
+  '购买',
+];
+
+bool _hasPaidMarker(String text) {
+  final lower = text.toLowerCase();
+  return _paidMarkers.any(lower.contains);
 }
 
 List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {

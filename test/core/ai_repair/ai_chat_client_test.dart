@@ -508,4 +508,41 @@ void main() {
       }
     });
   });
+
+  test(
+    'the model menu lists what the service lists, asking with the key',
+    () async {
+      final service = _Service(200, {
+        'data': [
+          {'id': 'deepseek-v4.1-flash'},
+          {'id': 'kimi-k3'},
+          {'object': 'model'},
+        ],
+      });
+      final models = await _client(
+        service,
+        baseUrl: 'https://ai.example/v1/chat/completions',
+      ).listModels();
+      expect(models, ['deepseek-v4.1-flash', 'kimi-k3']);
+      expect(service.request!.uri.toString(), 'https://ai.example/v1/models');
+      expect(service.request!.headers['Authorization'], 'Bearer sk-1');
+    },
+  );
+
+  test('a service without a model list says so', () async {
+    await expectLater(
+      _client(_Service(404, {'error': 'no'})).listModels(),
+      throwsA(
+        isA<AiServiceException>().having(
+          (e) => e.message,
+          'message',
+          '服務回了 404',
+        ),
+      ),
+    );
+    await expectLater(
+      _client(_Service(200, {'models': []})).listModels(),
+      throwsA(isA<AiServiceException>()),
+    );
+  });
 }

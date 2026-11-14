@@ -123,6 +123,7 @@ class SourceRepairBatch extends ChangeNotifier {
   SourceRepairBatch({
     required List<BookSource> sources,
     required this.service,
+    this.aiConcurrency = defaultAiConcurrency,
     this._recheck,
     this._checkSite,
     AiRepairChecker? check,
@@ -142,8 +143,12 @@ class SourceRepairBatch extends ChangeNotifier {
     _session = session ?? _defaultSession;
   }
 
-  /// 同時交給 AI 修幾個網站。
-  static const int aiConcurrency = 3;
+  /// 沒指定時同時交給 AI 修幾個網站（[aiDefaultConcurrency]）。
+  static const int defaultAiConcurrency = aiDefaultConcurrency;
+
+  /// 同時交給 AI 修幾個網站：App 照 AI 服務頁的設定，實跑測試照
+  /// `NR_AI_CONCURRENCY`。
+  final int aiConcurrency;
 
   /// 同時檢查幾個網站。
   static const int siteConcurrency = 8;
@@ -545,7 +550,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   Iterable<RepairItem> _pending() => items.where((item) => !item.isFinished);
 
-  /// 還沒結果的書源照網站（可註冊網域）分組，照原本的順序。
+  /// 還沒結果的書源照網站（書源網址的主機，[siteKey]）分組，照原本的順序。
   Map<String, List<RepairItem>> _pendingBySite() {
     final groups = <String, List<RepairItem>>{};
     for (final item in _pending()) {
