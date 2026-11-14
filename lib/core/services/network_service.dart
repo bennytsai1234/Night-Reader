@@ -8,10 +8,11 @@ import 'package:path/path.dart' as p;
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/cloudflare_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
+import 'package:night_reader/core/network/source_tls.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
-/// NetworkService - 專業網路伺服 (具備反爬蟲對應能力)
-/// 封裝全域 Dio 實例並支持 Cookie 持久化與書源併發控制
+/// 書源的連線（[dio]：Cookie、轉址、Cloudflare 攔截器，憑證不驗，見
+/// [sourceHttpClient]），和夜讀自己的服務用的連線（[appDio]）。
 class NetworkService {
   static final NetworkService _instance = NetworkService._internal();
   factory NetworkService() => _instance;
@@ -22,6 +23,15 @@ class NetworkService {
 
   Dio get dio => _dio;
   CookieJar get cookieJar => _cookieJar;
+
+  /// 夜讀自己的服務（App 更新）用的連線：照常驗憑證，不帶書源的 Cookie 與
+  /// 攔截器。書源的請求走 [dio]。
+  final Dio appDio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ),
+  );
 
   bool _isInitialized = false;
 
@@ -50,13 +60,14 @@ class NetworkService {
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
       ),
-    );
+    )..httpClientAdapter = sourceHttpClientAdapter();
 
     // 最先：中文網域換成 punycode，Cookie 與後面的攔截器看到的是送出的網址。
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
           options.path = NetworkUtils.toRequestUrl(options.path);
+          AppInterceptor.rememberSourceCookie(options);
           handler.next(options);
         },
       ),

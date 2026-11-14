@@ -13,6 +13,7 @@ import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
 
 /// AI 修復的「解析」與「跑程式」（ADR 0054）：在書源 worker 裡跑，規則 JS
@@ -40,7 +41,9 @@ Future<String> parseRepairPage(
 
 /// 跑程式：在 [source] 的規則 JS 環境跑 [code]，`page(頁碼)` 傳回 [pages]
 /// 裡那一頁的原文。傳回值寫成文字（不是字串的轉成 JSON），最多
-/// [_jsResultLength] 字；出錯時是錯誤訊息。
+/// [_jsResultLength] 字；出錯時是錯誤訊息。程式送出的請求接在後面：實際送出
+/// 的標頭與回應的開頭（2026-11-13 酷匠阅读的 AI 兩次把標頭包在 `headers`
+/// 裡傳給 `java.connect`，看不到送出了什麼，以為整套介面失效）。
 Future<String> runRepairJs(
   BookSource source, {
   required String code,
@@ -213,21 +216,36 @@ Future<String> Function(CancelToken) _jsTask(
   final prelude =
       'var __nrPages = ${jsonEncode({for (final MapEntry(:key, :value) in pages.entries) '$key': value})};'
       'function page(n) { return __nrPages[String(n)]; }\n';
-  try {
-    final value = AnalyzeRule(source: source).evalJS(prelude + code, null);
-    final text = switch (value) {
-      null => 'null',
-      final String string => string,
-      _ => _encode(value),
-    };
-    return text.length <= _jsResultLength
-        ? '傳回：$text'
-        : '傳回（共 ${text.length} 字，只給前 $_jsResultLength 字）：'
-              '${text.substring(0, _jsResultLength)}';
-  } catch (error) {
-    return '出錯：$error';
+  final requests = RequestLog(
+    responsePreview: RequestLog.diagnosisPreview,
+    sentHeaders: true,
+  );
+  final result = await requests.run(() async {
+    try {
+      final value = AnalyzeRule(source: source).evalJS(prelude + code, null);
+      final text = switch (value) {
+        null => 'null',
+        final String string => string,
+        _ => _encode(value),
+      };
+      return text.length <= _jsResultLength
+          ? '傳回：$text'
+          : '傳回（共 ${text.length} 字，只給前 $_jsResultLength 字）：'
+                '${text.substring(0, _jsResultLength)}';
+    } catch (error) {
+      return '出錯：$error';
+    }
+  });
+  if (requests.lines.isEmpty) return result;
+  var sent = requests.lines.join('\n');
+  if (sent.length > _jsRequestsLength) {
+    sent = '${sent.substring(0, _jsRequestsLength)}…（後面省略）';
   }
+  return '$result\n# 這段程式送出的請求\n$sent';
 };
+
+/// 程式送出的請求最多附幾個字。
+const int _jsRequestsLength = 6000;
 
 String _encode(Object value) {
   try {

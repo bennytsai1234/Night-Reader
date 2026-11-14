@@ -357,7 +357,6 @@ class _SearchViewState extends State<SearchView> {
       return AppStateView(
         icon: Icons.filter_alt_off,
         title: '沒有符合篩選的結果',
-        description: '目前的結果都被篩選條件排除了。',
         primaryAction: AppStateAction(
           label: '清除篩選',
           icon: Icons.clear,
@@ -822,7 +821,7 @@ class _SearchViewState extends State<SearchView> {
                                 // 屏蔽詞記在手機上、每次搜尋都套用，「清除」
                                 // 不清它：清的是這次搜尋的篩選。
                                 GroupedSection(
-                                  footer: '書名或作者含有這些字的結果不列，每次搜尋都套用；用逗號或空白分開。',
+                                  footer: '用逗號或空白分開',
                                   children: [
                                     GroupedTextFieldRow(
                                       label: '屏蔽詞',

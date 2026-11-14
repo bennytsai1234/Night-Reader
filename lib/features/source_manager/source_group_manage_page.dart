@@ -48,7 +48,6 @@ class SourceGroupManagePage extends StatelessWidget {
               child: AppStateView(
                 icon: Icons.folder_outlined,
                 title: '尚未建立自訂分組',
-                description: '新增分組並選擇要加入的書源，就能依分組管理、篩選與分享。',
                 primaryAction: AppStateAction(
                   label: '新增分組',
                   icon: Icons.add,

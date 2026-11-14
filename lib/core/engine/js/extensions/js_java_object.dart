@@ -872,8 +872,8 @@ extension JsJavaObject on JsExtensionsBase {
         getCookie: function(url) { return __lrWait('cookieGet', url); },
         set: function(url, value) { sendMessage('setCookie', JSON.stringify([url, value])); },
         setCookie: function(url, value) { sendMessage('setCookie', JSON.stringify([url, value])); },
-        remove: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
-        removeCookie: function(url) { sendMessage('removeCookie', JSON.stringify(url)); },
+        remove: function(url) { __lrWait('removeCookie', url); },
+        removeCookie: function(url) { __lrWait('removeCookie', url); },
         all: function() { return __lrWait('allCookies', ''); },
         // Legado CookieStore：「a=1; b=2」與 Map 互轉，空值的項目略過。傳回
         // Java 的 Map（get、put、keySet 都能用，也能照屬性讀）。

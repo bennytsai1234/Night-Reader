@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/chapter_content_kind.dart';
 
 import 'ai_chat_client.dart';
 import 'repair_pages.dart';
@@ -228,6 +229,7 @@ const Map<String, String> aiGiveUpLabels = {
   'paid': '要付費',
   'human_check': '要真人在網頁上驗證',
   'blocked': '網站擋下所有請求',
+  'not_a_book': '不是小說、漫畫或有聲書',
   'site_broken': '網站的功能壞了',
   'rate_limited': '網站限流',
 };
@@ -497,13 +499,16 @@ Map<String, Object?> _flatten(Map<String, dynamic> json, [String prefix = '']) {
   return out;
 }
 
-const String _rules = '''
+const String _rules =
+    '''
 書源是 Legado 3.0（閱讀 App）格式的 JSON，夜讀照同樣的規則解析。
 - bookSourceType：0 小說（正文是成段文字）、1 有聲（正文是音訊網址）、2 漫畫（正文是圖片網址）。照抓到的正文判斷，不照名稱猜。規則裡用 book.type = … 逐本書設定類型的書源（聚合源，正文是哪一類看登入表單選的模式）不改類型。
+  - 正文怎樣算抓到（試抓與校驗都照這個）：小說去掉圖片後至少 $chapterTextMinRunes 字，整章只有圖不算；漫畫至少一張圖；有聲至少一個網址。校驗也照抓到的正文改類型：去掉圖片與網址後至少 ${ChapterContentKind.novelMinRunes} 字是小說，至少 ${ChapterContentKind.comicMinImages} 張圖、不到 ${ChapterContentKind.comicMaxRunes} 字是漫畫，其他照書源原本的類型。
 - 規則語法照 Legado：JSOUP Default（class.xxx.0@tag.a@href）、CSS（@css:）、XPath（//）、JSONPath（\$.）、正則替換（##正則##替換）、<js></js> 與 @js:、{{ }} 內嵌、@put／@get。網址規則可以接 ,{"method":"POST","body":"...","charset":"gbk"}。
 - 目錄或一章正文分成好幾頁時，用 ruleToc.nextTocUrl、ruleContent.nextContentUrl 寫抓「下一頁」網址的規則（例如 a#next@href），夜讀照它一頁一頁抓下去、接成完整的目錄或一章。
 - 規則 JS 裡可用（同 Legado）：變數 result、baseUrl、book、source；key、page 只有網址規則（searchUrl、exploreUrl 這類）的 JS 有，解析規則（bookList 這類）的 JS 沒有。
-  - 抓網頁：java.ajax(網址) 直接傳回內容字串（網址可以接 ,{"method":"POST","body":"..."}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
+  - result 是這條規則前一段的結果。書單裡每本書的欄位規則（name、bookUrl 這類）直接用 JS 時，result 是這本書那一塊網頁元素（接成字串是它的 HTML），java.getString(規則) 也在這一塊裡找。
+  - 抓網頁：java.ajax(網址) 直接傳回內容字串，只收網址一個參數，方法、內文、標頭寫在網址後面（網址,{"method":"POST","body":"...","headers":{"名稱":"值"}}）；java.post(網址, 內文, 標頭物件)、java.get(網址, 標頭物件)、java.connect(網址) 或 java.connect(網址, 標頭物件) 傳回回應物件，內容要用 .body()，狀態碼 .code()、網址 .url()、標頭 .headers()。標頭物件直接是 {"名稱":"值"}，外面不包 headers。java.ajax、java.connect 照書源的標頭與 Cookie 送；java.get、java.post 只送你給的標頭，enabledCookieJar 是 1 時再加上存著的 Cookie。java.get 抓網頁一定要給標頭物件（可以是 {}）：只給一個參數的 java.get(名稱) 是讀變數。
   - 解析：java.setContent(html) 之後 java.getString(規則)、java.getStringList(規則)、java.getElements(規則)。
   - 編碼：java.base64Decode(字串)、java.base64Encode、java.md5Encode、java.encodeURI、java.t2s、java.s2t、java.createSymmetricCrypto(…)。
   - 變數與 Cookie：java.put(名稱, 值)、java.get(名稱)；cookie.getCookie(網址)、cookie.setCookie(網址, 值)。
@@ -517,12 +522,16 @@ const String _method =
 ## 怎麼查
 - 先看開場的校驗結果與試抓：哪一段失敗、網站實際回了什麼。網站回了正常的內容、規則卻抓不到（例如「未獲取到書籍」但回應裡有書單），問題在解析規則，網址與參數照舊；網站回的是錯誤、提示、驗證頁或轉址程式，才查網址、參數、標頭或網站本身。
 - 每個抓到的網頁都有頁碼（頁 N），整頁存在夜讀這邊；回給你的只是精簡後的開頭。後面的內容用 read 讀；要知道某段文字在哪、它的選擇器怎麼寫，用 find；要看程式、<head> 與所有屬性，用 read 的 raw。
-- 改了規則就 test：一次從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；要確認後面幾段，從那一段 test。parse 不連網站，只在已經抓到的那頁試解析，網站在限流時用它。
+- 改了規則就 test：一次從指定的那一段（搜尋、發現頁、詳情頁、目錄頁或正文頁）一路抓到正文，每一段送了什麼、抓到什麼都回給你；要確認後面幾段，從那一段 test。test 不會交出：看過結果（書名、作者、目錄、正文都對）再用 submit 交出。試抓與校驗都從搜尋結果的第一本往下走；校驗遇到第一本打不開（詳情、目錄或正文失效）會改試第二本，兩本都打不開才算壞。第一本是下架或打不開的書時，用 test 的 from info 拿另一本試，不用為它改規則。parse 不連網站，只在已經抓到的那頁試解析，網站在限流時用它。
 - 要試的是書源本身的設定（Cookie 罐、標頭、網址參數、編碼）時，寫進 patch 直接 test：比自己寫程式一步步模擬快，送出的也是夜讀實際會送的樣子。
 - 網站對請求直接斷線、逾時或連回應都沒有時，先換送出的條件試：User-Agent（手機、桌機）、http 或 https、有沒有 www；換了哪一項就通，就把那一項寫進書源。
-- 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，還是被擋就用 give_up 的 rate_limited 放棄，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
-- 這個網站做不到書源要的某一段時，開場列出的別的網域可能是同一個網站的其他網址（鏡像、新網域、姊妹站）：先拿同一本書到那個網域看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域。
-- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前幾本一樣就不算修好。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 網站回的那頁不是內容時，先認出是哪一種再照做。要你隔一段時間再來的（限流）：等它說的間隔過了，再送一次同一個請求（試抓與校驗也會送，連續送太快被擋的算在裡面）；照常拿得到結果就照常修，等過一次還是被擋就用 give_up 的 rate_limited 放棄，不再等第二次，寫出網站說的話：限流到一般使用拿不到結果，找得到繞過的寫法也算壞了。要瀏覽器驗證或答題的（防護頁）：看能不能照它要的（例如寫入 Cookie）通過。用程式轉走的：照轉去的網址查。
+- 這個網站做不到書源要的某一段，或慢到超過校驗的時限時（回應那一行寫了花幾秒，超時的訊息寫了時限），開場列出的別的網域與同一個網站的其他開頭可能做得到：鏡像、新網域、姊妹站，或同一個網站的電腦版（www.）與手機版（m.），這兩版常是不同的程式，同一段的網址與快慢都不一樣。先拿同一本書到那裡看同一段，做得到就換書源網址的開頭、規則照舊直接 test，沒過再看是哪一段要改；只有一段換到另一版時，那一段抓到的書籍網址要轉成書源其他段用的那一版。別的網域只看開場列出的、或網頁裡寫到的，不自己猜新網域；同一個網站換成 www. 或 m. 開頭不算猜。
+- 搜尋與詳情抓到的書名、作者要一樣：書名加作者是夜讀認一本書的依據（搜尋結果合併、換源、書籤）。同一套網站的搜尋頁、分類頁常長得不一樣，借用同一份規則時兩種頁都要看。
+- 回應那一行寫了（快取 HIT…）時，那頁是網站前面的快取伺服器存著的舊頁面：換關鍵字、加網址參數、等多久都一樣。搜尋頁這樣時，拿站上有的書名與不可能的詞各搜一次，回的一樣就是網站的搜尋壞了（site_broken）。
+- 搜尋規則要抓的是搜尋結果：通過校驗後夜讀會用一個不可能有的詞再搜一次，前 5 本書名和用試抓關鍵字搜到的前 5 本一樣，就不算修好；網站搜不到時回固定的推薦書也沒關係，只要和搜得到時不一樣。網站的搜尋本身壞了時用 give_up 的 site_broken 放棄，證據是拿站上確實有的書名（首頁、排行列出的）搜，網站回的跟搜不可能的詞一樣。
+- 試抓與校驗搜尋用的關鍵字是書源的 ruleSearch.checkKeyWord，沒寫時是開場除錯紀錄寫的那個（「開始搜尋關鍵字」）。站上搜不到這個詞，或這個詞的結果多到網站要很久才回時，把 checkKeyWord 改成站上確實有的書名（首頁、排行列出的）再 test，不用為這個詞改搜尋規則。
+- 網站的內容不是小說、漫畫或有聲書時（例如一篇貼文當一本書的段子、新聞站，有的文章只有圖、有的只有字），用 give_up 的 not_a_book 放棄：不為了過校驗改類型，也不只抓其中一種文章。
 - 放棄的證據到這樣就夠：那個功能在網站自己頁面上的做法（表單、連結送的地方）與開場列出的別的網域都試過，都做不到；不用把網站每個入口都試一遍。網站整個連不上或都轉到別處時，開場列出的別的網域試過就夠。
 - 一個書源最多 ${AiAgentKnobs.maxRounds} 輪（每次回覆算一輪），用完算沒修完；每一步都要有目的，把想確認什麼寫在 note。
 - 書源規則只放書源要用的規則；要跑程式查東西用 js。
@@ -643,9 +652,8 @@ final List<AiTool> aiRepairTools = [
   (
     name: 'test',
     description:
-        '試抓：拿改過的書源從某一段一路抓到第一章正文。抓到正文（照書源校驗的'
-        '判斷）就自動跑書源校驗（換第二本書、抽查前幾章），通過就套用；沒過會'
-        '回校驗的結論與診斷。',
+        '試抓：拿改過的書源從某一段一路抓到第一章正文，回每一段送了什麼、抓到'
+        '什麼。不會交出。',
     parameters: _object(
       {
         'patch': _patch,
@@ -668,8 +676,9 @@ final List<AiTool> aiRepairTools = [
   (
     name: 'submit',
     description:
-        '交出：試抓走不到正文、但確定改對了才用（例如正文要付費）；夜讀跑一次'
-        '書源校驗，通過才套用。',
+        '交出：看過試抓結果、確定改對了就用（試抓走不到正文但確定改對了也用，'
+        '例如正文要付費）。夜讀跑一次書源校驗（換第二本書、抽查前幾章），通過'
+        '才套用；沒過會回校驗的結論與診斷。',
     parameters: _object({'patch': _patch, 'note': _note}, ['patch']),
   ),
   (
@@ -682,10 +691,14 @@ final List<AiTool> aiRepairTools = [
           'enum': aiGiveUpLabels.keys.toList(),
           'description':
               '原因：照順序問，第一個答「是」的就選它。'
-              'site_gone：網域查不到、只剩停放頁，或每個網址最後落到的頁面都沒有這個'
-              '書源的書？login：內容要登入帳號才給？paid：內容要付費才給？'
+              'site_gone：網域查不到、每個網址都連不上（沒有回應、連線被拒）、只剩'
+              '停放頁，或每個網址最後落到的頁面都沒有這個書源的書（例如整站都回同一個'
+              '錯誤頁：5xx、資料庫連不上）？login：內容要登入帳號才給？'
+              'paid：有要付費、VIP 或解鎖才給的章節（前面幾章免費也算）？'
               'human_check：這個網站自己的頁面要真人驗證，驗證過後給的是這個網站的內容？'
               'blocked：網站擋下夜讀的所有請求？'
+              'not_a_book：網站的內容不是小說、漫畫或有聲書（例如一篇貼文當一本書的'
+              '段子、新聞站）？'
               'rate_limited：網站要你隔一段時間再來，等過它說的間隔再送同一個請求'
               '還是被擋（功能壞掉的一種：一般使用拿不到結果）？'
               'site_broken：網站在、其他頁面正常，書源要用的功能網站自己也做不到'
@@ -748,8 +761,27 @@ String _situation(BookSource source, String checkResult, String probe) =>
     // 改了搜尋規則、發現頁跟著壞，原本要等交件被退才知道（2026-11-12、13
     // 涨姿势三次都是這樣）。
     '${_exploreBorrowsSearch(source) ? '$aiRepairExploreBorrowsSearch\n\n' : ''}'
+    '${_sentBecause(source)}'
     '# 書源校驗的結果\n$checkResult\n\n'
     '# 試抓這個書源\n$probe';
+
+/// 書源上次校驗留下的結論（狀態標記與錯誤註解）：整批修復沿用一天內的
+/// 校驗送來，開場那次校驗可能已經沒問題（網站時好時壞）。2026-11-13 品书楼
+/// 開場就沒問題，AI 不知道為什麼送來，把每一段都查了一遍（8 輪）。沒有留下
+/// 結論是空字串。
+String _sentBecause(BookSource source) {
+  final health = source.runtimeHealth;
+  final error = source.errorComment;
+  if (health.category == SourceHealthCategory.healthy && error == null) {
+    return '';
+  }
+  final label = health.category == SourceHealthCategory.healthy
+      ? ''
+      : health.label;
+  final detail = [label, ?error].join('：');
+  return '# 送來修的原因\n上一次校驗的結論：$detail。開場重新校驗的結果在下面；'
+      '兩次不一樣時，先照上一次壞的那一段查。\n\n';
+}
 
 bool _exploreBorrowsSearch(BookSource source) =>
     (source.exploreUrl ?? '').trim().isNotEmpty &&
@@ -767,9 +799,11 @@ const String aiRepairUnrelatedSearch =
 String aiRepairFetchReply(String url, List<String> lines) =>
     '# 看網頁 $url（精簡後，每頁只給開頭；其他段用 read）\n${lines.join('\n')}';
 
-/// 試抓之後回給 AI 的話。
-String aiRepairProbeReply(SourceProbeReport probe) =>
-    '# 試抓結果：${probe.summary}\n${probe.fullText}';
+/// 試抓之後回給 AI 的話；搜尋與詳情的書名或作者不一樣時寫在最後
+/// （[mismatch]，`searchInfoMismatch`）。
+String aiRepairProbeReply(SourceProbeReport probe, {String? mismatch}) =>
+    '# 試抓結果：${probe.summary}\n${probe.fullText}'
+    '${mismatch == null ? '' : '\n\n# 書名或作者對不上：$mismatch'}';
 
 /// 交出或試抓到正文、校驗卻沒過時回給 AI 的話：校驗的結論與它的診斷
 /// （出錯的那一段送了什麼請求、網站回了什麼）。

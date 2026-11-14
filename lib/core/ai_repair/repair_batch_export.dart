@@ -94,7 +94,6 @@ Future<File> exportRepairBatch(
               'model': batch.service.model,
               'effort': batch.service.effort,
             },
-            'tokenBudget': batch.tokenBudget,
             'tokensUsed': batch.tokensUsed,
             'reusedChecks': batch.reusedChecks,
             'stoppedStage': batch.stoppedStage?.name,
@@ -177,8 +176,7 @@ String _summary(
       DateFormat('yyyy-MM-dd HH:mm').format(time),
     ].join(' · '),
     '',
-    'AI 用量：${batch.tokensUsed} token'
-        '${batch.tokenBudget == null ? '（不限）' : '／上限 ${batch.tokenBudget}'}',
+    'AI 用量：${batch.tokensUsed} token',
     '沿用 24 小時內的校驗結果：${batch.reusedChecks} 個',
     if (batch.stoppedStage case final stage?) '按了停止：做到 ${stage.name}',
     if (batch.errorMessage case final error?) '修復中斷：${redact(error)}',

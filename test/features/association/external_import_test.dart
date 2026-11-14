@@ -160,6 +160,35 @@ void main() {
       expect(find.byType(SnackBar), findsNothing);
     });
 
+    testWidgets('加入書架的連結跳出匯入書架的確認框', (tester) async {
+      final context = await pumpHost(tester);
+      service.handleUri(
+        context,
+        Uri.parse(
+          'legado://import/addToBookshelf?src='
+          'https%3A%2F%2Fexample.com%2Fbooks.json',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('外部匯入'), findsOneWidget);
+      expect(find.text('匯入書架'), findsOneWidget);
+    });
+
+    testWidgets('沒帶 src 的連結不理（同 Legado）', (tester) async {
+      final context = await pumpHost(tester);
+      service.handleUri(
+        context,
+        Uri.parse(
+          'legado://addBook?url=https%3A%2F%2Fexample.com%2Fbooks.json',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('外部匯入'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
     testWidgets('訂閱源連結只告知不支援，沒有匯入按鈕', (tester) async {
       final context = await pumpHost(tester);
       service.handleUri(

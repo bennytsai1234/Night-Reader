@@ -33,22 +33,25 @@ BookSourceKind chapterKindShownBy(
 };
 
 /// 拿掉插圖標記後還有夠多的字：整章是圖（例如把 VIP 章畫成圖的網站）不算
-/// 讀得到（ADR 0050）。
+/// 讀得到（ADR 0050）。至少 [chapterTextMinRunes] 字。
 bool chapterTextReadable(String content) {
   final trimmed = IllustrationMarkers.strip(content).trim();
   if (trimmed.isEmpty) return false;
   if (trimmed.startsWith('加載章節失敗')) return false;
   if (trimmed.startsWith('章節內容為空')) return false;
-  return trimmed.runes.length >= 20;
+  return trimmed.runes.length >= chapterTextMinRunes;
 }
+
+/// 小說的一章去掉插圖後至少幾個字才算讀得到（[chapterTextReadable]）。
+const int chapterTextMinRunes = 20;
 
 /// 書源校驗照抓到的一章正文判斷書源是哪一類（ADR 0051）。正文裡的圖片是
 /// `<img src="網址">`（抓正文時一律留下，ADR 0050）。
 ///
 /// 要有十足把握才給答案，判斷不出來就是 [unclear]，校驗維持書源原本的類型：
-/// - 成段文字（去掉圖片與網址後至少 [_textRunes] 字）是 [text]，每章附插圖
+/// - 成段文字（去掉圖片與網址後至少 [novelMinRunes] 字）是 [text]，每章附插圖
 ///   的小說也是；
-/// - 好幾張圖（至少 [_comicImages] 張）、幾乎沒有字（少於 [_comicMaxRunes]
+/// - 好幾張圖（至少 [comicMinImages] 張）、幾乎沒有字（少於 [comicMaxRunes]
 ///   字）是 [images]；
 /// - 只有音訊連結、沒有圖、幾乎沒有字是 [audio]。
 enum ChapterContentKind {
@@ -57,15 +60,15 @@ enum ChapterContentKind {
   audio,
   unclear;
 
-  static const int _textRunes = 200;
-  static const int _comicImages = 2;
-  static const int _comicMaxRunes = 50;
+  static const int novelMinRunes = 200;
+  static const int comicMinImages = 2;
+  static const int comicMaxRunes = 50;
   static const int _audioMaxRunes = 20;
 
   static ChapterContentKind of(String content) {
     final shape = ChapterContentShape.of(content);
-    if (shape.textRunes >= _textRunes) return text;
-    if (shape.images >= _comicImages && shape.textRunes < _comicMaxRunes) {
+    if (shape.textRunes >= novelMinRunes) return text;
+    if (shape.images >= comicMinImages && shape.textRunes < comicMaxRunes) {
       return images;
     }
     if (shape.audioUrls > 0 &&

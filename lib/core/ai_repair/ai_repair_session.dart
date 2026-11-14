@@ -173,7 +173,6 @@ class AiRepairSession extends ChangeNotifier {
     Future<Set<String>> Function(BookSource source)? secrets,
     this.recheckDelay = const Duration(seconds: 30),
     this._priorCheck,
-    bool Function()? hasBudget,
     void Function(AiUsage usage)? onUsage,
     Future<Directory> Function()? logDirectory,
   }) : job = AiRepairJob(source),
@@ -188,7 +187,6 @@ class AiRepairSession extends ChangeNotifier {
        _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
        _parsePage = parsePage ?? _defaultParsePage,
        _runJs = runJs ?? _defaultRunJs,
-       _hasBudget = hasBudget ?? _always,
        _copy = copy ?? _defaultCopy,
        _secretsOf = secrets ?? aiRepairSecretsOf,
        _backups = backups ?? AiRepairBackups.instance {
@@ -208,11 +206,6 @@ class AiRepairSession extends ChangeNotifier {
   /// 整批修復剛做的校驗；null 時修復頁自己校驗原本的書源。開場用完就放掉
   /// （帶著整份診斷與書源 JSON）。
   AiRepairPriorCheck? _priorCheck;
-
-  /// 還能再問 AI：整批修復有花費上限時，到了就不再問（[SourceRepairBatch]）。
-  final bool Function() _hasBudget;
-
-  static bool _always() => true;
 
   /// 使用者的 AI 服務；null 時用剪貼簿。
   final AiService? service;
@@ -476,12 +469,7 @@ class AiRepairSession extends ChangeNotifier {
     log.tools(
       const JsonEncoder.withIndent('  ').convert(aiToolsJson(aiRepairTools)),
     );
-    final end = await runAgent(
-      agent,
-      ask: _ask!,
-      cancelToken: _cancelToken,
-      hasBudget: _hasBudget,
-    );
+    final end = await runAgent(agent, ask: _ask!, cancelToken: _cancelToken);
     _stats = end.stats;
     if (_stopped || job.outcome != null) {
       _logStats(end);
@@ -643,11 +631,19 @@ class AiRepairSession extends ChangeNotifier {
       job._committing = false;
     }
     _finish(step, checkText);
+    // 交出的規則和原本一樣（2026-11-13 品书楼：AI 查過每一段都沒問題）：照樣
+    // 存回去拿掉舊的標記，但不說修好了。
+    final unchanged = changedParts(job.original, candidate).isEmpty;
+    final result = unchanged ? 'AI 查過，沒有要改的規則；重新校驗沒有問題' : '修好了，已套用';
+    final explanation = [
+      if (unchanged) 'AI 查過，沒有要改的規則',
+      if (note.isNotEmpty) 'AI：$note',
+    ].join('\n');
     job
       ..outcome = AiRepairOutcome.repaired
       ..repairedSource = saved
-      ..explanation = note.isEmpty ? null : 'AI：$note';
-    _logOutcome('修好了，已套用${note.isEmpty ? '' : '\nAI：$note'}');
+      ..explanation = explanation.isEmpty ? null : explanation;
+    _logOutcome('$result${note.isEmpty ? '' : '\nAI：$note'}');
     _notify();
     return null;
   }
@@ -978,6 +974,10 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 完整紀錄寫到對話的第幾句：每句只寫一次。
   int logged = 0;
 
+  /// 最後一次試抓到正文的那份書源（JSON 字串）：AI 交出的是同一份時，校驗
+  /// 照「試抓抓到過正文」做（沒過先隔一段時間再校驗一次）。
+  String? _probedOk;
+
   BookSource get original => job.original;
 
   @override
@@ -997,6 +997,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     job._probe = s._withPageIds(job._firstProbe!);
     current = sourceForAi(original);
     logged = 0;
+    _probedOk = null;
     s._finish(s._addStep(job, '重新開始（第 $attempt 次）', detail: why), why);
     s.log
       ..section('重新開始（第 $attempt 次）')
@@ -1197,7 +1198,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         s.log.full('### 程式\n$code');
         s._local(step, '跑程式', '# 程式結果\n$result');
         return answer('# 程式結果\n$result');
-      case AiTest(:final change, :final note, :final from, :final url):
+      case AiTest(:final change, :final from, :final url):
         final parsed = candidateOf(change);
         if (parsed == null) {
           return invalid('讀不懂 AI 回的書源', badChangeReply(change));
@@ -1249,15 +1250,13 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           s.log.both('試抓：$fact');
           return AgentRejected('# 書源校驗沒過：$fact');
         }
-        s._finish(step, '$changed，$where試抓：${probe.summary}，交出');
-        return submitted(
-          await s._validate(
-            job,
-            candidate,
-            note,
-            probeSucceeded: true,
-            last: false,
-          ),
+        // 試抓不交出：AI 看過結果自己 submit（使用者 2026-11-13，ADR 0054）。
+        _probedOk = jsonEncode(json);
+        final mismatch = searchInfoMismatch(probe);
+        s._finish(step, '$changed，$where試抓：${probe.summary}');
+        if (mismatch != null) s.log.both('試抓：$mismatch');
+        return answer(
+          aiRepairProbeReply(s._withPageIds(probe), mismatch: mismatch),
         );
       case AiSubmit(:final change, :final note):
         final parsed = candidateOf(change);
@@ -1269,7 +1268,15 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         final changed = AiRepairSession._changedText(original, candidate);
         s._finish(step, '$changed，交出');
         s.log.both('$changed，交出');
-        return submitted(await s._validate(job, candidate, note, last: false));
+        return submitted(
+          await s._validate(
+            job,
+            candidate,
+            note,
+            probeSucceeded: _probedOk == jsonEncode(json),
+            last: false,
+          ),
+        );
     }
   }
 

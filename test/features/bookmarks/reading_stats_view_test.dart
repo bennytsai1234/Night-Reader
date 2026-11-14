@@ -11,7 +11,7 @@ import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_settings.dart';
-import 'package:night_reader/features/settings/reading_stats_page.dart';
+import 'package:night_reader/features/bookmarks/reading_stats_view.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -72,7 +72,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: const ReadingStatsPage(),
+        home: const Scaffold(body: ReadingStatsView()),
       ),
     );
     await settle(tester);

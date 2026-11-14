@@ -244,7 +244,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 key: const ValueKey('noSources'),
                 icon: Icons.travel_explore_outlined,
                 title: '還沒有書源',
-                description: '匯入書源後，這裡會列出可以瀏覽分類的書源。',
                 primaryAction: AppStateAction(
                   label: '匯入書源',
                   icon: Icons.download_rounded,
@@ -292,7 +291,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         AppStateView(
           icon: Icons.search_off,
           title: '找不到符合條件的書源',
-          description: '清除搜尋或分組條件後再試一次。',
           primaryAction: AppStateAction(
             label: '清除條件',
             icon: Icons.clear,

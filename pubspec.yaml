@@ -67,6 +67,9 @@ dependencies:
 
   # === Image Loading ===
   cached_network_image: ^4.0.4
+  # 網路封面換成不驗憑證的書源連線（lib/core/network/source_tls.dart）。
+  flutter_cache_manager: ^3.4.5
+  http: ^1.6.0
 
   # === Image Picker ===
   image_picker: ^1.2.4
@@ -142,8 +145,6 @@ dev_dependencies:
   shared_preferences_platform_interface: ^2.4.2
   # 測試裡開得起瀏覽器頁的假 WebView（test/support/fake_webview.dart）。
   webview_flutter_platform_interface: ^2.15.1
-  # 測試換掉網路封面用的磁碟快取（CachedNetworkImageProvider.defaultCacheManager）。
-  flutter_cache_manager: ^3.4.5
   file: ^7.0.1
   # 量每一幀的記憶體回收（test/support/frame_budget.dart 的 FRAME_GC）。
   vm_service: ^15.3.0

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show TlsException;
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
@@ -740,7 +741,7 @@ class AnalyzeUrl {
           );
   }
 
-  /// 送出請求，傳回回應的位元組。網路斷線這類暫時的失敗再試兩次；網站
+  /// 送出請求，傳回回應的位元組。連線一下就斷這類暫時的失敗再試兩次；網站
   /// 回 4xx、5xx 照樣傳回，不成功時照網址選項 `retry` 再送（同 Legado）。
   Future<Response<List<int>>> _send(CancelToken? cancelToken) async {
     late Response<List<int>> response;
@@ -757,6 +758,10 @@ class AnalyzeUrl {
       method: method,
       headers: requestHeaders,
       responseType: ResponseType.bytes,
+      // 轉址由 AppInterceptor 一跳一跳跟（同 Legado 的 OkHttp）：每一跳照它的
+      // 網址載入 Cookie 罐、記進請求紀錄，書源給的 Cookie 跟著走。HTTP 套件
+      // 自己跟時，換了網址的開頭就把 Cookie 丟掉。
+      followRedirects: false,
       // 書源沒開 Cookie 罐時網站回的 Cookie 不存（同 Legado `setCookie`）。
       extra: LenientCookieManager.sourceExtra(source?.enabledCookieJar == true),
     );
@@ -825,27 +830,29 @@ class AnalyzeUrl {
     return headers;
   }
 
-  /// 判斷 Dio 錯誤是否屬於可重試的暫時性網路故障
-  /// (connectionTimeout / sendTimeout / receiveTimeout / connectionError（網域查不到除外）/ 未知 SocketException)
-  /// 不重試: cancel、badResponse (HTTP 4xx/5xx)、badCertificate、transformTimeout (回應轉換逾時)
+  /// 連線一下就斷（連線被重設、Socket 層級故障）再試；網站在時限內沒回應、
+  /// 加密連線失敗就不再試（同 Legado：OkHttp 的 `retryOnConnectionFailure`
+  /// 只換下一條路線，逾時與 TLS 握手失敗不重送）。重送逾時的請求讓一個不回應
+  /// 的網站要等三倍的 15 秒。
   bool _isRetryable(DioException e) {
     switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        return true;
       case DioExceptionType.connectionError:
         // 網域查不到再試也查不到（網站不在了，或手機斷網）。
         return !'${e.error}'.contains('Failed host lookup');
       case DioExceptionType.unknown:
-        // Socket 層級故障也算暫時性；網站擋下來（Cloudflare、封鎖網路）
-        // 這類已經判斷過的原因再試也一樣。
-        return e.error != null && e.error is! AppException;
+        // 網站擋下來（Cloudflare、封鎖網路）這類已經判斷過的原因、加密連線
+        // 失敗，再試也一樣。
+        final error = e.error;
+        return error != null &&
+            error is! AppException &&
+            error is! TlsException;
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
       case DioExceptionType.cancel:
       case DioExceptionType.badCertificate:
       case DioExceptionType.badResponse:
       case DioExceptionType.transformTimeout:
-        // 用戶端資料轉換逾時,非網路層暫時性故障,重試只會重跑請求再次逾時
         return false;
     }
   }

@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../network/source_tls.dart';
 import '../services/network_service.dart';
 import '../database/app_database.dart';
 import '../database/dao/book_dao.dart';
@@ -54,6 +55,7 @@ Future<void> configureDependencies() async {
 
   // 3. 其它核心服務註冊
   getIt.registerSingleton<NetworkService>(NetworkService());
+  useSourceConnectionForCovers();
   getIt.registerSingleton<TTSService>(TTSService());
   getIt.registerLazySingleton<CheckSourceService>(CheckSourceService.new);
 

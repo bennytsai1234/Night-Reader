@@ -29,7 +29,6 @@ void main() {
         BookSource(bookSourceUrl: 'https://b.example', bookSourceName: '乙'),
       ],
       service: _service,
-      tokenBudget: 1000000,
     )..tokensUsed = 1234;
     final repaired = batch.items.first;
     repaired

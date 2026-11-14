@@ -132,10 +132,11 @@ Future<(SourceCheckIsolateResult, BookSource)> _check(
   _FakeBookSourceService service, {
   BookSource? source,
   bool networkUp = true,
+  IsolateCheckConfig config = _searchOnly,
 }) async {
   final result = await SourceChecker(
     source: source ?? _source(),
-    config: _searchOnly,
+    config: config,
     service: service,
     networkCheck: () async => networkUp,
   ).run();
@@ -211,6 +212,33 @@ void main() {
     expect(checked.runtimeHealth.allowsReading, isFalse);
   });
 
+  test(
+    'a stage running past the time limit says the limit and the keyword',
+    () async {
+      // 2026-11-13 御书屋：搜尋要 48 秒，AI 不知道校驗只等 20 秒。
+      const quick = IsolateCheckConfig(
+        keyword: '我的',
+        timeoutSeconds: 1,
+        checkSearch: true,
+        checkDiscovery: false,
+        checkInfo: true,
+        checkCategory: true,
+        checkContent: true,
+      );
+      final (result, _) = await _check(
+        _FakeBookSourceService(
+          search: () => Completer<List<SearchBook>>().future,
+        ),
+        config: quick,
+      );
+
+      expect(
+        result.diagnostics.join('\n'),
+        contains('搜尋「我的」檢查超時：超過 1 秒（校驗設定的時限）'),
+      );
+    },
+  );
+
   test('a rule asking for web verification only marks the source', () async {
     final (_, checked) = await _check(
       _FakeBookSourceService(
@@ -263,7 +291,9 @@ void main() {
   });
 
   // 付費章節不抓（ADR 0057）：只抽查免費章節。
-  test('paid chapters are skipped and the free ones are checked', () async {
+  test('a paid chapter in the table of contents marks the whole source as '
+      'paid, left out and up for removal, without reading it', () async {
+    // 使用者 2026-11-13：只要有付費、VIP 章節就丟掉（ADR 0057）。
     final service = _FakeBookSourceService(
       chapters: (_) async => [
         BookChapter(url: 'https://site.example/1.html', title: '第一章'),
@@ -276,15 +306,17 @@ void main() {
     );
     final (result, checked) = await _check(service);
 
-    expect(result.isHealthy, isTrue);
-    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
-    expect(service.contentRequests, ['第一章']);
+    expect(checked.groupTags, contains(paidSourceGroupTag));
+    expect(checked.isCleanupCandidate, isTrue);
+    expect(checked.runtimeHealth.allowsSearch, isFalse);
+    expect(checked.runtimeHealth.allowsReading, isFalse);
+    expect(result.message, contains('目錄有付費章節: 第二章'));
+    expect(service.contentRequests, isEmpty);
   });
 
-  test(
-    'a book of only paid chapters marks the source as needing login',
-    () async {
-      final service = _FakeBookSourceService(
+  test('a book of only paid chapters is paid too', () async {
+    final (_, checked) = await _check(
+      _FakeBookSourceService(
         chapters: (_) async => [
           BookChapter(
             url: 'https://site.example/1.html',
@@ -292,14 +324,33 @@ void main() {
             isVip: true,
           ),
         ],
-      );
-      final (result, checked) = await _check(service);
+      ),
+    );
 
-      expect(checked.groupTags, contains(loginRequiredSourceGroupTag));
-      expect(result.message, contains('付費章節'));
-      expect(service.contentRequests, isEmpty);
-    },
-  );
+    expect(checked.groupTags, contains(paidSourceGroupTag));
+    expect(checked.groupTags, isNot(contains(loginRequiredSourceGroupTag)));
+  });
+
+  test('a VIP chapter the source marks as bought, or a title that only says '
+      'VIP, keeps the source', () async {
+    final service = _FakeBookSourceService(
+      chapters: (_) async => [
+        BookChapter(url: 'https://site.example/1.html', title: '第一章'),
+        BookChapter(
+          url: 'https://site.example/2.html',
+          title: '第二章',
+          isVip: true,
+          isPay: true,
+        ),
+        BookChapter(url: 'https://site.example/3.html', title: '第三章 VIP包厢'),
+      ],
+    );
+    final (result, checked) = await _check(service);
+
+    expect(result.isHealthy, isTrue);
+    expect(checked.groupTags, isNot(contains(paidSourceGroupTag)));
+    expect(service.contentRequests, contains('第一章'));
+  });
 
   test(
     'a book served as a download file marks a download-only source',
@@ -387,6 +438,53 @@ void main() {
         expect(source.runtimeHealth.quarantined, isTrue);
       },
     );
+  });
+
+  group('a site that refuses the connection or fails the TLS handshake', () {
+    // 2026-11-13 色欲文、鲤鱼乡①：連線被拒與加密連線失敗原本都標「校驗超時」。
+    DioException refused() => DioException(
+      requestOptions: RequestOptions(path: 'https://m.site.example/s'),
+      type: DioExceptionType.connectionError,
+      message: 'The connection errored: Connection refused',
+      error: SocketException(
+        'Connection refused',
+        osError: const OSError('Connection refused', 111),
+        address: InternetAddress('38.63.223.204'),
+        port: 54550,
+      ),
+    );
+    DioException handshake() => DioException(
+      requestOptions: RequestOptions(path: 'https://m.site.example/s'),
+      error: const HandshakeException(
+        'Handshake error in client',
+        OSError('WRONG_VERSION_NUMBER', 1),
+      ),
+    );
+
+    for (final (name, error) in [
+      ('refused', refused),
+      ('failed handshake', handshake),
+    ]) {
+      test('$name is a site problem, not a timeout', () async {
+        final (result, source) = await _check(
+          _FakeBookSourceService(search: () async => throw error()),
+        );
+
+        expect(source.runtimeHealth.label, '上游異常');
+        expect(source.groupTags, isNot(contains('校驗超時')));
+        expect(result.message, isNot(contains('超時')));
+      });
+    }
+
+    test('the local port is not written as the site\'s port', () async {
+      final (result, _) = await _check(
+        _FakeBookSourceService(search: () async => throw refused()),
+      );
+
+      expect(result.message, contains('Connection refused'));
+      expect(result.message, isNot(contains('54550')));
+      expect(result.message, contains('m.site.example:443'));
+    });
   });
 
   test('a dropped connection is retried once before judging', () async {

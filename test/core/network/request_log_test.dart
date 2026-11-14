@@ -33,6 +33,31 @@ void main() {
       expect(log.lines.single, contains('（快取 MISS、HIT，存了 3、5 秒）'));
     });
 
+    test('慢的回應寫出花了幾秒，快的不寫', () async {
+      // 2026-11-13 御书屋：搜尋要 48 秒，AI 看不到時間，猜了五輪。
+      Response<dynamic> sent(String path, Duration ago) => Response<dynamic>(
+        requestOptions: RequestOptions(
+          path: path,
+          extra: {
+            requestStartedKey: DateTime.now()
+                .subtract(ago)
+                .microsecondsSinceEpoch,
+          },
+        ),
+        statusCode: 200,
+        data: 'ok',
+      );
+      final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+      await log.run(() async {
+        recordResponse(
+          sent('https://site.example/slow', const Duration(seconds: 3)),
+        );
+        recordResponse(sent('https://site.example/fast', Duration.zero));
+      });
+      expect(log.lines.first, matches(RegExp(r'200，花了 3\.\d 秒，')));
+      expect(log.lines.last, isNot(contains('花了')));
+    });
+
     test('空字串、空位元組與全是空白的回應寫成沒有內容', () async {
       final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
       await log.run(() async {

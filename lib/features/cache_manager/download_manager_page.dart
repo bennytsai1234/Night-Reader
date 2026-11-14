@@ -117,7 +117,6 @@ class DownloadManagerPage extends StatelessWidget {
               child: const AppStateView(
                 icon: Icons.download_done_rounded,
                 title: '暫無背景下載任務',
-                description: '從書籍詳情加入下載後，進度會顯示在這裡。',
               ),
             )
           : SwipeActionsGroup(

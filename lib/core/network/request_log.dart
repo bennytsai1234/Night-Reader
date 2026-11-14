@@ -117,6 +117,27 @@ final class RequestLog {
   }
 }
 
+/// 請求送出的時刻（微秒）放在 `RequestOptions.extra` 的這個鍵：回應那一行
+/// 照它寫花了幾秒（[recordResponse]）。`AppInterceptor` 每送一次（含每一跳
+/// 轉址）重記一次。
+const String requestStartedKey = '_requestStartedMicros';
+
+/// 超過這麼久的回應才寫花了幾秒：快的不多佔字。2026-11-13 御书屋的搜尋要
+/// 48 秒，校驗只等 20 秒，AI 看不到時間，猜了五輪。
+const Duration _slowResponse = Duration(seconds: 1);
+
+/// 回應那一行的「，花了 48.2 秒」；不到 [_slowResponse] 或不知道何時送出是
+/// 空字串。
+String _elapsedNote(RequestOptions? options) {
+  final started = options?.extra[requestStartedKey];
+  if (started is! int) return '';
+  final elapsed = Duration(
+    microseconds: DateTime.now().microsecondsSinceEpoch - started,
+  );
+  if (elapsed < _slowResponse) return '';
+  return '，花了 ${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
+}
+
 /// 外層的 [RequestLog]；不在 [RequestLog.run] 裡時是 null。
 RequestLog? get currentRequestLog =>
     Zone.current[_requestLogZoneKey] as RequestLog?;
@@ -224,7 +245,10 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   if (response == null) {
     final type = error?.type;
     final uri = error?.requestOptions.uri.removeFragment();
-    log._add('  ← $uri 沒有回應（${type?.name ?? '未知'}）');
+    log._add(
+      '  ← $uri 沒有回應（${type?.name ?? '未知'}）'
+      '${_elapsedNote(error?.requestOptions)}',
+    );
     // 網站擋下夜讀（Cloudflare 那幾種）也包成 unknown，只算真的連線斷掉的。
     if (type == DioExceptionType.connectionError ||
         (type == DioExceptionType.unknown && error?.error is IOException)) {
@@ -239,7 +263,8 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   final head =
       '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
       '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}'
-      '${dropped == null ? '' : ' $dropped'}';
+      '${dropped == null ? '' : ' $dropped'}'
+      '${_elapsedNote(response.requestOptions)}';
   final empty = _recordBody(log, head, response.data);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;

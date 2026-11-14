@@ -11,7 +11,6 @@
 ///   是使用者的整份匯出檔，照案件集的名稱與網址挑出書源；跑完每件照預期答案
 ///   算對錯（修好了沒有、正文夠不夠長），印出表、寫進結果檔的 `score`。
 ///   `NR_ONLY=<名稱,名稱>` 只跑案件集裡這幾件（照 `name`）。
-///   `NR_TOKEN_BUDGET` 是整批的用量上限（預設 100 萬，0 是不限）。
 /// - `NR_AI_URL` 是服務網址，預設 DeepSeek（`https://api.deepseek.com`）；
 ///   OpenCode Go 是 `https://opencode.ai/inference/go/openai/v1`。`NR_AI_MODEL`
 ///   換模型，預設 `deepseek-flash`（服務的 `/models` 列得出有哪些）；
@@ -127,7 +126,6 @@ void main() {
                   s.bookSourceUrl == item['url'],
             ),
         ];
-  final budget = int.tryParse(env['NR_TOKEN_BUDGET'] ?? '') ?? 1000000;
 
   test('整批修復 ${sources.length} 個書源', () async {
     await getIt<BookSourceDao>().upsertAll(sources);
@@ -139,7 +137,6 @@ void main() {
         model: env['NR_AI_MODEL'] ?? 'deepseek-flash',
         effort: env['NR_AI_EFFORT'] ?? '',
       ),
-      tokenBudget: budget == 0 ? null : budget,
     );
     var lastStage = '';
     batch.addListener(() {

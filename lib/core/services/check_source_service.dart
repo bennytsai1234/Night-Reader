@@ -14,6 +14,7 @@ import 'package:night_reader/core/services/source_check_diagnostics.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/js/js_extensions_base.dart';
+import 'package:night_reader/core/constant/source_wait.dart';
 
 class SourceCheckEntry {
   final String sourceUrl;
@@ -126,7 +127,7 @@ class SourceCheckConfig {
 
   static const SourceCheckConfig defaults = SourceCheckConfig(
     keyword: '我的',
-    timeoutSeconds: 15,
+    timeoutSeconds: sourceWaitSeconds,
     checkSearch: true,
     checkDiscovery: true,
     checkInfo: true,

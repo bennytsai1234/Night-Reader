@@ -108,7 +108,7 @@ void main() {
     });
   });
 
-  test('開場的網頁連到的別的網域照次數列，同一個網站的子網域不算', () {
+  test('開場的網頁連到的別的網域照次數列，同一個網站的其他開頭另外列', () {
     // 2026-11-13 肉肉屋：封面圖在姊妹站的網域。
     final fact = otherDomainsFact(
       BookSource(bookSourceUrl: 'https://www.site.example'),
@@ -125,8 +125,16 @@ void main() {
     expect(fact, contains('img.sister.example 2'));
     expect(fact, contains('m.mirror.example 1'));
     expect(fact, contains('www.footer.example 1'), reason: '文字裡寫出的網址也算');
-    expect(fact, isNot(contains('site.example 1')));
-    expect(fact, isNot(contains('m2.site.example')));
+    final lines = fact!.split('\n');
+    expect(lines.first, isNot(contains('site.example 1')));
+    expect(lines.first, isNot(contains('m2.site.example')));
+    // 2026-11-13 御书屋：手機版搜尋要 48 秒，電腦版 2 秒。書源自己的開頭
+    // （www.site.example）不列；試抓的網頁在 m.site.example，上面的相對連結
+    // 也連到那裡。
+    expect(lines.last, startsWith('開場抓到的網頁連到同一個網站的其他開頭（出現次數）：'));
+    expect(lines.last, contains('m2.site.example 1'));
+    expect(lines.last, contains('m.site.example 1'));
+    expect(lines.last, isNot(contains('www.site.example')));
   });
 
   test('網址不同、內容一字不差的頁面標出是哪一頁', () {

@@ -374,7 +374,7 @@ class SourceChecker {
     _log('  ◇ 測試搜尋: $searchWord');
     try {
       final searchResults = await _fetch(
-        '搜尋',
+        '搜尋「$searchWord」',
         (_) => _service.searchBooks(_source, searchWord),
         cameBackEmpty: (results) => results.isEmpty,
       );
@@ -669,8 +669,14 @@ class SourceChecker {
       return;
     }
 
-    // 只抽查免費章節（ADR 0057）：後面有付費章節的書照樣讀得到前面。整本
-    // 都是付費章節才記下來。
+    // 書源標了付費、還沒買的章節（ADR 0057）：夜讀不接付費內容，整個書源
+    // 標成付費。只看書源自己標的；章名的「VIP」這類字樣只用來挑抽查的章，
+    // 猜錯不會丟掉整個書源。
+    if (readableChapters.where((c) => c.isLocked).firstOrNull case final c?) {
+      _recordIssue(issues, _paidChapterIssue(mode, c));
+      return;
+    }
+
     final freeChapters = [
       for (final chapter in readableChapters)
         if (!_looksLikeLockedChapter(chapter)) chapter,
@@ -792,7 +798,11 @@ class SourceChecker {
     bool siteFaltered() => _requests.transientResponses > transientBefore;
     Future<T> attempt(bool retrying) => fetch(retrying).timeout(
       _config.timeoutDuration,
-      onTimeout: () => throw TimeoutException('$label檢查超時'),
+      // 寫出時限：2026-11-13 御书屋的搜尋要 48 秒，AI 不知道校驗只等 20 秒，
+      // 原樣重跑、改 Cookie 猜了好幾輪。
+      onTimeout: () => throw TimeoutException(
+        '$label檢查超時：超過 ${_config.timeoutSeconds} 秒（校驗設定的時限）',
+      ),
     );
     try {
       final result = await attempt(false);
@@ -1204,6 +1214,15 @@ SourceRuntimeHealth _contentHealthFor(_CheckMode mode) {
   );
 }
 
+_IssueData _paidChapterIssue(_CheckMode mode, BookChapter chapter) {
+  final title = _compactChapterTitle(chapter.title);
+  return _IssueData(
+    stage: _stageFor(mode, 'toc'),
+    message: title.isEmpty ? '目錄有付費章節' : '目錄有付費章節: $title',
+    health: paidSourceHealth,
+  );
+}
+
 _IssueData _lockedChapterIssue(_CheckMode mode, BookChapter chapter) {
   final title = _compactChapterTitle(chapter.title);
   return _IssueData(
@@ -1356,10 +1375,6 @@ String _clip(String text, int limit) =>
 bool _looksLikeTimeout(String normalized) =>
     normalized.contains('timeout') ||
     normalized.contains('timed out') ||
-    normalized.contains('socketexception') ||
-    normalized.contains('handshakeexception') ||
-    normalized.contains('ssl') ||
-    normalized.contains('receivetimeout') ||
     normalized.contains('future not completed');
 
 bool _looksLikeBlockedUpstream(String normalized) =>
@@ -1371,7 +1386,10 @@ bool _looksLikeBlockedUpstream(String normalized) =>
     normalized.contains(' 503') ||
     normalized.contains('forbidden') ||
     normalized.contains('cloudflare') ||
-    normalized.contains('certificate_verify_failed');
+    // 連不上（連線被拒、加密連線失敗）：網站那邊的問題，不是太慢。書源的
+    // 連線不驗憑證（sourceHttpClient），憑證有問題不會走到這裡。
+    normalized.contains('socketexception') ||
+    normalized.contains('handshakeexception');
 
 int _issuePriority(SourceHealthCategory category) {
   switch (category) {
@@ -1383,6 +1401,8 @@ int _issuePriority(SourceHealthCategory category) {
       return 94;
     case SourceHealthCategory.downloadOnly:
       return 90;
+    case SourceHealthCategory.paid:
+      return 89;
     case SourceHealthCategory.contentBroken:
       return 80;
     case SourceHealthCategory.tocBroken:

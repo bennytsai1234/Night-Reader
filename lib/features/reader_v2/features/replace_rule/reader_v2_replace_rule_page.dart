@@ -173,7 +173,6 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
           ? AppStateView(
               icon: Icons.rule_rounded,
               title: '還沒有替換規則',
-              description: '新增規則後，可在閱讀時自動整理標題或正文。',
               primaryAction: AppStateAction(
                 label: '新增規則',
                 icon: Icons.add,

@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../storage/app_storage_paths.dart';
-import 'http_client.dart';
+import 'network_service.dart';
 import 'update_service.dart';
 
 /// 下載新版 APK 並交給系統安裝程式。
@@ -22,7 +22,7 @@ class AppUpdateInstaller {
     Dio? dio,
     Future<Directory> Function()? directoryLoader,
     MethodChannel? channel,
-  }) : _dio = dio ?? HttpClient().client,
+  }) : _dio = dio ?? NetworkService().appDio,
        _directoryLoader = directoryLoader ?? AppStoragePaths.appUpdateDir,
        _channel = channel ?? const MethodChannel('night_reader/app_installer');
 

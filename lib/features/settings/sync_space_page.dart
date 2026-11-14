@@ -127,7 +127,7 @@ class _SyncSpacePageState extends State<SyncSpacePage> {
         children: [
           GroupedSection(
             footer: _googleAvailable
-                ? 'Google 雲端硬碟用 App 專屬的隱藏資料夾，看不到也碰不到你其他的檔案。每台手機選同一個空間（同一個 Google 帳號，或同一個 WebDAV）才會同步。'
+                ? '每台手機選同一個空間（同一個 Google 帳號，或同一個 WebDAV）才會同步。'
                 : '每台手機選同一個 WebDAV 才會同步。',
             children: [
               if (_googleAvailable)
