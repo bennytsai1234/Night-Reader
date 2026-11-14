@@ -164,11 +164,20 @@ void main() {
       fetchPage: (source, url, _) async {
         fetched?.add(url);
         final status = fetchStatus?.call(url) ?? '200';
+        // 請求那一行照請求紀錄的寫法：POST 寫方法與送出的內容，回應那一行
+        // 只有網址。
+        final [address, ...rest] = url.split(',{');
+        final options = rest.isEmpty
+            ? const <String, dynamic>{}
+            : jsonDecode('{${rest.join(',{')}') as Map<String, dynamic>;
+        final request = options['method'] == 'POST'
+            ? 'POST $address 送出：${options['body']} 標頭：User-Agent: t'
+            : '$address 標頭：User-Agent: t';
         return (
-          lines: ['  ← $url $status：<form action="/s2">'],
+          lines: [request, '  ← $address $status：<form action="/s2">'],
           pages: [
             (
-              line: '  ← $url $status：<form action="/s2">',
+              line: '  ← $address $status：<form action="/s2">',
               body: '<html><form action="/s2"></html>',
             ),
           ],
@@ -188,43 +197,68 @@ void main() {
     );
   }
 
-  test(
-    'a page that answers now and then is said so after the result',
-    () async {
-      // 2026-11-14 白光小说：同一個搜尋網址一下 200、一下 502，AI 每次成功就
-      // 接著修別段，36 輪用完；思怡、读客书库同樣。程式把這件修復裡這個網址
-      // 回過的狀態碼列在結果後面，AI 不用自己記。
-      final statuses = ['200', '502', '502'];
-      var call = 0;
-      final s = session(
-        [_source('https://site.example')],
-        fetchStatus: (_) => statuses[call++],
-        replies: [
-          for (var i = 0; i < 3; i++)
-            jsonEncode({
-              'action': 'fetch',
-              'url': 'https://site.example/s',
-              'note': '第 $i 次',
-            }),
+  test('the same request answering now and then is said so after the '
+      'result', () async {
+    // 2026-11-14 白光小说：同一個搜尋一下 200、一下 502，AI 每次成功就接著
+    // 修別段，36 輪用完；思怡、读客书库同樣。程式把這件修復裡同一個請求
+    // 回過的狀態碼列在結果後面，AI 不用自己記。
+    final statuses = ['200', '502', '502'];
+    var call = 0;
+    final s = session(
+      [_source('https://site.example')],
+      fetchStatus: (_) => statuses[call++],
+      replies: [
+        for (var i = 0; i < 3; i++)
           jsonEncode({
-            'action': 'give_up',
-            'why': 'rate_limited',
-            'reason': '時好時壞',
+            'action': 'fetch',
+            'url': 'https://site.example/s',
+            'note': '第 $i 次',
           }),
-        ],
-      );
+        jsonEncode({
+          'action': 'give_up',
+          'why': 'rate_limited',
+          'reason': '時好時壞',
+        }),
+      ],
+    );
 
-      await s.start();
+    await s.start();
 
-      String result(int i) => asked[i + 1].last.content;
-      expect(result(0), isNot(contains('同一個網址這次回過不同的結果')));
-      expect(
-        result(1),
-        contains('# 同一個網址這次回過不同的結果\nhttps://site.example/s：200、502'),
-      );
-      expect(result(2), contains('https://site.example/s：200、502、502'));
-    },
-  );
+    String result(int i) => asked[i + 1].last.content;
+    expect(result(0), isNot(contains('同一個請求這次回過不同的結果')));
+    expect(
+      result(1),
+      contains('# 同一個請求這次回過不同的結果\nhttps://site.example/s：200、502'),
+    );
+    expect(result(2), contains('https://site.example/s：200、502、502'));
+  });
+
+  test('two different requests to one address are not called flaky', () async {
+    // 2026-11-14 白光小说：POST /search/ 只帶 keyword 回 502，多帶 submit 就
+    // 301 到結果頁。原本只看網址，把兩個不同的請求標成時好時壞，誤導 AI 放棄
+    // 一個修得好的書源。
+    final statuses = ['502', '301', '502'];
+    var call = 0;
+    final s = session(
+      [_source('https://site.example')],
+      fetchStatus: (_) => statuses[call++],
+      replies: [
+        for (final body in ['q=1', 'q=1&submit=1', 'q=1'])
+          jsonEncode({
+            'action': 'fetch',
+            'url': 'https://site.example/s,{"method":"POST","body":"$body"}',
+            'note': body,
+          }),
+        jsonEncode({'action': 'give_up', 'why': 'site_broken', 'reason': '測試'}),
+      ],
+    );
+
+    await s.start();
+
+    for (var i = 0; i < 3; i++) {
+      expect(asked[i + 1].last.content, isNot(contains('這次回過不同的結果')));
+    }
+  });
 
   test('a hand-in that changes no rule is not called fixed', () async {
     // 2026-11-13 品书楼：AI 查過每一段都沒問題，原本照樣寫「修好了」。
