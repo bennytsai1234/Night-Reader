@@ -220,7 +220,7 @@ const _bookListRule = {
   'lastChapter': 'class.last@text',
 };
 
-/// 網路回應從記憶體給，晚 [latency]（假時間，跟著 pump 前進）才到，像真的
+/// 書源與 App 自己的網路回應都從記憶體給，晚 [latency]（假時間，跟著 pump 前進）才到，像真的
 /// 網路一樣讓畫面先跑一段。
 /// 在 `tester.runAsync` 裡呼叫。
 Future<void> installFakeSite({
@@ -230,6 +230,8 @@ Future<void> installFakeSite({
   NetworkService().dio
     ..interceptors.clear()
     ..httpClientAdapter = _FakeSite(latency);
+  // 查版本、更新紀錄走 App 自己的連線（ADR 0063），也從這裡給。
+  NetworkService().appDio.httpClientAdapter = _FakeSite(latency);
 }
 
 class _FakeSite implements HttpClientAdapter {

@@ -33,6 +33,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -744,7 +745,14 @@ void main() {
           File('${polishDir.path}${Platform.pathSeparator}report.json')
               .writeAsString(const JsonEncoder.withIndent(' ').convert(runs)),
     );
-    // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。
+    // 情境裡加進書架的書照常在背景下載（假書 800 章，假時間要好幾分鐘），
+    // 先停下，再讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常
+    // 結束。
+    for (final task in DownloadService().tasks.toList()) {
+      if (task.isDownloading || task.isWaiting) {
+        DownloadService().pauseTask(task.bookUrl);
+      }
+    }
     await tester.pump(const Duration(minutes: 1));
     expect(
       failures,
