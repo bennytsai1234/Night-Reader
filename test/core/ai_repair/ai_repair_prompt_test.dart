@@ -205,7 +205,7 @@ void main() {
           allOf(
             contains('「同一個請求這次回過不同的結果」'),
             contains('這一次回覆就用 give_up 的 rate_limited 放棄'),
-            contains('這條蓋過下面每一條'),
+            contains('這條蓋過其他每一條'),
             contains('也不查其他段'),
             contains('只送這一次'),
           ),
@@ -243,6 +243,21 @@ void main() {
         aiRepairSystemPrompt,
         allOf(contains('一條規則只取一組 ##正則##替換'), contains('@css: 只看整條規則最前面')),
       );
+    });
+
+    test('a page that asks a person to answer is given up, even when its '
+        'pass cookie would let the source through', () {
+      // 2026-11-14 秋田书屋「6 + 6 = ?」、西瓜书屋「安全人机验证」：答案在網頁
+      // 上檢查，伺服器只認答對後寫的 Cookie，AI 直接寫入那個 Cookie 就過。
+      // 使用者定 B：那是替讀者偽造已經回答，跟 ADR 0033 不替使用者勾真人
+      // 勾選框同一類，判要真人驗證放棄；網頁程式自己跑完的檢查照常通過。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(contains('要人回答或操作才放行的'), contains('偽造已經回答')),
+      );
+      final giveUp = aiRepairTools.singleWhere((t) => t.name == 'give_up');
+      final why = (giveUp.parameters['properties']! as Map)['why'] as Map;
+      expect(why['description'], contains('算術題'));
     });
 
     test('a pasted source may be bare, a command, or a Legado array', () {
