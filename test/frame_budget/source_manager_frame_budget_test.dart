@@ -26,9 +26,10 @@ import '../support/screenshot.dart';
 
 const _sourceCount = 300;
 
-/// 三十個域名各十個書源；分組、發現、備註與停用的都有一些。
+/// 三百個網站各一個書源（同網站同類的會自動合併，ADR 0062）；分組、發現、
+/// 備註與停用的都有一些。
 BookSource _source(int i) => BookSource.fromJson({
-  'bookSourceUrl': 'https://www.site${i % 30}.example/path$i',
+  'bookSourceUrl': 'https://www$i.site${i % 30}.example/path',
   'bookSourceName': '書源 $i',
   'bookSourceGroup': i % 4 == 0
       ? '常用'

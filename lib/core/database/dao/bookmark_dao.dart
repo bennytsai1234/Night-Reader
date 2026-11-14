@@ -72,6 +72,25 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteByIds(Iterable<int> ids) =>
       (delete(bookmarks)..where((t) => t.id.isIn(ids))).go();
 
+  /// 讀者修改書籍資訊：書籤只換書的身分，不更動編號、位置或錨點。
+  Future<void> renameBook({
+    required String fromName,
+    required String fromAuthor,
+    required String toName,
+    required String toAuthor,
+  }) async {
+    if (fromName == toName && fromAuthor == toAuthor) return;
+    await (update(bookmarks)..where(
+          (t) => t.bookName.equals(fromName) & t.bookAuthor.equals(fromAuthor),
+        ))
+        .write(
+          BookmarksCompanion(
+            bookName: Value(toName),
+            bookAuthor: Value(toAuthor),
+          ),
+        );
+  }
+
   /// 一本書換了書源：書籤跟著搬到新書源那本（書名、作者照新書源的寫法），
   /// 每個書籤對到新目錄裡的同一章（同換源時的閱讀進度：先找同名的章，再照
   /// 章號與比例估）。章內第幾個字照舊，跳回時由閱讀器照錨點的前後原文在

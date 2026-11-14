@@ -58,7 +58,7 @@ sky();
   const box = document.querySelector('.styles');
   const shots = [...document.querySelectorAll('.style-stack > [data-style]')];
   if (!box || !shots.length) return;
-  // 白天牛皮紙、晚上素色：維護者自己讀書用的設定。
+  // 白天牛皮、晚上素色：維護者自己讀書用的設定。
   const chosen = { light: 'kraft', dark: 'plain' };
   let mode = 'dark';
   box.querySelectorAll('.swatches button').forEach((b) => b.prepend(document.createElement('i')));

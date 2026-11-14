@@ -33,6 +33,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -243,8 +244,7 @@ final _extraBooks = <Book>[];
 
 /// 「我的」與「關於夜讀」裡說好的例外（`docs/design/loading.md`「骨架換場」）。
 const _mineExempt = {
-  '閱讀統計': '閱讀統計頂端的骨架對齊大數字，小字的位置差一點',
-  '書籤與標註': '書籤與標註沒有骨架，資料當下就有',
+  '閱讀紀錄': '閱讀紀錄沒有骨架，資料當下就有',
   '書源管理': '第一次進來還沒有上次的書源可照著畫',
   '更新紀錄': '更新紀錄先畫固定樣子的骨架',
   '崩潰日誌': '崩潰日誌沒有骨架，資料當下就有',
@@ -376,9 +376,9 @@ final scenarios = <String, _Scenario>{
     '閱讀偏好',
     '外觀與主題',
     '朗讀與語音',
-    '閱讀統計',
-    '書籤與標註',
+    '閱讀紀錄',
     '書源管理',
+    'AI 服務',
     '備份與同步',
     '關於夜讀',
   ])
@@ -745,7 +745,14 @@ void main() {
           File('${polishDir.path}${Platform.pathSeparator}report.json')
               .writeAsString(const JsonEncoder.withIndent(' ').convert(runs)),
     );
-    // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。
+    // 情境裡加進書架的書照常在背景下載（假書 800 章，假時間要好幾分鐘），
+    // 先停下，再讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常
+    // 結束。
+    for (final task in DownloadService().tasks.toList()) {
+      if (task.isDownloading || task.isWaiting) {
+        DownloadService().pauseTask(task.bookUrl);
+      }
+    }
     await tester.pump(const Duration(minutes: 1));
     expect(
       failures,

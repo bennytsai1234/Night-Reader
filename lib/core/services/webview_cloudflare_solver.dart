@@ -77,6 +77,10 @@ class WebViewCloudflareSolver implements CloudflareSolver {
   Future<ClearanceResult> _solve(Uri uri) async {
     final controller = WebViewController();
     await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    // 書源網站的憑證不驗（同書源的連線，見 sourceHttpClient）。
+    await controller.setNavigationDelegate(
+      NavigationDelegate(onSslAuthError: (error) => error.proceed()),
+    );
     unawaited(WebViewNative.refreshUserAgent());
     attached.value = [...attached.value, controller];
     final stopwatch = Stopwatch()..start();

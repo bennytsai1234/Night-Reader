@@ -15,7 +15,6 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_page
 import 'package:night_reader/features/reader_v2/hybrid/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -300,7 +299,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     fontSize: fontSize,
     letterSpacing: letterSpacing,
     bold: bodyBold,
-    fontFamilyFallback: readerV2FontFallback(readerFontFamily),
+    fontFamily: readerFontFamily,
   );
 
   /// 畫面寬 [viewportWidth] 時一行最多放得下幾個字（兩側留最少留白）。

@@ -29,16 +29,18 @@ Future<void> openAiRepair(
   final navigator = Navigator.of(context);
   final repairs = runs ?? RepairRuns.instance;
   if (repairs.current case final SingleRepairRun current
-      when current.sourceUrl == source.bookSourceUrl) {
+      when !current.isDone && current.sourceUrl == source.bookSourceUrl) {
     await navigator.push(
       MaterialPageRoute<void>(builder: (_) => current.page()),
     );
     return;
   }
-  // 一次一件：別的工作在跑時入口是灰的，這裡再擋一次。
-  if (!backgroundWorkIdle()) return;
+  // 工作結束但結果還沒看過時，不能從另一個入口蓋掉它。
+  if (!repairs.canStartNew || !backgroundWorkIdle()) return;
   final service = await (settings ?? AiRepairSettings()).service();
-  if (!context.mounted) return;
+  if (!context.mounted || !repairs.canStartNew || !backgroundWorkIdle()) {
+    return;
+  }
   if (service == null) {
     final choice = await showAppAlert<String>(
       context: context,
@@ -71,7 +73,11 @@ Future<void> openAiRepair(
   }
   final session = AiRepairSession(source: source, service: service);
   final run = SingleRepairRun(session);
-  repairs.adopt(run);
+  if (!repairs.adopt(run)) {
+    run.disposeWork();
+    run.dispose();
+    return;
+  }
   await navigator.push(MaterialPageRoute<void>(builder: (_) => run.page()));
 }
 
@@ -227,7 +233,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                     const GlassMenuItem(
                       value: 'settings',
                       icon: Icons.tune_rounded,
-                      label: 'AI 修書源設定',
+                      label: 'AI 服務設定',
                     ),
                     GlassMenuItem(
                       value: 'copy',
@@ -281,7 +287,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                       children: [
                         GroupedTextFieldRow(
                           controller: _paste,
-                          hintText: '貼上 AI 回的書源 JSON',
+                          hintText: '書源 JSON',
                           keyboardType: TextInputType.multiline,
                           minLines: 4,
                           maxLines: 8,

@@ -89,7 +89,7 @@ void main() {
         for (final style in [
           '竹青',
           '茶褐',
-          '牛皮紙',
+          '牛皮',
           '豆綠',
           if (dark) '紙墨' else '素色',
           if (dark) '素色' else '紙墨',

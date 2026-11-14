@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/network/source_tls.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/resource_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
@@ -16,7 +17,7 @@ class BookCoverStorageService {
   factory BookCoverStorageService() => _instance;
   BookCoverStorageService._internal();
 
-  final Dio _dio = Dio();
+  final Dio _dio = Dio()..httpClientAdapter = sourceHttpClientAdapter();
 
   Future<void> ensureBookCoverStored(Book book) async {
     final source = book.coverUrl?.trim();

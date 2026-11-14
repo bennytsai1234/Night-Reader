@@ -45,7 +45,7 @@ class BookDetailChangeSourceFilterBar extends StatelessWidget {
           ],
           SearchField(
             controller: filterController,
-            hintText: '搜尋結果內篩選',
+            hintText: '篩選',
             textInputAction: TextInputAction.done,
             onChanged: provider.applyFilter,
           ),

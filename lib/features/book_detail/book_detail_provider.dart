@@ -856,7 +856,7 @@ class BookDetailProvider extends ChangeNotifier {
     }
 
     try {
-      await _bookDao.upsert(next);
+      await _bookDao.upsertEditedBookInfo(_book, next);
       final previousName = _book.recordName;
       _book = next;
       if (previousName != next.recordName) {
@@ -872,6 +872,7 @@ class BookDetailProvider extends ChangeNotifier {
         }
       }
       unawaited(_storeDisplayCover());
+      AppEventBus().fire(AppEventBus.upBookshelf);
       notifyListeners();
       return BookDetailOperationResult.success('書籍資訊已儲存');
     } catch (error) {
@@ -908,6 +909,7 @@ class BookDetailProvider extends ChangeNotifier {
       await _coverStorage.ensureDisplayCoverStored(next);
       await _bookDao.upsert(next);
       _book = next;
+      AppEventBus().fire(AppEventBus.upBookshelf);
       notifyListeners();
       return BookDetailOperationResult.success('封面已更新');
     } catch (error) {

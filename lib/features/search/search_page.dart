@@ -34,6 +34,8 @@ import 'widgets/search_result_item.dart';
 import 'widgets/search_scope_sheet.dart';
 import 'widgets/search_suggestion_view.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 /// SearchPage - 搜尋頁面
 /// (對標 Legado SearchActivity)
 class SearchPage extends StatefulWidget {
@@ -355,7 +357,6 @@ class _SearchViewState extends State<SearchView> {
       return AppStateView(
         icon: Icons.filter_alt_off,
         title: '沒有符合篩選的結果',
-        description: '目前的結果都被篩選條件排除了。',
         primaryAction: AppStateAction(
           label: '清除篩選',
           icon: Icons.clear,
@@ -549,18 +550,19 @@ class _SearchViewState extends State<SearchView> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              namesWaiting
-                  ? '還在等：${waiting.join('、')}'
-                  : p.totalSources > 0
-                  ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
-                  : '正在搜尋',
-              style: AppTextStyles.labelXs.copyWith(
-                height: 1.3,
-                color: AppChrome.of(context).sectionText,
+            child: DragOverflowText(
+              child: Text(
+                namesWaiting
+                    ? '還在等：${waiting.join('、')}'
+                    : p.totalSources > 0
+                    ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
+                    : '正在搜尋',
+                style: AppTextStyles.labelXs.copyWith(
+                  height: 1.3,
+                  color: AppChrome.of(context).sectionText,
+                ),
+                maxLines: 1,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -819,7 +821,7 @@ class _SearchViewState extends State<SearchView> {
                                 // 屏蔽詞記在手機上、每次搜尋都套用，「清除」
                                 // 不清它：清的是這次搜尋的篩選。
                                 GroupedSection(
-                                  footer: '書名或作者含有這些字的結果不列，每次搜尋都套用；用逗號或空白分開。',
+                                  footer: '用逗號或空白分開',
                                   children: [
                                     GroupedTextFieldRow(
                                       label: '屏蔽詞',

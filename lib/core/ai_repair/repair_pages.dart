@@ -53,7 +53,18 @@ final class RepairPages {
     }
     final page = RepairPage(_pages.length + 1, url, body);
     _pages.add(page);
-    return line.replaceFirst('← ', '← 頁 ${page.id}｜');
+    final labeled = line.replaceFirst('← ', '← 頁 ${page.id}｜');
+    // 網址不同、內容一字不差：每個網址都回同一份頁面的網站（停放頁、被拿去
+    // 轉址的網域、搜尋不理關鍵字）看這句就知道，不用自己比。
+    final twin = body.trim().isEmpty
+        ? null
+        : _pages.where((seen) => seen != page && seen.body == body).firstOrNull;
+    if (twin == null) return labeled;
+    final colon = labeled.indexOf('：', labeled.indexOf('← '));
+    return colon < 0
+        ? '$labeled（內容和頁 ${twin.id} 一字不差）'
+        : '${labeled.substring(0, colon)}（內容和頁 ${twin.id} 一字不差）'
+              '${labeled.substring(colon)}';
   }
 
   void clear() => _pages.clear();

@@ -184,6 +184,27 @@ Future<String> _echoCookie(
   }
 });
 
+/// 在書源 isolate 讓網站寫入一個 Cookie，傳回 `cookie.getCookie` 讀到的，與
+/// `cookie.removeCookie` 之後網站收到的 Cookie，中間用 `|` 隔開。
+Future<String> _siteCookieRoundTrip(String baseUrl) =>
+    SourceIsolate.run((_) async {
+      final engine = JsEngine(
+        source: BookSource(
+          bookSourceUrl: baseUrl,
+          bookSourceName: 'cookie',
+          enabledCookieJar: true,
+        ),
+      );
+      try {
+        return '${engine.evaluate('java.ajax("$baseUrl/set-delay");'
+        'var got = cookie.getCookie("$baseUrl");'
+        'cookie.removeCookie("$baseUrl");'
+        'got + "|" + java.ajax("$baseUrl/echo-cookie");')}';
+      } finally {
+        engine.dispose();
+      }
+    });
+
 /// 在書源 isolate 用帶著 [jsLib] 的書源跑一段規則 JS。
 Future<String> _evaluateSourceJs(String code, {String? jsLib}) =>
     SourceIsolate.run((_) async {
@@ -368,6 +389,12 @@ void main() {
           );
         case '/echo-cookie':
           request.response.write(request.headers.value('cookie') ?? '');
+        case '/set-delay':
+          request.response.headers.add(
+            HttpHeaders.setCookieHeader,
+            'ss_search_delay=1; Path=/',
+          );
+          request.response.write('搜索间隔: 120 秒');
         case '/count':
           counted++;
           request.response.write('數到了');
@@ -911,6 +938,16 @@ void main() {
       });
     }
 
+    test('cookie.getCookie and removeCookie see the cookies the site set, '
+        'like Legado', () async {
+      // 2026-11-13 手机小说：網站搜尋後寫入 ss_search_delay，書源每次搜尋前
+      // cookie.removeCookie(source.key) 清掉它（Legado 的 CookieStore 就是
+      // Cookie 罐）。夜讀原本只清規則寫的那份，網站寫的照樣送出，被擋 120 秒。
+      final [got, sentAfter] = (await _siteCookieRoundTrip(baseUrl)).split('|');
+      expect(got, contains('ss_search_delay=1'));
+      expect(sentAfter, isNot(contains('ss_search_delay')));
+    });
+
     test('inside a callback', () async {
       expect(
         await _evaluateJs('''
@@ -1172,9 +1209,10 @@ void main() {
 
       final reply = lines.singleWhere((l) => l.contains('/scripted '));
       expect(reply, contains('第一章的正文'));
-      // 程式拿掉了，只寫出它會轉到哪裡（page_notes）。
+      // 給 AI 的拿掉了程式，也不替它判斷這頁是不是轉址頁（交給 AI 讀）；
+      // 完整紀錄留著原文。
       expect(reply, isNot(contains('<script')));
-      expect(reply, contains('（這頁用程式轉到 https://ads.example/go）'));
+      expect(reply, isNot(contains('這頁用程式轉到')));
       expect(
         pages.singleWhere((p) => p.line.contains('/scripted ')).body,
         contains('<script>location="https://ads.example/go"</script>'),

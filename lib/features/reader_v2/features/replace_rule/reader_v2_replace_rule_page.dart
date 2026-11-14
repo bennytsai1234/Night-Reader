@@ -20,6 +20,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});
@@ -172,7 +173,6 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
           ? AppStateView(
               icon: Icons.rule_rounded,
               title: '還沒有替換規則',
-              description: '新增規則後，可在閱讀時自動整理標題或正文。',
               primaryAction: AppStateAction(
                 label: '新增規則',
                 icon: Icons.add,
@@ -385,19 +385,21 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _nameStyle.copyWith(color: scheme.onSurface),
+                      DragOverflowText(
+                        child: Text(
+                          _name,
+                          maxLines: 1,
+                          style: _nameStyle.copyWith(color: scheme.onSurface),
+                        ),
                       ),
                       const SizedBox(height: _patternGap),
-                      Text(
-                        _pattern,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: _patternStyle.copyWith(
-                          color: chrome.sectionText,
+                      DragOverflowText(
+                        child: Text(
+                          _pattern,
+                          maxLines: 2,
+                          style: _patternStyle.copyWith(
+                            color: chrome.sectionText,
+                          ),
                         ),
                       ),
                       const SizedBox(height: _chipGap),

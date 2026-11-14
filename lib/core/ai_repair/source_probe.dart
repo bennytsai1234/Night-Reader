@@ -7,6 +7,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -162,7 +163,7 @@ class SourceProbeReport {
 
 /// 開一個書源 worker 試抓 [source]（同書源校驗，ADR 0033）：用 [keyword]
 /// 搜尋，從第一本書一路抓到第一章正文。[keyword] 照書源除錯的寫法也可以
-/// 從中間開始：詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
+/// 從中間開始：`::發現頁網址`、詳情頁網址、`++目錄頁網址`、`--正文頁網址`（[probeStart]）。到了 [timeout] 還沒抓完就結束
 /// worker，傳回 [SourceProbeReport.timedOut]；[cancelToken] 取消時也是。
 Future<SourceProbeReport> probeSource(
   BookSource source, {
@@ -190,11 +191,14 @@ Future<SourceProbeReport> probeSource(
   }
 
   const stopped = SourceProbeReport(logs: [], requests: [], timedOut: true);
-  final timer = Timer(timeout, () => finish(stopped));
+  // worker 自己到 [timeout] 就停，交回走到哪裡的紀錄（2026-11-13 肉肉屋⑥
+  // 試抓四次超過時間，每次紀錄都是空的，AI 不知道停在哪一步）；規則 JS
+  // 同步等網路時 worker 的計時器要等那個請求結束，外層多等一個請求的時限。
+  final timer = Timer(timeout + _workerGrace, () => finish(stopped));
   unawaited(cancelToken?.whenCancel.then((_) => finish(stopped)));
   unawaited(
     worker
-        .run(_probeTask(source.toJson(), keyword))
+        .run(_probeTask(source.toJson(), keyword, timeout))
         .then(
           (map) => finish(SourceProbeReport.fromMap(map)),
           onError: (Object error, StackTrace stack) {
@@ -213,10 +217,16 @@ Future<SourceProbeReport> probeSource(
   return report;
 }
 
+/// worker 到時限沒交回時，外層再多等多久才結束它：一個請求的時限（規則 JS
+/// 同步等網路時，worker 的計時器要等那個請求結束才跑得到）。
+const Duration _workerGrace = Duration(seconds: 16);
+
 /// 在 worker 裡跑的試抓；只捕捉書源與關鍵字的資料（`CODING_STANDARDS.md`）。
+/// 到 [timeout] 還沒抓完就停下，交回到那裡為止的紀錄。
 Future<Map<String, Object?>> Function(CancelToken) _probeTask(
   Map<String, dynamic> sourceJson,
   String keyword,
+  Duration timeout,
 ) => (_) async {
   final debug = SourceDebugService();
   final logs = <(int, String)>[];
@@ -229,20 +239,24 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
     keepPages: true,
     sentHeaders: true,
   );
+  var timedOut = false;
   try {
-    await requests.run(
-      () => debug.startDebug(BookSource.fromJson(sourceJson), keyword),
-    );
+    await requests
+        .run(() => debug.startDebug(BookSource.fromJson(sourceJson), keyword))
+        .timeout(timeout);
+  } on TimeoutException {
+    timedOut = true;
+  } finally {
     // 紀錄經過 broadcast stream，讓最後幾筆送到。
     await Future<void>.delayed(Duration.zero);
-  } finally {
     await subscription.cancel();
   }
-  final content = debug.lastContent;
+  final content = timedOut ? null : debug.lastContent;
   return SourceProbeReport(
     logs: logs,
     requests: requests.lines,
     pages: requests.pages,
+    timedOut: timedOut,
     contentUsable: content == null
         ? null
         : sourceContentUsable(content.source, content.book, content.content),
@@ -329,8 +343,8 @@ Future<Map<String, Object?>> Function(CancelToken) _fetchTask(
       ).getStrResponse(),
     );
   } catch (error) {
-    requests.lines.add('錯誤：$error');
-    requests.pages.add((line: '錯誤：$error', body: null));
+    requests.lines.add('錯誤：${errorText(error)}');
+    requests.pages.add((line: '錯誤：${errorText(error)}', body: null));
   }
   return {
     'lines': requests.lines,
@@ -366,109 +380,12 @@ Future<bool> searchFollowsKeyword(
   }
 }
 
-/// 用網站自己發現頁上確實有的一本書搜一次的結果（[searchKnownTitle]）：
-/// [limited] 是搜那本書時網站限流說的話（請求紀錄的「網站限流」），沒被擋
-/// 是 null。
-typedef KnownTitleSearch = ({
-  String title,
-  String from,
-  bool found,
-  String? limited,
-});
-
-/// 原本的關鍵字搜不到書時，從網站自己的發現頁拿第一本書的書名，用 [source]
-/// 的搜尋規則搜它：搜不到，表示網站上有的書這個搜尋規則找不到（規則錯，或
-/// 網站的搜尋本身不理關鍵字）；搜得到，表示規則與網站都正常。2026-11-13
-/// 蜘蛛小說網的 AI 每次要花 5 到 10 輪自己做這個比對。在書源 worker 裡做、
-/// 記下請求：開場已經搜了好幾次，限流的網站這次可能被擋，被擋的寫成限流，
-/// 不寫成規則找不到。沒有發現頁、發現頁沒有書、出錯或逾時是 null。
-Future<KnownTitleSearch?> searchKnownTitle(
-  BookSource source, {
-  required Duration timeout,
-  CancelToken? cancelToken,
-  @visibleForTesting Future<DriftIsolate>? database,
-}) async {
-  if ((source.searchUrl ?? '').trim().isEmpty) return null;
-  final SourceWorker worker;
-  try {
-    worker = await SourceWorker.spawn(
-      debugName: 'KnownTitle',
-      withDictionaries: false,
-      database: database,
-    );
-  } catch (error) {
-    AppLog.d('用發現頁的書名搜尋開不起來: $error');
-    return null;
-  }
-  try {
-    if (cancelToken?.isCancelled ?? false) return null;
-    unawaited(
-      cancelToken?.whenCancel.then((_) => worker.kill(StateError('已停止'))),
-    );
-    final map = await worker
-        .run(_knownTitleTask(source.toJson(), timeout))
-        .timeout(timeout * 3, onTimeout: () => const {});
-    final title = map['title'] as String?;
-    if (title == null) return null;
-    return (
-      title: title,
-      from: map['from'] as String? ?? '',
-      found: map['found'] == true,
-      limited: map['limited'] as String?,
-    );
-  } catch (error) {
-    AppLog.d('用發現頁的書名搜尋沒做成: $error');
-    return null;
-  } finally {
-    worker.kill(StateError('用發現頁的書名搜尋已結束'));
-  }
-}
-
-/// 只捕捉資料（`CODING_STANDARDS.md` 背景執行）。
-Future<Map<String, Object?>> Function(CancelToken) _knownTitleTask(
-  Map<String, dynamic> sourceJson,
-  Duration timeout,
-) => (cancelToken) async {
-  final source = BookSource.fromJson(sourceJson);
-  final service = BookSourceService();
-  final kinds = await service
-      .exploreKinds(source.exploreUrl, source: source)
-      .timeout(timeout);
-  for (final kind in kinds) {
-    final url = kind.url?.trim() ?? '';
-    if (url.isEmpty) continue;
-    final books = await service
-        .exploreBooks(source, url, cancelToken: cancelToken)
-        .timeout(timeout);
-    final title = books.firstOrNull?.name.trim() ?? '';
-    if (title.isEmpty) continue;
-    final requests = RequestLog(
-      responsePreview: SourceProbeReport.responsePreview,
-    );
-    final found = await requests.run(
-      () => service
-          .searchBooks(source, title, cancelToken: cancelToken)
-          .timeout(timeout),
-    );
-    final limited = [
-      for (final line in requests.lines)
-        ?RegExp(r'網站限流：([^）]*)').firstMatch(line)?.group(1),
-    ].firstOrNull;
-    return {
-      'title': title,
-      'from': kind.title,
-      'found': found.any((book) => book.name.trim() == title),
-      'limited': limited,
-    };
-  }
-  return const {};
-};
-
 /// 不可能搜到書的詞。
 const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
 
 /// 試抓從哪一段開始時傳給 [probeSource] 的 keyword：`search` 用 [keyword]
-/// 搜尋，`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的寫法）。
+/// 搜尋，`explore`、`info`、`toc`、`content` 從 [url] 那一頁開始（書源除錯的
+/// 寫法；發現頁照 exploreUrl 的寫法原樣交給除錯解析）。
 /// [url] 是相對網址時照 [baseUrl]（書源網址）補成完整的：書源除錯同 Legado，
 /// 不是 http 開頭的會當成搜尋關鍵字（2026-11-12 AI 給 `/551874.html` 從詳情頁
 /// 試抓，結果拿它去搜尋）。不認得的段或少了網址是 null。
@@ -480,6 +397,9 @@ String? probeStart(
 }) {
   if (from == 'search') return keyword;
   if (url == null || url.trim().isEmpty) return null;
+  // 發現頁照 exploreUrl 的寫法（可以是相對網址、帶 {{page}}），由除錯照書源
+  // 解析（同 Legado `Debug` 的 `::網址`）。
+  if (from == 'explore') return '::${url.trim()}';
   final page = NetworkUtils.getAbsoluteURL(baseUrl, url);
   return switch (from) {
     'info' => page,
@@ -489,22 +409,65 @@ String? probeStart(
   };
 }
 
+/// 試抓從搜尋走進詳情時，搜尋結果第一本的書名、作者和詳情頁抓到的不一樣：
+/// 寫成一句告訴 AI 的事實；一樣或沒走到詳情是 null。書名加作者是夜讀認一本
+/// 書的依據（搜尋結果合併、換源、書籤）。2026-11-13 肉肉屋#3 的搜尋書名規則
+/// 抓到每一列的「目录」連結，20 本都叫「目录」，詳情頁卻是「《救命！…》」。
+String? searchInfoMismatch(SourceProbeReport probe) {
+  String? searchName, searchAuthor, infoName, infoAuthor;
+  var listed = false;
+  for (final (_, message) in probe.logs) {
+    if (message.startsWith('︽搜尋頁解析完成') || message.startsWith('︽發現頁解析完成')) {
+      listed = true;
+      continue;
+    }
+    if (listed && searchName == null) {
+      final first = RegExp(r'^\s*\[0\] (.*) - (.*)$').firstMatch(message);
+      if (first != null) {
+        searchName = first.group(1)!.trim();
+        searchAuthor = first.group(2)!.trim();
+      }
+    }
+    final info = RegExp(r'^︽詳情頁解析完成: (.*)$').firstMatch(message);
+    if (info != null) infoName = info.group(1)!.trim();
+    final author = RegExp(r'^\s*作者: (.*), 目錄: ').firstMatch(message);
+    if (author != null) infoAuthor = author.group(1)!.trim();
+  }
+  if (searchName == null || infoName == null) return null;
+  final parts = [
+    if (searchName != infoName) '書名搜尋是「$searchName」、詳情頁是「$infoName」',
+    if (infoAuthor != null &&
+        searchAuthor != '未知' &&
+        searchAuthor != infoAuthor)
+      '作者搜尋是「$searchAuthor」、詳情頁是「$infoAuthor」',
+  ];
+  return parts.isEmpty ? null : '搜尋結果第一本進了詳情頁，${parts.join('；')}';
+}
+
 /// 試抓到的正文頁有同一章的下一頁、試抓卻沒抓那一頁時，下一頁的網址；
 /// 沒有是 null。2026-11-12 下書網的 AI 交出的規則只抓到每章的前半頁
 /// （95393.html，後半在 95393_2.html），校驗照樣通過；11-13 另一次寫了
 /// `nextContentUrl`，選擇器卻抓不到連結，同樣只有前半頁，所以看的是請求
 /// 紀錄裡有沒有那一頁，不是規則有沒有寫。正文規則自己抓網頁（`java.ajax`
-/// 這類）的不看。
+/// 這類）的不看。下一頁就是目錄的下一章時不算（2026-11-13 腐文小说一頁
+/// 一章）：引擎照 Legado 不把下一章當同一章的下一頁抓。
 String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
   final rule = source.ruleContent;
   if (_fetchesItself.hasMatch(rule?.content ?? '')) return null;
   String? chapterUrl;
+  String? nextChapterUrl;
   for (final (_, message) in probe.logs) {
     final url = RegExp(r'^\s*正文 URL: (\S+)').firstMatch(message)?.group(1);
     if (url != null) chapterUrl = url;
+    final next = RegExp(r'^\s*下一章 URL: (\S+)').firstMatch(message)?.group(1);
+    if (next != null) nextChapterUrl = next;
   }
   final chapter = chapterUrl == null ? null : Uri.tryParse(chapterUrl);
   if (chapter == null) return null;
+  final nextUri = nextChapterUrl == null ? null : Uri.tryParse(nextChapterUrl);
+  final nextChapter = nextUri == null
+      ? null
+      : '${chapter.resolveUri(nextUri).removeFragment()}';
   final body = [
     for (final page in probe.pages)
       if (page.body != null &&
@@ -523,6 +486,7 @@ String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
     }
     if (isNextPageOfChapter(chapter, target)) {
       final next = '${target.removeFragment()}';
+      if (next == nextChapter) continue;
       final fetched = [
         ...probe.requests,
         for (final page in probe.pages) page.line,

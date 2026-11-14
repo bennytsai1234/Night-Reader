@@ -95,11 +95,7 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
     }
     final loading = _status == _ReleaseNotesStatus.loading;
     if (!loading && _notes.isEmpty) {
-      return const AppStateView(
-        icon: Icons.history_rounded,
-        title: '目前沒有更新紀錄',
-        description: '發布新版後，各版的更新內容會列在這裡。',
-      );
+      return const AppStateView(icon: Icons.history_rounded, title: '目前沒有更新紀錄');
     }
     // 骨架照幾段固定樣子的版本畫（還不知道有幾版、各寫了多少），資料到了
     // 先照真正的版本變一次形狀再換場（[GroupedListView.ready]）。

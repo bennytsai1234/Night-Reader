@@ -21,9 +21,9 @@ import 'survey_support.dart';
 const _area = 'sources';
 const _sourceCount = 300;
 
-/// 同 `source_manager_frame_budget_test.dart`：三十個域名各十個書源。
+/// 同 `source_manager_frame_budget_test.dart`：三百個網站各一個書源。
 BookSource _source(int i) => BookSource.fromJson({
-  'bookSourceUrl': 'https://www.site${i % 30}.example/path$i',
+  'bookSourceUrl': 'https://www$i.site${i % 30}.example/path',
   'bookSourceName': '書源 $i',
   'bookSourceGroup': i % 4 == 0
       ? '常用'

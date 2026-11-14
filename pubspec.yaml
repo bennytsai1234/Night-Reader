@@ -1,7 +1,7 @@
 name: night_reader
 description: "夜讀 - Night Reader, a Flutter novel reader app"
 publish_to: 'none'
-version: 0.3.10
+version: 0.4.0
 homepage: https://github.com/bennytsai1234/night-reader
 repository: https://github.com/bennytsai1234/night-reader
 issue_tracker: https://github.com/bennytsai1234/night-reader/issues
@@ -22,6 +22,10 @@ dependencies:
   dio_cookie_manager: ^3.5.0
   cookie_jar: ^4.0.9
   convert: ^3.1.2
+
+  # === Text ===
+  # 照使用者看到的一個字（字素）切段：下載字型的中日文字分段（ADR 0045）。
+  characters: ^1.4.1
 
   # === Database ===
   drift: ^2.35.2
@@ -63,6 +67,9 @@ dependencies:
 
   # === Image Loading ===
   cached_network_image: ^4.0.4
+  # 網路封面換成不驗憑證的書源連線（lib/core/network/source_tls.dart）。
+  flutter_cache_manager: ^3.4.5
+  http: ^1.6.0
 
   # === Image Picker ===
   image_picker: ^1.2.4
@@ -138,8 +145,6 @@ dev_dependencies:
   shared_preferences_platform_interface: ^2.4.2
   # 測試裡開得起瀏覽器頁的假 WebView（test/support/fake_webview.dart）。
   webview_flutter_platform_interface: ^2.15.1
-  # 測試換掉網路封面用的磁碟快取（CachedNetworkImageProvider.defaultCacheManager）。
-  flutter_cache_manager: ^3.4.5
   file: ^7.0.1
   # 量每一幀的記憶體回收（test/support/frame_budget.dart 的 FRAME_GC）。
   vm_service: ^15.3.0

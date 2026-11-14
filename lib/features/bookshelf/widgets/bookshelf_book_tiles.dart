@@ -14,6 +14,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 書卡上選取（勾號、圓圈、讓位、卡片底色）與角標的動畫時長：系統關閉動畫
 /// 時一律為 0，這組同步的動畫一起直接到位。
@@ -350,20 +351,22 @@ class BookshelfListCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: titleStyle.copyWith(color: scheme.onSurface),
+                  DragOverflowText(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      style: titleStyle.copyWith(color: scheme.onSurface),
+                    ),
                   ),
                   // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
                   // 載入骨架（不知道哪本沒有作者）才對得上。
                   const SizedBox(height: 2),
-                  Text(
-                    author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: authorStyle.copyWith(color: chrome.sectionText),
+                  DragOverflowText(
+                    child: Text(
+                      author,
+                      maxLines: 1,
+                      style: authorStyle.copyWith(color: chrome.sectionText),
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   BookshelfProgressLine(book: book),
@@ -584,11 +587,12 @@ class BookshelfGridTile extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
-                      child: Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: titleStyle.copyWith(color: scheme.onSurface),
+                      child: DragOverflowText(
+                        child: Text(
+                          name,
+                          maxLines: 2,
+                          style: titleStyle.copyWith(color: scheme.onSurface),
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
@@ -665,12 +669,15 @@ class BookshelfEditToolbar extends StatelessWidget {
                         color: action.destructive ? danger : scheme.onSurface,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        action.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.uiXs.copyWith(
-                          color: action.destructive ? danger : scheme.onSurface,
+                      DragOverflowText(
+                        child: Text(
+                          action.label,
+                          maxLines: 1,
+                          style: AppTextStyles.uiXs.copyWith(
+                            color: action.destructive
+                                ? danger
+                                : scheme.onSurface,
+                          ),
                         ),
                       ),
                     ],
@@ -695,11 +702,12 @@ class BookshelfEditToolbar extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.md),
         Flexible(
-          child: Text(
-            progressLabel ?? '',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
+          child: DragOverflowText(
+            child: Text(
+              progressLabel ?? '',
+              maxLines: 1,
+              style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
+            ),
           ),
         ),
       ],

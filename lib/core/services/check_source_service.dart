@@ -14,6 +14,7 @@ import 'package:night_reader/core/services/source_check_diagnostics.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/js/js_extensions_base.dart';
+import 'package:night_reader/core/constant/source_wait.dart';
 
 class SourceCheckEntry {
   final String sourceUrl;
@@ -33,6 +34,12 @@ class SourceCheckEntry {
   bool get isHealthy => health.category == SourceHealthCategory.healthy;
   bool get cleanupCandidate => health.cleanupCandidate;
 }
+
+/// 一個書源這次校驗的完整結果；逾時是 null（[CheckSourceService.check]）。
+typedef SourceCheckResultListener = void Function(
+  String sourceUrl,
+  SourceCheckIsolateResult? result,
+);
 
 class SourceCheckReport {
   final List<SourceCheckEntry> entries;
@@ -120,7 +127,7 @@ class SourceCheckConfig {
 
   static const SourceCheckConfig defaults = SourceCheckConfig(
     keyword: '我的',
-    timeoutSeconds: 15,
+    timeoutSeconds: sourceWaitSeconds,
     checkSearch: true,
     checkDiscovery: true,
     checkInfo: true,
@@ -213,19 +220,18 @@ class SourceCheckConfig {
     checkContent: checkContent,
   );
 
-  /// Upper bound for one source check.
-  ///
-  /// Stage-level checks still use [timeoutDuration]. This budget prevents a
-  /// single source from occupying a worker for the full sum of every stage.
+  /// 一個書源整個校驗的時限：每一段各自照 [timeoutDuration]，這個上限讓
+  /// 一個書源不會把每段的時限加總佔滿 worker。正文抽查的中段、後段算多
+  /// 一段。
   Duration get sourceTimeoutDuration {
     final activeFlows = (checkSearch ? 1 : 0) + (checkDiscovery ? 1 : 0);
     final stageBudget =
         activeFlows +
         (checkInfo ? activeFlows : 0) +
         (checkCategory ? activeFlows : 0) +
-        (checkContent ? activeFlows : 0);
+        (checkContent ? activeFlows * 2 : 0);
     final multiplier = math.max(2, math.min(stageBudget, 6));
-    final seconds = math.min(timeoutSeconds * multiplier, 90);
+    final seconds = math.min(timeoutSeconds * multiplier, 120);
     return Duration(seconds: math.max(timeoutSeconds, seconds));
   }
 
@@ -401,13 +407,21 @@ class CheckSourceService extends ChangeNotifier {
     _notifyIfAlive();
   }
 
-  Future<SourceCheckReport> check(List<String> urls) async {
+  /// 校驗 [urls]。[onResult] 收到每個書源這次校驗的完整結果（含診斷），
+  /// 逾時是 null：整批修復交給 AI 那段沿用，不再校驗一次。
+  Future<SourceCheckReport> check(
+    List<String> urls, {
+    SourceCheckResultListener? onResult,
+  }) async {
     if (_isChecking) return _lastReport;
 
-    return _checkAll(urls);
+    return _checkAll(urls, onResult);
   }
 
-  Future<SourceCheckReport> _checkAll(List<String> urls) async {
+  Future<SourceCheckReport> _checkAll(
+    List<String> urls,
+    SourceCheckResultListener? onResult,
+  ) async {
     final normalizedUrls = LinkedHashSet<String>.from(
       urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
     ).toList(growable: false);
@@ -435,7 +449,8 @@ class CheckSourceService extends ChangeNotifier {
     try {
       results = await _SourceCheckExecutionPool(
         workerCount: _sourceCheckConcurrency,
-        checkSource: (url) => _checkSingleSourceWithBudget(url, config),
+        checkSource: (url) =>
+            _checkSingleSourceWithBudget(url, config, onResult),
         recordFailure: _recordUnexpectedSourceFailure,
         onTaskDone: () {
           _currentCount++;
@@ -474,6 +489,7 @@ class CheckSourceService extends ChangeNotifier {
   Future<SourceCheckEntry?> _checkSingleSourceWithBudget(
     String url,
     SourceCheckConfig config,
+    SourceCheckResultListener? onResult,
   ) async {
     final source = await _sourceDao.getByUrl(url);
     if (source == null || _shouldIgnoreSourceUpdate(url)) return null;
@@ -502,8 +518,11 @@ class CheckSourceService extends ChangeNotifier {
     _activeTasks[url] = handle;
     try {
       final result = await handle.result;
-      if (result == null) return await _recordSourceTimeout(url, config);
-      return await _applyIsolateResult(url, result);
+      final entry = result == null
+          ? await _recordSourceTimeout(url, config)
+          : await _applyIsolateResult(url, result);
+      if (entry != null) onResult?.call(url, result);
+      return entry;
     } finally {
       _activeTasks.remove(url);
     }

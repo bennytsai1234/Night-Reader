@@ -277,18 +277,25 @@ const String aiFindBadCall = '# 讀不懂這個工具呼叫';
 
 /// 讀 AI 呼叫的一個工具：讀得懂時是指令與它的 key，讀不懂時 [fact] 說哪裡
 /// 不對。交出的 key 不含理由與說明以外的差別：同一批書換個說法交出也算同一次。
-({AiFindCommand? command, String key, String fact}) readAiFindCall(
-  AiToolCall call,
-) {
+({AiFindCommand? command, String key, String fact, bool malformed})
+readAiFindCall(AiToolCall call) {
   final decoded = decodeToolCall(call, aiFindTools, badCall: aiFindBadCall);
   final args = decoded.args;
-  if (args == null) return (command: null, key: '', fact: decoded.fact);
+  if (args == null) {
+    return (
+      command: null,
+      key: '',
+      fact: decoded.fact,
+      malformed: decoded.malformed,
+    );
+  }
   final command = AiFindCommand.fromCall(call.name, args);
   if (command == null) {
     return (
       command: null,
       key: '',
       fact: missingToolArguments(call, aiFindTools, aiFindBadCall),
+      malformed: false,
     );
   }
   final key = switch (command) {
@@ -302,5 +309,5 @@ const String aiFindBadCall = '# 讀不懂這個工具呼叫';
     AiFindShelf() => 'shelf',
     AiFindSubmit(:final books) => 'submit ${[for (final b in books) b.book]}',
   };
-  return (command: command, key: key, fact: '');
+  return (command: command, key: key, fact: '', malformed: false);
 }

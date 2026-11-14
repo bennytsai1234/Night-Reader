@@ -1,3 +1,4 @@
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/site_check.dart';
 

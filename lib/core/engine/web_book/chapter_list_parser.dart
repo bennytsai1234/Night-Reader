@@ -117,6 +117,25 @@ class ChapterListParser {
 
           chapters.add(chapter);
           if (maxChapters != null && chapters.length >= maxChapters) {
+            // 只要前幾章（書源校驗）時，這一頁後面的章若有付費的，接一章在
+            // 最後：校驗看得出這個書源有付費章節（ADR 0057），不用整份目錄
+            // 都解析。只看書源標了付費的規則，沒寫就不多看。
+            if (isVipRule.isNotEmpty) {
+              final locked = _firstLockedAfter(
+                elements,
+                i + 1,
+                source: source,
+                book: book,
+                baseUrl: baseUrl,
+                pageUrl: pageUrl,
+                owner: rule,
+                nameRule: chapterNameRule,
+                urlRule: chapterUrlRule,
+                isVipRule: isVipRule,
+                isPayRule: isPayRule,
+              );
+              if (locked != null) chapters.add(locked);
+            }
             return ChapterListResult(
               chapters: chapters,
               nextUrls: const <String>[],
@@ -144,6 +163,53 @@ class ChapterListParser {
     } finally {
       rule.dispose();
     }
+  }
+
+  /// [elements] 從 [start] 起第一個書源標了付費、還沒買的章（[BookChapter.isLocked]）；
+  /// 沒有就是 null。只讀付費的兩條規則，找到了才讀章名與網址。
+  static BookChapter? _firstLockedAfter(
+    List<dynamic> elements,
+    int start, {
+    required BookSource source,
+    required Book book,
+    required String baseUrl,
+    required String pageUrl,
+    required AnalyzeRule owner,
+    required String nameRule,
+    required String urlRule,
+    required String isVipRule,
+    required String isPayRule,
+  }) {
+    for (var i = start; i < elements.length; i++) {
+      final itemRule = AnalyzeRule(source: source, ruleData: book).setContent(
+        elements[i],
+        baseUrl: baseUrl,
+        redirectUrl: pageUrl,
+      )..jsEngineOwner = owner;
+      final chapter = BookChapter(
+        baseUrl: pageUrl,
+        bookUrl: book.bookUrl,
+        index: i,
+      );
+      itemRule.setChapter(chapter);
+      try {
+        chapter.isVip = _isTrue(_readString(itemRule, isVipRule));
+        chapter.isPay = _isTrue(_readString(itemRule, isPayRule));
+        if (!chapter.isLocked) continue;
+        chapter.title = _readString(itemRule, nameRule);
+        final rawUrl = _readString(itemRule, urlRule);
+        chapter.url = rawUrl.isEmpty
+            ? pageUrl
+            : NetworkUtils.getAbsoluteURL(
+                itemRule.redirectUrl ?? baseUrl,
+                rawUrl,
+              );
+        return chapter;
+      } finally {
+        itemRule.dispose();
+      }
+    }
+    return null;
   }
 
   /// 解析布林字串 (對標 Android String.isTrue)

@@ -18,6 +18,7 @@
 
 - **Codex 審查的暫存** `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時擋掉 Codex 最後一次連線，`codex exec` 回非零但報告通常已經寫好；先看報告檔再決定要不要重跑。
 - **Windows 上用 Python 寫檔**要給 `newline='\n'`，不然會寫成 CRLF。
+- **改含中文的檔案用編輯工具（Edit）**：在 Bash 用 heredoc 把含中文的比對字串交給 Python 時，常常比對不到、檔案沒改（2026-11-13 好幾次）；英文與程式碼的比對不受影響。
 - **家裡這台沒有 `jq`**：查 PR 與 Actions 狀態用 `gh` 內建的 `--jq`（例如 `gh run list --json name,conclusion --jq '.[]'`）；腳本裡接 `| jq` 會靜靜地失敗，監看迴圈永遠等不到結束。
 - **重新產生 `NightReaderPunct`**：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 
@@ -25,5 +26,5 @@
 
 - **Legado 原始碼**：對照 Legado 的做法時讀使用者的 fork：家裡在 `C:\Users\benny\Desktop\Folder\projects\legado`，公司在 `D:\Migrated\Desktop\Folder\product\legado`；GitHub 上的 `gedoor/legado` 已經清空。
 - **Mihon 原始碼**：對照漫畫閱讀器（條漫捲動、縮放、換章分隔）時讀，家裡在 `C:\Users\benny\Desktop\Folder\projects\mihon`，公司在 `D:\Migrated\Desktop\Folder\product\mihon`（`git clone --depth 1 https://github.com/mihonapp/mihon.git`，Apache 2.0）；條漫閱讀器在 `app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/`，預設值在 `ui/reader/setting/ReaderPreferences.kt`。
-- **用真的網站校驗書源**：`test/live/source_check_live_test.dart`，用法寫在檔頭。調 AI 修書源（提示詞、流程）時用 `test/live/source_repair_batch_live_test.dart` 拿一批壞掉的書源跑整套修復異常書源比前後，會花 AI 額度，用法寫在檔頭；跑完用 `dart run tool/ai_repair_table.dart <紀錄資料夾>` 把每件的完整修復紀錄整理成評估表（手機「分享完整紀錄」的檔也可以），每次的表存下來和上一次比；要一輪一輪看某一件時用 `dart run tool/ai_repair_view.dart <紀錄.txt> <輸出.html>` 轉成可以點開的頁面，放進對話給使用者看。源倉庫（yckceo.com）的書源可以照清單頁收集 id，再從 `https://www.yckceo.com/yuedu/shuyuan/json/id/<id>.json` 下載。清單頁 `https://www.yckceo.com/yuedu/shuyuan/index.html` 接 `?tu=1`（圖源）、`?shengyin=1`（有聲）、`?keys=<關鍵字>`、`&page=<n>` 篩選，一頁 100 個；「圖源」裡混著小說與聚合源，類型以下載的 JSON 為準。
+- **用真的網站校驗書源**：`test/live/source_check_live_test.dart`，用法寫在檔頭。調 AI 修書源（提示詞、流程）時的整批實跑、評估表與逐輪頁面照 `docs/agents/ai-repair-runs.md`。源倉庫（yckceo.com）的書源可以照清單頁收集 id，再從 `https://www.yckceo.com/yuedu/shuyuan/json/id/<id>.json` 下載。清單頁 `https://www.yckceo.com/yuedu/shuyuan/index.html` 接 `?tu=1`（圖源）、`?shengyin=1`（有聲）、`?keys=<關鍵字>`、`&page=<n>` 篩選，一頁 100 個；「圖源」裡混著小說與聚合源，類型以下載的 JSON 為準。
 - **整批校驗的逾時與 `DioException [unknown]` 不代表書源壞了**：家裡這台連部分網站時 TLS 憑證不受信任（curl 也一樣）、DNS 時好時壞，每次跑的結果都不同（2026-11-10，401 個裡 155 個逾時）。要判斷書源本身時，挑出來重跑，並用 curl 打同一個網址對照；書源匯入時的分類（`prepareIncoming`）`test/live/` 不會跑，要看匯入後的類型另外呼叫。

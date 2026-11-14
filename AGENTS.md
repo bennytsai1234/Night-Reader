@@ -31,7 +31,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試：在整個 `test/` grep 改到的類別與函式，引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
+- CI（`.github/workflows/ci.yml`）在開 PR、PR 有新推送、推上 `beta` 時跑；做的途中推分支只是備份，不跑。本機只跑受影響的測試：在整個 `test/` grep 改到的類別與函式，改掉或拿掉的輸出文字也 grep 那段字本身（測試常直接比對它），引用到的檔都算（測試常放在別的資料夾，例如書源引擎的解析在 `test/core/engine/` 各處都有）。用 `tool/flutter_test.sh <測試路徑>`（`--run-skipped -t …` 這類參數照接）：錯誤一定印出、進度行與套件清單濾掉，輸出整份看。全套測試只在 CI 跑。
 - 改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交。
 - 推送前的 hook 跑 `flutter analyze`，看 `pre-push:` 開頭那一行（通過是 `pre-push: analyze 通過（全套測試看 CI）`）；Git 會在它後面再印遠端訊息，只看最後幾行會漏掉。
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。
@@ -43,7 +43,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - `beta` 是預設分支，日常改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版（ADR 0049）。分支保護只禁止強制推送與刪除；不改寫歷史，versionCode 靠提交數只增不減。
 - 只改說明文件（`.md`、`docs/`）時，`git pull --ff-only` 後直接在 `beta` 上改、推，不開分支、不審。
-- 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，一件事一條分支、一個 PR，跟著改的文件放同一條分支。發正式版的升版號提交例外，照 `docs/agents/release.md` 直接推上 `beta`。
+- 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，同一段工作的改動與跟著改的文件都放同一條分支、一個 PR。發正式版的升版號提交例外，照 `docs/agents/release.md` 直接推上 `beta`。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`），本文用繁體中文。
 - **收尾**時讀 `docs/agents/finish.md`；使用者說**合併**時讀 `docs/agents/merge.md`；使用者說要**發正式版**時讀 `docs/agents/release.md`。
 - 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `docs/design/`；本檔只放每件工作都用得到的規則。

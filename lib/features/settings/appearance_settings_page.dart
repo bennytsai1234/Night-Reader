@@ -17,6 +17,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
 /// 換頁動畫與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
@@ -298,6 +299,7 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
         style.label,
         style: _StyleCard.labelStyle(selected: isSelected),
         width: cardWidth,
+        maxLines: 1,
         textAlign: TextAlign.center,
       ).centeredIn(cardWidth);
       final labelTop = top + pageHeight + _StyleCard.labelGap;
@@ -425,12 +427,16 @@ class _StyleCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: labelGap),
-            Text(
-              style.label,
-              // 窄螢幕加大字級時換行，不省略成「…」。
-              textAlign: TextAlign.center,
-              style: labelStyle(selected: selected).copyWith(
-                color: selected ? scheme.onSurface : chrome.sectionText,
+            // 風格名稱固定一行；超出卡寬時可拖動查看，不折行或省略。
+            DragOverflowText(
+              child: Text(
+                style.label,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: labelStyle(selected: selected).copyWith(
+                  color: selected ? scheme.onSurface : chrome.sectionText,
+                ),
               ),
             ),
           ],

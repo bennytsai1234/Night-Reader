@@ -191,4 +191,78 @@ void main() {
     );
     expect((await getIt<BookDao>().getByUrl('$oldUrl/book/1'))!.origin, oldUrl);
   });
+
+  test('merging duplicate sources of one site moves their books and search '
+      'results to the one kept, joins their own groups, keeps its login, and '
+      'deletes the duplicates', () async {
+    const keep = 'https://site.example#a';
+    const dupB = 'https://site.example#b';
+    const dupC = 'https://site.example#c';
+    final dao = getIt<BookSourceDao>();
+    await dao.upsert(
+      BookSource(
+        bookSourceUrl: keep,
+        bookSourceName: '甲',
+        bookSourceGroup: '常用',
+      ),
+    );
+    await dao.upsert(
+      BookSource(
+        bookSourceUrl: dupB,
+        bookSourceName: '乙',
+        bookSourceGroup: '收藏,$abnormalSourceGroupTag',
+      ),
+    );
+    await dao.upsert(BookSource(bookSourceUrl: dupC, bookSourceName: '丙'));
+    await getIt<BookDao>().upsert(
+      Book(bookUrl: 'https://site.example/book/1', name: '甲書', origin: dupB),
+    );
+    await getIt<SearchBookDao>().upsert(
+      SearchBook(
+        bookUrl: 'https://site.example/book/2',
+        name: '乙書',
+        origin: dupC,
+        originName: '丙',
+      ),
+    );
+    final cache = CacheManager();
+    await cache.put('userInfo_$keep', '{"user":"甲"}');
+    await cache.put('userInfo_$dupB', '{"user":"乙"}');
+    await SourceMoves(await SharedPreferences.getInstance())
+        .record(from: 'https://old.example', to: keep);
+
+    await BookSourceService().mergeSources([dupB, dupC], keep);
+
+    expect(await dao.getByUrl(dupB), isNull);
+    expect(await dao.getByUrl(dupC), isNull);
+    final kept = (await dao.getByUrl(keep))!;
+    expect(kept.bookSourceGroup, '常用,收藏', reason: '校驗標記不併過去');
+    final book = (await getIt<BookDao>().getByUrl(
+      'https://site.example/book/1',
+    ))!;
+    expect(book.origin, keep);
+    expect(book.originName, '甲');
+    final search = await getIt<SearchBookDao>().getByNames(['乙書']);
+    expect(search.single.origin, keep);
+    expect(await cache.get('userInfo_$keep'), '{"user":"甲"}');
+    expect(await cache.get('userInfo_$dupB'), isNull);
+    expect(SourceMoves(await SharedPreferences.getInstance()).read(), {
+      keep: ['https://old.example', dupB, dupC],
+    });
+  });
+
+  test('nothing is merged once the source to keep is gone', () async {
+    final dao = getIt<BookSourceDao>();
+    await dao.upsert(
+      BookSource(bookSourceUrl: 'https://site.example#b', bookSourceName: '乙'),
+    );
+
+    final merged = await BookSourceService().mergeSources([
+      'https://site.example#b',
+    ], 'https://site.example#a');
+
+    expect(merged, isEmpty);
+    expect(await dao.getByUrl('https://site.example#b'), isNotNull);
+    expect(await dao.getByUrl('https://site.example#a'), isNull, reason: '不復活');
+  });
 }

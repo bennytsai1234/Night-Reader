@@ -116,6 +116,42 @@ void main() {
     expect(provider.book.bookUrl, oldUrl);
   });
 
+  test(
+    'editing book info and cover refreshes the bookshelf once per save',
+    () async {
+      var refreshes = 0;
+      final subscription = AppEventBus()
+          .onName(AppEventBus.upBookshelf)
+          .listen((_) => refreshes++);
+      addTearDown(subscription.cancel);
+      final provider = await openDetail();
+
+      // 沒有成功儲存時，不要求書架重讀。
+      final rejected = await provider.updateBookInfo('  ', '作者', '', '');
+      expect(rejected.success, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(refreshes, 0);
+
+      final edited = await provider.updateBookInfo('新書名', '新作者', '新簡介', '');
+      expect(edited.success, isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(refreshes, 1);
+      expect((await db.bookDao.getByUrl(oldUrl))?.name, '新書名');
+      expect((await db.bookDao.getByUrl(oldUrl))?.author, '新作者');
+
+      final covered = await provider.updateCover('');
+      expect(covered.success, isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(refreshes, 2);
+
+      // 原本就會通知書架的自動檢查更新開關仍然照常運作。
+      final updateCheck = await provider.setCanUpdate(false);
+      expect(updateCheck.success, isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(refreshes, 3);
+    },
+  );
+
   test('a source edited elsewhere is read again on return', () async {
     await db.bookSourceDao.upsert(
       BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '舊名字'),

@@ -25,6 +25,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.
 import 'package:night_reader/features/reader_v2/screen/reader_v2_side_panel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
@@ -838,6 +839,12 @@ class _InfoRow extends StatelessWidget {
     Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
       (null, _) || (_, null) => child,
       (final color?, Text(:final data?)) => SkeletonText(data, color: color),
+      // 選了下載字型時字分段（[_infoText]）；骨架照系統字型在前量，中文字
+      // 在中文字型裡都是一格寬，長度不變。
+      (final color?, Text(:final textSpan?)) => SkeletonText(
+        textSpan.toPlainText(),
+        color: color,
+      ),
       // 只有圖示的欄位（自動翻頁、只有電池、數字畫在電池裡）置中在列上，
       // 不跟字的位置。
       (final color?, final Icon child) => _InfoItemSkeleton(
@@ -853,11 +860,18 @@ class _InfoRow extends StatelessWidget {
         child: child,
       ),
     };
-    final left = masked(
-      _itemWidget(context, slots.left, progress, title, TextAlign.left),
+    // 骨架仍看原始文字；完成後只讓真正超出的資訊可以手動橫向拖動。
+    Widget? reveal(Widget? item) => switch (item) {
+      final Text text when !skeleton => DragOverflowText(child: text),
+      _ => item,
+    };
+    final left = reveal(
+      masked(_itemWidget(context, slots.left, progress, title, TextAlign.left)),
     );
-    final right = masked(
-      _itemWidget(context, slots.right, progress, title, TextAlign.right),
+    final right = reveal(
+      masked(
+        _itemWidget(context, slots.right, progress, title, TextAlign.right),
+      ),
     );
     // 整列讀成一句：每個欄位自己帶讀屏文字，時鐘與電量跟著自己的更新重算，
     // 不必等這一列因為進度或換章重建。骨架不提供語意。
@@ -879,9 +893,8 @@ class _InfoRow extends StatelessWidget {
             locale: kReaderV2TextLocale,
           ),
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          // 被刪節號截掉的章名，寬度照截完的字算，不是整欄：載入時的骨架
-          // 照它量，才會和字一樣長。
+          overflow: TextOverflow.visible,
+          // 資訊欄位內容過長時由 DragOverflowText 檢測並供手動拖動。
           textWidthBasis: TextWidthBasis.longestLine,
           child: SizedBox(
             height: rowHeight ?? readerInfoRowHeightFor(shell.infoFontSize),
@@ -898,7 +911,7 @@ class _InfoRow extends StatelessWidget {
                   ),
                   const SizedBox(width: AppSpacing.xs),
                 ],
-                // 左欄通常放較長的書名／章節名，佔剩餘空間並先被刪節；
+                // 左欄通常放較長的書名／章節名，佔剩餘空間，過長時可拖動；
                 // 右欄放短的進度或時間，最多佔一半寬度，盡量完整顯示。
                 Expanded(
                   child: LayoutBuilder(
@@ -953,9 +966,10 @@ class _InfoRow extends StatelessWidget {
         fontSize: shell.infoFontSize,
       );
     }
-    return Text(
+    return _infoText(
       _itemText(context, item, progress, title) ?? '',
-      textAlign: align,
+      align,
+      shell.fontFamily,
     );
   }
 
@@ -1161,6 +1175,27 @@ final DateFormat _clock12 = DateFormat('h:mm');
 DateFormat _clockFormat(bool use24HourClock) =>
     use24HourClock ? _clock24 : _clock12;
 
+/// 資訊列的一段字（書名、章名、進度）。選了下載的字型（[fontFamily]）時，
+/// 中日文字另用下載字型在前的字族，英數字照舊系統字型在前，同正文
+/// （[readerV2CjkRuns]）。時鐘只有數字，不必分段。
+Widget _infoText(String text, TextAlign align, String? fontFamily) {
+  if (fontFamily == null) return Text(text, textAlign: align);
+  final cjk = TextStyle(
+    fontFamilyFallback: readerV2CjkFontFallback(fontFamily),
+  );
+  final spans = <InlineSpan>[];
+  var cursor = 0;
+  for (final run in readerV2CjkRuns(text)) {
+    if (run.start > cursor) {
+      spans.add(TextSpan(text: text.substring(cursor, run.start)));
+    }
+    spans.add(TextSpan(text: text.substring(run.start, run.end), style: cjk));
+    cursor = run.end;
+  }
+  if (cursor < text.length) spans.add(TextSpan(text: text.substring(cursor)));
+  return Text.rich(TextSpan(children: spans), textAlign: align);
+}
+
 class _ReaderClock extends StatefulWidget {
   const _ReaderClock({required this.format, required this.textAlign});
 
@@ -1210,7 +1245,7 @@ class _ReaderClockState extends State<_ReaderClock> {
     return Semantics(
       label: '時間 $time',
       excludeSemantics: true,
-      child: Text(time, textAlign: widget.textAlign),
+      child: DragOverflowText(child: Text(time, textAlign: widget.textAlign)),
     );
   }
 }

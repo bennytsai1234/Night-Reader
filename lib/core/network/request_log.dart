@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/page_digest.dart';
-import 'package:night_reader/core/network/page_notes.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
 
 /// 一份 [RequestLog] 記什麼；跨 isolate 送得過去（規則 JS 要等的請求在網路
@@ -118,6 +117,27 @@ final class RequestLog {
   }
 }
 
+/// 請求送出的時刻（微秒）放在 `RequestOptions.extra` 的這個鍵：回應那一行
+/// 照它寫花了幾秒（[recordResponse]）。`AppInterceptor` 每送一次（含每一跳
+/// 轉址）重記一次。
+const String requestStartedKey = '_requestStartedMicros';
+
+/// 超過這麼久的回應才寫花了幾秒：快的不多佔字。2026-11-13 御书屋的搜尋要
+/// 48 秒，校驗只等 20 秒，AI 看不到時間，猜了五輪。
+const Duration _slowResponse = Duration(seconds: 1);
+
+/// 回應那一行的「，花了 48.2 秒」；不到 [_slowResponse] 或不知道何時送出是
+/// 空字串。
+String _elapsedNote(RequestOptions? options) {
+  final started = options?.extra[requestStartedKey];
+  if (started is! int) return '';
+  final elapsed = Duration(
+    microseconds: DateTime.now().microsecondsSinceEpoch - started,
+  );
+  if (elapsed < _slowResponse) return '';
+  return '，花了 ${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
+}
+
 /// 外層的 [RequestLog]；不在 [RequestLog.run] 裡時是 null。
 RequestLog? get currentRequestLog =>
     Zone.current[_requestLogZoneKey] as RequestLog?;
@@ -225,7 +245,10 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   if (response == null) {
     final type = error?.type;
     final uri = error?.requestOptions.uri.removeFragment();
-    log._add('  ← $uri 沒有回應（${type?.name ?? '未知'}）');
+    log._add(
+      '  ← $uri 沒有回應（${type?.name ?? '未知'}）'
+      '${_elapsedNote(error?.requestOptions)}',
+    );
     // 網站擋下夜讀（Cloudflare 那幾種）也包成 unknown，只算真的連線斷掉的。
     if (type == DioExceptionType.connectionError ||
         (type == DioExceptionType.unknown && error?.error is IOException)) {
@@ -240,8 +263,9 @@ void recordResponse(Response<dynamic>? response, {DioException? error}) {
   final head =
       '  ← ${response.realUri.removeFragment()} ${status ?? '?'}'
       '${type == null ? '' : ' $type'}${cache == null ? '' : ' $cache'}'
-      '${dropped == null ? '' : ' $dropped'}';
-  final empty = _recordBody(log, head, response.data, status: status);
+      '${dropped == null ? '' : ' $dropped'}'
+      '${_elapsedNote(response.requestOptions)}';
+  final empty = _recordBody(log, head, response.data);
   if (status == 429 || (status != null && status >= 500) || empty) {
     log._transientResponses++;
   }
@@ -298,13 +322,11 @@ void recordRenderedPage(String? url, Object? body) {
 
 /// 回應那一行：[head] 接上長度與內容開頭；[RequestLog.pages] 那份接上整頁。
 /// 傳回內容是不是空白。
-bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
+bool _recordBody(RequestLog log, String head, Object? data) {
   final full = log.keepPages;
-  // 只記開頭幾個字時也解開夠長的一段：認限流、防護頁與轉址頁（[pageNoteOf]）
-  // 要看頁面有多長，拿截短的開頭量，長網頁會被當成只有一段轉址程式的短頁。
   final decoded = _decode(
     data,
-    full || log.digestPages ? _digestBytes : _noteBytes,
+    full || log.digestPages ? _digestBytes : log.responsePreview! * 4,
   );
   if (decoded == null) {
     log._add(head);
@@ -338,28 +360,13 @@ bool _recordBody(RequestLog log, String head, Object? data, {int? status}) {
       : tooShort
       ? '，太短不精簡'
       : '，精簡後 ${collapsed.length} 字';
-  // 限流、防護頁與轉址頁精簡後幾乎是空的，寫出它是什麼（[pageNoteOf]）。
-  final note = pageNoteOf(text, status: status);
   log._add(
-    '$head，$length$digested${note == null ? '' : '（$note）'}'
+    '$head，$length$digested'
     '${shown.isEmpty ? '' : '：$shown'}',
     full ? text : null,
   );
   return collapsed.isEmpty;
 }
-
-/// [recordResponse] 記的回應那一行，網站給的是內容：狀態碼 2xx、有內容，
-/// 也不是限流、防護頁或轉址頁（[pageNoteOf] 寫在括號裡的說明）。不是回應
-/// 那一行的是 false。
-bool isContentResponseLine(String line) {
-  final match = _responseLine.firstMatch(line);
-  if (match == null) return false;
-  final status = int.parse(match.group(1)!);
-  if (status < 200 || status >= 300 || line.contains('，沒有內容')) return false;
-  return !pageNoteOpenings.any((note) => line.contains('（$note'));
-}
-
-final RegExp _responseLine = RegExp(r'^\s*← \S+ (\d{3})\b');
 
 /// 回應內容的長度與文字；不認得的型別是 null，沒有內容時長度是 null。
 /// 位元組照網頁宣告的編碼解開（GBK 這類中文網站），沒宣告的照內容猜，最多
@@ -390,8 +397,5 @@ final RegExp _responseLine = RegExp(r'^\s*← \S+ (\d{3})\b');
 }
 
 const int _digestBytes = RequestLog.fullPageBytes;
-
-/// 只記開頭時解開多少位元組來認頁面種類：比 [pageNoteOf] 認短頁的門檻長得多。
-const int _noteBytes = 64 * 1024;
 
 final Object _requestLogZoneKey = Object();

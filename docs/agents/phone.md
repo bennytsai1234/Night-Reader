@@ -14,6 +14,7 @@
 - 崩潰日誌：`/sdcard/Android/data/com.inkpage.reader/files/` 直接讀（`crash-*.log`，最多留 50 份）；同一個資料夾的 `trail.log` 是這次開啟最近的動作與 App 日誌。vivo 的 logcat 幾乎全被濾掉，正式版的 App 日誌也不進 logcat，要看 App 做了什麼讀 `trail.log`。
 - 系統層的閃退（崩潰日誌裡沒有）：`adb shell dumpsys activity exit-info com.inkpage.reader` 是系統記的每次結束與原因，`adb logcat -b crash -d` 是原生崩潰的訊號與堆疊。堆疊落在 `libapp.so` 時只有位址（發布版不留符號），靠訊號、執行緒名稱與呼叫來源推理，再在電腦上做小實驗重現（2026-11-11 書源 worker 閃退就是這樣查到的）。系統層的閃退（原生崩潰、記憶體不足、沒有回應）夜讀當下記不到，下次開啟、進場播完後照系統記的原因補寫一份，開頭是「上次結束（系統記的）」，附結束前的動作與日誌（`trail.log` 是這次開啟到現在的）；這種先看崩潰日誌，沒有才連手機讀 `adb logcat -b crash`。最近一次書源校驗的診斷在同一個資料夾的 `source-check.log`（每個出問題的書源一段：錯誤、實際執行的 JS、請求與網站的回應），使用者也能在「校驗詳情」按「複製診斷」。
 - 書源原文：書源管理多選 →「⋯」→「匯出與分享」→「分享選中」→「儲存到檔案管理員」，檔案在 `/sdcard/Download/分享儲存/`，拿到後用 `test/live/` 在電腦上連真網站校驗。
+- AI 修復的完整紀錄：手機上修過的每一件都寫在 `/sdcard/Android/data/com.inkpage.reader/files/ai-repair/`（一件一份 `.txt`，只留最近的幾十份），整個資料夾 `adb pull` 到主資料夾的 `.local/ai-repair/<日期>/`，不用在 App 裡一件件按「分享完整紀錄」。還在修的那件檔案還在寫（沒有 `NR-AI-REPAIR-STATS` 那行），修完再拉一次。整理成表用 `dart run tool/ai_repair_table.dart <資料夾> --out <表>`。
 - 畫面：`adb exec-out screencap -p` 截圖；`uiautomator dump` 讀得到每一列的文字（Flutter 的 `content-desc`），用來找點的位置。動畫逐幀看用 `adb shell screenrecord` 錄、拉回後 `ffmpeg -fps_mode passthrough` 拆幀（影片標的幀率是 90000，不加會把每幀複製上百份）。
 
 ## 裝 APK

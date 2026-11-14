@@ -130,7 +130,9 @@ final class StyleFingerprint {
       titleCenter: style.titleCenter,
       textScaleFactor: textScaleFactor,
       fontFamilySignature:
-          fontFamilySignature ?? spec.style.fontFamily ?? 'system',
+          fontFamilySignature ??
+          readerV2FontFamilySignature(spec.style.fontFamily) ??
+          'system',
       platformFontSignature: platformFontSignature,
       titleFontSize: style.titleFontSize,
       titleSpacing: style.titleSpacing,
@@ -794,7 +796,7 @@ final class HybridBlockTextStyle {
     required this.letterSpacing,
     this.bold = false,
     this.center = false,
-    this.fontFamilyFallback = kReaderV2FontFamilyFallback,
+    this.fontFamily,
   });
 
   factory HybridBlockTextStyle.fromLayoutStyle(
@@ -807,7 +809,7 @@ final class HybridBlockTextStyle {
       letterSpacing: style.letterSpacing,
       bold: isTitle ? style.titleBold : style.bold,
       center: isTitle && style.titleCenter,
-      fontFamilyFallback: readerV2FontFallback(style.fontFamily),
+      fontFamily: style.fontFamily,
     );
   }
 
@@ -820,8 +822,14 @@ final class HybridBlockTextStyle {
   /// 量字形與折行時一律從左緣起算。
   final bool center;
 
-  /// 標點字型之後的字族清單（[readerV2FontFallback]）。
-  final List<String> fontFamilyFallback;
+  /// 下載的正文字型（ADR 0045）；null 是系統字型。
+  final String? fontFamily;
+
+  /// 英數字與符號在標點字型之後的字族清單（[readerV2FontFallback]）。
+  List<String> get fontFamilyFallback => readerV2FontFallback(fontFamily);
+
+  /// 中日文字在標點字型之後的字族清單（[readerV2CjkFontFallback]）。
+  List<String> get cjkFontFamilyFallback => readerV2CjkFontFallback(fontFamily);
 }
 
 final class LayoutTask {

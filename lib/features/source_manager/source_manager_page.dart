@@ -45,6 +45,8 @@ import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
 
@@ -106,8 +108,27 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   /// 沒選書源時按鈕灰著。有選取時也視為編輯模式，避免選取狀態沒有出口。
   bool _editMode = false;
 
+  /// 讀清單時併掉了重複書源（ADR 0062）：從底部提示。
+  ValueNotifier<int>? _merged;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _merged ??= context.read<SourceManagerProvider>().duplicatesMerged
+      ..addListener(_sayMerged);
+  }
+
+  void _sayMerged() {
+    if (!mounted) return;
+    final count = context.read<SourceManagerProvider>().lastMergedDuplicates;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('已合併 $count 個同網站重複的書源')));
+  }
+
   @override
   void dispose() {
+    _merged?.removeListener(_sayMerged);
     _searchController.dispose();
     super.dispose();
   }
@@ -939,13 +960,14 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                           child: Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  g,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodyBase.copyWith(
-                                    height: 1.3,
-                                    color: scheme.onSurface,
+                                child: DragOverflowText(
+                                  child: Text(
+                                    g,
+                                    maxLines: 1,
+                                    style: AppTextStyles.bodyBase.copyWith(
+                                      height: 1.3,
+                                      color: scheme.onSurface,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1001,9 +1023,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           messenger.showSnackBar(
             SnackBar(
               content: Text(
-                unsupportedCount > 0
-                    ? '成功匯入 $count 個書源，其中 $unsupportedCount 個已標記為不支援並停用'
-                    : '成功匯入 $count 個書源',
+                sourceImportMessage(count, unsupported: unsupportedCount),
               ),
             ),
           );

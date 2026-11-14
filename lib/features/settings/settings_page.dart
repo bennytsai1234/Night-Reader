@@ -8,10 +8,10 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/features/source_manager/ai_repair/ai_repair_settings_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
-import 'package:night_reader/features/settings/reading_stats_page.dart';
 
 import 'tts_settings_page.dart';
 import 'backup_sync_page.dart';
@@ -23,9 +23,9 @@ import 'package:night_reader/features/about/check_update_row.dart';
 /// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）；「檢查更新」
 /// 例外，點了就檢查（ADR 0030）。
 ///
-/// 依用途分三組：閱讀（偏好、外觀、朗讀、統計），書與資料（書籤與標註、書源、
+/// 依用途分三組：閱讀（偏好、外觀、朗讀），書與資料（閱讀紀錄、書源、AI 服務、
 /// 備份），App（檢查更新、關於）。第一層九個（使用者 2026-10-23：九個剛好；
-/// 崩潰日誌與背景下載佇列在關於夜讀裡），ADR 0030。
+/// 崩潰日誌與背景下載佇列在關於夜讀裡，閱讀統計在閱讀紀錄裡），ADR 0030。
 ///
 /// 圖示顏料依意義固定：硃砂＝閱讀、點金＝紀錄、石青＝網路與書源、
 /// 茄紫＝外觀、苔綠＝聲音、茶褐＝資料、墨＝App 資訊。
@@ -85,14 +85,6 @@ class SettingsPage extends StatelessWidget {
                 title: '朗讀與語音',
                 onTap: () => _push(context, const TtsSettingsPage()),
               ),
-              GroupedRow(
-                leading: const GroupedIconTile(
-                  Icons.timer_outlined,
-                  tint: AppTint.gold,
-                ),
-                title: '閱讀統計',
-                onTap: () => _push(context, const ReadingStatsPage()),
-              ),
             ],
           ),
           GroupedSection(
@@ -102,7 +94,7 @@ class SettingsPage extends StatelessWidget {
                   Icons.bookmarks_outlined,
                   tint: AppTint.gold,
                 ),
-                title: '書籤與標註',
+                title: '閱讀紀錄',
                 onTap: () => unawaited(BookmarksPage.open(context)),
               ),
               GroupedRow(
@@ -112,6 +104,14 @@ class SettingsPage extends StatelessWidget {
                 ),
                 title: '書源管理',
                 onTap: () => _push(context, const SourceManagerPage()),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.auto_fix_high_outlined,
+                  tint: AppTint.azurite,
+                ),
+                title: 'AI 服務',
+                onTap: () => _push(context, const AiRepairSettingsPage()),
               ),
               GroupedRow(
                 leading: const GroupedIconTile(

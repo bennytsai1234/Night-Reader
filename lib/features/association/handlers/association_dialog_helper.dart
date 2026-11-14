@@ -100,12 +100,10 @@ mixin AssociationDialogHelper on AssociationBase {
           final parsed = await service.parseSourcesDetailedAsync(content);
           final count = await service.importSources(parsed.allSources);
           // 和書源管理的匯入同一套說法：夜讀不支援的書源會匯入但停用。
-          final unsupportedCount = parsed.unsupportedSources.length;
-          message = count == 0
-              ? '未匯入有效書源'
-              : unsupportedCount > 0
-              ? '成功匯入 $count 個書源，其中 $unsupportedCount 個已標記為不支援並停用'
-              : '成功匯入 $count 個書源';
+          message = sourceImportMessage(
+            count,
+            unsupported: parsed.unsupportedSources.length,
+          );
         case ImportContentKind.bookshelf:
           final result = await BookshelfExchangeService().importFromText(
             content,

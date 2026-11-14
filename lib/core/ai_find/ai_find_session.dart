@@ -272,8 +272,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       return AgentCommand(command, read.key);
     }
     _say('讀不懂工具呼叫');
-    s.log.both('讀不懂工具呼叫：${read.fact}');
-    return AgentBadCommand(read.fact);
+    s.log.both(
+      '讀不懂工具呼叫：${read.fact}'
+      '${read.malformed ? '（這則回覆不接進對話，同一段對話重送）' : ''}',
+    );
+    return AgentBadCommand(read.fact, malformed: read.malformed);
   }
 
   @override

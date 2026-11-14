@@ -121,6 +121,8 @@ class BackstageWebView {
 
     await controller.setNavigationDelegate(
       NavigationDelegate(
+        // 書源網站的憑證不驗（同書源的連線，見 sourceHttpClient）。
+        onSslAuthError: (error) => error.proceed(),
         onPageFinished: (String currentUrl) async {
           if (isCompleted) return;
 

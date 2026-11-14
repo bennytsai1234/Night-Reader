@@ -10,8 +10,6 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dar
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
 
-import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
-
 import '../layout/reader_paragraph_layout.dart';
 import '../layout/visual_line_layout_engine.dart';
 import 'budget_governor.dart';
@@ -539,7 +537,7 @@ final class LayoutPump implements HybridLayoutPump {
     final indentLength = _indentFor(task).length;
     final body = task.layoutText;
     final builder = ui.ParagraphBuilder(paragraphStyle)
-      ..pushStyle(_textStyle(task));
+      ..pushStyle(_paragraphLayout.textStyle(task.textStyle, task.textColor));
     final indentCellWidth = task.cellWidth ?? task.textStyle.fontSize;
     for (var i = 0; i < indentLength; i += 1) {
       builder.addPlaceholder(
@@ -548,29 +546,13 @@ final class LayoutPump implements HybridLayoutPump {
         ui.PlaceholderAlignment.bottom,
       );
     }
-    builder.addText(body);
+    _paragraphLayout.addFontRuns(builder, body, task.textStyle, task.textColor);
     return builder.build()
       ..layout(ui.ParagraphConstraints(width: task.contentWidth));
   }
 
   String _indentFor(LayoutTask task) {
     return task.indentChars <= 0 ? '' : '　' * task.indentChars.clamp(0, 8);
-  }
-
-  ui.TextStyle _textStyle(LayoutTask task, {double? letterSpacing}) {
-    return ui.TextStyle(
-      color: task.textColor,
-      fontSize: task.textStyle.fontSize,
-      height: task.textStyle.lineHeight,
-      letterSpacing: letterSpacing ?? task.textStyle.letterSpacing,
-      fontWeight: task.textStyle.bold
-          ? ui.FontWeight.bold
-          : ui.FontWeight.normal,
-      fontFamily: kReaderV2PunctFontFamily,
-      fontFamilyFallback: task.textStyle.fontFamilyFallback,
-      fontFeatures: kReaderV2CjkFontFeatures,
-      locale: kReaderV2TextLocale,
-    );
   }
 }
 

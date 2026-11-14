@@ -262,8 +262,12 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('removeCookie', (args) {
-      _track(CookieStore().removeCookie(args.toString()));
+    // 網站寫的也清（同 Legado：它的 CookieStore 就是 Cookie 罐），規則等清完
+    // 才往下：2026-11-13 手机小说每次搜尋前清掉網站寫的搜尋間隔 Cookie，原本
+    // 清不到，被擋 120 秒。要等，所以走 onBlocking（停止時的錯誤照 JS 錯誤丟）。
+    onBlocking('removeCookie', (url) {
+      _track(CookieStore().removeCookie('$url'));
+      BlockingCall.run(cookieJarDelete('$url'));
       return null;
     });
     runtime.onMessage('clearCookies', (_) {
@@ -487,9 +491,9 @@ class JsExtensions extends JsExtensionsBase {
       BlockingCall.run(cacheRead(key)) as String?;
 
   /// [url] 的站點 Cookie，和 [cached] 一樣先看記憶體。
-  String siteCookie(String url) =>
-      cookieStore.getMemoryCookie(url) ??
-      BlockingCall.run(cookieRead(url)) as String;
+  /// 規則寫的與網站寫的 Cookie 合起來（[cookieRead]）：Cookie 罐在主 isolate，
+  /// 每次都等網路 isolate 讀。
+  String siteCookie(String url) => BlockingCall.run(cookieRead(url)) as String;
 
   /// 規則 JS 觸發、資料庫還沒寫完的寫入（快取、Cookie、登入資料、書源
   /// 變數）。規則 JS 不等它們；要確定寫完的地方（登入頁的動作結束前，

@@ -524,11 +524,14 @@ Future<(Book, AudiobookPlayer, FakeAudioEngine)> _seedAudiobook() async {
 AiRepairSession _aiRepairSession() {
   SourceCheckIsolateResult checked(BookSource source) {
     final healthy = source.ruleContent?.content == 'class.txt@text';
+    // 真的校驗會把結論寫成書源的分組標記再傳回（修復頁照它寫「正文失效」）。
+    final checked = BookSource.fromJson(source.toJson());
+    if (!healthy) checked.addGroup('異常,正文失效');
     return SourceCheckIsolateResult(
       stage: healthy ? 'done' : 'content',
       message: healthy ? '校驗成功' : '正文為空',
       isHealthy: healthy,
-      updatedSourceJson: source.toJson(),
+      updatedSourceJson: checked.toJson(),
       logs: const [],
     );
   }
@@ -724,7 +727,7 @@ Future<void> _seedCheckedSources() async {
       ('https://www.rain.example', '聽雨文庫', '常用', null),
       ('https://a.example', '晨光書屋', '異常,搜尋失效', '搜尋結果是空的'),
       ('https://b.example', '雲間小說', '異常,需要登入', null),
-      ('https://c.example', '舊港文庫', '異常,網站失效', '伺服器回應錯誤（521）'),
+      ('https://c.example', '舊港文庫', '異常,網站失效', '網域查不到'),
       ('https://d.example', '北窗書局', '異常,正文失效', '正文是空的'),
       ('https://e.example', '星河書海', '', null),
     ])

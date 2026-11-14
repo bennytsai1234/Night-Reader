@@ -44,6 +44,10 @@ void main() {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     site = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
+      // 很慢的正文頁：試抓的時限內回不來。
+      if (request.uri.path == '/book/9/1.html') {
+        await Future<void>.delayed(const Duration(seconds: 3));
+      }
       final body = switch (request.uri.path) {
         '/search' => '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
         '/book/1' =>
@@ -55,9 +59,8 @@ void main() {
         '/book/2/1.html' =>
           '<div id="content"><img src="/static/lazy.png" '
               'data-original="/img/chapter-1-page-1.jpg"></div>',
-        '/explore' => '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
-        '/limited' =>
-          '<script>alert("搜索间隔: 30 秒");window.history.go(-1);</script>',
+        '/explore/1.html' =>
+          '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
         // 一章分兩頁（下書網）：第一頁有指向第二頁的連結。
         '/book/3/1.html' =>
           '<div id="content">$_chapter</div><a href="/book/3/1_2.html">下一页</a>',
@@ -96,6 +99,38 @@ void main() {
     ruleContent: ContentRule(content: content),
   );
 
+  test('a search name that differs from the detail page is spelled out', () {
+    // 2026-11-13 肉肉屋#3：搜尋的書名規則抓到「目录」連結。
+    SourceProbeReport walked(String listed, String info, String author) =>
+        SourceProbeReport(
+          logs: [
+            (10, '︽搜尋頁解析完成，獲取到 20 本書籍'),
+            (10, '  [0] $listed - 连山会'),
+            (10, '  [1] 目录 - 陌筱欷'),
+            (20, '︽詳情頁解析完成: $info'),
+            (20, '  作者: $author, 目錄: https://a.example/index/1'),
+          ],
+          requests: const [],
+        );
+
+    expect(
+      searchInfoMismatch(walked('目录', '《救命！》', '连山会')),
+      '搜尋結果第一本進了詳情頁，書名搜尋是「目录」、詳情頁是「《救命！》」',
+    );
+    expect(
+      searchInfoMismatch(walked('救命！', '救命！', '别人')),
+      '搜尋結果第一本進了詳情頁，作者搜尋是「连山会」、詳情頁是「别人」',
+    );
+    expect(searchInfoMismatch(walked('救命！', '救命！', '连山会')), isNull);
+    expect(
+      searchInfoMismatch(
+        const SourceProbeReport(logs: [(20, '︽詳情頁解析完成: 救命！')], requests: []),
+      ),
+      isNull,
+      reason: '從詳情開始試抓，沒有搜尋結果可比',
+    );
+  });
+
   test('a probe walks from search to content and keeps each page', () async {
     final report = await probeSource(
       source(),
@@ -110,6 +145,21 @@ void main() {
     expect(report.pageCount, greaterThanOrEqualTo(3));
     expect(report.fullText, contains('<a href="/book/1/1.html">第一章</a>'));
     expect(report.fullText, contains(_chapter));
+  });
+
+  test('a probe that runs out of time says how far it got', () async {
+    // 2026-11-13 肉肉屋⑥：四次超過時間，紀錄都是空的。
+    final report = await probeSource(
+      source(),
+      keyword: probeStart('content', keyword: '', url: '$site/book/9/1.html')!,
+      timeout: const Duration(seconds: 1),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(report.timedOut, isTrue);
+    expect(report.fullText, contains('正文 URL: $site/book/9/1.html'));
+    expect(report.requests, contains(startsWith('$site/book/9/1.html')));
+    expect(report.fullText, contains('（試抓超過時間，停在這裡）'));
   });
 
   test(
@@ -162,25 +212,21 @@ void main() {
     );
   });
 
-  test('a title the site lists in discovery is searched with the source, and '
-      'a limited answer is told apart from not found', () async {
-    final listed = source()..exploreUrl = '全部::/explore';
-    final found = await searchKnownTitle(
-      listed,
+  test('a probe can start from a discovery page written like exploreUrl, '
+      'relative and with {{page}}', () async {
+    final report = await probeSource(
+      source(),
+      keyword: probeStart(
+        'explore',
+        keyword: '',
+        url: '/explore/{{page}}.html',
+      )!,
       timeout: const Duration(seconds: 30),
       database: Future.value(databaseIsolate),
     );
-    expect(found, (title: '夜雨聽書', from: '全部', found: true, limited: null));
 
-    final limited = await searchKnownTitle(
-      source()
-        ..exploreUrl = '全部::/explore'
-        ..searchUrl = '/limited?q={{key}}',
-      timeout: const Duration(seconds: 30),
-      database: Future.value(databaseIsolate),
-    );
-    expect(limited?.found, isFalse);
-    expect(limited?.limited, '「搜索间隔: 30 秒」');
+    expect(report.succeeded, isTrue, reason: report.fullText);
+    expect(report.requests.first, contains('/explore/1.html'));
   });
 
   test('a probe can start from the table of contents', () async {

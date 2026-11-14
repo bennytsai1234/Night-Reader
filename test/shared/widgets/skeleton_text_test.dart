@@ -1,4 +1,5 @@
-// 照字畫的骨架長條要和換上來的字一樣長：被刪節的一行含「…」，行首與行尾
+// 照字畫的骨架長條要和換上來的字一樣長：被刪節的一行含「…」（放不下時換上來
+// 的是可拖的字，最後一行照露出的範圍畫），行首與行尾
 // 的全形標點扣掉那一格空著的部分（docs/design/loading.md「骨架的樣子」）。
 //
 // 測試字型的字都是方塊，所以標點空著多少由測試直接給表；
@@ -189,9 +190,10 @@ void main() {
         ),
       ),
     );
+    // 放不下的字換上來時可以拖（DragOverflowText），露出整欄寬的字。
     final bar = tester.getRect(find.byType(SkeletonBox));
     expect(bar.left, 0);
-    expect(bar.width, 50);
+    expect(bar.width, 55);
     expect(bar.height, 10);
     expect(tester.getSize(find.byType(SkeletonText)).height, 13);
   });
@@ -233,5 +235,62 @@ void main() {
       expect(blank.advance, closeTo(1, 0.01));
       expect(blank.left + blank.right, lessThan(0.5));
     }
+  });
+
+  group('overflowing text drags its last line (DragOverflowText)', () {
+    test('the last line fills the column; earlier lines stay as laid out', () {
+      // 一格 10 寬、行高 13：第一行五個字，第二行從「六」起整段拖。
+      final painter = _layout('一二三四五六七八九十甲乙', maxWidth: 55, maxLines: 2);
+      final lines = skeletonTextLines(painter, maxWidth: 55);
+      expect(lines, hasLength(2));
+      expect(lines[0].left, 0);
+      expect(lines[0].right, 50);
+      expect(lines[1].left, 0);
+      expect(lines[1].right, 55);
+      expect(lines[1].top, greaterThanOrEqualTo(13));
+    });
+
+    test('an empty line before the dragged one is not taken for it', () {
+      final painter = _layout(
+        'abc\n\n\ndefghijklmn',
+        maxWidth: 55,
+        maxLines: 3,
+      );
+      final lines = skeletonTextLines(painter, maxWidth: 55);
+      expect(lines, hasLength(2), reason: '第一行 abc、第三行可拖');
+      expect(lines.first.top, lessThan(13));
+      expect(lines.last.top, greaterThanOrEqualTo(26));
+    });
+
+    test('centered earlier lines align in the full column', () {
+      final painter = TextPainter(
+        text: const TextSpan(text: 'abc\ndef\nghi\njkl', style: _style),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+        maxLines: 3,
+        ellipsis: '…',
+      )..layout(maxWidth: 55);
+      final lines = skeletonTextLines(painter, maxWidth: 55);
+      // 換上來的字撐滿 55：「abc」置中在 12.5–42.5。
+      expect(lines.first.left, 12.5);
+    });
+
+    test('mixed styles keep the size of each run in the dragged line', () {
+      final painter = TextPainter(
+        text: const TextSpan(
+          style: _style,
+          children: [
+            TextSpan(text: 'a'),
+            TextSpan(text: 'b', style: TextStyle(fontSize: 40)),
+            TextSpan(text: 'c'),
+          ],
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: 55);
+      final lines = skeletonTextLines(painter, maxWidth: 55);
+      expect(lines.single.right, 55);
+    });
   });
 }

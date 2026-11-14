@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/models/source/source_site.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -209,15 +210,6 @@ Future<SiteCheck> checkSite(
   } finally {
     worker.kill(StateError('網站檢查已結束'));
   }
-}
-
-/// 書源網址的開頭（`https://www.site.com`）；不是 http(s) 的是 null。
-String? siteOrigin(String sourceUrl) {
-  final match = RegExp(
-    r'^(https?://[^/#?,\s]+)',
-    caseSensitive: false,
-  ).firstMatch(sourceUrl.trim());
-  return match?.group(1);
 }
 
 Future<Map<String, Object?>> Function(CancelToken) _siteTask(

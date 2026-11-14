@@ -1,14 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'http_client.dart';
+import 'network_service.dart';
 
 /// AppUpdateService - 查 GitHub Release 的最新版本資訊。
 ///
 /// 只負責 HTTP + 版本比對。SharedPreferences、UI、下載安裝都在他處。
 class AppUpdateService {
   AppUpdateService({Dio? dio, Future<String> Function()? currentVersionLoader})
-    : _dio = dio ?? HttpClient().client,
+    : _dio = dio ?? NetworkService().appDio,
       _currentVersionLoader = currentVersionLoader ?? _defaultCurrentVersion;
 
   static const _releasesUrl =

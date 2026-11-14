@@ -169,6 +169,56 @@ class AiChatClient {
     return url.endsWith('/chat/completions') ? url : '$url/chat/completions';
   }
 
+  /// 服務列出的模型（OpenAI 相容的 `GET 服務網址/models`），照服務給的順序；
+  /// AI 服務頁的模型選單用。不用金鑰也列得出的服務（OpenCode Go）照樣送
+  /// 金鑰，各家都認。
+  Future<List<String>> listModels() async {
+    var base = service.baseUrl.trim();
+    while (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    if (base.endsWith('/chat/completions')) {
+      base = base.substring(0, base.length - '/chat/completions'.length);
+    }
+    final uri = Uri.tryParse('$base/models');
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw const AiServiceException('服務網址不對');
+    }
+    final Response<dynamic> response;
+    try {
+      response = await _dio.getUri<dynamic>(
+        uri,
+        options: Options(
+          receiveTimeout: const Duration(seconds: 15),
+          headers: {
+            if (service.apiKey.isNotEmpty)
+              'Authorization': 'Bearer ${service.apiKey}',
+            'User-Agent': 'NightReader-AIRepair/1.0',
+          },
+        ),
+      );
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      throw AiServiceException(
+        status == null ? '連不上服務：${error.type.name}' : '服務回了 $status',
+      );
+    }
+    var data = response.data;
+    if (data is String) {
+      try {
+        data = jsonDecode(data);
+      } on FormatException {
+        throw const AiServiceException('服務回的模型清單讀不懂');
+      }
+    }
+    final list = data is Map ? data['data'] : null;
+    if (list is! List) throw const AiServiceException('服務回的模型清單讀不懂');
+    return [
+      for (final item in list)
+        if (item is Map && item['id'] is String) item['id'] as String,
+    ];
+  }
+
   /// 不串流的回應最多收多少位元組：書源 JSON 加說明遠小於這個；再多就是
   /// 服務出了狀況，收下來只會佔滿記憶體。
   static const int maxResponseBytes = 2 * 1024 * 1024;
@@ -254,7 +304,7 @@ class AiChatClient {
               'tool_choice': 'required',
             },
             'stream': true,
-            // 串流時用量只在要了才給（OpenAI、DeepSeek）；整批的用量上限靠它。
+            // 串流時用量只在要了才給（OpenAI、DeepSeek）；修復頁的 AI 用量靠它。
             'stream_options': {'include_usage': true},
             if (service.effort.isNotEmpty) 'reasoning_effort': service.effort,
           },
@@ -523,7 +573,7 @@ final class _StreamReader implements Sink<String> {
   /// 還沒回完就斷了時的用量：服務回報過的照用；沒有輸出時是 null（多半還沒
   /// 開始計費）；其他照字數估，打中快取算 0。
   ///
-  /// 每 token 算 2.5 字，寧可估多、讓整批的用量上限早點到：2026-11-12 實跑
+  /// 每 token 算 2.5 字，寧可估多：2026-11-12 實跑
   /// 涨姿势（deepseek-v4.1-flash）第 1 輪送出 23,786 字是 9,180 token（2.6
   /// 字），思考加回覆 2,776 字是 738 token（3.8 字）。
   AiUsage? get estimate {

@@ -8,6 +8,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 
 import '../../change_cover_sheet.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 class CoverGridItem extends StatelessWidget {
   final AggregatedSearchBook result;
 
@@ -61,11 +63,12 @@ class CoverGridItem extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            isDefault ? '恢復預設' : (result.book.originName ?? '未知來源'),
-            style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          DragOverflowText(
+            child: Text(
+              isDefault ? '恢復預設' : (result.book.originName ?? '未知來源'),
+              style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
+              maxLines: 1,
+            ),
           ),
         ],
       ),

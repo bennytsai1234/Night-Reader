@@ -1,39 +1,34 @@
 # AI 修復實跑
 
-用真的書源與使用者的 AI 服務跑 AI 修復，照結果改 AI 修復的工具、提示詞或迴圈（`agent-harness` 技能的「評估、迭代」）。
+用真的書源與使用者的 AI 服務整批跑 AI 修復，照 `agent-harness` 技能第 5 步一輪一輪迭代：抽樣、評過程、歸因、要使用者認定的、終點都照技能；評估表的欄位與回報格式照技能的 `references/evaluation.md`。這裡只寫夜讀的材料、跑法與對應。
 
-## 案件集
+## 材料
 
-`test/live/ai_repair_cases.json` 列每件書源的預期答案（`fixed` 修得好、`unfixable` 書源本身修不了、`unknown` 還沒定）與證據。預期答案要有 AI 修復以外的證據（curl 打網站、網站本身的行為），不拿 AI 修復自己的判定當答案；寫好請使用者確認，`confirmed` 改成 true。書源 JSON 是使用者的資料，不進 repo：整份匯出檔放在主資料夾的 `.local/ai-repair/export_589_sources.json`，跑的時候照名稱與網址挑。
-
-查預期答案時這幾處容易漏（2026-11-13 第二批漏了三件，都是 AI 先查到）：
-
-- 搜尋要拿站上有的書名和不可能的詞各搜一次、比結果：夜讀的書源校驗只看搜得到書，網站不理關鍵字、回固定推薦書也算過。
-- 送出的編碼與 Cookie 照書源的來：curl 預設不存 Cookie，書源開了 Cookie 罐（或網站靠工作階段 Cookie 驗證、限流）時用 `-c`／`-b` 帶著走，關鍵字照書源的 `charset` 編碼。
-- 主站的功能壞了時，看同一套網站的姊妹站或鏡像（書源裡圖片、轉址指到的網域）有沒有完整的版本。
+- **案件集**：`test/live/ai_repair_cases.json`，一件只有 `name` 與 `url`，取自 2026-11-13 手機上整批修復時交給 AI 的 67 件。不附預期答案，評的是過程。
+- **書源 JSON**：使用者的資料，不進 repo。整份匯出檔在主資料夾的 `.local/ai-repair/export_589_sources.json`，實跑測試照案件的名稱與網址從裡面挑；要更新時從手機拿（`docs/agents/phone.md`「書源原文」）。
+- **金鑰**：主資料夾的 `.local/ai-repair.key`（`C:\Users\benny\Desktop\Folder\projects\Night-Reader\.local\ai-repair.key`），git 忽略，worktree 也讀這一份。已經有就直接用；沒有或服務回金鑰不對時，用 `request_secret`（`delivery: "file"`）跟使用者要，存到這裡。不刪、不上傳、不印出。
+- **服務**：使用者 2026-11-12 定的 `NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`。實跑用 `NR_AI_CONCURRENCY=6`（App 是 3）：OpenCode Go 官方文件沒寫並行上限，限制是 5 小時、每週、每月的用量額度；出現 429、「無法確認」或每輪等 AI 明顯變長就退回 4。平日台灣時間 09:00–12:00、14:00–18:00 是它的尖峰，要比耗時的兩輪都在非尖峰跑。
 
 ## 一輪怎麼跑
 
-1. 跑案件：`NR_SOURCES` 給匯出檔、`NR_CASES` 給案件集（測試檔頭有寫），跑完印出每件預期與實際、對或錯。一個改動只重跑它要改善的那幾件（`NR_ONLY=蜘蛛小说网,涨姿势`）；累積一批改動再跑整個案件集看有沒有退化（使用者 2026-11-13：每個小改動都跑全部，額度與時間花在沒改到的案件上）。匯出檔要更新時從手機拿（`docs/agents/phone.md`「書源原文」）。
-2. 金鑰固定放在主資料夾的 `.local/ai-repair.key`（`C:\Users\benny\Desktop\Folder\projects\Night-Reader\.local\ai-repair.key`，git 忽略、不上傳，worktree 也讀這一份）。已經有就直接用；沒有或服務回金鑰不對時，用 `request_secret`（`delivery: "file"`）跟使用者要，存到這裡，不刪。
-3. 跑 `test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在它的檔頭；要跑幾分鐘，所以放背景。使用者 2026-11-12 定的服務：`NR_AI_URL=https://opencode.ai/inference/go/openai/v1`、`NR_AI_MODEL=deepseek-v4.1-flash`、`NR_AI_EFFORT=low`；用量不設上限，給 `NR_TOKEN_BUDGET=0`（使用者 2026-11-13，十一件全量要兩百萬以上）。
-4. 讀結果檔（`NR_OUT`）與最後印出的完整修復紀錄。紀錄裡找每一輪的「讀不懂」、重複的指令、失控與校驗沒過，打開那幾輪 AI 實際回的話。
+1. **整批跑**：`test/live/source_repair_batch_live_test.dart`，跑法與環境變數寫在檔頭；`NR_SOURCES` 給匯出檔、`NR_CASES` 給案件集，加 `FLUTTER_TEST_WALL=0`（`tool/flutter_test.sh` 預設 20 分鐘就停，整批沒跑完結果檔不會寫出來）。67 件、AI 同時修 3 個網站，11/13 那批光等 AI 與跑工具就 221 分鐘，放背景。一個改動只重跑出現過那類問題的件：`NR_ONLY=蜘蛛小说网,🎃涨姿势🎃`，名稱照案件集整個寫（含表情符號），對不上的測試直接停下；同名的會一起跑（饿狼小说有兩件）。
+2. **整理成表、抽樣**：測試開頭與結尾都印出完整修復紀錄的資料夾（在暫存資料夾裡）。整個資料夾複製到主資料夾的 `.local/ai-repair/runs/<日期-名稱>/`，再跑 `dart run tool/ai_repair_table.dart <那個資料夾> --out <那個資料夾>/_table.md`：一件一列的評估表，下面是第 5 步的四組抽樣。跟上一輪的表比回合數、耗時、快取命中率。
+3. **讀紀錄**：抽到的件逐份讀完。一份紀錄大半是整頁原文，先濾掉再從頭讀：
 
-## 歸因
+   ```sh
+   awk '/^### 請求與網站回的原文|^### 工具$|^### 送給 AI（system|^### 送給 AI（tool/{skip=1; print; next} /^## |^### /{skip=0} !skip' <紀錄> | grep -v '^\s*$' | sed '/^## 怎麼查/,/^### 送給 AI（user/{/^### 送給 AI（user/!d}'
+   ```
 
-紀錄裡每個拖慢或沒修好的地方，先查出錯在哪一層、修在那一層（`agent-harness` 第 6 步）。拿那一輪工具回給 AI 的結果，跟 AI 修復以外查到的事實對照：
+   要一輪一輪給使用者看某一件時，`dart run tool/ai_repair_view.dart <紀錄.txt> <輸出.html>` 轉成可以點開的頁面，放進對話。
 
-- **案件本身**：用 curl 照網站要的做一次（例如防搜刮驗證頁寫入的 Cookie）。程式過不了（要真人驗證、網站不在、功能本身壞了），改案件的預期答案，請使用者確認。
-- **引擎**：AI 寫的規則照 Legado 是對的，夜讀跑出不同的結果；對照 Legado 原始碼（位置在 `docs/agents/environment.md`）。寫一個會紅的測試、修引擎，照 Legado。例：沒有詳情規則時目錄網址是空的。
-- **harness**：工具回的跟 curl 或引擎實際做的不一樣，或少了 AI 要的事實（實際送出的標頭、這頁是防護頁、規則用到書的變數）。修工具、開場或驗收。
-- **模型**：上面都對，AI 還是走錯，才改系統提示的定義。
+## 夜讀的對應
 
-分不清是引擎做不到還是 AI 沒寫對時，照 curl 查到的事實寫一份規則，用 `test/live/source_check_live_test.dart` 跑：跑不過是引擎的事。歸因清楚、修法只有一種的直接修、提交，接著跑下一輪；要在做法間取捨，或會改到使用者看得到的東西時，才列給使用者選。
+照技能第 5 步評過程與歸因時，夜讀的正式系統是書源引擎與校驗，agent 以外的方法是 curl 與 Legado 原始碼：
 
-## 怎麼回報
-
-整輪一張表：每件預期與實際、對或錯、輪數、token、時間，和上一輪比。再逐件只講從起點到終點，不逐輪列：
-
-- **修好了**：列出拖慢的地方，每項附輪數與歸到哪一層、怎麼修。
-- **沒修好**：附紀錄裡的證據，說歸到哪一層、怎麼修。
-- 校驗判「修好了」也要核對：改過的規則有沒有弄壞別段（例如發現頁沒有自己的書單規則時借用搜尋規則）。
+- **用 curl 核對書源類的結論**，條件照書源實際送的：
+  - 搜尋拿站上有的書名和不可能的詞（例如「夜讀查無此書ㄅㄆㄇㄈ」）各搜一次、比結果：夜讀的校驗只看搜得到書，網站不理關鍵字、回固定推薦書也算過。
+  - 關鍵字照書源的 `charset` 編碼，GBK 的書源用 GBK 送。
+  - 書源開了 Cookie 罐（`enabledCookieJar`），或網站靠工作階段 Cookie 驗證、限流時，curl 用 `-c`／`-b` 把 Cookie 帶著走。
+  - 主站的功能壞了時，看書源裡圖片、轉址指到的網域有沒有同一套網站的完整版本。
+- **引擎**：AI 寫的規則照 Legado 是對的、夜讀跑出不同的結果時，對照 Legado 原始碼（位置在 `docs/agents/environment.md`），照 Legado 修引擎。
+- **親手做一份成品**：照 curl 查到的事實寫一份書源，用 `test/live/source_check_live_test.dart` 跑校驗；修了引擎後，改前改後也用它跑匯出檔裡碰得到的書源，報實際增減。

@@ -59,14 +59,24 @@ PageLines pageLinesAt({
             math.max(previous.$2, range.end),
           );
   }
-  final bodyStyle = readerSkeletonInkStyle(spec);
+  final cjkInkStyle = readerSkeletonInkStyle(spec, cjk: true);
+  final latinInkStyle = readerSkeletonInkStyle(spec, cjk: false);
   void addLines(int chapter, int start, int end, {required bool title}) {
     if (end <= start) return;
     for (final box in pipeline.geometry.lineBoxes(chapter, start, end)) {
       if (box.bottom - offset <= 0 || box.top - offset >= height) continue;
       var line = Rect.fromLTRB(box.left, box.top, box.right, box.bottom);
       // 章名的字級與粗細不同，又很少以標點開頭結尾，照字框畫。
-      if (!title) line = _inkLine(pipeline, chapter, line, bodyStyle, spec);
+      if (!title) {
+        line = _inkLine(
+          pipeline,
+          chapter,
+          line,
+          cjkStyle: cjkInkStyle,
+          latinStyle: latinInkStyle,
+          spec: spec,
+        );
+      }
       if (title) titleLines.add(lines.length);
       lines.add(line.shift(Offset(0, -offset)));
     }
@@ -97,10 +107,16 @@ PageLines pageLinesAt({
 }
 
 /// 正文的字樣（標點字型在前，與段落排版相同），用來查標點的筆畫位置
-/// （[PunctuationInk]）。
-TextStyle readerSkeletonInkStyle(ReaderV2LayoutSpec spec) => TextStyle(
+/// （[PunctuationInk]）。[cjk] 是中日文字的標點（「，。）），其餘（西文
+/// 彎引號）是英數字的字族，同正文分段（[readerV2CjkRuns]）。
+TextStyle readerSkeletonInkStyle(
+  ReaderV2LayoutSpec spec, {
+  required bool cjk,
+}) => TextStyle(
   fontFamily: kReaderV2PunctFontFamily,
-  fontFamilyFallback: readerV2FontFallback(spec.style.fontFamily),
+  fontFamilyFallback: cjk
+      ? readerV2CjkFontFallback(spec.style.fontFamily)
+      : readerV2FontFallback(spec.style.fontFamily),
   fontWeight: spec.style.bold ? FontWeight.bold : FontWeight.normal,
   fontFeatures: kReaderV2CjkFontFeatures,
   locale: kReaderV2TextLocale,
@@ -111,10 +127,11 @@ TextStyle readerSkeletonInkStyle(ReaderV2LayoutSpec spec) => TextStyle(
 Rect _inkLine(
   HybridLayoutPipeline pipeline,
   int chapter,
-  Rect line,
-  TextStyle style,
-  ReaderV2LayoutSpec spec,
-) {
+  Rect line, {
+  required TextStyle cjkStyle,
+  required TextStyle latinStyle,
+  required ReaderV2LayoutSpec spec,
+}) {
   SkeletonGlyph? glyphAt(double x) {
     final hit = pipeline.geometry.glyphAt(Offset(x, line.center.dy));
     if (hit == null) return null;
@@ -132,7 +149,7 @@ Rect _inkLine(
     return SkeletonGlyph(
       mark,
       Rect.fromLTRB(box.left, box.top, box.right, box.bottom),
-      style: style,
+      style: isReaderV2CjkRune(mark.codeUnitAt(0)) ? cjkStyle : latinStyle,
       fontSize: spec.style.fontSize,
     );
   }

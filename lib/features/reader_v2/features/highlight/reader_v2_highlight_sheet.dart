@@ -11,7 +11,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 點正文上已畫的標註打開的面板：畫到的字、換顏色、換底色或底線、備忘、
-/// 複製、刪除。換了就存，不另按儲存；備忘在面板收起時存。
+/// 複製、刪除。換了就存，不另按儲存；備忘在面板收起或切到別的 App 時存。
 class ReaderV2HighlightSheet extends StatefulWidget {
   const ReaderV2HighlightSheet({
     super.key,
@@ -39,6 +39,15 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
   );
   bool _deleted = false;
 
+  /// 切到別的 App 時也存一次：在背景被系統結束時不會走到 [dispose]。
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onHide: _saveNote);
+  }
+
   /// 目前的樣子，備忘照輸入框裡的字。
   Highlight get _current => _highlight.copyWith(note: _note.text.trim());
 
@@ -47,13 +56,19 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
     widget.onChanged(next);
   }
 
+  /// 備忘改了才存，不是每打一個字存一次。
+  void _saveNote() {
+    if (_deleted) return;
+    final current = _current;
+    if (current.note == _highlight.note) return;
+    _highlight = current;
+    widget.onChanged(current);
+  }
+
   @override
   void dispose() {
-    // 備忘改了就在收起時存一次，不是每打一個字存一次。
-    final current = _current;
-    if (!_deleted && current.note != _highlight.note) {
-      widget.onChanged(current);
-    }
+    _saveNote();
+    _lifecycle.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -110,7 +125,6 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
             children: [
               GroupedTextFieldRow(
                 controller: _note,
-                hintText: '寫下自己的話',
                 minLines: 2,
                 maxLines: 6,
                 keyboardType: TextInputType.multiline,

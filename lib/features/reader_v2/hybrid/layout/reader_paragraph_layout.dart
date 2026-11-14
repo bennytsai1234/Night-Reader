@@ -36,13 +36,13 @@ final class ReaderParagraphLayout {
     required double fontSize,
     required double letterSpacing,
     required bool bold,
-    List<String> fontFamilyFallback = kReaderV2FontFamilyFallback,
+    String? fontFamily,
   }) {
     if (!fontSize.isFinite || fontSize <= 0 || !letterSpacing.isFinite) {
       return null;
     }
     final key =
-        '$fontSize|$letterSpacing|$bold|${fontFamilyFallback.join(',')}|'
+        '$fontSize|$letterSpacing|$bold|${readerV2FontFamilySignature(fontFamily)}|'
         '$kReaderV2CjkTypographyFeatureSignature';
     final cached = _cellWidthCache[key];
     if (cached != null) return cached;
@@ -54,7 +54,7 @@ final class ReaderParagraphLayout {
         lineHeight: 1.0,
         letterSpacing: letterSpacing,
         bold: bold,
-        fontFamilyFallback: fontFamilyFallback,
+        fontFamily: fontFamily,
       ),
       textColor: const ui.Color(0xFF000000),
     )..layout(ui.ParagraphConstraints(width: fontSize * 8));
@@ -195,7 +195,7 @@ final class ReaderParagraphLayout {
   /// 就和漢字一樣佔一格。
   double emojiScale(HybridBlockTextStyle style) {
     final key =
-        '${style.fontSize}|${style.bold}|${style.fontFamilyFallback.join(',')}|'
+        '${style.fontSize}|${style.bold}|${readerV2FontFamilySignature(style.fontFamily)}|'
         '$kReaderV2CjkTypographyFeatureSignature';
     final cached = _emojiScaleCache[key];
     if (cached != null) return cached;
@@ -204,11 +204,11 @@ final class ReaderParagraphLayout {
       lineHeight: 1.0,
       letterSpacing: 0,
       bold: style.bold,
-      fontFamilyFallback: style.fontFamilyFallback,
+      fontFamily: style.fontFamily,
     );
-    double advance(String text) {
+    double advance(String text, {bool cjk = false}) {
       final builder = ui.ParagraphBuilder(ui.ParagraphStyle())
-        ..pushStyle(_textStyle(plain, const ui.Color(0xFF000000)))
+        ..pushStyle(_textStyle(plain, const ui.Color(0xFF000000), cjk: cjk))
         ..addText(text);
       final paragraph = builder.build()
         ..layout(ui.ParagraphConstraints(width: style.fontSize * 8));
@@ -218,7 +218,7 @@ final class ReaderParagraphLayout {
       return boxes.last.right - boxes.first.left;
     }
 
-    final cjk = advance('一');
+    final cjk = advance('一', cjk: true);
     final emoji = advance('\u{1F600}');
     final scale = cjk > 0 && emoji > 0 ? cjk / emoji : 1.0;
     _emojiScaleCache[key] = scale;
@@ -235,17 +235,46 @@ final class ReaderParagraphLayout {
   ) {
     final runs = emojiRuns(text);
     if (runs.isEmpty) {
-      builder.addText(text);
+      addFontRuns(builder, text, style, color);
       return;
     }
     final emojiStyle = _textStyle(style, color, fontScale: emojiScale(style));
     var cursor = 0;
     for (final run in runs) {
       if (run.start > cursor) {
-        builder.addText(text.substring(cursor, run.start));
+        addFontRuns(builder, text.substring(cursor, run.start), style, color);
       }
       builder
         ..pushStyle(emojiStyle)
+        ..addText(text.substring(run.start, run.end))
+        ..pop();
+      cursor = run.end;
+    }
+    if (cursor < text.length) {
+      addFontRuns(builder, text.substring(cursor), style, color);
+    }
+  }
+
+  /// 加入一段文字，外層已推入 [textStyle]：選了下載的字型時，中日文字
+  /// （[readerV2CjkRuns]）另推一層下載字型在前的字樣。
+  void addFontRuns(
+    ui.ParagraphBuilder builder,
+    String text,
+    HybridBlockTextStyle style,
+    ui.Color color,
+  ) {
+    if (style.fontFamily == null) {
+      builder.addText(text);
+      return;
+    }
+    final cjkStyle = _textStyle(style, color, cjk: true);
+    var cursor = 0;
+    for (final run in readerV2CjkRuns(text)) {
+      if (run.start > cursor) {
+        builder.addText(text.substring(cursor, run.start));
+      }
+      builder
+        ..pushStyle(cjkStyle)
         ..addText(text.substring(run.start, run.end))
         ..pop();
       cursor = run.end;
@@ -290,10 +319,16 @@ final class ReaderParagraphLayout {
     return builder.build();
   }
 
+  /// 段落最外層的字樣（英數字與符號的字族），配 [addFontRuns] 用。
+  ui.TextStyle textStyle(HybridBlockTextStyle style, ui.Color color) =>
+      _textStyle(style, color);
+
+  /// [cjk] 是中日文字的字樣：下載的字型排在平台預設前面。
   ui.TextStyle _textStyle(
     HybridBlockTextStyle style,
     ui.Color color, {
     double fontScale = 1.0,
+    bool cjk = false,
   }) {
     return ui.TextStyle(
       color: color,
@@ -302,7 +337,9 @@ final class ReaderParagraphLayout {
       letterSpacing: style.letterSpacing,
       fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
       fontFamily: kReaderV2PunctFontFamily,
-      fontFamilyFallback: style.fontFamilyFallback,
+      fontFamilyFallback: cjk
+          ? style.cjkFontFamilyFallback
+          : style.fontFamilyFallback,
       fontFeatures: kReaderV2CjkFontFeatures,
       locale: kReaderV2TextLocale,
     );

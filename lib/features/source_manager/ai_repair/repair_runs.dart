@@ -25,8 +25,8 @@ const List<RepairStage> repairStages = [
 String repairStageTitle(RepairStage stage) => switch (stage) {
   RepairStage.checking => '重新校驗',
   RepairStage.checkingSites => '檢查網站',
-  RepairStage.moving => '網站搬家的換網址',
-  RepairStage.repairing || RepairStage.sharing => 'AI 修，每個網站一個',
+  RepairStage.moving => '換網址',
+  RepairStage.repairing || RepairStage.sharing => 'AI 修',
   RepairStage.done => '',
 };
 
@@ -99,6 +99,9 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 這一件的頁面。
   Widget page();
 
+  /// 做完之後在結果頁刪了、併了幾次書源：書源管理看到它變了就重讀清單。
+  int get sourceEdits => 0;
+
   /// 工作本身（批次、單一修復）做完之後放掉資源。
   void disposeWork();
 
@@ -165,11 +168,23 @@ class BatchRepairRun extends RepairRun {
     super.work,
     super.navigator,
   }) {
-    batch.addListener(changed);
+    batch
+      ..addListener(changed)
+      ..addListener(_watchEdits);
   }
 
   final SourceRepairBatch batch;
   final String title;
+  int _seenEdits = 0;
+
+  @override
+  int get sourceEdits => batch.sourceEdits;
+
+  void _watchEdits() {
+    if (batch.sourceEdits == _seenEdits) return;
+    _seenEdits = batch.sourceEdits;
+    notifyListeners();
+  }
 
   @override
   BackgroundWorkStatus get status => BackgroundWorkStatus(
@@ -191,8 +206,10 @@ class BatchRepairRun extends RepairRun {
 
   @override
   void disposeWork() {
-    batch.removeListener(changed);
-    batch.dispose();
+    batch
+      ..removeListener(changed)
+      ..removeListener(_watchEdits)
+      ..dispose();
   }
 }
 
@@ -240,11 +257,17 @@ class RepairRuns extends ChangeNotifier {
 
   RepairRun? get current => _current;
 
-  /// 換成新的一件：上一件一定已經做完（入口在有工作跑的時候是灰的）。
-  void adopt(RepairRun run) {
+  /// 舊結果已經看過、頁面也關了，才可以開始下一件。
+  bool get canStartNew => _current == null || _current!.isDone;
+
+  /// 修完但還沒看過結果時，不允許新工作覆蓋舊結果。
+  /// 回傳 false 時由呼叫端收掉尚未開始的新工作。
+  bool adopt(RepairRun run) {
+    if (!canStartNew) return false;
     _drop();
     _current = run..addListener(_changed);
     notifyListeners();
+    return true;
   }
 
   void _changed() {
@@ -255,7 +278,7 @@ class RepairRuns extends ChangeNotifier {
 
   void _drop() {
     final run = _current;
-    if (run == null || !run.isFinished) return;
+    if (run == null || !run.isDone) return;
     _current = null;
     run
       ..removeListener(_changed)
@@ -272,13 +295,18 @@ bool backgroundWorkIdle() => !BackgroundWork.instance.isBusy;
 /// 工作、沒有校驗在跑（登入完的自動校驗也算）。
 bool canAiRepair(String sourceUrl, {required bool checking}) {
   final current = RepairRuns.instance.current;
-  if (current is SingleRepairRun && current.sourceUrl == sourceUrl) {
+  if (current is SingleRepairRun &&
+      !current.isDone &&
+      current.sourceUrl == sourceUrl) {
     return true;
   }
-  return !checking && backgroundWorkIdle();
+  return !checking && RepairRuns.instance.canStartNew && backgroundWorkIdle();
 }
 
 /// 「修復異常書源」能不能按：有一批正在修或還沒看結果（推回那一批），或
 /// 沒有工作在跑。
-bool canRepairBatch() =>
-    RepairRuns.instance.current is BatchRepairRun || backgroundWorkIdle();
+bool canRepairBatch() {
+  final current = RepairRuns.instance.current;
+  if (current is BatchRepairRun && !current.isDone) return true;
+  return RepairRuns.instance.canStartNew && backgroundWorkIdle();
+}

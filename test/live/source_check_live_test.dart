@@ -10,7 +10,7 @@
 /// - `NR_ONLY=<書源名稱的一部分>`：只跑名稱含這段字的書源。
 /// - `NR_DISCOVERY=1`：也校驗發現（手機上的校驗預設有開）。
 /// - `NR_KEYWORD`、`NR_TIMEOUT`：搜尋關鍵字與每步秒數，預設和手機一樣是
-///   「我的」、15 秒。
+///   「我的」、20 秒。
 /// - `NR_PARALLEL=<n>`：整批跑時同時校驗 n 個書源（每個在自己的 isolate），
 ///   全部算成一個測試；沒給時一個書源一個測試、依序跑。
 /// - `NR_OUT=<檔案>`：每個書源的結果另外寫成一行 JSON 接在檔案後面（名稱、
@@ -108,7 +108,7 @@ void main() {
   final out = env['NR_OUT'];
   final config = IsolateCheckConfig(
     keyword: env['NR_KEYWORD'] ?? '我的',
-    timeoutSeconds: int.tryParse(env['NR_TIMEOUT'] ?? '') ?? 15,
+    timeoutSeconds: int.tryParse(env['NR_TIMEOUT'] ?? '') ?? 20,
     checkSearch: true,
     checkDiscovery: env['NR_DISCOVERY'] == '1',
     checkInfo: true,

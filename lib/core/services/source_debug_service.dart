@@ -221,6 +221,7 @@ class SourceDebugService {
 
     log('︾開始解析正文頁: ${targetChapter.title}', state: 40);
     log('  正文 URL: $url');
+    if (nextUrl != null) log('  下一章 URL: $nextUrl');
 
     final content = await _bookSourceService.getContent(
       source,

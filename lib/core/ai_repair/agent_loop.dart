@@ -22,7 +22,7 @@ import 'ai_chat_client.dart';
 ///   狀態重跑，含第一次最多 [AiAgentKnobs.attempts] 次，仍不行是
 ///   [AgentEndKind.unconfirmed]。
 /// - 每件都有結果：完成、無法確認、取消，或服務出了重跑也不會好的錯
-///   （金鑰、網址、額度）、整批的用量上限到了。
+///   （金鑰、網址、額度）。
 abstract class AgentTask<C> {
   /// 每次（含重跑）的開場：系統提示與這一件的第一則訊息。
   List<AiMessage> opening();
@@ -72,19 +72,14 @@ typedef AgentRoundRecord = ({
 
 /// 讀 AI 的一個工具呼叫的參數：讀得懂時 [args] 是參數物件；讀不懂時 [fact]
 /// 說哪裡不對（沒有這個工具、參數不是 JSON 物件），開頭是 [badCall]。
-({Map<String, dynamic>? args, String fact}) decodeToolCall(
+/// [malformed] 是參數根本不是 JSON（[AgentBadCommand.malformed]）。
+({Map<String, dynamic>? args, String fact, bool malformed}) decodeToolCall(
   AiToolCall call,
   List<AiTool> tools, {
   required String badCall,
 }) {
-  if (!tools.any((tool) => tool.name == call.name)) {
-    return (
-      args: null,
-      fact:
-          '$badCall：沒有叫 ${call.name} 的工具，有的是 '
-          '${tools.map((tool) => tool.name).join('、')}',
-    );
-  }
+  // 先看是不是 JSON：參數寫壞時工具名稱多半也是模型內建標記的一部分，
+  // 照樣丟掉重送。
   final Object? args;
   try {
     args = call.arguments.trim().isEmpty
@@ -93,13 +88,40 @@ typedef AgentRoundRecord = ({
   } on FormatException catch (error) {
     return (
       args: null,
-      fact: '$badCall（${call.name}）：參數不是合法的 JSON：${error.message}',
+      fact:
+          '$badCall（${call.name}）：參數不是合法的 JSON：'
+          '${error.message}${_badJsonSpot(call.arguments, error.offset)}',
+      malformed: true,
+    );
+  }
+  if (!tools.any((tool) => tool.name == call.name)) {
+    return (
+      args: null,
+      fact:
+          '$badCall：沒有叫 ${call.name} 的工具，有的是 '
+          '${tools.map((tool) => tool.name).join('、')}',
+      malformed: false,
     );
   }
   if (args is! Map<String, dynamic>) {
-    return (args: null, fact: '$badCall（${call.name}）：參數要是一個 JSON 物件');
+    return (
+      args: null,
+      fact: '$badCall（${call.name}）：參數要是一個 JSON 物件',
+      malformed: false,
+    );
   }
-  return (args: args, fact: '');
+  return (args: args, fact: '', malformed: false);
+}
+
+/// JSON 壞在哪：第幾個字與那一段原文。只寫「Unexpected character」時，AI
+/// 看不出自己寫錯什麼，同樣的錯再送一次（2026-11-14 读客书库，模型把內建的
+/// 工具標記寫進參數，連續三次讀不懂）。
+String _badJsonSpot(String text, int? offset) {
+  if (offset == null) return '';
+  final at = offset.clamp(0, text.length);
+  final from = (at - 20).clamp(0, text.length);
+  final to = (at + 20).clamp(0, text.length);
+  return '，第 ${at + 1} 個字附近：${text.substring(from, to)}';
 }
 
 /// 參數讀得懂、但少了必要的參數或值不對時的那句話。
@@ -171,10 +193,12 @@ final class AgentCommand<C> extends AgentParse<C> {
 }
 
 /// 呼叫讀不懂：沒有這個工具、參數不是合法的 JSON、少了欄位（[fact] 說
-/// 哪裡不對）。
+/// 哪裡不對）。[malformed] 是參數根本不是 JSON（模型把內建的工具標記寫進
+/// 參數、服務轉不了原樣交回）：這則回覆不接進對話，同一段對話重送。
 final class AgentBadCommand<C> extends AgentParse<C> {
-  const AgentBadCommand(this.fact);
+  const AgentBadCommand(this.fact, {this.malformed = false});
   final String fact;
+  final bool malformed;
 }
 
 /// 執行一個指令的結果。
@@ -203,9 +227,12 @@ final class AgentRejected extends AgentResult {
   final String reason;
 }
 
-/// 交出的東西通過驗收（或確定的放棄被接受），這件做完。
+/// 交出的東西通過驗收（或確定的放棄被接受），這件做完。[reason] 是寫進紀錄
+/// 的結束原因：交件與放棄分開記，評估表上放棄的件才不會看起來像做好了。
 final class AgentAccepted extends AgentResult {
-  const AgentAccepted();
+  const AgentAccepted() : reason = '交件被收下';
+  const AgentAccepted.gaveUp() : reason = '放棄被收下';
+  final String reason;
 }
 
 /// 做到一半停下了（使用者按停止），或任務自己結束了這件（例如存不進去）。
@@ -225,7 +252,7 @@ enum AgentEndKind {
   /// 使用者停下。
   cancelled,
 
-  /// 重跑也不會好的錯（金鑰、網址、額度），或整批的用量上限到了。
+  /// 重跑也不會好的錯（金鑰、網址、額度）。
   failed,
 }
 
@@ -296,13 +323,12 @@ typedef AgentAsk = Future<AiReply> Function(
 );
 
 /// 跑一件：照 [AgentTask] 開場，一輪一輪問 [ask]，直到有結果。
-/// [cancelToken] 取消時是 [AgentEndKind.cancelled]；[hasBudget] 不再成立時
-/// 不再問，是 [AgentEndKind.failed]。[attempts] 是含第一次最多跑幾次。
+/// [cancelToken] 取消時是 [AgentEndKind.cancelled]。[attempts] 是含第一次
+/// 最多跑幾次。
 Future<AgentEnd> runAgent<C>(
   AgentTask<C> task, {
   required AgentAsk ask,
   required CancelToken cancelToken,
-  bool Function()? hasBudget,
   int attempts = AiAgentKnobs.attempts,
 }) async {
   final stats = AgentStats();
@@ -311,14 +337,7 @@ Future<AgentEnd> runAgent<C>(
 
   for (var attempt = 1; ; attempt++) {
     stats.attempts = attempt;
-    final why = await _attempt(
-      task,
-      attempt,
-      stats,
-      ask,
-      cancelToken,
-      hasBudget,
-    );
+    final why = await _attempt(task, attempt, stats, ask, cancelToken);
     switch (why) {
       case _Finished(:final kind, :final reason):
         return end(kind, reason);
@@ -357,7 +376,6 @@ Future<_AttemptEnd> _attempt<C>(
   AgentStats stats,
   AgentAsk ask,
   CancelToken cancelToken,
-  bool Function()? hasBudget,
 ) async {
   final messages = [
     for (final message in task.opening())
@@ -390,9 +408,6 @@ Future<_AttemptEnd> _attempt<C>(
 
   while (true) {
     if (cancelToken.isCancelled) return cancelled;
-    if (!(hasBudget?.call() ?? true)) {
-      return const _Finished(AgentEndKind.failed, '整批的 AI 用量到了上限');
-    }
     if (round >= AiAgentKnobs.maxRounds) {
       return _Retry('用完 ${AiAgentKnobs.maxRounds} 輪還沒交出');
     }
@@ -462,6 +477,16 @@ Future<_AttemptEnd> _attempt<C>(
     record(reply: reply);
     stalls = 0;
     if (cancelToken.isCancelled) return cancelled;
+    final parsed = [for (final call in reply.toolCalls) task.parse(call)];
+    // 參數寫壞的回覆不接進對話，同一段對話重送：留著的話模型下一輪照抄
+    // 自己寫壞的開頭（2026-11-14 读客书库連續三次一字不差）。
+    if (parsed.any((p) => p is AgentBadCommand<C> && p.malformed)) {
+      stats.badCommands++;
+      if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+        return _Retry('連續 $badCommand 次工具參數寫壞');
+      }
+      continue;
+    }
     messages.add(
       AiMessage.assistant(
         reply.content,
@@ -480,9 +505,9 @@ Future<_AttemptEnd> _attempt<C>(
     }
     noCommand = 0;
     // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
-    for (final call in reply.toolCalls) {
+    for (final (i, call) in reply.toolCalls.indexed) {
       void answer(String text) => fact(text, callId: call.id);
-      switch (task.parse(call)) {
+      switch (parsed[i]) {
         case AgentBadCommand(fact: final text):
           stats.badCommands++;
           if (++badCommand >= AiAgentKnobs.badCommandLimit) {
@@ -500,8 +525,8 @@ Future<_AttemptEnd> _attempt<C>(
           stats.tools += toolWatch.elapsed;
           if (cancelToken.isCancelled) return cancelled;
           switch (result) {
-            case AgentAccepted():
-              return const _Finished(AgentEndKind.completed, '交件被收下');
+            case AgentAccepted(:final reason):
+              return _Finished(AgentEndKind.completed, reason);
             case AgentStopped(:final kind, :final reason):
               return _Finished(kind, reason);
             case AgentInvalid(fact: final text):

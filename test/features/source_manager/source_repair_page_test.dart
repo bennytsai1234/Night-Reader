@@ -70,8 +70,8 @@ void main() {
 
     expect(find.text('修好了 · 2'), findsOneWidget);
     expect(find.text('網站不在了 · 1'), findsOneWidget);
-    expect(find.text('停用這 1 個'), findsOneWidget);
     expect(find.text('刪除這 1 個'), findsOneWidget);
+    expect(find.textContaining('停用'), findsNothing, reason: '網站不在了只給刪除');
     expect(find.text('沒修好 · 1'), findsOneWidget);
     expect(find.text('重新校驗就沒問題了'), findsOneWidget);
     expect(find.text('沒問題 1 個'), findsOneWidget, reason: '不修 0 個不寫');
@@ -106,5 +106,43 @@ void main() {
     expect(find.text('第 2 輪：AI 改了搜尋，試抓中…'), findsOneWidget);
     expect(find.text('0／1 個網站'), findsOneWidget);
     expect(find.text('停止'), findsOneWidget);
+  });
+
+  testWidgets('sources not worth repairing are listed by name in their own '
+      'cards; tapping one shows why', (tester) async {
+    final batch = _batch([
+      ('甲', RepairOutcome.skipped),
+      ('乙', RepairOutcome.aiUnfixable),
+      ('丙', RepairOutcome.healthy),
+    ])..stage = RepairStage.done;
+
+    await _pump(tester, batch);
+
+    expect(find.text('不用修'), findsOneWidget);
+    expect(find.text('AI 之前修不好'), findsOneWidget);
+    expect(find.text('甲'), findsOneWidget);
+    expect(find.text('乙'), findsOneWidget);
+    expect(find.text('說明 甲'), findsNothing, reason: '原因點開才看');
+
+    await tester.tap(find.text('甲'));
+    await tester.pumpAndSettle();
+    expect(find.text('說明 甲'), findsOneWidget);
+  });
+
+  testWidgets('after deleting, the gone sites fold into one line, also when '
+      'the page is opened again', (tester) async {
+    final batch = _batch([
+      ('甲', RepairOutcome.siteGone),
+      ('乙', RepairOutcome.siteGone),
+    ])..stage = RepairStage.done;
+    for (final item in batch.items) {
+      item.deleted = true;
+    }
+
+    await _pump(tester, batch);
+
+    expect(find.text('網站不在了的 2 個已刪除'), findsOneWidget);
+    expect(find.text('甲'), findsNothing);
+    expect(find.text('刪除這 2 個'), findsNothing);
   });
 }

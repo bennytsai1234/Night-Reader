@@ -18,6 +18,22 @@ class AppInterceptor extends Interceptor {
   static const String disableManualRedirectHandlingKey =
       '_disableManualRedirectHandling';
   static const String _manualRedirectVisitedKey = '_manualRedirectVisited';
+
+  /// 書源自己給的 Cookie 標頭（Cookie 管理器合進 Cookie 罐之前），由最前面的
+  /// 攔截器記下（[rememberSourceCookie]）：轉址時只帶這份過去，Cookie 罐為
+  /// 舊網址加的不帶到別的網站，新網址的由 Cookie 管理器照新網址再載入。
+  static const String sourceCookieKey = '_sourceCookie';
+
+  /// 記下 [options] 送出前書源給的 Cookie；轉址的每一跳沿用第一跳記的。
+  static void rememberSourceCookie(RequestOptions options) {
+    if (options.extra.containsKey(sourceCookieKey)) return;
+    final given = [
+      for (final MapEntry(:key, :value) in options.headers.entries)
+        if (key.toLowerCase() == 'cookie' && value != null) '$value',
+    ];
+    options.extra[sourceCookieKey] = given.isEmpty ? null : given.join('; ');
+  }
+
   static const int _maxManualRedirects = 10;
 
   @override
@@ -38,6 +54,7 @@ class AppInterceptor extends Interceptor {
     }
 
     AppLog.i('Network Request: [${options.method}] ${options.uri}');
+    options.extra[requestStartedKey] = DateTime.now().microsecondsSinceEpoch;
     recordRequestUrl(
       options.method,
       options.uri,
@@ -159,9 +176,15 @@ class AppInterceptor extends Interceptor {
       _removeHeader(redirectedHeaders, Headers.contentTypeHeader);
       _removeHeader(redirectedHeaders, 'transfer-encoding');
     }
+    // 同 Legado（OkHttp 轉址）：換了網址的開頭只拿掉 Authorization；書源給的
+    // Cookie 照帶（2026-11-13 美亿言情的檢查頁 Cookie 在 http 轉 https 時被
+    // 丟掉）。Cookie 罐的部分由新的一跳照新網址載入。
     if (!_isSameAuthority(request.uri, resolvedUri)) {
       _removeHeader(redirectedHeaders, 'authorization');
-      _removeHeader(redirectedHeaders, 'cookie');
+    }
+    _removeHeader(redirectedHeaders, 'cookie');
+    if (request.extra[sourceCookieKey] case final String cookie) {
+      redirectedHeaders['Cookie'] = cookie;
     }
 
     final redirectChain =

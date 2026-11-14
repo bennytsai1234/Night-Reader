@@ -29,6 +29,8 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'widgets/explore_skeletons.dart';
 import 'widgets/legado_explore_kind_flow.dart';
 
+import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
 
@@ -242,7 +244,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 key: const ValueKey('noSources'),
                 icon: Icons.travel_explore_outlined,
                 title: '還沒有書源',
-                description: '匯入書源後，這裡會列出可以瀏覽分類的書源。',
                 primaryAction: AppStateAction(
                   label: '匯入書源',
                   icon: Icons.download_rounded,
@@ -290,7 +291,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         AppStateView(
           icon: Icons.search_off,
           title: '找不到符合條件的書源',
-          description: '清除搜尋或分組條件後再試一次。',
           primaryAction: AppStateAction(
             label: '清除條件',
             icon: Icons.clear,
@@ -621,14 +621,15 @@ class _SourceRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.bodyBase.copyWith(
-                  height: 1.3,
-                  color: scheme.onSurface,
-                  fontWeight: expanded ? FontWeight.w600 : FontWeight.w400,
+              child: DragOverflowText(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  style: AppTextStyles.bodyBase.copyWith(
+                    height: 1.3,
+                    color: scheme.onSurface,
+                    fontWeight: expanded ? FontWeight.w600 : FontWeight.w400,
+                  ),
                 ),
               ),
             ),

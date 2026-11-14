@@ -13,8 +13,8 @@ import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/backup_sync_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
-import 'package:night_reader/features/settings/reading_stats_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
+import 'package:night_reader/features/source_manager/ai_repair/ai_repair_settings_page.dart';
 import 'package:night_reader/features/settings/tts_settings_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
@@ -29,9 +29,9 @@ const _rows = <(String, Type)>[
   ('閱讀偏好', ReadingSettingsPage),
   ('外觀與主題', AppearanceSettingsPage),
   ('朗讀與語音', TtsSettingsPage),
-  ('閱讀統計', ReadingStatsPage),
-  ('書籤與標註', BookmarksPage),
+  ('閱讀紀錄', BookmarksPage),
   ('書源管理', SourceManagerPage),
+  ('AI 服務', AiRepairSettingsPage),
   ('備份與同步', BackupSyncPage),
   ('關於夜讀', AboutPage),
 ];

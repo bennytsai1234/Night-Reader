@@ -217,7 +217,7 @@ void main() {
       return prefs;
     }
 
-    test('預設淺色牛皮紙、深色素色、純黑開著', () async {
+    test('預設淺色牛皮、深色素色、純黑開著', () async {
       await register(<String, Object>{});
       final provider = ThemeSettingsProvider();
       expect(provider.lightStyle, AppStyle.kraft);
