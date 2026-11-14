@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -7,7 +9,11 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  Future<AiRepairSettings> open(WidgetTester tester, String saved) async {
+  Future<AiRepairSettings> open(
+    WidgetTester tester,
+    String saved, {
+    Future<List<String>> Function(AiService service)? listModels,
+  }) async {
     SharedPreferences.setMockInitialValues({
       if (saved.isNotEmpty) AiRepairSettings.serviceKey: saved,
     });
@@ -15,7 +21,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: AiRepairSettingsPage(settings: settings),
+        home: AiRepairSettingsPage(settings: settings, listModels: listModels),
       ),
     );
     await tester.pumpAndSettle();
@@ -75,5 +81,30 @@ void main() {
     await tester.tap(find.text('6 個'));
     await tester.pumpAndSettle();
     expect(await settings.concurrency(), 6);
+  });
+
+  testWidgets('a model list that comes back after the service changed is '
+      'dropped', (tester) async {
+    // Codex 審查：列模型清單還沒回來就換了服務，舊服務的清單照樣跳出來，
+    // 選了就把舊服務的模型寫進新服務。
+    final pending = Completer<List<String>>();
+    final settings = await open(
+      tester,
+      '{"baseUrl":"https://api.openai.com/v1","apiKey":"sk-1","model":""}',
+      listModels: (_) => pending.future,
+    );
+    await tester.tap(find.text('模型'));
+    await tester.pump();
+    await tester.tap(find.text('常用服務'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('DeepSeek'));
+    await tester.pumpAndSettle();
+
+    pending.complete(['gpt-old']);
+    await tester.pumpAndSettle();
+
+    expect(find.text('gpt-old'), findsNothing);
+    await leave(tester);
+    expect((await settings.read()).model, '');
   });
 }

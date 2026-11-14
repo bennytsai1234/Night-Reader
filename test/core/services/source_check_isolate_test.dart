@@ -29,6 +29,7 @@ class _FakeBookSourceService extends BookSourceService {
   final List<String> contentRequests = <String>[];
   final List<String> tocRequests = <String>[];
   final List<int?> tocLimits = <int?>[];
+  final List<bool> tocComplete = <bool>[];
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -72,6 +73,7 @@ class _FakeBookSourceService extends BookSourceService {
   }) async {
     tocRequests.add(book.name);
     tocLimits.add(chapterLimit);
+    tocComplete.add(requireComplete);
     final chapters = this.chapters;
     if (chapters != null) return chapters(book);
     return [
@@ -423,6 +425,8 @@ void main() {
       await _check(service);
 
       expect(service.tocLimits, everyElement(isNull));
+      // 目錄有一頁抓不到時不拿殘缺的目錄抽樣（Codex 審查）。
+      expect(service.tocComplete, everyElement(isTrue));
     });
 
     test('a whole book that reads fine at every sample is healthy', () async {
@@ -463,6 +467,37 @@ void main() {
         expect('正文內容過短或為空'.allMatches(result.message).length, 1);
       },
     );
+
+    test('a short notice among the samples of a short book falls back to the '
+        'next chapter', () async {
+      // Codex 審查：8 章的書抽第 6、7、8 章，第 6 章是短公告；同時抓時第 7 章
+      // 已被別的抽樣佔走，往後試不到，就判失效。
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(8),
+        content: (chapter) async =>
+            chapter.index == 5 ? '請假一天' : chapterText(chapter),
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+    });
+
+    test('an author\'s note shared by chapters with repeated lines is not '
+        'half of them', () async {
+      // Codex 審查：章內重複的句子先去重再算比例，作者的話實際只佔 18%，
+      // 卻算成 70%，還因為「訂閱」被判成付費。
+      const note = '作者的話：感謝各位讀者長期以來的支持與鼓勵，歡迎訂閱並繼續關注本書';
+      final service = _FakeBookSourceService(
+        chapters: (_) async => book(40),
+        content: (chapter) async {
+          final line = '第${chapter.index}章的主角又說了同一句台詞';
+          return '${List.filled(10, line).join('。')}。$note';
+        },
+      );
+      final (result, _) = await _check(service);
+
+      expect(result.isHealthy, isTrue);
+    });
 
     test('a short sampled chapter is followed by the next one', () async {
       final service = _FakeBookSourceService(
@@ -507,8 +542,9 @@ void main() {
           chapters: (_) async => book(40),
           content: (chapter) async {
             if (chapter.index != 30) return chapterText(chapter);
+            // 真的跨章：第 97 章 26,810 字裡 23,723 字是第 98 章。
             final next = book(40)[36];
-            return '${chapterText(chapter)}${chapterText(next)}歡迎訂閱本書。';
+            return '${chapter.title}的開頭。${chapterText(next)}歡迎訂閱本書。';
           },
         );
         final (result, checked) = await _check(service);
@@ -518,26 +554,6 @@ void main() {
         expect(result.message, contains('第31章的正文把第37章也抓進來了'));
       },
     );
-
-    test('the later chapters are fetched at once', () async {
-      // 2026-11-14 改後整批校驗：一章等一章抓，8 章的書抽完第 1、6、7、8 章
-      // 就超過整個書源的總時限，40 個書源因此判成逾時。
-      var running = 0;
-      var most = 0;
-      final service = _FakeBookSourceService(
-        chapters: (_) async => book(40),
-        content: (chapter) async {
-          most = ++running > most ? running : most;
-          await Future<void>.delayed(const Duration(milliseconds: 20));
-          running--;
-          return chapterText(chapter);
-        },
-      );
-      final (result, _) = await _check(service);
-
-      expect(result.isHealthy, isTrue);
-      expect(most, 3);
-    });
 
     test('later chapters repeating the same other text mark the content '
         'broken', () async {

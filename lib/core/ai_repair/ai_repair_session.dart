@@ -989,10 +989,12 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 兩個不同的請求被當成時好時壞。
   final Map<String, List<String>> _answered = {};
 
-  /// 請求那一行：GET 只寫網址，其他寫方法；送出的內容寫在「送出：」後面，
-  /// 標頭寫在「標頭：」後面（`RequestLog`）。
+  /// 請求那一行：GET 只寫網址，其他寫方法；轉址的下一跳在網址後面接
+  /// 「（轉址）」，送出的內容寫在「送出：」後面，標頭寫在「標頭：」後面
+  /// （`recordRequestUrl`）。
   static final RegExp _requestLine = RegExp(
-    r'^(?:(POST|PUT|PATCH|DELETE|HEAD) )?(https?://\S+)(?: 送出：(.*?))?(?: 標頭：.*)?$',
+    r'^(?:(POST|PUT|PATCH|DELETE|HEAD) )?(https?://[^\s（]+)(?:（轉址）)?'
+    r'(?: 送出：(.*?))?(?: 標頭：.*)?$',
   );
 
   static final RegExp _responseLine = RegExp(

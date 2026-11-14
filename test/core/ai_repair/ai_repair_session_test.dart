@@ -142,6 +142,7 @@ void main() {
     Directory? logs,
     SourceProbeReport Function(BookSource source)? probe,
     String Function(String url)? fetchStatus,
+    List<String> Function(String url)? fetchLines,
   }) {
     var next = 0;
     return AiRepairSession(
@@ -163,6 +164,9 @@ void main() {
       },
       fetchPage: (source, url, _) async {
         fetched?.add(url);
+        if (fetchLines?.call(url) case final lines?) {
+          return (lines: lines, pages: const <({String line, String body})>[]);
+        }
         final status = fetchStatus?.call(url) ?? '200';
         // 請求那一行照請求紀錄的寫法：POST 寫方法與送出的內容，回應那一行
         // 只有網址。
@@ -258,6 +262,38 @@ void main() {
     for (var i = 0; i < 3; i++) {
       expect(asked[i + 1].last.content, isNot(contains('這次回過不同的結果')));
     }
+  });
+
+  test('a redirected request keeps its method and body', () async {
+    // Codex 審查：轉址的請求行網址後面有「（轉址）」，對不上回應的網址，
+    // 就退回只看網址，送出內容不同的兩個 POST 又被標成時好時壞。
+    final answers = {
+      'a': [
+        'POST https://site.example/result（轉址） 送出：keyword=x',
+        '  ← https://site.example/result 502',
+      ],
+      'b': [
+        'POST https://site.example/result（轉址） 送出：keyword=x&submit=1',
+        '  ← https://site.example/result 200',
+      ],
+    };
+    final s = session(
+      [_source('https://site.example')],
+      fetchLines: (url) => answers[url.substring(url.length - 1)]!,
+      replies: [
+        for (final key in ['a', 'b'])
+          jsonEncode({
+            'action': 'fetch',
+            'url': 'https://site.example/$key',
+            'note': key,
+          }),
+        jsonEncode({'action': 'give_up', 'why': 'site_broken', 'reason': '測試'}),
+      ],
+    );
+
+    await s.start();
+
+    expect(asked[2].last.content, isNot(contains('這次回過不同的結果')));
   });
 
   test('a hand-in that changes no rule is not called fixed', () async {

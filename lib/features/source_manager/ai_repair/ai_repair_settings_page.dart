@@ -20,9 +20,12 @@ const String aiRepairPrivacyNote =
 /// 金鑰、模型（從服務列出的清單選）、思考程度、同時修幾個網站，離開頁面
 /// 就存。
 class AiRepairSettingsPage extends StatefulWidget {
-  const AiRepairSettingsPage({super.key, this.settings});
+  const AiRepairSettingsPage({super.key, this.settings, this.listModels});
 
   final AiRepairSettings? settings;
+
+  /// 向服務要模型清單；沒給時用 [AiChatClient.listModels]（測試換掉它）。
+  final Future<List<String>> Function(AiService service)? listModels;
 
   @override
   State<AiRepairSettingsPage> createState() => _AiRepairSettingsPageState();
@@ -36,6 +39,10 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
   bool _revealed = false;
   bool _testing = false;
   bool _listing = false;
+
+  /// 服務換了（選了別的常用服務、改了網址或金鑰）就加一：還在等的模型清單
+  /// 回來時已經是舊服務的，丟掉（Codex 審查：選了會把舊服務的模型寫進新服務）。
+  int _serviceVersion = 0;
 
   String _model = '';
 
@@ -120,7 +127,10 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     );
     if (picked == null || !mounted) return;
     if (picked.isEmpty) {
-      setState(() => _url.clear());
+      setState(() {
+        _serviceVersion++;
+        _url.clear();
+      });
       return;
     }
     final preset = aiServicePresets.firstWhere((p) => p.name == picked);
@@ -128,6 +138,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     // 換了服務，原本的模型多半不在新服務上：有實測過的就填它，沒有的讓
     // 使用者從新服務列出的模型選。
     setState(() {
+      _serviceVersion++;
       _url.text = preset.baseUrl;
       _model = preset.model ?? '';
     });
@@ -143,9 +154,10 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
       return;
     }
     setState(() => _listing = true);
+    final version = _serviceVersion;
     List<String> models = const [];
     try {
-      models = await AiChatClient(service).listModels();
+      models = await (widget.listModels ?? _listModels)(service);
     } on AiServiceException catch (error) {
       if (mounted) _say('列不出模型：${error.message}');
     } catch (error) {
@@ -153,7 +165,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     } finally {
       if (mounted) setState(() => _listing = false);
     }
-    if (!mounted || !rowContext.mounted) return;
+    if (!mounted || !rowContext.mounted || version != _serviceVersion) return;
     final picked = models.isEmpty
         ? ''
         : await showGlassMenu<String>(
@@ -173,7 +185,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
               const GlassMenuItem(value: '', label: '自己輸入模型名稱'),
             ],
           );
-    if (picked == null || !mounted) return;
+    if (picked == null || !mounted || version != _serviceVersion) return;
     if (picked.isNotEmpty) {
       setState(() => _model = picked);
       return;
@@ -195,8 +207,13 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
         );
       },
     );
-    if (typed != null && mounted) setState(() => _model = typed.trim());
+    if (typed != null && mounted && version == _serviceVersion) {
+      setState(() => _model = typed.trim());
+    }
   }
+
+  static Future<List<String>> _listModels(AiService service) =>
+      AiChatClient(service).listModels();
 
   Future<void> _pickConcurrency(BuildContext rowContext) async {
     FocusScope.of(context).unfocus();
@@ -260,7 +277,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
               ),
               GroupedTextFieldRow(
                 label: '服務網址',
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) => setState(() => _serviceVersion++),
                 controller: _url,
                 hintText: 'https://api.openai.com/v1',
                 keyboardType: TextInputType.url,
@@ -269,6 +286,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
               GroupedTextFieldRow(
                 label: '金鑰',
                 controller: _key,
+                onChanged: (_) => _serviceVersion++,
                 obscureText: !_revealed,
                 keyboardType: TextInputType.visiblePassword,
                 textInputAction: TextInputAction.done,

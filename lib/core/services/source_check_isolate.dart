@@ -611,6 +611,8 @@ class SourceChecker {
           pageConcurrency: _config.checkContent
               ? null
               : _validationPageConcurrency,
+          // 有一頁抓不到時不拿殘缺的目錄抽樣（Codex 審查）。
+          requireComplete: _config.checkContent,
         ),
         cameBackEmpty: (chapters) => chapters.every((c) => c.isVolume),
         falteredSince: transientBeforeDetail,
@@ -723,25 +725,25 @@ class SourceChecker {
       issues: issues,
     );
     if (head == null) return;
-    // 中段、後段互不相依，同時抓：一章等一章時，章短的書（8 章抽 1、6、7、
-    // 8）就超過總時限。
+    // 一章一章抓：同時抓時，往後試的那一章可能被別的抽樣佔走，共用的
+    // 「這一段的請求從哪開始」也會讓診斷列出別章的請求（Codex 審查）。
     final taken = <String>{head.chapter.url};
-    // 同時抓的幾章都失敗時，結論只寫第一章（紀錄與診斷照樣每章都有）。
-    final laterIssues = <_IssueData>[];
-    final later = await Future.wait([
-      for (final index in _laterSampleIndexes(readableChapters))
-        _probeLater(
-          book,
-          readableChapters,
-          index,
-          taken,
-          mode: mode,
-          issues: laterIssues,
-        ),
-    ]);
-    if (laterIssues.isNotEmpty) issues.add(laterIssues.first);
-    if (later.contains(null)) return;
-    _checkRepeatedText([head, ...later.nonNulls], mode: mode, issues: issues);
+    final later = <({BookChapter chapter, String content})>[];
+    for (final index in _laterSampleIndexes(readableChapters)) {
+      // 前一個位置往後試時已經抽過這一章。
+      if (taken.contains(readableChapters[index].url)) continue;
+      final sample = await _probeLater(
+        book,
+        readableChapters,
+        index,
+        taken,
+        mode: mode,
+        issues: issues,
+      );
+      if (sample == null) return;
+      later.add(sample);
+    }
+    _checkRepeatedText([head, ...later], mode: mode, issues: issues);
   }
 
   Future<({BookChapter chapter, String content})?> _probeHead(
@@ -1456,21 +1458,39 @@ List<String>? _sharedSentences(String a, String b) {
     _ => false,
   };
   if (media(a) || media(b)) return null;
-  Set<String> sentences(String text) => {
-    for (final part in text.split(RegExp(r'[\n。！？!?；;]')))
-      if (part.trim().isNotEmpty) part.trim(),
-  };
+  // 照每句出現的次數算：章內重複的台詞先去重的話，作者的話只佔一小段也會
+  // 算成一半以上（Codex 審查）。
+  Map<String, int> sentences(String text) {
+    final counts = <String, int>{};
+    for (final part in text.split(RegExp(r'[\n。！？!?；;]'))) {
+      final sentence = part.trim();
+      if (sentence.isNotEmpty) {
+        counts.update(sentence, (n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+    return counts;
+  }
+
   final left = sentences(a);
   final right = sentences(b);
-  final shared = left.intersection(right);
+  int length(Map<String, int> counts) => counts.entries.fold(
+    0,
+    (sum, entry) => sum + entry.key.length * entry.value,
+  );
+  final shared = [
+    for (final sentence in left.keys)
+      if (right.containsKey(sentence)) sentence,
+  ];
   if (shared.isEmpty) return null;
-  int length(Iterable<String> parts) =>
-      parts.fold(0, (sum, part) => sum + part.length);
-  final sharedLength = length(shared);
+  final sharedLength = shared.fold(
+    0,
+    (sum, sentence) =>
+        sum + sentence.length * math.min(left[sentence]!, right[sentence]!),
+  );
   if (sharedLength * 2 < length(left) || sharedLength * 2 < length(right)) {
     return null;
   }
-  return shared.toList();
+  return shared;
 }
 
 /// 拿掉空白，比對開頭用。

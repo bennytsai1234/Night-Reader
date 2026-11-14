@@ -221,9 +221,8 @@ class SourceCheckConfig {
   );
 
   /// 一個書源整個校驗的時限：每一段各自照 [timeoutDuration]，這個上限讓
-  /// 一個書源不會把每段的時限加總佔滿 worker。正文抽查的中段、後段算多一段
-  /// （三章同時抓）：2026-11-14 只算正文一段時，40 個書源在抽後段時撞到
-  /// 總時限、判成逾時。
+  /// 一個書源不會把每段的時限加總佔滿 worker。正文抽查的中段、後段算多
+  /// 一段。
   Duration get sourceTimeoutDuration {
     final activeFlows = (checkSearch ? 1 : 0) + (checkDiscovery ? 1 : 0);
     final stageBudget =
