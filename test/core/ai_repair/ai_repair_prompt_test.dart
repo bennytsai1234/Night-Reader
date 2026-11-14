@@ -260,6 +260,20 @@ void main() {
       expect(why['description'], contains('算術題'));
     });
 
+    test('the AI is told how to find text a page fills in with a script, and '
+        'that full addresses in rules move with the site', () {
+      // 2026-11-14 躺着看 25 輪：第 4 輪只改書源網址開頭，搜尋網址寫死裸網域，
+      // 試抓 403；第 6～17 輪摸索正文藏在頁面程式的 base64 裡該從哪下手。
+      expect(
+        aiRepairSystemPrompt,
+        allOf(
+          contains('規則裡寫死完整網址的'),
+          contains('誰把正文填進'),
+          contains('照抄成正文規則的 JS'),
+        ),
+      );
+    });
+
     test('a pasted source may be bare, a command, or a Legado array', () {
       expect(pastedSourceJson('```\n{"bookSourceUrl":"a"}\n```'), {
         'bookSourceUrl': 'a',
