@@ -19,11 +19,14 @@ HttpClientAdapter sourceHttpClientAdapter() =>
 
 /// 網路封面改走 [sourceHttpClient]：在第一張封面載入前換掉
 /// [CachedNetworkImageProvider.defaultCacheManager]，快取沿用原本那一份。
+/// 開 App 失敗重試時會再呼叫，換上的一直是同一個。
 void useSourceConnectionForCovers() {
-  CachedNetworkImageProvider.defaultCacheManager = CacheManager(
-    Config(
-      DefaultCacheManager.key,
-      fileService: HttpFileService(httpClient: IOClient(sourceHttpClient())),
-    ),
-  );
+  CachedNetworkImageProvider.defaultCacheManager = _coverCacheManager;
 }
+
+final CacheManager _coverCacheManager = CacheManager(
+  Config(
+    DefaultCacheManager.key,
+    fileService: HttpFileService(httpClient: IOClient(sourceHttpClient())),
+  ),
+);

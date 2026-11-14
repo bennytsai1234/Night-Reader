@@ -831,7 +831,7 @@ class AnalyzeUrl {
   }
 
   /// 連線一下就斷（連線被重設、Socket 層級故障）再試；網站在時限內沒回應、
-  /// 憑證不受信任就不再試（同 Legado：OkHttp 的 `retryOnConnectionFailure`
+  /// 加密連線失敗就不再試（同 Legado：OkHttp 的 `retryOnConnectionFailure`
   /// 只換下一條路線，逾時與 TLS 握手失敗不重送）。重送逾時的請求讓一個不回應
   /// 的網站要等三倍的 15 秒。
   bool _isRetryable(DioException e) {
@@ -840,8 +840,8 @@ class AnalyzeUrl {
         // 網域查不到再試也查不到（網站不在了，或手機斷網）。
         return !'${e.error}'.contains('Failed host lookup');
       case DioExceptionType.unknown:
-        // 網站擋下來（Cloudflare、封鎖網路）這類已經判斷過的原因、憑證不受
-        // 信任，再試也一樣。
+        // 網站擋下來（Cloudflare、封鎖網路）這類已經判斷過的原因、加密連線
+        // 失敗，再試也一樣。
         final error = e.error;
         return error != null &&
             error is! AppException &&

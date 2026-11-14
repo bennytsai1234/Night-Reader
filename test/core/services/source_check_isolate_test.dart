@@ -440,8 +440,8 @@ void main() {
     );
   });
 
-  group('a site that refuses the connection or has a bad certificate', () {
-    // 2026-11-13 色欲文、鲤鱼乡①：連線被拒與憑證過期原本都標「校驗超時」。
+  group('a site that refuses the connection or fails the TLS handshake', () {
+    // 2026-11-13 色欲文、鲤鱼乡①：連線被拒與加密連線失敗原本都標「校驗超時」。
     DioException refused() => DioException(
       requestOptions: RequestOptions(path: 'https://m.site.example/s'),
       type: DioExceptionType.connectionError,
@@ -453,17 +453,17 @@ void main() {
         port: 54550,
       ),
     );
-    DioException expired() => DioException(
+    DioException handshake() => DioException(
       requestOptions: RequestOptions(path: 'https://m.site.example/s'),
       error: const HandshakeException(
         'Handshake error in client',
-        OSError('CERTIFICATE_VERIFY_FAILED: certificate has expired', 1),
+        OSError('WRONG_VERSION_NUMBER', 1),
       ),
     );
 
     for (final (name, error) in [
       ('refused', refused),
-      ('expired certificate', expired),
+      ('failed handshake', handshake),
     ]) {
       test('$name is a site problem, not a timeout', () async {
         final (result, source) = await _check(

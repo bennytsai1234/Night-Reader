@@ -1386,10 +1386,10 @@ bool _looksLikeBlockedUpstream(String normalized) =>
     normalized.contains(' 503') ||
     normalized.contains('forbidden') ||
     normalized.contains('cloudflare') ||
-    // 連不上（連線被拒、憑證不受信任）：網站那邊的問題，不是太慢。
+    // 連不上（連線被拒、加密連線失敗）：網站那邊的問題，不是太慢。書源的
+    // 連線不驗憑證（sourceHttpClient），憑證有問題不會走到這裡。
     normalized.contains('socketexception') ||
-    normalized.contains('handshakeexception') ||
-    normalized.contains('certificate_verify_failed');
+    normalized.contains('handshakeexception');
 
 int _issuePriority(SourceHealthCategory category) {
   switch (category) {
