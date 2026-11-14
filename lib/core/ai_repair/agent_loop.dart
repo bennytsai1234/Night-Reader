@@ -81,10 +81,12 @@ final class AgentCommand<C> extends AgentParse<C> {
 }
 
 /// 呼叫讀不懂：沒有這個工具、參數不是合法的 JSON、少了欄位（[fact] 說
-/// 哪裡不對）。
+/// 哪裡不對）。[malformed] 是參數根本不是 JSON（模型把內建的工具標記寫進
+/// 參數、服務轉不了原樣交回）：這則回覆不接進對話，同一段對話重送。
 final class AgentBadCommand<C> extends AgentParse<C> {
-  const AgentBadCommand(this.fact);
+  const AgentBadCommand(this.fact, {this.malformed = false});
   final String fact;
+  final bool malformed;
 }
 
 /// 執行一個指令的結果。
@@ -363,6 +365,16 @@ Future<_AttemptEnd> _attempt<C>(
     record(reply: reply);
     stalls = 0;
     if (cancelToken.isCancelled) return cancelled;
+    final parsed = [for (final call in reply.toolCalls) task.parse(call)];
+    // 參數寫壞的回覆不接進對話，同一段對話重送：留著的話模型下一輪照抄
+    // 自己寫壞的開頭（2026-11-14 读客书库連續三次一字不差）。
+    if (parsed.any((p) => p is AgentBadCommand<C> && p.malformed)) {
+      stats.badCommands++;
+      if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+        return _Retry('連續 $badCommand 次工具參數寫壞');
+      }
+      continue;
+    }
     messages.add(
       AiMessage.assistant(
         reply.content,
@@ -381,9 +393,9 @@ Future<_AttemptEnd> _attempt<C>(
     }
     noCommand = 0;
     // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
-    for (final call in reply.toolCalls) {
+    for (final (i, call) in reply.toolCalls.indexed) {
       void answer(String text) => fact(text, callId: call.id);
-      switch (task.parse(call)) {
+      switch (parsed[i]) {
         case AgentBadCommand(fact: final text):
           stats.badCommands++;
           if (++badCommand >= AiAgentKnobs.badCommandLimit) {

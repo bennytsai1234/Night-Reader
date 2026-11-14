@@ -1088,9 +1088,13 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     if (read.command case final command?) {
       return AgentCommand(command, read.key);
     }
+    final malformed = aiRepairArgumentsMalformed(call);
     if (step case final step?) s._finish(step, '讀不懂工具呼叫', failed: true);
-    s.log.both('讀不懂工具呼叫：${read.fact}');
-    return AgentBadCommand(read.fact);
+    s.log.both(
+      '讀不懂工具呼叫：${read.fact}'
+      '${malformed ? '（這則回覆不接進對話，同一段對話重送）' : ''}',
+    );
+    return AgentBadCommand(read.fact, malformed: malformed);
   }
 
   @override

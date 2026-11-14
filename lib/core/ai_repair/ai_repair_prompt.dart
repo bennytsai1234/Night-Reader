@@ -815,6 +815,17 @@ String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
   if (diagnostics.isNotEmpty) diagnostics.join('\n\n'),
 ].join('\n');
 
+/// 工具呼叫的參數根本不是 JSON（迴圈丟掉這則、同一段對話重送）。
+bool aiRepairArgumentsMalformed(AiToolCall call) {
+  if (call.arguments.trim().isEmpty) return false;
+  try {
+    jsonDecode(call.arguments);
+    return false;
+  } on FormatException {
+    return true;
+  }
+}
+
 /// JSON 壞在哪：第幾個字與那一段原文。只寫「Unexpected character」時，AI
 /// 看不出自己寫錯什麼，同樣的錯再送一次（2026-11-14 读客书库，模型把內建的
 /// 工具標記寫進參數，連續三次讀不懂）。
