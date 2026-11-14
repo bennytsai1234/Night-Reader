@@ -4,8 +4,12 @@
 ///
 /// ```sh
 /// NR_SOURCES=<書源 JSON> NR_AI_KEY_FILE=<只放金鑰的檔> NR_OUT=<結果 JSON> \
-///   flutter test --run-skipped -t live test/live/source_repair_batch_live_test.dart
+///   FLUTTER_TEST_WALL=0 tool/flutter_test.sh --run-skipped -t live \
+///   test/live/source_repair_batch_live_test.dart
 /// ```
+///
+/// `FLUTTER_TEST_WALL=0` 關掉 `tool/flutter_test.sh` 預設 20 分鐘的整次時限，
+/// 時限交給這個測試自己的逾時；整批沒跑完就停，結果檔不會寫出來。
 ///
 /// - 給了 `NR_CASES`（案件集，`test/live/ai_repair_cases.json`）時，`NR_SOURCES`
 ///   是使用者的整份匯出檔，照案件集的名稱與網址挑出書源；
@@ -115,14 +119,19 @@ void main() {
             if (only == null || only.contains((item as Map)['name']))
               item as Map<String, dynamic>,
         ];
-  // 名稱打錯時不能退回整份匯出檔：那是好幾百個書源打真的網站與 AI 服務。
+  // 挑不出來時不能退回整份 NR_SOURCES：匯出檔是好幾百個書源，會去打真的網站
+  // 與 AI 服務。
+  if (only != null && casesPath == null) {
+    throw StateError('NR_ONLY 要和 NR_CASES 一起給');
+  }
   if (casesPath != null) {
     final unmatched = {
       ...?only?.difference({for (final item in cases) item['name']}),
     };
-    if (unmatched.isNotEmpty || cases.isEmpty) {
+    if (unmatched.isNotEmpty) {
       throw StateError('NR_ONLY 在案件集裡找不到：${unmatched.join('、')}');
     }
+    if (cases.isEmpty) throw StateError('案件集裡沒有案件');
   }
   final sources = casesPath == null
       ? all
