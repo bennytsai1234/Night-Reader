@@ -88,20 +88,33 @@ class AppearanceSettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
-            header: '介面語言',
             children: [
-              for (final (choice, label) in const [
-                ('system', '跟隨系統'),
-                ('zh_TW', '繁體中文'),
-                ('zh_CN', '简体中文'),
-              ])
-                GroupedCheckRow(
-                  title: label,
-                  selected: choice == 'system'
-                      ? appSettings.locale == null
-                      : appSettings.locale == appSettings.parseLocale(choice),
-                  onTap: () => appSettings.setUiLanguage(choice),
-                ),
+              Builder(
+                builder: (rowContext) {
+                  final selected = appSettings.locale == null
+                      ? 'system'
+                      : appSettings.locale?.countryCode == 'CN'
+                      ? 'zh_CN'
+                      : 'zh_TW';
+                  const labels = {
+                    'system': '跟隨系統',
+                    'zh_TW': '繁體中文',
+                    'zh_CN': '简体中文',
+                  };
+                  return GroupedRow(
+                    title: '介面語言',
+                    value: labels[selected],
+                    showChevron: false,
+                    onTap: () => _pickOption(
+                      rowContext,
+                      const ['system', 'zh_TW', 'zh_CN'],
+                      label: (choice) => labels[choice]!,
+                      selected: selected,
+                      onPicked: appSettings.setUiLanguage,
+                    ),
+                  );
+                },
+              ),
             ],
           ),
           GroupedSection(
