@@ -31,8 +31,8 @@ const _listRule = {
 };
 
 /// 假網站只回應 explore.test。搜尋要多幾個書源才會陸續回來：這 40 個書源的
-/// 搜尋網址寫成同一台的絕對網址，每個都回同樣的 30 本；同時最多 8 個（預設），
-/// 整批約 1.5 秒搜完，中途才按得到「停止」。idempotent，兩次跑都照呼叫。
+/// 搜尋網址寫成同一台的絕對網址，每個都回同樣的 30 本；同時最多 16 個（預設），
+/// 整批約 1 秒搜完，中途才按得到「停止」。idempotent，兩次跑都照呼叫。
 Future<void> _seedExtraSources() => getIt<BookSourceDao>().upsertAll([
   for (var i = 1; i <= 40; i++)
     BookSource.fromJson({

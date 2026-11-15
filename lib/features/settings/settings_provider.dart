@@ -47,7 +47,6 @@ class SettingsProvider extends SettingsProviderBase {
   // --- 缺失屬性補全 ---
   bool autoRefresh = true;
   bool defaultToRead = false;
-  int threadCount = 4;
   String userAgent = '';
   bool antiAlias = true;
   bool replaceEnableDefault = true;
@@ -106,7 +105,6 @@ class SettingsProvider extends SettingsProviderBase {
         : parseThemeMode(storedThemeMode);
     locale = parseLocale(prefs.getString(PreferKey.language) ?? 'system');
     userAgent = prefs.getString(PreferKey.userAgent) ?? '';
-    threadCount = prefs.getInt(PreferKey.threadCount) ?? 4;
     recordLog = prefs.getBool(PreferKey.recordLog) ?? false;
     appCrash = prefs.getBool(PreferKey.appCrash) ?? false;
     lastVersionCode = prefs.getInt(PreferKey.lastVersionCode) ?? 0;

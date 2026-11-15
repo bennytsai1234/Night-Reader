@@ -17,8 +17,8 @@
 ///   搜尋工具搜，印出每次送了幾個書源、幾個出錯、花多久、搜到幾本，與全部
 ///   花多久（量搜尋要等多久用）。`NR_SEARCH_PARALLEL=1` 時幾個一起搜（同一輪
 ///   的幾個搜尋一起送時是不是比較快）。`NR_SEARCH_KIND` 給 comic、audio 換類別。
-/// - `NR_THREADS=<個數>` 改一次搜尋同時送幾個書源（搜尋頁的 `thread_count`，
-///   沒給時同 App 是 8），量並行數改了以後的搜尋與找書。
+/// - `NR_THREADS=<個數>` 改一次搜尋同時送幾個書源（`SearchModel.threadCount`，
+///   沒給時同 App 是 16），量並行數改了以後的搜尋與找書。
 /// - 給了 `NR_FIRST_ROUND=<次數>` 時不跑工具：每件只照現在的提示詞問第一輪
 ///   這麼多次，印出 AI 的思考開頭與呼叫了什麼（改了開場或提示詞，先看第一步
 ///   有沒有改過來，比整件重跑便宜；agent-harness 第 5 步「重放」）。
@@ -49,6 +49,7 @@ import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -167,9 +168,9 @@ void main() {
   setUpAll(() async {
     quickJsUnavailableReason();
     PathProviderPlatform.instance = _TempPaths(root.path);
-    // NR_THREADS 改一次搜尋同時送幾個書源（搜尋頁的 thread_count，預設 8）。
+    // NR_THREADS 改一次搜尋同時送幾個書源（SearchModel.threadCount，預設 16）。
     final threads = int.tryParse(Platform.environment['NR_THREADS'] ?? '');
-    SharedPreferences.setMockInitialValues({'thread_count': ?threads});
+    SharedPreferences.setMockInitialValues({PreferKey.threadCount: ?threads});
     await GetIt.instance.reset();
     registerDatabase(AppDatabase());
     GetIt.instance.registerSingleton<SharedPreferences>(

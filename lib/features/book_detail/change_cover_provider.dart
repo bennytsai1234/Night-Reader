@@ -8,7 +8,6 @@ import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/di/injection.dart';
 
 /// 換封面面板的狀態；每次開面板建立一個，關閉時停止搜尋。
@@ -149,10 +148,7 @@ class ChangeCoverProvider extends ChangeNotifier {
       _totalSources = coverSources.length;
       if (_totalSources == 0) return;
 
-      final threadCount = await SharedPreferences.getInstance().then(
-        (prefs) => prefs.getInt('thread_count') ?? 8,
-      );
-      final coverPool = Pool(threadCount);
+      final coverPool = Pool(await SearchModel.threadCount());
 
       final tasks = <Future<bool>>[];
       for (final source in coverSources) {
