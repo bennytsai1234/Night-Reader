@@ -23,6 +23,11 @@ class SourceRule {
   List<String> ruleParam = [];
   List<int> ruleType = [];
 
+  /// 含 `{{ }}`、`@get:` 的規則：`##` 的取代等組好字（[makeUp]）才切，
+  /// 同 Legado `makeUpRule`。`{{$..name##小说}}` 裡的 `##` 屬於那段子規則，
+  /// 先切整條會把它切斷，剩下 `{{$..name` 原樣印出來。
+  bool _splitAfterMakeUp = false;
+
   static final RegExp _evalPattern = RegExp(
     r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}',
     caseSensitive: false,
@@ -41,8 +46,9 @@ class SourceRule {
   /// 前綴的規則一律是 JSON 路徑。
   SourceRule(this.rule, {this.mode = Mode.defaultMode, bool isJson = false}) {
     rule = _stripLeadingStandaloneCommentLines(rule);
+    _splitAfterMakeUp = _evalPatternJson.hasMatch(rule);
     // 處理 ##regex##replacement 與 ### replaceFirst
-    if (rule.contains('##')) {
+    if (rule.contains('##') && !_splitAfterMakeUp) {
       final rawParts = rule.split('##');
       final parts = <String>[];
       for (var i = 0; i < rawParts.length; i++) {
@@ -117,8 +123,17 @@ class SourceRule {
     if (evalMatches.isNotEmpty) {
       isDynamic = true;
       // 同 Legado：含 `@get:`、`{{ }}` 的規則組好就是結果的文字，不再拿去
-      // 解析（`##` 之後的取代已在上面分開）。
-      if (mode != Mode.js && mode != Mode.regex) mode = Mode.regex;
+      // 解析；只有第一段組字前面已經有 `##`（`$.title##{{…}}`，組的是取代
+      // 式）時，規則本身照原本的模式解析。
+      final first = _splitAfterMakeUp
+          ? _evalPatternJson.firstMatch(rule)!
+          : evalMatches.first;
+      if (mode != Mode.js &&
+          mode != Mode.regex &&
+          (first.start == 0 ||
+              !rule.substring(0, first.start).contains('##'))) {
+        mode = Mode.regex;
+      }
     }
     for (final match in evalMatches) {
       if (match.start > start) _splitRegex(rule.substring(start, match.start));
@@ -163,12 +178,42 @@ class SourceRule {
     }
   }
 
-  /// 動態組合規則字串 (對標 Android SourceRule.makeUpRule)
+  SourceRule._made(
+    this.rule,
+    this.mode,
+    this.replaceRegex,
+    this.replacement,
+    this.replaceFirst,
+  );
+
+  /// 這一次要用的規則（對標 Android SourceRule.makeUpRule）：組好規則字串，
+  /// 含 `{{ }}`、`@get:` 的再照 `##` 切出取代式（同 Legado：`[0]` 去頭尾
+  /// 空白是規則、`[1]` 正則、`[2]` 取代、有第四段是只換第一個）。
   ///
-  /// 重要：本方法不得 mutate `this.rule`，因為 SourceRule 實例會被
-  /// stringRuleCache 靜態快取跨呼叫共用。mutate 後會造成 race condition
-  /// 或把動態組合後的字串寫回快取，污染後續使用者。
-  String makeUpRule(dynamic result, dynamic analyzer) {
+  /// 交回新的一份，不改自己：SourceRule 實例會被 stringRuleCache 靜態快取
+  /// 跨呼叫共用，改了會把這次組好的字寫回快取，污染後續使用者。
+  SourceRule makeUp(dynamic result, dynamic analyzer) {
+    final made = _compose(result, analyzer);
+    if (!_splitAfterMakeUp) {
+      return SourceRule._made(
+        made,
+        mode,
+        replaceRegex,
+        replacement,
+        replaceFirst,
+      );
+    }
+    final parts = made.split('##');
+    return SourceRule._made(
+      parts[0].trim(),
+      mode,
+      parts.length > 1 ? parts[1] : '',
+      parts.length > 2 ? parts[2] : '',
+      parts.length > 3,
+    );
+  }
+
+  String _compose(dynamic result, dynamic analyzer) {
     if (!isDynamic) return rule;
     final buffer = StringBuffer();
     for (var i = 0; i < ruleType.length; i++) {
