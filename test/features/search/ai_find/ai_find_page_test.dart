@@ -41,7 +41,8 @@ class _Library implements AiFindLibrary {
     String keyword,
     BookSourceKind kind,
     CancelToken cancelToken,
-  ) async => (books: [_book('獵魔人')], sources: 2, failed: 0);
+  ) async =>
+      (books: [_book('獵魔人')], tiers: [1], sources: 2, failed: 0, pending: 0);
 
   @override
   Future<Book> detail(SearchBook book, CancelToken cancelToken) async =>

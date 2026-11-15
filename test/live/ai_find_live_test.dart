@@ -203,7 +203,7 @@ void main() {
         final result = await library.search(keyword, kind, CancelToken());
         debugPrint(
           '##### 搜尋「$keyword」${kind.name}：送了 ${result.sources} 個書源，'
-          '${result.failed} 個出錯或逾時，花 '
+          '${result.failed} 個出錯或逾時，${result.pending} 個到時限沒回來，花 '
           '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒，'
           '合併後 ${result.books.length} 本',
         );

@@ -52,12 +52,16 @@ abstract interface class AiFindLibrary {
   Set<String> get secrets;
 }
 
-/// 一次搜尋：[books] 是合併後的書，[sources] 是送了幾個書源，[failed] 是
-/// 其中幾個出錯或逾時（書源自己的問題，AI 拿它判斷搜不到是不是因為書源）。
+/// 一次搜尋：[books] 是合併後的書，照搜尋頁的相關度排；[tiers] 和它一一對應，
+/// 是搜尋頁的分段（0 完全相符、1 部分相符、2 其他結果）。[sources] 是送了幾個
+/// 書源，[failed] 是其中幾個出錯或逾時，[pending] 是到時限還沒回來、不等了的
+/// （AI 拿這些判斷搜不到是不是因為書源）。
 typedef AiFindSearchResult = ({
   List<SearchBook> books,
+  List<int> tiers,
   int sources,
   int failed,
+  int pending,
 });
 
 /// 讀不到這一章：[message] 照實回給 AI。

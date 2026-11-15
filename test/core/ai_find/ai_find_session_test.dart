@@ -39,6 +39,7 @@ class _Library implements AiFindLibrary {
   final Set<String> secrets = {};
   Completer<void>? searchGate;
   String? detailIntro;
+  int pending = 0;
   bool searchCancelled = false;
 
   @override
@@ -59,10 +60,21 @@ class _Library implements AiFindLibrary {
         );
       }
     }
+    final books = results[keyword] ?? const <SearchBook>[];
     return (
-      books: results[keyword] ?? const <SearchBook>[],
+      books: books,
+      // 同搜尋頁：書名等於關鍵字是完全相符、含關鍵字是部分相符。
+      tiers: [
+        for (final book in books)
+          book.name == keyword
+              ? 0
+              : book.name.contains(keyword)
+              ? 1
+              : 2,
+      ],
       sources: 3,
       failed: 1,
+      pending: pending,
     );
   }
 
@@ -480,6 +492,32 @@ void main() {
       contains('b31｜爽文｜作者｜完结 {{\$..shortName｜1 個書源'),
       reason: '第一次只給看了 30 本，下一本接 b31',
     );
+  });
+
+  test('search results are split into the search page tiers, each book '
+      'shows the start of its intro, and sources cut off by the time limit '
+      'are counted', () async {
+    final library = _Library({
+      '咒術迴戰': [_book('咒術迴戰'), _book('咒術迴戰：反派第一人'), _book('我在忍界搞咒術')],
+    })..pending = 40;
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '咒術迴戰'}),
+      ]),
+    ]);
+    await session(library, ai).start();
+    final result = ai.toolResults(2).single;
+    expect(result, contains('40 個到時限還沒回來、不等了'));
+    final lines = result.split('\n');
+    expect(lines.sublist(1), [
+      '## 完全相符',
+      startsWith('b1｜咒術迴戰｜'),
+      '## 部分相符',
+      startsWith('b2｜咒術迴戰：反派第一人｜'),
+      '## 其他結果',
+      startsWith('b3｜我在忍界搞咒術｜'),
+    ]);
+    expect(lines[2], endsWith('｜簡介：咒術迴戰 的簡介'));
   });
 
   test('a detail with HTML tags and line breaks reads as plain text', () async {

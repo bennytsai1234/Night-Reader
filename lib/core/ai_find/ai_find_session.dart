@@ -216,8 +216,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   /// 搜過的關鍵字：結果與那次搜尋實際的情況（送了幾個書源、花多久），接著
   /// 拿下一批時不再搜一次。編號在給 AI 看到時才給：一次搜尋常有上萬本，
   /// 全部編號的話後面的書編到 b15226（2026-11-15 實跑）。
-  final Map<String, Future<({List<SearchBook> books, String facts})>>
-  _searches = {};
+  final Map<String, Future<_Search>> _searches = {};
   List<AiFindExploreSource>? _exploreSources;
 
   /// 同時跑幾個搜尋：一個搜尋就同時問 thread_count 個書源（預設 8）。
@@ -352,7 +351,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     final cacheKey = '${command.kind.name}\u0000${command.keyword}';
     // 存的是搜尋本身：同一則回覆裡同樣的搜尋一起開始時，第二個等第一個。
     final pending = _searches.putIfAbsent(cacheKey, () => _runSearch(command));
-    final ({List<SearchBook> books, String facts}) search;
+    final _Search search;
     try {
       search = await pending;
     } catch (_) {
@@ -367,14 +366,13 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       books,
       command.page,
       empty: '沒有搜到書',
+      tiers: search.tiers,
     );
     s.log.note(_head(text));
     return AgentToolResult(text);
   }
 
-  Future<({List<SearchBook> books, String facts})> _runSearch(
-    AiFindSearch command,
-  ) =>
+  Future<_Search> _runSearch(AiFindSearch command) =>
       // 計時從輪到它開始：排隊等的時間不算這次搜尋花的。
       _searchSlots.withResource(() async {
         final watch = Stopwatch()..start();
@@ -385,9 +383,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         );
         return (
           books: result.books,
+          tiers: result.tiers,
           facts:
               '送了 ${result.sources} 個書源'
-              '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}，'
+              '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}'
+              '${result.pending > 0 ? '，${result.pending} 個到時限還沒回來、不等了' : ''}，'
               '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
         );
       });
@@ -612,11 +612,16 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     return book;
   }
 
+  /// 搜尋頁的三段（[AiFindSearchResult.tiers]）。
+  static const List<String> _tierLabels = ['完全相符', '部分相符', '其他結果'];
+
+  /// [tiers] 給了時（搜尋），照搜尋頁在每段第一本前面標段名。
   String _bookPage(
     String heading,
     List<SearchBook> books,
     int page, {
     required String empty,
+    List<int>? tiers,
   }) {
     if (books.isEmpty) return '$heading：$empty';
     final from = (page - 1) * aiFindSearchPageSize;
@@ -625,8 +630,19 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     }
     final to = (from + aiFindSearchPageSize).clamp(0, books.length);
     final more = to < books.length ? '，還有，用 page ${page + 1} 接著拿' : '';
+    final lines = <String>[];
+    for (var i = from; i < to; i++) {
+      final tier = tiers != null && i < tiers.length ? tiers[i] : null;
+      if (tier != null &&
+          (i == from || tier != tiers![i - 1]) &&
+          tier >= 0 &&
+          tier < _tierLabels.length) {
+        lines.add('## ${_tierLabels[tier]}');
+      }
+      lines.add(_bookLine(_register(books[i])));
+    }
     return '$heading：共 ${books.length} 本，這是第 ${from + 1} 到 $to 本$more\n'
-        '${books.sublist(from, to).map((book) => _bookLine(_register(book))).join('\n')}';
+        '${lines.join('\n')}';
   }
 
   static String _bookLine(_Found found) {
@@ -646,8 +662,22 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       ?clean(b.kind),
       if (clean(b.latestChapterTitle) case final latest?) '最新：$latest',
       '${b.origins.length} 個書源',
+      if (_introHead(b.intro) case final intro?) '簡介：$intro',
     ].join('｜');
   }
+
+  /// 書卡上簡介的開頭：清成一行純文字，最多 [_introLength] 字。
+  static String? _introHead(String? intro) {
+    final text = aiFindPlainText(intro ?? '').replaceAll(RegExp(r'\s+'), ' ');
+    if (text.isEmpty) return null;
+    return text.length <= _introLength
+        ? text
+        : '${text.substring(0, _introLength)}…';
+  }
+
+  /// 書卡上的簡介給幾字：夠看出故事是什麼，不用每本都點詳情（使用者
+  /// 2026-11-15 同意加）。
+  static const int _introLength = 60;
 
   AgentResult _unknownBook(String id) =>
       AgentToolResult('# 沒有編號 $id 的書：編號在搜尋或發現頁的結果裡');
@@ -693,3 +723,6 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     s._notify();
   }
 }
+
+/// 一次搜尋記下的結果：書、搜尋頁的分段與那次實際的情況。
+typedef _Search = ({List<SearchBook> books, List<int> tiers, String facts});

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
@@ -27,7 +29,11 @@ class AppAiFindLibrary implements AiFindLibrary {
     required this._scope,
     BookSourceService? service,
     this._searchLoader,
+    this.searchLimit = aiFindSearchLimit,
   }) : _service = service ?? BookSourceService();
+
+  /// 一次搜尋最多等多久：時間到就用已經回來的結果（同搜尋頁按「停止」）。
+  final Duration searchLimit;
 
   /// 開始找書時搜尋頁的範圍；找書中途改範圍不影響這次。
   final SearchScope _scope;
@@ -61,6 +67,11 @@ class AppAiFindLibrary implements AiFindLibrary {
       persist: false,
     );
     cancelToken.whenCancel.then((_) => model.cancelSearch()).ignore();
+    var pending = 0;
+    final limit = Timer(searchLimit, () {
+      pending = collector.total - collector.completed;
+      model.stopSearch();
+    });
     try {
       await model.search(
         key: keyword,
@@ -69,17 +80,21 @@ class AppAiFindLibrary implements AiFindLibrary {
         kind: kind,
       );
     } finally {
+      limit.cancel();
       model.dispose();
     }
     _throwIfCancelled(cancelToken);
+    // 聚合源每一類都搜（ADR 0056），它搜到的書照搜尋頁的篩法只留這一類。
+    final books = [
+      for (final book in collector.books)
+        if (book.bookKind == kind) book,
+    ];
     return (
-      // 聚合源每一類都搜（ADR 0056），它搜到的書照搜尋頁的篩法只留這一類。
-      books: [
-        for (final book in collector.books)
-          if (book.bookKind == kind) book,
-      ],
+      books: books,
+      tiers: [for (final book in books) searchRelevanceRank(book, keyword)],
       sources: collector.total,
       failed: collector.failed,
+      pending: pending,
     );
   }
 
@@ -348,6 +363,10 @@ class AppAiFindLibrary implements AiFindLibrary {
   }
 }
 
+/// 找書的一次搜尋最多等多久（使用者 2026-11-15：一次搜尋盡量在 60 秒內）。
+/// 全部書源要等 80 到 150 秒，多出來的是少數拖到逾時的書源。
+const Duration aiFindSearchLimit = Duration(seconds: 50);
+
 /// 網路錯誤回給 AI 的話：網站回了幾號，或連線怎麼斷的。
 String aiFindNetworkFailure(DioException error) {
   final code = error.response?.statusCode;
@@ -367,6 +386,7 @@ class _SearchCollector implements SearchModelCallback {
   List<SearchBook> books = const [];
   int total = 0;
   int failed = 0;
+  int completed = 0;
 
   @override
   void onSearchStart() {}
@@ -389,5 +409,6 @@ class _SearchCollector implements SearchModelCallback {
   }) {
     this.total = total;
     this.failed = failed;
+    this.completed = completed;
   }
 }
