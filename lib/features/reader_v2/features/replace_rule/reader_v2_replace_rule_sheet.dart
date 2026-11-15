@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -149,7 +150,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(failureMessage('更新替換規則設定', error))),
+        SnackBar(content: UiText(failureMessage('更新替換規則設定', error))),
       );
     } finally {
       if (mounted) setState(() => _updatingToggle = false);
@@ -176,7 +177,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('執行測試', error))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('執行測試', error))));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -215,7 +216,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(failureMessage('套用替換規則', error))));
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('套用替換規則', error))));
     }
   }
 
@@ -301,7 +302,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(failureMessage('重載內容', error)),
+                            content: UiText(failureMessage('重載內容', error)),
                           ),
                         );
                       }
@@ -316,7 +317,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             header: '測試結果',
             children: [
               GroupedContent(
-                child: Text(
+                child: UiText(
                   result.isEmpty ? '（空白）' : result,
                   style: AppTextStyles.bodySm.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,

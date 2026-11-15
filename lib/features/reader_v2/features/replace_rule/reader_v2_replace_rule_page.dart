@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -113,7 +114,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('刪除規則', error))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('刪除規則', error))));
     }
   }
 
@@ -125,7 +126,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(failureMessage('更新規則狀態', error))));
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('更新規則狀態', error))));
     }
   }
 
@@ -386,7 +387,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           _name,
                           maxLines: 1,
                           style: _nameStyle.copyWith(color: scheme.onSurface),
@@ -394,7 +395,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                       ),
                       const SizedBox(height: _patternGap),
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           _pattern,
                           maxLines: 2,
                           style: _patternStyle.copyWith(
@@ -416,7 +417,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                                 ),
                                 borderRadius: AppRadius.cardXs,
                               ),
-                              child: Text(
+                              child: UiText(
                                 label,
                                 style: _chipStyle.copyWith(
                                   color: chrome.sectionText,

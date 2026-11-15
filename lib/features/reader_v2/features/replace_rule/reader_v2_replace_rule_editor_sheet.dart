@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
@@ -168,7 +169,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
     );
     if (!rule.isValid()) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('規則格式無效，請檢查正則內容')));
+          .showSnackBar(const SnackBar(content: UiText('規則格式無效，請檢查正則內容')));
       return;
     }
     setState(() => _saving = true);
@@ -179,7 +180,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('儲存規則', error))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('儲存規則', error))));
       setState(() => _saving = false);
     }
   }

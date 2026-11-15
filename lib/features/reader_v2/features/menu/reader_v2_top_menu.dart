@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -100,7 +101,7 @@ class ReaderV2TopMenu extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Center(
                   child: DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       bookName,
                       style: AppTextStyles.titleSm.copyWith(
                         fontWeight: FontWeight.w600,
@@ -143,7 +144,7 @@ class ReaderV2TopMenu extends StatelessWidget {
               child: ValueListenableBuilder<int>(
                 valueListenable: navigation.current,
                 builder: (context, _, _) => DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     navigation.currentTitle,
                     style: AppTextStyles.labelSm.copyWith(
                       color: menuStyle.foreground,
@@ -170,7 +171,7 @@ class ReaderV2TopMenu extends StatelessWidget {
                       borderRadius: AppRadius.pillShape,
                     ),
                     child: DragOverflowText(
-                      child: Text(
+                      child: UiText(
                         originName,
                         maxLines: 1,
                         style: AppTextStyles.micro.copyWith(
