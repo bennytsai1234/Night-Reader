@@ -59,13 +59,9 @@ String aiFindDateLabel(int millis, DateTime now) {
   return date.year == now.year ? day : '${date.year}/$day';
 }
 
-/// 開始前那一列「不想看的」右邊的字：沒有寫「沒有」，兩項以內全列，
-/// 再多寫前兩項與總數。
-String aiFindAvoidSummary(List<String> avoid) => switch (avoid.length) {
-  0 => '沒有',
-  <= 2 => avoid.join('、'),
-  _ => '${avoid.take(2).join('、')} 等 ${avoid.length} 項',
-};
+/// 開始前那一列「不想看的」右邊的字：只寫幾項，沒有寫「沒有」。
+String aiFindAvoidSummary(List<String> avoid) =>
+    avoid.isEmpty ? '沒有' : '${avoid.length} 項';
 
 /// 「8.4 萬 token」：頁面上的用量。
 String aiFindTokens(int tokens) => tokens < 10000

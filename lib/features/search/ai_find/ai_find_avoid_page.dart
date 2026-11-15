@@ -72,9 +72,6 @@ class _AiFindAvoidPageState extends State<AiFindAvoidPage> {
       child: GroupedListView(
         children: [
           GroupedSection(
-            footer:
-                '每次找書都避開這幾類，看故事判斷，不只看字眼；描述裡說要的照描述。'
-                '點一下修改，往左滑刪除。',
             children: [
               for (final (index, item) in _items.indexed)
                 SwipeActions(

@@ -411,7 +411,7 @@ void main() {
 
     Navigator.of(tester.element(find.text('女頻'))).pop();
     await tester.pumpAndSettle();
-    expect(find.text('女頻、系統文'), findsOneWidget);
+    expect(find.text('2 項'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), '爽文');
     await tester.pumpAndSettle();
@@ -422,7 +422,6 @@ void main() {
     await tester.pump();
     await settle(tester, () => run.isFinished);
     expect(sent, ['女頻', '系統文']);
-    expect(aiFindAvoidSummary(['女頻', '後宮', '系統文']), '女頻、後宮 等 3 項');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
