@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/user_error.dart';
@@ -109,7 +110,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     final notice = messenger.showSnackBar(
       SnackBar(
-        content: Text(error),
+        content: UiText(error),
         persist: false,
         duration: const Duration(seconds: 4),
         action: remedy == null
@@ -294,7 +295,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('已複製音訊網址')));
+          ..showSnackBar(const SnackBar(content: UiText('已複製音訊網址')));
       case _MoreAction.editSource:
         if (source == null) return;
         await Navigator.of(context).push<bool>(
@@ -477,7 +478,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
                             ..hideCurrentSnackBar()
                             ..showSnackBar(
                               const SnackBar(
-                                content: Text(lockedChapterNotice),
+                                content: UiText(lockedChapterNotice),
                               ),
                             )
                         : () => unawaited(_player.playChapter(i)),
@@ -672,7 +673,7 @@ class _BookHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     book.name,
                     maxLines: 2,
                     style: AppTextStyles.titleMd.copyWith(
@@ -683,7 +684,7 @@ class _BookHeader extends StatelessWidget {
                 if (byline.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       byline,
                       maxLines: 1,
                       style: AppTextStyles.bodySm.copyWith(
@@ -694,7 +695,7 @@ class _BookHeader extends StatelessWidget {
                 ],
                 if (episodes > 0) ...[
                   const SizedBox(height: 2),
-                  Text(
+                  UiText(
                     '共 $episodes 集',
                     style: AppTextStyles.bodySm.copyWith(
                       color: scheme.onSurfaceVariant,
@@ -804,7 +805,7 @@ class _EpisodeRow extends StatelessWidget {
       _ => scheme.onSurface,
     };
     final status = switch (state) {
-      _EpisodeState.finished => Text(
+      _EpisodeState.finished => UiText(
         '聽完',
         style: AppTextStyles.bodySm.copyWith(color: scheme.onSurfaceVariant),
       ),
@@ -815,7 +816,7 @@ class _EpisodeRow extends StatelessWidget {
       ),
       _EpisodeState.paused => ValueListenableBuilder<Duration>(
         valueListenable: position,
-        builder: (context, at, _) => Text(
+        builder: (context, at, _) => UiText(
           '聽到 ${formatPlayTime(at)}',
           style: AppTextStyles.bodySm.copyWith(color: scheme.onSurfaceVariant),
         ),
@@ -837,7 +838,7 @@ class _EpisodeRow extends StatelessWidget {
               children: [
                 Expanded(
                   child: DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       chapter.title,
                       maxLines: 1,
                       style: AppTextStyles.bodyBase.copyWith(
@@ -953,7 +954,7 @@ class _ControlDock extends StatelessWidget {
                 child: Column(
                   children: [
                     DragOverflowText(
-                      child: Text(
+                      child: UiText(
                         player.chapter?.title ?? '',
                         maxLines: 1,
                         style: AppTextStyles.uiMd.copyWith(
@@ -1084,9 +1085,9 @@ class _ProgressBar extends StatelessWidget {
             ),
             Row(
               children: [
-                Text(formatPlayTime(at), style: timeStyle),
+                UiText(formatPlayTime(at), style: timeStyle),
                 const Spacer(),
-                Text(
+                UiText(
                   total == null ? '--:--' : formatPlayTime(total),
                   style: timeStyle,
                 ),

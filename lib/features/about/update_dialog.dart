@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/app_update_installer.dart';
 import 'package:night_reader/core/services/update_service.dart';
@@ -221,7 +222,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (notes.isNotEmpty)
-                  Text(
+                  UiText(
                     notes,
                     style: AppTextStyles.bodySm.copyWith(
                       height: 1.5,
@@ -267,17 +268,17 @@ class _UpdateDialogState extends State<UpdateDialog> {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            Text(label, textAlign: TextAlign.center, style: style),
+            UiText(label, textAlign: TextAlign.center, style: style),
           ],
         );
       case _Phase.ready:
-        return Text(
+        return UiText(
           _installerOpened ? '下載完成，請在系統畫面確認安裝。' : '新版已下載完成，可直接安裝。',
           textAlign: TextAlign.center,
           style: style,
         );
       case _Phase.failed:
-        return Text(
+        return UiText(
           _apk == null ? '下載失敗，請重試或改到下載頁下載。' : '無法開啟系統安裝程式，請重試或改到下載頁下載。',
           textAlign: TextAlign.center,
           style: style,

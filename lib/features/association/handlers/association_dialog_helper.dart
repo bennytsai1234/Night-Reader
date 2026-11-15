@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 
 import '../import_content.dart';
@@ -36,7 +37,7 @@ mixin AssociationDialogHelper on AssociationBase {
       final message = failureMessage('讀取匯入內容', error, stackTrace);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+          .showSnackBar(SnackBar(content: UiText(message)));
       return;
     }
     if (!context.mounted) return;
@@ -123,11 +124,11 @@ mixin AssociationDialogHelper on AssociationBase {
       }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+          .showSnackBar(SnackBar(content: UiText(message)));
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage(action, error))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage(action, error))));
     }
   }
 
