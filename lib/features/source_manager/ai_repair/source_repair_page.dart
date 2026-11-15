@@ -347,7 +347,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     return shown.isEmpty ? '沒有' : shown.join('，');
   }
 
-  /// 出錯或按了停止的那一步畫紅叉（同單一書源的 AI 修），後面的步驟沒做，
+  /// 出錯或按了結束的那一步畫紅叉（同單一書源的 AI 修），後面的步驟沒做，
   /// 畫成還沒輪到。
   Widget _stageIcon(BuildContext context, RepairStage stage) {
     // 暫停中：接著做時從頭一段一段重新走（已經有結果的不再處理）。

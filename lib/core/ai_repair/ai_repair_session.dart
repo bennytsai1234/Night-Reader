@@ -84,7 +84,7 @@ class AiRepairJob {
   String? explanation;
 
   /// AI 明確放棄時才標「AI 修不好」；網路、金鑰、系統錯誤、校驗超過時間與
-  /// 按停止都不標。
+  /// 按暫停、結束都不標。
   bool confirmedUnfixable = false;
 
   /// AI 放棄時選的原因（[aiGiveUpLabels] 的 key）。
@@ -119,7 +119,7 @@ class AiRepairJob {
   /// 問了 AI 幾輪，跨重跑接著數。
   int _rounds = 0;
 
-  /// 開始存修好的書源了：這時按停止也停不下來，結果照存的結果。
+  /// 開始存修好的書源了：這時按暫停或結束也停不下來，結果照存的結果。
   bool _committing = false;
 }
 
@@ -1134,7 +1134,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   @override
   void roundEnded(AgentRoundRecord record) {
-    // 按了停止：做著的那一步已經標成停止（[AiRepairSession.stop]）。
+    // 按了暫停或結束：做著的那一步已經標好（[AiRepairSession.stop]、[AiRepairSession.pause]）。
     if (s._stopped) return;
     final reply = record.reply;
     if (record.usage case final usage?) s._onUsage?.call(usage);

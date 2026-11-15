@@ -243,7 +243,7 @@ class SourceRepairBatch extends ChangeNotifier {
   String? errorMessage;
   RepairStage? failedStage;
 
-  /// 按「停止」時做到的那一步；它和後面的步驟沒做完。
+  /// 按「結束」時做到的那一步；它和後面的步驟沒做完。
   RepairStage? stoppedStage;
 
   int count(RepairOutcome outcome) =>

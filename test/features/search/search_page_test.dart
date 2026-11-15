@@ -434,8 +434,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('還在等：甲源、乙源'), findsOneWidget);
 
-    // 不想等了按頁首的「停止」，已找到的結果留著。
-    await tester.tap(find.text('停止'));
+    // 不想等了按頁首的「結束」，已找到的結果留著。
+    await tester.tap(find.text('結束'));
     await tester.pumpAndSettle();
     expect(provider.isSearching, isFalse);
     expect(find.text('甲書'), findsOneWidget);

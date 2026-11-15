@@ -336,9 +336,9 @@ void main() {
           () => tester.tapAt(_centre),
           until: _steady(_menuShown),
         );
-        await step('reader27', '選單點「停止自動翻頁」', () async {
+        await step('reader27', '選單點「結束自動翻頁」', () async {
           await _menu(tester, shown: true);
-          await tester.tap(find.byTooltip('停止自動翻頁'));
+          await tester.tap(find.byTooltip('結束自動翻頁'));
         }, until: _steady(() => true));
         await step('reader28', '選單點「下一章」→跳到下一章', () async {
           await _menu(tester, shown: true);

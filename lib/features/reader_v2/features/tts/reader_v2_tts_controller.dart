@@ -236,7 +236,7 @@ class ReaderV2TtsController extends ChangeNotifier
         case _SpeechStart.unavailable:
           _finishSpeech(
             generation,
-            notice: '第 ${next.chapterIndex + 1} 章無法載入，朗讀已停止',
+            notice: '第 ${next.chapterIndex + 1} 章無法載入，朗讀已結束',
           );
           return;
         case _SpeechStart.empty:

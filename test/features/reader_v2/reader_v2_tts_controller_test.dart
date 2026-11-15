@@ -382,7 +382,7 @@ void main() {
 
     expect(engine.spoken, ['第一章。']);
     expect(tts.currentHighlight, isNull);
-    expect(runtime.takeUserNotice()?.message, '第 2 章無法載入，朗讀已停止');
+    expect(runtime.takeUserNotice()?.message, '第 2 章無法載入，朗讀已結束');
   });
 
   test('finishing the last chapter says the book has ended', () async {

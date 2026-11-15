@@ -168,12 +168,12 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             const SizedBox(width: AppSpacing.sm),
             GlassCapsule(
-              label: provider.isSearching ? '停止' : '搜尋',
+              label: provider.isSearching ? '結束' : '搜尋',
               icon: provider.isSearching
                   ? Icons.stop_rounded
                   : Icons.search_rounded,
               foregroundColor: provider.isSearching ? scheme.error : null,
-              tooltip: provider.isSearching ? '停止搜尋' : '搜尋',
+              tooltip: provider.isSearching ? '結束搜尋' : '搜尋',
               onTap: () {
                 if (provider.isSearching) {
                   provider.stopSearch();

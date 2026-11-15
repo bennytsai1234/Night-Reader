@@ -105,7 +105,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                     valueListenable: widget.autoScrolling,
                     builder: (context, on, _) => GlassIconButton(
                       icon: Icons.keyboard_double_arrow_down_rounded,
-                      tooltip: on ? '停止自動捲動' : '開始自動捲動',
+                      tooltip: on ? '結束自動捲動' : '開始自動捲動',
                       tint: on
                           ? Color.alphaBlend(menuStyle.accentMuted, tint)
                           : tint,

@@ -75,7 +75,7 @@ class ReaderV2TtsPanel extends StatelessWidget {
                     Icons.stop_rounded,
                     tint: AppTint.rust,
                   ),
-                  title: '停止朗讀',
+                  title: '結束朗讀',
                   showChevron: false,
                   onTap: () => unawaited(tts.stop()),
                 ),

@@ -32,7 +32,7 @@ const _listRule = {
 
 /// 假網站只回應 explore.test。搜尋要多幾個書源才會陸續回來：這 40 個書源的
 /// 搜尋網址寫成同一台的絕對網址，每個都回同樣的 30 本；同時最多 8 個（預設），
-/// 整批約 1.5 秒搜完，中途才按得到「停止」。idempotent，兩次跑都照呼叫。
+/// 整批約 1.5 秒搜完，中途才按得到「結束」。idempotent，兩次跑都照呼叫。
 Future<void> _seedExtraSources() => getIt<BookSourceDao>().upsertAll([
   for (var i = 1; i <= 40; i++)
     BookSource.fromJson({
@@ -227,8 +227,8 @@ void main() {
           action: () => tester.tap(inSearchBar('取消')),
         );
 
-        // 第二次進搜尋：歷史關鍵字在，點一個進去，搜尋途中按停止。假網站的回應
-        // 預設 0.3 秒，搜完前就錄完了、按不到停止，這次改成 2 秒才回來。
+        // 第二次進搜尋：歷史關鍵字在，點一個進去，搜尋途中按結束。假網站的回應
+        // 預設 0.3 秒，搜完前就錄完了、按不到結束，這次改成 2 秒才回來。
         await tester.runAsync(
           () => installFakeSite(latency: const Duration(seconds: 2)),
         );
@@ -250,8 +250,8 @@ void main() {
           tester,
           area: _area,
           key: 'search20',
-          label: '搜尋途中按「停止」',
-          action: () => tester.tap(inSearchBar('停止')),
+          label: '搜尋途中按「結束」',
+          action: () => tester.tap(inSearchBar('結束')),
           until: () {
             final p = _search();
             return p != null && !p.isSearching && surveyQuiet();

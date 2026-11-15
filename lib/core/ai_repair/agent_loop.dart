@@ -364,7 +364,7 @@ final class AgentAccepted extends AgentResult {
   final String reason;
 }
 
-/// 做到一半停下了（使用者按停止），或任務自己結束了這件（例如存不進去）。
+/// 做到一半停下了（使用者按暫停或結束），或任務自己結束了這件（例如存不進去）。
 final class AgentStopped extends AgentResult {
   const AgentStopped(this.kind, this.reason);
   final AgentEndKind kind;
