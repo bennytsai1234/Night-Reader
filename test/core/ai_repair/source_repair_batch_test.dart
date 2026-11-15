@@ -127,12 +127,16 @@ void main() {
     DateTime Function()? now,
     int aiConcurrency = SourceRepairBatch.defaultAiConcurrency,
     Future<void> Function()? beforeAsk,
+    Map<String, RepairDone> done = const {},
+    Set<String> reusedAlready = const {},
   }) {
     return SourceRepairBatch(
       sources: sources,
       service: _service,
       now: now,
       aiConcurrency: aiConcurrency,
+      done: done,
+      reused: reusedAlready,
       recheck: (urls, _, onResult) async {
         rechecked.addAll(urls);
         for (final url in urls) {
@@ -677,5 +681,143 @@ void main() {
     expect(b.count(RepairOutcome.shared), 1);
     expect(b.items[1].sharedFrom, same(b.items[0]));
     expect(b.items[2].sharedFrom, isNull);
+  });
+
+  group('pause and continue', () {
+    final sources = [
+      _source('https://ok.example'),
+      _source('https://bad1.example'),
+      _source('https://bad2.example'),
+    ];
+    const recheck = {'https://ok.example': SourceRuntimeHealth.healthy};
+
+    test('pause while the AI repairs keeps the sources that have a result '
+        'and leaves the rest without one', () async {
+      late SourceRepairBatch b;
+      b = batch(
+        sources,
+        recheck: recheck,
+        aiConcurrency: 1,
+        beforeAsk: () async => b.pause(),
+      );
+      await b.start();
+
+      expect(b.isPaused, isTrue);
+      expect(b.isFinished, isFalse, reason: '暫停不是結束');
+      expect(b.isStopped, isFalse);
+      expect(b.done.keys, ['https://ok.example']);
+      expect(b.done.values.single.outcome, RepairOutcome.healthy);
+      expect(
+        [for (final item in b.items.skip(1)) item.outcome],
+        [null, null],
+        reason: '正在修與還沒輪到的不定案，繼續時重修',
+      );
+      expect(saved, isEmpty, reason: '暫停時書源不改');
+    });
+
+    test('continuing with those results repairs only the rest', () async {
+      final again = batch(
+        sources,
+        recheck: recheck,
+        aiConcurrency: 1,
+        done: {
+          'https://ok.example': (
+            outcome: RepairOutcome.healthy,
+            detail: '重新校驗就沒問題了',
+            tokens: 0,
+          ),
+        },
+      );
+      await again.start();
+
+      expect(rechecked, ['https://bad1.example', 'https://bad2.example']);
+      expect(asked.toSet(), {'https://bad1.example', 'https://bad2.example'});
+      expect(
+        [for (final item in again.items) item.outcome],
+        [RepairOutcome.healthy, RepairOutcome.aiFixed, RepairOutcome.aiFixed],
+      );
+      expect(again.items.first.detail, '重新校驗就沒問題了');
+    });
+
+    test('ending a paused batch closes what had no result', () async {
+      late SourceRepairBatch b;
+      b = batch(
+        sources,
+        recheck: recheck,
+        aiConcurrency: 1,
+        beforeAsk: () async => b.pause(),
+      );
+      await b.start();
+      b.stop();
+      expect(b.isFinished, isTrue);
+      expect(
+        [for (final item in b.items) item.outcome],
+        [RepairOutcome.healthy, RepairOutcome.notTried, RepairOutcome.notTried],
+      );
+      expect(b.items.last.detail, '已結束');
+    });
+  });
+
+  test('a source the AI fixes under a new address is saved with that address '
+      'the moment it gets its result', () async {
+    final seen = <List<String>>[];
+    final b = batch(
+      [_source('https://bad.example')],
+      replies: (_) => [
+        jsonEncode({
+          'action': 'submit',
+          'patch': {'bookSourceUrl': 'https://new.example'},
+        }),
+      ],
+    );
+    b.addListener(() {
+      final keys = b.done.keys.toList();
+      if (keys.isNotEmpty &&
+          (seen.isEmpty || seen.last.length != keys.length)) {
+        seen.add(keys);
+      }
+    });
+    await b.start();
+    expect(b.items.single.outcome, RepairOutcome.aiFixed);
+    expect(seen.first, ['https://new.example'], reason: '定案那一刻存的進度');
+  });
+
+  test('a finished repair is handed to the next batch, and a source reused '
+      'from a fresh check is counted once', () async {
+    late SourceRepairBatch b;
+    b = batch(
+      [_source('https://bad1.example'), _source('https://bad2.example')],
+      aiConcurrency: 1,
+      beforeAsk: () async {
+        if (b.items.first.isFinished) b.pause();
+      },
+    );
+    await b.start();
+    expect(b.isPaused, isTrue);
+    expect(b.items.first.outcome, RepairOutcome.aiFixed);
+    final taken = b.takeFinishedSessions();
+    expect(taken.keys, ['https://bad1.example']);
+
+    final next = batch([
+      _source('https://bad1.example'),
+      _source('https://bad2.example'),
+    ], done: b.done);
+    expect(next.adoptSessions(taken), isEmpty);
+    expect(next.items.first.session, same(taken.values.single));
+    b.dispose();
+    expect(
+      next.items.first.session!.job.outcome,
+      AiRepairOutcome.repaired,
+      reason: '上一批放掉時不跟著放掉',
+    );
+
+    final fresh = DateTime.now().millisecondsSinceEpoch;
+    final reused = batch(
+      [_source('https://bad1.example')..lastCheckTime = fresh],
+      done: const {},
+      reusedAlready: {'https://bad1.example'},
+    );
+    await reused.start();
+    expect(reused.reusedChecks, 1, reason: '暫停前已經算過的不再加');
   });
 }

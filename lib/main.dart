@@ -39,10 +39,14 @@ import 'core/engine/source_isolate/source_isolate.dart';
 import 'core/network/cloudflare.dart';
 import 'core/services/webview_cloudflare_solver.dart';
 import 'core/services/app_log_service.dart';
+import 'core/services/background_work/background_work.dart';
 import 'core/services/book_storage_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
+import 'features/search/ai_find/ai_find_run.dart';
 import 'features/search/search_provider.dart';
+import 'features/source_manager/ai_repair/repair_runs.dart';
+import 'features/source_manager/source_check_job.dart';
 import 'shared/widgets/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
 
@@ -280,6 +284,11 @@ void _runPostLaunchTasks() {
   unawaited(PunctuationInk.onLaunchSettled());
   // 進搜尋頁的第一幀就畫得出搜尋紀錄。
   unawaited(SearchProvider.prefetchHistory());
+  // 上次被收掉的背景工作：收掉留下的通知，暫停的工作讀回來（ADR 0058）。
+  BackgroundWork.instance.clearLeftover();
+  unawaited(restorePausedAiFind());
+  unawaited(PausedSourceCheck.instance.restore());
+  unawaited(restorePausedRepair());
 }
 
 /// 用上次存下的手機瀏覽器標識，之後讀到新的就存起來（[WebViewUserAgent]）。

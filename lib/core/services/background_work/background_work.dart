@@ -6,6 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/app_permission_service.dart';
 
+/// 按了暫停、還沒停好時的通知內文與頁面上那一列。
+const String backgroundWorkPausing = '正在暫停…';
+
+/// 按了結束、還沒停好時的通知內文與頁面上那一列。
+const String backgroundWorkEnding = '正在結束…';
+
 /// 通知欄上一件背景工作的樣子：標題是工作，內文是做到哪裡；[progress]
 /// 是整件的進度（0 到 1），null 是不畫進度條（ADR 0058）。
 @immutable
@@ -14,11 +20,35 @@ class BackgroundWorkStatus {
     required this.title,
     required this.text,
     this.progress,
+    this.pausable = false,
+    this.settling = false,
   });
+
+  /// 做到一半按了暫停或結束時的樣子：內文寫正在暫停或結束，不放按鈕。
+  const BackgroundWorkStatus.settling(
+    this.title, {
+    required bool pausing,
+    this.progress,
+  }) : text = pausing ? backgroundWorkPausing : backgroundWorkEnding,
+       pausable = false,
+       settling = true;
 
   final String title;
   final String text;
   final double? progress;
+
+  /// 通知放「暫停」：這件工作暫停後能接著做。
+  final bool pausable;
+
+  /// 正在暫停或結束：通知不放按鈕。
+  final bool settling;
+
+  /// 通知上的按鈕，照順序（`BackgroundWorkService.kt` 認這幾個名字）。
+  List<String> get actions => settling
+      ? const []
+      : pausable
+      ? const ['pause', 'end']
+      : const ['end'];
 
   /// 交給系統的進度：千分之幾。進度條畫不出比這更細的差別，同一個千分位
   /// 不重送。
@@ -31,17 +61,23 @@ class BackgroundWorkStatus {
       other is BackgroundWorkStatus &&
       other.title == title &&
       other.text == text &&
-      other.permille == permille;
+      other.permille == permille &&
+      other.pausable == pausable &&
+      other.settling == settling;
 
   @override
-  int get hashCode => Object.hash(title, text, permille);
+  int get hashCode => Object.hash(title, text, permille, pausable, settling);
 }
 
 /// 一件使用者按了才開始的長工作：修復異常書源、單一書源的 AI 修復、
-/// 校驗書源（ADR 0058）。
+/// 校驗書源、AI 找書（ADR 0058）。
 abstract interface class BackgroundJob {
-  /// 通知上按了「停止」、從最近使用滑掉夜讀，或系統的時間到了。
-  void stopFromSystem();
+  /// 通知上按了「暫停」、從最近使用滑掉夜讀，或系統的時間到了：停下、做到
+  /// 的留著，之後按繼續接著做。
+  void pauseFromSystem();
+
+  /// 通知上按了「結束」：工作就此結束，結果留著。
+  void endFromSystem();
 
   /// 點了通知：回到這件工作的頁面。
   void openFromNotification();
@@ -55,7 +91,7 @@ abstract interface class BackgroundWorkPlatform {
   /// 收掉通知、停掉前景服務。
   Future<void> hide();
 
-  /// 系統那邊按了停止（`stop`）或點了通知（`open`）。
+  /// 系統那邊按了暫停（`pause`）、結束（`end`）或點了通知（`open`）。
   set onAction(void Function(String action)? handler);
 }
 
@@ -97,8 +133,18 @@ class BackgroundWork extends ChangeNotifier {
   /// 系統拒絕或送不過去的錯誤：連續相同的只記一次。
   String? _lastError;
 
-  /// 有一件在跑：另外兩件的入口是灰的。
+  /// 有一件在跑：其他幾件的開始與繼續是灰的。
   bool get isBusy => _job != null;
+
+  /// 開 App 時收掉上次留下的通知與前景服務：程序還在、Flutter 引擎卻重開過
+  /// 時（Activity 被收掉後播放套件拆了引擎），舊的通知沒有人會收（ADR 0058）。
+  /// 這時還沒有工作在跑才收。
+  void clearLeftover() {
+    if (_job != null) return;
+    _send(() async {
+      if (_job == null && _sent == null) await _platform!.hide();
+    });
+  }
 
   BackgroundJob? get current => _job;
 
@@ -169,8 +215,10 @@ class BackgroundWork extends ChangeNotifier {
     final job = _job;
     if (job == null) return;
     switch (action) {
-      case 'stop':
-        job.stopFromSystem();
+      case 'pause':
+        job.pauseFromSystem();
+      case 'end':
+        job.endFromSystem();
       case 'open':
         job.openFromNotification();
     }
@@ -195,6 +243,7 @@ class _MethodChannelPlatform implements BackgroundWorkPlatform {
         'title': status.title,
         'text': status.text,
         'progress': status.permille ?? -1,
+        'actions': status.actions,
       }) ??
       false;
 

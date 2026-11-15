@@ -5,7 +5,7 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 
 /// AI 找書的工具實際去拿的東西（ADR 0060）：搜尋、詳情、正文、發現頁與書架。
 /// 正式的實作照搜尋頁、書籍詳情與閱讀器同一套引擎（`AppAiFindLibrary`），
-/// 測試換成記憶體裡的書。每個方法都收 [CancelToken]：按停止時正在跑的
+/// 測試換成記憶體裡的書。每個方法都收 [CancelToken]：按暫停或結束時正在跑的
 /// 搜尋或抓取要跟著停（`agent_loop` 在工具回來後才看取消）。
 abstract interface class AiFindLibrary {
   /// 照搜尋頁的搜尋範圍（開始找書時的那一份）搜 [keyword]，只回 [kind]

@@ -9,6 +9,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
 import '../source_debug_page.dart';
+import 'source_check_status_bar.dart' show sourceCheckPausedText;
 import '../source_manager_provider.dart';
 
 class SourceManagerDialogs {
@@ -28,8 +29,8 @@ class SourceManagerDialogs {
             title: '校驗詳情',
             message: provider.checkService.config.summary,
             onAction: (value) {
-              if (value == 'cancel') {
-                provider.cancelSourceCheck();
+              if (value == 'end') {
+                provider.endSourceCheck();
               } else if (value == 'copy') {
                 _copyCheckDiagnostics(context, provider.checkService);
               } else {
@@ -43,8 +44,10 @@ class SourceManagerDialogs {
                 Text(
                   provider.checkService.isChecking
                       ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
+                      : provider.pausedCheck.plan != null
+                      ? sourceCheckPausedText(provider.pausedCheck.plan!)
                       : provider.checkService.lastReport.stopped
-                      ? '已停止'
+                      ? '已結束'
                       : '已完成',
                   style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
                 ),
@@ -98,10 +101,11 @@ class SourceManagerDialogs {
               ],
             ),
             actions: [
-              if (provider.checkService.isChecking)
+              if (provider.checkService.isChecking ||
+                  provider.pausedCheck.isPaused)
                 const AppAlertAction(
-                  label: '停止校驗',
-                  value: 'cancel',
+                  label: '結束校驗',
+                  value: 'end',
                   destructive: true,
                 )
               else if (provider.checkService.lastReport.affectedCount > 0)
