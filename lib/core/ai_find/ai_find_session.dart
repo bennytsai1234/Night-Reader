@@ -219,11 +219,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   final Map<String, Future<_Search>> _searches = {};
   List<AiFindExploreSource>? _exploreSources;
 
-  /// 同時跑幾個搜尋：一個搜尋就同時問 thread_count 個書源（預設 8）。
-  /// 2026-11-15 量的：三個一起搜共 132 秒、一個接一個 252 秒，出錯或逾時的書源
-  /// 從 4.5% 變 7.7%；AI 一則回覆有時叫五六個，全部一起送更多書源逾時，其餘
-  /// 排隊。
-  final Pool _searchSlots = Pool(3);
+  /// 同時跑幾個搜尋：一個搜尋就同時問 thread_count 個書源（預設 8），每個搜尋
+  /// 50 秒到就停（書庫的 `aiFindSearchLimit`）。一起送的越多，書源互搶書源 isolate、
+  /// 50 秒內回來的越少（2026-11-15 量的：單獨搜 396 個書源有 91 個沒回來，兩個
+  /// 一起搜 192 到 218 個）。使用者 2026-11-15 選兩個，其餘排隊。
+  final Pool _searchSlots = Pool(2);
   final Map<String, List<String>> _categories = {};
   AiRepairStep? _round;
   int _logged = 0;
