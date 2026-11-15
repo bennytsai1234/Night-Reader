@@ -45,7 +45,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 只改說明文件（`.md`、`docs/`）時，`git pull --ff-only` 後直接在 `beta` 上改、推，不開分支、不審。
 - 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，同一段工作的改動與跟著改的文件都放同一條分支、一個 PR。發正式版的升版號提交例外，照 `docs/agents/release.md` 直接推上 `beta`。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`），本文用繁體中文。
-- **收尾**時讀 `docs/agents/finish.md`；使用者說**合併**時讀 `docs/agents/merge.md`；使用者說要**發正式版**時讀 `docs/agents/release.md`。
+- 問使用者要不要**收尾**之前讀 `docs/agents/finish.md`，問題裡列的步驟照它；使用者說**合併**時讀 `docs/agents/merge.md`；使用者說要**發正式版**時讀 `docs/agents/release.md`。
 - 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `docs/design/`；本檔只放每件工作都用得到的規則。
 
 ## 環境
