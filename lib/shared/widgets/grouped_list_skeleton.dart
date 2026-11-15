@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
@@ -232,7 +233,7 @@ class GroupedItemShape {
       ),
       SizedBox(:final height?, child: null) => GroupedItemShape(height),
       DragOverflowText(
-        child: Text(
+        child: UiText(
           :final data?,
           :final style,
           :final maxLines,
@@ -249,7 +250,7 @@ class GroupedItemShape {
           fill: true,
         ),
       // 一般的字放不下時照 [Text] 的截斷畫。
-      Text(:final data?, :final style, :final maxLines, :final textAlign) ||
+      UiText(:final data?, :final style, :final maxLines, :final textAlign) ||
       SelectableText(
         :final data?,
         :final style,

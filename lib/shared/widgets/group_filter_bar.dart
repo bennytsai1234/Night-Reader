@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
@@ -236,7 +237,7 @@ class _GroupPickerSheetState<T> extends State<_GroupPickerSheet<T>> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(
-              child: Text(
+              child: UiText(
                 '找不到符合的分組',
                 style: AppTextStyles.bodySm.copyWith(
                   color: AppChrome.of(context).sectionText,

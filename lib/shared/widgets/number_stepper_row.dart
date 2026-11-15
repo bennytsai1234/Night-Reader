@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
@@ -288,7 +289,7 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
           children: [
             Expanded(
               child: ExcludeSemantics(
-                child: Text(
+                child: UiText(
                   widget.label,
                   style: NumberStepperRow._labelStyle.copyWith(
                     color: colorScheme.onSurface,
@@ -461,7 +462,7 @@ class _ValueButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: _kValuePadding),
               child: Center(
                 widthFactor: 1,
-                child: Text(
+                child: UiText(
                   text,
                   style: NumberStepperRow._valueStyle.copyWith(
                     color: colorScheme.onSurface,

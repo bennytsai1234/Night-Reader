@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/scheduler.dart';
 
@@ -118,7 +119,7 @@ class GroupedSection extends StatelessWidget {
                   0,
                 ),
               ),
-              child: Text(
+              child: UiText(
                 footer,
                 style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
               ),
@@ -230,7 +231,7 @@ class GroupedSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       header: true,
-      child: Text(text, style: textStyle(context)),
+      child: UiText(text, style: textStyle(context)),
     );
   }
 }
@@ -822,7 +823,7 @@ class GroupedRow extends StatelessWidget
                   titleWidget ??
                       _withMark(
                         DragOverflowText(
-                          child: Text(
+                          child: UiText(
                             title,
                             maxLines: maxTitleLines,
                             style: _textStyle.copyWith(
@@ -837,7 +838,7 @@ class GroupedRow extends StatelessWidget
                   if (hasSubtitle) ...[
                     const SizedBox(height: _subtitleGap),
                     DragOverflowText(
-                      child: Text(
+                      child: UiText(
                         subtitle!,
                         maxLines: maxSubtitleLines,
                         style: _subtitleStyle.copyWith(
@@ -854,7 +855,7 @@ class GroupedRow extends StatelessWidget
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: _valueMaxWidth(context)),
                 child: DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     value!,
                     maxLines: 1,
                     textAlign: TextAlign.end,
@@ -994,7 +995,7 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
       return _glyphShape(size ?? IconTheme.of(context).size ?? 24);
     case PasswordRevealButton():
       return _glyphShape(PasswordRevealButton.iconSize);
-    case Text(:final data?, :final style, :final maxLines):
+    case UiText(:final data?, :final style, :final maxLines):
       return GroupedItemShape.text(
         context,
         data,
@@ -1005,7 +1006,7 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
     // 限寬的字（右側的狀態文字）照最寬的寬度排。
     case ConstrainedBox(
       :final constraints,
-      child: Text(:final data?, :final style, :final maxLines),
+      child: UiText(:final data?, :final style, :final maxLines),
     ):
       return GroupedItemShape.text(
         context,
@@ -1534,7 +1535,7 @@ class GroupedTextFieldRow extends StatelessWidget
                     padding: const EdgeInsets.only(top: AppSpacing.md),
                     child: SizedBox(
                       width: labelWidth,
-                      child: Text(
+                      child: UiText(
                         label!,
                         style: _labelStyle.copyWith(color: scheme.onSurface),
                       ),
