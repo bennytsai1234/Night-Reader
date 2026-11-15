@@ -62,8 +62,9 @@ abstract final class UiLanguageText {
     if (cached != null) return _simplified[text] = cached;
     final converted = ChineseUtils.t2s(text);
     _simplified[text] = converted;
-    if (_simplified.length > _maxEntries)
+    if (_simplified.length > _maxEntries) {
       _simplified.remove(_simplified.keys.first);
+    }
     return converted;
   }
 
