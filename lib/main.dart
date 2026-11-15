@@ -398,9 +398,12 @@ class ReaderApp extends StatelessWidget {
               child: ThemeRevealScope(
                 child: StatusBarStableInset(
                   child: BackdropGroup(
-                    child: ChineseDisplayScope(
+                    child: UiLanguageScope(
+                      locale: locale,
+                      child: ChineseDisplayScope(
                       child: HiddenWebViews(
                         child: child ?? const SizedBox.shrink(),
+                      ),
                       ),
                     ),
                   ),

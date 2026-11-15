@@ -87,6 +87,23 @@ class AppearanceSettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
+            header: '介面語言',
+            children: [
+              for (final (choice, label) in const [
+                ('system', '跟隨系統'),
+                ('zh_TW', '繁體中文'),
+                ('zh_CN', '简体中文'),
+              ])
+                GroupedCheckRow(
+                  title: label,
+                  selected: choice == 'system'
+                      ? appSettings.locale == null
+                      : appSettings.locale == appSettings.parseLocale(choice),
+                  onTap: () => appSettings.setUiLanguage(choice),
+                ),
+            ],
+          ),
+          GroupedSection(
             header: '玻璃效果',
             children: [
               GroupedContent(

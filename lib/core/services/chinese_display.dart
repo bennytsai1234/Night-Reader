@@ -49,7 +49,7 @@ abstract final class ChineseDisplay {
       _dictionaryFailed = true;
     }
     // 不轉換時已顯示的文字不受影響，不必整個 App 重建。
-    if (mode.value != 0) mode.refresh();
+    mode.refresh();
   }
 
   /// 目前的模式下，書籍資訊能不能照轉換後的樣子顯示：不轉換、字典已載入，
