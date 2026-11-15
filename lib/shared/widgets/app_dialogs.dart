@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
@@ -221,7 +222,7 @@ class AppAlert<T> extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: DragOverflowText(
-                child: Text(
+                child: UiText(
                   action.label,
                   maxLines: 1,
                   style: AppTextStyles.bodyMd.copyWith(
@@ -309,7 +310,7 @@ class AppAlert<T> extends StatelessWidget {
                           if (title != null)
                             Semantics(
                               header: true,
-                              child: Text(
+                              child: UiText(
                                 title!,
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.titleMd.copyWith(
@@ -320,7 +321,7 @@ class AppAlert<T> extends StatelessWidget {
                           if (message != null) ...[
                             if (title != null)
                               const SizedBox(height: AppSpacing.sm),
-                            Text(
+                            UiText(
                               message!,
                               textAlign: TextAlign.center,
                               style: AppTextStyles.bodySm.copyWith(
@@ -454,7 +455,7 @@ class AlertCheckRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      UiText(
                         title,
                         style: AppTextStyles.bodyBase.copyWith(
                           height: 1.3,
@@ -462,7 +463,7 @@ class AlertCheckRow extends StatelessWidget {
                         ),
                       ),
                       if (subtitle != null)
-                        Text(
+                        UiText(
                           subtitle!,
                           style: AppTextStyles.bodySm.copyWith(
                             height: 1.3,
@@ -595,7 +596,7 @@ class _AppActionSheet<T> extends StatelessWidget {
                         child: Column(
                           children: [
                             if (title != null)
-                              Text(
+                              UiText(
                                 title!,
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.uiSm.copyWith(
@@ -606,7 +607,7 @@ class _AppActionSheet<T> extends StatelessWidget {
                             if (message != null) ...[
                               if (title != null)
                                 const SizedBox(height: AppSpacing.xs),
-                              Text(
+                              UiText(
                                 message!,
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.bodySm.copyWith(
@@ -675,7 +676,7 @@ class _AppActionSheet<T> extends StatelessWidget {
                 child: SizedBox(
                   height: AppGrouped.rowMinHeight + AppSpacing.md,
                   child: Center(
-                    child: Text(
+                    child: UiText(
                       cancelLabel,
                       style: AppTextStyles.bodyMd.copyWith(
                         color: scheme.primary,

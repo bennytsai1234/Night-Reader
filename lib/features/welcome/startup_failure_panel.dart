@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/features/about/crash_log_page.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -42,7 +43,7 @@ class StartupFailurePanel extends StatelessWidget {
                   Icon(Icons.error_outline_rounded, color: scheme.error),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
-                    child: Text(
+                    child: UiText(
                       title,
                       style: AppTextStyles.titleMd.copyWith(
                         color: scheme.onSurface,
@@ -52,7 +53,7 @@ class StartupFailurePanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
+              UiText(
                 message,
                 style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
               ),
@@ -102,6 +103,6 @@ class StartupFailurePanel extends StatelessWidget {
     await Clipboard.setData(ClipboardData(text: details));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('已複製錯誤詳情')));
+        .showSnackBar(const SnackBar(content: UiText('已複製錯誤詳情')));
   }
 }
