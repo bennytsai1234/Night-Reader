@@ -650,6 +650,7 @@ class GlassCapsule extends StatelessWidget {
     this.maxLines = 1,
     this.tooltip,
     this.count,
+    this.translate = true,
   });
 
   static const double height = 34.0;
@@ -682,6 +683,10 @@ class GlassCapsule extends StatelessWidget {
 
   /// 標籤後方的小字數量（例如分組內的書源數）。
   final int? count;
+
+  /// [label] 是分組名稱、發現分類這類書源的資料時給 false，不跟介面語言
+  /// 轉換（ADR 0066）。
+  final bool translate;
 
   @override
   Widget build(BuildContext context) {
@@ -721,6 +726,7 @@ class GlassCapsule extends StatelessWidget {
                 child: DragOverflowText(
                   child: UiText(
                     label,
+                    translate: translate,
                     maxLines: maxLines,
                     textAlign: TextAlign.center,
                     style: style,
@@ -870,7 +876,11 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.titleSheen,
     this.morph = false,
     this.readable = true,
+    this.translateTitle = true,
   });
+
+  /// [title] 是書名、發現分類這類資料時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translateTitle;
 
   /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕照
   /// [ReadableWidth.headerInsetOf] 往內收，[bottom] 跟著內容欄。書源除錯
@@ -974,12 +984,17 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   title!,
                   key: morph ? ValueKey(title) : null,
                   color: fg,
+                  translate: translateTitle,
                 ),
                 final sheen => ValueListenableBuilder<bool>(
                   key: morph ? ValueKey(title) : null,
                   valueListenable: sheen,
-                  builder: (_, active, _) =>
-                      NavHeaderTitle(title!, color: fg, sheen: active),
+                  builder: (_, active, _) => NavHeaderTitle(
+                    title!,
+                    color: fg,
+                    sheen: active,
+                    translate: translateTitle,
+                  ),
                 ),
               });
     if (morph && middle != null) {
@@ -1082,10 +1097,14 @@ class NavHeaderTitle extends StatelessWidget {
     this.visible = true,
     this.color,
     this.sheen = false,
+    this.translate = true,
   });
 
   final String title;
   final bool visible;
+
+  /// [title] 是書名這類資料時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translate;
 
   /// 預設為主要文字色。
   final Color? color;
@@ -1108,6 +1127,7 @@ class NavHeaderTitle extends StatelessWidget {
             child: DragOverflowText(
               child: UiText(
                 title,
+                translate: translate,
                 maxLines: 1,
                 style: AppTextStyles.titleSm.copyWith(
                   fontWeight: FontWeight.w600,

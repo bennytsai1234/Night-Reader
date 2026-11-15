@@ -505,6 +505,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
         // 書名一進頁就畫在大頁首裡，捲上去之後才由頁首標題接手。
         builder: (context, collapsed, _) => NavHeaderTitle(
           failed ? '書籍詳情' : context.zh(provider.book.name),
+          translate: failed,
           visible: collapsed || failed,
         ),
       ),
@@ -1194,11 +1195,13 @@ class _ChapterRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return GroupedRow(
       title: title,
+      translateTitle: false,
       titleWidget: Padding(
         padding: EdgeInsets.only(left: indented ? tocChapterIndent : 0),
         child: DragOverflowText(
           child: UiText(
             title,
+            translate: false,
             maxLines: 1,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.3,

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -23,6 +24,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
@@ -734,8 +736,10 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DragOverflowText(
+                        // 書名，照閱讀偏好的繁簡轉換（ADR 0066）。
                         child: UiText(
-                          title,
+                          context.zh(title),
+                          translate: false,
                           maxLines: 2,
                           style: _titleStyle.copyWith(color: scheme.onSurface),
                         ),
@@ -838,12 +842,13 @@ class _TaskControlButton extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final label = context.ui(tooltip);
     return Tooltip(
-      message: tooltip,
+      message: label,
       excludeFromSemantics: true,
       child: Semantics(
         button: true,
-        label: tooltip,
+        label: label,
         excludeSemantics: true,
         enabled: onPressed != null,
         child: PressScale(

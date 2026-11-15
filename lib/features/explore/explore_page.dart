@@ -31,6 +31,7 @@ import 'widgets/explore_skeletons.dart';
 import 'widgets/legado_explore_kind_flow.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
@@ -156,6 +157,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           ),
           for (final group in provider.groups)
             GlassMenuItem(
+              translate: false,
               value: group,
               label: '$group　${provider.groupCounts[group] ?? 0}',
               checked: provider.selectedGroup == group,
@@ -404,6 +406,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         final hasUrl = kind.url != null && kind.url!.isNotEmpty;
         return GlassCapsule(
           label: isError ? '分類載入失敗' : kind.title,
+          translate: isError,
           maxLines: 2,
           blur: false,
           tint: chrome.groupedBackground,
@@ -642,7 +645,7 @@ class _SourceRow extends StatelessWidget {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: scheme.primary,
-                  semanticsLabel: '正在載入分類',
+                  semanticsLabel: context.ui('正在載入分類'),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),

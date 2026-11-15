@@ -167,6 +167,7 @@ class SourceLoginButtons extends StatelessWidget
                           width: slot.width,
                           child: GlassCapsule(
                             label: buttons[slot.index].name.trim(),
+                            translate: false,
                             blur: false,
                             tint: chrome.groupedSurface,
                             selected: identical(buttons[slot.index], running),
@@ -281,6 +282,7 @@ class _SourceLoginFieldState extends State<SourceLoginField> {
         children: [
           UiText(
             widget.row.name,
+            translate: false,
             style: SourceLoginField._labelStyle.copyWith(
               color: chrome.sectionText,
             ),

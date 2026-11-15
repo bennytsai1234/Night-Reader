@@ -30,6 +30,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
 ///
@@ -906,7 +907,7 @@ class _InfoRow extends StatelessWidget {
                       Icons.auto_stories_outlined,
                       size: _infoIconSize(shell.infoFontSize),
                       color: infoColor,
-                      semanticLabel: '自動翻頁中',
+                      semanticLabel: context.ui('自動翻頁中'),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.xs),

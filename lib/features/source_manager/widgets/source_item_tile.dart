@@ -309,6 +309,7 @@ class _SourceRowContent extends StatelessWidget {
                       child: DragOverflowText(
                         child: UiText(
                           source.bookSourceName,
+                          translate: false,
                           style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
                             fontWeight: FontWeight.w500,
@@ -346,6 +347,7 @@ class _SourceRowContent extends StatelessWidget {
                 DragOverflowText(
                   child: UiText(
                     source.bookSourceUrl,
+                    translate: false,
                     style: AppTextStyles.bodySm.copyWith(
                       height: 1.3,
                       color: chrome.sectionText,
@@ -460,6 +462,7 @@ class _SourceRowContent extends StatelessWidget {
             ),
             child: UiText(
               tag,
+              translate: false,
               style: AppTextStyles.labelXs.copyWith(
                 height: 1.15,
                 color: chrome.sectionText,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -30,7 +31,7 @@ class BookDetailChangeSourceItem extends StatelessWidget {
     final kind = context.zh(searchBook.kind ?? '');
     final meta = [
       if (author.isNotEmpty) author,
-      StringUtils.displayWordCount(searchBook.wordCount, kind),
+      context.ui(StringUtils.displayWordCount(searchBook.wordCount, kind)),
       ...StringUtils.kindLabels(kind),
     ].where((value) => value.isNotEmpty).join(' · ');
     final secondaryStyle = AppTextStyles.bodySm.copyWith(
@@ -60,7 +61,7 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                       DragOverflowText(
                         child: UiText(
                           searchBook.originName ?? '未知來源',
-                          translate: false,
+                          translate: searchBook.originName == null,
                           maxLines: 1,
                           style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
@@ -74,6 +75,7 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                         DragOverflowText(
                           child: UiText(
                             meta,
+                            translate: false,
                             maxLines: 1,
                             style: secondaryStyle,
                           ),
@@ -82,7 +84,12 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                       const SizedBox(height: 2),
                       DragOverflowText(
                         child: UiText(
-                          '最新：${context.zh(searchBook.latestChapterTitle ?? '無最新章節資訊')}',
+                          latestChapterLine(
+                            context,
+                            searchBook.latestChapterTitle,
+                            fallback: '無最新章節資訊',
+                          ),
+                          translate: false,
                           maxLines: 1,
                           style: secondaryStyle,
                         ),

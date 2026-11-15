@@ -736,6 +736,7 @@ class _SearchViewState extends State<SearchView> {
                             index: index,
                             count: failures.length,
                             child: GroupedRow(
+                              translateTitle: false,
                               title: failure.source.bookSourceName,
                               subtitle: failure.message,
                               onTap: () => _showTextDialog(
@@ -855,6 +856,7 @@ class _SearchViewState extends State<SearchView> {
                                             source,
                                           ),
                                           child: GroupedRow(
+                                            translateTitle: false,
                                             title: source,
                                             showChevron: false,
                                             onTap: () =>

@@ -36,9 +36,12 @@ class TocVolumeRow extends StatelessWidget {
       expanded: collapsed == null ? null : !collapsed,
       child: GroupedRow(
         title: title,
+        translateTitle: false,
+        // 卷名是書的資料，照閱讀偏好的繁簡轉換（ADR 0066）。
         titleWidget: DragOverflowText(
           child: UiText(
             title,
+            translate: false,
             maxLines: 1,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.3,

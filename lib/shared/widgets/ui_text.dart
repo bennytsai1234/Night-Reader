@@ -48,11 +48,11 @@ class UiText extends Text {
 
   /// 拖曳溢位文字在量測前先拿到與畫面相同的文字。
   Text displayText(BuildContext context) {
-    // 字典初始化完成時通知重建；不依賴閱讀偏好目前的轉換方向。
-    ChineseDisplay.readyOf(context);
     if (!translate || !UiLanguageScope.isSimplified(context)) {
       return this;
     }
+    // 介面是簡體時，字典載入完成要重建一次（載入前轉換原樣返回）。
+    ChineseDisplay.readyOf(context);
     final dataValue = data;
     final convertedSpan = textSpan;
     final semantics = semanticsLabel == null

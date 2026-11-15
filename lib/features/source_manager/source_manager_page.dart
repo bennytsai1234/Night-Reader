@@ -47,6 +47,7 @@ import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
@@ -301,13 +302,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
       ),
       if (_isImporting)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
           child: ClipRRect(
             borderRadius: AppRadius.pillShape,
             child: LinearProgressIndicator(
               minHeight: 2,
-              semanticsLabel: '正在處理書源匯入',
+              semanticsLabel: context.ui('正在處理書源匯入'),
             ),
           ),
         ),

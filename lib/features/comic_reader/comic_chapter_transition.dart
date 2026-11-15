@@ -218,6 +218,7 @@ class ComicChapterTransition extends StatelessWidget {
       DragOverflowText(
         child: UiText(
           name,
+          translate: false,
           maxLines: _maxNameLines,
           style: _nameStyle.copyWith(color: foreground),
         ),

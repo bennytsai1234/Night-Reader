@@ -26,6 +26,8 @@ import 'licenses_page.dart';
 import 'privacy_pages.dart';
 import 'release_notes_page.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 /// 「自動更新」的三種：不自動檢查、自動檢查（有新版時問要不要下載）、自動
 /// 檢查並在 Wi-Fi 下直接下載。
 enum _AppUpdateMode {
@@ -458,7 +460,7 @@ class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
               width: _iconSize,
               height: _iconSize,
               fit: BoxFit.cover,
-              semanticLabel: '夜讀應用程式圖示',
+              semanticLabel: context.ui('夜讀應用程式圖示'),
             ),
           ),
           const SizedBox(height: _nameGap),

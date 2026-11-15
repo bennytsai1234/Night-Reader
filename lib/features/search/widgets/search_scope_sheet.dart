@@ -230,6 +230,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
           child: Semantics(
             checked: isSelected,
             child: GroupedRow(
+              translateTitle: false,
               title: group,
               showChevron: false,
               onTap: () {
@@ -309,6 +310,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
                       index: index,
                       count: count,
                       child: GroupedCheckRow(
+                        translate: false,
                         title: source.bookSourceName,
                         subtitle: source.bookSourceUrl,
                         selected:

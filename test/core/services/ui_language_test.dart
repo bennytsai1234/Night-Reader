@@ -53,10 +53,10 @@ void main() {
 
   testWidgets('資料文字可選擇不跟介面語言轉換', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: UiLanguageScope(
-          locale: Locale('zh', 'CN'),
-          child: Scaffold(body: UiText('書架', translate: false)),
+          locale: const Locale('zh', 'CN'),
+          child: const Scaffold(body: UiText('書架', translate: false)),
         ),
       ),
     );

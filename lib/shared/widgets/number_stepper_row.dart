@@ -12,6 +12,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/press_ink.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
 ///
@@ -354,7 +355,7 @@ class _StepButton extends StatelessWidget {
       // 不使用 Tooltip：Tooltip 自帶長按手勢，會與連續調整競爭。
       child: Semantics(
         container: true,
-        label: tooltip,
+        label: UiLanguageText.convert(context, tooltip),
         button: true,
         enabled: enabled,
         child: SizedBox.square(

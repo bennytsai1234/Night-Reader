@@ -13,6 +13,7 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../../book_detail/book_detail_page.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
@@ -133,7 +134,11 @@ class ExploreBookItem extends StatelessWidget {
                       const SizedBox(height: 2),
                       DragOverflowText(
                         child: UiText(
-                          '最新：${context.zh(book.latestChapterTitle!)}',
+                          latestChapterLine(
+                            context,
+                            book.latestChapterTitle,
+                            fallback: '',
+                          ),
                           translate: false,
                           style: metaStyle,
                           maxLines: 1,
@@ -165,7 +170,9 @@ class ExploreBookItem extends StatelessWidget {
   /// 真實清單與載入骨架共用的作者、字數、分類文字。
   static String metaOf(BuildContext context, SearchBook book) {
     final kind = context.zh(book.kind ?? '');
-    final wordCount = StringUtils.displayWordCount(book.wordCount, kind);
+    final wordCount = context.ui(
+      StringUtils.displayWordCount(book.wordCount, kind),
+    );
     return [
       if (book.author != null && book.author!.isNotEmpty)
         context.zh(book.author!),

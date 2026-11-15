@@ -274,6 +274,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
   /// 一本書一列：顯示時做繁簡轉換，和書架一致；找書仍用原文。同名的
   /// 漫畫、有聲書書名後面帶記號（ADR 0053）。
   Widget _row(BuildContext context, _BookTime record) => GroupedRow(
+    translateTitle: false,
     title: context.zh(BookSourceKind.splitRecordName(record.bookName).name),
     titleMark: _kindMark(record.bookName),
     value: _formatDuration(record.readTime),

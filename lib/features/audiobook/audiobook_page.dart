@@ -207,6 +207,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
             extendBodyBehindAppBar: true,
             backgroundColor: chrome.groupedBackground,
             appBar: GlassNavHeader(
+              translateTitle: false,
               title: book.name,
               actions: [_buildMoreButton(context)],
             ),

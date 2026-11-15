@@ -281,6 +281,7 @@ class _GroupRow extends StatelessWidget
   bool get hasLeading => true;
 
   GroupedRow _row(BuildContext context) => GroupedRow(
+    translateTitle: false,
     title: group,
     leading: const GroupedIconTile(Icons.folder_rounded, tint: AppTint.gold),
     enabled: enabled,
@@ -387,6 +388,7 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
                 index: index,
                 count: sources.length,
                 child: GroupedCheckRow(
+                  translate: false,
                   title: source.bookSourceName,
                   subtitle: url,
                   selected: _selected.contains(url),

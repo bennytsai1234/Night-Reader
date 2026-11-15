@@ -33,6 +33,7 @@ class BookInfoDetails extends StatelessWidget {
         GroupedRow(
           title: '來源',
           value: book.originName,
+          translateValue: false,
           trailing: book.isLocal ? null : SourceStatusChip(provider: provider),
           showChevron: !book.isLocal,
           onTap: book.isLocal ? null : onShowSourceOptions,

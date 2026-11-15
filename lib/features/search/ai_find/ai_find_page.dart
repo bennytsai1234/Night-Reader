@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
@@ -417,6 +418,7 @@ class _AiFindPageState extends State<AiFindPage> {
       footer: _sentTo,
       children: [
         GroupedRow(
+          translateTitle: false,
           title: context.zh(session.description),
           subtitle: '深度：${session.depth.label}',
           showChevron: false,
@@ -496,6 +498,7 @@ class _AiFindPageState extends State<AiFindPage> {
       GroupedSection(
         children: [
           GroupedRow(
+            translateTitle: false,
             title: context.zh(record.description),
             subtitle:
                 '深度：${depth.label} · ${record.rounds} 輪 · '
@@ -534,7 +537,11 @@ class _AiFindPageState extends State<AiFindPage> {
             header: 'AI 的說明',
             children: [
               GroupedContent(
-                child: UiText(context.zh(record.summary), style: bodyStyle),
+                child: UiText(
+                  context.zh(record.summary),
+                  translate: false,
+                  style: bodyStyle,
+                ),
               ),
             ],
           ),
@@ -612,6 +619,7 @@ class _AiFindPickRow extends StatelessWidget {
                 children: [
                   UiText(
                     context.zh(book.name),
+                    translate: false,
                     style: AppTextStyles.bodyBase.copyWith(
                       height: 1.3,
                       color: scheme.onSurface,
@@ -624,12 +632,15 @@ class _AiFindPickRow extends StatelessWidget {
                       author: context.zh(book.author ?? ''),
                       kind: context.zh(book.kind ?? ''),
                       wordCount: book.wordCount,
+                      ui: context.ui,
                     ),
+                    translate: false,
                     style: secondary,
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   UiText(
                     context.zh(pick.reason),
+                    translate: false,
                     style: AppTextStyles.bodySm.copyWith(
                       height: 1.45,
                       color: scheme.onSurface,

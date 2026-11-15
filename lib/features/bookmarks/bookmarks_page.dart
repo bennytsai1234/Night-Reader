@@ -348,6 +348,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
         children: [
           for (final group in _groups(_items, _bookmarkEntry))
             GroupedSection(
+              translateHeader: false,
               header: context.zh(
                 BookSourceKind.splitRecordName(group.first.bookName).name,
               ),
@@ -365,8 +366,10 @@ class _BookmarksPageState extends State<BookmarksPage> {
                       ),
                     ],
                     child: GroupedRow(
+                      translateTitle: false,
                       title: context.zh(bookmark.excerpt),
                       maxTitleLines: 2,
+                      translateSubtitle: false,
                       subtitle: context.zh(bookmark.chapterTitle),
                       maxSubtitleLines: 1,
                       showChevron: false,
@@ -398,6 +401,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
         children: [
           for (final group in _groups(_highlights, _highlightEntry))
             GroupedSection(
+              translateHeader: false,
               header: context.zh(
                 BookSourceKind.splitRecordName(group.first.bookName).name,
               ),
@@ -416,10 +420,12 @@ class _BookmarksPageState extends State<BookmarksPage> {
                     ],
                     child: GroupedRow(
                       leading: HighlightColorBar(color: highlight.color),
+                      translateTitle: false,
                       title: context.zh(highlight.quote),
                       maxTitleLines: 3,
                       // 章名一行，有備忘時接在下面（最多兩行）。備忘是
                       // 自己寫的，不做繁簡轉換。
+                      translateSubtitle: false,
                       subtitle: [
                         context.zh(highlight.chapterTitle),
                         if (highlight.note.isNotEmpty) highlight.note,

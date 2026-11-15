@@ -209,8 +209,10 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
                       widthFactor: 1,
                       // 泡泡只在按住捲軸時出現、不接觸控，拖不動：章名放不下
                       // 照舊加「…」（docs/design/components.md「過長文字」）。
+                      // 章名是書的資料，照閱讀偏好的繁簡轉換（ADR 0066）。
                       child: UiText(
                         widget.labelFor(_dragIndex),
+                        translate: false,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.uiMd.copyWith(

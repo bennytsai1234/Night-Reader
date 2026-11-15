@@ -390,6 +390,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                       DragOverflowText(
                         child: UiText(
                           _name,
+                          translate: false,
                           maxLines: 1,
                           style: _nameStyle.copyWith(color: scheme.onSurface),
                         ),
@@ -398,6 +399,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                       DragOverflowText(
                         child: UiText(
                           _pattern,
+                          translate: false,
                           maxLines: 2,
                           style: _patternStyle.copyWith(
                             color: chrome.sectionText,

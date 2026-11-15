@@ -96,6 +96,7 @@ class SearchHistoryView extends StatelessWidget {
             children: [
               for (final keyword in provider.historyKeywords)
                 GroupedRow(
+                  translateTitle: false,
                   title: keyword.word,
                   leading: Icon(
                     Icons.history_rounded,

@@ -36,9 +36,13 @@ class GroupedSection extends StatelessWidget {
     this.separatorIndent,
     this.margin,
     this.topGap = AppGrouped.sectionGap,
+    this.translateHeader = true,
   });
 
   final String? header;
+
+  /// 組標題是書名這類資料時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translateHeader;
 
   /// 組標題右側的動作（例如「全部清除」）。
   final Widget? headerTrailing;
@@ -91,7 +95,12 @@ class GroupedSection extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Expanded(child: GroupedSectionHeader(header ?? '')),
+                  Expanded(
+                    child: GroupedSectionHeader(
+                      header ?? '',
+                      translate: translateHeader,
+                    ),
+                  ),
                   ?headerTrailing,
                 ],
               ),
@@ -217,9 +226,12 @@ bool groupedRowHasLeading(Widget widget) => switch (widget) {
 
 /// 組標題文字；也可單獨用在非卡片內容（例如格狀選項）上方。
 class GroupedSectionHeader extends StatelessWidget {
-  const GroupedSectionHeader(this.text, {super.key});
+  const GroupedSectionHeader(this.text, {super.key, this.translate = true});
 
   final String text;
+
+  /// 組標題是書名這類資料時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translate;
 
   /// 組標題的字樣；骨架照同一份字樣量組標題的高度。
   static TextStyle textStyle(BuildContext context) =>
@@ -232,7 +244,7 @@ class GroupedSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       header: true,
-      child: UiText(text, style: textStyle(context)),
+      child: UiText(text, translate: translate, style: textStyle(context)),
     );
   }
 }
@@ -630,9 +642,18 @@ class GroupedRow extends StatelessWidget
     this.enabled = true,
     this.maxSubtitleLines = 2,
     this.maxTitleLines,
+    this.translateTitle = true,
+    this.translateSubtitle = true,
+    this.translateValue = true,
   });
 
   final String title;
+
+  /// 標題、副標、右側數值是書或使用者的資料（書名、章名、書源名稱、自己寫的
+  /// 字）時給 false：不跟介面語言轉換，書的資料照閱讀偏好的繁簡轉換（ADR 0066）。
+  final bool translateTitle;
+  final bool translateSubtitle;
+  final bool translateValue;
 
   /// 覆寫標題（例如帶徽章）；[title] 仍作為語意標籤。
   final Widget? titleWidget;
@@ -826,6 +847,7 @@ class GroupedRow extends StatelessWidget
                         DragOverflowText(
                           child: UiText(
                             title,
+                            translate: translateTitle,
                             maxLines: maxTitleLines,
                             style: _textStyle.copyWith(
                               color: titleColor,
@@ -841,6 +863,7 @@ class GroupedRow extends StatelessWidget
                     DragOverflowText(
                       child: UiText(
                         subtitle!,
+                        translate: translateSubtitle,
                         maxLines: maxSubtitleLines,
                         style: _subtitleStyle.copyWith(
                           color: chrome.sectionText,
@@ -858,6 +881,7 @@ class GroupedRow extends StatelessWidget
                 child: DragOverflowText(
                   child: UiText(
                     value!,
+                    translate: translateValue,
                     maxLines: 1,
                     textAlign: TextAlign.end,
                     style: _textStyle.copyWith(color: chrome.sectionText),
@@ -1107,7 +1131,7 @@ class PasswordRevealButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IconButton(
-    tooltip: revealed ? '隱藏密碼' : '顯示密碼',
+    tooltip: UiLanguageText.convert(context, revealed ? '隱藏密碼' : '顯示密碼'),
     onPressed: onPressed,
     icon: Icon(
       revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
@@ -1187,11 +1211,16 @@ class GroupedCheckRow extends StatelessWidget
     required this.selected,
     required this.onTap,
     this.enabled = true,
+    this.translate = true,
   });
 
   final String title;
   final String? subtitle;
   final Widget? leading;
+
+  /// 標題與副標是書源名稱、網址這類資料時給 false，不跟介面語言轉換
+  /// （ADR 0066）。
+  final bool translate;
   final bool selected;
   final VoidCallback? onTap;
   final bool enabled;
@@ -1204,6 +1233,8 @@ class GroupedCheckRow extends StatelessWidget
   GroupedRow _row(BuildContext context) => GroupedRow(
     title: title,
     subtitle: subtitle,
+    translateTitle: translate,
+    translateSubtitle: translate,
     leading: leading,
     enabled: enabled,
     showChevron: false,

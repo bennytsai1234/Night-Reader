@@ -12,6 +12,7 @@ import '../theme/app_tokens.dart';
 import 'glass.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 情境選單的一個項目。
 sealed class GlassMenuEntry<T> {
@@ -29,10 +30,15 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     this.checked,
     this.enabled = true,
     this.submenu = false,
+    this.translate = true,
   }) : assert(!submenu || (icon == null && swatch == null));
 
   final T value;
   final String label;
+
+  /// [label]、[subtitle] 是分組名稱這類資料時給 false，不跟介面語言轉換
+  /// （ADR 0066）。
+  final bool translate;
 
   /// Telegram 把圖示放在右側。
   final IconData? icon;
@@ -157,7 +163,7 @@ class GlassMenuButton<T> extends StatelessWidget {
           return Semantics(
             button: true,
             enabled: enabled,
-            label: tooltip,
+            label: UiLanguageText.convertNullable(context, tooltip),
             child: PressScale(
               onTap: onTap,
               // 停用透明度同 [GlassIconButton]。
@@ -519,6 +525,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                                 DragOverflowText(
                                   child: UiText(
                                     entry.label,
+                                    translate: entry.translate,
                                     maxLines: 2,
                                     style: AppTextStyles.bodyBase.copyWith(
                                       height: 1.25,
@@ -530,6 +537,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                                   DragOverflowText(
                                     child: UiText(
                                       entry.subtitle!,
+                                      translate: entry.translate,
                                       maxLines: 1,
                                       style: AppTextStyles.bodySm.copyWith(
                                         height: 1.25,

@@ -87,8 +87,10 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
           GroupedSection(
             children: [
               GroupedRow(
+                translateTitle: false,
                 title: _highlight.quote,
                 maxTitleLines: 4,
+                translateSubtitle: false,
                 subtitle: _highlight.chapterTitle,
                 maxSubtitleLines: 1,
               ),

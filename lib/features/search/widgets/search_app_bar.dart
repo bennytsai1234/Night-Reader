@@ -146,6 +146,8 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
                   Flexible(
                     child: GlassCapsule(
                       label: scope.isAll ? '全部' : scopeDisplay,
+                      // 書源的分組或名稱照原文（ADR 0066）。
+                      translate: scope.isAll,
                       icon: Icons.layers_outlined,
                       trailingIcon: Icons.expand_more_rounded,
                       selected: !scope.isAll,
