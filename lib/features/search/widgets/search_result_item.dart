@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -171,7 +172,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
                     children: [
                       Expanded(
                         child: DragOverflowText(
-                          child: Text(
+                          child: UiText(
                             context.zh(book.name),
                             maxLines: 1,
                             style: AppTextStyles.bodyBase.copyWith(
@@ -191,11 +192,11 @@ class _SearchResultItemState extends State<SearchResultItem> {
                   ),
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: Text(metadata, maxLines: 1, style: secondaryStyle),
+                    child: UiText(metadata, maxLines: 1, style: secondaryStyle),
                   ),
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
                       maxLines: 1,
                       style: secondaryStyle,

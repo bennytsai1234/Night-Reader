@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
@@ -393,7 +394,7 @@ class _StyleCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 6, 7, 0),
       child: Align(
         alignment: Alignment.topLeft,
-        child: Text(
+        child: UiText(
           '永',
           // 書頁是縮圖，字跟著頁面大小，不隨系統字級放大。
           textScaler: TextScaler.noScaling,
@@ -446,7 +447,7 @@ class _StyleCard extends StatelessWidget {
             const SizedBox(height: labelGap),
             // 風格名稱固定一行；超出卡寬時可拖動查看，不折行或省略。
             DragOverflowText(
-              child: Text(
+              child: UiText(
                 style.label,
                 maxLines: 1,
                 softWrap: false,
