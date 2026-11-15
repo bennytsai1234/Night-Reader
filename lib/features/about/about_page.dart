@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/app_version.dart';
@@ -180,7 +181,7 @@ class _AboutPageState extends State<AboutPage> {
     if (mounted) setState(() => _clearingWebData = false);
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
+        content: UiText(
           failures.isEmpty
               ? '已清除網頁資料'
               : failureMessage('清除${failures.join('、')}', firstError!),
@@ -373,7 +374,7 @@ class _AboutPageState extends State<AboutPage> {
     showAppAlert<void>(
       context: context,
       title: '免責聲明',
-      content: Text(
+      content: UiText(
         '1. 本軟體僅作為開源閱讀工具使用，不提供任何書籍、書源或訂閱內容。\n\n'
         '2. 使用者應遵守當地法律法規，並對所導入的內容承擔全部法律責任。\n\n'
         '3. 對於使用本軟體產生的任何版權爭議、數據損失，開發者概不負責。',
@@ -461,7 +462,7 @@ class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
             ),
           ),
           const SizedBox(height: _nameGap),
-          Text(
+          UiText(
             '夜讀',
             style: _nameStyle.copyWith(
               color: Theme.of(context).colorScheme.onSurface,
@@ -470,7 +471,7 @@ class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
           const SizedBox(height: _versionGap),
           ValueListenableBuilder(
             valueListenable: package,
-            builder: (context, package, _) => Text(
+            builder: (context, package, _) => UiText(
               _AboutPageState._versionLabel(package.version),
               strutStyle: _versionStrut,
               style: _versionStyle.copyWith(
