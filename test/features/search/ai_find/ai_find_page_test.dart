@@ -350,6 +350,46 @@ void main() {
     expect(find.text('沒有結果：用完 36 輪還沒交出'), findsOneWidget);
   });
 
+  testWidgets('a recommended book opens its detail, back returns to the '
+      'results, and the next one opens the same way', (tester) async {
+    final opened = <String>[];
+    await show(
+      tester,
+      AiFindPage(
+        prefs: await prefs(),
+        record: AiFindRecord(
+          id: 'x',
+          description: '我喜歡海賊王',
+          depth: 'normal',
+          createdAt: 0,
+          outcome: AiFindOutcome.found,
+          picks: [
+            (book: _book('海贼王之剑豪之心'), reason: '穿越者的劍豪路'),
+            (book: _book('海贼王之大文豪'), reason: '穿越成報社老闆的兒子'),
+          ],
+        ),
+        bookPage: (book) {
+          final name = (book.book as SearchBook).name;
+          opened.add(name);
+          return Scaffold(body: Center(child: Text('詳情：$name')));
+        },
+      ),
+    );
+
+    await tester.tap(find.text('海贼王之剑豪之心'));
+    await tester.pumpAndSettle();
+    expect(find.text('詳情：海贼王之剑豪之心'), findsOneWidget);
+
+    Navigator.of(tester.element(find.text('詳情：海贼王之剑豪之心'))).pop();
+    await tester.pumpAndSettle();
+    expect(find.text('推薦 · 2'), findsOneWidget, reason: '回到結果頁');
+
+    await tester.tap(find.text('海贼王之大文豪'));
+    await tester.pumpAndSettle();
+    expect(find.text('詳情：海贼王之大文豪'), findsOneWidget);
+    expect(opened, ['海贼王之剑豪之心', '海贼王之大文豪']);
+  });
+
   test('the date of a past find drops the year only for this year', () {
     final now = DateTime(2026, 11, 15);
     expect(

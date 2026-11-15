@@ -72,8 +72,16 @@ class AiFindPage extends StatefulWidget {
     AiRepairSettings? settings,
     SharedPreferences? prefs,
     this.startRun,
+    this.bookPage = _bookDetail,
   }) : settings = settings ?? AiRepairSettings(prefs),
        _prefs = prefs;
+
+  /// 點推薦的一本推哪一頁：書籍詳情（照找到它的書源）。結果頁留在底下，
+  /// 返回就回到結果、再點下一本。測試換成假的詳情頁。
+  final Widget Function(AggregatedSearchBook book) bookPage;
+
+  static Widget _bookDetail(AggregatedSearchBook book) =>
+      BookDetailPage(searchBook: book);
 
   /// 在跑或跑完的那一次；開始前是 null。
   final AiFindRun? run;
@@ -466,7 +474,8 @@ class _AiFindPageState extends State<AiFindPage> {
           GroupedSection(
             header: '推薦 · ${record.picks.length}',
             children: [
-              for (final pick in record.picks) _AiFindPickRow(pick: pick),
+              for (final pick in record.picks)
+                _AiFindPickRow(pick: pick, bookPage: widget.bookPage),
             ],
           ),
         if (record.summary.trim().isNotEmpty)
@@ -497,9 +506,10 @@ class _AiFindPageState extends State<AiFindPage> {
 /// 推薦的一本：封面、書名、「作者 · 字數 · 分類」與推薦理由（不截斷）；點了
 /// 照找到它的書源進書籍詳情。
 class _AiFindPickRow extends StatelessWidget {
-  const _AiFindPickRow({required this.pick});
+  const _AiFindPickRow({required this.pick, required this.bookPage});
 
   final AiFindPick pick;
+  final Widget Function(AggregatedSearchBook book) bookPage;
 
   @override
   Widget build(BuildContext context) {
@@ -512,8 +522,8 @@ class _AiFindPickRow extends StatelessWidget {
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => BookDetailPage(
-            searchBook: AggregatedSearchBook(
+          builder: (_) => bookPage(
+            AggregatedSearchBook(
               book: book,
               sources: book.sourceLabels.isNotEmpty
                   ? book.sourceLabels
