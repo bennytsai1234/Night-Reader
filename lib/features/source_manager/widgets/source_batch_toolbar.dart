@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -98,7 +99,7 @@ class SelectActionBar extends StatelessWidget {
               ),
               Expanded(
                 child: DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     selectionLabel,
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -297,7 +298,7 @@ class _BarTextButton extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             child: Center(
               widthFactor: 1,
-              child: Text(
+              child: UiText(
                 label,
                 style: AppTextStyles.uiMd.copyWith(
                   color: color.withValues(alpha: enabled ? 1 : 0.38),

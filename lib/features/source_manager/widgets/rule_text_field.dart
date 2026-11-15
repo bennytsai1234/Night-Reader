@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -97,7 +98,7 @@ class RuleTextField extends StatelessWidget implements GroupedSkeletonItem {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: Text(
+                  child: UiText(
                     label,
                     style: _labelStyle.copyWith(color: chrome.sectionText),
                   ),

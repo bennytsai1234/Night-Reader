@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -306,7 +307,7 @@ class _SourceRowContent extends StatelessWidget {
                   children: [
                     Flexible(
                       child: DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           source.bookSourceName,
                           style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
@@ -343,7 +344,7 @@ class _SourceRowContent extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     source.bookSourceUrl,
                     style: AppTextStyles.bodySm.copyWith(
                       height: 1.3,
@@ -361,7 +362,7 @@ class _SourceRowContent extends StatelessWidget {
                 if (errorLine != null) ...[
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       errorLine,
                       style: AppTextStyles.labelSm.copyWith(
                         height: 1.3,
@@ -429,7 +430,7 @@ class _SourceRowContent extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: AppRadius.cardXs,
       ),
-      child: Text(
+      child: UiText(
         health.label,
         style: AppTextStyles.labelXs.copyWith(
           height: 1.15,
@@ -457,7 +458,7 @@ class _SourceRowContent extends StatelessWidget {
               color: chrome.sectionText.withValues(alpha: 0.1),
               borderRadius: AppRadius.cardXs,
             ),
-            child: Text(
+            child: UiText(
               tag,
               style: AppTextStyles.labelXs.copyWith(
                 height: 1.15,
@@ -500,7 +501,7 @@ class _SourceRowContent extends StatelessWidget {
         ),
         Expanded(
           child: DragOverflowText(
-            child: Text(
+            child: UiText(
               progress.message,
               style: AppTextStyles.labelSm.copyWith(
                 height: 1.3,
@@ -602,7 +603,7 @@ class _GroupCapsule extends StatelessWidget {
           borderRadius: AppRadius.pillShape,
         ),
         child: DragOverflowText(
-          child: Text(
+          child: UiText(
             label,
             maxLines: 1,
             style: AppTextStyles.labelXs.copyWith(
