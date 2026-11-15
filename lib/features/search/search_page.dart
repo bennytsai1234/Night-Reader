@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart'
     show BoxHitTestResult, PipelineOwner, RenderProxyBox, RenderSliver;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
@@ -470,7 +471,7 @@ class _SearchViewState extends State<SearchView> {
               Icon(icon, size: 16, color: color),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
+                child: UiText(
                   text,
                   style: AppTextStyles.labelSm.copyWith(
                     height: 1.3,
@@ -559,7 +560,7 @@ class _SearchViewState extends State<SearchView> {
         children: [
           Expanded(
             child: DragOverflowText(
-              child: Text(
+              child: UiText(
                 namesWaiting
                     ? '還在等：${waiting.join('、')}'
                     : p.totalSources > 0
@@ -605,7 +606,7 @@ class _SearchViewState extends State<SearchView> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            Text(
+            UiText(
               '${p.resultCount}/${p.unfilteredResultCount}',
               style: AppTextStyles.uiSm.copyWith(
                 color: AppChrome.of(context).sectionText,
@@ -712,7 +713,7 @@ class _SearchViewState extends State<SearchView> {
                       padding: const EdgeInsets.symmetric(
                         vertical: AppSpacing.xxl,
                       ),
-                      child: Text(
+                      child: UiText(
                         '沒有可查看的失敗明細',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodyBase.copyWith(

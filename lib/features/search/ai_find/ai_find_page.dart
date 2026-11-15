@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
@@ -185,7 +186,7 @@ class _AiFindPageState extends State<AiFindPage> {
   void _say(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   /// 背景工作的位置空著、也沒有還沒看過結果的那一次（ADR 0058）。
@@ -533,7 +534,7 @@ class _AiFindPageState extends State<AiFindPage> {
             header: 'AI 的說明',
             children: [
               GroupedContent(
-                child: Text(context.zh(record.summary), style: bodyStyle),
+                child: UiText(context.zh(record.summary), style: bodyStyle),
               ),
             ],
           ),
@@ -609,7 +610,7 @@ class _AiFindPickRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  UiText(
                     context.zh(book.name),
                     style: AppTextStyles.bodyBase.copyWith(
                       height: 1.3,
@@ -618,7 +619,7 @@ class _AiFindPickRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  UiText(
                     formatSearchResultMetadata(
                       author: context.zh(book.author ?? ''),
                       kind: context.zh(book.kind ?? ''),
@@ -627,7 +628,7 @@ class _AiFindPickRow extends StatelessWidget {
                     style: secondary,
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
+                  UiText(
                     context.zh(pick.reason),
                     style: AppTextStyles.bodySm.copyWith(
                       height: 1.45,
