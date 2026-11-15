@@ -71,7 +71,9 @@ class PreferKey {
   static const String fontFolder = 'fontFolder';
   static const String backupPath = 'backupUri';
   static const String restoreIgnore = 'restoreIgnore';
-  static const String threadCount = 'threadCount';
+
+  /// 一次搜尋同時送幾個書源（[SearchModel.threadCount]），沒有設定頁。
+  static const String threadCount = 'thread_count';
   static const String keepLight = 'keep_light';
 
   static const String enableCustomExport = 'enableCustomExport';

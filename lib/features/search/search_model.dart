@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -222,6 +223,14 @@ typedef SearchBookLoader = Future<List<SearchBook>> Function(
 /// 純邏輯層，不依賴 Flutter UI。
 /// 透過 [SearchModelCallback] 回報搜尋進度與結果。
 class SearchModel {
+  /// 一次搜尋同時送幾個書源，換封面也用同一個數字。App 沒有地方改它，
+  /// 偏好鍵 [PreferKey.threadCount] 只給實跑測試換數字量。照 Legado 的
+  /// `AppConfig.threadCount` 預設 16：兩個搜尋一起送時，50 秒內沒回來的書源
+  /// 從 8 個時的約 170 個降到約 50 個（2026-11-15 實跑，396 個書源）。
+  static Future<int> threadCount() async =>
+      (await SharedPreferences.getInstance()).getInt(PreferKey.threadCount) ??
+      16;
+
   final SearchModelCallback callback;
 
   /// 每源、同源內已去重的原始搜尋結果，依書名分組。合併僅在呈現層；
@@ -338,10 +347,7 @@ class SearchModel {
       return;
     }
 
-    // 取得並行數
-    final threadCount = await SharedPreferences.getInstance().then(
-      (p) => p.getInt('thread_count') ?? 8,
-    );
+    final threadCount = await SearchModel.threadCount();
     if (generation != _generation) return;
     final searchPool = Pool(threadCount);
     final respondTimes = <String, int>{};
