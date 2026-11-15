@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -134,7 +135,7 @@ class _BadgePill extends StatelessWidget {
       fontWeight: failed ? FontWeight.w700 : FontWeight.w600,
       color: BookshelfUpdateBadge._textColor,
     );
-    final label = Text(
+    final label = UiText(
       failed ? '!' : '+$count',
       key: ValueKey(failed ? 'failed' : 'new-$count'),
       style: style,
@@ -352,7 +353,7 @@ class BookshelfListCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       name,
                       maxLines: 1,
                       style: titleStyle.copyWith(color: scheme.onSurface),
@@ -362,7 +363,7 @@ class BookshelfListCard extends StatelessWidget {
                   // 載入骨架（不知道哪本沒有作者）才對得上。
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       author,
                       maxLines: 1,
                       style: authorStyle.copyWith(color: chrome.sectionText),
@@ -588,7 +589,7 @@ class BookshelfGridTile extends StatelessWidget {
                     SizedBox(
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
                       child: DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           name,
                           maxLines: 2,
                           style: titleStyle.copyWith(color: scheme.onSurface),
@@ -670,7 +671,7 @@ class BookshelfEditToolbar extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           action.label,
                           maxLines: 1,
                           style: AppTextStyles.uiXs.copyWith(
@@ -703,7 +704,7 @@ class BookshelfEditToolbar extends StatelessWidget {
         const SizedBox(width: AppSpacing.md),
         Flexible(
           child: DragOverflowText(
-            child: Text(
+            child: UiText(
               progressLabel ?? '',
               maxLines: 1,
               style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
