@@ -102,7 +102,8 @@ class ReaderV2TopMenu extends StatelessWidget {
                 child: Center(
                   child: DragOverflowText(
                     child: UiText(
-                      bookName, translate: false,
+                      bookName,
+                      translate: false,
                       style: AppTextStyles.titleSm.copyWith(
                         fontWeight: FontWeight.w600,
                         color: menuStyle.foreground,
@@ -145,7 +146,8 @@ class ReaderV2TopMenu extends StatelessWidget {
                 valueListenable: navigation.current,
                 builder: (context, _, _) => DragOverflowText(
                   child: UiText(
-                    navigation.currentTitle, translate: false,
+                    navigation.currentTitle,
+                    translate: false,
                     style: AppTextStyles.labelSm.copyWith(
                       color: menuStyle.foreground,
                     ),
@@ -172,7 +174,8 @@ class ReaderV2TopMenu extends StatelessWidget {
                     ),
                     child: DragOverflowText(
                       child: UiText(
-                        originName, translate: false,
+                        originName,
+                        translate: false,
                         maxLines: 1,
                         style: AppTextStyles.micro.copyWith(
                           color: menuStyle.foreground,

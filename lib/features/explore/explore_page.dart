@@ -526,8 +526,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('書源操作', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('書源操作', error))));
     }
   }
 
@@ -547,8 +548,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       await provider.deleteSource(source);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('刪除書源', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除書源', error))));
     }
   }
 

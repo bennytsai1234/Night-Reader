@@ -113,8 +113,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('刪除規則', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除規則', error))));
     }
   }
 
@@ -124,9 +125,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: UiText(failureMessage('更新規則狀態', error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: UiText(failureMessage('更新規則狀態', error))),
+      );
     }
   }
 

@@ -176,8 +176,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       setState(() => _testResult = result.display);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('執行測試', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('執行測試', error))));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -214,9 +215,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       await widget.onReload();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: UiText(failureMessage('套用替換規則', error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: UiText(failureMessage('套用替換規則', error))),
+      );
     }
   }
 

@@ -179,8 +179,9 @@ class _ReaderV2ReplaceRuleEditorSheetState
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('儲存規則', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('儲存規則', error))));
       setState(() => _saving = false);
     }
   }
