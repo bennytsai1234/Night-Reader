@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_connection_check.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -101,7 +102,7 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
   void _say(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   /// 思考程度：低的回得快、可能比較常走錯方向；服務預設不送這個參數。

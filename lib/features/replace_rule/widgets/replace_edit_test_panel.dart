@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -47,7 +48,7 @@ class ReplaceEditTestPanel extends StatelessWidget {
           header: '替換結果',
           children: [
             GroupedContent(
-              child: Text(
+              child: UiText(
                 testResult.isEmpty ? '(無結果)' : testResult,
                 style: AppTextStyles.bodySm.copyWith(
                   color: chrome.sectionText,

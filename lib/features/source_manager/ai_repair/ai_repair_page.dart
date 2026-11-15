@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -168,7 +169,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
   void _say(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   Future<void> _submitPaste() async {
@@ -422,7 +423,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
       header: repaired ? (job.restored ? '已還原成改前的版本' : '修好了') : '沒修好，書源沒有改',
       children: [
         GroupedContent(
-          child: Text(
+          child: UiText(
             explanation,
             style: AppTextStyles.bodySm.copyWith(
               color: Theme.of(context).colorScheme.onSurface,

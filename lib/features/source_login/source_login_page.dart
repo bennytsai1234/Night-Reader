@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -418,7 +419,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     if (messenger == null) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   // ── 書源要使用者做的事（SourceInteractionHandler） ─────────────────
@@ -462,7 +463,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
                   fit: BoxFit.contain,
                   errorBuilder: (context, _, _) => const SizedBox(
                     height: 64,
-                    child: Center(child: Text('驗證碼圖片載不到')),
+                    child: Center(child: UiText('驗證碼圖片載不到')),
                   ),
                 ),
               ),
