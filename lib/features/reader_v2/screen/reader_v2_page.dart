@@ -5,6 +5,7 @@ import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -620,29 +621,29 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           FilledButton.icon(
             onPressed: first.onPressed,
             icon: Icon(first.icon),
-            label: Text(first.label),
+            label: UiText(first.label),
           ),
           OutlinedButton.icon(
             onPressed: retry,
             icon: const Icon(Icons.refresh),
-            label: const Text('重試'),
+            label: const UiText('重試'),
           ),
         ] else
           FilledButton.icon(
             onPressed: retry,
             icon: const Icon(Icons.refresh),
-            label: const Text('重試'),
+            label: const UiText('重試'),
           ),
         // 本地書沒有換源，灰著留在原位（ADR 0059）。
         OutlinedButton.icon(
           onPressed: widget.book.isLocal ? null : _showChangeSource,
           icon: const Icon(Icons.swap_horiz),
-          label: const Text('換源'),
+          label: const UiText('換源'),
         ),
         TextButton.icon(
           onPressed: _handleExitIntent,
           icon: const Icon(Icons.arrow_back),
-          label: const Text('返回'),
+          label: const UiText('返回'),
         ),
       ],
     );
@@ -890,7 +891,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     messenger.hideCurrentSnackBar();
     final controller = messenger.showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: UiText(message),
         action: action == null
             ? null
             : SnackBarAction(label: action.label, onPressed: action.onPressed),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -237,7 +238,7 @@ class _HighlightSectionState extends State<_HighlightSection> {
           child: Row(
             children: [
               const ExcludeSemantics(
-                child: Text(
+                child: UiText(
                   _HighlightSection._strengthLabel,
                   style: _HighlightSection._strengthStyle,
                 ),
@@ -301,7 +302,7 @@ class _HighlightPreview extends StatelessWidget {
         color: palette.readerBackground,
         borderRadius: AppRadius.cardMd,
       ),
-      child: Text.rich(
+      child: UiText.rich(
         span(
           textStyle.copyWith(color: palette.readerText),
           highlight: TextStyle(
@@ -379,7 +380,7 @@ class _HighlightColorRow extends StatelessWidget {
                         : null,
                   ),
                   const SizedBox(height: labelGap),
-                  Text(option.label, style: labelStyle),
+                  UiText(option.label, style: labelStyle),
                 ],
               ),
             ),
@@ -395,7 +396,7 @@ void _reportSaveFailure(BuildContext context, Future<void> save) {
     save.catchError((Object _) {
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')));
+          ?.showSnackBar(const SnackBar(content: UiText('朗讀設定儲存失敗，已恢復原本的值')));
     }),
   );
 }

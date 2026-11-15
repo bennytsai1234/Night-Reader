@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/highlight.dart';
@@ -242,7 +243,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
             left: _volumes.volumeOf(index) >= 0 ? tocChapterIndent : 0,
           ),
           child: DragOverflowText(
-            child: Text(
+            child: UiText(
               chapterTitle,
               maxLines: 1,
               style: AppTextStyles.bodyBase.copyWith(
@@ -448,7 +449,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     );
   }
 
-  Widget _countLabel(ThemeData theme, String text) => Text(
+  Widget _countLabel(ThemeData theme, String text) => UiText(
     text,
     style: AppTextStyles.uiSm.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
