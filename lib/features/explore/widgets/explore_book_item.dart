@@ -96,7 +96,7 @@ class ExploreBookItem extends StatelessWidget {
                         Expanded(
                           child: DragOverflowText(
                             child: UiText(
-                              context.zh(book.name),
+                              context.zh(book.name), translate: false,
                               style: AppTextStyles.bodyBase.copyWith(
                                 height: 1.3,
                                 color: scheme.onSurface,
@@ -119,7 +119,7 @@ class ExploreBookItem extends StatelessWidget {
                       child: _withExtras(
                         (book) => DragOverflowText(
                           child: UiText(
-                            metaOf(context, book),
+                            metaOf(context, book), translate: false,
                             style: metaStyle,
                             maxLines: 1,
                           ),
@@ -131,7 +131,7 @@ class ExploreBookItem extends StatelessWidget {
                       const SizedBox(height: 2),
                       DragOverflowText(
                         child: UiText(
-                          '最新：${context.zh(book.latestChapterTitle!)}',
+                          '最新：${context.zh(book.latestChapterTitle!)}', translate: false,
                           style: metaStyle,
                           maxLines: 1,
                         ),

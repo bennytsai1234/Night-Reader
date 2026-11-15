@@ -88,7 +88,7 @@ class BookInfoHeader extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
           child: DragOverflowText(
             child: UiText(
-              context.zh(book.name),
+              context.zh(book.name), translate: false,
               textAlign: TextAlign.center,
               maxLines: 3,
               style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
@@ -101,7 +101,7 @@ class BookInfoHeader extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
             child: DragOverflowText(
               child: UiText(
-                author,
+                author, translate: false,
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 style: AppTextStyles.bodyBase.copyWith(

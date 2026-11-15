@@ -674,7 +674,7 @@ class _BookHeader extends StatelessWidget {
               children: [
                 DragOverflowText(
                   child: UiText(
-                    book.name,
+                    book.name, translate: false,
                     maxLines: 2,
                     style: AppTextStyles.titleMd.copyWith(
                       color: scheme.onSurface,
@@ -685,7 +685,7 @@ class _BookHeader extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
                     child: UiText(
-                      byline,
+                      byline, translate: false,
                       maxLines: 1,
                       style: AppTextStyles.bodySm.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -839,7 +839,7 @@ class _EpisodeRow extends StatelessWidget {
                 Expanded(
                   child: DragOverflowText(
                     child: UiText(
-                      chapter.title,
+                      chapter.title, translate: false,
                       maxLines: 1,
                       style: AppTextStyles.bodyBase.copyWith(
                         color: titleColor,
@@ -955,7 +955,7 @@ class _ControlDock extends StatelessWidget {
                   children: [
                     DragOverflowText(
                       child: UiText(
-                        player.chapter?.title ?? '',
+                        player.chapter?.title ?? '', translate: false,
                         maxLines: 1,
                         style: AppTextStyles.uiMd.copyWith(
                           color: scheme.onSurface,
