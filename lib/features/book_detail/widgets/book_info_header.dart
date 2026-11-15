@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
@@ -86,7 +87,7 @@ class BookInfoHeader extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
           child: DragOverflowText(
-            child: Text(
+            child: UiText(
               context.zh(book.name),
               textAlign: TextAlign.center,
               maxLines: 3,
@@ -99,7 +100,7 @@ class BookInfoHeader extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
             child: DragOverflowText(
-              child: Text(
+              child: UiText(
                 author,
                 textAlign: TextAlign.center,
                 maxLines: 1,
@@ -210,7 +211,7 @@ class _ActionButton extends StatelessWidget {
                     horizontal: AppSpacing.xs,
                   ),
                   child: DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       label,
                       maxLines: 1,
                       style: AppTextStyles.uiXs.copyWith(color: color),
@@ -256,7 +257,7 @@ class SourceStatusChip extends StatelessWidget {
           color: color.withValues(alpha: 0.12),
           borderRadius: AppRadius.pillShape,
         ),
-        child: Text(
+        child: UiText(
           provider.sourceStatusLabel,
           style: AppTextStyles.labelXs.copyWith(
             height: 1.3,

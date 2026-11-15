@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -64,7 +65,7 @@ class CoverGridItem extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           DragOverflowText(
-            child: Text(
+            child: UiText(
               isDefault ? '恢復預設' : (result.book.originName ?? '未知來源'),
               style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
               maxLines: 1,

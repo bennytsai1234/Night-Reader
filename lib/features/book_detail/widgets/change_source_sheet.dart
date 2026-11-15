@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -149,7 +150,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               ignoring: _isSwitchingSource,
               child: sources.isEmpty && !provider.isSearching
                   ? Center(
-                      child: Text(
+                      child: UiText(
                         provider.allResults.isNotEmpty
                             ? '沒有符合篩選的來源'
                             : '未找到其他來源',
@@ -201,7 +202,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
       }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(outcome.message)));
+          .showSnackBar(SnackBar(content: UiText(outcome.message)));
       if (outcome.success) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _isSwitchingSource = false);

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -403,9 +404,9 @@ class _StatTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: _padding),
         child: Column(
           children: [
-            DragOverflowText(child: Text.rich(_valueSpan(scheme), maxLines: 1)),
+            DragOverflowText(child: UiText.rich(_valueSpan(scheme), maxLines: 1)),
             const SizedBox(height: _labelGap),
-            Text(
+            UiText(
               label,
               style: AppTextStyles.uiSm.copyWith(
                 color: scheme.onSurfaceVariant,

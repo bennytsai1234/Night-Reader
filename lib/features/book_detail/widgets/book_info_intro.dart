@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -58,7 +59,7 @@ class BookInfoIntro extends StatelessWidget {
       header: '簡介',
       children: [
         GroupedContent(
-          child: Text(
+          child: UiText(
             intro.isEmpty ? '暫無簡介' : context.zh(intro),
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.6,

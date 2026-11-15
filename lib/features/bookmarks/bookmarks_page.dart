@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -259,7 +260,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: UiText(message),
           action: SnackBarAction(label: '復原', onPressed: undo),
         ),
       );

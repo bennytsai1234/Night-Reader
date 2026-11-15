@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
@@ -71,7 +72,7 @@ class BookReadCapsule extends StatelessWidget {
                       children: [
                         Icon(Icons.menu_book_rounded, size: 22, color: primary),
                         const SizedBox(width: AppSpacing.sm),
-                        Text(
+                        UiText(
                           label,
                           style: AppTextStyles.uiMd.copyWith(
                             fontWeight: FontWeight.w600,
