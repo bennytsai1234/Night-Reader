@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
 import 'package:super_sliver_list/super_sliver_list.dart' as super_list;
@@ -375,7 +376,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     color: AppChrome.of(context).sectionText,
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text(
+                  UiText(
                     '找不到相符章節',
                     style: AppTextStyles.bodyBase.copyWith(
                       color: Theme.of(context).colorScheme.onSurface,
@@ -431,7 +432,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       ? () => ScaffoldMessenger.of(context)
                           ..hideCurrentSnackBar()
                           ..showSnackBar(
-                            const SnackBar(content: Text(lockedChapterNotice)),
+                            const SnackBar(content: UiText(lockedChapterNotice)),
                           )
                       : widget.fromReader
                       ? () => Navigator.of(context).pop(chapter.url)
@@ -579,7 +580,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(result.message)));
+          ..showSnackBar(SnackBar(content: UiText(result.message)));
       case _MenuAction.download:
         unawaited(_showDownloadSheet(context, provider));
       case _MenuAction.export:
@@ -631,7 +632,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
       final result = await provider.setInBookshelf(false);
       if (!context.mounted) return;
       messenger.clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text(result.message)));
+      messenger.showSnackBar(SnackBar(content: UiText(result.message)));
       if (result.success && context.mounted) {
         Navigator.of(context).pop();
       }
@@ -640,7 +641,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
     final result = await provider.setInBookshelf(true);
     if (!context.mounted) return;
-    messenger.showSnackBar(SnackBar(content: Text(result.message)));
+    messenger.showSnackBar(SnackBar(content: UiText(result.message)));
   }
 
   Future<void> _handleCheckUpdate(
@@ -650,7 +651,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final result = await provider.checkForUpdates();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(result.message)));
+        .showSnackBar(SnackBar(content: UiText(result.message)));
   }
 
   Future<void> _handleExport(
@@ -659,7 +660,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   ) async {
     if (provider.totalChapterCount == 0) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('沒有可匯出的章節')));
+          .showSnackBar(const SnackBar(content: UiText('沒有可匯出的章節')));
       return;
     }
     await provider.refreshCacheStatus();
@@ -685,7 +686,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
         final result = await provider.queueDownloadMissing();
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(result.message)));
+            .showSnackBar(SnackBar(content: UiText(result.message)));
         return;
       }
       fetchMissingRemote = decision == 'export';
@@ -704,11 +705,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已建立匯出檔案')));
+          .showSnackBar(const SnackBar(content: UiText('已建立匯出檔案')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('匯出', e))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('匯出', e))));
     } finally {
       if (mounted) setState(() => _exportProgress = null);
     }
@@ -779,7 +780,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final audio = provider.book.bookKind == BookSourceKind.audio;
     if (!status.hasContentCache) {
       messenger.showSnackBar(
-        SnackBar(content: Text(audio ? '這本書還沒有下載的音訊' : '這本書還沒有下載的正文')),
+        SnackBar(content: UiText(audio ? '這本書還沒有下載的音訊' : '這本書還沒有下載的正文')),
       );
       return;
     }
@@ -799,7 +800,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     if (!confirmed || !context.mounted) return;
     final result = await provider.clearStoredContent();
     if (!context.mounted) return;
-    messenger.showSnackBar(SnackBar(content: Text(result.message)));
+    messenger.showSnackBar(SnackBar(content: UiText(result.message)));
   }
 
   Future<void> _queueDownload(
@@ -809,7 +810,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final result = await task;
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(result.message)));
+        .showSnackBar(SnackBar(content: UiText(result.message)));
   }
 
   /// 提示框內的分組輸入卡片。
@@ -896,7 +897,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
       final index = provider.displayIndexForChapter(provider.book.chapterIndex);
       if (index < 0) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('目前閱讀章節不在目錄中')));
+            .showSnackBar(const SnackBar(content: UiText('目前閱讀章節不在目錄中')));
         return;
       }
       if (!_chapterListController.isAttached) return;
@@ -963,19 +964,19 @@ class _BookDetailPageState extends State<BookDetailPage> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          UiText(
             '狀態：${provider.sourceStatusLabel}',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySm.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: AppSpacing.xs),
-          Text(
+          UiText(
             provider.sourceStatusDescription,
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySm,
           ),
           const SizedBox(height: AppSpacing.sm),
-          Text(
+          UiText(
             b.origin,
             textAlign: TextAlign.center,
             style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
@@ -1194,7 +1195,7 @@ class _ChapterRow extends StatelessWidget {
       titleWidget: Padding(
         padding: EdgeInsets.only(left: indented ? tocChapterIndent : 0),
         child: DragOverflowText(
-          child: Text(
+          child: UiText(
             title,
             maxLines: 1,
             style: AppTextStyles.bodyBase.copyWith(
@@ -1207,7 +1208,7 @@ class _ChapterRow extends StatelessWidget {
       ),
       showChevron: false,
       trailing: isCurrent
-          ? Text(
+          ? UiText(
               '目前',
               style: AppTextStyles.labelSm.copyWith(color: scheme.primary),
             )

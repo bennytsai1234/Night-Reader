@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -57,7 +58,7 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           searchBook.originName ?? '未知來源',
                           maxLines: 1,
                           style: AppTextStyles.bodyBase.copyWith(
@@ -70,12 +71,12 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                       if (meta.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         DragOverflowText(
-                          child: Text(meta, maxLines: 1, style: secondaryStyle),
+                          child: UiText(meta, maxLines: 1, style: secondaryStyle),
                         ),
                       ],
                       const SizedBox(height: 2),
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           '最新：${context.zh(searchBook.latestChapterTitle ?? '無最新章節資訊')}',
                           maxLines: 1,
                           style: secondaryStyle,

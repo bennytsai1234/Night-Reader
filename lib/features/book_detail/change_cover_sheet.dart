@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:night_reader/core/services/app_permission_service.dart';
@@ -25,7 +26,7 @@ Future<void> applyCoverFromSheet(BuildContext context, String url) async {
     return;
   }
   ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(outcome.message)));
+      .showSnackBar(SnackBar(content: UiText(outcome.message)));
 }
 
 class ChangeCoverSheet extends StatelessWidget {
@@ -72,7 +73,7 @@ class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
       if (!allowed) {
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('未取得相簿權限，無法選取封面圖片')));
+              .showSnackBar(const SnackBar(content: UiText('未取得相簿權限，無法選取封面圖片')));
         }
         return;
       }
@@ -82,7 +83,7 @@ class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failureMessage('選取圖片', e))));
+            .showSnackBar(SnackBar(content: UiText(failureMessage('選取圖片', e))));
       }
     }
   }
@@ -143,7 +144,7 @@ class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
         }
         if (provider.covers.isEmpty && !provider.isSearching) {
           return Center(
-            child: Text(
+            child: UiText(
               '未找到相關封面',
               style: AppTextStyles.bodyBase.copyWith(
                 color: AppChrome.of(context).sectionText,
