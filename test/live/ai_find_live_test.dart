@@ -22,8 +22,10 @@
 ///   有沒有改過來，比整件重跑便宜；agent-harness 第 5 步「重放」）。
 /// - `NR_AI_URL`、`NR_AI_MODEL`、`NR_AI_EFFORT` 同修書源的實跑
 ///   （`docs/agents/ai-repair-runs.md`）。
-/// - 一件接一件跑：每件的搜尋都送全部書源，同時跑會互搶書源 isolate，量到
-///   的時間不是使用者會碰到的。
+/// - `NR_CONCURRENCY=<件數>` 同時跑幾件，預設 1（一件接一件）。同時跑時每件的
+///   搜尋都送全部書源、互搶書源 isolate，逾時的書源變多、每件的時間比使用者
+///   碰到的長：比回合數與做法，時間只跟同樣件數的批次比（使用者 2026-11-15：
+///   測試時要並行，整批快一點）。
 /// - 每件的完整紀錄寫在最後印出的資料夾，統計那一行開頭是
 ///   `NR-AI-FIND-STATS`。
 ///
@@ -57,6 +59,7 @@ import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/features/search/ai_find/app_ai_find_library.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:pool/pool.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../test_helper.dart';
@@ -288,7 +291,10 @@ void main() {
     debugPrint('##### 完整找書紀錄：$logs');
     final rows = <Map<String, Object?>>[];
     final watch = Stopwatch()..start();
-    for (final item in cases) {
+    final concurrency = int.tryParse(env['NR_CONCURRENCY'] ?? '') ?? 1;
+    final slots = Pool(concurrency);
+    debugPrint('##### 同時跑 $concurrency 件');
+    Future<void> runCase(Map<String, dynamic> item) async {
       final id = item['id'] as String;
       final description = item['description'] as String;
       final session = AiFindSession(
@@ -350,6 +356,10 @@ void main() {
       );
       session.dispose();
     }
+
+    await Future.wait([
+      for (final item in cases) slots.withResource(() => runCase(item)),
+    ]);
     debugPrint('##### 完整找書紀錄：$logs');
   }, timeout: const Timeout(Duration(hours: 3)));
 }
