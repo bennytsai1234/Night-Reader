@@ -30,13 +30,18 @@ final class AiRepairLog {
 
   /// 一次 AI 找書的紀錄（ADR 0060）：和修復紀錄同一個資料夾、同樣的兩份，
   /// 檔名接 `find`。
+  ///
+  /// 給了 [fileName] 是接著寫暫停前那一份（[AiRepairLog.fileName]），App 重開後
+  /// 「分享完整紀錄」還是同一個檔；摘要只有這次開始之後的。
   AiRepairLog.find({
     required String description,
+    String? fileName,
     Future<Directory> Function()? directory,
   }) : _directory = directory ?? _defaultDirectory,
        _fileName =
+           fileName ??
            '${DateFormat('yyyyMMdd-HHmmss-SSS').format(DateTime.now())}-'
-           'find-${_opened++}.txt' {
+               'find-${_opened++}.txt' {
     _title = '# AI 找書：$description';
   }
 
@@ -46,6 +51,9 @@ final class AiRepairLog {
 
   late final String _title;
   final String _fileName;
+
+  /// 完整紀錄的檔名（資料夾裡的那份）。
+  String get fileName => _fileName;
   final Future<Directory> Function() _directory;
   final Stopwatch _clock = Stopwatch()..start();
   final List<_Block> _blocks = [];

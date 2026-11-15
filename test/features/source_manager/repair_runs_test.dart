@@ -128,7 +128,7 @@ void main() {
     expect(run.status.text, 'AI 修，7／24 個網站');
 
     batch.stop();
-    expect(run.status.text, '正在停下…');
+    expect(run.status.text, '正在結束…');
   });
 
   test('a batch that finishes with no page open stays until its results '
@@ -212,17 +212,17 @@ void main() {
     runs.dispose();
   });
 
-  test('stop on the notification stops the batch and says so', () async {
+  test('end on the notification ends the batch and says so', () async {
     final gate = Completer<void>();
     final batch = _batch(gate: gate);
     final run = runOf(batch);
     run.start();
     await _flush();
 
-    run.stopFromSystem();
+    run.endFromSystem();
     await _flush();
     expect(batch.isStopped, isTrue);
-    expect(platform.calls.last, startsWith('正在停下…'));
+    expect(platform.calls.last, startsWith('正在結束…'));
 
     gate.complete();
     await batch.completion;
@@ -248,14 +248,14 @@ void main() {
     await _flush();
     changes.value = 1;
     await _flush();
-    job.stopFromSystem();
+    job.endFromSystem();
     await _flush();
     finish.complete();
     await running;
     await _flush();
 
     expect(cancelled, isTrue);
-    expect(platform.calls, ['第 0／4 個｜0', '第 1／4 個｜250', '正在停下…｜250', 'hide']);
+    expect(platform.calls, ['第 0／4 個｜0', '第 1／4 個｜250', '正在結束…｜250', 'hide']);
     expect(work.isBusy, isFalse);
   });
 

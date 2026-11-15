@@ -43,6 +43,30 @@ class AiRepairStep {
   final String title;
   String? detail;
   AiRepairStepState state;
+
+  /// 存成暫停的工作（背景工作接著做，ADR 0058）。
+  Map<String, Object?> toJson() => {
+    'title': title,
+    'detail': ?detail,
+    'state': state.name,
+  };
+
+  factory AiRepairStep.fromJson(Object? json) {
+    if (json case {'title': final String title}) {
+      return AiRepairStep(
+        title,
+        detail: switch (json['detail']) {
+          final String detail => detail,
+          _ => null,
+        },
+        state: AiRepairStepState.values.firstWhere(
+          (state) => state.name == json['state'],
+          orElse: () => AiRepairStepState.done,
+        ),
+      );
+    }
+    throw const FormatException('一步的格式不對');
+  }
 }
 
 /// 一個書源修完的結果。
@@ -1091,6 +1115,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   @override
   void factAdded(String fact) {}
+
+  @override
+  void checkpoint(AgentCheckpoint state) {}
 
   /// 修書源的工具會改正在修的書源（改了再試抓），照順序執行。
   @override

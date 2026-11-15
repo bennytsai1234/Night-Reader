@@ -25,6 +25,10 @@ import 'ai_find_prompt.dart';
 /// 完整紀錄裡統計那一行的開頭，後面接 JSON（同 AI 修復的評估表）。
 const String aiFindStatsMarker = 'NR-AI-FIND-STATS ';
 
+/// 暫停的找書存檔的格式版本（[AiFindSession.restore]）：改了存什麼就加一，
+/// 舊版存的接不下去，照沒找完收尾。
+const int aiFindProgressVersion = 1;
+
 /// 一次 AI 找書（ADR 0060）：使用者的描述與深度交給和任務無關的迴圈
 /// （[runAgent]），工具的實際抓取在 [AiFindLibrary]。頁面看 [rounds]、
 /// [tokens] 與結果；返回或離開夜讀照跑（背景工作）。
@@ -35,10 +39,114 @@ class AiFindSession extends ChangeNotifier {
     required this._library,
     required this._ask,
     this.serviceLabel = '',
+    this.scope = '',
     AiRepairLog? log,
     String? id,
+    DateTime? startedAt,
   }) : log = log ?? AiRepairLog.find(description: description),
-       id = id ?? const Uuid().v4();
+       id = id ?? const Uuid().v4(),
+       startedAt = startedAt ?? DateTime.now();
+
+  /// 讀回暫停時存的 [progress]（每一輪開頭存的那份），還沒開始；[start] 從
+  /// 存的那一輪接著問（背景工作接著做，ADR 0058）。[log] 是同一次開 App 裡
+  /// 暫停前的紀錄；App 重開後沒有，接著寫同一個檔。格式不對時丟
+  /// [FormatException]。
+  factory AiFindSession.restore(
+    String progress, {
+    required AiFindLibrary library,
+    required AgentAsk ask,
+    String serviceLabel = '',
+    AiRepairLog? log,
+  }) {
+    final json = switch (jsonDecode(progress)) {
+      final Map<String, Object?> map
+          when map['version'] == aiFindProgressVersion =>
+        map,
+      _ => throw const FormatException('不是這一版存的找書'),
+    };
+    T read<T>(String key) => switch (json[key]) {
+      final T value => value,
+      _ => throw FormatException('找書的存檔少了 $key'),
+    };
+    final description = read<String>('description');
+    final session = AiFindSession(
+      description: description,
+      depth: AiFindDepth.fromName(read<String>('depth')),
+      library: library,
+      ask: ask,
+      serviceLabel: serviceLabel,
+      scope: read<String>('scope'),
+      log:
+          log ??
+          AiRepairLog.find(
+            description: description,
+            fileName: read<String>('log'),
+          ),
+      id: read<String>('id'),
+      startedAt: DateTime.fromMillisecondsSinceEpoch(read<int>('startedAt')),
+    );
+    session
+      ..tokens = read<int>('tokens')
+      ..rounds.addAll([
+        for (final round in read<List<Object?>>('rounds'))
+          AiRepairStep.fromJson(round),
+      ])
+      .._resume = AgentCheckpoint.fromJson(read<Map<String, Object?>>('loop'))
+      .._agentState = read<Map<String, Object?>>('agent');
+    return session;
+  }
+
+  /// 存檔裡的搜尋範圍；讀不出來是 null。
+  static String? scopeOf(String progress) => _field(progress, 'scope');
+
+  /// 存檔裡的「主機名 · 模型」；讀不出來是 null。
+  static String? serviceLabelOf(String progress) =>
+      _field(progress, 'serviceLabel');
+
+  static String? _field(String progress, String key) {
+    try {
+      final json = jsonDecode(progress);
+      return json is Map<String, Object?> && json[key] is String
+          ? json[key]! as String
+          : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// 存檔裡看得出來的那幾項（描述、深度、開始的時刻），接不下去時用來
+  /// 照沒找完收尾；連這些都讀不出來是 null。
+  static AiFindRecord? brokenRecord(String progress, String why) {
+    try {
+      final json = jsonDecode(progress);
+      if (json case {
+        'id': final String id,
+        'description': final String description,
+        'depth': final String depth,
+        'startedAt': final int startedAt,
+      }) {
+        return AiFindRecord(
+          id: id,
+          description: description,
+          depth: depth,
+          createdAt: startedAt,
+          outcome: AiFindOutcome.unfinished,
+          failure: why,
+          rounds: switch (json['rounds']) {
+            final List<Object?> rounds => rounds.length,
+            _ => 0,
+          },
+          tokens: switch (json['tokens']) {
+            final int tokens => tokens,
+            _ => 0,
+          },
+        );
+      }
+    } on FormatException {
+      // 讀不出來就不留。
+    }
+    return null;
+  }
 
   /// 這次找書的編號：存成「過去的找書」那一筆時用（兩台不會撞號）。
   final String id;
@@ -55,11 +163,21 @@ class AiFindSession extends ChangeNotifier {
 
   /// 「送到 主機名 · 模型」那行。
   final String serviceLabel;
+
+  /// 搜尋範圍（`SearchScope` 的文字）：存進暫停的存檔，接著做時照同一個範圍。
+  final String scope;
   final AiRepairLog log;
   final AiFindLibrary _library;
   final AgentAsk _ask;
   final CancelToken _cancelToken = CancelToken();
-  final DateTime startedAt = DateTime.now();
+  final DateTime startedAt;
+
+  /// 每一輪開頭存下的那份（JSON 文字），給背景工作寫進檔案。
+  void Function(String progress)? onCheckpoint;
+
+  /// 接著做時迴圈與工具的狀態（[restore] 讀回來的）。
+  AgentCheckpoint? _resume;
+  Map<String, Object?>? _agentState;
 
   /// 一輪一列（頁面上的「第 N 輪」）。
   final List<AiRepairStep> rounds = [];
@@ -81,28 +199,60 @@ class AiFindSession extends ChangeNotifier {
 
   bool _started = false;
   bool _stopped = false;
+  bool _pausing = false;
+  bool _paused = false;
   bool _disposed = false;
 
-  bool get isRunning => _started && outcome == null;
+  bool get isRunning => _started && outcome == null && !_paused;
   bool get isFinished => outcome != null;
+
+  /// 按了結束、還沒停好或已經停好。
   bool get isStopped => _stopped;
 
-  /// 開始找；回傳找完（停下、出錯也算）的時刻。
+  /// 按了暫停、正在等進行中的搜尋停下。
+  bool get isPausing => _pausing && !_paused;
+
+  /// 停在一輪開頭，等使用者按繼續或結束。
+  bool get isPaused => _paused;
+
+  /// 接著做時從第幾輪問起（頁面上「從第 N 輪接著問」）。
+  int get nextRound => rounds.length + 1;
+
+  /// 開始找，或從存的那一輪接著找；回傳找完（結束、出錯也算）或暫停好的
+  /// 時刻。
   Future<void> start() async {
     if (_started) return;
     _started = true;
     _notify();
-    log
-      ..redact = ((text) => redactAiRepairSecrets(text, _library.secrets))
-      ..header('$serviceLabel · 深度 ${depth.label}', prompt: aiFindPromptVersion)
-      ..full('（迴圈的設定：${AiAgentKnobs.summary}）')
-      ..tools(
-        const JsonEncoder.withIndent('  ').convert(aiToolsJson(aiFindTools)),
-      );
+    final resume = _resume;
+    _resume = null;
+    log.redact = (text) => redactAiRepairSecrets(text, _library.secrets);
+    if (resume == null) {
+      log
+        ..header(
+          '$serviceLabel · 深度 ${depth.label}',
+          prompt: aiFindPromptVersion,
+        )
+        ..full('（迴圈的設定：${AiAgentKnobs.summary}）')
+        ..tools(
+          const JsonEncoder.withIndent('  ').convert(aiToolsJson(aiFindTools)),
+        );
+    } else {
+      log
+        ..section('接著做')
+        ..both('從第 $nextRound 輪接著問（$serviceLabel）');
+    }
     final agent = _FindAgent(this);
+    if (resume != null) agent.restore(_agentState ?? const {}, resume);
+    _agentState = null;
     final AgentEnd end;
     try {
-      end = await runAgent(agent, ask: _ask, cancelToken: _cancelToken);
+      end = await runAgent(
+        agent,
+        ask: _ask,
+        cancelToken: _cancelToken,
+        resume: resume,
+      );
     } catch (error, stack) {
       // 迴圈本身不該丟；丟了也要有結果，不讓頁面停在進行中。
       log.both('找書中斷：$error\n$stack');
@@ -110,11 +260,20 @@ class AiFindSession extends ChangeNotifier {
       return;
     }
     stats = end.stats;
+    if (end.kind == AgentEndKind.cancelled && _pausing && !_stopped) {
+      // 暫停：結果不寫、紀錄不收尾；接著做的是最後存的那一輪開頭。
+      _paused = true;
+      log
+        ..section('暫停')
+        ..both('暫停了，存的是第 ${stats!.rounds} 輪問完之後的樣子');
+      _notify();
+      return;
+    }
     switch (end.kind) {
       case AgentEndKind.completed:
         _end(AiFindOutcome.found, null);
       case AgentEndKind.cancelled:
-        _end(AiFindOutcome.stopped, '已停止');
+        _end(AiFindOutcome.stopped, '已結束');
       case AgentEndKind.unconfirmed || AgentEndKind.failed:
         _end(AiFindOutcome.unfinished, end.reason);
     }
@@ -140,18 +299,66 @@ class AiFindSession extends ChangeNotifier {
     );
   }
 
-  /// 停下：正在跑的搜尋與抓取跟著取消。
+  /// 結束：正在跑的搜尋與抓取跟著取消，結果照「已結束」收尾。暫停中（或
+  /// 還沒開始接著做）的直接收尾。
   void stop() {
     if (_stopped || isFinished) return;
     _stopped = true;
-    if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
+    if (!_started || _paused) {
+      _end(AiFindOutcome.stopped, '已結束');
+      return;
+    }
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
     final last = rounds.lastOrNull;
     if (last != null && last.state == AiRepairStepState.running) {
       last
         ..state = AiRepairStepState.failed
-        ..detail = '已停止';
+        ..detail = '已結束';
     }
     _notify();
+  }
+
+  /// 暫停：正在跑的搜尋與抓取跟著取消；接著做時從最後存的那一輪開頭問起，
+  /// 這一輪做到一半的不留。
+  void pause() {
+    if (!isRunning || _pausing || _stopped) return;
+    _pausing = true;
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('已暫停');
+    _notify();
+  }
+
+  /// 存一份「這一輪開頭」的樣子（[AgentTask.checkpoint] 叫的）：同步編成
+  /// 文字，之後的工具改了狀態也不影響存下的這份。
+  void _checkpoint(AgentCheckpoint state, Map<String, Object?> agent) {
+    final save = onCheckpoint;
+    if (save == null) return;
+    save(
+      jsonEncode({
+        'version': aiFindProgressVersion,
+        'prompt': aiFindPromptVersion,
+        'id': id,
+        'description': description,
+        'depth': depth.name,
+        'scope': scope,
+        'serviceLabel': serviceLabel,
+        'startedAt': startedAt.millisecondsSinceEpoch,
+        'log': log.fileName,
+        'tokens': tokens,
+        // 存的時候上一輪的每個呼叫都有結果了：還在轉的那一列存成做完。
+        'rounds': [
+          for (final round in rounds)
+            if (round.state == AiRepairStepState.running)
+              (AiRepairStep(
+                round.title,
+                detail: round.detail,
+              )..state = AiRepairStepState.done).toJson()
+            else
+              round.toJson(),
+        ],
+        'loop': state.toJson(),
+        'agent': agent,
+      }),
+    );
   }
 
   void _end(AiFindOutcome value, String? reason) {
@@ -169,7 +376,7 @@ class AiFindSession extends ChangeNotifier {
         AiFindOutcome.found =>
           '推薦 ${picks.length} 本：'
               '${picks.map((p) => p.book.name).join('、')}\n$summary',
-        AiFindOutcome.stopped => '已停止',
+        AiFindOutcome.stopped => '已結束',
         AiFindOutcome.unfinished => '沒有找完：$reason',
       })
       ..finish();
@@ -239,6 +446,108 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   @override
   String redact(String text) => redactAiRepairSecrets(text, _library.secrets);
+
+  /// 每一輪開頭存下工具的狀態：書的編號（對話裡用編號指書）、看過詳情與
+  /// 正文沒有、發現頁的書源與分類（編號照順序）。搜過的結果不存：書多，
+  /// 接著做時要下一批會重搜一次。
+  @override
+  void checkpoint(AgentCheckpoint state) {
+    s._checkpoint(state, {
+      'books': [
+        for (final found in _books.values)
+          {
+            'id': found.id,
+            'book': found.book.toJson(),
+            'origins': [
+              for (final (i, origin) in found.book.origins.indexed)
+                [origin, found.book.sourceLabels[i]],
+            ],
+            'detailTried': found.detailTried,
+            'readTried': found.readTried,
+            if (found.detail case final detail?)
+              'detail': {
+                'coverUrl': detail.coverUrl,
+                'intro': detail.intro,
+                'wordCount': detail.wordCount,
+                'kind': detail.kind,
+              },
+          },
+      ],
+      if (_exploreSources case final sources?)
+        'exploreSources': [
+          for (final source in sources)
+            {'url': source.url, 'name': source.name, 'kind': source.kind.name},
+        ],
+      'categories': _categories,
+    });
+  }
+
+  /// 讀回 [checkpoint] 存的工具狀態；[resume] 的對話已經寫進紀錄。
+  void restore(Map<String, Object?> json, AgentCheckpoint resume) {
+    _logged = resume.messages.length;
+    for (final item in switch (json['books']) {
+      final List<Object?> list => list,
+      _ => const <Object?>[],
+    }) {
+      if (item case {
+        'id': final String id,
+        'book': final Map<String, Object?> data,
+      }) {
+        final book = SearchBook.fromJson(data);
+        if (item['origins'] case final List<Object?> origins) {
+          for (final origin in origins) {
+            if (origin case [final String url, final String name]) {
+              book.addOrigin(url, name: name == url ? null : name);
+            }
+          }
+        }
+        final found = _Found(id, book)
+          ..detailTried = item['detailTried'] == true
+          ..readTried = item['readTried'] == true;
+        if (item['detail'] case final Map<String, Object?> detail) {
+          String? text(String key) => switch (detail[key]) {
+            final String value => value,
+            _ => null,
+          };
+          found.detail = Book(
+            name: book.name,
+            author: book.author ?? '',
+            coverUrl: text('coverUrl'),
+            intro: text('intro'),
+            wordCount: text('wordCount'),
+            kind: text('kind'),
+          );
+        }
+        _books[id] = found;
+        _idByIdentity[_identity(book)] = id;
+      }
+    }
+    if (json['exploreSources'] case final List<Object?> sources) {
+      _exploreSources = [
+        for (final source in sources)
+          if (source case {
+            'url': final String url,
+            'name': final String name,
+            'kind': final String kind,
+          })
+            (
+              url: url,
+              name: name,
+              kind: BookSourceKind.values.firstWhere(
+                (value) => value.name == kind,
+                orElse: () => BookSourceKind.novel,
+              ),
+            ),
+      ];
+    }
+    if (json['categories'] case final Map<String, Object?> categories) {
+      for (final MapEntry(:key, :value) in categories.entries) {
+        if (value case final List<Object?> names) {
+          _categories[key] = [for (final name in names) '$name'];
+        }
+      }
+    }
+  }
 
   @override
   void restart(int attempt, String why) {
@@ -637,9 +946,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     // 書名、作者照搜尋頁合併同一本的寫法正規化（繁簡、全半形、空白、大小寫）：
     // 不同搜尋各挑的代表來源寫法不一樣時，同一本才不會拿兩個編號、被推薦兩次
     // （Codex 審查）。
-    final identity =
-        '${book.bookKind.name}\u0000${_identityText(book.name)}'
-        '\u0000${_identityText(book.author ?? '')}';
+    final identity = _identity(book);
     final existing = _idByIdentity[identity];
     if (existing != null) return _books[existing]!;
     final id = 'b${_books.length + 1}';
@@ -648,6 +955,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     _idByIdentity[identity] = id;
     return found;
   }
+
+  static String _identity(SearchBook book) =>
+      '${book.bookKind.name}\u0000${_identityText(book.name)}'
+      '\u0000${_identityText(book.author ?? '')}';
 
   static String _identityText(String text) => ChineseUtils.t2s(
     StringUtils.fullToHalf(text).replaceAll(RegExp(r'\s+'), '').toLowerCase(),

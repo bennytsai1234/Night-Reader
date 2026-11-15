@@ -13,7 +13,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _Job implements BackgroundJob {
   @override
-  void stopFromSystem() {}
+  void pauseFromSystem() {}
+
+  @override
+  void endFromSystem() {}
 
   @override
   void openFromNotification() {}

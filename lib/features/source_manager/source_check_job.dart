@@ -5,7 +5,6 @@ import 'package:night_reader/core/services/background_work/background_work.dart'
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/shared/navigation/root_navigator.dart';
 
-import 'ai_repair/repair_runs.dart' show backgroundWorkStopping;
 import 'source_manager_page.dart';
 
 /// 從書源管理按下去的校驗（「校驗所有書源」「校驗選中」）：離開夜讀也繼續，
@@ -42,9 +41,16 @@ class SourceCheckJob implements BackgroundJob {
   BackgroundWorkStatus get status {
     final total = _total();
     final done = _done();
+    if (_stopping) {
+      return BackgroundWorkStatus.settling(
+        '校驗書源',
+        pausing: false,
+        progress: total > 0 ? done / total : 0,
+      );
+    }
     return BackgroundWorkStatus(
       title: '校驗書源',
-      text: _stopping ? backgroundWorkStopping : '第 $done／$total 個',
+      text: '第 $done／$total 個',
       progress: total > 0 ? done / total : 0,
     );
   }
@@ -65,7 +71,10 @@ class SourceCheckJob implements BackgroundJob {
   }
 
   @override
-  void stopFromSystem() {
+  void pauseFromSystem() => endFromSystem();
+
+  @override
+  void endFromSystem() {
     if (_stopping) return;
     _stopping = true;
     _work.update(this, status);
