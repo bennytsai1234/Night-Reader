@@ -14,6 +14,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_model.dart';
@@ -30,7 +31,12 @@ class AppAiFindLibrary implements AiFindLibrary {
     BookSourceService? service,
     this._searchLoader,
     this.searchLimit = aiFindSearchLimit,
-  }) : _service = service ?? BookSourceService();
+    Dio? wikipedia,
+  }) : _service = service ?? BookSourceService(),
+       _wikipedia = wikipedia ?? NetworkService().appDio;
+
+  /// 查作品別名用的連線：夜讀自己對外的那一條（照常驗憑證、不帶書源的 Cookie）。
+  final Dio _wikipedia;
 
   /// 一次搜尋最多等多久：時間到就用已經回來的結果（同搜尋頁按「停止」）。
   final Duration searchLimit;
@@ -184,6 +190,89 @@ class AppAiFindLibrary implements AiFindLibrary {
     if (text.isEmpty) throw const AiFindUnreadable('正文是空的');
     return (title: chapter.title, text: text, total: toc.length);
   });
+
+  /// 查中文維基百科：先照名稱拿條目（轉址的別名會轉到正式條目），沒有就用
+  /// 全文搜尋拿第一個條目；再照台灣、中國大陸、香港各拿一次條目名，維基百科
+  /// 照地區轉換譯名（鏈鋸人／电锯人）。只送作品名，不送使用者的任何資料。
+  @override
+  Future<AiFindWorkNames?> workNames(
+    String name,
+    CancelToken cancelToken,
+  ) async {
+    try {
+      var summary = await _wikiSummary(name, 'zh-tw', cancelToken);
+      if (summary == null) {
+        final found = await _wikiSearch(name, cancelToken);
+        if (found == null) return null;
+        summary = await _wikiSummary(found, 'zh-tw', cancelToken);
+        if (summary == null) return null;
+      }
+      final title = summary.title;
+      final names = <String, String>{'台灣': summary.display};
+      for (final (label, variant) in [('中國大陸', 'zh-cn'), ('香港', 'zh-hk')]) {
+        final other = await _wikiSummary(title, variant, cancelToken);
+        if (other != null) names[label] = other.display;
+      }
+      return (title: title, names: names, intro: summary.extract);
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error) || cancelToken.isCancelled) rethrow;
+      throw AiFindUnreadable('連不上中文維基百科：${aiFindNetworkFailure(error)}');
+    }
+  }
+
+  static const String _wikiBase = 'https://zh.wikipedia.org';
+
+  /// 維基百科要求自動程式帶可辨識的 User-Agent。
+  static const Map<String, String> _wikiHeaders = {
+    'User-Agent': 'NightReader/1.0 (AI book finder; work name lookup)',
+  };
+
+  Future<({String title, String display, String extract})?> _wikiSummary(
+    String title,
+    String variant,
+    CancelToken cancelToken,
+  ) async {
+    final response = await _wikipedia.get<Map<String, dynamic>>(
+      '$_wikiBase/api/rest_v1/page/summary/'
+      '${Uri.encodeComponent(title.replaceAll(' ', '_'))}',
+      options: Options(
+        headers: {..._wikiHeaders, 'Accept-Language': variant},
+        validateStatus: (status) => status == 200 || status == 404,
+      ),
+      cancelToken: cancelToken,
+    );
+    final data = response.data;
+    if (response.statusCode != 200 || data == null) return null;
+    // 消歧義頁不是作品條目。
+    if (data['type'] == 'disambiguation') return null;
+    final pageTitle = '${data['title'] ?? ''}'.trim();
+    if (pageTitle.isEmpty) return null;
+    final display = aiFindPlainText('${data['displaytitle'] ?? pageTitle}');
+    return (
+      title: pageTitle,
+      display: display.isEmpty ? pageTitle : display,
+      extract: '${data['extract'] ?? ''}'.trim(),
+    );
+  }
+
+  Future<String?> _wikiSearch(String name, CancelToken cancelToken) async {
+    final response = await _wikipedia.get<Map<String, dynamic>>(
+      '$_wikiBase/w/api.php',
+      queryParameters: {
+        'action': 'query',
+        'list': 'search',
+        'srsearch': name,
+        'srlimit': '1',
+        'format': 'json',
+      },
+      options: Options(headers: _wikiHeaders),
+      cancelToken: cancelToken,
+    );
+    final hits = (response.data?['query'] as Map?)?['search'];
+    if (hits is! List || hits.isEmpty) return null;
+    final title = '${(hits.first as Map)['title'] ?? ''}'.trim();
+    return title.isEmpty ? null : title;
+  }
 
   @override
   Future<List<AiFindExploreSource>> exploreSources() async {

@@ -76,6 +76,9 @@ sealed class AiFindCommand {
         final page = integer('page') ?? 1;
         if ((category ?? 0) < 0 || page < 1) return null;
         return AiFindExplore(id(args['source'], 's'), category, page);
+      case 'names':
+        final work = text('name');
+        return work == null ? null : AiFindNames(work);
       case 'shelf':
         return const AiFindShelf();
       case 'submit':
@@ -131,6 +134,12 @@ final class AiFindExplore extends AiFindCommand {
   final String? source;
   final int? category;
   final int page;
+}
+
+/// 查一部作品在中文維基百科的條目與各地寫法。
+final class AiFindNames extends AiFindCommand {
+  const AiFindNames(this.name);
+  final String name;
 }
 
 final class AiFindShelf extends AiFindCommand {
@@ -203,6 +212,19 @@ final List<AiTool> aiFindTools = [
       'category': {'type': 'integer', 'description': '分類的編號，從 0 數'},
       'page': {'type': 'integer', 'description': '第幾頁，從 1 數，預設 1'},
     }),
+  ),
+  (
+    name: 'names',
+    description:
+        '查一部作品的各地譯名與簡稱：查中文維基百科，回條目名、台灣、中國大陸、'
+        '香港各自的寫法與條目開頭一段。兩岸譯名常不同字（例如「鏈鋸人」與「電鋸人」），'
+        '書源的搜尋只比對書名，每個寫法都要搜才找得齊。',
+    parameters: _object(
+      {
+        'name': {'type': 'string', 'description': '作品名稱或簡稱'},
+      },
+      ['name'],
+    ),
   ),
   (
     name: 'shelf',
@@ -320,6 +342,7 @@ readAiFindCall(AiToolCall call) {
       'read $book $chapter $from',
     AiFindExplore(:final source, :final category, :final page) =>
       'explore $source $category $page',
+    AiFindNames(:final name) => 'names $name',
     AiFindShelf() => 'shelf',
     AiFindSubmit(:final books) => 'submit ${[for (final b in books) b.book]}',
   };

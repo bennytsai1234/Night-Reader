@@ -47,6 +47,10 @@ abstract interface class AiFindLibrary {
   /// 書架上的書與閱讀紀錄（含已經移出書架的）。
   Future<List<AiFindShelfEntry>> shelf();
 
+  /// [name] 這部作品在中文維基百科的條目與各地寫法（查作品別名）；沒有條目
+  /// 是 null。連不上時丟 [AiFindUnreadable]。
+  Future<AiFindWorkNames?> workNames(String name, CancelToken cancelToken);
+
   /// 這次抓過的書源的秘密（登入資料、Cookie、書源變數，ADR 0054）：工具結果
   /// 接進對話、寫進紀錄前換掉（`AgentTask.redact`）。
   Set<String> get secrets;
@@ -62,6 +66,14 @@ typedef AiFindSearchResult = ({
   int sources,
   int failed,
   int pending,
+});
+
+/// 一部作品在中文維基百科：[title] 是條目名，[names] 是各地的寫法
+/// （「台灣」「中國大陸」「香港」對寫法），[intro] 是條目開頭一段。
+typedef AiFindWorkNames = ({
+  String title,
+  Map<String, String> names,
+  String intro,
 });
 
 /// 讀不到這一章：[message] 照實回給 AI。

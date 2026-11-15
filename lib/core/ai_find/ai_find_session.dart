@@ -330,6 +330,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         AiFindDetail() => await _detail(command),
         AiFindRead() => await _read(command),
         AiFindExplore() => await _explore(command),
+        AiFindNames() => await _names(command),
         AiFindShelf() => await _shelf(),
         AiFindSubmit() => _submit(command),
       };
@@ -516,6 +517,31 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     s.log.note(_head(text));
     return AgentToolResult(text);
   }
+
+  Future<AgentResult> _names(AiFindNames command) async {
+    _say('查「${command.name}」的別名');
+    final AiFindWorkNames? found;
+    try {
+      found = await _library.workNames(command.name, _cancel);
+    } on AiFindUnreadable catch (error) {
+      return AgentToolResult('# 查不到「${command.name}」的別名：${error.message}');
+    }
+    if (found == null) {
+      return AgentToolResult('# 中文維基百科沒有「${command.name}」的條目');
+    }
+    final intro = found.intro.replaceAll(RegExp(r'\s+'), ' ');
+    final text = [
+      '# 「${command.name}」在中文維基百科：條目《${found.title}》',
+      for (final MapEntry(:key, :value) in found.names.entries) '$key：$value',
+      if (intro.isNotEmpty)
+        '開頭：${intro.length <= _wikiIntroLength ? intro : '${intro.substring(0, _wikiIntroLength)}…'}',
+    ].join('\n');
+    s.log.note(_head(text));
+    return AgentToolResult(text);
+  }
+
+  /// 維基百科條目開頭給幾字：夠看出是不是那部作品、有沒有寫其他譯名。
+  static const int _wikiIntroLength = 300;
 
   Future<AgentResult> _shelf() async {
     _say('看書架與閱讀紀錄');

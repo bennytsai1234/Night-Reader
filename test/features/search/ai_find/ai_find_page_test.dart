@@ -73,6 +73,18 @@ class _Library implements AiFindLibrary {
   ) async => const [];
 
   @override
+  Future<AiFindWorkNames?> workNames(
+    String name,
+    CancelToken cancelToken,
+  ) async => name == '鏈鋸人'
+      ? (
+          title: '鏈鋸人',
+          names: {'台灣': '鏈鋸人', '中國大陸': '电锯人'},
+          intro: '《鏈鋸人》是由日本漫畫家藤本樹所創作的黑暗奇幻少年漫畫。',
+        )
+      : null;
+
+  @override
   Future<List<AiFindShelfEntry>> shelf() async => const [];
 }
 

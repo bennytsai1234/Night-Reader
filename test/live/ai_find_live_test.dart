@@ -128,6 +128,10 @@ class _CaseLibrary implements AiFindLibrary {
   ) => _real.exploreBooks(source, category, page, cancelToken);
 
   @override
+  Future<AiFindWorkNames?> workNames(String name, CancelToken cancelToken) =>
+      _real.workNames(name, cancelToken);
+
+  @override
   Future<List<AiFindShelfEntry>> shelf() async => _shelf;
 
   @override

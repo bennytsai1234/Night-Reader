@@ -116,6 +116,18 @@ class _Library implements AiFindLibrary {
   ) async => [_book('獵魔人'), _book('排行新書')];
 
   @override
+  Future<AiFindWorkNames?> workNames(
+    String name,
+    CancelToken cancelToken,
+  ) async => name == '鏈鋸人'
+      ? (
+          title: '鏈鋸人',
+          names: {'台灣': '鏈鋸人', '中國大陸': '电锯人'},
+          intro: '《鏈鋸人》是由日本漫畫家藤本樹所創作的黑暗奇幻少年漫畫。',
+        )
+      : null;
+
+  @override
   Future<List<AiFindShelfEntry>> shelf() async => [
     (
       name: '詭秘之主',
@@ -516,6 +528,22 @@ void main() {
     ]);
     expect(lines.first, contains('另有 1 本書名與作者都不含這個詞，沒列出'));
     expect(lines[2], endsWith('｜簡介：咒術迴戰 的簡介'));
+  });
+
+  test('names tells every regional name of a work, or that there is no '
+      'entry', () async {
+    final ai = _Ai([
+      _calls([
+        ('names', {'name': '鏈鋸人'}),
+        ('names', {'name': '沒有這部'}),
+      ]),
+    ]);
+    await session(_Library({}), ai).start();
+    final results = ai.toolResults(2);
+    expect(results.first, contains('條目《鏈鋸人》'));
+    expect(results.first, contains('中國大陸：电锯人'));
+    expect(results.first, contains('開頭：《鏈鋸人》是由日本漫畫家'));
+    expect(results.last, contains('中文維基百科沒有「沒有這部」的條目'));
   });
 
   test('a detail with HTML tags and line breaks reads as plain text', () async {
