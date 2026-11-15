@@ -27,6 +27,9 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onScopePressed;
   final VoidCallback onCancel;
 
+  /// 搜尋框旁的 ✦：AI 找書（ADR 0060）。
+  final VoidCallback? onAiFind;
+
   const SearchAppBar({
     super.key,
     required this.controller,
@@ -35,6 +38,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onSearch,
     required this.onCancel,
     this.onScopePressed,
+    this.onAiFind,
   });
 
   static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
@@ -99,6 +103,10 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
                 onSubmitted: onSearch,
               ),
             ),
+            if (onAiFind case final onAiFind?) ...[
+              const SizedBox(width: AppSpacing.md),
+              _AiFindAction(onPressed: onAiFind),
+            ],
             const SizedBox(width: AppSpacing.md),
             PlainTextAction(label: '取消', onPressed: onCancel),
           ],
@@ -179,4 +187,35 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
     );
   }
+}
+
+/// 搜尋框與「取消」之間的 ✦（docs/design/screens.md「搜尋」）：24 的強調色
+/// 圖示，有沒有設定 AI 服務都在。
+class _AiFindAction extends StatelessWidget {
+  const _AiFindAction({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: 'AI 找書',
+    child: Semantics(
+      button: true,
+      label: 'AI 找書',
+      child: PressScale(
+        scale: 0.9,
+        onTap: onPressed,
+        child: SizedBox(
+          height: AppGlass.buttonSize,
+          child: Center(
+            child: Icon(
+              Icons.auto_awesome_outlined,
+              size: 24,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }

@@ -89,23 +89,52 @@ class AiRepairSettings {
     return saved;
   }
 
-  /// 畫面上填的內容，沒填的是空字串。
-  Future<AiService> read() async {
+  /// AI 找書用的服務（ADR 0060）：網址、金鑰、思考程度同修書源，模型是
+  /// 「找書的模型」，留空就用修書源的模型。沒填好是 null。
+  ///
+  /// 只填了找書的模型、修書源的模型空著也算填好（Codex 審查）；網址、金鑰與
+  /// 兩個模型從同一次讀到的設定拿，不會拼到兩個時間點的值。
+  Future<AiService?> findService() async {
+    final json = await _json();
+    final saved = _serviceOf(json);
+    final find = _field(json, 'findModel');
+    final model = find.isNotEmpty ? find : saved.model;
+    if (saved.baseUrl.isEmpty || model.isEmpty) return null;
+    return (
+      baseUrl: saved.baseUrl,
+      apiKey: saved.apiKey,
+      model: model,
+      effort: saved.effort,
+    );
+  }
+
+  /// 「找書的模型」；空字串是同修書源的模型。
+  Future<String> findModel() async => _field(await _json(), 'findModel');
+
+  Future<Map<String, dynamic>> _json() async {
     final raw = (await _ensure()).getString(serviceKey);
-    Map<String, dynamic> json = const {};
-    if (raw != null) {
-      try {
-        if (jsonDecode(raw) case final Map<String, dynamic> decoded) {
-          json = decoded;
-        }
-      } on FormatException {
-        // 讀不懂就當作沒填。
+    if (raw == null) return const {};
+    try {
+      if (jsonDecode(raw) case final Map<String, dynamic> decoded) {
+        return decoded;
       }
+    } on FormatException {
+      // 讀不懂就當作沒填。
     }
-    String field(String name) => switch (json[name]) {
-      final String value => value.trim(),
-      _ => '',
-    };
+    return const {};
+  }
+
+  static String _field(Map<String, dynamic> json, String name) =>
+      switch (json[name]) {
+        final String value => value.trim(),
+        _ => '',
+      };
+
+  /// 畫面上填的內容，沒填的是空字串。
+  Future<AiService> read() async => _serviceOf(await _json());
+
+  static AiService _serviceOf(Map<String, dynamic> json) {
+    String field(String name) => _field(json, name);
     final effort = field('effort');
     return (
       baseUrl: field('baseUrl'),
@@ -115,7 +144,9 @@ class AiRepairSettings {
     );
   }
 
-  Future<void> save(AiService service) async {
+  /// 存服務；[findModel] 沒給時留著原本的「找書的模型」。兩個模型和網址、
+  /// 金鑰存在同一筆（理由見類別說明）。
+  Future<void> save(AiService service, {String? findModel}) async {
     final prefs = await _ensure();
     final value = (
       baseUrl: service.baseUrl.trim(),
@@ -123,7 +154,11 @@ class AiRepairSettings {
       model: service.model.trim(),
       effort: service.effort,
     );
-    if (value.baseUrl.isEmpty && value.apiKey.isEmpty && value.model.isEmpty) {
+    final find = (findModel ?? await this.findModel()).trim();
+    if (value.baseUrl.isEmpty &&
+        value.apiKey.isEmpty &&
+        value.model.isEmpty &&
+        find.isEmpty) {
       await prefs.remove(serviceKey);
       return;
     }
@@ -134,6 +169,7 @@ class AiRepairSettings {
         'apiKey': value.apiKey,
         'model': value.model,
         if (value.effort.isNotEmpty) 'effort': value.effort,
+        if (find.isNotEmpty) 'findModel': find,
       }),
     );
   }

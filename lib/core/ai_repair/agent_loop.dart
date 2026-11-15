@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
 
 import 'ai_chat_client.dart';
 
@@ -42,6 +44,11 @@ abstract class AgentTask<C> {
   /// 執行一個指令；傳回的文字是要接進對話的事實，秘密已經遮掉。
   Future<AgentResult> execute(C command);
 
+  /// [command] 和同一則回覆裡的其他呼叫同時執行也不會改變結果（只讀的
+  /// 查詢）：迴圈一收到回覆就一起開始，結果照呼叫的順序接回對話。交出這類
+  /// 要看前面查過什麼的，照順序執行。預設都照順序。
+  bool runsAlongside(C command) => false;
+
   /// 一輪開始：第 [attempt] 次的第 [round] 輪（每次從 1 數起）；[messages]
   /// 是這輪要送出的全部對話。
   void roundStarted(int attempt, int round, List<AiMessage> messages) {}
@@ -67,6 +74,116 @@ typedef AgentRoundRecord = ({
   Duration elapsed,
   String? error,
 });
+
+/// 讀 AI 的一個工具呼叫的參數：讀得懂時 [args] 是參數物件；讀不懂時 [fact]
+/// 說哪裡不對（沒有這個工具、參數不是 JSON 物件），開頭是 [badCall]。
+/// [malformed] 是參數根本不是 JSON（[AgentBadCommand.malformed]）。
+({Map<String, dynamic>? args, String fact, bool malformed}) decodeToolCall(
+  AiToolCall call,
+  List<AiTool> tools, {
+  required String badCall,
+}) {
+  // 先看是不是 JSON：參數寫壞時工具名稱多半也是模型內建標記的一部分，
+  // 照樣丟掉重送。
+  final Object? args;
+  try {
+    args = call.arguments.trim().isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(call.arguments);
+  } on FormatException catch (error) {
+    return (
+      args: null,
+      fact:
+          '$badCall（${call.name}）：參數不是合法的 JSON：'
+          '${error.message}${_badJsonSpot(call.arguments, error.offset)}',
+      malformed: true,
+    );
+  }
+  if (!tools.any((tool) => tool.name == call.name)) {
+    return (
+      args: null,
+      fact:
+          '$badCall：沒有叫 ${call.name} 的工具，有的是 '
+          '${tools.map((tool) => tool.name).join('、')}',
+      malformed: false,
+    );
+  }
+  if (args is! Map<String, dynamic>) {
+    return (
+      args: null,
+      fact: '$badCall（${call.name}）：參數要是一個 JSON 物件',
+      malformed: false,
+    );
+  }
+  return (args: args, fact: '', malformed: false);
+}
+
+/// JSON 壞在哪：第幾個字與那一段原文。只寫「Unexpected character」時，AI
+/// 看不出自己寫錯什麼，同樣的錯再送一次（2026-11-14 读客书库，模型把內建的
+/// 工具標記寫進參數，連續三次讀不懂）。
+String _badJsonSpot(String text, int? offset) {
+  if (offset == null) return '';
+  final at = offset.clamp(0, text.length);
+  final from = (at - 20).clamp(0, text.length);
+  final to = (at + 20).clamp(0, text.length);
+  return '，第 ${at + 1} 個字附近：${text.substring(from, to)}';
+}
+
+/// 參數讀得懂、但少了必要的參數或值不對時的那句話。
+String missingToolArguments(
+  AiToolCall call,
+  List<AiTool> tools,
+  String badCall,
+) {
+  final tool = tools.firstWhere((tool) => tool.name == call.name);
+  final required = (tool.parameters['required'] as List?)?.cast<String>() ?? [];
+  return '$badCall（${call.name}）：少了必要的參數或值不對'
+      '${required.isEmpty ? '' : '，要有 ${required.join('、')}'}';
+}
+
+/// 一個指令的 key：工具名稱與參數，鍵照名稱排；[ignore] 是不算進去的頂層
+/// 參數（例如給人看的說明）。同樣的工具與參數 key 相同
+/// （[AiAgentKnobs.sameCallLimit]）。
+String agentCommandKey(
+  String name,
+  Map<String, dynamic> args, {
+  Set<String> ignore = const {},
+}) {
+  Object? sorted(Object? value) => switch (value) {
+    final Map<dynamic, dynamic> map => {
+      for (final key in map.keys.map((k) => '$k').toList()..sort())
+        key: sorted(map[key]),
+    },
+    final List<dynamic> list => [for (final item in list) sorted(item)],
+    _ => value,
+  };
+  final command = sorted({...args}..removeWhere((k, _) => ignore.contains(k)));
+  try {
+    return '$name ${jsonEncode(command)}';
+  } on JsonUnsupportedObjectError {
+    // 數字超出範圍這類寫不回 JSON 的值。
+    return '$name $command';
+  }
+}
+
+/// 一輪寫進紀錄的那行：花的時間、送出多少、服務回報的用量。
+String agentRoundText(AgentRoundRecord record) {
+  String tokens(int count) => NumberFormat.decimalPattern().format(count);
+  final reply = record.reply;
+  final seconds =
+      '${(record.elapsed.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
+  final sent = '送出 ${record.sentMessages} 句 ${tokens(record.sentChars)} 字';
+  final head = reply == null
+      ? 'AI 回覆 $seconds（$sent）'
+      : 'AI 回覆 $seconds（$sent，第一段資料 '
+            '${(reply.firstData.inMilliseconds / 1000).toStringAsFixed(1)} 秒）';
+  final usage = record.usage;
+  if (usage == null) return head;
+  return '$head；${record.estimated ? '沒回完，照字數估：' : ''}'
+      '送出 ${tokens(usage.prompt)} token'
+      '（打中快取 ${tokens(usage.cached)}）、回覆 ${tokens(usage.completion)}'
+      '（思考 ${tokens(usage.reasoning)}）';
+}
 
 /// AI 這輪回的話讀出來的樣子。
 sealed class AgentParse<C> {
@@ -392,50 +509,86 @@ Future<_AttemptEnd> _attempt<C>(
       continue;
     }
     noCommand = 0;
-    // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
-    for (final (i, call) in reply.toolCalls.indexed) {
-      void answer(String text) => fact(text, callId: call.id);
-      switch (parsed[i]) {
-        case AgentBadCommand(fact: final text):
-          stats.badCommands++;
-          if (++badCommand >= AiAgentKnobs.badCommandLimit) {
-            return _Retry('連續 $badCommand 次工具呼叫讀不懂');
-          }
-          answer(text);
-        case AgentCommand(:final command, :final key):
-          final count = calls[key] = (calls[key] ?? 0) + 1;
-          if (count >= AiAgentKnobs.sameCallLimit) {
-            return _Retry('同樣的工具與參數第 $count 次');
-          }
-          stats.toolCalls++;
-          final toolWatch = Stopwatch()..start();
-          final result = await task.execute(command);
-          stats.tools += toolWatch.elapsed;
-          if (cancelToken.isCancelled) return cancelled;
-          switch (result) {
-            case AgentAccepted(:final reason):
-              return _Finished(AgentEndKind.completed, reason);
-            case AgentStopped(:final kind, :final reason):
-              return _Finished(kind, reason);
-            case AgentInvalid(fact: final text):
-              stats.badCommands++;
-              if (++badCommand >= AiAgentKnobs.badCommandLimit) {
-                return _Retry('連續 $badCommand 次工具呼叫讀不懂');
-              }
-              answer(text);
-            case AgentRejected(:final reason):
-              badCommand = 0;
-              stats.rejections++;
-              // 交出之間的查證不重算：數的是交出的那幾次連續被退。
-              if (++rejections >= AiAgentKnobs.rejectionLimit) {
-                return _Retry('交出連續被退 $rejections 次');
-              }
-              answer('$reason${_repeated(count, lastResult, key, reason)}');
-            case AgentToolResult(:final text, :final same):
-              badCommand = 0;
-              answer('$text${_repeated(count, lastResult, key, same ?? text)}');
-          }
+    // 互不影響的查詢一起跑（AI 一則回覆常叫好幾個搜尋，一個接一個等的話
+    // 一輪要好幾分鐘，2026-11-15 AI 找書實跑）：照呼叫的順序切段，相鄰、
+    // 可以一起跑的那段輪到時一起開始；交出這類要照順序的是段的界線，前面那段
+    // 都回來才做它，後面那段等它做完才開始（Codex 審查：排在交出後面的詳情先
+    // 開始，交出就照「已經看過詳情」收了）。同樣的參數到上限的那個和它後面的
+    // 不算進來，照順序那段會在那裡停下。
+    final alongside = <int>{};
+    final counted = Map.of(calls);
+    for (final (i, parse) in parsed.indexed) {
+      if (parse is! AgentCommand<C>) continue;
+      final count = counted[parse.key] = (counted[parse.key] ?? 0) + 1;
+      if (count >= AiAgentKnobs.sameCallLimit) break;
+      if (task.runsAlongside(parse.command)) alongside.add(i);
+    }
+    final early = <int, Future<AgentResult>>{};
+    void startSegment(int from) {
+      for (var j = from; alongside.contains(j); j++) {
+        early[j] ??= task.execute((parsed[j] as AgentCommand<C>).command)
+          ..ignore();
       }
+    }
+
+    final toolWatch = Stopwatch()..start();
+    try {
+      // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
+      for (final (i, call) in reply.toolCalls.indexed) {
+        void answer(String text) => fact(text, callId: call.id);
+        switch (parsed[i]) {
+          case AgentBadCommand(fact: final text):
+            stats.badCommands++;
+            if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+              return _Retry('連續 $badCommand 次工具呼叫讀不懂');
+            }
+            answer(text);
+          case AgentCommand(:final command, :final key):
+            final count = calls[key] = (calls[key] ?? 0) + 1;
+            if (count >= AiAgentKnobs.sameCallLimit) {
+              return _Retry('同樣的工具與參數第 $count 次');
+            }
+            stats.toolCalls++;
+            if (alongside.contains(i)) startSegment(i);
+            final result = await (early[i] ?? task.execute(command));
+            if (cancelToken.isCancelled) return cancelled;
+            switch (result) {
+              case AgentAccepted(:final reason):
+                return _Finished(AgentEndKind.completed, reason);
+              case AgentStopped(:final kind, :final reason):
+                return _Finished(kind, reason);
+              case AgentInvalid(fact: final text):
+                stats.badCommands++;
+                if (++badCommand >= AiAgentKnobs.badCommandLimit) {
+                  return _Retry('連續 $badCommand 次工具呼叫讀不懂');
+                }
+                answer(text);
+              case AgentRejected(:final reason):
+                badCommand = 0;
+                stats.rejections++;
+                // 交出之間的查證不重算：數的是交出的那幾次連續被退。
+                if (++rejections >= AiAgentKnobs.rejectionLimit) {
+                  return _Retry('交出連續被退 $rejections 次');
+                }
+                answer('$reason${_repeated(count, lastResult, key, reason)}');
+              case AgentToolResult(:final text, :final same):
+                badCommand = 0;
+                answer(
+                  '$text${_repeated(count, lastResult, key, same ?? text)}',
+                );
+            }
+        }
+      }
+    } finally {
+      // 提前結束（交出被收下、讀不懂到上限、停止）時，已經開始的查詢也等
+      // 它們回來再走：不然這件已經結束、重跑清了狀態，舊的查詢還在用書源、
+      // 改狀態、寫紀錄。停止時它們收到同一個取消，很快就回來。
+      await Future.wait([
+        for (final pending in early.values)
+          pending.then<void>((_) {}, onError: (Object _) {}),
+      ]);
+      // 一起跑的幾個重疊的時間只算一次：工具秒是這一輪等工具的時間。
+      stats.tools += toolWatch.elapsed;
     }
   }
 }

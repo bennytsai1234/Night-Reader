@@ -26,8 +26,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
@@ -89,6 +91,23 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's06_explore': (const {}, (t) async => tapText(t, '發現')),
   's07_mine': (const {}, (t) async => tapText(t, '我的')),
   's08_search': (const {}, (t) async => tapTooltip(t, '搜尋')),
+  's08b_search_past_finds': (
+    const {},
+    (t) async {
+      await t.runAsync(
+        () => getIt<AiFindDao>().upsert(
+          AiFindRecord(
+            id: 'shot',
+            description: '爽文、穿越，我在看《咒術迴戰》和《鏈鋸人》，想要更刺激的',
+            depth: 'normal',
+            createdAt: DateTime(2026, 11, 13, 21).millisecondsSinceEpoch,
+            outcome: AiFindOutcome.found,
+          ),
+        ),
+      );
+      await tapTooltip(t, '搜尋');
+    },
+  ),
   's09_detail': (
     const {},
     (t) async {
@@ -123,6 +142,7 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
   's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
+  's18b_ai_service': (const {}, (t) async => openMine(t, 'AI 服務')),
   's19_release_notes': (
     const {},
     (t) async {

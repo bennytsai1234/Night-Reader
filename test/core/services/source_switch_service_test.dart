@@ -115,8 +115,9 @@ class _SearchTrackingBookSourceService extends BookSourceService {
   Future<List<SearchBook>> preciseSearch(
     BookSource source,
     String name,
-    String author,
-  ) async {
+    String author, {
+    CancelToken? cancelToken,
+  }) async {
     preciseSearchCalls++;
     return const <SearchBook>[];
   }
@@ -153,8 +154,9 @@ class _ThrowingSearchBookSourceService extends BookSourceService {
   Future<List<SearchBook>> preciseSearch(
     BookSource source,
     String name,
-    String author,
-  ) async {
+    String author, {
+    CancelToken? cancelToken,
+  }) async {
     throw error;
   }
 
@@ -180,8 +182,9 @@ class _AutoPrepareFailureBookSourceService extends BookSourceService {
   Future<List<SearchBook>> preciseSearch(
     BookSource source,
     String name,
-    String author,
-  ) async {
+    String author, {
+    CancelToken? cancelToken,
+  }) async {
     return <SearchBook>[_candidate(source.bookSourceUrl)];
   }
 

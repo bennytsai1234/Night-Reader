@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
@@ -35,7 +36,8 @@ void main() {
       ..registerSingleton<BookDao>(BookDao(db))
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
       ..registerSingleton<SearchBookDao>(SearchBookDao(db))
-      ..registerSingleton<SearchKeywordDao>(SearchKeywordDao(db));
+      ..registerSingleton<SearchKeywordDao>(SearchKeywordDao(db))
+      ..registerSingleton<AiFindDao>(AiFindDao(db));
   });
 
   tearDown(() async {

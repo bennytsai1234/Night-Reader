@@ -280,10 +280,14 @@ class RepairRuns extends ChangeNotifier {
     final run = _current;
     if (run == null || !run.isDone) return;
     _current = null;
-    run
-      ..removeListener(_changed)
-      ..disposeWork()
-      ..dispose();
+    run.removeListener(_changed);
+    // 常是在這一件自己的通知裡走到這裡（看過結果、頁面關掉）：等它通知完
+    // 再放掉，不然是在通知中途拆掉它的監聽清單。
+    scheduleMicrotask(() {
+      run
+        ..disposeWork()
+        ..dispose();
+    });
   }
 }
 

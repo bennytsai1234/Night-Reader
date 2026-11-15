@@ -9726,6 +9726,451 @@ extension HighlightToInsertable on Highlight {
   }
 }
 
+class $AiFindRecordsTable extends AiFindRecords
+    with TableInfo<$AiFindRecordsTable, AiFindRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AiFindRecordsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _depthMeta = const VerificationMeta('depth');
+  @override
+  late final GeneratedColumn<String> depth = GeneratedColumn<String>(
+    'depth',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'createdAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<AiFindOutcome, String> outcome =
+      GeneratedColumn<String>(
+        'outcome',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<AiFindOutcome>($AiFindRecordsTable.$converteroutcome);
+  static const VerificationMeta _failureMeta = const VerificationMeta(
+    'failure',
+  );
+  @override
+  late final GeneratedColumn<String> failure = GeneratedColumn<String>(
+    'failure',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _picksJsonMeta = const VerificationMeta(
+    'picksJson',
+  );
+  @override
+  late final GeneratedColumn<String> picksJson = GeneratedColumn<String>(
+    'picks',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _roundsMeta = const VerificationMeta('rounds');
+  @override
+  late final GeneratedColumn<int> rounds = GeneratedColumn<int>(
+    'rounds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _tokensMeta = const VerificationMeta('tokens');
+  @override
+  late final GeneratedColumn<int> tokens = GeneratedColumn<int>(
+    'tokens',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    description,
+    depth,
+    createdAt,
+    outcome,
+    failure,
+    summary,
+    picksJson,
+    rounds,
+    tokens,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ai_find_records';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AiFindRecord> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    if (data.containsKey('depth')) {
+      context.handle(
+        _depthMeta,
+        depth.isAcceptableOrUnknown(data['depth']!, _depthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_depthMeta);
+    }
+    if (data.containsKey('createdAt')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['createdAt']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('failure')) {
+      context.handle(
+        _failureMeta,
+        failure.isAcceptableOrUnknown(data['failure']!, _failureMeta),
+      );
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    }
+    if (data.containsKey('picks')) {
+      context.handle(
+        _picksJsonMeta,
+        picksJson.isAcceptableOrUnknown(data['picks']!, _picksJsonMeta),
+      );
+    }
+    if (data.containsKey('rounds')) {
+      context.handle(
+        _roundsMeta,
+        rounds.isAcceptableOrUnknown(data['rounds']!, _roundsMeta),
+      );
+    }
+    if (data.containsKey('tokens')) {
+      context.handle(
+        _tokensMeta,
+        tokens.isAcceptableOrUnknown(data['tokens']!, _tokensMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AiFindRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AiFindRecord.row(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      depth: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}depth'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}createdAt'],
+      )!,
+      outcome: $AiFindRecordsTable.$converteroutcome.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}outcome'],
+        )!,
+      ),
+      failure: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failure'],
+      )!,
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      )!,
+      picksJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}picks'],
+      )!,
+      rounds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rounds'],
+      )!,
+      tokens: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tokens'],
+      )!,
+    );
+  }
+
+  @override
+  $AiFindRecordsTable createAlias(String alias) {
+    return $AiFindRecordsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<AiFindOutcome, String, String> $converteroutcome =
+      const EnumNameConverter<AiFindOutcome>(AiFindOutcome.values);
+}
+
+class AiFindRecordsCompanion extends UpdateCompanion<AiFindRecord> {
+  final Value<String> id;
+  final Value<String> description;
+  final Value<String> depth;
+  final Value<int> createdAt;
+  final Value<AiFindOutcome> outcome;
+  final Value<String> failure;
+  final Value<String> summary;
+  final Value<String> picksJson;
+  final Value<int> rounds;
+  final Value<int> tokens;
+  final Value<int> rowid;
+  const AiFindRecordsCompanion({
+    this.id = const Value.absent(),
+    this.description = const Value.absent(),
+    this.depth = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.outcome = const Value.absent(),
+    this.failure = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.picksJson = const Value.absent(),
+    this.rounds = const Value.absent(),
+    this.tokens = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AiFindRecordsCompanion.insert({
+    required String id,
+    required String description,
+    required String depth,
+    required int createdAt,
+    required AiFindOutcome outcome,
+    this.failure = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.picksJson = const Value.absent(),
+    this.rounds = const Value.absent(),
+    this.tokens = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       description = Value(description),
+       depth = Value(depth),
+       createdAt = Value(createdAt),
+       outcome = Value(outcome);
+  static Insertable<AiFindRecord> custom({
+    Expression<String>? id,
+    Expression<String>? description,
+    Expression<String>? depth,
+    Expression<int>? createdAt,
+    Expression<String>? outcome,
+    Expression<String>? failure,
+    Expression<String>? summary,
+    Expression<String>? picksJson,
+    Expression<int>? rounds,
+    Expression<int>? tokens,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (description != null) 'description': description,
+      if (depth != null) 'depth': depth,
+      if (createdAt != null) 'createdAt': createdAt,
+      if (outcome != null) 'outcome': outcome,
+      if (failure != null) 'failure': failure,
+      if (summary != null) 'summary': summary,
+      if (picksJson != null) 'picks': picksJson,
+      if (rounds != null) 'rounds': rounds,
+      if (tokens != null) 'tokens': tokens,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AiFindRecordsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? description,
+    Value<String>? depth,
+    Value<int>? createdAt,
+    Value<AiFindOutcome>? outcome,
+    Value<String>? failure,
+    Value<String>? summary,
+    Value<String>? picksJson,
+    Value<int>? rounds,
+    Value<int>? tokens,
+    Value<int>? rowid,
+  }) {
+    return AiFindRecordsCompanion(
+      id: id ?? this.id,
+      description: description ?? this.description,
+      depth: depth ?? this.depth,
+      createdAt: createdAt ?? this.createdAt,
+      outcome: outcome ?? this.outcome,
+      failure: failure ?? this.failure,
+      summary: summary ?? this.summary,
+      picksJson: picksJson ?? this.picksJson,
+      rounds: rounds ?? this.rounds,
+      tokens: tokens ?? this.tokens,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (depth.present) {
+      map['depth'] = Variable<String>(depth.value);
+    }
+    if (createdAt.present) {
+      map['createdAt'] = Variable<int>(createdAt.value);
+    }
+    if (outcome.present) {
+      map['outcome'] = Variable<String>(
+        $AiFindRecordsTable.$converteroutcome.toSql(outcome.value),
+      );
+    }
+    if (failure.present) {
+      map['failure'] = Variable<String>(failure.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (picksJson.present) {
+      map['picks'] = Variable<String>(picksJson.value);
+    }
+    if (rounds.present) {
+      map['rounds'] = Variable<int>(rounds.value);
+    }
+    if (tokens.present) {
+      map['tokens'] = Variable<int>(tokens.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AiFindRecordsCompanion(')
+          ..write('id: $id, ')
+          ..write('description: $description, ')
+          ..write('depth: $depth, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('outcome: $outcome, ')
+          ..write('failure: $failure, ')
+          ..write('summary: $summary, ')
+          ..write('picksJson: $picksJson, ')
+          ..write('rounds: $rounds, ')
+          ..write('tokens: $tokens, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class _$AiFindRecordInsertable implements Insertable<AiFindRecord> {
+  AiFindRecord _object;
+  _$AiFindRecordInsertable(this._object);
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    return AiFindRecordsCompanion(
+      id: Value(_object.id),
+      description: Value(_object.description),
+      depth: Value(_object.depth),
+      createdAt: Value(_object.createdAt),
+      outcome: Value(_object.outcome),
+      failure: Value(_object.failure),
+      summary: Value(_object.summary),
+      picksJson: Value(_object.picksJson),
+      rounds: Value(_object.rounds),
+      tokens: Value(_object.tokens),
+    ).toColumns(false);
+  }
+}
+
+extension AiFindRecordToInsertable on AiFindRecord {
+  _$AiFindRecordInsertable toInsertable() {
+    return _$AiFindRecordInsertable(this);
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -9754,6 +10199,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SearchKeywordsTable searchKeywords = $SearchKeywordsTable(this);
   late final $BookmarksTable bookmarks = $BookmarksTable(this);
   late final $HighlightsTable highlights = $HighlightsTable(this);
+  late final $AiFindRecordsTable aiFindRecords = $AiFindRecordsTable(this);
   late final BookDao bookDao = BookDao(this as AppDatabase);
   late final ChapterDao chapterDao = ChapterDao(this as AppDatabase);
   late final BookSourceDao bookSourceDao = BookSourceDao(this as AppDatabase);
@@ -9783,6 +10229,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ReaderChapterContentDao(this as AppDatabase);
   late final BookmarkDao bookmarkDao = BookmarkDao(this as AppDatabase);
   late final HighlightDao highlightDao = HighlightDao(this as AppDatabase);
+  late final AiFindDao aiFindDao = AiFindDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9809,6 +10256,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     searchKeywords,
     bookmarks,
     highlights,
+    aiFindRecords,
   ];
 }
 
@@ -16373,6 +16821,313 @@ typedef $$HighlightsTableProcessedTableManager =
       Highlight,
       PrefetchHooks Function()
     >;
+typedef $$AiFindRecordsTableCreateCompanionBuilder =
+    AiFindRecordsCompanion Function({
+      required String id,
+      required String description,
+      required String depth,
+      required int createdAt,
+      required AiFindOutcome outcome,
+      Value<String> failure,
+      Value<String> summary,
+      Value<String> picksJson,
+      Value<int> rounds,
+      Value<int> tokens,
+      Value<int> rowid,
+    });
+typedef $$AiFindRecordsTableUpdateCompanionBuilder =
+    AiFindRecordsCompanion Function({
+      Value<String> id,
+      Value<String> description,
+      Value<String> depth,
+      Value<int> createdAt,
+      Value<AiFindOutcome> outcome,
+      Value<String> failure,
+      Value<String> summary,
+      Value<String> picksJson,
+      Value<int> rounds,
+      Value<int> tokens,
+      Value<int> rowid,
+    });
+
+class $$AiFindRecordsTableFilterComposer
+    extends Composer<_$AppDatabase, $AiFindRecordsTable> {
+  $$AiFindRecordsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get depth => $composableBuilder(
+    column: $table.depth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<AiFindOutcome, AiFindOutcome, String>
+  get outcome => $composableBuilder(
+    column: $table.outcome,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get failure => $composableBuilder(
+    column: $table.failure,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get picksJson => $composableBuilder(
+    column: $table.picksJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rounds => $composableBuilder(
+    column: $table.rounds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tokens => $composableBuilder(
+    column: $table.tokens,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AiFindRecordsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AiFindRecordsTable> {
+  $$AiFindRecordsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get depth => $composableBuilder(
+    column: $table.depth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get outcome => $composableBuilder(
+    column: $table.outcome,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failure => $composableBuilder(
+    column: $table.failure,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get picksJson => $composableBuilder(
+    column: $table.picksJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rounds => $composableBuilder(
+    column: $table.rounds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tokens => $composableBuilder(
+    column: $table.tokens,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AiFindRecordsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AiFindRecordsTable> {
+  $$AiFindRecordsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get depth =>
+      $composableBuilder(column: $table.depth, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<AiFindOutcome, String> get outcome =>
+      $composableBuilder(column: $table.outcome, builder: (column) => column);
+
+  GeneratedColumn<String> get failure =>
+      $composableBuilder(column: $table.failure, builder: (column) => column);
+
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<String> get picksJson =>
+      $composableBuilder(column: $table.picksJson, builder: (column) => column);
+
+  GeneratedColumn<int> get rounds =>
+      $composableBuilder(column: $table.rounds, builder: (column) => column);
+
+  GeneratedColumn<int> get tokens =>
+      $composableBuilder(column: $table.tokens, builder: (column) => column);
+}
+
+class $$AiFindRecordsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AiFindRecordsTable,
+          AiFindRecord,
+          $$AiFindRecordsTableFilterComposer,
+          $$AiFindRecordsTableOrderingComposer,
+          $$AiFindRecordsTableAnnotationComposer,
+          $$AiFindRecordsTableCreateCompanionBuilder,
+          $$AiFindRecordsTableUpdateCompanionBuilder,
+          (
+            AiFindRecord,
+            BaseReferences<_$AppDatabase, $AiFindRecordsTable, AiFindRecord>,
+          ),
+          AiFindRecord,
+          PrefetchHooks Function()
+        > {
+  $$AiFindRecordsTableTableManager(_$AppDatabase db, $AiFindRecordsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AiFindRecordsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AiFindRecordsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AiFindRecordsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<String> depth = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<AiFindOutcome> outcome = const Value.absent(),
+                Value<String> failure = const Value.absent(),
+                Value<String> summary = const Value.absent(),
+                Value<String> picksJson = const Value.absent(),
+                Value<int> rounds = const Value.absent(),
+                Value<int> tokens = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AiFindRecordsCompanion(
+                id: id,
+                description: description,
+                depth: depth,
+                createdAt: createdAt,
+                outcome: outcome,
+                failure: failure,
+                summary: summary,
+                picksJson: picksJson,
+                rounds: rounds,
+                tokens: tokens,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String description,
+                required String depth,
+                required int createdAt,
+                required AiFindOutcome outcome,
+                Value<String> failure = const Value.absent(),
+                Value<String> summary = const Value.absent(),
+                Value<String> picksJson = const Value.absent(),
+                Value<int> rounds = const Value.absent(),
+                Value<int> tokens = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AiFindRecordsCompanion.insert(
+                id: id,
+                description: description,
+                depth: depth,
+                createdAt: createdAt,
+                outcome: outcome,
+                failure: failure,
+                summary: summary,
+                picksJson: picksJson,
+                rounds: rounds,
+                tokens: tokens,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AiFindRecordsTable, AiFindRecord>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AiFindRecordsTable,
+                    AiFindRecord
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AiFindRecordsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AiFindRecordsTable,
+      AiFindRecord,
+      $$AiFindRecordsTableFilterComposer,
+      $$AiFindRecordsTableOrderingComposer,
+      $$AiFindRecordsTableAnnotationComposer,
+      $$AiFindRecordsTableCreateCompanionBuilder,
+      $$AiFindRecordsTableUpdateCompanionBuilder,
+      (
+        AiFindRecord,
+        BaseReferences<_$AppDatabase, $AiFindRecordsTable, AiFindRecord>,
+      ),
+      AiFindRecord,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -16419,4 +17174,6 @@ class $AppDatabaseManager {
       $$BookmarksTableTableManager(_db, _db.bookmarks);
   $$HighlightsTableTableManager get highlights =>
       $$HighlightsTableTableManager(_db, _db.highlights);
+  $$AiFindRecordsTableTableManager get aiFindRecords =>
+      $$AiFindRecordsTableTableManager(_db, _db.aiFindRecords);
 }

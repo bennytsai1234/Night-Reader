@@ -28,6 +28,7 @@ import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
+import 'ai_find/ai_find_page.dart';
 import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
@@ -245,6 +246,13 @@ class _SearchViewState extends State<SearchView> {
             onSearch: _onSearch,
             onScopePressed: _openScopeSheet,
             onCancel: () => Navigator.maybePop(context),
+            onAiFind: () {
+              _inputFocus.unfocus();
+              // 回來時這次找書可能已經存成「過去的找書」的一筆。
+              unawaited(
+                openAiFind(context).then((_) => provider.loadPastFinds()),
+              );
+            },
           ),
           // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
           body: Builder(

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/ai_find_dao.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -129,6 +130,7 @@ Future<void> setUpApp({Map<String, Object> prefs = const {}}) async {
     ..registerLazySingleton<SearchBookDao>(() => SearchBookDao(_db))
     ..registerLazySingleton<SearchHistoryDao>(() => SearchHistoryDao(_db))
     ..registerLazySingleton<SearchKeywordDao>(() => SearchKeywordDao(_db))
+    ..registerLazySingleton<AiFindDao>(() => AiFindDao(_db))
     ..registerLazySingleton<KeyboardAssistDao>(() => KeyboardAssistDao(_db))
     ..registerLazySingleton<ServerDao>(() => ServerDao(_db))
     ..registerLazySingleton<ReaderChapterContentDao>(

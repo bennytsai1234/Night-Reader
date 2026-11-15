@@ -71,6 +71,39 @@ void main() {
     expect((await settings.read()).model, '');
   });
 
+  testWidgets('the model for finding books is picked from the same list and '
+      'can go back to the repair model', (tester) async {
+    final settings = await open(
+      tester,
+      '{"baseUrl":"https://ai.example/v1","apiKey":"sk-1","model":"repair"}',
+      listModels: (_) async => ['repair', 'finder'],
+    );
+    expect(find.text('同修書源'), findsOneWidget);
+    await tester.tap(find.text('找書的模型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('finder'));
+    await tester.pumpAndSettle();
+    await leave(tester);
+    expect(await settings.findModel(), 'finder');
+    expect((await settings.read()).model, 'repair');
+
+    await open(
+      tester,
+      '{"baseUrl":"https://ai.example/v1","apiKey":"sk-1","model":"repair",'
+      '"findModel":"finder"}',
+      listModels: (_) async => ['repair', 'finder'],
+    );
+    await tester.tap(find.text('找書的模型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同修書源').last);
+    await tester.pumpAndSettle();
+    await leave(tester);
+    expect(
+      await AiRepairSettings(await SharedPreferences.getInstance()).findModel(),
+      '',
+    );
+  });
+
   testWidgets('how many sites to repair at once is picked from a menu', (
     tester,
   ) async {

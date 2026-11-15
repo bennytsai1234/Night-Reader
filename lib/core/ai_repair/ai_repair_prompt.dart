@@ -6,6 +6,7 @@ import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
 
+import 'agent_loop.dart';
 import 'ai_chat_client.dart';
 import 'repair_pages.dart';
 import 'source_probe.dart';
@@ -255,26 +256,6 @@ const Map<String, String> aiGiveUpLabels = {
   'site_broken': '網站的功能壞了',
   'rate_limited': '網站限流',
 };
-
-/// 同樣的指令與參數用同一個 key（迴圈數第幾次，`AgentCommand.key`）：指令的
-/// JSON 拿掉說明（note、reason），欄位照名稱排序。
-String aiRepairCommandKey(Map<String, dynamic> json) {
-  Object? sorted(Object? value) => switch (value) {
-    final Map<String, dynamic> map => {
-      for (final key in map.keys.toList()..sort()) key: sorted(map[key]),
-    },
-    final List<dynamic> list => [for (final item in list) sorted(item)],
-    _ => value,
-  };
-  final command = {...json}
-    ..removeWhere((key, _) => key == 'note' || key == 'reason');
-  try {
-    return jsonEncode(sorted(command));
-  } on JsonUnsupportedObjectError {
-    // 數字超出範圍這類寫不回 JSON 的值。
-    return '${sorted(command)}';
-  }
-}
 
 /// AI 回的話與貼回的內容最多幾個字：一個書源的 JSON 遠小於這個。
 const int aiRepairMaxReplyLength = 300000;
@@ -863,28 +844,6 @@ String aiRepairCheckReply(String checkText, List<String> diagnostics) => [
   if (diagnostics.isNotEmpty) diagnostics.join('\n\n'),
 ].join('\n');
 
-/// 工具呼叫的參數根本不是 JSON（迴圈丟掉這則、同一段對話重送）。
-bool aiRepairArgumentsMalformed(AiToolCall call) {
-  if (call.arguments.trim().isEmpty) return false;
-  try {
-    jsonDecode(call.arguments);
-    return false;
-  } on FormatException {
-    return true;
-  }
-}
-
-/// JSON 壞在哪：第幾個字與那一段原文。只寫「Unexpected character」時，AI
-/// 看不出自己寫錯什麼，同樣的錯再送一次（2026-11-14 读客书库，模型把內建的
-/// 工具標記寫進參數，連續三次讀不懂）。
-String _badJsonSpot(String text, int? offset) {
-  if (offset == null) return '';
-  final at = offset.clamp(0, text.length);
-  final from = (at - 20).clamp(0, text.length);
-  final to = (at + 20).clamp(0, text.length);
-  return '，第 ${at + 1} 個字附近：${text.substring(from, to)}';
-}
-
 /// 工具呼叫讀不懂時回給 AI 的話的開頭。
 const String aiRepairBadCall = '# 讀不懂這個工具呼叫';
 
@@ -892,59 +851,34 @@ const String aiRepairBadCall = '# 讀不懂這個工具呼叫';
 const String aiRepairBadSourceReply =
     '$aiRepairBadCall：改過的書源組不起來（欄位的型別或數值不對，例如數字超出範圍）';
 
-/// 讀 AI 呼叫的一個工具：讀得懂時是指令與它的 key（[aiRepairCommandKey]），
-/// 讀不懂時 [fact] 說哪裡不對（沒有這個工具、參數不是 JSON 物件、少了必要
-/// 的參數）。
-({AiRepairCommand? command, String key, String fact}) readAiRepairCall(
-  AiToolCall call,
-) {
-  final tool = aiRepairTools
-      .where((tool) => tool.name == call.name)
-      .firstOrNull;
-  if (tool == null) {
+/// 讀 AI 呼叫的一個工具：讀得懂時是指令與它的 key（[agentCommandKey]，
+/// 說明 note、reason 不算），讀不懂時 [fact] 說哪裡不對（沒有這個工具、
+/// 參數不是 JSON 物件、少了必要的參數）。
+({AiRepairCommand? command, String key, String fact, bool malformed})
+readAiRepairCall(AiToolCall call) {
+  final decoded = decodeToolCall(call, aiRepairTools, badCall: aiRepairBadCall);
+  final args = decoded.args;
+  if (args == null) {
     return (
       command: null,
       key: '',
-      fact:
-          '$aiRepairBadCall：沒有叫 ${call.name} 的工具，有的是 '
-          '${aiRepairTools.map((tool) => tool.name).join('、')}',
-    );
-  }
-  final Object? args;
-  try {
-    args = call.arguments.trim().isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(call.arguments);
-  } on FormatException catch (error) {
-    return (
-      command: null,
-      key: '',
-      fact:
-          '$aiRepairBadCall（${call.name}）：參數不是合法的 JSON：'
-          '${error.message}${_badJsonSpot(call.arguments, error.offset)}',
-    );
-  }
-  if (args is! Map<String, dynamic>) {
-    return (
-      command: null,
-      key: '',
-      fact: '$aiRepairBadCall（${call.name}）：參數要是一個 JSON 物件',
+      fact: decoded.fact,
+      malformed: decoded.malformed,
     );
   }
   final command = AiRepairCommand.fromCall(call.name, args);
   if (command == null) {
-    final required = tool.parameters['required']! as List<String>;
     return (
       command: null,
       key: '',
-      fact:
-          '$aiRepairBadCall（${call.name}）：少了必要的參數或值不對，'
-          '要有 ${required.join('、')}',
+      fact: missingToolArguments(call, aiRepairTools, aiRepairBadCall),
+      malformed: false,
     );
   }
   return (
     command: command,
-    key: aiRepairCommandKey({...args, 'action': call.name}),
+    key: agentCommandKey(call.name, args, ignore: const {'note', 'reason'}),
     fact: '',
+    malformed: false,
   );
 }
