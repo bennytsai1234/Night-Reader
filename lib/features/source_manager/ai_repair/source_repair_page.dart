@@ -7,6 +7,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/repair_batch_export.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -147,8 +148,86 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     ),
   );
 
+  /// 暫停中按了繼續：照現在的 AI 服務設定，用同一批書源重開，已經有結果的
+  /// 不再處理。
+  Future<void> _resume() async {
+    if (!_run.canResume) return;
+    final service = await AiRepairSettings().service();
+    if (!mounted) return;
+    if (service == null) {
+      final go = await showAppAlert<bool>(
+        context: context,
+        title: _run.title,
+        message: '還沒設定 AI 服務。',
+        actions: const [
+          AppAlertAction(label: '設定 AI 服務', value: true, isDefault: true),
+          AppAlertAction(label: '取消', value: false),
+        ],
+      );
+      if (go == true && mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AiRepairSettingsPage()),
+        );
+      }
+      return;
+    }
+    await _run.resume();
+  }
+
+  /// 最後一張卡片：做著時「暫停｜結束」，暫停中「繼續｜結束」（使用者
+  /// 2026-11-15 在 AI 找書的候選圖上選的甲，修書源照同一套），做完是「完成」。
+  List<Widget> _controls() {
+    if (_batch.isFinished) {
+      return [
+        GroupedRow(
+          title: '完成',
+          accent: true,
+          showChevron: false,
+          onTap: () => Navigator.of(context).maybePop(),
+        ),
+      ];
+    }
+    final ending = _batch.isStopped || _run.isEnding;
+    final end = GroupedRow(
+      title: ending ? backgroundWorkEnding : '結束',
+      destructive: true,
+      showChevron: false,
+      onTap: ending ? null : () => unawaited(_run.end()),
+    );
+    if (_run.isPaused) {
+      return [
+        GroupedRow(
+          title: '繼續',
+          accent: true,
+          showChevron: false,
+          enabled: _run.canResume,
+          onTap: _run.canResume ? () => unawaited(_resume()) : null,
+        ),
+        end,
+      ];
+    }
+    final pausing = _batch.isPaused;
+    return [
+      GroupedRow(
+        title: pausing ? backgroundWorkPausing : '暫停',
+        showChevron: false,
+        enabled: !pausing && !ending,
+        onTap: pausing || ending ? null : _run.pauseNow,
+      ),
+      end,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 暫停後按繼續換成新的一批：先聽這一件，換了再聽新的那一批。
+    return ListenableBuilder(
+      listenable: _run,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     return ListenableBuilder(
       listenable: _batch,
       builder: (context, _) {
@@ -203,6 +282,17 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                       subtitle: _stageDetail(stage),
                       showChevron: false,
                     ),
+                  if (_run.isPaused)
+                    GroupedRow(
+                      leading: Icon(
+                        Icons.pause_circle_rounded,
+                        size: 22,
+                        color: AppChrome.of(context).sectionText,
+                      ),
+                      title: '已暫停',
+                      subtitle: '按「繼續」接著修，已經有結果的書源不再處理',
+                      showChevron: false,
+                    ),
                   GroupedRow(
                     title: 'AI 用量',
                     value: _tokens(_batch.tokensUsed),
@@ -211,24 +301,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
                 ],
               ),
               ..._results(context),
-              GroupedSection(
-                children: [
-                  if (_batch.isFinished)
-                    GroupedRow(
-                      title: '完成',
-                      accent: true,
-                      showChevron: false,
-                      onTap: () => Navigator.of(context).maybePop(),
-                    )
-                  else
-                    GroupedRow(
-                      title: _batch.isStopped ? '正在停下…' : '停止',
-                      destructive: true,
-                      showChevron: false,
-                      onTap: _batch.isStopped ? null : _batch.stop,
-                    ),
-                ],
-              ),
+              GroupedSection(children: _controls()),
             ],
           ),
         );
@@ -236,11 +309,13 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     );
   }
 
-  /// 這一段的副標：做著時是進度（和通知內文同一句），做完是結果。
+  /// 這一段的副標：做著時是進度（和通知內文同一句），做完是結果。暫停中
+  /// 每一段都寫目前的結果。
   String? _stageDetail(RepairStage stage) {
     final current = _batch.stage;
-    if (stage.index > current.index) return null;
-    if (stage == current && !_batch.isFinished) {
+    final paused = _run.isPaused;
+    if (!paused && stage.index > current.index) return null;
+    if (!paused && stage == current && !_batch.isFinished) {
       return repairStageProgress(_batch);
     }
     int n(RepairOutcome outcome) => _batch.count(outcome);
@@ -275,6 +350,10 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
   /// 出錯或按了停止的那一步畫紅叉（同單一書源的 AI 修），後面的步驟沒做，
   /// 畫成還沒輪到。
   Widget _stageIcon(BuildContext context, RepairStage stage) {
+    // 暫停中：接著做時從頭一段一段重新走（已經有結果的不再處理）。
+    if (_run.isPaused) {
+      return aiRepairStepIcon(context, AiRepairStepState.waiting);
+    }
     final cut = _batch.failedStage ?? _batch.stoppedStage;
     if (cut != null && stage.index >= cut.index) {
       return aiRepairStepIcon(

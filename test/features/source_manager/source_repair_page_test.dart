@@ -105,7 +105,8 @@ void main() {
     expect(find.text('正在修 · 1'), findsOneWidget);
     expect(find.text('第 2 輪：AI 改了搜尋，試抓中…'), findsOneWidget);
     expect(find.text('0／1 個網站'), findsOneWidget);
-    expect(find.text('停止'), findsOneWidget);
+    expect(find.text('暫停'), findsOneWidget);
+    expect(find.text('結束'), findsOneWidget);
   });
 
   testWidgets('sources not worth repairing are listed by name in their own '

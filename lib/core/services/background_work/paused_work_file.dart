@@ -59,7 +59,8 @@ class PausedWorkFile {
         try {
           final file = await _file();
           await file.parent.create(recursive: true);
-          final temp = File('${file.path}.tmp');
+          // 暫存檔每個存檔各一個：同名的上一件還在收尾時不會撞在一起。
+          final temp = File('${file.path}.${identityHashCode(this)}.tmp');
           await temp.writeAsString(text, flush: true);
           if (_closed) {
             await temp.delete();

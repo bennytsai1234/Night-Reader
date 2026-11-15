@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -59,7 +61,7 @@ Future<void> openAiRepair(
         );
         return;
       case 'clipboard':
-        // 剪貼簿要使用者來回貼，留在這一頁：返回等於停止。
+        // 剪貼簿要使用者來回貼，留在這一頁：返回等於結束。
         final session = AiRepairSession(source: source, service: null);
         await navigator.push(
           MaterialPageRoute<void>(
@@ -92,7 +94,7 @@ class AiRepairPage extends StatefulWidget {
 
   final AiRepairSession session;
 
-  /// 剪貼簿的修復：這一頁開始並收掉 [session]，返回等於停止。整批修復點進
+  /// 剪貼簿的修復：這一頁開始並收掉 [session]，返回等於結束。整批修復點進
   /// 一個網站看步驟時是 false，修復由整批修復管。
   final bool owned;
 
@@ -108,7 +110,8 @@ class _AiRepairPageState extends State<AiRepairPage> {
   final TextEditingController _paste = TextEditingController();
   bool _closing = false;
 
-  AiRepairSession get _session => widget.session;
+  /// 背景跑的修復暫停後按繼續會換成新的一段，照 [AiRepairPage.run] 的。
+  AiRepairSession get _session => widget.run?.session ?? widget.session;
 
   @override
   void initState() {
@@ -145,7 +148,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
     }
   }
 
-  /// 自己啟動的修復先停止並等執行中工作退出，才能從頁面返回。
+  /// 自己啟動的修復先結束並等執行中工作退出，才能從頁面返回。
   Future<void> _stopAndClose() async {
     if (_closing) return;
     _closing = true;
@@ -207,8 +210,93 @@ class _AiRepairPageState extends State<AiRepairPage> {
     );
   }
 
+  /// 暫停中按了繼續：照現在的 AI 服務設定，這個書源從頭重修。
+  Future<void> _resume(SingleRepairRun run) async {
+    if (!run.canResume) return;
+    final service = await AiRepairSettings().service();
+    if (!mounted) return;
+    if (service == null) {
+      final go = await showAppAlert<bool>(
+        context: context,
+        title: 'AI 修復「${_session.job.original.bookSourceName}」',
+        message: '還沒設定 AI 服務。',
+        actions: const [
+          AppAlertAction(label: '設定 AI 服務', value: true, isDefault: true),
+          AppAlertAction(label: '取消', value: false),
+        ],
+      );
+      if (go == true && mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AiRepairSettingsPage()),
+        );
+      }
+      return;
+    }
+    await run.resume();
+    if (mounted && run.isPaused && !run.isEnding) _say('書源已經不在了，沒辦法接著修');
+  }
+
+  /// 最後一張卡片：背景跑的修復做著時「暫停｜結束」，暫停中「繼續｜結束」
+  /// （使用者 2026-11-15 在 AI 找書的候選圖上選的甲，修書源照同一套）；剪貼簿
+  /// 的修復只有「結束」；做完是「完成」。
+  List<Widget> _controls(SingleRepairRun? run) {
+    if (_session.isFinished && !(run?.isPaused ?? false)) {
+      return [
+        GroupedRow(
+          title: '完成',
+          accent: true,
+          showChevron: false,
+          onTap: () => Navigator.of(context).maybePop(),
+        ),
+      ];
+    }
+    final ending = _session.isStopped || (run?.isEnding ?? false);
+    final end = GroupedRow(
+      title: ending ? backgroundWorkEnding : '結束',
+      destructive: true,
+      showChevron: false,
+      onTap: ending
+          ? null
+          : run == null
+          ? _session.stop
+          : () => unawaited(run.end()),
+    );
+    if (run == null) return [end];
+    if (run.isPaused) {
+      return [
+        GroupedRow(
+          title: '繼續',
+          accent: true,
+          showChevron: false,
+          enabled: run.canResume,
+          onTap: run.canResume ? () => unawaited(_resume(run)) : null,
+        ),
+        end,
+      ];
+    }
+    final pausing = _session.isPaused;
+    return [
+      GroupedRow(
+        title: pausing ? backgroundWorkPausing : '暫停',
+        showChevron: false,
+        enabled: !pausing && !ending,
+        onTap: pausing || ending ? null : run.pauseNow,
+      ),
+      end,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final run = widget.run;
+    if (run == null) return _build(context, null);
+    return ListenableBuilder(
+      listenable: run,
+      builder: (context, _) => _build(context, run),
+    );
+  }
+
+  Widget _build(BuildContext context, SingleRepairRun? run) {
     return ListenableBuilder(
       listenable: _session,
       builder: (context, _) {
@@ -269,7 +357,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
             ),
             body: GroupedListView(
               children: [
-                if (job.steps.isNotEmpty) ...[
+                if (job.steps.isNotEmpty || (run?.isPaused ?? false)) ...[
                   GroupedSection(
                     footer: sentTo,
                     children: [
@@ -278,6 +366,17 @@ class _AiRepairPageState extends State<AiRepairPage> {
                           leading: aiRepairStepIcon(context, step.state),
                           title: step.title,
                           subtitle: step.detail,
+                          showChevron: false,
+                        ),
+                      if (run?.isPaused ?? false)
+                        GroupedRow(
+                          leading: Icon(
+                            Icons.pause_circle_rounded,
+                            size: 22,
+                            color: AppChrome.of(context).sectionText,
+                          ),
+                          title: '已暫停',
+                          subtitle: '按「繼續」從頭重修這個書源',
                           showChevron: false,
                         ),
                     ],
@@ -303,24 +402,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
                   if (job.outcome case final outcome?)
                     _result(context, job, outcome),
                 ],
-                GroupedSection(
-                  children: [
-                    if (_session.isFinished)
-                      GroupedRow(
-                        title: '完成',
-                        accent: true,
-                        showChevron: false,
-                        onTap: () => Navigator.of(context).maybePop(),
-                      )
-                    else
-                      GroupedRow(
-                        title: _session.isStopped ? '正在停下…' : '停止',
-                        destructive: true,
-                        showChevron: false,
-                        onTap: _session.isStopped ? null : _session.stop,
-                      ),
-                  ],
-                ),
+                GroupedSection(children: _controls(run)),
               ],
             ),
           ),

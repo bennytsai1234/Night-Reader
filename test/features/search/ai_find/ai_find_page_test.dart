@@ -231,6 +231,7 @@ void main() {
               return run = AiFindRun(
                 session,
                 save: (record) async => saved.add(record),
+                progress: _MemoryFile(),
                 work: BackgroundWork(platform: _Platform()),
               );
             },
@@ -298,6 +299,7 @@ void main() {
                 ),
               ),
               save: (_) async {},
+              progress: _MemoryFile(),
               work: BackgroundWork(platform: _Platform()),
             ),
       ),

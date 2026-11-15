@@ -81,7 +81,7 @@ void main() {
     expect(find.text('校驗原本的書源'), findsOneWidget);
     expect(find.text('第 1 輪'), findsOneWidget);
     expect(find.text('AI 回覆中…'), findsOneWidget);
-    expect(find.text('停止'), findsOneWidget);
+    expect(find.text('結束'), findsOneWidget);
     expect(find.text('送到 ai.example · m'), findsOneWidget);
 
     reply.complete(
@@ -102,7 +102,7 @@ void main() {
     expect(find.text('AI：正文在 div.txt'), findsOneWidget);
     expect(find.text('還原改前的版本'), findsOneWidget);
     expect(find.text('完成'), findsOneWidget);
-    expect(find.text('停止'), findsNothing);
+    expect(find.text('結束'), findsNothing);
   });
 
   testWidgets('the clipboard way waits for a paste on the same page', (

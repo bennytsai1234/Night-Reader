@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_backups.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
+import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
@@ -13,6 +18,8 @@ import 'package:night_reader/features/source_manager/ai_repair/source_repair_pag
 import 'package:night_reader/features/source_manager/source_check_job.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+
+import '../../support/fake_ai.dart';
 
 const _service = (
   baseUrl: 'https://ai.example/v1',
@@ -111,8 +118,13 @@ void main() {
     runs = RepairRuns();
   });
 
-  BatchRepairRun runOf(SourceRepairBatch batch) =>
-      BatchRepairRun(batch, title: '修復異常書源', work: work, navigator: () => null);
+  BatchRepairRun runOf(SourceRepairBatch batch) => BatchRepairRun(
+    batch,
+    title: '修復異常書源',
+    progress: _MemoryFile(),
+    work: work,
+    navigator: () => null,
+  );
 
   test('each of the four stages is a quarter of the progress bar', () {
     final batch = _batch()
@@ -435,5 +447,181 @@ void main() {
     await tester.runAsync(() => batch.completion);
     await tester.pump();
     expect(work.isBusy, isFalse);
+  });
+
+  group('pausing a repair', () {
+    test('a batch paused during the recheck frees the slot, keeps its save '
+        'and continues as a new batch', () async {
+      final gate = Completer<void>();
+      final file = _MemoryFile();
+      final reopened = <List<String>>[];
+      final run = BatchRepairRun(
+        _batch(gate: gate),
+        title: '修復異常書源',
+        progress: file,
+        work: work,
+        navigator: () => null,
+        reopen: (urls, done, reused) async {
+          reopened.add(urls);
+          return _batch();
+        },
+      );
+      runs.adopt(run);
+      run.start();
+      await _flush();
+      run.pauseNow();
+      expect(run.status.text, '正在暫停…');
+      gate.complete();
+      await run.batch.completion;
+      await _flush();
+      await _flush();
+
+      expect(run.isPaused, isTrue);
+      expect(run.isFinished, isFalse);
+      expect(work.isBusy, isFalse, reason: '暫停空出位置、收掉通知');
+      expect(platform.calls.last, 'hide');
+      final saved = jsonDecode(file.text!) as Map<String, Object?>;
+      expect(saved['kind'], 'batch');
+      expect(saved['urls'], ['https://s0.example', 'https://s1.example']);
+      expect(runs.current, same(run), reason: '入口推回暫停的這一批');
+
+      await run.resume();
+      await run.batch.completion;
+      await _flush();
+      await _flush();
+      expect(reopened, [
+        ['https://s0.example', 'https://s1.example'],
+      ]);
+      expect(run.isFinished, isTrue);
+      expect(file.closed, isTrue, reason: '做完了，存檔刪掉');
+    });
+
+    test('a single repair paused while the AI answers continues as a fresh '
+        'repair of the same source', () async {
+      final file = _MemoryFile();
+      AiRepairSession session({required bool blocks}) => AiRepairSession(
+        source: _s('one'),
+        service: _service,
+        check: (source, _) async => SourceCheckIsolateResult(
+          stage: 'content',
+          message: '正文為空',
+          isHealthy: false,
+          updatedSourceJson: source.toJson(),
+          logs: const [],
+        ),
+        probe: (_, _, {start}) async =>
+            const SourceProbeReport(logs: [], requests: []),
+        keywordCheck: (_, _) async => true,
+        ask: (_, token) async {
+          if (!blocks) {
+            return fakeAiReply(
+              jsonEncode({
+                'action': 'give_up',
+                'why': 'site_gone',
+                'reason': '網站關了',
+              }),
+            );
+          }
+          await token.whenCancel;
+          throw DioException.requestCancelled(
+            requestOptions: RequestOptions(),
+            reason: '已暫停',
+          );
+        },
+        apply: (_, _) async {},
+        secrets: (_) async => const {},
+        backups: AiRepairBackups(),
+      );
+      final reopened = <String>[];
+      final run = SingleRepairRun(
+        session(blocks: true),
+        progress: file,
+        work: work,
+        navigator: () => null,
+        reopen: (url) async {
+          reopened.add(url);
+          return session(blocks: false);
+        },
+      );
+      run.start();
+      for (var i = 0; i < 20 && run.session.job.steps.length < 3; i++) {
+        await _flush();
+      }
+      run.pauseNow();
+      for (var i = 0; i < 20 && !run.isPaused; i++) {
+        await _flush();
+      }
+      expect(run.isPaused, isTrue);
+      expect(run.session.job.outcome, isNull, reason: '暫停不定案、書源不改');
+      expect(jsonDecode(file.text!), {
+        'version': 1,
+        'kind': 'single',
+        'url': 'https://one.example',
+      });
+      expect(work.isBusy, isFalse);
+
+      await run.resume();
+      for (var i = 0; i < 40 && !run.isFinished; i++) {
+        await _flush();
+      }
+      expect(reopened, ['https://one.example']);
+      expect(run.isFinished, isTrue);
+      expect(file.closed, isTrue);
+    });
+
+    test('a batch left paused when the app was closed comes back with its '
+        'results; ending it drops the save', () async {
+      final file = _MemoryFile(
+        jsonEncode({
+          'version': 1,
+          'kind': 'batch',
+          'title': '修復異常書源',
+          'baseUrl': 'https://ai.example/v1',
+          'model': 'm',
+          'urls': ['https://s0.example', 'https://s1.example'],
+          'done': {
+            'https://s0.example': ['healthy', '重新校驗就沒問題了', 0],
+          },
+          'reusedChecks': 3,
+        }),
+      );
+      await restorePausedRepair(
+        file: file,
+        runs: runs,
+        load: (urls) async => [
+          for (final url in urls) _s(Uri.parse(url).host.split('.').first),
+        ],
+        work: work,
+      );
+      final run = runs.current! as BatchRepairRun;
+      expect(run.isPaused, isTrue);
+      expect(run.batch.items.first.outcome, RepairOutcome.healthy);
+      expect(run.batch.items.last.outcome, isNull);
+      expect(run.batch.reusedChecks, 3);
+      expect(run.batch.service.model, 'm');
+
+      await run.end();
+      expect(run.isFinished, isTrue);
+      expect(run.batch.items.last.outcome, RepairOutcome.notTried);
+      expect(file.closed, isTrue);
+    });
+
+    test('a single repair whose source is gone is not brought back', () async {
+      final file = _MemoryFile(
+        jsonEncode({
+          'version': 1,
+          'kind': 'single',
+          'url': 'https://x.example',
+        }),
+      );
+      await restorePausedRepair(
+        file: file,
+        runs: runs,
+        load: (_) async => const [],
+        work: work,
+      );
+      expect(runs.current, isNull);
+      expect(file.closed, isTrue);
+    });
   });
 }

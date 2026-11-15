@@ -1263,7 +1263,7 @@ void main() {
     await s.start();
 
     final job = s.job;
-    expect(job.steps.last.detail, '已停止');
+    expect(job.steps.last.detail, '已結束');
     expect(job.steps.last.state, AiRepairStepState.failed);
     expect(job.outcome, AiRepairOutcome.failed);
     expect(applied, isEmpty);

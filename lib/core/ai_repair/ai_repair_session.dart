@@ -264,14 +264,22 @@ class AiRepairSession extends ChangeNotifier {
   Completer<void>? _pasteCompletion;
   bool _running = false;
   bool _stopped = false;
+  bool _paused = false;
   bool _disposed = false;
 
   bool get usesClipboard => service == null;
   bool get isRunning => _running;
-  bool get isStopped => _stopped;
+
+  /// 按了結束（還沒停好或已經停好）；暫停不算。
+  bool get isStopped => _stopped && !_paused;
+
+  /// 按了暫停：停下、書源不改，不算結束；接著做是這個書源從頭重修
+  /// （背景工作接著做，ADR 0058）。
+  bool get isPaused => _paused;
 
   /// 做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished => !_running && (_stopped || job.outcome != null);
+  bool get isFinished =>
+      !_running && !_paused && (_stopped || job.outcome != null);
   Future<void> get completion =>
       _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
@@ -326,33 +334,68 @@ class AiRepairSession extends ChangeNotifier {
           }
         }
       }
+      // 暫停時正好在存修好的書源：存完就算做完，不再是暫停。
+      if (job.outcome != null) _paused = false;
       CrashTrail.action(
-        'AI 修復${_stopped ? '停下了' : '做完了'}：${job.original.bookSourceName}',
+        'AI 修復${_paused
+            ? '暫停了'
+            : _stopped
+            ? '結束了'
+            : '做完了'}：${job.original.bookSourceName}',
       );
       _notify();
     }
   }
 
-  /// 停下：做著的那一步標成停止，修到一半的不改。
+  /// 結束：做著的那一步標成結束，修到一半的不改。暫停中的直接收尾。
   void stop() {
-    if (_stopped || job.outcome != null) return;
-    CrashTrail.action('按了停止：AI 修復 ${job.original.bookSourceName}');
+    if (job.outcome != null) return;
+    if (_paused) {
+      _paused = false;
+      _endSteps();
+      _notify();
+      return;
+    }
+    if (_stopped) return;
+    CrashTrail.action('按了結束：AI 修復 ${job.original.bookSourceName}');
     _stopped = true;
-    if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
+    if (!job._committing) _endSteps();
+    _notify();
+  }
+
+  void _endSteps() {
+    for (final step in job.steps) {
+      if (step.state == AiRepairStepState.running) {
+        step
+          ..state = AiRepairStepState.failed
+          ..detail = '已結束';
+      }
+    }
+    if (job.steps.isNotEmpty && job.outcome == null) {
+      job
+        ..awaitingPaste = false
+        ..outcome = AiRepairOutcome.failed
+        ..explanation = '已結束，書源沒有改。';
+      _logOutcome('已結束，書源沒有改。');
+    }
+  }
+
+  /// 暫停：做著的那一步停下、書源不改，結果不寫（背景工作接著做，ADR 0058）。
+  /// 正在存修好的書源時停不下來，存完就算做完。剪貼簿的修復不暫停。
+  void pause() {
+    if (_stopped || job.outcome != null || usesClipboard) return;
+    CrashTrail.action('按了暫停：AI 修復 ${job.original.bookSourceName}');
+    _stopped = true;
+    _paused = true;
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('已暫停');
     if (!job._committing) {
       for (final step in job.steps) {
         if (step.state == AiRepairStepState.running) {
           step
             ..state = AiRepairStepState.failed
-            ..detail = '已停止';
+            ..detail = '已暫停';
         }
-      }
-      if (job.steps.isNotEmpty && job.outcome == null) {
-        job
-          ..awaitingPaste = false
-          ..outcome = AiRepairOutcome.failed
-          ..explanation = '已停止，書源沒有改。';
-        _logOutcome('已停止，書源沒有改。');
       }
     }
     _notify();

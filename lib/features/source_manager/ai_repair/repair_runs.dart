@@ -1,9 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/services/background_work/paused_work_file.dart';
 import 'package:night_reader/shared/navigation/root_navigator.dart';
 
 import 'ai_repair_page.dart';
@@ -256,99 +263,421 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   }
 }
 
-/// 修復異常書源（一批）。
+/// 暫停的修復存在哪個檔（[PausedWorkFile.name]）：單一書源與一批共用，一次只有
+/// 一件修復。
+const String repairProgressName = 'repair';
+
+/// 存檔的格式版本：改了存什麼就加一，舊版的讀不回來。
+const int _repairProgressVersion = 1;
+
+/// 接著修一批：照存的書源與結果建新的一批，用現在的 AI 服務設定；沒有 AI
+/// 服務是 null。
+typedef BatchRepairReopen = Future<SourceRepairBatch?> Function(
+  List<String> urls,
+  Map<String, RepairDone> done,
+  int reusedChecks,
+);
+
+/// 修復異常書源（一批）。每有書源定案就存一次（哪些書源、各自的結果）：暫停
+/// （按暫停、從最近使用滑掉、被系統收掉）後按繼續用同一批書源重開，已經有
+/// 結果的帶著結果不再處理；暫停時正在 AI 修的書源從頭重修（使用者
+/// 2026-11-15 選，ADR 0058）。
 class BatchRepairRun extends RepairRun {
   BatchRepairRun(
-    this.batch, {
+    this._batch, {
     required this.title,
+    PausedWorkFile? progress,
+    BatchRepairReopen? reopen,
     super.work,
     super.navigator,
-  }) {
-    batch
-      ..addListener(changed)
-      ..addListener(_watchEdits);
+  }) : _file = progress ?? PausedWorkFile(repairProgressName),
+       _reopen = reopen ?? _reopenWithService {
+    _adopt(_batch);
   }
 
-  final SourceRepairBatch batch;
+  /// 開 App 時讀回的暫停中的那一批：照存檔顯示，還沒開始。
+  BatchRepairRun.paused(
+    this._batch, {
+    required this.title,
+    required this._file,
+    BatchRepairReopen? reopen,
+    super.work,
+    super.navigator,
+  }) : _reopen = reopen ?? _reopenWithService,
+       super(paused: true) {
+    _adopt(_batch);
+  }
+
+  SourceRepairBatch _batch;
+
+  /// 現在這一批：暫停後接著做時換成新建的一批。
+  SourceRepairBatch get batch => _batch;
   final String title;
+  final PausedWorkFile _file;
+  final BatchRepairReopen _reopen;
   int _seenEdits = 0;
+  int _savedDone = -1;
+  bool _pausedWork = false;
+
+  static Future<SourceRepairBatch?> _reopenWithService(
+    List<String> urls,
+    Map<String, RepairDone> done,
+    int reusedChecks,
+  ) async {
+    final settings = AiRepairSettings();
+    final service = await settings.service();
+    if (service == null) return null;
+    final concurrency = await settings.concurrency();
+    final sources = await _loadSources(urls);
+    return SourceRepairBatch(
+      sources: sources,
+      service: service,
+      aiConcurrency: concurrency,
+      done: done,
+      reusedChecks: reusedChecks,
+    );
+  }
+
+  void _adopt(SourceRepairBatch batch) {
+    _batch = batch
+      ..addListener(changed)
+      ..addListener(_watchEdits)
+      ..addListener(_watchDone);
+    _seenEdits = batch.sourceEdits;
+  }
+
+  void _drop(SourceRepairBatch batch) {
+    batch
+      ..removeListener(changed)
+      ..removeListener(_watchEdits)
+      ..removeListener(_watchDone);
+  }
 
   @override
-  int get sourceEdits => batch.sourceEdits;
+  int get sourceEdits => _batch.sourceEdits;
 
   void _watchEdits() {
-    if (batch.sourceEdits == _seenEdits) return;
-    _seenEdits = batch.sourceEdits;
+    if (_batch.sourceEdits == _seenEdits) return;
+    _seenEdits = _batch.sourceEdits;
     notifyListeners();
   }
 
+  /// 有書源定案就存一次（只在跑的時候）。
+  void _watchDone() {
+    if (!isRunning || _file.isClosed) return;
+    final done = _batch.items.where((item) => item.isFinished).length;
+    if (done == _savedDone) return;
+    _savedDone = done;
+    _save();
+  }
+
+  void _save() {
+    final service = _batch.service;
+    _file.save(
+      jsonEncode({
+        'version': _repairProgressVersion,
+        'kind': 'batch',
+        'title': title,
+        'baseUrl': service.baseUrl,
+        'model': service.model,
+        'urls': [for (final item in _batch.items) item.source.bookSourceUrl],
+        'done': {
+          for (final MapEntry(:key, :value) in _batch.done.entries)
+            key: [value.outcome.name, value.detail, value.tokens],
+        },
+        'reusedChecks': _batch.reusedChecks,
+      }),
+    );
+  }
+
   @override
-  BackgroundWorkStatus get status => batch.isStopped
+  bool get canPause => true;
+
+  @override
+  bool get workPaused => _pausedWork;
+
+  @override
+  BackgroundWorkStatus get status =>
+      _batch.isStopped || (_batch.isPaused && _batch.isRunning)
       ? BackgroundWorkStatus.settling(
           title,
-          pausing: false,
-          progress: repairBatchProgress(batch),
+          pausing: _batch.isPaused,
+          progress: repairBatchProgress(_batch),
         )
       : BackgroundWorkStatus(
           title: title,
           text:
-              '${_repairStageShortTitle(batch.stage)}，${repairStageProgress(batch)}',
-          progress: repairBatchProgress(batch),
+              '${_repairStageShortTitle(_batch.stage)}，${repairStageProgress(_batch)}',
+          progress: repairBatchProgress(_batch),
+          pausable: true,
         );
 
   @override
-  Future<void> run() => batch.start();
+  Future<void> run() async {
+    _pausedWork = false;
+    _savedDone = -1;
+    _save();
+    await _batch.start();
+    if (_batch.isPaused) {
+      _pausedWork = true;
+      return;
+    }
+    await _file.close();
+  }
 
   @override
-  void stop() => batch.stop();
+  void stop() {
+    unawaited(_file.close());
+    _batch.stop();
+  }
+
+  @override
+  void pause() => _batch.pause();
+
+  @override
+  Future<void> endPaused() async {
+    _batch.stop();
+    await _file.close();
+  }
+
+  @override
+  Future<bool> prepareResume() async {
+    final next = await _reopen(
+      [for (final item in _batch.items) item.source.bookSourceUrl],
+      _batch.done,
+      _batch.reusedChecks,
+    );
+    if (next == null) return false;
+    final previous = _batch;
+    _drop(previous);
+    _adopt(next);
+    notifyListeners();
+    scheduleMicrotask(previous.dispose);
+    return true;
+  }
 
   @override
   Widget page() => SourceRepairPage(run: this);
 
   @override
   void disposeWork() {
-    batch
-      ..removeListener(changed)
-      ..removeListener(_watchEdits)
-      ..dispose();
+    _drop(_batch);
+    _batch.dispose();
   }
 }
 
+/// 接著修一個書源：照網址讀回書源、用現在的 AI 服務設定建新的一段修復；
+/// 書源不在了或沒有 AI 服務是 null。
+typedef SingleRepairReopen = Future<AiRepairSession?> Function(String url);
+
 /// 單一書源的 AI 修復（用 AI 服務的；剪貼簿的要使用者來回貼，留在頁面上）。
+/// 暫停後按繼續是這個書源從頭重修（使用者 2026-11-15 選，ADR 0058）。
 class SingleRepairRun extends RepairRun {
-  SingleRepairRun(this.session, {super.work, super.navigator}) {
-    session.addListener(changed);
+  SingleRepairRun(
+    this._session, {
+    PausedWorkFile? progress,
+    SingleRepairReopen? reopen,
+    super.work,
+    super.navigator,
+  }) : _file = progress ?? PausedWorkFile(repairProgressName),
+       _reopen = reopen ?? _reopenWithService {
+    _session.addListener(changed);
   }
 
-  final AiRepairSession session;
+  /// 開 App 時讀回的暫停中的那一件：照存的書源顯示，還沒開始。
+  SingleRepairRun.paused(
+    this._session, {
+    required this._file,
+    SingleRepairReopen? reopen,
+    super.work,
+    super.navigator,
+  }) : _reopen = reopen ?? _reopenWithService,
+       super(paused: true) {
+    _session.addListener(changed);
+  }
 
-  String get sourceUrl => session.job.original.bookSourceUrl;
+  AiRepairSession _session;
+
+  /// 現在這一段修復：暫停後接著做時換成新的一段。
+  AiRepairSession get session => _session;
+  final PausedWorkFile _file;
+  final SingleRepairReopen _reopen;
+  bool _pausedWork = false;
+
+  String get sourceUrl => _session.job.original.bookSourceUrl;
+
+  static Future<AiRepairSession?> _reopenWithService(String url) async {
+    final service = await AiRepairSettings().service();
+    if (service == null) return null;
+    final source = await getIt<BookSourceDao>().getByUrl(url);
+    if (source == null) return null;
+    return AiRepairSession(source: source, service: service);
+  }
+
+  @override
+  bool get canPause => true;
+
+  @override
+  bool get workPaused => _pausedWork;
 
   @override
   BackgroundWorkStatus get status {
-    final title = 'AI 修復 · ${session.job.original.bookSourceName}';
-    if (session.isStopped) {
-      return BackgroundWorkStatus.settling(title, pausing: false);
+    final title = 'AI 修復 · ${_session.job.original.bookSourceName}';
+    if (_session.isStopped || (_session.isPaused && _session.isRunning)) {
+      return BackgroundWorkStatus.settling(title, pausing: _session.isPaused);
     }
     return BackgroundWorkStatus(
       title: title,
-      text: session.job.steps.lastOrNull?.title ?? '準備中…',
+      text: _session.job.steps.lastOrNull?.title ?? '準備中…',
+      pausable: true,
     );
   }
 
   @override
-  Future<void> run() => session.start();
+  Future<void> run() async {
+    _pausedWork = false;
+    _file.save(
+      jsonEncode({
+        'version': _repairProgressVersion,
+        'kind': 'single',
+        'url': sourceUrl,
+      }),
+    );
+    await _session.start();
+    if (_session.isPaused) {
+      _pausedWork = true;
+      return;
+    }
+    await _file.close();
+  }
 
   @override
-  void stop() => session.stop();
+  void stop() {
+    unawaited(_file.close());
+    _session.stop();
+  }
 
   @override
-  Widget page() => AiRepairPage(session: session, owned: false, run: this);
+  void pause() => _session.pause();
+
+  @override
+  Future<void> endPaused() async {
+    _session.stop();
+    await _file.close();
+  }
+
+  @override
+  Future<bool> prepareResume() async {
+    final next = await _reopen(sourceUrl);
+    if (next == null) return false;
+    final previous = _session..removeListener(changed);
+    _session = next..addListener(changed);
+    notifyListeners();
+    scheduleMicrotask(previous.dispose);
+    return true;
+  }
+
+  @override
+  Widget page() => AiRepairPage(session: _session, owned: false, run: this);
 
   @override
   void disposeWork() {
-    session.removeListener(changed);
-    session.dispose();
+    _session.removeListener(changed);
+    _session.dispose();
+  }
+}
+
+/// 照網址讀回書源，照原本的順序；不在了的略過。
+Future<List<BookSource>> _loadSources(List<String> urls) async {
+  final dao = getIt<BookSourceDao>();
+  return [for (final url in urls) ?await dao.getByUrl(url)];
+}
+
+/// 開 App 時讀回暫停的修復（被系統收掉、從最近使用滑掉都算暫停，ADR 0058）：
+/// 書源管理的入口推回它，頁面顯示已暫停。書源都不在了、或存檔讀不出來時
+/// 存檔刪掉。
+Future<void> restorePausedRepair({
+  PausedWorkFile? file,
+  RepairRuns? runs,
+  Future<List<BookSource>> Function(List<String> urls)? load,
+  SingleRepairReopen? reopenSingle,
+  BatchRepairReopen? reopenBatch,
+  BackgroundWork? work,
+}) async {
+  final store = file ?? PausedWorkFile(repairProgressName);
+  final repairs = runs ?? RepairRuns.instance;
+  final text = await store.read();
+  if (text == null || repairs.current != null) return;
+  final loadSources = load ?? _loadSources;
+  RepairRun? run;
+  try {
+    final json = jsonDecode(text);
+    if (json case {
+      'version': _repairProgressVersion,
+      'kind': 'single',
+      'url': final String url,
+    }) {
+      final source = (await loadSources([url])).firstOrNull;
+      if (source != null) {
+        run = SingleRepairRun.paused(
+          AiRepairSession(source: source, service: null),
+          file: store,
+          reopen: reopenSingle,
+          work: work,
+        );
+      }
+    } else if (json case {
+      'version': _repairProgressVersion,
+      'kind': 'batch',
+      'title': final String title,
+      'baseUrl': final String baseUrl,
+      'model': final String model,
+      'urls': final List<Object?> urls,
+      'done': final Map<String, Object?> done,
+      'reusedChecks': final int reusedChecks,
+    }) {
+      final sources = await loadSources([for (final url in urls) '$url']);
+      if (sources.isNotEmpty) {
+        run = BatchRepairRun.paused(
+          SourceRepairBatch(
+            sources: sources,
+            service: (baseUrl: baseUrl, apiKey: '', model: model, effort: ''),
+            done: {
+              for (final MapEntry(:key, :value) in done.entries)
+                if (value case [
+                  final String outcome,
+                  final String detail,
+                  final int tokens,
+                ])
+                  key: (
+                    outcome: RepairOutcome.values.firstWhere(
+                      (value) => value.name == outcome,
+                      orElse: () => RepairOutcome.notTried,
+                    ),
+                    detail: detail,
+                    tokens: tokens,
+                  ),
+            },
+            reusedChecks: reusedChecks,
+          ),
+          title: title,
+          file: store,
+          reopen: reopenBatch,
+          work: work,
+        );
+      }
+    }
+  } on FormatException catch (error) {
+    AppLog.w('restorePausedRepair: 讀不出來：$error');
+  }
+  if (run == null) {
+    await store.close();
+    return;
+  }
+  if (!repairs.adopt(run)) {
+    run
+      ..disposeWork()
+      ..dispose();
   }
 }
 

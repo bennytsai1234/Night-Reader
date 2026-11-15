@@ -65,9 +65,13 @@ enum RepairOutcome {
   /// AI 之前試過修不好（書源帶「AI 修不好」），這次跳過。
   aiUnfixable,
 
-  /// 未處理：校驗沒有結果、花費到了上限，或按了停止。
+  /// 未處理：校驗沒有結果、花費到了上限，或按了結束。
   notTried,
 }
+
+/// 暫停前已經有結果的一個書源（背景工作接著做，ADR 0058）：接著做時直接
+/// 帶著這個結果，不再處理。
+typedef RepairDone = ({RepairOutcome outcome, String detail, int tokens});
 
 /// 整批修復裡的一個書源。
 class RepairItem {
@@ -133,7 +137,19 @@ class SourceRepairBatch extends ChangeNotifier {
     Future<void> Function(List<String> urls)? delete,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
     DateTime Function()? now,
-  }) : items = [for (final source in sources) RepairItem(source)],
+    Map<String, RepairDone> done = const {},
+    this.reusedChecks = 0,
+  }) : items = [
+         for (final source in sources)
+           if (done[source.bookSourceUrl] case final result?)
+             RepairItem(source)
+               ..outcome = result.outcome
+               ..detail = result.detail
+               ..tokens = result.tokens
+           else
+             RepairItem(source),
+       ],
+       tokensUsed = done.values.fold(0, (sum, result) => sum + result.tokens),
        _now = now ?? DateTime.now,
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
@@ -178,10 +194,10 @@ class SourceRepairBatch extends ChangeNotifier {
   int stageTotal = 0;
 
   /// AI 一共用了多少 token。
-  int tokensUsed = 0;
+  int tokensUsed;
 
   /// 沿用上次校驗結果、沒有重新校驗的書源數（[freshCheck]）。
-  int reusedChecks = 0;
+  int reusedChecks;
 
   /// 做完之後刪了幾次書源：書源管理看到它變了就重讀清單。
   int sourceEdits = 0;
@@ -196,12 +212,31 @@ class SourceRepairBatch extends ChangeNotifier {
   Future<void>? _startTask;
   bool _running = false;
   bool _stopped = false;
+  bool _paused = false;
   bool _disposed = false;
   final List<AiRepairSession> _sessions = [];
 
   bool get isRunning => _running;
-  bool get isStopped => _stopped;
+
+  /// 按了結束（還沒停好或已經停好）；暫停不算。
+  bool get isStopped => _stopped && !_paused;
+
+  /// 按了暫停：已經有結果的留著，接著做時用同一批書源重開，有結果的不再
+  /// 處理（ADR 0058）。
+  bool get isPaused => _paused;
+
   bool get isFinished => stage == RepairStage.done;
+
+  /// 已經有結果的書源（照現在的網址）：暫停的存檔存它。
+  Map<String, RepairDone> get done => {
+    for (final item in items)
+      if (item.outcome case final outcome?)
+        item.source.bookSourceUrl: (
+          outcome: outcome,
+          detail: item.detail ?? '',
+          tokens: item.tokens,
+        ),
+  };
   Future<void> get completion => _startTask ?? Future<void>.value();
 
   /// 未預期錯誤顯示在結果頁，避免把沒校驗的書源送去 AI。
@@ -238,39 +273,68 @@ class SourceRepairBatch extends ChangeNotifier {
     } finally {
       for (final item in items) {
         item.priorCheck = null;
-        if (item.outcome == null) {
-          item
-            ..outcome = RepairOutcome.notTried
-            ..detail = _stopped ? '已停止' : errorMessage ?? '沒輪到';
-        }
       }
-      stage = RepairStage.done;
-      _running = false;
-      CrashTrail.action(_stopped ? '修復異常書源停下了' : '修復異常書源做完了');
-      _notify();
+      if (_paused) {
+        // 暫停：沒結果的留著，接著做時再處理。
+        _running = false;
+        CrashTrail.action('修復異常書源暫停了');
+        _notify();
+      } else {
+        _closeUnfinished(_stopped ? '已結束' : errorMessage ?? '沒輪到');
+        _running = false;
+        CrashTrail.action(_stopped ? '修復異常書源結束了' : '修復異常書源做完了');
+        _notify();
+      }
     }
   }
 
-  /// 停下：做著的那一個 AI 修復停下、書源不改，還沒輪到的不做。
-  void stop() {
-    if (_stopped || isFinished) return;
-    CrashTrail.action('按了停止：修復異常書源（做到${_stageName(stage)}）');
-    _stopped = true;
-    if (_startTask != null) stoppedStage = stage;
-    if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
-    _activeRecheckService?.cancel();
-    for (final session in _sessions) {
-      session.stop();
-    }
-    if (_startTask == null) {
-      for (final item in items) {
+  void _closeUnfinished(String detail) {
+    for (final item in items) {
+      if (item.outcome == null) {
         item
           ..outcome = RepairOutcome.notTried
-          ..detail = '已停止';
+          ..detail = detail;
       }
-      stage = RepairStage.done;
     }
+    stage = RepairStage.done;
+  }
+
+  /// 結束：做著的那一個 AI 修復停下、書源不改，還沒輪到的不做。暫停中的
+  /// （或還沒開始接著做的）直接收尾。
+  void stop() {
+    if (isFinished) return;
+    if (_paused || (_startTask == null && !_stopped)) {
+      _paused = false;
+      _stopped = true;
+      stoppedStage = _startTask == null ? null : stage;
+      _closeUnfinished('已結束');
+      _notify();
+      return;
+    }
+    if (_stopped) return;
+    CrashTrail.action('按了結束：修復異常書源（做到${_stageName(stage)}）');
+    _stopped = true;
+    stoppedStage = stage;
+    _cancelAll('已結束', pause: false);
     _notify();
+  }
+
+  /// 暫停：做著的 AI 修復與校驗停下、書源不改，已經有結果的留著。
+  void pause() {
+    if (_stopped || isFinished || _startTask == null) return;
+    CrashTrail.action('按了暫停：修復異常書源（做到${_stageName(stage)}）');
+    _stopped = true;
+    _paused = true;
+    _cancelAll('已暫停', pause: true);
+    _notify();
+  }
+
+  void _cancelAll(String why, {required bool pause}) {
+    if (!_cancelToken.isCancelled) _cancelToken.cancel(why);
+    _activeRecheckService?.cancel();
+    for (final session in _sessions) {
+      pause ? session.pause() : session.stop();
+    }
   }
 
   static String _stageName(RepairStage stage) => switch (stage) {
@@ -290,6 +354,8 @@ class SourceRepairBatch extends ChangeNotifier {
     final now = _now().millisecondsSinceEpoch;
     final toCheck = <RepairItem>[];
     for (final item in items) {
+      // 暫停前已經有結果的（接著做）不再處理。
+      if (item.isFinished) continue;
       final source = item.source;
       final health = source.runtimeHealth;
       if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
@@ -615,7 +681,7 @@ class SourceRepairBatch extends ChangeNotifier {
   @override
   void dispose() {
     if (_disposed) return;
-    stop();
+    if (!_paused) stop();
     _disposed = true;
     for (final session in _sessions) {
       session
