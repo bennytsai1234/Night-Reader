@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
@@ -314,7 +315,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('儲存失敗，請稍後再試')));
+            .showSnackBar(const SnackBar(content: UiText('儲存失敗，請稍後再試')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -331,7 +332,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     if (message == null) return true;
     _tabController.animateTo(0);
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+        .showSnackBar(SnackBar(content: UiText(message)));
     return false;
   }
 

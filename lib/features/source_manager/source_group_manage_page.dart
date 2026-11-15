@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
@@ -160,7 +161,7 @@ class SourceGroupManagePage extends StatelessWidget {
 
     if (urls.isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('該分組下無書源')));
+          .showSnackBar(const SnackBar(content: UiText('該分組下無書源')));
       return;
     }
 
@@ -170,7 +171,7 @@ class SourceGroupManagePage extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(failureMessage('分享分組', error))));
+        ).showSnackBar(SnackBar(content: UiText(failureMessage('分享分組', error))));
       }
     }
   }
@@ -215,7 +216,7 @@ class SourceGroupManagePage extends StatelessWidget {
           } catch (error) {
             if (pageContext.mounted) {
               ScaffoldMessenger.of(pageContext).showSnackBar(
-                SnackBar(content: Text(failureMessage('儲存分組', error))),
+                SnackBar(content: UiText(failureMessage('儲存分組', error))),
               );
             }
           }
@@ -257,7 +258,7 @@ class SourceGroupManagePage extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(failureMessage('刪除分組', error))));
+        ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除分組', error))));
       }
     }
   }
