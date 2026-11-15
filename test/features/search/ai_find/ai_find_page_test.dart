@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
@@ -202,6 +203,7 @@ void main() {
             ({
               required description,
               required depth,
+              required avoid,
               required service,
               required scope,
             }) {
@@ -283,6 +285,7 @@ void main() {
             ({
               required description,
               required depth,
+              required avoid,
               required service,
               required scope,
             }) => run = AiFindRun(
@@ -335,6 +338,94 @@ void main() {
     expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦。'), findsNothing);
   });
 
+  testWidgets('the avoid list: the row sums it up, the list page adds, '
+      'edits and deletes, and starting sends the saved list', (tester) async {
+    final settings = await prefs();
+    List<String>? sent;
+    late AiFindRun run;
+    await show(
+      tester,
+      AiFindPage(
+        prefs: settings,
+        startRun:
+            ({
+              required description,
+              required depth,
+              required avoid,
+              required service,
+              required scope,
+            }) {
+              sent = avoid;
+              final replies = [
+                _call('submit', {'books': <Object?>[], 'summary': '沒找到'}),
+              ];
+              return run = AiFindRun(
+                AiFindSession(
+                  description: description,
+                  depth: depth,
+                  avoid: avoid,
+                  library: _Library(),
+                  ask: (_, _) async => replies.removeAt(0),
+                  log: AiRepairLog.find(
+                    description: description,
+                    directory: () async => logs,
+                  ),
+                ),
+                save: (_) async {},
+                progress: _MemoryFile(),
+                work: BackgroundWork(platform: _Platform()),
+              );
+            },
+      ),
+    );
+    expect(find.text('沒有'), findsOneWidget);
+
+    Future<void> type(String text) async {
+      await tester.tap(find.text('新增'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), text);
+      await tester.tap(find.text('確定'));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.text('不想看的'));
+    await tester.pumpAndSettle();
+    await type('女頻、後宮');
+    await type('無限流，後宮');
+    expect(AiFindAvoid.read(settings), [
+      '女頻',
+      '後宮',
+      '無限流',
+    ], reason: '頓號、逗號分開是幾項，已有的不重複加');
+
+    await tester.tap(find.text('無限流'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '系統文');
+    await tester.tap(find.text('確定'));
+    await tester.pumpAndSettle();
+    expect(AiFindAvoid.read(settings), ['女頻', '後宮', '系統文']);
+
+    await tester.drag(find.text('後宮'), const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    expect(AiFindAvoid.read(settings), ['女頻', '系統文'], reason: '往左滑刪除');
+
+    Navigator.of(tester.element(find.text('女頻'))).pop();
+    await tester.pumpAndSettle();
+    expect(find.text('女頻、系統文'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '爽文');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('開始找書'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始找書'));
+    await tester.pump();
+    await tester.pump();
+    await settle(tester, () => run.isFinished);
+    expect(sent, ['女頻', '系統文']);
+    expect(aiFindAvoidSummary(['女頻', '後宮', '系統文']), '女頻、後宮 等 3 項');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('starting without an AI service asks to set one up', (
     tester,
   ) async {
@@ -347,6 +438,7 @@ void main() {
             ({
               required description,
               required depth,
+              required avoid,
               required service,
               required scope,
             }) {
@@ -470,6 +562,7 @@ void main() {
             ({
               required description,
               required depth,
+              required avoid,
               required service,
               required scope,
             }) => run = AiFindRun(

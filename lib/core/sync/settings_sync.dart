@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -87,6 +88,8 @@ class SettingsSync extends SyncKind {
     PreferKey.readerTtsFollow,
     PreferKey.ttsTimer,
     PreferKey.ttsTimerCustomMinutes,
+    // AI 找書「不想看的」清單：使用者的口味，兩台該一樣
+    AiFindAvoid.key,
     // AI 修書源的服務與金鑰：同書源的登入資料，另一台同步完就能用（ADR 0054）
     ...AiRepairSettings.syncedKeys,
   };

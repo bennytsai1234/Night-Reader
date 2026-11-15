@@ -38,6 +38,7 @@ class AiFindSession extends ChangeNotifier {
     required this.depth,
     required this._library,
     required this._ask,
+    this.avoid = const [],
     this.serviceLabel = '',
     this.scope = '',
     AiRepairLog? log,
@@ -72,6 +73,11 @@ class AiFindSession extends ChangeNotifier {
     final session = AiFindSession(
       description: description,
       depth: AiFindDepth.fromName(read<String>('depth')),
+      // 早於清單的存檔沒有這一項；接著做時清單已在存下的對話裡。
+      avoid: switch (json['avoid']) {
+        final List<Object?> items => items.whereType<String>().toList(),
+        _ => const [],
+      },
       library: library,
       ask: ask,
       serviceLabel: serviceLabel,
@@ -160,6 +166,9 @@ class AiFindSession extends ChangeNotifier {
 
   final String description;
   final AiFindDepth depth;
+
+  /// 這次找書送給 AI 的「不想看的」清單（開始那一刻的，之後改清單不影響）。
+  final List<String> avoid;
 
   /// 「送到 主機名 · 模型」那行。
   final String serviceLabel;
@@ -339,6 +348,7 @@ class AiFindSession extends ChangeNotifier {
         'id': id,
         'description': description,
         'depth': depth.name,
+        'avoid': avoid,
         'scope': scope,
         'serviceLabel': serviceLabel,
         'startedAt': startedAt.millisecondsSinceEpoch,
@@ -442,7 +452,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   @override
   List<AiMessage> opening() =>
-      aiFindOpening(description: s.description, depth: s.depth);
+      aiFindOpening(description: s.description, depth: s.depth, avoid: s.avoid);
 
   @override
   String redact(String text) => redactAiRepairSecrets(text, _library.secrets);

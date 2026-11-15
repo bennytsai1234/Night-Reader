@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -30,6 +31,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ai_find_avoid_page.dart';
 import 'ai_find_run.dart';
 import 'app_ai_find_library.dart';
 
@@ -56,6 +58,14 @@ String aiFindDateLabel(int millis, DateTime now) {
   final day = '${date.month}/${date.day}';
   return date.year == now.year ? day : '${date.year}/$day';
 }
+
+/// 開始前那一列「不想看的」右邊的字：沒有寫「沒有」，兩項以內全列，
+/// 再多寫前兩項與總數。
+String aiFindAvoidSummary(List<String> avoid) => switch (avoid.length) {
+  0 => '沒有',
+  <= 2 => avoid.join('、'),
+  _ => '${avoid.take(2).join('、')} 等 ${avoid.length} 項',
+};
 
 /// 「8.4 萬 token」：頁面上的用量。
 String aiFindTokens(int tokens) => tokens < 10000
@@ -97,6 +107,7 @@ class AiFindPage extends StatefulWidget {
   final AiFindRun Function({
     required String description,
     required AiFindDepth depth,
+    required List<String> avoid,
     required AiService service,
     required SearchScope scope,
   })?
@@ -110,6 +121,7 @@ class _AiFindPageState extends State<AiFindPage> {
   final TextEditingController _description = TextEditingController();
   AiFindRun? _run;
   AiFindDepth _depth = AiFindDepth.normal;
+  List<String> _avoid = const [];
   AiService? _service;
   bool _starting = false;
 
@@ -136,6 +148,7 @@ class _AiFindPageState extends State<AiFindPage> {
     if (!mounted) return;
     setState(() {
       _depth = AiFindDepth.fromName(prefs.getString(aiFindDepthKey));
+      _avoid = AiFindAvoid.read(prefs);
       _service = service;
     });
   }
@@ -214,6 +227,7 @@ class _AiFindPageState extends State<AiFindPage> {
       final run = (widget.startRun ?? _defaultRun)(
         description: description,
         depth: _depth,
+        avoid: AiFindAvoid.read(prefs),
         service: service,
         scope: scope,
       );
@@ -259,12 +273,14 @@ class _AiFindPageState extends State<AiFindPage> {
   static AiFindRun _defaultRun({
     required String description,
     required AiFindDepth depth,
+    required List<String> avoid,
     required AiService service,
     required SearchScope scope,
   }) => AiFindRun(
     AiFindSession(
       description: description,
       depth: depth,
+      avoid: avoid,
       library: AppAiFindLibrary(scope: scope),
       ask: AiFindSession.askService(service),
       serviceLabel: aiFindServiceLabel(service),
@@ -279,6 +295,16 @@ class _AiFindPageState extends State<AiFindPage> {
     if (!mounted || _run != null) return;
     final service = await widget.settings.findService();
     if (mounted) setState(() => _service = service);
+  }
+
+  /// 「不想看的」清單頁；回來時照改過的清單更新那一列。
+  Future<void> _openAvoid() async {
+    final prefs = await _prefs();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => AiFindAvoidPage(prefs: prefs)),
+    );
+    if (mounted) setState(() => _avoid = AiFindAvoid.read(prefs));
   }
 
   Future<void> _copySummary(AiFindSession session) async {
@@ -388,6 +414,15 @@ class _AiFindPageState extends State<AiFindPage> {
             selected: _depth,
             onChanged: (depth) => setState(() => _depth = depth),
           ),
+        ),
+      ],
+    ),
+    GroupedSection(
+      children: [
+        GroupedRow(
+          title: '不想看的',
+          value: aiFindAvoidSummary(_avoid),
+          onTap: () => unawaited(_openAvoid()),
         ),
       ],
     ),

@@ -271,6 +271,8 @@ const String aiFindSystemPrompt =
     '- 交出 10 本：相關的不夠 10 本時有幾本交幾本，說明裡寫為什麼不夠。\n'
     '- 乙女向（女主角和原作男角色談戀愛）與成人向的書可以搜、可以看，但只有描述'
     '提到、或書架上讀的就是那一類時才推薦；其他時候不推薦。\n'
+    '- 使用者列了「不想看的」（例如女頻、後宮）時，那幾類的書可以搜、可以看，但不'
+    '推薦；合不合看故事，不看字眼。這次的描述明確說要其中一類時，照描述。\n'
     '- 描述沒寫偏好時，書架與閱讀紀錄（shelf）看得出他看過什麼、偏好哪一類（男頻、'
     '女頻、乙女向、成人向），照那類挑；上面的書算看過，不推薦。\n'
     '- 推薦理由寫這本哪裡相符、哪裡不確定或不符，依據是你從工具看到的書名、分類、'
@@ -297,13 +299,17 @@ const String aiFindSystemPrompt =
     '問到時才寫。照深度看詳情、讀章節確認。\n'
     '5. 交出；找不到相關的，交出零本並說明找了什麼。';
 
-/// 第一輪送給 AI 的話：系統提示與這次的描述、深度。
+/// 第一輪送給 AI 的話：系統提示與這次的描述、深度，和「不想看的」清單。
 List<AiMessage> aiFindOpening({
   required String description,
   required AiFindDepth depth,
+  List<String> avoid = const [],
 }) => [
   const AiMessage.system(aiFindSystemPrompt),
-  AiMessage.user('# 使用者的描述\n$description\n\n# 深度\n${depth.label}'),
+  AiMessage.user(
+    '# 使用者的描述\n$description\n\n# 深度\n${depth.label}'
+    '${avoid.isEmpty ? '' : '\n\n# 不想看的\n${avoid.join('、')}'}',
+  ),
 ];
 
 /// 提示詞的版本：系統提示與工具清單的雜湊開頭，寫進紀錄。

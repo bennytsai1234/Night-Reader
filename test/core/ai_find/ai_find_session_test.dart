@@ -204,10 +204,12 @@ void main() {
     _Library library,
     _Ai ai, {
     AiFindDepth depth = AiFindDepth.normal,
+    List<String> avoid = const [],
   }) {
     final find = AiFindSession(
       description: '爽文、穿越，想要更刺激的',
       depth: depth,
+      avoid: avoid,
       library: library,
       ask: ai.call,
       log: AiRepairLog.find(description: '爽文、穿越', directory: () async => logs),
@@ -809,12 +811,18 @@ void main() {
       'what an uninterrupted find sends and ends with the same picks',
       () async {
         // 深入：交出要看過詳情、讀過正文，接著做時看過什麼要從存檔讀回來；
-        // 發現頁的書源編號與書的編號也要接得上。
+        // 發現頁的書源編號與書的編號也要接得上；「不想看的」清單也一樣。
         final ai = _Ai(script());
-        final full = session(library(), ai, depth: AiFindDepth.deep);
+        final full = session(
+          library(),
+          ai,
+          depth: AiFindDepth.deep,
+          avoid: ['女頻', '後宮'],
+        );
         final saved = <String>[];
         full.onCheckpoint = saved.add;
         await full.start();
+        expect(ai.seen.first[1].content, endsWith('# 不想看的\n女頻、後宮'));
         expect(full.outcome, AiFindOutcome.found);
         expect(full.picks.map((p) => p.book.name), ['獵魔人', '斬妖']);
         expect(saved, hasLength(6));
