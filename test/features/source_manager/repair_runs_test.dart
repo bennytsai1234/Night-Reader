@@ -511,7 +511,6 @@ void main() {
         ),
         probe: (_, _, {start}) async =>
             const SourceProbeReport(logs: [], requests: []),
-        keywordCheck: (_, _) async => true,
         ask: (_, token) async {
           if (!blocks) {
             return fakeAiReply(
