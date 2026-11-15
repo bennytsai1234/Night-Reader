@@ -5,6 +5,7 @@ import 'dart:ui' as ui show TextDirection;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -838,10 +839,10 @@ class _InfoRow extends StatelessWidget {
     // 時鐘、電量與圖示照它們自己的大小畫一條。
     Widget? masked(Widget? child) => switch ((skeletonColor, child)) {
       (null, _) || (_, null) => child,
-      (final color?, Text(:final data?)) => SkeletonText(data, color: color),
+      (final color?, UiText(:final data?)) => SkeletonText(data, color: color),
       // 選了下載字型時字分段（[_infoText]）；骨架照系統字型在前量，中文字
       // 在中文字型裡都是一格寬，長度不變。
-      (final color?, Text(:final textSpan?)) => SkeletonText(
+      (final color?, UiText(:final textSpan?)) => SkeletonText(
         textSpan.toPlainText(),
         color: color,
       ),
@@ -1160,10 +1161,10 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
             fontSize: widget.fontSize,
           ),
           SizedBox(width: widget.fontSize * 0.25),
-          Flexible(child: Text('$number%')),
+          Flexible(child: UiText('$number%')),
         ],
       ),
-      _ => Text('$number%'),
+      _ => UiText('$number%'),
     };
   }
 }
@@ -1179,7 +1180,7 @@ DateFormat _clockFormat(bool use24HourClock) =>
 /// 中日文字另用下載字型在前的字族，英數字照舊系統字型在前，同正文
 /// （[readerV2CjkRuns]）。時鐘只有數字，不必分段。
 Widget _infoText(String text, TextAlign align, String? fontFamily) {
-  if (fontFamily == null) return Text(text, textAlign: align);
+  if (fontFamily == null) return UiText(text, textAlign: align);
   final cjk = TextStyle(
     fontFamilyFallback: readerV2CjkFontFallback(fontFamily),
   );
@@ -1193,7 +1194,7 @@ Widget _infoText(String text, TextAlign align, String? fontFamily) {
     cursor = run.end;
   }
   if (cursor < text.length) spans.add(TextSpan(text: text.substring(cursor)));
-  return Text.rich(TextSpan(children: spans), textAlign: align);
+  return UiText.rich(TextSpan(children: spans), textAlign: align);
 }
 
 class _ReaderClock extends StatefulWidget {
@@ -1245,7 +1246,7 @@ class _ReaderClockState extends State<_ReaderClock> {
     return Semantics(
       label: '時間 $time',
       excludeSemantics: true,
-      child: DragOverflowText(child: Text(time, textAlign: widget.textAlign)),
+      child: DragOverflowText(child: UiText(time, textAlign: widget.textAlign)),
     );
   }
 }
