@@ -33,7 +33,65 @@ class SourceCheckEntry {
 
   bool get isHealthy => health.category == SourceHealthCategory.healthy;
   bool get cleanupCandidate => health.cleanupCandidate;
+
+  /// 存進暫停的校驗（背景工作接著做，ADR 0058）。
+  Map<String, Object?> toJson() => {
+    'sourceUrl': sourceUrl,
+    'sourceName': sourceName,
+    'stage': stage,
+    'message': message,
+    'category': health.category.name,
+    'label': health.label,
+    'description': health.description,
+    'allowsSearch': health.allowsSearch,
+    'allowsReading': health.allowsReading,
+    'cleanupCandidate': health.cleanupCandidate,
+    'quarantined': health.quarantined,
+  };
+
+  /// 讀回 [toJson] 存的；格式不對是 null。
+  static SourceCheckEntry? fromJson(Object? json) {
+    if (json case {
+      'sourceUrl': final String sourceUrl,
+      'sourceName': final String sourceName,
+      'stage': final String stage,
+      'message': final String message,
+      'category': final String category,
+      'label': final String label,
+      'description': final String description,
+      'allowsSearch': final bool allowsSearch,
+      'allowsReading': final bool allowsReading,
+      'cleanupCandidate': final bool cleanupCandidate,
+      'quarantined': final bool quarantined,
+    }) {
+      return SourceCheckEntry(
+        sourceUrl: sourceUrl,
+        sourceName: sourceName,
+        stage: stage,
+        message: message,
+        health: SourceRuntimeHealth(
+          category: SourceHealthCategory.values.firstWhere(
+            (value) => value.name == category,
+            orElse: () => SourceHealthCategory.upstreamUnstable,
+          ),
+          label: label,
+          description: description,
+          allowsSearch: allowsSearch,
+          allowsReading: allowsReading,
+          cleanupCandidate: cleanupCandidate,
+          quarantined: quarantined,
+        ),
+      );
+    }
+    return null;
+  }
 }
+
+/// 一個書源校驗完了（沒被停下打斷）：[entry] 是結果，書源不在了是 null。
+typedef SourceCheckFinished = void Function(
+  String sourceUrl,
+  SourceCheckEntry? entry,
+);
 
 /// 一個書源這次校驗的完整結果；逾時是 null（[CheckSourceService.check]）。
 typedef SourceCheckResultListener = void Function(
@@ -49,7 +107,7 @@ class SourceCheckReport {
   /// 中途停止時這次本來要校驗幾個書源；跑完是 null。
   final int? plannedCount;
 
-  /// 這次是按「停止」中途結束的：[entries] 只有停下前校驗完的那些。
+  /// 這次是按暫停或結束中途停下的：[entries] 只有停下前校驗完的那些。
   bool get stopped => plannedCount != null;
 
   static const empty = SourceCheckReport(<SourceCheckEntry>[]);
@@ -78,7 +136,7 @@ class SourceCheckReport {
   bool get isPresent => hasEntries || stopped;
 
   String get summary =>
-      '${stopped ? '已停止，校驗了 $total/$plannedCount 個：' : ''}'
+      '${stopped ? '已結束，校驗了 $total/$plannedCount 個：' : ''}'
       '可用 $healthyCount / 異常 $affectedCount / 建議清理 $cleanupCandidateCount';
 }
 
@@ -276,12 +334,16 @@ class _SourceCheckExecutionPool {
   final void Function() onTaskDone;
   final bool Function() shouldContinue;
 
+  /// 一個書源校驗完、而且當時還沒被停下（停下時被打斷的不算，接著做時重校）。
+  final SourceCheckFinished? onFinished;
+
   _SourceCheckExecutionPool({
     required this.workerCount,
     required this.checkSource,
     required this.recordFailure,
     required this.onTaskDone,
     required this.shouldContinue,
+    this.onFinished,
   });
 
   Future<List<SourceCheckEntry?>> run(List<String> sourceUrls) async {
@@ -306,6 +368,9 @@ class _SourceCheckExecutionPool {
           );
           results[task.index] = await recordFailure(task.sourceUrl, error);
         } finally {
+          if (shouldContinue()) {
+            onFinished?.call(task.sourceUrl, results[task.index]);
+          }
           onTaskDone();
         }
       }
@@ -409,18 +474,37 @@ class CheckSourceService extends ChangeNotifier {
 
   /// 校驗 [urls]。[onResult] 收到每個書源這次校驗的完整結果（含診斷），
   /// 逾時是 null：整批修復交給 AI 那段沿用，不再校驗一次。
+  ///
+  /// 暫停後接著做（ADR 0058）：[earlier] 是暫停前校驗完的結果，進度從它的
+  /// 個數接著數、報告接在它後面；[onFinished] 收到每個校驗完的書源，背景工作
+  /// 照它存進度。
   Future<SourceCheckReport> check(
     List<String> urls, {
     SourceCheckResultListener? onResult,
+    int doneBefore = 0,
+    List<SourceCheckEntry> earlier = const [],
+    SourceCheckFinished? onFinished,
   }) async {
     if (_isChecking) return _lastReport;
 
-    return _checkAll(urls, onResult);
+    return _checkAll(urls, onResult, doneBefore, earlier, onFinished);
+  }
+
+  /// 暫停中的校驗按了結束（App 重開過，記憶體裡沒有那次的報告）：照存的
+  /// 結果寫成上次校驗摘要。
+  void showStoppedReport(List<SourceCheckEntry> entries, int plannedCount) {
+    if (_isChecking) return;
+    _lastReport = SourceCheckReport(entries, plannedCount: plannedCount);
+    _statusMsg = _lastReport.summary;
+    _notifyIfAlive();
   }
 
   Future<SourceCheckReport> _checkAll(
     List<String> urls,
     SourceCheckResultListener? onResult,
+    int doneBefore,
+    List<SourceCheckEntry> earlier,
+    SourceCheckFinished? onFinished,
   ) async {
     final normalizedUrls = LinkedHashSet<String>.from(
       urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
@@ -428,8 +512,8 @@ class CheckSourceService extends ChangeNotifier {
     final config = _config.normalized();
     _isChecking = true;
     CrashTrail.action('開始校驗書源（${normalizedUrls.length} 個）');
-    _totalCount = normalizedUrls.length;
-    _currentCount = 0;
+    _totalCount = doneBefore + normalizedUrls.length;
+    _currentCount = doneBefore;
     _statusMsg = '準備校驗';
     _lastReport = SourceCheckReport.empty;
     _logs.clear();
@@ -457,6 +541,7 @@ class CheckSourceService extends ChangeNotifier {
           _notifyIfAlive();
         },
         shouldContinue: () => _isChecking,
+        onFinished: onFinished,
       ).run(normalizedUrls);
     } finally {
       // 校驗結束（無論正常、取消或例外）都清除 JS 靜態快取。
@@ -468,16 +553,16 @@ class CheckSourceService extends ChangeNotifier {
 
     final stopped = !_isChecking;
     if (stopped) {
-      _appendLog('校驗已停止，校驗了 $_currentCount / $_totalCount 個，結果照留');
+      _appendLog('校驗停下了，校驗了 $_currentCount / $_totalCount 個，結果照留');
     }
 
     _isChecking = false;
     _activeTasks.clear();
     await _flushPendingStatusWrites();
-    _lastReport = SourceCheckReport(
-      results.whereType<SourceCheckEntry>().toList(growable: false),
-      plannedCount: stopped ? _totalCount : null,
-    );
+    _lastReport = SourceCheckReport([
+      ...earlier,
+      ...results.whereType<SourceCheckEntry>(),
+    ], plannedCount: stopped ? _totalCount : null);
     _statusMsg = _lastReport.summary;
     _appendLog('校驗完成：${_lastReport.summary}');
     CrashTrail.action('校驗書源結束：${_lastReport.summary}');

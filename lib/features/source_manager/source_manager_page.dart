@@ -281,11 +281,15 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
         child: SourceCheckStatusBar(
           provider: provider,
-          onTap: provider.checkService.isChecking || provider.hasLastCheckReport
+          onTap:
+              provider.checkService.isChecking ||
+                  provider.pausedCheck.isPaused ||
+                  provider.hasLastCheckReport
               ? () {
                   // 有異常就篩出異常書源；校驗中或全部可用時打開校驗日誌，
                   // 狀態列的箭頭才不會點了沒反應。
                   if (!provider.checkService.isChecking &&
+                      !provider.pausedCheck.isPaused &&
                       provider.lastCheckReport.affectedCount > 0) {
                     provider.setFilterGroup(abnormalSourceGroupTag);
                   } else {

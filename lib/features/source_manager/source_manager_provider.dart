@@ -516,6 +516,7 @@ class SourceManagerProvider with ChangeNotifier {
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
     RepairRuns? repairRuns,
+    PausedSourceCheck? pausedCheck,
     Future<int> Function(List<BookSource> sources)? mergeDuplicates,
   }) : _importService = importService ?? SourceImportService(),
        _mergeDuplicates =
@@ -523,11 +524,13 @@ class SourceManagerProvider with ChangeNotifier {
            ((sources) => mergeDuplicateSources(sources: sources)),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
        _repairRuns = repairRuns ?? RepairRuns.instance,
+       pausedCheck = pausedCheck ?? PausedSourceCheck.instance,
        lastSourceCount = _readLastCount(),
        lastRows = _readLastRows() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
     _repairRuns.addListener(_handleRepairRunsChanged);
+    this.pausedCheck.addListener(notifyListeners);
     unawaited(
       entrance.then((_) {
         if (_disposed) return;
@@ -542,6 +545,9 @@ class SourceManagerProvider with ChangeNotifier {
 
   final Future<void> Function()? _uncovered;
   final RepairRuns _repairRuns;
+
+  /// 暫停中的校驗（ADR 0058）：校驗膠囊照它顯示已暫停。
+  final PausedSourceCheck pausedCheck;
   final Future<int> Function(List<BookSource> sources) _mergeDuplicates;
 
   /// 讀清單時併掉了重複書源（ADR 0062）：每併一次加一，頁面聽它從底部提示
@@ -618,6 +624,7 @@ class SourceManagerProvider with ChangeNotifier {
     _checkNotifyTimer?.cancel();
     checkService.removeListener(_handleCheckServiceChanged);
     _repairRuns.removeListener(_handleRepairRunsChanged);
+    pausedCheck.removeListener(notifyListeners);
     if (_listeningSync) SourceSync.applied.removeListener(_handleSourcesSynced);
     duplicatesMerged.dispose();
     super.dispose();
@@ -798,9 +805,43 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void cancelSourceCheck() {
-    checkService.cancel();
+  /// 校驗膠囊的「暫停」：正在校驗的那幾個停下，做完的留著，按繼續校驗剩下的
+  /// （ADR 0058）。
+  void pauseSourceCheck() {
+    final job = SourceCheckJob.current;
+    if (job == null) return;
+    job.pauseFromSystem();
     clearSelection();
+  }
+
+  /// 校驗膠囊與校驗詳情的「結束」：校驗中的停下、暫停中的收尾，做完的結果
+  /// 寫成上次校驗摘要。
+  void endSourceCheck() {
+    final job = SourceCheckJob.current;
+    if (job != null) {
+      job.endFromSystem();
+    } else if (pausedCheck.isPaused) {
+      unawaited(pausedCheck.end(service: checkService));
+    } else {
+      checkService.cancel();
+    }
+    clearSelection();
+  }
+
+  /// 暫停中的校驗按了繼續：沒有別的背景工作在跑才接著校驗剩下的。
+  bool get canResumeSourceCheck =>
+      pausedCheck.isPaused && backgroundWorkIdle() && !isMutationBusy;
+
+  Future<void> resumeSourceCheck() async {
+    if (!canResumeSourceCheck || !_beginBatchOperation()) return;
+    try {
+      final taken = pausedCheck.take();
+      if (taken == null) return;
+      final (plan, file) = taken;
+      await SourceCheckJob.of(checkService, plan, file: file).run();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   /// 反選 (對標 legado revertSelection)
@@ -1138,8 +1179,12 @@ class SourceManagerProvider with ChangeNotifier {
       if (config != null) {
         await checkService.updateConfig(config);
       }
-      await SourceCheckJob.of(checkService)
-          .run(() => checkService.check(selectedUrls.toList(growable: false)));
+      // 開始新的一次：暫停中的那次結束，做完的那些不再接著校驗。
+      await pausedCheck.end();
+      await SourceCheckJob.of(
+        checkService,
+        SourceCheckPlan(selectedUrls.toList(growable: false)),
+      ).run();
     } finally {
       _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
@@ -1259,7 +1304,8 @@ class SourceManagerProvider with ChangeNotifier {
       if (config != null) {
         await checkService.updateConfig(config);
       }
-      await SourceCheckJob.of(checkService).run(() => checkService.check(urls));
+      await pausedCheck.end();
+      await SourceCheckJob.of(checkService, SourceCheckPlan(urls)).run();
     } finally {
       _selectedUrls.removeAll(selectedAtStart);
       _endBatchOperation();

@@ -45,6 +45,7 @@ import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
 import 'features/search/ai_find/ai_find_run.dart';
 import 'features/search/search_provider.dart';
+import 'features/source_manager/source_check_job.dart';
 import 'shared/widgets/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
 
@@ -285,6 +286,7 @@ void _runPostLaunchTasks() {
   // 上次被收掉的背景工作：收掉留下的通知，暫停的工作讀回來（ADR 0058）。
   BackgroundWork.instance.clearLeftover();
   unawaited(restorePausedAiFind());
+  unawaited(PausedSourceCheck.instance.restore());
 }
 
 /// 用上次存下的手機瀏覽器標識，之後讀到新的就存起來（[WebViewUserAgent]）。

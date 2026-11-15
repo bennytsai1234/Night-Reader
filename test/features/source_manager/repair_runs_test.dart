@@ -6,6 +6,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/services/background_work/paused_work_file.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart';
@@ -21,6 +22,33 @@ const _service = (
 );
 
 /// 換掉 Android 那一半，看通知實際收到什麼（只驗 Dart 這邊的協定）。
+/// 存在記憶體裡的暫停存檔。
+class _MemoryFile extends PausedWorkFile {
+  _MemoryFile([this.text]) : super('check_sources');
+  String? text;
+  bool closed = false;
+
+  @override
+  bool get isClosed => closed;
+
+  @override
+  Future<String?> read() async => text;
+
+  @override
+  void save(String text) {
+    if (!closed) this.text = text;
+  }
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    text = null;
+  }
+}
+
 class _FakePlatform implements BackgroundWorkPlatform {
   final List<String> calls = [];
 
@@ -231,32 +259,147 @@ void main() {
     expect(work.isBusy, isFalse);
   });
 
-  test('a source check holds the slot and reports how far it got', () async {
-    final changes = ValueNotifier<int>(0);
-    var cancelled = false;
-    final finish = Completer<void>();
-    final job = SourceCheckJob(
-      changes: changes,
-      done: () => changes.value,
-      total: () => 4,
-      cancel: () => cancelled = true,
-      work: work,
+  group('a source check', () {
+    SourceCheckEntry entry(String url) => SourceCheckEntry(
+      sourceUrl: url,
+      sourceName: url,
+      stage: '搜尋',
+      message: 'ok',
+      health: SourceRuntimeHealth.healthy,
     );
 
-    final running = job.run(() => finish.future);
-    expect(work.isBusy, isTrue);
-    await _flush();
-    changes.value = 1;
-    await _flush();
-    job.endFromSystem();
-    await _flush();
-    finish.complete();
-    await running;
-    await _flush();
+    /// 假的校驗：照順序校驗 [urls]，每做完一個回報；校驗完 [stopAfter] 個之後
+    /// 等到被取消才回來（取消時正在校驗的那個不算做完）。
+    ({SourceCheckJob job, ValueNotifier<int> changes}) jobOf(
+      SourceCheckPlan plan,
+      _MemoryFile file,
+      PausedSourceCheck paused, {
+      int stopAfter = 1,
+      List<int>? doneBeforeSeen,
+    }) {
+      final changes = ValueNotifier<int>(plan.finished.length);
+      final cancel = Completer<void>();
+      final job = SourceCheckJob(
+        plan: plan,
+        changes: changes,
+        done: () => changes.value,
+        total: () => plan.urls.length,
+        cancel: () {
+          if (!cancel.isCompleted) cancel.complete();
+        },
+        check:
+            (
+              urls, {
+              required doneBefore,
+              required earlier,
+              required onFinished,
+            }) async {
+              doneBeforeSeen?.add(doneBefore);
+              for (final (i, url) in urls.indexed) {
+                if (i >= stopAfter) {
+                  await cancel.future;
+                  return;
+                }
+                await Future<void>.delayed(Duration.zero);
+                onFinished(url, entry(url));
+                changes.value++;
+              }
+            },
+        file: file,
+        paused: paused,
+        work: work,
+      );
+      return (job: job, changes: changes);
+    }
 
-    expect(cancelled, isTrue);
-    expect(platform.calls, ['第 0／4 個｜0', '第 1／4 個｜250', '正在結束…｜250', 'hide']);
-    expect(work.isBusy, isFalse);
+    test('holds the slot and reports how far it got; end keeps what was '
+        'checked and drops the save', () async {
+      final file = _MemoryFile();
+      final paused = PausedSourceCheck(file: _MemoryFile.new);
+      final plan = SourceCheckPlan(['a', 'b', 'c', 'd']);
+      final (:job, changes: _) = jobOf(plan, file, paused);
+
+      final running = job.run();
+      expect(work.isBusy, isTrue);
+      await _flush();
+      await _flush();
+      job.endFromSystem();
+      await running;
+      await _flush();
+
+      expect(platform.calls, ['第 0／4 個｜0', '第 1／4 個｜250', '正在結束…｜250', 'hide']);
+      expect(work.isBusy, isFalse);
+      expect(file.closed, isTrue);
+      expect(paused.isPaused, isFalse);
+      expect(plan.finished, {'a'});
+    });
+
+    test('pause keeps what is left; continue checks only that, counting on '
+        'from what was done', () async {
+      final file = _MemoryFile();
+      final paused = PausedSourceCheck(file: _MemoryFile.new);
+      final (:job, changes: _) = jobOf(
+        SourceCheckPlan(['a', 'b', 'c', 'd']),
+        file,
+        paused,
+      );
+      final running = job.run();
+      await _flush();
+      await _flush();
+      job.pauseFromSystem();
+      await running;
+      await _flush();
+
+      expect(work.isBusy, isFalse, reason: '暫停空出位置、收掉通知');
+      expect(platform.calls, ['第 0／4 個｜0', '第 1／4 個｜250', '正在暫停…｜250', 'hide']);
+      expect(paused.plan!.remaining, ['b', 'c', 'd']);
+      expect(file.closed, isFalse);
+      final saved = SourceCheckPlan.decode(file.text!)!;
+      expect(saved.finished, {'a'}, reason: '下次開 App 讀得回來');
+      expect(saved.entries.single.sourceUrl, 'a');
+
+      final (plan, kept) = paused.take()!;
+      final seen = <int>[];
+      final (job: resumed, changes: _) = jobOf(
+        plan,
+        kept as _MemoryFile,
+        paused,
+        stopAfter: 99,
+        doneBeforeSeen: seen,
+      );
+      await resumed.run();
+      expect(seen, [1]);
+      expect(plan.finished, {'a', 'b', 'c', 'd'});
+      expect(plan.entries.map((e) => e.sourceUrl), ['a', 'b', 'c', 'd']);
+      expect(kept.closed, isTrue, reason: '做完了，存檔刪掉');
+      expect(paused.isPaused, isFalse);
+    });
+
+    test('a check left when the app was closed comes back paused; ending it '
+        'drops the save', () async {
+      final left = SourceCheckPlan(
+        ['a', 'b'],
+        finished: {'a'},
+        entries: [entry('a')],
+      );
+      final file = _MemoryFile(left.encode());
+      final paused = PausedSourceCheck(file: () => file);
+      await paused.restore();
+      expect(paused.plan!.remaining, ['b']);
+      expect(paused.plan!.entries.single.sourceUrl, 'a');
+
+      await paused.end();
+      expect(paused.isPaused, isFalse);
+      expect(file.closed, isTrue);
+    });
+
+    test('a save that cannot be read is dropped', () async {
+      final file = _MemoryFile('{"version": 0}');
+      final paused = PausedSourceCheck(file: () => file);
+      await paused.restore();
+      expect(paused.isPaused, isFalse);
+      expect(file.closed, isTrue);
+    });
   });
 
   testWidgets('going back from the page leaves the batch running', (
