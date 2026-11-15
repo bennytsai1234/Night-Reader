@@ -996,7 +996,7 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
       return _glyphShape(size ?? IconTheme.of(context).size ?? 24);
     case PasswordRevealButton():
       return _glyphShape(PasswordRevealButton.iconSize);
-    case UiText(:final data?, :final style, :final maxLines):
+    case Text(:final data?, :final style, :final maxLines):
       return GroupedItemShape.text(
         context,
         data,
@@ -1007,7 +1007,7 @@ GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
     // 限寬的字（右側的狀態文字）照最寬的寬度排。
     case ConstrainedBox(
       :final constraints,
-      child: UiText(:final data?, :final style, :final maxLines),
+      child: Text(:final data?, :final style, :final maxLines),
     ):
       return GroupedItemShape.text(
         context,
