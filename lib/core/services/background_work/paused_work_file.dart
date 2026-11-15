@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 /// - 寫入排隊：上一次還沒寫完時又存，只寫最後那份。先寫到暫存檔再改名，
 ///   寫到一半被收掉也留著上一份完整的。
 /// - [close] 之後不再寫：使用者按了結束的工作不能從晚到的那次寫入活回來。
+/// - 同名的幾個存檔（上一件還在收尾、下一件已經開始）的寫入與刪除排成一列，
+///   而且只有最後寫的那個能刪：舊的那件收尾時不會刪掉新的那件剛存的檔。
 class PausedWorkFile {
   PausedWorkFile(this.name, {Future<Directory> Function()? directory})
     : _directory = directory ?? _defaultDirectory;
@@ -22,6 +24,18 @@ class PausedWorkFile {
   String Function()? _pending;
   Future<void>? _writing;
   bool _closed = false;
+
+  /// 每個檔名最後寫的是哪一個存檔；沒人寫過是不在表裡。
+  static final Map<String, PausedWorkFile> _owners = {};
+
+  /// 每個檔名的寫入與刪除排成一列。
+  static final Map<String, Future<void>> _queues = {};
+
+  Future<void> _serial(Future<void> Function() work) {
+    final done = (_queues[name] ?? Future<void>.value()).then((_) => work());
+    _queues[name] = done.catchError((Object _) {});
+    return done;
+  }
 
   /// 已經結束，不再寫。
   bool get isClosed => _closed;
@@ -63,16 +77,19 @@ class PausedWorkFile {
         _pending = null;
         try {
           final text = next();
-          final file = await _file();
-          await file.parent.create(recursive: true);
-          // 暫存檔每個存檔各一個：同名的上一件還在收尾時不會撞在一起。
-          final temp = File('${file.path}.${identityHashCode(this)}.tmp');
-          await temp.writeAsString(text, flush: true);
-          if (_closed) {
-            await temp.delete();
-            return;
-          }
-          await temp.rename(file.path);
+          await _serial(() async {
+            if (_closed) return;
+            final file = await _file();
+            await file.parent.create(recursive: true);
+            final temp = File('${file.path}.${identityHashCode(this)}.tmp');
+            await temp.writeAsString(text, flush: true);
+            if (_closed) {
+              await temp.delete();
+              return;
+            }
+            await temp.rename(file.path);
+            _owners[name] = this;
+          });
         } catch (error) {
           AppLog.w('PausedWorkFile: 存不進 $name：$error');
         }
@@ -84,13 +101,19 @@ class PausedWorkFile {
 
   /// 這件工作結束了：之後的 [save] 都不理，存檔刪掉。等正在寫的那次寫完再刪，
   /// 不會被它寫回來。
+  /// 同名的另一個存檔後來寫過時不刪：那是下一件工作的。
   Future<void> close() async {
     _closed = true;
     _pending = null;
     await flush();
     try {
-      final file = await _file();
-      if (await file.exists()) await file.delete();
+      await _serial(() async {
+        final owner = _owners[name];
+        if (owner != null && !identical(owner, this)) return;
+        _owners.remove(name);
+        final file = await _file();
+        if (await file.exists()) await file.delete();
+      });
     } catch (error) {
       AppLog.w('PausedWorkFile: 刪不掉 $name：$error');
     }

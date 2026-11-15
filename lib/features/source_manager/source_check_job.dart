@@ -125,7 +125,10 @@ class PausedSourceCheck extends ChangeNotifier {
     if (_plan != null || SourceCheckJob.current != null) return;
     final file = _newFile();
     final text = await file.read();
-    if (text == null) return;
+    // 讀檔的時候使用者開始了新的一次：存檔是那一次的，不讀、不刪。
+    if (text == null || _plan != null || SourceCheckJob.current != null) {
+      return;
+    }
     final plan = SourceCheckPlan.decode(text);
     if (plan == null || plan.remaining.isEmpty) {
       AppLog.w('PausedSourceCheck: 存的校驗讀不出來或已經做完，刪掉');

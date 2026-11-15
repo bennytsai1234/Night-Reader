@@ -83,7 +83,20 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   }) : _work = work ?? BackgroundWork.instance,
        _navigator = navigator ?? (() => rootNavigatorKey.currentState),
        _started = paused,
-       _paused = paused;
+       _paused = paused {
+    // 暫停中的頁面要知道位置空出來了沒，「繼續」才跟著能按。
+    _work.addListener(_slotChanged);
+  }
+
+  void _slotChanged() {
+    if (_paused) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _work.removeListener(_slotChanged);
+    super.dispose();
+  }
 
   final BackgroundWork _work;
   final NavigatorState? Function() _navigator;
@@ -138,9 +151,15 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 暫停中按了結束：收尾、結果留著（找書存成過去的找書）。
   Future<void> endPaused() async {}
 
-  /// 按了繼續：讀回存檔、準備好接著做；接不下去（例如 AI 服務被刪了）傳回
-  /// false。
+  /// 按了繼續：讀回存檔、建好接著做要換上的新工作（還不換上）；接不下去
+  /// （例如 AI 服務被刪了）傳回 false。
   Future<bool> prepareResume() async => false;
+
+  /// 換上 [prepareResume] 建好的新工作：位置空著、等的時候沒按結束才叫。
+  void commitResume() {}
+
+  /// [prepareResume] 建好的不用了（等的時候按了結束、位置被別件佔了）：放掉。
+  void discardResume() {}
 
   /// 這一件的頁面。
   Widget page();
@@ -185,9 +204,12 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     _resuming = true;
     notifyListeners();
     try {
-      if (!await prepareResume() || !_paused || _ending || _work.isBusy) {
+      if (!await prepareResume()) return;
+      if (!_paused || _ending || _finished || _work.isBusy) {
+        discardResume();
         return;
       }
+      commitResume();
       _paused = false;
       _launch();
     } finally {
@@ -270,12 +292,19 @@ const String repairProgressName = 'repair';
 /// 存檔的格式版本：改了存什麼就加一，舊版的讀不回來。
 const int _repairProgressVersion = 1;
 
+/// 一批修復暫停時存的：這批的書源（現在的網址）、已經有結果的、沿用校驗的
+/// 書源與用了多少 token（含沒定案的書源已經花掉的）。
+typedef BatchRepairProgress = ({
+  List<String> urls,
+  Map<String, RepairDone> done,
+  Set<String> reused,
+  int tokensUsed,
+});
+
 /// 接著修一批：照存的書源與結果建新的一批，用現在的 AI 服務設定；沒有 AI
 /// 服務是 null。
 typedef BatchRepairReopen = Future<SourceRepairBatch?> Function(
-  List<String> urls,
-  Map<String, RepairDone> done,
-  int reusedChecks,
+  BatchRepairProgress progress,
 );
 
 /// 修復異常書源（一批）。每有書源定案就存一次（哪些書源、各自的結果）：暫停
@@ -318,23 +347,23 @@ class BatchRepairRun extends RepairRun {
   int _seenEdits = 0;
   int _savedDone = -1;
   bool _pausedWork = false;
+  SourceRepairBatch? _next;
 
   static Future<SourceRepairBatch?> _reopenWithService(
-    List<String> urls,
-    Map<String, RepairDone> done,
-    int reusedChecks,
+    BatchRepairProgress progress,
   ) async {
     final settings = AiRepairSettings();
     final service = await settings.service();
     if (service == null) return null;
     final concurrency = await settings.concurrency();
-    final sources = await _loadSources(urls);
+    final sources = await _loadSources(progress.urls);
     return SourceRepairBatch(
       sources: sources,
       service: service,
       aiConcurrency: concurrency,
-      done: done,
-      reusedChecks: reusedChecks,
+      done: progress.done,
+      reused: progress.reused,
+      tokensUsed: progress.tokensUsed,
     );
   }
 
@@ -385,7 +414,8 @@ class BatchRepairRun extends RepairRun {
           for (final MapEntry(:key, :value) in _batch.done.entries)
             key: [value.outcome.name, value.detail, value.tokens],
         },
-        'reusedChecks': _batch.reusedChecks,
+        'reused': [..._batch.reused],
+        'tokensUsed': _batch.tokensUsed,
       }),
     );
   }
@@ -442,18 +472,35 @@ class BatchRepairRun extends RepairRun {
 
   @override
   Future<bool> prepareResume() async {
-    final next = await _reopen(
-      [for (final item in _batch.items) item.source.bookSourceUrl],
-      _batch.done,
-      _batch.reusedChecks,
-    );
-    if (next == null) return false;
+    _next = await _reopen((
+      urls: [for (final item in _batch.items) item.source.bookSourceUrl],
+      done: _batch.done,
+      reused: _batch.reused,
+      tokensUsed: _batch.tokensUsed,
+    ));
+    return _next != null;
+  }
+
+  @override
+  void commitResume() {
+    final next = _next;
+    if (next == null) return;
+    _next = null;
     final previous = _batch;
+    // 已經有結果的書源經手的 AI 修復交給新的一批：照舊點得進去、打包得到。
+    for (final session in next.adoptSessions(previous.takeFinishedSessions())) {
+      session.dispose();
+    }
     _drop(previous);
     _adopt(next);
     notifyListeners();
     scheduleMicrotask(previous.dispose);
-    return true;
+  }
+
+  @override
+  void discardResume() {
+    _next?.dispose();
+    _next = null;
   }
 
   @override
@@ -566,15 +613,29 @@ class SingleRepairRun extends RepairRun {
     await _file.close();
   }
 
+  AiRepairSession? _next;
+
   @override
   Future<bool> prepareResume() async {
-    final next = await _reopen(sourceUrl);
-    if (next == null) return false;
+    _next = await _reopen(sourceUrl);
+    return _next != null;
+  }
+
+  @override
+  void commitResume() {
+    final next = _next;
+    if (next == null) return;
+    _next = null;
     final previous = _session..removeListener(changed);
     _session = next..addListener(changed);
     notifyListeners();
     scheduleMicrotask(previous.dispose);
-    return true;
+  }
+
+  @override
+  void discardResume() {
+    _next?.dispose();
+    _next = null;
   }
 
   @override
@@ -634,7 +695,8 @@ Future<void> restorePausedRepair({
       'model': final String model,
       'urls': final List<Object?> urls,
       'done': final Map<String, Object?> done,
-      'reusedChecks': final int reusedChecks,
+      'reused': final List<Object?> reused,
+      'tokensUsed': final int tokensUsed,
     }) {
       final sources = await loadSources([for (final url in urls) '$url']);
       if (sources.isNotEmpty) {
@@ -658,7 +720,8 @@ Future<void> restorePausedRepair({
                     tokens: tokens,
                   ),
             },
-            reusedChecks: reusedChecks,
+            reused: {for (final url in reused) '$url'},
+            tokensUsed: tokensUsed,
           ),
           title: title,
           file: store,
@@ -669,6 +732,14 @@ Future<void> restorePausedRepair({
     }
   } on FormatException catch (error) {
     AppLog.w('restorePausedRepair: 讀不出來：$error');
+  }
+  // 讀書源的時候使用者開始了新的修復：讓它照舊，這份不讀（存檔由
+  // PausedWorkFile 判斷是不是新的那件的，不會刪錯）。
+  if (repairs.current != null) {
+    run
+      ?..disposeWork()
+      ..dispose();
+    return;
   }
   if (run == null) {
     await store.close();

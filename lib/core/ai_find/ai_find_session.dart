@@ -448,8 +448,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   String redact(String text) => redactAiRepairSecrets(text, _library.secrets);
 
   /// 每一輪開頭存下工具的狀態：書的編號（對話裡用編號指書）、看過詳情與
-  /// 正文沒有、發現頁的書源與分類（編號照順序）。搜過的結果不存：書多，
-  /// 接著做時要下一批會重搜一次。
+  /// 正文沒有、發現頁的書源（編號照順序）。搜過的結果不存：書多，接著做時
+  /// 要下一批會重搜一次。發現頁的分類也不存：分類的網址在書庫裡，接著做時
+  /// 書庫是新的，重抓一次分類，名稱與抓的網址才出自同一份清單（書源的分類
+  /// 會變時，回給 AI 的是現在那個編號的名稱）。
   @override
   void checkpoint(AgentCheckpoint state) {
     s._checkpoint(state, {
@@ -478,7 +480,6 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
           for (final source in sources)
             {'url': source.url, 'name': source.name, 'kind': source.kind.name},
         ],
-      'categories': _categories,
     });
   }
 
@@ -539,13 +540,6 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
               ),
             ),
       ];
-    }
-    if (json['categories'] case final Map<String, Object?> categories) {
-      for (final MapEntry(:key, :value) in categories.entries) {
-        if (value case final List<Object?> names) {
-          _categories[key] = [for (final name in names) '$name'];
-        }
-      }
     }
   }
 

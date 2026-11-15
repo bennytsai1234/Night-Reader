@@ -128,6 +128,7 @@ void main() {
     int aiConcurrency = SourceRepairBatch.defaultAiConcurrency,
     Future<void> Function()? beforeAsk,
     Map<String, RepairDone> done = const {},
+    Set<String> reusedAlready = const {},
   }) {
     return SourceRepairBatch(
       sources: sources,
@@ -135,6 +136,7 @@ void main() {
       now: now,
       aiConcurrency: aiConcurrency,
       done: done,
+      reused: reusedAlready,
       recheck: (urls, _, onResult) async {
         rechecked.addAll(urls);
         for (final url in urls) {
@@ -757,5 +759,68 @@ void main() {
       );
       expect(b.items.last.detail, '已結束');
     });
+  });
+
+  test('a source the AI fixes under a new address is saved with that address '
+      'the moment it gets its result', () async {
+    final seen = <List<String>>[];
+    final b = batch(
+      [_source('https://bad.example')],
+      replies: (_) => [
+        jsonEncode({
+          'action': 'submit',
+          'patch': {'bookSourceUrl': 'https://new.example'},
+        }),
+      ],
+    );
+    b.addListener(() {
+      final keys = b.done.keys.toList();
+      if (keys.isNotEmpty &&
+          (seen.isEmpty || seen.last.length != keys.length)) {
+        seen.add(keys);
+      }
+    });
+    await b.start();
+    expect(b.items.single.outcome, RepairOutcome.aiFixed);
+    expect(seen.first, ['https://new.example'], reason: '定案那一刻存的進度');
+  });
+
+  test('a finished repair is handed to the next batch, and a source reused '
+      'from a fresh check is counted once', () async {
+    late SourceRepairBatch b;
+    b = batch(
+      [_source('https://bad1.example'), _source('https://bad2.example')],
+      aiConcurrency: 1,
+      beforeAsk: () async {
+        if (b.items.first.isFinished) b.pause();
+      },
+    );
+    await b.start();
+    expect(b.isPaused, isTrue);
+    expect(b.items.first.outcome, RepairOutcome.aiFixed);
+    final taken = b.takeFinishedSessions();
+    expect(taken.keys, ['https://bad1.example']);
+
+    final next = batch([
+      _source('https://bad1.example'),
+      _source('https://bad2.example'),
+    ], done: b.done);
+    expect(next.adoptSessions(taken), isEmpty);
+    expect(next.items.first.session, same(taken.values.single));
+    b.dispose();
+    expect(
+      next.items.first.session!.job.outcome,
+      AiRepairOutcome.repaired,
+      reason: '上一批放掉時不跟著放掉',
+    );
+
+    final fresh = DateTime.now().millisecondsSinceEpoch;
+    final reused = batch(
+      [_source('https://bad1.example')..lastCheckTime = fresh],
+      done: const {},
+      reusedAlready: {'https://bad1.example'},
+    );
+    await reused.start();
+    expect(reused.reusedChecks, 1, reason: '暫停前已經算過的不再加');
   });
 }

@@ -203,9 +203,26 @@ class AiFindRun extends RepairRun {
       AppLog.w('AiFindRun: 接不下去：$error');
       return false;
     }
-    if (next == null) return false;
+    _next = next;
+    return next != null;
+  }
+
+  /// [prepareResume] 建好、還沒換上的那一次。
+  AiFindSession? _next;
+
+  @override
+  void commitResume() {
+    final next = _next;
+    if (next == null) return;
+    _next = null;
     _replace(next);
-    return true;
+    notifyListeners();
+  }
+
+  @override
+  void discardResume() {
+    _next?.dispose();
+    _next = null;
   }
 
   void _replace(AiFindSession next) {

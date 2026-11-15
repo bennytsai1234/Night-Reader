@@ -461,8 +461,8 @@ void main() {
         progress: file,
         work: work,
         navigator: () => null,
-        reopen: (urls, done, reused) async {
-          reopened.add(urls);
+        reopen: (progress) async {
+          reopened.add(progress.urls);
           return _batch();
         },
       );
@@ -582,7 +582,12 @@ void main() {
           'done': {
             'https://s0.example': ['healthy', '重新校驗就沒問題了', 0],
           },
-          'reusedChecks': 3,
+          'reused': [
+            'https://s0.example',
+            'https://s9.example',
+            'https://s8.example',
+          ],
+          'tokensUsed': 5000,
         }),
       );
       await restorePausedRepair(
@@ -598,6 +603,7 @@ void main() {
       expect(run.batch.items.first.outcome, RepairOutcome.healthy);
       expect(run.batch.items.last.outcome, isNull);
       expect(run.batch.reusedChecks, 3);
+      expect(run.batch.tokensUsed, 5000, reason: '沒定案的書源花掉的也算');
       expect(run.batch.service.model, 'm');
 
       await run.end();
@@ -665,4 +671,53 @@ void main() {
     repairs.dispose();
     finds.dispose();
   });
+
+  test('ending while continue is still reading back keeps the ended repair '
+      'and lets go of the late one', () async {
+    final reopening = Completer<AiRepairSession?>();
+    final run = SingleRepairRun.paused(
+      AiRepairSession(source: _s('a'), service: null),
+      file: _MemoryFile('{}'),
+      reopen: (_) => reopening.future,
+      work: work,
+    );
+    final original = run.session;
+    final resuming = run.resume();
+    await _flush();
+    await run.end();
+    expect(run.isFinished, isTrue);
+    reopening.complete(AiRepairSession(source: _s('a'), service: _service));
+    await resuming;
+    expect(run.session, same(original), reason: '晚到的新修復不換上去');
+    expect(run.isFinished, isTrue);
+    expect(work.isBusy, isFalse);
+  });
+
+  test('a paused page hears when the slot frees up, so continue turns on', () {
+    final run = SingleRepairRun.paused(
+      AiRepairSession(source: _s('a'), service: null),
+      file: _MemoryFile('{}'),
+      work: work,
+    );
+    var heard = 0;
+    run.addListener(() => heard++);
+    final other = _Other();
+    work.begin(other, const BackgroundWorkStatus(title: '校驗書源', text: ''));
+    expect(run.canResume, isFalse);
+    work.end(other);
+    expect(run.canResume, isTrue);
+    expect(heard, 2, reason: '佔住、空出各通知一次');
+    run.dispose();
+  });
+}
+
+class _Other implements BackgroundJob {
+  @override
+  void pauseFromSystem() {}
+
+  @override
+  void endFromSystem() {}
+
+  @override
+  void openFromNotification() {}
 }

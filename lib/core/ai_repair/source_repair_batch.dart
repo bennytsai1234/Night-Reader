@@ -138,8 +138,10 @@ class SourceRepairBatch extends ChangeNotifier {
     AiRepairSession Function(BookSource source, RepairItem item)? session,
     DateTime Function()? now,
     Map<String, RepairDone> done = const {},
-    this.reusedChecks = 0,
-  }) : items = [
+    Set<String> reused = const {},
+    int? tokensUsed,
+  }) : _reused = {...reused},
+       items = [
          for (final source in sources)
            if (done[source.bookSourceUrl] case final result?)
              RepairItem(source)
@@ -149,7 +151,9 @@ class SourceRepairBatch extends ChangeNotifier {
            else
              RepairItem(source),
        ],
-       tokensUsed = done.values.fold(0, (sum, result) => sum + result.tokens),
+       tokensUsed =
+           tokensUsed ??
+           done.values.fold(0, (sum, result) => sum + result.tokens),
        _now = now ?? DateTime.now,
        _check = check ?? _defaultCheck,
        _save = save ?? _defaultSave,
@@ -196,8 +200,15 @@ class SourceRepairBatch extends ChangeNotifier {
   /// AI 一共用了多少 token。
   int tokensUsed;
 
-  /// 沿用上次校驗結果、沒有重新校驗的書源數（[freshCheck]）。
-  int reusedChecks;
+  /// 沿用上次校驗結果、沒有重新校驗的書源（[freshCheck]），照網址；暫停後
+  /// 接著做時同一個書源不重算。
+  final Set<String> _reused;
+
+  /// 沿用上次校驗結果的書源。
+  Set<String> get reused => {..._reused};
+
+  /// 沿用上次校驗結果、沒有重新校驗的書源數。
+  int get reusedChecks => _reused.length;
 
   /// 做完之後刪了幾次書源：書源管理看到它變了就重讀清單。
   int sourceEdits = 0;
@@ -226,6 +237,34 @@ class SourceRepairBatch extends ChangeNotifier {
   bool get isPaused => _paused;
 
   bool get isFinished => stage == RepairStage.done;
+
+  /// 已經有結果的書源經手的 AI 修復，照現在的網址：接著做時交給新的一批
+  /// （[adoptSessions]），頁面照舊點得進去看每一步、整批紀錄照舊打包得到。
+  /// 拿走的不跟著這一批放掉。
+  Map<String, AiRepairSession> takeFinishedSessions() {
+    final taken = <String, AiRepairSession>{};
+    for (final item in items) {
+      final session = item.session;
+      if (session == null || !item.isFinished) continue;
+      taken[item.source.bookSourceUrl] = session;
+      _sessions.remove(session);
+      session.removeListener(_notify);
+    }
+    return taken;
+  }
+
+  /// 接手上一批 [takeFinishedSessions] 交出的；對不上書源的傳回，由呼叫端放掉。
+  List<AiRepairSession> adoptSessions(Map<String, AiRepairSession> sessions) {
+    final left = {...sessions};
+    for (final item in items) {
+      if (!item.isFinished) continue;
+      final session = left.remove(item.source.bookSourceUrl);
+      if (session == null) continue;
+      item.session = session;
+      _sessions.add(session);
+    }
+    return left.values.toList();
+  }
 
   /// 已經有結果的書源（照現在的網址）：暫停的存檔存它。
   Map<String, RepairDone> get done => {
@@ -374,7 +413,7 @@ class SourceRepairBatch extends ChangeNotifier {
         _finish(item, RepairOutcome.skipped, '${health.label}：不修');
       } else if (source.lastCheckTime > 0 &&
           now - source.lastCheckTime < freshCheck.inMilliseconds) {
-        reusedChecks++;
+        _reused.add(source.bookSourceUrl);
         _judge(item, health, source.errorComment ?? health.description);
       } else {
         toCheck.add(item);
@@ -503,8 +542,10 @@ class SourceRepairBatch extends ChangeNotifier {
       final job = session.job;
       final fixed = job.repairedSource;
       if (job.outcome == AiRepairOutcome.repaired && fixed != null) {
-        _finish(lead, RepairOutcome.aiFixed, job.explanation ?? 'AI 修好了');
+        // 先換成存進去的那份（網址可能換了開頭）再定案：定案時存的進度要是
+        // 現在的網址。
         lead.source = fixed;
+        _finish(lead, RepairOutcome.aiFixed, job.explanation ?? 'AI 修好了');
         await _share(lead, others, fixed);
       } else if (!_stopped) {
         _finish(lead, RepairOutcome.notFixed, job.explanation ?? '沒修好');

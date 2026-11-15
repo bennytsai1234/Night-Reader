@@ -38,4 +38,25 @@ void main() {
     expect(await file().read(), isNull);
     expect(dir.listSync(), isEmpty);
   });
+
+  test('ending the previous job does not delete the save the next job of the '
+      'same kind just wrote', () async {
+    final previous = file()..save('上一件');
+    await previous.flush();
+    final closing = previous.close();
+    final next = file()..save('下一件');
+    await next.flush();
+    await closing;
+    expect(await file().read(), '下一件');
+
+    // 反過來：下一件還沒寫，上一件的刪掉；下一件之後照寫。
+    final old = file()..save('舊的');
+    await old.flush();
+    final fresh = file();
+    await old.close();
+    expect(await file().read(), isNull);
+    fresh.save('新的');
+    await fresh.flush();
+    expect(await file().read(), '新的');
+  });
 }
