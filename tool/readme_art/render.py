@@ -226,6 +226,10 @@ def render(name, card, tmp):
         return save(base, None, name)
     n = int(LOOP * FPS)
     parts, stages = [], []
+    # 底圖裡的洋紅色會被壓暗：隔壁手機的陰影疊在螢幕上。遮罩（單格那張）拿掉了陰影，
+    # 照它的濃淡貼會把被壓暗的洋紅色當成整塊扣掉，紅、藍多扣、綠不動，畫面偏綠；
+    # 取兩者較小的，短片就和靜態的螢幕一樣被陰影壓暗。
+    shade = magenta(base)
     for i, spec in enumerate(slots):
         alpha = magenta(shoot(name, tmp, i).crop(box))
         ys, xs = np.nonzero(alpha > 0.02)
@@ -234,7 +238,8 @@ def render(name, card, tmp):
             fr = devices_frames(spec.split(':', 1)[1].split(','), (x1 - x0, y1 - y0), n)
             stages.append((x0 - DEVICE_PAD, y0 - DEVICE_PAD, y1, fr))
             continue
-        parts.append((y0, y1, x0, x1, alpha[y0:y1, x0:x1, None], frames_for(spec, (x1 - x0, y1 - y0), n)))
+        al = np.minimum(alpha, shade)[y0:y1, x0:x1, None]
+        parts.append((y0, y1, x0, x1, al, frames_for(spec, (x1 - x0, y1 - y0), n)))
     b = np.asarray(base, dtype=np.float32)
     frames = []
     for f in range(n):

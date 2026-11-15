@@ -43,6 +43,30 @@ class AiRepairStep {
   final String title;
   String? detail;
   AiRepairStepState state;
+
+  /// 存成暫停的工作（背景工作接著做，ADR 0058）。
+  Map<String, Object?> toJson() => {
+    'title': title,
+    'detail': ?detail,
+    'state': state.name,
+  };
+
+  factory AiRepairStep.fromJson(Object? json) {
+    if (json case {'title': final String title}) {
+      return AiRepairStep(
+        title,
+        detail: switch (json['detail']) {
+          final String detail => detail,
+          _ => null,
+        },
+        state: AiRepairStepState.values.firstWhere(
+          (state) => state.name == json['state'],
+          orElse: () => AiRepairStepState.done,
+        ),
+      );
+    }
+    throw const FormatException('一步的格式不對');
+  }
 }
 
 /// 一個書源修完的結果。
@@ -60,7 +84,7 @@ class AiRepairJob {
   String? explanation;
 
   /// AI 明確放棄時才標「AI 修不好」；網路、金鑰、系統錯誤、校驗超過時間與
-  /// 按停止都不標。
+  /// 按暫停、結束都不標。
   bool confirmedUnfixable = false;
 
   /// AI 放棄時選的原因（[aiGiveUpLabels] 的 key）。
@@ -95,7 +119,7 @@ class AiRepairJob {
   /// 問了 AI 幾輪，跨重跑接著數。
   int _rounds = 0;
 
-  /// 開始存修好的書源了：這時按停止也停不下來，結果照存的結果。
+  /// 開始存修好的書源了：這時按暫停或結束也停不下來，結果照存的結果。
   bool _committing = false;
 }
 
@@ -137,12 +161,6 @@ typedef AiRepairFetcher = Future<AiPage> Function(
   CancelToken cancelToken,
 );
 
-/// 搜尋結果跟關鍵字有沒有關係（[searchFollowsKeyword]）。
-typedef AiRepairKeywordCheck = Future<bool> Function(
-  BookSource source,
-  CancelToken cancelToken,
-);
-
 /// 問 AI 一次（測試用的假 AI）；真的服務用 [AiChatClient]，帶著
 /// [aiRepairTools]。
 typedef AiRepairAsker = AgentAsk;
@@ -164,7 +182,6 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairProber? probe,
     AiRepairAsker? ask,
     AiRepairFetcher? fetchPage,
-    AiRepairKeywordCheck? keywordCheck,
     AiRepairPageParser? parsePage,
     AiRepairJsRunner? runJs,
     Future<void> Function(BookSource repaired, BookSource original)? apply,
@@ -184,7 +201,6 @@ class AiRepairSession extends ChangeNotifier {
        _check = check ?? defaultCheck,
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
-       _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
        _parsePage = parsePage ?? _defaultParsePage,
        _runJs = runJs ?? _defaultRunJs,
        _copy = copy ?? _defaultCopy,
@@ -213,7 +229,6 @@ class AiRepairSession extends ChangeNotifier {
   final AiRepairChecker _check;
   final AiRepairProber _probe;
   final AiRepairFetcher _fetchPage;
-  final AiRepairKeywordCheck _keywordCheck;
   final AiRepairPageParser _parsePage;
   final AiRepairJsRunner _runJs;
   late final AgentAsk? _ask;
@@ -240,14 +255,22 @@ class AiRepairSession extends ChangeNotifier {
   Completer<void>? _pasteCompletion;
   bool _running = false;
   bool _stopped = false;
+  bool _paused = false;
   bool _disposed = false;
 
   bool get usesClipboard => service == null;
   bool get isRunning => _running;
-  bool get isStopped => _stopped;
+
+  /// 按了結束（還沒停好或已經停好）；暫停不算。
+  bool get isStopped => _stopped && !_paused;
+
+  /// 按了暫停：停下、書源不改，不算結束；接著做是這個書源從頭重修
+  /// （背景工作接著做，ADR 0058）。
+  bool get isPaused => _paused;
 
   /// 做完（或停下）。剪貼簿等使用者貼回時不算。
-  bool get isFinished => !_running && (_stopped || job.outcome != null);
+  bool get isFinished =>
+      !_running && !_paused && (_stopped || job.outcome != null);
   Future<void> get completion =>
       _pasteCompletion?.future ?? _startTask ?? Future<void>.value();
 
@@ -302,33 +325,68 @@ class AiRepairSession extends ChangeNotifier {
           }
         }
       }
+      // 暫停時正好在存修好的書源：存完就算做完，不再是暫停。
+      if (job.outcome != null) _paused = false;
       CrashTrail.action(
-        'AI 修復${_stopped ? '停下了' : '做完了'}：${job.original.bookSourceName}',
+        'AI 修復${_paused
+            ? '暫停了'
+            : _stopped
+            ? '結束了'
+            : '做完了'}：${job.original.bookSourceName}',
       );
       _notify();
     }
   }
 
-  /// 停下：做著的那一步標成停止，修到一半的不改。
+  /// 結束：做著的那一步標成結束，修到一半的不改。暫停中的直接收尾。
   void stop() {
-    if (_stopped || job.outcome != null) return;
-    CrashTrail.action('按了停止：AI 修復 ${job.original.bookSourceName}');
+    if (job.outcome != null) return;
+    if (_paused) {
+      _paused = false;
+      _endSteps();
+      _notify();
+      return;
+    }
+    if (_stopped) return;
+    CrashTrail.action('按了結束：AI 修復 ${job.original.bookSourceName}');
     _stopped = true;
-    if (!_cancelToken.isCancelled) _cancelToken.cancel('已停止');
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('已結束');
+    if (!job._committing) _endSteps();
+    _notify();
+  }
+
+  void _endSteps() {
+    for (final step in job.steps) {
+      if (step.state == AiRepairStepState.running) {
+        step
+          ..state = AiRepairStepState.failed
+          ..detail = '已結束';
+      }
+    }
+    if (job.steps.isNotEmpty && job.outcome == null) {
+      job
+        ..awaitingPaste = false
+        ..outcome = AiRepairOutcome.failed
+        ..explanation = '已結束，書源沒有改。';
+      _logOutcome('已結束，書源沒有改。');
+    }
+  }
+
+  /// 暫停：做著的那一步停下、書源不改，結果不寫（背景工作接著做，ADR 0058）。
+  /// 正在存修好的書源時停不下來，存完就算做完。剪貼簿的修復不暫停。
+  void pause() {
+    if (_stopped || job.outcome != null || usesClipboard) return;
+    CrashTrail.action('按了暫停：AI 修復 ${job.original.bookSourceName}');
+    _stopped = true;
+    _paused = true;
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('已暫停');
     if (!job._committing) {
       for (final step in job.steps) {
         if (step.state == AiRepairStepState.running) {
           step
             ..state = AiRepairStepState.failed
-            ..detail = '已停止';
+            ..detail = '已暫停';
         }
-      }
-      if (job.steps.isNotEmpty && job.outcome == null) {
-        job
-          ..awaitingPaste = false
-          ..outcome = AiRepairOutcome.failed
-          ..explanation = '已停止，書源沒有改。';
-        _logOutcome('已停止，書源沒有改。');
       }
     }
     _notify();
@@ -599,22 +657,6 @@ class AiRepairSession extends ChangeNotifier {
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }
-    // 校驗只看搜尋有沒有回書：規則抓的是頁面上固定的推薦書也會過。
-    step.detail = '$checkText；確認搜尋結果跟關鍵字有關…';
-    _notify();
-    final keywordWatch = Stopwatch()..start();
-    final follows = await _guard(() => _keywordCheck(candidate, _cancelToken));
-    if (_stopped) return null;
-    if (follows == false) {
-      const unrelated = aiRepairUnrelatedSearch;
-      log.both('確認搜尋結果跟關鍵字有關（${_seconds(keywordWatch)}）：$unrelated');
-      _finish(step, unrelated, failed: true);
-      if (!last) {
-        return '# 書源校驗沒過：$unrelated（用「$nonsenseKeyword」搜尋也得到同樣的書）';
-      }
-      _fail(job, ['校驗：$unrelated', if (note.isNotEmpty) 'AI：$note'].join('\n'));
-      return null;
-    }
     job._committing = true;
     final saved = BookSource.fromJson(checked.updatedSourceJson);
     try {
@@ -870,21 +912,6 @@ class AiRepairSession extends ChangeNotifier {
     );
   }
 
-  /// 每次搜尋等一步校驗的時間（[SourceCheckConfig.timeoutDuration]）：修好的
-  /// 書源剛搜過一次，網站慢到等不到就不擋（[searchFollowsKeyword] 當成有關）。
-  static Future<bool> _defaultKeywordCheck(
-    BookSource source,
-    CancelToken cancelToken,
-  ) async {
-    final config = await _config();
-    return searchFollowsKeyword(
-      source,
-      keyword: source.getCheckKeyword(config.keyword),
-      timeout: config.timeoutDuration,
-      cancelToken: cancelToken,
-    );
-  }
-
   static Future<AiPage> _defaultFetchPage(
     BookSource source,
     String url,
@@ -1067,7 +1094,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   @override
   void roundEnded(AgentRoundRecord record) {
-    // 按了停止：做著的那一步已經標成停止（[AiRepairSession.stop]）。
+    // 按了暫停或結束：做著的那一步已經標好（[AiRepairSession.stop]、[AiRepairSession.pause]）。
     if (s._stopped) return;
     final reply = record.reply;
     if (record.usage case final usage?) s._onUsage?.call(usage);
@@ -1091,6 +1118,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   @override
   void factAdded(String fact) {}
+
+  @override
+  void checkpoint(AgentCheckpoint state) {}
 
   /// 修書源的工具會改正在修的書源（改了再試抓），照順序執行。
   @override

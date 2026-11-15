@@ -21,11 +21,15 @@ class _FakePlatform implements BackgroundWorkPlatform {
 }
 
 class _Job implements BackgroundJob {
+  int pauses = 0;
   int stops = 0;
   int opens = 0;
 
   @override
-  void stopFromSystem() => stops++;
+  void pauseFromSystem() => pauses++;
+
+  @override
+  void endFromSystem() => stops++;
 
   @override
   void openFromNotification() => opens++;
@@ -156,18 +160,62 @@ void main() {
     expect(permissionAsks, 1);
   });
 
-  test('stop and a tap on the notification go to the running job', () {
+  test('pause, end and a tap on the notification go to the running job', () {
     final job = _Job();
     work.begin(job, _start);
 
-    platform.handler!('stop');
+    platform.handler!('pause');
+    platform.handler!('end');
     platform.handler!('open');
+    expect(job.pauses, 1);
     expect(job.stops, 1);
     expect(job.opens, 1);
 
     work.end(job);
-    platform.handler!('stop');
-    expect(job.stops, 1, reason: '做完了，晚到的停止不送');
+    platform.handler!('end');
+    platform.handler!('pause');
+    expect(job.stops, 1, reason: '做完了，晚到的結束不送');
+    expect(job.pauses, 1, reason: '做完了，晚到的暫停不送');
+  });
+
+  test('the notification gets pause only from a job that can pause, and no '
+      'buttons while it is pausing or ending', () {
+    expect(_start.actions, ['end']);
+    expect(
+      const BackgroundWorkStatus(
+        title: 'AI 找書',
+        text: '第 1 輪',
+        pausable: true,
+      ).actions,
+      ['pause', 'end'],
+    );
+    expect(
+      const BackgroundWorkStatus.settling('AI 找書', pausing: true).actions,
+      isEmpty,
+    );
+    expect(
+      const BackgroundWorkStatus.settling('AI 找書', pausing: true).text,
+      '正在暫停…',
+    );
+    expect(
+      const BackgroundWorkStatus.settling('校驗書源', pausing: false).text,
+      '正在結束…',
+    );
+  });
+
+  test('opening the app clears a notification left by an engine that was '
+      'torn down, but not one a running job owns', () async {
+    work.clearLeftover();
+    await _flush();
+    expect(platform.calls, ['hide']);
+
+    final job = _Job();
+    work.begin(job, _start);
+    await _flush();
+    platform.calls.clear();
+    work.clearLeftover();
+    await _flush();
+    expect(platform.calls, isEmpty);
   });
 
   test('without a platform (iPhone, tests on a computer) nothing is sent but '

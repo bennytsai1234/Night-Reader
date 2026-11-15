@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
@@ -23,6 +24,14 @@ import 'package:night_reader/core/services/source_interaction.dart';
 // ═══════════════════════════════════════════════════════════════════
 //  Public types
 // ═══════════════════════════════════════════════════════════════════
+
+/// 校驗搜尋時多搜的一個詞：站上不可能有這本書，跟著關鍵字的搜尋回不出
+/// 搜正常關鍵字時的那幾本（ADR 0064）。
+const String nonsenseKeyword = '夜讀查無此書ㄅㄆㄇㄈ';
+
+/// 搜什麼都回同樣的書時，校驗的結論（「搜尋失效」的原因）。
+const String searchIgnoresKeywordMessage =
+    '搜尋結果跟關鍵字無關：搜一個不可能有的詞也回同樣的書，抓到的是頁面上固定的書';
 
 class IsolateCheckConfig {
   final String keyword;
@@ -399,6 +408,29 @@ class SourceChecker {
         return;
       }
 
+      final fixedBooks = await _booksForAnyWord(searchResults);
+      if (fixedBooks != null) {
+        _recordIssue(
+          issues,
+          _IssueData(
+            stage: 'search',
+            message:
+                '$searchIgnoresKeywordMessage（搜「$searchWord」和「$nonsenseKeyword」'
+                '前 ${fixedBooks.length} 本都是：${fixedBooks.join('、')}）',
+            health: const SourceRuntimeHealth(
+              category: SourceHealthCategory.searchBroken,
+              label: searchBrokenSourceGroupTag,
+              description: searchIgnoresKeywordMessage,
+              allowsSearch: false,
+              allowsReading: true,
+              cleanupCandidate: false,
+              quarantined: false,
+            ),
+          ),
+        );
+        return;
+      }
+
       await _checkSearchedBooks(searchResults, issues);
     } catch (e) {
       _recordFailure(
@@ -409,6 +441,34 @@ class SourceChecker {
       );
     }
   }
+
+  /// 再搜一次不可能有的詞（[nonsenseKeyword]）：前 [_fixedBookCompareCount]
+  /// 本書名和 [found] 一模一樣時，規則抓到的是頁面上固定的書、不是搜尋結果，
+  /// 回那幾本的書名；不一樣是 null。這樣的書源搜什麼都回同一份書單，混進
+  /// 每一次搜尋的結果（ADR 0064）。搜不到、出錯或逾時都算跟著關鍵字：網站
+  /// 搜不到時回推薦書沒關係，有的規則在搜不到時出錯（悅讀小說，同 Legado
+  /// 把空的搜尋頁改當詳情頁解析）。這次不重試，網站一時不穩就當成沒問題。
+  Future<List<String>?> _booksForAnyWord(List<SearchBook> found) async {
+    _log('  ◇ 測試搜尋不可能有的詞: $nonsenseKeyword');
+    final List<SearchBook> nonsense;
+    try {
+      nonsense = await _service
+          .searchBooks(_source, nonsenseKeyword)
+          .timeout(_config.timeoutDuration);
+    } catch (e) {
+      _log('  ≡ 搜「$nonsenseKeyword」沒有結果: ${_compactMessage(errorText(e))}');
+      return null;
+    }
+    List<String> leading(List<SearchBook> books) => [
+      for (final book in books.take(_fixedBookCompareCount)) book.name,
+    ];
+    final names = leading(found);
+    return nonsense.isNotEmpty && listEquals(names, leading(nonsense))
+        ? names
+        : null;
+  }
+
+  static const int _fixedBookCompareCount = 5;
 
   /// 拿搜尋到的第一本書測詳情、目錄與正文。這本書打不開時換一本再測：
   /// 可能只是那本書的問題（例如還沒有章節、書號代進規則後出錯），兩本都

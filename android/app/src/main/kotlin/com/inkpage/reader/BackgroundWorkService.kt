@@ -5,9 +5,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.browse.MediaBrowser
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -18,24 +20,36 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * 修書源、校驗書源這類使用者按了才開始的長工作（ADR 0058）。工作在 Dart 主
- * isolate 跑；這個前景服務只讓系統別凍結夜讀、關螢幕時 CPU 照跑（部分喚醒
- * 鎖），並在通知欄顯示進度：低重要性的頻道、只提醒一次、靜音，不跳出來。
+ * 修書源、校驗書源、AI 找書這類使用者按了才開始的長工作（ADR 0058）。工作在
+ * Dart 主 isolate 跑；這個前景服務只讓系統別凍結夜讀、關螢幕時 CPU 照跑（部分
+ * 喚醒鎖），並在通知欄顯示進度：低重要性的頻道、只提醒一次、靜音，不跳出來。
  *
  * 前景服務在工作開始時（使用者剛按下去、App 看得到）啟動一次，之後只用
  * `notify` 更新：App 在背景時再呼叫 `startForeground` 會被系統拒絕。
+ *
+ * 跑的時候連著播放服務（audio_service 的 `AudioService`）：Activity 被系統收掉
+ * 或按返回關掉時，audio_service 在沒播音、沒人連著它時把 Flutter 引擎拆掉，
+ * 工作就跟著沒了（使用者 2026-11-15 回報 AI 找書到背景後整個重開）。有人連著，
+ * 它就不拆；工作結束放開，沒播音時照舊拆。
  */
 class BackgroundWorkService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var foreground = false
+    private var engineHold: MediaBrowser? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            // 通知上的「停止」：交給 Dart 停，停好了它會叫 hide。
-            BackgroundWork.requestStop()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            // 通知上的按鈕：交給 Dart 暫停或結束，停好了它會叫 hide。
+            ACTION_PAUSE -> {
+                BackgroundWork.requestPause()
+                return START_NOT_STICKY
+            }
+            ACTION_END -> {
+                BackgroundWork.requestEnd()
+                return START_NOT_STICKY
+            }
         }
         BackgroundWork.starting = false
         // 在這裡才登記、不在 onCreate：登記之後 hide 會叫 finish，要先進了前景
@@ -50,14 +64,15 @@ class BackgroundWorkService : Service() {
             finish()
         } else {
             acquireWakeLock()
+            holdEngine()
         }
         return START_NOT_STICKY
     }
 
     /**
-     * 從最近使用滑掉夜讀等於終止（ADR 0058）：請 Dart 停下，通知、喚醒鎖與服務
-     * 在這裡就收掉，不等 Dart 回 hide。沒在播音時 audio_service 會跟著 Activity
-     * 把 Flutter 引擎拆掉，Dart 的 hide 可能永遠不會來。
+     * 從最近使用滑掉夜讀等於暫停（ADR 0058）：請 Dart 暫停，通知、喚醒鎖與服務
+     * 在這裡就收掉，不等 Dart 回 hide。放開播放服務後 audio_service 可能接著把
+     * 引擎拆掉；工作每一步都存了進度，下次開 App 顯示已暫停。
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
         BackgroundWork.terminate()
@@ -65,13 +80,14 @@ class BackgroundWorkService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
-    /** Android 15 起 dataSync 每天最多 6 小時，時間到了照停止處理。 */
+    /** Android 15 起 dataSync 每天最多 6 小時，時間到了照暫停處理。 */
     override fun onTimeout(startId: Int, fgsType: Int) {
-        BackgroundWork.requestStop()
+        BackgroundWork.requestPause()
         finish()
     }
 
     override fun onDestroy() {
+        releaseEngine()
         releaseWakeLock()
         if (BackgroundWork.service === this) BackgroundWork.service = null
         super.onDestroy()
@@ -86,6 +102,7 @@ class BackgroundWorkService : Service() {
     fun finish() {
         // 先放開：停下到銷毀之間又開始的一件要重新啟動前景服務，不能交給這個。
         if (BackgroundWork.service === this) BackgroundWork.service = null
+        releaseEngine()
         releaseWakeLock()
         if (foreground) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -118,12 +135,6 @@ class BackgroundWorkService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val stop = PendingIntent.getService(
-            this,
-            REQUEST_STOP,
-            Intent(this, BackgroundWorkService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             // 用資源編號引用：發布版不會把它當成沒用到而刪掉（#341）。
             .setSmallIcon(R.drawable.ic_stat_night_reader)
@@ -137,11 +148,52 @@ class BackgroundWorkService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        if (content.text != STOPPING) builder.addAction(0, "停止", stop)
+        // 按鈕由 Dart 決定：能接著做的有「暫停」，正在暫停或結束時不放。
+        for (action in content.actions) {
+            when (action) {
+                "pause" -> builder.addAction(0, "暫停", serviceIntent(ACTION_PAUSE, REQUEST_PAUSE))
+                "end" -> builder.addAction(0, "結束", serviceIntent(ACTION_END, REQUEST_END))
+            }
+        }
         if (content.progress >= 0) {
             builder.setProgress(PROGRESS_MAX, content.progress, false)
         }
         return builder.build()
+    }
+
+    private fun serviceIntent(action: String, request: Int): PendingIntent =
+        PendingIntent.getService(
+            this,
+            request,
+            Intent(this, BackgroundWorkService::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** 連著播放服務，讓 audio_service 在 Activity 不在時不拆引擎（見類別說明）。 */
+    private fun holdEngine() {
+        if (engineHold != null) return
+        val browser = MediaBrowser(
+            this,
+            ComponentName(this, "com.ryanheise.audioservice.AudioService"),
+            object : MediaBrowser.ConnectionCallback() {},
+            null,
+        )
+        engineHold = browser
+        try {
+            browser.connect()
+        } catch (e: Exception) {
+            // 連不上只是少了這層保護：工作照跑，進度照存。
+            engineHold = null
+        }
+    }
+
+    private fun releaseEngine() {
+        val browser = engineHold ?: return
+        engineHold = null
+        try {
+            browser.disconnect()
+        } catch (_: Exception) {
+        }
     }
 
     private fun createChannel() {
@@ -150,7 +202,7 @@ class BackgroundWorkService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         // 重要性建立後就改不了；這是新的頻道，從一開始就是低：不跳出、不出聲。
         val channel = NotificationChannel(CHANNEL_ID, "背景工作", NotificationManager.IMPORTANCE_LOW)
-        channel.description = "修書源、校驗書源時的進度"
+        channel.description = "修書源、校驗書源、AI 找書時的進度"
         channel.setShowBadge(false)
         channel.setSound(null, null)
         channel.enableVibration(false)
@@ -174,16 +226,15 @@ class BackgroundWorkService : Service() {
     companion object {
         const val CHANNEL_ID = "com.night_reader.background_work"
         const val ACTION_OPEN = "com.inkpage.reader.background_work.OPEN"
-        private const val ACTION_STOP = "com.inkpage.reader.background_work.STOP"
+        private const val ACTION_PAUSE = "com.inkpage.reader.background_work.PAUSE"
+        private const val ACTION_END = "com.inkpage.reader.background_work.END"
         private const val NOTIFICATION_ID = 0x4e52
         private const val REQUEST_OPEN = 0x4e52
-        private const val REQUEST_STOP = 0x4e53
+        private const val REQUEST_END = 0x4e53
+        private const val REQUEST_PAUSE = 0x4e54
 
         /** 和 Dart 端 `BackgroundWork.progressMax` 一致。 */
         private const val PROGRESS_MAX = 1000
-
-        /** 按了停止、停好之前的內文；這時不再放「停止」按鈕。 */
-        private const val STOPPING = "正在停下…"
 
         /** 和 dataSync 每天的上限一樣長；工作結束時就放掉。 */
         private const val WAKE_LOCK_TIMEOUT_MS = 6L * 60 * 60 * 1000
@@ -192,7 +243,12 @@ class BackgroundWorkService : Service() {
 
 /** Dart 端 `BackgroundWork` 的通道（`night_reader/background_work`）與服務的狀態。 */
 object BackgroundWork {
-    data class Content(val title: String, val text: String, val progress: Int)
+    data class Content(
+        val title: String,
+        val text: String,
+        val progress: Int,
+        val actions: List<String> = emptyList(),
+    )
 
     private var channel: MethodChannel? = null
 
@@ -203,7 +259,7 @@ object BackgroundWork {
     var starting = false
 
     /**
-     * 滑掉夜讀終止了這件工作，原生端已經收掉：Dart 停好之前晚到的 show
+     * 滑掉夜讀暫停了這件工作，原生端已經收掉：Dart 停好之前晚到的 show
      * 不再把通知與服務叫回來，等 Dart 的 hide（或新的引擎重新 install）。
      */
     private var terminated = false
@@ -226,6 +282,7 @@ object BackgroundWork {
                         call.argument<String>("title") ?: "",
                         call.argument<String>("text") ?: "",
                         call.argument<Int>("progress") ?: -1,
+                        call.argument<List<String>>("actions") ?: listOf("end"),
                     )
                     content = next
                     val running = service
@@ -261,16 +318,20 @@ object BackgroundWork {
         }
     }
 
-    fun requestStop() {
-        channel?.invokeMethod("stop", null)
+    fun requestPause() {
+        channel?.invokeMethod("pause", null)
     }
 
-    /** 滑掉夜讀：請 Dart 停下，之後到 Dart 停好之前的 show 都不理。 */
+    fun requestEnd() {
+        channel?.invokeMethod("end", null)
+    }
+
+    /** 滑掉夜讀：請 Dart 暫停，之後到 Dart 停好之前的 show 都不理。 */
     fun terminate() {
         terminated = true
         content = null
         starting = false
-        requestStop()
+        requestPause()
     }
 
     fun requestOpen() {

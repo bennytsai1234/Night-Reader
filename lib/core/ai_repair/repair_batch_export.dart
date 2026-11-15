@@ -178,7 +178,7 @@ String _summary(
     '',
     'AI 用量：${batch.tokensUsed} token',
     '沿用 24 小時內的校驗結果：${batch.reusedChecks} 個',
-    if (batch.stoppedStage case final stage?) '按了停止：做到 ${stage.name}',
+    if (batch.stoppedStage case final stage?) '按了結束：做到 ${stage.name}',
     if (batch.errorMessage case final error?) '修復中斷：${redact(error)}',
     '',
   ];

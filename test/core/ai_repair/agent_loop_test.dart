@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/agent_loop.dart';
@@ -40,6 +42,25 @@ final class _Task extends AgentTask<String> {
 
   @override
   void factAdded(String fact) => facts.add(fact);
+}
+
+/// 每一輪開頭把迴圈狀態存成 JSON 文字的假任務（同步存，像真的任務）。
+final class _Saving extends _Task {
+  final List<String> saved = [];
+
+  @override
+  void checkpoint(AgentCheckpoint state) =>
+      saved.add(jsonEncode(state.toJson()));
+}
+
+/// 存的狀態去掉計時（兩次跑的毫秒數本來就不同）。
+Map<String, Object?> _untimed(String saved) {
+  final json = jsonDecode(saved) as Map<String, Object?>;
+  final stats = {...json['stats']! as Map<String, Object?>}
+    ..remove('modelMs')
+    ..remove('toolsMs')
+    ..remove('otherMs');
+  return {...json, 'stats': stats};
 }
 
 /// 開場與工具結果都帶著金鑰的假任務：遮蔽要在迴圈接進對話時做。
@@ -355,5 +376,84 @@ void main() {
       },
     );
     expect(end.kind, AgentEndKind.cancelled);
+  });
+
+  test('stopping before any round and resuming from what was saved sends '
+      'exactly what an uninterrupted run sends', () async {
+    // 重跑、重複的參數、讀不懂、沒呼叫工具、交出被退、一則好幾個呼叫都走一次：
+    // 接著跑時這些計數也要從存的地方接著數。
+    const script = [
+      'tool:a',
+      'tool:a',
+      'bad',
+      'hello',
+      'submit:bad',
+      'tool:a|tool:b',
+      'submit:ok',
+    ];
+    AgentAsk ai(List<String> sent) => (messages, _) async {
+      sent.add(jsonEncode([for (final m in messages) agentMessageToJson(m)]));
+      final round = messages.where((m) => m.role == 'assistant').length;
+      return _reply(script[round]);
+    };
+
+    final full = _Saving();
+    final fullSent = <String>[];
+    final fullEnd = await runAgent(
+      full,
+      ask: ai(fullSent),
+      cancelToken: CancelToken(),
+    );
+    expect(fullEnd.kind, AgentEndKind.completed);
+    expect(full.saved, hasLength(script.length));
+
+    for (final (k, saved) in full.saved.indexed) {
+      final resumed = _Saving();
+      final sent = <String>[];
+      final end = await runAgent(
+        resumed,
+        ask: ai(sent),
+        cancelToken: CancelToken(),
+        resume: AgentCheckpoint.fromJson(
+          jsonDecode(saved) as Map<String, Object?>,
+        ),
+      );
+      expect(sent, fullSent.sublist(k), reason: '從第 ${k + 1} 輪前接著跑');
+      expect(resumed.openings, 0, reason: '接著跑不再開場');
+      expect(end.kind, fullEnd.kind);
+      expect(end.stats.rounds, fullEnd.stats.rounds);
+      expect(end.stats.toolCalls, fullEnd.stats.toolCalls);
+      expect(end.stats.rejections, fullEnd.stats.rejections);
+      expect(end.stats.badCommands, fullEnd.stats.badCommands);
+      expect(end.stats.noCommands, fullEnd.stats.noCommands);
+      expect(
+        resumed.saved.map(_untimed),
+        full.saved.sublist(k).map(_untimed),
+        reason: '接著跑時每一輪存的和沒中斷時一樣',
+      );
+    }
+  });
+
+  test('a message keeps every field through the save format, unlike the '
+      'wire format', () {
+    const messages = [
+      AiMessage.system('規則'),
+      AiMessage.assistant(
+        '',
+        toolCalls: [(id: 'c1', name: 'search', arguments: '{"q":"x"}')],
+        reasoning: '想一下',
+      ),
+      AiMessage.tool('c1', '結果'),
+    ];
+    for (final message in messages) {
+      final back = agentMessageFromJson(
+        jsonDecode(jsonEncode(agentMessageToJson(message))),
+      );
+      expect(back.role, message.role);
+      expect(back.content, message.content);
+      expect(back.reasoning, message.reasoning);
+      expect(back.toolCallId, message.toolCallId);
+      expect(back.toolCalls, message.toolCalls);
+    }
   });
 }

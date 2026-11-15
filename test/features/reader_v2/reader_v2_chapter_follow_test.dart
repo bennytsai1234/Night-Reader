@@ -138,7 +138,7 @@ void main() {
     await settle(tester, const Duration(milliseconds: 300));
     await expectChapterShown(4, '自動翻頁捲過章界');
 
-    await tester.tap(find.byTooltip('停止自動翻頁'));
+    await tester.tap(find.byTooltip('結束自動翻頁'));
     await rest(tester);
     await tearDownApp(tester);
   });

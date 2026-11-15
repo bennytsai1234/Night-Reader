@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
+import 'package:night_reader/core/ai_repair/agent_loop.dart';
 import 'package:night_reader/core/ai_repair/ai_chat_client.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
@@ -752,5 +753,176 @@ void main() {
         expect(properties.keys, contains(name), reason: tool.name);
       }
     }
+  });
+
+  group('pause and resume', () {
+    _Library library() => _Library({
+      '穿越': [_book('獵魔人'), _book('斬妖')],
+    });
+    List<AiReply> script() => [
+      _calls([
+        ('search', {'keyword': '穿越'}),
+        ('shelf', {}),
+      ]),
+      _calls([
+        ('explore', {}),
+        ('detail', {'book': 'b1'}),
+      ]),
+      _calls([
+        ('explore', {'source': 's1', 'category': 0}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '獵魔'},
+              {'book': 'b2', 'reason': '斬妖'},
+            ],
+            'summary': '先交',
+          },
+        ),
+      ]),
+      _calls([
+        ('detail', {'book': 'b2'}),
+        ('read', {'book': 'b1', 'chapter': 1}),
+        ('read', {'book': 'b2', 'chapter': 1}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '穿越後獵魔'},
+              {'book': 'b2', 'reason': '升級爽文'},
+            ],
+            'summary': '讀過兩本',
+          },
+        ),
+      ]),
+    ];
+    String sent(List<AiMessage> messages) =>
+        jsonEncode([for (final m in messages) agentMessageToJson(m)]);
+
+    test(
+      'stopping before any round and resuming from what was saved sends '
+      'what an uninterrupted find sends and ends with the same picks',
+      () async {
+        // 深入：交出要看過詳情、讀過正文，接著做時看過什麼要從存檔讀回來；
+        // 發現頁的書源編號與書的編號也要接得上。
+        final ai = _Ai(script());
+        final full = session(library(), ai, depth: AiFindDepth.deep);
+        final saved = <String>[];
+        full.onCheckpoint = saved.add;
+        await full.start();
+        expect(full.outcome, AiFindOutcome.found);
+        expect(full.picks.map((p) => p.book.name), ['獵魔人', '斬妖']);
+        expect(saved, hasLength(6));
+
+        for (final (k, progress) in saved.indexed) {
+          final next = _Ai(script().sublist(k));
+          final resumed = AiFindSession.restore(
+            progress,
+            library: library(),
+            ask: next.call,
+            log: AiRepairLog.find(
+              description: '爽文、穿越',
+              directory: () async => logs,
+            ),
+          );
+          sessions.add(resumed);
+          final again = <String>[];
+          resumed.onCheckpoint = again.add;
+          expect(resumed.rounds, hasLength(k));
+          expect(resumed.nextRound, k + 1);
+          await resumed.start();
+          expect(
+            next.seen.map(sent),
+            ai.seen.sublist(k).map(sent),
+            reason: '從第 ${k + 1} 輪前接著做',
+          );
+          expect(resumed.outcome, full.outcome);
+          expect(resumed.picks.map((p) => p.book.name), ['獵魔人', '斬妖']);
+          expect(
+            resumed.picks.first.book.origins,
+            full.picks.first.book.origins,
+          );
+          expect(resumed.tokens, full.tokens);
+          expect(resumed.rounds, hasLength(full.rounds.length));
+          expect(resumed.record!.id, full.record!.id);
+        }
+      },
+    );
+
+    test('pause stops the running search and leaves the find paused, not '
+        'ended', () async {
+      final lib = _Library({})..searchGate = Completer<void>();
+      final ai = _Ai([
+        _calls([
+          ('search', {'keyword': '穿越'}),
+        ]),
+      ]);
+      final find = session(lib, ai);
+      final saved = <String>[];
+      find.onCheckpoint = saved.add;
+      final running = find.start();
+      await pumpEventQueue();
+      find.pause();
+      expect(find.isPausing, isTrue);
+      await running.timeout(const Duration(seconds: 5));
+      expect(lib.searchCancelled, isTrue);
+      expect(find.isPaused, isTrue);
+      expect(find.isFinished, isFalse);
+      expect(find.record, isNull, reason: '暫停不是結束，不存成過去的找書');
+      expect(saved, hasLength(1), reason: '第一輪開頭就存了');
+    });
+
+    test('ending a paused find records it as ended', () async {
+      final ai = _Ai(script());
+      final find = session(library(), ai);
+      final saved = <String>[];
+      find.onCheckpoint = saved.add;
+      await find.start();
+      final paused = AiFindSession.restore(
+        saved[2],
+        library: library(),
+        ask: _Ai(const []).call,
+        log: AiRepairLog.find(
+          description: '爽文、穿越',
+          directory: () async => logs,
+        ),
+      );
+      sessions.add(paused);
+      paused.stop();
+      expect(paused.outcome, AiFindOutcome.stopped);
+      expect(paused.record!.failure, '已結束');
+      expect(paused.record!.rounds, 2);
+    });
+
+    test('a save from another version is not resumed but still tells what '
+        'the find was', () {
+      final progress = jsonEncode({
+        'version': aiFindProgressVersion + 1,
+        'id': 'x',
+        'description': '想看的',
+        'depth': 'normal',
+        'startedAt': 1,
+        'rounds': [{}, {}],
+        'tokens': 5,
+      });
+      expect(
+        () => AiFindSession.restore(
+          progress,
+          library: library(),
+          ask: _Ai(const []).call,
+        ),
+        throwsFormatException,
+      );
+      final record = AiFindSession.brokenRecord(progress, '接不下去')!;
+      expect(record.outcome, AiFindOutcome.unfinished);
+      expect(record.description, '想看的');
+      expect(record.rounds, 2);
+      expect(AiFindSession.brokenRecord('不是 JSON', '接不下去'), isNull);
+    });
   });
 }

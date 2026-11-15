@@ -469,7 +469,7 @@ void main() {
       print(describeFrames('$round 自動翻頁捲三秒', costs));
       await tester.tapAt(centre);
       await settle(tester, const Duration(milliseconds: 800));
-      await tester.tap(find.byTooltip('停止自動翻頁'));
+      await tester.tap(find.byTooltip('結束自動翻頁'));
       await settle(tester, const Duration(milliseconds: 800));
       await tester.tapAt(centre);
       await rest(tester);

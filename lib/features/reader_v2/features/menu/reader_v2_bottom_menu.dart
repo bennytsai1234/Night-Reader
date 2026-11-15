@@ -186,7 +186,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     final actions = <Widget>[
       GlassIconButton(
         icon: Icons.auto_stories_outlined,
-        tooltip: isAutoPaging ? '停止自動翻頁' : '開始自動翻頁',
+        tooltip: isAutoPaging ? '結束自動翻頁' : '開始自動翻頁',
         tint: isAutoPaging
             ? Color.alphaBlend(menuStyle.accentMuted, tint)
             : tint,

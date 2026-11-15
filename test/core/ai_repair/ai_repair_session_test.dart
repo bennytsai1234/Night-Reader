@@ -51,6 +51,30 @@ SourceCheckIsolateResult _checked(
   );
 }
 
+/// 校驗：搜什麼都回同樣的書（[searchIgnoresKeywordMessage]）。
+SourceCheckIsolateResult _fixedBooks(BookSource source) {
+  final copy = BookSource.fromJson(source.toJson())
+    ..addHealthGroups(
+      const SourceRuntimeHealth(
+        category: SourceHealthCategory.searchBroken,
+        label: searchBrokenSourceGroupTag,
+        description: searchIgnoresKeywordMessage,
+        allowsSearch: false,
+        allowsReading: true,
+        cleanupCandidate: false,
+        quarantined: false,
+      ),
+    );
+  return SourceCheckIsolateResult(
+    stage: 'search',
+    message: '$searchIgnoresKeywordMessage（前 5 本都是：熱門一、熱門二）',
+    isHealthy: false,
+    updatedSourceJson: copy.toJson(),
+    logs: const [],
+    diagnostics: const [],
+  );
+}
+
 /// 發現頁那一段的診斷：網站回了 [response] 那一行。
 List<String> _discoveryDiagnostics(String response) => [
   '[發現] 發現頁沒有結果\n這一段的請求與回應:\nhttps://site.example/all\n$response',
@@ -135,8 +159,6 @@ void main() {
     Set<String> timesOut = const {},
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
-    bool Function(BookSource source)? followsKeyword,
-    List<String>? keywordChecked,
     List<String>? checked,
     AiRepairPriorCheck? priorCheck,
     Directory? logs,
@@ -158,10 +180,6 @@ void main() {
                   _checked(source, broken: broken[source.bookSourceUrl]);
       },
       probe: (source, _, {start}) async => (probe ?? _probe)(source),
-      keywordCheck: (source, _) async {
-        keywordChecked?.add(source.ruleContent?.content ?? '');
-        return followsKeyword?.call(source) ?? true;
-      },
       fetchPage: (source, url, _) async {
         fetched?.add(url);
         if (fetchLines?.call(url) case final lines?) {
@@ -423,7 +441,6 @@ void main() {
           pages: [(line: _probe(source).requests.single, body: raw)],
           contentUsable: _probe(source).contentUsable,
         ),
-        keywordCheck: (_, _) async => true,
         fetchPage: (_, url, _) async => (
           lines: ['  ← $url 200：<form action="/s2">'],
           pages: [
@@ -525,7 +542,6 @@ void main() {
           contentUsable: report.contentUsable,
         );
       },
-      keywordCheck: (_, _) async => true,
       parsePage: (source, stage, page, _) async {
         parsed.add((stage, page.body, source.ruleToc?.chapterList));
         return '解析成目錄頁：1 章';
@@ -624,7 +640,6 @@ void main() {
         service: _service,
         check: (_, _) async => throw StateError('isolate 掛了'),
         probe: (source, _, {start}) async => _probe(source),
-        keywordCheck: (_, _) async => true,
         ask: (_, _) async => fakeAiReply(_submitTested),
         apply: (source, _) async => applied.add(source),
         secrets: (_) async => const {},
@@ -647,7 +662,6 @@ void main() {
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (source, _, {start}) async => _probe(source),
-      keywordCheck: (_, _) async => true,
       ask: (messages, _) async {
         asked.add(List.of(messages));
         final call = calls++;
@@ -902,27 +916,37 @@ void main() {
     expect(applied, isEmpty);
   });
 
-  test('a search that returns the same books for any word is not a fix, and '
-      'the AI is told why', () async {
-    var checks = 0;
+  test('a search the check finds returning the same books for any word is not '
+      'a fix, and the AI is told why', () async {
     final s = session(
       [_source('https://site.example')],
-      replies: [_command('test'), _submitTested, _submitTested],
-      // 原本的書源（開場）照常；AI 第一次交的搜尋抓到固定的書，第二次對了。
-      followsKeyword: (source) =>
-          source.ruleContent?.content == 'id.old@text' || ++checks > 1,
+      replies: [
+        _command('test'),
+        _submitTested,
+        jsonEncode({
+          'action': 'submit',
+          'patch': {'searchUrl': '/search?q={{key}}'},
+          'note': '改抓搜尋結果',
+        }),
+      ],
+      // AI 第一次交的搜尋抓到固定的書，改了搜尋網址才對。
+      check: (source) =>
+          source.searchUrl == '/s?q={{key}}' &&
+              source.ruleContent?.content == 'class.txt@text'
+          ? _fixedBooks(source)
+          : null,
     );
 
     await s.start();
 
-    expect(asked[2].last.content, contains('搜尋結果跟關鍵字無關'));
+    expect(
+      asked[2].last.content,
+      startsWith('# 書源校驗沒過：搜尋失效：$searchIgnoresKeywordMessage'),
+    );
     expect(s.job.outcome, AiRepairOutcome.repaired);
   });
 
-  test('the opening says when discovery borrows the search rules; whether the '
-      'search follows the keyword is only tested on what the AI hands in '
-      '(the source being repaired is broken anyway)', () async {
-    final keywordChecked = <String>[];
+  test('the opening says when discovery borrows the search rules', () async {
     final s = session(
       [
         _source('https://site.example')
@@ -933,16 +957,11 @@ void main() {
         jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
         jsonEncode({'action': 'give_up', 'why': 'paid', 'reason': '不修'}),
       ],
-      followsKeyword: (_) => false,
-      keywordChecked: keywordChecked,
     );
 
     await s.start();
 
-    final opening = asked.first.last.content;
-    expect(opening, isNot(contains(aiRepairUnrelatedSearch)));
-    expect(opening, contains(aiRepairExploreBorrowsSearch));
-    expect(keywordChecked, isEmpty);
+    expect(asked.first.last.content, contains(aiRepairExploreBorrowsSearch));
   });
 
   test('a check the batch just made is used as it is: the original source is '
@@ -1077,7 +1096,6 @@ void main() {
         service: clipboard ? null : _service,
         check: (source, _) async => _checked(source),
         probe: (_, _, {start}) async => probe,
-        keywordCheck: (_, _) async => true,
         ask: (messages, _) async {
           asked.add(List.of(messages));
           return fakeAiReply(
@@ -1132,7 +1150,6 @@ void main() {
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (source, _, {start}) async => _probe(source),
-      keywordCheck: (_, _) async => true,
       ask: (_, _) async => fakeAiReply(_command('submit')),
       apply: (source, _) async {
         s.stop();
@@ -1156,7 +1173,6 @@ void main() {
         service: _service,
         check: (source, _) async => _checked(source),
         probe: (source, _, {start}) async => _probe(source),
-        keywordCheck: (_, _) async => true,
         ask: (_, _) async => fakeAiReply(_command('submit')),
         apply: (_, _) async => throw AiRepairConflict(conflict),
         secrets: (_) async => const {},
@@ -1215,7 +1231,6 @@ void main() {
         return checks == 1 ? Future.value(_checked(source)) : gate.future;
       },
       probe: (source, _, {start}) async => _probe(source),
-      keywordCheck: (_, _) async => true,
       copy: (_) async {},
       secrets: (_) async => const {},
       apply: (source, _) async => applied.add(source),
@@ -1247,7 +1262,6 @@ void main() {
       service: _service,
       check: (source, _) async => _checked(source),
       probe: (source, _, {start}) async => _probe(source),
-      keywordCheck: (_, _) async => true,
       ask: (_, cancelToken) async {
         s.stop();
         throw DioException.requestCancelled(
@@ -1263,7 +1277,7 @@ void main() {
     await s.start();
 
     final job = s.job;
-    expect(job.steps.last.detail, '已停止');
+    expect(job.steps.last.detail, '已結束');
     expect(job.steps.last.state, AiRepairStepState.failed);
     expect(job.outcome, AiRepairOutcome.failed);
     expect(applied, isEmpty);

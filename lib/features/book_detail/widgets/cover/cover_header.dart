@@ -27,7 +27,7 @@ class CoverHeader extends StatelessWidget {
           SheetHeader(
             title: '更換封面',
             trailing: GlassIconButton(
-              tooltip: provider.isSearching ? '停止搜尋封面' : '重新搜尋封面',
+              tooltip: provider.isSearching ? '結束搜尋封面' : '重新搜尋封面',
               icon: provider.isSearching
                   ? Icons.stop_rounded
                   : Icons.refresh_rounded,

@@ -164,6 +164,15 @@ const _styles = ['plain', 'paper', 'tea', 'kraft', 'bamboo', 'bean'];
 
 Duration _ms(int ms) => Duration(milliseconds: ms);
 
+/// 整本下載短片的書：書名、總章數、開始時下載了幾章、第幾格下載完
+/// （每格 33ms：1.0、2.2、3.4、4.4 秒）。
+const _downloadBooks = [
+  ('夜雨聽書', 120, 104, 30),
+  ('霧港來信', 86, 52, 66),
+  ('山海舊聞錄', 203, 128, 102),
+  ('長街燈火', 64, 8, 132),
+];
+
 final _shots = <_Shot>[
   const _Shot('launch', launch: true),
   _Shot(
@@ -214,6 +223,17 @@ final _shots = <_Shot>[
   ),
   _Shot('sync-phone', steps: openReader),
   _Shot('sync-tablet', steps: openReader, tablet: true),
+  // README 開頭卡片後面那台平板：平板縮得比手機小，字放大才和手機上的正文一樣大。
+  _Shot(
+    'hero-tablet',
+    steps: openReader,
+    tablet: true,
+    prefs: {
+      PreferKey.readerFontSize: 30.0,
+      PreferKey.readerTitleFontSize: 36.0,
+      PreferKey.readerPaddingHorizontal: 44.0,
+    },
+  ),
   _Shot(
     'tts',
     steps: (t) async {
@@ -242,17 +262,12 @@ final _shots = <_Shot>[
       service.tasks
         ..clear()
         ..addAll([
-          for (final (i, (name, total)) in [
-            ('夜雨聽書', 120),
-            ('霧港來信', 86),
-            ('山海舊聞錄', 203),
-            ('長街燈火', 64),
-          ].indexed)
+          for (final (i, (name, total, start, _)) in _downloadBooks.indexed)
             DownloadTask(
               bookUrl: 'https://www.example.com/book/dl$i/',
               bookName: name,
               totalCount: total,
-              successCount: [96, 30, 12, 0][i],
+              successCount: start,
               status: DownloadTask.statusDownloading,
               sortOrder: i,
             ),
@@ -261,20 +276,19 @@ final _shots = <_Shot>[
       await _tapText(t, '背景下載佇列');
       await _waitSkeletons(t);
     },
+    // 四本以差不多的速度一起下載，一本接一本下載完，全部完成後停一下。
+    // 最後一格（網站的封面、README 卡片的第一格）是四本都下載完成。
     clip: (t, r) => r.run(
-      _ms(3600),
+      _ms(4800),
       onFrame: (i) {
         final service = DownloadService();
         for (final (n, task) in service.tasks.indexed) {
-          // 一本接一本：前一本快好了，下一本才跑得快。
-          final speed = [1, 1, 2, 1][n];
-          if (i % 2 == 0) {
-            task.successCount = (task.successCount + speed).clamp(
-              0,
-              task.totalCount,
-            );
-          }
-          if (task.successCount == task.totalCount) {
+          final (_, total, start, done) = _downloadBooks[n];
+          final p = (i + 1) / done;
+          task.successCount = p >= 1
+              ? total
+              : start + ((total - start) * p).floor();
+          if (task.successCount == total) {
             task.status = DownloadTask.statusCompleted;
           }
         }
@@ -568,7 +582,6 @@ AiRepairSession _aiRepairSession() {
     ),
     check: (source, _) async => checked(source),
     probe: (_, _, {start}) async => probe,
-    keywordCheck: (_, _) async => true,
     ask: (_, _) async => fakeAiReply(replies[next++]),
     apply: (_, _) async {},
     secrets: (_) async => const {},

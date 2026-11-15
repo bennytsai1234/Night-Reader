@@ -18,6 +18,7 @@ import 'package:night_reader/features/source_manager/ai_repair/ai_repair_setting
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart'
     show aiRepairStepIcon;
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -35,8 +36,8 @@ import 'app_ai_find_library.dart';
 /// 上次選的深度：只存這台手機、不同步（ADR 0060）。
 const String aiFindDepthKey = 'ai_find.depth';
 
-/// 搜尋頁的 ✦：有一次找書在跑、或做完還沒看過結果時推回那一頁；不然推
-/// 開始前的頁面（docs/design/screens.md「AI 找書」）。
+/// 搜尋頁的 ✦：有一次找書在跑、暫停中，或做完還沒看過結果時推回那一頁；
+/// 不然推開始前的頁面（docs/design/screens.md「AI 找書」）。
 Future<void> openAiFind(BuildContext context) async {
   final navigator = Navigator.of(context);
   if (aiFindRuns.current case final AiFindRun current when !current.isDone) {
@@ -144,9 +145,8 @@ class _AiFindPageState extends State<AiFindPage> {
   }
 
   /// 頁面看著這一次：通知點了不再推一頁；推入動畫播完才開始（ADR 0018）。
+  /// 每一輪的進度、暫停與結束都由這一次通知。
   void _attach(AiFindRun run) {
-    // 每一輪的進度從找書本身來（背景工作只在做完時通知頁面）。
-    run.session.addListener(_redraw);
     run
       ..attach()
       ..addListener(_redraw);
@@ -175,7 +175,6 @@ class _AiFindPageState extends State<AiFindPage> {
     BackgroundWork.instance.removeListener(_redraw);
     final run = _run;
     if (run != null) {
-      run.session.removeListener(_redraw);
       run
         ..removeListener(_redraw)
         ..detach();
@@ -203,20 +202,7 @@ class _AiFindPageState extends State<AiFindPage> {
       final service = await widget.settings.findService();
       if (!mounted) return;
       if (service == null) {
-        final choice = await showAppAlert<String>(
-          context: context,
-          title: 'AI 找書',
-          message: '還沒設定 AI 服務。',
-          actions: const [
-            AppAlertAction(
-              label: '設定 AI 服務',
-              value: 'settings',
-              isDefault: true,
-            ),
-            AppAlertAction(label: '取消', value: 'cancel'),
-          ],
-        );
-        if (choice == 'settings' && mounted) await _openSettings();
+        await _askForService();
         return;
       }
       // 讀設定的時候別的工作可能開始了。
@@ -244,6 +230,32 @@ class _AiFindPageState extends State<AiFindPage> {
     }
   }
 
+  /// 沒設定 AI 服務：提示框帶去設定頁（開始與繼續都一樣）。
+  Future<void> _askForService() async {
+    final choice = await showAppAlert<String>(
+      context: context,
+      title: 'AI 找書',
+      message: '還沒設定 AI 服務。',
+      actions: const [
+        AppAlertAction(label: '設定 AI 服務', value: 'settings', isDefault: true),
+        AppAlertAction(label: '取消', value: 'cancel'),
+      ],
+    );
+    if (choice == 'settings' && mounted) await _openSettings();
+  }
+
+  /// 暫停中按了繼續：照現在的 AI 服務設定，從存的那一輪接著問。
+  Future<void> _resume(AiFindRun run) async {
+    if (!run.canResume) return;
+    final service = await widget.settings.findService();
+    if (!mounted) return;
+    if (service == null) {
+      await _askForService();
+      return;
+    }
+    await run.resume();
+  }
+
   static AiFindRun _defaultRun({
     required String description,
     required AiFindDepth depth,
@@ -255,13 +267,10 @@ class _AiFindPageState extends State<AiFindPage> {
       depth: depth,
       library: AppAiFindLibrary(scope: scope),
       ask: AiFindSession.askService(service),
-      serviceLabel: _serviceLabel(service),
+      serviceLabel: aiFindServiceLabel(service),
+      scope: scope.toString(),
     ),
   );
-
-  static String _serviceLabel(AiService service) =>
-      '${Uri.tryParse(service.baseUrl)?.host ?? service.baseUrl} · '
-      '${service.model}';
 
   Future<void> _openSettings() async {
     await Navigator.of(context).push(
@@ -339,7 +348,7 @@ class _AiFindPageState extends State<AiFindPage> {
           if (record != null)
             ..._report(context, record, finished: widget.record == null)
           else if (session != null)
-            ..._running(context, session)
+            ..._running(context, _run!, session)
           else
             ..._draft(context),
         ],
@@ -351,7 +360,7 @@ class _AiFindPageState extends State<AiFindPage> {
     final label = _run?.session.serviceLabel;
     if (label != null && label.isNotEmpty) return '送到 $label';
     final service = _service;
-    return service == null ? null : '送到 ${_serviceLabel(service)}';
+    return service == null ? null : '送到 ${aiFindServiceLabel(service)}';
   }
 
   List<Widget> _draft(BuildContext context) => [
@@ -396,7 +405,13 @@ class _AiFindPageState extends State<AiFindPage> {
     ),
   ];
 
-  List<Widget> _running(BuildContext context, AiFindSession session) => [
+  /// 進行中與暫停中（docs/design/screens.md「AI 找書」）：最後一張卡片兩列，
+  /// 做著時「暫停｜結束」，暫停中「繼續｜結束」，輪次最後多一列「已暫停」。
+  List<Widget> _running(
+    BuildContext context,
+    AiFindRun run,
+    AiFindSession session,
+  ) => [
     GroupedSection(
       footer: _sentTo,
       children: [
@@ -413,6 +428,17 @@ class _AiFindPageState extends State<AiFindPage> {
             subtitle: round.detail,
             showChevron: false,
           ),
+        if (run.isPaused)
+          GroupedRow(
+            leading: Icon(
+              Icons.pause_circle_rounded,
+              size: 22,
+              color: AppChrome.of(context).sectionText,
+            ),
+            title: '已暫停',
+            subtitle: '按「繼續」從第 ${session.nextRound} 輪接著問',
+            showChevron: false,
+          ),
         GroupedRow(
           title: 'AI 用量',
           value: aiFindTokens(session.tokens),
@@ -420,17 +446,40 @@ class _AiFindPageState extends State<AiFindPage> {
         ),
       ],
     ),
-    GroupedSection(
-      children: [
-        GroupedRow(
-          title: session.isStopped ? '正在停下…' : '停止',
-          destructive: true,
-          showChevron: false,
-          onTap: session.isStopped ? null : session.stop,
-        ),
-      ],
-    ),
+    GroupedSection(children: _controls(run, session)),
   ];
+
+  List<Widget> _controls(AiFindRun run, AiFindSession session) {
+    final ending = session.isStopped || run.isEnding;
+    final end = GroupedRow(
+      title: ending ? backgroundWorkEnding : '結束',
+      destructive: true,
+      showChevron: false,
+      onTap: ending ? null : () => unawaited(run.end()),
+    );
+    if (run.isPaused) {
+      return [
+        GroupedRow(
+          title: '繼續',
+          accent: true,
+          showChevron: false,
+          enabled: run.canResume,
+          onTap: run.canResume ? () => unawaited(_resume(run)) : null,
+        ),
+        end,
+      ];
+    }
+    final pausing = session.isPausing;
+    return [
+      GroupedRow(
+        title: pausing ? backgroundWorkPausing : '暫停',
+        showChevron: false,
+        enabled: !pausing && !session.isStopped,
+        onTap: pausing || session.isStopped ? null : run.pauseNow,
+      ),
+      end,
+    ];
+  }
 
   /// 做完的那一次（[finished]，最後一張是「完成」）或過去的一次。
   List<Widget> _report(
@@ -461,7 +510,7 @@ class _AiFindPageState extends State<AiFindPage> {
           children: [
             GroupedRow(
               title: record.outcome == AiFindOutcome.stopped
-                  ? '已停止'
+                  ? '已結束'
                   : record.failure.isEmpty
                   ? '沒有找完'
                   : record.failure,

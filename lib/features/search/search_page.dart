@@ -538,7 +538,7 @@ class _SearchViewState extends State<SearchView> {
   );
 
   /// 剩下的書源不超過這個數時，改列出還在等哪幾個；三個名稱大致排得進
-  /// 一行。不想等了按頁首的「停止」，已找到的結果留著。
+  /// 一行。不想等了按頁首的「結束」，已找到的結果留著。
   static const _namedWaitingLimit = 3;
 
   Widget _buildSearchProgress(SearchProvider p) => ListenableBuilder(

@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/core/services/background_work/paused_work_file.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_page.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_run.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -97,6 +98,42 @@ AiReply _call(String name, Map<String, Object?> args) => (
   usage: (prompt: 30000, cached: 0, completion: 2000, reasoning: 0),
   firstData: Duration.zero,
 );
+
+/// 存在記憶體裡的暫停存檔（元件測試的假時間裡不碰真的檔案）。
+class _MemoryFile extends PausedWorkFile {
+  _MemoryFile([this.text]) : super('ai_find');
+  String? text;
+  bool closed = false;
+
+  @override
+  bool get isClosed => closed;
+
+  @override
+  Future<String?> read() async => text;
+
+  @override
+  void saveLater(String Function() encode) {
+    if (!closed) text = encode();
+  }
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    text = null;
+  }
+}
+
+/// 收到取消才回來的假 AI 回覆（暫停、結束時正在等 AI）。
+Future<AiReply> _untilCancelled(CancelToken token) async {
+  await token.whenCancel;
+  throw DioException.requestCancelled(
+    requestOptions: RequestOptions(),
+    reason: '已取消',
+  );
+}
 
 class _Platform implements BackgroundWorkPlatform {
   @override
@@ -194,6 +231,7 @@ void main() {
               return run = AiFindRun(
                 session,
                 save: (record) async => saved.add(record),
+                progress: _MemoryFile(),
                 work: BackgroundWork(platform: _Platform()),
               );
             },
@@ -261,6 +299,7 @@ void main() {
                 ),
               ),
               save: (_) async {},
+              progress: _MemoryFile(),
               work: BackgroundWork(platform: _Platform()),
             ),
       ),
@@ -411,5 +450,160 @@ void main() {
       aiFindDateLabel(DateTime(2025, 11, 13).millisecondsSinceEpoch, now),
       '2025/11/13',
     );
+  });
+
+  testWidgets('pause stops at the start of the last saved round: the page '
+      'says so with continue and end, and continue picks up from there', (
+    tester,
+  ) async {
+    final file = _MemoryFile();
+    final work = BackgroundWork(platform: _Platform());
+    final saved = <AiFindRecord>[];
+    final resumedFrom = <int>[];
+    var asked = 0;
+    late AiFindRun run;
+    await show(
+      tester,
+      AiFindPage(
+        prefs: await prefs(),
+        startRun:
+            ({
+              required description,
+              required depth,
+              required service,
+              required scope,
+            }) => run = AiFindRun(
+              AiFindSession(
+                description: description,
+                depth: depth,
+                library: _Library(),
+                ask: (_, token) async => ++asked == 1
+                    ? _call('search', {'keyword': '穿越'})
+                    : _untilCancelled(token),
+                log: AiRepairLog.find(
+                  description: description,
+                  directory: () async => logs,
+                ),
+              ),
+              save: (record) async => saved.add(record),
+              progress: file,
+              work: work,
+              reopen: (progress, log) async {
+                final next = AiFindSession.restore(
+                  progress,
+                  library: _Library(),
+                  ask: (_, _) async =>
+                      _call('submit', {'books': [], 'summary': '沒找到想要的'}),
+                  log: log,
+                );
+                resumedFrom.add(next.nextRound);
+                return next;
+              },
+            ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), '穿越');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始找書'));
+    await settle(tester, () => asked >= 2);
+    await tester.pump();
+    expect(find.text('暫停'), findsOneWidget);
+    expect(find.text('結束'), findsOneWidget);
+
+    await tester.tap(find.text('暫停'));
+    await settle(tester, () => run.isPaused);
+    await tester.pump();
+
+    expect(work.isBusy, isFalse, reason: '暫停空出背景工作的位置、收掉通知');
+    expect(find.text('已暫停'), findsOneWidget);
+    expect(find.text('按「繼續」從第 2 輪接著問'), findsOneWidget);
+    expect(find.text('第 2 輪'), findsNothing, reason: '做到一半的那一輪不留');
+    expect(find.text('繼續'), findsOneWidget);
+    expect(find.text('結束'), findsOneWidget);
+    expect(saved, isEmpty, reason: '暫停不是結束');
+    expect(file.text, isNotNull);
+
+    await tester.tap(find.text('繼續'));
+    await settle(tester, () => run.isFinished);
+    await tester.pump();
+
+    expect(resumedFrom, [2]);
+    expect(find.text('沒找到想要的'), findsOneWidget);
+    expect(find.text('完成'), findsOneWidget);
+    expect(saved.single.rounds, 2);
+    expect(saved.single.outcome, AiFindOutcome.found);
+    expect(file.closed, isTrue, reason: '結束的不會再活回來');
+    await tester.pumpWidget(const SizedBox.shrink());
+    var written = false;
+    unawaited(run.session.log.file().then((_) => written = true));
+    await settle(tester, () => written);
+  });
+
+  group('a find left paused when the app was closed', () {
+    Future<String> progressAfterOneRound() async {
+      final saves = <String>[];
+      final session = AiFindSession(
+        description: '穿越',
+        depth: AiFindDepth.quick,
+        library: _Library(),
+        ask: (messages, _) async => messages.any((m) => m.role == 'assistant')
+            ? _call('submit', {'books': [], 'summary': ''})
+            : _call('search', {'keyword': '穿越'}),
+        log: AiRepairLog.find(description: '穿越', directory: () async => logs),
+      )..onCheckpoint = saves.add;
+      await session.start();
+      await session.log.file();
+      session.dispose();
+      return saves[1];
+    }
+
+    test('comes back paused; ending it saves it as an ended find and drops '
+        'the save', () async {
+      final file = _MemoryFile(await progressAfterOneRound());
+      final saved = <AiFindRecord>[];
+      await restorePausedAiFind(
+        file: file,
+        save: (record) async => saved.add(record),
+        work: BackgroundWork(platform: null),
+      );
+      final run = aiFindRuns.current! as AiFindRun;
+      expect(run.isPaused, isTrue);
+      expect(run.isDone, isFalse, reason: '✦ 推回暫停的這一次');
+      expect(run.session.rounds, hasLength(1));
+      expect(run.session.nextRound, 2);
+      expect(run.canResume, isTrue);
+
+      await run.end();
+      expect(run.isFinished, isTrue);
+      expect(saved.single.outcome, AiFindOutcome.stopped);
+      expect(saved.single.rounds, 1);
+      expect(file.closed, isTrue);
+      run
+        ..attach()
+        ..detach();
+      await pumpEventQueue();
+      expect(aiFindRuns.current, isNull);
+    });
+
+    test('a save from another version becomes an unfinished find', () async {
+      final file = _MemoryFile(
+        jsonEncode({
+          'version': 0,
+          'id': 'old',
+          'description': '舊的',
+          'depth': 'normal',
+          'startedAt': 1,
+        }),
+      );
+      final saved = <AiFindRecord>[];
+      await restorePausedAiFind(
+        file: file,
+        save: (record) async => saved.add(record),
+      );
+      expect(aiFindRuns.current, isNull);
+      expect(saved.single.outcome, AiFindOutcome.unfinished);
+      expect(saved.single.description, '舊的');
+      expect(file.closed, isTrue);
+    });
   });
 }
