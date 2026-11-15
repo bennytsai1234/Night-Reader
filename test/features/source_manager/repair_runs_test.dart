@@ -624,4 +624,45 @@ void main() {
       expect(file.closed, isTrue);
     });
   });
+
+  test('a new repair ends the paused one in the source manager; a paused AI '
+      'find keeps its place', () async {
+    final repairs = RepairRuns(newEndsPaused: true);
+    final file = _MemoryFile(
+      jsonEncode({'version': 1, 'kind': 'single', 'url': 'https://a.example'}),
+    );
+    await restorePausedRepair(
+      file: file,
+      runs: repairs,
+      load: (_) async => [_s('a')],
+      work: work,
+    );
+    final paused = repairs.current!;
+    expect(paused.isPaused, isTrue);
+    expect(repairs.canStartNew, isTrue, reason: '別的書源的 AI 修復不再灰著');
+
+    final next = SingleRepairRun(
+      AiRepairSession(source: _s('b'), service: null),
+      progress: _MemoryFile(),
+      work: work,
+      navigator: () => null,
+    );
+    expect(repairs.adopt(next), isTrue);
+    expect(repairs.current, same(next));
+    await _flush();
+    await _flush();
+    expect(paused.isFinished, isTrue, reason: '暫停的那件結束了');
+    expect(file.closed, isTrue);
+
+    final finds = RepairRuns();
+    final pausedFind = SingleRepairRun.paused(
+      AiRepairSession(source: _s('c'), service: null),
+      file: _MemoryFile('{}'),
+      work: work,
+    );
+    expect(finds.adopt(pausedFind), isTrue);
+    expect(finds.canStartNew, isFalse, reason: 'AI 找書的 ✦ 推回暫停的那次');
+    repairs.dispose();
+    finds.dispose();
+  });
 }

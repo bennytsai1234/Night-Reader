@@ -684,19 +684,46 @@ Future<void> restorePausedRepair({
 /// 正在跑、或做完還沒看過結果的那一件修復。書源管理的入口照它決定推回
 /// 同一件還是開新的；它做完時書源管理重讀清單。
 class RepairRuns extends ChangeNotifier {
-  static final RepairRuns instance = RepairRuns();
+  RepairRuns({this.newEndsPaused = false});
+
+  /// 書源管理的修復：暫停中的那件不擋新的一件，開始新的時候它就結束（使用者
+  /// 2026-11-15 選，同校驗）。
+  static final RepairRuns instance = RepairRuns(newEndsPaused: true);
+
+  /// 開始新的一件時，暫停中的那件就結束。沒開時暫停中的擋著新的，入口推回它
+  /// （AI 找書的 ✦）。
+  final bool newEndsPaused;
 
   RepairRun? _current;
 
   RepairRun? get current => _current;
 
-  /// 舊結果已經看過、頁面也關了，才可以開始下一件。
-  bool get canStartNew => _current == null || _current!.isDone;
+  /// 舊結果已經看過、頁面也關了（或暫停中、而且開新的會結束它），才可以開始
+  /// 下一件。
+  bool get canStartNew {
+    final run = _current;
+    return run == null ||
+        run.isDone ||
+        (newEndsPaused && run.isPaused && !run.isSettling);
+  }
 
   /// 修完但還沒看過結果時，不允許新工作覆蓋舊結果。
   /// 回傳 false 時由呼叫端收掉尚未開始的新工作。
   bool adopt(RepairRun run) {
     if (!canStartNew) return false;
+    final previous = _current;
+    if (previous != null && previous.isPaused) {
+      _current = null;
+      previous.removeListener(_changed);
+      // 收尾完才放掉：結束要刪存檔、寫結果，途中還會通知。
+      unawaited(
+        previous.end().whenComplete(() {
+          previous
+            ..disposeWork()
+            ..dispose();
+        }),
+      );
+    }
     _drop();
     _current = run..addListener(_changed);
     notifyListeners();
@@ -725,7 +752,7 @@ class RepairRuns extends ChangeNotifier {
 }
 
 /// 一次只跑一件（ADR 0058）：有背景工作在跑時，書源管理的修復與校驗入口是
-/// 灰的，只有推回正在跑或暫停中的那一件的還能按。
+/// 灰的，只有推回正在跑的那一件的還能按。
 bool backgroundWorkIdle() => !BackgroundWork.instance.isBusy;
 
 /// 單一書源的「AI 修復」能不能按：這個書源正在修（推回那一頁），或沒有
