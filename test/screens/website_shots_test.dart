@@ -568,7 +568,6 @@ AiRepairSession _aiRepairSession() {
     ),
     check: (source, _) async => checked(source),
     probe: (_, _, {start}) async => probe,
-    keywordCheck: (_, _) async => true,
     ask: (_, _) async => fakeAiReply(replies[next++]),
     apply: (_, _) async {},
     secrets: (_) async => const {},

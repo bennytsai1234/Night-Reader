@@ -17,11 +17,20 @@ import 'package:night_reader/core/services/source_interaction.dart';
 
 const _readable = '這是一段足夠長的正文內容，用來確認校驗會把它當成可以閱讀的章節。';
 
-/// 各階段回傳什麼由測試指定；沒指定的階段給一本正常的書。
+/// 各階段回傳什麼由測試指定；沒指定的階段給一本正常的書。搜那個不可能有
+/// 的詞（[nonsenseKeyword]）照 [nonsense]，沒指定時和正常的網站一樣搜不到。
 class _FakeBookSourceService extends BookSourceService {
-  _FakeBookSourceService({this.search, this.info, this.chapters, this.content});
+  _FakeBookSourceService({
+    this.search,
+    this.nonsense,
+    this.info,
+    this.chapters,
+    this.content,
+  });
 
   final Future<List<SearchBook>> Function()? search;
+  final Future<List<SearchBook>> Function()? nonsense;
+  final List<String> searchedKeys = <String>[];
   final Future<Book> Function(Book book)? info;
   final Future<List<BookChapter>> Function(Book book)? chapters;
   final Future<String> Function(BookChapter chapter)? content;
@@ -40,6 +49,10 @@ class _FakeBookSourceService extends BookSourceService {
     bool Function(int size)? shouldBreak,
     CancelToken? cancelToken,
   }) async {
+    searchedKeys.add(key);
+    if (key == nonsenseKeyword) {
+      return nonsense?.call() ?? const <SearchBook>[];
+    }
     final search = this.search;
     if (search != null) return search();
     return [
@@ -177,6 +190,84 @@ void main() {
     expect(checked.groupTags, contains(searchBrokenSourceGroupTag));
     expect(checked.runtimeHealth.allowsSearch, isFalse);
     expect(checked.runtimeHealth.allowsReading, isTrue);
+  });
+
+  group('a search that returns the same books for any word', () {
+    List<SearchBook> books(List<String> names) => [
+      for (final (i, name) in names.indexed)
+        SearchBook(
+          bookUrl: 'https://site.example/book/$i',
+          name: name,
+          origin: 'https://site.example',
+        ),
+    ];
+    final fixed = books(['熱門一', '熱門二', '熱門三', '熱門四', '熱門五', '熱門六']);
+
+    test('marks search broken, still readable, and names the books', () async {
+      final service = _FakeBookSourceService(
+        search: () async => fixed,
+        nonsense: () async => fixed,
+      );
+      final (result, checked) = await _check(service);
+
+      expect(service.searchedKeys, ['我的', nonsenseKeyword]);
+      expect(result.isHealthy, isFalse);
+      expect(result.stage, 'search');
+      expect(checked.groupTags, contains(searchBrokenSourceGroupTag));
+      expect(checked.groupTags, contains(abnormalSourceGroupTag));
+      expect(checked.runtimeHealth.allowsSearch, isFalse);
+      expect(checked.runtimeHealth.allowsReading, isTrue);
+      expect(result.message, contains(searchIgnoresKeywordMessage));
+      expect(result.message, contains('熱門五'));
+      expect(result.message, isNot(contains('熱門六')));
+    });
+
+    test('only the first five titles are compared', () async {
+      final (result, _) = await _check(
+        _FakeBookSourceService(
+          search: () async => fixed,
+          nonsense: () async => books(['熱門一', '熱門二', '熱門三', '熱門四', '熱門五']),
+        ),
+      );
+
+      expect(result.isHealthy, isFalse);
+    });
+
+    test('other books for the impossible word are fine: a site may show its '
+        'recommendations when nothing matches', () async {
+      final (result, _) = await _check(
+        _FakeBookSourceService(
+          search: () async => fixed,
+          nonsense: () async => books(['推薦一', '推薦二']),
+        ),
+      );
+
+      expect(result.isHealthy, isTrue);
+    });
+
+    test('an error or a timeout for the impossible word passes: some rules '
+        'fail when a site finds nothing, as in Legado', () async {
+      for (final nonsense in <Future<List<SearchBook>> Function()>[
+        () async => throw Exception("TypeError: cannot read property '1'"),
+        () => Completer<List<SearchBook>>().future,
+      ]) {
+        final (result, checked) = await _check(
+          _FakeBookSourceService(search: () async => fixed, nonsense: nonsense),
+          config: const IsolateCheckConfig(
+            keyword: '我的',
+            timeoutSeconds: 1,
+            checkSearch: true,
+            checkDiscovery: false,
+            checkInfo: true,
+            checkCategory: true,
+            checkContent: true,
+          ),
+        );
+
+        expect(result.isHealthy, isTrue, reason: result.message);
+        expect(checked.bookSourceGroup, isNull);
+      }
+    });
   });
 
   test('a site that blocks Night Reader quarantines the source', () async {

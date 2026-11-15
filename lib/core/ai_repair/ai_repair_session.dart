@@ -137,12 +137,6 @@ typedef AiRepairFetcher = Future<AiPage> Function(
   CancelToken cancelToken,
 );
 
-/// 搜尋結果跟關鍵字有沒有關係（[searchFollowsKeyword]）。
-typedef AiRepairKeywordCheck = Future<bool> Function(
-  BookSource source,
-  CancelToken cancelToken,
-);
-
 /// 問 AI 一次（測試用的假 AI）；真的服務用 [AiChatClient]，帶著
 /// [aiRepairTools]。
 typedef AiRepairAsker = AgentAsk;
@@ -164,7 +158,6 @@ class AiRepairSession extends ChangeNotifier {
     AiRepairProber? probe,
     AiRepairAsker? ask,
     AiRepairFetcher? fetchPage,
-    AiRepairKeywordCheck? keywordCheck,
     AiRepairPageParser? parsePage,
     AiRepairJsRunner? runJs,
     Future<void> Function(BookSource repaired, BookSource original)? apply,
@@ -184,7 +177,6 @@ class AiRepairSession extends ChangeNotifier {
        _check = check ?? defaultCheck,
        _probe = probe ?? _defaultProbe,
        _fetchPage = fetchPage ?? _defaultFetchPage,
-       _keywordCheck = keywordCheck ?? _defaultKeywordCheck,
        _parsePage = parsePage ?? _defaultParsePage,
        _runJs = runJs ?? _defaultRunJs,
        _copy = copy ?? _defaultCopy,
@@ -213,7 +205,6 @@ class AiRepairSession extends ChangeNotifier {
   final AiRepairChecker _check;
   final AiRepairProber _probe;
   final AiRepairFetcher _fetchPage;
-  final AiRepairKeywordCheck _keywordCheck;
   final AiRepairPageParser _parsePage;
   final AiRepairJsRunner _runJs;
   late final AgentAsk? _ask;
@@ -599,22 +590,6 @@ class AiRepairSession extends ChangeNotifier {
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
       return null;
     }
-    // 校驗只看搜尋有沒有回書：規則抓的是頁面上固定的推薦書也會過。
-    step.detail = '$checkText；確認搜尋結果跟關鍵字有關…';
-    _notify();
-    final keywordWatch = Stopwatch()..start();
-    final follows = await _guard(() => _keywordCheck(candidate, _cancelToken));
-    if (_stopped) return null;
-    if (follows == false) {
-      const unrelated = aiRepairUnrelatedSearch;
-      log.both('確認搜尋結果跟關鍵字有關（${_seconds(keywordWatch)}）：$unrelated');
-      _finish(step, unrelated, failed: true);
-      if (!last) {
-        return '# 書源校驗沒過：$unrelated（用「$nonsenseKeyword」搜尋也得到同樣的書）';
-      }
-      _fail(job, ['校驗：$unrelated', if (note.isNotEmpty) 'AI：$note'].join('\n'));
-      return null;
-    }
     job._committing = true;
     final saved = BookSource.fromJson(checked.updatedSourceJson);
     try {
@@ -866,21 +841,6 @@ class AiRepairSession extends ChangeNotifier {
       source,
       keyword: start ?? source.getCheckKeyword(config.keyword),
       timeout: config.sourceTimeoutDuration,
-      cancelToken: cancelToken,
-    );
-  }
-
-  /// 每次搜尋等一步校驗的時間（[SourceCheckConfig.timeoutDuration]）：修好的
-  /// 書源剛搜過一次，網站慢到等不到就不擋（[searchFollowsKeyword] 當成有關）。
-  static Future<bool> _defaultKeywordCheck(
-    BookSource source,
-    CancelToken cancelToken,
-  ) async {
-    final config = await _config();
-    return searchFollowsKeyword(
-      source,
-      keyword: source.getCheckKeyword(config.keyword),
-      timeout: config.timeoutDuration,
       cancelToken: cancelToken,
     );
   }

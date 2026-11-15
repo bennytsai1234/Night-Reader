@@ -77,6 +77,7 @@
 | [0058](0058-long-source-work-keeps-running-in-the-background.md) | 修復異常書源、單一書源的 AI 修復、校驗書源離開夜讀也繼續：自己寫的前景服務，一次一件，通知欄只放進度、不跳出；修復頁不再返回等於停止 |
 | [0060](0060-ai-finds-books-in-the-users-sources.md) | AI 找書：使用者描述想看的，AI 只用工具在使用者的書源裡搜、看詳情、讀章、看發現頁與書架，交出工具真的找到的書；深度每次選，迴圈與紀錄照 AI 修復，第四件背景工作，每次找書留著、進備份與全面同步 |
 | [0063](0063-source-connections-skip-certificate-checks.md) | 連書源網站不驗憑證（書源請求、規則 JS、匯入、封面、書源用的瀏覽器），同 Legado；App 更新、同步、AI、字型照常驗，各用自己的連線 |
+| [0064](0064-check-searches-an-impossible-word.md) | 書源校驗多搜一個不可能有的詞，前 5 本書名一樣就判「搜尋失效」、交 AI 修；搜不到、出錯、逾時算過；搜尋失敗不標記書源 |
 
 ## 工程與流程
 
