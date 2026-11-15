@@ -121,7 +121,8 @@ class PausedSourceCheck extends ChangeNotifier {
 
   /// 開 App 時讀回上次暫停（或被收掉）的校驗。
   Future<void> restore() async {
-    if (_plan != null) return;
+    // 使用者在讀回之前就開始了新的一次：存檔是那一次的，不讀。
+    if (_plan != null || SourceCheckJob.current != null) return;
     final file = _newFile();
     final text = await file.read();
     if (text == null) return;
@@ -237,7 +238,7 @@ class SourceCheckJob implements BackgroundJob {
     current = this;
     void update() => _work.update(this, status);
     _changes.addListener(update);
-    _file.save(plan.encode());
+    _file.saveLater(plan.encode);
     try {
       await _check(
         plan.remaining,
@@ -246,7 +247,7 @@ class SourceCheckJob implements BackgroundJob {
         onFinished: (url, entry) {
           plan.finished.add(url);
           if (entry != null) plan.entries.add(entry);
-          if (!_ending) _file.save(plan.encode());
+          if (!_ending) _file.saveLater(plan.encode);
         },
       );
     } finally {

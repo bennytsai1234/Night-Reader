@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 /// 一件背景工作做到哪裡的存檔：每做完一步（AI 找書的一輪、校驗的一個書源）
 /// 存一次，App 被收掉或從最近使用滑掉之後，下次開 App 照它顯示「已暫停」、
-/// 按繼續從這裡接著做（ADR 0058）。一件一個檔，只在這台手機、不同步。
+/// 按繼續從這裡接著做（ADR 0058）。一件一個檔，不同步、不進夜讀的備份。
 ///
 /// - 寫入排隊：上一次還沒寫完時又存，只寫最後那份。先寫到暫存檔再改名，
 ///   寫到一半被收掉也留著上一份完整的。
@@ -19,7 +19,7 @@ class PausedWorkFile {
   final String name;
   final Future<Directory> Function() _directory;
 
-  String? _pending;
+  String Function()? _pending;
   Future<void>? _writing;
   bool _closed = false;
 
@@ -39,9 +39,14 @@ class PausedWorkFile {
   }
 
   /// 存 [text]（排隊，見類別說明）；結束之後不理。
-  void save(String text) {
+  void save(String text) => saveLater(() => text);
+
+  /// 要寫的時候才呼叫 [encode] 編成文字：上一次還沒寫完時連續存好幾次，只編
+  /// 最後那次（校驗每做完一個書源就存，600 個書源的進度編一次要 2 ms）。
+  /// 只給之後不會再改的、或改了也照寫當下樣子沒關係的狀態用。
+  void saveLater(String Function() encode) {
     if (_closed) return;
-    _pending = text;
+    _pending = encode;
     _writing ??= _drain();
   }
 
@@ -54,9 +59,10 @@ class PausedWorkFile {
 
   Future<void> _drain() async {
     try {
-      for (var text = _pending; text != null && !_closed; text = _pending) {
+      for (var next = _pending; next != null && !_closed; next = _pending) {
         _pending = null;
         try {
+          final text = next();
           final file = await _file();
           await file.parent.create(recursive: true);
           // 暫存檔每個存檔各一個：同名的上一件還在收尾時不會撞在一起。

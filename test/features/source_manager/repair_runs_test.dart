@@ -42,8 +42,8 @@ class _MemoryFile extends PausedWorkFile {
   Future<String?> read() async => text;
 
   @override
-  void save(String text) {
-    if (!closed) this.text = text;
+  void saveLater(String Function() encode) {
+    if (!closed) text = encode();
   }
 
   @override

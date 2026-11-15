@@ -124,7 +124,8 @@ class SourceCheckStatusBar extends StatelessWidget {
                     ? (provider.canResumeSourceCheck
                           ? () => unawaited(provider.resumeSourceCheck())
                           : null)
-                    : (isChecking && !settling
+                    // 整批修復的重新校驗、登入完的自動校驗不是背景工作，不能暫停。
+                    : (job != null && !settling
                           ? provider.pauseSourceCheck
                           : null),
               ),
