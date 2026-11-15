@@ -167,7 +167,12 @@ class _BalancedText extends StatelessWidget {
         painter.dispose();
         return SizedBox(
           width: width,
-          child: UiText(displayed, translate: false, style: effective, textAlign: TextAlign.center),
+          child: UiText(
+            displayed,
+            translate: false,
+            style: effective,
+            textAlign: TextAlign.center,
+          ),
         );
       },
     );
@@ -198,7 +203,10 @@ class _StateActionButton extends StatelessWidget {
               );
       case _ActionEmphasis.text:
         return action.icon == null
-            ? TextButton(onPressed: action.onPressed, child: UiText(action.label))
+            ? TextButton(
+                onPressed: action.onPressed,
+                child: UiText(action.label),
+              )
             : TextButton.icon(
                 onPressed: action.onPressed,
                 icon: Icon(action.icon),

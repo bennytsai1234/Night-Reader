@@ -139,7 +139,9 @@ class _TtsSettingsPageState extends State<TtsSettingsPage> {
                             } catch (_) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: UiText('音色無法套用，請改選其他音色')),
+                                const SnackBar(
+                                  content: UiText('音色無法套用，請改選其他音色'),
+                                ),
                               );
                             }
                           },

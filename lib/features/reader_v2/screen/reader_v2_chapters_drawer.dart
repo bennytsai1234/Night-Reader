@@ -244,7 +244,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
           ),
           child: DragOverflowText(
             child: UiText(
-              chapterTitle, translate: false,
+              chapterTitle,
+              translate: false,
               maxLines: 1,
               style: AppTextStyles.bodyBase.copyWith(
                 height: 1.3,

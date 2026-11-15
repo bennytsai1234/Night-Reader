@@ -173,7 +173,8 @@ class _SearchResultItemState extends State<SearchResultItem> {
                       Expanded(
                         child: DragOverflowText(
                           child: UiText(
-                            context.zh(book.name), translate: false,
+                            context.zh(book.name),
+                            translate: false,
                             maxLines: 1,
                             style: AppTextStyles.bodyBase.copyWith(
                               height: 1.3,
@@ -192,12 +193,18 @@ class _SearchResultItemState extends State<SearchResultItem> {
                   ),
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: UiText(metadata, translate: false, maxLines: 1, style: secondaryStyle),
+                    child: UiText(
+                      metadata,
+                      translate: false,
+                      maxLines: 1,
+                      style: secondaryStyle,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   DragOverflowText(
                     child: UiText(
-                      '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}', translate: false,
+                      '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
+                      translate: false,
                       maxLines: 1,
                       style: secondaryStyle,
                     ),

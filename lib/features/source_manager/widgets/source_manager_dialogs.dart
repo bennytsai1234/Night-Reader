@@ -387,8 +387,9 @@ class SourceManagerDialogs {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: UiText(failureMessage('刪除', error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除', error))));
       }
     }
   }

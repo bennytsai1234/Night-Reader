@@ -54,8 +54,9 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
           .showSnackBar(const SnackBar(content: UiText('已複製完整日誌至剪貼簿')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage('複製日誌', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('複製日誌', error))));
     }
   }
 

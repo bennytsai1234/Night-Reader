@@ -169,9 +169,9 @@ class SourceGroupManagePage extends StatelessWidget {
       await p.shareSourcesByUrls(urls, fileName: '$groupName.legado');
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: UiText(failureMessage('分享分組', error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: UiText(failureMessage('分享分組', error))),
+        );
       }
     }
   }
@@ -256,9 +256,9 @@ class SourceGroupManagePage extends StatelessWidget {
       await provider.deleteGroup(name);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除分組', error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: UiText(failureMessage('刪除分組', error))),
+        );
       }
     }
   }

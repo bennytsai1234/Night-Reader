@@ -19,10 +19,20 @@ void main() {
   test('繁簡預設依系統語言判斷，非中文保持繁體', () {
     expect(prefersSimplified(const Locale('zh', 'CN')), isTrue);
     expect(prefersSimplified(const Locale('zh', 'SG')), isTrue);
-    expect(prefersSimplified(const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans')), isTrue);
+    expect(
+      prefersSimplified(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+      ),
+      isTrue,
+    );
     expect(prefersSimplified(const Locale('zh', 'TW')), isFalse);
     expect(prefersSimplified(const Locale('zh', 'HK')), isFalse);
-    expect(prefersSimplified(const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')), isFalse);
+    expect(
+      prefersSimplified(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      ),
+      isFalse,
+    );
     expect(prefersSimplified(const Locale('en', 'US')), isFalse);
   });
 
