@@ -404,7 +404,9 @@ class _StatTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: _padding),
         child: Column(
           children: [
-            DragOverflowText(child: UiText.rich(_valueSpan(scheme), maxLines: 1)),
+            DragOverflowText(
+              child: UiText.rich(_valueSpan(scheme), maxLines: 1),
+            ),
             const SizedBox(height: _labelGap),
             UiText(
               label,

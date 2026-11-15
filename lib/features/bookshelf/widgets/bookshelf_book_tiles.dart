@@ -354,7 +354,8 @@ class BookshelfListCard extends StatelessWidget {
                 children: [
                   DragOverflowText(
                     child: UiText(
-                      name, translate: false,
+                      name,
+                      translate: false,
                       maxLines: 1,
                       style: titleStyle.copyWith(color: scheme.onSurface),
                     ),
@@ -364,7 +365,8 @@ class BookshelfListCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   DragOverflowText(
                     child: UiText(
-                      author, translate: false,
+                      author,
+                      translate: false,
                       maxLines: 1,
                       style: authorStyle.copyWith(color: chrome.sectionText),
                     ),
@@ -590,7 +592,8 @@ class BookshelfGridTile extends StatelessWidget {
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
                       child: DragOverflowText(
                         child: UiText(
-                          name, translate: false,
+                          name,
+                          translate: false,
                           maxLines: 2,
                           style: titleStyle.copyWith(color: scheme.onSurface),
                         ),

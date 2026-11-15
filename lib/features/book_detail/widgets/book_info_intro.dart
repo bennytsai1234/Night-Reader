@@ -61,7 +61,9 @@ class BookInfoIntro extends StatelessWidget {
       children: [
         GroupedContent(
           child: UiText(
-            intro.isEmpty ? UiLanguageText.convert(context, '暫無簡介') : context.zh(intro),
+            intro.isEmpty
+                ? UiLanguageText.convert(context, '暫無簡介')
+                : context.zh(intro),
             translate: false,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.6,

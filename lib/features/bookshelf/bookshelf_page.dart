@@ -1134,7 +1134,9 @@ class _BookshelfPageState extends State<BookshelfPage>
           ),
         );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: UiText(failureMessage('設定', e))));
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('設定', e))),
+      );
     }
   }
 
@@ -1293,7 +1295,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       // 中途失敗時，已刪掉的書不再留在選取裡。
       final remaining = p.books.map((book) => book.bookUrl).toSet();
       setState(() => _selectedUrls.retainAll(remaining));
-      messenger.showSnackBar(SnackBar(content: UiText(failureMessage('刪除', e))));
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('刪除', e))),
+      );
     }
   }
 }

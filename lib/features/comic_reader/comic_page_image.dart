@@ -230,7 +230,10 @@ class _PageError extends StatelessWidget {
           children: [
             Icon(Icons.broken_image_outlined, size: 40, color: color),
             const SizedBox(height: AppSpacing.md),
-            UiText('這張圖載不到', style: AppTextStyles.titleSm.copyWith(color: color)),
+            UiText(
+              '這張圖載不到',
+              style: AppTextStyles.titleSm.copyWith(color: color),
+            ),
             const SizedBox(height: AppSpacing.xs),
             DragOverflowText(
               child: UiText(
@@ -247,7 +250,10 @@ class _PageError extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FilledButton(onPressed: onRemedy, child: UiText(remedy.label)),
+                  FilledButton(
+                    onPressed: onRemedy,
+                    child: UiText(remedy.label),
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   TextButton(onPressed: onRetry, child: const UiText('重試')),
                 ],
