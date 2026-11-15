@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/scheduler.dart';
 
@@ -1478,9 +1479,9 @@ class GroupedTextFieldRow extends StatelessWidget
       focusedBorder: InputBorder.none,
       errorBorder: InputBorder.none,
       focusedErrorBorder: InputBorder.none,
-      errorText: errorText,
+      errorText: UiLanguageText.convertNullable(context, errorText),
       contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      hintText: hintText,
+      hintText: UiLanguageText.convertNullable(context, hintText),
       hintStyle: _hintStyle.copyWith(
         color: chrome.sectionText.withValues(alpha: 0.7),
       ),

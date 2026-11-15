@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 /// App 固定介面文字使用的繁簡，不影響書籍正文的繁簡轉換。
 ///
@@ -42,8 +43,10 @@ abstract final class UiLanguageText {
   static final Map<String, String> _simplified = <String, String>{};
   static const int _maxEntries = 4096;
 
-  static String convert(BuildContext context, String text) =>
-      UiLanguageScope.isSimplified(context) ? toSimplified(text) : text;
+  static String convert(BuildContext context, String text) {
+    ChineseDisplay.readyOf(context);
+    return UiLanguageScope.isSimplified(context) ? toSimplified(text) : text;
+  }
 
   static String? convertNullable(BuildContext context, String? text) =>
       text == null ? null : convert(context, text);

@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -508,13 +509,13 @@ class GlassIconButton extends StatelessWidget {
     button = Semantics(
       button: true,
       enabled: enabled,
-      label: tooltip,
+      label: UiLanguageText.convertNullable(context, tooltip),
       child: button,
     );
     if (tooltip == null) return button;
     // 名稱已由上面的 Semantics 提供；Tooltip 再提供一次，讀屏會念兩遍。
     return Tooltip(
-      message: tooltip!,
+      message: UiLanguageText.convert(context, tooltip!),
       excludeFromSemantics: true,
       child: button,
     );
@@ -748,12 +749,12 @@ class GlassCapsule extends StatelessWidget {
     capsule = Semantics(
       button: enabled,
       selected: selected,
-      label: tooltip,
+      label: UiLanguageText.convertNullable(context, tooltip),
       child: PressScale(scale: 0.95, onTap: onTap, child: capsule),
     );
     if (tooltip == null) return capsule;
     return Tooltip(
-      message: tooltip!,
+      message: UiLanguageText.convert(context, tooltip!),
       excludeFromSemantics: true,
       child: capsule,
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 enum AppStateTone { neutral, error }
@@ -131,11 +132,12 @@ class _BalancedText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effective = DefaultTextStyle.of(context).style.merge(style);
+    final displayed = UiLanguageText.convert(context, text);
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
         final painter = TextPainter(
-          text: TextSpan(text: text, style: effective),
+          text: TextSpan(text: displayed, style: effective),
           textAlign: TextAlign.center,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
@@ -165,7 +167,7 @@ class _BalancedText extends StatelessWidget {
         painter.dispose();
         return SizedBox(
           width: width,
-          child: UiText(text, style: effective, textAlign: TextAlign.center),
+          child: UiText(displayed, translate: false, style: effective, textAlign: TextAlign.center),
         );
       },
     );

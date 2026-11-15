@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -112,7 +113,7 @@ class RuleTextField extends StatelessWidget implements GroupedSkeletonItem {
             maxLines: maxLines,
             style: _fieldStyle.copyWith(color: scheme.onSurface),
             decoration: InputDecoration(
-              hintText: hint,
+              hintText: UiLanguageText.convert(context, hint),
               hintStyle: _hintStyle.copyWith(
                 color: chrome.sectionText.withValues(alpha: 0.7),
               ),
@@ -135,12 +136,12 @@ class RuleTextField extends StatelessWidget implements GroupedSkeletonItem {
   Widget _buildHelperButton(BuildContext context) {
     final semanticsLabel = '開啟$label小幫手';
     return Semantics(
-      label: semanticsLabel,
+      label: UiLanguageText.convert(context, semanticsLabel),
       button: true,
       onTap: () => _showHelperMenu(context),
       child: ExcludeSemantics(
         child: Tooltip(
-          message: semanticsLabel,
+          message: UiLanguageText.convert(context, semanticsLabel),
           child: PressScale(
             onTap: () => _showHelperMenu(context),
             child: SizedBox.fromSize(

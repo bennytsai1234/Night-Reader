@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
@@ -397,9 +398,9 @@ class AlertTextField extends StatelessWidget {
         isDense: true,
         filled: true,
         fillColor: chrome.groupedBackground,
-        hintText: hintText,
-        labelText: labelText,
-        errorText: errorText,
+        hintText: UiLanguageText.convertNullable(context, hintText),
+        labelText: UiLanguageText.convertNullable(context, labelText),
+        errorText: UiLanguageText.convertNullable(context, errorText),
         hintStyle: AppTextStyles.bodyBase.copyWith(
           height: 1.3,
           color: chrome.sectionText.withValues(alpha: 0.7),
