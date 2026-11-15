@@ -24,7 +24,7 @@
 ///   套用到同網站；存的也是暫存資料庫，跑完刪掉。
 /// - 結果檔是總時間與每個書源的結果、網站檢查、AI 的每一步與統計（含用量）。
 ///   每個書源的完整修復紀錄寫在開頭與最後印出的資料夾，用
-///   `dart run tool/ai_repair_table.dart <資料夾>` 整理成評估表與分組抽樣。
+///   `dart run tool/ai_repair_table.dart <資料夾>` 整理成評估表。
 ///
 /// 書源的拿法同 `source_check_live_test.dart` 檔頭。金鑰固定放在主資料夾的
 /// `.local/ai-repair.key`（git 忽略、不上傳）。
