@@ -285,6 +285,17 @@ void main() {
     await settle(tester, () => written);
   });
 
+  testWidgets('under the depth switch, a line says how far the chosen depth '
+      'checks each book', (tester) async {
+    await show(tester, AiFindPage(prefs: await prefs()));
+    expect(find.text('每本都點開看過詳情（簡介、分類、字數）才推薦。'), findsOneWidget);
+
+    await tester.tap(find.text('深入'));
+    await tester.pumpAndSettle();
+    expect(find.text('每本都看過詳情，小說再讀過一章正文；漫畫、有聲書照一般。'), findsOneWidget);
+    expect(find.text('每本都點開看過詳情（簡介、分類、字數）才推薦。'), findsNothing);
+  });
+
   testWidgets('starting without an AI service asks to set one up', (
     tester,
   ) async {

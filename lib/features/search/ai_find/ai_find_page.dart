@@ -368,6 +368,7 @@ class _AiFindPageState extends State<AiFindPage> {
     ),
     GroupedSection(
       header: '深度',
+      footer: _depth.explanation,
       children: [
         GroupedContent(
           child: GlassSegmented<AiFindDepth>(
