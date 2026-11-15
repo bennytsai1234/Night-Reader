@@ -88,6 +88,21 @@ class AppearanceSettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
+            header: '玻璃效果',
+            children: [
+              GroupedContent(
+                child: GlassSegmented<GlassStrength>(
+                  segments: [
+                    for (final strength in GlassStrength.values)
+                      GlassSegment(strength, strength.label),
+                  ],
+                  selected: themeSettings.glassStrength,
+                  onChanged: themeSettings.setGlassStrength,
+                ),
+              ),
+            ],
+          ),
+          GroupedSection(
             children: [
               Builder(
                 builder: (rowContext) {
@@ -114,21 +129,6 @@ class AppearanceSettingsPage extends StatelessWidget {
                     ),
                   );
                 },
-              ),
-            ],
-          ),
-          GroupedSection(
-            header: '玻璃效果',
-            children: [
-              GroupedContent(
-                child: GlassSegmented<GlassStrength>(
-                  segments: [
-                    for (final strength in GlassStrength.values)
-                      GlassSegment(strength, strength.label),
-                  ],
-                  selected: themeSettings.glassStrength,
-                  onChanged: themeSettings.setGlassStrength,
-                ),
               ),
             ],
           ),
