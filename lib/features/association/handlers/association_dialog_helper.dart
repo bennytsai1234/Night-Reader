@@ -127,8 +127,9 @@ mixin AssociationDialogHelper on AssociationBase {
           .showSnackBar(SnackBar(content: UiText(message)));
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: UiText(failureMessage(action, error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage(action, error))));
     }
   }
 

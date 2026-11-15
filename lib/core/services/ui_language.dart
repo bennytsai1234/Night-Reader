@@ -6,7 +6,11 @@ import 'package:night_reader/core/services/chinese_display.dart';
 ///
 /// null 表示跟隨裝置語言；非中文系統預設保留繁體中文。
 class UiLanguageScope extends InheritedWidget {
-  const UiLanguageScope({super.key, required this.locale, required super.child});
+  const UiLanguageScope({
+    super.key,
+    required this.locale,
+    required super.child,
+  });
 
   final Locale? locale;
 
@@ -20,7 +24,8 @@ class UiLanguageScope extends InheritedWidget {
   }
 
   @override
-  bool updateShouldNotify(UiLanguageScope oldWidget) => locale != oldWidget.locale;
+  bool updateShouldNotify(UiLanguageScope oldWidget) =>
+      locale != oldWidget.locale;
 }
 
 bool prefersSimplified(Locale locale) {
@@ -57,7 +62,8 @@ abstract final class UiLanguageText {
     if (cached != null) return _simplified[text] = cached;
     final converted = ChineseUtils.t2s(text);
     _simplified[text] = converted;
-    if (_simplified.length > _maxEntries) _simplified.remove(_simplified.keys.first);
+    if (_simplified.length > _maxEntries)
+      _simplified.remove(_simplified.keys.first);
     return converted;
   }
 

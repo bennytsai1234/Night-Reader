@@ -71,7 +71,11 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                       if (meta.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         DragOverflowText(
-                          child: UiText(meta, maxLines: 1, style: secondaryStyle),
+                          child: UiText(
+                            meta,
+                            maxLines: 1,
+                            style: secondaryStyle,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 2),

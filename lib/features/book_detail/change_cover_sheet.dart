@@ -72,8 +72,9 @@ class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
       final allowed = await _permissionService.requestPhotoLibraryIfNeeded();
       if (!allowed) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: UiText('未取得相簿權限，無法選取封面圖片')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: UiText('未取得相簿權限，無法選取封面圖片')));
         }
         return;
       }

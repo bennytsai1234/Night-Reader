@@ -432,7 +432,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       ? () => ScaffoldMessenger.of(context)
                           ..hideCurrentSnackBar()
                           ..showSnackBar(
-                            const SnackBar(content: UiText(lockedChapterNotice)),
+                            const SnackBar(
+                              content: UiText(lockedChapterNotice),
+                            ),
                           )
                       : widget.fromReader
                       ? () => Navigator.of(context).pop(chapter.url)
