@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -490,7 +491,7 @@ class GlassIconButton extends StatelessWidget {
           blur: blur,
           child: Center(
             child: switch (label) {
-              final text? => Text(
+              final text? => UiText(
                 text,
                 maxLines: 1,
                 style: AppTextStyles.uiSm.copyWith(
@@ -559,7 +560,7 @@ class GlassTextButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Center(
                 widthFactor: 1,
-                child: Text(
+                child: UiText(
                   label,
                   style: AppTextStyles.uiMd.copyWith(
                     color: color.withValues(alpha: enabled ? 1 : 0.38),
@@ -623,7 +624,7 @@ class PlainTextAction extends StatelessWidget {
             padding: EdgeInsets.symmetric(
               horizontal: small ? 0 : AppSpacing.xs,
             ),
-            child: Center(widthFactor: 1, child: Text(label, style: style)),
+            child: Center(widthFactor: 1, child: UiText(label, style: style)),
           ),
         ),
       ),
@@ -717,7 +718,7 @@ class GlassCapsule extends StatelessWidget {
               ],
               Flexible(
                 child: DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     label,
                     maxLines: maxLines,
                     textAlign: TextAlign.center,
@@ -727,7 +728,7 @@ class GlassCapsule extends StatelessWidget {
               ),
               if (count != null) ...[
                 const SizedBox(width: AppSpacing.xs),
-                Text(
+                UiText(
                   '$count',
                   style: AppTextStyles.uiXs.copyWith(
                     color: color.withValues(alpha: color.a * 0.6),
@@ -1104,7 +1105,7 @@ class NavHeaderTitle extends StatelessWidget {
           child: InkSheen(
             active: sheen,
             child: DragOverflowText(
-              child: Text(
+              child: UiText(
                 title,
                 maxLines: 1,
                 style: AppTextStyles.titleSm.copyWith(

@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
@@ -516,7 +517,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 DragOverflowText(
-                                  child: Text(
+                                  child: UiText(
                                     entry.label,
                                     maxLines: 2,
                                     style: AppTextStyles.bodyBase.copyWith(
@@ -527,7 +528,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                                 ),
                                 if (entry.subtitle != null)
                                   DragOverflowText(
-                                    child: Text(
+                                    child: UiText(
                                       entry.subtitle!,
                                       maxLines: 1,
                                       style: AppTextStyles.bodySm.copyWith(

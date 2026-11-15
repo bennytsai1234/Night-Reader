@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -208,7 +209,7 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
                       widthFactor: 1,
                       // 泡泡只在按住捲軸時出現、不接觸控，拖不動：章名放不下
                       // 照舊加「…」（docs/design/components.md「過長文字」）。
-                      child: Text(
+                      child: UiText(
                         widget.labelFor(_dragIndex),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

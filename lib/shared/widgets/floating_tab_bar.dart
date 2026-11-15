@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../layout/readable_width.dart';
 import '../theme/app_chrome.dart';
@@ -442,7 +443,7 @@ class _TabGlyph extends StatelessWidget {
     children: [
       Icon(icon, size: 24, color: color),
       const SizedBox(height: 2),
-      Text(
+      UiText(
         label,
         maxLines: 1,
         style: AppTextStyles.micro.copyWith(
