@@ -1,5 +1,6 @@
 window.CARDS = {
-  "hero": {"type": "hero", "back": "reader-paper_dark", "front": "launch", "a": "clip:launch:hold"},
+  "hero": {"type": "hero", "back": "hero-tablet", "front": "launch", "a": "clip:launch:hold",
+    "tablet": {"left": 518, "top": 46, "width": 256}, "phone": {"left": 420, "top": 138, "width": 172}},
 
   "reading": {"type": "row", "t": 0.3, "dim": 0.5, "w": 196, "items": [
     {"s": "open", "a": "clip:open", "h": "流暢", "p": "開 App、開書、換頁<br>都不掉幀"},
@@ -20,7 +21,7 @@ window.CARDS = {
   "library": {"type": "row", "t": 0.85, "dim": 0.5, "w": 134, "gap": 18, "items": [
     {"s": "search", "a": "clip:search", "h": "多書源搜尋", "p": "繁簡一起找<br>同一本書合成一筆"},
     {"s": "source-change", "h": "換源", "p": "照章名找回那一章<br>書籤和標註都還在"},
-    {"s": "download", "a": "clip:download", "h": "整本下載", "p": "小說、漫畫放上書架<br>就整本下載"},
+    {"s": "download", "a": "clip:download:hold", "h": "整本下載", "p": "小說、漫畫放上書架<br>就整本下載"},
     {"s": "local-toc", "h": "本地書", "p": "TXT、EPUB<br>匯入自動分章"},
     {"s": "sync-phone", "a": "devices:sync-phone,sync-tablet", "h": "多台同步", "p": "Google 雲端硬碟<br>或 WebDAV"}
   ]},
