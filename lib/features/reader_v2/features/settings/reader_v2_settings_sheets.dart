@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
@@ -228,7 +229,7 @@ class _ReaderStyleSelector extends StatelessWidget
                 ),
               ),
               alignment: Alignment.center,
-              child: Text(
+              child: UiText(
                 'Aa',
                 style: AppTextStyles.uiSm.copyWith(
                   color: palette.readerText,
@@ -237,7 +238,7 @@ class _ReaderStyleSelector extends StatelessWidget
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            Text(
+            UiText(
               style.label,
               style: AppTextStyles.labelSm.copyWith(
                 color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
