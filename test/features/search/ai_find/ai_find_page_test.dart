@@ -531,18 +531,6 @@ void main() {
     expect(opened, ['海贼王之剑豪之心', '海贼王之大文豪']);
   });
 
-  test('the date of a past find drops the year only for this year', () {
-    final now = DateTime(2026, 11, 15);
-    expect(
-      aiFindDateLabel(DateTime(2026, 11, 13).millisecondsSinceEpoch, now),
-      '11/13',
-    );
-    expect(
-      aiFindDateLabel(DateTime(2025, 11, 13).millisecondsSinceEpoch, now),
-      '2025/11/13',
-    );
-  });
-
   testWidgets('pause stops at the start of the last saved round: the page '
       'says so with continue and end, and continue picks up from there', (
     tester,

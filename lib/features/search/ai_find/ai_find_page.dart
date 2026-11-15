@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +29,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -49,14 +52,6 @@ Future<void> openAiFind(BuildContext context) async {
     return;
   }
   await navigator.push(MaterialPageRoute<void>(builder: (_) => AiFindPage()));
-}
-
-/// 「過去的找書」一列右邊的日期：今年的寫「11/13」，不是今年的寫
-/// 「2025/11/13」（docs/design/screens.md「搜尋」）。
-String aiFindDateLabel(int millis, DateTime now) {
-  final date = DateTime.fromMillisecondsSinceEpoch(millis);
-  final day = '${date.month}/${date.day}';
-  return date.year == now.year ? day : '${date.year}/$day';
 }
 
 /// 開始前那一列「不想看的」右邊的字：只寫幾項，沒有寫「沒有」。
@@ -585,21 +580,93 @@ class _AiFindPageState extends State<AiFindPage> {
 }
 
 /// 推薦的一本：封面、書名、「作者 · 字數 · 分類」與推薦理由（不截斷）；點了
-/// 照找到它的書源進書籍詳情。
-class _AiFindPickRow extends StatelessWidget {
+/// 照找到它的書源進書籍詳情。從「過去的找書」推入時，骨架照同樣的三段字與
+/// 封面算（[skeletonShape]，ADR 0029）。
+class _AiFindPickRow extends StatelessWidget implements GroupedSkeletonItem {
   const _AiFindPickRow({required this.pick, required this.bookPage});
 
   final AiFindPick pick;
   final Widget Function(AggregatedSearchBook book) bookPage;
 
+  static const EdgeInsets _padding = EdgeInsets.fromLTRB(
+    AppGrouped.margin,
+    AppSpacing.md,
+    AppGrouped.margin,
+    AppSpacing.md,
+  );
+
+  /// 封面右邊那一欄的三段字：每段上面空多少、字與字樣。
+  List<(double, String, TextStyle)> _lines(BuildContext context) {
+    final book = pick.book;
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      (
+        0,
+        context.zh(book.name),
+        AppTextStyles.bodyBase.copyWith(
+          height: 1.3,
+          color: scheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      (
+        2,
+        formatSearchResultMetadata(
+          author: context.zh(book.author ?? ''),
+          kind: context.zh(book.kind ?? ''),
+          wordCount: book.wordCount,
+        ),
+        AppTextStyles.bodySm.copyWith(
+          height: 1.35,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      (
+        AppSpacing.xs,
+        context.zh(pick.reason),
+        AppTextStyles.bodySm.copyWith(height: 1.45, color: scheme.onSurface),
+      ),
+    ];
+  }
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    const textLeft = ExploreBookItem.coverWidth + AppSpacing.lg;
+    final textWidth = width - _padding.horizontal - textLeft;
+    final marks = <SkeletonShape>[
+      const SkeletonShape(
+        Rect.fromLTWH(
+          0,
+          0,
+          ExploreBookItem.coverWidth,
+          ExploreBookItem.coverHeight,
+        ),
+      ),
+    ];
+    var y = 0.0;
+    for (final (gap, text, style) in _lines(context)) {
+      y += gap;
+      final line = GroupedItemShape.text(
+        context,
+        text,
+        style: style,
+        width: textWidth,
+      );
+      marks.addAll(line.marksAt(Offset(textLeft, y)));
+      y += line.height;
+    }
+    return GroupedItemShape(
+      math.max(y, ExploreBookItem.coverHeight),
+      marks: marks,
+    ).padded(_padding);
+  }
+
   @override
   Widget build(BuildContext context) {
     final book = pick.book;
-    final scheme = Theme.of(context).colorScheme;
-    final secondary = AppTextStyles.bodySm.copyWith(
-      height: 1.35,
-      color: scheme.onSurfaceVariant,
-    );
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -614,12 +681,7 @@ class _AiFindPickRow extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          AppSpacing.md,
-          AppGrouped.margin,
-          AppSpacing.md,
-        ),
+        padding: _padding,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -640,31 +702,10 @@ class _AiFindPickRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    context.zh(book.name),
-                    style: AppTextStyles.bodyBase.copyWith(
-                      height: 1.3,
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    formatSearchResultMetadata(
-                      author: context.zh(book.author ?? ''),
-                      kind: context.zh(book.kind ?? ''),
-                      wordCount: book.wordCount,
-                    ),
-                    style: secondary,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    context.zh(pick.reason),
-                    style: AppTextStyles.bodySm.copyWith(
-                      height: 1.45,
-                      color: scheme.onSurface,
-                    ),
-                  ),
+                  for (final (gap, text, style) in _lines(context)) ...[
+                    if (gap > 0) SizedBox(height: gap),
+                    Text(text, style: style),
+                  ],
                 ],
               ),
             ),
