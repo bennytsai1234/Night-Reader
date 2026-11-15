@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -325,7 +326,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
               // 以文字中線對齊空白的中線，字級放大時往上下兩側長。
               child: FractionalTranslation(
                 translation: const Offset(0, -0.5),
-                child: Text(
+                child: UiText(
                   '本章 ${(scrub.percent / 10).round()}/10',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.labelXs.copyWith(
@@ -457,7 +458,7 @@ class ReaderV2MenuIcon extends StatelessWidget {
             children: [
               Icon(icon, color: menuStyle.foreground, size: 24),
               const SizedBox(height: AppSpacing.xs),
-              Text(
+              UiText(
                 label,
                 style: AppTextStyles.uiXs.copyWith(color: menuStyle.foreground),
               ),
@@ -525,7 +526,7 @@ class _ChapterJumpButtonState extends State<_ChapterJumpButton> {
     return TextButton(
       onPressed: _enabled ? widget.onPressed : null,
       style: widget.style,
-      child: Text(widget.label),
+      child: UiText(widget.label),
     );
   }
 }
