@@ -61,7 +61,6 @@ class UiText extends Text {
     if (dataValue != null) {
       return Text(
         UiLanguageText.toSimplified(dataValue),
-        key: key,
         style: style,
         strutStyle: strutStyle,
         textAlign: textAlign,
@@ -79,7 +78,6 @@ class UiText extends Text {
     }
     return Text.rich(
       UiLanguageText.convertSpan(convertedSpan!),
-      key: key,
       style: style,
       strutStyle: strutStyle,
       textAlign: textAlign,
