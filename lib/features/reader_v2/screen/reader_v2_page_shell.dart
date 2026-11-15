@@ -5,7 +5,6 @@ import 'dart:ui' as ui show TextDirection;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -1161,10 +1160,10 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
             fontSize: widget.fontSize,
           ),
           SizedBox(width: widget.fontSize * 0.25),
-          Flexible(child: UiText('$number%')),
+          Flexible(child: Text('$number%')),
         ],
       ),
-      _ => UiText('$number%'),
+      _ => Text('$number%'),
     };
   }
 }
@@ -1180,7 +1179,7 @@ DateFormat _clockFormat(bool use24HourClock) =>
 /// 中日文字另用下載字型在前的字族，英數字照舊系統字型在前，同正文
 /// （[readerV2CjkRuns]）。時鐘只有數字，不必分段。
 Widget _infoText(String text, TextAlign align, String? fontFamily) {
-  if (fontFamily == null) return UiText(text, translate: false, textAlign: align);
+  if (fontFamily == null) return Text(text, textAlign: align);
   final cjk = TextStyle(
     fontFamilyFallback: readerV2CjkFontFallback(fontFamily),
   );
@@ -1194,7 +1193,7 @@ Widget _infoText(String text, TextAlign align, String? fontFamily) {
     cursor = run.end;
   }
   if (cursor < text.length) spans.add(TextSpan(text: text.substring(cursor)));
-  return UiText.rich(TextSpan(children: spans), translate: false, textAlign: align);
+  return Text.rich(TextSpan(children: spans), textAlign: align);
 }
 
 class _ReaderClock extends StatefulWidget {
@@ -1246,7 +1245,7 @@ class _ReaderClockState extends State<_ReaderClock> {
     return Semantics(
       label: '時間 $time',
       excludeSemantics: true,
-      child: DragOverflowText(child: UiText(time, textAlign: widget.textAlign)),
+      child: DragOverflowText(child: Text(time, textAlign: widget.textAlign)),
     );
   }
 }
