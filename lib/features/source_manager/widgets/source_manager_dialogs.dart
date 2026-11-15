@@ -13,6 +13,8 @@ import '../source_debug_page.dart';
 import 'source_check_status_bar.dart' show sourceCheckPausedText;
 import '../source_manager_provider.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 class SourceManagerDialogs {
   static void showCheckLog(
     BuildContext context,
@@ -502,9 +504,15 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
                 ),
                 for (final row in rows)
                   AlertCheckRow(
-                    title:
-                        '${row.tag.kind?.sourceLabel ?? row.tag.group}：'
-                        '${row.count} 個',
+                    // 書源類型與數量是介面字，分組名稱照原文（ADR 0066）。
+                    title: switch (row.tag.kind) {
+                      final kind? => context.ui(
+                        '${kind.sourceLabel}：${row.count} 個',
+                      ),
+                      null =>
+                        '${row.tag.group}${context.ui('：${row.count} 個')}',
+                    },
+                    translateTitle: false,
                     value: selected.contains(row.tag),
                     onChanged: (value) => setState(
                       () => value

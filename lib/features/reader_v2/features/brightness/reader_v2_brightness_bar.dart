@@ -3,6 +3,7 @@ import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_br
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 閱讀選單左側的亮度條：上方一顆「自動」鈕，下方一條直立膠囊，亮度從下
 /// 往上填滿。膠囊中的細線以下是加暗段（[ReaderV2Brightness.dimZone]），
@@ -139,8 +140,8 @@ class _BrightnessPillState extends State<_BrightnessPill> {
         fillOpacity > 0.5 && _height * level >= AppSpacing.md + _iconSize;
     return Semantics(
       slider: true,
-      label: '亮度',
-      value: widget.auto ? '跟隨系統' : _percent(level),
+      label: context.ui('亮度'),
+      value: widget.auto ? context.ui('跟隨系統') : _percent(level),
       increasedValue: _percent(_clamp(widget.level + _step)),
       decreasedValue: _percent(_clamp(widget.level - _step)),
       onIncrease: () => _nudge(_step),

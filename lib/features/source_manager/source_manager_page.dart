@@ -969,6 +969,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                                 child: DragOverflowText(
                                   child: UiText(
                                     g,
+                                    translate: false,
                                     maxLines: 1,
                                     style: AppTextStyles.bodyBase.copyWith(
                                       height: 1.3,

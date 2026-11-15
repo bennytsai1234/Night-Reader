@@ -11,6 +11,7 @@ import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_pan
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleEditorSheet({
@@ -138,11 +139,19 @@ class _ReaderV2ReplaceRuleEditorSheetState
           .then(
             (result) {
               if (!mounted || result == null) return;
-              setState(() => _testResult = result.display);
+              // 規則跑出來的字照原文，逾時這類 App 的說明照介面語言
+              // （ADR 0066）；結果區整段不再轉。
+              setState(
+                () => _testResult = result is ReplaceRulePreviewDone
+                    ? result.text
+                    : context.ui(result.display),
+              );
             },
             onError: (Object error) {
               if (!mounted) return;
-              setState(() => _testResult = failureMessage('執行測試', error));
+              setState(
+                () => _testResult = context.ui(failureMessage('執行測試', error)),
+              );
             },
           ),
     );

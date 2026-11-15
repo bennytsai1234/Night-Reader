@@ -67,6 +67,7 @@ class SearchHistoryView extends StatelessWidget {
               for (final find in provider.pastFinds)
                 GroupedRow(
                   title: find.description,
+                  translateTitle: false,
                   maxTitleLines: 1,
                   leading: Icon(
                     Icons.auto_awesome_outlined,

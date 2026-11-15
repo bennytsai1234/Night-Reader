@@ -76,7 +76,8 @@ class ExploreShowView extends StatelessWidget {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: GlassNavHeader(title: exploreName),
+      // 發現分類是書源寫的，照原文（ADR 0066）。
+      appBar: GlassNavHeader(title: exploreName, translateTitle: false),
       // 從 Scaffold 內取內距，top 才包含延伸到下方的頁首高度。
       body: Builder(
         builder: (bodyContext) => _buildBody(bodyContext, provider),

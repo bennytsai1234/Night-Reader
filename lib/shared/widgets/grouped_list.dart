@@ -299,7 +299,9 @@ class GroupedListView extends StatelessWidget {
     // 準備好前後都是同一串元件，只改屬性，進場的狀態才留得住。
     return Semantics(
       liveRegion: placeholder,
-      label: placeholder ? loadingLabel : null,
+      label: placeholder
+          ? UiLanguageText.convertNullable(context, loadingLabel)
+          : null,
       child: ExcludeSemantics(
         excluding: placeholder,
         child: _GroupedEntrance(

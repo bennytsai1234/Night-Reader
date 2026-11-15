@@ -1130,7 +1130,7 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
     final number = percent == null ? '…' : '$percent';
     // 四種樣子都讀「電量 N%」；還沒拿到電量時不讀。
     return Semantics(
-      label: percent == null ? null : '電量 $percent%',
+      label: percent == null ? null : context.ui('電量 $percent%'),
       excludeSemantics: true,
       child: _glyph(battery, percent, number),
     );
@@ -1244,7 +1244,7 @@ class _ReaderClockState extends State<_ReaderClock> {
   Widget build(BuildContext context) {
     final time = widget.format.format(_now);
     return Semantics(
-      label: '時間 $time',
+      label: context.ui('時間 $time'),
       excludeSemantics: true,
       child: DragOverflowText(child: Text(time, textAlign: widget.textAlign)),
     );

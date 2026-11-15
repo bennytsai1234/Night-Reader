@@ -5,25 +5,60 @@ import 'package:night_reader/core/services/chinese_display.dart';
 /// App 固定介面文字使用的繁簡，不影響書籍正文的繁簡轉換。
 ///
 /// [locale] 是使用者選的介面語言，null 表示跟隨系統；非中文系統用繁體。
-/// 跟隨系統時每次建立都重新看系統語言：系統語言改了 MaterialApp 會重建
-/// builder，這裡跟著換，介面文字只在繁簡真的變了時重建。
-class UiLanguageScope extends InheritedWidget {
-  UiLanguageScope({super.key, required Locale? locale, required super.child})
-    : simplified = prefersSimplified(
-        locale ?? WidgetsBinding.instance.platformDispatcher.locale,
-      );
+/// 跟隨系統時自己聽系統語言的變更：App 沒有宣告中文語系，Flutter 把繁體、
+/// 簡體都解析成預設的英文，MaterialApp 不會因為系統改繁簡而重建。介面文字
+/// 只在繁簡真的變了時重建。
+class UiLanguageScope extends StatefulWidget {
+  const UiLanguageScope({super.key, required this.locale, required this.child});
 
-  /// 介面文字顯示簡體。
-  final bool simplified;
+  final Locale? locale;
+  final Widget child;
 
   static bool isSimplified(BuildContext context) =>
       context
-          .dependOnInheritedWidgetOfExactType<UiLanguageScope>()
+          .dependOnInheritedWidgetOfExactType<_UiLanguageInherited>()
           ?.simplified ??
       prefersSimplified(WidgetsBinding.instance.platformDispatcher.locale);
 
   @override
-  bool updateShouldNotify(UiLanguageScope oldWidget) =>
+  State<UiLanguageScope> createState() => _UiLanguageScopeState();
+}
+
+class _UiLanguageScopeState extends State<UiLanguageScope>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    if (widget.locale == null) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => _UiLanguageInherited(
+    simplified: prefersSimplified(
+      widget.locale ?? WidgetsBinding.instance.platformDispatcher.locale,
+    ),
+    child: widget.child,
+  );
+}
+
+class _UiLanguageInherited extends InheritedWidget {
+  const _UiLanguageInherited({required this.simplified, required super.child});
+
+  final bool simplified;
+
+  @override
+  bool updateShouldNotify(_UiLanguageInherited oldWidget) =>
       simplified != oldWidget.simplified;
 }
 
@@ -73,7 +108,11 @@ String latestChapterLine(
 
 /// 只轉換 App 的固定介面文字；書籍內容依閱讀偏好的繁簡轉換設定。
 abstract final class UiLanguageText {
+  /// 最近轉過的介面字。字典開 App 載一次、不會換，結果可以一直沿用；
+  /// 測試外殼每項測試前用 [clearCache] 清掉（CODING_STANDARDS「測試」）。
   static final Map<String, String> _simplified = <String, String>{};
+
+  static void clearCache() => _simplified.clear();
   static const int _maxEntries = 4096;
 
   /// 介面是簡體時才登記字典載入完成時重建；繁體介面不轉換，閱讀偏好的

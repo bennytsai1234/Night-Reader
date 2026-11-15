@@ -578,7 +578,7 @@ class _SummaryStats extends StatelessWidget implements GroupedSkeletonItem {
         for (final (label, value) in stats)
           Expanded(
             child: Semantics(
-              label: '$label $value',
+              label: context.ui('$label $value'),
               excludeSemantics: true,
               child: Column(
                 children: [

@@ -79,7 +79,7 @@
 | [0063](0063-source-connections-skip-certificate-checks.md) | 連書源網站不驗憑證（書源請求、規則 JS、匯入、封面、書源用的瀏覽器），同 Legado；App 更新、同步、AI、字型照常驗，各用自己的連線 |
 | [0064](0064-check-searches-an-impossible-word.md) | 書源校驗多搜一個不可能有的詞，前 5 本書名一樣就判「搜尋失效」、交 AI 修；搜不到、出錯、逾時算過；搜尋失敗不標記書源 |
 | [0065](0065-ai-service-credential-persists-on-switch.md) | AI 服務切換主機時保留金鑰，刻意保留原本欄位，使用者自行核對新服務；舊憑證可能送到新主機 |
-| [0066](0066-interface-language-follows-system-or-selection.md) | 介面語言三選一（跟隨系統／繁體／简体）：介面字照它轉，書的資料照閱讀偏好的繁簡轉換，使用者與書源寫的字照原文；通知照介面語言；不同步、備份帶著 |
+| [0066](0066-interface-language-follows-system-or-selection.md) | 介面語言三選一（跟隨系統／繁體／简体）：介面字照它轉，書的資料照閱讀偏好的繁簡轉換，使用者與書源寫的字照原文，句子裡夾著的名稱跟著句子；通知照介面語言；不同步、備份帶著 |
 
 ## 工程與流程
 

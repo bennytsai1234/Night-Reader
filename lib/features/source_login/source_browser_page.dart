@@ -127,6 +127,7 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
       context: context,
       title: '用其他 App 開啟？',
       message: request.url,
+      translateMessage: false,
       confirmLabel: '開啟',
     );
     if (open && mounted) {
@@ -206,7 +207,9 @@ class _SourceBrowserPageState extends State<SourceBrowserPage> {
         backgroundColor: AppChrome.of(context).groupedBackground,
         appBar: GlassNavHeader(
           readable: false,
+          // 書源名稱、網頁標題，或呼叫端組好的「登入 · 書源名稱」（ADR 0066）。
           title: widget.title,
+          translateTitle: false,
           leading: GlassIconButton(
             icon: Icons.arrow_back_ios_new_rounded,
             tooltip: '返回',

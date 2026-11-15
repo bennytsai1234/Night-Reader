@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 書籍詳情底部的浮動玻璃膠囊：「開始閱讀／繼續閱讀」，有聲書是「開始
 /// 收聽／繼續收聽」。目錄捲到哪都按得到。
@@ -58,7 +59,7 @@ class BookReadCapsule extends StatelessWidget {
             heightFactor: 1,
             child: Semantics(
               button: true,
-              label: label,
+              label: context.ui(label),
               excludeSemantics: true,
               child: PressScale(
                 scale: 0.97,

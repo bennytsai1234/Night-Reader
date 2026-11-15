@@ -67,6 +67,8 @@ class CoverGridItem extends StatelessWidget {
           DragOverflowText(
             child: UiText(
               isDefault ? '恢復預設' : (result.book.originName ?? '未知來源'),
+              // 書源名稱照原文（ADR 0066）。
+              translate: isDefault || result.book.originName == null,
               style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
               maxLines: 1,
             ),

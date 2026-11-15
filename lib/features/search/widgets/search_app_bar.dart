@@ -9,6 +9,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import '../search_provider.dart';
 
 import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// SearchAppBar - 搜尋頁面頂部欄
 /// (對標 Legado SearchActivity 的 TitleBar + SearchView)
@@ -200,10 +201,10 @@ class _AiFindAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: 'AI 找書',
+    message: context.ui('AI 找書'),
     child: Semantics(
       button: true,
-      label: 'AI 找書',
+      label: context.ui('AI 找書'),
       child: PressScale(
         scale: 0.9,
         onTap: onPressed,

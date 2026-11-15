@@ -16,6 +16,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2SettingsSheets {
   const ReaderV2SettingsSheets._();
@@ -178,6 +179,7 @@ class _ReaderStyleSelector extends StatelessWidget
             children: [
               for (final style in AppStyle.values)
                 _swatch(
+                  context,
                   style,
                   style.paletteFor(
                     brightness,
@@ -200,6 +202,7 @@ class _ReaderStyleSelector extends StatelessWidget
   }
 
   Widget _swatch(
+    BuildContext context,
     AppStyle style,
     StylePalette palette, {
     required bool selected,
@@ -207,7 +210,7 @@ class _ReaderStyleSelector extends StatelessWidget
     required VoidCallback onTap,
   }) {
     return Semantics(
-      label: style.label,
+      label: context.ui(style.label),
       selected: selected,
       button: true,
       excludeSemantics: true,

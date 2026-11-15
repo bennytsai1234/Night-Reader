@@ -10,6 +10,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class CrashLogPage extends StatefulWidget {
   const CrashLogPage({
@@ -100,7 +101,7 @@ class _CrashLogPageState extends State<CrashLogPage> {
         return Center(
           child: Semantics(
             liveRegion: true,
-            label: '正在載入崩潰日誌',
+            label: context.ui('正在載入崩潰日誌'),
             child: ExcludeSemantics(child: CircularProgressIndicator()),
           ),
         );

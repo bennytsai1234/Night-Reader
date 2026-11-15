@@ -15,6 +15,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import '../source_manager_provider.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 編輯模式左側勾選圈佔用的寬度（圈 22 + 間距）。
 const double _kCheckSlotWidth = 22 + AppGrouped.iconGap;
@@ -132,7 +133,7 @@ class SourceItemTile extends StatelessWidget {
                         mutationEnabled: false,
                         showSeparator: false,
                         // 預覽不接收觸控，開關保持一般外觀而非停用的淡色。
-                        trailing: _enabledSwitch(),
+                        trailing: _enabledSwitch(context),
                       ),
                     ),
                   ),
@@ -148,7 +149,10 @@ class SourceItemTile extends StatelessWidget {
                         ? ReorderableDragStartListener(
                             index: index!,
                             child: Semantics(
-                              label: '拖曳調整 ${source.bookSourceName} 順序',
+                              label:
+                                  '${context.ui('拖曳調整')} '
+                                  '${source.bookSourceName} '
+                                  '${context.ui('順序')}',
                               child: SizedBox.square(
                                 dimension: AppGrouped.rowMinHeight,
                                 child: Icon(
@@ -160,7 +164,7 @@ class SourceItemTile extends StatelessWidget {
                             ),
                           )
                         : null)
-                  : _enabledSwitch(),
+                  : _enabledSwitch(context),
             ),
           ),
         );
@@ -228,9 +232,9 @@ class SourceItemTile extends StatelessWidget {
     );
   }
 
-  Widget _enabledSwitch() {
+  Widget _enabledSwitch(BuildContext context) {
     return Semantics(
-      label: '${source.bookSourceName} 啟用',
+      label: '${source.bookSourceName} ${context.ui('啟用')}',
       child: GroupedSwitch(
         value: source.enabled,
         onChanged: mutationEnabled ? onEnabledChanged : null,
@@ -608,6 +612,7 @@ class _GroupCapsule extends StatelessWidget {
         child: DragOverflowText(
           child: UiText(
             label,
+            translate: false,
             maxLines: 1,
             style: AppTextStyles.labelXs.copyWith(
               height: 1.15,

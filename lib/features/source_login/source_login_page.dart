@@ -32,6 +32,8 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'source_browser_page.dart';
 import 'source_login_form.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 /// 開 [source] 的登入（ADR 0038），關掉後傳回登入資料有沒有變（表單內容、
 /// 登入標頭、Cookie）。有變而且現在有登入資料時，拿掉書源的「需要登入」
 /// 標記。呼叫端照結果重抓失敗的東西（閱讀器重抓這一章、詳情重抓目錄）。
@@ -58,6 +60,8 @@ Future<bool> openSourceLogin(
   if (beforePush != null && !await beforePush()) return false;
   if (!context.mounted) return false;
   final navigator = Navigator.of(context);
+  // 「登入」照介面語言，書源名稱照原文；網頁頁首整段不再轉（ADR 0066）。
+  final loginTitle = '${context.ui('登入')} · ${source.bookSourceName}';
   final form = source.loginForm;
   final loginUrl = source.loginUrl?.trim() ?? '';
   final bool attempted;
@@ -68,7 +72,7 @@ Future<bool> openSourceLogin(
         builder: (_) => SourceBrowserPage(
           sourceUrl: source.bookSourceUrl,
           url: NetworkUtils.getAbsoluteURL(source.bookSourceUrl, loginUrl),
-          title: '登入 · ${source.bookSourceName}',
+          title: loginTitle,
           headers: source.getHeaderMapSync(),
         ),
       ),
@@ -364,7 +368,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         builder: (_) => SourceBrowserPage(
           sourceUrl: widget.source.bookSourceUrl,
           url: url,
-          title: '登入 · ${widget.source.bookSourceName}',
+          title: '${context.ui('登入')} · ${widget.source.bookSourceName}',
           headers: widget.source.getHeaderMapSync(),
         ),
       ),
@@ -378,6 +382,7 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       context: context,
       title: '登入標頭',
       message: header.isEmpty ? '這個書源沒有存登入標頭' : header,
+      translateMessage: header.isEmpty,
       actions: [
         if (header.isNotEmpty) const AppAlertAction(label: '複製', value: true),
         AppAlertAction(
@@ -491,7 +496,9 @@ class _SourceLoginPageState extends State<SourceLoginPage>
     if (message.long || text.contains('\n') || text.length > 40) {
       final shown = showAppAlert<void>(
         context: context,
+        // 書源程式給的訊息照原文（ADR 0066）。
         message: text,
+        translateMessage: false,
         actions: const [
           AppAlertAction(label: '好', value: null, isDefault: true),
         ],
@@ -570,7 +577,8 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       extendBodyBehindAppBar: true,
       backgroundColor: chrome.groupedBackground,
       appBar: GlassNavHeader(
-        title: '登入 · ${widget.source.bookSourceName}',
+        title: '${context.ui('登入')} · ${widget.source.bookSourceName}',
+        translateTitle: false,
         actions: [
           GlassMenuButton<String>(
             entriesBuilder: (_) => [

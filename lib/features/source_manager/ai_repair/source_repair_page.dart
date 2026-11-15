@@ -494,6 +494,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       showAppAlert<void>(
         context: context,
         title: item.source.bookSourceName,
+        translateTitle: false,
         message: item.detail ?? '',
         actions: const [
           AppAlertAction(label: '知道了', value: null, isDefault: true),

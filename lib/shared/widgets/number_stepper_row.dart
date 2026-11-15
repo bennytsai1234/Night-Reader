@@ -278,8 +278,8 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
     final increased = _normalized(_value + widget.step);
     final decreased = _normalized(_value - widget.step);
     return Semantics(
-      label: widget.label,
-      value: _displayText,
+      label: UiLanguageText.convert(context, widget.label),
+      value: UiLanguageText.convert(context, _displayText),
       increasedValue: _canIncrease ? _withUnit(_format(increased)) : null,
       decreasedValue: _canDecrease ? _withUnit(_format(decreased)) : null,
       onIncrease: _canIncrease ? () => _stepBy(1) : null,

@@ -3,6 +3,7 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 Future<bool> launchExternalUrlWithFeedback(
   BuildContext context,
@@ -30,7 +31,7 @@ Future<bool> launchExternalUrlWithFeedback(
       SnackBar(
         content: const UiText('無法開啟連結'),
         action: SnackBarAction(
-          label: '複製連結',
+          label: context.ui('複製連結'),
           onPressed: () async {
             try {
               await Clipboard.setData(ClipboardData(text: url));

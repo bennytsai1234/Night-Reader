@@ -22,6 +22,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});
@@ -389,7 +390,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                     children: [
                       DragOverflowText(
                         child: UiText(
-                          _name,
+                          rule.name.isEmpty ? context.ui(_name) : _name,
                           translate: false,
                           maxLines: 1,
                           style: _nameStyle.copyWith(color: scheme.onSurface),
@@ -434,7 +435,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Semantics(
-                  label: '啟用 ${rule.name}',
+                  label: '${context.ui('啟用')} ${rule.name}',
                   child: GroupedSwitch(
                     value: rule.isEnabled,
                     onChanged: onToggle,

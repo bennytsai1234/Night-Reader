@@ -71,6 +71,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_progress_sync.
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2Page extends StatefulWidget {
   const ReaderV2Page({
@@ -894,7 +895,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         content: UiText(message),
         action: action == null
             ? null
-            : SnackBarAction(label: action.label, onPressed: action.onPressed),
+            : SnackBarAction(
+                label: context.ui(action.label),
+                onPressed: action.onPressed,
+              ),
         // 帶按鈕的提示預設不會自己收起，會一直蓋在正文上。
         persist: false,
         duration: duration,

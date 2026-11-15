@@ -7,6 +7,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_pal
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 漫畫閱讀選單下方那一塊要的進度：第幾話、本話第幾張、共幾張。
 @immutable
@@ -215,13 +216,13 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                 child: SizedBox(
                   height: AppGlass.buttonSize,
                   child: Semantics(
-                    label: '本話第幾張',
+                    label: context.ui('本話第幾張'),
                     child: Slider(
                       value: count > 1 ? shown.toDouble() : 0,
                       max: count > 1 ? (count - 1).toDouble() : 1,
                       divisions: count > 1 ? count - 1 : null,
                       semanticFormatterCallback: (v) =>
-                          '第 ${v.round() + 1} / $count 張',
+                          context.ui('第 ${v.round() + 1} / $count 張'),
                       onChanged: count > 1
                           ? (v) => setState(() => _scrubbing = v.round())
                           : null,

@@ -964,6 +964,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final action = await showAppAlert<String>(
       context: context,
       title: b.originName,
+      translateTitle: false,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

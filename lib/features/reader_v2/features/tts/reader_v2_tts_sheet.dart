@@ -17,6 +17,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPlaying;
@@ -245,7 +246,7 @@ class _HighlightSectionState extends State<_HighlightSection> {
               ),
               Expanded(
                 child: Semantics(
-                  label: '高亮深淺',
+                  label: context.ui('高亮深淺'),
                   child: Slider(
                     value: strength,
                     min: ReaderV2HighlightStrength.min,
@@ -339,7 +340,7 @@ class _HighlightColorRow extends StatelessWidget {
           Semantics(
             button: true,
             selected: option == settings.highlightColor,
-            label: option.label,
+            label: context.ui(option.label),
             // 色票下方的文字和這個標籤相同，排除子樹才不會念兩次；點擊動作
             // 也跟著被排除，要在這裡補上。
             excludeSemantics: true,

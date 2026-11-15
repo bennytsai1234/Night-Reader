@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -41,7 +42,11 @@ class SearchSuggestionView extends StatelessWidget {
           children: [
             for (final suggestion in suggestions)
               GroupedRow(
-                title: suggestion.word,
+                // 書架上的書名照閱讀偏好，搜尋紀錄照原文（ADR 0066）。
+                title: suggestion.fromBookshelf
+                    ? context.zh(suggestion.word)
+                    : suggestion.word,
+                translateTitle: false,
                 leading: Icon(
                   suggestion.fromBookshelf
                       ? Icons.auto_stories_outlined

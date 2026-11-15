@@ -630,6 +630,7 @@ class _SourceRow extends StatelessWidget {
               child: DragOverflowText(
                 child: UiText(
                   name,
+                  translate: false,
                   maxLines: 1,
                   style: AppTextStyles.bodyBase.copyWith(
                     height: 1.3,

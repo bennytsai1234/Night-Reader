@@ -19,6 +19,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleSheet({
@@ -173,7 +174,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       // 時作廢，傳回 null。
       final result = await _preview.run(rules, text);
       if (!mounted || result == null) return;
-      setState(() => _testResult = result.display);
+      // 規則跑出來的字照原文，逾時這類 App 的說明照介面語言（ADR 0066）。
+      setState(
+        () => _testResult = result is ReplaceRulePreviewDone
+            ? result.text
+            : context.ui(result.display),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -319,7 +325,8 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             children: [
               GroupedContent(
                 child: UiText(
-                  result.isEmpty ? '（空白）' : result,
+                  result.isEmpty ? context.ui('（空白）') : result,
+                  translate: false,
                   style: AppTextStyles.bodySm.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),

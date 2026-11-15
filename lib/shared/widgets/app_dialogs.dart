@@ -39,6 +39,8 @@ Future<T?> showAppAlert<T>({
   Widget? content,
   required List<AppAlertAction<T>> actions,
   bool barrierDismissible = true,
+  bool translateTitle = true,
+  bool translateMessage = true,
 }) {
   return _showAlertRoute<T>(
     context: context,
@@ -46,6 +48,8 @@ Future<T?> showAppAlert<T>({
     builder: (context) => AppAlert<T>(
       title: title,
       message: message,
+      translateTitle: translateTitle,
+      translateMessage: translateMessage,
       content: content,
       actions: actions,
     ),
@@ -90,7 +94,7 @@ Future<T?> _showAlertRoute<T>({
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
-    barrierLabel: '關閉',
+    barrierLabel: UiLanguageText.convert(context, '關閉'),
     barrierColor: AppChrome.of(context).barrier,
     transitionDuration: AppMotion.menu,
     pageBuilder: (context, _, _) => builder(context),
@@ -153,11 +157,15 @@ Future<bool> showAppConfirm({
   String confirmLabel = '確定',
   String cancelLabel = '取消',
   bool destructive = false,
+  bool translateTitle = true,
+  bool translateMessage = true,
 }) async {
   final result = await showAppAlert<bool>(
     context: context,
     title: title,
     message: message,
+    translateTitle: translateTitle,
+    translateMessage: translateMessage,
     content: content,
     actions: [
       AppAlertAction(label: cancelLabel, value: false),
@@ -182,10 +190,17 @@ class AppAlert<T> extends StatelessWidget {
     this.content,
     required this.actions,
     this.onAction,
+    this.translateTitle = true,
+    this.translateMessage = true,
   });
 
   final String? title;
   final String? message;
+
+  /// 標題或說明整段是資料（書源名稱、書源傳來的訊息、網址）時給 false，
+  /// 不跟介面語言轉換。句子裡夾著名稱的照介面語言整句轉（ADR 0066）。
+  final bool translateTitle;
+  final bool translateMessage;
   final Widget? content;
   final List<AppAlertAction<T>> actions;
 
@@ -313,6 +328,7 @@ class AppAlert<T> extends StatelessWidget {
                               header: true,
                               child: UiText(
                                 title!,
+                                translate: translateTitle,
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.titleMd.copyWith(
                                   color: scheme.onSurface,
@@ -324,6 +340,7 @@ class AppAlert<T> extends StatelessWidget {
                               const SizedBox(height: AppSpacing.sm),
                             UiText(
                               message!,
+                              translate: translateMessage,
                               textAlign: TextAlign.center,
                               style: AppTextStyles.bodySm.copyWith(
                                 color: scheme.onSurface.withValues(alpha: 0.8),
@@ -427,11 +444,15 @@ class AlertCheckRow extends StatelessWidget {
     this.subtitle,
     required this.value,
     required this.onChanged,
+    this.translateTitle = true,
   });
 
   final String title;
   final String? subtitle;
   final bool value;
+
+  /// [title] 是分組名稱這類資料時給 false（ADR 0066）。
+  final bool translateTitle;
   final ValueChanged<bool>? onChanged;
 
   @override
@@ -458,6 +479,7 @@ class AlertCheckRow extends StatelessWidget {
                     children: [
                       UiText(
                         title,
+                        translate: translateTitle,
                         style: AppTextStyles.bodyBase.copyWith(
                           height: 1.3,
                           color: scheme.onSurface,

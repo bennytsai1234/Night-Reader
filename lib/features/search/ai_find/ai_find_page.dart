@@ -418,8 +418,9 @@ class _AiFindPageState extends State<AiFindPage> {
       footer: _sentTo,
       children: [
         GroupedRow(
+          // 使用者自己寫的描述照原文（ADR 0066）。
           translateTitle: false,
-          title: context.zh(session.description),
+          title: session.description,
           subtitle: '深度：${session.depth.label}',
           showChevron: false,
           maxTitleLines: 3,
@@ -499,7 +500,7 @@ class _AiFindPageState extends State<AiFindPage> {
         children: [
           GroupedRow(
             translateTitle: false,
-            title: context.zh(record.description),
+            title: record.description,
             subtitle:
                 '深度：${depth.label} · ${record.rounds} 輪 · '
                 '${aiFindTokens(record.tokens)}',

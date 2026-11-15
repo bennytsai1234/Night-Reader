@@ -21,6 +21,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 閱讀紀錄頁的「統計」（`BookmarksPage`）：頂端今天、本週、總計三格，下面
 /// 各書讀了多久，含有聲書的收聽時間（docs/design/screens.md）。
@@ -399,7 +400,7 @@ class _StatTile extends StatelessWidget {
     final (value, unit) = _valueAndUnit;
     return Semantics(
       container: true,
-      label: '$label $value $unit',
+      label: context.ui('$label $value $unit'),
       excludeSemantics: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: _padding),

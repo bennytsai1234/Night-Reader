@@ -19,6 +19,8 @@ import 'ai_repair_settings_page.dart';
 import 'repair_runs.dart';
 import 'source_repair_page.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 /// 從書源管理開始 AI 修一個書源：這個書源正在修、或修完還沒看過結果時推回
 /// 那一頁（ADR 0058）；有 AI 服務就開始修、推修復頁，返回時照修；沒有時問要
 /// 去設定、複製給 AI 或取消（docs/design/screens.md「AI 修書源」）。書源管理在
@@ -315,7 +317,8 @@ class _AiRepairPageState extends State<AiRepairPage> {
           child: Scaffold(
             extendBodyBehindAppBar: true,
             appBar: GlassNavHeader(
-              title: 'AI 修復 · ${job.original.bookSourceName}',
+              title: '${context.ui('AI 修復')} · ${job.original.bookSourceName}',
+              translateTitle: false,
               actions: [
                 GlassMenuButton<String>(
                   entriesBuilder: (_) => [

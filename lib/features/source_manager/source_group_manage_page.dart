@@ -17,6 +17,8 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'source_manager_provider.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 class SourceGroupManagePage extends StatelessWidget {
   const SourceGroupManagePage({super.key});
 
@@ -344,7 +346,8 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(
-        title: '加入「${widget.group}」',
+        title: '${context.ui('加入')}「${widget.group}」',
+        translateTitle: false,
         actions: [
           GlassTextButton(
             label: _selected.isEmpty ? '完成' : '完成（${_selected.length}）',

@@ -21,6 +21,7 @@ import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 /// 閱讀器左側的面板：「目錄」「書籤」「標註」三個分頁，頂端的分段切換。
 class ReaderV2ChaptersDrawer extends StatefulWidget {
@@ -496,7 +497,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
             itemCount: rows.length,
             itemBuilder: (context, index) {
               final (:bookmark, :chapter) = rows[index];
-              final excerpt = bookmark.excerpt;
+              final excerpt = context.zh(bookmark.excerpt);
               return SwipeActions(
                 key: ValueKey(bookmark.id),
                 enabled: widget.onBookmarkDelete != null,
@@ -518,7 +519,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                       maxTitleLines: 2,
                       translateSubtitle: false,
                       subtitle: widget.bookmarkChapter == null
-                          ? bookmark.chapterTitle
+                          ? context.zh(bookmark.chapterTitle)
                           : widget.titleFor(chapter),
                       maxSubtitleLines: 1,
                       showChevron: false,
@@ -601,13 +602,13 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
                     GroupedRow(
                       leading: HighlightColorBar(color: highlight.color),
                       translateTitle: false,
-                      title: highlight.quote,
+                      title: context.zh(highlight.quote),
                       maxTitleLines: 3,
                       // 章名一行，有備忘時接在下面（最多兩行）。
                       translateSubtitle: false,
                       subtitle: [
                         widget.highlightChapter == null
-                            ? highlight.chapterTitle
+                            ? context.zh(highlight.chapterTitle)
                             : widget.titleFor(chapter),
                         if (highlight.note.isNotEmpty) highlight.note,
                       ].join('\n'),

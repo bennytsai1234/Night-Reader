@@ -40,6 +40,8 @@ import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 import 'audiobook_player.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 /// 有聲書播放器（`docs/design/audiobook.md`「播放器」）：集數清單是主體，
 /// 控制在底部的浮動玻璃膠囊，膠囊上方是倍速、定時、播放模式三顆圓鈕。
@@ -116,7 +118,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
         action: remedy == null
             ? null
             : SnackBarAction(
-                label: remedy.label,
+                label: context.ui(remedy.label),
                 onPressed: () {
                   if (mounted) unawaited(_runRemedy(context, remedy));
                 },
@@ -208,7 +210,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
             backgroundColor: chrome.groupedBackground,
             appBar: GlassNavHeader(
               translateTitle: false,
-              title: book.name,
+              title: context.zh(book.name),
               actions: [_buildMoreButton(context)],
             ),
             body: Stack(
@@ -462,7 +464,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
             chapters.length,
             chapter.isVolume
                 ? TocVolumeRow(
-                    title: chapter.title,
+                    title: context.zh(chapter.title),
                     count: _volumeSize(chapters, i),
                     unit: '集',
                   )
@@ -621,7 +623,7 @@ class _BookHeader extends StatelessWidget {
         coverWidth -
         AppSpacing.lg;
     final title = TextPainter(
-      text: TextSpan(text: book.name, style: _titleStyle),
+      text: TextSpan(text: context.zh(book.name), style: _titleStyle),
       textDirection: TextDirection.ltr,
       textScaler: scaler,
       maxLines: 2,
@@ -636,7 +638,7 @@ class _BookHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final byline = [
-      book.getRealAuthor(),
+      context.zh(book.getRealAuthor()),
       sourceName,
     ].where((text) => text.trim().isNotEmpty).join(' · ');
     return Container(
@@ -675,7 +677,7 @@ class _BookHeader extends StatelessWidget {
               children: [
                 DragOverflowText(
                   child: UiText(
-                    book.name,
+                    context.zh(book.name),
                     translate: false,
                     maxLines: 2,
                     style: AppTextStyles.titleMd.copyWith(
@@ -842,7 +844,7 @@ class _EpisodeRow extends StatelessWidget {
                 Expanded(
                   child: DragOverflowText(
                     child: UiText(
-                      chapter.title,
+                      context.zh(chapter.title),
                       translate: false,
                       maxLines: 1,
                       style: AppTextStyles.bodyBase.copyWith(
@@ -959,7 +961,7 @@ class _ControlDock extends StatelessWidget {
                   children: [
                     DragOverflowText(
                       child: UiText(
-                        player.chapter?.title ?? '',
+                        context.zh(player.chapter?.title ?? ''),
                         translate: false,
                         maxLines: 1,
                         style: AppTextStyles.uiMd.copyWith(
@@ -1140,7 +1142,7 @@ class _Controls extends StatelessWidget {
         Semantics(
           button: true,
           // 接著聽一律叫「繼續」，同朗讀與下載。
-          label: player.playing ? '暫停' : '繼續',
+          label: context.ui(player.playing ? '暫停' : '繼續'),
           excludeSemantics: true,
           child: PressScale(
             onTap: () => unawaited(player.toggle()),

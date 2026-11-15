@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/source_debug_service.dart';
 
 import 'source_debug_provider.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 class SourceDebugPage extends StatefulWidget {
   final BookSource source;
   final String debugKey;
@@ -94,7 +96,8 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
             appBar: GlassNavHeader(
               // 除錯日誌照整個畫面寬，長網址少換行。
               readable: false,
-              title: '除錯：${widget.source.bookSourceName}',
+              title: '${context.ui('除錯：')}${widget.source.bookSourceName}',
+              translateTitle: false,
               actions: [
                 GlassIconButton(
                   icon: Icons.copy_rounded,
@@ -106,7 +109,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
                 ),
                 busy
                     ? Semantics(
-                        label: '除錯中',
+                        label: context.ui('除錯中'),
                         liveRegion: true,
                         child: const SizedBox.square(
                           dimension: AppGlass.buttonSize,

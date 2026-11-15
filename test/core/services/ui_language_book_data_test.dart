@@ -19,6 +19,8 @@ import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
 import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 import 'package:provider/provider.dart';
 
@@ -46,6 +48,10 @@ void main() {
     ),
     home: home,
   );
+
+  // 介面語言把資料轉成簡體時的樣子。`UiText` 自己也是 `Text`，帶著轉換前的
+  // 原文，所以只找原文分不出有沒有被轉，要確認轉換後的字不在畫面上。
+  const converted = '灯下读过的话';
 
   // (閱讀偏好的繁簡轉換, 存的資料, 該顯示的樣子)
   const cases = [(0, '燈下讀過的話', '燈下讀過的話'), (1, '灯下读过的话', '燈下讀過的話')];
@@ -93,6 +99,7 @@ void main() {
         }
 
         expect(find.text(shown), findsOneWidget);
+        expect(find.text(converted), findsNothing, reason: '沒被介面語言轉成簡體');
         expect(find.text('第一章 燈下'), findsOneWidget);
         expect(find.text('夜雨聽書'), findsOneWidget);
         expect(find.text('书签'), findsWidgets, reason: '介面字照介面語言');
@@ -116,6 +123,7 @@ void main() {
         ),
       );
       expect(find.text(shown), findsOneWidget);
+      expect(find.text(converted), findsNothing, reason: '沒被介面語言轉成簡體');
     }
   });
 
@@ -151,8 +159,42 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text(shown), findsOneWidget);
+      expect(find.text(converted), findsNothing, reason: '沒被介面語言轉成簡體');
     }
     await tester.pumpWidget(const SizedBox.shrink());
     service.tasks.clear();
+  });
+  testWidgets('對話框：標題是資料時照原文，說明是介面字照介面語言', (tester) async {
+    await tester.pumpWidget(
+      simplifiedApp(
+        const AppAlert<void>(
+          title: '燈下讀過的話',
+          translateTitle: false,
+          message: '書源設定',
+          actions: [AppAlertAction(label: '關閉', value: null)],
+        ),
+      ),
+    );
+    expect(find.text('燈下讀過的話'), findsOneWidget);
+    expect(find.text(converted), findsNothing);
+    expect(find.text('书源设定'), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
+  });
+
+  testWidgets('替換規則的測試結果是規則跑出來的字，照原文', (tester) async {
+    final input = TextEditingController(text: '燈下讀過的話');
+    addTearDown(input.dispose);
+    await tester.pumpWidget(
+      simplifiedApp(
+        Scaffold(
+          body: ReplaceEditTestPanel(
+            testInputCtrl: input,
+            testResult: '燈下讀過的話',
+          ),
+        ),
+      ),
+    );
+    expect(find.text(converted), findsNothing);
+    expect(find.text('替换结果'), findsOneWidget, reason: '組標題照介面語言');
   });
 }

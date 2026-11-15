@@ -16,6 +16,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 編輯器分頁標籤，順序對應 [TabBarView] 的子頁。
 const List<String> _tabLabels = ['基礎', '搜尋', '發現', '詳情', '目錄', '正文'];
@@ -371,7 +372,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
             onPressed: _isSaving ? null : _openDebug,
           ),
           Semantics(
-            label: '儲存書源',
+            label: context.ui('儲存書源'),
             child: GlassTextButton(
               label: _isSaving ? '儲存中…' : '儲存',
               emphasized: true,

@@ -31,6 +31,8 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'reading_stats_view.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 /// 「我的 → 閱讀紀錄」：頂端分段切換書籤、標註與統計。書籤與標註都是一本書
 /// 一組（最近留過的書在上），組裡照在書裡的先後排。點了開那本書、跳過去；
 /// 書不在手機上時用書名搜尋。往左滑刪除，提示可「復原」。標註可以匯出。
@@ -261,7 +263,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       ..showSnackBar(
         SnackBar(
           content: UiText(message),
-          action: SnackBarAction(label: '復原', onPressed: undo),
+          action: SnackBarAction(label: context.ui('復原'), onPressed: undo),
         ),
       );
   }

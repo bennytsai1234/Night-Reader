@@ -62,4 +62,24 @@ void main() {
     );
     expect(find.text('書架'), findsOneWidget);
   });
+  testWidgets('跟隨系統：App 開著改系統語言，介面字跟著換', (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'TW');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) =>
+            UiLanguageScope(locale: null, child: child!),
+        home: const Scaffold(body: UiText('書架 搜尋')),
+      ),
+    );
+    expect(find.text('书架 搜寻'), findsNothing);
+
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+    await tester.pump();
+    expect(find.text('书架 搜寻'), findsOneWidget);
+
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'TW');
+    await tester.pump();
+    expect(find.text('书架 搜寻'), findsNothing);
+  });
 }
