@@ -207,6 +207,21 @@ void main() {
           '${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒，'
           '合併後 ${result.books.length} 本',
         );
+        final counts = [0, 0, 0];
+        for (final tier in result.tiers) {
+          counts[tier.clamp(0, 2)]++;
+        }
+        debugPrint(
+          '#####   完全相符 ${counts[0]}、部分相符 ${counts[1]}、其他結果 ${counts[2]}',
+        );
+        for (final (i, book) in result.books.indexed) {
+          if (result.tiers[i] == 2) {
+            debugPrint(
+              '#####   其他結果第一本：${book.name}｜${book.origins.length} 個書源｜${(book.intro ?? '').replaceAll('\n', ' ').substring(0, (book.intro ?? '').length.clamp(0, 40))}',
+            );
+            break;
+          }
+        }
         for (final book in result.books.take(5)) {
           debugPrint(
             '#####   ${book.name}｜${book.author}｜${book.origins.length} 個書源',

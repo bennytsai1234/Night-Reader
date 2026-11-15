@@ -381,14 +381,26 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
           command.kind,
           _cancel,
         );
+        // 只給完全相符與部分相符（使用者 2026-11-15）：其他結果多半是不理
+        // 關鍵字、回固定書單的書源給的，「咒術迴戰」682 本裡有 458 本。
+        final books = <SearchBook>[];
+        final tiers = <int>[];
+        for (final (i, book) in result.books.indexed) {
+          final tier = i < result.tiers.length ? result.tiers[i] : 2;
+          if (tier > 1) continue;
+          books.add(book);
+          tiers.add(tier);
+        }
+        final dropped = result.books.length - books.length;
         return (
-          books: result.books,
-          tiers: result.tiers,
+          books: books,
+          tiers: tiers,
           facts:
               '送了 ${result.sources} 個書源'
               '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}'
               '${result.pending > 0 ? '，${result.pending} 個到時限還沒回來、不等了' : ''}，'
-              '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒',
+              '花 ${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} 秒'
+              '${dropped > 0 ? '；另有 $dropped 本書名與作者都不含這個詞，沒列出' : ''}',
         );
       });
 
@@ -612,8 +624,8 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     return book;
   }
 
-  /// 搜尋頁的三段（[AiFindSearchResult.tiers]）。
-  static const List<String> _tierLabels = ['完全相符', '部分相符', '其他結果'];
+  /// 搜尋頁的分段（[AiFindSearchResult.tiers]）；其他結果不給 AI。
+  static const List<String> _tierLabels = ['完全相符', '部分相符'];
 
   /// [tiers] 給了時（搜尋），照搜尋頁在每段第一本前面標段名。
   String _bookPage(

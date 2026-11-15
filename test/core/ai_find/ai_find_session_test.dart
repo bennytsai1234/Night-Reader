@@ -40,6 +40,9 @@ class _Library implements AiFindLibrary {
   Completer<void>? searchGate;
   String? detailIntro;
   int pending = 0;
+
+  /// 指定某本在搜尋頁的哪一段。
+  Map<String, int> tierOf = {};
   bool searchCancelled = false;
 
   @override
@@ -63,15 +66,8 @@ class _Library implements AiFindLibrary {
     final books = results[keyword] ?? const <SearchBook>[];
     return (
       books: books,
-      // 同搜尋頁：書名等於關鍵字是完全相符、含關鍵字是部分相符。
-      tiers: [
-        for (final book in books)
-          book.name == keyword
-              ? 0
-              : book.name.contains(keyword)
-              ? 1
-              : 2,
-      ],
+      // 沒指定的都算部分相符（假書庫的書名不一定含關鍵字）。
+      tiers: [for (final book in books) tierOf[book.name] ?? 1],
       sources: 3,
       failed: 1,
       pending: pending,
@@ -497,9 +493,12 @@ void main() {
   test('search results are split into the search page tiers, each book '
       'shows the start of its intro, and sources cut off by the time limit '
       'are counted', () async {
-    final library = _Library({
-      '咒術迴戰': [_book('咒術迴戰'), _book('咒術迴戰：反派第一人'), _book('我在忍界搞咒術')],
-    })..pending = 40;
+    final library =
+        _Library({
+            '咒術迴戰': [_book('咒術迴戰'), _book('咒術迴戰：反派第一人'), _book('我在忍界搞咒術')],
+          })
+          ..pending = 40
+          ..tierOf = {'咒術迴戰': 0, '咒術迴戰：反派第一人': 1, '我在忍界搞咒術': 2};
     final ai = _Ai([
       _calls([
         ('search', {'keyword': '咒術迴戰'}),
@@ -514,9 +513,8 @@ void main() {
       startsWith('b1｜咒術迴戰｜'),
       '## 部分相符',
       startsWith('b2｜咒術迴戰：反派第一人｜'),
-      '## 其他結果',
-      startsWith('b3｜我在忍界搞咒術｜'),
     ]);
+    expect(lines.first, contains('另有 1 本書名與作者都不含這個詞，沒列出'));
     expect(lines[2], endsWith('｜簡介：咒術迴戰 的簡介'));
   });
 
