@@ -123,7 +123,9 @@ class _Library implements AiFindLibrary {
       ? (
           title: '鏈鋸人',
           names: {'台灣': '鏈鋸人', '中國大陸': '电锯人'},
+          aliases: ['電鋸人', 'Chainsaw Man'],
           intro: '《鏈鋸人》是由日本漫畫家藤本樹所創作的黑暗奇幻少年漫畫。',
+          others: ['鏈鋸人角色列表'],
         )
       : null;
 
@@ -543,6 +545,8 @@ void main() {
     expect(results.first, contains('條目《鏈鋸人》'));
     expect(results.first, contains('中國大陸：电锯人'));
     expect(results.first, contains('開頭：《鏈鋸人》是由日本漫畫家'));
+    expect(results.first, contains('別名（轉到這個條目的名稱）：電鋸人、Chainsaw Man'));
+    expect(results.first, contains('同一個詞搜到的其他條目：鏈鋸人角色列表'));
     expect(results.last, contains('中文維基百科沒有「沒有這部」的條目'));
   });
 

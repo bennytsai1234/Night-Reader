@@ -69,11 +69,15 @@ typedef AiFindSearchResult = ({
 });
 
 /// 一部作品在中文維基百科：[title] 是條目名，[names] 是各地的寫法
-/// （「台灣」「中國大陸」「香港」對寫法），[intro] 是條目開頭一段。
+/// （「台灣」「中國大陸」「香港」對寫法），[aliases] 是轉到這個條目的名稱
+/// （譯名、簡稱、原文名），[intro] 是條目開頭一段，[others] 是同一個詞搜到的
+/// 其他條目（名稱有歧義時讓 AI 選）。
 typedef AiFindWorkNames = ({
   String title,
   Map<String, String> names,
+  List<String> aliases,
   String intro,
+  List<String> others,
 });
 
 /// 讀不到這一章：[message] 照實回給 AI。

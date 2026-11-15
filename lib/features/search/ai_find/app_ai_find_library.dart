@@ -200,11 +200,13 @@ class AppAiFindLibrary implements AiFindLibrary {
     CancelToken cancelToken,
   ) async {
     try {
+      // 同名詞搜到的前幾個條目：名稱有歧義時（「巨人」是神話的巨人，不是
+      // 進擊的巨人）讓 AI 自己選，再用條目名查一次。
+      final hits = await _wikiSearch(name, cancelToken);
       var summary = await _wikiSummary(name, 'zh-tw', cancelToken);
       if (summary == null) {
-        final found = await _wikiSearch(name, cancelToken);
-        if (found == null) return null;
-        summary = await _wikiSummary(found, 'zh-tw', cancelToken);
+        if (hits.isEmpty) return null;
+        summary = await _wikiSummary(hits.first, 'zh-tw', cancelToken);
         if (summary == null) return null;
       }
       final title = summary.title;
@@ -213,7 +215,16 @@ class AppAiFindLibrary implements AiFindLibrary {
         final other = await _wikiSummary(title, variant, cancelToken);
         if (other != null) names[label] = other.display;
       }
-      return (title: title, names: names, intro: summary.extract);
+      return (
+        title: title,
+        names: names,
+        aliases: await _wikiRedirects(title, cancelToken),
+        intro: summary.extract,
+        others: [
+          for (final hit in hits)
+            if (hit != title) hit,
+        ],
+      );
     } on DioException catch (error) {
       if (CancelToken.isCancel(error) || cancelToken.isCancelled) rethrow;
       throw AiFindUnreadable('連不上中文維基百科：${aiFindNetworkFailure(error)}');
@@ -243,8 +254,6 @@ class AppAiFindLibrary implements AiFindLibrary {
     );
     final data = response.data;
     if (response.statusCode != 200 || data == null) return null;
-    // 消歧義頁不是作品條目。
-    if (data['type'] == 'disambiguation') return null;
     final pageTitle = '${data['title'] ?? ''}'.trim();
     if (pageTitle.isEmpty) return null;
     final display = aiFindPlainText('${data['displaytitle'] ?? pageTitle}');
@@ -255,23 +264,61 @@ class AppAiFindLibrary implements AiFindLibrary {
     );
   }
 
-  Future<String?> _wikiSearch(String name, CancelToken cancelToken) async {
+  /// 全文搜尋的前 [_wikiSearchLimit] 個條目名。
+  Future<List<String>> _wikiSearch(String name, CancelToken cancelToken) async {
     final response = await _wikipedia.get<Map<String, dynamic>>(
       '$_wikiBase/w/api.php',
       queryParameters: {
         'action': 'query',
         'list': 'search',
         'srsearch': name,
-        'srlimit': '1',
+        'srlimit': '$_wikiSearchLimit',
         'format': 'json',
       },
       options: Options(headers: _wikiHeaders),
       cancelToken: cancelToken,
     );
     final hits = (response.data?['query'] as Map?)?['search'];
-    if (hits is! List || hits.isEmpty) return null;
-    final title = '${(hits.first as Map)['title'] ?? ''}'.trim();
-    return title.isEmpty ? null : title;
+    if (hits is! List) return const [];
+    return [
+      for (final hit in hits)
+        if ('${(hit as Map)['title'] ?? ''}'.trim() case final title
+            when title.isNotEmpty)
+          title,
+    ];
+  }
+
+  static const int _wikiSearchLimit = 5;
+
+  /// 轉到這個條目的名稱（轉址頁）：各地譯名、簡稱、原文名多半都在這裡
+  /// （ONE PIECE 有航海王、海賊王、海贼王、俠盜路飛）。
+  Future<List<String>> _wikiRedirects(
+    String title,
+    CancelToken cancelToken,
+  ) async {
+    final response = await _wikipedia.get<Map<String, dynamic>>(
+      '$_wikiBase/w/api.php',
+      queryParameters: {
+        'action': 'query',
+        'prop': 'redirects',
+        'titles': title,
+        'rdlimit': '50',
+        'rdnamespace': '0',
+        'format': 'json',
+      },
+      options: Options(headers: _wikiHeaders),
+      cancelToken: cancelToken,
+    );
+    final pages = (response.data?['query'] as Map?)?['pages'];
+    if (pages is! Map) return const [];
+    return [
+      for (final page in pages.values)
+        for (final redirect
+            in ((page as Map)['redirects'] as List?) ?? const [])
+          if ('${(redirect as Map)['title'] ?? ''}'.trim() case final name
+              when name.isNotEmpty)
+            name,
+    ];
   }
 
   @override

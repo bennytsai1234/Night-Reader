@@ -49,10 +49,12 @@ void main() {
     expect(names!.title, '咒術迴戰');
     expect(names.names, {'台灣': '咒術迴戰', '中國大陸': '咒术回战', '香港': '咒術迴戰'});
     expect(names.intro, startsWith('《咒術迴戰》'));
+    expect(names.aliases, ['咒术回战', '呪術廻戦']);
+    expect(names.others, isEmpty, reason: '搜到的就是查到的那個條目');
     expect(
-      asked.first,
-      contains('summary/%E5%92%92%E5%9B%9E'),
-      reason: '先照名稱拿',
+      asked,
+      contains(contains('summary/%E5%92%92%E5%9B%9E')),
+      reason: '照名稱拿過',
     );
     expect(asked, contains(contains('srsearch=')), reason: '沒有條目再搜尋');
 
@@ -81,6 +83,21 @@ class _Wiki implements HttpClientAdapter {
             Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
+    if (uri.contains('prop=redirects')) {
+      return json({
+        'query': {
+          'pages': {
+            '1': {
+              'title': '咒術迴戰',
+              'redirects': [
+                {'title': '咒术回战'},
+                {'title': '呪術廻戦'},
+              ],
+            },
+          },
+        },
+      });
+    }
     if (uri.contains('srsearch=')) {
       return json({
         'query': {

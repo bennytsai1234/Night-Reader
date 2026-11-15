@@ -533,8 +533,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     final text = [
       '# 「${command.name}」在中文維基百科：條目《${found.title}》',
       for (final MapEntry(:key, :value) in found.names.entries) '$key：$value',
+      if (found.aliases.isNotEmpty) '別名（轉到這個條目的名稱）：${found.aliases.join('、')}',
       if (intro.isNotEmpty)
         '開頭：${intro.length <= _wikiIntroLength ? intro : '${intro.substring(0, _wikiIntroLength)}…'}',
+      if (found.others.isNotEmpty)
+        '同一個詞搜到的其他條目：${found.others.join('、')}（不是要找的作品時，用條目名再查一次）',
     ].join('\n');
     s.log.note(_head(text));
     return AgentToolResult(text);

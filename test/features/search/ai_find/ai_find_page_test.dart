@@ -80,7 +80,9 @@ class _Library implements AiFindLibrary {
       ? (
           title: '鏈鋸人',
           names: {'台灣': '鏈鋸人', '中國大陸': '电锯人'},
+          aliases: ['電鋸人', 'Chainsaw Man'],
           intro: '《鏈鋸人》是由日本漫畫家藤本樹所創作的黑暗奇幻少年漫畫。',
+          others: ['鏈鋸人角色列表'],
         )
       : null;
 
