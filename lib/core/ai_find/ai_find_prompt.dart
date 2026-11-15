@@ -7,9 +7,9 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 
 /// AI 找書的深度（ADR 0060）：交出時每本書要做到哪裡才收。
 enum AiFindDepth {
-  quick('快速', '從搜尋結果的書名、字數與簡介開頭挑，不一本本點開看。'),
-  normal('一般', '每本都點開看過詳情（簡介、分類、字數）才推薦。'),
-  deep('深入', '每本都看過詳情，小說再讀過一章正文；漫畫、有聲書照一般。');
+  quick('快速', '從搜尋結果的書名、字數與簡介開頭挑，不必每本都點開看。'),
+  normal('一般', '每本都去看詳情（簡介、分類、字數）再推薦。'),
+  deep('深入', '每本都去看詳情，小說再試讀一章正文，讀不到的寫明原因；漫畫、有聲書照一般。');
 
   const AiFindDepth(this.label, this.explanation);
   final String label;
