@@ -60,7 +60,7 @@ class BookDetailChangeSourceItem extends StatelessWidget {
                       DragOverflowText(
                         child: UiText(
                           searchBook.originName ?? '未知來源',
-                  translate: false,
+                          translate: false,
                           maxLines: 1,
                           style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
