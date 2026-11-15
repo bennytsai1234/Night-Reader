@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/user_error.dart';
@@ -39,6 +40,8 @@ import 'package:night_reader/shared/widgets/toc_volume_row.dart';
 import 'audiobook_player.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 /// 有聲書播放器（`docs/design/audiobook.md`「播放器」）：集數清單是主體，
 /// 控制在底部的浮動玻璃膠囊，膠囊上方是倍速、定時、播放模式三顆圓鈕。
@@ -109,13 +112,13 @@ class _AudiobookPageState extends State<AudiobookPage> {
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     final notice = messenger.showSnackBar(
       SnackBar(
-        content: Text(error),
+        content: UiText(error),
         persist: false,
         duration: const Duration(seconds: 4),
         action: remedy == null
             ? null
             : SnackBarAction(
-                label: remedy.label,
+                label: context.ui(remedy.label),
                 onPressed: () {
                   if (mounted) unawaited(_runRemedy(context, remedy));
                 },
@@ -206,7 +209,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
             extendBodyBehindAppBar: true,
             backgroundColor: chrome.groupedBackground,
             appBar: GlassNavHeader(
-              title: book.name,
+              translateTitle: false,
+              title: context.zh(book.name),
               actions: [_buildMoreButton(context)],
             ),
             body: Stack(
@@ -294,7 +298,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('已複製音訊網址')));
+          ..showSnackBar(const SnackBar(content: UiText('已複製音訊網址')));
       case _MoreAction.editSource:
         if (source == null) return;
         await Navigator.of(context).push<bool>(
@@ -460,7 +464,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
             chapters.length,
             chapter.isVolume
                 ? TocVolumeRow(
-                    title: chapter.title,
+                    title: context.zh(chapter.title),
                     count: _volumeSize(chapters, i),
                     unit: '集',
                   )
@@ -477,7 +481,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
                             ..hideCurrentSnackBar()
                             ..showSnackBar(
                               const SnackBar(
-                                content: Text(lockedChapterNotice),
+                                content: UiText(lockedChapterNotice),
                               ),
                             )
                         : () => unawaited(_player.playChapter(i)),
@@ -619,7 +623,7 @@ class _BookHeader extends StatelessWidget {
         coverWidth -
         AppSpacing.lg;
     final title = TextPainter(
-      text: TextSpan(text: book.name, style: _titleStyle),
+      text: TextSpan(text: context.zh(book.name), style: _titleStyle),
       textDirection: TextDirection.ltr,
       textScaler: scaler,
       maxLines: 2,
@@ -634,7 +638,7 @@ class _BookHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final byline = [
-      book.getRealAuthor(),
+      context.zh(book.getRealAuthor()),
       sourceName,
     ].where((text) => text.trim().isNotEmpty).join(' · ');
     return Container(
@@ -672,8 +676,9 @@ class _BookHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DragOverflowText(
-                  child: Text(
-                    book.name,
+                  child: UiText(
+                    context.zh(book.name),
+                    translate: false,
                     maxLines: 2,
                     style: AppTextStyles.titleMd.copyWith(
                       color: scheme.onSurface,
@@ -683,8 +688,9 @@ class _BookHeader extends StatelessWidget {
                 if (byline.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       byline,
+                      translate: false,
                       maxLines: 1,
                       style: AppTextStyles.bodySm.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -694,7 +700,7 @@ class _BookHeader extends StatelessWidget {
                 ],
                 if (episodes > 0) ...[
                   const SizedBox(height: 2),
-                  Text(
+                  UiText(
                     '共 $episodes 集',
                     style: AppTextStyles.bodySm.copyWith(
                       color: scheme.onSurfaceVariant,
@@ -804,7 +810,7 @@ class _EpisodeRow extends StatelessWidget {
       _ => scheme.onSurface,
     };
     final status = switch (state) {
-      _EpisodeState.finished => Text(
+      _EpisodeState.finished => UiText(
         '聽完',
         style: AppTextStyles.bodySm.copyWith(color: scheme.onSurfaceVariant),
       ),
@@ -815,7 +821,7 @@ class _EpisodeRow extends StatelessWidget {
       ),
       _EpisodeState.paused => ValueListenableBuilder<Duration>(
         valueListenable: position,
-        builder: (context, at, _) => Text(
+        builder: (context, at, _) => UiText(
           '聽到 ${formatPlayTime(at)}',
           style: AppTextStyles.bodySm.copyWith(color: scheme.onSurfaceVariant),
         ),
@@ -837,8 +843,9 @@ class _EpisodeRow extends StatelessWidget {
               children: [
                 Expanded(
                   child: DragOverflowText(
-                    child: Text(
-                      chapter.title,
+                    child: UiText(
+                      context.zh(chapter.title),
+                      translate: false,
                       maxLines: 1,
                       style: AppTextStyles.bodyBase.copyWith(
                         color: titleColor,
@@ -953,8 +960,9 @@ class _ControlDock extends StatelessWidget {
                 child: Column(
                   children: [
                     DragOverflowText(
-                      child: Text(
-                        player.chapter?.title ?? '',
+                      child: UiText(
+                        context.zh(player.chapter?.title ?? ''),
+                        translate: false,
                         maxLines: 1,
                         style: AppTextStyles.uiMd.copyWith(
                           color: scheme.onSurface,
@@ -1084,9 +1092,9 @@ class _ProgressBar extends StatelessWidget {
             ),
             Row(
               children: [
-                Text(formatPlayTime(at), style: timeStyle),
+                UiText(formatPlayTime(at), style: timeStyle),
                 const Spacer(),
-                Text(
+                UiText(
                   total == null ? '--:--' : formatPlayTime(total),
                   style: timeStyle,
                 ),
@@ -1134,7 +1142,7 @@ class _Controls extends StatelessWidget {
         Semantics(
           button: true,
           // 接著聽一律叫「繼續」，同朗讀與下載。
-          label: player.playing ? '暫停' : '繼續',
+          label: context.ui(player.playing ? '暫停' : '繼續'),
           excludeSemantics: true,
           child: PressScale(
             onTap: () => unawaited(player.toggle()),

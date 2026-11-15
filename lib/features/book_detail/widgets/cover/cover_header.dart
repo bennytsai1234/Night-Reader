@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -48,7 +49,7 @@ class CoverHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     '搜尋關鍵字：$bookName $author',
                     maxLines: 1,
                     style: AppTextStyles.bodySm.copyWith(
@@ -66,7 +67,7 @@ class CoverHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
+                  UiText(
                     provider.isInitialized ? '正在搜尋封面…' : '正在載入封面…',
                     style: AppTextStyles.labelXs.copyWith(
                       color: chrome.sectionText,
@@ -74,7 +75,7 @@ class CoverHeader extends StatelessWidget {
                   ),
                 ] else if (provider.errorMessage != null) ...[
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
+                  UiText(
                     provider.errorMessage!,
                     style: AppTextStyles.labelXs.copyWith(color: error),
                   ),

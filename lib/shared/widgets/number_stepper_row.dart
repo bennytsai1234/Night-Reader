@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
@@ -11,6 +12,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/press_ink.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
 ///
@@ -276,8 +278,8 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
     final increased = _normalized(_value + widget.step);
     final decreased = _normalized(_value - widget.step);
     return Semantics(
-      label: widget.label,
-      value: _displayText,
+      label: UiLanguageText.convert(context, widget.label),
+      value: UiLanguageText.convert(context, _displayText),
       increasedValue: _canIncrease ? _withUnit(_format(increased)) : null,
       decreasedValue: _canDecrease ? _withUnit(_format(decreased)) : null,
       onIncrease: _canIncrease ? () => _stepBy(1) : null,
@@ -288,7 +290,7 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
           children: [
             Expanded(
               child: ExcludeSemantics(
-                child: Text(
+                child: UiText(
                   widget.label,
                   style: NumberStepperRow._labelStyle.copyWith(
                     color: colorScheme.onSurface,
@@ -353,7 +355,7 @@ class _StepButton extends StatelessWidget {
       // 不使用 Tooltip：Tooltip 自帶長按手勢，會與連續調整競爭。
       child: Semantics(
         container: true,
-        label: tooltip,
+        label: UiLanguageText.convert(context, tooltip),
         button: true,
         enabled: enabled,
         child: SizedBox.square(
@@ -461,7 +463,7 @@ class _ValueButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: _kValuePadding),
               child: Center(
                 widthFactor: 1,
-                child: Text(
+                child: UiText(
                   text,
                   style: NumberStepperRow._valueStyle.copyWith(
                     color: colorScheme.onSurface,

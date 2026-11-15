@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -14,6 +15,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import '../source_manager_provider.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 編輯模式左側勾選圈佔用的寬度（圈 22 + 間距）。
 const double _kCheckSlotWidth = 22 + AppGrouped.iconGap;
@@ -131,7 +133,7 @@ class SourceItemTile extends StatelessWidget {
                         mutationEnabled: false,
                         showSeparator: false,
                         // 預覽不接收觸控，開關保持一般外觀而非停用的淡色。
-                        trailing: _enabledSwitch(),
+                        trailing: _enabledSwitch(context),
                       ),
                     ),
                   ),
@@ -147,7 +149,10 @@ class SourceItemTile extends StatelessWidget {
                         ? ReorderableDragStartListener(
                             index: index!,
                             child: Semantics(
-                              label: '拖曳調整 ${source.bookSourceName} 順序',
+                              label:
+                                  '${context.ui('拖曳調整')} '
+                                  '${source.bookSourceName} '
+                                  '${context.ui('順序')}',
                               child: SizedBox.square(
                                 dimension: AppGrouped.rowMinHeight,
                                 child: Icon(
@@ -159,7 +164,7 @@ class SourceItemTile extends StatelessWidget {
                             ),
                           )
                         : null)
-                  : _enabledSwitch(),
+                  : _enabledSwitch(context),
             ),
           ),
         );
@@ -227,9 +232,9 @@ class SourceItemTile extends StatelessWidget {
     );
   }
 
-  Widget _enabledSwitch() {
+  Widget _enabledSwitch(BuildContext context) {
     return Semantics(
-      label: '${source.bookSourceName} 啟用',
+      label: '${source.bookSourceName} ${context.ui('啟用')}',
       child: GroupedSwitch(
         value: source.enabled,
         onChanged: mutationEnabled ? onEnabledChanged : null,
@@ -306,8 +311,9 @@ class _SourceRowContent extends StatelessWidget {
                   children: [
                     Flexible(
                       child: DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           source.bookSourceName,
+                          translate: false,
                           style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
                             fontWeight: FontWeight.w500,
@@ -343,8 +349,9 @@ class _SourceRowContent extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     source.bookSourceUrl,
+                    translate: false,
                     style: AppTextStyles.bodySm.copyWith(
                       height: 1.3,
                       color: chrome.sectionText,
@@ -361,7 +368,7 @@ class _SourceRowContent extends StatelessWidget {
                 if (errorLine != null) ...[
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       errorLine,
                       style: AppTextStyles.labelSm.copyWith(
                         height: 1.3,
@@ -429,7 +436,7 @@ class _SourceRowContent extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: AppRadius.cardXs,
       ),
-      child: Text(
+      child: UiText(
         health.label,
         style: AppTextStyles.labelXs.copyWith(
           height: 1.15,
@@ -457,8 +464,9 @@ class _SourceRowContent extends StatelessWidget {
               color: chrome.sectionText.withValues(alpha: 0.1),
               borderRadius: AppRadius.cardXs,
             ),
-            child: Text(
+            child: UiText(
               tag,
+              translate: false,
               style: AppTextStyles.labelXs.copyWith(
                 height: 1.15,
                 color: chrome.sectionText,
@@ -500,7 +508,7 @@ class _SourceRowContent extends StatelessWidget {
         ),
         Expanded(
           child: DragOverflowText(
-            child: Text(
+            child: UiText(
               progress.message,
               style: AppTextStyles.labelSm.copyWith(
                 height: 1.3,
@@ -602,8 +610,9 @@ class _GroupCapsule extends StatelessWidget {
           borderRadius: AppRadius.pillShape,
         ),
         child: DragOverflowText(
-          child: Text(
+          child: UiText(
             label,
+            translate: false,
             maxLines: 1,
             style: AppTextStyles.labelXs.copyWith(
               height: 1.15,

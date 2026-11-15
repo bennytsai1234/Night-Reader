@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
@@ -365,7 +366,7 @@ class _SegmentLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = _style(emphasized: emphasized).copyWith(color: color);
     final text = DragOverflowText(
-      child: Text(
+      child: UiText(
         segment.label,
         maxLines: 1,
         textAlign: TextAlign.center,

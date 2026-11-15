@@ -54,6 +54,7 @@ class SourceManagerMenus {
     if (provider.userGroups.isNotEmpty) const GlassMenuDivider(),
     for (final group in provider.userGroups)
       GlassMenuItem(
+        translate: false,
         value: group,
         label: group,
         checked: provider.filterGroup == group,

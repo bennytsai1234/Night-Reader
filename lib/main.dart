@@ -15,6 +15,7 @@ import 'core/constant/prefer_key.dart';
 import 'core/fonts/app_font.dart';
 import 'core/fonts/font_library.dart';
 import 'core/services/chinese_display.dart';
+import 'core/services/ui_language.dart';
 import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
@@ -398,9 +399,12 @@ class ReaderApp extends StatelessWidget {
               child: ThemeRevealScope(
                 child: StatusBarStableInset(
                   child: BackdropGroup(
-                    child: ChineseDisplayScope(
-                      child: HiddenWebViews(
-                        child: child ?? const SizedBox.shrink(),
+                    child: UiLanguageScope(
+                      locale: locale,
+                      child: ChineseDisplayScope(
+                        child: HiddenWebViews(
+                          child: child ?? const SizedBox.shrink(),
+                        ),
                       ),
                     ),
                   ),

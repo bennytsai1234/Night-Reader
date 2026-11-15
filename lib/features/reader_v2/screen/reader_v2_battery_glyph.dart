@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 /// 頁首頁尾的電池：橫式圓角外框、右側一個小凸點，裡面照電量從左填到對應
 /// 的長度，顏色跟資訊列的字一樣，大小照資訊列的字級（[fontSize]）。
@@ -46,7 +47,7 @@ class ReaderV2BatteryGlyph extends StatelessWidget {
           fontSize * 0.3 + stroke + nub,
           stroke,
         ),
-        child: Text(
+        child: UiText(
           label,
           style: TextStyle(fontSize: fontSize * 0.88, height: 1.2),
           maxLines: 1,

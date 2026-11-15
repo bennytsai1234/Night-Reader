@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -9,6 +10,7 @@ import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 閱讀器內設定面板的唯一開啟入口。
 ///
@@ -154,7 +156,7 @@ class ReaderV2SheetScaffold extends StatelessWidget {
                     child: Semantics(
                       header: true,
                       child: DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           title,
                           maxLines: 1,
                           textAlign: TextAlign.center,
@@ -204,10 +206,10 @@ class _CloseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Tooltip(
-      message: '關閉',
+      message: context.ui('關閉'),
       child: Semantics(
         button: true,
-        label: '關閉',
+        label: context.ui('關閉'),
         excludeSemantics: true,
         child: PressScale(
           onTap: () => Navigator.maybePop(context),

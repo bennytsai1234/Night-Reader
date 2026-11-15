@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -90,7 +91,7 @@ class SourceCheckStatusBar extends StatelessWidget {
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: DragOverflowText(
-                              child: Text(
+                              child: UiText(
                                 isChecking
                                     // statusMsg 已經是「正在校驗: 書源名」，前面只補進度。
                                     ? '(${provider.checkService.currentCount}/${provider.checkService.totalCount}) ${settling ? (job.isEnding ? backgroundWorkEnding : backgroundWorkPausing) : provider.checkService.statusMsg}'
@@ -167,7 +168,7 @@ class _CapsuleButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         child: Center(
           widthFactor: 1,
-          child: Text(
+          child: UiText(
             label,
             style: AppTextStyles.uiSm.copyWith(
               color: color,

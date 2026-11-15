@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/explore/explore_book_details.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -12,6 +13,7 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../../book_detail/book_detail_page.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
@@ -94,8 +96,9 @@ class ExploreBookItem extends StatelessWidget {
                       children: [
                         Expanded(
                           child: DragOverflowText(
-                            child: Text(
+                            child: UiText(
                               context.zh(book.name),
+                              translate: false,
                               style: AppTextStyles.bodyBase.copyWith(
                                 height: 1.3,
                                 color: scheme.onSurface,
@@ -117,8 +120,9 @@ class ExploreBookItem extends StatelessWidget {
                       height: metaLineHeight,
                       child: _withExtras(
                         (book) => DragOverflowText(
-                          child: Text(
+                          child: UiText(
                             metaOf(context, book),
+                            translate: false,
                             style: metaStyle,
                             maxLines: 1,
                           ),
@@ -129,8 +133,13 @@ class ExploreBookItem extends StatelessWidget {
                         book.latestChapterTitle!.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       DragOverflowText(
-                        child: Text(
-                          '最新：${context.zh(book.latestChapterTitle!)}',
+                        child: UiText(
+                          latestChapterLine(
+                            context,
+                            book.latestChapterTitle,
+                            fallback: '',
+                          ),
+                          translate: false,
                           style: metaStyle,
                           maxLines: 1,
                         ),
@@ -161,7 +170,9 @@ class ExploreBookItem extends StatelessWidget {
   /// 真實清單與載入骨架共用的作者、字數、分類文字。
   static String metaOf(BuildContext context, SearchBook book) {
     final kind = context.zh(book.kind ?? '');
-    final wordCount = StringUtils.displayWordCount(book.wordCount, kind);
+    final wordCount = context.ui(
+      StringUtils.displayWordCount(book.wordCount, kind),
+    );
     return [
       if (book.author != null && book.author!.isNotEmpty)
         context.zh(book.author!),
@@ -205,7 +216,7 @@ class InfoBadge extends StatelessWidget {
         color: scheme.primary.withValues(alpha: 0.12),
         borderRadius: AppRadius.pillShape,
       ),
-      child: Text(
+      child: UiText(
         label,
         style: AppTextStyles.labelXs.copyWith(
           height: 1.3,

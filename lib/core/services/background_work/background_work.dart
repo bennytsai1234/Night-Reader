@@ -5,6 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/app_permission_service.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/ui_language.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 按了暫停、還沒停好時的通知內文與頁面上那一列。
 const String backgroundWorkPausing = '正在暫停…';
@@ -238,14 +242,23 @@ class _MethodChannelPlatform implements BackgroundWorkPlatform {
   );
 
   @override
-  Future<bool> show(BackgroundWorkStatus status) async =>
-      await _channel.invokeMethod<bool>('show', {
-        'title': status.title,
-        'text': status.text,
-        'progress': status.permille ?? -1,
-        'actions': status.actions,
-      }) ??
-      false;
+  Future<bool> show(BackgroundWorkStatus status) async {
+    // 通知照介面語言整段轉換，內文裡的書源名稱也一起轉；按鈕的字也由這裡
+    // 給（ADR 0066）。
+    final simplified = languagePrefIsSimplified(
+      getIt<SharedPreferences>().getString(PreferKey.language),
+    );
+    String ui(String text) =>
+        simplified ? UiLanguageText.toSimplified(text) : text;
+    return await _channel.invokeMethod<bool>('show', {
+          'title': ui(status.title),
+          'text': ui(status.text),
+          'progress': status.permille ?? -1,
+          'actions': status.actions,
+          'actionLabels': {'pause': ui('暫停'), 'end': ui('結束')},
+        }) ??
+        false;
+  }
 
   @override
   Future<void> hide() => _channel.invokeMethod<void>('hide');

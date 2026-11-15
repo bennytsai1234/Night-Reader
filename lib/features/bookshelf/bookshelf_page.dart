@@ -8,6 +8,7 @@ import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -643,11 +644,11 @@ class _BookshelfPageState extends State<BookshelfPage>
       final ok = await provider.importLocalBookPath(path);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(ok ? '匯入成功' : '匯入失敗')));
+          .showSnackBar(SnackBar(content: UiText(ok ? '匯入成功' : '匯入失敗')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('匯入', e))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('匯入', e))));
     }
   }
 
@@ -686,11 +687,11 @@ class _BookshelfPageState extends State<BookshelfPage>
       await provider.importBookshelfFromUrl(trimmed);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('書架網址匯入完成')));
+          .showSnackBar(const SnackBar(content: UiText('書架網址匯入完成')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('書架網址匯入', e))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('書架網址匯入', e))));
     }
   }
 
@@ -710,13 +711,13 @@ class _BookshelfPageState extends State<BookshelfPage>
           imported.contents;
       if (importedTotal == 0) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('未找到可匯入的書架資料')));
+            .showSnackBar(const SnackBar(content: UiText('未找到可匯入的書架資料')));
         return;
       }
       unawaited(context.read<BookshelfProvider>().loadBooks());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: UiText(
             '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
             '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
           ),
@@ -725,7 +726,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('匯入', e))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('匯入', e))));
     }
   }
 
@@ -737,11 +738,11 @@ class _BookshelfPageState extends State<BookshelfPage>
       await BookshelfExchangeService().shareBookshelf(books: provider.books);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('書架已匯出')));
+          .showSnackBar(const SnackBar(content: UiText('書架已匯出')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('匯出', e))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('匯出', e))));
     }
   }
 
@@ -764,14 +765,14 @@ class _BookshelfPageState extends State<BookshelfPage>
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('檢查完成：$updated 本有更新、$chapters 個新章節、$failed 本失敗'),
+          content: UiText('檢查完成：$updated 本有更新、$chapters 個新章節、$failed 本失敗'),
         ),
       );
       _exitEditMode();
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('批次檢查更新', e))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('批次檢查更新', e))));
     }
   }
 
@@ -1093,14 +1094,14 @@ class _BookshelfPageState extends State<BookshelfPage>
     // 書源慢時要好幾秒才有結果，先告訴使用者已經開始。
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('正在檢查《$name》…')));
+      ..showSnackBar(SnackBar(content: UiText('正在檢查《$name》…')));
     try {
       final results = await provider.batchCheckUpdate({book.bookUrl});
       final result = results.isEmpty ? null : results.first;
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
+          content: UiText(
             result == null || result.failed
                 ? '《$name》檢查更新失敗'
                 : result.hasUpdate
@@ -1112,7 +1113,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
-        SnackBar(content: Text(failureMessage('檢查更新', e))),
+        SnackBar(content: UiText(failureMessage('檢查更新', e))),
       );
     } finally {
       _singleBookBusy.remove(book.bookUrl);
@@ -1129,11 +1130,13 @@ class _BookshelfPageState extends State<BookshelfPage>
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text(enable ? '《$name》恢復自動檢查更新' : '《$name》不再自動檢查更新'),
+            content: UiText(enable ? '《$name》恢復自動檢查更新' : '《$name》不再自動檢查更新'),
           ),
         );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(failureMessage('設定', e))));
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('設定', e))),
+      );
     }
   }
 
@@ -1151,10 +1154,10 @@ class _BookshelfPageState extends State<BookshelfPage>
       await provider.deleteBook(book.bookUrl);
       if (!mounted) return;
       setState(() => _selectedUrls.remove(book.bookUrl));
-      messenger.showSnackBar(const SnackBar(content: Text('已移出書架')));
+      messenger.showSnackBar(const SnackBar(content: UiText('已移出書架')));
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text(failureMessage('移出書架', e))),
+        SnackBar(content: UiText(failureMessage('移出書架', e))),
       );
     }
   }
@@ -1234,7 +1237,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       if (await dir.exists()) await dir.delete(recursive: true);
     }
     if (message.isNotEmpty) {
-      messenger.showSnackBar(SnackBar(content: Text(message)));
+      messenger.showSnackBar(SnackBar(content: UiText(message)));
     }
   }
 
@@ -1285,14 +1288,16 @@ class _BookshelfPageState extends State<BookshelfPage>
       if (!mounted) return;
       _exitEditMode();
       messenger.showSnackBar(
-        SnackBar(content: Text('已刪除 ${selectedUrls.length} 本書')),
+        SnackBar(content: UiText('已刪除 ${selectedUrls.length} 本書')),
       );
     } catch (e) {
       if (!mounted) return;
       // 中途失敗時，已刪掉的書不再留在選取裡。
       final remaining = p.books.map((book) => book.bookUrl).toSet();
       setState(() => _selectedUrls.retainAll(remaining));
-      messenger.showSnackBar(SnackBar(content: Text(failureMessage('刪除', e))));
+      messenger.showSnackBar(
+        SnackBar(content: UiText(failureMessage('刪除', e))),
+      );
     }
   }
 }

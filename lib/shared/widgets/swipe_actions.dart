@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/semantics.dart';
 
 import '../theme/app_haptics.dart';
@@ -10,6 +11,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 列滑動後露出的單一動作按鈕。
 @immutable
@@ -385,8 +387,9 @@ class _SwipeActionsState extends State<SwipeActions>
           customSemanticsActions: active
               ? {
                   for (final action in [...widget.leading, ...widget.trailing])
-                    CustomSemanticsAction(label: action.label):
-                        action.onPressed,
+                    CustomSemanticsAction(
+                      label: UiLanguageText.convert(context, action.label),
+                    ): action.onPressed,
                 }
               : null,
           child: row,
@@ -509,7 +512,7 @@ class _ActionButton extends StatelessWidget {
     const foreground = AppPalette.paper50;
     return Semantics(
       button: true,
-      label: action.label,
+      label: UiLanguageText.convert(context, action.label),
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -526,7 +529,7 @@ class _ActionButton extends StatelessWidget {
                   Icon(action.icon, size: 22, color: foreground),
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       action.label,
                       maxLines: 1,
                       textAlign: TextAlign.center,

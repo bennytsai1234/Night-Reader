@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -398,7 +399,7 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             alignment: AlignmentDirectional.centerStart,
             onPressed: item.onPressed,
-            child: Text(
+            child: UiText(
               AdaptiveTextSelectionToolbar.getButtonLabel(context, item),
             ),
           ),
@@ -441,7 +442,7 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
                 TextSelectionToolbarTextButton(
                   padding: TextSelectionToolbarTextButton.getPadding(i, count),
                   onPressed: widget.items[i].onPressed,
-                  child: Text(
+                  child: UiText(
                     AdaptiveTextSelectionToolbar.getButtonLabel(
                       context,
                       widget.items[i],

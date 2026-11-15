@@ -11,7 +11,7 @@ import 'sync_records.dart';
 /// 設定的同步：清單裡的每個設定一筆（ADR 0039）。只同步閱讀、外觀、朗讀與
 /// 書架的顯示這類兩台都該一樣的，以及 AI 修書源的服務（ADR 0054）；這台
 /// 手機自己的（亮度、螢幕方向、朗讀引擎與聲音、上次的骨架紀錄、更新頻道、
-/// 同步空間本身）不在清單裡。設定回到預設值（從偏好設定移除）也跟著同步。
+/// 介面語言（ADR 0066）、同步空間本身）不在清單裡。設定回到預設值（從偏好設定移除）也跟著同步。
 class SettingsSync extends SyncKind {
   SettingsSync({SharedPreferences? prefs})
     : _prefs = prefs ?? getIt<SharedPreferences>();

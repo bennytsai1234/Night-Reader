@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
@@ -66,6 +67,7 @@ class SearchHistoryView extends StatelessWidget {
               for (final find in provider.pastFinds)
                 GroupedRow(
                   title: find.description,
+                  translateTitle: false,
                   maxTitleLines: 1,
                   leading: Icon(
                     Icons.auto_awesome_outlined,
@@ -95,6 +97,7 @@ class SearchHistoryView extends StatelessWidget {
             children: [
               for (final keyword in provider.historyKeywords)
                 GroupedRow(
+                  translateTitle: false,
                   title: keyword.word,
                   leading: Icon(
                     Icons.history_rounded,
@@ -122,7 +125,7 @@ class SearchHistoryView extends StatelessWidget {
                   color: chrome.sectionText.withValues(alpha: 0.35),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text(
+                UiText(
                   '開始搜尋你想看的書吧',
                   style: AppTextStyles.bodyBase.copyWith(
                     color: chrome.sectionText,

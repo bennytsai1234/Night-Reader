@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/update_preferences.dart';
@@ -124,7 +125,7 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
     return GroupedSection(
       topGap: first ? AppSpacing.md : AppGrouped.sectionGap,
       header: 'v0.0.0',
-      headerTrailing: Text(
+      headerTrailing: UiText(
         '0000-00-00',
         style: AppTextStyles.uiSm.copyWith(color: chrome.sectionText),
       ),
@@ -132,7 +133,7 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
         GroupedContent(
           // 每行字數不同、最後一行短，像一段條列；都短於手機的一行寬，不會
           // 自己換行。
-          child: Text(
+          child: UiText(
             [
               for (var i = 0; i < lines; i++)
                 '• ${'更新說明' * 6}'.substring(
@@ -162,13 +163,13 @@ class _ReleaseNotesPageState extends State<ReleaseNotesPage> {
           : 'v${note.versionName}',
       headerTrailing: publishedAt == null
           ? null
-          : Text(
+          : UiText(
               _dateFormat.format(publishedAt),
               style: AppTextStyles.uiSm.copyWith(color: chrome.sectionText),
             ),
       children: [
         GroupedContent(
-          child: Text(
+          child: UiText(
             notes.isEmpty ? '這個版本沒有附更新說明。' : notes,
             style: AppTextStyles.bodySm.copyWith(
               height: 1.5,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -16,6 +17,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPlaying;
@@ -237,14 +239,14 @@ class _HighlightSectionState extends State<_HighlightSection> {
           child: Row(
             children: [
               const ExcludeSemantics(
-                child: Text(
+                child: UiText(
                   _HighlightSection._strengthLabel,
                   style: _HighlightSection._strengthStyle,
                 ),
               ),
               Expanded(
                 child: Semantics(
-                  label: '高亮深淺',
+                  label: context.ui('高亮深淺'),
                   child: Slider(
                     value: strength,
                     min: ReaderV2HighlightStrength.min,
@@ -301,7 +303,7 @@ class _HighlightPreview extends StatelessWidget {
         color: palette.readerBackground,
         borderRadius: AppRadius.cardMd,
       ),
-      child: Text.rich(
+      child: UiText.rich(
         span(
           textStyle.copyWith(color: palette.readerText),
           highlight: TextStyle(
@@ -338,7 +340,7 @@ class _HighlightColorRow extends StatelessWidget {
           Semantics(
             button: true,
             selected: option == settings.highlightColor,
-            label: option.label,
+            label: context.ui(option.label),
             // 色票下方的文字和這個標籤相同，排除子樹才不會念兩次；點擊動作
             // 也跟著被排除，要在這裡補上。
             excludeSemantics: true,
@@ -379,7 +381,7 @@ class _HighlightColorRow extends StatelessWidget {
                         : null,
                   ),
                   const SizedBox(height: labelGap),
-                  Text(option.label, style: labelStyle),
+                  UiText(option.label, style: labelStyle),
                 ],
               ),
             ),
@@ -395,7 +397,7 @@ void _reportSaveFailure(BuildContext context, Future<void> save) {
     save.catchError((Object _) {
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')));
+          ?.showSnackBar(const SnackBar(content: UiText('朗讀設定儲存失敗，已恢復原本的值')));
     }),
   );
 }

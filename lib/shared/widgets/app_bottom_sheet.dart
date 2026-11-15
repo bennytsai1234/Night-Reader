@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -105,7 +106,7 @@ class AppBottomSheet extends StatelessWidget {
                 middle: Semantics(
                   header: true,
                   child: DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       title,
                       maxLines: 1,
                       textAlign: TextAlign.center,
@@ -249,7 +250,7 @@ class SheetHeader extends StatelessWidget {
           middle: Semantics(
             header: true,
             child: DragOverflowText(
-              child: Text(
+              child: UiText(
                 title,
                 maxLines: 1,
                 style: AppTextStyles.titleMd.copyWith(

@@ -3,6 +3,8 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -490,7 +492,7 @@ class GlassIconButton extends StatelessWidget {
           blur: blur,
           child: Center(
             child: switch (label) {
-              final text? => Text(
+              final text? => UiText(
                 text,
                 maxLines: 1,
                 style: AppTextStyles.uiSm.copyWith(
@@ -507,13 +509,13 @@ class GlassIconButton extends StatelessWidget {
     button = Semantics(
       button: true,
       enabled: enabled,
-      label: tooltip,
+      label: UiLanguageText.convertNullable(context, tooltip),
       child: button,
     );
     if (tooltip == null) return button;
     // 名稱已由上面的 Semantics 提供；Tooltip 再提供一次，讀屏會念兩遍。
     return Tooltip(
-      message: tooltip!,
+      message: UiLanguageText.convert(context, tooltip!),
       excludeFromSemantics: true,
       child: button,
     );
@@ -559,7 +561,7 @@ class GlassTextButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Center(
                 widthFactor: 1,
-                child: Text(
+                child: UiText(
                   label,
                   style: AppTextStyles.uiMd.copyWith(
                     color: color.withValues(alpha: enabled ? 1 : 0.38),
@@ -623,7 +625,7 @@ class PlainTextAction extends StatelessWidget {
             padding: EdgeInsets.symmetric(
               horizontal: small ? 0 : AppSpacing.xs,
             ),
-            child: Center(widthFactor: 1, child: Text(label, style: style)),
+            child: Center(widthFactor: 1, child: UiText(label, style: style)),
           ),
         ),
       ),
@@ -648,6 +650,7 @@ class GlassCapsule extends StatelessWidget {
     this.maxLines = 1,
     this.tooltip,
     this.count,
+    this.translate = true,
   });
 
   static const double height = 34.0;
@@ -680,6 +683,10 @@ class GlassCapsule extends StatelessWidget {
 
   /// 標籤後方的小字數量（例如分組內的書源數）。
   final int? count;
+
+  /// [label] 是分組名稱、發現分類這類書源的資料時給 false，不跟介面語言
+  /// 轉換（ADR 0066）。
+  final bool translate;
 
   @override
   Widget build(BuildContext context) {
@@ -717,8 +724,9 @@ class GlassCapsule extends StatelessWidget {
               ],
               Flexible(
                 child: DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     label,
+                    translate: translate,
                     maxLines: maxLines,
                     textAlign: TextAlign.center,
                     style: style,
@@ -727,7 +735,7 @@ class GlassCapsule extends StatelessWidget {
               ),
               if (count != null) ...[
                 const SizedBox(width: AppSpacing.xs),
-                Text(
+                UiText(
                   '$count',
                   style: AppTextStyles.uiXs.copyWith(
                     color: color.withValues(alpha: color.a * 0.6),
@@ -747,12 +755,12 @@ class GlassCapsule extends StatelessWidget {
     capsule = Semantics(
       button: enabled,
       selected: selected,
-      label: tooltip,
+      label: UiLanguageText.convertNullable(context, tooltip),
       child: PressScale(scale: 0.95, onTap: onTap, child: capsule),
     );
     if (tooltip == null) return capsule;
     return Tooltip(
-      message: tooltip!,
+      message: UiLanguageText.convert(context, tooltip!),
       excludeFromSemantics: true,
       child: capsule,
     );
@@ -868,7 +876,11 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.titleSheen,
     this.morph = false,
     this.readable = true,
+    this.translateTitle = true,
   });
+
+  /// [title] 是書名、發現分類這類資料時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translateTitle;
 
   /// 這一頁是清單頁、在平板上有置中的內容欄（[ReadableWidth]）：按鈕照
   /// [ReadableWidth.headerInsetOf] 往內收，[bottom] 跟著內容欄。書源除錯
@@ -972,12 +984,17 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   title!,
                   key: morph ? ValueKey(title) : null,
                   color: fg,
+                  translate: translateTitle,
                 ),
                 final sheen => ValueListenableBuilder<bool>(
                   key: morph ? ValueKey(title) : null,
                   valueListenable: sheen,
-                  builder: (_, active, _) =>
-                      NavHeaderTitle(title!, color: fg, sheen: active),
+                  builder: (_, active, _) => NavHeaderTitle(
+                    title!,
+                    color: fg,
+                    sheen: active,
+                    translate: translateTitle,
+                  ),
                 ),
               });
     if (morph && middle != null) {
@@ -1080,10 +1097,14 @@ class NavHeaderTitle extends StatelessWidget {
     this.visible = true,
     this.color,
     this.sheen = false,
+    this.translate = true,
   });
 
   final String title;
   final bool visible;
+
+  /// [title] 是書名這類資料時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translate;
 
   /// 預設為主要文字色。
   final Color? color;
@@ -1104,8 +1125,9 @@ class NavHeaderTitle extends StatelessWidget {
           child: InkSheen(
             active: sheen,
             child: DragOverflowText(
-              child: Text(
+              child: UiText(
                 title,
+                translate: translate,
                 maxLines: 1,
                 style: AppTextStyles.titleSm.copyWith(
                   fontWeight: FontWeight.w600,

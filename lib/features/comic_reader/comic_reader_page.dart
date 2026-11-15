@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_numbers.dart';
@@ -394,7 +395,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   void _toggleAutoScroll() {
@@ -671,7 +672,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         : null;
     if (url == null) {
       ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(const SnackBar(content: Text('這一話沒有網頁可以開')));
+          ?.showSnackBar(const SnackBar(content: UiText('這一話沒有網頁可以開')));
       return;
     }
     unawaited(_openWeb(url));
@@ -777,12 +778,12 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         if (remedy != null) ...[
           FilledButton(
             onPressed: () => unawaited(_runOpenRemedy(remedy)),
-            child: Text(remedy.label),
+            child: UiText(remedy.label),
           ),
           const SizedBox(width: AppSpacing.md),
-          TextButton(onPressed: _retryOpen, child: const Text('重試')),
+          TextButton(onPressed: _retryOpen, child: const UiText('重試')),
         ] else
-          FilledButton(onPressed: _retryOpen, child: const Text('重試')),
+          FilledButton(onPressed: _retryOpen, child: const UiText('重試')),
       ],
     );
   }
@@ -798,7 +799,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              UiText(
                 '打不開這本漫畫：$loadError',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: palette.readerText),

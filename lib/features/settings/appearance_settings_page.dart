@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
@@ -18,6 +19,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 外觀與主題：淺色與深色各用的風格、深色用純黑、強調色、深淺、玻璃效果、
 /// 換頁動畫與介面字型。當下深淺用的風格決定 App 介面、閱讀正文與閱讀選單的配色。
@@ -98,6 +100,36 @@ class AppearanceSettingsPage extends StatelessWidget {
                   selected: themeSettings.glassStrength,
                   onChanged: themeSettings.setGlassStrength,
                 ),
+              ),
+            ],
+          ),
+          GroupedSection(
+            children: [
+              Builder(
+                builder: (rowContext) {
+                  final selected = appSettings.locale == null
+                      ? 'system'
+                      : appSettings.locale?.countryCode == 'CN'
+                      ? 'zh_CN'
+                      : 'zh_TW';
+                  const labels = {
+                    'system': '跟隨系統',
+                    'zh_TW': '繁體中文',
+                    'zh_CN': '简体中文',
+                  };
+                  return GroupedRow(
+                    title: '介面語言',
+                    value: labels[selected],
+                    showChevron: false,
+                    onTap: () => _pickOption(
+                      rowContext,
+                      const ['system', 'zh_TW', 'zh_CN'],
+                      label: (choice) => labels[choice]!,
+                      selected: selected,
+                      onPicked: appSettings.setUiLanguage,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -376,7 +408,7 @@ class _StyleCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 6, 7, 0),
       child: Align(
         alignment: Alignment.topLeft,
-        child: Text(
+        child: UiText(
           '永',
           // 書頁是縮圖，字跟著頁面大小，不隨系統字級放大。
           textScaler: TextScaler.noScaling,
@@ -389,7 +421,7 @@ class _StyleCard extends StatelessWidget {
       ),
     );
     return Semantics(
-      label: style.label,
+      label: context.ui(style.label),
       selected: selected,
       button: true,
       // excludeSemantics 也排除了子樹手勢的點擊動作，要在這裡補上。
@@ -429,7 +461,7 @@ class _StyleCard extends StatelessWidget {
             const SizedBox(height: labelGap),
             // 風格名稱固定一行；超出卡寬時可拖動查看，不折行或省略。
             DragOverflowText(
-              child: Text(
+              child: UiText(
                 style.label,
                 maxLines: 1,
                 softWrap: false,

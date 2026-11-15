@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
@@ -35,9 +36,12 @@ class TocVolumeRow extends StatelessWidget {
       expanded: collapsed == null ? null : !collapsed,
       child: GroupedRow(
         title: title,
+        translateTitle: false,
+        // 卷名是書的資料，照閱讀偏好的繁簡轉換（ADR 0066）。
         titleWidget: DragOverflowText(
-          child: Text(
+          child: UiText(
             title,
+            translate: false,
             maxLines: 1,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.3,

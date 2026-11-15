@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -21,6 +22,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});
@@ -112,8 +114,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('刪除規則', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除規則', error))));
     }
   }
 
@@ -123,9 +126,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failureMessage('更新規則狀態', error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: UiText(failureMessage('更新規則狀態', error))),
+      );
     }
   }
 
@@ -386,16 +389,18 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DragOverflowText(
-                        child: Text(
-                          _name,
+                        child: UiText(
+                          rule.name.isEmpty ? context.ui(_name) : _name,
+                          translate: false,
                           maxLines: 1,
                           style: _nameStyle.copyWith(color: scheme.onSurface),
                         ),
                       ),
                       const SizedBox(height: _patternGap),
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           _pattern,
+                          translate: false,
                           maxLines: 2,
                           style: _patternStyle.copyWith(
                             color: chrome.sectionText,
@@ -416,7 +421,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                                 ),
                                 borderRadius: AppRadius.cardXs,
                               ),
-                              child: Text(
+                              child: UiText(
                                 label,
                                 style: _chipStyle.copyWith(
                                   color: chrome.sectionText,
@@ -430,7 +435,7 @@ class _RuleRow extends StatelessWidget implements GroupedSkeletonItem {
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Semantics(
-                  label: '啟用 ${rule.name}',
+                  label: '${context.ui('啟用')} ${rule.name}',
                   child: GroupedSwitch(
                     value: rule.isEnabled,
                     onChanged: onToggle,

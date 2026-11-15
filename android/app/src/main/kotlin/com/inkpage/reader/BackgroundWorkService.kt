@@ -151,8 +151,16 @@ class BackgroundWorkService : Service() {
         // 按鈕由 Dart 決定：能接著做的有「暫停」，正在暫停或結束時不放。
         for (action in content.actions) {
             when (action) {
-                "pause" -> builder.addAction(0, "暫停", serviceIntent(ACTION_PAUSE, REQUEST_PAUSE))
-                "end" -> builder.addAction(0, "結束", serviceIntent(ACTION_END, REQUEST_END))
+                "pause" -> builder.addAction(
+                    0,
+                    content.actionLabels["pause"] ?: "暫停",
+                    serviceIntent(ACTION_PAUSE, REQUEST_PAUSE),
+                )
+                "end" -> builder.addAction(
+                    0,
+                    content.actionLabels["end"] ?: "結束",
+                    serviceIntent(ACTION_END, REQUEST_END),
+                )
             }
         }
         if (content.progress >= 0) {
@@ -248,6 +256,8 @@ object BackgroundWork {
         val text: String,
         val progress: Int,
         val actions: List<String> = emptyList(),
+        /** 按鈕的字，照介面語言由 Dart 給（ADR 0066）。 */
+        val actionLabels: Map<String, String> = emptyMap(),
     )
 
     private var channel: MethodChannel? = null
@@ -283,6 +293,7 @@ object BackgroundWork {
                         call.argument<String>("text") ?: "",
                         call.argument<Int>("progress") ?: -1,
                         call.argument<List<String>>("actions") ?: listOf("end"),
+                        call.argument<Map<String, String>>("actionLabels") ?: emptyMap(),
                     )
                     content = next
                     val running = service

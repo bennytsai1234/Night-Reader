@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -229,10 +230,13 @@ class _PageError extends StatelessWidget {
           children: [
             Icon(Icons.broken_image_outlined, size: 40, color: color),
             const SizedBox(height: AppSpacing.md),
-            Text('這張圖載不到', style: AppTextStyles.titleSm.copyWith(color: color)),
+            UiText(
+              '這張圖載不到',
+              style: AppTextStyles.titleSm.copyWith(color: color),
+            ),
             const SizedBox(height: AppSpacing.xs),
             DragOverflowText(
-              child: Text(
+              child: UiText(
                 ComicLoadError.describe(error),
                 textAlign: TextAlign.center,
                 maxLines: 3,
@@ -246,19 +250,22 @@ class _PageError extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FilledButton(onPressed: onRemedy, child: Text(remedy.label)),
+                  FilledButton(
+                    onPressed: onRemedy,
+                    child: UiText(remedy.label),
+                  ),
                   const SizedBox(width: AppSpacing.md),
-                  TextButton(onPressed: onRetry, child: const Text('重試')),
+                  TextButton(onPressed: onRetry, child: const UiText('重試')),
                 ],
               )
             else
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FilledButton(onPressed: onRetry, child: const Text('重試')),
+                  FilledButton(onPressed: onRetry, child: const UiText('重試')),
                   if (onOpenWeb case final open?) ...[
                     const SizedBox(width: AppSpacing.md),
-                    TextButton(onPressed: open, child: const Text('用網頁開啟')),
+                    TextButton(onPressed: open, child: const UiText('用網頁開啟')),
                   ],
                 ],
               ),

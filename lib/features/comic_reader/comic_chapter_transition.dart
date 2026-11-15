@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
@@ -212,11 +213,12 @@ class ComicChapterTransition extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text(label, style: _labelStyle.copyWith(color: foreground)),
+      UiText(label, style: _labelStyle.copyWith(color: foreground)),
       const SizedBox(height: _labelGap),
       DragOverflowText(
-        child: Text(
+        child: UiText(
           name,
+          translate: false,
           maxLines: _maxNameLines,
           style: _nameStyle.copyWith(color: foreground),
         ),
@@ -242,7 +244,7 @@ class ComicChapterTransition extends StatelessWidget {
             Icon(icon, size: _noticeIcon, color: iconColor),
             const SizedBox(width: _noticeIconGap),
             Flexible(
-              child: Text(
+              child: UiText(
                 text,
                 style: _noticeStyle.copyWith(color: foreground),
               ),
@@ -269,7 +271,7 @@ class ComicChapterTransition extends StatelessWidget {
       SizedBox(
         width: double.infinity,
         child: DragOverflowText(
-          child: Text(
+          child: UiText(
             message,
             maxLines: _maxMessageLines,
             textAlign: TextAlign.center,
@@ -288,12 +290,12 @@ class ComicChapterTransition extends StatelessWidget {
 
   Widget _failedActions() {
     final remedy = remedyLabel;
-    final retry = TextButton(onPressed: onRetry, child: const Text('重試'));
+    final retry = TextButton(onPressed: onRetry, child: const UiText('重試'));
     if (remedy == null) return retry;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        FilledButton(onPressed: onRemedy, child: Text(remedy)),
+        FilledButton(onPressed: onRemedy, child: UiText(remedy)),
         const SizedBox(width: _messageGap),
         retry,
       ],

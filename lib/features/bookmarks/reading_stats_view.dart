@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -20,6 +21,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 閱讀紀錄頁的「統計」（`BookmarksPage`）：頂端今天、本週、總計三格，下面
 /// 各書讀了多久，含有聲書的收聽時間（docs/design/screens.md）。
@@ -273,6 +275,7 @@ class _ReadingStatsViewState extends State<ReadingStatsView> {
   /// 一本書一列：顯示時做繁簡轉換，和書架一致；找書仍用原文。同名的
   /// 漫畫、有聲書書名後面帶記號（ADR 0053）。
   Widget _row(BuildContext context, _BookTime record) => GroupedRow(
+    translateTitle: false,
     title: context.zh(BookSourceKind.splitRecordName(record.bookName).name),
     titleMark: _kindMark(record.bookName),
     value: _formatDuration(record.readTime),
@@ -397,15 +400,17 @@ class _StatTile extends StatelessWidget {
     final (value, unit) = _valueAndUnit;
     return Semantics(
       container: true,
-      label: '$label $value $unit',
+      label: context.ui('$label $value $unit'),
       excludeSemantics: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: _padding),
         child: Column(
           children: [
-            DragOverflowText(child: Text.rich(_valueSpan(scheme), maxLines: 1)),
+            DragOverflowText(
+              child: UiText.rich(_valueSpan(scheme), maxLines: 1),
+            ),
             const SizedBox(height: _labelGap),
-            Text(
+            UiText(
               label,
               style: AppTextStyles.uiSm.copyWith(
                 color: scheme.onSurfaceVariant,
