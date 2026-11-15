@@ -78,6 +78,8 @@ void main() {
   testWidgets('介面語言維持單列，選簡體後能儲存並切回系統', (tester) async {
     await pumpPage(tester);
     expect(find.text('介面語言'), findsOneWidget);
+    await tester.ensureVisible(find.text('介面語言'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('介面語言'));
     await tester.pumpAndSettle();
     expect(find.text('简体中文'), findsWidgets);
