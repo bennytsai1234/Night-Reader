@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -114,7 +115,7 @@ class _SleepTimerSectionState extends State<SleepTimerSection> {
             if (status != null)
               Padding(
                 padding: const EdgeInsets.only(top: statusGap),
-                child: Text(
+                child: UiText(
                   status,
                   textAlign: TextAlign.center,
                   style: statusStyle.copyWith(

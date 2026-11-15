@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/semantics.dart';
 
 import '../theme/app_haptics.dart';
@@ -526,7 +527,7 @@ class _ActionButton extends StatelessWidget {
                   Icon(action.icon, size: 22, color: foreground),
                   const SizedBox(height: AppSpacing.xs),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       action.label,
                       maxLines: 1,
                       textAlign: TextAlign.center,
