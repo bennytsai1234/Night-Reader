@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/explore/explore_book_details.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -94,7 +95,7 @@ class ExploreBookItem extends StatelessWidget {
                       children: [
                         Expanded(
                           child: DragOverflowText(
-                            child: Text(
+                            child: UiText(
                               context.zh(book.name),
                               style: AppTextStyles.bodyBase.copyWith(
                                 height: 1.3,
@@ -117,7 +118,7 @@ class ExploreBookItem extends StatelessWidget {
                       height: metaLineHeight,
                       child: _withExtras(
                         (book) => DragOverflowText(
-                          child: Text(
+                          child: UiText(
                             metaOf(context, book),
                             style: metaStyle,
                             maxLines: 1,
@@ -129,7 +130,7 @@ class ExploreBookItem extends StatelessWidget {
                         book.latestChapterTitle!.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           '最新：${context.zh(book.latestChapterTitle!)}',
                           style: metaStyle,
                           maxLines: 1,
@@ -205,7 +206,7 @@ class InfoBadge extends StatelessWidget {
         color: scheme.primary.withValues(alpha: 0.12),
         borderRadius: AppRadius.pillShape,
       ),
-      child: Text(
+      child: UiText(
         label,
         style: AppTextStyles.labelXs.copyWith(
           height: 1.3,

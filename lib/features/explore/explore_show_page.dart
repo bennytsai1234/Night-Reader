@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
@@ -206,7 +207,7 @@ class ExploreShowView extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
           alignment: Alignment.center,
-          child: Text(
+          child: UiText(
             '載入失敗，點擊重試',
             style: AppTextStyles.bodyXs.copyWith(
               color: Theme.of(context).colorScheme.error,

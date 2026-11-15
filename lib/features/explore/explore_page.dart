@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
 
@@ -376,7 +377,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       AppSpacing.lg,
                     ),
                     child: provider.expandedKinds.isEmpty
-                        ? Text(
+                        ? UiText(
                             '暫無分類',
                             style: AppTextStyles.bodySm.copyWith(
                               color: AppChrome.of(context).sectionText,
@@ -526,7 +527,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('書源操作', error))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('書源操作', error))));
     }
   }
 
@@ -547,7 +548,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('刪除書源', error))));
+          .showSnackBar(SnackBar(content: UiText(failureMessage('刪除書源', error))));
     }
   }
 
@@ -622,7 +623,7 @@ class _SourceRow extends StatelessWidget {
           children: [
             Expanded(
               child: DragOverflowText(
-                child: Text(
+                child: UiText(
                   name,
                   maxLines: 1,
                   style: AppTextStyles.bodyBase.copyWith(
