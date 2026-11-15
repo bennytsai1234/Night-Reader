@@ -509,19 +509,28 @@ Future<_AttemptEnd> _attempt<C>(
       continue;
     }
     noCommand = 0;
-    // 互不影響的查詢一起開始（AI 一則回覆常叫好幾個搜尋，一個接一個等的話
-    // 一輪要好幾分鐘，2026-11-15 AI 找書實跑）；同樣的參數到上限的那個和它
-    // 後面的不先開始，照順序那段會在那裡停下。
-    final early = <int, Future<AgentResult>>{};
+    // 互不影響的查詢一起跑（AI 一則回覆常叫好幾個搜尋，一個接一個等的話
+    // 一輪要好幾分鐘，2026-11-15 AI 找書實跑）：照呼叫的順序切段，相鄰、
+    // 可以一起跑的那段輪到時一起開始；交出這類要照順序的是段的界線，前面那段
+    // 都回來才做它，後面那段等它做完才開始（Codex 審查：排在交出後面的詳情先
+    // 開始，交出就照「已經看過詳情」收了）。同樣的參數到上限的那個和它後面的
+    // 不算進來，照順序那段會在那裡停下。
+    final alongside = <int>{};
     final counted = Map.of(calls);
     for (final (i, parse) in parsed.indexed) {
       if (parse is! AgentCommand<C>) continue;
       final count = counted[parse.key] = (counted[parse.key] ?? 0) + 1;
       if (count >= AiAgentKnobs.sameCallLimit) break;
-      if (task.runsAlongside(parse.command)) {
-        early[i] = task.execute(parse.command)..ignore();
+      if (task.runsAlongside(parse.command)) alongside.add(i);
+    }
+    final early = <int, Future<AgentResult>>{};
+    void startSegment(int from) {
+      for (var j = from; alongside.contains(j); j++) {
+        early[j] ??= task.execute((parsed[j] as AgentCommand<C>).command)
+          ..ignore();
       }
     }
+
     final toolWatch = Stopwatch()..start();
     try {
       // 每個呼叫都要有一句工具結果，服務才收下一輪的對話。
@@ -540,6 +549,7 @@ Future<_AttemptEnd> _attempt<C>(
               return _Retry('同樣的工具與參數第 $count 次');
             }
             stats.toolCalls++;
+            if (alongside.contains(i)) startSegment(i);
             final result = await (early[i] ?? task.execute(command));
             if (cancelToken.isCancelled) return cancelled;
             switch (result) {
@@ -570,6 +580,13 @@ Future<_AttemptEnd> _attempt<C>(
         }
       }
     } finally {
+      // 提前結束（交出被收下、讀不懂到上限、停止）時，已經開始的查詢也等
+      // 它們回來再走：不然這件已經結束、重跑清了狀態，舊的查詢還在用書源、
+      // 改狀態、寫紀錄。停止時它們收到同一個取消，很快就回來。
+      await Future.wait([
+        for (final pending in early.values)
+          pending.then<void>((_) {}, onError: (Object _) {}),
+      ]);
       // 一起跑的幾個重疊的時間只算一次：工具秒是這一輪等工具的時間。
       stats.tools += toolWatch.elapsed;
     }

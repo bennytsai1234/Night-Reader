@@ -212,18 +212,25 @@ class BookSourceService {
   Future<List<ExploreKind>> exploreKinds(
     String? exploreUrl, {
     BookSource? source,
-  }) => _runOnSource(_exploreKindsTask(exploreUrl, source), source: source);
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _exploreKindsTask(exploreUrl, source),
+    source: source,
+    cancelToken: cancelToken,
+  );
 
   /// 精確搜尋：書名與作者都相同的第一本。
   Future<List<SearchBook>> preciseSearch(
     BookSource source,
     String name,
-    String author,
-  ) => searchBooks(
+    String author, {
+    CancelToken? cancelToken,
+  }) => searchBooks(
     source,
     name,
     filter: _exactBook(name, author),
     shouldBreak: stopAtFirstSearchResult,
+    cancelToken: cancelToken,
   );
 
   Future<List<Book>> importBookshelf(String url) async {

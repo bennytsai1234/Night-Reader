@@ -261,7 +261,13 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
 
   Future<void> _test() async {
     final service = _service;
-    if (service.baseUrl.isEmpty || service.model.isEmpty) {
+    // 修書源的模型與找書的模型都驗：找書另選的模型不一定支援工具呼叫；只填
+    // 了其中一個也能測。
+    final models = {
+      for (final model in [service.model, _findModel])
+        if (model.isNotEmpty) model,
+    };
+    if (service.baseUrl.isEmpty || models.isEmpty) {
       _say('先填服務網址與模型');
       return;
     }
@@ -269,25 +275,17 @@ class _AiRepairSettingsPageState extends State<AiRepairSettingsPage> {
     setState(() => _testing = true);
     try {
       await _settings.save(service, findModel: _findModel);
-      await verifyAiToolConnection(AiChatClient(service));
-      // 找書另選了模型時一起驗：那個模型不一定支援工具呼叫。
-      final find = _findModel;
-      if (find.isNotEmpty && find != service.model) {
+      for (final model in models) {
         await verifyAiToolConnection(
           AiChatClient((
             baseUrl: service.baseUrl,
             apiKey: service.apiKey,
-            model: find,
+            model: model,
             effort: service.effort,
           )),
         );
       }
-      if (mounted) {
-        _say(
-          '連線與工具呼叫正常：${service.model}'
-          '${find.isNotEmpty && find != service.model ? '、$find' : ''}',
-        );
-      }
+      if (mounted) _say('連線與工具呼叫正常：${models.join('、')}');
     } on AiServiceException catch (error) {
       if (mounted) _say(error.message);
     } catch (error) {

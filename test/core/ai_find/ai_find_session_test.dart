@@ -532,6 +532,78 @@ void main() {
     expect(lines[2], endsWith('｜簡介：咒術迴戰 的簡介'));
   });
 
+  test('a submit before a detail in the same reply is judged before that '
+      'detail runs', () async {
+    final library = _Library({
+      '穿越': [_book('獵魔人')],
+    });
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '獵魔'},
+            ],
+            'summary': '先交',
+          },
+        ),
+        ('detail', {'book': 'b1'}),
+      ]),
+    ]);
+    await session(library, ai).start();
+    final results = ai.toolResults(3);
+    expect(results.first, contains('b1《獵魔人》：還沒看過詳情'));
+    expect(results.last, contains('# b1 的詳情'));
+  });
+
+  test('the same book spelled with different width or spaces keeps one '
+      'number and cannot be recommended twice', () async {
+    final library = _Library({
+      '獵魔': [_book('獵魔人')],
+      '人': [
+        SearchBook(
+          bookUrl: 'https://b.test/x',
+          name: '獵魔 人',
+          author: '作者',
+          origin: 'https://b.test',
+        ),
+      ],
+    });
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '獵魔'}),
+        ('search', {'keyword': '人'}),
+      ]),
+    ]);
+    await session(library, ai, depth: AiFindDepth.quick).start();
+    final results = ai.toolResults(2);
+    expect(results.last, contains('b1｜'), reason: '第二次搜到的同一本還是 b1');
+    expect(results.last, isNot(contains('b2')));
+  });
+
+  test('a detail says how many chapters the book has, or that the page does '
+      'not say', () async {
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        ('detail', {'book': 'b1'}),
+      ]),
+    ]);
+    await session(
+      _Library({
+        '穿越': [_book('獵魔人')],
+      }),
+      ai,
+    ).start();
+    expect(ai.toolResults(3).single, contains('章數：詳情頁沒寫'));
+  });
+
   test('names tells every regional name of a work, or that there is no '
       'entry', () async {
     final ai = _Ai([

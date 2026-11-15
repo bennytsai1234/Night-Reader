@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/ai_find_dao.dart';
+import 'package:night_reader/features/search/ai_find/ai_find_run.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
@@ -270,6 +271,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     // 先讀過去的找書再讀紀錄：紀錄讀完才決定畫不畫空頁，兩段一起出現。
     _pastFinds = await _aiFindDao.getNewestFirst();
     await loadHistory();
+    if (_disposed) return;
+    aiFindRuns.addListener(_onFindRunsChanged);
+  }
+
+  /// 背景的找書做完時已經存成一筆：搜尋頁開著也要看到它（Codex 審查）。
+  /// 每次找書的背景工作只在做完、頁面開關時通知，重讀的次數很少。
+  void _onFindRunsChanged() {
+    if (aiFindRuns.current?.isFinished ?? false) unawaited(loadPastFinds());
   }
 
   /// 從找書頁回來、刪了一筆之後重讀。
@@ -794,6 +803,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _progressNotify?.cancel();
     _progressUpdates.dispose();
     _coverSubscription?.cancel();
+    aiFindRuns.removeListener(_onFindRunsChanged);
     _searchModel.cancelSearch();
     _isSearching = false;
     _bookshelfTracker.dispose();

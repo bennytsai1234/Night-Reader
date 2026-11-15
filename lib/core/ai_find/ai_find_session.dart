@@ -14,6 +14,8 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:pool/pool.dart';
 import 'package:uuid/uuid.dart';
 
@@ -435,6 +437,8 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         '${field('分類與標籤', book.kind ?? found.book.kind)}'
         '${field('字數', book.wordCount ?? found.book.wordCount)}'
         '${field('最新章節', book.latestChapterTitle ?? found.book.latestChapterTitle)}'
+        // ADR 0060 的詳情有章數；詳情頁多半沒寫，要讀目錄才知道，不知道就說。
+        '章數：${book.totalChapterNum > 0 ? '${book.totalChapterNum} 章' : '詳情頁沒寫（讀章節時會知道）'}\n'
         '簡介：${intro.isEmpty ? '（沒有）' : intro}';
     s.log.note(_head(text));
     return AgentToolResult(text);
@@ -630,8 +634,12 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   /// 同一本（同類、同名、同作者）拿同一個編號，之後看過的詳情也算數。
   _Found _register(SearchBook book) {
+    // 書名、作者照搜尋頁合併同一本的寫法正規化（繁簡、全半形、空白、大小寫）：
+    // 不同搜尋各挑的代表來源寫法不一樣時，同一本才不會拿兩個編號、被推薦兩次
+    // （Codex 審查）。
     final identity =
-        '${book.bookKind.name}\u0000${book.name.trim()}\u0000${(book.author ?? '').trim()}';
+        '${book.bookKind.name}\u0000${_identityText(book.name)}'
+        '\u0000${_identityText(book.author ?? '')}';
     final existing = _idByIdentity[identity];
     if (existing != null) return _books[existing]!;
     final id = 'b${_books.length + 1}';
@@ -640,6 +648,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     _idByIdentity[identity] = id;
     return found;
   }
+
+  static String _identityText(String text) => ChineseUtils.t2s(
+    StringUtils.fullToHalf(text).replaceAll(RegExp(r'\s+'), '').toLowerCase(),
+  );
 
   /// 推薦的那張卡補上詳情抓到的封面與簡介（點進去照卡片的來源）。
   SearchBook _withDetail(_Found found) {

@@ -73,28 +73,45 @@ class AppAiFindLibrary implements AiFindLibrary {
       persist: false,
     );
     cancelToken.whenCancel.then((_) => model.cancelSearch()).ignore();
+    final searching = model.search(
+      key: keyword,
+      scope: _scope,
+      precisionSearch: false,
+      kind: kind,
+    );
+    var finished = false;
+    final ended = searching.whenComplete(() => finished = true);
+    // 時限到就照搜尋頁的「停止」拿已經回來的結果回去，不等還在跑的書源：
+    // 停止只發出取消，規則 JS 這類收不到取消的工作會拖到書源自己的逾時
+    // （Codex 審查）。搜尋真的結束才放掉 model。
+    final limit = Completer<void>();
+    final timer = Timer(searchLimit, limit.complete);
+    try {
+      await Future.any<Object?>([ended, limit.future, cancelToken.whenCancel]);
+    } finally {
+      timer.cancel();
+    }
     var pending = 0;
-    final limit = Timer(searchLimit, () {
+    if (!finished) {
       pending = collector.total - collector.completed;
       model.stopSearch();
-    });
-    try {
-      await model.search(
-        key: keyword,
-        scope: _scope,
-        precisionSearch: false,
-        kind: kind,
-      );
-    } finally {
-      limit.cancel();
-      model.dispose();
     }
+    ended
+        .then((_) => model.dispose(), onError: (_) => model.dispose())
+        .ignore();
     _throwIfCancelled(cancelToken);
     // 聚合源每一類都搜（ADR 0056），它搜到的書照搜尋頁的篩法只留這一類。
     final books = [
       for (final book in collector.books)
         if (book.bookKind == kind) book,
     ];
+    // 搜尋結果的欄位可能帶著書源的登入資料或 Cookie（書源把它們回顯在書名、
+    // 簡介裡）：送給 AI 之前，結果裡每個書源的秘密都要先收進遮蔽清單
+    // （Codex 審查：原本只有看詳情、讀章節的書源才收）。
+    await Future.wait([
+      for (final origin in {for (final book in books) ...book.origins})
+        _source(origin).then<void>((_) {}, onError: (Object _) {}),
+    ]);
     return (
       books: books,
       tiers: [for (final book in books) searchRelevanceRank(book, keyword)],
@@ -129,11 +146,14 @@ class AppAiFindLibrary implements AiFindLibrary {
         for (final origin in others) {
           try {
             final source = await _source(origin);
+            if (cancelToken.isCancelled) break;
             final candidate = (await _service.preciseSearch(
               source,
               book.name,
               book.author ?? '',
+              cancelToken: cancelToken,
             )).firstOrNull;
+            if (cancelToken.isCancelled) break;
             if (candidate == null) continue;
             final info = await _service.getBookInfo(
               source,
@@ -149,6 +169,7 @@ class AppAiFindLibrary implements AiFindLibrary {
             // 書源已經不在了。
           }
         }
+        _throwIfCancelled(cancelToken);
         if (first != null) return first;
         throw failure!;
       });
@@ -346,7 +367,7 @@ class AppAiFindLibrary implements AiFindLibrary {
     AiFindExploreSource source,
     CancelToken cancelToken,
   ) => _describeFailure(cancelToken, () async {
-    final kinds = await _exploreKinds(source);
+    final kinds = await _exploreKinds(source, cancelToken);
     return [for (final kind in kinds) kind.title];
   });
 
@@ -357,7 +378,7 @@ class AppAiFindLibrary implements AiFindLibrary {
     int page,
     CancelToken cancelToken,
   ) => _describeFailure(cancelToken, () async {
-    final kinds = await _exploreKinds(source);
+    final kinds = await _exploreKinds(source, cancelToken);
     final full = await _source(source.url);
     return _service.exploreBooks(
       full,
@@ -371,7 +392,8 @@ class AppAiFindLibrary implements AiFindLibrary {
   Future<List<AiFindShelfEntry>> shelf() async {
     final books = await getIt<BookDao>().getAll();
     final records = await getIt<ReadRecordDao>().getAll();
-    // 閱讀紀錄照書名、各台加總（閱讀統計的算法）。
+    // 閱讀紀錄照紀錄名稱（漫畫、有聲書帶類別前綴，`Book.recordName`）各台
+    // 加總，同閱讀統計（Codex 審查：照書名對，漫畫與有聲書的時間對不上）。
     final seconds = <String, int>{};
     for (final record in records) {
       seconds[record.bookName] =
@@ -381,21 +403,23 @@ class AppAiFindLibrary implements AiFindLibrary {
     final named = <String>{};
     for (final book in books) {
       if (!book.isInBookshelf) continue;
-      named.add(book.name);
-      entries.add(_entry(book, seconds[book.name] ?? 0, onShelf: true));
+      named.add(book.recordName);
+      entries.add(_entry(book, seconds[book.recordName] ?? 0, onShelf: true));
     }
-    // 讀過、已經移出書架的：資料庫還留著這本書時帶上作者與類別。
-    final byName = {for (final book in books) book.name: book};
-    for (final MapEntry(key: name, value: read) in seconds.entries) {
-      if (named.contains(name) || read <= 0) continue;
-      final book = byName[name];
+    // 讀過、已經移出書架的：資料庫還留著這本書時帶上作者與類別，沒有時照
+    // 紀錄名稱還原書名與類別。
+    final byRecord = {for (final book in books) book.recordName: book};
+    for (final MapEntry(key: record, value: read) in seconds.entries) {
+      if (named.contains(record) || read <= 0) continue;
+      final book = byRecord[record];
+      final split = BookSourceKind.splitRecordName(record);
       entries.add(
         book != null
             ? _entry(book, read, onShelf: false)
             : (
-                name: name,
+                name: split.name,
                 author: '',
-                kind: null,
+                kind: split.kind,
                 onShelf: false,
                 local: false,
                 readSeconds: read,
@@ -441,11 +465,18 @@ class AppAiFindLibrary implements AiFindLibrary {
     return _infos[book.bookUrl] = info;
   }
 
-  Future<List<ExploreKind>> _exploreKinds(AiFindExploreSource source) async {
+  Future<List<ExploreKind>> _exploreKinds(
+    AiFindExploreSource source,
+    CancelToken cancelToken,
+  ) async {
     final cached = _kinds[source.url];
     if (cached != null) return cached;
     final full = await _source(source.url);
-    final kinds = await _service.exploreKinds(full.exploreUrl, source: full);
+    final kinds = await _service.exploreKinds(
+      full.exploreUrl,
+      source: full,
+      cancelToken: cancelToken,
+    );
     // 沒有網址的是分組標題；ERROR: 開頭的是解析器把失敗寫成的分類。
     final error = kinds
         .where((kind) => kind.title.startsWith('ERROR:'))

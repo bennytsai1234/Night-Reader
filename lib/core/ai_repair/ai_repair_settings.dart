@@ -91,18 +91,21 @@ class AiRepairSettings {
 
   /// AI 找書用的服務（ADR 0060）：網址、金鑰、思考程度同修書源，模型是
   /// 「找書的模型」，留空就用修書源的模型。沒填好是 null。
+  ///
+  /// 只填了找書的模型、修書源的模型空著也算填好（Codex 審查）；網址、金鑰與
+  /// 兩個模型從同一次讀到的設定拿，不會拼到兩個時間點的值。
   Future<AiService?> findService() async {
-    final saved = await service();
-    if (saved == null) return null;
-    final model = await findModel();
-    return model.isEmpty
-        ? saved
-        : (
-            baseUrl: saved.baseUrl,
-            apiKey: saved.apiKey,
-            model: model,
-            effort: saved.effort,
-          );
+    final json = await _json();
+    final saved = _serviceOf(json);
+    final find = _field(json, 'findModel');
+    final model = find.isNotEmpty ? find : saved.model;
+    if (saved.baseUrl.isEmpty || model.isEmpty) return null;
+    return (
+      baseUrl: saved.baseUrl,
+      apiKey: saved.apiKey,
+      model: model,
+      effort: saved.effort,
+    );
   }
 
   /// 「找書的模型」；空字串是同修書源的模型。
@@ -128,8 +131,9 @@ class AiRepairSettings {
       };
 
   /// 畫面上填的內容，沒填的是空字串。
-  Future<AiService> read() async {
-    final json = await _json();
+  Future<AiService> read() async => _serviceOf(await _json());
+
+  static AiService _serviceOf(Map<String, dynamic> json) {
     String field(String name) => _field(json, name);
     final effort = field('effort');
     return (

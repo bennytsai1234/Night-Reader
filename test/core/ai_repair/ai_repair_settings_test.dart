@@ -60,6 +60,18 @@ void main() {
     }, reason: '和網址、金鑰同一筆，一起同步');
   });
 
+  test('a service with only the model for finding books is set up for '
+      'finding books', () async {
+    SharedPreferences.setMockInitialValues({
+      AiRepairSettings.serviceKey:
+          '{"baseUrl":"https://ai.example/v1","apiKey":"k","model":"",'
+          '"findModel":"finder"}',
+    });
+    final settings = AiRepairSettings(await SharedPreferences.getInstance());
+    expect(await settings.service(), isNull, reason: '修書源沒有模型');
+    expect((await settings.findService())?.model, 'finder');
+  });
+
   test('how many sites the AI repairs at once is kept, three by default, and '
       'synced', () async {
     SharedPreferences.setMockInitialValues({});
