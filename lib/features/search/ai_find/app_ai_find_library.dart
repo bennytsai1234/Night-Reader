@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
+import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -213,22 +214,23 @@ class AppAiFindLibrary implements AiFindLibrary {
         if (!chapter.isVolume) chapter,
     ];
     if (toc.isEmpty) throw const AiFindUnreadable('目錄是空的');
-    if (number > toc.length) {
-      throw AiFindUnreadable('沒有第 $number 章，共 ${toc.length} 章');
+    final index = number == aiFindLastChapter ? toc.length : number;
+    if (index > toc.length) {
+      throw AiFindUnreadable('沒有第 $index 章，共 ${toc.length} 章');
     }
-    final chapter = toc[number - 1];
+    final chapter = toc[index - 1];
     // 付費、還沒買的章節不抓（ADR 0057）。
     if (chapter.isLocked) throw const AiFindUnreadable(lockedChapterNotice);
     final raw = await _service.getContent(
       source,
       info,
       chapter,
-      nextChapterUrl: number < toc.length ? toc[number].url : null,
+      nextChapterUrl: index < toc.length ? toc[index].url : null,
       cancelToken: cancelToken,
     );
     final text = aiFindPlainText(raw);
     if (text.isEmpty) throw const AiFindUnreadable('正文是空的');
-    return (title: chapter.title, text: text, total: toc.length);
+    return (title: chapter.title, text: text, number: index, total: toc.length);
   });
 
   /// 查中文維基百科：先照名稱拿條目（轉址的別名會轉到正式條目），沒有就用

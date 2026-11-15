@@ -55,7 +55,7 @@ class _Library implements AiFindLibrary {
     SearchBook book,
     int number,
     CancelToken cancelToken,
-  ) async => (title: '第一章', text: '正文', total: 1);
+  ) async => (title: '第一章', text: '正文', number: 1, total: 1);
 
   @override
   Future<List<AiFindExploreSource>> exploreSources() async => const [];
@@ -336,7 +336,10 @@ void main() {
 
     await tester.tap(find.text('深入'));
     await tester.pumpAndSettle();
-    expect(find.text('每本都去看詳情，小說再試讀一章正文，讀不到的寫明原因；漫畫、有聲書照一般。'), findsOneWidget);
+    expect(
+      find.text('每本都去看詳情，小說再讀第一章與最後一章，看是不是太監，讀不到的寫明原因；漫畫、有聲書照一般。'),
+      findsOneWidget,
+    );
     expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦。'), findsNothing);
   });
 

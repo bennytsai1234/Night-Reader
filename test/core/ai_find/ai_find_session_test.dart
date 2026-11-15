@@ -93,8 +93,9 @@ class _Library implements AiFindLibrary {
     CancelToken cancelToken,
   ) async {
     calls.add('chapter ${book.name} $number');
-    if (number > 2) throw const AiFindUnreadable('沒有這一章，共 2 章');
-    return (title: '第$number章', text: '字' * 4500, total: 2);
+    final index = number == aiFindLastChapter ? 2 : number;
+    if (index > 2) throw const AiFindUnreadable('沒有這一章，共 2 章');
+    return (title: '第$index章', text: '字' * 4500, number: index, total: 2);
   }
 
   @override
@@ -249,6 +250,8 @@ void main() {
       ]),
       _calls([
         ('read', {'book': 'b1', 'chapter': 1}),
+        ('read', {'book': 'b1', 'chapter': -1}),
+        ('read', {'book': 'b2', 'chapter': -1}),
         ('read', {'book': 'b2', 'chapter': 3}),
       ]),
       _calls([
@@ -294,6 +297,7 @@ void main() {
 
     final reads = ai.toolResults(5);
     expect(reads.first, contains('這章共 4500 字，這是 0 到 3000，下一段從 3000 讀'));
+    expect(reads[1], contains('第 2／2 章（最後一章） 第2章'));
     expect(reads.last, contains('第 3 章讀不到：沒有這一章'));
     expect(ai.toolResults(6).single, contains('這是 3000 到 4500，這章讀完了'));
     expect(library.calls, isNot(contains('chapter 漫畫獵魔 1')));
@@ -386,6 +390,60 @@ void main() {
     expect(empty.picks, isEmpty);
     expect(empty.summary, '你的書源裡沒有');
     expect(none.toolResults(2).single, contains('沒有搜到書'));
+  });
+
+  test('deep: a novel read only from the start is sent back to read its last '
+      'chapter; reading the last chapter by number counts too', () async {
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        ('detail', {'book': 'b1'}),
+        ('detail', {'book': 'b2'}),
+        ('read', {'book': 'b1', 'chapter': 1}),
+        ('read', {'book': 'b2', 'chapter': 2}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '獵魔'},
+              {'book': 'b2', 'reason': '斬妖'},
+            ],
+            'summary': '先交',
+          },
+        ),
+      ]),
+      _calls([
+        ('read', {'book': 'b1', 'chapter': -1}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '獵魔，最後一章是斷更公告，可能太監'},
+              {'book': 'b2', 'reason': '斬妖'},
+            ],
+            'summary': '讀過頭尾',
+          },
+        ),
+      ]),
+    ]);
+    final find = session(
+      _Library({
+        '穿越': [_book('獵魔人'), _book('斬妖')],
+      }),
+      ai,
+      depth: AiFindDepth.deep,
+    );
+    await find.start();
+    final rejected = ai.toolResults(4).single;
+    expect(rejected, contains('b1《獵魔人》：還沒讀過最後一章'));
+    expect(rejected, isNot(contains('b2')), reason: '讀了第 2／2 章就是最後一章');
+    expect(find.picks.map((p) => p.book.name), ['獵魔人', '斬妖']);
   });
 
   test('the AI is told how many books to find; handing in more is sent back '
@@ -835,6 +893,8 @@ void main() {
         ('detail', {'book': 'b2'}),
         ('read', {'book': 'b1', 'chapter': 1}),
         ('read', {'book': 'b2', 'chapter': 1}),
+        ('read', {'book': 'b1', 'chapter': -1}),
+        ('read', {'book': 'b2', 'chapter': -1}),
       ]),
       _calls([
         (

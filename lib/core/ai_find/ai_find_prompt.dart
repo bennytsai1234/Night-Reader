@@ -9,7 +9,7 @@ import 'package:night_reader/core/models/source/book_source_logic.dart';
 enum AiFindDepth {
   quick('快速', '從搜尋結果的書名、字數與簡介開頭挑，不必每本都點開看。'),
   normal('一般', '每本都去看詳情（簡介、分類、字數）再推薦。'),
-  deep('深入', '每本都去看詳情，小說再試讀一章正文，讀不到的寫明原因；漫畫、有聲書照一般。');
+  deep('深入', '每本都去看詳情，小說再讀第一章與最後一章，看是不是太監，讀不到的寫明原因；漫畫、有聲書照一般。');
 
   const AiFindDepth(this.label, this.explanation);
   final String label;
@@ -29,6 +29,9 @@ const int aiFindMaxCount = 30;
 
 /// 搜尋一次給 AI 幾本，其餘的用 page 接著拿。
 const int aiFindSearchPageSize = 30;
+
+/// 讀章節的 chapter 給這個是最後一章。
+const int aiFindLastChapter = -1;
 
 /// 讀章節一次給幾字。
 const int aiFindReadLength = 3000;
@@ -73,7 +76,11 @@ sealed class AiFindCommand {
         final book = id(args['book'], 'b');
         final chapter = integer('chapter') ?? 1;
         final from = integer('from') ?? 0;
-        if (book == null || chapter < 1 || from < 0) return null;
+        if (book == null ||
+            (chapter < 1 && chapter != aiFindLastChapter) ||
+            from < 0) {
+          return null;
+        }
         return AiFindRead(book, chapter, from);
       case 'explore':
         final category = integer('category');
@@ -194,12 +201,15 @@ final List<AiTool> aiFindTools = [
   (
     name: 'read',
     description:
-        '讀一本小說的某一章，一次給 $aiFindReadLength 字，寫出這章共幾字、下一段從哪讀。'
-        '漫畫與有聲書讀不了正文。',
+        '讀一本小說的某一章，一次給 $aiFindReadLength 字，寫出這是第幾章、全書共幾章、'
+        '這章共幾字、下一段從哪讀。漫畫與有聲書讀不了正文。',
     parameters: _object(
       {
         'book': _book,
-        'chapter': {'type': 'integer', 'description': '第幾章，從 1 數，預設 1'},
+        'chapter': {
+          'type': 'integer',
+          'description': '第幾章，從 1 數，預設 1；給 $aiFindLastChapter 是最後一章',
+        },
         'from': {'type': 'integer', 'description': '從這章第幾字讀起，預設 0'},
       },
       ['book'],
@@ -284,7 +294,10 @@ const String aiFindSystemPrompt =
     '- 推薦理由寫這本哪裡相符、哪裡不確定或不符，依據是你從工具看到的書名、分類、'
     '簡介、正文。\n'
     '- 深度決定每本要查到哪裡才收：快速是工具回過就收；一般是每本都看過詳情；'
-    '深入是每本都看過詳情，小說還要讀過至少一章（讀不到的寫明讀不到的原因也收）。'
+    '深入是每本都看過詳情，小說還要讀過第一章與最後一章（chapter 給 $aiFindLastChapter；'
+    '讀不到的寫明讀不到的原因也收）。最後一章看得出是不是太監：故事沒收尾就停了，'
+    '例如最後一章是請假或斷更公告、劇情停在半路；太監的書照樣可以推，理由寫明'
+    '可能太監與依據。'
     '交出不合的書會被退回並列出哪幾本不合。\n\n'
     '# 找法\n'
     '1. 弄清楚他說的是什麼：提到作品時，用 names 查每部作品（同一次回覆一起查），'
@@ -302,7 +315,7 @@ const String aiFindSystemPrompt =
     '4. 挑優：先看相符程度，再看篇幅（字數或章數）多、幾個書源有（越多通常越熱門）；'
     '同樣相符時篇幅長的優先，不到 30 萬字的也可以推，理由寫明篇幅短。完結、連載、'
     '停更都不影響挑選，篇幅夠讀就好，推薦理由不寫更新狀態與最後更新的時間，描述'
-    '問到時才寫。照深度看詳情、讀章節確認。\n'
+    '問到時才寫（讀過最後一章看出可能太監的照上面寫）。照深度看詳情、讀章節確認。\n'
     '5. 交出；找不到相關的，交出零本並說明找了什麼。';
 
 /// 第一輪送給 AI 的話：系統提示與這次的描述、深度、本數，和「不想看的」清單。
