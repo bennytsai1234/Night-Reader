@@ -22,6 +22,11 @@ enum AiFindDepth {
       values.asNameMap()[name] ?? AiFindDepth.normal;
 }
 
+/// 要找幾本：使用者在開始前輸入，預設 [aiFindDefaultCount]，最多
+/// [aiFindMaxCount]（交出時一本一本查到深度要的地方，本數越多越久）。
+const int aiFindDefaultCount = 10;
+const int aiFindMaxCount = 30;
+
 /// 搜尋一次給 AI 幾本，其餘的用 page 接著拿。
 const int aiFindSearchPageSize = 30;
 
@@ -268,7 +273,8 @@ const String aiFindSystemPrompt =
     '- 合不合看故事，不看字眼：穿越、重生、爽文、系統這類，簡介和分類常不會照字'
     '寫，要從故事判斷（例如主角從現代到了另一個世界是穿越，一路變強、壓過對手是'
     '爽文）。描述裡的條件是偏好，部分相符就可以推。\n'
-    '- 交出 10 本：相關的不夠 10 本時有幾本交幾本，說明裡寫為什麼不夠。\n'
+    '- 交出使用者要的本數（「本數」那一段）：相關的不夠時有幾本交幾本，說明裡寫'
+    '為什麼不夠；超過本數會被退回。\n'
     '- 乙女向（女主角和原作男角色談戀愛）與成人向的書可以搜、可以看，但只有描述'
     '提到、或書架上讀的就是那一類時才推薦；其他時候不推薦。\n'
     '- 使用者列了「不想看的」（例如女頻、後宮）時，那幾類的書可以搜、可以看，但不'
@@ -291,7 +297,7 @@ const String aiFindSystemPrompt =
     '   - 綜漫、諸天、無限流：書名不帶作品名，要看簡介有沒有這部作品。\n'
     '   - 沒提到作品時，搜描述裡的題材字眼。\n'
     '3. 每輪看收穫再決定：結果只列書名或作者含那個詞的書，分成完全相符、部分相符，'
-    '每本附簡介開頭。相關的夠多（十本以上）就去挑；太少就換下一招或翻下一批，不用'
+    '每本附簡介開頭。相關的夠交出要的本數就去挑；太少就換下一招或翻下一批，不用'
     '每一招都試。\n'
     '4. 挑優：先看相符程度，再看篇幅（字數或章數）多、幾個書源有（越多通常越熱門）；'
     '同樣相符時篇幅長的優先，不到 30 萬字的也可以推，理由寫明篇幅短。完結、連載、'
@@ -299,15 +305,16 @@ const String aiFindSystemPrompt =
     '問到時才寫。照深度看詳情、讀章節確認。\n'
     '5. 交出；找不到相關的，交出零本並說明找了什麼。';
 
-/// 第一輪送給 AI 的話：系統提示與這次的描述、深度，和「不想看的」清單。
+/// 第一輪送給 AI 的話：系統提示與這次的描述、深度、本數，和「不想看的」清單。
 List<AiMessage> aiFindOpening({
   required String description,
   required AiFindDepth depth,
+  int count = aiFindDefaultCount,
   List<String> avoid = const [],
 }) => [
   const AiMessage.system(aiFindSystemPrompt),
   AiMessage.user(
-    '# 使用者的描述\n$description\n\n# 深度\n${depth.label}'
+    '# 使用者的描述\n$description\n\n# 深度\n${depth.label}\n\n# 本數\n$count'
     '${avoid.isEmpty ? '' : '\n\n# 不想看的\n${avoid.join('、')}'}',
   ),
 ];

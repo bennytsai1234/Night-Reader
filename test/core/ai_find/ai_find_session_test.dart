@@ -204,11 +204,13 @@ void main() {
     _Library library,
     _Ai ai, {
     AiFindDepth depth = AiFindDepth.normal,
+    int count = aiFindDefaultCount,
     List<String> avoid = const [],
   }) {
     final find = AiFindSession(
       description: '爽文、穿越，想要更刺激的',
       depth: depth,
+      count: count,
       avoid: avoid,
       library: library,
       ask: ai.call,
@@ -384,6 +386,50 @@ void main() {
     expect(empty.picks, isEmpty);
     expect(empty.summary, '你的書源裡沒有');
     expect(none.toolResults(2).single, contains('沒有搜到書'));
+  });
+
+  test('the AI is told how many books to find; handing in more is sent back '
+      'to pick the best ones', () async {
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '獵魔'},
+              {'book': 'b2', 'reason': '斬妖'},
+            ],
+            'summary': '兩本',
+          },
+        ),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b2', 'reason': '斬妖'},
+            ],
+            'summary': '最合的一本',
+          },
+        ),
+      ]),
+    ]);
+    final find = session(
+      _Library({
+        '穿越': [_book('獵魔人'), _book('斬妖')],
+      }),
+      ai,
+      depth: AiFindDepth.quick,
+      count: 1,
+    );
+    await find.start();
+    expect(ai.seen.first[1].content, contains('# 本數\n1'));
+    expect(ai.toolResults(3).single, contains('交了 2 本，使用者要 1 本：挑最合的 1 本再交'));
+    expect(find.picks.map((p) => p.book.name), ['斬妖']);
   });
 
   test('searches in one reply run at the same time, the same search runs '

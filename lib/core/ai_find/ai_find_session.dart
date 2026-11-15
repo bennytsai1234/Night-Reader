@@ -38,6 +38,7 @@ class AiFindSession extends ChangeNotifier {
     required this.depth,
     required this._library,
     required this._ask,
+    this.count = aiFindDefaultCount,
     this.avoid = const [],
     this.serviceLabel = '',
     this.scope = '',
@@ -73,7 +74,11 @@ class AiFindSession extends ChangeNotifier {
     final session = AiFindSession(
       description: description,
       depth: AiFindDepth.fromName(read<String>('depth')),
-      // 早於清單的存檔沒有這一項；接著做時清單已在存下的對話裡。
+      // 早於本數與清單的存檔沒有這兩項；接著做時它們已在存下的對話裡。
+      count: switch (json['count']) {
+        final int count => count,
+        _ => aiFindDefaultCount,
+      },
       avoid: switch (json['avoid']) {
         final List<Object?> items => items.whereType<String>().toList(),
         _ => const [],
@@ -166,6 +171,9 @@ class AiFindSession extends ChangeNotifier {
 
   final String description;
   final AiFindDepth depth;
+
+  /// 這次要找幾本：交出超過就退回。
+  final int count;
 
   /// 這次找書送給 AI 的「不想看的」清單（開始那一刻的，之後改清單不影響）。
   final List<String> avoid;
@@ -348,6 +356,7 @@ class AiFindSession extends ChangeNotifier {
         'id': id,
         'description': description,
         'depth': depth.name,
+        'count': count,
         'avoid': avoid,
         'scope': scope,
         'serviceLabel': serviceLabel,
@@ -451,8 +460,12 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   CancelToken get _cancel => s._cancelToken;
 
   @override
-  List<AiMessage> opening() =>
-      aiFindOpening(description: s.description, depth: s.depth, avoid: s.avoid);
+  List<AiMessage> opening() => aiFindOpening(
+    description: s.description,
+    depth: s.depth,
+    count: s.count,
+    avoid: s.avoid,
+  );
 
   @override
   String redact(String text) => redactAiRepairSecrets(text, _library.secrets);
@@ -904,6 +917,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   AgentResult _submit(AiFindSubmit command) {
     _say('交出 ${command.books.length} 本');
+    final extra = command.books.length - s.count;
     final problems = <String>[];
     final seen = <String>{};
     for (final pick in command.books) {
@@ -928,9 +942,17 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         problems.add('${pick.book}《${found.book.name}》：還沒讀過正文（深度 深入）');
       }
     }
-    if (problems.isNotEmpty) {
-      _finishRound('交出被退回：${problems.length} 本不合', failed: true);
-      final text = '# 交出被退回，這幾本不合：\n${problems.join('\n')}';
+    if (extra > 0 || problems.isNotEmpty) {
+      _finishRound(
+        '交出被退回：${[if (extra > 0) '多了 $extra 本', if (problems.isNotEmpty) '${problems.length} 本不合'].join('、')}',
+        failed: true,
+      );
+      final text = [
+        '# 交出被退回',
+        if (extra > 0)
+          '交了 ${command.books.length} 本，使用者要 ${s.count} 本：挑最合的 ${s.count} 本再交',
+        if (problems.isNotEmpty) ...['這幾本不合：', ...problems],
+      ].join('\n');
       s.log.both(text);
       return AgentRejected(text);
     }

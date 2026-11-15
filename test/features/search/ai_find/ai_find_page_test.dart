@@ -203,6 +203,7 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
               required avoid,
               required service,
               required scope,
@@ -285,6 +286,7 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
               required avoid,
               required service,
               required scope,
@@ -338,10 +340,12 @@ void main() {
     expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦。'), findsNothing);
   });
 
-  testWidgets('the avoid list: the row sums it up, the list page adds, '
-      'edits and deletes, and starting sends the saved list', (tester) async {
+  testWidgets('the book count and the avoid list: the rows sum them up, the '
+      'count takes 1 to 30, the list page adds, edits and deletes, and '
+      'starting sends both', (tester) async {
     final settings = await prefs();
     List<String>? sent;
+    int? sentCount;
     late AiFindRun run;
     await show(
       tester,
@@ -351,11 +355,13 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
               required avoid,
               required service,
               required scope,
             }) {
               sent = avoid;
+              sentCount = count;
               final replies = [
                 _call('submit', {'books': <Object?>[], 'summary': '沒找到'}),
               ];
@@ -363,6 +369,7 @@ void main() {
                 AiFindSession(
                   description: description,
                   depth: depth,
+                  count: count,
                   avoid: avoid,
                   library: _Library(),
                   ask: (_, _) async => replies.removeAt(0),
@@ -379,6 +386,18 @@ void main() {
       ),
     );
     expect(find.text('沒有'), findsOneWidget);
+    expect(find.text('10 本'), findsOneWidget, reason: '預設找 10 本');
+
+    await tester.tap(find.text('本數'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '31');
+    await tester.tap(find.text('確定'));
+    await tester.pumpAndSettle();
+    expect(find.text('請輸入 1 到 30'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, '5');
+    await tester.tap(find.text('確定'));
+    await tester.pumpAndSettle();
+    expect(find.text('5 本'), findsOneWidget);
 
     Future<void> type(String text) async {
       await tester.tap(find.text('新增'));
@@ -422,6 +441,8 @@ void main() {
     await tester.pump();
     await settle(tester, () => run.isFinished);
     expect(sent, ['女頻', '系統文']);
+    expect(sentCount, 5);
+    expect(settings.getInt(aiFindCountKey), 5, reason: '下次停在 5 本');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -437,6 +458,7 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
               required avoid,
               required service,
               required scope,
@@ -549,6 +571,7 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
               required avoid,
               required service,
               required scope,
