@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
@@ -193,7 +194,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        UiText(
           count > 0 ? '第 ${shown + 1} / $count 張' : '',
           style: AppTextStyles.labelXs.copyWith(
             color: menuStyle.mutedForeground,
@@ -206,7 +207,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                   ? widget.onPrevChapter
                   : null,
               style: buttonStyle,
-              child: const Text('上一話'),
+              child: const UiText('上一話'),
             ),
             Expanded(
               child: SliderTheme(
@@ -240,7 +241,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                   ? widget.onNextChapter
                   : null,
               style: buttonStyle,
-              child: const Text('下一話'),
+              child: const UiText('下一話'),
             ),
           ],
         ),
