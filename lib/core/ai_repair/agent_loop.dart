@@ -58,6 +58,130 @@ abstract class AgentTask<C> {
 
   /// 接進對話、但不是工具結果的一句（沒有指令、讀不懂、這輪的狀態）。
   void factAdded(String fact) {}
+
+  /// 要問 AI 之前的完整狀態：上一輪的每個呼叫都有結果了，接著問的就是
+  /// [state] 的對話。任務在這裡同步存下它與自己的狀態（看過哪些書、抓過的
+  /// 頁），App 重開後用 [runAgent] 的 `resume` 從這裡接著問（ADR 0058）。
+  /// 一定要在這裡同步存：之後的工具會改任務的狀態，晚一點存的話，任務記得
+  /// 做過、對話裡卻還沒有那句結果。
+  void checkpoint(AgentCheckpoint state) {}
+}
+
+/// 問 AI 之前的迴圈狀態（[AgentTask.checkpoint]）：對話與停下條件的計數，
+/// 從這裡接著跑和沒中斷一樣。
+final class AgentCheckpoint {
+  AgentCheckpoint({
+    required this.attempt,
+    required this.round,
+    required this.messages,
+    required this.noCommand,
+    required this.badCommand,
+    required this.rejections,
+    required this.stalls,
+    required this.calls,
+    required this.lastResult,
+    required this.stats,
+  });
+
+  /// 第幾次（整件重跑算一次）。
+  final int attempt;
+
+  /// 這一次已經問了幾輪。
+  final int round;
+  final List<AiMessage> messages;
+  final int noCommand;
+  final int badCommand;
+  final int rejections;
+  final int stalls;
+
+  /// 同樣的工具與參數各叫了幾次（[AiAgentKnobs.sameCallLimit]）。
+  final Map<String, int> calls;
+
+  /// 每個工具與參數上一次的結果（「結果與前幾次相同」）。
+  final Map<String, String> lastResult;
+
+  /// [AgentStats.toMap] 的樣子。
+  final Map<String, Object?> stats;
+
+  Map<String, Object?> toJson() => {
+    'attempt': attempt,
+    'round': round,
+    'messages': [for (final message in messages) agentMessageToJson(message)],
+    'noCommand': noCommand,
+    'badCommand': badCommand,
+    'rejections': rejections,
+    'stalls': stalls,
+    'calls': calls,
+    'lastResult': lastResult,
+    'stats': stats,
+  };
+
+  /// 讀回 [toJson] 存的；格式不對時丟 [FormatException]。
+  factory AgentCheckpoint.fromJson(Map<String, Object?> json) {
+    T read<T>(String key) => switch (json[key]) {
+      final T value => value,
+      _ => throw FormatException('迴圈狀態少了 $key'),
+    };
+    return AgentCheckpoint(
+      attempt: read<int>('attempt'),
+      round: read<int>('round'),
+      messages: [
+        for (final item in read<List<Object?>>('messages'))
+          agentMessageFromJson(item),
+      ],
+      noCommand: read<int>('noCommand'),
+      badCommand: read<int>('badCommand'),
+      rejections: read<int>('rejections'),
+      stalls: read<int>('stalls'),
+      calls: read<Map<String, Object?>>('calls')
+          .map((key, value) => MapEntry(key, value is int ? value : 0)),
+      lastResult: read<Map<String, Object?>>('lastResult')
+          .map((key, value) => MapEntry(key, '$value')),
+      stats: read<Map<String, Object?>>('stats'),
+    );
+  }
+}
+
+/// 存檔用的一句對話：和送給服務的樣子（[AiMessage.toJson]）分開，原樣存
+/// 每個欄位（送出時空白的內容會變成 null，讀回來就不一樣了）。
+Map<String, Object?> agentMessageToJson(AiMessage message) => {
+  'role': message.role,
+  'content': message.content,
+  if (message.reasoning.isNotEmpty) 'reasoning': message.reasoning,
+  'toolCallId': ?message.toolCallId,
+  if (message.toolCalls.isNotEmpty)
+    'toolCalls': [
+      for (final call in message.toolCalls)
+        {'id': call.id, 'name': call.name, 'arguments': call.arguments},
+    ],
+};
+
+AiMessage agentMessageFromJson(Object? json) {
+  if (json case {'role': final String role, 'content': final String content}) {
+    return AiMessage(
+      role,
+      content,
+      reasoning: switch (json['reasoning']) {
+        final String text => text,
+        _ => '',
+      },
+      toolCallId: switch (json['toolCallId']) {
+        final String id => id,
+        _ => null,
+      },
+      toolCalls: [
+        if (json['toolCalls'] case final List<Object?> calls)
+          for (final call in calls)
+            if (call case {
+              'id': final String id,
+              'name': final String name,
+              'arguments': final String arguments,
+            })
+              (id: id, name: name, arguments: arguments),
+      ],
+    );
+  }
+  throw const FormatException('對話的一句格式不對');
 }
 
 /// 一輪問 AI 的紀錄（寫進修復紀錄）。[usage] 是這輪的用量：回完的照服務
@@ -289,10 +413,46 @@ final class AgentStats {
   Duration tools = Duration.zero;
   final Stopwatch _clock = Stopwatch()..start();
 
+  /// 暫停之前已經跑了多久（接著跑時從 [toMap] 讀回來）；暫停的時間不算。
+  Duration _before = Duration.zero;
+
   /// 每次沒跑完的原因，照順序。
   final List<String> restarts = [];
 
-  Duration get total => _clock.elapsed;
+  /// 接著跑：讀回暫停前 [toMap] 的數字。
+  void restore(Map<String, Object?> map) {
+    int read(String key) => switch (map[key]) {
+      final int value => value,
+      _ => 0,
+    };
+    attempts = read('attempts').clamp(1, 1 << 30);
+    rounds = read('rounds');
+    toolCalls = read('toolCalls');
+    rejections = read('rejections');
+    badCommands = read('badCommands');
+    noCommands = read('noCommands');
+    stalls = read('stalls');
+    prompt = read('prompt');
+    cached = read('cached');
+    completion = read('completion');
+    reasoning = read('reasoning');
+    model = Duration(milliseconds: read('modelMs'));
+    tools = Duration(milliseconds: read('toolsMs'));
+    _before = Duration(
+      milliseconds: read('modelMs') + read('toolsMs') + read('otherMs'),
+    );
+    restarts
+      ..clear()
+      ..addAll([
+        if (map['restarts'] case final List<Object?> list)
+          for (final item in list) '$item',
+      ]);
+    _clock
+      ..reset()
+      ..start();
+  }
+
+  Duration get total => _before + _clock.elapsed;
   Duration get other => total - model - tools;
 
   void add(AiUsage usage) {
@@ -317,7 +477,7 @@ final class AgentStats {
     'modelMs': model.inMilliseconds,
     'toolsMs': tools.inMilliseconds,
     'otherMs': other.inMilliseconds,
-    'restarts': restarts,
+    'restarts': [...restarts],
   };
 }
 
@@ -329,20 +489,25 @@ typedef AgentAsk = Future<AiReply> Function(
 
 /// 跑一件：照 [AgentTask] 開場，一輪一輪問 [ask]，直到有結果。
 /// [cancelToken] 取消時是 [AgentEndKind.cancelled]。[attempts] 是含第一次
-/// 最多跑幾次。
+/// 最多跑幾次。給了 [resume] 是從暫停前存的那一刻接著跑（任務自己的狀態
+/// 由任務先讀回來），不再開場。
 Future<AgentEnd> runAgent<C>(
   AgentTask<C> task, {
   required AgentAsk ask,
   required CancelToken cancelToken,
   int attempts = AiAgentKnobs.attempts,
+  AgentCheckpoint? resume,
 }) async {
   final stats = AgentStats();
+  if (resume != null) stats.restore(resume.stats);
   AgentEnd end(AgentEndKind kind, String reason) =>
       AgentEnd(kind, reason, stats);
 
-  for (var attempt = 1; ; attempt++) {
+  var from = resume;
+  for (var attempt = from?.attempt ?? 1; ; attempt++) {
     stats.attempts = attempt;
-    final why = await _attempt(task, attempt, stats, ask, cancelToken);
+    final why = await _attempt(task, attempt, stats, ask, cancelToken, from);
+    from = null;
     switch (why) {
       case _Finished(:final kind, :final reason):
         return end(kind, reason);
@@ -381,18 +546,21 @@ Future<_AttemptEnd> _attempt<C>(
   AgentStats stats,
   AgentAsk ask,
   CancelToken cancelToken,
+  AgentCheckpoint? resume,
 ) async {
-  final messages = [
-    for (final message in task.opening())
-      AiMessage(message.role, task.redact(message.content)),
-  ];
-  var round = 0;
-  var noCommand = 0;
-  var badCommand = 0;
-  var rejections = 0;
-  var stalls = 0;
-  final calls = <String, int>{};
-  final lastResult = <String, String>{};
+  final messages = resume != null
+      ? [...resume.messages]
+      : [
+          for (final message in task.opening())
+            AiMessage(message.role, task.redact(message.content)),
+        ];
+  var round = resume?.round ?? 0;
+  var noCommand = resume?.noCommand ?? 0;
+  var badCommand = resume?.badCommand ?? 0;
+  var rejections = resume?.rejections ?? 0;
+  var stalls = resume?.stalls ?? 0;
+  final calls = <String, int>{...?resume?.calls};
+  final lastResult = <String, String>{...?resume?.lastResult};
   const cancelled = _Finished(AgentEndKind.cancelled, '已停止');
 
   /// 這輪的狀態，附在結果後面：快用完時剩幾輪。
@@ -416,6 +584,20 @@ Future<_AttemptEnd> _attempt<C>(
     if (round >= AiAgentKnobs.maxRounds) {
       return _Retry('用完 ${AiAgentKnobs.maxRounds} 輪還沒交出');
     }
+    task.checkpoint(
+      AgentCheckpoint(
+        attempt: attempt,
+        round: round,
+        messages: List.unmodifiable(messages),
+        noCommand: noCommand,
+        badCommand: badCommand,
+        rejections: rejections,
+        stalls: stalls,
+        calls: Map.unmodifiable(calls),
+        lastResult: Map.unmodifiable(lastResult),
+        stats: stats.toMap(),
+      ),
+    );
     round++;
     stats.rounds++;
     task.roundStarted(attempt, round, messages);
