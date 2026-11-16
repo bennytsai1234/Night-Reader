@@ -118,34 +118,77 @@ void main() {
     expect(provider.sources.map((s) => s.bookSourceUrl), [url]);
   });
 
-  test('a check stopped midway leaves no row spinning', () async {
-    final stopping = CheckSourceService(
-      spawn: (source, config, timeout) async {
-        final result = Completer<SourceCheckIsolateResult?>();
-        return SourceCheckIsolateHandle(
-          result: result.future,
-          abort: () => result.complete(null),
-        );
-      },
-    );
+  Future<SourceManagerProvider> providerWith(CheckSourceService check) async {
     await GetIt.instance.unregister<CheckSourceService>();
-    GetIt.instance.registerSingleton<CheckSourceService>(stopping);
+    GetIt.instance.registerSingleton<CheckSourceService>(check);
     final provider = SourceManagerProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
     while (provider.isLoading || provider.totalSourceCount == 0) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
+    return provider;
+  }
 
-    final run = stopping.check([url]);
-    while (stopping.progressOf(url) == null) {
+  test('checked fine and left alone, the row keeps 校驗成功', () async {
+    final healthy = CheckSourceService(
+      spawn: (source, config, timeout) async => SourceCheckIsolateHandle(
+        result: Future.value(
+          SourceCheckIsolateResult(
+            stage: 'done',
+            message: '校驗成功',
+            isHealthy: true,
+            updatedSourceJson: source.toJson(),
+            logs: const [],
+          ),
+        ),
+        abort: () {},
+      ),
+    );
+    final provider = await providerWith(healthy);
+
+    await healthy.check([url]);
+    await provider.loadSources(showLoading: false);
+
+    expect(healthy.progressOf(url)?.message, '校驗成功');
+    expect(healthy.progressOf(url)?.hasIssue, isFalse);
+  });
+
+  test('a check stopped midway keeps the finished rows, even while the '
+      'stop is still writing, and leaves no row spinning', () async {
+    const slow = 'https://slow.example';
+    await dao.upsert(BookSource(bookSourceUrl: slow, bookSourceName: '慢的'));
+    // 跑著的書源停下要一點時間：按了停止，這一輪還沒做完。
+    final stopped = Completer<void>();
+    final stopping = CheckSourceService(
+      spawn: (source, config, timeout) async {
+        if (source.bookSourceUrl != slow) {
+          return _searchBroken(source, config, timeout);
+        }
+        final result = Completer<SourceCheckIsolateResult?>();
+        return SourceCheckIsolateHandle(
+          result: result.future,
+          abort: () => stopped.future.then((_) => result.complete(null)),
+        );
+      },
+    );
+    final provider = await providerWith(stopping);
+
+    final run = stopping.check([url, slow]);
+    while (stopping.progressOf(url)?.isFinal != true ||
+        stopping.progressOf(slow) == null) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
-    expect(stopping.progressOf(url)?.isFinal, isFalse);
+    expect(stopping.progressOf(slow)?.isFinal, isFalse);
     stopping.cancel();
+    await provider.loadSources(showLoading: false);
+    expect(stopping.progressOf(url)?.hasIssue, isTrue);
+
+    stopped.complete();
     await run;
     await provider.loadSources(showLoading: false);
 
-    expect(stopping.progressOf(url), isNull);
+    expect(stopping.progressOf(url)?.hasIssue, isTrue);
+    expect(stopping.progressOf(slow), isNull);
   });
 
   test('marks cleared for just this source drop its result too', () async {

@@ -411,6 +411,10 @@ class CheckSourceService extends ChangeNotifier {
   final BookSourceDao _sourceDao;
 
   bool _isChecking = false;
+
+  /// 一輪校驗開始到結果全寫進資料庫為止。按停止時 [_isChecking] 先變成
+  /// false，這一輪還要等跑著的書源停下、把結果寫進去才算完。
+  bool _runInProgress = false;
   int _finishedRunCount = 0;
   int _totalCount = 0;
   int _currentCount = 0;
@@ -462,9 +466,10 @@ class CheckSourceService extends ChangeNotifier {
   /// 書源清單照資料庫重讀了（[sources] 是全部書源），丟掉不再代表書源現況
   /// 的進度，那些列改照資料庫顯示：校驗之後被別處改寫或刪掉的書源（和
   /// 「沒有異常」篩選一致），和校驗停下時還沒做完、停在「等待校驗」的。
-  /// 校驗中不丟：結果分批寫進資料庫，清單要等做完才重讀。
+  /// 這一輪還沒做完（[_runInProgress]）不丟：結果分批寫進資料庫，按了停止
+  /// 也要等跑著的書源停下、寫完才算數，清單要等做完才重讀。
   void forgetOutdatedProgress(Iterable<BookSource> sources) {
-    if (_isChecking || _sourceProgress.isEmpty) return;
+    if (_runInProgress || _sourceProgress.isEmpty) return;
     final byUrl = {for (final source in sources) source.bookSourceUrl: source};
     _sourceProgress.removeWhere((url, progress) {
       final source = byUrl[url];
@@ -547,6 +552,7 @@ class CheckSourceService extends ChangeNotifier {
     ).toList(growable: false);
     final config = _config.normalized();
     _isChecking = true;
+    _runInProgress = true;
     CrashTrail.action('開始校驗書源（${normalizedUrls.length} 個）');
     _totalCount = doneBefore + normalizedUrls.length;
     _currentCount = doneBefore;
@@ -594,7 +600,11 @@ class CheckSourceService extends ChangeNotifier {
 
     _isChecking = false;
     _activeTasks.clear();
-    await _flushPendingStatusWrites();
+    try {
+      await _flushPendingStatusWrites();
+    } finally {
+      _runInProgress = false;
+    }
     _lastReport = SourceCheckReport([
       ...earlier,
       ...results.whereType<SourceCheckEntry>(),
