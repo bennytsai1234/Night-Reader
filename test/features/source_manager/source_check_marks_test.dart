@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -113,6 +114,34 @@ void main() {
       expect(provider.allGroups, ['精選']);
     },
   );
+
+  test('an AI-confirmed unstable website is removable until marks are cleared', () async {
+    final source = BookSource(
+      bookSourceUrl: 'https://unstable.example',
+      bookSourceName: '不穩定網站',
+      bookSourceGroup: '精選,$searchBrokenSourceGroupTag',
+      bookSourceComment: '// Error: 舊的搜尋失效\\n\\n作者的說明',
+    );
+    await dao.upsert(source);
+    await markAiUnfixable(source, 'site_unstable');
+
+    final marked = (await dao.getByUrl(source.bookSourceUrl))!;
+    expect(marked.hasGroupTag(aiUnfixableSourceGroupTag), isTrue);
+    expect(marked.hasGroupTag(unstableSourceGroupTag), isTrue);
+    expect(marked.runtimeHealth.cleanupCandidate, isTrue);
+    expect(marked.runtimeHealth.quarantined, isTrue);
+    expect(marked.errorComment, contains('網站不穩定'));
+    expect(marked.bookSourceComment, contains('作者的說明'));
+    expect(marked.hasGroupTag(searchBrokenSourceGroupTag), isFalse);
+
+    final provider = await loadedProvider();
+    expect(await provider.clearCheckMarks({source.bookSourceUrl}), 1);
+    final cleared = (await dao.getByUrl(source.bookSourceUrl))!;
+    expect(cleared.isCleanupCandidate, isFalse);
+    expect(cleared.hasGroupTag(aiUnfixableSourceGroupTag), isFalse);
+    expect(cleared.bookSourceGroup, '精選');
+    expect(cleared.bookSourceComment, '作者的說明');
+  });
 
   test('clearing the selected sources leaves the others marked', () async {
     final provider = await loadedProvider();
