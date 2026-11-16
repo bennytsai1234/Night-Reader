@@ -296,39 +296,45 @@ void main() {
     expect(unfixable, ['https://site.example#a', 'https://site.example#b']);
   });
 
-  test('unstable websites are unfixable, and their sources are removable', () async {
-    final b = batch([
-      _source('https://site.example#a'),
-      _source('https://site.example#b'),
-      _source('https://other.example'),
-    ], replies: (url) => [
-      if (url.contains('site.example'))
-        jsonEncode({
-          'action': 'give_up',
-          'why': 'site_unstable',
-          'reason': '相同搜尋有時 200，有時 502',
-        })
-      else
-        _fix,
-    ]);
+  test(
+    'unstable websites are unfixable, and their sources are removable',
+    () async {
+      final b = batch(
+        [
+          _source('https://site.example#a'),
+          _source('https://site.example#b'),
+          _source('https://other.example'),
+        ],
+        replies: (url) => [
+          if (url.contains('site.example'))
+            jsonEncode({
+              'action': 'give_up',
+              'why': 'site_unstable',
+              'reason': '相同搜尋有時 200，有時 502',
+            })
+          else
+            _fix,
+        ],
+      );
 
-    await b.start();
+      await b.start();
 
-    expect(b.count(RepairOutcome.notFixed), 2);
-    expect(b.count(RepairOutcome.aiFixed), 1);
-    expect(unfixable, ['https://site.example#a', 'https://site.example#b']);
-    expect(
-      b.unstableLeft.map((item) => item.source.bookSourceUrl),
-      ['https://site.example#a', 'https://site.example#b'],
-    );
-    await b.deleteUnstable();
-    await b.deleteUnstable();
-    expect(deleted, [
-      ['https://site.example#a', 'https://site.example#b'],
-    ]);
-    expect(b.unstableLeft, isEmpty);
-    expect(b.sourceEdits, 1);
-  });
+      expect(b.count(RepairOutcome.notFixed), 2);
+      expect(b.count(RepairOutcome.aiFixed), 1);
+      expect(unfixable, ['https://site.example#a', 'https://site.example#b']);
+      expect(b.unstableLeft.map((item) => item.source.bookSourceUrl), [
+        'https://site.example#a',
+        'https://site.example#b',
+      ]);
+      await b.deleteUnstable();
+      await b.deleteUnstable();
+      expect(deleted, [
+        ['https://site.example#a', 'https://site.example#b'],
+      ]);
+      expect(b.unstableLeft, isEmpty);
+      expect(b.sourceEdits, 1);
+    },
+  );
 
   test('a source the AI already could not fix, and one that never had a '
       'search, are skipped without asking the AI', () async {
@@ -578,7 +584,8 @@ void main() {
         return [];
       },
       checkSite: (_) async => fail('must not inspect an unverified source'),
-      markUnfixable: (_, _) async => fail('must not persist an unverified source'),
+      markUnfixable: (_, _) async =>
+          fail('must not persist an unverified source'),
     );
 
     await b.start();
