@@ -46,6 +46,17 @@ String? unjoinedNextPage(
   return null;
 }
 
+/// [pages] 裡一章正文的第一頁：第一個帶整頁原文、網站給的是內容（2xx，或
+/// WebView 渲染的沒有狀態碼）的回應；沒有是 -1。書源自己跟的轉址（POST 的
+/// 302 這類）中間那幾跳也記了回應，不是正文。
+int firstContentPage(List<LoggedPage> pages) => pages.indexWhere((page) {
+  if (page.body == null) return false;
+  final match = RegExp(r'^\s*← \S+ (\S+)').firstMatch(page.line);
+  if (match == null) return false;
+  final status = int.tryParse(match.group(1)!);
+  return status == null || (status >= 200 && status < 300);
+});
+
 /// 正文規則自己抓網頁（`java.ajax` 這類）：下一頁可能由規則自己接，
 /// [unjoinedNextPage] 不看。
 bool contentRuleFetchesItself(BookSource source) =>
@@ -78,11 +89,13 @@ bool isNextPageOfChapter(Uri chapter, Uri link) {
 String? _respondedUrl(String line) =>
     RegExp(r'^\s*← (\S+)').firstMatch(line)?.group(1);
 
-/// 請求那一行（`GET` 不寫方法、其他寫在前面，轉址到的標「（轉址）」）；
-/// 回應那一行（`←` 開頭）與空行不是。
+/// 另外送出的請求那一行（`GET` 不寫方法、其他寫在前面）；回應那一行
+/// （`←` 開頭）、轉址的一跳（標「（轉址）」）與空行不是。
 bool _isRequestLine(String line) {
   final trimmed = line.trim();
-  return trimmed.isNotEmpty && !trimmed.startsWith('←');
+  return trimmed.isNotEmpty &&
+      !trimmed.startsWith('←') &&
+      !trimmed.split(' ').take(2).any((word) => word.endsWith('（轉址）'));
 }
 
 /// 書源網址規則的網址後面可能接著 `,{"method":"POST",…}`，只留網址。

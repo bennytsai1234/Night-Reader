@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
+import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -24,8 +24,9 @@ class _MinimalServicesBinding extends BindingBase
       _instance ??= _MinimalServicesBinding();
 }
 
-/// 搜尋、詳情、目錄照 [toc] 給，正文照書源的規則真的去本機網站抓
-/// （[CompleteContentFetcher]），請求經過真的網路層記進校驗的紀錄。
+/// 搜尋、詳情、目錄照 [toc] 給；正文照讀書時的路（[BookSourceService.
+/// getContent]，在書源 isolate 裡原地執行，同校驗的 worker）照書源的規則真的
+/// 去本機網站抓，請求經過真的網路層記進校驗的紀錄。
 class _SiteService extends BookSourceService {
   _SiteService(this.toc);
 
@@ -65,22 +66,6 @@ class _SiteService extends BookSourceService {
     CancelToken? cancelToken,
     bool requireComplete = false,
   }) async => toc;
-
-  @override
-  Future<String> getContent(
-    BookSource source,
-    Book book,
-    BookChapter chapter, {
-    String? nextChapterUrl,
-    int? pageConcurrency,
-    CancelToken? cancelToken,
-  }) => CompleteContentFetcher.fetch(
-    source,
-    book,
-    chapter,
-    nextChapterUrl: nextChapterUrl,
-    pageConcurrency: pageConcurrency,
-  );
 }
 
 const _config = IsolateCheckConfig(
@@ -102,16 +87,32 @@ void main() {
   final half = '前半章的一段話，' * 40;
 
   // /c/N.html 是第 N 章的前半，後半在 /c/N_2.html（下書網 2026-11-12 的
-  // 結構）；/f/ 是腐文小说那種一頁一章，目錄的下一章就是 1_2.html。
+  // 結構）；/f/ 是腐文小说那種一頁一章，目錄的下一章就是 1_2.html；/r/N.html
+  // 轉址到 /c/N.html；/m/ 是漫畫，一頁一張圖、用 _2.html 翻頁，整章的圖在
+  // 第一頁就列出來。
   setUpAll(() async {
     await NetworkService().init();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     site = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
       final path = request.uri.path;
-      final match = RegExp(r'^/([cf])/(\d+)(_2)?\.html$').firstMatch(path);
+      final match = RegExp(r'^/([cfm])/(\d+)(_2)?\.html$').firstMatch(path);
       request.response.headers.contentType = ContentType.html;
-      if (match == null) {
+      if (path.startsWith('/r/')) {
+        request.response
+          ..statusCode = HttpStatus.found
+          ..headers.set(
+            HttpHeaders.locationHeader,
+            path.replaceFirst('r', 'c'),
+          );
+      } else if (match?.group(1) == 'm') {
+        request.response.write(
+          '<html><body><div id="content">'
+          '${[for (var i = 1; i <= 5; i++) '<img src="/img/$i.jpg">'].join()}'
+          '</div><a href="${path.replaceFirst('.html', '_2.html')}">下一页</a>'
+          '</body></html>',
+        );
+      } else if (match == null) {
         request.response.statusCode = HttpStatus.notFound;
       } else {
         final (folder, n, second) = (
@@ -169,6 +170,29 @@ void main() {
     expect(result.message, contains('$site/c/1_2.html'));
     expect(result.message, contains('書源沒有下一頁規則'));
   });
+
+  test(
+    'a chapter address that redirects is judged on the page it lands on',
+    () async {
+      final result = await check(source(), chapters('r', paged));
+
+      expect(result.isHealthy, isFalse, reason: result.logs.join('\n'));
+      expect(result.message, contains('$site/c/1_2.html'));
+    },
+  );
+
+  test(
+    'a comic whose first page lists every picture is not cut short',
+    () async {
+      // 漫畫網站常一頁一張圖、用 _2.html 翻頁，規則卻在第一頁就拿到整章的圖。
+      final comic = source()
+        ..ruleContent!.content = 'id.content@html'
+        ..bookSourceType = SourceType.image;
+      final result = await check(comic, chapters('m', paged));
+
+      expect(result.isHealthy, isTrue, reason: result.logs.join('\n'));
+    },
+  );
 
   test('a next-page rule that finds no link is caught too', () async {
     // 2026-11-13 下書網：nextContentUrl 的選擇器在頁面上抓不到連結。

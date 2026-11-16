@@ -921,7 +921,9 @@ class SourceChecker {
       final kind = _kindShownBy(content, book);
       _reclassify(kind);
       final usable = chapterContentUsable(kind, content);
-      if (usable) {
+      // 只看文字：漫畫網站常一頁一張圖、用 _2.html 翻頁，規則卻在第一頁就
+      // 拿到整章的圖片清單。
+      if (usable && kind == BookSourceKind.novel) {
         if (_unjoinedNextPage(pages, toc) case final next?) {
           _recordIssue(issues, _unjoinedPageIssue(chapter, next, mode));
           return null;
@@ -940,13 +942,11 @@ class SourceChecker {
   }
 
   /// 抓一章只抓了第一頁時，同一章下一頁的網址（[unjoinedNextPage]，ADR
-  /// 0068）；[pages] 是抓這一章時的請求，第一個帶內容的回應是第一頁。目錄
-  /// 上的章節不算下一頁；正文規則自己抓網頁的不看。
+  /// 0068）；[pages] 是抓這一章時的請求（第一頁見 [firstContentPage]）。
+  /// 目錄上的章節不算下一頁；正文規則自己抓網頁的不看。
   String? _unjoinedNextPage(List<LoggedPage> pages, List<BookChapter> toc) {
     if (contentRuleFetchesItself(_source)) return null;
-    final first = pages.indexWhere(
-      (page) => page.body != null && page.line.trimLeft().startsWith('←'),
-    );
+    final first = firstContentPage(pages);
     if (first < 0) return null;
     return unjoinedNextPage(
       pages,

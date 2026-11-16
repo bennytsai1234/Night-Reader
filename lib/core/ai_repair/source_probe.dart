@@ -413,9 +413,13 @@ String? searchInfoMismatch(SourceProbeReport probe) {
 
 /// 試抓到的正文只抓了第一頁時，同一章下一頁的網址；沒有是 null
 /// （[unjoinedNextPage]，書源校驗也照它判）。第一頁是除錯紀錄「正文 URL」
-/// 那一頁最後一次的回應，目錄的下一章是「下一章 URL」。
+/// 那一頁最後一次的回應，目錄的下一章是「下一章 URL」。只看小說源：漫畫
+/// 網站常一頁一張圖地翻頁，規則卻在第一頁就拿到整章的圖。
 String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
-  if (contentRuleFetchesItself(source)) return null;
+  if (source.sourceKind != BookSourceKind.novel ||
+      contentRuleFetchesItself(source)) {
+    return null;
+  }
   String? chapterUrl;
   String? nextChapterUrl;
   for (final (_, message) in probe.logs) {
