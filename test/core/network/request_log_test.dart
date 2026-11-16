@@ -329,6 +329,32 @@ void main() {
     expect(log.lines.last.length, lessThan(200));
   });
 
+  test('whole pages are kept only for the part that asks, and only that '
+      'part\'s requests', () async {
+    // 書源校驗只在抓正文時要整頁（找同一章下一頁的連結）。
+    final page = '<a href="1_2.html">下一页</a>${'正文' * 400}';
+    final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
+    final content = <LoggedPage>[];
+    await log.run(() async {
+      recordRequestUrl('GET', Uri.parse('https://site.example/search'));
+      recordResponse(_response('https://site.example/search', 200, page));
+      await log.keepingPages(content, () async {
+        expect(log.settings.keepPages, isTrue, reason: '規則 JS 的請求也記整頁');
+        recordRequestUrl('GET', Uri.parse('https://site.example/c/1'));
+        recordResponse(_response('https://site.example/c/1', 200, page));
+      });
+      recordRequestUrl('GET', Uri.parse('https://site.example/c/9'));
+    });
+
+    expect(log.lines, hasLength(5), reason: '每一段照常記');
+    expect(log.pages, isEmpty);
+    expect(log.settings.keepPages, isFalse);
+    expect(content, [
+      (line: 'https://site.example/c/1', body: null),
+      (line: log.lines[3], body: page),
+    ]);
+  });
+
   test('a GBK page reads as Chinese, not mojibake', () async {
     final log = RequestLog(responsePreview: RequestLog.diagnosisPreview);
     await log.run(() async {

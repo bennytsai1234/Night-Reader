@@ -18,6 +18,7 @@ import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
+import 'package:night_reader/core/services/content_next_page.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 
@@ -781,6 +782,7 @@ class SourceChecker {
     final head = await _probeHead(
       book,
       freeChapters,
+      toc: readableChapters,
       mode: mode,
       issues: issues,
     );
@@ -809,6 +811,7 @@ class SourceChecker {
   Future<({BookChapter chapter, String content})?> _probeHead(
     Book book,
     List<BookChapter> readableChapters, {
+    required List<BookChapter> toc,
     required _CheckMode mode,
     required List<_IssueData> issues,
   }) async {
@@ -825,6 +828,7 @@ class SourceChecker {
         book,
         readableChapters,
         chapter,
+        toc: toc,
         mode: mode,
         issues: issues,
       );
@@ -861,6 +865,7 @@ class SourceChecker {
         book,
         chapters,
         chapters[at],
+        toc: chapters,
         mode: mode,
         issues: issues,
       );
@@ -881,25 +886,32 @@ class SourceChecker {
     return null;
   }
 
-  /// 抓一章正文：抓到的內容與讀不讀得到；出錯時記下、傳回 null。
+  /// 抓一章正文：抓到的內容與讀不讀得到；出錯，或讀得到卻只抓了第一頁
+  /// （[_unjoinedNextPage]）時記下、傳回 null。[toc] 是整份目錄。
   Future<({String text, bool usable})?> _probeContent(
     Book book,
     List<BookChapter> chapters,
     BookChapter chapter, {
+    required List<BookChapter> toc,
     required _CheckMode mode,
     required List<_IssueData> issues,
   }) async {
     final nextChapterUrl = _nextReadableChapterUrl(chapters, chapter);
+    // 這一章抓取時的請求，每個回應帶整頁；重試時換一份，只看最後一次。
+    var pages = <LoggedPage>[];
     try {
       _log('  ◇ 測試${mode.label}正文: ${chapter.title}');
       final content = await _fetch(
         '${mode.label}正文',
-        (_) => _service.getContent(
-          _source,
-          book,
-          chapter,
-          nextChapterUrl: nextChapterUrl,
-          pageConcurrency: _validationPageConcurrency,
+        (_) => _requests.keepingPages(
+          pages = <LoggedPage>[],
+          () => _service.getContent(
+            _source,
+            book,
+            chapter,
+            nextChapterUrl: nextChapterUrl,
+            pageConcurrency: _validationPageConcurrency,
+          ),
         ),
         cameBackEmpty: (content) =>
             !chapterContentUsable(_kindShownBy(content, book), content),
@@ -908,7 +920,14 @@ class SourceChecker {
       // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
       final kind = _kindShownBy(content, book);
       _reclassify(kind);
-      return (text: content, usable: chapterContentUsable(kind, content));
+      final usable = chapterContentUsable(kind, content);
+      if (usable) {
+        if (_unjoinedNextPage(pages, toc) case final next?) {
+          _recordIssue(issues, _unjoinedPageIssue(chapter, next, mode));
+          return null;
+        }
+      }
+      return (text: content, usable: usable);
     } catch (e) {
       _recordFailure(
         issues,
@@ -918,6 +937,41 @@ class SourceChecker {
       );
       return null;
     }
+  }
+
+  /// 抓一章只抓了第一頁時，同一章下一頁的網址（[unjoinedNextPage]，ADR
+  /// 0068）；[pages] 是抓這一章時的請求，第一個帶內容的回應是第一頁。目錄
+  /// 上的章節不算下一頁；正文規則自己抓網頁的不看。
+  String? _unjoinedNextPage(List<LoggedPage> pages, List<BookChapter> toc) {
+    if (contentRuleFetchesItself(_source)) return null;
+    final first = pages.indexWhere(
+      (page) => page.body != null && page.line.trimLeft().startsWith('←'),
+    );
+    if (first < 0) return null;
+    return unjoinedNextPage(
+      pages,
+      first,
+      chapters: [for (final chapter in toc) chapter.url],
+    );
+  }
+
+  _IssueData _unjoinedPageIssue(
+    BookChapter chapter,
+    String next,
+    _CheckMode mode,
+  ) {
+    final hasRule = (_source.ruleContent?.nextContentUrl ?? '')
+        .trim()
+        .isNotEmpty;
+    return _IssueData(
+      stage: _stageFor(mode, 'content'),
+      message:
+          '${mode == _CheckMode.search ? '' : '發現書籍'}'
+          '${_compactChapterTitle(chapter.title)}只抓到第一頁：正文頁有指向同一章'
+          '下一頁的連結（$next），'
+          '${hasRule ? '下一頁規則（nextContentUrl）沒有抓到它' : '書源沒有下一頁規則（nextContentUrl）'}',
+      health: _contentHealthFor(mode),
+    );
   }
 
   /// 抽到的章裡有兩章一半以上是同一段文字，就不是這一章該有的正文：

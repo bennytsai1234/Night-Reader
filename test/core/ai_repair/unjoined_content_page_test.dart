@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/content_next_page.dart';
 
 const _chapter = 'https://www.site.example/book/149032/95393.html';
 const _chapterNext = 'https://www.site.example/book/149032/95393_2.html';
@@ -28,6 +29,10 @@ SourceProbeReport _probe(
   pages: [
     (line: _chapter, body: null),
     (line: '  ← $_chapter 200 text/html，7752 位元組：…', body: body),
+    if (fetchedNext) ...[
+      (line: _chapterNext, body: null),
+      (line: '  ← $_chapterNext 200 text/html，7752 位元組：…', body: '…'),
+    ],
   ],
   contentUsable: true,
 );
