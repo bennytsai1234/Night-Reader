@@ -238,7 +238,7 @@ void main() {
           }),
         jsonEncode({
           'action': 'give_up',
-          'why': 'rate_limited',
+          'why': 'site_unstable',
           'reason': '時好時壞',
         }),
       ],
@@ -280,6 +280,30 @@ void main() {
     for (var i = 0; i < 3; i++) {
       expect(asked[i + 1].last.content, isNot(contains('這次回過不同的結果')));
     }
+  });
+
+  test('different request headers are not mistaken for an unstable site', () async {
+    final s = session(
+      [_source('https://site.example')],
+      fetchLines: (url) => url.endsWith('/mobile')
+          ? [
+              'https://site.example/s 標頭：User-Agent: mobile',
+              '  ← https://site.example/s 200',
+            ]
+          : [
+              'https://site.example/s 標頭：User-Agent: desktop',
+              '  ← https://site.example/s 502',
+            ],
+      replies: [
+        jsonEncode({'action': 'fetch', 'url': 'https://site.example/mobile'}),
+        jsonEncode({'action': 'fetch', 'url': 'https://site.example/desktop'}),
+        jsonEncode({'action': 'give_up', 'why': 'site_broken', 'reason': '測試'}),
+      ],
+    );
+
+    await s.start();
+
+    expect(asked[2].last.content, isNot(contains('這次回過不同的結果')));
   });
 
   test('a redirected request keeps its method and body', () async {
@@ -786,7 +810,7 @@ void main() {
         jsonEncode({'action': 'fetch', 'url': '/s', 'note': '看搜尋'}),
         jsonEncode({
           'action': 'give_up',
-          'why': 'rate_limited',
+          'why': 'site_unstable',
           'reason': '搜尋回「搜索间隔: 30 秒」',
         }),
       ],
@@ -795,8 +819,8 @@ void main() {
     await s.start();
 
     expect(asked, hasLength(2));
-    expect(s.job.giveUpWhy, 'rate_limited');
-    expect(s.job.explanation, 'AI：網站限流。搜尋回「搜索间隔: 30 秒」');
+    expect(s.job.giveUpWhy, 'site_unstable');
+    expect(s.job.explanation, 'AI：網站不穩定。搜尋回「搜索间隔: 30 秒」');
   });
 
   test('a site whose own search is broken can be given up on', () async {
