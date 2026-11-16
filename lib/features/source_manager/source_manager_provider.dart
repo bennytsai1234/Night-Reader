@@ -671,6 +671,7 @@ class SourceManagerProvider with ChangeNotifier {
         }
       }
       _sources = loadedSources;
+      checkService.forgetOutdatedProgress(loadedSources);
       _rememberCount(loadedSources.length);
       _selectedUrls.retainAll(
         loadedSources.map((source) => source.bookSourceUrl).toSet(),

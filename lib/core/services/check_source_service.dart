@@ -99,6 +99,13 @@ typedef SourceCheckResultListener = void Function(
   SourceCheckIsolateResult? result,
 );
 
+/// 開一個書源的校驗（[spawnSourceCheck]）。
+typedef SourceCheckSpawner = Future<SourceCheckIsolateHandle> Function(
+  BookSource source,
+  IsolateCheckConfig config,
+  Duration timeout,
+);
+
 class SourceCheckReport {
   final List<SourceCheckEntry> entries;
 
@@ -156,12 +163,24 @@ class SourceCheckProgress {
   final bool isFinal;
   final bool hasIssue;
 
+  /// 記下這筆進度時書源的分組與註解：校驗寫進資料庫的就是這兩個。書源之後
+  /// 被別處改寫（AI 修好存檔、清除校驗標記），資料庫和它對不上，這筆進度
+  /// 就不再代表書源現在的樣子（[CheckSourceService.forgetOutdatedProgress]）。
+  final String? group;
+  final String? comment;
+
   const SourceCheckProgress({
     required this.sourceName,
     required this.message,
     required this.isFinal,
     required this.hasIssue,
+    this.group,
+    this.comment,
   });
+
+  bool describes(BookSource source) =>
+      (source.bookSourceGroup ?? '') == (group ?? '') &&
+      (source.bookSourceComment ?? '') == (comment ?? '');
 }
 
 class SourceCheckConfig {
@@ -411,8 +430,12 @@ class CheckSourceService extends ChangeNotifier {
   CheckSourceService({
     BookSourceDao? sourceDao,
     SourceCheckDiagnostics? diagnostics,
+    this._spawn = spawnSourceCheck,
   }) : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
        diagnostics = diagnostics ?? SourceCheckDiagnostics();
+
+  /// 開一個書源的校驗；測試換成直接給結果的。
+  final SourceCheckSpawner _spawn;
 
   /// 最近一次校驗的診斷（「校驗詳情」的「複製診斷」）。
   final SourceCheckDiagnostics diagnostics;
@@ -435,6 +458,19 @@ class CheckSourceService extends ChangeNotifier {
 
   SourceCheckProgress? progressOf(String sourceUrl) =>
       _sourceProgress[sourceUrl];
+
+  /// 書源清單照資料庫重讀了（[sources] 是全部書源），丟掉不再代表書源現況
+  /// 的進度，那些列改照資料庫顯示：校驗之後被別處改寫或刪掉的書源（和
+  /// 「沒有異常」篩選一致），和校驗停下時還沒做完、停在「等待校驗」的。
+  /// 校驗中不丟：結果分批寫進資料庫，清單要等做完才重讀。
+  void forgetOutdatedProgress(Iterable<BookSource> sources) {
+    if (_isChecking || _sourceProgress.isEmpty) return;
+    final byUrl = {for (final source in sources) source.bookSourceUrl: source};
+    _sourceProgress.removeWhere((url, progress) {
+      final source = byUrl[url];
+      return !progress.isFinal || source == null || !progress.describes(source);
+    });
+  }
 
   Future<void> loadConfig() async {
     final prefs = await _safeGetPreferences();
@@ -585,7 +621,7 @@ class CheckSourceService extends ChangeNotifier {
 
     SourceCheckIsolateHandle handle;
     try {
-      handle = await spawnSourceCheck(
+      handle = await _spawn(
         source,
         config.forIsolate,
         config.sourceTimeoutDuration,
@@ -817,6 +853,8 @@ class CheckSourceService extends ChangeNotifier {
       message: message,
       isFinal: isFinal,
       hasIssue: hasIssue,
+      group: source.bookSourceGroup,
+      comment: source.bookSourceComment,
     );
   }
 
