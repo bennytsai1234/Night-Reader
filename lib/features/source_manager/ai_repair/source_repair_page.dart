@@ -485,9 +485,8 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
               showChevron: false,
               onTap: _batch.isEditing
                   ? null
-                  : () => unawaited(
-                      _delete(unstableLeft.length, unstable: true),
-                    ),
+                  : () =>
+                        unawaited(_delete(unstableLeft.length, unstable: true)),
             ),
           ],
         ),
