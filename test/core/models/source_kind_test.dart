@@ -28,21 +28,24 @@ BookSource _source({
 );
 
 void main() {
-  test('confirmed website instability is removable while a lone timeout is not', () {
-    final unstable = _source()
-      ..addHealthGroups(upstreamHealth(unstableSourceGroupTag));
-    final timeout = _source(url: 'https://slow.test')
-      ..addHealthGroups(upstreamHealth(timeoutSourceGroupTag));
+  test(
+    'confirmed website instability is removable while a lone timeout is not',
+    () {
+      final unstable = _source()
+        ..addHealthGroups(upstreamHealth(unstableSourceGroupTag));
+      final timeout = _source(url: 'https://slow.test')
+        ..addHealthGroups(upstreamHealth(timeoutSourceGroupTag));
 
-    expect(unstable.runtimeHealth.label, unstableSourceGroupTag);
-    expect(unstable.isCleanupCandidate, isTrue);
-    expect(unstable.isQuarantined, isTrue);
-    expect(unstable.isSearchEnabledByRuntime, isFalse);
-    expect(unstable.isReadingEnabledByRuntime, isFalse);
-    expect(timeout.isCleanupCandidate, isFalse);
-    unstable.removeInvalidGroups();
-    expect(unstable.isCleanupCandidate, isFalse);
-  });
+      expect(unstable.runtimeHealth.label, unstableSourceGroupTag);
+      expect(unstable.isCleanupCandidate, isTrue);
+      expect(unstable.isQuarantined, isTrue);
+      expect(unstable.isSearchEnabledByRuntime, isFalse);
+      expect(unstable.isReadingEnabledByRuntime, isFalse);
+      expect(timeout.isCleanupCandidate, isFalse);
+      unstable.removeInvalidGroups();
+      expect(unstable.isCleanupCandidate, isFalse);
+    },
+  );
 
   test('the kind follows the source type only', () {
     expect(_source(type: 0).sourceKind, BookSourceKind.novel);
