@@ -112,7 +112,8 @@ class AutoSourceSwitch implements BackgroundJob {
       if (!(prefs.getBool(PreferKey.orphanedBooksSwitched) ?? false)) {
         await prefs.setBool(PreferKey.orphanedBooksSwitched, true);
         final known = {
-          for (final source in await _sources.getAll()) source.bookSourceUrl,
+          for (final source in await _sources.getAllPart())
+            source.bookSourceUrl,
         };
         _add(await _shelfWebBooks((origin) => !known.contains(origin)));
       }
@@ -193,7 +194,8 @@ class AutoSourceSwitch implements BackgroundJob {
     final orphaned = await _stillOrphaned(bookUrl);
     if (orphaned == null) return;
     var book = orphaned;
-    // 搜書源要一兩分鐘，這段時間進度可能被同步改了：照改過的再對一次。
+    // 搜書源要一兩分鐘，這段時間進度可能被同步改了：讀到的那一章變了就照
+    // 改過的再找一次。
     for (var attempt = 0; attempt < 2; attempt++) {
       if (_booksInUse().contains(bookUrl)) {
         _heldBack.add(bookUrl);
@@ -214,14 +216,30 @@ class AutoSourceSwitch implements BackgroundJob {
         _heldBack.add(bookUrl);
         return;
       }
-      if (_sameProgress(latest, book)) {
-        await _switch.commitSwitch(latest, prepared, bookDao: _books);
-        AppEventBus().fire(AppEventBus.upBookshelf);
-        // 書架上的書照新書源整本重抓（ADR 0008）。
-        unawaited(_keepDownloaded(prepared.migratedBook.bookUrl));
+      // 寫回最新的這本：搜的時候分組、封面、閱讀設定這類可能改過。
+      final rebased = latest.origin == book.origin
+          ? _switch.rebase(
+              prepared,
+              latest,
+              targetChapterTitle: await _readingTitle(latest),
+            )
+          : null;
+      if (rebased == null) {
+        book = latest;
+        continue;
+      }
+      // 換過去的那本已經在書架上（從那個書源加過同一本）：換了會蓋掉它的
+      // 進度、少一本，留給使用者自己決定。
+      final target = rebased.migratedBook.bookUrl;
+      if (target != bookUrl &&
+          ((await _books.getByUrl(target))?.isInBookshelf ?? false)) {
         return;
       }
-      book = latest;
+      await _switch.commitSwitch(latest, rebased, bookDao: _books);
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      // 書架上的書照新書源整本重抓（ADR 0008）。
+      unawaited(_keepDownloaded(target));
+      return;
     }
   }
 
@@ -242,12 +260,6 @@ class AutoSourceSwitch implements BackgroundJob {
     }
     return null;
   }
-
-  static bool _sameProgress(Book a, Book b) =>
-      a.origin == b.origin &&
-      a.chapterIndex == b.chapterIndex &&
-      a.durChapterTitle == b.durChapterTitle &&
-      a.charOffset == b.charOffset;
 
   BackgroundWorkStatus _status(Book? book) => BackgroundWorkStatus(
     title: title,

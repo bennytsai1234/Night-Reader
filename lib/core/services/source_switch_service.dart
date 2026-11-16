@@ -33,6 +33,7 @@ bool isSourceSwitchUnavailable(Object error) {
 /// 驗證：背景不等人，ADR 0038）與「AI 修不好」。
 bool autoSwitchCandidateSource(BookSource source, BookSourceKind kind) =>
     source.isSearchableFor(kind) &&
+    !source.isAggregateSource &&
     !source.groupTags.any(
       (tag) =>
           sourceRuntimeStatusTags.contains(tag) ||
@@ -138,13 +139,15 @@ class SourceSwitchService {
     };
     final pool = Pool(_maxConcurrentSearches);
     try {
-      Future<T?> skipUnavailable<T>(Future<T> Function() work) =>
+      // 背景沒人看：一個書源出了任何錯都只跳過它，不讓整本書放棄；
+      // 沒預期的錯記下來。
+      Future<T?> skipFailed<T>(String origin, Future<T> Function() work) =>
           pool.withResource(() async {
             if (cancelToken?.isCancelled ?? false) return null;
             try {
               return await work();
-            } catch (error) {
-              if (!_skippable(error, cancelToken)) rethrow;
+            } catch (error, stack) {
+              _logUnexpected(origin, error, stack, cancelToken);
               return null;
             }
           });
@@ -152,7 +155,8 @@ class SourceSwitchService {
       final hits = [
         for (final found in await Future.wait([
           for (final source in sources)
-            skipUnavailable(
+            skipFailed(
+              source.bookSourceUrl,
               () => _service.preciseSearch(
                 source,
                 book.name,
@@ -167,7 +171,8 @@ class SourceSwitchService {
       final aligned = [
         for (final candidate in await Future.wait([
           for (final hit in hits)
-            skipUnavailable(
+            skipFailed(
+              hit.origin,
               () => _align(
                 book,
                 hit,
@@ -176,7 +181,9 @@ class SourceSwitchService {
               ),
             ),
         ]))
+          // 書的類別由書源的規則寫：換過去類別要一樣（ADR 0053）。
           if (candidate != null &&
+              candidate.migratedBook.bookKind == book.bookKind &&
               sameChapterTitle(candidate.targetChapter.title, chapterTitle))
             candidate,
       ];
@@ -191,8 +198,13 @@ class SourceSwitchService {
         if (cancelToken?.isCancelled ?? false) return null;
         try {
           return await _validate(candidate, cancelToken: cancelToken);
-        } catch (error) {
-          if (!_skippable(error, cancelToken)) rethrow;
+        } catch (error, stack) {
+          _logUnexpected(
+            candidate.source.bookSourceUrl,
+            error,
+            stack,
+            cancelToken,
+          );
         }
       }
       return null;
@@ -201,9 +213,66 @@ class SourceSwitchService {
     }
   }
 
-  /// 自動換源跳過這個候選就好的錯誤：書源搜不到、抓不到，或整件被取消。
-  static bool _skippable(Object error, CancelToken? cancelToken) =>
-      isSourceSwitchUnavailable(error) || (cancelToken?.isCancelled ?? false);
+  /// 自動換源跳過的候選出的錯：書源搜不到、抓不到、整件被取消是平常的事，
+  /// 其他的記下來。
+  static void _logUnexpected(
+    String origin,
+    Object error,
+    StackTrace stack,
+    CancelToken? cancelToken,
+  ) {
+    if (isSourceSwitchUnavailable(error) ||
+        (cancelToken?.isCancelled ?? false)) {
+      return;
+    }
+    AppLog.e('自動換源：書源 $origin 出錯，跳過', error: error, stackTrace: stack);
+  }
+
+  /// [prepared] 改照 [latest] 寫回：準備時用的那份書之後被改過（分組、排序、
+  /// 封面、閱讀設定、閱讀時間這類）時，寫回的要是最新的。讀到的那一章
+  /// [targetChapterTitle]（沒給照書記的）對到的不是準備好的那一章時是 null，
+  /// 要重新準備。
+  PreparedSourceSwitch? rebase(
+    PreparedSourceSwitch prepared,
+    Book latest, {
+    String? targetChapterTitle,
+  }) {
+    final alignment = latest.copyWith(
+      durChapterTitle: targetChapterTitle ?? latest.durChapterTitle,
+    );
+    final migrated = _migrate(
+      alignment,
+      prepared.migratedBook,
+      prepared.chapters,
+    );
+    if (migrated.index != prepared.targetChapterIndex) return null;
+    return PreparedSourceSwitch(
+      searchBook: prepared.searchBook,
+      source: prepared.source,
+      migratedBook: migrated.book,
+      chapters: prepared.chapters,
+      targetChapterIndex: migrated.index,
+      validatedContent: prepared.validatedContent,
+    );
+  }
+
+  /// [from] 的閱讀進度與書架上的設定搬到新書源的 [to]（[Book.migrateTo]）；
+  /// [index] 是讀到的那一章在 [chapters] 的位置。
+  static ({Book book, int index}) _migrate(
+    Book from,
+    Book to,
+    List<BookChapter> chapters,
+  ) {
+    final book = from.migrateTo(to, chapters);
+    final index = book.chapterIndex.clamp(0, chapters.length - 1);
+    // 有聲書對到同一集就接著聽到的那一秒（charOffset 存毫秒，ADR 0055），
+    // 文字書的位置規則不適用。
+    if (book.bookKind == BookSourceKind.audio &&
+        chapters[index].title == from.durChapterTitle) {
+      book.charOffset = from.charOffset;
+    }
+    return (book: book, index: index);
+  }
 
   Future<PreparedSourceSwitch> prepareSwitch(
     Book currentBook,
@@ -251,20 +320,13 @@ class SourceSwitchService {
       throw SourceException('新來源沒有可用目錄', sourceUrl: candidate.origin);
     }
 
-    final migratedBook = alignmentBook.migrateTo(hydratedBook, chapters);
-    final targetIndex = migratedBook.chapterIndex.clamp(0, chapters.length - 1);
-    // 有聲書對到同一集就接著聽到的那一秒（charOffset 存毫秒，ADR 0055），
-    // 文字書的位置規則不適用。
-    if (migratedBook.bookKind == BookSourceKind.audio &&
-        chapters[targetIndex].title == alignmentBook.durChapterTitle) {
-      migratedBook.charOffset = alignmentBook.charOffset;
-    }
+    final migrated = _migrate(alignmentBook, hydratedBook, chapters);
     return _AlignedSwitch(
       searchBook: candidate,
       source: source,
-      migratedBook: migratedBook,
+      migratedBook: migrated.book,
       chapters: chapters,
-      targetIndex: targetIndex,
+      targetIndex: migrated.index,
     );
   }
 
@@ -307,6 +369,7 @@ class SourceSwitchService {
         migratedBook,
         validatedContent,
         dir: await BookIllustrationStorage.dirFor(migratedBook),
+        cancelToken: cancelToken,
       );
     }
 

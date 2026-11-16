@@ -375,26 +375,63 @@ void main() {
       expect(sites.searched, ['ok']);
     });
 
-    test('某個書源搜不到只跳過它，未知的程式錯誤照常丟出', () async {
-      final skipped = await switcher(
-        _SitesBookSourceService(
-          {'a': _titles(10), 'b': _titles(10)},
-          searchErrors: {'a': SourceException('搜尋不可用', sourceUrl: 'a')},
-        ),
-        [ordered('a', 0), ordered('b', 1)],
-      ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
-      expect(skipped?.source.bookSourceUrl, 'b');
-
-      final error = StateError('search invariant broke');
-      await expectLater(
-        switcher(
+    test('某個書源出錯只跳過它，連沒預期的錯也是：背景沒人看，不讓整本書放棄', () async {
+      for (final error in [
+        SourceException('搜尋不可用', sourceUrl: 'a'),
+        StateError('search invariant broke'),
+      ]) {
+        final prepared = await switcher(
           _SitesBookSourceService(
-            {'a': _titles(10)},
+            {'a': _titles(20), 'b': _titles(10)},
             searchErrors: {'a': error},
           ),
-          [ordered('a', 0)],
-        ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章'),
-        throwsA(same(error)),
+          [ordered('a', 0), ordered('b', 1)],
+        ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+        expect(prepared?.source.bookSourceUrl, 'b', reason: '$error');
+      }
+    });
+
+    test('聚合源不當候選（ADR 0056 照 Legado 只用同一類）', () async {
+      final sites = _SitesBookSourceService({
+        'aggregate': _titles(20),
+        'plain': _titles(10),
+      });
+      final aggregate = ordered('aggregate', 0)
+        ..ruleBookInfo = BookInfoRule(name: '@js:book.type = 32; result');
+      final prepared = await switcher(sites, [
+        aggregate,
+        ordered('plain', 1),
+      ]).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+
+      expect(aggregate.isAggregateSource, isTrue);
+      expect(prepared?.source.bookSourceUrl, 'plain');
+      expect(sites.searched, ['plain']);
+    });
+
+    test('改照最新的書寫回：搜的時候改了分組、封面也留著；讀到的那一章變了'
+        '就要重新準備', () async {
+      final service = switcher(_SitesBookSourceService({'a': _titles(10)}), [
+        ordered('a', 0),
+      ]);
+      final book = _currentBook();
+      final prepared = (await service.prepareAutomaticSwitch(
+        book,
+        chapterTitle: '第6章',
+      ))!;
+      final latest = book.copyWith(group: 4, customCoverUrl: 'cover.jpg');
+
+      final rebased = service.rebase(prepared, latest)!;
+      expect(rebased.migratedBook.group, 4);
+      expect(rebased.migratedBook.customCoverUrl, 'cover.jpg');
+      expect(rebased.migratedBook.origin, 'a');
+      expect(rebased.targetChapterIndex, 5);
+
+      expect(
+        service.rebase(
+          prepared,
+          book.copyWith(chapterIndex: 7, durChapterTitle: '第8章'),
+        ),
+        isNull,
       );
     });
 

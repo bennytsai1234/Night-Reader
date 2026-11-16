@@ -280,6 +280,43 @@ void main() {
     expect(sites.searches, ['new'], reason: '只搜了第一本');
   });
 
+  test(
+    'what changed on the book while its sources were searched is kept',
+    () async {
+      await launched();
+      await shelve(_book('old'));
+      sites.gate = Completer<void>();
+
+      await db.bookSourceDao.deleteByUrl('old');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      final book = (await db.bookDao.getByUrl('old/夜雨'))!;
+      await db.bookDao.upsert(book.copyWith(group: 4, customIntro: '改過的簡介'));
+      sites.gate!.complete();
+      await settled();
+
+      final switched = (await shelf()).single;
+      expect(switched.origin, 'new');
+      expect((switched.group, switched.customIntro), (4, '改過的簡介'));
+    },
+  );
+
+  test(
+    'a book already on the shelf from the new source is not overwritten',
+    () async {
+      // 換過去會蓋掉那本的進度、書架少一本：兩本都留著。
+      await launched();
+      await shelve(_book('old'));
+      await shelve(_book('new').copyWith(bookUrl: 'new/book', chapterIndex: 8));
+
+      await db.bookSourceDao.deleteByUrl('old');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await settled();
+
+      final books = {for (final b in await shelf()) b.bookUrl: b.chapterIndex};
+      expect(books, {'old/夜雨': 5, 'new/book': 8});
+    },
+  );
+
   test('books that had no source before this version are searched once, on '
       'the first launch', () async {
     await shelve(_book('missing'));

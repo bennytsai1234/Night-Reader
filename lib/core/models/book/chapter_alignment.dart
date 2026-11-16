@@ -2,9 +2,9 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 
 /// 舊目錄第 [oldIndex] 章（章名 [oldTitle]）在 [newChapters] 裡是第幾章：
-/// 先找同名的章（[sameChapterTitle]：繁簡、空白不同也算），再找同一個章號，都沒有就照比例估。目錄
-/// 裡有好幾章同名或同章號時（例如好幾個「番外」），取離估計位置最近的那
-/// 一章，不是第一個。
+/// 先找同名的章（[sameChapterTitle]：繁簡、空白不同也算），再找同一個
+/// 章號，都沒有就照比例估。目錄裡有好幾章同名或同章號時（例如好幾個
+/// 「番外」），取離估計位置最近的那一章，不是第一個。
 int alignChapterIndex({
   required int oldIndex,
   required String? oldTitle,
@@ -34,9 +34,8 @@ int alignChapterIndex({
   if (oldTitle != null && oldTitle.isNotEmpty) {
     final exact = nearest((chapter) => chapter.title == oldTitle);
     if (exact != null) return exact;
-    final converted = nearest(
-      (chapter) => sameChapterTitle(chapter.title, oldTitle),
-    );
+    final oldKey = _titleKey(oldTitle);
+    final converted = nearest((chapter) => _titleKey(chapter.title) == oldKey);
     if (converted != null) return converted;
   }
 
@@ -55,7 +54,9 @@ int alignChapterIndex({
 bool sameChapterTitle(String a, String b) => _titleKey(a) == _titleKey(b);
 
 String _titleKey(String title) =>
-    ChineseUtils.t2s(title.replaceAll(RegExp(r'\s+'), ''));
+    ChineseUtils.t2s(title.replaceAll(_whitespace, ''));
+
+final RegExp _whitespace = RegExp(r'\s+');
 
 int? _extractChapterNumber(String? title) {
   if (title == null) return null;
