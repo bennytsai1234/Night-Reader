@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/same_book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_model.dart';

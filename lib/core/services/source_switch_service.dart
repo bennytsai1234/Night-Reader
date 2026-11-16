@@ -21,6 +21,7 @@ import 'package:pool/pool.dart';
 import 'app_log_service.dart';
 import 'book_source_service.dart';
 import 'chapter_content_kind.dart';
+import 'same_book.dart';
 import 'source_switch_handoff.dart';
 
 bool isSourceSwitchUnavailable(Object error) {
@@ -108,7 +109,7 @@ class SourceSwitchService {
 
   /// 自動換源（ADR 0069）：在書源被刪掉的 [book] 之外，從啟用、同一類、
   /// 沒有狀態標記與「AI 修不好」的書源（[autoSwitchCandidateSource]）裡找
-  /// 書名與作者都一樣的這本書。讀到的那一章 [chapterTitle] 在新目錄裡對得上
+  /// 書名與作者都一樣的這本書（[isSameBook]，同手動換源）。讀到的那一章 [chapterTitle] 在新目錄裡對得上
   /// （[sameChapterTitle]）、那一章抓得到的才算；幾個都算時挑目錄章數最多
   /// 的，一樣多照書源排序。沒有一個算是 null。
   ///
@@ -152,20 +153,31 @@ class SourceSwitchService {
             }
           });
 
-      final hits = [
-        for (final found in await Future.wait([
-          for (final source in sources)
+      // 搜法同手動換源：繁簡兩種書名都搜，書名、作者照 [isSameBook] 比。
+      final names = searchKeyVariants(book.name);
+      final found = await Future.wait([
+        for (final source in sources)
+          for (final name in names)
             skipFailed(
               source.bookSourceUrl,
-              () => _service.preciseSearch(
+              () => _service.searchBooks(
                 source,
-                book.name,
-                book.author,
+                name,
+                filter: sameBookFilter(
+                  book.name,
+                  book.author,
+                  checkAuthor: true,
+                ),
+                shouldBreak: stopAtFirstSearchResult,
                 cancelToken: cancelToken,
               ),
             ),
-        ]))
-          ...?found,
+      ]);
+      final seen = <String>{};
+      final hits = [
+        for (final results in found)
+          for (final hit in results ?? const <SearchBook>[])
+            if (seen.add('${hit.origin}\u0000${hit.bookUrl}')) hit,
       ];
 
       final aligned = [

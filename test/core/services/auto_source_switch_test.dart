@@ -23,10 +23,12 @@ class _Sites extends BookSourceService {
   Completer<void>? gate;
 
   @override
-  Future<List<SearchBook>> preciseSearch(
+  Future<List<SearchBook>> searchBooks(
     BookSource source,
-    String name,
-    String author, {
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
     CancelToken? cancelToken,
   }) async {
     searches.add(source.bookSourceUrl);
@@ -34,8 +36,8 @@ class _Sites extends BookSourceService {
     return [
       SearchBook(
         bookUrl: '${source.bookSourceUrl}/book',
-        name: name,
-        author: author,
+        name: key,
+        author: '作者',
         origin: source.bookSourceUrl,
         originName: source.bookSourceName,
       ),

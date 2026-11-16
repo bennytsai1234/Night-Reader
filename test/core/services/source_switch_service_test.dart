@@ -108,36 +108,48 @@ class _FakeBookSourceService extends BookSourceService {
   );
 }
 
-/// 自動換源用的網站：每個書源的目錄照 [tocs]（書源網址 → 章名），搜得到
-/// 書名與作者都一樣的那本；[unreadable] 的正文抓不到，[searchErrors] 的
-/// 搜尋丟出那個錯誤。
+/// 自動換源用的網站：每個書源的目錄照 [tocs]（書源網址 → 章名），搜到的
+/// 書是 [listed]（書名、作者）、類別照書源（同真的搜尋解析）；過濾照搜尋
+/// 傳進來的。[unreadable] 的正文抓不到，[searchErrors] 的搜尋丟出那個錯誤。
 class _SitesBookSourceService extends BookSourceService {
   _SitesBookSourceService(
     this.tocs, {
     this.unreadable = const {},
     this.searchErrors = const {},
+    this.listed = ('測試書', '作者'),
+    this.content = '這是一段足夠長的章節正文內容，用來通過可讀性檢查。',
   });
 
   final Map<String, List<String>> tocs;
   final Set<String> unreadable;
   final Map<String, Object> searchErrors;
+  final (String, String) listed;
+  final String content;
   final List<String> searched = [];
   final List<String> contentFetched = [];
 
   @override
-  Future<List<SearchBook>> preciseSearch(
+  Future<List<SearchBook>> searchBooks(
     BookSource source,
-    String name,
-    String author, {
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
     CancelToken? cancelToken,
   }) async {
     final origin = source.bookSourceUrl;
     searched.add(origin);
     if (searchErrors[origin] case final error?) throw error;
-    if (!tocs.containsKey(origin) || name != '測試書' || author != '作者') {
+    final (name, author) = listed;
+    if (!tocs.containsKey(origin) || !(filter?.call(name, author) ?? true)) {
       return const [];
     }
-    return [_candidate(origin)];
+    return [
+      _candidate(origin)
+        ..name = name
+        ..author = author
+        ..type = source.bookSourceType,
+    ];
   }
 
   @override
@@ -175,9 +187,7 @@ class _SitesBookSourceService extends BookSourceService {
     CancelToken? cancelToken,
   }) async {
     contentFetched.add(source.bookSourceUrl);
-    return unreadable.contains(source.bookSourceUrl)
-        ? ''
-        : '這是一段足夠長的章節正文內容，用來通過可讀性檢查。';
+    return unreadable.contains(source.bookSourceUrl) ? '' : content;
   }
 }
 
@@ -317,6 +327,37 @@ void main() {
           );
 
       expect(prepared?.targetChapterIndex, 1);
+    });
+
+    test('書名、作者照手動換源的比法：全形、空白、繁簡不同也是同一本，'
+        '作者不同不是', () async {
+      final same = await switcher(
+        _SitesBookSourceService({'a': _titles(10)}, listed: ('測試書 ', '作　者')),
+        [ordered('a', 0)],
+      ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+      expect(same?.source.bookSourceUrl, 'a');
+
+      final other = await switcher(
+        _SitesBookSourceService({'a': _titles(10)}, listed: ('測試書', '別人')),
+        [ordered('a', 0)],
+      ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+      expect(other, isNull);
+    });
+
+    test('漫畫書換到漫畫書源，正文是圖也算抓到', () async {
+      final pictures = [
+        for (var i = 1; i <= 3; i++) '<img src="https://img.test/$i.jpg">',
+      ].join('\n');
+      final prepared = await switcher(
+        _SitesBookSourceService({
+          'novel': _titles(20),
+          'comic': _titles(10),
+        }, content: pictures),
+        [ordered('novel', 0), ordered('comic', 1)..bookSourceType = 2],
+      ).prepareAutomaticSwitch(_currentBook()..type = 2, chapterTitle: '第6章');
+
+      expect(prepared?.source.bookSourceUrl, 'comic');
+      expect(prepared?.migratedBook.bookKind, BookSourceKind.comic);
     });
 
     test('幾個都合格時挑目錄章數最多的，一樣多照書源排序', () async {

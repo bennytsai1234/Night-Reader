@@ -11,34 +11,13 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
-import 'package:night_reader/core/utils/string_utils.dart';
+import 'package:night_reader/core/services/same_book.dart';
 import 'package:pool/pool.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/search_scope.dart';
 
 import 'package:night_reader/core/constant/source_wait.dart';
-
-/// 比對用的書名、作者與關鍵字：全形轉半形、去空白、轉小寫，繁體轉成簡體，
-/// 繁體站與簡體站回傳的同一本書才會併成一張、照同樣的相關度排。
-String normalizeSearchText(String? value) {
-  if (value == null || value.isEmpty) return '';
-  String normalize() => ChineseUtils.t2s(
-    StringUtils.fullToHalf(value).replaceAll(RegExp(r'\s+'), '').toLowerCase(),
-  );
-  // 繁簡字典還沒載入時 t2s 原樣返回，這時的結果不記下來，載入後重算。
-  if (!ChineseUtils.isInitialized) return normalize();
-  return _normalizedText.putIfAbsent(value, normalize);
-}
-
-/// 繁簡轉換一個書名要十幾微秒，合併每次重算都會對整份結果再做一次，所以把
-/// 結果記下來。每次新搜尋開始時清空，大小不超過一次搜尋碰到的文字數。
-final Map<String, String> _normalizedText = {};
-
-/// 書源多半是簡體站，也有繁體站：關鍵字照原文搜，轉成另一種寫法後不同時
-/// 也一起搜，輸入哪一種都找得到兩邊的書。
-List<String> searchKeyVariants(String key) =>
-    {key, ChineseUtils.t2s(key), ChineseUtils.s2t(key)}.toList();
 
 /// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（類別前綴＋正規化
 /// 書名＋作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
@@ -53,23 +32,6 @@ String searchResultIdentity(SearchBook book) =>
 /// （ADR 0053）。
 String _nameKeyOf(SearchBook book) =>
     '${book.bookKind.keyPrefix}${normalizeSearchText(book.name)}';
-
-/// 書名 [name]、作者 [author] 的結果是不是《[bookName]》這本書：書名正規化後
-/// 相同；[checkAuthor] 時作者正規化後也要相同。正規化和搜尋合併卡
-/// （[searchResultIdentity]）同一套；換源與換封面都照這一條認同一本書。
-bool isSameBook(
-  String name,
-  String? author,
-  String bookName,
-  String? bookAuthor, {
-  required bool checkAuthor,
-}) {
-  if (normalizeSearchText(name) != normalizeSearchText(bookName)) {
-    return false;
-  }
-  return !checkAuthor ||
-      normalizeSearchText(author) == normalizeSearchText(bookAuthor);
-}
 
 bool matchesPrecisionSearch(SearchBook book, String key) {
   final keyword = normalizeSearchText(key);
@@ -326,7 +288,7 @@ class SearchModel {
     }
     final cancelToken = CancelToken();
     _cancelToken = cancelToken;
-    _normalizedText.clear();
+    clearNormalizedSearchText();
     _groups.clear();
     _rawIndex.clear();
     for (final book in _expandInitialResults(initialResults)) {

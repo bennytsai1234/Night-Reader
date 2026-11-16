@@ -12,25 +12,10 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/same_book.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
-import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/constant/source_wait.dart';
-
-/// 換源搜尋的過濾條件，跟著搜尋送進書源 isolate，所以在只捕捉書名與作者的
-/// 頂層函式裡建立。
-bool Function(String name, String author) _sameBookFilter(
-  String bookName,
-  String bookAuthor, {
-  required bool checkAuthor,
-}) =>
-    (name, author) => isSameBook(
-      name,
-      author,
-      bookName,
-      bookAuthor,
-      checkAuthor: checkAuthor,
-    );
 
 class BookDetailChangeSourceProvider extends ChangeNotifier {
   BookDetailChangeSourceProvider(
@@ -177,7 +162,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               final results = await _searchNames(
                 source,
                 names,
-                _sameBookFilter(
+                sameBookFilter(
                   book.name,
                   book.author,
                   checkAuthor: shouldCheckAuthor,
