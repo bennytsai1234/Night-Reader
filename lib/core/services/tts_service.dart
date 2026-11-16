@@ -169,11 +169,12 @@ class TTSService extends ChangeNotifier {
   }
 
   /// 開 App 的進場在底色時等這個（`LaunchEntrance.prepared`）：朗讀引擎開
-  /// 好、設定套完，最多等 [launchWait]。開引擎的呼叫在 Android 主執行緒上
-  /// 執行，和 Flutter 畫畫面的主執行緒是同一條；系統的朗讀服務連上後還會在
-  /// 這條執行緒讀整份音色清單。不等的話，這些工作落在骨架長出的後半段，
-  /// 畫面停約 0.2 秒（2026-10-25 在使用者的手機上量到）；等第一次朗讀或打開
-  /// 設定頁才開，就變成之後某個隨機的時間點頓一下。
+  /// 好、設定套完，最多等 [launchWait]。`flutter_tts` 的呼叫在外掛自己的執行
+  /// 緒上做（`third_party/flutter_tts/PATCHES.md` nightreader.5）；系統通知欄
+  /// 的播放控制（[SystemPlayback.start]）仍在 Android 主執行緒，也就是 Flutter
+  /// 畫畫面的執行緒。2026-10-25 外掛還在主執行緒時，不等的話這些工作落在骨架
+  /// 長出的後半段，畫面停約 0.2 秒；等手機的系統追蹤確認主執行緒上剩下的夠
+  /// 輕，才拿掉這個等待（PLAN.md）。
   Future<void> ready() => init().timeout(launchWait, onTimeout: () {});
 
   /// 開 App 最多等朗讀引擎多久：使用者的手機上從開始連線到系統回應約 1.1

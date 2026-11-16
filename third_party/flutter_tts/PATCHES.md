@@ -6,7 +6,7 @@
 - Archive: `https://pub.dev/api/archives/flutter_tts-4.2.5.tar.gz`
 - Archive SHA-256: `ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775`
 - Upstream repository: <https://github.com/dlutton/flutter_tts>
-- Vendored version: `4.2.5+nightreader.1`
+- Vendored version: `4.2.5+nightreader.5`
 - License: MIT; the upstream [`LICENSE`](LICENSE) is retained unchanged.
 
 ## Local patch
@@ -55,3 +55,18 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
 - Restored the upstream 4.2.5 iOS implementation (`ios/`) and its plugin
   registration. The podspec's deployment target is raised from 8.0 to 13.0;
   the sources are otherwise unchanged.
+
+## Patch `nightreader.5`: Android engine work off the main thread
+
+- Every method call, the `onInit` follow-up (default voice locale, pending
+  calls) and `TextToSpeech` creation run in order on the plugin's own
+  `HandlerThread` (`flutter_tts`). Each call is a binder round trip to the TTS
+  service, and voice lists are large parcels read several times while the app
+  sets up the engine; on Android the main thread also draws Flutter frames, so
+  this work stalled launch animations. Results and events are posted back to
+  the main thread (`MainThreadResult`, `invokeMethod`).
+- `onInit` applies the default voice locale before running calls queued while
+  connecting, so a queued `setLanguage` is no longer reverted to the default.
+- `setEngine` with the engine already connected replies at once instead of
+  binding the TTS service again; switching engines shuts the replaced engine
+  down. Only the most recently created engine's `onInit` is honoured.

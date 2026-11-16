@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
@@ -34,6 +35,11 @@ import java.util.UUID
 /** FlutterTtsPlugin  */
 class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     private var handler: Handler? = null
+    // nightreader.5：朗讀引擎的每個呼叫都是跨程序呼叫（音色清單一次就是一大包），
+    // 不在 Android 主執行緒（也是 Flutter 畫畫面的執行緒）上做，全部照順序交給
+    // 這條執行緒；回給 Dart 的結果與事件再送回主執行緒。
+    private var workerThread: HandlerThread? = null
+    private var worker: Handler? = null
     private var methodChannel: MethodChannel? = null
     private var speakResult: Result? = null
     private var synthResult: Result? = null
@@ -71,7 +77,11 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         methodChannel!!.setMethodCallHandler(this)
         handler = Handler(Looper.getMainLooper())
         bundle = Bundle()
-        tts = TextToSpeech(context, onInitListenerWithoutCallback)
+        val thread = HandlerThread("flutter_tts").apply { start() }
+        workerThread = thread
+        worker = Handler(thread.looper)
+        // 建立引擎也要查已安裝的朗讀引擎，一起放在這條執行緒。
+        worker!!.post { tts = TextToSpeech(context, initListener(false)) }
     }
 
     /** Android Plugin APIs  */
@@ -80,11 +90,18 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        stop()
-        tts!!.shutdown()
-        context = null
         methodChannel!!.setMethodCallHandler(null)
         methodChannel = null
+        worker!!.post {
+            tts?.let {
+                stop()
+                it.shutdown()
+            }
+            context = null
+        }
+        // 先做完上面排進去的關閉，再結束這條執行緒。
+        workerThread!!.quitSafely()
+        workerThread = null
     }
 
     private val utteranceProgressListener: UtteranceProgressListener =
@@ -214,71 +231,72 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         }
     }
 
-    private val onInitListenerWithCallback: TextToSpeech.OnInitListener =
-        TextToSpeech.OnInitListener { status ->
-            // Handle pending method calls (sent while TTS was initializing)
-            synchronized(this@FlutterTtsPlugin) {
-                ttsStatus = status
-                for (call in pendingMethodCalls) {
-                    call.run()
-                }
-                pendingMethodCalls.clear()
-            }
+    // 系統在主執行緒回呼 onInit；讀預設音色、跑排著的呼叫都交給 [worker]。
+    // 換引擎（[setEngine]）連上時要回覆 Dart 那次呼叫（[replyEngine]）。只認最後
+    // 建立的那個引擎：換掉的引擎遲到的回呼不能把新引擎當成已經連上。
+    private var engineGeneration = 0
 
-            if (status == TextToSpeech.SUCCESS) {
-                tts!!.setOnUtteranceProgressListener(utteranceProgressListener)
-                try {
-                    val locale: Locale = tts!!.defaultVoice.locale
-                    if (isLanguageAvailable(locale)) {
-                        tts!!.language = locale
-                    }
-                } catch (e: NullPointerException) {
-                    Log.e(tag, "getDefaultLocale: " + e.message)
-                } catch (e: IllegalArgumentException) {
-                    Log.e(tag, "getDefaultLocale: " + e.message)
-                }
-
-                engineResult!!.success(1)
-            } else {
-                engineResult!!.error("TtsError","Failed to initialize TextToSpeech with status: $status", null)
-            }
-            //engineResult = null
-        }
-
-    private val onInitListenerWithoutCallback: TextToSpeech.OnInitListener =
-        TextToSpeech.OnInitListener { status ->
-            // Handle pending method calls (sent while TTS was initializing)
-            synchronized(this@FlutterTtsPlugin) {
-                ttsStatus = status
-                for (call in pendingMethodCalls) {
-                    call.run()
-                }
-                pendingMethodCalls.clear()
-            }
-
-            if (status == TextToSpeech.SUCCESS) {
-                tts!!.setOnUtteranceProgressListener(utteranceProgressListener)
-                try {
-                    val locale: Locale = tts!!.defaultVoice.locale
-                    if (isLanguageAvailable(locale)) {
-                        tts!!.language = locale
-                    }
-                } catch (e: NullPointerException) {
-                    Log.e(tag, "getDefaultLocale: " + e.message)
-                } catch (e: IllegalArgumentException) {
-                    Log.e(tag, "getDefaultLocale: " + e.message)
-                }
-            } else {
-                Log.e(tag, "Failed to initialize TextToSpeech with status: $status")
+    /** 在 [worker] 上呼叫，每建立一個 [TextToSpeech] 用一個新的。 */
+    private fun initListener(replyEngine: Boolean): TextToSpeech.OnInitListener {
+        val generation = ++engineGeneration
+        return TextToSpeech.OnInitListener { status ->
+            worker?.post {
+                if (generation == engineGeneration) onEngineReady(status, replyEngine)
             }
         }
+    }
+
+    /** 在 [worker] 上執行。 */
+    private fun onEngineReady(status: Int, replyEngine: Boolean) {
+        if (status == TextToSpeech.SUCCESS) {
+            tts!!.setOnUtteranceProgressListener(utteranceProgressListener)
+            // nightreader.5：先套預設音色的語言，再跑排著的呼叫；原本順序相反，
+            // 引擎連上前送來的 setLanguage 會被蓋回預設語言。
+            try {
+                val locale: Locale = tts!!.defaultVoice.locale
+                if (isLanguageAvailable(locale)) {
+                    tts!!.language = locale
+                }
+            } catch (e: NullPointerException) {
+                Log.e(tag, "getDefaultLocale: " + e.message)
+            } catch (e: IllegalArgumentException) {
+                Log.e(tag, "getDefaultLocale: " + e.message)
+            }
+        } else {
+            Log.e(tag, "Failed to initialize TextToSpeech with status: $status")
+        }
+
+        // Handle pending method calls (sent while TTS was initializing)
+        synchronized(this@FlutterTtsPlugin) {
+            ttsStatus = status
+            for (call in pendingMethodCalls) {
+                call.run()
+            }
+            pendingMethodCalls.clear()
+        }
+
+        if (!replyEngine) return
+        val reply = engineResult ?: return
+        engineResult = null
+        if (status == TextToSpeech.SUCCESS) {
+            reply.success(1)
+        } else {
+            reply.error("TtsError", "Failed to initialize TextToSpeech with status: $status", null)
+        }
+    }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
+        val mainResult = MainThreadResult(result, handler!!)
+        worker!!.post { handleMethodCall(call, mainResult) }
+    }
+
+    /** 在 [worker] 上執行。 */
+    private fun handleMethodCall(call: MethodCall, result: Result) {
         // If TTS is still loading
         synchronized(this@FlutterTtsPlugin) {
             if (ttsStatus == null) {
                 // Suspend method call until the TTS engine is ready
-                val suspendedCall = Runnable { onMethodCall(call, result) }
+                val suspendedCall = Runnable { handleMethodCall(call, result) }
                 pendingMethodCalls.add(suspendedCall)
                 return
             }
@@ -311,7 +329,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                 val b = speak(text, focus)
                 if (!b) {
                     synchronized(this@FlutterTtsPlugin) {
-                        val suspendedCall = Runnable { onMethodCall(call, result) }
+                        val suspendedCall = Runnable { handleMethodCall(call, result) }
                         pendingMethodCalls.add(suspendedCall)
                     }
                     return
@@ -495,10 +513,20 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     private fun setEngine(engine: String?, result: Result) {
+        // nightreader.5：已經連著同一個引擎就不重連（開 App 套用存下的引擎時，
+        // 多半就是系統預設的那個；重連要再等系統的朗讀服務回應一次）。
+        val current = selectedEngine ?: tts?.defaultEngine
+        if (ttsStatus == TextToSpeech.SUCCESS && engine != null && engine == current) {
+            selectedEngine = engine
+            result.success(1)
+            return
+        }
         ttsStatus = null
         selectedEngine = engine
         engineResult = result
-        tts = TextToSpeech(context, onInitListenerWithCallback, engine)
+        // 換掉的引擎要關掉，不然它和系統朗讀服務的連線一直留著。
+        tts?.shutdown()
+        tts = TextToSpeech(context, initListener(true), engine)
     }
 
     private fun setLanguage(language: String?, result: Result) {
@@ -687,7 +715,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
             }
         } else {
             ttsStatus = null
-            tts = TextToSpeech(context, onInitListenerWithoutCallback, selectedEngine)
+            tts = TextToSpeech(context, initListener(false), selectedEngine)
             false
         }
     }
@@ -817,5 +845,23 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         } else {
             audioManager?.abandonAudioFocus(null)
         }
+    }
+}
+
+/** 結果一律在主執行緒回給 Dart：呼叫在 [FlutterTtsPlugin] 的背景執行緒上做完。 */
+private class MainThreadResult(
+    private val result: Result,
+    private val main: Handler,
+) : Result {
+    override fun success(value: Any?) {
+        main.post { result.success(value) }
+    }
+
+    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+        main.post { result.error(errorCode, errorMessage, errorDetails) }
+    }
+
+    override fun notImplemented() {
+        main.post { result.notImplemented() }
     }
 }
