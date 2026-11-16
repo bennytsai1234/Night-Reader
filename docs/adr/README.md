@@ -78,10 +78,10 @@
 | [0060](0060-ai-finds-books-in-the-users-sources.md) | AI 找書：使用者描述想看的，AI 只用工具在使用者的書源裡搜、看詳情、讀章、看發現頁與書架，交出工具真的找到的書；深度每次選，迴圈與紀錄照 AI 修復，第四件背景工作，每次找書留著、進備份與全面同步 |
 | [0063](0063-source-connections-skip-certificate-checks.md) | 連書源網站不驗憑證（書源請求、規則 JS、匯入、封面、書源用的瀏覽器），同 Legado；App 更新、同步、AI、字型照常驗，各用自己的連線 |
 | [0064](0064-check-searches-an-impossible-word.md) | 書源校驗多搜一個不可能有的詞，前 5 本書名一樣就判「搜尋失效」、交 AI 修；搜不到、出錯、逾時算過；搜尋失敗不標記書源 |
-| [0068](0068-check-catches-chapters-cut-at-the-first-page.md) | 書源校驗抽查的文字正文第一頁有同一章下一頁的連結、之後沒再抓，判「正文失效」、交 AI 修；連結是目錄上的章、規則自己抓網頁、漫畫與有聲的不算 |
 | [0065](0065-ai-service-credential-persists-on-switch.md) | AI 服務切換主機時保留金鑰，刻意保留原本欄位，使用者自行核對新服務；舊憑證可能送到新主機 |
 | [0066](0066-interface-language-follows-system-or-selection.md) | 介面語言三選一（跟隨系統／繁體／简体）：介面字照它轉，書的資料照閱讀偏好的繁簡轉換，使用者與書源寫的字照原文，句子裡夾著的名稱跟著句子；通知照介面語言；不同步、備份帶著 |
 | [0067](0067-foreign-check-marks-are-dropped.md) | 校驗標記只由夜讀的校驗寫：Legado 這類別的 App 留下的失效分組與錯誤註解，進來時拿掉、當成還沒校驗過（有「異常」的照留）；校驗與清除校驗標記一起清；既有書源升級時整理一次 |
+| [0068](0068-check-catches-chapters-cut-at-the-first-page.md) | 書源校驗抽查的文字正文第一頁有同一章下一頁的連結、之後沒再抓，判「正文失效」、交 AI 修；連結是目錄上的章、規則自己抓網頁、漫畫與有聲的不算 |
 
 ## 工程與流程
 

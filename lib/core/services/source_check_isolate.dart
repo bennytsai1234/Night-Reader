@@ -890,7 +890,7 @@ class SourceChecker {
   }
 
   /// 抓一章正文：抓到的內容與讀不讀得到；出錯，或讀得到卻只抓了第一頁
-  /// （[_unjoinedNextPage]）時記下、傳回 null。[toc] 是整份目錄。
+  /// （[chapterCutAtFirstPage]）時記下、傳回 null。[toc] 是整份目錄。
   Future<({String text, bool usable})?> _probeContent(
     Book book,
     List<BookChapter> chapters,
@@ -923,16 +923,18 @@ class SourceChecker {
       // 抓得到的正文裡提到「訂閱」「VIP」這類字不算。
       final kind = _kindShownBy(content, book);
       _reclassify(kind);
-      final usable = chapterContentUsable(kind, content);
-      // 只看文字：漫畫網站常一頁一張圖、用 _2.html 翻頁，規則卻在第一頁就
-      // 拿到整章的圖片清單。
-      if (usable && kind == BookSourceKind.novel) {
-        if (_unjoinedNextPage(pages, toc) case final next?) {
-          _recordIssue(issues, _unjoinedPageIssue(chapter, next, mode));
-          return null;
-        }
+      final next = chapterCutAtFirstPage(
+        _source,
+        book,
+        content,
+        pages,
+        toc: [for (final chapter in toc) chapter.url],
+      );
+      if (next != null) {
+        _recordIssue(issues, _unjoinedPageIssue(chapter, next, mode));
+        return null;
       }
-      return (text: content, usable: usable);
+      return (text: content, usable: chapterContentUsable(kind, content));
     } catch (e) {
       _recordFailure(
         issues,
@@ -942,20 +944,6 @@ class SourceChecker {
       );
       return null;
     }
-  }
-
-  /// 抓一章只抓了第一頁時，同一章下一頁的網址（[unjoinedNextPage]，ADR
-  /// 0068）；[pages] 是抓這一章時的請求（第一頁見 [firstContentPage]）。
-  /// 目錄上的章節不算下一頁；正文規則自己抓網頁的不看。
-  String? _unjoinedNextPage(List<LoggedPage> pages, List<BookChapter> toc) {
-    if (contentRuleFetchesItself(_source)) return null;
-    final first = firstContentPage(pages);
-    if (first < 0) return null;
-    return unjoinedNextPage(
-      pages,
-      first,
-      chapters: [for (final chapter in toc) chapter.url],
-    );
   }
 
   _IssueData _unjoinedPageIssue(

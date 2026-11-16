@@ -1,55 +1,85 @@
 import 'package:html/parser.dart' as html_parser;
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/network/request_log.dart';
+import 'package:night_reader/core/services/chapter_content_kind.dart';
 
-/// 抓一章正文時只抓了第一頁：第一頁（[pages] 的第 [first] 筆，回應那一行
-/// 帶整頁原文）有指向同一章下一頁的連結（[isNextPageOfChapter]），之後卻
-/// 沒有再送出任何請求。傳回那個連結；有接下去抓或沒有這種連結是 null。
+/// [source] 抓到的這章正文 [content] 只抓了第一頁時，同一章下一頁的網址；
+/// 沒有是 null（ADR 0068）。書源校驗與 AI 修復的試抓都照它判，兩邊的結論
+/// 才一樣。
 ///
-/// [pages] 是抓這一章時的請求紀錄（[RequestLog.pages] 的樣子）。2026-11-12
-/// 下書網的 AI 交出的規則只抓到每章的前半頁（95393.html，後半在
+/// [pages] 是只抓這一章時的請求紀錄（[RequestLog.keepingPages]，每個回應帶
+/// 整頁原文），[toc] 是目錄上每一章的網址。正文要讀得到，而且是文字
+/// （[chapterKindShownBy]：聚合源的書照書）：漫畫網站常一頁一張圖、用
+/// `_2.html` 翻頁，規則卻在第一頁就拿到整章的圖片清單。正文規則自己抓網頁的
+/// （[contentRuleFetchesItself]）不看。
+String? chapterCutAtFirstPage(
+  BookSource source,
+  Book book,
+  String content,
+  List<LoggedPage> pages, {
+  Iterable<String> toc = const [],
+}) {
+  if (contentRuleFetchesItself(source)) return null;
+  final kind = chapterKindShownBy(source, book, content);
+  if (kind != BookSourceKind.novel || !chapterContentUsable(kind, content)) {
+    return null;
+  }
+  final first = _firstContentPage(pages);
+  if (first < 0) return null;
+  return _unjoinedNextPage(pages, first, toc);
+}
+
+/// 第一頁（[pages] 的第 [first] 筆，回應那一行帶整頁原文）有指向同一章下一頁
+/// 的連結（[isNextPageOfChapter]），之後卻沒有再送出任何請求。傳回那個連結；
+/// 有接下去抓或沒有這種連結是 null。
+///
+/// 2026-11-12 下書網的 AI 交出的規則只抓到每章的前半頁（95393.html，後半在
 /// 95393_2.html），校驗照樣通過；11-13 另一次寫了 `nextContentUrl`，
 /// 選擇器卻抓不到連結，同樣只有前半頁，所以看的是之後有沒有請求，不看規則
 /// 有沒有寫；有請求就算接上了，不比網址（規則可能換一種寫法抓下一頁，例如
 /// 網站的 API）。
 ///
-/// 目錄上的章節 [chapters]（含下一章）不算下一頁：2026-11-13 腐文小说一頁
-/// 一章，目錄的第二章就是 27752_2.html，引擎照 Legado 不把下一章當同一章的
-/// 下一頁抓。正文規則自己抓網頁的（[contentRuleFetchesItself]）由呼叫的地方
-/// 排除。
-String? unjoinedNextPage(
+/// 目錄上的章節 [toc]（含下一章）不算下一頁：2026-11-13 腐文小说一頁一章，
+/// 目錄的第二章就是 27752_2.html，引擎照 Legado 不把下一章當同一章的下一頁
+/// 抓。比對時不看 http、https：目錄頁與正文頁一個轉到 https、一個沒轉時，
+/// 同一章的網址只差在這裡。
+String? _unjoinedNextPage(
   List<LoggedPage> pages,
-  int first, {
-  Iterable<String> chapters = const [],
-}) {
+  int first,
+  Iterable<String> toc,
+) {
   final body = pages[first].body;
   final url = _respondedUrl(pages[first].line);
   final page = url == null ? null : Uri.tryParse(url);
   if (body == null || page == null) return null;
   final listed = {
-    for (final chapter in chapters)
+    for (final chapter in toc)
       if (_resolve(page, _withoutOptions(chapter)) case final uri?)
-        '${uri.removeFragment()}',
+        _withoutScheme(uri),
   };
   for (final link in html_parser.parse(body).querySelectorAll('a[href]')) {
     final href = link.attributes['href']!.trim();
     if (href.isEmpty || href.startsWith('javascript:')) continue;
     final target = _resolve(page, href);
     if (target == null || !isNextPageOfChapter(page, target)) continue;
-    final next = '${target.removeFragment()}';
-    if (listed.contains(next)) continue;
+    if (listed.contains(_withoutScheme(target))) continue;
     final fetchedMore = pages
         .skip(first + 1)
         .any((later) => _isRequestLine(later.line));
-    return fetchedMore ? null : next;
+    return fetchedMore ? null : '${target.removeFragment()}';
   }
   return null;
 }
 
+/// 比對目錄用的網址：去掉 `#` 之後與 http、https。
+String _withoutScheme(Uri uri) =>
+    '${uri.removeFragment()}'.replaceFirst(RegExp(r'^[A-Za-z]+:'), '');
+
 /// [pages] 裡一章正文的第一頁：第一個帶整頁原文、網站給的是內容（2xx，或
 /// WebView 渲染的沒有狀態碼）的回應；沒有是 -1。書源自己跟的轉址（POST 的
 /// 302 這類）中間那幾跳也記了回應，不是正文。
-int firstContentPage(List<LoggedPage> pages) => pages.indexWhere((page) {
+int _firstContentPage(List<LoggedPage> pages) => pages.indexWhere((page) {
   if (page.body == null) return false;
   final match = RegExp(r'^\s*← \S+ (\S+)').firstMatch(page.line);
   if (match == null) return false;
@@ -58,7 +88,7 @@ int firstContentPage(List<LoggedPage> pages) => pages.indexWhere((page) {
 });
 
 /// 正文規則自己抓網頁（`java.ajax` 這類）：下一頁可能由規則自己接，
-/// [unjoinedNextPage] 不看。
+/// [chapterCutAtFirstPage] 不看。
 bool contentRuleFetchesItself(BookSource source) =>
     _fetchesItself.hasMatch(source.ruleContent?.content ?? '');
 

@@ -24,6 +24,7 @@ class SourceProbeReport {
     this.pages = const [],
     this.timedOut = false,
     this.contentUsable,
+    this.unjoinedNextPage,
   });
 
   /// 除錯紀錄，`(狀態, 訊息)`；狀態同 [DebugLog.state]。
@@ -42,6 +43,7 @@ class SourceProbeReport {
     requests: requests,
     timedOut: timedOut,
     contentUsable: contentUsable,
+    unjoinedNextPage: unjoinedNextPage,
   );
 
   /// 整段試抓超過時間被停下。
@@ -56,6 +58,10 @@ class SourceProbeReport {
   /// 抓到的正文照書源校驗的判斷算不算抓到了（[sourceContentUsable]）：
   /// 只有一行提示、只有佔位圖的不算。沒走到正文是 null。
   final bool? contentUsable;
+
+  /// 抓到的正文只抓了第一頁時，同一章下一頁的網址；沒有、或沒走到正文是
+  /// null。和書源校驗同一個判斷（[chapterCutAtFirstPage]）。
+  final String? unjoinedNextPage;
 
   /// 一路抓到正文了，而且照書源校驗的判斷算抓到了（[contentUsable]）。
   bool get succeeded =>
@@ -141,6 +147,7 @@ class SourceProbeReport {
     'pages': [for (final page in pages) loggedPageToJson(page)],
     'timedOut': timedOut,
     'contentUsable': contentUsable,
+    'unjoinedNextPage': unjoinedNextPage,
   };
 
   factory SourceProbeReport.fromMap(Map<Object?, Object?> map) =>
@@ -156,6 +163,7 @@ class SourceProbeReport {
         ],
         timedOut: map['timedOut'] as bool? ?? false,
         contentUsable: map['contentUsable'] as bool?,
+        unjoinedNextPage: map['unjoinedNextPage'] as String?,
       );
 }
 
@@ -258,6 +266,15 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
     contentUsable: content == null
         ? null
         : sourceContentUsable(content.source, content.book, content.content),
+    unjoinedNextPage: content == null
+        ? null
+        : chapterCutAtFirstPage(
+            content.source,
+            content.book,
+            content.content,
+            content.pages,
+            toc: content.toc,
+          ),
   ).toMap();
 };
 
@@ -409,34 +426,6 @@ String? searchInfoMismatch(SourceProbeReport probe) {
       '作者搜尋是「$searchAuthor」、詳情頁是「$infoAuthor」',
   ];
   return parts.isEmpty ? null : '搜尋結果第一本進了詳情頁，${parts.join('；')}';
-}
-
-/// 試抓到的正文只抓了第一頁時，同一章下一頁的網址；沒有是 null
-/// （[unjoinedNextPage]，書源校驗也照它判）。第一頁是除錯紀錄「正文 URL」
-/// 那一頁最後一次的回應，目錄的下一章是「下一章 URL」。只看小說源：漫畫
-/// 網站常一頁一張圖地翻頁，規則卻在第一頁就拿到整章的圖。
-String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
-  if (source.sourceKind != BookSourceKind.novel ||
-      contentRuleFetchesItself(source)) {
-    return null;
-  }
-  String? chapterUrl;
-  String? nextChapterUrl;
-  for (final (_, message) in probe.logs) {
-    final url = RegExp(r'^\s*正文 URL: (\S+)').firstMatch(message)?.group(1);
-    if (url != null) chapterUrl = url;
-    final next = RegExp(r'^\s*下一章 URL: (\S+)').firstMatch(message)?.group(1);
-    if (next != null) nextChapterUrl = next;
-  }
-  final chapter = chapterUrl == null ? null : Uri.tryParse(chapterUrl);
-  if (chapter == null) return null;
-  final first = probe.pages.lastIndexWhere(
-    (page) =>
-        page.body != null &&
-        page.line.trimLeft().startsWith('← ${chapter.removeFragment()} '),
-  );
-  if (first < 0) return null;
-  return unjoinedNextPage(probe.pages, first, chapters: [?nextChapterUrl]);
 }
 
 /// 回應那一行只留到大小為止：「  ← 頁 2｜網址 200 text/html，41940 位元組，
