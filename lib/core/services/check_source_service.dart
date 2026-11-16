@@ -760,9 +760,7 @@ class CheckSourceService extends ChangeNotifier {
           ..removeInvalidGroups()
           ..removeErrorComment()
           ..addHealthGroups(upstreamHealth(unstableSourceGroupTag))
-          ..addErrorComment(
-            saved!.errorComment ?? 'AI：網站不穩定，無法修復',
-          );
+          ..addErrorComment(saved!.errorComment ?? 'AI：網站不穩定，無法修復');
       }
     }
     _pendingStatusWrites[source.bookSourceUrl] = source;
