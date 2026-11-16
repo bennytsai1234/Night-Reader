@@ -193,7 +193,7 @@ void main() {
     );
 
     test(
-      'a site that answers only now and then is given up as rate limited',
+      'unstable websites are explicitly unfixable and removable',
       () {
         // 2026-11-14 白光、读客书库、思怡小说的網站一下 200、一下 429 或 502，
         // 86读书時快時慢，AI 一直重試、換主機、先修別段，各花二三十輪。還原
@@ -203,8 +203,10 @@ void main() {
         expect(
           aiRepairSystemPrompt,
           allOf(
+            contains('網站不穩定＝無法修復'),
+            contains('建議清理（可移除）'),
             contains('「同一個請求這次回過不同的結果」'),
-            contains('這一次回覆就用 give_up 的 rate_limited 放棄'),
+            contains('這一次回覆就用 give_up 的 site_unstable 放棄'),
             contains('這條蓋過其他每一條'),
             contains('也不查其他段'),
             contains('只送這一次'),
