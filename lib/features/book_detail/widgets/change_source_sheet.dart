@@ -3,6 +3,7 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
@@ -21,9 +22,11 @@ typedef ChangeSourceOutcome = ({bool success, String message});
 ///
 /// 詳情頁情境不傳，沿用 [BookDetailProvider.changeSource]；閱讀器情境傳入走
 /// [SourceSwitchService] 的回呼。回呼負責執行換源並回傳結果，由面板顯示
-/// SnackBar、成功時 pop。
+/// SnackBar、成功時 pop。[toc] 是清單已經抓好的它的詳情與目錄，交給
+/// [SourceSwitchService.prepareSwitch] 就不用再抓一次。
 typedef OnSelectSource = Future<ChangeSourceOutcome> Function(
   SearchBook selected,
+  SourceToc? toc,
 );
 
 class ChangeSourceSheet extends StatelessWidget {
@@ -123,6 +126,9 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               count: 1,
               child: BookDetailChangeSourceItem(
                 searchBook: widget.originalBook.toSearchBook(),
+                chapterCount: widget.originalBook.totalChapterNum > 0
+                    ? widget.originalBook.totalChapterNum
+                    : null,
                 isCurrent: true,
               ),
             ),
@@ -173,7 +179,12 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
                           count: count,
                           child: BookDetailChangeSourceItem(
                             searchBook: result,
-                            onTap: () => _handleSelect(context, result),
+                            chapterCount: provider.chapterCountOf(result),
+                            onTap: () => _handleSelect(
+                              context,
+                              result,
+                              provider.tocOf(result),
+                            ),
                           ),
                         );
                       },
@@ -185,16 +196,23 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     );
   }
 
-  Future<void> _handleSelect(BuildContext context, SearchBook result) async {
+  Future<void> _handleSelect(
+    BuildContext context,
+    SearchBook result,
+    SourceToc? toc,
+  ) async {
     if (_isSwitchingSource) return;
     setState(() => _isSwitchingSource = true);
     try {
       final select = widget.onSelectSource;
       final ChangeSourceOutcome outcome;
       if (select != null) {
-        outcome = await select(result);
+        outcome = await select(result, toc);
       } else {
-        final detailOutcome = await widget.detailProvider!.changeSource(result);
+        final detailOutcome = await widget.detailProvider!.changeSource(
+          result,
+          toc: toc,
+        );
         outcome = (
           success: detailOutcome.success,
           message: detailOutcome.message,

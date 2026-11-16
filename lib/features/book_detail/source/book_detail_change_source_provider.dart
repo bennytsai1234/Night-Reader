@@ -13,6 +13,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/same_book.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/constant/source_wait.dart';
@@ -111,33 +112,30 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final cached = await searchBookDao.getByNames(names);
     if (!_isSearchActive(searchId)) return;
 
-    final allowedOrigins = enabledSources
-        .map((source) => source.bookSourceUrl)
-        .toSet();
+    final sourcesByUrl = {
+      for (final source in enabledSources) source.bookSourceUrl: source,
+    };
     _sourceRespondTimes = {
       for (final source in enabledSources)
         source.bookSourceUrl: source.respondTime,
     };
-    final cachedResults = _sortResults(
-      cached
-          .where(
-            (result) =>
-                allowedOrigins.contains(result.origin) &&
-                _isSameBook(result.name, result.author, checkAuthor: true),
-          )
-          .toList(),
-    );
-    allResults = cachedResults;
+    final cachedResults = [
+      for (final result in cached)
+        if (sourcesByUrl.containsKey(result.origin) &&
+            _isSameBook(result.name, result.author, checkAuthor: true))
+          result,
+    ];
+    // 目錄抓到了才列（換源要抓目錄，抓不到的換不過去）：這次面板裡已經抓
+    // 過的先列，其他的抓到再補。
+    _loadingTocs.clear();
+    allResults = _sortResults([
+      for (final result in cachedResults)
+        if (_tocs.containsKey(_resultKey(result))) result,
+    ]);
     _rebuildFilteredResults();
 
     isSearching = true;
-    if (enabledSources.isEmpty) {
-      status = '目前範圍沒有可用書源';
-    } else if (cachedResults.isNotEmpty) {
-      status = '已載入 ${cachedResults.length} 個快取來源，正在同步更新...';
-    } else {
-      status = '正在搜尋可用書源...';
-    }
+    status = enabledSources.isEmpty ? '目前範圍沒有可用書源' : '正在搜尋可用書源...';
     _notifySafely();
 
     if (enabledSources.isEmpty) {
@@ -150,7 +148,24 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
       var failedSources = 0;
       var completedSources = 0;
       final searchPool = Pool(_maxConcurrentSearches);
+      // 搜完的書源：之後才抓到目錄的快取結果不再加回去，照這次搜到的。
+      final searched = <String>{};
       try {
+        final cachedTasks = [
+          for (final result in cachedResults)
+            if (!_tocs.containsKey(_resultKey(result)))
+              searchPool.withResource(() async {
+                if (!_isSearchActive(searchId)) return;
+                final source = sourcesByUrl[result.origin]!;
+                if (!await _loadToc(result, source, searchId)) return;
+                if (!_isSearchActive(searchId) ||
+                    searched.contains(result.origin)) {
+                  return;
+                }
+                _addResults([result]);
+                _notifySafely();
+              }),
+        ];
         final searchTasks = enabledSources.map((source) {
           return searchPool.withResource(() async {
             if (!_isSearchActive(searchId)) return;
@@ -170,12 +185,23 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               );
               if (!_isSearchActive(searchId)) return;
               final elapsed = stopwatch.elapsedMilliseconds;
-              for (final result in results) {
-                result.respondTime = elapsed;
-              }
-              _replaceSourceResults(source.bookSourceUrl, results);
+              final matching = [
+                for (final result in results)
+                  if (_listable(result)) result..respondTime = elapsed,
+              ];
+              final loaded = await Future.wait([
+                for (final result in matching)
+                  _loadToc(result, source, searchId),
+              ]);
+              if (!_isSearchActive(searchId)) return;
+              searched.add(source.bookSourceUrl);
+              _replaceSourceResults(source.bookSourceUrl, [
+                for (final (i, result) in matching.indexed)
+                  if (loaded[i]) result,
+              ]);
             } catch (_) {
               if (_isSearchActive(searchId)) {
+                searched.add(source.bookSourceUrl);
                 failedSources++;
                 _replaceSourceResults(
                   source.bookSourceUrl,
@@ -191,7 +217,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
           });
         }).toList();
 
-        await Future.wait(searchTasks);
+        await Future.wait([...cachedTasks, ...searchTasks]);
         if (!_isSearchActive(searchId)) return;
 
         isSearching = false;
@@ -326,20 +352,77 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     return enabledSources;
   }
 
+  /// 搜到的 [result] 能不能列：不是現在的書源、書名是同一本。
+  bool _listable(SearchBook result) =>
+      result.origin != book.origin &&
+      _isSameBook(result.name, result.author, checkAuthor: false);
+
   void _replaceSourceResults(String sourceUrl, List<SearchBook> results) {
-    final merged = <String, SearchBook>{
+    allResults = [
       for (final result in allResults)
-        if (result.origin != sourceUrl) _resultKey(result): result,
+        if (result.origin != sourceUrl) result,
+    ];
+    _addResults(results);
+  }
+
+  void _addResults(List<SearchBook> results) {
+    final merged = <String, SearchBook>{
+      for (final result in allResults) _resultKey(result): result,
+      for (final result in results) _resultKey(result): result,
     };
-    for (final result in results) {
-      if (result.origin == book.origin ||
-          !_isSameBook(result.name, result.author, checkAuthor: false)) {
-        continue;
-      }
-      merged[_resultKey(result)] = result;
-    }
     allResults = _sortResults(merged.values.toList());
     _rebuildFilteredResults();
+  }
+
+  /// 抓到目錄的結果：章數，與留給換源用的詳情、目錄（[SourceToc]）。
+  /// 留著的目錄總共超過 [_maxKeptChapters] 章時只記章數（同 Legado
+  /// 換源的上限），選它換源時再抓一次。
+  final Map<String, ({int count, SourceToc? toc})> _tocs = {};
+  int _keptChapters = 0;
+  static const int _maxKeptChapters = 30000;
+
+  /// 這次搜尋正在抓的目錄：同一本（快取與這次搜到的）只抓一次。
+  final Map<String, Future<bool>> _loadingTocs = {};
+
+  /// [result] 的目錄有幾章；還沒抓到是 null。
+  int? chapterCountOf(SearchBook result) => _tocs[_resultKey(result)]?.count;
+
+  /// [result] 抓好的詳情與目錄，換源時交給 [SourceSwitchService.prepareSwitch]。
+  SourceToc? tocOf(SearchBook result) => _tocs[_resultKey(result)]?.toc;
+
+  /// 抓 [result] 的詳情與目錄；抓到了傳回 true。
+  Future<bool> _loadToc(SearchBook result, BookSource source, int searchId) {
+    final key = _resultKey(result);
+    if (_tocs.containsKey(key)) return Future.value(true);
+    return _loadingTocs.putIfAbsent(key, () async {
+      final cancelToken = CancelToken();
+      _activeSearchTokens.add(cancelToken);
+      try {
+        final toc =
+            await loadSourceToc(
+              service,
+              source,
+              result,
+              cancelToken: cancelToken,
+            ).timeout(
+              _sourceSearchTimeout * 2,
+              onTimeout: () {
+                cancelToken.cancel('換源抓目錄逾時');
+                throw TimeoutException('換源抓目錄逾時');
+              },
+            );
+        if (!_isSearchActive(searchId)) return false;
+        final count = toc.chapters.length;
+        final keep = _keptChapters + count <= _maxKeptChapters;
+        if (keep) _keptChapters += count;
+        _tocs[key] = (count: count, toc: keep ? toc : null);
+        return true;
+      } catch (_) {
+        return false;
+      } finally {
+        _activeSearchTokens.remove(cancelToken);
+      }
+    });
   }
 
   void _updateSearchingStatus(int completedSources, int totalSources) {

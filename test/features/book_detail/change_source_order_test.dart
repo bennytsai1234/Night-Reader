@@ -10,8 +10,17 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 
-/// 每個書源回應要多久、回的字數照 [_sites] 定。
-class _Sites extends BookSourceService {
+import 'change_source_sites.dart';
+
+/// 每個書源回應要多久、回的字數照 [_sites] 定；目錄章數照 [chapters]。
+class _Sites extends BookSourceService with ChapterListSites {
+  _Sites([this.chapters = const {}]);
+
+  final Map<String, int> chapters;
+
+  @override
+  int chapterCountFor(String origin) => chapters[origin] ?? 10;
+
   @override
   Future<List<SearchBook>> searchBooks(
     BookSource source,
@@ -59,7 +68,9 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<BookDetailChangeSourceProvider> search() async {
+  Future<BookDetailChangeSourceProvider> search([
+    Map<String, int> chapters = const {},
+  ]) async {
     final provider = BookDetailChangeSourceProvider(
       Book(
         bookUrl: 'https://mine.example/book',
@@ -68,7 +79,7 @@ void main() {
         author: '沈知秋',
         wordCount: '121.5萬字',
       ),
-      service: _Sites(),
+      service: _Sites(chapters),
       sourceDao: sourceDao,
       searchBookDao: SearchBookDao(db),
       autoStart: false,
@@ -98,5 +109,23 @@ void main() {
     ]);
     provider.toggleExcludeFarWordCount();
     expect(provider.filteredResults, hasLength(4));
+  });
+
+  test('目錄抓到了才列，右邊寫共幾章；抓不到目錄的不列（換不過去）', () async {
+    final provider = await search({
+      'https://fast.example': 1648,
+      'https://partial.example': 0,
+    });
+
+    expect(provider.filteredResults.map((r) => r.origin), [
+      'https://fast.example',
+      'https://unknown.example',
+      'https://slow.example',
+    ]);
+    final fast = provider.filteredResults.first;
+    expect(provider.chapterCountOf(fast), 1648);
+    // 抓好的目錄留給換源用，選它時不用再抓一次。
+    expect(provider.tocOf(fast)?.chapters, hasLength(1648));
+    expect(provider.tocOf(fast)?.book.bookUrl, 'https://fast.example/book');
   });
 }

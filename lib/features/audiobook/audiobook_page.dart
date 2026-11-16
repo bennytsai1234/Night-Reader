@@ -327,7 +327,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeSourceSheet(
         book: book,
-        onSelectSource: (candidate) async {
+        onSelectSource: (candidate, toc) async {
           try {
             await _player.saveProgress();
             final prepared = await service.prepareSwitch(
@@ -335,6 +335,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
               candidate,
               targetChapterIndex: book.chapterIndex,
               targetChapterTitle: book.durChapterTitle,
+              toc: toc,
             );
             await service.commitSwitch(book, prepared);
             AppEventBus().fire(AppEventBus.upBookshelf);
