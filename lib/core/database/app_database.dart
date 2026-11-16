@@ -137,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   static final Completer<String?> _sharedFile = Completer<String?>();
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -243,6 +243,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 19) {
         // 過去的找書（ADR 0060）。
         await m.createTable(aiFindRecords);
+      }
+      if (from < 20) {
+        await dropForeignSourceCheckMarks();
       }
     },
     beforeOpen: (_) async {
@@ -359,6 +362,46 @@ class AppDatabase extends _$AppDatabase {
     // 用這些書源加的書跟著換類別，同存書源時（ADR 0053）。每個書源都比，
     // 不只這次改了類型的：重跑也補得到上次漏的。
     await BookDao(this).followSourceKinds(BookSourceDao.kindsToFollow(sources));
+  }
+
+  /// 已存的書源拿掉別的 App 校驗留下的標記（[BookSourceLogic.dropForeignCheckMarks]），
+  /// 傳回改了幾個。以前匯入時沒拿：Legado 舊版的「正文失效」和夜讀的標記同字，
+  /// 書源被當成正文壞掉、不參加搜尋，卻因為沒有「異常」篩不出來。
+  Future<int> dropForeignSourceCheckMarks() async {
+    // 只建了部分舊表的測試資料庫沒有書源表。
+    final hasTable = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+      "AND name = 'book_sources'",
+    ).get();
+    if (hasTable.isEmpty) return 0;
+    // 先用 SQL 挑出可能有的，不必整張表讀出來。
+    final rows = await customSelect(
+      'SELECT bookSourceUrl, bookSourceName, bookSourceGroup, '
+      'bookSourceComment, lastCheckTime FROM book_sources '
+      "WHERE bookSourceGroup LIKE '%失效%' "
+      "OR bookSourceGroup LIKE '%校验超时%' "
+      "OR bookSourceGroup LIKE '%$timeoutSourceGroupTag%' "
+      "OR bookSourceComment LIKE '%// Error:%'",
+    ).get();
+    var changed = 0;
+    for (final row in rows) {
+      // 書源 JSON 不帶校驗時間，另外讀。
+      final source = BookSource.fromJson(row.data)
+        ..lastCheckTime = row.read<int>('lastCheckTime');
+      if (!source.dropForeignCheckMarks()) continue;
+      await customStatement(
+        'UPDATE book_sources SET bookSourceGroup = ?, bookSourceComment = ?, '
+        'lastCheckTime = ? WHERE bookSourceUrl = ?',
+        [
+          source.bookSourceGroup,
+          source.bookSourceComment,
+          source.lastCheckTime,
+          source.bookSourceUrl,
+        ],
+      );
+      changed++;
+    }
+    return changed;
   }
 
   Future<void> _createPerformanceIndexes() async {
