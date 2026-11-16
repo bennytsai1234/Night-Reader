@@ -54,11 +54,13 @@ class SourceToc {
 }
 
 /// 抓 [candidate] 在書源 [source] 上的詳情與目錄；目錄是空的時丟出
-/// [SourceException]（換不過去）。
+/// [SourceException]（換不過去）。[requireComplete] 時目錄哪一頁抓不到就
+/// 整份失敗（[BookSourceService.getChapterList]），不給少了幾頁的目錄。
 Future<SourceToc> loadSourceToc(
   BookSourceService service,
   BookSource source,
   SearchBook candidate, {
+  bool requireComplete = false,
   CancelToken? cancelToken,
 }) async {
   final book = await service.getBookInfo(
@@ -69,6 +71,7 @@ Future<SourceToc> loadSourceToc(
   final chapters = await service.getChapterList(
     source,
     book,
+    requireComplete: requireComplete,
     cancelToken: cancelToken,
   );
   if (chapters.isEmpty) {
@@ -359,14 +362,18 @@ class SourceSwitchService {
       chapterIndex: targetChapterIndex ?? currentBook.chapterIndex,
       durChapterTitle: targetChapterTitle ?? currentBook.durChapterTitle,
     );
-    final SourceToc(book: hydratedBook, :chapters) =
-        toc ??
-        await loadSourceToc(
-          _service,
-          source,
-          candidate,
-          cancelToken: cancelToken,
-        );
+    final SourceToc(book: hydratedBook, :chapters) = toc == null
+        ? await loadSourceToc(
+            _service,
+            source,
+            candidate,
+            cancelToken: cancelToken,
+          )
+        // 清單留著的那份不改：抓正文時規則會改章節的欄位，換不成再點一次
+        // 要用原本的。
+        : SourceToc(toc.book, [
+            for (final chapter in toc.chapters) chapter.copyWith(),
+          ]);
 
     final migrated = _migrate(alignmentBook, hydratedBook, chapters);
     return _AlignedSwitch(

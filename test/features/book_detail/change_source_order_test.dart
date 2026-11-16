@@ -68,9 +68,12 @@ void main() {
   });
   tearDown(() => db.close());
 
+  late _Sites sites;
+
   Future<BookDetailChangeSourceProvider> search([
     Map<String, int> chapters = const {},
   ]) async {
+    sites = _Sites(chapters);
     final provider = BookDetailChangeSourceProvider(
       Book(
         bookUrl: 'https://mine.example/book',
@@ -79,7 +82,7 @@ void main() {
         author: '沈知秋',
         wordCount: '121.5萬字',
       ),
-      service: _Sites(chapters),
+      service: sites,
       sourceDao: sourceDao,
       searchBookDao: SearchBookDao(db),
       autoStart: false,
@@ -127,5 +130,25 @@ void main() {
     // 抓好的目錄留給換源用，選它時不用再抓一次。
     expect(provider.tocOf(fast)?.chapters, hasLength(1648));
     expect(provider.tocOf(fast)?.book.bookUrl, 'https://fast.example/book');
+  });
+
+  test('抓整份目錄：哪一頁抓不到就不列，章數不會少算', () async {
+    await search();
+    expect(sites.completeRequests, isNotEmpty);
+    expect(sites.completeRequests, everyElement(isTrue));
+  });
+
+  test('留著的目錄總共超過三萬章時只記章數，換源時再抓', () async {
+    final provider = await search({
+      'https://fast.example': 20000,
+      'https://slow.example': 20000,
+    });
+    final big = [
+      for (final r in provider.filteredResults)
+        if (provider.chapterCountOf(r) == 20000) r,
+    ];
+
+    expect(big, hasLength(2));
+    expect(big.where((r) => provider.tocOf(r) == null), hasLength(1));
   });
 }

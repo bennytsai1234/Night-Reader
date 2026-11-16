@@ -9,6 +9,9 @@ import 'package:night_reader/core/services/book_source_service.dart';
 mixin ChapterListSites on BookSourceService {
   int chapterCountFor(String origin) => 10;
 
+  /// 每次抓目錄是不是要整份（`requireComplete`）。
+  final List<bool> completeRequests = [];
+
   @override
   Future<Book> getBookInfo(
     BookSource source,
@@ -24,13 +27,16 @@ mixin ChapterListSites on BookSourceService {
     int? pageConcurrency,
     CancelToken? cancelToken,
     bool requireComplete = false,
-  }) async => [
-    for (var i = 0; i < chapterCountFor(source.bookSourceUrl); i++)
-      BookChapter(
-        url: '${book.bookUrl}/c$i',
-        title: '第${i + 1}章',
-        bookUrl: book.bookUrl,
-        index: i,
-      ),
-  ];
+  }) async {
+    completeRequests.add(requireComplete);
+    return [
+      for (var i = 0; i < chapterCountFor(source.bookSourceUrl); i++)
+        BookChapter(
+          url: '${book.bookUrl}/c$i',
+          title: '第${i + 1}章',
+          bookUrl: book.bookUrl,
+          index: i,
+        ),
+    ];
+  }
 }
