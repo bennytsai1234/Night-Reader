@@ -634,7 +634,7 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// AI 已確認網站不穩定、無法修復的書源：列為可移除，不自動刪除。
   /// 同網站的其他書源也在 AI 放棄時一起標記。
-  List<RepairItem> get unstableLeft {
+  List<RepairItem> get unstableItems {
     final unstableSites = {
       for (final item in items)
         if (item.session?.job.giveUpWhy == 'site_unstable')
@@ -642,14 +642,18 @@ class SourceRepairBatch extends ChangeNotifier {
     };
     return [
       for (final item in items)
-        if (!item.deleted &&
-            (item.outcome == RepairOutcome.notFixed ||
+        if ((item.outcome == RepairOutcome.notFixed ||
                 item.outcome == RepairOutcome.aiUnfixable) &&
             (item.source.hasGroupTag(unstableSourceGroupTag) ||
                 unstableSites.contains(siteKey(item.source))))
           item,
     ];
   }
+
+  List<RepairItem> get unstableLeft => [
+    for (final item in unstableItems)
+      if (!item.deleted) item,
+  ];
 
   Future<void> deleteUnstable() async => _deleteItems(unstableLeft);
 
