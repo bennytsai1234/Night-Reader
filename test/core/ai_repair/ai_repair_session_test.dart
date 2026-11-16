@@ -157,6 +157,7 @@ void main() {
     Set<String> secretValues = const {},
     Future<Set<String>> Function(BookSource source)? secrets,
     Set<String> timesOut = const {},
+    int checkTimeouts = 0,
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
     List<String>? checked,
@@ -167,6 +168,7 @@ void main() {
     List<String> Function(String url)? fetchLines,
   }) {
     var next = 0;
+    var timeoutsLeft = checkTimeouts;
     return AiRepairSession(
       logDirectory: logs == null ? null : () async => logs,
       priorCheck: priorCheck,
@@ -174,6 +176,10 @@ void main() {
       service: clipboard ? null : _service,
       check: (source, _) async {
         checked?.add(source.ruleContent?.content ?? '');
+        if (timeoutsLeft > 0) {
+          timeoutsLeft--;
+          return null;
+        }
         return timesOut.contains(source.bookSourceUrl)
             ? null
             : check?.call(source) ??
@@ -401,16 +407,94 @@ void main() {
     expect(s.job.explanation, contains('原本的校驗是「校驗超時」'));
   });
 
+  test('an unchanged hand-in after the opening check timed out is called '
+      'unstable', () async {
+    // Codex 審查改派子代理審：開場校驗整個超過時間（null）原本不算。
+    final s = session(
+      [_source('https://site.example', content: 'class.txt@text')],
+      checkTimeouts: 1,
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(applied, isEmpty);
+    expect(s.job.giveUpWhy, 'site_unstable');
+  });
+
+  test('an unchanged hand-in is called unstable when the earlier check could '
+      'not reach the site', () async {
+    // 使用者選 B：整批沿用一天內校驗過的書源時開場會重校驗；書源上留著
+    // 「上游異常」、這次開場與交出都過了，也是時好時壞。
+    final source = _source('https://site.example', content: 'class.txt@text')
+      ..addHealthGroups(upstreamHealth(upstreamBlockedSourceGroupTag));
+    final s = session(
+      [source],
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(applied, isEmpty);
+    expect(s.job.giveUpWhy, 'site_unstable');
+    expect(s.job.explanation, contains('原本的校驗是「上游異常」'));
+  });
+
+  test(
+    'a check without the same headers is not mixed with the probe',
+    () async {
+      // 換了 User-Agent 的試抓 200、校驗用原本的標頭沒回應：條件不同，不算
+      // 時好時壞（子代理審查 F2）。
+      const search = 'https://site.example/s?q=1';
+      final s = session(
+        [_source('https://site.example')],
+        check: (source) => _checked(
+          source,
+          diagnostics: const [
+            '[搜尋] 搜尋逾時\n這一段的請求與回應:\n$search 標頭：User-Agent: desktop\n'
+                '  ← $search 沒有回應（connectionTimeout）',
+          ],
+        ),
+        probe: (_) => const SourceProbeReport(
+          logs: [(10, '︾開始解析搜尋頁')],
+          requests: ['$search 標頭：User-Agent: mobile', '  ← $search 200：<div>…'],
+        ),
+        replies: [
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'site_broken',
+            'reason': '測試',
+          }),
+        ],
+      );
+
+      await s.start();
+
+      expect(asked.first.last.content, isNot(contains('這次回過不同的結果')));
+    },
+  );
+
   test('the opening says so when the check and the probe disagree', () async {
-    // 校驗的診斷不記標頭、試抓記：同一個搜尋校驗時沒回應、試抓 200，
-    // 開場就列出來，AI 第一輪就看得到。
+    // 同一個搜尋校驗時沒回應、試抓 200：開場就列出來，AI 第一輪就看得到。
     const search = 'https://site.example/s?q=1';
     final s = session(
       [_source('https://site.example')],
       check: (source) => _checked(
         source,
         diagnostics: const [
-          '[搜尋] 搜尋逾時\n這一段的請求與回應:\n$search\n'
+          '[搜尋] 搜尋逾時\n這一段的請求與回應:\n$search 標頭：User-Agent: t\n'
               '  ← $search 沒有回應（connectionTimeout）',
         ],
       ),

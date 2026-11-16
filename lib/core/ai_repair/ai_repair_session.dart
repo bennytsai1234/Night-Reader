@@ -108,9 +108,10 @@ class AiRepairJob {
   /// 原本的書源校驗出來壞在哪；校驗逾時是 null。
   SourceHealthCategory? _before;
 
-  /// 原本的書源校驗時網站沒回內容：「上游異常」（連不上、回錯誤）或「校驗
-  /// 超時」的那個標記，其他是 null。AI 沒改規則、再校驗就通過時，網站是
-  /// 時好時壞（[AiRepairSession._validate]，使用者 2026-11-16）。
+  /// 原本的書源校驗時網站沒回內容：這次開場或上一次的校驗是「上游異常」
+  /// （連不上、回錯誤）或「校驗超時」的那個標記，其他是 null。AI 沒改規則、
+  /// 再校驗就通過時，網站是時好時壞（[AiRepairSession._validate]，使用者
+  /// 2026-11-16）。
   String? _beforeUnreachable;
 
   /// 開場的試抓：[_firstProbe] 是抓到的原樣，[_probe] 是標上頁碼、給 AI 的
@@ -464,15 +465,22 @@ class AiRepairSession extends ChangeNotifier {
     final before = checked == null
         ? null
         : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth;
+    String? unreachable(String? label) =>
+        const {
+          upstreamBlockedSourceGroupTag,
+          timeoutSourceGroupTag,
+        }.contains(label)
+        ? label
+        : null;
+    // 這次開場的校驗，或送來修的原因（書源上留著的上一次校驗的結論）：
+    // 整批沿用一天內校驗過的書源時，開場重校驗可能已經過了。開場校驗整個
+    // 超過時間也算校驗超時。
     job
       .._before = before?.category
-      .._beforeUnreachable =
-          const {
-            upstreamBlockedSourceGroupTag,
-            timeoutSourceGroupTag,
-          }.contains(before?.label)
-          ? before!.label
-          : null;
+      .._beforeUnreachable = checked == null
+          ? timeoutSourceGroupTag
+          : unreachable(before?.label) ??
+                unreachable(original.runtimeHealth.label);
     job._checkResult = [checkText, ...?checked?.diagnostics].join('\n\n');
     _finish(checkStep, prior == null ? checkText : '沿用剛才的校驗：$checkText');
     log
@@ -1025,11 +1033,11 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 網站，AI 每次成功就以為好了、接著修別段（2026-11-14 白光小说 36 輪
   /// 用完），程式把這個事實列在開場與結果後面，判斷照舊交給 AI。
   ///
-  /// 鍵是方法、網址與送出的內容：只看網址時，白光的 POST 少帶 submit 回
-  /// 502、帶了 301，兩個不同的請求被當成時好時壞。標頭不同的也是不同的請求
-  /// （換了 User-Agent 就通是找到修法），但校驗的診斷不記標頭（`null`），
-  /// 和每一種標頭都算同一個：不然開場校驗逾時、試抓同一個請求成功對不上。
-  final Map<String, List<({String? headers, String status})>> _answered = {};
+  /// 同一個請求是方法、網址、送出的內容與標頭都一樣：只看網址時，白光的
+  /// POST 少帶 submit 回 502、帶了 301，兩個不同的請求被當成時好時壞；換了
+  /// User-Agent 就通是找到修法，也不算。校驗、試抓與工具的請求紀錄都記標頭
+  /// （`RequestLog.sentHeaders`），開場校驗和試抓才對得上。
+  final Map<String, List<String>> _answered = {};
 
   /// 開場的校驗與試抓裡時好時壞的那一段（[_mixedAnswers]）：只算一次，
   /// 整件重跑時開場一字不差。
@@ -1057,19 +1065,20 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 一段，沒有是空字串。回應前面沒有請求那一行的不算（認不出是哪個請求）；
   /// 轉址後的下一跳是對新網址的 GET。
   String _mixedAnswers(String text) {
-    final seen = <String, Set<({String? headers, String status})>>{};
-    ({String url, String key, String? headers})? request;
+    final seen = <String, Set<String>>{};
+    ({String url, String key})? request;
     for (final line in text.split('\n')) {
       if (_requestLine.firstMatch(line) case final match?) {
         final method = match.group(1);
         final url = match.group(2)!;
         final body = match.group(3);
+        final headers = match.group(4);
         request = (
           url: url,
           key:
               '${method == null ? '' : '$method '}$url'
-              '${body == null ? '' : ' 送出：$body'}',
-          headers: match.group(4),
+              '${body == null ? '' : ' 送出：$body'}'
+              '${headers == null ? '' : ' 標頭：$headers'}',
         );
         continue;
       }
@@ -1077,42 +1086,18 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       if (response == null || request == null) continue;
       final url = response.group(1)!;
       final key = url == request.url ? request.key : url;
-      seen.putIfAbsent(key, () => {}).add((
-        headers: request.headers,
-        status: response.group(2)!,
-      ));
+      seen.putIfAbsent(key, () => {}).add(response.group(2)!);
     }
-    for (final MapEntry(key: key, value: answers) in seen.entries) {
-      _answered.putIfAbsent(key, () => []).addAll(answers);
+    for (final MapEntry(key: key, value: statuses) in seen.entries) {
+      _answered.putIfAbsent(key, () => []).addAll(statuses);
     }
     final lines = [
-      for (final key in seen.keys) ?_mixedLine(key, _answered[key]!),
+      for (final key in seen.keys)
+        if (_answered[key]! case final all
+            when all.any(_ok) && all.any(_failed))
+          '$key：${all.join('、')}',
     ];
     return lines.isEmpty ? '' : '\n\n# 同一個請求這次回過不同的結果\n${lines.join('\n')}';
-  }
-
-  /// [key] 這個請求回過成功也回過失敗時列成一行，沒有是 null。照每一種
-  /// 標頭各看一次，沒記標頭的回應算進每一種。
-  static String? _mixedLine(
-    String key,
-    List<({String? headers, String status})> answers,
-  ) {
-    final kinds = {
-      for (final answer in answers)
-        if (answer.headers != null) answer.headers,
-    };
-    for (final headers in kinds.isEmpty ? const <String?>[null] : kinds) {
-      final statuses = [
-        for (final answer in answers)
-          if (answer.headers == null || answer.headers == headers)
-            answer.status,
-      ];
-      if (statuses.any(_ok) && statuses.any(_failed)) {
-        return '$key${headers == null ? '' : ' 標頭：$headers'}'
-            '：${statuses.join('、')}';
-      }
-    }
-    return null;
   }
 
   @override
