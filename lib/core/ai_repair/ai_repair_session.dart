@@ -1004,7 +1004,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// （`recordRequestUrl`）。
   static final RegExp _requestLine = RegExp(
     r'^(?:(POST|PUT|PATCH|DELETE|HEAD) )?(https?://[^\s（]+)(?:（轉址）)?'
-    r'(?: 送出：(.*?))?(?: 標頭：(.*))?$'
+    r'(?: 送出：(.*?))?(?: 標頭：(.*))?$',
   );
 
   static final RegExp _responseLine = RegExp(
