@@ -524,10 +524,12 @@ class SingleRepairRun extends RepairRun {
     this._session, {
     PausedWorkFile? progress,
     SingleRepairReopen? reopen,
+    Future<void> Function(BookSource source, String? reason)? markUnfixable,
     super.work,
     super.navigator,
   }) : _file = progress ?? PausedWorkFile(repairProgressName),
-       _reopen = reopen ?? _reopenWithService {
+       _reopen = reopen ?? _reopenWithService,
+       _markUnfixable = markUnfixable ?? markAiUnfixable {
     _session.addListener(changed);
   }
 
@@ -536,9 +538,11 @@ class SingleRepairRun extends RepairRun {
     this._session, {
     required this._file,
     SingleRepairReopen? reopen,
+    Future<void> Function(BookSource source, String? reason)? markUnfixable,
     super.work,
     super.navigator,
   }) : _reopen = reopen ?? _reopenWithService,
+       _markUnfixable = markUnfixable ?? markAiUnfixable,
        super(paused: true) {
     _session.addListener(changed);
   }
@@ -549,7 +553,12 @@ class SingleRepairRun extends RepairRun {
   AiRepairSession get session => _session;
   final PausedWorkFile _file;
   final SingleRepairReopen _reopen;
+  final Future<void> Function(BookSource source, String? reason) _markUnfixable;
   bool _pausedWork = false;
+  int _sourceEdits = 0;
+
+  @override
+  int get sourceEdits => _sourceEdits;
 
   String get sourceUrl => _session.job.original.bookSourceUrl;
 
@@ -594,6 +603,12 @@ class SingleRepairRun extends RepairRun {
     if (_session.isPaused) {
       _pausedWork = true;
       return;
+    }
+    // 單一修復也必須保留「網站不穩定＝無法修復」的可移除狀態。
+    if (_session.job.confirmedUnfixable &&
+        _session.job.giveUpWhy == 'site_unstable') {
+      await _markUnfixable(_session.job.original, _session.job.giveUpWhy);
+      _sourceEdits++;
     }
     await _file.close();
   }
