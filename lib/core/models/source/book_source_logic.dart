@@ -86,6 +86,13 @@ const List<String> sourceRuntimeStatusTags = <String>[
   verificationRequiredSourceGroupTag,
 ];
 
+/// 別的 App 校驗留下的分組：照 Legado 認校驗分組的規則（`getInvalidGroupNames`），
+/// 名稱含「失效」或是「校验超时」（Legado 寫「搜索失效」「搜索正文失效」「网站失效」，
+/// 舊版寫「正文失效」「目录失效」）；轉成繁體的清單是「校驗超時」。夜讀自己的
+/// 「搜尋失效」這類也符合，分不出是誰寫的時看有沒有「異常」（[BookSourceLogic.dropForeignCheckMarks]）。
+bool isForeignCheckMarkGroup(String tag) =>
+    tag.contains('失效') || tag == '校验超时' || tag == timeoutSourceGroupTag;
+
 /// 名稱、分組、說明、網址裡認得出的字樣，分成有聲、漫畫、影視三組；只在
 /// 匯入時用來替類型寫 0 的書源補判類型（[classifySourceTypeByMarkers]）。
 /// 照這個順序找，同時帶兩組字樣的書源算先找到的那一組。
@@ -380,8 +387,45 @@ extension BookSourceLogic on BookSourceBase {
     bookSourceGroup = currentGroups.isEmpty ? null : currentGroups.join(',');
   }
 
+  /// 拿掉校驗留下的分組：夜讀的校驗標記，和別的 App 校驗留下的
+  /// （[isForeignCheckMarkGroup]，Legado 校驗前也這樣清）。
   void removeInvalidGroups() {
-    removeGroup(sourceRuntimeStatusTags.join(','));
+    _removeGroupsWhere(
+      (tag) =>
+          sourceRuntimeStatusTags.contains(tag) || isForeignCheckMarkGroup(tag),
+    );
+  }
+
+  /// 別的 App（Legado）校驗留下的分組與錯誤註解拿掉，回傳有沒有改。夜讀的
+  /// 校驗標記決定書源能不能搜尋、能不能開書，只由夜讀自己的校驗寫；夜讀標了
+  /// 有問題的一定帶「異常」。所以：
+  /// - 沒有「異常」的不是夜讀校驗出問題的：像校驗標記的分組（含夜讀的「搜尋
+  ///   失效」）與 `// Error:` 註解都拿掉，校驗時間歸零，當成還沒校驗過。
+  /// - 有「異常」的是夜讀校驗過的：只拿掉夜讀不認得的（「搜索失效」這類），
+  ///   以前的夜讀校驗不會清它們。
+  ///
+  /// 書源從外面進來時（[prepareIncoming]）與升級時整理既有書源用。
+  bool dropForeignCheckMarks() {
+    final checkedHere = hasGroupTag(abnormalSourceGroupTag);
+    final comment = bookSourceComment;
+    final removedGroups = _removeGroupsWhere(
+      (tag) =>
+          isForeignCheckMarkGroup(tag) &&
+          (!checkedHere || !sourceRuntimeStatusTags.contains(tag)),
+    );
+    if (!checkedHere) removeErrorComment();
+    if (!removedGroups && bookSourceComment == comment) return false;
+    if (!checkedHere) lastCheckTime = 0;
+    return true;
+  }
+
+  /// 拿掉符合 [test] 的分組，回傳有沒有拿掉；沒有時分組欄位原樣不動。
+  bool _removeGroupsWhere(bool Function(String tag) test) {
+    final tags = groupTags;
+    final kept = {...tags}..removeWhere(test);
+    if (kept.length == tags.length) return false;
+    bookSourceGroup = kept.isEmpty ? null : kept.join(',');
+    return true;
   }
 
   /// 校驗的結論 [health] 寫成分組標記：不是可用的都加「異常」，再加這個
@@ -471,10 +515,12 @@ extension BookSourceLogic on BookSourceBase {
 
   /// 書源從外面進來時（匯入、還原備份、書架交換檔）先整理：類型寫 0 的照
   /// 字樣補判（[classifySourceTypeByMarkers]），舊版加的「非小說源」標記一起
-  /// 升級（[upgradeLegacyNonNovelSource]）。
+  /// 升級（[upgradeLegacyNonNovelSource]），別的 App 校驗留下的標記拿掉
+  /// （[dropForeignCheckMarks]）。
   void prepareIncoming() {
     classifySourceTypeByMarkers(this);
     upgradeLegacyNonNovelSource(this);
+    dropForeignCheckMarks();
   }
 
   /// 書源屬於哪一類（[BookSourceKind]）。
