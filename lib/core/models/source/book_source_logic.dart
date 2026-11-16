@@ -12,6 +12,7 @@ const String tocBrokenSourceGroupTag = '目錄失效';
 const String contentBrokenSourceGroupTag = '正文失效';
 const String timeoutSourceGroupTag = '校驗超時';
 const String siteBrokenSourceGroupTag = '網站失效';
+const String unstableSourceGroupTag = '網站不穩定';
 const String upstreamBlockedSourceGroupTag = '上游異常';
 const String downloadOnlySourceGroupTag = '下載站';
 const String paidSourceGroupTag = '付費';
@@ -77,6 +78,7 @@ const List<String> sourceRuntimeStatusTags = <String>[
   contentBrokenSourceGroupTag,
   timeoutSourceGroupTag,
   siteBrokenSourceGroupTag,
+  unstableSourceGroupTag,
   upstreamBlockedSourceGroupTag,
   downloadOnlySourceGroupTag,
   paidSourceGroupTag,
@@ -350,25 +352,28 @@ Set<String> splitSourceGroups(String? value) {
 /// 網站那邊的三種問題，照這個順序認（舊版一次標了好幾個時取前面的）。
 const List<String> _upstreamTags = [
   siteBrokenSourceGroupTag,
+  unstableSourceGroupTag,
   upstreamBlockedSourceGroupTag,
   timeoutSourceGroupTag,
 ];
 
 /// 網站那邊的問題：書源先隔離（排出搜尋與閱讀），[tag] 說是哪一種——
-/// 「網站失效」（網域查不到、網站不在了）、「上游異常」（連不上、回錯誤、
-/// 擋下夜讀）、「校驗超時」（太慢）。
+/// 「網站失效」（網域查不到、網站不在了）、「網站不穩定」（AI 確認時好時壞
+/// 或持續限流，無法修復、可移除）、「上游異常」（連不上、回錯誤、擋下夜讀）、
+/// 「校驗超時」（太慢）。
 SourceRuntimeHealth upstreamHealth(String tag) => SourceRuntimeHealth(
   category: SourceHealthCategory.upstreamUnstable,
   label: tag,
   description: switch (tag) {
     siteBrokenSourceGroupTag => '網域查不到或網站已經不在，換了網址才可能恢復',
+    unstableSourceGroupTag => '網站不穩定，AI 已判定無法修復，建議移除',
     timeoutSourceGroupTag => '網站回應太慢，來源先隔離但不視為永久失效',
     quarantineSourceGroupTag => '校驗流程異常，先隔離避免影響其他書源',
     _ => '上游暫時不可用，來源先隔離但不視為永久失效',
   },
   allowsSearch: false,
   allowsReading: false,
-  cleanupCandidate: false,
+  cleanupCandidate: tag == unstableSourceGroupTag,
   quarantined: true,
 );
 
@@ -468,7 +473,7 @@ extension BookSourceLogic on BookSourceBase {
         contentBrokenSourceGroupTag,
         quarantineSourceGroupTag,
       ],
-      // 網站那邊的問題分三種，各標各的：網站不在了、連不上或回錯誤、太慢。
+      // 網站那邊的問題各標各的：網站不在了、不穩定、連不上或回錯誤、太慢。
       SourceHealthCategory.upstreamUnstable => [
         if (_upstreamTags.contains(health.label)) health.label,
         quarantineSourceGroupTag,

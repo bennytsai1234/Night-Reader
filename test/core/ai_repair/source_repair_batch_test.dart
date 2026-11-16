@@ -153,7 +153,7 @@ void main() {
       check: (source, _) async => _checked(source),
       save: (repaired, original) async => saved.add(repaired),
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
-      markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
+      markUnfixable: (source, _) async => unfixable.add(source.bookSourceUrl),
       delete: (urls) async => deleted.add(urls),
       session: (source, item) {
         final answers = replies?.call(source.bookSourceUrl) ?? [_fix];
@@ -296,6 +296,46 @@ void main() {
     expect(unfixable, ['https://site.example#a', 'https://site.example#b']);
   });
 
+  test(
+    'unstable websites are unfixable, and their sources are removable',
+    () async {
+      final b = batch(
+        [
+          _source('https://site.example#a'),
+          _source('https://site.example#b'),
+          _source('https://other.example'),
+        ],
+        replies: (url) => [
+          if (url.contains('site.example'))
+            jsonEncode({
+              'action': 'give_up',
+              'why': 'site_unstable',
+              'reason': '相同搜尋有時 200，有時 502',
+            })
+          else
+            _fix,
+        ],
+      );
+
+      await b.start();
+
+      expect(b.count(RepairOutcome.notFixed), 2);
+      expect(b.count(RepairOutcome.aiFixed), 1);
+      expect(unfixable, ['https://site.example#a', 'https://site.example#b']);
+      expect(b.unstableLeft.map((item) => item.source.bookSourceUrl), [
+        'https://site.example#a',
+        'https://site.example#b',
+      ]);
+      await b.deleteUnstable();
+      await b.deleteUnstable();
+      expect(deleted, [
+        ['https://site.example#a', 'https://site.example#b'],
+      ]);
+      expect(b.unstableLeft, isEmpty);
+      expect(b.sourceEdits, 1);
+    },
+  );
+
   test('a source the AI already could not fix, and one that never had a '
       'search, are skipped without asking the AI', () async {
     final tried = _source('https://tried.example')
@@ -426,7 +466,7 @@ void main() {
       check: (source, _) async => _checked(source),
       save: (_, _) async {},
       markGone: (source, _) async => gone.add(source.bookSourceUrl),
-      markUnfixable: (_) async {},
+      markUnfixable: (_, _) async {},
       session: (source, _) => AiRepairSession(
         source: source,
         service: _service,
@@ -459,7 +499,7 @@ void main() {
       },
       checkSite: (_) async => const SiteCheck(SiteVerdict.alive, '網站正常'),
       markGone: (_, _) async => fail('stopped batch must not mark sources'),
-      markUnfixable: (_) async => fail('stopped batch must not write'),
+      markUnfixable: (_, _) async => fail('stopped batch must not write'),
     );
 
     final running = b.start();
@@ -493,7 +533,7 @@ void main() {
       },
       checkSite: (_) => gate.future,
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
-      markUnfixable: (_) async {},
+      markUnfixable: (_, _) async {},
     );
 
     final running = b.start();
@@ -514,7 +554,7 @@ void main() {
       service: _service,
       recheck: (_, _, _) async => throw StateError('校驗服務無法啟動'),
       checkSite: (_) async => fail('must not proceed after recheck failure'),
-      markUnfixable: (_) async => fail('must not change sources'),
+      markUnfixable: (_, _) async => fail('must not change sources'),
     );
     await b.start();
 
@@ -544,7 +584,8 @@ void main() {
         return [];
       },
       checkSite: (_) async => fail('must not inspect an unverified source'),
-      markUnfixable: (_) async => fail('must not persist an unverified source'),
+      markUnfixable: (_, _) async =>
+          fail('must not persist an unverified source'),
     );
 
     await b.start();
@@ -565,7 +606,7 @@ void main() {
         return [for (final url in urls) _entry(url, _broken)];
       },
       checkSite: (_) async => const SiteCheck(SiteVerdict.alive, '網站正常'),
-      markUnfixable: (source) async => unfixable.add(source.bookSourceUrl),
+      markUnfixable: (source, _) async => unfixable.add(source.bookSourceUrl),
       session: (source, item) => AiRepairSession(
         source: source,
         service: _service,

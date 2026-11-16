@@ -171,6 +171,48 @@ void main() {
     expect(run.status.text, '正在結束…');
   });
 
+  test(
+    'a single repair records a confirmed unstable site as removable',
+    () async {
+      final marked = <String>[];
+      final session = AiRepairSession(
+        source: _s('unstable'),
+        service: _service,
+        check: (source, _) async => SourceCheckIsolateResult(
+          stage: 'content',
+          message: '正文為空',
+          isHealthy: false,
+          updatedSourceJson: source.toJson(),
+          logs: const [],
+        ),
+        probe: (_, _, {start}) async =>
+            const SourceProbeReport(logs: [], requests: []),
+        ask: (_, _) async => fakeAiReply(
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'site_unstable',
+            'reason': '同一請求時好時壞',
+          }),
+        ),
+        secrets: (_) async => <String>{},
+      );
+      final run = SingleRepairRun(
+        session,
+        progress: _MemoryFile(),
+        work: work,
+        navigator: () => null,
+        markUnfixable: (source, reason) async =>
+            marked.add('${source.bookSourceUrl}:$reason'),
+      );
+      await run.run();
+
+      expect(marked, ['https://unstable.example:site_unstable']);
+      expect(run.sourceEdits, 1);
+      run.disposeWork();
+      run.dispose();
+    },
+  );
+
   test('a batch that finishes with no page open stays until its results '
       'are seen, then is let go', () async {
     final batch = _batch();
