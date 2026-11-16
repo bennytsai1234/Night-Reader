@@ -56,7 +56,8 @@ void main() {
     );
   }
 
-  testWidgets('steps fill in as the repair goes, then 完成', (tester) async {
+  testWidgets('the four stages fill in as the repair goes, the AI rounds '
+      'fold under 經過, then 完成', (tester) async {
     final reply = Completer<AiReply>();
     final session = AiRepairSession(
       source: BookSource(
@@ -78,8 +79,11 @@ void main() {
 
     expect(find.text('AI 修復 · 筆趣閣'), findsOneWidget);
     expect(find.text('校驗原本的書源'), findsOneWidget);
-    expect(find.text('第 1 輪'), findsOneWidget);
+    expect(find.text('AI 修改規則'), findsOneWidget);
     expect(find.text('AI 回覆中…'), findsOneWidget);
+    expect(find.text('校驗修好的書源'), findsOneWidget, reason: '還沒輪到的段也列著');
+    expect(find.textContaining('輪'), findsNothing);
+    expect(find.text('經過'), findsNothing, reason: '還沒有做完的步');
     expect(find.text('結束'), findsOneWidget);
     expect(find.text('送到 ai.example · m'), findsOneWidget);
 
@@ -97,6 +101,11 @@ void main() {
     await _settle(tester);
 
     expect(find.text('校驗修好的書源'), findsOneWidget);
+    expect(find.text('1 步'), findsOneWidget);
+    expect(find.text('AI 改了正文，交出'), findsOneWidget);
+    await tester.tap(find.text('經過'));
+    await tester.pump();
+    expect(find.text('AI 改了正文，交出'), findsNWidgets(2));
     expect(find.text('修好了'), findsOneWidget);
     expect(find.text('AI：正文在 div.txt'), findsOneWidget);
     expect(find.text('還原改前的版本'), findsOneWidget);

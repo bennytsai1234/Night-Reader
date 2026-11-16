@@ -9,7 +9,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_log.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart'
-    show AiRepairStep, AiRepairStepState;
+    show AiRepairStep, AiRepairStepKind, AiRepairStepState;
 import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -28,6 +28,9 @@ const String aiFindStatsMarker = 'NR-AI-FIND-STATS ';
 /// 暫停的找書存檔的格式版本（[AiFindSession.restore]）：改了存什麼就加一，
 /// 舊版存的接不下去，照沒找完收尾。
 const int aiFindProgressVersion = 1;
+
+/// AI 回覆中、還沒叫工具時，這一輪寫的事。
+const String aiFindThinking = '想下一步…';
 
 /// 一次 AI 找書（ADR 0060）：使用者的描述與深度交給和任務無關的迴圈
 /// （[runAgent]），工具的實際抓取在 [AiFindLibrary]。頁面看 [rounds]、
@@ -100,7 +103,7 @@ class AiFindSession extends ChangeNotifier {
       ..tokens = read<int>('tokens')
       ..rounds.addAll([
         for (final round in read<List<Object?>>('rounds'))
-          AiRepairStep.fromJson(round),
+          AiRepairStep.fromJson(round, kind: AiRepairStepKind.round),
       ])
       .._resume = AgentCheckpoint.fromJson(read<Map<String, Object?>>('loop'))
       .._agentState = read<Map<String, Object?>>('agent');
@@ -196,7 +199,7 @@ class AiFindSession extends ChangeNotifier {
   AgentCheckpoint? _resume;
   Map<String, Object?>? _agentState;
 
-  /// 一輪一列（頁面上的「第 N 輪」）。
+  /// AI 問過的每一輪：頁面上最後一輪是「現在在做的事」，之前的收在「經過」。
   final List<AiRepairStep> rounds = [];
 
   /// 這次找書用了多少 token（服務回報的送出加回覆，含打中快取的）。
@@ -232,7 +235,16 @@ class AiFindSession extends ChangeNotifier {
   /// 停在一輪開頭，等使用者按繼續或結束。
   bool get isPaused => _paused;
 
-  /// 接著做時從第幾輪問起（頁面上「從第 N 輪接著問」）。
+  /// 現在在做的事：最後一輪的工具（同一輪幾個用「；」接起來），還沒叫工具
+  /// 時是 [aiFindThinking]。頁面與通知內文用它。
+  String get now {
+    final round = rounds.lastOrNull;
+    if (round == null) return '準備中…';
+    final detail = (round.detail ?? '').trim();
+    return detail.isEmpty ? aiFindThinking : detail;
+  }
+
+  /// 接著做時從第幾輪問起（紀錄裡寫）。
   int get nextRound => rounds.length + 1;
 
   /// 開始找，或從存的那一輪接著找；回傳找完（結束、出錯也算）或暫停好的
@@ -370,6 +382,7 @@ class AiFindSession extends ChangeNotifier {
               (AiRepairStep(
                 round.title,
                 detail: round.detail,
+                kind: round.kind,
               )..state = AiRepairStepState.done).toJson()
             else
               round.toJson(),
@@ -591,7 +604,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       previous.state = AiRepairStepState.done;
     }
     final title = attempt == 1 ? '第 $round 輪' : '第 $attempt 次 · 第 $round 輪';
-    _round = AiRepairStep(title, detail: '想下一步…');
+    _round = AiRepairStep(
+      title,
+      detail: aiFindThinking,
+      kind: AiRepairStepKind.round,
+    );
     s.rounds.add(_round!);
     s._notify();
     s.log.section(title, round: true);
