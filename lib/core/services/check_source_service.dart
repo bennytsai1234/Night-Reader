@@ -623,25 +623,31 @@ class CheckSourceService extends ChangeNotifier {
     for (final log in result.logs) {
       _appendLog(log, sourceUrl: url);
     }
+    await _queueStatusWrite(source);
+    // AI 已確認網站不穩定的結論要保留到使用者清除校驗標記。
+    // 校驗本次偶爾成功，不會將「無法修復、可移除」改寫成健康。
+    final confirmedUnstable = source.hasGroupTag(unstableSourceGroupTag);
+    final hasIssue = confirmedUnstable || !result.isHealthy;
+    final message = confirmedUnstable
+        ? source.errorComment ?? 'AI：網站不穩定，無法修復'
+        : result.message;
     unawaited(
       diagnostics.record(
         sourceName: source.bookSourceName,
         sourceUrl: source.bookSourceUrl,
-        outcome: result.isHealthy ? '校驗成功' : source.runtimeHealth.label,
+        outcome: hasIssue ? source.runtimeHealth.label : '校驗成功',
         entries: result.diagnostics,
       ),
     );
-    await _queueStatusWrite(source);
-    final hasIssue = !result.isHealthy;
-    final progressMsg = result.isHealthy
-        ? '校驗成功'
-        : '${source.runtimeHealth.label}: ${result.message}';
+    final progressMsg = hasIssue
+        ? '${source.runtimeHealth.label}: $message'
+        : '校驗成功';
     _setSourceProgress(source, progressMsg, isFinal: true, hasIssue: hasIssue);
     return SourceCheckEntry(
       sourceUrl: source.bookSourceUrl,
       sourceName: source.bookSourceName,
-      stage: result.stage,
-      message: result.isHealthy ? '校驗成功' : result.message,
+      stage: confirmedUnstable ? 'upstream' : result.stage,
+      message: hasIssue ? message : '校驗成功',
       health: source.runtimeHealth,
     );
   }
@@ -745,6 +751,20 @@ class CheckSourceService extends ChangeNotifier {
   }
 
   Future<void> _queueStatusWrite(BookSource source) async {
+    // 「網站不穩定」由 AI 根據多次請求證據判定；單次重新校驗不能推翻。
+    // 只有使用者明確清除校驗標記，才允許重新判定。
+    if (source.hasGroupTag(aiUnfixableSourceGroupTag)) {
+      final saved = await _sourceDao.getByUrl(source.bookSourceUrl);
+      if (saved?.hasGroupTag(unstableSourceGroupTag) ?? false) {
+        source
+          ..removeInvalidGroups()
+          ..removeErrorComment()
+          ..addHealthGroups(upstreamHealth(unstableSourceGroupTag))
+          ..addErrorComment(
+            saved!.errorComment ?? 'AI：網站不穩定，無法修復',
+          );
+      }
+    }
     _pendingStatusWrites[source.bookSourceUrl] = source;
     if (_pendingStatusWrites.length >= _statusWriteBatchSize) {
       await _flushPendingStatusWrites();
