@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
+import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_secrets.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -121,18 +122,19 @@ class AppAiFindLibrary implements AiFindLibrary {
     );
   }
 
-  /// 詳情照卡片的來源抓；簡介是空的或抓不到時，到有這本的其他書源（最多
-  /// 再兩個）照書名與作者精確搜一次再抓（換源的做法），第一個有簡介的為準。
-  /// 只問主要來源時，同一本書在別的書源有簡介、AI 拿到空的就跳過它
-  /// （2026-11-15 實跑：蠱真人）。
+  /// 詳情照卡片的來源抓；簡介或字數是空的、或抓不到時，到有這本的其他書源
+  /// （最多再兩個）照書名與作者精確搜一次再抓（換源的做法），缺的那幾欄照
+  /// 先抓到的補上，都齊了就停。只問主要來源時，同一本書在別的書源有簡介、
+  /// AI 拿到空的就跳過它（2026-11-15 實跑：蠱真人）；小說的字數同樣，推薦的
+  /// 書才不會缺字數。漫畫、有聲書的書源多半沒寫字數，不為它多搜。
   @override
   Future<Book> detail(SearchBook book, CancelToken cancelToken) =>
       _describeFailure(cancelToken, () async {
         Object? failure;
-        Book? first;
+        Book? best;
         try {
-          first = await _info(book, cancelToken);
-          if (_hasIntro(first)) return first;
+          best = await _info(book, cancelToken);
+          if (_complete(best, book)) return best;
         } on DioException catch (error) {
           if (CancelToken.isCancel(error)) rethrow;
           failure = error;
@@ -160,7 +162,8 @@ class AppAiFindLibrary implements AiFindLibrary {
               candidate.toBook(),
               cancelToken: cancelToken,
             );
-            if (_hasIntro(info)) return info;
+            best = best == null ? info : _fill(best, info);
+            if (_complete(best, book)) return best;
           } on DioException catch (error) {
             if (CancelToken.isCancel(error) || cancelToken.isCancelled) rethrow;
           } on AppException {
@@ -170,12 +173,31 @@ class AppAiFindLibrary implements AiFindLibrary {
           }
         }
         _throwIfCancelled(cancelToken);
-        if (first != null) return first;
+        if (best != null) return best;
         throw failure!;
       });
 
   static bool _hasIntro(Book book) =>
       aiFindPlainText(book.customIntro ?? book.intro ?? '').isNotEmpty;
+
+  static bool _hasWordCount(Book book) =>
+      (book.wordCount ?? '').trim().isNotEmpty;
+
+  static bool _complete(Book book, SearchBook card) =>
+      _hasIntro(book) &&
+      (card.bookKind != BookSourceKind.novel || _hasWordCount(book));
+
+  /// [base] 缺的簡介與字數照 [other] 補，其他照 [base]。
+  static Book _fill(Book base, Book other) {
+    final intro = _hasIntro(base) || !_hasIntro(other)
+        ? null
+        : other.customIntro ?? other.intro;
+    return base.copyWith(
+      intro: intro,
+      customIntro: base.customIntro == null ? null : intro,
+      wordCount: _hasWordCount(base) ? null : other.wordCount,
+    );
+  }
 
   @override
   Future<AiFindChapter> chapter(
@@ -194,22 +216,23 @@ class AppAiFindLibrary implements AiFindLibrary {
         if (!chapter.isVolume) chapter,
     ];
     if (toc.isEmpty) throw const AiFindUnreadable('目錄是空的');
-    if (number > toc.length) {
-      throw AiFindUnreadable('沒有第 $number 章，共 ${toc.length} 章');
+    final index = number == aiFindLastChapter ? toc.length : number;
+    if (index > toc.length) {
+      throw AiFindUnreadable('沒有第 $index 章，共 ${toc.length} 章');
     }
-    final chapter = toc[number - 1];
+    final chapter = toc[index - 1];
     // 付費、還沒買的章節不抓（ADR 0057）。
     if (chapter.isLocked) throw const AiFindUnreadable(lockedChapterNotice);
     final raw = await _service.getContent(
       source,
       info,
       chapter,
-      nextChapterUrl: number < toc.length ? toc[number].url : null,
+      nextChapterUrl: index < toc.length ? toc[index].url : null,
       cancelToken: cancelToken,
     );
     final text = aiFindPlainText(raw);
     if (text.isEmpty) throw const AiFindUnreadable('正文是空的');
-    return (title: chapter.title, text: text, total: toc.length);
+    return (title: chapter.title, text: text, number: index, total: toc.length);
   });
 
   /// 查中文維基百科：先照名稱拿條目（轉址的別名會轉到正式條目），沒有就用

@@ -47,12 +47,13 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           });
         }
 
-        final rule = sourceRule.makeUpRule(result, this);
-        log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
+        final made = sourceRule.makeUp(result, this);
+        final rule = made.rule;
+        log('  ◇ 模式: ${made.mode.name}, 規則: $rule');
 
         dynamic tempResult;
         try {
-          switch (sourceRule.mode) {
+          switch (made.mode) {
             // 同 Legado：交回第一筆的分組（詳情頁 `init` 之後的 `$1`、`$2`
             // 讀的就是它）。
             case Mode.regex:
@@ -83,7 +84,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           throw ParsingException(
             e.toString(),
             rule: rule,
-            mode: sourceRule.mode.name,
+            mode: made.mode.name,
             url: baseUrl,
             originalError: e,
           );
@@ -93,11 +94,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         // 文字（JS 規則是 JS 交回的結果、正則模式是正則找到的）。
         result = tempResult;
 
-        if (result != null && sourceRule.replaceRegex.isNotEmpty) {
-          log(
-            '  ◇ 正則替換: ${sourceRule.replaceRegex} -> ${sourceRule.replacement}',
-          );
-          result = replaceRegexLogic(stringifyRuleResult(result), sourceRule);
+        if (result != null && made.replaceRegex.isNotEmpty) {
+          log('  ◇ 正則替換: ${made.replaceRegex} -> ${made.replacement}');
+          result = replaceRegexLogic(stringifyRuleResult(result), made);
         }
 
         final preview = result == null ? 'null' : stringifyRuleResult(result);
@@ -139,12 +138,13 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           });
         }
 
-        final rule = sourceRule.makeUpRule(result, this);
-        log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
+        final made = sourceRule.makeUp(result, this);
+        final rule = made.rule;
+        log('  ◇ 模式: ${made.mode.name}, 規則: $rule');
 
         dynamic tempResult;
         try {
-          switch (sourceRule.mode) {
+          switch (made.mode) {
             case Mode.regex:
               tempResult = AnalyzeByRegex.getElements(
                 result.toString(),
@@ -173,7 +173,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           throw ParsingException(
             e.toString(),
             rule: rule,
-            mode: sourceRule.mode.name,
+            mode: made.mode.name,
             url: baseUrl,
             originalError: e,
           );
@@ -183,16 +183,14 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         // 文字（JS 規則是 JS 交回的結果、正則模式是正則找到的）。
         result = tempResult;
 
-        if (result != null && sourceRule.replaceRegex.isNotEmpty) {
-          log('  ◇ 正則替換列表元素: ${sourceRule.replaceRegex}');
+        if (result != null && made.replaceRegex.isNotEmpty) {
+          log('  ◇ 正則替換列表元素: ${made.replaceRegex}');
           if (result is List) {
             result = result
-                .map(
-                  (e) => replaceRegexLogic(stringifyRuleResult(e), sourceRule),
-                )
+                .map((e) => replaceRegexLogic(stringifyRuleResult(e), made))
                 .toList();
           } else {
-            result = replaceRegexLogic(stringifyRuleResult(result), sourceRule);
+            result = replaceRegexLogic(stringifyRuleResult(result), made);
           }
         }
         log(

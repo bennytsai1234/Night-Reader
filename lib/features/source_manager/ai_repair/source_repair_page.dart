@@ -383,9 +383,15 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     });
     final gone = of(const {RepairOutcome.siteGone});
     final goneLeft = _batch.goneLeft;
-    final notFixed = of(const {RepairOutcome.notFixed});
+    final unstable = _batch.unstableItems;
+    final unstableLeft = _batch.unstableLeft;
+    final notFixed = of(const {RepairOutcome.notFixed})
+        .where((item) => !unstable.contains(item))
+        .toList();
     final skipped = of(const {RepairOutcome.skipped});
-    final unfixable = of(const {RepairOutcome.aiUnfixable});
+    final unfixable = of(const {RepairOutcome.aiUnfixable})
+        .where((item) => !unstable.contains(item))
+        .toList();
     final rest = [
       ('重新校驗就沒問題了', _batch.count(RepairOutcome.healthy)),
       ('沒輪到', _batch.count(RepairOutcome.notTried)),
@@ -453,6 +459,37 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
             ),
           ],
         ),
+      if (unstable.isNotEmpty && unstableLeft.isEmpty)
+        GroupedSection(
+          children: [
+            GroupedRow(
+              title: '網站不穩定的 ${unstable.length} 個已刪除',
+              showChevron: false,
+            ),
+          ],
+        )
+      else if (unstableLeft.isNotEmpty)
+        GroupedSection(
+          header: '網站不穩定 · ${unstableLeft.length}',
+          footer: '已判定無法修復，列為可移除',
+          children: [
+            for (final item in unstableLeft) _itemRow(item),
+            if (unstable.length > unstableLeft.length)
+              GroupedRow(
+                title: '已刪除 ${unstable.length - unstableLeft.length} 個',
+                showChevron: false,
+              ),
+            GroupedRow(
+              title: '刪除這 ${unstableLeft.length} 個',
+              destructive: true,
+              showChevron: false,
+              onTap: _batch.isEditing
+                  ? null
+                  : () =>
+                        unawaited(_delete(unstableLeft.length, unstable: true)),
+            ),
+          ],
+        ),
       if (notFixed.isNotEmpty)
         GroupedSection(
           header: '沒修好 · ${notFixed.length}',
@@ -515,18 +552,24 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     );
   }
 
-  Future<void> _delete(int count) async {
+  Future<void> _delete(int count, {bool unstable = false}) async {
     final ok = await showAppAlert<bool>(
       context: context,
       title: '刪除 $count 個書源？',
-      message: '網站已經不在了。刪掉之後要再用得重新匯入。',
+      message: unstable
+          ? '網站不穩定，已判定無法修復。刪掉之後要再用得重新匯入。'
+          : '網站已經不在了。刪掉之後要再用得重新匯入。',
       actions: const [
         AppAlertAction(label: '刪除', value: true, destructive: true),
         AppAlertAction(label: '取消', value: false),
       ],
     );
     if (ok != true) return;
-    await _batch.deleteGone();
+    if (unstable) {
+      await _batch.deleteUnstable();
+    } else {
+      await _batch.deleteGone();
+    }
     if (mounted) _say('已刪除 $count 個書源');
   }
 

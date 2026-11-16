@@ -47,14 +47,15 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             });
           }
 
-          final rule = sourceRule.makeUpRule(result, this);
-          log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
+          final made = sourceRule.makeUp(result, this);
+          final rule = made.rule;
+          log('  ◇ 模式: ${made.mode.name}, 規則: $rule');
 
           dynamic tempResult;
           if (isUrl && _looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
             tempResult = rule;
-          } else if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
-            switch (sourceRule.mode) {
+          } else if (rule.isNotEmpty || made.replaceRegex.isEmpty) {
+            switch (made.mode) {
               case Mode.js:
                 tempResult = evalJS(rule, result);
                 break;
@@ -92,9 +93,9 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           // 交回的結果，沒值就是空的（同 Legado），不另外退回規則文字。
           result = tempResult;
 
-          if (result != null && sourceRule.replaceRegex.isNotEmpty) {
-            log('  ◇ 正則替換: ${sourceRule.replaceRegex}');
-            result = replaceRegexLogic(stringifyRuleResult(result), sourceRule);
+          if (result != null && made.replaceRegex.isNotEmpty) {
+            log('  ◇ 正則替換: ${made.replaceRegex}');
+            result = replaceRegexLogic(stringifyRuleResult(result), made);
           }
 
           final preview = result == null ? 'null' : stringifyRuleResult(result);
@@ -172,11 +173,12 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             });
           }
 
-          final rule = sourceRule.makeUpRule(result, this);
-          log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
+          final made = sourceRule.makeUp(result, this);
+          final rule = made.rule;
+          log('  ◇ 模式: ${made.mode.name}, 規則: $rule');
           final currentInput = result;
 
-          switch (sourceRule.mode) {
+          switch (made.mode) {
             case Mode.js:
               result = evalJS(rule, result);
               break;
@@ -199,21 +201,19 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                   .getStringList(rule);
           }
 
-          if (sourceRule.replaceRegex.isNotEmpty) {
-            log('  ◇ 正則替換列表: ${sourceRule.replaceRegex}');
+          if (made.replaceRegex.isNotEmpty) {
+            log('  ◇ 正則替換列表: ${made.replaceRegex}');
             if (result is List) {
               result = result
                   .map(
-                    (e) => replaceRegexListItemLogic(
-                      stringifyRuleResult(e),
-                      sourceRule,
-                    ),
+                    (e) =>
+                        replaceRegexListItemLogic(stringifyRuleResult(e), made),
                   )
                   .toList();
             } else {
               result = replaceRegexLogic(
                 result == null ? '' : stringifyRuleResult(result),
-                sourceRule,
+                made,
               );
             }
           }

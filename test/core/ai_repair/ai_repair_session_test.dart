@@ -157,6 +157,7 @@ void main() {
     Set<String> secretValues = const {},
     Future<Set<String>> Function(BookSource source)? secrets,
     Set<String> timesOut = const {},
+    int checkTimeouts = 0,
     List<String>? fetched,
     SourceCheckIsolateResult? Function(BookSource source)? check,
     List<String>? checked,
@@ -167,6 +168,7 @@ void main() {
     List<String> Function(String url)? fetchLines,
   }) {
     var next = 0;
+    var timeoutsLeft = checkTimeouts;
     return AiRepairSession(
       logDirectory: logs == null ? null : () async => logs,
       priorCheck: priorCheck,
@@ -174,6 +176,10 @@ void main() {
       service: clipboard ? null : _service,
       check: (source, _) async {
         checked?.add(source.ruleContent?.content ?? '');
+        if (timeoutsLeft > 0) {
+          timeoutsLeft--;
+          return null;
+        }
         return timesOut.contains(source.bookSourceUrl)
             ? null
             : check?.call(source) ??
@@ -238,7 +244,7 @@ void main() {
           }),
         jsonEncode({
           'action': 'give_up',
-          'why': 'rate_limited',
+          'why': 'site_unstable',
           'reason': '時好時壞',
         }),
       ],
@@ -250,9 +256,14 @@ void main() {
     expect(result(0), isNot(contains('同一個請求這次回過不同的結果')));
     expect(
       result(1),
-      contains('# 同一個請求這次回過不同的結果\nhttps://site.example/s：200、502'),
+      contains(
+        '# 同一個請求這次回過不同的結果\nhttps://site.example/s 標頭：User-Agent: t：200、502',
+      ),
     );
-    expect(result(2), contains('https://site.example/s：200、502、502'));
+    expect(
+      result(2),
+      contains('https://site.example/s 標頭：User-Agent: t：200、502、502'),
+    );
   });
 
   test('two different requests to one address are not called flaky', () async {
@@ -281,6 +292,40 @@ void main() {
       expect(asked[i + 1].last.content, isNot(contains('這次回過不同的結果')));
     }
   });
+
+  test(
+    'different request headers are not mistaken for an unstable site',
+    () async {
+      final s = session(
+        [_source('https://site.example')],
+        fetchLines: (url) => url.endsWith('/mobile')
+            ? [
+                'https://site.example/s 標頭：User-Agent: mobile',
+                '  ← https://site.example/s 200',
+              ]
+            : [
+                'https://site.example/s 標頭：User-Agent: desktop',
+                '  ← https://site.example/s 502',
+              ],
+        replies: [
+          jsonEncode({'action': 'fetch', 'url': 'https://site.example/mobile'}),
+          jsonEncode({
+            'action': 'fetch',
+            'url': 'https://site.example/desktop',
+          }),
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'site_broken',
+            'reason': '測試',
+          }),
+        ],
+      );
+
+      await s.start();
+
+      expect(asked[2].last.content, isNot(contains('這次回過不同的結果')));
+    },
+  );
 
   test('a redirected request keeps its method and body', () async {
     // Codex 審查：轉址的請求行網址後面有「（轉址）」，對不上回應的網址，
@@ -332,6 +377,146 @@ void main() {
     expect(s.job.outcome, AiRepairOutcome.repaired);
     expect(s.job.explanation, 'AI 查過，沒有要改的規則\nAI：每一段都正常');
     expect(s.log.summary, contains('AI 查過，沒有要改的規則；重新校驗沒有問題'));
+  });
+
+  test('an unchanged hand-in after the site did not answer is called '
+      'unstable', () async {
+    // 使用者 2026-11-16：網站不穩定＝修不好。原本校驗逾時、規則沒改再校驗
+    // 就過了，是網站時好時壞，不存回去當成沒問題。
+    var calls = 0;
+    final s = session(
+      [_source('https://site.example', content: 'class.txt@text')],
+      check: (source) => calls++ == 0
+          ? _checked(source, broken: upstreamHealth(timeoutSourceGroupTag))
+          : null,
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(applied, isEmpty);
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.confirmedUnfixable, isTrue);
+    expect(s.job.giveUpWhy, 'site_unstable');
+    expect(s.job.explanation, contains('原本的校驗是「校驗超時」'));
+  });
+
+  test('an unchanged hand-in after the opening check timed out is called '
+      'unstable', () async {
+    // Codex 審查改派子代理審：開場校驗整個超過時間（null）原本不算。
+    final s = session(
+      [_source('https://site.example', content: 'class.txt@text')],
+      checkTimeouts: 1,
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(applied, isEmpty);
+    expect(s.job.giveUpWhy, 'site_unstable');
+  });
+
+  test('an unchanged hand-in is called unstable when the earlier check could '
+      'not reach the site', () async {
+    // 使用者選 B：整批沿用一天內校驗過的書源時開場會重校驗；書源上留著
+    // 「上游異常」、這次開場與交出都過了，也是時好時壞。
+    final source = _source('https://site.example', content: 'class.txt@text')
+      ..addHealthGroups(upstreamHealth(upstreamBlockedSourceGroupTag));
+    final s = session(
+      [source],
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(applied, isEmpty);
+    expect(s.job.giveUpWhy, 'site_unstable');
+    expect(s.job.explanation, contains('原本的校驗是「上游異常」'));
+  });
+
+  test(
+    'a check without the same headers is not mixed with the probe',
+    () async {
+      // 換了 User-Agent 的試抓 200、校驗用原本的標頭沒回應：條件不同，不算
+      // 時好時壞（子代理審查 F2）。
+      const search = 'https://site.example/s?q=1';
+      final s = session(
+        [_source('https://site.example')],
+        check: (source) => _checked(
+          source,
+          diagnostics: const [
+            '[搜尋] 搜尋逾時\n這一段的請求與回應:\n$search 標頭：User-Agent: desktop\n'
+                '  ← $search 沒有回應（connectionTimeout）',
+          ],
+        ),
+        probe: (_) => const SourceProbeReport(
+          logs: [(10, '︾開始解析搜尋頁')],
+          requests: ['$search 標頭：User-Agent: mobile', '  ← $search 200：<div>…'],
+        ),
+        replies: [
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'site_broken',
+            'reason': '測試',
+          }),
+        ],
+      );
+
+      await s.start();
+
+      expect(asked.first.last.content, isNot(contains('這次回過不同的結果')));
+    },
+  );
+
+  test('the opening says so when the check and the probe disagree', () async {
+    // 同一個搜尋校驗時沒回應、試抓 200：開場就列出來，AI 第一輪就看得到。
+    const search = 'https://site.example/s?q=1';
+    final s = session(
+      [_source('https://site.example')],
+      check: (source) => _checked(
+        source,
+        diagnostics: const [
+          '[搜尋] 搜尋逾時\n這一段的請求與回應:\n$search 標頭：User-Agent: t\n'
+              '  ← $search 沒有回應（connectionTimeout）',
+        ],
+      ),
+      probe: (_) => const SourceProbeReport(
+        logs: [(10, '︾開始解析搜尋頁')],
+        requests: ['$search 標頭：User-Agent: t', '  ← $search 200：<div>…'],
+      ),
+      replies: [
+        jsonEncode({
+          'action': 'give_up',
+          'why': 'site_unstable',
+          'reason': '時好時壞',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(
+      asked.first.last.content,
+      contains('# 同一個請求這次回過不同的結果\n$search 標頭：User-Agent: t：沒有回應、200'),
+    );
   });
 
   test(
@@ -786,7 +971,7 @@ void main() {
         jsonEncode({'action': 'fetch', 'url': '/s', 'note': '看搜尋'}),
         jsonEncode({
           'action': 'give_up',
-          'why': 'rate_limited',
+          'why': 'site_unstable',
           'reason': '搜尋回「搜索间隔: 30 秒」',
         }),
       ],
@@ -795,8 +980,8 @@ void main() {
     await s.start();
 
     expect(asked, hasLength(2));
-    expect(s.job.giveUpWhy, 'rate_limited');
-    expect(s.job.explanation, 'AI：網站限流。搜尋回「搜索间隔: 30 秒」');
+    expect(s.job.giveUpWhy, 'site_unstable');
+    expect(s.job.explanation, 'AI：網站不穩定。搜尋回「搜索间隔: 30 秒」');
   });
 
   test('a site whose own search is broken can be given up on', () async {

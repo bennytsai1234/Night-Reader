@@ -38,6 +38,8 @@ class AiFindSession extends ChangeNotifier {
     required this.depth,
     required this._library,
     required this._ask,
+    this.count = aiFindDefaultCount,
+    this.avoid = const [],
     this.serviceLabel = '',
     this.scope = '',
     AiRepairLog? log,
@@ -72,6 +74,15 @@ class AiFindSession extends ChangeNotifier {
     final session = AiFindSession(
       description: description,
       depth: AiFindDepth.fromName(read<String>('depth')),
+      // 早於本數與清單的存檔沒有這兩項；接著做時它們已在存下的對話裡。
+      count: switch (json['count']) {
+        final int count => count,
+        _ => aiFindDefaultCount,
+      },
+      avoid: switch (json['avoid']) {
+        final List<Object?> items => items.whereType<String>().toList(),
+        _ => const [],
+      },
       library: library,
       ask: ask,
       serviceLabel: serviceLabel,
@@ -160,6 +171,12 @@ class AiFindSession extends ChangeNotifier {
 
   final String description;
   final AiFindDepth depth;
+
+  /// 這次要找幾本：交出超過就退回。
+  final int count;
+
+  /// 這次找書送給 AI 的「不想看的」清單（開始那一刻的，之後改清單不影響）。
+  final List<String> avoid;
 
   /// 「送到 主機名 · 模型」那行。
   final String serviceLabel;
@@ -339,6 +356,8 @@ class AiFindSession extends ChangeNotifier {
         'id': id,
         'description': description,
         'depth': depth.name,
+        'count': count,
+        'avoid': avoid,
         'scope': scope,
         'serviceLabel': serviceLabel,
         'startedAt': startedAt.millisecondsSinceEpoch,
@@ -410,6 +429,9 @@ class _Found {
   Book? detail;
   bool detailTried = false;
   bool readTried = false;
+
+  /// 讀過（或試過讀）最後一章：深入時看是不是太監。
+  bool lastTried = false;
 }
 
 /// 找書這件事（[AgentTask]）：開場是描述與深度，指令是 [AiFindCommand]，
@@ -441,8 +463,12 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   CancelToken get _cancel => s._cancelToken;
 
   @override
-  List<AiMessage> opening() =>
-      aiFindOpening(description: s.description, depth: s.depth);
+  List<AiMessage> opening() => aiFindOpening(
+    description: s.description,
+    depth: s.depth,
+    count: s.count,
+    avoid: s.avoid,
+  );
 
   @override
   String redact(String text) => redactAiRepairSecrets(text, _library.secrets);
@@ -466,6 +492,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
             ],
             'detailTried': found.detailTried,
             'readTried': found.readTried,
+            'lastTried': found.lastTried,
             if (found.detail case final detail?)
               'detail': {
                 'coverUrl': detail.coverUrl,
@@ -504,7 +531,8 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         }
         final found = _Found(id, book)
           ..detailTried = item['detailTried'] == true
-          ..readTried = item['readTried'] == true;
+          ..readTried = item['readTried'] == true
+          ..lastTried = item['lastTried'] == true;
         if (item['detail'] case final Map<String, Object?> detail) {
           String? text(String key) => switch (detail[key]) {
             final String value => value,
@@ -755,23 +783,26 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         '# ${found.id} 是${_kindLabel(found.book.bookKind)}，讀不了正文；看詳情就好',
       );
     }
-    _say('讀《${found.book.name}》第 ${command.chapter} 章');
+    final last = command.chapter == aiFindLastChapter;
+    final which = last ? '最後一章' : '第 ${command.chapter} 章';
+    _say('讀《${found.book.name}》$which');
     found.readTried = true;
+    if (last) found.lastTried = true;
     final AiFindChapter chapter;
     try {
       chapter = await _library.chapter(found.book, command.chapter, _cancel);
     } on AiFindUnreadable catch (error) {
-      return AgentToolResult(
-        '# ${found.id} 第 ${command.chapter} 章讀不到：${error.message}',
-      );
+      return AgentToolResult('# ${found.id} $which讀不到：${error.message}');
     }
+    if (chapter.number == chapter.total) found.lastTried = true;
     final text = chapter.text;
     final from = command.from.clamp(0, text.length);
     final to = (from + aiFindReadLength).clamp(0, text.length);
     final next = to < text.length ? '，下一段從 $to 讀' : '，這章讀完了';
     final reply =
-        '# ${found.id}《${found.book.name}》第 ${command.chapter}／'
-        '${chapter.total} 章 ${chapter.title}（這章共 ${text.length} 字，'
+        '# ${found.id}《${found.book.name}》第 ${chapter.number}／'
+        '${chapter.total} 章${last ? '（最後一章）' : ''} ${chapter.title}'
+        '（這章共 ${text.length} 字，'
         '這是 $from 到 $to$next）\n${text.substring(from, to)}';
     s.log.note(_head(reply));
     return AgentToolResult(reply);
@@ -894,6 +925,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   AgentResult _submit(AiFindSubmit command) {
     _say('交出 ${command.books.length} 本');
+    final extra = command.books.length - s.count;
     final problems = <String>[];
     final seen = <String>{};
     for (final pick in command.books) {
@@ -913,14 +945,28 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         continue;
       }
       if (s.depth == AiFindDepth.deep &&
-          found.book.bookKind == BookSourceKind.novel &&
-          !found.readTried) {
-        problems.add('${pick.book}《${found.book.name}》：還沒讀過正文（深度 深入）');
+          found.book.bookKind == BookSourceKind.novel) {
+        if (!found.readTried) {
+          problems.add('${pick.book}《${found.book.name}》：還沒讀過正文（深度 深入）');
+        } else if (!found.lastTried) {
+          problems.add(
+            '${pick.book}《${found.book.name}》：還沒讀過最後一章'
+            '（深度 深入，chapter 給 $aiFindLastChapter）',
+          );
+        }
       }
     }
-    if (problems.isNotEmpty) {
-      _finishRound('交出被退回：${problems.length} 本不合', failed: true);
-      final text = '# 交出被退回，這幾本不合：\n${problems.join('\n')}';
+    if (extra > 0 || problems.isNotEmpty) {
+      _finishRound(
+        '交出被退回：${[if (extra > 0) '多了 $extra 本', if (problems.isNotEmpty) '${problems.length} 本不合'].join('、')}',
+        failed: true,
+      );
+      final text = [
+        '# 交出被退回',
+        if (extra > 0)
+          '交了 ${command.books.length} 本，使用者要 ${s.count} 本：挑最合的 ${s.count} 本再交',
+        if (problems.isNotEmpty) ...['這幾本不合：', ...problems],
+      ].join('\n');
       s.log.both(text);
       return AgentRejected(text);
     }

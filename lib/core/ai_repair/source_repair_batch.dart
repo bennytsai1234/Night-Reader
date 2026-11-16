@@ -133,7 +133,7 @@ class SourceRepairBatch extends ChangeNotifier {
     AiRepairChecker? check,
     Future<void> Function(BookSource repaired, BookSource original)? save,
     Future<void> Function(BookSource source, SiteCheck site)? markGone,
-    Future<void> Function(BookSource source)? markUnfixable,
+    Future<void> Function(BookSource source, String? reason)? markUnfixable,
     Future<void> Function(List<String> urls)? delete,
     AiRepairSession Function(BookSource source, RepairItem item)? session,
     DateTime Function()? now,
@@ -185,7 +185,7 @@ class SourceRepairBatch extends ChangeNotifier {
   final AiRepairChecker _check;
   final Future<void> Function(BookSource repaired, BookSource original) _save;
   final Future<void> Function(BookSource source, SiteCheck site) _markGone;
-  final Future<void> Function(BookSource source) _markUnfixable;
+  final Future<void> Function(BookSource source, String? reason) _markUnfixable;
   final Future<void> Function(List<String> urls) _delete;
   final DateTime Function() _now;
   late final AiRepairSession Function(BookSource source, RepairItem item)
@@ -550,7 +550,7 @@ class SourceRepairBatch extends ChangeNotifier {
       } else if (!_stopped) {
         _finish(lead, RepairOutcome.notFixed, job.explanation ?? '沒修好');
         if (job.confirmedUnfixable) {
-          await _markUnfixable(lead.source);
+          await _markUnfixable(lead.source, job.giveUpWhy);
           for (final item in others) {
             if (_stopped) return;
             _finish(
@@ -558,7 +558,7 @@ class SourceRepairBatch extends ChangeNotifier {
               RepairOutcome.notFixed,
               '同網站的「${lead.source.bookSourceName}」沒修好',
             );
-            await _markUnfixable(item.source);
+            await _markUnfixable(item.source, job.giveUpWhy);
           }
         } else {
           for (final item in others) {
@@ -620,7 +620,7 @@ class SourceRepairBatch extends ChangeNotifier {
     return true;
   }
 
-  // ── 做完之後：刪掉網站不在了的 ───────────────────────────────────────
+  // ── 做完之後：使用者自行刪掉網站失效、不穩定的書源 ──────────────────
 
   /// 網站不在了、還沒刪的書源。
   List<RepairItem> get goneLeft => [
@@ -630,12 +630,38 @@ class SourceRepairBatch extends ChangeNotifier {
 
   /// 網站不在了的書源全部刪掉（使用者 2026-11-13：不停用，直接刪）。修到
   /// 一半就刪的，之後才判定網站不在了的照樣列著、可以再刪。
-  Future<void> deleteGone() async {
-    final gone = goneLeft;
-    if (gone.isEmpty || _editing) return;
+  Future<void> deleteGone() async => _deleteItems(goneLeft);
+
+  /// AI 已確認網站不穩定、無法修復的書源：列為可移除，不自動刪除。
+  /// 同網站的其他書源也在 AI 放棄時一起標記。
+  List<RepairItem> get unstableItems {
+    final unstableSites = {
+      for (final item in items)
+        if (item.session?.job.giveUpWhy == 'site_unstable')
+          siteKey(item.source),
+    };
+    return [
+      for (final item in items)
+        if ((item.outcome == RepairOutcome.notFixed ||
+                item.outcome == RepairOutcome.aiUnfixable) &&
+            (item.source.hasGroupTag(unstableSourceGroupTag) ||
+                unstableSites.contains(siteKey(item.source))))
+          item,
+    ];
+  }
+
+  List<RepairItem> get unstableLeft => [
+    for (final item in unstableItems)
+      if (!item.deleted) item,
+  ];
+
+  Future<void> deleteUnstable() async => _deleteItems(unstableLeft);
+
+  Future<void> _deleteItems(List<RepairItem> toDelete) async {
+    if (toDelete.isEmpty || _editing) return;
     await _edit(() async {
-      await _delete([for (final item in gone) item.source.bookSourceUrl]);
-      for (final item in gone) {
+      await _delete([for (final item in toDelete) item.source.bookSourceUrl]);
+      for (final item in toDelete) {
         item.deleted = true;
       }
     });
@@ -792,13 +818,28 @@ class SourceRepairBatch extends ChangeNotifier {
       );
 }
 
-/// AI 修過、沒修好：書源標「AI 修不好」，下次整批修復跳過（ADR 0054）；書源
-/// 在這段時間被刪掉了就不寫。
-Future<void> markAiUnfixable(BookSource source) async {
+/// AI 確認無法修復：標「AI 修不好」，下次整批修復跳過（ADR 0054）。
+/// 網站不穩定時另外標狀態並列入建議清理，讓使用者自行選擇移除。
+/// 這段時間已刪掉的書源不寫。
+Future<void> markAiUnfixable(BookSource source, String? reason) async {
   final dao = getIt<BookSourceDao>();
   final current = await dao.getByUrl(source.bookSourceUrl);
-  if (current == null || current.hasGroupTag(aiUnfixableSourceGroupTag)) return;
-  current.addGroup(aiUnfixableSourceGroupTag);
+  if (current == null) return;
+  final unstable = reason == 'site_unstable';
+  if (current.hasGroupTag(aiUnfixableSourceGroupTag) &&
+      (!unstable || current.hasGroupTag(unstableSourceGroupTag))) {
+    return;
+  }
+  if (unstable) {
+    current
+      ..removeInvalidGroups()
+      ..removeErrorComment()
+      ..addHealthGroups(upstreamHealth(unstableSourceGroupTag))
+      ..addErrorComment('AI：網站不穩定，無法修復');
+  }
+  current
+    ..addGroup(aiUnfixableSourceGroupTag)
+    ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
   await dao.upsert(current);
 }
 
