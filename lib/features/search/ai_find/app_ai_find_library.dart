@@ -125,8 +125,8 @@ class AppAiFindLibrary implements AiFindLibrary {
   /// 詳情照卡片的來源抓；簡介或字數是空的、或抓不到時，到有這本的其他書源
   /// （最多再兩個）照書名與作者精確搜一次再抓（換源的做法），缺的那幾欄照
   /// 先抓到的補上，都齊了就停。只問主要來源時，同一本書在別的書源有簡介、
-  /// AI 拿到空的就跳過它（2026-11-15 實跑：蠱真人）；字數同樣，推薦的書才
-  /// 不會缺字數。
+  /// AI 拿到空的就跳過它（2026-11-15 實跑：蠱真人）；小說的字數同樣，推薦的
+  /// 書才不會缺字數。漫畫、有聲書的書源多半沒寫字數，不為它多搜。
   @override
   Future<Book> detail(SearchBook book, CancelToken cancelToken) =>
       _describeFailure(cancelToken, () async {
@@ -134,7 +134,7 @@ class AppAiFindLibrary implements AiFindLibrary {
         Book? best;
         try {
           best = await _info(book, cancelToken);
-          if (_complete(best)) return best;
+          if (_complete(best, book)) return best;
         } on DioException catch (error) {
           if (CancelToken.isCancel(error)) rethrow;
           failure = error;
@@ -163,7 +163,7 @@ class AppAiFindLibrary implements AiFindLibrary {
               cancelToken: cancelToken,
             );
             best = best == null ? info : _fill(best, info);
-            if (_complete(best)) return best;
+            if (_complete(best, book)) return best;
           } on DioException catch (error) {
             if (CancelToken.isCancel(error) || cancelToken.isCancelled) rethrow;
           } on AppException {
@@ -183,7 +183,9 @@ class AppAiFindLibrary implements AiFindLibrary {
   static bool _hasWordCount(Book book) =>
       (book.wordCount ?? '').trim().isNotEmpty;
 
-  static bool _complete(Book book) => _hasIntro(book) && _hasWordCount(book);
+  static bool _complete(Book book, SearchBook card) =>
+      _hasIntro(book) &&
+      (card.bookKind != BookSourceKind.novel || _hasWordCount(book));
 
   /// [base] 缺的簡介與字數照 [other] 補，其他照 [base]。
   static Book _fill(Book base, Book other) {

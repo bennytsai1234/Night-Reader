@@ -46,6 +46,11 @@ void main() {
     expect(rule(content).getString(r'$.title##{{$.cut}}'), '開始');
   });
 
+  test(r'## 之後的 $1 是取代式的群組，不是正則規則（同 Legado splitRegex）', () {
+    final content = {'title': '第一章 開始', 'cut': '第一章 '};
+    expect(rule(content).getString(r'$.title##({{$.cut}})##[$1]'), '[第一章 ]開始');
+  });
+
   test('網頁的簡介：{{@@…}} 裡的 ## 不會把規則切斷（大唐小說、歪歪書庫的寫法）', () {
     const html =
         '<html><head>'

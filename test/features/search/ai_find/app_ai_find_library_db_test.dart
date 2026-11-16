@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -157,6 +158,34 @@ void main() {
     expect(detail.intro, '穿越後獵魔', reason: '先補到的為準');
     expect(detail.wordCount, '120萬字');
     expect(sites.asked, ['https://a.test', 'https://b.test', 'https://c.test']);
+  });
+
+  test('a comic with an intro but no word count is not looked up elsewhere: '
+      'comic sources rarely give one', () async {
+    for (final url in ['https://a.test', 'https://b.test']) {
+      await addSource(url);
+    }
+    final sites = _Sites({
+      'https://a.test': Book(
+        bookUrl: 'https://a.test/x',
+        name: '海賊',
+        origin: 'https://a.test',
+        intro: '航海冒險',
+      ),
+      'https://b.test': Book(
+        bookUrl: 'https://b.test/x',
+        name: '海賊',
+        origin: 'https://b.test',
+        wordCount: '300話',
+      ),
+    });
+    final library = AppAiFindLibrary(scope: SearchScope(), service: sites);
+    final comic = found('https://a.test', '海賊')
+      ..type = BookType.image
+      ..origins.add('https://b.test');
+    final detail = await library.detail(comic, CancelToken());
+    expect(detail.intro, '航海冒險');
+    expect(sites.asked, ['https://a.test']);
   });
 
   test('the time limit hands back what has arrived even when a source never '

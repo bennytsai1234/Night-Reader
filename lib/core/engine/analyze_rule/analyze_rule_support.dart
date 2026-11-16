@@ -153,10 +153,12 @@ class SourceRule {
     if (rule.length > start) _splitRegex(rule.substring(start));
   }
 
+  /// 拆出 `$1` 這類正則群組。同 Legado `splitRegex`：只找這段第一個 `##`
+  /// 前面的，`##` 之後的 `$1` 屬於取代式，原樣留著。
   void _splitRegex(String ruleStr) {
     var start = 0;
     final regexPattern = RegExp(r'\$\d{1,2}');
-    final matches = regexPattern.allMatches(ruleStr);
+    final matches = regexPattern.allMatches(ruleStr.split('##').first);
     if (matches.isNotEmpty) {
       isDynamic = true;
       if (mode != Mode.js) {

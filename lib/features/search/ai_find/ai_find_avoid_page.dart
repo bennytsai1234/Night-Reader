@@ -118,6 +118,12 @@ class _ItemRow extends StatelessWidget implements GroupedRowLike {
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: AppChrome.of(context).groupedSurface,
-    child: GroupedRow(title: title, showChevron: false, onTap: onTap),
+    // 使用者自己寫的字照原文，不跟著介面語言轉繁簡（ADR 0066）。
+    child: GroupedRow(
+      title: title,
+      translateTitle: false,
+      showChevron: false,
+      onTap: onTap,
+    ),
   );
 }
