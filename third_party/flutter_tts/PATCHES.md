@@ -70,3 +70,6 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
 - `setEngine` with the engine already connected replies at once instead of
   binding the TTS service again; switching engines shuts the replaced engine
   down. Only the most recently created engine's `onInit` is honoured.
+- Calls queued while connecting are taken out of the queue before they run:
+  a `speak` that has to reconnect queues itself again, which used to modify the
+  list mid-iteration.

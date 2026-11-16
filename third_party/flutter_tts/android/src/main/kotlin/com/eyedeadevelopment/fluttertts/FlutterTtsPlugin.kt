@@ -267,12 +267,13 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         }
 
         // Handle pending method calls (sent while TTS was initializing)
-        synchronized(this@FlutterTtsPlugin) {
+        // 先取出再跑：念不出來的 speak 會重連並把自己排回 pendingMethodCalls。
+        val calls = synchronized(this@FlutterTtsPlugin) {
             ttsStatus = status
-            for (call in pendingMethodCalls) {
-                call.run()
-            }
-            pendingMethodCalls.clear()
+            ArrayList(pendingMethodCalls).also { pendingMethodCalls.clear() }
+        }
+        for (call in calls) {
+            call.run()
         }
 
         if (!replyEngine) return
