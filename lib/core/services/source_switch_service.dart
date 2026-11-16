@@ -134,7 +134,7 @@ class SourceSwitchService {
             return a.bookSourceUrl.compareTo(b.bookSourceUrl);
           });
     if (sources.isEmpty) return null;
-    // 搜尋結果的 originOrder 沒有填，照書源本身的排序。
+    // 章數一樣時照書源管理的排序（上面排好的順序）。
     final rank = {
       for (final (i, source) in sources.indexed) source.bookSourceUrl: i,
     };
