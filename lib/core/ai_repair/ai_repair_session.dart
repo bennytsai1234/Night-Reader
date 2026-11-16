@@ -108,6 +108,11 @@ class AiRepairJob {
   /// 原本的書源校驗出來壞在哪；校驗逾時是 null。
   SourceHealthCategory? _before;
 
+  /// 原本的書源校驗時網站沒回內容：「上游異常」（連不上、回錯誤）或「校驗
+  /// 超時」的那個標記，其他是 null。AI 沒改規則、再校驗就通過時，網站是
+  /// 時好時壞（[AiRepairSession._validate]，使用者 2026-11-16）。
+  String? _beforeUnreachable;
+
   /// 開場的試抓：[_firstProbe] 是抓到的原樣，[_probe] 是標上頁碼、給 AI 的
   /// 那份。整件重跑時照 [_firstProbe] 重新標頁碼，開場一字不差。
   SourceProbeReport? _firstProbe;
@@ -456,9 +461,18 @@ class AiRepairSession extends ChangeNotifier {
         : await _guard(() => _check(original, _cancelToken));
     if (_stopped) return;
     final checkText = _checkText(checked);
-    job._before = checked == null
+    final before = checked == null
         ? null
-        : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth.category;
+        : BookSource.fromJson(checked.updatedSourceJson).runtimeHealth;
+    job
+      .._before = before?.category
+      .._beforeUnreachable =
+          const {
+            upstreamBlockedSourceGroupTag,
+            timeoutSourceGroupTag,
+          }.contains(before?.label)
+          ? before!.label
+          : null;
     job._checkResult = [checkText, ...?checked?.diagnostics].join('\n\n');
     _finish(checkStep, prior == null ? checkText : '沿用剛才的校驗：$checkText');
     log
@@ -655,6 +669,21 @@ class AiRepairSession extends ChangeNotifier {
         ]);
       }
       _fail(job, ['校驗：$checkText', if (note.isNotEmpty) 'AI：$note'].join('\n'));
+      return null;
+    }
+    // 網站時好時壞：原本校驗時沒回內容，規則沒改再校驗就過了。偶爾通過不算
+    // 能用（網站不穩定＝修不好，使用者 2026-11-16），不存回去當成沒問題。
+    if (job._beforeUnreachable case final before?
+        when changedParts(job.original, candidate).isEmpty) {
+      _finish(step, checkText);
+      job
+        ..confirmedUnfixable = true
+        ..giveUpWhy = 'site_unstable';
+      _fail(
+        job,
+        'AI：${aiGiveUpLabels['site_unstable']}。原本的校驗是「$before」，'
+        '規則沒改再校驗就通過，網站時好時壞',
+      );
       return null;
     }
     job._committing = true;
@@ -991,13 +1020,20 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
 
   BookSource get original => job.original;
 
-  /// 這件修復裡每個請求回過什麼（狀態碼或「沒有回應」），照工具結果的順序、
-  /// 同一次結果裡一樣的只記一次：一下成功、一下 429 或 5xx 的網站，AI 每次
-  /// 成功就以為好了、接著修別段（2026-11-14 白光小说 36 輪用完），程式把
-  /// 這個事實列在結果後面，判斷照舊交給 AI。同一個請求是方法、網址與送出的
-  /// 內容和標頭都一樣：只看網址時，白光的 POST 少帶 submit 回 502、帶了 301，
-  /// 兩個不同的請求被當成時好時壞。
-  final Map<String, List<String>> _answered = {};
+  /// 這件修復裡每個請求回過什麼（狀態碼或「沒有回應」），從開場的校驗與
+  /// 試抓起，照順序、同一段裡一樣的只記一次：一下成功、一下 429 或 5xx 的
+  /// 網站，AI 每次成功就以為好了、接著修別段（2026-11-14 白光小说 36 輪
+  /// 用完），程式把這個事實列在開場與結果後面，判斷照舊交給 AI。
+  ///
+  /// 鍵是方法、網址與送出的內容：只看網址時，白光的 POST 少帶 submit 回
+  /// 502、帶了 301，兩個不同的請求被當成時好時壞。標頭不同的也是不同的請求
+  /// （換了 User-Agent 就通是找到修法），但校驗的診斷不記標頭（`null`），
+  /// 和每一種標頭都算同一個：不然開場校驗逾時、試抓同一個請求成功對不上。
+  final Map<String, List<({String? headers, String status})>> _answered = {};
+
+  /// 開場的校驗與試抓裡時好時壞的那一段（[_mixedAnswers]）：只算一次，
+  /// 整件重跑時開場一字不差。
+  String? _openingMixed;
 
   /// 請求那一行：GET 只寫網址，其他寫方法；轉址的下一跳在網址後面接
   /// 「（轉址）」，送出的內容寫在「送出：」後面，標頭寫在「標頭：」後面
@@ -1021,20 +1057,19 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   /// 一段，沒有是空字串。回應前面沒有請求那一行的不算（認不出是哪個請求）；
   /// 轉址後的下一跳是對新網址的 GET。
   String _mixedAnswers(String text) {
-    final seen = <String, Set<String>>{};
-    ({String url, String key})? request;
+    final seen = <String, Set<({String? headers, String status})>>{};
+    ({String url, String key, String? headers})? request;
     for (final line in text.split('\n')) {
       if (_requestLine.firstMatch(line) case final match?) {
         final method = match.group(1);
         final url = match.group(2)!;
         final body = match.group(3);
-        final headers = match.group(4);
         request = (
           url: url,
           key:
               '${method == null ? '' : '$method '}$url'
-              '${body == null ? '' : ' 送出：$body'}'
-              '${headers == null ? '' : ' 標頭：$headers'}',
+              '${body == null ? '' : ' 送出：$body'}',
+          headers: match.group(4),
         );
         continue;
       }
@@ -1042,18 +1077,42 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       if (response == null || request == null) continue;
       final url = response.group(1)!;
       final key = url == request.url ? request.key : url;
-      seen.putIfAbsent(key, () => {}).add(response.group(2)!);
+      seen.putIfAbsent(key, () => {}).add((
+        headers: request.headers,
+        status: response.group(2)!,
+      ));
     }
-    for (final MapEntry(key: key, value: statuses) in seen.entries) {
-      _answered.putIfAbsent(key, () => []).addAll(statuses);
+    for (final MapEntry(key: key, value: answers) in seen.entries) {
+      _answered.putIfAbsent(key, () => []).addAll(answers);
     }
     final lines = [
-      for (final key in seen.keys)
-        if (_answered[key]! case final all
-            when all.any(_ok) && all.any(_failed))
-          '$key：${all.join('、')}',
+      for (final key in seen.keys) ?_mixedLine(key, _answered[key]!),
     ];
     return lines.isEmpty ? '' : '\n\n# 同一個請求這次回過不同的結果\n${lines.join('\n')}';
+  }
+
+  /// [key] 這個請求回過成功也回過失敗時列成一行，沒有是 null。照每一種
+  /// 標頭各看一次，沒記標頭的回應算進每一種。
+  static String? _mixedLine(
+    String key,
+    List<({String? headers, String status})> answers,
+  ) {
+    final kinds = {
+      for (final answer in answers)
+        if (answer.headers != null) answer.headers,
+    };
+    for (final headers in kinds.isEmpty ? const <String?>[null] : kinds) {
+      final statuses = [
+        for (final answer in answers)
+          if (answer.headers == null || answer.headers == headers)
+            answer.status,
+      ];
+      if (statuses.any(_ok) && statuses.any(_failed)) {
+        return '$key${headers == null ? '' : ' 標頭：$headers'}'
+            '：${statuses.join('、')}';
+      }
+    }
+    return null;
   }
 
   @override
@@ -1064,6 +1123,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     source: original,
     checkResult: job._checkResult!,
     probe: job._probe!,
+    mixedAnswers: _openingMixed ??= _mixedAnswers(
+      '${job._checkResult!}\n${job._firstProbe!.requests.join('\n')}',
+    ),
   );
 
   @override
@@ -1382,6 +1444,8 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     if (failure != null) return AgentRejected(failure);
     if (s._stopped) return _cancelled;
     if (job.outcome == AiRepairOutcome.repaired) return const AgentAccepted();
+    // 規則沒改、只是網站時好時壞（[AiRepairSession._validate]）：算放棄。
+    if (job.confirmedUnfixable) return const AgentAccepted.gaveUp();
     // 校驗過了卻存不進去（書源在修的時候被改過或刪掉）。
     return AgentStopped(AgentEndKind.failed, job.explanation ?? '存不進去');
   }

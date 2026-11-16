@@ -196,23 +196,28 @@ void main() {
       // 2026-11-14 白光、读客书库、思怡小说的網站一下 200、一下 429 或 502，
       // 86读书時快時慢，AI 一直重試、換主機、先修別段，各花二三十輪。還原
       // 读客书库的對話問 AI：「再送一次」沒寫上限、跟「不再等第二次」打架，
-      // 換網域與查其他段它當成診斷。工具結果後面列出「同一個請求這次回過
-      // 不同的結果」時當下放棄，蓋過其他每一條；還沒列出時只重送一次。
+      // 換網域與查其他段它當成診斷。開場或工具結果後面列出「同一個請求這次
+      // 回過不同的結果」、或網站要隔一段時間再來時，只看一輪別的網域與版本
+      // 就放棄，蓋過其他每一條；不等間隔重送（使用者 2026-11-16：網站不穩定
+      // ＝修不好，但鏡像、手機版可能是另一台主機）。
       expect(
         aiRepairSystemPrompt,
-        allOf(
+        allOf([
           contains('網站不穩定＝無法修復'),
-          contains('建議清理（可移除）'),
-          contains('「同一個請求這次回過不同的結果」'),
-          contains('這一次回覆就用 give_up 的 site_unstable 放棄'),
+          contains('偶爾抓得到不算能用'),
+          contains('開場或工具結果後面列出「同一個請求這次回過不同的結果」'),
+          contains('同一次回覆一起看一輪那一段'),
+          contains('都一樣就用 give_up 的 site_unstable 放棄'),
           contains('這條蓋過其他每一條'),
-          contains('也不查其他段'),
+          contains('不查其他段'),
+          contains('不等過那段時間再送同一個請求'),
           contains('只送這一次'),
-        ),
+        ]),
       );
       final giveUp = aiRepairTools.firstWhere((t) => t.name == 'give_up');
       final why = (giveUp.parameters['properties'] as Map)['why'] as Map;
       expect(why['description'], contains('時好時壞'));
+      expect(why['description'], contains('限制請求的頻率'));
       expect(why['description'], contains('慢到超過校驗的時限'));
     });
 

@@ -373,6 +373,68 @@ void main() {
     expect(s.log.summary, contains('AI 查過，沒有要改的規則；重新校驗沒有問題'));
   });
 
+  test('an unchanged hand-in after the site did not answer is called '
+      'unstable', () async {
+    // 使用者 2026-11-16：網站不穩定＝修不好。原本校驗逾時、規則沒改再校驗
+    // 就過了，是網站時好時壞，不存回去當成沒問題。
+    var calls = 0;
+    final s = session(
+      [_source('https://site.example', content: 'class.txt@text')],
+      check: (source) => calls++ == 0
+          ? _checked(source, broken: upstreamHealth(timeoutSourceGroupTag))
+          : null,
+      replies: [
+        jsonEncode({
+          'action': 'submit',
+          'patch': <String, dynamic>{},
+          'note': '每一段都正常',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(applied, isEmpty);
+    expect(s.job.outcome, AiRepairOutcome.failed);
+    expect(s.job.confirmedUnfixable, isTrue);
+    expect(s.job.giveUpWhy, 'site_unstable');
+    expect(s.job.explanation, contains('原本的校驗是「校驗超時」'));
+  });
+
+  test('the opening says so when the check and the probe disagree', () async {
+    // 校驗的診斷不記標頭、試抓記：同一個搜尋校驗時沒回應、試抓 200，
+    // 開場就列出來，AI 第一輪就看得到。
+    const search = 'https://site.example/s?q=1';
+    final s = session(
+      [_source('https://site.example')],
+      check: (source) => _checked(
+        source,
+        diagnostics: const [
+          '[搜尋] 搜尋逾時\n這一段的請求與回應:\n$search\n'
+              '  ← $search 沒有回應（connectionTimeout）',
+        ],
+      ),
+      probe: (_) => const SourceProbeReport(
+        logs: [(10, '︾開始解析搜尋頁')],
+        requests: ['$search 標頭：User-Agent: t', '  ← $search 200：<div>…'],
+      ),
+      replies: [
+        jsonEncode({
+          'action': 'give_up',
+          'why': 'site_unstable',
+          'reason': '時好時壞',
+        }),
+      ],
+    );
+
+    await s.start();
+
+    expect(
+      asked.first.last.content,
+      contains('# 同一個請求這次回過不同的結果\n$search 標頭：User-Agent: t：沒有回應、200'),
+    );
+  });
+
   test(
     'a test whose search name differs from the detail page says so',
     () async {
