@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_library.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
@@ -54,7 +55,7 @@ class _Library implements AiFindLibrary {
     SearchBook book,
     int number,
     CancelToken cancelToken,
-  ) async => (title: '第一章', text: '正文', total: 1);
+  ) async => (title: '第一章', text: '正文', number: 1, total: 1);
 
   @override
   Future<List<AiFindExploreSource>> exploreSources() async => const [];
@@ -202,6 +203,8 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
+              required avoid,
               required service,
               required scope,
             }) {
@@ -283,6 +286,8 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
+              required avoid,
               required service,
               required scope,
             }) => run = AiFindRun(
@@ -331,8 +336,117 @@ void main() {
 
     await tester.tap(find.text('深入'));
     await tester.pumpAndSettle();
-    expect(find.text('每本都去看詳情，小說再試讀一章正文，讀不到的寫明原因；漫畫、有聲書照一般。'), findsOneWidget);
+    expect(
+      find.text('每本都去看詳情，小說再讀第一章與最後一章，看是不是太監，讀不到的寫明原因；漫畫、有聲書照一般。'),
+      findsOneWidget,
+    );
     expect(find.text('每本都去看詳情（簡介、分類、字數）再推薦。'), findsNothing);
+  });
+
+  testWidgets('the book count and the avoid list: the rows sum them up, the '
+      'count takes 1 to 30, the list page adds, edits and deletes, and '
+      'starting sends both', (tester) async {
+    final settings = await prefs();
+    List<String>? sent;
+    int? sentCount;
+    late AiFindRun run;
+    await show(
+      tester,
+      AiFindPage(
+        prefs: settings,
+        startRun:
+            ({
+              required description,
+              required depth,
+              required count,
+              required avoid,
+              required service,
+              required scope,
+            }) {
+              sent = avoid;
+              sentCount = count;
+              final replies = [
+                _call('submit', {'books': <Object?>[], 'summary': '沒找到'}),
+              ];
+              return run = AiFindRun(
+                AiFindSession(
+                  description: description,
+                  depth: depth,
+                  count: count,
+                  avoid: avoid,
+                  library: _Library(),
+                  ask: (_, _) async => replies.removeAt(0),
+                  log: AiRepairLog.find(
+                    description: description,
+                    directory: () async => logs,
+                  ),
+                ),
+                save: (_) async {},
+                progress: _MemoryFile(),
+                work: BackgroundWork(platform: _Platform()),
+              );
+            },
+      ),
+    );
+    expect(find.text('沒有'), findsOneWidget);
+    expect(find.text('10 本'), findsOneWidget, reason: '預設找 10 本');
+
+    await tester.tap(find.text('本數'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '31');
+    await tester.tap(find.text('確定'));
+    await tester.pumpAndSettle();
+    expect(find.text('請輸入 1 到 30'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, '5');
+    await tester.tap(find.text('確定'));
+    await tester.pumpAndSettle();
+    expect(find.text('5 本'), findsOneWidget);
+
+    Future<void> type(String text) async {
+      await tester.tap(find.text('新增'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), text);
+      await tester.tap(find.text('確定'));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.text('不想看的'));
+    await tester.pumpAndSettle();
+    await type('女頻、後宮');
+    await type('無限流，後宮');
+    expect(AiFindAvoid.read(settings), [
+      '女頻',
+      '後宮',
+      '無限流',
+    ], reason: '頓號、逗號分開是幾項，已有的不重複加');
+
+    await tester.tap(find.text('無限流'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '系統文');
+    await tester.tap(find.text('確定'));
+    await tester.pumpAndSettle();
+    expect(AiFindAvoid.read(settings), ['女頻', '後宮', '系統文']);
+
+    await tester.drag(find.text('後宮'), const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    expect(AiFindAvoid.read(settings), ['女頻', '系統文'], reason: '往左滑刪除');
+
+    Navigator.of(tester.element(find.text('女頻'))).pop();
+    await tester.pumpAndSettle();
+    expect(find.text('2 項'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '爽文');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('開始找書'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始找書'));
+    await tester.pump();
+    await tester.pump();
+    await settle(tester, () => run.isFinished);
+    expect(sent, ['女頻', '系統文']);
+    expect(sentCount, 5);
+    expect(settings.getInt(aiFindCountKey), 5, reason: '下次停在 5 本');
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('starting without an AI service asks to set one up', (
@@ -347,6 +461,8 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
+              required avoid,
               required service,
               required scope,
             }) {
@@ -440,18 +556,6 @@ void main() {
     expect(opened, ['海贼王之剑豪之心', '海贼王之大文豪']);
   });
 
-  test('the date of a past find drops the year only for this year', () {
-    final now = DateTime(2026, 11, 15);
-    expect(
-      aiFindDateLabel(DateTime(2026, 11, 13).millisecondsSinceEpoch, now),
-      '11/13',
-    );
-    expect(
-      aiFindDateLabel(DateTime(2025, 11, 13).millisecondsSinceEpoch, now),
-      '2025/11/13',
-    );
-  });
-
   testWidgets('pause stops at the start of the last saved round: the page '
       'says so with continue and end, and continue picks up from there', (
     tester,
@@ -470,6 +574,8 @@ void main() {
             ({
               required description,
               required depth,
+              required count,
+              required avoid,
               required service,
               required scope,
             }) => run = AiFindRun(

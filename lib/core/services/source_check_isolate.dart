@@ -238,9 +238,12 @@ class SourceChecker {
   final List<String> _logs = [];
   final List<String> _diagnostics = [];
 
-  /// 校驗送出的請求與網站的回應，依序（`recordRequestUrls`）。
+  /// 校驗送出的請求與網站的回應，依序（`recordRequestUrls`）。也記送出的
+  /// 標頭：AI 修書源照方法、網址、內容與標頭認同一個請求，開場校驗和試抓
+  /// 才對得上（換了 User-Agent 就通的不算時好時壞）。
   final RequestLog _requests = RequestLog(
     responsePreview: RequestLog.diagnosisPreview,
+    sentHeaders: true,
   );
 
   /// 網域查不到時查過網路本身通不通：true 是手機斷網了，null 是還沒查過。

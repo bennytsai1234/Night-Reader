@@ -19,7 +19,8 @@ abstract interface class AiFindLibrary {
   /// 書籍詳情：照卡片的來源抓詳情頁。
   Future<Book> detail(SearchBook book, CancelToken cancelToken);
 
-  /// 第 [number] 章（從 1 數，不算分卷標題）的正文純文字。讀不到時丟
+  /// 第 [number] 章（從 1 數，不算分卷標題；-1 是最後一章，`aiFindLastChapter`）
+  /// 的正文純文字。讀不到時丟
   /// [AiFindUnreadable]，訊息說為什麼（付費章節、要登入、抓不到、沒有這一章）。
   Future<AiFindChapter> chapter(
     SearchBook book,
@@ -89,8 +90,8 @@ class AiFindUnreadable implements Exception {
   String toString() => message;
 }
 
-/// 一章：[total] 是這本書有幾章（不算分卷標題）。
-typedef AiFindChapter = ({String title, String text, int total});
+/// 一章：[number] 是第幾章，[total] 是這本書有幾章（不算分卷標題）。
+typedef AiFindChapter = ({String title, String text, int number, int total});
 
 /// 有發現頁的書源：[url] 是書源網址。
 typedef AiFindExploreSource = ({String url, String name, BookSourceKind kind});

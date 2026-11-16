@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -29,14 +31,20 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ai_find_avoid_page.dart';
 import 'ai_find_run.dart';
 import 'app_ai_find_library.dart';
 
 /// 上次選的深度：只存這台手機、不同步（ADR 0060）。
 const String aiFindDepthKey = 'ai_find.depth';
+
+/// 上次輸入的本數：同深度，只存這台手機、不同步。
+const String aiFindCountKey = 'ai_find.count';
 
 /// 搜尋頁的 ✦：有一次找書在跑、暫停中，或做完還沒看過結果時推回那一頁；
 /// 不然推開始前的頁面（docs/design/screens.md「AI 找書」）。
@@ -51,13 +59,9 @@ Future<void> openAiFind(BuildContext context) async {
   await navigator.push(MaterialPageRoute<void>(builder: (_) => AiFindPage()));
 }
 
-/// 「過去的找書」一列右邊的日期：今年的寫「11/13」，不是今年的寫
-/// 「2025/11/13」（docs/design/screens.md「搜尋」）。
-String aiFindDateLabel(int millis, DateTime now) {
-  final date = DateTime.fromMillisecondsSinceEpoch(millis);
-  final day = '${date.month}/${date.day}';
-  return date.year == now.year ? day : '${date.year}/$day';
-}
+/// 開始前那一列「不想看的」右邊的字：只寫幾項，沒有寫「沒有」。
+String aiFindAvoidSummary(List<String> avoid) =>
+    avoid.isEmpty ? '沒有' : '${avoid.length} 項';
 
 /// 「8.4 萬 token」：頁面上的用量。
 String aiFindTokens(int tokens) => tokens < 10000
@@ -99,6 +103,8 @@ class AiFindPage extends StatefulWidget {
   final AiFindRun Function({
     required String description,
     required AiFindDepth depth,
+    required int count,
+    required List<String> avoid,
     required AiService service,
     required SearchScope scope,
   })?
@@ -112,6 +118,8 @@ class _AiFindPageState extends State<AiFindPage> {
   final TextEditingController _description = TextEditingController();
   AiFindRun? _run;
   AiFindDepth _depth = AiFindDepth.normal;
+  int _count = aiFindDefaultCount;
+  List<String> _avoid = const [];
   AiService? _service;
   bool _starting = false;
 
@@ -138,6 +146,11 @@ class _AiFindPageState extends State<AiFindPage> {
     if (!mounted) return;
     setState(() {
       _depth = AiFindDepth.fromName(prefs.getString(aiFindDepthKey));
+      _count = (prefs.getInt(aiFindCountKey) ?? aiFindDefaultCount).clamp(
+        1,
+        aiFindMaxCount,
+      );
+      _avoid = AiFindAvoid.read(prefs);
       _service = service;
     });
   }
@@ -211,11 +224,14 @@ class _AiFindPageState extends State<AiFindPage> {
       if (!_slotFree) return;
       final prefs = await _prefs();
       await prefs.setString(aiFindDepthKey, _depth.name);
+      await prefs.setInt(aiFindCountKey, _count);
       final scope = SearchScope.fromPrefs(prefs);
       final description = _description.text.trim();
       final run = (widget.startRun ?? _defaultRun)(
         description: description,
         depth: _depth,
+        count: _count,
+        avoid: AiFindAvoid.read(prefs),
         service: service,
         scope: scope,
       );
@@ -261,12 +277,16 @@ class _AiFindPageState extends State<AiFindPage> {
   static AiFindRun _defaultRun({
     required String description,
     required AiFindDepth depth,
+    required int count,
+    required List<String> avoid,
     required AiService service,
     required SearchScope scope,
   }) => AiFindRun(
     AiFindSession(
       description: description,
       depth: depth,
+      count: count,
+      avoid: avoid,
       library: AppAiFindLibrary(scope: scope),
       ask: AiFindSession.askService(service),
       serviceLabel: aiFindServiceLabel(service),
@@ -281,6 +301,55 @@ class _AiFindPageState extends State<AiFindPage> {
     if (!mounted || _run != null) return;
     final service = await widget.settings.findService();
     if (mounted) setState(() => _service = service);
+  }
+
+  /// 本數：輸入 1 到 [aiFindMaxCount] 的整數，其他的不收、提示框留著。
+  Future<void> _pickCount() async {
+    String? error;
+    final typed = await showStatefulAppAlert<int>(
+      context: context,
+      fieldTexts: ['$_count'],
+      builder: (dialogContext, setDialogState, fields) => AppAlert<bool>(
+        title: '要找幾本',
+        content: AlertTextField(
+          controller: fields.single,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          errorText: error,
+          onChanged: (_) {
+            if (error != null) setDialogState(() => error = null);
+          },
+        ),
+        actions: const [
+          AppAlertAction(label: '取消', value: false),
+          AppAlertAction(label: '確定', value: true, isDefault: true),
+        ],
+        onAction: (confirmed) {
+          if (!confirmed) {
+            Navigator.of(dialogContext).pop();
+            return;
+          }
+          final count = int.tryParse(fields.single.text.trim());
+          if (count == null || count < 1 || count > aiFindMaxCount) {
+            setDialogState(() => error = '請輸入 1 到 $aiFindMaxCount');
+            return;
+          }
+          Navigator.of(dialogContext).pop(count);
+        },
+      ),
+    );
+    if (typed != null && mounted) setState(() => _count = typed);
+  }
+
+  /// 「不想看的」清單頁；回來時照改過的清單更新那一列。
+  Future<void> _openAvoid() async {
+    final prefs = await _prefs();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => AiFindAvoidPage(prefs: prefs)),
+    );
+    if (mounted) setState(() => _avoid = AiFindAvoid.read(prefs));
   }
 
   Future<void> _copySummary(AiFindSession session) async {
@@ -390,6 +459,20 @@ class _AiFindPageState extends State<AiFindPage> {
             selected: _depth,
             onChanged: (depth) => setState(() => _depth = depth),
           ),
+        ),
+      ],
+    ),
+    GroupedSection(
+      children: [
+        GroupedRow(
+          title: '本數',
+          value: '$_count 本',
+          onTap: () => unawaited(_pickCount()),
+        ),
+        GroupedRow(
+          title: '不想看的',
+          value: aiFindAvoidSummary(_avoid),
+          onTap: () => unawaited(_openAvoid()),
         ),
       ],
     ),
@@ -563,21 +646,94 @@ class _AiFindPageState extends State<AiFindPage> {
 }
 
 /// 推薦的一本：封面、書名、「作者 · 字數 · 分類」與推薦理由（不截斷）；點了
-/// 照找到它的書源進書籍詳情。
-class _AiFindPickRow extends StatelessWidget {
+/// 照找到它的書源進書籍詳情。從「過去的找書」推入時，骨架照同樣的三段字與
+/// 封面算（[skeletonShape]，ADR 0029）。
+class _AiFindPickRow extends StatelessWidget implements GroupedSkeletonItem {
   const _AiFindPickRow({required this.pick, required this.bookPage});
 
   final AiFindPick pick;
   final Widget Function(AggregatedSearchBook book) bookPage;
 
+  static const EdgeInsets _padding = EdgeInsets.fromLTRB(
+    AppGrouped.margin,
+    AppSpacing.md,
+    AppGrouped.margin,
+    AppSpacing.md,
+  );
+
+  /// 封面右邊那一欄的三段字：每段上面空多少、字與字樣。
+  List<(double, String, TextStyle)> _lines(BuildContext context) {
+    final book = pick.book;
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      (
+        0,
+        context.zh(book.name),
+        AppTextStyles.bodyBase.copyWith(
+          height: 1.3,
+          color: scheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      (
+        2,
+        formatSearchResultMetadata(
+          author: context.zh(book.author ?? ''),
+          kind: context.zh(book.kind ?? ''),
+          wordCount: book.wordCount,
+          ui: context.ui,
+        ),
+        AppTextStyles.bodySm.copyWith(
+          height: 1.35,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      (
+        AppSpacing.xs,
+        context.zh(pick.reason),
+        AppTextStyles.bodySm.copyWith(height: 1.45, color: scheme.onSurface),
+      ),
+    ];
+  }
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    const textLeft = ExploreBookItem.coverWidth + AppSpacing.lg;
+    final textWidth = width - _padding.horizontal - textLeft;
+    final marks = <SkeletonShape>[
+      const SkeletonShape(
+        Rect.fromLTWH(
+          0,
+          0,
+          ExploreBookItem.coverWidth,
+          ExploreBookItem.coverHeight,
+        ),
+      ),
+    ];
+    var y = 0.0;
+    for (final (gap, text, style) in _lines(context)) {
+      y += gap;
+      final line = GroupedItemShape.text(
+        context,
+        text,
+        style: style,
+        width: textWidth,
+      );
+      marks.addAll(line.marksAt(Offset(textLeft, y)));
+      y += line.height;
+    }
+    return GroupedItemShape(
+      math.max(y, ExploreBookItem.coverHeight),
+      marks: marks,
+    ).padded(_padding);
+  }
+
   @override
   Widget build(BuildContext context) {
     final book = pick.book;
-    final scheme = Theme.of(context).colorScheme;
-    final secondary = AppTextStyles.bodySm.copyWith(
-      height: 1.35,
-      color: scheme.onSurfaceVariant,
-    );
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -592,12 +748,7 @@ class _AiFindPickRow extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          AppSpacing.md,
-          AppGrouped.margin,
-          AppSpacing.md,
-        ),
+        padding: _padding,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -618,35 +769,10 @@ class _AiFindPickRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  UiText(
-                    context.zh(book.name),
-                    translate: false,
-                    style: AppTextStyles.bodyBase.copyWith(
-                      height: 1.3,
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  UiText(
-                    formatSearchResultMetadata(
-                      author: context.zh(book.author ?? ''),
-                      kind: context.zh(book.kind ?? ''),
-                      wordCount: book.wordCount,
-                      ui: context.ui,
-                    ),
-                    translate: false,
-                    style: secondary,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  UiText(
-                    context.zh(pick.reason),
-                    translate: false,
-                    style: AppTextStyles.bodySm.copyWith(
-                      height: 1.45,
-                      color: scheme.onSurface,
-                    ),
-                  ),
+                  for (final (gap, text, style) in _lines(context)) ...[
+                    if (gap > 0) SizedBox(height: gap),
+                    UiText(text, translate: false, style: style),
+                  ],
                 ],
               ),
             ),
