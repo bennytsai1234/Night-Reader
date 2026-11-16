@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
 
@@ -30,6 +31,7 @@ import 'widgets/explore_skeletons.dart';
 import 'widgets/legado_explore_kind_flow.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
@@ -155,6 +157,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           ),
           for (final group in provider.groups)
             GlassMenuItem(
+              translate: false,
               value: group,
               label: '$group　${provider.groupCounts[group] ?? 0}',
               checked: provider.selectedGroup == group,
@@ -376,7 +379,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       AppSpacing.lg,
                     ),
                     child: provider.expandedKinds.isEmpty
-                        ? Text(
+                        ? UiText(
                             '暫無分類',
                             style: AppTextStyles.bodySm.copyWith(
                               color: AppChrome.of(context).sectionText,
@@ -403,6 +406,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         final hasUrl = kind.url != null && kind.url!.isNotEmpty;
         return GlassCapsule(
           label: isError ? '分類載入失敗' : kind.title,
+          translate: isError,
           maxLines: 2,
           blur: false,
           tint: chrome.groupedBackground,
@@ -525,8 +529,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('書源操作', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('書源操作', error))));
     }
   }
 
@@ -546,8 +551,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       await provider.deleteSource(source);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('刪除書源', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除書源', error))));
     }
   }
 
@@ -622,8 +628,9 @@ class _SourceRow extends StatelessWidget {
           children: [
             Expanded(
               child: DragOverflowText(
-                child: Text(
+                child: UiText(
                   name,
+                  translate: false,
                   maxLines: 1,
                   style: AppTextStyles.bodyBase.copyWith(
                     height: 1.3,
@@ -639,7 +646,7 @@ class _SourceRow extends StatelessWidget {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: scheme.primary,
-                  semanticsLabel: '正在載入分類',
+                  semanticsLabel: context.ui('正在載入分類'),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),

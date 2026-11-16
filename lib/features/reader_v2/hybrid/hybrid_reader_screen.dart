@@ -49,6 +49,8 @@ import 'view/hybrid_scroll_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 import 'view/viewport_commands.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
     super.key,
@@ -1944,7 +1946,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         child: Semantics(
           liveRegion: true,
           excludeSemantics: true,
-          label: message,
+          label: context.ui(message),
           child: unavailable
               ? ReaderUnavailableMessage(
                   message: message,

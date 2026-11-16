@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
@@ -9,6 +10,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class CrashLogPage extends StatefulWidget {
   const CrashLogPage({
@@ -99,7 +101,7 @@ class _CrashLogPageState extends State<CrashLogPage> {
         return Center(
           child: Semantics(
             liveRegion: true,
-            label: '正在載入崩潰日誌',
+            label: context.ui('正在載入崩潰日誌'),
             child: ExcludeSemantics(child: CircularProgressIndicator()),
           ),
         );
@@ -155,13 +157,13 @@ class _CrashLogPageState extends State<CrashLogPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('已複製至剪貼簿')));
+        ..showSnackBar(const SnackBar(content: UiText('已複製至剪貼簿')));
     } catch (error, stackTrace) {
       AppLog.e('複製崩潰日誌失敗', error: error, stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('複製崩潰日誌失敗')));
+        ..showSnackBar(const SnackBar(content: UiText('複製崩潰日誌失敗')));
     }
   }
 
@@ -182,14 +184,14 @@ class _CrashLogPageState extends State<CrashLogPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('已清除崩潰日誌')));
+        ..showSnackBar(const SnackBar(content: UiText('已清除崩潰日誌')));
     } catch (error, stackTrace) {
       AppLog.e('清除崩潰日誌失敗', error: error, stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('清除崩潰日誌失敗：${userErrorReason(error)}')),
+          SnackBar(content: UiText('清除崩潰日誌失敗：${userErrorReason(error)}')),
         );
     } finally {
       if (mounted) setState(() => _isClearing = false);

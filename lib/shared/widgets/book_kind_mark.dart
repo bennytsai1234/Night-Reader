@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 漫畫、有聲書的記號（ADR 0053）：同名的小說、漫畫、有聲是不同的書，搜尋
 /// 結果卡在封面左下角放這個記號分出來（docs/design/screens.md「搜尋」）。
@@ -45,7 +46,7 @@ class BookKindMark extends StatelessWidget {
     if (icon == null) return const SizedBox.shrink();
     // 疊在封面上，封面深淺不定：淺色、深色都是半透明黑底白圖示。
     return Semantics(
-      label: labelOf(kind),
+      label: UiLanguageText.convertNullable(context, labelOf(kind)),
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(

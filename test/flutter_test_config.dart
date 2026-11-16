@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -14,6 +15,8 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   final root = await Directory.systemTemp.createTemp('night_reader_test_');
   PathProviderPlatform.instance = TestPathProvider(root.path);
+  // 介面字的轉換快取是全 App 共用的靜態表，每項測試從空的開始。
+  setUp(UiLanguageText.clearCache);
   tearDownAll(() async {
     try {
       await root.delete(recursive: true);

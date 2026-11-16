@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
@@ -15,6 +16,8 @@ import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'source_manager_provider.dart';
+
+import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
   const SourceGroupManagePage({super.key});
@@ -160,7 +163,7 @@ class SourceGroupManagePage extends StatelessWidget {
 
     if (urls.isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('該分組下無書源')));
+          .showSnackBar(const SnackBar(content: UiText('該分組下無書源')));
       return;
     }
 
@@ -168,9 +171,9 @@ class SourceGroupManagePage extends StatelessWidget {
       await p.shareSourcesByUrls(urls, fileName: '$groupName.legado');
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(failureMessage('分享分組', error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: UiText(failureMessage('分享分組', error))),
+        );
       }
     }
   }
@@ -215,7 +218,7 @@ class SourceGroupManagePage extends StatelessWidget {
           } catch (error) {
             if (pageContext.mounted) {
               ScaffoldMessenger.of(pageContext).showSnackBar(
-                SnackBar(content: Text(failureMessage('儲存分組', error))),
+                SnackBar(content: UiText(failureMessage('儲存分組', error))),
               );
             }
           }
@@ -255,9 +258,9 @@ class SourceGroupManagePage extends StatelessWidget {
       await provider.deleteGroup(name);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(failureMessage('刪除分組', error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: UiText(failureMessage('刪除分組', error))),
+        );
       }
     }
   }
@@ -280,6 +283,7 @@ class _GroupRow extends StatelessWidget
   bool get hasLeading => true;
 
   GroupedRow _row(BuildContext context) => GroupedRow(
+    translateTitle: false,
     title: group,
     leading: const GroupedIconTile(Icons.folder_rounded, tint: AppTint.gold),
     enabled: enabled,
@@ -342,7 +346,8 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(
-        title: '加入「${widget.group}」',
+        title: '${context.ui('加入')}「${widget.group}」',
+        translateTitle: false,
         actions: [
           GlassTextButton(
             label: _selected.isEmpty ? '完成' : '完成（${_selected.length}）',
@@ -386,6 +391,7 @@ class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
                 index: index,
                 count: sources.length,
                 child: GroupedCheckRow(
+                  translate: false,
                   title: source.bookSourceName,
                   subtitle: url,
                   selected: _selected.contains(url),

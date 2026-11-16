@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -31,14 +33,21 @@ class BookInfoDetails extends StatelessWidget {
         GroupedRow(
           title: '來源',
           value: book.originName,
+          translateValue: false,
           trailing: book.isLocal ? null : SourceStatusChip(provider: provider),
           showChevron: !book.isLocal,
           onTap: book.isLocal ? null : onShowSourceOptions,
         ),
-        if (kind.isNotEmpty) GroupedRow(title: '分類', value: kind),
+        if (kind.isNotEmpty)
+          GroupedRow(title: '分類', value: kind, translateValue: false),
         if (wordCount.isNotEmpty) GroupedRow(title: '字數', value: wordCount),
         if (latest.isNotEmpty)
-          GroupedRow(title: '最新章節', subtitle: latest, maxSubtitleLines: 1),
+          GroupedRow(
+            title: '最新章節',
+            subtitle: latest,
+            translateSubtitle: false,
+            maxSubtitleLines: 1,
+          ),
       ],
     );
   }
@@ -58,8 +67,11 @@ class BookInfoIntro extends StatelessWidget {
       header: '簡介',
       children: [
         GroupedContent(
-          child: Text(
-            intro.isEmpty ? '暫無簡介' : context.zh(intro),
+          child: UiText(
+            intro.isEmpty
+                ? UiLanguageText.convert(context, '暫無簡介')
+                : context.zh(intro),
+            translate: false,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.6,
               color: Theme.of(context).colorScheme.onSurface,

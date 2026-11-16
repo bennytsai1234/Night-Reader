@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_preview.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
@@ -10,6 +11,7 @@ import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_pan
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleEditorSheet({
@@ -137,11 +139,19 @@ class _ReaderV2ReplaceRuleEditorSheetState
           .then(
             (result) {
               if (!mounted || result == null) return;
-              setState(() => _testResult = result.display);
+              // 規則跑出來的字照原文，逾時這類 App 的說明照介面語言
+              // （ADR 0066）；結果區整段不再轉。
+              setState(
+                () => _testResult = result is ReplaceRulePreviewDone
+                    ? result.text
+                    : context.ui(result.display),
+              );
             },
             onError: (Object error) {
               if (!mounted) return;
-              setState(() => _testResult = failureMessage('執行測試', error));
+              setState(
+                () => _testResult = context.ui(failureMessage('執行測試', error)),
+              );
             },
           ),
     );
@@ -168,7 +178,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
     );
     if (!rule.isValid()) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('規則格式無效，請檢查正則內容')));
+          .showSnackBar(const SnackBar(content: UiText('規則格式無效，請檢查正則內容')));
       return;
     }
     setState(() => _saving = true);
@@ -178,8 +188,9 @@ class _ReaderV2ReplaceRuleEditorSheetState
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('儲存規則', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('儲存規則', error))));
       setState(() => _saving = false);
     }
   }

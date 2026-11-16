@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
@@ -78,7 +79,7 @@ class SearchField extends StatelessWidget {
                 child: Icon(Icons.search_rounded, size: 19, color: muted),
               ),
               prefixIconConstraints: const BoxConstraints(),
-              hintText: hintText,
+              hintText: UiLanguageText.convert(context, hintText),
               hintStyle: AppTextStyles.bodyBase.copyWith(
                 height: 1.25,
                 color: muted.withValues(alpha: 0.8),
@@ -94,7 +95,7 @@ class SearchField extends StatelessWidget {
             }
             return Semantics(
               button: true,
-              label: '清除',
+              label: UiLanguageText.convert(context, '清除'),
               child: PressScale(
                 onTap: () {
                   controller.clear();

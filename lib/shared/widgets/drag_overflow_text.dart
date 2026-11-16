@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'skeleton_text.dart';
+import 'ui_text.dart';
 
 /// 文字放得下時照原本的行數與排版；放不下時前幾行照常換行，最後一行接著排
 /// 剩下的字，讀者可以左右拖動看完，不會自動跑馬燈，也不把卡片撐寬
@@ -18,6 +19,9 @@ class DragOverflowText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final child = this.child is UiText
+        ? (this.child as UiText).displayText(context)
+        : this.child;
     return LayoutBuilder(
       builder: (context, constraints) {
         if (!constraints.hasBoundedWidth || constraints.maxWidth <= 0) {

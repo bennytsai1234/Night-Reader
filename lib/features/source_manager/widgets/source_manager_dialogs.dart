@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
@@ -11,6 +12,8 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import '../source_debug_page.dart';
 import 'source_check_status_bar.dart' show sourceCheckPausedText;
 import '../source_manager_provider.dart';
+
+import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceManagerDialogs {
   static void showCheckLog(
@@ -41,7 +44,7 @@ class SourceManagerDialogs {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                UiText(
                   provider.checkService.isChecking
                       ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
                       : provider.pausedCheck.plan != null
@@ -52,7 +55,7 @@ class SourceManagerDialogs {
                   style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
+                UiText(
                   provider.checkService.statusMsg,
                   style: AppTextStyles.bodySm.copyWith(
                     color: chrome.sectionText,
@@ -67,7 +70,7 @@ class SourceManagerDialogs {
                   ),
                   child: logs.isEmpty
                       ? Center(
-                          child: Text(
+                          child: UiText(
                             '目前還沒有校驗日誌',
                             style: AppTextStyles.bodySm.copyWith(
                               color: chrome.sectionText,
@@ -132,14 +135,14 @@ class SourceManagerDialogs {
     try {
       final text = await checkService.diagnostics.read();
       if (text.isEmpty) {
-        messenger.showSnackBar(const SnackBar(content: Text('這次校驗沒有診斷')));
+        messenger.showSnackBar(const SnackBar(content: UiText('這次校驗沒有診斷')));
         return;
       }
       await Clipboard.setData(ClipboardData(text: text));
-      messenger.showSnackBar(const SnackBar(content: Text('已複製校驗診斷')));
+      messenger.showSnackBar(const SnackBar(content: UiText('已複製校驗診斷')));
     } catch (error) {
       messenger.showSnackBar(
-        SnackBar(content: Text('複製校驗診斷失敗：${userErrorReason(error)}')),
+        SnackBar(content: UiText('複製校驗診斷失敗：${userErrorReason(error)}')),
       );
     }
   }
@@ -198,7 +201,7 @@ class SourceManagerDialogs {
       } catch (error) {
         if (pageContext.mounted) {
           ScaffoldMessenger.of(pageContext).showSnackBar(
-            SnackBar(content: Text(failureMessage('校驗啟動', error))),
+            SnackBar(content: UiText(failureMessage('校驗啟動', error))),
           );
         }
       }
@@ -312,7 +315,7 @@ class SourceManagerDialogs {
                   color: chrome.groupedBackground,
                   borderRadius: AppRadius.cardMd,
                 ),
-                child: Text(
+                child: UiText(
                   SourceCheckConfig(
                     keyword: keywordController.text,
                     timeoutSeconds:
@@ -360,12 +363,12 @@ class SourceManagerDialogs {
       final affected = await provider.clearCheckMarks(urls);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('已清除 $affected 個書源的校驗標記')));
+            .showSnackBar(SnackBar(content: UiText('已清除 $affected 個書源的校驗標記')));
       }
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failureMessage('清除校驗標記', error))),
+          SnackBar(content: UiText(failureMessage('清除校驗標記', error))),
         );
       }
     }
@@ -382,12 +385,13 @@ class SourceManagerDialogs {
       final affected = await provider.deleteSourcesWithTags(chosen);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('已刪除 $affected 個書源')));
+            .showSnackBar(SnackBar(content: UiText('已刪除 $affected 個書源')));
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failureMessage('刪除', error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: UiText(failureMessage('刪除', error))));
       }
     }
   }
@@ -496,13 +500,19 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
               if (rows.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: Text(title, style: sectionStyle),
+                  child: UiText(title, style: sectionStyle),
                 ),
                 for (final row in rows)
                   AlertCheckRow(
-                    title:
-                        '${row.tag.kind?.sourceLabel ?? row.tag.group}：'
-                        '${row.count} 個',
+                    // 書源類型與數量是介面字，分組名稱照原文（ADR 0066）。
+                    title: switch (row.tag.kind) {
+                      final kind? => context.ui(
+                        '${kind.sourceLabel}：${row.count} 個',
+                      ),
+                      null =>
+                        '${row.tag.group}${context.ui('：${row.count} 個')}',
+                    },
+                    translateTitle: false,
                     value: selected.contains(row.tag),
                     onChanged: (value) => setState(
                       () => value

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -79,7 +80,7 @@ Future<List<BookSource>?> showImportPreviewDialog(
             if (p.unsupportedSources.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Text(
+                child: UiText(
                   '含夜讀不支援的書源（影視、文件）：${p.unsupportedSources.length} 個，會以停用狀態匯入',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodySm.copyWith(
@@ -115,7 +116,7 @@ Future<List<BookSource>?> showImportPreviewDialog(
             if (p.unchangedSources.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(
+                child: UiText(
                   '無變化：${p.unchangedSources.length} 個（跳過）',
                   style: AppTextStyles.bodySm.copyWith(
                     color: chrome.sectionText,
@@ -125,7 +126,7 @@ Future<List<BookSource>?> showImportPreviewDialog(
             if (p.newSources.isEmpty && p.updatedSources.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.sm),
-                child: Text(
+                child: UiText(
                   '沒有需要匯入的變更',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodySm.copyWith(color: scheme.onSurface),

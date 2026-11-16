@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/fonts/app_font.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
@@ -1049,7 +1050,7 @@ class _ResetButton extends StatelessWidget implements GroupedSkeletonItem {
         // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
         // 會蓋掉主題的字族。
       ),
-      child: const Text(_label),
+      child: const UiText(_label),
     );
   }
 }
@@ -1118,7 +1119,7 @@ class _LabeledRow extends StatelessWidget implements GroupedSkeletonItem {
         constraints: const BoxConstraints(minHeight: _minHeight),
         child: Row(
           children: [
-            Text(
+            UiText(
               label,
               style: _labelStyle.copyWith(
                 color: Theme.of(context).colorScheme.onSurface,
@@ -1260,7 +1261,7 @@ class _ClickActionGrid extends StatelessWidget implements GroupedSkeletonItem {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
                 child: DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     label,
                     textAlign: TextAlign.center,
                     maxLines: 2,

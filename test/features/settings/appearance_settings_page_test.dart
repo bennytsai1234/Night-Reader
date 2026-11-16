@@ -75,6 +75,24 @@ void main() {
     expect(glass.dy, lessThan(852), reason: '不用往下捲就看得到玻璃效果');
   });
 
+  testWidgets('介面語言維持單列，選簡體後能儲存並切回系統', (tester) async {
+    await pumpPage(tester);
+    expect(find.text('介面語言'), findsOneWidget);
+    await tester.ensureVisible(find.text('介面語言'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('介面語言'));
+    await tester.pumpAndSettle();
+    expect(find.text('简体中文'), findsWidgets);
+    await tester.tap(find.text('简体中文').last);
+    await tester.pumpAndSettle();
+    expect(prefs.getString(PreferKey.language), 'zh_CN');
+    await tester.tap(find.text('介面語言'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('跟隨系統').last);
+    await tester.pumpAndSettle();
+    expect(prefs.getString(PreferKey.language), 'system');
+  });
+
   testWidgets('窄螢幕加大字級時，風格名稱維持單行且可左右拖動', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);

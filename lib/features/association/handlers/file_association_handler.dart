@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
@@ -56,7 +57,7 @@ mixin FileAssociationHandler on AssociationBase {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(imported ? '已將書籍加入書架：$fileName' : '加入書架失敗：$fileName'),
+          content: UiText(imported ? '已將書籍加入書架：$fileName' : '加入書架失敗：$fileName'),
         ),
       );
     } catch (e) {
@@ -64,7 +65,7 @@ mixin FileAssociationHandler on AssociationBase {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('匯入書籍失敗：${userErrorReason(e)}')));
+      ).showSnackBar(SnackBar(content: UiText('匯入書籍失敗：${userErrorReason(e)}')));
     }
   }
 
@@ -89,7 +90,7 @@ mixin FileAssociationHandler on AssociationBase {
       final message = failureMessage('讀取檔案', error, stackTrace);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+          .showSnackBar(SnackBar(content: UiText(message)));
       return;
     }
     if (!context.mounted) return;

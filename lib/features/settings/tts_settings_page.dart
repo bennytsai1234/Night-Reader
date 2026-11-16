@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
@@ -112,7 +113,7 @@ class _TtsSettingsPageState extends State<TtsSettingsPage> {
                       } catch (_) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('語音引擎切換失敗，已維持原設定')),
+                          const SnackBar(content: UiText('語音引擎切換失敗，已維持原設定')),
                         );
                       }
                     },
@@ -138,7 +139,9 @@ class _TtsSettingsPageState extends State<TtsSettingsPage> {
                             } catch (_) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('音色無法套用，請改選其他音色')),
+                                const SnackBar(
+                                  content: UiText('音色無法套用，請改選其他音色'),
+                                ),
                               );
                             }
                           },
@@ -232,7 +235,7 @@ void _reportSaveFailure(BuildContext context, Future<void> save) {
     save.catchError((Object _) {
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')));
+          ?.showSnackBar(const SnackBar(content: UiText('朗讀設定儲存失敗，已恢復原本的值')));
     }),
   );
 }

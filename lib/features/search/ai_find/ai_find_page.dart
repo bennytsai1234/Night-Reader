@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
@@ -11,6 +12,7 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
@@ -198,7 +200,7 @@ class _AiFindPageState extends State<AiFindPage> {
   void _say(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   /// 背景工作的位置空著、也沒有還沒看過結果的那一次（ADR 0058）。
@@ -499,7 +501,9 @@ class _AiFindPageState extends State<AiFindPage> {
       footer: _sentTo,
       children: [
         GroupedRow(
-          title: context.zh(session.description),
+          // 使用者自己寫的描述照原文（ADR 0066）。
+          translateTitle: false,
+          title: session.description,
           subtitle: '深度：${session.depth.label}',
           showChevron: false,
           maxTitleLines: 3,
@@ -578,7 +582,8 @@ class _AiFindPageState extends State<AiFindPage> {
       GroupedSection(
         children: [
           GroupedRow(
-            title: context.zh(record.description),
+            translateTitle: false,
+            title: record.description,
             subtitle:
                 '深度：${depth.label} · ${record.rounds} 輪 · '
                 '${aiFindTokens(record.tokens)}',
@@ -616,7 +621,11 @@ class _AiFindPageState extends State<AiFindPage> {
             header: 'AI 的說明',
             children: [
               GroupedContent(
-                child: Text(context.zh(record.summary), style: bodyStyle),
+                child: UiText(
+                  context.zh(record.summary),
+                  translate: false,
+                  style: bodyStyle,
+                ),
               ),
             ],
           ),
@@ -672,6 +681,7 @@ class _AiFindPickRow extends StatelessWidget implements GroupedSkeletonItem {
           author: context.zh(book.author ?? ''),
           kind: context.zh(book.kind ?? ''),
           wordCount: book.wordCount,
+          ui: context.ui,
         ),
         AppTextStyles.bodySm.copyWith(
           height: 1.35,
@@ -761,7 +771,7 @@ class _AiFindPickRow extends StatelessWidget implements GroupedSkeletonItem {
                 children: [
                   for (final (gap, text, style) in _lines(context)) ...[
                     if (gap > 0) SizedBox(height: gap),
-                    Text(text, style: style),
+                    UiText(text, translate: false, style: style),
                   ],
                 ],
               ),

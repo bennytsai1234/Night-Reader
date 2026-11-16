@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_prompt.dart';
 import 'package:night_reader/core/models/book_source.dart';
 
@@ -15,6 +16,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 編輯器分頁標籤，順序對應 [TabBarView] 的子頁。
 const List<String> _tabLabels = ['基礎', '搜尋', '發現', '詳情', '目錄', '正文'];
@@ -314,7 +316,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('儲存失敗，請稍後再試')));
+            .showSnackBar(const SnackBar(content: UiText('儲存失敗，請稍後再試')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -331,7 +333,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     if (message == null) return true;
     _tabController.animateTo(0);
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+        .showSnackBar(SnackBar(content: UiText(message)));
     return false;
   }
 
@@ -370,7 +372,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
             onPressed: _isSaving ? null : _openDebug,
           ),
           Semantics(
-            label: '儲存書源',
+            label: context.ui('儲存書源'),
             child: GlassTextButton(
               label: _isSaving ? '儲存中…' : '儲存',
               emphasized: true,

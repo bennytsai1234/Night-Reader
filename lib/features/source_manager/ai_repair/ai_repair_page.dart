@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
@@ -17,6 +18,8 @@ import 'package:share_plus/share_plus.dart';
 import 'ai_repair_settings_page.dart';
 import 'repair_runs.dart';
 import 'source_repair_page.dart';
+
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 從書源管理開始 AI 修一個書源：這個書源正在修、或修完還沒看過結果時推回
 /// 那一頁（ADR 0058）；有 AI 服務就開始修、推修復頁，返回時照修；沒有時問要
@@ -168,7 +171,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
   void _say(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 
   Future<void> _submitPaste() async {
@@ -314,7 +317,8 @@ class _AiRepairPageState extends State<AiRepairPage> {
           child: Scaffold(
             extendBodyBehindAppBar: true,
             appBar: GlassNavHeader(
-              title: 'AI 修復 · ${job.original.bookSourceName}',
+              title: '${context.ui('AI 修復')} · ${job.original.bookSourceName}',
+              translateTitle: false,
               actions: [
                 GlassMenuButton<String>(
                   entriesBuilder: (_) => [
@@ -422,7 +426,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
       header: repaired ? (job.restored ? '已還原成改前的版本' : '修好了') : '沒修好，書源沒有改',
       children: [
         GroupedContent(
-          child: Text(
+          child: UiText(
             explanation,
             style: AppTextStyles.bodySm.copyWith(
               color: Theme.of(context).colorScheme.onSurface,

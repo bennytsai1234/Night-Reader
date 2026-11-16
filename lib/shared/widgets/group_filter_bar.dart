@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
@@ -12,11 +13,19 @@ import 'search_field.dart';
 /// [GroupFilterBar] 的單一選項：分組值、顯示名稱與其中的書源數。
 @immutable
 class GroupFilterOption<T> {
-  const GroupFilterOption(this.value, this.label, {this.count});
+  const GroupFilterOption(
+    this.value,
+    this.label, {
+    this.count,
+    this.translate = true,
+  });
 
   final T value;
   final String label;
   final int? count;
+
+  /// [label] 是書源的分組名稱時給 false，不跟介面語言轉換（ADR 0066）。
+  final bool translate;
 }
 
 /// 書源分組篩選列：「全部」固定在最左，其餘分組為可橫向捲動的獨立膠囊，
@@ -105,6 +114,7 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
     return GlassCapsule(
       key: key,
       label: option.label,
+      translate: option.translate,
       count: option.count,
       selected: option.value == widget.selected,
       onTap: () => _select(option.value),
@@ -197,6 +207,7 @@ class _GroupPickerSheetState<T> extends State<_GroupPickerSheet<T>> {
   Widget _chip(GroupFilterOption<T> option) {
     return GlassCapsule(
       label: option.label,
+      translate: option.translate,
       count: option.count,
       selected: option.value == widget.selected,
       blur: false,
@@ -236,7 +247,7 @@ class _GroupPickerSheetState<T> extends State<_GroupPickerSheet<T>> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(
-              child: Text(
+              child: UiText(
                 '找不到符合的分組',
                 style: AppTextStyles.bodySm.copyWith(
                   color: AppChrome.of(context).sectionText,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/ai_repair/repair_batch_export.dart';
@@ -412,6 +413,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
             for (final item in working)
               GroupedRow(
                 leading: aiRepairStepIcon(context, AiRepairStepState.running),
+                translateTitle: false,
                 title: item.source.bookSourceName,
                 subtitle: _lastStep(item.session!),
                 showChevron: true,
@@ -485,12 +487,14 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
 
   /// 只列名稱，點了看原因。
   Widget _nameRow(RepairItem item) => GroupedRow(
+    translateTitle: false,
     title: item.source.bookSourceName,
     showChevron: true,
     onTap: () => unawaited(
       showAppAlert<void>(
         context: context,
         title: item.source.bookSourceName,
+        translateTitle: false,
         message: item.detail ?? '',
         actions: const [
           AppAlertAction(label: '知道了', value: null, isDefault: true),
@@ -502,6 +506,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
   Widget _itemRow(RepairItem item) {
     final session = item.session;
     return GroupedRow(
+      translateTitle: false,
       title: item.source.bookSourceName,
       subtitle: item.detail,
       maxSubtitleLines: 2,
@@ -554,7 +559,7 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
   void _say(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: UiText(message)));
   }
 }
 

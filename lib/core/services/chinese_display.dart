@@ -3,6 +3,7 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 書籍資訊的顯示時繁簡轉換：書名、作者、簡介、分類與章節標題。
@@ -32,9 +33,10 @@ abstract final class ChineseDisplay {
   static Future<void> start(SharedPreferences prefs) =>
       _loading = _start(prefs);
 
-  /// [start] 做完時完成：讀字典檔、送進背景 isolate 解析、要轉換時整個
-  /// App 重建一次，都在主執行緒上有工作。開 App 的進場等它做完才開始長
-  /// 骨架（`LaunchEntrance.prepared`）。沒呼叫 [start]（測試）時已完成：每次
+  /// [start] 做完時完成：讀字典檔、送進背景 isolate 解析、要轉換（書的
+  /// 資訊照閱讀偏好轉，或介面是簡體）時讓顯示轉換後文字的地方重建一次，
+  /// 都在主執行緒上有工作。開 App 的進場等它做完才開始長骨架
+  /// （`LaunchEntrance.prepared`）。沒呼叫 [start]（測試）時已完成：每次
   /// 給一個新的，不留一個建好的 future 給之後的呼叫端（future 在建立它的
   /// zone 裡通知等的人，測試一個接一個換 zone）。
   static Future<void> get loaded => _loading ?? Future<void>.value();
@@ -48,8 +50,11 @@ abstract final class ChineseDisplay {
       AppLog.e('ChineseUtils load error: $e', error: e, stackTrace: stack);
       _dictionaryFailed = true;
     }
-    // 不轉換時已顯示的文字不受影響，不必整個 App 重建。
-    if (mode.value != 0) mode.refresh();
+    // 書的資訊不轉換、介面也是繁體時，已顯示的文字不受字典影響，不必重建。
+    if (mode.value != 0 ||
+        languagePrefIsSimplified(prefs.getString(PreferKey.language))) {
+      mode.refresh();
+    }
   }
 
   /// 目前的模式下，書籍資訊能不能照轉換後的樣子顯示：不轉換、字典已載入，

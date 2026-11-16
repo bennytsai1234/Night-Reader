@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -9,6 +10,7 @@ import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_palette.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 閱讀器上方選單：浮在狀態列下方的玻璃列——兩側圓形玻璃按鈕、中間書名膠囊，
 /// 開啟「標題附加資訊」時下方再浮一張章節資訊卡。
@@ -100,8 +102,9 @@ class ReaderV2TopMenu extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Center(
                   child: DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       bookName,
+                      translate: false,
                       style: AppTextStyles.titleSm.copyWith(
                         fontWeight: FontWeight.w600,
                         color: menuStyle.foreground,
@@ -143,8 +146,9 @@ class ReaderV2TopMenu extends StatelessWidget {
               child: ValueListenableBuilder<int>(
                 valueListenable: navigation.current,
                 builder: (context, _, _) => DragOverflowText(
-                  child: Text(
+                  child: UiText(
                     navigation.currentTitle,
+                    translate: false,
                     style: AppTextStyles.labelSm.copyWith(
                       color: menuStyle.foreground,
                     ),
@@ -160,6 +164,7 @@ class ReaderV2TopMenu extends StatelessWidget {
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 140),
                 child: _originTap(
+                  context,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.md,
@@ -170,8 +175,9 @@ class ReaderV2TopMenu extends StatelessWidget {
                       borderRadius: AppRadius.pillShape,
                     ),
                     child: DragOverflowText(
-                      child: Text(
+                      child: UiText(
                         originName,
+                        translate: false,
                         maxLines: 1,
                         style: AppTextStyles.micro.copyWith(
                           color: menuStyle.foreground,
@@ -189,12 +195,12 @@ class ReaderV2TopMenu extends StatelessWidget {
     );
   }
 
-  Widget _originTap({required Widget child}) {
+  Widget _originTap(BuildContext context, {required Widget child}) {
     final onTap = onOpenOrigin;
     if (onTap == null) return child;
     return Semantics(
       button: true,
-      hint: '用瀏覽器開這一章',
+      hint: context.ui('用瀏覽器開這一章'),
       child: PressScale(onTap: onTap, child: child),
     );
   }

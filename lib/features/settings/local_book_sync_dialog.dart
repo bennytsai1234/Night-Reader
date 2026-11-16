@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/sync/local_book_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
@@ -16,7 +17,7 @@ Future<void> runLocalBookSync(BuildContext context, SyncService sync) async {
   final navigator = Navigator.of(context, rootNavigator: true);
   void tell(String text) => messenger
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(text)));
+    ..showSnackBar(SnackBar(content: UiText(text)));
 
   // 比對要補算舊書的指紋、讀雲端的小紀錄，通常一下子；取消就不等它。
   final prepared = _prepare(sync);

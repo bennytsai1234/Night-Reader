@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -10,6 +11,8 @@ import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_controller.dart';
 import 'reader_v2_menu_palette.dart';
+
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 選單與頁首頁尾用到的章節資訊。目前這一章（[current]）是小訊號：捲動
 /// 途中換章時，只有章名、上一章／下一章這幾個聽它的小元件更新，閱讀頁
@@ -325,7 +328,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
               // 以文字中線對齊空白的中線，字級放大時往上下兩側長。
               child: FractionalTranslation(
                 translation: const Offset(0, -0.5),
-                child: Text(
+                child: UiText(
                   '本章 ${(scrub.percent / 10).round()}/10',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.labelXs.copyWith(
@@ -372,6 +375,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
       listenable: Listenable.merge([navigation.scrub, progressListenable]),
       builder: (context, _) {
         return _progressSlider(
+          context,
           canScrub,
           currentPercent: progressListenable?.value?.chapterPercent ?? 0,
         );
@@ -379,20 +383,25 @@ class ReaderV2BottomMenu extends StatelessWidget {
     );
   }
 
-  Widget _progressSlider(bool canScrub, {required double currentPercent}) {
+  Widget _progressSlider(
+    BuildContext context,
+    bool canScrub, {
+    required double currentPercent,
+  }) {
     final scrub = navigation.scrub.value;
     final value = (scrub.holdsSlider ? scrub.percent : currentPercent)
         .clamp(0.0, 100.0)
         .toDouble();
     return Semantics(
-      label: '本章進度',
+      label: context.ui('本章進度'),
       child: Slider(
         value: value,
         min: 0,
         max: 100,
         divisions: 10,
         // 讀屏念出「本章 n/10」，和拖動時的提示一致，而不只是百分比。
-        semanticFormatterCallback: (v) => '本章 ${(v / 10).round()}/10',
+        semanticFormatterCallback: (v) =>
+            context.ui('本章 ${(v / 10).round()}/10'),
         onChangeStart: canScrub ? onScrubStart : null,
         onChanged: canScrub ? onScrubbing : null,
         onChangeEnd: canScrub ? onScrubEnd : null,
@@ -457,7 +466,7 @@ class ReaderV2MenuIcon extends StatelessWidget {
             children: [
               Icon(icon, color: menuStyle.foreground, size: 24),
               const SizedBox(height: AppSpacing.xs),
-              Text(
+              UiText(
                 label,
                 style: AppTextStyles.uiXs.copyWith(color: menuStyle.foreground),
               ),
@@ -525,7 +534,7 @@ class _ChapterJumpButtonState extends State<_ChapterJumpButton> {
     return TextButton(
       onPressed: _enabled ? widget.onPressed : null,
       style: widget.style,
-      child: Text(widget.label),
+      child: UiText(widget.label),
     );
   }
 }

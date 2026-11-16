@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
@@ -69,7 +70,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         if (didPop) return;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('處理中，完成後才能離開')));
+          ..showSnackBar(const SnackBar(content: UiText('處理中，完成後才能離開')));
       },
       child: _buildScaffold(),
     );
@@ -179,12 +180,12 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('建立備份失敗')));
+            .showSnackBar(const SnackBar(content: UiText('建立備份失敗')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failureMessage('備份', e))));
+            .showSnackBar(SnackBar(content: UiText(failureMessage('備份', e))));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -221,11 +222,11 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
           ? '部分資料已還原，$failed 匯入失敗；重新啟動 App 後生效'
           : '還原失敗，$failed 無法匯入';
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+          .showSnackBar(SnackBar(content: UiText(message)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failureMessage('還原', e))));
+            .showSnackBar(SnackBar(content: UiText(failureMessage('還原', e))));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);

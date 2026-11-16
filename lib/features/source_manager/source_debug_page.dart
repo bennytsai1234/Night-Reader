@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -9,6 +10,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 
 import 'source_debug_provider.dart';
+
+import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceDebugPage extends StatefulWidget {
   final BookSource source;
@@ -50,11 +53,12 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
       await writeClipboard(ClipboardData(text: fullLog));
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已複製完整日誌至剪貼簿')));
+          .showSnackBar(const SnackBar(content: UiText('已複製完整日誌至剪貼簿')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('複製日誌', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('複製日誌', error))));
     }
   }
 
@@ -92,7 +96,8 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
             appBar: GlassNavHeader(
               // 除錯日誌照整個畫面寬，長網址少換行。
               readable: false,
-              title: '除錯：${widget.source.bookSourceName}',
+              title: '${context.ui('除錯：')}${widget.source.bookSourceName}',
+              translateTitle: false,
               actions: [
                 GlassIconButton(
                   icon: Icons.copy_rounded,
@@ -104,7 +109,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
                 ),
                 busy
                     ? Semantics(
-                        label: '除錯中',
+                        label: context.ui('除錯中'),
                         liveRegion: true,
                         child: const SizedBox.square(
                           dimension: AppGlass.buttonSize,
@@ -179,7 +184,7 @@ class _DebugConsole extends StatelessWidget {
         child: SizedBox.expand(
           child: logs.isEmpty
               ? Center(
-                  child: Text(
+                  child: UiText(
                     isFinished ? '沒有除錯日誌' : '準備除錯…',
                     style: AppTextStyles.bodySm.copyWith(
                       color: AppPalette.ink100,

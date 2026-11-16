@@ -13,6 +13,9 @@ import 'package:night_reader/shared/widgets/glass.dart';
 
 import 'audiobook_player.dart';
 
+import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
+
 /// 離開播放器還在播時，書架、發現、我的在搜尋鈕上方浮的圓鈕
 /// （`docs/design/audiobook.md`「離開播放器還在播：圓鈕」）：封面縮圖、外圈
 /// 是本集收聽進度、中間是暫停／播放。點一下暫停／繼續，往上滑展開成播放器，
@@ -124,8 +127,8 @@ class _AudiobookMiniButtonState extends State<AudiobookMiniButton>
     if (book == null) return const SizedBox.shrink();
     final button = Semantics(
       button: true,
-      label: '有聲書：${book.name}',
-      hint: '點兩下暫停或繼續，往上滑打開播放器，往下滑結束（記住聽到哪裡）',
+      label: '${context.ui('有聲書：')}${context.zh(book.name)}',
+      hint: context.ui('點兩下暫停或繼續，往上滑打開播放器，往下滑結束（記住聽到哪裡）'),
       child: GestureDetector(
         onTap: () => unawaited(_player.toggle()),
         onVerticalDragEnd: _onVerticalDragEnd,

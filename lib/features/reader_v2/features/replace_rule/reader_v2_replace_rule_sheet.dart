@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -18,6 +19,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleSheet({
@@ -149,7 +151,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(failureMessage('更新替換規則設定', error))),
+        SnackBar(content: UiText(failureMessage('更新替換規則設定', error))),
       );
     } finally {
       if (mounted) setState(() => _updatingToggle = false);
@@ -172,11 +174,17 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       // 時作廢，傳回 null。
       final result = await _preview.run(rules, text);
       if (!mounted || result == null) return;
-      setState(() => _testResult = result.display);
+      // 規則跑出來的字照原文，逾時這類 App 的說明照介面語言（ADR 0066）。
+      setState(
+        () => _testResult = result is ReplaceRulePreviewDone
+            ? result.text
+            : context.ui(result.display),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('執行測試', error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: UiText(failureMessage('執行測試', error))));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -213,9 +221,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       await widget.onReload();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failureMessage('套用替換規則', error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: UiText(failureMessage('套用替換規則', error))),
+      );
     }
   }
 
@@ -301,7 +309,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(failureMessage('重載內容', error)),
+                            content: UiText(failureMessage('重載內容', error)),
                           ),
                         );
                       }
@@ -316,8 +324,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             header: '測試結果',
             children: [
               GroupedContent(
-                child: Text(
-                  result.isEmpty ? '（空白）' : result,
+                child: UiText(
+                  result.isEmpty ? context.ui('（空白）') : result,
+                  translate: false,
                   style: AppTextStyles.bodySm.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),

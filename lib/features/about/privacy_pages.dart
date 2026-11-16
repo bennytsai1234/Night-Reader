@@ -1,5 +1,6 @@
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/services/app_permission_service.dart';
@@ -188,7 +189,7 @@ class _PermissionsPageState extends State<PermissionsPage>
       showChevron: item.action != null,
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 112),
-        child: Text(
+        child: UiText(
           item.status,
           textAlign: TextAlign.end,
           style: AppTextStyles.uiSm.copyWith(
@@ -265,7 +266,7 @@ List<Widget> _noticeSections(
               horizontal: AppGrouped.rowPadding,
               vertical: AppSpacing.lg,
             ),
-            child: Text(
+            child: UiText(
               section.body,
               style: AppTextStyles.bodyBase.copyWith(
                 height: 1.55,

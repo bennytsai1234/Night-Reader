@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -15,6 +16,7 @@ import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 書卡上選取（勾號、圓圈、讓位、卡片底色）與角標的動畫時長：系統關閉動畫
 /// 時一律為 0，這組同步的動畫一起直接到位。
@@ -134,7 +136,7 @@ class _BadgePill extends StatelessWidget {
       fontWeight: failed ? FontWeight.w700 : FontWeight.w600,
       color: BookshelfUpdateBadge._textColor,
     );
-    final label = Text(
+    final label = UiText(
       failed ? '!' : '+$count',
       key: ValueKey(failed ? 'failed' : 'new-$count'),
       style: style,
@@ -143,7 +145,7 @@ class _BadgePill extends StatelessWidget {
     // 會在排版中途重設自己，不能只把時長設成 0，直接拿掉。
     final animate = !MediaQuery.disableAnimationsOf(context);
     return Semantics(
-      label: failed ? '檢查更新失敗' : '有 $count 個新章節',
+      label: context.ui(failed ? '檢查更新失敗' : '有 $count 個新章節'),
       child: ExcludeSemantics(
         child: AnimatedContainer(
           duration: animate ? AppMotion.fade : Duration.zero,
@@ -352,8 +354,9 @@ class BookshelfListCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       name,
+                      translate: false,
                       maxLines: 1,
                       style: titleStyle.copyWith(color: scheme.onSurface),
                     ),
@@ -362,8 +365,9 @@ class BookshelfListCard extends StatelessWidget {
                   // 載入骨架（不知道哪本沒有作者）才對得上。
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: Text(
+                    child: UiText(
                       author,
+                      translate: false,
                       maxLines: 1,
                       style: authorStyle.copyWith(color: chrome.sectionText),
                     ),
@@ -588,8 +592,9 @@ class BookshelfGridTile extends StatelessWidget {
                     SizedBox(
                       height: titleHeightFor(MediaQuery.textScalerOf(context)),
                       child: DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           name,
+                          translate: false,
                           maxLines: 2,
                           style: titleStyle.copyWith(color: scheme.onSurface),
                         ),
@@ -670,7 +675,7 @@ class BookshelfEditToolbar extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       DragOverflowText(
-                        child: Text(
+                        child: UiText(
                           action.label,
                           maxLines: 1,
                           style: AppTextStyles.uiXs.copyWith(
@@ -703,7 +708,7 @@ class BookshelfEditToolbar extends StatelessWidget {
         const SizedBox(width: AppSpacing.md),
         Flexible(
           child: DragOverflowText(
-            child: Text(
+            child: UiText(
               progressLabel ?? '',
               maxLines: 1,
               style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),

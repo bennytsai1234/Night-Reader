@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -46,7 +47,7 @@ Future<void> runFullSync(BuildContext context, SyncService sync) async {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(
+        content: UiText(
           error != null
               ? '全面同步失敗：$error'
               : cancelled

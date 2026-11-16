@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
@@ -22,6 +24,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
@@ -374,7 +377,7 @@ class DownloadManagerPage extends StatelessWidget {
       return;
     }
     messenger.showSnackBar(
-      const SnackBar(content: Text('已刪除。書架上的書下次開 App 會再排回下載，不想下載請改按暫停')),
+      const SnackBar(content: UiText('已刪除。書架上的書下次開 App 會再排回下載，不想下載請改按暫停')),
     );
   }
 
@@ -393,13 +396,13 @@ class DownloadManagerPage extends StatelessWidget {
           children: [
             SizedBox(
               width: 76,
-              child: Text(
+              child: UiText(
                 label,
                 style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
               ),
             ),
             Expanded(
-              child: Text(
+              child: UiText(
                 value,
                 style: AppTextStyles.bodySm.copyWith(color: scheme.onSurface),
               ),
@@ -575,15 +578,15 @@ class _SummaryStats extends StatelessWidget implements GroupedSkeletonItem {
         for (final (label, value) in stats)
           Expanded(
             child: Semantics(
-              label: '$label $value',
+              label: context.ui('$label $value'),
               excludeSemantics: true,
               child: Column(
                 children: [
-                  Text(
+                  UiText(
                     '$value',
                     style: _valueStyle.copyWith(color: scheme.onSurface),
                   ),
-                  Text(
+                  UiText(
                     label,
                     style: _labelStyle.copyWith(color: chrome.sectionText),
                   ),
@@ -733,8 +736,10 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DragOverflowText(
-                        child: Text(
-                          title,
+                        // 書名，照閱讀偏好的繁簡轉換（ADR 0066）。
+                        child: UiText(
+                          context.zh(title),
+                          translate: false,
                           maxLines: 2,
                           style: _titleStyle.copyWith(color: scheme.onSurface),
                         ),
@@ -754,7 +759,7 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                         children: [
                           Expanded(
                             child: DragOverflowText(
-                              child: Text(
+                              child: UiText(
                                 status,
                                 maxLines: 2,
                                 style: _smallStyle.copyWith(color: statusColor),
@@ -763,7 +768,7 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                           ),
                           if (downloading) ...[
                             const SizedBox(width: AppSpacing.md),
-                            Text(
+                            UiText(
                               _downloadingText,
                               style: _smallStyle.copyWith(
                                 color: scheme.primary,
@@ -775,7 +780,7 @@ class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
                       if (failure != null) ...[
                         const SizedBox(height: AppSpacing.xs),
                         DragOverflowText(
-                          child: Text(
+                          child: UiText(
                             failure,
                             maxLines: 2,
                             style: _smallStyle.copyWith(color: context.danger),
@@ -837,12 +842,13 @@ class _TaskControlButton extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final label = context.ui(tooltip);
     return Tooltip(
-      message: tooltip,
+      message: label,
       excludeFromSemantics: true,
       child: Semantics(
         button: true,
-        label: tooltip,
+        label: label,
         excludeSemantics: true,
         enabled: onPressed != null,
         child: PressScale(

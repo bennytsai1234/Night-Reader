@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 規則除錯：輸入測試文字，即時顯示替換結果。
 class ReplaceEditTestPanel extends StatelessWidget {
@@ -47,8 +49,10 @@ class ReplaceEditTestPanel extends StatelessWidget {
           header: '替換結果',
           children: [
             GroupedContent(
-              child: Text(
-                testResult.isEmpty ? '(無結果)' : testResult,
+              // 結果是規則跑出來的字，照原文（ADR 0066）。
+              child: UiText(
+                testResult.isEmpty ? context.ui('(無結果)') : testResult,
+                translate: false,
                 style: AppTextStyles.bodySm.copyWith(
                   color: chrome.sectionText,
                   fontFamily: 'monospace',

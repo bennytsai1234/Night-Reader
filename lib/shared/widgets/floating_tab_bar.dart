@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 
 import '../layout/readable_width.dart';
 import '../theme/app_chrome.dart';
@@ -9,6 +10,8 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
 import 'launch_entrance.dart';
+
+import 'package:night_reader/core/services/ui_language.dart';
 
 class FloatingTabItem {
   const FloatingTabItem({required this.icon, required this.label});
@@ -206,7 +209,10 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             LaunchSkeleton(
               child: Semantics(
                 button: true,
-                label: widget.searchTooltip,
+                label: UiLanguageText.convertNullable(
+                  context,
+                  widget.searchTooltip,
+                ),
                 child: PressScale(
                   onTap: widget.onSearch,
                   child: SizedBox.square(
@@ -409,7 +415,7 @@ class _TabItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: label,
+      label: UiLanguageText.convert(context, label),
       onTap: onActivate,
       excludeSemantics: true,
       // 圖示與字照字形的透明度染成 [color]；換顏色只重畫這一層，圖示與字
@@ -442,7 +448,7 @@ class _TabGlyph extends StatelessWidget {
     children: [
       Icon(icon, size: 24, color: color),
       const SizedBox(height: 2),
-      Text(
+      UiText(
         label,
         maxLines: 1,
         style: AppTextStyles.micro.copyWith(

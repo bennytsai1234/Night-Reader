@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 漫畫閱讀選單下方那一塊要的進度：第幾話、本話第幾張、共幾張。
 @immutable
@@ -193,7 +195,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        UiText(
           count > 0 ? '第 ${shown + 1} / $count 張' : '',
           style: AppTextStyles.labelXs.copyWith(
             color: menuStyle.mutedForeground,
@@ -206,7 +208,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                   ? widget.onPrevChapter
                   : null,
               style: buttonStyle,
-              child: const Text('上一話'),
+              child: const UiText('上一話'),
             ),
             Expanded(
               child: SliderTheme(
@@ -214,13 +216,13 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                 child: SizedBox(
                   height: AppGlass.buttonSize,
                   child: Semantics(
-                    label: '本話第幾張',
+                    label: context.ui('本話第幾張'),
                     child: Slider(
                       value: count > 1 ? shown.toDouble() : 0,
                       max: count > 1 ? (count - 1).toDouble() : 1,
                       divisions: count > 1 ? count - 1 : null,
                       semanticFormatterCallback: (v) =>
-                          '第 ${v.round() + 1} / $count 張',
+                          context.ui('第 ${v.round() + 1} / $count 張'),
                       onChanged: count > 1
                           ? (v) => setState(() => _scrubbing = v.round())
                           : null,
@@ -240,7 +242,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                   ? widget.onNextChapter
                   : null,
               style: buttonStyle,
-              child: const Text('下一話'),
+              child: const UiText('下一話'),
             ),
           ],
         ),

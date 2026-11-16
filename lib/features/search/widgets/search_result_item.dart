@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
@@ -13,6 +14,7 @@ import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 class SearchResultItem extends StatefulWidget {
@@ -127,6 +129,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
       author: context.zh(book.author ?? ''),
       kind: context.zh(book.kind ?? ''),
       wordCount: book.wordCount,
+      ui: context.ui,
     );
     final secondaryStyle = AppTextStyles.bodySm.copyWith(
       height: 1.35,
@@ -171,8 +174,9 @@ class _SearchResultItemState extends State<SearchResultItem> {
                     children: [
                       Expanded(
                         child: DragOverflowText(
-                          child: Text(
+                          child: UiText(
                             context.zh(book.name),
+                            translate: false,
                             maxLines: 1,
                             style: AppTextStyles.bodyBase.copyWith(
                               height: 1.3,
@@ -191,12 +195,22 @@ class _SearchResultItemState extends State<SearchResultItem> {
                   ),
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: Text(metadata, maxLines: 1, style: secondaryStyle),
+                    child: UiText(
+                      metadata,
+                      translate: false,
+                      maxLines: 1,
+                      style: secondaryStyle,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   DragOverflowText(
-                    child: Text(
-                      '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
+                    child: UiText(
+                      latestChapterLine(
+                        context,
+                        book.latestChapterTitle,
+                        fallback: '暫無',
+                      ),
+                      translate: false,
                       maxLines: 1,
                       style: secondaryStyle,
                     ),
@@ -213,20 +227,20 @@ class _SearchResultItemState extends State<SearchResultItem> {
 
 /// 作者 · 字數 · 分類。字數排在分類前面，分類很長被截掉時字數還看得到；
 /// 字數統一寫法、分類丟掉混進來的日期與數字，見 [StringUtils]。
+/// 作者、字數與分類接成一行。作者與分類是書的資料（呼叫端先照閱讀偏好
+/// 轉好）；字數的單位與「資訊未提供」是介面字，經 [ui] 照介面語言（ADR 0066）。
 String formatSearchResultMetadata({
   String? author,
   String? kind,
   String? wordCount,
+  String Function(String text) ui = _same,
 }) {
   final values = <String>[
     if ((author ?? '').trim().isNotEmpty) author!.trim(),
-    StringUtils.displayWordCount(wordCount, kind),
+    ui(StringUtils.displayWordCount(wordCount, kind)),
     ...StringUtils.kindLabels(kind),
   ]..removeWhere((value) => value.isEmpty);
-  return values.isEmpty ? '資訊未提供' : values.join(' · ');
+  return values.isEmpty ? ui('資訊未提供') : values.join(' · ');
 }
 
-String _valueOrFallback(String? value, String fallback) {
-  final trimmed = value?.trim();
-  return trimmed == null || trimmed.isEmpty ? fallback : trimmed;
-}
+String _same(String text) => text;

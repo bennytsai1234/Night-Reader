@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -720,7 +721,7 @@ class _MainPageState extends State<MainPage>
       _lastBackPressedAt = now;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('再按一次退出')));
+        ..showSnackBar(const SnackBar(content: UiText('再按一次退出')));
       return;
     }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -194,7 +195,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
 
   Widget _emptyHint(String text) {
     return Center(
-      child: Text(
+      child: UiText(
         text,
         style: AppTextStyles.bodyBase.copyWith(
           color: AppChrome.of(context).sectionText,
@@ -229,6 +230,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
           child: Semantics(
             checked: isSelected,
             child: GroupedRow(
+              translateTitle: false,
               title: group,
               showChevron: false,
               onTap: () {
@@ -262,7 +264,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            UiText(
               '書源載入失敗',
               style: AppTextStyles.bodyBase.copyWith(
                 color: AppChrome.of(context).sectionText,
@@ -308,6 +310,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
                       index: index,
                       count: count,
                       child: GroupedCheckRow(
+                        translate: false,
                         title: source.bookSourceName,
                         subtitle: source.bookSourceUrl,
                         selected:

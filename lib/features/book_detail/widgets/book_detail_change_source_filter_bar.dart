@@ -36,6 +36,7 @@ class BookDetailChangeSourceFilterBar extends StatelessWidget {
                     group,
                     group,
                     count: provider.groupCounts[group],
+                    translate: false,
                   ),
               ],
               selected: provider.selectedGroup,

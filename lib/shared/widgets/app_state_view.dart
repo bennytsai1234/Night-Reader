@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 enum AppStateTone { neutral, error }
@@ -67,7 +69,7 @@ class AppStateView extends StatelessWidget {
                     children: [
                       Icon(icon, size: 40, color: accent),
                       const SizedBox(height: AppSpacing.lg),
-                      Text(
+                      UiText(
                         title,
                         style: theme.textTheme.titleMedium?.copyWith(
                           color: scheme.onSurface,
@@ -130,11 +132,12 @@ class _BalancedText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effective = DefaultTextStyle.of(context).style.merge(style);
+    final displayed = UiLanguageText.convert(context, text);
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
         final painter = TextPainter(
-          text: TextSpan(text: text, style: effective),
+          text: TextSpan(text: displayed, style: effective),
           textAlign: TextAlign.center,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
@@ -164,7 +167,12 @@ class _BalancedText extends StatelessWidget {
         painter.dispose();
         return SizedBox(
           width: width,
-          child: Text(text, style: effective, textAlign: TextAlign.center),
+          child: UiText(
+            displayed,
+            translate: false,
+            style: effective,
+            textAlign: TextAlign.center,
+          ),
         );
       },
     );
@@ -186,20 +194,23 @@ class _StateActionButton extends StatelessWidget {
         return action.icon == null
             ? FilledButton(
                 onPressed: action.onPressed,
-                child: Text(action.label),
+                child: UiText(action.label),
               )
             : FilledButton.icon(
                 onPressed: action.onPressed,
                 icon: Icon(action.icon),
-                label: Text(action.label),
+                label: UiText(action.label),
               );
       case _ActionEmphasis.text:
         return action.icon == null
-            ? TextButton(onPressed: action.onPressed, child: Text(action.label))
+            ? TextButton(
+                onPressed: action.onPressed,
+                child: UiText(action.label),
+              )
             : TextButton.icon(
                 onPressed: action.onPressed,
                 icon: Icon(action.icon),
-                label: Text(action.label),
+                label: UiText(action.label),
               );
     }
   }

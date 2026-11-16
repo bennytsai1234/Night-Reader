@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
@@ -46,6 +47,7 @@ import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
@@ -123,7 +125,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final count = context.read<SourceManagerProvider>().lastMergedDuplicates;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('已合併 $count 個同網站重複的書源')));
+      ..showSnackBar(SnackBar(content: UiText('已合併 $count 個同網站重複的書源')));
   }
 
   @override
@@ -223,7 +225,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         if (!mounted) return;
         messenger.showSnackBar(
           SnackBar(
-            content: Text(copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出'),
+            content: UiText(copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出'),
           ),
         );
       }, errorPrefix: '匯出書源失敗'),
@@ -300,13 +302,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
       ),
       if (_isImporting)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
           child: ClipRRect(
             borderRadius: AppRadius.pillShape,
             child: LinearProgressIndicator(
               minHeight: 2,
-              semanticsLabel: '正在處理書源匯入',
+              semanticsLabel: context.ui('正在處理書源匯入'),
             ),
           ),
         ),
@@ -559,7 +561,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                             title: p.loadErrorMessage!,
                             destructive: true,
                             showChevron: false,
-                            trailing: Text(
+                            trailing: UiText(
                               '重試',
                               style: AppTextStyles.bodyBase.copyWith(
                                 color: Theme.of(context).colorScheme.primary,
@@ -859,11 +861,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     try {
       await p.deleteSelected();
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('已刪除 $count 個書源')));
+      messenger.showSnackBar(SnackBar(content: UiText('已刪除 $count 個書源')));
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(failureMessage('刪除書源', error))),
+        SnackBar(content: UiText(failureMessage('刪除書源', error))),
       );
     }
   }
@@ -906,7 +908,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
               if (pageContext.mounted) {
                 ScaffoldMessenger.of(pageContext).showSnackBar(
                   SnackBar(
-                    content: Text(
+                    content: UiText(
                       failureMessage('${remove ? '移出' : '加入'}分組', error),
                     ),
                   ),
@@ -965,8 +967,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                             children: [
                               Expanded(
                                 child: DragOverflowText(
-                                  child: Text(
+                                  child: UiText(
                                     g,
+                                    translate: false,
                                     maxLines: 1,
                                     style: AppTextStyles.bodyBase.copyWith(
                                       height: 1.3,
@@ -1007,7 +1010,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       final parsed = await p.parseSourcesDetailedAsync(jsonStr);
       if (!context.mounted) return;
       if (parsed.allSources.isEmpty) {
-        messenger.showSnackBar(const SnackBar(content: Text('未解析到有效書源')));
+        messenger.showSnackBar(const SnackBar(content: UiText('未解析到有效書源')));
         return;
       }
       final preview = await p.previewImport(
@@ -1026,7 +1029,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
               .length;
           messenger.showSnackBar(
             SnackBar(
-              content: Text(
+              content: UiText(
                 sourceImportMessage(count, unsupported: unsupportedCount),
               ),
             ),
@@ -1036,7 +1039,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     } catch (e) {
       if (context.mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text(failureMessage('匯入', e))),
+          SnackBar(content: UiText(failureMessage('匯入', e))),
         );
       }
     }
@@ -1108,7 +1111,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       if (!context.mounted) return;
       if (text == null || text.trim().isEmpty) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('剪貼簿沒有可匯入的內容')));
+            .showSnackBar(const SnackBar(content: UiText('剪貼簿沒有可匯入的內容')));
         return;
       }
       await _importWithPreview(context, text);
@@ -1127,7 +1130,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       AppLog.e('$errorPrefix: $error', error: error, stackTrace: stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$errorPrefix：${userErrorReason(error)}')),
+          SnackBar(content: UiText('$errorPrefix：${userErrorReason(error)}')),
         );
       }
     } finally {
@@ -1162,7 +1165,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       AppLog.e('$errorPrefix: $error', error: error, stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$errorPrefix：${userErrorReason(error)}')),
+        SnackBar(content: UiText('$errorPrefix：${userErrorReason(error)}')),
       );
     }
   }

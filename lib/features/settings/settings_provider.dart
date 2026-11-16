@@ -58,6 +58,15 @@ class SettingsProvider extends SettingsProviderBase {
   bool readAloudByMediaButton = false;
   bool showMangaUi = true;
 
+  /// 介面語言和閱讀正文的繁簡轉換彼此獨立。
+  void setUiLanguage(String choice) {
+    final next = parseLocale(choice);
+    if (locale == next) return;
+    locale = next;
+    save(PreferKey.language, choice);
+    update();
+  }
+
   void setUserAgent(String v) {
     userAgent = v;
     save(PreferKey.userAgent, v);

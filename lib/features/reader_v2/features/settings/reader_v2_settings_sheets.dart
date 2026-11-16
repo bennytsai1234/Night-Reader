@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
@@ -15,6 +16,7 @@ import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 class ReaderV2SettingsSheets {
   const ReaderV2SettingsSheets._();
@@ -177,6 +179,7 @@ class _ReaderStyleSelector extends StatelessWidget
             children: [
               for (final style in AppStyle.values)
                 _swatch(
+                  context,
                   style,
                   style.paletteFor(
                     brightness,
@@ -199,6 +202,7 @@ class _ReaderStyleSelector extends StatelessWidget
   }
 
   Widget _swatch(
+    BuildContext context,
     AppStyle style,
     StylePalette palette, {
     required bool selected,
@@ -206,7 +210,7 @@ class _ReaderStyleSelector extends StatelessWidget
     required VoidCallback onTap,
   }) {
     return Semantics(
-      label: style.label,
+      label: context.ui(style.label),
       selected: selected,
       button: true,
       excludeSemantics: true,
@@ -228,7 +232,7 @@ class _ReaderStyleSelector extends StatelessWidget
                 ),
               ),
               alignment: Alignment.center,
-              child: Text(
+              child: UiText(
                 'Aa',
                 style: AppTextStyles.uiSm.copyWith(
                   color: palette.readerText,
@@ -237,7 +241,7 @@ class _ReaderStyleSelector extends StatelessWidget
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            Text(
+            UiText(
               style.label,
               style: AppTextStyles.labelSm.copyWith(
                 color: selected ? scheme.onSurface : scheme.onSurfaceVariant,

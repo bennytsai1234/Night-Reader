@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 
 /// 長目錄的快速捲軸（取法 Telegram Android 的 fast scroller）：清單捲動時
 /// 右緣浮出一顆細長的拖曳鈕，停下一會兒後淡出；按住拖動時依位置跳到對應的
@@ -208,8 +210,10 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
                       widthFactor: 1,
                       // 泡泡只在按住捲軸時出現、不接觸控，拖不動：章名放不下
                       // 照舊加「…」（docs/design/components.md「過長文字」）。
-                      child: Text(
+                      // 章名是書的資料，照閱讀偏好的繁簡轉換（ADR 0066）。
+                      child: UiText(
                         widget.labelFor(_dragIndex),
+                        translate: false,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.uiMd.copyWith(
@@ -239,7 +243,7 @@ class _ChapterScrollbarState extends State<ChapterScrollbar>
           width: _touchWidth,
           height: _thumbHeight,
           child: Semantics(
-            label: '快速捲動目錄',
+            label: UiLanguageText.convert(context, '快速捲動目錄'),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onVerticalDragStart: (_) {
