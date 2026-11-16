@@ -115,33 +115,36 @@ void main() {
     },
   );
 
-  test('an AI-confirmed unstable website is removable until marks are cleared', () async {
-    final source = BookSource(
-      bookSourceUrl: 'https://unstable.example',
-      bookSourceName: '不穩定網站',
-      bookSourceGroup: '精選,$searchBrokenSourceGroupTag',
-      bookSourceComment: '// Error: 舊的搜尋失效\n\n作者的說明',
-    );
-    await dao.upsert(source);
-    await markAiUnfixable(source, 'site_unstable');
+  test(
+    'an AI-confirmed unstable website is removable until marks are cleared',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'https://unstable.example',
+        bookSourceName: '不穩定網站',
+        bookSourceGroup: '精選,$searchBrokenSourceGroupTag',
+        bookSourceComment: '// Error: 舊的搜尋失效\n\n作者的說明',
+      );
+      await dao.upsert(source);
+      await markAiUnfixable(source, 'site_unstable');
 
-    final marked = (await dao.getByUrl(source.bookSourceUrl))!;
-    expect(marked.hasGroupTag(aiUnfixableSourceGroupTag), isTrue);
-    expect(marked.hasGroupTag(unstableSourceGroupTag), isTrue);
-    expect(marked.runtimeHealth.cleanupCandidate, isTrue);
-    expect(marked.runtimeHealth.quarantined, isTrue);
-    expect(marked.errorComment, contains('網站不穩定'));
-    expect(marked.bookSourceComment, contains('作者的說明'));
-    expect(marked.hasGroupTag(searchBrokenSourceGroupTag), isFalse);
+      final marked = (await dao.getByUrl(source.bookSourceUrl))!;
+      expect(marked.hasGroupTag(aiUnfixableSourceGroupTag), isTrue);
+      expect(marked.hasGroupTag(unstableSourceGroupTag), isTrue);
+      expect(marked.runtimeHealth.cleanupCandidate, isTrue);
+      expect(marked.runtimeHealth.quarantined, isTrue);
+      expect(marked.errorComment, contains('網站不穩定'));
+      expect(marked.bookSourceComment, contains('作者的說明'));
+      expect(marked.hasGroupTag(searchBrokenSourceGroupTag), isFalse);
 
-    final provider = await loadedProvider();
-    expect(await provider.clearCheckMarks({source.bookSourceUrl}), 1);
-    final cleared = (await dao.getByUrl(source.bookSourceUrl))!;
-    expect(cleared.isCleanupCandidate, isFalse);
-    expect(cleared.hasGroupTag(aiUnfixableSourceGroupTag), isFalse);
-    expect(cleared.bookSourceGroup, '精選');
-    expect(cleared.bookSourceComment, '作者的說明');
-  });
+      final provider = await loadedProvider();
+      expect(await provider.clearCheckMarks({source.bookSourceUrl}), 1);
+      final cleared = (await dao.getByUrl(source.bookSourceUrl))!;
+      expect(cleared.isCleanupCandidate, isFalse);
+      expect(cleared.hasGroupTag(aiUnfixableSourceGroupTag), isFalse);
+      expect(cleared.bookSourceGroup, '精選');
+      expect(cleared.bookSourceComment, '作者的說明');
+    },
+  );
 
   test('clearing the selected sources leaves the others marked', () async {
     final provider = await loadedProvider();
