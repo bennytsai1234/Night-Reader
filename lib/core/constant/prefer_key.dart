@@ -110,6 +110,10 @@ class PreferKey {
   /// 背景下載佇列按了「暫停全部」（bool）：重開 App 也照樣停著，按「繼續
   /// 全部」才接著下載。
   static const String downloadsPausedAll = 'downloads_paused_all';
+
+  /// 這台已經替書源不在了的書架網路書找過一次替代書源（bool，ADR 0069）：
+  /// 自動換源之前就沒有書源的書，更新後只找一次。只屬於這台，不進備份。
+  static const String orphanedBooksSwitched = 'orphaned_books_switched';
   static const String mangaPreDownloadNum = 'mangaPreDownloadNum';
   static const String mangaAutoPageSpeed = 'mangaAutoPageSpeed';
   static const String mangaFooterConfig = 'mangaFooterConfig';

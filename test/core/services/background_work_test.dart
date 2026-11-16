@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
 
@@ -40,6 +42,8 @@ const _start = BackgroundWorkStatus(
   text: '第 0／4 個',
   progress: 0,
 );
+
+const _switching = BackgroundWorkStatus(title: '自動換源', text: '正在找替代的書源');
 
 Future<void> _flush() => Future<void>.delayed(Duration.zero);
 
@@ -216,6 +220,48 @@ void main() {
     work.clearLeftover();
     await _flush();
     expect(platform.calls, isEmpty);
+  });
+
+  test('a queued job starts when the running one ends, and the notification '
+      'changes over without being taken down', () async {
+    // 自動換源排在別件後面（ADR 0069）：收掉再開的話，夜讀不在前景時
+    // Android 不讓它重開前景服務。
+    final first = _Job();
+    final queued = _Job();
+    work.begin(first, _start);
+    await _flush();
+    var started = false;
+    unawaited(
+      work.beginAfterCurrent(queued, _switching).then((_) {
+        started = true;
+      }),
+    );
+    await _flush();
+    expect(started, isFalse);
+    expect(work.current, same(first));
+    expect(work.begin(_Job(), _start), isFalse, reason: '排隊的也佔著位置');
+
+    platform.calls.clear();
+    work.end(first);
+    await _flush();
+    expect(started, isTrue);
+    expect(work.current, same(queued));
+    expect(platform.calls, ['show 自動換源｜正在找替代的書源｜null']);
+
+    work.end(queued);
+    await _flush();
+    expect(work.isBusy, isFalse);
+    expect(platform.calls.last, 'hide');
+  });
+
+  test('a job that does not wait starts at once without asking for the '
+      'notification permission', () async {
+    final job = _Job();
+    await work.beginAfterCurrent(job, _switching);
+    await _flush();
+    expect(work.current, same(job));
+    expect(permissionAsks, 0, reason: '自動換源是靜默的');
+    expect(platform.calls, ['show 自動換源｜正在找替代的書源｜null']);
   });
 
   test('without a platform (iPhone, tests on a computer) nothing is sent but '

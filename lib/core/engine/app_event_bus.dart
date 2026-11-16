@@ -31,6 +31,11 @@ class AppEventBus {
   /// [BookSwitchedEvent]。
   static const String bookSwitched = 'bookSwitched';
 
+  /// 使用者或同步刪掉了書源（[BookSourceDao.deleteByUrls]；併掉重複的、
+  /// 改網址不算，書跟著搬走了）；data 是刪掉的網址 `List<String>`。用它的
+  /// 書架上的書自動換源（ADR 0069）。
+  static const String sourcesDeleted = 'sourcesDeleted';
+
   void fire(String name, {dynamic data}) {
     _eventBus.fire(AppEvent(name, data: data));
   }

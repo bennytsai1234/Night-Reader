@@ -40,6 +40,7 @@ import 'core/engine/source_isolate/source_isolate.dart';
 import 'core/network/cloudflare.dart';
 import 'core/services/webview_cloudflare_solver.dart';
 import 'core/services/app_log_service.dart';
+import 'core/services/auto_source_switch.dart';
 import 'core/services/background_work/background_work.dart';
 import 'core/services/book_storage_service.dart';
 import 'core/services/crash_handler.dart';
@@ -134,6 +135,8 @@ Future<void> _startApp() async {
     AppLog.i('Configuring Dependencies...');
     await configureDependencies();
     AppLog.i('Dependencies Configured Successfully');
+    // 同步可能在進場前就刪掉書源：先開始接收，進場播完才換（ADR 0069）。
+    AutoSourceSwitch.instance.listen();
 
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
@@ -290,6 +293,12 @@ void _runPostLaunchTasks() {
   unawaited(restorePausedAiFind());
   unawaited(PausedSourceCheck.instance.restore());
   unawaited(restorePausedRepair());
+  // 書源被刪掉的書架網路書：開 App 前記下的這時才換（ADR 0069）。
+  unawaited(
+    SharedPreferences.getInstance().then(
+      AutoSourceSwitch.instance.onLaunchSettled,
+    ),
+  );
 }
 
 /// 用上次存下的手機瀏覽器標識，之後讀到新的就存起來（[WebViewUserAgent]）。

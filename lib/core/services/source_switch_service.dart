@@ -11,6 +11,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -27,10 +28,16 @@ bool isSourceSwitchUnavailable(Object error) {
   return error is AppException || error is TimeoutException;
 }
 
-/// 換源搜尋只要書名相同的那本；跟著搜尋送進書源 isolate，所以在只捕捉書名
-/// 的頂層函式裡建立。
-bool Function(String name, String author) _nameEquals(String bookName) =>
-    (name, _) => name == bookName;
+/// 自動換源（ADR 0069）能換過去的書源：啟用、和書同一類（聚合源不算，ADR
+/// 0056 照 Legado 只用同一類）、沒有校驗的狀態標記（含付費、需要登入、需要
+/// 驗證：背景不等人，ADR 0038）與「AI 修不好」。
+bool autoSwitchCandidateSource(BookSource source, BookSourceKind kind) =>
+    source.isSearchableFor(kind) &&
+    !source.groupTags.any(
+      (tag) =>
+          sourceRuntimeStatusTags.contains(tag) ||
+          tag == aiUnfixableSourceGroupTag,
+    );
 
 class PreparedSourceSwitch {
   final SearchBook searchBook;
@@ -64,6 +71,24 @@ class PreparedSourceSwitch {
   }
 }
 
+/// 換源對好目錄、還沒確認正文的那一半（[SourceSwitchService._align]）。
+class _AlignedSwitch {
+  _AlignedSwitch({
+    required this.searchBook,
+    required this.source,
+    required this.migratedBook,
+    required this.chapters,
+    required this.targetIndex,
+  }) : targetChapter = chapters[targetIndex];
+
+  final SearchBook searchBook;
+  final BookSource source;
+  final Book migratedBook;
+  final List<BookChapter> chapters;
+  final int targetIndex;
+  final BookChapter targetChapter;
+}
+
 class SourceSwitchService {
   SourceSwitchService({
     BookSourceService? service,
@@ -80,95 +105,128 @@ class SourceSwitchService {
   final SourceSwitchOperationQuiescer? _operationQuiescer;
   final SourceSwitchAssetRetirer? _assetRetirer;
 
-  Future<List<SearchBook>> searchAlternatives(
+  /// 自動換源（ADR 0069）：在書源被刪掉的 [book] 之外，從啟用、同一類、
+  /// 沒有狀態標記與「AI 修不好」的書源（[autoSwitchCandidateSource]）裡找
+  /// 書名與作者都一樣的這本書。讀到的那一章 [chapterTitle] 在新目錄裡對得上
+  /// （[sameChapterTitle]）、那一章抓得到的才算；幾個都算時挑目錄章數最多
+  /// 的，一樣多照書源排序。沒有一個算是 null。
+  ///
+  /// 某個書源搜不到、抓不到（[isSourceSwitchUnavailable]）只跳過那一個；
+  /// [cancelToken] 取消時傳回 null。
+  Future<PreparedSourceSwitch?> prepareAutomaticSwitch(
     Book book, {
-    bool checkAuthor = true,
+    required String chapterTitle,
+    CancelToken? cancelToken,
   }) async {
-    final enabledSources = (await _sourceDao.getEnabled())
-        .where(
-          (source) =>
-              source.isSearchableFor(book.bookKind) &&
-              source.bookSourceUrl != book.origin,
-        )
-        .toList();
-    if (enabledSources.isEmpty) {
-      return const <SearchBook>[];
-    }
-
-    final searchPool = Pool(_maxConcurrentSearches);
+    final sources =
+        (await _sourceDao.getEnabled())
+            .where(
+              (source) =>
+                  source.bookSourceUrl != book.origin &&
+                  autoSwitchCandidateSource(source, book.bookKind),
+            )
+            .toList()
+          ..sort((a, b) {
+            final byOrder = a.customOrder.compareTo(b.customOrder);
+            if (byOrder != 0) return byOrder;
+            return a.bookSourceUrl.compareTo(b.bookSourceUrl);
+          });
+    if (sources.isEmpty) return null;
+    // 搜尋結果的 originOrder 沒有填，照書源本身的排序。
+    final rank = {
+      for (final (i, source) in sources.indexed) source.bookSourceUrl: i,
+    };
+    final pool = Pool(_maxConcurrentSearches);
     try {
-      final tasks = enabledSources.map((source) {
-        return searchPool.withResource(() async {
-          try {
-            final author = book.author.trim();
-            if (checkAuthor && author.isNotEmpty) {
-              return await _service.preciseSearch(source, book.name, author);
+      Future<T?> skipUnavailable<T>(Future<T> Function() work) =>
+          pool.withResource(() async {
+            if (cancelToken?.isCancelled ?? false) return null;
+            try {
+              return await work();
+            } catch (error) {
+              if (!_skippable(error, cancelToken)) rethrow;
+              return null;
             }
-            return await _service.searchBooks(
-              source,
-              book.name,
-              filter: _nameEquals(book.name),
-              shouldBreak: stopAtFirstSearchResult,
-            );
-          } catch (error) {
-            if (!isSourceSwitchUnavailable(error)) rethrow;
-            return const <SearchBook>[];
-          }
-        });
-      }).toList();
-      final results = await Future.wait(tasks);
-      final merged = results.expand((items) => items).toList();
-      merged.removeWhere((item) => item.origin == book.origin);
-      merged.sort((a, b) {
-        final orderCompare = a.originOrder.compareTo(b.originOrder);
-        if (orderCompare != 0) {
-          return orderCompare;
-        }
-        final chapterCompare = (b.latestChapterTitle?.length ?? 0).compareTo(
-          a.latestChapterTitle?.length ?? 0,
+          });
+
+      final hits = [
+        for (final found in await Future.wait([
+          for (final source in sources)
+            skipUnavailable(
+              () => _service.preciseSearch(
+                source,
+                book.name,
+                book.author,
+                cancelToken: cancelToken,
+              ),
+            ),
+        ]))
+          ...?found,
+      ];
+
+      final aligned = [
+        for (final candidate in await Future.wait([
+          for (final hit in hits)
+            skipUnavailable(
+              () => _align(
+                book,
+                hit,
+                targetChapterTitle: chapterTitle,
+                cancelToken: cancelToken,
+              ),
+            ),
+        ]))
+          if (candidate != null &&
+              sameChapterTitle(candidate.targetChapter.title, chapterTitle))
+            candidate,
+      ];
+      aligned.sort((a, b) {
+        final byChapters = b.chapters.length.compareTo(a.chapters.length);
+        if (byChapters != 0) return byChapters;
+        return rank[a.source.bookSourceUrl]!.compareTo(
+          rank[b.source.bookSourceUrl]!,
         );
-        if (chapterCompare != 0) {
-          return chapterCompare;
-        }
-        return a.name.compareTo(b.name);
       });
-      return merged;
+      for (final candidate in aligned) {
+        if (cancelToken?.isCancelled ?? false) return null;
+        try {
+          return await _validate(candidate, cancelToken: cancelToken);
+        } catch (error) {
+          if (!_skippable(error, cancelToken)) rethrow;
+        }
+      }
+      return null;
     } finally {
-      await searchPool.close();
+      await pool.close();
     }
   }
 
-  Future<PreparedSourceSwitch?> autoPrepareSwitch(
-    Book currentBook, {
-    bool checkAuthor = true,
-    int? targetChapterIndex,
-    String? targetChapterTitle,
-  }) async {
-    final candidates = await searchAlternatives(
-      currentBook,
-      checkAuthor: checkAuthor,
-    );
-    for (final candidate in candidates) {
-      try {
-        return await prepareSwitch(
-          currentBook,
-          candidate,
-          targetChapterIndex: targetChapterIndex,
-          targetChapterTitle: targetChapterTitle,
-        );
-      } catch (error) {
-        if (!isSourceSwitchUnavailable(error)) rethrow;
-        continue;
-      }
-    }
-    return null;
-  }
+  /// 自動換源跳過這個候選就好的錯誤：書源搜不到、抓不到，或整件被取消。
+  static bool _skippable(Object error, CancelToken? cancelToken) =>
+      isSourceSwitchUnavailable(error) || (cancelToken?.isCancelled ?? false);
 
   Future<PreparedSourceSwitch> prepareSwitch(
     Book currentBook,
     SearchBook candidate, {
     int? targetChapterIndex,
     String? targetChapterTitle,
+  }) async => _validate(
+    await _align(
+      currentBook,
+      candidate,
+      targetChapterIndex: targetChapterIndex,
+      targetChapterTitle: targetChapterTitle,
+    ),
+  );
+
+  /// 換源的前一半：新書源的詳情與目錄，進度照章名對到新目錄
+  /// （[Book.migrateTo]）。
+  Future<_AlignedSwitch> _align(
+    Book currentBook,
+    SearchBook candidate, {
+    int? targetChapterIndex,
+    String? targetChapterTitle,
+    CancelToken? cancelToken,
   }) async {
     final source = await _sourceDao.getByUrl(candidate.origin);
     if (source == null) {
@@ -179,43 +237,67 @@ class SourceSwitchService {
       chapterIndex: targetChapterIndex ?? currentBook.chapterIndex,
       durChapterTitle: targetChapterTitle ?? currentBook.durChapterTitle,
     );
-    final hydratedBook = await _service.getBookInfo(source, candidate.toBook());
-    final chapters = await _service.getChapterList(source, hydratedBook);
+    final hydratedBook = await _service.getBookInfo(
+      source,
+      candidate.toBook(),
+      cancelToken: cancelToken,
+    );
+    final chapters = await _service.getChapterList(
+      source,
+      hydratedBook,
+      cancelToken: cancelToken,
+    );
     if (chapters.isEmpty) {
       throw SourceException('新來源沒有可用目錄', sourceUrl: candidate.origin);
     }
 
     final migratedBook = alignmentBook.migrateTo(hydratedBook, chapters);
-    final resolvedTargetIndex = migratedBook.chapterIndex.clamp(
-      0,
-      chapters.length - 1,
-    );
-
-    final targetChapter = chapters[resolvedTargetIndex];
-    // 有聲書照播放時同一個入口拿音訊網址（正文規則空著時章節網址就是音訊），
-    // 不跑文字正文；對到同一集就接著聽到的那一秒（charOffset 存毫秒，
-    // ADR 0055），文字書的位置規則不適用。
-    final audio = migratedBook.bookKind == BookSourceKind.audio;
-    if (audio && targetChapter.title == alignmentBook.durChapterTitle) {
+    final targetIndex = migratedBook.chapterIndex.clamp(0, chapters.length - 1);
+    // 有聲書對到同一集就接著聽到的那一秒（charOffset 存毫秒，ADR 0055），
+    // 文字書的位置規則不適用。
+    if (migratedBook.bookKind == BookSourceKind.audio &&
+        chapters[targetIndex].title == alignmentBook.durChapterTitle) {
       migratedBook.charOffset = alignmentBook.charOffset;
     }
-    final validatedContent = audio
+    return _AlignedSwitch(
+      searchBook: candidate,
+      source: source,
+      migratedBook: migratedBook,
+      chapters: chapters,
+      targetIndex: targetIndex,
+    );
+  }
+
+  /// 換源的後一半：新書源讀到的那一章抓得到才算。
+  Future<PreparedSourceSwitch> _validate(
+    _AlignedSwitch aligned, {
+    CancelToken? cancelToken,
+  }) async {
+    final _AlignedSwitch(
+      :source,
+      :migratedBook,
+      :chapters,
+      :targetIndex,
+      :targetChapter,
+    ) = aligned;
+    // 有聲書照播放時同一個入口拿音訊網址（正文規則空著時章節網址就是音訊），
+    // 不跑文字正文。
+    final validatedContent = migratedBook.bookKind == BookSourceKind.audio
         ? (await _service.getAudioRequest(
             source,
             migratedBook,
             targetChapter,
+            cancelToken: cancelToken,
           )).url
         : await _service.getContent(
             source,
             migratedBook,
             targetChapter,
-            nextChapterUrl: _nextReadableChapterUrl(
-              chapters,
-              resolvedTargetIndex,
-            ),
+            nextChapterUrl: _nextReadableChapterUrl(chapters, targetIndex),
+            cancelToken: cancelToken,
           );
     if (!chapterContentUsable(migratedBook.bookKind, validatedContent)) {
-      throw SourceException('目標章節內容不可讀', sourceUrl: candidate.origin);
+      throw SourceException('目標章節內容不可讀', sourceUrl: source.bookSourceUrl);
     }
     // 漫畫的圖由漫畫閱讀器照書源抓（ADR 0052），不當插圖存。
     if (migratedBook.bookKind == BookSourceKind.novel &&
@@ -229,11 +311,11 @@ class SourceSwitchService {
     }
 
     return PreparedSourceSwitch(
-      searchBook: candidate,
+      searchBook: aligned.searchBook,
       source: source,
       migratedBook: migratedBook,
       chapters: chapters,
-      targetChapterIndex: resolvedTargetIndex,
+      targetChapterIndex: targetIndex,
       validatedContent: validatedContent,
     );
   }
