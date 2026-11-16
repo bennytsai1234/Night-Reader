@@ -74,7 +74,6 @@ class SearchHistoryView extends StatelessWidget {
                     size: 20,
                     color: chrome.sectionText,
                   ),
-                  value: aiFindDateLabel(find.createdAt, DateTime.now()),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => AiFindPage(record: find),
