@@ -250,9 +250,9 @@ void main() {
     expect(result(0), isNot(contains('同一個請求這次回過不同的結果')));
     expect(
       result(1),
-      contains('# 同一個請求這次回過不同的結果\nhttps://site.example/s：200、502'),
+      contains('# 同一個請求這次回過不同的結果\nhttps://site.example/s 標頭：User-Agent: t：200、502'),
     );
-    expect(result(2), contains('https://site.example/s：200、502、502'));
+    expect(result(2), contains('https://site.example/s 標頭：User-Agent: t：200、502、502'));
   });
 
   test('two different requests to one address are not called flaky', () async {
