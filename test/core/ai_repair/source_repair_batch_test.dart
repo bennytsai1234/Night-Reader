@@ -466,7 +466,7 @@ void main() {
       check: (source, _) async => _checked(source),
       save: (_, _) async {},
       markGone: (source, _) async => gone.add(source.bookSourceUrl),
-      markUnfixable: (_) async {},
+      markUnfixable: (_, _) async {},
       session: (source, _) => AiRepairSession(
         source: source,
         service: _service,
@@ -533,7 +533,7 @@ void main() {
       },
       checkSite: (_) => gate.future,
       markGone: (source, site) async => gone.add(source.bookSourceUrl),
-      markUnfixable: (_) async {},
+      markUnfixable: (_, _) async {},
     );
 
     final running = b.start();
