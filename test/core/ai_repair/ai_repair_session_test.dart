@@ -250,9 +250,14 @@ void main() {
     expect(result(0), isNot(contains('同一個請求這次回過不同的結果')));
     expect(
       result(1),
-      contains('# 同一個請求這次回過不同的結果\nhttps://site.example/s 標頭：User-Agent: t：200、502'),
+      contains(
+        '# 同一個請求這次回過不同的結果\nhttps://site.example/s 標頭：User-Agent: t：200、502',
+      ),
     );
-    expect(result(2), contains('https://site.example/s 標頭：User-Agent: t：200、502、502'));
+    expect(
+      result(2),
+      contains('https://site.example/s 標頭：User-Agent: t：200、502、502'),
+    );
   });
 
   test('two different requests to one address are not called flaky', () async {
@@ -282,29 +287,39 @@ void main() {
     }
   });
 
-  test('different request headers are not mistaken for an unstable site', () async {
-    final s = session(
-      [_source('https://site.example')],
-      fetchLines: (url) => url.endsWith('/mobile')
-          ? [
-              'https://site.example/s 標頭：User-Agent: mobile',
-              '  ← https://site.example/s 200',
-            ]
-          : [
-              'https://site.example/s 標頭：User-Agent: desktop',
-              '  ← https://site.example/s 502',
-            ],
-      replies: [
-        jsonEncode({'action': 'fetch', 'url': 'https://site.example/mobile'}),
-        jsonEncode({'action': 'fetch', 'url': 'https://site.example/desktop'}),
-        jsonEncode({'action': 'give_up', 'why': 'site_broken', 'reason': '測試'}),
-      ],
-    );
+  test(
+    'different request headers are not mistaken for an unstable site',
+    () async {
+      final s = session(
+        [_source('https://site.example')],
+        fetchLines: (url) => url.endsWith('/mobile')
+            ? [
+                'https://site.example/s 標頭：User-Agent: mobile',
+                '  ← https://site.example/s 200',
+              ]
+            : [
+                'https://site.example/s 標頭：User-Agent: desktop',
+                '  ← https://site.example/s 502',
+              ],
+        replies: [
+          jsonEncode({'action': 'fetch', 'url': 'https://site.example/mobile'}),
+          jsonEncode({
+            'action': 'fetch',
+            'url': 'https://site.example/desktop',
+          }),
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'site_broken',
+            'reason': '測試',
+          }),
+        ],
+      );
 
-    await s.start();
+      await s.start();
 
-    expect(asked[2].last.content, isNot(contains('這次回過不同的結果')));
-  });
+      expect(asked[2].last.content, isNot(contains('這次回過不同的結果')));
+    },
+  );
 
   test('a redirected request keeps its method and body', () async {
     // Codex 審查：轉址的請求行網址後面有「（轉址）」，對不上回應的網址，
