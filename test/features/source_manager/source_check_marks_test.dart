@@ -120,7 +120,7 @@ void main() {
       bookSourceUrl: 'https://unstable.example',
       bookSourceName: '不穩定網站',
       bookSourceGroup: '精選,$searchBrokenSourceGroupTag',
-      bookSourceComment: '// Error: 舊的搜尋失效\\n\\n作者的說明',
+      bookSourceComment: '// Error: 舊的搜尋失效\n\n作者的說明',
     );
     await dao.upsert(source);
     await markAiUnfixable(source, 'site_unstable');
