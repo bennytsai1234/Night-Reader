@@ -353,4 +353,19 @@ void main() {
 
     expect(result, '傳回：2:本機書源');
   }, skip: quickJsUnavailableReason());
+
+  test('JS tool includes synchronous java.ajax request and response', () async {
+    final result = await runRepairJs(
+      source(),
+      code: 'java.ajax("$site/book/1/1.html")',
+      pages: const {},
+      timeout: const Duration(seconds: 30),
+      database: Future.value(databaseIsolate),
+    );
+
+    expect(result, contains('# 這段程式送出的請求'), reason: result);
+    expect(result, contains('$site/book/1/1.html'), reason: result);
+    expect(result, contains('  ← $site/book/1/1.html 200'), reason: result);
+  }, skip: quickJsUnavailableReason());
+
 }
