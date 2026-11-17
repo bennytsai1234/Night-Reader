@@ -48,6 +48,14 @@ void main() {
       if (request.uri.path == '/book/9/1.html') {
         await Future<void>.delayed(const Duration(seconds: 3));
       }
+      // 轉址的章節網址：轉到一章分兩頁的那一章。
+      if (request.uri.path == '/book/4/1.html') {
+        request.response
+          ..statusCode = HttpStatus.movedPermanently
+          ..headers.set(HttpHeaders.locationHeader, '/book/3/1.html');
+        await request.response.close();
+        return;
+      }
       final body = switch (request.uri.path) {
         '/search' => '<div class="book"><a href="/book/1">夜雨聽書</a></div>',
         '/book/1' =>
@@ -204,12 +212,33 @@ void main() {
     );
 
     expect(report.fullText, contains('$site/book/3/1_2.html'));
-    expect(unjoinedContentPage(report, paged), isNull);
-    expect(
-      unjoinedContentPage(report, source(content: 'id.content@text')),
-      isNull,
-      reason: '抓過了就算接上',
-    );
+    expect(report.unjoinedNextPage, isNull);
+    expect(SourceProbeReport.fromMap(report.toMap()).unjoinedNextPage, isNull);
+  });
+
+  test('a chapter cut at its first page is caught the way the source check '
+      'catches it, also when the chapter address redirects', () async {
+    // 審查：原本照除錯紀錄的「正文 URL」找第一頁，章節網址轉址時找不到，
+    // 試抓放過、校驗才擋下。
+    for (final start in ['/book/3/1.html', '/book/4/1.html']) {
+      final report = await probeSource(
+        source(content: 'id.content@text'),
+        keyword: probeStart('content', keyword: '', url: '$site$start')!,
+        timeout: const Duration(seconds: 30),
+        database: Future.value(databaseIsolate),
+      );
+
+      expect(report.succeeded, isTrue, reason: report.fullText);
+      expect(
+        report.unjoinedNextPage,
+        '$site/book/3/1_2.html',
+        reason: report.fullText,
+      );
+      expect(
+        SourceProbeReport.fromMap(report.toMap()).unjoinedNextPage,
+        '$site/book/3/1_2.html',
+      );
+    }
   });
 
   test('a probe can start from a discovery page written like exploreUrl, '
