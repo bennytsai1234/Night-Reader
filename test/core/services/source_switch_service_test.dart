@@ -503,6 +503,34 @@ void main() {
       await db.close();
     });
 
+    test('換源清單抓好的目錄交進來就不再抓一次', () async {
+      final candidate = _candidate('new-origin');
+      final sourceService = _FakeBookSourceService(
+        chapters: _chapters(candidate.bookUrl, 3),
+        throwOnChapterList: true,
+      );
+      final service = SourceSwitchService(
+        service: sourceService,
+        sourceDao: db.bookSourceDao,
+      );
+      final toc = SourceToc(
+        candidate.toBook(),
+        _chapters(candidate.bookUrl, 3),
+      );
+
+      final prepared = await service.prepareSwitch(
+        _currentBook(chapterIndex: 1, durChapterTitle: '第2章'),
+        candidate,
+        toc: toc,
+      );
+
+      expect(prepared.targetChapter.title, '第2章');
+      expect(prepared.chapters, hasLength(3));
+      expect(sourceService.contentCalls, 1);
+      // 清單留著的那份不改：換不成再點一次要用原本的。
+      expect(identical(prepared.chapters.first, toc.chapters.first), isFalse);
+    });
+
     test('按標題對齊到目標章節索引', () async {
       final candidate = _candidate('new-origin');
       final chapters = _chapters(candidate.bookUrl, 100);

@@ -1248,8 +1248,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => ChangeSourceSheet(
         book: widget.book,
-        onSelectSource: (candidate) => _handleChangeSourceSelected(
+        onSelectSource: (candidate, toc) => _handleChangeSourceSelected(
           candidate,
+          toc: toc,
           onSuccess: (prepared) => preparedSwitch = prepared,
         ),
       ),
@@ -1262,6 +1263,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
     SearchBook candidate, {
+    SourceToc? toc,
     void Function(PreparedSourceSwitch prepared)? onSuccess,
   }) async {
     try {
@@ -1289,6 +1291,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         candidate,
         targetChapterIndex: currentIndex,
         targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
+        toc: toc,
       );
       await _sourceSwitchService.commitSwitch(
         widget.book,

@@ -41,6 +41,45 @@ bool autoSwitchCandidateSource(BookSource source, BookSourceKind kind) =>
           tag == aiUnfixableSourceGroupTag,
     );
 
+/// 新書源上這本書的詳情與目錄（[loadSourceToc]）：換源清單抓來寫章數，
+/// 選它換源時交給 [SourceSwitchService.prepareSwitch]，不用再抓一次。
+class SourceToc {
+  const SourceToc(this.book, this.chapters);
+
+  /// 照詳情頁補好的書。
+  final Book book;
+
+  /// 目錄，不是空的。
+  final List<BookChapter> chapters;
+}
+
+/// 抓 [candidate] 在書源 [source] 上的詳情與目錄；目錄是空的時丟出
+/// [SourceException]（換不過去）。[requireComplete] 時目錄哪一頁抓不到就
+/// 整份失敗（[BookSourceService.getChapterList]），不給少了幾頁的目錄。
+Future<SourceToc> loadSourceToc(
+  BookSourceService service,
+  BookSource source,
+  SearchBook candidate, {
+  bool requireComplete = false,
+  CancelToken? cancelToken,
+}) async {
+  final book = await service.getBookInfo(
+    source,
+    candidate.toBook(),
+    cancelToken: cancelToken,
+  );
+  final chapters = await service.getChapterList(
+    source,
+    book,
+    requireComplete: requireComplete,
+    cancelToken: cancelToken,
+  );
+  if (chapters.isEmpty) {
+    throw SourceException('新來源沒有可用目錄', sourceUrl: candidate.origin);
+  }
+  return SourceToc(book, chapters);
+}
+
 class PreparedSourceSwitch {
   final SearchBook searchBook;
   final BookSource source;
@@ -286,17 +325,21 @@ class SourceSwitchService {
     return (book: book, index: index);
   }
 
+  /// 換到 [candidate]。[toc] 是換源清單已經抓好的它的詳情與目錄，給了就
+  /// 不再抓一次。
   Future<PreparedSourceSwitch> prepareSwitch(
     Book currentBook,
     SearchBook candidate, {
     int? targetChapterIndex,
     String? targetChapterTitle,
+    SourceToc? toc,
   }) async => _validate(
     await _align(
       currentBook,
       candidate,
       targetChapterIndex: targetChapterIndex,
       targetChapterTitle: targetChapterTitle,
+      toc: toc,
     ),
   );
 
@@ -307,6 +350,7 @@ class SourceSwitchService {
     SearchBook candidate, {
     int? targetChapterIndex,
     String? targetChapterTitle,
+    SourceToc? toc,
     CancelToken? cancelToken,
   }) async {
     final source = await _sourceDao.getByUrl(candidate.origin);
@@ -318,19 +362,18 @@ class SourceSwitchService {
       chapterIndex: targetChapterIndex ?? currentBook.chapterIndex,
       durChapterTitle: targetChapterTitle ?? currentBook.durChapterTitle,
     );
-    final hydratedBook = await _service.getBookInfo(
-      source,
-      candidate.toBook(),
-      cancelToken: cancelToken,
-    );
-    final chapters = await _service.getChapterList(
-      source,
-      hydratedBook,
-      cancelToken: cancelToken,
-    );
-    if (chapters.isEmpty) {
-      throw SourceException('新來源沒有可用目錄', sourceUrl: candidate.origin);
-    }
+    final SourceToc(book: hydratedBook, :chapters) = toc == null
+        ? await loadSourceToc(
+            _service,
+            source,
+            candidate,
+            cancelToken: cancelToken,
+          )
+        // 清單留著的那份不改：抓正文時規則會改章節的欄位，換不成再點一次
+        // 要用原本的。
+        : SourceToc(toc.book, [
+            for (final chapter in toc.chapters) chapter.copyWith(),
+          ]);
 
     final migrated = _migrate(alignmentBook, hydratedBook, chapters);
     return _AlignedSwitch(
