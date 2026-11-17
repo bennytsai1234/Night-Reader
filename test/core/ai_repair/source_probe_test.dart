@@ -367,5 +367,4 @@ void main() {
     expect(result, contains('$site/book/1/1.html'), reason: result);
     expect(result, contains('  ← $site/book/1/1.html 200'), reason: result);
   }, skip: quickJsUnavailableReason());
-
 }
