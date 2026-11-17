@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -11,6 +10,7 @@ import 'package:night_reader/core/network/error_text.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
+import 'package:night_reader/core/services/content_next_page.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
@@ -24,6 +24,7 @@ class SourceProbeReport {
     this.pages = const [],
     this.timedOut = false,
     this.contentUsable,
+    this.unjoinedNextPage,
   });
 
   /// 除錯紀錄，`(狀態, 訊息)`；狀態同 [DebugLog.state]。
@@ -42,6 +43,7 @@ class SourceProbeReport {
     requests: requests,
     timedOut: timedOut,
     contentUsable: contentUsable,
+    unjoinedNextPage: unjoinedNextPage,
   );
 
   /// 整段試抓超過時間被停下。
@@ -56,6 +58,10 @@ class SourceProbeReport {
   /// 抓到的正文照書源校驗的判斷算不算抓到了（[sourceContentUsable]）：
   /// 只有一行提示、只有佔位圖的不算。沒走到正文是 null。
   final bool? contentUsable;
+
+  /// 抓到的正文只抓了第一頁時，同一章下一頁的網址；沒有、或沒走到正文是
+  /// null。和書源校驗同一個判斷（[chapterCutAtFirstPage]）。
+  final String? unjoinedNextPage;
 
   /// 一路抓到正文了，而且照書源校驗的判斷算抓到了（[contentUsable]）。
   bool get succeeded =>
@@ -141,6 +147,7 @@ class SourceProbeReport {
     'pages': [for (final page in pages) loggedPageToJson(page)],
     'timedOut': timedOut,
     'contentUsable': contentUsable,
+    'unjoinedNextPage': unjoinedNextPage,
   };
 
   factory SourceProbeReport.fromMap(Map<Object?, Object?> map) =>
@@ -156,6 +163,7 @@ class SourceProbeReport {
         ],
         timedOut: map['timedOut'] as bool? ?? false,
         contentUsable: map['contentUsable'] as bool?,
+        unjoinedNextPage: map['unjoinedNextPage'] as String?,
       );
 }
 
@@ -258,6 +266,15 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
     contentUsable: content == null
         ? null
         : sourceContentUsable(content.source, content.book, content.content),
+    unjoinedNextPage: content == null
+        ? null
+        : chapterCutAtFirstPage(
+            content.source,
+            content.book,
+            content.content,
+            content.pages,
+            toc: content.toc,
+          ),
   ).toMap();
 };
 
@@ -409,93 +426,6 @@ String? searchInfoMismatch(SourceProbeReport probe) {
       '作者搜尋是「$searchAuthor」、詳情頁是「$infoAuthor」',
   ];
   return parts.isEmpty ? null : '搜尋結果第一本進了詳情頁，${parts.join('；')}';
-}
-
-/// 試抓到的正文頁有同一章的下一頁、試抓卻沒抓那一頁時，下一頁的網址；
-/// 沒有是 null。2026-11-12 下書網的 AI 交出的規則只抓到每章的前半頁
-/// （95393.html，後半在 95393_2.html），校驗照樣通過；11-13 另一次寫了
-/// `nextContentUrl`，選擇器卻抓不到連結，同樣只有前半頁，所以看的是請求
-/// 紀錄裡有沒有那一頁，不是規則有沒有寫。正文規則自己抓網頁（`java.ajax`
-/// 這類）的不看。下一頁就是目錄的下一章時不算（2026-11-13 腐文小说一頁
-/// 一章）：引擎照 Legado 不把下一章當同一章的下一頁抓。
-String? unjoinedContentPage(SourceProbeReport probe, BookSource source) {
-  final rule = source.ruleContent;
-  if (_fetchesItself.hasMatch(rule?.content ?? '')) return null;
-  String? chapterUrl;
-  String? nextChapterUrl;
-  for (final (_, message) in probe.logs) {
-    final url = RegExp(r'^\s*正文 URL: (\S+)').firstMatch(message)?.group(1);
-    if (url != null) chapterUrl = url;
-    final next = RegExp(r'^\s*下一章 URL: (\S+)').firstMatch(message)?.group(1);
-    if (next != null) nextChapterUrl = next;
-  }
-  final chapter = chapterUrl == null ? null : Uri.tryParse(chapterUrl);
-  if (chapter == null) return null;
-  final nextUri = nextChapterUrl == null ? null : Uri.tryParse(nextChapterUrl);
-  final nextChapter = nextUri == null
-      ? null
-      : '${chapter.resolveUri(nextUri).removeFragment()}';
-  final body = [
-    for (final page in probe.pages)
-      if (page.body != null &&
-          page.line.trimLeft().startsWith('← ${chapter.removeFragment()} '))
-        page.body!,
-  ].lastOrNull;
-  if (body == null) return null;
-  for (final link in html_parser.parse(body).querySelectorAll('a[href]')) {
-    final href = link.attributes['href']!.trim();
-    if (href.isEmpty || href.startsWith('javascript:')) continue;
-    final Uri target;
-    try {
-      target = chapter.resolve(href);
-    } on FormatException {
-      continue;
-    }
-    if (isNextPageOfChapter(chapter, target)) {
-      final next = '${target.removeFragment()}';
-      if (next == nextChapter) continue;
-      final fetched = [
-        ...probe.requests,
-        for (final page in probe.pages) page.line,
-      ].map(_requestedUrl).contains(next);
-      return fetched ? null : next;
-    }
-  }
-  return null;
-}
-
-/// 請求紀錄裡請求那一行（`GET` 不寫方法、其他寫在前面，轉址到的標「（轉址）」）
-/// 送出的網址；回應那一行（`←` 開頭，內容裡可能正好有下一頁的連結）是 null。
-String? _requestedUrl(String line) {
-  final words = line.trim().split(' ');
-  if (words.first.startsWith('←')) return null;
-  final url = RegExp(r'^[A-Z]+$').hasMatch(words.first) && words.length > 1
-      ? words[1]
-      : words.first;
-  return url.replaceAll('（轉址）', '');
-}
-
-final RegExp _fetchesItself = RegExp(
-  r'java\.(ajax|ajaxAll|get|post|connect)\(',
-);
-
-/// [link] 是不是 [chapter] 這一章的下一頁：同一個網站，檔名是這一頁的接
-/// `_2`、`-2` 這類（95393.html → 95393_2.html），或同一個路徑換了 page、p
-/// 這類頁碼參數。下一章（95394.html）不算。
-@visibleForTesting
-bool isNextPageOfChapter(Uri chapter, Uri link) {
-  if (link.host != chapter.host) return false;
-  final parts = RegExp(r'^(.*?)(\.[A-Za-z0-9]+)?$').firstMatch(chapter.path)!;
-  final stem = RegExp.escape(parts.group(1)!);
-  final extension = RegExp.escape(parts.group(2) ?? '');
-  if (RegExp('^$stem[_-]\\d+$extension\$').hasMatch(link.path)) return true;
-  if (link.path != chapter.path) return false;
-  for (final name in const ['page', 'p', 'pn', 'pg']) {
-    final next = int.tryParse(link.queryParameters[name] ?? '');
-    final current = int.tryParse(chapter.queryParameters[name] ?? '1') ?? 1;
-    if (next != null && next > current) return true;
-  }
-  return false;
 }
 
 /// 回應那一行只留到大小為止：「  ← 頁 2｜網址 200 text/html，41940 位元組，
