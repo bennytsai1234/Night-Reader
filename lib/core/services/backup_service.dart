@@ -137,10 +137,11 @@ class BackupService {
       // 2. 導出偏好設定 (對標 config.xml)
       final Map<String, dynamic> config = {};
       for (var key in prefs.getKeys()) {
-        // 這台手機在同步裡的名字、下載佇列的「暫停全部」只屬於這台，還原
-        // 到另一台不能沿用。
+        // 這台手機在同步裡的名字、下載佇列的「暫停全部」、找過沒有書源的書
+        // 只屬於這台，還原到另一台不能沿用。
         if (key == SyncSettings.deviceIdKey ||
-            key == PreferKey.downloadsPausedAll) {
+            key == PreferKey.downloadsPausedAll ||
+            key == PreferKey.orphanedBooksSwitched) {
           continue;
         }
         config[key] = prefs.get(key);

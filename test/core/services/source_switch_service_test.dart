@@ -18,6 +18,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
@@ -107,58 +108,25 @@ class _FakeBookSourceService extends BookSourceService {
   );
 }
 
-class _SearchTrackingBookSourceService extends BookSourceService {
-  int preciseSearchCalls = 0;
-  int nameOnlySearchCalls = 0;
+/// 自動換源用的網站：每個書源的目錄照 [tocs]（書源網址 → 章名），搜到的
+/// 書是 [listed]（書名、作者）、類別照書源（同真的搜尋解析）；過濾照搜尋
+/// 傳進來的。[unreadable] 的正文抓不到，[searchErrors] 的搜尋丟出那個錯誤。
+class _SitesBookSourceService extends BookSourceService {
+  _SitesBookSourceService(
+    this.tocs, {
+    this.unreadable = const {},
+    this.searchErrors = const {},
+    this.listed = ('測試書', '作者'),
+    this.content = '這是一段足夠長的章節正文內容，用來通過可讀性檢查。',
+  });
 
-  @override
-  Future<List<SearchBook>> preciseSearch(
-    BookSource source,
-    String name,
-    String author, {
-    CancelToken? cancelToken,
-  }) async {
-    preciseSearchCalls++;
-    return const <SearchBook>[];
-  }
-
-  @override
-  Future<List<SearchBook>> searchBooks(
-    BookSource source,
-    String key, {
-    int page = 1,
-    bool Function(String name, String author)? filter,
-    bool Function(int size)? shouldBreak,
-    CancelToken? cancelToken,
-  }) async {
-    nameOnlySearchCalls++;
-    final candidate = SearchBook(
-      bookUrl: '${source.bookSourceUrl}/book/1',
-      name: key,
-      author: '不同作者',
-      origin: source.bookSourceUrl,
-      originName: source.bookSourceName,
-    );
-    return filter?.call(candidate.name, candidate.author ?? '') == false
-        ? const <SearchBook>[]
-        : <SearchBook>[candidate];
-  }
-}
-
-class _ThrowingSearchBookSourceService extends BookSourceService {
-  _ThrowingSearchBookSourceService(this.error);
-
-  final Object error;
-
-  @override
-  Future<List<SearchBook>> preciseSearch(
-    BookSource source,
-    String name,
-    String author, {
-    CancelToken? cancelToken,
-  }) async {
-    throw error;
-  }
+  final Map<String, List<String>> tocs;
+  final Set<String> unreadable;
+  final Map<String, Object> searchErrors;
+  final (String, String) listed;
+  final String content;
+  final List<String> searched = [];
+  final List<String> contentFetched = [];
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -169,23 +137,19 @@ class _ThrowingSearchBookSourceService extends BookSourceService {
     bool Function(int size)? shouldBreak,
     CancelToken? cancelToken,
   }) async {
-    throw error;
-  }
-}
-
-class _AutoPrepareFailureBookSourceService extends BookSourceService {
-  _AutoPrepareFailureBookSourceService(this.error);
-
-  final Object error;
-
-  @override
-  Future<List<SearchBook>> preciseSearch(
-    BookSource source,
-    String name,
-    String author, {
-    CancelToken? cancelToken,
-  }) async {
-    return <SearchBook>[_candidate(source.bookSourceUrl)];
+    final origin = source.bookSourceUrl;
+    searched.add(origin);
+    if (searchErrors[origin] case final error?) throw error;
+    final (name, author) = listed;
+    if (!tocs.containsKey(origin) || !(filter?.call(name, author) ?? true)) {
+      return const [];
+    }
+    return [
+      _candidate(origin)
+        ..name = name
+        ..author = author
+        ..type = source.bookSourceType,
+    ];
   }
 
   @override
@@ -193,10 +157,45 @@ class _AutoPrepareFailureBookSourceService extends BookSourceService {
     BookSource source,
     Book book, {
     CancelToken? cancelToken,
+  }) async => book;
+
+  @override
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+    bool requireComplete = false,
+  }) async => [
+    for (final (i, title) in tocs[source.bookSourceUrl]!.indexed)
+      BookChapter(
+        url: '${book.bookUrl}/c$i',
+        title: title,
+        bookUrl: book.bookUrl,
+        index: i,
+      ),
+  ];
+
+  @override
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
   }) async {
-    throw error;
+    contentFetched.add(source.bookSourceUrl);
+    return unreadable.contains(source.bookSourceUrl) ? '' : content;
   }
 }
+
+/// 第 1 到 [count] 章的章名，[extra] 接在最後。
+List<String> _titles(int count, [List<String> extra = const []]) => [
+  for (var i = 1; i <= count; i++) '第$i章',
+  ...extra,
+];
 
 class _EnabledBookSourceDao extends Fake implements BookSourceDao {
   _EnabledBookSourceDao(this.sources);
@@ -280,93 +279,215 @@ Future<void> _seedOldContent(AppDatabase db, Book oldBook) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('SourceSwitchService.searchAlternatives', () {
-    test('停用作者比對時以書名搜尋，不會要求候選作者為空字串', () async {
-      final source = _source('new-origin', '新源');
-      final sourceService = _SearchTrackingBookSourceService();
-      final service = SourceSwitchService(
-        service: sourceService,
-        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
-      );
+  group('SourceSwitchService.prepareAutomaticSwitch（ADR 0069）', () {
+    SourceSwitchService switcher(
+      _SitesBookSourceService sites,
+      List<BookSource> sources,
+    ) => SourceSwitchService(
+      service: sites,
+      sourceDao: _EnabledBookSourceDao(sources),
+    );
 
-      final results = await service.searchAlternatives(
-        _currentBook(),
-        checkAuthor: false,
-      );
+    BookSource ordered(String url, int order, {String? group}) =>
+        _source(url, url)
+          ..customOrder = order
+          ..bookSourceGroup = group;
 
-      expect(results, hasLength(1));
-      expect(results.single.author, '不同作者');
-      expect(sourceService.nameOnlySearchCalls, 1);
-      expect(sourceService.preciseSearchCalls, 0);
+    test('讀到的那一章章名對不上的不換：手動換源會照位置換算，自動換源沒人看', () async {
+      final sites = _SitesBookSourceService({
+        'a': [for (var i = 1; i <= 30; i++) '第$i話'],
+        'b': _titles(8),
+      });
+      final prepared = await switcher(sites, [
+        ordered('a', 0),
+        ordered('b', 1),
+      ]).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+
+      expect(prepared?.source.bookSourceUrl, 'b');
+      expect(prepared?.targetChapter.title, '第6章');
+      expect(sites.contentFetched, ['b'], reason: '對不上的不抓正文');
+
+      final none = await switcher(_SitesBookSourceService({'a': _titles(5)}), [
+        ordered('a', 0),
+      ]).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+      expect(none, isNull);
     });
 
-    test('原書沒有作者時自動退化為書名搜尋', () async {
-      final source = _source('new-origin', '新源');
-      final sourceService = _SearchTrackingBookSourceService();
-      final service = SourceSwitchService(
-        service: sourceService,
-        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
-      );
+    test('章名繁簡、空白不同也算對得上', () async {
+      ChineseUtils.initializeFromDictionaryData(['', '', '', '歸\t归\n來\t来\n']);
+      final prepared =
+          await switcher(
+            _SitesBookSourceService({
+              'a': ['第一章 序', '第二章　归来'],
+            }),
+            [ordered('a', 0)],
+          ).prepareAutomaticSwitch(
+            _currentBook(chapterIndex: 1, durChapterTitle: '第二章 歸來'),
+            chapterTitle: '第二章 歸來',
+          );
 
-      final results = await service.searchAlternatives(
-        _currentBook().copyWith(author: '   '),
-      );
-
-      expect(results, hasLength(1));
-      expect(sourceService.nameOnlySearchCalls, 1);
-      expect(sourceService.preciseSearchCalls, 0);
+      expect(prepared?.targetChapterIndex, 1);
     });
 
-    test('已知書源失敗只淘汰該搜尋候選', () async {
-      final source = _source('new-origin', '新源');
-      final service = SourceSwitchService(
-        service: _ThrowingSearchBookSourceService(
-          SourceException('書源搜尋不可用', sourceUrl: source.bookSourceUrl),
+    test('書名、作者照手動換源的比法：全形、空白、繁簡不同也是同一本，'
+        '作者不同不是', () async {
+      final same = await switcher(
+        _SitesBookSourceService({'a': _titles(10)}, listed: ('測試書 ', '作　者')),
+        [ordered('a', 0)],
+      ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+      expect(same?.source.bookSourceUrl, 'a');
+
+      final other = await switcher(
+        _SitesBookSourceService({'a': _titles(10)}, listed: ('測試書', '別人')),
+        [ordered('a', 0)],
+      ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+      expect(other, isNull);
+    });
+
+    test('漫畫書換到漫畫書源，正文是圖也算抓到', () async {
+      final pictures = [
+        for (var i = 1; i <= 3; i++) '<img src="https://img.test/$i.jpg">',
+      ].join('\n');
+      final prepared = await switcher(
+        _SitesBookSourceService({
+          'novel': _titles(20),
+          'comic': _titles(10),
+        }, content: pictures),
+        [ordered('novel', 0), ordered('comic', 1)..bookSourceType = 2],
+      ).prepareAutomaticSwitch(_currentBook()..type = 2, chapterTitle: '第6章');
+
+      expect(prepared?.source.bookSourceUrl, 'comic');
+      expect(prepared?.migratedBook.bookKind, BookSourceKind.comic);
+    });
+
+    test('幾個都合格時挑目錄章數最多的，一樣多照書源排序', () async {
+      final sites = _SitesBookSourceService({
+        'a': _titles(10),
+        'b': _titles(20),
+        'c': _titles(20),
+      });
+      final prepared = await switcher(sites, [
+        ordered('a', 0),
+        ordered('c', 2),
+        ordered('b', 1),
+      ]).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+
+      expect(prepared?.source.bookSourceUrl, 'b');
+      expect(sites.contentFetched, ['b']);
+    });
+
+    test('章數最多的正文抓不到時換下一個', () async {
+      final sites = _SitesBookSourceService(
+        {'a': _titles(10), 'b': _titles(20)},
+        unreadable: {'b'},
+      );
+      final prepared = await switcher(sites, [
+        ordered('a', 0),
+        ordered('b', 1),
+      ]).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+
+      expect(prepared?.source.bookSourceUrl, 'a');
+      expect(sites.contentFetched, ['b', 'a']);
+    });
+
+    test('只找啟用、同一類、沒有狀態標記與「AI 修不好」的書源', () async {
+      final sites = _SitesBookSourceService({
+        for (final url in ['ok', 'flagged', 'paid', 'unfixable', 'login'])
+          url: _titles(10),
+        'comic': _titles(10),
+        'off': _titles(10),
+      });
+      final sources = [
+        ordered('ok', 0),
+        ordered('flagged', 1, group: '異常,正文失效'),
+        ordered('paid', 2, group: '付費'),
+        ordered('unfixable', 3, group: 'AI 修不好'),
+        ordered('login', 4, group: '需要登入'),
+        ordered('comic', 5)..bookSourceType = 2,
+        ordered('off', 6)..enabled = false,
+        ordered('old-origin', 7),
+      ];
+      final prepared = await switcher(
+        sites,
+        sources,
+      ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+
+      expect(prepared?.source.bookSourceUrl, 'ok');
+      expect(sites.searched, ['ok']);
+    });
+
+    test('某個書源出錯只跳過它，連沒預期的錯也是：背景沒人看，不讓整本書放棄', () async {
+      for (final error in [
+        SourceException('搜尋不可用', sourceUrl: 'a'),
+        StateError('search invariant broke'),
+      ]) {
+        final prepared = await switcher(
+          _SitesBookSourceService(
+            {'a': _titles(20), 'b': _titles(10)},
+            searchErrors: {'a': error},
+          ),
+          [ordered('a', 0), ordered('b', 1)],
+        ).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+        expect(prepared?.source.bookSourceUrl, 'b', reason: '$error');
+      }
+    });
+
+    test('聚合源不當候選（ADR 0056 照 Legado 只用同一類）', () async {
+      final sites = _SitesBookSourceService({
+        'aggregate': _titles(20),
+        'plain': _titles(10),
+      });
+      final aggregate = ordered('aggregate', 0)
+        ..ruleBookInfo = BookInfoRule(name: '@js:book.type = 32; result');
+      final prepared = await switcher(sites, [
+        aggregate,
+        ordered('plain', 1),
+      ]).prepareAutomaticSwitch(_currentBook(), chapterTitle: '第6章');
+
+      expect(aggregate.isAggregateSource, isTrue);
+      expect(prepared?.source.bookSourceUrl, 'plain');
+      expect(sites.searched, ['plain']);
+    });
+
+    test('改照最新的書寫回：搜的時候改了分組、封面也留著；讀到的那一章變了'
+        '就要重新準備', () async {
+      final service = switcher(_SitesBookSourceService({'a': _titles(10)}), [
+        ordered('a', 0),
+      ]);
+      final book = _currentBook();
+      final prepared = (await service.prepareAutomaticSwitch(
+        book,
+        chapterTitle: '第6章',
+      ))!;
+      final latest = book.copyWith(group: 4, customCoverUrl: 'cover.jpg');
+
+      final rebased = service.rebase(prepared, latest)!;
+      expect(rebased.migratedBook.group, 4);
+      expect(rebased.migratedBook.customCoverUrl, 'cover.jpg');
+      expect(rebased.migratedBook.origin, 'a');
+      expect(rebased.targetChapterIndex, 5);
+
+      expect(
+        service.rebase(
+          prepared,
+          book.copyWith(chapterIndex: 7, durChapterTitle: '第8章'),
         ),
-        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
-      );
-
-      expect(await service.searchAlternatives(_currentBook()), isEmpty);
-    });
-
-    test('未知搜尋程式錯誤不得被當成空候選', () async {
-      final source = _source('new-origin', '新源');
-      final error = StateError('search invariant broke');
-      final service = SourceSwitchService(
-        service: _ThrowingSearchBookSourceService(error),
-        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
-      );
-
-      await expectLater(
-        service.searchAlternatives(_currentBook()),
-        throwsA(same(error)),
+        isNull,
       );
     });
 
-    test('auto prepare 只跳過已知候選 unavailable', () async {
-      final source = _source('new-origin', '新源');
-      final service = SourceSwitchService(
-        service: _AutoPrepareFailureBookSourceService(
-          SourceException('候選不可用', sourceUrl: source.bookSourceUrl),
-        ),
-        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
-      );
+    test('取消時不換也不丟錯誤', () async {
+      final cancel = CancelToken()..cancel();
+      final sites = _SitesBookSourceService({'a': _titles(10)});
+      final prepared = await switcher(sites, [ordered('a', 0)])
+          .prepareAutomaticSwitch(
+            _currentBook(),
+            chapterTitle: '第6章',
+            cancelToken: cancel,
+          );
 
-      expect(await service.autoPrepareSwitch(_currentBook()), isNull);
-    });
-
-    test('auto prepare 不吞未知 prepare 錯誤', () async {
-      final source = _source('new-origin', '新源');
-      final error = StateError('prepare invariant broke');
-      final service = SourceSwitchService(
-        service: _AutoPrepareFailureBookSourceService(error),
-        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
-      );
-
-      await expectLater(
-        service.autoPrepareSwitch(_currentBook()),
-        throwsA(same(error)),
-      );
+      expect(prepared, isNull);
+      expect(sites.searched, isEmpty);
     });
   });
 

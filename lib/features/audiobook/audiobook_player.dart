@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/sleep_timer.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/sync/progress_sync.dart';
@@ -151,6 +152,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   AppLifecycleListener? _lifecycle;
 
   Book? _book;
+
+  /// 播著的書登記成開著的（[BooksInUse]）：播的時候不自動換源，不然之後存的
+  /// 收聽進度寫不到換過去的那本（ADR 0069）。
+  BookInUse? _inUse;
   BookSource? _source;
   List<BookChapter> _chapters = const [];
   int _index = 0;
@@ -235,6 +240,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     await _close();
     final generation = ++_generation;
     _book = book;
+    _inUse = BooksInUse.hold(book.bookUrl);
     _chapters = const [];
     _index = book.chapterIndex;
     _duration = null;
@@ -540,6 +546,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     await _listenTime?.stop();
     await _engine?.stop();
     _book = null;
+    _inUse?.release();
+    _inUse = null;
     _source = null;
     _chapters = const [];
     _prefetched = null;
@@ -783,6 +791,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
       unawaited(subscription.cancel());
     }
     unawaited(_engine?.dispose());
+    _inUse?.release();
     sleepTimer.dispose();
     position.dispose();
     super.dispose();
