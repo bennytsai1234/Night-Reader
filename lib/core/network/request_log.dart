@@ -73,10 +73,12 @@ final class RequestLog {
   /// Cookie 這類有沒有真的送出去。
   final bool sentHeaders;
 
+  /// 規則 JS 的請求在網路 isolate 照這份設定記；在 [keepingPages] 裡時
+  /// 那邊也記整頁，帶回來交給 [keepingPages]。
   RequestLogSettings get settings => (
     responsePreview: responsePreview,
     digestPages: digestPages,
-    keepPages: keepPages,
+    keepPages: keepPages || _currentPageSink != null,
     sentHeaders: sentHeaders,
   );
 
@@ -99,6 +101,17 @@ final class RequestLog {
   Future<T> run<T>(Future<T> Function() body) =>
       runZoned(body, zoneValues: {_requestLogZoneKey: this});
 
+  /// 在這份紀錄裡執行 [body]，裡面的請求照常記進來，另外照 [pages] 的樣子
+  /// （每個回應帶整頁原文）記一份進 [into]。只有 [body] 送出的請求進
+  /// [into]：時限到了 [body] 還沒停，之後送的也不會混進別段的 [into]。
+  /// 書源校驗只在抓正文時要整頁（找同一章下一頁的連結），其他段不多解開
+  /// 整頁。只在 [withResponses] 時有用。
+  Future<T> keepingPages<T>(List<LoggedPage> into, Future<T> Function() body) =>
+      runZoned(
+        body,
+        zoneValues: {_requestLogZoneKey: this, _pageSinkZoneKey: into},
+      );
+
   /// 接上在別的 isolate 記下的內容（規則 JS 要等的請求在網路 isolate 送出，
   /// ADR 0034）。
   void merge(
@@ -107,14 +120,20 @@ final class RequestLog {
     List<LoggedPage> otherPages = const [],
   }) {
     lines.addAll(otherLines);
-    pages.addAll(otherPages);
+    if (keepPages) pages.addAll(otherPages);
+    _currentPageSink?.addAll(otherPages);
     _transientResponses += transientResponses;
   }
 
   void _add(String line, [String? body]) {
     lines.add(line);
-    if (keepPages && withResponses) pages.add((line: line, body: body));
+    if (!withResponses) return;
+    if (keepPages) pages.add((line: line, body: body));
+    _currentPageSink?.add((line: line, body: body));
   }
+
+  /// 這一行要不要帶整頁原文：[keepPages]，或在 [keepingPages] 裡。
+  bool get _keepsPageNow => keepPages || _currentPageSink != null;
 }
 
 /// 請求送出的時刻（微秒）放在 `RequestOptions.extra` 的這個鍵：回應那一行
@@ -323,7 +342,7 @@ void recordRenderedPage(String? url, Object? body) {
 /// 回應那一行：[head] 接上長度與內容開頭；[RequestLog.pages] 那份接上整頁。
 /// 傳回內容是不是空白。
 bool _recordBody(RequestLog log, String head, Object? data) {
-  final full = log.keepPages;
+  final full = log._keepsPageNow;
   final decoded = _decode(
     data,
     full || log.digestPages ? _digestBytes : log.responsePreview! * 4,
@@ -399,3 +418,9 @@ bool _recordBody(RequestLog log, String head, Object? data) {
 const int _digestBytes = RequestLog.fullPageBytes;
 
 final Object _requestLogZoneKey = Object();
+
+/// [RequestLog.keepingPages] 的那一份；不在裡面時是 null。
+List<LoggedPage>? get _currentPageSink =>
+    Zone.current[_pageSinkZoneKey] as List<LoggedPage>?;
+
+final Object _pageSinkZoneKey = Object();

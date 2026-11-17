@@ -7,6 +7,7 @@ import 'book_source_service.dart';
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/network/redirects.dart';
+import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -65,8 +66,18 @@ class SourceDebugService {
   }
 
   /// 這一輪抓到的正文與它的書源、書；還沒抓到正文是 null。AI 修復的試抓
-  /// 照它判斷抓到了沒，和書源校驗同一套（[sourceContentUsable]）。
-  ({BookSource source, Book book, String content})? lastContent;
+  /// 照它判斷抓到了沒、是不是只抓了第一頁，和書源校驗同一套
+  /// （[sourceContentUsable]、`chapterCutAtFirstPage`）：[pages] 是只抓這一章
+  /// 時的請求（在記回應的 [RequestLog] 裡才有），[toc] 是目錄上每一章的
+  /// 網址（從正文頁開始的沒有目錄）。
+  ({
+    BookSource source,
+    Book book,
+    String content,
+    List<LoggedPage> pages,
+    List<String> toc,
+  })?
+  lastContent;
 
   Future<void> startDebug(BookSource source, String key) {
     final runId = ++_runId;
@@ -201,6 +212,7 @@ class SourceDebugService {
         book: targetBook,
         chapter: firstChapter,
         nextUrl: nextChapterUrl,
+        toc: [for (final chapter in chapters) chapter.url],
       );
     } else {
       log('≡沒有正文章節', state: -1);
@@ -213,6 +225,7 @@ class SourceDebugService {
     Book? book,
     BookChapter? chapter,
     String? nextUrl,
+    List<String> toc = const [],
   }) async {
     final targetBook = book ?? Book(origin: source.bookSourceUrl);
     final targetChapter =
@@ -223,14 +236,25 @@ class SourceDebugService {
     log('  正文 URL: $url');
     if (nextUrl != null) log('  下一章 URL: $nextUrl');
 
-    final content = await _bookSourceService.getContent(
+    Future<String> fetch() => _bookSourceService.getContent(
       source,
       targetBook,
       targetChapter,
       nextChapterUrl: nextUrl,
     );
+    final pages = <LoggedPage>[];
+    final requests = currentRequestLog;
+    final content = await (requests == null
+        ? fetch()
+        : requests.keepingPages(pages, fetch));
 
-    lastContent = (source: source, book: targetBook, content: content);
+    lastContent = (
+      source: source,
+      book: targetBook,
+      content: content,
+      pages: pages,
+      toc: toc,
+    );
     log('︽正文頁解析完成 (內容長度: ${content.length})', state: 1000);
     if (content.length > 100) {
       log('正文預覽: ${content.substring(0, 100)}...');
