@@ -336,8 +336,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     return null;
   }
 
+  /// 開書時目錄讀到之前 [_chapters] 是空的、[_index] 已經是上次聽的那集，
+  /// 從清單的範圍內往前找。
   int? _previousPlayable(int from) {
-    for (var i = from - 1; i >= 0; i--) {
+    for (var i = min(from, _chapters.length) - 1; i >= 0; i--) {
       if (!_chapters[i].isSkippedWhenReading) return i;
     }
     return null;

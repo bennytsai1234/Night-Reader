@@ -112,6 +112,25 @@ void main() {
     expect(sync.opened, [book.bookUrl]);
   });
 
+  test('開書還沒讀到目錄時，畫面問有沒有上一集、下一集不會出錯', () async {
+    // 開書先通知畫面「載入中」，這時目錄還是空的、集數已經是上次聽的那集；
+    // 資料庫在另一個 isolate，回覆前畫面會照這個狀態畫一幀播放鈕。
+    final errors = <Object>[];
+    player.addListener(() {
+      try {
+        player.hasPrevious;
+        player.hasNext;
+      } catch (error) {
+        errors.add(error);
+      }
+    });
+
+    await player.open(book);
+
+    expect(errors, isEmpty);
+    expect(player.hasPrevious, isTrue);
+  });
+
   test('播著的書算開著，停了才放掉：播的時候不自動換源（ADR 0069）', () async {
     // 開著時換了源，之後存的收聽進度寫不到換過去的那本。
     await player.open(book);
