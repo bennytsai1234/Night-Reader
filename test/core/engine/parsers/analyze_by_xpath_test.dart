@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/parsers/analyze_by_xpath.dart';
+import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 
 /// XPath 規則照 Legado 用的 JsoupXpath。
 void main() {
@@ -38,6 +41,48 @@ void main() {
   });
   // novelnext 這類英文小說站：搜尋結果每一列用 `@XPath:div[2]/div/h3/a/@title`
   // 從那一列往下找（JsoupXpath 從 JXNode 起算）。
+  // JsoupXpath 的 `=` 是整個屬性值相等：class 多一個字、多一個類別名稱、
+  // 順序不同都不算。
+  group('@class= 比的是整個屬性值', () {
+    const html = '''
+      <div class="chapter"><a href="/1">第一章</a></div>
+      <div class="chapter-preview"><a href="/x">預覽內容</a></div>
+      <div class="otherchapter"><a href="/y">別處</a></div>
+      <p class="a b">甲</p><p class="b a">乙</p><p class="a b c">丙</p>
+    ''';
+
+    test('不把 class 含有那段字的也選進來', () {
+      final xpath = AnalyzeByXPath(html);
+      expect(xpath.getElements("//div[@class='chapter']"), hasLength(1));
+      expect(xpath.getStringList("//div[@class='chapter']/a/text()"), ['第一章']);
+      expect(xpath.getString('//div[@class="chapter"]/a/@href'), '/1');
+    });
+
+    test('好幾個類別名稱照寫的順序整串相等', () {
+      final xpath = AnalyzeByXPath(html);
+      expect(xpath.getStringList("//p[@class='a b']/text()"), ['甲']);
+    });
+
+    test('目錄只列 class 完全相同的那一塊', () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': '測試書庫',
+        'bookSourceUrl': 'https://site.test',
+        'ruleToc': {
+          'chapterList': "//div[@class='chapter']/a",
+          'chapterName': '//a/text()',
+          'chapterUrl': '//a/@href',
+        },
+      });
+      final result = await ChapterListParser.parse(
+        source: source,
+        book: Book(bookUrl: 'https://site.test/b', origin: 'https://site.test'),
+        body: '<html><body>$html</body></html>',
+        baseUrl: 'https://site.test/b',
+      );
+      expect(result.chapters.map((c) => c.title), ['第一章']);
+    });
+  });
+
   group('相對路徑：從目前的元素往下找', () {
     const html = '''
       <div class="list">
@@ -79,6 +124,21 @@ void main() {
         'Book A',
         'Author A',
       ]);
+    });
+
+    test('引號裡的 | 是值的一部分，不是兩條路徑', () {
+      const page =
+          '<div class="row"><a data-ref="v1|part" href="/1">第一章</a>'
+          '<a data-ref="v2" href="/2">第二章</a></div>';
+      final row = AnalyzeByXPath(page).getElements("//div[@class='row']");
+      final xpath = AnalyzeByXPath(row.single);
+      expect(xpath.getStringList("a[@data-ref='v1|part']/@href"), ['/1']);
+      expect(xpath.getStringList('a[@data-ref="v1|part"]/@href'), ['/1']);
+      // 引號外的 | 照舊是兩條，各從自己的起點找。
+      expect(
+        xpath.getStringList("a[@data-ref='v1|part']/@href | //a[2]/@href"),
+        ['/1', '/2'],
+      );
     });
 
     test('只有第一步可以省略 /', () {

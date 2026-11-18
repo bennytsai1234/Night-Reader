@@ -93,6 +93,20 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     _notifySafely();
   }
 
+  /// 面板右上角的「重新搜尋」：網站可能更新過，這次面板抓過的目錄也丟掉
+  /// 重抓（同 Legado 換源的重新搜尋），清單先清空、抓到目錄的再列。
+  Future<void> refreshSearch() {
+    _tocs.clear();
+    _keptChapters = 0;
+    // 按下當下就清空：上一輪的列不再能點，也不閃出「未找到其他來源」。
+    allResults = [];
+    _rebuildFilteredResults();
+    isSearching = true;
+    _notifySafely();
+    return startSearch();
+  }
+
+  /// 照目前的分組與校驗作者搜一輪；這次面板抓過目錄的書直接列，不重抓。
   Future<void> startSearch() async {
     _cancelActiveSearch();
     final searchId = ++_activeSearchId;
@@ -378,7 +392,8 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
 
   /// 抓到目錄的結果：章數，與留給換源用的詳情、目錄（[SourceToc]）。
   /// 留著的目錄總共超過 [_maxKeptChapters] 章時只記章數（同 Legado
-  /// 換源的上限），選它換源時再抓一次。
+  /// 換源的上限），選它換源時再抓一次。換分組、切換校驗作者時沿用，按
+  /// 「重新搜尋」時清掉（[refreshSearch]）。
   final Map<String, ({int count, SourceToc? toc})> _tocs = {};
   int _keptChapters = 0;
   static const int _maxKeptChapters = 30000;

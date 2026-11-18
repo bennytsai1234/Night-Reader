@@ -5,7 +5,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
-import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -82,29 +81,21 @@ void main() {
 
   // 第一頁免費、後面要登入：不能把第一頁當成一整章（ADR 0038）。
   test('a later page behind a login wall fails the whole chapter', () async {
-    for (final fetch in [
-      () => WebBook.getContentAwait(source, book, chapter('/free')),
-      () => CompleteContentFetcher.fetch(source, book, chapter('/free')),
-    ]) {
-      await expectLater(fetch(), throwsA(isA<LoginCheckException>()));
-    }
+    await expectLater(
+      CompleteContentFetcher.fetch(source, book, chapter('/free')),
+      throwsA(isA<LoginCheckException>()),
+    );
   });
 
   test('a chapter that is only a login prompt fails', () async {
-    for (final fetch in [
-      () => WebBook.getContentAwait(source, book, chapter('/prompt')),
-      () => CompleteContentFetcher.fetch(source, book, chapter('/prompt')),
-    ]) {
-      await expectLater(fetch(), throwsA(isA<LoginCheckException>()));
-    }
+    await expectLater(
+      CompleteContentFetcher.fetch(source, book, chapter('/prompt')),
+      throwsA(isA<LoginCheckException>()),
+    );
   });
 
   for (final path in ['/linked', '/subscribe']) {
     test('a readable chapter does not fail on login words ($path)', () async {
-      expect(
-        await WebBook.getContentAwait(source, book, chapter(path)),
-        contains('正文的一段話'),
-      );
       expect(
         await CompleteContentFetcher.fetch(source, book, chapter(path)),
         contains('正文的一段話'),

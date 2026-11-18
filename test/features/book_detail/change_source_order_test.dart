@@ -132,6 +132,40 @@ void main() {
     expect(provider.tocOf(fast)?.book.bookUrl, 'https://fast.example/book');
   });
 
+  test('按「重新搜尋」重抓目錄：網站多了章節，章數與換源用的目錄跟著更新', () async {
+    final chapters = {'https://fast.example': 10};
+    final provider = await search(chapters);
+    SearchBook fast() => provider.filteredResults.firstWhere(
+      (r) => r.origin == 'https://fast.example',
+    );
+    expect(provider.chapterCountOf(fast()), 10);
+
+    chapters['https://fast.example'] = 12;
+    final refreshing = provider.refreshSearch();
+    // 按下當下就清空、標成搜尋中，上一輪的列不能再點。
+    expect(provider.filteredResults, isEmpty);
+    expect(provider.isSearching, isTrue);
+    await refreshing;
+
+    expect(provider.chapterCountOf(fast()), 12);
+    expect(provider.tocOf(fast())?.chapters, hasLength(12));
+  });
+
+  test('換分組、切換校驗作者沿用這次面板抓過的目錄，不重抓', () async {
+    final chapters = {'https://fast.example': 10};
+    final provider = await search(chapters);
+    chapters['https://fast.example'] = 12;
+
+    // 切換校驗作者、換分組做的事：改條件後重新搜尋。
+    provider.checkAuthor = !provider.checkAuthor;
+    await provider.startSearch();
+
+    final fast = provider.filteredResults.firstWhere(
+      (r) => r.origin == 'https://fast.example',
+    );
+    expect(provider.chapterCountOf(fast), 10);
+  });
+
   test('抓整份目錄：哪一頁抓不到就不列，章數不會少算', () async {
     await search();
     expect(sites.completeRequests, isNotEmpty);

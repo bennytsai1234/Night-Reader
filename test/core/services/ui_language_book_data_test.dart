@@ -6,15 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
+import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/ui_language.dart';
+import 'package:night_reader/features/book_detail/change_cover_provider.dart';
+import 'package:night_reader/features/book_detail/widgets/cover/cover_header.dart';
 import 'package:night_reader/features/bookmarks/bookmarks_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -106,6 +110,47 @@ void main() {
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(seconds: 10));
+      });
+    }
+  });
+
+  group('更換封面的搜尋關鍵字', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      await GetIt.instance.reset();
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      GetIt.instance
+        ..registerSingleton<BookSourceDao>(BookSourceDao(db))
+        ..registerSingleton<SearchBookDao>(SearchBookDao(db));
+    });
+
+    tearDown(() async {
+      await db.close();
+      await GetIt.instance.reset();
+    });
+
+    for (final (mode, stored, shown) in cases) {
+      testWidgets('閱讀偏好 $mode：書名、作者照閱讀偏好，標籤是簡體', (tester) async {
+        ChineseDisplay.mode.value = mode;
+        final provider = ChangeCoverProvider();
+        addTearDown(provider.dispose);
+        await tester.pumpWidget(
+          ChangeNotifierProvider<ChangeCoverProvider>.value(
+            value: provider,
+            child: simplifiedApp(
+              Scaffold(
+                body: CoverHeader(bookName: stored, author: stored),
+              ),
+            ),
+          ),
+        );
+        expect(find.text('搜寻关键字：$shown $shown'), findsOneWidget);
+        expect(
+          find.text('搜寻关键字：$converted $converted'),
+          findsNothing,
+          reason: '書名、作者沒被介面語言轉成簡體',
+        );
       });
     }
   });

@@ -1,0 +1,24 @@
+#!/bin/sh
+# 簽出後（git worktree add 也會跑）：這個 worktree 沒有 sqlite3 套件下載的 sqlite3.dll 時，從主資料夾複製一份。
+# 啟用：git config core.hooksPath .githooks
+#
+# 公司網路會改掉下載的檔案，sqlite3 的建置 hook 核對雜湊不過，新 worktree 的測試與建置都跑不起來；
+# 主資料夾留著核對過的那份。下載資料夾叫 download-<檔案 SHA-256 前 8 碼>（package:sqlite3 的
+# lib/src/hook/assets.dart），只複製名稱和內容對得上的最新一份：套件升級後主資料夾裡最新的就是新版要的。
+# 哪一步失敗都不擋簽出。
+dir=.dart_tool/hooks_runner/shared/sqlite3/build
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+main=$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+main=${main%/.git}
+[ -d "$main/$dir" ] || exit 0
+ls -td "$main/$dir"/download-* 2>/dev/null | while IFS= read -r src; do
+  name=${src##*/}
+  [ -f "$src/sqlite3.dll" ] || continue
+  [ "$(sha256sum "$src/sqlite3.dll" | cut -c1-8)" = "${name#download-}" ] || continue
+  if [ ! -f "$top/$dir/$name/sqlite3.dll" ]; then
+    mkdir -p "$top/$dir/$name" && cp "$src/sqlite3.dll" "$top/$dir/$name/" &&
+      echo "post-checkout: 從主資料夾複製了 $dir/$name/sqlite3.dll"
+  fi
+  break
+done
+exit 0
