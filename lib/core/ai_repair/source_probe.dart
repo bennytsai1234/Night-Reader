@@ -159,6 +159,7 @@ Future<SourceProbeReport> probeSource(
       debugName: 'SourceProbe',
       withDictionaries: false,
       database: database,
+      cancelToken: cancelToken,
     );
   } catch (error, stack) {
     AppLog.e('試抓的 worker 開不起來: $error', error: error, stackTrace: stack);
@@ -313,6 +314,7 @@ Future<AiPage> fetchPageForAi(
     worker = await SourceWorker.spawn(
       debugName: 'SourceFetch',
       withDictionaries: false,
+      cancelToken: cancelToken,
     );
   } catch (error) {
     return (lines: ['抓不了：$error'], pages: const <LoggedPage>[]);

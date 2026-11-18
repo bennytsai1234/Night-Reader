@@ -93,6 +93,7 @@ Future<String> _inWorker(
       debugName: name,
       withDictionaries: false,
       database: database,
+      cancelToken: cancelToken,
     );
   } catch (error) {
     return '做不了：$error';

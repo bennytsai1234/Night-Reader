@@ -7,7 +7,8 @@ import 'package:dio/dio.dart';
 import 'package:drift/isolate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
+import 'package:flutter_js/flutter_js.dart'
+    show JsInterruptFlag, QuickJsRuntime2, fetchPolyfillSource;
 import 'package:native_synchronization/mailbox.dart';
 import 'package:native_synchronization/sendable.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -72,10 +73,12 @@ abstract final class SourceIsolate {
       for (var i = 1; i <= workerCount; i++)
         opened
             .then(
-              (_) => SourceWorker.spawn(
+              (_) => SourceWorker._spawn(
                 debugName: 'SourceIsolate $i',
+                role: _Role.source,
                 withDictionaries: true,
                 database: database,
+                temporary: false,
               ),
             )
             .then<SourceWorker?>(
@@ -177,6 +180,7 @@ abstract final class SourceIo {
         debugName: 'SourceIo',
         role: _Role.io,
         withDictionaries: false,
+        temporary: false,
         database: _database,
         databaseFile: await _databaseFile,
       );
@@ -233,8 +237,9 @@ bool _sendable(Object task) {
 ///   做，結果由主 isolate 放進 worker 的 [_replies]（[BlockingCall]）。
 ///
 /// 書源 isolate 是常駐的 worker；書源校驗每個書源開一個，逾時就結束它。
-/// 結束時手上的工作立刻以失敗結束，isolate 本身等目前這段規則 JS 跑完
-/// 才結束（見 [kill]），卡在迴圈裡的規則 JS 停不下來。
+/// 結束時手上的工作立刻以失敗結束，正在跑的規則 JS 在下一個檢查點停下，
+/// isolate 等這段程式回到 Dart 才結束（見 [kill]）；iOS 的規則 JS 停不下來，
+/// 等它自己跑完。還沒真的結束的臨時 worker 有上限（[maxTemporaryWorkers]）。
 final class SourceWorker {
   SourceWorker._(
     this._isolate,
@@ -242,6 +247,7 @@ final class SourceWorker {
     this._inbox,
     this._errors,
     this._replies,
+    this._interrupt,
   );
 
   final Isolate _isolate;
@@ -254,6 +260,11 @@ final class SourceWorker {
   /// 停住的 worker 從這裡拿回結果。由主 isolate 建立與擁有：worker 被結束
   /// 時網路 isolate 可能還在做它的事，信箱的記憶體不能跟著 worker 釋放。
   final Mailbox _replies;
+
+  /// [kill] 時舉起，worker 裡正在跑的規則 JS 在下一個檢查點停下、回到 Dart，
+  /// isolate 才結束得了（寫成無窮迴圈的也是）。由主 isolate 建立與擁有，
+  /// isolate 真的結束後才釋放。規則 JS 停不下來的平台（iOS）是 null。
+  final JsInterruptFlag? _interrupt;
 
   /// worker 現在停住等的那一次呼叫。停住的 worker 不會再發，所以同時只有
   /// 一次。
@@ -275,29 +286,80 @@ final class SourceWorker {
   static int _nextRateTicket = 0;
   static int _nextBlockedCall = 0;
 
-  /// 開一個 worker，等它連上資料庫、網路設定好才傳回。[withDictionaries]
-  /// 為 false 時不載入繁簡字典（校驗用，省下每個書源解析一次字典），
-  /// `java.t2s` 這類轉換原樣返回。
+  /// 開一個臨時的 worker（書源校驗每個書源一個、AI 修書源的工具、登入），
+  /// 等它連上資料庫、網路設定好才傳回。[withDictionaries] 為 false 時不載入
+  /// 繁簡字典（校驗用，省下每個書源解析一次字典），`java.t2s` 這類轉換原樣
+  /// 返回。
+  ///
+  /// 同時存在的臨時 worker 最多 [maxTemporaryWorkers] 條，滿了就等前面的
+  /// 真的結束才開；[cancelToken] 取消時不再等，丟出取消的錯誤。
   static Future<SourceWorker> spawn({
     required String debugName,
     required bool withDictionaries,
     Future<DriftIsolate>? database,
+    CancelToken? cancelToken,
   }) => _spawn(
     debugName: debugName,
     role: _Role.source,
     withDictionaries: withDictionaries,
     database: database,
+    temporary: true,
+    cancelToken: cancelToken,
   );
+
+  /// 同時存在的臨時 worker（[spawn]）最多幾條。算到 isolate 真的結束為止，
+  /// 不是到 [kill]：被結束時卡在規則 JS 裡的 worker 要等那段跑完才結束，
+  /// 只算還在做事的話，一批校驗裡好幾個卡住的書源會讓 isolate 越開越多
+  /// （CPU、耗電、記憶體）。校驗同時 8 個，多留 4 條給同時在用的 AI 修書源
+  /// 與登入。
+  @visibleForTesting
+  static int maxTemporaryWorkers = 12;
+
+  /// 開了、還沒真的結束的臨時 worker 數。
+  static int _temporaryAlive = 0;
+
+  /// 等名額的；有 worker 真的結束時全部叫醒，各自再看一次。
+  static final Set<Completer<void>> _placeWaiters = {};
+
+  static Future<void> _takePlace(CancelToken? cancelToken) async {
+    while (_temporaryAlive >= maxTemporaryWorkers) {
+      if (cancelToken?.cancelError case final cancelled?) throw cancelled;
+      final waiter = Completer<void>();
+      _placeWaiters.add(waiter);
+      try {
+        await Future.any([waiter.future, ?cancelToken?.whenCancel]);
+      } finally {
+        _placeWaiters.remove(waiter);
+      }
+    }
+    if (cancelToken?.cancelError case final cancelled?) throw cancelled;
+    _temporaryAlive++;
+  }
+
+  static void _releasePlace() {
+    _temporaryAlive--;
+    final waiters = [..._placeWaiters];
+    _placeWaiters.clear();
+    for (final waiter in waiters) {
+      waiter.complete();
+    }
+  }
 
   /// [databaseFile] 只給網路 isolate：另開一條連到這個檔案的連線，不排在
   /// drift isolate 的交易後面（見 [SourceIo]）。
+  ///
+  /// [temporary] 的佔一個臨時 worker 的名額，到 isolate 真的結束才還
+  /// （[maxTemporaryWorkers]）。
   static Future<SourceWorker> _spawn({
     required String debugName,
     required _Role role,
     required bool withDictionaries,
+    required bool temporary,
     Future<DriftIsolate>? database,
     String? databaseFile,
+    CancelToken? cancelToken,
   }) async {
+    if (temporary) await _takePlace(cancelToken);
     final inbox = ReceivePort('$debugName main');
     final errors = ReceivePort('$debugName errors');
     final exit = ReceivePort('$debugName exit');
@@ -311,6 +373,9 @@ final class SourceWorker {
       }
       channel?.receive(message);
     });
+    final interrupt = role == _Role.source && JsInterruptFlag.supported
+        ? JsInterruptFlag()
+        : null;
     final Isolate isolate;
     try {
       isolate = await Isolate.spawn(
@@ -327,6 +392,8 @@ final class SourceWorker {
       inbox.close();
       errors.close();
       exit.close();
+      interrupt?.free();
+      if (temporary) _releasePlace();
       rethrow;
     }
     late final SourceWorker worker;
@@ -335,10 +402,20 @@ final class SourceWorker {
       onRequest: (request) => _answerWorker(worker, request),
       onNotice: (notice) => _onWorkerNotice(worker, notice),
     );
-    worker = SourceWorker._(isolate, channel, inbox, errors, Mailbox());
+    worker = SourceWorker._(
+      isolate,
+      channel,
+      inbox,
+      errors,
+      Mailbox(),
+      interrupt,
+    );
     exit.listen((_) {
       exit.close();
       worker.kill(StateError('$debugName 已結束'));
+      // isolate 已經不在了，沒有人會再讀它。
+      interrupt?.free();
+      if (temporary) _releasePlace();
     });
     _live.add(worker);
     _installMainMirrors();
@@ -349,6 +426,7 @@ final class SourceWorker {
           databasePort:
               (await (database ?? AppDatabase.sharedIsolate)).connectPort,
           databaseFile: databaseFile,
+          interruptFlag: interrupt?.address,
           replies: role == _Role.source ? worker._replies.asSendable : null,
           rootToken: RootIsolateToken.instance,
           dictionaries: withDictionaries ? await _dictionaries() : null,
@@ -415,10 +493,13 @@ final class SourceWorker {
   /// 不能用 [Isolate.immediate]：規則 JS 跑在 QuickJS 的原生程式裡，常常
   /// 回呼 Dart（`java.*`、`source.*` 這類）；isolate 在回呼中途被結束，
   /// QuickJS 下一次回呼就進到已經不在的 isolate，整個 App 原生閃退
-  /// （2026-11-11 beta.73 在修書源時按停止的閃退）。
+  /// （2026-11-11 beta.73 在修書源時按停止的閃退）。改成舉起停止旗標
+  /// （[_interrupt]）：QuickJS 自己在檢查點停下、丟錯回到 Dart，這段程式
+  /// 跑完就輪到結束。
   void kill(Object error) {
     if (_killed) return;
     _killed = true;
+    _interrupt?.raise();
     _live.remove(this);
     if (_live.isEmpty) _uninstallMainMirrors();
     for (final ticket in _tickets) {
@@ -839,6 +920,9 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
   // 時給空字串，fetch 不能用，但不會去碰 rootBundle。
   fetchPolyfillSource = init.fetchPolyfill ?? '';
   AppStoragePaths.useRoots(init.storageRoots);
+  if (init.interruptFlag case final address?) {
+    QuickJsRuntime2.interruptFlag = JsInterruptFlag.fromAddress(address);
+  }
   final dictionaries = init.dictionaries;
   if (dictionaries != null) {
     ChineseUtils.initializeFromDictionaryData(dictionaries);
@@ -934,6 +1018,7 @@ final class _Initialize {
     required this.role,
     required this.databasePort,
     required this.databaseFile,
+    required this.interruptFlag,
     required this.replies,
     required this.rootToken,
     required this.dictionaries,
@@ -945,6 +1030,10 @@ final class _Initialize {
   final _Role role;
   final SendPort databasePort;
   final String? databaseFile;
+
+  /// 停止旗標的位址（[SourceWorker._interrupt]）；不能停的平台與網路
+  /// isolate 是 null。
+  final int? interruptFlag;
   final Sendable<Mailbox>? replies;
   final RootIsolateToken? rootToken;
   final List<String>? dictionaries;

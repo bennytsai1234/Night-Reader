@@ -186,6 +186,7 @@ Future<SiteCheck> checkSite(
     worker = await SourceWorker.spawn(
       debugName: 'SiteCheck',
       withDictionaries: false,
+      cancelToken: cancelToken,
     );
   } catch (error) {
     return SiteCheck(SiteVerdict.alive, '檢查不了：$error');
