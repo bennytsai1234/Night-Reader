@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'clause_text.dart';
 import 'glass.dart';
 import 'grouped_list.dart';
 
@@ -32,12 +33,17 @@ class AppAlertAction<T> {
 
 /// Telegram 式置中提示框：標題、說明、可選的自訂內容，按鈕以髮絲線分隔。
 /// 兩個以內的按鈕橫排，三個以上直排。
+///
+/// 標題直接問要做什麼（「刪除 3 本書？」），說明只寫一句後果；做了就回
+/// 不去的給 [irreversible]，說明下面另起一行危險色的「無法復原」，說明裡
+/// 不再寫一次（docs/design/components.md「選單與提示」）。
 Future<T?> showAppAlert<T>({
   required BuildContext context,
   String? title,
   String? message,
   Widget? content,
   required List<AppAlertAction<T>> actions,
+  bool irreversible = false,
   bool barrierDismissible = true,
   bool translateTitle = true,
   bool translateMessage = true,
@@ -48,6 +54,7 @@ Future<T?> showAppAlert<T>({
     builder: (context) => AppAlert<T>(
       title: title,
       message: message,
+      irreversible: irreversible,
       translateTitle: translateTitle,
       translateMessage: translateMessage,
       content: content,
@@ -157,6 +164,7 @@ Future<bool> showAppConfirm({
   String confirmLabel = '確定',
   String cancelLabel = '取消',
   bool destructive = false,
+  bool irreversible = false,
   bool translateTitle = true,
   bool translateMessage = true,
 }) async {
@@ -164,6 +172,7 @@ Future<bool> showAppConfirm({
     context: context,
     title: title,
     message: message,
+    irreversible: irreversible,
     translateTitle: translateTitle,
     translateMessage: translateMessage,
     content: content,
@@ -190,12 +199,16 @@ class AppAlert<T> extends StatelessWidget {
     this.content,
     required this.actions,
     this.onAction,
+    this.irreversible = false,
     this.translateTitle = true,
     this.translateMessage = true,
   });
 
   final String? title;
   final String? message;
+
+  /// 做了就回不去：說明下面另起一行危險色的「無法復原」。
+  final bool irreversible;
 
   /// 標題或說明整段是資料（書源名稱、書源傳來的訊息、網址）時給 false，
   /// 不跟介面語言轉換。句子裡夾著名稱的照介面語言整句轉（ADR 0066）。
@@ -207,7 +220,10 @@ class AppAlert<T> extends StatelessWidget {
   /// 覆寫按鈕行為；預設為 `Navigator.pop(value)`。
   final ValueChanged<T>? onAction;
 
-  static const double _width = 290;
+  /// 寬 320：說明是 15 號字，290 時平均多排快半行，三分之一的說明最後
+  /// 一行只剩一兩個字（2026-11-18 量 12 則真的說明）。窄手機收到螢幕寬減
+  /// 兩側留白。
+  static const double _width = 320;
 
   @override
   Widget build(BuildContext context) {
@@ -216,12 +232,14 @@ class AppAlert<T> extends StatelessWidget {
     final media = MediaQuery.of(context);
     final horizontal = actions.length <= 2;
 
+    final danger = Theme.of(context).brightness == Brightness.dark
+        ? AppPalette.rustDark
+        : AppPalette.rust;
+    // 提示框裡只有兩種字級：標題與按鈕 17，其餘 15（說明、自訂內容）。
+    final bodyStyle = AppTextStyles.bodyBase.copyWith(color: scheme.onSurface);
+
     Widget actionButton(AppAlertAction<T> action) {
-      final color = action.destructive
-          ? (Theme.of(context).brightness == Brightness.dark
-                ? AppPalette.rustDark
-                : AppPalette.rust)
-          : scheme.primary;
+      final color = action.destructive ? danger : scheme.primary;
       return InkWell(
         onTap: action.enabled
             ? () {
@@ -338,18 +356,24 @@ class AppAlert<T> extends StatelessWidget {
                           if (message != null) ...[
                             if (title != null)
                               const SizedBox(height: AppSpacing.sm),
-                            UiText(
+                            ClauseText(
                               message!,
                               translate: translateMessage,
                               textAlign: TextAlign.center,
-                              style: AppTextStyles.bodySm.copyWith(
-                                color: scheme.onSurface.withValues(alpha: 0.8),
-                              ),
+                              style: bodyStyle,
                             ),
+                          ],
+                          if (irreversible) ...[
+                            if (title != null || message != null)
+                              const SizedBox(height: AppSpacing.sm),
+                            _IrreversibleLine(color: danger),
                           ],
                           if (content != null) ...[
                             const SizedBox(height: AppSpacing.md),
-                            content!,
+                            DefaultTextStyle.merge(
+                              style: bodyStyle,
+                              child: content!,
+                            ),
                           ],
                         ],
                       ),
@@ -366,6 +390,35 @@ class AppAlert<T> extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 「無法復原」：說明下面獨立一行，危險色、加粗，讓最重要的後果一眼看到。
+class _IrreversibleLine extends StatelessWidget {
+  const _IrreversibleLine({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = AppTextStyles.bodyBase.copyWith(
+      color: color,
+      fontWeight: FontWeight.w600,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.error_outline_rounded,
+          // 圖示和字一樣大，跟著系統字級放大。
+          size: MediaQuery.textScalerOf(context).scale(style.fontSize!),
+          color: color,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(child: UiText('無法復原', style: style)),
+      ],
     );
   }
 }
@@ -425,6 +478,12 @@ class AlertTextField extends StatelessWidget {
           height: 1.3,
           color: chrome.sectionText.withValues(alpha: 0.7),
         ),
+        // 提示框裡只有 17 與 15 兩種字級；預設的錯誤訊息是 13。
+        errorStyle: AppTextStyles.bodyBase.copyWith(
+          height: 1.3,
+          color: scheme.error,
+        ),
+        errorMaxLines: 3,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
