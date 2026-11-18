@@ -61,38 +61,34 @@ void main() {
     expect(document.contentHash, onMain.contentHash);
   });
 
-  test('content worker repairs an orphan closing quote before making blocks', () async {
-    final result = await worker.process(
-      _args(rawContent: '　　「請進。\n　　」一個悅耳的女性聲音在門後傳來。'),
-    );
-    expect(
-      result['content'],
-      '　　「請進。」一個悅耳的女性聲音在門後傳來。',
-    );
-    final document = result['document']! as ReaderV2Content;
-    expect(document.paragraphs, [
-      '「請進。」一個悅耳的女性聲音在門後傳來。',
-    ]);
-  });
+  test(
+    'content worker repairs an orphan closing quote before making blocks',
+    () async {
+      final result = await worker.process(
+        _args(rawContent: '　　「請進。\n　　」一個悅耳的女性聲音在門後傳來。'),
+      );
+      expect(result['content'], '　　「請進。」一個悅耳的女性聲音在門後傳來。');
+      final document = result['document']! as ReaderV2Content;
+      expect(document.paragraphs, ['「請進。」一個悅耳的女性聲音在門後傳來。']);
+    },
+  );
 
   test('curly closing quotes recover CJK shape after joining', () async {
-    final result = await worker.process(
-      _args(rawContent: '　　“請進。\n　　”她回答。'),
-    );
+    final result = await worker.process(_args(rawContent: '　　“請進。\n　　”她回答。'));
     expect(result['content'], '　　「請進。」她回答。');
   });
 
-  test('a blank source line still separates paragraphs after conversion', () async {
-    final result = await worker.process({
-      ..._args(rawContent: '「請進。\n\n」下一段刻意從引號開始。'),
-      'reSegmentEnabled': false,
-    });
-    final document = result['document']! as ReaderV2Content;
-    expect(document.paragraphs, [
-      '「請進。',
-      '」下一段刻意從引號開始。',
-    ]);
-  });
+  test(
+    'a blank source line still separates paragraphs after conversion',
+    () async {
+      final result = await worker.process({
+        ..._args(rawContent: '「請進。\n\n」下一段刻意從引號開始。'),
+        'reSegmentEnabled': false,
+      });
+      final document = result['document']! as ReaderV2Content;
+      expect(document.paragraphs, ['「請進。', '」下一段刻意從引號開始。']);
+    },
+  );
 
   test(
     'a failed chapter surfaces as an error and the worker keeps serving',
