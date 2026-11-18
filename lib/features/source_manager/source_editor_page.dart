@@ -77,10 +77,10 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   Future<void> _confirmDiscard() async {
     final discard = await showAppConfirm(
       context: context,
-      title: '放棄未儲存的修改？',
-      message: '離開後，這次的修改都不會保留。',
+      title: '放棄這次的修改？',
       confirmLabel: '放棄',
       destructive: true,
+      irreversible: true,
     );
     if (discard && mounted) Navigator.pop(context);
   }
@@ -295,10 +295,11 @@ class _SourceEditorPageState extends State<SourceEditorPage>
         if (existing != null) {
           final overwrite = await showAppConfirm(
             context: context,
-            title: '覆蓋現有書源？',
-            message: '「${existing.bookSourceName}」已經使用這個網址，儲存後會以這次的內容取代它。',
+            title: '覆蓋「${existing.bookSourceName}」？',
+            message: '它用的是同一個網址，儲存後換成這次的內容。',
             confirmLabel: '覆蓋',
             destructive: true,
+            irreversible: true,
           );
           if (!overwrite || !mounted) return;
         }
@@ -365,12 +366,9 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(
         title: widget.source == null ? '新建書源' : '編輯書源',
+        // 頁首右邊只放「儲存」（docs/design/components.md「左右各一顆」）；
+        // 除錯書源在「基本」分頁最下面。
         actions: [
-          GlassIconButton(
-            tooltip: '除錯書源',
-            icon: Icons.bug_report_outlined,
-            onPressed: _isSaving ? null : _openDebug,
-          ),
           Semantics(
             label: context.ui('儲存書源'),
             child: GlassTextButton(
@@ -411,6 +409,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
               setState(() => _editingSource.bookSourceType = type);
               _updateDirty();
             },
+            onDebug: _isSaving ? null : _openDebug,
           ),
           SourceEditSearch(controllers: _controllers),
           SourceEditExplore(controllers: _controllers),

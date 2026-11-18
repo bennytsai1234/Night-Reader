@@ -10,12 +10,13 @@
 // SHOT_SIZE 是畫面的寬x高（邏輯像素），給平板這類其他尺寸用，預設是手機。
 //
 // SHOT_STYLE 是 `AppStyle` 的名稱（plain、paper、tea、kraft、bamboo、bean），
-// 淺色與深色都用它；不給時淺色紙墨、深色素色。SHOT_PURE_BLACK=off 關掉
+// 淺色與深色都用它；不給時照 App 的預設（淺色牛皮、深色素色）。SHOT_PURE_BLACK=off 關掉
 // 「深色用純黑」（預設開）。
 //
 // 圖檔寫在 [screenshotDir]，檔名是「情境_深淺.png」。這組測試帶 `screens`
 // 標籤，`dart_test.yaml` 讓它平常跳過，pre-push 與 CI 的全套測試不會跑。
-// 截圖環境畫不出玻璃模糊與網頁元件。文字沒有字族（例如自帶 textStyle 蓋掉主題）
+// 截圖環境畫不出網頁元件；玻璃是霧面，模糊畫得出哪些見
+// `docs/agents/candidates.md`。文字沒有字族（例如自帶 textStyle 蓋掉主題）
 // 時會畫成方塊，這在手機上看不出來，但通常表示該沿用主題字型。
 @Tags(['screens'])
 library;
@@ -77,7 +78,7 @@ Future<void> openReaderMenu(WidgetTester tester) async {
 
 final scenarios = <String, (Map<String, Object>, Steps)>{
   // 書架與主頁。
-  's01_shelf_grid': (const {}, (t) async {}),
+  's01_shelf_grid': (const {'bookshelf_is_grid': true}, (t) async {}),
   's02_shelf_list': (const {'bookshelf_is_grid': false}, (t) async {}),
   's03_shelf_organize': (const {}, (t) async => tapTooltip(t, '整理書架')),
   's04_shelf_add': (const {}, (t) async => tapTooltip(t, '加入書籍')),
@@ -143,6 +144,24 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
   's18b_ai_service': (const {}, (t) async => openMine(t, 'AI 服務')),
+  's18c_about_tools': (
+    const {},
+    (t) async {
+      await openMine(t, '關於夜讀');
+      await t.ensureVisible(find.text('背景下載佇列'));
+      await settle(t, const Duration(milliseconds: 300));
+    },
+  ),
+  's19b_app_log': (
+    const {},
+    (t) async {
+      await openMine(t, '關於夜讀');
+      await t.ensureVisible(find.text('App 日誌'));
+      await settle(t, const Duration(milliseconds: 300));
+      await tapText(t, 'App 日誌');
+      await settle(t);
+    },
+  ),
   's19_release_notes': (
     const {},
     (t) async {

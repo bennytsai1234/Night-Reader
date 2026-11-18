@@ -237,6 +237,8 @@ void main() {
         await step('崩潰日誌', () => _tapInList(tester, '崩潰日誌'));
         // 清除日誌的確認框沒有日誌時開不出來（那顆鈕停用），這裡不列。
         await step('返回關於夜讀（崩潰日誌）', () => goBack(tester));
+        await step('App 日誌', () => _tapInList(tester, 'App 日誌'));
+        await step('返回關於夜讀（App 日誌）', () => goBack(tester));
         await step('進入背景下載佇列', () => _tapInList(tester, '背景下載佇列'));
         await step('返回關於夜讀（下載佇列）', () => goBack(tester));
         // 自動更新：三種模式各選一次，最後選回自動檢查。

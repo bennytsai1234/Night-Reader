@@ -87,11 +87,8 @@ class StartupFailurePanel extends StatelessWidget {
       title: '錯誤詳情',
       content: SelectableText(
         details,
-        style: AppTextStyles.labelSm.copyWith(
-          height: 1.45,
-          fontFamily: 'monospace',
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
+        // 提示框裡的字一律 15（docs/design/components.md「選單與提示」）。
+        style: const TextStyle(height: 1.45, fontFamily: 'monospace'),
       ),
       actions: const [
         AppAlertAction(label: '關閉', value: null, isDefault: true),

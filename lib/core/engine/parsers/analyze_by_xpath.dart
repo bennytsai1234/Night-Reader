@@ -103,7 +103,7 @@ class AnalyzeByXPath {
   /// 照每一段（`|` 分開）的開頭決定起點：相對路徑從 [_contextXPath] 查，其餘
   /// 照舊從整份查。兩種混在一起時各段分開查，結果照順序接起來、去掉重複。
   XPathResult<Node> _query(String rule) {
-    final parts = rule.split('|');
+    final parts = splitXPathUnion(rule);
     bool isRelative(String part) => _relativeStart.hasMatch(part.trim());
     final relative = parts.map(isRelative).toSet();
     if (relative.length == 1) {
@@ -168,8 +168,7 @@ class AnalyzeByXPath {
   List<dynamic> getElements(String xPathRule) {
     if (xPathRule.isEmpty) return [];
 
-    final normalizedRule = _normalizeXPathCompat(xPathRule);
-    final ruleAnalyzes = RuleAnalyzer(normalizedRule);
+    final ruleAnalyzes = RuleAnalyzer(xPathRule);
     final rules = ruleAnalyzes.splitRule(['&&', '||', '%%']);
 
     if (rules.length == 1) {
@@ -209,8 +208,7 @@ class AnalyzeByXPath {
   List<String> getStringList(String xPathRule) {
     if (xPathRule.isEmpty) return [];
 
-    final normalizedRule = _normalizeXPathCompat(xPathRule);
-    final ruleAnalyzes = RuleAnalyzer(normalizedRule);
+    final ruleAnalyzes = RuleAnalyzer(xPathRule);
     final rules = ruleAnalyzes.splitRule(['&&', '||', '%%']);
 
     if (rules.length == 1) {
@@ -602,20 +600,6 @@ class AnalyzeByXPath {
       return selectors.join();
     }
 
-    final classEqualsMatch = RegExp(r'''^@class\s*=\s*("([^"]*)"|'([^']*)')$''')
-        .firstMatch(predicate);
-    if (classEqualsMatch != null) {
-      final rawValue =
-          classEqualsMatch.group(2) ?? classEqualsMatch.group(3) ?? '';
-      final classTokens = rawValue
-          .split(RegExp(r'\s+'))
-          .map((token) => token.trim())
-          .where((token) => token.isNotEmpty);
-      return classTokens
-          .map((token) => '[class~="${_escapeCssValue(token)}"]')
-          .join();
-    }
-
     final containsMatch = RegExp(
       r'''^contains\(\s*@([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*,\s*("([^"]*)"|'([^']*)')\s*\)$''',
     ).firstMatch(predicate);
@@ -643,23 +627,6 @@ class AnalyzeByXPath {
 
   String _escapeCssValue(String value) {
     return value.replaceAll('\\', r'\\').replaceAll('"', r'\"');
-  }
-
-  String _normalizeXPathCompat(String rule) {
-    return rule.replaceAllMapped(
-      RegExp("@class\\s*=\\s*(\"([^\"]*)\"|'([^']*)')"),
-      (match) {
-        final rawValue = match.group(2) ?? match.group(3) ?? '';
-        final classNames = rawValue
-            .split(RegExp(r'\s+'))
-            .map((token) => token.trim())
-            .where((token) => token.isNotEmpty)
-            .toList();
-        return classNames
-            .map((token) => 'contains(@class, "$token")')
-            .join(' and ');
-      },
-    );
   }
 }
 

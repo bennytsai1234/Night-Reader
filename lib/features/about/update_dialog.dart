@@ -210,7 +210,6 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final notes = releaseNotesForDisplay(widget.info.updateLog);
     final status = _status(context);
     return AppAlert<_UpdateAction>(
@@ -222,13 +221,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (notes.isNotEmpty)
-                  UiText(
-                    notes,
-                    style: AppTextStyles.bodySm.copyWith(
-                      height: 1.5,
-                      color: scheme.onSurface,
-                    ),
-                  ),
+                  // 提示框裡的字一律 15（docs/design/components.md）。
+                  UiText(notes, style: const TextStyle(height: 1.5)),
                 if (notes.isNotEmpty && status != null)
                   const SizedBox(height: AppSpacing.lg),
                 ?status,
@@ -241,9 +235,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   Widget? _status(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final style = AppTextStyles.bodySm.copyWith(
-      color: scheme.onSurface.withValues(alpha: 0.8),
-    );
+    final style = AppTextStyles.bodyBase.copyWith(color: scheme.onSurface);
     switch (_phase) {
       case _Phase.idle:
         return null;

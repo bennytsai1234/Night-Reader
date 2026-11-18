@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'clause_text.dart';
 import 'glass.dart';
 import 'grouped_list.dart';
 
@@ -32,12 +33,17 @@ class AppAlertAction<T> {
 
 /// Telegram 式置中提示框：標題、說明、可選的自訂內容，按鈕以髮絲線分隔。
 /// 兩個以內的按鈕橫排，三個以上直排。
+///
+/// 標題直接問要做什麼（「刪除 3 本書？」），說明只寫一句後果；做了就回
+/// 不去的給 [irreversible]，說明下面另起一行危險色的「無法復原」，說明裡
+/// 不再寫一次（docs/design/components.md「選單與提示」）。
 Future<T?> showAppAlert<T>({
   required BuildContext context,
   String? title,
   String? message,
   Widget? content,
   required List<AppAlertAction<T>> actions,
+  bool irreversible = false,
   bool barrierDismissible = true,
   bool translateTitle = true,
   bool translateMessage = true,
@@ -48,6 +54,7 @@ Future<T?> showAppAlert<T>({
     builder: (context) => AppAlert<T>(
       title: title,
       message: message,
+      irreversible: irreversible,
       translateTitle: translateTitle,
       translateMessage: translateMessage,
       content: content,
@@ -157,6 +164,7 @@ Future<bool> showAppConfirm({
   String confirmLabel = '確定',
   String cancelLabel = '取消',
   bool destructive = false,
+  bool irreversible = false,
   bool translateTitle = true,
   bool translateMessage = true,
 }) async {
@@ -164,6 +172,7 @@ Future<bool> showAppConfirm({
     context: context,
     title: title,
     message: message,
+    irreversible: irreversible,
     translateTitle: translateTitle,
     translateMessage: translateMessage,
     content: content,
@@ -190,12 +199,16 @@ class AppAlert<T> extends StatelessWidget {
     this.content,
     required this.actions,
     this.onAction,
+    this.irreversible = false,
     this.translateTitle = true,
     this.translateMessage = true,
   });
 
   final String? title;
   final String? message;
+
+  /// 做了就回不去：說明下面另起一行危險色的「無法復原」。
+  final bool irreversible;
 
   /// 標題或說明整段是資料（書源名稱、書源傳來的訊息、網址）時給 false，
   /// 不跟介面語言轉換。句子裡夾著名稱的照介面語言整句轉（ADR 0066）。
@@ -207,7 +220,10 @@ class AppAlert<T> extends StatelessWidget {
   /// 覆寫按鈕行為；預設為 `Navigator.pop(value)`。
   final ValueChanged<T>? onAction;
 
-  static const double _width = 290;
+  /// 寬 320：說明是 15 號字，290 時平均多排快半行，三分之一的說明最後
+  /// 一行只剩一兩個字（2026-11-18 量 12 則真的說明）。窄手機收到螢幕寬減
+  /// 兩側留白。
+  static const double _width = 320;
 
   @override
   Widget build(BuildContext context) {
@@ -216,12 +232,14 @@ class AppAlert<T> extends StatelessWidget {
     final media = MediaQuery.of(context);
     final horizontal = actions.length <= 2;
 
+    final danger = Theme.of(context).brightness == Brightness.dark
+        ? AppPalette.rustDark
+        : AppPalette.rust;
+    // 提示框裡只有兩種字級：標題與按鈕 17，其餘 15（說明、自訂內容）。
+    final bodyStyle = AppTextStyles.bodyBase.copyWith(color: scheme.onSurface);
+
     Widget actionButton(AppAlertAction<T> action) {
-      final color = action.destructive
-          ? (Theme.of(context).brightness == Brightness.dark
-                ? AppPalette.rustDark
-                : AppPalette.rust)
-          : scheme.primary;
+      final color = action.destructive ? danger : scheme.primary;
       return InkWell(
         onTap: action.enabled
             ? () {
@@ -259,7 +277,7 @@ class AppAlert<T> extends StatelessWidget {
     final hairline = Container(
       width: horizontal ? AppGlass.hairline : null,
       height: horizontal ? null : AppGlass.hairline,
-      color: chrome.separator,
+      color: chrome.popupSeparator,
     );
 
     final buttons = horizontal
@@ -304,7 +322,7 @@ class AppAlert<T> extends StatelessWidget {
           child: GlassSurface(
             borderRadius: AppRadius.cardXl,
             grouped: false,
-            tint: chrome.groupedSurface.withValues(alpha: 0.94),
+            tint: chrome.popupTint(0.94),
             child: Material(
               type: MaterialType.transparency,
               child: Column(
@@ -338,24 +356,33 @@ class AppAlert<T> extends StatelessWidget {
                           if (message != null) ...[
                             if (title != null)
                               const SizedBox(height: AppSpacing.sm),
-                            UiText(
+                            ClauseText(
                               message!,
                               translate: translateMessage,
                               textAlign: TextAlign.center,
-                              style: AppTextStyles.bodySm.copyWith(
-                                color: scheme.onSurface.withValues(alpha: 0.8),
-                              ),
+                              style: bodyStyle,
                             ),
+                          ],
+                          if (irreversible) ...[
+                            if (title != null || message != null)
+                              const SizedBox(height: AppSpacing.sm),
+                            _IrreversibleLine(color: danger),
                           ],
                           if (content != null) ...[
                             const SizedBox(height: AppSpacing.md),
-                            content!,
+                            DefaultTextStyle.merge(
+                              style: bodyStyle,
+                              child: content!,
+                            ),
                           ],
                         ],
                       ),
                     ),
                   ),
-                  Container(height: AppGlass.hairline, color: chrome.separator),
+                  Container(
+                    height: AppGlass.hairline,
+                    color: chrome.popupSeparator,
+                  ),
                   buttons,
                 ],
               ),
@@ -367,13 +394,41 @@ class AppAlert<T> extends StatelessWidget {
   }
 }
 
+/// 「無法復原」：說明下面獨立一行，危險色、加粗，讓最重要的後果一眼看到。
+class _IrreversibleLine extends StatelessWidget {
+  const _IrreversibleLine({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = AppTextStyles.bodyBase.copyWith(
+      color: color,
+      fontWeight: FontWeight.w600,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.error_outline_rounded,
+          // 圖示和字一樣大，跟著系統字級放大。
+          size: MediaQuery.textScalerOf(context).scale(style.fontSize!),
+          color: color,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(child: UiText('無法復原', style: style)),
+      ],
+    );
+  }
+}
+
 /// 提示框內的輸入框：分組底色的圓角欄位，沒有外框線。
 class AlertTextField extends StatelessWidget {
   const AlertTextField({
     super.key,
     required this.controller,
     this.hintText,
-    this.labelText,
     this.errorText,
     this.onChanged,
     this.autofocus = false,
@@ -384,7 +439,6 @@ class AlertTextField extends StatelessWidget {
 
   final TextEditingController controller;
   final String? hintText;
-  final String? labelText;
   final String? errorText;
   final ValueChanged<String>? onChanged;
   final bool autofocus;
@@ -416,12 +470,17 @@ class AlertTextField extends StatelessWidget {
         filled: true,
         fillColor: chrome.groupedBackground,
         hintText: UiLanguageText.convertNullable(context, hintText),
-        labelText: UiLanguageText.convertNullable(context, labelText),
         errorText: UiLanguageText.convertNullable(context, errorText),
         hintStyle: AppTextStyles.bodyBase.copyWith(
           height: 1.3,
           color: chrome.sectionText.withValues(alpha: 0.7),
         ),
+        // 提示框裡只有 17 與 15 兩種字級；預設的錯誤訊息是 13。
+        errorStyle: AppTextStyles.bodyBase.copyWith(
+          height: 1.3,
+          color: scheme.error,
+        ),
+        errorMaxLines: 3,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
@@ -431,83 +490,6 @@ class AlertTextField extends StatelessWidget {
         focusedBorder: border,
         errorBorder: border,
         focusedErrorBorder: border,
-      ),
-    );
-  }
-}
-
-/// 提示框內的多選列：標題、附註（只放勾選後的後果，例如會覆蓋本機資料）與右側勾選圈。
-class AlertCheckRow extends StatelessWidget {
-  const AlertCheckRow({
-    super.key,
-    required this.title,
-    this.subtitle,
-    required this.value,
-    required this.onChanged,
-    this.translateTitle = true,
-  });
-
-  final String title;
-  final String? subtitle;
-  final bool value;
-
-  /// [title] 是分組名稱這類資料時給 false（ADR 0066）。
-  final bool translateTitle;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chrome = AppChrome.of(context);
-    final enabled = onChanged != null;
-    return Semantics(
-      checked: value,
-      enabled: enabled,
-      child: InkWell(
-        onTap: enabled ? () => onChanged!(!value) : null,
-        borderRadius: AppRadius.cardSm,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.45,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      UiText(
-                        title,
-                        translate: translateTitle,
-                        style: AppTextStyles.bodyBase.copyWith(
-                          height: 1.3,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                      if (subtitle != null)
-                        UiText(
-                          subtitle!,
-                          style: AppTextStyles.bodySm.copyWith(
-                            height: 1.3,
-                            color: chrome.sectionText,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Icon(
-                  value
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 22,
-                  color: value ? scheme.primary : chrome.sectionText,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -589,10 +571,11 @@ class _AppActionSheet<T> extends StatelessWidget {
     final anySelected = actions.any((a) => a.selected);
 
     return Padding(
+      // 左右和頁面上的卡片、分頁列同一條線。
       padding: EdgeInsets.fromLTRB(
-        AppSpacing.md,
+        AppGrouped.margin,
         topInset + AppSpacing.xxxl,
-        AppSpacing.md,
+        AppGrouped.margin,
         media.padding.bottom + AppSpacing.md,
       ),
       child: Column(
@@ -603,7 +586,7 @@ class _AppActionSheet<T> extends StatelessWidget {
             child: GlassSurface(
               borderRadius: AppRadius.cardXl,
               grouped: false,
-              tint: chrome.groupedSurface.withValues(alpha: 0.94),
+              tint: chrome.popupTint(0.94),
               child: Material(
                 type: MaterialType.transparency,
                 child: ListView(
@@ -645,7 +628,7 @@ class _AppActionSheet<T> extends StatelessWidget {
                       if (i > 0 || hasHeader)
                         Container(
                           height: AppGlass.hairline,
-                          color: chrome.separator,
+                          color: chrome.popupSeparator,
                         ),
                       GroupedRow(
                         title: actions[i].label,
@@ -691,7 +674,7 @@ class _AppActionSheet<T> extends StatelessWidget {
           GlassSurface(
             borderRadius: AppRadius.cardXl,
             grouped: false,
-            tint: chrome.groupedSurface.withValues(alpha: 0.94),
+            tint: chrome.popupTint(0.94),
             child: Material(
               type: MaterialType.transparency,
               child: InkWell(

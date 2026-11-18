@@ -181,3 +181,64 @@ ThemeData buildAppTheme(
     textTheme: textTheme,
   );
 }
+
+/// 底部面板裡的主題：深色時介面底色整組往上一階
+/// （[StylePalette.raisedForSheet]），面板疊在頁面上才看得到邊；淺色不變。
+///
+/// [base] 已經是面板裡的主題，或是閱讀器面板這類自己分層的主題（分組底色
+/// 不是風格的頁面底色）時原樣回傳，面板裡再開面板不會一路往上疊。風格配色
+/// 的擴充（[StylePalette]）不換：閱讀正文與閱讀選單照它取色，不跟著面板變。
+ThemeData sheetThemeOf(ThemeData base) {
+  final palette = base.extension<StylePalette>();
+  final chrome = base.extension<AppChrome>();
+  if (base.brightness == Brightness.light ||
+      palette == null ||
+      chrome == null ||
+      chrome.groupedBackground != palette.background) {
+    return base;
+  }
+  final colors = palette.raisedForSheet();
+  final scheme = base.colorScheme;
+  return base.copyWith(
+    colorScheme: scheme.copyWith(
+      primaryContainer: Color.alphaBlend(
+        colors.primary.withValues(alpha: 0.24),
+        colors.surface,
+      ),
+      secondaryContainer: Color.alphaBlend(
+        colors.secondary.withValues(alpha: 0.22),
+        colors.surface,
+      ),
+      surface: colors.surface,
+      onSurfaceVariant: colors.textMuted,
+      outline: colors.border,
+      outlineVariant: colors.border.withValues(alpha: 0.72),
+    ),
+    scaffoldBackgroundColor: colors.background,
+    cardTheme: base.cardTheme.copyWith(color: colors.surface),
+    bottomSheetTheme: base.bottomSheetTheme.copyWith(
+      backgroundColor: colors.surface,
+      modalBackgroundColor: colors.surface,
+    ),
+    dividerTheme: base.dividerTheme.copyWith(color: colors.border),
+    inputDecorationTheme: base.inputDecorationTheme.copyWith(
+      fillColor: colors.surface,
+    ),
+    extensions: [
+      for (final extension in base.extensions.values)
+        if (extension is! AppChrome) extension,
+      AppChrome.derive(
+        brightness: base.brightness,
+        primary: scheme.primary,
+        background: colors.background,
+        surface: colors.surface,
+        bar: colors.bar,
+        textPrimary: colors.text,
+        textSecondary: colors.textMuted,
+        border: colors.border,
+        inversePrimary: scheme.inversePrimary,
+        glassStrength: chrome.glassStrength,
+      ),
+    ],
+  );
+}

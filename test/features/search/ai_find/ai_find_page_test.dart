@@ -146,13 +146,18 @@ class _Platform implements BackgroundWorkPlatform {
 }
 
 /// 等 [done]：找書在假時間裡開始，計時器要 pump 才走、寫紀錄檔要真的時間，
-/// 輪流給（進行中那一輪的圖示一直轉，pumpAndSettle 等不到停）。
+/// 輪流給（進行中那一輪的圖示一直轉，pumpAndSettle 等不到停）。假時間最多走
+/// 200 次 50ms；之後只給真的時間（pump 不再推進假時間），最多 10 秒：CI 機器忙時
+/// 寫檔會超過 200 次 5ms 的真實時間。
 Future<void> settle(WidgetTester tester, bool Function() done) async {
-  for (var i = 0; i < 200 && !done(); i++) {
+  final real = Stopwatch()..start();
+  for (var i = 0; !done() && real.elapsed < const Duration(seconds: 10); i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 5)),
     );
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(
+      i < 200 ? const Duration(milliseconds: 50) : Duration.zero,
+    );
   }
   expect(done(), isTrue);
 }
@@ -260,7 +265,7 @@ void main() {
     expect(find.text('獵魔人'), findsOneWidget);
     expect(find.text('穿越後獵魔，節奏快'), findsOneWidget);
     expect(find.text('搜了穿越，讀過第一章'), findsOneWidget);
-    expect(find.text('深度：深入 · 4 輪 · 12.8 萬 token'), findsOneWidget);
+    expect(find.text('深度：深入 · 12.8 萬 token'), findsOneWidget);
     expect(find.text('完成'), findsOneWidget);
 
     final record = saved.single;
@@ -272,9 +277,8 @@ void main() {
     await settle(tester, () => written);
   });
 
-  testWidgets('while it runs, each round shows up with what it is doing', (
-    tester,
-  ) async {
+  testWidgets('while it runs, the page shows what the AI is doing now and '
+      'keeps the earlier rounds folded under 經過', (tester) async {
     final hold = Completer<AiReply>();
     var asked = 0;
     late AiFindRun run;
@@ -315,10 +319,16 @@ void main() {
     await settle(tester, () => asked >= 2);
     await tester.pump();
 
-    expect(find.text('第 1 輪'), findsOneWidget);
-    expect(find.text('搜尋「穿越」小說，找到 1 本'), findsOneWidget);
-    expect(find.text('第 2 輪'), findsOneWidget);
+    expect(find.text('想下一步…'), findsOneWidget);
+    expect(find.text('經過'), findsOneWidget);
+    expect(find.text('1 步'), findsOneWidget);
+    expect(find.text('搜尋「穿越」小說，找到 1 本'), findsNothing, reason: '預設收起');
+    expect(find.textContaining('輪'), findsNothing);
     expect(find.text('3.2 萬 token'), findsOneWidget);
+
+    await tester.tap(find.text('經過'));
+    await tester.pump();
+    expect(find.text('搜尋「穿越」小說，找到 1 本'), findsOneWidget);
 
     run.session.stop();
     hold.complete(_call('submit', {'books': [], 'summary': ''}));
@@ -494,7 +504,7 @@ void main() {
       tokens: 213000,
     );
     await show(tester, AiFindPage(prefs: await prefs(), record: shown));
-    expect(find.text('深度：一般 · 9 輪 · 21.3 萬 token'), findsOneWidget);
+    expect(find.text('深度：一般 · 21.3 萬 token'), findsOneWidget);
     expect(find.text('凡人修仙傳'), findsOneWidget);
     expect(find.text('完成'), findsNothing);
 
@@ -622,8 +632,9 @@ void main() {
 
     expect(work.isBusy, isFalse, reason: '暫停空出背景工作的位置、收掉通知');
     expect(find.text('已暫停'), findsOneWidget);
-    expect(find.text('按「繼續」從第 2 輪接著問'), findsOneWidget);
-    expect(find.text('第 2 輪'), findsNothing, reason: '做到一半的那一輪不留');
+    expect(find.text('按「繼續」接著問'), findsOneWidget);
+    expect(find.text('1 步'), findsOneWidget, reason: '做到一半的那一輪不留');
+    expect(find.text('想下一步…'), findsNothing);
     expect(find.text('繼續'), findsOneWidget);
     expect(find.text('結束'), findsOneWidget);
     expect(saved, isEmpty, reason: '暫停不是結束');

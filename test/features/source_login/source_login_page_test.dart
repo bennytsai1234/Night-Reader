@@ -13,7 +13,7 @@ import 'package:night_reader/features/source_login/source_browser_page.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
 import '../../support/fake_webview.dart';
@@ -169,8 +169,10 @@ void main() {
   });
 
   group('log in on the website', () {
-    Future<void> openMenu(WidgetTester tester) async {
-      await tester.tap(find.byType(GlassMenuButton<String>));
+    // 頁首右邊只有打勾，「在網站登入」在表單最下面的卡片
+    // （docs/design/components.md「左右各一顆」）。
+    Future<void> showActions(WidgetTester tester) async {
+      await tester.ensureVisible(find.text('在網站登入'));
       await tester.pumpAndSettle();
     }
 
@@ -190,7 +192,7 @@ void main() {
 
       final result = await openLogin(tester, onLoggedIn: () => loggedIn++);
       await tester.enterText(find.byType(TextField), '網站登入前填的帳號');
-      await openMenu(tester);
+      await showActions(tester);
       await tester.tap(find.text('在網站登入'));
       await tester.pumpAndSettle();
 
@@ -219,14 +221,34 @@ void main() {
       expect(saved?['帳號'], '網站登入前填的帳號');
     });
 
-    testWidgets('is in the form menu of a website source', (tester) async {
+    testWidgets('is in the form of a website source', (tester) async {
       setupTestDI();
       await tester.runAsync(() => dao.upsert(source));
 
       await openLogin(tester);
-      await openMenu(tester);
+      await showActions(tester);
 
       expect(find.text('在網站登入'), findsOneWidget);
+    });
+
+    testWidgets('stays under a form that cannot be read', (tester) async {
+      setupTestDI();
+      final broken = BookSource.fromJson({
+        ...source.toJson(),
+        'loginUi': '[{name: "帳號", type: ',
+      });
+      await tester.runAsync(() => dao.upsert(broken));
+
+      await openLogin(tester, login: broken);
+
+      expect(find.text('登入表單讀不出來'), findsOneWidget);
+      // 表單壞了還能改在網站登入、看標頭、清掉舊資料。
+      for (final title in ['在網站登入', '登入標頭', '清除登入資料']) {
+        final row = tester.widget<GroupedRow>(
+          find.widgetWithText(GroupedRow, title),
+        );
+        expect(row.enabled, isTrue, reason: title);
+      }
     });
 
     testWidgets('is greyed out when the source URL is a name', (tester) async {
@@ -238,14 +260,14 @@ void main() {
       await tester.runAsync(() => dao.upsert(named));
 
       await openLogin(tester, login: named);
-      await openMenu(tester);
+      await showActions(tester);
 
       expect(find.text('登入標頭'), findsOneWidget);
       // 一律畫出、灰掉（ADR 0059）。
-      final row = tester.widget<InkWell>(
-        find.ancestor(of: find.text('在網站登入'), matching: find.byType(InkWell)),
+      final row = tester.widget<GroupedRow>(
+        find.widgetWithText(GroupedRow, '在網站登入'),
       );
-      expect(row.onTap, isNull);
+      expect(row.enabled, isFalse);
     });
 
     test('opens the login URL when it is a URL, else the source URL', () {

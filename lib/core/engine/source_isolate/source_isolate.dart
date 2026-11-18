@@ -19,7 +19,6 @@ import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
@@ -217,7 +216,7 @@ bool _sendable(Object task) {
 /// - WebView（渲染網頁、通過 Cloudflare 檢查）：平台訊息只送到主
 ///   isolate，交給主 isolate。
 /// - 紀錄與提示：送回主 isolate（[AppLog.delegate]），未接住的錯誤寫進
-///   主 isolate 的錯誤紀錄。
+///   主 isolate 的 App 日誌（錯誤）。
 /// - 快取與 Cookie 的記憶體層：每個 isolate 各一份，寫入轉送給其他所有
 ///   isolate。
 ///
@@ -497,8 +496,8 @@ final class SourceWorker {
     final stackTrace = stack == null || stack.isEmpty
         ? null
         : StackTrace.fromString(stack);
+    // 書源 isolate 照跑、App 沒有閃退：記成錯誤（App 日誌），不寫崩潰日誌。
     AppLog.e('書源 isolate 未處理的錯誤: $error', stackTrace: stackTrace);
-    CrashHandler.recordError('書源 isolate: $error', stackTrace);
   }
 
   // ── 主 isolate 替 worker 做的事 ────────────────────────────────────
@@ -555,7 +554,13 @@ final class SourceWorker {
     switch (notice) {
       case final _Block block:
         unawaited(from._serveBlock(block));
-      case _Log(:final message, :final error, :final stackTrace, :final toast):
+      case _Log(
+        :final message,
+        :final error,
+        :final stackTrace,
+        :final toast,
+        :final isError,
+      ):
         AppLog.put(
           message,
           error: error,
@@ -563,6 +568,7 @@ final class SourceWorker {
               ? null
               : StackTrace.fromString(stackTrace),
           toast: toast,
+          isError: isError,
         );
       case _RateRelease(:final ticket):
         from._tickets.remove(ticket);
@@ -704,14 +710,16 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
   if (rootToken != null) {
     BackgroundIsolateBinaryMessenger.ensureInitialized(rootToken);
   }
-  AppLog.delegate = (message, error, stackTrace, toast) => channel.notify(
-    _Log(
-      message,
-      error: error?.toString(),
-      stackTrace: stackTrace?.toString(),
-      toast: toast,
-    ),
-  );
+  AppLog.delegate = (message, error, stackTrace, toast, isError) =>
+      channel.notify(
+        _Log(
+          message,
+          error: error?.toString(),
+          stackTrace: stackTrace?.toString(),
+          toast: toast,
+          isError: isError,
+        ),
+      );
   BackstageWebView.delegate = (request) async =>
       (await channel.request(request) as Map).cast<String, dynamic>();
   CloudflareClearance.delegate = (uri) async =>
@@ -908,12 +916,14 @@ final class _Log {
     required this.error,
     required this.stackTrace,
     required this.toast,
+    required this.isError,
   });
 
   final String message;
   final String? error;
   final String? stackTrace;
   final bool toast;
+  final bool isError;
 }
 
 final class _Clearance {

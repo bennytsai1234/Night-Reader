@@ -56,7 +56,7 @@ enum AppStyle {
     '紙墨',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFDDD9D1),
+      background: Color(0xFFDFD9CB),
       surface: AppPalette.paper50,
       bar: AppPalette.paper50,
       text: AppPalette.ink700,
@@ -91,7 +91,7 @@ enum AppStyle {
     '茶褐',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFD5CCBC),
+      background: Color(0xFFD8CCB1),
       surface: Color(0xFFF6EEDD),
       bar: Color(0xFFF6EEDD),
       text: Color(0xFF2C2014),
@@ -129,7 +129,7 @@ enum AppStyle {
     '牛皮',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFD2C5AD),
+      background: Color(0xFFD7C59B),
       surface: Color(0xFFF4E7CC),
       bar: Color(0xFFF4E7CC),
       text: Color(0xFF2E2416),
@@ -164,7 +164,7 @@ enum AppStyle {
     '竹青',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFD3D7CE),
+      background: Color(0xFFD3D8CA),
       surface: Color(0xFFF6F9F0),
       bar: Color(0xFFF6F9F0),
       text: Color(0xFF1C2619),
@@ -202,7 +202,7 @@ enum AppStyle {
     '豆綠',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFC7D5CA),
+      background: Color(0xFFC3D7C6),
       surface: Color(0xFFEAF7EC),
       bar: Color(0xFFEAF7EC),
       text: Color(0xFF112016),
@@ -382,6 +382,23 @@ class StylePalette extends ThemeExtension<StylePalette> {
       border: AppLayers.step(card, text, borderGap.abs()),
       readerBackground: _black,
       readerMenu: AppLayers.step(_black, readerText, AppLayers.cardGapDark),
+    );
+  }
+
+  /// 底部面板裡用的介面底色：深色時整組往上一階——面板底是卡片那一階、
+  /// 面板裡的卡片是玻璃那一階、玻璃再亮一階。深色的面板底若照頁面底色，
+  /// 疊在頁面上看不到邊（純黑時兩者都是純黑，遮罩也壓不暗）。淺色的面板是
+  /// 頁面底色，靠遮罩把底下壓暗分開，不變。
+  StylePalette raisedForSheet() {
+    if (brightness == Brightness.light) return this;
+    final borderGap =
+        AppLayers.lightness(border) - AppLayers.lightness(surface);
+    return copyWith(
+      background: surface,
+      surface: bar,
+      bar: AppLayers.step(bar, text, AppLayers.floatGapDark),
+      textMuted: AppLayers.keepGap(textMuted, text, from: surface, to: bar),
+      border: AppLayers.step(bar, text, borderGap.abs()),
     );
   }
 

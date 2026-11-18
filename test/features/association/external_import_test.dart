@@ -253,7 +253,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('無法辨識'), findsOneWidget);
-      expect(find.text('「notes.json」不是夜讀能匯入的格式。'), findsOneWidget);
+      // 提示框的說明照子句換行（ClauseText），比對內容時不看換行。
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              w.data?.replaceAll('\n', '') == '「notes.json」不是夜讀能匯入的格式。',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

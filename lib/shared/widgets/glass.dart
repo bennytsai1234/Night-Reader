@@ -441,7 +441,30 @@ class _PressScaleState extends State<PressScale> {
   }
 }
 
-/// 44×44 圓形玻璃按鈕；導航頁首兩側與閱讀器選單使用。
+/// 面板頁首裡的玻璃鈕（圓鈕、文字鈕、選單鈕）照這一層畫：看得到的大小 32、
+/// 觸控範圍維持 44；面板不透明，所以不取樣背景、底色不透明，也不畫貼邊
+/// 陰影（它長在面板上，不是浮在內容上）。面板頁首包這一層，呼叫的地方照
+/// 平常的寫法放按鈕，不各自傳大小（docs/design/components.md「面板頁首」）。
+class PanelButtons extends InheritedWidget {
+  const PanelButtons({super.key, required super.child});
+
+  /// 看得到的大小與圖示大小。
+  static const double size = 32.0;
+  static const double iconSize = 18.0;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PanelButtons>() != null;
+
+  /// 面板上按鈕的底色：玻璃那一階，不透明。
+  static Color tintOf(BuildContext context) =>
+      AppChrome.of(context).glassTint.withValues(alpha: 1);
+
+  @override
+  bool updateShouldNotify(PanelButtons oldWidget) => false;
+}
+
+/// 圓形玻璃按鈕，44×44；導航頁首兩側與閱讀器選單使用。在面板頁首裡
+/// （[PanelButtons]）看得到的圓是 32。
 class GlassIconButton extends StatelessWidget {
   const GlassIconButton({
     super.key,
@@ -450,14 +473,19 @@ class GlassIconButton extends StatelessWidget {
     this.tooltip,
     this.color,
     this.tint,
-    this.size = AppGlass.buttonSize,
-    this.iconSize = 22,
+    this.size,
+    this.iconSize,
     this.onLongPress,
     this.label,
     this.blur = true,
+    this.floating = true,
   });
 
   final IconData icon;
+
+  /// 見 [GlassSurface.floating]：列裡的一顆鈕（篩選列的格狀鈕）給 false，
+  /// 不畫貼邊陰影。
+  final bool floating;
 
   /// 放在不透明底上、跟著內容淡入時傳 false：不取樣背景，淡入中也沒有
   /// 模糊會在最後一幀才糊上（ADR 0022）。
@@ -470,8 +498,10 @@ class GlassIconButton extends StatelessWidget {
   final String? tooltip;
   final Color? color;
   final Color? tint;
-  final double size;
-  final double iconSize;
+
+  /// 不給時是 44；在面板頁首裡是 [PanelButtons.size]。
+  final double? size;
+  final double? iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -480,28 +510,36 @@ class GlassIconButton extends StatelessWidget {
     final foreground = (color ?? scheme.onSurface).withValues(
       alpha: enabled ? 1 : 0.38,
     );
+    final inPanel = PanelButtons.of(context);
+    final size =
+        this.size ?? (inPanel ? PanelButtons.size : AppGlass.buttonSize);
+    final iconSize = this.iconSize ?? (inPanel ? PanelButtons.iconSize : 22.0);
     Widget button = PressScale(
       onTap: onPressed,
       onLongPress: onLongPress,
-      child: SizedBox.square(
-        dimension: size,
-        child: GlassSurface(
-          shape: BoxShape.circle,
-          tint: tint,
-          shadow: false,
-          blur: blur,
-          child: Center(
-            child: switch (label) {
-              final text? => UiText(
-                text,
-                maxLines: 1,
-                style: AppTextStyles.uiSm.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w600,
+      child: _PanelHitBox(
+        inPanel: inPanel,
+        child: SizedBox.square(
+          dimension: size,
+          child: GlassSurface(
+            shape: BoxShape.circle,
+            tint: tint ?? (inPanel ? PanelButtons.tintOf(context) : null),
+            shadow: false,
+            floating: floating && !inPanel,
+            blur: blur && !inPanel,
+            child: Center(
+              child: switch (label) {
+                final text? => UiText(
+                  text,
+                  maxLines: 1,
+                  style: AppTextStyles.uiSm.copyWith(
+                    color: foreground,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              null => Icon(icon, size: iconSize, color: foreground),
-            },
+                null => Icon(icon, size: iconSize, color: foreground),
+              },
+            ),
           ),
         ),
       ),
@@ -529,6 +567,7 @@ class GlassTextButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.emphasized = false,
+    this.destructive = false,
     this.blur = true,
   });
 
@@ -538,6 +577,9 @@ class GlassTextButton extends StatelessWidget {
   /// 主要動作用主色字並加粗。
   final bool emphasized;
 
+  /// 危險動作（刪除）用危險色字並加粗。
+  final bool destructive;
+
   /// 見 [GlassIconButton.blur]。
   final bool blur;
 
@@ -545,33 +587,85 @@ class GlassTextButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
-    final color = emphasized ? scheme.primary : scheme.onSurface;
+    final color = destructive
+        ? (Theme.of(context).brightness == Brightness.dark
+              ? AppPalette.rustDark
+              : AppPalette.rust)
+        : emphasized
+        ? scheme.primary
+        : scheme.onSurface;
+    final inPanel = PanelButtons.of(context);
     return Semantics(
       button: true,
       enabled: enabled,
       child: PressScale(
         onTap: onPressed,
-        child: SizedBox(
-          height: AppGlass.buttonSize,
-          child: GlassSurface(
-            borderRadius: AppRadius.pillShape,
-            shadow: false,
-            blur: blur,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Center(
-                widthFactor: 1,
-                child: UiText(
-                  label,
-                  style: AppTextStyles.uiMd.copyWith(
-                    color: color.withValues(alpha: enabled ? 1 : 0.38),
-                    fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
+        child: _PanelHitBox(
+          inPanel: inPanel,
+          sideInset: true,
+          // 面板頁首裡高 32；系統字級放大、字比 32 高時跟著字長高，不裁字。
+          child: ConstrainedBox(
+            constraints: inPanel
+                ? const BoxConstraints(minHeight: PanelButtons.size)
+                : const BoxConstraints.tightFor(height: AppGlass.buttonSize),
+            child: GlassSurface(
+              borderRadius: AppRadius.pillShape,
+              tint: inPanel ? PanelButtons.tintOf(context) : null,
+              shadow: false,
+              floating: !inPanel,
+              blur: blur && !inPanel,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Center(
+                  widthFactor: 1,
+                  heightFactor: inPanel ? 1 : null,
+                  child: UiText(
+                    label,
+                    style: AppTextStyles.uiMd.copyWith(
+                      color: color.withValues(alpha: enabled ? 1 : 0.38),
+                      fontWeight: emphasized || destructive
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 面板頁首裡的鈕看得到的部分比較小：外面留 44 高（圓鈕也 44 寬）的觸控範圍，
+/// 看得到的部分置中。
+class _PanelHitBox extends StatelessWidget {
+  const _PanelHitBox({
+    required this.inPanel,
+    required this.child,
+    this.sideInset = false,
+  });
+
+  final bool inPanel;
+  final Widget child;
+
+  /// 比 44 寬的鈕（文字鈕）左右也各讓出圓鈕那 6，看得到的邊和圓鈕、底下的
+  /// 卡片切齊。
+  final bool sideInset;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!inPanel) return child;
+    const inset = (AppGlass.buttonSize - PanelButtons.size) / 2;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: AppGlass.buttonSize,
+        minHeight: AppGlass.buttonSize,
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: sideInset ? inset : 0),
+        child: Center(widthFactor: 1, heightFactor: 1, child: child),
       ),
     );
   }
@@ -659,10 +753,12 @@ class GlassCapsule extends StatelessWidget {
   static const double verticalPadding = AppSpacing.xs + 2;
 
   /// 選取中的淡主色底。字也是主色，主色比例壓低才維持 4.5:1 的文字對比。
-  static Color selectedTintOf(ColorScheme scheme) => Color.alphaBlend(
-    scheme.primary.withValues(alpha: 0.06),
-    scheme.surface.withValues(alpha: 0.9),
-  );
+  /// [opacity] 是底色的不透明度：有模糊時略透，沒有模糊時完全不透明。
+  static Color selectedTintOf(ColorScheme scheme, {required double opacity}) =>
+      Color.alphaBlend(
+        scheme.primary.withValues(alpha: 0.06),
+        scheme.surface.withValues(alpha: opacity),
+      );
 
   final String label;
   final VoidCallback? onTap;
@@ -708,7 +804,14 @@ class GlassCapsule extends StatelessWidget {
         // 篩選列與卡片上的膠囊是列裡的一顆按鈕，不是浮層。
         floating: false,
         blur: blur,
-        tint: selected ? selectedTintOf(scheme) : tint,
+        tint: selected
+            ? selectedTintOf(
+                scheme,
+                opacity: blur
+                    ? AppChrome.of(context).glassStrength.overBlur(0.9)
+                    : 1,
+              )
+            : tint,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md + 2,
@@ -965,13 +1068,12 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
     // 開 App 的進場：標題與按鈕先是骨架，跟書架一起換成真的。
-    // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高。
-    Widget slot(Widget? button) => morph
-        ? Center(
-            widthFactor: 1,
-            child: LaunchSkeleton(child: GlassMorph(child: button)),
-          )
-        : LaunchSkeleton(child: button!);
+    // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高，
+    // 左右兩側的鈕才一樣大。
+    Widget slot(Widget? button) => Center(
+      widthFactor: 1,
+      child: LaunchSkeleton(child: morph ? GlassMorph(child: button) : button!),
+    );
     // 連續過渡時沒有按鈕的一側也留著位置，按鈕才能從一個點長出來。
     final hasLeading = effectiveLeading != null || morph;
     final trailing = morph && actions.isEmpty ? const <Widget?>[null] : actions;

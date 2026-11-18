@@ -240,10 +240,10 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   Future<void> _confirmDelete(ReplaceRule rule) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除規則',
-      message: '確定刪除「${rule.name.isEmpty ? rule.pattern : rule.name}」？',
+      title: '刪除規則「${rule.name.isEmpty ? rule.pattern : rule.name}」？',
       confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (confirmed) {
       await _deleteRule(rule);
