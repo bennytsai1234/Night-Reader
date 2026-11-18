@@ -109,7 +109,7 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('全部分組'));
     await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('關閉'));
+    await tester.tap(find.byTooltip('關閉'));
     await tester.pumpAndSettle();
 
     expect(changes, isEmpty);

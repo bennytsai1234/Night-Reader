@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../../engine/app_event_bus.dart';
 import '../../models/base_source.dart';
 import '../../models/book_source.dart';
 import '../../services/app_log_service.dart';
@@ -161,12 +162,16 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// 刪掉書源，連同以它的身分存的登入資訊、登入標頭與變數
-  /// （[BaseSource.forgetCachedIdentity]）。
+  /// （[BaseSource.forgetCachedIdentity]）；刪完通知
+  /// [AppEventBus.sourcesDeleted]，用它的書架上的書自動換源（ADR 0069）。
   Future<void> deleteByUrl(String url) => deleteByUrls([url]);
 
   Future<void> deleteByUrls(List<String> urls) async {
     await _deleteRows(urls);
     await _forgetIdentities(urls);
+    if (urls.isNotEmpty) {
+      AppEventBus().fire(AppEventBus.sourcesDeleted, data: [...urls]);
+    }
   }
 
   Future<void> _forgetIdentities(List<String> urls) async {

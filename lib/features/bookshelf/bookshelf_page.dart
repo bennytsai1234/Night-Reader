@@ -270,23 +270,24 @@ class _BookshelfPageState extends State<BookshelfPage>
       return GlassNavHeader(
         morph: true,
         title: '已選 ${_selectedUrls.length} 本',
+        // 同書源管理的多選：左全選、右完成（docs/design/components.md）。
         leading: GlassTextButton(
-          label: '完成',
-          emphasized: true,
-          onPressed: _batchAction != null ? null : _exitEditMode,
+          label: allSelected ? '全不選' : '全選',
+          onPressed: _batchAction != null
+              ? null
+              : () => setState(() {
+                  if (allSelected) {
+                    _selectedUrls.clear();
+                  } else {
+                    _selectedUrls.addAll(shown.map((b) => b.bookUrl));
+                  }
+                }),
         ),
         actions: [
           GlassTextButton(
-            label: allSelected ? '全不選' : '全選',
-            onPressed: _batchAction != null
-                ? null
-                : () => setState(() {
-                    if (allSelected) {
-                      _selectedUrls.clear();
-                    } else {
-                      _selectedUrls.addAll(shown.map((b) => b.bookUrl));
-                    }
-                  }),
+            label: '完成',
+            emphasized: true,
+            onPressed: _batchAction != null ? null : _exitEditMode,
           ),
         ],
       );
@@ -336,6 +337,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         label: '統一封面',
         icon: Icons.nights_stay_outlined,
         checked: provider.unifiedCovers,
+        toggle: true,
       ),
       const GlassMenuDivider(),
       const GlassMenuItem(
@@ -1058,6 +1060,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: '自動檢查更新',
           icon: Icons.autorenew_rounded,
           checked: !book.isLocal && book.canUpdate,
+          toggle: true,
           enabled: !book.isLocal,
         ),
         const GlassMenuDivider(),
@@ -1143,10 +1146,12 @@ class _BookshelfPageState extends State<BookshelfPage>
   Future<void> _confirmRemoveOne(BookshelfProvider provider, Book book) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '移出書架',
-      message: '這本書會從書架移出，並刪除本機正文、下載任務、目錄與封面資料。',
+      title: '把《${book.name}》移出書架？',
+      // 本地書在夜讀資料夾裡的那份原檔也會刪掉（BookStorageService）。
+      message: book.isLocal ? '夜讀裡的這份原檔與封面一起刪除。' : '下載的正文與封面一起刪除。',
       confirmLabel: '移出',
       destructive: true,
+      irreversible: book.isLocal,
     );
     if (!confirmed || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1274,11 +1279,14 @@ class _BookshelfPageState extends State<BookshelfPage>
     final selectedUrls = Set<String>.from(_selectedUrls);
     final confirmed = await showAppConfirm(
       context: context,
-      title: '確認刪除',
-      message:
-          '將永久刪除這 ${selectedUrls.length} 本書，以及本機章節、正文快取、下載任務與封面資料。此操作無法復原。',
+      title: '刪除 ${selectedUrls.length} 本書？',
+      // 本地書在夜讀資料夾裡的那份原檔也會刪掉（BookStorageService）。
+      message: p.books.any((b) => selectedUrls.contains(b.bookUrl) && b.isLocal)
+          ? '下載的正文、封面與本地書在夜讀裡的原檔一起刪除。'
+          : '下載的正文與封面一起刪除。',
       confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed || !mounted) return;
     final messenger = ScaffoldMessenger.of(this.context);

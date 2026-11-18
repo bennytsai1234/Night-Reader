@@ -697,7 +697,10 @@ class BookDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<BookDetailOperationResult> changeSource(SearchBook newSource) async {
+  Future<BookDetailOperationResult> changeSource(
+    SearchBook newSource, {
+    SourceToc? toc,
+  }) async {
     if (_isChangingSource) {
       return BookDetailOperationResult.failure('正在換源，請稍候');
     }
@@ -710,6 +713,7 @@ class BookDetailProvider extends ChangeNotifier {
         newSource,
         targetChapterIndex: oldBook.chapterIndex,
         targetChapterTitle: oldBook.durChapterTitle,
+        toc: toc,
       );
       await _sourceSwitchService.commitSwitch(
         oldBook,

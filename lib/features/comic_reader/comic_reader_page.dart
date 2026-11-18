@@ -515,8 +515,11 @@ class _ComicReaderPageState extends State<ComicReaderPage>
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeSourceSheet(
         book: _book,
-        onSelectSource: (candidate) =>
-            _switchSource(candidate, onSuccess: (done) => prepared = done),
+        onSelectSource: (candidate, toc) => _switchSource(
+          candidate,
+          toc: toc,
+          onSuccess: (done) => prepared = done,
+        ),
       ),
     );
     final done = prepared;
@@ -530,6 +533,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
 
   Future<ChangeSourceOutcome> _switchSource(
     SearchBook candidate, {
+    SourceToc? toc,
     required void Function(PreparedSourceSwitch prepared) onSuccess,
   }) async {
     final service = SourceSwitchService(
@@ -550,6 +554,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         candidate,
         targetChapterIndex: location.chapterIndex,
         targetChapterTitle: title.isEmpty ? null : title,
+        toc: toc,
       );
       // 換源時文字書照字的位置對，漫畫沒有字：對到同名的那一話就接著同一
       // 張（新書源張數不同時，開書時夾在範圍內）。

@@ -146,13 +146,18 @@ class _Platform implements BackgroundWorkPlatform {
 }
 
 /// 等 [done]：找書在假時間裡開始，計時器要 pump 才走、寫紀錄檔要真的時間，
-/// 輪流給（進行中那一輪的圖示一直轉，pumpAndSettle 等不到停）。
+/// 輪流給（進行中那一輪的圖示一直轉，pumpAndSettle 等不到停）。假時間最多走
+/// 200 次 50ms；之後只給真的時間（pump 不再推進假時間），最多 10 秒：CI 機器忙時
+/// 寫檔會超過 200 次 5ms 的真實時間。
 Future<void> settle(WidgetTester tester, bool Function() done) async {
-  for (var i = 0; i < 200 && !done(); i++) {
+  final real = Stopwatch()..start();
+  for (var i = 0; !done() && real.elapsed < const Duration(seconds: 10); i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 5)),
     );
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(
+      i < 200 ? const Duration(milliseconds: 50) : Duration.zero,
+    );
   }
   expect(done(), isTrue);
 }

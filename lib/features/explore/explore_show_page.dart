@@ -228,7 +228,7 @@ class ExploreShowView extends StatelessWidget {
     showAppAlert<void>(
       context: context,
       title: '錯誤原因',
-      content: SelectableText(message, style: AppTextStyles.bodySm),
+      content: SelectableText(message),
       actions: const [
         AppAlertAction(label: '關閉', value: null, isDefault: true),
       ],

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -22,7 +24,8 @@ class AppBottomSheet extends StatelessWidget {
   /// 分組卡片的面板才開。
   final bool skeletonEntrance;
 
-  /// 關閉鈕左側的附加動作。
+  /// 頁首右邊的動作；有它時關閉鈕移到左邊（docs/design/components.md
+  /// 「左右各一顆」）。
   final Widget? trailing;
   final bool showDragHandle;
 
@@ -42,7 +45,11 @@ class AppBottomSheet extends StatelessWidget {
 
   static const double _handleWidth = 36;
   static const double _handleHeight = 5;
-  static const double _closeSize = 32;
+
+  /// 頁首左右的留白：按鈕的觸控範圍是 44、看得到的圓是 32，往外讓 6，
+  /// 看得到的邊才和底下的卡片切齊。
+  static const double _headerInset =
+      AppGrouped.margin - (AppGlass.buttonSize - PanelButtons.size) / 2;
 
   /// 內容左右對齊分組卡片的外距，底下留一段空白。
   static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(
@@ -73,6 +80,12 @@ class AppBottomSheet extends StatelessWidget {
     AppChrome chrome,
     double maxHeight,
   ) {
+    final close = GlassIconButton(
+      icon: Icons.close_rounded,
+      tooltip: '關閉',
+      color: chrome.sectionText,
+      onPressed: () => Navigator.maybePop(context),
+    );
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -94,47 +107,40 @@ class AppBottomSheet extends StatelessWidget {
                   ),
                 ),
               ),
-            SizedBox(
-              height: AppGlass.headerToolbarHeight,
-              child: NavigationToolbar(
-                centerMiddle: true,
-                middleSpacing: AppSpacing.md,
-                // 左側放一塊與關閉鈕等寬的空白，讓沒有 trailing 時標題也真正置中。
-                leading: const SizedBox(
-                  width: AppGrouped.margin + AppGlass.buttonSize,
-                ),
-                middle: Semantics(
-                  header: true,
-                  child: DragOverflowText(
-                    child: UiText(
-                      title,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.titleSm.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface,
+            PanelButtons(
+              child: SizedBox(
+                height: AppGlass.headerToolbarHeight,
+                child: NavigationToolbar(
+                  centerMiddle: true,
+                  middleSpacing: AppSpacing.md,
+                  // 左右各一顆：有右側動作時關閉在左邊；沒有時左邊空出和
+                  // 關閉鈕一樣寬，長標題也留在正中。兩側照按鈕自己的大小置中，
+                  // 不被撐高。
+                  leading: trailing == null
+                      ? const SizedBox(
+                          width: _headerInset + AppGlass.buttonSize,
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.only(left: _headerInset),
+                          child: Center(widthFactor: 1, child: close),
+                        ),
+                  middle: Semantics(
+                    header: true,
+                    child: DragOverflowText(
+                      child: UiText(
+                        title,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.titleSm.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                trailing: Padding(
-                  padding: const EdgeInsets.only(right: AppGrouped.margin),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (trailing != null) ...[
-                        trailing!,
-                        const SizedBox(width: AppSpacing.sm),
-                      ],
-                      GlassIconButton(
-                        icon: Icons.close_rounded,
-                        tooltip: '關閉',
-                        size: _closeSize,
-                        iconSize: 18,
-                        color: chrome.sectionText,
-                        onPressed: () => Navigator.maybePop(context),
-                      ),
-                    ],
+                  trailing: Padding(
+                    padding: const EdgeInsets.only(right: _headerInset),
+                    child: Center(widthFactor: 1, child: trailing ?? close),
                   ),
                 ),
               ),
@@ -192,24 +198,40 @@ class AppBottomSheet extends StatelessWidget {
     required WidgetBuilder builder,
     bool isScrollControlled = false,
     bool useSafeArea = false,
+    bool isDismissible = true,
     bool? showDragHandle,
     Color? backgroundColor,
     Color? barrierColor,
     ShapeBorder? shape,
     Clip? clipBehavior,
     BoxConstraints? constraints,
+    bool raised = true,
   }) {
+    // 面板裡的底色照面板的主題（深色往上一階，`sheetThemeOf`）；閱讀器面板
+    // 用選單主題自己分層，給 raised: false。
+    ThemeData themeOf(BuildContext context) =>
+        raised ? sheetThemeOf(Theme.of(context)) : Theme.of(context);
     return showModalBottomSheet<T>(
       context: context,
-      builder: builder,
+      builder: (context) => Theme(
+        data: themeOf(context),
+        child: Builder(builder: builder),
+      ),
       // 不給時照 Material 3 預設：最寬 640、置中。
       constraints: constraints,
       barrierColor: barrierColor ?? AppChrome.of(context).barrier,
+      // 讀螢幕軟體念遮罩的名字；不給時是 Material 的英文「Scrim」。
+      barrierLabel: UiLanguageText.convert(context, '關閉'),
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
+      // 不能點外面關掉時也不能往下拉掉（例如還沒儲存的表單）。
+      isDismissible: isDismissible,
+      enableDrag: isDismissible,
       showDragHandle: showDragHandle,
       backgroundColor:
-          backgroundColor ?? AppChrome.of(context).groupedBackground,
+          backgroundColor ??
+          themeOf(context).extension<AppChrome>()?.groupedBackground ??
+          AppChrome.of(context).groupedBackground,
       elevation: 0,
       shape:
           shape ??
@@ -236,25 +258,27 @@ class SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppGrouped.margin,
+        AppBottomSheet._headerInset,
         AppSpacing.sm,
-        AppGrouped.margin,
+        AppBottomSheet._headerInset,
         AppSpacing.xs,
       ),
-      child: SizedBox(
-        height: AppGlass.buttonSize,
-        child: NavigationToolbar(
-          middleSpacing: AppSpacing.md,
-          leading: leading,
-          trailing: trailing,
-          middle: Semantics(
-            header: true,
-            child: DragOverflowText(
-              child: UiText(
-                title,
-                maxLines: 1,
-                style: AppTextStyles.titleMd.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
+      child: PanelButtons(
+        child: SizedBox(
+          height: AppGlass.buttonSize,
+          child: NavigationToolbar(
+            middleSpacing: AppSpacing.md,
+            leading: leading,
+            trailing: trailing,
+            middle: Semantics(
+              header: true,
+              child: DragOverflowText(
+                child: UiText(
+                  title,
+                  maxLines: 1,
+                  style: AppTextStyles.titleMd.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
             ),

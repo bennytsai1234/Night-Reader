@@ -12,11 +12,15 @@ class SourceEditBasic extends StatelessWidget {
   /// 使用者在「書源類型」選了另一個類型（Legado 的 `bookSourceType`）。
   final ValueChanged<int> onTypeChanged;
 
+  /// 用編輯中還沒存的內容除錯；儲存中為 null，這一列灰掉。
+  final VoidCallback? onDebug;
+
   const SourceEditBasic({
     super.key,
     required this.source,
     required this.controllers,
     required this.onTypeChanged,
+    required this.onDebug,
   });
 
   @override
@@ -77,6 +81,17 @@ class SourceEditBasic extends StatelessWidget {
               controller: controllers['loginCheckJs']!,
               hintText: '登入檢查程式',
               maxLines: 3,
+            ),
+          ],
+        ),
+        // 頁首右邊只放「儲存」，除錯搬到這裡（docs/design/screens.md）。
+        GroupedSection(
+          children: [
+            GroupedRow(
+              title: '除錯書源',
+              leading: const GroupedIconTile(Icons.bug_report_outlined),
+              enabled: onDebug != null,
+              onTap: onDebug,
             ),
           ],
         ),

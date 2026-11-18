@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -49,6 +51,20 @@ void main() {
         );
         if (brightness == Brightness.light) {
           expect(palette.bar, palette.surface, reason: '淺色玻璃與卡片同色');
+          final card = AppLayers.lch(palette.surface);
+          final page = AppLayers.lch(palette.background);
+          // 寫死的色碼取整到 8 位元：彩度差 0.3、色相差 0.8 度以內。
+          expect(
+            page.c,
+            closeTo(card.c * AppLayers.pageChromaLight, 0.5),
+            reason: '頁面彩度是卡片的 ${AppLayers.pageChromaLight} 倍',
+          );
+          if (card.c < 0.5) {
+            expect(page.c, lessThan(0.5), reason: '沒有色調的風格頁面也是灰');
+          } else {
+            final hue = (page.h - card.h).abs() % 360;
+            expect(math.min(hue, 360 - hue), lessThan(1.5), reason: '頁面色相同卡片');
+          }
         } else {
           expect(
             l(palette.bar) - l(palette.surface),
@@ -289,5 +305,14 @@ void main() {
       await register(<String, Object>{PreferKey.appAccent: 'rainbow'});
       expect(ThemeSettingsProvider().accent, AppAccent.defaultAccent);
     });
+  });
+
+  test('CIELAB 換算：純紅是 L 53.2、C 104.6、色相 40 度', () {
+    // 獨立的參考值（sRGB、D65），不靠 lch() 自己算。
+    final red = AppLayers.lch(const Color(0xFFFF0000));
+    expect(red.l, closeTo(53.24, 0.1));
+    expect(red.c, closeTo(104.55, 0.3));
+    expect(red.h, closeTo(40.0, 0.3));
+    expect(red.l, closeTo(AppLayers.lightness(const Color(0xFFFF0000)), 0.01));
   });
 }

@@ -1,7 +1,7 @@
 name: Android Release
 
 on:
-  # 測試版由合併的人合完一批、beta 的 CI 通過後手動以 channel=beta 執行，一批發一版
+  # 測試版在使用者說「發測試版」、beta 的 CI 通過後手動以 channel=beta 執行
   # （ADR 0049）；推上 main（只會快轉到 beta 上的提交）在 pubspec 版號升到還沒發布的版本時
   # 發正式版（ADR 0002、0049）。
   push:
@@ -294,7 +294,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.0"
+          flutter-version: "3.47.2"
           channel: stable
           cache: true
 
@@ -428,7 +428,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.0"
+          flutter-version: "3.47.2"
           channel: stable
           cache: true
 

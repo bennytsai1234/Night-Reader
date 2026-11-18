@@ -571,6 +571,7 @@ class AiRepairSession extends ChangeNotifier {
     requests: _pages.add(probe.requests, probe.pages),
     timedOut: probe.timedOut,
     contentUsable: probe.contentUsable,
+    unjoinedNextPage: probe.unjoinedNextPage,
   );
 
   /// 和 AI 來回（ADR 0054）：交給和任務無關的迴圈（[runAgent]），書源修復
@@ -1434,7 +1435,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
           s._finish(step, '$changed，$where試抓：${probe.summary}');
           return answer(aiRepairProbeReply(s._withPageIds(probe)));
         }
-        if (unjoinedContentPage(probe, candidate) case final next?) {
+        if (probe.unjoinedNextPage case final next?) {
           final hasRule = (candidate.ruleContent?.nextContentUrl ?? '')
               .trim()
               .isNotEmpty;

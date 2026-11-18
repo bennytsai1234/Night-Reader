@@ -95,7 +95,8 @@ void main() {
     PathProviderPlatform.instance = _TempPaths(tempDir.path);
     AudioServicePlatform.instance = _RejectingAudioPlatform();
     final logs = <String>[];
-    AppLog.delegate = (message, error, stackTrace, toast) => logs.add(message);
+    AppLog.delegate = (message, error, stackTrace, toast, isError) =>
+        logs.add(message);
     addTearDown(() => AppLog.delegate = null);
 
     final playback = SystemPlayback(artwork: _NoArtwork());

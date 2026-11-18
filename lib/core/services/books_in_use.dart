@@ -30,6 +30,13 @@ class BooksInUse {
 
   /// 現在開著的書的網址。
   static Set<String> get bookUrls => {for (final book in _held) book.bookUrl};
+
+  static final StreamController<String> _released =
+      StreamController<String>.broadcast();
+
+  /// 一本書關掉了（沒有別的頁面還開著它）：傳出它的網址。開著時不能自動換源
+  /// 的書，關掉後接著換（ADR 0069）。
+  static Stream<String> get released => _released.stream;
 }
 
 /// [BooksInUse.hold] 登記的一筆。
@@ -38,5 +45,10 @@ final class BookInUse {
 
   String bookUrl;
 
-  void release() => BooksInUse._held.remove(this);
+  void release() {
+    if (!BooksInUse._held.remove(this)) return;
+    if (!BooksInUse.bookUrls.contains(bookUrl)) {
+      BooksInUse._released.add(bookUrl);
+    }
+  }
 }

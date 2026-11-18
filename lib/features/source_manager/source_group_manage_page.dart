@@ -248,8 +248,8 @@ class SourceGroupManagePage extends StatelessWidget {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除分組',
-      message: '確定要刪除分組 "$name" 嗎？\n這不會刪除書源，只會移除該分組標籤。',
+      title: '刪除分組「$name」？',
+      message: '書源不會刪除，只拿掉這個分組。',
       confirmLabel: '刪除',
       destructive: true,
     );

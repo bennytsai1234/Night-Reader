@@ -174,6 +174,38 @@ class BackgroundWork extends ChangeNotifier {
     return true;
   }
 
+  /// 排在現在那一件後面的工作：只有自動換源排隊（ADR 0069 是 0058「不做
+  /// 排隊」的例外）。
+  ({BackgroundJob job, BackgroundWorkStatus status, Completer<void> started})?
+  _queued;
+
+  /// 開始 [job]；有別件在跑時排在它後面，它結束時接著開始。傳回 [job] 開始
+  /// 的時候。不要通知權限：自動換源是靜默的，不在刪書源時跳出權限詢問。
+  ///
+  /// 接著開始時通知不收、直接換成 [job] 的樣子：前景服務一直開著，夜讀那時
+  /// 不在前景也接得上（Android 不讓背景的 App 啟動前景服務）。
+  Future<void> beginAfterCurrent(
+    BackgroundJob job,
+    BackgroundWorkStatus status,
+  ) {
+    if (identical(_job, job)) return Future<void>.value();
+    final queued = _queued;
+    if (queued != null) {
+      assert(identical(queued.job, job), 'only one job waits');
+      return queued.started.future;
+    }
+    if (_job == null) {
+      _job = job;
+      _shown = status;
+      _send(() => _flush(job));
+      notifyListeners();
+      return Future<void>.value();
+    }
+    final started = Completer<void>();
+    _queued = (job: job, status: status, started: started);
+    return started.future;
+  }
+
   /// [job] 做到哪裡了：內容和上一次一樣（同一個千分位）時不送；前一次還沒
   /// 送完時連續幾次變動只送最後一次。
   void update(BackgroundJob job, BackgroundWorkStatus status) {
@@ -182,9 +214,20 @@ class BackgroundWork extends ChangeNotifier {
     _send(() => _flush(job));
   }
 
-  /// [job] 結束了（做完、停下或出錯）：收掉通知，位置空出來。
+  /// [job] 結束了（做完、停下或出錯）：收掉通知，位置空出來；有排隊的
+  /// （[beginAfterCurrent]）就換成它，通知不收。
   void end(BackgroundJob job) {
     if (!identical(_job, job)) return;
+    final queued = _queued;
+    if (queued != null) {
+      _queued = null;
+      _job = queued.job;
+      _shown = queued.status;
+      _send(() => _flush(queued.job));
+      queued.started.complete();
+      notifyListeners();
+      return;
+    }
     _job = null;
     _shown = null;
     _send(() async {

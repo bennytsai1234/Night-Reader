@@ -27,6 +27,7 @@ import 'source_group_manage_page.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/cover_reveal.dart';
@@ -37,7 +38,7 @@ import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
-import 'widgets/import_preview_dialog.dart';
+import 'widgets/import_preview_sheet.dart';
 import 'widgets/source_item_tile.dart';
 import '../source_login/source_login_page.dart';
 import 'widgets/source_list_skeleton.dart';
@@ -46,7 +47,6 @@ import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceManagerPage extends StatefulWidget {
@@ -817,9 +817,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '還原 AI 修改前',
-      message: '「${s.bookSourceName}」換回 AI 修改之前的版本；AI 修好之後的改動也會一起換掉。',
+      title: '把「${s.bookSourceName}」換回 AI 修改前？',
+      message: 'AI 修好之後的改動也會一起換掉。',
       confirmLabel: '還原',
+      destructive: true,
+      irreversible: true,
     );
     if (!confirmed || !mounted) return;
     await _runAction(() async {
@@ -834,10 +836,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除書源',
-      message: '確定要刪除「${s.bookSourceName}」嗎？',
+      title: '刪除「${s.bookSourceName}」？',
       confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed || !mounted) return;
     await _runAction(() => p.deleteSource(s), errorPrefix: '刪除書源失敗');
@@ -852,10 +854,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showAppConfirm(
       context: context,
-      title: '確認刪除',
-      message: '確定要刪除選中的 $count 個書源嗎？',
-      confirmLabel: '確定刪除',
+      title: '刪除 $count 個書源？',
+      confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed) return;
     try {
@@ -870,136 +872,97 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     }
   }
 
+  /// 多選的書源加入或移出一個分組：底部面板上面是分組名稱的輸入列，下面
+  /// 列出現有的分組，點了填進輸入列；頁首右邊「加入」「移出」。
   Future<void> _showSelectionGroupDialog(
     BuildContext context,
     SourceManagerProvider p, {
     required bool remove,
   }) async {
     final pageContext = context;
+    final action = remove ? '移出' : '加入';
     String? inputError;
-    await showStatefulAppAlert<void>(
+    await AppBottomSheet.showCustom<void>(
       context: context,
-      fieldTexts: const [''],
-      builder: (dialogContext, setDialogState, fields) {
-        final ctrl = fields.single;
-        final chrome = AppChrome.of(dialogContext);
-        final scheme = Theme.of(dialogContext).colorScheme;
-        return AppAlert<bool>(
-          title: remove ? '移出分組' : '加入分組',
-          onAction: (confirmed) async {
-            if (!confirmed) {
-              Navigator.pop(dialogContext);
-              return;
-            }
-            final text = ctrl.text.trim();
-            if (text.isEmpty) {
-              setDialogState(() => inputError = '請輸入或選擇分組名稱');
-              return;
-            }
-            final selected = p.selectedUrls;
-            Navigator.pop(dialogContext);
-            try {
-              if (remove) {
-                await p.selectionRemoveFromGroups(selected, text);
-              } else {
-                await p.selectionAddToGroups(selected, text);
+      isScrollControlled: true,
+      builder: (sheetContext) => TextControllersScope(
+        initialTexts: const [''],
+        builder: (sheetContext, fields) => StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final ctrl = fields.single;
+            Future<void> submit() async {
+              final text = ctrl.text.trim();
+              if (text.isEmpty) {
+                setSheetState(() => inputError = '輸入或選一個分組');
+                return;
               }
-            } catch (error) {
-              if (pageContext.mounted) {
-                ScaffoldMessenger.of(pageContext).showSnackBar(
-                  SnackBar(
-                    content: UiText(
-                      failureMessage('${remove ? '移出' : '加入'}分組', error),
+              final selected = p.selectedUrls;
+              Navigator.pop(sheetContext);
+              try {
+                if (remove) {
+                  await p.selectionRemoveFromGroups(selected, text);
+                } else {
+                  await p.selectionAddToGroups(selected, text);
+                }
+              } catch (error) {
+                if (pageContext.mounted) {
+                  ScaffoldMessenger.of(pageContext).showSnackBar(
+                    SnackBar(
+                      content: UiText(failureMessage('$action分組', error)),
                     ),
-                  ),
-                );
+                  );
+                }
               }
             }
-          },
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AlertTextField(
-                controller: ctrl,
-                errorText: inputError,
-                // 每次輸入都重建，下方清單的勾選才跟著輸入框的內容。
-                onChanged: (_) => setDialogState(() => inputError = null),
+
+            return AppBottomSheet(
+              title: '$action分組',
+              trailing: GlassTextButton(
+                label: action,
+                emphasized: true,
+                onPressed: submit,
               ),
-              if (p.allGroups.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.md),
-                Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: chrome.groupedBackground,
-                    borderRadius: AppRadius.cardMd,
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: p.allGroups.length,
-                    separatorBuilder: (_, _) => Padding(
-                      padding: const EdgeInsets.only(left: AppSpacing.md),
-                      child: Container(
-                        height: AppGlass.hairline,
-                        color: chrome.separator,
-                      ),
+              children: [
+                GroupedSection(
+                  margin: EdgeInsets.zero,
+                  topGap: AppSpacing.md,
+                  children: [
+                    GroupedTextFieldRow(
+                      controller: ctrl,
+                      hintText: '分組名稱',
+                      errorText: inputError,
+                      // 每次輸入都重建，下面清單的勾才跟著輸入列的內容。
+                      onChanged: (_) => setSheetState(() => inputError = null),
                     ),
-                    itemBuilder: (_, i) {
-                      final g = p.allGroups[i];
-                      final picked = ctrl.text.trim() == g;
-                      return InkWell(
-                        onTap: () {
-                          ctrl.value = TextEditingValue(
-                            text: g,
-                            selection: TextSelection.collapsed(
-                              offset: g.length,
-                            ),
-                          );
-                          setDialogState(() => inputError = null);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md,
-                            vertical: AppSpacing.md,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: DragOverflowText(
-                                  child: UiText(
-                                    g,
-                                    translate: false,
-                                    maxLines: 1,
-                                    style: AppTextStyles.bodyBase.copyWith(
-                                      height: 1.3,
-                                      color: scheme.onSurface,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (picked)
-                                Icon(
-                                  Icons.check_rounded,
-                                  size: 18,
-                                  color: scheme.primary,
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  ],
                 ),
+                if (p.allGroups.isNotEmpty)
+                  GroupedSection(
+                    margin: EdgeInsets.zero,
+                    header: '現有分組',
+                    children: [
+                      for (final g in p.allGroups)
+                        GroupedCheckRow(
+                          title: g,
+                          translate: false,
+                          selected: ctrl.text.trim() == g,
+                          onTap: () => setSheetState(() {
+                            ctrl.value = TextEditingValue(
+                              text: g,
+                              selection: TextSelection.collapsed(
+                                offset: g.length,
+                              ),
+                            );
+                            inputError = null;
+                          }),
+                        ),
+                    ],
+                  ),
               ],
-            ],
-          ),
-          actions: const [
-            AppAlertAction(label: '取消', value: false),
-            AppAlertAction(label: '確定', value: true, isDefault: true),
-          ],
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -1018,7 +981,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         unsupportedSources: parsed.unsupportedSources,
       );
       if (!context.mounted) return;
-      final confirmed = await showImportPreviewDialog(context, preview);
+      final confirmed = await showImportPreviewSheet(context, preview);
       if (confirmed != null && confirmed.isNotEmpty) {
         final count = await p.importSources(confirmed);
         if (context.mounted) {

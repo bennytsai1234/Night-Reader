@@ -143,8 +143,7 @@ class SearchHistoryView extends StatelessWidget {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除記錄',
-      message: '確定要刪除「${keyword.word}」嗎？',
+      title: '刪除搜尋紀錄「${keyword.word}」？',
       confirmLabel: '刪除',
       destructive: true,
     );
@@ -157,8 +156,9 @@ class SearchHistoryView extends StatelessWidget {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除找書紀錄',
-      message: '確定要刪除「${find.description}」這次的找書嗎？',
+      title: '刪除這筆找書紀錄？',
+      message: find.description,
+      translateMessage: false,
       confirmLabel: '刪除',
       destructive: true,
     );
@@ -168,8 +168,7 @@ class SearchHistoryView extends StatelessWidget {
   Future<void> _confirmClearHistory(BuildContext context) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '清空歷史',
-      message: '確定要清空所有搜尋歷史嗎？',
+      title: '清空所有搜尋紀錄？',
       confirmLabel: '清空',
       destructive: true,
     );

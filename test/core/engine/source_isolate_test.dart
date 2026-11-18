@@ -473,7 +473,7 @@ void main() {
       database: Future.value(databaseIsolate),
     );
     final started = Completer<void>();
-    AppLog.delegate = (message, error, stackTrace, toast) {
+    AppLog.delegate = (message, error, stackTrace, toast, isError) {
       if (message.contains('規則 JS 開始跑了') && !started.isCompleted) {
         started.complete();
       }
@@ -687,7 +687,7 @@ void main() {
 
   test('logs reach the main isolate', () async {
     final logs = <(String, bool)>[];
-    AppLog.delegate = (message, error, stackTrace, toast) =>
+    AppLog.delegate = (message, error, stackTrace, toast, isError) =>
         logs.add((message, toast));
     addTearDown(() => AppLog.delegate = null);
 
@@ -1058,7 +1058,7 @@ void main() {
 
     setUp(() {
       logs = [];
-      AppLog.delegate = (message, error, stackTrace, toast) =>
+      AppLog.delegate = (message, error, stackTrace, toast, isError) =>
           logs.add(message);
       source = BookSource.fromJson({
         'bookSourceUrl': baseUrl,
