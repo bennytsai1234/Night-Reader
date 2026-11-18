@@ -269,7 +269,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               icon: Icons.refresh_rounded,
               iconSize: 20,
               tooltip: '重新搜尋',
-              onPressed: _isSwitchingSource ? null : provider.startSearch,
+              onPressed: _isSwitchingSource ? null : provider.refreshSearch,
             ),
     );
   }
