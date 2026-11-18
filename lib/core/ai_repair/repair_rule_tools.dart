@@ -44,6 +44,10 @@ Future<String> parseRepairPage(
 /// [_jsResultLength] 字；出錯時是錯誤訊息。程式送出的請求接在後面：實際送出
 /// 的標頭與回應的開頭（2026-11-13 酷匠阅读的 AI 兩次把標頭包在 `headers`
 /// 裡傳給 `java.connect`，看不到送出了什麼，以為整套介面失效）。
+///
+/// 請求一邊跑一邊交回來（[RequestLog.live]）：規則 JS 同步等網路、超過時間
+/// 時，已經送出的請求和網站回了什麼照樣附上（2026-11-14 Codex 審查用本機
+/// 伺服器重現：超時就只剩「超過時間，沒做完」）。
 Future<String> runRepairJs(
   BookSource source, {
   required String code,
@@ -51,20 +55,37 @@ Future<String> runRepairJs(
   required Duration timeout,
   CancelToken? cancelToken,
   @visibleForTesting Future<DriftIsolate>? database,
-}) => _inWorker(
-  'RepairJs',
-  _jsTask(source.toJson(), code, pages),
-  timeout: timeout,
-  cancelToken: cancelToken,
-  database: database,
-);
+}) async {
+  // 只留要附上的那麼多字：送了很多請求的程式不在這裡越積越多。
+  final sent = StringBuffer();
+  var cut = false;
+  final result = await _inWorker(
+    'RepairJs',
+    _jsTask(source.toJson(), code, pages),
+    timeout: timeout,
+    cancelToken: cancelToken,
+    database: database,
+    onProgress: (entry) {
+      if (entry is! LoggedRequestLine || cut) return;
+      final line = sent.isEmpty ? entry.line : '\n${entry.line}';
+      final room = _jsRequestsLength - sent.length;
+      cut = line.length > room;
+      sent.write(cut ? line.substring(0, room) : line);
+    },
+  );
+  if (sent.isEmpty) return result;
+  return '$result\n# 這段程式送出的請求\n$sent${cut ? '…（後面省略）' : ''}';
+}
 
+/// [onProgress] 收 [task] 一邊跑一邊交回的紀錄；傳回之後（含超過時間）到的
+/// 不收。
 Future<String> _inWorker(
   String name,
   Future<String> Function(CancelToken) task, {
   required Duration timeout,
   CancelToken? cancelToken,
   Future<DriftIsolate>? database,
+  void Function(Object entry)? onProgress,
 }) async {
   final SourceWorker worker;
   try {
@@ -82,7 +103,7 @@ Future<String> _inWorker(
       cancelToken?.whenCancel.then((_) => worker.kill(StateError('已停止'))),
     );
     return await worker
-        .run(task, cancelToken: cancelToken)
+        .run(task, cancelToken: cancelToken, onProgress: onProgress)
         .timeout(timeout, onTimeout: () => '超過時間，沒做完');
   } catch (error) {
     return '出錯：$error';
@@ -219,8 +240,9 @@ Future<String> Function(CancelToken) _jsTask(
   final requests = RequestLog(
     responsePreview: RequestLog.diagnosisPreview,
     sentHeaders: true,
+    live: true,
   );
-  final result = await requests.run(() async {
+  return requests.run(() async {
     try {
       final value = AnalyzeRule(source: source).evalJS(prelude + code, null);
       final text = switch (value) {
@@ -236,12 +258,6 @@ Future<String> Function(CancelToken) _jsTask(
       return '出錯：$error';
     }
   });
-  if (requests.lines.isEmpty) return result;
-  var sent = requests.lines.join('\n');
-  if (sent.length > _jsRequestsLength) {
-    sent = '${sent.substring(0, _jsRequestsLength)}…（後面省略）';
-  }
-  return '$result\n# 這段程式送出的請求\n$sent';
 };
 
 /// 程式送出的請求最多附幾個字。

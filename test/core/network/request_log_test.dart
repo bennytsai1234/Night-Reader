@@ -329,6 +329,23 @@ void main() {
     expect(log.lines.last.length, lessThan(200));
   });
 
+  // 試抓的整頁原文一邊跑一邊交給主 isolate；網路 isolate 已經直接交了，就不
+  // 再跟著結果帶回 worker（每頁最多 2 MiB）。
+  test('a live log takes whole pages back only when nobody got them yet', () {
+    final log = RequestLog(responsePreview: 6000, keepPages: true, live: true);
+
+    expect(log.settingsFor(forwardsDirectly: true).returnsPages, isFalse);
+    expect(log.settingsFor(forwardsDirectly: false).returnsPages, isTrue);
+    expect(
+      RequestLog(
+        responsePreview: 6000,
+        keepPages: true,
+      ).settingsFor(forwardsDirectly: true).returnsPages,
+      isTrue,
+      reason: '不是 live 的紀錄自己要留整頁',
+    );
+  });
+
   test('whole pages are kept only for the part that asks, and only that '
       'part\'s requests', () async {
     // 書源校驗只在抓正文時要整頁（找同一章下一頁的連結）。
@@ -339,7 +356,11 @@ void main() {
       recordRequestUrl('GET', Uri.parse('https://site.example/search'));
       recordResponse(_response('https://site.example/search', 200, page));
       await log.keepingPages(content, () async {
-        expect(log.settings.keepPages, isTrue, reason: '規則 JS 的請求也記整頁');
+        expect(
+          log.settingsFor(forwardsDirectly: false).keepPages,
+          isTrue,
+          reason: '規則 JS 的請求也記整頁',
+        );
         recordRequestUrl('GET', Uri.parse('https://site.example/c/1'));
         recordResponse(_response('https://site.example/c/1', 200, page));
       });
@@ -348,7 +369,7 @@ void main() {
 
     expect(log.lines, hasLength(5), reason: '每一段照常記');
     expect(log.pages, isEmpty);
-    expect(log.settings.keepPages, isFalse);
+    expect(log.settingsFor(forwardsDirectly: false).keepPages, isFalse);
     expect(content, [
       (line: 'https://site.example/c/1', body: null),
       (line: log.lines[3], body: page),

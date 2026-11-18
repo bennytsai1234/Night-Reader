@@ -47,6 +47,7 @@ class SourceDebugService {
   int _runId = 0;
   bool _runFailed = false;
   static const Symbol _runKey = #sourceDebugRun;
+  static const Symbol _onLogKey = #sourceDebugOnLog;
 
   void log(String msg, {int state = 1, bool isHtml = false}) {
     if (Zone.current[_runKey] != _runId) return;
@@ -58,6 +59,7 @@ class SourceDebugService {
     }
 
     final debugLog = DebugLog(state, printMsg, DateTime.now());
+    (Zone.current[_onLogKey] as void Function(DebugLog log)?)?.call(debugLog);
     _logController.add(debugLog);
   }
 
@@ -79,16 +81,24 @@ class SourceDebugService {
   })?
   lastContent;
 
-  Future<void> startDebug(BookSource source, String key) {
+  /// 除錯 [source]。[onLog] 在每一筆紀錄寫下的當下收到它（[logStream] 的
+  /// 聽眾要等這段同步的程式跑完才收到）：試抓在書源 worker 裡跑，規則 JS
+  /// 同步等網路時也要把紀錄當下送出去。
+  Future<void> startDebug(
+    BookSource source,
+    String key, {
+    void Function(DebugLog log)? onLog,
+  }) {
     final runId = ++_runId;
     _runFailed = false;
     lastContent = null;
     return runZoned(
-      () => withSourceRequestLog(
-        (url) => log('  實際請求: $url'),
-        () => _runDebug(source, key),
+      () => withSourceDebugLog(
+        onRequest: (url) => log('  實際請求: $url'),
+        onNote: log,
+        body: () => _runDebug(source, key),
       ),
-      zoneValues: {_runKey: runId},
+      zoneValues: {_runKey: runId, _onLogKey: onLog},
     );
   }
 

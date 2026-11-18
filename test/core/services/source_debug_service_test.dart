@@ -44,6 +44,9 @@ void main() {
         case '/moved':
           request.response.statusCode = HttpStatus.found;
           request.response.headers.set(HttpHeaders.locationHeader, '/');
+        case '/empty':
+          // 2026-11-13 酷匠阅读的搜尋介面回 0 位元組。
+          break;
         case '/moved-down':
           request.response.statusCode = HttpStatus.found;
           request.response.headers.set(HttpHeaders.locationHeader, '/down');
@@ -130,6 +133,29 @@ void main() {
     expect(messages, contains('❌ 發生錯誤: 伺服器回應錯誤（521）'));
     expect(messages, contains('  出錯的請求: $baseUrl/down'));
   });
+
+  // 書單規則抓不到東西時照詳情頁解析（Legado BookList.kt）。酷匠阅读的搜尋
+  // 回空白，照詳情頁解析時詳情頁的 JS 出錯；沒寫這一行，看起來像詳情頁的
+  // 規則壞了，AI 兩輪說看不懂。
+  test('an empty book list says it falls back to the detail page', () async {
+    final messages = await debug(
+      BookSource(
+        bookSourceUrl: baseUrl,
+        bookSourceName: '搜尋回空白',
+        searchUrl: '/empty',
+        ruleSearch: SearchRule(bookList: '.item', name: 'b@text'),
+        ruleBookInfo: BookInfoRule(name: '@js:JSON.parse(result).name'),
+      ),
+    );
+
+    final fallback = messages.indexOf('└列表為空,按詳情頁解析');
+    expect(fallback, isNonNegative, reason: messages.join('\n'));
+    expect(
+      messages.indexWhere((m) => m.startsWith('❌')),
+      greaterThan(fallback),
+      reason: messages.join('\n'),
+    );
+  }, skip: quickJsUnavailableReason());
 
   test('requests sent straight through Dio are recorded', () async {
     // 規則 JS 的 `java.get`、`java.post` 不經過 AnalyzeUrl，直接用 Dio 送。
