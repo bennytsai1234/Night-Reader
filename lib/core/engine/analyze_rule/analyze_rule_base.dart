@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:html_unescape/html_unescape.dart';
 
 import '../parsers/analyze_by_css.dart';
@@ -20,16 +18,6 @@ import 'analyze_rule_support.dart';
 abstract class AnalyzeRuleBase {
   RuleDataInterface? ruleData;
   dynamic source; // BaseSource equivalent
-
-  // 全域調試日誌流
-  static StreamController<String>? debugLogController;
-
-  void log(String msg) {
-    final controller = debugLogController;
-    if (controller != null && !controller.isClosed) {
-      controller.add(msg);
-    }
-  }
 
   dynamic content;
   String? baseUrl;
@@ -60,11 +48,6 @@ abstract class AnalyzeRuleBase {
   static final LruMap<String, List<SourceRule>> stringRuleCache = LruMap(
     maxSize: 200,
   );
-
-  static void dispose() {
-    debugLogController?.close();
-    debugLogController = null;
-  }
 
   void put(String key, String? value) {
     if (value == null) return;
