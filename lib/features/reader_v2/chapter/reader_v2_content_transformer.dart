@@ -16,6 +16,7 @@ import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
 import 'reader_v2_content.dart';
+import 'semantic_paragraph_formatter.dart';
 
 /// 在內容轉換階段執行文字排版正規化。
 ///
@@ -778,7 +779,7 @@ class ReaderV2ContentTransformer {
     final chapterTitle = args['chapterTitle'] as String? ?? '';
     final rules = _rulesFrom(args);
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
-    final content = _applyRules(
+    final content = SemanticParagraphFormatter.repair(_applyRules(
       bookName: bookName,
       bookOrigin: bookOrigin,
       chapterTitle: chapterTitle,
@@ -790,7 +791,7 @@ class ReaderV2ContentTransformer {
       titleRules: _titleRulesOf(rules, bookName, bookOrigin),
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
-    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'));
     // 排版整理逐行處理、不增減行，整理後是空白的行不成段。
     final lines = content.split('\n');
     final shown = normalizeTypography(content).split('\n');
@@ -857,7 +858,7 @@ class ReaderV2ContentTransformer {
     _RuleProgress? onRule,
   }) {
     final content = normalizeTypography(
-      _applyRules(
+      SemanticParagraphFormatter.repair(_applyRules(
         bookName: bookName,
         bookOrigin: bookOrigin,
         chapterTitle: chapterTitle,
@@ -867,7 +868,7 @@ class ReaderV2ContentTransformer {
         useReplaceRules: useReplaceRules,
         reSegmentEnabled: reSegmentEnabled,
         onRule: onRule,
-      ),
+      )),
     );
 
     final paragraphs = <String>[];
