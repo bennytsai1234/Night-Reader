@@ -25,6 +25,10 @@ abstract final class CrashTrail {
   /// 一則最長幾個字：錯誤訊息可能附上整頁網頁。
   static const int maxLineLength = 300;
 
+  /// 一則錯誤最長幾個字：多留堆疊最上面幾格（[errorFrames]），看得出錯在哪。
+  static const int maxErrorLength = 600;
+  static const int errorFrames = 3;
+
   /// 一般日誌隔多久存一次；動作馬上存。
   static const Duration logWriteDelay = Duration(milliseconds: 500);
 
@@ -64,10 +68,21 @@ abstract final class CrashTrail {
     _schedule(immediately: true);
   }
 
-  /// 錯誤馬上存：接著可能就閃退了。
-  static void error(String text) {
-    _add(_errors, maxErrors, text);
-    _schedule(immediately: true);
+  /// 錯誤和一般日誌一樣隔 [logWriteDelay] 存：書源出錯時一下就好幾則。
+  /// 接著閃退的話，Dart 的錯誤當場從記憶體附進崩潰日誌，不靠這個檔。
+  static void error(String text, {StackTrace? stackTrace}) {
+    final frames = (stackTrace?.toString() ?? '')
+        .split('\n')
+        .map((frame) => frame.trim())
+        .where((frame) => frame.isNotEmpty)
+        .take(errorFrames);
+    _add(
+      _errors,
+      maxErrors,
+      [text, ...frames].join(' ← '),
+      maxLength: maxErrorLength,
+    );
+    _schedule();
   }
 
   static void log(String text) {
@@ -131,10 +146,15 @@ abstract final class CrashTrail {
     _schedule(immediately: true);
   }
 
-  static void _add(ListQueue<String> list, int max, String text) {
+  static void _add(
+    ListQueue<String> list,
+    int max,
+    String text, {
+    int maxLength = maxLineLength,
+  }) {
     var line = redact(text.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim());
-    if (line.length > maxLineLength) {
-      line = '${line.substring(0, maxLineLength)}…';
+    if (line.length > maxLength) {
+      line = '${line.substring(0, maxLength)}…';
     }
     list.add('${_format(_now().millisecondsSinceEpoch)} $line');
     while (list.length > max) {

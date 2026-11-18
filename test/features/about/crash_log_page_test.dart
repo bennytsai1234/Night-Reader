@@ -34,13 +34,17 @@ void main() {
   Future<void> openPage(
     WidgetTester tester, {
     Future<void> Function(String text)? writeClipboard,
+    Future<void> Function(String path)? shareFile,
   }) async {
     // 頁面一掛上就開始讀檔：在真實時間裡掛上，讀檔才跑得完。
     await tester.runAsync(
       () => tester.pumpWidget(
         MaterialApp(
           theme: buildAppTheme(AppStyle.paper, Brightness.light),
-          home: CrashLogPage(writeClipboard: writeClipboard),
+          home: CrashLogPage(
+            writeClipboard: writeClipboard,
+            shareFile: shareFile,
+          ),
         ),
       ),
     );
@@ -68,14 +72,44 @@ void main() {
     expect(lengths, isNotEmpty);
     expect(lengths.reduce((a, b) => a > b ? a : b), lessThanOrEqualTo(2000));
 
-    await tester.tap(find.byTooltip('複製日誌'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('複製日誌'));
     await tester.pump();
+    expect(copied!.length, greaterThanOrEqualTo(fullCrashLogsMinChars));
     expect(copied, contains('錯誤 #49'));
     expect(copied, contains('錯誤 #0\n'));
     expect(
       copied!.indexOf('錯誤 #49'),
       lessThan(copied!.indexOf('錯誤 #0\n')),
       reason: '從新到舊',
+    );
+  });
+
+  testWidgets('sharing writes every log into one text file', (tester) async {
+    await tester.runAsync(() => seedFullCrashLogs(directory, count: 3));
+    String? shared;
+    await openPage(
+      tester,
+      shareFile: (path) async => shared = File(path).readAsStringSync(),
+    );
+
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分享日誌檔'));
+    for (var i = 0; i < 100 && shared == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(shared, isNotNull);
+    expect(shared, contains('錯誤 #2'));
+    expect(shared, contains('錯誤 #0\n'));
+    expect(
+      shared,
+      (await tester.runAsync(CrashHandler.readLogs))!.join(),
+      reason: '和頁面上的整份一樣',
     );
   });
 }

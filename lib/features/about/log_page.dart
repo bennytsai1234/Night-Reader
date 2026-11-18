@@ -15,6 +15,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:share_plus/share_plus.dart';
@@ -56,6 +57,8 @@ class LogPage extends StatefulWidget {
 }
 
 enum _LogStatus { loading, loaded, error }
+
+enum _LogAction { copy, share, clear }
 
 class _LogPageState extends State<LogPage> {
   _LogStatus _status = _LogStatus.loading;
@@ -115,22 +118,33 @@ class _LogPageState extends State<LogPage> {
       appBar: GlassNavHeader(
         title: widget.title,
         actions: [
-          GlassIconButton(
-            icon: Icons.copy_rounded,
-            iconSize: 20,
-            tooltip: '複製日誌',
-            onPressed: canUseLogs ? _copyLogs : null,
-          ),
-          GlassIconButton(
-            icon: Icons.ios_share_rounded,
-            iconSize: 20,
-            tooltip: '分享日誌檔',
-            onPressed: canUseLogs ? _shareLogs : null,
-          ),
-          GlassIconButton(
-            icon: Icons.delete_outline_rounded,
-            tooltip: '清除日誌',
-            onPressed: canUseLogs ? _confirmClearLogs : null,
+          // 和 AI 找書頁的「複製摘要」「分享完整紀錄」同一種做法：三顆圓鈕
+          // 會把標題擠到一邊（使用者 2026-11-18 從候選圖選的）。
+          GlassMenuButton<_LogAction>(
+            enabled: canUseLogs,
+            entriesBuilder: (_) => const [
+              GlassMenuItem(
+                value: _LogAction.copy,
+                icon: Icons.copy_rounded,
+                label: '複製日誌',
+              ),
+              GlassMenuItem(
+                value: _LogAction.share,
+                icon: Icons.ios_share_rounded,
+                label: '分享日誌檔',
+              ),
+              GlassMenuItem(
+                value: _LogAction.clear,
+                icon: Icons.delete_outline_rounded,
+                label: '清除日誌',
+                destructive: true,
+              ),
+            ],
+            onSelected: (action) => unawaited(switch (action) {
+              _LogAction.copy => _copyLogs(),
+              _LogAction.share => _shareLogs(),
+              _LogAction.clear => _confirmClearLogs(),
+            }),
           ),
         ],
       ),

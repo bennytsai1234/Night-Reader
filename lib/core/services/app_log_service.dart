@@ -55,7 +55,7 @@ class AppLog {
     _logs.addFirst(entry);
     final line = error == null ? message : '$message: $error';
     if (isError || error != null) {
-      CrashTrail.error(line);
+      CrashTrail.error(line, stackTrace: stackTrace);
     } else {
       CrashTrail.log(line);
     }

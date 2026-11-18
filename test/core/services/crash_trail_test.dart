@@ -50,6 +50,27 @@ void main() {
     expect(forCrash, isNot(contains('書源訊息')));
   });
 
+  test('an error keeps the top of its stack, so it shows where it broke', () {
+    AppLog.e(
+      '書源校驗失敗 [某書源]',
+      error: StateError('壞了'),
+      stackTrace: StackTrace.fromString(
+        '#0      SourceChecker._run (package:night_reader/a.dart:10:3)\n'
+        '#1      SourceChecker.run (package:night_reader/a.dart:20:5)\n'
+        '#2      _checkTask (package:night_reader/b.dart:30:7)\n'
+        '#3      Worker.run (package:night_reader/c.dart:40:9)\n',
+      ),
+    );
+
+    final line = CrashTrail.renderForCrash()
+        .split('\n')
+        .firstWhere((line) => line.contains('書源校驗失敗'));
+    expect(line, contains('Bad state: 壞了'));
+    expect(line, contains('a.dart:10:3'));
+    expect(line, contains('b.dart:30:7'));
+    expect(line, isNot(contains('c.dart')));
+  });
+
   test('the logs section is cut from what was stored, old or new layout', () {
     const stored =
         '開啟夜讀：2026-11-18 10:00:00\n\n'
