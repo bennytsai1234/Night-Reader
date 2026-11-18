@@ -218,6 +218,54 @@ final void Function(
             )>>('jsSetMaxStackSize')
     .asFunction();
 
+typedef _JSInterruptHandlerNative = Int32 Function(
+  Pointer<JSRuntime> rt,
+  Pointer<Void> opaque,
+);
+
+/// void JS_SetInterruptHandler(JSRuntime *rt, JSInterruptHandler *cb,
+/// void *opaque)：QuickJS 本身的 API。Android 的 fastdev 函式庫與 Linux 的
+/// 測試函式庫有匯出；Windows 的測試函式庫沒有，是 null。
+final void Function(
+  Pointer<JSRuntime>,
+  Pointer<NativeFunction<_JSInterruptHandlerNative>>,
+  Pointer<Void>,
+)? _jsSetInterruptHandler = _qjsLib.providesSymbol('JS_SetInterruptHandler')
+    ? _qjsLib
+        .lookup<
+            NativeFunction<
+                Void Function(
+                  Pointer<JSRuntime>,
+                  Pointer<NativeFunction<_JSInterruptHandlerNative>>,
+                  Pointer<Void>,
+                )>>('JS_SetInterruptHandler')
+        .asFunction()
+    : null;
+
+/// QuickJS 每跑一段就問一次：[flag] 指到的值不是 0 就停下來。
+int _interruptRequested(Pointer<JSRuntime> rt, Pointer<Void> flag) =>
+    flag.cast<Int32>().value;
+
+/// 每個 isolate 各一個：回呼只能在建立它的 isolate 裡呼叫。
+final Pointer<NativeFunction<_JSInterruptHandlerNative>> _interruptHandler =
+    Pointer.fromFunction<_JSInterruptHandlerNative>(_interruptRequested, 0);
+
+/// 這個函式庫能不能中途停下 QuickJS（[jsSetInterruptFlag]）。函式庫載入
+/// 不了（沒用到規則 JS 的測試）也是不能。
+bool get jsInterruptSupported {
+  try {
+    return _jsSetInterruptHandler != null;
+  } on ArgumentError {
+    return false;
+  }
+}
+
+/// [rt] 執行 JS 時，[flag] 指到的值變成非 0，就在下一個檢查點丟出不能被
+/// 接住的錯誤、回到 Dart。取代函式庫原本只看時間的中斷處理（夜讀不設
+/// timeout）。函式庫不支援時什麼都不做。
+void jsSetInterruptFlag(Pointer<JSRuntime> rt, Pointer<Int32> flag) =>
+    _jsSetInterruptHandler?.call(rt, _interruptHandler, flag.cast());
+
 /// DLLEXPORT void jsSetMemoryLimit(JSRuntime *rt, size_t limit);
 final void Function(
   Pointer<JSRuntime>,
