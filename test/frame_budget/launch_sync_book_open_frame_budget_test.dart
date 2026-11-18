@@ -166,7 +166,14 @@ void main() {
     // 雲端硬碟一次讀寫約 0.3 秒。
     store.latency = const Duration(milliseconds: 300);
 
-    await pumpApp(tester);
+    await pumpApp(tester, waitForBackgroundWork: false);
+    if (Platform.environment['NR_SYNC_OFF'] != '1') {
+      expect(
+        SyncService.instance.status.value.running,
+        isTrue,
+        reason: '點書時同步要還在跑，量的才是同步的影響',
+      );
+    }
     // 每一幀時同步跑到哪一種資料，印在量測結果後面，對得上是哪幾幀被同步佔住。
     final syncing = <String, List<int>>{};
     await measureNavigation(

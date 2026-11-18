@@ -95,7 +95,7 @@ if [ "${1:-}" = summarize ]; then
 fi
 
 if [ $# -lt 2 ]; then
-  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 ref=$1

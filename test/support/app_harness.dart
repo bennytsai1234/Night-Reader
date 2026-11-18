@@ -412,12 +412,16 @@ Future<Uint8List> _encodeCover(int seed) async {
 /// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。收住、拍圖都要等某一格
 /// 畫完，一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
 ///
-/// 進場播完後 App 才開始背景工作：書架補下載，接著檢查書架更新（書架標題
-/// 播流光）。資料庫在另一個 isolate 時（量幀的測試）它們要等真實時間，等這
-/// 兩件做完、流光掃完這一輪才交回，接下來的量測不和它們疊在一起。資料庫在
-/// 主執行緒時照舊只再推 0.5 秒：同一個檔的第二項測試起，補下載等的是上一項
-/// 留下、綁在上一項假時鐘上的下載服務，檢查不會開始。
-Future<void> pumpApp(WidgetTester tester) async {
+/// 進場播完後 App 開始背景工作，其中書架補下載、接著檢查書架更新（書架標題
+/// 播流光）最久。資料庫在另一個 isolate 時（量幀的測試）它們要等真實時間，
+/// 等這兩件做完、流光掃完這一輪才交回，接下來的量測不和它們疊在一起；要量
+/// 開 App 後馬上操作的（例如同步還在跑時點書）給 [waitForBackgroundWork]
+/// false。資料庫在主執行緒時只再推 0.5 秒：同一個檔的第二項測試起，補下載
+/// 等的是上一項留下、綁在上一項假時鐘上的下載服務，檢查不會開始。
+Future<void> pumpApp(
+  WidgetTester tester, {
+  bool waitForBackgroundWork = true,
+}) async {
   await startApp(tester);
   LaunchEntranceMotion? entrance;
   ValueNotifier<bool>? checking;
@@ -446,7 +450,7 @@ Future<void> pumpApp(WidgetTester tester) async {
   if (entrance != null && !finished) {
     fail('開 App 的進場推進 1000 格（16 秒）仍沒播完');
   }
-  if (!_databaseInIsolate) {
+  if (!_databaseInIsolate || !waitForBackgroundWork) {
     checking?.removeListener(onChecking);
     await settle(tester, const Duration(milliseconds: 500));
     return;
@@ -492,7 +496,7 @@ Future<void> settle(
 /// 開 App 後排的書架自動下載（測試沒有網路，很快失敗）跑著時，排程每秒看
 /// 一次還有沒有任務，留著那個計時器測試就結束不了；任務要等真實時間才收得
 /// 到資料庫的回覆，只推假時間等不完。資料庫在主執行緒時任務在假時間裡就
-/// 做完，不用等。拆掉 App 之後、測試結束之前呼叫。
+/// 做完，不用等。[pumpApp] 開好 App 時與拆掉 App 後（`tearDownApp`）呼叫。
 Future<void> waitForDownloads(WidgetTester tester) async {
   if (!_databaseInIsolate) return;
   final downloads = DownloadService();
