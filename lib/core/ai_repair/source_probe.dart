@@ -13,6 +13,7 @@ import 'package:night_reader/core/services/chapter_content_kind.dart';
 import 'package:night_reader/core/services/content_next_page.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
 
 /// 一次試抓：照書源除錯從搜尋一路抓到正文（[SourceDebugService]），記下除錯
 /// 紀錄與每個請求、網站回了什麼（每個回應留開頭 [responsePreview] 字），給
@@ -138,33 +139,6 @@ class SourceProbeReport {
 
   static String _clean(String message) =>
       message.replaceFirst(RegExp(r'^[\s❌︽≡]+'), '').trim();
-
-  Map<String, Object?> toMap() => {
-    'logs': [
-      for (final (state, message) in logs) [state, message],
-    ],
-    'requests': requests,
-    'pages': [for (final page in pages) loggedPageToJson(page)],
-    'timedOut': timedOut,
-    'contentUsable': contentUsable,
-    'unjoinedNextPage': unjoinedNextPage,
-  };
-
-  factory SourceProbeReport.fromMap(Map<Object?, Object?> map) =>
-      SourceProbeReport(
-        logs: [
-          for (final entry in map['logs']! as List)
-            ((entry as List)[0] as int, entry[1] as String),
-        ],
-        requests: List<String>.from(map['requests']! as List),
-        pages: [
-          for (final page in map['pages'] as List? ?? const [])
-            loggedPageFromJson(page),
-        ],
-        timedOut: map['timedOut'] as bool? ?? false,
-        contentUsable: map['contentUsable'] as bool?,
-        unjoinedNextPage: map['unjoinedNextPage'] as String?,
-      );
 }
 
 /// 開一個書源 worker 試抓 [source]（同書源校驗，ADR 0033）：用 [keyword]
@@ -177,6 +151,7 @@ Future<SourceProbeReport> probeSource(
   required Duration timeout,
   CancelToken? cancelToken,
   @visibleForTesting Future<DriftIsolate>? database,
+  @visibleForTesting Duration workerGrace = _workerGrace,
 }) async {
   final SourceWorker worker;
   try {
@@ -196,25 +171,59 @@ Future<SourceProbeReport> probeSource(
     completer.complete(report);
   }
 
-  const stopped = SourceProbeReport(logs: [], requests: [], timedOut: true);
-  // worker 自己到 [timeout] 就停，交回走到哪裡的紀錄（2026-11-13 肉肉屋⑥
-  // 試抓四次超過時間，每次紀錄都是空的，AI 不知道停在哪一步）；規則 JS
-  // 同步等網路時 worker 的計時器要等那個請求結束，外層多等一個請求的時限。
-  final timer = Timer(timeout + _workerGrace, () => finish(stopped));
-  unawaited(cancelToken?.whenCancel.then((_) => finish(stopped)));
+  // 除錯紀錄與請求一邊跑一邊交回來（[reportSourceProgress]），外層結束
+  // worker 時交回已經走到的這些（2026-11-13 肉肉屋⑥試抓四次超過時間，每次
+  // 紀錄都是空的，AI 不知道停在哪一步）。
+  final logs = <(int, String)>[];
+  final requests = <String>[];
+  final pages = <LoggedPage>[];
+  void collect(Object entry) {
+    switch (entry) {
+      case DebugLog(:final state, :final message):
+        logs.add((state, message));
+      case LoggedRequestLine(:final line, :final body):
+        requests.add(line);
+        pages.add((line: line, body: body));
+    }
+  }
+
+  SourceProbeReport walked({
+    required bool timedOut,
+    (int, String)? failure,
+    bool? contentUsable,
+    String? unjoinedNextPage,
+  }) => SourceProbeReport(
+    logs: [...logs, ?failure],
+    requests: [...requests],
+    pages: [...pages],
+    timedOut: timedOut,
+    contentUsable: contentUsable,
+    unjoinedNextPage: unjoinedNextPage,
+  );
+
+  // worker 自己到 [timeout] 就停；規則 JS 同步等網路時 worker 的計時器要等
+  // 那個請求結束，外層多等一個請求的時限，還沒交回就結束它。
+  final timer = Timer(
+    timeout + workerGrace,
+    () => finish(walked(timedOut: true)),
+  );
+  unawaited(
+    cancelToken?.whenCancel.then((_) => finish(walked(timedOut: true))),
+  );
   unawaited(
     worker
-        .run(_probeTask(source.toJson(), keyword, timeout))
+        .run(_probeTask(source.toJson(), keyword, timeout), onProgress: collect)
         .then(
-          (map) => finish(SourceProbeReport.fromMap(map)),
+          (outcome) => finish(
+            walked(
+              timedOut: outcome.timedOut,
+              contentUsable: outcome.contentUsable,
+              unjoinedNextPage: outcome.unjoinedNextPage,
+            ),
+          ),
           onError: (Object error, StackTrace stack) {
             if (completer.isCompleted) return;
-            finish(
-              SourceProbeReport(
-                logs: [(-1, '試抓失敗：$error')],
-                requests: const [],
-              ),
-            );
+            finish(walked(timedOut: false, failure: (-1, '試抓失敗：$error')));
           },
         ),
   );
@@ -227,41 +236,46 @@ Future<SourceProbeReport> probeSource(
 /// 同步等網路時，worker 的計時器要等那個請求結束才跑得到）。
 const Duration _workerGrace = Duration(seconds: 16);
 
+/// [_probeTask] 跑完交回的；紀錄在跑的途中已經交回（[probeSource]）。
+typedef _ProbeOutcome = ({
+  bool timedOut,
+  bool? contentUsable,
+  String? unjoinedNextPage,
+});
+
 /// 在 worker 裡跑的試抓；只捕捉書源與關鍵字的資料（`CODING_STANDARDS.md`）。
-/// 到 [timeout] 還沒抓完就停下，交回到那裡為止的紀錄。
-Future<Map<String, Object?>> Function(CancelToken) _probeTask(
+/// 除錯紀錄（[DebugLog]）與請求（[LoggedRequestLine]）一邊跑一邊交回；到
+/// [timeout] 還沒抓完就停下。
+Future<_ProbeOutcome> Function(CancelToken) _probeTask(
   Map<String, dynamic> sourceJson,
   String keyword,
   Duration timeout,
 ) => (_) async {
   final debug = SourceDebugService();
-  final logs = <(int, String)>[];
-  final subscription = debug.logStream.listen(
-    (log) => logs.add((log.state, log.message)),
-  );
+  final progress = currentSourceProgress;
   final requests = RequestLog(
     responsePreview: SourceProbeReport.responsePreview,
     digestPages: true,
     keepPages: true,
     sentHeaders: true,
+    live: true,
   );
   var timedOut = false;
   try {
     await requests
-        .run(() => debug.startDebug(BookSource.fromJson(sourceJson), keyword))
+        .run(
+          () => debug.startDebug(
+            BookSource.fromJson(sourceJson),
+            keyword,
+            onLog: progress,
+          ),
+        )
         .timeout(timeout);
   } on TimeoutException {
     timedOut = true;
-  } finally {
-    // 紀錄經過 broadcast stream，讓最後幾筆送到。
-    await Future<void>.delayed(Duration.zero);
-    await subscription.cancel();
   }
   final content = timedOut ? null : debug.lastContent;
-  return SourceProbeReport(
-    logs: logs,
-    requests: requests.lines,
-    pages: requests.pages,
+  return (
     timedOut: timedOut,
     contentUsable: content == null
         ? null
@@ -275,7 +289,7 @@ Future<Map<String, Object?>> Function(CancelToken) _probeTask(
             content.pages,
             toc: content.toc,
           ),
-  ).toMap();
+  );
 };
 
 /// AI 看的一頁：給 AI 的 [lines]（請求與精簡過的回應）與一筆對一筆、帶整頁
