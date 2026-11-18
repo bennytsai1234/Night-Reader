@@ -425,10 +425,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     showAppAlert<void>(
       context: context,
       title: '分類載入錯誤',
-      content: SelectableText(
-        kind.url ?? kind.title,
-        style: AppTextStyles.bodySm,
-      ),
+      content: SelectableText(kind.url ?? kind.title),
       actions: const [
         AppAlertAction(label: '關閉', value: null, isDefault: true),
       ],
@@ -541,10 +538,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除書源',
-      message: '確定刪除「${source.bookSourceName}」嗎？',
+      title: '刪除「${source.bookSourceName}」？',
       confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed) return;
     try {

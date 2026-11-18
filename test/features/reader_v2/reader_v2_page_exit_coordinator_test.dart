@@ -48,10 +48,10 @@ void main() {
     );
     await tester.tap(find.text('返回'));
     await tester.pumpAndSettle();
-    expect(find.text('加入書架？'), findsOneWidget);
+    expect(find.textContaining('加入書架？'), findsOneWidget);
     await answer();
     await tester.pumpAndSettle();
-    expect(find.text('加入書架？'), findsNothing);
+    expect(find.textContaining('加入書架？'), findsNothing);
     return delegate;
   }
 

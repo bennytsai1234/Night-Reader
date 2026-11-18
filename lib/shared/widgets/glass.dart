@@ -567,6 +567,7 @@ class GlassTextButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.emphasized = false,
+    this.destructive = false,
     this.blur = true,
   });
 
@@ -576,6 +577,9 @@ class GlassTextButton extends StatelessWidget {
   /// 主要動作用主色字並加粗。
   final bool emphasized;
 
+  /// 危險動作（刪除）用危險色字並加粗。
+  final bool destructive;
+
   /// 見 [GlassIconButton.blur]。
   final bool blur;
 
@@ -583,7 +587,13 @@ class GlassTextButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
-    final color = emphasized ? scheme.primary : scheme.onSurface;
+    final color = destructive
+        ? (Theme.of(context).brightness == Brightness.dark
+              ? AppPalette.rustDark
+              : AppPalette.rust)
+        : emphasized
+        ? scheme.primary
+        : scheme.onSurface;
     final inPanel = PanelButtons.of(context);
     return Semantics(
       button: true,
@@ -613,7 +623,7 @@ class GlassTextButton extends StatelessWidget {
                     label,
                     style: AppTextStyles.uiMd.copyWith(
                       color: color.withValues(alpha: enabled ? 1 : 0.38),
-                      fontWeight: emphasized
+                      fontWeight: emphasized || destructive
                           ? FontWeight.w600
                           : FontWeight.w500,
                     ),

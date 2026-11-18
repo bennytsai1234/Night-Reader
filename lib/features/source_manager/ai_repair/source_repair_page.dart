@@ -556,9 +556,8 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     final ok = await showAppAlert<bool>(
       context: context,
       title: '刪除 $count 個書源？',
-      message: unstable
-          ? '網站不穩定，已判定無法修復。刪掉之後要再用得重新匯入。'
-          : '網站已經不在了。刪掉之後要再用得重新匯入。',
+      message: unstable ? '網站不穩定，已判定修不好。' : '網站已經不在了。',
+      irreversible: true,
       actions: const [
         AppAlertAction(label: '刪除', value: true, destructive: true),
         AppAlertAction(label: '取消', value: false),

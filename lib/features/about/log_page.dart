@@ -243,9 +243,9 @@ class _LogPageState extends State<LogPage> {
     final confirmed = await showAppConfirm(
       context: context,
       title: '清除${widget.title}？',
-      message: '清除後無法復原。',
       confirmLabel: '清除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed || !mounted) return;
 

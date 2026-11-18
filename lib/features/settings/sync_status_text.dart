@@ -80,9 +80,8 @@ class SyncProgressView extends StatelessWidget {
         UiText(
           label,
           textAlign: TextAlign.center,
-          style: AppTextStyles.bodySm.copyWith(
-            color: scheme.onSurface.withValues(alpha: 0.8),
-          ),
+          // 只放在提示框裡，照提示框的說明：15 號、正常濃度。
+          style: AppTextStyles.bodyBase.copyWith(color: scheme.onSurface),
         ),
       ],
     );

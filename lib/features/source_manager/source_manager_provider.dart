@@ -21,7 +21,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'ai_repair/repair_runs.dart';
 import 'source_check_job.dart';
-import 'widgets/import_preview_dialog.dart';
+import 'widgets/import_preview_sheet.dart';
 import 'widgets/source_list_skeleton.dart';
 
 /// 匯入的 JSON 文字去掉前後空白與 BOM（有些網站與檔案會帶），書源解析與
