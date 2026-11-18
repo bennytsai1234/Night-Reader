@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -196,10 +197,18 @@ class AppBottomSheet extends StatelessWidget {
     ShapeBorder? shape,
     Clip? clipBehavior,
     BoxConstraints? constraints,
+    bool raised = true,
   }) {
+    // 面板裡的底色照面板的主題（深色往上一階，`sheetThemeOf`）；閱讀器面板
+    // 用選單主題自己分層，給 raised: false。
+    ThemeData themeOf(BuildContext context) =>
+        raised ? sheetThemeOf(Theme.of(context)) : Theme.of(context);
     return showModalBottomSheet<T>(
       context: context,
-      builder: builder,
+      builder: (context) => Theme(
+        data: themeOf(context),
+        child: Builder(builder: builder),
+      ),
       // 不給時照 Material 3 預設：最寬 640、置中。
       constraints: constraints,
       barrierColor: barrierColor ?? AppChrome.of(context).barrier,
@@ -207,7 +216,9 @@ class AppBottomSheet extends StatelessWidget {
       useSafeArea: useSafeArea,
       showDragHandle: showDragHandle,
       backgroundColor:
-          backgroundColor ?? AppChrome.of(context).groupedBackground,
+          backgroundColor ??
+          themeOf(context).extension<AppChrome>()?.groupedBackground ??
+          AppChrome.of(context).groupedBackground,
       elevation: 0,
       shape:
           shape ??

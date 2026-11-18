@@ -385,6 +385,23 @@ class StylePalette extends ThemeExtension<StylePalette> {
     );
   }
 
+  /// 底部面板裡用的介面底色：深色時整組往上一階——面板底是卡片那一階、
+  /// 面板裡的卡片是玻璃那一階、玻璃再亮一階。深色的面板底若照頁面底色，
+  /// 疊在頁面上看不到邊（純黑時兩者都是純黑，遮罩也壓不暗）。淺色的面板是
+  /// 頁面底色，靠遮罩把底下壓暗分開，不變。
+  StylePalette raisedForSheet() {
+    if (brightness == Brightness.light) return this;
+    final borderGap =
+        AppLayers.lightness(border) - AppLayers.lightness(surface);
+    return copyWith(
+      background: surface,
+      surface: bar,
+      bar: AppLayers.step(bar, text, AppLayers.floatGapDark),
+      textMuted: AppLayers.keepGap(textMuted, text, from: surface, to: bar),
+      border: AppLayers.step(bar, text, borderGap.abs()),
+    );
+  }
+
   /// 目前主題的配色；主題沒有掛擴充時以預設風格補上。
   static StylePalette of(BuildContext context) {
     final theme = Theme.of(context);

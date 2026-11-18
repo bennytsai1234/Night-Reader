@@ -659,10 +659,12 @@ class GlassCapsule extends StatelessWidget {
   static const double verticalPadding = AppSpacing.xs + 2;
 
   /// 選取中的淡主色底。字也是主色，主色比例壓低才維持 4.5:1 的文字對比。
-  static Color selectedTintOf(ColorScheme scheme) => Color.alphaBlend(
-    scheme.primary.withValues(alpha: 0.06),
-    scheme.surface.withValues(alpha: 0.9),
-  );
+  /// [opacity] 是底色的不透明度：有模糊時略透，沒有模糊時完全不透明。
+  static Color selectedTintOf(ColorScheme scheme, {required double opacity}) =>
+      Color.alphaBlend(
+        scheme.primary.withValues(alpha: 0.06),
+        scheme.surface.withValues(alpha: opacity),
+      );
 
   final String label;
   final VoidCallback? onTap;
@@ -708,7 +710,14 @@ class GlassCapsule extends StatelessWidget {
         // 篩選列與卡片上的膠囊是列裡的一顆按鈕，不是浮層。
         floating: false,
         blur: blur,
-        tint: selected ? selectedTintOf(scheme) : tint,
+        tint: selected
+            ? selectedTintOf(
+                scheme,
+                opacity: blur
+                    ? AppChrome.of(context).glassStrength.overBlur(0.9)
+                    : 1,
+              )
+            : tint,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md + 2,

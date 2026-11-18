@@ -322,7 +322,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         grouped: false,
         shadow: false,
         floating: false,
-        tint: chrome.groupedSurface.withValues(alpha: 0.9),
+        tint: chrome.popupTint(0.9),
         child: Material(
           type: MaterialType.transparency,
           child: ListView(
@@ -360,11 +360,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                   )
                 : FadeTransition(
                     opacity: fade,
-                    child: ColoredBox(
-                      color: chrome.barrier.withValues(
-                        alpha: chrome.barrier.a * 0.4,
-                      ),
-                    ),
+                    child: ColoredBox(color: chrome.menuBarrier),
                   ),
           ),
         ),
@@ -483,15 +479,18 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           widgets.add(
             Container(
               height: AppSpacing.sm,
-              color: chrome.separator.withValues(
-                alpha: chrome.separator.a * 0.5,
+              color: chrome.popupSeparator.withValues(
+                alpha: chrome.popupSeparator.a * 0.5,
               ),
             ),
           );
         case GlassMenuItem<T>():
           if (previous is GlassMenuItem<T>) {
             widgets.add(
-              Container(height: AppGlass.hairline, color: chrome.separator),
+              Container(
+                height: AppGlass.hairline,
+                color: chrome.popupSeparator,
+              ),
             );
           }
           final color = entry.destructive ? danger : scheme.onSurface;
