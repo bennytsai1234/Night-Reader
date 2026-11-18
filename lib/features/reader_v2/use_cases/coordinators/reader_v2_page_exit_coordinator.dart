@@ -74,8 +74,8 @@ class ReaderV2PageExitCoordinator {
   ) {
     return showAppAlert<ReaderV2ExitChoice?>(
       context: context,
-      title: '加入書架？',
-      message: '《${book.name}》尚未加入書架，是否在退出前加入書架以保留目前閱讀進度？',
+      title: '把《${book.name}》加入書架？',
+      message: '加入書架才會留下這次的閱讀進度。',
       actions: const [
         AppAlertAction(
           label: '加入書架',

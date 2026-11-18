@@ -411,26 +411,18 @@ class DownloadManagerPage extends StatelessWidget {
     BookSourceKind kind,
   ) {
     final chrome = AppChrome.of(context);
-    final scheme = Theme.of(context).colorScheme;
     Widget detailRow(String label, String value) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 提示框裡的字一律 15，標籤欄放得下五個字。
             SizedBox(
-              width: 76,
-              child: UiText(
-                label,
-                style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
-              ),
+              width: 80,
+              child: UiText(label, style: TextStyle(color: chrome.sectionText)),
             ),
-            Expanded(
-              child: UiText(
-                value,
-                style: AppTextStyles.bodySm.copyWith(color: scheme.onSurface),
-              ),
-            ),
+            Expanded(child: UiText(value)),
           ],
         ),
       );

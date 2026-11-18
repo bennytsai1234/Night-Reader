@@ -903,7 +903,7 @@ class _SearchViewState extends State<SearchView> {
       context: context,
       title: title,
       translateTitle: false,
-      content: SelectableText(text, style: AppTextStyles.bodySm),
+      content: SelectableText(text),
       actions: const [
         AppAlertAction(label: '關閉', value: null, isDefault: true),
       ],
