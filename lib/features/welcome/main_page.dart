@@ -12,7 +12,7 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/audiobook/audiobook_mini_button.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
@@ -338,12 +338,12 @@ class _MainPageState extends State<MainPage>
         : page;
   }
 
-  /// 開 App 的準備工作：書架讀完、繁簡字典載入完、朗讀引擎開好
-  /// （[LaunchEntrance.prepared]、[TTSService.ready]）。
+  /// 開 App 的準備工作：書架讀完、繁簡字典載入完、系統播放資訊的媒體工作
+  /// 階段開好（[LaunchEntrance.prepared]、[SystemPlayback.ready]）。
   Future<void> _launchPrepared() => Future.wait([
     context.read<BookshelfProvider>().firstLoad,
     ChineseDisplay.loaded,
-    TTSService().ready(),
+    SystemPlayback.instance.ready(),
   ]);
 
   /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播
