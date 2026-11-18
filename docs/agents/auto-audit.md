@@ -26,7 +26,7 @@
 | 書源 1 | `lib/core/engine/parsers/`、`analyze_rule/` 與 `analyze_rule.dart`、`rule_analyzer/` 與 `rule_analyzer.dart`、`analyze_url.dart`、`explore_url_parser.dart`、`rule_data_fields.dart` |
 | 書源 2 | `lib/core/engine/web_book/`、`source_isolate/`、`lib/core/network/`；`lib/core/utils/` 的 `network_utils`、`source_progress`、`idna`、`public_suffix`（不看資料表 `idna_mapping_table`、`public_suffix_rules`）；服務 `http_client`、`network_service`、`rate_limiter`、`encoding_detect` |
 | 書源 3 | `lib/features/source_manager/`（`ai_repair/` 在書源 4）、`search/`、`explore/`、`lib/core/engine/book/`、`app_event_bus.dart`；服務 `book_source_service`、`check_source_service`、`source_check_isolate`、`source_check_diagnostics`、`source_check_js_worker_probe`、`source_debug_service`、`source_switch_service`、`source_switch_handoff`、`auto_source_switch`、`rule_big_data_service` |
-| 書源 4 | 登入、網頁驗證與 AI 修書源：`lib/features/source_login/`、`lib/core/ai_repair/`、`lib/features/source_manager/ai_repair/`；服務 `source_login_session`、`source_interaction`、`cookie_store`、`login_data_backup`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` |
+| 書源 4 | 登入、網頁驗證、AI 修書源與 AI 找書：`lib/features/source_login/`、`lib/core/ai_repair/`、`lib/core/ai_find/`、`lib/features/source_manager/ai_repair/`；服務 `source_login_session`、`source_interaction`、`cookie_store`、`login_data_backup`、`backstage_webview`、`webview_cloudflare_solver`、`webview_data_service` |
 | 閱讀器 0 | `lib/features/reader_v2/hybrid/` |
 | 閱讀器 1 | `reader_v2/features/`、`lib/features/bookmarks/`、`lib/core/engine/reader/`、`lib/core/services/system_playback/`；服務 `tts_speech_coordinator`、`sleep_timer`、`chinese_display`、`chinese_utils` |
 | 閱讀器 2 | `reader_v2/screen/`、`viewport/` |

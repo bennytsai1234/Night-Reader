@@ -12,6 +12,7 @@ import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/features/source_manager/ai_repair/ai_repair_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 import '../../support/fake_ai.dart';
 
@@ -56,7 +57,8 @@ void main() {
     );
   }
 
-  testWidgets('steps fill in as the repair goes, then 完成', (tester) async {
+  testWidgets('the four stages fill in as the repair goes, the AI rounds '
+      'fold under 經過, then 完成', (tester) async {
     final reply = Completer<AiReply>();
     final session = AiRepairSession(
       source: BookSource(
@@ -78,8 +80,11 @@ void main() {
 
     expect(find.text('AI 修復 · 筆趣閣'), findsOneWidget);
     expect(find.text('校驗原本的書源'), findsOneWidget);
-    expect(find.text('第 1 輪'), findsOneWidget);
+    expect(find.text('AI 修改規則'), findsOneWidget);
     expect(find.text('AI 回覆中…'), findsOneWidget);
+    expect(find.text('校驗修好的書源'), findsOneWidget, reason: '還沒輪到的段也列著');
+    expect(find.textContaining('輪'), findsNothing);
+    expect(find.text('經過'), findsNothing, reason: '還沒有做完的步');
     expect(find.text('結束'), findsOneWidget);
     expect(find.text('送到 ai.example · m'), findsOneWidget);
 
@@ -97,11 +102,86 @@ void main() {
     await _settle(tester);
 
     expect(find.text('校驗修好的書源'), findsOneWidget);
+    expect(find.text('1 步'), findsOneWidget);
+    expect(find.text('AI 改了正文，交出'), findsOneWidget);
     expect(find.text('修好了'), findsOneWidget);
     expect(find.text('AI：正文在 div.txt'), findsOneWidget);
     expect(find.text('還原改前的版本'), findsOneWidget);
     expect(find.text('完成'), findsOneWidget);
     expect(find.text('結束'), findsNothing);
+
+    // 展開後一步一列，清單變長、下面的結果捲出畫面，所以結果先看。
+    await tester.tap(find.text('經過'));
+    await tester.pump();
+    expect(find.text('AI 改了正文，交出'), findsNWidgets(2));
+  });
+
+  testWidgets('a hand-in the check turns back sends the AI back to work: '
+      'the AI stage spins again and the check stage waits', (tester) async {
+    final replies = [Completer<AiReply>(), Completer<AiReply>()];
+    var asked = 0;
+    final session = AiRepairSession(
+      source: BookSource(
+        bookSourceUrl: 'https://site.example',
+        bookSourceName: '筆趣閣',
+        ruleContent: ContentRule(content: 'id.old@text'),
+      ),
+      service: _service,
+      check: (source, _) async => _checked(source),
+      probe: (_, _, {start}) async => _probe,
+      ask: (_, _) => replies[asked++].future,
+      apply: (_, _) async {},
+      secrets: (_) async => const {},
+      backups: AiRepairBackups(),
+    );
+
+    await pumpPage(tester, session);
+    await _settle(tester);
+    // 交出的規則校驗不過：退回給 AI，再問一次。
+    replies[0].complete(
+      fakeAiReply(
+        jsonEncode({
+          'action': 'submit',
+          'patch': {
+            'ruleContent': {'content': 'class.wrong@text'},
+          },
+          'note': '正文在 div.wrong',
+        }),
+      ),
+    );
+    await _settle(tester);
+    expect(asked, 2, reason: '退回後接著問 AI');
+
+    Icon iconOf(String title) => tester.widget<Icon>(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text(title),
+          matching: find.byType(GroupedRow),
+        ),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(find.text('1 步'), findsOneWidget, reason: '正在回覆的那一步不算經過');
+    expect(
+      find.byType(CircularProgressIndicator),
+      findsOneWidget,
+      reason: 'AI 修改規則又在做',
+    );
+    expect(
+      iconOf('校驗修好的書源').icon,
+      Icons.radio_button_unchecked_rounded,
+      reason: '這一輪還沒交出',
+    );
+
+    // 這一輪 AI 說修不好：AI 那段是紅叉，校驗那段還是空心圓。
+    replies[1].complete(
+      fakeAiReply(
+        jsonEncode({'action': 'give_up', 'why': 'site_gone', 'reason': '網站關了'}),
+      ),
+    );
+    await _settle(tester);
+    expect(iconOf('AI 修改規則').icon, Icons.cancel_rounded);
+    expect(iconOf('校驗修好的書源').icon, Icons.radio_button_unchecked_rounded);
   });
 
   testWidgets('the clipboard way waits for a paste on the same page', (
