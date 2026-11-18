@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 /// 頁面、卡片與浮動元件的分層規則，所有風格、淺色與深色共用。
 ///
 /// 差距以 CIELAB 明度差（ΔL*，人眼感受到的明暗差）表示。淺色卡片多已近白，
-/// 由頁面往文字色退；深色頁面已近黑，由卡片往文字色提亮。`StylePalette`
-/// 的底色照這組數字算好寫死，`app_style_test` 檢查每個風格都符合。
+/// 頁面以卡片為準：明度低 [cardGapLight]、彩度乘 [pageChromaLight]、色相不變；
+/// 深色頁面已近黑，卡片由頁面往文字色提亮。`StylePalette` 的底色照這組數字
+/// 算好寫死，`app_style_test` 檢查每個風格都符合。
 class AppLayers {
   AppLayers._();
 
