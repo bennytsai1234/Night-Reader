@@ -965,13 +965,12 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
     // 開 App 的進場：標題與按鈕先是骨架，跟書架一起換成真的。
-    // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高。
-    Widget slot(Widget? button) => morph
-        ? Center(
-            widthFactor: 1,
-            child: LaunchSkeleton(child: GlassMorph(child: button)),
-          )
-        : LaunchSkeleton(child: button!);
+    // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高，
+    // 左右兩側的鈕才一樣大。
+    Widget slot(Widget? button) => Center(
+      widthFactor: 1,
+      child: LaunchSkeleton(child: morph ? GlassMorph(child: button) : button!),
+    );
     // 連續過渡時沒有按鈕的一側也留著位置，按鈕才能從一個點長出來。
     final hasLeading = effectiveLeading != null || morph;
     final trailing = morph && actions.isEmpty ? const <Widget?>[null] : actions;

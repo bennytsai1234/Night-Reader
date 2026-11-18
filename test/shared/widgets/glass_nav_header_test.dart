@@ -119,4 +119,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(leading(), Size.zero);
   });
+
+  testWidgets('the left button keeps its own height like the right one', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      page(
+        GlassNavHeader(
+          title: '已選 2 項',
+          leading: GlassTextButton(label: '全選', onPressed: () {}),
+          actions: [GlassTextButton(label: '完成', onPressed: () {})],
+        ),
+      ),
+    );
+
+    final left = tester.getSize(find.byType(GlassTextButton).first);
+    final right = tester.getSize(find.byType(GlassTextButton).last);
+    expect(left, right, reason: '同樣兩個字的鈕，左右一樣大');
+    expect(left.height, AppGlass.buttonSize, reason: '不被工具列拉高');
+  });
 }
