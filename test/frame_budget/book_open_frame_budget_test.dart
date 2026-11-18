@@ -31,7 +31,7 @@ void main() {
   testWidgets('opening books', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await installFakeSite();
     });

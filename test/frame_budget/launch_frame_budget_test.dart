@@ -36,7 +36,7 @@ void main() {
     // 建書卡、解碼封面，換場前等它們畫得出來（ADR 0031）。
     final covers = coverDirectory();
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await seedMoreBooks(24);
       await seedCovers(covers);
@@ -122,6 +122,7 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pump(const Duration(seconds: 1));
       }
+      await waitForDownloads(tester);
     }
 
     // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。

@@ -20,7 +20,7 @@ void main() {
   testWidgets('reading preferences pushed from the reader', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
     });
     await pumpApp(tester);

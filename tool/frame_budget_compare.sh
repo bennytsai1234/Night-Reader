@@ -6,8 +6,8 @@
 # 例：bash tool/frame_budget_compare.sh origin/beta test/frame_budget/reader_interactions_frame_budget_test.dart
 #
 # 把 <改前的提交> 開在暫時的 worktree，和目前的工作目錄（含還沒 commit 的改動）各跑一次，
-# 印出一張 Markdown 表：每個情境動畫在動的時候，扣掉測試的資料庫、排版切片照實算後還超過
-# 上限（電腦 4.2ms）的幀數（ADR 0036），和整段所有幀的主執行緒時間合計（宣稱某件工作離開
+# 印出一張 Markdown 表：每個情境動畫在動的時候，排版切片照實算後還超過上限（電腦 4.2ms）
+# 的幀數（ADR 0036），和整段所有幀的主執行緒時間合計（宣稱某件工作離開
 # 主執行緒時看這欄）。點下去的那一幀與預留停頓不算進幀數；最大一幀降了但還超過，一樣是
 # 掉幀，表上不列。表可以直接貼進 commit message。測試檔路徑相對於 repo 根目錄；改前沒有的
 # 測試檔只跑改後，改前的量測工具還不會印這個數字時那一格是「—」。測試沒有全過就停下來，
@@ -32,7 +32,8 @@
 set -euo pipefail
 
 # 從 describeFrames 的摘要（「<情境>：N 幀，…，主執行緒合計 Tms」與下一行「  動畫中…
-# （扣掉資料庫、排版切片照實算後 K 幀）…」）收集兩邊的 K 與 T，印成對照表。
+# （排版切片照實算後 K 幀）…」）收集兩邊的 K 與 T，印成對照表。改前的量測工具把測試的
+# 資料庫開在主執行緒、印的是「扣掉資料庫、排版切片照實算後 K 幀」，一樣讀得懂。
 summarize() {
   local dir=$1 logs=() side log i
   # 改前沒有這些測試檔時只有改後的 log；一份都沒有時 awk 會改讀標準輸入，先擋下來。
@@ -68,7 +69,7 @@ summarize() {
       }
       next
     }
-    label != "" && match($0, /扣掉資料庫、排版切片照實算後 [0-9]+ 幀/) {
+    label != "" && match($0, /排版切片照實算後 [0-9]+ 幀/) {
       rest = substr($0, RSTART, RLENGTH)
       gsub(/[^0-9]+/, "", rest)
       record(side, label, rest)

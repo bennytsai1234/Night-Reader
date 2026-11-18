@@ -84,7 +84,7 @@ void main() {
   testWidgets('searching 60 sources while results stream in', (tester) async {
     setUpScreenshot(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await getIt<BookSourceDao>().deleteByUrls([
         kOrigin,

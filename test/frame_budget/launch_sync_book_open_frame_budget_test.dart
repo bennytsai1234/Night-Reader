@@ -130,7 +130,7 @@ void main() {
       bases: SyncBaseStorage(directory: () async => bases),
     );
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await installFakeSite();
       await getIt<BookSourceDao>().upsertAll([

@@ -116,7 +116,7 @@ void main() {
   testWidgets('comic fast scroll', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await getIt<BookDao>().upsert(_book);
     });
     // 一張 720×1100（約一張漫畫單頁），一話八張。
