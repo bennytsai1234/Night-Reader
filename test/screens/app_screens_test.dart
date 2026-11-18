@@ -144,6 +144,24 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's17_backup': (const {}, (t) async => openMine(t, '備份與同步')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
   's18b_ai_service': (const {}, (t) async => openMine(t, 'AI 服務')),
+  's18c_about_tools': (
+    const {},
+    (t) async {
+      await openMine(t, '關於夜讀');
+      await t.ensureVisible(find.text('背景下載佇列'));
+      await settle(t, const Duration(milliseconds: 300));
+    },
+  ),
+  's19b_app_log': (
+    const {},
+    (t) async {
+      await openMine(t, '關於夜讀');
+      await t.ensureVisible(find.text('App 日誌'));
+      await settle(t, const Duration(milliseconds: 300));
+      await tapText(t, 'App 日誌');
+      await settle(t);
+    },
+  ),
   's19_release_notes': (
     const {},
     (t) async {
