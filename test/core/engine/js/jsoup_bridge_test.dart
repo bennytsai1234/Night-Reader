@@ -176,6 +176,50 @@ void main() {
     );
   }, skip: skip);
 
+  // getElementById、getElementsByClass 這類收的是 ID、類別名稱、屬性值本身，
+  // 不是 CSS：值裡的 `.`、`"`、`)` 照字比對（Jsoup 的 Evaluator.Id、Class、
+  // AttributeWithValue、ContainsText）。
+  test('getElementBy… compare the literal value, not a CSS selector', () async {
+    expect(
+      await run(r'''
+        var d = org.jsoup.Jsoup.parse('<div id="plain">一</div>' +
+          '<div id="chapter.1">正文</div>' +
+          '<p class="ch">甲</p><p class="chapter.active x">第二段</p>' +
+          '<span data-label="a&quot;b">第三段</span>' +
+          '<span DATA-k=" V ">第四段</span>' +
+          '<i>章（上)</i><b>一<i>二</i></b>');
+        [d.getElementById('plain').text(),
+         d.getElementById('chapter.1').text(),
+         d.getElementsByClass('ch').text(),
+         d.getElementsByClass('chapter.active').text(),
+         d.getElementsByClass('CH').size(),
+         d.getElementsByAttributeValue('data-label', 'a"b').text(),
+         d.getElementsByAttributeValue('data-k', 'v').text(),
+         d.getElementsByAttribute('data-label').size(),
+         d.getElementsByAttribute('Data-K').size(),
+         d.getElementsByTag('SPAN').size(),
+         d.getElementsContainingText('（上)').last().text(),
+         d.getElementsContainingOwnText('二').last().tagName(),
+         d.getElementsContainingOwnText('一二').size()].join('|')
+      '''),
+      '一|正文|甲|第二段|1|第三段|第四段|1|1|2|章（上)|i|0',
+    );
+  }, skip: skip);
+
+  // Jsoup 的類別名稱照任何空白分開（tab、換行也算），比對不分大小寫。
+  test('class names are split on any whitespace, like Jsoup', () async {
+    expect(
+      await run(r'''
+        var d = org.jsoup.Jsoup.parse('<p class="a\tb">1</p>' +
+          '<p class="a\nB">2</p><p class="a b">3</p>');
+        var p = d.select('p').get(1);
+        [d.getElementsByClass('b').size(), p.hasClass('b'),
+         p.classNames().join(',')].join('|')
+      '''),
+      '3|true|a,B',
+    );
+  }, skip: skip);
+
   test('errors from Jsoup can be caught like in Rhino', () async {
     expect(
       await run('''
