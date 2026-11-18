@@ -17,7 +17,7 @@
 - **開 App 的底色不等朗讀引擎**：使用者 2026-11-16 要加快開 App。開 App 只有底色的那段（`LaunchEntrance.prepared`）等書架、繁簡字典與 `TTSService.ready()`；#129 在使用者手機上量到底色 253 → 1030ms，約 0.78 秒只在等系統的朗讀服務回應。等它是因為朗讀外掛把跨程序呼叫（開一次引擎讀 3～4 次完整音色清單）放在 Android 主執行緒，引擎開好那一下會卡動畫（ADR 0018）。外掛已改成在自己的執行緒上做（分支 `perf/tts-off-main-thread`，fork nightreader.5），底色的等待還在。使用者回家量：
   1. 用那條分支的測試 APK 錄冷啟動的系統追蹤（`docs/agents/phone.md`），確認 Android 主執行緒上沒有 `flutter_tts` 的工作，並量剩下的系統通知欄播放控制（`SystemPlayback.start` → `AudioService.init`，不是我們的 fork）佔多少。
   2. 主執行緒上剩下的夠輕，就拿掉 `_launchPrepared` 裡的 `TTSService.ready()`（照舊數字推算底色約少 0.7 秒），並改寫 ADR 0023「只讓等待變短的改動不做」；播放控制太重的話，它留在底色或挪到骨架長完的靜止段，再談。
-- **全面整理資料夾與檔名，拆成幾批**：使用者 2026-11-18 定的，在下一條的狀態機之前做完。
+- **全面整理資料夾與檔名，拆成幾批**：使用者 2026-11-18 定的，在下一條的狀態機之前做完。使用者先把還開著的 PR 合併完、手上的問題都修完，才開工；開工由使用者說。
   - **每批一個 PR，只搬不改**：只動檔案位置、檔名和跟著改的 import，內容一行不改，git 才追得到搬家前的歷史（`git log --follow`）。`test/` 照 `lib/` 的結構，測試跟著搬。文件裡寫到的路徑與檔名一起改（`docs/` 與根目錄的 `.md` 寫完整路徑的約 23 處，另有很多只寫檔名，用檔名 grep）。驗證：`flutter analyze` 通過、搬過的測試照跑。每批的新結構先列給使用者看，定了再搬。
   - **拆大檔另外做**：拆檔會改內容，不和搬檔放同一個提交；每個大檔拆不拆、怎麼拆，到那批再談。2000 行上下的：`skeleton.dart` 2148、`hybrid_reader_screen.dart` 2103、`source_check_isolate.dart` 1849、`grouped_list.dart` 1584、`reader_v2_page.dart` 1529、`ai_repair_session.dart` 1512、`app_page_transition.dart` 1495（`idna_mapping_table.dart`、`public_suffix_rules.dart` 是資料表，不拆）。
   - **批次**（初稿，開工時照 import 關係核對）：
