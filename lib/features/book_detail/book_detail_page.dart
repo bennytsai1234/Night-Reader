@@ -1090,7 +1090,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
           p.book.name,
           p.book.author,
           // 預填畫面上看到的內容（使用者改過的優先）。
-          p.book.getDisplayIntro() ?? '',
+          p.book.getShownIntro(),
           p.book.customCoverUrl ?? p.book.coverUrl ?? '',
           p.book.kind ?? '',
           p.book.customTag ?? '',

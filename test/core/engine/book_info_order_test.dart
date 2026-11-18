@@ -38,7 +38,8 @@ void main() {
       baseUrl: 'https://order.test/b/1',
     );
 
-    expect(book.intro, '簡介\n当前来源【2】');
+    // 簡介照 Legado 整理過（HtmlFormatter.format：換行後縮排兩格）。
+    expect(book.intro, '簡介\n　　当前来源【2】');
     expect(
       book.tocUrl,
       'https://order.test/toc/2/${Uri.encodeComponent('詳情的書名')}',
