@@ -19,107 +19,99 @@ import '../source_manager_provider.dart';
 import 'package:night_reader/core/services/ui_language.dart';
 
 class SourceManagerDialogs {
+  /// 校驗詳情：底部面板上面是進度與狀態，下面是日誌；頁首右邊在校驗中或
+  /// 暫停時是「結束校驗」，結束後有出問題的書源時是「複製診斷」。
   static void showCheckLog(
     BuildContext context,
     SourceManagerProvider provider,
   ) {
-    showStatefulAppAlert<void>(
+    AppBottomSheet.showCustom<void>(
       context: context,
-      builder: (context, _, _) => AnimatedBuilder(
+      isScrollControlled: true,
+      builder: (sheetContext) => AnimatedBuilder(
         animation: provider.checkService,
-        builder: (context, _) {
-          final logs = provider.checkService.logs;
-          final chrome = AppChrome.of(context);
-          final scheme = Theme.of(context).colorScheme;
-          return AppAlert<String>(
-            title: '校驗詳情',
-            message: provider.checkService.config.summary,
-            onAction: (value) {
-              if (value == 'end') {
-                provider.endSourceCheck();
-              } else if (value == 'copy') {
-                _copyCheckDiagnostics(context, provider.checkService);
-              } else {
-                Navigator.pop(context);
-              }
-            },
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                UiText(
-                  provider.checkService.isChecking
-                      ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
-                      : provider.pausedCheck.plan != null
-                      ? sourceCheckPausedText(provider.pausedCheck.plan!)
-                      : provider.checkService.lastReport.stopped
-                      ? '已結束'
-                      : '已完成',
-                  style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                UiText(
-                  provider.checkService.statusMsg,
-                  style: AppTextStyles.bodySm.copyWith(
-                    color: chrome.sectionText,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Container(
-                  height: 320,
-                  decoration: BoxDecoration(
-                    color: chrome.groupedBackground,
-                    borderRadius: AppRadius.cardMd,
-                  ),
-                  child: logs.isEmpty
-                      ? Center(
-                          child: UiText(
-                            '目前還沒有校驗日誌',
-                            style: AppTextStyles.bodySm.copyWith(
-                              color: chrome.sectionText,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          itemCount: logs.length,
-                          separatorBuilder: (_, _) => Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: AppSpacing.sm,
-                            ),
-                            child: Container(
-                              height: AppGlass.hairline,
-                              color: chrome.separator,
-                            ),
-                          ),
-                          itemBuilder: (context, index) {
-                            final entry = logs[index];
-                            return SelectableText(
-                              '${entry.formattedTime} ${entry.message}',
-                              style: AppTextStyles.labelSm.copyWith(
-                                fontFamily: 'monospace',
-                                height: 1.45,
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-            actions: [
-              if (provider.checkService.isChecking ||
-                  provider.pausedCheck.isPaused)
-                const AppAlertAction(
+        builder: (sheetContext, _) {
+          final service = provider.checkService;
+          final logs = service.logs;
+          final chrome = AppChrome.of(sheetContext);
+          final running = service.isChecking || provider.pausedCheck.isPaused;
+          final Widget? trailing = running
+              ? GlassTextButton(
                   label: '結束校驗',
-                  value: 'end',
                   destructive: true,
+                  onPressed: provider.endSourceCheck,
                 )
-              else if (provider.checkService.lastReport.affectedCount > 0)
-                const AppAlertAction(label: '複製診斷', value: 'copy'),
-              const AppAlertAction(
-                label: '關閉',
-                value: 'close',
-                isDefault: true,
+              : service.lastReport.affectedCount > 0
+              ? GlassTextButton(
+                  label: '複製診斷',
+                  onPressed: () => _copyCheckDiagnostics(sheetContext, service),
+                )
+              : null;
+          return AppBottomSheet(
+            title: '校驗詳情',
+            trailing: trailing,
+            children: [
+              GroupedSection(
+                margin: EdgeInsets.zero,
+                topGap: AppSpacing.md,
+                footer: service.config.summary,
+                children: [
+                  GroupedRow(
+                    title: service.isChecking
+                        ? '進度 ${service.currentCount}/${service.totalCount}'
+                        : provider.pausedCheck.plan != null
+                        ? sourceCheckPausedText(provider.pausedCheck.plan!)
+                        : service.lastReport.stopped
+                        ? '已結束'
+                        : '已完成',
+                    subtitle: service.statusMsg.isEmpty
+                        ? null
+                        : service.statusMsg,
+                    showChevron: false,
+                  ),
+                ],
+              ),
+              GroupedSection(
+                margin: EdgeInsets.zero,
+                header: '日誌',
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(sheetContext).height * 0.45,
+                    child: logs.isEmpty
+                        ? Center(
+                            child: UiText(
+                              '目前還沒有校驗日誌',
+                              style: AppTextStyles.bodyBase.copyWith(
+                                color: chrome.sectionText,
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            itemCount: logs.length,
+                            separatorBuilder: (_, _) => Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppSpacing.sm,
+                              ),
+                              child: Container(
+                                height: AppGlass.hairline,
+                                color: chrome.separator,
+                              ),
+                            ),
+                            // 日誌照崩潰日誌頁：等寬小字，欄位才對得齊。
+                            itemBuilder: (context, index) {
+                              final entry = logs[index];
+                              return SelectableText(
+                                '${entry.formattedTime} ${entry.message}',
+                                style: AppTextStyles.labelSm.copyWith(
+                                  fontFamily: 'monospace',
+                                  height: 1.45,
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
             ],
           );

@@ -127,6 +127,18 @@ void main() {
     expect(find.text('正文'), findsNothing);
   });
 
+  testWidgets('校驗詳情：沒在校驗、也沒有出問題的書源時，頁首右邊沒有動作', (tester) async {
+    final provider = await loadedProvider(tester);
+    await open(tester, (context) async {
+      SourceManagerDialogs.showCheckLog(context, provider);
+    });
+    expect(find.text('校驗詳情'), findsOneWidget);
+    expect(find.text('已完成'), findsOneWidget);
+    expect(find.text('目前還沒有校驗日誌'), findsOneWidget);
+    expect(find.text('結束校驗'), findsNothing);
+    expect(find.text('複製診斷'), findsNothing);
+  });
+
   testWidgets('匯入預覽：關掉的類型不匯入', (tester) async {
     final novel = BookSource(bookSourceUrl: 'https://n.test');
     final comic = BookSource(
