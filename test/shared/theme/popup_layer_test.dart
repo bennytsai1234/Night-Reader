@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -62,6 +63,49 @@ void _openActionSheet(BuildContext context) => showAppActionSheet<String>(
 );
 
 void main() {
+  for (final style in AppStyle.values) {
+    for (final pureBlack in [true, false]) {
+      final name = '${style.label}${pureBlack ? '純黑' : ''}';
+
+      test('彈出層：淺色和卡片同色，深色是玻璃那一階（$name）', () {
+        for (final brightness in Brightness.values) {
+          final theme = buildAppTheme(style, brightness, pureBlack: pureBlack);
+          final palette = theme.extension<StylePalette>()!;
+          final chrome = theme.extension<AppChrome>()!;
+          expect(
+            chrome.popupSurface,
+            brightness == Brightness.light ? palette.surface : palette.bar,
+          );
+          expect(chrome.menuBarrier.a, lessThan(chrome.barrier.a));
+        }
+      });
+
+      test('底部面板：深色整組往上一階，淺色不變（$name）', () {
+        final light = buildAppTheme(style, Brightness.light);
+        expect(sheetThemeOf(light), same(light));
+
+        final dark = buildAppTheme(
+          style,
+          Brightness.dark,
+          pureBlack: pureBlack,
+        );
+        final palette = dark.extension<StylePalette>()!;
+        final sheet = sheetThemeOf(dark);
+        final chrome = sheet.extension<AppChrome>()!;
+        expect(chrome.groupedBackground, palette.surface);
+        expect(chrome.groupedSurface, palette.bar);
+        expect(sheet.colorScheme.surface, palette.bar);
+        expect(
+          AppLayers.lightness(chrome.glassTint) -
+              AppLayers.lightness(palette.bar),
+          closeTo(AppLayers.floatGapDark, 0.6),
+        );
+        // 面板裡再開面板不會一路往上疊。
+        expect(sheetThemeOf(sheet), same(sheet));
+      });
+    }
+  }
+
   const openers = {
     '彈出選單': _openMenu,
     '提示框': _openAlert,

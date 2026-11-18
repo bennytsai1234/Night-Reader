@@ -14,6 +14,9 @@ class ReaderV2MenuStyle {
   final Color accent;
   final Color onAccent;
   final Color accentMuted;
+
+  /// 目錄面板背後的遮罩。比 App 的遮罩重：淺色的面板比紙暗，壓淺了面板和
+  /// 露出的那一條正文分不開。
   final Color scrim;
 
   const ReaderV2MenuStyle({
@@ -52,7 +55,7 @@ class ReaderV2MenuStyle {
       accent: palette.primary,
       onAccent: palette.onPrimary,
       accentMuted: palette.primary.withValues(alpha: 0.18),
-      scrim: Colors.black.withValues(alpha: 0.18),
+      scrim: Colors.black54,
     );
   }
 

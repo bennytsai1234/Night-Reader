@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 開關 [ReaderV2SidePanel] 的遙控器，由閱讀頁建立與釋放。
@@ -309,7 +310,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   Widget build(BuildContext context) {
     final shown = _shown.value;
     if (shown) _panel = widget.panel;
-    final scrim = DrawerTheme.of(context).scrimColor ?? Colors.black54;
+    final scrim = ReaderV2MenuStyle.of(context).scrim;
     final edge = _edgeDragWidth + MediaQuery.paddingOf(context).left;
     final covering = _builtCovering = _covering;
     return Stack(

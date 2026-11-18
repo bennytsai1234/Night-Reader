@@ -65,7 +65,8 @@ class AppChrome extends ThemeExtension<AppChrome> {
   /// 提示框、底部面板與長按預覽背後的遮罩。
   final Color barrier;
 
-  /// 彈出選單背後的遮罩：選單小、點了就走，壓得比 [barrier] 淺。
+  /// 彈出選單背後的遮罩：選單小、點了就走，壓得比 [barrier] 淺（淺色 12%、
+  /// 深色 27%，[barrier] 是 18%、40%）。
   final Color menuBarrier;
 
   /// 提示訊息（toast）。
@@ -124,7 +125,9 @@ class AppChrome extends ThemeExtension<AppChrome> {
       popupSurface: popupSurface,
       popupSeparator: popupBorder.withValues(alpha: separatorAlpha),
       barrier: barrier,
-      menuBarrier: barrier.withValues(alpha: barrier.a * debugMenuBarrierRatio),
+      menuBarrier: isLight
+          ? textPrimary.withValues(alpha: 0.12)
+          : const Color(0x45000000),
       // 淺色時是墨色底配紙色字；深色時比卡片再亮一階。提示訊息沒有模糊，
       // 底色完全不透明。
       toastBackground: isLight
@@ -138,9 +141,6 @@ class AppChrome extends ThemeExtension<AppChrome> {
           : Color.lerp(primary, textPrimary, 0.3)!,
     );
   }
-
-  // PROTOTYPE：候選圖用的旋鈕，使用者選定後換成常數。
-  static double debugMenuBarrierRatio = 0.4;
 
   /// 彈出層的底色：玻璃強度有模糊時用 [blurred] 的不透明度，實色完全不透明
   /// （[GlassStrength.overBlur]）。
