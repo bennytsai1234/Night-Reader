@@ -40,7 +40,7 @@ class SleepTimer extends ChangeNotifier {
   static const int minCustomMinutes = 1;
   static const int maxCustomMinutes = 180;
 
-  /// 沒設定過自訂時的分鐘數，與選單定時鍵在定時關閉時用的時間相同。
+  /// 沒設定過自訂時的分鐘數。
   static const int defaultCustomMinutes = 30;
 
   final VoidCallback _onExpired;
