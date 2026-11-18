@@ -24,7 +24,6 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -235,7 +234,10 @@ class _SourceLoginPageState extends State<SourceLoginPage>
   /// 換成「在網站登入」時，瀏覽器關掉才完成。
   Future<void>? _website;
 
-  bool get _busy => _running != null || _submitting;
+  /// 正在清除登入資料：和按鈕、打勾一樣算一個動作，一次只跑一個。
+  bool _clearing = false;
+
+  bool get _busy => _running != null || _submitting || _clearing;
 
   @override
   void initState() {
@@ -406,7 +408,9 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       confirmLabel: '清除',
       destructive: true,
     );
-    if (!confirmed || !mounted) return;
+    // 確認框開著時可能已經按了別的動作。
+    if (!confirmed || !mounted || _busy) return;
+    setState(() => _clearing = true);
     try {
       await clearSourceLoginData(widget.source);
       for (final entry in _fields.entries) {
@@ -416,6 +420,8 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       _showNotice('已清除登入資料');
     } catch (error, stackTrace) {
       _showNotice(failureMessage('清除登入資料', error, stackTrace));
+    } finally {
+      if (mounted) setState(() => _clearing = false);
     }
   }
 
@@ -528,6 +534,41 @@ class _SourceLoginPageState extends State<SourceLoginPage>
 
   // ── 畫面 ─────────────────────────────────────────────────────────
 
+  /// 書源的表單，最下面一張卡片放登入頁自己的動作。
+  List<Widget> _page(List<SourceLoginRow> rows, String? websiteUrl) => [
+    ..._items(rows),
+    _actions(websiteUrl),
+  ];
+
+  /// 登入頁自己的動作（頁首右邊只有打勾，docs/design/components.md
+  /// 「左右各一顆」）。表單讀不出來時也在，還能改在網站登入或清掉舊資料。
+  /// 有動作在跑時都灰掉，一次只跑一個。
+  Widget _actions(String? websiteUrl) => GroupedSection(
+    children: [
+      // 書源網址不是 http(s) 時灰掉（ADR 0059）。
+      GroupedRow(
+        title: '在網站登入',
+        leading: const GroupedIconTile(Icons.open_in_browser_rounded),
+        enabled: websiteUrl != null && !_busy,
+        onTap: websiteUrl == null ? null : () => _loginOnWebsite(websiteUrl),
+      ),
+      GroupedRow(
+        title: '登入標頭',
+        leading: const GroupedIconTile(Icons.badge_outlined),
+        enabled: !_busy,
+        onTap: _showLoginHeader,
+      ),
+      GroupedRow(
+        title: '清除登入資料',
+        leading: const GroupedIconTile(Icons.logout_rounded),
+        destructive: true,
+        showChevron: false,
+        enabled: !_busy,
+        onTap: _clearLoginData,
+      ),
+    ],
+  );
+
   List<Widget> _items(List<SourceLoginRow> rows) {
     final items = <Widget>[];
     var index = 0;
@@ -579,34 +620,9 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       appBar: GlassNavHeader(
         title: '${context.ui('登入')} · ${widget.source.bookSourceName}',
         translateTitle: false,
+        // 頁首右邊只有打勾（docs/design/components.md「左右各一顆」）：書源的
+        // 說明會寫「填完點右上角 √」。其他動作在表單最下面的卡片。
         actions: [
-          GlassMenuButton<String>(
-            entriesBuilder: (_) => [
-              // 書源網址不是 http(s) 時灰掉（ADR 0059）。
-              GlassMenuItem(
-                value: 'website',
-                label: '在網站登入',
-                icon: Icons.open_in_browser_rounded,
-                enabled: websiteUrl != null && !_busy,
-              ),
-              const GlassMenuItem(
-                value: 'header',
-                label: '登入標頭',
-                icon: Icons.badge_outlined,
-              ),
-              const GlassMenuItem(
-                value: 'clear',
-                label: '清除登入資料',
-                icon: Icons.logout_rounded,
-                destructive: true,
-              ),
-            ],
-            onSelected: (value) => switch (value) {
-              'website' => _loginOnWebsite(websiteUrl!),
-              'header' => _showLoginHeader(),
-              _ => _clearLoginData(),
-            },
-          ),
           GlassIconButton(
             icon: Icons.check_rounded,
             tooltip: '登入',
@@ -615,10 +631,17 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         ],
       ),
       body: broken != null
-          ? AppStateView(
-              icon: Icons.error_outline_rounded,
-              title: broken,
-              tone: AppStateTone.error,
+          ? Column(
+              children: [
+                Expanded(
+                  child: AppStateView(
+                    icon: Icons.error_outline_rounded,
+                    title: broken,
+                    tone: AppStateTone.error,
+                  ),
+                ),
+                SafeArea(top: false, child: _actions(websiteUrl)),
+              ],
             )
           : SkeletonSwitcher(
               loading: rows == null,
@@ -626,9 +649,10 @@ class _SourceLoginPageState extends State<SourceLoginPage>
               // 程式表單回來後，以真實欄位及按鈕重算揭開前的骨架；
               // 尚未知資料時才使用通用的兩欄表單預覽。
               skeleton: _FormSkeleton(
-                items: rows == null ? null : _items(rows),
+                items: rows == null ? null : _page(rows, websiteUrl),
               ),
-              builder: (_) => GroupedListView(children: _items(rows ?? [])),
+              builder: (_) =>
+                  GroupedListView(children: _page(rows ?? [], websiteUrl)),
             ),
     );
   }

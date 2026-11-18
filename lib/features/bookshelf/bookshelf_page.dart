@@ -270,23 +270,24 @@ class _BookshelfPageState extends State<BookshelfPage>
       return GlassNavHeader(
         morph: true,
         title: '已選 ${_selectedUrls.length} 本',
+        // 同書源管理的多選：左全選、右完成（docs/design/components.md）。
         leading: GlassTextButton(
-          label: '完成',
-          emphasized: true,
-          onPressed: _batchAction != null ? null : _exitEditMode,
+          label: allSelected ? '全不選' : '全選',
+          onPressed: _batchAction != null
+              ? null
+              : () => setState(() {
+                  if (allSelected) {
+                    _selectedUrls.clear();
+                  } else {
+                    _selectedUrls.addAll(shown.map((b) => b.bookUrl));
+                  }
+                }),
         ),
         actions: [
           GlassTextButton(
-            label: allSelected ? '全不選' : '全選',
-            onPressed: _batchAction != null
-                ? null
-                : () => setState(() {
-                    if (allSelected) {
-                      _selectedUrls.clear();
-                    } else {
-                      _selectedUrls.addAll(shown.map((b) => b.bookUrl));
-                    }
-                  }),
+            label: '完成',
+            emphasized: true,
+            onPressed: _batchAction != null ? null : _exitEditMode,
           ),
         ],
       );
@@ -336,6 +337,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         label: '統一封面',
         icon: Icons.nights_stay_outlined,
         checked: provider.unifiedCovers,
+        toggle: true,
       ),
       const GlassMenuDivider(),
       const GlassMenuItem(
@@ -1058,6 +1060,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           label: '自動檢查更新',
           icon: Icons.autorenew_rounded,
           checked: !book.isLocal && book.canUpdate,
+          toggle: true,
           enabled: !book.isLocal,
         ),
         const GlassMenuDivider(),

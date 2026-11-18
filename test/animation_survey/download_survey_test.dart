@@ -147,15 +147,29 @@ void main() {
           tester,
           area: _area,
           key: 'download07',
-          label: '點頂部「暫停全部」',
-          action: () => tester.tap(find.byTooltip('暫停全部')),
+          label: '點頂部「⋯」，打開選單',
+          action: () => tester.tap(find.byTooltip('更多')),
+        );
+        await surveyStep(
+          tester,
+          area: _area,
+          key: 'download07b',
+          label: '選「暫停全部」',
+          action: () => tester.tap(find.text('暫停全部').last),
         );
         await surveyStep(
           tester,
           area: _area,
           key: 'download08',
-          label: '點頂部「繼續全部」',
-          action: () => tester.tap(find.byTooltip('繼續全部')),
+          label: '點頂部「⋯」，打開選單',
+          action: () => tester.tap(find.byTooltip('更多')),
+        );
+        await surveyStep(
+          tester,
+          area: _area,
+          key: 'download08b',
+          label: '選「繼續全部」',
+          action: () => tester.tap(find.text('繼續全部').last),
         );
         await surveyStep(
           tester,
@@ -196,8 +210,15 @@ void main() {
           tester,
           area: _area,
           key: 'download14',
-          label: '點「清除已完成」',
-          action: () => tester.tap(find.byTooltip('清除已完成')),
+          label: '點頂部「⋯」，打開選單',
+          action: () => tester.tap(find.byTooltip('更多')),
+        );
+        await surveyStep(
+          tester,
+          area: _area,
+          key: 'download14b',
+          label: '選「清除已完成」',
+          action: () => tester.tap(find.text('清除已完成').last),
         );
         await surveyStep(
           tester,

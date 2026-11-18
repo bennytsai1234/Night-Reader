@@ -223,8 +223,13 @@ void main() {
           tester,
           area: _area,
           key: 'search16',
-          label: '點「取消」，離開搜尋',
-          action: () => tester.tap(inSearchBar('取消')),
+          label: '點左上「‹」，離開搜尋',
+          action: () => tester.tap(
+            find.descendant(
+              of: find.byType(SearchAppBar),
+              matching: find.byTooltip('返回'),
+            ),
+          ),
         );
 
         // 第二次進搜尋：歷史關鍵字在，點一個進去，搜尋途中按結束。假網站的回應
@@ -261,8 +266,13 @@ void main() {
           tester,
           area: _area,
           key: 'search21',
-          label: '點「取消」，離開搜尋',
-          action: () => tester.tap(inSearchBar('取消')),
+          label: '點左上「‹」，離開搜尋',
+          action: () => tester.tap(
+            find.descendant(
+              of: find.byType(SearchAppBar),
+              matching: find.byTooltip('返回'),
+            ),
+          ),
         );
       },
     );
