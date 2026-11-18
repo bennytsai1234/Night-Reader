@@ -206,6 +206,20 @@ void main() {
     );
   }, skip: skip);
 
+  // Jsoup 的類別名稱照任何空白分開（tab、換行也算），比對不分大小寫。
+  test('class names are split on any whitespace, like Jsoup', () async {
+    expect(
+      await run(r'''
+        var d = org.jsoup.Jsoup.parse('<p class="a\tb">1</p>' +
+          '<p class="a\nB">2</p><p class="a b">3</p>');
+        var p = d.select('p').get(1);
+        [d.getElementsByClass('b').size(), p.hasClass('b'),
+         p.classNames().join(',')].join('|')
+      '''),
+      '3|true|a,B',
+    );
+  }, skip: skip);
+
   test('errors from Jsoup can be caught like in Rhino', () async {
     expect(
       await run('''

@@ -265,9 +265,11 @@ class JsoupBridge {
       case 'className':
         return element?.className ?? '';
       case 'classNames':
-        return element?.classes.toList() ?? const <String>[];
+        return element == null ? const <String>[] : _classNames(element);
       case 'hasClass':
-        return element?.classes.contains(arg(0)) ?? false;
+        final name = arg(0).toLowerCase();
+        return element != null &&
+            _classNames(element).any((c) => c.toLowerCase() == name);
       case 'addClass':
         element?.classes.add(arg(0));
         return node;
@@ -306,7 +308,7 @@ class JsoupBridge {
       case 'getElementsByClass':
         final name = arg(0).toLowerCase();
         return _allElements(container)
-            .where((e) => e.classes.any((c) => c.toLowerCase() == name))
+            .where((e) => _classNames(e).any((c) => c.toLowerCase() == name))
             .toList();
       case 'getElementsByAttribute':
         final name = arg(0).trim();
@@ -326,7 +328,7 @@ class JsoupBridge {
       case 'getElementsContainingText':
       case 'getElementsContainingOwnText':
         // Jsoup：不分大小寫，搜的字連續空白併成一個。
-        final needle = arg(0).replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+        final needle = arg(0).replaceAll(_whitespace, ' ').toLowerCase();
         final own = op == 'getElementsContainingOwnText';
         return _allElements(container)
             .where(
@@ -934,6 +936,15 @@ class JsoupBridge {
     }
     return replacement;
   }
+
+  /// Jsoup 的類別名稱：`class` 照任何空白（含 tab、換行）分開；`html` 套件的
+  /// `classes` 只照空格分。
+  static List<String> _classNames(dom.Element element) => [
+    for (final name in element.className.split(_whitespace))
+      if (name.isNotEmpty) name,
+  ];
+
+  static final RegExp _whitespace = RegExp(r'\s+');
 
   /// HTML 屬性名稱不分大小寫：找出實際存的那個鍵。
   static Object? _attributeKey(dom.Element element, String name) {
