@@ -67,3 +67,14 @@ QuickJS 中斷 API：`JS_SetInterruptHandler(runtime, handler, opaque)`（回傳
 目前已完成程式路徑、已有回歸測試、QuickJS Dart FFI 封裝與上游原生碼審閱。沒有可用的 Flutter/Dart SDK 及可用 Android 裝置執行環境；GitHub 連線只足夠讀檔和建立研究分支，無法在此直接跑上述原型與量測。因此「timeout 在 Android 0.3.6 無效」目前是**待驗證的高優先假設**，不是實測結論。
 
 本文不改 `PLAN.md`、ADR、App 程式或測試，不開 PR。取得實測再決定是否進入修正階段。
+
+## 實作
+
+照「B + C」做了（分支 `fix/rule-js-interrupt`）：
+
+- **B，中斷**：沒有用函式庫原本只看時間、`start` 不會被設的 `timeout`，改用 QuickJS 本身的 `JS_SetInterruptHandler` 裝夜讀自己的處理：一個放在原生記憶體的停止旗標（`JsInterruptFlag`，`third_party/flutter_js/PATCHES.md` 的 `nightreader.7`），處理只讀旗標。主 isolate 替每個書源 worker 建一個，`SourceWorker.kill` 舉起；worker 裡之後建的 QuickJS runtime 都裝上。isolate 真的結束（`onExit`）後才釋放。實際打包的 Android 0.3.6 `.so` 有匯出 `JS_SetInterruptHandler`（讀 `.aar` 裡 arm64 的動態符號表確認）。
+- **C，上限**：臨時 worker（`SourceWorker.spawn`：校驗、AI 修書源的工具、網站檢查、登入）同時最多 12 條，算到 `onExit` 才還；常駐的四條與網路 isolate 不算。滿了就等，等的時候能取消；書源校驗的 handle 立刻交回，等名額時按停止也有作用，逾時從 worker 開好才算。被結束 60 秒還沒真的結束的（停不下來：iOS 的規則 JS、卡在 Dart 正規表示式裡的）記一筆 App 日誌、讓出名額：一直佔著的話，累積到 12 條後校驗、AI 修書源、登入全部停住、沒有提示，比改前（多耗電）更糟。研究原本寫「滿了就停止派發、讓使用者看到」，這裡選讓出名額，不另做提示。
+- 測試在 `test/core/engine/source_worker_places_test.dart`（自己一個檔：別的測試結束的 worker 可能還卡著、佔著名額）：名額、取消、60 秒讓出（測試裡縮短）、校驗等名額時停止，用 Dart 的同步 `sleep` 佔住 worker，各平台都跑；`while (true) {}` 與包在 `try／catch` 裡的迴圈停下那兩項只在有 `JS_SetInterruptHandler` 的函式庫上跑，Windows 測試用的沒有，所以只在 CI 的 Linux 跑。
+
+還沒做：iOS 的 JavaScriptCore 沒有中斷，卡住的規則照舊停不下來，60 秒後不再佔名額，isolate 照舊留著；常駐書源 isolate 裡被取消的工作不中斷它的規則 JS（同一條 isolate 上可能是別的工作的 JS 在跑），只有結束 worker 時才中斷。
+

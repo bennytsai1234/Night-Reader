@@ -186,8 +186,12 @@ Future<SiteCheck> checkSite(
     worker = await SourceWorker.spawn(
       debugName: 'SiteCheck',
       withDictionaries: false,
+      cancelToken: cancelToken,
     );
   } catch (error) {
+    if (cancelToken?.isCancelled ?? false) {
+      return const SiteCheck(SiteVerdict.unreachable, '已停止');
+    }
     return SiteCheck(SiteVerdict.alive, '檢查不了：$error');
   }
   try {
