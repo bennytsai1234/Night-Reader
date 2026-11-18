@@ -66,8 +66,8 @@ abstract final class SemanticParagraphFormatter {
     // applies to an opening mark stranded at the end of the previous line.
     final first = _visibleEdge(right, fromStart: true);
     final last = _visibleEdge(left, fromStart: false);
-    if (_noParagraphStart.contains(first) ||
-        _noParagraphEnd.contains(last)) {
+    if ((first.isNotEmpty && _noParagraphStart.contains(first)) ||
+        (last.isNotEmpty && _noParagraphEnd.contains(last))) {
       return true;
     }
     if ((left.endsWith('…') && right.startsWith('…')) ||
