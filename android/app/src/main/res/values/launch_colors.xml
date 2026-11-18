@@ -5,11 +5,11 @@
          檢查兩邊一致。launch_<淺色風格>_<深色底> 跟隨系統深淺，深色版在
          values-night/launch_colors.xml。 -->
     <color name="launch_plain_light">#DDDDDD</color>
-    <color name="launch_paper_light">#DDD9D1</color>
-    <color name="launch_tea_light">#D5CCBC</color>
-    <color name="launch_kraft_light">#D2C5AD</color>
-    <color name="launch_bamboo_light">#D3D7CE</color>
-    <color name="launch_bean_light">#C7D5CA</color>
+    <color name="launch_paper_light">#DFD9CB</color>
+    <color name="launch_tea_light">#D8CCB1</color>
+    <color name="launch_kraft_light">#D7C59B</color>
+    <color name="launch_bamboo_light">#D3D8CA</color>
+    <color name="launch_bean_light">#C3D7C6</color>
     <color name="launch_black_dark">#000000</color>
     <color name="launch_paper_dark">#1A1612</color>
     <color name="launch_tea_dark">#1B140D</color>
