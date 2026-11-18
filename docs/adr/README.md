@@ -6,7 +6,7 @@
 
 | ADR | 一句話 |
 |---|---|
-| [0023](0023-optimize-for-smoothness-not-waiting-time.md) | 不以縮短等待時間為目標，看整體流暢與動畫完整 |
+| [0023](0023-optimize-for-smoothness-not-waiting-time.md) | 流暢與動畫完整優先，等待時間其次 |
 | [0018](0018-animations-never-share-frames-with-heavy-work.md) | 動畫播放時不跑會佔住主執行緒的工作，寧可內容晚一點出現 |
 | [0029](0029-no-dropped-frames-in-transitions-and-reveals.md) | 轉場與骨架換場不掉幀：用時間換流暢、工作拆小分攤到更多格，與六個做法 |
 | [0036](0036-three-rules-for-smooth-animation.md) | 動畫流不流暢的三條標準：點下去那一幀可以重、預留停頓可以跑重工作、動畫中每一幀在 8.3ms 內（電腦 4.2ms）；使用者在手機上感覺得到才修 |

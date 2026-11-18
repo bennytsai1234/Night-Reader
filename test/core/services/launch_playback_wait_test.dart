@@ -48,7 +48,7 @@ void main() {
       (call) async => Directory.systemTemp.path,
     );
     AudioServicePlatform.instance = _ReadyAudioPlatform();
-    final playback = SystemPlayback();
+    final playback = SystemPlayback.instance;
     unawaited(TTSService().init());
 
     var ready = false;

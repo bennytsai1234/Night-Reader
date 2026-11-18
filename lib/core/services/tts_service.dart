@@ -187,7 +187,9 @@ class TTSService extends ChangeNotifier {
     await _loadSavedSpeechParams();
     notifyListeners();
     try {
-      await SystemPlayback.instance.start();
+      // 媒體工作階段和朗讀引擎各開各的：系統一直不回應工作階段時，朗讀照樣
+      // 能念（工作階段開好時會補上播放資訊）。
+      unawaited(SystemPlayback.instance.start());
       await _initTts();
       _isInitialized = true;
       // 引擎、音色清單與保存的選擇都載好了：設定頁跟著更新。

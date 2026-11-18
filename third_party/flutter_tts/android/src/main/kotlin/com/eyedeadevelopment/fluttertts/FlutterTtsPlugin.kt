@@ -37,10 +37,11 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     private var handler: Handler? = null
     // nightreader.5：朗讀引擎的每個呼叫都是跨程序呼叫（音色清單一次就是一大包），
     // 不在 Android 主執行緒（也是 Flutter 畫畫面的執行緒）上做，全部照順序交給
-    // 這條執行緒；回給 Dart 的結果與事件再送回主執行緒。
+    // 這條執行緒；回給 Dart 的結果與事件再送回主執行緒。下面的狀態只在這條執行緒
+    // 上讀寫：系統朗讀服務的回呼（onInit、念的進度）也先排到這條執行緒再處理。
     private var workerThread: HandlerThread? = null
-    private var worker: Handler? = null
-    private var methodChannel: MethodChannel? = null
+    @Volatile private var worker: Handler? = null
+    @Volatile private var methodChannel: MethodChannel? = null
     private var speakResult: Result? = null
     private var synthResult: Result? = null
     private var awaitSpeakCompletion = false
@@ -61,7 +62,10 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     private var queueMode: Int = TextToSpeech.QUEUE_FLUSH
     private var ttsStatus: Int? = null
     private var selectedEngine: String? = null
-    private var engineResult: Result? = null
+    // 目前這個引擎連的是哪個（建立時指定的，或當時的系統預設）。
+    private var connectedEngine: String? = null
+    // 正在連的引擎連上時要回覆的那次 setEngine。
+    private var engineReply: Result? = null
     private var parcelFileDescriptor: ParcelFileDescriptor? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -81,7 +85,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         workerThread = thread
         worker = Handler(thread.looper)
         // 建立引擎也要查已安裝的朗讀引擎，一起放在這條執行緒。
-        worker!!.post { tts = TextToSpeech(context, initListener(false)) }
+        onWorker { createEngine(null, null) }
     }
 
     /** Android Plugin APIs  */
@@ -90,21 +94,79 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        methodChannel!!.setMethodCallHandler(null)
+        methodChannel?.setMethodCallHandler(null)
         methodChannel = null
-        worker!!.post {
-            tts?.let {
-                stop()
-                it.shutdown()
+        val thread = workerThread
+        val lastWorker = worker
+        // 之後到的系統回呼都排不進來（[onWorker] 看到 null 就丟掉）。
+        worker = null
+        workerThread = null
+        lastWorker?.post {
+            guarded("detach") {
+                engineGeneration++
+                pendingMethodCalls.clear()
+                engineReply = null
+                tts?.let {
+                    stop()
+                    it.shutdown()
+                }
+                tts = null
+                releaseAudioFocus()
+                context = null
             }
-            context = null
         }
         // 先做完上面排進去的關閉，再結束這條執行緒。
-        workerThread!!.quitSafely()
-        workerThread = null
+        thread?.quitSafely()
     }
 
-    private val utteranceProgressListener: UtteranceProgressListener =
+    /** 排到 [worker] 上做；已經結束（detach）就丟掉。 */
+    private fun onWorker(task: () -> Unit) {
+        worker?.post { guarded("worker") { task() } }
+    }
+
+    /**
+     * 在 [worker] 上做的事丟出的例外不會被 Flutter 接住（原本在主執行緒上由
+     * MethodChannel 轉成錯誤回覆），不接住會讓整個 App 結束。
+     */
+    private inline fun guarded(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            Log.e(tag, "$what: $e")
+        }
+    }
+
+    /**
+     * 每個引擎一個：系統朗讀服務在自己的執行緒回呼，排到 [worker] 再處理；換掉的
+     * 引擎遲到的回呼不處理，免得改到新引擎正在念的那句。
+     */
+    private fun progressListener(generation: Int): UtteranceProgressListener {
+        val events = utteranceEvents
+        return object : UtteranceProgressListener() {
+            private fun current(task: () -> Unit) {
+                onWorker { if (generation == engineGeneration) task() }
+            }
+
+            override fun onStart(utteranceId: String) = current { events.onStart(utteranceId) }
+
+            override fun onDone(utteranceId: String) = current { events.onDone(utteranceId) }
+
+            override fun onStop(utteranceId: String, interrupted: Boolean) =
+                current { events.onStop(utteranceId, interrupted) }
+
+            override fun onRangeStart(utteranceId: String, startAt: Int, endAt: Int, frame: Int) =
+                current { events.onRangeStart(utteranceId, startAt, endAt, frame) }
+
+            @Deprecated("")
+            override fun onError(utteranceId: String) = current { events.onError(utteranceId) }
+
+            override fun onError(utteranceId: String, errorCode: Int) =
+                current { events.onError(utteranceId, errorCode) }
+        }
+    }
+
+    /** 念的進度，在 [worker] 上處理（[progressListener] 排過來的）。 */
+    private val utteranceEvents: UtteranceProgressListener =
         object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String) {
                 if (utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
@@ -119,7 +181,8 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                     }
                 }
                 if (Build.VERSION.SDK_INT < 26) {
-                    onProgress(utteranceId, 0, utterances[utteranceId]!!.length)
+                    // 靜音與存成檔案的那幾句不在 [utterances] 裡。
+                    utterances[utteranceId]?.let { onProgress(utteranceId, 0, it.length) }
                 }
             }
 
@@ -163,12 +226,12 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
 
             private fun onProgress(utteranceId: String?, startAt: Int, endAt: Int) {
                 if (utteranceId != null && !utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
-                    val text = utterances[utteranceId]
+                    val text = utterances[utteranceId] ?: return
                     val data = HashMap<String, String?>()
                     data["text"] = text
                     data["start"] = startAt.toString()
                     data["end"] = endAt.toString()
-                    data["word"] = text!!.substring(startAt, endAt)
+                    data["word"] = text.substring(startAt, endAt)
                     invokeMethod("speak.onProgress", data)
                 }
             }
@@ -184,72 +247,79 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
 
             @Deprecated("")
             override fun onError(utteranceId: String) {
-                if (utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
-                    closeParcelFileDescriptor(true)
-                    if (awaitSynthCompletion) {
-                        synth = false
-                    }
-                    invokeMethod("synth.onError", "Error from TextToSpeech (synth)")
-                } else {
-                    if (awaitSpeakCompletion) {
-                        speaking = false
-                    }
-                    invokeMethod("speak.onError", "Error from TextToSpeech (speak)")
-                }
+                onError(utteranceId, "")
                 releaseAudioFocus()
             }
 
             override fun onError(utteranceId: String, errorCode: Int) {
+                onError(utteranceId, " - $errorCode")
+            }
+
+            // 等念完（或存完檔）的那次呼叫也要回覆，不然 Dart 那邊一直等。
+            private fun onError(utteranceId: String, code: String) {
                 if (utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
                     closeParcelFileDescriptor(true)
                     if (awaitSynthCompletion) {
-                        synth = false
+                        synthCompletion(0)
                     }
-                    invokeMethod("synth.onError", "Error from TextToSpeech (synth) - $errorCode")
+                    invokeMethod("synth.onError", "Error from TextToSpeech (synth)$code")
                 } else {
                     if (awaitSpeakCompletion) {
-                        speaking = false
+                        speakCompletion(0)
                     }
-                    invokeMethod("speak.onError", "Error from TextToSpeech (speak) - $errorCode")
+                    invokeMethod("speak.onError", "Error from TextToSpeech (speak)$code")
                 }
             }
         }
 
+    /** 在 [worker] 上執行。 */
     fun speakCompletion(success: Int) {
         speaking = false
-        handler!!.post {
-            speakResult?.success(success)
-            speakResult = null
-        }
-    }
-
-    fun synthCompletion(success: Int) {
-        synth = false
-        handler!!.post {
-            synthResult?.success(success)
-            synthResult = null
-        }
-    }
-
-    // 系統在主執行緒回呼 onInit；讀預設音色、跑排著的呼叫都交給 [worker]。
-    // 換引擎（[setEngine]）連上時要回覆 Dart 那次呼叫（[replyEngine]）。只認最後
-    // 建立的那個引擎：換掉的引擎遲到的回呼不能把新引擎當成已經連上。
-    private var engineGeneration = 0
-
-    /** 在 [worker] 上呼叫，每建立一個 [TextToSpeech] 用一個新的。 */
-    private fun initListener(replyEngine: Boolean): TextToSpeech.OnInitListener {
-        val generation = ++engineGeneration
-        return TextToSpeech.OnInitListener { status ->
-            worker?.post {
-                if (generation == engineGeneration) onEngineReady(status, replyEngine)
-            }
-        }
+        speakResult?.success(success)
+        speakResult = null
     }
 
     /** 在 [worker] 上執行。 */
-    private fun onEngineReady(status: Int, replyEngine: Boolean) {
+    fun synthCompletion(success: Int) {
+        synth = false
+        synthResult?.success(success)
+        synthResult = null
+    }
+
+    // 只認最後建立的那個引擎：換掉的引擎遲到的回呼不能把新引擎當成已經連上，
+    // 也不能改到新引擎正在念的那句。只在 [worker] 上讀寫。
+    private var engineGeneration = 0
+
+    /**
+     * 在 [worker] 上：換成新的引擎（[engine] 為 null 是系統預設）。[reply] 是要
+     * 等它連上才回覆的那次 setEngine；斷線重連沒有。換掉的引擎正在念、正在存檔
+     * 或正在連的，都先回覆，不留著讓 Dart 一直等。
+     */
+    private fun createEngine(engine: String?, reply: Result?) {
+        if (reply != null) {
+            engineReply?.success(0)
+            engineReply = reply
+        }
+        if (speakResult != null) speakCompletion(0)
+        if (synthResult != null) synthCompletion(0)
+        speaking = false
+        synth = false
+        ttsStatus = null
+        // 換掉的引擎要關掉，不然它和系統朗讀服務的連線一直留著。
+        tts?.shutdown()
+        val generation = ++engineGeneration
+        // 系統在主執行緒回呼（連不上時在建構子裡直接回呼）；排到 [worker] 再處理。
+        val created = TextToSpeech(context, { status ->
+            onWorker { if (generation == engineGeneration) onEngineReady(status) }
+        }, engine)
+        tts = created
+        connectedEngine = engine ?: created.defaultEngine
+    }
+
+    /** 在 [worker] 上執行。 */
+    private fun onEngineReady(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            tts!!.setOnUtteranceProgressListener(utteranceProgressListener)
+            tts!!.setOnUtteranceProgressListener(progressListener(engineGeneration))
             // nightreader.5：先套預設音色的語言，再跑排著的呼叫；原本順序相反，
             // 引擎連上前送來的 setLanguage 會被蓋回預設語言。
             try {
@@ -266,41 +336,53 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
             Log.e(tag, "Failed to initialize TextToSpeech with status: $status")
         }
 
+        ttsStatus = status
+        // 先回覆這個引擎的 setEngine，再跑排著的呼叫：排著的可能是下一次 setEngine，
+        // 它會換上自己的回覆。
+        engineReply?.let { reply ->
+            engineReply = null
+            if (status == TextToSpeech.SUCCESS) {
+                reply.success(1)
+            } else {
+                reply.error("TtsError", "Failed to initialize TextToSpeech with status: $status", null)
+            }
+        }
         // Handle pending method calls (sent while TTS was initializing)
         // 先取出再跑：念不出來的 speak 會重連並把自己排回 pendingMethodCalls。
-        val calls = synchronized(this@FlutterTtsPlugin) {
-            ttsStatus = status
-            ArrayList(pendingMethodCalls).also { pendingMethodCalls.clear() }
-        }
+        val calls = ArrayList(pendingMethodCalls)
+        pendingMethodCalls.clear()
         for (call in calls) {
             call.run()
-        }
-
-        if (!replyEngine) return
-        val reply = engineResult ?: return
-        engineResult = null
-        if (status == TextToSpeech.SUCCESS) {
-            reply.success(1)
-        } else {
-            reply.error("TtsError", "Failed to initialize TextToSpeech with status: $status", null)
         }
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         val mainResult = MainThreadResult(result, handler!!)
-        worker!!.post { handleMethodCall(call, mainResult) }
+        val target = worker
+        if (target == null) {
+            mainResult.error("TtsError", "flutter_tts is detached", null)
+            return
+        }
+        target.post { runCall(call, mainResult) }
+    }
+
+    /** 在 [worker] 上執行；丟出的例外回成這次呼叫的錯誤（見 [guarded]）。 */
+    private fun runCall(call: MethodCall, result: Result) {
+        try {
+            handleMethodCall(call, result)
+        } catch (e: Exception) {
+            Log.e(tag, "${call.method}: $e")
+            result.error("TtsError", "${call.method}: $e", null)
+        }
     }
 
     /** 在 [worker] 上執行。 */
     private fun handleMethodCall(call: MethodCall, result: Result) {
         // If TTS is still loading
-        synchronized(this@FlutterTtsPlugin) {
-            if (ttsStatus == null) {
-                // Suspend method call until the TTS engine is ready
-                val suspendedCall = Runnable { handleMethodCall(call, result) }
-                pendingMethodCalls.add(suspendedCall)
-                return
-            }
+        if (ttsStatus == null) {
+            // Suspend method call until the TTS engine is ready
+            pendingMethodCalls.add(Runnable { runCall(call, result) })
+            return
         }
         when (call.method) {
             "speak" -> {
@@ -327,13 +409,18 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
                         return
                     }
                 }
-                val b = speak(text, focus)
-                if (!b) {
-                    synchronized(this@FlutterTtsPlugin) {
-                        val suspendedCall = Runnable { handleMethodCall(call, result) }
-                        pendingMethodCalls.add(suspendedCall)
+                when (speak(text, focus)) {
+                    SpeakOutcome.STARTED -> {}
+                    SpeakOutcome.RECONNECTING -> {
+                        // 連上後再念這句。
+                        pendingMethodCalls.add(Runnable { runCall(call, result) })
+                        return
                     }
-                    return
+                    SpeakOutcome.REJECTED -> {
+                        // 引擎連著但不收這句：沒有要等的連線，直接回覆失敗。
+                        result.success(0)
+                        return
+                    }
                 }
                 // Only use await speak completion if queueMode is set to QUEUE_FLUSH
                 if (awaitSpeakCompletion && queueMode == TextToSpeech.QUEUE_FLUSH) {
@@ -451,6 +538,7 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
             "setSilence" -> {
                 val silencems: String = call.arguments.toString()
                 this.silencems = silencems.toInt()
+                result.success(1)
             }
 
             "setSharedInstance" -> result.success(1)
@@ -515,19 +603,15 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
 
     private fun setEngine(engine: String?, result: Result) {
         // nightreader.5：已經連著同一個引擎就不重連（開 App 套用存下的引擎時，
-        // 多半就是系統預設的那個；重連要再等系統的朗讀服務回應一次）。
-        val current = selectedEngine ?: tts?.defaultEngine
-        if (ttsStatus == TextToSpeech.SUCCESS && engine != null && engine == current) {
+        // 多半就是系統預設的那個；重連要再等系統的朗讀服務回應一次）。比的是
+        // 建立這個引擎時連的那個，不是現在的系統預設（使用者可能剛在系統設定改過）。
+        if (ttsStatus == TextToSpeech.SUCCESS && engine != null && engine == connectedEngine) {
             selectedEngine = engine
             result.success(1)
             return
         }
-        ttsStatus = null
         selectedEngine = engine
-        engineResult = result
-        // 換掉的引擎要關掉，不然它和系統朗讀服務的連線一直留著。
-        tts?.shutdown()
-        tts = TextToSpeech(context, initListener(true), engine)
+        createEngine(engine, result)
     }
 
     private fun setLanguage(language: String?, result: Result) {
@@ -696,29 +780,31 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         result.success(data)
     }
 
-    private fun speak(text: String, focus: Boolean): Boolean {
+    private enum class SpeakOutcome { STARTED, RECONNECTING, REJECTED }
+
+    private fun speak(text: String, focus: Boolean): SpeakOutcome {
+        if (!ismServiceConnectionUsable(tts)) {
+            createEngine(selectedEngine, null)
+            return SpeakOutcome.RECONNECTING
+        }
         val uuid: String = UUID.randomUUID().toString()
         utterances[uuid] = text
-        return if (ismServiceConnectionUsable(tts)) {
-            if(focus){
-                requestAudioFocus()
-            }
-
-            if (silencems > 0) {
-                tts!!.playSilentUtterance(
-                    silencems.toLong(),
-                    TextToSpeech.QUEUE_FLUSH,
-                    SILENCE_PREFIX + uuid
-                )
-                tts!!.speak(text, TextToSpeech.QUEUE_ADD, bundle, uuid) == 0
-            } else {
-                tts!!.speak(text, queueMode, bundle, uuid) == 0
-            }
-        } else {
-            ttsStatus = null
-            tts = TextToSpeech(context, initListener(false), selectedEngine)
-            false
+        if(focus){
+            requestAudioFocus()
         }
+        val accepted = if (silencems > 0) {
+            tts!!.playSilentUtterance(
+                silencems.toLong(),
+                TextToSpeech.QUEUE_FLUSH,
+                SILENCE_PREFIX + uuid
+            )
+            tts!!.speak(text, TextToSpeech.QUEUE_ADD, bundle, uuid) == 0
+        } else {
+            tts!!.speak(text, queueMode, bundle, uuid) == 0
+        }
+        if (accepted) return SpeakOutcome.STARTED
+        utterances.remove(uuid)
+        return SpeakOutcome.REJECTED
     }
 
     private fun stop() {
@@ -849,20 +935,24 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
     }
 }
 
-/** 結果一律在主執行緒回給 Dart：呼叫在 [FlutterTtsPlugin] 的背景執行緒上做完。 */
+/**
+ * 結果一律在主執行緒回給 Dart：呼叫在 [FlutterTtsPlugin] 的背景執行緒上做完。
+ * 只回第一次：同一個呼叫回兩次，Flutter 會丟出 Reply already submitted。
+ */
 private class MainThreadResult(
     private val result: Result,
     private val main: Handler,
 ) : Result {
-    override fun success(value: Any?) {
-        main.post { result.success(value) }
+    private val replied = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun reply(send: () -> Unit) {
+        if (replied.compareAndSet(false, true)) main.post(send)
     }
 
-    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-        main.post { result.error(errorCode, errorMessage, errorDetails) }
-    }
+    override fun success(value: Any?) = reply { result.success(value) }
 
-    override fun notImplemented() {
-        main.post { result.notImplemented() }
-    }
+    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) =
+        reply { result.error(errorCode, errorMessage, errorDetails) }
+
+    override fun notImplemented() = reply { result.notImplemented() }
 }
