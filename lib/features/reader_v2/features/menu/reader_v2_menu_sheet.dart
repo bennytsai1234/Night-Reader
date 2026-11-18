@@ -53,8 +53,10 @@ class ReaderV2MenuSheet {
       // 面板裡調每行字數時跟著正文一起變寬變窄。
       constraints: const BoxConstraints(),
       isScrollControlled: true,
-      // 面板底色由下方 Material 依選單主題繪製，才能在開啟期間即時換色。
+      // 面板底色由下方 Material 依選單主題繪製，才能在開啟期間即時換色；
+      // 分層照選單主題，不套一般面板的那一階。
       backgroundColor: Colors.transparent,
+      raised: false,
       barrierColor: barrierColor,
       shape: const RoundedRectangleBorder(),
       clipBehavior: Clip.none,
