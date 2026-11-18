@@ -162,6 +162,8 @@ class _GroupFilterBarState<T> extends State<GroupFilterBar<T>> {
             tooltip: '全部分組',
             size: height,
             iconSize: 17,
+            // 和旁邊的膠囊同一排、同一個樣子：同一個玻璃色、不畫陰影。
+            floating: false,
             // 沒有分組時灰掉（ADR 0059）。
             onPressed: widget.groups.isEmpty ? null : _openPicker,
           ),

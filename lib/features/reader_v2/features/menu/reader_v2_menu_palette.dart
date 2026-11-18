@@ -11,6 +11,10 @@ class ReaderV2MenuStyle {
   final Color foreground;
   final Color mutedForeground;
   final Color outline;
+
+  /// 面板裡分組卡片上的分隔線：和卡片的深淺差照 App 的。[outline] 是對 App
+  /// 的卡片調的，直接畫在面板底上的列（目錄）照舊用它。
+  final Color cardOutline;
   final Color accent;
   final Color onAccent;
   final Color accentMuted;
@@ -26,6 +30,7 @@ class ReaderV2MenuStyle {
     required this.foreground,
     required this.mutedForeground,
     required this.outline,
+    required this.cardOutline,
     required this.accent,
     required this.onAccent,
     required this.accentMuted,
@@ -36,13 +41,23 @@ class ReaderV2MenuStyle {
     final palette = StylePalette.of(context);
     final background = palette.readerMenu.withValues(alpha: 0.96);
     final foreground = palette.text;
+    // 面板裡的卡片照分層：淺色的面板比紙暗，卡片往紙的顏色亮回一階（到
+    // 紙色就停）；深色的面板比紙亮，卡片再亮一階。
+    final card = palette.brightness == Brightness.light
+        ? AppLayers.step(
+            palette.readerMenu,
+            palette.readerBackground,
+            AppLayers.cardGapLight,
+          )
+        : AppLayers.step(
+            palette.readerMenu,
+            foreground,
+            AppLayers.floatGapDark,
+          );
     return ReaderV2MenuStyle(
       brightness: palette.brightness,
       background: background,
-      backgroundElevated: Color.alphaBlend(
-        foreground.withValues(alpha: 0.06),
-        background,
-      ),
+      backgroundElevated: card,
       foreground: foreground,
       // 次要文字是照卡片調的；閱讀選單淺色比卡片暗，跟著加深。
       mutedForeground: AppLayers.keepGap(
@@ -52,6 +67,13 @@ class ReaderV2MenuStyle {
         to: palette.readerMenu,
       ),
       outline: palette.border,
+      cardOutline: AppLayers.step(
+        card,
+        foreground,
+        (AppLayers.lightness(palette.border) -
+                AppLayers.lightness(palette.surface))
+            .abs(),
+      ),
       accent: palette.primary,
       onAccent: palette.onPrimary,
       accentMuted: palette.primary.withValues(alpha: 0.18),
@@ -72,7 +94,10 @@ class ReaderV2MenuStyle {
   /// 以選單配色覆寫 App 主題，讓面板與上下選單屬於同一個視覺區域。
   /// 玻璃與分組元件的衍生色（[AppChrome]）也改由選單配色推導，
   /// 不沿用 App 主題掛載的擴充。
-  ThemeData toSheetTheme(ThemeData base) {
+  ///
+  /// [cards]：裡面是分組卡片的面板給 true，分隔線照卡片算（[cardOutline]）；
+  /// 列直接畫在面板底上的（目錄、上下選單）照 [outline]。
+  ThemeData toSheetTheme(ThemeData base, {bool cards = false}) {
     final surface = background.withValues(alpha: 1);
     final elevated = Color.alphaBlend(backgroundElevated, surface);
     final accentContainer = Color.alphaBlend(accentMuted, surface);
@@ -125,7 +150,7 @@ class ReaderV2MenuStyle {
           bar: surface,
           textPrimary: foreground,
           textSecondary: mutedForeground,
-          border: outline,
+          border: cards ? cardOutline : outline,
           inversePrimary: base.colorScheme.inversePrimary,
           glassStrength:
               base.extension<AppChrome>()?.glassStrength ??

@@ -103,6 +103,22 @@ void main() {
         // 面板裡再開面板不會一路往上疊。
         expect(sheetThemeOf(sheet), same(sheet));
       });
+
+      test('面板頁首的鈕和面板底分得開：明度至少差 10（$name）', () {
+        for (final brightness in Brightness.values) {
+          final sheet = sheetThemeOf(
+            buildAppTheme(style, brightness, pureBlack: pureBlack),
+          );
+          final chrome = sheet.extension<AppChrome>()!;
+          final button = chrome.glassTint.withValues(alpha: 1);
+          expect(
+            AppLayers.lightness(button) -
+                AppLayers.lightness(chrome.groupedBackground),
+            greaterThan(10),
+            reason: brightness.name,
+          );
+        }
+      });
     }
   }
 

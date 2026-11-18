@@ -44,7 +44,11 @@ class AppBottomSheet extends StatelessWidget {
 
   static const double _handleWidth = 36;
   static const double _handleHeight = 5;
-  static const double _closeSize = 32;
+
+  /// 頁首左右的留白：按鈕的觸控範圍是 44、看得到的圓是 32，往外讓 6，
+  /// 看得到的邊才和底下的卡片切齊。
+  static const double _headerInset =
+      AppGrouped.margin - (AppGlass.buttonSize - PanelButtons.size) / 2;
 
   /// 內容左右對齊分組卡片的外距，底下留一段空白。
   static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(
@@ -78,8 +82,6 @@ class AppBottomSheet extends StatelessWidget {
     final close = GlassIconButton(
       icon: Icons.close_rounded,
       tooltip: '關閉',
-      size: _closeSize,
-      iconSize: 18,
       color: chrome.sectionText,
       onPressed: () => Navigator.maybePop(context),
     );
@@ -104,37 +106,41 @@ class AppBottomSheet extends StatelessWidget {
                   ),
                 ),
               ),
-            SizedBox(
-              height: AppGlass.headerToolbarHeight,
-              child: NavigationToolbar(
-                centerMiddle: true,
-                middleSpacing: AppSpacing.md,
-                // 左右各一顆：有右側動作時關閉在左邊；沒有時左邊空出和
-                // 關閉鈕一樣寬，長標題也留在正中。兩側照按鈕自己的大小置中，
-                // 不被撐高。
-                leading: trailing == null
-                    ? const SizedBox(width: AppGrouped.margin + _closeSize)
-                    : Padding(
-                        padding: const EdgeInsets.only(left: AppGrouped.margin),
-                        child: Center(widthFactor: 1, child: close),
-                      ),
-                middle: Semantics(
-                  header: true,
-                  child: DragOverflowText(
-                    child: UiText(
-                      title,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.titleSm.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface,
+            PanelButtons(
+              child: SizedBox(
+                height: AppGlass.headerToolbarHeight,
+                child: NavigationToolbar(
+                  centerMiddle: true,
+                  middleSpacing: AppSpacing.md,
+                  // 左右各一顆：有右側動作時關閉在左邊；沒有時左邊空出和
+                  // 關閉鈕一樣寬，長標題也留在正中。兩側照按鈕自己的大小置中，
+                  // 不被撐高。
+                  leading: trailing == null
+                      ? const SizedBox(
+                          width: _headerInset + AppGlass.buttonSize,
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.only(left: _headerInset),
+                          child: Center(widthFactor: 1, child: close),
+                        ),
+                  middle: Semantics(
+                    header: true,
+                    child: DragOverflowText(
+                      child: UiText(
+                        title,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.titleSm.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                trailing: Padding(
-                  padding: const EdgeInsets.only(right: AppGrouped.margin),
-                  child: Center(widthFactor: 1, child: trailing ?? close),
+                  trailing: Padding(
+                    padding: const EdgeInsets.only(right: _headerInset),
+                    child: Center(widthFactor: 1, child: trailing ?? close),
+                  ),
                 ),
               ),
             ),
@@ -245,25 +251,27 @@ class SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppGrouped.margin,
+        AppBottomSheet._headerInset,
         AppSpacing.sm,
-        AppGrouped.margin,
+        AppBottomSheet._headerInset,
         AppSpacing.xs,
       ),
-      child: SizedBox(
-        height: AppGlass.buttonSize,
-        child: NavigationToolbar(
-          middleSpacing: AppSpacing.md,
-          leading: leading,
-          trailing: trailing,
-          middle: Semantics(
-            header: true,
-            child: DragOverflowText(
-              child: UiText(
-                title,
-                maxLines: 1,
-                style: AppTextStyles.titleMd.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
+      child: PanelButtons(
+        child: SizedBox(
+          height: AppGlass.buttonSize,
+          child: NavigationToolbar(
+            middleSpacing: AppSpacing.md,
+            leading: leading,
+            trailing: trailing,
+            middle: Semantics(
+              header: true,
+              child: DragOverflowText(
+                child: UiText(
+                  title,
+                  maxLines: 1,
+                  style: AppTextStyles.titleMd.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
             ),

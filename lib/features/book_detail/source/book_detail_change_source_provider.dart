@@ -31,7 +31,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
        searchBookDao = searchBookDao ?? getIt<SearchBookDao>() {
     if (autoStart) {
       // 一建立就算搜尋中：startSearch 要先等資料庫查詢才會標記，這段空檔
-      // 不能讓面板閃出「未找到其他來源」。
+      // 不能讓面板閃出沒有來源的樣子。
       isSearching = true;
       unawaited(loadGroups());
       unawaited(startSearch());
@@ -98,7 +98,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   Future<void> refreshSearch() {
     _tocs.clear();
     _keptChapters = 0;
-    // 按下當下就清空：上一輪的列不再能點，也不閃出「未找到其他來源」。
+    // 按下當下就清空：上一輪的列不再能點，也不閃出沒有來源的樣子。
     allResults = [];
     _rebuildFilteredResults();
     isSearching = true;
