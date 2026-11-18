@@ -248,6 +248,7 @@ const _mineExempt = {
   '書源管理': '第一次進來還沒有上次的書源可照著畫',
   '更新紀錄': '更新紀錄先畫固定樣子的骨架',
   '崩潰日誌': '崩潰日誌沒有骨架，資料當下就有',
+  'App 日誌': 'App 日誌沒有骨架，資料當下就有',
 };
 
 /// 情境清單，順序就是執行順序。
@@ -398,7 +399,15 @@ final scenarios = <String, _Scenario>{
     (t) => t.tap(find.text('登入')),
     before: _openLoginSourceMenu,
   ),
-  for (final row in const ['開源許可證', '隱私說明', '權限', '更新紀錄', '崩潰日誌', '背景下載佇列'])
+  for (final row in const [
+    '開源許可證',
+    '隱私說明',
+    '權限',
+    '更新紀錄',
+    '崩潰日誌',
+    'App 日誌',
+    '背景下載佇列',
+  ])
     'about-$row': _Scenario(
       '「關於夜讀」點「$row」',
       _tapMineRow(row),

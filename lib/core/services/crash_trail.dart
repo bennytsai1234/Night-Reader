@@ -5,16 +5,21 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
-/// 崩潰前的紀錄：最近的動作（開始、停止、做完、App 進出背景）與最近的一般
-/// 日誌，隨時存進檔案。夜讀在系統層崩潰時自己來不及寫崩潰日誌，下次開啟
-/// 時把上次留下的這份連同系統記的結束原因一起寫進去（`ProcessExits`）；
-/// Dart 的錯誤當場附上這次的。
+/// 最近的紀錄：最近的動作（開始、停止、做完、App 進出背景）、最近的錯誤
+/// （`AppLog.e` 與帶錯誤的日誌）與最近的一般日誌，隨時存進 [fileName]。
+/// 「關於夜讀 → App 日誌」顯示這次與上次開啟的整份。
 ///
-/// 動作與日誌分開留：書源校驗時規則 JS 的訊息一下就幾十則，不能把「按了
-/// 停止」這種動作擠掉。只存在手機上，要使用者自己複製才會送出；網址裡的
-/// 帳號密碼、token 這類參數與 Cookie、Authorization 的值先遮掉再記。
+/// 崩潰日誌只附動作與錯誤（[renderForCrash]）：Dart 的錯誤當場附上這次的；
+/// 夜讀在系統層崩潰時自己來不及寫，下次開啟時把上次留下的這份連同系統記的
+/// 結束原因一起寫進去（`ProcessExits`）。
+///
+/// 三種分開留：書源校驗時規則 JS 的訊息一下就幾十則，不能把「按了停止」這種
+/// 動作與書源 isolate 的錯誤擠掉。只存在手機上，要使用者自己複製或分享才會
+/// 送出；網址裡的帳號密碼、token 這類參數與 Cookie、Authorization 的值先遮掉
+/// 再記。
 abstract final class CrashTrail {
   static const int maxActions = 30;
+  static const int maxErrors = 20;
   static const int maxLogs = 60;
 
   /// 一則最長幾個字：錯誤訊息可能附上整頁網頁。
@@ -24,6 +29,7 @@ abstract final class CrashTrail {
   static const Duration logWriteDelay = Duration(milliseconds: 500);
 
   static final ListQueue<String> _actions = ListQueue<String>();
+  static final ListQueue<String> _errors = ListQueue<String>();
   static final ListQueue<String> _logs = ListQueue<String>();
   static final int _sessionStart = DateTime.now().millisecondsSinceEpoch;
   static DateTime Function() _now = DateTime.now;
@@ -58,22 +64,71 @@ abstract final class CrashTrail {
     _schedule(immediately: true);
   }
 
+  /// 錯誤馬上存：接著可能就閃退了。
+  static void error(String text) {
+    _add(_errors, maxErrors, text);
+    _schedule(immediately: true);
+  }
+
   static void log(String text) {
     _add(_logs, maxLogs, text);
     _schedule();
   }
 
-  /// 這次開啟到現在的紀錄，附在崩潰日誌裡。
-  static String render() {
+  /// 這次開啟到現在的整份紀錄：存進檔案、App 日誌顯示的。
+  static String render() => _render(withLogs: true);
+
+  /// 附在崩潰日誌裡的：只有動作與錯誤。
+  static String renderForCrash() => _render(withLogs: false);
+
+  static const String _logsHeader = '--- 最近的日誌 ---';
+
+  static String _render({required bool withLogs}) {
     final buffer = StringBuffer()
-      ..writeln('開啟夜讀：${_format(_sessionStart, full: true)}')
-      ..writeln('\n--- 最近的動作 ---');
-    _actions.forEach(buffer.writeln);
-    if (_actions.isEmpty) buffer.writeln('（沒有）');
-    buffer.writeln('\n--- 最近的日誌 ---');
-    _logs.forEach(buffer.writeln);
-    if (_logs.isEmpty) buffer.writeln('（沒有）');
+      ..writeln('開啟夜讀：${_format(_sessionStart, full: true)}');
+    void section(String header, ListQueue<String> lines) {
+      buffer.writeln('\n$header');
+      lines.forEach(buffer.writeln);
+      if (lines.isEmpty) buffer.writeln('（沒有）');
+    }
+
+    section('--- 最近的動作 ---', _actions);
+    section('--- 最近的錯誤 ---', _errors);
+    if (withLogs) section(_logsHeader, _logs);
     return buffer.toString().trimRight();
+  }
+
+  /// [render] 存下的整份去掉一般日誌那段，同 [renderForCrash]：上次開啟
+  /// 留下的那份附進崩潰日誌時用。
+  static String withoutLogs(String text) {
+    final start = text.indexOf(_logsHeader);
+    if (start < 0) return text;
+    final next = text.indexOf('\n--- ', start + _logsHeader.length);
+    final rest = next < 0 ? '' : text.substring(next);
+    return '${text.substring(0, start).trimRight()}$rest'.trimRight();
+  }
+
+  /// App 日誌顯示的：這次開啟的整份，接著上次開啟留下的（有的話）。
+  static String renderWithPrevious() {
+    final buffer = StringBuffer()
+      ..writeln('=== 這次開啟 ===')
+      ..writeln(render());
+    final previous = _previous;
+    if (previous != null) {
+      buffer
+        ..writeln('\n=== 上次開啟 ===')
+        ..writeln(previous.text);
+    }
+    return buffer.toString().trimRight();
+  }
+
+  /// 清掉這次與上次開啟的紀錄（App 日誌的「清除」）；檔案跟著改寫。
+  static void clear() {
+    _actions.clear();
+    _errors.clear();
+    _logs.clear();
+    _previous = null;
+    _schedule(immediately: true);
   }
 
   static void _add(ListQueue<String> list, int max, String text) {
@@ -125,7 +180,7 @@ abstract final class CrashTrail {
       );
       await temp.rename(file.path);
     } catch (_) {
-      // 存不進去也不影響使用；崩潰日誌少一段紀錄而已。
+      // 存不進去也不影響使用；App 日誌少了上次開啟的那份而已。
     }
   }
 
@@ -176,6 +231,7 @@ abstract final class CrashTrail {
   @visibleForTesting
   static void resetForTesting({DateTime Function()? now}) {
     _actions.clear();
+    _errors.clear();
     _logs.clear();
     _file = null;
     _dirty = false;

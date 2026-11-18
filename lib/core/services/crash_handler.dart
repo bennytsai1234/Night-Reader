@@ -16,9 +16,11 @@ import 'process_exits.dart';
 /// CrashHandler - 全域異常捕獲與日誌記錄
 /// (原 Android help/CrashHandler.kt)
 ///
-/// 寫兩種崩潰日誌：Dart 的錯誤當場寫；系統層的結束（原生崩潰、記憶體不足、
-/// 沒有回應）夜讀來不及寫，下次開啟時照系統記的原因寫（[recordPreviousExits]）。
-/// 兩種都附上崩潰前的紀錄（[CrashTrail]）。
+/// 崩潰日誌只寫 App 出事的時候，兩種：主 isolate 沒接住的 Dart 錯誤當場寫；
+/// 系統層的結束（原生崩潰、使用中記憶體不足、沒有回應）夜讀來不及寫，下次
+/// 開啟時照系統記的原因寫（[recordPreviousExits]）。兩種都附上出事前最近的
+/// 動作與錯誤（[CrashTrail.renderForCrash]），一般日誌只在 App 日誌裡。背景
+/// isolate 的錯誤（書源、書源校驗）App 沒有閃退，只記成錯誤（`AppLog.e`）。
 class CrashHandler {
   static const _errorDeduplicationWindow = Duration(seconds: 2);
   static const _maxRecentErrorFingerprints = 64;
@@ -109,6 +111,8 @@ class CrashHandler {
     return false;
   }
 
+  static const String _trailHeader = '=== 最近的動作與錯誤（完整的紀錄在「關於夜讀 → App 日誌」） ===';
+
   static Future<void> _saveLog(String error, StackTrace? stack) async {
     final now = DateTime.now();
     final body = StringBuffer()
@@ -121,8 +125,8 @@ class CrashHandler {
         ..writeln(stack.toString());
     }
     body
-      ..writeln('\n=== 最近的紀錄 ===')
-      ..writeln(CrashTrail.render());
+      ..writeln('\n$_trailHeader')
+      ..writeln(CrashTrail.renderForCrash());
     await _writeLog(now, body.toString(), memory: true);
   }
 
@@ -160,8 +164,8 @@ class CrashHandler {
             previous != null &&
             previous.start <= exit.timestamp) {
           body
-            ..writeln('\n=== 結束前的紀錄 ===')
-            ..writeln(previous.text);
+            ..writeln('\n=== 結束前的動作與錯誤 ===')
+            ..writeln(CrashTrail.withoutLogs(previous.text));
         }
         final written = await _writeLog(
           DateTime.fromMillisecondsSinceEpoch(exit.timestamp),

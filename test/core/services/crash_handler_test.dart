@@ -73,14 +73,20 @@ void main() {
     },
   );
 
-  test('a Dart error carries what happened just before it', () async {
+  test('a Dart error carries the actions and errors just before it, '
+      'not the ordinary logs', () async {
     CrashTrail.action('開始修復異常書源（3 個）');
+    CrashTrail.error('書源 isolate 未處理的錯誤: FormatException');
+    CrashTrail.log('書源訊息: 規則 JS 印的一行');
 
     await CrashHandler.saveLogForTesting('boom');
 
     final logs = (await CrashHandler.readLogs()).join();
     expect(logs, contains('boom'));
     expect(logs, contains('開始修復異常書源（3 個）'));
+    expect(logs, contains('書源 isolate 未處理的錯誤: FormatException'));
+    expect(logs, isNot(contains('規則 JS 印的一行')));
+    expect(logs, contains('App 日誌'));
   });
 
   group('exits the system recorded', () {
@@ -91,7 +97,9 @@ void main() {
       // 上次開啟留下的紀錄：開啟在崩潰前一分鐘。
       File('${directory.path}/${CrashTrail.fileName}').writeAsStringSync(
         'session ${crashedAt.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch}\n'
-        '--- 最近的動作 ---\n15:02:14 按了停止：修復異常書源（做到重新校驗）\n',
+        '--- 最近的動作 ---\n15:02:14 按了停止：修復異常書源（做到重新校驗）\n'
+        '\n--- 最近的錯誤 ---\n15:02:13 書源校驗失敗 [某書源]\n'
+        '\n--- 最近的日誌 ---\n15:02:12 書源訊息: 規則 JS 印的一行\n',
       );
       await CrashTrail.start(directory);
     }
@@ -139,6 +147,8 @@ void main() {
       expect(log, contains('當時: 前景'));
       expect(log, contains('destroyed mutex'));
       expect(log, contains('按了停止：修復異常書源'));
+      expect(log, contains('書源校驗失敗 [某書源]'));
+      expect(log, isNot(contains('規則 JS 印的一行')));
       expect(prefs.getInt(CrashHandler.exitsSeenKey), nativeCrash.timestamp);
     });
 

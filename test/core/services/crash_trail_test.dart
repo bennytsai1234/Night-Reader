@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_trail.dart';
 
 void main() {
@@ -30,6 +31,73 @@ void main() {
     expect(text, isNot(contains('書源訊息 139')));
     expect('書源訊息 '.allMatches(text), hasLength(CrashTrail.maxLogs));
   });
+
+  test('errors are kept apart from the logs, and only actions and errors go '
+      'into a crash log', () {
+    AppLog.e('書源 isolate 未處理的錯誤: StateError');
+    AppLog.put('讀快取失敗', error: const FormatException('壞掉的 JSON'));
+    for (var i = 0; i < 200; i++) {
+      AppLog.d('書源訊息 $i');
+    }
+
+    final all = CrashTrail.render();
+    expect(all, contains('書源 isolate 未處理的錯誤: StateError'));
+    expect(all, contains('讀快取失敗: FormatException: 壞掉的 JSON'));
+    expect(all, contains('書源訊息 199'));
+
+    final forCrash = CrashTrail.renderForCrash();
+    expect(forCrash, contains('書源 isolate 未處理的錯誤: StateError'));
+    expect(forCrash, isNot(contains('書源訊息')));
+  });
+
+  test('the logs section is cut from what was stored, old or new layout', () {
+    const stored =
+        '開啟夜讀：2026-11-18 10:00:00\n\n'
+        '--- 最近的動作 ---\n10:00:01 回到前景\n\n'
+        '--- 最近的錯誤 ---\n10:00:02 讀快取失敗\n\n'
+        '--- 最近的日誌 ---\n10:00:03 書源訊息';
+    expect(
+      CrashTrail.withoutLogs(stored),
+      allOf(contains('回到前景'), contains('讀快取失敗'), isNot(contains('書源訊息'))),
+    );
+    // 這一版之前存的沒有錯誤那段。
+    const old =
+        '開啟夜讀：2026-11-18 10:00:00\n\n'
+        '--- 最近的動作 ---\n10:00:01 回到前景\n\n'
+        '--- 最近的日誌 ---\n10:00:03 書源訊息';
+    expect(
+      CrashTrail.withoutLogs(old),
+      allOf(contains('回到前景'), isNot(contains('書源訊息'))),
+    );
+  });
+
+  test(
+    'the App log shows this time and last time; clearing empties both',
+    () async {
+      await CrashTrail.start(directory);
+      CrashTrail.action('開始校驗書源（199 個）');
+      await CrashTrail.flushForTesting();
+      CrashTrail.resetForTesting();
+      await CrashTrail.start(directory);
+      CrashTrail.action('系統播放按了 播放');
+
+      final text = CrashTrail.renderWithPrevious();
+      expect(text.indexOf('系統播放按了 播放'), lessThan(text.indexOf('=== 上次開啟 ===')));
+      expect(
+        text.indexOf('=== 上次開啟 ==='),
+        lessThan(text.indexOf('開始校驗書源（199 個）')),
+      );
+
+      CrashTrail.clear();
+      await CrashTrail.flushForTesting();
+      expect(CrashTrail.renderWithPrevious(), isNot(contains('系統播放按了')));
+      expect(CrashTrail.renderWithPrevious(), isNot(contains('上次開啟')));
+      expect(
+        File('${directory.path}/${CrashTrail.fileName}').readAsStringSync(),
+        isNot(contains('系統播放按了')),
+      );
+    },
+  );
 
   test('a long or multi-line log is cut to one short line', () {
     CrashTrail.log('第一行\n第二行${'字' * 500}');
