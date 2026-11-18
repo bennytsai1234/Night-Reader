@@ -56,7 +56,7 @@ class BookDetailSkeleton extends StatelessWidget {
         ? math.min(total, _maxChapterRows)
         : _unknownChapterRows;
     final chapterCount = total > 0 ? total : chapterRows;
-    final intro = book.getDisplayIntro()?.trim() ?? '';
+    final intro = book.getShownIntro();
     return ExcludeSemantics(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
