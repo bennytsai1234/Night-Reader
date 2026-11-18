@@ -10,6 +10,7 @@ import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
+import 'popup_routes.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
@@ -45,8 +46,9 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   /// Telegram 把圖示放在右側。
   final IconData? icon;
 
-  /// 放在圖示位置的色點（選顏色的選單）；與 [icon] 擇一。
-  final Color? swatch;
+  /// 放在圖示位置的色點（選顏色的選單），照選單裡當下的主題取色；與
+  /// [icon] 擇一。
+  final Color Function(BuildContext context)? swatch;
   final String? subtitle;
   final bool destructive;
 
@@ -75,15 +77,9 @@ Future<T?> showGlassMenu<T>({
   required Rect anchor,
   required List<GlassMenuEntry<T>> entries,
 }) {
-  return Navigator.of(context, rootNavigator: true).push<T>(
-    _GlassMenuRoute<T>(
-      anchor: anchor,
-      entries: entries,
-      capturedThemes: InheritedTheme.capture(
-        from: context,
-        to: Navigator.of(context, rootNavigator: true).context,
-      ),
-    ),
+  final origin = PopupOrigin.of(context);
+  return Navigator.of(origin.context, rootNavigator: true).push<T>(
+    _GlassMenuRoute<T>(anchor: anchor, entries: entries, origin: origin),
   );
 }
 
@@ -108,16 +104,14 @@ Future<T?> showContextPreviewMenu<T>({
   BorderRadius previewRadius = AppRadius.cardLg,
 }) {
   AppHaptics.lift();
-  return Navigator.of(context, rootNavigator: true).push<T>(
+  final origin = PopupOrigin.of(context);
+  return Navigator.of(origin.context, rootNavigator: true).push<T>(
     _GlassMenuRoute<T>(
       anchor: sourceRect,
       entries: entries,
       preview: preview,
       previewRadius: previewRadius,
-      capturedThemes: InheritedTheme.capture(
-        from: context,
-        to: Navigator.of(context, rootNavigator: true).context,
-      ),
+      origin: origin,
     ),
   );
 }
@@ -196,14 +190,22 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
   _GlassMenuRoute({
     required this.anchor,
     required this.entries,
-    required this.capturedThemes,
+    required PopupOrigin origin,
     this.preview,
     this.previewRadius = AppRadius.cardLg,
-  });
+  }) : _origin = origin,
+       capturedThemes = InheritedTheme.capture(
+         from: origin.context,
+         to: Navigator.of(origin.context, rootNavigator: true).context,
+       );
 
   final Rect anchor;
   final List<GlassMenuEntry<T>> entries;
+
+  /// 打開處複製的主題（從 [DerivedTheme] 底下打開時是那一層外面的，
+  /// [PopupOrigin]）。
   final CapturedThemes capturedThemes;
+  final PopupOrigin _origin;
   final Widget? preview;
   final BorderRadius previewRadius;
 
@@ -228,9 +230,8 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    return capturedThemes.wrap(
-      _GlassMenuOverlay<T>(route: this, animation: animation),
-    );
+    final overlay = _GlassMenuOverlay<T>(route: this, animation: animation);
+    return capturedThemes.wrap(_origin.wrap(overlay));
   }
 }
 
@@ -578,7 +579,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                               dimension: 20,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: entry.swatch,
+                                  color: entry.swatch!(context),
                                   shape: BoxShape.circle,
                                 ),
                               ),

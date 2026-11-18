@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 
 /// 閱讀選單（上下選單、目錄、閱讀器內面板）的配色，取自目前風格。
 class ReaderV2MenuStyle {
@@ -37,8 +38,21 @@ class ReaderV2MenuStyle {
     required this.scrim,
   });
 
-  factory ReaderV2MenuStyle.of(BuildContext context) {
-    final palette = StylePalette.of(context);
+  factory ReaderV2MenuStyle.of(BuildContext context) =>
+      ReaderV2MenuStyle.fromPalette(StylePalette.of(context));
+
+  /// 閱讀選單那一層的主題，照外層的主題 [base] 算（[toSheetTheme]）；給
+  /// [DerivedTheme]，系統切換深淺時跟著換。
+  static ThemeData menuThemeOf(ThemeData base) =>
+      ReaderV2MenuStyle.fromPalette(StylePalette.ofTheme(base))
+          .toSheetTheme(base);
+
+  /// 裡面是分組卡片的閱讀器面板用的 [menuThemeOf]（`cards: true`）。
+  static ThemeData cardsMenuThemeOf(ThemeData base) =>
+      ReaderV2MenuStyle.fromPalette(StylePalette.ofTheme(base))
+          .toSheetTheme(base, cards: true);
+
+  factory ReaderV2MenuStyle.fromPalette(StylePalette palette) {
     final background = palette.readerMenu.withValues(alpha: 0.96);
     final foreground = palette.text;
     // 面板裡的卡片照分層：淺色的面板比紙暗，卡片往紙的顏色亮回一階（到
