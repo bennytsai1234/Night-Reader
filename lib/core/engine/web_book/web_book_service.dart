@@ -28,12 +28,6 @@ import 'package:night_reader/core/network/str_response.dart';
 class WebBook {
   WebBook._();
 
-  /// 目錄翻頁上限，防止無限迴圈
-  static const int _maxTocPages = 100;
-
-  /// 正文翻頁上限
-  static const int _maxContentPages = 20;
-
   /// 多頁並發抓取的預設執行緒數 (對標 Android AppConfig.threadCount)
   static const int _pageConcurrency = 4;
 
@@ -201,7 +195,6 @@ class WebBook {
           // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
           final pending = firstResult.nextUrls
               .where((u) => visitedUrls.add(u))
-              .take(_maxTocPages - 1)
               .toList();
           final responses = await _fetchParallel(
             pending,
@@ -236,15 +229,12 @@ class WebBook {
             // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
           }
         } else {
-          // 單 nextUrl → daisy chain 循序抓取
+          // 單 nextUrl → daisy chain 循序抓取，同 Legado 不限頁數：抓到沒有
+          // 下一頁、或下一頁抓過了為止。
           String? currentUrl = firstResult.nextUrls.isNotEmpty
               ? firstResult.nextUrls.first
               : null;
-          for (
-            var pageNum = 1;
-            pageNum < _maxTocPages && currentUrl != null;
-            pageNum++
-          ) {
+          while (currentUrl != null) {
             if (chapterLimit != null && allChapters.length >= chapterLimit) {
               break;
             }
@@ -406,7 +396,6 @@ class WebBook {
       // 多 nextUrl → 並發抓取 (對標 Android BookContent mapAsync)
       final pending = firstResult.nextUrls
           .where((u) => visitedUrls.add(u))
-          .take(_maxContentPages - 1)
           .toList();
       final responses = await _fetchParallel(
         pending,
@@ -434,15 +423,12 @@ class WebBook {
         }
       }
     } else {
-      // 單 nextUrl → daisy chain 循序抓取
+      // 單 nextUrl → daisy chain 循序抓取，同 Legado 不限頁數：抓到沒有
+      // 下一頁、下一頁抓過了，或下一頁是下一章（ContentParser 濾掉）為止。
       String? currentUrl = firstResult.nextUrls.isNotEmpty
           ? firstResult.nextUrls.first
           : null;
-      for (
-        var pageNum = 1;
-        pageNum < _maxContentPages && currentUrl != null;
-        pageNum++
-      ) {
+      while (currentUrl != null) {
         if (!visitedUrls.add(currentUrl)) break;
 
         final analyzeUrl = AnalyzeUrl(
