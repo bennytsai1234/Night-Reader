@@ -23,6 +23,10 @@ audio_service 0.18.19 讓通知的播放、暫停鈕送替身鍵，好和耳機�
 
 測試：`test/core/services/system_playback_notification_play_test.dart`。
 
+2026-11-18 修後在同一台 vivo 上用測試 APK 驗證：暫停後從通知按播放 3 次，3 次都在 4～5 秒內回到 PLAYING、朗讀服務出聲；`trail.log` 依序是「系統播放按了媒體鍵 media（狀態：暫停）」「系統播放按了 播放（ReaderV2TtsController）」「朗讀收到系統的播放」。
+
+已知限制：播放鈕送的是切換鍵，交回夜讀時照夜讀當下的狀態決定播放或暫停。夜讀已經在播、通知還沒換成「暫停」的那一下按「播放」（例如在 App 裡剛按了繼續，或連按兩下），會變成暫停，再按一次就好。要讓通知的播放鈕固定是播放，只能改 audio_service（直接送服務意圖，例如 LightningYu/audio_service#4 的做法），沒有做。
+
 ## 旁支線索
 
 Android 16 曾記錄 `AudioHardening background playback would be muted for com.google.android.tts`，當時只是警告、未實際靜音，和這個問題無關。
