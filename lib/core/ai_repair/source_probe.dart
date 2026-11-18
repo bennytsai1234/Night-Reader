@@ -159,8 +159,13 @@ Future<SourceProbeReport> probeSource(
       debugName: 'SourceProbe',
       withDictionaries: false,
       database: database,
+      cancelToken: cancelToken,
     );
   } catch (error, stack) {
+    // 等 worker 名額時被停下的不是開不起來。
+    if (cancelToken?.isCancelled ?? false) {
+      return const SourceProbeReport(logs: [], requests: [], timedOut: true);
+    }
     AppLog.e('試抓的 worker 開不起來: $error', error: error, stackTrace: stack);
     return SourceProbeReport(logs: [(-1, '試抓開不起來：$error')], requests: const []);
   }
@@ -313,8 +318,12 @@ Future<AiPage> fetchPageForAi(
     worker = await SourceWorker.spawn(
       debugName: 'SourceFetch',
       withDictionaries: false,
+      cancelToken: cancelToken,
     );
   } catch (error) {
+    if (cancelToken?.isCancelled ?? false) {
+      return (lines: const ['已停止'], pages: const <LoggedPage>[]);
+    }
     return (lines: ['抓不了：$error'], pages: const <LoggedPage>[]);
   }
   try {
