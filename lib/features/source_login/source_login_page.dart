@@ -234,7 +234,10 @@ class _SourceLoginPageState extends State<SourceLoginPage>
   /// 換成「在網站登入」時，瀏覽器關掉才完成。
   Future<void>? _website;
 
-  bool get _busy => _running != null || _submitting;
+  /// 正在清除登入資料：和按鈕、打勾一樣算一個動作，一次只跑一個。
+  bool _clearing = false;
+
+  bool get _busy => _running != null || _submitting || _clearing;
 
   @override
   void initState() {
@@ -405,7 +408,9 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       confirmLabel: '清除',
       destructive: true,
     );
-    if (!confirmed || !mounted) return;
+    // 確認框開著時可能已經按了別的動作。
+    if (!confirmed || !mounted || _busy) return;
+    setState(() => _clearing = true);
     try {
       await clearSourceLoginData(widget.source);
       for (final entry in _fields.entries) {
@@ -415,6 +420,8 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       _showNotice('已清除登入資料');
     } catch (error, stackTrace) {
       _showNotice(failureMessage('清除登入資料', error, stackTrace));
+    } finally {
+      if (mounted) setState(() => _clearing = false);
     }
   }
 
@@ -530,30 +537,37 @@ class _SourceLoginPageState extends State<SourceLoginPage>
   /// 書源的表單，最下面一張卡片放登入頁自己的動作。
   List<Widget> _page(List<SourceLoginRow> rows, String? websiteUrl) => [
     ..._items(rows),
-    GroupedSection(
-      children: [
-        // 書源網址不是 http(s) 時灰掉（ADR 0059）。
-        GroupedRow(
-          title: '在網站登入',
-          leading: const GroupedIconTile(Icons.open_in_browser_rounded),
-          enabled: websiteUrl != null && !_busy,
-          onTap: websiteUrl == null ? null : () => _loginOnWebsite(websiteUrl),
-        ),
-        GroupedRow(
-          title: '登入標頭',
-          leading: const GroupedIconTile(Icons.badge_outlined),
-          onTap: _showLoginHeader,
-        ),
-        GroupedRow(
-          title: '清除登入資料',
-          leading: const GroupedIconTile(Icons.logout_rounded),
-          destructive: true,
-          showChevron: false,
-          onTap: _clearLoginData,
-        ),
-      ],
-    ),
+    _actions(websiteUrl),
   ];
+
+  /// 登入頁自己的動作（頁首右邊只有打勾，docs/design/components.md
+  /// 「左右各一顆」）。表單讀不出來時也在，還能改在網站登入或清掉舊資料。
+  /// 有動作在跑時都灰掉，一次只跑一個。
+  Widget _actions(String? websiteUrl) => GroupedSection(
+    children: [
+      // 書源網址不是 http(s) 時灰掉（ADR 0059）。
+      GroupedRow(
+        title: '在網站登入',
+        leading: const GroupedIconTile(Icons.open_in_browser_rounded),
+        enabled: websiteUrl != null && !_busy,
+        onTap: websiteUrl == null ? null : () => _loginOnWebsite(websiteUrl),
+      ),
+      GroupedRow(
+        title: '登入標頭',
+        leading: const GroupedIconTile(Icons.badge_outlined),
+        enabled: !_busy,
+        onTap: _showLoginHeader,
+      ),
+      GroupedRow(
+        title: '清除登入資料',
+        leading: const GroupedIconTile(Icons.logout_rounded),
+        destructive: true,
+        showChevron: false,
+        enabled: !_busy,
+        onTap: _clearLoginData,
+      ),
+    ],
+  );
 
   List<Widget> _items(List<SourceLoginRow> rows) {
     final items = <Widget>[];
@@ -617,10 +631,17 @@ class _SourceLoginPageState extends State<SourceLoginPage>
         ],
       ),
       body: broken != null
-          ? AppStateView(
-              icon: Icons.error_outline_rounded,
-              title: broken,
-              tone: AppStateTone.error,
+          ? Column(
+              children: [
+                Expanded(
+                  child: AppStateView(
+                    icon: Icons.error_outline_rounded,
+                    title: broken,
+                    tone: AppStateTone.error,
+                  ),
+                ),
+                SafeArea(top: false, child: _actions(websiteUrl)),
+              ],
             )
           : SkeletonSwitcher(
               loading: rows == null,

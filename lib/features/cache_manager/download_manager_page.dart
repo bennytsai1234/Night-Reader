@@ -26,7 +26,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
 
-enum _QueueAction { togglePause, clearCompleted }
+enum _QueueAction { pauseAll, resumeAll, clearCompleted }
 
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
@@ -101,7 +101,9 @@ class DownloadManagerPage extends StatelessWidget {
             enabled: queue.hasActive || queue.hasCompleted,
             entriesBuilder: (_) => [
               GlassMenuItem(
-                value: _QueueAction.togglePause,
+                value: service.isPaused
+                    ? _QueueAction.resumeAll
+                    : _QueueAction.pauseAll,
                 label: service.isPaused ? '繼續全部' : '暫停全部',
                 icon: service.isPaused
                     ? Icons.play_arrow_rounded
@@ -115,13 +117,20 @@ class DownloadManagerPage extends StatelessWidget {
                 enabled: queue.hasCompleted,
               ),
             ],
+            // 選單開著時佇列可能變了：照選的那一項的方向做，從服務當下的
+            // 任務挑，不用打開選單時的那一份。
             onSelected: (action) {
+              final current = List<DownloadTask>.of(service.tasks);
               switch (action) {
-                case _QueueAction.togglePause:
-                  service.togglePause();
+                case _QueueAction.pauseAll:
+                  if (!service.isPaused &&
+                      current.any((task) => !task.isCompleted)) {
+                    service.togglePause();
+                  }
+                case _QueueAction.resumeAll:
+                  if (service.isPaused) service.togglePause();
                 case _QueueAction.clearCompleted:
-                  for (final task
-                      in tasks.where((task) => task.isCompleted).toList()) {
+                  for (final task in current.where((t) => t.isCompleted)) {
                     service.removeTask(task.bookUrl);
                   }
               }

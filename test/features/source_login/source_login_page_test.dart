@@ -231,6 +231,26 @@ void main() {
       expect(find.text('在網站登入'), findsOneWidget);
     });
 
+    testWidgets('stays under a form that cannot be read', (tester) async {
+      setupTestDI();
+      final broken = BookSource.fromJson({
+        ...source.toJson(),
+        'loginUi': '[{name: "帳號", type: ',
+      });
+      await tester.runAsync(() => dao.upsert(broken));
+
+      await openLogin(tester, login: broken);
+
+      expect(find.text('登入表單讀不出來'), findsOneWidget);
+      // 表單壞了還能改在網站登入、看標頭、清掉舊資料。
+      for (final title in ['在網站登入', '登入標頭', '清除登入資料']) {
+        final row = tester.widget<GroupedRow>(
+          find.widgetWithText(GroupedRow, title),
+        );
+        expect(row.enabled, isTrue, reason: title);
+      }
+    });
+
     testWidgets('is greyed out when the source URL is a name', (tester) async {
       setupTestDI();
       final named = BookSource.fromJson({

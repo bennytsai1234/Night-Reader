@@ -249,12 +249,14 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
             label: '校驗作者',
             icon: Icons.person_outline_rounded,
             checked: provider.checkAuthor,
+            toggle: true,
           ),
           GlassMenuItem(
             value: _SourceFilter.excludeFarWordCount,
             label: '不列字數差太多的',
             icon: Icons.straighten_rounded,
             checked: provider.excludeFarWordCount,
+            toggle: true,
           ),
         ],
         onSelected: (filter) => switch (filter) {

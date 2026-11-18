@@ -31,7 +31,9 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     this.enabled = true,
     this.submenu = false,
     this.translate = true,
-  }) : assert(!submenu || (icon == null && swatch == null));
+    this.toggle = false,
+  }) : assert(!submenu || (icon == null && swatch == null)),
+       assert(!toggle || checked != null);
 
   final T value;
   final String label;
@@ -52,6 +54,10 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   /// 選單裡有切換類選項時，每一列都留勾號欄，切換時字不會左右移。
   final bool? checked;
   final bool enabled;
+
+  /// 這一項是獨立的開關（可以和別項同時勾），不是單選裡的一個選項：讀屏
+  /// 照核取方塊念，不當成單選群組。
+  final bool toggle;
 
   /// 點了在同一處開出第二層：右側畫「›」，不另給圖示（使用者 2026-11-11
   /// 選的，會展開的一眼分得出來）。
@@ -490,13 +496,13 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           }
           final color = entry.destructive ? danger : scheme.onSurface;
           widgets.add(
-            // 讀屏要知道哪一項已勾選（單選群組）、哪一項停用；畫面上只靠勾號
-            // 與透明度表示。
+            // 讀屏要知道哪一項已勾選（單選群組或獨立的開關）、哪一項停用；
+            // 畫面上只靠勾號與透明度表示。
             Semantics(
               button: true,
               enabled: entry.enabled,
               checked: hasChecks ? entry.checked ?? false : null,
-              inMutuallyExclusiveGroup: hasChecks,
+              inMutuallyExclusiveGroup: hasChecks && !entry.toggle,
               child: InkWell(
                 onTap: entry.enabled
                     ? () => Navigator.of(context).pop(entry.value)

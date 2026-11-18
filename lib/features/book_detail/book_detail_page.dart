@@ -526,6 +526,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               label: '自動檢查更新',
               icon: Icons.autorenew_rounded,
               checked: onlineShelfBook && provider.book.canUpdate,
+              toggle: true,
               enabled: onlineShelfBook,
             ),
             GlassMenuItem(

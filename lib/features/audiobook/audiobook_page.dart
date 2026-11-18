@@ -252,6 +252,7 @@ class _AudiobookPageState extends State<AudiobookPage> {
           label: '保持喚醒',
           icon: Icons.light_mode_outlined,
           checked: _player.keepAwake,
+          toggle: true,
         ),
         GlassMenuItem(
           value: _MoreAction.copyUrl,

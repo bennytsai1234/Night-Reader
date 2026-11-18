@@ -108,10 +108,11 @@ class AppBottomSheet extends StatelessWidget {
               child: NavigationToolbar(
                 centerMiddle: true,
                 middleSpacing: AppSpacing.md,
-                // 左右各一顆：有右側動作時關閉在左邊；沒有時左邊空著，
-                // 關閉在右邊。兩側照按鈕自己的大小置中，不被撐高。
+                // 左右各一顆：有右側動作時關閉在左邊；沒有時左邊空出和
+                // 關閉鈕一樣寬，長標題也留在正中。兩側照按鈕自己的大小置中，
+                // 不被撐高。
                 leading: trailing == null
-                    ? null
+                    ? const SizedBox(width: AppGrouped.margin + _closeSize)
                     : Padding(
                         padding: const EdgeInsets.only(left: AppGrouped.margin),
                         child: Center(widthFactor: 1, child: close),

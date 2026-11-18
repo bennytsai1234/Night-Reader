@@ -105,6 +105,8 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
               // 「左右各一顆」）；除錯中由頁首下緣的進度線表示。
               actions: [
                 GlassMenuButton<_DebugAction>(
+                  // 兩項都不能按時整顆停用（ADR 0059）。
+                  enabled: provider.logs.isNotEmpty || !busy,
                   entriesBuilder: (_) => [
                     GlassMenuItem(
                       value: _DebugAction.copy,
