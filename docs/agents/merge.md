@@ -1,9 +1,11 @@
 # 合併
 
-使用者說「合併」時照全域 `git-flow` 的合併，夜讀另外照這些。為什麼見 ADR 0049。
+收尾到 PR 的 CI 通過後，照全域 `git-flow` 的合併，夜讀另外照這些。為什麼見 ADR 0049。
 
-1. `gh pr list` 列出可以合併的 PR，一個一個來。`gh pr view <PR> --json mergeable` 是 `CONFLICTING` 才在 worktree 裡把 `beta` 併進來、解衝突、推上去、等 CI 通過；是 `UNKNOWN`（GitHub 還在算）就再查一次。沒有衝突就直接合，`beta` 在這條 PR 的 CI 之後動過也不重跑：合在一起才出錯的，由第 3 步 `beta` 的 CI 擋在發測試版之前。這點和全域 `git-flow` 的合併不同。
-2. `gh pr merge <PR> --squash`：標題與說明取 PR 的，GitHub 自動刪遠端分支。
-3. 全部合完：`git pull --ff-only`、`git worktree prune`，在同一輪裡前景等 `beta` 上最後一次 CI 跑完（`gh run watch <run> --exit-status`，逾時設 10 分鐘；中間幾次會被下一次取消），等完直接做第 4 步。不放背景，原因見全域指示「指令與測試」。
-4. 通過就 `gh workflow run android-release.yml --ref beta -f channel=beta` 發這一批的測試版（沒有 App 改動時照常結束、不發），確認開始建置就走，不等 APK。沒通過就留下來修：開小分支修、開 PR、等 CI、合併，再回到第 3 步；某個 PR 本身的邏輯一時修不好，就 `git revert` 它的合併提交推上 `beta`，告訴使用者它要回去重做。
-5. 回報合了哪些、測試版發了沒。
+1. `git fetch`，列出這條分支開出之後 `beta` 多的 App 改動：`git log --oneline $(git merge-base HEAD origin/beta)..origin/beta -- lib android ios assets third_party pubspec.yaml`。沒有就跳到第 4 步。
+2. 有的話，在 worktree 裡把 `origin/beta` 併進來（先不推），跑 `flutter analyze` 與這條分支、那幾個 PR 改到的測試檔。有衝突就解。
+3. 那幾個 PR 裡有改到和這條分支同一個模組的（前四層路徑相同，例如 `lib/features/reader_v2/hybrid`），派 `codex-review` 審相容性：任務檔列出那幾個 PR 與這條分支，照四象限核對，這條分支的程式在它們的新行為下還對不對，它們的程式有沒有依賴這條分支改掉或改了含義的東西。核對屬實的修掉。
+   第 2、3 步有改程式或解了衝突，就推上去、等 CI（T3 監看），喚起後回到第 1 步。沒改就丟掉本機的合併（`git reset --hard <分支頭>`），接第 4 步。
+4. 再 `git fetch` 一次：`origin/beta` 在第 1 步之後又動過，回到第 1 步。沒動就 `gh pr merge <PR> --squash --match-head-commit <分支頭>`，標題與說明取 PR 的，GitHub 自動刪遠端分支。
+5. `unwatch_pull_request`、刪 worktree 與本機分支。不發測試版，測試版等使用者說（`docs/agents/release.md`）。
+6. 回報合了什麼；第 1 步有別的 App 改動時，寫出這條和哪幾個 PR 一起進了 `beta`、相容性審查看了什麼、結果如何。

@@ -15,7 +15,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 和使用者的工作默契
 
-- **做到好，做到可以合併就停**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問（使用者的話：「像許願機一樣」）。全部做完才問要不要收尾，收尾到「可以合併」就停，使用者說「合併」才合併（ADR 0049）。
+- **做到好，自己合併收工**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問（使用者的話：「像許願機一樣」）。全部做完才收尾，`feat/` 還要等使用者說這條沒問題；收尾後自己合併（ADR 0049）。
 - **結果寫在對話裡**：使用者不看 PR 與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」。
 - **視覺由使用者在圖上選**：改外觀前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，選了就寫進 `docs/design/` 對應的那份，不做成設定（ADR 0030）。系統畫的畫面（通知、鎖定畫面）與並排比較的做法在 `docs/agents/candidates.md`。版型與動畫只要小修，不要大改。
 - **動畫用動畫儀表板說明**：說明動畫、轉場與時間軸，或給候選與改前改後時，照 `animation-dashboard` 技能把儀表板放進對話，再補判斷。
@@ -45,7 +45,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 只改說明文件（`.md`、`docs/`）時，`git pull --ff-only` 後直接在 `beta` 上改、推，不開分支、不審。
 - 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，同一段工作的改動與跟著改的文件都放同一條分支、一個 PR。發正式版的升版號提交例外，照 `docs/agents/release.md` 直接推上 `beta`。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`），本文用繁體中文。
-- 問使用者要不要**收尾**之前讀 `docs/agents/finish.md`，問題裡列的步驟照它；使用者說**合併**時讀 `docs/agents/merge.md`；使用者說要**發正式版**時讀 `docs/agents/release.md`。
+- **收尾**前讀 `docs/agents/finish.md`，CI 通過要**合併**前讀 `docs/agents/merge.md`；使用者說要**發測試版**或**發正式版**時讀 `docs/agents/release.md`。
 - 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `docs/design/`；本檔只放每件工作都用得到的規則。
 
 ## 環境
