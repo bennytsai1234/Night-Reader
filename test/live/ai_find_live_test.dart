@@ -12,7 +12,8 @@
 ///   書源（同搜尋頁預設）。
 /// - `NR_CASES` 是案件集：每件 `id`、`description`、`depth`（quick、normal、
 ///   deep），可以有 `shelf`（書架與閱讀紀錄，欄位同 `AiFindShelfEntry`，
-///   `kind` 寫 novel、comic、audio）。`NR_ONLY=<id,id>` 只跑這幾件。
+///   `kind` 寫 novel、comic、audio，可以寫 `category`、`intro`；沒有書源，
+///   AI 要看詳情得自己搜書名）。`NR_ONLY=<id,id>` 只跑這幾件。
 /// - 只給 `NR_SEARCH=<關鍵字,關鍵字>`、不給 `NR_CASES` 時不問 AI：照找書的
 ///   搜尋工具搜，印出每次送了幾個書源、幾個出錯、花多久、搜到幾本，與全部
 ///   花多久（量搜尋要等多久用）。`NR_SEARCH_PARALLEL=1` 時幾個一起搜（同一輪
@@ -159,6 +160,9 @@ List<AiFindShelfEntry> _shelfOf(Object? json) => [
       chapter: item['chapter'] as String?,
       chapterIndex: item['chapterIndex'] as int?,
       chapterTotal: item['chapterTotal'] as int?,
+      category: item['category'] as String?,
+      intro: item['intro'] as String?,
+      book: null,
     ),
 ];
 

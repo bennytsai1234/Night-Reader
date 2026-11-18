@@ -98,7 +98,10 @@ typedef AiFindExploreSource = ({String url, String name, BookSourceKind kind});
 
 /// 書架上的一本或一筆閱讀紀錄。[readSeconds] 是讀了多久（各台加總），
 /// [chapter] 是讀到哪一章的章名，[chapterIndex]／[chapterTotal] 從 1 數；
-/// 不知道的是 null（只剩閱讀紀錄、書已經不在資料庫的，作者與類別都不知道）。
+/// [category] 與 [intro] 是書源給的分類與簡介，AI 拿來看他喜歡什麼樣的書。
+/// [book] 是有書源的那本（本地書與只剩閱讀紀錄的沒有）：AI 拿它的編號看詳情、
+/// 讀章節，也可以推薦它。不知道的是 null（只剩閱讀紀錄、書已經不在資料庫的，
+/// 作者與類別都不知道）。
 typedef AiFindShelfEntry = ({
   String name,
   String author,
@@ -109,6 +112,9 @@ typedef AiFindShelfEntry = ({
   String? chapter,
   int? chapterIndex,
   int? chapterTotal,
+  String? category,
+  String? intro,
+  SearchBook? book,
 });
 
 /// 正文與詳情給 AI 讀的純文字：插圖換成「（插圖）」、換行標籤換成換行、其他

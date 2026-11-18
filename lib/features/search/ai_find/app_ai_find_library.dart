@@ -449,6 +449,9 @@ class AppAiFindLibrary implements AiFindLibrary {
                 chapter: null,
                 chapterIndex: null,
                 chapterTotal: null,
+                category: null,
+                intro: null,
+                book: null,
               ),
       );
     }
@@ -473,6 +476,27 @@ class AppAiFindLibrary implements AiFindLibrary {
           : book.durChapterTitle!.trim(),
       chapterIndex: total > 0 ? book.chapterIndex + 1 : null,
       chapterTotal: total > 0 ? total : null,
+      category: book.kind,
+      // 書源給的簡介，不送使用者自己改寫的（customIntro）。
+      intro: book.intro,
+      // 網路書照它的書源看詳情、讀章節（同搜尋到的書）；本地書沒有書源。
+      book: book.isLocal || book.origin.isEmpty
+          ? null
+          : SearchBook(
+              bookUrl: book.bookUrl,
+              name: book.name,
+              author: book.author,
+              kind: book.kind,
+              coverUrl: book.coverUrl,
+              intro: book.intro,
+              wordCount: book.wordCount,
+              latestChapterTitle: book.latestChapterTitle,
+              origin: book.origin,
+              originName: book.originName,
+              type: book.type,
+              variable: book.variable,
+              tocUrl: book.tocUrl,
+            ),
     );
   }
 

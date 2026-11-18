@@ -246,4 +246,38 @@ void main() {
     expect(byName['有聲']!.onShelf, isFalse);
     expect(byName['有聲']!.kind, BookSourceKind.audio);
   });
+
+  test(
+    'a shelf book from a source carries its category, the intro the '
+    'source gave and the book to look at; a local book has no book',
+    () async {
+      await getIt<BookDao>().upsertAll([
+        Book(
+          bookUrl: 'https://a.test/steal',
+          name: '偷香高手',
+          author: '小刀',
+          origin: 'https://a.test',
+          originName: 'A 站',
+          kind: '都市,後宮',
+          intro: '穿越後的豔遇人生',
+          customIntro: '我自己寫的心得',
+          isInBookshelf: true,
+        ),
+        Book(
+          bookUrl: 'local://txt',
+          name: '本地書',
+          origin: BookType.localOrigin,
+          isInBookshelf: true,
+        ),
+      ]);
+      final shelf = await AppAiFindLibrary(scope: SearchScope()).shelf();
+      final byName = {for (final entry in shelf) entry.name: entry};
+      final steal = byName['偷香高手']!;
+      expect(steal.category, '都市,後宮');
+      expect(steal.intro, '穿越後的豔遇人生', reason: '不送使用者自己改寫的簡介');
+      expect(steal.book?.bookUrl, 'https://a.test/steal');
+      expect(steal.book?.origin, 'https://a.test');
+      expect(byName['本地書']!.book, isNull);
+    },
+  );
 }
