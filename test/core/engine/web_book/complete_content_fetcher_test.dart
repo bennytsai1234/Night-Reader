@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -19,6 +21,24 @@ class _MinimalServicesBinding extends BindingBase
   static _MinimalServicesBinding ensureInitialized() {
     return _instance ??= _MinimalServicesBinding();
   }
+}
+
+/// 書架上這本書存著的目錄：第 i 章是 /book/i。
+class _StoredChapters extends Fake implements ChapterDao {
+  _StoredChapters(this.baseUrl, this.count);
+
+  final String baseUrl;
+  final int count;
+
+  @override
+  Future<BookChapter?> getChapter(String bookUrl, int index) async =>
+      index < count
+      ? BookChapter(
+          url: '$baseUrl/book/$index',
+          title: '第$index章',
+          index: index,
+        )
+      : null;
 }
 
 void main() {
@@ -46,6 +66,9 @@ void main() {
           request.response.write(
             page('第$n頁的正文。', n < 120 ? '/long/${n + 1}' : null),
           );
+        case 'book':
+          // 每章一頁，「下一頁」的規則抓到的其實是下一章。
+          request.response.write(page('第$n章的正文。', '/book/${n + 1}'));
         case 'loop':
           request.response.write(page('第$n頁的正文。', '/loop/${3 - n}'));
         default:
@@ -96,4 +119,19 @@ void main() {
       expect(content, contains('第2頁的正文'));
     },
   );
+
+  test('with no next chapter given, the stored table of contents stops the '
+      'chapter at the next one, like Legado', () async {
+    // 書架自動下載、漫畫與有聲書沒傳下一章網址；Legado 這時查這本書存著的
+    // 目錄（下一章，沒有就第一章）。
+    GetIt.I.registerSingleton<ChapterDao>(_StoredChapters(baseUrl, 150));
+    addTearDown(() => GetIt.I.unregister<ChapterDao>());
+    final content = await CompleteContentFetcher.fetch(
+      source,
+      book,
+      BookChapter(url: '$baseUrl/book/3', title: '第3章', index: 3),
+    );
+    expect(content, contains('第3章的正文'));
+    expect(content, isNot(contains('第4章的正文')));
+  });
 }
