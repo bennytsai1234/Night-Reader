@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -229,15 +230,54 @@ class CrashHandler {
     }
   }
 
-  /// 最近的崩潰日誌；沒有任何紀錄時回傳空字串，讀取失敗時丟出例外，
-  /// 讓日誌頁顯示對應的空狀態或錯誤狀態。
-  static Future<String> readLogs() async {
+  /// 留著的崩潰日誌從新到舊接成一份，切成給頁面一段段排版的片段
+  /// （[logChunks]；接回整份用 `join()`）。留滿時約百萬字，讀檔與切段在背景
+  /// isolate。沒有任何紀錄時回傳空清單，讀取失敗時丟出例外，讓日誌頁顯示
+  /// 對應的空狀態或錯誤狀態。
+  static Future<List<String>> readLogs() async {
+    final path = (await _logDirectory()).path;
+    return Isolate.run(() => logChunks(_readAll(path)));
+  }
+
+  static String _readAll(String path) {
     final buffer = StringBuffer();
-    for (final file in _logsNewestFirst(await _logDirectory())) {
-      buffer.writeln(await file.readAsString());
+    for (final file in _logsNewestFirst(Directory(path))) {
+      buffer.writeln(file.readAsStringSync());
     }
     return buffer.toString().trimRight();
   }
+
+  /// 頁面一次排版一段的長度上限（字）。整份放進同一段字，留滿 50 份時排
+  /// 一次要好幾秒（2026-11-18 量到一幀 2 秒）。
+  static const int displayChunkChars = 800;
+
+  /// 把 [text] 切成依序接起來就是原文的片段，每段最多 [maxChars] 字，盡量
+  /// 切在換行之後；一行比上限長時從中間切（不切開代理對）。
+  static List<String> logChunks(
+    String text, {
+    int maxChars = displayChunkChars,
+  }) {
+    final chunks = <String>[];
+    var start = 0;
+    while (start < text.length) {
+      var end = start + maxChars;
+      if (end >= text.length) {
+        chunks.add(text.substring(start));
+        break;
+      }
+      final newline = text.lastIndexOf('\n', end - 1);
+      if (newline >= start) {
+        end = newline + 1;
+      } else if (_isLeadSurrogate(text.codeUnitAt(end - 1))) {
+        end -= 1;
+      }
+      chunks.add(text.substring(start, end));
+      start = end;
+    }
+    return chunks;
+  }
+
+  static bool _isLeadSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
 
   /// 刪除所有崩潰日誌；失敗時丟出例外，不讓頁面誤報已清除。
   static Future<void> clearLogs() async {

@@ -54,7 +54,7 @@ void main() {
     expect(logs, hasLength(50));
     // 最舊的幾份刪掉了，剛寫的那份還在。
     expect(logs, isNot(contains(contains('0000000001000'))));
-    expect(await CrashHandler.readLogs(), contains('new error'));
+    expect((await CrashHandler.readLogs()).join(), contains('new error'));
   });
 
   test(
@@ -67,7 +67,7 @@ void main() {
         ).writeAsStringSync('log $i');
       }
 
-      final logs = await CrashHandler.readLogs();
+      final logs = (await CrashHandler.readLogs()).join();
       expect(logs, contains('log 0'));
       expect(logs, contains('log 24'));
     },
@@ -78,7 +78,7 @@ void main() {
 
     await CrashHandler.saveLogForTesting('boom');
 
-    final logs = await CrashHandler.readLogs();
+    final logs = (await CrashHandler.readLogs()).join();
     expect(logs, contains('boom'));
     expect(logs, contains('開始修復異常書源（3 個）'));
   });
@@ -134,7 +134,7 @@ void main() {
       );
 
       expect(crashLogs(), hasLength(1));
-      final log = await CrashHandler.readLogs();
+      final log = (await CrashHandler.readLogs()).join();
       expect(log, contains('原生程式崩潰（訊號 6 SIGABRT）'));
       expect(log, contains('當時: 前景'));
       expect(log, contains('destroyed mutex'));
