@@ -470,6 +470,9 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   final Pool _searchSlots = Pool(2);
   final Map<String, List<String>> _categories = {};
   AiRepairStep? _round;
+
+  /// 這一輪每個呼叫各一句（[_say]），頁面的副標是它們用「；」接起來。
+  final List<String> _roundParts = [];
   int _logged = 0;
 
   AiFindLibrary get _library => s._library;
@@ -604,6 +607,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       previous.state = AiRepairStepState.done;
     }
     final title = attempt == 1 ? '第 $round 輪' : '第 $attempt 次 · 第 $round 輪';
+    _roundParts.clear();
     _round = AiRepairStep(
       title,
       detail: aiFindThinking,
@@ -638,7 +642,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     for (final call in reply.toolCalls) {
       s.log.toolCall(call.name, call.arguments);
     }
-    if (reply.toolCalls.isNotEmpty) _round?.detail = '';
+    if (reply.toolCalls.isNotEmpty) {
+      _roundParts.clear();
+      _round?.detail = '';
+    }
     _logged = record.sentMessages + 1;
     s._notify();
   }
@@ -708,6 +715,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     } catch (_) {
       // 出錯的不留著：下次同樣的搜尋重搜。
       _searches.remove(cacheKey)?.ignore();
+      _say('$label，出錯', replacing: '$label…');
       rethrow;
     }
     final books = search.books;
@@ -1124,15 +1132,14 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   void _say(String text, {String? replacing}) {
     final round = _round;
     if (round == null) return;
-    final done = round.detail ?? '';
-    final parts = done.isEmpty ? <String>[] : done.split('；');
-    final at = replacing == null ? -1 : parts.indexOf(replacing);
+    // 一句一項記著，不把接好的副標再切開：關鍵字裡可能就有「；」。
+    final at = replacing == null ? -1 : _roundParts.indexOf(replacing);
     if (at >= 0) {
-      parts[at] = text;
+      _roundParts[at] = text;
     } else {
-      parts.add(text);
+      _roundParts.add(text);
     }
-    round.detail = parts.join('；');
+    round.detail = _roundParts.join('；');
     s._notify();
   }
 

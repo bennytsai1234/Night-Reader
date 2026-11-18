@@ -365,7 +365,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
             ),
             body: GroupedListView(
               children: [
-                if (job.steps.isNotEmpty || (run?.isPaused ?? false)) ...[
+                if (!_clipboard || job.steps.isNotEmpty) ...[
                   GroupedSection(
                     footer: sentTo,
                     children: [
@@ -420,11 +420,25 @@ class _AiRepairPageState extends State<AiRepairPage> {
     );
   }
 
+  /// 剪貼簿的修復：照做過的步一步一列。只從「複製給 AI」進來，不進背景，
+  /// 所以沒有 [AiRepairPage.run]；App 重開後還原的暫停修復也沒有 AI 服務，
+  /// 但有 run，照固定四段畫。
+  bool get _clipboard => widget.run == null && _session.usesClipboard;
+
   /// AI 修改規則那一段的每一步（AI 的輪與重新開始）。
   static List<AiRepairStep> _aiSteps(AiRepairJob job) => [
     for (final step in job.steps)
       if (step.kind != AiRepairStepKind.stage) step,
   ];
+
+  /// 最後一次「校驗修好的書源」之後 AI 又做了事：交出的被退回，回到 AI 修改
+  /// 規則，這次的校驗還沒開始。
+  static bool _backToAi(AiRepairJob job) {
+    final steps = job.steps;
+    final verify = steps.lastIndexWhere((s) => s.title == aiRepairVerifyStage);
+    return verify < 0 ||
+        steps.lastIndexWhere((s) => s.kind != AiRepairStepKind.stage) > verify;
+  }
 
   /// 「經過」：AI 做過的步，正在做的那一步寫在「AI 修改規則」的副標，不放進來。
   List<AiRepairStep> _history(AiRepairJob job) {
@@ -434,14 +448,12 @@ class _AiRepairPageState extends State<AiRepairPage> {
         : steps;
   }
 
-  /// 「AI 修改規則」的狀態：還沒問 AI 是還沒開始；校驗修好的書源開始了是
-  /// 做完；AI 說修不好、出錯、按了暫停或結束時是失敗（後面的段沒做，同整批
-  /// 修復）；其他時候是做著（兩輪之間也算）。
+  /// 「AI 修改規則」的狀態：還沒問 AI 是還沒開始；交出的正在校驗或校驗過了
+  /// 是做完；AI 說修不好、出錯、按了暫停或結束時是失敗（後面的段沒做，同整批
+  /// 修復）；其他時候是做著（兩輪之間、交出被退回後也算）。
   AiRepairStepState _aiState(AiRepairJob job, List<AiRepairStep> steps) {
     if (steps.isEmpty) return AiRepairStepState.waiting;
-    if (job.steps.any((step) => step.title == aiRepairVerifyStage)) {
-      return AiRepairStepState.done;
-    }
+    if (!_backToAi(job)) return AiRepairStepState.done;
     if (steps.last.state == AiRepairStepState.running) {
       return AiRepairStepState.running;
     }
@@ -461,7 +473,7 @@ class _AiRepairPageState extends State<AiRepairPage> {
           subtitle: detail,
           showChevron: false,
         );
-    if (_session.usesClipboard) {
+    if (_clipboard) {
       return [
         for (final step in job.steps) row(step.state, step.title, step.detail),
       ];
@@ -478,7 +490,10 @@ class _AiRepairPageState extends State<AiRepairPage> {
       stage(aiRepairCheckStage),
       stage(aiRepairFetchStage),
       row(_aiState(job, ai), 'AI 修改規則', ai.lastOrNull?.line),
-      stage(aiRepairVerifyStage),
+      if (ai.isNotEmpty && _backToAi(job))
+        row(AiRepairStepState.waiting, aiRepairVerifyStage, null)
+      else
+        stage(aiRepairVerifyStage),
     ];
   }
 

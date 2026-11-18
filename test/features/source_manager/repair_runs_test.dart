@@ -550,6 +550,31 @@ void main() {
     expect(work.isBusy, isFalse);
   });
 
+  testWidgets('a paused single repair brought back after the app was closed '
+      'shows the four stages, not the clipboard steps', (tester) async {
+    // 還原時只知道書源網址，工作沒有 AI 服務（按繼續時才照設定重開）。
+    final run = SingleRepairRun.paused(
+      AiRepairSession(source: _s('one'), service: null),
+      file: _MemoryFile(),
+      work: work,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: run.page(),
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.text('校驗原本的書源'), findsOneWidget);
+    expect(find.text('AI 修改規則'), findsOneWidget);
+    expect(find.text('校驗修好的書源'), findsOneWidget);
+    expect(find.text('已暫停'), findsOneWidget);
+    expect(find.text('繼續'), findsOneWidget);
+    run.disposeWork();
+    run.dispose();
+  });
+
   group('pausing a repair', () {
     test('a batch paused during the recheck frees the slot, keeps its save '
         'and continues as a new batch', () async {

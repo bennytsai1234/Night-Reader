@@ -1161,6 +1161,12 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
     current = sourceForAi(original);
     logged = 0;
     _probedOk = null;
+    // 上一次最後一輪被打斷時還是做著的：收成失敗，「經過」裡不留轉圈的步。
+    for (final last in job.steps) {
+      if (last.state == AiRepairStepState.running) {
+        last.state = AiRepairStepState.failed;
+      }
+    }
     s._finish(
       s._addStep(
         job,
@@ -1341,6 +1347,9 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         final reply = found == null
             ? s._noPage(page)
             : await readRepairPage(found, from: from, length: length, raw: raw);
+        // 讀頁在別的 isolate 做，回來前按了暫停或結束：步驟已經收成失敗，
+        // 不再蓋回去（同解析頁、跑程式）。
+        if (s._stopped) return _cancelled;
         s._local(step, '讀頁 $page', reply);
         return answer(reply);
       case AiFind(:final page, text: final query, :final from):
@@ -1348,6 +1357,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         final reply = found == null
             ? s._noPage(page)
             : await findInRepairPage(found, query, from: from);
+        if (s._stopped) return _cancelled;
         s._local(step, '在頁 $page 找「$query」', reply);
         return answer(reply);
       case AiParse(:final page, :final stage, :final change):
