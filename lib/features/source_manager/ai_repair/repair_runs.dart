@@ -584,7 +584,7 @@ class SingleRepairRun extends RepairRun {
     }
     return BackgroundWorkStatus(
       title: title,
-      text: _session.job.steps.lastOrNull?.title ?? '準備中…',
+      text: _session.job.steps.lastOrNull?.line ?? '準備中…',
       pausable: true,
     );
   }
