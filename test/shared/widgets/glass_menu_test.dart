@@ -1,3 +1,5 @@
+import 'dart:ui' show CheckedState;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -40,7 +42,7 @@ void main() {
     expect(await labelLeft(on: false), await labelLeft(on: true));
   });
 
-  testWidgets('a toggle item reads as a checkbox, not as one of a choice', (
+  testWidgets('a toggle reads as a checkbox and a plain action as a button', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
@@ -62,6 +64,7 @@ void main() {
                     checked: true,
                     toggle: true,
                   ),
+                  GlassMenuItem(value: '選取', label: '選取'),
                 ],
               ),
               child: const Text('開'),
@@ -80,6 +83,11 @@ void main() {
     expect(exclusive('網格'), isTrue);
     expect(exclusive('列表'), isTrue);
     expect(exclusive('統一封面'), isFalse, reason: '可以和別項同時勾');
+    final action = tester
+        .getSemantics(find.bySemanticsLabel('選取'))
+        .flagsCollection;
+    expect(action.isInMutuallyExclusiveGroup, isFalse, reason: '一般動作照按鈕念');
+    expect(action.isChecked, CheckedState.none);
     semantics.dispose();
   });
 

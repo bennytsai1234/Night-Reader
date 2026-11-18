@@ -27,8 +27,15 @@ class CoverHeader extends StatelessWidget {
       builder: (context, provider, child) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 左右各一顆：右邊有動作時關閉在左邊（docs/design/components.md）。
           SheetHeader(
             title: '更換封面',
+            leading: GlassIconButton(
+              tooltip: '關閉',
+              icon: Icons.close_rounded,
+              iconSize: 20,
+              onPressed: () => Navigator.maybePop(context),
+            ),
             trailing: GlassIconButton(
               tooltip: provider.isSearching ? '結束搜尋封面' : '重新搜尋封面',
               icon: provider.isSearching
