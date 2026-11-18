@@ -496,12 +496,13 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           final color = entry.destructive ? danger : scheme.onSurface;
           widgets.add(
             // 讀屏要知道哪一項已勾選（單選群組或獨立的開關）、哪一項停用；
-            // 畫面上只靠勾號與透明度表示。
+            // 畫面上只靠勾號與透明度表示。沒有勾號的一般動作照按鈕念，
+            // 勾號欄（[hasChecks]）只管排版。
             Semantics(
               button: true,
               enabled: entry.enabled,
-              checked: hasChecks ? entry.checked ?? false : null,
-              inMutuallyExclusiveGroup: hasChecks && !entry.toggle,
+              checked: entry.checked,
+              inMutuallyExclusiveGroup: entry.checked != null && !entry.toggle,
               child: InkWell(
                 onTap: entry.enabled
                     ? () => Navigator.of(context).pop(entry.value)
