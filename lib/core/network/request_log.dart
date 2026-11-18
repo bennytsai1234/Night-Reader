@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:night_reader/core/network/page_digest.dart';
 import 'package:night_reader/core/services/encoding_detect.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
 
 /// 一份 [RequestLog] 記什麼；跨 isolate 送得過去（規則 JS 要等的請求在網路
 /// isolate 照同樣的設定記，`BlockingCall`）。
@@ -15,6 +16,7 @@ typedef RequestLogSettings = ({
   bool digestPages,
   bool keepPages,
   bool sentHeaders,
+  bool live,
 });
 
 /// [RequestLog.pages] 的一筆：請求或回應的那一行（同 [RequestLog.lines]），
@@ -27,6 +29,15 @@ List<Object?> loggedPageToJson(LoggedPage page) => [page.line, page.body];
 LoggedPage loggedPageFromJson(Object? json) {
   final list = json! as List;
   return (line: list[0]! as String, body: list[1] as String?);
+}
+
+/// [RequestLog.live] 一邊跑一邊交回的一行（[reportSourceProgress]）：同
+/// [RequestLog.lines] 的一行；[RequestLog.keepPages] 時回應另帶整頁原文。
+final class LoggedRequestLine {
+  const LoggedRequestLine(this.line, this.body);
+
+  final String line;
+  final String? body;
 }
 
 /// 一段工作實際送出的請求，依序記在 [lines]；給了 [responsePreview] 時每個
@@ -47,6 +58,7 @@ final class RequestLog {
     this.digestPages = false,
     this.keepPages = false,
     this.sentHeaders = false,
+    this.live = false,
   });
 
   RequestLog.from(RequestLogSettings settings)
@@ -55,6 +67,7 @@ final class RequestLog {
         digestPages: settings.digestPages,
         keepPages: settings.keepPages,
         sentHeaders: settings.sentHeaders,
+        live: settings.live,
       );
 
   /// 網頁先精簡（[digestPage]）再取開頭，給 AI 看。
@@ -73,6 +86,15 @@ final class RequestLog {
   /// Cookie 這類有沒有真的送出去。
   final bool sentHeaders;
 
+  /// 每記一行，當下也交給 [run] 開始時收書源工作紀錄的人（[LoggedRequestLine]，
+  /// [reportSourceProgress]）：規則 JS 同步等網路、外層先結束時，已經送出
+  /// 的請求也拿得到。規則 JS 的請求由網路 isolate 照同樣的設定交回，[merge]
+  /// 接上時不再交一次。
+  final bool live;
+
+  /// [live] 時收紀錄的人；第一次 [run] 時記下。
+  void Function(Object entry)? _progress;
+
   /// 規則 JS 的請求在網路 isolate 照這份設定記；在 [keepingPages] 裡時
   /// 那邊也記整頁，帶回來交給 [keepingPages]。
   RequestLogSettings get settings => (
@@ -80,6 +102,7 @@ final class RequestLog {
     digestPages: digestPages,
     keepPages: keepPages || _currentPageSink != null,
     sentHeaders: sentHeaders,
+    live: live,
   );
 
   bool get withResponses => responsePreview != null;
@@ -98,8 +121,10 @@ final class RequestLog {
   int get transientResponses => _transientResponses;
 
   /// 在這份紀錄裡執行 [body]：裡面送出的請求都記進來。
-  Future<T> run<T>(Future<T> Function() body) =>
-      runZoned(body, zoneValues: {_requestLogZoneKey: this});
+  Future<T> run<T>(Future<T> Function() body) {
+    if (live) _progress ??= currentSourceProgress;
+    return runZoned(body, zoneValues: {_requestLogZoneKey: this});
+  }
 
   /// 在這份紀錄裡執行 [body]，裡面的請求照常記進來，另外照 [pages] 的樣子
   /// （每個回應帶整頁原文）記一份進 [into]。只有 [body] 送出的請求進
@@ -127,6 +152,7 @@ final class RequestLog {
 
   void _add(String line, [String? body]) {
     lines.add(line);
+    _progress?.call(LoggedRequestLine(line, keepPages ? body : null));
     if (!withResponses) return;
     if (keepPages) pages.add((line: line, body: body));
     _currentPageSink?.add((line: line, body: body));

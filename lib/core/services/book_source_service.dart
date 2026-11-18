@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/base_source.dart';
@@ -476,30 +477,32 @@ _Work<List<ExploreKind>> _exploreKindsTask(
 typedef _Change = (Object? before, Object? after);
 
 final class _Ran<R> {
-  const _Ran(
-    this.result,
-    this.bookChanges,
-    this.chapterChanges,
-    this.requestUrls,
-  );
+  const _Ran(this.result, this.bookChanges, this.chapterChanges);
 
   final R result;
   final Map<String, _Change> bookChanges;
   final Map<String, _Change> chapterChanges;
-
-  /// 工作實際送出的請求網址；只有 [withSourceRequestLog] 裡才記。
-  final List<String> requestUrls;
 }
 
-/// 書源除錯用：[body] 裡經由 [BookSourceService] 跑的書源工作，跑完後把
-/// 實際送出的請求網址依序交給 [onRequest]。工作失敗時不交，出錯的那個網址
-/// 在錯誤（[DioException.requestOptions]）裡。
-Future<T> withSourceRequestLog<T>(
-  void Function(String url) onRequest,
-  Future<T> Function() body,
-) => runZoned(body, zoneValues: {_requestLogZoneKey: onRequest});
+/// 書源除錯用：[body] 裡經由 [BookSourceService] 跑的書源工作，一邊跑一邊把
+/// 實際送出的請求網址交給 [onRequest]、引擎寫給除錯看的話（[SourceDebugNote]，
+/// 例如書單是空的、改照詳情頁解析）交給 [onNote]，照發生的順序，工作失敗時
+/// 也交。
+Future<T> withSourceDebugLog<T>({
+  required void Function(String url) onRequest,
+  required void Function(String note) onNote,
+  required Future<T> Function() body,
+}) => runZoned(
+  body,
+  zoneValues: {_debugLogZoneKey: (onRequest: onRequest, onNote: onNote)},
+);
 
-final Object _requestLogZoneKey = Object();
+typedef _DebugLog = ({
+  void Function(String url) onRequest,
+  void Function(String note) onNote,
+});
+
+final Object _debugLogZoneKey = Object();
 
 /// 在書源 isolate 執行 [work]，把規則在 [book]、[chapter] 上改的欄位
 /// （[bookRuleFields]、[chapterRuleFields]）抄回傳入的物件。
@@ -518,17 +521,27 @@ Future<R> _runOnSource<R>(
   // 付費章節的正文、圖、音訊都不抓（ADR 0057）：網站只會回付費提示，夜讀
   // 也不替使用者買。閱讀器、下載、朗讀、校驗都經過這裡。
   if (chapter != null && chapter.isLocked) throw LockedChapterException();
-  // 原地執行時，書源工作裡又叫回來的工作（規則 JS 這類）的請求記進外層
-  // 工作的清單，照送出的順序列。
-  final onRequest = isRecordingRequestUrls
-      ? null
-      : Zone.current[_requestLogZoneKey] as void Function(String url)?;
+  final debug = Zone.current[_debugLogZoneKey] as _DebugLog?;
   final _Ran<R> ran;
   try {
     ran = await SourceIsolate.run(
-      _tracked(work, book, chapter, recordRequests: onRequest != null),
+      // 外層已經在記請求時（原地執行時書源工作裡又叫回來的工作，或書源
+      // 除錯外面又包一層記請求的），請求照送出的順序記進外層的紀錄。
+      _tracked(
+        work,
+        book,
+        chapter,
+        recordRequests: debug != null && !isRecordingRequestUrls,
+      ),
       affinity: source?.bookSourceUrl,
       cancelToken: cancelToken,
+      onProgress: debug == null
+          ? null
+          : (entry) => switch (entry) {
+              LoggedRequestLine(:final line) => debug.onRequest(line),
+              SourceDebugNote(:final message) => debug.onNote(message),
+              _ => null,
+            },
     );
   } on SourceVerificationException catch (error) {
     // 取消後才交回的：書源 isolate 停在等網路時還沒收到取消，認不出來。
@@ -542,14 +555,13 @@ Future<R> _runOnSource<R>(
   }
   if (book != null) _apply(bookRuleFields, ran.bookChanges, book);
   if (chapter != null) _apply(chapterRuleFields, ran.chapterChanges, chapter);
-  if (onRequest != null) ran.requestUrls.forEach(onRequest);
   return ran.result;
 }
 
 /// 包住 [work]：在執行它的 isolate 裡，開始前與結束後各讀一次 [book]、
 /// [chapter] 的規則欄位，只傳回有變的。[book]、[chapter] 和 [work] 捕捉的是
-/// 同一份（同一則訊息複製過去的物件仍是同一個）。[recordRequests] 時一併
-/// 傳回實際送出的請求網址。
+/// 同一份（同一則訊息複製過去的物件仍是同一個）。[recordRequests] 時一邊跑
+/// 一邊交回實際送出的請求網址（[LoggedRequestLine]）。
 _Work<_Ran<R>> _tracked<R>(
   _Work<R> work,
   Book? book,
@@ -560,7 +572,7 @@ _Work<_Ran<R>> _tracked<R>(
   final chapterBefore = chapter == null
       ? null
       : _readFields(chapterRuleFields, chapter);
-  final requests = RequestLog();
+  final requests = RequestLog(live: true);
   // 書源要使用者驗證而失敗時，失敗照實說是要驗證（ADR 0038）。
   Future<R> run() => SourceInteraction.watchVerification(
     () => work(cancelToken),
@@ -573,7 +585,6 @@ _Work<_Ran<R>> _tracked<R>(
     chapter == null
         ? const {}
         : _changes(chapterRuleFields, chapterBefore!, chapter),
-    requests.lines,
   );
 };
 

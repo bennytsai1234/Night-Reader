@@ -366,6 +366,8 @@ void main() {
     server.listen((request) async {
       request.response.headers.contentType = ContentType.html;
       switch (request.uri.path) {
+        case '/empty':
+          break;
         case '/search':
           request.response.write(
             '<div class="item"><a href="/book/1">夜讀</a>'
@@ -1146,13 +1148,33 @@ void main() {
 
     test('the URLs a task sent come back for source debugging', () async {
       final urls = <String>[];
-      await withSourceRequestLog(
-        urls.add,
-        () => BookSourceService().searchBooks(source, '夜讀'),
+      await withSourceDebugLog(
+        onRequest: urls.add,
+        onNote: (_) {},
+        body: () => BookSourceService().searchBooks(source, '夜讀'),
       );
 
       expect(urls, ['$baseUrl/search']);
     });
+
+    // 書單是空的、照詳情頁解析時寫出來（Legado BookList.kt），詳情頁的規則
+    // 接著出錯也要寫：紀錄當下送回來，不跟著結果（2026-11-13 酷匠阅读）。
+    test('what the engine notes comes back even when the task fails', () async {
+      source.searchUrl = '$baseUrl/empty';
+      source.ruleBookInfo!.name = '@js:JSON.parse(result).name';
+      final trail = <String>[];
+
+      await expectLater(
+        withSourceDebugLog(
+          onRequest: (url) => trail.add('請求 $url'),
+          onNote: trail.add,
+          body: () => BookSourceService().searchBooks(source, '夜讀'),
+        ),
+        throwsA(anything),
+      );
+
+      expect(trail, ['請求 $baseUrl/empty', '└列表為空,按詳情頁解析']);
+    }, skip: quickJsUnavailableReason());
 
     // 規則 JS 自己的請求在網路 isolate 送出（ADR 0034），網址跟著結果回來。
     test('the URLs rule JS sent are listed too', () async {
@@ -1160,9 +1182,10 @@ void main() {
       final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
       final urls = <String>[];
 
-      await withSourceRequestLog(
-        urls.add,
-        () => BookSourceService().getContent(
+      await withSourceDebugLog(
+        onRequest: urls.add,
+        onNote: (_) {},
+        body: () => BookSourceService().getContent(
           source,
           book,
           BookChapter(title: '第一章', url: '$baseUrl/c/1', bookUrl: book.bookUrl),

@@ -23,6 +23,7 @@ import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/utils/source_progress.dart';
 
 import 'isolate_channel.dart';
 
@@ -99,6 +100,9 @@ abstract final class SourceIsolate {
   /// [affinity] 相同的工作送到同一條：同一個書源的工作共用那條的 jsLib 與
   /// 規則引擎快取；下載一輪的書與章節只存在規劃它的那一條。沒給時輪流送。
   ///
+  /// [onProgress] 收工作一邊跑一邊交回的紀錄（[reportSourceProgress]），在
+  /// 呼叫 [run] 的 Zone 裡執行，一筆一筆照順序，都在結果之前。
+  ///
   /// [task] 連同它捕捉的變數會複製到書源 isolate，要在只捕捉書源、書籍與
   /// 字串這類資料的地方建立（例如頂層函式），不能捕捉頁面、回呼或資料庫
   /// 連線。
@@ -106,6 +110,7 @@ abstract final class SourceIsolate {
     Future<R> Function(CancelToken cancelToken) task, {
     String? affinity,
     CancelToken? cancelToken,
+    void Function(Object entry)? onProgress,
   }) async {
     final workers = _workers;
     final worker = workers == null
@@ -116,14 +121,18 @@ abstract final class SourceIsolate {
       // 測試多半不開書源 isolate；照樣試送一次，捕捉了送不出去的東西時
       // 在測試裡就失敗，不等到 App 裡才改回主 isolate。
       assert(_sendable(task));
-      return _runCancellable(task, cancelToken);
+      return _runCancellable(task, cancelToken, progress: _bound(onProgress));
     }
     try {
-      return await worker.run(task, cancelToken: cancelToken);
+      return await worker.run(
+        task,
+        cancelToken: cancelToken,
+        onProgress: onProgress,
+      );
     } on _TaskNotSendable catch (e) {
       assert(_sendable(task));
       AppLog.e('書源工作送不進書源 isolate，改在主 isolate 執行: ${e.error}', error: e.error);
-      return _runCancellable(task, cancelToken);
+      return _runCancellable(task, cancelToken, progress: _bound(onProgress));
     }
   }
 
@@ -356,18 +365,24 @@ final class SourceWorker {
   }
 
   /// 在 worker 執行 [task] 並傳回結果。[task] 拿到的 [CancelToken] 屬於
-  /// worker，[cancelToken] 取消時跟著取消。
+  /// worker，[cancelToken] 取消時跟著取消。[onProgress] 同
+  /// [SourceIsolate.run]：worker 停住等網路時，網路 isolate 記下的紀錄也當下
+  /// 交過來；工作結束（或 worker 被結束）後才到的不交。
   Future<R> run<R>(
     Future<R> Function(CancelToken cancelToken) task, {
     CancelToken? cancelToken,
+    void Function(Object entry)? onProgress,
   }) async {
     final id = _nextTaskId++;
     final Future<Object?> result;
     try {
-      result = _channel.request(_RunTask(id, task));
+      result = _channel.request(
+        _RunTask(id, task, progress: onProgress != null),
+      );
     } on ArgumentError catch (e) {
       throw _TaskNotSendable(e);
     }
+    if (_bound(onProgress) case final progress?) _progress[id] = progress;
     unawaited(
       cancelToken?.whenCancel.then((_) {
         if (_killed) return;
@@ -383,8 +398,12 @@ final class SourceWorker {
       return await result as R;
     } finally {
       _cancelledTasks.remove(id);
+      _progress.remove(id);
     }
   }
+
+  /// 還在跑、要一邊交回紀錄的工作的 `onProgress`。
+  final Map<int, void Function(Object entry)> _progress = {};
 
   /// 已經取消、還沒跑完的工作。worker 從停住醒來時還沒收到取消的通知
   /// （它在停住時排在後面），接著同步再發的要等的呼叫由這裡擋下。
@@ -407,6 +426,7 @@ final class SourceWorker {
     }
     _tickets.clear();
     _blocked?.cancel();
+    _progress.clear();
     // 停在原生的等待裡時 isolate 結束不了；關掉信箱叫醒它。
     _replies.close();
     _channel.close(error);
@@ -429,7 +449,12 @@ final class SourceWorker {
       if (call.cancelled) throw _cancelled();
       call.io = io;
       final reply = await io._channel.request(
-        _Perform(call.id, block.task, requestLog: block.requestLog),
+        _Perform(
+          call.id,
+          block.task,
+          requestLog: block.requestLog,
+          progress: _progress.containsKey(block.taskId),
+        ),
       );
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
     } catch (error) {
@@ -554,6 +579,16 @@ final class SourceWorker {
     switch (notice) {
       case final _Block block:
         unawaited(from._serveBlock(block));
+      case _Progress(:final taskId, :final entry):
+        from._progress[taskId]?.call(entry);
+      case _PerformProgress(:final callId, :final entry):
+        // 網路 isolate 替停住的 worker 做事時記下的：交給停住的那個工作。
+        for (final worker in _live) {
+          final blocked = worker._blocked;
+          if (blocked == null || blocked.id != callId) continue;
+          worker._progress[blocked.taskId]?.call(entry);
+          return;
+        }
       case _Log(
         :final message,
         :final error,
@@ -628,17 +663,28 @@ final Object _taskIdZoneKey = Object();
 
 /// 在記著 [cancelToken] 的 Zone 裡執行 [task]。沒給時沿用外層工作的：書源
 /// 工作裡又叫 [SourceIsolate.run] 的（原地執行），跟著外層一起取消。
+/// [progress] 收 [task] 交回的紀錄；沒給時交給外層收的人。
 Future<R> _runCancellable<R>(
   Future<R> Function(CancelToken cancelToken) task,
   CancelToken? cancelToken, {
   int? taskId,
+  void Function(Object entry)? progress,
 }) {
   final token = cancelToken ?? currentSourceCancelToken ?? CancelToken();
   return runZoned(
     () => task(token),
-    zoneValues: {_cancelTokenZoneKey: token, _taskIdZoneKey: ?taskId},
+    zoneValues: {
+      _cancelTokenZoneKey: token,
+      _taskIdZoneKey: ?taskId,
+      sourceProgressZoneKey: ?progress,
+    },
   );
 }
+
+/// [onProgress] 改成在現在這個 Zone 裡執行：收紀錄的人寫書源除錯紀錄時要在
+/// 那一輪除錯的 Zone 裡，自己再交出去的也交給外層收的人，不交回給自己。
+void Function(Object entry)? _bound(void Function(Object entry)? onProgress) =>
+    onProgress == null ? null : Zone.current.bindUnaryCallback(onProgress);
 
 /// 快取裡存的值理論上都是字串；送不過去的不同步，只記下來。
 void _tryNotify(IsolateChannel channel, Object notice) {
@@ -660,20 +706,39 @@ void _main(SendPort mainPort) {
     mainPort,
     onRequest: (request) async {
       switch (request) {
-        case _RunTask(:final id, :final task):
+        case _RunTask(:final id, :final task, :final progress):
           final cancelToken = CancelToken();
           tasks[id] = cancelToken;
           try {
-            return await _runCancellable(task, cancelToken, taskId: id);
+            return await _runCancellable(
+              task,
+              cancelToken,
+              taskId: id,
+              progress: progress
+                  ? (entry) => channel.notify(_Progress(id, entry))
+                  : null,
+            );
           } finally {
             tasks.remove(id);
           }
-        case _Perform(:final id, :final task, :final requestLog):
+        case _Perform(
+          :final id,
+          :final task,
+          :final requestLog,
+          :final progress,
+        ):
           final cancelToken = CancelToken();
           performs[id] = cancelToken;
           try {
             return TransferableTypedData.fromList([
-              await _perform(task, cancelToken, requestLog: requestLog),
+              await _perform(
+                task,
+                cancelToken,
+                requestLog: requestLog,
+                progress: progress
+                    ? (entry) => channel.notify(_PerformProgress(id, entry))
+                    : null,
+              ),
             ]);
           } finally {
             performs.remove(id);
@@ -766,16 +831,19 @@ Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
 
 /// 網路 isolate 做停住的 worker 交來的 [task]，結果編成一段位元組
 /// （[_Outcome]）。取消時 [task] 裡的請求跟著停。
+/// [progress] 收一邊跑一邊交回的紀錄（停住的工作要的話）。
 Future<Uint8List> _perform(
   Future<Object?> Function() task,
   CancelToken cancelToken, {
   required RequestLogSettings? requestLog,
+  required void Function(Object entry)? progress,
 }) async {
   final log = requestLog == null ? null : RequestLog.from(requestLog);
   try {
     final value = await _runCancellable(
       (_) => log == null ? task() : log.run(task),
       cancelToken,
+      progress: progress,
     );
     return _Outcome.success(value, log);
   } catch (error) {
@@ -853,10 +921,29 @@ final class _Initialize {
 }
 
 final class _RunTask {
-  const _RunTask(this.id, this.task);
+  const _RunTask(this.id, this.task, {required this.progress});
 
   final int id;
   final Future<Object?> Function(CancelToken cancelToken) task;
+
+  /// 呼叫端要一邊收紀錄（[_Progress]）。
+  final bool progress;
+}
+
+/// worker 上的工作 [taskId] 交回的一筆紀錄（[reportSourceProgress]）。
+final class _Progress {
+  const _Progress(this.taskId, this.entry);
+
+  final int taskId;
+  final Object entry;
+}
+
+/// 網路 isolate 替停住的那一次呼叫 [callId]（[_Blocked.id]）記下的一筆紀錄。
+final class _PerformProgress {
+  const _PerformProgress(this.callId, this.entry);
+
+  final int callId;
+  final Object entry;
 }
 
 final class _CancelTask {
@@ -880,11 +967,19 @@ final class _Block {
 
 /// 主 isolate 請網路 isolate 做停住的 worker 交來的 [task]。
 final class _Perform {
-  const _Perform(this.id, this.task, {required this.requestLog});
+  const _Perform(
+    this.id,
+    this.task, {
+    required this.requestLog,
+    required this.progress,
+  });
 
   final int id;
   final Future<Object?> Function() task;
   final RequestLogSettings? requestLog;
+
+  /// 停住的工作要一邊收紀錄（[_PerformProgress]）。
+  final bool progress;
 }
 
 final class _CancelPerform {
