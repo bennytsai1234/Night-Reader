@@ -781,17 +781,17 @@ class ReaderV2ContentTransformer {
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
     final content = SemanticParagraphFormatter.repair(
       _applyRules(
-      bookName: bookName,
-      bookOrigin: bookOrigin,
-      chapterTitle: chapterTitle,
-      // 插圖不成段（[ReaderV2Content.fromRaw]），拿掉後只有插圖的行是空行。
-      rawContent: IllustrationMarkers.strip(
-        args['rawContent'] as String? ?? '',
-      ),
-      rules: rules,
-      titleRules: _titleRulesOf(rules, bookName, bookOrigin),
-      useReplaceRules: useReplaceRules,
-      reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
+        bookName: bookName,
+        bookOrigin: bookOrigin,
+        chapterTitle: chapterTitle,
+        // 插圖不成段（[ReaderV2Content.fromRaw]），拿掉後只有插圖的行是空行。
+        rawContent: IllustrationMarkers.strip(
+          args['rawContent'] as String? ?? '',
+        ),
+        rules: rules,
+        titleRules: _titleRulesOf(rules, bookName, bookOrigin),
+        useReplaceRules: useReplaceRules,
+        reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
       ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
     );
     // 排版整理逐行處理、不增減行，整理後是空白的行不成段。
@@ -862,14 +862,14 @@ class ReaderV2ContentTransformer {
     final content = normalizeTypography(
       SemanticParagraphFormatter.repair(
         _applyRules(
-        bookName: bookName,
-        bookOrigin: bookOrigin,
-        chapterTitle: chapterTitle,
-        rawContent: rawContent,
-        rules: rules,
-        titleRules: titleRules,
-        useReplaceRules: useReplaceRules,
-        reSegmentEnabled: reSegmentEnabled,
+          bookName: bookName,
+          bookOrigin: bookOrigin,
+          chapterTitle: chapterTitle,
+          rawContent: rawContent,
+          rules: rules,
+          titleRules: titleRules,
+          useReplaceRules: useReplaceRules,
+          reSegmentEnabled: reSegmentEnabled,
           onRule: onRule,
         ),
       ),
