@@ -15,7 +15,6 @@ import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
-import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
@@ -349,129 +348,6 @@ class WebBook {
     } finally {
       rule.dispose();
     }
-  }
-
-  /// 獲取正文內容 (對標 getContentAwait / BookContent.analyzeContent)
-  /// 支援 nextContentUrl 多頁正文自動翻頁、並發抓取
-  static Future<String> getContentAwait(
-    BookSource source,
-    Book book,
-    BookChapter chapter, {
-    String? nextChapterUrl,
-    int? pageConcurrency,
-    CancelToken? cancelToken,
-  }) async {
-    final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
-    final contentParts = <String>[];
-    final visitedUrls = <String>{};
-
-    // 1. 抓取首頁正文
-    visitedUrls.add(chapter.url);
-    final firstAnalyzeUrl = AnalyzeUrl(
-      chapter.url,
-      source: source,
-      ruleData: book,
-    );
-    var firstRes = await firstAnalyzeUrl.getStrResponse(
-      cancelToken: cancelToken,
-    );
-    firstRes = runLoginCheckJs(firstAnalyzeUrl, firstRes);
-    _checkRedirect(source, firstRes);
-
-    final firstResult = await ContentParser.parse(
-      source: source,
-      book: book,
-      chapter: chapter,
-      body: firstRes.body,
-      baseUrl: chapter.url,
-      redirectUrl: firstRes.url,
-      nextChapterUrl: nextChapterUrl,
-    );
-    LoginWall.checkContent(firstRes, firstResult.content);
-    if (firstResult.content.isNotEmpty) {
-      contentParts.add(firstResult.content);
-    }
-
-    if (firstResult.nextUrls.length > 1) {
-      // 多 nextUrl → 並發抓取 (對標 Android BookContent mapAsync)
-      final pending = firstResult.nextUrls
-          .where((u) => visitedUrls.add(u))
-          .toList();
-      final responses = await _fetchParallel(
-        pending,
-        source,
-        book,
-        allowPartial: false,
-        concurrency: effectivePageConcurrency,
-        cancelToken: cancelToken,
-      );
-      for (var i = 0; i < responses.length; i++) {
-        final res = responses[i];
-        if (res == null) continue;
-        final pageResult = await ContentParser.parse(
-          source: source,
-          book: book,
-          chapter: chapter,
-          body: res.body,
-          baseUrl: pending[i],
-          redirectUrl: res.url,
-          nextChapterUrl: nextChapterUrl,
-        );
-        LoginWall.checkContent(res, pageResult.content);
-        if (pageResult.content.isNotEmpty) {
-          contentParts.add(pageResult.content);
-        }
-      }
-    } else {
-      // 單 nextUrl → daisy chain 循序抓取，同 Legado 不限頁數：抓到沒有
-      // 下一頁、下一頁抓過了，或下一頁是下一章（ContentParser 濾掉）為止。
-      String? currentUrl = firstResult.nextUrls.isNotEmpty
-          ? firstResult.nextUrls.first
-          : null;
-      while (currentUrl != null) {
-        if (!visitedUrls.add(currentUrl)) break;
-
-        final analyzeUrl = AnalyzeUrl(
-          currentUrl,
-          source: source,
-          ruleData: book,
-        );
-        var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-        res = runLoginCheckJs(analyzeUrl, res);
-        _checkRedirect(source, res);
-
-        final result = await ContentParser.parse(
-          source: source,
-          book: book,
-          chapter: chapter,
-          body: res.body,
-          baseUrl: currentUrl,
-          redirectUrl: res.url,
-          nextChapterUrl: nextChapterUrl,
-        );
-        LoginWall.checkContent(res, result.content);
-        if (result.content.isNotEmpty) {
-          contentParts.add(result.content);
-        }
-        currentUrl = result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
-      }
-    }
-
-    // 合併並執行最終 replaceRegex 清理 (對標 Android BookContent 尾段)
-    final joined = contentParts.join('\n');
-    final content = await ContentParser.finalizeContent(
-      source: source,
-      book: book,
-      chapter: chapter,
-      contentStr: joined,
-      // 同 Legado BookContent 尾段：用第一頁的規則，baseUrl 是章節網址、
-      // redirectUrl 是第一頁轉址後的網址，不是最後一頁的。
-      baseUrl: chapter.url,
-      redirectUrl: firstRes.url,
-    );
-    // 每一頁都讀得到，套完替換規則卻只剩一句登入提示。
-    LoginWall.checkContent(null, content);
-    return content;
   }
 
   /// 重定向檢查 (對標 Android WebBook.checkRedirect)
