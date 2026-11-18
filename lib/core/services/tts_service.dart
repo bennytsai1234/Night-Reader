@@ -168,22 +168,11 @@ class TTSService extends ChangeNotifier {
     }
   }
 
-  /// 開 App 的進場在底色時等這個（`LaunchEntrance.prepared`）：朗讀引擎開
-  /// 好、設定套完，最多等 [launchWait]。`flutter_tts` 的呼叫在外掛自己的執行
-  /// 緒上做（`third_party/flutter_tts/PATCHES.md` nightreader.5）；系統通知欄
-  /// 的播放控制（[SystemPlayback.start]）仍在 Android 主執行緒，也就是 Flutter
-  /// 畫畫面的執行緒。2026-10-25 外掛還在主執行緒時，不等的話這些工作落在骨架
-  /// 長出的後半段，畫面停約 0.2 秒；等手機的系統追蹤確認主執行緒上剩下的夠
-  /// 輕，才拿掉這個等待（PLAN.md）。
-  Future<void> ready() => init().timeout(launchWait, onTimeout: () {});
-
-  /// 開 App 最多等朗讀引擎多久：使用者的手機上從開始連線到系統回應約 1.1
-  /// 秒，留一倍餘裕。沒有朗讀引擎或系統一直不回應的手機，超過就照常進場，
-  /// 引擎之後自己開好。
-  static const Duration launchWait = Duration(seconds: 2);
-
   /// 開朗讀引擎（系統通知欄的播放控制與 flutter_tts）。開 App 時就開始
-  /// （`configureDependencies`），進場等它（[ready]）。
+  /// （`configureDependencies`）。進場只等播放控制（[SystemPlayback.ready]），
+  /// 不等引擎：`flutter_tts` 的呼叫在外掛自己的執行緒上做
+  /// （`third_party/flutter_tts/PATCHES.md` nightreader.5），系統的朗讀服務
+  /// 約 1 秒後才回應，回應時不佔 Flutter 畫畫面的主執行緒。
   Future<void> init() {
     if (_isInitialized) return Future<void>.value();
     final pending = _initializationFuture;

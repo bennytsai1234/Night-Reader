@@ -133,6 +133,16 @@ class SystemPlayback {
     );
   }
 
+  /// 開 App 的進場在底色時等這個（`LaunchEntrance.prepared`），最多等
+  /// [launchWait]：開媒體工作階段要在 Android 主執行緒建播放服務（使用者的
+  /// 手機上一段 6～7ms），也就是 Flutter 畫畫面的執行緒，放在骨架長出前的
+  /// 靜止時做完（ADR 0018）。朗讀引擎不等：`flutter_tts` 的呼叫在外掛自己的
+  /// 執行緒上（`third_party/flutter_tts/PATCHES.md` nightreader.5）。
+  Future<void> ready() => start().timeout(launchWait, onTimeout: () {});
+
+  /// 開 App 最多等媒體工作階段多久；系統一直不回應時照常進場。
+  static const Duration launchWait = Duration(seconds: 2);
+
   /// 向系統開媒體工作階段。開不起來時只少了系統播放資訊，播放照常；下次
   /// 呼叫再試。
   Future<void> start() {
