@@ -8,6 +8,9 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 import '../source_debug_page.dart';
 import 'source_check_status_bar.dart' show sourceCheckPausedText;
@@ -207,139 +210,121 @@ class SourceManagerDialogs {
       }
     }
 
-    await showStatefulAppAlert<void>(
+    await AppBottomSheet.showCustom<void>(
       context: context,
-      fieldTexts: [initial.keyword, initial.timeoutSeconds.toString()],
-      builder: (dialogContext, setState, fields) {
-        final [keywordController, timeoutController] = fields;
-        final chrome = AppChrome.of(dialogContext);
-        return AppAlert<bool>(
-          title: checkAll
-              ? '校驗所有書源（全部 $targetCount 項）'
-              : '校驗選中書源 ($targetCount)',
-          onAction: (confirmed) {
-            if (confirmed) {
-              start(
-                dialogContext,
-                setState,
-                keywordController,
-                timeoutController,
-              );
-            } else {
-              Navigator.pop(dialogContext);
-            }
-          },
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AlertTextField(
-                controller: keywordController,
-                labelText: '預設關鍵字',
-                // 底部的設定摘要含關鍵字，輸入時跟著更新。
-                onChanged: (_) => setState(() {}),
+      isScrollControlled: true,
+      builder: (sheetContext) => TextControllersScope(
+        initialTexts: [initial.keyword, initial.timeoutSeconds.toString()],
+        builder: (sheetContext, fields) => StatefulBuilder(
+          builder: (sheetContext, setState) {
+            final [keywordController, timeoutController] = fields;
+            final summary = SourceCheckConfig(
+              keyword: keywordController.text,
+              timeoutSeconds:
+                  int.tryParse(timeoutController.text) ??
+                  initial.timeoutSeconds,
+              checkSearch: checkSearch,
+              checkDiscovery: checkDiscovery,
+              checkInfo: checkInfo,
+              checkCategory: checkCategory,
+              checkContent: checkContent,
+            ).normalized().summary;
+            return AppBottomSheet(
+              title: checkAll
+                  ? '校驗全部 $targetCount 個書源'
+                  : '校驗選中的 $targetCount 個書源',
+              trailing: GlassTextButton(
+                label: '開始',
+                emphasized: true,
+                onPressed: () => start(
+                  sheetContext,
+                  setState,
+                  keywordController,
+                  timeoutController,
+                ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              AlertTextField(
-                controller: timeoutController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                labelText: '單步超時（秒）',
-                hintText: '至少 1 秒',
-                errorText: timeoutError,
-                onChanged: (_) => setState(() => timeoutError = null),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              AlertCheckRow(
-                value: checkSearch,
-                title: '校驗搜尋',
-                onChanged: (value) {
-                  setState(() {
-                    checkSearch = value;
-                    if (!checkSearch && !checkDiscovery) {
-                      checkDiscovery = true;
-                    }
-                  });
-                },
-              ),
-              AlertCheckRow(
-                value: checkDiscovery,
-                title: '校驗發現',
-                onChanged: (value) {
-                  setState(() {
-                    checkDiscovery = value;
-                    if (!checkSearch && !checkDiscovery) {
-                      checkSearch = true;
-                    }
-                  });
-                },
-              ),
-              AlertCheckRow(
-                value: checkInfo,
-                title: '校驗詳情',
-                onChanged: (value) {
-                  setState(() {
-                    checkInfo = value;
-                    if (!checkInfo) {
-                      checkCategory = false;
-                      checkContent = false;
-                    }
-                  });
-                },
-              ),
-              AlertCheckRow(
-                value: checkCategory,
-                title: '校驗目錄',
-                onChanged: checkInfo
-                    ? (value) {
-                        setState(() {
+              children: [
+                GroupedSection(
+                  margin: EdgeInsets.zero,
+                  topGap: AppSpacing.md,
+                  children: [
+                    GroupedTextFieldRow(
+                      label: '關鍵字',
+                      controller: keywordController,
+                      // 底下的設定摘要含關鍵字，輸入時跟著更新。
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    GroupedTextFieldRow(
+                      label: '單步超時',
+                      controller: timeoutController,
+                      keyboardType: TextInputType.number,
+                      hintText: '秒，至少 1',
+                      errorText: timeoutError,
+                      onChanged: (_) => setState(() => timeoutError = null),
+                    ),
+                  ],
+                ),
+                GroupedSection(
+                  margin: EdgeInsets.zero,
+                  header: '校驗項目',
+                  footer: summary,
+                  children: [
+                    // 搜尋與發現至少留一個。
+                    GroupedSwitchRow(
+                      title: '搜尋',
+                      value: checkSearch,
+                      onChanged: (value) => setState(() {
+                        checkSearch = value;
+                        if (!checkSearch && !checkDiscovery) {
+                          checkDiscovery = true;
+                        }
+                      }),
+                    ),
+                    GroupedSwitchRow(
+                      title: '發現',
+                      value: checkDiscovery,
+                      onChanged: (value) => setState(() {
+                        checkDiscovery = value;
+                        if (!checkSearch && !checkDiscovery) {
+                          checkSearch = true;
+                        }
+                      }),
+                    ),
+                    GroupedSwitchRow(
+                      title: '詳情',
+                      value: checkInfo,
+                      onChanged: (value) => setState(() {
+                        checkInfo = value;
+                        if (!checkInfo) {
+                          checkCategory = false;
+                          checkContent = false;
+                        }
+                      }),
+                    ),
+                    // 依賴上一層的開關，上一層關掉時藏起來（ADR 0009）。
+                    if (checkInfo)
+                      GroupedSwitchRow(
+                        title: '目錄',
+                        value: checkCategory,
+                        onChanged: (value) => setState(() {
                           checkCategory = value;
-                          if (!checkCategory) {
-                            checkContent = false;
-                          }
-                        });
-                      }
-                    : null,
-              ),
-              AlertCheckRow(
-                value: checkContent,
-                title: '校驗正文',
-                onChanged: checkInfo && checkCategory
-                    ? (value) => setState(() => checkContent = value)
-                    : null,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: chrome.groupedBackground,
-                  borderRadius: AppRadius.cardMd,
+                          if (!checkCategory) checkContent = false;
+                        }),
+                      ),
+                    if (checkInfo && checkCategory)
+                      GroupedSwitchRow(
+                        title: '正文',
+                        value: checkContent,
+                        onChanged: (value) =>
+                            setState(() => checkContent = value),
+                      ),
+                  ],
                 ),
-                child: UiText(
-                  SourceCheckConfig(
-                    keyword: keywordController.text,
-                    timeoutSeconds:
-                        int.tryParse(timeoutController.text) ??
-                        initial.timeoutSeconds,
-                    checkSearch: checkSearch,
-                    checkDiscovery: checkDiscovery,
-                    checkInfo: checkInfo,
-                    checkCategory: checkCategory,
-                    checkContent: checkContent,
-                  ).normalized().summary,
-                  style: AppTextStyles.bodySm.copyWith(
-                    color: chrome.sectionText,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: const [
-            AppAlertAction(label: '取消', value: false),
-            AppAlertAction(label: '開始校驗', value: true, isDefault: true),
-          ],
-        );
-      },
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -446,8 +431,9 @@ class SourceManagerDialogs {
   }
 }
 
-/// 問要刪帶哪些標籤的書源：類別、校驗標記、自己的分組各一段，每個標籤
-/// 寫有幾個書源，預設都不勾；回傳勾選的標籤，取消時是 null。
+/// 問要刪帶哪些標籤的書源：底部面板裡類別、校驗標記、自己的分組各一組，
+/// 每個標籤寫有幾個書源，預設都不勾；按頁首的「刪除 N 個」再確認一次。
+/// 回傳勾選的標籤，取消時是 null。
 Future<Set<SourceTag>?> pickSourceTagsToDelete(
   BuildContext context,
   SourceManagerProvider provider,
@@ -478,61 +464,64 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
     ),
   ];
   final selected = <SourceTag>{};
-  return showStatefulAppAlert<Set<SourceTag>>(
+  return AppBottomSheet.showCustom<Set<SourceTag>>(
     context: context,
-    builder: (dialogContext, setState, _) {
-      final count = provider.countSourcesWithTags(selected);
-      final sectionStyle = AppTextStyles.bodySm.copyWith(
-        color: AppChrome.of(dialogContext).sectionText,
-      );
-      return AppAlert<bool>(
-        title: '按標籤刪除',
-        message: '帶任一個標籤的書源都會刪除，無法復原。',
-        onAction: (confirmed) => Navigator.pop(
-          dialogContext,
-          confirmed ? Set<SourceTag>.of(selected) : null,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    isScrollControlled: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setState) {
+        final count = provider.countSourcesWithTags(selected);
+        Future<void> confirm() async {
+          final ok = await showAppConfirm(
+            context: sheetContext,
+            title: '刪除 $count 個書源？',
+            message: '帶任一個勾選標籤的書源都會刪除。',
+            confirmLabel: '刪除',
+            destructive: true,
+            irreversible: true,
+          );
+          if (ok && sheetContext.mounted) {
+            Navigator.pop(sheetContext, Set<SourceTag>.of(selected));
+          }
+        }
+
+        return AppBottomSheet(
+          title: '按標籤刪除',
+          trailing: GlassTextButton(
+            label: count == 0 ? '刪除' : '刪除 $count 個',
+            destructive: true,
+            onPressed: count == 0 ? null : confirm,
+          ),
           children: [
             for (final (title, rows) in sections)
-              if (rows.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: UiText(title, style: sectionStyle),
-                ),
-                for (final row in rows)
-                  AlertCheckRow(
-                    // 書源類型與數量是介面字，分組名稱照原文（ADR 0066）。
-                    title: switch (row.tag.kind) {
-                      final kind? => context.ui(
-                        '${kind.sourceLabel}：${row.count} 個',
+              if (rows.isNotEmpty)
+                GroupedSection(
+                  margin: EdgeInsets.zero,
+                  header: title,
+                  children: [
+                    for (final row in rows)
+                      GroupedCheckRow(
+                        // 書源類型與數量是介面字，分組名稱照原文（ADR 0066）。
+                        title: switch (row.tag.kind) {
+                          final kind? => sheetContext.ui(
+                            '${kind.sourceLabel}：${row.count} 個',
+                          ),
+                          null =>
+                            '${row.tag.group}${sheetContext.ui('：${row.count} 個')}',
+                        },
+                        translate: false,
+                        exclusive: false,
+                        selected: selected.contains(row.tag),
+                        onTap: () => setState(
+                          () => selected.contains(row.tag)
+                              ? selected.remove(row.tag)
+                              : selected.add(row.tag),
+                        ),
                       ),
-                      null =>
-                        '${row.tag.group}${context.ui('：${row.count} 個')}',
-                    },
-                    translateTitle: false,
-                    value: selected.contains(row.tag),
-                    onChanged: (value) => setState(
-                      () => value
-                          ? selected.add(row.tag)
-                          : selected.remove(row.tag),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
           ],
-        ),
-        actions: [
-          const AppAlertAction(label: '取消', value: false),
-          AppAlertAction(
-            label: count == 0 ? '刪除' : '刪除 $count 個',
-            value: true,
-            destructive: true,
-            enabled: count > 0,
-          ),
-        ],
-      );
-    },
+        );
+      },
+    ),
   );
 }

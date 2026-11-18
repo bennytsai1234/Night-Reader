@@ -197,6 +197,7 @@ class AppBottomSheet extends StatelessWidget {
     required WidgetBuilder builder,
     bool isScrollControlled = false,
     bool useSafeArea = false,
+    bool isDismissible = true,
     bool? showDragHandle,
     Color? backgroundColor,
     Color? barrierColor,
@@ -220,6 +221,9 @@ class AppBottomSheet extends StatelessWidget {
       barrierColor: barrierColor ?? AppChrome.of(context).barrier,
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
+      // 不能點外面關掉時也不能往下拉掉（例如還沒儲存的表單）。
+      isDismissible: isDismissible,
+      enableDrag: isDismissible,
       showDragHandle: showDragHandle,
       backgroundColor:
           backgroundColor ??

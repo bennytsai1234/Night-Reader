@@ -1074,65 +1074,41 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
+  /// 編輯書籍資訊：底部面板裡三組欄位，頁首右邊「儲存」。點面板外面或往下
+  /// 拉不會關掉，免得改到一半的內容不見。
   void _showEditBookInfoDialog(BuildContext context, BookDetailProvider p) {
     var saving = false;
     String? errorMessage;
-    showStatefulAppAlert<void>(
+    AppBottomSheet.showCustom<void>(
       context: context,
-      barrierDismissible: false,
-      fieldTexts: [
-        p.book.name,
-        p.book.author,
-        // 預填畫面上看到的內容（使用者改過的優先）。
-        p.book.getDisplayIntro() ?? '',
-        p.book.customCoverUrl ?? p.book.coverUrl ?? '',
-        p.book.kind ?? '',
-        p.book.customTag ?? '',
-        p.book.originName,
-        p.book.tocUrl,
-      ],
-      builder: (ctx, setDialogState, fields) {
-        final [n, a, i, c, k, tag, sourceName, toc] = fields;
-        GroupedTextFieldRow field(
-          String label,
-          TextEditingController controller, {
-          int maxLines = 1,
-        }) => GroupedTextFieldRow(
-          label: label,
-          controller: controller,
-          maxLines: maxLines,
-          minLines: 1,
-        );
-        return IgnorePointer(
-          ignoring: saving,
-          child: AppAlert<bool>(
-            title: '編輯',
-            message: errorMessage,
-            content: _fieldCard(ctx, [
-              field('書名', n),
-              field('作者', a),
-              field('封面', c),
-              field('分類', k),
-              field('自訂標籤', tag),
-              field('來源名稱', sourceName),
-              field('目錄 URL', toc),
-              field('簡介', i, maxLines: 3),
-            ]),
-            actions: [
-              AppAlertAction(label: '取消', value: false, enabled: !saving),
-              AppAlertAction(
-                label: saving ? '儲存中…' : '儲存',
-                value: true,
-                isDefault: true,
-                enabled: !saving,
-              ),
-            ],
-            onAction: (save) async {
-              if (!save) {
-                Navigator.pop(ctx);
-                return;
-              }
-              setDialogState(() {
+      isScrollControlled: true,
+      isDismissible: false,
+      builder: (ctx) => TextControllersScope(
+        initialTexts: [
+          p.book.name,
+          p.book.author,
+          // 預填畫面上看到的內容（使用者改過的優先）。
+          p.book.getDisplayIntro() ?? '',
+          p.book.customCoverUrl ?? p.book.coverUrl ?? '',
+          p.book.kind ?? '',
+          p.book.customTag ?? '',
+          p.book.originName,
+          p.book.tocUrl,
+        ],
+        builder: (ctx, fields) => StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final [n, a, i, c, k, tag, sourceName, toc] = fields;
+            GroupedTextFieldRow field(
+              String label,
+              TextEditingController controller,
+            ) => GroupedTextFieldRow(
+              label: label,
+              controller: controller,
+              maxLines: 1,
+              minLines: 1,
+            );
+            Future<void> save() async {
+              setSheetState(() {
                 saving = true;
                 errorMessage = null;
               });
@@ -1151,14 +1127,60 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 Navigator.pop(ctx);
                 return;
               }
-              setDialogState(() {
+              setSheetState(() {
                 saving = false;
                 errorMessage = result.message;
               });
-            },
-          ),
-        );
-      },
+            }
+
+            return IgnorePointer(
+              ignoring: saving,
+              child: AppBottomSheet(
+                title: '編輯書籍資訊',
+                showDragHandle: false,
+                trailing: GlassTextButton(
+                  label: saving ? '儲存中…' : '儲存',
+                  emphasized: true,
+                  onPressed: saving ? null : save,
+                ),
+                children: [
+                  GroupedSection(
+                    margin: EdgeInsets.zero,
+                    topGap: AppSpacing.md,
+                    footer: errorMessage,
+                    children: [
+                      field('書名', n),
+                      field('作者', a),
+                      field('分類', k),
+                      field('自訂標籤', tag),
+                    ],
+                  ),
+                  GroupedSection(
+                    margin: EdgeInsets.zero,
+                    header: '來源',
+                    children: [
+                      field('封面', c),
+                      field('來源名稱', sourceName),
+                      field('目錄 URL', toc),
+                    ],
+                  ),
+                  GroupedSection(
+                    margin: EdgeInsets.zero,
+                    header: '簡介',
+                    children: [
+                      GroupedTextFieldRow(
+                        controller: i,
+                        minLines: 3,
+                        maxLines: 8,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 

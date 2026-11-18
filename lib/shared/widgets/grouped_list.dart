@@ -1218,11 +1218,15 @@ class GroupedCheckRow extends StatelessWidget
     required this.onTap,
     this.enabled = true,
     this.translate = true,
+    this.exclusive = true,
   });
 
   final String title;
   final String? subtitle;
   final Widget? leading;
+
+  /// 單選（一組裡只勾一個）；可複選的清單給 false。
+  final bool exclusive;
 
   /// 標題與副標是書源名稱、網址這類資料時給 false，不跟介面語言轉換
   /// （ADR 0066）。
@@ -1267,8 +1271,9 @@ class GroupedCheckRow extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      selected: selected,
-      inMutuallyExclusiveGroup: true,
+      selected: exclusive ? selected : null,
+      checked: exclusive ? null : selected,
+      inMutuallyExclusiveGroup: exclusive,
       child: _row(context),
     );
   }

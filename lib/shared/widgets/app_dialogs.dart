@@ -429,7 +429,6 @@ class AlertTextField extends StatelessWidget {
     super.key,
     required this.controller,
     this.hintText,
-    this.labelText,
     this.errorText,
     this.onChanged,
     this.autofocus = false,
@@ -440,7 +439,6 @@ class AlertTextField extends StatelessWidget {
 
   final TextEditingController controller;
   final String? hintText;
-  final String? labelText;
   final String? errorText;
   final ValueChanged<String>? onChanged;
   final bool autofocus;
@@ -472,7 +470,6 @@ class AlertTextField extends StatelessWidget {
         filled: true,
         fillColor: chrome.groupedBackground,
         hintText: UiLanguageText.convertNullable(context, hintText),
-        labelText: UiLanguageText.convertNullable(context, labelText),
         errorText: UiLanguageText.convertNullable(context, errorText),
         hintStyle: AppTextStyles.bodyBase.copyWith(
           height: 1.3,
@@ -493,83 +490,6 @@ class AlertTextField extends StatelessWidget {
         focusedBorder: border,
         errorBorder: border,
         focusedErrorBorder: border,
-      ),
-    );
-  }
-}
-
-/// 提示框內的多選列：標題、附註（只放勾選後的後果，例如會覆蓋本機資料）與右側勾選圈。
-class AlertCheckRow extends StatelessWidget {
-  const AlertCheckRow({
-    super.key,
-    required this.title,
-    this.subtitle,
-    required this.value,
-    required this.onChanged,
-    this.translateTitle = true,
-  });
-
-  final String title;
-  final String? subtitle;
-  final bool value;
-
-  /// [title] 是分組名稱這類資料時給 false（ADR 0066）。
-  final bool translateTitle;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chrome = AppChrome.of(context);
-    final enabled = onChanged != null;
-    return Semantics(
-      checked: value,
-      enabled: enabled,
-      child: InkWell(
-        onTap: enabled ? () => onChanged!(!value) : null,
-        borderRadius: AppRadius.cardSm,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.45,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      UiText(
-                        title,
-                        translate: translateTitle,
-                        style: AppTextStyles.bodyBase.copyWith(
-                          height: 1.3,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                      if (subtitle != null)
-                        UiText(
-                          subtitle!,
-                          style: AppTextStyles.bodySm.copyWith(
-                            height: 1.3,
-                            color: chrome.sectionText,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Icon(
-                  value
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 22,
-                  color: value ? scheme.primary : chrome.sectionText,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
