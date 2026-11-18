@@ -198,7 +198,7 @@ void main() {
         });
         // 多選的標題列只有「全選」與「完成」；批次停用、啟用的工具列在程式裡沒有接上，這裡不列。
         await step('多選：全選', () => tester.tap(find.text('全選')));
-        await step('多選：取消全選', () => tester.tap(find.text('取消全選')));
+        await step('多選：全不選', () => tester.tap(find.text('全不選')));
         await step('完成多選', () => tester.tap(find.text('完成')));
 
         // 點一筆進編輯頁（只看不存），返回。
