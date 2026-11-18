@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/core/ai_find/ai_find_prompt.dart';
 import 'package:night_reader/core/ai_find/ai_find_session.dart';
+import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_settings.dart';
 import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -21,7 +22,7 @@ import 'package:night_reader/features/search/widgets/search_result_item.dart';
 import 'package:night_reader/features/source_manager/ai_repair/ai_repair_settings_page.dart';
 import 'package:night_reader/features/source_manager/ai_repair/repair_runs.dart';
 import 'package:night_reader/features/source_manager/ai_repair/source_repair_page.dart'
-    show aiRepairStepIcon;
+    show aiRepairStepIcon, aiStepsHistory;
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -68,7 +69,8 @@ String aiFindTokens(int tokens) => tokens < 10000
     ? '$tokens token'
     : '${(tokens / 10000).toStringAsFixed(1)} 萬 token';
 
-/// AI 找書頁：開始前填描述與深度；開始後一輪一列，做完列推薦與 AI 的說明
+/// AI 找書頁：開始前填描述與深度；開始後寫現在在做的事、過程收在「經過」，
+/// 做完列推薦與 AI 的說明
 /// （docs/design/screens.md「AI 找書」）。給了 [record] 是「過去的找書」的
 /// 一次報告。
 class AiFindPage extends StatefulWidget {
@@ -122,6 +124,9 @@ class _AiFindPageState extends State<AiFindPage> {
   List<String> _avoid = const [];
   AiService? _service;
   bool _starting = false;
+
+  /// 「經過」展開著：每次進這一頁都是收起的。
+  bool _historyOpen = false;
 
   @override
   void initState() {
@@ -490,51 +495,71 @@ class _AiFindPageState extends State<AiFindPage> {
     ),
   ];
 
-  /// 進行中與暫停中（docs/design/screens.md「AI 找書」）：最後一張卡片兩列，
-  /// 做著時「暫停｜結束」，暫停中「繼續｜結束」，輪次最後多一列「已暫停」。
+  /// 進行中與暫停中（docs/design/screens.md「AI 找書」）：第一張卡片是描述、
+  /// 現在在做的事（暫停中是「已暫停」）與用量，問過的輪收在「經過」；最後一張
+  /// 卡片兩列，做著時「暫停｜結束」，暫停中「繼續｜結束」。
   List<Widget> _running(
     BuildContext context,
     AiFindRun run,
     AiFindSession session,
-  ) => [
-    GroupedSection(
-      footer: _sentTo,
-      children: [
-        GroupedRow(
-          // 使用者自己寫的描述照原文（ADR 0066）。
-          translateTitle: false,
-          title: session.description,
-          subtitle: '深度：${session.depth.label}',
-          showChevron: false,
-          maxTitleLines: 3,
-        ),
-        for (final round in session.rounds)
+  ) {
+    final rounds = session.rounds;
+    // 暫停中做到一半的那一輪不留，問過的都算經過。
+    final past = run.isPaused || rounds.isEmpty
+        ? rounds
+        : rounds.sublist(0, rounds.length - 1);
+    final failed =
+        !run.isPaused && rounds.lastOrNull?.state == AiRepairStepState.failed;
+    final history = aiStepsHistory(
+      context,
+      steps: past,
+      expanded: _historyOpen,
+      onToggle: () => setState(() => _historyOpen = !_historyOpen),
+    );
+    return [
+      GroupedSection(
+        footer: _sentTo,
+        children: [
           GroupedRow(
-            leading: aiRepairStepIcon(context, round.state),
-            title: round.title,
-            subtitle: round.detail,
+            // 使用者自己寫的描述照原文（ADR 0066）。
+            translateTitle: false,
+            title: session.description,
+            subtitle: '深度：${session.depth.label}',
             showChevron: false,
+            maxTitleLines: 3,
           ),
-        if (run.isPaused)
-          GroupedRow(
-            leading: Icon(
-              Icons.pause_circle_rounded,
-              size: 22,
-              color: AppChrome.of(context).sectionText,
+          if (run.isPaused)
+            GroupedRow(
+              leading: Icon(
+                Icons.pause_circle_rounded,
+                size: 22,
+                color: AppChrome.of(context).sectionText,
+              ),
+              title: '已暫停',
+              subtitle: '按「繼續」接著問',
+              showChevron: false,
+            )
+          else
+            GroupedRow(
+              leading: aiRepairStepIcon(
+                context,
+                failed ? AiRepairStepState.failed : AiRepairStepState.running,
+              ),
+              title: session.now,
+              maxTitleLines: 3,
+              showChevron: false,
             ),
-            title: '已暫停',
-            subtitle: '按「繼續」從第 ${session.nextRound} 輪接著問',
+          GroupedRow(
+            title: 'AI 用量',
+            value: aiFindTokens(session.tokens),
             showChevron: false,
           ),
-        GroupedRow(
-          title: 'AI 用量',
-          value: aiFindTokens(session.tokens),
-          showChevron: false,
-        ),
-      ],
-    ),
-    GroupedSection(children: _controls(run, session)),
-  ];
+        ],
+      ),
+      ?history,
+      GroupedSection(children: _controls(run, session)),
+    ];
+  }
 
   List<Widget> _controls(AiFindRun run, AiFindSession session) {
     final ending = session.isStopped || run.isEnding;
@@ -584,9 +609,7 @@ class _AiFindPageState extends State<AiFindPage> {
           GroupedRow(
             translateTitle: false,
             title: record.description,
-            subtitle:
-                '深度：${depth.label} · ${record.rounds} 輪 · '
-                '${aiFindTokens(record.tokens)}',
+            subtitle: '深度：${depth.label} · ${aiFindTokens(record.tokens)}',
             showChevron: false,
             maxTitleLines: 3,
           ),

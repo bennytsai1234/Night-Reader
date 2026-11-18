@@ -98,12 +98,18 @@ void main() {
       ..stageTotal = 1;
     final working = batch.items.first;
     working.session = AiRepairSession(source: working.source, service: _service)
-      ..job.steps.add(AiRepairStep('第 2 輪', detail: 'AI 改了搜尋，試抓中…'));
+      ..job.steps.add(
+        AiRepairStep(
+          '第 2 輪',
+          detail: 'AI 改了搜尋，試抓中…',
+          kind: AiRepairStepKind.round,
+        ),
+      );
 
     await _pump(tester, batch);
 
     expect(find.text('正在修 · 1'), findsOneWidget);
-    expect(find.text('第 2 輪：AI 改了搜尋，試抓中…'), findsOneWidget);
+    expect(find.text('AI 改了搜尋，試抓中…'), findsOneWidget);
     expect(find.text('0／1 個網站'), findsOneWidget);
     expect(find.text('暫停'), findsOneWidget);
     expect(find.text('結束'), findsOneWidget);
