@@ -779,7 +779,8 @@ class ReaderV2ContentTransformer {
     final chapterTitle = args['chapterTitle'] as String? ?? '';
     final rules = _rulesFrom(args);
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
-    final content = SemanticParagraphFormatter.repair(_applyRules(
+    final content = SemanticParagraphFormatter.repair(
+      _applyRules(
       bookName: bookName,
       bookOrigin: bookOrigin,
       chapterTitle: chapterTitle,
@@ -791,7 +792,8 @@ class ReaderV2ContentTransformer {
       titleRules: _titleRulesOf(rules, bookName, bookOrigin),
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
-    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'));
+      ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
+    );
     // 排版整理逐行處理、不增減行，整理後是空白的行不成段。
     final lines = content.split('\n');
     final shown = normalizeTypography(content).split('\n');
@@ -858,7 +860,8 @@ class ReaderV2ContentTransformer {
     _RuleProgress? onRule,
   }) {
     final content = normalizeTypography(
-      SemanticParagraphFormatter.repair(_applyRules(
+      SemanticParagraphFormatter.repair(
+        _applyRules(
         bookName: bookName,
         bookOrigin: bookOrigin,
         chapterTitle: chapterTitle,
@@ -867,8 +870,9 @@ class ReaderV2ContentTransformer {
         titleRules: titleRules,
         useReplaceRules: useReplaceRules,
         reSegmentEnabled: reSegmentEnabled,
-        onRule: onRule,
-      )),
+          onRule: onRule,
+        ),
+      ),
     );
 
     final paragraphs = <String>[];
@@ -970,7 +974,6 @@ class ReaderV2ContentTransformer {
   static String _reSegment(String content) {
     final normalized = content
         .replaceAll(RegExp(r'\r\n?'), '\n')
-        .replaceAll(RegExp(r'\n{2,}'), '\n')
         .replaceAll(RegExp(r'[ \t]+\n'), '\n');
     final nonEmptyLines = normalized
         .split('\n')
@@ -1329,6 +1332,7 @@ class ReaderV2ContentTransformWorker {
               chapterIndex: args['chapterIndex'] as int? ?? 0,
               title: result['displayTitle'] as String? ?? '',
               rawText: result['content'] as String? ?? '',
+              repairBrokenLines: false,
               illustrationSlots: _illustrationSlots(
                 extracted.sources,
                 args['illustrationsDir'] as String?,
