@@ -592,10 +592,11 @@ class _AppActionSheet<T> extends StatelessWidget {
     final anySelected = actions.any((a) => a.selected);
 
     return Padding(
+      // 左右和頁面上的卡片、分頁列同一條線。
       padding: EdgeInsets.fromLTRB(
-        AppSpacing.md,
+        AppGrouped.margin,
         topInset + AppSpacing.xxxl,
-        AppSpacing.md,
+        AppGrouped.margin,
         media.padding.bottom + AppSpacing.md,
       ),
       child: Column(

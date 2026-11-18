@@ -157,16 +157,18 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
           Expanded(
             child: IgnorePointer(
               ignoring: _isSwitchingSource,
+              // 一個來源都沒找到時，上面那一行狀態已經寫了原因（沒找到、或
+              // 書源都失敗），這裡不再寫一次；找到了但被篩選擋掉才提示。
               child: sources.isEmpty && !provider.isSearching
                   ? Center(
-                      child: UiText(
-                        provider.allResults.isNotEmpty
-                            ? '沒有符合篩選的來源'
-                            : '未找到其他來源',
-                        style: AppTextStyles.bodyBase.copyWith(
-                          color: chrome.sectionText,
-                        ),
-                      ),
+                      child: provider.allResults.isEmpty
+                          ? null
+                          : UiText(
+                              '沒有符合篩選的來源',
+                              style: AppTextStyles.bodyBase.copyWith(
+                                color: chrome.sectionText,
+                              ),
+                            ),
                     )
                   : ListView.builder(
                       padding: EdgeInsets.only(
