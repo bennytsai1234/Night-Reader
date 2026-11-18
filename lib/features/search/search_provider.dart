@@ -147,9 +147,16 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   /// 這次搜尋的書源總數；重試失敗書源時不會被縮成重試的數量。
   int get searchedSourceCount => _run.searchedSourceCount;
-  int get unfilteredResultCount => _run.results.length;
+
+  /// 畫面上的結果：接回放到背景的那一次時，進場播完才放出來，換頁的那幾幀
+  /// 不建結果卡（ADR 0018、0070）。
+  List<SearchBook> get _shownResults =>
+      _holdingResults ? const [] : _run.results;
+  bool _holdingResults = false;
+
+  int get unfilteredResultCount => _shownResults.length;
   int get resultCount => results.length;
-  bool get hasUnfilteredResults => _run.results.isNotEmpty;
+  bool get hasUnfilteredResults => _shownResults.isNotEmpty;
   bool get isSearching => _run.isSearching;
 
   /// 已經送出、還沒回來的書源名稱。
@@ -164,7 +171,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 還沒搜完：搜尋中、放到背景後暫停中，或讀回的結果還沒合併。頁首是
   /// 「結束」、進度那一列還在。
   bool get isUnfinished =>
-      isSearching || isBackgroundPaused || _run.isRestoring;
+      isSearching || isBackgroundPaused || _run.isRestoring || _holdingResults;
 
   /// 進度那一列的「放到背景」：搜尋中、還沒放到背景時才有；別的背景工作在跑
   /// 時灰掉（ADR 0070）。
@@ -217,7 +224,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       _onlyInBookshelf;
   List<String> get availableSourceFilters {
     final labels = <String>{};
-    for (final book in _run.results) {
+    for (final book in _shownResults) {
       labels.addAll(_sourceLabelsFor(book));
     }
     return labels.toList()..sort();
@@ -303,6 +310,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     // 讀回的暫停或做完的搜尋：進場播完才合併成卡（ADR 0018）。
     if (_run.isRestoring) await _run.mergeRestored();
     if (_disposed) return;
+    if (_holdingResults) {
+      _holdingResults = false;
+      notifyListeners();
+    }
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
     // 先讀過去的找書再讀紀錄：紀錄讀完才決定畫不畫空頁，兩段一起出現。
@@ -412,9 +423,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   List<SearchBook> _orderedResults() {
     final held = _heldOrder;
-    if (held == null) return _sortedResults(_run.results);
+    if (held == null) return _sortedResults(_shownResults);
     final byIdentity = {
-      for (final book in _run.results) searchResultIdentity(book): book,
+      for (final book in _shownResults) searchResultIdentity(book): book,
     };
     return [for (final identity in held) ?byIdentity[identity]];
   }
@@ -433,7 +444,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   void holdResultOrder() {
     if (_heldOrder != null) return;
     _heldOrder = [
-      for (final book in _sortedResults(_run.results))
+      for (final book in _sortedResults(_shownResults))
         searchResultIdentity(book),
     ];
   }
@@ -443,7 +454,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     final held = _heldOrder;
     if (held == null) return;
     final known = held.toSet();
-    for (final book in _sortedResults(_run.results)) {
+    for (final book in _sortedResults(_shownResults)) {
       final identity = searchResultIdentity(book);
       if (known.add(identity)) held.add(identity);
     }
@@ -724,6 +735,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   void _attach(BackgroundSearchRun background) {
     _listen(_run = background.search);
+    _holdingResults = true;
     _adopt(background);
     // 類別、範圍、精準照那一次的，不寫回偏好。
     if (_run.conditions case final conditions?) {
@@ -742,6 +754,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   /// 接回或放到背景之後開始了別的搜尋：背景那次結束、不留，換一份新的。
   void _leaveBackground() {
+    _holdingResults = false;
     final background = _background;
     if (background == null) return;
     _background = null;

@@ -243,7 +243,10 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     await mergeRestored();
     _doneBefore = _sourceUrls.length - remaining.length;
     _failuresBefore = List.of(failures);
+    // 引擎真正開始前（讀字典、讀同時搜幾個）就算搜尋中，不閃出工具列。
+    isSearching = true;
     _startAttempt();
+    notifyListeners();
     await _track(
       _model.searchSources(
         key: key,

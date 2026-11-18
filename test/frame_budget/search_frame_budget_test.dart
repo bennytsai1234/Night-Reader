@@ -1,7 +1,7 @@
 // 搜尋頁：進頁、送出搜尋後幾十個書源、幾百筆結果陸續到達（合併同一本書、
 // 重排、建卡）、搜尋結束時進度與工具列交叉淡換、改排序與篩選整個清單重建、
-// 建議清單蓋上與收起、捲動後固定順序再接尾端，每一幀的成本（ADR 0018、
-// 0029）。用法見 `test/support/frame_budget.dart`；帶 `frame_budget` 標籤，
+// 建議清單蓋上與收起、捲動後固定順序再接尾端、放到背景後關頁再打開接回
+// （結果第一幀就在，ADR 0070），每一幀的成本（ADR 0018、0029）。用法見 `test/support/frame_budget.dart`；帶 `frame_budget` 標籤，
 // 平常的全套測試跳過。
 //
 // 書源的回應直接從記憶體給（App 裡在書源 isolate 解析，主執行緒只收結果），
@@ -9,6 +9,8 @@
 // 書源約 1.3 秒搜完；書名從 150 個裡取，同一本書會從好幾個書源回來，合併成一張卡。
 @Tags(['frame_budget'])
 library;
+
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,8 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/background_work/background_work.dart';
+import 'package:night_reader/features/search/background_search.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:night_reader/features/search/widgets/search_app_bar.dart';
@@ -99,28 +103,43 @@ void main() {
       } catch (_) {}
     });
 
+    final resultsDir = Directory.systemTemp.createTempSync('search-budget');
+    final searches = BackgroundSearches(
+      work: BackgroundWork(),
+      directory: () async => resultsDir,
+    );
+    Widget opener(String label, {required bool resume}) => Builder(
+      builder: (context) => TextButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ChangeNotifierProvider(
+              create: (context) => SearchProvider(
+                entrance: TransitionSettled.entered(context),
+                searchLoader: _loader,
+                backgroundSearches: searches,
+                resumeBackground: resume,
+              ),
+              child: const SearchView(),
+            ),
+          ),
+        ),
+        child: Text(label),
+      ),
+    );
+
     // 第一輪含 debug 模式第一次執行程式的編譯成本，只暖機；看第二輪。
     for (final round in ['第一輪', '第二輪']) {
       await tester.pumpWidget(
         MaterialApp(
           theme: buildAppTheme(AppStyle.paper, Brightness.light),
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ChangeNotifierProvider(
-                        create: (context) => SearchProvider(
-                          entrance: TransitionSettled.entered(context),
-                          searchLoader: _loader,
-                        ),
-                        child: const SearchView(),
-                      ),
-                    ),
-                  ),
-                  child: const Text('打開搜尋'),
-                ),
+          home: Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  opener('打開搜尋', resume: false),
+                  opener('接回搜尋', resume: true),
+                ],
               ),
             ),
           ),
@@ -241,6 +260,47 @@ void main() {
         action: () => goBack(tester),
         settled: () => find.text('打開搜尋').evaluate().isNotEmpty,
       );
+      await rest(tester);
+
+      // 放到背景：搜到一半關頁，搜完後再打開，結果第一幀就在（ADR 0070）。
+      await tester.tap(find.text('打開搜尋'));
+      await tester.pumpAndSettle();
+      final searching = Provider.of<SearchProvider>(
+        tester.element(find.byType(SearchView)),
+        listen: false,
+      );
+      await tester.runAsync(() => searching.ready);
+      await tester.enterText(find.byType(TextField), '夜');
+      await tester.tap(searchButton);
+      for (var i = 0; i < 100 && searching.results.length <= 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      searching.moveToBackground();
+      await goBack(tester);
+      await tester.pumpAndSettle();
+      final background = searches.current!;
+      for (var i = 0; i < 100 && !background.isFinished; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(background.isFinished, isTrue);
+      await rest(tester);
+      await measureNavigation(
+        tester,
+        '$round 接回放到背景的搜尋',
+        action: () => tester.tap(find.text('接回搜尋')),
+        page: find.byType(SearchView),
+      );
+      final resumed = Provider.of<SearchProvider>(
+        tester.element(find.byType(SearchView)),
+        listen: false,
+      );
+      await tester.runAsync(() => resumed.ready);
+      await tester.pumpAndSettle();
+      expect(resumed.results.length, greaterThan(100));
+      await rest(tester);
+      await goBack(tester);
+      await tester.pumpAndSettle();
+      expect(searches.current, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));
     }
