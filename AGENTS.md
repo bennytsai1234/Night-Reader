@@ -37,7 +37,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message。
 - 手機與模擬器上的驗證是使用者的事，不要求、不提及，回報也不列。
-- Flutter `3.47.0` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
+- Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
 
 ## Git 與發版
 
