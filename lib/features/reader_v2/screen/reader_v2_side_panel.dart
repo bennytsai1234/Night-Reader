@@ -381,7 +381,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
           child: AnimatedBuilder(
             animation: _position,
             // 平移對齊整數實體像素：滑入時目錄的字不必每到新位置就補建
-            // 字的貼圖（2026-11-18 量到第一次打開最重一幀少 2ms 以上）。
+            // 字的貼圖。
             builder: (context, child) => PixelTranslation(
               fraction: Offset(_position.value - 1, 0),
               child: child,

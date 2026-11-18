@@ -12,7 +12,8 @@
 //   await action();
 //   await recordAnimation(tester, name: name,
 //       phase: () { clock.mark(); return ...; }, until: ...);
-//   print(await clock.attach(tester, '<錄影資料夾>/$name'));
+//   print(await clock.attach(tester, '${frameRecordingDir.path}/$name'));
+//   await clock.dispose(tester);
 //
 // `attach` 把每格新字畫進字貼圖的時間寫進 meta.json 的 `glyph`，動畫儀表板多一排
 // 「建字貼圖」。注意：
@@ -20,6 +21,8 @@
 //   看起來沒有成本。改前改後、第一次與再一次都要各自一個 `flutter test`，或在
 //   同一個程序裡明確量「再一次」。
 // - 不和 `FRAME_GC=1` 一起用：它會改掉時間軸的設定。
+// - 時間軸整段錄完才取一次：每格拍圖都有一筆 `DoMakeRasterSnapshot`，`attach`
+//   核對每一格都找得到，前面的被緩衝區蓋掉時直接失敗，不會靜靜地少算。
 // - 時間是電腦上的：返回書架（#283 改前）電腦 28ms、手機 37ms，手機約慢 1.3 倍，
 //   只當數量級。
 import 'dart:convert';
@@ -39,7 +42,13 @@ class GlyphAtlasClock {
 
   static Future<GlyphAtlasClock> start(WidgetTester tester) async {
     final vm = (await tester.runAsync(() async {
-      final http = (await Service.getInfo()).serverUri!;
+      final http = (await Service.getInfo()).serverUri;
+      if (http == null) {
+        throw StateError(
+          '量建字貼圖要加 --enable-impeller --enable-vmservice：'
+          'flutter test --enable-impeller --enable-vmservice …',
+        );
+      }
       final path = http.path.endsWith('/') ? http.path : '${http.path}/';
       final vm = await vmServiceConnectUri(
         http.replace(scheme: 'ws', path: '${path}ws').toString(),
@@ -53,6 +62,14 @@ class GlyphAtlasClock {
   Future<void> reset(WidgetTester tester) async {
     _marks.clear();
     await tester.runAsync(_vm.clearVMTimeline);
+  }
+
+  /// 關掉時間軸的 Embedder、斷開連線。
+  Future<void> dispose(WidgetTester tester) async {
+    await tester.runAsync(() async {
+      await _vm.setVMTimelineFlags([]);
+      await _vm.dispose();
+    });
   }
 
   /// 每格畫完、拍圖之前叫（放在 recordAnimation 的 phase 裡）。
@@ -112,6 +129,16 @@ class GlyphAtlasClock {
     final file = File('$dir${Platform.pathSeparator}meta.json');
     final meta = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
     final frames = (meta['phases'] as List).length;
+    final missing = [
+      for (var i = 0; i < frames && i < r.snapshot.length; i++)
+        if (r.snapshot[i] == 0) i,
+    ];
+    if (missing.isNotEmpty) {
+      throw StateError(
+        '第 ${missing.take(5).join('、')} 格找不到拍圖的事件：時間軸的緩衝區'
+        '可能蓋掉了前面，這段的建字時間不可信（錄短一點再量）',
+      );
+    }
     double round(double v) => (v * 100).round() / 100;
     meta['glyph'] = [for (final v in r.fresh.take(frames)) round(v)];
     meta['glyphAtlas'] = [for (final v in r.atlas.take(frames)) round(v)];
@@ -125,8 +152,7 @@ class GlyphAtlasClock {
         firstFrames.add('#$i(${phases[i]}) ${r.fresh[i].toStringAsFixed(2)}');
       }
     }
-    final snaps = r.snapshot.where((v) => v > 0).length;
-    return 'frames=$frames snapshots=$snaps 新字 by phase: '
+    return 'frames=$frames 新字 by phase: '
         '${byPhase.entries.map((e) => '${e.key} ${e.value.toStringAsFixed(2)}').join(', ')}'
         '\n  frames with 新字: ${firstFrames.join('; ')}';
   }

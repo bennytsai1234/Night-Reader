@@ -13,7 +13,7 @@
     --heavy: var(--warning);
     --gc: var(--chart-2);
     --gc-old: var(--chart-5);
-    --glyph: var(--chart-3);
+    --glyph: var(--chart-6);
     --db: color-mix(in srgb, var(--chart-3) 55%, transparent);
     color: var(--foreground); font-family: var(--font-sans); font-size: 13px;
   }
@@ -108,7 +108,7 @@ const FRAME_MS = Object.values(DATA)[0].frameMs || 16, COLS = 16, [SW, SH] = CON
 const HAS_GC = Object.values(DATA).some(D => (D.gcNew || []).length);
 const GC_RATIO = CONFIG.gcPhoneRatio, PHONE_FRAME_MS = 1000 / 120;
 // 有記建字貼圖（meta.json 的 glyph：繪製執行緒把新字畫進字貼圖的時間）時多一排。
-const HAS_GLYPH = Object.values(DATA).some(D => (D.glyph || []).some(v => v > 0));
+const HAS_GLYPH = Object.values(DATA).some(D => (D.glyph || []).length);
 const PHASES = CONFIG.phases || {};
 const labelOf = raw => (PHASES[raw] && PHASES[raw].label) || raw;
 const kindOf = label => (Object.values(PHASES).find(p => p.label === label) || {}).kind || 'still';
