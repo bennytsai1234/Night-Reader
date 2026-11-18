@@ -18,15 +18,24 @@ String removePageLeftovers(String content, {required String chapterTitle}) {
       kept.add(line);
       continue;
     }
-    final rest = _squash(cleaned);
-    if (rest.isEmpty || rest == title) continue;
+    // 插圖的記號（私用區的字）不算字：只剩章名與插圖的行留下插圖。
+    final illustrations = cleaned.replaceAll(_notIllustration, '');
+    final rest = _squash(cleaned.replaceAll(_illustration, ''));
+    if (rest.isEmpty || rest == title) {
+      if (illustrations.isNotEmpty) kept.add(illustrations);
+      continue;
+    }
     kept.add(cleaned);
   }
   return kept.join('\n');
 }
 
-/// 整章沒有這幾個字就不必逐行看。
-final RegExp _hint = RegExp(r'本章未完|[页頁]');
+/// 整章沒有提示也沒有「第1/」「第(1/」這樣的頁碼開頭，就不必逐行看。
+final RegExp _hint = RegExp(r'本章未完|第\s*[（(]?\s*[0-9０-９]+\s*[/／]');
+
+/// 插圖的記號（`IllustrationMarkers.placeholder`）所在的私用區。
+final RegExp _illustration = RegExp('[\uE000-\uF8FF]');
+final RegExp _notIllustration = RegExp('[^\uE000-\uF8FF]');
 
 const String _digits = r'[0-9０-９]+';
 
@@ -41,12 +50,18 @@ final RegExp _trailingPageNumber = RegExp(
   '第\\s*$_digits\\s*[/／]\\s*$_digits\\s*[页頁]\\s*\$',
 );
 
-/// 「（本章未完，请点击下一页继续阅读）」：帶括號的到括號為止；沒有括號的
-/// 「本章未完，点击下一页继续阅读。」到句號或行尾為止。
+/// 「（本章未完，请点击下一页继续阅读）」「本章未完，点击下一页继续阅读。」：
+/// 「本章未完」後面要接下一頁、翻頁或繼續閱讀才算，「本章未完待續」這類正文
+/// 不動。帶括號的到括號為止，沒括號的到句末為止；長度有上限，一行裡很多個
+/// 沒收尾的括號也不會一再掃到行尾。
 final RegExp _unfinishedNote = RegExp(
-  r'[（(【\[]\s*本章未完[^）)】\]\n]*[）)】\]]'
-  r'|本章未完[^。！？\n]*[。！？]?',
+  '[（(【\\[]\\s*本章未完[^）)】\\]\\n]{0,30}?$_turnPage[^）)】\\]\\n]{0,20}?[）)】\\]]'
+  '|本章未完[^。！？!?\\n]{0,15}?$_turnPage(?:$_keepReading)?[》>\\s]*[。！？!?]?',
 );
+
+/// 叫讀者翻頁的字：下一頁、翻頁、繼續閱讀（簡繁）。
+const String _turnPage = '(?:下一[页頁]|翻[页頁]|$_keepReading)';
+const String _keepReading = '[继繼][续續][阅閱][读讀]';
 
 /// 比對章名用：拿掉空白（目錄的「第7章 添加规则」對正文的「第7章添加规则」）。
 String _squash(String text) => text.replaceAll(RegExp(r'\s'), '');

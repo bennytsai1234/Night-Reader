@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 
@@ -23,11 +25,7 @@ void main() {
       'reSegmentEnabled': false,
       'chineseConvertType': 0,
     });
-    return ReaderV2Content.fromRaw(
-      chapterIndex: 0,
-      title: '',
-      rawText: result['content']! as String,
-    ).paragraphs;
+    return (result['document']! as ReaderV2Content).paragraphs;
   }
 
   // 2026-11-18 笔趣阁 biquge345《咒回》第 7 章：網站一頁就給整章，原本兩頁的
@@ -70,6 +68,56 @@ void main() {
       '地图在第3/5页的角落，他翻了好几页才找到。',
       '这一页没有记下本章的内容。',
     ]);
+  });
+
+  // Codex 審查找到的：「本章未完」後面沒接翻頁的字，是正文。
+  test('story text that says the chapter is unfinished stays', () async {
+    const story =
+        '她說：「本章未完待續!」說完就關燈。\n'
+        '（本章未完稿，作者已手寫保留這段後記）';
+
+    expect(await shown(story, title: '第一章'), [
+      '她說：「本章未完待續！」說完就關燈。',
+      '（本章未完稿，作者已手寫保留這段後記）',
+    ]);
+  });
+
+  // 換頁那行同時有插圖：插圖留著，「隱藏」找原文的段落和畫面上的一樣多。
+  test(
+    'an illustration on the page-turn line stays and hiding still lines up',
+    () async {
+      const raw =
+          '前文。\n'
+          '第一章夜雨(第2/2页)<img src="image.png">\n'
+          '想隱藏的廣告。';
+      final book = Book(
+        bookUrl: 'https://www.biquge345.com/book/1/',
+        origin: 'https://www.biquge345.com',
+        name: '書',
+      );
+
+      expect(await shown(raw, title: '第一章 夜雨'), ['前文。', '想隱藏的廣告。']);
+      expect(
+        await ReaderV2ContentTransformer.ruleStageParagraphs(
+          book: book,
+          chapter: BookChapter(
+            url: 'u',
+            title: '第一章 夜雨',
+            bookUrl: book.bookUrl,
+          ),
+          rawContent: raw,
+          enabledRules: const [],
+        ),
+        ['前文。', '想隱藏的廣告。'],
+      );
+    },
+  );
+
+  test('a long line of unclosed notes is cleaned quickly', () async {
+    final line = '（本章未完。' * 4000;
+    final watch = Stopwatch()..start();
+    await shown(line, title: '第一章');
+    expect(watch.elapsedMilliseconds, lessThan(500));
   });
 
   test('the leftovers go even when the book skips replace rules', () async {
