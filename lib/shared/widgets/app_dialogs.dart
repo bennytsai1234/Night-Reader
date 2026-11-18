@@ -259,7 +259,7 @@ class AppAlert<T> extends StatelessWidget {
     final hairline = Container(
       width: horizontal ? AppGlass.hairline : null,
       height: horizontal ? null : AppGlass.hairline,
-      color: chrome.separator,
+      color: chrome.popupSeparator,
     );
 
     final buttons = horizontal
@@ -304,7 +304,7 @@ class AppAlert<T> extends StatelessWidget {
           child: GlassSurface(
             borderRadius: AppRadius.cardXl,
             grouped: false,
-            tint: chrome.groupedSurface.withValues(alpha: 0.94),
+            tint: chrome.popupTint(0.94),
             child: Material(
               type: MaterialType.transparency,
               child: Column(
@@ -355,7 +355,10 @@ class AppAlert<T> extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Container(height: AppGlass.hairline, color: chrome.separator),
+                  Container(
+                    height: AppGlass.hairline,
+                    color: chrome.popupSeparator,
+                  ),
                   buttons,
                 ],
               ),
@@ -603,7 +606,7 @@ class _AppActionSheet<T> extends StatelessWidget {
             child: GlassSurface(
               borderRadius: AppRadius.cardXl,
               grouped: false,
-              tint: chrome.groupedSurface.withValues(alpha: 0.94),
+              tint: chrome.popupTint(0.94),
               child: Material(
                 type: MaterialType.transparency,
                 child: ListView(
@@ -645,7 +648,7 @@ class _AppActionSheet<T> extends StatelessWidget {
                       if (i > 0 || hasHeader)
                         Container(
                           height: AppGlass.hairline,
-                          color: chrome.separator,
+                          color: chrome.popupSeparator,
                         ),
                       GroupedRow(
                         title: actions[i].label,
@@ -691,7 +694,7 @@ class _AppActionSheet<T> extends StatelessWidget {
           GlassSurface(
             borderRadius: AppRadius.cardXl,
             grouped: false,
-            tint: chrome.groupedSurface.withValues(alpha: 0.94),
+            tint: chrome.popupTint(0.94),
             child: Material(
               type: MaterialType.transparency,
               child: InkWell(

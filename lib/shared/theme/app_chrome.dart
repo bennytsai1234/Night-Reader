@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_layers.dart';
 import 'app_tokens.dart';
 
 /// 分組清單與玻璃元件使用的衍生色。
@@ -18,7 +19,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
     required this.glassTint,
     required this.glassShadow,
     required this.selectionLens,
+    required this.popupSurface,
+    required this.popupSeparator,
     required this.barrier,
+    required this.menuBarrier,
     required this.toastBackground,
     required this.toastForeground,
     required this.toastAction,
@@ -49,8 +53,20 @@ class AppChrome extends ThemeExtension<AppChrome> {
   /// 分頁列的選取膠囊。
   final Color selectionLens;
 
-  /// 情境選單與提示框背後的暗化遮罩。
+  /// 彈出層（彈出選單、提示框、動作表）的底色，不含透明度；畫的時候用
+  /// [popupTint]。淺色和卡片同色，靠遮罩把底下壓暗來分開；深色用玻璃那
+  /// 一階，比卡片亮（docs/design/appearance.md「層次」）。
+  final Color popupSurface;
+
+  /// 彈出層裡的髮絲分隔線：和 [separator] 對卡片的深淺差一樣，照
+  /// [popupSurface] 算。
+  final Color popupSeparator;
+
+  /// 提示框、底部面板與長按預覽背後的遮罩。
   final Color barrier;
+
+  /// 彈出選單背後的遮罩：選單小、點了就走，壓得比 [barrier] 淺。
+  final Color menuBarrier;
 
   /// 提示訊息（toast）。
   final Color toastBackground;
@@ -73,11 +89,28 @@ class AppChrome extends ThemeExtension<AppChrome> {
     GlassStrength glassStrength = GlassStrength.unspecified,
   }) {
     final isLight = brightness == Brightness.light;
+    final barrier = isLight
+        ? textPrimary.withValues(alpha: 0.18)
+        : const Color(0x66000000);
+    // 深色取卡片與玻璃裡亮的那個：閱讀器面板的主題把卡片放在比玻璃亮的
+    // 那一階。
+    final popupSurface =
+        isLight || surface.computeLuminance() > bar.computeLuminance()
+        ? surface
+        : bar;
+    final separatorAlpha = isLight ? 0.75 : 0.9;
+    final popupBorder = popupSurface == surface
+        ? border
+        : AppLayers.step(
+            popupSurface,
+            textPrimary,
+            (AppLayers.lightness(border) - AppLayers.lightness(surface)).abs(),
+          );
     return AppChrome(
       glassStrength: glassStrength,
       groupedBackground: background,
       groupedSurface: surface,
-      separator: border.withValues(alpha: isLight ? 0.75 : 0.9),
+      separator: border.withValues(alpha: separatorAlpha),
       sectionText: textSecondary,
       pressedHighlight: textPrimary.withValues(alpha: isLight ? 0.06 : 0.08),
       glassTint: bar.withValues(alpha: glassStrength.opacity(dark: !isLight)),
@@ -88,16 +121,15 @@ class AppChrome extends ThemeExtension<AppChrome> {
         primary.withValues(alpha: isLight ? 0.12 : 0.18),
         surface.withValues(alpha: 0.6),
       ),
-      barrier: isLight
-          ? textPrimary.withValues(alpha: 0.18)
-          : const Color(0x66000000),
-      // 淺色時是墨色底配紙色字；深色時是比卡片再亮一階的浮層。
+      popupSurface: popupSurface,
+      popupSeparator: popupBorder.withValues(alpha: separatorAlpha),
+      barrier: barrier,
+      menuBarrier: barrier.withValues(alpha: barrier.a * debugMenuBarrierRatio),
+      // 淺色時是墨色底配紙色字；深色時比卡片再亮一階。提示訊息沒有模糊，
+      // 底色完全不透明。
       toastBackground: isLight
-          ? textPrimary.withValues(alpha: 0.94)
-          : Color.alphaBlend(
-              textPrimary.withValues(alpha: 0.1),
-              surface,
-            ).withValues(alpha: 0.96),
+          ? textPrimary
+          : Color.alphaBlend(textPrimary.withValues(alpha: 0.1), surface),
       toastForeground: isLight ? background : textPrimary,
       // 深色浮層比卡片亮一階，主色直接用對比不夠（紙墨深色只有 3.8:1），
       // 往文字色靠一些。
@@ -106,6 +138,14 @@ class AppChrome extends ThemeExtension<AppChrome> {
           : Color.lerp(primary, textPrimary, 0.3)!,
     );
   }
+
+  // PROTOTYPE：候選圖用的旋鈕，使用者選定後換成常數。
+  static double debugMenuBarrierRatio = 0.4;
+
+  /// 彈出層的底色：玻璃強度有模糊時用 [blurred] 的不透明度，實色完全不透明
+  /// （[GlassStrength.overBlur]）。
+  Color popupTint(double blurred) =>
+      popupSurface.withValues(alpha: glassStrength.overBlur(blurred));
 
   /// 讀取目前主題的衍生色；主題沒有掛擴充時依 [ColorScheme] 推導。
   static AppChrome of(BuildContext context) {
@@ -136,7 +176,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
     Color? glassTint,
     Color? glassShadow,
     Color? selectionLens,
+    Color? popupSurface,
+    Color? popupSeparator,
     Color? barrier,
+    Color? menuBarrier,
     Color? toastBackground,
     Color? toastForeground,
     Color? toastAction,
@@ -151,7 +194,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
       glassTint: glassTint ?? this.glassTint,
       glassShadow: glassShadow ?? this.glassShadow,
       selectionLens: selectionLens ?? this.selectionLens,
+      popupSurface: popupSurface ?? this.popupSurface,
+      popupSeparator: popupSeparator ?? this.popupSeparator,
       barrier: barrier ?? this.barrier,
+      menuBarrier: menuBarrier ?? this.menuBarrier,
       toastBackground: toastBackground ?? this.toastBackground,
       toastForeground: toastForeground ?? this.toastForeground,
       toastAction: toastAction ?? this.toastAction,
@@ -173,7 +219,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
       other.glassTint == glassTint &&
       other.glassShadow == glassShadow &&
       other.selectionLens == selectionLens &&
+      other.popupSurface == popupSurface &&
+      other.popupSeparator == popupSeparator &&
       other.barrier == barrier &&
+      other.menuBarrier == menuBarrier &&
       other.toastBackground == toastBackground &&
       other.toastForeground == toastForeground &&
       other.toastAction == toastAction &&
@@ -189,7 +238,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
     glassTint,
     glassShadow,
     selectionLens,
+    popupSurface,
+    popupSeparator,
     barrier,
+    menuBarrier,
     toastBackground,
     toastForeground,
     toastAction,
@@ -216,7 +268,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
       glassTint: Color.lerp(glassTint, other.glassTint, t)!,
       glassShadow: Color.lerp(glassShadow, other.glassShadow, t)!,
       selectionLens: Color.lerp(selectionLens, other.selectionLens, t)!,
+      popupSurface: Color.lerp(popupSurface, other.popupSurface, t)!,
+      popupSeparator: Color.lerp(popupSeparator, other.popupSeparator, t)!,
       barrier: Color.lerp(barrier, other.barrier, t)!,
+      menuBarrier: Color.lerp(menuBarrier, other.menuBarrier, t)!,
       toastBackground: Color.lerp(toastBackground, other.toastBackground, t)!,
       toastForeground: Color.lerp(toastForeground, other.toastForeground, t)!,
       toastAction: Color.lerp(toastAction, other.toastAction, t)!,
@@ -256,6 +311,10 @@ enum GlassStrength {
   final double darkOpacity;
 
   double opacity({required bool dark}) => dark ? darkOpacity : lightOpacity;
+
+  /// 半透明一定配模糊：這個強度有模糊時是 [opacity]，沒有模糊（實色）時
+  /// 完全不透明，底下的字才不會清楚地透出來。
+  double overBlur(double opacity) => blur > 0 ? opacity : 1;
 
   /// 使用者沒選過時的玻璃效果。
   static const GlassStrength defaultStrength = GlassStrength.solid;

@@ -1,0 +1,99 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
+
+/// 畫面上每一塊玻璃底色的不透明度。
+List<double> _glassAlphas(WidgetTester tester) => [
+  for (final element in find.byType(GlassSurface).evaluate())
+    ((element.widget as GlassSurface).tint ?? AppChrome.of(element).glassTint)
+        .a,
+];
+
+Future<void> _pump(
+  WidgetTester tester,
+  Brightness brightness,
+  GlassStrength strength,
+  void Function(BuildContext context) open,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: buildAppTheme(
+        AppStyle.kraft,
+        brightness,
+        glassStrength: strength,
+        pureBlack: true,
+      ),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Column(
+            children: [
+              TextButton(
+                onPressed: () => open(context),
+                child: const Text('開'),
+              ),
+              const GlassCapsule(label: '全部', selected: true),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('開'));
+  await tester.pumpAndSettle();
+}
+
+void _openMenu(BuildContext context) => showGlassMenu<String>(
+  context: context,
+  anchor: const Rect.fromLTWH(20, 20, 40, 40),
+  entries: const [GlassMenuItem(value: '網格', label: '網格')],
+);
+
+void _openAlert(BuildContext context) =>
+    showAppConfirm(context: context, title: '按標籤刪除');
+
+void _openActionSheet(BuildContext context) => showAppActionSheet<String>(
+  context: context,
+  actions: const [AppSheetAction(label: '系統字型', value: 'system')],
+);
+
+void main() {
+  const openers = {
+    '彈出選單': _openMenu,
+    '提示框': _openAlert,
+    '動作表': _openActionSheet,
+  };
+
+  for (final brightness in Brightness.values) {
+    for (final MapEntry(key: name, value: open) in openers.entries) {
+      testWidgets('實色沒有模糊，$name與選中的膠囊完全不透明（${brightness.name}）', (
+        tester,
+      ) async {
+        await _pump(tester, brightness, GlassStrength.solid, open);
+        final alphas = _glassAlphas(tester);
+        expect(alphas.length, greaterThan(1), reason: '$name應該畫在玻璃上');
+        expect(alphas, everyElement(1.0));
+      });
+
+      testWidgets('霧面有模糊，$name照舊半透明（${brightness.name}）', (tester) async {
+        await _pump(tester, brightness, GlassStrength.frosted, open);
+        expect(_glassAlphas(tester), everyElement(lessThan(1.0)));
+      });
+    }
+
+    test('提示訊息沒有模糊，底色完全不透明（${brightness.name}）', () {
+      for (final strength in GlassStrength.values) {
+        final theme = buildAppTheme(
+          AppStyle.kraft,
+          brightness,
+          glassStrength: strength,
+        );
+        expect(theme.extension<AppChrome>()!.toastBackground.a, 1.0);
+      }
+    });
+  }
+}
