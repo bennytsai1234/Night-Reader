@@ -52,6 +52,18 @@ void main() {
       );
     });
 
+    test('插圖記號不會遮住行尾開引號或行首收引號', () {
+      const illustration = '\uE000';
+      expect(
+        SemanticParagraphFormatter.repair('他說：「' + illustration + '\n你好。」'),
+        '他說：「' + illustration + '你好。」',
+      );
+      expect(
+        SemanticParagraphFormatter.repair('「請進。\n' + illustration + '」她回答。'),
+        '「請進。' + illustration + '」她回答。',
+      );
+    });
+
     test('普通段落及連續對話仍各是一段', () {
       const source = '第一段寫完了。\n第二段開始。\n「你好。」\n「再見。」';
       expect(SemanticParagraphFormatter.repair(source), source);
