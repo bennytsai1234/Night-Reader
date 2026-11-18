@@ -820,6 +820,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       title: '把「${s.bookSourceName}」換回 AI 修改前？',
       message: 'AI 修好之後的改動也會一起換掉。',
       confirmLabel: '還原',
+      destructive: true,
+      irreversible: true,
     );
     if (!confirmed || !mounted) return;
     await _runAction(() async {

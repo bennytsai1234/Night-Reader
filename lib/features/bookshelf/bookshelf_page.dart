@@ -1147,9 +1147,11 @@ class _BookshelfPageState extends State<BookshelfPage>
     final confirmed = await showAppConfirm(
       context: context,
       title: '把《${book.name}》移出書架？',
-      message: '下載的正文與封面一起刪除。',
+      // 本地書在夜讀資料夾裡的那份原檔也會刪掉（BookStorageService）。
+      message: book.isLocal ? '夜讀裡的這份原檔與封面一起刪除。' : '下載的正文與封面一起刪除。',
       confirmLabel: '移出',
       destructive: true,
+      irreversible: book.isLocal,
     );
     if (!confirmed || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1278,7 +1280,10 @@ class _BookshelfPageState extends State<BookshelfPage>
     final confirmed = await showAppConfirm(
       context: context,
       title: '刪除 ${selectedUrls.length} 本書？',
-      message: '下載的正文與封面一起刪除。',
+      // 本地書在夜讀資料夾裡的那份原檔也會刪掉（BookStorageService）。
+      message: p.books.any((b) => selectedUrls.contains(b.bookUrl) && b.isLocal)
+          ? '下載的正文、封面與本地書在夜讀裡的原檔一起刪除。'
+          : '下載的正文與封面一起刪除。',
       confirmLabel: '刪除',
       destructive: true,
       irreversible: true,

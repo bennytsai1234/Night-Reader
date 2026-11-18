@@ -107,9 +107,16 @@ class ClauseText extends StatelessWidget {
     return end;
   }
 
+  /// 只認常用漢字（基本區、擴充 A、相容漢字）：表情符號與補充平面的字
+  /// 是兩個 UTF-16 單位，從中間切會切壞。
   static bool _isCjk(String s, int from, int to) {
     for (var i = from; i < to; i++) {
-      if (s.codeUnitAt(i) < 0x2E80) return false;
+      final c = s.codeUnitAt(i);
+      final ideograph =
+          (c >= 0x3400 && c <= 0x4DBF) ||
+          (c >= 0x4E00 && c <= 0x9FFF) ||
+          (c >= 0xF900 && c <= 0xFAFF);
+      if (!ideograph) return false;
     }
     return true;
   }

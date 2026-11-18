@@ -130,6 +130,22 @@ void main() {
       expect(wrap('甲乙丙丁戊己庚辛壬癸子'), '甲乙丙丁戊己庚辛\n壬癸子');
     });
 
+    test('最後一行前面是表情符號時不往前帶，不會切壞', () {
+      // 寬 6 個字：第一行排到「戊」，只剩「己」。「😀」是兩個 UTF-16
+      // 單位，往前帶兩個單位會切在它中間。
+      final wrapped = ClauseText.wrapClauses(
+        '甲乙丙丁😀戊己',
+        TextPainter(textDirection: TextDirection.ltr),
+        style,
+        60,
+      );
+      expect(wrapped.replaceAll('\n', ''), '甲乙丙丁😀戊己');
+      for (final line in wrapped.split('\n')) {
+        final last = line.codeUnitAt(line.length - 1);
+        expect(last >= 0xD800 && last <= 0xDBFF, isFalse, reason: '行尾是半個字');
+      }
+    });
+
     test('一行排得下就不動，原本的換行照留', () {
       expect(wrap('甲乙丙'), '甲乙丙');
       expect(wrap('甲乙\n丙丁'), '甲乙\n丙丁');

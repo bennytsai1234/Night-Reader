@@ -492,11 +492,14 @@ Future<Set<SourceTag>?> pickSourceTagsToDelete(
                   children: [
                     for (final row in rows)
                       GroupedCheckRow(
-                        // 書源類型與數量是介面字，分組名稱照原文（ADR 0066）。
+                        // 書源類型、校驗標記與數量是介面字，使用者的分組
+                        // 名稱照原文（ADR 0066）。
                         title: switch (row.tag.kind) {
                           final kind? => sheetContext.ui(
                             '${kind.sourceLabel}：${row.count} 個',
                           ),
+                          null when checkTags.contains(row.tag.group) =>
+                            sheetContext.ui('${row.tag.group}：${row.count} 個'),
                           null =>
                             '${row.tag.group}${sheetContext.ui('：${row.count} 個')}',
                         },

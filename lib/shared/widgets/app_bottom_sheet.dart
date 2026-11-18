@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/core/services/ui_language.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -219,6 +220,8 @@ class AppBottomSheet extends StatelessWidget {
       // 不給時照 Material 3 預設：最寬 640、置中。
       constraints: constraints,
       barrierColor: barrierColor ?? AppChrome.of(context).barrier,
+      // 讀螢幕軟體念遮罩的名字；不給時是 Material 的英文「Scrim」。
+      barrierLabel: UiLanguageText.convert(context, '關閉'),
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
       // 不能點外面關掉時也不能往下拉掉（例如還沒儲存的表單）。
