@@ -756,7 +756,8 @@ List<AggregatedTimedBlock> _exclusive(List<TimedBlock> blocks) {
     ..length = math.min(15, self.length);
 }
 
-/// 摘要：幀數、中位數、最大值，以及超過 [over] 的每一幀各段成本。動畫中
+/// 摘要：幀數、中位數、最大值、所有幀的主執行緒時間合計（比較工作有沒有
+/// 離開主執行緒），以及超過 [over] 的每一幀各段成本。動畫中
 /// 另外列出扣掉資料庫、排版切片照實算（[FrameCost.judged]）後仍超過的
 /// 幀數：那些才是手機上也會超過的（ADR 0036）。
 String describeFrames(
@@ -792,7 +793,8 @@ String describeFrames(
 
   final lines = [
     '$label：${costs.length} 幀，中位數 ${ms(totals[totals.length ~/ 2])}ms，'
-        '最大 ${ms(totals.last)}ms，超過 ${limit}ms 的 ${spikes.length} 幀',
+        '最大 ${ms(totals.last)}ms，超過 ${limit}ms 的 ${spikes.length} 幀，'
+        '主執行緒合計 ${ms(totals.fold(0, (sum, us) => sum + us))}ms',
     '  動畫中（不含點下去後的第 0 幀）${peak(true)}；靜止時${peak(false)}',
     if (frameGc)
       '  回收記憶體的 ${collected.length} 幀（動畫中 '

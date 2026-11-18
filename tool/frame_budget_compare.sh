@@ -7,10 +7,11 @@
 #
 # 把 <改前的提交> 開在暫時的 worktree，和目前的工作目錄（含還沒 commit 的改動）各跑一次，
 # 印出一張 Markdown 表：每個情境動畫在動的時候，扣掉測試的資料庫、排版切片照實算後還超過
-# 上限（電腦 4.2ms）的幀數（ADR 0036）。點下去的那一幀與預留停頓不算；最大一幀降了但還
-# 超過，一樣是掉幀，表上不列。表可以直接貼進 commit message。測試檔路徑相對於 repo 根目錄；
-# 改前沒有的測試檔只跑改後，改前的量測工具還不會印這個數字時那一格是「—」。測試沒有全過
-# 就停下來，不印表。
+# 上限（電腦 4.2ms）的幀數（ADR 0036），和整段所有幀的主執行緒時間合計（宣稱某件工作離開
+# 主執行緒時看這欄）。點下去的那一幀與預留停頓不算進幀數；最大一幀降了但還超過，一樣是
+# 掉幀，表上不列。表可以直接貼進 commit message。測試檔路徑相對於 repo 根目錄；改前沒有的
+# 測試檔只跑改後，改前的量測工具還不會印這個數字時那一格是「—」。測試沒有全過就停下來，
+# 不印表。
 #
 # 只跑一次：數字有疑問時，打開完整輸出看那幾幀落在哪一段、在做什麼工作，不重跑。
 # 要證明某個掉幀修好了（同一份程式這次 4 幀、下次 0 幀的那種），用 FRAME_REPEAT=N
@@ -30,8 +31,8 @@
 # 測試：sh tool/frame_budget_compare_test.sh
 set -euo pipefail
 
-# 從 describeFrames 的摘要（「<情境>：N 幀，…」與下一行「  動畫中…（扣掉資料庫、排版切片
-# 照實算後 K 幀）…」）收集兩邊的 K，印成對照表。
+# 從 describeFrames 的摘要（「<情境>：N 幀，…，主執行緒合計 Tms」與下一行「  動畫中…
+# （扣掉資料庫、排版切片照實算後 K 幀）…」）收集兩邊的 K 與 T，印成對照表。
 summarize() {
   local dir=$1 logs=() side log i
   # 改前沒有這些測試檔時只有改後的 log；一份都沒有時 awk 會改讀標準輸入，先擋下來。
@@ -53,12 +54,18 @@ summarize() {
     function record(side, label, value) {
       over[side, label] = (side, label) in over ? over[side, label] "、" value : value
     }
+    function sumCell(side, label) { return (side, label) in sum ? sum[side, label] : "—" }
     FNR == 1 { side = FILENAME ~ /\/base(-[0-9]+)?\.log$/ ? "base" : "head"; split("", occ); label = "" }
     match($0, /：[0-9]+ 幀，中位數 [0-9.]+ms，最大 [0-9.]+ms，/) {
       label = substr($0, 1, RSTART - 1)
       # 同一次輸出裡同名的情境（例如來回兩次「發現→書架」）照出現順序分開。
       if (++occ[label] > 1) label = label "（第 " occ[label] " 次）"
       if (!(label in seen)) { seen[label] = 1; order[++count] = label }
+      if (match($0, /主執行緒合計 [0-9.]+ms/)) {
+        t = substr($0, RSTART, RLENGTH)
+        gsub(/[^0-9.]+/, "", t)
+        sum[side, label] = (side, label) in sum ? sum[side, label] "、" t : t
+      }
       next
     }
     label != "" && match($0, /扣掉資料庫、排版切片照實算後 [0-9]+ 幀/) {
@@ -71,11 +78,11 @@ summarize() {
     label != "" && /^  動畫中（不含點下去後的第 0 幀） 0 幀；/ { record(side, label, 0); label = "" }
     END {
       if (!count) { print "輸出裡沒有 describeFrames 的摘要行" > "/dev/stderr"; exit 1 }
-      print "| 情境 | 動畫中超過 4.2ms 的幀 改前 → 改後 |"
-      print "|---|---|"
+      print "| 情境 | 動畫中超過 4.2ms 的幀 改前 → 改後 | 主執行緒合計（ms）改前 → 改後 |"
+      print "|---|---|---|"
       for (i = 1; i <= count; i++) {
         l = order[i]
-        printf "| %s | %s → %s |\n", l, cell("base", l), cell("head", l)
+        printf "| %s | %s → %s | %s → %s |\n", l, cell("base", l), cell("head", l), sumCell("base", l), sumCell("head", l)
       }
     }
   ' "${logs[@]}"
