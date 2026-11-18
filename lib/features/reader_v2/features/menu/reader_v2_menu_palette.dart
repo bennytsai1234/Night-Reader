@@ -41,8 +41,8 @@ class ReaderV2MenuStyle {
     final palette = StylePalette.of(context);
     final background = palette.readerMenu.withValues(alpha: 0.96);
     final foreground = palette.text;
-    // 面板裡的卡片照分層：淺色的面板比紙暗，卡片往紙的顏色亮回一階（就是
-    // 紙色）；深色的面板比紙亮，卡片再亮一階。
+    // 面板裡的卡片照分層：淺色的面板比紙暗，卡片往紙的顏色亮回一階（到
+    // 紙色就停）；深色的面板比紙亮，卡片再亮一階。
     final card = palette.brightness == Brightness.light
         ? AppLayers.step(
             palette.readerMenu,

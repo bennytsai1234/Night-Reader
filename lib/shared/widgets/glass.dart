@@ -593,8 +593,11 @@ class GlassTextButton extends StatelessWidget {
         child: _PanelHitBox(
           inPanel: inPanel,
           sideInset: true,
-          child: SizedBox(
-            height: inPanel ? PanelButtons.size : AppGlass.buttonSize,
+          // 面板頁首裡高 32；系統字級放大、字比 32 高時跟著字長高，不裁字。
+          child: ConstrainedBox(
+            constraints: inPanel
+                ? const BoxConstraints(minHeight: PanelButtons.size)
+                : const BoxConstraints.tightFor(height: AppGlass.buttonSize),
             child: GlassSurface(
               borderRadius: AppRadius.pillShape,
               tint: inPanel ? PanelButtons.tintOf(context) : null,
@@ -605,6 +608,7 @@ class GlassTextButton extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Center(
                   widthFactor: 1,
+                  heightFactor: inPanel ? 1 : null,
                   child: UiText(
                     label,
                     style: AppTextStyles.uiMd.copyWith(

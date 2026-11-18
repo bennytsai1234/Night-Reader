@@ -69,6 +69,27 @@ void main() {
     expect(_visual(tester, close).center.dy, _visual(tester, save).center.dy);
   });
 
+  testWidgets('系統字級放大時，面板頁首的文字鈕跟著字長高，不裁字', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _pump(
+      tester,
+      AppBottomSheet(
+        title: '編輯規則',
+        trailing: GlassTextButton(label: '儲存', onPressed: () {}),
+        children: const [SizedBox(height: 40)],
+      ),
+    );
+    final save = find.byType(GlassTextButton);
+    final glass = _visual(tester, save);
+    final text = tester.getRect(
+      find.descendant(of: save, matching: find.text('儲存')),
+    );
+    expect(text.height, greaterThan(PanelButtons.size));
+    expect(glass.top, lessThanOrEqualTo(text.top));
+    expect(glass.bottom, greaterThanOrEqualTo(text.bottom));
+  });
+
   testWidgets('只有關閉的面板：關閉在右邊，右緣和卡片切齊', (tester) async {
     await _pump(
       tester,
