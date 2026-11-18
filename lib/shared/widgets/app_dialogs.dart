@@ -8,6 +8,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'clause_text.dart';
 import 'glass.dart';
+import 'popup_routes.dart';
 import 'grouped_list.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
@@ -98,20 +99,53 @@ Future<T?> _showAlertRoute<T>({
   required WidgetBuilder builder,
   required bool barrierDismissible,
 }) {
-  return showGeneralDialog<T>(
-    context: context,
-    barrierDismissible: barrierDismissible,
-    barrierLabel: UiLanguageText.convert(context, '關閉'),
-    barrierColor: AppChrome.of(context).barrier,
-    transitionDuration: AppMotion.menu,
-    pageBuilder: (context, _, _) => builder(context),
-    // 提示框在原地出現，只淡入不縮放；是玻璃，所以由玻璃自己連同模糊一起
-    // 淡（ADR 0022）。
-    transitionBuilder: (context, animation, _, child) => GlassReveal(
-      animation: CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve),
-      child: child,
+  final origin = PopupOrigin.of(context);
+  final navigator = Navigator.of(origin.context, rootNavigator: true);
+  return navigator.push<T>(
+    _AlertRoute<T>(
+      barrierThemes: InheritedTheme.capture(
+        from: origin.context,
+        to: navigator.context,
+      ),
+      barrierDerive: origin.derive,
+      barrierDismissible: barrierDismissible,
+      barrierLabel: UiLanguageText.convert(context, '關閉'),
+      barrierColor: AppChrome.of(context).barrier,
+      transitionDuration: AppMotion.menu,
+      pageBuilder: (context, _, _) => builder(context),
+      // 提示框在原地出現，只淡入不縮放；是玻璃，所以由玻璃自己連同模糊一起
+      // 淡（ADR 0022）。
+      transitionBuilder: (context, animation, _, child) => GlassReveal(
+        animation: CurvedAnimation(
+          parent: animation,
+          curve: AppMotion.fadeCurve,
+        ),
+        child: child,
+      ),
     ),
   );
+}
+
+/// 提示框的路由（照 [showGeneralDialog]），遮罩跟著當下主題
+/// （[LiveDialogBarrier]）。提示框的內容照 [showGeneralDialog] 不複製打開處
+/// 的主題，用 App 的主題。
+class _AlertRoute<T> extends RawDialogRoute<T> with LiveDialogBarrier<T> {
+  _AlertRoute({
+    required this.barrierThemes,
+    required this.barrierDerive,
+    required super.pageBuilder,
+    required super.barrierDismissible,
+    required super.barrierLabel,
+    required super.barrierColor,
+    required super.transitionDuration,
+    required super.transitionBuilder,
+  });
+
+  @override
+  final CapturedThemes barrierThemes;
+
+  @override
+  final ThemeDerivation? barrierDerive;
 }
 
 /// 擁有一組輸入框控制器：隨此元件建立，在它卸載時才釋放。
@@ -528,19 +562,21 @@ Future<T?> showAppActionSheet<T>({
 }) {
   // 面板裡的 MediaQuery 已被移除頂端內距，狀態列高度要先從外層取。
   final topInset = MediaQuery.paddingOf(context).top;
-  return showModalBottomSheet<T>(
-    context: context,
+  final origin = PopupOrigin.of(context);
+  return pushAppSheet<T>(
+    origin: origin,
     useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     elevation: 0,
-    barrierColor: AppChrome.of(context).barrier,
-    builder: (context) => _AppActionSheet<T>(
-      title: title,
-      message: message,
-      actions: actions,
-      cancelLabel: cancelLabel,
-      topInset: topInset,
+    builder: (context) => origin.wrap(
+      _AppActionSheet<T>(
+        title: title,
+        message: message,
+        actions: actions,
+        cancelLabel: cancelLabel,
+        topInset: topInset,
+      ),
     ),
   );
 }

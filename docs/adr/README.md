@@ -6,7 +6,7 @@
 
 | ADR | 一句話 |
 |---|---|
-| [0023](0023-optimize-for-smoothness-not-waiting-time.md) | 不以縮短等待時間為目標，看整體流暢與動畫完整 |
+| [0023](0023-optimize-for-smoothness-not-waiting-time.md) | 流暢與動畫完整優先，等待時間其次 |
 | [0018](0018-animations-never-share-frames-with-heavy-work.md) | 動畫播放時不跑會佔住主執行緒的工作，寧可內容晚一點出現 |
 | [0029](0029-no-dropped-frames-in-transitions-and-reveals.md) | 轉場與骨架換場不掉幀：用時間換流暢、工作拆小分攤到更多格，與六個做法 |
 | [0036](0036-three-rules-for-smooth-animation.md) | 動畫流不流暢的三條標準：點下去那一幀可以重、預留停頓可以跑重工作、動畫中每一幀在 8.3ms 內（電腦 4.2ms）；使用者在手機上感覺得到才修 |
@@ -83,6 +83,7 @@
 | [0067](0067-foreign-check-marks-are-dropped.md) | 校驗標記只由夜讀的校驗寫：Legado 這類別的 App 留下的失效分組與錯誤註解，進來時拿掉、當成還沒校驗過（有「異常」的照留）；校驗與清除校驗標記一起清；既有書源升級時整理一次 |
 | [0068](0068-check-catches-chapters-cut-at-the-first-page.md) | 書源校驗抽查的文字正文第一頁有同一章下一頁的連結、之後沒再抓，判「正文失效」、交 AI 修；連結是目錄上的章、規則自己抓網頁、漫畫與有聲的不算 |
 | [0069](0069-shelf-books-find-a-new-source-when-theirs-is-deleted.md) | 書架上的書，書源被刪掉時在背景自動換源一次：不分從哪裡刪，同類別、書名作者一樣、讀到的那章章名對得上才換，挑章數最多的；找不到維持原狀不再找；靜默，碰到別的背景工作就排隊（ADR 0058 的例外） |
+| [0071](0071-reader-drops-page-leftovers.md) | 網站轉貼分頁章節留在正文裡的頁碼、「本章未完」提示與換頁處的章名，讀的時候拿掉（Legado 交給書源）；不跟替換規則開關，已下載的章也乾淨；廣告不在範圍 |
 
 ## 工程與流程
 

@@ -248,7 +248,6 @@ Future<void> _pickAccent(
   BuildContext rowContext,
   ThemeSettingsProvider themeSettings,
 ) async {
-  final brightness = Theme.of(rowContext).brightness;
   final accent = await showGlassMenu<AppAccent>(
     context: rowContext,
     anchor: globalRectOf(rowContext),
@@ -258,10 +257,14 @@ Future<void> _pickAccent(
           value: accent,
           label: accent.label,
           checked: accent == themeSettings.accent,
-          swatch: themeSettings
-              .styleFor(brightness)
-              .paletteFor(brightness, accent)
-              .primary,
+          // 選單開著時系統切換深淺，色點跟著換成那個深淺的顏色。
+          swatch: (context) {
+            final brightness = Theme.of(context).brightness;
+            return themeSettings
+                .styleFor(brightness)
+                .paletteFor(brightness, accent)
+                .primary;
+          },
         ),
     ],
   );

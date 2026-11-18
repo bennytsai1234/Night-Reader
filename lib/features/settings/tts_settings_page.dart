@@ -20,9 +20,9 @@ class _TtsSettingsPageState extends State<TtsSettingsPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 朗讀引擎平常在開 App 時就開好了（TTSService.ready）；沒開好（開 App
-    // 時等超過上限、或開失敗）才在這裡再開一次，等換頁播完再開，不和換頁
-    // 擠在一起。init() 在已經開好時什麼都不做。
+    // 朗讀引擎在開 App 時就開始開（TTSService.init），系統朗讀服務約 1 秒後
+    // 才回應；還沒開好或開失敗時這裡等同一次（失敗就再開一次），等換頁播完
+    // 再等，不和換頁擠在一起。init() 在已經開好時什麼都不做。
     _opened ??= TransitionSettled.entered(context).then((_) {
       if (mounted) return TTSService().init();
     });

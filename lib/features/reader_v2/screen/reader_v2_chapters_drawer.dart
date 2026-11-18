@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -330,8 +331,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     final theme = ReaderV2MenuStyle.of(context).toSheetTheme(Theme.of(context));
     // 此處的 context 仍在 App 主題下，衍生色直接取選單主題上的擴充。
     final chrome = theme.extension<AppChrome>()!;
-    return Theme(
-      data: theme,
+    return DerivedTheme(
+      derive: ReaderV2MenuStyle.menuThemeOf,
       child: Drawer(
         backgroundColor: theme.colorScheme.surface,
         shape: const RoundedRectangleBorder(

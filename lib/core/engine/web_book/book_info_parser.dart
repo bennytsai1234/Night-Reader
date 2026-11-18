@@ -5,6 +5,7 @@ import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/utils/html_formatter.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 
@@ -95,7 +96,10 @@ class BookInfoParser {
       if (latestChapterTitle.isNotEmpty) {
         working.latestChapterTitle = latestChapterTitle;
       }
-      final intro = _optional('簡介', () => rule.getString(infoRule.intro ?? ''));
+      // 同 Legado：規則取整段 HTML（`#intro@html`）時，標籤換成換行或拿掉。
+      final intro = HtmlFormatter.format(
+        _optional('簡介', () => rule.getString(infoRule.intro ?? '')),
+      );
       if (intro.isNotEmpty) working.intro = intro;
       final coverUrl = _optional(
         '封面',

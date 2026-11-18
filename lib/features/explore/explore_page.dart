@@ -454,12 +454,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       context: rowContext,
       sourceRect: globalRectOf(rowContext),
       previewRadius: AppGrouped.cardRadius,
-      preview: Material(
-        color: AppChrome.of(rowContext).groupedSurface,
-        child: _SourceRow(
-          name: source.bookSourceName,
-          expanded: false,
-          loading: false,
+      // 底色在預覽裡取，選單開著時系統切換深淺也跟著換。
+      preview: Builder(
+        builder: (context) => Material(
+          color: AppChrome.of(context).groupedSurface,
+          child: _SourceRow(
+            name: source.bookSourceName,
+            expanded: false,
+            loading: false,
+          ),
         ),
       ),
       entries: const [
