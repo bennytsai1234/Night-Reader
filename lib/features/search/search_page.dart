@@ -21,9 +21,11 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 import 'search_model.dart';
 import 'search_provider.dart';
+import 'search_run.dart';
 import 'models/search_scope.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/background_work/background_work.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -83,6 +85,8 @@ class _SearchPageState extends State<SearchPage> {
             (initialSource == null
                 ? null
                 : SearchProvider.searchKindOf(initialSource)),
+        // 沒帶關鍵字打開時接回放到背景的那一次（ADR 0070）。
+        resumeBackground: widget.initialQuery == null && initialSource == null,
       ),
       child: SearchView(
         initialQuery: widget.initialQuery,
@@ -160,7 +164,11 @@ class _SearchViewState extends State<SearchView> {
   @override
   void initState() {
     super.initState();
-    if (_opensBlank) return;
+    if (_opensBlank) {
+      // 接回的那一次搜尋：輸入框是它的關鍵字。
+      _controller.text = context.read<SearchProvider>().lastSearchKey;
+      return;
+    }
     _controller.text = widget.initialQuery ?? '';
     unawaited(_searchWhenReady());
   }
@@ -187,6 +195,8 @@ class _SearchViewState extends State<SearchView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // 點通知時這一頁已經在最上面就不再推一頁（ADR 0058）。
+    context.read<SearchProvider>().route = ModalRoute.of(context);
     final tickerMode = TickerMode.getValuesNotifier(context);
     if (tickerMode == _tickerMode) return;
     _tickerMode?.removeListener(_onTickerModeChanged);
@@ -236,7 +246,7 @@ class _SearchViewState extends State<SearchView> {
       builder: (context, provider, child) {
         _trackArrivals(provider);
         final showResults =
-            !(provider.results.isEmpty && !provider.isSearching);
+            !(provider.results.isEmpty && !provider.isUnfinished);
         return Scaffold(
           extendBodyBehindAppBar: true,
           backgroundColor: AppChrome.of(context).groupedBackground,
@@ -276,7 +286,7 @@ class _SearchViewState extends State<SearchView> {
                     right: 0,
                     // 搜尋結束時停在最後的進度淡出，不在一幀內消失。
                     child: _FadeSwap(
-                      child: provider.isSearching
+                      child: provider.isSearching || provider.isBackgroundPaused
                           ? ListenableBuilder(
                               key: const ValueKey('progress'),
                               listenable: provider.progressUpdates,
@@ -328,7 +338,9 @@ class _SearchViewState extends State<SearchView> {
     return [
       if (provider.precisionSearch || !provider.searchScope.isAll)
         _buildFilterStatusPanel(provider),
-      if (provider.isSearching || provider.hasUnfilteredResults)
+      if (provider.isSearching ||
+          provider.isBackgroundPaused ||
+          provider.hasUnfilteredResults)
         _buildStatusSlot(context, provider)
       else if (provider.failedSources > 0)
         _buildFailedSourcesPanel(context, provider),
@@ -525,7 +537,7 @@ class _SearchViewState extends State<SearchView> {
       // blur: false，可以跟著淡。
       child: _FadeSwap(
         alignment: AlignmentDirectional.centerStart,
-        child: p.isSearching
+        child: p.isSearching || p.isBackgroundPaused
             ? KeyedSubtree(
                 key: const ValueKey('progress'),
                 child: _buildSearchProgress(p),
@@ -538,22 +550,47 @@ class _SearchViewState extends State<SearchView> {
     ),
   );
 
-  /// 剩下的書源不超過這個數時，改列出還在等哪幾個；三個名稱大致排得進
-  /// 一行。不想等了按頁首的「結束」，已找到的結果留著。
-  static const _namedWaitingLimit = 3;
-
+  /// 進度那一列：剩不到三個書源時列出還在等哪幾個（[searchProgressText]）。
+  /// 不想等了按頁首的「結束」，已找到的結果留著。右邊是「放到背景」，放到
+  /// 背景後是「暫停」，暫停中是「繼續」（ADR 0070）。
   Widget _buildSearchProgress(SearchProvider p) => ListenableBuilder(
     listenable: p.progressUpdates,
     builder: (context, _) => _buildSearchProgressContent(p),
   );
 
   Widget _buildSearchProgressContent(SearchProvider p) {
-    final remaining = p.totalSources - p.completedSources;
-    final waiting = p.waitingSources;
-    final namesWaiting =
-        p.totalSources > 0 &&
-        remaining <= _namedWaitingLimit &&
-        waiting.isNotEmpty;
+    final text = p.isBackgroundPausing
+        ? backgroundWorkPausing
+        : p.isBackgroundStopping
+        ? backgroundWorkEnding
+        : p.isBackgroundPaused
+        ? '已暫停 ${p.completedSources}/${p.totalSources}'
+        : searchProgressText(
+            completed: p.completedSources,
+            total: p.totalSources,
+            waiting: p.waitingSources,
+          );
+    final action = p.showsMoveToBackground
+        ? PlainTextAction(
+            label: '放到背景',
+            small: true,
+            onPressed: p.canMoveToBackground ? p.moveToBackground : null,
+          )
+        : p.isBackgroundPaused
+        ? PlainTextAction(
+            label: '繼續',
+            small: true,
+            onPressed: p.canResumeBackground
+                ? () => unawaited(p.resumeBackground())
+                : null,
+          )
+        : p.isInBackground && !p.isBackgroundPausing && !p.isBackgroundStopping
+        ? PlainTextAction(
+            label: '暫停',
+            small: true,
+            onPressed: p.pauseBackground,
+          )
+        : null;
     return Padding(
       padding: const EdgeInsets.only(left: AppGrouped.rowPadding),
       child: Row(
@@ -561,11 +598,7 @@ class _SearchViewState extends State<SearchView> {
           Expanded(
             child: DragOverflowText(
               child: UiText(
-                namesWaiting
-                    ? '還在等：${waiting.join('、')}'
-                    : p.totalSources > 0
-                    ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
-                    : '正在搜尋',
+                text,
                 style: AppTextStyles.labelXs.copyWith(
                   height: 1.3,
                   color: AppChrome.of(context).sectionText,
@@ -574,6 +607,13 @@ class _SearchViewState extends State<SearchView> {
               ),
             ),
           ),
+          if (action != null) ...[
+            const SizedBox(width: AppSpacing.md),
+            Padding(
+              padding: const EdgeInsets.only(right: AppGrouped.rowPadding),
+              child: action,
+            ),
+          ],
         ],
       ),
     );

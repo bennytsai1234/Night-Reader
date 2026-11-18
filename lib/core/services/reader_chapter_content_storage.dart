@@ -1,3 +1,4 @@
+import 'package:night_reader/core/services/reading_fetches.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -126,7 +127,7 @@ class ReaderChapterContentStorage {
     required bool saveChapterMetadata,
     required int maxAttempts,
   }) async {
-    final materialized = await _materialize(
+    Future<ChapterContentPreparationResult> materialize() => _materialize(
       chapterIndex: chapterIndex,
       chapter: chapter,
       sourceOverride: sourceOverride,
@@ -134,6 +135,10 @@ class ReaderChapterContentStorage {
       saveChapterMetadata: saveChapterMetadata,
       maxAttempts: maxAttempts,
     );
+    // 存著的正文沒有、要向書源抓：背景搜尋先讓（ADR 0070）。
+    final materialized = book.isLocal
+        ? await materialize()
+        : await ReadingFetches.instance.track(materialize);
     // 重抓失敗時存著的舊正文還在（失敗不蓋掉正文），但這次確實沒抓到。
     if (materialized.isFailed) return materialized;
     return await _readStored(chapter) ?? materialized;

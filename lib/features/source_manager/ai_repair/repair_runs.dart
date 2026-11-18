@@ -70,7 +70,8 @@ double repairBatchProgress(SourceRepairBatch batch) {
 }
 
 /// 一件背景工作的頁面那一半：頁面關了照跑，入口再按推回同一件（ADR 0058）。
-/// 做完、而且有頁面開著看過結果之後，最後一頁關掉才算結束。
+/// 做完、而且有頁面開著看過結果之後，最後一頁關掉才算結束。開 App 時讀回的
+/// 可以是暫停中（[paused]）或做完還沒看過（[finished]，放到背景的搜尋）。
 ///
 /// 能暫停的（[canPause]）：按暫停、從最近使用滑掉或被系統收掉都停在做完的
 /// 那一步，位置空出來；按繼續（[resume]）從那裡接著做，按結束（[end]）收尾、
@@ -80,10 +81,12 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
     BackgroundWork? work,
     NavigatorState? Function()? navigator,
     bool paused = false,
+    bool finished = false,
   }) : _work = work ?? BackgroundWork.instance,
        _navigator = navigator ?? (() => rootNavigatorKey.currentState),
-       _started = paused,
-       _paused = paused {
+       _started = paused || finished,
+       _paused = paused,
+       _finished = finished {
     // 暫停中的頁面要知道位置空出來了沒，「繼續」才跟著能按。
     _work.addListener(_slotChanged);
   }
@@ -102,7 +105,7 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   final NavigatorState? Function() _navigator;
 
   bool _started;
-  bool _finished = false;
+  bool _finished;
   bool _seen = false;
   bool _paused;
   bool _resuming = false;
