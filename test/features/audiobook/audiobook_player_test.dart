@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:drift/native.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -18,6 +19,8 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
+import 'package:night_reader/core/sync/progress_sync.dart';
+import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
 
 import 'audiobook_test_doubles.dart';
@@ -129,6 +132,76 @@ void main() {
 
     expect(errors, isEmpty);
     expect(player.hasPrevious, isTrue);
+  });
+
+  /// 書架上另一本有聲書，資料庫裡沒有目錄：開書要向書源抓（[source] 的
+  /// `chapterList` 放行）。
+  Future<Book> bookWithoutChapters() async {
+    final other = book.copyWith(
+      bookUrl: 'https://audio.test/book/2',
+      name: '另一本',
+      chapterIndex: 5,
+      charOffset: 0,
+    );
+    await bookDao.upsert(other);
+    return other;
+  }
+
+  test('列表循環時目錄還在抓，不算有下一集，按下一集也不出錯', () async {
+    while (player.mode != AudiobookPlayMode.listLoop) {
+      player.cycleMode();
+    }
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer();
+    final opening = player.open(other);
+    await pumpEventQueue();
+    expect(player.chapters, isEmpty);
+
+    expect(player.hasNext, isFalse);
+    await player.next();
+
+    source.chapterList!.complete([
+      for (var i = 0; i <= 6; i++)
+        BookChapter(
+          url: 'https://audio.test/b2/ep$i',
+          title: '第 $i 集',
+          bookUrl: other.bookUrl,
+          index: i,
+        ),
+    ]);
+    await opening;
+    expect(player.chapterIndex, 5);
+  });
+
+  test('抓不到目錄之後按播放、回到前景，都不出錯', () async {
+    // 先播過一本：播放引擎已經在了，播放鍵才會走到重載這一集。
+    await player.open(book);
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer()..complete(null);
+    await player.open(other);
+    expect(player.error, isNotNull);
+    expect(player.chapters, isEmpty);
+
+    await player.play();
+
+    // 另一台聽到較新的地方：沒有目錄跳不過去，不記成同步過。
+    sync.pulled = PulledProgress(
+      SyncedProgress(
+        chapterIndex: 3,
+        charOffset: 1000,
+        chapterTitle: '第 3 集',
+        time: 1,
+      ),
+      (_) async => sync.commits++,
+    );
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+    expect(sync.commits, 0);
   });
 
   test('播著的書算開著，停了才放掉：播的時候不自動換源（ADR 0069）', () async {
