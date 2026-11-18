@@ -6,6 +6,7 @@ import '../../../core/engine/reader/chinese_text_converter.dart';
 import '../../../core/utils/illustration_markers.dart';
 import '../session/reader_v2_location.dart';
 import 'reader_v2_illustration.dart';
+import 'semantic_paragraph_formatter.dart';
 
 export 'reader_v2_illustration.dart';
 
@@ -191,7 +192,9 @@ class ReaderV2Content {
   /// 只要段落時用這個：[ReaderV2Content.fromRaw] 還會對整章算雜湊，那只在
   /// 背景做（`reader_v2_content_transformer.dart`）。
   static List<String> paragraphsOf(String rawText) {
-    final normalized = normalizeRawText(rawText);
+    final normalized = normalizeRawText(
+      SemanticParagraphFormatter.repair(rawText),
+    );
     if (normalized.isEmpty) return const <String>[];
     return normalized
         .split(RegExp(r'\n+'))
