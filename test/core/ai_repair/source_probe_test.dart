@@ -11,6 +11,7 @@ import 'package:night_reader/core/ai_repair/repair_rule_tools.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,6 +42,10 @@ void main() {
     databaseIsolate = await DriftIsolate.spawn(NativeDatabase.memory);
     db = AppDatabase.connected(await databaseIsolate.connect());
     registerDatabase(db);
+    // 規則 JS 的 `java.ajax` 停住 worker、交給網路 isolate 送；App 裡開書源
+    // isolate 時設好它連哪個資料庫（[SourceIsolate.start]），這裡沒開，要
+    // 自己設，不然它等 App 的資料庫等不到。
+    SourceIo.configure(database: Future.value(databaseIsolate));
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     site = 'http://${server.address.address}:${server.port}';
     server.listen((request) async {
@@ -83,6 +88,7 @@ void main() {
   });
 
   tearDownAll(() async {
+    await SourceIo.stop();
     await server.close(force: true);
     await db.close();
     await databaseIsolate.shutdownAll();
