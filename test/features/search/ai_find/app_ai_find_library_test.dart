@@ -16,6 +16,12 @@ void main() {
     );
   });
 
+  // 笔趣阁 biquge345 的簡介原文寫著反斜線加 n；只有這個的簡介不算有簡介。
+  test('a literal backslash-n from the site is a line break for the AI', () {
+    expect(aiFindPlainText(r'第一行\n第二行'), '第一行\n第二行');
+    expect(aiFindPlainText(r'\n'), isEmpty);
+  });
+
   test('network failures say what the site did', () {
     final options = RequestOptions();
     expect(

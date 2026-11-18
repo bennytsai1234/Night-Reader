@@ -841,8 +841,14 @@ class BookDetailProvider extends ChangeNotifier {
     final next = Book.fromJson(Map<String, dynamic>.from(_book.toJson()));
     next.name = normalizedName;
     next.author = author.trim();
-    next.intro = intro.trim();
-    next.customIntro = intro.trim();
+    // 同 Legado（BookInfoEditActivity）：書源的簡介不動；簡介欄改過才算讀者
+    // 自己寫的，改成和書源的一樣就不算，清空就回到書源的。
+    final editedIntro = intro.trim();
+    if (editedIntro != _book.getShownIntro()) {
+      next.customIntro = editedIntro == _book.getShownSourceIntro()
+          ? null
+          : editedIntro;
+    }
     next.kind = kind?.trim();
     next.customTag = customTag?.trim();
     if (originName != null && originName.trim().isNotEmpty) {
