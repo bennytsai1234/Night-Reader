@@ -302,6 +302,27 @@ void main() {
     },
   );
 
+  test('the chapter title changed while searching, at the same index: a new '
+      'source without that chapter is not switched to', () async {
+    // 搜的時候同步把讀到的那一章改成「番外」（位置還是第 6 章）：新書源
+    // 沒有這一章，對不到章名就不換（ADR 0069），不能因為照比例估出同一個
+    // 位置就沿用驗證過「第6章」的候選。
+    await launched();
+    await shelve(_book('old'));
+    sites.gate = Completer<void>();
+
+    await db.bookSourceDao.deleteByUrl('old');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final book = (await db.bookDao.getByUrl('old/夜雨'))!;
+    await db.bookDao.upsert(book.copyWith(durChapterTitle: '番外'));
+    sites.gate!.complete();
+    await settled();
+
+    final kept = (await shelf()).single;
+    expect(kept.origin, 'old');
+    expect((kept.chapterIndex, kept.durChapterTitle), (5, '番外'));
+  });
+
   test(
     'a book already on the shelf from the new source is not overwritten',
     () async {

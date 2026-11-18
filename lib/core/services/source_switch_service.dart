@@ -281,22 +281,25 @@ class SourceSwitchService {
 
   /// [prepared] 改照 [latest] 寫回：準備時用的那份書之後被改過（分組、排序、
   /// 封面、閱讀設定、閱讀時間這類）時，寫回的要是最新的。讀到的那一章
-  /// [targetChapterTitle]（沒給照書記的）對到的不是準備好的那一章時是 null，
-  /// 要重新準備。
+  /// [targetChapterTitle]（沒給照書記的）對到的不是準備好的那一章、或那一章
+  /// 的章名不一樣（照比例估到同一個位置）時是 null，要重新準備。
   PreparedSourceSwitch? rebase(
     PreparedSourceSwitch prepared,
     Book latest, {
     String? targetChapterTitle,
   }) {
-    final alignment = latest.copyWith(
-      durChapterTitle: targetChapterTitle ?? latest.durChapterTitle,
-    );
+    final title = targetChapterTitle ?? latest.durChapterTitle;
+    if (title == null) return null;
+    final alignment = latest.copyWith(durChapterTitle: title);
     final migrated = _migrate(
       alignment,
       prepared.migratedBook,
       prepared.chapters,
     );
-    if (migrated.index != prepared.targetChapterIndex) return null;
+    if (migrated.index != prepared.targetChapterIndex ||
+        !sameChapterTitle(prepared.chapters[migrated.index].title, title)) {
+      return null;
+    }
     return PreparedSourceSwitch(
       searchBook: prepared.searchBook,
       source: prepared.source,
