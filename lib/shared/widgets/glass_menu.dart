@@ -10,6 +10,7 @@ import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
+import 'popup_routes.dart';
 
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
@@ -75,15 +76,9 @@ Future<T?> showGlassMenu<T>({
   required Rect anchor,
   required List<GlassMenuEntry<T>> entries,
 }) {
-  return Navigator.of(context, rootNavigator: true).push<T>(
-    _GlassMenuRoute<T>(
-      anchor: anchor,
-      entries: entries,
-      capturedThemes: InheritedTheme.capture(
-        from: context,
-        to: Navigator.of(context, rootNavigator: true).context,
-      ),
-    ),
+  final origin = PopupOrigin.of(context);
+  return Navigator.of(origin.context, rootNavigator: true).push<T>(
+    _GlassMenuRoute<T>(anchor: anchor, entries: entries, origin: origin),
   );
 }
 
@@ -108,16 +103,14 @@ Future<T?> showContextPreviewMenu<T>({
   BorderRadius previewRadius = AppRadius.cardLg,
 }) {
   AppHaptics.lift();
-  return Navigator.of(context, rootNavigator: true).push<T>(
+  final origin = PopupOrigin.of(context);
+  return Navigator.of(origin.context, rootNavigator: true).push<T>(
     _GlassMenuRoute<T>(
       anchor: sourceRect,
       entries: entries,
       preview: preview,
       previewRadius: previewRadius,
-      capturedThemes: InheritedTheme.capture(
-        from: context,
-        to: Navigator.of(context, rootNavigator: true).context,
-      ),
+      origin: origin,
     ),
   );
 }
@@ -196,14 +189,21 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
   _GlassMenuRoute({
     required this.anchor,
     required this.entries,
-    required this.capturedThemes,
+    required PopupOrigin origin,
     this.preview,
     this.previewRadius = AppRadius.cardLg,
-  });
+  }) : _raised = origin.raised,
+       capturedThemes = InheritedTheme.capture(
+         from: origin.context,
+         to: Navigator.of(origin.context, rootNavigator: true).context,
+       );
 
   final Rect anchor;
   final List<GlassMenuEntry<T>> entries;
+
+  /// 打開處的主題（從面板裡打開時是面板外層的，[PopupOrigin]）。
   final CapturedThemes capturedThemes;
+  final bool _raised;
   final Widget? preview;
   final BorderRadius previewRadius;
 
@@ -228,8 +228,9 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
+    final overlay = _GlassMenuOverlay<T>(route: this, animation: animation);
     return capturedThemes.wrap(
-      _GlassMenuOverlay<T>(route: this, animation: animation),
+      _raised ? RaisedSheetTheme(child: overlay) : overlay,
     );
   }
 }

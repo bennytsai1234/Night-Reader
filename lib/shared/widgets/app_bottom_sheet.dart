@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
@@ -8,6 +10,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 /// Telegram 式底部面板：分組底色、拖曳把手、置中標題與右側圓形關閉鈕，
@@ -192,7 +195,8 @@ class AppBottomSheet extends StatelessWidget {
   /// 顯示需要自訂內容與狀態管理的底部工作表，同時統一外層底色、形狀與裁切。
   ///
   /// 未指定 [backgroundColor] 時使用分組清單底色，讓面板內的分組卡片浮在
-  /// 底色之上。
+  /// 底色之上。底色、把手與遮罩照當下的主題畫，面板開著時系統切換深淺也
+  /// 跟著換；指定 [backgroundColor] 的面板在裡面自己照主題畫底色。
   static Future<T?> showCustom<T>({
     required BuildContext context,
     required WidgetBuilder builder,
@@ -209,34 +213,115 @@ class AppBottomSheet extends StatelessWidget {
   }) {
     // 面板裡的底色照面板的主題（深色往上一階，`sheetThemeOf`）；閱讀器面板
     // 用選單主題自己分層，給 raised: false。
-    ThemeData themeOf(BuildContext context) =>
-        raised ? sheetThemeOf(Theme.of(context)) : Theme.of(context);
-    return showModalBottomSheet<T>(
-      context: context,
-      builder: (context) => Theme(
-        data: themeOf(context),
-        child: Builder(builder: builder),
-      ),
+    final origin = PopupOrigin.of(context);
+    // 外殼不畫底色：外殼的顏色在打開時就定住，底色由裡面的 Material 照
+    // 當下的主題畫。系統的把手畫在外殼裡、內容上方，底下就沒有底色，所以
+    // 把手也由裡面畫（[_SheetDragHandle]）。
+    final paintsSurface = backgroundColor == null;
+    return pushAppSheet<T>(
+      origin: origin,
+      builder: (context) {
+        Widget sheet = Builder(builder: builder);
+        if (raised) sheet = RaisedSheetTheme(child: sheet);
+        if (paintsSurface) {
+          sheet = _SheetSurface(
+            raised: raised,
+            showDragHandle: showDragHandle ?? false,
+            child: sheet,
+          );
+        }
+        return raised ? RaisedSheetScope(base: context, child: sheet) : sheet;
+      },
       // 不給時照 Material 3 預設：最寬 640、置中。
       constraints: constraints,
-      barrierColor: barrierColor ?? AppChrome.of(context).barrier,
+      barrierColor: barrierColor,
       // 讀螢幕軟體念遮罩的名字；不給時是 Material 的英文「Scrim」。
       barrierLabel: UiLanguageText.convert(context, '關閉'),
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
-      // 不能點外面關掉時也不能往下拉掉（例如還沒儲存的表單）。
       isDismissible: isDismissible,
-      enableDrag: isDismissible,
-      showDragHandle: showDragHandle,
-      backgroundColor:
-          backgroundColor ??
-          themeOf(context).extension<AppChrome>()?.groupedBackground ??
-          AppChrome.of(context).groupedBackground,
+      showDragHandle: paintsSurface ? false : showDragHandle,
+      backgroundColor: backgroundColor ?? Colors.transparent,
       elevation: 0,
       shape:
           shape ??
           const RoundedRectangleBorder(borderRadius: AppRadius.topSheetXl),
       clipBehavior: clipBehavior ?? Clip.antiAlias,
+    );
+  }
+}
+
+/// 底部面板的底色（分組清單底色）與系統樣式的把手，照當下的主題畫。
+///
+/// 放在墊高一階的面板主題外面，和原本畫在外殼的 Material 同一個主題：
+/// 把手顏色與預設字樣照外面的主題，只有底色取墊高後的那一階。
+class _SheetSurface extends StatelessWidget {
+  const _SheetSurface({
+    required this.raised,
+    required this.showDragHandle,
+    required this.child,
+  });
+
+  final bool raised;
+  final bool showDragHandle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final chrome = (raised ? sheetThemeOf(theme) : theme)
+        .extension<AppChrome>()!;
+    return Material(
+      color: chrome.groupedBackground,
+      child: showDragHandle
+          ? Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                const _SheetDragHandle(),
+                Padding(
+                  padding: const EdgeInsets.only(top: kMinInteractiveDimension),
+                  child: child,
+                ),
+              ],
+            )
+          : child,
+    );
+  }
+}
+
+/// 照 Material 3 底部面板的把手畫（`showDragHandle`）：32×4 的圓角條，
+/// 置中在 48 見方的觸控範圍裡；讀螢幕軟體點了關閉面板。
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle();
+
+  static const Size _defaultSize = Size(32, 4);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sheetTheme = theme.bottomSheetTheme;
+    final size = sheetTheme.dragHandleSize ?? _defaultSize;
+    return Semantics(
+      label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      container: true,
+      button: true,
+      onTap: () => Navigator.maybePop(context),
+      child: SizedBox(
+        width: math.max(size.width, kMinInteractiveDimension),
+        height: math.max(size.height, kMinInteractiveDimension),
+        child: Center(
+          child: Container(
+            width: size.width,
+            height: size.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(size.height / 2),
+              color:
+                  sheetTheme.dragHandleColor ??
+                  theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
