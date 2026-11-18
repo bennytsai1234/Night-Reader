@@ -23,19 +23,22 @@ class AppLog {
     Object? error,
     StackTrace? stackTrace,
     bool toast,
+    bool isError,
   )?
   delegate;
 
-  /// 記錄日誌 (原 Android AppLog.kt)
+  /// 記錄日誌 (原 Android AppLog.kt)。[isError] 或帶著 [error] 的記成錯誤
+  /// （App 日誌的「最近的錯誤」，崩潰日誌也附上），其他的是一般日誌。
   static void put(
     String message, {
     Object? error,
     StackTrace? stackTrace,
     bool toast = false,
+    bool isError = false,
   }) {
     final delegate = AppLog.delegate;
     if (delegate != null) {
-      delegate(message, error, stackTrace, toast);
+      delegate(message, error, stackTrace, toast, isError);
       return;
     }
     if (_logs.length >= _maxLogs) {
@@ -50,7 +53,12 @@ class AppLog {
     );
 
     _logs.addFirst(entry);
-    CrashTrail.log(error == null ? message : '$message: $error');
+    final line = error == null ? message : '$message: $error';
+    if (isError || error != null) {
+      CrashTrail.error(line, stackTrace: stackTrace);
+    } else {
+      CrashTrail.log(line);
+    }
 
     if (kDebugMode) {
       if (getIt.isRegistered<Logger>()) {
@@ -81,7 +89,13 @@ class AppLog {
     Object? error,
     StackTrace? stackTrace,
     bool toast = false,
-  }) => put(message, error: error, stackTrace: stackTrace, toast: toast);
+  }) => put(
+    message,
+    error: error,
+    stackTrace: stackTrace,
+    toast: toast,
+    isError: true,
+  );
 }
 
 class LogEntry {

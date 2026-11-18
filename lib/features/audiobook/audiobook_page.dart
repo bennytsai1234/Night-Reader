@@ -18,7 +18,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_chapter_files.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
-import 'package:night_reader/features/about/crash_log_page.dart';
+import 'package:night_reader/features/about/app_log_page.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
@@ -306,9 +306,8 @@ class _AudiobookPageState extends State<AudiobookPage> {
           MaterialPageRoute(builder: (_) => SourceEditorPage(source: source)),
         );
       case _MoreAction.log:
-        await Navigator.of(
-          context,
-        ).push<void>(MaterialPageRoute(builder: (_) => const CrashLogPage()));
+        await Navigator.of(context)
+            .push<void>(MaterialPageRoute(builder: (_) => const AppLogPage()));
     }
   }
 

@@ -20,6 +20,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import 'app_log_page.dart';
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
 import 'licenses_page.dart';
@@ -300,6 +301,18 @@ class _AboutPageState extends State<AboutPage> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CrashLogPage()),
+                ),
+              ),
+              // 崩潰日誌只收出事的時候；平常的動作、錯誤與日誌在這裡。
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.article_outlined,
+                  tint: AppTint.ink,
+                ),
+                title: 'App 日誌',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AppLogPage()),
                 ),
               ),
               // 和崩潰日誌一樣平常不看，出事才看（使用者 2026-11-01）。

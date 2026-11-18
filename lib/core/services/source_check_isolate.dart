@@ -19,7 +19,6 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chapter_content_kind.dart';
 import 'package:night_reader/core/services/content_next_page.dart';
-import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/core/services/source_interaction.dart';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -170,13 +169,15 @@ Future<SourceCheckIsolateHandle> spawnSourceCheck(
         .then(
           (map) => finish(SourceCheckIsolateResult.fromMap(map)),
           onError: (Object error, StackTrace stack) {
-            // 先把真實錯誤寫進崩潰日誌，再以 null 收尾，避免被誤判為「整體校驗
-            // 超時」；結束 worker 的那一次不算。
+            // 先把真實錯誤記成錯誤（App 日誌；App 沒有閃退，不寫崩潰日誌），
+            // 再以 null 收尾，避免被誤判為「整體校驗超時」；結束 worker 的那一次
+            // 不算。
             if (!completer.isCompleted) {
-              CrashHandler.recordError(
+              AppLog.e(
                 '書源校驗失敗 [${source.bookSourceName}] '
-                '(${source.bookSourceUrl}): $error',
-                stack,
+                '(${source.bookSourceUrl})',
+                error: error,
+                stackTrace: stack,
               );
             }
             finish(null);

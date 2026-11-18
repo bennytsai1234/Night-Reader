@@ -1,214 +1,31 @@
-import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:flutter/services.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/app_state_view.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/core/services/ui_language.dart';
 
-class CrashLogPage extends StatefulWidget {
+import 'log_page.dart';
+
+/// 崩潰日誌（[CrashHandler] 寫的）：從新到舊，可以複製、分享成檔案或清除。
+class CrashLogPage extends StatelessWidget {
   const CrashLogPage({
     super.key,
     this.readLogs,
     this.clearLogs,
     this.writeClipboard,
+    this.shareFile,
   });
 
-  final Future<String> Function()? readLogs;
+  final Future<List<String>> Function()? readLogs;
   final Future<void> Function()? clearLogs;
   final Future<void> Function(String text)? writeClipboard;
+  final Future<void> Function(String path)? shareFile;
 
   @override
-  State<CrashLogPage> createState() => _CrashLogPageState();
-}
-
-enum _CrashLogStatus { loading, loaded, error }
-
-enum _CrashLogAction { copy, clear }
-
-class _CrashLogPageState extends State<CrashLogPage> {
-  _CrashLogStatus _status = _CrashLogStatus.loading;
-  String _logs = '';
-  Object? _loadError;
-  bool _isClearing = false;
-
-  bool get _hasLogs => _logs.trim().isNotEmpty;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLogs();
-  }
-
-  Future<void> _loadLogs() async {
-    if (mounted) {
-      setState(() {
-        _status = _CrashLogStatus.loading;
-        _loadError = null;
-      });
-    }
-    try {
-      final logs = await (widget.readLogs ?? CrashHandler.readLogs)();
-      if (!mounted) return;
-      setState(() {
-        _logs = logs;
-        _status = _CrashLogStatus.loaded;
-      });
-    } catch (error, stackTrace) {
-      AppLog.e('讀取崩潰日誌失敗', error: error, stackTrace: stackTrace);
-      if (!mounted) return;
-      setState(() {
-        _loadError = error;
-        _status = _CrashLogStatus.error;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final canUseLogs =
-        _status == _CrashLogStatus.loaded && _hasLogs && !_isClearing;
-
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: GlassNavHeader(
-        title: '崩潰日誌',
-        actions: [
-          // 頁首右邊只有一顆，動作都收進「更多」（docs/design/components.md
-          // 「左右各一顆」）；沒有日誌時整顆停用（ADR 0059）。
-          GlassMenuButton<_CrashLogAction>(
-            enabled: canUseLogs,
-            entriesBuilder: (_) => const [
-              GlassMenuItem(
-                value: _CrashLogAction.copy,
-                label: '複製日誌',
-                icon: Icons.copy_rounded,
-              ),
-              GlassMenuItem(
-                value: _CrashLogAction.clear,
-                label: '清除日誌',
-                icon: Icons.delete_outline_rounded,
-                destructive: true,
-              ),
-            ],
-            onSelected: (action) => switch (action) {
-              _CrashLogAction.copy => _copyLogs(),
-              _CrashLogAction.clear => _confirmClearLogs(),
-            },
-          ),
-        ],
-      ),
-      body: _buildBody(context),
-    );
-  }
-
-  Widget _buildBody(BuildContext context) {
-    switch (_status) {
-      case _CrashLogStatus.loading:
-        return Center(
-          child: Semantics(
-            liveRegion: true,
-            label: context.ui('正在載入崩潰日誌'),
-            child: ExcludeSemantics(child: CircularProgressIndicator()),
-          ),
-        );
-      case _CrashLogStatus.error:
-        return AppStateView(
-          icon: Icons.error_outline,
-          title: '崩潰日誌載入失敗',
-          description: userErrorReason(_loadError!),
-          tone: AppStateTone.error,
-          primaryAction: AppStateAction(
-            label: '重試',
-            icon: Icons.refresh,
-            onPressed: _loadLogs,
-          ),
-        );
-      case _CrashLogStatus.loaded:
-        if (!_hasLogs) {
-          return const AppStateView(
-            icon: Icons.article_outlined,
-            title: '目前沒有崩潰日誌',
-          );
-        }
-        return GroupedListView(
-          children: [
-            GroupedSection(
-              topGap: AppSpacing.md,
-              children: [
-                GroupedContent(
-                  child: SelectableText(
-                    _logs,
-                    style: AppTextStyles.labelSm.copyWith(
-                      height: 1.45,
-                      fontFamily: 'monospace',
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-    }
-  }
-
-  Future<void> _copyLogs() async {
-    try {
-      final writer = widget.writeClipboard;
-      if (writer == null) {
-        await Clipboard.setData(ClipboardData(text: _logs));
-      } else {
-        await writer(_logs);
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: UiText('已複製至剪貼簿')));
-    } catch (error, stackTrace) {
-      AppLog.e('複製崩潰日誌失敗', error: error, stackTrace: stackTrace);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: UiText('複製崩潰日誌失敗')));
-    }
-  }
-
-  Future<void> _confirmClearLogs() async {
-    final confirmed = await showAppConfirm(
-      context: context,
-      title: '清除崩潰日誌？',
-      message: '清除後無法復原。',
-      confirmLabel: '清除',
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
-
-    setState(() => _isClearing = true);
-    try {
-      await (widget.clearLogs ?? CrashHandler.clearLogs)();
-      await _loadLogs();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: UiText('已清除崩潰日誌')));
-    } catch (error, stackTrace) {
-      AppLog.e('清除崩潰日誌失敗', error: error, stackTrace: stackTrace);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: UiText('清除崩潰日誌失敗：${userErrorReason(error)}')),
-        );
-    } finally {
-      if (mounted) setState(() => _isClearing = false);
-    }
-  }
+  Widget build(BuildContext context) => LogPage(
+    title: '崩潰日誌',
+    emptyTitle: '目前沒有崩潰日誌',
+    fileName: '夜讀崩潰日誌',
+    readLogs: readLogs ?? CrashHandler.readLogs,
+    clearLogs: clearLogs ?? CrashHandler.clearLogs,
+    writeClipboard: writeClipboard,
+    shareFile: shareFile,
+  );
 }
