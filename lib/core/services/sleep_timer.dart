@@ -27,14 +27,20 @@ enum SleepTimerOption {
 }
 
 /// 定時關閉，朗讀與有聲書共用同一組選項（ADR 0055）：選項與自訂分鐘數記在
-/// 偏好裡，每次開始播放（包括定時暫停後按繼續）都照選項重新倒數；只算實際
-/// 在播的時間，暫停時倒數跟著停。時間到由 [onExpired] 暫停。
+/// 偏好裡，在任何一個定時選了，其他還在用的定時跟著換；每次開始播放（包括
+/// 定時暫停後按繼續）都照選項重新倒數；只算實際在播的時間，暫停時倒數跟著
+/// 停。時間到由 [onExpired] 暫停。
 ///
 /// 播放狀態由朗讀控制器或有聲書播放器透過 [sync] 告知；剩餘時間不逐秒
 /// 通知，顯示的元件自己定時重讀 [remaining]，畫面才不會每秒重建。
 class SleepTimer extends ChangeNotifier {
   SleepTimer({required this._onExpired, DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+    : _now = now ?? DateTime.now {
+    _live.add(this);
+  }
+
+  /// 還在用的定時（閱讀器的朗讀、有聲書播放器），選了就一起換。
+  static final Set<SleepTimer> _live = {};
 
   /// 自訂分鐘數的範圍；上限是最長固定選項（90 分）的兩倍。
   static const int minCustomMinutes = 1;
@@ -79,27 +85,35 @@ class SleepTimer extends ChangeNotifier {
     _customMinutes =
         (prefs.getInt(PreferKey.ttsTimerCustomMinutes) ?? defaultCustomMinutes)
             .clamp(minCustomMinutes, maxCustomMinutes);
+    // 偏好讀完前就開始播了：照讀到的定時開始倒數。
+    if (_active && !_armed) _arm();
     notifyListeners();
   }
 
-  /// 選擇並記住定時。播放中或暫停中選擇時立即從頭倒數。
+  /// 選擇並記住定時（所有還在用的定時一起換）。播放中或暫停中選擇時立即從頭
+  /// 倒數。
   Future<void> choose(SleepTimerOption option) async {
-    _option = option;
-    _restart();
+    for (final timer in _live) {
+      timer._option = option;
+      timer._restart();
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(PreferKey.ttsTimer, option.storedValue);
   }
 
   /// 設定並記住自訂分鐘數；正在用自訂時立即從頭倒數。
   Future<void> setCustomMinutes(int minutes) async {
-    _customMinutes = minutes.clamp(minCustomMinutes, maxCustomMinutes);
-    if (_option == SleepTimerOption.custom) {
-      _restart();
-    } else {
-      notifyListeners();
+    final clamped = minutes.clamp(minCustomMinutes, maxCustomMinutes);
+    for (final timer in _live) {
+      timer._customMinutes = clamped;
+      if (timer._option == SleepTimerOption.custom) {
+        timer._restart();
+      } else {
+        timer.notifyListeners();
+      }
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(PreferKey.ttsTimerCustomMinutes, _customMinutes);
+    await prefs.setInt(PreferKey.ttsTimerCustomMinutes, clamped);
   }
 
   /// [active]：有一段播放正在進行或暫停中；[running]：正在播。
@@ -169,6 +183,7 @@ class SleepTimer extends ChangeNotifier {
 
   @override
   void dispose() {
+    _live.remove(this);
     _timer?.cancel();
     super.dispose();
   }
