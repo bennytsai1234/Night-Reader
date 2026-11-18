@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -165,8 +166,13 @@ class _SearchViewState extends State<SearchView> {
   void initState() {
     super.initState();
     if (_opensBlank) {
-      // 接回的那一次搜尋：輸入框是它的關鍵字。
-      _controller.text = context.read<SearchProvider>().lastSearchKey;
+      // 接回的那一次搜尋：輸入框是它的關鍵字；開 App 時還在讀回的，讀好才
+      // 接回，輸入框還空著就填上。
+      final provider = context.read<SearchProvider>();
+      _controller.text = provider.lastSearchKey;
+      provider.onResumedLate = (key) {
+        if (mounted && _controller.text.isEmpty) _controller.text = key;
+      };
       return;
     }
     _controller.text = widget.initialQuery ?? '';
@@ -196,7 +202,7 @@ class _SearchViewState extends State<SearchView> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 點通知時這一頁已經在最上面就不再推一頁（ADR 0058）。
-    context.read<SearchProvider>().route = ModalRoute.of(context);
+    context.read<SearchProvider>().route = pageRouteOf(context);
     final tickerMode = TickerMode.getValuesNotifier(context);
     if (tickerMode == _tickerMode) return;
     _tickerMode?.removeListener(_onTickerModeChanged);

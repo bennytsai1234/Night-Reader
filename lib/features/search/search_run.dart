@@ -2,22 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/services/reading_fetches.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 
 import 'models/search_scope.dart';
 import 'search_model.dart';
 
 /// 一次搜尋用的條件：[kind] 是搜尋頁上選的類別，[byKind] 是有沒有照類別送
-/// （書源不只一類時才照類別），[scope] 是範圍（[SearchScope] 的字串）。
+/// 與篩（書源不只一類時才照類別），[scope] 是範圍（[SearchScope] 的字串）。
 typedef SearchConditions = ({
   BookSourceKind kind,
   bool byKind,
   String scope,
   bool precision,
 });
+
+/// 一個書源搜尋失敗的原因，與當時的書源名稱（書源之後被刪掉也寫得出來）。
+typedef SearchFailureNote = ({String name, String message});
 
 /// 剩下的書源不超過這個數時，進度改列出還在等哪幾個；三個名稱大致排得進
 /// 一行。
@@ -41,8 +46,12 @@ abstract interface class SearchRecorder {
   /// 這次要搜的書源排好了。
   void sourcesChosen();
 
-  /// [url] 這個書源搜完：搜到 [books]（零本也算），或失敗、原因是 [failure]。
-  void sourceDone(String url, List<SearchBook>? books, String? failure);
+  /// [url] 這個書源搜完：搜到 [books]（零本也算），或失敗（[failure]）。
+  void sourceDone(
+    String url,
+    List<SearchBook>? books,
+    SearchFailureNote? failure,
+  );
 }
 
 /// 進度的訂閱與結果清單分開，書源每次送出或回來不必重建搜尋結果。
@@ -56,34 +65,58 @@ class _ProgressUpdates extends ChangeNotifier {
 /// 結果與狀態變了通知自己的監聽者；只有進度、等待中的書源與失敗變了時通知
 /// [progressUpdates]。
 class SearchRun extends ChangeNotifier implements SearchModelCallback {
-  SearchRun({SearchBookLoader? loader}) {
-    _model = SearchModel(callback: this, loader: loader)
-      ..onSourcesChosen = _rememberSources
-      ..onSourceSearched = _recordSearched;
+  SearchRun({this._loader, ReadingFetches? readingFetches})
+    : _readingFetches = readingFetches ?? ReadingFetches.instance {
+    _model = _newModel();
   }
 
   /// 讀回的暫停中或做完的搜尋：結果還沒合併成卡，搜尋頁打開、進場播完才
   /// 合（[mergeRestored]）。
   SearchRun.restored({
-    SearchBookLoader? loader,
+    this._loader,
+    ReadingFetches? readingFetches,
     required this.key,
     required SearchConditions this.conditions,
     required List<String> sourceUrls,
     required Map<String, List<SearchBook>> searched,
-    required Map<String, String> failed,
-  }) : _sourceUrls = sourceUrls,
+    required Map<String, SearchFailureNote> failed,
+  }) : _readingFetches = readingFetches ?? ReadingFetches.instance,
+       _sourceUrls = sourceUrls,
        _unmerged = true {
-    _model = SearchModel(callback: this, loader: loader)
-      ..onSourcesChosen = _rememberSources
-      ..onSourceSearched = _recordSearched;
+    _model = _newModel();
     _searched.addAll(searched);
-    _failedReasons.addAll(failed);
+    _failedNotes.addAll(failed);
     completed = searched.length + failed.length;
     total = sourceUrls.length;
     this.failed = failed.length;
     searchedSourceCount = total;
   }
 
+  /// 照 [other] 現在的樣子（條件、結果、失敗）另開一份，給接回的背景搜尋
+  /// 做完後重試失敗的書源：重試是普通的搜尋，不屬於背景那件。
+  SearchRun.copyOf(SearchRun other)
+    : _loader = other._loader,
+      _readingFetches = other._readingFetches,
+      _sourceUrls = other._sourceUrls {
+    _model = _newModel();
+    key = other.key;
+    conditions = other.conditions;
+    results = other.results;
+    failures.addAll(other.failures);
+    _searched.addAll(other._searched);
+    _failedNotes.addAll(other._failedNotes);
+    completed = other.completed;
+    total = other.total;
+    failed = other.failed;
+    searchedSourceCount = other.searchedSourceCount;
+  }
+
+  SearchModel _newModel() => SearchModel(callback: this, loader: _loader)
+    ..onSourcesChosen = _rememberSources
+    ..onSourceSearched = _recordSearched;
+
+  final SearchBookLoader? _loader;
+  final ReadingFetches _readingFetches;
   late final SearchModel _model;
 
   /// 這次搜的關鍵字；還沒搜過是空的。
@@ -113,13 +146,13 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   int _doneBefore = 0;
   List<SearchFailure> _failuresBefore = const [];
 
-  /// 這次要搜的書源網址，照送出順序；每個書源搜完的結果與失敗原因。
+  /// 這次要搜的書源網址，照送出順序；每個書源搜完的結果與失敗。
   List<String> get sourceUrls => _sourceUrls;
   List<String> _sourceUrls = const [];
   Map<String, List<SearchBook>> get searched => _searched;
   final Map<String, List<SearchBook>> _searched = {};
-  Map<String, String> get failedReasons => _failedReasons;
-  final Map<String, String> _failedReasons = {};
+  Map<String, SearchFailureNote> get failedNotes => _failedNotes;
+  final Map<String, SearchFailureNote> _failedNotes = {};
 
   /// 下一次選好書源時記下（新的一次搜尋；重試與接著搜不改）。
   bool _choosing = false;
@@ -138,23 +171,28 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   bool _background = false;
   set background(bool value) {
     _background = value;
-    _model.beforeSource = value ? ReadingFetches.instance.idle : null;
+    _model.beforeSource = value ? _readingFetches.idle : null;
     if (value) _model.resume();
   }
 
-  /// 正在跑的這次搜尋，結束（做完、結束或取消）時完成。
+  /// 正在跑的這次搜尋，結束（做完、結束、暫停或取消）時完成。
   Future<void>? get running => _attempt?.future;
   Completer<void>? _attempt;
 
+  /// [begin] 之後、[start] 之前（頁面在存搜尋紀錄）：這段時間按了結束、
+  /// 暫停或開始新的一次，[start] 就不開始。
+  int _ticket = 0;
+  bool _pending = false;
+
   /// 送出搜尋後、引擎真正開始前（存歷史、讀書源清單）就先進入搜尋中，這段
-  /// 空檔才不會閃出空狀態，也擋住重複送出。
-  void begin(String key, SearchConditions conditions) {
+  /// 空檔才不會閃出空狀態，也擋住重複送出。傳回給 [start] 的號碼。
+  int begin(String key, SearchConditions conditions) {
     this.key = key;
     this.conditions = conditions;
     results = const [];
     failures.clear();
     _searched.clear();
-    _failedReasons.clear();
+    _failedNotes.clear();
     _sourceUrls = const [];
     _doneBefore = 0;
     _failuresBefore = const [];
@@ -166,13 +204,20 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     failed = 0;
     waitingSources = const [];
     _startAttempt();
+    _pending = true;
     notifyListeners();
+    return ++_ticket;
   }
 
   void _startAttempt() {
     final previous = _attempt;
     _attempt = Completer<void>();
     if (previous != null && !previous.isCompleted) previous.complete();
+  }
+
+  void _endAttempt() {
+    final attempt = _attempt;
+    if (attempt != null && !attempt.isCompleted) attempt.complete();
   }
 
   Future<void> _track(Future<void> work) async {
@@ -184,27 +229,24 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     }
   }
 
-  /// 照 [begin] 的條件在 [scope] 裡搜；[kind] 是只送給哪一類的書源。
-  Future<void> searchIn(SearchScope scope, {BookSourceKind? kind}) {
-    if (_disposed) return Future<void>.value();
+  /// 照 [begin] 的條件開始搜；[ticket] 不是最後一次 [begin] 的、或這段時間
+  /// 按了結束或暫停時不開始。
+  Future<void> start(int ticket) {
+    if (_disposed || ticket != _ticket || !_pending) {
+      return Future<void>.value();
+    }
+    _pending = false;
+    return _searchByConditions();
+  }
+
+  Future<void> _searchByConditions() {
+    final conditions = this.conditions!;
     return _track(
       _model.search(
         key: key,
-        scope: scope,
-        precisionSearch: conditions!.precision,
-        kind: kind,
-      ),
-    );
-  }
-
-  /// 照 [begin] 的條件只搜 [sources]。
-  Future<void> searchSources(List<BookSource> sources) {
-    if (_disposed) return Future<void>.value();
-    return _track(
-      _model.searchSources(
-        key: key,
-        sources: sources,
-        precisionSearch: conditions!.precision,
+        scope: SearchScope(conditions.scope),
+        precisionSearch: conditions.precision,
+        kind: conditions.byKind ? conditions.kind : null,
       ),
     );
   }
@@ -238,15 +280,21 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   }
 
   /// 接著搜暫停的搜尋：只搜 [remaining]，前面搜完的結果帶著、進度接著數。
-  /// 這次要搜、這段時間刪掉或停用的書源算搜完。
-  Future<void> continueWith(List<BookSource> remaining) async {
+  /// 這次要搜、這段時間刪掉或停用的書源算搜完。還沒選好書源就暫停的
+  /// （[remaining] 是 null）照條件重新搜。
+  Future<void> continueWith(List<BookSource>? remaining) async {
     await mergeRestored();
-    _doneBefore = _sourceUrls.length - remaining.length;
-    _failuresBefore = List.of(failures);
     // 引擎真正開始前（讀字典、讀同時搜幾個）就算搜尋中，不閃出工具列。
     isSearching = true;
     _startAttempt();
     notifyListeners();
+    if (remaining == null) {
+      _choosing = true;
+      await _searchByConditions();
+      return;
+    }
+    _doneBefore = _sourceUrls.length - remaining.length;
+    _failuresBefore = List.of(failures);
     await _track(
       _model.searchSources(
         key: key,
@@ -257,25 +305,35 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     );
   }
 
-  /// 讀回的結果合成搜尋頁的卡、找回失敗的書源；只做一次。
+  /// 讀回的結果合成搜尋頁的卡、找回失敗的書源，並把搜到的書放回搜尋快取
+  /// （開 App 時清掉了；從結果進書籍詳情後換源、換封面先列它們）；只做一次。
   Future<void> mergeRestored() async {
     if (!_unmerged) return;
     _unmerged = false;
-    results = SearchModel.cardsOf(
-      [for (final books in _searched.values) ...books],
-      key,
-      conditions!.precision,
-    );
+    final raw = [for (final books in _searched.values) ...books];
+    results = SearchModel.cardsOf(raw, key, conditions!.precision);
     final dao = getIt<BookSourceDao>();
-    for (final MapEntry(key: url, value: message) in _failedReasons.entries) {
-      final source = await dao.getByUrl(url);
-      if (source != null) {
-        failures.add(SearchFailure(source: source, message: message));
-      }
+    for (final MapEntry(key: url, value: note) in _failedNotes.entries) {
+      // 書源之後被刪掉的照樣列出原因，只是不能重試。
+      final source =
+          await dao.getByUrl(url) ??
+          BookSource(
+            bookSourceUrl: url,
+            bookSourceName: note.name,
+            enabled: false,
+          );
+      failures.add(SearchFailure(source: source, message: note.message));
     }
     if (_disposed) return;
     failed = failures.length;
     notifyListeners();
+    if (raw.isNotEmpty) {
+      try {
+        await getIt<SearchBookDao>().insertList(raw);
+      } catch (error) {
+        AppLog.w('SearchRun: 讀回的結果沒放回搜尋快取：$error');
+      }
+    }
   }
 
   /// 使用者按「結束」：已經收到的結果照常併入，再停下。
@@ -283,11 +341,23 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _model.stopSearch();
     isSearching = false;
     waitingSources = const [];
+    _endAttemptIfPending();
     notifyListeners();
   }
 
-  /// 停下、不再送書源，正在搜的取消（暫停放到背景的搜尋）；它們的結果不收。
-  void cancel() => _model.cancelSearch();
+  /// 暫停放到背景的搜尋：已經收到的結果照常併入，不再送書源，正在搜的取消
+  /// （繼續時重搜它們）。
+  void halt() {
+    _model.stopSearch();
+    _endAttemptIfPending();
+  }
+
+  /// 還沒開始就結束或暫停：等著它的背景工作不必等存搜尋紀錄。
+  void _endAttemptIfPending() {
+    if (!_pending) return;
+    _pending = false;
+    _endAttempt();
+  }
 
   /// 暫停好了：不在搜尋中，進度停在那裡。
   void markPaused() {
@@ -315,7 +385,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   void _recordSearched(BookSource source, List<SearchBook> books) {
     final url = source.bookSourceUrl;
     _searched[url] = books;
-    _failedReasons.remove(url);
+    _failedNotes.remove(url);
     recorder?.sourceDone(url, books, null);
   }
 
@@ -346,9 +416,13 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   void onSearchFailure(SearchFailure failure) {
     failures.add(failure);
     final url = failure.source.bookSourceUrl;
-    _failedReasons[url] = failure.message;
+    final note = (
+      name: failure.source.bookSourceName,
+      message: failure.message,
+    );
+    _failedNotes[url] = note;
     _searched.remove(url);
-    recorder?.sourceDone(url, null, failure.message);
+    recorder?.sourceDone(url, null, note);
     _progress.publish();
   }
 
@@ -373,12 +447,13 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _progress.publish();
   }
 
+  bool get isDisposed => _disposed;
+
   @override
   void dispose() {
     _disposed = true;
     _model.dispose();
-    final attempt = _attempt;
-    if (attempt != null && !attempt.isCompleted) attempt.complete();
+    _endAttempt();
     _progress.dispose();
     super.dispose();
   }

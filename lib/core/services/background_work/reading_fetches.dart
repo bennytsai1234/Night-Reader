@@ -3,10 +3,12 @@ import 'dart:async';
 /// 閱讀時正在向書源抓的東西：文字閱讀器抓沒存的章（含預先載入的下一章）、
 /// 漫畫抓一章的圖片清單、有聲書抓一集的音訊。放到背景的搜尋送下一個書源前
 /// 等它們抓完，閱讀的抓章插在搜尋前面（ADR 0070）。
+///
+/// 閱讀器與播放器用 [instance]；測試各建一份新的，計數不互相影響。
 class ReadingFetches {
-  ReadingFetches._();
+  ReadingFetches();
 
-  static final ReadingFetches instance = ReadingFetches._();
+  static final ReadingFetches instance = ReadingFetches();
 
   /// 最多等多久：抓章卡住時搜尋不跟著停。
   static const Duration longestWait = Duration(seconds: 10);

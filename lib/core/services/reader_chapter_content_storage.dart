@@ -1,4 +1,4 @@
-import 'package:night_reader/core/services/reading_fetches.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';

@@ -131,10 +131,13 @@ void main() {
     expect(find.text('暫停'), findsOneWidget);
 
     await tester.tap(find.text('暫停'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump(const Duration(milliseconds: 200));
+    // 停好要等結果檔寫完（真的寫檔）。
+    for (var i = 0; i < 50 && find.text('已暫停 0/1').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('已暫停 0/1'), findsOneWidget);
     expect(action(tester, '繼續').onPressed, isNotNull);
     // 還沒搜完：頁首照樣是「結束」。
@@ -146,9 +149,12 @@ void main() {
     work.end(other);
 
     await tester.tap(find.text('結束'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    for (var i = 0; i < 50 && find.text('已暫停 0/1').evaluate().isNotEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     await tester.pumpAndSettle();
     expect(find.text('已暫停 0/1'), findsNothing);
   });

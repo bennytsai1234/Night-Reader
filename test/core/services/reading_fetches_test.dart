@@ -10,7 +10,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
-import 'package:night_reader/core/services/reading_fetches.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 
 void main() {
   late AppDatabase db;

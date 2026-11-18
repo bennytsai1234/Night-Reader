@@ -127,6 +127,10 @@ abstract class RepairRun extends ChangeNotifier implements BackgroundJob {
   /// 暫停中按了結束、正在收尾。
   bool get isEnding => _ending;
 
+  /// 開著這一件的頁面數。
+  @protected
+  int get openPages => _pages;
+
   /// 做完而且看過了：入口可以收掉它、下次重開一件。
   bool get isDone => _finished && _seen && _pages == 0;
 

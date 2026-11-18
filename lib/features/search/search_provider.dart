@@ -192,11 +192,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get isBackgroundPaused => _background?.isPaused ?? false;
 
   /// 暫停中的「繼續」能不能按：別的背景工作在跑時灰掉。
-  bool get canResumeBackground => _background?.canResume ?? false;
+  bool get canResumeBackground =>
+      !_holdingResults && (_background?.canResume ?? false);
   bool get precisionSearch => _precisionSearch;
 
   /// 這次搜的是哪一類書：選的那一類有可搜尋的書源就是它，否則是第一個有的。
   BookSourceKind get kind {
+    // 接回的那一次照它當時的類別，不管現在哪一類還有書源。
+    if (_snapshot case final conditions?) return conditions.kind;
     if (_kindCounts.isEmpty || _kindCounts.containsKey(_chosenKind)) {
       return _chosenKind;
     }
@@ -209,8 +212,13 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 每一類可搜尋的書源數，給類別選單。
   Map<BookSourceKind, int> get kindCounts => _kindCounts;
 
-  /// 照類別篩（書源只有一類時不篩：聚合源搜到的其他類別照樣列出）。
-  bool get _filtersByKind => _kindCounts.length > 1;
+  /// 照類別篩（書源只有一類時不篩：聚合源搜到的其他類別照樣列出）；接回
+  /// 的那一次照它當時篩不篩。
+  bool get _filtersByKind => _snapshot?.byKind ?? _kindCounts.length > 1;
+
+  /// 接回或放到背景的那一次的條件：頁首膠囊與結果照它。
+  SearchConditions? get _snapshot =>
+      _background == null ? null : _run.conditions;
   List<String> get sourceGroups => _sourceGroups;
   SearchScope get searchScope => _searchScope;
   SearchResultSortMode get sortMode => _sortMode;
@@ -253,7 +261,11 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (resumable != null) {
       _attach(resumable);
     } else {
-      _listen(_run = SearchRun(loader: searchLoader));
+      _listen(_run = _newRun());
+      // 開 App 後馬上打開的搜尋頁：上次的那一件可能還在讀回，讀好了再接回。
+      if (resumeBackground) {
+        unawaited(_backgroundSearches.restored.then((_) => _attachLate()));
+      }
     }
     _backgroundSearches.work.addListener(_slotChanged);
     _backgroundSearches.runs.addListener(_slotChanged);
@@ -307,13 +319,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   }
 
   Future<void> _init() async {
-    // 讀回的暫停或做完的搜尋：進場播完才合併成卡（ADR 0018）。
-    if (_run.isRestoring) await _run.mergeRestored();
+    _entered = true;
+    if (_holdingResults) await _reveal();
     if (_disposed) return;
-    if (_holdingResults) {
-      _holdingResults = false;
-      notifyListeners();
-    }
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
     // 先讀過去的找書再讀紀錄：紀錄讀完才決定畫不畫空頁，兩段一起出現。
@@ -646,6 +654,11 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     return normalized.isEmpty ? null : normalized;
   }
 
+  SearchRun _newRun() => SearchRun(
+    loader: _loader ?? _backgroundSearches.loader,
+    readingFetches: _backgroundSearches.readingFetches,
+  );
+
   SearchConditions _conditions(SearchScope scope) => (
     kind: kind,
     byKind: _filtersByKind,
@@ -654,27 +667,30 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   );
 
   /// 新的一次搜尋開始前清掉上一次的：詳情帶回的封面、固定的順序與篩選。
-  void _beginSearch(String searchKey, SearchScope scope) {
+  /// 條件在這時定下（頁首膠囊當時的樣子）。傳回給 [SearchRun.start] 的號碼。
+  int _beginSearch(String searchKey, SearchScope scope) {
+    final conditions = _conditions(scope);
     _leaveBackground();
-    _run.begin(searchKey, _conditions(scope));
+    final ticket = _run.begin(searchKey, conditions);
     _resetCovers();
     _heldOrder = null;
     clearResultFilters();
     notifyListeners();
+    return ticket;
   }
 
   Future<void> search(String keyword) async {
     final searchKey = _normalizedSearchKey(keyword);
     if (searchKey == null) return;
-    _beginSearch(searchKey, _searchScope);
+    final ticket = _beginSearch(searchKey, _searchScope);
     final run = _run;
-    final kind = _filtersByKind ? this.kind : null;
 
     // 儲存搜尋歷史
     await _keywordDao.saveKeyword(searchKey);
     await loadHistory();
 
-    await run.searchIn(_searchScope, kind: kind);
+    // 存紀錄的時候按了結束、暫停或開始了新的一次，就不開始。
+    await run.start(ticket);
   }
 
   /// 在指定書源內搜尋
@@ -683,12 +699,20 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (searchKey == null) return;
     _followSourceKind(source);
     // 使用單一書源的 scope
-    final singleScope = SearchScope.fromSource(source);
-    _beginSearch(searchKey, singleScope);
-    await _run.searchIn(singleScope);
+    final ticket = _beginSearch(searchKey, SearchScope.fromSource(source));
+    await _run.start(ticket);
   }
 
-  Future<void> retryFailedSources() => _run.retryFailed();
+  /// 「重試失敗」：普通的搜尋。接回的背景搜尋做完後重試，另開一份帶著它的
+  /// 結果與失敗，背景那件就此收掉（ADR 0070）。
+  Future<void> retryFailedSources() async {
+    final background = _background;
+    if (background != null) {
+      if (!background.isFinished) return;
+      _leaveBackground(next: SearchRun.copyOf(_run));
+    }
+    await _run.retryFailed();
+  }
 
   /// 搜尋頁被整頁蓋住（書籍詳情、閱讀器）時暫停還沒送出的書源，回到搜尋頁
   /// 再接著送；放到背景的不暫停。進度與結果照舊，不通知畫面。
@@ -733,10 +757,18 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   Future<void> resumeBackground() async => _background?.resume();
 
+  /// 進場播完了：之後才接回的那一件直接放出結果。
+  bool _entered = false;
+
+  /// 這一頁已經算看著那一件（[RepairRun.attach]）：結果放出來之後才算，換頁
+  /// 途中就返回的不算看過，存檔留著（ADR 0070）。
+  bool _attached = false;
+
+  /// 接回：結果先不放，進場播完才放（[_reveal]）。
   void _attach(BackgroundSearchRun background) {
     _listen(_run = background.search);
     _holdingResults = true;
-    _adopt(background);
+    _adopt(background, attach: false);
     // 類別、範圍、精準照那一次的，不寫回偏好。
     if (_run.conditions case final conditions?) {
       _chosenKind = conditions.kind;
@@ -745,26 +777,63 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     }
   }
 
-  void _adopt(BackgroundSearchRun background) {
-    _background = background
-      ..attach()
-      ..route = _route
-      ..addListener(notifyListeners);
+  /// 開 App 後馬上打開的搜尋頁：讀回好了、使用者還沒開始搜，就接回。
+  void _attachLate() {
+    if (_disposed || _background != null || lastSearchKey.isNotEmpty) return;
+    final background = _backgroundSearches.resumable;
+    if (background == null) return;
+    _unlisten(_run);
+    _run.dispose();
+    _attach(background);
+    onResumedLate?.call(background.search.key);
+    notifyListeners();
+    if (_entered) unawaited(_reveal());
   }
 
-  /// 接回或放到背景之後開始了別的搜尋：背景那次結束、不留，換一份新的。
-  void _leaveBackground() {
+  /// 接回的搜尋頁晚一點才接回時（開 App 時還在讀回），把關鍵字交給輸入框。
+  void Function(String key)? onResumedLate;
+
+  /// 讀回的結果合併成卡（進場播完才做，ADR 0018），放出結果，這一頁才算看著。
+  Future<void> _reveal() async {
+    if (_run.isRestoring) await _run.mergeRestored();
+    final background = _background;
+    if (_disposed || background == null || !_holdingResults) return;
+    _holdingResults = false;
+    if (!_attached && !background.isDisposed) {
+      background.attach();
+      _attached = true;
+    }
+    notifyListeners();
+  }
+
+  void _adopt(BackgroundSearchRun background, {bool attach = true}) {
+    _background = background
+      ..route = _route
+      ..addListener(notifyListeners);
+    if (attach) background.attach();
+    _attached = attach;
+  }
+
+  /// 不再看著那一件：背景那件照它自己的生命週期收掉。
+  void _release(BackgroundSearchRun background) {
+    background.removeListener(notifyListeners);
+    if (background.isDisposed) return;
+    background.route = null;
+    if (_attached) background.detach();
+    _attached = false;
+  }
+
+  /// 接回或放到背景之後開始了別的搜尋：背景那次結束、不留，換成 [next]
+  /// （沒給是新的一份）。
+  void _leaveBackground({SearchRun? next}) {
     _holdingResults = false;
     final background = _background;
     if (background == null) return;
     _background = null;
-    background
-      ..removeListener(notifyListeners)
-      ..abandon()
-      ..route = null
-      ..detach();
+    background.abandon();
+    _release(background);
     _unlisten(_run);
-    _listen(_run = SearchRun(loader: _loader));
+    _listen(_run = next ?? _newRun());
   }
 
   void _listen(SearchRun run) {
@@ -811,6 +880,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool _historyLoaded = false;
 
   void _setHistory(List<SearchKeyword> history) {
+    // 搜尋頁關了才讀完（送出搜尋後馬上放到背景、返回）。
+    if (_disposed) return;
     final unchanged =
         _historyLoaded &&
         history.length == _history.length &&
@@ -885,10 +956,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (background == null) {
       _run.dispose();
     } else {
-      background
-        ..removeListener(notifyListeners)
-        ..route = null
-        ..detach();
+      _release(background);
     }
     _bookshelfTracker.dispose();
     // 存下的搜尋結果只在搜尋頁開著時有用（從結果進詳情後，換源與換封面先

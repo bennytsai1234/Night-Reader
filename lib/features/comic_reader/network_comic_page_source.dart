@@ -1,7 +1,7 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:night_reader/core/services/reading_fetches.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/core/models/book.dart';

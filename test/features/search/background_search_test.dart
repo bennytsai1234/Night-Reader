@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -15,7 +16,7 @@ import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/background_work/background_work.dart';
-import 'package:night_reader/core/services/reading_fetches.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/features/search/background_search.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -105,11 +106,13 @@ void main() {
   late _FakePlatform platform;
   late BackgroundWork work;
 
-  BackgroundSearches searches([_Loader? loader]) => BackgroundSearches(
-    work: work,
-    directory: () async => dir,
-    loader: loader?.call,
-  );
+  BackgroundSearches searches([_Loader? loader, ReadingFetches? fetches]) =>
+      BackgroundSearches(
+        work: work,
+        directory: () async => dir,
+        loader: loader?.call,
+        readingFetches: fetches ?? ReadingFetches(),
+      );
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -184,8 +187,8 @@ void main() {
     loader
       ..answer('乙', empty: true)
       ..answer('丙');
-    await settle();
     final run = background.current!;
+    await until(() => run.isFinished);
     expect(run.isFinished, isTrue);
     expect(work.isBusy, isFalse);
     expect(platform.shown.first.title, '搜尋書籍 · night');
@@ -234,7 +237,6 @@ void main() {
     expect(background.current!.isPaused, isTrue);
     expect(work.isBusy, isFalse);
     provider.dispose();
-    await background.current!.flushResults();
 
     // 夜讀被收掉、重新打開。
     final loader2 = _Loader();
@@ -278,7 +280,6 @@ void main() {
     await settle();
 
     await until(() => background.current!.isFinished);
-    await background.current!.flushResults();
     final restarted = searches();
     await restarted.restore();
     expect(restarted.current!.isFinished, isTrue);
@@ -300,7 +301,7 @@ void main() {
     await settle();
     provider.moveToBackground();
     provider.stopSearch();
-    await settle();
+    await until(() => background.current!.isFinished);
     expect(background.current!.isFinished, isTrue);
     expect(names(provider), ['甲書']);
     expect(provider.isSearching, isFalse);
@@ -344,7 +345,8 @@ void main() {
   test('a background search sends its next source only after the reader '
       'has its chapter', () async {
     await GetIt.instance<SharedPreferences>().setInt(PreferKey.threadCount, 1);
-    final background = searches();
+    final fetches = ReadingFetches();
+    final background = searches(null, fetches);
     final loader = _Loader();
     final provider = await page(background, loader);
     addTearDown(provider.dispose);
@@ -354,7 +356,7 @@ void main() {
     provider.moveToBackground();
 
     final chapter = Completer<String>();
-    final reading = ReadingFetches.instance.track(() => chapter.future);
+    final reading = fetches.track(() => chapter.future);
     loader.answer('甲');
     await settle();
     expect(loader.sent, ['甲']);
@@ -363,5 +365,216 @@ void main() {
     await reading;
     await settle();
     expect(loader.sent, ['甲', '乙']);
+  });
+
+  test('pausing while it waits for the reader settles at once', () async {
+    await GetIt.instance<SharedPreferences>().setInt(PreferKey.threadCount, 1);
+    final fetches = ReadingFetches();
+    final background = searches(null, fetches);
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    provider.moveToBackground();
+    final chapter = Completer<String>();
+    unawaited(fetches.track(() => chapter.future));
+    loader.answer('甲');
+    await settle();
+
+    provider.pauseBackground();
+    await until(() => background.current!.isPaused);
+    expect(background.current!.isPaused, isTrue);
+    expect(loader.sent, ['甲']);
+    chapter.complete('正文');
+  });
+
+  test('a search paused before it has sent anything sends nothing until it '
+      'resumes', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    // 還在存搜尋紀錄就放到背景、按暫停。
+    unawaited(provider.search('night'));
+    provider.moveToBackground();
+    provider.pauseBackground();
+    await until(() => background.current!.isPaused);
+    await settle();
+    expect(loader.sent, isEmpty);
+
+    await provider.resumeBackground();
+    await until(() => loader.sent.length == 3);
+    expect(loader.sent, ['甲', '乙', '丙']);
+  });
+
+  test('ending while it is still pausing ends it', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    provider.moveToBackground();
+    provider.pauseBackground();
+    provider.stopSearch();
+    await until(() => background.current!.isFinished);
+    expect(background.current!.isFinished, isTrue);
+    expect(provider.isBackgroundPaused, isFalse);
+  });
+
+  test('pausing keeps a source that has just come back', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    provider.moveToBackground();
+    loader.answer('甲');
+    // 還沒到合併結果的 100 ms 就暫停。
+    await pumpEventQueue();
+    provider.pauseBackground();
+    await until(() => background.current!.isPaused);
+    expect(names(provider), ['甲書']);
+  });
+
+  test(
+    'a page closed before its results showed does not count as seen',
+    () async {
+      final background = searches();
+      final loader = _Loader();
+      final provider = await page(background, loader);
+      unawaited(provider.search('night'));
+      await until(() => loader.sent.isNotEmpty);
+      provider.moveToBackground();
+      provider.dispose();
+      for (final name in ['甲', '乙', '丙']) {
+        loader.answer(name);
+      }
+      await until(() => background.current!.isFinished);
+
+      // 換頁還沒播完就返回。
+      final sliding = SearchProvider(
+        entrance: Completer<void>().future,
+        searchLoader: loader.call,
+        backgroundSearches: background,
+        resumeBackground: true,
+      );
+      sliding.dispose();
+      await settle();
+      expect(background.current, isNotNull);
+      expect(background.resumable, isNotNull);
+    },
+  );
+
+  test('two pages on one background search: a new search on one leaves the '
+      'other showing its results', () async {
+    final background = searches();
+    final loader = _Loader();
+    final first = await page(background, loader);
+    unawaited(first.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    loader.answer('甲');
+    await settle();
+    first.moveToBackground();
+    final second = await page(background, loader, resume: true);
+    addTearDown(second.dispose);
+
+    unawaited(second.search('other'));
+    await settle();
+    expect(names(first), ['甲書']);
+    expect(background.current, isNotNull);
+    first.dispose();
+    await until(() => background.current == null);
+    expect(background.current, isNull);
+  });
+
+  test('a resumed page keeps the kind that search was made in', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    provider.moveToBackground();
+    provider.dispose();
+    for (final name in ['甲', '乙', '丙']) {
+      loader.answer(name);
+    }
+    await until(() => background.current!.isFinished);
+    final resumed = await page(background, loader, resume: true);
+    addTearDown(resumed.dispose);
+    expect(resumed.kind, BookSourceKind.novel);
+    expect(names(resumed), hasLength(3));
+  });
+
+  test('retrying failed sources after a background search is an ordinary '
+      'search', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    provider.moveToBackground();
+    provider.dispose();
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => background.current!.isFinished);
+
+    final resumed = await page(background, loader, resume: true);
+    addTearDown(resumed.dispose);
+    unawaited(resumed.retryFailedSources());
+    await until(() => background.current == null);
+    expect(background.current, isNull);
+    await until(() => loader.sent.length == 4);
+    expect(loader.sent.last, '乙');
+    expect(names(resumed), unorderedEquals(['甲書', '丙書']));
+    expect(resumed.showsMoveToBackground, isTrue);
+  });
+
+  test('a results file cut off mid-line is read back up to the last whole '
+      'line and stays readable after resuming', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.isNotEmpty);
+    loader.answer('甲');
+    await settle();
+    provider.moveToBackground();
+    provider.pauseBackground();
+    await until(() => background.current!.isPaused);
+    provider.dispose();
+    // 寫到一半被收掉：最後一行切在中文字中間。
+    final file = dir.listSync().whereType<File>().single;
+    final half = utf8.encode('{"url":"https://乙.example","name":"乙');
+    file.writeAsBytesSync(
+      half.sublist(0, half.length - 1),
+      mode: FileMode.append,
+    );
+
+    final loader2 = _Loader();
+    final restarted = searches(loader2);
+    await restarted.restore();
+    final reopened = await page(restarted, loader2, resume: true);
+    expect(reopened.isBackgroundPaused, isTrue);
+    expect(names(reopened), ['甲書']);
+    await reopened.resumeBackground();
+    await until(() => loader2.sent.length == 2);
+    // 沒看到做完就離開：下次開 App 還要讀得回來。
+    reopened.dispose();
+    loader2
+      ..answer('乙')
+      ..answer('丙');
+    await until(() => restarted.current!.isFinished);
+
+    final again = searches();
+    await again.restore();
+    expect(again.current!.isFinished, isTrue);
+    final last = await page(again, _Loader(), resume: true);
+    addTearDown(last.dispose);
+    expect(names(last), unorderedEquals(['甲書', '乙書', '丙書']));
   });
 }

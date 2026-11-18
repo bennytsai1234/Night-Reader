@@ -313,6 +313,11 @@ class SearchModel {
     _waitingSources.clear();
 
     callback.onSearchStart();
+    // 先放進去的結果（重試、接著搜暫停的）先給頁面：剩下的書源都沒回書時
+    // 也看得到。
+    if (initialResults.isNotEmpty) {
+      callback.onSearchSuccess(List.from(_searchBooks));
+    }
 
     _totalCount = sources.length;
 
@@ -336,7 +341,8 @@ class SearchModel {
           }
           if (generation != _generation) return;
           if (beforeSource case final wait?) {
-            await wait();
+            // 按了暫停或結束就不再等。
+            await Future.any<Object?>([wait(), cancelToken.whenCancel]);
             if (generation != _generation) return;
           }
           await _searchSingleSource(
@@ -662,17 +668,21 @@ class SearchModel {
     List<SearchBook> rawBooks,
     String searchKey,
     bool precision,
-  ) => cardsOf(rawBooks, searchKey, precision);
+  ) {
+    final model = SearchModel(callback: const _SilentCallback());
+    rawBooks.forEach(model._groups.add);
+    return model._rebuild(searchKey, precision);
+  }
 
-  /// 逐源原始結果 [rawBooks] 合成搜尋頁的合併卡，同一次搜尋邊收邊併的結果
-  /// 一樣（讀回暫停的搜尋時用）。
+  /// 逐源原始結果 [rawBooks] 合成搜尋頁的合併卡，和同一次搜尋邊收邊併的
+  /// 結果一樣（同源去重、分組；讀回暫停的搜尋時用）。
   static List<SearchBook> cardsOf(
     List<SearchBook> rawBooks,
     String searchKey,
     bool precision,
   ) {
-    final model = SearchModel(callback: const _SilentCallback());
-    rawBooks.forEach(model._groups.add);
+    final model = SearchModel(callback: const _SilentCallback())
+      .._appendRawBooks(rawBooks);
     return model._rebuild(searchKey, precision);
   }
 }
