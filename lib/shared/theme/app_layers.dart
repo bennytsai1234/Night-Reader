@@ -24,6 +24,30 @@ class AppLayers {
   static double cardGap(Brightness brightness) =>
       brightness == Brightness.dark ? cardGapDark : cardGapLight;
 
+  /// 淺色頁面的彩度是卡片的幾倍，色相同卡片。卡片色往字色混出來的頁面
+  /// 彩度和卡片差不多，但暗了 12 就顯得灰褐；拉高彩度，頁面才像比卡片深
+  /// 一點的同一張紙（2026-11-18 使用者在候選圖上選）。素色沒有色調，不變。
+  static const double pageChromaLight = 1.6;
+
+  /// CIELAB 的明度、彩度與色相（度）。
+  static ({double l, double c, double h}) lch(Color color) {
+    double lin(double v) => v <= 0.04045
+        ? v / 12.92
+        : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+    double f(double t) =>
+        t > 0.008856 ? math.pow(t, 1 / 3).toDouble() : 7.787 * t + 16 / 116;
+    final r = lin(color.r), g = lin(color.g), b = lin(color.b);
+    final x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+    final y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    final z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+    final a = 500 * (f(x) - f(y)), bb = 200 * (f(y) - f(z));
+    return (
+      l: 116 * f(y) - 16,
+      c: math.sqrt(a * a + bb * bb),
+      h: (math.atan2(bb, a) * 180 / math.pi) % 360,
+    );
+  }
+
   /// CIELAB 明度 L*（0–100）。
   static double lightness(Color color) {
     final y = color.computeLuminance();

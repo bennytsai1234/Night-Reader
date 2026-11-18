@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -49,6 +51,17 @@ void main() {
         );
         if (brightness == Brightness.light) {
           expect(palette.bar, palette.surface, reason: '淺色玻璃與卡片同色');
+          final card = AppLayers.lch(palette.surface);
+          final page = AppLayers.lch(palette.background);
+          expect(
+            page.c,
+            closeTo(card.c * AppLayers.pageChromaLight, 1),
+            reason: '頁面彩度是卡片的 ${AppLayers.pageChromaLight} 倍',
+          );
+          if (card.c > 1) {
+            final hue = (page.h - card.h).abs() % 360;
+            expect(math.min(hue, 360 - hue), lessThan(3), reason: '頁面色相同卡片');
+          }
         } else {
           expect(
             l(palette.bar) - l(palette.surface),

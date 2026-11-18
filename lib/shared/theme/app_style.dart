@@ -56,7 +56,7 @@ enum AppStyle {
     '紙墨',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFDDD9D1),
+      background: Color(0xFFDFD9CB),
       surface: AppPalette.paper50,
       bar: AppPalette.paper50,
       text: AppPalette.ink700,
@@ -91,7 +91,7 @@ enum AppStyle {
     '茶褐',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFD5CCBC),
+      background: Color(0xFFD8CCB1),
       surface: Color(0xFFF6EEDD),
       bar: Color(0xFFF6EEDD),
       text: Color(0xFF2C2014),
@@ -129,7 +129,7 @@ enum AppStyle {
     '牛皮',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFD2C5AD),
+      background: Color(0xFFD7C59B),
       surface: Color(0xFFF4E7CC),
       bar: Color(0xFFF4E7CC),
       text: Color(0xFF2E2416),
@@ -164,7 +164,7 @@ enum AppStyle {
     '竹青',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFD3D7CE),
+      background: Color(0xFFD3D8CA),
       surface: Color(0xFFF6F9F0),
       bar: Color(0xFFF6F9F0),
       text: Color(0xFF1C2619),
@@ -202,7 +202,7 @@ enum AppStyle {
     '豆綠',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFC7D5CA),
+      background: Color(0xFFC3D7C6),
       surface: Color(0xFFEAF7EC),
       bar: Color(0xFFEAF7EC),
       text: Color(0xFF112016),
