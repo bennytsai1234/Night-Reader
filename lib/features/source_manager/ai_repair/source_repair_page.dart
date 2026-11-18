@@ -515,12 +515,9 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
     ];
   }
 
-  /// AI 現在做到哪一步，例如「第 3 輪：AI 改了搜尋，試抓中…」。
-  static String? _lastStep(AiRepairSession session) {
-    final step = session.job.steps.lastOrNull;
-    if (step == null) return '準備中…';
-    return step.detail == null ? step.title : '${step.title}：${step.detail}';
-  }
+  /// AI 現在做到哪一步，例如「AI 改了搜尋，試抓中…」。
+  static String? _lastStep(AiRepairSession session) =>
+      session.job.steps.lastOrNull?.line ?? '準備中…';
 
   /// 只列名稱，點了看原因。
   Widget _nameRow(RepairItem item) => GroupedRow(
@@ -603,6 +600,51 @@ class _SourceRepairPageState extends State<SourceRepairPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: UiText(message)));
   }
+}
+
+/// 「經過」卡片：AI 修復與 AI 找書做過的每一步。預設收起，只有一列「經過」
+/// 與步數；點了展開，照先後一步一列，標題是那一步做的事
+/// （docs/design/screens.md「AI 修書源」）。還沒有做完的步時不畫。
+GroupedSection? aiStepsHistory(
+  BuildContext context, {
+  required List<AiRepairStep> steps,
+  required bool expanded,
+  required VoidCallback onToggle,
+}) {
+  if (steps.isEmpty) return null;
+  return GroupedSection(
+    children: [
+      GroupedRow(
+        title: '經過',
+        value: '${steps.length} 步',
+        trailing: Icon(
+          expanded
+              ? Icons.keyboard_arrow_up_rounded
+              : Icons.keyboard_arrow_down_rounded,
+          size: 22,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        showChevron: false,
+        onTap: onToggle,
+      ),
+      if (expanded)
+        for (final step in steps)
+          switch (step.kind) {
+            AiRepairStepKind.restart => GroupedRow(
+              leading: aiRepairStepIcon(context, step.state),
+              title: '重新開始',
+              subtitle: step.detail,
+              showChevron: false,
+            ),
+            _ => GroupedRow(
+              leading: aiRepairStepIcon(context, step.state),
+              title: step.line,
+              maxTitleLines: 3,
+              showChevron: false,
+            ),
+          },
+    ],
+  );
 }
 
 /// 修復步驟的圖示：做完是綠色勾、做著是轉圈、失敗是紅色叉、還沒開始是空心圓。

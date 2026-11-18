@@ -19,12 +19,18 @@ void main() {
   const oldUrl = 'https://old.example/book/1';
   const newUrl = 'https://new.example/book/9';
 
-  Book bookAt(String url, String origin, {required bool inShelf}) => Book(
+  Book bookAt(
+    String url,
+    String origin, {
+    required bool inShelf,
+    String? intro,
+  }) => Book(
     bookUrl: url,
     origin: origin,
     originName: origin,
     name: '測試書',
     author: '作者',
+    intro: intro,
   )..isInBookshelf = inShelf;
 
   List<BookChapter> chaptersOf(String bookUrl, int count) => [
@@ -37,8 +43,13 @@ void main() {
       ),
   ];
 
-  Future<BookDetailProvider> openDetail() async {
-    final book = bookAt(oldUrl, 'https://old.example', inShelf: false);
+  Future<BookDetailProvider> openDetail({String? intro}) async {
+    final book = bookAt(
+      oldUrl,
+      'https://old.example',
+      inShelf: false,
+      intro: intro,
+    );
     await db.chapterDao.insertChapters(chaptersOf(oldUrl, 3));
     final provider = BookDetailProvider(
       AggregatedSearchBook(book: book, sources: []),
@@ -151,6 +162,27 @@ void main() {
       expect(refreshes, 3);
     },
   );
+
+  // 同 Legado（BookInfoEditActivity）：簡介欄和書源的一樣就不算自訂，書源的
+  // 簡介不被蓋掉。預填的是整理過的簡介，只改書名時也不能把它固定下來。
+  test('the intro becomes the reader\'s own only when it is edited', () async {
+    const sourceIntro = '<div>第一段<br />第二段</div>';
+    final provider = await openDetail(intro: sourceIntro);
+    final prefilled = provider.book.getShownIntro();
+    Future<Book?> stored() => db.bookDao.getByUrl(oldUrl);
+
+    await provider.updateBookInfo('新書名', '作者', prefilled, '');
+    expect((await stored())?.intro, sourceIntro);
+    expect((await stored())?.customIntro ?? '', isEmpty);
+
+    await provider.updateBookInfo('新書名', '作者', '我寫的簡介', '');
+    expect((await stored())?.intro, sourceIntro);
+    expect((await stored())?.customIntro, '我寫的簡介');
+
+    await provider.updateBookInfo('新書名', '作者', '', '');
+    expect((await stored())?.customIntro ?? '', isEmpty);
+    expect(provider.book.getShownIntro(), '第一段\n第二段');
+  });
 
   test('a source edited elsewhere is read again on return', () async {
     await db.bookSourceDao.upsert(

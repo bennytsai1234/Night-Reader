@@ -337,7 +337,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         morph: true,
         title: count == 0 ? '選取書源' : '已選 $count 項',
         leading: GlassTextButton(
-          label: allSelected ? '取消全選' : '全選',
+          label: allSelected ? '全不選' : '全選',
           onPressed: provider.sources.isNotEmpty && !busy
               ? provider.selectAll
               : null,
