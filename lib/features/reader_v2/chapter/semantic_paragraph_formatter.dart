@@ -64,8 +64,10 @@ abstract final class SemanticParagraphFormatter {
 
     // A closing mark must not start a new semantic paragraph. The inverse
     // applies to an opening mark stranded at the end of the previous line.
-    if (_noParagraphStart.contains(right[0]) ||
-        _noParagraphEnd.contains(left[left.length - 1])) {
+    final first = _visibleEdge(right, fromStart: true);
+    final last = _visibleEdge(left, fromStart: false);
+    if (_noParagraphStart.contains(first) ||
+        _noParagraphEnd.contains(last)) {
       return true;
     }
     if ((left.endsWith('…') && right.startsWith('…')) ||
@@ -77,11 +79,25 @@ abstract final class SemanticParagraphFormatter {
     // dialogue boundaries, short lines, or natural sentence-final lines.
     if (wrapColumn == null ||
         (left.runes.length - wrapColumn).abs() > 1 ||
-        _paragraphFinal.contains(left[left.length - 1]) ||
-        _dialogueStart.contains(right[0])) {
+        _paragraphFinal.contains(last) ||
+        _dialogueStart.contains(first)) {
       return false;
     }
     return true;
+  }
+
+
+  /// Inserted illustration markers are private-use code units. They are
+  /// content anchors, not punctuation, so skip them only when deciding
+  /// whether a neighbouring line starts/ends with a closing/opening mark.
+  static String _visibleEdge(String text, {required bool fromStart}) {
+    var index = fromStart ? 0 : text.length - 1;
+    while (index >= 0 && index < text.length) {
+      final code = text.codeUnitAt(index);
+      if (code < 0xE000 || code > 0xF8FF) return text[index];
+      index += fromStart ? 1 : -1;
+    }
+    return '';
   }
 
   /// Detect a fixed-width source only within runs without blank lines.
