@@ -591,10 +591,11 @@ AiRepairSession _aiRepairSession() {
 
 const _hideAd = '【夜雨小說網】請記住本站網址 yeyu-novel.example，手機閱讀更方便';
 
-/// 網站常見的樣子：簡體，段落之間夾著廣告與「本章未完」這類雜訊。
+/// 網站常見的樣子：簡體，段落之間夾著廣告與「請收藏本站」這類雜訊（頁碼與
+/// 「本章未完」閱讀器自己會拿掉，ADR 0071）。
 const _messyParagraphs = [
   '雨是从傍晚开始下的。沈知秋撑着一把旧油纸伞，沿着青石板路慢慢走回书铺，鞋尖早已湿透。',
-  '本章未完，请点击下一页继续阅读》》》',
+  '喜欢本书请收藏本站，最新章节抢先看》》》',
   '「掌柜的，今天还收书吗？」门口站着一个瘦高的少年，怀里抱着一只木匣，匣面刻着三个小字：『听雨楼』。',
   '（天才一秒记住本站地址：www.xiaoshuo-example.com 最快更新！无弹窗！）',
   '沈知秋看了他一眼，收起伞，抖落伞面上的水珠：「收。不过得先看货……你这匣子，是从哪里来的？」',
@@ -683,7 +684,7 @@ Future<void> _saveChapter(int index, List<String> paragraphs) async {
 Future<void> _seedCleanRules() async {
   ReaderV2ContentTransformWorker.instance.stop();
   await getIt<ReplaceRuleDao>().upsertAll([
-    ReplaceRule(id: 101, name: '本章未完', pattern: r'本章未完.*', order: 1),
+    ReplaceRule(id: 101, name: '收藏本站', pattern: r'喜欢本书请收藏.*', order: 1),
     ReplaceRule(id: 102, name: '記住網址', pattern: r'（天才一秒.*?）', order: 2),
     ReplaceRule(id: 103, name: '手機用戶', pattern: r'手机用户请浏览.*', order: 3),
   ]);

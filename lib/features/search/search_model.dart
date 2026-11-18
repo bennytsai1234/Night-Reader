@@ -227,6 +227,16 @@ class SearchModel {
 
   final bool persist;
 
+  /// 這次要搜的書源排好順序、開始送之前呼叫（放到背景的搜尋記下要搜哪些）。
+  void Function(List<BookSource> sources)? onSourcesChosen;
+
+  /// 一個書源搜完時呼叫，零本也算；[books] 是精準搜尋篩過、要併進結果的那些。
+  /// 和併進結果在同一處，記下的與畫面上的不會對不上。
+  void Function(BookSource source, List<SearchBook> books)? onSourceSearched;
+
+  /// 每個書源送出前等它：放到背景的搜尋先等閱讀時的抓章（ADR 0070）。
+  Future<void> Function()? beforeSource;
+
   /// 執行搜尋。給了 [kind] 就只送給那一類的書源；聚合源每一類都送
   /// （ADR 0056），它搜到的書由搜尋頁照類別篩。
   Future<void> search({
@@ -253,6 +263,8 @@ class SearchModel {
     );
   }
 
+  /// 搜 [sources]；[initialResults] 是先放進結果的書：合併卡（重試失敗書源）
+  /// 或逐源原始結果（接著搜暫停的搜尋）都可以。
   Future<void> searchSources({
     required String key,
     required List<BookSource> sources,
@@ -301,6 +313,11 @@ class SearchModel {
     _waitingSources.clear();
 
     callback.onSearchStart();
+    // 先放進去的結果（重試、接著搜暫停的）先給頁面：剩下的書源都沒回書時
+    // 也看得到。
+    if (initialResults.isNotEmpty) {
+      callback.onSearchSuccess(List.from(_searchBooks));
+    }
 
     _totalCount = sources.length;
 
@@ -313,14 +330,21 @@ class SearchModel {
     if (generation != _generation) return;
     final searchPool = Pool(threadCount);
     final respondTimes = <String, int>{};
+    final ordered = _fastestFirst(sources);
+    onSourcesChosen?.call(ordered);
 
     final tasks = <Future<void>>[
-      for (final source in _fastestFirst(sources))
+      for (final source in ordered)
         searchPool.withResource(() async {
           while (_resumed != null) {
             await _resumed!.future;
           }
           if (generation != _generation) return;
+          if (beforeSource case final wait?) {
+            // 按了暫停或結束就不再等。
+            await Future.any<Object?>([wait(), cancelToken.whenCancel]);
+            if (generation != _generation) return;
+          }
           await _searchSingleSource(
             source,
             key,
@@ -396,12 +420,13 @@ class SearchModel {
           ? books.where((b) => matchesPrecisionSearch(b, key)).toList()
           : books;
 
-      if (filteredBooks.isNotEmpty) {
+      if (filteredBooks.isNotEmpty && persist) {
         // 持久化到搜尋快取
-        if (persist) {
-          await getIt<SearchBookDao>().insertList(filteredBooks);
-          if (stale()) return;
-        }
+        await getIt<SearchBookDao>().insertList(filteredBooks);
+        if (stale()) return;
+      }
+      onSourceSearched?.call(source, filteredBooks);
+      if (filteredBooks.isNotEmpty) {
         // 合併結果：書源常常幾個一起回來，合併與通知頁面集中在一段時間內
         // 做一次（見 [_publishDelay]）。
         _appendRawBooks(filteredBooks);
@@ -646,6 +671,18 @@ class SearchModel {
   ) {
     final model = SearchModel(callback: const _SilentCallback());
     rawBooks.forEach(model._groups.add);
+    return model._rebuild(searchKey, precision);
+  }
+
+  /// 逐源原始結果 [rawBooks] 合成搜尋頁的合併卡，和同一次搜尋邊收邊併的
+  /// 結果一樣（同源去重、分組；讀回暫停的搜尋時用）。
+  static List<SearchBook> cardsOf(
+    List<SearchBook> rawBooks,
+    String searchKey,
+    bool precision,
+  ) {
+    final model = SearchModel(callback: const _SilentCallback())
+      .._appendRawBooks(rawBooks);
     return model._rebuild(searchKey, precision);
   }
 }

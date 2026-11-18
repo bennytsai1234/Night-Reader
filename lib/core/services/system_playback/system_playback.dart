@@ -133,6 +133,16 @@ class SystemPlayback {
     );
   }
 
+  /// 開 App 的進場在底色時等這個（`LaunchEntrance.prepared`），最多等
+  /// [launchWait]：開媒體工作階段要在 Android 主執行緒建播放服務（使用者的
+  /// 手機上一段 6～7ms），也就是 Flutter 畫畫面的執行緒，放在骨架長出前的
+  /// 靜止時做完（ADR 0018）。朗讀引擎不等：`flutter_tts` 的呼叫在外掛自己的
+  /// 執行緒上（`third_party/flutter_tts/PATCHES.md` nightreader.5）。
+  Future<void> ready() => start().timeout(launchWait, onTimeout: () {});
+
+  /// 開 App 最多等媒體工作階段多久；系統一直不回應時照常進場。
+  static const Duration launchWait = Duration(seconds: 2);
+
   /// 向系統開媒體工作階段。開不起來時只少了系統播放資訊，播放照常；下次
   /// 呼叫再試。
   Future<void> start() {
@@ -319,12 +329,22 @@ class _SessionHandler extends BaseAudioHandler {
     duration: item.duration,
   );
 
+  /// 暫停中通知上的播放鈕。audio_service 的 [MediaControl.play] 在通知上送
+  /// KEYCODE_MUTE，Android 14 起媒體工作階段不收這個鍵，照通知按鈕送鍵的系統
+  /// （例如 vivo）按了沒反應；改送播放／暫停鍵，交回來是 [MediaButton.media]，
+  /// 暫停中就是播放。
+  static const _resume = MediaControl(
+    androidIcon: 'drawable/audio_service_play_arrow',
+    label: 'Play',
+    action: MediaAction.playPause,
+  );
+
   static PlaybackState _stateOf(_Shown shown) {
     final controls = <MediaControl>[
       if (shown.controls.contains(PlaybackControl.skipToPrevious))
         MediaControl.skipToPrevious,
       if (shown.controls.contains(PlaybackControl.rewind)) MediaControl.rewind,
-      shown.playing ? MediaControl.pause : MediaControl.play,
+      shown.playing ? MediaControl.pause : _resume,
       if (shown.controls.contains(PlaybackControl.fastForward))
         MediaControl.fastForward,
       if (shown.controls.contains(PlaybackControl.skipToNext))
@@ -346,6 +366,9 @@ class _SessionHandler extends BaseAudioHandler {
       androidCompactActionIndices: compact,
       systemActions: {
         MediaAction.playPause,
+        // iPhone 照動作開放鎖定畫面的播放指令；播放鈕改送播放／暫停後，
+        // 暫停中的播放從這裡給。
+        if (!shown.playing) MediaAction.play,
         if (shown.controls.contains(PlaybackControl.seek)) MediaAction.seek,
       },
       playing: shown.playing,

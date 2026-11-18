@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -78,8 +79,8 @@ class ReaderV2MenuSheet {
                   // 面板裡空白的地方不算點到外面。
                   behavior: HitTestBehavior.opaque,
                   onTap: () {},
-                  child: Theme(
-                    data: theme,
+                  child: DerivedTheme(
+                    derive: ReaderV2MenuStyle.cardsMenuThemeOf,
                     child: Material(
                       color: theme.colorScheme.surface,
                       shape: const RoundedRectangleBorder(

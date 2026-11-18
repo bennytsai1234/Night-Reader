@@ -21,6 +21,13 @@
 - 只修使用者在手機上覺得頓的動畫，量測量到超過、使用者感覺不到的不主動修（ADR 0036）。修一段動畫前先照 ADR 0037 說它屬於哪種場景、用哪個流暢策略：點一下進頁、開面板、閱讀器原地重排的重工作放在畫面靜止時做完再開始動畫，不切碎攤進動畫；只有手指在動的時候與照時間切的工作才每幀限量。做到的標準是沒有掉幀：畫面在變的每一幀，閱讀器排版切片照實算後都低於 4.2ms（手機 8.3ms，ADR 0029、0036）；最重一幀降了但還超過不算修好。
 - 新增或修改轉場、骨架換場與換場之後才開始的背景工作時，照 ADR 0029 的六點做：先骨架後內容、後面是實色時給 `SkeletonSwitcher.backdrop` 只遮一層、會在動畫前後變動的小狀態用獨立的 `ValueListenable` 不通知整頁、換場後的工作依序隔一格啟動（不用 `Priority.idle`）、推入的頁面第一格只畫骨架（分組清單頁用 `GroupedListView` 就有）、量測涵蓋到骨架換完再多一秒。
 
+## 彈出層
+
+- 彈出層用夜讀自己的開法：底部面板 `AppBottomSheet.show`／`showCustom`、動作表 `showAppActionSheet`、提示框 `showAppAlert` 這一系列、彈出選單 `showGlassMenu`、Material 對話框 `showAppDialog`。Flutter 的 `showModalBottomSheet`、`showDialog`、`showGeneralDialog` 在打開當下就定住遮罩色與打開處的主題，彈出層開著時系統切換深淺就停在舊配色。
+- 從外層主題算出一層自己的主題（面板墊一階、閱讀選單配色）用 `DerivedTheme` 包，不寫 `Theme(data: f(Theme.of(context)))`：彈出層會把打開處的 `Theme` 複製成定值，`DerivedTheme` 底下打開的改從它外面打開、再照當下主題算一次（`lib/shared/widgets/popup_routes.dart`）。
+- 傳給彈出層的元件（長按預覽、自己畫底色的面板內容、選單色點）在元件裡照主題取色，不在打開前先算好顏色傳進去。
+- 新的開法或打開處加進 `test/shared/widgets/popup_theme_switch_test.dart` 的清單。
+
 ## 介面文字
 
 - 畫面上的字用 `UiText`，照介面語言轉換；傳字串給共用元件時由元件自己轉。書的資料（書名、作者、章名、摘錄）用 `context.zh` 照閱讀偏好，使用者與書源寫的字（備忘、搜尋紀錄、書源名稱、網址、分組）照原文，這兩種顯示時都給 `translate: false`（共用元件與對話框的 `translateTitle` 這類參數）；和介面字並排成一段時，介面字用 `context.ui`。App 組好的句子（提示列、確認框說明）裡夾著名稱的，整句照介面語言（ADR 0066）。

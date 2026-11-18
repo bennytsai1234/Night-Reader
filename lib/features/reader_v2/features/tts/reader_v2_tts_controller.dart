@@ -190,14 +190,11 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   /// 選單上的定時鍵：正在念就暫停在這一句；否則照記住的定時開始朗讀
-  /// （定時是關閉時改用 30 分），暫停中則從暫停處接著念。
+  /// （定時關閉就不定時），暫停中則從暫停處接著念。
   Future<void> toggleTimed() async {
     if (isPlaying) {
       _pauseAtSentence();
       return;
-    }
-    if (sleepTimer.option == SleepTimerOption.off) {
-      await sleepTimer.choose(SleepTimerOption.minutes30);
     }
     await toggle();
   }

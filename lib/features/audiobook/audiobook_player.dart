@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -380,7 +381,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           ? AudioRequest(url: local.uri.toString(), headers: const {})
           : prefetched != null && prefetched.index == index
           ? prefetched.request
-          : await _sourceService.getAudioRequest(source, book, chapter);
+          // 聽的時候抓這一集：背景搜尋先讓（ADR 0070）。
+          : await ReadingFetches.instance.track(
+              () => _sourceService.getAudioRequest(source, book, chapter),
+            );
       _prefetched = null;
       if (generation != _generation) return;
       _request = request;
@@ -429,10 +433,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final next = _nextPlayable(_index);
     if (book == null || source == null || next == null) return;
     try {
-      final request = await _sourceService.getAudioRequest(
-        source,
-        book,
-        _chapters[next],
+      final request = await ReadingFetches.instance.track(
+        () => _sourceService.getAudioRequest(source, book, _chapters[next]),
       );
       if (generation == _generation) {
         _prefetched = (index: next, request: request);
