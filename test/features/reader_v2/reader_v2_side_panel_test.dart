@@ -110,6 +110,42 @@ void main() {
     expect(panelLeft(tester), 0);
   });
 
+  testWidgets('sliding in and out, the panel moves by whole physical pixels', (
+    tester,
+  ) async {
+    // 不整除的像素密度：一個實體像素不是整數個邏輯像素。
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.reset);
+    await pumpPanel(tester);
+    bool onPixel(double logical) {
+      final physical = logical * 2.625;
+      return (physical - physical.roundToDouble()).abs() < 0.01;
+    }
+
+    final lefts = <double>[];
+    panel.open();
+    await tester.pump();
+    await tester.pump(AppMotion.stillGap);
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      lefts.add(panelLeft(tester));
+    }
+    await tester.pumpAndSettle();
+    expect(panelLeft(tester), 0);
+    panel.close();
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (find.byType(Drawer).evaluate().isNotEmpty) {
+        lefts.add(panelLeft(tester));
+      }
+    }
+    // 途中確實在動，而且每一幀都落在整數實體像素上。
+    expect(lefts.where((left) => left != 0 && left > -300), isNotEmpty);
+    for (final left in lefts) {
+      expect(onPixel(left), isTrue, reason: '面板左緣 $left');
+    }
+  });
+
   testWidgets('the frame that prepares the panel keeps it off screen; it '
       'slides out afterwards', (tester) async {
     await pumpPanel(tester);
