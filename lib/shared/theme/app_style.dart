@@ -403,11 +403,11 @@ class StylePalette extends ThemeExtension<StylePalette> {
   }
 
   /// 目前主題的配色；主題沒有掛擴充時以預設風格補上。
-  static StylePalette of(BuildContext context) {
-    final theme = Theme.of(context);
-    return theme.extension<StylePalette>() ??
-        AppStyle.paper.of(theme.brightness);
-  }
+  static StylePalette of(BuildContext context) => ofTheme(Theme.of(context));
+
+  /// [theme] 掛的配色；沒掛時照素色。
+  static StylePalette ofTheme(ThemeData theme) =>
+      theme.extension<StylePalette>() ?? AppStyle.paper.of(theme.brightness);
 
   @override
   StylePalette copyWith({

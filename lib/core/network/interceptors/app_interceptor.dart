@@ -8,7 +8,7 @@ import 'package:night_reader/core/services/network_service.dart';
 /// AppInterceptor - 全域網路攔截器 (對標 Android HttpHelper.kt 內建攔截器)
 class AppInterceptor extends Interceptor {
   // 照 2026-11 的 Chrome 正式版寫，格式同真的 Chrome（只送主版號，後面
-  // 是 .0.0.0）；Legado 寫它內建網路元件的 128（ADR 0070）。
+  // 是 .0.0.0）；Legado 寫它內建網路元件的 128（ADR 0072）。
   static const String desktopUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36';

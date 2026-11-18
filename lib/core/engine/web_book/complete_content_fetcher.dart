@@ -24,7 +24,7 @@ final class CompleteContentFetcher {
   /// 照 Legado：下一頁網址出現過、或就是下一章（[_storedNextChapterUrl]）
   /// 就停。Legado 沒有頁數上限；夜讀的書架自動下載沒人看著，規則一直給新
   /// 網址時會抓不完，留一個正常章節碰不到的上限（2026-11-13 环安小说网一章
-  /// 110 到 121 頁，ADR 0070）。
+  /// 110 到 121 頁，ADR 0072）。
   static const int _maxPages = 1000;
   static const int _defaultPageConcurrency = 4;
 

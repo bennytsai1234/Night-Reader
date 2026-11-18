@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -53,8 +54,8 @@ class ReaderV2TopMenu extends StatelessWidget {
       visible: controlsVisible,
       edge: AxisDirection.up,
       // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
-      child: Theme(
-        data: menuStyle.toSheetTheme(Theme.of(context)),
+      child: DerivedTheme(
+        derive: ReaderV2MenuStyle.menuThemeOf,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             horizontalInset,
