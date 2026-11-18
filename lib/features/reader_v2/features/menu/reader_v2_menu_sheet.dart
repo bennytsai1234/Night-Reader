@@ -120,7 +120,7 @@ class ReaderV2SheetScaffold extends StatelessWidget {
 
   static const double _handleWidth = 36;
   static const double _handleHeight = 5;
-  static const double _closeSize = 30;
+  static const double _closeSize = PanelButtons.size;
 
   @override
   Widget build(BuildContext context) {

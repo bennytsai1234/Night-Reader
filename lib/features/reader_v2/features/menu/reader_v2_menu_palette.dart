@@ -32,6 +32,9 @@ class ReaderV2MenuStyle {
     required this.scrim,
   });
 
+  // PROTOTYPE：候選圖用的旋鈕，使用者選定後拿掉。
+  static int debugCardMode = 0;
+
   factory ReaderV2MenuStyle.of(BuildContext context) {
     final palette = StylePalette.of(context);
     final background = palette.readerMenu.withValues(alpha: 0.96);
@@ -39,10 +42,18 @@ class ReaderV2MenuStyle {
     return ReaderV2MenuStyle(
       brightness: palette.brightness,
       background: background,
-      backgroundElevated: Color.alphaBlend(
-        foreground.withValues(alpha: 0.06),
-        background,
-      ),
+      backgroundElevated: switch (debugCardMode) {
+        1 => AppLayers.step(palette.readerMenu, foreground, 6),
+        2 =>
+          palette.brightness == Brightness.light
+              ? AppLayers.step(
+                  palette.readerMenu,
+                  palette.readerBackground,
+                  AppLayers.cardGapLight,
+                )
+              : AppLayers.step(palette.readerMenu, foreground, 6),
+        _ => Color.alphaBlend(foreground.withValues(alpha: 0.06), background),
+      },
       foreground: foreground,
       // 次要文字是照卡片調的；閱讀選單淺色比卡片暗，跟著加深。
       mutedForeground: AppLayers.keepGap(
