@@ -2,9 +2,9 @@
 
 日期：2026-11-17。基準：`beta` 的 `e26625b5597595dc4e09dd6643a2ef61288419c6`。
 
-範圍只涵蓋 AI 修復的「試抓」(`probeSource`) 與「JS 工具」(`runRepairJs`)。先確認資料流、遺失位置和能驗證的修法，不改產品行為；完成實作與 PR 留待後續決定。
+範圍只涵蓋 AI 修復的「試抓」(`probeSource`) 與「JS 工具」(`runRepairJs`)。下面的現況與時間軸是改前的樣子；照這份實作的做法與測試見最後一節「實作」。
 
-## 程式碼確認的現況
+## 改前的資料流
 
 1. **試抓有兩層逾時，但兩層拿到的紀錄不同。** `lib/core/ai_repair/source_probe.dart:174-269`：worker 裡 `RequestLog.run(...).timeout(timeout)` 等完後才組成 `SourceProbeReport`。主 isolate 另設 `timeout + 16 秒` 的計時器；到點直接以 `SourceProbeReport(logs: [], requests: [], timedOut: true)` 結束並 `kill` worker。同步規則 JS 停住時，worker 的 `Future.timeout` 事件也無法執行，所以主 isolate 不一定拿得到它當時已收集的內容。
 2. **JS 工具沒有部分成果。** `lib/core/ai_repair/repair_rule_tools.dart:63-95,210-247`：主 isolate 在 `worker.run(...).timeout` 到點時直接傳回「超過時間，沒做完」，在 `finally` 結束 worker。`_jsTask` 只有在整段 `evalJS` 返回後才從 `RequestLog.lines` 產生「# 這段程式送出的請求」，因此超時時請求紀錄也消失。
@@ -28,13 +28,6 @@
 
 這是**依程式碼推導、與前次重現一致**的因果鏈；本次尚未在測試環境重新執行 20 秒案例。
 
-## 現有測試與新加的覆蓋
-
-- `test/core/engine/source_isolate_test.dart` 已驗證規則 JS 的 `java.ajax` 會經網路 isolate 送出、網址和回應最後能帶回書源 isolate，包括失敗回應。這證明正常完成的低層通道已有測試。
-- `test/core/ai_repair/source_probe_test.dart` 已有試抓逾時顯示進度、一般 JS 工具計算的測試，但「JS 工具記錄同步 `java.ajax` 的請求與 200 回應」原本缺少覆蓋。
-- 本研究分支已補一項 **JS 工具真實同步請求的整合測試**：以本機 `HttpServer` 的頁面跑 `runRepairJs`，檢查輸出裡有網址、請求標題與回應狀態；設 `quickJsUnavailableReason()` 跳過原生 JS 引擎不可用的環境。
-- 還**沒有**一項可自動驗證「超時後取得最新紀錄」的測試，因為那是待實作的行為；不能先把現有空結果當作正確預期。
-
 ## 可行設計：以「逐筆事件」建立主 isolate 的最新紀錄
 
 1. `SourceWorker.run` 對有需要的工作加進度接收器，由主 isolate 按 worker 與 task ID 保存**本次工作**的 `logs / requests / pages`；一般書源工作不必開啟。
@@ -43,7 +36,7 @@
 4. 主 isolate 在正常完成時以最終 `SourceProbeReport`／JS 結果收尾；外層超時時，把目前收到的紀錄加上逾時標記交回，再沿用安全的 worker 結束流程。JS 工具也須帶回「已執行的請求」而非只有「超過時間，沒做完」。
 5. 每個事件要有工作身分與順序；完成、取消或逾時後關閉這次收集器，忽略遲到的網路事件，避免寫入下一次試抓。書源與網路 isolate 的事件不一定全域有序，應保持各事件內的請求、回應對應關係。
 
-這是**建議設計，尚未實作或量測**。注意 `RequestLog.pages` 每頁最多保留 2 MiB 原文；每次傳整包快照會讓跨 isolate 傳輸、記憶體與序列化成本隨行數膨脹。應傳增量、限制留存與避免重複合併。JS 工具本來只輸出最多 6,000 字的請求紀錄，不能因進度報送繞過該限制。
+下一節照這個設計實作了；成本沒有量。注意 `RequestLog.pages` 每頁最多保留 2 MiB 原文；每次傳整包快照會讓跨 isolate 傳輸、記憶體與序列化成本隨行數膨脹。應傳增量、限制留存與避免重複合併。JS 工具本來只輸出最多 6,000 字的請求紀錄，不能因進度報送繞過該限制。
 
 ## 後續驗證標準
 
@@ -53,8 +46,15 @@
 4. **交錯與結束**：取消、兩個 worker 同時跑、上一次已超時後新一輪開始；遲到的事件不得混進新一輪，無重複紀錄。
 5. **成本**：比較未開紀錄／開紀錄的正常完成耗時、事件筆數、峰值記憶體、傳輸位元組；不把除錯附加成本套到所有書源工作。
 
-## 本次驗證狀態
+## 實作
 
-- 已直接閱讀 `beta` 上的資料流、跨 isolate 訊息與現有測試；研究分支已加上正常 `java.ajax` 的 JS 工具測試。
-- 目前執行環境**沒有 Dart／Flutter SDK**，無法在本次研究裡執行 Flutter 測試或重新跑 20 秒實驗；不能聲稱測試通過。專案 `.github/workflows/ci.yml` 僅在 PR、`beta` 推送或手動啟動時執行，不會因推送普通研究分支自動跑。
-- 未改任何正式執行邏輯、預設時限、逾時訊息或 isolate 終止策略，未開 PR。
+照「逐筆事件」的設計做了（分支 `fix/rule-js-debug-logs`）：
+
+- 書源工作一邊跑一邊交回紀錄：`reportSourceProgress`（`lib/core/utils/source_progress.dart`），呼叫端在 `SourceIsolate.run`／`SourceWorker.run` 給 `onProgress`。worker 每一筆當下 `notify` 主 isolate；worker 停住時網路 isolate 替它記的照 `_Blocked.id` 交回停住的那個工作。工作結束或 worker 被結束後才到的不收，不會混進下一次。
+- `RequestLog.live`：每記一行交給 `run` 開始時收紀錄的人；網路 isolate 照同樣設定自己交回，`merge` 不再交，每一行（含整頁原文）只送一次。
+- 除錯紀錄由 `startDebug` 的 `onLog` 在寫下當下交出，不經 `logStream`。
+- 試抓與 JS 工具的紀錄以主 isolate 收到的那份為準，worker 跑完只交回逾時、正文判斷這些；外層超時交回已收到的。JS 工具的 6,000 字上限照舊。
+
+「後續驗證標準」的 1～3 有測試（`test/core/ai_repair/source_probe_test.dart`，本機伺服器、真的 `java.ajax`）；第 4 條靠每個工作各自登記收紀錄的人、結束時移除，沒有另寫交錯的測試；第 5 條沒有量。
+
+研究分支的那項 JS 工具測試原本在本機逾時：測試沒開書源 isolate，網路 isolate 沒設要連的資料庫，等 App 的資料庫等不到；測試裡補上 `SourceIo.configure`。
