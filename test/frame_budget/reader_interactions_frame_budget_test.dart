@@ -162,6 +162,7 @@ void main() {
             ],
           ].join(','),
         },
+        databaseInIsolate: true,
       );
       await seedLibrary();
       await _seedLongBook();

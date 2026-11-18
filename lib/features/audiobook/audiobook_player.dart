@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -336,8 +337,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     return null;
   }
 
+  /// 開書時目錄讀到之前（或沒讀成）[_chapters] 是空的、[_index] 已經是上次
+  /// 聽的那集，從清單的範圍內往前找。
   int? _previousPlayable(int from) {
-    for (var i = from - 1; i >= 0; i--) {
+    for (var i = min(from, _chapters.length) - 1; i >= 0; i--) {
       if (!_chapters[i].isSkippedWhenReading) return i;
     }
     return null;
@@ -351,7 +354,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   }) async {
     final book = _book;
     final source = _source;
-    if (book == null || source == null) return;
+    // 目錄還沒讀到或沒讀成時沒有集可換（[_previousPlayable]）。
+    if (book == null || source == null || index >= _chapters.length) return;
     // 換集先讓上一集停聲：新的一集抓不到時，不會畫面停在新集、耳朵還聽著
     // 舊集，舊集的位置也不會記到新集上。
     final previous = _engine;
@@ -377,7 +381,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           ? AudioRequest(url: local.uri.toString(), headers: const {})
           : prefetched != null && prefetched.index == index
           ? prefetched.request
-          : await _sourceService.getAudioRequest(source, book, chapter);
+          // 聽的時候抓這一集：背景搜尋先讓（ADR 0070）。
+          : await ReadingFetches.instance.track(
+              () => _sourceService.getAudioRequest(source, book, chapter),
+            );
       _prefetched = null;
       if (generation != _generation) return;
       _request = request;
@@ -426,10 +433,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final next = _nextPlayable(_index);
     if (book == null || source == null || next == null) return;
     try {
-      final request = await _sourceService.getAudioRequest(
-        source,
-        book,
-        _chapters[next],
+      final request = await ReadingFetches.instance.track(
+        () => _sourceService.getAudioRequest(source, book, _chapters[next]),
       );
       if (generation == _generation) {
         _prefetched = (index: next, request: request);
@@ -500,7 +505,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
 
   /// 有下一集可以換；列表循環時最後一集的下一集是第一集。
   bool get hasNext =>
-      _nextPlayable(_index) != null || _mode == AudiobookPlayMode.listLoop;
+      _nextPlayable(_index) != null ||
+      (_mode == AudiobookPlayMode.listLoop && _chapters.isNotEmpty);
 
   Future<void> next() async {
     final next =
@@ -695,7 +701,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 回到前景時沒在播：另一台聽到較新的地方就跳過去（停在那裡，不自動播）。
   Future<void> _catchUpAfterResume() async {
     final book = _book;
-    if (book == null || _playing || _loading) return;
+    // 沒有目錄（沒讀成）跳不過去；不跳就不記成同步過，下次還會再抓到。
+    if (book == null || _playing || _loading || _chapters.isEmpty) return;
     final since = (index: _index, at: position.value);
     final pulled = await _sync.pullProgress(book.bookUrl);
     if (pulled == null || !pulled.isCurrent || !isCurrent(book)) return;

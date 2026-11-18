@@ -21,7 +21,7 @@ void main() {
   testWidgets('explore categories and books', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await seedSiteSource();
       await installFakeSite();

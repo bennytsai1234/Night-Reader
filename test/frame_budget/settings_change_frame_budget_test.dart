@@ -30,7 +30,7 @@ void main() {
   testWidgets('changing a setting on a settings page', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
     });
     await pumpApp(tester);

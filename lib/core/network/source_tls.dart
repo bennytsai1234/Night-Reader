@@ -5,14 +5,20 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/io_client.dart';
+import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 
 /// 連書源網站的連線不驗憑證：過期、自簽、網域對不上的憑證都照樣連（同
 /// Legado：書源的 OkHttp、Jsoup、封面與 WebView 都不驗，ADR 0063）。書源網站
 /// 常放著憑證過期不管，驗了書就讀不到。夜讀自己的服務（App 更新、同步、AI）
 /// 各用自己的連線，照常驗。閒置的連線 3 秒就關，同 dio 預設的連線。
+///
+/// 請求沒帶瀏覽器標識時送夜讀的預設（同 Legado `HttpHelper` 補上
+/// `AppConfig.userAgent`）：網路封面與封面存檔不經 [AppInterceptor]，原本送
+/// 的是 Dart 自己的標識。經過攔截器的請求已經照網址選好，這個用不到。
 HttpClient sourceHttpClient() => HttpClient()
   ..idleTimeout = const Duration(seconds: 3)
-  ..badCertificateCallback = (_, _, _) => true;
+  ..badCertificateCallback = ((_, _, _) => true)
+  ..userAgent = AppInterceptor.desktopUserAgent;
 
 /// 給書源用的 dio 連線（[sourceHttpClient]）。
 HttpClientAdapter sourceHttpClientAdapter() =>

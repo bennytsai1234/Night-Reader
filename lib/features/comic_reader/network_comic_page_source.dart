@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:night_reader/core/services/background_work/reading_fetches.dart';
 import 'package:night_reader/core/comic/comic_chapter_download.dart';
 import 'package:night_reader/core/comic/comic_chapter_files.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -58,11 +59,14 @@ class NetworkComicPageSource implements ComicPageSource {
       // 下載好的檔壞了：刪掉照書源重抓，書架自動下載也會再排這一話。
       await cbz.delete();
     }
-    final urls = await _service.getComicPageUrls(
-      source,
-      book,
-      chapter,
-      remember: book.isInBookshelf,
+    // 讀的時候抓這一話的圖片清單：背景搜尋先讓（ADR 0070）。
+    final urls = await ReadingFetches.instance.track(
+      () => _service.getComicPageUrls(
+        source,
+        book,
+        chapter,
+        remember: book.isInBookshelf,
+      ),
     );
     _urls[chapterIndex] = urls;
     // 已經抓到的圖記得寬高，一開始就是正確高度。

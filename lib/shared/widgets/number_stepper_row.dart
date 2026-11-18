@@ -10,6 +10,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/press_ink.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/core/services/ui_language.dart';
@@ -255,9 +256,8 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
   }
 
   Future<void> _editValue() async {
-    final result = await showDialog<double>(
+    final result = await showAppDialog<double>(
       context: context,
-      barrierColor: AppChrome.of(context).barrier,
       builder: (_) => _NumberInputDialog(
         label: widget.label,
         initialText: _format(_value),

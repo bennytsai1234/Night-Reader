@@ -82,6 +82,8 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     final scope = provider.searchScope;
     final scopeDisplay = scope.display;
     final kind = provider.kind;
+    // 放到背景後暫停中的也還沒搜完：照樣是「結束」（ADR 0070）。
+    final unfinished = provider.isSearching || provider.isBackgroundPaused;
 
     return GlassNavHeader(
       automaticallyImplyLeading: false,
@@ -182,14 +184,12 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             const SizedBox(width: AppSpacing.sm),
             GlassCapsule(
-              label: provider.isSearching ? '結束' : '搜尋',
-              icon: provider.isSearching
-                  ? Icons.stop_rounded
-                  : Icons.search_rounded,
-              foregroundColor: provider.isSearching ? scheme.error : null,
-              tooltip: provider.isSearching ? '結束搜尋' : '搜尋',
+              label: unfinished ? '結束' : '搜尋',
+              icon: unfinished ? Icons.stop_rounded : Icons.search_rounded,
+              foregroundColor: unfinished ? scheme.error : null,
+              tooltip: unfinished ? '結束搜尋' : '搜尋',
               onTap: () {
-                if (provider.isSearching) {
+                if (unfinished) {
                   provider.stopSearch();
                 } else {
                   onSearch(controller.text);

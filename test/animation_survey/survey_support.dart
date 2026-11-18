@@ -57,7 +57,10 @@ Future<void> runSurvey(
   final open = launch ?? () => pumpApp(tester);
   setUpPhone(tester);
   await tester.runAsync(() async {
-    await setUpApp(prefs: {'themeMode': surveyMode, ...prefs});
+    await setUpApp(
+      prefs: {'themeMode': surveyMode, ...prefs},
+      databaseInIsolate: true,
+    );
     await seedLibrary();
     await seedSiteSource();
     await installFakeSite();
@@ -266,19 +269,18 @@ Future<void> surveyStep(
         '${Platform.pathSeparator}meta.json',
       ).readAsStringSync(),
     ) as Map<String, dynamic>;
-    // 扣掉測試的資料庫時間與排版切片的一半（照時間切、手機上一樣長，ADR 0036）。
-    final db = meta['db'] as List? ?? const [];
+    // 扣掉排版切片的一半（照時間切、手機上一樣長，ADR 0036）。
     final slice = meta['slice'] as List? ?? const [];
     double at(List list, int i) =>
         i < list.length ? (list[i] as num).toDouble() : 0;
     costs = [
       for (final (i, c) in (meta['costs'] as List).indexed)
-        (c as num).toDouble() - at(db, i) - at(slice, i) / 2,
+        (c as num).toDouble() - at(slice, i) / 2,
     ];
     phases = [for (final p in meta['phases'] as List) p as String];
   }
   // 照 ADR 0036：只看畫面在動的格子，第 0 格（點下去後的第一格）可以重、
-  // 不算；扣掉測試的資料庫時間、排版切片照實算後和 4.2ms 比。
+  // 不算；排版切片照實算後和 4.2ms 比。
   const still = {'靜止', '紙', '骨架停住'};
   final limit = frameLimit.inMicroseconds / 1000;
   final moving = [

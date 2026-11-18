@@ -173,6 +173,7 @@ Future<void> goBack(WidgetTester tester) async {
 Future<void> tearDownApp(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
   await settle(tester, const Duration(seconds: 5));
+  await waitForDownloads(tester);
   await tester.pump(const Duration(minutes: 1));
 }
 

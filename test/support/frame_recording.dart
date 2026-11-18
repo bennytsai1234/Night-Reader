@@ -8,13 +8,14 @@
 //
 //   testWidgets('launch', (tester) async {
 //     setUpPhone(tester);
+//     await tester.runAsync(() => setUpApp(databaseInIsolate: true));
 //     ...
 //     await recordAnimation(
 //       tester,
 //       name: 'b1200-g100-light',
 //       phase: () => ...,           // 這格在哪一段，例如「長出」「呼吸」
 //       until: () => finished,      // 動畫播完
-//       realAsync: true,            // 整個 App（資料庫在真的 isolate 裡）
+//       realAsync: true,            // 整個 App（資料庫在另一個 isolate）
 //     );
 //   });
 //
@@ -25,10 +26,11 @@
 // 會和只量成本時差一兩格。第一次開整個 App 含 debug 的編譯成本，先開一次
 // 暖身再錄。加 `FRAME_GC=1` 與 `--enable-vmservice` 時另外記下每格裡回收
 // 記憶體停住多久（`frame_budget.dart` 的 FRAME_GC），頁面上多一排「回收記憶體」。
-// 每格裡測試的資料庫花的時間一律記下（`db_clock.dart`），頁面上那一格扣掉它
-// 再和上限比：手機上資料庫不在主執行緒。每格存畫面要對整棵圖層重新組一次、
-// 多畫一張整個畫面，之後每一格量到的時間比只量時間（`test/frame_budget/`）
-// 多 0.3–0.5ms；貼著上限的格子要不要修，照 `test/frame_budget/` 的數字。
+// 資料庫和 App 一樣在另一個 isolate（`setUpApp` 的 `databaseInIsolate`），每格
+// 的時間裡沒有 SQL，只有送查詢、收結果；每格只讓出一次真實時間，回覆落在哪
+// 一格和手機不完全一樣。每格存畫面要對整棵圖層重新組一次、多畫一張整個畫面，
+// 之後每一格量到的時間比只量時間（`test/frame_budget/`）多 0.3–0.5ms；貼著
+// 上限的格子要不要修，照 `test/frame_budget/` 的數字。
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -119,7 +121,6 @@ Future<void> recordAnimation(
         'frameMs': frameDuration.inMicroseconds / 1000,
         'phases': phases,
         'costs': [for (final cost in costs) (cost.total / 100).round() / 10],
-        'db': [for (final cost in costs) (cost.dbMicros / 100).round() / 10],
         'slice': [
           for (final cost in costs) (cost.sliceMicros / 100).round() / 10,
         ],

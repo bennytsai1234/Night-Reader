@@ -7,12 +7,14 @@ import 'package:night_reader/core/services/network_service.dart';
 
 /// AppInterceptor - 全域網路攔截器 (對標 Android HttpHelper.kt 內建攔截器)
 class AppInterceptor extends Interceptor {
-  static const String _desktopUserAgent =
+  // 照 2026-11 的 Chrome 正式版寫，格式同真的 Chrome（只送主版號，後面
+  // 是 .0.0.0）；Legado 寫它內建網路元件的 128（ADR 0072）。
+  static const String desktopUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+      '(KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36';
   static const String mobileUserAgent =
-      'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
+      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/158.0.0.0 Mobile Safari/537.36';
   static const String manualRedirectCountKey = '_manualRedirectCount';
   static const String manualRedirectChainKey = '_manualRedirectChain';
   static const String disableManualRedirectHandlingKey =
@@ -81,7 +83,7 @@ class AppInterceptor extends Interceptor {
     if (host.startsWith('m.')) {
       return mobileUserAgent;
     }
-    return _desktopUserAgent;
+    return desktopUserAgent;
   }
 
   bool _hasHeader(Map<String, dynamic> headers, String name) {
