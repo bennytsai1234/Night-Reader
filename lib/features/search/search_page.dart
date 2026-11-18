@@ -246,7 +246,7 @@ class _SearchViewState extends State<SearchView> {
             provider: provider,
             onSearch: _onSearch,
             onScopePressed: _openScopeSheet,
-            onCancel: () => Navigator.maybePop(context),
+            onBack: () => Navigator.maybePop(context),
             onAiFind: () {
               _inputFocus.unfocus();
               // 回來時這次找書可能已經存成「過去的找書」的一筆。

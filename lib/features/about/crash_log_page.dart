@@ -9,6 +9,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/core/services/ui_language.dart';
 
@@ -29,6 +30,8 @@ class CrashLogPage extends StatefulWidget {
 }
 
 enum _CrashLogStatus { loading, loaded, error }
+
+enum _CrashLogAction { copy, clear }
 
 class _CrashLogPageState extends State<CrashLogPage> {
   _CrashLogStatus _status = _CrashLogStatus.loading;
@@ -78,16 +81,27 @@ class _CrashLogPageState extends State<CrashLogPage> {
       appBar: GlassNavHeader(
         title: '崩潰日誌',
         actions: [
-          GlassIconButton(
-            icon: Icons.copy_rounded,
-            iconSize: 20,
-            tooltip: '複製日誌',
-            onPressed: canUseLogs ? _copyLogs : null,
-          ),
-          GlassIconButton(
-            icon: Icons.delete_outline_rounded,
-            tooltip: '清除日誌',
-            onPressed: canUseLogs ? _confirmClearLogs : null,
+          // 頁首右邊只有一顆，動作都收進「更多」（docs/design/components.md
+          // 「左右各一顆」）；沒有日誌時整顆停用（ADR 0059）。
+          GlassMenuButton<_CrashLogAction>(
+            enabled: canUseLogs,
+            entriesBuilder: (_) => const [
+              GlassMenuItem(
+                value: _CrashLogAction.copy,
+                label: '複製日誌',
+                icon: Icons.copy_rounded,
+              ),
+              GlassMenuItem(
+                value: _CrashLogAction.clear,
+                label: '清除日誌',
+                icon: Icons.delete_outline_rounded,
+                destructive: true,
+              ),
+            ],
+            onSelected: (action) => switch (action) {
+              _CrashLogAction.copy => _copyLogs(),
+              _CrashLogAction.clear => _confirmClearLogs(),
+            },
           ),
         ],
       ),

@@ -11,6 +11,7 @@ import 'package:night_reader/features/book_detail/widgets/book_detail_change_sou
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -28,6 +29,8 @@ typedef OnSelectSource = Future<ChangeSourceOutcome> Function(
   SearchBook selected,
   SourceToc? toc,
 );
+
+enum _SourceFilter { checkAuthor, excludeFarWordCount }
 
 class ChangeSourceSheet extends StatelessWidget {
   final Book book;
@@ -231,29 +234,34 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     final primary = Theme.of(context).colorScheme.primary;
     return SheetHeader(
       title: '更換來源',
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GlassIconButton(
-            icon: provider.checkAuthor
-                ? Icons.person_rounded
-                : Icons.person_off_outlined,
-            iconSize: 20,
-            color: provider.checkAuthor ? primary : null,
-            tooltip: provider.checkAuthor ? '校驗作者：開' : '校驗作者：關',
-            onPressed: _isSwitchingSource ? null : provider.toggleCheckAuthor,
+      // 左右各一顆（docs/design/components.md）：兩個篩選收進一顆選單，
+      // 有一項開著時圖示用強調色。
+      leading: GlassMenuButton<_SourceFilter>(
+        icon: Icons.filter_list_rounded,
+        tooltip: '篩選',
+        color: provider.checkAuthor || provider.excludeFarWordCount
+            ? primary
+            : null,
+        enabled: !_isSwitchingSource,
+        entriesBuilder: (_) => [
+          GlassMenuItem(
+            value: _SourceFilter.checkAuthor,
+            label: '校驗作者',
+            icon: Icons.person_outline_rounded,
+            checked: provider.checkAuthor,
           ),
-          const SizedBox(width: AppSpacing.sm),
-          GlassIconButton(
+          GlassMenuItem(
+            value: _SourceFilter.excludeFarWordCount,
+            label: '不列字數差太多的',
             icon: Icons.straighten_rounded,
-            iconSize: 20,
-            color: provider.excludeFarWordCount ? primary : null,
-            tooltip: provider.excludeFarWordCount ? '不列字數差太多的：開' : '不列字數差太多的：關',
-            onPressed: _isSwitchingSource
-                ? null
-                : provider.toggleExcludeFarWordCount,
+            checked: provider.excludeFarWordCount,
           ),
         ],
+        onSelected: (filter) => switch (filter) {
+          _SourceFilter.checkAuthor => provider.toggleCheckAuthor(),
+          _SourceFilter.excludeFarWordCount =>
+            provider.toggleExcludeFarWordCount(),
+        },
       ),
       trailing: provider.isSearching
           ? const SizedBox.square(

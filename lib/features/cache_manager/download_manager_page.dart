@@ -26,6 +26,8 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/services/ui_language.dart';
 
+enum _QueueAction { togglePause, clearCompleted }
+
 typedef _QueueShape = ({
   List<DownloadTask> tasks,
   bool paused,
@@ -93,24 +95,37 @@ class DownloadManagerPage extends StatelessWidget {
       appBar: GlassNavHeader(
         title: '背景下載佇列',
         actions: [
-          GlassIconButton(
-            icon: service.isPaused
-                ? Icons.play_arrow_rounded
-                : Icons.pause_rounded,
-            tooltip: service.isPaused ? '繼續全部' : '暫停全部',
-            onPressed: queue.hasActive ? service.togglePause : null,
-          ),
-          GlassIconButton(
-            icon: Icons.delete_sweep_outlined,
-            tooltip: '清除已完成',
-            onPressed: queue.hasCompleted
-                ? () {
-                    for (final task
-                        in tasks.where((task) => task.isCompleted).toList()) {
-                      service.removeTask(task.bookUrl);
-                    }
+          // 頁首右邊只有一顆，動作都收進「更多」（docs/design/components.md
+          // 「左右各一顆」）；兩項都不能按時整顆停用（ADR 0059）。
+          GlassMenuButton<_QueueAction>(
+            enabled: queue.hasActive || queue.hasCompleted,
+            entriesBuilder: (_) => [
+              GlassMenuItem(
+                value: _QueueAction.togglePause,
+                label: service.isPaused ? '繼續全部' : '暫停全部',
+                icon: service.isPaused
+                    ? Icons.play_arrow_rounded
+                    : Icons.pause_rounded,
+                enabled: queue.hasActive,
+              ),
+              GlassMenuItem(
+                value: _QueueAction.clearCompleted,
+                label: '清除已完成',
+                icon: Icons.delete_sweep_outlined,
+                enabled: queue.hasCompleted,
+              ),
+            ],
+            onSelected: (action) {
+              switch (action) {
+                case _QueueAction.togglePause:
+                  service.togglePause();
+                case _QueueAction.clearCompleted:
+                  for (final task
+                      in tasks.where((task) => task.isCompleted).toList()) {
+                    service.removeTask(task.bookUrl);
                   }
-                : null,
+              }
+            },
           ),
         ],
       ),

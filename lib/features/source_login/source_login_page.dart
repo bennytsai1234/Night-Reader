@@ -24,7 +24,6 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -528,6 +527,34 @@ class _SourceLoginPageState extends State<SourceLoginPage>
 
   // ── 畫面 ─────────────────────────────────────────────────────────
 
+  /// 書源的表單，最下面一張卡片放登入頁自己的動作。
+  List<Widget> _page(List<SourceLoginRow> rows, String? websiteUrl) => [
+    ..._items(rows),
+    GroupedSection(
+      children: [
+        // 書源網址不是 http(s) 時灰掉（ADR 0059）。
+        GroupedRow(
+          title: '在網站登入',
+          leading: const GroupedIconTile(Icons.open_in_browser_rounded),
+          enabled: websiteUrl != null && !_busy,
+          onTap: websiteUrl == null ? null : () => _loginOnWebsite(websiteUrl),
+        ),
+        GroupedRow(
+          title: '登入標頭',
+          leading: const GroupedIconTile(Icons.badge_outlined),
+          onTap: _showLoginHeader,
+        ),
+        GroupedRow(
+          title: '清除登入資料',
+          leading: const GroupedIconTile(Icons.logout_rounded),
+          destructive: true,
+          showChevron: false,
+          onTap: _clearLoginData,
+        ),
+      ],
+    ),
+  ];
+
   List<Widget> _items(List<SourceLoginRow> rows) {
     final items = <Widget>[];
     var index = 0;
@@ -579,34 +606,9 @@ class _SourceLoginPageState extends State<SourceLoginPage>
       appBar: GlassNavHeader(
         title: '${context.ui('登入')} · ${widget.source.bookSourceName}',
         translateTitle: false,
+        // 頁首右邊只有打勾（docs/design/components.md「左右各一顆」）：書源的
+        // 說明會寫「填完點右上角 √」。其他動作在表單最下面的卡片。
         actions: [
-          GlassMenuButton<String>(
-            entriesBuilder: (_) => [
-              // 書源網址不是 http(s) 時灰掉（ADR 0059）。
-              GlassMenuItem(
-                value: 'website',
-                label: '在網站登入',
-                icon: Icons.open_in_browser_rounded,
-                enabled: websiteUrl != null && !_busy,
-              ),
-              const GlassMenuItem(
-                value: 'header',
-                label: '登入標頭',
-                icon: Icons.badge_outlined,
-              ),
-              const GlassMenuItem(
-                value: 'clear',
-                label: '清除登入資料',
-                icon: Icons.logout_rounded,
-                destructive: true,
-              ),
-            ],
-            onSelected: (value) => switch (value) {
-              'website' => _loginOnWebsite(websiteUrl!),
-              'header' => _showLoginHeader(),
-              _ => _clearLoginData(),
-            },
-          ),
           GlassIconButton(
             icon: Icons.check_rounded,
             tooltip: '登入',
@@ -626,9 +628,10 @@ class _SourceLoginPageState extends State<SourceLoginPage>
               // 程式表單回來後，以真實欄位及按鈕重算揭開前的骨架；
               // 尚未知資料時才使用通用的兩欄表單預覽。
               skeleton: _FormSkeleton(
-                items: rows == null ? null : _items(rows),
+                items: rows == null ? null : _page(rows, websiteUrl),
               ),
-              builder: (_) => GroupedListView(children: _items(rows ?? [])),
+              builder: (_) =>
+                  GroupedListView(children: _page(rows ?? [], websiteUrl)),
             ),
     );
   }

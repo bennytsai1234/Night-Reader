@@ -7,11 +7,14 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/core/services/source_debug_service.dart';
 
 import 'source_debug_provider.dart';
 
 import 'package:night_reader/core/services/ui_language.dart';
+
+enum _DebugAction { copy, restart }
 
 class SourceDebugPage extends StatefulWidget {
   final BookSource source;
@@ -98,57 +101,68 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
               readable: false,
               title: '${context.ui('除錯：')}${widget.source.bookSourceName}',
               translateTitle: false,
+              // 頁首右邊只有一顆，動作都收進「更多」（docs/design/components.md
+              // 「左右各一顆」）；除錯中由頁首下緣的進度線表示。
               actions: [
-                GlassIconButton(
-                  icon: Icons.copy_rounded,
-                  iconSize: 20,
-                  onPressed: provider.logs.isEmpty
-                      ? null
-                      : () => _copyFullLog(provider.logs),
-                  tooltip: '複製完整日誌',
+                GlassMenuButton<_DebugAction>(
+                  entriesBuilder: (_) => [
+                    GlassMenuItem(
+                      value: _DebugAction.copy,
+                      label: '複製完整日誌',
+                      icon: Icons.copy_rounded,
+                      enabled: provider.logs.isNotEmpty,
+                    ),
+                    GlassMenuItem(
+                      value: _DebugAction.restart,
+                      label: '重新除錯',
+                      icon: Icons.refresh_rounded,
+                      enabled: !busy,
+                    ),
+                  ],
+                  onSelected: (action) => switch (action) {
+                    _DebugAction.copy => _copyFullLog(provider.logs),
+                    _DebugAction.restart => provider.startDebug(),
+                  },
                 ),
-                busy
-                    ? Semantics(
-                        label: context.ui('除錯中'),
-                        liveRegion: true,
-                        child: const SizedBox.square(
-                          dimension: AppGlass.buttonSize,
-                          child: GlassSurface(
-                            shape: BoxShape.circle,
-                            shadow: false,
-                            child: Center(
-                              child: SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                    : GlassIconButton(
-                        icon: Icons.refresh_rounded,
-                        onPressed: () => provider.startDebug(),
-                        tooltip: '重新除錯',
-                      ),
               ],
             ),
-            body: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppGrouped.margin,
-                  AppSpacing.xs,
-                  AppGrouped.margin,
-                  AppGrouped.margin,
+            body: Stack(
+              children: [
+                Positioned.fill(
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppGrouped.margin,
+                        AppSpacing.xs,
+                        AppGrouped.margin,
+                        AppGrouped.margin,
+                      ),
+                      child: _DebugConsole(
+                        logs: provider.logs,
+                        isFinished: provider.isFinished,
+                        controller: _scrollController,
+                      ),
+                    ),
+                  ),
                 ),
-                child: _DebugConsole(
-                  logs: provider.logs,
-                  isFinished: provider.isFinished,
-                  controller: _scrollController,
-                ),
-              ),
+                // 除錯中頁首下緣一條載入進度線，同登入用的瀏覽器頁。
+                if (busy)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    child: Semantics(
+                      label: context.ui('除錯中'),
+                      liveRegion: true,
+                      child: LinearProgressIndicator(
+                        minHeight: 2,
+                        color: Theme.of(context).colorScheme.primary,
+                        backgroundColor: Colors.transparent,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           );
         },

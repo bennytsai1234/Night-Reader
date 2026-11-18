@@ -365,12 +365,9 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(
         title: widget.source == null ? '新建書源' : '編輯書源',
+        // 頁首右邊只放「儲存」（docs/design/components.md「左右各一顆」）；
+        // 除錯書源在「基本」分頁最下面。
         actions: [
-          GlassIconButton(
-            tooltip: '除錯書源',
-            icon: Icons.bug_report_outlined,
-            onPressed: _isSaving ? null : _openDebug,
-          ),
           Semantics(
             label: context.ui('儲存書源'),
             child: GlassTextButton(
@@ -411,6 +408,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
               setState(() => _editingSource.bookSourceType = type);
               _updateDirty();
             },
+            onDebug: _isSaving ? null : _openDebug,
           ),
           SourceEditSearch(controllers: _controllers),
           SourceEditExplore(controllers: _controllers),

@@ -132,12 +132,16 @@ class GlassMenuButton<T> extends StatelessWidget {
     this.tooltip = '更多',
     this.child,
     this.enabled = true,
+    this.color,
   });
 
   final List<GlassMenuEntry<T>> Function(BuildContext context) entriesBuilder;
   final ValueChanged<T> onSelected;
   final IconData icon;
   final String tooltip;
+
+  /// 圖示顏色；例如選單裡有開著的篩選時用強調色。
+  final Color? color;
 
   /// 覆寫按鈕外觀；為 null 時使用 [GlassIconButton]。
   final Widget? child;
@@ -171,7 +175,12 @@ class GlassMenuButton<T> extends StatelessWidget {
             ),
           );
         }
-        return GlassIconButton(icon: icon, tooltip: tooltip, onPressed: onTap);
+        return GlassIconButton(
+          icon: icon,
+          tooltip: tooltip,
+          color: color,
+          onPressed: onTap,
+        );
       },
     );
   }

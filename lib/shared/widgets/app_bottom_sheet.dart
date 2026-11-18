@@ -22,7 +22,8 @@ class AppBottomSheet extends StatelessWidget {
   /// 分組卡片的面板才開。
   final bool skeletonEntrance;
 
-  /// 關閉鈕左側的附加動作。
+  /// 頁首右邊的動作；有它時關閉鈕移到左邊（docs/design/components.md
+  /// 「左右各一顆」）。
   final Widget? trailing;
   final bool showDragHandle;
 
@@ -73,6 +74,14 @@ class AppBottomSheet extends StatelessWidget {
     AppChrome chrome,
     double maxHeight,
   ) {
+    final close = GlassIconButton(
+      icon: Icons.close_rounded,
+      tooltip: '關閉',
+      size: _closeSize,
+      iconSize: 18,
+      color: chrome.sectionText,
+      onPressed: () => Navigator.maybePop(context),
+    );
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -99,10 +108,14 @@ class AppBottomSheet extends StatelessWidget {
               child: NavigationToolbar(
                 centerMiddle: true,
                 middleSpacing: AppSpacing.md,
-                // 左側放一塊與關閉鈕等寬的空白，讓沒有 trailing 時標題也真正置中。
-                leading: const SizedBox(
-                  width: AppGrouped.margin + AppGlass.buttonSize,
-                ),
+                // 左右各一顆：有右側動作時關閉在左邊；沒有時左邊空著，
+                // 關閉在右邊。兩側照按鈕自己的大小置中，不被撐高。
+                leading: trailing == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(left: AppGrouped.margin),
+                        child: Center(widthFactor: 1, child: close),
+                      ),
                 middle: Semantics(
                   header: true,
                   child: DragOverflowText(
@@ -119,23 +132,7 @@ class AppBottomSheet extends StatelessWidget {
                 ),
                 trailing: Padding(
                   padding: const EdgeInsets.only(right: AppGrouped.margin),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (trailing != null) ...[
-                        trailing!,
-                        const SizedBox(width: AppSpacing.sm),
-                      ],
-                      GlassIconButton(
-                        icon: Icons.close_rounded,
-                        tooltip: '關閉',
-                        size: _closeSize,
-                        iconSize: 18,
-                        color: chrome.sectionText,
-                        onPressed: () => Navigator.maybePop(context),
-                      ),
-                    ],
-                  ),
+                  child: Center(widthFactor: 1, child: trailing ?? close),
                 ),
               ),
             ),
