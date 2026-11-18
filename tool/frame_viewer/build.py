@@ -18,7 +18,9 @@
 資料庫時間（`db_clock.dart`，手機上不在主執行緒）與閱讀器排版切片的一半（`slice_clock.dart`，
 照時間切、手機上一樣長）再和它比。錄影時開了 `FRAME_GC=1`，
 頁面多一排「回收記憶體」；`gcPhoneRatio` 是手機上回收比電腦慢幾倍（ADR 0029 定 2 倍），
-照它畫出換算到手機會超過一格的線。
+照它畫出換算到手機會超過一格的線。錄影時量了建字貼圖（`meta.json` 的 `glyph`，用
+`flutter test --enable-impeller --enable-vmservice` 錄、每格拍畫面時記下繪製執行緒把新字
+畫進字貼圖的時間），頁面多一排「建字貼圖」：不在主執行緒，和主執行緒那排分開看。
 
 需要 ffmpeg、numpy 與 Pillow。
 """
@@ -75,6 +77,7 @@ def measure(meta, frames, spots):
         'frameMs': meta.get('frameMs', 16),
         'gcNew': meta.get('gcNew', [])[:len(frames)],
         'gcOld': meta.get('gcOld', [])[:len(frames)],
+        'glyph': meta.get('glyph', [])[:len(frames)],
         'frames': rows,
     }
 
