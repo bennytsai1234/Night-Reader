@@ -255,6 +255,112 @@ void main() {
     expect(position.pixels, greaterThan(0));
   });
 
+  testWidgets('dragging past the end of a line keeps dragging the pager', (
+    tester,
+  ) async {
+    final controller = PageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PageView(
+          controller: controller,
+          children: [
+            ListView(
+              children: const [
+                SizedBox(
+                  width: 112,
+                  child: DragOverflowText(
+                    child: Text('這是一個非常非常長的書籍名稱，需要讓讀者手動拖動查看', maxLines: 1),
+                  ),
+                ),
+                SizedBox(height: 600),
+              ],
+            ),
+            const Center(child: Text('第二頁')),
+          ],
+        ),
+      ),
+    );
+    final line = find.byType(SingleChildScrollView);
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: line, matching: find.byType(Scrollable)),
+        )
+        .position;
+
+    final gesture = await tester.startGesture(tester.getCenter(line));
+    var stamp = const Duration(milliseconds: 16);
+    for (var i = 0; i < 40 && position.pixels < position.maxScrollExtent; i++) {
+      stamp += const Duration(milliseconds: 16);
+      await gesture.moveBy(const Offset(-40, 0), timeStamp: stamp);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, position.maxScrollExtent);
+    expect(controller.page, lessThan(0.1), reason: '字拖到邊界前分頁幾乎不動');
+
+    // 同一手勢再拖過半頁：字停在字尾，位移改拖分頁。
+    for (var i = 0; i < 7; i++) {
+      stamp += const Duration(milliseconds: 16);
+      await gesture.moveBy(const Offset(-40, 0), timeStamp: stamp);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, position.maxScrollExtent, reason: '字留在字尾');
+    expect(controller.page, greaterThan(0), reason: '分頁跟著手指');
+
+    await gesture.up(timeStamp: stamp + const Duration(milliseconds: 16));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(controller.page, 1, reason: '放開後停到下一頁');
+  });
+
+  testWidgets('a locked pager does not take the drag past the line edge', (
+    tester,
+  ) async {
+    final controller = PageController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PageView(
+          controller: controller,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            ListView(
+              children: const [
+                SizedBox(
+                  width: 112,
+                  child: DragOverflowText(
+                    child: Text('這是一個非常非常長的書籍名稱，需要讓讀者手動拖動查看', maxLines: 1),
+                  ),
+                ),
+                SizedBox(height: 600),
+              ],
+            ),
+            const Center(child: Text('第二頁')),
+          ],
+        ),
+      ),
+    );
+    final line = find.byType(SingleChildScrollView);
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(of: line, matching: find.byType(Scrollable)),
+        )
+        .position;
+
+    final gesture = await tester.startGesture(tester.getCenter(line));
+    for (var i = 0; i < 40 && position.pixels < position.maxScrollExtent; i++) {
+      await gesture.moveBy(const Offset(-40, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    for (var i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(-40, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.pixels, position.maxScrollExtent);
+    expect(controller.page, 0, reason: '分頁鎖住時留在原頁');
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(controller.page, 0);
+  });
+
   testWidgets('the system letter spacing counts when measuring', (
     tester,
   ) async {

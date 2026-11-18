@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -10,7 +12,8 @@ import 'ui_text.dart';
 ///
 /// 以實際欄寬、字級與系統的粗體、字距覆寫量測 [Text]：沒有限制行數的文字
 /// 照常換行，不會被改成可拖。混合字樣的 [Text.rich] 放不下時整段排成一行拖。
-/// 文字已經拖到邊上、還往邊外拖時，手勢讓給外層（列的滑動動作、換頁）。
+/// 文字已經拖到邊上、還往邊外拖時，手勢讓給外層（列的滑動動作、換頁）；
+/// 手勢途中才拖到邊上時，剩下的位移接著拖外層的分頁，放開後停到整頁。
 /// 骨架照同一套排法畫（[dragOverflowCut]、[dragOverflowTailSpan]）。
 class DragOverflowText extends StatelessWidget {
   const DragOverflowText({super.key, required this.child});
@@ -115,7 +118,8 @@ class DragOverflowText extends StatelessWidget {
   }
 }
 
-/// 可拖的那一行：橫向捲動，但已經在邊上、還往邊外拖時不接手勢。
+/// 可拖的那一行：橫向捲動；已經在邊上、還往邊外拖時不接手勢。手勢途中才
+/// 拖到邊上時，剩下的位移接著拖外層的水平捲動（主頁分頁），放開後停到整頁。
 class _DragLine extends StatefulWidget {
   const _DragLine({super.key, required this.width, required this.child});
 
@@ -129,6 +133,12 @@ class _DragLine extends StatefulWidget {
 class _DragLineState extends State<_DragLine> {
   final _controller = ScrollController();
 
+  /// 外層的水平捲動（主頁的 [PageView]）；第一次拖到邊界時才找。
+  ScrollPosition? _pager;
+
+  /// 這一次手勢已經把剩下的位移交給外層；到放開前都給外層，不拉回字。
+  bool _handedOff = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -137,16 +147,75 @@ class _DragLineState extends State<_DragLine> {
 
   void _move(double delta) {
     if (!_controller.hasClients) return;
+    if (_handedOff) {
+      _dragPager(delta);
+      return;
+    }
     final position = _controller.position;
-    _controller.jumpTo(
-      (position.pixels - delta).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
+    final target = (position.pixels - delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    // 字吃掉的手指位移；剩下的是拖到邊界後多出來的，交給外層。
+    final consumed = position.pixels - target;
+    final remaining = delta - consumed;
+    if (target != position.pixels) _controller.jumpTo(target);
+    if (remaining.abs() > 0.01 && _dragPager(remaining)) {
+      _handedOff = true;
+    }
+  }
+
+  /// 找最近的外層分頁捲動：往上會先經過書架的直向清單，跳過它。
+  ScrollPosition? _findPager() {
+    ScrollPosition? found;
+    context.visitAncestorElements((element) {
+      final widget = element.widget;
+      if (widget is Scrollable &&
+          axisDirectionToAxis(widget.axisDirection) == Axis.horizontal) {
+        final state = (element as StatefulElement).state;
+        if (state is ScrollableState && _isPaged(state.position.physics)) {
+          found = state.position;
+          return false;
+        }
+      }
+      return true;
+    });
+    return found;
+  }
+
+  /// 一次拖動會經過好幾層捲動物件；只有分頁那種才接手剩下的位移。
+  /// 分頁列鎖住（整頁編輯）時不接手，`jumpTo` 不受 physics 限制。
+  bool _isPaged(ScrollPhysics physics) {
+    var paged = false;
+    ScrollPhysics? current = physics;
+    while (current != null) {
+      if (current is NeverScrollableScrollPhysics) return false;
+      if (current is PageScrollPhysics) paged = true;
+      current = current.parent;
+    }
+    return paged;
+  }
+
+  bool _dragPager(double delta) {
+    final pager = _pager ??= _findPager();
+    if (pager == null || !pager.hasContentDimensions) return false;
+    pager.jumpTo(
+      (pager.pixels - delta).clamp(
+        pager.minScrollExtent,
+        pager.maxScrollExtent,
       ),
     );
+    return true;
   }
 
   void _settle(DragEndDetails details) {
+    final pager = _pager;
+    if (_handedOff && pager != null) {
+      _settlePager(pager, details.primaryVelocity ?? 0);
+      _endHandoff();
+      return;
+    }
+    _endHandoff();
     if (!_controller.hasClients) return;
     final velocity = details.primaryVelocity ?? 0;
     if (velocity.abs() < kMinFlingVelocity) return;
@@ -161,6 +230,38 @@ class _DragLineState extends State<_DragLine> {
     );
   }
 
+  void _cancel() {
+    final pager = _pager;
+    if (_handedOff && pager != null) _settlePager(pager, 0);
+    _endHandoff();
+  }
+
+  void _endHandoff() {
+    _handedOff = false;
+    _pager = null;
+  }
+
+  /// 手指放開後停在整頁：有速度就往那一邊的下一頁，沒有就最近的頁。
+  void _settlePager(ScrollPosition pager, double velocity) {
+    final viewport = pager.viewportDimension;
+    if (!viewport.isFinite || viewport <= 0) return;
+    final current = pager.pixels / viewport;
+    final minPage = (pager.minScrollExtent / viewport).round();
+    final maxPage = (pager.maxScrollExtent / viewport).round();
+    final fling = velocity.abs() >= kMinFlingVelocity;
+    final target = fling
+        ? (velocity < 0 ? current.floor() + 1 : current.ceil() - 1)
+        : current.round();
+    final page = target.clamp(minPage, maxPage).toInt();
+    unawaited(
+      pager.animateTo(
+        page * viewport,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return RawGestureDetector(
@@ -169,8 +270,10 @@ class _DragLineState extends State<_DragLine> {
             GestureRecognizerFactoryWithHandlers<_EdgeYieldingDragRecognizer>(
               () => _EdgeYieldingDragRecognizer(_controller),
               (recognizer) => recognizer
+                ..onStart = ((_) => _endHandoff())
                 ..onUpdate = ((details) => _move(details.delta.dx))
-                ..onEnd = _settle,
+                ..onEnd = _settle
+                ..onCancel = _cancel,
             ),
       },
       child: SingleChildScrollView(
