@@ -123,17 +123,20 @@ class SourceItemTile extends StatelessWidget {
                 ? null
                 : () => onLongPress(
                     globalRectOf(rowContext),
-                    Material(
-                      color: chrome.groupedSurface,
-                      child: _SourceRowContent(
-                        source: source,
-                        provider: provider,
-                        isSelected: false,
-                        editing: false,
-                        mutationEnabled: false,
-                        showSeparator: false,
-                        // 預覽不接收觸控，開關保持一般外觀而非停用的淡色。
-                        trailing: _enabledSwitch(context),
+                    // 底色在預覽裡取，選單開著時系統切換深淺也跟著換。
+                    Builder(
+                      builder: (context) => Material(
+                        color: AppChrome.of(context).groupedSurface,
+                        child: _SourceRowContent(
+                          source: source,
+                          provider: provider,
+                          isSelected: false,
+                          editing: false,
+                          mutationEnabled: false,
+                          showSeparator: false,
+                          // 預覽不接收觸控，開關保持一般外觀而非停用的淡色。
+                          trailing: _enabledSwitch(context),
+                        ),
                       ),
                     ),
                   ),

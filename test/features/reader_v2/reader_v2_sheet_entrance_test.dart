@@ -180,10 +180,16 @@ void main() {
               .background,
           background,
         );
-        expect(
-          tester.widget<BottomSheet>(sheet).backgroundColor,
-          label == '替換規則' ? background : Colors.transparent,
-        );
+        final painted = tester
+            .widgetList<Material>(
+              find.ancestor(
+                of: find.byType(GroupedSheetContent),
+                matching: find.byType(Material),
+              ),
+            )
+            .map((material) => material.color)
+            .firstWhere((color) => color != null && color.a > 0);
+        expect(painted, background);
         final closeGlass = find.descendant(
           of: find.byTooltip('關閉'),
           matching: find.byType(GlassSurface),
