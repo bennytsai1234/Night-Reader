@@ -14,7 +14,7 @@ import 'package:night_reader/core/services/ui_language.dart';
 /// SearchAppBar - 搜尋頁面頂部欄
 /// (對標 Legado SearchActivity 的 TitleBar + SearchView)
 ///
-/// Telegram 式搜尋頁首：上排是圓角搜尋框與「取消」，下排是玻璃膠囊，
+/// Telegram 式搜尋頁首：上排是返回、圓角搜尋框與 ✦（AI 找書），下排是玻璃膠囊，
 /// 字都是兩個字（docs/design/screens.md「搜尋」）：
 /// - 搜哪一類書（書源不只一類時才有）
 /// - 搜尋範圍（點擊觸發 onScopePressed）
@@ -26,10 +26,10 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   final SearchProvider provider;
   final ValueChanged<String> onSearch;
   final VoidCallback? onScopePressed;
-  final VoidCallback onCancel;
+  final VoidCallback onBack;
 
-  /// 搜尋框旁的 ✦：AI 找書（ADR 0060）。
-  final VoidCallback? onAiFind;
+  /// 搜尋框右邊的 ✦：AI 找書（ADR 0060）。
+  final VoidCallback onAiFind;
 
   const SearchAppBar({
     super.key,
@@ -37,9 +37,9 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.focusNode,
     required this.provider,
     required this.onSearch,
-    required this.onCancel,
+    required this.onBack,
+    required this.onAiFind,
     this.onScopePressed,
-    this.onAiFind,
   });
 
   static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
@@ -94,8 +94,17 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
               AppSpacing.md +
               ReadableWidth.sideOf(MediaQuery.sizeOf(context).width),
         ),
+        // 左右各一顆（docs/design/components.md）：只有圖示、和搜尋框同高，
+        // 搜尋框在標題的位置。
         child: Row(
           children: [
+            _BareAction(
+              icon: Icons.arrow_back_ios_new_rounded,
+              iconSize: 20,
+              tooltip: '返回',
+              onPressed: onBack,
+            ),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: SearchField(
                 controller: controller,
@@ -104,12 +113,14 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
                 onSubmitted: onSearch,
               ),
             ),
-            if (onAiFind case final onAiFind?) ...[
-              const SizedBox(width: AppSpacing.md),
-              _AiFindAction(onPressed: onAiFind),
-            ],
             const SizedBox(width: AppSpacing.md),
-            PlainTextAction(label: '取消', onPressed: onCancel),
+            _BareAction(
+              icon: Icons.auto_awesome_outlined,
+              iconSize: 24,
+              tooltip: 'AI 找書',
+              accent: true,
+              onPressed: onAiFind,
+            ),
           ],
         ),
       ),
@@ -192,33 +203,50 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// 搜尋框與「取消」之間的 ✦（docs/design/screens.md「搜尋」）：24 的強調色
-/// 圖示，有沒有設定 AI 服務都在。
-class _AiFindAction extends StatelessWidget {
-  const _AiFindAction({required this.onPressed});
+/// 搜尋頁首兩側的鈕：只有圖示、不加底，和搜尋框同寬高的一格
+/// （docs/design/screens.md「搜尋」）。✦ 是 24 的強調色，有沒有設定 AI 服務都在。
+class _BareAction extends StatelessWidget {
+  const _BareAction({
+    required this.icon,
+    required this.iconSize,
+    required this.tooltip,
+    required this.onPressed,
+    this.accent = false,
+  });
 
+  final IconData icon;
+  final double iconSize;
+  final String tooltip;
   final VoidCallback onPressed;
+  final bool accent;
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-    message: context.ui('AI 找書'),
-    child: Semantics(
-      button: true,
-      label: context.ui('AI 找書'),
-      child: PressScale(
-        scale: 0.9,
-        onTap: onPressed,
-        child: SizedBox(
-          height: AppGlass.buttonSize,
-          child: Center(
-            child: Icon(
-              Icons.auto_awesome_outlined,
-              size: 24,
-              color: Theme.of(context).colorScheme.primary,
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: context.ui(tooltip),
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: context.ui(tooltip),
+        child: PressScale(
+          scale: 0.9,
+          onTap: onPressed,
+          child: SizedBox(
+            width: _width,
+            height: AppGlass.buttonSize,
+            child: Center(
+              child: Icon(
+                icon,
+                size: iconSize,
+                color: accent ? scheme.primary : scheme.onSurface,
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
+
+  static const double _width = 28;
 }

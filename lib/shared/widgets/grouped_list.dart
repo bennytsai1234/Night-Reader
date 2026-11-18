@@ -145,6 +145,8 @@ class GroupedSection extends StatelessWidget {
 /// [GroupedSection] 一次建出所有列；書源、章節這類可能上百列的清單改由
 /// builder 逐列建立，每列自己畫出卡片的對應段落：第一列帶上圓角、最後一列
 /// 帶下圓角，其餘列上方畫髮絲分隔線；連起來與 [GroupedSection] 的卡片一致。
+/// 一段長內容切成好幾片（崩潰日誌）時 [separated] 是 false，片與片之間
+/// 不畫線，看起來是同一列。
 class GroupedSliceItem extends StatelessWidget {
   const GroupedSliceItem({
     super.key,
@@ -152,12 +154,14 @@ class GroupedSliceItem extends StatelessWidget {
     required this.count,
     required this.child,
     this.separatorIndent = AppGrouped.rowPadding,
+    this.separated = true,
   });
 
   final int index;
   final int count;
   final Widget child;
   final double separatorIndent;
+  final bool separated;
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +182,7 @@ class GroupedSliceItem extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!first) InsetSeparator(indent: separatorIndent),
+              if (!first && separated) InsetSeparator(indent: separatorIndent),
               child,
             ],
           ),
@@ -1214,11 +1218,15 @@ class GroupedCheckRow extends StatelessWidget
     required this.onTap,
     this.enabled = true,
     this.translate = true,
+    this.exclusive = true,
   });
 
   final String title;
   final String? subtitle;
   final Widget? leading;
+
+  /// 單選（一組裡只勾一個）；可複選的清單給 false。
+  final bool exclusive;
 
   /// 標題與副標是書源名稱、網址這類資料時給 false，不跟介面語言轉換
   /// （ADR 0066）。
@@ -1263,8 +1271,9 @@ class GroupedCheckRow extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      selected: selected,
-      inMutuallyExclusiveGroup: true,
+      selected: exclusive ? selected : null,
+      checked: exclusive ? null : selected,
+      inMutuallyExclusiveGroup: exclusive,
       child: _row(context),
     );
   }

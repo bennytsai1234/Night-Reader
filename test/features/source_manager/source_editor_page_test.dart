@@ -122,7 +122,7 @@ void main() {
     await tester.enterText(field(1), 'https://a.example');
     await save(tester);
 
-    expect(find.text('覆蓋現有書源？'), findsOneWidget);
+    expect(find.text('覆蓋「甲書源」？'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
 
@@ -145,7 +145,7 @@ void main() {
     await tester.pump();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('放棄未儲存的修改？'), findsOneWidget);
+    expect(find.text('放棄這次的修改？'), findsOneWidget);
 
     await tester.tap(find.text('放棄'));
     await tester.pumpAndSettle();

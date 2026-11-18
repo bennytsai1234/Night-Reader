@@ -16,6 +16,7 @@ import 'package:night_reader/core/engine/web_book/audio_url_resolver.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/books_in_use.dart';
 import 'package:night_reader/core/services/system_playback/system_playback.dart';
 import 'package:night_reader/features/audiobook/audiobook_player.dart';
 
@@ -109,6 +110,15 @@ void main() {
     expect(player.playing, isTrue);
     expect(player.chapterIndex, 2);
     expect(sync.opened, [book.bookUrl]);
+  });
+
+  test('播著的書算開著，停了才放掉：播的時候不自動換源（ADR 0069）', () async {
+    // 開著時換了源，之後存的收聽進度寫不到換過去的那本。
+    await player.open(book);
+    expect(BooksInUse.bookUrls, contains(book.bookUrl));
+
+    await player.stop();
+    expect(BooksInUse.bookUrls, isNot(contains(book.bookUrl)));
   });
 
   test('收聽時間只算出聲的時間，記在有聲書自己的名下（ADR 0055）', () async {

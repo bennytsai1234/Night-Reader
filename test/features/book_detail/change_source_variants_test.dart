@@ -16,8 +16,10 @@ import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 
+import 'change_source_sites.dart';
+
 /// 繁體站與簡體站各只認得自己那種寫法，都只回這本書。
-class _SingleScriptSites extends BookSourceService {
+class _SingleScriptSites extends BookSourceService with ChapterListSites {
   final searchedKeys = <String>[];
 
   @override

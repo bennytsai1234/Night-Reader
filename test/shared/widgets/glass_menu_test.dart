@@ -1,3 +1,5 @@
+import 'dart:ui' show CheckedState;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -38,6 +40,55 @@ void main() {
     }
 
     expect(await labelLeft(on: false), await labelLeft(on: true));
+  });
+
+  testWidgets('a toggle reads as a checkbox and a plain action as a button', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showGlassMenu<String>(
+                context: context,
+                anchor: const Rect.fromLTWH(20, 20, 40, 40),
+                entries: const [
+                  GlassMenuItem(value: '網格', label: '網格', checked: true),
+                  GlassMenuItem(value: '列表', label: '列表', checked: false),
+                  GlassMenuItem(
+                    value: '統一封面',
+                    label: '統一封面',
+                    checked: true,
+                    toggle: true,
+                  ),
+                  GlassMenuItem(value: '選取', label: '選取'),
+                ],
+              ),
+              child: const Text('開'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開'));
+    await tester.pumpAndSettle();
+
+    bool exclusive(String label) => tester
+        .getSemantics(find.bySemanticsLabel(label))
+        .flagsCollection
+        .isInMutuallyExclusiveGroup;
+    expect(exclusive('網格'), isTrue);
+    expect(exclusive('列表'), isTrue);
+    expect(exclusive('統一封面'), isFalse, reason: '可以和別項同時勾');
+    final action = tester
+        .getSemantics(find.bySemanticsLabel('選取'))
+        .flagsCollection;
+    expect(action.isInMutuallyExclusiveGroup, isFalse, reason: '一般動作照按鈕念');
+    expect(action.isChecked, CheckedState.none);
+    semantics.dispose();
   });
 
   testWidgets('a tall preview in landscape leaves every menu item reachable', (

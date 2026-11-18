@@ -2,7 +2,7 @@ name: CI
 
 on:
   # 開 PR 與 PR 有新推送時跑，測的是分支併進目前 beta 的樣子；做的途中推分支只是備份，不跑
-  # （ADR 0049）。合併後 beta 再跑一次，合併的人等它通過才發測試版。只改文件的 PR 與推送不跑。
+  # （ADR 0049）。合併後 beta 再跑一次，發測試版前要它通過。只改文件的 PR 與推送不跑。
   # 全套測試只在這裡跑：本機推送前只跑 analyze（.githooks/pre-push，ADR 0049）。
   pull_request:
     paths-ignore: ["**.md", "docs/**"]
@@ -58,7 +58,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.0'
+          flutter-version: '3.47.2'
           channel: stable
           cache: true
       - run: flutter pub get
@@ -88,7 +88,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.0'
+          flutter-version: '3.47.2'
           channel: stable
           cache: true
       - run: flutter pub get
@@ -124,12 +124,19 @@ jobs:
   # 有對不上就失敗。要系統的中文字型（照字畫的長條要真的字寬），一般的測試不裝，
   # 所以分在自己的機器上，和全套測試同時跑。只跑淺色、略過規格說好的例外
   # （POLISH_GATE=1）。
+  #
+  # 42 個情境在同一個測試裡一個接一個跑，每個約 3 秒，單台要 3 分鐘、是整次 CI 最慢
+  # 的一台；照情境順序輪流分給三台（POLISH_SHARD）。
   polish:
-    name: Skeleton handoff
+    name: Skeleton handoff (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-polish
+      group: ci-${{ github.workflow }}-${{ github.ref }}-polish-${{ matrix.shard }}
       cancel-in-progress: ${{ !inputs.ref }}
     steps:
       - uses: actions/checkout@v6
@@ -164,7 +171,7 @@ jobs:
           fc-cache -f >/dev/null || true
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.0'
+          flutter-version: '3.47.2'
           channel: stable
           cache: true
       - run: flutter pub get
@@ -173,10 +180,12 @@ jobs:
         # 都不會出現在紀錄裡，只剩「See exception logs above」。
         env:
           POLISH_GATE: '1'
+          POLISH_SHARD: ${{ matrix.shard }}/3
         run: flutter test --no-pub --reporter expanded --run-skipped -t polish test/polish
-      # 下載字型的分段選字要比兩套真的中文字型畫出的像素，只有這台裝了；
-      # 一般測試那台找不到字型會略過。
+      # 下載字型的分段選字要比兩套真的中文字型畫出的像素，只有這幾台裝了；
+      # 一般測試那台找不到字型會略過。只在第一台跑。
       - name: Check downloaded-font runs
+        if: matrix.shard == 1
         run: flutter test --no-pub --reporter expanded test/features/reader_v2/hybrid/font_runs_layout_test.dart
       - name: Verify the check did not modify tracked source
         if: always()
@@ -221,7 +230,7 @@ jobs:
           fi
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.0'
+          flutter-version: '3.47.2'
           channel: stable
           cache: true
       - run: flutter pub get

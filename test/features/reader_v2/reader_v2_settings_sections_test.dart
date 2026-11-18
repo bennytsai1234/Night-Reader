@@ -134,6 +134,7 @@ void main() {
       foreground: foreground,
       mutedForeground: foreground.withValues(alpha: 0.68),
       outline: foreground.withValues(alpha: 0.12),
+      cardOutline: foreground.withValues(alpha: 0.12),
       accent: const Color(0xFFD67B6E),
       onAccent: const Color(0xFF100D0A),
       accentMuted: const Color(0x2ED67B6E),

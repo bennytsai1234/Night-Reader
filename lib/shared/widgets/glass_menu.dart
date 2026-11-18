@@ -31,7 +31,9 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     this.enabled = true,
     this.submenu = false,
     this.translate = true,
-  }) : assert(!submenu || (icon == null && swatch == null));
+    this.toggle = false,
+  }) : assert(!submenu || (icon == null && swatch == null)),
+       assert(!toggle || checked != null);
 
   final T value;
   final String label;
@@ -52,6 +54,10 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   /// 選單裡有切換類選項時，每一列都留勾號欄，切換時字不會左右移。
   final bool? checked;
   final bool enabled;
+
+  /// 這一項是獨立的開關（可以和別項同時勾），不是單選裡的一個選項：讀屏
+  /// 照核取方塊念，不當成單選群組。
+  final bool toggle;
 
   /// 點了在同一處開出第二層：右側畫「›」，不另給圖示（使用者 2026-11-11
   /// 選的，會展開的一眼分得出來）。
@@ -132,12 +138,16 @@ class GlassMenuButton<T> extends StatelessWidget {
     this.tooltip = '更多',
     this.child,
     this.enabled = true,
+    this.color,
   });
 
   final List<GlassMenuEntry<T>> Function(BuildContext context) entriesBuilder;
   final ValueChanged<T> onSelected;
   final IconData icon;
   final String tooltip;
+
+  /// 圖示顏色；例如選單裡有開著的篩選時用強調色。
+  final Color? color;
 
   /// 覆寫按鈕外觀；為 null 時使用 [GlassIconButton]。
   final Widget? child;
@@ -171,7 +181,12 @@ class GlassMenuButton<T> extends StatelessWidget {
             ),
           );
         }
-        return GlassIconButton(icon: icon, tooltip: tooltip, onPressed: onTap);
+        return GlassIconButton(
+          icon: icon,
+          tooltip: tooltip,
+          color: color,
+          onPressed: onTap,
+        );
       },
     );
   }
@@ -307,7 +322,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         grouped: false,
         shadow: false,
         floating: false,
-        tint: chrome.groupedSurface.withValues(alpha: 0.9),
+        tint: chrome.popupTint(0.9),
         child: Material(
           type: MaterialType.transparency,
           child: ListView(
@@ -345,11 +360,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                   )
                 : FadeTransition(
                     opacity: fade,
-                    child: ColoredBox(
-                      color: chrome.barrier.withValues(
-                        alpha: chrome.barrier.a * 0.4,
-                      ),
-                    ),
+                    child: ColoredBox(color: chrome.menuBarrier),
                   ),
           ),
         ),
@@ -468,26 +479,30 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           widgets.add(
             Container(
               height: AppSpacing.sm,
-              color: chrome.separator.withValues(
-                alpha: chrome.separator.a * 0.5,
+              color: chrome.popupSeparator.withValues(
+                alpha: chrome.popupSeparator.a * 0.5,
               ),
             ),
           );
         case GlassMenuItem<T>():
           if (previous is GlassMenuItem<T>) {
             widgets.add(
-              Container(height: AppGlass.hairline, color: chrome.separator),
+              Container(
+                height: AppGlass.hairline,
+                color: chrome.popupSeparator,
+              ),
             );
           }
           final color = entry.destructive ? danger : scheme.onSurface;
           widgets.add(
-            // 讀屏要知道哪一項已勾選（單選群組）、哪一項停用；畫面上只靠勾號
-            // 與透明度表示。
+            // 讀屏要知道哪一項已勾選（單選群組或獨立的開關）、哪一項停用；
+            // 畫面上只靠勾號與透明度表示。沒有勾號的一般動作照按鈕念，
+            // 勾號欄（[hasChecks]）只管排版。
             Semantics(
               button: true,
               enabled: entry.enabled,
-              checked: hasChecks ? entry.checked ?? false : null,
-              inMutuallyExclusiveGroup: hasChecks,
+              checked: entry.checked,
+              inMutuallyExclusiveGroup: entry.checked != null && !entry.toggle,
               child: InkWell(
                 onTap: entry.enabled
                     ? () => Navigator.of(context).pop(entry.value)

@@ -565,6 +565,10 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
         },
         onSubmitted: (_) => _submit(),
         textAlign: TextAlign.center,
+        // 提示框裡只有 17 與 15 兩種字級；輸入框預設是 17、錯誤訊息 13。
+        style: AppTextStyles.bodyBase.copyWith(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
         // 和 AlertTextField 一樣用分組底色當欄位底：預設的表面色和提示框
         // 幾乎同色，看不出欄位範圍。
         decoration: InputDecoration(
@@ -576,7 +580,13 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
             borderSide: BorderSide.none,
           ),
           errorText: _errorText,
+          errorStyle: AppTextStyles.bodyBase.copyWith(
+            color: Theme.of(context).colorScheme.error,
+          ),
           suffixText: widget.unit.isEmpty ? null : widget.unit,
+          suffixStyle: AppTextStyles.bodyBase.copyWith(
+            color: AppChrome.of(context).sectionText,
+          ),
         ),
       ),
     );

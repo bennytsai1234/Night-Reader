@@ -54,7 +54,7 @@ void main() {
     expect(logs, hasLength(50));
     // 最舊的幾份刪掉了，剛寫的那份還在。
     expect(logs, isNot(contains(contains('0000000001000'))));
-    expect(await CrashHandler.readLogs(), contains('new error'));
+    expect((await CrashHandler.readLogs()).join(), contains('new error'));
   });
 
   test(
@@ -67,20 +67,65 @@ void main() {
         ).writeAsStringSync('log $i');
       }
 
-      final logs = await CrashHandler.readLogs();
+      final logs = (await CrashHandler.readLogs()).join();
       expect(logs, contains('log 0'));
       expect(logs, contains('log 24'));
     },
   );
 
-  test('a Dart error carries what happened just before it', () async {
+  test('a Dart error carries the actions and errors just before it, '
+      'not the ordinary logs', () async {
     CrashTrail.action('開始修復異常書源（3 個）');
+    CrashTrail.error('書源 isolate 未處理的錯誤: FormatException');
+    CrashTrail.log('書源訊息: 規則 JS 印的一行');
 
     await CrashHandler.saveLogForTesting('boom');
 
-    final logs = await CrashHandler.readLogs();
+    final logs = (await CrashHandler.readLogs()).join();
     expect(logs, contains('boom'));
     expect(logs, contains('開始修復異常書源（3 個）'));
+    expect(logs, contains('書源 isolate 未處理的錯誤: FormatException'));
+    expect(logs, isNot(contains('規則 JS 印的一行')));
+    expect(logs, contains('App 日誌'));
+  });
+
+  test('login details in errors, stacks and old logs are masked', () async {
+    await CrashHandler.saveLogForTesting(
+      'HttpException: https://user:pass@example.com/api?token=abc123 '
+      'Cookie: sid=xyz',
+    );
+    File('${directory.path}/crash-2026-01-01-00-00-00-0000000001000.log')
+        .writeAsStringSync('舊的：https://example.com/?password=hunter2');
+
+    final written = directory
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.log'))
+        .map((file) => file.readAsStringSync())
+        .where((text) => text.contains('HttpException'))
+        .single;
+    final read = (await CrashHandler.readLogs()).join();
+    for (final secret in ['user:pass', 'abc123', 'sid=xyz', 'hunter2']) {
+      expect(written, isNot(contains(secret)));
+      expect(read, isNot(contains(secret)));
+    }
+    expect(read, contains('HttpException'));
+  });
+
+  test('a newline right after the chunk limit stays with that chunk', () {
+    final text = '${'a' * 10}\n${'b' * 3}';
+    final chunks = CrashHandler.logChunks(text, maxChars: 10);
+    expect(chunks.join(), text);
+    expect(chunks.first, '${'a' * 10}\n');
+    expect(chunks.skip(1).any((chunk) => chunk.startsWith('\n')), isFalse);
+    // 空白行後面接一行超長的：不切出只有換行的一片。
+    final blank = 'a\n\n${'b' * 25}';
+    final pieces = CrashHandler.logChunks(blank, maxChars: 10);
+    expect(pieces.join(), blank);
+    expect(pieces, isNot(contains('\n')));
+    for (final sample in ['', '\n', '\n\n\n', 'x\r\ny\r\n', '😀' * 9]) {
+      expect(CrashHandler.logChunks(sample, maxChars: 3).join(), sample);
+    }
   });
 
   group('exits the system recorded', () {
@@ -91,7 +136,9 @@ void main() {
       // 上次開啟留下的紀錄：開啟在崩潰前一分鐘。
       File('${directory.path}/${CrashTrail.fileName}').writeAsStringSync(
         'session ${crashedAt.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch}\n'
-        '--- 最近的動作 ---\n15:02:14 按了停止：修復異常書源（做到重新校驗）\n',
+        '--- 最近的動作 ---\n15:02:14 按了停止：修復異常書源（做到重新校驗）\n'
+        '\n--- 最近的錯誤 ---\n15:02:13 書源校驗失敗 [某書源]\n'
+        '\n--- 最近的日誌 ---\n15:02:12 書源訊息: 規則 JS 印的一行\n',
       );
       await CrashTrail.start(directory);
     }
@@ -134,11 +181,13 @@ void main() {
       );
 
       expect(crashLogs(), hasLength(1));
-      final log = await CrashHandler.readLogs();
+      final log = (await CrashHandler.readLogs()).join();
       expect(log, contains('原生程式崩潰（訊號 6 SIGABRT）'));
       expect(log, contains('當時: 前景'));
       expect(log, contains('destroyed mutex'));
       expect(log, contains('按了停止：修復異常書源'));
+      expect(log, contains('書源校驗失敗 [某書源]'));
+      expect(log, isNot(contains('規則 JS 印的一行')));
       expect(prefs.getInt(CrashHandler.exitsSeenKey), nativeCrash.timestamp);
     });
 

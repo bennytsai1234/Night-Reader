@@ -3,6 +3,7 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
@@ -10,6 +11,7 @@ import 'package:night_reader/features/book_detail/widgets/book_detail_change_sou
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -21,10 +23,14 @@ typedef ChangeSourceOutcome = ({bool success, String message});
 ///
 /// 詳情頁情境不傳，沿用 [BookDetailProvider.changeSource]；閱讀器情境傳入走
 /// [SourceSwitchService] 的回呼。回呼負責執行換源並回傳結果，由面板顯示
-/// SnackBar、成功時 pop。
+/// SnackBar、成功時 pop。[toc] 是清單已經抓好的它的詳情與目錄，交給
+/// [SourceSwitchService.prepareSwitch] 就不用再抓一次。
 typedef OnSelectSource = Future<ChangeSourceOutcome> Function(
   SearchBook selected,
+  SourceToc? toc,
 );
+
+enum _SourceFilter { checkAuthor, excludeFarWordCount }
 
 class ChangeSourceSheet extends StatelessWidget {
   final Book book;
@@ -123,6 +129,9 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               count: 1,
               child: BookDetailChangeSourceItem(
                 searchBook: widget.originalBook.toSearchBook(),
+                chapterCount: widget.originalBook.totalChapterNum > 0
+                    ? widget.originalBook.totalChapterNum
+                    : null,
                 isCurrent: true,
               ),
             ),
@@ -148,16 +157,18 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
           Expanded(
             child: IgnorePointer(
               ignoring: _isSwitchingSource,
+              // 一個來源都沒找到時，上面那一行狀態已經寫了原因（沒找到、或
+              // 書源都失敗），這裡不再寫一次；找到了但被篩選擋掉才提示。
               child: sources.isEmpty && !provider.isSearching
                   ? Center(
-                      child: UiText(
-                        provider.allResults.isNotEmpty
-                            ? '沒有符合篩選的來源'
-                            : '未找到其他來源',
-                        style: AppTextStyles.bodyBase.copyWith(
-                          color: chrome.sectionText,
-                        ),
-                      ),
+                      child: provider.allResults.isEmpty
+                          ? null
+                          : UiText(
+                              '沒有符合篩選的來源',
+                              style: AppTextStyles.bodyBase.copyWith(
+                                color: chrome.sectionText,
+                              ),
+                            ),
                     )
                   : ListView.builder(
                       padding: EdgeInsets.only(
@@ -173,7 +184,12 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
                           count: count,
                           child: BookDetailChangeSourceItem(
                             searchBook: result,
-                            onTap: () => _handleSelect(context, result),
+                            chapterCount: provider.chapterCountOf(result),
+                            onTap: () => _handleSelect(
+                              context,
+                              result,
+                              provider.tocOf(result),
+                            ),
                           ),
                         );
                       },
@@ -185,16 +201,23 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     );
   }
 
-  Future<void> _handleSelect(BuildContext context, SearchBook result) async {
+  Future<void> _handleSelect(
+    BuildContext context,
+    SearchBook result,
+    SourceToc? toc,
+  ) async {
     if (_isSwitchingSource) return;
     setState(() => _isSwitchingSource = true);
     try {
       final select = widget.onSelectSource;
       final ChangeSourceOutcome outcome;
       if (select != null) {
-        outcome = await select(result);
+        outcome = await select(result, toc);
       } else {
-        final detailOutcome = await widget.detailProvider!.changeSource(result);
+        final detailOutcome = await widget.detailProvider!.changeSource(
+          result,
+          toc: toc,
+        );
         outcome = (
           success: detailOutcome.success,
           message: detailOutcome.message,
@@ -213,29 +236,36 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     final primary = Theme.of(context).colorScheme.primary;
     return SheetHeader(
       title: '更換來源',
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GlassIconButton(
-            icon: provider.checkAuthor
-                ? Icons.person_rounded
-                : Icons.person_off_outlined,
-            iconSize: 20,
-            color: provider.checkAuthor ? primary : null,
-            tooltip: provider.checkAuthor ? '校驗作者：開' : '校驗作者：關',
-            onPressed: _isSwitchingSource ? null : provider.toggleCheckAuthor,
+      // 左右各一顆（docs/design/components.md）：兩個篩選收進一顆選單，
+      // 有一項開著時圖示用強調色。
+      leading: GlassMenuButton<_SourceFilter>(
+        icon: Icons.filter_list_rounded,
+        tooltip: '篩選',
+        color: provider.checkAuthor || provider.excludeFarWordCount
+            ? primary
+            : null,
+        enabled: !_isSwitchingSource,
+        entriesBuilder: (_) => [
+          GlassMenuItem(
+            value: _SourceFilter.checkAuthor,
+            label: '校驗作者',
+            icon: Icons.person_outline_rounded,
+            checked: provider.checkAuthor,
+            toggle: true,
           ),
-          const SizedBox(width: AppSpacing.sm),
-          GlassIconButton(
+          GlassMenuItem(
+            value: _SourceFilter.excludeFarWordCount,
+            label: '不列字數差太多的',
             icon: Icons.straighten_rounded,
-            iconSize: 20,
-            color: provider.excludeFarWordCount ? primary : null,
-            tooltip: provider.excludeFarWordCount ? '不列字數差太多的：開' : '不列字數差太多的：關',
-            onPressed: _isSwitchingSource
-                ? null
-                : provider.toggleExcludeFarWordCount,
+            checked: provider.excludeFarWordCount,
+            toggle: true,
           ),
         ],
+        onSelected: (filter) => switch (filter) {
+          _SourceFilter.checkAuthor => provider.toggleCheckAuthor(),
+          _SourceFilter.excludeFarWordCount =>
+            provider.toggleExcludeFarWordCount(),
+        },
       ),
       trailing: provider.isSearching
           ? const SizedBox.square(
@@ -251,7 +281,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               icon: Icons.refresh_rounded,
               iconSize: 20,
               tooltip: '重新搜尋',
-              onPressed: _isSwitchingSource ? null : provider.startSearch,
+              onPressed: _isSwitchingSource ? null : provider.refreshSearch,
             ),
     );
   }

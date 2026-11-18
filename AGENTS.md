@@ -15,7 +15,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 和使用者的工作默契
 
-- **做到好，做到可以合併就停**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問（使用者的話：「像許願機一樣」）。全部做完才問要不要收尾，收尾到「可以合併」就停，使用者說「合併」才合併（ADR 0049）。
+- **做到好，自己合併收工**：交代的事自己做到好，途中看到的警告、同一原因的其他問題一起收掉，不為這些另外問（使用者的話：「像許願機一樣」）。全部做完才收尾，`feat/` 還要等使用者說這條沒問題；收尾後自己合併（ADR 0049）。
 - **結果寫在對話裡**：使用者不看 PR 與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」。
 - **視覺由使用者在圖上選**：改外觀前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，選了就寫進 `docs/design/` 對應的那份，不做成設定（ADR 0030）。系統畫的畫面（通知、鎖定畫面）與並排比較的做法在 `docs/agents/candidates.md`。版型與動畫只要小修，不要大改。
 - **動畫用動畫儀表板說明**：說明動畫、轉場與時間軸，或給候選與改前改後時，照 `animation-dashboard` 技能把儀表板放進對話，再補判斷。
@@ -37,7 +37,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message。
 - 手機與模擬器上的驗證是使用者的事，不要求、不提及，回報也不列。
-- Flutter `3.47.0` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
+- Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
 
 ## Git 與發版
 
@@ -45,21 +45,21 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 只改說明文件（`.md`、`docs/`）時，`git pull --ff-only` 後直接在 `beta` 上改、推，不開分支、不審。
 - 程式、測試、CI、hook、`pubspec.yaml`、`website/` 在從 `beta` 開的分支上做，同一段工作的改動與跟著改的文件都放同一條分支、一個 PR。發正式版的升版號提交例外，照 `docs/agents/release.md` 直接推上 `beta`。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`），本文用繁體中文。
-- 問使用者要不要**收尾**之前讀 `docs/agents/finish.md`，問題裡列的步驟照它；使用者說**合併**時讀 `docs/agents/merge.md`；使用者說要**發正式版**時讀 `docs/agents/release.md`。
+- **收尾**前讀 `docs/agents/finish.md`，CI 通過要**合併**前讀 `docs/agents/merge.md`；使用者說要**發測試版**或**發正式版**時讀 `docs/agents/release.md`。
 - 長期有效的內容依性質放：決定寫 ADR（加進索引），寫碼規範寫 `CODING_STANDARDS.md`，用語寫 `GLOSSARY.md`，畫面規格寫 `docs/design/`；本檔只放每件工作都用得到的規則。
 
 ## 環境
 
 - **同一個資料夾常有好幾個 session**：切分支會影響別人。自己的工作開 repo 外的 worktree，開工前 `git branch --show-current` 確認。預覽伺服器的 port 被佔用就換一個，不要結束別人的程序。
 - **開分支加 `--no-track`**：這台的 `push.default=upstream`，從 `origin/beta` 開的分支沒加會直接推進 `beta`。
-- **新 worktree 的 sqlite3**：把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置（公司網路會改掉下載的檔案）。
+- **新 worktree 的 sqlite3**：公司網路會改掉 sqlite3 套件下載的 `sqlite3.dll`，雜湊核對不過就建不起來。從主資料夾開 worktree 時，`.githooks/post-checkout` 會把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-*\` 裡核對過的最新一份複製過去；建置仍報 sqlite3 雜湊不符時，手動複製同一個檔到 worktree 的同一個位置。
 - 碰到這些情況先讀對應的文件：
   - 判斷掉幀是誰造成的、某件工作佔不佔主執行緒：`docs/agents/main-thread.md`
   - 連手機、拿崩潰日誌或書源、在手機上量效能：`docs/agents/phone.md`
   - 重拍網站畫面或短片、改 README 卡片：`docs/agents/website.md`
   - 用真的書源實跑 AI 修復、回報實跑結果：`docs/agents/ai-repair-runs.md`
   - 用真的書源實跑 AI 找書、回報實跑結果：`docs/agents/ai-find-runs.md`
-  - 子代理 worktree 或 T3、Linux 上跑字型或幀預算測試、Codex 審查、Python 或 `jq`、重新產生標點字型、對照 Legado、連真網站校驗書源：`docs/agents/environment.md`
+  - 子代理 worktree 或 T3、Linux 上跑字型或幀預算測試、改 CI 全套測試的跑法、Codex 審查、Python 或 `jq`、重新產生標點字型、對照 Legado、連真網站校驗書源：`docs/agents/environment.md`
 
 ## Agent skills
 

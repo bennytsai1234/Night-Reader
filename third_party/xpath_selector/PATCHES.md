@@ -27,6 +27,10 @@
   queried node, the same as `/div[2]` from that node. Upstream threw `is not a
   valid xpath query string`. Later steps still need their `/`, and a path
   starting with `@`, `.` or a function (`text()`) is still rejected.
+- `lib/src/parser.dart` `splitXPathUnion`, used by `parseSelectGroup` and
+  exported from `xpath_selector.dart`: a union is split on its top-level `|`
+  only. Upstream split on every `|`, so a value such as
+  `a[@data-ref='v1|part']` was cut into two broken paths.
 - `pubspec.yaml`: version `3.0.2+nightreader.1`, `publish_to: none`, no
   `dev_dependencies`.
 - `analysis_options.yaml` includes the app's rules and turns off
@@ -40,6 +44,8 @@ predicates. Book sources in the yckceo.com repository use them (思兔阅读
 `//*[@id='allchapter']//dd[a]`, 第一版主 banzhu `//li/div//a[@class]/text()`);
 upstream 3.0.2 throws `Unsupported predicate`. Relative paths are used from
 a list item (novelnext and the other English novel sites
-`@XPath:div[2]/div/h3/a/@title`); JsoupXpath evaluates them from that node. The app depends on this copy
+`@XPath:div[2]/div/h3/a/@title`); JsoupXpath evaluates them from that node.
+JsoupXpath parses a union with its grammar, so a `|` inside a quoted value
+is part of the value. The app depends on this copy
 through `dependency_overrides` so `xpath_selector_html_parser` uses it too.
 Tests: `test/core/engine/parsers/analyze_by_xpath_test.dart`.

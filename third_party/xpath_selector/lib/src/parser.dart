@@ -5,7 +5,7 @@ import 'model/base.dart';
 
 /// parse xpath selector
 List<List<Selector>> parseSelectGroup(String xpath) {
-  final combine = xpath.split('|');
+  final combine = splitXPathUnion(xpath);
   final selectorList = <List<Selector>>[];
 
   for (final _path in combine) {
@@ -19,6 +19,33 @@ List<List<Selector>> parseSelectGroup(String xpath) {
   }
 
   return selectorList;
+}
+
+/// Night Reader patch: split a union on its top-level `|` only. A `|` inside
+/// quotes, `[...]` or `(...)` belongs to a value or a predicate
+/// (`a[@data-ref='v1|part']`), as in XPath 1.0 and JsoupXpath.
+List<String> splitXPathUnion(String xpath) {
+  final parts = <String>[];
+  var depth = 0;
+  String? quote;
+  var start = 0;
+  for (var i = 0; i < xpath.length; i++) {
+    final char = xpath[i];
+    if (quote != null) {
+      if (char == quote) quote = null;
+    } else if (char == '"' || char == "'") {
+      quote = char;
+    } else if (char == '[' || char == '(') {
+      depth++;
+    } else if (char == ']' || char == ')') {
+      if (depth > 0) depth--;
+    } else if (char == '|' && depth == 0) {
+      parts.add(xpath.substring(start, i));
+      start = i + 1;
+    }
+  }
+  parts.add(xpath.substring(start));
+  return parts;
 }
 
 Selector _parseSelector(String input, {required bool first}) {

@@ -11,11 +11,11 @@ tags:
   # bash tool/animation_survey/run_all.sh [區 ...]
   animation_survey:
     skip: "錄影用，平常不跑"
-  # 細節檢查（test/polish/）要系統的中文字型，CI 另開一台照 POLISH_GATE=1 跑（ci.yml）。
+  # 細節檢查（test/polish/）要系統的中文字型，CI 另開三台照 POLISH_GATE=1 分著跑（ci.yml）。
   # 本機淺色、深色都跑：
   # flutter test --run-skipped -t polish test/polish
   polish:
-    skip: "要中文字型，CI 另開一台跑"
+    skip: "要中文字型，CI 另開三台跑"
   # 用真的網站校驗書源（test/live/），用法寫在檔頭：
   # NR_SOURCES=<書源 JSON> flutter test --run-skipped -t live test/live
   live:
