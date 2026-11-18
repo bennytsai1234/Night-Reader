@@ -37,7 +37,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 本機不建置、不除錯執行。給使用者看畫面用 `test/support/screenshot.dart` 畫成 PNG；對照整個 App 時重拍 `test/screens/`。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message。
 - 手機與模擬器上的驗證是使用者的事，不要求、不提及，回報也不列。
-- Flutter `3.47.0` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
+- Flutter `3.47.2` 固定在 `ci.yml` 與 `android-release.yml`，升級時兩處一起改。`third_party/` 三個 fork 的修補紀錄在各自的 `PATCHES.md`。
 
 ## Git 與發版
 
@@ -52,7 +52,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - **同一個資料夾常有好幾個 session**：切分支會影響別人。自己的工作開 repo 外的 worktree，開工前 `git branch --show-current` 確認。預覽伺服器的 port 被佔用就換一個，不要結束別人的程序。
 - **開分支加 `--no-track`**：這台的 `push.default=upstream`，從 `origin/beta` 開的分支沒加會直接推進 `beta`。
-- **新 worktree 的 sqlite3**：把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置（公司網路會改掉下載的檔案）。
+- **新 worktree 的 sqlite3**：公司網路會改掉 sqlite3 套件下載的 `sqlite3.dll`，雜湊核對不過就建不起來。從主資料夾開 worktree 時，`.githooks/post-checkout` 會把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-*\` 裡核對過的最新一份複製過去；建置仍報 sqlite3 雜湊不符時，手動複製同一個檔到 worktree 的同一個位置。
 - 碰到這些情況先讀對應的文件：
   - 判斷掉幀是誰造成的、某件工作佔不佔主執行緒：`docs/agents/main-thread.md`
   - 連手機、拿崩潰日誌或書源、在手機上量效能：`docs/agents/phone.md`
