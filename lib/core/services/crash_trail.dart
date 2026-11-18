@@ -98,6 +98,12 @@ abstract final class CrashTrail {
 
   static const String _logsHeader = '--- 最近的日誌 ---';
 
+  /// 一般日誌那段的標頭行；每則紀錄前面都有時間，不會整行一樣。
+  static final RegExp _logsHeaderLine = RegExp(
+    '^${RegExp.escape(_logsHeader)}\$',
+    multiLine: true,
+  );
+
   static String _render({required bool withLogs}) {
     final buffer = StringBuffer()
       ..writeln('開啟夜讀：${_format(_sessionStart, full: true)}');
@@ -114,17 +120,21 @@ abstract final class CrashTrail {
   }
 
   /// [render] 存下的整份去掉一般日誌那段，同 [renderForCrash]：上次開啟
-  /// 留下的那份附進崩潰日誌時用。
+  /// 留下的那份附進崩潰日誌時用。一般日誌在新舊格式裡都是最後一段。
   static String withoutLogs(String text) {
-    final start = text.indexOf(_logsHeader);
-    if (start < 0) return text;
-    final next = text.indexOf('\n--- ', start + _logsHeader.length);
-    final rest = next < 0 ? '' : text.substring(next);
-    return '${text.substring(0, start).trimRight()}$rest'.trimRight();
+    final header = _logsHeaderLine.firstMatch(text);
+    if (header == null) return text;
+    return text.substring(0, header.start).trimRight();
   }
 
-  /// App 日誌顯示的：這次開啟的整份，接著上次開啟留下的（有的話）。
+  /// 這次開啟還沒記下任何東西。
+  static bool get _sessionEmpty =>
+      _actions.isEmpty && _errors.isEmpty && _logs.isEmpty;
+
+  /// App 日誌顯示的：這次開啟的整份，接著上次開啟留下的（有的話）；兩次
+  /// 都沒有紀錄時是空字串。
   static String renderWithPrevious() {
+    if (_sessionEmpty && _previous == null) return '';
     final buffer = StringBuffer()
       ..writeln('=== 這次開啟 ===')
       ..writeln(render());
@@ -137,13 +147,26 @@ abstract final class CrashTrail {
     return buffer.toString().trimRight();
   }
 
-  /// 清掉這次與上次開啟的紀錄（App 日誌的「清除」）；檔案跟著改寫。
-  static void clear() {
+  /// 清掉這次與上次開啟的紀錄（App 日誌的「清除」）：等檔案改寫好才完成，
+  /// 寫不進去時丟出例外，舊的那份下次開啟還會回來。
+  static Future<void> clear() async {
     _actions.clear();
     _errors.clear();
     _logs.clear();
     _previous = null;
-    _schedule(immediately: true);
+    if (_file == null) return;
+    _dirty = true;
+    await _drain();
+    if (_lastWriteError case final error?) throw error;
+  }
+
+  /// 寫完正在寫的與還沒寫的。
+  static Future<void> _drain() async {
+    while (_writing != null || _dirty) {
+      _timer?.cancel();
+      _timer = null;
+      await (_writing ?? _write());
+    }
   }
 
   static void _add(
@@ -199,10 +222,14 @@ abstract final class CrashTrail {
         flush: true,
       );
       await temp.rename(file.path);
-    } catch (_) {
-      // 存不進去也不影響使用；App 日誌少了上次開啟的那份而已。
+      _lastWriteError = null;
+    } catch (error) {
+      // 存不進去也不影響使用；App 日誌少了上次開啟的那份而已。清除時要知道。
+      _lastWriteError = error;
     }
   }
+
+  static Object? _lastWriteError;
 
   static final RegExp _urlUserInfo = RegExp(r'(\w+://)[^/\s@]+@');
   static final RegExp _secretParameter = RegExp(
@@ -216,8 +243,7 @@ abstract final class CrashTrail {
   );
 
   /// 遮掉 [text] 裡網址的帳號密碼、看起來像登入資料的參數，與 Cookie、
-  /// Authorization 的值。
-  @visibleForTesting
+  /// Authorization 的值。崩潰日誌寫檔與讀出時也用它。
   static String redact(String text) => text
       .replaceAllMapped(_urlUserInfo, (m) => '${m[1]}***@')
       .replaceAllMapped(_secretParameter, (m) => '${m[1]}***')
@@ -230,9 +256,18 @@ abstract final class CrashTrail {
     if (newline < 0 || !content.startsWith(_sessionTag)) return null;
     final start = int.tryParse(content.substring(_sessionTag.length, newline));
     final text = content.substring(newline + 1).trim();
-    if (start == null || text.isEmpty) return null;
+    if (start == null || !_hasEntries(text)) return null;
     return (start: start, text: text);
   }
+
+  /// [render] 存下的整份裡有沒有任何一則紀錄（不只開啟時間與各段標頭）。
+  static bool _hasEntries(String text) => text.split('\n').any((line) {
+    final trimmed = line.trim();
+    return trimmed.isNotEmpty &&
+        trimmed != '（沒有）' &&
+        !trimmed.startsWith('開啟夜讀：') &&
+        !trimmed.startsWith('--- ');
+  });
 
   static String _format(int ms, {bool full = false}) =>
       DateFormat(full ? 'yyyy-MM-dd HH:mm:ss' : 'HH:mm:ss')
@@ -240,13 +275,7 @@ abstract final class CrashTrail {
 
   /// 寫完正在寫的那一次（測試用）。
   @visibleForTesting
-  static Future<void> flushForTesting() async {
-    while (_writing != null || _dirty) {
-      _timer?.cancel();
-      _timer = null;
-      await (_writing ?? _write());
-    }
-  }
+  static Future<void> flushForTesting() => _drain();
 
   @visibleForTesting
   static void resetForTesting({DateTime Function()? now}) {
@@ -260,6 +289,7 @@ abstract final class CrashTrail {
     _timer?.cancel();
     _timer = null;
     _previous = null;
+    _lastWriteError = null;
     _now = now ?? DateTime.now;
   }
 }

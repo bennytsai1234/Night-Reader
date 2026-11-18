@@ -89,6 +89,45 @@ void main() {
     expect(logs, contains('App 日誌'));
   });
 
+  test('login details in errors, stacks and old logs are masked', () async {
+    await CrashHandler.saveLogForTesting(
+      'HttpException: https://user:pass@example.com/api?token=abc123 '
+      'Cookie: sid=xyz',
+    );
+    File('${directory.path}/crash-2026-01-01-00-00-00-0000000001000.log')
+        .writeAsStringSync('舊的：https://example.com/?password=hunter2');
+
+    final written = directory
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.log'))
+        .map((file) => file.readAsStringSync())
+        .where((text) => text.contains('HttpException'))
+        .single;
+    final read = (await CrashHandler.readLogs()).join();
+    for (final secret in ['user:pass', 'abc123', 'sid=xyz', 'hunter2']) {
+      expect(written, isNot(contains(secret)));
+      expect(read, isNot(contains(secret)));
+    }
+    expect(read, contains('HttpException'));
+  });
+
+  test('a newline right after the chunk limit stays with that chunk', () {
+    final text = '${'a' * 10}\n${'b' * 3}';
+    final chunks = CrashHandler.logChunks(text, maxChars: 10);
+    expect(chunks.join(), text);
+    expect(chunks.first, '${'a' * 10}\n');
+    expect(chunks.skip(1).any((chunk) => chunk.startsWith('\n')), isFalse);
+    // 空白行後面接一行超長的：不切出只有換行的一片。
+    final blank = 'a\n\n${'b' * 25}';
+    final pieces = CrashHandler.logChunks(blank, maxChars: 10);
+    expect(pieces.join(), blank);
+    expect(pieces, isNot(contains('\n')));
+    for (final sample in ['', '\n', '\n\n\n', 'x\r\ny\r\n', '😀' * 9]) {
+      expect(CrashHandler.logChunks(sample, maxChars: 3).join(), sample);
+    }
+  });
+
   group('exits the system recorded', () {
     final crashedAt = DateTime(2026, 11, 11, 15, 2, 14);
     final now = DateTime(2026, 11, 11, 16);

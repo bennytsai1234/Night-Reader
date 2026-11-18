@@ -16,6 +16,6 @@ class AppLogPage extends StatelessWidget {
     fileName: '夜讀App日誌',
     readLogs: () async =>
         CrashHandler.logChunks(CrashTrail.renderWithPrevious()),
-    clearLogs: () async => CrashTrail.clear(),
+    clearLogs: CrashTrail.clear,
   );
 }

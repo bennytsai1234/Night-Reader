@@ -109,16 +109,53 @@ void main() {
         lessThan(text.indexOf('開始校驗書源（199 個）')),
       );
 
-      CrashTrail.clear();
-      await CrashTrail.flushForTesting();
-      expect(CrashTrail.renderWithPrevious(), isNot(contains('系統播放按了')));
-      expect(CrashTrail.renderWithPrevious(), isNot(contains('上次開啟')));
+      await CrashTrail.clear();
+      expect(CrashTrail.renderWithPrevious(), isEmpty);
       expect(
         File('${directory.path}/${CrashTrail.fileName}').readAsStringSync(),
         isNot(contains('系統播放按了')),
       );
     },
   );
+
+  test('a line that only mentions the logs header does not move the cut', () {
+    const stored =
+        '開啟夜讀：2026-11-18 10:00:00\n\n'
+        '--- 最近的動作 ---\n10:00:01 開始 AI 修復：--- 最近的日誌 --- 書源\n\n'
+        '--- 最近的錯誤 ---\n10:00:02 讀快取失敗\n\n'
+        '--- 最近的日誌 ---\n10:00:03 書源訊息';
+    final cut = CrashTrail.withoutLogs(stored);
+    expect(cut, contains('開始 AI 修復：--- 最近的日誌 --- 書源'));
+    expect(cut, contains('讀快取失敗'));
+    expect(cut, isNot(contains('書源訊息')));
+  });
+
+  test('nothing recorded shows no App log, and an empty last time is '
+      'not shown as one', () async {
+    expect(CrashTrail.renderWithPrevious(), isEmpty);
+
+    await CrashTrail.start(directory);
+    await CrashTrail.flushForTesting();
+    CrashTrail.resetForTesting();
+    await CrashTrail.start(directory);
+    expect(CrashTrail.previous, isNull);
+    expect(CrashTrail.renderWithPrevious(), isEmpty);
+  });
+
+  test('clearing reports a write that did not land', () async {
+    await CrashTrail.start(directory);
+    CrashTrail.action('開始校驗書源（199 個）');
+    await CrashTrail.flushForTesting();
+    // 暫存檔的位置被一個資料夾佔著：寫不進去。
+    Directory('${directory.path}/${CrashTrail.fileName}.tmp').createSync();
+
+    await expectLater(CrashTrail.clear(), throwsA(isA<FileSystemException>()));
+    expect(
+      File('${directory.path}/${CrashTrail.fileName}').readAsStringSync(),
+      contains('開始校驗書源（199 個）'),
+    );
+    Directory('${directory.path}/${CrashTrail.fileName}.tmp').deleteSync();
+  });
 
   test('a long or multi-line log is cut to one short line', () {
     CrashTrail.log('第一行\n第二行${'字' * 500}');

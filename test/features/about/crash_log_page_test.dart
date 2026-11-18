@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/features/about/crash_log_page.dart';
+import 'package:night_reader/features/about/log_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
@@ -111,5 +115,94 @@ void main() {
       (await tester.runAsync(CrashHandler.readLogs))!.join(),
       reason: '和頁面上的整份一樣',
     );
+  });
+
+  testWidgets('leaving while the file is being written does not share it', (
+    tester,
+  ) async {
+    await tester.runAsync(() => seedFullCrashLogs(directory, count: 3));
+    var shared = 0;
+    await openPage(tester, shareFile: (_) async => shared++);
+
+    // 選單在真實時間裡打開、點選：分享接著寫檔，寫檔才會真的跑完，看得到
+    // 寫完之後還分不分享。
+    await tester.runAsync(() => tester.tap(find.byTooltip('更多')));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => tester.tap(find.text('分享日誌檔')));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump();
+    expect(shared, 0);
+  });
+
+  testWidgets('copying a selection across pieces keeps their line breaks', (
+    tester,
+  ) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const Scaffold(
+          body: LogTextView(chunks: ['alpha\n', '\nbeta\n', 'gamma']),
+        ),
+      ),
+    );
+    // 片尾的換行不畫成多出來的一行。
+    expect(find.byType(RichText), findsNWidgets(3));
+    expect(
+      tester.getSize(find.text('alpha')).height,
+      tester.getSize(find.text('gamma')).height,
+    );
+
+    await tester.tap(find.text('alpha'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pump();
+    expect(copied, 'alpha\n\nbeta\ngamma');
+  });
+
+  testWidgets('logs already in hand still wait for the page to finish '
+      'sliding in', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const Scaffold(),
+      ),
+    );
+    unawaited(
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              CrashLogPage(readLogs: () => SynchronousFuture(const ['現成的日誌'])),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('現成的日誌'), findsNothing, reason: '換頁還在播');
+    await tester.pumpAndSettle();
+    expect(find.text('現成的日誌'), findsOneWidget);
   });
 }

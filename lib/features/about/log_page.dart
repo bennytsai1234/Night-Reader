@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/exception/user_error.dart';
@@ -72,15 +74,12 @@ class _LogPageState extends State<LogPage> {
   Future<void>? _entrance;
 
   @override
-  void initState() {
-    super.initState();
-    _loadLogs();
-  }
-
-  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _entrance ??= TransitionSettled.entered(context);
+    // 先有進場的等待才開始讀：讀取當下就完成時，也照樣等換頁播完。
+    if (_entrance != null) return;
+    _entrance = TransitionSettled.entered(context);
+    _loadLogs();
   }
 
   Future<void> _loadLogs() async {
@@ -210,6 +209,7 @@ class _LogPageState extends State<LogPage> {
   }
 
   Future<void> _shareLogs() async {
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
       final stamp = DateFormat('yyyyMMdd-HHmmss').format(DateTime.now());
@@ -217,6 +217,8 @@ class _LogPageState extends State<LogPage> {
         '${widget.fileName}-$stamp.txt',
       );
       await file.writeAsString(_chunks.join(), flush: true);
+      // 寫檔時已經離開這頁：不再跳出系統分享。
+      if (!mounted) return;
       final share = widget.shareFile;
       if (share != null) {
         await share(file.path);
@@ -237,6 +239,7 @@ class _LogPageState extends State<LogPage> {
   }
 
   Future<void> _confirmClearLogs() async {
+    if (!mounted) return;
     final confirmed = await showAppConfirm(
       context: context,
       title: '清除${widget.title}？',
@@ -300,16 +303,58 @@ class LogTextView extends StatelessWidget {
                 AppGrouped.rowPadding,
                 i == count - 1 ? AppSpacing.md : 0,
               ),
-              child: Text(_shown(chunks[i]), style: style),
+              child: _LogChunk(chunk: chunks[i], style: style),
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  /// 片段多半切在換行之後；那個換行由下一片從新的一行開始代替，不另外畫
-  /// 一行空白。
-  static String _shown(String chunk) =>
-      chunk.endsWith('\n') ? chunk.substring(0, chunk.length - 1) : chunk;
+/// 一個片段。片段多半切在換行之後：那個換行不畫（下一片本來就從新的一行
+/// 開始，畫了會多一行空白），選取蓋到這片結尾時再補回複製的字裡，跨片
+/// 選取複製出來的換行才和原文一樣。
+class _LogChunk extends StatefulWidget {
+  const _LogChunk({required this.chunk, required this.style});
+
+  final String chunk;
+  final TextStyle style;
+
+  @override
+  State<_LogChunk> createState() => _LogChunkState();
+}
+
+class _LogChunkState extends State<_LogChunk> {
+  final _selection = _TrailingNewlineSelection();
+
+  @override
+  void dispose() {
+    _selection.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chunk = widget.chunk;
+    if (!chunk.endsWith('\n')) return Text(chunk, style: widget.style);
+    return SelectionContainer(
+      delegate: _selection,
+      child: Text(chunk.substring(0, chunk.length - 1), style: widget.style),
+    );
+  }
+}
+
+/// 選取蓋到結尾時，複製的字後面補上這片沒畫出來的換行。
+class _TrailingNewlineSelection extends StaticSelectionContainerDelegate {
+  @override
+  SelectedContent? getSelectedContent() {
+    final content = super.getSelectedContent();
+    final range = getSelection();
+    if (content == null || range == null) return content;
+    final end = math.max(range.startOffset, range.endOffset);
+    return end >= contentLength
+        ? SelectedContent(plainText: '${content.plainText}\n')
+        : content;
+  }
 }
