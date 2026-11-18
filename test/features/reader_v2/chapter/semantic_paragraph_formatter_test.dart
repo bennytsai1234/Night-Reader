@@ -29,6 +29,57 @@ void main() {
       expect(SemanticParagraphFormatter.repair('他說—\n—不要走。'), '他說——不要走。');
     });
 
+    test('各自完整的刪節號、破折號不算被折開', () {
+      for (final source in ['他看著遠方……\n……良久，他才開口。', '她說——\n——這是另一段。']) {
+        expect(SemanticParagraphFormatter.repair(source), source);
+      }
+    });
+
+    // 真網站抓到的正文（2026-11-18，28 個書源 74 章）裡，誤合併都是引號方向
+    // 打反：書源把收引號打成 “、開引號打成 ”。
+    test('引號方向打反時，前一段沒有沒收的引號就不接', () {
+      for (final source in [
+        '“我走了。“\n她拉開門，又回頭看了一眼。',
+        '他看著窗外，小聲說道。\n”別怕，等回去了我慢慢教你。”',
+        '“看！是驚喜。“\n“這算什麼驚喜。”她笑了。',
+        '他站在門口，身影擋住了光。\n”你來了……“她抬起頭。',
+      ]) {
+        expect(SemanticParagraphFormatter.repair(source), source);
+      }
+    });
+
+    test('一句話跨好幾行、收引號打反時，不接下一段', () {
+      const source = '“從來只有我走，\n沒有人可以叫我走，今天我就要走！“\n她拉開門，又回頭看了一眼。';
+      expect(SemanticParagraphFormatter.repair(source), source);
+    });
+
+    test('前一段有沒收的引號時，下一行的收引號接回來', () {
+      expect(SemanticParagraphFormatter.repair('他大聲喊：“老師！\n”'), '他大聲喊：“老師！”');
+      expect(SemanticParagraphFormatter.repair('他說：“\n你好。”'), '他說：“你好。”');
+      expect(SemanticParagraphFormatter.repair('“師傅！\n！”'), '“師傅！！”');
+    });
+
+    test('連續對白每段只有開引號，各段照樣分開', () {
+      const source = '“第一段話還沒說完。\n“第二段接著說。\n“最後一段說完了。”';
+      expect(SemanticParagraphFormatter.repair(source), source);
+    });
+
+    test('整行只有標點的一段不接到上一行', () {
+      for (final source in ['「你說什麼？」\n？？？', '他愣住了。\n！！', '她沒有回答。\n。。。']) {
+        expect(SemanticParagraphFormatter.repair(source), source);
+      }
+    });
+
+    test('只有插圖的行是段落邊界，記號留在原位', () {
+      const illustration = '';
+      for (final source in [
+        '「請進。\n$illustration\n」她回答。',
+        '他說：「\n$illustration\n你好。」',
+      ]) {
+        expect(SemanticParagraphFormatter.repair(source), source);
+      }
+    });
+
     test('插圖記號不會遮住行尾開引號或行首收引號', () {
       const illustration = '\uE000';
       expect(
@@ -67,6 +118,15 @@ void main() {
       expect(SemanticParagraphFormatter.repair(lines.join('\n')), lines.join());
     });
 
+    test('行長不算插圖記號，有插圖的行照樣接回', () {
+      final lines = <String>[
+        for (var i = 0; i < 5; i++) '甲' * 24,
+        '${'乙' * 24}',
+        '這是末行。',
+      ];
+      expect(SemanticParagraphFormatter.repair(lines.join('\n')), lines.join());
+    });
+
     test('固定欄寬也不合併已結束的句子及新對話', () {
       final lines = <String>[
         '甲' * 23 + '。',
@@ -82,6 +142,22 @@ void main() {
       const source = '　　「請進。\r\n　　」她說。\r\n下一段。';
       final repaired = SemanticParagraphFormatter.repair(source);
       expect(SemanticParagraphFormatter.repair(repaired), repaired);
+    });
+
+    test('只有插圖的行夾在中間時，圖照樣排在下一段開頭', () {
+      final document = ReaderV2Content.fromRaw(
+        chapterIndex: 0,
+        title: '',
+        rawText: '他說：「\n\n你好。」',
+        illustrationSlots: [
+          (src: 'a.png', path: 'a.png', pixelWidth: 10, pixelHeight: 10),
+        ],
+      );
+      expect(document.paragraphs, ['他說：「', '你好。」']);
+      expect(
+        document.illustrations.single.offset,
+        document.displayText.indexOf('你好'),
+      );
     });
 
     test('章節的段落、文字與雜湊由修復後內容建立', () {

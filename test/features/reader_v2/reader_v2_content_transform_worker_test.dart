@@ -90,6 +90,26 @@ void main() {
     },
   );
 
+  test('with re-segmenting on, replace rules still see blank lines', () async {
+    final result = await worker.process(
+      _args(
+        rawContent: '第一段。\n\n第二段。',
+        rules: [
+          ReplaceRule(
+            id: 3,
+            name: '空白行',
+            pattern: '\n\n',
+            replacement: '\n＊\n',
+            isRegex: false,
+            order: 1,
+          ).toJson(),
+        ],
+      ),
+    );
+    final document = result['document']! as ReaderV2Content;
+    expect(document.paragraphs, ['第一段。', '＊', '第二段。']);
+  });
+
   test(
     'a failed chapter surfaces as an error and the worker keeps serving',
     () async {
