@@ -18,7 +18,10 @@ import 'package:night_reader/core/services/source_interaction.dart';
 final class CompleteContentFetcher {
   CompleteContentFetcher._();
 
-  static const int _maxPages = 100;
+  /// 照 Legado：下一頁網址出現過就停。Legado 沒有頁數上限；夜讀的書架
+  /// 自動下載沒人看著，規則一直給新網址時會抓不完，留一個正常章節碰不到的
+  /// 上限（2026-11-13 环安小说网一章 110 到 121 頁，ADR 0070）。
+  static const int _maxPages = 1000;
   static const int _defaultPageConcurrency = 4;
 
   static Future<String> fetch(
