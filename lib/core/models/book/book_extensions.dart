@@ -60,12 +60,19 @@ extension BookExtensions on BookBase {
   String? getDisplayIntro() =>
       (customIntro == null || customIntro!.isEmpty) ? intro : customIntro;
 
-  /// 書籍詳情顯示的簡介（[getDisplayIntro]）：整理成一行一段的文字，沒有就是
-  /// 空字串。詳情頁抓到時已經照 Legado 整理過，這裡再整理一次，資料庫裡
-  /// 早先存下、帶 HTML 標籤的簡介也乾淨；網站原文寫成字面 `\n`（反斜線加 n）
-  /// 的換成換行，這點 Legado 沒有處理。每段開頭的縮排拿掉。
+  /// 書籍詳情顯示的簡介：讀者自己寫的（[customIntro]）照原樣，沒有就是
+  /// [getShownSourceIntro]。
   String getShownIntro() {
-    final raw = getDisplayIntro();
+    final custom = customIntro?.trim() ?? '';
+    return custom.isNotEmpty ? custom : getShownSourceIntro();
+  }
+
+  /// 書源的簡介（[intro]）整理成一行一段的文字，沒有就是空字串。詳情頁抓到
+  /// 時已經照 Legado 整理過，這裡再整理一次，資料庫裡早先存下、帶 HTML 標籤
+  /// 的簡介也乾淨；網站原文寫成字面 `\n`（反斜線加 n）的換成換行，這點
+  /// Legado 沒有處理。每段開頭的縮排拿掉。
+  String getShownSourceIntro() {
+    final raw = intro;
     if (raw == null) return '';
     return HtmlFormatter.format(raw.replaceAll(_literalLineBreak, '\n'))
         .split('\n')

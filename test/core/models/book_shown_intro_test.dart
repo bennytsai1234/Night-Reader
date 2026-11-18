@@ -40,6 +40,15 @@ void main() {
     expect(book.getShownIntro(), '自己寫的簡介');
   });
 
+  test('the intro the reader wrote shows exactly as written', () {
+    final book = _book(
+      intro: '書源的簡介',
+      customIntro: r'路徑 C:\new 與 <br> 照寫的樣子👩‍👩‍👧‍👦',
+    );
+
+    expect(book.getShownIntro(), r'路徑 C:\new 與 <br> 照寫的樣子👩‍👩‍👧‍👦');
+  });
+
   test('no intro shows as empty', () {
     expect(_book().getShownIntro(), '');
   });
