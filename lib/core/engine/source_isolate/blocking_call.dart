@@ -31,20 +31,28 @@ abstract final class BlockingCall {
     if (channel == null || replies == null) {
       throw const BlockingCallUnavailable();
     }
+    final log = currentRequestLog;
+    // 收這份紀錄的人就是這個書源工作的（[SourceWorker.run] 的 onProgress）
+    // 時，網路 isolate 記下的直接交給主 isolate 的它，停住時也拿得到；收的
+    // 人在這個 isolate 裡（原地執行的工作自己收）時，接上時再交。
+    final sink = currentRequestLogSink;
+    final forwardsDirectly =
+        sink != null && identical(sink, Zone.current[_taskProgressZoneKey]);
     channel.notify(
       _Block(
         Zone.current[_taskIdZoneKey] as int?,
         task,
-        requestLog: currentRequestLog?.settings,
+        requestLog: log?.settingsFor(forwardsDirectly: forwardsDirectly),
       ),
     );
     final outcome = _Outcome.decode(replies.take());
     // 書源除錯與校驗要列出規則 JS 自己送的請求；它們在網路 isolate 送出，
     // 記下的網址（與回應）跟著結果回來，照順序接進這裡的紀錄。
-    currentRequestLog?.merge(
+    log?.merge(
       outcome.requestLines,
       outcome.transientResponses,
       otherPages: outcome.requestPages,
+      forwarded: forwardsDirectly,
     );
     if (outcome.error case final error?) throw error;
     return outcome.value;

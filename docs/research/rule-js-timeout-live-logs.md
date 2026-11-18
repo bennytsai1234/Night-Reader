@@ -51,10 +51,16 @@
 照「逐筆事件」的設計做了（分支 `fix/rule-js-debug-logs`）：
 
 - 書源工作一邊跑一邊交回紀錄：`reportSourceProgress`（`lib/core/utils/source_progress.dart`），呼叫端在 `SourceIsolate.run`／`SourceWorker.run` 給 `onProgress`。worker 每一筆當下 `notify` 主 isolate；worker 停住時網路 isolate 替它記的照 `_Blocked.id` 交回停住的那個工作。工作結束或 worker 被結束後才到的不收，不會混進下一次。
-- `RequestLog.live`：每記一行交給 `run` 開始時收紀錄的人；網路 isolate 照同樣設定自己交回，`merge` 不再交，每一行（含整頁原文）只送一次。
+- `RequestLog.live`：每記一行交給這次 `run` 開始時收紀錄的人。收的人就是這個 worker 工作的時，網路 isolate 照同樣設定直接交回，`merge` 不再交，整頁原文也不帶回 worker；收的人在 worker 裡（原地執行的工作自己收）時，`merge` 接上時再交。正文那段要在 worker 裡找下一頁（`keepingPages`），那段的整頁仍帶回 worker。
 - 除錯紀錄由 `startDebug` 的 `onLog` 在寫下當下交出，不經 `logStream`。
 - 試抓與 JS 工具的紀錄以主 isolate 收到的那份為準，worker 跑完只交回逾時、正文判斷這些；外層超時交回已收到的。JS 工具的 6,000 字上限照舊。
 
-「後續驗證標準」的 1～3 有測試（`test/core/ai_repair/source_probe_test.dart`，本機伺服器、真的 `java.ajax`）；第 4 條靠每個工作各自登記收紀錄的人、結束時移除，沒有另寫交錯的測試；第 5 條沒有量。
+測試（`test/core/ai_repair/source_probe_test.dart`，本機伺服器、真的 `java.ajax`）對照「後續驗證標準」：
+
+- 第 1 條：JS 工具的輸出有網址與 200；標頭遮蔽由 `test/core/network/request_log_test.dart` 另外測。
+- 第 2 條：試抓先抓到正文頁（200），再卡在規則 JS 的第一個慢請求；超時交回的有除錯紀錄、正文頁的回應、送出還沒回的那個請求。
+- 第 3 條：JS 工具第一個 `java.ajax` 已回、卡在第二個時超時，輸出兩個請求、只有第一個有回應。
+- 第 4 條：靠每個工作各自登記收紀錄的人、結束時移除（原地執行的也是），沒有另寫交錯的測試。
+- 第 5 條：沒有量。
 
 研究分支的那項 JS 工具測試原本在本機逾時：測試沒開書源 isolate，網路 isolate 沒設要連的資料庫，等 App 的資料庫等不到；測試裡補上 `SourceIo.configure`。

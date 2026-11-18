@@ -98,7 +98,7 @@ class SourceDebugService {
         onNote: log,
         body: () => _runDebug(source, key),
       ),
-      zoneValues: {_runKey: runId, _onLogKey: ?onLog},
+      zoneValues: {_runKey: runId, _onLogKey: onLog},
     );
   }
 

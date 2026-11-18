@@ -56,7 +56,9 @@ Future<String> runRepairJs(
   CancelToken? cancelToken,
   @visibleForTesting Future<DriftIsolate>? database,
 }) async {
-  final requests = <String>[];
+  // 只留要附上的那麼多字：送了很多請求的程式不在這裡越積越多。
+  final sent = StringBuffer();
+  var cut = false;
   final result = await _inWorker(
     'RepairJs',
     _jsTask(source.toJson(), code, pages),
@@ -64,15 +66,15 @@ Future<String> runRepairJs(
     cancelToken: cancelToken,
     database: database,
     onProgress: (entry) {
-      if (entry is LoggedRequestLine) requests.add(entry.line);
+      if (entry is! LoggedRequestLine || cut) return;
+      final line = sent.isEmpty ? entry.line : '\n${entry.line}';
+      final room = _jsRequestsLength - sent.length;
+      cut = line.length > room;
+      sent.write(cut ? line.substring(0, room) : line);
     },
   );
-  if (requests.isEmpty) return result;
-  var sent = requests.join('\n');
-  if (sent.length > _jsRequestsLength) {
-    sent = '${sent.substring(0, _jsRequestsLength)}…（後面省略）';
-  }
-  return '$result\n# 這段程式送出的請求\n$sent';
+  if (sent.isEmpty) return result;
+  return '$result\n# 這段程式送出的請求\n$sent${cut ? '…（後面省略）' : ''}';
 }
 
 /// [onProgress] 收 [task] 一邊跑一邊交回的紀錄；傳回之後（含超過時間）到的

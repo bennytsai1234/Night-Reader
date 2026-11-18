@@ -121,7 +121,7 @@ abstract final class SourceIsolate {
       // 測試多半不開書源 isolate；照樣試送一次，捕捉了送不出去的東西時
       // 在測試裡就失敗，不等到 App 裡才改回主 isolate。
       assert(_sendable(task));
-      return _runCancellable(task, cancelToken, progress: _bound(onProgress));
+      return _runInPlace(task, cancelToken, onProgress);
     }
     try {
       return await worker.run(
@@ -132,7 +132,7 @@ abstract final class SourceIsolate {
     } on _TaskNotSendable catch (e) {
       assert(_sendable(task));
       AppLog.e('書源工作送不進書源 isolate，改在主 isolate 執行: ${e.error}', error: e.error);
-      return _runCancellable(task, cancelToken, progress: _bound(onProgress));
+      return _runInPlace(task, cancelToken, onProgress);
     }
   }
 
@@ -453,7 +453,9 @@ final class SourceWorker {
           call.id,
           block.task,
           requestLog: block.requestLog,
-          progress: _progress.containsKey(block.taskId),
+          progress:
+              (block.requestLog?.live ?? false) &&
+              _progress.containsKey(block.taskId),
         ),
       );
       outcome = (reply as TransferableTypedData).materialize().asUint8List();
@@ -661,6 +663,10 @@ final Object _cancelTokenZoneKey = Object();
 /// 那一次呼叫跟著工作一起取消。
 final Object _taskIdZoneKey = Object();
 
+/// worker 上正在執行的工作交回紀錄的出口（送給主 isolate 的 onProgress）；
+/// 停住時用它判斷網路 isolate 記下的能不能直接交回（[BlockingCall]）。
+final Object _taskProgressZoneKey = Object();
+
 /// 在記著 [cancelToken] 的 Zone 裡執行 [task]。沒給時沿用外層工作的：書源
 /// 工作裡又叫 [SourceIsolate.run] 的（原地執行），跟著外層一起取消。
 /// [progress] 收 [task] 交回的紀錄；沒給時交給外層收的人。
@@ -686,6 +692,29 @@ Future<R> _runCancellable<R>(
 void Function(Object entry)? _bound(void Function(Object entry)? onProgress) =>
     onProgress == null ? null : Zone.current.bindUnaryCallback(onProgress);
 
+/// 原地執行 [task]，[onProgress] 只收到它返回為止：工作留下的計時器之後才
+/// 交的不收，和 worker 上的工作一樣。
+Future<R> _runInPlace<R>(
+  Future<R> Function(CancelToken cancelToken) task,
+  CancelToken? cancelToken,
+  void Function(Object entry)? onProgress,
+) async {
+  final bound = _bound(onProgress);
+  if (bound == null) return _runCancellable(task, cancelToken);
+  var open = true;
+  try {
+    return await _runCancellable(
+      task,
+      cancelToken,
+      progress: (entry) {
+        if (open) bound(entry);
+      },
+    );
+  } finally {
+    open = false;
+  }
+}
+
 /// 快取裡存的值理論上都是字串；送不過去的不同步，只記下來。
 void _tryNotify(IsolateChannel channel, Object notice) {
   try {
@@ -709,14 +738,18 @@ void _main(SendPort mainPort) {
         case _RunTask(:final id, :final task, :final progress):
           final cancelToken = CancelToken();
           tasks[id] = cancelToken;
+          final void Function(Object entry)? sink = progress
+              ? (entry) => channel.notify(_Progress(id, entry))
+              : null;
           try {
-            return await _runCancellable(
-              task,
-              cancelToken,
-              taskId: id,
-              progress: progress
-                  ? (entry) => channel.notify(_Progress(id, entry))
-                  : null,
+            return await runZoned(
+              () => _runCancellable(
+                task,
+                cancelToken,
+                taskId: id,
+                progress: sink,
+              ),
+              zoneValues: {_taskProgressZoneKey: ?sink},
             );
           } finally {
             tasks.remove(id);
