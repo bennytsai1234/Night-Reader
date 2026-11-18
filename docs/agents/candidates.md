@@ -6,7 +6,7 @@
 
 - 原型寫在 `test/_screens/`（git 忽略），選定後移到資源回收筒。這個資料夾在本機 `flutter analyze` 看得到，留著的話未用到的類別會讓推送前的檢查出警告。
 - 要畫在真畫面上（例如浮在書架上的元件）：先用 `test/screens/app_screens_test.dart` 拍真畫面（`SHOT_ONLY=s01`，淺色、深色各跑一次），再在原型測試裡把那張 PNG 當底圖（`runAsync` 裡 `instantiateImageCodec`、`RawImage`），只把候選元件疊上去。
-- 截圖環境的玻璃強度是霧面，App 的預設是實色：要拍使用者平常看到的樣子，偏好設定蓋上 `PreferKey.glassStrength: 'solid'`。
+- 候選照 App 的預設畫，使用者平常看到的就是這樣：淺色牛皮、深色素色加純黑、玻璃實色（預設值在 `ThemeSettingsProvider`）。拍整個 App 時，截圖環境的玻璃是霧面，偏好設定蓋上 `PreferKey.glassStrength: 'solid'`；只畫元件的原型自己建主題，淺色 `buildAppTheme(AppStyle.kraft, Brightness.light, glassStrength: GlassStrength.solid)`，深色 `buildAppTheme(AppStyle.plain, Brightness.dark, pureBlack: true, glassStrength: GlassStrength.solid)`。
 - 截圖環境畫得出彈出選單、提示框與長按預覽背後的模糊；分頁列、頁首與閱讀選單的模糊（共用背景取樣）沒有驗證過，不拿截圖判斷。
 - 某些陰影畫不出來：`BoxShadow` 的大範圍模糊會畫成一塊灰色長條，候選裡的陰影用小的（模糊 6、位移 2）；分不分得開看取樣的明度差，不看圖上的陰影。
 
