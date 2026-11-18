@@ -50,10 +50,12 @@ void main() {
       result['content']! as String,
       convertType: convert,
     );
+    // worker 已修過段落，和它建 document 時一樣不再修一次。
     return ReaderV2Content.fromRaw(
       chapterIndex: 0,
       title: '',
       rawText: content,
+      repairBrokenLines: false,
     ).paragraphs;
   }
 
@@ -118,6 +120,13 @@ void main() {
     expect(await hide('「請進。\n」她說。\n下一段。本站廣告', paragraph: 1, text: '本站廣告'), [
       '「請進。」她說。',
       '下一段。',
+    ]);
+  });
+
+  test('選到被接起來的接縫，刪的是那一處，不是同章另一處同樣的字', () async {
+    expect(await hide('「請進。\n」她說。\n旁白重複「請進。」', paragraph: 0, text: '「請進。」'), [
+      '她說。',
+      '旁白重複「請進。」',
     ]);
   });
 

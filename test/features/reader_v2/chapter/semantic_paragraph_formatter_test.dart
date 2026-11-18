@@ -59,6 +59,24 @@ void main() {
       expect(SemanticParagraphFormatter.repair('“師傅！\n！”'), '“師傅！！”');
     });
 
+    test('英文撇號與另一層的引號不算沒收的引號', () {
+      for (final source in ['I don’t know.\n”這一段的開引號打反了。“', '「甲說完了。\n』乙的引文']) {
+        expect(SemanticParagraphFormatter.repair(source), source);
+      }
+    });
+
+    test('接起來的段落記得原文的換行', () {
+      final repaired = SemanticParagraphFormatter.repairWithSources(
+        '「請進。\n」她說。\n\n下一段。',
+      );
+      expect(repaired.lines, ['「請進。」她說。', '', '下一段。']);
+      expect(repaired.sources, ['「請進。\n」她說。', '', '下一段。']);
+      expect(ReaderV2Content.sourceParagraphsOf('「請進。\n」她說。\n\n下一段。'), [
+        '「請進。\n」她說。',
+        '下一段。',
+      ]);
+    });
+
     test('連續對白每段只有開引號，各段照樣分開', () {
       const source = '“第一段話還沒說完。\n“第二段接著說。\n“最後一段說完了。”';
       expect(SemanticParagraphFormatter.repair(source), source);
@@ -71,7 +89,7 @@ void main() {
     });
 
     test('只有插圖的行是段落邊界，記號留在原位', () {
-      const illustration = '';
+      const illustration = '\uE000';
       for (final source in [
         '「請進。\n$illustration\n」她回答。',
         '他說：「\n$illustration\n你好。」',
@@ -114,14 +132,33 @@ void main() {
     });
 
     test('高可信度的固定欄寬折行接回原段落', () {
-      final lines = <String>[for (var i = 0; i < 5; i++) '甲' * 24, '這是末行。'];
+      final lines = <String>[for (var i = 0; i < 8; i++) '甲' * 24, '這是末行。'];
       expect(SemanticParagraphFormatter.repair(lines.join('\n')), lines.join());
     });
 
     test('行長不算插圖記號，有插圖的行照樣接回', () {
       final lines = <String>[
-        for (var i = 0; i < 5; i++) '甲' * 24,
-        '${'乙' * 24}',
+        for (var i = 0; i < 7; i++) '甲' * 24,
+        '${'乙' * 24}\uE000',
+        '這是末行。',
+      ];
+      expect(SemanticParagraphFormatter.repair(lines.join('\n')), lines.join());
+    });
+
+    test('幾項等長的列表不當成固定欄寬', () {
+      final source = [for (var i = 1; i <= 5; i++) '　${'甲' * 13}$i'].join('\n');
+      expect(SemanticParagraphFormatter.repair(source), source);
+    });
+
+    test('固定欄寬不把英文字詞黏在一起', () {
+      final source = [for (var i = 0; i < 8; i++) 'This is line $i of text']
+          .join('\n');
+      expect(SemanticParagraphFormatter.repair(source), source);
+    });
+
+    test('欄寬落在兩種行長中間時也認得', () {
+      final lines = <String>[
+        for (var i = 0; i < 8; i++) '甲' * (i.isEven ? 19 : 21),
         '這是末行。',
       ];
       expect(SemanticParagraphFormatter.repair(lines.join('\n')), lines.join());
@@ -130,7 +167,7 @@ void main() {
     test('固定欄寬也不合併已結束的句子及新對話', () {
       final lines = <String>[
         '甲' * 23 + '。',
-        for (var i = 0; i < 4; i++) '乙' * 24,
+        for (var i = 0; i < 7; i++) '乙' * 24,
         '「新的對話。」',
       ];
       final output = SemanticParagraphFormatter.repair(lines.join('\n'));
@@ -148,7 +185,7 @@ void main() {
       final document = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '',
-        rawText: '他說：「\n\n你好。」',
+        rawText: '他說：「\n\uE000\n你好。」',
         illustrationSlots: [
           (src: 'a.png', path: 'a.png', pixelWidth: 10, pixelHeight: 10),
         ],

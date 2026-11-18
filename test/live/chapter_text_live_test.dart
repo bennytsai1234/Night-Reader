@@ -117,7 +117,8 @@ void main() {
         json,
   ].take(limit).toList();
   final dir = Directory(outDir)..createSync(recursive: true);
-  final index = File('${dir.path}/index.jsonl');
+  // 每次重抓都從新的索引開始：同一個資料夾重跑時，檔名會覆蓋舊的那份。
+  final index = File('${dir.path}/index.jsonl')..writeAsStringSync('');
   final service = BookSourceService();
 
   Future<void> fetch(int sourceIndex, Map<String, dynamic> json) async {

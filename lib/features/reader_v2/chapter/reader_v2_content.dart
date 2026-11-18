@@ -207,6 +207,16 @@ class ReaderV2Content {
         .toList(growable: false);
   }
 
+  /// 和 [paragraphsOf] 一段一段對應的原文：被段落修復接起來的段，保留原本
+  /// 的換行（替換規則在段落修復之前套用，看到的是這樣的字）。
+  static List<String> sourceParagraphsOf(String rawText) {
+    final repaired = SemanticParagraphFormatter.repairWithSources(rawText);
+    return [
+      for (var i = 0; i < repaired.lines.length; i += 1)
+        if (repaired.lines[i].trim().isNotEmpty) repaired.sources[i].trim(),
+    ];
+  }
+
   static String normalizeRawText(String rawText) {
     return rawText
         .replaceAll('\r\n', '\n')

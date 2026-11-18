@@ -779,27 +779,37 @@ class ReaderV2ContentTransformer {
     final chapterTitle = args['chapterTitle'] as String? ?? '';
     final rules = _rulesFrom(args);
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
-    final content = SemanticParagraphFormatter.repair(
+    // 和顯示的正文（worker）一樣把插圖換成記號再套規則，重新分段與段落
+    // 修復看到的行才一樣；回傳前才拿掉記號。
+    final extracted = IllustrationMarkers.extract(
+      args['rawContent'] as String? ?? '',
+    );
+    final count = extracted.sources.length;
+    String withoutPlaceholders(String text) => String.fromCharCodes(
+      text.codeUnits.where(
+        (unit) => IllustrationMarkers.placeholderIndex(unit, count) == null,
+      ),
+    );
+    final repaired = SemanticParagraphFormatter.repairWithSources(
       _applyRules(
         bookName: bookName,
         bookOrigin: bookOrigin,
         chapterTitle: chapterTitle,
-        // 插圖不成段（[ReaderV2Content.fromRaw]），拿掉後只有插圖的行是空行。
-        rawContent: IllustrationMarkers.strip(
-          args['rawContent'] as String? ?? '',
-        ),
+        rawContent: extracted.text,
         rules: rules,
         titleRules: _titleRulesOf(rules, bookName, bookOrigin),
         useReplaceRules: useReplaceRules,
         reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
       ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
     );
-    // 排版整理逐行處理、不增減行，整理後是空白的行不成段。
-    final lines = content.split('\n');
-    final shown = normalizeTypography(content).split('\n');
+    // 排版整理逐行處理、不增減行；整理後是空白或只有插圖的行不成段
+    // （[ReaderV2Content.fromRaw]）。被段落修復接起來的段，原文保留原本的
+    // 換行：新規則接在既有規則之後、段落修復之前套用，看到的是那樣的字。
+    final shown = normalizeTypography(repaired.lines.join('\n')).split('\n');
     return <String>[
-      for (var i = 0; i < lines.length; i += 1)
-        if (_paragraphOf(shown[i]).isNotEmpty) lines[i],
+      for (var i = 0; i < shown.length; i += 1)
+        if (_paragraphOf(withoutPlaceholders(shown[i])).isNotEmpty)
+          withoutPlaceholders(repaired.sources[i]),
     ];
   }
 

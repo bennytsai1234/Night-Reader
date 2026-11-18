@@ -11,48 +11,76 @@ abstract final class SemanticParagraphFormatter {
   /// 不會出現在段首的標點（不含引號，引號另外判斷）。
   static const String _noParagraphStart = '，。、；：！？）】》〉〕｝';
   static const String _noParagraphEnd = '（【《〈〔｛';
+
+  /// 單層引號；其餘的「」“” 是雙層，兩層各自配對。
+  static const String _singleQuotes = '『』‘’';
   static const String _closingQuotes = '」』”’';
   static const String _openingQuotes = '「『“‘';
   static const String _curlyQuotes = '“”‘’';
   static const String _sentenceFinal = '。！？!?…';
-  static const String _paragraphFinal = '。！？!?」』”’';
+  static const String _paragraphFinal = '。！？!?.」』”’';
 
   /// 整行只有這些時是獨立的一段（例如「？？？」「！！」），不接到上一行。
   static const String _standalonePunctuation = '，。、；：！？!?…～~';
 
-  static String repair(String content) {
-    if (content.isEmpty) return content;
+  static String repair(String content) =>
+      _repair(content).map((group) => group.repaired).join('\n');
+
+  /// 修復後的每一行（[lines]，和 [repair] 的結果一行一行對應）與組成它的
+  /// 原文（[sources]：被接起來的幾行照原樣以換行相連）。替換規則在修復之前
+  /// 套用，要建規則比對被接起來的字時用 [sources]。
+  static ({List<String> lines, List<String> sources}) repairWithSources(
+    String content,
+  ) {
+    final groups = _repair(content);
+    return (
+      lines: [for (final group in groups) group.repaired],
+      sources: [for (final group in groups) group.source],
+    );
+  }
+
+  static List<({String repaired, String source})> _repair(String content) {
+    if (content.isEmpty) return const [(repaired: '', source: '')];
     final lines = content
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n')
         .split('\n');
-    if (lines.length < 2) return lines.single;
-
     final wrapColumns = _fixedWidthColumns(lines);
-    final output = <String>[];
+    final output = <({String repaired, String source})>[];
     String? pending;
+    String? pendingSource;
     var previous = '';
+
+    void flush() {
+      if (pending != null) {
+        output.add((repaired: pending!, source: pendingSource!));
+      }
+      pending = null;
+      pendingSource = null;
+    }
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       if (_visible(line).isEmpty) {
-        if (pending != null) output.add(pending);
-        pending = null;
+        flush();
         // 空白行與只有插圖的行是確定的邊界，下一行以收尾標點開頭也不跨過。
-        output.add(line.trim().isEmpty ? '' : line);
+        final kept = line.trim().isEmpty ? '' : line;
+        output.add((repaired: kept, source: line));
         continue;
       }
       if (pending != null &&
-          _shouldJoin(pending, previous, line, wrapColumns[i])) {
-        pending = pending.trimRight() + line.trimLeft();
+          _shouldJoin(pending!, previous, line, wrapColumns[i])) {
+        pending = pending!.trimRight() + line.trimLeft();
+        pendingSource = '$pendingSource\n$line';
       } else {
-        if (pending != null) output.add(pending);
+        flush();
         pending = line;
+        pendingSource = line;
       }
       previous = line;
     }
-    if (pending != null) output.add(pending);
-    return output.join('\n');
+    flush();
+    return output;
   }
 
   /// [paragraph] 是到上一行為止接好的段落，[before] 是上一行本身。
@@ -68,17 +96,23 @@ abstract final class SemanticParagraphFormatter {
     final last = left[left.length - 1];
 
     // 書源常把 “ ” 的方向打反（“看！”寫成“看！“），只看方向會把下一段
-    // 併進來。引號一律要這一段還有沒收的引號才接；彎引號緊跟在句末標點
-    // 之後是收引號（一句話跨好幾行說完時，開引號在更前面的行），不是留在
-    // 行尾的開引號。
+    // 併進來。引號一律要這一段還有同一層沒收的引號才接；彎引號緊跟在句末
+    // 標點之後是收引號（一句話跨好幾行說完時，開引號在更前面的行），不是
+    // 留在行尾的開引號。
     if (_openingQuotes.contains(last) &&
         _curlyQuotes.contains(last) &&
         left.length > 1 &&
         _sentenceFinal.contains(left[left.length - 2])) {
       return false;
     }
-    if (_closingQuotes.contains(first) || _openingQuotes.contains(last)) {
-      return _hasUnclosedQuote(paragraph);
+    if (_closingQuotes.contains(first)) {
+      return _hasUnclosedQuote(
+        paragraph,
+        single: _singleQuotes.contains(first),
+      );
+    }
+    if (_openingQuotes.contains(last)) {
+      return _hasUnclosedQuote(paragraph, single: _singleQuotes.contains(last));
     }
     if (_noParagraphStart.contains(first)) {
       return !_isStandalonePunctuation(right);
@@ -88,38 +122,51 @@ abstract final class SemanticParagraphFormatter {
       return true;
     }
 
-    // 欄寬一致是硬折行的證據；句子已結束或下一行是新的對白時仍分段。
+    // 欄寬一致是硬折行的證據；句子已結束、下一行是新的對白，或接縫兩邊
+    // 都是英數字（接起來會黏掉字詞間的空格）時仍分段。
     return wrapColumn != null &&
         (left.runes.length - wrapColumn).abs() <= 1 &&
         !_paragraphFinal.contains(last) &&
-        !_openingQuotes.contains(first);
+        !_openingQuotes.contains(first) &&
+        !(_isLatinLetterOrDigit(last.codeUnitAt(0)) &&
+            _isLatinLetterOrDigit(first.codeUnitAt(0)));
   }
 
-  /// [text] 裡有沒收的引號：「『 多於 」』，或彎雙引號、彎單引號是奇數個
-  /// （方向不可靠，只數個數）。
-  static bool _hasUnclosedQuote(String text) {
+  /// [text] 裡有沒有沒收的雙層（[single] 時單層）引號：直角引號開的多於
+  /// 收的，或彎引號是奇數個（方向不可靠，只數個數）。英文字中間的 `’` 是
+  /// 撇號（don’t），不算。
+  static bool _hasUnclosedQuote(String text, {required bool single}) {
+    final (open, close, curlyOpen, curlyClose) = single
+        ? (0x300E, 0x300F, 0x2018, 0x2019) // 『』‘’
+        : (0x300C, 0x300D, 0x201C, 0x201D); // 「」“”
     var corner = 0;
-    var whiteCorner = 0;
-    var double = 0;
-    var single = 0;
-    for (final unit in text.codeUnits) {
-      switch (unit) {
-        case 0x300C: // 「
-          corner++;
-        case 0x300D: // 」
-          corner--;
-        case 0x300E: // 『
-          whiteCorner++;
-        case 0x300F: // 』
-          whiteCorner--;
-        case 0x201C || 0x201D: // “ ”
-          double++;
-        case 0x2018 || 0x2019: // ‘ ’
-          single++;
+    var curly = 0;
+    final units = text.codeUnits;
+    for (var i = 0; i < units.length; i++) {
+      final unit = units[i];
+      if (unit == open) {
+        corner++;
+      } else if (unit == close) {
+        corner--;
+      } else if (unit == curlyOpen) {
+        curly++;
+      } else if (unit == curlyClose) {
+        final apostrophe =
+            single &&
+            i > 0 &&
+            i + 1 < units.length &&
+            _isLatinLetterOrDigit(units[i - 1]) &&
+            _isLatinLetterOrDigit(units[i + 1]);
+        if (!apostrophe) curly++;
       }
     }
-    return corner > 0 || whiteCorner > 0 || double.isOdd || single.isOdd;
+    return corner > 0 || curly.isOdd;
   }
+
+  static bool _isLatinLetterOrDigit(int unit) =>
+      (unit >= 0x30 && unit <= 0x39) ||
+      (unit >= 0x41 && unit <= 0x5A) ||
+      (unit >= 0x61 && unit <= 0x7A);
 
   static bool _isStandalonePunctuation(String text) =>
       text.split('').every(_standalonePunctuation.contains);
@@ -151,9 +198,9 @@ abstract final class SemanticParagraphFormatter {
 
   static bool _isPlaceholder(int unit) => unit >= 0xE000 && unit <= 0xF8FF;
 
-  /// 只在沒有空白行的連續區間裡找固定欄寬：至少五行，其中至少四行、
-  /// 也至少四分之三的行，字數落在同一個 14–120 字的欄寬正負一字內。
-  /// 單獨一段長段落或長短不一的小說段落不算。
+  /// 只在沒有空白行的連續區間裡找固定欄寬：至少八行，其中至少六行、也
+  /// 至少四分之三的行，字數落在同一個 14–120 字的欄寬正負一字內。單獨
+  /// 一段長段落、長短不一的小說段落與幾項等長的列表不算。
   static List<int?> _fixedWidthColumns(List<String> lines) {
     final result = List<int?>.filled(lines.length, null);
     final lengths = [for (final line in lines) _visible(line).runes.length];
@@ -166,16 +213,20 @@ abstract final class SemanticParagraphFormatter {
       var end = start;
       final frequencies = <int, int>{};
       while (end < lines.length && lengths[end] != 0) {
-        final length = lengths[end];
-        if (length >= 14 && length <= 120) {
-          frequencies[length] = (frequencies[length] ?? 0) + 1;
-        }
+        frequencies.update(lengths[end], (n) => n + 1, ifAbsent: () => 1);
         end++;
       }
-      if (end - start >= 5) {
+      if (end - start >= 8) {
         int? column;
         var bestCount = 0;
-        for (final candidate in frequencies.keys) {
+        final candidates = {
+          for (final length in frequencies.keys) ...[
+            length - 1,
+            length,
+            length + 1,
+          ],
+        }.where((candidate) => candidate >= 14 && candidate <= 120);
+        for (final candidate in candidates) {
           final matches =
               (frequencies[candidate - 1] ?? 0) +
               (frequencies[candidate] ?? 0) +
@@ -186,7 +237,7 @@ abstract final class SemanticParagraphFormatter {
           }
         }
         if (column != null &&
-            bestCount >= 4 &&
+            bestCount >= 6 &&
             bestCount * 4 >= (end - start) * 3) {
           for (var i = start; i < end; i++) {
             result[i] = column;
