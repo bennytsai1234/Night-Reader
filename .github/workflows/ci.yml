@@ -98,11 +98,8 @@ jobs:
         # 檔（一份 2 分 20 秒，四份加起來比不分還多），同一個檔的測試也會被
         # 拆散到不同台。測試用提交的 *.g.dart；過時與否由 codegen 那台檢查。
         # 檔名全程以 NUL 分隔，含空白或中文的路徑也照原樣傳給 flutter test。
-        # dart_test.yaml 標成 skip 的標籤（截圖、量測、錄影、真實網站、細節檢查）
-        # 整個檔都不跑，卻照樣要編譯、載入，每份多花十幾秒，分檔前先拿掉。
         run: |
-          skip_tags=$(awk '/^tags:/{t=1;next} t&&/^[^ #]/{t=0} t&&/^  [a-z_]+:/{tag=$1;sub(":","",tag)} t&&/^    skip:/{print tag}' dart_test.yaml | paste -sd'|')
-          mapfile -d '' -t files < <(git ls-files -z -- 'test/*_test.dart' 'test/**/*_test.dart' | sort -zu | xargs -0 grep -LZE "^@Tags\(\[[^]]*'(${skip_tags:-^$})'")
+          mapfile -d '' -t files < <(git ls-files -z -- 'test/*_test.dart' 'test/**/*_test.dart' | sort -zu)
           if [ ${#files[@]} -eq 0 ]; then
             echo "::error::No test files found."
             exit 1
