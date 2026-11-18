@@ -292,34 +292,52 @@ class JsoupBridge {
         return selectWithSelfCompat(container, arg(0)).firstOrNull;
       case 'is':
         return element != null && elementMatchesSelectorCompat(element, arg(0));
+      // 這幾個收的是 ID、標籤、類別名稱、屬性與文字本身，不是 CSS：照
+      // Jsoup 的 Evaluator 直接比對，值裡的 `.`、`"`、`)` 照字算。
       case 'getElementById':
-        return container == null
-            ? null
-            : selectWithSelfCompat(container, '#${arg(0)}').firstOrNull;
+        final id = arg(0);
+        if (id.isEmpty) return null;
+        return _allElements(container).where((e) => e.id == id).firstOrNull;
       case 'getElementsByTag':
-        return container == null
-            ? const <dom.Element>[]
-            : selectWithSelfCompat(container, arg(0));
+        final tag = arg(0).trim().toLowerCase();
+        return _allElements(container)
+            .where((e) => e.localName?.toLowerCase() == tag)
+            .toList();
       case 'getElementsByClass':
-        return container == null
-            ? const <dom.Element>[]
-            : selectWithSelfCompat(container, '.${arg(0)}');
+        final name = arg(0).toLowerCase();
+        return _allElements(container)
+            .where((e) => e.classes.any((c) => c.toLowerCase() == name))
+            .toList();
       case 'getElementsByAttribute':
-        return container == null
-            ? const <dom.Element>[]
-            : selectWithSelfCompat(container, '[${arg(0)}]');
+        final name = arg(0).trim();
+        return _allElements(container)
+            .where((e) => _attributeKey(e, name) != null)
+            .toList();
       case 'getElementsByAttributeValue':
-        return container == null
-            ? const <dom.Element>[]
-            : selectWithSelfCompat(container, '[${arg(0)}="${arg(1)}"]');
+        final name = arg(0).trim();
+        final value = arg(1).trim().toLowerCase();
+        return _allElements(container)
+            .where(
+              (e) =>
+                  _attributeKey(e, name) != null &&
+                  _attributeValue(e, name).trim().toLowerCase() == value,
+            )
+            .toList();
       case 'getElementsContainingText':
-        return container == null
-            ? const <dom.Element>[]
-            : selectWithSelfCompat(container, '*:contains(${arg(0)})');
       case 'getElementsContainingOwnText':
-        return container == null
-            ? const <dom.Element>[]
-            : selectWithSelfCompat(container, '*:containsOwn(${arg(0)})');
+        // Jsoup：不分大小寫，搜的字連續空白併成一個。
+        final needle = arg(0).replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+        final own = op == 'getElementsContainingOwnText';
+        return _allElements(container)
+            .where(
+              (e) =>
+                  (own
+                          ? jsoupOwnText(e, isData: _isData)
+                          : jsoupText(e, isData: _isData))
+                      .toLowerCase()
+                      .contains(needle),
+            )
+            .toList();
       case 'getAllElements':
         return container == null
             ? const <dom.Element>[]
