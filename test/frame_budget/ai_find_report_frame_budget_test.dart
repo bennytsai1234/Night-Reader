@@ -57,7 +57,7 @@ void main() {
     setUpScreenshot(tester);
     late SharedPreferences prefs;
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       prefs = await SharedPreferences.getInstance();
     });
     final record = _record();

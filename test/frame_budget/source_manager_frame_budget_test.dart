@@ -1,8 +1,7 @@
 // 書源管理：三百個書源進頁（骨架、清單出現）、進出選取時列尾交叉淡換、
 // 全選與批次停用、按域名分組切換、搜尋框每打一個字的重建，每一幀的成本
 // （ADR 0018、0029）。用法見 `test/support/frame_budget.dart`；帶
-// `frame_budget` 標籤，平常的全套測試跳過。資料庫是記憶體資料庫，在主執行
-// 緒（手機上在自己的 isolate），「幀前」裡有一部分是它。
+// `frame_budget` 標籤，平常的全套測試跳過。
 @Tags(['frame_budget'])
 library;
 
@@ -53,7 +52,10 @@ void main() {
     setUpScreenshot(tester);
     await tester.runAsync(() async {
       // 上次讀完有三百個書源：骨架照它畫列。
-      await setUpApp(prefs: {'source_manager_last_count': _sourceCount});
+      await setUpApp(
+        prefs: {'source_manager_last_count': _sourceCount},
+        databaseInIsolate: true,
+      );
       await getIt<BookSourceDao>().upsertAll([
         for (var i = 0; i < _sourceCount; i++) _source(i),
       ]);

@@ -337,8 +337,10 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     return null;
   }
 
+  /// 開書時目錄讀到之前（或沒讀成）[_chapters] 是空的、[_index] 已經是上次
+  /// 聽的那集，從清單的範圍內往前找。
   int? _previousPlayable(int from) {
-    for (var i = from - 1; i >= 0; i--) {
+    for (var i = min(from, _chapters.length) - 1; i >= 0; i--) {
       if (!_chapters[i].isSkippedWhenReading) return i;
     }
     return null;
@@ -352,7 +354,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   }) async {
     final book = _book;
     final source = _source;
-    if (book == null || source == null) return;
+    // 目錄還沒讀到或沒讀成時沒有集可換（[_previousPlayable]）。
+    if (book == null || source == null || index >= _chapters.length) return;
     // 換集先讓上一集停聲：新的一集抓不到時，不會畫面停在新集、耳朵還聽著
     // 舊集，舊集的位置也不會記到新集上。
     final previous = _engine;
@@ -502,7 +505,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
 
   /// 有下一集可以換；列表循環時最後一集的下一集是第一集。
   bool get hasNext =>
-      _nextPlayable(_index) != null || _mode == AudiobookPlayMode.listLoop;
+      _nextPlayable(_index) != null ||
+      (_mode == AudiobookPlayMode.listLoop && _chapters.isNotEmpty);
 
   Future<void> next() async {
     final next =
@@ -697,7 +701,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 回到前景時沒在播：另一台聽到較新的地方就跳過去（停在那裡，不自動播）。
   Future<void> _catchUpAfterResume() async {
     final book = _book;
-    if (book == null || _playing || _loading) return;
+    // 沒有目錄（沒讀成）跳不過去；不跳就不記成同步過，下次還會再抓到。
+    if (book == null || _playing || _loading || _chapters.isEmpty) return;
     final since = (index: _index, at: position.value);
     final pulled = await _sync.pullProgress(book.bookUrl);
     if (pulled == null || !pulled.isCurrent || !isCurrent(book)) return;

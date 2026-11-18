@@ -47,7 +47,7 @@ void main() {
     setUpPhone(tester);
     late AudiobookPlayer player;
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await getIt<BookSourceDao>().upsert(
         BookSource(
           bookSourceUrl: 'https://audio.test',

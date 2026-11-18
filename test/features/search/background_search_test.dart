@@ -202,7 +202,7 @@ void main() {
 
     // 看過、離開搜尋頁之後就收掉，下次打開是空白的。
     again.dispose();
-    await settle();
+    await until(() => background.current == null);
     expect(background.current, isNull);
     final blank = await page(background, loader, resume: true);
     addTearDown(blank.dispose);
@@ -216,7 +216,7 @@ void main() {
     unawaited(provider.search('night'));
     await until(() => loader.sent.isNotEmpty);
     provider.dispose();
-    await settle();
+    await until(() => background.current == null);
     expect(background.current, isNull);
     expect(work.isBusy, isFalse);
   });
@@ -233,7 +233,7 @@ void main() {
     await settle();
     provider.moveToBackground();
     provider.pauseBackground();
-    await settle();
+    await until(() => background.current?.isPaused ?? false);
     expect(background.current!.isPaused, isTrue);
     expect(work.isBusy, isFalse);
     provider.dispose();
@@ -319,7 +319,7 @@ void main() {
     final reopened = await page(background, loader, resume: true);
     addTearDown(reopened.dispose);
     unawaited(reopened.search('other'));
-    await settle();
+    await until(() => background.current == null);
     expect(background.current, isNull);
     expect(dir.listSync(recursive: true).whereType<File>(), isEmpty);
     expect(reopened.lastSearchKey, 'other');

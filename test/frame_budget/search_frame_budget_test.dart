@@ -88,7 +88,7 @@ void main() {
   testWidgets('searching 60 sources while results stream in', (tester) async {
     setUpScreenshot(tester);
     await tester.runAsync(() async {
-      await setUpApp();
+      await setUpApp(databaseInIsolate: true);
       await seedLibrary();
       await getIt<BookSourceDao>().deleteByUrls([
         kOrigin,
@@ -263,8 +263,9 @@ void main() {
       await rest(tester);
 
       // 放到背景：搜到一半關頁，搜完後再打開，結果第一幀就在（ADR 0070）。
+      // 資料庫在另一個 isolate，等待都要讓出真實時間（rest、settle）。
       await tester.tap(find.text('打開搜尋'));
-      await tester.pumpAndSettle();
+      await rest(tester);
       final searching = Provider.of<SearchProvider>(
         tester.element(find.byType(SearchView)),
         listen: false,
@@ -273,13 +274,17 @@ void main() {
       await tester.enterText(find.byType(TextField), '夜');
       await tester.tap(searchButton);
       for (var i = 0; i < 100 && searching.results.length <= 10; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
+        await settle(tester, const Duration(milliseconds: 50));
       }
       searching.moveToBackground();
       await goBack(tester);
-      await tester.pumpAndSettle();
+      await rest(tester);
       final background = searches.current!;
-      for (var i = 0; i < 100 && !background.isFinished; i++) {
+      // 結果一批一批寫進檔案（真的檔案讀寫），每一步讓出幾毫秒真實時間。
+      for (var i = 0; i < 600 && !background.isFinished; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
         await tester.pump(const Duration(milliseconds: 50));
       }
       expect(background.isFinished, isTrue);
@@ -295,11 +300,11 @@ void main() {
         listen: false,
       );
       await tester.runAsync(() => resumed.ready);
-      await tester.pumpAndSettle();
+      await rest(tester);
       expect(resumed.results.length, greaterThan(100));
       await rest(tester);
       await goBack(tester);
-      await tester.pumpAndSettle();
+      await rest(tester);
       expect(searches.current, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));
