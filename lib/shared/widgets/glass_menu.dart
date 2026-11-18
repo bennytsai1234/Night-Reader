@@ -46,8 +46,9 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
   /// Telegram 把圖示放在右側。
   final IconData? icon;
 
-  /// 放在圖示位置的色點（選顏色的選單）；與 [icon] 擇一。
-  final Color? swatch;
+  /// 放在圖示位置的色點（選顏色的選單），照選單裡當下的主題取色；與
+  /// [icon] 擇一。
+  final Color Function(BuildContext context)? swatch;
   final String? subtitle;
   final bool destructive;
 
@@ -192,7 +193,7 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
     required PopupOrigin origin,
     this.preview,
     this.previewRadius = AppRadius.cardLg,
-  }) : _raised = origin.raised,
+  }) : _origin = origin,
        capturedThemes = InheritedTheme.capture(
          from: origin.context,
          to: Navigator.of(origin.context, rootNavigator: true).context,
@@ -201,9 +202,10 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
   final Rect anchor;
   final List<GlassMenuEntry<T>> entries;
 
-  /// 打開處的主題（從面板裡打開時是面板外層的，[PopupOrigin]）。
+  /// 打開處複製的主題（從 [DerivedTheme] 底下打開時是那一層外面的，
+  /// [PopupOrigin]）。
   final CapturedThemes capturedThemes;
-  final bool _raised;
+  final PopupOrigin _origin;
   final Widget? preview;
   final BorderRadius previewRadius;
 
@@ -229,9 +231,7 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
     Animation<double> secondaryAnimation,
   ) {
     final overlay = _GlassMenuOverlay<T>(route: this, animation: animation);
-    return capturedThemes.wrap(
-      _raised ? RaisedSheetTheme(child: overlay) : overlay,
-    );
+    return capturedThemes.wrap(_origin.wrap(overlay));
   }
 }
 
@@ -579,7 +579,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                               dimension: 20,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: entry.swatch,
+                                  color: entry.swatch!(context),
                                   shape: BoxShape.circle,
                                 ),
                               ),

@@ -99,14 +99,15 @@ Future<T?> _showAlertRoute<T>({
   required WidgetBuilder builder,
   required bool barrierDismissible,
 }) {
-  final origin = PopupOrigin.of(context).context;
-  final navigator = Navigator.of(origin, rootNavigator: true);
+  final origin = PopupOrigin.of(context);
+  final navigator = Navigator.of(origin.context, rootNavigator: true);
   return navigator.push<T>(
     _AlertRoute<T>(
       barrierThemes: InheritedTheme.capture(
-        from: origin,
+        from: origin.context,
         to: navigator.context,
       ),
+      barrierDerive: origin.derive,
       barrierDismissible: barrierDismissible,
       barrierLabel: UiLanguageText.convert(context, '關閉'),
       barrierColor: AppChrome.of(context).barrier,
@@ -131,6 +132,7 @@ Future<T?> _showAlertRoute<T>({
 class _AlertRoute<T> extends RawDialogRoute<T> with LiveDialogBarrier<T> {
   _AlertRoute({
     required this.barrierThemes,
+    required this.barrierDerive,
     required super.pageBuilder,
     required super.barrierDismissible,
     required super.barrierLabel,
@@ -141,6 +143,9 @@ class _AlertRoute<T> extends RawDialogRoute<T> with LiveDialogBarrier<T> {
 
   @override
   final CapturedThemes barrierThemes;
+
+  @override
+  final ThemeDerivation? barrierDerive;
 }
 
 /// 擁有一組輸入框控制器：隨此元件建立，在它卸載時才釋放。

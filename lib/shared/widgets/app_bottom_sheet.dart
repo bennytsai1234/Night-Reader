@@ -222,15 +222,20 @@ class AppBottomSheet extends StatelessWidget {
       origin: origin,
       builder: (context) {
         Widget sheet = Builder(builder: builder);
-        if (raised) sheet = RaisedSheetTheme(child: sheet);
+        if (raised) sheet = DerivedTheme(derive: sheetThemeOf, child: sheet);
         if (paintsSurface) {
           sheet = _SheetSurface(
             raised: raised,
-            showDragHandle: showDragHandle ?? false,
+            // 沒指定時照 Material：主題要把手、而且拉得動才畫。
+            showDragHandle:
+                showDragHandle ??
+                (isDismissible &&
+                    (Theme.of(context).bottomSheetTheme.showDragHandle ??
+                        false)),
             child: sheet,
           );
         }
-        return raised ? RaisedSheetScope(base: context, child: sheet) : sheet;
+        return origin.wrap(sheet);
       },
       // 不給時照 Material 3 預設：最寬 640、置中。
       constraints: constraints,
@@ -269,10 +274,9 @@ class _SheetSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chrome = (raised ? sheetThemeOf(theme) : theme)
-        .extension<AppChrome>()!;
+    final chrome = raised ? sheetThemeOf(theme).extension<AppChrome>() : null;
     return Material(
-      color: chrome.groupedBackground,
+      color: (chrome ?? AppChrome.of(context)).groupedBackground,
       child: showDragHandle
           ? Stack(
               alignment: Alignment.topCenter,
@@ -290,7 +294,9 @@ class _SheetSurface extends StatelessWidget {
 }
 
 /// 照 Material 3 底部面板的把手畫（`showDragHandle`）：32×4 的圓角條，
-/// 置中在 48 見方的觸控範圍裡；讀螢幕軟體點了關閉面板。
+/// 置中在 48 見方的觸控範圍裡；讀螢幕軟體點了關閉面板。拖曳由整個面板
+/// 接（`enableDrag`）；Material 在面板不能拉掉時還讓把手自己拉得動、滑鼠
+/// 停在上面時換色，夜讀沒有這樣的面板，不照做。
 class _SheetDragHandle extends StatelessWidget {
   const _SheetDragHandle();
 
@@ -305,7 +311,12 @@ class _SheetDragHandle extends StatelessWidget {
       label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       container: true,
       button: true,
-      onTap: () => Navigator.maybePop(context),
+      onTap: () {
+        // 照 Material：只關掉這個面板，而且它要在最上層。
+        if (ModalRoute.of(context)?.isCurrent ?? false) {
+          Navigator.pop(context);
+        }
+      },
       child: SizedBox(
         width: math.max(size.width, kMinInteractiveDimension),
         height: math.max(size.height, kMinInteractiveDimension),

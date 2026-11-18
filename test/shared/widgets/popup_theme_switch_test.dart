@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -47,12 +48,11 @@ void main() {
     return bytes!;
   }
 
-  /// 在 [start] 的深淺打開 [open]（[nested] 時從一個面板裡打開），切到
-  /// [end]，回傳切換後的畫面。
+  /// 在 [start] 的深淺從 [host] 打開 [open]，切到 [end]，回傳切換後的畫面。
   Future<Uint8List> render(
     WidgetTester tester, {
     required void Function(BuildContext context) open,
-    required bool nested,
+    required _Host host,
     required Brightness start,
     required Brightness end,
   }) async {
@@ -63,6 +63,31 @@ void main() {
     dispatcher.platformBrightnessTestValue = start;
     addTearDown(dispatcher.clearPlatformBrightnessTestValue);
 
+    // 面板裡打開的那一列；閱讀器面板的內容要畫得出骨架，用分組列。
+    final row = GlobalKey();
+    final button = GroupedSection(
+      children: [
+        GroupedRow(
+          key: row,
+          title: '再開',
+          onTap: () => open(row.currentContext!),
+        ),
+      ],
+    );
+    void openHost(BuildContext context) => switch (host) {
+      _Host.page || _Host.readerMenu => open(context),
+      _Host.sheet => AppBottomSheet.show<void>(
+        context: context,
+        title: '外面',
+        children: [button],
+      ),
+      _Host.readerSheet => ReaderV2MenuSheet.show<void>(
+        context,
+        settings: readerSettings,
+        builder: (_) => ReaderV2SheetScaffold(title: '外面', children: [button]),
+      ),
+    };
+
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(
       MaterialApp(
@@ -71,26 +96,24 @@ void main() {
         themeMode: ThemeMode.system,
         themeAnimationStyle: AnimationStyle.noAnimation,
         builder: (context, child) => RepaintBoundary(key: shot, child: child),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => nested
-                    ? AppBottomSheet.show<void>(
-                        context: context,
-                        title: '外面',
-                        children: [
-                          Builder(
-                            builder: (inner) => TextButton(
-                              onPressed: () => open(inner),
-                              child: const Text('再開'),
-                            ),
-                          ),
-                        ],
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) {
+                final opener = Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => openHost(context),
+                    child: const Text('開'),
+                  ),
+                );
+                // 閱讀選單：頁面上包一層選單配色，從裡面打開。
+                return host == _Host.readerMenu
+                    ? DerivedTheme(
+                        derive: ReaderV2MenuStyle.menuThemeOf,
+                        child: opener,
                       )
-                    : open(context),
-                child: const Text('開'),
-              ),
+                    : opener;
+              },
             ),
           ),
         ),
@@ -98,7 +121,7 @@ void main() {
     );
     await tester.tap(find.text('開'));
     await tester.pumpAndSettle();
-    if (nested) {
+    if (host.nested) {
       await tester.tap(find.text('再開'));
       await tester.pumpAndSettle();
     }
@@ -143,13 +166,20 @@ void main() {
     '彈出選單': (context) => showGlassMenu<String>(
       context: context,
       anchor: const Rect.fromLTWH(300, 300, 40, 40),
-      entries: const [GlassMenuItem(value: 'a', label: '網格')],
+      entries: [
+        GlassMenuItem(
+          value: 'a',
+          label: '強調色',
+          swatch: (context) => Theme.of(context).colorScheme.primary,
+        ),
+      ],
     ),
     '長按預覽選單': (context) => showContextPreviewMenu<String>(
       context: context,
       sourceRect: const Rect.fromLTWH(40, 200, 200, 60),
+      // 照書源管理與發現的預覽：底色在預覽裡取，字色由 Material 給。
       preview: Builder(
-        builder: (context) => ColoredBox(
+        builder: (context) => Material(
           color: Theme.of(context).colorScheme.surface,
           child: const Text('書名'),
         ),
@@ -178,32 +208,29 @@ void main() {
   };
 
   for (final MapEntry(key: name, value: open) in popups.entries) {
-    for (final nested in [false, true]) {
+    for (final host in _Host.values) {
       for (final (start, end) in [
         (Brightness.light, Brightness.dark),
         (Brightness.dark, Brightness.light),
       ]) {
-        testWidgets(
-          '$name${nested ? '（從面板裡開）' : ''}：${start.name} 開著切到 ${end.name}，'
-          '和直接在 ${end.name} 打開一樣',
-          (tester) async {
-            final expected = await render(
-              tester,
-              open: open,
-              nested: nested,
-              start: end,
-              end: end,
-            );
-            final switched = await render(
-              tester,
-              open: open,
-              nested: nested,
-              start: start,
-              end: end,
-            );
-            expect(_firstDifference(switched, expected), isNull);
-          },
-        );
+        testWidgets('$name（${host.label}）：${start.name} 開著切到 ${end.name}，'
+            '和直接在 ${end.name} 打開一樣', (tester) async {
+          final expected = await render(
+            tester,
+            open: open,
+            host: host,
+            start: end,
+            end: end,
+          );
+          final switched = await render(
+            tester,
+            open: open,
+            host: host,
+            start: start,
+            end: end,
+          );
+          expect(_firstDifference(switched, expected), isNull);
+        });
       }
     }
   }
@@ -222,4 +249,19 @@ String? _firstDifference(Uint8List actual, Uint8List expected) {
     }
   }
   return null;
+}
+
+/// 從哪裡打開。
+enum _Host {
+  page('從頁面開'),
+  sheet('從底部面板裡開'),
+  readerSheet('從閱讀器面板裡開'),
+  readerMenu('從閱讀選單開');
+
+  const _Host(this.label);
+
+  final String label;
+
+  /// 先打開一個面板，再從面板裡打開。
+  bool get nested => this == sheet || this == readerSheet;
 }
