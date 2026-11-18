@@ -32,12 +32,12 @@ void main() {
     test('插圖記號不會遮住行尾開引號或行首收引號', () {
       const illustration = '\uE000';
       expect(
-        SemanticParagraphFormatter.repair('他說：「' + illustration + '\n你好。」'),
-        '他說：「' + illustration + '你好。」',
+        SemanticParagraphFormatter.repair('他說：「${illustration}\n你好。」'),
+        '他說：「${illustration}你好。」',
       );
       expect(
-        SemanticParagraphFormatter.repair('「請進。\n' + illustration + '」她回答。'),
-        '「請進。' + illustration + '」她回答。',
+        SemanticParagraphFormatter.repair('「請進。\n${illustration}」她回答。'),
+        '「請進。${illustration}」她回答。',
       );
     });
 
@@ -74,7 +74,7 @@ void main() {
         '「新的對話。」',
       ];
       final output = SemanticParagraphFormatter.repair(lines.join('\n'));
-      expect(output.startsWith(lines.first + '\n'), isTrue);
+      expect(output.startsWith('${lines.first}\n'), isTrue);
       expect(output.endsWith('\n「新的對話。」'), isTrue);
     });
 
