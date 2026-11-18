@@ -171,6 +171,65 @@ void main() {
     expect(run.status.text, '正在結束…');
   });
 
+  test('a single repair notification says what is being done, not which '
+      'round', () async {
+    final checking = Completer<void>();
+    final answering = Completer<void>();
+    final session = AiRepairSession(
+      source: _s('one'),
+      service: _service,
+      check: (source, _) async {
+        await checking.future;
+        return SourceCheckIsolateResult(
+          stage: 'content',
+          message: '正文為空',
+          isHealthy: false,
+          updatedSourceJson: source.toJson(),
+          logs: const [],
+        );
+      },
+      probe: (_, _, {start}) async =>
+          const SourceProbeReport(logs: [], requests: []),
+      ask: (_, _) async {
+        await answering.future;
+        return fakeAiReply(
+          jsonEncode({
+            'action': 'give_up',
+            'why': 'site_gone',
+            'reason': '網站關了',
+          }),
+        );
+      },
+      secrets: (_) async => const {},
+    );
+    final run = SingleRepairRun(
+      session,
+      progress: _MemoryFile(),
+      work: work,
+      navigator: () => null,
+    );
+    expect(run.status.title, 'AI 修復 · one');
+    expect(run.status.text, '準備中…');
+
+    final done = run.run();
+    for (var i = 0; i < 20 && session.job.steps.isEmpty; i++) {
+      await _flush();
+    }
+    expect(run.status.text, '校驗原本的書源');
+
+    checking.complete();
+    for (var i = 0; i < 20 && session.job.steps.length < 3; i++) {
+      await _flush();
+    }
+    expect(session.job.steps.last.title, '第 1 輪', reason: '紀錄照寫輪次');
+    expect(run.status.text, 'AI 回覆中…');
+
+    answering.complete();
+    await done;
+    run.disposeWork();
+    run.dispose();
+  });
+
   test(
     'a single repair records a confirmed unstable site as removable',
     () async {
@@ -489,6 +548,31 @@ void main() {
     await tester.runAsync(() => batch.completion);
     await tester.pump();
     expect(work.isBusy, isFalse);
+  });
+
+  testWidgets('a paused single repair brought back after the app was closed '
+      'shows the four stages, not the clipboard steps', (tester) async {
+    // 還原時只知道書源網址，工作沒有 AI 服務（按繼續時才照設定重開）。
+    final run = SingleRepairRun.paused(
+      AiRepairSession(source: _s('one'), service: null),
+      file: _MemoryFile(),
+      work: work,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: run.page(),
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.text('校驗原本的書源'), findsOneWidget);
+    expect(find.text('AI 修改規則'), findsOneWidget);
+    expect(find.text('校驗修好的書源'), findsOneWidget);
+    expect(find.text('已暫停'), findsOneWidget);
+    expect(find.text('繼續'), findsOneWidget);
+    run.disposeWork();
+    run.dispose();
   });
 
   group('pausing a repair', () {

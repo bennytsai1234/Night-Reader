@@ -140,11 +140,9 @@ class AiFindRun extends RepairRun {
         pausing: !_session.isStopped,
       );
     }
-    final round = _session.rounds.lastOrNull;
-    final detail = (round?.detail ?? '').trim();
     return BackgroundWorkStatus(
       title: 'AI 找書',
-      text: detail.isNotEmpty ? detail : round?.title ?? '準備中…',
+      text: _session.now,
       pausable: true,
     );
   }
