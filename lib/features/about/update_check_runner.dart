@@ -6,7 +6,7 @@ import 'package:night_reader/core/services/app_update_installer.dart';
 import 'package:night_reader/core/services/update_preferences.dart';
 import 'package:night_reader/core/services/update_service.dart';
 import 'package:night_reader/features/about/update_dialog.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/widgets/popup_routes.dart';
 
 /// 自動 / 手動 更新檢查的入口。集中處理「呼叫 service → 看忽略與稍後提醒 →
 /// 視網路先下載 → 顯示 Dialog → 寫忽略或稍後提醒」。
@@ -127,10 +127,9 @@ class UpdateCheckRunner {
     if (_dialogOpen[navigator] ?? false) return null;
     _dialogOpen[navigator] = true;
     try {
-      return await showDialog<UpdateDialogResult>(
+      return await showAppDialog<UpdateDialogResult>(
         context: context,
         barrierDismissible: false,
-        barrierColor: AppChrome.of(context).barrier,
         builder: (_) => UpdateDialog(
           info: info,
           installer: _installer,
