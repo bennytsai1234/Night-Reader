@@ -103,14 +103,16 @@ void main() {
     expect(find.text('校驗修好的書源'), findsOneWidget);
     expect(find.text('1 步'), findsOneWidget);
     expect(find.text('AI 改了正文，交出'), findsOneWidget);
-    await tester.tap(find.text('經過'));
-    await tester.pump();
-    expect(find.text('AI 改了正文，交出'), findsNWidgets(2));
     expect(find.text('修好了'), findsOneWidget);
     expect(find.text('AI：正文在 div.txt'), findsOneWidget);
     expect(find.text('還原改前的版本'), findsOneWidget);
     expect(find.text('完成'), findsOneWidget);
     expect(find.text('結束'), findsNothing);
+
+    // 展開後一步一列，清單變長、下面的結果捲出畫面，所以結果先看。
+    await tester.tap(find.text('經過'));
+    await tester.pump();
+    expect(find.text('AI 改了正文，交出'), findsNWidgets(2));
   });
 
   testWidgets('the clipboard way waits for a paste on the same page', (
