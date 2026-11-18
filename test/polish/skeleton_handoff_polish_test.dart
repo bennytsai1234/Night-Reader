@@ -9,8 +9,8 @@
 //
 // 結果印在輸出裡（`POLISH` 開頭的行），截圖與資料寫在 [polishDir]
 // （系統暫存區，不在 repo 裡），`tool/polish_viewer/` 拿它做成總覽頁。這組測試
-// 帶 `polish` 標籤，`dart_test.yaml` 讓一般的測試跳過它；CI 另開一個工作照
-// `POLISH_GATE=1` 跑。有情境對不上、沒看到骨架或操作失敗就失敗，規格說好的
+// 帶 `polish` 標籤，`dart_test.yaml` 讓一般的測試跳過它；CI 另開三台照
+// `POLISH_GATE=1` 與 `POLISH_SHARD` 分著跑。有情境對不上、沒看到骨架或操作失敗就失敗，規格說好的
 // 例外標在情境的 `exempt`。
 //
 // 每一次執行前都把書的閱讀位置、偏好與快取重設成同一個起點，所以淺色、深色
