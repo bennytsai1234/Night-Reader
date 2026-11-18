@@ -452,9 +452,6 @@ class PanelButtons extends InheritedWidget {
   static const double size = 32.0;
   static const double iconSize = 18.0;
 
-  // PROTOTYPE：候選圖用的旋鈕，使用者選定後拿掉。
-  static bool debugShadow = false;
-
   static bool of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PanelButtons>() != null;
 
@@ -528,7 +525,7 @@ class GlassIconButton extends StatelessWidget {
             shape: BoxShape.circle,
             tint: tint ?? (inPanel ? PanelButtons.tintOf(context) : null),
             shadow: false,
-            floating: floating && (!inPanel || PanelButtons.debugShadow),
+            floating: floating && !inPanel,
             blur: blur && !inPanel,
             child: Center(
               child: switch (label) {
@@ -602,7 +599,7 @@ class GlassTextButton extends StatelessWidget {
               borderRadius: AppRadius.pillShape,
               tint: inPanel ? PanelButtons.tintOf(context) : null,
               shadow: false,
-              floating: !inPanel || PanelButtons.debugShadow,
+              floating: !inPanel,
               blur: blur && !inPanel,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),

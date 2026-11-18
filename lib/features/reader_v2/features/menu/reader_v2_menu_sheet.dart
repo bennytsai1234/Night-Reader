@@ -68,7 +68,7 @@ class ReaderV2MenuSheet {
           listenable: settings,
           builder: (context, _) {
             final theme = ReaderV2MenuStyle.of(context)
-                .toSheetTheme(Theme.of(context));
+                .toSheetTheme(Theme.of(context), cards: true);
             return Align(
               alignment: Alignment.bottomCenter,
               heightFactor: 1,
