@@ -319,12 +319,22 @@ class _SessionHandler extends BaseAudioHandler {
     duration: item.duration,
   );
 
+  /// 暫停中通知上的播放鈕。audio_service 的 [MediaControl.play] 在通知上送
+  /// KEYCODE_MUTE，Android 14 起媒體工作階段不收這個鍵，照通知按鈕送鍵的系統
+  /// （例如 vivo）按了沒反應；改送播放／暫停鍵，交回來是 [MediaButton.media]，
+  /// 暫停中就是播放。
+  static const _resume = MediaControl(
+    androidIcon: 'drawable/audio_service_play_arrow',
+    label: 'Play',
+    action: MediaAction.playPause,
+  );
+
   static PlaybackState _stateOf(_Shown shown) {
     final controls = <MediaControl>[
       if (shown.controls.contains(PlaybackControl.skipToPrevious))
         MediaControl.skipToPrevious,
       if (shown.controls.contains(PlaybackControl.rewind)) MediaControl.rewind,
-      shown.playing ? MediaControl.pause : MediaControl.play,
+      shown.playing ? MediaControl.pause : _resume,
       if (shown.controls.contains(PlaybackControl.fastForward))
         MediaControl.fastForward,
       if (shown.controls.contains(PlaybackControl.skipToNext))
@@ -346,6 +356,9 @@ class _SessionHandler extends BaseAudioHandler {
       androidCompactActionIndices: compact,
       systemActions: {
         MediaAction.playPause,
+        // iPhone 照動作開放鎖定畫面的播放指令；播放鈕改送播放／暫停後，
+        // 暫停中的播放從這裡給。
+        if (!shown.playing) MediaAction.play,
         if (shown.controls.contains(PlaybackControl.seek)) MediaAction.seek,
       },
       playing: shown.playing,
