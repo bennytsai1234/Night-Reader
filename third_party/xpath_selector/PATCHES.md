@@ -27,6 +27,10 @@
   queried node, the same as `/div[2]` from that node. Upstream threw `is not a
   valid xpath query string`. Later steps still need their `/`, and a path
   starting with `@`, `.` or a function (`text()`) is still rejected.
+- `lib/src/parser.dart` `splitXPathUnion`, used by `parseSelectGroup` and
+  exported from `xpath_selector.dart`: a union is split on its top-level `|`
+  only. Upstream split on every `|`, so a value such as
+  `a[@data-ref='v1|part']` was cut into two broken paths.
 - `pubspec.yaml`: version `3.0.2+nightreader.1`, `publish_to: none`, no
   `dev_dependencies`.
 - `analysis_options.yaml` includes the app's rules and turns off
