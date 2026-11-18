@@ -141,7 +141,11 @@ void main() {
     expect(provider.chapterCountOf(fast()), 10);
 
     chapters['https://fast.example'] = 12;
-    await provider.refreshSearch();
+    final refreshing = provider.refreshSearch();
+    // 按下當下就清空、標成搜尋中，上一輪的列不能再點。
+    expect(provider.filteredResults, isEmpty);
+    expect(provider.isSearching, isTrue);
+    await refreshing;
 
     expect(provider.chapterCountOf(fast()), 12);
     expect(provider.tocOf(fast())?.chapters, hasLength(12));

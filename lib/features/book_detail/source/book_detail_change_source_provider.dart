@@ -98,6 +98,11 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   Future<void> refreshSearch() {
     _tocs.clear();
     _keptChapters = 0;
+    // 按下當下就清空：上一輪的列不再能點，也不閃出「未找到其他來源」。
+    allResults = [];
+    _rebuildFilteredResults();
+    isSearching = true;
+    _notifySafely();
     return startSearch();
   }
 

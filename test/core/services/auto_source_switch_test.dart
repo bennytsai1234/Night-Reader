@@ -312,7 +312,11 @@ void main() {
     sites.gate = Completer<void>();
 
     await db.bookSourceDao.deleteByUrl('old');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // 等它照「第6章」開始搜了才改，測到的是搜完重對的那一段。
+    for (var i = 0; i < 500 && sites.searches.isEmpty; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+    expect(sites.searches, isNotEmpty);
     final book = (await db.bookDao.getByUrl('old/夜雨'))!;
     await db.bookDao.upsert(book.copyWith(durChapterTitle: '番外'));
     sites.gate!.complete();
