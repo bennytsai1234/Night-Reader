@@ -2,6 +2,9 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/login_check.dart';
@@ -18,7 +21,11 @@ import 'package:night_reader/core/services/source_interaction.dart';
 final class CompleteContentFetcher {
   CompleteContentFetcher._();
 
-  static const int _maxPages = 100;
+  /// 照 Legado：下一頁網址出現過、或就是下一章（[_storedNextChapterUrl]）
+  /// 就停。Legado 沒有頁數上限；夜讀的書架自動下載沒人看著，規則一直給新
+  /// 網址時會抓不完，留一個正常章節碰不到的上限（2026-11-13 环安小说网一章
+  /// 110 到 121 頁，ADR 0072）。
+  static const int _maxPages = 1000;
   static const int _defaultPageConcurrency = 4;
 
   static Future<String> fetch(
@@ -29,6 +36,9 @@ final class CompleteContentFetcher {
     int? pageConcurrency,
     CancelToken? cancelToken,
   }) async {
+    final stopAt = (nextChapterUrl == null || nextChapterUrl.isEmpty)
+        ? await _storedNextChapterUrl(book, chapter)
+        : nextChapterUrl;
     final contentParts = <String>[];
     final queuedUrls = <String>{chapter.url};
     final pendingUrls = ListQueue<String>()..add(chapter.url);
@@ -59,7 +69,7 @@ final class CompleteContentFetcher {
             book,
             chapter,
             url,
-            nextChapterUrl: nextChapterUrl,
+            nextChapterUrl: stopAt,
             cancelToken: cancelToken,
           ),
         ),
@@ -88,6 +98,28 @@ final class CompleteContentFetcher {
     );
     LoginWall.checkContent(null, content);
     return content;
+  }
+
+  /// 沒給下一章網址時（書架自動下載、漫畫、有聲書），同 Legado `BookContent`
+  /// 查這本書存著的目錄：下一章，沒有就第一章。「下一頁」規則抓到下一章的
+  /// 連結時靠它停在本章，不把後面整本接進來。不在書架上的書沒有存目錄。
+  static Future<String?> _storedNextChapterUrl(
+    Book book,
+    BookChapter chapter,
+  ) async {
+    if (!getIt.isRegistered<ChapterDao>()) return null;
+    final chapters = getIt<ChapterDao>();
+    try {
+      return (await chapters.getChapter(
+            book.bookUrl,
+            chapter.index + 1,
+          ))?.url ??
+          (await chapters.getChapter(book.bookUrl, 0))?.url;
+    } on Object catch (error) {
+      // 停點只是多一道擋：讀不到目錄就照沒有停點抓，不讓這一章因此失敗。
+      AppLog.w('正文：讀不到存著的目錄當停點：$error');
+      return null;
+    }
   }
 
   /// 抓一頁正文。這一頁的書源程式要使用者驗證而被擋下、這一頁因此失敗或
