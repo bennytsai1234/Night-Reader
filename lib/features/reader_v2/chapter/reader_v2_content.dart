@@ -53,11 +53,12 @@ class ReaderV2Content {
     required int chapterIndex,
     required String title,
     required String rawText,
+    bool repairBrokenLines = true,
     List<ReaderV2IllustrationSlot?> illustrationSlots =
         const <ReaderV2IllustrationSlot?>[],
   }) {
     final placed = _placeIllustrations(
-      paragraphsOf(rawText),
+      paragraphsOf(rawText, repairBrokenLines: repairBrokenLines),
       illustrationSlots.length,
     );
     final paragraphs = placed.paragraphs;
@@ -191,9 +192,12 @@ class ReaderV2Content {
   /// 原文切成的段落，和 [ReaderV2Content.fromRaw] 的 [paragraphs] 相同。
   /// 只要段落時用這個：[ReaderV2Content.fromRaw] 還會對整章算雜湊，那只在
   /// 背景做（`reader_v2_content_transformer.dart`）。
-  static List<String> paragraphsOf(String rawText) {
+  static List<String> paragraphsOf(
+    String rawText, {
+    bool repairBrokenLines = true,
+  }) {
     final normalized = normalizeRawText(
-      SemanticParagraphFormatter.repair(rawText),
+      repairBrokenLines ? SemanticParagraphFormatter.repair(rawText) : rawText,
     );
     if (normalized.isEmpty) return const <String>[];
     return normalized
