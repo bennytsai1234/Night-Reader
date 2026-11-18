@@ -34,25 +34,18 @@ class BookListParser {
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
   }) async {
-    // 1. 偵測 bookUrlPattern (對標 Android BookList.analyzeBookList)
-    if (isSearch && source.bookUrlPattern?.isNotEmpty == true) {
-      try {
-        // Legado `baseUrl.matches(it.toRegex())`：整個網址都符合才算詳情頁。
-        if (javaRegExp(
-          source.bookUrlPattern!,
-          wholeInput: true,
-        ).hasMatch(baseUrl)) {
-          reportSourceProgress(const SourceDebugNote('≡連結為詳情頁'));
-          final searchBook = await _getInfoItem(
-            source: source,
-            body: body,
-            baseUrl: baseUrl,
-          );
-          if (searchBook != null) {
-            return [searchBook];
-          }
-        }
-      } catch (_) {}
+    // 1. 搜尋網址就是詳情頁（bookUrlPattern）：照 Legado BookList.kt 只照
+    // 詳情頁解析，結果或錯誤就是這次的搜尋結果，不回頭當書單解析（詳情頁
+    // 的規則壞了要報出來，不是變成「沒有書」）。
+    if (isSearch && _isDetailPage(source.bookUrlPattern, baseUrl)) {
+      reportSourceProgress(const SourceDebugNote('≡連結為詳情頁'));
+      final searchBook = await _getInfoItem(
+        source: source,
+        body: body,
+        baseUrl: baseUrl,
+        filter: filter,
+      );
+      return [?searchBook];
     }
 
     final rule = AnalyzeRule(source: source).setContent(body, baseUrl: baseUrl);
@@ -85,11 +78,9 @@ class BookListParser {
           source: source,
           body: body,
           baseUrl: baseUrl,
+          filter: filter,
         );
-        if (searchBook != null) {
-          return [searchBook];
-        }
-        return [];
+        return [?searchBook];
       }
 
       final books = <SearchBook>[];
@@ -172,10 +163,25 @@ class BookListParser {
     }
   }
 
+  /// Legado `baseUrl.matches(it.toRegex())`：整個網址都符合才算詳情頁。
+  /// 寫錯的正規表示式當成不是詳情頁：Java 認得、夜讀的轉換認不得的寫法不
+  /// 讓整個搜尋失敗。
+  static bool _isDetailPage(String? pattern, String baseUrl) {
+    if (pattern == null || pattern.isEmpty) return false;
+    try {
+      return javaRegExp(pattern, wholeInput: true).hasMatch(baseUrl);
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// 照詳情頁解析這一頁；書名作者不符 [filter]（精準搜尋、換源）或沒有書名
+  /// 時是 null（Legado `getInfoItem`）。
   static Future<SearchBook?> _getInfoItem({
     required BookSource source,
     required String body,
     required String baseUrl,
+    required bool Function(String name, String author)? filter,
   }) async {
     var book = Book(
       bookUrl: baseUrl,
@@ -192,6 +198,7 @@ class BookListParser {
       baseUrl: baseUrl,
     );
 
+    if (filter?.call(book.name, book.author) == false) return null;
     if (book.name.isNotEmpty) {
       return book.toSearchBook();
     }
