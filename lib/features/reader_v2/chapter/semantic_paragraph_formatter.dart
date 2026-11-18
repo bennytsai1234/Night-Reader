@@ -9,14 +9,10 @@
 /// deletes line breaks/indentation at joined boundaries; it never invents
 /// punctuation or changes a word.
 abstract final class SemanticParagraphFormatter {
-  static const String _noParagraphStart =
-      '，。、；：！？」』）】》〉〕｝”’';
-  static const String _noParagraphEnd =
-      '「『（【《〈〔｛“‘';
-  static const String _paragraphFinal =
-      '。！？!?」』”’';
-  static const String _dialogueStart =
-      '「『“‘';
+  static const String _noParagraphStart = '，。、；：！？」』）】》〉〕｝”’';
+  static const String _noParagraphEnd = '「『（【《〈〔｛“‘';
+  static const String _paragraphFinal = '。！？!?」』”’';
+  static const String _dialogueStart = '「『“‘';
 
   static String repair(String content) {
     if (content.isEmpty) return content;
@@ -85,7 +81,6 @@ abstract final class SemanticParagraphFormatter {
     }
     return true;
   }
-
 
   /// Inserted illustration markers are private-use code units. They are
   /// content anchors, not punctuation, so skip them only when deciding
