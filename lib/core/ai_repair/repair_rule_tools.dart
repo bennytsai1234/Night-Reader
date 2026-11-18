@@ -96,6 +96,7 @@ Future<String> _inWorker(
       cancelToken: cancelToken,
     );
   } catch (error) {
+    if (cancelToken?.isCancelled ?? false) return '已停止';
     return '做不了：$error';
   }
   try {

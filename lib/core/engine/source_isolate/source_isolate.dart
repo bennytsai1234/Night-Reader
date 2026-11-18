@@ -273,6 +273,10 @@ final class SourceWorker {
   /// isolate 結束（當掉或被結束）時呼叫一次。
   void Function()? _onExit;
 
+  /// 臨時 worker 被結束後 [stuckWorkerGrace] 還沒真的結束時呼叫（讓出名額）。
+  void Function()? _onStuck;
+  Timer? _stuck;
+
   /// 這個 worker 借走、還沒交回的限流紀錄；結束 worker 時一併交回，否則
   /// 固定間隔限流的書源之後的請求會一直排隊。
   final Set<int> _tickets = {};
@@ -310,10 +314,17 @@ final class SourceWorker {
   /// 同時存在的臨時 worker（[spawn]）最多幾條。算到 isolate 真的結束為止，
   /// 不是到 [kill]：被結束時卡在規則 JS 裡的 worker 要等那段跑完才結束，
   /// 只算還在做事的話，一批校驗裡好幾個卡住的書源會讓 isolate 越開越多
-  /// （CPU、耗電、記憶體）。校驗同時 8 個，多留 4 條給同時在用的 AI 修書源
-  /// 與登入。
+  /// （CPU、耗電、記憶體）。校驗同時 8 個；修復異常書源的網站檢查、AI
+  /// 修書源的工具、登入同時用時排隊。
   @visibleForTesting
   static int maxTemporaryWorkers = 12;
+
+  /// 被結束的臨時 worker 最多佔名額多久。規則 JS 停不下來時（iOS 的
+  /// JavaScriptCore 不能中途停；卡在 Dart 的正規表示式裡也停不了）它永遠
+  /// 不結束，一直佔著的話，累積到上限後校驗、AI 修書源、登入全部停住、沒有
+  /// 提示；到時就記下來、讓出名額，那條 isolate 照樣留著。
+  @visibleForTesting
+  static Duration stuckWorkerGrace = const Duration(seconds: 60);
 
   /// 開了、還沒真的結束的臨時 worker 數。
   static int _temporaryAlive = 0;
@@ -360,6 +371,13 @@ final class SourceWorker {
     CancelToken? cancelToken,
   }) async {
     if (temporary) await _takePlace(cancelToken);
+    var holdsPlace = temporary;
+    void givePlaceBack() {
+      if (!holdsPlace) return;
+      holdsPlace = false;
+      _releasePlace();
+    }
+
     final inbox = ReceivePort('$debugName main');
     final errors = ReceivePort('$debugName errors');
     final exit = ReceivePort('$debugName exit');
@@ -373,11 +391,12 @@ final class SourceWorker {
       }
       channel?.receive(message);
     });
-    final interrupt = role == _Role.source && JsInterruptFlag.supported
-        ? JsInterruptFlag()
-        : null;
+    JsInterruptFlag? interrupt;
     final Isolate isolate;
     try {
+      interrupt = role == _Role.source && JsInterruptFlag.supported
+          ? JsInterruptFlag()
+          : null;
       isolate = await Isolate.spawn(
         _main,
         inbox.sendPort,
@@ -393,16 +412,38 @@ final class SourceWorker {
       errors.close();
       exit.close();
       interrupt?.free();
-      if (temporary) _releasePlace();
+      givePlaceBack();
       rethrow;
     }
+    SourceWorker? created;
+    var exitedEarly = false;
+    // 開好之前就結束的（送出連線前當掉）也要還名額、釋放旗標。
+    exit.listen((_) {
+      exit.close();
+      final worker = created;
+      if (worker == null) {
+        exitedEarly = true;
+        inbox.close();
+        errors.close();
+        remote.future.ignore();
+        if (!remote.isCompleted) {
+          remote.completeError(StateError('$debugName 開不起來'));
+        }
+      } else {
+        worker.kill(StateError('$debugName 已結束'));
+        worker._stuck?.cancel();
+      }
+      // isolate 已經不在了，沒有人會再讀它。
+      interrupt?.free();
+      givePlaceBack();
+    });
     late final SourceWorker worker;
     channel = IsolateChannel(
       await remote.future,
       onRequest: (request) => _answerWorker(worker, request),
       onNotice: (notice) => _onWorkerNotice(worker, notice),
     );
-    worker = SourceWorker._(
+    worker = created = SourceWorker._(
       isolate,
       channel,
       inbox,
@@ -410,13 +451,19 @@ final class SourceWorker {
       Mailbox(),
       interrupt,
     );
-    exit.listen((_) {
-      exit.close();
-      worker.kill(StateError('$debugName 已結束'));
-      // isolate 已經不在了，沒有人會再讀它。
-      interrupt?.free();
-      if (temporary) _releasePlace();
-    });
+    if (exitedEarly) {
+      worker.kill(StateError('$debugName 開不起來'));
+      throw StateError('$debugName 開不起來');
+    }
+    if (temporary) {
+      worker._onStuck = () {
+        AppLog.w(
+          '$debugName 結束 ${stuckWorkerGrace.inSeconds} 秒後還沒停下'
+          '（規則卡住、停不下來），不再佔臨時 worker 的名額',
+        );
+        givePlaceBack();
+      };
+    }
     _live.add(worker);
     _installMainMirrors();
     try {
@@ -500,6 +547,9 @@ final class SourceWorker {
     if (_killed) return;
     _killed = true;
     _interrupt?.raise();
+    if (_onStuck case final onStuck?) {
+      _stuck = Timer(stuckWorkerGrace, onStuck);
+    }
     _live.remove(this);
     if (_live.isEmpty) _uninstallMainMirrors();
     for (final ticket in _tickets) {

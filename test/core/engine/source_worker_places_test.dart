@@ -11,8 +11,10 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../test_helper.dart';
@@ -27,15 +29,15 @@ Future<void> Function(CancelToken) _holdWorker(Duration busy) => (_) async {
   sleep(busy);
 };
 
-/// 寫成無窮迴圈的規則 JS；開始前告訴主 isolate。
-Future<void> _ruleJsLoopingForever(CancelToken _) async {
+/// 寫成無窮迴圈的規則 JS [loop]；開始前告訴主 isolate。
+Future<void> Function(CancelToken) _ruleJsLooping(String loop) => (_) async {
   final engine = JsEngine();
   try {
-    engine.evaluate('java.toast("worker 被佔住了"); while (true) {}');
+    engine.evaluate('java.toast("worker 被佔住了"); $loop');
   } finally {
     engine.dispose();
   }
-}
+};
 
 /// 這個平台的規則 JS 不能中途停下時，跳過的原因。
 String? _ruleJsInterruptUnavailableReason() =>
@@ -72,10 +74,12 @@ void main() {
 
   group('temporary workers that have not exited yet', () {
     late int cap;
+    late Duration grace;
     late Completer<void> held;
 
     setUp(() {
       cap = SourceWorker.maxTemporaryWorkers;
+      grace = SourceWorker.stuckWorkerGrace;
       SourceWorker.maxTemporaryWorkers = 1;
       held = Completer<void>();
       AppLog.delegate = (message, error, stackTrace, toast, isError) {
@@ -87,6 +91,7 @@ void main() {
 
     tearDown(() {
       SourceWorker.maxTemporaryWorkers = cap;
+      SourceWorker.stuckWorkerGrace = grace;
       AppLog.delegate = null;
     });
 
@@ -115,28 +120,53 @@ void main() {
       final next = await spawn();
       addTearDown(() => next.kill(StateError('測試結束')));
 
-      expect(waited.elapsed, greaterThan(const Duration(milliseconds: 1500)));
+      expect(waited.elapsed, greaterThan(const Duration(seconds: 1)));
     });
 
     // 2026-11-11 #358 改成等規則 JS 跑完才結束 worker（不然原生閃退），寫成
-    // 無窮迴圈的規則從此停不下來；現在 QuickJS 在檢查點自己停下。
+    // 無窮迴圈的規則從此停不下來；現在 QuickJS 在檢查點自己停下。包在
+    // try／catch 裡的也一樣：停下的錯誤接不住，不然外層迴圈又繞回去。
+    for (final (name, loop) in [
+      ('a plain loop', 'while (true) {}'),
+      (
+        'a loop that catches errors',
+        'for (;;) { try { while (true) {} } catch (e) {} }',
+      ),
+    ]) {
+      test(
+        'a worker stopped in a rule JS loop stops the loop and exits: $name',
+        () async {
+          final worker = await spawn();
+          unawaited(
+            worker.run(_ruleJsLooping(loop)).then((_) {}, onError: (_) {}),
+          );
+          await held.future.timeout(const Duration(seconds: 10));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+
+          worker.kill(StateError('已停止'));
+
+          // 名額只有一個：被結束的那條真的結束了才開得起來。
+          final next = await spawn().timeout(const Duration(seconds: 10));
+          next.kill(StateError('測試結束'));
+        },
+        skip: _ruleJsInterruptUnavailableReason(),
+      );
+    }
+
+    // 停不下來的（iOS 的規則 JS、卡在 Dart 正規表示式裡的）一直佔著名額的
+    // 話，累積到上限後校驗、AI 修書源、登入全部停住。
     test(
-      'a worker stopped in a rule JS loop stops the loop and exits',
+      'a stopped worker that never exits gives its place back in time',
       () async {
-        final worker = await spawn();
-        unawaited(
-          worker.run(_ruleJsLoopingForever).then((_) {}, onError: (_) {}),
-        );
-        await held.future.timeout(const Duration(seconds: 10));
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+        SourceWorker.stuckWorkerGrace = const Duration(milliseconds: 300);
+        await stopWhileHeld(const Duration(seconds: 3));
+        final waited = Stopwatch()..start();
 
-        worker.kill(StateError('已停止'));
+        final next = await spawn();
+        addTearDown(() => next.kill(StateError('測試結束')));
 
-        // 名額只有一個：被結束的那條真的結束了才開得起來。
-        final next = await spawn().timeout(const Duration(seconds: 10));
-        next.kill(StateError('測試結束'));
+        expect(waited.elapsed, lessThan(const Duration(seconds: 2)));
       },
-      skip: _ruleJsInterruptUnavailableReason(),
     );
 
     test('waiting for a place can be cancelled', () async {
@@ -148,7 +178,42 @@ void main() {
 
       cancel.cancel();
 
-      await expectLater(next, throwsA(anything));
+      await expectLater(
+        next,
+        throwsA(
+          isA<DioException>().having(
+            (e) => e.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect(waited.elapsed, lessThan(const Duration(seconds: 1)));
+      // 讓佔住的那條真的結束，不留給下一個測試。
+      await spawn().then((worker) => worker.kill(StateError('測試結束')));
+    });
+
+    // 書源校驗等名額時按停止：要立刻結束，不等到有名額才開 worker、跑完。
+    test('a source check waiting for a place stops when aborted', () async {
+      await stopWhileHeld(const Duration(seconds: 3));
+      final waited = Stopwatch()..start();
+      final handle = await spawnSourceCheck(
+        BookSource(bookSourceUrl: 'https://a.example', bookSourceName: '甲'),
+        const IsolateCheckConfig(
+          keyword: '我的',
+          timeoutSeconds: 20,
+          checkSearch: true,
+          checkDiscovery: false,
+          checkInfo: false,
+          checkCategory: false,
+          checkContent: false,
+        ),
+        const Duration(seconds: 20),
+      );
+
+      handle.abort();
+
+      expect(await handle.result, isNull);
       expect(waited.elapsed, lessThan(const Duration(seconds: 1)));
       // 讓佔住的那條真的結束，不留給下一個測試。
       await spawn().then((worker) => worker.kill(StateError('測試結束')));

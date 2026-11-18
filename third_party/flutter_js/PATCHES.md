@@ -103,7 +103,8 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
   afterwards in that isolate through QuickJS's own `JS_SetInterruptHandler`,
   replacing the bridge's time-based handler (Night Reader never sets
   `timeout`). When the flag is raised, QuickJS throws an uncatchable error at
-  its next check and returns to Dart, so even `while (true) {}` stops.
+  its next check and returns to Dart, so even `while (true) {}` stops. Once
+  raised, `evaluate` on that runtime fails at once instead of starting.
 - The handler is a Dart callback that only reads the flag; it runs on the
   isolate that is evaluating, like the existing channel callback.
 - `JsInterruptFlag.supported` is false on iOS (JavaScriptCore), when the

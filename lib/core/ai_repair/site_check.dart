@@ -189,6 +189,9 @@ Future<SiteCheck> checkSite(
       cancelToken: cancelToken,
     );
   } catch (error) {
+    if (cancelToken?.isCancelled ?? false) {
+      return const SiteCheck(SiteVerdict.unreachable, '已停止');
+    }
     return SiteCheck(SiteVerdict.alive, '檢查不了：$error');
   }
   try {

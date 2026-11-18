@@ -242,7 +242,7 @@ final void Function(
         .asFunction()
     : null;
 
-/// QuickJS 每跑一段就問一次：[flag] 指到的值不是 0 就停下來。
+/// QuickJS 每跑一段指令就問一次：[flag] 指到的值不是 0 就停下來。
 int _interruptRequested(Pointer<JSRuntime> rt, Pointer<Void> flag) =>
     flag.cast<Int32>().value;
 
