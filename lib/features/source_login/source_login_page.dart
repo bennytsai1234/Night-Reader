@@ -403,8 +403,8 @@ class _SourceLoginPageState extends State<SourceLoginPage>
   Future<void> _clearLoginData() async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '清除登入資料',
-      message: '清除「${widget.source.bookSourceName}」填過的內容、登入標頭與網站的 Cookie。',
+      title: '清除「${widget.source.bookSourceName}」的登入資料？',
+      message: '填過的內容、登入標頭與網站的 Cookie 都會清掉，要重新登入。',
       confirmLabel: '清除',
       destructive: true,
     );

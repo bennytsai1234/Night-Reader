@@ -817,8 +817,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '還原 AI 修改前',
-      message: '「${s.bookSourceName}」換回 AI 修改之前的版本；AI 修好之後的改動也會一起換掉。',
+      title: '把「${s.bookSourceName}」換回 AI 修改前？',
+      message: 'AI 修好之後的改動也會一起換掉。',
       confirmLabel: '還原',
     );
     if (!confirmed || !mounted) return;
@@ -834,10 +834,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   ) async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '刪除書源',
-      message: '確定要刪除「${s.bookSourceName}」嗎？',
+      title: '刪除「${s.bookSourceName}」？',
       confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed || !mounted) return;
     await _runAction(() => p.deleteSource(s), errorPrefix: '刪除書源失敗');
@@ -852,10 +852,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showAppConfirm(
       context: context,
-      title: '確認刪除',
-      message: '確定要刪除選中的 $count 個書源嗎？',
-      confirmLabel: '確定刪除',
+      title: '刪除 $count 個書源？',
+      confirmLabel: '刪除',
       destructive: true,
+      irreversible: true,
     );
     if (!confirmed) return;
     try {

@@ -201,7 +201,7 @@ class _BackupSyncPageState extends State<BackupSyncPage> {
     final confirmed = await showAppConfirm(
       context: context,
       title: '還原這份備份？',
-      message: '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',
+      message: '備份裡的書架、書源與設定併進目前的資料，相同的項目以備份為準。',
       confirmLabel: '開始還原',
     );
     if (!confirmed || !mounted) return;

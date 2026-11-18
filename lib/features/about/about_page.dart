@@ -156,8 +156,8 @@ class _AboutPageState extends State<AboutPage> {
   Future<void> _clearWebData() async {
     final confirmed = await showAppConfirm(
       context: context,
-      title: '清除網頁資料',
-      message: '會清除書源的 Cookie、WebView 的 localStorage 與快取，需要登入或網頁驗證的書源要重新驗證；書籍與正文不受影響。',
+      title: '清除網頁資料？',
+      message: '要登入或網頁驗證的書源得重新驗證，書與正文不受影響。',
       confirmLabel: '清除',
       destructive: true,
     );
@@ -393,10 +393,6 @@ class _AboutPageState extends State<AboutPage> {
         '1. 本軟體僅作為開源閱讀工具使用，不提供任何書籍、書源或訂閱內容。\n\n'
         '2. 使用者應遵守當地法律法規，並對所導入的內容承擔全部法律責任。\n\n'
         '3. 對於使用本軟體產生的任何版權爭議、數據損失，開發者概不負責。',
-        style: AppTextStyles.bodySm.copyWith(
-          height: 1.55,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
       ),
       actions: const [
         AppAlertAction(label: '我已閱讀並知曉', value: null, isDefault: true),

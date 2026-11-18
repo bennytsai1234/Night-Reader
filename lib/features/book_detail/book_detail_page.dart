@@ -31,6 +31,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/clause_text.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
@@ -627,8 +628,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
     if (provider.isInBookshelf) {
       final confirmed = await showAppConfirm(
         context: context,
-        title: '移出書架',
-        message: '這本書會從書架移出，並刪除本機正文、下載任務、目錄與封面資料。',
+        title: '把《${provider.book.name}》移出書架？',
+        message: '下載的正文與封面一起刪除。',
         confirmLabel: '移出',
         destructive: true,
       );
@@ -791,13 +792,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final size = formatMegabytes(status.contentBytes);
     final confirmed = await showAppConfirm(
       context: context,
-      title: audio ? '清除已下載的音訊' : '清除已下載的正文',
+      title: audio
+          ? '清除下載的 ${status.storedChapterCount} 集音訊？'
+          : '清除下載的 ${status.storedChapterCount} 章正文？',
       message: audio
-          ? '已下載的 ${status.storedChapterCount} 集音訊（$size）會刪掉，'
-                '之後線上聽，要離線聽再自己下載。收聽進度不受影響。'
-          : '已下載的 ${status.storedChapterCount} 章正文與插圖'
-                '（$size）會刪掉，書架會自動重新下載。'
-                '閱讀進度、書籤與標註不受影響。',
+          ? '共 $size，之後線上聽，要離線聽得再下載；收聽進度留著。'
+          : '共 $size，連同插圖；書架會自動重新下載，閱讀進度、書籤與標註留著。',
       confirmLabel: '清除',
       destructive: true,
     );
@@ -972,19 +972,19 @@ class _BookDetailPageState extends State<BookDetailPage> {
           UiText(
             '狀態：${provider.sourceStatusLabel}',
             textAlign: TextAlign.center,
-            style: AppTextStyles.bodySm.copyWith(fontWeight: FontWeight.w600),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: AppSpacing.xs),
-          UiText(
+          ClauseText(
             provider.sourceStatusDescription,
             textAlign: TextAlign.center,
-            style: AppTextStyles.bodySm,
           ),
           const SizedBox(height: AppSpacing.sm),
           UiText(
             b.origin,
+            translate: false,
             textAlign: TextAlign.center,
-            style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
+            style: TextStyle(color: chrome.sectionText),
           ),
         ],
       ),

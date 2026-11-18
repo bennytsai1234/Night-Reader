@@ -520,7 +520,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('刪除'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('確定刪除'));
+    // 提示框蓋在工作列上，它的「刪除」是最後一個。
+    await tester.tap(find.text('刪除').last);
     for (var i = 0; i < 5; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 20)),

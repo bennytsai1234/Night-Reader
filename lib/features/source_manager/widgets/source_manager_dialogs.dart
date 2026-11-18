@@ -352,8 +352,8 @@ class SourceManagerDialogs {
     if (urls == null) {
       final confirmed = await showAppConfirm(
         context: context,
-        title: '清除校驗標記',
-        message: '所有書源的校驗分組與錯誤註解都會移除，全部回到可用。',
+        title: '清除所有校驗標記？',
+        message: '校驗分組與錯誤註解都會移除，所有書源回到可用。',
         confirmLabel: '清除',
         destructive: true,
       );
