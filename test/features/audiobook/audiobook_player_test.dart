@@ -821,6 +821,42 @@ void main() {
     expect(sync.commits, 0);
   });
 
+  test('回到前景接進度的途中按播放、還在等系統接手：照按的播，不接另一台', () async {
+    await player.open(book);
+    await player.pause();
+    sync
+      ..pulled = PulledProgress(
+        SyncedProgress(
+          chapterIndex: 3,
+          charOffset: 1000,
+          chapterTitle: '第 3 集',
+          time: 1,
+        ),
+        (_) async => sync.commits++,
+      )
+      ..pullGate = Completer<void>();
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+
+    playback.startGate = Completer<void>();
+    final playing = player.play();
+    await pumpEventQueue();
+    sync.pullGate!.complete();
+    await pumpEventQueue();
+    playback.startGate!.complete();
+    await playing;
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 2);
+    expect(player.playing, isTrue);
+    expect(sync.commits, 0);
+  });
+
   group('系統播放資訊', () {
     test('開始播就接手：原本在播的暫停，交出集名、副標、總長與五顆按鈕', () async {
       final other = OtherPlaybackOwner();

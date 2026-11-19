@@ -172,8 +172,11 @@ class RecordingPlayback extends SystemPlayback {
   Duration? position;
   bool? buffering;
 
+  /// 接手系統播放要等外面放行（真的第一次接手要等系統建好工作階段）。
+  Completer<void>? startGate;
+
   @override
-  Future<void> start() async {}
+  Future<void> start() async => startGate?.future;
 
   @override
   void show(
