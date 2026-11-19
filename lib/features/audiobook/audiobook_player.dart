@@ -639,16 +639,14 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     final generation = _generation;
     switch (_mode) {
       case AudiobookPlayMode.singleLoop:
-        await seek(Duration.zero);
-        await _engine?.play();
+        await _replay(generation);
       case AudiobookPlayMode.shuffle:
         final candidates = [
           for (var i = 0; i < _chapters.length; i++)
             if (!_chapters[i].isSkippedWhenReading && i != _index) i,
         ];
         if (candidates.isEmpty) {
-          await seek(Duration.zero);
-          await _engine?.play();
+          await _replay(generation);
         } else {
           final pick = candidates[_random.nextInt(candidates.length)];
           await _load(pick, start: Duration.zero, autoplay: true);
@@ -668,6 +666,15 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           await _saveProgress();
         }
     }
+  }
+
+  /// 單集循環（與隨機只剩這一集）：從頭再播這一集。回到開頭要存進度，等的
+  /// 途中按了暫停、換了集或停了就不播（[_startPlaying]）。
+  Future<void> _replay(int generation) async {
+    await seek(Duration.zero);
+    final engine = _engine;
+    if (engine == null || generation != _generation) return;
+    await _startPlaying(engine);
   }
 
   // --- 引擎事件 ---
@@ -802,11 +809,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   // --- 系統播放資訊 ---
 
   /// 開始播：先接手系統播放資訊（原本在播的朗讀收到暫停），再讓引擎播。
+  /// 叫引擎出聲都經過這裡：還要出聲、還是同一次載入、這一集開好了才播。
   Future<void> _startPlaying(AudioEngine engine) async {
     final generation = _generation;
     await _playback.start();
     // 等系統播放控制的這段時間按了暫停、換了集或停了：不出聲。
-    if (!_wantPlay || generation != _generation || _book == null) return;
+    if (!_wantPlay ||
+        generation != _generation ||
+        (_phase != AudiobookPhase.playing && _phase != AudiobookPhase.paused)) {
+      return;
+    }
     _publish(playing: true);
     await engine.play();
   }

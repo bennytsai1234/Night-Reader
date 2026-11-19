@@ -418,6 +418,41 @@ void main() {
     expect(player.playing, isTrue);
   });
 
+  test('單集循環播完、還沒重播前按了暫停：不再出聲', () async {
+    await player.open(book);
+    player.cycleMode();
+    expect(player.mode, AudiobookPlayMode.singleLoop);
+    engine.finish();
+    await player.pause();
+    await pumpEventQueue();
+
+    expect(engine.playing, isFalse);
+    expect(player.playing, isFalse);
+  });
+
+  test('隨機播放只剩這一集時播完、還沒重播前按了暫停：不再出聲', () async {
+    await ChapterDao(db).insertChapters([
+      for (final i in [1, 3])
+        BookChapter(
+          url: 'https://audio.test/ep$i',
+          title: '第 $i 集',
+          bookUrl: book.bookUrl,
+          index: i,
+          isVip: true,
+        ),
+    ]);
+    await player.open(book);
+    while (player.mode != AudiobookPlayMode.shuffle) {
+      player.cycleMode();
+    }
+    engine.finish();
+    await player.pause();
+    await pumpEventQueue();
+
+    expect(engine.playing, isFalse);
+    expect(player.playing, isFalse);
+  });
+
   test('列表循環在最後一集之後回到第一集，跳過分卷標題', () async {
     await player.open(book, chapterIndex: 3);
     player
