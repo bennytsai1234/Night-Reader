@@ -570,14 +570,27 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   Future<void> seek(Duration to) async {
     _commands++;
     final engine = _engine;
-    if (engine == null || _book == null) return;
+    if (engine == null) return;
+    switch (_phase) {
+      // 還沒有開好的一集：引擎裡是上一集，拖了會把位置記到新的一集上。
+      case AudiobookPhase.idle ||
+          AudiobookPhase.opening ||
+          AudiobookPhase.openFailed ||
+          AudiobookPhase.loading:
+        return;
+      // 播完後拖回去：停在拖到的地方，按播放從這裡接著播，不再從開頭；引擎
+      // 還沒拖好就按播放也一樣。
+      case AudiobookPhase.ended:
+        _moveTo(AudiobookPhase.paused);
+      case AudiobookPhase.playing ||
+          AudiobookPhase.paused ||
+          AudiobookPhase.failed:
+    }
     final total = _duration;
     var target = to < Duration.zero ? Duration.zero : to;
     if (total != null && target > total) target = total;
     position.value = target;
     await engine.seek(target);
-    // 播完後拖回去：停在拖到的地方，按播放從這裡接著播，不再從開頭。
-    if (_phase == AudiobookPhase.ended) _moveTo(AudiobookPhase.paused);
     _publish();
     await _saveProgress();
   }

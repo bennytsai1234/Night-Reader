@@ -531,6 +531,40 @@ void main() {
     expect(player.playing, isTrue);
   });
 
+  test('最後一集播完後拖回去、引擎還沒拖好就按播放：不從開頭重播', () async {
+    await player.open(book, chapterIndex: 3);
+    engine.finish();
+    await pumpEventQueue();
+    engine.seekGate = Completer<void>();
+    final seeking = player.seek(const Duration(minutes: 5));
+    await pumpEventQueue();
+    final playing = player.play();
+    engine.seekGate!.complete();
+    await seeking;
+    await playing;
+
+    expect(engine.opened, hasLength(1));
+    expect(engine.position, const Duration(minutes: 5));
+    expect(player.playing, isTrue);
+  });
+
+  test('換集抓網址時拖動不算數：不把拖到的位置記到新的一集', () async {
+    await player.open(book);
+    await pumpEventQueue();
+    source.gate = Completer<void>();
+    final switching = player.playChapter(1);
+    await pumpEventQueue();
+    player.onSeek(const Duration(minutes: 7));
+    await pumpEventQueue();
+    source.gate!.complete();
+    await switching;
+    await pumpEventQueue();
+
+    expect(player.position.value, Duration.zero);
+    expect((await stored()).chapterIndex, 1);
+    expect((await stored()).charOffset, 0);
+  });
+
   test('付費的集跳過，不問書源；後面都是付費的就停在結尾（ADR 0057）', () async {
     await ChapterDao(db).insertChapters([
       BookChapter(
