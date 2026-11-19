@@ -665,3 +665,19 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 - `_SkeletonState._breathing`：減少動態的設定。
 
 **同資料夾不在這一節的**：一般換場 `skeleton_switcher.dart` 的 `_resting`、`_snapshotting`、`_reveal` 是它在開 App 進場裡等到哪一步，和進場一起收（見「進場」）；兩種換場的 `_sweep` 是這一次換場的方向，`CoverReveal._waiting` 只會從等封面變成不等，`_CoverRevealSlotState` 的 `_granted` 配 `_queuedOn` 是排隊建書卡的三個樣子（沒排、排著、放行），都只有一個布林值，不換結構。
+
+**改後**：
+
+| 改前 | 改後 |
+|---|---|
+| `_hold != null`、`_waiting` | `_Waiting`（等開始）；`_hold` 只剩聽通知的掛勾，到了呼吸的時候、階段還是等開始才從最深起 |
+| `_restFrom == null && !_still`，配 `_restarted` | `_Breathing`：從哪一輪起算（`shift`）、是不是從最深起（`fromDeepest`） |
+| `_restFrom != null && !_still` | `_Resting`：原本那口怎麼起的（一個 `_Breathing`）與從哪個相位開始收；接著呼吸就換回那個 `_Breathing` |
+| `_still`（配 `_restFrom != null`） | `_Still` |
+| 跟著共用呼吸的骨架抄六個欄位 | 抄計時的輪數與 `_stage` 兩個 |
+| 漸層快取比 `_shift`、`_restFrom`、`_restarted` | 比 `_stage` 是不是同一個（每個階段建好就不改） |
+| `_start`、`gradient`、`isBreathing` 各自拼 `_hold`、`_waiting`、`_still` | 都看「正在呼吸或收住中」（`_moving`） |
+
+`_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 與共用呼吸的計數照舊（理由見上）。拿掉 `_restarted`、`_restFrom`、`_still`、`_waiting` 與三個快取欄位；對外的 `SharedSkeletonBreath`、`SkeletonRest`、`SkeletonPhase` 與 `Skeleton` 不變，閱讀器的紙照舊。
+
+讀者看不到、碰不到的兩處跟著階段表定：開 App 的骨架在收住途中才掛上進場時，原本計時器被停住、收住永遠等不完，現在照樣收完；還沒到呼吸的時候、已經收住了，到了呼吸的時候原本會多通知一次重畫（深淺不變），現在不通知。
