@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 
 /// AI 找書的工具實際去拿的東西（ADR 0060）：搜尋、詳情、正文、發現頁與書架。

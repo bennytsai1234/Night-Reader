@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:url_launcher/url_launcher.dart';

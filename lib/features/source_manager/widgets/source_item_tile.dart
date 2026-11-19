@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
-import 'package:night_reader/core/models/book_source_part.dart';
-import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
 
 import '../source_manager_provider.dart';
 
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 編輯模式左側勾選圈佔用的寬度（圈 22 + 間距）。
 const double _kCheckSlotWidth = 22 + AppGrouped.iconGap;
 
 /// 書源列和載入骨架共用同一套功能標籤，數量及「停發」寬度不可猜。
-List<String> sourceFunctionTags(BookSourcePart source) => [
+List<String> sourceFunctionTags(BookSource source) => [
   if (source.hasSearchUrl) '搜',
   if (source.hasExploreUrl) source.enabledExplore ? '發' : '停發',
   if (source.hasBookInfoRule) '詳',
@@ -32,7 +31,7 @@ List<String> sourceFunctionTags(BookSourcePart source) => [
 /// 書源名稱旁的分組膠囊，書源列與骨架共用：分組以逗號相接。書源有狀態標籤時，
 /// 校驗寫進分組的結果標記（「異常」「搜尋失效」……）不列，由狀態標籤顯示一次；
 /// 沒有狀態標籤時（例如只有「異常」）照列，提示才不會整個不見。
-String? sourceGroupLabel(BookSourcePart source) => groupLabelOf(
+String? sourceGroupLabel(BookSource source) => groupLabelOf(
   source.bookSourceGroup,
   hasStatus: source.runtimeHealth.category != SourceHealthCategory.healthy,
 );
@@ -45,7 +44,7 @@ String? groupLabelOf(String? group, {required bool hasStatus}) {
 }
 
 /// 書源列與骨架共用的錯誤提示，遇到長訊息要留出相同的高度。
-String? sourceErrorLine(BookSourcePart source) {
+String? sourceErrorLine(BookSource source) {
   final comment = source.bookSourceComment?.trim();
   if (comment == null || comment.isEmpty) return null;
   for (final line in comment.split('\n')) {
@@ -60,7 +59,7 @@ String? sourceErrorLine(BookSourcePart source) {
 /// 書源清單的一列（Telegram 聊天列表式）：左滑置頂／刪除、右滑編輯，
 /// 長按浮起預覽與動作選單；編輯模式左側出現勾選圈，右側換成排序把手。
 class SourceItemTile extends StatelessWidget {
-  final BookSourcePart source;
+  final BookSource source;
   final SourceManagerProvider provider;
   final bool isSelected;
 
@@ -257,7 +256,7 @@ class _SourceRowContent extends StatelessWidget {
     required this.trailing,
   });
 
-  final BookSourcePart source;
+  final BookSource source;
   final SourceManagerProvider provider;
   final bool isSelected;
   final bool editing;

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 
-import '../book.dart';
+import 'book.dart';
 import 'chapter_alignment.dart';
 
 /// Book 業務邏輯擴展

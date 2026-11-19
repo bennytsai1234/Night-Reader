@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/source_manager/widgets/source_item_tile.dart';

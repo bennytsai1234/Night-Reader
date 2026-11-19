@@ -9,7 +9,7 @@ import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/source_check/source_check_isolate.dart';
 import 'package:night_reader/core/ai_repair/source_probe.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/background_work/background_work.dart';
 import 'package:night_reader/core/background_work/paused_work_file.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';

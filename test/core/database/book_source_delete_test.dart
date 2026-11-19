@@ -4,7 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
 

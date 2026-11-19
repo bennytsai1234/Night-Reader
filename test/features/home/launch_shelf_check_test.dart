@@ -12,7 +12,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/main.dart';

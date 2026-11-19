@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:provider/provider.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 import '../../change_cover_provider.dart';
 
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 class CoverHeader extends StatelessWidget {
   final String bookName;

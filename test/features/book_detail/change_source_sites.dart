@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 
 /// 換源清單的假網站共用的詳情與目錄：換源清單要抓到目錄才列出一本書。

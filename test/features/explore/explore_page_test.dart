@@ -1,20 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/explore/explore_provider.dart';
 import 'package:night_reader/features/explore/widgets/explore_skeletons.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

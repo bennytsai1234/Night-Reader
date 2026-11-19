@@ -5,7 +5,7 @@ import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 
 /// 把一段要讀整個檔的工作交給誰跑：預設背景 isolate；元件測試的假時間等不到

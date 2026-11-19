@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/features/search/widgets/search_result_item.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';

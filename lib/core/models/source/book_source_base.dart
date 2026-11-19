@@ -1,4 +1,4 @@
-import '../base_source.dart';
+import 'base_source.dart';
 import 'book_source_rules.dart';
 
 /// BookSource 的基礎屬性與欄位定義

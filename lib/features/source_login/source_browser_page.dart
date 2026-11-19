@@ -10,8 +10,8 @@ import 'package:night_reader/core/utils/network_utils.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// 閱讀器的「前往驗證」：開書源 [sourceUrl] 要使用者操作的那一頁

@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../storage/app_storage_paths.dart';
 import '../network/network_service.dart';
-import 'update_service.dart';
+import 'app_update_service.dart';
 
 /// 下載新版 APK 並交給系統安裝程式。
 ///

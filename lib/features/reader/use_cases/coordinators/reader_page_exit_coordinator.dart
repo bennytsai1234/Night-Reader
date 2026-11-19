@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 
 /// 「加入書架？」的選擇；沒選（按取消、點框外、返回鍵）是 null，留在閱讀器。
 enum ReaderExitChoice { addToBookshelf, leave }

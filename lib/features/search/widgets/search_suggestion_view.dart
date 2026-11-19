@@ -3,7 +3,7 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 import '../search_provider.dart';
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/sync/local_book_sync.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/features/settings/sync_status_text.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 
 /// 「同步本地書」（ADR 0039）：先比對出要做的事（比對時開一個進度框），
 /// 顯示要上傳、下載幾本、各多少 MB、要移出與刪掉幾本，使用者確定才開始。

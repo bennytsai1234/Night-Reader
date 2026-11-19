@@ -5,7 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 
 void main() {
   // 同一個檔案先後開兩次（建好、再照舊版本重開），是刻意的。

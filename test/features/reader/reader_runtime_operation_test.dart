@@ -6,12 +6,12 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_operation_token.dart';
@@ -940,7 +940,7 @@ void main() {
 
     final runtime = host.ensureRuntime(
       const Size(220, 180),
-      const ReaderStyle(
+      const ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1004,7 +1004,7 @@ void main() {
     });
     final runtime = host.ensureRuntime(
       const Size(220, 180),
-      const ReaderStyle(
+      const ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1085,7 +1085,7 @@ void main() {
       });
 
       const size = Size(220, 180);
-      const initialStyle = ReaderStyle(
+      const initialStyle = ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1215,7 +1215,7 @@ void main() {
       await host.settings.loadSettings();
 
       const size = Size(220, 180);
-      const style = ReaderStyle(
+      const style = ReaderStylePreferences(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,

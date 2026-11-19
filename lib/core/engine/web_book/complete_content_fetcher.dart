@@ -7,11 +7,11 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/web_book/content_parser.dart';
-import 'package:night_reader/core/engine/web_book/login_check.dart';
+import 'package:night_reader/core/engine/web_book/login_wall.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 
 /// 正文完整性優先的抓取器。

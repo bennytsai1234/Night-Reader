@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/cover_reveal.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/cover_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 
 import 'explore_book_details.dart';
 import 'explore_show_provider.dart';

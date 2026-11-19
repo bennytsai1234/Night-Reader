@@ -33,9 +33,9 @@ import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/database/dao/server_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';
@@ -50,13 +50,13 @@ import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/launch_entrance.dart';
+import 'package:night_reader/shared/widgets/skeleton/launch_entrance.dart';
 import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
-import 'package:night_reader/shared/widgets/skeleton_text.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_text.dart';
 
 import 'screenshot.dart';
 

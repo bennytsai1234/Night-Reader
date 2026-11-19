@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';

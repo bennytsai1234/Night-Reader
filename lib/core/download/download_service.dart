@@ -8,14 +8,14 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_illustration_storage.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
-import 'package:night_reader/core/source_switch/source_switch_handoff.dart';
+import 'package:night_reader/core/source_switch/source_switch_operation_lease.dart';
 
 import 'download_base.dart';
 import 'download_scheduler.dart';

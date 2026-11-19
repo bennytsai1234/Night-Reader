@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/platform/app_file_selection_service.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
@@ -24,25 +24,24 @@ import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
 
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/book_source_part.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
-import 'package:night_reader/shared/widgets/cover_reveal.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/search_field.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/skeleton/cover_reveal.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/search_field.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
 
 import 'widgets/import_preview_sheet.dart';
 import 'widgets/source_item_tile.dart';
 import '../source_login/source_login_page.dart';
 import 'widgets/source_list_skeleton.dart';
-import 'widgets/source_batch_toolbar.dart';
+import 'widgets/select_action_bar.dart';
 import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
@@ -614,7 +613,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Widget _buildItem(
     SourceManagerProvider p,
-    BookSourcePart s, {
+    BookSource s, {
     required int index,
     required bool editing,
     required bool showHostHeader,
@@ -654,7 +653,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   /// 長按書源：列浮起預覽，旁邊列出單一書源的動作。
   Future<void> _showSourceMenu(
     SourceManagerProvider p,
-    BookSourcePart s,
+    BookSource s,
     Rect sourceRect,
     Widget preview,
   ) async {
@@ -811,10 +810,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     if (mounted) await p.loadSources(showLoading: false);
   }
 
-  Future<void> _confirmAiRestore(
-    SourceManagerProvider p,
-    BookSourcePart s,
-  ) async {
+  Future<void> _confirmAiRestore(SourceManagerProvider p, BookSource s) async {
     final confirmed = await showAppConfirm(
       context: context,
       title: '把「${s.bookSourceName}」換回 AI 修改前？',
@@ -832,7 +828,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Future<void> _confirmDeleteSource(
     SourceManagerProvider p,
-    BookSourcePart s,
+    BookSource s,
   ) async {
     final confirmed = await showAppConfirm(
       context: context,

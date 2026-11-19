@@ -8,7 +8,7 @@ import '../../support/sync_store_blobs.dart';
 
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/sync/highlight_sync.dart';
 import 'package:night_reader/core/sync/sync_records.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';

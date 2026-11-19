@@ -21,10 +21,10 @@ import 'package:night_reader/core/utils/cache_manager.dart';
 import 'package:night_reader/core/chinese/chinese_utils.dart';
 import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/network/network_service.dart';
-import 'package:night_reader/core/network/rate_limiter.dart';
+import 'package:night_reader/core/network/concurrent_rate_limiter.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
-import 'package:night_reader/core/utils/source_progress.dart';
+import 'package:night_reader/core/source/source_progress.dart';
 
 import 'isolate_channel.dart';
 

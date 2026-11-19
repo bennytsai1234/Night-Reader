@@ -1,3 +1,14 @@
+/// 行高（字級的倍數）可設的範圍。
+const double kReaderMinLineHeight = 1.2;
+const double kReaderMaxLineHeight = 3.0;
+
+/// 行高限制在 [kReaderMinLineHeight]～[kReaderMaxLineHeight]；不是有限的數
+/// 時當 1.5。
+double normalizeReaderLineHeight(double value) {
+  if (!value.isFinite) return 1.5;
+  return value.clamp(kReaderMinLineHeight, kReaderMaxLineHeight).toDouble();
+}
+
 const double kReaderContentTopSafeAreaFactor = 0.75;
 const double kReaderContentTopSpacing = 4.5;
 

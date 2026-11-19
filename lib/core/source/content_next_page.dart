@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/request_log.dart';
 import 'package:night_reader/core/source/chapter_content_kind.dart';
 

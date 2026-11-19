@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
-import 'package:night_reader/shared/widgets/group_filter_bar.dart';
-import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/lists/group_filter_bar.dart';
+import 'package:night_reader/shared/widgets/lists/search_field.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 換源面板的篩選列：書源分組篩選列，下方是結果內篩選框。

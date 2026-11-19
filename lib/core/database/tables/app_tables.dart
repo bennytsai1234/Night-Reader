@@ -2,25 +2,25 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
-import '../../models/ai_find_record.dart';
-import '../../models/book.dart';
-import '../../models/bookmark.dart';
-import '../../models/chapter.dart';
-import '../../models/highlight.dart';
+import '../../models/search/ai_find_record.dart';
+import '../../models/book/book.dart';
+import '../../models/reading/bookmark.dart';
+import '../../models/book/book_chapter.dart';
+import '../../models/reading/highlight.dart';
 import '../../models/replace_rule.dart';
-import '../../models/book_source.dart';
-import '../../models/book_group.dart';
+import '../../models/source/book_source.dart';
+import '../../models/book/book_group.dart';
 import '../../models/cookie.dart';
 import '../../models/dict_rule.dart';
 import '../../models/http_tts.dart';
-import '../../models/read_record.dart';
+import '../../models/reading/read_record.dart';
 import '../../models/server.dart';
 import '../../models/txt_toc_rule.dart';
 import '../../models/cache.dart';
 import '../../models/keyboard_assist.dart';
-import '../../models/search_book.dart';
+import '../../models/search/search_book.dart';
 import '../../models/download_task.dart';
-import '../../models/search_keyword.dart';
+import '../../models/search/search_keyword.dart';
 
 // ─────────────────── TypeConverters ───────────────────
 

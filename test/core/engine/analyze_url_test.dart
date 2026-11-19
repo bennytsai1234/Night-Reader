@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/js/js_response.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 
 import '../../test_helper.dart';
 

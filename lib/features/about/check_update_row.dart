@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
 
 import 'update_check_runner.dart';
 

@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/source/book_source_service.dart';
 import 'package:night_reader/core/source_check/check_source_service.dart';

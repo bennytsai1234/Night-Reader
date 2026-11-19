@@ -11,12 +11,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/network/network_service.dart';
 import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 
 import 'app_harness.dart';
 import 'frame_budget.dart';

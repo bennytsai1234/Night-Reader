@@ -2,13 +2,13 @@
 // 「作者 · 字數 · 分類」、推薦理由）與 AI 的說明，骨架都和換上的內容一樣。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/models/ai_find_record.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search/ai_find_record.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/features/search/ai_find/ai_find_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../support/screenshot.dart';

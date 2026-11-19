@@ -6,10 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book/book_extensions.dart';
-import 'package:night_reader/core/models/bookmark.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
@@ -26,7 +26,7 @@ import 'package:night_reader/features/reader/features/menu/reader_tap_action.dar
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_editor_sheet.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_sheet.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight_follower.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
 
 typedef ReaderNoticeSink = void Function(
   String message, {

@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/ai_find/ai_find_avoid.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/widgets/app_dialogs.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/swipe_actions.dart';
+import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/lists/swipe_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// AI 找書「不想看的」清單（docs/design/screens.md「AI 找書」）：一項一列，

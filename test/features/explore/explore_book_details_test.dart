@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/features/explore/explore_book_details.dart';
 
 void main() {

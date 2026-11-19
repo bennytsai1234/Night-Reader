@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/playback/now_playing_artwork.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 
 const _pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 

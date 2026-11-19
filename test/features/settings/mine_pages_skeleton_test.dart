@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/app_update/app_version.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/skeleton_match.dart';

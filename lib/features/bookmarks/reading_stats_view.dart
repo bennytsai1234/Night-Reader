@@ -2,13 +2,13 @@ import 'dart:math' as math;
 
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/shared/widgets/book_kind_mark.dart';
+import 'package:night_reader/shared/widgets/book/book_kind_mark.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
@@ -18,9 +18,9 @@ import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀紀錄頁的「統計」（`BookmarksPage`）：頂端今天、本週、總計三格，下面

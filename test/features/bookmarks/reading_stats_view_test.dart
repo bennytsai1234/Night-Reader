@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
-import 'package:night_reader/core/models/read_record.dart';
+import 'package:night_reader/core/models/reading/read_record.dart';
 import 'package:night_reader/core/sync/read_stats_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_records.dart';

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/ui_text.dart';
+import 'package:night_reader/shared/widgets/popups/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
+import 'package:night_reader/shared/widgets/text/ui_text.dart';
 
 class ImportPreviewResult {
   final List<BookSource> newSources;

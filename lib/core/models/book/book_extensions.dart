@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/book_type.dart';
-import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';

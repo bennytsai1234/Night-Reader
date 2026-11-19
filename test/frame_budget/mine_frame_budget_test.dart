@@ -18,7 +18,7 @@ import 'package:night_reader/features/source_manager/ai_repair/ai_repair_setting
 import 'package:night_reader/features/settings/tts_settings_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';

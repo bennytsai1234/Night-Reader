@@ -13,8 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/app_providers.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/main.dart';
-import 'package:night_reader/shared/widgets/launch_entrance.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/launch_entrance.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:provider/provider.dart';
 
 import '../support/app_harness.dart';

@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/resource_service.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 
 /// 系統播放資訊的封面：把書的封面變成手機上的一個圖檔，交給系統去讀。
 ///

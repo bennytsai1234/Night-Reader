@@ -8,7 +8,7 @@ import 'package:xpath_selector/xpath_selector.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
-import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
 

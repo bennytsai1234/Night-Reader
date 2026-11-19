@@ -8,7 +8,7 @@ import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/sync/source_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

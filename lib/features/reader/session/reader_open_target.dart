@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 
 import 'reader_location.dart';
 

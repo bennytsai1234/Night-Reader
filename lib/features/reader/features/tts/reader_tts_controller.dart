@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/core/playback/tts_service.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_sheet.dart';

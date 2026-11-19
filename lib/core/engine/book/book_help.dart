@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:night_reader/core/constant/app_pattern.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 
 /// BookHelp - 輔助書籍處理工具 (對標 Android help/book/BookHelp.kt)
 class BookHelp {

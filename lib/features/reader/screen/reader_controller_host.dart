@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/features/reader/screen/dependencies/reader_dependencies.dart';
-import 'package:night_reader/features/reader/screen/reader_latest_only_scheduler.dart';
+import 'package:night_reader/features/reader/screen/latest_only_scheduler.dart';
 import 'package:night_reader/features/reader/features/auto_page/reader_auto_page_controller.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
@@ -14,7 +14,7 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_c
 import 'package:night_reader/features/reader/features/tts/reader_tts_controller.dart';
 import 'package:night_reader/features/reader/text_view/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
+import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/features/reader/session/reader_progress_controller.dart';
@@ -202,7 +202,7 @@ class ReaderControllerHost {
     }
   }
 
-  ReaderRuntime ensureRuntime(Size size, ReaderStyle style) {
+  ReaderRuntime ensureRuntime(Size size, ReaderStylePreferences style) {
     _lastViewportSize = size;
     final existing = runtime;
     if (existing != null) return existing;
@@ -252,7 +252,7 @@ class ReaderControllerHost {
   void syncRuntimeConfiguration(
     ReaderRuntime runtime,
     Size size,
-    ReaderStyle style,
+    ReaderStylePreferences style,
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
@@ -381,7 +381,7 @@ class ReaderControllerHost {
     );
   }
 
-  ReaderLayoutSpec specFromStyle(Size size, ReaderStyle style) {
+  ReaderLayoutSpec specFromStyle(Size size, ReaderStylePreferences style) {
     // cellWidth 只描述全形字 advance 的 typography metric。
     // ReaderLayoutSpec 可用它推導置中的內部 text frame，但不得用它
     // 裁切或重定義 viewport 擁有的實體 contentWidth。

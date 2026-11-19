@@ -1,5 +1,5 @@
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
-import 'package:night_reader/features/reader/text_view/progress/chapter_shares.dart';
+import 'package:night_reader/features/reader/text_view/progress/reader_chapter_shares.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 
 /// Computes published progress from semantic text coordinates.

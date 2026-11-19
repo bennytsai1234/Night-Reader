@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/app_update/app_update_installer.dart';
 import 'package:night_reader/core/app_update/update_preferences.dart';
-import 'package:night_reader/core/app_update/update_service.dart';
+import 'package:night_reader/core/app_update/app_update_service.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

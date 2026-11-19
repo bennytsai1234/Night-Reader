@@ -4,8 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
 
 /// 開書、跳章與重新排版時蓋在正文上的一張紙。
 ///

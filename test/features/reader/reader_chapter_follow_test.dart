@@ -6,7 +6,7 @@ import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';
 import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/navigation_budget.dart';

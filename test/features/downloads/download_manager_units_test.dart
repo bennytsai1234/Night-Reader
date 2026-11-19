@@ -8,7 +8,7 @@ import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/features/downloads/download_manager_page.dart';

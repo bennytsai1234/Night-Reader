@@ -4,7 +4,7 @@ import 'dart:io' show gzip;
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/js_extensions.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 
 import '../../../test_helper.dart';

@@ -29,7 +29,7 @@ import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
-import 'shared/widgets/theme_reveal_scope.dart';
+import 'shared/theme/theme_reveal_scope.dart';
 import 'features/association/association_handler_service.dart';
 import 'features/settings/launch_screen_theme_sync.dart';
 import 'features/settings/settings_provider.dart';
@@ -50,10 +50,10 @@ import 'features/search/search_provider.dart';
 import 'features/search/background_search.dart';
 import 'features/source_manager/ai_repair/repair_runs.dart';
 import 'features/source_manager/source_check_job.dart';
-import 'shared/widgets/skeleton_text.dart';
+import 'shared/widgets/skeleton/skeleton_text.dart';
 import 'shared/navigation/root_navigator.dart';
 
-import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
+import 'package:night_reader/shared/widgets/text/drag_overflow_text.dart';
 
 Future<bool> runBackgroundTask<T>({
   required Future<void> Function() initialize,

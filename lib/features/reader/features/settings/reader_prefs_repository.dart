@@ -10,7 +10,6 @@ import 'package:night_reader/features/reader/features/settings/reader_highlight_
 import 'package:night_reader/features/reader/features/settings/reader_info_item.dart';
 import 'package:night_reader/features/reader/features/settings/reader_orientation.dart';
 import 'package:night_reader/features/reader/features/settings/reader_page_turn_speed.dart';
-import 'package:night_reader/features/reader/layout/reader_style.dart';
 import 'package:night_reader/features/reader/layout/reader_typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -178,7 +177,7 @@ double _legacyTitleSpacing({
   required double lineHeight,
   required double paragraphSpacing,
 }) {
-  final lineExtent = fontSize * ReaderStyle.normalizeLineHeight(lineHeight);
+  final lineExtent = fontSize * normalizeReaderLineHeight(lineHeight);
   if (!paragraphSpacing.isFinite || lineExtent <= 0) return 0.0;
   return paragraphSpacing * 8 / lineExtent;
 }

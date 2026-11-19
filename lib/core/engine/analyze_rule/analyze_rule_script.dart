@@ -3,7 +3,7 @@ import '../js/js_engine.dart';
 
 import 'package:night_reader/core/network/cookie_store.dart';
 import 'package:night_reader/core/utils/cache_manager.dart';
-import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/models/source/base_source.dart';
 
 /// AnalyzeRule 的腳本執行 (原 Android AnalyzeRule.kt)。JS 結果取決於
 /// source / book / chapter / page / baseUrl 與外部狀態，不快取執行結果。

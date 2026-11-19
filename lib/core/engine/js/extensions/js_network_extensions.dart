@@ -6,7 +6,7 @@ import '../js_extensions.dart';
 import 'js_blocking_tasks.dart';
 import 'js_jsoup_http.dart';
 
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/network/cloudflare.dart';

@@ -4,10 +4,10 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
-import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/book/default_book_cover.dart';
 
 import 'bookshelf_provider_base.dart';
 

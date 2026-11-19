@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
-import 'package:night_reader/shared/widgets/book_kind_mark.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/book/book_kind_mark.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass/glass.dart';
 
 import '../search_provider.dart';
 
-import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/lists/search_field.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// SearchAppBar - 搜尋頁面頂部欄

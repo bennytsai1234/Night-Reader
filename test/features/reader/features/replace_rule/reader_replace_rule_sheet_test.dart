@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_sheet.dart';
 import 'package:night_reader/shared/theme/app_style.dart';

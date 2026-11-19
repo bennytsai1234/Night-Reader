@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/constant/source_type.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/glass/glass_menu.dart';
+import 'package:night_reader/shared/widgets/lists/grouped_list.dart';
 
 class SourceEditBasic extends StatelessWidget {
   final BookSource source;

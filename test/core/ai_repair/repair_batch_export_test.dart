@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/ai_repair/ai_repair_session.dart';
 import 'package:night_reader/core/ai_repair/repair_batch_export.dart';
 import 'package:night_reader/core/ai_repair/source_repair_batch.dart';
-import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
 
 const _service = (
   baseUrl: 'https://ai.example/v1',

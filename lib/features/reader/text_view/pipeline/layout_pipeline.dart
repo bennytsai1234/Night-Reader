@@ -723,9 +723,6 @@ final class LayoutPipeline {
         cellWidth: spec.cellWidth,
         textColor: _textColor(),
         priority: _priorityFor(headKey, anchor: anchor),
-        direction: headKey < _documentIndex.centerKey
-            ? ReaderScrollDirection.backward
-            : ReaderScrollDirection.forward,
         indentChars: indentCharsFor(head, spec),
         trailingSpacing: _trailingSpacingFor(blocks, last, spec),
         readerOwnedLinePlan: true,

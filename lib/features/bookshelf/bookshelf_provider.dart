@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:night_reader/core/engine/app_event_bus.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/storage/book_storage_service.dart';
 import 'package:night_reader/core/sync/settings_sync.dart';

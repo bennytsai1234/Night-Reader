@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';

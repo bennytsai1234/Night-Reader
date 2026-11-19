@@ -1,4 +1,4 @@
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
 

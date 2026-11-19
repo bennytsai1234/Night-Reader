@@ -6,8 +6,8 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/highlight_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/bookmark.dart';
-import 'package:night_reader/core/models/highlight.dart';
+import 'package:night_reader/core/models/reading/bookmark.dart';
+import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 

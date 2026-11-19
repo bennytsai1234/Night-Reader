@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book/book.dart';
 import 'package:night_reader/core/sync/local_book_sync.dart';
 import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_merge.dart';

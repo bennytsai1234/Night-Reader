@@ -37,13 +37,13 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book/book.dart';
+import 'package:night_reader/core/models/source/book_source.dart';
+import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/local_book/local_book_service.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
+import 'package:night_reader/shared/widgets/glass/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';
