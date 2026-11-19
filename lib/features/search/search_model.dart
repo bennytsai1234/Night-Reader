@@ -230,6 +230,10 @@ class SearchModel {
   /// 這次要搜的書源排好順序、開始送之前呼叫（放到背景的搜尋記下要搜哪些）。
   void Function(List<BookSource> sources)? onSourcesChosen;
 
+  /// [search] 實際搜的範圍和給的不同時呼叫：範圍裡的分組沒有可搜尋的書源，
+  /// 清掉那些分組、一個都不剩就搜全部（[SearchScope.getBookSources]）。
+  void Function(String scope)? onScopeNarrowed;
+
   /// 一個書源搜完時呼叫，零本也算；[books] 是精準搜尋篩過、要併進結果的那些。
   /// 和併進結果在同一處，記下的與畫面上的不會對不上。
   void Function(BookSource source, List<SearchBook> books)? onSourceSearched;
@@ -247,7 +251,11 @@ class SearchModel {
   }) async {
     cancelSearch();
     final generation = _generation;
+    final asked = scope.toString();
     final scoped = await scope.getBookSources();
+    if (generation == _generation && scope.toString() != asked) {
+      onScopeNarrowed?.call(scope.toString());
+    }
     final sources = kind == null
         ? scoped
         : [
