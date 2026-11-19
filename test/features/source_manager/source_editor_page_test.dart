@@ -95,6 +95,26 @@ void main() {
     expect(saved.ruleContent?.webJs, 'webJs()');
   });
 
+  // 匯入另一台時靠更新時間認出新的一版（同 Legado 的編輯器）。
+  testWidgets('saving an edit records when it was changed; saving without '
+      'one keeps the time', (tester) async {
+    await tester.runAsync(
+      () => dao.upsert(sampleSource()..lastUpdateTime = 1000),
+    );
+    Future<BookSource> stored() async => (await tester.runAsync<BookSource?>(
+      () => dao.getByUrl('https://a.example'),
+    ))!;
+
+    await pumpEditor(tester, await stored());
+    await save(tester);
+    expect((await stored()).lastUpdateTime, 1000);
+
+    await pumpEditor(tester, await stored());
+    await tester.enterText(field(0), '乙書源');
+    await save(tester);
+    expect((await stored()).lastUpdateTime, greaterThan(1000));
+  });
+
   testWidgets('changing the url moves the source instead of copying it', (
     tester,
   ) async {

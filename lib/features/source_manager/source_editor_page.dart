@@ -309,6 +309,10 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       if (before != null && changedParts(before, _editingSource).isNotEmpty) {
         _editingSource.removeGroup(aiUnfixableSourceGroupTag);
       }
+      // 內容改了就記下修改的時間，匯入另一台時才認得出這是新的一版（同 Legado）。
+      if (before == null || _dirty) {
+        _editingSource.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+      }
       await _bookSourceService.saveEditedSource(
         _editingSource,
         previousUrl: previousUrl,
