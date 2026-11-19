@@ -231,12 +231,13 @@ class _ReaderSidePanelState extends State<ReaderSidePanel>
     if (_phase is _Hidden) _go(const _AtEdge());
   }
 
-  /// 手指真的開始左右拖：面板交給手指，還沒開始的滑出作廢。按著的途中
-  /// 面板已經收掉的話，這次拖曳不理。
+  /// 手指真的開始左右拖：面板交給手指，還沒開始的滑出作廢，按著時才開始
+  /// 的滑出停在這裡。按著的途中面板已經收掉的話，這次拖曳不理。
   void _handleDragStart(DragStartDetails details) {
     final from = _phase;
     if (from is _Hidden) return;
     _go(_Dragging(open: from.open, opened: from.opened));
+    _position.stop();
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {

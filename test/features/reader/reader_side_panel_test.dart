@@ -599,6 +599,31 @@ void main() {
     expectSettled(tester);
   });
 
+  testWidgets('a finger resting on the screen when the held slide starts '
+      'takes the panel the moment it drags: the slide stops there', (
+    tester,
+  ) async {
+    await pumpPanel(tester, heavy: true);
+    panel.open();
+    await tester.pump();
+    final drag = await tester.startGesture(const Offset(200, 300));
+    await tester.pump(AppMotion.stillGap);
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    final sliding = tester.getTopRight(find.byType(Drawer)).dx;
+    expect(sliding, greaterThan(0), reason: '停頓過了，面板已經在滑');
+    await drag.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    final grabbed = tester.getTopRight(find.byType(Drawer)).dx;
+    expect(grabbed, lessThanOrEqualTo(sliding), reason: '手指往左拖');
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tester.getTopRight(find.byType(Drawer)).dx, grabbed);
+    await drag.up();
+    await tester.pumpAndSettle();
+    expectSettled(tester);
+  });
+
   testWidgets('pulled out, dragged back to the edge and out again, the panel '
       'stays with the finger and opens when let go past half', (tester) async {
     await pumpPanel(tester);
