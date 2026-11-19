@@ -1,15 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/text/ui_text.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/models/book/book.dart';
-import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/models/reading/bookmark.dart';
-import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
 import 'package:night_reader/core/models/reading/highlight.dart';
 import 'package:night_reader/core/backup/highlight_export.dart';
@@ -19,12 +15,8 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
-import 'package:night_reader/features/book_detail/book_detail_page.dart';
-import 'package:night_reader/features/reader/features/replace_rule/reader_replace_rule_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/tts_settings_page.dart';
-import 'package:night_reader/shared/navigation/app_page_transition.dart';
-import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
@@ -32,15 +24,14 @@ import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
 import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
 import 'package:night_reader/features/reader/screen/reader_change_source.dart';
+import 'package:night_reader/features/reader/screen/reader_menu_pages.dart';
 import 'package:night_reader/features/reader/screen/reader_source_remedy.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader/session/reader_session_facade.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness.dart';
 import 'package:night_reader/features/reader/features/brightness/reader_brightness_bar.dart';
-import 'package:night_reader/features/reader/features/menu/reader_menu_departure.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
-import 'package:night_reader/features/reader/features/tts/reader_tts_sheet.dart';
 import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
 import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';
 import 'package:night_reader/features/reader/screen/reader_side_panel.dart';
@@ -49,13 +40,10 @@ import 'package:night_reader/features/reader/features/settings/reader_settings_s
 import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
 import 'package:night_reader/features/reader/screen/reader_window_settings.dart';
-import 'package:night_reader/features/settings/reading_settings_page.dart';
-import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/popups/app_dialogs.dart';
 import 'package:night_reader/shared/theme/theme_reveal_scope.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_open_target.dart';
@@ -104,6 +92,20 @@ class _ReaderPageState extends State<ReaderPage>
     info: _chapterInfo,
   );
 
+  /// 從閱讀選單開出去的頁面與面板（[ReaderMenuPages]）。
+  late final ReaderMenuPages _menuPages = ReaderMenuPages(
+    context: () => context,
+    mounted: () => mounted,
+    book: widget.book,
+    initialChapters: widget.initialChapters,
+    host: _host,
+    info: _chapterInfo,
+    coordinator: _coordinator,
+    remedy: _remedy,
+    changeSource: _changeSource,
+    showNotice: _showNotice,
+  );
+
   /// 讀不到正文時的按鈕列、登入與網頁驗證（[ReaderSourceRemedy]）。
   late final ReaderSourceRemedy _remedy = ReaderSourceRemedy(
     context: () => context,
@@ -115,7 +117,7 @@ class _ReaderPageState extends State<ReaderPage>
     showNotice: _showNotice,
     jumpToChapter: _jumpToChapterFromDrawer,
     exit: _handleExitIntent,
-    restoreMenuWhenUncovered: _restoreMenuWhenUncovered,
+    restoreMenuWhenUncovered: () => _menuPages.restoreMenuWhenUncovered(),
   );
 
   late final ReaderChapterInfo _chapterInfo = ReaderChapterInfo(
@@ -153,11 +155,6 @@ class _ReaderPageState extends State<ReaderPage>
     vsync: this,
   );
   bool _entranceWatched = false;
-
-  /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
-  late final ReaderMenuDeparture _menuDeparture = ReaderMenuDeparture(
-    _host.menu,
-  );
 
   /// 只拿來計骨架淡入的時長（頁首頁尾骨架與照紀錄畫的正文骨架都是
   /// [AppMotion.fade]）：開書時和這一頁的第一幀同時開始，從目錄跳章時和
@@ -244,7 +241,7 @@ class _ReaderPageState extends State<ReaderPage>
     _skeletonBreath.dispose();
     unawaited(_settingsSaveFailures?.cancel());
     unawaited(_hostNotices?.cancel());
-    _menuDeparture.dispose();
+    _menuPages.dispose();
     _coordinator.dispose();
     _progress.dispose();
     _host.menu.controlsVisible.removeListener(_dismissSyncHintOnMenu);
@@ -453,29 +450,32 @@ class _ReaderPageState extends State<ReaderPage>
                   dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
                   onExitIntent: _handleExitIntent,
                   onSystemBack: _handleSystemBack,
-                  onMore: () => unawaited(_showMore()),
+                  onMore: () => unawaited(_menuPages.showMore()),
                   onOpenDrawer: _openChapters,
-                  onTts: () => _openPanel(_showTts),
+                  onTts: () => _menuPages.openPanel(_menuPages.showTts),
                   onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
-                  onInterface: () => _openPanel(
+                  onInterface: () => _menuPages.openPanel(
                     () => ReaderSettingsSheets.showInterfaceSettings(
                       context,
                       settings,
                     ),
                   ),
-                  onSettings: () => unawaited(_openReadingPreferences()),
+                  onSettings: () =>
+                      unawaited(_menuPages.openReadingPreferences()),
                   onAutoPage: _coordinator.toggleAutoPage,
                   onToggleDayNight: _toggleDayNight,
-                  onReplaceRule: () =>
-                      _openPanel(() => _coordinator.openReplaceRule(context)),
+                  onReplaceRule: () => _menuPages.openPanel(
+                    () => _coordinator.openReplaceRule(context),
+                  ),
                   onAutoPageSettings: () =>
-                      unawaited(_openReadingPreferences()),
+                      unawaited(_menuPages.openReadingPreferences()),
                   onReplaceRuleSettings: () =>
-                      unawaited(_openReplaceRulePage()),
-                  onTimedTtsSettings: () =>
-                      unawaited(_openSettingsPage(const TtsSettingsPage())),
+                      unawaited(_menuPages.openReplaceRulePage()),
+                  onTimedTtsSettings: () => unawaited(
+                    _menuPages.openSettingsPage(const TtsSettingsPage()),
+                  ),
                   onDayNightSettings: () => unawaited(
-                    _openSettingsPage(const AppearanceSettingsPage()),
+                    _menuPages.openSettingsPage(const AppearanceSettingsPage()),
                   ),
                   onShowControls: menu.showControls,
                   onDismissControls: menu.dismissControls,
@@ -506,7 +506,7 @@ class _ReaderPageState extends State<ReaderPage>
                   sleepTimer: _host.tts?.sleepTimer,
                   isTtsPlaying: _host.tts?.isPlaying ?? false,
                   isTtsPaused: _host.tts?.isPaused ?? false,
-                  onMenuHidden: _handleMenuHidden,
+                  onMenuHidden: _menuPages.menusHidden,
                   onChapterPanelChanged: (open) => _drawerOpen.value = open,
                 ),
               ),
@@ -740,158 +740,6 @@ class _ReaderPageState extends State<ReaderPage>
     );
   }
 
-  /// 「更多」正在查登入用的書源：第一次要讀資料庫，這段按鈕還點得到，連點
-  /// 兩下會疊兩個選單。選單推上去之後點擊就落在選單上。
-  bool _lookingUpMore = false;
-
-  Future<void> _showMore() async {
-    if (_lookingUpMore) return;
-    final isLocal = widget.book.isLocal;
-    _lookingUpMore = true;
-    final BookSource? loginSource;
-    try {
-      loginSource = await _remedy.loginSource();
-    } finally {
-      _lookingUpMore = false;
-    }
-    if (!mounted) return;
-    final action = await showAppActionSheet<_ReaderMoreAction>(
-      context: context,
-      // 本地書與沒有登入的書源用不到的項目灰著留在原位（ADR 0059）。
-      actions: [
-        AppSheetAction(
-          label: '換源',
-          icon: Icons.swap_horiz_rounded,
-          value: _ReaderMoreAction.changeSource,
-          enabled: !isLocal,
-        ),
-        AppSheetAction(
-          label: '重新取得本章',
-          icon: Icons.refresh_rounded,
-          value: _ReaderMoreAction.refetchChapter,
-          enabled: !isLocal,
-        ),
-        AppSheetAction(
-          label: '登入',
-          icon: Icons.login_rounded,
-          value: _ReaderMoreAction.login,
-          enabled: loginSource != null,
-        ),
-        const AppSheetAction(
-          label: '書籍詳情',
-          icon: Icons.info_outline_rounded,
-          value: _ReaderMoreAction.bookDetail,
-        ),
-        const AppSheetAction(
-          label: '全域系統設定',
-          icon: Icons.settings_suggest_rounded,
-          value: _ReaderMoreAction.globalSettings,
-        ),
-      ],
-    );
-    if (!mounted || action == null) return;
-    switch (action) {
-      case _ReaderMoreAction.changeSource:
-        _host.menu.dismissControls();
-        await _changeSource.show();
-      case _ReaderMoreAction.refetchChapter:
-        _host.menu.dismissControls();
-        await _remedy.refetchCurrentChapter();
-      case _ReaderMoreAction.login:
-        if (loginSource != null) {
-          await _remedy.login(loginSource, ticket: _departMenu());
-        }
-      case _ReaderMoreAction.bookDetail:
-        await _showBookDetail();
-      case _ReaderMoreAction.globalSettings:
-        final pushed = await _pushOverMenu(
-          _departMenu(),
-          MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
-        );
-        if (!mounted || pushed == null) return;
-        // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
-        // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。等返回動畫
-        // 播完才載入：設定變了會重排正文，不和返回動畫疊在一起（ADR 0018）。
-        _restoreMenuWhenUncovered(
-          beforeMenu: () => unawaited(_host.settings.loadSettings()),
-        );
-    }
-  }
-
-  /// 下方選單的「進階」：自動翻頁、繁簡、點擊區域、音量鍵這些不常邊讀邊
-  /// 調的設定只在「閱讀偏好」一個地方（ADR 0030），不另開一個內容相同的
-  /// 面板。和全域系統設定一樣等返回動畫播完才重讀設定（ADR 0018）。
-  Future<void> _openReadingPreferences() =>
-      _openSettingsPage(const ReadingSettingsPage());
-
-  /// 推一整頁設定（「進階」與圓鈕長按）：選單先滑出才推，返回動畫播完才
-  /// 重讀閱讀設定、再滑回選單（ADR 0018）。[whenUncovered] 和重讀設定
-  /// 同時做。
-  Future<void> _openSettingsPage(
-    Widget page, {
-    VoidCallback? whenUncovered,
-  }) async {
-    final pushed = await _pushOverMenu(
-      _departMenu(),
-      MaterialPageRoute<void>(builder: (_) => page),
-    );
-    if (!mounted || pushed == null) return;
-    _restoreMenuWhenUncovered(
-      beforeMenu: () {
-        unawaited(_host.settings.loadSettings());
-        whenUncovered?.call();
-      },
-    );
-  }
-
-  /// 替換規則鈕長按：直接進規則管理頁。回來時規則有改動才照新規則重載
-  /// 正文；推頁前讀不到規則時當作有改動。
-  Future<void> _openReplaceRulePage() async {
-    final replaceDao = _host.dependencies.replaceDao;
-    if (replaceDao == null) {
-      _showNotice('替換規則資料庫不可用');
-      return;
-    }
-    Future<String?> snapshot() async {
-      try {
-        return jsonEncode([
-          for (final rule in await replaceDao.getAll()) rule.toJson(),
-        ]);
-      } catch (error) {
-        AppLog.w('讀取替換規則失敗，回來時照樣重載正文: $error');
-        return null;
-      }
-    }
-
-    final before = snapshot();
-    await _openSettingsPage(
-      const ReaderReplaceRulePage(),
-      whenUncovered: () => unawaited(_reloadIfRulesChanged(before, snapshot)),
-    );
-  }
-
-  /// 從規則管理頁回來：規則和推頁前一樣就不動；有改動（或讀不到、比不出）
-  /// 才照新規則重載正文。讀規則的期間閱讀器可能已經關掉或換了一份正文，
-  /// 這時不重載；重載失敗和面板一樣提示，原本的正文留著。
-  Future<void> _reloadIfRulesChanged(
-    Future<String?> before,
-    Future<String?> Function() snapshot,
-  ) async {
-    final runtime = _host.runtime;
-    if (runtime == null) return;
-    final previous = await before;
-    if (previous != null && await snapshot() == previous) return;
-    if (!mounted || runtime.disposed || !identical(_host.runtime, runtime)) {
-      return;
-    }
-    try {
-      await runtime.reloadContentPreservingLocation();
-    } catch (error, stackTrace) {
-      AppLog.e('套用替換規則失敗', error: error, stackTrace: stackTrace);
-      _showNotice(failureMessage('套用替換規則', error));
-    }
-  }
-
   /// 拖動條放開：跳到選定位置。正文排到新位置的那一幀才發布頁尾進度，
   /// 所以等跳轉做完再過一幀，拖動條才改回跟閱讀進度。
   /// [drag] 是這一次拖動的編號：連續放開兩次時，先做完的舊跳轉不解除
@@ -909,139 +757,6 @@ class _ReaderPageState extends State<ReaderPage>
           ..ensureVisualUpdate();
       }
     }
-  }
-
-  void _handleMenuHidden() => _menuDeparture.menusHidden();
-
-  /// 收起選單、開一張推頁請求；推頁期間自動捲動保持暫停，選單再打開時
-  /// 解除（見 [ReaderControllerHost.holdAutoPageWhileAway]）。
-  ReaderMenuDepartureTicket _departMenu() {
-    _host.holdAutoPageWhileAway();
-    return _menuDeparture.depart();
-  }
-
-  /// 從選單推一整頁（書籍詳情、全域設定）：等選單滑出畫面才推（見
-  /// [ReaderMenuDeparture]）。推之前再確認這次請求沒有作廢（選單又打開、
-  /// 改選了別的、離開閱讀器）、閱讀器仍是最上面的一頁、選單完全收著；
-  /// 沒有推頁時回傳 null，推了就回傳那一頁關掉時的結果。
-  Future<(T?,)?> _pushOverMenu<T>(
-    ReaderMenuDepartureTicket ticket,
-    Route<T> route,
-  ) async {
-    if (!await ticket.menusGone ||
-        !mounted ||
-        !ticket.canDepart ||
-        !(pageRouteOf(context)?.isCurrent ?? false)) {
-      if (mounted) _host.releaseAutoPage();
-      return null;
-    }
-    return (await Navigator.of(context).push(route),);
-  }
-
-  /// 推上去的頁關掉後，等返回動畫播完再把選單滑回來，回到打開選單的
-  /// 樣子；滑入不和返回動畫疊在一起，也不在淡入中的閱讀器裡出現。
-  /// [beforeMenu] 在返回動畫播完、選單滑回之前呼叫（閱讀器已經被別頁
-  /// 蓋住時也照樣呼叫）。
-  void _restoreMenuWhenUncovered({VoidCallback? beforeMenu}) {
-    unawaited(
-      TransitionSettled.uncovered(context).then((_) {
-        if (!mounted) return;
-        beforeMenu?.call();
-        if (!(pageRouteOf(context)?.isCurrent ?? false)) return;
-        _host.menu.showControls();
-      }),
-    );
-  }
-
-  /// 從閱讀器開的詳情：點章節回來跳到那一章（見 [resolveDetailChapter]），
-  /// 按閱讀鈕直接回來。
-  Future<void> _showBookDetail() async {
-    final departure = _departMenu();
-    final flushed = await _host.flushProgress();
-    if (!mounted) return;
-    final chapterDao = _host.dependencies.chapterDao;
-    final index =
-        flushed?.chapterIndex ??
-        _chapterInfo.currentChapterIndex(_host.runtime);
-    final storedIndex = await chapterDao.indexOfUrl(
-      widget.book.bookUrl,
-      _chapterInfo.chapterUrlAt(index),
-    );
-    if (!mounted) return;
-    final book = widget.book.copyWith(
-      chapterIndex: storedIndex ?? index,
-      durChapterTitle: _chapterInfo.rawChapterTitleAt(index),
-    );
-    // 寫入進度、查章節的期間選單可能又被打開：推之前由 [_pushOverMenu]
-    // 再確認一次。
-    final pushed = await _pushOverMenu(
-      departure,
-      MaterialPageRoute<String>(
-        builder: (_) => BookDetailPage(book: book, fromReader: true),
-      ),
-    );
-    if (!mounted || pushed == null) return;
-    final (targetUrl,) = pushed;
-    if (targetUrl == null) {
-      _restoreMenuWhenUncovered();
-      return;
-    }
-    // 點了章節回來：直接跳過去、不滑回選單，自動捲動照常接著捲。
-    _host.releaseAutoPage();
-    final target = await resolveDetailChapter(
-      url: targetUrl,
-      readerChapters: _host.runtime?.chapters ?? widget.initialChapters,
-      loadLatest: () async {
-        await _host.flushProgress();
-        return chapterDao.getByBook(widget.book.bookUrl);
-      },
-    );
-    if (!mounted || target == null) return;
-    final latest = target.latest;
-    if (latest == null) {
-      await _coordinator.jumpToChapter(target.index);
-      return;
-    }
-    unawaited(
-      Navigator.of(context).pushReplacement(
-        BookOpenRoute(
-          book: widget.book,
-          openTarget: ReaderOpenTarget.chapterStart(target.index),
-          initialChapters: latest,
-        ),
-      ),
-    );
-  }
-
-  /// 從選單開面板：開著時上下選單與亮度條收起，正文整頁露出來（排版面板
-  /// 沒有暗色遮罩，邊調邊看）；面板關掉後回到選單打開的樣子。
-  ///
-  /// 選單從面板滑上來的下一格才開始滑出：面板的第一格要建整個面板的骨架，
-  /// 選單開始滑出那一格要重算整組選單的讀屏資訊，兩件事錯開一格（ADR 0029
-  /// 做法 4；擠在同一格時那一格多 1–2ms）。
-  void _openPanel(Future<void> Function() open) {
-    var closed = false;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !closed) _host.menu.dismissControls();
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-    unawaited(
-      open().whenComplete(() {
-        closed = true;
-        if (!mounted || !(pageRouteOf(context)?.isCurrent ?? false)) return;
-        _host.menu.showControls();
-      }),
-    );
-  }
-
-  Future<void> _showTts() async {
-    final tts = _host.tts;
-    if (tts == null) return;
-    await ReaderMenuSheet.show<void>(
-      context,
-      settings: _host.settings,
-      builder: (_) => ReaderTtsPanel(tts: tts, settings: _host.settings),
-    );
   }
 
   @override
@@ -1098,35 +813,6 @@ class _ReaderPageState extends State<ReaderPage>
     }
     unawaited(launchExternalUrlWithFeedback(context, url));
   }
-}
-
-/// 從閱讀器開的詳情點了章節 [url]，閱讀器要開哪一章。
-///
-/// 閱讀器整段閱讀都用開書時的目錄 [readerChapters]；詳情頁讀的是資料庫裡
-/// 的目錄，可能已經被書架檢查或詳情的「檢查更新」換過，序號對不上，所以
-/// 兩邊用章節網址對應：閱讀器的目錄裡有這一章就原地跳（`latest` 為 null）；
-/// 沒有（新章節）就到 [loadLatest] 讀到的最新目錄裡找，找到就用最新目錄
-/// 重開；都沒有回傳 null。
-@visibleForTesting
-Future<({int index, List<BookChapter>? latest})?> resolveDetailChapter({
-  required String url,
-  required List<BookChapter> readerChapters,
-  required Future<List<BookChapter>> Function() loadLatest,
-}) async {
-  final index = readerChapters.indexWhere((c) => c.url == url);
-  if (index >= 0) return (index: index, latest: null);
-  final latest = await loadLatest();
-  final latestIndex = latest.indexWhere((c) => c.url == url);
-  if (latestIndex < 0) return null;
-  return (index: latestIndex, latest: latest);
-}
-
-enum _ReaderMoreAction {
-  changeSource,
-  refetchChapter,
-  login,
-  bookDetail,
-  globalSettings,
 }
 
 /// 第一幀還沒有 Runtime 時的目前章：要開的那一章，不會變。
