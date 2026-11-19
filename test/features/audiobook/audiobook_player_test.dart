@@ -359,6 +359,69 @@ void main() {
     expect(engine.opened.last.$1.toString(), 'https://audio.test/b2/ep5.mp3');
   });
 
+  test('開書中按了暫停：開好不自己播', () async {
+    final other = await bookWithoutChapters();
+    source.chapterList = Completer();
+    final opening = player.open(other);
+    await pumpEventQueue();
+    await player.pause();
+    source.chapterList!.complete([
+      for (var i = 0; i <= 6; i++)
+        BookChapter(
+          url: 'https://audio.test/b2/ep$i',
+          title: '第 $i 集',
+          bookUrl: other.bookUrl,
+          index: i,
+        ),
+    ]);
+    await opening;
+
+    expect(player.phase, AudiobookPhase.paused);
+    expect(engine.playing, isFalse);
+  });
+
+  test('按了暫停之後才報播完：接下一集但不出聲', () async {
+    await player.open(book, chapterIndex: 1);
+    await pumpEventQueue();
+    await player.pause();
+    final opening = engine.nextOpen;
+    engine.finish();
+    await opening.timeout(const Duration(seconds: 5));
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 2);
+    expect(engine.playing, isFalse);
+  });
+
+  test('回到前景接另一台的進度、還在載入時按播放：載好就播', () async {
+    await player.open(book);
+    await player.pause();
+    sync.pulled = PulledProgress(
+      SyncedProgress(
+        chapterIndex: 1,
+        charOffset: 1000,
+        chapterTitle: '第 1 集',
+        time: 1,
+      ),
+      (_) async => sync.commits++,
+    );
+    source.gate = Completer<void>();
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+    expect(player.phase, AudiobookPhase.loading);
+    await player.play();
+    source.gate!.complete();
+    await pumpEventQueue();
+
+    expect(player.chapterIndex, 1);
+    expect(engine.playing, isTrue);
+  });
+
   test('換到抓不到的一集時，上一集也停聲，不會畫面停在新集、還聽著舊集', () async {
     await player.open(book);
     expect(engine.playing, isTrue);
