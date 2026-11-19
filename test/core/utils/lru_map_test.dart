@@ -25,6 +25,25 @@ void main() {
       expect(map.containsKey('a'), isTrue);
       expect(map.containsKey('b'), isFalse);
     });
+
+    test('a stored null is kept and reading it counts as a use', () {
+      final map = LruMap<String, int?>(maxSize: 2);
+      map['n'] = null;
+      map['a'] = 1;
+      expect(map['n'], isNull);
+      map['b'] = 2;
+      expect(map.keys, ['n', 'b']);
+    });
+
+    test('clear gives the whole limit back', () {
+      final map = LruMap<String, int>(maxSize: 2);
+      map['a'] = 1;
+      map['b'] = 2;
+      map.clear();
+      map['c'] = 3;
+      map['d'] = 4;
+      expect(map.keys, ['c', 'd']);
+    });
   });
 
   group('counted by size (CacheManager memory layer)', () {
@@ -81,6 +100,17 @@ void main() {
       expect(cache.keys, ['a', 'n']);
       cache['b'] = List<int>.filled(1023, 0); // drops the oldest: a
       expect(cache.keys, ['n', 'b']);
+    });
+
+    test('clear gives the whole limit back', () {
+      final cache = LruMap<String, Object?>(
+        maxSize: 10,
+        sizeOf: estimateMemorySize,
+      );
+      cache['a'] = 'xxxx'; // 8
+      cache.clear();
+      cache['b'] = 'xxxxx'; // 10
+      expect(cache.keys, ['b']);
     });
   });
 }

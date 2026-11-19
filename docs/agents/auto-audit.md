@@ -35,10 +35,10 @@
 | 資料 0 | `lib/core/database/`（不看 `*.g.dart`）、`models/`；`lib/core/storage/` 的 `app_cache`、`app_storage_paths`、`reader_layout_cache`、`storage_metrics` |
 | 資料 1 | `lib/core/download/`（`audio_chapter_download` 在閱讀器 4）、`lib/features/cache_manager/`；`lib/core/utils/cache_manager.dart`；`lib/core/storage/` 的 `book_storage_service`、`book_chapter_files`、`reader_chapter_content_store`、`reader_chapter_content_storage`、`book_illustration_storage`、`book_cover_storage_service`、`bookshelf_state_tracker`、`books_in_use` |
 | 資料 2 | 備份、還原、匯出、本地書、更新：`lib/core/local_book/`、`backup/`（`login_data_backup` 在書源 4）、`app_update/`；`lib/core/playback/tts_service.dart` |
-| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`background_work/`、`diagnostics/`、`platform/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` |
+| 資料 3 | `lib/main.dart`、`lib/app_providers.dart`、`lib/core/startup/`、`di/`、`config/`、`constant/`、`exception/`、`fonts/`、`base/`、`background_work/`、`diagnostics/`、`platform/`；Android 那一半：`android/app/src/main/` 的 Kotlin 與 `AndroidManifest.xml`；`lib/core/utils/` 的 `encoder_utils`、`lru_map`；`lib/core/storage/resource_service.dart` |
 | 資料 4 | 同步：`lib/core/sync/` |
 | 介面 0 | `lib/shared/widgets/` 裡的 `skeleton*`、`snapshot_sweep`、`launch_entrance` |
-| 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/` |
+| 介面 1 | `lib/shared/widgets/` 其餘、`lib/shared/navigation/`、`theme/`、`layout/`、`lib/core/widgets/` |
 | 介面 2 | `lib/features/bookshelf/`、`book_detail/`、`welcome/` |
 | 介面 3 | `lib/features/settings/`、`about/`、`association/`、`replace_rule/` |
 | 文件 | 全部文件；另外列出 `lib/features/`、`lib/core/` 底下的資料夾，與表上只列了部分檔案的資料夾（`lib/core/source/`、`storage/`、`utils/`）裡的檔，表上沒有的寫進報告「沒排進分段的程式」一節 |
