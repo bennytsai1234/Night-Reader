@@ -9,7 +9,7 @@
 | 狀態機 | 改前的旗標 | 改後的狀態 | 改後寫不出來的組合 | 歷史上因此出錯的 | 重構時查到並修掉的 | PR |
 |---|---|---|---|---|---|---|
 | 背景工作的生命週期 | 7 處共 30 個（見下方） | 五件共用的 `WorkPhase`；頁面那層的 `_RunStage`；校驗服務的 `_CheckPhase` | 按了結束又是已暫停；正在暫停時整批先標成做完；停下中開始新的一輪校驗 | 5 件（見下方） | 5 件（見下方） | #458 |
-| 同步 | `_running`、`_again`、`_fullPending`、`_cancelled`（另有 `_progressFirst`、`_authorizingGoogleDrive` 留成旗標） | `SyncPhase`（閒著、同步進度、全面同步、停下中）與排著的下一輪，收在跑著的那一段 `_SyncRun`；全面同步交回 `FullSyncResult` | 排著全面同步卻沒在跑；進度輪裡記著取消；閒著時還留著要插隊的進度；進度框收掉後那一行和那一輪的結果對不上 | 1 件（見下方） | 7 件（見下方） | （合併時補） |
+| 同步 | `_running`、`_again`、`_fullPending`、`_cancelled`（另有 `_progressFirst`、`_authorizingGoogleDrive` 留成旗標） | `SyncPhase`（閒著、同步進度、全面同步、停下中）與排著的下一輪，收在跑著的那一段 `_SyncRun`；全面同步交回 `FullSyncResult` | 排著全面同步卻沒在跑；進度輪裡記著取消；閒著時還留著要插隊的進度；進度框收掉後那一行和那一輪的結果對不上 | 1 件（見下方） | 7 件（見下方） | #461 |
 
 ## 各狀態機
 
