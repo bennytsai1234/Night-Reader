@@ -684,6 +684,35 @@ void main() {
       });
     }
 
+    testWidgets('a dialog opened mid-drag: once it closes the page comes '
+        'back whole', (tester) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      final page = tester.element(find.text('新頁'));
+      final route = ModalRoute.of(page)!;
+      final gesture = await holdDrag(tester);
+      unawaited(
+        showDialog<void>(
+          context: page,
+          builder: (_) => const AlertDialog(content: Text('對話框')),
+        ),
+      );
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      // 對話框開著時，這一頁停在放開時的地方。
+      expect(tester.getCenter(find.text('新頁')).dx, closeTo(620, 1));
+
+      Navigator.pop(tester.element(find.text('對話框')));
+      await tester.pumpAndSettle();
+      expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+      expect(route.animation!.value, 1);
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
+      await slowDrag(tester, 800 * 0.25);
+      await tester.pumpAndSettle();
+      expect(find.text('新頁'), findsNothing);
+    });
+
     testWidgets('closing the page in code mid-drag ends the gesture', (
       tester,
     ) async {

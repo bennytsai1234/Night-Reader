@@ -185,6 +185,15 @@ class _AppTransitionState extends State<_AppTransition>
       oldWidget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
       _listen(widget.secondaryAnimation, _onCoveredStatus);
     }
+    // 路由狀態變了才會重建到這裡，例如蓋在上面的頁被關掉（[ModalRoute.didPopNext]）。
+    // 蓋上來的是對話框這類不帶動底下頁面的路由時，關掉它不會有下面
+    // [_onCoveredStatus] 的那一下，從這裡補回。建構中不能通知 Navigator，
+    // 等這一幀畫完。
+    if (_swipe is _Stranded) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _restoreIfUncovered();
+      });
+    }
   }
 
   void _listen(Animation<double> animation, AnimationStatusListener listener) {
@@ -194,13 +203,19 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _onCoveredStatus(AnimationStatus status) {
     _under.update(status);
-    if (status.isDismissed && _swipe is _Stranded) _restore();
+    if (status.isDismissed) _restoreIfUncovered();
   }
 
-  // 用公開的手勢入口把路由送回整頁：開始一次手勢、立刻取消，路由自己播完。
-  void _restore() {
+  // 停在半途時，回到最上層、上面也沒有頁在換，就從停著的地方回到整頁：用
+  // 公開的手勢入口開始一次手勢、立刻取消，路由自己播完。
+  void _restoreIfUncovered() {
+    if (_swipe is! _Stranded ||
+        !_route.isCurrent ||
+        !widget.secondaryAnimation.isDismissed) {
+      return;
+    }
     _swipe = const _Idle();
-    if (!_route.isCurrent || _progress >= 1) return;
+    if (_progress >= 1) return;
     _route
       ..handleStartBackGesture(progress: _progress)
       ..handleCancelBackGesture();
@@ -488,7 +503,7 @@ final class _Settling extends _Swipe {
 }
 
 /// 收完時有新頁蓋在上面：不是最上層時 [ModalRoute] 不讓手勢改進度，路由
-/// 停在半途；蓋上來的頁關掉後補回整頁。
+/// 停在半途；回到最上層、上面沒有頁在換時補回整頁。
 final class _Stranded extends _Swipe {
   const _Stranded();
 }
