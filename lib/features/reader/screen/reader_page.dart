@@ -21,7 +21,6 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/core/models/search/search_book.dart';
 import 'package:night_reader/core/storage/book_cover_storage_service.dart';
 import 'package:night_reader/core/storage/books_in_use.dart';
-import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/source/source_interaction.dart';
 import 'package:night_reader/core/source_switch/source_switch_service.dart';
@@ -38,6 +37,7 @@ import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
 import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
 import 'package:night_reader/features/reader/screen/reader_controller_host.dart';
+import 'package:night_reader/features/reader/screen/reader_chapter_info.dart';
 import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader/session/reader_session_facade.dart';
@@ -103,6 +103,15 @@ class _ReaderPageState extends State<ReaderPage>
 
   late final ReaderControllerHost _host;
   late final ReaderPageCoordinator _coordinator;
+
+  /// 目前章、章名與頁首頁尾的資訊（[ReaderChapterInfo]）。
+  late final ReaderChapterInfo _chapterInfo = ReaderChapterInfo(
+    book: widget.book,
+    initialChapters: widget.initialChapters,
+    openTarget: widget.openTarget,
+    runtime: () => _host.runtime,
+    chineseConvert: () => _host.settings.chineseConvert,
+  );
   late final ReaderProgressSync _progressSync;
 
   final ValueNotifier<ProgressSnapshot?> _progress =
@@ -306,9 +315,11 @@ class _ReaderPageState extends State<ReaderPage>
     final navigation = ReaderChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
-      current: runtime?.visibleChapterIndex ?? _NoChapterYet(_openChapterIndex),
+      current:
+          runtime?.visibleChapterIndex ??
+          _NoChapterYet(_chapterInfo.openChapterIndex),
       scrub: menu.scrub,
-      titleFor: _chapterTitleAt,
+      titleFor: _chapterInfo.chapterTitleAt,
     );
 
     final customBrightness =
@@ -363,7 +374,7 @@ class _ReaderPageState extends State<ReaderPage>
                     shown: _chapterPanel.shown,
                     chapters: runtime?.chapters ?? widget.initialChapters,
                     currentChapter: navigation.current,
-                    titleFor: _chapterTitleAt,
+                    titleFor: _chapterInfo.chapterTitleAt,
                     listenable: runtime,
                     onChapterTap: _jumpToChapterFromDrawer,
                     bookmarks: _host.bookmarks.available
@@ -402,8 +413,8 @@ class _ReaderPageState extends State<ReaderPage>
                   textColor: palette.readerText,
                   controlsVisible: menu.controlsVisible,
                   showReadTitleAddition: settings.showReadTitleAddition,
-                  infoState: _infoStateOf(runtime),
-                  loadingTarget: _infoTargetOf(runtime),
+                  infoState: _chapterInfo.infoStateOf(runtime),
+                  loadingTarget: _chapterInfo.infoTargetOf(runtime),
                   originName: widget.book.originName,
                   onOpenOrigin: widget.book.isLocal ? null : _openChapterWeb,
                   progressListenable: _progress,
@@ -871,7 +882,7 @@ class _ReaderPageState extends State<ReaderPage>
     if (runtime.state.lifecycle == ReaderLifecycle.unavailable) {
       await _retryReader(runtime);
     } else if (failedChapter != null &&
-        failedChapter != _currentChapterIndex(runtime)) {
+        failedChapter != _chapterInfo.currentChapterIndex(runtime)) {
       _jumpToChapterFromDrawer(failedChapter);
     } else {
       await _refetchCurrentChapter();
@@ -1155,15 +1166,17 @@ class _ReaderPageState extends State<ReaderPage>
     final flushed = await _host.flushProgress();
     if (!mounted) return;
     final chapterDao = _host.dependencies.chapterDao;
-    final index = flushed?.chapterIndex ?? _currentChapterIndex(_host.runtime);
+    final index =
+        flushed?.chapterIndex ??
+        _chapterInfo.currentChapterIndex(_host.runtime);
     final storedIndex = await chapterDao.indexOfUrl(
       widget.book.bookUrl,
-      _chapterUrlAt(index),
+      _chapterInfo.chapterUrlAt(index),
     );
     if (!mounted) return;
     final book = widget.book.copyWith(
       chapterIndex: storedIndex ?? index,
-      durChapterTitle: _rawChapterTitleAt(index),
+      durChapterTitle: _chapterInfo.rawChapterTitleAt(index),
     );
     // 寫入進度、查章節的期間選單可能又被打開：推之前由 [_pushOverMenu]
     // 再確認一次。
@@ -1274,8 +1287,9 @@ class _ReaderPageState extends State<ReaderPage>
       final runtime = _host.runtime;
       final currentLocation = flushedLocation ?? runtime?.state.visibleLocation;
       final currentIndex =
-          currentLocation?.chapterIndex ?? _currentChapterIndex(runtime);
-      final currentTitle = _chapterTitleAt(currentIndex);
+          currentLocation?.chapterIndex ??
+          _chapterInfo.currentChapterIndex(runtime);
+      final currentTitle = _chapterInfo.chapterTitleAt(currentIndex);
       final switchingBook = widget.book.copyWith(
         chapterIndex: currentIndex,
         durChapterTitle: currentTitle.isEmpty
@@ -1345,7 +1359,7 @@ class _ReaderPageState extends State<ReaderPage>
       book: widget.book,
       chapters: chapters,
       location: location,
-      chapterTitle: _chapterTitleAt(location.chapterIndex),
+      chapterTitle: _chapterInfo.chapterTitleAt(location.chapterIndex),
       bookDao: _host.dependencies.bookDao,
       chapterDao: _host.dependencies.chapterDao,
     );
@@ -1359,104 +1373,17 @@ class _ReaderPageState extends State<ReaderPage>
     return _host.bookStorageService.discardBook(widget.book);
   }
 
-  /// 頁首頁尾資訊列跟著正文：開書、跳到別章、改排版與重載內容時畫骨架，
-  /// 開書取不到正文時不畫。同一章內的跳轉（例如拖進度條預覽）資訊列留在
-  /// 原處。
-  ReaderInfoState _infoStateOf(ReaderRuntime? runtime) {
-    if (runtime == null) return ReaderInfoState.loading;
-    if (runtime.state.lifecycle == ReaderLifecycle.unavailable) {
-      return ReaderInfoState.hidden;
-    }
-    if (!runtime.state.hasStableWorld ||
-        runtime.isJumpingToAnotherChapter ||
-        runtime.isRebuildingText) {
-      return ReaderInfoState.loading;
-    }
-    return ReaderInfoState.ready;
-  }
-
-  int _currentChapterIndex(ReaderRuntime? runtime) {
-    final count = runtime?.chapterCount ?? widget.initialChapters.length;
-    if (runtime == null || count <= 0) return 0;
-    return runtime.state.visibleLocation.chapterIndex
-        .clamp(0, count - 1)
-        .toInt();
-  }
-
-  /// 目錄、選單與資訊列顯示用的章節標題，套用閱讀設定的繁簡轉換。
-  String _chapterTitleAt(int index) {
-    return ChineseDisplay.convert(
-      _rawChapterTitleAt(index),
-      convertType: _host.settings.chineseConvert,
-    );
-  }
-
-  /// 目錄還沒載入時（從書架開書，目錄在開書途中才從資料庫讀出），上次讀到
-  /// 的那一章用書的閱讀紀錄裡的章名：開書時頁首頁尾的骨架照它量。
-  String _rawChapterTitleAt(int index) {
-    final runtime = _host.runtime;
-    final title = runtime != null
-        ? runtime.titleFor(index)
-        : index >= 0 && index < widget.initialChapters.length
-        ? widget.initialChapters[index].title
-        : '';
-    if (title.isNotEmpty || index != widget.book.chapterIndex) return title;
-    return widget.book.durChapterTitle ?? '';
-  }
-
-  /// 要開的那一章：指定了開哪裡（例如書籍詳情點某一章）就是它，否則是書的
-  /// 閱讀紀錄。和 Runtime 選開書位置的順序一樣。
-  int get _openChapterIndex =>
-      widget.openTarget?.location.chapterIndex ?? widget.book.chapterIndex;
-
-  /// 最後一次載入時頁首頁尾描述的位置，見 [_infoTargetOf]。
-  ReaderInfoTarget? _lastInfoTarget;
-
-  /// 載入期間頁首頁尾描述的位置（[ReaderInfoTarget]）：跳章時是要跳去
-  /// 的那一章，開書時是要開的那一章（[_openChapterIndex]）。目錄還沒載入時
-  /// 章數照書的紀錄。開書取不到正文時，要開的位置跟著那次開書一起清掉，
-  /// 淡掉的骨架照最後一次載入時的位置畫，寬度不跳。
-  ReaderInfoTarget _infoTargetOf(ReaderRuntime? runtime) {
-    final last = _lastInfoTarget;
-    if (last != null &&
-        runtime?.state.lifecycle == ReaderLifecycle.unavailable) {
-      return last;
-    }
-    final chapterIndex =
-        runtime?.pendingLocation?.chapterIndex ??
-        runtime?.state.visibleLocation.chapterIndex ??
-        _openChapterIndex;
-    final loaded = runtime?.chapterCount ?? widget.initialChapters.length;
-    return _lastInfoTarget = ReaderInfoTarget(
-      chapterIndex: chapterIndex,
-      chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
-      title: _chapterTitleAt(chapterIndex),
-      shares: runtime?.chapterShares.value,
-    );
-  }
-
   /// 點書源膠囊：用瀏覽器開正在讀的這一章（同 Legado 點章節網址）。
   void _openChapterWeb() {
     final runtime = _host.runtime;
-    final index = _currentChapterIndex(runtime);
-    final chapter =
-        runtime?.chapterAt(index) ??
-        (index < widget.initialChapters.length
-            ? widget.initialChapters[index]
-            : null);
+    final index = _chapterInfo.currentChapterIndex(runtime);
+    final chapter = _chapterInfo.chapterAt(index);
     final url = chapter?.webPageUrl;
     if (url == null) {
       _showNotice('這一章沒有網頁可以開');
       return;
     }
     unawaited(launchExternalUrlWithFeedback(context, url));
-  }
-
-  String _chapterUrlAt(int index) {
-    final runtime = _host.runtime;
-    if (runtime != null) return runtime.chapterUrlAt(index);
-    if (index < 0 || index >= widget.initialChapters.length) return '';
-    return widget.initialChapters[index].url;
   }
 }
 
