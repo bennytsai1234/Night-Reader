@@ -92,23 +92,22 @@ enum _MoreAction {
 }
 
 class _ComicReaderPageState extends State<ComicReaderPage>
-    implements ReaderV2ExitFlowDelegate {
+    implements ReaderExitFlowDelegate {
   static const Duration _saveDelay = Duration(milliseconds: 400);
 
-  final ReaderV2SettingsController _settings = ReaderV2SettingsController();
+  final ReaderSettingsController _settings = ReaderSettingsController();
   final ValueNotifier<bool> _menuVisible = ValueNotifier(false);
   final ValueNotifier<bool> _autoScrolling = ValueNotifier(false);
   final ValueNotifier<int> _currentChapter = ValueNotifier(0);
   final ValueNotifier<ComicMenuProgress> _progress = ValueNotifier(
     const ComicMenuProgress(chapterIndex: 0, pageIndex: 0, pageCount: 0),
   );
-  final ValueNotifier<ReaderV2ScrubState> _scrub = ValueNotifier((
+  final ValueNotifier<ReaderScrubState> _scrub = ValueNotifier((
     isScrubbing: false,
     holdsSlider: false,
     percent: 0,
   ));
-  final ReaderV2SidePanelController _chapterPanel =
-      ReaderV2SidePanelController();
+  final ReaderSidePanelController _chapterPanel = ReaderSidePanelController();
   final ComicStripController _strip = ComicStripController();
 
   List<BookChapter> _chapters = const [];
@@ -424,17 +423,17 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     );
   }
 
-  Future<void> _openPreferences() => ReaderV2MenuSheet.show<void>(
+  Future<void> _openPreferences() => ReaderMenuSheet.show<void>(
     context,
     settings: _settings,
-    builder: (context) => ReaderV2SheetScaffold(
+    builder: (context) => ReaderSheetScaffold(
       title: '漫畫偏好',
       children: [
         NumberStepperRow(
           label: '自動捲動速度',
           value: _settings.autoPageSpeed,
-          min: ReaderV2SettingsController.minAutoPageSpeed,
-          max: ReaderV2SettingsController.maxAutoPageSpeed,
+          min: ReaderSettingsController.minAutoPageSpeed,
+          max: ReaderSettingsController.maxAutoPageSpeed,
           step: 0.01,
           displayScale: 100,
           unit: '%',
@@ -510,7 +509,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     PreparedSourceSwitch? prepared;
     await AppBottomSheet.showCustom<void>(
       context: context,
-      constraints: ReaderV2MenuSheet.constraintsFor(context, _settings),
+      constraints: ReaderMenuSheet.constraintsFor(context, _settings),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeSourceSheet(
@@ -683,7 +682,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     unawaited(_openWeb(url));
   }
 
-  /// 離開：和文字閱讀器同一套（[ReaderV2PageExitCoordinator]）——沒加入
+  /// 離開：和文字閱讀器同一套（[ReaderPageExitCoordinator]）——沒加入
   /// 書架的書照「離開時詢問加入書架」問，不留的書清掉它的目錄與暫存。
   Future<void> _exit() => _exitCoordinator.handleExitIntent(
     context: context,
@@ -691,8 +690,8 @@ class _ComicReaderPageState extends State<ComicReaderPage>
     popNavigator: () => Navigator.of(context).pop(),
   );
 
-  final ReaderV2PageExitCoordinator _exitCoordinator =
-      ReaderV2PageExitCoordinator();
+  final ReaderPageExitCoordinator _exitCoordinator =
+      ReaderPageExitCoordinator();
 
   @override
   Book get book => _book;
@@ -706,10 +705,10 @@ class _ComicReaderPageState extends State<ComicReaderPage>
 
   @override
   Future<void> addCurrentBookToBookshelf() async {
-    await const ReaderV2SessionFacade().addCurrentBookToBookshelf(
+    await const ReaderSessionFacade().addCurrentBookToBookshelf(
       book: _book,
       chapters: _chapters,
-      location: ReaderV2Location(
+      location: ReaderLocation(
         chapterIndex: _book.chapterIndex,
         charOffset: _book.charOffset,
         visualOffsetPx: _book.visualOffsetPx,
@@ -747,7 +746,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
                 ? Brightness.light
                 : Brightness.dark,
           ),
-          child: ReaderV2WindowSettings(
+          child: ReaderWindowSettings(
             keepScreenOn: _settings.keepScreenOn,
             backlight: null,
             orientation: _settings.orientation,
@@ -816,15 +815,15 @@ class _ComicReaderPageState extends State<ComicReaderPage>
         ),
       );
     }
-    final navigation = ReaderV2ChapterNavigationState(
+    final navigation = ReaderChapterNavigationState(
       chapterCount: _chapters.length,
       current: _currentChapter,
       scrub: _scrub,
       titleFor: _titleOf,
     );
-    return ReaderV2SidePanel(
+    return ReaderSidePanel(
       controller: _chapterPanel,
-      panel: ReaderV2ChaptersDrawer(
+      panel: ReaderChaptersDrawer(
         shown: _chapterPanel.shown,
         chapters: _chapters,
         currentChapter: _currentChapter,
@@ -862,7 +861,7 @@ class _ComicReaderPageState extends State<ComicReaderPage>
             left: 0,
             right: 0,
             top: 0,
-            child: ReaderV2TopMenu(
+            child: ReaderTopMenu(
               controlsVisible: _menuVisible,
               bookName: _book.name,
               navigation: navigation,

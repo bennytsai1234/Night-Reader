@@ -13,8 +13,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
-  const ReaderV2ReplaceRuleEditorSheet({
+class ReaderReplaceRuleEditorSheet extends StatefulWidget {
+  const ReaderReplaceRuleEditorSheet({
     super.key,
     this.rule,
     this.testSample,
@@ -38,10 +38,10 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   }) {
     return AppBottomSheet.showCustom<void>(
       context: context,
-      // 從閱讀器打開時對齊正文（ReaderV2MenuSheet.constraintsFor）。
+      // 從閱讀器打開時對齊正文（ReaderMenuSheet.constraintsFor）。
       constraints: constraints,
       isScrollControlled: true,
-      builder: (_) => ReaderV2ReplaceRuleEditorSheet(
+      builder: (_) => ReaderReplaceRuleEditorSheet(
         rule: rule,
         testSample: testSample,
         onSave: onSave,
@@ -50,12 +50,12 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   }
 
   @override
-  State<ReaderV2ReplaceRuleEditorSheet> createState() =>
-      _ReaderV2ReplaceRuleEditorSheetState();
+  State<ReaderReplaceRuleEditorSheet> createState() =>
+      _ReaderReplaceRuleEditorSheetState();
 }
 
-class _ReaderV2ReplaceRuleEditorSheetState
-    extends State<ReaderV2ReplaceRuleEditorSheet> {
+class _ReaderReplaceRuleEditorSheetState
+    extends State<ReaderReplaceRuleEditorSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
   late final TextEditingController _groupCtrl;

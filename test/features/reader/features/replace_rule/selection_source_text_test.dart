@@ -34,7 +34,7 @@ void main() {
     List<ReplaceRule> rules = const <ReplaceRule>[],
     int convert = 0,
   }) async {
-    final result = await ReaderV2ContentTransformWorker.instance.process({
+    final result = await ReaderContentTransformWorker.instance.process({
       'chapterIndex': 0,
       'bookName': book.name,
       'bookOrigin': book.origin,
@@ -51,7 +51,7 @@ void main() {
       convertType: convert,
     );
     // worker 已修過段落，和它建 document 時一樣不再修一次。
-    return ReaderV2Content.fromRaw(
+    return ReaderContent.fromRaw(
       chapterIndex: 0,
       title: '',
       rawText: content,
@@ -81,7 +81,7 @@ void main() {
       start = line.indexOf(text, start + 1);
     }
     expect(start, isNonNegative, reason: '第 $paragraph 段沒有「$text」');
-    final sources = await ReaderV2ContentTransformer.ruleStageParagraphs(
+    final sources = await ReaderContentTransformer.ruleStageParagraphs(
       book: book,
       chapter: BookChapter(url: 'c', title: title),
       rawContent: raw,

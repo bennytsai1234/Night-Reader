@@ -1,21 +1,21 @@
 import 'reader_location.dart';
 import 'reader_runtime.dart';
 
-class ReaderV2ViewportBridge {
-  final ReaderV2Runtime _runtime;
+class ReaderViewportBridge {
+  final ReaderRuntime _runtime;
 
-  ReaderV2ViewportBridge(this._runtime);
+  ReaderViewportBridge(this._runtime);
 
   Object? _visibleLocationCaptureOwner;
-  ReaderV2VisibleLocationCapture? _visibleLocationCapture;
+  ReaderVisibleLocationCapture? _visibleLocationCapture;
   Object? _viewportRestoreOwner;
-  ReaderV2ViewportRestore? _viewportRestore;
+  ReaderViewportRestore? _viewportRestore;
 
-  ReaderV2ViewportRestore? get viewportRestore => _viewportRestore;
+  ReaderViewportRestore? get viewportRestore => _viewportRestore;
 
   void registerVisibleLocationCapture(
     Object owner,
-    ReaderV2VisibleLocationCapture capture,
+    ReaderVisibleLocationCapture capture,
   ) {
     _visibleLocationCaptureOwner = owner;
     _visibleLocationCapture = capture;
@@ -27,7 +27,7 @@ class ReaderV2ViewportBridge {
     _visibleLocationCapture = null;
   }
 
-  void registerViewportRestore(Object owner, ReaderV2ViewportRestore restore) {
+  void registerViewportRestore(Object owner, ReaderViewportRestore restore) {
     _viewportRestoreOwner = owner;
     _viewportRestore = restore;
   }
@@ -39,9 +39,9 @@ class ReaderV2ViewportBridge {
     return true;
   }
 
-  /// 照正文目前的捲動位置更新 [ReaderV2State.visibleLocation]（見
-  /// [ReaderV2Runtime.updateVisibleLocation]：不通知整個 Runtime）。
-  ReaderV2Location? captureVisibleLocation() {
+  /// 照正文目前的捲動位置更新 [ReaderState.visibleLocation]（見
+  /// [ReaderRuntime.updateVisibleLocation]：不通知整個 Runtime）。
+  ReaderLocation? captureVisibleLocation() {
     if (_runtime.disposed || !_runtime.state.hasStableWorld) return null;
     final capture = _visibleLocationCapture;
     if (capture == null) return null;
@@ -53,8 +53,8 @@ class ReaderV2ViewportBridge {
     return captured;
   }
 
-  Future<ReaderV2Location?> saveProgress({
-    ReaderV2Location? location,
+  Future<ReaderLocation?> saveProgress({
+    ReaderLocation? location,
     bool immediate = true,
   }) async {
     final targetLocation = location ?? captureVisibleLocation();
@@ -62,18 +62,18 @@ class ReaderV2ViewportBridge {
     return _saveProgressLocation(targetLocation, immediate: immediate);
   }
 
-  Future<ReaderV2Location?> flushProgress() {
+  Future<ReaderLocation?> flushProgress() {
     final location = captureVisibleLocation() ?? _runtime.state.visibleLocation;
     return _saveProgressLocation(location);
   }
 
-  Future<ReaderV2Location?> saveProgressLocation(
-    ReaderV2Location location, {
+  Future<ReaderLocation?> saveProgressLocation(
+    ReaderLocation location, {
     bool immediate = true,
   }) => _saveProgressLocation(location, immediate: immediate);
 
-  Future<ReaderV2Location?> _saveProgressLocation(
-    ReaderV2Location location, {
+  Future<ReaderLocation?> _saveProgressLocation(
+    ReaderLocation location, {
     bool immediate = true,
   }) async {
     if (_runtime.disposed) return null;
@@ -81,11 +81,11 @@ class ReaderV2ViewportBridge {
       chapterCount: _runtime.repository.chapterCount,
     );
     if (normalized == _runtime.state.committedLocation) {
-      // ReaderV2Location equality intentionally describes viewport geometry,
+      // ReaderLocation equality intentionally describes viewport geometry,
       // not the persisted content identity. The same chapter/offset can now
       // point into a new displayText version, so an unchanged viewport must
       // still pass through ProgressController: it enriches readerAnchorJson
-      // from the exact cached ReaderV2Content before writing.
+      // from the exact cached ReaderContent before writing.
       if (immediate) {
         await _runtime.progressController.saveImmediately(normalized);
       } else {
@@ -102,12 +102,12 @@ class ReaderV2ViewportBridge {
     return normalized;
   }
 
-  ReaderV2Location? _normalizeCapturedLocation(ReaderV2Location? location) {
+  ReaderLocation? _normalizeCapturedLocation(ReaderLocation? location) {
     if (location == null) return null;
     final visualOffset = location.visualOffsetPx;
     if (!visualOffset.isFinite || visualOffset.isNaN) return null;
-    if (visualOffset < ReaderV2Location.minVisualOffsetPx ||
-        visualOffset > ReaderV2Location.maxVisualOffsetPx) {
+    if (visualOffset < ReaderLocation.minVisualOffsetPx ||
+        visualOffset > ReaderLocation.maxVisualOffsetPx) {
       return null;
     }
     return location.normalized(chapterCount: _runtime.repository.chapterCount);

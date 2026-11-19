@@ -43,7 +43,7 @@ void main() {
     );
     expect(find.text(rawName), findsOneWidget);
 
-    final settings = ReaderV2SettingsController()..setChineseConvert(1);
+    final settings = ReaderSettingsController()..setChineseConvert(1);
     await tester.pump();
     expect(find.text('斗羅大陸'), findsOneWidget);
 

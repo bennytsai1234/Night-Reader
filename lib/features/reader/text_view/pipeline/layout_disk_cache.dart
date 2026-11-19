@@ -11,8 +11,8 @@ import '../measure/metrics_disk_cache.dart';
 ///
 /// 只用來加速：讀不到、寫不進去都當作沒有快取，不會讓章節載入或排版
 /// 失敗。兩個快取在第一次用到時才打開。
-final class HybridLayoutDiskCache {
-  HybridLayoutDiskCache({required this.bookUrl});
+final class LayoutDiskCache {
+  LayoutDiskCache({required this.bookUrl});
 
   final String bookUrl;
   MetricsDiskCache? _metrics;

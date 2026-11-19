@@ -54,7 +54,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: AppProviders.providers,
-        child: const ReaderApp(),
+        child: const NightReaderApp(),
       ),
     );
     // 書讀到了、骨架還在呼吸時，下載完成之類的原因又要重讀一次書架，這一次

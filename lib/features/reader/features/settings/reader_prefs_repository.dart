@@ -17,8 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 一個閱讀設定的存檔描述：存檔名稱、預設值，以及讀出與寫入的方式。
 ///
 /// [key] 是存檔名稱，多台手機同步與備份靠它對上（ADR 0039），不能改。
-final class ReaderV2Setting<T> {
-  ReaderV2Setting._({
+final class ReaderSetting<T> {
+  ReaderSetting._({
     required this.key,
     required this._fallback,
     required this._read,
@@ -30,7 +30,7 @@ final class ReaderV2Setting<T> {
   final T Function() _fallback;
   final T? Function(SharedPreferences prefs) _read;
   final T Function(T? stored) _decode;
-  final ReaderV2SettingWrite Function(T value) _prepare;
+  final ReaderSettingWrite Function(T value) _prepare;
 
   /// 預設值。每次都是新的物件，清單不在快照之間共用。
   T get fallback => _fallback();
@@ -40,20 +40,20 @@ final class ReaderV2Setting<T> {
 
   /// 把 [value] 轉成要存的樣子（在呼叫的當下，之後清單再被改也不影響），
   /// 回傳拿到偏好設定後寫入的那一步。
-  ReaderV2SettingWrite prepare(T value) => _prepare(value);
+  ReaderSettingWrite prepare(T value) => _prepare(value);
 }
 
 /// 拿到偏好設定後寫入一個已經轉好的值；寫不進去時回傳 false。
-typedef ReaderV2SettingWrite = Future<bool> Function(SharedPreferences prefs);
+typedef ReaderSettingWrite = Future<bool> Function(SharedPreferences prefs);
 
-ReaderV2Setting<T> _setting<T>(
+ReaderSetting<T> _setting<T>(
   String key,
   T Function() fallback, {
   required T? Function(SharedPreferences prefs) read,
-  required ReaderV2SettingWrite Function(T value) prepare,
+  required ReaderSettingWrite Function(T value) prepare,
   T Function(T? stored)? decode,
 }) {
-  return ReaderV2Setting<T>._(
+  return ReaderSetting<T>._(
     key: key,
     fallback: fallback,
     read: read,
@@ -62,7 +62,7 @@ ReaderV2Setting<T> _setting<T>(
   );
 }
 
-ReaderV2Setting<double> _double(
+ReaderSetting<double> _double(
   String key,
   double fallback, {
   double? Function(SharedPreferences prefs)? read,
@@ -81,7 +81,7 @@ ReaderV2Setting<double> _double(
   );
 }
 
-ReaderV2Setting<int> _int(
+ReaderSetting<int> _int(
   String key,
   int fallback, {
   int Function(int? stored)? decode,
@@ -99,7 +99,7 @@ ReaderV2Setting<int> _int(
   );
 }
 
-ReaderV2Setting<bool> _bool(String key, bool fallback) {
+ReaderSetting<bool> _bool(String key, bool fallback) {
   return _setting<bool>(
     key,
     () => fallback,
@@ -110,7 +110,7 @@ ReaderV2Setting<bool> _bool(String key, bool fallback) {
 }
 
 /// 字串存檔的設定：[parse] 讀不懂時回傳 null，就用預設值。
-ReaderV2Setting<T> _text<T>(
+ReaderSetting<T> _text<T>(
   String key,
   T Function() fallback, {
   required T? Function(String? stored) parse,
@@ -139,13 +139,13 @@ double Function(double? stored) _finiteClamp(
 }
 
 /// 正文與頁首頁尾的留白（px）。
-ReaderV2Setting<double> _pagePadding(String key, double fallback) {
+ReaderSetting<double> _pagePadding(String key, double fallback) {
   return _double(
     key,
     fallback,
     decode: _finiteClamp(
-      ReaderV2PrefsRepository.minPagePadding,
-      ReaderV2PrefsRepository.maxPagePadding,
+      ReaderPrefsRepository.minPagePadding,
+      ReaderPrefsRepository.maxPagePadding,
       fallback,
     ),
   );
@@ -162,10 +162,10 @@ const int _defaultLineChars = 60;
 
 /// 自動翻頁速度（每秒滾動畫面高的比例）。舊版存的是整數百分比，超過 1 就除以 100。
 double _autoPageSpeedOf(double? value) {
-  const fallback = ReaderV2PrefsRepository.defaultAutoPageSpeed;
+  const fallback = ReaderPrefsRepository.defaultAutoPageSpeed;
   if (value == null || !value.isFinite) return fallback;
-  const min = ReaderV2PrefsRepository.minAutoPageSpeed;
-  const max = ReaderV2PrefsRepository.maxAutoPageSpeed;
+  const min = ReaderPrefsRepository.minAutoPageSpeed;
+  const max = ReaderPrefsRepository.maxAutoPageSpeed;
   if (value > 1) return (value / 100).clamp(min, max).toDouble();
   return value.clamp(min, max).toDouble();
 }
@@ -178,7 +178,7 @@ double _legacyTitleSpacing({
   required double lineHeight,
   required double paragraphSpacing,
 }) {
-  final lineExtent = fontSize * ReaderV2Style.normalizeLineHeight(lineHeight);
+  final lineExtent = fontSize * ReaderStyle.normalizeLineHeight(lineHeight);
   if (!paragraphSpacing.isFinite || lineExtent <= 0) return 0.0;
   return paragraphSpacing * 8 / lineExtent;
 }
@@ -195,27 +195,27 @@ List<int> _parseClickActions(String? stored) {
 
 List<int> _normalizeClickActions(List<int>? actions) {
   if (actions == null || actions.length != 9) {
-    return ReaderV2TapAction.defaultGrid();
+    return ReaderTapAction.defaultGrid();
   }
   return List<int>.from(actions);
 }
 
 /// 所有閱讀設定的存檔描述。改值、存檔、還原、讀出都照這裡。
 ///
-/// 加一個設定：在這裡加一行並列入 [all]，在 [ReaderV2PrefsSnapshot] 加一個讀取的
+/// 加一個設定：在這裡加一行並列入 [all]，在 [ReaderPrefsSnapshot] 加一個讀取的
 /// getter，在控制器加一個 set 方法與欄位。存檔名稱一旦存出去就不能改。
-abstract final class ReaderV2Settings {
+abstract final class ReaderSettings {
   /// 正文字號。
   static final fontSize = _double(PreferKey.readerFontSize, _defaultFontSize);
 
   /// 章節標題字號。未保存過時沿用舊版規則（正文 + 4），外觀不變。
   static final titleFontSize = _double(
     PreferKey.readerTitleFontSize,
-    _defaultFontSize + kReaderV2DefaultTitleSizeDelta,
+    _defaultFontSize + kReaderDefaultTitleSizeDelta,
     read: (prefs) =>
         prefs.getDouble(PreferKey.readerTitleFontSize) ??
         (prefs.getDouble(PreferKey.readerFontSize) ?? _defaultFontSize) +
-            kReaderV2DefaultTitleSizeDelta,
+            kReaderDefaultTitleSizeDelta,
   );
 
   static final lineHeight = _double(
@@ -232,8 +232,8 @@ abstract final class ReaderV2Settings {
     PreferKey.readerChapterSpacing,
     _defaultChapterSpacing,
     decode: _finiteClamp(
-      ReaderV2PrefsRepository.minChapterSpacing,
-      ReaderV2PrefsRepository.maxChapterSpacing,
+      ReaderPrefsRepository.minChapterSpacing,
+      ReaderPrefsRepository.maxChapterSpacing,
       _defaultChapterSpacing,
     ),
   );
@@ -243,7 +243,7 @@ abstract final class ReaderV2Settings {
   /// 自動翻頁速度（每秒滾動畫面高的比例）；還讀得到舊版的整數百分比。
   static final autoPageSpeed = _double(
     PreferKey.readerAutoPageSpeed,
-    ReaderV2PrefsRepository.defaultAutoPageSpeed,
+    ReaderPrefsRepository.defaultAutoPageSpeed,
     read: (prefs) =>
         prefs.getDouble(PreferKey.readerAutoPageSpeed) ??
         prefs.getInt(PreferKey.autoReadSpeed)?.toDouble(),
@@ -261,7 +261,7 @@ abstract final class ReaderV2Settings {
   static final showAddToShelfAlert = _bool(PreferKey.showAddToShelfAlert, true);
   static final clickActions = _text<List<int>>(
     PreferKey.readerClickActions,
-    ReaderV2TapAction.defaultGrid,
+    ReaderTapAction.defaultGrid,
     parse: _parseClickActions,
     encode: (actions) => _normalizeClickActions(actions).join(','),
   );
@@ -277,8 +277,8 @@ abstract final class ReaderV2Settings {
     PreferKey.readerLineChars,
     _defaultLineChars,
     decode: (stored) =>
-        ReaderV2PrefsRepository.normalizeLineChars(stored ?? _defaultLineChars),
-    encode: ReaderV2PrefsRepository.normalizeLineChars,
+        ReaderPrefsRepository.normalizeLineChars(stored ?? _defaultLineChars),
+    encode: ReaderPrefsRepository.normalizeLineChars,
   );
 
   /// 左右對齊：一行湊不滿一個字格的空隙攤進字距。
@@ -297,48 +297,48 @@ abstract final class ReaderV2Settings {
   static final hideStatusBar = _bool(PreferKey.readerHideStatusBar, true);
 
   /// 狀態列預設隱藏，頁首接手時間與電量。
-  static final headerInfo = _text<ReaderV2InfoSlots>(
+  static final headerInfo = _text<ReaderInfoSlots>(
     PreferKey.readerHeaderInfo,
-    () => const ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.time,
-      right: ReaderV2InfoItem.battery,
+    () => const ReaderInfoSlots(
+      left: ReaderInfoItem.time,
+      right: ReaderInfoItem.battery,
     ),
-    parse: ReaderV2InfoSlots.decode,
+    parse: ReaderInfoSlots.decode,
     encode: (value) => value.encode(),
   );
-  static final footerInfo = _text<ReaderV2InfoSlots>(
+  static final footerInfo = _text<ReaderInfoSlots>(
     PreferKey.readerFooterInfo,
-    () => const ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.chapterTitle,
-      right: ReaderV2InfoItem.bookProgress,
+    () => const ReaderInfoSlots(
+      left: ReaderInfoItem.chapterTitle,
+      right: ReaderInfoItem.bookProgress,
     ),
-    parse: ReaderV2InfoSlots.decode,
+    parse: ReaderInfoSlots.decode,
     encode: (value) => value.encode(),
   );
 
   /// 朗讀高亮與選字反白的顏色，以及朗讀高亮的深淺。
-  static final highlightColor = _text<ReaderV2HighlightColor>(
+  static final highlightColor = _text<ReaderHighlightColor>(
     PreferKey.readerHighlightColor,
-    () => ReaderV2HighlightColor.defaultColor,
-    parse: ReaderV2HighlightColor.parse,
+    () => ReaderHighlightColor.defaultColor,
+    parse: ReaderHighlightColor.parse,
     encode: (value) => value.name,
   );
   static final highlightStrength = _double(
     PreferKey.readerHighlightStrength,
-    ReaderV2HighlightStrength.defaultValue,
-    decode: ReaderV2HighlightStrength.normalize,
-    encode: ReaderV2HighlightStrength.normalize,
+    ReaderHighlightStrength.defaultValue,
+    decode: ReaderHighlightStrength.normalize,
+    encode: ReaderHighlightStrength.normalize,
   );
 
   /// 亮度跟隨系統；關閉時用 [brightness]。
   static final brightnessAuto = _bool(PreferKey.readerBrightnessAuto, true);
 
-  /// 亮度條的位置（0–1），換算見 [ReaderV2Brightness]。
+  /// 亮度條的位置（0–1），換算見 [ReaderBrightness]。
   static final brightness = _double(
     PreferKey.readerBrightness,
-    ReaderV2Brightness.defaultLevel,
-    decode: ReaderV2Brightness.normalize,
-    encode: ReaderV2Brightness.normalize,
+    ReaderBrightness.defaultLevel,
+    decode: ReaderBrightness.normalize,
+    encode: ReaderBrightness.normalize,
   );
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁；[volumeKeyReversed] 時對調。
@@ -368,18 +368,18 @@ abstract final class ReaderV2Settings {
       );
     },
     decode: _finiteClamp(
-      ReaderV2PrefsRepository.minTitleSpacing,
-      ReaderV2PrefsRepository.maxTitleSpacing,
+      ReaderPrefsRepository.minTitleSpacing,
+      ReaderPrefsRepository.maxTitleSpacing,
       _defaultTitleSpacing,
     ),
   );
 
   /// 閱讀器露在畫面上時螢幕保持常亮。
   static final keepScreenOn = _bool(PreferKey.readerKeepScreenOn, true);
-  static final orientation = _text<ReaderV2Orientation>(
+  static final orientation = _text<ReaderOrientation>(
     PreferKey.readerOrientation,
-    () => ReaderV2Orientation.system,
-    parse: ReaderV2Orientation.parse,
+    () => ReaderOrientation.system,
+    parse: ReaderOrientation.parse,
     encode: (value) => value.name,
   );
 
@@ -394,12 +394,12 @@ abstract final class ReaderV2Settings {
     PreferKey.readerPageTurnOverlap,
     1,
     decode: (stored) =>
-        ReaderV2PrefsRepository.normalizePageTurnOverlap(stored ?? 1),
+        ReaderPrefsRepository.normalizePageTurnOverlap(stored ?? 1),
   );
-  static final pageTurnSpeed = _text<ReaderV2PageTurnSpeed>(
+  static final pageTurnSpeed = _text<ReaderPageTurnSpeed>(
     PreferKey.readerPageTurnSpeed,
-    () => ReaderV2PageTurnSpeed.defaultSpeed,
-    parse: ReaderV2PageTurnSpeed.parse,
+    () => ReaderPageTurnSpeed.defaultSpeed,
+    parse: ReaderPageTurnSpeed.parse,
     encode: (value) => value.name,
   );
 
@@ -409,21 +409,21 @@ abstract final class ReaderV2Settings {
     PreferKey.readerProgressFractionDigits,
     1,
     decode: (stored) =>
-        ReaderV2PrefsRepository.normalizeProgressFractionDigits(stored ?? 1),
+        ReaderPrefsRepository.normalizeProgressFractionDigits(stored ?? 1),
   );
 
   /// 亮度條拉到底時疊上的黑色不透明度。
   static final maxDim = _double(
     PreferKey.readerMaxDim,
-    ReaderV2Brightness.defaultMaxDim,
-    decode: ReaderV2Brightness.normalizeMaxDim,
+    ReaderBrightness.defaultMaxDim,
+    decode: ReaderBrightness.normalizeMaxDim,
   );
 
   /// 正文上下緣漸隱的最大高度（px）；0 是不漸隱。
   static final edgeFade = _double(
     PreferKey.readerEdgeFade,
-    ReaderV2PrefsRepository.defaultEdgeFade,
-    decode: ReaderV2PrefsRepository.normalizeEdgeFade,
+    ReaderPrefsRepository.defaultEdgeFade,
+    decode: ReaderPrefsRepository.normalizeEdgeFade,
   );
 
   /// 朗讀時畫面跟著念到的句子捲動。
@@ -438,8 +438,8 @@ abstract final class ReaderV2Settings {
   static final infoFontSize = _double(
     PreferKey.readerInfoFontSize,
     kReaderInfoFontSize,
-    decode: ReaderV2PrefsRepository.normalizeInfoFontSize,
-    encode: ReaderV2PrefsRepository.normalizeInfoFontSize,
+    decode: ReaderPrefsRepository.normalizeInfoFontSize,
+    encode: ReaderPrefsRepository.normalizeInfoFontSize,
   );
 
   /// 正文、標題與頁首頁尾的字型（ADR 0045）。
@@ -451,7 +451,7 @@ abstract final class ReaderV2Settings {
   );
 
   /// 全部設定；快照由這裡預設、讀出。
-  static final List<ReaderV2Setting<dynamic>> all = [
+  static final List<ReaderSetting<dynamic>> all = [
     fontSize,
     titleFontSize,
     lineHeight,
@@ -498,79 +498,79 @@ abstract final class ReaderV2Settings {
   ];
 }
 
-/// 閱讀設定的一份快照：每個設定一個值（見 [ReaderV2Settings]）。
-class ReaderV2PrefsSnapshot {
-  ReaderV2PrefsSnapshot._(this._values);
+/// 閱讀設定的一份快照：每個設定一個值（見 [ReaderSettings]）。
+class ReaderPrefsSnapshot {
+  ReaderPrefsSnapshot._(this._values);
 
   final Map<Object, Object?> _values;
 
   /// 所有設定的預設值。
-  factory ReaderV2PrefsSnapshot.defaults() => ReaderV2PrefsSnapshot._({
-    for (final setting in ReaderV2Settings.all) setting: setting.fallback,
+  factory ReaderPrefsSnapshot.defaults() => ReaderPrefsSnapshot._({
+    for (final setting in ReaderSettings.all) setting: setting.fallback,
   });
 
   /// [setting] 在這份快照裡的值。
-  T valueOf<T>(ReaderV2Setting<T> setting) => _values[setting] as T;
+  T valueOf<T>(ReaderSetting<T> setting) => _values[setting] as T;
 
   /// 其餘設定不變、只換掉 [setting] 的值的新快照。其餘的清單（九宮格）各自
   /// 複製一份，不和這份快照共用。
-  ReaderV2PrefsSnapshot withValue<T>(ReaderV2Setting<T> setting, T value) =>
-      ReaderV2PrefsSnapshot._({
+  ReaderPrefsSnapshot withValue<T>(ReaderSetting<T> setting, T value) =>
+      ReaderPrefsSnapshot._({
         for (final MapEntry(:key, value: current) in _values.entries)
           key: current is List<int> ? List<int>.of(current) : current,
         setting: value,
       });
 
-  double get fontSize => valueOf(ReaderV2Settings.fontSize);
-  double get titleFontSize => valueOf(ReaderV2Settings.titleFontSize);
-  double get lineHeight => valueOf(ReaderV2Settings.lineHeight);
-  double get paragraphSpacing => valueOf(ReaderV2Settings.paragraphSpacing);
-  double get chapterSpacing => valueOf(ReaderV2Settings.chapterSpacing);
-  double get letterSpacing => valueOf(ReaderV2Settings.letterSpacing);
-  int get textIndent => valueOf(ReaderV2Settings.textIndent);
-  double get autoPageSpeed => valueOf(ReaderV2Settings.autoPageSpeed);
-  int get chineseConvert => valueOf(ReaderV2Settings.chineseConvert);
-  bool get showIllustrations => valueOf(ReaderV2Settings.showIllustrations);
-  bool get showAddToShelfAlert => valueOf(ReaderV2Settings.showAddToShelfAlert);
-  List<int> get clickActions => valueOf(ReaderV2Settings.clickActions);
-  double get paddingHorizontal => valueOf(ReaderV2Settings.paddingHorizontal);
-  int get lineChars => valueOf(ReaderV2Settings.lineChars);
-  bool get justifyText => valueOf(ReaderV2Settings.justifyText);
-  double get paddingTop => valueOf(ReaderV2Settings.paddingTop);
-  double get paddingBottom => valueOf(ReaderV2Settings.paddingBottom);
-  double get footerOffset => valueOf(ReaderV2Settings.footerOffset);
-  bool get hideStatusBar => valueOf(ReaderV2Settings.hideStatusBar);
-  ReaderV2InfoSlots get headerInfo => valueOf(ReaderV2Settings.headerInfo);
-  ReaderV2InfoSlots get footerInfo => valueOf(ReaderV2Settings.footerInfo);
-  ReaderV2HighlightColor get highlightColor =>
-      valueOf(ReaderV2Settings.highlightColor);
-  double get highlightStrength => valueOf(ReaderV2Settings.highlightStrength);
-  bool get brightnessAuto => valueOf(ReaderV2Settings.brightnessAuto);
-  double get brightness => valueOf(ReaderV2Settings.brightness);
-  bool get volumeKeyPage => valueOf(ReaderV2Settings.volumeKeyPage);
-  bool get volumeKeyReversed => valueOf(ReaderV2Settings.volumeKeyReversed);
-  double get titleSpacing => valueOf(ReaderV2Settings.titleSpacing);
-  bool get keepScreenOn => valueOf(ReaderV2Settings.keepScreenOn);
-  ReaderV2Orientation get orientation => valueOf(ReaderV2Settings.orientation);
-  bool get hideNavigationBar => valueOf(ReaderV2Settings.hideNavigationBar);
-  int get pageTurnOverlap => valueOf(ReaderV2Settings.pageTurnOverlap);
-  ReaderV2PageTurnSpeed get pageTurnSpeed =>
-      valueOf(ReaderV2Settings.pageTurnSpeed);
-  bool get use24HourClock => valueOf(ReaderV2Settings.use24HourClock);
+  double get fontSize => valueOf(ReaderSettings.fontSize);
+  double get titleFontSize => valueOf(ReaderSettings.titleFontSize);
+  double get lineHeight => valueOf(ReaderSettings.lineHeight);
+  double get paragraphSpacing => valueOf(ReaderSettings.paragraphSpacing);
+  double get chapterSpacing => valueOf(ReaderSettings.chapterSpacing);
+  double get letterSpacing => valueOf(ReaderSettings.letterSpacing);
+  int get textIndent => valueOf(ReaderSettings.textIndent);
+  double get autoPageSpeed => valueOf(ReaderSettings.autoPageSpeed);
+  int get chineseConvert => valueOf(ReaderSettings.chineseConvert);
+  bool get showIllustrations => valueOf(ReaderSettings.showIllustrations);
+  bool get showAddToShelfAlert => valueOf(ReaderSettings.showAddToShelfAlert);
+  List<int> get clickActions => valueOf(ReaderSettings.clickActions);
+  double get paddingHorizontal => valueOf(ReaderSettings.paddingHorizontal);
+  int get lineChars => valueOf(ReaderSettings.lineChars);
+  bool get justifyText => valueOf(ReaderSettings.justifyText);
+  double get paddingTop => valueOf(ReaderSettings.paddingTop);
+  double get paddingBottom => valueOf(ReaderSettings.paddingBottom);
+  double get footerOffset => valueOf(ReaderSettings.footerOffset);
+  bool get hideStatusBar => valueOf(ReaderSettings.hideStatusBar);
+  ReaderInfoSlots get headerInfo => valueOf(ReaderSettings.headerInfo);
+  ReaderInfoSlots get footerInfo => valueOf(ReaderSettings.footerInfo);
+  ReaderHighlightColor get highlightColor =>
+      valueOf(ReaderSettings.highlightColor);
+  double get highlightStrength => valueOf(ReaderSettings.highlightStrength);
+  bool get brightnessAuto => valueOf(ReaderSettings.brightnessAuto);
+  double get brightness => valueOf(ReaderSettings.brightness);
+  bool get volumeKeyPage => valueOf(ReaderSettings.volumeKeyPage);
+  bool get volumeKeyReversed => valueOf(ReaderSettings.volumeKeyReversed);
+  double get titleSpacing => valueOf(ReaderSettings.titleSpacing);
+  bool get keepScreenOn => valueOf(ReaderSettings.keepScreenOn);
+  ReaderOrientation get orientation => valueOf(ReaderSettings.orientation);
+  bool get hideNavigationBar => valueOf(ReaderSettings.hideNavigationBar);
+  int get pageTurnOverlap => valueOf(ReaderSettings.pageTurnOverlap);
+  ReaderPageTurnSpeed get pageTurnSpeed =>
+      valueOf(ReaderSettings.pageTurnSpeed);
+  bool get use24HourClock => valueOf(ReaderSettings.use24HourClock);
   int get progressFractionDigits =>
-      valueOf(ReaderV2Settings.progressFractionDigits);
-  double get maxDim => valueOf(ReaderV2Settings.maxDim);
-  double get edgeFade => valueOf(ReaderV2Settings.edgeFade);
-  bool get ttsFollow => valueOf(ReaderV2Settings.ttsFollow);
-  bool get bodyBold => valueOf(ReaderV2Settings.bodyBold);
-  bool get titleBold => valueOf(ReaderV2Settings.titleBold);
-  bool get titleCenter => valueOf(ReaderV2Settings.titleCenter);
-  double get infoFontSize => valueOf(ReaderV2Settings.infoFontSize);
-  AppFont get readerFont => valueOf(ReaderV2Settings.readerFont);
+      valueOf(ReaderSettings.progressFractionDigits);
+  double get maxDim => valueOf(ReaderSettings.maxDim);
+  double get edgeFade => valueOf(ReaderSettings.edgeFade);
+  bool get ttsFollow => valueOf(ReaderSettings.ttsFollow);
+  bool get bodyBold => valueOf(ReaderSettings.bodyBold);
+  bool get titleBold => valueOf(ReaderSettings.titleBold);
+  bool get titleCenter => valueOf(ReaderSettings.titleCenter);
+  double get infoFontSize => valueOf(ReaderSettings.infoFontSize);
+  AppFont get readerFont => valueOf(ReaderSettings.readerFont);
 }
 
-class ReaderV2PrefsRepository {
-  const ReaderV2PrefsRepository();
+class ReaderPrefsRepository {
+  const ReaderPrefsRepository();
 
   /// 自動翻頁速度（每秒滾動畫面高的比例）的合法範圍；
   /// 所有讀寫端（設定 sheet、全域設定頁、AutoPageController）共用此常數。
@@ -613,7 +613,7 @@ class ReaderV2PrefsRepository {
   static const double minInfoFontSize = 9.0;
   static const double maxInfoFontSize = 16.0;
 
-  Future<ReaderV2PrefsSnapshot> load() async =>
+  Future<ReaderPrefsSnapshot> load() async =>
       read(await SharedPreferences.getInstance());
 
   /// 還沒有標題間距這個設定時，把從字號、行高與段距換算出的值存下來；之後
@@ -627,15 +627,13 @@ class ReaderV2PrefsRepository {
   }
 
   /// 從已經取得的 [SharedPreferences] 同步讀出設定。
-  ReaderV2PrefsSnapshot read(SharedPreferences prefs) =>
-      ReaderV2PrefsSnapshot._({
-        for (final setting in ReaderV2Settings.all)
-          setting: setting.read(prefs),
-      });
+  ReaderPrefsSnapshot read(SharedPreferences prefs) => ReaderPrefsSnapshot._({
+    for (final setting in ReaderSettings.all) setting: setting.read(prefs),
+  });
 
   /// 寫入一個設定；寫不進去時丟出錯誤，由控制器還原成最後落地的值。
   /// 存的是呼叫當下的值：清單在等偏好設定的期間又被改也不影響。
-  Future<void> save<T>(ReaderV2Setting<T> setting, T value) async {
+  Future<void> save<T>(ReaderSetting<T> setting, T value) async {
     final write = setting.prepare(value);
     final prefs = await SharedPreferences.getInstance();
     if (!await write(prefs)) {

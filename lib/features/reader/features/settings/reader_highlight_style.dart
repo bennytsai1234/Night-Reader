@@ -4,7 +4,7 @@ import 'package:night_reader/shared/theme/app_style.dart';
 
 /// 朗讀高亮與選字反白共用的顏色。[theme] 取目前風格的高亮色；
 /// 其餘是固定色票。
-enum ReaderV2HighlightColor {
+enum ReaderHighlightColor {
   theme('跟隨主題', null),
   amber('琥珀', Color(0xFFFFC857)),
   blue('藍', Color(0xFF5AA9FF)),
@@ -12,7 +12,7 @@ enum ReaderV2HighlightColor {
   pink('粉', Color(0xFFFF7FAF)),
   gray('灰', Color(0xFF9E9E9E));
 
-  const ReaderV2HighlightColor(this.label, this._color);
+  const ReaderHighlightColor(this.label, this._color);
 
   final String label;
   final Color? _color;
@@ -20,9 +20,9 @@ enum ReaderV2HighlightColor {
   Color resolve(StylePalette palette) => _color ?? palette.highlight;
 
   /// 沒設定過或認不得時：灰（維護者自己讀書用的設定，2026-11-06）。
-  static const ReaderV2HighlightColor defaultColor = gray;
+  static const ReaderHighlightColor defaultColor = gray;
 
-  static ReaderV2HighlightColor parse(String? name) {
+  static ReaderHighlightColor parse(String? name) {
     for (final value in values) {
       if (value.name == name) return value;
     }
@@ -31,7 +31,7 @@ enum ReaderV2HighlightColor {
 }
 
 /// 朗讀高亮的深淺（鋪底色的不透明度）。
-abstract final class ReaderV2HighlightStrength {
+abstract final class ReaderHighlightStrength {
   static const double min = 0.06;
   static const double max = 0.6;
   static const double defaultValue = 0.5;

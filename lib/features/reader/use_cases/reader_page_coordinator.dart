@@ -28,17 +28,17 @@ import 'package:night_reader/features/reader/features/replace_rule/reader_replac
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight_follower.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
-typedef ReaderV2NoticeSink = void Function(
+typedef ReaderNoticeSink = void Function(
   String message, {
-  ReaderV2NoticeAction? action,
+  ReaderNoticeAction? action,
 });
 
 /// 提示列右側的按鈕，例如「復原」。
-typedef ReaderV2NoticeAction = ({String label, VoidCallback onPressed});
+typedef ReaderNoticeAction = ({String label, VoidCallback onPressed});
 
-class ReaderV2PageCoordinator {
-  ReaderV2PageCoordinator({required this._host, required this._showNotice}) {
-    _ttsFollower = ReaderV2TtsHighlightFollower(
+class ReaderPageCoordinator {
+  ReaderPageCoordinator({required this._host, required this._showNotice}) {
+    _ttsFollower = ReaderTtsHighlightFollower(
       ensureHighlightVisible: (highlight) {
         final ensureVisible = _host.viewportController.ensureCharRangeVisible;
         if (ensureVisible == null) return Future<bool>.value(false);
@@ -51,8 +51,8 @@ class ReaderV2PageCoordinator {
     );
   }
 
-  final ReaderV2ControllerHost _host;
-  final ReaderV2NoticeSink _showNotice;
+  final ReaderControllerHost _host;
+  final ReaderNoticeSink _showNotice;
 
   /// 點擊區域的「目錄」「日夜切換」：要用到頁面的抽屜與主題，由頁面接上，
   /// 和閱讀選單的同名按鈕做同一件事。
@@ -63,7 +63,7 @@ class ReaderV2PageCoordinator {
   static const Duration _scrubPreviewDebounce = Duration(milliseconds: 180);
   Timer? _scrubPreviewTimer;
 
-  late final ReaderV2TtsHighlightFollower _ttsFollower;
+  late final ReaderTtsHighlightFollower _ttsFollower;
 
   void handleTap(TapUpDetails details, Size? viewportSize) {
     final runtime = _host.runtime;
@@ -74,35 +74,35 @@ class ReaderV2PageCoordinator {
     final col = (details.localPosition.dx / (viewportSize.width / 3))
         .floor()
         .clamp(0, 2);
-    final action = ReaderV2TapAction.fromCode(
+    final action = ReaderTapAction.fromCode(
       _host.settings.clickActions[row * 3 + col],
     );
     switch (action) {
-      case ReaderV2TapAction.menu:
+      case ReaderTapAction.menu:
         _host.menu.showControls();
         return;
-      case ReaderV2TapAction.nextPage:
+      case ReaderTapAction.nextPage:
         unawaited(_movePage(forward: true));
         return;
-      case ReaderV2TapAction.prevPage:
+      case ReaderTapAction.prevPage:
         unawaited(_movePage(forward: false));
         return;
-      case ReaderV2TapAction.nextChapter:
+      case ReaderTapAction.nextChapter:
         unawaited(jumpRelativeChapter(1));
         return;
-      case ReaderV2TapAction.prevChapter:
+      case ReaderTapAction.prevChapter:
         unawaited(jumpRelativeChapter(-1));
         return;
-      case ReaderV2TapAction.toggleTts:
+      case ReaderTapAction.toggleTts:
         unawaited(_host.tts?.toggle());
         return;
-      case ReaderV2TapAction.openChapters:
+      case ReaderTapAction.openChapters:
         openChapters?.call();
         return;
-      case ReaderV2TapAction.toggleAutoPage:
+      case ReaderTapAction.toggleAutoPage:
         toggleAutoPage();
         return;
-      case ReaderV2TapAction.toggleDayNight:
+      case ReaderTapAction.toggleDayNight:
         toggleDayNight?.call();
         return;
     }
@@ -113,7 +113,7 @@ class ReaderV2PageCoordinator {
     if (runtime == null || runtime.chapterCount <= 0) return;
     final current = runtime.state.visibleLocation.chapterIndex;
     bool locked(int index) => runtime.chapterAt(index)?.isLocked ?? false;
-    final target = ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+    final target = ReaderChapterNavigationResolver.resolveRelativeTarget(
       currentChapterIndex: current,
       chapterCount: runtime.chapterCount,
       delta: delta,
@@ -135,7 +135,7 @@ class ReaderV2PageCoordinator {
     await jumpToChapter(target);
   }
 
-  /// [settled] 見 [ReaderV2Runtime.jumpToChapter]。
+  /// [settled] 見 [ReaderRuntime.jumpToChapter]。
   Future<void> jumpToChapter(int index, {Future<void>? settled}) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
@@ -182,7 +182,7 @@ class ReaderV2PageCoordinator {
     final ratio = (percent / 100).clamp(0.0, 1.0).toDouble();
     if (ratio <= 0) {
       await runtime.jumpToLocation(
-        ReaderV2Location(
+        ReaderLocation(
           chapterIndex: chapterIndex,
           charOffset: 0,
           visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
@@ -195,7 +195,7 @@ class ReaderV2PageCoordinator {
     final length = content.displayText.length;
     final charOffset = (length * ratio).round().clamp(0, length).toInt();
     await runtime.jumpToLocation(
-      ReaderV2Location(chapterIndex: chapterIndex, charOffset: charOffset),
+      ReaderLocation(chapterIndex: chapterIndex, charOffset: charOffset),
       immediateSave: immediateSave,
     );
   }
@@ -236,15 +236,12 @@ class ReaderV2PageCoordinator {
       return;
     }
     // 點下去就開，和選單收起同時；測試文字與規則數由面板打開後自己讀。
-    final constraints = ReaderV2MenuSheet.constraintsFor(
-      context,
-      _host.settings,
-    );
+    final constraints = ReaderMenuSheet.constraintsFor(context, _host.settings);
     await AppBottomSheet.showCustom<void>(
       context: context,
       constraints: constraints,
       isScrollControlled: true,
-      builder: (_) => ReaderV2ReplaceRuleSheet(
+      builder: (_) => ReaderReplaceRuleSheet(
         sheetConstraints: constraints,
         book: _host.book,
         bookDao: _host.dependencies.bookDao,
@@ -303,9 +300,9 @@ class ReaderV2PageCoordinator {
     if (source == null || !context.mounted) return;
     final (:replaceDao, :pattern, :paragraph) = source;
     int? id;
-    await ReaderV2ReplaceRuleEditorSheet.show(
+    await ReaderReplaceRuleEditorSheet.show(
       context,
-      constraints: ReaderV2MenuSheet.constraintsFor(context, _host.settings),
+      constraints: ReaderMenuSheet.constraintsFor(context, _host.settings),
       rule: ReplaceRule(
         name: pattern,
         group: _replacedTextGroup,
@@ -358,7 +355,7 @@ class ReaderV2PageCoordinator {
       ).getRawContent(book: book, chapter: chapter);
       final paragraphs = raw == null
           ? const <String>[]
-          : await ReaderV2ContentTransformer.ruleStageParagraphs(
+          : await ReaderContentTransformer.ruleStageParagraphs(
               book: book,
               chapter: chapter,
               rawContent: raw,
@@ -452,9 +449,9 @@ class ReaderV2PageCoordinator {
     final runtime = _host.runtime;
     if (runtime == null) return;
     await _jumpTo(
-      ReaderV2Bookmarks.locationOf(
+      ReaderBookmarks.locationOf(
         bookmark,
-        chapterIndex: ReaderV2Bookmarks.chapterIndexIn(
+        chapterIndex: ReaderBookmarks.chapterIndexIn(
           bookmark,
           runtime.chapters,
         ),
@@ -517,9 +514,9 @@ class ReaderV2PageCoordinator {
     final runtime = _host.runtime;
     if (runtime == null) return;
     await _jumpTo(
-      ReaderV2Highlights.locationOf(
+      ReaderHighlights.locationOf(
         highlight,
-        chapterIndex: ReaderV2Highlights.chapterIndexIn(
+        chapterIndex: ReaderHighlights.chapterIndexIn(
           highlight,
           runtime.chapters,
         ),
@@ -529,7 +526,7 @@ class ReaderV2PageCoordinator {
   }
 
   /// 跳到 [target]，照目前的排版放在畫面上方讀起的位置（同跳章）。
-  Future<void> _jumpTo(ReaderV2Location target, {Future<void>? settled}) async {
+  Future<void> _jumpTo(ReaderLocation target, {Future<void>? settled}) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
     final location = target.copyWith(
@@ -593,7 +590,7 @@ class ReaderV2PageCoordinator {
 
   /// 靜態函式建立的閉包只帶著 [raw] 進另一個 isolate，不帶這個協調器。
   static Future<List<String>> _sourceParagraphsInBackground(String raw) =>
-      Isolate.run(() => ReaderV2Content.sourceParagraphsOf(raw));
+      Isolate.run(() => ReaderContent.sourceParagraphsOf(raw));
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
   Future<void> movePage({required bool forward}) => _movePage(forward: forward);
@@ -610,7 +607,7 @@ class ReaderV2PageCoordinator {
 /// [content] 的 `displayText` 位置 [charOffset] 落在第幾段正文；在章節標題上
 /// 時是第一段。替換規則一般不增刪段落，所以這個序號也能拿來找原文的同一段。
 @visibleForTesting
-int paragraphIndexAt(ReaderV2Content content, int charOffset) {
+int paragraphIndexAt(ReaderContent content, int charOffset) {
   var end = content.bodyStartOffset;
   for (var i = 0; i < content.paragraphs.length; i++) {
     // 段落之間以兩個換行相接。

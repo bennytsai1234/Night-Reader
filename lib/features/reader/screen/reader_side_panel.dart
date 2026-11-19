@@ -8,9 +8,9 @@ import 'package:night_reader/features/reader/features/menu/reader_menu_palette.d
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/pixel_translation.dart';
 
-/// 開關 [ReaderV2SidePanel] 的遙控器，由閱讀頁建立與釋放。
-class ReaderV2SidePanelController {
-  _ReaderV2SidePanelState? _state;
+/// 開關 [ReaderSidePanel] 的遙控器，由閱讀頁建立與釋放。
+class ReaderSidePanelController {
+  _ReaderSidePanelState? _state;
 
   final ValueNotifier<bool> _shown = ValueNotifier(false);
 
@@ -41,8 +41,8 @@ class ReaderV2SidePanelController {
 /// [AppMotion.stillGap]，滑出的每一幀只平移面板、改暗幕的濃淡（ADR 0037
 /// 策略一、二）。手指按在左緣時就先準備，往右拖時面板已經建好，只跟著手指
 /// 走（策略四）。
-class ReaderV2SidePanel extends StatefulWidget {
-  const ReaderV2SidePanel({
+class ReaderSidePanel extends StatefulWidget {
+  const ReaderSidePanel({
     super.key,
     required this.controller,
     required this.panel,
@@ -51,7 +51,7 @@ class ReaderV2SidePanel extends StatefulWidget {
     this.onClosed,
   });
 
-  final ReaderV2SidePanelController controller;
+  final ReaderSidePanelController controller;
 
   /// 面板本身（[Drawer]）。
   final Widget panel;
@@ -64,10 +64,10 @@ class ReaderV2SidePanel extends StatefulWidget {
   final VoidCallback? onClosed;
 
   @override
-  State<ReaderV2SidePanel> createState() => _ReaderV2SidePanelState();
+  State<ReaderSidePanel> createState() => _ReaderSidePanelState();
 }
 
-class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
+class _ReaderSidePanelState extends State<ReaderSidePanel>
     with SingleTickerProviderStateMixin {
   /// 照 Flutter 的抽屜：收放的基準時間、甩動算數的最低速度與左緣的感應寬度。
   static const Duration _settleDuration = Duration(milliseconds: 246);
@@ -96,14 +96,14 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   /// 面板自己的焦點範圍：打開時焦點移進來，不留在被蓋住的閱讀頁（同系統
   /// 抽屜）。
   final FocusScopeNode _focusScope = FocusScopeNode(
-    debugLabel: 'ReaderV2SidePanel',
+    debugLabel: 'ReaderSidePanel',
   );
 
   /// 面板建過了，之後一直掛著。
   bool _built = false;
   bool _open = false;
 
-  /// 上次收完之後打開過：收完時才通知 [ReaderV2SidePanel.onClosed]。只是手指
+  /// 上次收完之後打開過：收完時才通知 [ReaderSidePanel.onClosed]。只是手指
   /// 按在左緣、或拉一點就放掉彈回去，不算打開過。
   bool _openedSinceClosed = false;
 
@@ -123,7 +123,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   }
 
   @override
-  void didUpdateWidget(ReaderV2SidePanel oldWidget) {
+  void didUpdateWidget(ReaderSidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       if (oldWidget.controller._state == this) {
@@ -311,7 +311,7 @@ class _ReaderV2SidePanelState extends State<ReaderV2SidePanel>
   Widget build(BuildContext context) {
     final shown = _shown.value;
     if (shown) _panel = widget.panel;
-    final scrim = ReaderV2MenuStyle.of(context).scrim;
+    final scrim = ReaderMenuStyle.of(context).scrim;
     final edge = _edgeDragWidth + MediaQuery.paddingOf(context).left;
     final covering = _builtCovering = _covering;
     return Stack(

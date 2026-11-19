@@ -43,10 +43,10 @@ class _FakeChapterDao extends Fake implements ChapterDao {
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 void main() {
-  late ReaderV2Runtime runtime;
-  late ReaderV2ViewportController viewport;
-  late ReaderV2AutoPageController autoPage;
-  ReaderV2FrameCallback? onFrame;
+  late ReaderRuntime runtime;
+  late ReaderViewportController viewport;
+  late ReaderAutoPageController autoPage;
+  ReaderFrameCallback? onFrame;
   var elapsed = Duration.zero;
   var primed = false;
 
@@ -59,7 +59,7 @@ void main() {
       originName: '本地',
     );
     final bookDao = _FakeBookDao();
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: [
         BookChapter(
@@ -74,17 +74,17 @@ void main() {
       chapterDao: _FakeChapterDao(),
       sourceDao: _FakeSourceDao(),
     );
-    runtime = ReaderV2Runtime(
+    runtime = ReaderRuntime(
       book: book,
       repository: repository,
-      progressController: ReaderV2ProgressController(
+      progressController: ReaderProgressController(
         book: book,
         repository: repository,
         bookDao: bookDao,
       ),
-      initialLayoutSpec: ReaderV2LayoutSpec.fromViewport(
+      initialLayoutSpec: ReaderLayoutSpec.fromViewport(
         viewportSize: const Size(400, 600),
-        style: const ReaderV2LayoutStyle(
+        style: const ReaderLayoutStyle(
           fontSize: 18,
           lineHeight: 1.5,
           letterSpacing: 0,
@@ -95,12 +95,12 @@ void main() {
           paddingRight: 12,
         ),
       ),
-      initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      initialLocation: const ReaderLocation(chapterIndex: 0, charOffset: 0),
     );
-    viewport = ReaderV2ViewportController()..settleScroll = () async {};
+    viewport = ReaderViewportController()..settleScroll = () async {};
     onFrame = null;
     elapsed = Duration.zero;
-    autoPage = ReaderV2AutoPageController(
+    autoPage = ReaderAutoPageController(
       runtime: runtime,
       viewportController: viewport,
       viewportExtent: () => 600,
@@ -165,7 +165,7 @@ void main() {
       ..scrollBy = ((_) async => false)
       ..moveToNextPage = (() async => false);
     // 另開一個，拆掉它不影響 tearDown 拆共用的那個。
-    final closing = ReaderV2AutoPageController(
+    final closing = ReaderAutoPageController(
       runtime: runtime,
       viewportController: viewport,
       viewportExtent: () => 600,
@@ -262,12 +262,12 @@ void main() {
 
     restoring = Completer<bool>();
     final jump = runtime.jumpToLocation(
-      const ReaderV2Location(chapterIndex: 0, charOffset: 1),
+      const ReaderLocation(chapterIndex: 0, charOffset: 1),
     );
     await pumpEventQueue();
     expect(
       runtime.stateMachine.currentOperation?.kind,
-      ReaderV2OperationKind.jump,
+      ReaderOperationKind.jump,
     );
     autoPage.start();
     tick();
@@ -296,7 +296,7 @@ void main() {
     }
 
     // 預設速度是每秒捲幾個視窗高：120Hz 每幀 600 × 速度 × 8.333ms。
-    const speed = ReaderV2PrefsRepository.defaultAutoPageSpeed;
+    const speed = ReaderPrefsRepository.defaultAutoPageSpeed;
     expect(deltas, hasLength(3));
     for (final delta in deltas) {
       expect(delta, closeTo(600 * speed * 0.008333, 1e-6));

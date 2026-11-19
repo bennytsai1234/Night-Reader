@@ -7,7 +7,7 @@ void main() {
     test('把孤立的下引號接回同一句，保留後面的敘述', () {
       const source = '「請進。\n」一個悅耳的女性聲音在門後傳來。';
       expect(SemanticParagraphFormatter.repair(source), '「請進。」一個悅耳的女性聲音在門後傳來。');
-      expect(ReaderV2Content.paragraphsOf(source), ['「請進。」一個悅耳的女性聲音在門後傳來。']);
+      expect(ReaderContent.paragraphsOf(source), ['「請進。」一個悅耳的女性聲音在門後傳來。']);
     });
 
     test('行首帶有來源縮排時，不把縮排塞進段落中間', () {
@@ -71,7 +71,7 @@ void main() {
       );
       expect(repaired.lines, ['「請進。」她說。', '', '下一段。']);
       expect(repaired.sources, ['「請進。\n」她說。', '', '下一段。']);
-      expect(ReaderV2Content.sourceParagraphsOf('「請進。\n」她說。\n\n下一段。'), [
+      expect(ReaderContent.sourceParagraphsOf('「請進。\n」她說。\n\n下一段。'), [
         '「請進。\n」她說。',
         '下一段。',
       ]);
@@ -113,7 +113,7 @@ void main() {
     test('普通段落及連續對話仍各是一段', () {
       const source = '第一段寫完了。\n第二段開始。\n「你好。」\n「再見。」';
       expect(SemanticParagraphFormatter.repair(source), source);
-      expect(ReaderV2Content.paragraphsOf(source), [
+      expect(ReaderContent.paragraphsOf(source), [
         '第一段寫完了。',
         '第二段開始。',
         '「你好。」',
@@ -182,7 +182,7 @@ void main() {
     });
 
     test('只有插圖的行夾在中間時，圖照樣排在下一段開頭', () {
-      final document = ReaderV2Content.fromRaw(
+      final document = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '他說：「\n\uE000\n你好。」',
@@ -198,7 +198,7 @@ void main() {
     });
 
     test('章節的段落、文字與雜湊由修復後內容建立', () {
-      final document = ReaderV2Content.fromRaw(
+      final document = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '第一章',
         rawText: '　　「請進。\n　　」她說。\n　　下一段。',

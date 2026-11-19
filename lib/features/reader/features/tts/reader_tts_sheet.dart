@@ -19,7 +19,7 @@ import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-abstract class ReaderV2TtsSheetController extends Listenable {
+abstract class ReaderTtsSheetController extends Listenable {
   bool get isPlaying;
 
   /// 暫停中：播放鍵會從暫停處接著念，而不是從畫面位置開始。
@@ -34,23 +34,19 @@ abstract class ReaderV2TtsSheetController extends Listenable {
   Future<void> setPitch(double value);
 }
 
-/// 閱讀器內的朗讀面板內容；由 ReaderV2MenuSheet 以選單配色開啟。
-class ReaderV2TtsPanel extends StatelessWidget {
-  const ReaderV2TtsPanel({
-    super.key,
-    required this.tts,
-    required this.settings,
-  });
+/// 閱讀器內的朗讀面板內容；由 ReaderMenuSheet 以選單配色開啟。
+class ReaderTtsPanel extends StatelessWidget {
+  const ReaderTtsPanel({super.key, required this.tts, required this.settings});
 
-  final ReaderV2TtsSheetController tts;
-  final ReaderV2SettingsController settings;
+  final ReaderTtsSheetController tts;
+  final ReaderSettingsController settings;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[tts, settings]),
       builder: (context, _) {
-        return ReaderV2SheetScaffold(
+        return ReaderSheetScaffold(
           title: '朗讀',
           children: [
             // 分組卡片，和閱讀器其他面板一致（DESIGN 不再使用 ListTile）。
@@ -136,7 +132,7 @@ Widget _stepperRow(Widget stepper) => GroupedContent(
 class _HighlightSection extends StatefulWidget implements GroupedSkeletonItem {
   const _HighlightSection({required this.settings});
 
-  final ReaderV2SettingsController settings;
+  final ReaderSettingsController settings;
 
   @override
   GroupedItemShape skeletonShape(
@@ -152,7 +148,7 @@ class _HighlightSection extends StatefulWidget implements GroupedSkeletonItem {
     // 色票一格是色點與名稱置中疊起來、取較寬的那個，幾格頭尾對齊、平均分開。
     const swatch = _HighlightColorRow._swatchSize;
     final labels = [
-      for (final option in ReaderV2HighlightColor.values)
+      for (final option in ReaderHighlightColor.values)
         GroupedItemShape.text(
           context,
           option.label,
@@ -249,8 +245,8 @@ class _HighlightSectionState extends State<_HighlightSection> {
                   label: context.ui('高亮深淺'),
                   child: Slider(
                     value: strength,
-                    min: ReaderV2HighlightStrength.min,
-                    max: ReaderV2HighlightStrength.max,
+                    min: ReaderHighlightStrength.min,
+                    max: ReaderHighlightStrength.max,
                     onChanged: (value) => setState(() => _dragging = value),
                     onChangeEnd: (value) {
                       setState(() => _dragging = null);
@@ -272,7 +268,7 @@ class _HighlightSectionState extends State<_HighlightSection> {
 class _HighlightPreview extends StatelessWidget {
   const _HighlightPreview({required this.settings, required this.strength});
 
-  final ReaderV2SettingsController settings;
+  final ReaderSettingsController settings;
 
   /// 預覽用的深淺；拖動中是尚未寫入的暫存值。
   final double strength;
@@ -321,7 +317,7 @@ class _HighlightPreview extends StatelessWidget {
 class _HighlightColorRow extends StatelessWidget {
   const _HighlightColorRow({required this.settings});
 
-  final ReaderV2SettingsController settings;
+  final ReaderSettingsController settings;
 
   static const double _swatchSize = 30;
 
@@ -336,7 +332,7 @@ class _HighlightColorRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        for (final option in ReaderV2HighlightColor.values)
+        for (final option in ReaderHighlightColor.values)
           Semantics(
             button: true,
             selected: option == settings.highlightColor,
@@ -372,7 +368,7 @@ class _HighlightColorRow extends StatelessWidget {
                             size: 18,
                             color: Colors.black.withValues(alpha: 0.7),
                           )
-                        : option == ReaderV2HighlightColor.theme
+                        : option == ReaderHighlightColor.theme
                         ? Icon(
                             Icons.palette_outlined,
                             size: 16,

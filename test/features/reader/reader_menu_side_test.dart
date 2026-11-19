@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 閱讀選單與面板跟著每行字數對齊正文的左右邊。
 void main() {
-  Future<ReaderV2SettingsController> settingsWith(int lineChars) async {
+  Future<ReaderSettingsController> settingsWith(int lineChars) async {
     SharedPreferences.setMockInitialValues({
       PreferKey.readerLineChars: lineChars,
     });
@@ -19,7 +19,7 @@ void main() {
     getIt.registerSingleton<SharedPreferences>(
       await SharedPreferences.getInstance(),
     );
-    return ReaderV2SettingsController();
+    return ReaderSettingsController();
   }
 
   tearDown(GetIt.instance.reset);
@@ -83,13 +83,13 @@ void main() {
     addTearDown(settings.dispose);
 
     final side = settings.menuSideFor(1280)!;
-    expect(1280 - side * 2, ReaderV2SettingsController.menuMinWidth);
+    expect(1280 - side * 2, ReaderSettingsController.menuMinWidth);
   });
 
   group('reader panels', () {
     Future<void> openPanel(
       WidgetTester tester,
-      ReaderV2SettingsController settings,
+      ReaderSettingsController settings,
     ) async {
       tester.view.physicalSize = const Size(1280, 880);
       tester.view.devicePixelRatio = 1;
@@ -99,7 +99,7 @@ void main() {
           home: Builder(
             builder: (context) => Center(
               child: TextButton(
-                onPressed: () => ReaderV2MenuSheet.show<void>(
+                onPressed: () => ReaderMenuSheet.show<void>(
                   context,
                   settings: settings,
                   // 裡面放一層接得到點擊的底，點面板時點到的是面板本身。

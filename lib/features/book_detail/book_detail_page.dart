@@ -188,7 +188,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   : () => _navigateToReader(
                       context,
                       provider.book,
-                      ReaderV2OpenTarget.resume(provider.book),
+                      ReaderOpenTarget.resume(provider.book),
                       provider.allChapters,
                     ),
             ),
@@ -442,7 +442,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       : () => _navigateToReader(
                           context,
                           currentBook,
-                          ReaderV2OpenTarget.chapterStart(chapter.index),
+                          ReaderOpenTarget.chapterStart(chapter.index),
                           provider.allChapters,
                         ),
                 ),
@@ -1022,7 +1022,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   Future<void> _navigateToReader(
     BuildContext context,
     Book b,
-    ReaderV2OpenTarget openTarget,
+    ReaderOpenTarget openTarget,
     List<BookChapter> initialChapters,
   ) async {
     final provider = context.read<BookDetailProvider>();

@@ -43,7 +43,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: const ReaderV2ReplaceRulePage(),
+        home: const ReaderReplaceRulePage(),
       ),
     );
     await settle(tester);

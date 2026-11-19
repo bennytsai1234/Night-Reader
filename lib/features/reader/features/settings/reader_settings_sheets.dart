@@ -18,15 +18,15 @@ import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-class ReaderV2SettingsSheets {
-  const ReaderV2SettingsSheets._();
+class ReaderSettingsSheets {
+  const ReaderSettingsSheets._();
 
   /// 排版面板：半高、不加暗色遮罩，調整時可直接看到正文變化。
   static Future<void> showInterfaceSettings(
     BuildContext context,
-    ReaderV2SettingsController settings,
+    ReaderSettingsController settings,
   ) {
-    return ReaderV2MenuSheet.show<void>(
+    return ReaderMenuSheet.show<void>(
       context,
       settings: settings,
       barrierColor: Colors.transparent,
@@ -38,7 +38,7 @@ class ReaderV2SettingsSheets {
 class _ReaderInterfaceSheet extends StatefulWidget {
   const _ReaderInterfaceSheet({required this.settings});
 
-  final ReaderV2SettingsController settings;
+  final ReaderSettingsController settings;
 
   @override
   State<_ReaderInterfaceSheet> createState() => _ReaderInterfaceSheetState();
@@ -47,7 +47,7 @@ class _ReaderInterfaceSheet extends StatefulWidget {
 class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
   // 面板自己有左右內距，各組卡片不再加外距。關掉面板時還沒提交的步進
   // 在 dispose 提交。
-  late final ReaderV2SettingsGroups _groups = ReaderV2SettingsGroups(
+  late final ReaderSettingsGroups _groups = ReaderSettingsGroups(
     widget.settings,
     margin: EdgeInsets.zero,
   );
@@ -60,7 +60,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return ReaderV2SheetScaffold(
+    return ReaderSheetScaffold(
       title: '外觀與排版',
       maxHeightFactor: 0.6,
       children: [

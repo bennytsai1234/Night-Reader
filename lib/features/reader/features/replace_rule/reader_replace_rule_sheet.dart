@@ -21,8 +21,8 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-class ReaderV2ReplaceRuleSheet extends StatefulWidget {
-  const ReaderV2ReplaceRuleSheet({
+class ReaderReplaceRuleSheet extends StatefulWidget {
+  const ReaderReplaceRuleSheet({
     super.key,
     required this.book,
     required this.bookDao,
@@ -60,11 +60,10 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   }
 
   @override
-  State<ReaderV2ReplaceRuleSheet> createState() =>
-      _ReaderV2ReplaceRuleSheetState();
+  State<ReaderReplaceRuleSheet> createState() => _ReaderReplaceRuleSheetState();
 }
 
-class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
+class _ReaderReplaceRuleSheetState extends State<ReaderReplaceRuleSheet> {
   late bool _useReplaceRule;
 
   /// 「管理規則」右側的規則數。讀到時只有那一列聽它重建：常在面板滑入途中
@@ -110,7 +109,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   }
 
   Future<void> _reloadEnabledRules() async {
-    final rules = await ReaderV2ReplaceRuleSheet.loadEnabledRules(
+    final rules = await ReaderReplaceRuleSheet.loadEnabledRules(
       widget.replaceDao,
       widget.book,
     );
@@ -196,7 +195,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     if (!context.mounted) return;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
+      MaterialPageRoute(builder: (_) => const ReaderReplaceRulePage()),
     );
     if (!mounted) return;
     // 只是進去看看、沒有改動時不重載正文。
@@ -252,7 +251,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               title: '新增規則',
               onTap: () async {
                 var saved = false;
-                await ReaderV2ReplaceRuleEditorSheet.show(
+                await ReaderReplaceRuleEditorSheet.show(
                   context,
                   constraints: widget.sheetConstraints,
                   onSave: (rule) async {

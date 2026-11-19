@@ -88,7 +88,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 const Size _viewport = Size(400, 600);
 
-const ReaderV2Style _style = ReaderV2Style(
+const ReaderStyle _style = ReaderStyle(
   fontSize: 18,
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -111,14 +111,14 @@ BookChapter _chapter(int index, {int paragraphs = 80}) => BookChapter(
   ).join('\n'),
 );
 
-ReaderV2Runtime _makeRuntime({
+ReaderRuntime _makeRuntime({
   int chapterCount = 3,
   int paragraphs = 80,
-  ReaderV2Location initialLocation = const ReaderV2Location(
+  ReaderLocation initialLocation = const ReaderLocation(
     chapterIndex: 0,
     charOffset: 0,
   ),
-  ReaderV2TestContentLoader? contentLoader,
+  ReaderTestContentLoader? contentLoader,
 }) {
   final book = Book(
     bookUrl: 'http://interaction.test',
@@ -128,7 +128,7 @@ ReaderV2Runtime _makeRuntime({
     originName: '本地',
   );
   final bookDao = _FakeBookDao();
-  final repository = ReaderV2ChapterRepository(
+  final repository = ReaderChapterRepository(
     book: book,
     initialChapters: List<BookChapter>.generate(
       chapterCount,
@@ -140,17 +140,17 @@ ReaderV2Runtime _makeRuntime({
     chapterDao: _FakeChapterDao(),
     sourceDao: _FakeSourceDao(),
   );
-  return ReaderV2Runtime(
+  return ReaderRuntime(
     book: book,
     repository: repository,
-    progressController: ReaderV2ProgressController(
+    progressController: ReaderProgressController(
       book: book,
       repository: repository,
       bookDao: bookDao,
     ),
-    initialLayoutSpec: ReaderV2LayoutSpec.fromViewport(
+    initialLayoutSpec: ReaderLayoutSpec.fromViewport(
       viewportSize: _viewport,
-      style: ReaderV2LayoutStyle(
+      style: ReaderLayoutStyle(
         fontSize: _style.fontSize,
         lineHeight: _style.lineHeight,
         letterSpacing: _style.letterSpacing,
@@ -167,30 +167,30 @@ ReaderV2Runtime _makeRuntime({
 }
 
 void main() {
-  late ReaderV2Runtime runtime;
-  late ReaderV2ViewportController viewport;
+  late ReaderRuntime runtime;
+  late ReaderViewportController viewport;
   late List<TapUpDetails> taps;
   GestureTapUpCallback? onTap;
 
   Future<void> pumpReader(
     WidgetTester tester, {
-    ReaderV2Runtime? customRuntime,
+    ReaderRuntime? customRuntime,
     bool waitForOpen = true,
-    ReaderV2TtsHighlight? ttsHighlight,
+    ReaderTtsHighlight? ttsHighlight,
     ReaderSkeletonPageStore? skeletonPages,
-    ValueNotifier<HybridProgressSnapshot?>? progress,
+    ValueNotifier<ProgressSnapshot?>? progress,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     runtime = customRuntime ?? _makeRuntime();
     addTearDown(runtime.dispose);
-    viewport = ReaderV2ViewportController();
+    viewport = ReaderViewportController();
     taps = <TapUpDetails>[];
     onTap = null;
     await tester.pumpWidget(
       MaterialApp(
-        home: HybridReaderScreen(
+        home: ReaderTextView(
           runtime: runtime,
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -235,7 +235,7 @@ void main() {
 
   group('開書骨架照上次那一頁畫', () {
     late ReaderSkeletonPageStore store;
-    late ValueNotifier<HybridProgressSnapshot?> progress;
+    late ValueNotifier<ProgressSnapshot?> progress;
     setUp(() async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       store = ReaderSkeletonPageStore(await SharedPreferences.getInstance());
@@ -274,8 +274,8 @@ void main() {
       return store.read('http://interaction.test')!;
     }
 
-    ReaderV2Runtime reopenAt(ReaderSkeletonPage page) => _makeRuntime(
-      initialLocation: ReaderV2Location(
+    ReaderRuntime reopenAt(ReaderSkeletonPage page) => _makeRuntime(
+      initialLocation: ReaderLocation(
         chapterIndex: page.chapterIndex,
         charOffset: page.charOffset,
         visualOffsetPx: page.visualOffsetPx,
@@ -337,7 +337,7 @@ void main() {
       await pumpReader(
         tester,
         customRuntime: _makeRuntime(
-          initialLocation: ReaderV2Location(
+          initialLocation: ReaderLocation(
             chapterIndex: page.chapterIndex,
             charOffset: page.charOffset + 40,
           ),
@@ -356,9 +356,9 @@ void main() {
       await pumpReader(tester, skeletonPages: store, progress: progress);
       await settleReveal(tester);
       final oldSpec = runtime.state.layoutSpec;
-      final larger = ReaderV2LayoutSpec.fromViewport(
+      final larger = ReaderLayoutSpec.fromViewport(
         viewportSize: _viewport,
-        style: ReaderV2LayoutStyle(
+        style: ReaderLayoutStyle(
           fontSize: 26,
           lineHeight: _style.lineHeight,
           letterSpacing: _style.letterSpacing,
@@ -631,9 +631,7 @@ void main() {
     await tester.pump();
     expect(find.byType(LoadingVeil), findsOneWidget);
 
-    target.completeError(
-      const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
-    );
+    target.completeError(const ReaderContentUnavailableException('第 7 章暫時取不到'));
     await jump;
     await settle(tester);
 
@@ -704,9 +702,9 @@ void main() {
     ) async {
       await pumpReader(tester);
       await settle(tester);
-      final larger = ReaderV2LayoutSpec.fromViewport(
+      final larger = ReaderLayoutSpec.fromViewport(
         viewportSize: _viewport,
-        style: ReaderV2LayoutStyle(
+        style: ReaderLayoutStyle(
           fontSize: 26,
           lineHeight: _style.lineHeight,
           letterSpacing: _style.letterSpacing,
@@ -816,7 +814,7 @@ void main() {
       final custom = _makeRuntime(
         chapterCount: chapterCount,
         paragraphs: paragraphs,
-        initialLocation: ReaderV2Location(
+        initialLocation: ReaderLocation(
           chapterIndex: 0,
           charOffset: _chapter(0, paragraphs: paragraphs).content!.length ~/ 2,
         ),
@@ -905,10 +903,10 @@ void main() {
   }
 
   group('a paper whose owner gives up never leaves the reader blank', () {
-    ReaderV2LayoutSpec specWithFont(double fontSize) =>
-        ReaderV2LayoutSpec.fromViewport(
+    ReaderLayoutSpec specWithFont(double fontSize) =>
+        ReaderLayoutSpec.fromViewport(
           viewportSize: _viewport,
-          style: ReaderV2LayoutStyle(
+          style: ReaderLayoutStyle(
             fontSize: fontSize,
             lineHeight: _style.lineHeight,
             letterSpacing: _style.letterSpacing,
@@ -972,7 +970,7 @@ void main() {
       final jump = runtime.jumpToChapter(7);
       await tester.pump(const Duration(milliseconds: 16));
       target.completeError(
-        const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
+        const ReaderContentUnavailableException('第 7 章暫時取不到'),
       );
       await untilSettled(tester);
       await jump;
@@ -1009,7 +1007,7 @@ void main() {
       expect(find.byType(CustomScrollView), findsNothing, reason: '舊正文已拆掉');
 
       target.completeError(
-        const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
+        const ReaderContentUnavailableException('第 7 章暫時取不到'),
       );
       await untilSettled(tester);
       await jump;
@@ -1131,9 +1129,7 @@ void main() {
     expect(taps, hasLength(1), reason: '點紙不會被當成停住甩動而吞掉');
     expect(identical(runtime.stateMachine.currentOperation, operation), isTrue);
 
-    target.completeError(
-      const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
-    );
+    target.completeError(const ReaderContentUnavailableException('第 7 章暫時取不到'));
     await jump;
     await settle(tester);
 
@@ -1268,8 +1264,8 @@ void main() {
   ) async {
     await pumpReader(tester);
     await settle(tester);
-    ReaderV2FrameCallback? tick;
-    final auto = ReaderV2AutoPageController(
+    ReaderFrameCallback? tick;
+    final auto = ReaderAutoPageController(
       runtime: runtime,
       viewportController: viewport,
       viewportExtent: () => _viewport.height,
@@ -1314,7 +1310,7 @@ void main() {
       customRuntime: _makeRuntime(
         // Long enough that both 3000px leads stay inside chapter 1.
         paragraphs: 400,
-        initialLocation: const ReaderV2Location(
+        initialLocation: const ReaderLocation(
           chapterIndex: 1,
           charOffset: 6000,
         ),
@@ -1337,7 +1333,7 @@ void main() {
       waitForOpen: false,
       customRuntime: _makeRuntime(
         paragraphs: 400,
-        initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 0),
         contentLoader: (index, chapter) => switch (index) {
           0 => previous.future,
           1 => Future.value(chapter.content),
@@ -1380,10 +1376,10 @@ void main() {
       tester,
       waitForOpen: false,
       customRuntime: _makeRuntime(
-        initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 0),
         contentLoader: (index, chapter) => index == 0
             ? Future.error(
-                const ReaderV2ContentUnavailableException('第 0 章暫時取不到'),
+                const ReaderContentUnavailableException('第 0 章暫時取不到'),
               )
             : Future.value(chapter.content),
       ),
@@ -1421,7 +1417,7 @@ void main() {
     runtime = _makeRuntime(
       chapterCount: 1,
       paragraphs: 5,
-      initialLocation: const ReaderV2Location(
+      initialLocation: const ReaderLocation(
         chapterIndex: 0,
         charOffset: 0,
         visualOffsetPx: 120,
@@ -1438,7 +1434,7 @@ void main() {
             }
             return false;
           },
-          child: HybridReaderScreen(
+          child: ReaderTextView(
             runtime: runtime,
             backgroundColor: Colors.white,
             textColor: Colors.black,
@@ -1481,12 +1477,12 @@ void main() {
       tester,
       customRuntime: _makeRuntime(
         chapterCount: 2,
-        initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 0),
         contentLoader: (index, chapter) async {
           if (index != 0) return chapter.content;
           requests += 1;
           if (!available) {
-            throw const ReaderV2ContentUnavailableException('第 0 章暫時取不到');
+            throw const ReaderContentUnavailableException('第 0 章暫時取不到');
           }
           return chapter.content;
         },
@@ -1520,7 +1516,7 @@ void main() {
           if (index != 1) return chapter.content;
           requests += 1;
           if (!available) {
-            throw const ReaderV2ContentUnavailableException('第 1 章暫時取不到');
+            throw const ReaderContentUnavailableException('第 1 章暫時取不到');
           }
           return chapter.content;
         },
@@ -1563,16 +1559,14 @@ void main() {
   ) async {
     await pumpReader(
       tester,
-      ttsHighlight: const ReaderV2TtsHighlight(
+      ttsHighlight: const ReaderTtsHighlight(
         chapterIndex: 0,
         sentenceStart: 10,
         sentenceEnd: 40,
       ),
     );
-    List<HybridLineBox> boxes() => tester
-        .widget<HybridTtsHighlightOverlay>(
-          find.byType(HybridTtsHighlightOverlay),
-        )
+    List<LineBox> boxes() => tester
+        .widget<TtsHighlightOverlay>(find.byType(TtsHighlightOverlay))
         .sentence;
     final before = boxes();
     expect(before, isNotEmpty);
@@ -1810,9 +1804,9 @@ void main() {
     ) async {
       await pumpReader(tester, skeletonPages: store, waitForOpen: false);
       final first = (await untilVeilLines(tester)).lines!;
-      final larger = ReaderV2LayoutSpec.fromViewport(
+      final larger = ReaderLayoutSpec.fromViewport(
         viewportSize: _viewport,
-        style: ReaderV2LayoutStyle(
+        style: ReaderLayoutStyle(
           fontSize: 26,
           lineHeight: _style.lineHeight,
           letterSpacing: _style.letterSpacing,
@@ -1882,10 +1876,7 @@ void main() {
         tester,
         customRuntime: _makeRuntime(
           paragraphs: 1,
-          initialLocation: const ReaderV2Location(
-            chapterIndex: 2,
-            charOffset: 0,
-          ),
+          initialLocation: const ReaderLocation(chapterIndex: 2, charOffset: 0),
         ),
         skeletonPages: store,
         waitForOpen: false,
@@ -1899,13 +1890,10 @@ void main() {
       await pumpReader(
         tester,
         customRuntime: _makeRuntime(
-          initialLocation: const ReaderV2Location(
-            chapterIndex: 1,
-            charOffset: 0,
-          ),
+          initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 0),
           contentLoader: (index, chapter) => index == 0
               ? Future.error(
-                  const ReaderV2ContentUnavailableException('第 0 章暫時取不到'),
+                  const ReaderContentUnavailableException('第 0 章暫時取不到'),
                 )
               : Future.value(chapter.content),
         ),

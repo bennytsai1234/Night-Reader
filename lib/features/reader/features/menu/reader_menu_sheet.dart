@@ -15,20 +15,20 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀器內設定面板的唯一開啟入口。
 ///
-/// 面板配色取閱讀選單配色（[ReaderV2MenuStyle]），面板開啟期間換風格或
+/// 面板配色取閱讀選單配色（[ReaderMenuStyle]），面板開啟期間換風格或
 /// 深淺會即時更新；設定變動時整個面板重建，內容不必各自監聽。
-class ReaderV2MenuSheet {
-  const ReaderV2MenuSheet._();
+class ReaderMenuSheet {
+  const ReaderMenuSheet._();
 
   /// Material 3 底部面板預設的最寬寬度。
   static const double _defaultMaxWidth = 640;
 
   /// 閱讀器裡的面板寬度：正文欄照每行字數收窄時，面板左右緣對齊正文的
-  /// 左右邊（[ReaderV2SettingsController.menuSideFor]）；沒收窄時照預設
+  /// 左右邊（[ReaderSettingsController.menuSideFor]）；沒收窄時照預設
   /// 最寬 640。
   static double widthFor(
     BuildContext context,
-    ReaderV2SettingsController settings,
+    ReaderSettingsController settings,
   ) {
     final width = MediaQuery.sizeOf(context).width;
     final side = settings.menuSideFor(width);
@@ -39,12 +39,12 @@ class ReaderV2MenuSheet {
   /// 打開時就定下寬度的面板（替換規則、換源）用的寬度限制。
   static BoxConstraints constraintsFor(
     BuildContext context,
-    ReaderV2SettingsController settings,
+    ReaderSettingsController settings,
   ) => BoxConstraints(maxWidth: widthFor(context, settings));
 
   static Future<T?> show<T>(
     BuildContext context, {
-    required ReaderV2SettingsController settings,
+    required ReaderSettingsController settings,
     required WidgetBuilder builder,
     Color? barrierColor,
   }) {
@@ -68,7 +68,7 @@ class ReaderV2MenuSheet {
         child: ListenableBuilder(
           listenable: settings,
           builder: (context, _) {
-            final theme = ReaderV2MenuStyle.of(context)
+            final theme = ReaderMenuStyle.of(context)
                 .toSheetTheme(Theme.of(context), cards: true);
             return Align(
               alignment: Alignment.bottomCenter,
@@ -80,7 +80,7 @@ class ReaderV2MenuSheet {
                   behavior: HitTestBehavior.opaque,
                   onTap: () {},
                   child: DerivedTheme(
-                    derive: ReaderV2MenuStyle.cardsMenuThemeOf,
+                    derive: ReaderMenuStyle.cardsMenuThemeOf,
                     child: Material(
                       color: theme.colorScheme.surface,
                       shape: const RoundedRectangleBorder(
@@ -104,9 +104,9 @@ class ReaderV2MenuSheet {
 }
 
 /// 閱讀器設定面板的版面：拖曳把手、置中標題與右側圓形關閉鈕，
-/// 下方為可捲動內容。配色取自 [ReaderV2MenuSheet] 套上的選單主題。
-class ReaderV2SheetScaffold extends StatelessWidget {
-  const ReaderV2SheetScaffold({
+/// 下方為可捲動內容。配色取自 [ReaderMenuSheet] 套上的選單主題。
+class ReaderSheetScaffold extends StatelessWidget {
+  const ReaderSheetScaffold({
     super.key,
     required this.title,
     required this.children,

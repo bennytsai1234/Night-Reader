@@ -23,7 +23,7 @@ void main() {
   tearDown(() => messenger().setMockMethodCallHandler(channel, null));
 
   Widget reader({required bool enabled, Key? key}) => MaterialApp(
-    home: ReaderV2VolumeKeys(
+    home: ReaderVolumeKeys(
       key: key,
       enabled: enabled,
       onKey: (_) {},

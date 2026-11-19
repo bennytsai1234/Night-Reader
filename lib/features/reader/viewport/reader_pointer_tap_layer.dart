@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 /// 按下的那一刻詢問：這次觸碰是否只是用來停住正在進行的捲動。
-typedef ReaderV2PointerDownTapPolicy = bool Function();
+typedef ReaderPointerDownTapPolicy = bool Function();
 
-class ReaderV2PointerTapLayer extends StatefulWidget {
-  const ReaderV2PointerTapLayer({
+class ReaderPointerTapLayer extends StatefulWidget {
+  const ReaderPointerTapLayer({
     super.key,
     required this.child,
     this.onTapUp,
@@ -18,14 +18,13 @@ class ReaderV2PointerTapLayer extends StatefulWidget {
 
   /// 在命中測試時呼叫，早於任何手勢收到按下事件。捲動元件收到按下事件
   /// 就會停住慣性，事後再查捲動狀態已經看不出這一下是不是在停捲動。
-  final ReaderV2PointerDownTapPolicy? suppressTapAtPointerDown;
+  final ReaderPointerDownTapPolicy? suppressTapAtPointerDown;
 
   @override
-  State<ReaderV2PointerTapLayer> createState() =>
-      _ReaderV2PointerTapLayerState();
+  State<ReaderPointerTapLayer> createState() => _ReaderPointerTapLayerState();
 }
 
-class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
+class _ReaderPointerTapLayerState extends State<ReaderPointerTapLayer> {
   int? _pointer;
   Offset? _downPosition;
   Duration? _downTime;

@@ -42,14 +42,14 @@ final class ReaderParagraphLayout {
       return null;
     }
     final key =
-        '$fontSize|$letterSpacing|$bold|${readerV2FontFamilySignature(fontFamily)}|'
-        '$kReaderV2CjkTypographyFeatureSignature';
+        '$fontSize|$letterSpacing|$bold|${readerFontFamilySignature(fontFamily)}|'
+        '$kReaderCjkTypographyFeatureSignature';
     final cached = _cellWidthCache[key];
     if (cached != null) return cached;
 
     final paragraph = _nativeParagraph(
       text: '一一',
-      textStyle: HybridBlockTextStyle(
+      textStyle: BlockTextStyle(
         fontSize: fontSize,
         lineHeight: 1.0,
         letterSpacing: letterSpacing,
@@ -85,7 +85,7 @@ final class ReaderParagraphLayout {
 
   List<ShapedGrapheme> shapeGraphemes({
     required String text,
-    required HybridBlockTextStyle textStyle,
+    required BlockTextStyle textStyle,
   }) {
     if (text.isEmpty) return const <ShapedGrapheme>[];
 
@@ -152,7 +152,7 @@ final class ReaderParagraphLayout {
   ui.Paragraph build({
     required String sourceText,
     required ParagraphTextMap textMap,
-    required HybridBlockTextStyle textStyle,
+    required BlockTextStyle textStyle,
     required double contentWidth,
     required double? cellWidth,
     required ui.Color textColor,
@@ -193,13 +193,13 @@ final class ReaderParagraphLayout {
 
   /// emoji 的字級倍率：讓 emoji 的字寬等於一個漢字（不含字距），emoji
   /// 就和漢字一樣佔一格。
-  double emojiScale(HybridBlockTextStyle style) {
+  double emojiScale(BlockTextStyle style) {
     final key =
-        '${style.fontSize}|${style.bold}|${readerV2FontFamilySignature(style.fontFamily)}|'
-        '$kReaderV2CjkTypographyFeatureSignature';
+        '${style.fontSize}|${style.bold}|${readerFontFamilySignature(style.fontFamily)}|'
+        '$kReaderCjkTypographyFeatureSignature';
     final cached = _emojiScaleCache[key];
     if (cached != null) return cached;
-    final plain = HybridBlockTextStyle(
+    final plain = BlockTextStyle(
       fontSize: style.fontSize,
       lineHeight: 1.0,
       letterSpacing: 0,
@@ -230,7 +230,7 @@ final class ReaderParagraphLayout {
   void _addStyledText(
     ui.ParagraphBuilder builder,
     String text,
-    HybridBlockTextStyle style,
+    BlockTextStyle style,
     ui.Color color,
   ) {
     final runs = emojiRuns(text);
@@ -256,11 +256,11 @@ final class ReaderParagraphLayout {
   }
 
   /// 加入一段文字，外層已推入 [textStyle]：選了下載的字型時，中日文字
-  /// （[readerV2CjkRuns]）另推一層下載字型在前的字樣。
+  /// （[readerCjkRuns]）另推一層下載字型在前的字樣。
   void addFontRuns(
     ui.ParagraphBuilder builder,
     String text,
-    HybridBlockTextStyle style,
+    BlockTextStyle style,
     ui.Color color,
   ) {
     if (style.fontFamily == null) {
@@ -269,7 +269,7 @@ final class ReaderParagraphLayout {
     }
     final cjkStyle = _textStyle(style, color, cjk: true);
     var cursor = 0;
-    for (final run in readerV2CjkRuns(text)) {
+    for (final run in readerCjkRuns(text)) {
       if (run.start > cursor) {
         builder.addText(text.substring(cursor, run.start));
       }
@@ -289,7 +289,7 @@ final class ReaderParagraphLayout {
   /// [textAlign] 只給排出要畫的段落用；量字形與字格時從左緣起算，折行
   /// 才不會被置中的位移帶偏。
   ui.ParagraphStyle _paragraphStyle(
-    HybridBlockTextStyle style, {
+    BlockTextStyle style, {
     ui.TextAlign textAlign = ui.TextAlign.start,
   }) {
     return ui.ParagraphStyle(
@@ -298,7 +298,7 @@ final class ReaderParagraphLayout {
       fontSize: style.fontSize,
       height: style.lineHeight,
       strutStyle: ui.StrutStyle(
-        fontFamily: kReaderV2PunctFontFamily,
+        fontFamily: kReaderPunctFontFamily,
         fontFamilyFallback: style.fontFamilyFallback,
         fontSize: style.fontSize,
         height: style.lineHeight,
@@ -310,7 +310,7 @@ final class ReaderParagraphLayout {
 
   ui.Paragraph _nativeParagraph({
     required String text,
-    required HybridBlockTextStyle textStyle,
+    required BlockTextStyle textStyle,
     required ui.Color textColor,
   }) {
     final builder = ui.ParagraphBuilder(_paragraphStyle(textStyle))
@@ -320,12 +320,12 @@ final class ReaderParagraphLayout {
   }
 
   /// 段落最外層的字樣（英數字與符號的字族），配 [addFontRuns] 用。
-  ui.TextStyle textStyle(HybridBlockTextStyle style, ui.Color color) =>
+  ui.TextStyle textStyle(BlockTextStyle style, ui.Color color) =>
       _textStyle(style, color);
 
   /// [cjk] 是中日文字的字樣：下載的字型排在平台預設前面。
   ui.TextStyle _textStyle(
-    HybridBlockTextStyle style,
+    BlockTextStyle style,
     ui.Color color, {
     double fontScale = 1.0,
     bool cjk = false,
@@ -336,12 +336,12 @@ final class ReaderParagraphLayout {
       height: style.lineHeight,
       letterSpacing: style.letterSpacing,
       fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
-      fontFamily: kReaderV2PunctFontFamily,
+      fontFamily: kReaderPunctFontFamily,
       fontFamilyFallback: cjk
           ? style.cjkFontFamilyFallback
           : style.fontFamilyFallback,
-      fontFeatures: kReaderV2CjkFontFeatures,
-      locale: kReaderV2TextLocale,
+      fontFeatures: kReaderCjkFontFeatures,
+      locale: kReaderTextLocale,
     );
   }
 }

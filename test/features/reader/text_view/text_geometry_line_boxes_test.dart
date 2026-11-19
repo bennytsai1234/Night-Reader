@@ -34,10 +34,7 @@ void main() {
       ui.TextDirection.ltr,
     );
 
-    final lines = HybridTextGeometry.boxesPerLine(paragraph, [
-      ...glyphs,
-      spacer,
-    ]);
+    final lines = TextGeometry.boxesPerLine(paragraph, [...glyphs, spacer]);
 
     expect(lines, hasLength(2));
     expect(lines.first.left, 0);

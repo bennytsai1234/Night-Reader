@@ -6,25 +6,24 @@ import 'reader_menu_controller.dart';
 /// 完全滑出畫面：推進、覆蓋、縮放這幾種換頁會淡掉底下的閱讀器，選單還在
 /// 的話玻璃包在淡出裡，模糊要到最後一幀才糊上（ADR 0022）。
 ///
-/// 每一次推頁是一張 [ReaderV2MenuDepartureTicket]。選了別的目的地（開了
+/// 每一次推頁是一張 [ReaderMenuDepartureTicket]。選了別的目的地（開了
 /// 新的一張）、選單在滑出途中又被打開，或閱讀器拆掉時，舊的那張作廢：
 /// 它不會等到之後另一次不相關的收起才推頁。
-class ReaderV2MenuDeparture {
-  ReaderV2MenuDeparture(this._menu)
-    : _offScreen = !_menu.controlsVisible.value {
+class ReaderMenuDeparture {
+  ReaderMenuDeparture(this._menu) : _offScreen = !_menu.controlsVisible.value {
     _menu.controlsVisible.addListener(_onMenuChanged);
   }
 
-  final ReaderV2MenuController _menu;
+  final ReaderMenuController _menu;
 
   /// 選單完全不在畫面上：沒有打開過，或收起動畫播完（[menusHidden]）。
   bool _offScreen;
-  ReaderV2MenuDepartureTicket? _current;
+  ReaderMenuDepartureTicket? _current;
 
   /// 收起選單、開一張新的推頁請求；前一張作廢。
-  ReaderV2MenuDepartureTicket depart() {
+  ReaderMenuDepartureTicket depart() {
     _current?._settle(false);
-    final ticket = _current = ReaderV2MenuDepartureTicket._(this);
+    final ticket = _current = ReaderMenuDepartureTicket._(this);
     if (_offScreen) ticket._settle(true);
     _menu.dismissControls();
     return ticket;
@@ -51,11 +50,11 @@ class ReaderV2MenuDeparture {
   }
 }
 
-/// 一次從選單推頁的請求，見 [ReaderV2MenuDeparture]。
-class ReaderV2MenuDepartureTicket {
-  ReaderV2MenuDepartureTicket._(this._owner);
+/// 一次從選單推頁的請求，見 [ReaderMenuDeparture]。
+class ReaderMenuDepartureTicket {
+  ReaderMenuDepartureTicket._(this._owner);
 
-  final ReaderV2MenuDeparture _owner;
+  final ReaderMenuDeparture _owner;
   final Completer<bool> _gone = Completer<bool>();
   bool _cancelled = false;
 

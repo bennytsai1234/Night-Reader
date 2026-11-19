@@ -9,7 +9,7 @@ import 'package:night_reader/features/reader/text_view/paragraph/paragraph_cache
 import 'cached_block_widget.dart';
 import 'block_sliver.dart';
 
-final class HybridScrollView extends StatelessWidget {
+final class ReaderScrollView extends StatelessWidget {
   /// Flutter's RenderSliverFixedExtentBoxAdaptor force-unwraps the result of
   /// itemExtentBuilder while laying out active children. DocumentIndex can be
   /// reset before the old sliver has been removed from the render tree, so the
@@ -17,13 +17,13 @@ final class HybridScrollView extends StatelessWidget {
   ///
   /// 這個值不會污染滾動幾何：`scrollExtent`、`maxPaintExtent`、各 child 的
   /// `layoutOffset` 與 `firstIndex`/`targetLastIndex` 全部由
-  /// [RenderHybridBlockSliver] 的 Fenwick 覆寫算出，那些路徑不呼叫
+  /// [RenderBlockSliver] 的 Fenwick 覆寫算出，那些路徑不呼叫
   /// itemExtentBuilder。它只會成為某個下一幀就會被回收的殘留 child 的
   /// BoxConstraints。真正可見的位移來自索引本身合法地變空（I3 漸進重建），
   /// 不是這個值。
   static const double _fallbackItemExtent = 1.0;
 
-  const HybridScrollView({
+  const ReaderScrollView({
     super.key,
     required this.centerKey,
     required this.documentIndex,
@@ -34,7 +34,7 @@ final class HybridScrollView extends StatelessWidget {
     this.controller,
     this.cacheExtent,
     this.horizontalPadding = EdgeInsets.zero,
-    this.physics = const HybridScrollPhysics(),
+    this.physics = const ReaderScrollPhysics(),
     this.textColor = const Color(0xFF000000),
     this.clipBehavior = Clip.hardEdge,
   });
@@ -62,7 +62,7 @@ final class HybridScrollView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // D4：原生 Scrollbar 停用；無回彈由 HybridScrollPhysics（Clamping 基底）保證。
+    // D4：原生 Scrollbar 停用；無回彈由 ReaderScrollPhysics（Clamping 基底）保證。
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context)
           .copyWith(scrollbars: false, overscroll: false),
@@ -83,11 +83,11 @@ final class HybridScrollView extends StatelessWidget {
   }
 
   Widget _buildSliver({Key? key, required bool beforeCenter}) {
-    return HybridBlockSliver(
+    return BlockSliver(
       key: key,
       documentIndex: documentIndex,
       beforeCenter: beforeCenter,
-      delegate: HybridSliverChildDelegate(
+      delegate: BlockSliverChildDelegate(
         documentIndex: documentIndex,
         beforeCenter: beforeCenter,
         resetGeneration: documentIndex.resetGeneration,
@@ -131,8 +131,8 @@ final class HybridScrollView extends StatelessWidget {
 /// 直接材料化，不需要 setState 重建整棵滾動子樹（fling 幀 build 歸零）。
 /// [RenderCachedBlock] 自己就是 repaint boundary（每個段落一層，滾動時只移動
 /// 圖層、不重跑 paint），所以不再額外包 RepaintBoundary / AutomaticKeepAlive。
-final class HybridSliverChildDelegate extends SliverChildDelegate {
-  const HybridSliverChildDelegate({
+final class BlockSliverChildDelegate extends SliverChildDelegate {
+  const BlockSliverChildDelegate({
     required this.documentIndex,
     required this.beforeCenter,
     required this.resetGeneration,
@@ -180,7 +180,7 @@ final class HybridSliverChildDelegate extends SliverChildDelegate {
       : documentIndex.centerAndAfterCount;
 
   @override
-  bool shouldRebuild(covariant HybridSliverChildDelegate oldDelegate) {
+  bool shouldRebuild(covariant BlockSliverChildDelegate oldDelegate) {
     return !identical(documentIndex, oldDelegate.documentIndex) ||
         beforeCenter != oldDelegate.beforeCenter ||
         resetGeneration != oldDelegate.resetGeneration ||
@@ -197,9 +197,9 @@ final class HybridSliverChildDelegate extends SliverChildDelegate {
 ///
 /// 不依排版進度縮放手指位移或改變慣性軌跡；正文來不及排時由排版排程
 /// 補上，而不是讓捲動變慢。
-final class HybridScrollPhysics extends ClampingScrollPhysics {
-  const HybridScrollPhysics({super.parent});
+final class ReaderScrollPhysics extends ClampingScrollPhysics {
+  const ReaderScrollPhysics({super.parent});
   @override
-  HybridScrollPhysics applyTo(ScrollPhysics? ancestor) =>
-      HybridScrollPhysics(parent: buildParent(ancestor));
+  ReaderScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      ReaderScrollPhysics(parent: buildParent(ancestor));
 }

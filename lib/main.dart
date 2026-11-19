@@ -172,7 +172,7 @@ Future<void> _startApp() async {
     runApp(
       MultiProvider(
         providers: AppProviders.providers,
-        child: const LaunchScreenThemeSync(child: ReaderApp()),
+        child: const LaunchScreenThemeSync(child: NightReaderApp()),
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -362,8 +362,8 @@ Future<void> _cleanupLegacyCustomFontArtifacts() async {
   }
 }
 
-class ReaderApp extends StatelessWidget {
-  const ReaderApp({super.key});
+class NightReaderApp extends StatelessWidget {
+  const NightReaderApp({super.key});
 
   @override
   Widget build(BuildContext context) {

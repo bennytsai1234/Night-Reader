@@ -14,7 +14,7 @@ void main() {
   )!;
 
   test('without justification the leftover space insets both edges', () {
-    final frame = ReaderV2TextLayoutFrame.centered(
+    final frame = ReaderTextLayoutFrame.centered(
       contentWidth: contentWidth,
       cellWidth: cellAt(0),
     );
@@ -27,13 +27,13 @@ void main() {
       'number of cells', () {
     final cell = cellAt(0);
     final cells = (contentWidth / cell).floor();
-    final spacing = ReaderV2TextLayoutFrame.justifiedLetterSpacing(
+    final spacing = ReaderTextLayoutFrame.justifiedLetterSpacing(
       contentWidth: contentWidth,
       cellWidth: cell,
       letterSpacing: 0,
     );
     final justifiedCell = cellAt(spacing);
-    final frame = ReaderV2TextLayoutFrame.centered(
+    final frame = ReaderTextLayoutFrame.centered(
       contentWidth: contentWidth,
       cellWidth: justifiedCell,
     );
@@ -46,7 +46,7 @@ void main() {
   });
 
   test('justification keeps the user letter spacing as its base', () {
-    final spacing = ReaderV2TextLayoutFrame.justifiedLetterSpacing(
+    final spacing = ReaderTextLayoutFrame.justifiedLetterSpacing(
       contentWidth: contentWidth,
       cellWidth: cellAt(1),
       letterSpacing: 1,
@@ -58,7 +58,7 @@ void main() {
   group('line chars', () {
     const cell = 19.0;
     double padding(double viewport, int chars) =>
-        ReaderV2TextLayoutFrame.sidePadding(
+        ReaderTextLayoutFrame.sidePadding(
           viewportWidth: viewport,
           minPadding: 12,
           cellWidth: cell,
@@ -68,7 +68,7 @@ void main() {
     test('a phone that holds fewer chars keeps the minimum margin', () {
       // 393 寬扣兩側 12 放得下 19 字，比 32 少：撐滿，跟沒有字數上限一樣。
       expect(
-        ReaderV2TextLayoutFrame.lineCapacity(
+        ReaderTextLayoutFrame.lineCapacity(
           viewportWidth: 393,
           minPadding: 12,
           cellWidth: cell,
@@ -83,14 +83,14 @@ void main() {
       for (final viewport in [1280.0, 880.0]) {
         final side = padding(viewport, 32);
         final content = viewport - side * 2;
-        final frame = ReaderV2TextLayoutFrame.centered(
+        final frame = ReaderTextLayoutFrame.centered(
           contentWidth: content,
           cellWidth: cell,
         );
         expect((frame.width / cell).floor(), 32);
         // 欄寬剛好是整數格：左右對齊沒有零頭可攤，字距照使用者設的。
         expect(
-          ReaderV2TextLayoutFrame.justifiedLetterSpacing(
+          ReaderTextLayoutFrame.justifiedLetterSpacing(
             contentWidth: content,
             cellWidth: cell,
             letterSpacing: 1,
@@ -109,7 +109,7 @@ void main() {
 
   test('a content box narrower than one cell keeps the letter spacing', () {
     expect(
-      ReaderV2TextLayoutFrame.justifiedLetterSpacing(
+      ReaderTextLayoutFrame.justifiedLetterSpacing(
         contentWidth: 10,
         cellWidth: 18,
         letterSpacing: 0,

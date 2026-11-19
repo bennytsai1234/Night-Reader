@@ -164,7 +164,7 @@ final class DocumentIndex {
     return list[index];
   }
 
-  // ---- sliver 幾何查詢（供 RenderHybridBlockSliver 覆寫框架線性掃描） ----
+  // ---- sliver 幾何查詢（供 RenderBlockSliver 覆寫框架線性掃描） ----
   //
   // 框架 RenderSliverFixedExtentBoxAdaptor 在 itemExtentBuilder 模式下的
   // offset↔index 換算是從 0 線性累加（O(n)/O(n×v) 每幀）；以下三個查詢

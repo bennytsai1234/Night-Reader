@@ -8,45 +8,43 @@ import 'package:night_reader/features/reader/session/reader_operation_token.dart
 import 'package:night_reader/features/reader/session/reader_runtime.dart';
 
 /// 每一幀呼叫一次，帶著從開始算起的幀時間。
-typedef ReaderV2FrameCallback = void Function(Duration elapsed);
+typedef ReaderFrameCallback = void Function(Duration elapsed);
 
 /// 開始在每一幀呼叫 [onFrame]，回傳停止的函式。
-typedef ReaderV2FrameSource = VoidCallback Function(
-  ReaderV2FrameCallback onFrame,
-);
+typedef ReaderFrameSource = VoidCallback Function(ReaderFrameCallback onFrame);
 
-VoidCallback _tickerFrameSource(ReaderV2FrameCallback onFrame) {
-  final ticker = Ticker(onFrame, debugLabel: 'ReaderV2AutoPage');
+VoidCallback _tickerFrameSource(ReaderFrameCallback onFrame) {
+  final ticker = Ticker(onFrame, debugLabel: 'ReaderAutoPage');
   unawaited(ticker.start());
   return ticker.dispose;
 }
 
 /// 自動捲動。每一幀依幀時間推進正文，跟著螢幕的更新率走（120Hz 螢幕
 /// 每秒推 120 次），位移量只看經過的時間，不看更新率。
-class ReaderV2AutoPageController extends ChangeNotifier {
-  ReaderV2AutoPageController({
+class ReaderAutoPageController extends ChangeNotifier {
+  ReaderAutoPageController({
     required this.runtime,
     this._viewportController,
     this._viewportExtent,
     this._autoPageSpeed,
-    ReaderV2FrameSource? frameSource,
+    ReaderFrameSource? frameSource,
   }) : _frameSource = frameSource ?? _tickerFrameSource;
 
   static const double _minAutoPageSpeed =
-      ReaderV2PrefsRepository.minAutoPageSpeed;
+      ReaderPrefsRepository.minAutoPageSpeed;
   static const double _maxAutoPageSpeed =
-      ReaderV2PrefsRepository.maxAutoPageSpeed;
+      ReaderPrefsRepository.maxAutoPageSpeed;
   static const double _defaultAutoPageSpeed =
-      ReaderV2PrefsRepository.defaultAutoPageSpeed;
+      ReaderPrefsRepository.defaultAutoPageSpeed;
 
   /// 單幀最多推進的時間。卡頓超過這麼久時不一口氣補上，免得正文跳一大段。
   static const double _maxFrameSeconds = 0.08;
 
-  final ReaderV2Runtime runtime;
-  final ReaderV2ViewportController? _viewportController;
+  final ReaderRuntime runtime;
+  final ReaderViewportController? _viewportController;
   final double Function()? _viewportExtent;
   final double Function()? _autoPageSpeed;
-  final ReaderV2FrameSource _frameSource;
+  final ReaderFrameSource _frameSource;
   VoidCallback? _stopFrames;
   Duration? _lastFrame;
 
@@ -134,7 +132,7 @@ class ReaderV2AutoPageController extends ChangeNotifier {
     // 等跳章正文、或紙還蓋著正文（跳章排好後掀紙前的預留停頓）時紙下的
     // 正文不動；這一步跳過，不當成到了書尾而停下。
     if (runtime.stateMachine.currentOperation?.kind ==
-            ReaderV2OperationKind.jump ||
+            ReaderOperationKind.jump ||
         (_viewportController?.isTextCovered?.call() ?? false)) {
       return true;
     }

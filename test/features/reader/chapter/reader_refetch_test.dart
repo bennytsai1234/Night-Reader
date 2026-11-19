@@ -51,7 +51,7 @@ class _SourceDao extends Fake implements BookSourceDao {
 void main() {
   late AppDatabase db;
   late _Site site;
-  late ReaderV2ChapterRepository repository;
+  late ReaderChapterRepository repository;
 
   final source = BookSource.fromJson({
     'bookSourceName': '測試',
@@ -73,7 +73,7 @@ void main() {
     site = _Site();
     final chapterDao = ChapterDao(db);
     await chapterDao.insertChapters([chapter]);
-    repository = ReaderV2ChapterRepository(
+    repository = ReaderChapterRepository(
       book: book,
       initialChapters: [chapter],
       bookDao: BookDao(db),
@@ -105,7 +105,7 @@ void main() {
     site.body = null;
     await expectLater(
       repository.reloadContent(0, refetch: true),
-      throwsA(isA<ReaderV2ContentUnavailableException>()),
+      throwsA(isA<ReaderContentUnavailableException>()),
     );
 
     expect(repository.cachedContent(0), same(before));

@@ -20,7 +20,7 @@ void main() {
   tearDown(() => messenger().setMockMethodCallHandler(channel, null));
 
   // 一行的高度照預設的字號與行高。
-  final defaults = ReaderV2PrefsSnapshot.defaults();
+  final defaults = ReaderPrefsSnapshot.defaults();
   final lineExtent = defaults.fontSize * defaults.lineHeight;
 
   Future<ScrollPosition Function()> open(

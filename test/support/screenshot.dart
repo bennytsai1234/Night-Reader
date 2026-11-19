@@ -56,10 +56,10 @@ Future<void> loadScreenshotFonts() async {
   );
   final existing = cjk.where((path) => File(path).existsSync()).toList();
   await _loadFont('Roboto', existing);
-  for (final family in kReaderV2FontFamilyFallback) {
+  for (final family in kReaderFontFamilyFallback) {
     await _loadFont(family, existing);
   }
-  await _loadFont(kReaderV2PunctFontFamily, [
+  await _loadFont(kReaderPunctFontFamily, [
     'assets/fonts/NightReaderPunct-Regular.ttf',
     'assets/fonts/NightReaderPunct-Bold.ttf',
   ]);

@@ -25,9 +25,9 @@ void main() {
   });
   tearDown(GetIt.instance.reset);
 
-  group('ReaderV2SettingsController resets', () {
+  group('ReaderSettingsController resets', () {
     test('resetTypography restores and persists defaults', () async {
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       settings.setTypography(
         fontSize: 30,
         lineHeight: 2.4,
@@ -41,7 +41,7 @@ void main() {
       settings.resetTypography();
       await pumpEventQueue();
 
-      final defaults = ReaderV2PrefsSnapshot.defaults();
+      final defaults = ReaderPrefsSnapshot.defaults();
       expect(settings.fontSize, defaults.fontSize);
       expect(settings.lineHeight, defaults.lineHeight);
       expect(settings.letterSpacing, defaults.letterSpacing);
@@ -63,19 +63,19 @@ void main() {
     });
 
     test('resetClickActions restores default grid', () async {
-      final settings = ReaderV2SettingsController();
-      settings.setClickAction(0, ReaderV2TapAction.values.last.code);
+      final settings = ReaderSettingsController();
+      settings.setClickAction(0, ReaderTapAction.values.last.code);
 
       settings.resetClickActions();
       await pumpEventQueue();
 
-      expect(settings.clickActions, ReaderV2TapAction.defaultGrid());
+      expect(settings.clickActions, ReaderTapAction.defaultGrid());
     });
   });
 
-  Future<ReaderV2SettingsController> pumpSection(WidgetTester tester) async {
-    final settings = ReaderV2SettingsController();
-    final groups = ReaderV2SettingsGroups(settings);
+  Future<ReaderSettingsController> pumpSection(WidgetTester tester) async {
+    final settings = ReaderSettingsController();
+    final groups = ReaderSettingsGroups(settings);
     addTearDown(groups.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -121,13 +121,13 @@ void main() {
     // 延遲提交尚未觸發前重設，待提交的步進必須被丟棄。
     await tester.tap(find.widgetWithText(TextButton, '恢復預設'));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(settings.fontSize, ReaderV2PrefsSnapshot.defaults().fontSize);
+    expect(settings.fontSize, ReaderPrefsSnapshot.defaults().fontSize);
     expect(resetButton().onPressed, isNull);
   });
 
   test('menu sheet theme follows menu palette colors', () {
     const foreground = Color(0xFFE0DACC);
-    final style = ReaderV2MenuStyle(
+    final style = ReaderMenuStyle(
       brightness: Brightness.dark,
       background: const Color(0xF5141210),
       backgroundElevated: const Color(0x14FFFFFF),
@@ -155,7 +155,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final themeSettings = ThemeSettingsProvider();
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -165,7 +165,7 @@ void main() {
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () => ReaderV2SettingsSheets.showInterfaceSettings(
+                onPressed: () => ReaderSettingsSheets.showInterfaceSettings(
                   context,
                   settings,
                 ),
@@ -194,7 +194,7 @@ void main() {
 
   testWidgets('外觀與排版面板只放常調的幾項，更多排版設定進閱讀偏好，關掉後閱讀器才重讀', (tester) async {
     final themeSettings = ThemeSettingsProvider();
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     addTearDown(settings.dispose);
 
     await tester.pumpWidget(
@@ -205,7 +205,7 @@ void main() {
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () => ReaderV2SettingsSheets.showInterfaceSettings(
+                onPressed: () => ReaderSettingsSheets.showInterfaceSettings(
                   context,
                   settings,
                 ),
@@ -238,7 +238,7 @@ void main() {
     // 閱讀偏好頁用自己的控制器寫入；閱讀器的設定等那一頁整個關掉才重讀，
     // 不在被蓋住時排版、拖到返回動畫裡。
     final before = settings.fontSize;
-    final pageSettings = ReaderV2SettingsController()..setFontSize(before + 1);
+    final pageSettings = ReaderSettingsController()..setFontSize(before + 1);
     await tester.pump(const Duration(milliseconds: 200));
     pageSettings.dispose();
     expect(settings.fontSize, before, reason: '蓋著時不換');

@@ -14,8 +14,8 @@ import 'package:night_reader/core/chinese/chinese_display.dart';
 
 /// 點正文上已畫的標註打開的面板：畫到的字、換顏色、換底色或底線、備忘、
 /// 複製、刪除。換了就存，不另按儲存；備忘在面板收起或切到別的 App 時存。
-class ReaderV2HighlightSheet extends StatefulWidget {
-  const ReaderV2HighlightSheet({
+class ReaderHighlightSheet extends StatefulWidget {
+  const ReaderHighlightSheet({
     super.key,
     required this.highlight,
     required this.onChanged,
@@ -31,10 +31,10 @@ class ReaderV2HighlightSheet extends StatefulWidget {
   final ValueChanged<Highlight> onDelete;
 
   @override
-  State<ReaderV2HighlightSheet> createState() => _ReaderV2HighlightSheetState();
+  State<ReaderHighlightSheet> createState() => _ReaderHighlightSheetState();
 }
 
-class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
+class _ReaderHighlightSheetState extends State<ReaderHighlightSheet> {
   late Highlight _highlight = widget.highlight;
   late final TextEditingController _note = TextEditingController(
     text: widget.highlight.note,
@@ -81,7 +81,7 @@ class _ReaderV2HighlightSheetState extends State<ReaderV2HighlightSheet> {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: keyboard),
-      child: ReaderV2SheetScaffold(
+      child: ReaderSheetScaffold(
         title: '標註',
         // 看得到面板上方那一段正文，換顏色時就看得到效果。
         maxHeightFactor: 0.7,

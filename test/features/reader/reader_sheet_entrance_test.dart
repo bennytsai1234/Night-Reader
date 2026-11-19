@@ -224,9 +224,7 @@ void main() {
         } else {
           expect(
             tester
-                .widget<ReaderV2SheetScaffold>(
-                  find.byType(ReaderV2SheetScaffold),
-                )
+                .widget<ReaderSheetScaffold>(find.byType(ReaderSheetScaffold))
                 .maxHeightFactor,
             label == '排版' ? 0.6 : 0.9,
           );
@@ -309,7 +307,7 @@ void main() {
     await tester.tap(find.text('管理規則'));
     await settle(tester, const Duration(milliseconds: 800));
     expect(tester.takeException(), isNull);
-    expect(find.byType(ReaderV2ReplaceRulePage), findsOneWidget);
+    expect(find.byType(ReaderReplaceRulePage), findsOneWidget);
     await goBack(tester);
     await settle(tester, const Duration(milliseconds: 800));
     expect(tester.takeException(), isNull);

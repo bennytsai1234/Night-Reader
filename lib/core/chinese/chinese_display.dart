@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 顯示模式無關。
 ///
 /// 轉換模式與閱讀設定的「繁簡轉換」為同一個值
-/// （0：不轉換、1：簡轉繁、2：繁轉簡），由 ReaderV2SettingsController
+/// （0：不轉換、1：簡轉繁、2：繁轉簡），由 ReaderSettingsController
 /// 在載入與變更時同步；App 啟動時由 [start] 讀出。
 abstract final class ChineseDisplay {
   /// 沒設定過時的模式：簡轉繁（維護者自己讀書用的設定，2026-11-06）。

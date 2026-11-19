@@ -20,31 +20,29 @@ import 'reader_state_machine.dart';
 
 import 'reader_viewport_bridge.dart';
 
-typedef ReaderV2VisibleLocationCapture = ReaderV2Location? Function();
+typedef ReaderVisibleLocationCapture = ReaderLocation? Function();
 
 /// 交給頁面顯示的提示；某一章取不到時 [chapterIndex] 是那一章。
-typedef ReaderV2UserNotice = ({String message, int? chapterIndex});
-typedef ReaderV2ViewportRestore = Future<bool> Function(
-  ReaderV2Location location,
-);
+typedef ReaderUserNotice = ({String message, int? chapterIndex});
+typedef ReaderViewportRestore = Future<bool> Function(ReaderLocation location);
 
-class ReaderV2Runtime extends ChangeNotifier {
-  factory ReaderV2Runtime({
+class ReaderRuntime extends ChangeNotifier {
+  factory ReaderRuntime({
     required Book book,
-    required ReaderV2ChapterRepository repository,
-    required ReaderV2ProgressController progressController,
-    required ReaderV2LayoutSpec initialLayoutSpec,
-    ReaderV2Location? initialLocation,
+    required ReaderChapterRepository repository,
+    required ReaderProgressController progressController,
+    required ReaderLayoutSpec initialLayoutSpec,
+    ReaderLocation? initialLocation,
   }) {
     final location =
         (initialLocation ??
-                ReaderV2Location(
+                ReaderLocation(
                   chapterIndex: book.chapterIndex,
                   charOffset: book.charOffset,
                   visualOffsetPx: book.visualOffsetPx,
                 ))
             .normalized();
-    return ReaderV2Runtime._(
+    return ReaderRuntime._(
       repository: repository,
       progressController: progressController,
       initialLayoutSpec: initialLayoutSpec,
@@ -52,15 +50,15 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
   }
 
-  ReaderV2Runtime._({
+  ReaderRuntime._({
     required this.repository,
     required this.progressController,
-    required ReaderV2LayoutSpec initialLayoutSpec,
-    required ReaderV2Location initialLocation,
+    required ReaderLayoutSpec initialLayoutSpec,
+    required ReaderLocation initialLocation,
   }) : _initialLocation = initialLocation,
-       stateMachine = ReaderV2StateMachine(
-         ReaderV2State(
-           lifecycle: ReaderV2Lifecycle.cold,
+       stateMachine = ReaderStateMachine(
+         ReaderState(
+           lifecycle: ReaderLifecycle.cold,
            committedLocation: initialLocation,
            visibleLocation: initialLocation,
            layoutSpec: initialLayoutSpec,
@@ -68,37 +66,37 @@ class ReaderV2Runtime extends ChangeNotifier {
            contentGeneration: repository.contentGeneration,
          ),
        ) {
-    viewportBridge = ReaderV2ViewportBridge(this);
+    viewportBridge = ReaderViewportBridge(this);
   }
 
-  final ReaderV2ChapterRepository repository;
-  final ReaderV2ProgressController progressController;
+  final ReaderChapterRepository repository;
+  final ReaderProgressController progressController;
 
   /// 開著的這本書。
   Book get book => progressController.book;
 
   /// 開書的位置，開書前跳章失敗時也回到這裡（[openBook]）。
-  ReaderV2Location _initialLocation;
+  ReaderLocation _initialLocation;
 
   /// 開書開始了沒有（[openBook]）；開始之前的跳章記在 [_jumpedBeforeOpen]，
   /// 開書時開在那裡，不蓋掉使用者的選擇。
   bool _openStarted = false;
-  ReaderV2Location? _jumpedBeforeOpen;
-  final ReaderV2StateMachine stateMachine;
+  ReaderLocation? _jumpedBeforeOpen;
+  final ReaderStateMachine stateMachine;
   final ChangeNotifier _viewportGeometryNotifier = ChangeNotifier();
 
-  late final ReaderV2ViewportBridge viewportBridge;
+  late final ReaderViewportBridge viewportBridge;
 
   bool disposed = false;
-  ReaderV2UserNotice? _pendingUserNotice;
-  ReaderV2Location? get pendingLocation => stateMachine.pendingLocation;
+  ReaderUserNotice? _pendingUserNotice;
+  ReaderLocation? get pendingLocation => stateMachine.pendingLocation;
 
   /// 正在跳到別章、還沒排好。同一章內的跳轉（例如拖進度條預覽）不算。
   bool get isJumpingToAnotherChapter {
     final operation = stateMachine.currentOperation;
     final target = pendingLocation;
     return operation != null &&
-        operation.kind == ReaderV2OperationKind.jump &&
+        operation.kind == ReaderOperationKind.jump &&
         target != null &&
         target.chapterIndex != state.visibleLocation.chapterIndex;
   }
@@ -107,13 +105,13 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// 重新載入，還沒排好。
   bool get isRebuildingText {
     final kind = stateMachine.currentOperation?.kind;
-    return kind == ReaderV2OperationKind.presentation ||
-        kind == ReaderV2OperationKind.contentReload;
+    return kind == ReaderOperationKind.presentation ||
+        kind == ReaderOperationKind.contentReload;
   }
 
-  ReaderV2State get state => stateMachine.state;
+  ReaderState get state => stateMachine.state;
 
-  /// 畫面上這一章，見 [ReaderV2StateMachine.visibleChapterIndex]。
+  /// 畫面上這一章，見 [ReaderStateMachine.visibleChapterIndex]。
   ValueListenable<int> get visibleChapterIndex =>
       stateMachine.visibleChapterIndex;
 
@@ -136,7 +134,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   void registerVisibleLocationCapture(
     Object owner,
-    ReaderV2VisibleLocationCapture capture,
+    ReaderVisibleLocationCapture capture,
   ) {
     viewportBridge.registerVisibleLocationCapture(owner, capture);
   }
@@ -145,7 +143,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     viewportBridge.unregisterVisibleLocationCapture(owner);
   }
 
-  void registerViewportRestore(Object owner, ReaderV2ViewportRestore restore) {
+  void registerViewportRestore(Object owner, ReaderViewportRestore restore) {
     viewportBridge.registerViewportRestore(owner, restore);
   }
 
@@ -157,11 +155,11 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
-  ReaderV2Location? captureVisibleLocation() =>
+  ReaderLocation? captureVisibleLocation() =>
       viewportBridge.captureVisibleLocation();
 
-  Future<ReaderV2Location?> saveProgress({
-    ReaderV2Location? location,
+  Future<ReaderLocation?> saveProgress({
+    ReaderLocation? location,
     bool immediate = true,
   }) async {
     return viewportBridge.saveProgress(
@@ -170,7 +168,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
   }
 
-  Future<ReaderV2Location?> flushProgress() {
+  Future<ReaderLocation?> flushProgress() {
     return viewportBridge.flushProgress();
   }
 
@@ -185,17 +183,17 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// [location]：跳轉途中使用者自己捲動（[cancelJumpForUserScroll]）、被更新
   /// 的操作取代、那一章取不到、閱讀器關掉都傳回 false，畫面不在目標上。
   Future<bool> jumpToLocation(
-    ReaderV2Location location, {
+    ReaderLocation location, {
     bool immediateSave = true,
     Future<void>? settled,
   }) =>
       _jumpToLocation(location, immediateSave: immediateSave, settled: settled);
 
-  Future<bool> restoreFromLocation(ReaderV2Location location) async {
+  Future<bool> restoreFromLocation(ReaderLocation location) async {
     final token = beginRestoreOperation(location: location);
     try {
       return await _positionViewport(location: location, token: token);
-    } on ReaderV2ContentUnavailableException catch (error) {
+    } on ReaderContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
       return false;
     } catch (error, stackTrace) {
@@ -205,7 +203,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   // -- Runtime-owned methods --
 
-  ReaderV2UserNotice? takeUserNotice() {
+  ReaderUserNotice? takeUserNotice() {
     final notice = _pendingUserNotice;
     _pendingUserNotice = null;
     return notice;
@@ -221,9 +219,9 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// 每章佔全書多少，全書進度照它算。開書時先讀好（[openBook]）再排正文：
   /// 頁尾第一次出現就是加權過的數字，之後不會在換場途中換數字。讀到之前
   /// 是 `even(0)`（章數對不上，照章數平均）。
-  ValueListenable<ReaderV2ChapterShares> get chapterShares => _chapterShares;
-  final ValueNotifier<ReaderV2ChapterShares> _chapterShares =
-      ValueNotifier<ReaderV2ChapterShares>(const ReaderV2ChapterShares.even(0));
+  ValueListenable<ReaderChapterShares> get chapterShares => _chapterShares;
+  final ValueNotifier<ReaderChapterShares> _chapterShares =
+      ValueNotifier<ReaderChapterShares>(const ReaderChapterShares.even(0));
 
   /// 只讀資料庫（目錄已經載入）；讀不到就照章數平均，不擋開書。
   Future<void> _loadChapterShares() async {
@@ -240,7 +238,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// 已經跳章（例如在換頁動畫期間開了目錄），開在跳去的地方。給了
   /// [chapterTitle]（從書籤開書）時，讀到目錄後照章名對到這台目錄的那一章：
   /// 開書前目錄可能還沒抓，位置裡的章節序號是別處的座標。
-  Future<void> openBook({ReaderV2Location? at, String? chapterTitle}) async {
+  Future<void> openBook({ReaderLocation? at, String? chapterTitle}) async {
     _openStarted = true;
     if (at != null) _initialLocation = at.normalized();
     final jumped = _jumpedBeforeOpen;
@@ -269,7 +267,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         _initialLocation = location;
       }
       await _positionViewport(location: location, token: token);
-    } on ReaderV2ContentUnavailableException catch (error) {
+    } on ReaderContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
@@ -279,7 +277,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// 開書的位置停在付費章節（不抓，ADR 0057）時，改到最近的免費章節章首：
   /// 先往後找，沒有再往前找，同漫畫與有聲書。整本都是付費章節就不動，排版
   /// 時照常顯示取不到。存的進度、同步來的進度與書籤都可能停在這種章。
-  ReaderV2Location _skipLockedChapter(ReaderV2Location location) {
+  ReaderLocation _skipLockedChapter(ReaderLocation location) {
     final count = repository.chapterCount;
     if (count <= 0) return location;
     final index = location.chapterIndex.clamp(0, count - 1).toInt();
@@ -287,7 +285,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         repository.chapterAt(chapterIndex)?.isLocked ?? false;
     if (!locked(index)) return location;
     int? nearest(int delta) =>
-        ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+        ReaderChapterNavigationResolver.resolveRelativeTarget(
           currentChapterIndex: index,
           chapterCount: count,
           delta: delta,
@@ -295,14 +293,14 @@ class ReaderV2Runtime extends ChangeNotifier {
         );
     final target = nearest(1) ?? nearest(-1);
     if (target == null) return location;
-    return ReaderV2Location(
+    return ReaderLocation(
       chapterIndex: target,
       charOffset: 0,
       visualOffsetPx: stateMachine.effectiveLayoutSpec.anchorOffsetInViewport,
     );
   }
 
-  Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
+  Future<void> applyPresentation({required ReaderLayoutSpec spec}) async {
     final stagedSpec = stateMachine.effectiveLayoutSpec;
     if (stagedSpec.presentationSignature == spec.presentationSignature) return;
 
@@ -326,7 +324,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
     try {
       await _positionViewport(location: location, token: token);
-    } on ReaderV2ContentUnavailableException catch (error) {
+    } on ReaderContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
@@ -334,7 +332,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   /// 重新整理目前這一章並停在原位。[refetch] 先向書源重抓（見
-  /// [ReaderV2ChapterRepository.reloadContent]）；抓不到時保留原本的正文，
+  /// [ReaderChapterRepository.reloadContent]）；抓不到時保留原本的正文，
   /// 並把原因交給頁面顯示。
   Future<bool> reloadContentPreservingLocation({bool refetch = false}) async {
     final location =
@@ -354,7 +352,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       if (!isCurrentOperationToken(token)) return true;
       await _positionViewport(location: remappedLocation, token: token);
       return true;
-    } on ReaderV2ContentUnavailableException catch (error) {
+    } on ReaderContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
       return false;
     } catch (error, stackTrace) {
@@ -362,13 +360,13 @@ class ReaderV2Runtime extends ChangeNotifier {
     }
   }
 
-  Future<ReaderV2Location> _remapReloadLocation({
-    required ReaderV2Location location,
-    required ReaderV2Content? previousContent,
-    required ReaderV2OperationToken token,
+  Future<ReaderLocation> _remapReloadLocation({
+    required ReaderLocation location,
+    required ReaderContent? previousContent,
+    required ReaderOperationToken token,
     required bool refetch,
   }) async {
-    late final ReaderV2Content after;
+    late final ReaderContent after;
     try {
       after = await repository.reloadContent(
         location.chapterIndex,
@@ -380,33 +378,33 @@ class ReaderV2Runtime extends ChangeNotifier {
     if (!isCurrentOperationToken(token)) return location;
     final before = previousContent;
     if (before == null) return location;
-    return ReaderV2ContentLocationMapper.remap(
+    return ReaderContentLocationMapper.remap(
       location: location,
       before: before,
       after: after,
     );
   }
 
-  bool isCurrentOperationToken(ReaderV2OperationToken token) {
+  bool isCurrentOperationToken(ReaderOperationToken token) {
     return !disposed && stateMachine.isCurrent(token);
   }
 
-  ReaderV2OperationToken beginJumpOperation({ReaderV2Location? location}) {
+  ReaderOperationToken beginJumpOperation({ReaderLocation? location}) {
     if (!_openStarted && location != null) _jumpedBeforeOpen = location;
     final token = stateMachine.beginJump(location: location);
     notifyListeners();
     return token;
   }
 
-  ReaderV2OperationToken beginRestoreOperation({ReaderV2Location? location}) {
+  ReaderOperationToken beginRestoreOperation({ReaderLocation? location}) {
     final token = stateMachine.beginRestore(location: location);
     notifyListeners();
     return token;
   }
 
   bool completeOperation(
-    ReaderV2OperationToken token, {
-    ReaderV2Location? visibleLocation,
+    ReaderOperationToken token, {
+    ReaderLocation? visibleLocation,
   }) {
     if (!isCurrentOperationToken(token)) return false;
     final completed = stateMachine.completeOperation(
@@ -421,15 +419,15 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// 放棄這次跳轉。開書、排版與內容重載不受影響，它們不是使用者發起的移動。
   void cancelJumpForUserScroll() {
     final operation = stateMachine.currentOperation;
-    if (operation == null || operation.kind != ReaderV2OperationKind.jump) {
+    if (operation == null || operation.kind != ReaderOperationKind.jump) {
       return;
     }
     if (stateMachine.abandonOperation(operation)) notifyListeners();
   }
 
   Future<void> _finishContentUnavailable(
-    ReaderV2OperationToken token,
-    ReaderV2ContentUnavailableException error,
+    ReaderOperationToken token,
+    ReaderContentUnavailableException error,
   ) async {
     if (!isCurrentOperationToken(token)) return;
     // 取不到的那一章：頁面給登入或前往驗證的路時，回來重抓的是它。
@@ -439,7 +437,7 @@ class ReaderV2Runtime extends ChangeNotifier {
           .normalized(chapterCount: repository.chapterCount)
           .chapterIndex,
     );
-    if (state.lifecycle == ReaderV2Lifecycle.cold &&
+    if (state.lifecycle == ReaderLifecycle.cold &&
         _targetsAnotherChapterThanOpen(token)) {
       // 開書還沒排好就跳到別章（之後可能又改了排版、沿用同一個目標），
       // 那一章取不到：取不到的是跳到的章，不是這本書。回到開書的位置重新開，
@@ -458,14 +456,14 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool _targetsAnotherChapterThanOpen(ReaderV2OperationToken token) {
+  bool _targetsAnotherChapterThanOpen(ReaderOperationToken token) {
     final count = repository.chapterCount;
     return token.targetLocation.normalized(chapterCount: count).chapterIndex !=
         _initialLocation.normalized(chapterCount: count).chapterIndex;
   }
 
   Never _rethrowOperationFailure(
-    ReaderV2OperationToken token,
+    ReaderOperationToken token,
     Object error,
     StackTrace stackTrace,
   ) {
@@ -476,7 +474,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     Error.throwWithStackTrace(error, stackTrace);
   }
 
-  Never _failOperationInvariant(ReaderV2OperationToken token, String message) {
+  Never _failOperationInvariant(ReaderOperationToken token, String message) {
     if (isCurrentOperationToken(token)) {
       stateMachine.abandonOperation(token);
       notifyListeners();
@@ -487,12 +485,12 @@ class ReaderV2Runtime extends ChangeNotifier {
   /// 捲動讀到的位置。不通知整個 Runtime 的監聽者：位置每一格都在變，
   /// 要跟著位置變的只有章（[visibleChapterIndex]）與章內進度（正文發布的
   /// 進度），各自是小訊號；Runtime 的通知只留給操作、排版與內容換代。
-  void updateVisibleLocation(ReaderV2Location location) {
+  void updateVisibleLocation(ReaderLocation location) {
     if (disposed) return;
     stateMachine.updateVisibleLocation(location);
   }
 
-  void commitProgressLocation(ReaderV2Location location) {
+  void commitProgressLocation(ReaderLocation location) {
     if (disposed) return;
     // committedLocation is persistence bookkeeping, not rendered Reader state.
     // visibleLocation already owns viewport notifications, so a background
@@ -520,32 +518,32 @@ class ReaderV2Runtime extends ChangeNotifier {
     return content.displayText.substring(safeOffset).trim();
   }
 
-  Future<ReaderV2Content> loadContentForTts(ReaderV2Location location) {
+  Future<ReaderContent> loadContentForTts(ReaderLocation location) {
     final normalized = location.normalized(
       chapterCount: repository.chapterCount,
     );
     return _loadContentAt(normalized.chapterIndex);
   }
 
-  Future<ReaderV2Content> loadContentAt(int chapterIndex) {
+  Future<ReaderContent> loadContentAt(int chapterIndex) {
     return _loadContentAt(chapterIndex);
   }
 
-  Future<ReaderV2Content> _loadContentAt(int chapterIndex) async {
-    ReaderV2Content? content;
+  Future<ReaderContent> _loadContentAt(int chapterIndex) async {
+    ReaderContent? content;
     try {
       content = await repository.loadContent(chapterIndex);
       return content;
     } finally {
       // Repository generations fence its async/cache work. Runtime publishes
       // that semantic generation before a caller can consume newly loaded
-      // coordinates, so Hybrid/TTS never need to infer invalidation.
+      // coordinates, so the text view and TTS never need to infer invalidation.
       _publishRepositoryContentGeneration(materializedContent: content);
     }
   }
 
   void _publishRepositoryContentGeneration({
-    ReaderV2Content? materializedContent,
+    ReaderContent? materializedContent,
   }) {
     if (disposed) return;
     final generation = repository.contentGeneration;
@@ -557,7 +555,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         content != null &&
         content.chapterIndex == state.visibleLocation.chapterIndex) {
       stateMachine.updateVisibleLocation(
-        ReaderV2ContentLocationMapper.resolve(
+        ReaderContentLocationMapper.resolve(
           location: state.visibleLocation,
           target: content,
         ),
@@ -571,7 +569,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   Future<void> _jumpToChapter(int chapterIndex, {Future<void>? settled}) {
     return _jumpToLocation(
-      ReaderV2Location(
+      ReaderLocation(
         chapterIndex: chapterIndex,
         charOffset: 0,
         visualOffsetPx: state.layoutSpec.anchorOffsetInViewport,
@@ -582,7 +580,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<bool> _jumpToLocation(
-    ReaderV2Location location, {
+    ReaderLocation location, {
     required bool immediateSave,
     Future<void>? settled,
   }) async {
@@ -610,7 +608,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         await viewportBridge.saveProgressLocation(state.visibleLocation);
       }
       return true;
-    } on ReaderV2ContentUnavailableException catch (error) {
+    } on ReaderContentUnavailableException catch (error) {
       await _finishContentUnavailable(token, error);
       return false;
     } catch (error, stackTrace) {
@@ -619,8 +617,8 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<bool> _positionViewport({
-    required ReaderV2Location location,
-    required ReaderV2OperationToken token,
+    required ReaderLocation location,
+    required ReaderOperationToken token,
   }) async {
     await repository.ensureChapters();
     if (!isCurrentOperationToken(token)) return false;
@@ -653,7 +651,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       // owned it when captured. Re-resolve the same operation intent whenever
       // the semantic document generation advances during viewport work.
       final resolved =
-          ReaderV2ContentLocationMapper.resolve(
+          ReaderContentLocationMapper.resolve(
             location: location.copyWith(chapterIndex: chapterIndex),
             target: content,
           ).normalized(

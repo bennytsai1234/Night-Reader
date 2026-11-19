@@ -14,14 +14,14 @@ import 'package:night_reader/features/reader/session/reader_state.dart';
 import 'package:night_reader/features/reader/session/reader_state_machine.dart';
 
 void main() {
-  group('ReaderV2StateMachine', () {
+  group('ReaderStateMachine', () {
     test('operation start never changes an existing stable Reader world', () {
-      final machine = ReaderV2StateMachine(_initialState());
-      const target = ReaderV2Location(chapterIndex: 2, charOffset: 8);
+      final machine = ReaderStateMachine(_initialState());
+      const target = ReaderLocation(chapterIndex: 2, charOffset: 8);
 
       final jump = machine.beginJump(location: target);
 
-      expect(machine.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(machine.state.lifecycle, ReaderLifecycle.ready);
       expect(machine.state.hasStableWorld, isTrue);
       expect(machine.state.visibleLocation.chapterIndex, 0);
       expect(machine.currentOperation, same(jump));
@@ -29,12 +29,12 @@ void main() {
     });
 
     test('new operation normally cancels the older token', () {
-      final machine = ReaderV2StateMachine(_initialState());
+      final machine = ReaderStateMachine(_initialState());
       final first = machine.beginJump(
-        location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        location: const ReaderLocation(chapterIndex: 1, charOffset: 0),
       );
       final second = machine.beginJump(
-        location: const ReaderV2Location(chapterIndex: 2, charOffset: 0),
+        location: const ReaderLocation(chapterIndex: 2, charOffset: 0),
       );
 
       expect(machine.completeOperation(first), isFalse);
@@ -56,7 +56,7 @@ void main() {
     test(
       'presentation is staged until the current operation commits layout',
       () {
-        final machine = ReaderV2StateMachine(_initialState());
+        final machine = ReaderStateMachine(_initialState());
         final originalSignature = machine.state.layoutSpec.layoutSignature;
         final spec = _layoutSpec(fontSize: 22);
         final presentation = machine.beginPresentation(
@@ -76,7 +76,7 @@ void main() {
     );
 
     test('viewport spec updates without advancing layout generation', () {
-      final machine = ReaderV2StateMachine(_initialState());
+      final machine = ReaderStateMachine(_initialState());
       final generation = machine.state.layoutGeneration;
       final resized = _layoutSpec(viewportSize: const Size(360, 600));
 
@@ -93,10 +93,10 @@ void main() {
     test(
       'viewport update preserves an active operation and its semantic intent',
       () {
-        final machine = ReaderV2StateMachine(_initialState());
+        final machine = ReaderStateMachine(_initialState());
         final staged = _layoutSpec(fontSize: 22);
         machine.beginPresentation(spec: staged, layoutGeneration: 1);
-        const target = ReaderV2Location(chapterIndex: 3, charOffset: 42);
+        const target = ReaderLocation(chapterIndex: 3, charOffset: 42);
         final jump = machine.beginJump(location: target);
         final resized = _layoutSpec(
           fontSize: 22,
@@ -105,7 +105,7 @@ void main() {
 
         expect(machine.updateViewportSpec(resized), isTrue);
         expect(machine.currentOperation, same(jump));
-        expect(machine.currentOperation!.kind, ReaderV2OperationKind.jump);
+        expect(machine.currentOperation!.kind, ReaderOperationKind.jump);
         expect(machine.currentOperation!.targetLocation, target);
         expect(machine.currentOperation!.layoutGeneration, 1);
         expect(
@@ -126,7 +126,7 @@ void main() {
     test(
       'content generation publishes independently from layout generation',
       () {
-        final machine = ReaderV2StateMachine(_initialState());
+        final machine = ReaderStateMachine(_initialState());
         final layoutGeneration = machine.state.layoutGeneration;
         final layoutSignature = machine.state.layoutSpec.layoutSignature;
 
@@ -141,13 +141,13 @@ void main() {
     );
 
     test('superseding operation inherits an uncommitted layout intent', () {
-      final machine = ReaderV2StateMachine(_initialState());
+      final machine = ReaderStateMachine(_initialState());
       final spec = _layoutSpec(fontSize: 22);
       final presentation = machine.beginPresentation(
         spec: spec,
         layoutGeneration: 1,
       );
-      const target = ReaderV2Location(chapterIndex: 3, charOffset: 42);
+      const target = ReaderLocation(chapterIndex: 3, charOffset: 42);
       final jump = machine.beginJump(location: target);
 
       expect(machine.isCurrent(presentation), isFalse);
@@ -162,22 +162,22 @@ void main() {
     test(
       'external unavailability can only mark a Reader with no stable world',
       () {
-        final cold = ReaderV2StateMachine(
-          _initialState(lifecycle: ReaderV2Lifecycle.cold),
+        final cold = ReaderStateMachine(
+          _initialState(lifecycle: ReaderLifecycle.cold),
         );
         final opening = cold.beginOpen();
         expect(cold.markUnavailable(opening, 'content unavailable'), isTrue);
-        expect(cold.state.lifecycle, ReaderV2Lifecycle.unavailable);
+        expect(cold.state.lifecycle, ReaderLifecycle.unavailable);
         expect(cold.state.hasStableWorld, isFalse);
         expect(cold.currentOperation, isNull);
 
-        final ready = ReaderV2StateMachine(_initialState());
+        final ready = ReaderStateMachine(_initialState());
         final jump = ready.beginJump();
         expect(
           () => ready.markUnavailable(jump, 'target unavailable'),
           throwsStateError,
         );
-        expect(ready.state.lifecycle, ReaderV2Lifecycle.ready);
+        expect(ready.state.lifecycle, ReaderLifecycle.ready);
         expect(ready.state.hasStableWorld, isTrue);
       },
     );
@@ -185,8 +185,8 @@ void main() {
     test(
       'a presentation inherits semantic intent, not the last painted location',
       () {
-        final machine = ReaderV2StateMachine(_initialState());
-        const target = ReaderV2Location(chapterIndex: 3, charOffset: 42);
+        final machine = ReaderStateMachine(_initialState());
+        const target = ReaderLocation(chapterIndex: 3, charOffset: 42);
         machine.beginJump(location: target);
         final presentation = machine.beginPresentation(
           spec: _layoutSpec(fontSize: 22),
@@ -200,9 +200,9 @@ void main() {
     );
 
     test('persisting an older location cannot move the visible position', () {
-      final machine = ReaderV2StateMachine(_initialState());
+      final machine = ReaderStateMachine(_initialState());
       final before = machine.state.visibleLocation;
-      const visible = ReaderV2Location(chapterIndex: 2, charOffset: 50);
+      const visible = ReaderLocation(chapterIndex: 2, charOffset: 50);
       machine.updateVisibleLocation(visible);
       machine.commitLocation(before);
       expect(machine.state.committedLocation, before);
@@ -210,11 +210,11 @@ void main() {
     });
   });
 
-  group('ReaderV2ContentLocationMapper content identity', () {
+  group('ReaderContentLocationMapper content identity', () {
     test(
       'source title/prefix changes do not reinterpret the old absolute offset',
       () {
-        final before = ReaderV2Content.fromRaw(
+        final before = ReaderContent.fromRaw(
           chapterIndex: 3,
           title: '短標題',
           rawText: '前文前文前文\n目標句從這裡開始，後面內容保持一致。\n尾聲尾聲尾聲',
@@ -222,17 +222,17 @@ void main() {
         final targetText = '目標句從這裡開始';
         final oldOffset = before.displayText.indexOf(targetText);
         expect(oldOffset, greaterThan(0));
-        final captured = ReaderV2ContentLocationMapper.capture(
-          location: ReaderV2Location(chapterIndex: 3, charOffset: oldOffset),
+        final captured = ReaderContentLocationMapper.capture(
+          location: ReaderLocation(chapterIndex: 3, charOffset: oldOffset),
           content: before,
         );
 
-        final after = ReaderV2Content.fromRaw(
+        final after = ReaderContent.fromRaw(
           chapterIndex: 3,
           title: '另一個來源使用非常非常長的章節標題',
           rawText: '來源站前言與廣告\n前文前文前文\n目標句從這裡開始，後面內容保持一致。\n尾聲尾聲尾聲',
         );
-        final resolved = ReaderV2ContentLocationMapper.resolve(
+        final resolved = ReaderContentLocationMapper.resolve(
           location: captured,
           target: after,
         );
@@ -247,24 +247,24 @@ void main() {
     );
 
     test('replacement that changes sentence boundaries maps by text identity, not sentence ordinal', () {
-      final before = ReaderV2Content.fromRaw(
+      final before = ReaderContent.fromRaw(
         chapterIndex: 1,
         title: '章名',
         rawText: '甲乙丙丁目標內容保持不變，這裡才是閱讀位置。後續文字也保持不變。',
       );
       const targetText = '目標內容保持不變';
       final oldOffset = before.displayText.indexOf(targetText);
-      final captured = ReaderV2ContentLocationMapper.capture(
-        location: ReaderV2Location(chapterIndex: 1, charOffset: oldOffset),
+      final captured = ReaderContentLocationMapper.capture(
+        location: ReaderLocation(chapterIndex: 1, charOffset: oldOffset),
         content: before,
       );
 
-      final after = ReaderV2Content.fromRaw(
+      final after = ReaderContent.fromRaw(
         chapterIndex: 1,
         title: '章名',
         rawText: '甲。乙。丙。丁。目標內容保持不變，這裡才是閱讀位置。後續文字也保持不變。',
       );
-      final resolved = ReaderV2ContentLocationMapper.resolve(
+      final resolved = ReaderContentLocationMapper.resolve(
         location: captured,
         target: after,
       );
@@ -276,14 +276,14 @@ void main() {
     });
 
     test('legacy location without identity remains a backwards-compatible scalar offset', () {
-      final target = ReaderV2Content.fromRaw(
+      final target = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '章',
         rawText: 'abcdefghijklmnopqrstuvwxyz',
       );
-      const legacy = ReaderV2Location(chapterIndex: 0, charOffset: 7);
+      const legacy = ReaderLocation(chapterIndex: 0, charOffset: 7);
 
-      final resolved = ReaderV2ContentLocationMapper.resolve(
+      final resolved = ReaderContentLocationMapper.resolve(
         location: legacy,
         target: target,
       );
@@ -297,7 +297,7 @@ void main() {
       final leftContext = List<String>.filled(47, 'b').join();
       final rightContext = List<String>.filled(47, 'c').join();
       final after = List<String>.filled(20, 'd').join();
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '$before😀$leftContext$rightContext😀$after',
@@ -306,8 +306,8 @@ void main() {
       // 10 ASCII + 😀(2) + 47 = 59. With a 48-code-unit radius, the raw
       // left boundary would be 11 (inside the first surrogate pair), while
       // the raw right boundary would be 107 (inside the second pair).
-      final captured = ReaderV2ContentLocationMapper.capture(
-        location: const ReaderV2Location(chapterIndex: 0, charOffset: 59),
+      final captured = ReaderContentLocationMapper.capture(
+        location: const ReaderLocation(chapterIndex: 0, charOffset: 59),
         content: content,
       );
 
@@ -327,7 +327,7 @@ void main() {
         durChapterTitle: '第三章',
         totalChapterNum: 3,
         readerAnchorJson: jsonEncode(
-          const ReaderV2Location(
+          const ReaderLocation(
             chapterIndex: 2,
             charOffset: 42,
             visualOffsetPx: 8,
@@ -349,7 +349,7 @@ void main() {
 
       expect(migrated.chapterIndex, 1);
       expect(migrated.charOffset, 42);
-      final resumed = ReaderV2OpenTarget.resume(migrated).location;
+      final resumed = ReaderOpenTarget.resume(migrated).location;
       expect(resumed.chapterIndex, 1);
       expect(resumed.charOffset, 42);
       expect(resumed.contentHash, 'old-content');
@@ -385,25 +385,23 @@ void main() {
   });
 }
 
-ReaderV2State _initialState({
-  ReaderV2Lifecycle lifecycle = ReaderV2Lifecycle.ready,
-}) {
-  return ReaderV2State(
+ReaderState _initialState({ReaderLifecycle lifecycle = ReaderLifecycle.ready}) {
+  return ReaderState(
     lifecycle: lifecycle,
-    committedLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
-    visibleLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+    committedLocation: const ReaderLocation(chapterIndex: 0, charOffset: 0),
+    visibleLocation: const ReaderLocation(chapterIndex: 0, charOffset: 0),
     layoutSpec: _layoutSpec(),
     layoutGeneration: 0,
   );
 }
 
-ReaderV2LayoutSpec _layoutSpec({
+ReaderLayoutSpec _layoutSpec({
   double fontSize = 18,
   Size viewportSize = const Size(360, 640),
 }) {
-  return ReaderV2LayoutSpec.fromViewport(
+  return ReaderLayoutSpec.fromViewport(
     viewportSize: viewportSize,
-    style: ReaderV2LayoutStyle(
+    style: ReaderLayoutStyle(
       fontSize: fontSize,
       lineHeight: 1.6,
       letterSpacing: 0,

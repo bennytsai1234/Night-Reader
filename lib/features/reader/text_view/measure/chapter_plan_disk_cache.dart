@@ -226,7 +226,7 @@ final class ChapterPlanDiskCache {
           ChapterBlock(
             key: BlockKey(chapterIndex: text.id, blockIndex: next),
             text: source.substring(start, end),
-            charRange: HybridTextRange(start, end),
+            charRange: ChapterTextRange(start, end),
             sourceParagraphIndex: paragraph,
             isTitle: isTitle,
             isContinuation: isContinuation,

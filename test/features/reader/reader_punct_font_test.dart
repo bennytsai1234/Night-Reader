@@ -15,11 +15,11 @@ void main() {
 
   test('pubspec registers both weights under the reader family name', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(pubspec, contains('- family: $kReaderV2PunctFontFamily'));
+    expect(pubspec, contains('- family: $kReaderPunctFontFamily'));
     for (final weight in ['Regular', 'Bold']) {
       expect(
         pubspec,
-        contains('assets/fonts/$kReaderV2PunctFontFamily-$weight.ttf'),
+        contains('assets/fonts/$kReaderPunctFontFamily-$weight.ttf'),
       );
     }
   });
@@ -27,12 +27,12 @@ void main() {
   for (final weight in ['Regular', 'Bold']) {
     group(weight, () {
       final font = _TrueTypeFont(
-        File('assets/fonts/$kReaderV2PunctFontFamily-$weight.ttf')
+        File('assets/fonts/$kReaderPunctFontFamily-$weight.ttf')
             .readAsBytesSync(),
       );
 
       test('family name matches the reader text style', () {
-        expect(font.familyName, kReaderV2PunctFontFamily);
+        expect(font.familyName, kReaderPunctFontFamily);
       });
 
       test('covers only the reader punctuation set', () {

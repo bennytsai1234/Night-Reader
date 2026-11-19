@@ -7,8 +7,8 @@ import 'package:night_reader/features/reader/chapter/reader_chapter_repository.d
 
 import 'reader_location.dart';
 
-class ReaderV2ProgressController {
-  ReaderV2ProgressController({
+class ReaderProgressController {
+  ReaderProgressController({
     required this.book,
     required this.repository,
     required this.bookDao,
@@ -16,16 +16,16 @@ class ReaderV2ProgressController {
   });
 
   final Book book;
-  final ReaderV2ChapterRepository repository;
+  final ReaderChapterRepository repository;
   final BookDao bookDao;
   final Duration debounce;
 
   Timer? _timer;
-  ReaderV2Location? _pendingLocation;
+  ReaderLocation? _pendingLocation;
   Future<void>? _activeFlush;
   bool _disposed = false;
 
-  void schedule(ReaderV2Location location) {
+  void schedule(ReaderLocation location) {
     if (_disposed) return;
     _pendingLocation = location.normalized();
     _timer?.cancel();
@@ -34,7 +34,7 @@ class ReaderV2ProgressController {
     });
   }
 
-  Future<void> saveImmediately(ReaderV2Location location) async {
+  Future<void> saveImmediately(ReaderLocation location) async {
     if (_disposed) return;
     _pendingLocation = location.normalized();
     await flush();
@@ -62,7 +62,7 @@ class ReaderV2ProgressController {
     }
   }
 
-  Future<void> _write(ReaderV2Location location) async {
+  Future<void> _write(ReaderLocation location) async {
     final normalized = location.normalized(
       chapterCount: repository.chapterCount,
     );

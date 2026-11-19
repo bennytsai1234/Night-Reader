@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_page_exit_coordinator.dart';
 
-class _Delegate implements ReaderV2ExitFlowDelegate {
+class _Delegate implements ReaderExitFlowDelegate {
   final List<String> calls = [];
 
   @override
@@ -31,7 +31,7 @@ void main() {
     Future<void> Function() answer,
   ) async {
     final delegate = _Delegate();
-    final coordinator = ReaderV2PageExitCoordinator();
+    final coordinator = ReaderPageExitCoordinator();
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(

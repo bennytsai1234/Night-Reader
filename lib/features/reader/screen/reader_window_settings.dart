@@ -14,8 +14,8 @@ import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 /// 整個 App 只有一個視窗：最後露出來的閱讀器擁有它，只有擁有者的設定送進
 /// 視窗。換源、從書籍詳情回來時新的閱讀頁取代舊的，舊頁在新頁套用之後才
 /// 被蓋住、拆掉，那時它已經不是擁有者，不會把新頁的設定蓋回系統設定。
-class ReaderV2WindowSettings extends StatefulWidget {
-  const ReaderV2WindowSettings({
+class ReaderWindowSettings extends StatefulWidget {
+  const ReaderWindowSettings({
     super.key,
     required this.keepScreenOn,
     required this.backlight,
@@ -27,36 +27,36 @@ class ReaderV2WindowSettings extends StatefulWidget {
 
   /// 視窗背光（0–1）；null 是跟隨系統。
   final double? backlight;
-  final ReaderV2Orientation orientation;
+  final ReaderOrientation orientation;
   final Widget child;
 
   @override
-  State<ReaderV2WindowSettings> createState() => _ReaderV2WindowSettingsState();
+  State<ReaderWindowSettings> createState() => _ReaderWindowSettingsState();
 }
 
 typedef _Window = ({
   bool keepScreenOn,
   double? backlight,
-  ReaderV2Orientation orientation,
+  ReaderOrientation orientation,
 });
 
 const _Window _system = (
   keepScreenOn: false,
   backlight: null,
-  orientation: ReaderV2Orientation.system,
+  orientation: ReaderOrientation.system,
 );
 
-class _ReaderV2WindowSettingsState extends State<ReaderV2WindowSettings> {
+class _ReaderWindowSettingsState extends State<ReaderWindowSettings> {
   /// 露在畫面上的閱讀器，依露出的先後排；最後一個是擁有者。重建不改順序：
   /// 換頁動畫中舊頁還露著、跟著重建，也不會把擁有權搶回去。
-  static final List<_ReaderV2WindowSettingsState> _shown = [];
+  static final List<_ReaderWindowSettingsState> _shown = [];
 
   /// 最後一次送給視窗的值；沒送過時等於系統設定。
   static _Window _sent = _system;
 
   _Window get _wanted => (
     keepScreenOn: widget.keepScreenOn,
-    backlight: ReaderV2DeviceChannel.supportsWindowBrightness
+    backlight: ReaderDeviceChannel.supportsWindowBrightness
         ? widget.backlight
         : null,
     orientation: widget.orientation,
@@ -69,7 +69,7 @@ class _ReaderV2WindowSettingsState extends State<ReaderV2WindowSettings> {
   }
 
   @override
-  void didUpdateWidget(covariant ReaderV2WindowSettings oldWidget) {
+  void didUpdateWidget(covariant ReaderWindowSettings oldWidget) {
     super.didUpdateWidget(oldWidget);
     _sync();
   }
@@ -100,10 +100,10 @@ class _ReaderV2WindowSettingsState extends State<ReaderV2WindowSettings> {
     final sent = _sent;
     _sent = next;
     if (next.keepScreenOn != sent.keepScreenOn) {
-      unawaited(ReaderV2DeviceChannel.setKeepScreenOn(next.keepScreenOn));
+      unawaited(ReaderDeviceChannel.setKeepScreenOn(next.keepScreenOn));
     }
     if (next.backlight != sent.backlight) {
-      unawaited(ReaderV2DeviceChannel.setWindowBrightness(next.backlight));
+      unawaited(ReaderDeviceChannel.setWindowBrightness(next.backlight));
     }
     if (next.orientation != sent.orientation) {
       unawaited(

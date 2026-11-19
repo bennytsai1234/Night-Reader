@@ -20,7 +20,7 @@ void main() {
     Future<Size> sizeAt(double fontSize) async {
       await pump(
         tester,
-        ReaderV2BatteryGlyph(
+        ReaderBatteryGlyph(
           key: const Key('battery'),
           percent: 82,
           charging: false,
@@ -43,7 +43,7 @@ void main() {
   testWidgets('the number sits inside the battery outline', (tester) async {
     await pump(
       tester,
-      const ReaderV2BatteryGlyph(
+      const ReaderBatteryGlyph(
         key: Key('battery'),
         percent: 82,
         charging: false,
@@ -63,7 +63,7 @@ void main() {
   testWidgets('charging adds a bolt next to the battery', (tester) async {
     await pump(
       tester,
-      const ReaderV2BatteryGlyph(
+      const ReaderBatteryGlyph(
         percent: 100,
         charging: true,
         color: Colors.black,

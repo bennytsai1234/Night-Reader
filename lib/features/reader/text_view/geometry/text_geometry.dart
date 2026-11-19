@@ -13,16 +13,16 @@ import '../overlay/selection_service.dart';
 import '../paragraph/paragraph_cache.dart';
 
 /// 段首縮排的字數；標題與接續上一個 block 的段落不縮排。
-int hybridIndentCharsFor(ChapterBlock block, ReaderV2LayoutSpec spec) {
+int indentCharsFor(ChapterBlock block, ReaderLayoutSpec spec) {
   if (block.isTitle || block.isContinuation) return 0;
   return spec.style.textIndent.clamp(0, 8).toInt();
 }
 
 typedef _LineBoxMemo = ({
   ChapterBlocks blocks,
-  HybridTextRange range,
+  ChapterTextRange range,
   int revision,
-  List<HybridLineBox> boxes,
+  List<LineBox> boxes,
 });
 
 /// 章內文字 offset 與正文座標之間的換算：朗讀高亮與選字反白的框、長按
@@ -32,8 +32,8 @@ typedef _LineBoxMemo = ({
 /// viewport 座標時由呼叫端扣掉捲動位置。一份只對應一個排版世代：
 /// [epoch] 與 [paragraphCache] 換代時重建。段落還沒排好時查不到，回傳
 /// null 或空清單。
-final class HybridTextGeometry {
-  HybridTextGeometry({
+final class TextGeometry {
+  TextGeometry({
     required this._paragraphCache,
     required this._epoch,
     required this._documentIndex,
@@ -48,7 +48,7 @@ final class HybridTextGeometry {
   final LayoutEpoch _epoch;
   final DocumentIndex _documentIndex;
   final ChapterBlocks? Function(int chapterIndex) _blocksOf;
-  final ReaderV2LayoutSpec Function() _layoutSpec;
+  final ReaderLayoutSpec Function() _layoutSpec;
   _LineBoxMemo? _lineBoxMemo;
 
   /// 選取是否還對得上畫面：章節重新切分、換內容或樣式換代後，舊 offset
@@ -63,11 +63,11 @@ final class HybridTextGeometry {
   /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。朗讀高亮
   /// 與選字反白在捲動時每幀都要畫，所以文件索引與這段文字都沒變時沿用
   /// 上次的結果；有 block 還沒排好時不記，下次再算。
-  List<HybridLineBox> lineBoxes(int chapterIndex, int start, int end) {
+  List<LineBox> lineBoxes(int chapterIndex, int start, int end) {
     final blocks = _blocksOf(chapterIndex);
-    if (blocks == null) return const <HybridLineBox>[];
-    final range = HybridTextRange(math.max(0, start), math.max(0, end));
-    if (range.isEmpty) return const <HybridLineBox>[];
+    if (blocks == null) return const <LineBox>[];
+    final range = ChapterTextRange(math.max(0, start), math.max(0, end));
+    if (range.isEmpty) return const <LineBox>[];
     final memo = _lineBoxMemo;
     if (memo != null &&
         identical(memo.blocks, blocks) &&
@@ -76,7 +76,7 @@ final class HybridTextGeometry {
       return memo.boxes;
     }
     final paintLeft = _layoutSpec().textPaddingLeft;
-    final result = <HybridLineBox>[];
+    final result = <LineBox>[];
     var complete = true;
     final blockList = blocks.blocks;
     var low = 0;
@@ -102,7 +102,7 @@ final class HybridTextGeometry {
         continue;
       }
       for (final box in boxes) {
-        final lineBox = HybridLineBox(
+        final lineBox = LineBox(
           left: paintLeft + box.left,
           top: top + box.top,
           right: paintLeft + box.right,
@@ -116,7 +116,7 @@ final class HybridTextGeometry {
             math.min(previous.bottom, lineBox.bottom) -
                     math.max(previous.top, lineBox.top) >
                 0.5) {
-          result[result.length - 1] = HybridLineBox(
+          result[result.length - 1] = LineBox(
             left: math.min(previous.left, lineBox.left),
             top: math.min(previous.top, lineBox.top),
             right: math.max(previous.right, lineBox.right),
@@ -143,7 +143,7 @@ final class HybridTextGeometry {
   Rect? rangeRect(ChapterBlocks blocks, int start, int end) {
     double? top;
     double? bottom;
-    final range = HybridTextRange(math.max(0, start), math.max(0, end));
+    final range = ChapterTextRange(math.max(0, start), math.max(0, end));
     for (final block in blocks.blocks) {
       if (!block.charRange.intersects(range) &&
           !(range.isEmpty && block.charRange.containsOffset(range.start))) {
@@ -174,7 +174,7 @@ final class HybridTextGeometry {
   /// 段落還沒排好時以 block 頂端代替那一行；block 還沒進文件索引時回傳
   /// null。
   double? scrollOffsetForAnchor(
-    HybridAnchor anchor,
+    ScrollAnchor anchor,
     ChapterBlocks blocks, {
     required double anchorLine,
   }) {
@@ -199,7 +199,7 @@ final class HybridTextGeometry {
 
   /// [hit] 那一行的閱讀位置：行首的字，加上 [worldY] 與行頂的距離。
   /// 段落還沒排好時取 block 的第一個字。
-  ReaderV2Location? locationAt(
+  ReaderLocation? locationAt(
     DocumentOffsetHit hit, {
     required double worldY,
     required int chapterCount,
@@ -215,11 +215,11 @@ final class HybridTextGeometry {
       final height = _documentIndex.metricsFor(hit.key)?.height ?? 0.0;
       final visual = (worldY - (hit.blockTop + height))
           .clamp(
-            ReaderV2Location.minVisualOffsetPx,
-            ReaderV2Location.maxVisualOffsetPx,
+            ReaderLocation.minVisualOffsetPx,
+            ReaderLocation.maxVisualOffsetPx,
           )
           .toDouble();
-      return ReaderV2Location(
+      return ReaderLocation(
             chapterIndex: hit.key.chapterIndex,
             charOffset: block.charRange.start,
             visualOffsetPx: visual,
@@ -243,7 +243,7 @@ final class HybridTextGeometry {
         final group = blocks.groupContaining(hit.key);
         final textMap = ParagraphTextMap.forBlocks(
           group,
-          indentLength: hybridIndentCharsFor(group.first, _layoutSpec()),
+          indentLength: indentCharsFor(group.first, _layoutSpec()),
         );
         final position = paragraph.getPositionForOffset(
           Offset(0, line.top + 0.1),
@@ -265,11 +265,11 @@ final class HybridTextGeometry {
     }
     final visual = (worldY - (hit.blockTop + lineTop))
         .clamp(
-          ReaderV2Location.minVisualOffsetPx,
-          ReaderV2Location.maxVisualOffsetPx,
+          ReaderLocation.minVisualOffsetPx,
+          ReaderLocation.maxVisualOffsetPx,
         )
         .toDouble();
-    return ReaderV2Location(
+    return ReaderLocation(
           chapterIndex: hit.key.chapterIndex,
           charOffset: charOffset,
           visualOffsetPx: visual,
@@ -286,7 +286,7 @@ final class HybridTextGeometry {
 
   /// 長按點到的字：只接受真的落在字形上的點，縮排、段距、行尾空白與
   /// 標題都不算。回傳章內 offset 與它所屬的來源段落。
-  ({ChapterBlocks blocks, HybridTextRange paragraph, int offset})? glyphAt(
+  ({ChapterBlocks blocks, ChapterTextRange paragraph, int offset})? glyphAt(
     Offset point,
   ) {
     final hit = _documentIndex.hitTest(point.dy);
@@ -350,7 +350,7 @@ final class HybridTextGeometry {
     if (rawEntry == null) return null;
     final textMap = ParagraphTextMap.forBlocks(
       group,
-      indentLength: hybridIndentCharsFor(head, _layoutSpec()),
+      indentLength: indentCharsFor(head, _layoutSpec()),
     );
     final sourceLocalOffset = (charOffsetInChapter - head.charRange.start)
         .clamp(0, textMap.sourceLength)
@@ -383,7 +383,7 @@ final class HybridTextGeometry {
   List<ui.TextBox>? _blockLocalBoxesForRange(
     ChapterBlocks blocks,
     ChapterBlock block,
-    HybridTextRange range,
+    ChapterTextRange range,
   ) {
     final entry = _paragraphCache.acquireEntry(block.key, _epoch);
     if (entry == null) return null;
@@ -398,7 +398,7 @@ final class HybridTextGeometry {
     final local =
         ParagraphTextMap.forBlocks(
           group,
-          indentLength: hybridIndentCharsFor(group.first, _layoutSpec()),
+          indentLength: indentCharsFor(group.first, _layoutSpec()),
         ).paragraphRangeForSourceRange(
           sourceStart - groupStart,
           sourceEnd - groupStart,
@@ -442,7 +442,7 @@ final class HybridTextGeometry {
       ),
       textMap: ParagraphTextMap.forBlocks(
         group,
-        indentLength: hybridIndentCharsFor(group.first, spec),
+        indentLength: indentCharsFor(group.first, spec),
       ),
       groupStart: group.first.charRange.start,
     );

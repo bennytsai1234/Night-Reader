@@ -20,12 +20,12 @@ import 'package:night_reader/features/reader/layout/reader_layout_constants.dart
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ReaderV2SettingsController extends ChangeNotifier {
+class ReaderSettingsController extends ChangeNotifier {
   /// 建構時就從已預載的 SharedPreferences 同步讀出使用者的設定：閱讀器第一幀
   /// 就照這些設定畫出正文與頁首頁尾的骨架，不必先等一次非同步載入。讀不出來
   /// （例如還原進來的值型別不對）就用預設值，閱讀器照樣打開。
-  ReaderV2SettingsController({
-    this._prefsRepository = const ReaderV2PrefsRepository(),
+  ReaderSettingsController({
+    this._prefsRepository = const ReaderPrefsRepository(),
   }) {
     try {
       final prefs = getIt<SharedPreferences>();
@@ -33,7 +33,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       _persisted = _prefsRepository.read(prefs);
     } catch (error, stackTrace) {
       AppLog.e('閱讀設定讀取失敗: $error', error: error, stackTrace: stackTrace);
-      _persisted = ReaderV2PrefsSnapshot.defaults();
+      _persisted = ReaderPrefsSnapshot.defaults();
     }
     _initFromCache(_persisted);
     _fonts.changes.addListener(_onFontsChanged);
@@ -51,79 +51,73 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 正文目前用的字族；選的字型還不能用時是 null（系統字型）。
   String? get readerFontFamily => _fonts.familyOf(readerFont);
 
-  static const double minReadableLineHeight =
-      ReaderV2Style.minReadableLineHeight;
-  static const double maxReadableLineHeight =
-      ReaderV2Style.maxReadableLineHeight;
-  static const double minAutoPageSpeed =
-      ReaderV2PrefsRepository.minAutoPageSpeed;
-  static const double maxAutoPageSpeed =
-      ReaderV2PrefsRepository.maxAutoPageSpeed;
-  static const double minPagePadding = ReaderV2PrefsRepository.minPagePadding;
-  static const double maxPagePadding = ReaderV2PrefsRepository.maxPagePadding;
+  static const double minReadableLineHeight = ReaderStyle.minReadableLineHeight;
+  static const double maxReadableLineHeight = ReaderStyle.maxReadableLineHeight;
+  static const double minAutoPageSpeed = ReaderPrefsRepository.minAutoPageSpeed;
+  static const double maxAutoPageSpeed = ReaderPrefsRepository.maxAutoPageSpeed;
+  static const double minPagePadding = ReaderPrefsRepository.minPagePadding;
+  static const double maxPagePadding = ReaderPrefsRepository.maxPagePadding;
   static const double minChapterSpacing =
-      ReaderV2PrefsRepository.minChapterSpacing;
+      ReaderPrefsRepository.minChapterSpacing;
   static const double maxChapterSpacing =
-      ReaderV2PrefsRepository.maxChapterSpacing;
-  static const double minTitleSpacing = ReaderV2PrefsRepository.minTitleSpacing;
-  static const double maxTitleSpacing = ReaderV2PrefsRepository.maxTitleSpacing;
+      ReaderPrefsRepository.maxChapterSpacing;
+  static const double minTitleSpacing = ReaderPrefsRepository.minTitleSpacing;
+  static const double maxTitleSpacing = ReaderPrefsRepository.maxTitleSpacing;
 
-  final ReaderV2PrefsRepository _prefsRepository;
+  final ReaderPrefsRepository _prefsRepository;
 
-  double fontSize = ReaderV2PrefsSnapshot.defaults().fontSize;
-  double titleFontSize = ReaderV2PrefsSnapshot.defaults().titleFontSize;
-  double lineHeight = ReaderV2PrefsSnapshot.defaults().lineHeight;
-  double paragraphSpacing = ReaderV2PrefsSnapshot.defaults().paragraphSpacing;
-  double chapterSpacing = ReaderV2PrefsSnapshot.defaults().chapterSpacing;
-  double letterSpacing = ReaderV2PrefsSnapshot.defaults().letterSpacing;
-  int textIndent = ReaderV2PrefsSnapshot.defaults().textIndent;
+  double fontSize = ReaderPrefsSnapshot.defaults().fontSize;
+  double titleFontSize = ReaderPrefsSnapshot.defaults().titleFontSize;
+  double lineHeight = ReaderPrefsSnapshot.defaults().lineHeight;
+  double paragraphSpacing = ReaderPrefsSnapshot.defaults().paragraphSpacing;
+  double chapterSpacing = ReaderPrefsSnapshot.defaults().chapterSpacing;
+  double letterSpacing = ReaderPrefsSnapshot.defaults().letterSpacing;
+  int textIndent = ReaderPrefsSnapshot.defaults().textIndent;
 
   /// 正文兩側最少留白；實際的左右邊距照 [lineChars] 算（[paddingHorizontalFor]）。
-  double paddingHorizontal = ReaderV2PrefsSnapshot.defaults().paddingHorizontal;
-  int lineChars = ReaderV2PrefsSnapshot.defaults().lineChars;
-  bool justifyText = ReaderV2PrefsSnapshot.defaults().justifyText;
-  double paddingTop = ReaderV2PrefsSnapshot.defaults().paddingTop;
-  double paddingBottom = ReaderV2PrefsSnapshot.defaults().paddingBottom;
-  double footerOffset = ReaderV2PrefsSnapshot.defaults().footerOffset;
-  bool hideStatusBar = ReaderV2PrefsSnapshot.defaults().hideStatusBar;
-  ReaderV2InfoSlots headerInfo = ReaderV2PrefsSnapshot.defaults().headerInfo;
-  ReaderV2InfoSlots footerInfo = ReaderV2PrefsSnapshot.defaults().footerInfo;
-  int chineseConvert = ReaderV2PrefsSnapshot.defaults().chineseConvert;
-  bool showIllustrations = ReaderV2PrefsSnapshot.defaults().showIllustrations;
-  double autoPageSpeed = ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
-  bool showAddToShelfAlert =
-      ReaderV2PrefsSnapshot.defaults().showAddToShelfAlert;
-  List<int> clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
-  ReaderV2HighlightColor highlightColor =
-      ReaderV2PrefsSnapshot.defaults().highlightColor;
-  double highlightStrength = ReaderV2PrefsSnapshot.defaults().highlightStrength;
-  bool brightnessAuto = ReaderV2PrefsSnapshot.defaults().brightnessAuto;
-  double brightness = ReaderV2PrefsSnapshot.defaults().brightness;
-  bool volumeKeyPage = ReaderV2PrefsSnapshot.defaults().volumeKeyPage;
-  bool volumeKeyReversed = ReaderV2PrefsSnapshot.defaults().volumeKeyReversed;
-  double titleSpacing = ReaderV2PrefsSnapshot.defaults().titleSpacing;
-  bool keepScreenOn = ReaderV2PrefsSnapshot.defaults().keepScreenOn;
-  ReaderV2Orientation orientation =
-      ReaderV2PrefsSnapshot.defaults().orientation;
-  bool hideNavigationBar = ReaderV2PrefsSnapshot.defaults().hideNavigationBar;
-  int pageTurnOverlap = ReaderV2PrefsSnapshot.defaults().pageTurnOverlap;
-  ReaderV2PageTurnSpeed pageTurnSpeed =
-      ReaderV2PrefsSnapshot.defaults().pageTurnSpeed;
-  bool use24HourClock = ReaderV2PrefsSnapshot.defaults().use24HourClock;
+  double paddingHorizontal = ReaderPrefsSnapshot.defaults().paddingHorizontal;
+  int lineChars = ReaderPrefsSnapshot.defaults().lineChars;
+  bool justifyText = ReaderPrefsSnapshot.defaults().justifyText;
+  double paddingTop = ReaderPrefsSnapshot.defaults().paddingTop;
+  double paddingBottom = ReaderPrefsSnapshot.defaults().paddingBottom;
+  double footerOffset = ReaderPrefsSnapshot.defaults().footerOffset;
+  bool hideStatusBar = ReaderPrefsSnapshot.defaults().hideStatusBar;
+  ReaderInfoSlots headerInfo = ReaderPrefsSnapshot.defaults().headerInfo;
+  ReaderInfoSlots footerInfo = ReaderPrefsSnapshot.defaults().footerInfo;
+  int chineseConvert = ReaderPrefsSnapshot.defaults().chineseConvert;
+  bool showIllustrations = ReaderPrefsSnapshot.defaults().showIllustrations;
+  double autoPageSpeed = ReaderPrefsSnapshot.defaults().autoPageSpeed;
+  bool showAddToShelfAlert = ReaderPrefsSnapshot.defaults().showAddToShelfAlert;
+  List<int> clickActions = ReaderPrefsSnapshot.defaults().clickActions;
+  ReaderHighlightColor highlightColor =
+      ReaderPrefsSnapshot.defaults().highlightColor;
+  double highlightStrength = ReaderPrefsSnapshot.defaults().highlightStrength;
+  bool brightnessAuto = ReaderPrefsSnapshot.defaults().brightnessAuto;
+  double brightness = ReaderPrefsSnapshot.defaults().brightness;
+  bool volumeKeyPage = ReaderPrefsSnapshot.defaults().volumeKeyPage;
+  bool volumeKeyReversed = ReaderPrefsSnapshot.defaults().volumeKeyReversed;
+  double titleSpacing = ReaderPrefsSnapshot.defaults().titleSpacing;
+  bool keepScreenOn = ReaderPrefsSnapshot.defaults().keepScreenOn;
+  ReaderOrientation orientation = ReaderPrefsSnapshot.defaults().orientation;
+  bool hideNavigationBar = ReaderPrefsSnapshot.defaults().hideNavigationBar;
+  int pageTurnOverlap = ReaderPrefsSnapshot.defaults().pageTurnOverlap;
+  ReaderPageTurnSpeed pageTurnSpeed =
+      ReaderPrefsSnapshot.defaults().pageTurnSpeed;
+  bool use24HourClock = ReaderPrefsSnapshot.defaults().use24HourClock;
   int progressFractionDigits =
-      ReaderV2PrefsSnapshot.defaults().progressFractionDigits;
-  double maxDim = ReaderV2PrefsSnapshot.defaults().maxDim;
-  double edgeFade = ReaderV2PrefsSnapshot.defaults().edgeFade;
-  bool ttsFollow = ReaderV2PrefsSnapshot.defaults().ttsFollow;
-  bool bodyBold = ReaderV2PrefsSnapshot.defaults().bodyBold;
-  bool titleBold = ReaderV2PrefsSnapshot.defaults().titleBold;
-  bool titleCenter = ReaderV2PrefsSnapshot.defaults().titleCenter;
-  double infoFontSize = ReaderV2PrefsSnapshot.defaults().infoFontSize;
-  AppFont readerFont = ReaderV2PrefsSnapshot.defaults().readerFont;
+      ReaderPrefsSnapshot.defaults().progressFractionDigits;
+  double maxDim = ReaderPrefsSnapshot.defaults().maxDim;
+  double edgeFade = ReaderPrefsSnapshot.defaults().edgeFade;
+  bool ttsFollow = ReaderPrefsSnapshot.defaults().ttsFollow;
+  bool bodyBold = ReaderPrefsSnapshot.defaults().bodyBold;
+  bool titleBold = ReaderPrefsSnapshot.defaults().titleBold;
+  bool titleCenter = ReaderPrefsSnapshot.defaults().titleCenter;
+  double infoFontSize = ReaderPrefsSnapshot.defaults().infoFontSize;
+  AppFont readerFont = ReaderPrefsSnapshot.defaults().readerFont;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
-  late ReaderV2PrefsSnapshot _persisted;
+  late ReaderPrefsSnapshot _persisted;
   final Map<String, int> _saveGenerations = <String, int>{};
   final StreamController<String> _saveFailures =
       StreamController<String>.broadcast();
@@ -155,10 +149,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
   }
 
-  void _initFromCache(ReaderV2PrefsSnapshot snapshot) {
+  void _initFromCache(ReaderPrefsSnapshot snapshot) {
     fontSize = snapshot.fontSize;
     titleFontSize = snapshot.titleFontSize;
-    lineHeight = ReaderV2Style.normalizeLineHeight(snapshot.lineHeight);
+    lineHeight = ReaderStyle.normalizeLineHeight(snapshot.lineHeight);
     paragraphSpacing = snapshot.paragraphSpacing;
     chapterSpacing = snapshot.chapterSpacing;
     letterSpacing = snapshot.letterSpacing;
@@ -217,9 +211,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void _persist(
     String field,
     Future<void> Function() write, {
-    required ReaderV2PrefsSnapshot Function(ReaderV2PrefsSnapshot persisted)
+    required ReaderPrefsSnapshot Function(ReaderPrefsSnapshot persisted)
     onSaved,
-    required void Function(ReaderV2PrefsSnapshot persisted) restore,
+    required void Function(ReaderPrefsSnapshot persisted) restore,
   }) {
     final generation = (_saveGenerations[field] ?? 0) + 1;
     _saveGenerations[field] = generation;
@@ -243,7 +237,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 存一個單純設定；寫入失敗時還原成最後落地的值（經 [restoreAs] 修正）。
   void _save<T>(
-    ReaderV2Setting<T> setting,
+    ReaderSetting<T> setting,
     T value, {
     required void Function(T value) put,
     T Function(T persisted)? restoreAs,
@@ -262,7 +256,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 改一個單純設定：與目前值相同就不動（[force] 時照寫）；否則更新欄位、
   /// 存檔並通知。[same] 決定「相同」的判斷，預設用 `==`。
   void _set<T>(
-    ReaderV2Setting<T> setting,
+    ReaderSetting<T> setting,
     T value, {
     required T current,
     required void Function(T value) put,
@@ -279,7 +273,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 排版的一項：有變才更新欄位，存檔每次都做（排版那幾項每次都寫）。回傳欄位有沒有變。
   bool _typography<T>(
-    ReaderV2Setting<T> setting,
+    ReaderSetting<T> setting,
     T current,
     T value,
     void Function(T value) put, {
@@ -306,7 +300,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int lineCapacityFor(double viewportWidth) {
     final cell = cellWidth;
     if (cell == null) return 0;
-    return ReaderV2TextLayoutFrame.lineCapacity(
+    return ReaderTextLayoutFrame.lineCapacity(
       viewportWidth: viewportWidth,
       minPadding: paddingHorizontal,
       cellWidth: cell,
@@ -316,7 +310,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 畫面寬 [viewportWidth] 時正文的左右邊距，頁首頁尾的左右內距也用它：
   /// 照每行字數把正文欄收窄置中，放不下就撐滿、只留最少留白。
   double paddingHorizontalFor(double viewportWidth) =>
-      ReaderV2TextLayoutFrame.sidePadding(
+      ReaderTextLayoutFrame.sidePadding(
         viewportWidth: viewportWidth,
         minPadding: paddingHorizontal,
         cellWidth: cellWidth,
@@ -355,7 +349,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
           .clamp(menuMinInset, AppGrouped.margin)
           .toDouble();
 
-  ReaderV2Style readStyleFor(
+  ReaderStyle readStyleFor(
     EdgeInsets mediaPadding, {
     required double viewportWidth,
     bool topInfoReservedExternally = false,
@@ -368,9 +362,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
             : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
-    return ReaderV2Style(
+    return ReaderStyle(
       fontSize: fontSize,
-      lineHeight: ReaderV2Style.normalizeLineHeight(lineHeight),
+      lineHeight: ReaderStyle.normalizeLineHeight(lineHeight),
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
       chapterSpacing: chapterSpacing,
@@ -408,7 +402,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     var changed = false;
     if (titleSpacing != null) {
       changed |= _typography(
-        ReaderV2Settings.titleSpacing,
+        ReaderSettings.titleSpacing,
         this.titleSpacing,
         titleSpacing,
         (value) => this.titleSpacing = value,
@@ -416,7 +410,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (textIndent != null) {
       changed |= _typography(
-        ReaderV2Settings.textIndent,
+        ReaderSettings.textIndent,
         this.textIndent,
         textIndent,
         (value) => this.textIndent = value,
@@ -424,7 +418,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (fontSize != null) {
       changed |= _typography(
-        ReaderV2Settings.fontSize,
+        ReaderSettings.fontSize,
         this.fontSize,
         fontSize,
         (value) => this.fontSize = value,
@@ -432,7 +426,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (titleFontSize != null) {
       changed |= _typography(
-        ReaderV2Settings.titleFontSize,
+        ReaderSettings.titleFontSize,
         this.titleFontSize,
         titleFontSize,
         (value) => this.titleFontSize = value,
@@ -440,16 +434,16 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (lineHeight != null) {
       changed |= _typography(
-        ReaderV2Settings.lineHeight,
+        ReaderSettings.lineHeight,
         this.lineHeight,
-        ReaderV2Style.normalizeLineHeight(lineHeight),
+        ReaderStyle.normalizeLineHeight(lineHeight),
         (value) => this.lineHeight = value,
-        restoreAs: ReaderV2Style.normalizeLineHeight,
+        restoreAs: ReaderStyle.normalizeLineHeight,
       );
     }
     if (paragraphSpacing != null) {
       changed |= _typography(
-        ReaderV2Settings.paragraphSpacing,
+        ReaderSettings.paragraphSpacing,
         this.paragraphSpacing,
         paragraphSpacing,
         (value) => this.paragraphSpacing = value,
@@ -457,7 +451,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (chapterSpacing != null) {
       changed |= _typography(
-        ReaderV2Settings.chapterSpacing,
+        ReaderSettings.chapterSpacing,
         this.chapterSpacing,
         chapterSpacing,
         (value) => this.chapterSpacing = value,
@@ -465,7 +459,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     }
     if (letterSpacing != null) {
       changed |= _typography(
-        ReaderV2Settings.letterSpacing,
+        ReaderSettings.letterSpacing,
         this.letterSpacing,
         letterSpacing,
         (value) => this.letterSpacing = value,
@@ -478,7 +472,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 正文字型
   /// 恢復為預設值。
   void resetTypography() {
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final defaults = ReaderPrefsSnapshot.defaults();
     setBodyBold(defaults.bodyBold, force: true);
     setTitleBold(defaults.titleBold, force: true);
     setTitleCenter(defaults.titleCenter, force: true);
@@ -497,7 +491,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 正文粗細、標題粗細、標題對齊與正文字型是否都是預設值。
   bool get isTypographyChoicesDefault {
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final defaults = ReaderPrefsSnapshot.defaults();
     return bodyBold == defaults.bodyBold &&
         titleBold == defaults.titleBold &&
         titleCenter == defaults.titleCenter &&
@@ -505,7 +499,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setBodyBold(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.bodyBold,
+    ReaderSettings.bodyBold,
     value,
     current: bodyBold,
     put: (v) => bodyBold = v,
@@ -513,7 +507,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   );
 
   void setTitleBold(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.titleBold,
+    ReaderSettings.titleBold,
     value,
     current: titleBold,
     put: (v) => titleBold = v,
@@ -521,7 +515,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   );
 
   void setTitleCenter(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.titleCenter,
+    ReaderSettings.titleCenter,
     value,
     current: titleCenter,
     put: (v) => titleCenter = v,
@@ -532,16 +526,16 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setReaderFont(AppFont value, {bool force = false}) {
     if (readerFont == value && !force) return;
     readerFont = value;
-    _save(ReaderV2Settings.readerFont, value, put: (v) => readerFont = v);
+    _save(ReaderSettings.readerFont, value, put: (v) => readerFont = v);
     unawaited(_fonts.ensure(value));
     notifyListeners();
   }
 
   /// 頁首頁尾資訊的字級；那一列跟著變高，正文區跟著讓出位置。
   void setInfoFontSize(double value, {bool force = false}) {
-    final normalized = ReaderV2PrefsRepository.normalizeInfoFontSize(value);
+    final normalized = ReaderPrefsRepository.normalizeInfoFontSize(value);
     _set(
-      ReaderV2Settings.infoFontSize,
+      ReaderSettings.infoFontSize,
       normalized,
       current: infoFontSize,
       put: (v) => infoFontSize = v,
@@ -552,7 +546,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setAutoPageSpeed(double value) {
     final normalized = _normalizeAutoPageSpeed(value);
     _set(
-      ReaderV2Settings.autoPageSpeed,
+      ReaderSettings.autoPageSpeed,
       normalized,
       current: autoPageSpeed,
       put: (v) => autoPageSpeed = v,
@@ -561,17 +555,17 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
-  void setHighlightColor(ReaderV2HighlightColor value) => _set(
-    ReaderV2Settings.highlightColor,
+  void setHighlightColor(ReaderHighlightColor value) => _set(
+    ReaderSettings.highlightColor,
     value,
     current: highlightColor,
     put: (v) => highlightColor = v,
   );
 
   void setHighlightStrength(double value) {
-    final normalized = ReaderV2HighlightStrength.normalize(value);
+    final normalized = ReaderHighlightStrength.normalize(value);
     _set(
-      ReaderV2Settings.highlightStrength,
+      ReaderSettings.highlightStrength,
       normalized,
       current: highlightStrength,
       put: (v) => highlightStrength = v,
@@ -581,7 +575,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 亮度改回跟隨系統，或改用自己的亮度（沿用上次調的位置）。
   void setBrightnessAuto(bool value) => _set(
-    ReaderV2Settings.brightnessAuto,
+    ReaderSettings.brightnessAuto,
     value,
     current: brightnessAuto,
     put: (v) => brightnessAuto = v,
@@ -590,50 +584,46 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 拖動亮度條：改用自己的亮度並立刻套用。拖動中 [persist] 為 false，
   /// 放開時再寫入一次，不在每一格都寫偏好設定。
   void setBrightness(double value, {bool persist = true}) {
-    final normalized = ReaderV2Brightness.normalize(value);
+    final normalized = ReaderBrightness.normalize(value);
     final changed = brightness != normalized || brightnessAuto;
     brightness = normalized;
     if (brightnessAuto) setBrightnessAuto(false);
     if (persist) {
-      _save(
-        ReaderV2Settings.brightness,
-        normalized,
-        put: (v) => brightness = v,
-      );
+      _save(ReaderSettings.brightness, normalized, put: (v) => brightness = v);
     }
     if (changed) notifyListeners();
   }
 
   void setVolumeKeyPage(bool value) => _set(
-    ReaderV2Settings.volumeKeyPage,
+    ReaderSettings.volumeKeyPage,
     value,
     current: volumeKeyPage,
     put: (v) => volumeKeyPage = v,
   );
 
   void setVolumeKeyReversed(bool value) => _set(
-    ReaderV2Settings.volumeKeyReversed,
+    ReaderSettings.volumeKeyReversed,
     value,
     current: volumeKeyReversed,
     put: (v) => volumeKeyReversed = v,
   );
 
   void setKeepScreenOn(bool value) => _set(
-    ReaderV2Settings.keepScreenOn,
+    ReaderSettings.keepScreenOn,
     value,
     current: keepScreenOn,
     put: (v) => keepScreenOn = v,
   );
 
-  void setOrientation(ReaderV2Orientation value) => _set(
-    ReaderV2Settings.orientation,
+  void setOrientation(ReaderOrientation value) => _set(
+    ReaderSettings.orientation,
     value,
     current: orientation,
     put: (v) => orientation = v,
   );
 
   void setHideNavigationBar(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.hideNavigationBar,
+    ReaderSettings.hideNavigationBar,
     value,
     current: hideNavigationBar,
     put: (v) => hideNavigationBar = v,
@@ -641,24 +631,24 @@ class ReaderV2SettingsController extends ChangeNotifier {
   );
 
   void setPageTurnOverlap(int value) {
-    final normalized = ReaderV2PrefsRepository.normalizePageTurnOverlap(value);
+    final normalized = ReaderPrefsRepository.normalizePageTurnOverlap(value);
     _set(
-      ReaderV2Settings.pageTurnOverlap,
+      ReaderSettings.pageTurnOverlap,
       normalized,
       current: pageTurnOverlap,
       put: (v) => pageTurnOverlap = v,
     );
   }
 
-  void setPageTurnSpeed(ReaderV2PageTurnSpeed value) => _set(
-    ReaderV2Settings.pageTurnSpeed,
+  void setPageTurnSpeed(ReaderPageTurnSpeed value) => _set(
+    ReaderSettings.pageTurnSpeed,
     value,
     current: pageTurnSpeed,
     put: (v) => pageTurnSpeed = v,
   );
 
   void setUse24HourClock(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.use24HourClock,
+    ReaderSettings.use24HourClock,
     value,
     current: use24HourClock,
     put: (v) => use24HourClock = v,
@@ -666,11 +656,11 @@ class ReaderV2SettingsController extends ChangeNotifier {
   );
 
   void setProgressFractionDigits(int value, {bool force = false}) {
-    final normalized = ReaderV2PrefsRepository.normalizeProgressFractionDigits(
+    final normalized = ReaderPrefsRepository.normalizeProgressFractionDigits(
       value,
     );
     _set(
-      ReaderV2Settings.progressFractionDigits,
+      ReaderSettings.progressFractionDigits,
       normalized,
       current: progressFractionDigits,
       put: (v) => progressFractionDigits = v,
@@ -679,9 +669,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setMaxDim(double value) {
-    final normalized = ReaderV2Brightness.normalizeMaxDim(value);
+    final normalized = ReaderBrightness.normalizeMaxDim(value);
     _set(
-      ReaderV2Settings.maxDim,
+      ReaderSettings.maxDim,
       normalized,
       current: maxDim,
       put: (v) => maxDim = v,
@@ -689,9 +679,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setEdgeFade(double value, {bool force = false}) {
-    final normalized = ReaderV2PrefsRepository.normalizeEdgeFade(value);
+    final normalized = ReaderPrefsRepository.normalizeEdgeFade(value);
     _set(
-      ReaderV2Settings.edgeFade,
+      ReaderSettings.edgeFade,
       normalized,
       current: edgeFade,
       put: (v) => edgeFade = v,
@@ -700,7 +690,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setTtsFollow(bool value) => _set(
-    ReaderV2Settings.ttsFollow,
+    ReaderSettings.ttsFollow,
     value,
     current: ttsFollow,
     put: (v) => ttsFollow = v,
@@ -708,7 +698,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 繁簡轉換：換了才讓正文重轉（[_contentSettingsGeneration]）並更新顯示模式。
   void setChineseConvert(int value) => _set(
-    ReaderV2Settings.chineseConvert,
+    ReaderSettings.chineseConvert,
     value,
     current: chineseConvert,
     put: _putChineseConvert,
@@ -723,7 +713,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   /// 顯示插圖（ADR 0050）：換了讓正文重轉，插圖跟著出現或拿掉。
   void setShowIllustrations(bool value) => _set(
-    ReaderV2Settings.showIllustrations,
+    ReaderSettings.showIllustrations,
     value,
     current: showIllustrations,
     put: (v) {
@@ -739,13 +729,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void resetClickActions() {
-    _setClickActions(ReaderV2PrefsSnapshot.defaults().clickActions);
+    _setClickActions(ReaderPrefsSnapshot.defaults().clickActions);
   }
 
   void _setClickActions(List<int> next) {
     clickActions = next;
     _save(
-      ReaderV2Settings.clickActions,
+      ReaderSettings.clickActions,
       next,
       put: (v) => clickActions = v,
       restoreAs: (v) => List<int>.from(v),
@@ -766,7 +756,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
         paddingHorizontal = value;
         changed = true;
         _save(
-          ReaderV2Settings.paddingHorizontal,
+          ReaderSettings.paddingHorizontal,
           value,
           put: (v) => paddingHorizontal = v,
         );
@@ -777,7 +767,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       if (force || paddingTop != value) {
         paddingTop = value;
         changed = true;
-        _save(ReaderV2Settings.paddingTop, value, put: (v) => paddingTop = v);
+        _save(ReaderSettings.paddingTop, value, put: (v) => paddingTop = v);
       }
     }
     if (bottom != null) {
@@ -786,7 +776,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
         paddingBottom = value;
         changed = true;
         _save(
-          ReaderV2Settings.paddingBottom,
+          ReaderSettings.paddingBottom,
           value,
           put: (v) => paddingBottom = v,
         );
@@ -796,9 +786,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setLineChars(int value, {bool force = false}) {
-    final normalized = ReaderV2PrefsRepository.normalizeLineChars(value);
+    final normalized = ReaderPrefsRepository.normalizeLineChars(value);
     _set(
-      ReaderV2Settings.lineChars,
+      ReaderSettings.lineChars,
       normalized,
       current: lineChars,
       put: (v) => lineChars = v,
@@ -810,7 +800,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setFooterOffset(double value, {bool force = false}) {
     final normalized = _normalizePagePadding(value);
     _set(
-      ReaderV2Settings.footerOffset,
+      ReaderSettings.footerOffset,
       normalized,
       current: footerOffset,
       put: (v) => footerOffset = v,
@@ -819,7 +809,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setJustifyText(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.justifyText,
+    ReaderSettings.justifyText,
     value,
     current: justifyText,
     put: (v) => justifyText = v,
@@ -833,7 +823,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   /// 將每行字數、邊距、左右對齊、上下緣漸隱、頁尾位置、系統列與頁首／頁尾（含時間
   /// 與進度的格式）恢復為預設值。
   void resetPageLayout() {
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final defaults = ReaderPrefsSnapshot.defaults();
     setPagePadding(
       horizontal: defaults.paddingHorizontal,
       top: defaults.paddingTop,
@@ -854,7 +844,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   bool get isPageLayoutDefault {
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final defaults = ReaderPrefsSnapshot.defaults();
     return paddingHorizontal == defaults.paddingHorizontal &&
         lineChars == defaults.lineChars &&
         justifyText == defaults.justifyText &&
@@ -872,23 +862,23 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setHideStatusBar(bool value, {bool force = false}) => _set(
-    ReaderV2Settings.hideStatusBar,
+    ReaderSettings.hideStatusBar,
     value,
     current: hideStatusBar,
     put: (v) => hideStatusBar = v,
     force: force,
   );
 
-  void setHeaderInfo(ReaderV2InfoSlots value, {bool force = false}) => _set(
-    ReaderV2Settings.headerInfo,
+  void setHeaderInfo(ReaderInfoSlots value, {bool force = false}) => _set(
+    ReaderSettings.headerInfo,
     value,
     current: headerInfo,
     put: (v) => headerInfo = v,
     force: force,
   );
 
-  void setFooterInfo(ReaderV2InfoSlots value, {bool force = false}) => _set(
-    ReaderV2Settings.footerInfo,
+  void setFooterInfo(ReaderInfoSlots value, {bool force = false}) => _set(
+    ReaderSettings.footerInfo,
     value,
     current: footerInfo,
     put: (v) => footerInfo = v,
@@ -901,7 +891,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   double _normalizeAutoPageSpeed(double value) {
-    if (!value.isFinite) return ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
+    if (!value.isFinite) return ReaderPrefsSnapshot.defaults().autoPageSpeed;
     return value.clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
   }
 }

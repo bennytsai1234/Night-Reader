@@ -17,7 +17,7 @@ double? pageTurnDistance({
 }
 
 /// 翻頁算不算翻完：捲到要求的距離，或在書首、書尾停下。
-bool isHybridPageMoveComplete({
+bool isPageMoveComplete({
   required double requestedDistance,
   required double actualDistance,
   required bool atBookBoundary,

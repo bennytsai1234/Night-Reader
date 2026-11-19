@@ -40,7 +40,7 @@ final ReplaceRule _after = ReplaceRule(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final worker = ReaderV2ContentTransformWorker.instance;
+  final worker = ReaderContentTransformWorker.instance;
 
   test('the worker processes chapter content off the main isolate', () async {
     final result = await worker.process(_args());
@@ -51,8 +51,8 @@ void main() {
   test('the worker also splits paragraphs and hashes the chapter', () async {
     final result = await worker.process({..._args(), 'chapterIndex': 7});
 
-    final document = result['document']! as ReaderV2Content;
-    final onMain = ReaderV2Content.fromRaw(
+    final document = result['document']! as ReaderContent;
+    final onMain = ReaderContent.fromRaw(
       chapterIndex: 7,
       title: '第一章',
       rawText: '　　第一段。\n　　第二段。',
@@ -70,7 +70,7 @@ void main() {
         _args(rawContent: '　　「請進。\n　　」一個悅耳的女性聲音在門後傳來。'),
       );
       expect(result['content'], '　　「請進。」一個悅耳的女性聲音在門後傳來。');
-      final document = result['document']! as ReaderV2Content;
+      final document = result['document']! as ReaderContent;
       expect(document.paragraphs, ['「請進。」一個悅耳的女性聲音在門後傳來。']);
     },
   );
@@ -87,7 +87,7 @@ void main() {
         ..._args(rawContent: '「請進。\n\n」下一段刻意從引號開始。'),
         'reSegmentEnabled': false,
       });
-      final document = result['document']! as ReaderV2Content;
+      final document = result['document']! as ReaderContent;
       expect(document.paragraphs, ['「請進。', '」下一段刻意從引號開始。']);
     },
   );
@@ -108,7 +108,7 @@ void main() {
         ],
       ),
     );
-    final document = result['document']! as ReaderV2Content;
+    final document = result['document']! as ReaderContent;
     expect(document.paragraphs, ['第一段。', '＊', '第二段。']);
   });
 
@@ -120,8 +120,8 @@ void main() {
       final long = '前文。${'甲' * 180}。後文。\n<img src="a.png">';
       for (final raw in [long, '「請進。\n<img src="a.png">\n」她說。']) {
         final result = await worker.process(_args(rawContent: raw));
-        final document = result['document']! as ReaderV2Content;
-        final sources = await ReaderV2ContentTransformer.ruleStageParagraphs(
+        final document = result['document']! as ReaderContent;
+        final sources = await ReaderContentTransformer.ruleStageParagraphs(
           book: book,
           chapter: BookChapter(url: 'c', title: '第一章'),
           rawContent: raw,
@@ -137,7 +137,7 @@ void main() {
     () async {
       await expectLater(
         worker.process(_args(rules: const <Object?>['不是規則'])),
-        throwsA(isA<ReaderV2ContentTransformException>()),
+        throwsA(isA<ReaderContentTransformException>()),
       );
 
       final result = await worker.process(_args());

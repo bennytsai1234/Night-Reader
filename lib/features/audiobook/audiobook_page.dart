@@ -201,10 +201,10 @@ class _AudiobookPageState extends State<AudiobookPage> {
         final book = _player.isCurrent(widget.book)
             ? _player.book!
             : widget.book;
-        return ReaderV2WindowSettings(
+        return ReaderWindowSettings(
           keepScreenOn: _player.keepAwake,
           backlight: null,
-          orientation: ReaderV2Orientation.system,
+          orientation: ReaderOrientation.system,
           child: Scaffold(
             extendBodyBehindAppBar: true,
             backgroundColor: chrome.groupedBackground,

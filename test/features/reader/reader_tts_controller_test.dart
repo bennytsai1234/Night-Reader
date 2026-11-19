@@ -130,7 +130,7 @@ class _OtherOwner implements PlaybackOwner {
   void onFastForward() {}
 }
 
-class _FakeTtsEngine extends ReaderV2TtsEngine {
+class _FakeTtsEngine extends ReaderTtsEngine {
   final StreamController<void> _completions =
       StreamController<void>.broadcast();
   final List<String> spoken = <String>[];
@@ -188,9 +188,9 @@ class _FakeTtsEngine extends ReaderV2TtsEngine {
 }
 
 void main() {
-  late ReaderV2Runtime runtime;
+  late ReaderRuntime runtime;
   late _FakeTtsEngine engine;
-  late ReaderV2TtsController tts;
+  late ReaderTtsController tts;
   var now = DateTime(2026, 10, 15, 23);
 
   // audio_service 一個程序只能開一次工作階段：整個檔案共用一份真的系統播放
@@ -226,7 +226,7 @@ void main() {
       originName: '本地',
     );
     final bookDao = _FakeBookDao();
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: [
         for (final index in contents.keys)
@@ -241,7 +241,7 @@ void main() {
         await gates[index]?.future;
         final content = contents[index];
         if (content == null) {
-          throw const ReaderV2ContentUnavailableException('暫時無法取得');
+          throw const ReaderContentUnavailableException('暫時無法取得');
         }
         return content;
       },
@@ -249,17 +249,17 @@ void main() {
       chapterDao: _FakeChapterDao(),
       sourceDao: _FakeSourceDao(),
     );
-    runtime = ReaderV2Runtime(
+    runtime = ReaderRuntime(
       book: book,
       repository: repository,
-      progressController: ReaderV2ProgressController(
+      progressController: ReaderProgressController(
         book: book,
         repository: repository,
         bookDao: bookDao,
       ),
-      initialLayoutSpec: ReaderV2LayoutSpec.fromViewport(
+      initialLayoutSpec: ReaderLayoutSpec.fromViewport(
         viewportSize: const Size(400, 600),
-        style: const ReaderV2LayoutStyle(
+        style: const ReaderLayoutStyle(
           fontSize: 18,
           lineHeight: 1.5,
           letterSpacing: 0,
@@ -270,12 +270,12 @@ void main() {
           paddingRight: 12,
         ),
       ),
-      initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      initialLocation: const ReaderLocation(chapterIndex: 0, charOffset: 0),
     );
     runtime.registerViewportRestore(Object(), (_) async => true);
     await runtime.openBook();
     engine = _FakeTtsEngine();
-    tts = ReaderV2TtsController(
+    tts = ReaderTtsController(
       runtime: runtime,
       tts: engine,
       playback: playback,
@@ -297,7 +297,7 @@ void main() {
 
   void moveTo(int chapterIndex) {
     runtime.updateVisibleLocation(
-      ReaderV2Location(chapterIndex: chapterIndex, charOffset: 0),
+      ReaderLocation(chapterIndex: chapterIndex, charOffset: 0),
     );
   }
 

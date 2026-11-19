@@ -35,19 +35,19 @@ final class ChapterLayoutPlan {
   final String layoutIdentity;
   final List<
     ({
-      HybridTextRange range,
+      ChapterTextRange range,
       int sourceParagraph,
       bool isTitle,
       bool isContinuation,
       bool layoutBreakBefore,
       List<int> visualLineBreakOffsets,
       List<LineSpacer> visualLineSpacers,
-      ReaderV2Illustration? illustration,
+      ReaderIllustration? illustration,
     })
   >
   _spans;
 
-  /// 有插圖的章節不存進磁碟快取（[HybridLayoutDiskCache.readPlan]）。
+  /// 有插圖的章節不存進磁碟快取（[LayoutDiskCache.readPlan]）。
   bool get hasIllustrations => _spans.any((span) => span.illustration != null);
 
   ChapterBlocks materialize(ChapterText text) {

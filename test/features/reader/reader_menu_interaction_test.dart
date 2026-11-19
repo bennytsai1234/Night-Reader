@@ -31,19 +31,19 @@ void main() {
     await rest(tester);
 
     final slider = find.descendant(
-      of: find.byType(ReaderV2BottomMenu),
+      of: find.byType(ReaderBottomMenu),
       matching: find.byType(Slider),
     );
     final rect = tester.getRect(slider);
     final before = tester.widget<Slider>(slider).value;
     final runtime = tester
-        .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+        .widget<ReaderTextView>(find.byType(ReaderTextView))
         .runtime;
     final beforeLocation = runtime.state.visibleLocation;
     final content = (await tester.runAsync(
       () => runtime.loadContentAt(beforeLocation.chapterIndex),
     ))!;
-    final targets = <ReaderV2Location>[];
+    final targets = <ReaderLocation>[];
     void captureTarget() {
       if (runtime.pendingLocation case final location?) targets.add(location);
     }
@@ -80,18 +80,18 @@ void main() {
       expect(selected, greaterThan(before));
       expect(
         find.descendant(
-          of: find.byType(ReaderV2BottomMenu),
+          of: find.byType(ReaderBottomMenu),
           matching: find.text('本章 ${(selected / 10).round()}/10'),
         ),
         findsOneWidget,
       );
       expectNoGlassUnderFade(tester);
       for (final type in [
-        ReaderV2Page,
-        ReaderV2TopMenu,
-        ReaderV2BottomMenu,
-        ReaderV2BrightnessBar,
-        HybridReaderScreen,
+        ReaderPage,
+        ReaderTopMenu,
+        ReaderBottomMenu,
+        ReaderBrightnessBar,
+        ReaderTextView,
       ]) {
         expect(rebuilds[type] ?? 0, 0, reason: '拖動中的數值不應重建 $type');
       }
@@ -119,7 +119,7 @@ void main() {
     }, reason: '放開後拖動條要停在選定的位置，不能先回到原本的 $before');
     expect(
       tester
-          .widget<ReaderV2BottomMenu>(find.byType(ReaderV2BottomMenu))
+          .widget<ReaderBottomMenu>(find.byType(ReaderBottomMenu))
           .navigation
           .scrub
           .value
@@ -130,7 +130,7 @@ void main() {
     expect(
       targets,
       contains(
-        ReaderV2Location(
+        ReaderLocation(
           chapterIndex: beforeLocation.chapterIndex,
           charOffset: (content.displayText.length * selected / 100).round(),
         ),

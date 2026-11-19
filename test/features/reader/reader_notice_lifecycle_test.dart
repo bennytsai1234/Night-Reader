@@ -64,10 +64,8 @@ void main() {
       await pumpApp(tester);
       await openReader(tester);
 
-      final reader = tester.widget<HybridReaderScreen>(
-        find.byType(HybridReaderScreen),
-      );
-      const location = ReaderV2Location(chapterIndex: 2, charOffset: 5);
+      final reader = tester.widget<ReaderTextView>(find.byType(ReaderTextView));
+      const location = ReaderLocation(chapterIndex: 2, charOffset: 5);
       reader.onBookmarkText!((
         location: location,
         chapterTitle: '第三章',

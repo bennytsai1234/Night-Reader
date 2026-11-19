@@ -1,9 +1,9 @@
 import 'reader_location.dart';
 
-enum ReaderV2OperationKind { open, jump, restore, presentation, contentReload }
+enum ReaderOperationKind { open, jump, restore, presentation, contentReload }
 
-class ReaderV2OperationToken {
-  const ReaderV2OperationToken({
+class ReaderOperationToken {
+  const ReaderOperationToken({
     required this.id,
     required this.kind,
     required this.layoutGeneration,
@@ -11,7 +11,7 @@ class ReaderV2OperationToken {
   });
 
   final int id;
-  final ReaderV2OperationKind kind;
+  final ReaderOperationKind kind;
 
   /// Layout generation this operation intends to materialize.
   ///
@@ -20,5 +20,5 @@ class ReaderV2OperationToken {
   final int layoutGeneration;
 
   /// Semantic intent, independent of the last painted or persisted location.
-  final ReaderV2Location targetLocation;
+  final ReaderLocation targetLocation;
 }

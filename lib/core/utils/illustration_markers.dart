@@ -13,7 +13,7 @@ abstract final class IllustrationMarkers {
 
   /// 轉換正文時代替第 [index] 張圖的字（私用區，每張不同）：繁簡轉換與排版
   /// 整理不動它，替換規則刪掉或搬動某張圖時，其他圖照樣對得上；轉完再拿
-  /// 掉、記下位置（閱讀器的 `ReaderV2Content.fromRaw`）。
+  /// 掉、記下位置（閱讀器的 `ReaderContent.fromRaw`）。
   static String placeholder(int index) =>
       String.fromCharCode(_firstPlaceholder + index);
 

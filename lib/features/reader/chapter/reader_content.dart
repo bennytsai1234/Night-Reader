@@ -10,23 +10,23 @@ import 'semantic_paragraph_formatter.dart';
 
 export 'reader_illustration.dart';
 
-/// 一張插圖對到的圖檔與大小（[ReaderV2Content.fromRaw]）。
-typedef ReaderV2IllustrationSlot = ({
+/// 一張插圖對到的圖檔與大小（[ReaderContent.fromRaw]）。
+typedef ReaderIllustrationSlot = ({
   String src,
   String path,
   int pixelWidth,
   int pixelHeight,
 });
 
-class ReaderV2Content {
-  const ReaderV2Content({
+class ReaderContent {
+  const ReaderContent({
     required this.chapterIndex,
     required this.title,
     required this.paragraphs,
     required this.plainText,
     required this.displayText,
     required this.contentHash,
-    this.illustrations = const <ReaderV2Illustration>[],
+    this.illustrations = const <ReaderIllustration>[],
   });
 
   final int chapterIndex;
@@ -38,7 +38,7 @@ class ReaderV2Content {
 
   /// 要顯示的插圖，照位置排（ADR 0050）。圖不在 [displayText] 裡，關掉
   /// 「顯示插圖」時這裡是空的，字一模一樣。
-  final List<ReaderV2Illustration> illustrations;
+  final List<ReaderIllustration> illustrations;
 
   int get bodyStartOffset {
     if (title.isEmpty) return 0;
@@ -49,13 +49,13 @@ class ReaderV2Content {
   /// 位置：一律拿掉，對應 [illustrationSlots] 的第 i 個（每張圖一個，關掉
   /// 「顯示插圖」時都是 null）；是 null（關掉、圖檔不在或讀不出大小）的那張
   /// 不顯示。只有插圖的段落不成段，圖放在下一段前面。
-  factory ReaderV2Content.fromRaw({
+  factory ReaderContent.fromRaw({
     required int chapterIndex,
     required String title,
     required String rawText,
     bool repairBrokenLines = true,
-    List<ReaderV2IllustrationSlot?> illustrationSlots =
-        const <ReaderV2IllustrationSlot?>[],
+    List<ReaderIllustrationSlot?> illustrationSlots =
+        const <ReaderIllustrationSlot?>[],
   }) {
     final placed = _placeIllustrations(
       paragraphsOf(rawText, repairBrokenLines: repairBrokenLines),
@@ -80,7 +80,7 @@ class ReaderV2Content {
       paragraphStarts.add(cursor);
       cursor += paragraph.length + 2;
     }
-    final illustrations = <ReaderV2Illustration>[];
+    final illustrations = <ReaderIllustration>[];
     for (final position in placed.positions) {
       final slot = illustrationSlots[position.index];
       if (slot == null) continue;
@@ -88,7 +88,7 @@ class ReaderV2Content {
           ? displayText.length
           : paragraphStarts[position.paragraph] + position.offset;
       illustrations.add(
-        ReaderV2Illustration(
+        ReaderIllustration(
           offset: offset,
           src: slot.src,
           path: slot.path,
@@ -114,14 +114,14 @@ class ReaderV2Content {
             ],
         ],
     });
-    return ReaderV2Content(
+    return ReaderContent(
       chapterIndex: chapterIndex,
       title: normalizedTitle,
       paragraphs: List<String>.unmodifiable(paragraphs),
       plainText: plainText,
       displayText: displayText,
       contentHash: sha1.convert(utf8.encode(hashMaterial)).toString(),
-      illustrations: List<ReaderV2Illustration>.unmodifiable(illustrations),
+      illustrations: List<ReaderIllustration>.unmodifiable(illustrations),
     );
   }
 
@@ -189,8 +189,8 @@ class ReaderV2Content {
   static final RegExp _leadingSpace = RegExp(r'^[\s　]+');
   static final RegExp _trailingSpace = RegExp(r'[\s　]+$');
 
-  /// 原文切成的段落，和 [ReaderV2Content.fromRaw] 的 [paragraphs] 相同。
-  /// 只要段落時用這個：[ReaderV2Content.fromRaw] 還會對整章算雜湊，那只在
+  /// 原文切成的段落，和 [ReaderContent.fromRaw] 的 [paragraphs] 相同。
+  /// 只要段落時用這個：[ReaderContent.fromRaw] 還會對整章算雜湊，那只在
   /// 背景做（`reader_content_transformer.dart`）。
   static List<String> paragraphsOf(
     String rawText, {
@@ -234,15 +234,15 @@ class ReaderV2Content {
 /// hash and length. When identity changes it resolves that anchor in the new
 /// text; sentence ordinals are deliberately not part of the contract, because
 /// replacement rules may insert/delete punctuation and line breaks.
-final class ReaderV2ContentLocationMapper {
-  const ReaderV2ContentLocationMapper._();
+final class ReaderContentLocationMapper {
+  const ReaderContentLocationMapper._();
 
   static const int _contextCodeUnits = 48;
   static const ChineseTextConverter _converter = ChineseTextConverter();
 
-  static ReaderV2Location capture({
-    required ReaderV2Location location,
-    required ReaderV2Content content,
+  static ReaderLocation capture({
+    required ReaderLocation location,
+    required ReaderContent content,
   }) {
     return location
         .normalized(chapterLength: content.displayText.length)
@@ -253,9 +253,9 @@ final class ReaderV2ContentLocationMapper {
         );
   }
 
-  static ReaderV2Location resolve({
-    required ReaderV2Location location,
-    required ReaderV2Content target,
+  static ReaderLocation resolve({
+    required ReaderLocation location,
+    required ReaderContent target,
   }) {
     if (location.contentHash == target.contentHash) {
       return capture(location: location, content: target);
@@ -274,7 +274,7 @@ final class ReaderV2ContentLocationMapper {
   /// [location] 在另一份正文（[displayText]，身分 [contentHash]）裡是第幾個
   /// 字：同一份照原位置，不同就照前後原文找回同一句，找不到時照長度比例估。
   static int offsetIn({
-    required ReaderV2Location location,
+    required ReaderLocation location,
     required String displayText,
     required String contentHash,
   }) {
@@ -298,10 +298,10 @@ final class ReaderV2ContentLocationMapper {
     return mapped ?? projected;
   }
 
-  static ReaderV2Location remap({
-    required ReaderV2Location location,
-    required ReaderV2Content before,
-    required ReaderV2Content after,
+  static ReaderLocation remap({
+    required ReaderLocation location,
+    required ReaderContent before,
+    required ReaderContent after,
   }) {
     if (before.chapterIndex != after.chapterIndex) {
       return resolve(

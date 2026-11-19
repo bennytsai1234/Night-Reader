@@ -28,7 +28,7 @@ void main() {
   late int systemBacks;
   late int exitIntents;
   late int timedTtsTaps;
-  late ReaderV2SidePanelController panel;
+  late ReaderSidePanelController panel;
 
   const contentKey = Key('reader-content');
 
@@ -36,11 +36,11 @@ void main() {
     WidgetTester tester, {
     bool controlsVisible = false,
     ValueListenable<bool>? controls,
-    ValueListenable<ReaderV2InfoState>? infoStates,
+    ValueListenable<ReaderInfoState>? infoStates,
     ValueListenable<int>? chapters,
-    ReaderV2InfoSlots headerInfo = const ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.none,
-      right: ReaderV2InfoItem.none,
+    ReaderInfoSlots headerInfo = const ReaderInfoSlots(
+      left: ReaderInfoItem.none,
+      right: ReaderInfoItem.none,
     ),
     Widget? brightnessControl,
     SleepTimer? sleepTimer,
@@ -48,7 +48,7 @@ void main() {
     double menuInset = AppGrouped.margin,
     VoidCallback? onDrawerClosed,
     VoidCallback? onMenuHidden,
-    ReaderV2InfoTarget? loadingTarget,
+    ReaderInfoTarget? loadingTarget,
     String? fontFamily,
   }) async {
     showControls = 0;
@@ -56,11 +56,11 @@ void main() {
     dismissControls = 0;
     systemBacks = 0;
     exitIntents = 0;
-    panel = ReaderV2SidePanelController();
+    panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
     final scroll = ScrollController();
     addTearDown(scroll.dispose);
-    final menu = ReaderV2MenuController();
+    final menu = ReaderMenuController();
     addTearDown(menu.dispose);
     final fixed = ValueNotifier(controlsVisible);
     addTearDown(fixed.dispose);
@@ -74,7 +74,7 @@ void main() {
       MaterialApp(
         home: ListenableBuilder(
           listenable: Listenable.merge([infoStates]),
-          builder: (context, _) => ReaderV2PageShell(
+          builder: (context, _) => ReaderPageShell(
             book: Book(
               bookUrl: 'http://shell.test',
               name: '殼層測試書',
@@ -90,7 +90,7 @@ void main() {
                   SizedBox(height: 40, child: Text('第 $index 行')),
             ),
             chapterPanelController: panel,
-            chapterPanel: ReaderV2ChaptersDrawer(
+            chapterPanel: ReaderChaptersDrawer(
               chapters: const [],
               currentChapter: chapter,
               titleFor: (_) => '',
@@ -103,10 +103,10 @@ void main() {
             textColor: Colors.black,
             controlsVisible: visibility,
             showReadTitleAddition: true,
-            infoState: infoStates?.value ?? ReaderV2InfoState.ready,
+            infoState: infoStates?.value ?? ReaderInfoState.ready,
             loadingTarget: loadingTarget,
             originName: '本地',
-            navigation: ReaderV2ChapterNavigationState(
+            navigation: ReaderChapterNavigationState(
               chapterCount: 3,
               current: chapter,
               scrub: menu.scrub,
@@ -116,9 +116,9 @@ void main() {
             hideStatusBar: true,
             topCutoutExtent: 40,
             headerInfo: headerInfo,
-            footerInfo: const ReaderV2InfoSlots(
-              left: ReaderV2InfoItem.bookName,
-              right: ReaderV2InfoItem.none,
+            footerInfo: const ReaderInfoSlots(
+              left: ReaderInfoItem.bookName,
+              right: ReaderInfoItem.none,
             ),
             paddingHorizontal: paddingHorizontal,
             menuInset: menuInset,
@@ -224,22 +224,22 @@ void main() {
     controls.value = true;
     await tester.pump();
     await tester.pump(AppMotion.readerMenuIn ~/ 2);
-    expect(awayOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
-    expect(awayOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderTopMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderBottomMenu), inExclusiveRange(0, 1));
     // 只滑不淡：玻璃上方沒有半透明圖層，模糊不會到最後一幀才糊上。
     expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
-    expect(awayOf(ReaderV2TopMenu), 0);
-    expect(awayOf(ReaderV2BottomMenu), 0);
+    expect(awayOf(ReaderTopMenu), 0);
+    expect(awayOf(ReaderBottomMenu), 0);
 
     controls.value = false;
     await tester.pump();
     await tester.pump(AppMotion.readerMenuOut ~/ 2);
-    expect(awayOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
-    expect(awayOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderTopMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderBottomMenu), inExclusiveRange(0, 1));
     expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
-    expect(awayOf(ReaderV2BottomMenu), 1);
+    expect(awayOf(ReaderBottomMenu), 1);
   });
 
   testWidgets('opening and closing the menus only moves them; buttons, titles, '
@@ -274,9 +274,9 @@ void main() {
 
     expect(rebuilds[GlassSlide] ?? 0, greaterThan(0), reason: '選單要真的滑動');
     for (final type in [
-      ReaderV2PageShell,
-      ReaderV2TopMenu,
-      ReaderV2BottomMenu,
+      ReaderPageShell,
+      ReaderTopMenu,
+      ReaderBottomMenu,
       GlassIconButton,
       TextButton,
       Slider,
@@ -292,14 +292,14 @@ void main() {
   ) async {
     await pumpShell(
       tester,
-      headerInfo: const ReaderV2InfoSlots(
-        left: ReaderV2InfoItem.batteryIcon,
-        right: ReaderV2InfoItem.battery,
+      headerInfo: const ReaderInfoSlots(
+        left: ReaderInfoItem.batteryIcon,
+        right: ReaderInfoItem.battery,
       ),
     );
     await tester.pumpAndSettle();
     // 頁首左欄只有電池，右欄的「電量」照舊是數字。
-    expect(find.byType(ReaderV2BatteryGlyph), findsOneWidget);
+    expect(find.byType(ReaderBatteryGlyph), findsOneWidget);
     expect(find.textContaining('%'), findsOneWidget);
   });
 
@@ -325,9 +325,9 @@ void main() {
     );
     await pumpShell(
       tester,
-      headerInfo: const ReaderV2InfoSlots(
-        left: ReaderV2InfoItem.batteryIcon,
-        right: ReaderV2InfoItem.time,
+      headerInfo: const ReaderInfoSlots(
+        left: ReaderInfoItem.batteryIcon,
+        right: ReaderInfoItem.time,
       ),
     );
     await tester.pumpAndSettle();
@@ -357,9 +357,9 @@ void main() {
       tester,
       controlsVisible: true,
       chapters: chapter,
-      headerInfo: const ReaderV2InfoSlots(
-        left: ReaderV2InfoItem.chapterTitle,
-        right: ReaderV2InfoItem.none,
+      headerInfo: const ReaderInfoSlots(
+        left: ReaderInfoItem.chapterTitle,
+        right: ReaderInfoItem.none,
       ),
     );
     await tester.pumpAndSettle();
@@ -389,9 +389,9 @@ void main() {
     expect(button('上一章').onPressed, isNotNull);
     expect(button('下一章').onPressed, isNotNull);
     for (final type in [
-      ReaderV2PageShell,
-      ReaderV2TopMenu,
-      ReaderV2BottomMenu,
+      ReaderPageShell,
+      ReaderTopMenu,
+      ReaderBottomMenu,
       GlassIconButton,
     ]) {
       expect(rebuilds[type] ?? 0, 0, reason: '換章不應重建 $type');
@@ -401,7 +401,7 @@ void main() {
   testWidgets('a tap on the header or footer with the menu open only closes '
       'it', (tester) async {
     await pumpShell(tester, controlsVisible: true);
-    final size = tester.getSize(find.byType(ReaderV2PageShell));
+    final size = tester.getSize(find.byType(ReaderPageShell));
 
     // 頁尾最底下兩點，在下方選單底下的留白裡。
     await tester.tapAt(Offset(size.width / 2, size.height - 2));
@@ -443,7 +443,7 @@ void main() {
     tester,
   ) async {
     await pumpShell(tester, controlsVisible: false);
-    final size = tester.getSize(find.byType(ReaderV2PageShell));
+    final size = tester.getSize(find.byType(ReaderPageShell));
     final header = Offset(size.width / 2, 20);
     final footer = Offset(size.width / 2, size.height - 10);
 
@@ -494,8 +494,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final bar = tester.getRect(find.byKey(barKey));
-    final top = tester.getRect(find.byType(ReaderV2TopMenu));
-    final bottom = tester.getRect(find.byType(ReaderV2BottomMenu));
+    final top = tester.getRect(find.byType(ReaderTopMenu));
+    final bottom = tester.getRect(find.byType(ReaderBottomMenu));
     expect(bar.top - top.bottom, AppSpacing.xl);
     expect(bottom.top - bar.bottom, AppSpacing.xl);
     expect(bar.left, AppGrouped.margin);
@@ -554,7 +554,7 @@ void main() {
 
     expect(panel.isOpen, isFalse);
     expect(find.byType(Drawer), findsNothing);
-    expect(find.byType(ReaderV2PageShell), findsOneWidget);
+    expect(find.byType(ReaderPageShell), findsOneWidget);
     expect(systemBacks, 0);
     expect(exitIntents, 0);
   });
@@ -619,9 +619,9 @@ void main() {
   });
 
   group('info rows while the text is loading', () {
-    const headerInfo = ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.chapterTitle,
-      right: ReaderV2InfoItem.bookProgress,
+    const headerInfo = ReaderInfoSlots(
+      left: ReaderInfoItem.chapterTitle,
+      right: ReaderInfoItem.bookProgress,
     );
 
     /// 資訊列裡的文字；頂部選單也有章名與書名，不算。
@@ -629,7 +629,7 @@ void main() {
       (element) =>
           element.widget is Text &&
           (element.widget as Text).data == text &&
-          element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null,
+          element.findAncestorWidgetOfExactType<ReaderTopMenu>() == null,
     );
 
     /// [text] 畫出來的字的中線（全域座標）：最寬的那一段字的字框中線。
@@ -652,10 +652,10 @@ void main() {
       (widget) => widget is SkeletonText && widget.text == text,
     );
 
-    Future<ValueNotifier<ReaderV2InfoState>> pumpLoading(
+    Future<ValueNotifier<ReaderInfoState>> pumpLoading(
       WidgetTester tester,
     ) async {
-      final states = ValueNotifier(ReaderV2InfoState.loading);
+      final states = ValueNotifier(ReaderInfoState.loading);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
@@ -687,7 +687,7 @@ void main() {
 
       // 換成資訊後，每一條就在那段字的位置、和字一樣寬，上下置中在畫出來
       // 的字上（不是行框：資訊列混了標點字型與退回的字型，兩者中線不同）。
-      states.value = ReaderV2InfoState.ready;
+      states.value = ReaderInfoState.ready;
       await tester.pumpAndSettle();
       for (final text in texts) {
         final content = tester.getRect(infoText(text));
@@ -703,15 +703,15 @@ void main() {
 
     testWidgets('the battery-only bar sits on the battery, the clock bar on '
         'its digits', (tester) async {
-      final states = ValueNotifier(ReaderV2InfoState.loading);
+      final states = ValueNotifier(ReaderInfoState.loading);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
         controlsVisible: false,
         infoStates: states,
-        headerInfo: const ReaderV2InfoSlots(
-          left: ReaderV2InfoItem.batteryIcon,
-          right: ReaderV2InfoItem.time,
+        headerInfo: const ReaderInfoSlots(
+          left: ReaderInfoItem.batteryIcon,
+          right: ReaderInfoItem.time,
         ),
       );
       await tester.pump(SkeletonReveal.defaultDuration);
@@ -725,12 +725,12 @@ void main() {
           );
       expect(header, hasLength(2));
 
-      states.value = ReaderV2InfoState.ready;
+      states.value = ReaderInfoState.ready;
       await tester.pumpAndSettle();
       expect(
         header.first.center.dy,
         moreOrLessEquals(
-          tester.getRect(find.byType(ReaderV2BatteryGlyph)).center.dy,
+          tester.getRect(find.byType(ReaderBatteryGlyph)).center.dy,
         ),
       );
       expect(
@@ -741,22 +741,22 @@ void main() {
 
     testWidgets('with a downloaded font the chapter title draws CJK with that '
         'font first and keeps a skeleton bar on its text', (tester) async {
-      final states = ValueNotifier(ReaderV2InfoState.loading);
+      final states = ValueNotifier(ReaderInfoState.loading);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
         controlsVisible: false,
         infoStates: states,
-        headerInfo: const ReaderV2InfoSlots(
-          left: ReaderV2InfoItem.chapterTitle,
-          right: ReaderV2InfoItem.none,
+        headerInfo: const ReaderInfoSlots(
+          left: ReaderInfoItem.chapterTitle,
+          right: ReaderInfoItem.none,
         ),
         fontFamily: 'TestKai',
       );
       await tester.pump(AppMotion.fade);
       expect(infoSkeleton('第一章'), findsOneWidget);
 
-      states.value = ReaderV2InfoState.ready;
+      states.value = ReaderInfoState.ready;
       await tester.pumpAndSettle();
       final title = tester
           .widgetList<Text>(find.byType(Text))
@@ -770,7 +770,7 @@ void main() {
       final states = await pumpLoading(tester);
       final skeletonTitle = tester.getRect(infoSkeleton('第一章'));
 
-      states.value = ReaderV2InfoState.ready;
+      states.value = ReaderInfoState.ready;
       await tester.pump();
       await tester.pump(AppMotion.fade ~/ 2);
       // 淡出中的骨架與淡入中的資訊同時在畫面上。
@@ -786,7 +786,7 @@ void main() {
     testWidgets('a jump turns the info into skeleton bars in place', (
       tester,
     ) async {
-      final states = ValueNotifier(ReaderV2InfoState.ready);
+      final states = ValueNotifier(ReaderInfoState.ready);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
@@ -798,7 +798,7 @@ void main() {
       expect(find.byType(SkeletonBox), findsNothing);
       final infoTitle = tester.getRect(infoText('第一章'));
 
-      states.value = ReaderV2InfoState.loading;
+      states.value = ReaderInfoState.loading;
       await tester.pump();
       // 變成骨架照骨架換場的時長。
       await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
@@ -816,7 +816,7 @@ void main() {
     testWidgets('the skeleton keeps breathing when the info finishes fading', (
       tester,
     ) async {
-      final states = ValueNotifier(ReaderV2InfoState.ready);
+      final states = ValueNotifier(ReaderInfoState.ready);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
@@ -827,7 +827,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 變成骨架照骨架換場的時長。
-      states.value = ReaderV2InfoState.loading;
+      states.value = ReaderInfoState.loading;
       await tester.pump();
       await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       final breathing = [
@@ -849,7 +849,7 @@ void main() {
     testWidgets('switching back before the fade starts moving keeps the info', (
       tester,
     ) async {
-      final states = ValueNotifier(ReaderV2InfoState.ready);
+      final states = ValueNotifier(ReaderInfoState.ready);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
@@ -860,9 +860,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 兩次切換在同一個時間點：動畫已開始但濃淡還停在端點。
-      states.value = ReaderV2InfoState.loading;
+      states.value = ReaderInfoState.loading;
       await tester.pump();
-      states.value = ReaderV2InfoState.ready;
+      states.value = ReaderInfoState.ready;
       await tester.pump();
       await tester.pump(AppMotion.fade * 2);
 
@@ -885,7 +885,7 @@ void main() {
       final states = await pumpLoading(tester);
       await tester.pump(SkeletonReveal.defaultDuration);
 
-      states.value = ReaderV2InfoState.hidden;
+      states.value = ReaderInfoState.hidden;
       await tester.pump();
       await tester.pump(AppMotion.fade ~/ 2);
       // 骨架整條淡掉，不是直接拿掉。
@@ -910,14 +910,14 @@ void main() {
     testWidgets('the fading skeleton is drawn from the loading target', (
       tester,
     ) async {
-      final states = ValueNotifier(ReaderV2InfoState.loading);
+      final states = ValueNotifier(ReaderInfoState.loading);
       addTearDown(states.dispose);
       await pumpShell(
         tester,
         controlsVisible: false,
         infoStates: states,
         headerInfo: headerInfo,
-        loadingTarget: const ReaderV2InfoTarget(
+        loadingTarget: const ReaderInfoTarget(
           chapterIndex: 2,
           chapterCount: 3,
           title: '第三章　很長很長的章名',
@@ -927,7 +927,7 @@ void main() {
       final loading = tester.getRect(infoSkeleton('第三章　很長很長的章名'));
 
       // 取不到正文：淡掉的仍是要開的那一章的長條，寬度不跳。
-      states.value = ReaderV2InfoState.hidden;
+      states.value = ReaderInfoState.hidden;
       await tester.pump();
       await tester.pump(AppMotion.fade ~/ 2);
       expect(tester.getRect(infoSkeleton('第三章　很長很長的章名')), loading);

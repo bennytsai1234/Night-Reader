@@ -5,7 +5,7 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/widgets/popup_routes.dart';
 
 /// 閱讀選單（上下選單、目錄、閱讀器內面板）的配色，取自目前風格。
-class ReaderV2MenuStyle {
+class ReaderMenuStyle {
   final Brightness brightness;
   final Color background;
   final Color backgroundElevated;
@@ -24,7 +24,7 @@ class ReaderV2MenuStyle {
   /// 露出的那一條正文分不開。
   final Color scrim;
 
-  const ReaderV2MenuStyle({
+  const ReaderMenuStyle({
     required this.brightness,
     required this.background,
     required this.backgroundElevated,
@@ -38,21 +38,21 @@ class ReaderV2MenuStyle {
     required this.scrim,
   });
 
-  factory ReaderV2MenuStyle.of(BuildContext context) =>
-      ReaderV2MenuStyle.fromPalette(StylePalette.of(context));
+  factory ReaderMenuStyle.of(BuildContext context) =>
+      ReaderMenuStyle.fromPalette(StylePalette.of(context));
 
   /// 閱讀選單那一層的主題，照外層的主題 [base] 算（[toSheetTheme]）；給
   /// [DerivedTheme]，系統切換深淺時跟著換。
   static ThemeData menuThemeOf(ThemeData base) =>
-      ReaderV2MenuStyle.fromPalette(StylePalette.ofTheme(base))
+      ReaderMenuStyle.fromPalette(StylePalette.ofTheme(base))
           .toSheetTheme(base);
 
   /// 裡面是分組卡片的閱讀器面板用的 [menuThemeOf]（`cards: true`）。
   static ThemeData cardsMenuThemeOf(ThemeData base) =>
-      ReaderV2MenuStyle.fromPalette(StylePalette.ofTheme(base))
+      ReaderMenuStyle.fromPalette(StylePalette.ofTheme(base))
           .toSheetTheme(base, cards: true);
 
-  factory ReaderV2MenuStyle.fromPalette(StylePalette palette) {
+  factory ReaderMenuStyle.fromPalette(StylePalette palette) {
     final background = palette.readerMenu.withValues(alpha: 0.96);
     final foreground = palette.text;
     // 面板裡的卡片照分層：淺色的面板比紙暗，卡片往紙的顏色亮回一階（到
@@ -68,7 +68,7 @@ class ReaderV2MenuStyle {
             foreground,
             AppLayers.floatGapDark,
           );
-    return ReaderV2MenuStyle(
+    return ReaderMenuStyle(
       brightness: palette.brightness,
       background: background,
       backgroundElevated: card,

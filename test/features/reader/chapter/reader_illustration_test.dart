@@ -16,7 +16,7 @@ import 'package:night_reader/features/reader/text_view/text/text_preprocessor.da
 
 String _m(int index) => IllustrationMarkers.placeholder(index);
 
-ReaderV2IllustrationSlot _slot(String src) =>
+ReaderIllustrationSlot _slot(String src) =>
     (src: src, path: '/images/$src', pixelWidth: 300, pixelHeight: 200);
 
 void main() {
@@ -92,12 +92,12 @@ void main() {
 
   group('正文裡的插圖位置', () {
     test('沒有插圖時正文與雜湊和以前一樣', () {
-      final plain = ReaderV2Content.fromRaw(
+      final plain = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '第一章',
         rawText: '甲\n乙',
       );
-      final marked = ReaderV2Content.fromRaw(
+      final marked = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '第一章',
         rawText: '甲\n${_m(0)}\n乙',
@@ -109,7 +109,7 @@ void main() {
     });
 
     test('只有插圖的行不成段，圖在下一段前面；段中的圖記在字的位置', () {
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '第一章',
         rawText: '甲甲\n${_m(0)}\n乙${_m(1)}乙\n丙${_m(2)}\n${_m(3)}',
@@ -131,13 +131,13 @@ void main() {
     });
 
     test('關掉顯示插圖時字一模一樣，只是沒有插圖', () {
-      final on = ReaderV2Content.fromRaw(
+      final on = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '甲\n${_m(0)}\n乙',
         illustrationSlots: [_slot('1')],
       );
-      final off = ReaderV2Content.fromRaw(
+      final off = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '甲\n${_m(0)}\n乙',
@@ -150,7 +150,7 @@ void main() {
     });
 
     test('網路書每行前面的全形縮排不影響插圖位置', () {
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '　　甲\n　　${_m(0)}\n　　乙',
@@ -164,7 +164,7 @@ void main() {
     });
 
     test('讀不到的圖不顯示，其他照常', () {
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '${_m(0)}甲\n${_m(1)}乙',
@@ -175,7 +175,7 @@ void main() {
   });
 
   group('切塊', () {
-    Future<ChapterBlocks> blocksOf(ReaderV2Content content) {
+    Future<ChapterBlocks> blocksOf(ReaderContent content) {
       return const TextPreprocessor(useIsolate: false).process(
         ChapterText(
           id: 0,
@@ -189,7 +189,7 @@ void main() {
     }
 
     test('段前、段中、段尾、章末的插圖各自一塊，段中的圖把段落切開', () async {
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '第一章',
         rawText: '甲甲\n${_m(0)}\n乙${_m(1)}乙\n丙${_m(2)}\n${_m(3)}',
@@ -217,7 +217,7 @@ void main() {
     });
 
     test('位置一律落在字上，不落在插圖', () async {
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: 0,
         title: '',
         rawText: '甲\n${_m(0)}\n乙\n${_m(1)}',
@@ -249,13 +249,13 @@ void main() {
     });
     tearDown(() => dir.delete(recursive: true));
 
-    Future<ReaderV2Content> transform(
+    Future<ReaderContent> transform(
       String raw, {
       String title = '第一章',
       List<ReplaceRule> rules = const [],
       bool show = true,
     }) async {
-      final result = await ReaderV2ContentTransformWorker.instance.process({
+      final result = await ReaderContentTransformWorker.instance.process({
         'chapterIndex': 0,
         'bookName': '書',
         'bookOrigin': 'http://source.test',
@@ -267,7 +267,7 @@ void main() {
         'chineseConvertType': 0,
         'illustrationsDir': ?(show ? dir.path : null),
       });
-      return result['document']! as ReaderV2Content;
+      return result['document']! as ReaderContent;
     }
 
     test('替換規則刪掉一張圖，其他圖照樣對得上', () async {
@@ -291,8 +291,8 @@ void main() {
   });
 
   group('插圖大小', () {
-    ReaderV2Illustration illustration(int width, int height) =>
-        ReaderV2Illustration(
+    ReaderIllustration illustration(int width, int height) =>
+        ReaderIllustration(
           offset: 0,
           src: 's',
           path: 'p',

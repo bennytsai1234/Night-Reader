@@ -1,11 +1,11 @@
 import 'reader_typography.dart';
 
-class ReaderV2Style {
+class ReaderStyle {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;
   static const double defaultLineHeight = 1.5;
 
-  const ReaderV2Style({
+  const ReaderStyle({
     required this.fontSize,
     required this.lineHeight,
     required this.letterSpacing,
@@ -23,8 +23,7 @@ class ReaderV2Style {
     this.textIndent = 0,
     double? titleFontSize,
     this.titleSpacing = 0.0,
-  }) : titleFontSize =
-           titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
+  }) : titleFontSize = titleFontSize ?? fontSize + kReaderDefaultTitleSizeDelta;
 
   final double fontSize;
   final double lineHeight;
@@ -39,7 +38,7 @@ class ReaderV2Style {
   final double paddingRight;
 
   /// 左右對齊：排版時把一行湊不滿一個字格的空隙攤進字距，
-  /// 見 `ReaderV2TextLayoutFrame.justifiedLetterSpacing`。
+  /// 見 `ReaderTextLayoutFrame.justifiedLetterSpacing`。
   final bool justify;
 
   /// 正文加粗。
@@ -55,7 +54,7 @@ class ReaderV2Style {
   final String? fontFamily;
   final int textIndent;
 
-  /// 章節標題字號；未指定時比正文大 [kReaderV2DefaultTitleSizeDelta]。
+  /// 章節標題字號；未指定時比正文大 [kReaderDefaultTitleSizeDelta]。
   final double titleFontSize;
 
   /// 章節標題與正文之間的空白（行）。
@@ -68,7 +67,7 @@ class ReaderV2Style {
     return value.clamp(minReadableLineHeight, maxReadableLineHeight).toDouble();
   }
 
-  ReaderV2Style copyWith({
+  ReaderStyle copyWith({
     double? fontSize,
     double? lineHeight,
     double? letterSpacing,
@@ -87,7 +86,7 @@ class ReaderV2Style {
     double? titleFontSize,
     double? titleSpacing,
   }) {
-    return ReaderV2Style(
+    return ReaderStyle(
       fontSize: fontSize ?? this.fontSize,
       lineHeight: lineHeight ?? this.lineHeight,
       letterSpacing: letterSpacing ?? this.letterSpacing,
@@ -110,7 +109,7 @@ class ReaderV2Style {
 
   @override
   bool operator ==(Object other) {
-    return other is ReaderV2Style &&
+    return other is ReaderStyle &&
         other.fontSize == fontSize &&
         other.lineHeight == lineHeight &&
         other.letterSpacing == letterSpacing &&

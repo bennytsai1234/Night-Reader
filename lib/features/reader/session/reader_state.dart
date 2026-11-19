@@ -2,10 +2,10 @@ import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 
 import 'reader_location.dart';
 
-enum ReaderV2Lifecycle { cold, ready, unavailable }
+enum ReaderLifecycle { cold, ready, unavailable }
 
-class ReaderV2State {
-  const ReaderV2State({
+class ReaderState {
+  const ReaderState({
     required this.lifecycle,
     required this.committedLocation,
     required this.visibleLocation,
@@ -15,10 +15,10 @@ class ReaderV2State {
     this.unavailableMessage,
   });
 
-  final ReaderV2Lifecycle lifecycle;
-  final ReaderV2Location committedLocation;
-  final ReaderV2Location visibleLocation;
-  final ReaderV2LayoutSpec layoutSpec;
+  final ReaderLifecycle lifecycle;
+  final ReaderLocation committedLocation;
+  final ReaderLocation visibleLocation;
+  final ReaderLayoutSpec layoutSpec;
   final int layoutGeneration;
 
   /// Runtime-published semantic document generation.
@@ -28,19 +28,19 @@ class ReaderV2State {
   final int contentGeneration;
   final String? unavailableMessage;
 
-  bool get hasStableWorld => lifecycle == ReaderV2Lifecycle.ready;
+  bool get hasStableWorld => lifecycle == ReaderLifecycle.ready;
 
-  ReaderV2State copyWith({
-    ReaderV2Lifecycle? lifecycle,
-    ReaderV2Location? committedLocation,
-    ReaderV2Location? visibleLocation,
-    ReaderV2LayoutSpec? layoutSpec,
+  ReaderState copyWith({
+    ReaderLifecycle? lifecycle,
+    ReaderLocation? committedLocation,
+    ReaderLocation? visibleLocation,
+    ReaderLayoutSpec? layoutSpec,
     int? layoutGeneration,
     int? contentGeneration,
     String? unavailableMessage,
     bool clearUnavailableMessage = false,
   }) {
-    return ReaderV2State(
+    return ReaderState(
       lifecycle: lifecycle ?? this.lifecycle,
       committedLocation: committedLocation ?? this.committedLocation,
       visibleLocation: visibleLocation ?? this.visibleLocation,

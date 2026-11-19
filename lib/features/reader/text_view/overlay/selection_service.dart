@@ -20,7 +20,7 @@ typedef ParagraphSelection = ({
 /// 在選取開頭留書籤要的東西（見 [ReaderTextSelection.asBookmark]）：位置
 /// 已綁好那一章正文的錨點。
 typedef SelectionBookmark = ({
-  ReaderV2Location location,
+  ReaderLocation location,
   String chapterTitle,
   String excerpt,
 });
@@ -28,7 +28,7 @@ typedef SelectionBookmark = ({
 /// 把選到的字畫上標註要的東西（見 [ReaderTextSelection.asHighlight]）：
 /// 開頭的位置已綁好那一章正文的錨點，[quote] 是畫到的字。
 typedef SelectionHighlight = ({
-  ReaderV2Location location,
+  ReaderLocation location,
   String chapterTitle,
   String quote,
 });
@@ -48,14 +48,14 @@ final class ReaderTextSelection {
   /// 目前的 ChapterBlocks，選取隨之失效。
   final ChapterBlocks blocks;
   final LayoutEpoch epoch;
-  final HybridTextRange paragraph;
-  final HybridTextRange range;
+  final ChapterTextRange paragraph;
+  final ChapterTextRange range;
 
   int get chapterIndex => blocks.chapterIndex;
 
   String get text => blocks.displayText.substring(range.start, range.end);
 
-  /// 選取落在第幾段正文（`ReaderV2Content.paragraphs` 的序號）、那一段的字，
+  /// 選取落在第幾段正文（`ReaderContent.paragraphs` 的序號）、那一段的字，
   /// 與選取在段內的位置；交給上層對回原文。
   ParagraphSelection get inParagraph => (
     chapterIndex: chapterIndex,
@@ -79,7 +79,7 @@ final class ReaderTextSelection {
     final local = range.start - paragraph.start;
     var start = range.start;
     var end = range.end;
-    for (final sentence in const ReaderV2TtsSegmenter().segment(
+    for (final sentence in const ReaderTtsSegmenter().segment(
       text: paragraphText,
       chapterIndex: chapterIndex,
       startOffset: local,
@@ -92,7 +92,7 @@ final class ReaderTextSelection {
       }
     }
     return (
-      location: ReaderV2Location(chapterIndex: chapterIndex, charOffset: start)
+      location: ReaderLocation(chapterIndex: chapterIndex, charOffset: start)
           .withContentIdentity(
             contentHash: blocks.contentHash,
             displayText: blocks.displayText,
@@ -116,7 +116,7 @@ final class ReaderTextSelection {
     }
     // 選到的全是空白時 [quote] 是空的，不畫。
     return (
-      location: ReaderV2Location(
+      location: ReaderLocation(
         chapterIndex: chapterIndex,
         charOffset: start,
       ).withContentIdentity(contentHash: blocks.contentHash, displayText: text),
@@ -165,7 +165,7 @@ final class ReaderTextSelection {
         blocks: blocks,
         epoch: epoch,
         paragraph: paragraph,
-        range: HybridTextRange(start, end),
+        range: ChapterTextRange(start, end),
       ),
       edge: moving,
     );

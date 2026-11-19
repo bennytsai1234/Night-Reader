@@ -48,13 +48,13 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  ReaderV2LayoutSpec specWithFontSize(
+  ReaderLayoutSpec specWithFontSize(
     double fontSize, {
     Size viewportSize = const Size(220, 180),
   }) {
-    return ReaderV2LayoutSpec.fromViewport(
+    return ReaderLayoutSpec.fromViewport(
       viewportSize: viewportSize,
-      style: ReaderV2LayoutStyle(
+      style: ReaderLayoutStyle(
         fontSize: fontSize,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -76,11 +76,11 @@ void main() {
     content: '第 $index 章內容。',
   );
 
-  ReaderV2Runtime makeRuntime(
+  ReaderRuntime makeRuntime(
     List<BookChapter> chapters, {
-    ReaderV2TestContentLoader? contentLoader,
-    ReaderV2LayoutSpec? initialLayoutSpec,
-    ReaderV2Location initialLocation = const ReaderV2Location(
+    ReaderTestContentLoader? contentLoader,
+    ReaderLayoutSpec? initialLayoutSpec,
+    ReaderLocation initialLocation = const ReaderLocation(
       chapterIndex: 0,
       charOffset: 0,
     ),
@@ -93,7 +93,7 @@ void main() {
       originName: '本地',
     );
     final bookDao = _FakeBookDao();
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: chapters,
       contentLoader: contentLoader,
@@ -101,10 +101,10 @@ void main() {
       chapterDao: _FakeChapterDao(),
       sourceDao: _FakeSourceDao(),
     );
-    return ReaderV2Runtime(
+    return ReaderRuntime(
       book: book,
       repository: repository,
-      progressController: ReaderV2ProgressController(
+      progressController: ReaderProgressController(
         book: book,
         repository: repository,
         bookDao: bookDao,
@@ -129,10 +129,10 @@ void main() {
     ];
     final runtime = makeRuntime(
       chapters,
-      initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 2),
+      initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 2),
     );
     addTearDown(runtime.dispose);
-    final restores = <ReaderV2Location>[];
+    final restores = <ReaderLocation>[];
     runtime.registerViewportRestore(Object(), (location) async {
       restores.add(location);
       return true;
@@ -150,22 +150,22 @@ void main() {
     // 同書源工作入口：付費章節不抓，正文準備回「付費章節」。
     Future<String?> loader(int index, BookChapter chapter) async {
       if (chapter.isLocked) {
-        throw const ReaderV2ContentUnavailableException(lockedChapterNotice);
+        throw const ReaderContentUnavailableException(lockedChapterNotice);
       }
       return chapter.content;
     }
 
-    Future<(ReaderV2Runtime, List<ReaderV2Location>)> open(
+    Future<(ReaderRuntime, List<ReaderLocation>)> open(
       List<BookChapter> chapters, {
       required int at,
     }) async {
       final runtime = makeRuntime(
         chapters,
         contentLoader: loader,
-        initialLocation: ReaderV2Location(chapterIndex: at, charOffset: 5),
+        initialLocation: ReaderLocation(chapterIndex: at, charOffset: 5),
       );
       addTearDown(runtime.dispose);
-      final restores = <ReaderV2Location>[];
+      final restores = <ReaderLocation>[];
       runtime.registerViewportRestore(Object(), (location) async {
         restores.add(location);
         return true;
@@ -182,7 +182,7 @@ void main() {
         chapter(3),
       ], at: 1);
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(restores.single.chapterIndex, 3);
       expect(restores.single.charOffset, 0);
       expect(
@@ -200,7 +200,7 @@ void main() {
         paid(3),
       ], at: 2);
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(restores.single.chapterIndex, 1);
       expect(restores.single.charOffset, 0);
     });
@@ -215,7 +215,7 @@ void main() {
         chapter(2),
       ], contentLoader: loader);
       addTearDown(runtime.dispose);
-      final restores = <ReaderV2Location>[];
+      final restores = <ReaderLocation>[];
       runtime.registerViewportRestore(Object(), (location) {
         restores.add(location);
         return restores.length == 1 ? openRestore.future : Future.value(true);
@@ -227,7 +227,7 @@ void main() {
       openRestore.complete(true);
       await opening;
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.visibleLocation.chapterIndex, 1);
       expect(restores.map((location) => location.chapterIndex), [1, 1]);
       expect(runtime.takeUserNotice()?.message, lockedChapterNotice);
@@ -236,7 +236,7 @@ void main() {
     test('a book of only paid chapters shows it cannot be read', () async {
       final (runtime, restores) = await open([paid(0), paid(1)], at: 1);
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.unavailable);
+      expect(runtime.state.lifecycle, ReaderLifecycle.unavailable);
       expect(runtime.state.unavailableMessage, lockedChapterNotice);
       expect(restores, isEmpty);
     });
@@ -251,14 +251,14 @@ void main() {
           index == 3 ? content.future : Future.value(chapter.content),
     );
     addTearDown(runtime.dispose);
-    final restores = <ReaderV2Location>[];
+    final restores = <ReaderLocation>[];
     runtime.registerViewportRestore(Object(), (location) async {
       restores.add(location);
       return true;
     });
     await runtime.openBook();
 
-    const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
+    const target = ReaderLocation(chapterIndex: 3, charOffset: 4);
     final jump = runtime.jumpToLocation(target);
     final presentation = runtime.applyPresentation(spec: specWithFontSize(22));
 
@@ -267,7 +267,7 @@ void main() {
     content.complete(chapters[3].content);
     await Future.wait([jump, presentation]);
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.lifecycle, ReaderLifecycle.ready);
     expect(runtime.state.visibleLocation, target);
     expect(
       runtime.state.layoutSpec.layoutSignature,
@@ -285,7 +285,7 @@ void main() {
       runtime.registerViewportRestore(Object(), (_) async => true);
       await runtime.openBook();
 
-      const captured = ReaderV2Location(
+      const captured = ReaderLocation(
         chapterIndex: 0,
         charOffset: 2,
         visualOffsetPx: 12,
@@ -352,7 +352,7 @@ void main() {
         spec: staged,
         layoutGeneration: runtime.state.layoutGeneration + 1,
       );
-      const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
+      const target = ReaderLocation(chapterIndex: 3, charOffset: 4);
       final jump = runtime.beginJumpOperation(location: target);
       final restoresBeforeResize = restores;
       final resized = specWithFontSize(22, viewportSize: const Size(220, 160));
@@ -362,7 +362,7 @@ void main() {
       expect(runtime.stateMachine.currentOperation, same(jump));
       expect(
         runtime.stateMachine.currentOperation!.kind,
-        ReaderV2OperationKind.jump,
+        ReaderOperationKind.jump,
       );
       expect(runtime.pendingLocation, target);
       expect(
@@ -463,7 +463,7 @@ void main() {
     expect(runtime.isJumpingToAnotherChapter, isFalse);
 
     final sameChapter = runtime.jumpToLocation(
-      const ReaderV2Location(chapterIndex: 0, charOffset: 2),
+      const ReaderLocation(chapterIndex: 0, charOffset: 2),
     );
     expect(runtime.stateMachine.currentOperation, isNotNull);
     expect(runtime.isJumpingToAnotherChapter, isFalse);
@@ -512,7 +512,7 @@ void main() {
         [chapter(0), chapter(1)],
         contentLoader: (index, chapter) async {
           if (index == 1) {
-            throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
+            throw ReaderContentUnavailableException('目標章節暫時無法取得');
           }
           return chapter.content;
         },
@@ -526,7 +526,7 @@ void main() {
 
       await runtime.jumpToChapter(1);
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.hasStableWorld, isTrue);
       expect(runtime.state.visibleLocation, before);
       expect(runtime.state.layoutGeneration, generation);
@@ -571,7 +571,7 @@ void main() {
         [chapter(0)],
         contentLoader: (_, chapter) async {
           if (failRefresh) {
-            throw ReaderV2ContentUnavailableException('重新載入正文失敗');
+            throw ReaderContentUnavailableException('重新載入正文失敗');
           }
           return chapter.content;
         },
@@ -589,7 +589,7 @@ void main() {
 
       expect(await runtime.reloadContentPreservingLocation(), isFalse);
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.hasStableWorld, isTrue);
       expect(runtime.repository.cachedContent(0), same(before));
       expect(runtime.repository.contentGeneration, generationBefore);
@@ -629,7 +629,7 @@ void main() {
         ),
       );
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.hasStableWorld, isTrue);
       expect(runtime.state.visibleLocation, before);
       expect(runtime.pendingLocation, isNull);
@@ -643,7 +643,7 @@ void main() {
       final runtime = makeRuntime(
         [chapter(0)],
         contentLoader: (_, _) async {
-          throw ReaderV2ContentUnavailableException('正文暫時無法取得');
+          throw ReaderContentUnavailableException('正文暫時無法取得');
         },
       );
       addTearDown(runtime.dispose);
@@ -651,7 +651,7 @@ void main() {
 
       await runtime.openBook();
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.unavailable);
+      expect(runtime.state.lifecycle, ReaderLifecycle.unavailable);
       expect(runtime.state.hasStableWorld, isFalse);
       expect(runtime.pendingLocation, isNull);
       expect(runtime.state.unavailableMessage, contains('正文暫時無法取得'));
@@ -667,13 +667,13 @@ void main() {
         [chapter(0), chapter(1)],
         contentLoader: (index, chapter) async {
           if (index == 1) {
-            throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
+            throw ReaderContentUnavailableException('目標章節暫時無法取得');
           }
           return chapter.content;
         },
       );
       addTearDown(runtime.dispose);
-      final restores = <ReaderV2Location>[];
+      final restores = <ReaderLocation>[];
       runtime.registerViewportRestore(Object(), (location) {
         restores.add(location);
         return restores.length == 1 ? openRestore.future : Future.value(true);
@@ -688,7 +688,7 @@ void main() {
       openRestore.complete(true);
       await open;
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.unavailableMessage, isNull);
       expect(runtime.state.visibleLocation.chapterIndex, 0);
       expect(restores.last.chapterIndex, 0);
@@ -707,7 +707,7 @@ void main() {
           index == 1 ? targetContent.future : Future.value(chapter.content),
     );
     addTearDown(runtime.dispose);
-    final restores = <ReaderV2Location>[];
+    final restores = <ReaderLocation>[];
     runtime.registerViewportRestore(Object(), (location) {
       restores.add(location);
       return restores.length == 1 ? openRestore.future : Future.value(true);
@@ -721,13 +721,13 @@ void main() {
     expect(runtime.pendingLocation?.chapterIndex, 1);
 
     targetContent.completeError(
-      const ReaderV2ContentUnavailableException('目標章節暫時無法取得'),
+      const ReaderContentUnavailableException('目標章節暫時無法取得'),
     );
     await Future.wait([jump, relayout]);
     openRestore.complete(true);
     await open;
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.lifecycle, ReaderLifecycle.ready);
     expect(runtime.state.unavailableMessage, isNull);
     expect(runtime.state.visibleLocation.chapterIndex, 0);
     expect(
@@ -749,7 +749,7 @@ void main() {
 
     await expectLater(runtime.jumpToChapter(1), throwsStateError);
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.lifecycle, ReaderLifecycle.ready);
     expect(runtime.state.hasStableWorld, isTrue);
     expect(runtime.pendingLocation, isNull);
   });
@@ -764,7 +764,7 @@ void main() {
       await runtime.openBook();
 
       final operation = runtime.beginJumpOperation(
-        location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        location: const ReaderLocation(chapterIndex: 1, charOffset: 0),
       );
       expect(runtime.stateMachine.currentOperation, same(operation));
       expect(runtime.state.hasStableWorld, isTrue);
@@ -772,7 +772,7 @@ void main() {
       runtime.unregisterViewportRestore(owner);
 
       expect(runtime.stateMachine.currentOperation, isNull);
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.hasStableWorld, isTrue);
     },
   );
@@ -789,7 +789,7 @@ void main() {
       await runtime.openBook();
 
       final operation = runtime.beginJumpOperation(
-        location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        location: const ReaderLocation(chapterIndex: 1, charOffset: 0),
       );
       runtime.unregisterViewportRestore(staleOwner);
 
@@ -821,7 +821,7 @@ void main() {
     () async {
       final runtime = makeRuntime(List.generate(3, chapter));
       addTearDown(runtime.dispose);
-      final restores = <ReaderV2Location>[];
+      final restores = <ReaderLocation>[];
       runtime.registerViewportRestore(Object(), (location) async {
         restores.add(location);
         return true;
@@ -832,7 +832,7 @@ void main() {
       await runtime.applyPresentation(spec: specWithFontSize(22));
       await runtime.reloadContentPreservingLocation();
 
-      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.lifecycle, ReaderLifecycle.ready);
       expect(runtime.state.visibleLocation.chapterIndex, 1);
       expect(runtime.pendingLocation, isNull);
       expect(restores, isNotEmpty);
@@ -885,11 +885,11 @@ void main() {
       expect(loadCount, 3);
 
       secondReload.completeError(
-        const ReaderV2ContentUnavailableException('第二次重新載入失敗'),
+        const ReaderContentUnavailableException('第二次重新載入失敗'),
       );
       await expectLater(
         refresh2,
-        throwsA(isA<ReaderV2ContentUnavailableException>()),
+        throwsA(isA<ReaderContentUnavailableException>()),
       );
 
       final afterFailure = repository.cachedContent(0);
@@ -919,7 +919,7 @@ void main() {
     getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
 
     final entrance = Completer<void>();
-    final host = ReaderV2ControllerHost(
+    final host = ReaderControllerHost(
       book: Book(
         bookUrl: 'http://entrance.test',
         name: '進場測試書',
@@ -940,7 +940,7 @@ void main() {
 
     final runtime = host.ensureRuntime(
       const Size(220, 180),
-      const ReaderV2Style(
+      const ReaderStyle(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -956,7 +956,7 @@ void main() {
     var opened = false;
     runtime.addListener(() {
       if (runtime.stateMachine.currentOperation?.kind ==
-          ReaderV2OperationKind.open) {
+          ReaderOperationKind.open) {
         opened = true;
       }
     });
@@ -984,7 +984,7 @@ void main() {
     getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
     getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
 
-    final host = ReaderV2ControllerHost(
+    final host = ReaderControllerHost(
       book: Book(
         bookUrl: 'http://auto-page-away.test',
         name: '自動捲動測試書',
@@ -1004,7 +1004,7 @@ void main() {
     });
     final runtime = host.ensureRuntime(
       const Size(220, 180),
-      const ReaderV2Style(
+      const ReaderStyle(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1019,7 +1019,7 @@ void main() {
     // 換成看得到幀來源有沒有在跑的自動捲動。
     host.autoPage?.dispose();
     var framesRunning = false;
-    final autoPage = host.autoPage = ReaderV2AutoPageController(
+    final autoPage = host.autoPage = ReaderAutoPageController(
       runtime: runtime,
       frameSource: (_) {
         framesRunning = true;
@@ -1071,7 +1071,7 @@ void main() {
         origin: 'local',
         originName: '本地',
       );
-      final host = ReaderV2ControllerHost(
+      final host = ReaderControllerHost(
         book: book,
         initialChapters: [chapter(0), chapter(1)],
         openTarget: null,
@@ -1085,7 +1085,7 @@ void main() {
       });
 
       const size = Size(220, 180);
-      const initialStyle = ReaderV2Style(
+      const initialStyle = ReaderStyle(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1125,7 +1125,7 @@ void main() {
       final jump = runtime.jumpToChapter(1);
       expect(
         runtime.stateMachine.currentOperation?.kind,
-        ReaderV2OperationKind.jump,
+        ReaderOperationKind.jump,
       );
 
       host.syncRuntimeConfiguration(runtime, size, desiredStyle);
@@ -1133,7 +1133,7 @@ void main() {
         var frame = 0;
         frame < 6 &&
             runtime.stateMachine.currentOperation?.kind !=
-                ReaderV2OperationKind.presentation;
+                ReaderOperationKind.presentation;
         frame++
       ) {
         await tester.pump();
@@ -1141,7 +1141,7 @@ void main() {
 
       expect(
         runtime.stateMachine.currentOperation?.kind,
-        ReaderV2OperationKind.presentation,
+        ReaderOperationKind.presentation,
         reason: 'presentation 必須接手 jump 的 pending target 才算有效重現。',
       );
       expect(runtime.pendingLocation?.chapterIndex, 1);
@@ -1152,7 +1152,7 @@ void main() {
       expect(runtime.state.layoutSpec.presentationSignature, initialSignature);
 
       targetContent.completeError(
-        const ReaderV2ContentUnavailableException('目標章節暫時無法取得'),
+        const ReaderContentUnavailableException('目標章節暫時無法取得'),
       );
       await jump;
       for (var frame = 0; frame < 4; frame++) {
@@ -1199,7 +1199,7 @@ void main() {
         origin: 'local',
         originName: '本地',
       );
-      final host = ReaderV2ControllerHost(
+      final host = ReaderControllerHost(
         book: book,
         initialChapters: [chapter(0), chapter(1)],
         openTarget: null,
@@ -1215,7 +1215,7 @@ void main() {
       await host.settings.loadSettings();
 
       const size = Size(220, 180);
-      const style = ReaderV2Style(
+      const style = ReaderStyle(
         fontSize: 18,
         lineHeight: 1.5,
         letterSpacing: 0,
@@ -1237,7 +1237,7 @@ void main() {
           loads[index] = (loads[index] ?? 0) + 1;
           if (failNextReload) {
             failNextReload = false;
-            throw const ReaderV2ContentUnavailableException('正文設定重新載入失敗');
+            throw const ReaderContentUnavailableException('正文設定重新載入失敗');
           }
           return chapter.content;
         },

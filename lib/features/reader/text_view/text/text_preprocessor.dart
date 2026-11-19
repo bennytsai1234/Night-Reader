@@ -72,12 +72,12 @@ ChapterBlocks _processSync(_PreprocessRequest request) {
   // 插圖各自一塊、不佔字（ADR 0050）：落在段落開頭的放在那一段前面，
   // 落在段落結尾的放在後面，落在段落中間的把那一段切開，後半段從新的
   // 一行開始、不縮排。
-  void addIllustration(ReaderV2Illustration illustration, int paragraph) {
+  void addIllustration(ReaderIllustration illustration, int paragraph) {
     blocks.add(
       ChapterBlock(
         key: BlockKey(chapterIndex: chapter.id, blockIndex: blocks.length),
         text: '',
-        charRange: HybridTextRange(illustration.offset, illustration.offset),
+        charRange: ChapterTextRange(illustration.offset, illustration.offset),
         sourceParagraphIndex: paragraph,
         illustration: illustration,
       ),
@@ -102,12 +102,12 @@ ChapterBlocks _processSync(_PreprocessRequest request) {
       addIllustrationsUpTo(segment.start, segment.paragraph);
     }
     // 段落中間的插圖把段落切成幾份；每個切點記下那裡的插圖。
-    final cuts = <({int at, List<ReaderV2Illustration> illustrations})>[];
+    final cuts = <({int at, List<ReaderIllustration> illustrations})>[];
     while (!segment.isTitle &&
         nextIllustration < illustrations.length &&
         illustrations[nextIllustration].offset < segment.end) {
       final at = illustrations[nextIllustration].offset;
-      final here = <ReaderV2Illustration>[];
+      final here = <ReaderIllustration>[];
       while (nextIllustration < illustrations.length &&
           illustrations[nextIllustration].offset == at) {
         here.add(illustrations[nextIllustration++]);
@@ -136,7 +136,7 @@ ChapterBlocks _processSync(_PreprocessRequest request) {
           ChapterBlock(
             key: BlockKey(chapterIndex: chapter.id, blockIndex: blocks.length),
             text: chunks[i],
-            charRange: HybridTextRange(start, end),
+            charRange: ChapterTextRange(start, end),
             sourceParagraphIndex: segment.paragraph,
             isTitle: segment.isTitle,
             isContinuation: piece > 0 || i > 0,

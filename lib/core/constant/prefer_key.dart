@@ -198,7 +198,7 @@ class PreferKey {
   static const String readerTtsPitch = 'reader_tts_pitch';
   static const String readerTtsLanguage = 'reader_tts_language';
 
-  /// 朗讀高亮與選字反白的顏色（[ReaderV2HighlightColor.name]）。
+  /// 朗讀高亮與選字反白的顏色（[ReaderHighlightColor.name]）。
   static const String readerHighlightColor = 'reader_highlight_color';
 
   /// 朗讀高亮的深淺（不透明度）。
@@ -229,7 +229,7 @@ class PreferKey {
   /// 閱讀器亮度跟隨系統；關閉時用 [readerBrightness]。
   static const String readerBrightnessAuto = 'reader_brightness_auto';
 
-  /// 閱讀器亮度條的位置（0–1，見 `ReaderV2Brightness`）。
+  /// 閱讀器亮度條的位置（0–1，見 `ReaderBrightness`）。
   static const String readerBrightness = 'reader_brightness';
   static const String readerVolumeKeyPage = 'reader_volume_key_page';
 
@@ -237,7 +237,7 @@ class PreferKey {
   static const String readerVolumeKeyReversed = 'reader_volume_key_reversed';
   static const String readerKeepScreenOn = 'reader_keep_screen_on';
 
-  /// 閱讀器的螢幕方向（`ReaderV2Orientation.name`）。
+  /// 閱讀器的螢幕方向（`ReaderOrientation.name`）。
   static const String readerOrientation = 'reader_orientation';
 
   /// 隱藏狀態列時一起隱藏系統導覽列。
@@ -249,7 +249,7 @@ class PreferKey {
   /// 翻頁時上一屏留在畫面上的行數。
   static const String readerPageTurnOverlap = 'reader_page_turn_overlap';
 
-  /// 翻頁捲動的快慢（`ReaderV2PageTurnSpeed.name`）。
+  /// 翻頁捲動的快慢（`ReaderPageTurnSpeed.name`）。
   static const String readerPageTurnSpeed = 'reader_page_turn_speed';
   static const String readerUse24HourClock = 'reader_use_24_hour_clock';
 

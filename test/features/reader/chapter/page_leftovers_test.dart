@@ -14,7 +14,7 @@ void main() {
     required String title,
     bool useReplaceRules = true,
   }) async {
-    final result = await ReaderV2ContentTransformWorker.instance.process({
+    final result = await ReaderContentTransformWorker.instance.process({
       'chapterIndex': 0,
       'bookName': '咒回：特级的我去死灭打宿傩了！',
       'bookOrigin': 'https://www.biquge345.com',
@@ -25,7 +25,7 @@ void main() {
       'reSegmentEnabled': false,
       'chineseConvertType': 0,
     });
-    return (result['document']! as ReaderV2Content).paragraphs;
+    return (result['document']! as ReaderContent).paragraphs;
   }
 
   // 2026-11-18 笔趣阁 biquge345《咒回》第 7 章：網站一頁就給整章，原本兩頁的
@@ -98,7 +98,7 @@ void main() {
 
       expect(await shown(raw, title: '第一章 夜雨'), ['前文。', '想隱藏的廣告。']);
       expect(
-        await ReaderV2ContentTransformer.ruleStageParagraphs(
+        await ReaderContentTransformer.ruleStageParagraphs(
           book: book,
           chapter: BookChapter(
             url: 'u',

@@ -44,8 +44,8 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 /// 高度）決定，不看狀態列當下的內距：從後台回到前台時系統會先把狀態列
 /// 叫回來、再由 App 收起，這段期間的內距變動不得推動正文。
 @immutable
-final class ReaderV2PageChromeLayout {
-  const ReaderV2PageChromeLayout._({
+final class ReaderPageChromeLayout {
+  const ReaderPageChromeLayout._({
     required this.headerExtent,
     required this.headerRowTop,
     required this.footerExtent,
@@ -58,7 +58,7 @@ final class ReaderV2PageChromeLayout {
 
   /// [topCutoutExtent] 為 null 表示尚未取得挖孔高度，暫以系統內距代替。
   /// [footerOffset] 為頁尾資訊列底部到畫面底部的距離。
-  factory ReaderV2PageChromeLayout.resolve({
+  factory ReaderPageChromeLayout.resolve({
     required EdgeInsets mediaPadding,
     double? topCutoutExtent,
     required bool hideStatusBar,
@@ -89,7 +89,7 @@ final class ReaderV2PageChromeLayout {
     final footerExtent = showFooterInfo
         ? footerRowBottom + readerFooterRowHeightFor(infoFontSize)
         : mediaPadding.bottom;
-    return ReaderV2PageChromeLayout._(
+    return ReaderPageChromeLayout._(
       headerExtent: headerExtent,
       headerRowTop: headerRowTop,
       footerExtent: footerExtent,
@@ -115,8 +115,8 @@ final class ReaderV2PageChromeLayout {
   final bool showFooterInfo;
 }
 
-class ReaderV2PageShell extends StatelessWidget {
-  const ReaderV2PageShell({
+class ReaderPageShell extends StatelessWidget {
+  const ReaderPageShell({
     super.key,
     required this.book,
     required this.content,
@@ -184,9 +184,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final Book book;
   final Widget content;
 
-  /// 左側的目錄面板與開關它的遙控器（[ReaderV2SidePanel]）。
-  final ReaderV2ChaptersDrawer chapterPanel;
-  final ReaderV2SidePanelController chapterPanelController;
+  /// 左側的目錄面板與開關它的遙控器（[ReaderSidePanel]）。
+  final ReaderChaptersDrawer chapterPanel;
+  final ReaderSidePanelController chapterPanelController;
   final Color backgroundColor;
 
   /// 頁首／頁尾資訊列的文字與圖示色。
@@ -199,29 +199,29 @@ class ReaderV2PageShell extends StatelessWidget {
   /// 開關時這個框架與選單內容都不重建（ADR 0029 做法 3）。
   final ValueListenable<bool> controlsVisible;
   final bool showReadTitleAddition;
-  final ReaderV2InfoState infoState;
+  final ReaderInfoState infoState;
 
-  /// [infoState] 是 [ReaderV2InfoState.loading] 時骨架照它排字；null 時照
+  /// [infoState] 是 [ReaderInfoState.loading] 時骨架照它排字；null 時照
   /// 畫面上這一章。
-  final ReaderV2InfoTarget? loadingTarget;
+  final ReaderInfoTarget? loadingTarget;
   final String originName;
 
-  /// 點書源膠囊（見 [ReaderV2TopMenu.onOpenOrigin]）。
+  /// 點書源膠囊（見 [ReaderTopMenu.onOpenOrigin]）。
   final VoidCallback? onOpenOrigin;
-  final ValueListenable<HybridProgressSnapshot?>? progressListenable;
+  final ValueListenable<ProgressSnapshot?>? progressListenable;
 
   /// 章數、目前章（小訊號）與章名；上方選單的章名、上一章／下一章與頁首
   /// 頁尾的章名都照它，捲動途中換章時只有這幾處更新。
-  final ReaderV2ChapterNavigationState navigation;
+  final ReaderChapterNavigationState navigation;
   final bool isAutoPaging;
   final bool hideStatusBar;
-  final ReaderV2InfoSlots headerInfo;
-  final ReaderV2InfoSlots footerInfo;
+  final ReaderInfoSlots headerInfo;
+  final ReaderInfoSlots footerInfo;
 
   /// 正文的左右邊距；頁首頁尾資訊列的左右內距也用它。
   final double paddingHorizontal;
 
-  /// 上下選單離畫面左右邊多遠（`ReaderV2SettingsController.menuInsetFor`）；
+  /// 上下選單離畫面左右邊多遠（`ReaderSettingsController.menuInsetFor`）；
   /// 亮度條和它對齊，但最多離左邊 16。
   final double menuInset;
   final double paddingTop;
@@ -264,7 +264,7 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
 
-  /// 圓鈕長按開完整設定頁（見 [ReaderV2BottomMenu.onAutoPageSettings]）。
+  /// 圓鈕長按開完整設定頁（見 [ReaderBottomMenu.onAutoPageSettings]）。
   final VoidCallback? onAutoPageSettings;
   final VoidCallback? onReplaceRuleSettings;
   final VoidCallback? onTimedTtsSettings;
@@ -294,7 +294,7 @@ class ReaderV2PageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.paddingOf(context);
-    final layout = ReaderV2PageChromeLayout.resolve(
+    final layout = ReaderPageChromeLayout.resolve(
       mediaPadding: mediaPadding,
       topCutoutExtent: topCutoutExtent,
       hideStatusBar: hideStatusBar,
@@ -329,7 +329,7 @@ class ReaderV2PageShell extends StatelessWidget {
         onSystemBack();
       },
       // 目錄蓋在整個 Scaffold 上：提示（SnackBar）在暗幕底下，和系統抽屜一樣。
-      child: ReaderV2SidePanel(
+      child: ReaderSidePanel(
         controller: chapterPanelController,
         panel: chapterPanel,
         onOpenChanged: onChapterPanelChanged,
@@ -426,7 +426,7 @@ class ReaderV2PageShell extends StatelessWidget {
                     ),
                   ),
                 Positioned.fill(
-                  child: _ReaderV2ControlsDismissLayer(
+                  child: _ReaderControlsDismissLayer(
                     controlsVisible: controlsVisible,
                     onDismiss: onDismissControls,
                   ),
@@ -439,7 +439,7 @@ class ReaderV2PageShell extends StatelessWidget {
                     children: [
                       LayoutId(
                         id: _MenuSlot.top,
-                        child: ReaderV2TopMenu(
+                        child: ReaderTopMenu(
                           horizontalInset: menuInset,
                           controlsVisible: controlsVisible,
                           bookName: context.zh(book.name),
@@ -453,7 +453,7 @@ class ReaderV2PageShell extends StatelessWidget {
                       ),
                       LayoutId(
                         id: _MenuSlot.bottom,
-                        child: ReaderV2BottomMenu(
+                        child: ReaderBottomMenu(
                           horizontalInset: menuInset,
                           controlsVisible: controlsVisible,
                           navigation: navigation,
@@ -487,7 +487,7 @@ class ReaderV2PageShell extends StatelessWidget {
                       if (brightnessControl case final control?)
                         LayoutId(
                           id: _MenuSlot.brightness,
-                          child: ReaderV2MenuEntrance(
+                          child: ReaderMenuEntrance(
                             visible: controlsVisible,
                             edge: AxisDirection.left,
                             // 滑出畫面的距離照它離左邊多遠。
@@ -495,7 +495,7 @@ class ReaderV2PageShell extends StatelessWidget {
                             // 比上下選單晚一點出發，三塊錯開。
                             delay: AppMotion.readerMenuStagger,
                             child: DerivedTheme(
-                              derive: ReaderV2MenuStyle.menuThemeOf,
+                              derive: ReaderMenuStyle.menuThemeOf,
                               child: control,
                             ),
                           ),
@@ -516,7 +516,7 @@ enum _MenuSlot { top, bottom, brightness }
 
 /// 上下選單貼齊畫面上下緣；亮度條離左邊 [brightnessSide]，撐滿兩者之間的
 /// 空間、上下各留 [AppSpacing.xl]，在上下選單之間置中。空間不夠時亮度條
-/// 自己不畫（[ReaderV2BrightnessBar.minHeight]）。
+/// 自己不畫（[ReaderBrightnessBar.minHeight]）。
 class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
   _MenuLayoutDelegate({required this.brightnessSide});
 
@@ -551,7 +551,7 @@ class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
 }
 
 /// 頁首頁尾資訊列目前要畫什麼。
-enum ReaderV2InfoState {
+enum ReaderInfoState {
   /// 不畫：開書取不到正文（正文區改顯示錯誤）。已經畫出的骨架整條淡掉。
   hidden,
 
@@ -563,12 +563,12 @@ enum ReaderV2InfoState {
 }
 
 /// 載入期間頁首頁尾描述的位置：要開、要跳去的那一章。骨架照這一章的章名與
-/// 進度排字量寬度，換成資訊時字一樣長。正文排好前畫面上那一章（[ReaderV2ChapterNavigationState.current]）
+/// 進度排字量寬度，換成資訊時字一樣長。正文排好前畫面上那一章（[ReaderChapterNavigationState.current]）
 /// 還不是要開的那一章，進度也還沒算出來；照它們量，骨架會缺一條、照舊章或
 /// 照「…」量得太短。
 @immutable
-final class ReaderV2InfoTarget {
-  const ReaderV2InfoTarget({
+final class ReaderInfoTarget {
+  const ReaderInfoTarget({
     required this.chapterIndex,
     required this.chapterCount,
     required this.title,
@@ -580,7 +580,7 @@ final class ReaderV2InfoTarget {
   final String title;
 
   /// 每章佔全書多少，跳到章首時的全書進度照它算，和排好後一樣。
-  final ReaderV2ChapterShares? shares;
+  final ReaderChapterShares? shares;
 
   /// 這一章的進度：進度通道已經是這一章（例如開書時先放進去的上次進度）就
   /// 用它，否則當作在章首。跳章跳到章首，數字和排好後一樣；開書沒有上次
@@ -588,13 +588,13 @@ final class ReaderV2InfoTarget {
   ///
   /// 同一章時只沿用它的章內比例；章數與每章佔全書多少用這次的（[shares]，
   /// 開書時排正文前就讀好），這次還沒讀到時才用它記下的（上次存的骨架頁）。
-  HybridProgressSnapshot progressFrom(HybridProgressSnapshot? progress) {
+  ProgressSnapshot progressFrom(ProgressSnapshot? progress) {
     final sameChapter =
         progress != null && progress.chapterIndex == chapterIndex;
     final current = shares?.chapterCount == chapterCount ? shares : null;
     final keepRecorded =
         current == null && sameChapter && progress.chapterCount == chapterCount;
-    return HybridProgressSnapshot(
+    return ProgressSnapshot(
       chapterIndex: chapterIndex,
       chapterCount: chapterCount,
       chapterPercent: sameChapter ? progress.chapterPercent : 0,
@@ -616,7 +616,7 @@ final class ReaderV2InfoTarget {
 class _InfoLayer extends StatefulWidget {
   const _InfoLayer({required this.state, required this.builder});
 
-  final ReaderV2InfoState state;
+  final ReaderInfoState state;
 
   /// 畫出資訊列；`skeleton` 為 true 時每個欄位畫成骨架。
   final Widget Function(bool skeleton) builder;
@@ -666,13 +666,13 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _sync({ReaderV2InfoState? from}) {
+  void _sync({ReaderInfoState? from}) {
     // 骨架與資訊在同一個位置交叉淡換，兩者都從目前的濃淡接著走，切換途中
     // 再切回來不會先閃空。
     final state = widget.state;
-    final toSkeleton = state == ReaderV2InfoState.loading;
+    final toSkeleton = state == ReaderInfoState.loading;
     final toInfo =
-        from == ReaderV2InfoState.loading && state == ReaderV2InfoState.ready;
+        from == ReaderInfoState.loading && state == ReaderInfoState.ready;
     final reveal = toSkeleton || toInfo ? SkeletonReveal.of(context) : null;
     // 換場途中反過來時沿用這一輪的方向與方式倒著走：換掉 _incoming 會讓
     // 左右的濃淡在同一幀對調。
@@ -686,7 +686,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     _info.duration = duration;
     _skeleton.duration = duration;
     _animate(_skeleton, toSkeleton ? 1 : 0);
-    _animate(_info, state == ReaderV2InfoState.ready ? 1 : 0);
+    _animate(_info, state == ReaderInfoState.ready ? 1 : 0);
   }
 
   void _animate(AnimationController controller, double target) {
@@ -707,9 +707,9 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
-    final showInfo = state == ReaderV2InfoState.ready || !_info.isDismissed;
+    final showInfo = state == ReaderInfoState.ready || !_info.isDismissed;
     final showSkeleton =
-        state == ReaderV2InfoState.loading || !_skeleton.isDismissed;
+        state == ReaderInfoState.loading || !_skeleton.isDismissed;
     // 兩層各帶 key：一層淡完移出時另一層的位置往前挪，沒有 key 會被接到
     // 移走那一層的元素上重建，骨架的呼吸從頭開始、資訊的時鐘電量重訂閱。
     return Stack(
@@ -741,7 +741,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
 class _PermanentInfoBar extends StatelessWidget {
   const _PermanentInfoBar({required this.shell, required this.rowBottom});
 
-  final ReaderV2PageShell shell;
+  final ReaderPageShell shell;
 
   /// 資訊列底部到畫面底部的距離。
   final double rowBottom;
@@ -789,8 +789,8 @@ class _InfoRow extends StatelessWidget {
     this.skeleton = false,
   });
 
-  final ReaderV2PageShell shell;
-  final ReaderV2InfoSlots slots;
+  final ReaderPageShell shell;
+  final ReaderInfoSlots slots;
   final bool showAutoPage;
 
   /// null 時是頁首那一列的高度。
@@ -817,10 +817,10 @@ class _InfoRow extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(BuildContext context, HybridProgressSnapshot? live) {
-    // 載入中的骨架照要開的那一章排字（[ReaderV2InfoTarget]）；排好後骨架淡
+  Widget _buildRow(BuildContext context, ProgressSnapshot? live) {
+    // 載入中的骨架照要開的那一章排字（[ReaderInfoTarget]）；排好後骨架淡
     // 出途中照真正的資訊，和底下淡入的字一樣。取不到正文時骨架照原樣淡掉。
-    final target = skeleton && shell.infoState != ReaderV2InfoState.ready
+    final target = skeleton && shell.infoState != ReaderInfoState.ready
         ? shell.loadingTarget
         : null;
     final progress = target?.progressFrom(live) ?? live;
@@ -889,9 +889,9 @@ class _InfoRow extends StatelessWidget {
             fontSize: shell.infoFontSize,
             color: infoColor,
             fontWeight: FontWeight.w400,
-            fontFamily: kReaderV2PunctFontFamily,
-            fontFamilyFallback: readerV2FontFallback(shell.fontFamily),
-            locale: kReaderV2TextLocale,
+            fontFamily: kReaderPunctFontFamily,
+            fontFamilyFallback: readerFontFallback(shell.fontFamily),
+            locale: kReaderTextLocale,
           ),
           maxLines: 1,
           overflow: TextOverflow.visible,
@@ -948,13 +948,13 @@ class _InfoRow extends StatelessWidget {
   /// [title] 是骨架照要開的那一章排字時的章名；null 時照畫面上這一章。
   Widget? _itemWidget(
     BuildContext context,
-    ReaderV2InfoItem item,
-    HybridProgressSnapshot? progress,
+    ReaderInfoItem item,
+    ProgressSnapshot? progress,
     String? title,
     TextAlign align,
   ) {
-    if (item == ReaderV2InfoItem.none) return null;
-    if (item == ReaderV2InfoItem.time) {
+    if (item == ReaderInfoItem.none) return null;
+    if (item == ReaderInfoItem.time) {
       return _ReaderClock(
         format: _clockFormat(shell.use24HourClock),
         textAlign: align,
@@ -976,28 +976,28 @@ class _InfoRow extends StatelessWidget {
 
   String? _itemText(
     BuildContext context,
-    ReaderV2InfoItem item,
-    HybridProgressSnapshot? progress,
+    ReaderInfoItem item,
+    ProgressSnapshot? progress,
     String? title,
   ) {
     final navigation = shell.navigation;
     return switch (item) {
-      ReaderV2InfoItem.none ||
-      ReaderV2InfoItem.time ||
-      ReaderV2InfoItem.battery ||
-      ReaderV2InfoItem.batteryIcon ||
-      ReaderV2InfoItem.batteryWithIcon ||
-      ReaderV2InfoItem.batteryInside => null,
-      ReaderV2InfoItem.bookName => context.zh(shell.book.name),
-      ReaderV2InfoItem.chapterTitle => title ?? navigation.currentTitle,
-      ReaderV2InfoItem.chapterIndex =>
+      ReaderInfoItem.none ||
+      ReaderInfoItem.time ||
+      ReaderInfoItem.battery ||
+      ReaderInfoItem.batteryIcon ||
+      ReaderInfoItem.batteryWithIcon ||
+      ReaderInfoItem.batteryInside => null,
+      ReaderInfoItem.bookName => context.zh(shell.book.name),
+      ReaderInfoItem.chapterTitle => title ?? navigation.currentTitle,
+      ReaderInfoItem.chapterIndex =>
         progress?.chapterIndexLabel ??
             (navigation.chapterCount > 0
                 ? '${navigation.currentIndex + 1}/${navigation.chapterCount}'
                 : '…'),
-      ReaderV2InfoItem.chapterProgress =>
+      ReaderInfoItem.chapterProgress =>
         progress?.chapterProgressLabel ?? '本章 …',
-      ReaderV2InfoItem.bookProgress =>
+      ReaderInfoItem.bookProgress =>
         progress?.bookPercentLabel(shell.progressFractionDigits) ?? '…%',
     };
   }
@@ -1086,14 +1086,13 @@ class _ReaderBattery extends StatefulWidget {
     required this.fontSize,
   });
 
-  /// [ReaderV2InfoItem.isBattery] 的其中一種。
-  final ReaderV2InfoItem item;
+  /// [ReaderInfoItem.isBattery] 的其中一種。
+  final ReaderInfoItem item;
 
   /// 數字和字排在同一行（只有數字、電池加數字）；只有電池或數字畫在電池
   /// 裡時，整個欄位置中在電池圖示上。
   bool get drawsDigitsInLine =>
-      item == ReaderV2InfoItem.battery ||
-      item == ReaderV2InfoItem.batteryWithIcon;
+      item == ReaderInfoItem.battery || item == ReaderInfoItem.batteryWithIcon;
   final Color color;
   final double fontSize;
 
@@ -1102,13 +1101,13 @@ class _ReaderBattery extends StatefulWidget {
 }
 
 class _ReaderBatteryState extends State<_ReaderBattery> {
-  StreamSubscription<ReaderV2Battery>? _subscription;
-  ReaderV2Battery? _battery = ReaderV2DeviceChannel.latestBattery;
+  StreamSubscription<ReaderBattery>? _subscription;
+  ReaderBattery? _battery = ReaderDeviceChannel.latestBattery;
 
   @override
   void initState() {
     super.initState();
-    _subscription = ReaderV2DeviceChannel.battery.listen(
+    _subscription = ReaderDeviceChannel.battery.listen(
       (battery) {
         if (mounted) setState(() => _battery = battery);
       },
@@ -1136,25 +1135,25 @@ class _ReaderBatteryState extends State<_ReaderBattery> {
     );
   }
 
-  Widget _glyph(ReaderV2Battery? battery, int? percent, String number) {
+  Widget _glyph(ReaderBattery? battery, int? percent, String number) {
     return switch (widget.item) {
-      ReaderV2InfoItem.batteryIcon => ReaderV2BatteryGlyph(
+      ReaderInfoItem.batteryIcon => ReaderBatteryGlyph(
         percent: percent,
         charging: battery?.charging ?? false,
         color: widget.color,
         fontSize: widget.fontSize,
       ),
-      ReaderV2InfoItem.batteryInside => ReaderV2BatteryGlyph(
+      ReaderInfoItem.batteryInside => ReaderBatteryGlyph(
         percent: percent,
         charging: battery?.charging ?? false,
         color: widget.color,
         fontSize: widget.fontSize,
         label: number,
       ),
-      ReaderV2InfoItem.batteryWithIcon => Row(
+      ReaderInfoItem.batteryWithIcon => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ReaderV2BatteryGlyph(
+          ReaderBatteryGlyph(
             percent: percent,
             charging: battery?.charging ?? false,
             color: widget.color,
@@ -1178,15 +1177,13 @@ DateFormat _clockFormat(bool use24HourClock) =>
 
 /// 資訊列的一段字（書名、章名、進度）。選了下載的字型（[fontFamily]）時，
 /// 中日文字另用下載字型在前的字族，英數字照舊系統字型在前，同正文
-/// （[readerV2CjkRuns]）。時鐘只有數字，不必分段。
+/// （[readerCjkRuns]）。時鐘只有數字，不必分段。
 Widget _infoText(String text, TextAlign align, String? fontFamily) {
   if (fontFamily == null) return Text(text, textAlign: align);
-  final cjk = TextStyle(
-    fontFamilyFallback: readerV2CjkFontFallback(fontFamily),
-  );
+  final cjk = TextStyle(fontFamilyFallback: readerCjkFontFallback(fontFamily));
   final spans = <InlineSpan>[];
   var cursor = 0;
-  for (final run in readerV2CjkRuns(text)) {
+  for (final run in readerCjkRuns(text)) {
     if (run.start > cursor) {
       spans.add(TextSpan(text: text.substring(cursor, run.start)));
     }
@@ -1281,8 +1278,8 @@ class _ShowControlsTap extends StatelessWidget {
 
 /// 選單開著時，在正文、頁首或頁尾上點一下或開始滑動就收起選單。一直
 /// 掛著、在按下的那一刻看選單開著沒有，選單開關時不必重建或搬動這一層。
-class _ReaderV2ControlsDismissLayer extends StatefulWidget {
-  const _ReaderV2ControlsDismissLayer({
+class _ReaderControlsDismissLayer extends StatefulWidget {
+  const _ReaderControlsDismissLayer({
     required this.controlsVisible,
     required this.onDismiss,
   });
@@ -1291,12 +1288,12 @@ class _ReaderV2ControlsDismissLayer extends StatefulWidget {
   final VoidCallback onDismiss;
 
   @override
-  State<_ReaderV2ControlsDismissLayer> createState() =>
-      _ReaderV2ControlsDismissLayerState();
+  State<_ReaderControlsDismissLayer> createState() =>
+      _ReaderControlsDismissLayerState();
 }
 
-class _ReaderV2ControlsDismissLayerState
-    extends State<_ReaderV2ControlsDismissLayer> {
+class _ReaderControlsDismissLayerState
+    extends State<_ReaderControlsDismissLayer> {
   int? _pointer;
   Offset? _downPosition;
   bool _dismissed = false;

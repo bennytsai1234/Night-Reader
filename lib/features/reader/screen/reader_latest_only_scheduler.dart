@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-/// 只送最新那一次的排程，排版與內容設定生效共用（見 `ReaderV2ControllerHost`）。
+/// 只送最新那一次的排程，排版與內容設定生效共用（見 `ReaderControllerHost`）。
 ///
 /// [request] 記下要送的值並排一次送出。送出在下一幀；[quietFrames] 為真時要
 /// 等到一幀沒有新的 [request] 才送，旋轉與 inset 動畫每幀都會變，只送最後

@@ -40,10 +40,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         navigatorKey: navigator,
-        home: const ReaderV2WindowSettings(
+        home: const ReaderWindowSettings(
           keepScreenOn: true,
           backlight: 0.3,
-          orientation: ReaderV2Orientation.system,
+          orientation: ReaderOrientation.system,
           child: Scaffold(body: Text('reader')),
         ),
       ),
@@ -83,10 +83,10 @@ void main() {
   testWidgets('following the system never sends a brightness', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: ReaderV2WindowSettings(
+        home: ReaderWindowSettings(
           keepScreenOn: true,
           backlight: null,
-          orientation: ReaderV2Orientation.system,
+          orientation: ReaderOrientation.system,
           child: SizedBox(),
         ),
       ),
@@ -99,10 +99,10 @@ void main() {
     tester,
   ) async {
     Widget reader({required bool keepScreenOn}) => MaterialApp(
-      home: ReaderV2WindowSettings(
+      home: ReaderWindowSettings(
         keepScreenOn: keepScreenOn,
         backlight: null,
-        orientation: ReaderV2Orientation.system,
+        orientation: ReaderOrientation.system,
         child: const SizedBox(),
       ),
     );
@@ -128,10 +128,10 @@ void main() {
         home: StatefulBuilder(
           builder: (context, setState) {
             setOld = setState;
-            return ReaderV2WindowSettings(
+            return ReaderWindowSettings(
               keepScreenOn: true,
               backlight: oldBacklight,
-              orientation: ReaderV2Orientation.landscape,
+              orientation: ReaderOrientation.landscape,
               child: const Scaffold(body: Text('old')),
             );
           },
@@ -143,10 +143,10 @@ void main() {
     unawaited(
       navigator.currentState!.pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => const ReaderV2WindowSettings(
+          builder: (_) => const ReaderWindowSettings(
             keepScreenOn: true,
             backlight: 0.5,
-            orientation: ReaderV2Orientation.landscape,
+            orientation: ReaderOrientation.landscape,
             child: Scaffold(body: Text('new')),
           ),
         ),
@@ -168,10 +168,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         navigatorKey: navigator,
-        home: const ReaderV2WindowSettings(
+        home: const ReaderWindowSettings(
           keepScreenOn: false,
           backlight: null,
-          orientation: ReaderV2Orientation.landscape,
+          orientation: ReaderOrientation.landscape,
           child: Scaffold(body: Text('reader')),
         ),
       ),

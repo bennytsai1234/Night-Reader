@@ -8,8 +8,8 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader/session/reader_read_time_controller.dart';
 import 'package:night_reader/shared/navigation/app_route_observer.dart';
 
-class ReaderV2ReadTimeScope extends StatefulWidget {
-  const ReaderV2ReadTimeScope({
+class ReaderReadTimeScope extends StatefulWidget {
+  const ReaderReadTimeScope({
     super.key,
     required this.book,
     required this.child,
@@ -19,12 +19,12 @@ class ReaderV2ReadTimeScope extends StatefulWidget {
   final Widget child;
 
   @override
-  State<ReaderV2ReadTimeScope> createState() => _ReaderV2ReadTimeScopeState();
+  State<ReaderReadTimeScope> createState() => _ReaderReadTimeScopeState();
 }
 
-class _ReaderV2ReadTimeScopeState extends State<ReaderV2ReadTimeScope>
+class _ReaderReadTimeScopeState extends State<ReaderReadTimeScope>
     with WidgetsBindingObserver, RouteAware {
-  late final ReaderV2ReadTimeController _controller;
+  late final ReaderReadTimeController _controller;
   ModalRoute<void>? _observedRoute;
   bool _routeVisible = true;
   bool _appInForeground = true;
@@ -37,7 +37,7 @@ class _ReaderV2ReadTimeScopeState extends State<ReaderV2ReadTimeScope>
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     final book = widget.book;
-    _controller = ReaderV2ReadTimeController(
+    _controller = ReaderReadTimeController(
       // 書架上的書照資料庫裡現在的書名（可能在書籍詳情改過）；不在資料庫
       // 的書照開書時的書名。漫畫、有聲帶類別前綴（ADR 0053）。
       bookName: () async =>

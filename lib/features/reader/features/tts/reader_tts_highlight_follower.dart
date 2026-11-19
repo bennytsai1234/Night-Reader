@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'reader_tts_highlight.dart';
 
-typedef ReaderV2TtsEnsureHighlight = Future<bool> Function(
-  ReaderV2TtsHighlight highlight,
+typedef ReaderTtsEnsureHighlight = Future<bool> Function(
+  ReaderTtsHighlight highlight,
 );
 
 /// Coordinates asynchronous viewport following for TTS highlights.
@@ -11,20 +11,20 @@ typedef ReaderV2TtsEnsureHighlight = Future<bool> Function(
 /// A highlight is considered followed only after the viewport command returns
 /// `true`. Failed commands stay pending so a later layout/scroll notification
 /// can retry the same target instead of silently dropping it.
-final class ReaderV2TtsHighlightFollower {
-  ReaderV2TtsHighlightFollower({required this.ensureHighlightVisible});
+final class ReaderTtsHighlightFollower {
+  ReaderTtsHighlightFollower({required this.ensureHighlightVisible});
 
-  final ReaderV2TtsEnsureHighlight ensureHighlightVisible;
-  ReaderV2TtsHighlight? _currentHighlight;
-  ReaderV2TtsHighlight? _lastFollowedHighlight;
-  ReaderV2TtsHighlight? _pendingHighlight;
+  final ReaderTtsEnsureHighlight ensureHighlightVisible;
+  ReaderTtsHighlight? _currentHighlight;
+  ReaderTtsHighlight? _lastFollowedHighlight;
+  ReaderTtsHighlight? _pendingHighlight;
   bool _following = false;
 
-  ReaderV2TtsHighlight? get lastFollowedHighlight => _lastFollowedHighlight;
-  ReaderV2TtsHighlight? get pendingHighlight => _pendingHighlight;
+  ReaderTtsHighlight? get lastFollowedHighlight => _lastFollowedHighlight;
+  ReaderTtsHighlight? get pendingHighlight => _pendingHighlight;
   bool get isFollowing => _following;
 
-  void update(ReaderV2TtsHighlight? highlight) {
+  void update(ReaderTtsHighlight? highlight) {
     if (highlight == null || !highlight.isValid) {
       _currentHighlight = null;
       _lastFollowedHighlight = null;

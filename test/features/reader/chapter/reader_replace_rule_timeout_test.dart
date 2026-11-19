@@ -57,7 +57,7 @@ void main() {
   late AppDatabase db;
   late _Site site;
   late ReplaceRuleDao replaceDao;
-  late ReaderV2ChapterRepository repository;
+  late ReaderChapterRepository repository;
   late List<ReplaceRule> disabled;
 
   final source = BookSource.fromJson({
@@ -104,7 +104,7 @@ void main() {
     await chapterDao.insertChapters(chapters);
     disabled = [];
     site = _Site();
-    repository = ReaderV2ChapterRepository(
+    repository = ReaderChapterRepository(
       book: book,
       initialChapters: chapters,
       bookDao: BookDao(db),
@@ -159,7 +159,7 @@ void main() {
 
   test('另一個閱讀器同時在處理的章也收到停用，之後不再跑那一條', () async {
     final other = <ReplaceRule>[];
-    final second = ReaderV2ChapterRepository(
+    final second = ReaderChapterRepository(
       book: book,
       initialChapters: chapters,
       bookDao: BookDao(db),

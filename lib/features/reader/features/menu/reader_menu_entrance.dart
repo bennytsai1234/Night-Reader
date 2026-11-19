@@ -12,8 +12,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 /// 自己聽 [visible]，選單開關時只有滑動與擋點擊這兩層跟著變，[child]
 /// （按鈕、章名、進度條、亮度條）不重建（ADR 0029 做法 3）。收起時不接
 /// 點擊；系統關閉動畫時直接到位。
-class ReaderV2MenuEntrance extends StatefulWidget {
-  const ReaderV2MenuEntrance({
+class ReaderMenuEntrance extends StatefulWidget {
+  const ReaderMenuEntrance({
     super.key,
     required this.visible,
     required this.edge,
@@ -38,10 +38,10 @@ class ReaderV2MenuEntrance extends StatefulWidget {
   final Widget child;
 
   @override
-  State<ReaderV2MenuEntrance> createState() => _ReaderV2MenuEntranceState();
+  State<ReaderMenuEntrance> createState() => _ReaderMenuEntranceState();
 }
 
-class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
+class _ReaderMenuEntranceState extends State<ReaderMenuEntrance>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
@@ -80,7 +80,7 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
   }
 
   @override
-  void didUpdateWidget(ReaderV2MenuEntrance oldWidget) {
+  void didUpdateWidget(ReaderMenuEntrance oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (identical(widget.visible, oldWidget.visible)) return;
     oldWidget.visible.removeListener(_onVisibleChanged);

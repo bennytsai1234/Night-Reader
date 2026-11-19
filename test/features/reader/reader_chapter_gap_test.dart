@@ -10,11 +10,11 @@ import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 /// trailingSpacing（layout_pump_test 驗證），因此捲動、定位與進度共用
 /// 同一份幾何。
 void main() {
-  ReaderV2LayoutStyle styleWith({
+  ReaderLayoutStyle styleWith({
     double paragraphSpacing = 1.0,
     double chapterSpacing = 1.0,
     double titleSpacing = 0.0,
-  }) => ReaderV2LayoutStyle(
+  }) => ReaderLayoutStyle(
     fontSize: 20,
     lineHeight: 1.5,
     letterSpacing: 0,
@@ -28,8 +28,8 @@ void main() {
   );
   const lineExtent = 30.0;
 
-  double chapterEnd(ReaderV2LayoutStyle style, {bool isTitle = false}) =>
-      readerV2BlockTrailingSpacing(style, isTitle: isTitle, isChapterEnd: true);
+  double chapterEnd(ReaderLayoutStyle style, {bool isTitle = false}) =>
+      readerBlockTrailingSpacing(style, isTitle: isTitle, isChapterEnd: true);
 
   test('chapter end leaves exactly the configured lines', () {
     expect(chapterEnd(styleWith()), lineExtent);
@@ -49,16 +49,12 @@ void main() {
   test(
     'a title leaves the title spacing, independent of paragraph spacing',
     () {
-      double afterTitle(ReaderV2LayoutStyle style) =>
-          readerV2BlockTrailingSpacing(
-            style,
-            isTitle: true,
-            isChapterEnd: false,
-          );
+      double afterTitle(ReaderLayoutStyle style) =>
+          readerBlockTrailingSpacing(style, isTitle: true, isChapterEnd: false);
       expect(afterTitle(styleWith(paragraphSpacing: 2)), 0);
       expect(afterTitle(styleWith(titleSpacing: 1.5)), lineExtent * 1.5);
       expect(
-        readerV2BlockTrailingSpacing(
+        readerBlockTrailingSpacing(
           styleWith(paragraphSpacing: 0.5, titleSpacing: 3),
           isTitle: false,
           isChapterEnd: false,
@@ -69,11 +65,10 @@ void main() {
   );
 
   test('title spacing is part of the text layout and cache identity', () {
-    ReaderV2LayoutSpec spec(double titleSpacing) =>
-        ReaderV2LayoutSpec.fromViewport(
-          viewportSize: const Size(400, 800),
-          style: styleWith(titleSpacing: titleSpacing),
-        );
+    ReaderLayoutSpec spec(double titleSpacing) => ReaderLayoutSpec.fromViewport(
+      viewportSize: const Size(400, 800),
+      style: styleWith(titleSpacing: titleSpacing),
+    );
     expect(spec(1).layoutSignature, isNot(spec(0).layoutSignature));
     expect(
       StyleFingerprint.fromLayoutSpec(spec(1)),
@@ -82,8 +77,8 @@ void main() {
   });
 
   test('chapter spacing is part of the text layout and cache identity', () {
-    ReaderV2LayoutSpec spec(double chapterSpacing) =>
-        ReaderV2LayoutSpec.fromViewport(
+    ReaderLayoutSpec spec(double chapterSpacing) =>
+        ReaderLayoutSpec.fromViewport(
           viewportSize: const Size(400, 800),
           style: styleWith(chapterSpacing: chapterSpacing),
         );

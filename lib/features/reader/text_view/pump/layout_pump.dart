@@ -98,8 +98,8 @@ final class LayoutPump {
   Future<ChapterBlocks?> planChapterVisualLines(
     ChapterBlocks source, {
     required int maxBlockChars,
-    required HybridBlockTextStyle bodyStyle,
-    required HybridBlockTextStyle titleStyle,
+    required BlockTextStyle bodyStyle,
+    required BlockTextStyle titleStyle,
     required double contentWidth,
     required double? cellWidth,
     required int textIndent,
@@ -314,8 +314,8 @@ final class LayoutPump {
   Iterable<ChapterBlocks?> _alignmentSteps(
     ChapterBlocks source, {
     required int maxBlockChars,
-    required HybridBlockTextStyle bodyStyle,
-    required HybridBlockTextStyle titleStyle,
+    required BlockTextStyle bodyStyle,
+    required BlockTextStyle titleStyle,
     required double contentWidth,
     required double? cellWidth,
     required int textIndent,
@@ -337,7 +337,7 @@ final class LayoutPump {
               blockIndex: blockIndex++,
             ),
             text: text,
-            charRange: HybridTextRange(groupStart, groupStart),
+            charRange: ChapterTextRange(groupStart, groupStart),
             sourceParagraphIndex: head.sourceParagraphIndex,
             isTitle: head.isTitle,
             isContinuation: head.isContinuation,
@@ -378,7 +378,7 @@ final class LayoutPump {
               blockIndex: blockIndex++,
             ),
             text: text.substring(cursor, plan.end),
-            charRange: HybridTextRange(
+            charRange: ChapterTextRange(
               groupStart + cursor,
               groupStart + plan.end,
             ),

@@ -69,11 +69,11 @@ Finder get _thumb => find.descendant(
 /// 閱讀器已經開好：路由到位、沒有在重排（紙由 surveyQuiet 管）。
 /// 不用 hasStableWorld：從詳情開的閱讀器它一直是 false，但紙已經掀開、畫面不動。
 bool _readerReady(WidgetTester tester) {
-  if (find.byType(HybridReaderScreen).evaluate().isEmpty) return false;
+  if (find.byType(ReaderTextView).evaluate().isEmpty) return false;
   final runtime = tester
-      .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+      .widget<ReaderTextView>(find.byType(ReaderTextView))
       .runtime;
-  return pageSettled(find.byType(ReaderV2Page)) &&
+  return pageSettled(find.byType(ReaderPage)) &&
       runtime.stateMachine.currentOperation == null;
 }
 

@@ -9,8 +9,8 @@ import 'package:night_reader/features/reader/session/reader_read_time_scope.dart
 import 'package:night_reader/features/reader/screen/reader_page.dart';
 
 /// 開書：漫畫進漫畫閱讀器（[ComicReaderPage]，ADR 0052），有聲書進播放器
-/// （[AudiobookPage]，ADR 0055），其他進 [ReaderV2Page]。轉場與其他換頁相同
-/// （「外觀與主題 → 換頁動畫」）；[ReaderV2Page] 的重排版延後到第一幀後，
+/// （[AudiobookPage]，ADR 0055），其他進 [ReaderPage]。轉場與其他換頁相同
+/// （「外觀與主題 → 換頁動畫」）；[ReaderPage] 的重排版延後到第一幀後，
 /// 轉場本身每幀都便宜。
 ///
 /// 兩種閱讀器的閱讀時間記進閱讀統計；收聽時間由播放器自己記（只算真的出聲
@@ -24,7 +24,7 @@ class BookOpenRoute extends MaterialPageRoute<void> {
   }) : super(
          builder: (context) {
            final startChapter =
-               openTarget?.intent == ReaderV2OpenIntent.chapterStart
+               openTarget?.intent == ReaderOpenIntent.chapterStart
                ? openTarget!.location.chapterIndex
                : null;
            return switch (book.bookKind) {
@@ -32,7 +32,7 @@ class BookOpenRoute extends MaterialPageRoute<void> {
                book: book,
                chapterIndex: startChapter,
              ),
-             BookSourceKind.comic => ReaderV2ReadTimeScope(
+             BookSourceKind.comic => ReaderReadTimeScope(
                book: book,
                child: ComicReaderPage(
                  book: book,
@@ -40,9 +40,9 @@ class BookOpenRoute extends MaterialPageRoute<void> {
                  initialChapters: initialChapters,
                ),
              ),
-             _ => ReaderV2ReadTimeScope(
+             _ => ReaderReadTimeScope(
                book: book,
-               child: ReaderV2Page(
+               child: ReaderPage(
                  book: book,
                  openTarget: openTarget,
                  initialChapters: initialChapters,
@@ -53,7 +53,7 @@ class BookOpenRoute extends MaterialPageRoute<void> {
        );
 
   final Book book;
-  final ReaderV2OpenTarget? openTarget;
+  final ReaderOpenTarget? openTarget;
   final List<BookChapter> initialChapters;
 
   @override

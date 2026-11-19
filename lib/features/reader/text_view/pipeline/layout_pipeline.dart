@@ -22,7 +22,7 @@ import '../view/admission_controller.dart';
 import 'layout_disk_cache.dart';
 import '../text/text_preprocessor.dart';
 
-/// [HybridLayoutPipeline.waitForProgress] 等到的結果。
+/// [LayoutPipeline.waitForProgress] 等到的結果。
 enum MaterializationWait {
   /// 有新的正文排好或取得了，再檢查一次。
   progressed,
@@ -45,10 +45,10 @@ enum MaterializationWait {
 /// 正文。[dispose] 後進行中的工作都作廢，結果不會再寫進共用的量測、文件
 /// 索引與 admission。換行計畫與段落尺寸會讀寫 [diskCache]，丟掉時把這個
 /// 世代量到的尺寸存回去。
-final class HybridLayoutPipeline {
-  HybridLayoutPipeline({
+final class LayoutPipeline {
+  LayoutPipeline({
     required this._epoch,
-    required ReaderV2LayoutSpec Function() layoutSpec,
+    required ReaderLayoutSpec Function() layoutSpec,
     required this._publishedEpoch,
     required this._measurementStore,
     required this._documentIndex,
@@ -74,7 +74,7 @@ final class HybridLayoutPipeline {
       namespace: _namespace,
       governor: _governor,
     );
-    _geometry = HybridTextGeometry(
+    _geometry = TextGeometry(
       paragraphCache: _paragraphCache,
       epoch: _epoch,
       documentIndex: _documentIndex,
@@ -91,18 +91,18 @@ final class HybridLayoutPipeline {
   }
 
   final LayoutEpoch _epoch;
-  final ReaderV2LayoutSpec Function() _readLayoutSpec;
+  final ReaderLayoutSpec Function() _readLayoutSpec;
 
   /// Runtime 目前發布的世代。
   final LayoutEpoch Function() _publishedEpoch;
-  ReaderV2LayoutSpec _generationSpec;
+  ReaderLayoutSpec _generationSpec;
   final MeasurementStore _measurementStore;
   final DocumentIndex _documentIndex;
   final AdmissionController _admission;
   final BudgetGovernor _governor;
-  final HybridChapterRepository _chapters;
+  final ChapterTextWindow _chapters;
   final TextPreprocessor _preprocessor;
-  final HybridLayoutDiskCache? _diskCache;
+  final LayoutDiskCache? _diskCache;
   final int Function() _chapterCount;
   final Color Function() _textColor;
 
@@ -111,7 +111,7 @@ final class HybridLayoutPipeline {
   late final MeasurementNamespace _namespace;
   late final ParagraphCache _paragraphCache;
   late final LayoutPump _pump;
-  late final HybridTextGeometry _geometry;
+  late final TextGeometry _geometry;
   late final StreamSubscription<BlockReady> _pumpEventsSub;
   final Map<int, ChapterLayoutPlan> _layoutPlans = <int, ChapterLayoutPlan>{};
   final Map<int, ChapterBlocks> _blocks = {};
@@ -132,21 +132,21 @@ final class HybridLayoutPipeline {
   /// 這一代的排版樣式。同一代裡 Runtime 仍可能換掉不影響換行的部分（例如
   /// 內距），所以還在這一代時讀 Runtime 的；換代之後停在這一代最後的值，
   /// 和紙下舊正文的換行計畫、段落與幾何是同一份。
-  ReaderV2LayoutSpec get layoutSpec {
+  ReaderLayoutSpec get layoutSpec {
     if (isCurrentGeneration) _generationSpec = _readLayoutSpec();
     return _generationSpec;
   }
 
   MeasurementNamespace get namespace => _namespace;
   ParagraphCache get paragraphCache => _paragraphCache;
-  HybridTextGeometry get geometry => _geometry;
+  TextGeometry get geometry => _geometry;
 
   /// 已排出換行計畫、正文還留在記憶體裡的章節。
   ChapterBlocks? blocksOf(int chapter) => _blocks[chapter];
 
   /// 取得 [chapter] 並排出換行計畫。同一章同時只排一次，後到的請求共用
   /// 結果並可提高優先順序。取不到正文時丟出
-  /// [ReaderV2ContentUnavailableException]；世代作廢（Runtime 換代或這一份
+  /// [ReaderContentUnavailableException]；世代作廢（Runtime 換代或這一份
   /// 丟了）時回傳 null：取正文的途中 Runtime 可能因為正文換了而換代，拿到
   /// 的已經是新一代的正文。
   Future<ChapterBlocks?> ensureChapter(
@@ -203,11 +203,8 @@ final class HybridLayoutPipeline {
       final blocks = await _pump.planChapterVisualLines(
         rough,
         maxBlockChars: maxBlockChars,
-        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(spec.style),
-        titleStyle: HybridBlockTextStyle.fromLayoutStyle(
-          spec.style,
-          isTitle: true,
-        ),
+        bodyStyle: BlockTextStyle.fromLayoutStyle(spec.style),
+        titleStyle: BlockTextStyle.fromLayoutStyle(spec.style, isTitle: true),
         contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
         textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
@@ -237,7 +234,7 @@ final class HybridLayoutPipeline {
     return task;
   }
 
-  /// 以 [chapter] 為中心、前後各留 [HybridChapterRepository.windowRadius]
+  /// 以 [chapter] 為中心、前後各留 [ChapterTextWindow.windowRadius]
   /// 章的需求範圍。
   void demandAround(int chapter) {
     _setDemandRange(
@@ -404,7 +401,7 @@ final class HybridLayoutPipeline {
     };
     if (pending.isEmpty) {
       throw StateError(
-        'Hybrid restore stalled with no layout work or chapter acquisition in flight.',
+        'Text view restore stalled with no layout work or chapter acquisition in flight.',
       );
     }
 
@@ -425,7 +422,7 @@ final class HybridLayoutPipeline {
     int end,
     bool Function() isCurrent,
   ) async {
-    final range = HybridTextRange(math.max(0, start), math.max(0, end));
+    final range = ChapterTextRange(math.max(0, start), math.max(0, end));
     final targets = blocks.blocks
         .where(
           (block) =>
@@ -460,7 +457,7 @@ final class HybridLayoutPipeline {
             break;
           case MaterializationWait.frontierUnavailable:
             throw StateError(
-              'Hybrid target range is not materialized and only unavailable '
+              'Text view target range is not materialized and only unavailable '
               'speculative frontier work remains.',
             );
         }
@@ -476,7 +473,7 @@ final class HybridLayoutPipeline {
 
   /// 已排好的正文在章節邊緣結束、而相鄰章節取不到時，那一章與取不到的
   /// 原因；不在邊緣或那一章沒有失敗時回傳 null。
-  ({int chapter, ReaderV2ContentUnavailableException failure})?
+  ({int chapter, ReaderContentUnavailableException failure})?
   unavailableFrontier({required bool forward}) {
     // 中心 block 之前還沒放行任何 block 時，最上緣就是中心 block 本身。
     final center = _documentIndex.centerKey;
@@ -565,7 +562,7 @@ final class HybridLayoutPipeline {
     _disposed = true;
     final diskCache = _diskCache;
     if (diskCache != null) {
-      // 有插圖的章節不存尺寸（[HybridLayoutDiskCache.readPlan]）。
+      // 有插圖的章節不存尺寸（[LayoutDiskCache.readPlan]）。
       final withIllustrations = <int>{
         for (final plan in _layoutPlans.values)
           if (plan.hasIllustrations) plan.chapterIndex,
@@ -620,9 +617,9 @@ final class HybridLayoutPipeline {
     try {
       final blocks = await ensureChapter(chapter, priority: priority);
       if (blocks != null && !_disposed) _onProgress();
-    } on ReaderV2ContentUnavailableException {
+    } on ReaderContentUnavailableException {
       // Speculative neighbor acquisition may be unavailable. This is neither
-      // operation cancellation nor a Hybrid deterministic-core failure.
+      // operation cancellation nor a text-view deterministic-core failure.
     }
   }
 
@@ -633,10 +630,10 @@ final class HybridLayoutPipeline {
     try {
       await load;
       return (chapter: chapter, unavailable: false);
-    } on ReaderV2ContentUnavailableException {
+    } on ReaderContentUnavailableException {
       // The operation target was acquired before this wait. A neighboring
       // speculative chapter being unavailable is a bounded external frontier,
-      // not cancellation and not a failure of the target or Hybrid core.
+      // not cancellation and not a failure of the target or text-view core.
       return (chapter: chapter, unavailable: true);
     }
   }
@@ -718,7 +715,7 @@ final class HybridLayoutPipeline {
             : const <ChapterBlock>[],
         epoch: _epoch,
         fingerprint: _namespace.fingerprint,
-        textStyle: HybridBlockTextStyle.fromLayoutStyle(
+        textStyle: BlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: head.isTitle,
         ),
@@ -727,9 +724,9 @@ final class HybridLayoutPipeline {
         textColor: _textColor(),
         priority: _priorityFor(headKey, anchor: anchor),
         direction: headKey < _documentIndex.centerKey
-            ? HybridScrollDirection.backward
-            : HybridScrollDirection.forward,
-        indentChars: hybridIndentCharsFor(head, spec),
+            ? ReaderScrollDirection.backward
+            : ReaderScrollDirection.forward,
+        indentChars: indentCharsFor(head, spec),
         trailingSpacing: _trailingSpacingFor(blocks, last, spec),
         readerOwnedLinePlan: true,
       ),
@@ -744,9 +741,9 @@ final class HybridLayoutPipeline {
     if (_illustrationsInFlight.containsKey(block.key)) return;
     final spec = layoutSpec;
     final isChapterEnd = block.blockIndex == blocks.blocks.length - 1;
-    // 章末留章節間距，同字的章末塊（[readerV2BlockTrailingSpacing]）。
+    // 章末留章節間距，同字的章末塊（[readerBlockTrailingSpacing]）。
     final trailingSpacing = isChapterEnd
-        ? readerV2BlockTrailingSpacing(
+        ? readerBlockTrailingSpacing(
             spec.style,
             isTitle: false,
             isChapterEnd: true,
@@ -757,7 +754,7 @@ final class HybridLayoutPipeline {
       contentWidth: spec.textLayoutFrame.width,
       maxHeight: spec.contentHeight,
       devicePixelRatio: _devicePixelRatio(),
-      gap: readerV2IllustrationGap(spec.style),
+      gap: readerIllustrationGap(spec.style),
       trailingSpacing: trailingSpacing,
     );
     final textColor = _textColor();
@@ -802,7 +799,7 @@ final class HybridLayoutPipeline {
   static double _trailingSpacingFor(
     ChapterBlocks blocks,
     ChapterBlock block,
-    ReaderV2LayoutSpec spec,
+    ReaderLayoutSpec spec,
   ) {
     final nextIndex = block.blockIndex + 1;
     final isChapterEnd = nextIndex >= blocks.blocks.length;
@@ -813,7 +810,7 @@ final class HybridLayoutPipeline {
         return 0.0;
       }
     }
-    return readerV2BlockTrailingSpacing(
+    return readerBlockTrailingSpacing(
       spec.style,
       isTitle: block.isTitle,
       isChapterEnd: isChapterEnd,
@@ -841,7 +838,7 @@ final class HybridLayoutPipeline {
     );
   }
 
-  static StyleFingerprint _fingerprintFor(ReaderV2LayoutSpec spec) {
+  static StyleFingerprint _fingerprintFor(ReaderLayoutSpec spec) {
     return StyleFingerprint.fromLayoutSpec(
       spec,
       platformFontSignature:

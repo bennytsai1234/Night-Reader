@@ -74,7 +74,7 @@ class _ViewportHarness extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = ReaderV2PageChromeLayout.resolve(
+    final layout = ReaderPageChromeLayout.resolve(
       mediaPadding: MediaQuery.paddingOf(context),
       hideStatusBar: false,
       showHeaderInfo: false,

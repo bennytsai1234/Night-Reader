@@ -1,9 +1,9 @@
 import '../progress/chapter_shares.dart';
 
-final class HybridProgressSnapshot {
+final class ProgressSnapshot {
   /// [chapterStart]、[chapterShare] 是這一章開頭在全書的位置與佔全書多少
-  /// （[ReaderV2ChapterShares]）；沒給時當每章一樣長。
-  const HybridProgressSnapshot({
+  /// （[ReaderChapterShares]）；沒給時當每章一樣長。
+  const ProgressSnapshot({
     required this.chapterIndex,
     required this.chapterCount,
     required this.chapterPercent,
@@ -23,10 +23,10 @@ final class HybridProgressSnapshot {
 
   double get chapterStart =>
       _givenStart ??
-      ReaderV2ChapterShares.even(chapterCount).startOf(chapterIndex);
+      ReaderChapterShares.even(chapterCount).startOf(chapterIndex);
   double get chapterShare =>
       _givenShare ??
-      ReaderV2ChapterShares.even(chapterCount).shareOf(chapterIndex);
+      ReaderChapterShares.even(chapterCount).shareOf(chapterIndex);
 
   String get chapterLabel {
     if (chapterCount <= 0) return '第 0/0 章 · 本章 0/10';
@@ -70,7 +70,7 @@ final class HybridProgressSnapshot {
   /// widget rebuild。
   @override
   bool operator ==(Object other) {
-    return other is HybridProgressSnapshot &&
+    return other is ProgressSnapshot &&
         other.chapterIndex == chapterIndex &&
         other.chapterCount == chapterCount &&
         other.chapterLabel == chapterLabel &&

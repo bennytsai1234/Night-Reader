@@ -5,22 +5,21 @@ import 'package:flutter/material.dart';
 /// 長按插圖打開的大圖（ADR 0050）：黑底、照原圖畫，可以雙指縮放；沒有
 /// 放大時往下拖超過一段距離或按返回就關掉，拖的途中圖跟著手指、底色
 /// 跟著變淡。
-class ReaderV2IllustrationViewer extends StatefulWidget {
-  const ReaderV2IllustrationViewer({super.key, required this.path});
+class ReaderIllustrationViewer extends StatefulWidget {
+  const ReaderIllustrationViewer({super.key, required this.path});
 
   final String path;
 
   static Route<void> route(String path) => MaterialPageRoute<void>(
-    builder: (_) => ReaderV2IllustrationViewer(path: path),
+    builder: (_) => ReaderIllustrationViewer(path: path),
   );
 
   @override
-  State<ReaderV2IllustrationViewer> createState() =>
-      _ReaderV2IllustrationViewerState();
+  State<ReaderIllustrationViewer> createState() =>
+      _ReaderIllustrationViewerState();
 }
 
-class _ReaderV2IllustrationViewerState
-    extends State<ReaderV2IllustrationViewer> {
+class _ReaderIllustrationViewerState extends State<ReaderIllustrationViewer> {
   final TransformationController _transform = TransformationController();
   bool _zoomed = false;
   double _drag = 0;

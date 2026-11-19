@@ -66,7 +66,7 @@ void main() {
     addTearDown(tester.view.reset);
     final visible = ValueNotifier(true);
     addTearDown(visible.dispose);
-    final menu = ReaderV2MenuController();
+    final menu = ReaderMenuController();
     addTearDown(menu.dispose);
 
     await tester.pumpWidget(
@@ -75,10 +75,10 @@ void main() {
         home: Scaffold(
           body: Stack(
             children: [
-              ReaderV2TopMenu(
+              ReaderTopMenu(
                 controlsVisible: visible,
                 bookName: '書名',
-                navigation: ReaderV2ChapterNavigationState(
+                navigation: ReaderChapterNavigationState(
                   chapterCount: 1,
                   current: const AlwaysStoppedAnimation(0),
                   scrub: menu.scrub,
@@ -102,7 +102,7 @@ void main() {
   testWidgets('點書源膠囊叫 onOpenOrigin；沒給時膠囊不能點', (tester) async {
     final visible = ValueNotifier(true);
     addTearDown(visible.dispose);
-    final menu = ReaderV2MenuController();
+    final menu = ReaderMenuController();
     addTearDown(menu.dispose);
     var opened = 0;
 
@@ -111,10 +111,10 @@ void main() {
         home: Scaffold(
           body: Stack(
             children: [
-              ReaderV2TopMenu(
+              ReaderTopMenu(
                 controlsVisible: visible,
                 bookName: '書名',
-                navigation: ReaderV2ChapterNavigationState(
+                navigation: ReaderChapterNavigationState(
                   chapterCount: 1,
                   current: const AlwaysStoppedAnimation(0),
                   scrub: menu.scrub,

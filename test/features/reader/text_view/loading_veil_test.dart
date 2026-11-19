@@ -11,11 +11,11 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 void main() {
-  final spec = ReaderV2LayoutSpec(
+  final spec = ReaderLayoutSpec(
     viewportSize: const Size(400, 800),
     contentWidth: 360,
     contentHeight: 800,
-    style: const ReaderV2LayoutStyle(
+    style: const ReaderLayoutStyle(
       fontSize: 18,
       lineHeight: 1.6,
       letterSpacing: 0,

@@ -36,7 +36,7 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
   final Listenable repaint;
 
   /// 選取範圍在 viewport 上的字形框，每條視覺行一個。
-  final List<HybridLineBox> Function(ReaderTextSelection selection) boxesFor;
+  final List<LineBox> Function(ReaderTextSelection selection) boxesFor;
 
   /// viewport 上一點在選取段落內最近的游標位置（章內 offset）。
   final int? Function(ReaderTextSelection selection, Offset point) caretAt;
@@ -87,7 +87,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
-      // 正文會畫出這一區，由閱讀頁框架裁切（見 HybridReaderScreen）。
+      // 正文會畫出這一區，由閱讀頁框架裁切（見 ReaderTextView）。
       clipBehavior: Clip.none,
       children: <Widget>[
         widget.child,
@@ -125,7 +125,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
     );
   }
 
-  Widget _buildHandle(HybridLineBox box, SelectionEdge edge) {
+  Widget _buildHandle(LineBox box, SelectionEdge edge) {
     final controls = materialTextSelectionHandleControls;
     final type = edge == SelectionEdge.start
         ? TextSelectionHandleType.left
@@ -194,7 +194,7 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   Widget _buildToolbar(
     BuildContext context,
     ReaderTextSelection selection,
-    List<HybridLineBox> boxes,
+    List<LineBox> boxes,
   ) {
     final left = boxes.map((box) => box.left).reduce(math.min);
     final right = boxes.map((box) => box.right).reduce(math.max);
@@ -503,7 +503,7 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
 final class _SelectionPainter extends CustomPainter {
   const _SelectionPainter({required this.boxes, required this.color});
 
-  final List<HybridLineBox> boxes;
+  final List<LineBox> boxes;
   final Color color;
 
   @override
@@ -523,7 +523,7 @@ final class _SelectionPainter extends CustomPainter {
   bool shouldRepaint(_SelectionPainter oldDelegate) =>
       oldDelegate.color != color || !_sameBoxes(oldDelegate.boxes, boxes);
 
-  static bool _sameBoxes(List<HybridLineBox> a, List<HybridLineBox> b) {
+  static bool _sameBoxes(List<LineBox> a, List<LineBox> b) {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i += 1) {

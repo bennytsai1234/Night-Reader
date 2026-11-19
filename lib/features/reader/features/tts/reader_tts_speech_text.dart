@@ -1,7 +1,7 @@
 /// Prepares reader text for system TTS without changing the displayed source
 /// text or the UTF-16 offsets used for sentence highlighting.
-final class ReaderV2TtsSpeechText {
-  const ReaderV2TtsSpeechText._();
+final class ReaderTtsSpeechText {
+  const ReaderTtsSpeechText._();
 
   // Chinese ellipses (… / ⋯) and runs of three or more ASCII/fullwidth dots.
   static final RegExp _ellipsis = RegExp(r'(?:[.．]{3,}|[…⋯]+)');

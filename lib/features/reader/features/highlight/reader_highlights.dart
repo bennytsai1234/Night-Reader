@@ -11,9 +11,9 @@ import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.d
 import 'package:night_reader/features/reader/session/reader_location.dart';
 
 /// 閱讀器裡這本書的標註：照書名加作者讀出來，資料表一變就跟著更新，
-/// 正文上的底色、底線與目錄的標註分頁都看它（同 [ReaderV2Bookmarks]）。
-class ReaderV2Highlights extends ValueNotifier<List<Highlight>> {
-  ReaderV2Highlights({
+/// 正文上的底色、底線與目錄的標註分頁都看它（同 [ReaderBookmarks]）。
+class ReaderHighlights extends ValueNotifier<List<Highlight>> {
+  ReaderHighlights({
     required Book book,
     required HighlightDao? dao,
     required this._chapters,
@@ -72,7 +72,7 @@ class ReaderV2Highlights extends ValueNotifier<List<Highlight>> {
   /// 把 [location]（已綁好那一章正文的錨點）起的 [quote] 畫上標註，顏色與
   /// 樣子沿用最近畫的那一個（第一次是黃色底色）。
   Future<Highlight?> add({
-    required ReaderV2Location location,
+    required ReaderLocation location,
     required String chapterTitle,
     required String quote,
   }) async {
@@ -110,7 +110,7 @@ class ReaderV2Highlights extends ValueNotifier<List<Highlight>> {
       );
 
   /// 標註開頭的位置：記下的錨點，章節序號換成這台目錄裡的（同書籤）。
-  static ReaderV2Location locationOf(
+  static ReaderLocation locationOf(
     Highlight highlight, {
     required int chapterIndex,
   }) => locationFromAnchor(

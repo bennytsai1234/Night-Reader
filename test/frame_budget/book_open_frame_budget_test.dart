@@ -22,8 +22,7 @@ bool _veilCovering() => find
     .any((e) => (e.widget as LoadingVeil).controller.isVisible);
 
 /// 閱讀器進場播完、載入的紙掀開（掀完後紙從元件樹拿掉）。
-bool _readerShown() =>
-    pageSettled(find.byType(ReaderV2Page)) && !_veilCovering();
+bool _readerShown() => pageSettled(find.byType(ReaderPage)) && !_veilCovering();
 
 void main() {
   setUpAll(loadScreenshotFonts);

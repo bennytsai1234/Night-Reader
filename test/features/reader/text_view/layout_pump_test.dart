@@ -124,12 +124,12 @@ void main() {
           block: const ChapterBlock(
             key: key,
             text: 'abcd',
-            charRange: HybridTextRange(0, 4),
+            charRange: ChapterTextRange(0, 4),
             sourceParagraphIndex: 0,
           ),
           epoch: namespace.epoch,
           fingerprint: namespace.fingerprint,
-          textStyle: const HybridBlockTextStyle(
+          textStyle: const BlockTextStyle(
             fontSize: 18,
             lineHeight: 1.5,
             letterSpacing: 0,
@@ -198,12 +198,12 @@ void main() {
           block: const ChapterBlock(
             key: key,
             text: '這是一段測試文字。',
-            charRange: HybridTextRange(0, 8),
+            charRange: ChapterTextRange(0, 8),
             sourceParagraphIndex: 0,
           ),
           epoch: LayoutEpoch.initial,
           fingerprint: namespace.fingerprint,
-          textStyle: const HybridBlockTextStyle(
+          textStyle: const BlockTextStyle(
             fontSize: 18,
             lineHeight: 1.5,
             letterSpacing: 0,
@@ -374,7 +374,7 @@ void main() {
             ChapterBlock(
               key: BlockKey(chapterIndex: chapter, blockIndex: 0),
               text: 'abc',
-              charRange: const HybridTextRange(0, 3),
+              charRange: const ChapterTextRange(0, 3),
               sourceParagraphIndex: 0,
             ),
           ],
@@ -384,12 +384,12 @@ void main() {
             pump.planChapterVisualLines(
               source(chapter),
               maxBlockChars: 40,
-              bodyStyle: const HybridBlockTextStyle(
+              bodyStyle: const BlockTextStyle(
                 fontSize: 18,
                 lineHeight: 1.5,
                 letterSpacing: 0,
               ),
-              titleStyle: const HybridBlockTextStyle(
+              titleStyle: const BlockTextStyle(
                 fontSize: 22,
                 lineHeight: 1.5,
                 letterSpacing: 0,
@@ -492,7 +492,10 @@ void main() {
             ChapterBlock(
               key: const BlockKey(chapterIndex: 0, blockIndex: 0),
               text: 'A long paragraph ' * 100,
-              charRange: HybridTextRange(0, ('A long paragraph ' * 100).length),
+              charRange: ChapterTextRange(
+                0,
+                ('A long paragraph ' * 100).length,
+              ),
               sourceParagraphIndex: 0,
             ),
           ],
@@ -500,12 +503,12 @@ void main() {
         final preparation = pump.planChapterVisualLines(
           source,
           maxBlockChars: 40,
-          bodyStyle: const HybridBlockTextStyle(
+          bodyStyle: const BlockTextStyle(
             fontSize: 18,
             lineHeight: 1.5,
             letterSpacing: 0,
           ),
-          titleStyle: const HybridBlockTextStyle(
+          titleStyle: const BlockTextStyle(
             fontSize: 22,
             lineHeight: 1.5,
             letterSpacing: 0,
@@ -552,7 +555,7 @@ void main() {
   const fontSize = 20.0;
   const contentWidth = fontSize * 6.3; // 非整數行寬比例，避免巧合對齊句界
   const trailingSpacing = 3.0;
-  const textStyle = HybridBlockTextStyle(
+  const textStyle = BlockTextStyle(
     fontSize: fontSize,
     lineHeight: 1.5,
     letterSpacing: 0,
@@ -581,7 +584,7 @@ void main() {
         ChapterBlock(
           key: BlockKey(chapterIndex: 0, blockIndex: i),
           text: paragraphText.substring(offsets[i], offsets[i + 1]),
-          charRange: HybridTextRange(offsets[i], offsets[i + 1]),
+          charRange: ChapterTextRange(offsets[i], offsets[i + 1]),
           sourceParagraphIndex: 0,
           isContinuation: i > 0,
         ),
@@ -609,7 +612,7 @@ void main() {
     return boxes.first.top;
   }
 
-  /// 黑箱重現 HybridReaderScreen._visualPositionForChar 的世界座標換算：
+  /// 黑箱重現 ReaderTextView._visualPositionForChar 的世界座標換算：
   /// 只用 ParagraphCache／MeasurementStore 的公開介面，找出 [chapterOffset]
   /// 視覺上真正落在 group 哪個 block 的 Y 窗、以及該窗內的 local top，
   /// 再累加前面 block 的高度得到世界座標。
@@ -1298,7 +1301,7 @@ void main() {
       expect(index.admittedCount, 3);
       expect(index.chapterExtent(0), 300); // _ready 固定 height: 100
 
-      // 章節 evicted／invalidated：與 HybridReaderScreen._onChapterEvent
+      // 章節 evicted／invalidated：與 ReaderTextView._onChapterEvent
       // 同款兩步——DocumentIndex 丟棄已放行座標，AdmissionController 丟棄
       // 記住的舊章節形狀與尚未 admit 的殘留 pending。
       final indexChanged = index.invalidateChapter(0);
@@ -1481,7 +1484,7 @@ void main() {
     }) => ChapterBlock(
       key: BlockKey(chapterIndex: 3, blockIndex: index),
       text: (isTitle ? text.title : text.displayText).substring(start, end),
-      charRange: HybridTextRange(start, end),
+      charRange: ChapterTextRange(start, end),
       sourceParagraphIndex: paragraph,
       isTitle: isTitle,
       isContinuation: continuation,
@@ -1579,12 +1582,12 @@ void main() {
             .planChapterVisualLines(
               rough,
               maxBlockChars: 20,
-              bodyStyle: const HybridBlockTextStyle(
+              bodyStyle: const BlockTextStyle(
                 fontSize: 18,
                 lineHeight: 1.5,
                 letterSpacing: 0,
               ),
-              titleStyle: const HybridBlockTextStyle(
+              titleStyle: const BlockTextStyle(
                 fontSize: 22,
                 lineHeight: 1.5,
                 letterSpacing: 0,
@@ -1870,7 +1873,7 @@ void main() {
       }
 
       // sliver 幾何查詢：對照框架 RenderSliverFixedExtentBoxAdaptor 在
-      // itemExtentBuilder 模式下的線性演算法（RenderHybridBlockSliver 以
+      // itemExtentBuilder 模式下的線性演算法（RenderBlockSliver 以
       // Fenwick 取代之，語意必須逐點一致）。Fenwick 與逐項累加的浮點求和
       // 順序不同（誤差 ~1e-13），index 探測避開精確邊界（±1e-6 nudge，
       // 高度 ≥5.0 不會因此跨界），offset 比較用 closeTo。
@@ -2010,7 +2013,7 @@ ChapterBlocks _chapterBlocks(int chapterIndex, int count) {
       (index) => ChapterBlock(
         key: BlockKey(chapterIndex: chapterIndex, blockIndex: index),
         text: 'x',
-        charRange: HybridTextRange(index, index + 1),
+        charRange: ChapterTextRange(index, index + 1),
         sourceParagraphIndex: index,
       ),
     ),
@@ -2031,12 +2034,12 @@ LayoutTask _ownedTask(int chapter, MeasurementNamespace ns) {
     block: ChapterBlock(
       key: BlockKey(chapterIndex: chapter, blockIndex: 0),
       text: text,
-      charRange: const HybridTextRange(0, text.length),
+      charRange: const ChapterTextRange(0, text.length),
       sourceParagraphIndex: 0,
     ),
     epoch: ns.epoch,
     fingerprint: ns.fingerprint,
-    textStyle: const HybridBlockTextStyle(
+    textStyle: const BlockTextStyle(
       fontSize: 18,
       lineHeight: 1.5,
       letterSpacing: 0,

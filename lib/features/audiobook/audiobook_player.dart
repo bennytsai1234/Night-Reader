@@ -97,7 +97,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   /// 收聽時間記進閱讀統計（使用者 2026-11-09 選「算進去、分開顯示」，
   /// ADR 0055）：只算真的出聲的時間，暫停、緩衝不算。照書的 `recordName`
   /// 記，有聲書帶類別前綴，統計頁分得出哪些是聽的。
-  ReaderV2ReadTimeController? _listenTime;
+  ReaderReadTimeController? _listenTime;
   String? _listenBookUrl;
 
   /// 真的在出聲：播著、沒在載入或緩衝。收聽時間與定時都只算這段。
@@ -119,7 +119,7 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
           _readRecordDao ??
           (getIt.isRegistered<ReadRecordDao>() ? getIt<ReadRecordDao>() : null);
       if (dao == null) return;
-      _listenTime = ReaderV2ReadTimeController(
+      _listenTime = ReaderReadTimeController(
         bookName: () async =>
             (await _books.getByUrl(book.bookUrl))?.recordName ??
             book.recordName,

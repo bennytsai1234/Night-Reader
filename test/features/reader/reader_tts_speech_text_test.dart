@@ -11,17 +11,17 @@ void main() {
       '．．．',
       ' ...... \n …… ',
     ]) {
-      expect(ReaderV2TtsSpeechText.prepare(text), isEmpty, reason: text);
+      expect(ReaderTtsSpeechText.prepare(text), isEmpty, reason: text);
     }
   });
 
   test('句中刪節號只保留一次自然停頓', () {
-    expect(ReaderV2TtsSpeechText.prepare('他想了......接著說……好吧⋯⋯'), '他想了，接著說，好吧，');
-    expect(ReaderV2TtsSpeechText.prepare('等等．．．再說。'), '等等，再說。');
+    expect(ReaderTtsSpeechText.prepare('他想了......接著說……好吧⋯⋯'), '他想了，接著說，好吧，');
+    expect(ReaderTtsSpeechText.prepare('等等．．．再說。'), '等等，再說。');
   });
 
   test('一般句點、版本號和網址不變', () {
     const text = '版本 1.2.3，請到 example.com 查看。';
-    expect(ReaderV2TtsSpeechText.prepare(text), text);
+    expect(ReaderTtsSpeechText.prepare(text), text);
   });
 }

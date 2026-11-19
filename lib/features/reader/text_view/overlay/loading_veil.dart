@@ -338,7 +338,7 @@ class LoadingVeil extends StatefulWidget {
   final LoadingVeilController controller;
 
   /// 正文目前的版面：骨架長條的高度照它的字級。
-  final ReaderV2LayoutSpec spec;
+  final ReaderLayoutSpec spec;
   final Color backgroundColor;
   final Color textColor;
 
@@ -458,7 +458,7 @@ class _LoadingVeilPainter extends CustomPainter {
 
   /// 骨架出現是不是由左而右；骨架已經完全出現時不影響畫面。
   final bool Function() skeletonSweep;
-  final ReaderV2LayoutSpec spec;
+  final ReaderLayoutSpec spec;
   final List<Rect>? lines;
   final Set<int> titleLines;
   final Set<int> blockLines;
@@ -493,7 +493,7 @@ class _LoadingVeilPainter extends CustomPainter {
     }
 
     // 跨在上下緣的那一行畫到正文區外、正文與頁首頁尾之間的空隙裡
-    // （HybridScrollView 不裁切，閱讀頁框架裁到空隙為止）；紙也往上下各多
+    // （ReaderScrollView 不裁切，閱讀頁框架裁到空隙為止）；紙也往上下各多
     // 蓋一個正文區高，那半行才跟著紙一起掀開，不會先露出來。
     canvas.drawRect(
       Rect.fromLTRB(0, -size.height, size.width, size.height * 2),

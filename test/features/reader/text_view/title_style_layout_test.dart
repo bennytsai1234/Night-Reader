@@ -15,7 +15,7 @@ const double _cell = 20;
 const _engine = VisualLineLayoutEngine();
 const _layout = ReaderParagraphLayout();
 
-HybridBlockTextStyle _style({bool center = false}) => HybridBlockTextStyle(
+BlockTextStyle _style({bool center = false}) => BlockTextStyle(
   fontSize: _cell,
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -51,12 +51,12 @@ ui.Paragraph _draw(String text, double width, {required bool center}) {
   );
 }
 
-ReaderV2LayoutStyle _layoutStyle({
+ReaderLayoutStyle _layoutStyle({
   bool bold = false,
   bool titleBold = true,
   bool titleCenter = false,
   String? fontFamily,
-}) => ReaderV2LayoutStyle(
+}) => ReaderLayoutStyle(
   fontSize: 18,
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -110,8 +110,8 @@ void main() {
 
   test('a downloaded font comes after the system font for Latin and before '
       'it for CJK', () {
-    final system = HybridBlockTextStyle.fromLayoutStyle(_layoutStyle());
-    final kai = HybridBlockTextStyle.fromLayoutStyle(
+    final system = BlockTextStyle.fromLayoutStyle(_layoutStyle());
+    final kai = BlockTextStyle.fromLayoutStyle(
       _layoutStyle(fontFamily: 'NightReaderWenKaiTC'),
       isTitle: true,
     );
@@ -124,7 +124,7 @@ void main() {
 
   test('the skeleton measures CJK punctuation and Latin quotes in the same '
       'font order the body draws them', () {
-    final spec = ReaderV2LayoutSpec.fromViewport(
+    final spec = ReaderLayoutSpec.fromViewport(
       viewportSize: const ui.Size(400, 800),
       style: _layoutStyle(fontFamily: 'NightReaderWenKaiTC'),
     );
@@ -140,19 +140,17 @@ void main() {
 
   test('only titles take the title weight and alignment', () {
     final style = _layoutStyle(titleBold: false, titleCenter: true);
-    final title = HybridBlockTextStyle.fromLayoutStyle(style, isTitle: true);
-    final body = HybridBlockTextStyle.fromLayoutStyle(style);
+    final title = BlockTextStyle.fromLayoutStyle(style, isTitle: true);
+    final body = BlockTextStyle.fromLayoutStyle(style);
     expect(title.bold, isFalse);
     expect(title.center, isTrue);
     expect(body.bold, isFalse);
     expect(body.center, isFalse);
 
-    final boldBody = HybridBlockTextStyle.fromLayoutStyle(
-      _layoutStyle(bold: true),
-    );
+    final boldBody = BlockTextStyle.fromLayoutStyle(_layoutStyle(bold: true));
     expect(boldBody.bold, isTrue);
     expect(
-      HybridBlockTextStyle.fromLayoutStyle(
+      BlockTextStyle.fromLayoutStyle(
         _layoutStyle(bold: true),
         isTitle: true,
       ).bold,
@@ -161,8 +159,8 @@ void main() {
   });
 
   test('weight and title alignment are part of the layout identity', () {
-    ReaderV2LayoutSpec spec(ReaderV2LayoutStyle style) =>
-        ReaderV2LayoutSpec.fromViewport(
+    ReaderLayoutSpec spec(ReaderLayoutStyle style) =>
+        ReaderLayoutSpec.fromViewport(
           viewportSize: const ui.Size(393, 800),
           style: style,
         );

@@ -18,7 +18,7 @@ ChapterBlock _block(
   return ChapterBlock(
     key: BlockKey(chapterIndex: 0, blockIndex: index),
     text: text,
-    charRange: HybridTextRange(start, start + text.length),
+    charRange: ChapterTextRange(start, start + text.length),
     sourceParagraphIndex: paragraph,
     isTitle: isTitle,
     isContinuation: isContinuation,
@@ -179,7 +179,7 @@ void main() {
         blocks: chapter,
         epoch: LayoutEpoch.initial,
         paragraph: paragraph,
-        range: HybridTextRange(start, start + 2),
+        range: ChapterTextRange(start, start + 2),
       );
     }
 
@@ -235,19 +235,19 @@ void main() {
         return <int>[2, 4];
       });
       final word = await const WordSegmenter().wordAt('天色漸暗', 3);
-      expect(word, const HybridTextRange(2, 4));
+      expect(word, const ChapterTextRange(2, 4));
     });
 
     test('原生端沒給詞或結果不含長按位置時退回單一字元', () async {
       messenger.setMockMethodCallHandler(channel, (call) async => null);
       expect(
         await const WordSegmenter().wordAt('天色漸暗', 1),
-        const HybridTextRange(1, 2),
+        const ChapterTextRange(1, 2),
       );
       messenger.setMockMethodCallHandler(channel, (call) async => <int>[0, 1]);
       expect(
         await const WordSegmenter().wordAt('天色漸暗', 3),
-        const HybridTextRange(3, 4),
+        const ChapterTextRange(3, 4),
       );
     });
 
@@ -255,10 +255,10 @@ void main() {
       const text = 'a😀b';
       expect(
         await const WordSegmenter().wordAt(text, 2),
-        const HybridTextRange(1, 3),
+        const ChapterTextRange(1, 3),
       );
-      expect(WordSegmenter.characterAt(text, 1), const HybridTextRange(1, 3));
-      expect(WordSegmenter.characterAt(text, 3), const HybridTextRange(3, 4));
+      expect(WordSegmenter.characterAt(text, 1), const ChapterTextRange(1, 3));
+      expect(WordSegmenter.characterAt(text, 3), const ChapterTextRange(3, 4));
     });
   });
 
@@ -269,12 +269,7 @@ void main() {
       ValueChanged<ReaderTextSelection>? onReplace,
       ValueChanged<ReaderTextSelection>? onBookmark,
       ValueChanged<ReaderTextSelection>? onHighlight,
-      HybridLineBox box = const HybridLineBox(
-        left: 100,
-        top: 300,
-        right: 140,
-        bottom: 320,
-      ),
+      LineBox box = const LineBox(left: 100, top: 300, right: 140, bottom: 320),
     }) async {
       final chapter = _chapter();
       final start = chapter.displayText.indexOf('城門');
@@ -286,7 +281,7 @@ void main() {
             paragraph: chapter.sourceParagraphRange(
               const BlockKey(chapterIndex: 0, blockIndex: 1),
             )!,
-            range: HybridTextRange(start, start + 2),
+            range: ChapterTextRange(start, start + 2),
           ),
         );
       addTearDown(service.dispose);
@@ -295,7 +290,7 @@ void main() {
           home: ReaderTextSelectionLayer(
             selection: service,
             repaint: service,
-            boxesFor: (_) => <HybridLineBox>[box],
+            boxesFor: (_) => <LineBox>[box],
             caretAt: (_, _) => null,
             onHide: onHide,
             onReplace: onReplace,
@@ -360,7 +355,7 @@ void main() {
           blocks: current.blocks,
           epoch: current.epoch,
           paragraph: current.paragraph,
-          range: HybridTextRange(current.range.start, current.range.end - 1),
+          range: ChapterTextRange(current.range.start, current.range.end - 1),
         ),
       );
       await tester.pumpAndSettle();
@@ -409,7 +404,7 @@ void main() {
       await pumpSelected(
         tester,
         onHide: (_) {},
-        box: const HybridLineBox(left: 80, top: 300, right: 120, bottom: 320),
+        box: const LineBox(left: 80, top: 300, right: 120, bottom: 320),
       );
       await tester.pumpAndSettle();
 
@@ -428,7 +423,7 @@ void main() {
         await pumpSelected(
           tester,
           onHide: (_) {},
-          box: HybridLineBox(left: 100, top: top, right: 140, bottom: top + 20),
+          box: LineBox(left: 100, top: top, right: 140, bottom: top + 20),
         );
         await tester.pumpAndSettle();
         await tester.tap(find.byIcon(Icons.more_vert));
@@ -623,8 +618,8 @@ void main() {
       final highlight = ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: HybridTextRange(start, start + body.length),
-        range: HybridTextRange(start, start + body.length),
+        paragraph: ChapterTextRange(start, start + body.length),
+        range: ChapterTextRange(start, start + body.length),
       ).asHighlight;
       expect(highlight.quote, '雨停了。');
       expect(highlight.location.charOffset, display.indexOf('雨停了'));
@@ -632,8 +627,8 @@ void main() {
       final blank = ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: HybridTextRange(start, start + body.length),
-        range: HybridTextRange(start, start + 2),
+        paragraph: ChapterTextRange(start, start + body.length),
+        range: ChapterTextRange(start, start + 2),
       ).asHighlight;
       expect(blank.quote, isEmpty, reason: '全是空白不畫');
     });
@@ -657,8 +652,8 @@ void main() {
       ReaderTextSelection select(String from, String to) => ReaderTextSelection(
         blocks: chapter,
         epoch: LayoutEpoch.initial,
-        paragraph: HybridTextRange(start, start + body.length),
-        range: HybridTextRange(
+        paragraph: ChapterTextRange(start, start + body.length),
+        range: ChapterTextRange(
           display.indexOf(from),
           display.indexOf(to) + to.length,
         ),

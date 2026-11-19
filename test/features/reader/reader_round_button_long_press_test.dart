@@ -29,11 +29,11 @@ void main() {
     await showReaderMenu(tester);
 
     Finder roundButton(String tooltip) => find.descendant(
-      of: find.byType(ReaderV2BottomMenu),
+      of: find.byType(ReaderBottomMenu),
       matching: find.byTooltip(tooltip),
     );
     final dayNight = find.descendant(
-      of: find.byType(ReaderV2BottomMenu),
+      of: find.byType(ReaderBottomMenu),
       matching: find.byWidgetPredicate(
         (widget) =>
             widget is Tooltip &&
@@ -43,7 +43,7 @@ void main() {
 
     for (final (button, page) in <(Finder, Type)>[
       (roundButton('開始自動翻頁'), ReadingSettingsPage),
-      (roundButton('替換規則'), ReaderV2ReplaceRulePage),
+      (roundButton('替換規則'), ReaderReplaceRulePage),
       (roundButton('定時朗讀'), TtsSettingsPage),
       (dayNight, AppearanceSettingsPage),
     ]) {
@@ -52,7 +52,7 @@ void main() {
       await rest(tester);
       expect(find.byType(page), findsOneWidget, reason: '長按開 $page');
       expect(
-        find.byType(ReaderV2Page, skipOffstage: false),
+        find.byType(ReaderPage, skipOffstage: false),
         findsOneWidget,
         reason: '閱讀器留在底下',
       );
@@ -62,7 +62,7 @@ void main() {
       expect(find.byType(page), findsNothing);
       expect(
         tester
-            .widget<ReaderV2BottomMenu>(find.byType(ReaderV2BottomMenu))
+            .widget<ReaderBottomMenu>(find.byType(ReaderBottomMenu))
             .controlsVisible
             .value,
         isTrue,
@@ -84,19 +84,19 @@ void main() {
     await rest(tester);
     await showReaderMenu(tester);
     final runtime = tester
-        .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+        .widget<ReaderTextView>(find.byType(ReaderTextView))
         .runtime;
     final chapter = runtime.state.visibleLocation.chapterIndex;
     final word = kParagraphs.first.substring(0, 2);
 
     await tester.longPress(
       find.descendant(
-        of: find.byType(ReaderV2BottomMenu),
+        of: find.byType(ReaderBottomMenu),
         matching: find.byTooltip('替換規則'),
       ),
     );
     await rest(tester);
-    expect(find.byType(ReaderV2ReplaceRulePage), findsOneWidget);
+    expect(find.byType(ReaderReplaceRulePage), findsOneWidget);
     await tester.runAsync(
       () => getIt<ReplaceRuleDao>().insert(
         ReplaceRule(

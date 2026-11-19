@@ -73,8 +73,8 @@ import 'package:night_reader/features/reader/session/reader_state.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-class ReaderV2Page extends StatefulWidget {
-  const ReaderV2Page({
+class ReaderPage extends StatefulWidget {
+  const ReaderPage({
     super.key,
     required this.book,
     this.openTarget,
@@ -82,32 +82,31 @@ class ReaderV2Page extends StatefulWidget {
   });
 
   final Book book;
-  final ReaderV2OpenTarget? openTarget;
+  final ReaderOpenTarget? openTarget;
   final List<BookChapter> initialChapters;
 
   @override
-  State<ReaderV2Page> createState() => _ReaderV2PageState();
+  State<ReaderPage> createState() => _ReaderPageState();
 }
 
-class _ReaderV2PageState extends State<ReaderV2Page>
+class _ReaderPageState extends State<ReaderPage>
     with WidgetsBindingObserver, TickerProviderStateMixin
-    implements ReaderV2ExitFlowDelegate {
-  static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
+    implements ReaderExitFlowDelegate {
+  static const ReaderSessionFacade _sessionFacade = ReaderSessionFacade();
 
   late final SourceSwitchService _sourceSwitchService;
 
   /// 左側的目錄面板。
-  final ReaderV2SidePanelController _chapterPanel =
-      ReaderV2SidePanelController();
-  final ReaderV2PageExitCoordinator _exitCoordinator =
-      ReaderV2PageExitCoordinator();
+  final ReaderSidePanelController _chapterPanel = ReaderSidePanelController();
+  final ReaderPageExitCoordinator _exitCoordinator =
+      ReaderPageExitCoordinator();
 
-  late final ReaderV2ControllerHost _host;
-  late final ReaderV2PageCoordinator _coordinator;
-  late final ReaderV2ProgressSync _progressSync;
+  late final ReaderControllerHost _host;
+  late final ReaderPageCoordinator _coordinator;
+  late final ReaderProgressSync _progressSync;
 
-  final ValueNotifier<HybridProgressSnapshot?> _progress =
-      ValueNotifier<HybridProgressSnapshot?>(null);
+  final ValueNotifier<ProgressSnapshot?> _progress =
+      ValueNotifier<ProgressSnapshot?>(null);
   Size? _lastViewportSize;
   String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
@@ -134,7 +133,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   bool _entranceWatched = false;
 
   /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
-  late final ReaderV2MenuDeparture _menuDeparture = ReaderV2MenuDeparture(
+  late final ReaderMenuDeparture _menuDeparture = ReaderMenuDeparture(
     _host.menu,
   );
 
@@ -158,7 +157,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           DownloadService().quiesceForSourceSwitch(oldBook),
       assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
     );
-    _host = ReaderV2ControllerHost(
+    _host = ReaderControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,
       openTarget: widget.openTarget,
@@ -167,12 +166,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       isMounted: () => mounted,
       openLocation: (runtime) => _progressSync.openLocation(runtime),
     );
-    _coordinator = ReaderV2PageCoordinator(host: _host, showNotice: _showNotice)
+    _coordinator = ReaderPageCoordinator(host: _host, showNotice: _showNotice)
       ..openChapters = _openChapters
       ..toggleDayNight = _toggleDayNight;
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
     _hostNotices = _host.notices.listen(_showNotice);
-    _progressSync = ReaderV2ProgressSync(
+    _progressSync = ReaderProgressSync(
       book: widget.book,
       runtime: () => _host.runtime,
       onJumped: _showSyncHint,
@@ -214,7 +213,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
   Future<void> _refreshTopCutoutExtent() async {
-    final extent = await ReaderV2DeviceChannel.topCutoutExtent();
+    final extent = await ReaderDeviceChannel.topCutoutExtent();
     // 取不到時保留上一次的值，避免頁首在暫態中跳回系統內距。
     if (!mounted || extent == null || extent == _topCutoutExtent) return;
     setState(() => _topCutoutExtent = extent);
@@ -241,11 +240,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
   /// 跳到另一台的進度後，提示顯示期間停在的位置；一翻頁、捲動就收起提示。
-  ReaderV2Location? _syncHintAt;
+  ReaderLocation? _syncHintAt;
 
   static const String _syncHintMessage = '已接上另一台的進度';
 
-  void _showSyncHint(ReaderV2Location previous) {
+  void _showSyncHint(ReaderLocation previous) {
     final runtime = _host.runtime;
     if (!mounted || runtime == null) return;
     _syncHintAt = runtime.state.visibleLocation;
@@ -304,7 +303,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final runtime = _host.runtime;
     final palette = StylePalette.of(context);
     final isDarkBackground = palette.brightness == Brightness.dark;
-    final navigation = ReaderV2ChapterNavigationState(
+    final navigation = ReaderChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
       current: runtime?.visibleChapterIndex ?? _NoChapterYet(_openChapterIndex),
@@ -314,7 +313,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
     final customBrightness =
         !settings.brightnessAuto &&
-        ReaderV2DeviceChannel.supportsWindowBrightness;
+        ReaderDeviceChannel.supportsWindowBrightness;
     return StatusBarHidden(
       hidden: settings.hideStatusBar,
       hideNavigationBar: settings.hideNavigationBar,
@@ -332,13 +331,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               ? Brightness.light
               : Brightness.dark,
         ),
-        child: ReaderV2WindowSettings(
+        child: ReaderWindowSettings(
           keepScreenOn: settings.keepScreenOn,
           backlight: customBrightness
-              ? ReaderV2Brightness.backlightFor(settings.brightness)
+              ? ReaderBrightness.backlightFor(settings.brightness)
               : null,
           orientation: settings.orientation,
-          child: ReaderV2VolumeKeys(
+          child: ReaderVolumeKeys(
             enabled: settings.volumeKeyPage && !(_host.tts?.isPlaying ?? false),
             blockers: [menu.controlsVisible, _drawerOpen],
             onKey: (volumeDown) => unawaited(
@@ -348,7 +347,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             ),
             child: _DimOverlay(
               dim: customBrightness
-                  ? ReaderV2Brightness.dimFor(
+                  ? ReaderBrightness.dimFor(
                       settings.brightness,
                       maxDim: settings.maxDim,
                     )
@@ -356,11 +355,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               // 頁首頁尾的骨架和正文的紙同一口呼吸。
               child: SharedSkeletonBreathScope(
                 breath: _skeletonBreath,
-                child: ReaderV2PageShell(
+                child: ReaderPageShell(
                   book: widget.book,
                   content: _buildContent(context),
                   chapterPanelController: _chapterPanel,
-                  chapterPanel: ReaderV2ChaptersDrawer(
+                  chapterPanel: ReaderChaptersDrawer(
                     shown: _chapterPanel.shown,
                     chapters: runtime?.chapters ?? widget.initialChapters,
                     currentChapter: navigation.current,
@@ -371,7 +370,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                         ? _host.bookmarks
                         : null,
                     bookmarkChapter: (bookmark) =>
-                        ReaderV2Bookmarks.chapterIndexIn(
+                        ReaderBookmarks.chapterIndexIn(
                           bookmark,
                           runtime?.chapters ?? widget.initialChapters,
                         ),
@@ -381,7 +380,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                         ? _host.highlights
                         : null,
                     highlightChapter: (highlight) =>
-                        ReaderV2Highlights.chapterIndexIn(
+                        ReaderHighlights.chapterIndexIn(
                           highlight,
                           runtime?.chapters ?? widget.initialChapters,
                         ),
@@ -440,7 +439,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   onTts: () => _openPanel(_showTts),
                   onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
                   onInterface: () => _openPanel(
-                    () => ReaderV2SettingsSheets.showInterfaceSettings(
+                    () => ReaderSettingsSheets.showInterfaceSettings(
                       context,
                       settings,
                     ),
@@ -475,8 +474,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                     unawaited(_commitScrub(percent, drag));
                   },
                   brightnessControl:
-                      ReaderV2DeviceChannel.supportsWindowBrightness
-                      ? ReaderV2BrightnessBar(
+                      ReaderDeviceChannel.supportsWindowBrightness
+                      ? ReaderBrightnessBar(
                           auto: settings.brightnessAuto,
                           level: settings.brightness,
                           onAutoChanged: settings.setBrightnessAuto,
@@ -518,10 +517,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         final palette = StylePalette.of(context);
         return Stack(
           fit: StackFit.expand,
-          // 正文會畫出這一區，由閱讀頁框架裁切（見 HybridReaderScreen）。
+          // 正文會畫出這一區，由閱讀頁框架裁切（見 ReaderTextView）。
           clipBehavior: Clip.none,
           children: [
-            HybridReaderScreen(
+            ReaderTextView(
               skeletonBreath: _skeletonBreath,
               runtime: runtime,
               backgroundColor: palette.readerBackground,
@@ -559,7 +558,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               pageTurnOverlap: _host.settings.pageTurnOverlap,
               pageTurnDuration: _host.settings.pageTurnSpeed.duration,
             ),
-            if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable)
+            if (runtime.state.lifecycle == ReaderLifecycle.unavailable)
               Align(
                 alignment: Alignment.bottomCenter,
                 child: SafeArea(
@@ -573,7 +572,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  Widget _buildReaderErrorActions(ReaderV2Runtime runtime) {
+  Widget _buildReaderErrorActions(ReaderRuntime runtime) {
     final message = runtime.state.unavailableMessage ?? '';
     if (_verificationFor(message) case final request?) {
       // 書源要在網頁上驗證：「前往驗證」排第一，關掉就重開（ADR 0038）。
@@ -609,7 +608,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 開書失敗的按鈕列；[first] 是能解決這次失敗的那一顆（登入、前往驗證），
   /// 有的話排第一、重試退成次要。
   Widget _readerErrorActions(
-    ReaderV2Runtime runtime, {
+    ReaderRuntime runtime, {
     ({String label, IconData icon, VoidCallback onPressed})? first,
   }) {
     void retry() => unawaited(_retryReader(runtime));
@@ -650,7 +649,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  Future<void> _retryReader(ReaderV2Runtime runtime) async {
+  Future<void> _retryReader(ReaderRuntime runtime) async {
     if (runtime.chapterCount <= 0) {
       await runtime.openBook();
       return;
@@ -714,10 +713,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final highlights = _host.highlights;
     final highlight = highlights.byId(id);
     if (highlight == null) return;
-    await ReaderV2MenuSheet.show<void>(
+    await ReaderMenuSheet.show<void>(
       context,
       settings: _host.settings,
-      builder: (_) => ReaderV2HighlightSheet(
+      builder: (_) => ReaderHighlightSheet(
         highlight: highlight,
         onChanged: (next) => unawaited(highlights.save(next)),
         onDelete: _coordinator.deleteHighlight,
@@ -815,7 +814,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 選單開的那一次：等選單滑出才推頁，回來後選單滑回來。
   Future<void> _login(
     BookSource source, {
-    ReaderV2MenuDepartureTicket? ticket,
+    ReaderMenuDepartureTicket? ticket,
     int? failedChapter,
   }) async {
     final changed = await openSourceLogin(
@@ -869,7 +868,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Future<void> _refetchFailed([int? failedChapter]) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
-    if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
+    if (runtime.state.lifecycle == ReaderLifecycle.unavailable) {
       await _retryReader(runtime);
     } else if (failedChapter != null &&
         failedChapter != _currentChapterIndex(runtime)) {
@@ -881,7 +880,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   void _showNotice(
     String message, {
-    ReaderV2NoticeAction? action,
+    ReaderNoticeAction? action,
     Duration duration = const Duration(milliseconds: 4000),
   }) {
     if (!mounted) return;
@@ -1049,7 +1048,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
     final before = snapshot();
     await _openSettingsPage(
-      const ReaderV2ReplaceRulePage(),
+      const ReaderReplaceRulePage(),
       whenUncovered: () => unawaited(_reloadIfRulesChanged(before, snapshot)),
     );
   }
@@ -1098,18 +1097,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _handleMenuHidden() => _menuDeparture.menusHidden();
 
   /// 收起選單、開一張推頁請求；推頁期間自動捲動保持暫停，選單再打開時
-  /// 解除（見 [ReaderV2ControllerHost.holdAutoPageWhileAway]）。
-  ReaderV2MenuDepartureTicket _departMenu() {
+  /// 解除（見 [ReaderControllerHost.holdAutoPageWhileAway]）。
+  ReaderMenuDepartureTicket _departMenu() {
     _host.holdAutoPageWhileAway();
     return _menuDeparture.depart();
   }
 
   /// 從選單推一整頁（書籍詳情、全域設定）：等選單滑出畫面才推（見
-  /// [ReaderV2MenuDeparture]）。推之前再確認這次請求沒有作廢（選單又打開、
+  /// [ReaderMenuDeparture]）。推之前再確認這次請求沒有作廢（選單又打開、
   /// 改選了別的、離開閱讀器）、閱讀器仍是最上面的一頁、選單完全收著；
   /// 沒有推頁時回傳 null，推了就回傳那一頁關掉時的結果。
   Future<(T?,)?> _pushOverMenu<T>(
-    ReaderV2MenuDepartureTicket ticket,
+    ReaderMenuDepartureTicket ticket,
     Route<T> route,
   ) async {
     if (!await ticket.menusGone ||
@@ -1200,7 +1199,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       Navigator.of(context).pushReplacement(
         BookOpenRoute(
           book: widget.book,
-          openTarget: ReaderV2OpenTarget.chapterStart(target.index),
+          openTarget: ReaderOpenTarget.chapterStart(target.index),
           initialChapters: latest,
         ),
       ),
@@ -1231,10 +1230,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Future<void> _showTts() async {
     final tts = _host.tts;
     if (tts == null) return;
-    await ReaderV2MenuSheet.show<void>(
+    await ReaderMenuSheet.show<void>(
       context,
       settings: _host.settings,
-      builder: (_) => ReaderV2TtsPanel(tts: tts, settings: _host.settings),
+      builder: (_) => ReaderTtsPanel(tts: tts, settings: _host.settings),
     );
   }
 
@@ -1243,7 +1242,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     PreparedSourceSwitch? preparedSwitch;
     await AppBottomSheet.showCustom<void>(
       context: context,
-      constraints: ReaderV2MenuSheet.constraintsFor(context, _host.settings),
+      constraints: ReaderMenuSheet.constraintsFor(context, _host.settings),
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => ChangeSourceSheet(
@@ -1312,7 +1311,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     Navigator.of(context).pushReplacement(
       BookOpenRoute(
         book: prepared.migratedBook,
-        openTarget: ReaderV2OpenTarget.resume(prepared.migratedBook),
+        openTarget: ReaderOpenTarget.resume(prepared.migratedBook),
         initialChapters: prepared.chapters,
       ),
     );
@@ -1336,7 +1335,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final runtime = _host.runtime;
     final location =
         runtime?.state.visibleLocation ??
-        ReaderV2Location(
+        ReaderLocation(
           chapterIndex: widget.book.chapterIndex,
           charOffset: widget.book.charOffset,
           visualOffsetPx: widget.book.visualOffsetPx,
@@ -1363,20 +1362,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 頁首頁尾資訊列跟著正文：開書、跳到別章、改排版與重載內容時畫骨架，
   /// 開書取不到正文時不畫。同一章內的跳轉（例如拖進度條預覽）資訊列留在
   /// 原處。
-  ReaderV2InfoState _infoStateOf(ReaderV2Runtime? runtime) {
-    if (runtime == null) return ReaderV2InfoState.loading;
-    if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
-      return ReaderV2InfoState.hidden;
+  ReaderInfoState _infoStateOf(ReaderRuntime? runtime) {
+    if (runtime == null) return ReaderInfoState.loading;
+    if (runtime.state.lifecycle == ReaderLifecycle.unavailable) {
+      return ReaderInfoState.hidden;
     }
     if (!runtime.state.hasStableWorld ||
         runtime.isJumpingToAnotherChapter ||
         runtime.isRebuildingText) {
-      return ReaderV2InfoState.loading;
+      return ReaderInfoState.loading;
     }
-    return ReaderV2InfoState.ready;
+    return ReaderInfoState.ready;
   }
 
-  int _currentChapterIndex(ReaderV2Runtime? runtime) {
+  int _currentChapterIndex(ReaderRuntime? runtime) {
     final count = runtime?.chapterCount ?? widget.initialChapters.length;
     if (runtime == null || count <= 0) return 0;
     return runtime.state.visibleLocation.chapterIndex
@@ -1411,16 +1410,16 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       widget.openTarget?.location.chapterIndex ?? widget.book.chapterIndex;
 
   /// 最後一次載入時頁首頁尾描述的位置，見 [_infoTargetOf]。
-  ReaderV2InfoTarget? _lastInfoTarget;
+  ReaderInfoTarget? _lastInfoTarget;
 
-  /// 載入期間頁首頁尾描述的位置（[ReaderV2InfoTarget]）：跳章時是要跳去
+  /// 載入期間頁首頁尾描述的位置（[ReaderInfoTarget]）：跳章時是要跳去
   /// 的那一章，開書時是要開的那一章（[_openChapterIndex]）。目錄還沒載入時
   /// 章數照書的紀錄。開書取不到正文時，要開的位置跟著那次開書一起清掉，
   /// 淡掉的骨架照最後一次載入時的位置畫，寬度不跳。
-  ReaderV2InfoTarget _infoTargetOf(ReaderV2Runtime? runtime) {
+  ReaderInfoTarget _infoTargetOf(ReaderRuntime? runtime) {
     final last = _lastInfoTarget;
     if (last != null &&
-        runtime?.state.lifecycle == ReaderV2Lifecycle.unavailable) {
+        runtime?.state.lifecycle == ReaderLifecycle.unavailable) {
       return last;
     }
     final chapterIndex =
@@ -1428,7 +1427,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         runtime?.state.visibleLocation.chapterIndex ??
         _openChapterIndex;
     final loaded = runtime?.chapterCount ?? widget.initialChapters.length;
-    return _lastInfoTarget = ReaderV2InfoTarget(
+    return _lastInfoTarget = ReaderInfoTarget(
       chapterIndex: chapterIndex,
       chapterCount: loaded > 0 ? loaded : widget.book.totalChapterNum,
       title: _chapterTitleAt(chapterIndex),
@@ -1492,7 +1491,7 @@ enum _ReaderMoreAction {
 
 /// 第一幀還沒有 Runtime 時的目前章：要開的那一章，不會變。
 /// Runtime 建好後開書會通知閱讀頁重建，改聽
-/// [ReaderV2Runtime.visibleChapterIndex]。
+/// [ReaderRuntime.visibleChapterIndex]。
 class _NoChapterYet implements ValueListenable<int> {
   const _NoChapterYet(this.value);
 

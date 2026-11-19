@@ -24,7 +24,7 @@ void main() {
               onPressed: () => showModalBottomSheet<void>(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => ReaderV2HighlightSheet(
+                builder: (_) => ReaderHighlightSheet(
                   highlight: highlight,
                   onChanged: saved.add,
                   onDelete: deleted.add,

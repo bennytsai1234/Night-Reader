@@ -22,8 +22,8 @@ void main() {
     });
     await pumpApp(tester);
 
-    ReaderV2Location visible() => tester
-        .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+    ReaderLocation visible() => tester
+        .widget<ReaderTextView>(find.byType(ReaderTextView))
         .runtime
         .state
         .visibleLocation;
@@ -36,7 +36,7 @@ void main() {
 
     // 從畫面量位置記的是錨線上那一行的行首；存的位置在行中間時，沒捲動
     // 就關掉，存的還是原本那個字，不會變成行首。
-    ReaderV2Location? first;
+    ReaderLocation? first;
     for (var round = 0; round < 3; round++) {
       await openReader(tester);
       await rest(tester);

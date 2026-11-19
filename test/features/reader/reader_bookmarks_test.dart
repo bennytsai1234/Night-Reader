@@ -25,7 +25,7 @@ void main() {
   group('which chapter a bookmark is in on this phone', () {
     test('found by its chapter title even when the number moved', () {
       expect(
-        ReaderV2Bookmarks.chapterIndexIn(
+        ReaderBookmarks.chapterIndexIn(
           mark(),
           toc(['楔子', '第一章', '第二章', '第三章']),
         ),
@@ -35,7 +35,7 @@ void main() {
 
     test('a title written in simplified Chinese still matches', () {
       expect(
-        ReaderV2Bookmarks.chapterIndexIn(
+        ReaderBookmarks.chapterIndexIn(
           mark(chapterTitle: '第三章 松煙墨'),
           toc(['第一章', '第二章', '第三章 松烟墨']),
         ),
@@ -44,7 +44,7 @@ void main() {
     });
 
     test('without the chapter list it keeps the stored number', () {
-      expect(ReaderV2Bookmarks.chapterIndexIn(mark(), const []), 2);
+      expect(ReaderBookmarks.chapterIndexIn(mark(), const []), 2);
     });
   });
 
@@ -52,7 +52,7 @@ void main() {
     'jumping back finds the same sentence after the chapter text changed',
     () {
       const before = '第三章\n\n雨是從傍晚開始下的。沈知秋撐著一把舊油紙傘。';
-      final captured = const ReaderV2Location(
+      final captured = const ReaderLocation(
         chapterIndex: 2,
         charOffset: 15,
       ).withContentIdentity(contentHash: 'old', displayText: before);
@@ -65,12 +65,12 @@ void main() {
         anchor: jsonEncode(captured.toJson()),
       );
 
-      final location = ReaderV2Bookmarks.locationOf(bookmark, chapterIndex: 4);
+      final location = ReaderBookmarks.locationOf(bookmark, chapterIndex: 4);
       expect(location.chapterIndex, 4, reason: '章節序號用這台目錄的');
 
       // 新書源在前面多了一段字。
       const after = '第三章\n\n（本章由某站提供）\n\n雨是從傍晚開始下的。沈知秋撐著一把舊油紙傘。';
-      final offset = ReaderV2ContentLocationMapper.offsetIn(
+      final offset = ReaderContentLocationMapper.offsetIn(
         location: location,
         displayText: after,
         contentHash: 'new',

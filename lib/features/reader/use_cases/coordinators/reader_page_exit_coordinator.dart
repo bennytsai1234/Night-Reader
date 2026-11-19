@@ -3,14 +3,14 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
 /// 「加入書架？」的選擇；沒選（按取消、點框外、返回鍵）是 null，留在閱讀器。
-enum ReaderV2ExitChoice { addToBookshelf, leave }
+enum ReaderExitChoice { addToBookshelf, leave }
 
-typedef ReaderV2ExitPrompt = Future<ReaderV2ExitChoice?> Function(
+typedef ReaderExitPrompt = Future<ReaderExitChoice?> Function(
   BuildContext context,
   Book book,
 );
 
-abstract class ReaderV2ExitFlowDelegate {
+abstract class ReaderExitFlowDelegate {
   Book get book;
 
   bool shouldPromptAddToBookshelfOnExit();
@@ -22,16 +22,16 @@ abstract class ReaderV2ExitFlowDelegate {
   Future<void> discardUnkeptBookStorage();
 }
 
-class ReaderV2PageExitCoordinator {
-  ReaderV2PageExitCoordinator({ReaderV2ExitPrompt? promptAddToBookshelf})
+class ReaderPageExitCoordinator {
+  ReaderPageExitCoordinator({ReaderExitPrompt? promptAddToBookshelf})
     : _promptAddToBookshelf = promptAddToBookshelf ?? _showAddToBookshelfDialog;
 
-  final ReaderV2ExitPrompt _promptAddToBookshelf;
+  final ReaderExitPrompt _promptAddToBookshelf;
   bool _isHandlingExit = false;
 
   Future<void> handleExitIntent({
     required BuildContext context,
-    required ReaderV2ExitFlowDelegate provider,
+    required ReaderExitFlowDelegate provider,
     required VoidCallback popNavigator,
   }) async {
     if (_isHandlingExit || !context.mounted) return;
@@ -55,9 +55,9 @@ class ReaderV2PageExitCoordinator {
       switch (choice) {
         case null:
           return;
-        case ReaderV2ExitChoice.addToBookshelf:
+        case ReaderExitChoice.addToBookshelf:
           await provider.addCurrentBookToBookshelf();
-        case ReaderV2ExitChoice.leave:
+        case ReaderExitChoice.leave:
           await provider.discardUnkeptBookStorage();
       }
       if (!context.mounted) return;
@@ -68,21 +68,21 @@ class ReaderV2PageExitCoordinator {
   }
 
   /// 三顆按鈕直排：加入書架、直接退出、取消（留在閱讀器）。
-  static Future<ReaderV2ExitChoice?> _showAddToBookshelfDialog(
+  static Future<ReaderExitChoice?> _showAddToBookshelfDialog(
     BuildContext context,
     Book book,
   ) {
-    return showAppAlert<ReaderV2ExitChoice?>(
+    return showAppAlert<ReaderExitChoice?>(
       context: context,
       title: '把《${book.name}》加入書架？',
       message: '加入書架才會留下這次的閱讀進度。',
       actions: const [
         AppAlertAction(
           label: '加入書架',
-          value: ReaderV2ExitChoice.addToBookshelf,
+          value: ReaderExitChoice.addToBookshelf,
           isDefault: true,
         ),
-        AppAlertAction(label: '直接退出', value: ReaderV2ExitChoice.leave),
+        AppAlertAction(label: '直接退出', value: ReaderExitChoice.leave),
         AppAlertAction(label: '取消', value: null),
       ],
     );

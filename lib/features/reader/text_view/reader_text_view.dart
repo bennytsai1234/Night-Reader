@@ -51,8 +51,8 @@ import 'view/viewport_commands.dart';
 
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-class HybridReaderScreen extends StatefulWidget {
-  const HybridReaderScreen({
+class ReaderTextView extends StatefulWidget {
+  const ReaderTextView({
     super.key,
     required this.runtime,
     required this.backgroundColor,
@@ -71,7 +71,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.highlights,
     this.onHighlightTap,
     this.highlightColor = const Color(0xFFFFC857),
-    this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
+    this.highlightStrength = ReaderHighlightStrength.defaultValue,
     this.progressListenable,
     this.bookUrl,
     this.skeletonPages,
@@ -87,13 +87,13 @@ class HybridReaderScreen extends StatefulWidget {
   /// null 時紙自己一口。建好後不換。
   final SharedSkeletonBreath? skeletonBreath;
 
-  final ReaderV2Runtime runtime;
+  final ReaderRuntime runtime;
   final Color backgroundColor;
   final Color textColor;
-  final ReaderV2Style style;
+  final ReaderStyle style;
   final GestureTapUpCallback? onContentTapUp;
-  final ReaderV2ViewportController? viewportController;
-  final ReaderV2TtsHighlight? ttsHighlight;
+  final ReaderViewportController? viewportController;
+  final ReaderTtsHighlight? ttsHighlight;
 
   /// 閱讀選單開著：點正文由選單的收起層處理（這裡不翻頁、不叫選單），
   /// 也不能選字，打開時清掉既有選取。只有點擊與長按那一層聽它，選單開關
@@ -133,7 +133,7 @@ class HybridReaderScreen extends StatefulWidget {
   /// 反白固定深淺以保持可辨識。
   final Color highlightColor;
   final double highlightStrength;
-  final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
+  final ValueNotifier<ProgressSnapshot?>? progressListenable;
   final String? bookUrl;
 
   /// 每本書上一次離開時的那一頁（ADR 0024）：開書時從同一處打開就照它畫
@@ -148,31 +148,31 @@ class HybridReaderScreen extends StatefulWidget {
   final Duration pageTurnDuration;
 
   @override
-  State<HybridReaderScreen> createState() => _HybridReaderScreenState();
+  State<ReaderTextView> createState() => _ReaderTextViewState();
 }
 
-class _HybridReaderScreenState extends State<HybridReaderScreen>
+class _ReaderTextViewState extends State<ReaderTextView>
     with TickerProviderStateMixin {
   static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
   static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
-  final GlobalKey _centerKey = GlobalKey(debugLabel: 'hybrid-center-sliver');
+  final GlobalKey _centerKey = GlobalKey(debugLabel: 'text-view-center-sliver');
   final MeasurementStore _measurementStore = MeasurementStore();
   final DocumentIndex _documentIndex = DocumentIndex(
     centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
   );
   final BudgetGovernor _governor = BudgetGovernor();
   final ViewportCommandQueue _commands = ViewportCommandQueue();
-  final HybridScrollPhysics _physics = const HybridScrollPhysics();
-  late HybridChapterRepository _chapterRepo;
+  final ReaderScrollPhysics _physics = const ReaderScrollPhysics();
+  late ChapterTextWindow _chapterRepo;
   late final AdmissionController _admission;
-  HybridLayoutDiskCache? _diskCache;
+  LayoutDiskCache? _diskCache;
 
   /// 目前排版世代的排版管線；排版或內容換代時整份換新（見
   /// [_handleEpochRebuild]）。
-  late HybridLayoutPipeline _pipeline;
+  late LayoutPipeline _pipeline;
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
-  HybridScrollController? _scrollController;
+  ReaderScrollController? _scrollController;
   PageTurn? _pageTurn;
   Size _viewportSize = Size.zero;
 
@@ -186,7 +186,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 還原已經排好、原生捲動位置還沒套上時要停的錨點。位置不存成數字，
   /// 每次照當下的大小與範圍用 [_restingOffset] 算：等 viewport 的這幾幀
   /// 正文區變了大小，建立捲動時用的也是新的位置。
-  ({HybridAnchor anchor, ChapterBlocks blocks})? _pendingAnchor;
+  ({ScrollAnchor anchor, ChapterBlocks blocks})? _pendingAnchor;
 
   double? get _pendingScrollOffset {
     final pending = _pendingAnchor;
@@ -195,7 +195,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         : _restingOffset(pending.anchor, pending.blocks);
   }
 
-  ReaderV2OperationToken? _demandOwner;
+  ReaderOperationToken? _demandOwner;
   int _windowCenter = 0;
   int _lastLayoutGeneration = 0;
   int _lastContentGeneration = 0;
@@ -205,11 +205,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 使用者捲動或停止自動捲動不會；跳轉被使用者捲動取代時，由 Runtime
   /// 放棄該操作。
   int _restoreRevision = 0;
-  ReaderV2Location? _lastReportedLocation;
+  ReaderLocation? _lastReportedLocation;
 
   /// 最近一次還原到的位置，畫面還沒離開它之前量到的位置就是它
   /// （[_unmovedRestoredLocation]）；畫面一離開就清掉。
-  ReaderV2Location? _restoredLocation;
+  ReaderLocation? _restoredLocation;
   bool _initialRestoreCompleted = false;
 
   /// 紙現在歸誰：等正文的跳章（[_syncJumpVeil]）、進行中的還原
@@ -260,7 +260,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   @override
   void initState() {
     super.initState();
-    _chapterRepo = HybridChapterRepository(
+    _chapterRepo = ChapterTextWindow(
       repository: widget.runtime.repository,
       loadContent: widget.runtime.loadContentAt,
     );
@@ -302,7 +302,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
 
-  void _unregisterRuntime(ReaderV2Runtime runtime) {
+  void _unregisterRuntime(ReaderRuntime runtime) {
     runtime.removeListener(_onRuntimeChanged);
     runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
     runtime.chapterShares.removeListener(_publishProgress);
@@ -318,13 +318,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   @override
-  void didUpdateWidget(covariant HybridReaderScreen oldWidget) {
+  void didUpdateWidget(covariant ReaderTextView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.runtime != widget.runtime) {
       _unregisterRuntime(oldWidget.runtime);
       _chapterEventsSub?.cancel();
       unawaited(_chapterRepo.dispose());
-      _chapterRepo = HybridChapterRepository(
+      _chapterRepo = ChapterTextWindow(
         repository: widget.runtime.repository,
         loadContent: widget.runtime.loadContentAt,
       );
@@ -465,15 +465,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _veil.resumeBreath();
   }
 
-  static HybridLayoutDiskCache? _diskCacheFor(HybridReaderScreen widget) {
+  static LayoutDiskCache? _diskCacheFor(ReaderTextView widget) {
     final bookUrl = widget.bookUrl;
     if (!widget.enableDiskCache || bookUrl == null) return null;
-    return HybridLayoutDiskCache(bookUrl: bookUrl);
+    return LayoutDiskCache(bookUrl: bookUrl);
   }
 
-  HybridLayoutPipeline _createPipeline() {
+  LayoutPipeline _createPipeline() {
     final state = widget.runtime.state;
-    return HybridLayoutPipeline(
+    return LayoutPipeline(
       epoch: LayoutEpoch(
         state.layoutGeneration,
         contentGeneration: state.contentGeneration,
@@ -523,9 +523,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// [_releasePaper]：沒有操作接手就掀紙回到舊正文，舊正文已經拆掉時重新
   /// 還原最後的穩定位置。
   Future<bool> _restoreCore(
-    ReaderV2Location location, {
+    ReaderLocation location, {
     required bool Function() isCurrent,
-    ReaderV2OperationKind? operationKind,
+    ReaderOperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
     _paper.beginRestore(isCurrent);
@@ -544,9 +544,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   Future<bool> _runRestore(
-    ReaderV2Location location, {
+    ReaderLocation location, {
     required bool Function() isCurrent,
-    ReaderV2OperationKind? operationKind,
+    ReaderOperationKind? operationKind,
   }) async {
     // 舊正文還在畫面上（例如朗讀念到還沒載入的一章）：紙先淡入蓋住，蓋滿
     // 才開始排版（ADR 0018）。
@@ -575,14 +575,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       // only as far as that distance reaches: the window loop below pulls in
       // an adjacent chapter exactly when the lead crosses into it.
       final operationOwnsReadyWorld =
-          operationKind == ReaderV2OperationKind.open ||
-          operationKind == ReaderV2OperationKind.jump;
+          operationKind == ReaderOperationKind.open ||
+          operationKind == ReaderOperationKind.jump;
 
       final normalized = location.normalized(
         chapterCount: widget.runtime.chapterCount,
         chapterLength: blocks.displayText.length,
       );
-      final anchor = HybridAnchor.fromLocation(normalized, blocks);
+      final anchor = ScrollAnchor.fromLocation(normalized, blocks);
       _setRestoreCompleted(false);
       // 只有開書時位置、版面與正文都和紀錄相同才照紀錄畫；其他還原（包括
       // 取代了還沒排完的開書或另一個還原）一律重新等自己的第一頁。
@@ -609,7 +609,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         if (!isCurrent()) return false;
         if (target == null) {
           throw StateError(
-            'Hybrid restore target has no admitted anchor geometry after '
+            'Text view restore target has no admitted anchor geometry after '
             'materialization completed.',
           );
         }
@@ -655,12 +655,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   /// 還原到 [anchor] 時捲動最後停住的位置：錨點那一行對到錨線的位置，在
-  /// 正文不會再變多的一側（[HybridLayoutPipeline.edgeFinal]）夾進可捲的
+  /// 正文不會再變多的一側（[LayoutPipeline.edgeFinal]）夾進可捲的
   /// 範圍，和 viewport 自己夾的一樣（有中心 sliver：最小
   /// min(0, −beforeExtent)，最大 max(0, afterExtent − 高)）。還會排進正文
   /// 的一側不夾，範圍還會變大。第一頁的骨架、還原前要排好的範圍與最後的
   /// `jumpTo` 都照這個位置，錨點還沒排進來時回傳 null。
-  double? _restingOffset(HybridAnchor anchor, ChapterBlocks blocks) {
+  double? _restingOffset(ScrollAnchor anchor, ChapterBlocks blocks) {
     final offset = _offsetForAnchor(anchor, blocks);
     if (offset == null) return null;
     var result = offset;
@@ -703,7 +703,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 再排；再也排不進更多時照已經排好的回傳。錨點一直沒排進來或作廢時
   /// 回傳 null。
   Future<double?> _layOutAround(
-    HybridAnchor anchor,
+    ScrollAnchor anchor,
     ChapterBlocks blocks, {
     required bool withLead,
     required bool Function() isCurrent,
@@ -844,7 +844,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 都是付費章節就停在這裡說明。付費章節不抓，不用重試。
   void _skipLockedChapters({required int from, required bool forward}) {
     final runtime = widget.runtime;
-    final target = ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+    final target = ReaderChapterNavigationResolver.resolveRelativeTarget(
       currentChapterIndex: from,
       chapterCount: runtime.chapterCount,
       delta: forward ? 1 : -1,
@@ -977,10 +977,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 跳章一開始就蓋紙：正文還在取得時，舊正文不留在畫面上，紙也攔下捲動。
   /// 排版開始後由 [_restoreCore] 接手；跳章在那之前就結束時，紙交給接手的
   /// 操作，沒有操作接手就由 [_releasePaper] 掀開，舊正文原封不動。
-  void _syncJumpVeil(ReaderV2OperationToken? operation) {
-    final jump = operation?.kind == ReaderV2OperationKind.jump
-        ? operation
-        : null;
+  void _syncJumpVeil(ReaderOperationToken? operation) {
+    final jump = operation?.kind == ReaderOperationKind.jump ? operation : null;
     if (!_paper.claimForJump(jump, textShown: _initialRestoreCompleted)) {
       return;
     }
@@ -1100,13 +1098,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  ReaderV2Location? _captureForBridge() {
+  ReaderLocation? _captureForBridge() {
     final location = _captureVisibleLocation();
     if (location != null) _lastReportedLocation = location;
     return location;
   }
 
-  ReaderV2Location? _captureVisibleLocation() {
+  ReaderLocation? _captureVisibleLocation() {
     final offset = _effectiveScrollOffset();
     if (offset == null || _viewportSize.height <= 0) return null;
     final anchorLine = AnchorManager.anchorOffsetInViewport(
@@ -1136,7 +1134,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 進度），沒捲動就重新量會變成行首，進度小幅往回跳，每換一次排版就再
   /// 往回退一點。捲動位置等於還原到它會停的位置，就是沒動過；上方補進
   /// 章節而調整捲動時兩邊一起變，也算沒動過。
-  ReaderV2Location? _unmovedRestoredLocation(double offset) {
+  ReaderLocation? _unmovedRestoredLocation(double offset) {
     final restored = _restoredLocation;
     if (restored == null) return null;
     final blocks = _pipeline.blocksOf(restored.chapterIndex);
@@ -1144,7 +1142,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     // 夾進可捲的範圍。
     final expected = blocks == null
         ? null
-        : _restingOffset(HybridAnchor.fromLocation(restored, blocks), blocks);
+        : _restingOffset(ScrollAnchor.fromLocation(restored, blocks), blocks);
     if (expected == null || (expected - offset).abs() > 0.5) {
       _restoredLocation = null;
       return null;
@@ -1152,7 +1150,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return restored;
   }
 
-  ReaderV2Location? _preserveShortChapterAtBoundary({
+  ReaderLocation? _preserveShortChapterAtBoundary({
     required DocumentOffsetHit? anchorHit,
     required double scrollOffset,
   }) {
@@ -1169,7 +1167,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// 還原到 [location]。有操作時屬於那個操作；沒有操作時（重新還原穩定
   /// 位置，見 [_syncStableWorld]）一開始新的操作就作廢。
-  Future<bool> _restoreToLocation(ReaderV2Location location) async {
+  Future<bool> _restoreToLocation(ReaderLocation location) async {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
     bool owned() => operation == null
@@ -1207,7 +1205,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return true;
   }
 
-  double? _offsetForAnchor(HybridAnchor anchor, ChapterBlocks blocks) =>
+  double? _offsetForAnchor(ScrollAnchor anchor, ChapterBlocks blocks) =>
       _pipeline.geometry.scrollOffsetForAnchor(
         anchor,
         blocks,
@@ -1222,7 +1220,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return _pendingScrollOffset;
   }
 
-  ReaderV2Location? _captureAndReport() {
+  ReaderLocation? _captureAndReport() {
     final location = widget.runtime.captureVisibleLocation();
     if (location != null) _lastReportedLocation = location;
     return location;
@@ -1243,7 +1241,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final blocks = _pipeline.blocksOf(location.chapterIndex);
     if (blocks == null) return;
 
-    notifier.value = HybridProgress(
+    notifier.value = ProgressCalculator(
       chapterCount: widget.runtime.chapterCount,
       shares: widget.runtime.chapterShares.value,
     ).progressForLocation(location, chapterLength: blocks.displayText.length);
@@ -1263,7 +1261,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   bool _isTextCovered() => _veilHoldsText;
 
-  void _detachController(ReaderV2ViewportController? controller) {
+  void _detachController(ReaderViewportController? controller) {
     if (controller == null) return;
     if (controller.scrollBy == _scrollBy) controller.scrollBy = null;
     if (controller.continuousScrollBy == _continuousScrollBy) {
@@ -1500,7 +1498,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           ? _admission.atForwardBookBoundary
           : _admission.atBackwardBookBoundary;
       return turn.finish(
-        isHybridPageMoveComplete(
+        isPageMoveComplete(
           requestedDistance: turn.requestedDistance,
           actualDistance: (position.pixels - before).abs(),
           atBookBoundary: atBookBoundary,
@@ -1540,7 +1538,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final safeChapter = chapterIndex.clamp(0, runtime.chapterCount - 1).toInt();
     if (!_chapterRepo.isResident(safeChapter)) {
       final ok = await _restoreCore(
-        ReaderV2Location(
+        ReaderLocation(
           chapterIndex: safeChapter,
           charOffset: math.min(startCharOffset, endCharOffset),
         ),
@@ -1560,7 +1558,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final anchorKey = blocks.blockForCharOffset(start).key;
     if (_documentIndex.topOf(anchorKey) == null) {
       final ok = await _restoreCore(
-        ReaderV2Location(chapterIndex: safeChapter, charOffset: start),
+        ReaderLocation(chapterIndex: safeChapter, charOffset: start),
         isCurrent: isCurrent,
       );
       if (ok && isCurrent()) await _handleScrollSettled();
@@ -1622,7 +1620,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
-  List<HybridLineBox> _selectionBoxes(ReaderTextSelection selection) {
+  List<LineBox> _selectionBoxes(ReaderTextSelection selection) {
     if (!_pipeline.geometry.isSelectionCurrent(selection)) {
       // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1630,7 +1628,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           _clearSelection();
         }
       });
-      return const <HybridLineBox>[];
+      return const <LineBox>[];
     }
     return _marks.lineBoxes(
       selection.chapterIndex,
@@ -1672,7 +1670,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       unawaited(Feedback.forLongPress(context));
       unawaited(
         Navigator.of(context)
-            .push(ReaderV2IllustrationViewer.route(illustration.path)),
+            .push(ReaderIllustrationViewer.route(illustration.path)),
       );
       return;
     }
@@ -1708,7 +1706,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         blocks: hit.blocks,
         epoch: epoch,
         paragraph: hit.paragraph,
-        range: HybridTextRange(
+        range: ChapterTextRange(
           hit.paragraph.start + word.start,
           hit.paragraph.start + word.end,
         ),
@@ -1766,7 +1764,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return controller.position.isScrollingNotifier.value && _sawUserScroll;
   }
 
-  Widget _buildVeil(ReaderV2State state) {
+  Widget _buildVeil(ReaderState state) {
     final page = _veilPage;
     return LoadingVeil(
       controller: _veil,
@@ -1833,7 +1831,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 先只排第一頁、照它長出骨架，接著排前後其他頁（ADR 0016）。第一頁照
   /// 捲動停住的位置（[_restingOffset]）排，和掀開後的正文一致。
   Future<bool> _showFirstPage(
-    HybridAnchor anchor,
+    ScrollAnchor anchor,
     ChapterBlocks blocks, {
     required bool Function() isCurrent,
   }) async {
@@ -1933,13 +1931,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
-  Widget _buildLoading(ReaderV2State state) {
-    final unavailable = state.lifecycle == ReaderV2Lifecycle.unavailable;
+  Widget _buildLoading(ReaderState state) {
+    final unavailable = state.lifecycle == ReaderLifecycle.unavailable;
     final message = unavailable ? _friendlyErrorMessage : '正在準備閱讀內容';
     return ColoredBox(
       color: widget.backgroundColor,
       child: _whileControls(
-        (controlsVisible, child) => ReaderV2PointerTapLayer(
+        (controlsVisible, child) => ReaderPointerTapLayer(
           onTapUp: controlsVisible ? null : widget.onContentTapUp,
           child: child,
         ),
@@ -1969,7 +1967,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         if (!_initialRestoreCompleted || _textWaitsForBreath) {
           return _buildLoading(state);
         }
-        final controller = _scrollController ??= HybridScrollController(
+        final controller = _scrollController ??= ReaderScrollController(
           initialScrollOffset: _pendingScrollOffset ?? 0.0,
           keepScrollOffset: false,
         );
@@ -1978,7 +1976,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         final textSpec = _pipeline.layoutSpec;
         final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,
-          child: HybridScrollView(
+          child: ReaderScrollView(
             centerKey: _centerKey,
             documentIndex: _documentIndex,
             namespace: _pipeline.namespace,
@@ -1994,7 +1992,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             ),
             physics: _physics,
             // 跨在上下緣的段落畫到正文區外，閱讀頁框架只露出正文與頁首頁尾
-            // 之間那段空隙，並在那裡漸隱（ReaderV2PageShell）。
+            // 之間那段空隙，並在那裡漸隱（ReaderPageShell）。
             clipBehavior: Clip.none,
           ),
         );
@@ -2050,7 +2048,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                 : (selection) => widget.onHighlightText!(selection.asHighlight),
             highlightColor: widget.highlightColor,
             child: _whileControls(
-              (controlsVisible, child) => ReaderV2PointerTapLayer(
+              (controlsVisible, child) => ReaderPointerTapLayer(
                 onTapUp: widget.onContentTapUp == null || controlsVisible
                     ? null
                     : _handleContentTapUp,
@@ -2073,7 +2071,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
-  /// 照閱讀選單開著與否（[HybridReaderScreen.controlsVisible]）包上點擊
+  /// 照閱讀選單開著與否（[ReaderTextView.controlsVisible]）包上點擊
   /// 與長按層；選單開關時只重建 [builder] 這一層，[child] 原封不動。
   Widget _whileControls(
     Widget Function(bool controlsVisible, Widget child) builder, {

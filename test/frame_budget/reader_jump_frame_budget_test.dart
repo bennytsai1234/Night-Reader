@@ -56,7 +56,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 const Size _viewport = Size(400, 800);
 
-const ReaderV2Style _style = ReaderV2Style(
+const ReaderStyle _style = ReaderStyle(
   fontSize: 18,
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -95,7 +95,7 @@ void main() {
       originName: '本地',
     );
     final bookDao = _FakeBookDao();
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: List<BookChapter>.generate(40, _chapter),
       contentLoader: (_, chapter) => Future<String?>.value(chapter.content),
@@ -103,17 +103,17 @@ void main() {
       chapterDao: _FakeChapterDao(),
       sourceDao: _FakeSourceDao(),
     );
-    final runtime = ReaderV2Runtime(
+    final runtime = ReaderRuntime(
       book: book,
       repository: repository,
-      progressController: ReaderV2ProgressController(
+      progressController: ReaderProgressController(
         book: book,
         repository: repository,
         bookDao: bookDao,
       ),
-      initialLayoutSpec: ReaderV2LayoutSpec.fromViewport(
+      initialLayoutSpec: ReaderLayoutSpec.fromViewport(
         viewportSize: _viewport,
-        style: ReaderV2LayoutStyle(
+        style: ReaderLayoutStyle(
           fontSize: _style.fontSize,
           lineHeight: _style.lineHeight,
           letterSpacing: _style.letterSpacing,
@@ -125,17 +125,17 @@ void main() {
           textIndent: _style.textIndent,
         ),
       ),
-      initialLocation: const ReaderV2Location(chapterIndex: 3, charOffset: 0),
+      initialLocation: const ReaderLocation(chapterIndex: 3, charOffset: 0),
     );
     addTearDown(runtime.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: HybridReaderScreen(
+        home: ReaderTextView(
           runtime: runtime,
           backgroundColor: Colors.white,
           textColor: Colors.black,
           style: _style,
-          viewportController: ReaderV2ViewportController(),
+          viewportController: ReaderViewportController(),
           enableDiskCache: false,
           preprocessor: const TextPreprocessor(useIsolate: false),
         ),

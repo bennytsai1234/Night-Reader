@@ -5,19 +5,19 @@ import 'reader_location.dart';
 import 'reader_operation_token.dart';
 import 'reader_state.dart';
 
-class ReaderV2StateMachine {
-  ReaderV2StateMachine(ReaderV2State state)
+class ReaderStateMachine {
+  ReaderStateMachine(ReaderState state)
     : _state = state,
       _visibleChapterIndex = ValueNotifier(state.visibleLocation.chapterIndex);
 
-  ReaderV2State _state;
-  ReaderV2State get state => _state;
-  set state(ReaderV2State value) {
+  ReaderState _state;
+  ReaderState get state => _state;
+  set state(ReaderState value) {
     _state = value;
     _visibleChapterIndex.value = value.visibleLocation.chapterIndex;
   }
 
-  /// 畫面上這一章（[ReaderV2State.visibleLocation] 的章）。每一次寫入位置
+  /// 畫面上這一章（[ReaderState.visibleLocation] 的章）。每一次寫入位置
   /// 都跟著更新，捲動途中悄悄記下的位置也一樣；章名、上一章／下一章、
   /// 目錄的目前章各自聽它，換章時只有它們更新，閱讀頁不重建（ADR 0029
   /// 做法 3）。未正規化，用的人自己夾在章數內。
@@ -26,71 +26,65 @@ class ReaderV2StateMachine {
 
   void dispose() => _visibleChapterIndex.dispose();
   int _nextOperationId = 0;
-  ReaderV2OperationToken? _currentOperation;
-  ReaderV2LayoutSpec? _stagedLayoutSpec;
+  ReaderOperationToken? _currentOperation;
+  ReaderLayoutSpec? _stagedLayoutSpec;
 
-  ReaderV2OperationToken? get currentOperation => _currentOperation;
-  ReaderV2Location? get pendingLocation => _currentOperation?.targetLocation;
-  ReaderV2LayoutSpec? get stagedLayoutSpec => _stagedLayoutSpec;
-  ReaderV2LayoutSpec get effectiveLayoutSpec =>
+  ReaderOperationToken? get currentOperation => _currentOperation;
+  ReaderLocation? get pendingLocation => _currentOperation?.targetLocation;
+  ReaderLayoutSpec? get stagedLayoutSpec => _stagedLayoutSpec;
+  ReaderLayoutSpec get effectiveLayoutSpec =>
       _stagedLayoutSpec ?? state.layoutSpec;
 
-  ReaderV2OperationToken beginOpen({ReaderV2Location? location}) {
-    if (state.lifecycle == ReaderV2Lifecycle.unavailable) {
+  ReaderOperationToken beginOpen({ReaderLocation? location}) {
+    if (state.lifecycle == ReaderLifecycle.unavailable) {
       state = state.copyWith(
-        lifecycle: ReaderV2Lifecycle.cold,
+        lifecycle: ReaderLifecycle.cold,
         clearUnavailableMessage: true,
       );
     }
+    return _beginOperation(ReaderOperationKind.open, targetLocation: location);
+  }
+
+  ReaderOperationToken beginJump({ReaderLocation? location}) {
+    return _beginOperation(ReaderOperationKind.jump, targetLocation: location);
+  }
+
+  ReaderOperationToken beginRestore({ReaderLocation? location}) {
     return _beginOperation(
-      ReaderV2OperationKind.open,
+      ReaderOperationKind.restore,
       targetLocation: location,
     );
   }
 
-  ReaderV2OperationToken beginJump({ReaderV2Location? location}) {
-    return _beginOperation(
-      ReaderV2OperationKind.jump,
-      targetLocation: location,
-    );
-  }
-
-  ReaderV2OperationToken beginRestore({ReaderV2Location? location}) {
-    return _beginOperation(
-      ReaderV2OperationKind.restore,
-      targetLocation: location,
-    );
-  }
-
-  ReaderV2OperationToken beginPresentation({
-    required ReaderV2LayoutSpec spec,
-    ReaderV2Location? location,
+  ReaderOperationToken beginPresentation({
+    required ReaderLayoutSpec spec,
+    ReaderLocation? location,
     required int layoutGeneration,
   }) {
     return _beginOperation(
-      ReaderV2OperationKind.presentation,
+      ReaderOperationKind.presentation,
       targetLocation: location,
       layoutGeneration: layoutGeneration,
       layoutSpec: spec,
     );
   }
 
-  ReaderV2OperationToken beginContentReload({ReaderV2Location? location}) {
+  ReaderOperationToken beginContentReload({ReaderLocation? location}) {
     return _beginOperation(
-      ReaderV2OperationKind.contentReload,
+      ReaderOperationKind.contentReload,
       targetLocation: location,
     );
   }
 
-  void updateVisibleLocation(ReaderV2Location location) {
+  void updateVisibleLocation(ReaderLocation location) {
     state = state.copyWith(visibleLocation: location);
   }
 
-  void commitLocation(ReaderV2Location location) {
+  void commitLocation(ReaderLocation location) {
     state = state.copyWith(committedLocation: location);
   }
 
-  bool updateViewportSpec(ReaderV2LayoutSpec spec) {
+  bool updateViewportSpec(ReaderLayoutSpec spec) {
     final operation = _currentOperation;
     final ownerSpec = effectiveLayoutSpec;
     if (spec.layoutSignature != ownerSpec.layoutSignature) {
@@ -110,7 +104,7 @@ class ReaderV2StateMachine {
     return true;
   }
 
-  bool isCurrent(ReaderV2OperationToken token) {
+  bool isCurrent(ReaderOperationToken token) {
     final current = _currentOperation;
     return current != null &&
         current.id == token.id &&
@@ -129,7 +123,7 @@ class ReaderV2StateMachine {
     return true;
   }
 
-  bool commitLayoutForOperation(ReaderV2OperationToken token) {
+  bool commitLayoutForOperation(ReaderOperationToken token) {
     if (!isCurrent(token)) return false;
     final stagedSpec = _stagedLayoutSpec;
     if (token.layoutGeneration == state.layoutGeneration) {
@@ -160,28 +154,28 @@ class ReaderV2StateMachine {
   }
 
   bool completeOperation(
-    ReaderV2OperationToken token, {
-    ReaderV2Location? visibleLocation,
+    ReaderOperationToken token, {
+    ReaderLocation? visibleLocation,
   }) {
     if (!isCurrent(token)) return false;
     _currentOperation = null;
     _stagedLayoutSpec = null;
     state = state.copyWith(
-      lifecycle: ReaderV2Lifecycle.ready,
+      lifecycle: ReaderLifecycle.ready,
       visibleLocation: visibleLocation,
       clearUnavailableMessage: true,
     );
     return true;
   }
 
-  bool abandonOperation(ReaderV2OperationToken token) {
+  bool abandonOperation(ReaderOperationToken token) {
     if (!isCurrent(token)) return false;
     _currentOperation = null;
     _stagedLayoutSpec = null;
     return true;
   }
 
-  bool markUnavailable(ReaderV2OperationToken token, Object error) {
+  bool markUnavailable(ReaderOperationToken token, Object error) {
     if (!isCurrent(token)) return false;
     if (state.hasStableWorld) {
       throw StateError(
@@ -191,17 +185,17 @@ class ReaderV2StateMachine {
     _currentOperation = null;
     _stagedLayoutSpec = null;
     state = state.copyWith(
-      lifecycle: ReaderV2Lifecycle.unavailable,
+      lifecycle: ReaderLifecycle.unavailable,
       unavailableMessage: error.toString(),
     );
     return true;
   }
 
-  ReaderV2OperationToken _beginOperation(
-    ReaderV2OperationKind kind, {
-    ReaderV2Location? targetLocation,
+  ReaderOperationToken _beginOperation(
+    ReaderOperationKind kind, {
+    ReaderLocation? targetLocation,
     int? layoutGeneration,
-    ReaderV2LayoutSpec? layoutSpec,
+    ReaderLayoutSpec? layoutSpec,
   }) {
     final previous = _currentOperation;
     final previousStagedSpec = _stagedLayoutSpec;
@@ -216,14 +210,14 @@ class ReaderV2StateMachine {
         'Operation layout generation is outside the active transaction.',
       );
     }
-    ReaderV2LayoutSpec? stagedSpec = layoutSpec;
+    ReaderLayoutSpec? stagedSpec = layoutSpec;
     if (stagedSpec == null &&
         previous != null &&
         previous.layoutGeneration > state.layoutGeneration &&
         generation == previous.layoutGeneration) {
       stagedSpec = previousStagedSpec;
     }
-    final token = ReaderV2OperationToken(
+    final token = ReaderOperationToken(
       targetLocation:
           targetLocation ?? previous?.targetLocation ?? state.visibleLocation,
       id: ++_nextOperationId,

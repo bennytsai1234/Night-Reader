@@ -2,7 +2,7 @@
 ///
 /// [dimZone] 以上調視窗背光（不改系統設定）；以下是加暗段：背光維持最低，
 /// 正文再疊一層黑色，讓手機最暗時還能更暗。
-abstract final class ReaderV2Brightness {
+abstract final class ReaderBrightness {
   /// 亮度條下方這一段是加暗段。四分之一讓背光段仍有大半條可以細調。
   static const double dimZone = 0.25;
 

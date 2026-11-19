@@ -39,7 +39,7 @@ void main() {
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
         home: Scaffold(
-          body: ReaderV2ReplaceRuleSheet(
+          body: ReaderReplaceRuleSheet(
             book: Book(bookUrl: 'https://b.test/1', origin: 'https://b.test'),
             bookDao: BookDao(db),
             replaceDao: dao,

@@ -24,10 +24,8 @@ void main() {
     await rest(tester);
 
     const centre = Offset(196, 420);
-    final screen = tester.widget<HybridReaderScreen>(
-      find.byType(HybridReaderScreen),
-    );
-    final ReaderV2Runtime runtime = screen.runtime;
+    final screen = tester.widget<ReaderTextView>(find.byType(ReaderTextView));
+    final ReaderRuntime runtime = screen.runtime;
     int chapter() => runtime.state.visibleLocation.chapterIndex;
     double chapterPercent() =>
         screen.progressListenable?.value?.chapterPercent ?? 0;
@@ -41,19 +39,19 @@ void main() {
       (element) =>
           element.widget is Text &&
           (element.widget as Text).data == text &&
-          element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null &&
-          element.findAncestorWidgetOfExactType<ReaderV2PageShell>() != null,
+          element.findAncestorWidgetOfExactType<ReaderTopMenu>() == null &&
+          element.findAncestorWidgetOfExactType<ReaderPageShell>() != null,
     );
 
     /// 上方選單章節卡上的章名。
     Finder menuTitle(String text) => find.descendant(
-      of: find.byType(ReaderV2TopMenu),
+      of: find.byType(ReaderTopMenu),
       matching: find.text(text),
     );
 
     TextButton jumpButton(String label) => tester.widget<TextButton>(
       find.descendant(
-        of: find.byType(ReaderV2BottomMenu),
+        of: find.byType(ReaderBottomMenu),
         matching: find.ancestor(
           of: find.text(label),
           matching: find.byType(TextButton),
@@ -108,7 +106,7 @@ void main() {
       find.descendant(
         of: find.ancestor(
           of: find.descendant(
-            of: find.byType(ReaderV2ChaptersDrawer),
+            of: find.byType(ReaderChaptersDrawer),
             matching: find.text(kChapterTitles[3]),
           ),
           matching: find.byType(Row),

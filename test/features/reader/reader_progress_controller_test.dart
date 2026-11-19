@@ -64,15 +64,15 @@ void main() {
 
   tearDown(() => db.close());
 
-  ReaderV2ProgressController controllerReading(List<BookChapter> opened) {
-    final repository = ReaderV2ChapterRepository(
+  ReaderProgressController controllerReading(List<BookChapter> opened) {
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: opened,
       bookDao: bookDao,
       chapterDao: chapterDao,
       sourceDao: BookSourceDao(db),
     );
-    return ReaderV2ProgressController(
+    return ReaderProgressController(
       book: book,
       repository: repository,
       bookDao: bookDao,
@@ -87,7 +87,7 @@ void main() {
     final controller = controllerReading(opened);
 
     await controller.saveImmediately(
-      const ReaderV2Location(chapterIndex: 1, charOffset: 30),
+      const ReaderLocation(chapterIndex: 1, charOffset: 30),
     );
 
     final saved = (await bookDao.getByUrl(book.bookUrl))!;
@@ -115,21 +115,21 @@ void main() {
         }),
       );
     });
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: opened,
       bookDao: bookDao,
       chapterDao: racingDao,
       sourceDao: BookSourceDao(db),
     );
-    final controller = ReaderV2ProgressController(
+    final controller = ReaderProgressController(
       book: book,
       repository: repository,
       bookDao: bookDao,
     );
 
     await controller.saveImmediately(
-      const ReaderV2Location(chapterIndex: 1, charOffset: 30),
+      const ReaderLocation(chapterIndex: 1, charOffset: 30),
     );
     await replacing;
 
@@ -144,7 +144,7 @@ void main() {
     final controller = controllerReading(opened);
 
     await controller.saveImmediately(
-      const ReaderV2Location(chapterIndex: 1, charOffset: 5),
+      const ReaderLocation(chapterIndex: 1, charOffset: 5),
     );
 
     final saved = (await bookDao.getByUrl(book.bookUrl))!;

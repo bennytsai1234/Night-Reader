@@ -4,12 +4,12 @@ import 'reader_typography.dart';
 
 /// 一段正文（或標題）之後的留白高度，計入該 block 的量測高度。
 ///
-/// 標題之後留 [ReaderV2LayoutStyle.titleSpacing] 行（標題間距），正文段落
-/// 之後留段距。章末改留 [ReaderV2LayoutStyle.chapterSpacing] 行（使用者設定的
+/// 標題之後留 [ReaderLayoutStyle.titleSpacing] 行（標題間距），正文段落
+/// 之後留段距。章末改留 [ReaderLayoutStyle.chapterSpacing] 行（使用者設定的
 /// 章節間距），與段距分開計算、不疊加。空白屬於章末 block 自己的高度，捲動、
 /// 定位與進度都沿用同一份幾何，不需要另外的特例。
-double readerV2BlockTrailingSpacing(
-  ReaderV2LayoutStyle style, {
+double readerBlockTrailingSpacing(
+  ReaderLayoutStyle style, {
   required bool isTitle,
   required bool isChapterEnd,
 }) {
@@ -21,15 +21,15 @@ double readerV2BlockTrailingSpacing(
 }
 
 /// 插圖上下各留的空白：半行（docs/design/reader.md「插圖」）。
-double readerV2IllustrationGap(ReaderV2LayoutStyle style) =>
+double readerIllustrationGap(ReaderLayoutStyle style) =>
     style.fontSize * style.effectiveLineHeight / 2;
 
-class ReaderV2LayoutStyle {
+class ReaderLayoutStyle {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;
   static const double defaultLineHeight = 1.5;
 
-  const ReaderV2LayoutStyle({
+  const ReaderLayoutStyle({
     required this.fontSize,
     required this.lineHeight,
     required this.letterSpacing,
@@ -46,8 +46,7 @@ class ReaderV2LayoutStyle {
     this.textIndent = 0,
     double? titleFontSize,
     this.titleSpacing = 0.0,
-  }) : titleFontSize =
-           titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
+  }) : titleFontSize = titleFontSize ?? fontSize + kReaderDefaultTitleSizeDelta;
 
   final double fontSize;
   final double lineHeight;
@@ -80,14 +79,14 @@ class ReaderV2LayoutStyle {
   }
 }
 
-final class ReaderV2TextLayoutFrame {
-  const ReaderV2TextLayoutFrame({
+final class ReaderTextLayoutFrame {
+  const ReaderTextLayoutFrame({
     required this.width,
     required this.leftInset,
     required this.rightInset,
   });
 
-  factory ReaderV2TextLayoutFrame.centered({
+  factory ReaderTextLayoutFrame.centered({
     required double contentWidth,
     required double? cellWidth,
   }) {
@@ -98,7 +97,7 @@ final class ReaderV2TextLayoutFrame {
         !cellWidth.isFinite ||
         cellWidth <= 0 ||
         contentWidth < cellWidth) {
-      return ReaderV2TextLayoutFrame(
+      return ReaderTextLayoutFrame(
         width: contentWidth,
         leftInset: 0,
         rightInset: 0,
@@ -112,7 +111,7 @@ final class ReaderV2TextLayoutFrame {
     // physical content box.
     final cells = _cellCount(contentWidth, cellWidth);
     if (cells < 1) {
-      return ReaderV2TextLayoutFrame(
+      return ReaderTextLayoutFrame(
         width: contentWidth,
         leftInset: 0,
         rightInset: 0,
@@ -126,7 +125,7 @@ final class ReaderV2TextLayoutFrame {
         .clamp(0.0, double.infinity)
         .toDouble();
     final leftInset = residual / 2;
-    return ReaderV2TextLayoutFrame(
+    return ReaderTextLayoutFrame(
       width: width,
       leftInset: leftInset,
       rightInset: residual - leftInset,
@@ -200,14 +199,14 @@ final class ReaderV2TextLayoutFrame {
   final double rightInset;
 }
 
-class ReaderV2LayoutSpec {
-  ReaderV2LayoutSpec({
+class ReaderLayoutSpec {
+  ReaderLayoutSpec({
     required this.viewportSize,
     required this.contentWidth,
     required this.contentHeight,
     required this.style,
     this.cellWidth,
-  }) : textLayoutFrame = ReaderV2TextLayoutFrame.centered(
+  }) : textLayoutFrame = ReaderTextLayoutFrame.centered(
          contentWidth: contentWidth,
          cellWidth: cellWidth,
        ),
@@ -237,11 +236,11 @@ class ReaderV2LayoutSpec {
   final Size viewportSize;
   final double contentWidth;
   final double contentHeight;
-  final ReaderV2LayoutStyle style;
+  final ReaderLayoutStyle style;
 
   /// Typography-owned placement inside [contentWidth]. It never changes the
   /// viewport-owned physical content width or user padding.
-  final ReaderV2TextLayoutFrame textLayoutFrame;
+  final ReaderTextLayoutFrame textLayoutFrame;
 
   /// 實測全形字 advance（含 letterSpacing），只屬於 typography metrics。
   /// 用於首行縮排 placeholder 與 [textLayoutFrame] 的內部排版幾何；
@@ -260,7 +259,7 @@ class ReaderV2LayoutSpec {
   /// Viewport height and vertical chrome/insets are deliberately excluded.
   /// They change how much of the already-laid-out document is visible, not
   /// how text wraps. A change here is the only kind that may advance the
-  /// Runtime layout generation and rebuild the Hybrid measurement epoch.
+  /// Runtime layout generation and rebuild the text-view measurement epoch.
   final int layoutSignature;
 
   /// Identity of the physical viewport/chrome geometry.
@@ -282,9 +281,9 @@ class ReaderV2LayoutSpec {
     return (viewportHeight * 0.2).clamp(24.0, 120.0).toDouble();
   }
 
-  static ReaderV2LayoutSpec fromViewport({
+  static ReaderLayoutSpec fromViewport({
     required Size viewportSize,
-    required ReaderV2LayoutStyle style,
+    required ReaderLayoutStyle style,
     double? cellWidth,
   }) {
     final contentWidth =
@@ -295,12 +294,12 @@ class ReaderV2LayoutSpec {
         (viewportSize.height - style.paddingTop - style.paddingBottom)
             .clamp(1.0, double.infinity)
             .toDouble();
-    final normalizedLineHeight = ReaderV2LayoutStyle.normalizeLineHeight(
+    final normalizedLineHeight = ReaderLayoutStyle.normalizeLineHeight(
       style.lineHeight,
     );
     final effectiveStyle = normalizedLineHeight == style.lineHeight
         ? style
-        : ReaderV2LayoutStyle(
+        : ReaderLayoutStyle(
             fontSize: style.fontSize,
             lineHeight: normalizedLineHeight,
             letterSpacing: style.letterSpacing,
@@ -322,7 +321,7 @@ class ReaderV2LayoutSpec {
         cellWidth != null && cellWidth.isFinite && cellWidth > 0
         ? cellWidth
         : null;
-    return ReaderV2LayoutSpec(
+    return ReaderLayoutSpec(
       viewportSize: viewportSize,
       contentWidth: contentWidth,
       contentHeight: contentHeight,
@@ -333,10 +332,10 @@ class ReaderV2LayoutSpec {
 
   static int _buildLayoutSignature({
     required double contentWidth,
-    required ReaderV2LayoutStyle style,
+    required ReaderLayoutStyle style,
     required double? cellWidth,
   }) {
-    final paragraphWidth = ReaderV2TextLayoutFrame.centered(
+    final paragraphWidth = ReaderTextLayoutFrame.centered(
       contentWidth: contentWidth,
       cellWidth: cellWidth,
     ).width;
@@ -352,17 +351,17 @@ class ReaderV2LayoutSpec {
       style.bold,
       style.titleBold,
       style.titleCenter,
-      readerV2FontFamilySignature(style.fontFamily),
+      readerFontFamilySignature(style.fontFamily),
       style.titleFontSize,
       style.titleSpacing,
-      kReaderV2CjkTypographyFeatureSignature,
+      kReaderCjkTypographyFeatureSignature,
     );
   }
 
   static int _buildViewportSignature({
     required Size viewportSize,
     required double contentHeight,
-    required ReaderV2LayoutStyle style,
+    required ReaderLayoutStyle style,
   }) {
     return Object.hash(
       viewportSize.width,

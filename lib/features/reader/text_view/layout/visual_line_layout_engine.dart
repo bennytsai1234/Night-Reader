@@ -109,7 +109,7 @@ final class VisualLineBreakPolicy {
       rune == 0x3000;
 }
 
-/// Sole owner of visual-line breaking in Hybrid B.
+/// Sole owner of visual-line breaking in the text view.
 ///
 /// 每個字佔整數個字格：寬度剛好一格的字（漢字、全形標點、emoji）照實際
 /// 字寬排；其餘連續的字（英文、數字、半形符號）合成一段，寬度補到半格的
@@ -148,7 +148,7 @@ final class VisualLineLayoutEngine {
     required String text,
     required int start,
     required int maxBlockChars,
-    required HybridBlockTextStyle textStyle,
+    required BlockTextStyle textStyle,
     required double contentWidth,
     required double? cellWidth,
     required int indentChars,

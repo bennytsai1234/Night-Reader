@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 /// Splits reader text into system-TTS-sized segments while preserving the
 /// reader's UTF-16 coordinate space.
-final class ReaderV2TtsSegment {
-  const ReaderV2TtsSegment({
+final class ReaderTtsSegment {
+  const ReaderTtsSegment({
     required this.chapterIndex,
     required this.startCharOffset,
     required this.endCharOffset,
@@ -16,20 +16,20 @@ final class ReaderV2TtsSegment {
   final String text;
 }
 
-final class ReaderV2TtsSegmenter {
-  const ReaderV2TtsSegmenter();
+final class ReaderTtsSegmenter {
+  const ReaderTtsSegmenter();
 
   /// 每句各自成段，短句不併到下一句：高亮與朗讀單位都對齊一句。
   static const int maxSegmentLength = 220;
 
-  List<ReaderV2TtsSegment> segment({
+  List<ReaderTtsSegment> segment({
     required String text,
     required int chapterIndex,
     required int startOffset,
   }) {
     final span = _readableSpan(text, _sentenceStart(text, startOffset));
-    if (span == null) return const <ReaderV2TtsSegment>[];
-    final segments = <ReaderV2TtsSegment>[];
+    if (span == null) return const <ReaderTtsSegment>[];
+    final segments = <ReaderTtsSegment>[];
     var cursor = _safeSegmentStart(text, span.start, span.end);
     while (cursor < span.end) {
       while (cursor < span.end && _isWhitespace(text.codeUnitAt(cursor))) {
@@ -50,7 +50,7 @@ final class ReaderV2TtsSegmenter {
         end = next;
       }
       segments.add(
-        ReaderV2TtsSegment(
+        ReaderTtsSegment(
           chapterIndex: chapterIndex,
           startCharOffset: cursor,
           endCharOffset: end,

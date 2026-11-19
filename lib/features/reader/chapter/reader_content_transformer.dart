@@ -26,7 +26,7 @@ import 'semantic_paragraph_formatter.dart';
 /// 純西文脈絡（英文句、數字、URL）一律原樣保留。這是 source typography
 /// normalization，不擁有 visual-line boundary。
 ///
-/// 這裡只處理文字本身；不要在 [ReaderV2Content.fromRaw] 之後再改字，否則
+/// 這裡只處理文字本身；不要在 [ReaderContent.fromRaw] 之後再改字，否則
 /// displayText 的 TTS、進度錨點與 contentHash 會失去同一座標系。
 ///
 /// [preserveCjkSpaces] 供標題使用：章節標題的空格是刻意的結構分隔
@@ -654,8 +654,8 @@ bool _isCjkRune(int? rune) {
       (rune >= 0x20000 && rune <= 0x323AF);
 }
 
-class ReaderV2ContentTransformer {
-  const ReaderV2ContentTransformer();
+class ReaderContentTransformer {
+  const ReaderContentTransformer();
 
   static final Map<String, RegExp> _regexCache = {};
   static const String _duplicateTitleBoundary = r'(?=\s|\p{P}|$)';
@@ -676,16 +676,16 @@ class ReaderV2ContentTransformer {
   }
 
   /// 處理一章正文，連同切段落與 contentHash 都在 worker 算好
-  /// （[ReaderV2Content.fromRaw]），主 isolate 直接拿到成品：整章跑正規表示式、
+  /// （[ReaderContent.fromRaw]），主 isolate 直接拿到成品：整章跑正規表示式、
   /// 編碼與雜湊在手機上要幾毫秒，開書與跳章時正好疊在骨架呼吸上（ADR 0018）。
   ///
   /// 一條規則跑超過它的逾時就略過它、照其他規則處理完，並呼叫
-  /// [onRuleTimedOut]（[ReaderV2ContentTransformWorker.process]）。
+  /// [onRuleTimedOut]（[ReaderContentTransformWorker.process]）。
   ///
   /// 正文裡的插圖標記一律拿掉；[illustrationsDir] 有給（開了「顯示插圖」）
   /// 時，圖檔在那個資料夾、讀得出大小的才放進
-  /// [ReaderV2Content.illustrations]（ADR 0050）。
-  Future<ReaderV2Content> process({
+  /// [ReaderContent.illustrations]（ADR 0050）。
+  Future<ReaderContent> process({
     required int chapterIndex,
     required Book book,
     required BookChapter chapter,
@@ -708,11 +708,11 @@ class ReaderV2ContentTransformer {
       'illustrationsDir': ?illustrationsDir,
     };
 
-    final result = await ReaderV2ContentTransformWorker.instance.process(
+    final result = await ReaderContentTransformWorker.instance.process(
       args,
       onRuleTimedOut: onRuleTimedOut,
     );
-    return result['document']! as ReaderV2Content;
+    return result['document']! as ReaderContent;
   }
 
   /// [onRule]：每開始套用一條規則就傳它在 `rulesJson` 的位置，一輪規則套完
@@ -751,7 +751,7 @@ class ReaderV2ContentTransformer {
   }
 
   /// 這一章正文的每一段在替換規則全部套用之後、排版整理之前的樣子，和
-  /// [ReaderV2Content.paragraphs] 一一對應。接在既有規則之後的新規則看到的
+  /// [ReaderContent.paragraphs] 一一對應。接在既有規則之後的新規則看到的
   /// 就是這些字（選字「隱藏」用它找原文）。在另一個 isolate 處理，整章跑
   /// 規則的正規表示式不佔畫面執行緒。
   static Future<List<String>> ruleStageParagraphs({
@@ -804,7 +804,7 @@ class ReaderV2ContentTransformer {
       ).replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
     );
     // 排版整理逐行處理、不增減行；整理後是空白或只有插圖的行不成段
-    // （[ReaderV2Content.fromRaw]）。被段落修復接起來的段，原文保留原本的
+    // （[ReaderContent.fromRaw]）。被段落修復接起來的段，原文保留原本的
     // 換行：新規則接在既有規則之後、段落修復之前套用，看到的是那樣的字。
     final shown = normalizeTypography(repaired.lines.join('\n')).split('\n');
     return <String>[
@@ -1045,7 +1045,7 @@ class ReaderV2ContentTransformer {
 /// worker 每開始套用一條規則傳它在 `rulesJson` 的位置，一輪套完傳 null。
 typedef _RuleProgress = void Function(int? index);
 
-/// 規則在 `rulesJson` 的位置（[ReaderV2ContentTransformer._rulesFrom] 記下）。
+/// 規則在 `rulesJson` 的位置（[ReaderContentTransformer._rulesFrom] 記下）。
 final Expando<int> _sourceIndexes = Expando('rulesJson index');
 
 extension on ReplaceRule {
@@ -1054,8 +1054,8 @@ extension on ReplaceRule {
 }
 
 /// 內容轉換失敗：worker 啟動不了、處理時丟出錯誤，或處理途中意外結束。
-final class ReaderV2ContentTransformException implements Exception {
-  const ReaderV2ContentTransformException(this.message);
+final class ReaderContentTransformException implements Exception {
+  const ReaderContentTransformException(this.message);
 
   final String message;
 
@@ -1064,7 +1064,7 @@ final class ReaderV2ContentTransformException implements Exception {
 }
 
 /// 常駐內容轉換 worker isolate；替換規則、重分段、簡繁轉換，以及切段落與
-/// contentHash（[ReaderV2Content.fromRaw]）只在這裡做，不在主 isolate 做。
+/// contentHash（[ReaderContent.fromRaw]）只在這裡做，不在主 isolate 做。
 ///
 /// 為什麼不用 compute：fling 放開瞬間會連續預載最多 3 章，compute 每章現場
 /// spawn/銷毀一個 isolate；且簡繁字典只存在主 isolate 靜態區，轉換被迫留在
@@ -1077,13 +1077,13 @@ final class ReaderV2ContentTransformException implements Exception {
 /// 照原順序重送，那一章照其他規則處理完；正在處理的那個請求的
 /// `onRuleTimedOut` 收到那條規則（閱讀器拿來停用它）。
 ///
-/// worker 意外結束時，等待中的請求以 [ReaderV2ContentTransformException]
+/// worker 意外結束時，等待中的請求以 [ReaderContentTransformException]
 /// 結束，下一個請求重新啟動 worker。
-class ReaderV2ContentTransformWorker {
-  ReaderV2ContentTransformWorker._();
+class ReaderContentTransformWorker {
+  ReaderContentTransformWorker._();
 
-  static final ReaderV2ContentTransformWorker instance =
-      ReaderV2ContentTransformWorker._();
+  static final ReaderContentTransformWorker instance =
+      ReaderContentTransformWorker._();
 
   Future<({SendPort commands, int generation})>? _starting;
 
@@ -1127,7 +1127,7 @@ class ReaderV2ContentTransformWorker {
     final ({SendPort commands, int generation}) worker;
     try {
       worker = await (_starting ??= _start());
-    } on ReaderV2ContentTransformException {
+    } on ReaderContentTransformException {
       return; // 啟動失敗時等待中的請求已經收到錯誤（_reset）。
     }
     // 啟動完成後 worker 又被換掉了：換掉的那一方會再送一次。
@@ -1144,7 +1144,7 @@ class ReaderV2ContentTransformWorker {
       } catch (error) {
         _pending.remove(id);
         request.completer.completeError(
-          ReaderV2ContentTransformException(failureMessage('章節內容處理', error)),
+          ReaderContentTransformException(failureMessage('章節內容處理', error)),
         );
       }
     }
@@ -1224,7 +1224,7 @@ class ReaderV2ContentTransformWorker {
           completer.complete(Map<String, Object?>.from(result));
         } else {
           completer.completeError(
-            ReaderV2ContentTransformException(
+            ReaderContentTransformException(
               '章節內容處理失敗：${message['error'] ?? '未知錯誤'}',
             ),
           );
@@ -1232,7 +1232,7 @@ class ReaderV2ContentTransformWorker {
         return;
       }
       // onError 送來 [錯誤, 堆疊]、onExit 送來 null：worker 已經結束。
-      const failure = ReaderV2ContentTransformException('內容轉換程序意外結束');
+      const failure = ReaderContentTransformException('內容轉換程序意外結束');
       if (!handshake.isCompleted) handshake.completeError(failure);
       if (identical(_responses, responses)) _reset(failure);
     });
@@ -1248,14 +1248,14 @@ class ReaderV2ContentTransformWorker {
       // 的那個（逾時要停的是那個）。
       if (generation != _generation) {
         isolate.kill(priority: Isolate.immediate);
-        throw const ReaderV2ContentTransformException('內容轉換程序已停止');
+        throw const ReaderContentTransformException('內容轉換程序已停止');
       }
       _isolate = isolate;
       final commands = await handshake.future;
       final dictionaryData = await _loadDictionaryDataFromBundle();
       // 握手之後、字典載入期間 worker 就結束了。
       if (generation != _generation) {
-        throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
+        throw const ReaderContentTransformException('內容轉換程序意外結束');
       }
       if (dictionaryData != null && dictionaryData.length == 4) {
         commands.send(<String, Object?>{
@@ -1265,9 +1265,9 @@ class ReaderV2ContentTransformWorker {
       }
       return (commands: commands, generation: generation);
     } catch (error) {
-      final failure = error is ReaderV2ContentTransformException
+      final failure = error is ReaderContentTransformException
           ? error
-          : ReaderV2ContentTransformException(failureMessage('啟動內容轉換', error));
+          : ReaderContentTransformException(failureMessage('啟動內容轉換', error));
       if (identical(_responses, responses)) _reset(failure);
       throw failure;
     }
@@ -1280,10 +1280,10 @@ class ReaderV2ContentTransformWorker {
   /// 的請求排進已經沒人推動的假時鐘，正文永遠等不到。整套 App 的測試在每個
   /// 測試開頭停掉它（`setUpApp`）。
   @visibleForTesting
-  void stop() => _reset(const ReaderV2ContentTransformException('內容轉換程序已停止'));
+  void stop() => _reset(const ReaderContentTransformException('內容轉換程序已停止'));
 
   /// 丟掉目前的 worker，等待中的請求以 [failure] 結束；下一個請求會重新啟動。
-  void _reset(ReaderV2ContentTransformException failure) {
+  void _reset(ReaderContentTransformException failure) {
     _discardWorker();
     final waiters = _pending.values.toList(growable: false);
     _pending.clear();
@@ -1326,7 +1326,7 @@ class ReaderV2ContentTransformWorker {
               args['rawContent'] as String? ?? '',
             );
             args['rawContent'] = extracted.text;
-            final result = ReaderV2ContentTransformer._processInBackground(
+            final result = ReaderContentTransformer._processInBackground(
               args,
               onRule: (index) => replyPort.send(('rule', id, index)),
             );
@@ -1343,7 +1343,7 @@ class ReaderV2ContentTransformWorker {
               );
             }
             // worker 和主 isolate 同一個 isolate group，成品直接傳回去。
-            result['document'] = ReaderV2Content.fromRaw(
+            result['document'] = ReaderContent.fromRaw(
               chapterIndex: args['chapterIndex'] as int? ?? 0,
               title: result['displayTitle'] as String? ?? '',
               rawText: result['content'] as String? ?? '',
@@ -1372,7 +1372,7 @@ class ReaderV2ContentTransformWorker {
 
 /// 每張插圖對到的圖檔與大小，一張一個；沒給資料夾（關掉「顯示插圖」）時
 /// 都是 null、不顯示，圖檔不在或讀不出大小的那張不顯示（ADR 0050）。
-List<ReaderV2IllustrationSlot?> _illustrationSlots(
+List<ReaderIllustrationSlot?> _illustrationSlots(
   List<String> sources,
   String? dir,
 ) {
@@ -1402,6 +1402,6 @@ class _TransformRequest {
   final Completer<Map<String, Object?>> completer =
       Completer<Map<String, Object?>>();
 
-  /// 已經送給第幾代的 worker（[ReaderV2ContentTransformWorker._generation]）。
+  /// 已經送給第幾代的 worker（[ReaderContentTransformWorker._generation]）。
   int? sentTo;
 }

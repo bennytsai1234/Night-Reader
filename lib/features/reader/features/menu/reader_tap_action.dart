@@ -1,4 +1,4 @@
-enum ReaderV2TapAction {
+enum ReaderTapAction {
   menu(0, '喚起選單'),
   nextPage(1, '下一頁'),
   prevPage(2, '上一頁'),
@@ -9,21 +9,21 @@ enum ReaderV2TapAction {
   toggleAutoPage(7, '自動翻頁'),
   toggleDayNight(8, '日夜切換');
 
-  const ReaderV2TapAction(this.code, this.label);
+  const ReaderTapAction(this.code, this.label);
 
   final int code;
   final String label;
 
-  static ReaderV2TapAction fromCode(int code) {
+  static ReaderTapAction fromCode(int code) {
     for (final action in values) {
       if (action.code == code) {
         return action;
       }
     }
-    return ReaderV2TapAction.menu;
+    return ReaderTapAction.menu;
   }
 
   static List<int> defaultGrid() {
-    return List<int>.filled(9, ReaderV2TapAction.menu.code);
+    return List<int>.filled(9, ReaderTapAction.menu.code);
   }
 }

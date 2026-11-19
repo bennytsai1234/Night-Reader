@@ -11,4 +11,4 @@
 ## Consequences
 
 - 補白記在換行計畫裡（`ChapterBlock.visualLineSpacers`），Paragraph 以零高度的 placeholder 畫出；選字、朗讀高亮與閱讀位置都經 `ParagraphTextMap` 跳過它。
-- 改動這套規則要提高 `kReaderV2CjkTypographyFeatureSignature`，舊的量測與換行快取才不會沿用。
+- 改動這套規則要提高 `kReaderCjkTypographyFeatureSignature`，舊的量測與換行快取才不會沿用。

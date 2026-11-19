@@ -113,8 +113,7 @@ bool _veilCovering() => find
     .evaluate()
     .any((e) => (e.widget as LoadingVeil).controller.isVisible);
 
-bool _readerShown() =>
-    pageSettled(find.byType(ReaderV2Page)) && !_veilCovering();
+bool _readerShown() => pageSettled(find.byType(ReaderPage)) && !_veilCovering();
 
 void main() {
   setUpAll(loadScreenshotFonts);

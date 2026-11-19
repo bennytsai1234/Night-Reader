@@ -34,7 +34,7 @@ Future<Uint8List> _render(String text, {String? fontFamily}) async {
   final paragraph = _layout.build(
     sourceText: text,
     textMap: ParagraphTextMap(sourceLength: text.length, indentLength: 0),
-    textStyle: HybridBlockTextStyle(
+    textStyle: BlockTextStyle(
       fontSize: 40,
       lineHeight: 1.5,
       letterSpacing: 0,
@@ -63,7 +63,7 @@ void main() {
     await _load('sans-serif', pair[0]);
     await _load(_downloaded, pair[1]);
     await _load(
-      kReaderV2PunctFontFamily,
+      kReaderPunctFontFamily,
       'assets/fonts/NightReaderPunct-Regular.ttf',
     );
   });
@@ -100,18 +100,18 @@ void main() {
     );
   }, skip: pair == null ? '找不到中文字型' : false);
 
-  test('readerV2CjkRuns covers CJK, kana and full-width forms only', () {
-    expect(readerV2CjkRuns('Ab臺灣12かな！x𠀋'), [
+  test('readerCjkRuns covers CJK, kana and full-width forms only', () {
+    expect(readerCjkRuns('Ab臺灣12かな！x𠀋'), [
       (start: 2, end: 4),
       (start: 6, end: 9),
       (start: 10, end: 12),
     ]);
-    expect(readerV2CjkRuns('Abc 123'), isEmpty);
+    expect(readerCjkRuns('Abc 123'), isEmpty);
     // 照字素切：附加的記號跟著前面的字，不拆成兩段字樣。
-    expect(readerV2CjkRuns('葛\u{E0100}a'), [(start: 0, end: 3)]);
-    expect(readerV2CjkRuns('漢\u0483a'), [(start: 0, end: 2)]);
-    expect(readerV2CjkRuns('漢\u200Da'), [(start: 0, end: 2)]);
-    expect(readerV2CjkRuns('a\u302Ab'), isEmpty, reason: 'CJK 範圍的聲調記號接在西文後');
-    expect(readerV2CjkRuns('e\u0301'), isEmpty);
+    expect(readerCjkRuns('葛\u{E0100}a'), [(start: 0, end: 3)]);
+    expect(readerCjkRuns('漢\u0483a'), [(start: 0, end: 2)]);
+    expect(readerCjkRuns('漢\u200Da'), [(start: 0, end: 2)]);
+    expect(readerCjkRuns('a\u302Ab'), isEmpty, reason: 'CJK 範圍的聲調記號接在西文後');
+    expect(readerCjkRuns('e\u0301'), isEmpty);
   });
 }

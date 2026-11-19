@@ -24,7 +24,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 
 // 閱讀設定的各組：閱讀器內的外觀與排版面板與「閱讀偏好」頁共用，都透過
-// ReaderV2SettingsController 讀寫，兩處行為與資料一致。
+// ReaderSettingsController 讀寫，兩處行為與資料一致。
 //
 // 每一組是一個 GroupedSection，列是各自獨立的小元件：
 // - 每一列只聽自己顯示的那個值，改一個設定只重建那一列，不重建整組或整頁。
@@ -32,16 +32,16 @@ import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 //   畫面上看得到的組（ADR 0029）。原本版面、狀態列與頁首頁尾是同一個元件，
 //   上半在畫面上，畫面外的下半也一起建。
 // - 連按步進合併成一次提交的暫存值不放在列裡（列捲出畫面就拆掉），放在
-//   [ReaderV2SettingsGroups]，由所在頁面的 State 建立與釋放。
+//   [ReaderSettingsGroups]，由所在頁面的 State 建立與釋放。
 
 /// 閱讀設定的各組與它們的暫存值。所在頁面的 State 在 initState 建立、
 /// dispose 時呼叫 [dispose]（還沒提交的步進在這時提交）。
-class ReaderV2SettingsGroups {
-  ReaderV2SettingsGroups(this.settings, {this.margin}) {
+class ReaderSettingsGroups {
+  ReaderSettingsGroups(this.settings, {this.margin}) {
     settings.addListener(_onSettingsChanged);
   }
 
-  final ReaderV2SettingsController settings;
+  final ReaderSettingsController settings;
 
   /// 各組卡片的外距；null 時是分組清單的預設（左右 [AppGrouped.margin]）。
   /// 閱讀器面板自己有左右內距，傳 [EdgeInsets.zero]。
@@ -106,7 +106,7 @@ class ReaderV2SettingsGroups {
   // ---------- 排版 ----------
 
   bool get _typographyIsDefault {
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final defaults = ReaderPrefsSnapshot.defaults();
     for (final field in _TypographyField.values) {
       if (_typography.valueOf(field) != field.defaultIn(defaults)) return false;
     }
@@ -160,8 +160,8 @@ class ReaderV2SettingsGroups {
             edits: _typography,
             field: _TypographyField.titleSpacing,
             label: '標題間距',
-            min: ReaderV2SettingsController.minTitleSpacing,
-            max: ReaderV2SettingsController.maxTitleSpacing,
+            min: ReaderSettingsController.minTitleSpacing,
+            max: ReaderSettingsController.maxTitleSpacing,
             step: 0.1,
             fractionDigits: 1,
             unit: '行',
@@ -170,8 +170,8 @@ class ReaderV2SettingsGroups {
           edits: _typography,
           field: _TypographyField.lineHeight,
           label: '行高',
-          min: ReaderV2SettingsController.minReadableLineHeight,
-          max: ReaderV2SettingsController.maxReadableLineHeight,
+          min: ReaderSettingsController.minReadableLineHeight,
+          max: ReaderSettingsController.maxReadableLineHeight,
           step: 0.1,
           fractionDigits: 1,
         ),
@@ -199,8 +199,8 @@ class ReaderV2SettingsGroups {
             edits: _typography,
             field: _TypographyField.chapterSpacing,
             label: '章節間距',
-            min: ReaderV2SettingsController.minChapterSpacing,
-            max: ReaderV2SettingsController.maxChapterSpacing,
+            min: ReaderSettingsController.minChapterSpacing,
+            max: ReaderSettingsController.maxChapterSpacing,
             step: 0.5,
             fractionDigits: 1,
             unit: '行',
@@ -286,8 +286,8 @@ class ReaderV2SettingsGroups {
     edits: _padding,
     field: field,
     label: label,
-    min: ReaderV2SettingsController.minPagePadding,
-    max: ReaderV2SettingsController.maxPagePadding,
+    min: ReaderSettingsController.minPagePadding,
+    max: ReaderSettingsController.maxPagePadding,
     step: _paddingStep,
   );
 
@@ -297,8 +297,8 @@ class ReaderV2SettingsGroups {
     edits: _padding,
     field: _PaddingField.lineChars,
     label: '每行字數',
-    min: ReaderV2PrefsRepository.lineCharsRange.min.toDouble(),
-    max: ReaderV2PrefsRepository.lineCharsRange.max.toDouble(),
+    min: ReaderPrefsRepository.lineCharsRange.min.toDouble(),
+    max: ReaderPrefsRepository.lineCharsRange.max.toDouble(),
     maxOf: (context) => _lineCapacity(context).toDouble(),
     listenable: settings,
     step: 1,
@@ -349,8 +349,8 @@ class ReaderV2SettingsGroups {
               builder: (context, fade) => NumberStepperRow(
                 label: '上下緣漸隱',
                 value: fade,
-                min: ReaderV2PrefsRepository.minEdgeFade,
-                max: ReaderV2PrefsRepository.maxEdgeFade,
+                min: ReaderPrefsRepository.minEdgeFade,
+                max: ReaderPrefsRepository.maxEdgeFade,
                 step: _paddingStep,
                 onChanged: settings.setEdgeFade,
               ),
@@ -364,8 +364,8 @@ class ReaderV2SettingsGroups {
                 builder: (context, offset) => NumberStepperRow(
                   label: '頁尾位置',
                   value: offset,
-                  min: ReaderV2SettingsController.minPagePadding,
-                  max: ReaderV2SettingsController.maxPagePadding,
+                  min: ReaderSettingsController.minPagePadding,
+                  max: ReaderSettingsController.maxPagePadding,
                   step: _paddingStep,
                   onChanged: settings.setFooterOffset,
                 ),
@@ -409,7 +409,7 @@ class ReaderV2SettingsGroups {
             ('頁尾左側', true, false),
             ('頁尾右側', true, true),
           ])
-            _Watch<ReaderV2InfoItem>(
+            _Watch<ReaderInfoItem>(
               listenable: settings,
               select: () {
                 final slots = footer
@@ -440,8 +440,8 @@ class ReaderV2SettingsGroups {
               builder: (context, size) => NumberStepperRow(
                 label: '字級',
                 value: size,
-                min: ReaderV2PrefsRepository.minInfoFontSize,
-                max: ReaderV2PrefsRepository.maxInfoFontSize,
+                min: ReaderPrefsRepository.minInfoFontSize,
+                max: ReaderPrefsRepository.maxInfoFontSize,
                 step: 1,
                 onChanged: settings.setInfoFontSize,
               ),
@@ -498,23 +498,23 @@ class ReaderV2SettingsGroups {
           builder: (context, overlap) => NumberStepperRow(
             label: '保留行數',
             value: overlap.toDouble(),
-            min: ReaderV2PrefsRepository.minPageTurnOverlap.toDouble(),
-            max: ReaderV2PrefsRepository.maxPageTurnOverlap.toDouble(),
+            min: ReaderPrefsRepository.minPageTurnOverlap.toDouble(),
+            max: ReaderPrefsRepository.maxPageTurnOverlap.toDouble(),
             step: 1,
             unit: '行',
             onChanged: (value) => settings.setPageTurnOverlap(value.round()),
           ),
         ),
       ),
-      _Watch<ReaderV2PageTurnSpeed>(
+      _Watch<ReaderPageTurnSpeed>(
         listenable: settings,
         select: () => settings.pageTurnSpeed,
         builder: (context, speed) => _LabeledRow(
           label: '捲動速度',
-          child: GlassSegmented<ReaderV2PageTurnSpeed>(
+          child: GlassSegmented<ReaderPageTurnSpeed>(
             expand: false,
             segments: [
-              for (final option in ReaderV2PageTurnSpeed.values)
+              for (final option in ReaderPageTurnSpeed.values)
                 GlassSegment(option, option.label),
             ],
             selected: speed,
@@ -542,15 +542,15 @@ class ReaderV2SettingsGroups {
           onChanged: settings.setKeepScreenOn,
         ),
       ),
-      _Watch<ReaderV2Orientation>(
+      _Watch<ReaderOrientation>(
         listenable: settings,
         select: () => settings.orientation,
         builder: (context, orientation) => _LabeledRow(
           label: '螢幕方向',
-          child: GlassSegmented<ReaderV2Orientation>(
+          child: GlassSegmented<ReaderOrientation>(
             expand: false,
             segments: [
-              for (final option in ReaderV2Orientation.values)
+              for (final option in ReaderOrientation.values)
                 GlassSegment(option, option.label),
             ],
             selected: orientation,
@@ -566,8 +566,8 @@ class ReaderV2SettingsGroups {
             builder: (context, dim) => NumberStepperRow(
               label: '最暗程度',
               value: dim,
-              min: ReaderV2Brightness.minMaxDim,
-              max: ReaderV2Brightness.maxMaxDim,
+              min: ReaderBrightness.minMaxDim,
+              max: ReaderBrightness.maxMaxDim,
               step: 0.05,
               displayScale: 100,
               unit: '%',
@@ -592,8 +592,8 @@ class ReaderV2SettingsGroups {
           builder: (context, speed) => NumberStepperRow(
             label: '速度',
             value: speed,
-            min: ReaderV2SettingsController.minAutoPageSpeed,
-            max: ReaderV2SettingsController.maxAutoPageSpeed,
+            min: ReaderSettingsController.minAutoPageSpeed,
+            max: ReaderSettingsController.maxAutoPageSpeed,
             step: 0.01,
             displayScale: 100,
             unit: '%',
@@ -645,7 +645,7 @@ class ReaderV2SettingsGroups {
   );
 
   bool get _clickActionsAreDefault {
-    final defaults = ReaderV2TapAction.defaultGrid();
+    final defaults = ReaderTapAction.defaultGrid();
     for (var i = 0; i < defaults.length; i++) {
       if (settings.clickActions[i] != defaults[i]) return false;
     }
@@ -734,7 +734,7 @@ enum _TypographyField {
   chapterSpacing,
   textIndent;
 
-  double read(ReaderV2SettingsController s) => switch (this) {
+  double read(ReaderSettingsController s) => switch (this) {
     fontSize => s.fontSize,
     titleFontSize => s.titleFontSize,
     titleSpacing => s.titleSpacing,
@@ -745,7 +745,7 @@ enum _TypographyField {
     textIndent => s.textIndent.toDouble(),
   };
 
-  double defaultIn(ReaderV2PrefsSnapshot d) => switch (this) {
+  double defaultIn(ReaderPrefsSnapshot d) => switch (this) {
     fontSize => d.fontSize,
     titleFontSize => d.titleFontSize,
     titleSpacing => d.titleSpacing,
@@ -762,7 +762,7 @@ enum _PaddingField {
   top,
   bottom;
 
-  double read(ReaderV2SettingsController s) => switch (this) {
+  double read(ReaderSettingsController s) => switch (this) {
     lineChars => s.lineChars.toDouble(),
     top => s.paddingTop,
     bottom => s.paddingBottom,
@@ -788,7 +788,7 @@ class _StagedEdits<F extends Enum> extends ChangeNotifier {
 
   static const _commitDelay = Duration(milliseconds: 120);
 
-  final ReaderV2SettingsController _settings;
+  final ReaderSettingsController _settings;
   final double Function(F field) _read;
   final void Function(Map<F, double> values) _commit;
   final Map<F, ValueNotifier<double>> _values;
@@ -1149,8 +1149,8 @@ class _InfoItemPickerRow extends StatelessWidget
   });
 
   final String label;
-  final ReaderV2InfoItem value;
-  final ValueChanged<ReaderV2InfoItem> onChanged;
+  final ReaderInfoItem value;
+  final ValueChanged<ReaderInfoItem> onChanged;
 
   GroupedRow _row(BuildContext context) => GroupedRow(
     title: label,
@@ -1168,11 +1168,11 @@ class _InfoItemPickerRow extends StatelessWidget
   Widget build(BuildContext context) => _row(context);
 
   Future<void> _showPicker(BuildContext context) async {
-    final picked = await showAppActionSheet<ReaderV2InfoItem>(
+    final picked = await showAppActionSheet<ReaderInfoItem>(
       context: context,
       title: label,
       actions: [
-        for (final item in ReaderV2InfoItem.values)
+        for (final item in ReaderInfoItem.values)
           AppSheetAction(
             label: item.label,
             value: item,
@@ -1236,7 +1236,7 @@ class _ClickActionGrid extends StatelessWidget implements GroupedSkeletonItem {
       ),
       itemCount: 9,
       itemBuilder: (context, index) {
-        final label = ReaderV2TapAction.fromCode(actions[index]).label;
+        final label = ReaderTapAction.fromCode(actions[index]).label;
         final isCenter = index == 4;
         return Material(
           // 格子用淡墨底與卡片區隔；中央格（預設喚起選單）以主色標示。
@@ -1283,11 +1283,11 @@ class _ClickActionGrid extends StatelessWidget implements GroupedSkeletonItem {
 
   Future<void> _showActionPicker(BuildContext context, int zone) async {
     final current = actions[zone];
-    final picked = await showAppActionSheet<ReaderV2TapAction>(
+    final picked = await showAppActionSheet<ReaderTapAction>(
       context: context,
       title: '選擇點擊功能',
       actions: [
-        for (final action in ReaderV2TapAction.values)
+        for (final action in ReaderTapAction.values)
           AppSheetAction(
             label: action.label,
             value: action,

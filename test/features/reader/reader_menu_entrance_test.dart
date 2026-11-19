@@ -20,13 +20,13 @@ void main() {
     required bool visible,
     Duration delay = Duration.zero,
   }) async {
-    if (find.byType(ReaderV2MenuEntrance).evaluate().isEmpty) {
+    if (find.byType(ReaderMenuEntrance).evaluate().isEmpty) {
       visibility.value = visible;
       await tester.pumpWidget(
         MaterialApp(
           home: Align(
             alignment: Alignment.topCenter,
-            child: ReaderV2MenuEntrance(
+            child: ReaderMenuEntrance(
               visible: visibility,
               edge: AxisDirection.up,
               delay: delay,
@@ -69,7 +69,7 @@ void main() {
     for (final fade in [Opacity, FadeTransition]) {
       expect(
         find.descendant(
-          of: find.byType(ReaderV2MenuEntrance),
+          of: find.byType(ReaderMenuEntrance),
           matching: find.byType(fade),
         ),
         findsNothing,

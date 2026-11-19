@@ -18,8 +18,8 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 /// 選單與頁首頁尾用到的章節資訊。目前這一章（[current]）是小訊號：捲動
 /// 途中換章時，只有章名、上一章／下一章這幾個聽它的小元件更新，閱讀頁
 /// 不重建。
-class ReaderV2ChapterNavigationState {
-  const ReaderV2ChapterNavigationState({
+class ReaderChapterNavigationState {
+  const ReaderChapterNavigationState({
     required this.chapterCount,
     required this.current,
     required this.scrub,
@@ -30,7 +30,7 @@ class ReaderV2ChapterNavigationState {
 
   /// 畫面上這一章（未正規化，讀 [currentIndex]）。
   final ValueListenable<int> current;
-  final ValueListenable<ReaderV2ScrubState> scrub;
+  final ValueListenable<ReaderScrubState> scrub;
   final String Function(int index) titleFor;
 
   int get currentIndex =>
@@ -43,8 +43,8 @@ class ReaderV2ChapterNavigationState {
 
 /// 閱讀器下方選單：浮在手勢列上方的圓角玻璃膠囊（章節拖動條與主功能），
 /// 膠囊上方另有一排圓形玻璃按鈕。
-class ReaderV2BottomMenu extends StatelessWidget {
-  const ReaderV2BottomMenu({
+class ReaderBottomMenu extends StatelessWidget {
+  const ReaderBottomMenu({
     super.key,
     required this.controlsVisible,
     required this.navigation,
@@ -85,9 +85,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 拖動條圓鈕的半徑（直徑 26）。
   static const double _thumbRadius = 13;
 
-  /// 選單開著；只有滑動那一層聽它（見 [ReaderV2MenuEntrance]）。
+  /// 選單開著；只有滑動那一層聽它（見 [ReaderMenuEntrance]）。
   final ValueListenable<bool> controlsVisible;
-  final ReaderV2ChapterNavigationState navigation;
+  final ReaderChapterNavigationState navigation;
   final bool isAutoPaging;
   final IconData dayNightIcon;
   final String dayNightTooltip;
@@ -115,27 +115,27 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final ValueChanged<double> onScrubEnd;
 
   /// 章內進度的窄通道；未拖動時拖動條跟隨此值即時顯示。
-  final ValueListenable<HybridProgressSnapshot?>? progressListenable;
+  final ValueListenable<ProgressSnapshot?>? progressListenable;
 
   /// 朗讀定時；朗讀還沒準備好時為 null，定時鍵灰著（ADR 0059）。
   final SleepTimer? sleepTimer;
   final bool isTtsPlaying;
   final bool isTtsPaused;
 
-  /// 收起動畫播完、選單完全移出畫面時呼叫（見 [ReaderV2MenuEntrance]）。
+  /// 收起動畫播完、選單完全移出畫面時呼叫（見 [ReaderMenuEntrance]）。
   final VoidCallback? onHidden;
 
   @override
   Widget build(BuildContext context) {
-    final menuStyle = ReaderV2MenuStyle.of(context);
+    final menuStyle = ReaderMenuStyle.of(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return ReaderV2MenuEntrance(
+    return ReaderMenuEntrance(
       visible: controlsVisible,
       edge: AxisDirection.down,
       onHidden: onHidden,
       // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
       child: DerivedTheme(
-        derive: ReaderV2MenuStyle.menuThemeOf,
+        derive: ReaderMenuStyle.menuThemeOf,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             horizontalInset,
@@ -184,7 +184,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 膠囊上方的圓形玻璃按鈕（自動翻頁、替換規則、定時朗讀、日夜切換）。
   Widget _buildFloatingButtons(
     BuildContext context,
-    ReaderV2MenuStyle menuStyle,
+    ReaderMenuStyle menuStyle,
   ) {
     final tint = menuStyle.glassTintOf(context);
     final actions = <Widget>[
@@ -248,7 +248,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 無光暈與刻度）；漫畫閱讀器的「本話第幾張」也用它。
   static SliderThemeData sliderThemeOf(
     BuildContext context,
-    ReaderV2MenuStyle menuStyle,
+    ReaderMenuStyle menuStyle,
   ) {
     final track = menuStyle.mutedForeground.withValues(alpha: 0.24);
     return SliderTheme.of(context).copyWith(
@@ -272,10 +272,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildChapterSlider(
-    BuildContext context,
-    ReaderV2MenuStyle menuStyle,
-  ) {
+  Widget _buildChapterSlider(BuildContext context, ReaderMenuStyle menuStyle) {
     final canScrub = navigation.chapterCount > 0;
 
     return Row(
@@ -309,7 +306,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 拖動時的「本章 n/10」：疊在膠囊上緣到圓鈕頂端之間原有的空白裡，
   /// 不佔版面，膠囊、上方圓鈕與亮度條都不動；按下淡入、放開淡出
   /// （[AppMotion.fade]），淡出時留著最後的數字。
-  Widget _buildScrubLabel(BuildContext context, ReaderV2MenuStyle menuStyle) {
+  Widget _buildScrubLabel(BuildContext context, ReaderMenuStyle menuStyle) {
     const gapAboveThumb =
         _panelTopPadding + AppGlass.buttonSize / 2 - _thumbRadius;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
@@ -320,7 +317,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
       child: IgnorePointer(
         // 讀屏由拖動條自己念出同樣的「本章 n/10」。
         child: ExcludeSemantics(
-          child: ValueListenableBuilder<ReaderV2ScrubState>(
+          child: ValueListenableBuilder<ReaderScrubState>(
             valueListenable: navigation.scrub,
             builder: (context, scrub, _) => AnimatedOpacity(
               opacity: scrub.isScrubbing ? 1 : 0,
@@ -348,7 +345,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     String label,
     bool Function() enabled,
     VoidCallback onPressed,
-    ReaderV2MenuStyle menuStyle,
+    ReaderMenuStyle menuStyle,
   ) {
     return _ChapterJumpButton(
       current: navigation.current,
@@ -370,7 +367,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 拖動條表示「本章內進度」，與資訊列同樣切成十等份：未拖動時跟隨
   /// 閱讀進度（經 progressListenable 窄通道，不觸發整頁 rebuild）；
   /// 拖動跨檔位時由外層做預覽跳轉，放開才落定存進度；放開到跳轉做完之前
-  /// 停在選定的位置（[ReaderV2ScrubState.holdsSlider]）。
+  /// 停在選定的位置（[ReaderScrubState.holdsSlider]）。
   Widget _buildProgressSlider(bool canScrub) {
     return ListenableBuilder(
       listenable: Listenable.merge([navigation.scrub, progressListenable]),
@@ -411,7 +408,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
   }
 
   /// 膠囊內的主功能：圖示加小字標籤，按下微縮而不鋪水波紋。
-  Widget _buildMainActions(ReaderV2MenuStyle menuStyle) {
+  Widget _buildMainActions(ReaderMenuStyle menuStyle) {
     return Row(
       children: [
         _menuIcon(Icons.list_rounded, '目錄', onOpenDrawer, menuStyle),
@@ -426,9 +423,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
     IconData icon,
     String label,
     VoidCallback onTap,
-    ReaderV2MenuStyle menuStyle,
+    ReaderMenuStyle menuStyle,
   ) => Expanded(
-    child: ReaderV2MenuIcon(
+    child: ReaderMenuIcon(
       icon: icon,
       label: label,
       onTap: onTap,
@@ -438,8 +435,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
 }
 
 /// 下方選單膠囊裡的一個主功能：圖示加小字標籤，按下微縮而不鋪水波紋。
-class ReaderV2MenuIcon extends StatelessWidget {
-  const ReaderV2MenuIcon({
+class ReaderMenuIcon extends StatelessWidget {
+  const ReaderMenuIcon({
     super.key,
     required this.icon,
     required this.label,
@@ -450,7 +447,7 @@ class ReaderV2MenuIcon extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final ReaderV2MenuStyle menuStyle;
+  final ReaderMenuStyle menuStyle;
 
   @override
   Widget build(BuildContext context) {

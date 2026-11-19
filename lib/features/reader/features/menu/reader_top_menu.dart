@@ -6,7 +6,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
-import 'reader_bottom_menu.dart' show ReaderV2ChapterNavigationState;
+import 'reader_bottom_menu.dart' show ReaderChapterNavigationState;
 import 'reader_menu_entrance.dart';
 import 'reader_menu_palette.dart';
 
@@ -15,8 +15,8 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀器上方選單：浮在狀態列下方的玻璃列——兩側圓形玻璃按鈕、中間書名膠囊，
 /// 開啟「標題附加資訊」時下方再浮一張章節資訊卡。
-class ReaderV2TopMenu extends StatelessWidget {
-  const ReaderV2TopMenu({
+class ReaderTopMenu extends StatelessWidget {
+  const ReaderTopMenu({
     super.key,
     required this.controlsVisible,
     required this.bookName,
@@ -32,12 +32,12 @@ class ReaderV2TopMenu extends StatelessWidget {
   /// 左右離畫面邊的距離；正文欄照每行字數收窄時對齊正文的左右邊。
   final double horizontalInset;
 
-  /// 選單開著；只有滑動那一層聽它（見 [ReaderV2MenuEntrance]）。
+  /// 選單開著；只有滑動那一層聽它（見 [ReaderMenuEntrance]）。
   final ValueListenable<bool> controlsVisible;
   final String bookName;
 
   /// 章節卡的章名照它的目前章。
-  final ReaderV2ChapterNavigationState navigation;
+  final ReaderChapterNavigationState navigation;
   final String originName;
   final bool showReadTitleAddition;
   final VoidCallback onBack;
@@ -48,14 +48,14 @@ class ReaderV2TopMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final menuStyle = ReaderV2MenuStyle.of(context);
+    final menuStyle = ReaderMenuStyle.of(context);
     final topInset = MediaQuery.paddingOf(context).top;
-    return ReaderV2MenuEntrance(
+    return ReaderMenuEntrance(
       visible: controlsVisible,
       edge: AxisDirection.up,
       // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
       child: DerivedTheme(
-        derive: ReaderV2MenuStyle.menuThemeOf,
+        derive: ReaderMenuStyle.menuThemeOf,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             horizontalInset,
@@ -78,7 +78,7 @@ class ReaderV2TopMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildAppBar(BuildContext context, ReaderV2MenuStyle menuStyle) {
+  Widget _buildAppBar(BuildContext context, ReaderMenuStyle menuStyle) {
     final tint = menuStyle.glassTintOf(context);
     return Row(
       children: [
@@ -130,7 +130,7 @@ class ReaderV2TopMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildAdditionInfo(BuildContext context, ReaderV2MenuStyle menuStyle) {
+  Widget _buildAdditionInfo(BuildContext context, ReaderMenuStyle menuStyle) {
     return GlassSurface(
       borderRadius: AppRadius.cardXl,
       tint: menuStyle.glassTintOf(context),

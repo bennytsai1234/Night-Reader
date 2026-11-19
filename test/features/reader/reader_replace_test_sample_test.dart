@@ -4,7 +4,7 @@ import 'package:night_reader/features/reader/use_cases/reader_page_coordinator.d
 
 void main() {
   // displayText：「第一章\n\n甲甲\n\n乙乙乙\n\n丙」，正文從 5 開始。
-  final content = ReaderV2Content.fromRaw(
+  final content = ReaderContent.fromRaw(
     chapterIndex: 0,
     title: '第一章',
     rawText: '甲甲\n乙乙乙\n\n丙',

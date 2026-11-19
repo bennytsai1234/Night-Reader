@@ -1,12 +1,12 @@
 import 'package:flutter/gestures.dart' show Drag;
 import 'package:flutter/widgets.dart';
 
-/// 正文的捲動控制器，位置物件換成 [HybridScrollPosition]。
-final class HybridScrollController extends ScrollController {
-  HybridScrollController({super.initialScrollOffset, super.keepScrollOffset});
+/// 正文的捲動控制器，位置物件換成 [ReaderScrollPosition]。
+final class ReaderScrollController extends ScrollController {
+  ReaderScrollController({super.initialScrollOffset, super.keepScrollOffset});
 
   @override
-  HybridScrollPosition get position => super.position as HybridScrollPosition;
+  ReaderScrollPosition get position => super.position as ReaderScrollPosition;
 
   @override
   ScrollPosition createScrollPosition(
@@ -14,7 +14,7 @@ final class HybridScrollController extends ScrollController {
     ScrollContext context,
     ScrollPosition? oldPosition,
   ) {
-    return HybridScrollPosition(
+    return ReaderScrollPosition(
       physics: physics,
       context: context,
       initialPixels: initialScrollOffset,
@@ -30,8 +30,8 @@ final class HybridScrollController extends ScrollController {
 /// 原生 Scrollable 在按下的瞬間就會 hold 住進行中的捲動，這時還分不出
 /// 是點擊還是拖動。翻頁的連點每一下都要接著前一下繼續捲，所以翻頁動畫
 /// 不讓按下停住；手指真的拖動時，拖動照常取代動畫、由使用者接手。
-final class HybridScrollPosition extends ScrollPositionWithSingleContext {
-  HybridScrollPosition({
+final class ReaderScrollPosition extends ScrollPositionWithSingleContext {
+  ReaderScrollPosition({
     required super.physics,
     required super.context,
     super.initialPixels,

@@ -139,7 +139,7 @@ const List<String> _videoSourceMarkers = <String>[
 /// 校驗再照抓到的正文改（ADR 0051）。聚合源照作者寫的類型，書各自是哪一類
 /// 由書源的規則決定（ADR 0056）。
 enum BookSourceKind {
-  /// 類型 0，文字書源，Reader V2 讀。
+  /// 類型 0，文字書源，閱讀器讀。
   novel,
 
   /// 類型 2，圖片書源。
@@ -536,7 +536,7 @@ extension BookSourceLogic on BookSourceBase {
     _ => BookSourceKind.unsupported,
   };
 
-  /// 夜讀打得開的書源：小說源給 Reader V2，有聲源給有聲書播放器
+  /// 夜讀打得開的書源：小說源給閱讀器，有聲源給有聲書播放器
   /// （ADR 0055），漫畫源給漫畫閱讀器（ADR 0052）。搜尋、發現、閱讀、
   /// 下載與檢查新章節只用這幾類。
   bool get isOpenableSource => switch (sourceKind) {

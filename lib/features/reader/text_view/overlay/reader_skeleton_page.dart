@@ -44,19 +44,19 @@ final class ReaderSkeletonPage {
 
   /// [lines] 裡插圖方塊的索引：照整個範圍畫，不畫成一條字的高度。
   final Set<int> blockLines;
-  final HybridProgressSnapshot? progress;
+  final ProgressSnapshot? progress;
 
   /// 開書的位置與版面都和記下時相同。位置比到半個像素：存進資料庫再讀
   /// 出來的捲動餘量可能有小數誤差。
-  bool matches(ReaderV2Location location, ReaderV2LayoutSpec spec) =>
+  bool matches(ReaderLocation location, ReaderLayoutSpec spec) =>
       location.chapterIndex == chapterIndex &&
       location.charOffset == charOffset &&
       (location.visualOffsetPx - visualOffsetPx).abs() < 0.5 &&
       layout == layoutKeyOf(spec);
 
-  /// 決定每一行落在哪裡的版面參數。不用 [ReaderV2LayoutSpec] 的雜湊：
+  /// 決定每一行落在哪裡的版面參數。不用 [ReaderLayoutSpec] 的雜湊：
   /// `Object.hash` 每次啟動 App 都不同，存起來下次比不上。
-  static String layoutKeyOf(ReaderV2LayoutSpec spec) {
+  static String layoutKeyOf(ReaderLayoutSpec spec) {
     final style = spec.style;
     return jsonEncode([
       spec.viewportSize.width,
@@ -76,11 +76,11 @@ final class ReaderSkeletonPage {
       style.bold,
       style.titleBold,
       style.titleCenter,
-      readerV2FontFamilySignature(style.fontFamily),
+      readerFontFamilySignature(style.fontFamily),
       style.textIndent,
       style.titleFontSize,
       style.titleSpacing,
-      kReaderV2CjkTypographyFeatureSignature,
+      kReaderCjkTypographyFeatureSignature,
     ]);
   }
 
@@ -134,7 +134,7 @@ final class ReaderSkeletonPage {
       ],
       progress: progress == null
           ? null
-          : HybridProgressSnapshot(
+          : ProgressSnapshot(
               chapterIndex: progress[0] as int,
               chapterCount: progress[1] as int,
               chapterPercent: (progress[2] as num).toDouble(),

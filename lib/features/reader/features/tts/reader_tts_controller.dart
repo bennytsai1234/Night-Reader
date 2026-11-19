@@ -19,7 +19,7 @@ import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/reader/use_cases/coordinators/reader_chapter_navigation_resolver.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-abstract class ReaderV2TtsEngine extends ChangeNotifier {
+abstract class ReaderTtsEngine extends ChangeNotifier {
   bool get isPlaying;
   double get rate;
   double get pitch;
@@ -36,8 +36,8 @@ abstract class ReaderV2TtsEngine extends ChangeNotifier {
   Future<void> setLanguage(String value);
 }
 
-class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
-  ReaderV2SystemTtsEngine({TTSService? service})
+class ReaderSystemTtsEngine extends ReaderTtsEngine {
+  ReaderSystemTtsEngine({TTSService? service})
     : _service = service ?? TTSService() {
     _service.addListener(notifyListeners);
   }
@@ -84,14 +84,14 @@ class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
   }
 }
 
-class ReaderV2TtsController extends ChangeNotifier
-    implements ReaderV2TtsSheetController, PlaybackOwner {
-  ReaderV2TtsController({
+class ReaderTtsController extends ChangeNotifier
+    implements ReaderTtsSheetController, PlaybackOwner {
+  ReaderTtsController({
     required this.runtime,
-    ReaderV2TtsEngine? tts,
+    ReaderTtsEngine? tts,
     SystemPlayback? playback,
     @visibleForTesting DateTime Function()? now,
-  }) : _tts = tts ?? ReaderV2SystemTtsEngine(),
+  }) : _tts = tts ?? ReaderSystemTtsEngine(),
        _ownsTtsEngine = tts == null,
        _playback = playback ?? SystemPlayback.instance {
     sleepTimer = SleepTimer(onExpired: _pauseAtSentence, now: now);
@@ -103,16 +103,16 @@ class ReaderV2TtsController extends ChangeNotifier
     );
   }
 
-  final ReaderV2Runtime runtime;
-  final ReaderV2TtsEngine _tts;
+  final ReaderRuntime runtime;
+  final ReaderTtsEngine _tts;
   final bool _ownsTtsEngine;
   final SystemPlayback _playback;
   late final StreamSubscription<void> _completionSubscription;
 
   /// 念過的章節顯示的章名（含繁簡轉換與替換規則），系統播放資訊的標題用。
   final Map<int, String> _chapterTitles = <int, String>{};
-  ReaderV2Location? _speechStartLocation;
-  List<ReaderV2TtsSegment> _segments = const <ReaderV2TtsSegment>[];
+  ReaderLocation? _speechStartLocation;
+  List<ReaderTtsSegment> _segments = const <ReaderTtsSegment>[];
   int _segmentIndex = -1;
   int _speechGeneration = 0;
   late int _observedContentGeneration;
@@ -129,7 +129,7 @@ class ReaderV2TtsController extends ChangeNotifier
 
   /// 停在一句之後（[_pauseAtSentence]），播放鍵從這裡接著念；暫停時已停掉
   /// 引擎，只剩這個位置。
-  ReaderV2Location? _resumeLocation;
+  ReaderLocation? _resumeLocation;
 
   @override
   late final SleepTimer sleepTimer;
@@ -151,13 +151,13 @@ class ReaderV2TtsController extends ChangeNotifier
   double get pitch => _tts.pitch;
 
   String? get language => _tts.language;
-  ReaderV2Location? get speechStartLocation => _speechStartLocation;
+  ReaderLocation? get speechStartLocation => _speechStartLocation;
 
   /// 高亮目前朗讀的整個句段。
-  ReaderV2TtsHighlight? get currentHighlight {
+  ReaderTtsHighlight? get currentHighlight {
     final segment = _currentSegment;
     if (segment == null) return null;
-    return ReaderV2TtsHighlight(
+    return ReaderTtsHighlight(
       chapterIndex: segment.chapterIndex,
       sentenceStart: segment.startCharOffset,
       sentenceEnd: segment.endCharOffset,
@@ -221,7 +221,7 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 從 [location] 開始朗讀；這一章已沒有可念的內容就往後找下一個有正文的
   /// 章節。章節載入失敗或念到書尾時停下並告知，不默默跳過。
   Future<void> _speakFrom(
-    ReaderV2Location location, {
+    ReaderLocation location, {
     required int generation,
   }) async {
     var next = location;
@@ -242,7 +242,7 @@ class ReaderV2TtsController extends ChangeNotifier
             _finishSpeech(generation, notice: '已朗讀到書尾');
             return;
           }
-          next = ReaderV2Location(
+          next = ReaderLocation(
             chapterIndex: chapterIndex,
             charOffset: 0,
             visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
@@ -252,10 +252,10 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   Future<_SpeechStart> _startFromLocation(
-    ReaderV2Location location, {
+    ReaderLocation location, {
     required int generation,
   }) async {
-    final ReaderV2Content content;
+    final ReaderContent content;
     try {
       content = await runtime.loadContentForTts(location);
     } catch (_) {
@@ -436,7 +436,7 @@ class ReaderV2TtsController extends ChangeNotifier
   /// 從 [from] 往 [delta] 的方向數過去、跳過付費章節的那一章（ADR 0057）；
   /// 沒有時是 null。
   int? _chapterAfter(int from, int delta) =>
-      ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+      ReaderChapterNavigationResolver.resolveRelativeTarget(
         currentChapterIndex: from,
         chapterCount: runtime.chapterCount,
         delta: delta,
@@ -456,7 +456,7 @@ class ReaderV2TtsController extends ChangeNotifier
         : null;
   }
 
-  ReaderV2Location _chapterStart(int chapterIndex) => ReaderV2Location(
+  ReaderLocation _chapterStart(int chapterIndex) => ReaderLocation(
     chapterIndex: chapterIndex,
     charOffset: 0,
     visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
@@ -469,11 +469,11 @@ class ReaderV2TtsController extends ChangeNotifier
   void _pauseAtSentence() {
     final skipTarget = _pendingSkipTarget;
     final segment = _currentSegment;
-    final ReaderV2Location resumeLocation;
+    final ReaderLocation resumeLocation;
     if (skipTarget != null) {
       resumeLocation = _chapterStart(skipTarget);
     } else if (segment != null) {
-      resumeLocation = ReaderV2Location(
+      resumeLocation = ReaderLocation(
         chapterIndex: segment.chapterIndex,
         charOffset: segment.startCharOffset,
       );
@@ -553,7 +553,7 @@ class ReaderV2TtsController extends ChangeNotifier
     return !_disposed && generation == _speechGeneration;
   }
 
-  ReaderV2TtsSegment? get _currentSegment {
+  ReaderTtsSegment? get _currentSegment {
     final index = _segmentIndex;
     if (index < 0 || index >= _segments.length) return null;
     return _segments[index];
@@ -568,11 +568,11 @@ class ReaderV2TtsController extends ChangeNotifier
   Future<bool> _speakCurrentSegment(int generation) async {
     final segment = _currentSegment;
     if (segment == null) return _clearSpeechState(generation);
-    _speechStartLocation = ReaderV2Location(
+    _speechStartLocation = ReaderLocation(
       chapterIndex: segment.chapterIndex,
       charOffset: segment.startCharOffset,
     );
-    await _tts.speak(ReaderV2TtsSpeechText.prepare(segment.text));
+    await _tts.speak(ReaderTtsSpeechText.prepare(segment.text));
     if (!_isActiveGeneration(generation)) return false;
     notifyListeners();
     return true;
@@ -589,16 +589,16 @@ class ReaderV2TtsController extends ChangeNotifier
     _resumeLocation = null;
     _skipTarget = null;
     _speechStartLocation = null;
-    _segments = const <ReaderV2TtsSegment>[];
+    _segments = const <ReaderTtsSegment>[];
     _segmentIndex = -1;
   }
 
-  List<ReaderV2TtsSegment> _segmentsFor({
+  List<ReaderTtsSegment> _segmentsFor({
     required String text,
     required int chapterIndex,
     required int startOffset,
   }) {
-    final segments = const ReaderV2TtsSegmenter().segment(
+    final segments = const ReaderTtsSegmenter().segment(
       text: text,
       chapterIndex: chapterIndex,
       startOffset: startOffset,
@@ -607,7 +607,7 @@ class ReaderV2TtsController extends ChangeNotifier
     // 只從朗讀隊列略過，避免 TTS 一個個念「點」。
     return segments
         .where(
-          (segment) => ReaderV2TtsSpeechText.prepare(segment.text).isNotEmpty,
+          (segment) => ReaderTtsSpeechText.prepare(segment.text).isNotEmpty,
         )
         .toList(growable: false);
   }

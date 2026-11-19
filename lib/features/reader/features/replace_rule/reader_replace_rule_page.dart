@@ -24,15 +24,14 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/shared/widgets/drag_overflow_text.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
-class ReaderV2ReplaceRulePage extends StatefulWidget {
-  const ReaderV2ReplaceRulePage({super.key});
+class ReaderReplaceRulePage extends StatefulWidget {
+  const ReaderReplaceRulePage({super.key});
 
   @override
-  State<ReaderV2ReplaceRulePage> createState() =>
-      _ReaderV2ReplaceRulePageState();
+  State<ReaderReplaceRulePage> createState() => _ReaderReplaceRulePageState();
 }
 
-class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
+class _ReaderReplaceRulePageState extends State<ReaderReplaceRulePage> {
   final ReplaceRuleDao _replaceDao = getIt<ReplaceRuleDao>();
   bool _loading = true;
   Object? _loadError;
@@ -95,7 +94,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   }
 
   Future<void> _openEditor({ReplaceRule? rule}) async {
-    await ReaderV2ReplaceRuleEditorSheet.show(
+    await ReaderReplaceRuleEditorSheet.show(
       context,
       rule: rule,
       onSave: (next) async {

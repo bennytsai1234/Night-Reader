@@ -36,14 +36,14 @@ final _blocks = ChapterBlocks(
     ChapterBlock(
       key: BlockKey(chapterIndex: 0, blockIndex: 0),
       text: '第一章',
-      charRange: HybridTextRange(0, 3),
+      charRange: ChapterTextRange(0, 3),
       sourceParagraphIndex: -1,
       isTitle: true,
     ),
     ChapterBlock(
       key: BlockKey(chapterIndex: 0, blockIndex: 1),
       text: '正文',
-      charRange: HybridTextRange(5, 7),
+      charRange: ChapterTextRange(5, 7),
       sourceParagraphIndex: 0,
     ),
   ],

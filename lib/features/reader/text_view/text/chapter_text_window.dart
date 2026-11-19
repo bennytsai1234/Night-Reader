@@ -6,19 +6,19 @@ import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 
-typedef ReaderV2ContentLoader = Future<ReaderV2Content> Function(int index);
+typedef ReaderContentLoader = Future<ReaderContent> Function(int index);
 
-final class HybridChapterRepository {
-  HybridChapterRepository({
-    ReaderV2ChapterRepository? repository,
-    ReaderV2ContentLoader? loadContent,
+final class ChapterTextWindow {
+  ChapterTextWindow({
+    ReaderChapterRepository? repository,
+    ReaderContentLoader? loadContent,
     this.windowRadius = 2,
   }) : assert(repository != null || loadContent != null),
        _repository = repository,
        _loadContent = loadContent ?? repository!.loadContent;
 
-  final ReaderV2ChapterRepository? _repository;
-  final ReaderV2ContentLoader _loadContent;
+  final ReaderChapterRepository? _repository;
+  final ReaderContentLoader _loadContent;
 
   /// Minimum prefetch radius. The screen may widen the resident range from
   /// admitted viewport and lead geometry.
@@ -32,8 +32,8 @@ final class HybridChapterRepository {
   /// 取不到的章節。之後的 [load] 直接回報同一個失敗，不再對書源發請求；
   /// 使用者的動作（開書、跳章、捲到或翻到這一章的邊緣）才透過
   /// [forgetFailure]／[forgetFailures] 重試。
-  final Map<int, ReaderV2ContentUnavailableException> _failures =
-      <int, ReaderV2ContentUnavailableException>{};
+  final Map<int, ReaderContentUnavailableException> _failures =
+      <int, ReaderContentUnavailableException>{};
   int? _residentFirst;
   int? _residentLast;
   int _generation = 0;
@@ -53,7 +53,7 @@ final class HybridChapterRepository {
   Future<ChapterText> load(ChapterId id) {
     if (_disposed) {
       return Future<ChapterText>.error(
-        StateError('HybridChapterRepository has been disposed.'),
+        StateError('ChapterTextWindow has been disposed.'),
       );
     }
     final cached = _window.remove(id);
@@ -68,10 +68,10 @@ final class HybridChapterRepository {
     final generation = _generation;
     late final Future<ChapterText> task;
     task = () async {
-      final ReaderV2Content content;
+      final ReaderContent content;
       try {
         content = await _loadContent(id);
-      } on ReaderV2ContentUnavailableException catch (error) {
+      } on ReaderContentUnavailableException catch (error) {
         if (!_disposed && generation == _generation) _failures[id] = error;
         rethrow;
       }
@@ -120,12 +120,12 @@ final class HybridChapterRepository {
   Future<void> _prefetch(int index) async {
     try {
       await load(index);
-    } on ReaderV2ContentUnavailableException {
+    } on ReaderContentUnavailableException {
       // Residency warming is speculative. External unavailability is allowed
       // to stop this prefetch without pretending the operation was cancelled.
     } catch (error, stackTrace) {
       AppLog.e(
-        'Hybrid chapter prefetch failed unexpectedly for chapter $index',
+        'Text view chapter prefetch failed unexpectedly for chapter $index',
         error: error,
         stackTrace: stackTrace,
       );
@@ -133,7 +133,7 @@ final class HybridChapterRepository {
     }
   }
 
-  ReaderV2ContentUnavailableException? failureOf(ChapterId id) => _failures[id];
+  ReaderContentUnavailableException? failureOf(ChapterId id) => _failures[id];
 
   void forgetFailure(ChapterId id) => _failures.remove(id);
 
@@ -160,7 +160,7 @@ final class HybridChapterRepository {
     await _events.close();
   }
 
-  ChapterText _adapt(ReaderV2Content content) {
+  ChapterText _adapt(ReaderContent content) {
     return ChapterText(
       id: content.chapterIndex,
       title: content.title,

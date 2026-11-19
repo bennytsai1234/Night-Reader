@@ -2,15 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// 電量與充電狀態。
-final class ReaderV2Battery {
-  const ReaderV2Battery({required this.percent, required this.charging});
+final class ReaderBattery {
+  const ReaderBattery({required this.percent, required this.charging});
 
   final int percent;
   final bool charging;
 }
 
-/// `MainActivity` 攔下音量鍵時的通知對象，見 [ReaderV2DeviceChannel.volumeKeyListener]。
-abstract interface class ReaderV2VolumeKeyListener {
+/// `MainActivity` 攔下音量鍵時的通知對象，見 [ReaderDeviceChannel.volumeKeyListener]。
+abstract interface class ReaderVolumeKeyListener {
   /// 攔下的音量鍵，參數 true 是音量下。
   void onVolumeKey(bool forward);
 
@@ -23,7 +23,7 @@ abstract interface class ReaderV2VolumeKeyListener {
 ///
 /// 原生端在 `MainActivity`；iOS 的 `AppDelegate` 只實作電量與螢幕常亮。
 /// 沒有對應 handler 的平台，查詢回傳 null、設定不做事、電量串流不發出資料。
-abstract final class ReaderV2DeviceChannel {
+abstract final class ReaderDeviceChannel {
   static const MethodChannel _device = MethodChannel(
     'night_reader/reader_device',
   );
@@ -64,11 +64,11 @@ abstract final class ReaderV2DeviceChannel {
   static bool get supportsVolumeKeys =>
       defaultTargetPlatform == TargetPlatform.android;
 
-  static ReaderV2VolumeKeyListener? _volumeKeyListener;
+  static ReaderVolumeKeyListener? _volumeKeyListener;
 
   /// 收 `MainActivity` 的音量鍵通知；同一時間只有一個（目前的閱讀器）。
-  static ReaderV2VolumeKeyListener? get volumeKeyListener => _volumeKeyListener;
-  static set volumeKeyListener(ReaderV2VolumeKeyListener? listener) {
+  static ReaderVolumeKeyListener? get volumeKeyListener => _volumeKeyListener;
+  static set volumeKeyListener(ReaderVolumeKeyListener? listener) {
     _volumeKeyListener = listener;
     _device.setMethodCallHandler(
       listener == null
@@ -97,17 +97,17 @@ abstract final class ReaderV2DeviceChannel {
     }
   }
 
-  static ReaderV2Battery? _latestBattery;
+  static ReaderBattery? _latestBattery;
 
   /// 最近一次收到的電量；新訂閱者先以它顯示，不必等下一次變化。
-  static ReaderV2Battery? get latestBattery => _latestBattery;
+  static ReaderBattery? get latestBattery => _latestBattery;
 
   /// 所有訂閱者共用同一個原生訂閱；最後一個訂閱者取消時原生端停止監聽。
-  static final Stream<ReaderV2Battery> battery = _battery
+  static final Stream<ReaderBattery> battery = _battery
       .receiveBroadcastStream()
       .map((event) {
         final data = event as Map<Object?, Object?>;
-        return _latestBattery = ReaderV2Battery(
+        return _latestBattery = ReaderBattery(
           percent: data['percent']! as int,
           charging: data['charging']! as bool,
         );

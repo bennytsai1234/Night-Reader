@@ -24,9 +24,9 @@ void main() {
           // 右邊一欄點了翻下一頁，其餘叫出選單。
           PreferKey.readerClickActions: [
             for (var row = 0; row < 3; row++) ...[
-              ReaderV2TapAction.menu.code,
-              ReaderV2TapAction.menu.code,
-              ReaderV2TapAction.nextPage.code,
+              ReaderTapAction.menu.code,
+              ReaderTapAction.menu.code,
+              ReaderTapAction.nextPage.code,
             ],
           ].join(','),
         },
@@ -40,7 +40,7 @@ void main() {
     const centre = Offset(196, 420);
     const rightColumn = Offset(340, 420);
     final runtime = tester
-        .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+        .widget<ReaderTextView>(find.byType(ReaderTextView))
         .runtime;
     bool menuAt(double shown) => find
         .byType(GlassSlide)
@@ -62,8 +62,8 @@ void main() {
       previous?.call(element, builtOnce);
       final type = element.widget.runtimeType;
       if (menuParts.contains(type) &&
-          element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null &&
-          element.findAncestorWidgetOfExactType<ReaderV2BottomMenu>() == null) {
+          element.findAncestorWidgetOfExactType<ReaderTopMenu>() == null &&
+          element.findAncestorWidgetOfExactType<ReaderBottomMenu>() == null) {
         return;
       }
       rebuilds[type] = (rebuilds[type] ?? 0) + 1;
@@ -95,12 +95,12 @@ void main() {
 
     expect(rebuilds[GlassSlide] ?? 0, greaterThan(0), reason: '選單要真的滑動');
     for (final type in [
-      ReaderV2Page,
-      ReaderV2PageShell,
-      HybridReaderScreen,
-      ReaderV2TopMenu,
-      ReaderV2BottomMenu,
-      ReaderV2BrightnessBar,
+      ReaderPage,
+      ReaderPageShell,
+      ReaderTextView,
+      ReaderTopMenu,
+      ReaderBottomMenu,
+      ReaderBrightnessBar,
       ...menuParts,
     ]) {
       expect(rebuilds[type] ?? 0, 0, reason: '選單開關不應重建 $type');

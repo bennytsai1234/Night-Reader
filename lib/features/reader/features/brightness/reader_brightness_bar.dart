@@ -6,12 +6,12 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
 
 /// 閱讀選單左側的亮度條：上方一顆「自動」鈕，下方一條直立膠囊，亮度從下
-/// 往上填滿。膠囊中的細線以下是加暗段（[ReaderV2Brightness.dimZone]），
+/// 往上填滿。膠囊中的細線以下是加暗段（[ReaderBrightness.dimZone]），
 /// 填色換成主色。跟隨系統時膠囊變淡，一拖就改成自己的亮度。
 ///
 /// 膠囊撐滿父層給的高度（減去自動鈕），由選單決定整條多長。
-class ReaderV2BrightnessBar extends StatelessWidget {
-  const ReaderV2BrightnessBar({
+class ReaderBrightnessBar extends StatelessWidget {
+  const ReaderBrightnessBar({
     super.key,
     required this.auto,
     required this.level,
@@ -44,7 +44,7 @@ class ReaderV2BrightnessBar extends StatelessWidget {
   }
 
   Widget _buildBar(BuildContext context) {
-    final menuStyle = ReaderV2MenuStyle.of(context);
+    final menuStyle = ReaderMenuStyle.of(context);
     final tint = menuStyle.glassTintOf(context);
     return Column(
       children: [
@@ -84,7 +84,7 @@ class _BrightnessPill extends StatefulWidget {
   final bool auto;
   final double level;
   final Color tint;
-  final ReaderV2MenuStyle menuStyle;
+  final ReaderMenuStyle menuStyle;
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
 
@@ -96,7 +96,7 @@ class _BrightnessPillState extends State<_BrightnessPill> {
   static const double _step = 0.05;
   static const double _iconSize = 22;
   double? _dragLevel;
-  double _height = ReaderV2BrightnessBar.minPillHeight;
+  double _height = ReaderBrightnessBar.minPillHeight;
 
   double _levelAt(double dy) => (1 - dy / _height).clamp(0.0, 1.0).toDouble();
 
@@ -132,7 +132,7 @@ class _BrightnessPillState extends State<_BrightnessPill> {
   Widget _buildPill() {
     final menuStyle = widget.menuStyle;
     final level = _dragLevel ?? widget.level;
-    final inDimZone = level < ReaderV2Brightness.dimZone;
+    final inDimZone = level < ReaderBrightness.dimZone;
     final fillColor = inDimZone ? menuStyle.accent : menuStyle.foreground;
     final fillOpacity = widget.auto && _dragLevel == null ? 0.3 : 0.85;
     // 圖示整個被填色蓋住時改用選單底色，否則用前景色。
@@ -176,7 +176,7 @@ class _BrightnessPillState extends State<_BrightnessPill> {
                   Positioned(
                     left: AppSpacing.md,
                     right: AppSpacing.md,
-                    bottom: _height * ReaderV2Brightness.dimZone - 1,
+                    bottom: _height * ReaderBrightness.dimZone - 1,
                     height: 2,
                     child: DecoratedBox(
                       decoration: BoxDecoration(

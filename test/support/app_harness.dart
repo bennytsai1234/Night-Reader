@@ -119,7 +119,7 @@ Future<void> setUpApp({
   // 整個程式共用、存著 future 的東西，上一個測試留下的會在上一個測試的
   // zone 裡通知等的人，那個假時鐘已經沒人推動，這個測試開書就一直等不到
   // 正文：正文轉換的 worker，與 rootBundle 快取的字典字串。
-  ReaderV2ContentTransformWorker.instance.stop();
+  ReaderContentTransformWorker.instance.stop();
   rootBundle.clear();
   SharedPreferences.setMockInitialValues(_harnessPrefs(prefs));
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
@@ -474,7 +474,10 @@ Future<void> startApp(WidgetTester tester) async {
   PunctuationInk.resetForTest(measure: false);
   addTearDown(PunctuationInk.resetForTest);
   await tester.pumpWidget(
-    MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
+    MultiProvider(
+      providers: AppProviders.providers,
+      child: const NightReaderApp(),
+    ),
   );
 }
 

@@ -14,7 +14,7 @@ import 'package:night_reader/features/reader/layout/reader_typography.dart';
 /// 全形標點 1000、英文字母 500、i 與 l 250、數字 600、空格 250、😀 1200。
 /// 字級 20，所以一格 20px、半格 10px、最小間隙 1/8 格 = 2.5px。
 const double _cell = 20;
-const _style = HybridBlockTextStyle(
+const _style = BlockTextStyle(
   fontSize: _cell,
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -87,7 +87,7 @@ void main() {
   setUpAll(() async {
     final bytes = File('test/fixtures/fonts/mixed_width_test.ttf')
         .readAsBytesSync();
-    final loader = FontLoader(kReaderV2PunctFontFamily)
+    final loader = FontLoader(kReaderPunctFontFamily)
       ..addFont(Future<ByteData>.value(ByteData.sublistView(bytes)));
     await loader.load();
   });
@@ -107,7 +107,7 @@ void main() {
     // 在容許誤差 0.01 內，補到 10。補白 4.995 比兩側間隙之和少一點點：
     // 原本 clamp 的下限比上限大，閱讀器排版時拋例外（0.3.6-beta.4 的
     // 崩潰日誌）。
-    const style = HybridBlockTextStyle(
+    const style = BlockTextStyle(
       fontSize: _cell,
       lineHeight: 1.5,
       letterSpacing: 0.005,

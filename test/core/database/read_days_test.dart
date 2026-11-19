@@ -95,7 +95,7 @@ void main() {
     final dao = ReadRecordDao(db);
     var now = DateTime(2026, 10, 15, 21);
     var currentName = '舊書名';
-    final timer = ReaderV2ReadTimeController(
+    final timer = ReaderReadTimeController(
       bookName: () async => currentName,
       readRecordDao: dao,
       now: () => now,

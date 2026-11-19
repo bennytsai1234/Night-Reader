@@ -58,7 +58,7 @@ final Directory polishDir = Directory(
 typedef Steps = Future<void> Function(WidgetTester tester);
 
 /// 頁首頁尾放滿每一種欄位：A、B 兩組合起來八種都有。代碼見
-/// `ReaderV2InfoItem`。
+/// `ReaderInfoItem`。
 const _infoA = <String, Object>{
   PreferKey.readerHeaderInfo: '2,8', // 書名｜電量（含圖示）
   PreferKey.readerFooterInfo: '3,6', // 章節名稱｜全書進度

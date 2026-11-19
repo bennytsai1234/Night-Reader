@@ -2,7 +2,7 @@
 /// 裡是哪個範圍。
 ///
 /// [source] 是替換規則全部套用之後、排版整理之前的那一段
-/// （`ReaderV2ContentTransformer.ruleStageParagraphs`），[shown] 是它經過排版
+/// （`ReaderContentTransformer.ruleStageParagraphs`），[shown] 是它經過排版
 /// 整理（標點換成全形、刪掉中文之間的空白、`...` 變 `……`）與繁簡轉換後畫
 /// 在畫面上的樣子。兩邊逐字對齊：略過空白，漢字只認位置（繁簡轉換一字換
 /// 一字），英數字不分全半形，其他標點與符號只認位置。刪節號與破折號排版時

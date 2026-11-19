@@ -8,7 +8,7 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 /// 第幾個字還要照那一章目前的正文解析），往後畫 [length] 個字。
 typedef ReaderHighlightMark = ({
   int id,
-  ReaderV2Location location,
+  ReaderLocation location,
   int length,
   HighlightColor color,
   HighlightStyle style,
@@ -16,7 +16,7 @@ typedef ReaderHighlightMark = ({
 
 /// 一個標註在 viewport 上的字形範圍，每條視覺行一個框。
 typedef HighlightPaint = ({
-  List<HybridLineBox> boxes,
+  List<LineBox> boxes,
   HighlightColor color,
   HighlightStyle style,
 });
@@ -65,7 +65,7 @@ final class HighlightMarksPainter extends CustomPainter {
   static const Radius _radius = Radius.circular(4);
 
   /// 底色略為外擴，包住字形而不是切齊字緣（同朗讀高亮）。
-  static Rect fillRectOf(HybridLineBox box) =>
+  static Rect fillRectOf(LineBox box) =>
       Rect.fromLTRB(box.left - 2, box.top, box.right + 2, box.bottom);
 
   @override
@@ -117,7 +117,7 @@ final class HighlightMarksPainter extends CustomPainter {
     return false;
   }
 
-  static bool _sameBoxes(List<HybridLineBox> a, List<HybridLineBox> b) {
+  static bool _sameBoxes(List<LineBox> a, List<LineBox> b) {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i += 1) {

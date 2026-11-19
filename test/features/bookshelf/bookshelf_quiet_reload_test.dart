@@ -146,14 +146,10 @@ void main() {
     await settle(tester, const Duration(milliseconds: 300));
 
     await tester.tap(tileOf('夜雨聽書'));
-    for (
-      var i = 0;
-      i < 30 && find.byType(ReaderV2Page).evaluate().isEmpty;
-      i++
-    ) {
+    for (var i = 0; i < 30 && find.byType(ReaderPage).evaluate().isEmpty; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
-    final reader = tester.widget<ReaderV2Page>(find.byType(ReaderV2Page));
+    final reader = tester.widget<ReaderPage>(find.byType(ReaderPage));
     expect(reader.book.charOffset, 120, reason: '從新的位置打開');
     await settle(tester, const Duration(seconds: 1));
     await close(tester);

@@ -5,7 +5,7 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 
 /// 正文裡一個書籤的位置：[location] 的章節序號已經對到這台的目錄，章內
 /// 第幾個字還要照那一章目前的正文解析（正文變了照錨點找回同一句）。
-typedef ReaderMark = ({int id, ReaderV2Location location});
+typedef ReaderMark = ({int id, ReaderLocation location});
 
 /// 書籤在正文旁的記號：書籤那一句開頭那一行，左側邊距畫一條細短線
 /// （使用者 2026-11-02 從緞帶、短線、圓點三個候選選定）。
@@ -20,7 +20,7 @@ final class BookmarkMarksOverlay extends StatelessWidget {
     required this.color,
   });
 
-  final List<HybridLineBox> lines;
+  final List<LineBox> lines;
 
   /// 正文欄的左緣（viewport 座標），也就是左邊距的寬。
   final double textLeft;
@@ -47,7 +47,7 @@ final class _BookmarkMarksPainter extends CustomPainter {
     required this.color,
   });
 
-  final List<HybridLineBox> lines;
+  final List<LineBox> lines;
   final double textLeft;
   final Color color;
 
@@ -85,7 +85,7 @@ final class _BookmarkMarksPainter extends CustomPainter {
       old.textLeft != textLeft ||
       !_sameLines(old.lines, lines);
 
-  static bool _sameLines(List<HybridLineBox> a, List<HybridLineBox> b) {
+  static bool _sameLines(List<LineBox> a, List<LineBox> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i].top != b[i].top || a[i].bottom != b[i].bottom) return false;

@@ -27,18 +27,13 @@ final class ReaderMarkGeometry {
   });
 
   /// 目前排版世代的排版管線；換代時整份換新，所以每次都重新取。
-  final HybridLayoutPipeline Function() _pipeline;
+  final LayoutPipeline Function() _pipeline;
   final DocumentIndex _documentIndex;
   final double? Function() _scrollOffset;
 
   final Map<
     int,
-    ({
-      ReaderV2Location location,
-      ChapterBlocks blocks,
-      int revision,
-      HybridLineBox box,
-    })
+    ({ReaderLocation location, ChapterBlocks blocks, int revision, LineBox box})
   >
   _markBoxes = {};
 
@@ -48,19 +43,19 @@ final class ReaderMarkGeometry {
       ReaderHighlightMark mark,
       ChapterBlocks blocks,
       int revision,
-      HybridTextRange range,
-      List<HybridLineBox> boxes,
+      ChapterTextRange range,
+      List<LineBox> boxes,
     })
   >
   _highlightBoxes = {};
 
   /// 書籤那一行在 viewport 上的行框；那一章還沒排好的不畫。
-  List<HybridLineBox> bookmarkLines(List<ReaderMark> marks) {
+  List<LineBox> bookmarkLines(List<ReaderMark> marks) {
     final scroll = _scrollOffset();
-    if (marks.isEmpty || scroll == null) return const <HybridLineBox>[];
+    if (marks.isEmpty || scroll == null) return const <LineBox>[];
     final pipeline = _pipeline();
     final revision = _documentIndex.revisionNumber;
-    final lines = <HybridLineBox>[];
+    final lines = <LineBox>[];
     final seen = <int>{};
     for (final (:id, :location) in marks) {
       seen.add(id);
@@ -72,7 +67,7 @@ final class ReaderMarkGeometry {
           !identical(cached.blocks, blocks) ||
           cached.revision != revision) {
         final text = blocks.displayText;
-        final offset = ReaderV2ContentLocationMapper.offsetIn(
+        final offset = ReaderContentLocationMapper.offsetIn(
           location: location,
           displayText: text,
           contentHash: blocks.contentHash,
@@ -167,11 +162,11 @@ final class ReaderMarkGeometry {
   }
 
   /// [start, end) 在 viewport 上的字形範圍，每條視覺行一個框（見
-  /// [HybridTextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
-  List<HybridLineBox> lineBoxes(int chapterIndex, int start, int end) {
+  /// [TextGeometry.lineBoxes]）；每幀只扣掉捲動位置。
+  List<LineBox> lineBoxes(int chapterIndex, int start, int end) {
     final scroll = _scrollOffset();
-    if (scroll == null) return const <HybridLineBox>[];
-    return <HybridLineBox>[
+    if (scroll == null) return const <LineBox>[];
+    return <LineBox>[
       for (final box in _pipeline().geometry.lineBoxes(
         chapterIndex,
         start,
@@ -183,29 +178,28 @@ final class ReaderMarkGeometry {
 
   /// 標註在那一章正文裡的範圍：開頭照錨點找回（正文變了照前後原文），往
   /// 後畫記下的那麼長，不超出那一章。
-  static HybridTextRange _highlightRangeIn(
+  static ChapterTextRange _highlightRangeIn(
     ReaderHighlightMark mark,
     ChapterBlocks blocks,
   ) {
     final text = blocks.displayText;
-    final start = ReaderV2ContentLocationMapper.offsetIn(
+    final start = ReaderContentLocationMapper.offsetIn(
       location: mark.location,
       displayText: text,
       contentHash: blocks.contentHash,
     ).clamp(0, text.length - 1).toInt();
-    return HybridTextRange(
+    return ChapterTextRange(
       start,
       math.min(text.length, start + math.max(1, mark.length)),
     );
   }
 
-  static HybridLineBox _scrolled(HybridLineBox box, double scroll) =>
-      HybridLineBox(
-        left: box.left,
-        top: box.top - scroll,
-        right: box.right,
-        bottom: box.bottom - scroll,
-      );
+  static LineBox _scrolled(LineBox box, double scroll) => LineBox(
+    left: box.left,
+    top: box.top - scroll,
+    right: box.right,
+    bottom: box.bottom - scroll,
+  );
 }
 
 /// 疊在正文上、跟著捲動的三層：標註、書籤記號、朗讀高亮（由下而上）。
@@ -236,7 +230,7 @@ final class ReaderMarkLayers extends StatelessWidget {
   final double highlightStrength;
   final ValueListenable<List<ReaderHighlightMark>>? highlights;
   final ValueListenable<List<ReaderMark>>? marks;
-  final ReaderV2TtsHighlight? ttsHighlight;
+  final ReaderTtsHighlight? ttsHighlight;
 
   @override
   Widget build(BuildContext context) {
@@ -291,7 +285,7 @@ final class ReaderMarkLayers extends StatelessWidget {
             child: ClipRect(
               child: ListenableBuilder(
                 listenable: scroll,
-                builder: (context, _) => HybridTtsHighlightOverlay(
+                builder: (context, _) => TtsHighlightOverlay(
                   sentence: geometry.lineBoxes(
                     tts.chapterIndex,
                     tts.sentenceStart,

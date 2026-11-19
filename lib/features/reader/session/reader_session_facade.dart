@@ -5,13 +5,13 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
 
-class ReaderV2SessionFacade {
-  const ReaderV2SessionFacade();
+class ReaderSessionFacade {
+  const ReaderSessionFacade();
 
   Future<void> addCurrentBookToBookshelf({
     required Book book,
     required List<BookChapter> chapters,
-    required ReaderV2Location location,
+    required ReaderLocation location,
     required String chapterTitle,
     required BookDao bookDao,
     required ChapterDao chapterDao,

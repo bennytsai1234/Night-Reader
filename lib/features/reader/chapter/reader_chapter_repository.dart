@@ -26,13 +26,13 @@ import 'package:night_reader/features/reader/text_view/progress/chapter_shares.d
 import 'reader_content.dart';
 import 'reader_content_transformer.dart';
 
-typedef ReaderV2TestContentLoader = Future<String?> Function(
+typedef ReaderTestContentLoader = Future<String?> Function(
   int chapterIndex,
   BookChapter chapter,
 );
 
-final class ReaderV2ContentUnavailableException implements Exception {
-  const ReaderV2ContentUnavailableException(this.message);
+final class ReaderContentUnavailableException implements Exception {
+  const ReaderContentUnavailableException(this.message);
 
   final String message;
 
@@ -40,8 +40,8 @@ final class ReaderV2ContentUnavailableException implements Exception {
   String toString() => message;
 }
 
-class ReaderV2ChapterRepository {
-  ReaderV2ChapterRepository({
+class ReaderChapterRepository {
+  ReaderChapterRepository({
     required this.book,
     List<BookChapter> initialChapters = const <BookChapter>[],
     BookDao? bookDao,
@@ -91,16 +91,16 @@ class ReaderV2ChapterRepository {
   /// Test-only seam. When absent, the production content pipeline is
   /// unchanged. A supplied loader may hold a chapter future to reproduce a
   /// deterministic in-flight state without changing rendering behaviour.
-  final ReaderV2TestContentLoader? contentLoader;
-  final ReaderV2ContentTransformer _contentTransformer =
-      const ReaderV2ContentTransformer();
+  final ReaderTestContentLoader? contentLoader;
+  final ReaderContentTransformer _contentTransformer =
+      const ReaderContentTransformer();
 
   List<BookChapter> _chapters;
   BookSource? _source;
   static const int _maxContentCacheSize = 20;
-  final Map<int, ReaderV2Content> _contentCache = <int, ReaderV2Content>{};
-  final Map<int, Future<ReaderV2Content>> _contentInFlight =
-      <int, Future<ReaderV2Content>>{};
+  final Map<int, ReaderContent> _contentCache = <int, ReaderContent>{};
+  final Map<int, Future<ReaderContent>> _contentInFlight =
+      <int, Future<ReaderContent>>{};
   int _contentCacheGeneration = 0;
   int _contentGeneration = 0;
   final Map<int, String> _materializedContentIdentities = <int, String>{};
@@ -147,13 +147,13 @@ class ReaderV2ChapterRepository {
     final source = await _ensureSource();
     if (source == null) {
       if (book.isLocal) {
-        throw const ReaderV2ContentUnavailableException('本地書籍章節目錄不存在，請重新匯入');
+        throw const ReaderContentUnavailableException('本地書籍章節目錄不存在，請重新匯入');
       }
-      throw const ReaderV2ContentUnavailableException('章節目錄載入失敗: 找不到書源');
+      throw const ReaderContentUnavailableException('章節目錄載入失敗: 找不到書源');
     }
     final fetched = await _loadChapterListFromSource(source);
     if (fetched.isEmpty) {
-      throw const ReaderV2ContentUnavailableException('章節目錄載入失敗: 目錄為空');
+      throw const ReaderContentUnavailableException('章節目錄載入失敗: 目錄為空');
     }
     for (var i = 0; i < fetched.length; i++) {
       fetched[i].index = i;
@@ -189,9 +189,9 @@ class ReaderV2ChapterRepository {
   /// 每章佔全書多少（全書進度用）。本地書照每章在檔案裡的位元組範圍；
   /// 網路書照下載好的正文的位元組數，還沒下載的章照已下載的平均。分卷
   /// 標題沒有正文，佔 0。
-  Future<ReaderV2ChapterShares> loadChapterShares() async {
+  Future<ReaderChapterShares> loadChapterShares() async {
     final chapters = _chapters;
-    if (chapters.isEmpty) return const ReaderV2ChapterShares.even(0);
+    if (chapters.isEmpty) return const ReaderChapterShares.even(0);
     Map<String, int> stored = const <String, int>{};
     if (!book.isLocal) {
       stored =
@@ -201,7 +201,7 @@ class ReaderV2ChapterRepository {
           ) ??
           const <String, int>{};
     }
-    return ReaderV2ChapterShares.fromLengths([
+    return ReaderChapterShares.fromLengths([
       for (final chapter in chapters)
         if (chapter.isVolume)
           0
@@ -220,11 +220,11 @@ class ReaderV2ChapterRepository {
     } on DioException catch (error) {
       if (error.type == DioExceptionType.cancel) rethrow;
       final status = error.response?.statusCode;
-      throw ReaderV2ContentUnavailableException(
+      throw ReaderContentUnavailableException(
         status == null ? '章節目錄載入失敗: 網路錯誤' : '章節目錄載入失敗: 伺服器回應 $status',
       );
     } on AppException catch (error) {
-      throw ReaderV2ContentUnavailableException('章節目錄載入失敗: ${error.message}');
+      throw ReaderContentUnavailableException('章節目錄載入失敗: ${error.message}');
     }
   }
 
@@ -237,7 +237,7 @@ class ReaderV2ChapterRepository {
     return chapterAt(chapterIndex)?.title ?? '';
   }
 
-  Future<ReaderV2Content> loadContent(int chapterIndex) async {
+  Future<ReaderContent> loadContent(int chapterIndex) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     final cached = _contentCache.remove(safeIndex);
@@ -247,7 +247,7 @@ class ReaderV2ChapterRepository {
     }
     final inFlight = _contentInFlight[safeIndex];
     if (inFlight != null) return inFlight;
-    late final Future<ReaderV2Content> task;
+    late final Future<ReaderContent> task;
     task = _loadContentUncached(safeIndex, _contentCacheGeneration);
     _contentInFlight[safeIndex] = task;
     try {
@@ -259,14 +259,13 @@ class ReaderV2ChapterRepository {
     }
   }
 
-  Future<ReaderV2Content?> preloadContent(int chapterIndex) async {
+  Future<ReaderContent?> preloadContent(int chapterIndex) async {
     await ensureChapters();
     if (!_isValidChapterIndex(chapterIndex)) return null;
     return loadContent(chapterIndex);
   }
 
-  ReaderV2Content? cachedContent(int chapterIndex) =>
-      _contentCache[chapterIndex];
+  ReaderContent? cachedContent(int chapterIndex) => _contentCache[chapterIndex];
 
   /// Monotonic generation for the committed semantic document.
   ///
@@ -285,13 +284,13 @@ class ReaderV2ChapterRepository {
   /// proves that its committed identity changed outside this repository.
   ///
   /// [refetch] 先向書源重抓這一章、成功才換掉存著的正文（書源回了擋爬蟲頁
-  /// 或不完整的正文時用）；抓不到就丟出 [ReaderV2ContentUnavailableException]，
+  /// 或不完整的正文時用）；抓不到就丟出 [ReaderContentUnavailableException]，
   /// 存著的正文與閱讀中的內容都不變。
-  Future<ReaderV2Content> reloadContent(
+  Future<ReaderContent> reloadContent(
     int chapterIndex, {
     bool refetch = false,
   }) {
-    final result = Completer<ReaderV2Content>();
+    final result = Completer<ReaderContent>();
     _reloadTail = _reloadTail.then((_) async {
       try {
         result.complete(
@@ -304,13 +303,13 @@ class ReaderV2ChapterRepository {
     return result.future;
   }
 
-  Future<ReaderV2Content> _reloadContentTransaction(
+  Future<ReaderContent> _reloadContentTransaction(
     int chapterIndex, {
     required bool refetch,
   }) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
-    final previousCache = Map<int, ReaderV2Content>.from(_contentCache);
+    final previousCache = Map<int, ReaderContent>.from(_contentCache);
     final previousSource = _source;
     final previousRules = _enabledRules;
     final previousRulesRevision = _rulesRevision;
@@ -358,18 +357,18 @@ class ReaderV2ChapterRepository {
     }
   }
 
-  Future<ReaderV2Content> _loadContentUncached(
+  Future<ReaderContent> _loadContentUncached(
     int chapterIndex,
     int cacheGeneration,
   ) async {
     final chapter = chapterAt(chapterIndex);
     if (chapter == null) {
-      throw const ReaderV2ContentUnavailableException('章節內容載入失敗: 找不到章節');
+      throw const ReaderContentUnavailableException('章節內容載入失敗: 找不到章節');
     }
     final testLoader = contentLoader;
     if (testLoader != null) {
       final rawContent = await testLoader(chapterIndex, chapter);
-      final content = ReaderV2Content.fromRaw(
+      final content = ReaderContent.fromRaw(
         chapterIndex: chapterIndex,
         title: chapter.title,
         rawText: rawContent ?? chapter.content ?? '',
@@ -379,7 +378,7 @@ class ReaderV2ChapterRepository {
       }
       return content;
     }
-    final loaded = await _loadViaV2ContentPipeline(
+    final loaded = await _loadViaContentPipeline(
       chapterIndex,
       chapter,
       cacheGeneration,
@@ -391,7 +390,7 @@ class ReaderV2ChapterRepository {
       return loaded;
     }
 
-    final content = ReaderV2Content.fromRaw(
+    final content = ReaderContent.fromRaw(
       chapterIndex: chapterIndex,
       title: chapter.title,
       rawText: (chapter.content ?? '').trim(),
@@ -402,12 +401,12 @@ class ReaderV2ChapterRepository {
     return content;
   }
 
-  void _writeToContentCache(int chapterIndex, ReaderV2Content content) {
+  void _writeToContentCache(int chapterIndex, ReaderContent content) {
     final previousIdentity = _materializedContentIdentities[chapterIndex];
     if (previousIdentity != null && previousIdentity != content.contentHash) {
       // Persistent acquisition can change outside the active Reader (for
       // example a downloader refresh). The content owner recognizes that
-      // identity transition here; Hybrid must never infer it from layout.
+      // identity transition here; the text view must never infer it from layout.
       _contentGeneration += 1;
     }
     _materializedContentIdentities[chapterIndex] = content.contentHash;
@@ -475,7 +474,7 @@ class ReaderV2ChapterRepository {
       saveChapterMetadata: !book.isLocal,
     );
     if (fetched.isFailed) {
-      throw ReaderV2ContentUnavailableException(
+      throw ReaderContentUnavailableException(
         (fetched.failureMessage ?? fetched.content).trim(),
       );
     }
@@ -503,7 +502,7 @@ class ReaderV2ChapterRepository {
     );
   }
 
-  Future<ReaderV2Content?> _loadViaV2ContentPipeline(
+  Future<ReaderContent?> _loadViaContentPipeline(
     int chapterIndex,
     BookChapter chapter,
     int cacheGeneration,
@@ -513,7 +512,7 @@ class ReaderV2ChapterRepository {
         book.bookUrl.startsWith('local://') &&
         localExtension.isNotEmpty &&
         !isSupportedLocalBookPath(book.bookUrl)) {
-      throw const ReaderV2ContentUnavailableException(
+      throw const ReaderContentUnavailableException(
         '本地書格式不受支援，請使用 TXT 或 EPUB 檔案',
       );
     }
@@ -525,7 +524,7 @@ class ReaderV2ChapterRepository {
       saveChapterMetadata: !book.isLocal,
     );
     if (prepared.isFailed) {
-      throw ReaderV2ContentUnavailableException(
+      throw ReaderContentUnavailableException(
         (prepared.failureMessage ?? prepared.content).trim(),
       );
     }
@@ -543,8 +542,8 @@ class ReaderV2ChapterRepository {
             : null,
         onRuleTimedOut: _disableTimedOutRule,
       );
-    } on ReaderV2ContentTransformException catch (error) {
-      throw ReaderV2ContentUnavailableException(error.message);
+    } on ReaderContentTransformException catch (error) {
+      throw ReaderContentUnavailableException(error.message);
     }
   }
 
@@ -565,7 +564,7 @@ class ReaderV2ChapterRepository {
   bool _disposed = false;
 
   /// 套用正文時跑超過逾時的規則照 Legado 停用：開關關掉、存進資料庫，之後
-  /// 的章不再帶它；這一章照其他規則處理完（[ReaderV2ContentTransformWorker]）。
+  /// 的章不再帶它；這一章照其他規則處理完（[ReaderContentTransformWorker]）。
   /// 快取當下就作廢：重新讀規則排在停用之後，讀到的是停用後的。
   ///
   /// 停用一定要讓讀者看到提示（[onReplaceRuleDisabled]）。閱讀器已經關掉

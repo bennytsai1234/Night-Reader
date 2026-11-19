@@ -8,7 +8,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 閱讀器左側的面板：一直掛著、先建好再滑，其他照系統抽屜。
 void main() {
-  late ReaderV2SidePanelController panel;
+  late ReaderSidePanelController panel;
   late int panelBuilds;
   late int bodyTaps;
   late List<bool> openChanges;
@@ -25,7 +25,7 @@ void main() {
     WidgetTester tester, {
     ValueNotifier<Brightness>? brightness,
   }) async {
-    panel = ReaderV2SidePanelController();
+    panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
     late StateSetter rebuildPage;
     var pageBuilds = 0;
@@ -38,7 +38,7 @@ void main() {
             builder: (context, setState) {
               rebuildPage = setState;
               pageBuilds++;
-              return ReaderV2SidePanel(
+              return ReaderSidePanel(
                 controller: panel,
                 onOpenChanged: openChanges.add,
                 onClosed: () => closes++,
@@ -274,11 +274,11 @@ void main() {
 
   testWidgets('scrolling up and down in the open panel leaves the panel in '
       'place: no slide runs', (tester) async {
-    panel = ReaderV2SidePanelController();
+    panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderV2SidePanel(
+        home: ReaderSidePanel(
           controller: panel,
           panel: Drawer(
             child: ListView(
@@ -335,11 +335,11 @@ void main() {
   testWidgets('a screen reader skips the covered page whenever the panel is '
       'on screen, also while the finger pulls it out', (tester) async {
     final semantics = tester.ensureSemantics();
-    panel = ReaderV2SidePanelController();
+    panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderV2SidePanel(
+        home: ReaderSidePanel(
           controller: panel,
           panel: const Drawer(child: Text('章節')),
           child: Center(
@@ -372,11 +372,11 @@ void main() {
 
   testWidgets('a drag that starts while the slide is held hands the panel '
       'to the finger: the held slide never runs', (tester) async {
-    panel = ReaderV2SidePanelController();
+    panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderV2SidePanel(
+        home: ReaderSidePanel(
           controller: panel,
           // 準備那一幀很重：滑出要停 AppMotion.stillGap。
           panel: Builder(
@@ -407,7 +407,7 @@ void main() {
 
   testWidgets('focus moves into the open panel, also one pulled out from the '
       'edge, and leaves the page underneath', (tester) async {
-    panel = ReaderV2SidePanelController();
+    panel = ReaderSidePanelController();
     addTearDown(panel.dispose);
     final bodyFocus = FocusNode();
     final panelFocus = FocusNode();
@@ -415,7 +415,7 @@ void main() {
     addTearDown(panelFocus.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderV2SidePanel(
+        home: ReaderSidePanel(
           controller: panel,
           panel: Drawer(
             child: Center(

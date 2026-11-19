@@ -37,7 +37,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ReaderV2ChaptersDrawer(
+          body: ReaderChaptersDrawer(
             chapters: chapters,
             currentChapter: ValueNotifier(3),
             titleFor: (index) => chapters[index].title,
@@ -79,7 +79,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ReaderV2ChaptersDrawer(
+          body: ReaderChaptersDrawer(
             chapters: chapters,
             currentChapter: ValueNotifier(0),
             titleFor: (index) => chapters[index].title,
@@ -151,7 +151,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ReaderV2ChaptersDrawer(
+          body: ReaderChaptersDrawer(
             chapters: chapters,
             currentChapter: ValueNotifier(0),
             titleFor: (index) => chapters[index].title,
@@ -210,7 +210,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ReaderV2ChaptersDrawer(
+          body: ReaderChaptersDrawer(
             chapters: chapters,
             currentChapter: ValueNotifier(4),
             titleFor: (index) => chapters[index].title,
@@ -259,7 +259,7 @@ void main() {
     final current = ValueNotifier(1);
     Widget drawer() => MaterialApp(
       home: Scaffold(
-        body: ReaderV2ChaptersDrawer(
+        body: ReaderChaptersDrawer(
           chapters: chapters,
           currentChapter: current,
           titleFor: (index) => chapters[index].title,
@@ -302,7 +302,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ReaderV2ChaptersDrawer(
+          body: ReaderChaptersDrawer(
             chapters: chapters,
             currentChapter: current,
             titleFor: (index) {

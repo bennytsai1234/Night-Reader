@@ -149,7 +149,7 @@ void main() {
         final expected = style.of(brightness);
         final theme = Theme.of(context);
         final palette = StylePalette.of(context);
-        final menu = ReaderV2MenuStyle.of(context);
+        final menu = ReaderMenuStyle.of(context);
 
         expect(theme.brightness, brightness);
         expect(palette, same(expected));
@@ -160,10 +160,7 @@ void main() {
         expect(menu.foreground, expected.text);
         expect(menu.accent, expected.primary);
         expect(menu.onAccent, expected.onPrimary);
-        expect(
-          ReaderV2HighlightColor.theme.resolve(palette),
-          expected.highlight,
-        );
+        expect(ReaderHighlightColor.theme.resolve(palette), expected.highlight);
       }
     }
   });
@@ -185,8 +182,7 @@ void main() {
           builder: (context, setState) {
             rebuild = setState;
             return Theme(
-              data: ReaderV2MenuStyle.of(context)
-                  .toSheetTheme(Theme.of(context)),
+              data: ReaderMenuStyle.of(context).toSheetTheme(Theme.of(context)),
               child: menu,
             );
           },

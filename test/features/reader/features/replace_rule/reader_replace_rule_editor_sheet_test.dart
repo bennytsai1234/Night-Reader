@@ -16,7 +16,7 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => ReaderV2ReplaceRuleEditorSheet.show(
+              onPressed: () => ReaderReplaceRuleEditorSheet.show(
                 context,
                 rule: ReplaceRule(
                   name: '城門',
@@ -66,7 +66,7 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => ReaderV2ReplaceRuleEditorSheet.show(
+              onPressed: () => ReaderReplaceRuleEditorSheet.show(
                 context,
                 rule: ReplaceRule(
                   name: '回溯',

@@ -26,7 +26,7 @@ void main() {
     addTearDown(scroll.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderV2PointerTapLayer(
+        home: ReaderPointerTapLayer(
           onTapUp: (_) => taps++,
           // 和閱讀器一樣，正文上還有長按選字，捲動要越過觸控門檻才接手。
           child: GestureDetector(

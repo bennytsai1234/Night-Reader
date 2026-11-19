@@ -4,31 +4,31 @@ import 'package:night_reader/core/models/book.dart';
 
 import 'reader_location.dart';
 
-enum ReaderV2OpenIntent { resume, chapterStart }
+enum ReaderOpenIntent { resume, chapterStart }
 
-class ReaderV2OpenTarget {
-  const ReaderV2OpenTarget({
+class ReaderOpenTarget {
+  const ReaderOpenTarget({
     required this.location,
     required this.intent,
     this.chapterTitle,
   });
 
-  final ReaderV2Location location;
-  final ReaderV2OpenIntent intent;
+  final ReaderLocation location;
+  final ReaderOpenIntent intent;
 
   /// 要開的那一章的章名（書籤）：開書時目錄可能還沒抓（剛還原、剛同步來
   /// 的書），[location] 的章節序號只是別處的座標；閱讀器讀到目錄後照章名
-  /// 再對一次（`ReaderV2Runtime.openBook`）。
+  /// 再對一次（`ReaderRuntime.openBook`）。
   final String? chapterTitle;
 
-  factory ReaderV2OpenTarget.resume(Book book) {
-    ReaderV2Location? persistedAnchor;
+  factory ReaderOpenTarget.resume(Book book) {
+    ReaderLocation? persistedAnchor;
     final encoded = book.readerAnchorJson;
     if (encoded != null && encoded.isNotEmpty) {
       try {
         final decoded = jsonDecode(encoded);
         if (decoded is Map) {
-          persistedAnchor = ReaderV2Location.fromJson(
+          persistedAnchor = ReaderLocation.fromJson(
             Map<String, dynamic>.from(decoded),
           );
         }
@@ -37,14 +37,14 @@ class ReaderV2OpenTarget {
         // portable fallback; unrelated programming errors must stay visible.
       }
     }
-    final scalar = ReaderV2Location(
+    final scalar = ReaderLocation(
       chapterIndex: book.chapterIndex,
       charOffset: book.charOffset,
       visualOffsetPx: book.visualOffsetPx,
     ).normalized();
     final anchor = persistedAnchor;
-    return ReaderV2OpenTarget(
-      intent: ReaderV2OpenIntent.resume,
+    return ReaderOpenTarget(
+      intent: ReaderOpenIntent.resume,
       // The DB writes scalar progress and readerAnchorJson atomically. If an
       // older/imported row disagrees, the scalar coordinates are the chapter
       // ownership truth; stale anchor metadata must not redirect another
@@ -58,22 +58,22 @@ class ReaderV2OpenTarget {
     );
   }
 
-  factory ReaderV2OpenTarget.chapterStart(int chapterIndex) {
-    return ReaderV2OpenTarget(
-      intent: ReaderV2OpenIntent.chapterStart,
-      location: ReaderV2Location(
+  factory ReaderOpenTarget.chapterStart(int chapterIndex) {
+    return ReaderOpenTarget(
+      intent: ReaderOpenIntent.chapterStart,
+      location: ReaderLocation(
         chapterIndex: chapterIndex,
         charOffset: 0,
       ).normalized(),
     );
   }
 
-  factory ReaderV2OpenTarget.location(
-    ReaderV2Location location, {
-    ReaderV2OpenIntent intent = ReaderV2OpenIntent.chapterStart,
+  factory ReaderOpenTarget.location(
+    ReaderLocation location, {
+    ReaderOpenIntent intent = ReaderOpenIntent.chapterStart,
     String? chapterTitle,
   }) {
-    return ReaderV2OpenTarget(
+    return ReaderOpenTarget(
       intent: intent,
       location: location.normalized(),
       chapterTitle: chapterTitle,

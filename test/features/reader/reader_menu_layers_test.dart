@@ -10,7 +10,7 @@ void main() {
     for (final style in AppStyle.values) {
       for (final brightness in Brightness.values) {
         for (final pureBlack in [true, false]) {
-          late ReaderV2MenuStyle menu;
+          late ReaderMenuStyle menu;
           late StylePalette palette;
           await tester.pumpWidget(
             MaterialApp(
@@ -19,7 +19,7 @@ void main() {
               themeAnimationDuration: Duration.zero,
               home: Builder(
                 builder: (context) {
-                  menu = ReaderV2MenuStyle.of(context);
+                  menu = ReaderMenuStyle.of(context);
                   palette = StylePalette.of(context);
                   return const SizedBox.shrink();
                 },

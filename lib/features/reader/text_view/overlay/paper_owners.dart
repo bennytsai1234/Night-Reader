@@ -18,12 +18,12 @@ import 'package:night_reader/features/reader/session/reader_operation_token.dart
 /// 掀紙或重新還原。原本這三件事是畫面上的三個欄位，靠三個函式互相補位
 /// （跳章蓋紙、#59；開書時跳章、#80）。
 final class PaperOwners {
-  ReaderV2OperationToken? _jump;
+  ReaderOperationToken? _jump;
   bool Function()? _restore;
   bool _stableWorld = false;
 
   /// 正在等正文的跳章；排版開始後或跳章結束時為 null。
-  ReaderV2OperationToken? get jump => _jump;
+  ReaderOperationToken? get jump => _jump;
 
   /// 有跳章在等正文：紙下的舊正文歸它，不能被移動或記下。
   bool get holdsTextForJump => _jump != null;
@@ -42,7 +42,7 @@ final class PaperOwners {
   /// 蓋紙）。[textShown] 是正文已經排好、畫在畫面上；開書還沒排好時跳章不另外
   /// 蓋紙，紙本來就蓋著。同一個跳章重複通知不重來。
   bool claimForJump(
-    ReaderV2OperationToken? operation, {
+    ReaderOperationToken? operation, {
     required bool textShown,
   }) {
     if (identical(operation, _jump)) return false;

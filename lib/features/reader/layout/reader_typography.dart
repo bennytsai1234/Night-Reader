@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:characters/characters.dart';
 
-const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
+const List<FontFeature> kReaderCjkFontFeatures = <FontFeature>[
   FontFeature.enable('fwid'),
 ];
 
@@ -11,8 +11,8 @@ const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
 /// Android 的 Noto Sans CJK 是一個字型集合，同一個碼位依語系選用
 /// 簡中／繁中／日文字形；指定繁中（臺灣）讓漢字回退到繁中字形。
 /// 標點不靠語系：部分機型的系統字型不提供繁中字形，見
-/// [kReaderV2PunctFontFamily]。
-const Locale kReaderV2TextLocale = Locale.fromSubtags(
+/// [kReaderPunctFontFamily]。
+const Locale kReaderTextLocale = Locale.fromSubtags(
   languageCode: 'zh',
   scriptCode: 'Hant',
   countryCode: 'TW',
@@ -25,39 +25,39 @@ const Locale kReaderV2TextLocale = Locale.fromSubtags(
 /// （直筆外緣貼字格中線，各佔四分之一格），以及置中的刪節號「…」與拉滿
 /// 整格的破折號「—」（系統回退會落到 Roboto 的西文窄字形）。放在字型清單首位，標點不受
 /// 手機系統字型的語系與廠商設定影響；其餘字元交給
-/// [kReaderV2FontFamilyFallback] 與平台回退，與未指定字型時相同。
-const String kReaderV2PunctFontFamily = 'NightReaderPunct';
+/// [kReaderFontFamilyFallback] 與平台回退，與未指定字型時相同。
+const String kReaderPunctFontFamily = 'NightReaderPunct';
 
 /// 未指定字型時引擎使用的平台預設字族；接在標點字型之後，讓拉丁字母與
 /// 數字維持原本的系統字型。
-const List<String> kReaderV2FontFamilyFallback = <String>['sans-serif'];
+const List<String> kReaderFontFamilyFallback = <String>['sans-serif'];
 
 /// 英數字與符號在標點字型之後的字族清單：選了下載的字型（[family]，
 /// ADR 0045）時排在平台預設後面，英數字照舊用系統字型、照 ADR 0007 補
 /// 半格；思源宋體自己的英數字吃了 `fwid` 會變成全形。漢字等中日文字改用
-/// [readerV2CjkFontFallback]，見 [readerV2CjkRuns]。
-List<String> readerV2FontFallback(String? family) => family == null
-    ? kReaderV2FontFamilyFallback
-    : <String>[...kReaderV2FontFamilyFallback, family];
+/// [readerCjkFontFallback]，見 [readerCjkRuns]。
+List<String> readerFontFallback(String? family) => family == null
+    ? kReaderFontFamilyFallback
+    : <String>[...kReaderFontFamilyFallback, family];
 
-/// 中日文字（[isReaderV2CjkRune]）在標點字型之後的字族清單：下載的字型
+/// 中日文字（[isReaderCjkRune]）在標點字型之後的字族清單：下載的字型
 /// 排在平台預設前面。字型清單是「第一套有這個字的勝出」，有些手機的
 /// `sans-serif` 自己就有漢字，排在後面的下載字型就輪不到。那套字型沒有的
 /// 字（例如子集外的罕見字）照樣交給平台。
-List<String> readerV2CjkFontFallback(String? family) => family == null
-    ? kReaderV2FontFamilyFallback
-    : <String>[family, ...kReaderV2FontFamilyFallback];
+List<String> readerCjkFontFallback(String? family) => family == null
+    ? kReaderFontFamilyFallback
+    : <String>[family, ...kReaderFontFamilyFallback];
 
 /// 字族進排版身分（版面簽章、骨架版面鍵、段落量測的指紋）時用的名字；
 /// 系統字型是 null。下載的字型帶上分段選字的版本：舊的換行是照「系統
 /// 字型在前」量的。
-String? readerV2FontFamilySignature(String? family) =>
+String? readerFontFamilySignature(String? family) =>
     family == null ? null : '$family+cjk-first-v1';
 
 /// 中日文字：CJK 部首、符號與標點、假名、注音、漢字（含擴充區與相容
 /// 字）、直排與相容形式、全形與半形字形。其餘的字（英數字、西文標點、
 /// 一般符號）照舊系統字型在前。
-bool isReaderV2CjkRune(int rune) =>
+bool isReaderCjkRune(int rune) =>
     (rune >= 0x2E80 && rune <= 0x9FFF) ||
     (rune >= 0xF900 && rune <= 0xFAFF) ||
     (rune >= 0xFE10 && rune <= 0xFE1F) ||
@@ -68,12 +68,12 @@ bool isReaderV2CjkRune(int rune) =>
 /// [text] 裡連續的中日文字範圍（UTF-16，遞增、不重疊）。照字素（使用者
 /// 看到的一個字）切，由字素的第一個碼位決定歸哪一段：異體字選擇符、組合
 /// 符號與零寬連接符跟著前面的字，不會把一個字拆成兩段字樣。
-List<({int start, int end})> readerV2CjkRuns(String text) {
+List<({int start, int end})> readerCjkRuns(String text) {
   final result = <({int start, int end})>[];
   var index = 0;
   int? runStart;
   for (final grapheme in text.characters) {
-    if (isReaderV2CjkRune(grapheme.runes.first)) {
+    if (isReaderCjkRune(grapheme.runes.first)) {
       runStart ??= index;
     } else if (runStart != null) {
       result.add((start: runStart, end: index));
@@ -105,8 +105,8 @@ List<({int start, int end})> readerV2CjkRuns(String text) {
 // halfcell-v1：英數字段補到半格、emoji 縮到一格、行高由 strut 固定。
 // kinsoku-v2：換行做避頭尾，英數字段只拉最後一個單字；被拉字的行把空隙
 // 攤進字距，每個字距最多 1/4 格。
-const String kReaderV2CjkTypographyFeatureSignature =
+const String kReaderCjkTypographyFeatureSignature =
     'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2+twpunct-v2+halfcell-v1+kinsoku-v2';
 
 /// 未設定標題字號時，章節標題比正文大的字號（舊版固定規則）。
-const double kReaderV2DefaultTitleSizeDelta = 4.0;
+const double kReaderDefaultTitleSizeDelta = 4.0;

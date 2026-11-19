@@ -28,7 +28,7 @@ void main() {
     await openReader(tester);
 
     final page = find.byType(ReadingSettingsPage);
-    final reader = find.byType(ReaderV2Page);
+    final reader = find.byType(ReaderPage);
     for (final round in ['第一輪', '第二輪']) {
       await showReaderMenu(tester);
       await measureNavigation(

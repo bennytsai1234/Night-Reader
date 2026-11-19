@@ -23,10 +23,10 @@ import 'package:night_reader/features/reader/viewport/reader_viewport_controller
 import 'package:night_reader/features/replace_rule/replace_rule_deadline.dart';
 
 /// 排版設定送出的一筆：送出時用的 Runtime 與版面。
-typedef _PresentationJob = ({ReaderV2Runtime runtime, ReaderV2LayoutSpec spec});
+typedef _PresentationJob = ({ReaderRuntime runtime, ReaderLayoutSpec spec});
 
-class ReaderV2ControllerHost {
-  ReaderV2ControllerHost({
+class ReaderControllerHost {
+  ReaderControllerHost({
     required this.book,
     required this.initialChapters,
     required this.openTarget,
@@ -37,18 +37,18 @@ class ReaderV2ControllerHost {
   }) {
     settings.addListener(_onSettingsChanged);
     menu.controlsVisible.addListener(_onMenuChanged);
-    dependencies = ReaderV2Dependencies(
+    dependencies = ReaderDependencies(
       book: book,
       initialChapters: initialChapters,
       currentChineseConvert: () => settings.chineseConvert,
       currentShowIllustrations: () => settings.showIllustrations,
     );
-    bookmarks = ReaderV2Bookmarks(
+    bookmarks = ReaderBookmarks(
       book: book,
       dao: dependencies.bookmarkDao,
       chapters: () => runtime?.chapters ?? initialChapters,
     );
-    highlights = ReaderV2Highlights(
+    highlights = ReaderHighlights(
       book: book,
       dao: dependencies.highlightDao,
       chapters: () => runtime?.chapters ?? initialChapters,
@@ -69,25 +69,24 @@ class ReaderV2ControllerHost {
 
   final Book book;
   final List<BookChapter> initialChapters;
-  final ReaderV2OpenTarget? openTarget;
+  final ReaderOpenTarget? openTarget;
 
   /// 開書的換頁動畫與骨架淡入都播完時完成；開書載入等它（ADR 0018）。
   final Future<void> _entrance;
 
   /// 進場播完、開書之前問一次要不要改停在別的位置（剛同步來、比 [book]
-  /// 新的閱讀紀錄，見 `ReaderV2ProgressSync.openLocation`）；null 就停在
+  /// 新的閱讀紀錄，見 `ReaderProgressSync.openLocation`）；null 就停在
   /// [openTarget]。
-  final Future<ReaderV2Location?> Function(ReaderV2Runtime runtime)?
-  _openLocation;
+  final Future<ReaderLocation?> Function(ReaderRuntime runtime)? _openLocation;
   final VoidCallback _onChanged;
   final bool Function() _isMounted;
 
-  final ReaderV2SettingsController settings = ReaderV2SettingsController();
-  final ReaderV2MenuController menu = ReaderV2MenuController();
-  final ReaderV2ViewportController viewportController =
-      ReaderV2ViewportController();
+  final ReaderSettingsController settings = ReaderSettingsController();
+  final ReaderMenuController menu = ReaderMenuController();
+  final ReaderViewportController viewportController =
+      ReaderViewportController();
 
-  late final ReaderV2Dependencies dependencies;
+  late final ReaderDependencies dependencies;
 
   /// 讀書途中要給讀者的提示，例如替換規則跑太久被停用；閱讀器顯示成浮動
   /// 提示。
@@ -97,18 +96,18 @@ class ReaderV2ControllerHost {
   late final BookStorageService bookStorageService;
 
   /// 這本書的書籤（正文旁的記號、目錄的書籤分頁）。
-  late final ReaderV2Bookmarks bookmarks;
+  late final ReaderBookmarks bookmarks;
 
   /// 這本書的標註（正文上的底色與底線、目錄的標註分頁）。
-  late final ReaderV2Highlights highlights;
+  late final ReaderHighlights highlights;
 
   /// 上次算書籤記號與標註落在哪一章時的目錄（章數、頭尾章節網址）；目錄
   /// 讀出來或換過才重算。
   (int, String, String)? _markedChapters;
 
-  ReaderV2Runtime? runtime;
-  ReaderV2TtsController? tts;
-  ReaderV2AutoPageController? autoPage;
+  ReaderRuntime? runtime;
+  ReaderTtsController? tts;
+  ReaderAutoPageController? autoPage;
 
   Size? _lastViewportSize;
   int _appliedContentSettingsGeneration = 0;
@@ -118,8 +117,8 @@ class ReaderV2ControllerHost {
   _lastFailedPresentationAttempt;
 
   /// 內容設定（繁簡、替換規則）送出時，用的 Runtime。
-  late final LatestOnlyScheduler<ReaderV2Runtime> _contentSettings =
-      LatestOnlyScheduler<ReaderV2Runtime>(
+  late final LatestOnlyScheduler<ReaderRuntime> _contentSettings =
+      LatestOnlyScheduler<ReaderRuntime>(
         isMounted: _isMounted,
         gate: _contentSettingsWanted,
         send: _applyContentSettings,
@@ -177,7 +176,7 @@ class ReaderV2ControllerHost {
       autoPage?.setPaused(menu.controlsVisible.value || _awayOverMenu);
 
   /// 選單開關只改自動捲動的暫停，不通知閱讀頁：選單、收起手勢與正文的
-  /// 點擊層各自聽 [ReaderV2MenuController.controlsVisible]。
+  /// 點擊層各自聽 [ReaderMenuController.controlsVisible]。
   void _onMenuChanged() {
     if (menu.controlsVisible.value) _awayOverMenu = false;
     _syncAutoPagePause();
@@ -185,7 +184,7 @@ class ReaderV2ControllerHost {
 
   /// 朗讀跟隨與自動捲動都會移動正文，同一時間只留一個：朗讀一開始播放
   /// 就停掉自動捲動；開始自動捲動時停掉朗讀，見
-  /// `ReaderV2PageCoordinator.toggleAutoPage`。
+  /// `ReaderPageCoordinator.toggleAutoPage`。
   void _onTtsChanged() {
     final playing = tts?.isPlaying ?? false;
     if (playing && !_ttsWasPlaying) autoPage?.stop();
@@ -203,7 +202,7 @@ class ReaderV2ControllerHost {
     }
   }
 
-  ReaderV2Runtime ensureRuntime(Size size, ReaderV2Style style) {
+  ReaderRuntime ensureRuntime(Size size, ReaderStyle style) {
     _lastViewportSize = size;
     final existing = runtime;
     if (existing != null) return existing;
@@ -218,22 +217,22 @@ class ReaderV2ControllerHost {
         if (!_notices.isClosed) _notices.add(replaceRuleDisabledNotice(rule));
       },
     );
-    final progressController = ReaderV2ProgressController(
+    final progressController = ReaderProgressController(
       book: book,
       repository: repository,
       bookDao: dependencies.bookDao,
     );
     final initialLocation = _initialLocationFor(spec);
-    final nextRuntime = ReaderV2Runtime(
+    final nextRuntime = ReaderRuntime(
       book: book,
       repository: repository,
       progressController: progressController,
       initialLayoutSpec: spec,
       initialLocation: initialLocation,
     )..addListener(_onControllerChanged);
-    final nextTts = ReaderV2TtsController(runtime: nextRuntime)
+    final nextTts = ReaderTtsController(runtime: nextRuntime)
       ..addListener(_onTtsChanged);
-    final nextAutoPage = ReaderV2AutoPageController(
+    final nextAutoPage = ReaderAutoPageController(
       runtime: nextRuntime,
       viewportController: viewportController,
       viewportExtent: () =>
@@ -251,9 +250,9 @@ class ReaderV2ControllerHost {
   }
 
   void syncRuntimeConfiguration(
-    ReaderV2Runtime runtime,
+    ReaderRuntime runtime,
     Size size,
-    ReaderV2Style style,
+    ReaderStyle style,
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
@@ -283,7 +282,7 @@ class ReaderV2ControllerHost {
     _reconcileContentSettings(runtime);
   }
 
-  void _reconcileContentSettings(ReaderV2Runtime runtime) {
+  void _reconcileContentSettings(ReaderRuntime runtime) {
     final desiredGeneration = settings.contentSettingsGeneration;
     if (_appliedContentSettingsGeneration == desiredGeneration) {
       if (_lastFailedContentSettingsAttempt?.settingsGeneration ==
@@ -300,14 +299,14 @@ class ReaderV2ControllerHost {
   }
 
   /// 送出當下還要不要送內容設定：還沒生效，且這個 Reader 世界沒有失敗過。
-  bool _contentSettingsWanted(ReaderV2Runtime runtime) {
+  bool _contentSettingsWanted(ReaderRuntime runtime) {
     final desiredGeneration = settings.contentSettingsGeneration;
     if (_appliedContentSettingsGeneration == desiredGeneration) return false;
     final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
     return _lastFailedContentSettingsAttempt != attempt;
   }
 
-  Future<void> _applyContentSettings(ReaderV2Runtime runtime) async {
+  Future<void> _applyContentSettings(ReaderRuntime runtime) async {
     final desiredGeneration = settings.contentSettingsGeneration;
     final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
     final applied = await runtime.reloadContentPreservingLocation();
@@ -323,7 +322,7 @@ class ReaderV2ControllerHost {
   }
 
   ({int settingsGeneration, int chapterIndex, int contentGeneration})
-  _contentSettingsAttempt(ReaderV2Runtime runtime, int settingsGeneration) {
+  _contentSettingsAttempt(ReaderRuntime runtime, int settingsGeneration) {
     final target = runtime.pendingLocation ?? runtime.state.visibleLocation;
     return (
       settingsGeneration: settingsGeneration,
@@ -356,7 +355,7 @@ class ReaderV2ControllerHost {
   }
 
   ({int presentationSignature, int chapterIndex, int contentGeneration})
-  _presentationAttempt(ReaderV2Runtime runtime, ReaderV2LayoutSpec spec) {
+  _presentationAttempt(ReaderRuntime runtime, ReaderLayoutSpec spec) {
     final target = runtime.pendingLocation ?? runtime.state.visibleLocation;
     return (
       presentationSignature: spec.presentationSignature,
@@ -365,26 +364,26 @@ class ReaderV2ControllerHost {
     );
   }
 
-  ReaderV2Location _initialLocationFor(ReaderV2LayoutSpec spec) {
+  ReaderLocation _initialLocationFor(ReaderLayoutSpec spec) {
     final target = openTarget;
     if (target != null) {
-      if (target.intent == ReaderV2OpenIntent.chapterStart) {
+      if (target.intent == ReaderOpenIntent.chapterStart) {
         return target.location.copyWith(
           visualOffsetPx: spec.anchorOffsetInViewport,
         );
       }
       return target.location;
     }
-    return ReaderV2Location(
+    return ReaderLocation(
       chapterIndex: book.chapterIndex,
       charOffset: book.charOffset,
       visualOffsetPx: book.visualOffsetPx,
     );
   }
 
-  ReaderV2LayoutSpec specFromStyle(Size size, ReaderV2Style style) {
+  ReaderLayoutSpec specFromStyle(Size size, ReaderStyle style) {
     // cellWidth 只描述全形字 advance 的 typography metric。
-    // ReaderV2LayoutSpec 可用它推導置中的內部 text frame，但不得用它
+    // ReaderLayoutSpec 可用它推導置中的內部 text frame，但不得用它
     // 裁切或重定義 viewport 擁有的實體 contentWidth。
     double? measureCell(double letterSpacing) =>
         const ReaderParagraphLayout().measureCellWidth(
@@ -397,17 +396,17 @@ class ReaderV2ControllerHost {
     var cellWidth = measureCell(letterSpacing);
     if (style.justify && cellWidth != null) {
       // 左右對齊：剩下的空隙攤進字距後重量字格，文字框就撐滿內容寬。
-      letterSpacing = ReaderV2TextLayoutFrame.justifiedLetterSpacing(
+      letterSpacing = ReaderTextLayoutFrame.justifiedLetterSpacing(
         contentWidth: size.width - style.paddingLeft - style.paddingRight,
         cellWidth: cellWidth,
         letterSpacing: letterSpacing,
       );
       cellWidth = measureCell(letterSpacing);
     }
-    return ReaderV2LayoutSpec.fromViewport(
+    return ReaderLayoutSpec.fromViewport(
       viewportSize: size,
       cellWidth: cellWidth,
-      style: ReaderV2LayoutStyle(
+      style: ReaderLayoutStyle(
         fontSize: style.fontSize,
         lineHeight: style.lineHeight,
         letterSpacing: letterSpacing,
@@ -428,7 +427,7 @@ class ReaderV2ControllerHost {
     );
   }
 
-  Future<ReaderV2Location?> flushProgress() async {
+  Future<ReaderLocation?> flushProgress() async {
     return runtime?.flushProgress();
   }
 
@@ -437,7 +436,7 @@ class ReaderV2ControllerHost {
   /// 開書定位完成（含取不到正文而停在錯誤畫面）時完成。
   Future<void> get opened => _opened.future;
 
-  void _openRuntimeAfterEntrance(ReaderV2Runtime runtime) {
+  void _openRuntimeAfterEntrance(ReaderRuntime runtime) {
     if (_opening) return;
     _opening = true;
     unawaited(

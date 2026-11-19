@@ -14,8 +14,8 @@ import 'package:night_reader/features/reader/chapter/reader_chapter_repository.d
 import 'package:night_reader/features/reader/text_view/overlay/reader_skeleton_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ReaderV2Dependencies {
-  ReaderV2Dependencies({
+class ReaderDependencies {
+  ReaderDependencies({
     required this.book,
     List<BookChapter> initialChapters = const <BookChapter>[],
     BookDao? bookDao,
@@ -74,10 +74,10 @@ class ReaderV2Dependencies {
   /// 開書骨架照著畫的上一頁紀錄（ADR 0024）；沒有偏好設定時不記。
   final ReaderSkeletonPageStore? skeletonPages;
 
-  ReaderV2ChapterRepository createChapterRepository({
+  ReaderChapterRepository createChapterRepository({
     void Function(ReplaceRule rule)? onReplaceRuleDisabled,
   }) {
-    return ReaderV2ChapterRepository(
+    return ReaderChapterRepository(
       book: book,
       initialChapters: initialChapters,
       bookDao: bookDao,

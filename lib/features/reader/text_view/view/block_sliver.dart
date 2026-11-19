@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:night_reader/features/reader/text_view/measure/document_index.dart';
 
-/// [SliverVariedExtentList] 的 hybrid 特化版。
+/// [SliverVariedExtentList] 給閱讀器正文用的特化版。
 ///
 /// 框架基底 `RenderSliverFixedExtentBoxAdaptor` 在 `itemExtentBuilder` 模式
 /// 下，offset↔index 與 index→layoutOffset 的換算全部從 index 0 線性累加：
@@ -11,8 +11,8 @@ import 'package:night_reader/features/reader/text_view/measure/document_index.da
 /// F 越大——這正是「越滾越卡」的來源。本類以 [DocumentIndex] 的 Fenwick
 /// 前綴和覆寫這些查詢為 O(log n)，幾何結果與框架線性版本逐點一致，
 /// I1（extent 只讀精確 metrics）不受影響。
-final class HybridBlockSliver extends SliverVariedExtentList {
-  const HybridBlockSliver({
+final class BlockSliver extends SliverVariedExtentList {
+  const BlockSliver({
     super.key,
     required super.delegate,
     required super.itemExtentBuilder,
@@ -24,9 +24,9 @@ final class HybridBlockSliver extends SliverVariedExtentList {
   final bool beforeCenter;
 
   @override
-  RenderHybridBlockSliver createRenderObject(BuildContext context) {
+  RenderBlockSliver createRenderObject(BuildContext context) {
     final element = context as SliverMultiBoxAdaptorElement;
-    return RenderHybridBlockSliver(
+    return RenderBlockSliver(
       childManager: element,
       itemExtentBuilder: itemExtentBuilder,
       documentIndex: documentIndex,
@@ -37,7 +37,7 @@ final class HybridBlockSliver extends SliverVariedExtentList {
   @override
   void updateRenderObject(
     BuildContext context,
-    covariant RenderHybridBlockSliver renderObject,
+    covariant RenderBlockSliver renderObject,
   ) {
     super.updateRenderObject(context, renderObject);
     renderObject
@@ -46,8 +46,8 @@ final class HybridBlockSliver extends SliverVariedExtentList {
   }
 }
 
-final class RenderHybridBlockSliver extends RenderSliverVariedExtentList {
-  RenderHybridBlockSliver({
+final class RenderBlockSliver extends RenderSliverVariedExtentList {
+  RenderBlockSliver({
     required super.childManager,
     required super.itemExtentBuilder,
     required this._documentIndex,

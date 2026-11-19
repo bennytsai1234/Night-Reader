@@ -14,13 +14,13 @@ typedef PageLines = ({
   List<Rect> lines,
   Set<int> titleLines,
   Set<int> blockLines,
-  ReaderV2LayoutSpec spec,
+  ReaderLayoutSpec spec,
 });
 
 /// 捲動位置在 [offset]、正文區高 [height] 時，畫面上每一行字的位置與其中
 /// 章名那幾行。
 PageLines pageLinesAt({
-  required HybridLayoutPipeline pipeline,
+  required LayoutPipeline pipeline,
   required DocumentIndex documentIndex,
   required double offset,
   required double height,
@@ -108,29 +108,27 @@ PageLines pageLinesAt({
 
 /// 正文的字樣（標點字型在前，與段落排版相同），用來查標點的筆畫位置
 /// （[PunctuationInk]）。[cjk] 是中日文字的標點（「，。）），其餘（西文
-/// 彎引號）是英數字的字族，同正文分段（[readerV2CjkRuns]）。
-TextStyle readerSkeletonInkStyle(
-  ReaderV2LayoutSpec spec, {
-  required bool cjk,
-}) => TextStyle(
-  fontFamily: kReaderV2PunctFontFamily,
-  fontFamilyFallback: cjk
-      ? readerV2CjkFontFallback(spec.style.fontFamily)
-      : readerV2FontFallback(spec.style.fontFamily),
-  fontWeight: spec.style.bold ? FontWeight.bold : FontWeight.normal,
-  fontFeatures: kReaderV2CjkFontFeatures,
-  locale: kReaderV2TextLocale,
-);
+/// 彎引號）是英數字的字族，同正文分段（[readerCjkRuns]）。
+TextStyle readerSkeletonInkStyle(ReaderLayoutSpec spec, {required bool cjk}) =>
+    TextStyle(
+      fontFamily: kReaderPunctFontFamily,
+      fontFamilyFallback: cjk
+          ? readerCjkFontFallback(spec.style.fontFamily)
+          : readerFontFallback(spec.style.fontFamily),
+      fontWeight: spec.style.bold ? FontWeight.bold : FontWeight.normal,
+      fontFeatures: kReaderCjkFontFeatures,
+      locale: kReaderTextLocale,
+    );
 
 /// 正文一行（正文座標）縮到行首、行尾標點的筆畫上（[skeletonInkLine]）：
 /// 對話段落以「開頭、」結尾，句子停在行尾的「。」「，」。
 Rect _inkLine(
-  HybridLayoutPipeline pipeline,
+  LayoutPipeline pipeline,
   int chapter,
   Rect line, {
   required TextStyle cjkStyle,
   required TextStyle latinStyle,
-  required ReaderV2LayoutSpec spec,
+  required ReaderLayoutSpec spec,
 }) {
   SkeletonGlyph? glyphAt(double x) {
     final hit = pipeline.geometry.glyphAt(Offset(x, line.center.dy));
@@ -149,7 +147,7 @@ Rect _inkLine(
     return SkeletonGlyph(
       mark,
       Rect.fromLTRB(box.left, box.top, box.right, box.bottom),
-      style: isReaderV2CjkRune(mark.codeUnitAt(0)) ? cjkStyle : latinStyle,
+      style: isReaderCjkRune(mark.codeUnitAt(0)) ? cjkStyle : latinStyle,
       fontSize: spec.style.fontSize,
     );
   }

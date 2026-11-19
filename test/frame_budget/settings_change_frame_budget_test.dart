@@ -120,7 +120,7 @@ Future<List<FrameCost>> _measureChange(
   final previousRebuild = debugOnRebuildDirtyWidget;
   final pageBuilds = {
     for (final type in [
-      ReaderApp,
+      NightReaderApp,
       MaterialApp,
       MainPage,
       BookshelfPage,

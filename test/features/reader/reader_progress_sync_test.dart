@@ -96,10 +96,10 @@ void main() {
   late _BookDao bookDao;
   late _Sync sync;
   late Book book;
-  late ReaderV2Runtime runtime;
+  late ReaderRuntime runtime;
 
   /// 視窗把位置排好的動作；測試換掉它來控制跳轉什麼時候完成。
-  late Future<bool> Function(ReaderV2Location location) restore;
+  late Future<bool> Function(ReaderLocation location) restore;
 
   /// 取不到內容的章節。
   late Set<int> unavailable;
@@ -118,12 +118,12 @@ void main() {
       charOffset: 10,
     );
     bookDao.stored = book;
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: book,
       initialChapters: chapters,
       contentLoader: (index, chapter) async {
         if (unavailable.contains(index)) {
-          throw const ReaderV2ContentUnavailableException('這一章暫時取不到');
+          throw const ReaderContentUnavailableException('這一章暫時取不到');
         }
         return chapter.content;
       },
@@ -131,17 +131,17 @@ void main() {
       chapterDao: _ChapterDao(),
       sourceDao: _SourceDao(),
     );
-    runtime = ReaderV2Runtime(
+    runtime = ReaderRuntime(
       book: book,
       repository: repository,
-      progressController: ReaderV2ProgressController(
+      progressController: ReaderProgressController(
         book: book,
         repository: repository,
         bookDao: bookDao,
       ),
-      initialLayoutSpec: ReaderV2LayoutSpec.fromViewport(
+      initialLayoutSpec: ReaderLayoutSpec.fromViewport(
         viewportSize: const Size(220, 180),
-        style: const ReaderV2LayoutStyle(
+        style: const ReaderLayoutStyle(
           fontSize: 18,
           lineHeight: 1.5,
           letterSpacing: 0,
@@ -153,17 +153,17 @@ void main() {
           textIndent: 2,
         ),
       ),
-      initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 10),
+      initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 10),
     );
     runtime.registerViewportRestore(Object(), (location) => restore(location));
     addTearDown(runtime.dispose);
   });
 
-  ReaderV2ProgressSync start({
-    ReaderV2OpenTarget? openTarget,
-    void Function(ReaderV2Location previous)? onJumped,
+  ReaderProgressSync start({
+    ReaderOpenTarget? openTarget,
+    void Function(ReaderLocation previous)? onJumped,
   }) {
-    final progressSync = ReaderV2ProgressSync(
+    final progressSync = ReaderProgressSync(
       book: book,
       runtime: () => runtime,
       onJumped: onJumped ?? (_) => fail('開書不提示'),
@@ -222,7 +222,7 @@ void main() {
   test('opening a chapter picked from the table of contents does not wait '
       'or read the saved position', () async {
     sync.progress = Completer();
-    final progressSync = start(openTarget: ReaderV2OpenTarget.chapterStart(4));
+    final progressSync = start(openTarget: ReaderOpenTarget.chapterStart(4));
 
     expect(sync.opened, [book.bookUrl]);
     expect(await progressSync.openLocation(runtime), isNull);
@@ -231,7 +231,7 @@ void main() {
 
   test('closing the reader while waiting ends the wait at once', () async {
     sync.progress = Completer();
-    final progressSync = ReaderV2ProgressSync(
+    final progressSync = ReaderProgressSync(
       book: book,
       runtime: () => runtime,
       onJumped: (_) {},
@@ -249,7 +249,7 @@ void main() {
   test('a chapter picked before the book opened is where it opens', () async {
     unawaited(runtime.jumpToChapter(4));
     await runtime.openBook(
-      at: const ReaderV2Location(chapterIndex: 2, charOffset: 0),
+      at: const ReaderLocation(chapterIndex: 2, charOffset: 0),
     );
 
     expect(runtime.state.visibleLocation.chapterIndex, 4);
@@ -258,7 +258,7 @@ void main() {
   group('leaving the reader', () {
     test('closing it saves the position and asks for the progress to go up '
         'first', () async {
-      final progressSync = ReaderV2ProgressSync(
+      final progressSync = ReaderProgressSync(
         book: book,
         runtime: () => runtime,
         onJumped: (_) {},
@@ -292,7 +292,7 @@ void main() {
 
   group('progress that arrives after the book opened', () {
     var commits = 0;
-    final jumped = <ReaderV2Location>[];
+    final jumped = <ReaderLocation>[];
 
     PulledProgress cloudAt(int chapter, int offset) => PulledProgress(
       SyncedProgress(
@@ -304,9 +304,9 @@ void main() {
       (_) async => commits++,
     );
 
-    /// 開書時同步的進度還沒好，等滿 [ReaderV2ProgressSync.openGrace] 照這台
+    /// 開書時同步的進度還沒好，等滿 [ReaderProgressSync.openGrace] 照這台
     /// 的位置開了。
-    Future<ReaderV2ProgressSync> openWhileSyncing() async {
+    Future<ReaderProgressSync> openWhileSyncing() async {
       commits = 0;
       jumped.clear();
       sync.progress = Completer();
@@ -356,7 +356,7 @@ void main() {
       final progressSync = await openWhileSyncing();
       progressSync.bookOpened();
       runtime.updateVisibleLocation(
-        const ReaderV2Location(chapterIndex: 1, charOffset: 300),
+        const ReaderLocation(chapterIndex: 1, charOffset: 300),
       );
 
       sync.pulled = cloudAt(3, 40);
@@ -398,7 +398,7 @@ void main() {
 
   group('catching up with a newer progress while reading', () {
     var commits = 0;
-    final jumped = <ReaderV2Location>[];
+    final jumped = <ReaderLocation>[];
 
     /// 另一台讀到第 [chapter] 章第 [offset] 個字。
     PulledProgress cloudAt(int chapter, int offset) => PulledProgress(
@@ -472,7 +472,7 @@ void main() {
       await entered.future;
       runtime.cancelJumpForUserScroll();
       runtime.updateVisibleLocation(
-        const ReaderV2Location(chapterIndex: 1, charOffset: 200),
+        const ReaderLocation(chapterIndex: 1, charOffset: 200),
       );
       gate.complete();
       await pumpEventQueue();
@@ -511,7 +511,7 @@ void main() {
       await backToForeground();
       await entered.future;
       final newer = runtime.jumpToLocation(
-        const ReaderV2Location(chapterIndex: 2, charOffset: 0),
+        const ReaderLocation(chapterIndex: 2, charOffset: 0),
       );
       await newer;
       gate.complete();

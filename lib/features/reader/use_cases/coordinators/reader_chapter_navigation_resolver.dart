@@ -1,5 +1,5 @@
-class ReaderV2ChapterNavigationResolver {
-  const ReaderV2ChapterNavigationResolver._();
+class ReaderChapterNavigationResolver {
+  const ReaderChapterNavigationResolver._();
 
   /// 從目前這一章往 [delta] 的方向數過去的那一章；[skip] 的章（付費章節，
   /// ADR 0057）不算，跳過去。沒有時是 null。

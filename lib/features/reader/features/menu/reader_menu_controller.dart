@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 /// [holdsSlider]：拖動中，或放開後閱讀器還在跳往選定位置；這段期間拖動條
 /// 停在 [percent]，不跟著還沒更新的閱讀進度。
-typedef ReaderV2ScrubState = ({
+typedef ReaderScrubState = ({
   bool isScrubbing,
   bool holdsSlider,
   double percent,
@@ -11,7 +11,7 @@ typedef ReaderV2ScrubState = ({
 /// 閱讀選單的狀態：開著與否、拖動章內進度。兩者都是小訊號，只有用到的
 /// 那一小塊聽（ADR 0029 做法 3）：選單開關時只有負責滑動與收起手勢的幾層
 /// 跟著變，按鈕、章名、進度條與亮度條不重建，閱讀頁也不重建。
-class ReaderV2MenuController {
+class ReaderMenuController {
   final ValueNotifier<bool> _controlsVisible = ValueNotifier(false);
 
   /// 上下選單與亮度條開著（收起動畫一開始就是 false）。
@@ -19,12 +19,12 @@ class ReaderV2MenuController {
 
   /// 拖動只通知拖動條與提示；不因每個刻度讓正文和整組玻璃選單重建。
   /// 章內進度為 0–100，放開後保留給提示淡出。
-  final ValueNotifier<ReaderV2ScrubState> _scrub = ValueNotifier((
+  final ValueNotifier<ReaderScrubState> _scrub = ValueNotifier((
     isScrubbing: false,
     holdsSlider: false,
     percent: 0,
   ));
-  ValueListenable<ReaderV2ScrubState> get scrub => _scrub;
+  ValueListenable<ReaderScrubState> get scrub => _scrub;
   bool get isScrubbing => _scrub.value.isScrubbing;
 
   /// 第幾次拖動；放開後的跳轉做完時拿它對，舊的跳轉不解除新一次的停留。

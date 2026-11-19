@@ -16,7 +16,7 @@ final class IllustrationBox {
   });
 
   factory IllustrationBox.layout(
-    ReaderV2Illustration illustration, {
+    ReaderIllustration illustration, {
     required double contentWidth,
     required double maxHeight,
     required double devicePixelRatio,
@@ -54,7 +54,7 @@ final class IllustrationBox {
 
 /// 解碼好的插圖，照最近用到的留著幾張（每張照畫出來的大小解碼）。
 ///
-/// 插圖解碼好才交給排版（[HybridLayoutPipeline]），所以紙掀開時圖一定畫得
+/// 插圖解碼好才交給排版（[LayoutPipeline]），所以紙掀開時圖一定畫得
 /// 出來；被擠掉的那張再畫到時重新解碼，好了才補畫。
 ///
 /// 圖檔是書源 isolate 寫進書本的插圖資料夾的，這裡收不到通知；「清除已下載

@@ -18,16 +18,16 @@ import 'reader_state.dart';
 /// 等不及的話先照這台的位置開，進度晚到時讀者還沒動就跳過去。
 /// 讀書途中 App 回到前景時抓這本書的雲端進度，比這台新就跳過去。離開閱讀
 /// 器、App 退到背景時把進度存好再上傳。
-class ReaderV2ProgressSync {
-  ReaderV2ProgressSync({
+class ReaderProgressSync {
+  ReaderProgressSync({
     required this.book,
     required this._runtime,
     required this._onJumped,
     required this._bookDao,
-    ReaderV2OpenTarget? openTarget,
+    ReaderOpenTarget? openTarget,
     SyncService? sync,
   }) : _resumes =
-           openTarget == null || openTarget.intent == ReaderV2OpenIntent.resume,
+           openTarget == null || openTarget.intent == ReaderOpenIntent.resume,
        _sync = sync ?? SyncService.instance;
 
   /// 同一章裡差這麼多字以內不跳：多半是另一台螢幕大小不同、存的是畫面頂端
@@ -39,10 +39,10 @@ class ReaderV2ProgressSync {
   static const Duration openGrace = Duration(milliseconds: 500);
 
   final Book book;
-  final ReaderV2Runtime? Function() _runtime;
+  final ReaderRuntime? Function() _runtime;
 
   /// 跳到另一台的位置之後呼叫，[previous] 是跳之前的位置，給「回到原處」用。
-  final void Function(ReaderV2Location previous) _onJumped;
+  final void Function(ReaderLocation previous) _onJumped;
   final BookDao _bookDao;
   final SyncService _sync;
 
@@ -77,7 +77,7 @@ class ReaderV2ProgressSync {
   ///
   /// 開 App 或回到 App 的同步還沒做完閱讀進度就等它，記成開著之後再讀這台
   /// 資料庫裡的位置：書架或詳情頁拿著的書可能是同步套用之前的舊位置。
-  Future<ReaderV2Location?> openLocation(ReaderV2Runtime runtime) async {
+  Future<ReaderLocation?> openLocation(ReaderRuntime runtime) async {
     if (!_resumes) return null;
     final ready = _sync.progressReady;
     if (ready != null && !await _within(ready, openGrace)) {
@@ -93,7 +93,7 @@ class ReaderV2ProgressSync {
       return null;
     }
     if (stored == null) return null;
-    final at = ReaderV2OpenTarget.resume(stored).location;
+    final at = ReaderOpenTarget.resume(stored).location;
     return _samePlace(at, runtime.state.visibleLocation) ? null : at;
   }
 
@@ -134,7 +134,7 @@ class ReaderV2ProgressSync {
 
   void _onHide() => _upload(_runtime());
 
-  void _upload(ReaderV2Runtime? runtime) {
+  void _upload(ReaderRuntime? runtime) {
     final flushing = runtime == null || runtime.disposed
         ? Future<void>.value()
         : runtime.flushProgress();
@@ -154,7 +154,7 @@ class ReaderV2ProgressSync {
   /// 這台的位置比較新，離開時照常上傳。
   Future<void> _jumpIfStill(
     PulledProgress? pulled,
-    ReaderV2Location since,
+    ReaderLocation since,
   ) async {
     final runtime = _runtime();
     if (pulled == null || !pulled.isCurrent || !_isReady(runtime)) return;
@@ -163,7 +163,7 @@ class ReaderV2ProgressSync {
     final index = pulled.progress.chapterIndexIn([
       for (var i = 0; i < runtime.chapterCount; i++) runtime.titleFor(i),
     ]);
-    final target = ReaderV2Location(
+    final target = ReaderLocation(
       chapterIndex: index,
       charOffset: pulled.progress.charOffset,
     );
@@ -184,13 +184,13 @@ class ReaderV2ProgressSync {
     await pulled.commit(ProgressSync.recordOf(book));
   }
 
-  bool _isReady(ReaderV2Runtime? runtime) =>
+  bool _isReady(ReaderRuntime? runtime) =>
       !_disposed &&
       runtime != null &&
       !runtime.disposed &&
-      runtime.state.lifecycle == ReaderV2Lifecycle.ready;
+      runtime.state.lifecycle == ReaderLifecycle.ready;
 
-  static bool _samePlace(ReaderV2Location a, ReaderV2Location b) =>
+  static bool _samePlace(ReaderLocation a, ReaderLocation b) =>
       a.chapterIndex == b.chapterIndex && a.charOffset == b.charOffset;
 
   /// 等 [future]，最多 [limit]；傳回它有沒有在時限內完成。閱讀器關掉時馬上

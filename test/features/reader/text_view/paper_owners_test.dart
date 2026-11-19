@@ -5,11 +5,11 @@ import 'package:night_reader/features/reader/text_view/overlay/paper_owners.dart
 import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:night_reader/features/reader/session/reader_operation_token.dart';
 
-ReaderV2OperationToken _jump(int id) => ReaderV2OperationToken(
+ReaderOperationToken _jump(int id) => ReaderOperationToken(
   id: id,
-  kind: ReaderV2OperationKind.jump,
+  kind: ReaderOperationKind.jump,
   layoutGeneration: 0,
-  targetLocation: const ReaderV2Location(chapterIndex: 3, charOffset: 0),
+  targetLocation: const ReaderLocation(chapterIndex: 3, charOffset: 0),
 );
 
 void main() {

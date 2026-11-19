@@ -8,10 +8,10 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  ReaderV2LayoutSpec spec({double fontSize = 18}) =>
-      ReaderV2LayoutSpec.fromViewport(
+  ReaderLayoutSpec spec({double fontSize = 18}) =>
+      ReaderLayoutSpec.fromViewport(
         viewportSize: const Size(400, 800),
-        style: ReaderV2LayoutStyle(
+        style: ReaderLayoutStyle(
           fontSize: fontSize,
           lineHeight: 1.6,
           letterSpacing: 0,
@@ -36,14 +36,14 @@ void main() {
       Rect.fromLTRB(20, 69, 210, 87),
     ],
     titleLines: const {0},
-    progress: const HybridProgressSnapshot(
+    progress: const ProgressSnapshot(
       chapterIndex: 3,
       chapterCount: 40,
       chapterPercent: 35,
     ),
   );
 
-  const location = ReaderV2Location(
+  const location = ReaderLocation(
     chapterIndex: 3,
     charOffset: 120,
     visualOffsetPx: 4.5,

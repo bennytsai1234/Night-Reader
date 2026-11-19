@@ -14,7 +14,7 @@ final class WordSegmenter {
 
   /// [text] 中涵蓋 [offset] 的那個詞。原生端不可用時退回單一字元
   /// （surrogate pair 視為一個字）。
-  Future<HybridTextRange> wordAt(String text, int offset) async {
+  Future<ChapterTextRange> wordAt(String text, int offset) async {
     try {
       final result = await _channel.invokeListMethod<int>('wordAt', {
         'text': text,
@@ -27,7 +27,7 @@ final class WordSegmenter {
             start <= offset &&
             offset < end &&
             end <= text.length) {
-          return HybridTextRange(start, end);
+          return ChapterTextRange(start, end);
         }
       }
     } on PlatformException {
@@ -38,7 +38,7 @@ final class WordSegmenter {
     return characterAt(text, offset);
   }
 
-  static HybridTextRange characterAt(String text, int offset) {
+  static ChapterTextRange characterAt(String text, int offset) {
     var start = offset;
     if (start > 0 &&
         _isLowSurrogate(text.codeUnitAt(start)) &&
@@ -51,7 +51,7 @@ final class WordSegmenter {
         _isLowSurrogate(text.codeUnitAt(end))) {
       end += 1;
     }
-    return HybridTextRange(start, end);
+    return ChapterTextRange(start, end);
   }
 
   static bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;

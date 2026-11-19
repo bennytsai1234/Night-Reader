@@ -8,7 +8,7 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 
 typedef ChapterId = int;
 
-enum HybridScrollDirection { forward, backward }
+enum ReaderScrollDirection { forward, backward }
 
 /// [loading]：視口只顯示載入畫面、沒有正文可掉幀，排版可用滿整幀。
 enum PumpState { idle, dragging, ballistic, rebuilding, loading }
@@ -104,13 +104,13 @@ final class StyleFingerprint {
     required this.fontFamilySignature,
     required this.platformFontSignature,
     this.cellWidth,
-    this.typographyFeatureSignature = kReaderV2CjkTypographyFeatureSignature,
+    this.typographyFeatureSignature = kReaderCjkTypographyFeatureSignature,
     this.titleFontSize = 0,
     this.titleSpacing = 0,
   });
 
   factory StyleFingerprint.fromLayoutSpec(
-    ReaderV2LayoutSpec spec, {
+    ReaderLayoutSpec spec, {
     double textScaleFactor = 1.0,
     String? fontFamilySignature,
     String platformFontSignature = 'unknown',
@@ -131,7 +131,7 @@ final class StyleFingerprint {
       textScaleFactor: textScaleFactor,
       fontFamilySignature:
           fontFamilySignature ??
-          readerV2FontFamilySignature(spec.style.fontFamily) ??
+          readerFontFamilySignature(spec.style.fontFamily) ??
           'system',
       platformFontSignature: platformFontSignature,
       titleFontSize: style.titleFontSize,
@@ -274,8 +274,8 @@ final class BlockMetrics {
   int get hashCode => Object.hash(height, lineCount);
 }
 
-final class HybridTextRange {
-  const HybridTextRange(this.start, this.end)
+final class ChapterTextRange {
+  const ChapterTextRange(this.start, this.end)
     : assert(start >= 0),
       assert(end >= start);
 
@@ -287,13 +287,15 @@ final class HybridTextRange {
 
   bool containsOffset(int offset) => offset >= start && offset < end;
 
-  bool intersects(HybridTextRange other) {
+  bool intersects(ChapterTextRange other) {
     return start < other.end && other.start < end;
   }
 
   @override
   bool operator ==(Object other) {
-    return other is HybridTextRange && other.start == start && other.end == end;
+    return other is ChapterTextRange &&
+        other.start == start &&
+        other.end == end;
   }
 
   @override
@@ -345,13 +347,13 @@ final class ChapterBlock {
 
   /// 這一塊是一張插圖（ADR 0050）：沒有字，[charRange] 是插圖位置上的空
   /// 範圍，高度照圖的大小算，不排字。
-  final ReaderV2Illustration? illustration;
+  final ReaderIllustration? illustration;
 
   bool get isIllustration => illustration != null;
 
   final BlockKey key;
   final String text;
-  final HybridTextRange charRange;
+  final ChapterTextRange charRange;
   final int sourceParagraphIndex;
   final bool isTitle;
 
@@ -442,9 +444,9 @@ final class ChapterBlocks {
     );
   }
 
-  HybridAnchor anchorForCharOffset(int charOffset) {
+  ScrollAnchor anchorForCharOffset(int charOffset) {
     final block = blockForCharOffset(charOffset);
-    return HybridAnchor(
+    return ScrollAnchor(
       chapterIndex: chapterIndex,
       blockIndex: block.blockIndex,
       charOffsetInChapter: charOffset.clamp(0, displayText.length).toInt(),
@@ -490,7 +492,7 @@ final class ChapterBlocks {
 
   /// [key] 所屬來源段落在章內的字元範圍；長段落即使被拆成多個 group 也
   /// 回傳整段。標題不屬於任何來源段落，回傳 null。
-  HybridTextRange? sourceParagraphRange(BlockKey key) {
+  ChapterTextRange? sourceParagraphRange(BlockKey key) {
     final index = blocks.indexWhere((block) => block.key == key);
     if (index < 0) return null;
     final block = blocks[index];
@@ -506,7 +508,7 @@ final class ChapterBlocks {
         blocks[end + 1].sourceParagraphIndex == sourceParagraphIndex) {
       end += 1;
     }
-    return HybridTextRange(
+    return ChapterTextRange(
       blocks[start].charRange.start,
       blocks[end].charRange.end,
     );
@@ -697,8 +699,8 @@ final class ParagraphPiece {
   final double? spacerWidth;
 }
 
-final class HybridAnchor {
-  const HybridAnchor({
+final class ScrollAnchor {
+  const ScrollAnchor({
     required this.chapterIndex,
     required this.blockIndex,
     required this.charOffsetInChapter,
@@ -707,15 +709,15 @@ final class HybridAnchor {
        assert(blockIndex >= 0),
        assert(charOffsetInChapter >= 0);
 
-  factory HybridAnchor.fromLocation(
-    ReaderV2Location location,
+  factory ScrollAnchor.fromLocation(
+    ReaderLocation location,
     ChapterBlocks blocks,
   ) {
     final normalized = location.normalized(
       chapterLength: blocks.displayText.length,
     );
     final block = blocks.blockForCharOffset(normalized.charOffset);
-    return HybridAnchor(
+    return ScrollAnchor(
       chapterIndex: normalized.chapterIndex,
       blockIndex: block.blockIndex,
       charOffsetInChapter: normalized.charOffset,
@@ -732,8 +734,8 @@ final class HybridAnchor {
     return BlockKey(chapterIndex: chapterIndex, blockIndex: blockIndex);
   }
 
-  ReaderV2Location toLocation({int? chapterLength}) {
-    return ReaderV2Location(
+  ReaderLocation toLocation({int? chapterLength}) {
+    return ReaderLocation(
       chapterIndex: chapterIndex,
       charOffset: charOffsetInChapter,
       visualOffsetPx: visualOffsetPx,
@@ -748,9 +750,9 @@ final class ChapterText {
     required List<String> paragraphs,
     required this.displayText,
     required this.contentHash,
-    List<ReaderV2Illustration> illustrations = const <ReaderV2Illustration>[],
+    List<ReaderIllustration> illustrations = const <ReaderIllustration>[],
   }) : paragraphs = List<String>.unmodifiable(paragraphs),
-       illustrations = List<ReaderV2Illustration>.unmodifiable(illustrations);
+       illustrations = List<ReaderIllustration>.unmodifiable(illustrations);
 
   final ChapterId id;
   final String title;
@@ -758,8 +760,8 @@ final class ChapterText {
   final String displayText;
   final String contentHash;
 
-  /// 照位置排的插圖（[ReaderV2Content.illustrations]）。
-  final List<ReaderV2Illustration> illustrations;
+  /// 照位置排的插圖（[ReaderContent.illustrations]）。
+  final List<ReaderIllustration> illustrations;
 }
 
 final class ChapterEvent {
@@ -789,8 +791,8 @@ final class ChapterEvent {
   final String? contentHash;
 }
 
-final class HybridBlockTextStyle {
-  const HybridBlockTextStyle({
+final class BlockTextStyle {
+  const BlockTextStyle({
     required this.fontSize,
     required this.lineHeight,
     required this.letterSpacing,
@@ -799,11 +801,11 @@ final class HybridBlockTextStyle {
     this.fontFamily,
   });
 
-  factory HybridBlockTextStyle.fromLayoutStyle(
-    ReaderV2LayoutStyle style, {
+  factory BlockTextStyle.fromLayoutStyle(
+    ReaderLayoutStyle style, {
     bool isTitle = false,
   }) {
-    return HybridBlockTextStyle(
+    return BlockTextStyle(
       fontSize: isTitle ? style.titleFontSize : style.fontSize,
       lineHeight: style.effectiveLineHeight,
       letterSpacing: style.letterSpacing,
@@ -825,11 +827,11 @@ final class HybridBlockTextStyle {
   /// 下載的正文字型（ADR 0045）；null 是系統字型。
   final String? fontFamily;
 
-  /// 英數字與符號在標點字型之後的字族清單（[readerV2FontFallback]）。
-  List<String> get fontFamilyFallback => readerV2FontFallback(fontFamily);
+  /// 英數字與符號在標點字型之後的字族清單（[readerFontFallback]）。
+  List<String> get fontFamilyFallback => readerFontFallback(fontFamily);
 
-  /// 中日文字在標點字型之後的字族清單（[readerV2CjkFontFallback]）。
-  List<String> get cjkFontFamilyFallback => readerV2CjkFontFallback(fontFamily);
+  /// 中日文字在標點字型之後的字族清單（[readerCjkFontFallback]）。
+  List<String> get cjkFontFamilyFallback => readerCjkFontFallback(fontFamily);
 }
 
 final class LayoutTask {
@@ -842,7 +844,7 @@ final class LayoutTask {
     required this.contentWidth,
     this.textColor = const ui.Color(0xFF000000),
     this.priority = LayoutTaskPriority.prefetch,
-    this.direction = HybridScrollDirection.forward,
+    this.direction = ReaderScrollDirection.forward,
     this.indentChars = 0,
     this.trailingSpacing = 0.0,
     this.trailingLayoutLookahead = '',
@@ -885,11 +887,11 @@ final class LayoutTask {
 
   final LayoutEpoch epoch;
   final StyleFingerprint fingerprint;
-  final HybridBlockTextStyle textStyle;
+  final BlockTextStyle textStyle;
   final double contentWidth;
   final ui.Color textColor;
   final LayoutTaskPriority priority;
-  final HybridScrollDirection direction;
+  final ReaderScrollDirection direction;
   final int indentChars;
   final double trailingSpacing;
   final double? cellWidth;
@@ -914,8 +916,8 @@ final class BlockReady {
 }
 
 /// 一段文字在畫面上一條視覺行內實際佔據的範圍（viewport 座標）。
-final class HybridLineBox {
-  const HybridLineBox({
+final class LineBox {
+  const LineBox({
     required this.left,
     required this.top,
     required this.right,

@@ -25,8 +25,8 @@ import 'package:night_reader/core/chinese/ui_language.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 
 /// 閱讀器左側的面板：「目錄」「書籤」「標註」三個分頁，頂端的分段切換。
-class ReaderV2ChaptersDrawer extends StatefulWidget {
-  const ReaderV2ChaptersDrawer({
+class ReaderChaptersDrawer extends StatefulWidget {
+  const ReaderChaptersDrawer({
     super.key,
     required this.chapters,
     required this.currentChapter,
@@ -81,7 +81,7 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   /// 點了一章。收起目錄、蓋紙與載入都由呼叫端負責。
   final ValueChanged<int> onChapterTap;
 
-  /// 面板在畫面上（`ReaderV2SidePanelController.shown`）。面板收著時一直掛著，
+  /// 面板在畫面上（`ReaderSidePanelController.shown`）。面板收著時一直掛著，
   /// 每次變成 true 就重設成剛打開的樣子：從目錄分頁開始、照目前這章重新決定
   /// 收起哪些卷並捲到這章，書籤與標註頁回到頂端；收著時不理會換章。沒給時
   /// 當作一直在畫面上。
@@ -89,10 +89,10 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   final Listenable? listenable;
 
   @override
-  State<ReaderV2ChaptersDrawer> createState() => _ReaderV2ChaptersDrawerState();
+  State<ReaderChaptersDrawer> createState() => _ReaderChaptersDrawerState();
 }
 
-class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
+class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   /// 列高：1 倍字級時固定 56，字級放大到放不下（GroupedRow 上下內距 20
   /// 加一行 15×1.3 的標題）時跟著長高。捲動定位用同一個值。
   double get _tileExtent =>
@@ -104,7 +104,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   /// 正在看哪個分頁；每次打開都從目錄開始。
   _DrawerTab _tab = _DrawerTab.chapters;
 
-  /// 剛打開、下一次建畫面時重設（[ReaderV2ChaptersDrawer.shown]）。等到建
+  /// 剛打開、下一次建畫面時重設（[ReaderChaptersDrawer.shown]）。等到建
   /// 畫面時才做，用的是打開那一刻換上的最新目錄。
   bool _resetPending = false;
 
@@ -178,7 +178,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 
   @override
-  void didUpdateWidget(covariant ReaderV2ChaptersDrawer oldWidget) {
+  void didUpdateWidget(covariant ReaderChaptersDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 執行階段每次給一份新的清單；分卷的位置沒變（例如只多了新章）就
     // 沿用收起的卷，列照新的目錄重排。
@@ -328,11 +328,11 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   Widget build(BuildContext context) {
     if (_resetPending) _resetForOpening();
     // 目錄屬於閱讀選單區域，配色取選單配色。
-    final theme = ReaderV2MenuStyle.of(context).toSheetTheme(Theme.of(context));
+    final theme = ReaderMenuStyle.of(context).toSheetTheme(Theme.of(context));
     // 此處的 context 仍在 App 主題下，衍生色直接取選單主題上的擴充。
     final chrome = theme.extension<AppChrome>()!;
     return DerivedTheme(
-      derive: ReaderV2MenuStyle.menuThemeOf,
+      derive: ReaderMenuStyle.menuThemeOf,
       child: Drawer(
         backgroundColor: theme.colorScheme.surface,
         shape: const RoundedRectangleBorder(

@@ -19,20 +19,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 設定保存失敗時的還原契約，以及持久化資料損毀時的回退。
 ///
 /// 可切換寫入失敗的 repository；讀取仍走 SharedPreferences mock。
-class _BrokenLoadRepository extends ReaderV2PrefsRepository {
+class _BrokenLoadRepository extends ReaderPrefsRepository {
   const _BrokenLoadRepository();
 
   @override
-  Future<ReaderV2PrefsSnapshot> load() async => throw StateError('no prefs');
+  Future<ReaderPrefsSnapshot> load() async => throw StateError('no prefs');
 }
 
-class _FlakyPrefsRepository extends ReaderV2PrefsRepository {
+class _FlakyPrefsRepository extends ReaderPrefsRepository {
   _FlakyPrefsRepository();
 
   bool failWrites = false;
 
   @override
-  Future<void> save<T>(ReaderV2Setting<T> setting, T value) async {
+  Future<void> save<T>(ReaderSetting<T> setting, T value) async {
     final failing =
         setting.key == PreferKey.readerFontSize ||
         setting.key == PreferKey.readerPaddingHorizontal;
@@ -58,8 +58,8 @@ void main() {
 
   test('saving stores the value as it was when saved', () async {
     final actions = List<int>.filled(9, 0);
-    final pending = ReaderV2PrefsRepository().save(
-      ReaderV2Settings.clickActions,
+    final pending = ReaderPrefsRepository().save(
+      ReaderSettings.clickActions,
       actions,
     );
     // 等寫入的期間清單又被改：存的照舊是呼叫當下的。
@@ -70,8 +70,8 @@ void main() {
   });
 
   test('a snapshot does not share the tap grid with the one it came from', () {
-    final first = ReaderV2PrefsSnapshot.defaults();
-    final second = first.withValue(ReaderV2Settings.fontSize, 24.0);
+    final first = ReaderPrefsSnapshot.defaults();
+    final second = first.withValue(ReaderSettings.fontSize, 24.0);
     first.clickActions[0] = 1;
     expect(second.clickActions[0], 0);
   });
@@ -83,14 +83,14 @@ void main() {
         PreferKey.readerHeaderInfo: '3,6',
       });
 
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
 
       expect(settings.fontSize, 24.0);
       expect(
         settings.headerInfo,
-        const ReaderV2InfoSlots(
-          left: ReaderV2InfoItem.chapterTitle,
-          right: ReaderV2InfoItem.bookProgress,
+        const ReaderInfoSlots(
+          left: ReaderInfoItem.chapterTitle,
+          right: ReaderInfoItem.bookProgress,
         ),
       );
       settings.dispose();
@@ -104,22 +104,22 @@ void main() {
         PreferKey.readerLineHeight: 1.4,
         PreferKey.readerParagraphSpacing: 0.1,
       });
-      double gapPx(ReaderV2SettingsController s) => s.titleSpacing * 18 * 1.4;
+      double gapPx(ReaderSettingsController s) => s.titleSpacing * 18 * 1.4;
 
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       expect(gapPx(settings), closeTo(0.8, 1e-9));
 
       // 換算的值當場存下來，之後改段距不會再帶著標題間距變。
       settings.setTypography(paragraphSpacing: 0);
       await pumpEventQueue();
-      final reopened = ReaderV2SettingsController();
+      final reopened = ReaderSettingsController();
       expect(gapPx(reopened), closeTo(0.8, 1e-9));
       settings.dispose();
       reopened.dispose();
     });
 
     test('settings never saved open with the defaults', () async {
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       final readStyle = settings.readStyleFor(
         EdgeInsets.zero,
         viewportWidth: 393,
@@ -146,15 +146,15 @@ void main() {
     test('an unreadable saved value opens with the defaults', () async {
       await usePrefs(<String, Object>{PreferKey.readerFontSize: '24'});
 
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
 
-      expect(settings.fontSize, ReaderV2PrefsSnapshot.defaults().fontSize);
+      expect(settings.fontSize, ReaderPrefsSnapshot.defaults().fontSize);
       settings.dispose();
     });
 
     test('a failed reload keeps the current settings', () async {
       await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
-      final settings = ReaderV2SettingsController(
+      final settings = ReaderSettingsController(
         prefsRepository: const _BrokenLoadRepository(),
       );
 
@@ -168,7 +168,7 @@ void main() {
   group('save failure rollback', () {
     test('failed write restores the last persisted value', () async {
       final repository = _FlakyPrefsRepository();
-      final settings = ReaderV2SettingsController(prefsRepository: repository);
+      final settings = ReaderSettingsController(prefsRepository: repository);
       await settings.loadSettings();
       final failures = <String>[];
       settings.saveFailures.listen(failures.add);
@@ -189,7 +189,7 @@ void main() {
 
     test('an older failure does not overwrite a newer value', () async {
       final repository = _FlakyPrefsRepository();
-      final settings = ReaderV2SettingsController(prefsRepository: repository);
+      final settings = ReaderSettingsController(prefsRepository: repository);
       await settings.loadSettings();
 
       repository.failWrites = true;
@@ -206,12 +206,12 @@ void main() {
   });
 
   test('reloading a changed Chinese conversion re-converts content', () async {
-    final reader = ReaderV2SettingsController();
+    final reader = ReaderSettingsController();
     await reader.loadSettings();
     final generation = reader.contentSettingsGeneration;
 
     // 另一個 controller（閱讀偏好頁）寫入新的繁簡轉換（預設是簡轉繁）。
-    final page = ReaderV2SettingsController()..setChineseConvert(2);
+    final page = ReaderSettingsController()..setChineseConvert(2);
     await pumpEventQueue();
 
     await reader.loadSettings();
@@ -223,10 +223,10 @@ void main() {
 
   test('unsaved title size keeps the old body + 4 appearance', () async {
     await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
-    final snapshot = await const ReaderV2PrefsRepository().load();
+    final snapshot = await const ReaderPrefsRepository().load();
     expect(snapshot.titleFontSize, 28.0);
 
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     await settings.loadSettings();
     settings.setTypography(fontSize: 30);
     expect(settings.titleFontSize, 28.0, reason: '標題字號獨立於正文');
@@ -237,21 +237,21 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       PreferKey.readerChapterSpacing: 99.0,
     });
-    final snapshot = await const ReaderV2PrefsRepository().load();
-    expect(snapshot.chapterSpacing, ReaderV2PrefsRepository.maxChapterSpacing);
+    final snapshot = await const ReaderPrefsRepository().load();
+    expect(snapshot.chapterSpacing, ReaderPrefsRepository.maxChapterSpacing);
   });
 
   test('footer offset persists and reset returns to the default', () async {
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     await settings.loadSettings();
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final defaults = ReaderPrefsSnapshot.defaults();
     expect(settings.footerOffset, defaults.footerOffset);
 
     settings.setFooterOffset(0);
     await pumpEventQueue();
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getDouble(PreferKey.readerFooterOffset), 0);
-    expect((await const ReaderV2PrefsRepository().load()).footerOffset, 0);
+    expect((await const ReaderPrefsRepository().load()).footerOffset, 0);
 
     settings.resetPageLayout();
     await pumpEventQueue();
@@ -263,19 +263,19 @@ void main() {
   test(
     'weights and title alignment persist and reset with typography',
     () async {
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       expect(settings.isTypographyChoicesDefault, isTrue);
       settings
         ..setBodyBold(true)
         ..setTitleBold(false)
         ..setTitleCenter(true);
       await pumpEventQueue();
-      final saved = await const ReaderV2PrefsRepository().load();
+      final saved = await const ReaderPrefsRepository().load();
       expect(saved.bodyBold, isTrue);
       expect(saved.titleBold, isFalse);
       expect(saved.titleCenter, isTrue);
 
-      final reopened = ReaderV2SettingsController();
+      final reopened = ReaderSettingsController();
       final style = reopened.readStyleFor(EdgeInsets.zero, viewportWidth: 393);
       expect(style.bold, isTrue);
       expect(style.titleBold, isFalse);
@@ -315,7 +315,7 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     var notified = 0;
     settings.addListener(() => notified++);
     expect(settings.readerFont, AppFont.system);
@@ -330,7 +330,7 @@ void main() {
     expect(await fake.ensure(AppFont.wenkaiTc), isTrue);
     await pumpEventQueue();
     expect(
-      (await const ReaderV2PrefsRepository().load()).readerFont,
+      (await const ReaderPrefsRepository().load()).readerFont,
       AppFont.wenkaiTc,
     );
     expect(settings.readerFontFamily, 'TestwenkaiTc');
@@ -352,16 +352,16 @@ void main() {
   test(
     'info font size persists, is clamped and resets with the page layout',
     () async {
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       settings.setInfoFontSize(14);
       await pumpEventQueue();
-      expect((await const ReaderV2PrefsRepository().load()).infoFontSize, 14);
+      expect((await const ReaderPrefsRepository().load()).infoFontSize, 14);
       expect(settings.isPageLayoutDefault, isFalse);
 
       settings.setInfoFontSize(40);
-      expect(settings.infoFontSize, ReaderV2PrefsRepository.maxInfoFontSize);
+      expect(settings.infoFontSize, ReaderPrefsRepository.maxInfoFontSize);
       settings.setInfoFontSize(2);
-      expect(settings.infoFontSize, ReaderV2PrefsRepository.minInfoFontSize);
+      expect(settings.infoFontSize, ReaderPrefsRepository.minInfoFontSize);
 
       settings.resetPageLayout();
       await pumpEventQueue();
@@ -373,7 +373,7 @@ void main() {
 
   test('reset writes the defaults even when another phone changed them '
       'while the page was open', () async {
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     expect(settings.isTypographyChoicesDefault, isTrue);
     expect(settings.isPageLayoutDefault, isTrue);
     // 頁面開著時同步寫進另一台的值，記憶體裡還是預設。
@@ -390,8 +390,8 @@ void main() {
       ..resetPageLayout();
     await pumpEventQueue();
 
-    final saved = await const ReaderV2PrefsRepository().load();
-    final defaults = ReaderV2PrefsSnapshot.defaults();
+    final saved = await const ReaderPrefsRepository().load();
+    final defaults = ReaderPrefsSnapshot.defaults();
     expect(saved.bodyBold, defaults.bodyBold);
     expect(saved.titleCenter, defaults.titleCenter);
     expect(saved.justifyText, defaults.justifyText);
@@ -402,13 +402,13 @@ void main() {
   });
 
   test('line chars persists and reset returns to 60', () async {
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     await settings.loadSettings();
     expect(settings.lineChars, 60);
 
     settings.setLineChars(20);
     await pumpEventQueue();
-    expect((await const ReaderV2PrefsRepository().load()).lineChars, 20);
+    expect((await const ReaderPrefsRepository().load()).lineChars, 20);
     expect(settings.isPageLayoutDefault, isFalse);
 
     settings.resetPageLayout();
@@ -420,7 +420,7 @@ void main() {
 
   test('an earlier left/right margin stays as the minimum margin', () async {
     await usePrefs(<String, Object>{PreferKey.readerPaddingHorizontal: 6.0});
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     await settings.loadSettings();
 
     // 手機放不下 32 字：撐滿，兩側照舊是原本設的邊距。
@@ -431,7 +431,7 @@ void main() {
   test(
     'justify text is on by default, persists and reaches the style',
     () async {
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       await settings.loadSettings();
       expect(settings.justifyText, isTrue);
       expect(
@@ -441,10 +441,7 @@ void main() {
 
       settings.setJustifyText(false);
       await pumpEventQueue();
-      expect(
-        (await const ReaderV2PrefsRepository().load()).justifyText,
-        isFalse,
-      );
+      expect((await const ReaderPrefsRepository().load()).justifyText, isFalse);
       expect(
         settings.readStyleFor(EdgeInsets.zero, viewportWidth: 393).justify,
         isFalse,
@@ -459,71 +456,68 @@ void main() {
   );
 
   test('battery info items round-trip through stored slots', () {
-    const slots = ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.battery,
-      right: ReaderV2InfoItem.batteryWithIcon,
+    const slots = ReaderInfoSlots(
+      left: ReaderInfoItem.battery,
+      right: ReaderInfoItem.batteryWithIcon,
     );
-    expect(ReaderV2InfoSlots.decode(slots.encode()), slots);
-    const inside = ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.none,
-      right: ReaderV2InfoItem.batteryInside,
+    expect(ReaderInfoSlots.decode(slots.encode()), slots);
+    const inside = ReaderInfoSlots(
+      left: ReaderInfoItem.none,
+      right: ReaderInfoItem.batteryInside,
     );
-    expect(ReaderV2InfoSlots.decode(inside.encode()), inside);
-    const iconOnly = ReaderV2InfoSlots(
-      left: ReaderV2InfoItem.batteryIcon,
-      right: ReaderV2InfoItem.none,
+    expect(ReaderInfoSlots.decode(inside.encode()), inside);
+    const iconOnly = ReaderInfoSlots(
+      left: ReaderInfoItem.batteryIcon,
+      right: ReaderInfoItem.none,
     );
     expect(iconOnly.encode(), '10,0');
-    expect(ReaderV2InfoSlots.decode(iconOnly.encode()), iconOnly);
-    expect(
-      ReaderV2InfoItem.values.where((item) => item.isBattery),
-      hasLength(4),
-    );
+    expect(ReaderInfoSlots.decode(iconOnly.encode()), iconOnly);
+    expect(ReaderInfoItem.values.where((item) => item.isBattery), hasLength(4));
     // 碼是存下的值，選單順序換了也不能重複。
     expect(
-      ReaderV2InfoItem.values.map((item) => item.code).toSet(),
-      hasLength(ReaderV2InfoItem.values.length),
+      ReaderInfoItem.values.map((item) => item.code).toSet(),
+      hasLength(ReaderInfoItem.values.length),
     );
   });
 
   test('朗讀高亮的顏色與深淺可保存並讀回；未設定時用預設', () async {
-    final defaults = await const ReaderV2PrefsRepository().load();
-    expect(defaults.highlightColor, ReaderV2HighlightColor.gray);
-    expect(defaults.highlightStrength, ReaderV2HighlightStrength.defaultValue);
+    final defaults = await const ReaderPrefsRepository().load();
+    expect(defaults.highlightColor, ReaderHighlightColor.gray);
+    expect(defaults.highlightStrength, ReaderHighlightStrength.defaultValue);
 
-    final settings = ReaderV2SettingsController();
+    final settings = ReaderSettingsController();
     await settings.loadSettings();
-    settings.setHighlightColor(ReaderV2HighlightColor.blue);
+    settings.setHighlightColor(ReaderHighlightColor.blue);
     settings.setHighlightStrength(0.4);
     await pumpEventQueue();
     settings.dispose();
 
-    final reloaded = await const ReaderV2PrefsRepository().load();
-    expect(reloaded.highlightColor, ReaderV2HighlightColor.blue);
+    final reloaded = await const ReaderPrefsRepository().load();
+    expect(reloaded.highlightColor, ReaderHighlightColor.blue);
     expect(reloaded.highlightStrength, closeTo(0.4, 1e-9));
   });
 
   test(
     'dragging the brightness bar leaves auto and saves once on release',
     () async {
-      final defaults = await const ReaderV2PrefsRepository().load();
+      final defaults = await const ReaderPrefsRepository().load();
       expect(defaults.brightnessAuto, isTrue);
       expect(defaults.volumeKeyPage, isTrue);
 
-      final settings = ReaderV2SettingsController();
+      final settings = ReaderSettingsController();
       await settings.loadSettings();
       settings.setBrightness(0.1, persist: false);
       expect(settings.brightnessAuto, isFalse);
       await pumpEventQueue();
-      final mid = await const ReaderV2PrefsRepository().load();
-      expect(mid.brightness, ReaderV2Brightness.defaultLevel);
+      final mid = await const ReaderPrefsRepository().load();
+      expect(mid.brightness, ReaderBrightness.defaultLevel);
 
       settings.setBrightness(0.2);
       settings.setVolumeKeyPage(true);
       await pumpEventQueue();
       settings.dispose();
 
-      final reloaded = await const ReaderV2PrefsRepository().load();
+      final reloaded = await const ReaderPrefsRepository().load();
       expect(reloaded.brightnessAuto, isFalse);
       expect(reloaded.brightness, closeTo(0.2, 1e-9));
       expect(reloaded.volumeKeyPage, isTrue);
@@ -535,18 +529,18 @@ void main() {
       PreferKey.readerHighlightColor: 'rainbow',
       PreferKey.readerHighlightStrength: 5.0,
     });
-    final snapshot = await const ReaderV2PrefsRepository().load();
-    expect(snapshot.highlightColor, ReaderV2HighlightColor.defaultColor);
-    expect(snapshot.highlightStrength, ReaderV2HighlightStrength.max);
+    final snapshot = await const ReaderPrefsRepository().load();
+    expect(snapshot.highlightColor, ReaderHighlightColor.defaultColor);
+    expect(snapshot.highlightStrength, ReaderHighlightStrength.max);
   });
 
   test('malformed stored info slots fall back safely', () {
-    expect(ReaderV2InfoSlots.decode('garbage'), isNull);
+    expect(ReaderInfoSlots.decode('garbage'), isNull);
     expect(
-      ReaderV2InfoSlots.decode('99,6'),
-      const ReaderV2InfoSlots(
-        left: ReaderV2InfoItem.none,
-        right: ReaderV2InfoItem.bookProgress,
+      ReaderInfoSlots.decode('99,6'),
+      const ReaderInfoSlots(
+        left: ReaderInfoItem.none,
+        right: ReaderInfoItem.bookProgress,
       ),
     );
   });

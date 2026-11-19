@@ -17,7 +17,7 @@ import 'package:night_reader/features/reader/layout/reader_typography.dart';
 const double _cell = 20;
 const double _frame = 260;
 const double _width = _frame + 0.05;
-const _style = HybridBlockTextStyle(
+const _style = BlockTextStyle(
   fontSize: _cell,
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -73,7 +73,7 @@ void main() {
   setUpAll(() async {
     final bytes = File('test/fixtures/fonts/mixed_width_test.ttf')
         .readAsBytesSync();
-    final loader = FontLoader(kReaderV2PunctFontFamily)
+    final loader = FontLoader(kReaderPunctFontFamily)
       ..addFont(Future<ByteData>.value(ByteData.sublistView(bytes)));
     await loader.load();
   });

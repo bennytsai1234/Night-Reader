@@ -9,7 +9,7 @@ import 'package:night_reader/features/reader/screen/reader_page_shell.dart';
 /// 把狀態列叫回來、再由 App 收起，這段期間回報的上緣內距會跳動，正文
 /// 不得跟著移動。頁尾的位置與正文到頁尾的距離都由使用者設定決定。
 void main() {
-  ReaderV2PageChromeLayout resolve({
+  ReaderPageChromeLayout resolve({
     double statusInset = 30,
     double navInset = 20,
     double? cutout = 28,
@@ -21,7 +21,7 @@ void main() {
     double footerOffset = 4,
     double infoFontSize = kReaderInfoFontSize,
   }) {
-    return ReaderV2PageChromeLayout.resolve(
+    return ReaderPageChromeLayout.resolve(
       mediaPadding: EdgeInsets.only(top: statusInset, bottom: navInset),
       topCutoutExtent: cutout,
       hideStatusBar: hideStatusBar,

@@ -13,8 +13,8 @@ import 'reader_device_channel.dart';
 /// [enabled]（設定開著、沒在朗讀）、閱讀器是最上面那一頁（沒有面板、
 /// 對話框或整頁蓋著）、[blockers] 都是 false（選單、目錄收著）時攔下；
 /// 其餘時候音量鍵照常調音量。
-class ReaderV2VolumeKeys extends StatefulWidget {
-  const ReaderV2VolumeKeys({
+class ReaderVolumeKeys extends StatefulWidget {
+  const ReaderVolumeKeys({
     super.key,
     required this.enabled,
     this.blockers = const [],
@@ -30,11 +30,11 @@ class ReaderV2VolumeKeys extends StatefulWidget {
   final Widget child;
 
   @override
-  State<ReaderV2VolumeKeys> createState() => _ReaderV2VolumeKeysState();
+  State<ReaderVolumeKeys> createState() => _ReaderVolumeKeysState();
 }
 
-class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys>
-    implements ReaderV2VolumeKeyListener {
+class _ReaderVolumeKeysState extends State<ReaderVolumeKeys>
+    implements ReaderVolumeKeyListener {
   bool _routeCurrent = false;
 
   /// 最後告訴原生端的值；null 是還沒告訴過，下一次不管攔不攔都要送：
@@ -47,7 +47,7 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys>
     for (final blocker in widget.blockers) {
       blocker.addListener(_sync);
     }
-    ReaderV2DeviceChannel.volumeKeyListener = this;
+    ReaderDeviceChannel.volumeKeyListener = this;
   }
 
   @override
@@ -58,7 +58,7 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys>
   }
 
   @override
-  void didUpdateWidget(covariant ReaderV2VolumeKeys oldWidget) {
+  void didUpdateWidget(covariant ReaderVolumeKeys oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!listEquals(oldWidget.blockers, widget.blockers)) {
       for (final blocker in oldWidget.blockers) {
@@ -79,12 +79,12 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys>
     // 換成另一個閱讀器時，新的那個先接手；舊的關掉時不能把它的設定收掉。
     if (_owner) {
       _send(false);
-      ReaderV2DeviceChannel.volumeKeyListener = null;
+      ReaderDeviceChannel.volumeKeyListener = null;
     }
     super.dispose();
   }
 
-  bool get _owner => identical(ReaderV2DeviceChannel.volumeKeyListener, this);
+  bool get _owner => identical(ReaderDeviceChannel.volumeKeyListener, this);
 
   bool get _active =>
       widget.enabled &&
@@ -98,7 +98,7 @@ class _ReaderV2VolumeKeysState extends State<ReaderV2VolumeKeys>
   void _send(bool on) {
     if (on == _sent) return;
     _sent = on;
-    unawaited(ReaderV2DeviceChannel.setVolumeKeyPaging(on));
+    unawaited(ReaderDeviceChannel.setVolumeKeyPaging(on));
   }
 
   @override

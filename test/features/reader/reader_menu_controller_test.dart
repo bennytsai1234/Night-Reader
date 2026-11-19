@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader/features/menu/reader_menu_controller.dart';
 
 void main() {
-  late ReaderV2MenuController menu;
-  setUp(() => menu = ReaderV2MenuController());
+  late ReaderMenuController menu;
+  setUp(() => menu = ReaderMenuController());
   tearDown(() => menu.dispose());
 
   test('放開後停在選定的位置，這一次的跳轉做完才放手', () {

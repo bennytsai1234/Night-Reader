@@ -11,8 +11,8 @@ import 'package:night_reader/shared/widgets/ui_text.dart';
 /// 有字時外框包住這段字（「電量（數字在電池裡）」），填滿改用淡色墊在字底下，
 /// 字照樣看得清楚。[percent] 為 null（還沒拿到電量）時不填。充電中在電池右邊
 /// 多一個小閃電。
-class ReaderV2BatteryGlyph extends StatelessWidget {
-  const ReaderV2BatteryGlyph({
+class ReaderBatteryGlyph extends StatelessWidget {
+  const ReaderBatteryGlyph({
     super.key,
     required this.percent,
     required this.charging,

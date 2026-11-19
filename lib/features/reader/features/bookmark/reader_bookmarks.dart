@@ -12,8 +12,8 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 
 /// 閱讀器裡這本書的書籤：照書名加作者讀出來，資料表一變（新增、刪除、
 /// 另一台同步過來）就跟著更新，正文旁的記號與目錄的書籤分頁都看它。
-class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
-  ReaderV2Bookmarks({
+class ReaderBookmarks extends ValueNotifier<List<Bookmark>> {
+  ReaderBookmarks({
     required Book book,
     required BookmarkDao? dao,
     required this._chapters,
@@ -58,7 +58,7 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
 
   /// 在 [location]（已綁好那一章正文的錨點）留一個書籤。
   Future<Bookmark?> add({
-    required ReaderV2Location location,
+    required ReaderLocation location,
     required String chapterTitle,
     required String excerpt,
   }) async {
@@ -95,7 +95,7 @@ class ReaderV2Bookmarks extends ValueNotifier<List<Bookmark>> {
 
   /// 跳回書籤要去的位置：記下的錨點（含前後原文，正文變了照它找回同一
   /// 句），章節序號換成這台目錄裡的。
-  static ReaderV2Location locationOf(
+  static ReaderLocation locationOf(
     Bookmark bookmark, {
     required int chapterIndex,
   }) => locationFromAnchor(
@@ -126,10 +126,10 @@ int chapterIndexByTitle({
   newChapters: chapters,
 );
 
-/// 記下的錨點（`ReaderV2Location` 的 JSON，含前後原文）換成閱讀器的位置，
+/// 記下的錨點（`ReaderLocation` 的 JSON，含前後原文）換成閱讀器的位置，
 /// 章節序號換成這台目錄裡的 [chapterIndex]；讀不懂時照章內第幾個字。書籤
 /// 與標註共用。
-ReaderV2Location locationFromAnchor(
+ReaderLocation locationFromAnchor(
   String? anchor, {
   required int chapterIndex,
   required int charOffset,
@@ -138,12 +138,12 @@ ReaderV2Location locationFromAnchor(
     try {
       final decoded = jsonDecode(anchor);
       if (decoded is Map) {
-        return ReaderV2Location.fromJson(Map<String, dynamic>.from(decoded))
+        return ReaderLocation.fromJson(Map<String, dynamic>.from(decoded))
             .copyWith(chapterIndex: chapterIndex, visualOffsetPx: 0);
       }
     } on FormatException {
       // 讀不懂的錨點照章內第幾個字跳。
     }
   }
-  return ReaderV2Location(chapterIndex: chapterIndex, charOffset: charOffset);
+  return ReaderLocation(chapterIndex: chapterIndex, charOffset: charOffset);
 }

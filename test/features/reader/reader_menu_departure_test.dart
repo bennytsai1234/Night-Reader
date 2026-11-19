@@ -6,13 +6,13 @@ import 'package:night_reader/features/reader/features/menu/reader_menu_entrance.
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 void main() {
-  late ReaderV2MenuController menu;
-  late ReaderV2MenuDeparture departure;
+  late ReaderMenuController menu;
+  late ReaderMenuDeparture departure;
 
   /// 閱讀器的下方選單：跟著選單的開關滑進滑出，收完時通知 [departure]。
   Future<void> pumpMenu(WidgetTester tester) async {
-    menu = ReaderV2MenuController();
-    departure = ReaderV2MenuDeparture(menu);
+    menu = ReaderMenuController();
+    departure = ReaderMenuDeparture(menu);
     addTearDown(() {
       departure.dispose();
       menu.dispose();
@@ -21,7 +21,7 @@ void main() {
       MaterialApp(
         home: Align(
           alignment: Alignment.bottomCenter,
-          child: ReaderV2MenuEntrance(
+          child: ReaderMenuEntrance(
             visible: menu.controlsVisible,
             edge: AxisDirection.down,
             onHidden: departure.menusHidden,
@@ -38,7 +38,7 @@ void main() {
   }
 
   /// 記下 [ticket] 的結果；還沒結果時是空的。
-  List<bool> outcome(ReaderV2MenuDepartureTicket ticket) {
+  List<bool> outcome(ReaderMenuDepartureTicket ticket) {
     final results = <bool>[];
     ticket.menusGone.then(results.add);
     return results;
@@ -139,7 +139,7 @@ void main() {
     expect(result, [false]);
     expect(ticket.canDepart, isFalse);
     // tearDown 會再 dispose 一次；先換一個新的給它。
-    departure = ReaderV2MenuDeparture(menu);
+    departure = ReaderMenuDeparture(menu);
     await tester.pumpAndSettle();
   });
 }

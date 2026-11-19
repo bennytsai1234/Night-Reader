@@ -5,7 +5,7 @@ import 'package:night_reader/features/reader/text_view/core/text_view_types.dart
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 
 void main() {
-  group('ReaderV2 layout ownership', () {
+  group('Reader layout ownership', () {
     test('height-only viewport change preserves text layout identity', () {
       final tall = _spec();
       final short = _spec(viewportSize: const Size(360, 600));
@@ -54,7 +54,7 @@ void main() {
   });
 }
 
-ReaderV2LayoutSpec _spec({
+ReaderLayoutSpec _spec({
   Size viewportSize = const Size(360, 640),
   double fontSize = 18,
   double paddingTop = 24,
@@ -62,10 +62,10 @@ ReaderV2LayoutSpec _spec({
   double paddingLeft = 20,
   double paddingRight = 20,
 }) {
-  return ReaderV2LayoutSpec.fromViewport(
+  return ReaderLayoutSpec.fromViewport(
     viewportSize: viewportSize,
     cellWidth: fontSize,
-    style: ReaderV2LayoutStyle(
+    style: ReaderLayoutStyle(
       fontSize: fontSize,
       lineHeight: 1.6,
       letterSpacing: 0,

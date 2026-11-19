@@ -6,7 +6,7 @@ void main() {
   bool paid(int index) => index == 2 || index == 3;
 
   int? resolve(int current, int delta) =>
-      ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+      ReaderChapterNavigationResolver.resolveRelativeTarget(
         currentChapterIndex: current,
         chapterCount: 6,
         delta: delta,
@@ -23,7 +23,7 @@ void main() {
     expect(resolve(5, 1), isNull);
     expect(resolve(0, -1), isNull);
     expect(
-      ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+      ReaderChapterNavigationResolver.resolveRelativeTarget(
         currentChapterIndex: 1,
         chapterCount: 4,
         delta: 1,
@@ -35,7 +35,7 @@ void main() {
 
   test('without a skip rule every chapter counts', () {
     expect(
-      ReaderV2ChapterNavigationResolver.resolveRelativeTarget(
+      ReaderChapterNavigationResolver.resolveRelativeTarget(
         currentChapterIndex: 1,
         chapterCount: 6,
         delta: 1,

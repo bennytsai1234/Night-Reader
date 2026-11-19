@@ -5,12 +5,12 @@ import 'package:flutter/foundation.dart';
 /// 位元組，比例和字數一樣）；還不知道長度的章用已知各章的平均，一章都
 /// 不知道時各算一份。分卷標題沒有正文，佔 0。
 @immutable
-final class ReaderV2ChapterShares {
+final class ReaderChapterShares {
   /// 每章一樣長。
-  const ReaderV2ChapterShares.even(this.chapterCount) : _starts = null;
+  const ReaderChapterShares.even(this.chapterCount) : _starts = null;
 
   /// [lengths] 與章節一一對應：null 是還不知道，0 是沒有正文（分卷）。
-  factory ReaderV2ChapterShares.fromLengths(List<int?> lengths) {
+  factory ReaderChapterShares.fromLengths(List<int?> lengths) {
     final known = [
       for (final length in lengths)
         if (length != null && length > 0) length,
@@ -24,16 +24,16 @@ final class ReaderV2ChapterShares {
         length == null ? average : length.toDouble(),
     ];
     final total = weights.fold<double>(0, (sum, w) => sum + w);
-    if (total <= 0) return ReaderV2ChapterShares.even(lengths.length);
+    if (total <= 0) return ReaderChapterShares.even(lengths.length);
     final starts = List<double>.filled(lengths.length + 1, 0);
     for (var i = 0; i < weights.length; i++) {
       starts[i + 1] = starts[i] + weights[i] / total;
     }
     starts[lengths.length] = 1;
-    return ReaderV2ChapterShares._(lengths.length, starts);
+    return ReaderChapterShares._(lengths.length, starts);
   }
 
-  const ReaderV2ChapterShares._(this.chapterCount, List<double> starts)
+  const ReaderChapterShares._(this.chapterCount, List<double> starts)
     : _starts = starts;
 
   final int chapterCount;

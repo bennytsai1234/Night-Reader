@@ -3,7 +3,7 @@ import 'package:night_reader/features/reader/features/tts/reader_tts_segmenter.d
 
 /// 朗讀高亮的契約：一句一段、句段邊界不切開收引號，頭尾不漏字。
 void main() {
-  const segmenter = ReaderV2TtsSegmenter();
+  const segmenter = ReaderTtsSegmenter();
 
   test('a sentence keeps its closing quote', () {
     const text = '「我們現在就出發，天亮之前一定要趕到城裡，否則城門一關就來不及了。」他說完便轉身離開了院子。';

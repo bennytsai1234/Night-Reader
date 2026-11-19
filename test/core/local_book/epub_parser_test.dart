@@ -361,7 +361,7 @@ void main() {
     final stale = [for (final c in result.chapters) c.copyWith()]
       ..last.end = result.chapters.last.end! - 1;
     await db.chapterDao.insertChapters(stale);
-    final repository = ReaderV2ChapterRepository(
+    final repository = ReaderChapterRepository(
       book: result.book,
       initialChapters: stale,
       bookDao: db.bookDao,

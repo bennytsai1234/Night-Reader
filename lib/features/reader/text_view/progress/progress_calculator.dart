@@ -7,16 +7,16 @@ import 'package:night_reader/features/reader/session/reader_location.dart';
 /// DocumentIndex owns only the materialized layout window. It is deliberately
 /// absent here because a partial chapter extent cannot represent total chapter
 /// progress.
-final class HybridProgress {
-  const HybridProgress({required this.chapterCount, this.shares});
+final class ProgressCalculator {
+  const ProgressCalculator({required this.chapterCount, this.shares});
 
   final int chapterCount;
 
   /// 每章佔全書多少；沒給時當每章一樣長。
-  final ReaderV2ChapterShares? shares;
+  final ReaderChapterShares? shares;
 
-  HybridProgressSnapshot progressForLocation(
-    ReaderV2Location location, {
+  ProgressSnapshot progressForLocation(
+    ReaderLocation location, {
     required int chapterLength,
   }) {
     final chapterIndex = chapterCount <= 0
@@ -30,7 +30,7 @@ final class HybridProgress {
               .clamp(0.0, 100.0)
               .toDouble();
     final known = shares?.chapterCount == chapterCount ? shares : null;
-    return HybridProgressSnapshot(
+    return ProgressSnapshot(
       chapterIndex: chapterIndex,
       chapterCount: chapterCount,
       chapterPercent: chapterPercent,

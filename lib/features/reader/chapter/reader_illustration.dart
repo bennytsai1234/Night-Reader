@@ -1,10 +1,10 @@
 /// 正文裡的一張插圖（ADR 0050）：夾在 [offset] 那個字之前，圖不算字。
 ///
-/// [offset] 是 [ReaderV2Content.displayText] 裡的 UTF-16 位置；落在段落開頭
+/// [offset] 是 [ReaderContent.displayText] 裡的 UTF-16 位置；落在段落開頭
 /// 時圖在那一段前面，落在段落中間時那一段從這裡切開、圖夾在中間，等於
 /// 正文長度時圖在章末。
-final class ReaderV2Illustration {
-  const ReaderV2Illustration({
+final class ReaderIllustration {
+  const ReaderIllustration({
     required this.offset,
     required this.src,
     required this.path,
@@ -26,7 +26,7 @@ final class ReaderV2Illustration {
 
   @override
   bool operator ==(Object other) =>
-      other is ReaderV2Illustration &&
+      other is ReaderIllustration &&
       other.offset == offset &&
       other.src == src &&
       other.path == path &&

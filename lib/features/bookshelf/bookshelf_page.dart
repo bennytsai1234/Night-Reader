@@ -1268,7 +1268,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     context.read<BookshelfProvider>().reloadWhenUncovered();
     await Navigator.push(
       context,
-      BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
+      BookOpenRoute(book: book, openTarget: ReaderOpenTarget.resume(book)),
     );
   }
 

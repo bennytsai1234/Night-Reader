@@ -1,8 +1,8 @@
 /// 朗讀高亮：目前朗讀的整個句段。
 ///
 /// offset 是章節 displayText 的 UTF-16 座標。
-class ReaderV2TtsHighlight {
-  const ReaderV2TtsHighlight({
+class ReaderTtsHighlight {
+  const ReaderTtsHighlight({
     required this.chapterIndex,
     required this.sentenceStart,
     required this.sentenceEnd,
@@ -16,7 +16,7 @@ class ReaderV2TtsHighlight {
 
   @override
   bool operator ==(Object other) {
-    return other is ReaderV2TtsHighlight &&
+    return other is ReaderTtsHighlight &&
         other.chapterIndex == chapterIndex &&
         other.sentenceStart == sentenceStart &&
         other.sentenceEnd == sentenceEnd;

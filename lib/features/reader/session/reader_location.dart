@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
-class ReaderV2Location {
+class ReaderLocation {
   static const double minVisualOffsetPx = -120.0;
   static const double maxVisualOffsetPx = 120.0;
 
-  const ReaderV2Location({
+  const ReaderLocation({
     required this.chapterIndex,
     required this.charOffset,
     this.visualOffsetPx = 0.0,
@@ -37,7 +37,7 @@ class ReaderV2Location {
     return value.clamp(minVisualOffsetPx, maxVisualOffsetPx).toDouble();
   }
 
-  factory ReaderV2Location.fromJson(Map<String, dynamic> json) {
+  factory ReaderLocation.fromJson(Map<String, dynamic> json) {
     int asInt(dynamic value) {
       if (value is int) return value;
       if (value is double) return value.round();
@@ -66,7 +66,7 @@ class ReaderV2Location {
       return text.isEmpty ? null : text;
     }
 
-    return ReaderV2Location(
+    return ReaderLocation(
       chapterIndex: asInt(json['chapterIndex']),
       charOffset: asInt(json['charOffset']),
       visualOffsetPx: asDouble(json['visualOffsetPx']),
@@ -77,7 +77,7 @@ class ReaderV2Location {
     ).normalized();
   }
 
-  ReaderV2Location normalized({int? chapterCount, int? chapterLength}) {
+  ReaderLocation normalized({int? chapterCount, int? chapterLength}) {
     final maxChapter = chapterCount == null || chapterCount <= 0
         ? null
         : chapterCount - 1;
@@ -90,7 +90,7 @@ class ReaderV2Location {
     final safeOffset = maxOffset == null
         ? (charOffset < 0 ? 0 : charOffset)
         : charOffset.clamp(0, maxOffset).toInt();
-    return ReaderV2Location(
+    return ReaderLocation(
       chapterIndex: safeChapter,
       charOffset: safeOffset,
       visualOffsetPx: normalizeVisualOffsetPx(visualOffsetPx),
@@ -105,7 +105,7 @@ class ReaderV2Location {
   /// the coordinate. The viewport is the authoritative place to do this: it
   /// already knows which ChapterBlocks are actually painted, so persistence
   /// does not have to hope the repository LRU still contains the same version.
-  ReaderV2Location withContentIdentity({
+  ReaderLocation withContentIdentity({
     required String contentHash,
     required String displayText,
     int contextRadius = 48,
@@ -153,7 +153,7 @@ class ReaderV2Location {
   static bool _isHighSurrogate(int value) => value >= 0xD800 && value <= 0xDBFF;
   static bool _isLowSurrogate(int value) => value >= 0xDC00 && value <= 0xDFFF;
 
-  ReaderV2Location copyWith({
+  ReaderLocation copyWith({
     int? chapterIndex,
     int? charOffset,
     double? visualOffsetPx,
@@ -163,7 +163,7 @@ class ReaderV2Location {
     String? anchorAfter,
     bool clearContentIdentity = false,
   }) {
-    return ReaderV2Location(
+    return ReaderLocation(
       chapterIndex: chapterIndex ?? this.chapterIndex,
       charOffset: charOffset ?? this.charOffset,
       visualOffsetPx: visualOffsetPx ?? this.visualOffsetPx,
@@ -199,7 +199,7 @@ class ReaderV2Location {
     // Content identity is persistence/remapping metadata, not another viewport
     // coordinate. Runtime change detection must remain about the visible
     // position itself so enriching an anchor cannot trigger UI churn.
-    return other is ReaderV2Location &&
+    return other is ReaderLocation &&
         other.chapterIndex == chapterIndex &&
         other.charOffset == charOffset &&
         other.visualOffsetPx == visualOffsetPx;
@@ -210,6 +210,6 @@ class ReaderV2Location {
 
   @override
   String toString() {
-    return 'ReaderV2Location(chapterIndex: $chapterIndex, charOffset: $charOffset, visualOffsetPx: $visualOffsetPx, contentHash: $contentHash)';
+    return 'ReaderLocation(chapterIndex: $chapterIndex, charOffset: $charOffset, visualOffsetPx: $visualOffsetPx, contentHash: $contentHash)';
   }
 }
