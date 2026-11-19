@@ -632,20 +632,20 @@ void main() {
     expect(playback.playing, isFalse);
   });
 
-  test('抓網址時引擎回報出錯：載好也不出聲，留著原因', () async {
+  test('抓網址時引擎送來上一集的錯：不算這一集的，照樣載好播', () async {
     await player.open(book);
     await pumpEventQueue();
     source.gate = Completer<void>();
     final switching = player.playChapter(1);
     await pumpEventQueue();
     engine.fail(StateError('斷線'));
+    expect(player.error, isNull);
     source.gate!.complete();
     await switching;
 
-    expect(player.playing, isFalse);
-    expect(engine.playing, isFalse);
-    expect(player.error, isNotNull);
-    expect(player.loading, isFalse);
+    expect(engine.opened.last.$1.toString(), 'https://audio.test/ep1.mp3');
+    expect(player.playing, isTrue);
+    expect(player.error, isNull);
   });
 
   test('回到前景時暫停中：另一台聽到別集，跳過去停著、記成同步過', () async {

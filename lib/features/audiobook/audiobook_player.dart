@@ -422,10 +422,8 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
     if (previous != null && previous.playing) await previous.pause();
     if (autoplay) _wantPlay = true;
     final generation = ++_generation;
-    // 載入途中被取代（之後的開書、換集、停止），或引擎回報出錯成了這一集
-    // 播不出來：這次載入不再往下做。
-    bool stale() =>
-        generation != _generation || _phase != AudiobookPhase.loading;
+    // 載入途中被之後的開書、換集、停止取代：這次載入不再往下做。
+    bool stale() => generation != _generation;
     final chapter = _chapters[index];
     _index = index;
     _duration = null;
@@ -729,8 +727,16 @@ class AudiobookPlayer extends ChangeNotifier implements PlaybackOwner {
   }
 
   /// 播放途中出錯：引擎停下、記下原因，按播放時重新載入這一集（[play]）。
+  /// 開書中、載入這一集時引擎送來的錯是上一集（或上一本）的：這一集開不了
+  /// 由 [AudioEngine.open] 丟出來，在 [_load] 接，不從這裡算。
   void _onError(Object error) {
-    if (_phase == AudiobookPhase.idle) return;
+    switch (_phase) {
+      case AudiobookPhase.idle ||
+          AudiobookPhase.opening ||
+          AudiobookPhase.loading:
+        return;
+      default:
+    }
     _fail(failureMessage('播放', error));
     unawaited(_engine?.pause());
     _publish();
