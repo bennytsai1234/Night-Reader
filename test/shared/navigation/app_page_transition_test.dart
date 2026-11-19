@@ -120,10 +120,10 @@ void main() {
     semantics.dispose();
   });
 
-  /// 新頁此刻的樣子：外層透明度（百分比）、裁切範圍與文字位置，攤成一串
-  /// 長度固定的數字。
-  List<double> pose(WidgetTester tester) {
-    final page = find.text('新頁');
+  /// 寫著 [text] 的那一頁此刻的樣子：外層透明度（百分比）、裁切範圍與文字
+  /// 位置，攤成一串長度固定的數字。
+  List<double> poseOf(WidgetTester tester, String text) {
+    final page = find.text(text);
     final opacity = tester
         .widgetList<Opacity>(
           find.ancestor(of: page, matching: find.bySubtype<Opacity>()),
@@ -149,6 +149,9 @@ void main() {
       rect.width,
     ];
   }
+
+  /// 新頁此刻的樣子，同 [poseOf]。
+  List<double> pose(WidgetTester tester) => poseOf(tester, '新頁');
 
   /// 換頁的第一、二幀停在起點（第一幀花掉的時間不算進動畫），之後才照時間
   /// 走；量某個時間點的樣子前先推過這兩幀，第二幀只隔 1ms。
@@ -271,6 +274,48 @@ void main() {
       await tester.pumpAndSettle();
       expect(pageBuilds, 1);
       expect(homeBuilds, homeBefore);
+    });
+  }
+
+  for (final transition in AppPageTransition.values) {
+    testWidgets('${transition.name}: going back mid-opening turns around '
+        'without a jump', (tester) async {
+      await pumpApp(tester, transition);
+      await tester.tapAt(card.center);
+      Navigator.push(
+        home,
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+        ),
+      );
+      await startTrip(tester);
+      // 每 8ms 一格記下新頁的樣子；開到 40% 時返回。
+      const frame = Duration(milliseconds: 8);
+      final opening = <List<double>>[pose(tester)];
+      while (frame * opening.length < transition.duration * 0.4) {
+        await tester.pump(frame);
+        opening.add(pose(tester));
+      }
+      Navigator.pop(tester.element(find.text('新頁')));
+      final closing = <List<double>>[];
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(frame);
+        closing.add(pose(tester));
+      }
+      // 轉向的那幾格每一步都不比開啟途中最大的一步大：不跳回起點或終點。
+      var widest = 0.0;
+      for (var i = 1; i < opening.length; i++) {
+        final step = distance(opening[i - 1], opening[i]);
+        if (step > widest) widest = step;
+      }
+      var previous = opening.last;
+      for (final now in closing) {
+        expect(distance(previous, now), lessThanOrEqualTo(widest + 1));
+        previous = now;
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('新頁'), findsNothing);
+      expect(find.text('主頁'), findsOneWidget);
     });
   }
 
@@ -493,6 +538,108 @@ void main() {
         await tester.pumpAndSettle();
       });
     }
+
+    for (final transition in AppPageTransition.values) {
+      testWidgets('${transition.name}: let go short of a fifth the page comes '
+          'back whole, past it the page goes back', (tester) async {
+        await pumpApp(tester, transition);
+        final homeAtRest = poseOf(tester, '主頁');
+        await tester.tapAt(card.center);
+        await push(tester);
+        final settled = pose(tester);
+        final route = ModalRoute.of(tester.element(find.text('新頁')))!;
+
+        await slowDrag(tester, 800 * 0.15);
+        await tester.pumpAndSettle();
+        expect(samePose(pose(tester), settled), isTrue);
+        expect(route.animation!.value, 1);
+        expect(Navigator.of(home).userGestureInProgress, isFalse);
+
+        await slowDrag(tester, 800 * 0.25);
+        await tester.pumpAndSettle();
+        expect(find.text('新頁'), findsNothing);
+        expect(samePose(poseOf(tester, '主頁'), homeAtRest), isTrue);
+        expect(Navigator.of(home).userGestureInProgress, isFalse);
+      });
+    }
+
+    for (final goesBack in [false, true]) {
+      testWidgets('touching the edge again while it '
+          '${goesBack ? 'goes back' : 'springs back'} does not take it over', (
+        tester,
+      ) async {
+        await pumpApp(tester, AppPageTransition.slide);
+        await push(tester);
+        await slowDrag(tester, 800 * (goesBack ? 0.25 : 0.15));
+        await tester.pump(const Duration(milliseconds: 16));
+        // 收尾途中又從左緣往右拖一大段。
+        final again = await tester.startGesture(const Offset(5, 300));
+        for (var i = 0; i < 10; i++) {
+          await again.moveBy(const Offset(30, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await again.up();
+        await tester.pumpAndSettle();
+        if (goesBack) {
+          expect(find.text('新頁'), findsNothing);
+        } else {
+          expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+        }
+        expect(Navigator.of(home).userGestureInProgress, isFalse);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    for (final goesBack in [false, true]) {
+      testWidgets(
+        'a page pushed mid-drag (${goesBack ? 'goes back' : 'springs '
+                  'back'}) leaves the page whole',
+        (tester) async {
+          await pumpApp(tester, AppPageTransition.slide);
+          await push(tester);
+          final page = tester.element(find.text('新頁'));
+          final route = ModalRoute.of(page)!;
+          final gesture = await holdDrag(tester);
+          Navigator.push(
+            page,
+            MaterialPageRoute<void>(
+              builder: (_) => const Scaffold(body: Center(child: Text('第三頁'))),
+            ),
+          );
+          await tester.pump();
+          // 往回拖到不滿五分之一再放，或直接放開（已經拖過四分之一）。
+          if (!goesBack) await gesture.moveBy(const Offset(-150, 0));
+          await gesture.up();
+          await tester.pumpAndSettle();
+          Navigator.pop(tester.element(find.text('第三頁')));
+          await tester.pumpAndSettle();
+
+          // 被蓋住時不返回；回到這一頁時是整頁，也還能再拖曳返回。
+          expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+          expect(route.animation!.value, 1);
+          expect(route.popGestureEnabled, isTrue);
+          expect(Navigator.of(home).userGestureInProgress, isFalse);
+          await slowDrag(tester, 800 * 0.25);
+          await tester.pumpAndSettle();
+          expect(find.text('新頁'), findsNothing);
+        },
+      );
+    }
+
+    testWidgets('closing the page in code mid-drag ends the gesture', (
+      tester,
+    ) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      final gesture = await holdDrag(tester);
+      Navigator.pop(tester.element(find.text('新頁')));
+      await tester.pumpAndSettle();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('新頁'), findsNothing);
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
+    });
 
     testWidgets('past a fifth of the width it goes back within 0.2s', (
       tester,
