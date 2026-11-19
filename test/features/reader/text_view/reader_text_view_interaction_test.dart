@@ -119,6 +119,7 @@ ReaderRuntime _makeRuntime({
     charOffset: 0,
   ),
   ReaderTestContentLoader? contentLoader,
+  Set<int> locked = const <int>{},
 }) {
   final book = Book(
     bookUrl: 'http://interaction.test',
@@ -132,7 +133,9 @@ ReaderRuntime _makeRuntime({
     book: book,
     initialChapters: List<BookChapter>.generate(
       chapterCount,
-      (index) => _chapter(index, paragraphs: paragraphs),
+      (index) =>
+          _chapter(index, paragraphs: paragraphs)
+            ..isVip = locked.contains(index),
     ),
     contentLoader:
         contentLoader ?? (_, chapter) => Future<String?>.value(chapter.content),
@@ -1552,6 +1555,72 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await settle(tester);
     expect(runtime.state.visibleLocation.chapterIndex, 1);
+  });
+
+  testWidgets('paging past the first or last page says the book ends there', (
+    tester,
+  ) async {
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(chapterCount: 1, paragraphs: 30),
+    );
+    final position = scrollPosition(tester);
+    expect(await viewport.moveToPrevPage!(), isFalse);
+    expect(runtime.takeUserNotice()?.message, '已到書首');
+
+    for (var i = 0; i < 5 && position.pixels < position.maxScrollExtent; i++) {
+      position.jumpTo(position.maxScrollExtent);
+      await settle(tester);
+    }
+    final turn = viewport.moveToNextPage!();
+    await settle(tester);
+    expect(await turn, isFalse);
+    expect(runtime.takeUserNotice()?.message, '已到書尾');
+  });
+
+  testWidgets('speech follow scrolls to laid-out text below the screen', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    final start = position.pixels;
+    // 第 0 章第 40 段：已經排好、在畫面下方。
+    final offset = _chapter(0).content!.indexOf('第 0 章第 40 段');
+    final followed = viewport.ensureCharRangeVisible!(
+      chapterIndex: 0,
+      startCharOffset: offset,
+      endCharOffset: offset + 4,
+    );
+    await settle(tester);
+    expect(await followed, isTrue);
+    expect(position.pixels, greaterThan(start + _viewport.height));
+    expect(find.byType(LoadingVeil), findsNothing, reason: '排好的範圍裡不蓋紙');
+  });
+
+  testWidgets('paging into a paid chapter jumps past it', (tester) async {
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        paragraphs: 20,
+        locked: const {1},
+        contentLoader: (index, chapter) async {
+          if (index == 1) {
+            throw const ReaderContentUnavailableException(lockedChapterNotice);
+          }
+          return chapter.content;
+        },
+      ),
+    );
+    final position = scrollPosition(tester);
+    for (var i = 0; i < 5 && position.pixels < position.maxScrollExtent; i++) {
+      position.jumpTo(position.maxScrollExtent);
+      await settle(tester);
+    }
+    final turn = viewport.moveToNextPage!();
+    await settle(tester);
+    await settle(tester);
+    expect(await turn, isFalse);
+    expect(runtime.state.visibleLocation.chapterIndex, 2, reason: '跳過付費的第 1 章');
   });
 
   testWidgets('the speech highlight follows the text while scrolling', (
