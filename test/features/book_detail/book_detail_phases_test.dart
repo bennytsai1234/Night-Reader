@@ -21,12 +21,15 @@ import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 /// 操作；書源問題那一列寫什麼、有沒有「登入」；檢查更新、加入或移出書架、
 /// 換源進行中再按一次會怎樣。
 
-enum _Toc { ok, fails, needsLogin, hangs }
+enum _Toc { ok, empty, fails, needsLogin, hangs }
 
 class _Source extends BookSourceService {
   bool infoFails = false;
   _Toc toc = _Toc.ok;
   int chapterListCalls = 0;
+
+  /// 給了就等它才回目錄（照開始抓時的 [toc]）。
+  Completer<void>? tocGate;
 
   @override
   Future<Book> getBookInfo(
@@ -46,13 +49,16 @@ class _Source extends BookSourceService {
     int? pageConcurrency,
     CancelToken? cancelToken,
     bool requireComplete = false,
-  }) {
+  }) async {
     chapterListCalls++;
-    return switch (toc) {
-      _Toc.ok => Future.value(chaptersOf(book.bookUrl, 3)),
-      _Toc.fails => Future.error(Exception('目錄連不上')),
-      _Toc.needsLogin => Future.error(LoginCheckException('目錄需要登入後閱讀')),
-      _Toc.hangs => Completer<List<BookChapter>>().future,
+    final mode = toc;
+    await tocGate?.future;
+    return switch (mode) {
+      _Toc.ok => chaptersOf(book.bookUrl, 3),
+      _Toc.empty => <BookChapter>[],
+      _Toc.fails => throw Exception('目錄連不上'),
+      _Toc.needsLogin => throw LoginCheckException('目錄需要登入後閱讀'),
+      _Toc.hangs => await Completer<List<BookChapter>>().future,
     };
   }
 }
@@ -395,6 +401,45 @@ void main() {
         expect(row(provider), (null, false));
       });
     }
+
+    test('a refetch that finds no chapters keeps the row', () async {
+      await storeSource();
+      service.toc = _Toc.fails;
+      final provider = await open();
+
+      service.toc = _Toc.empty;
+      await provider.setInBookshelf(true);
+      expect(provider.totalChapterCount, 0);
+      expect(row(provider), (_tocFailed, false));
+    });
+
+    test('a TOC another page stored clears the row when adding to the '
+        'shelf', () async {
+      await storeSource(login: true);
+      service.toc = _Toc.needsLogin;
+      final provider = await open();
+
+      await db.chapterDao.insertChapters(chaptersOf(_bookUrl, 3));
+      await provider.setInBookshelf(true);
+      expect(provider.totalChapterCount, 3);
+      expect(row(provider), (null, false));
+    });
+
+    test('a refetch that fails after an update check brought the TOC keeps '
+        'the row clear', () async {
+      await storeSource();
+      service.toc = _Toc.fails;
+      final provider = await open(updates: _Updates(db));
+
+      service.tocGate = Completer<void>();
+      final adding = provider.setInBookshelf(true);
+      await until(() => service.chapterListCalls == 2);
+      expect((await provider.checkForUpdates()).success, isTrue);
+      service.tocGate!.complete();
+      await adding;
+      expect(provider.totalChapterCount, 4);
+      expect(row(provider), (null, false));
+    });
 
     test('a TOC that failed and comes in with an update check clears the '
         'row', () async {

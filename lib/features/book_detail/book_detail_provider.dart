@@ -173,9 +173,11 @@ class BookDetailProvider extends ChangeNotifier {
       _sourceUnreadableReason == null &&
       _shownFetchIssue == _FetchIssue.tocNeedsLogin;
 
-  /// 這一輪抓書源的結果照現在手上的書源怎麼寫：擋在登入牆後、書源卻沒有
-  /// （或已經拿掉）登入時，寫成目錄沒抓到。
+  /// 這一輪抓書源的結果照現在手上的書源與目錄怎麼寫：目錄已經有了（重抓
+  /// 到、別處存好、檢查更新帶回來）就不寫目錄的問題；擋在登入牆後、書源卻
+  /// 沒有（或已經拿掉）登入時，寫成目錄沒抓到。
   _FetchIssue get _shownFetchIssue => switch (_fetchIssue) {
+    _ when _fetchIssue.isToc && _allChapters.isNotEmpty => _FetchIssue.none,
     _FetchIssue.tocNeedsLogin when !(_currentSource?.hasLogin ?? false) =>
       _FetchIssue.tocFailed,
     final issue => issue,
@@ -482,7 +484,6 @@ class BookDetailProvider extends ChangeNotifier {
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
         await _chapterDao.insertChapters(_allChapters);
-        if (_fetchIssue.isToc) _fetchIssue = _FetchIssue.none;
       } catch (e) {
         final needsLogin =
             e is LoginCheckException || LoginCheckException.describes('$e');
