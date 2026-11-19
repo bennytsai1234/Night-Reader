@@ -2,16 +2,14 @@ import 'dart:isolate';
 
 import 'package:characters/characters.dart';
 
-import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
 import 'package:night_reader/features/reader/chapter/reader_illustration.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 
-final class TextPreprocessor implements HybridTextPreprocessor {
+final class TextPreprocessor {
   const TextPreprocessor({this.useIsolate = true});
 
   final bool useIsolate;
 
-  @override
   Future<ChapterBlocks> process(
     ChapterText chapter, {
     int maxBlockChars = 1800,

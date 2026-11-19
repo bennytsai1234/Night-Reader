@@ -1,28 +1,23 @@
-import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 
 enum MetricsInvalidationCause { style, viewportWidth, content, platformFont }
 
-final class MeasurementStore implements HybridMeasurementStore {
+final class MeasurementStore {
   final Map<MeasurementNamespace, Map<BlockKey, BlockMetrics>> _metrics =
       <MeasurementNamespace, Map<BlockKey, BlockMetrics>>{};
 
-  @override
   BlockMetrics? get(MeasurementNamespace namespace, BlockKey key) {
     return _metrics[namespace]?[key];
   }
 
-  @override
   void put(MeasurementNamespace namespace, BlockKey key, BlockMetrics metrics) {
     (_metrics[namespace] ??= <BlockKey, BlockMetrics>{})[key] = metrics;
   }
 
-  @override
   void invalidateNamespace(MeasurementNamespace namespace) {
     _metrics.remove(namespace);
   }
 
-  @override
   void invalidateChapter(int chapterIndex) {
     for (final namespace in _metrics.values) {
       namespace.removeWhere((key, _) => key.chapterIndex == chapterIndex);

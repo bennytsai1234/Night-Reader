@@ -139,7 +139,7 @@ class HybridReaderScreen extends StatefulWidget {
   /// 每本書上一次離開時的那一頁（ADR 0024）：開書時從同一處打開就照它畫
   /// 骨架；離開閱讀器或 App 切到背景時記下目前這一頁。
   final ReaderSkeletonPageStore? skeletonPages;
-  final HybridTextPreprocessor preprocessor;
+  final TextPreprocessor preprocessor;
   final bool enableDiskCache;
   final int paragraphCacheCapacity;
 

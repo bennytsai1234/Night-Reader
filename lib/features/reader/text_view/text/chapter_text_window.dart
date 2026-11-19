@@ -4,12 +4,11 @@ import 'dart:collection';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/features/reader/chapter/reader_content.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
-import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 
 typedef ReaderV2ContentLoader = Future<ReaderV2Content> Function(int index);
 
-final class HybridChapterRepository implements HybridChapterTextRepository {
+final class HybridChapterRepository {
   HybridChapterRepository({
     ReaderV2ChapterRepository? repository,
     ReaderV2ContentLoader? loadContent,
@@ -40,7 +39,6 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
   int _generation = 0;
   bool _disposed = false;
 
-  @override
   Stream<ChapterEvent> get events => _events.stream;
 
   int? get residentFirst => _residentFirst;
@@ -52,7 +50,6 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     return first != null && last != null && id >= first && id <= last;
   }
 
-  @override
   Future<ChapterText> load(ChapterId id) {
     if (_disposed) {
       return Future<ChapterText>.error(
@@ -103,7 +100,6 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
   /// Transfers raw-chapter residency ownership to an explicit contiguous
   /// range. The caller chooses the range from viewport/lead geometry; this
   /// repository only caches exactly that ownership set.
-  @override
   void setResidentRange(int first, int last) {
     if (_disposed) return;
     var safeFirst = first < 0 ? 0 : first;

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier, Listenable;
 
-import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 
 final class DocumentOffsetHit {
@@ -29,7 +28,7 @@ final class ChapterOffsetRange {
 /// I2 保證 admission 恆為「由 center 向兩側的連續邊緣」，因此 admit 是
 /// 兩側 list/Fenwick 的 append——熱路徑上沒有排序、沒有全量重建。
 /// 亂序 admit（理論上不發生）以 debug assert 攔截並 fallback 全量重建。
-final class DocumentIndex implements HybridDocumentIndex {
+final class DocumentIndex {
   DocumentIndex({required this._centerKey});
 
   BlockKey _centerKey;
@@ -156,7 +155,6 @@ final class DocumentIndex implements HybridDocumentIndex {
 
   BlockMetrics? metricsFor(BlockKey key) => _metrics[key];
 
-  @override
   BlockKey? keyForSliverIndex({
     required bool beforeCenter,
     required int index,
@@ -200,7 +198,6 @@ final class DocumentIndex implements HybridDocumentIndex {
     return tree.firstPrefixGreaterOrEqual(scrollOffset) ?? tree.length - 1;
   }
 
-  @override
   double? topOf(BlockKey key) {
     if (!_metrics.containsKey(key)) return null;
     if (key < _centerKey) {
@@ -213,7 +210,6 @@ final class DocumentIndex implements HybridDocumentIndex {
     return index == 0 ? 0.0 : _afterTree.prefixSum(index - 1);
   }
 
-  @override
   double? bottomOf(BlockKey key) {
     final top = topOf(key);
     final metrics = _metrics[key];
@@ -232,7 +228,6 @@ final class DocumentIndex implements HybridDocumentIndex {
     );
   }
 
-  @override
   BlockKey? blockAtOffset(double offset) {
     if (offset >= 0) {
       if (_centerAndAfter.isEmpty) return null;
@@ -295,7 +290,6 @@ final class DocumentIndex implements HybridDocumentIndex {
     return result;
   }
 
-  @override
   double chapterExtent(int chapterIndex) {
     return chapterRange(chapterIndex)?.extent ?? 0.0;
   }

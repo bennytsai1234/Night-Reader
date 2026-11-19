@@ -9,7 +9,6 @@ import 'package:night_reader/features/reader/chapter/reader_chapter_repository.d
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 
 import '../core/chapter_layout_plan.dart';
-import '../core/progress_snapshot.dart';
 import '../core/text_view_types.dart';
 import '../geometry/text_geometry.dart';
 import '../illustration/illustration_images.dart';
@@ -21,6 +20,7 @@ import '../pump/layout_pump.dart';
 import '../text/chapter_text_window.dart';
 import '../view/admission_controller.dart';
 import 'layout_disk_cache.dart';
+import '../text/text_preprocessor.dart';
 
 /// [HybridLayoutPipeline.waitForProgress] 等到的結果。
 enum MaterializationWait {
@@ -101,7 +101,7 @@ final class HybridLayoutPipeline {
   final AdmissionController _admission;
   final BudgetGovernor _governor;
   final HybridChapterRepository _chapters;
-  final HybridTextPreprocessor _preprocessor;
+  final TextPreprocessor _preprocessor;
   final HybridLayoutDiskCache? _diskCache;
   final int Function() _chapterCount;
   final Color Function() _textColor;

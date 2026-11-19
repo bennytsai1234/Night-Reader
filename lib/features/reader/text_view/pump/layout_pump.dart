@@ -6,16 +6,17 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/scheduler.dart';
-import 'package:night_reader/features/reader/text_view/core/progress_snapshot.dart';
 import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
 import 'package:night_reader/features/reader/text_view/paragraph/paragraph_cache.dart';
 
 import '../layout/reader_paragraph_layout.dart';
+import '../measure/measurement_store.dart';
 import '../layout/visual_line_layout_engine.dart';
 import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
-final class LayoutPump implements HybridLayoutPump {
+/// I4: this is the only contract allowed to build and lay out [ui.Paragraph].
+final class LayoutPump {
   static const double _minBlockHeight = 1e-6;
   static const ReaderParagraphLayout _paragraphLayout = ReaderParagraphLayout();
   static const VisualLineLayoutEngine _lineLayoutEngine =
@@ -31,7 +32,7 @@ final class LayoutPump implements HybridLayoutPump {
        _costModel = costModel ?? LayoutCostModel();
 
   final ParagraphCache _paragraphCache;
-  final HybridMeasurementStore _measurementStore;
+  final MeasurementStore _measurementStore;
   final MeasurementNamespace _namespace;
   final BudgetGovernor _governor;
   final LayoutCostModel _costModel;
@@ -57,7 +58,6 @@ final class LayoutPump implements HybridLayoutPump {
   int get frameWorkMicros => _spentThisFrame;
   int maxCharsForBudget(Duration budget) => _costModel.maxCharsFor(budget);
 
-  @override
   Stream<BlockReady> get completed => _completed.stream;
 
   /// Demand belongs to this pump instance. Queued probes and drawable layout
@@ -146,7 +146,6 @@ final class LayoutPump implements HybridLayoutPump {
     }
   }
 
-  @override
   void submit(LayoutTask task) {
     if (_disposed ||
         !_wantsChapter(task.block.chapterIndex) ||
@@ -164,7 +163,6 @@ final class LayoutPump implements HybridLayoutPump {
     _scheduleFrame();
   }
 
-  @override
   void onScrollStateChanged(PumpState state) {
     _state = state;
     // A gesture changes scheduling priority/budget, not content identity.
@@ -306,7 +304,6 @@ final class LayoutPump implements HybridLayoutPump {
     _completed.add(BlockReady(key: block.key, epoch: epoch, metrics: metrics));
   }
 
-  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;

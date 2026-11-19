@@ -1,7 +1,6 @@
 import 'dart:collection';
 import 'dart:ui' as ui;
 
-import '../core/progress_snapshot.dart';
 import '../core/text_view_types.dart';
 import '../illustration/illustration_images.dart';
 
@@ -77,7 +76,7 @@ final class ParagraphLease {
 /// The cache owns only reusable entries. Live consumers explicitly retain
 /// entries, including an as-yet-unbuilt entry, and observe replacements for
 /// their entire lifetime rather than racing a one-shot paint waiter.
-final class ParagraphCache implements HybridParagraphCache {
+final class ParagraphCache {
   ParagraphCache({this.capacity = 512}) : assert(capacity > 0);
   final int capacity;
   final LinkedHashMap<_ParagraphCacheKey, ParagraphEntry> _entries =
@@ -109,7 +108,6 @@ final class ParagraphCache implements HybridParagraphCache {
     if (consumers?.isEmpty ?? false) _consumers.remove(lease._key);
   }
 
-  @override
   ui.Paragraph? acquire(BlockKey key, LayoutEpoch epoch) =>
       acquireEntry(key, epoch)?.paragraph;
 
@@ -125,7 +123,6 @@ final class ParagraphCache implements HybridParagraphCache {
     return _consumers[cacheKey]?.firstOrNull?.entry;
   }
 
-  @override
   void put(
     BlockKey key,
     LayoutEpoch epoch,
@@ -194,7 +191,6 @@ final class ParagraphCache implements HybridParagraphCache {
     }
   }
 
-  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
