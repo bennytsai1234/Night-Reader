@@ -150,6 +150,10 @@ class Skeleton extends StatefulWidget {
   /// 呼吸一輪的時長：由深到淺、再由淺到深各一段 [AppMotion.skeletonPulse]。
   static Duration get breathCycle => AppMotion.skeletonPulse * 2;
 
+  /// 所在 [Skeleton] 的呼吸；不在骨架底下、或不呼吸（減少動態）時是 null。
+  static SkeletonPhase? phaseOf(BuildContext context) =>
+      _SkeletonScope.maybeOf(context)?.phase;
+
   @override
   State<Skeleton> createState() => _SkeletonState();
 }
@@ -393,16 +397,31 @@ class SkeletonRest {
   }
 }
 
+/// 骨架形狀畫的時候讀的呼吸（[Skeleton.phaseOf]）：[SkeletonBox] 這類形狀
+/// 聽它重畫，照它的深淺或整片的漸層畫。呼吸怎麼開始、收住、接著呼吸都在
+/// [Skeleton] 這一邊，形狀只讀這幾樣。
+abstract interface class SkeletonPhase implements Listenable {
+  /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）。
+  double depthAt(double u, SkeletonBreath breath);
+
+  /// 這一刻整個畫面寬的呼吸漸層（螢幕座標）；整片一樣深時是 null，用單色畫。
+  ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth);
+
+  /// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`。回傳的
+  /// 矩陣是共用的一個，下一個形狀算的時候就被蓋掉，拿到就要用掉。
+  Matrix4 toScreen(RenderObject box);
+}
+
 /// 一個 [Skeleton] 的呼吸：從開始呼吸起經過了幾輪（不折回 0）。收住時
 /// （[rest]）每個位置等到下一次最深就停在那裡：呼吸曲線在最深處的變化是
 /// 零，停下來接得上，不是動到一半定住。
-class _BreathClock extends ChangeNotifier {
+class _BreathClock extends ChangeNotifier implements SkeletonPhase {
   _BreathClock(TickerProvider vsync) {
     _ticker = vsync.createTicker(_tick);
   }
 
   /// 這個骨架最外層的 render object（[_SkeletonAnchor]），底下的形狀到螢幕
-  /// 的轉換從它接上去（[_screenTransform]）。換了一個時重算轉換。
+  /// 的轉換從它接上去（[toScreen]）。換了一個時重算轉換。
   RenderObject? get _anchor => _anchorObject;
   RenderObject? _anchorObject;
   set _anchor(RenderObject? value) {
@@ -705,6 +724,7 @@ class _BreathClock extends ChangeNotifier {
 
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
   /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
+  @override
   double depthAt(double u, SkeletonBreath breath) {
     if (_hold != null || _waiting) return 1;
     final phase = _phase;
@@ -722,6 +742,7 @@ class _BreathClock extends ChangeNotifier {
   /// 位置的深淺。同一個骨架每一幀每種顏色只建一道，底下每個形狀共用
   /// （[_drawBreathing]），呼吸每一幀的成本不跟著形狀數變多。整片一樣深時
   /// （還沒開始呼吸、收住了、整片一起呼吸）回傳 null，用單色畫。
+  @override
   ui.Gradient? gradient(Color color, SkeletonBreath breath, double viewWidth) {
     // `viewWidth <= 0` 對 NaN 不成立，無限大也一起擋下（#203）。
     if (_hold != null ||
@@ -757,6 +778,25 @@ class _BreathClock extends ChangeNotifier {
       ],
       _gradientStops,
     );
+  }
+
+  /// 由左而右呼吸時每個骨架元件每一幀都要算一次（[SkeletonBox] 這類形狀）。
+  /// 不沿路記下每一層、不新建矩陣：結果放在共用的 [_toScreen]。只往上算到
+  /// 這個骨架的最外層（[_anchor]），再接上那一層這一幀到螢幕的轉換（每個
+  /// 骨架一幀算一次）：骨架上面的元件樹（App、頁面、換頁動畫…）比骨架裡面
+  /// 深得多，平板書架 69 個形狀每個都從頭算到螢幕時，光這一步每幀約 0.7ms
+  /// （2026-11-02 量）。
+  @override
+  Matrix4 toScreen(RenderObject box) {
+    final anchor = _anchor;
+    final reached = _walkUp(box, anchor, _toScreen);
+    if (anchor != null && identical(reached, anchor)) {
+      _step
+        ..setFrom(_anchorTransform())
+        ..multiply(_toScreen);
+      _toScreen.setFrom(_step);
+    }
+    return _toScreen;
   }
 
   final Map<Color, ui.Gradient> _gradients = {};
@@ -818,7 +858,7 @@ class SkeletonBox extends StatelessWidget {
     child: _SkeletonBoxPaint(
       color: color ?? Skeleton.colorOf(context),
       borderRadius: borderRadius,
-      phase: _SkeletonScope.maybeOf(context)?.phase,
+      phase: Skeleton.phaseOf(context),
       breath: SkeletonLook.of(context).breath,
       viewWidth: MediaQuery.sizeOf(context).width,
     ),
@@ -838,7 +878,7 @@ class _SkeletonBoxPaint extends LeafRenderObjectWidget {
 
   final Color color;
   final BorderRadius borderRadius;
-  final _BreathClock? phase;
+  final SkeletonPhase? phase;
   final SkeletonBreath breath;
   final double viewWidth;
 
@@ -889,8 +929,8 @@ class _RenderSkeletonBox extends RenderBox {
     markNeedsPaint();
   }
 
-  _BreathClock? _phase;
-  set phase(_BreathClock? value) {
+  SkeletonPhase? _phase;
+  set phase(SkeletonPhase? value) {
     if (identical(_phase, value)) return;
     if (attached) _phase?.removeListener(markNeedsPaint);
     _phase = value;
@@ -953,11 +993,11 @@ class _RenderSkeletonBox extends RenderBox {
 
 /// 畫一個跟著呼吸的佔位形狀。[shape] 是形狀在 [box] 裡的位置，[offset] 是
 /// [box] 這次畫在圖層上的位置。[toScreen] 是 [box] 到螢幕的轉換
-/// （[_screenTransform]），一次畫好幾個形狀時由呼叫端算一次傳進來；null 時
+/// （[SkeletonPhase.toScreen]），一次畫好幾個形狀時由呼叫端算一次傳進來；null 時
 /// 這裡算。
 ///
 /// 由左而右呼吸時，每個形狀用骨架這一幀共用的那一道漸層
-/// （[_BreathClock.gradient]，螢幕座標）：畫之前把畫布的橫軸換成螢幕的橫軸，
+/// （[SkeletonPhase.gradient]，螢幕座標）：畫之前把畫布的橫軸換成螢幕的橫軸，
 /// 形狀也換到螢幕的橫向位置上畫，畫完換回來。換頁途中整頁在平移、縮放，
 /// 同一個螢幕位置的骨架照樣一樣深。每個形狀自己畫在原本的位置，裁切、捲動、
 /// 先後順序都和其他元件一樣。
@@ -975,7 +1015,7 @@ void _drawBreathing(
   Offset offset,
   RRect shape, {
   required Color color,
-  required _BreathClock? phase,
+  required SkeletonPhase? phase,
   required SkeletonBreath breath,
   required double viewWidth,
   Matrix4? toScreen,
@@ -996,7 +1036,7 @@ void _drawBreathing(
   // 形狀左上角在螢幕上的橫向位置是 scale·x + shift（x 是在 box 裡的位置）。
   // 只照平移、縮放與左右翻轉換算：斜切、旋轉時整個形狀照頂邊那一行的位置
   // 算深淺（App 裡沒有這種轉換，原本逐個形狀畫漸層時也是這樣）。
-  final transform = toScreen ?? _screenTransform(box, phase);
+  final transform = toScreen ?? phase!.toScreen(box);
   final scale = transform.storage[0];
   final shift = transform.storage[12] + transform.storage[4] * shape.top;
   if (!scale.isFinite || !shift.isFinite) {
@@ -1047,27 +1087,6 @@ RRect _scaleX(RRect shape, double scale, double shift) {
 final List<double> _gradientStops = List<double>.unmodifiable([
   for (var i = 0; i <= 32; i++) i / 32,
 ]);
-
-/// [box] 到螢幕（邏輯像素）的轉換，同 `box.getTransformTo(null)`，但不沿路
-/// 記下每一層、不新建矩陣：結果放在共用的 [_toScreen]，下一個形狀算的時候
-/// 就被蓋掉，拿到就要用掉。由左而右呼吸時每個骨架元件每一幀都要算一次
-/// （[_drawBreathing]）。
-///
-/// 只往上算到所在骨架的最外層（[_BreathClock._anchor]），再接上那一層這一幀
-/// 到螢幕的轉換（每個骨架一幀算一次）：骨架上面的元件樹（App、頁面、換頁
-/// 動畫…）比骨架裡面深得多，平板書架 69 個形狀每個都從頭算到螢幕時，光這
-/// 一步每幀約 0.7ms（2026-11-02 量）。
-Matrix4 _screenTransform(RenderObject box, _BreathClock? clock) {
-  final anchor = clock?._anchor;
-  final reached = _walkUp(box, anchor, _toScreen);
-  if (anchor != null && identical(reached, anchor)) {
-    _step
-      ..setFrom(clock!._anchorTransform())
-      ..multiply(_toScreen);
-    _toScreen.setFrom(_step);
-  }
-  return _toScreen;
-}
 
 /// 從 [box] 往上，把每一層的轉換乘在左邊，寫進 [into]；走到 [stopAt] 或
 /// 最上面那一層（整個畫面到裝置像素，不算，和 getTransformTo(null) 一樣）
@@ -1147,7 +1166,7 @@ class SkeletonShapes extends LeafRenderObjectWidget {
     height: height,
     shapes: shapes,
     color: Skeleton.colorOf(context),
-    phase: _SkeletonScope.maybeOf(context)?.phase,
+    phase: Skeleton.phaseOf(context),
     breath: SkeletonLook.of(context).breath,
     viewWidth: MediaQuery.sizeOf(context).width,
   );
@@ -1158,7 +1177,7 @@ class SkeletonShapes extends LeafRenderObjectWidget {
       ..height = height
       ..shapes = shapes
       ..color = Skeleton.colorOf(context)
-      ..phase = _SkeletonScope.maybeOf(context)?.phase
+      ..phase = Skeleton.phaseOf(context)
       ..breath = SkeletonLook.of(context).breath
       ..viewWidth = MediaQuery.sizeOf(context).width;
   }
@@ -1207,7 +1226,7 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
     // 由左而右呼吸時，整塊到螢幕的轉換只算一次，每個形狀共用。
     final toScreen = _phase?.gradient(_color, _breath, _viewWidth) == null
         ? null
-        : _screenTransform(this, _phase);
+        : _phase!.toScreen(this);
     for (final shape in _shapes(size)) {
       final rrect = shape.radius.toRRect(shape.rect);
       final fill = shape.fill;
