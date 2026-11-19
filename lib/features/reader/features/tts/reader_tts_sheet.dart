@@ -18,12 +18,10 @@ import 'package:night_reader/shared/widgets/lists/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/sleep_timer_section.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/core/chinese/ui_language.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 
 abstract class ReaderTtsSheetController extends Listenable {
-  bool get isPlaying;
-
-  /// 暫停中：播放鍵會從暫停處接著念，而不是從畫面位置開始。
-  bool get isPaused;
+  ReaderTtsPhase get phase;
   double get rate;
   double get pitch;
   SleepTimer get sleepTimer;
@@ -55,16 +53,16 @@ class ReaderTtsPanel extends StatelessWidget {
               children: [
                 GroupedRow(
                   leading: GroupedIconTile(
-                    tts.isPlaying
+                    tts.phase == ReaderTtsPhase.reading
                         ? Icons.pause_rounded
                         : Icons.play_arrow_rounded,
                     tint: AppTint.azurite,
                   ),
-                  title: tts.isPlaying
-                      ? '暫停朗讀'
-                      : tts.isPaused
-                      ? '繼續朗讀'
-                      : '開始朗讀',
+                  title: switch (tts.phase) {
+                    ReaderTtsPhase.idle => '開始朗讀',
+                    ReaderTtsPhase.reading => '暫停朗讀',
+                    ReaderTtsPhase.paused => '繼續朗讀',
+                  },
                   showChevron: false,
                   onTap: () => unawaited(tts.toggle()),
                 ),
