@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/models/source/book_source.dart';
 import 'package:night_reader/core/diagnostics/app_log_service.dart';
 import 'package:night_reader/core/diagnostics/crash_trail.dart';
@@ -23,6 +22,7 @@ import 'ai_repair_settings.dart';
 import 'ai_repair_step.dart';
 import 'repair_pages.dart';
 import 'repair_rule_tools.dart';
+import 'repair_verdict.dart';
 import 'opening_facts.dart';
 import 'source_probe.dart';
 
@@ -360,9 +360,7 @@ class AiRepairSession extends ChangeNotifier {
     if (!job.awaitingPaste || _running || _stopped || _disposed) return null;
     if (text.length > aiRepairMaxReplyLength) return '貼回的內容太長';
     final json = pastedSourceJson(text);
-    final candidate = json == null
-        ? null
-        : _candidateOrNull(job.original, json);
+    final candidate = json == null ? null : candidateOrNull(job.original, json);
     if (candidate == null) return '讀不出書源 JSON';
     job.awaitingPaste = false;
     final pending = Completer<void>();
@@ -628,7 +626,7 @@ class AiRepairSession extends ChangeNotifier {
     if (checked == null || !usable(checked)) {
       _finish(step, checkText, failed: true);
       if (!last) {
-        final discovery = _discoveryNote(checked, job.original, candidate);
+        final discovery = discoveryNote(checked, job.original, candidate);
         return aiRepairCheckReply(checkText, [
           ?discovery,
           ...?checked?.diagnostics,
@@ -684,74 +682,6 @@ class AiRepairSession extends ChangeNotifier {
     _logOutcome('$result${note.isEmpty ? '' : '\nAI：$note'}');
     _notify();
     return null;
-  }
-
-  /// 校驗的結果可以存：沒問題；或原本搜尋、閱讀有壞（[before] 不是只壞
-  /// 發現頁），現在只剩發現頁失效、而 AI 沒動發現頁用的規則（[touchedDiscovery]）
-  /// ——發現頁原本就壞了，搜尋與閱讀修好了還是比原本好。原本就只壞發現頁、
-  /// 或不知道原本壞在哪（[before] 是 null）的，要整個沒問題才算。
-  static bool usableFix(
-    SourceCheckIsolateResult? result,
-    BookSource original,
-    BookSource candidate, {
-    required SourceHealthCategory? before,
-  }) {
-    if (result == null) return false;
-    if (result.isHealthy) return true;
-    if (before == null || _discoveryOnly.contains(before)) return false;
-    return _onlyDiscoveryFails(result) &&
-        !touchedDiscovery(original, candidate);
-  }
-
-  static bool _onlyDiscoveryFails(SourceCheckIsolateResult result) =>
-      _discoveryOnly.contains(
-        BookSource.fromJson(result.updatedSourceJson).runtimeHealth.category,
-      );
-
-  /// AI 動了發現頁用的規則：改了發現的規則，或改了搜尋規則、而發現頁用搜尋
-  /// 規則解析（[BookListParser.exploreUsesSearchRule]）。2026-11-12 實跑
-  /// 涨姿势：發現沒有自己的書單規則，AI 把搜尋改成網站的 API，發現頁跟著
-  /// 抓不到書，卻照「AI 沒動發現」收下。
-  static bool touchedDiscovery(BookSource original, BookSource candidate) {
-    final parts = changedParts(original, candidate);
-    if (parts.contains('發現')) return true;
-    return parts.contains('搜尋') &&
-        (BookListParser.exploreUsesSearchRule(original) ||
-            BookListParser.exploreUsesSearchRule(candidate));
-  }
-
-  /// 只剩發現頁沒過、AI 改了發現頁借用的搜尋規則時，回給 AI 的那一句事實。
-  static String? _discoveryNote(
-    SourceCheckIsolateResult? result,
-    BookSource original,
-    BookSource candidate,
-  ) {
-    if (result == null || !_onlyDiscoveryFails(result)) return null;
-    final parts = changedParts(original, candidate);
-    if (parts.contains('發現') || !parts.contains('搜尋')) return null;
-    if (!touchedDiscovery(original, candidate)) return null;
-    return aiRepairExploreBorrowsSearch;
-  }
-
-  static const Set<SourceHealthCategory> _discoveryOnly = {
-    SourceHealthCategory.discoveryBroken,
-    SourceHealthCategory.discoveryDetailBroken,
-    SourceHealthCategory.discoveryTocBroken,
-    SourceHealthCategory.discoveryContentBroken,
-  };
-
-  /// AI 回的書源照原本的身分組起來；欄位的型別或數值不對（例如超出範圍的
-  /// 數字）時是 null，當成讀不懂。
-  static BookSource? _candidateOrNull(
-    BookSource original,
-    Map<String, dynamic> json,
-  ) {
-    try {
-      return candidateFrom(original, json);
-    } catch (error) {
-      AppLog.d('AI 回的書源讀不出來: $error');
-      return null;
-    }
   }
 
   /// 送給 AI、寫進紀錄的文字都經過這裡：開始時讀到的秘密、修復途中重讀
@@ -1103,7 +1033,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
   (Map<String, dynamic>, BookSource)? candidateOf(AiChange change) {
     if (aiChangeProblem(change) != null) return null;
     final json = applyAiChange(current, change);
-    final candidate = AiRepairSession._candidateOrNull(original, json);
+    final candidate = candidateOrNull(original, json);
     return candidate == null ? null : (json, candidate);
   }
 
@@ -1160,8 +1090,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
       case AiFetch(:final url):
         step.detail = '看網頁 $url…';
         s._notify();
-        final base =
-            AiRepairSession._candidateOrNull(original, current) ?? original;
+        final base = candidateOrNull(original, current) ?? original;
         final watch = Stopwatch()..start();
         final page = await s._guard(
           () => s._fetchPage(base, url, s._cancelToken),
@@ -1203,8 +1132,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         }
         final BookSource source;
         if (change == null) {
-          source =
-              AiRepairSession._candidateOrNull(original, current) ?? original;
+          source = candidateOrNull(original, current) ?? original;
         } else {
           final parsed = candidateOf(change);
           if (parsed == null) {
@@ -1224,8 +1152,7 @@ final class _RepairAgent implements AgentTask<AiRepairCommand> {
         s._local(step, '解析頁 $page（$stage）', reply);
         return answer(reply);
       case AiJs(:final code):
-        final source =
-            AiRepairSession._candidateOrNull(original, current) ?? original;
+        final source = candidateOrNull(original, current) ?? original;
         final pages = {
           for (final match in RegExp(r'page\(\s*(\d+)\s*\)').allMatches(code))
             if (s._pages[int.parse(match.group(1)!)] case final page?)

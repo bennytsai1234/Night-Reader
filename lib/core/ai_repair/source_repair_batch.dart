@@ -19,6 +19,7 @@ import 'ai_repair_apply.dart';
 import 'ai_repair_prompt.dart';
 import 'ai_repair_session.dart';
 import 'ai_repair_settings.dart';
+import 'repair_verdict.dart';
 import 'site_check.dart';
 
 /// 整批修復做到哪一段。
@@ -96,7 +97,7 @@ class RepairItem {
   /// 這個書源用了多少 token。
   int tokens = 0;
 
-  /// 重新校驗出來壞在哪；判斷修好了沒要用（[AiRepairSession.usableFix]）。
+  /// 重新校驗出來壞在哪；判斷修好了沒要用（[usableFix]）。
   SourceHealthCategory? before;
 
   /// 這一批剛重新校驗的完整結果，交給 AI 時沿用（沿用 24 小時內校驗的沒有）；
@@ -603,12 +604,7 @@ class SourceRepairBatch extends ChangeNotifier {
     final checked = await _check(candidate, _cancelToken);
     if (_stopped ||
         checked == null ||
-        !AiRepairSession.usableFix(
-          checked,
-          item.source,
-          candidate,
-          before: item.before,
-        )) {
+        !usableFix(checked, item.source, candidate, before: item.before)) {
       return false;
     }
     final saved = BookSource.fromJson(checked.updatedSourceJson);
