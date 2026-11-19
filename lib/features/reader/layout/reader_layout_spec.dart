@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'reader_layout_constants.dart';
 import 'reader_typography.dart';
 
 /// 一段正文（或標題）之後的留白高度，計入該 block 的量測高度。
@@ -25,10 +26,6 @@ double readerIllustrationGap(ReaderLayoutStyle style) =>
     style.fontSize * style.effectiveLineHeight / 2;
 
 class ReaderLayoutStyle {
-  static const double minReadableLineHeight = 1.2;
-  static const double maxReadableLineHeight = 3.0;
-  static const double defaultLineHeight = 1.5;
-
   const ReaderLayoutStyle({
     required this.fontSize,
     required this.lineHeight,
@@ -71,12 +68,7 @@ class ReaderLayoutStyle {
   /// 標題與正文之間的空白（行），計入標題 block 的量測高度。
   final double titleSpacing;
 
-  double get effectiveLineHeight => normalizeLineHeight(lineHeight);
-
-  static double normalizeLineHeight(double value) {
-    if (!value.isFinite || value.isNaN) return defaultLineHeight;
-    return value.clamp(minReadableLineHeight, maxReadableLineHeight).toDouble();
-  }
+  double get effectiveLineHeight => normalizeReaderLineHeight(lineHeight);
 }
 
 final class ReaderTextLayoutFrame {
@@ -294,9 +286,7 @@ class ReaderLayoutSpec {
         (viewportSize.height - style.paddingTop - style.paddingBottom)
             .clamp(1.0, double.infinity)
             .toDouble();
-    final normalizedLineHeight = ReaderLayoutStyle.normalizeLineHeight(
-      style.lineHeight,
-    );
+    final normalizedLineHeight = normalizeReaderLineHeight(style.lineHeight);
     final effectiveStyle = normalizedLineHeight == style.lineHeight
         ? style
         : ReaderLayoutStyle(

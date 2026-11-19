@@ -1,13 +1,10 @@
+import 'reader_layout_constants.dart';
 import 'reader_typography.dart';
 
 /// 使用者在閱讀設定選的排版樣式，照選的值原樣帶著（含「左右對齊」開關）。
 /// 排版前照畫面寬度與量到的字格換算成 `ReaderLayoutStyle`：左右對齊在那時
 /// 攤進字距。
 class ReaderStylePreferences {
-  static const double minReadableLineHeight = 1.2;
-  static const double maxReadableLineHeight = 3.0;
-  static const double defaultLineHeight = 1.5;
-
   const ReaderStylePreferences({
     required this.fontSize,
     required this.lineHeight,
@@ -63,12 +60,7 @@ class ReaderStylePreferences {
   /// 章節標題與正文之間的空白（行）。
   final double titleSpacing;
 
-  double get effectiveLineHeight => normalizeLineHeight(lineHeight);
-
-  static double normalizeLineHeight(double value) {
-    if (!value.isFinite || value.isNaN) return defaultLineHeight;
-    return value.clamp(minReadableLineHeight, maxReadableLineHeight).toDouble();
-  }
+  double get effectiveLineHeight => normalizeReaderLineHeight(lineHeight);
 
   ReaderStylePreferences copyWith({
     double? fontSize,

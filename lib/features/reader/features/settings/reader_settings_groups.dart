@@ -12,6 +12,7 @@ import 'package:night_reader/features/reader/features/settings/reader_orientatio
 import 'package:night_reader/features/reader/features/settings/reader_page_turn_speed.dart';
 import 'package:night_reader/features/reader/features/settings/reader_prefs_repository.dart';
 import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
+import 'package:night_reader/features/reader/layout/reader_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
@@ -171,8 +172,8 @@ class ReaderSettingsGroups {
           edits: _typography,
           field: _TypographyField.lineHeight,
           label: '行高',
-          min: ReaderSettingsController.minReadableLineHeight,
-          max: ReaderSettingsController.maxReadableLineHeight,
+          min: kReaderMinLineHeight,
+          max: kReaderMaxLineHeight,
           step: 0.1,
           fractionDigits: 1,
         ),

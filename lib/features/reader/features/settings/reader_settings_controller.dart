@@ -51,10 +51,6 @@ class ReaderSettingsController extends ChangeNotifier {
   /// 正文目前用的字族；選的字型還不能用時是 null（系統字型）。
   String? get readerFontFamily => _fonts.familyOf(readerFont);
 
-  static const double minReadableLineHeight =
-      ReaderStylePreferences.minReadableLineHeight;
-  static const double maxReadableLineHeight =
-      ReaderStylePreferences.maxReadableLineHeight;
   static const double minAutoPageSpeed = ReaderPrefsRepository.minAutoPageSpeed;
   static const double maxAutoPageSpeed = ReaderPrefsRepository.maxAutoPageSpeed;
   static const double minPagePadding = ReaderPrefsRepository.minPagePadding;
@@ -154,9 +150,7 @@ class ReaderSettingsController extends ChangeNotifier {
   void _initFromCache(ReaderPrefsSnapshot snapshot) {
     fontSize = snapshot.fontSize;
     titleFontSize = snapshot.titleFontSize;
-    lineHeight = ReaderStylePreferences.normalizeLineHeight(
-      snapshot.lineHeight,
-    );
+    lineHeight = normalizeReaderLineHeight(snapshot.lineHeight);
     paragraphSpacing = snapshot.paragraphSpacing;
     chapterSpacing = snapshot.chapterSpacing;
     letterSpacing = snapshot.letterSpacing;
@@ -368,7 +362,7 @@ class ReaderSettingsController extends ChangeNotifier {
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
     return ReaderStylePreferences(
       fontSize: fontSize,
-      lineHeight: ReaderStylePreferences.normalizeLineHeight(lineHeight),
+      lineHeight: normalizeReaderLineHeight(lineHeight),
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
       chapterSpacing: chapterSpacing,
@@ -440,9 +434,9 @@ class ReaderSettingsController extends ChangeNotifier {
       changed |= _typography(
         ReaderSettings.lineHeight,
         this.lineHeight,
-        ReaderStylePreferences.normalizeLineHeight(lineHeight),
+        normalizeReaderLineHeight(lineHeight),
         (value) => this.lineHeight = value,
-        restoreAs: ReaderStylePreferences.normalizeLineHeight,
+        restoreAs: normalizeReaderLineHeight,
       );
     }
     if (paragraphSpacing != null) {
