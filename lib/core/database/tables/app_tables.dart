@@ -11,13 +11,8 @@ import '../../models/replace_rule.dart';
 import '../../models/source/book_source.dart';
 import '../../models/book/book_group.dart';
 import '../../models/cookie.dart';
-import '../../models/dict_rule.dart';
-import '../../models/http_tts.dart';
 import '../../models/reading/read_record.dart';
-import '../../models/server.dart';
-import '../../models/txt_toc_rule.dart';
 import '../../models/cache.dart';
-import '../../models/keyboard_assist.dart';
 import '../../models/search/search_book.dart';
 import '../../models/download_task.dart';
 import '../../models/search/search_keyword.dart';
@@ -457,39 +452,6 @@ class Cookies extends Table {
   Set<Column> get primaryKey => {url};
 }
 
-// ───────────── DictRules ─────────────
-@UseRowClass(DictRule, generateInsertable: true)
-class DictRules extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
-  TextColumn get urlRule =>
-      text().named('urlRule').nullable().map(const EmptyStringConverter())();
-  TextColumn get showRule =>
-      text().named('showRule').nullable().map(const EmptyStringConverter())();
-  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
-  IntColumn get sortNumber =>
-      integer().named('sortNumber').withDefault(const Constant(0))();
-}
-
-// ───────────── HttpTts ─────────────
-@UseRowClass(HttpTTS, generateInsertable: true)
-class HttpTtsTable extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
-  TextColumn get url => text()();
-  TextColumn get contentType => text().named('contentType').nullable()();
-  TextColumn get concurrentRate => text().named('concurrentRate').nullable()();
-  TextColumn get loginUrl => text().named('loginUrl').nullable()();
-  TextColumn get loginUi => text().named('loginUi').nullable()();
-  TextColumn get header => text().nullable()();
-  TextColumn get jsLib => text().named('jsLib').nullable()();
-  BoolColumn get enabledCookieJar =>
-      boolean().named('enabledCookieJar').withDefault(const Constant(false))();
-  TextColumn get loginCheckJs => text().named('loginCheckJs').nullable()();
-  IntColumn get lastUpdateTime =>
-      integer().named('lastUpdateTime').withDefault(const Constant(0))();
-}
-
 // ───────────── ReadRecords ─────────────
 @UseRowClass(ReadRecord, generateInsertable: true)
 class ReadRecords extends Table {
@@ -514,49 +476,12 @@ class ReadDays extends Table {
   Set<Column> get primaryKey => {bookName, day};
 }
 
-// ───────────── Servers ─────────────
-@UseRowClass(Server, generateInsertable: true)
-class Servers extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
-  TextColumn get type => text()();
-  TextColumn get config => text().nullable()();
-  IntColumn get sortNumber =>
-      integer().named('sortNumber').withDefault(const Constant(0))();
-}
-
-// ───────────── TxtTocRules ─────────────
-@UseRowClass(TxtTocRule, generateInsertable: true)
-class TxtTocRules extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
-  TextColumn get rule => text()();
-  TextColumn get example => text().nullable()();
-  IntColumn get serialNumber =>
-      integer().named('serialNumber').withDefault(const Constant(-1))();
-  BoolColumn get enable => boolean().withDefault(const Constant(true))();
-}
-
 // ───────────── Cache ─────────────
 @UseRowClass(Cache, generateInsertable: true)
 class CacheTable extends Table {
   TextColumn get key => text().named('key')();
   TextColumn get value => text().named('value').nullable()();
   IntColumn get deadline => integer().withDefault(const Constant(0))();
-
-  @override
-  Set<Column> get primaryKey => {key};
-}
-
-// ───────────── KeyboardAssists ─────────────
-@UseRowClass(KeyboardAssist, generateInsertable: true)
-class KeyboardAssists extends Table {
-  TextColumn get key => text().named('key')();
-  IntColumn get type => integer().withDefault(const Constant(0))();
-  TextColumn get value =>
-      text().named('value').nullable().map(const EmptyStringConverter())();
-  IntColumn get serialNo =>
-      integer().named('serialNo').withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {key};

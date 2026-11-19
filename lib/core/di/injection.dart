@@ -22,8 +22,6 @@ import '../database/dao/replace_rule_dao.dart';
 import '../database/dao/search_book_dao.dart';
 import '../database/dao/search_history_dao.dart';
 import '../database/dao/search_keyword_dao.dart';
-import '../database/dao/keyboard_assist_dao.dart';
-import '../database/dao/server_dao.dart';
 import '../database/dao/reader_chapter_content_dao.dart';
 import '../playback/tts_service.dart';
 import '../source_check/check_source_service.dart';
@@ -120,10 +118,6 @@ void registerDatabase(AppDatabase database) {
   getIt.registerLazySingleton<SearchKeywordDao>(
     () => SearchKeywordDao(getIt<AppDatabase>()),
   );
-  getIt.registerLazySingleton<KeyboardAssistDao>(
-    () => KeyboardAssistDao(getIt<AppDatabase>()),
-  );
-  getIt.registerLazySingleton<ServerDao>(() => ServerDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<ReaderChapterContentDao>(
     () => ReaderChapterContentDao(getIt<AppDatabase>()),
   );
