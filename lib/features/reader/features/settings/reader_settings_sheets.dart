@@ -98,7 +98,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
 
 /// 風格選擇：改的是目前深淺用的風格（「外觀與主題」頁的同一個設定），
 /// 換了整個 App 一起換，另一個深淺的風格不動。色票顯示各風格在目前深淺
-/// 下的正文紙張與文字（含純黑）。
+/// 下的正文紙張與文字（含純黑）：紙色上一個正文字色的大「夜」。
 class _ReaderStyleSelector extends StatelessWidget
     implements GroupedSkeletonItem {
   const _ReaderStyleSelector();
@@ -232,11 +232,16 @@ class _ReaderStyleSelector extends StatelessWidget
                 ),
               ),
               alignment: Alignment.center,
+              // 大「夜」是正文字色：純黑時紙都是黑的，靠字色分出風格。
               child: UiText(
-                'Aa',
+                '夜',
+                // 色票大小固定，字不隨系統字級放大。
+                textScaler: TextScaler.noScaling,
                 style: AppTextStyles.uiSm.copyWith(
+                  fontSize: 26,
                   color: palette.readerText,
                   fontWeight: FontWeight.w600,
+                  height: 1.1,
                 ),
               ),
             ),

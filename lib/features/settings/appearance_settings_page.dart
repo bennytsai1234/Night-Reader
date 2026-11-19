@@ -375,8 +375,9 @@ class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
   }
 }
 
-/// 一張摺角書頁：閱讀紙色上一個「永」與幾條正文色細線，右上角摺起露出
-/// 主色；風格名稱寫在頁下。選中時書頁浮起、加主色外框、名稱變粗。
+/// 一張摺角書頁：閱讀紙色上一個大「夜」與幾條正文色實線，右上角摺起露出
+/// 主色；風格名稱寫在頁下。純黑時六張紙都是黑的，靠大面積的字色分出風格。
+/// 選中時書頁浮起、加主色外框、名稱變粗。
 class _StyleCard extends StatelessWidget {
   const _StyleCard({
     required this.style,
@@ -397,6 +398,9 @@ class _StyleCard extends StatelessWidget {
   static const double aspectRatio = 3 / 4;
   static const double labelGap = AppSpacing.sm;
 
+  /// 頁上「夜」的字級。
+  static const double glyphSize = 24;
+
   static TextStyle labelStyle({required bool selected}) => AppTextStyles.labelSm
       .copyWith(fontWeight: selected ? FontWeight.w600 : FontWeight.w500);
 
@@ -408,14 +412,15 @@ class _StyleCard extends StatelessWidget {
         ? Duration.zero
         : AppMotion.menu;
     final page = Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 7, 0),
+      padding: const EdgeInsets.fromLTRB(7, 4, 7, 0),
       child: Align(
         alignment: Alignment.topLeft,
         child: UiText(
-          '永',
+          '夜',
           // 書頁是縮圖，字跟著頁面大小，不隨系統字級放大。
           textScaler: TextScaler.noScaling,
           style: AppTextStyles.uiMd.copyWith(
+            fontSize: glyphSize,
             color: palette.readerText,
             fontWeight: FontWeight.w600,
             height: 1.1,
@@ -482,7 +487,7 @@ class _StyleCard extends StatelessWidget {
 }
 
 /// 摺角書頁：紙面、陰影與外框都沿同一條頁形（右上角斜切），外框跟著
-/// 摺線走；紙上畫正文細線，摺過來的那一角是主色。
+/// 摺線走；紙上畫正文色實線，摺過來的那一角是主色。
 class _FoldedPagePainter extends CustomPainter {
   const _FoldedPagePainter({
     required this.paper,
@@ -544,10 +549,11 @@ class _FoldedPagePainter extends CustomPainter {
     final left = size.width * 0.13;
     final right = size.width * 0.88;
     final lineWidth = right - left;
-    const thickness = 2.5;
+    const thickness = 3.0;
     const lineGap = 6.5;
-    final paint = Paint()..color = ink.withValues(alpha: 0.33);
-    var top = size.height * 0.36;
+    final paint = Paint()..color = ink.withValues(alpha: 0.85);
+    // 從「夜」底下開始。
+    var top = size.height * 0.5;
     for (var i = 0; i < _lines.length; i++) {
       if (top + thickness > size.height - 4) break;
       final factor = _lines[i];
