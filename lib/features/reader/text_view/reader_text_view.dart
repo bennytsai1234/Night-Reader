@@ -204,7 +204,18 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// 最近一次還原到的位置，畫面還沒離開它之前量到的位置就是它
   /// （[_unmovedRestoredLocation]）；畫面一離開就清掉。
   ReaderLocation? _restoredLocation;
-  bool _initialRestoreCompleted = false;
+
+  /// 正文現在在哪一段：排版中、等掀紙、在畫面上（[_TextStage]）。
+  _TextStage _stage = const _LayingOut();
+
+  /// 正文照目前的排版排好了（等掀紙或在畫面上）。
+  bool get _textLaidOut => _stage is! _LayingOut;
+
+  /// 手指對正文做什麼；正文回到排版中時一律是沒有。
+  _FingerScroll _finger = _FingerScroll.none;
+
+  /// 進行中的還原要的排版預算與是哪一次還原；沒有時照 [_finger]。
+  ({bool Function() owner, PumpState state})? _restoreBudget;
 
   /// 紙現在歸誰：等正文的跳章（[_syncJumpVeil]）、進行中的還原
   /// （[_restoreCore]）、重新還原最後的穩定位置（[_syncStableWorld]）；都沒有
@@ -239,9 +250,9 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// App 切到背景時記下目前這一頁（之後可能被系統關掉，不會再走到
   /// [dispose]）。
   late final AppLifecycleListener _lifecycle;
-  bool _dragging = false;
 
-  bool _sawUserScroll = false;
+  /// 這一幀結束時已經排了一次重建（[_scheduleRebuild]）、一次量位置
+  /// （[_scheduleMotionCapture]）：一幀各只做一次。不是階段，任何階段都可能。
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
 
@@ -386,26 +397,26 @@ class _ReaderTextViewState extends State<ReaderTextView>
     _admission.dispose();
     _scrollController?.dispose();
     _touch.dispose();
-    _revealTimer?.cancel();
+    if (_stage case _AwaitingReveal(:final stillGap)) stillGap?.cancel();
     _veil.dispose();
     super.dispose();
   }
 
-  /// 正文是否已排好可以顯示；切換時蓋上或掀開 [_veil]。
-  void _setRestoreCompleted(bool completed) {
+  /// 正文照目前的排版排好了沒；排好時走到等掀紙，回到排版中時蓋上 [_veil]、
+  /// 手指的捲動跟著正文一起拿掉。
+  void _setTextLaidOut(bool laidOut) {
     // 排版流程接手這張紙，等正文的跳章不再另外管它。
     _paper.restoreTookOverJump();
-    if (_initialRestoreCompleted == completed) return;
-    _initialRestoreCompleted = completed;
-    if (completed) {
-      _revealWhenStill(buildText: true);
+    if (_textLaidOut == laidOut) return;
+    if (laidOut) {
+      _revealWhenStill();
     } else {
+      _cancelPendingReveal();
+      _stage = const _LayingOut();
+      _setFinger(_FingerScroll.none);
       _coverUntilFirstPage();
     }
   }
-
-  /// 等著掀紙的這一次（[_revealWhenStill]）；又蓋紙時作廢。
-  Object? _pendingReveal;
 
   /// 正文排好、要掀紙，照開 App 換場的順序（ADR 0035、0037 策略一、二）：
   /// 骨架的呼吸先收住（每個位置把這一口呼完、停在最深），畫面靜止後才在
@@ -415,18 +426,19 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// 25.6ms；原本在呼吸途中把呼吸凍在當下的深淺來建正文，掀紙時再接著
   /// 呼吸，看起來呼吸播到一半就頓住、和字一起出來（使用者 2026-11-07）。
   ///
-  /// [buildText]：正文還沒建在紙底下（開書第一次排好）。收住的這段期間
-  /// 正文先不建（[_textWaitsForBreath]），重建也只畫紙。
-  void _revealWhenStill({bool buildText = false}) {
+  /// 從排版中來時正文還沒建在紙底下（開書、跳章、重排後第一次排好）：收住
+  /// 的這段期間正文先不建，重建也只畫紙；從在畫面上來時（蓋紙的操作結束、
+  /// 掀回舊正文）正文本來就在。
+  void _revealWhenStill() {
     final reveal = SkeletonReveal.of(context);
-    final pending = _pendingReveal = Object();
-    bool current() => mounted && identical(_pendingReveal, pending);
-    if (buildText) _textWaitsForBreath = true;
+    final awaiting = _AwaitingReveal(textBuilt: _stage is _Shown);
+    _stage = awaiting;
+    bool current() => mounted && identical(_stage, awaiting);
     unawaited(() async {
       await _veil.settleBreath();
       if (!current()) return;
-      if (_textWaitsForBreath) {
-        _textWaitsForBreath = false;
+      if (!awaiting.textBuilt) {
+        awaiting.textBuilt = true;
         _scheduleRebuild();
       }
       // 排好的重建在這一幀結束時才 setState，正文在下一幀才建好、畫出：
@@ -435,10 +447,9 @@ class _ReaderTextViewState extends State<ReaderTextView>
       if (!current()) return;
       await WidgetsBinding.instance.endOfFrame;
       if (!current()) return;
-      _revealTimer = Timer(AppMotion.stillGap, () {
-        _revealTimer = null;
+      awaiting.stillGap = Timer(AppMotion.stillGap, () {
         if (!current()) return;
-        _pendingReveal = null;
+        _stage = const _Shown();
         _veil.reveal(reveal);
         // 掀開中的紙不攔觸控：紙上那層的攔不攔照重建時的狀態。
         _scheduleRebuild();
@@ -446,26 +457,42 @@ class _ReaderTextViewState extends State<ReaderTextView>
     }());
   }
 
-  /// 正文已排好，但骨架的呼吸還沒收住：這段期間只畫紙，正文等收住才建
-  /// （[_revealWhenStill]）。
-  bool _textWaitsForBreath = false;
-
-  /// [_revealWhenStill] 停 [AppMotion.stillGap] 的計時器。
-  Timer? _revealTimer;
-
   /// 又要蓋紙：等著掀的那一次作廢，收住的呼吸接著走；還沒建的正文照常
   /// 建在紙底下，之後的流程當它已經在。
   void _cancelPendingReveal() {
-    _revealTimer?.cancel();
-    _revealTimer = null;
-    if (_textWaitsForBreath) {
-      _textWaitsForBreath = false;
-      _scheduleRebuild();
-    }
-    if (_pendingReveal == null) return;
-    _pendingReveal = null;
+    final awaiting = _stage;
+    if (awaiting is! _AwaitingReveal) return;
+    awaiting.stillGap?.cancel();
+    _stage = const _Shown();
+    if (!awaiting.textBuilt) _scheduleRebuild();
     _veil.resumeBreath();
   }
+
+  /// 換手指的捲動，排版預算跟著換。
+  void _setFinger(_FingerScroll finger) {
+    if (_finger == finger) return;
+    _finger = finger;
+    _syncPumpState();
+  }
+
+  /// 這次還原（[owner]）要的排版預算：還原進行中照它，不照手指。
+  void _setRestoreBudget(bool Function() owner, PumpState state) {
+    _restoreBudget = (owner: owner, state: state);
+    _syncPumpState();
+  }
+
+  /// [owner] 那次還原結束：預算還是它的就交回手指；已經有接手的還原寫了
+  /// 自己的，不動（被取代的還原照手指寫回，會蓋掉接手那次的載入中）。
+  void _endRestoreBudget(bool Function() owner) {
+    if (!identical(_restoreBudget?.owner, owner)) return;
+    _restoreBudget = null;
+    _syncPumpState();
+  }
+
+  /// 排版每幀的預算（ADR 0018）只在這裡寫：進行中的還原要的，其他時候照
+  /// 手指。
+  void _syncPumpState() =>
+      _pipeline.onScrollStateChanged(_restoreBudget?.state ?? _finger.pump);
 
   static LayoutDiskCache? _diskCacheFor(ReaderTextView widget) {
     final bookUrl = widget.bookUrl;
@@ -514,7 +541,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   void _handleEpochRebuild() {
     _runtimeLocationRevision += 1;
     _restoreRevision += 1;
-    _setRestoreCompleted(false);
+    _setTextLaidOut(false);
     _pipeline.dispose();
     _chapterRepo.invalidateLoaded(emitEvents: false);
     _documentIndex.reset(centerKey: _documentIndex.centerKey);
@@ -563,8 +590,9 @@ class _ReaderTextViewState extends State<ReaderTextView>
     _windowCenter = chapter;
     pipeline.demandAround(chapter);
     pipeline.clearPendingLayouts();
-    pipeline.onScrollStateChanged(
-      _initialRestoreCompleted ? PumpState.rebuilding : PumpState.loading,
+    _setRestoreBudget(
+      isCurrent,
+      _textLaidOut ? PumpState.rebuilding : PumpState.loading,
     );
     try {
       final blocks = await pipeline.ensureChapter(
@@ -585,7 +613,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
         chapterLength: blocks.displayText.length,
       );
       final anchor = ScrollAnchor.fromLocation(normalized, blocks);
-      _setRestoreCompleted(false);
+      _setTextLaidOut(false);
       // 只有開書時位置、版面與正文都和紀錄相同才照紀錄畫；其他還原（包括
       // 取代了還沒排完的開書或另一個還原）一律重新等自己的第一頁。
       final opening = _openingPage;
@@ -594,7 +622,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
           opening.contentHash == blocks.contentHash &&
           opening.layout == ReaderSkeletonPage.layoutKeyOf(pipeline.layoutSpec);
       if (!keepsOpeningPage) _coverUntilFirstPage();
-      pipeline.onScrollStateChanged(PumpState.loading);
+      _setRestoreBudget(isCurrent, PumpState.loading);
       _scheduleRebuild();
       pipeline.resetDocument(anchor.blockKey);
       if (!keepsOpeningPage &&
@@ -622,8 +650,8 @@ class _ReaderTextViewState extends State<ReaderTextView>
       var laidOutFor = _viewportSize;
       _pendingAnchor = (anchor: anchor, blocks: blocks);
       _lastReportedLocation = normalized;
-      _setRestoreCompleted(true);
-      pipeline.onScrollStateChanged(PumpState.rebuilding);
+      _setTextLaidOut(true);
+      _setRestoreBudget(isCurrent, PumpState.rebuilding);
       _scheduleRebuild();
       while (true) {
         // Return only after the native viewport exists and has applied the
@@ -648,15 +676,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
       _publishProgress();
       return true;
     } finally {
-      // 被取代的還原不動預算：接手的那次還原已經寫了自己的（載入中），
-      // 照手指寫回會蓋掉它，紙下排版就不照載入中的上限（ADR 0018）。
-      if (mounted &&
-          identical(pipeline, _pipeline) &&
-          (isCurrent() || !_paper.restoring)) {
-        pipeline.onScrollStateChanged(
-          _dragging ? PumpState.dragging : PumpState.idle,
-        );
-      }
+      if (mounted) _endRestoreBudget(isCurrent);
     }
   }
 
@@ -759,7 +779,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   }
 
   void _reconcileVisibleWindow() {
-    if (!mounted || !_initialRestoreCompleted) return;
+    if (!mounted || !_textLaidOut) return;
     // A runtime operation owns demand until positioning commits. Observations
     // of the previously displayed world cannot overwrite its requested target.
     if (widget.runtime.pendingLocation != null) return;
@@ -783,28 +803,26 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (notification is ScrollUpdateNotification) {
       // 拖動真的推動正文才算使用者接手捲動。正文上只有捲動手勢時，
       // 原生 Scrollable 連單純的點擊也會發出零位移的拖動開始。
-      if (!_dragging && notification.dragDetails != null) {
-        _dragging = true;
-        _sawUserScroll = true;
+      final byFinger = notification.dragDetails != null;
+      if (byFinger && _finger != _FingerScroll.dragging) {
         _touch.clear();
         _runtimeLocationRevision += 1;
         widget.runtime.cancelJumpForUserScroll();
-        _pipeline.onScrollStateChanged(PumpState.dragging);
-      } else if (_dragging && notification.dragDetails == null) {
-        _dragging = false;
-        _pipeline.onScrollStateChanged(PumpState.ballistic);
+        _setFinger(_FingerScroll.dragging);
+      } else if (!byFinger && _finger == _FingerScroll.dragging) {
+        _setFinger(_FingerScroll.flinging);
       }
       _scheduleMotionCapture();
     } else if (notification is OverscrollNotification &&
         notification.dragDetails != null) {
       // 停在可捲範圍盡頭再往外拖，正文不動、只有 overscroll；手勢結束時
       // 一樣要檢查那個邊緣是不是取不到的章節。
-      _sawUserScroll = true;
+      if (_finger == _FingerScroll.none) {
+        _setFinger(_FingerScroll.pullingAtEdge);
+      }
     } else if (notification is ScrollEndNotification) {
-      final wasUser = _sawUserScroll;
-      _dragging = false;
-      _sawUserScroll = false;
-      _pipeline.onScrollStateChanged(PumpState.idle);
+      final wasUser = _finger != _FingerScroll.none;
+      _setFinger(_FingerScroll.none);
       if (wasUser) {
         _retryUnavailableFrontierAtExtent();
         unawaited(_handleScrollSettled());
@@ -867,9 +885,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     final revision = _runtimeLocationRevision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _captureFramePending = false;
-      if (!mounted ||
-          !_initialRestoreCompleted ||
-          revision != _runtimeLocationRevision) {
+      if (!mounted || !_textLaidOut || revision != _runtimeLocationRevision) {
         return;
       }
       if (widget.runtime.pendingLocation != null) return;
@@ -881,9 +897,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   }
 
   Future<void> _handleScrollSettled() async {
-    if (!mounted ||
-        !_initialRestoreCompleted ||
-        widget.runtime.pendingLocation != null) {
+    if (!mounted || !_textLaidOut || widget.runtime.pendingLocation != null) {
       return;
     }
     final location = _captureAndReport();
@@ -931,7 +945,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
         _pipeline.demandAround(chapter);
       }
     }
-    if (state.hasStableWorld && _initialRestoreCompleted) {
+    if (state.hasStableWorld && _textLaidOut) {
       _demandOwner = null;
       _reconcileVisibleWindow();
       _publishProgress();
@@ -947,7 +961,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// 操作，沒有操作接手就由 [_releasePaper] 掀開，舊正文原封不動。
   void _syncJumpVeil(ReaderOperationToken? operation) {
     final jump = operation?.kind == ReaderOperationKind.jump ? operation : null;
-    if (!_paper.claimForJump(jump, textShown: _initialRestoreCompleted)) {
+    if (!_paper.claimForJump(jump, textShown: _textLaidOut)) {
       return;
     }
     _touch.clear();
@@ -957,7 +971,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// 紙正蓋著畫面上的正文（淡入中或已蓋滿，不是正在掀開）：紙攔下捲動、
   /// 長按與翻頁，紙下的正文停在蓋紙那一刻的位置。
   bool get _veilHoldsText =>
-      _initialRestoreCompleted && _veil.isVisible && !_veil.isRevealing;
+      _textLaidOut && _veil.isVisible && !_veil.isRevealing;
 
   /// 停住紙下正在跑的捲動（甩動的慣性、已經開始的拖動），固定在蓋紙那一刻
   /// 的位置。`jumpTo` 會結束目前的捲動活動，進行中的拖動也一併作廢。
@@ -967,9 +981,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     final position = controller.position;
     _veilHoldOffset = position.pixels;
     position.jumpTo(position.pixels);
-    _dragging = false;
-    _sawUserScroll = false;
-    _pipeline.onScrollStateChanged(PumpState.idle);
+    _setFinger(_FingerScroll.none);
   }
 
   void _holdScrollUnderVeilAgain() {
@@ -996,11 +1008,11 @@ class _ReaderTextViewState extends State<ReaderTextView>
         )) {
       return;
     }
-    if (!_initialRestoreCompleted || _textOutdated) {
+    if (!_textLaidOut || _textOutdated) {
       _syncStableWorld();
       return;
     }
-    if (!_veilHoldsText || _pendingReveal != null) return;
+    if (!_veilHoldsText || _stage is _AwaitingReveal) return;
     _revealWhenStill();
   }
 
@@ -1015,7 +1027,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
           hasOperation: runtime.stateMachine.currentOperation != null,
         ) ||
         !runtime.state.hasStableWorld ||
-        (_initialRestoreCompleted && !_textOutdated)) {
+        (_textLaidOut && !_textOutdated)) {
       return;
     }
     if (!_paper.beginStableWorld()) return;
@@ -1159,8 +1171,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (controller != null && controller.hasClients) {
       controller.position.jumpTo(controller.position.pixels);
     }
-    _dragging = false;
-    _sawUserScroll = false;
+    _setFinger(_FingerScroll.none);
     final ok = await _restoreCore(
       location,
       isCurrent: current,
@@ -1201,7 +1212,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     // Chapter progress is semantic content progress, not materialized layout
     // progress. DocumentIndex intentionally contains only the admitted window.
     final runtimeLocationIsPublished =
-        _initialRestoreCompleted && widget.runtime.state.hasStableWorld;
+        _textLaidOut && widget.runtime.state.hasStableWorld;
     final location = runtimeLocationIsPublished
         ? widget.runtime.state.visibleLocation
         : _captureVisibleLocation();
@@ -1228,7 +1239,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     pageTurnOverlap: () => widget.pageTurnOverlap,
     pageTurnDuration: () => widget.pageTurnDuration,
     captureOwner: _captureCommandOwner,
-    userScrolling: () => _sawUserScroll,
+    userScrolling: () => _finger != _FingerScroll.none,
     onStop: () => _runtimeLocationRevision += 1,
     onSettled: _handleScrollSettled,
     onScrolled: () {
@@ -1269,7 +1280,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     // 紙蓋著正文時不接新的命令；這個命令自己蓋的紙（朗讀跟隨到還沒載入
     // 的一章）不影響它繼續。
     final admitted =
-        _initialRestoreCompleted && !_sawUserScroll && !_veilHoldsText;
+        _textLaidOut && _finger == _FingerScroll.none && !_veilHoldsText;
     return () =>
         admitted &&
         mounted &&
@@ -1282,7 +1293,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
         pipeline.isCurrentGeneration &&
         revision == _runtimeLocationRevision &&
         identical(runtime.stateMachine.currentOperation, operation) &&
-        !_sawUserScroll &&
+        _finger == _FingerScroll.none &&
         // 等跳章正文時紙下的正文歸那次跳章：翻頁、自動捲動與朗讀跟隨都
         // 不能移動它，跳章結束後再來。
         !_paper.holdsTextForJump;
@@ -1304,7 +1315,8 @@ class _ReaderTextViewState extends State<ReaderTextView>
   bool _isUserFlingInProgress() {
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
-    return controller.position.isScrollingNotifier.value && _sawUserScroll;
+    return controller.position.isScrollingNotifier.value &&
+        _finger != _FingerScroll.none;
   }
 
   Widget _buildVeil(ReaderState state) {
@@ -1335,7 +1347,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
   /// （ADR 0018、0023）。紙已經蓋滿時直接蓋上；正文本來就不在畫面上
   /// （開書、排版中）時不動，紙由排版流程管。
   void _coverText() {
-    if (!_initialRestoreCompleted) return;
+    if (!_textLaidOut) return;
     _cancelPendingReveal();
     if (_veil.isCovered && _covering == null) {
       _coverUntilFirstPage();
@@ -1368,7 +1380,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
       await covering;
       if (!mounted) return false;
     }
-    return mounted && (!_initialRestoreCompleted || _veil.isCovered);
+    return mounted && (!_textLaidOut || _veil.isCovered);
   }
 
   /// 先只排第一頁、照它長出骨架，接著排前後其他頁（ADR 0016）。第一頁照
@@ -1447,7 +1459,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     final store = widget.skeletonPages;
     final bookUrl = widget.bookUrl;
     if (store == null || bookUrl == null) return;
-    if (!_initialRestoreCompleted || _paper.holdsTextForJump) return;
+    if (!_textLaidOut || _paper.holdsTextForJump) return;
     final location = _captureVisibleLocation();
     final offset = _effectiveScrollOffset();
     if (location == null || offset == null) return;
@@ -1507,7 +1519,8 @@ class _ReaderTextViewState extends State<ReaderTextView>
       builder: (context, constraints) {
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
-        if (!_initialRestoreCompleted || _textWaitsForBreath) {
+        // 排版中、等掀紙但正文還沒建：只畫紙。
+        if (_stage case _LayingOut() || _AwaitingReveal(textBuilt: false)) {
           return _buildLoading(state);
         }
         final controller = _scrollController ??= ReaderScrollController(
@@ -1629,4 +1642,54 @@ class _ReaderTextViewState extends State<ReaderTextView>
       child: child,
     );
   }
+}
+
+/// 正文現在在哪一段（`docs/state-machines.md`「閱讀器正文捲動」）。紙蓋上、
+/// 淡入、掀開的樣子歸 [LoadingVeilController]，紙歸誰管歸 [PaperOwners]；
+/// 這裡只管正文排好了沒、建了沒、掀紙了沒。
+sealed class _TextStage {
+  const _TextStage();
+}
+
+/// 正文還沒照目前的排版排好：只畫紙，沒有捲動視圖。
+final class _LayingOut extends _TextStage {
+  const _LayingOut();
+}
+
+/// 正文排好了，紙還蓋著，照開 App 換場的順序等著掀（[_ReaderTextViewState
+/// ._revealWhenStill]）。每一次等掀紙是一個新的物件，等待回來時看現在還是
+/// 不是它。
+final class _AwaitingReveal extends _TextStage {
+  _AwaitingReveal({required this.textBuilt});
+
+  /// 正文已經建在紙底下。false 時骨架的呼吸還沒收住，正文先不建、只畫紙。
+  bool textBuilt;
+
+  /// 正文建好、畫出之後再停 [AppMotion.stillGap] 的計時。
+  Timer? stillGap;
+}
+
+/// 正文建在畫面上：紙掀開中、已掀完，或跳章、改排版時又淡入蓋住。
+final class _Shown extends _TextStage {
+  const _Shown();
+}
+
+/// 手指對正文做什麼；只在正文建在畫面上、紙沒蓋著時有。
+enum _FingerScroll {
+  none(PumpState.idle),
+
+  /// 停在可捲範圍的盡頭往外拉，正文沒動：手指按著，還沒接手捲動（往回推動
+  /// 正文時才接手）。
+  pullingAtEdge(PumpState.idle),
+
+  /// 拖著正文在動。
+  dragging(PumpState.dragging),
+
+  /// 手指放開了，甩出去的慣性還在跑。
+  flinging(PumpState.ballistic);
+
+  const _FingerScroll(this.pump);
+
+  /// 沒有還原在進行時，排版每幀的預算（ADR 0018）。
+  final PumpState pump;
 }
