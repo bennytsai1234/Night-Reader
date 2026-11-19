@@ -6,9 +6,10 @@
 //
 // 檔裡任何一個公開的 class、enum、mixin、extension、extension type 或 typedef，
 // 名稱以檔名開頭（`glass.dart` 裡的 `GlassSurface`），或檔名以它的名稱開頭
-// （`reader_page_shell.dart` 裡的 `ReaderPage`），就算對得上；比對時不看底線
-// 與大小寫（`webdav_sync_store.dart` 和 `WebDavSyncStore` 一樣）。沒有公開型別
-// 的檔、產生的 `.g.dart` 與 `part of` 的檔不看。
+// （`reader_page_shell.dart` 裡的 `ReaderPage`），而且切在詞的交界
+// （`user.dart` 裡的 `UsernameDialog` 不算），就算對得上；比對時不看底線
+// 與大小寫（`webdav_sync_store.dart` 和 `WebDavSyncStore` 一樣）。註解與字串
+// 裡的字不算宣告。沒有公開型別的檔、產生的 `.g.dart` 與 `part of` 的檔不看。
 //
 // 列出來的要人判斷：檔名說的不是它放的東西就改檔名；檔裡刻意放一組同類的
 // 東西、或主角是函式，就加進下面的 [_reviewed] 並寫一句為什麼。有沒列進去的
@@ -52,18 +53,147 @@ const _reviewed = {
 
 final _declaration = RegExp(
   r'^(?:(?:abstract|base|final|interface|sealed|mixin)\s+)*'
-  r'(?:class|enum|mixin|typedef|extension\s+type|extension)\s+([A-Za-z]\w*)',
+  r'(?:class|enum|mixin|typedef|extension\s+type|extension(?!\s+on\b))'
+  r'\s+([A-Za-z]\w*)',
   multiLine: true,
 );
 
+/// 檔名 [base]（不含 `.dart`）和 [text] 裡的公開型別對不上時，回傳那些型別；
+/// 對得上、沒有公開型別或是 `part of` 的檔，回傳 null。
+List<String>? fileNameMismatch(String base, String text) {
+  final code = _blankCommentsAndStrings(text);
+  if (RegExp(r'^part\s+of\b', multiLine: true).hasMatch(code)) return null;
+  final types = _declaration
+      .allMatches(code)
+      .map((m) => m[1]!)
+      .where((name) => !name.startsWith('_'))
+      .toList();
+  if (types.isEmpty || types.any((type) => _matches(base, type))) return null;
+  return types;
+}
+
+/// 前綴要切在詞的交界：型別名稱的下一個字是大寫，或檔名的下一個字是底線；
+/// 檔名多一個複數的 s 也算（`sync_records.dart` 裡的 `SyncRecord`）。
 bool _matches(String base, String type) {
   final file = base.replaceAll('_', '');
   final name = type.toLowerCase();
-  return name.startsWith(file) || file.startsWith(name);
+  if (name == file) return true;
+  if (name.startsWith(file)) {
+    final next = type[file.length];
+    return next != next.toLowerCase();
+  }
+  if (!file.startsWith(name)) return false;
+  var i = 0;
+  for (var letters = 0; letters < name.length; i++) {
+    if (base[i] != '_') letters++;
+  }
+  final rest = base.substring(i);
+  return rest.startsWith('_') || rest == 's' || rest.startsWith('s_');
 }
 
+/// 把註解與字串的內容換成空白、保留換行，宣告的比對才不會讀到註解或字串裡
+/// 的 `class`。
+String _blankCommentsAndStrings(String text) {
+  final out = StringBuffer();
+  var i = 0;
+  void blank(int end) {
+    for (; i < end && i < text.length; i++) {
+      out.write(text[i] == '\n' ? '\n' : ' ');
+    }
+  }
+
+  bool at(String s) => text.startsWith(s, i);
+
+  // 掃一段程式碼，遇到 [untilBrace] 層級的 `}` 就停（字串插值的結尾）。
+  void code({bool untilBrace = false}) {
+    var depth = 0;
+    while (i < text.length) {
+      if (at('//')) {
+        final end = text.indexOf('\n', i);
+        blank(end < 0 ? text.length : end);
+      } else if (at('/*')) {
+        var nest = 0;
+        final from = i;
+        var j = i;
+        while (j < text.length) {
+          if (text.startsWith('/*', j)) {
+            nest++;
+            j += 2;
+          } else if (text.startsWith('*/', j)) {
+            nest--;
+            j += 2;
+            if (nest == 0) break;
+          } else {
+            j++;
+          }
+        }
+        i = from;
+        blank(j);
+      } else if (at("'") ||
+          at('"') ||
+          ((at("r'") || at('r"')) &&
+              (i == 0 || !RegExp(r'\w').hasMatch(text[i - 1])))) {
+        final raw = text[i] == 'r';
+        if (raw) blank(i + 1);
+        final quote = text.startsWith(text[i] * 3, i) ? text[i] * 3 : text[i];
+        blank(i + quote.length);
+        while (i < text.length && !at(quote)) {
+          if (!raw && at(r'\')) {
+            blank(i + 2);
+          } else if (!raw && at(r'${')) {
+            blank(i + 2);
+            code(untilBrace: true);
+            blank(i + 1);
+          } else if (quote.length == 1 && text[i] == '\n') {
+            break;
+          } else {
+            blank(i + 1);
+          }
+        }
+        blank(i + quote.length);
+      } else {
+        final c = text[i];
+        if (untilBrace) {
+          if (c == '{') depth++;
+          if (c == '}') {
+            if (depth == 0) return;
+            depth--;
+          }
+        }
+        out.write(c);
+        i++;
+      }
+    }
+  }
+
+  code();
+  return out.toString();
+}
+
+/// 把命令列給的路徑換成 repo 相對、正斜線、不帶 `./` 與結尾斜線的寫法，
+/// 和 [_reviewed] 的鍵同一套。
+String repoRelative(String path, {String? root}) {
+  var p = path.replaceAll(r'\', '/');
+  final r = (root ?? Directory.current.path).replaceAll(r'\', '/');
+  final absolute = p.startsWith('/') || RegExp(r'^[A-Za-z]:/').hasMatch(p);
+  if (absolute && p.toLowerCase().startsWith('${r.toLowerCase()}/')) {
+    p = p.substring(r.length + 1);
+  }
+  while (p.startsWith('./')) {
+    p = p.substring(2);
+  }
+  while (p.endsWith('/')) {
+    p = p.substring(0, p.length - 1);
+  }
+  return p;
+}
+
+/// [path] 在 [root] 這個資料夾底下（以目錄為界，`lib/core_extra` 不在 `lib/core`）。
+bool isUnder(String path, String root) =>
+    path == root || path.startsWith('$root/');
+
 void main(List<String> args) {
-  final roots = args.isEmpty ? ['lib'] : args;
+  final roots = (args.isEmpty ? ['lib'] : args).map(repoRelative).toList();
   var found = 0;
   for (final root in roots) {
     final files =
@@ -75,24 +205,17 @@ void main(List<String> args) {
             .toList()
           ..sort((a, b) => a.path.compareTo(b.path));
     for (final file in files) {
-      final path = file.path.replaceAll(r'\', '/');
+      final path = repoRelative(file.path);
       if (_reviewed.containsKey(path)) continue;
-      final text = file.readAsStringSync();
-      if (RegExp(r'^part of ', multiLine: true).hasMatch(text)) continue;
-      final types = _declaration
-          .allMatches(text)
-          .map((m) => m[1]!)
-          .where((name) => !name.startsWith('_'))
-          .toList();
-      if (types.isEmpty) continue;
       final base = file.uri.pathSegments.last.replaceAll('.dart', '');
-      if (types.any((type) => _matches(base, type))) continue;
+      final types = fileNameMismatch(base, file.readAsStringSync());
+      if (types == null) continue;
       stdout.writeln('$path\t${types.join(' ')}');
       found++;
     }
   }
   for (final path in _reviewed.keys) {
-    if (!File(path).existsSync() && roots.any(path.startsWith)) {
+    if (!File(path).existsSync() && roots.any((r) => isUnder(path, r))) {
       stdout.writeln('$path\t看過的清單裡有，但檔案不在了：從清單拿掉');
       found++;
     }
