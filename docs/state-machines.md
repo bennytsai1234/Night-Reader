@@ -666,6 +666,10 @@ ADR 0055 的播放器（`lib/features/audiobook/audiobook_player.dart`），讀�
 
 **同資料夾不在這一節的**：一般換場 `skeleton_switcher.dart` 的 `_resting`、`_snapshotting`、`_reveal` 是它在開 App 進場裡等到哪一步，和進場一起收（見「進場」）；兩種換場的 `_sweep` 是這一次換場的方向，`CoverReveal._waiting` 只會從等封面變成不等，`_CoverRevealSlotState` 的 `_granted` 配 `_queuedOn` 是排隊建書卡的三個樣子（沒排、排著、放行），都只有一個布林值，不換結構。
 
+**重構時查到並修掉的**：
+
+- 開 App 的骨架收住途中接著呼吸時，一輪的長度從進場的 0.6 秒換回 1.6 秒，計時器照樣在走、整段時間用新的長度重算，那一格深淺最多跳 64/255。改成換長度時從當下的輪數接著算。現在的程式碰不到（理由見階段表下方），先寫會失敗的測試再修。
+
 **改後**：
 
 | 改前 | 改後 |
