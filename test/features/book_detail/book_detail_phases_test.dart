@@ -377,6 +377,38 @@ void main() {
     });
   });
 
+  group('目錄後來抓到了', () {
+    for (final (name, toc, login) in [
+      ('failed', _Toc.fails, false),
+      ('was behind a login', _Toc.needsLogin, true),
+    ]) {
+      test('a TOC that $name and comes in when adding to the shelf clears '
+          'the row', () async {
+        await storeSource(login: login);
+        service.toc = toc;
+        final provider = await open();
+
+        service.toc = _Toc.ok;
+        final result = await provider.setInBookshelf(true);
+        expect(result.success, isTrue);
+        expect(provider.totalChapterCount, 3);
+        expect(row(provider), (null, false));
+      });
+    }
+
+    test('a TOC that failed and comes in with an update check clears the '
+        'row', () async {
+      await storeSource();
+      service.toc = _Toc.fails;
+      final provider = await open(updates: _Updates(db));
+
+      final result = await provider.checkForUpdates();
+      expect(result.success, isTrue);
+      expect(provider.totalChapterCount, 4);
+      expect(row(provider), (null, false));
+    });
+  });
+
   group('載入', () {
     test('a load that fails shows the error, and retry loads it', () async {
       await storeSource();

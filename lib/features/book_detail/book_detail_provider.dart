@@ -120,6 +120,8 @@ enum BookDetailWorldState { initializing, ready, unavailable }
 
 class BookDetailProvider extends ChangeNotifier {
   static const String _bookInfoDegradationMessage = '書籍資訊更新失敗，目前顯示已儲存內容';
+  static const String _tocFailedMessage = '目前來源目錄載入失敗，建議換源後再試';
+  static const String _tocNeedsLoginMessage = '目錄需要登入後閱讀';
 
   final BookDao _bookDao;
   final ReadRecordDao? _readRecordDao;
@@ -439,6 +441,15 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
+  /// 目錄抓到了：那一列的「目錄沒抓到」「目錄要登入」收掉。
+  void _clearTocFailure() {
+    _loginRequired = false;
+    if (_sourceIssueMessage == _tocFailedMessage ||
+        _sourceIssueMessage == _tocNeedsLoginMessage) {
+      _sourceIssueMessage = null;
+    }
+  }
+
   Future<void> _loadChapters() async {
     _allChapters = await _chapterDao.getByBook(_book.bookUrl);
 
@@ -450,14 +461,14 @@ class BookDetailProvider extends ChangeNotifier {
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
         await _chapterDao.insertChapters(_allChapters);
-        _loginRequired = false;
+        _clearTocFailure();
       } catch (e) {
         _loginRequired =
             _currentSource!.hasLogin &&
             (e is LoginCheckException || LoginCheckException.describes('$e'));
         _sourceIssueMessage = _loginRequired
-            ? '目錄需要登入後閱讀'
-            : '目前來源目錄載入失敗，建議換源後再試';
+            ? _tocNeedsLoginMessage
+            : _tocFailedMessage;
         AppLog.e('加載目錄失敗: $e', error: e);
       }
     }
@@ -988,6 +999,7 @@ class BookDetailProvider extends ChangeNotifier {
       if (result.failed) throw result.error!;
       _allChapters = await _chapterDao.getByBook(_book.bookUrl);
       _clearBookInfoDegradation();
+      _clearTocFailure();
       await _refreshCacheStatus(notify: false);
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
