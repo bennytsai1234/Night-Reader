@@ -513,6 +513,122 @@ void main() {
     });
   });
 
+  // 要念的那一章還在載入時，不管怎麼進來都算朗讀中：面板與定時鍵是
+  // 「暫停朗讀」，系統播放資訊是要念的那章，暫停停在要念的位置。
+  group('while the chapter to read loads', () {
+    test('starting counts as reading and can be paused', () async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+      moveTo(1);
+      unawaited(tts.startFromVisibleLocation());
+      await pumpEventQueue();
+
+      expect(tts.phase, ReaderTtsPhase.reading);
+      expect(system.title, '第 2 章');
+      expect(system.playing, isTrue);
+
+      tts.onPause();
+      second.complete();
+      await pumpEventQueue();
+      expect(engine.spoken, isEmpty);
+      expect(tts.phase, ReaderTtsPhase.paused);
+
+      await tts.toggle();
+      expect(engine.spoken, ['乙。']);
+    });
+
+    test('a manual jump while starting reads from the new place', () async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+      moveTo(1);
+      unawaited(tts.startFromVisibleLocation());
+      await pumpEventQueue();
+
+      moveTo(0);
+      await tts.followManualJump();
+      second.complete();
+      await pumpEventQueue();
+
+      expect(engine.spoken, ['甲。']);
+      expect(tts.currentHighlight?.chapterIndex, 0);
+    });
+
+    test(
+      'reading on to the next chapter shows it, pausing stops at its start',
+      () async {
+        final second = Completer<void>();
+        await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+        await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
+        expect(system.title, '第 2 章');
+
+        tts.onPause();
+        second.complete();
+        await pumpEventQueue();
+        await tts.toggle();
+        // 念完的「甲。」不再念一次。
+        expect(engine.spoken, ['甲。', '乙。']);
+      },
+    );
+
+    test('next while reading on counts from the chapter loading', () async {
+      final second = Completer<void>();
+      await open({0: '甲。', 1: '乙。', 2: '丙。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+
+      tts.onSkipToNext();
+      second.complete();
+      await pumpEventQueue();
+      expect(engine.spoken, ['甲。', '丙。']);
+    });
+
+    test(
+      'passing a chapter without text counts as reading and can be paused',
+      () async {
+        final third = Completer<void>();
+        await open({0: '甲。', 1: '', 2: '丙。'}, gates: {2: third});
+        await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
+
+        expect(tts.phase, ReaderTtsPhase.reading);
+        expect(system.title, '第 3 章');
+        tts.onPause();
+        third.complete();
+        await pumpEventQueue();
+        expect(engine.spoken, ['甲。']);
+
+        await tts.toggle();
+        expect(engine.spoken, ['甲。', '丙。']);
+      },
+    );
+
+    test(
+      'playing after pausing on a picked chapter shows that chapter',
+      () async {
+        final second = Completer<void>();
+        await open({0: '甲。', 1: '乙。'}, gates: {1: second});
+        await tts.startFromVisibleLocation();
+        tts.onSkipToNext();
+        await pumpEventQueue();
+        tts.onPause();
+        await pumpEventQueue();
+
+        unawaited(tts.toggle());
+        await pumpEventQueue();
+        expect(system.title, '第 2 章');
+        expect(system.playing, isTrue);
+
+        second.complete();
+        await pumpEventQueue();
+        expect(engine.spoken, ['甲。', '乙。']);
+      },
+    );
+  });
+
   group('ending from the panel', () {
     test('ending while paused clears the highlight and the system info, the '
         'next start reads from the page', () async {
@@ -896,12 +1012,15 @@ void main() {
     test(
       'a chapter picked while the next one is still loading reads on',
       () async {
-        // 念完第二章、第三章還在載入時按上一章：第一章先念起來，念完一句
-        // 要接著念下一句，不被還在等第三章的那一輪擋掉。
+        // 念完第二章、第三章還在載入時按上一章：從載入中的第三章往前算，
+        // 第二章先念起來，念完一句要接著念下一句，不被還在等第三章的那一輪
+        // 擋掉。
         final third = Completer<void>();
-        await open({0: '甲。乙。', 1: '丙。', 2: '丁。'}, gates: {2: third});
+        await open({0: '甲。', 1: '丙。戊。', 2: '丁。'}, gates: {2: third});
         moveTo(1);
         await tts.startFromVisibleLocation();
+        engine.complete();
+        await pumpEventQueue();
         engine.complete();
         await pumpEventQueue();
 
@@ -910,11 +1029,11 @@ void main() {
         engine.complete();
         await pumpEventQueue();
 
-        expect(engine.spoken, ['丙。', '甲。', '乙。']);
+        expect(engine.spoken, ['丙。', '戊。', '丙。', '戊。']);
         third.complete();
         await pumpEventQueue();
-        expect(engine.spoken.last, '乙。');
-        expect(tts.currentHighlight?.chapterIndex, 0);
+        expect(engine.spoken.last, '戊。');
+        expect(tts.currentHighlight?.chapterIndex, 1);
       },
     );
 

@@ -129,11 +129,7 @@ class ReaderTtsController extends ChangeNotifier
   @override
   ReaderTtsPhase get phase => switch (_state) {
     _Idle() => ReaderTtsPhase.idle,
-    final _Loading loading =>
-      _loadingChapter(loading) == null
-          ? ReaderTtsPhase.idle
-          : ReaderTtsPhase.reading,
-    _Speaking() => ReaderTtsPhase.reading,
+    _Loading() || _Speaking() => ReaderTtsPhase.reading,
     _Paused() => ReaderTtsPhase.paused,
   };
 
@@ -171,16 +167,10 @@ class ReaderTtsController extends ChangeNotifier
   /// 章、下一章照它。
   int? get _chapterIndex => switch (_state) {
     _Idle() => null,
-    final _Loading loading => _loadingChapter(loading),
+    final _Loading loading => loading.location.chapterIndex,
     final _Speaking speaking => speaking.segment.chapterIndex,
     final _Paused paused => paused.resumeAt.chapterIndex,
   };
-
-  /// 載入中算哪一章：按了上一章、下一章的是要去的那章，其他的是剛念的那句
-  /// 的章；都沒有（開始念、經過沒有正文的章）時算沒在朗讀。
-  int? _loadingChapter(_Loading loading) => loading.picked
-      ? loading.location.chapterIndex
-      : loading.highlight?.chapterIndex;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -229,8 +219,7 @@ class ReaderTtsController extends ChangeNotifier
   /// 載入 [loading] 那一章並從它的位置念起；這一章已沒有可念的內容就往後
   /// 找下一個有正文的章節。章節載入失敗或念到書尾時停下並告知，不默默跳過。
   Future<void> _load(_Loading loading) async {
-    _state = loading;
-    if (loading.picked) notifyListeners();
+    _enter(loading);
     var current = loading;
     while (true) {
       final location = current.location;
@@ -261,8 +250,8 @@ class ReaderTtsController extends ChangeNotifier
         _finish(_endNoticeAfter(location.chapterIndex));
         return;
       }
-      current = _Loading(_chapterStart(next), picked: current.picked);
-      _state = current;
+      current = _Loading(_chapterStart(next));
+      _enter(current);
     }
   }
 
@@ -315,6 +304,13 @@ class ReaderTtsController extends ChangeNotifier
   }
 
   bool _isCurrent(_TtsState state) => !_disposed && identical(_state, state);
+
+  /// 換到 [loading] 並通知：要載入的那一章馬上算朗讀中，系統播放資訊換到它。
+  void _enter(_Loading loading) {
+    if (identical(_state, loading)) return;
+    _state = loading;
+    notifyListeners();
+  }
 
   @override
   Future<void> stop() async {
@@ -453,10 +449,8 @@ class ReaderTtsController extends ChangeNotifier
     final loading = _Loading(
       _chapterStart(target),
       highlight: _highlightSegment,
-      picked: true,
     );
-    _state = loading;
-    notifyListeners();
+    _enter(loading);
     await _tts.stop();
     if (_isCurrent(loading)) await _load(loading);
   }
@@ -483,21 +477,21 @@ class ReaderTtsController extends ChangeNotifier
   );
 
   /// 暫停（面板、定時鍵、定時到了、系統或耳機按了暫停、另一方開始播）：
-  /// 停在目前這句，播放鍵從這句開頭接著念；剛按了上一章／下一章、那一章還
-  /// 在載入時，停在那一章開頭。用停止而不是引擎的暫停：句與句之間引擎沒有
+  /// 停在目前這句，播放鍵從這句開頭接著念；要念的那一章還在載入時，停在要
+  /// 念的位置（按了上一章、下一章或自動換章是那一章開頭）。用停止而不是引擎的暫停：句與句之間引擎沒有
   /// 在念，暫停不會生效，下一句照樣會開始。
   void _pause() {
     final paused = switch (_state) {
       _Idle() => null,
-      final _Loading loading when loading.picked => _Paused(
+      final _Loading loading => _Paused(
         loading.location,
         highlight: loading.highlight,
       ),
-      _Loading(:final highlight?) || _Paused(:final highlight?) => _Paused(
+      _Paused(:final highlight?) => _Paused(
         _sentenceStart(highlight),
         highlight: highlight,
       ),
-      _Loading() || _Paused() => null,
+      _Paused() => null,
       final _Speaking speaking => _Paused(
         _sentenceStart(speaking.segment),
         highlight: speaking.segment,
@@ -572,13 +566,12 @@ final class _Idle extends _TtsState {
 }
 
 /// 要念的那一章還在載入：載入好就從 [location] 念起。[highlight] 是剛念的
-/// 那句，載入中高亮留在那裡；[picked] 是按了上一章、下一章載入的。
+/// 那句，載入中高亮留在那裡。
 final class _Loading extends _TtsState {
-  _Loading(this.location, {this.highlight, this.picked = false});
+  _Loading(this.location, {this.highlight});
 
   final ReaderLocation location;
   final ReaderTtsSegment? highlight;
-  final bool picked;
 }
 
 /// 念著 [segments] 的第 [index] 句（這一章從朗讀起點往後的句子）。
