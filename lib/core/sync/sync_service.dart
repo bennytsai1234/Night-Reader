@@ -509,12 +509,15 @@ class SyncService {
   /// 完成」時又要求同步的，會開新的一段，不會拿到這一段的 future。
   void _finishRun() {
     _run = null;
+    // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。先取下這一段
+    // 的等待再通知：聽到通知才回到 App 的，等的是新的一段。
+    final waiting = _progressPending;
+    _progressPending = null;
     status.value = status.value.copyWith(
       phase: SyncPhase.idle,
       clearProgress: true,
     );
-    // 沒設定同步空間、或沒走到閱讀進度就失敗了，開書也不再等。
-    _progressDone();
+    waiting?.complete();
   }
 
   /// 開 App 進場播完時：讀出設定、同步一次閱讀進度，並開始數這台的改動
@@ -544,11 +547,25 @@ class SyncService {
   /// 時候；其他時候是 null。
   Completer<void>? _progressPending;
 
-  void _expectProgress() => _progressPending ??= Completer<void>();
+  /// 開始等下一個進度那一步。已經有人在等的，換成新的、和新的一起放掉：
+  /// 正在做的那一步讀的可能是這次要求之前的雲端。
+  void _expectProgress() {
+    final earlier = _progressPending;
+    final waiting = _progressPending = Completer<void>();
+    if (earlier != null) unawaited(waiting.future.then(earlier.complete));
+  }
 
   void _progressDone() {
     _progressPending?.complete();
     _progressPending = null;
+  }
+
+  /// 進度那一步做完：開始時就在等的（[waiting]）才放掉。這一步開始之後才
+  /// 等的（讀雲端時回到 App），等的是排在後面的那一輪。
+  void _progressStepDone(Completer<void>? waiting) {
+    if (waiting != null && identical(waiting, _progressPending)) {
+      _progressDone();
+    }
   }
 
   /// 開 App 或回到前景後的這次同步，閱讀進度那一步做完（不論成功、失敗或
@@ -623,6 +640,7 @@ class SyncService {
           status.value = status.value.copyWith(
             progress: (kind: kind.name, step: index + 1, total: kinds.length),
           );
+          final waiting = kind is ProgressSync ? _progressPending : null;
           final kindTimer = Stopwatch()..start();
           try {
             if (await _syncKind(store, kind)) {
@@ -646,7 +664,7 @@ class SyncService {
               (elapsed) => elapsed + kindTimer.elapsedMilliseconds,
               ifAbsent: () => kindTimer.elapsedMilliseconds,
             );
-            if (kind is ProgressSync) _progressDone();
+            if (kind is ProgressSync) _progressStepDone(waiting);
           }
           if (run.progressFirst) {
             run.progressFirst = false;
