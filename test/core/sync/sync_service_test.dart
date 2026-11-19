@@ -429,6 +429,8 @@ void main() {
       settings: SyncSettings(),
       storeFactory: (space, _, _) => space == SyncSpace.none ? null : store,
     );
+    await idle.start();
+    expect(idle.progressReady, isNull, reason: '開書不等');
     await idle.syncAll();
     expect(await idle.pullProgress('x'), isNull);
     expect(store.writes, 0);
@@ -610,6 +612,60 @@ void main() {
 
     expect((await b.book('b-src')).durChapterTitle, '第三章');
   });
+
+  test(
+    'progress asked for before cancelling a full sync is still sent',
+    () async {
+      await a.addBook('a-src', toc: toc, time: 100);
+      await a.sync.syncAll();
+      await b.addBook('b-src', toc: toc, time: 50);
+      await b.sync.syncAll();
+
+      // B 全面同步讀書源時讀到第三章、退到背景，接著使用者取消；進度那一種
+      // 這一輪已經做過了。
+      final reading = Completer<void>();
+      final stuck = Completer<void>();
+      store.beforeNextRead = (name) {
+        if (name != 'sources.json' || reading.isCompleted) return null;
+        reading.complete();
+        return stuck.future;
+      };
+      final full = b.sync.syncAll();
+      await reading.future;
+      await b.books.updateProgress('b-src', 3, '第三章', 4);
+      b.sync.syncBeforeBackground();
+      b.sync.cancelSync();
+      stuck.complete();
+      await full;
+      while (b.sync.status.value.running) {
+        await pumpEventQueue();
+      }
+
+      await a.sync.syncAll();
+      expect((await a.book('a-src')).durChapterTitle, '第三章');
+    },
+  );
+
+  test(
+    'the reader stops waiting for progress when the space is down',
+    () async {
+      final down = _FailingStore()
+        ..failing['progress.json'] = const SyncStoreException('連不上同步空間');
+      final service = SyncService(
+        settings: SyncSettings(),
+        bases: SyncBaseStorage(
+          directory: () async => Directory('${baseDir.path}/down'),
+        ),
+        storeFactory: (_, _, _) => down,
+        kinds: (service) => [a.progress(service)],
+      );
+
+      await service.start();
+
+      expect(service.progressReady, isNull);
+      expect(service.status.value.error, '連不上同步空間');
+    },
+  );
 
   test('a full sync asked for when the last round reports done runs, and the '
       'next daily sync is still progress only', () async {

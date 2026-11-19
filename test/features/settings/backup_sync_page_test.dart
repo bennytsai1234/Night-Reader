@@ -63,9 +63,16 @@ class _Kind extends SyncKind {
 class _MemoryBases extends SyncBaseStorage {
   final Map<String, Map<String, Object?>> files = {};
 
+  /// 設了就讓下一次讀紀錄停在這裡（每一輪開始都讀，用來卡住日常的進度同步）。
+  Completer<void>? gate;
+
   @override
-  Future<Map<String, Object?>> readJson(String name) async =>
-      Map.of(files[name] ?? const {});
+  Future<Map<String, Object?>> readJson(String name) async {
+    final waiting = gate;
+    gate = null;
+    if (waiting != null) await waiting.future;
+    return Map.of(files[name] ?? const {});
+  }
 
   @override
   Future<void> writeJson(String name, Map<String, Object?> json) async =>
@@ -77,6 +84,7 @@ class _MemoryBases extends SyncBaseStorage {
 
 void main() {
   late _Store store;
+  late _MemoryBases bases;
   final previous = SyncService.instance;
   tearDown(() => SyncService.instance = previous);
 
@@ -89,7 +97,7 @@ void main() {
     SyncService.instance = SyncService(
       runner: runSyncWorkInline,
       storeFactory: (_, _, _) => store,
-      bases: _MemoryBases(),
+      bases: bases = _MemoryBases(),
       kinds: (_) => [_Kind('sources'), _Kind('settings')],
     );
     await tester.pumpWidget(
@@ -142,5 +150,29 @@ void main() {
     expect(find.text('全面同步中'), findsNothing);
     expect(find.text('已停下，同步好的資料留著'), findsOneWidget);
     expect(store.reads, ['sources.json']);
+  });
+
+  testWidgets('cancelling a full sync still waiting behind the daily sync: '
+      'the full round never runs', (tester) async {
+    await pump(tester);
+    // 日常的進度同步卡住時按「立即全面同步」，全面同步排在它後面。
+    final daily = Completer<void>();
+    bases.gate = daily;
+    SyncService.instance.syncProgress();
+    await tester.tap(find.text('立即全面同步'));
+    // 日常那一輪還沒寫出進度，進度條來回跑，等不到畫面靜止。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('全面同步中'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pump();
+    expect(find.text('正在停下…'), findsOneWidget);
+
+    daily.complete();
+    await settle(tester);
+    expect(find.text('全面同步中'), findsNothing);
+    expect(find.text('已停下，同步好的資料留著'), findsOneWidget);
+    expect(store.reads, isEmpty, reason: '排著的全面同步沒有跑');
   });
 }
