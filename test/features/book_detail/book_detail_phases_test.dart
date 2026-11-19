@@ -409,6 +409,19 @@ void main() {
     });
   });
 
+  group('從書源編輯或除錯頁回來', () {
+    test('a source that can no longer be read shows its health without '
+        'login', () async {
+      await storeSource(login: true);
+      service.toc = _Toc.needsLogin;
+      final provider = await open();
+
+      await storeSource(login: true, group: paidSourceGroupTag);
+      await provider.reloadSource();
+      expect(row(provider), (paidSourceHealth.description, false));
+    });
+  });
+
   group('載入', () {
     test('a load that fails shows the error, and retry loads it', () async {
       await storeSource();

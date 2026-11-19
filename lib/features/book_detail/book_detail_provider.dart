@@ -405,6 +405,8 @@ class BookDetailProvider extends ChangeNotifier {
     } else {
       _sourceIssueMessage = null;
     }
+    // 那一列換成別的字或收掉，「登入」跟著拿掉。
+    _loginRequired = false;
   }
 
   Future<void> _loadBookInfo() async {
