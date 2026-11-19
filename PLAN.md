@@ -8,7 +8,7 @@
   - **1. 搬資料夾與改名，三批，每批一個 PR**
     - **搬法**：搬檔的提交只動檔案位置、檔名和跟著改的 import，內容一行不改，git 才追得到搬家前的歷史（`git log --follow`）。改類別名稱、刪檔、併檔會改內容，在同一個 PR 裡另做提交。`test/` 照 `lib/` 的結構，測試跟著搬。文件裡寫到的路徑與檔名一起改（完整路徑用路徑 grep，只寫檔名的用檔名 grep）。驗證：`flutter analyze` 通過、搬過的測試照跑。
     - **命名原則**（第三批收尾時寫進 `CODING_STANDARDS.md`）：名字說它是什麼，不說第幾版或怎麼做出來的（V2、hybrid、new、legacy 拿掉，`helper`、`utils`、`manager` 能換成具體說法就換）；資料夾照讀者看得到的功能、用 `GLOSSARY.md` 的詞，一個詞對到一個地方；檔名是主要類別名稱的小寫寫法；`core/` 放沒有畫面的、`features/` 放畫面，同一件事兩邊各有一部分要是刻意的分層。
-    - **第一批：拆掉 `lib/core/services/`**（使用者 2026-11-19 確認）。各組搬到 `core/` 底下，和已有的同類資料夾併：
+    - **第一批：拆掉 `lib/core/services/`**（使用者 2026-11-19 確認；分支 `refactor/split-core-services` 開工中，合併前別的分支不要改 `lib/`）。各組搬到 `core/` 底下，和已有的同類資料夾併：
       - `core/source/`：`book_source_service`、`source_dedupe`、`source_interaction`、`source_login_session`、`source_debug_service`、`rule_big_data_service`、`content_next_page`、`chapter_content_kind`
       - `core/source_check/`：`check_source_service`、`source_check_isolate`、`source_check_diagnostics`
       - `core/source_switch/`：`source_switch_service`、`source_switch_handoff`、`auto_source_switch`、`same_book`
