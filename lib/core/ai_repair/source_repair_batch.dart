@@ -345,16 +345,22 @@ class SourceRepairBatch extends ChangeNotifier {
   /// （或還沒開始接著做的）直接收尾。
   void stop() {
     if (isFinished) return;
-    if (_paused || (_startTask == null && !_stopped)) {
+    if ((_paused && !_running) || (_startTask == null && !_stopped)) {
       _paused = false;
       _stopped = true;
       stoppedStage = _startTask == null ? null : stage;
+      // 暫停時停在半途的 AI 修復跟著結束：點進去看到的是已結束。
+      for (final session in _sessions) {
+        session.stop();
+      }
       _closeUnfinished('已結束');
       _notify();
       return;
     }
-    if (_stopped) return;
+    // 正在暫停時按結束：結束蓋過暫停，照做著時按結束的走。
+    if (_stopped && !_paused) return;
     CrashTrail.action('按了結束：修復異常書源（做到${_stageName(stage)}）');
+    _paused = false;
     _stopped = true;
     stoppedStage = stage;
     _cancelAll('已結束', pause: false);

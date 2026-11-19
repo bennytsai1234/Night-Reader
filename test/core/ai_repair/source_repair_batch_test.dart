@@ -797,6 +797,50 @@ void main() {
       );
       expect(b.items.last.detail, '已結束');
     });
+
+    test('ending a batch that paused while the AI repaired ends that repair '
+        'too, so its page shows it ended', () async {
+      late SourceRepairBatch b;
+      b = batch(
+        sources,
+        recheck: recheck,
+        aiConcurrency: 1,
+        beforeAsk: () async => b.pause(),
+      );
+      await b.start();
+      final repair = b.items[1].session!;
+      expect(repair.isPaused, isTrue);
+
+      b.stop();
+
+      expect(repair.isPaused, isFalse);
+      expect(repair.isFinished, isTrue);
+      expect(repair.job.explanation, '已結束，書源沒有改。');
+    });
+
+    test('ending while the pause is still settling ends the batch and the '
+        'repair it was running', () async {
+      late SourceRepairBatch b;
+      b = batch(
+        sources,
+        recheck: recheck,
+        aiConcurrency: 1,
+        beforeAsk: () async => b
+          ..pause()
+          ..stop(),
+      );
+      await b.start();
+
+      expect(b.isFinished, isTrue);
+      expect(b.isPaused, isFalse);
+      final repair = b.items[1].session!;
+      expect(repair.isPaused, isFalse);
+      expect(repair.isFinished, isTrue);
+      expect(
+        [for (final item in b.items) item.outcome],
+        [RepairOutcome.healthy, RepairOutcome.notTried, RepairOutcome.notTried],
+      );
+    });
   });
 
   test('a source the AI fixes under a new address is saved with that address '
