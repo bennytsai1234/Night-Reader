@@ -259,6 +259,27 @@ class SourceImportService {
 /// 兩者擇一。
 typedef SourceTag = ({BookSourceKind? kind, String? group});
 
+/// 整份書源清單現在被誰占著（`docs/state-machines.md`「書源管理」）。占著的
+/// 由自己收：第一次讀與重讀由最新一次讀清單收尾時收，匯入與批次作業做完收；
+/// 它們裡面的重讀不碰階段。
+enum _ListWork {
+  /// 第一次讀：骨架照上次的樣子畫，什麼都不能改。
+  opening,
+
+  /// 閒著：都能改，改一列時只鎖那一列。
+  idle,
+
+  /// 重讀：讀完第一次之後要等它的讀清單（改了書源之後、從編輯頁回來、
+  /// 按了重試）。清單留著，選單灰掉。
+  reloading,
+
+  /// 匯入：寫進資料庫、併重複書源、重讀。
+  importing,
+
+  /// 批次作業：刪、移動、改分組、校驗、清標記；每一列都鎖住。
+  batch,
+}
+
 class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
   final SourceImportService _importService;
@@ -356,23 +377,40 @@ class SourceManagerProvider with ChangeNotifier {
     return list;
   }
 
-  // 一建立就算載入中：書源等進場動畫播完才讀，這段期間不能當成沒有書源。
-  // 第一次讀取收尾時一起收掉。
-  bool _isLoading = true;
-  bool _loadOwnsLoading = true;
-  bool get isLoading => _isLoading;
-  bool _isBatchOperationInProgress = false;
-  bool get isBatchOperationInProgress => _isBatchOperationInProgress;
+  /// 整份清單現在被誰占著。一建立就是第一次讀：書源等進場動畫播完才讀，
+  /// 這段期間不能當成沒有書源。
+  _ListWork _work = _ListWork.opening;
+
+  /// 清單在讀：骨架（沒有書源時）與 [expectsSources] 看它。
+  bool get isLoading => switch (_work) {
+    _ListWork.opening || _ListWork.reloading || _ListWork.importing => true,
+    _ListWork.idle || _ListWork.batch => false,
+  };
+
+  /// 正在改的那幾列：一次可以好幾列，和閒著、重讀同時成立。
   final Set<String> _pendingSourceMutations = <String>{};
 
-  /// 讀清單時正在併重複書源（ADR 0062）：這段時間其他改書源的動作等它。
-  bool _mergingDuplicates = false;
-  bool get _hasActiveMutation =>
-      _isBatchOperationInProgress ||
+  /// 正在併重複書源（ADR 0062）：在讀清單裡做，會和第一次讀、重讀同時成立，
+  /// 所以不是 [_work] 的一個階段。這段時間其他改書源的動作等它。
+  Future<int>? _merging;
+
+  /// 讀清單時能不能併重複書源：書源管理自己在改書源（匯入、批次作業、
+  /// 校驗、有一列在改）時不併，做完重讀時再併。
+  bool get _canMerge =>
+      switch (_work) {
+        _ListWork.opening || _ListWork.idle || _ListWork.reloading => true,
+        _ListWork.importing || _ListWork.batch => false,
+      } &&
+      _merging == null &&
+      !checkService.isChecking &&
+      _pendingSourceMutations.isEmpty;
+
+  /// 整份清單忙著：選單、多選工具列、分組管理灰掉，不能開始批次作業與匯入。
+  bool get isMutationBusy =>
+      _work != _ListWork.idle ||
+      _merging != null ||
       checkService.isChecking ||
-      _mergingDuplicates ||
       _pendingSourceMutations.isNotEmpty;
-  bool get isMutationBusy => _isLoading || _hasActiveMutation;
 
   /// 上次讀完時的書源數，存在偏好設定、開頁時同步讀出；第一次讀取完成前
   /// 照它畫骨架的列數，並決定要不要先留出搜尋框與底部工具列。沒有紀錄
@@ -382,7 +420,7 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 頁面要不要畫「有書源」的版面（頁首搜尋框、底部工具列）。還沒有資料的
   /// 載入中照上次的紀錄，版面從第一幀就和讀完時一樣，清單出現時不被推動。
-  bool get expectsSources => _isLoading && _sources.isEmpty
+  bool get expectsSources => isLoading && _sources.isEmpty
       ? (lastSourceCount ?? 1) > 0
       : _sources.isNotEmpty;
 
@@ -469,7 +507,7 @@ class SourceManagerProvider with ChangeNotifier {
   /// 這一列此刻能不能操作：批次作業或校驗進行中全部鎖住；單一書源的修改
   /// 只鎖住那一列。
   bool isSourceLocked(String url) =>
-      _isBatchOperationInProgress ||
+      _work == _ListWork.batch ||
       checkService.isChecking ||
       _pendingSourceMutations.contains(url);
   final Set<String> _selectedUrls = {};
@@ -649,25 +687,24 @@ class SourceManagerProvider with ChangeNotifier {
 
   Future<void> loadSources({bool showLoading = true}) async {
     final generation = ++_loadGeneration;
-    if (showLoading) {
-      _isLoading = true;
-      _loadOwnsLoading = true;
+    // 匯入、批次作業裡的重讀不碰階段：清單已經被它們占著，由它們收。
+    if (showLoading && _work == _ListWork.idle) {
+      _work = _ListWork.reloading;
       notifyListeners();
     }
     try {
       var loadedSources = await _dao.getAllPart();
       if (_disposed || generation != _loadGeneration) return;
-      // 重複書源每次讀清單都併（ADR 0062）。書源管理自己在改書源時不併；
-      // 校驗、修復這類批次工作在跑時由 [mergeDuplicateSources] 擋下，等它們
-      // 做完重讀時再併。
-      if (!_hasActiveMutation &&
-          duplicateSourceGroups(loadedSources).isNotEmpty) {
-        _mergingDuplicates = true;
+      // 重複書源每次讀清單都併（ADR 0062），書源管理自己在改書源時除外
+      // （[_canMerge]）；校驗、修復這類批次工作在跑時由
+      // [mergeDuplicateSources] 擋下，等它們做完重讀時再併。
+      if (_canMerge && duplicateSourceGroups(loadedSources).isNotEmpty) {
+        final merging = _merging = _mergeDuplicates(loadedSources);
         final int merged;
         try {
-          merged = await _mergeDuplicates(loadedSources);
+          merged = await merging;
         } finally {
-          _mergingDuplicates = false;
+          _merging = null;
         }
         if (_disposed) return;
         if (merged > 0) {
@@ -699,12 +736,11 @@ class SourceManagerProvider with ChangeNotifier {
         _markVisibleSourcesDirty();
       }
     } finally {
-      // 最新一次讀取收尾：一律發布結果，也收掉被它取代的讀取留下的載入狀態
-      // （匯入自己設的載入狀態由匯入收）。
+      // 最新一次讀取收尾：一律發布結果，也收掉第一次讀與重讀，含被它取代
+      // 的那幾次留下的（匯入、批次作業由它們自己收）。
       if (!_disposed && generation == _loadGeneration) {
-        if (_loadOwnsLoading) {
-          _isLoading = false;
-          _loadOwnsLoading = false;
+        if (_work case _ListWork.opening || _ListWork.reloading) {
+          _work = _ListWork.idle;
         }
         notifyListeners();
       }
@@ -1386,14 +1422,14 @@ class SourceManagerProvider with ChangeNotifier {
   /// 直接匯入書源列表（跳過預覽）
   Future<SourceImportCount> importSources(List<BookSource> sources) async {
     if (sources.isEmpty || isMutationBusy) return (imported: 0, merged: 0);
-    _isLoading = true;
+    _work = _ListWork.importing;
     notifyListeners();
     try {
       final count = await _importService.importSources(sources);
       await loadSources(showLoading: false);
       return count;
     } finally {
-      _isLoading = false;
+      _work = _ListWork.idle;
       notifyListeners();
     }
   }
@@ -1414,21 +1450,21 @@ class SourceManagerProvider with ChangeNotifier {
 
   bool _beginBatchOperation() {
     if (isMutationBusy) return false;
-    _isBatchOperationInProgress = true;
+    _work = _ListWork.batch;
     notifyListeners();
     return true;
   }
 
   void _endBatchOperation() {
-    if (!_isBatchOperationInProgress) return;
-    _isBatchOperationInProgress = false;
+    if (_work != _ListWork.batch) return;
+    _work = _ListWork.idle;
     notifyListeners();
   }
 
-  /// 不同書源的單筆修改可以同時進行；同一筆或批次作業、校驗、載入中則拒絕。
+  /// 不同書源的單筆修改可以同時進行；同一筆、清單被占著（[_work] 不是閒著）
+  /// 或校驗中則拒絕。
   bool _beginSourceMutation(String url) {
-    if (_isLoading ||
-        _isBatchOperationInProgress ||
+    if (_work != _ListWork.idle ||
         checkService.isChecking ||
         !_pendingSourceMutations.add(url)) {
       return false;
