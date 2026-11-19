@@ -408,9 +408,11 @@ class ReaderTtsController extends ChangeNotifier
         coverSource: UnifiedCovers.coverOf(book),
       ),
       playing: isPlaying,
+      // 上一章、下一章跳過付費章節：那個方向沒有能念的章就不放那顆。
       controls: {
-        if (chapterIndex > 0) PlaybackControl.skipToPrevious,
-        if (chapterIndex + 1 < runtime.chapterCount) PlaybackControl.skipToNext,
+        if (_chapterAfter(chapterIndex, -1) != null)
+          PlaybackControl.skipToPrevious,
+        if (_chapterAfter(chapterIndex, 1) != null) PlaybackControl.skipToNext,
         PlaybackControl.stop,
       },
     );

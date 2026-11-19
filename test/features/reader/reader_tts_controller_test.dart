@@ -998,6 +998,15 @@ void main() {
       expect(system.controls, {PlaybackControl.stop});
     });
 
+    test('only paid chapters that way leaves that button out', () async {
+      await open({0: null, 1: '乙。', 2: null}, paid: {0, 2});
+      moveTo(1);
+      await tts.startFromVisibleLocation();
+      await pumpEventQueue();
+
+      expect(system.controls, {PlaybackControl.stop});
+    });
+
     test('pausing shows paused, stopping takes it away', () async {
       await open({0: '第一句。'});
       await tts.startFromVisibleLocation();
