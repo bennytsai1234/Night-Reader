@@ -315,11 +315,13 @@ void main() {
       holding = true;
       await tester.tap(find.text('結束'));
       await tester.pump();
-      // 結束那一行還在寫：同通知欄，寫「正在結束…」直到停好。
-      expect(find.text('正在結束…'), findsOneWidget);
-      expect(find.byType(PlainTextAction), findsNothing);
-      expect(find.text('結束'), findsOneWidget);
-      expect(find.text('排序：相關度'), findsNothing);
+      // 搜尋本身已經停下：結果工具列馬上淡入、頁首「搜尋」；背景那件還在
+      // 寫結束那一行（通知欄寫「正在結束…」）。
+      expect(find.text('排序：相關度'), findsOneWidget);
+      expect(find.text('搜尋'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('正在結束…'), findsNothing);
+      expect(find.text('排序：相關度'), findsOneWidget);
       await release(tester, find.text('排序：相關度'));
     });
   });
