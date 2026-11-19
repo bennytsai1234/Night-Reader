@@ -15,6 +15,7 @@ import 'package:night_reader/core/playback/system_playback.dart';
 import 'package:night_reader/features/reader/chapter/reader_chapter_repository.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_controller.dart';
+import 'package:night_reader/features/reader/features/tts/reader_tts_phase.dart';
 import 'package:night_reader/core/playback/sleep_timer.dart';
 import 'package:night_reader/features/reader/layout/reader_layout_spec.dart';
 import 'package:night_reader/features/reader/session/reader_location.dart';
@@ -357,11 +358,11 @@ void main() {
       await open({0: '第一章開頭。', 1: '第二章開頭。'});
       await tts.startFromVisibleLocation();
       await tts.toggle();
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
 
       moveTo(1);
       await tts.followManualJump();
-      expect(tts.isPaused, isFalse);
+      expect(tts.phase, isNot(ReaderTtsPhase.paused));
       expect(tts.isPlaying, isFalse);
 
       await tts.toggle();
@@ -487,7 +488,7 @@ void main() {
         await pumpEventQueue();
 
         expect(engine.spoken, ['甲。']);
-        expect(tts.isPaused, isTrue);
+        expect(tts.phase, ReaderTtsPhase.paused);
         expect(tts.currentHighlight?.sentenceStart, 0);
       },
     );
@@ -520,11 +521,11 @@ void main() {
       engine.complete();
       await pumpEventQueue();
       await tts.toggle();
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
 
       await tts.stop();
       await pumpEventQueue();
-      expect(tts.isPaused, isFalse);
+      expect(tts.phase, isNot(ReaderTtsPhase.paused));
       expect(tts.isPlaying, isFalse);
       expect(tts.currentHighlight, isNull);
       expect(system.title, isNull);
@@ -567,7 +568,7 @@ void main() {
       await elapse(tester, const Duration(minutes: 15));
 
       expect(tts.isPlaying, isFalse);
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
       expect(tts.currentHighlight?.sentenceStart, sentenceStart);
 
       await tts.toggle();
@@ -584,12 +585,26 @@ void main() {
 
       await tts.toggle();
       await elapse(tester, const Duration(hours: 1));
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
       expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
 
       await tts.toggle();
       await elapse(tester, const Duration(minutes: 10));
       expect(tts.isPlaying, isFalse);
+    });
+
+    testWidgets('keeps counting down when next lands on a chapter without '
+        'text', (tester) async {
+      await open({0: '甲。', 1: '', 2: '丙。'});
+      await tts.sleepTimer.choose(SleepTimerOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      tts.onSkipToNext();
+      await tester.pump();
+      expect(engine.spoken.last, '丙。');
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+      await tts.stop();
     });
 
     testWidgets('keeps counting down across chapters', (tester) async {
@@ -618,7 +633,7 @@ void main() {
 
       await elapse(tester, const Duration(minutes: 10));
       expect(tts.isPlaying, isFalse);
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
     });
 
     testWidgets('changing the custom minutes leaves a preset alone', (
@@ -672,7 +687,7 @@ void main() {
       // 念著時再按是暫停在這一句，再按一次從這句接著念。
       await tts.toggleTimed();
       expect(tts.isPlaying, isFalse);
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
 
       await tts.toggleTimed();
       expect(engine.spoken, ['唯一的一句。', '唯一的一句。']);
@@ -704,7 +719,7 @@ void main() {
       await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 15));
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
 
       await tts.toggleTimed();
       expect(engine.spoken, ['第一句。', '第一句。']);
@@ -760,7 +775,7 @@ void main() {
 
       tts.onPause();
       await pumpEventQueue();
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
       expect(system.playing, isFalse);
 
       tts.onPlay();
@@ -805,7 +820,7 @@ void main() {
       await tts.sleepTimer.choose(SleepTimerOption.minutes15);
       await tts.startFromVisibleLocation();
       await elapse(tester, const Duration(minutes: 15));
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
 
       tts.onSkipToNext();
       await tester.pump();
@@ -834,7 +849,7 @@ void main() {
       await pumpEventQueue();
 
       expect(tts.isPlaying, isFalse);
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
       expect(tts.currentHighlight?.sentenceStart, sentenceStart);
       // 暫停中的朗讀不把系統播放資訊搶回來。
       expect(system.title, '第一集');
@@ -846,6 +861,23 @@ void main() {
       expect(other.pauses, 1);
       expect(system.title, '第 1 章');
       expect(system.playing, isTrue);
+    });
+
+    test('a completion the engine reports while the picked chapter loads does '
+        'not read the old chapter on', () async {
+      final second = Completer<void>();
+      await open({0: '甲。乙。', 1: '丙。'}, gates: {1: second});
+      await tts.startFromVisibleLocation();
+
+      tts.onSkipToNext();
+      await pumpEventQueue();
+      engine.complete();
+      await pumpEventQueue();
+      expect(engine.spoken, ['甲。']);
+
+      second.complete();
+      await pumpEventQueue();
+      expect(engine.spoken, ['甲。', '丙。']);
     });
 
     test('pressing next twice quickly moves two chapters', () async {
@@ -915,7 +947,7 @@ void main() {
       // 引擎停著等第二章，朗讀還在進行：面板按下去是暫停，不是從畫面重念。
       expect(tts.isPlaying, isTrue);
       await tts.toggle();
-      expect(tts.isPaused, isTrue);
+      expect(tts.phase, ReaderTtsPhase.paused);
       second.complete();
       await pumpEventQueue();
       expect(engine.spoken, ['第一句。']);
