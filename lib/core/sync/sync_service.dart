@@ -125,6 +125,12 @@ class _SyncRun {
   /// 送；和這一輪、排著的下一輪同時成立。
   bool progressFirst = false;
 
+  /// 這一輪是全面同步時，等它做完的人（[SyncService.syncAll]）。
+  Completer<void>? fullWaiters;
+
+  /// 排著的全面同步，等它做完的人。
+  Completer<void>? nextFullWaiters;
+
   /// 整段做完時完成。
   late final Future<void> done;
 }
@@ -371,13 +377,18 @@ class SyncService {
   /// 不等結果。其他資料在主執行緒上比對很重，開書時跟著跑會讓動畫掉幀，
   /// 只在使用者按「立即全面同步」時同步（[syncAll]，ADR 0046）。正在同步
   /// 時，跑完再補一次。
-  void syncProgress() => unawaited(_request(full: false));
+  void syncProgress() => unawaited(_requestProgress());
 
   /// 全面同步：書架、書源、替換規則、設定、登入資料……全部種類。使用者在
   /// 「備份與同步」按「立即全面同步」、或剛選好同步空間時呼叫。正在同步時
-  /// 不搶先，等含全部種類的那一輪做完才完成。失敗記在 [status]、不丟出來；
+  /// 不搶先，排在後面，那一輪做完就完成（之後補跑的輪次不等）。失敗記在 [status]、不丟出來；
   /// 沒設定同步空間時什麼都不做。
-  Future<void> syncAll() => _request(full: true);
+  Future<void> syncAll() {
+    final run = _run;
+    if (run == null) return _start(SyncPhase.full).fullWaiters!.future;
+    run.next = _Next.full;
+    return (run.nextFullWaiters ??= Completer<void>()).future;
+  }
 
   /// 取消全面同步：正在跑的那一輪目前這一種做完就停，已經寫完的種類留著，
   /// 不回滾；還沒開始的那一輪不跑。之後才要求的進度同步照常補跑。
@@ -387,7 +398,11 @@ class SyncService {
     if (run.round == SyncPhase.full) run.round = SyncPhase.stopping;
     // 排的時候可能也有人要過進度（退到背景、有聲書存好進度），分不出來就
     // 照要過算，不漏送。
-    if (run.next == _Next.full) run.next = _Next.progress;
+    if (run.next == _Next.full) {
+      run.next = _Next.progress;
+      run.nextFullWaiters?.complete();
+      run.nextFullWaiters = null;
+    }
   }
 
   /// App 進入背景時同步本機改動；Google 帳號選取造成的暫停不算。
@@ -405,19 +420,21 @@ class SyncService {
     syncProgress();
   }
 
-  Future<void> _request({required bool full}) {
+  /// 要一輪進度同步；傳回整段（含補跑的輪次）做完的時候。
+  Future<void> _requestProgress() {
     if (_run case final run?) {
-      if (full) {
-        run.next = _Next.full;
-      } else if (run.next == _Next.none) {
-        run.next = _Next.progress;
-      }
+      if (run.next == _Next.none) run.next = _Next.progress;
       return run.done;
     }
-    final run = _SyncRun(full ? SyncPhase.full : SyncPhase.progress);
+    return _start(SyncPhase.progress).done;
+  }
+
+  _SyncRun _start(SyncPhase round) {
+    final run = _SyncRun(round);
+    if (round == SyncPhase.full) run.fullWaiters = Completer<void>();
     _run = run;
     run.done = _runRounds(run);
-    return run.done;
+    return run;
   }
 
   /// 一輪接一輪跑到沒有排著的。最後一次看排隊和放下 [_run] 在同一步：之後
@@ -429,6 +446,8 @@ class SyncService {
       while (true) {
         rounds++;
         await _syncOnce(run);
+        run.fullWaiters?.complete();
+        run.fullWaiters = null;
         switch (run.next) {
           case _Next.none:
             if (status.value.enabled && timer.elapsedMilliseconds >= 1000) {
@@ -439,10 +458,15 @@ class SyncService {
             run.round = SyncPhase.progress;
           case _Next.full:
             run.round = SyncPhase.full;
+            run.fullWaiters = run.nextFullWaiters;
+            run.nextFullWaiters = null;
         }
         run.next = _Next.none;
       }
     } finally {
+      // 出錯跳出來的話，等著的人也放掉。
+      run.fullWaiters?.complete();
+      run.nextFullWaiters?.complete();
       _finishRun();
     }
   }
@@ -468,7 +492,7 @@ class SyncService {
       return;
     }
     _watchEdits();
-    await _request(full: false);
+    await _requestProgress();
   }
 
   /// App 回到前景：同步閱讀進度，把別台在這段時間讀到的地方接過來。開書等

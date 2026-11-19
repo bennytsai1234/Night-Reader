@@ -152,8 +152,8 @@ void main() {
     expect(store.reads, ['sources.json']);
   });
 
-  testWidgets('cancelling a full sync still waiting behind the daily sync: '
-      'the full round never runs', (tester) async {
+  testWidgets('cancelling a full sync still waiting behind the daily sync '
+      'closes at once; the full round never runs', (tester) async {
     await pump(tester);
     // 日常的進度同步卡住時按「立即全面同步」，全面同步排在它後面。
     final daily = Completer<void>();
@@ -165,14 +165,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('全面同步中'), findsOneWidget);
 
+    // 全面同步還沒開始，取消了就沒有要等的：進度框馬上收，日常那一輪照跑。
     await tester.tap(find.text('取消'));
-    await tester.pump();
-    expect(find.text('正在停下…'), findsOneWidget);
-
-    daily.complete();
     await settle(tester);
     expect(find.text('全面同步中'), findsNothing);
     expect(find.text('已停下，同步好的資料留著'), findsOneWidget);
+
+    daily.complete();
+    await settle(tester);
     expect(store.reads, isEmpty, reason: '排著的全面同步沒有跑');
   });
 }
