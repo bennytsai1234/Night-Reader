@@ -50,10 +50,12 @@ void main() {
       result['content']! as String,
       convertType: convert,
     );
+    // worker 已修過段落，和它建 document 時一樣不再修一次。
     return ReaderV2Content.fromRaw(
       chapterIndex: 0,
       title: '',
       rawText: content,
+      repairBrokenLines: false,
     ).paragraphs;
   }
 
@@ -112,6 +114,20 @@ void main() {
       ),
       ['他走了。下一句'],
     );
+  });
+
+  test('收引號被折到下一行、接回同一段後，後面的段落仍對得上', () async {
+    expect(await hide('「請進。\n」她說。\n下一段。本站廣告', paragraph: 1, text: '本站廣告'), [
+      '「請進。」她說。',
+      '下一段。',
+    ]);
+  });
+
+  test('選到被接起來的接縫，刪的是那一處，不是同章另一處同樣的字', () async {
+    expect(await hide('「請進。\n」她說。\n旁白重複「請進。」', paragraph: 0, text: '「請進。」'), [
+      '她說。',
+      '旁白重複「請進。」',
+    ]);
   });
 
   test('刪節號與破折號排版後長度不同，仍刪得掉', () async {

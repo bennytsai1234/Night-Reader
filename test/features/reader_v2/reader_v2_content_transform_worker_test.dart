@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
@@ -60,6 +62,75 @@ void main() {
     expect(document.displayText, onMain.displayText);
     expect(document.contentHash, onMain.contentHash);
   });
+
+  test(
+    'content worker repairs an orphan closing quote before making blocks',
+    () async {
+      final result = await worker.process(
+        _args(rawContent: '　　「請進。\n　　」一個悅耳的女性聲音在門後傳來。'),
+      );
+      expect(result['content'], '　　「請進。」一個悅耳的女性聲音在門後傳來。');
+      final document = result['document']! as ReaderV2Content;
+      expect(document.paragraphs, ['「請進。」一個悅耳的女性聲音在門後傳來。']);
+    },
+  );
+
+  test('curly closing quotes recover CJK shape after joining', () async {
+    final result = await worker.process(_args(rawContent: '　　“請進。\n　　”她回答。'));
+    expect(result['content'], '　　「請進。」她回答。');
+  });
+
+  test(
+    'a blank source line still separates paragraphs after conversion',
+    () async {
+      final result = await worker.process({
+        ..._args(rawContent: '「請進。\n\n」下一段刻意從引號開始。'),
+        'reSegmentEnabled': false,
+      });
+      final document = result['document']! as ReaderV2Content;
+      expect(document.paragraphs, ['「請進。', '」下一段刻意從引號開始。']);
+    },
+  );
+
+  test('with re-segmenting on, replace rules still see blank lines', () async {
+    final result = await worker.process(
+      _args(
+        rawContent: '第一段。\n\n第二段。',
+        rules: [
+          ReplaceRule(
+            id: 3,
+            name: '空白行',
+            pattern: '\n\n',
+            replacement: '\n＊\n',
+            isRegex: false,
+            order: 1,
+          ).toJson(),
+        ],
+      ),
+    );
+    final document = result['document']! as ReaderV2Content;
+    expect(document.paragraphs, ['第一段。', '＊', '第二段。']);
+  });
+
+  test(
+    'selection source paragraphs line up with shown ones around illustrations',
+    () async {
+      final book = Book(bookUrl: 'b', name: '測試書', origin: 'local')
+        ..readConfig = ReadConfig(useReplaceRule: true, reSegment: true);
+      final long = '前文。${'甲' * 180}。後文。\n<img src="a.png">';
+      for (final raw in [long, '「請進。\n<img src="a.png">\n」她說。']) {
+        final result = await worker.process(_args(rawContent: raw));
+        final document = result['document']! as ReaderV2Content;
+        final sources = await ReaderV2ContentTransformer.ruleStageParagraphs(
+          book: book,
+          chapter: BookChapter(url: 'c', title: '第一章'),
+          rawContent: raw,
+          enabledRules: const [],
+        );
+        expect(sources, hasLength(document.paragraphs.length), reason: raw);
+      }
+    },
+  );
 
   test(
     'a failed chapter surfaces as an error and the worker keeps serving',

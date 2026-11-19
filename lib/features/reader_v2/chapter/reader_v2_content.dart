@@ -6,6 +6,7 @@ import '../../../core/engine/reader/chinese_text_converter.dart';
 import '../../../core/utils/illustration_markers.dart';
 import '../session/reader_v2_location.dart';
 import 'reader_v2_illustration.dart';
+import 'semantic_paragraph_formatter.dart';
 
 export 'reader_v2_illustration.dart';
 
@@ -52,11 +53,12 @@ class ReaderV2Content {
     required int chapterIndex,
     required String title,
     required String rawText,
+    bool repairBrokenLines = true,
     List<ReaderV2IllustrationSlot?> illustrationSlots =
         const <ReaderV2IllustrationSlot?>[],
   }) {
     final placed = _placeIllustrations(
-      paragraphsOf(rawText),
+      paragraphsOf(rawText, repairBrokenLines: repairBrokenLines),
       illustrationSlots.length,
     );
     final paragraphs = placed.paragraphs;
@@ -190,14 +192,29 @@ class ReaderV2Content {
   /// 原文切成的段落，和 [ReaderV2Content.fromRaw] 的 [paragraphs] 相同。
   /// 只要段落時用這個：[ReaderV2Content.fromRaw] 還會對整章算雜湊，那只在
   /// 背景做（`reader_v2_content_transformer.dart`）。
-  static List<String> paragraphsOf(String rawText) {
-    final normalized = normalizeRawText(rawText);
+  static List<String> paragraphsOf(
+    String rawText, {
+    bool repairBrokenLines = true,
+  }) {
+    final normalized = normalizeRawText(
+      repairBrokenLines ? SemanticParagraphFormatter.repair(rawText) : rawText,
+    );
     if (normalized.isEmpty) return const <String>[];
     return normalized
         .split(RegExp(r'\n+'))
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .toList(growable: false);
+  }
+
+  /// 和 [paragraphsOf] 一段一段對應的原文：被段落修復接起來的段，保留原本
+  /// 的換行（替換規則在段落修復之前套用，看到的是這樣的字）。
+  static List<String> sourceParagraphsOf(String rawText) {
+    final repaired = SemanticParagraphFormatter.repairWithSources(rawText);
+    return [
+      for (var i = 0; i < repaired.lines.length; i += 1)
+        if (repaired.lines[i].trim().isNotEmpty) repaired.sources[i].trim(),
+    ];
   }
 
   static String normalizeRawText(String rawText) {
