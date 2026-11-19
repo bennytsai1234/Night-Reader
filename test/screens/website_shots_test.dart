@@ -58,7 +58,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/download/download_service.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
+import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:night_reader/features/search/widgets/search_app_bar.dart';
@@ -655,7 +655,7 @@ String _cn(int n) {
 }
 
 Future<void> _saveChapter(int index, List<String> paragraphs) async {
-  ReaderV2ContentTransformWorker.instance.stop();
+  ReaderContentTransformWorker.instance.stop();
   // 示範的標註與書籤照原本的正文定位，換了正文就會畫錯地方。
   final highlights = getIt<HighlightDao>();
   await highlights.deleteByIds((await highlights.getAll()).map((h) => h.id));
@@ -682,7 +682,7 @@ Future<void> _saveChapter(int index, List<String> paragraphs) async {
 }
 
 Future<void> _seedCleanRules() async {
-  ReaderV2ContentTransformWorker.instance.stop();
+  ReaderContentTransformWorker.instance.stop();
   await getIt<ReplaceRuleDao>().upsertAll([
     ReplaceRule(id: 101, name: '收藏本站', pattern: r'喜欢本书请收藏.*', order: 1),
     ReplaceRule(id: 102, name: '記住網址', pattern: r'（天才一秒.*?）', order: 2),
@@ -954,7 +954,10 @@ Future<void> _recordLaunch(WidgetTester tester) async {
   PunctuationInk.resetForTest(measure: false);
   addTearDown(PunctuationInk.resetForTest);
   await tester.pumpWidget(
-    MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
+    MultiProvider(
+      providers: AppProviders.providers,
+      child: const NightReaderApp(),
+    ),
   );
   await _Recorder(tester, 'launch').run(_ms(3000));
   await settle(tester, const Duration(milliseconds: 500));

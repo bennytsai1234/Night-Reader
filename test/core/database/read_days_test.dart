@@ -2,7 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_controller.dart';
+import 'package:night_reader/features/reader/session/reader_read_time_controller.dart';
 
 import 'legacy_books_table.dart';
 import 'legacy_chapters_table.dart';
@@ -95,7 +95,7 @@ void main() {
     final dao = ReadRecordDao(db);
     var now = DateTime(2026, 10, 15, 21);
     var currentName = '舊書名';
-    final timer = ReaderV2ReadTimeController(
+    final timer = ReaderReadTimeController(
       bookName: () async => currentName,
       readRecordDao: dao,
       now: () => now,

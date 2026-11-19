@@ -16,8 +16,8 @@ import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/book_read_capsule.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
+import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 
@@ -69,11 +69,11 @@ Finder get _thumb => find.descendant(
 /// 閱讀器已經開好：路由到位、沒有在重排（紙由 surveyQuiet 管）。
 /// 不用 hasStableWorld：從詳情開的閱讀器它一直是 false，但紙已經掀開、畫面不動。
 bool _readerReady(WidgetTester tester) {
-  if (find.byType(HybridReaderScreen).evaluate().isEmpty) return false;
+  if (find.byType(ReaderTextView).evaluate().isEmpty) return false;
   final runtime = tester
-      .widget<HybridReaderScreen>(find.byType(HybridReaderScreen))
+      .widget<ReaderTextView>(find.byType(ReaderTextView))
       .runtime;
-  return pageSettled(find.byType(ReaderV2Page)) &&
+  return pageSettled(find.byType(ReaderPage)) &&
       runtime.stateMachine.currentOperation == null;
 }
 

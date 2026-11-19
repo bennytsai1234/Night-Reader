@@ -72,7 +72,7 @@ class Highlight {
   /// 標註開頭是章內第幾個字（正文顯示文字的位置）。
   final int charOffset;
 
-  /// 開頭那個字的 `ReaderV2Location` JSON，含綁定的正文與前後原文。
+  /// 開頭那個字的 `ReaderLocation` JSON，含綁定的正文與前後原文。
   final String? anchor;
 
   /// 畫到的那段字。

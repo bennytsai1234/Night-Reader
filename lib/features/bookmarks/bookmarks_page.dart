@@ -14,11 +14,11 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/highlight.dart';
 import 'package:night_reader/core/chinese/chinese_display.dart';
 import 'package:night_reader/core/backup/highlight_export.dart';
-import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmarks.dart';
-import 'package:night_reader/features/reader_v2/features/highlight/reader_v2_highlights.dart';
-import 'package:night_reader/features/reader_v2/hybrid/overlay/highlight_marks.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader/features/bookmark/reader_bookmarks.dart';
+import 'package:night_reader/features/reader/features/highlight/reader_highlights.dart';
+import 'package:night_reader/features/reader/text_view/overlay/highlight_marks.dart';
+import 'package:night_reader/features/reader/session/reader_location.dart';
+import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -212,7 +212,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
   /// 手機上有這本書就開它、跳到 [locationOf] 給的位置；沒有就用書名搜尋。
   Future<void> _open(
     _Entry entry,
-    ReaderV2Location Function(int chapterIndex) locationOf,
+    ReaderLocation Function(int chapterIndex) locationOf,
   ) async {
     final book = await BookmarksPage._findBook(
       entry.bookName,
@@ -243,7 +243,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
         initialChapters: chapters,
         // 目錄還沒抓時（剛還原、剛同步來的書），閱讀器讀到目錄後再照章名
         // 對一次章。
-        openTarget: ReaderV2OpenTarget.location(
+        openTarget: ReaderOpenTarget.location(
           locationOf(
             chapterIndexByTitle(
               chapterIndex: entry.chapterIndex,
@@ -378,7 +378,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                       onTap: () => unawaited(
                         _open(
                           _bookmarkEntry(bookmark),
-                          (chapterIndex) => ReaderV2Bookmarks.locationOf(
+                          (chapterIndex) => ReaderBookmarks.locationOf(
                             bookmark,
                             chapterIndex: chapterIndex,
                           ),
@@ -437,7 +437,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                       onTap: () => unawaited(
                         _open(
                           _highlightEntry(highlight),
-                          (chapterIndex) => ReaderV2Highlights.locationOf(
+                          (chapterIndex) => ReaderHighlights.locationOf(
                             highlight,
                             chapterIndex: chapterIndex,
                           ),

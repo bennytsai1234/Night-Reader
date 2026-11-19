@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_sections.dart';
+import 'package:night_reader/features/reader/screen/reader_device_channel.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
@@ -20,8 +20,8 @@ class ReadingSettingsPage extends StatefulWidget {
 }
 
 class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
-  final ReaderV2SettingsController _settings = ReaderV2SettingsController();
-  late final ReaderV2SettingsGroups _groups = ReaderV2SettingsGroups(_settings);
+  final ReaderSettingsController _settings = ReaderSettingsController();
+  late final ReaderSettingsGroups _groups = ReaderSettingsGroups(_settings);
   late final StreamSubscription<String> _saveFailures;
 
   @override
@@ -65,10 +65,10 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
             _groups.chineseConvert(),
             _groups.illustrations(),
             _groups.clickActions(),
-            if (ReaderV2DeviceChannel.supportsVolumeKeys) _groups.volumeKey(),
+            if (ReaderDeviceChannel.supportsVolumeKeys) _groups.volumeKey(),
             _groups.tts(),
             _groups.screen(
-              maxDim: ReaderV2DeviceChannel.supportsWindowBrightness,
+              maxDim: ReaderDeviceChannel.supportsWindowBrightness,
             ),
           ],
         ),

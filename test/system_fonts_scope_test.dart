@@ -42,7 +42,7 @@ void main() {
           '這些測試用了 loadScreenshotFonts，CI 上找不到中文字型會失敗。'
           '一般測試用測試預設字型；要量英數字補半格時用 '
           'test/fixtures/fonts/mixed_width_test.ttf（範例在 '
-          'test/features/reader_v2/hybrid/half_cell_layout_test.dart）。',
+          'test/features/reader/text_view/half_cell_layout_test.dart）。',
     );
   });
 }

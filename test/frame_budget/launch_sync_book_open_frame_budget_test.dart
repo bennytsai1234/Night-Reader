@@ -20,8 +20,8 @@ import 'package:night_reader/core/sync/sync_base_storage.dart';
 import 'package:night_reader/core/sync/sync_service.dart';
 import 'package:night_reader/core/sync/sync_store.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
+import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
 
 import '../support/app_harness.dart';
 import '../support/navigation_budget.dart';
@@ -113,8 +113,7 @@ bool _veilCovering() => find
     .evaluate()
     .any((e) => (e.widget as LoadingVeil).controller.isVisible);
 
-bool _readerShown() =>
-    pageSettled(find.byType(ReaderV2Page)) && !_veilCovering();
+bool _readerShown() => pageSettled(find.byType(ReaderPage)) && !_veilCovering();
 
 void main() {
   setUpAll(loadScreenshotFonts);

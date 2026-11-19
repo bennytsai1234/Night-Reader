@@ -155,7 +155,7 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: AppProviders.providers,
-          child: const ReaderApp(),
+          child: const NightReaderApp(),
         ),
       );
       final frames = <_Frame>[];

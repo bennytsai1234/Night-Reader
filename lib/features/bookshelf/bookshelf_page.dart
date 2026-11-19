@@ -22,7 +22,7 @@ import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dar
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/shared/layout/readable_width.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/navigation/app_route_observer.dart';
@@ -1268,7 +1268,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     context.read<BookshelfProvider>().reloadWhenUncovered();
     await Navigator.push(
       context,
-      BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
+      BookOpenRoute(book: book, openTarget: ReaderOpenTarget.resume(book)),
     );
   }
 

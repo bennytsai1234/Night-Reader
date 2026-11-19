@@ -4,7 +4,7 @@ import 'json_read.dart';
 ///
 /// 位置和閱讀進度同一套：第幾章（章名）的第幾個字，跳回時照目前的排版
 /// 算出在畫面哪裡；[anchor] 另記那個字前後的原文，換了書源、正文有出入時
-/// 照它找回同一句（`ReaderV2Location`）。
+/// 照它找回同一句（`ReaderLocation`）。
 ///
 /// 書籤跟著書名加作者，不跟書源：換源、另一台用別的書源讀同一本書，都還
 /// 是這本書的書籤（同步認書的方式，ADR 0039）。
@@ -35,7 +35,7 @@ class Bookmark {
   /// 章內第幾個字（正文顯示文字的位置）。
   final int charOffset;
 
-  /// `ReaderV2Location` 的 JSON，含這個位置綁定的正文與前後原文。
+  /// `ReaderLocation` 的 JSON，含這個位置綁定的正文與前後原文。
   final String? anchor;
 
   /// 書籤那一句（選得比一句長時是選到的全部），清單上顯示它。

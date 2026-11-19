@@ -23,7 +23,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader/session/reader_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -188,7 +188,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   : () => _navigateToReader(
                       context,
                       provider.book,
-                      ReaderV2OpenTarget.resume(provider.book),
+                      ReaderOpenTarget.resume(provider.book),
                       provider.allChapters,
                     ),
             ),
@@ -442,7 +442,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       : () => _navigateToReader(
                           context,
                           currentBook,
-                          ReaderV2OpenTarget.chapterStart(chapter.index),
+                          ReaderOpenTarget.chapterStart(chapter.index),
                           provider.allChapters,
                         ),
                 ),
@@ -1022,7 +1022,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   Future<void> _navigateToReader(
     BuildContext context,
     Book b,
-    ReaderV2OpenTarget openTarget,
+    ReaderOpenTarget openTarget,
     List<BookChapter> initialChapters,
   ) async {
     final provider = context.read<BookDetailProvider>();

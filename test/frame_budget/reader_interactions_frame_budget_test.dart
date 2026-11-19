@@ -16,12 +16,12 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
-import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
-import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
-import 'package:night_reader/features/reader_v2/hybrid/view/hybrid_scroll_controller.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader/features/menu/reader_tap_action.dart';
+import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
+import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
+import 'package:night_reader/features/reader/text_view/view/reader_scroll_controller.dart';
+import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';
+import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -80,21 +80,21 @@ bool _glassAt(double shown) {
 bool _menuShown() => _glassAt(1);
 bool _menuHidden() => _glassAt(0);
 
-ReaderV2Runtime _runtime(WidgetTester tester) =>
-    tester.widget<HybridReaderScreen>(find.byType(HybridReaderScreen)).runtime;
+ReaderRuntime _runtime(WidgetTester tester) =>
+    tester.widget<ReaderTextView>(find.byType(ReaderTextView)).runtime;
 
-HybridScrollPosition _textPosition(WidgetTester tester) {
+ReaderScrollPosition _textPosition(WidgetTester tester) {
   final view = tester.widget<CustomScrollView>(
     find.descendant(
-      of: find.byType(HybridReaderScreen),
+      of: find.byType(ReaderTextView),
       matching: find.byType(CustomScrollView),
     ),
   );
-  return view.controller!.position as HybridScrollPosition;
+  return view.controller!.position as ReaderScrollPosition;
 }
 
 Finder get _drawerList => find.descendant(
-  of: find.byType(ReaderV2ChaptersDrawer),
+  of: find.byType(ReaderChaptersDrawer),
   matching: find.byType(ListView),
 );
 
@@ -156,9 +156,9 @@ void main() {
           // 右邊一欄點了翻下一頁，其餘叫出選單。
           PreferKey.readerClickActions: [
             for (var row = 0; row < 3; row++) ...[
-              ReaderV2TapAction.menu.code,
-              ReaderV2TapAction.menu.code,
-              ReaderV2TapAction.nextPage.code,
+              ReaderTapAction.menu.code,
+              ReaderTapAction.menu.code,
+              ReaderTapAction.nextPage.code,
             ],
           ].join(','),
         },

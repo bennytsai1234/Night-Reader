@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/widgets/popup_routes.dart';
 import 'package:night_reader/shared/widgets/ui_text.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
+import 'package:night_reader/features/reader/features/menu/reader_bottom_menu.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_entrance.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -83,14 +83,14 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final menuStyle = ReaderV2MenuStyle.of(context);
+    final menuStyle = ReaderMenuStyle.of(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final tint = menuStyle.glassTintOf(context);
-    return ReaderV2MenuEntrance(
+    return ReaderMenuEntrance(
       visible: widget.controlsVisible,
       edge: AxisDirection.down,
       child: DerivedTheme(
-        derive: ReaderV2MenuStyle.menuThemeOf,
+        derive: ReaderMenuStyle.menuThemeOf,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             AppGrouped.margin,
@@ -147,7 +147,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                         Row(
                           children: [
                             Expanded(
-                              child: ReaderV2MenuIcon(
+                              child: ReaderMenuIcon(
                                 icon: Icons.list_rounded,
                                 label: '目錄',
                                 onTap: widget.onOpenChapters,
@@ -155,7 +155,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
                               ),
                             ),
                             Expanded(
-                              child: ReaderV2MenuIcon(
+                              child: ReaderMenuIcon(
                                 icon: Icons.tune_rounded,
                                 label: '漫畫偏好',
                                 onTap: widget.onPreferences,
@@ -178,7 +178,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
 
   Widget _pageRow(
     BuildContext context,
-    ReaderV2MenuStyle menuStyle,
+    ReaderMenuStyle menuStyle,
     ComicMenuProgress progress,
   ) {
     final count = progress.pageCount;
@@ -213,7 +213,7 @@ class _ComicReaderBottomMenuState extends State<ComicReaderBottomMenu> {
             ),
             Expanded(
               child: SliderTheme(
-                data: ReaderV2BottomMenu.sliderThemeOf(context, menuStyle),
+                data: ReaderBottomMenu.sliderThemeOf(context, menuStyle),
                 child: SizedBox(
                   height: AppGlass.buttonSize,
                   child: Semantics(

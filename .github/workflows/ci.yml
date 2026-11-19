@@ -186,7 +186,7 @@ jobs:
       # 一般測試那台找不到字型會略過。只在第一台跑。
       - name: Check downloaded-font runs
         if: matrix.shard == 1
-        run: flutter test --no-pub --reporter expanded test/features/reader_v2/hybrid/font_runs_layout_test.dart
+        run: flutter test --no-pub --reporter expanded test/features/reader/text_view/font_runs_layout_test.dart
       - name: Verify the check did not modify tracked source
         if: always()
         run: git diff --exit-code

@@ -35,7 +35,7 @@ Future<void> _launchStep(WidgetTester tester, String key, String label) =>
       action: () => tester.pumpWidget(
         MultiProvider(
           providers: AppProviders.providers,
-          child: const ReaderApp(),
+          child: const NightReaderApp(),
         ),
       ),
       until: _entranceFinished,

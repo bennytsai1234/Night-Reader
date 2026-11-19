@@ -34,8 +34,8 @@ import 'features/association/association_handler_service.dart';
 import 'features/settings/launch_screen_theme_sync.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
-import 'features/welcome/main_page.dart';
-import 'features/welcome/startup_failure_panel.dart';
+import 'features/home/main_page.dart';
+import 'features/home/startup_failure_panel.dart';
 import 'core/engine/source_isolate/source_isolate.dart';
 import 'core/network/cloudflare.dart';
 import 'core/network/webview_cloudflare_solver.dart';
@@ -172,7 +172,7 @@ Future<void> _startApp() async {
     runApp(
       MultiProvider(
         providers: AppProviders.providers,
-        child: const LaunchScreenThemeSync(child: ReaderApp()),
+        child: const LaunchScreenThemeSync(child: NightReaderApp()),
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -362,8 +362,8 @@ Future<void> _cleanupLegacyCustomFontArtifacts() async {
   }
 }
 
-class ReaderApp extends StatelessWidget {
-  const ReaderApp({super.key});
+class NightReaderApp extends StatelessWidget {
+  const NightReaderApp({super.key});
 
   @override
   Widget build(BuildContext context) {

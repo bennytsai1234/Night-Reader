@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_sheet.dart';
+import 'package:night_reader/features/reader/features/settings/reader_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
@@ -21,14 +21,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 一模一樣（面板底色、把手、遮罩、裡面的字與卡片都跟著換）。
 void main() {
   final shot = GlobalKey();
-  late ReaderV2SettingsController readerSettings;
+  late ReaderSettingsController readerSettings;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     GetIt.instance.registerSingleton<SharedPreferences>(
       await SharedPreferences.getInstance(),
     );
-    readerSettings = ReaderV2SettingsController();
+    readerSettings = ReaderSettingsController();
   });
 
   tearDown(() {
@@ -81,10 +81,10 @@ void main() {
         title: '外面',
         children: [button],
       ),
-      _Host.readerSheet => ReaderV2MenuSheet.show<void>(
+      _Host.readerSheet => ReaderMenuSheet.show<void>(
         context,
         settings: readerSettings,
-        builder: (_) => ReaderV2SheetScaffold(title: '外面', children: [button]),
+        builder: (_) => ReaderSheetScaffold(title: '外面', children: [button]),
       ),
     };
 
@@ -109,7 +109,7 @@ void main() {
                 // 閱讀選單：頁面上包一層選單配色，從裡面打開。
                 return host == _Host.readerMenu
                     ? DerivedTheme(
-                        derive: ReaderV2MenuStyle.menuThemeOf,
+                        derive: ReaderMenuStyle.menuThemeOf,
                         child: opener,
                       )
                     : opener;
@@ -186,10 +186,10 @@ void main() {
       ),
       entries: const [GlassMenuItem(value: 'a', label: '移出書架')],
     ),
-    '閱讀器面板': (context) => ReaderV2MenuSheet.show<void>(
+    '閱讀器面板': (context) => ReaderMenuSheet.show<void>(
       context,
       settings: readerSettings,
-      builder: (_) => ReaderV2SheetScaffold(
+      builder: (_) => ReaderSheetScaffold(
         title: '標註',
         children: [GroupedRow(title: '顏色', onTap: () {})],
       ),

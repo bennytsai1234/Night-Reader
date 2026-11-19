@@ -35,7 +35,7 @@ extension BookLogic on Book {
           : durChapterTitle,
       // A scalar UTF-16 offset has no meaning in another source. Preserve the
       // intra-chapter address only when it is bound to the exact old display
-      // text; Reader V2 will resolve that content anchor against the new text.
+      // text; the reader will resolve that content anchor against the new text.
       charOffset: preserveContentAddress ? charOffset : 0,
       visualOffsetPx: preserveContentAddress ? visualOffsetPx : 0.0,
       readerAnchorJson: migratedAnchor,

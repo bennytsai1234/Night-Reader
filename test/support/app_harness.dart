@@ -47,11 +47,11 @@ import 'package:night_reader/core/storage/reader_chapter_content_store.dart';
 import 'package:night_reader/core/playback/tts_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
+import 'package:night_reader/features/reader/chapter/reader_content_transformer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
-import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
+import 'package:night_reader/features/reader/text_view/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -119,7 +119,7 @@ Future<void> setUpApp({
   // 整個程式共用、存著 future 的東西，上一個測試留下的會在上一個測試的
   // zone 裡通知等的人，那個假時鐘已經沒人推動，這個測試開書就一直等不到
   // 正文：正文轉換的 worker，與 rootBundle 快取的字典字串。
-  ReaderV2ContentTransformWorker.instance.stop();
+  ReaderContentTransformWorker.instance.stop();
   rootBundle.clear();
   SharedPreferences.setMockInitialValues(_harnessPrefs(prefs));
   // 同步服務是整個程式共用的，記著上一個測試的偏好設定與執行狀態。
@@ -474,7 +474,10 @@ Future<void> startApp(WidgetTester tester) async {
   PunctuationInk.resetForTest(measure: false);
   addTearDown(PunctuationInk.resetForTest);
   await tester.pumpWidget(
-    MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
+    MultiProvider(
+      providers: AppProviders.providers,
+      child: const NightReaderApp(),
+    ),
   );
 }
 

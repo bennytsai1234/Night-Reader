@@ -80,7 +80,7 @@ Dart isolate 之間只能傳訊息，不共用記憶體（[Dart: Isolates](https
 
 ### 阻礙五：呼叫端
 
-直接使用 `BookSourceService`／`WebBook` 的地方有 16 個檔案：搜尋（`search_model.dart`）、書架檢查（`bookshelf_provider_base.dart`）、書籍詳情與換源（`book_detail_provider.dart`、`book_detail_change_source_provider.dart`、`change_cover_provider.dart`、`source_switch_service.dart`）、正文（`reader_v2_chapter_repository.dart`、`reader_v2_dependencies.dart`、`reader_chapter_content_storage.dart`、`chapter_content_preparation_pipeline.dart`）、下載（`download_base.dart`）、發現（`explore_show_provider.dart`）、匯出（`export_book_service.dart`）、書源除錯與編輯器（`source_debug_service.dart`、`source_editor_page.dart`），以及校驗本身。
+直接使用 `BookSourceService`／`WebBook` 的地方有 16 個檔案：搜尋（`search_model.dart`）、書架檢查（`bookshelf_provider_base.dart`）、書籍詳情與換源（`book_detail_provider.dart`、`book_detail_change_source_provider.dart`、`change_cover_provider.dart`、`source_switch_service.dart`）、正文（`reader_chapter_repository.dart`、`reader_dependencies.dart`、`reader_chapter_content_storage.dart`、`chapter_content_preparation_pipeline.dart`）、下載（`download_base.dart`）、發現（`explore_show_provider.dart`）、匯出（`export_book_service.dart`）、書源除錯與編輯器（`source_debug_service.dart`、`source_editor_page.dart`），以及校驗本身。
 
 結果傳回主 isolate 時會複製，Dart 文件提醒「Data copying can be very slow, though, especially for large messages」（[Dart: Concurrency](https://dart.dev/language/concurrency)）。目錄這種大結果最好由書源 isolate 直接寫進資料庫，只把摘要（章數、新增數）傳回。
 

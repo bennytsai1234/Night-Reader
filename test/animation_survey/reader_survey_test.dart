@@ -12,12 +12,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
-import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
-import 'package:night_reader/features/reader_v2/hybrid/view/hybrid_scroll_controller.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader/features/menu/reader_tap_action.dart';
+import 'package:night_reader/features/reader/text_view/reader_text_view.dart';
+import 'package:night_reader/features/reader/text_view/view/reader_scroll_controller.dart';
+import 'package:night_reader/features/reader/screen/reader_chapters_drawer.dart';
+import 'package:night_reader/features/reader/screen/reader_page.dart';
+import 'package:night_reader/features/reader/session/reader_runtime.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
@@ -38,9 +38,9 @@ const _leftEdge = Offset(50, 420);
 /// 點擊區域：每列 [上一頁, 喚起選單, 下一頁]，左欄上一頁、右欄下一頁。
 final String _tapGrid = [
   for (var row = 0; row < 3; row++) ...[
-    ReaderV2TapAction.prevPage.code,
-    ReaderV2TapAction.menu.code,
-    ReaderV2TapAction.nextPage.code,
+    ReaderTapAction.prevPage.code,
+    ReaderTapAction.menu.code,
+    ReaderTapAction.nextPage.code,
   ],
 ].join(',');
 
@@ -100,7 +100,7 @@ bool _drawerOpen() {
 }
 
 Finder get _drawerList => find.descendant(
-  of: find.byType(ReaderV2ChaptersDrawer),
+  of: find.byType(ReaderChaptersDrawer),
   matching: find.byType(ListView),
 );
 
@@ -114,18 +114,18 @@ Finder get _thumb => find.descendant(
 Finder get _slider => find.byType(Slider);
 
 Finder get _textScroll => find.descendant(
-  of: find.byType(HybridReaderScreen),
+  of: find.byType(ReaderTextView),
   matching: find.byType(CustomScrollView),
 );
 
-bool _readerMounted() => find.byType(HybridReaderScreen).evaluate().isNotEmpty;
+bool _readerMounted() => find.byType(ReaderTextView).evaluate().isNotEmpty;
 
-ReaderV2Runtime _runtime(WidgetTester tester) =>
-    tester.widget<HybridReaderScreen>(find.byType(HybridReaderScreen)).runtime;
+ReaderRuntime _runtime(WidgetTester tester) =>
+    tester.widget<ReaderTextView>(find.byType(ReaderTextView)).runtime;
 
-HybridScrollPosition _textPosition(WidgetTester tester) {
+ReaderScrollPosition _textPosition(WidgetTester tester) {
   final view = tester.widget<CustomScrollView>(_textScroll);
-  return view.controller!.position as HybridScrollPosition;
+  return view.controller!.position as ReaderScrollPosition;
 }
 
 /// 等一次操作（重排、換章、拖進度）做完：看見它開始過、之後不再忙、畫面也停了。
@@ -183,7 +183,7 @@ void main() {
           until: _steady(
             () =>
                 _readerMounted() &&
-                pageSettled(find.byType(ReaderV2Page)) &&
+                pageSettled(find.byType(ReaderPage)) &&
                 _runtime(tester).stateMachine.currentOperation == null,
           ),
         );

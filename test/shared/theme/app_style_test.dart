@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
-import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
+import 'package:night_reader/features/reader/features/menu/reader_menu_palette.dart';
+import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_layers.dart';
@@ -149,7 +149,7 @@ void main() {
         final expected = style.of(brightness);
         final theme = Theme.of(context);
         final palette = StylePalette.of(context);
-        final menu = ReaderV2MenuStyle.of(context);
+        final menu = ReaderMenuStyle.of(context);
 
         expect(theme.brightness, brightness);
         expect(palette, same(expected));
@@ -160,10 +160,7 @@ void main() {
         expect(menu.foreground, expected.text);
         expect(menu.accent, expected.primary);
         expect(menu.onAccent, expected.onPrimary);
-        expect(
-          ReaderV2HighlightColor.theme.resolve(palette),
-          expected.highlight,
-        );
+        expect(ReaderHighlightColor.theme.resolve(palette), expected.highlight);
       }
     }
   });
@@ -185,8 +182,7 @@ void main() {
           builder: (context, setState) {
             rebuild = setState;
             return Theme(
-              data: ReaderV2MenuStyle.of(context)
-                  .toSheetTheme(Theme.of(context)),
+              data: ReaderMenuStyle.of(context).toSheetTheme(Theme.of(context)),
               child: menu,
             );
           },

@@ -1,0 +1,205 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
+import 'package:night_reader/features/reader/text_view/core/text_view_types.dart';
+import 'package:night_reader/features/reader/text_view/measure/document_index.dart';
+import 'package:night_reader/features/reader/text_view/measure/measurement_store.dart';
+import 'package:night_reader/features/reader/text_view/paragraph/paragraph_cache.dart';
+
+import 'cached_block_widget.dart';
+import 'block_sliver.dart';
+
+final class ReaderScrollView extends StatelessWidget {
+  /// Flutter's RenderSliverFixedExtentBoxAdaptor force-unwraps the result of
+  /// itemExtentBuilder while laying out active children. DocumentIndex can be
+  /// reset before the old sliver has been removed from the render tree, so the
+  /// callback must remain total during that transition.
+  ///
+  /// 這個值不會污染滾動幾何：`scrollExtent`、`maxPaintExtent`、各 child 的
+  /// `layoutOffset` 與 `firstIndex`/`targetLastIndex` 全部由
+  /// [RenderBlockSliver] 的 Fenwick 覆寫算出，那些路徑不呼叫
+  /// itemExtentBuilder。它只會成為某個下一幀就會被回收的殘留 child 的
+  /// BoxConstraints。真正可見的位移來自索引本身合法地變空（I3 漸進重建），
+  /// 不是這個值。
+  static const double _fallbackItemExtent = 1.0;
+
+  const ReaderScrollView({
+    super.key,
+    required this.centerKey,
+    required this.documentIndex,
+    required this.namespace,
+    required this.measurementStore,
+    required this.paragraphCache,
+    required this.epoch,
+    this.controller,
+    this.cacheExtent,
+    this.horizontalPadding = EdgeInsets.zero,
+    this.physics = const ReaderScrollPhysics(),
+    this.textColor = const Color(0xFF000000),
+    this.clipBehavior = Clip.hardEdge,
+  });
+
+  /// center sliver 的 key。必須由呼叫端持有並跨 rebuild 穩定——
+  /// 每次 build 換 key 會讓 CustomScrollView 整個 sliver 重掛。
+  final GlobalKey centerKey;
+  final DocumentIndex documentIndex;
+  final MeasurementNamespace namespace;
+  final MeasurementStore measurementStore;
+  final ParagraphCache paragraphCache;
+  final LayoutEpoch epoch;
+  final ScrollController? controller;
+  final double? cacheExtent;
+  final EdgeInsets horizontalPadding;
+
+  /// Native scroll physics. Materialization never scales pointer deltas or
+  /// changes the ballistic trajectory based on paragraph readiness.
+  final ScrollPhysics physics;
+  final Color textColor;
+
+  /// [Clip.none] 讓跨在上下緣的段落整段畫出視窗外，由外層決定露出多少
+  /// （閱讀頁在正文與頁首頁尾之間的空隙做漸隱）。
+  final Clip clipBehavior;
+
+  @override
+  Widget build(BuildContext context) {
+    // D4：原生 Scrollbar 停用；無回彈由 ReaderScrollPhysics（Clamping 基底）保證。
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context)
+          .copyWith(scrollbars: false, overscroll: false),
+      child: CustomScrollView(
+        controller: controller,
+        center: centerKey,
+        physics: physics,
+        clipBehavior: clipBehavior,
+        scrollCacheExtent: cacheExtent == null
+            ? null
+            : ScrollCacheExtent.pixels(cacheExtent!),
+        slivers: <Widget>[
+          _buildSliver(beforeCenter: true),
+          _buildSliver(key: centerKey, beforeCenter: false),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliver({Key? key, required bool beforeCenter}) {
+    return BlockSliver(
+      key: key,
+      documentIndex: documentIndex,
+      beforeCenter: beforeCenter,
+      delegate: BlockSliverChildDelegate(
+        documentIndex: documentIndex,
+        beforeCenter: beforeCenter,
+        resetGeneration: documentIndex.resetGeneration,
+        namespace: namespace,
+        measurementStore: measurementStore,
+        paragraphCache: paragraphCache,
+        epoch: epoch,
+        textColor: textColor,
+        horizontalPadding: horizontalPadding,
+      ),
+      itemExtentBuilder: (index, dimensions) {
+        final key = documentIndex.keyForSliverIndex(
+          beforeCenter: beforeCenter,
+          index: index,
+        );
+        if (key == null) {
+          return _fallbackItemExtent;
+        }
+        // extent 讀 DocumentIndex 的 admitted metrics，與 Fenwick 座標同源
+        // （I1/I3：admit 時已是精確量測且座標凍結）。不可讀 MeasurementStore
+        // ——epoch 換代或章節 invalidate 的過渡幀，store 可能已被清而 widget
+        // 還抱著舊 namespace closure，會出現座標與 extent 失同步。
+        final metrics = documentIndex.metricsFor(key);
+        final extent = metrics?.height;
+        // 這一支目前結構上不可達：`_metrics` 與兩側清單在每個可觀察點都
+        // 一致，且 BlockMetrics 保證 height > 0（兩個生產者都有 guard）。
+        // 保留是因為 itemExtentBuilder 被框架強制解包，必須是全函式。
+        if (extent == null || !extent.isFinite || extent <= 0) {
+          return _fallbackItemExtent;
+        }
+        return extent;
+      },
+    );
+  }
+}
+
+/// 即時讀 [DocumentIndex] 的 child delegate。
+///
+/// 取代 `SliverChildBuilderDelegate`：childCount 不在 build 時凍結，
+/// 新放行 block 由 [DocumentIndex.revision] → render 層 markNeedsLayout
+/// 直接材料化，不需要 setState 重建整棵滾動子樹（fling 幀 build 歸零）。
+/// [RenderCachedBlock] 自己就是 repaint boundary（每個段落一層，滾動時只移動
+/// 圖層、不重跑 paint），所以不再額外包 RepaintBoundary / AutomaticKeepAlive。
+final class BlockSliverChildDelegate extends SliverChildDelegate {
+  const BlockSliverChildDelegate({
+    required this.documentIndex,
+    required this.beforeCenter,
+    required this.resetGeneration,
+    required this.namespace,
+    required this.measurementStore,
+    required this.paragraphCache,
+    required this.epoch,
+    required this.textColor,
+    required this.horizontalPadding,
+  });
+
+  final DocumentIndex documentIndex;
+  final bool beforeCenter;
+  final int resetGeneration;
+  final MeasurementNamespace namespace;
+  final MeasurementStore measurementStore;
+  final ParagraphCache paragraphCache;
+  final LayoutEpoch epoch;
+  final Color textColor;
+  final EdgeInsets horizontalPadding;
+
+  @override
+  Widget? build(BuildContext context, int index) {
+    final key = documentIndex.keyForSliverIndex(
+      beforeCenter: beforeCenter,
+      index: index,
+    );
+    if (key == null) return null;
+    return Padding(
+      padding: horizontalPadding,
+      child: CachedBlockWidget(
+        blockKey: key,
+        epoch: epoch,
+        namespace: namespace,
+        measurementStore: measurementStore,
+        paragraphCache: paragraphCache,
+        textColor: textColor,
+      ),
+    );
+  }
+
+  @override
+  int? get estimatedChildCount => beforeCenter
+      ? documentIndex.beforeCount
+      : documentIndex.centerAndAfterCount;
+
+  @override
+  bool shouldRebuild(covariant BlockSliverChildDelegate oldDelegate) {
+    return !identical(documentIndex, oldDelegate.documentIndex) ||
+        beforeCenter != oldDelegate.beforeCenter ||
+        resetGeneration != oldDelegate.resetGeneration ||
+        namespace != oldDelegate.namespace ||
+        !identical(measurementStore, oldDelegate.measurementStore) ||
+        !identical(paragraphCache, oldDelegate.paragraphCache) ||
+        epoch != oldDelegate.epoch ||
+        textColor != oldDelegate.textColor ||
+        horizontalPadding != oldDelegate.horizontalPadding;
+  }
+}
+
+/// Clamping 基底的閱讀器捲動物理：不回彈，捲到已排版正文的盡頭就停。
+///
+/// 不依排版進度縮放手指位移或改變慣性軌跡；正文來不及排時由排版排程
+/// 補上，而不是讓捲動變慢。
+final class ReaderScrollPhysics extends ClampingScrollPhysics {
+  const ReaderScrollPhysics({super.parent});
+  @override
+  ReaderScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      ReaderScrollPhysics(parent: buildParent(ancestor));
+}

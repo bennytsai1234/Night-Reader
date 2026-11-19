@@ -24,4 +24,4 @@
 ## Consequences
 
 - 這幾項都進排版的身分（`layoutSignature`、`StyleFingerprint`、骨架紀錄的版面鍵），改了就整份重排；升級後第一次開書，舊的量測快取與骨架紀錄對不上，重新量一次。
-- 字格寬度照正文粗細量（`ReaderV2SettingsController.cellWidth`），首行縮排與英數字補半格跟著正文粗細的字寬走。
+- 字格寬度照正文粗細量（`ReaderSettingsController.cellWidth`），首行縮排與英數字補半格跟著正文粗細的字寬走。

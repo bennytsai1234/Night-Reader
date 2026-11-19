@@ -15,7 +15,7 @@ import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/tts_settings_page.dart';
-import 'package:night_reader/features/welcome/main_page.dart';
+import 'package:night_reader/features/home/main_page.dart';
 import 'package:night_reader/main.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
@@ -120,7 +120,7 @@ Future<List<FrameCost>> _measureChange(
   final previousRebuild = debugOnRebuildDirtyWidget;
   final pageBuilds = {
     for (final type in [
-      ReaderApp,
+      NightReaderApp,
       MaterialApp,
       MainPage,
       BookshelfPage,

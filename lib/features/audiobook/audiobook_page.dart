@@ -19,8 +19,8 @@ import 'package:night_reader/core/storage/book_chapter_files.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/about/app_log_page.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_orientation.dart';
-import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
+import 'package:night_reader/features/reader/features/settings/reader_orientation.dart';
+import 'package:night_reader/features/reader/screen/reader_window_settings.dart';
 import 'package:night_reader/features/source_login/source_failure_remedy.dart';
 import 'package:night_reader/features/source_login/source_login_page.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
@@ -201,10 +201,10 @@ class _AudiobookPageState extends State<AudiobookPage> {
         final book = _player.isCurrent(widget.book)
             ? _player.book!
             : widget.book;
-        return ReaderV2WindowSettings(
+        return ReaderWindowSettings(
           keepScreenOn: _player.keepAwake,
           backlight: null,
-          orientation: ReaderV2Orientation.system,
+          orientation: ReaderOrientation.system,
           child: Scaffold(
             extendBodyBehindAppBar: true,
             backgroundColor: chrome.groupedBackground,

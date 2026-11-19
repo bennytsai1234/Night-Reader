@@ -1,0 +1,113 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/features/reader/session/reader_read_time_controller.dart';
+import 'package:night_reader/shared/navigation/app_route_observer.dart';
+
+class ReaderReadTimeScope extends StatefulWidget {
+  const ReaderReadTimeScope({
+    super.key,
+    required this.book,
+    required this.child,
+  });
+
+  final Book book;
+  final Widget child;
+
+  @override
+  State<ReaderReadTimeScope> createState() => _ReaderReadTimeScopeState();
+}
+
+class _ReaderReadTimeScopeState extends State<ReaderReadTimeScope>
+    with WidgetsBindingObserver, RouteAware {
+  late final ReaderReadTimeController _controller;
+  ModalRoute<void>? _observedRoute;
+  bool _routeVisible = true;
+  bool _appInForeground = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _appInForeground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    final book = widget.book;
+    _controller = ReaderReadTimeController(
+      // 書架上的書照資料庫裡現在的書名（可能在書籍詳情改過）；不在資料庫
+      // 的書照開書時的書名。漫畫、有聲帶類別前綴（ADR 0053）。
+      bookName: () async =>
+          (await getIt<BookDao>().getByUrl(book.bookUrl))?.recordName ??
+          book.recordName,
+      readRecordDao: getIt<ReadRecordDao>(),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<void>(context);
+    if (route != null && !identical(route, _observedRoute)) {
+      if (_observedRoute != null) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _observedRoute = route;
+      _routeVisible = route.isCurrent;
+      appRouteObserver.subscribe(this, route);
+    }
+    _syncTimer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appInForeground = state == AppLifecycleState.resumed;
+    _syncTimer();
+  }
+
+  @override
+  void didPush() {
+    _routeVisible = true;
+    _syncTimer();
+  }
+
+  @override
+  void didPushNext() {
+    _routeVisible = false;
+    _syncTimer();
+  }
+
+  @override
+  void didPopNext() {
+    _routeVisible = true;
+    _syncTimer();
+  }
+
+  @override
+  void didPop() {
+    _routeVisible = false;
+    _syncTimer();
+  }
+
+  void _syncTimer() {
+    if (_appInForeground && _routeVisible) {
+      _controller.start();
+    } else {
+      unawaited(_controller.stop());
+    }
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_controller.close());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}

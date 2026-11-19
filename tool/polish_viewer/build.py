@@ -39,7 +39,7 @@ MODES = {'light': '淺色', 'dark': '深色'}
 PHONE_HEIGHT = 852
 # 頁面元件的名稱（`skeleton_handoff.dart` 寫在 place 開頭）換成畫面的名字。
 PAGES = {
-    'ReaderV2Page': '閱讀器',
+    'ReaderPage': '閱讀器',
     'BookshelfPage': '書架',
     'BookDetailPage': '書籍詳情',
     'ExplorePage': '發現',
