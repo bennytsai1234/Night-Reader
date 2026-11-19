@@ -551,7 +551,8 @@ void main() {
       final provider = await open(waitReady: false);
       final states = <BookDetailWorldState>[];
       provider.addListener(() => states.add(provider.worldState));
-      await until(() => provider.hasReadyWorld);
+      await until(() => states.length >= 3);
+      // 再等一下，確認沒有第四次。
       await Future<void>.delayed(const Duration(milliseconds: 50));
       // 進場後開始載入不通知（ADR 0018）；排好目錄時骨架還在，換成內容
       // 只有一次，之後是存好封面的那一次。
