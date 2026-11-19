@@ -133,10 +133,9 @@ class _AudiobookPageState extends State<AudiobookPage> {
     );
   }
 
-  /// 這本書某一集播不出來的原因；整本打不開（還沒有目錄）由狀態畫面顯示，
-  /// 不算在這裡。
+  /// 這本書某一集播不出來的原因；整本打不開由狀態畫面顯示，不算在這裡。
   String? get _playbackError =>
-      _player.isCurrent(widget.book) && _player.chapters.isNotEmpty
+      _player.isCurrent(widget.book) && _player.phase == AudiobookPhase.failed
       ? _player.error
       : null;
 
@@ -148,11 +147,11 @@ class _AudiobookPageState extends State<AudiobookPage> {
     if (await remedy.run(context) && mounted) _retry();
   }
 
-  /// 重試：還沒有目錄就重開這本書；有了就重播，[AudiobookPlayer.play] 會重載
+  /// 重試：打不開就重開這本書；不然重播，[AudiobookPlayer.play] 會重載
   /// 失敗的那一集。播放器已經換成別本書時不動它。
   void _retry() {
     if (!_player.isCurrent(widget.book)) return;
-    if (_player.chapters.isEmpty) {
+    if (_player.phase == AudiobookPhase.openFailed) {
       unawaited(_player.open(widget.book, chapterIndex: widget.chapterIndex));
     } else {
       unawaited(_player.play());
@@ -364,8 +363,10 @@ class _AudiobookPageState extends State<AudiobookPage> {
   Widget _buildBody(BuildContext context, Book book) {
     final current = _player.isCurrent(widget.book);
     final chapters = current ? _player.chapters : const <BookChapter>[];
-    final error = current ? _player.error : null;
-    if (chapters.isEmpty && error != null) {
+    final error = current && _player.phase == AudiobookPhase.openFailed
+        ? _player.error
+        : null;
+    if (error != null) {
       final padding = MediaQuery.paddingOf(context);
       final remedy = SourceFailureRemedy.of(error, _player.source);
       final retry = AppStateAction(
