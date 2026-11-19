@@ -652,19 +652,20 @@ class _BookHeader extends StatelessWidget {
             width: coverWidth,
             child: AspectRatio(
               aspectRatio: 5 / 7,
-              // 沒有封面時直接畫有聲書的預設封面；BookCoverWidget 載不到時
-              // 畫的夜空要等書的類別定下來才分類別（見交接）。
+              // 沒有封面或載不到時畫有聲書的預設封面；書名用畫面上顯示的
+              // （繁簡轉換後），顏色與星星才和書架、書籍詳情的同一本一樣。
               child: switch (UnifiedCovers.coverOf(book)) {
                 final cover? when cover.trim().isNotEmpty => BookCoverWidget(
                   coverUrl: cover,
-                  bookName: book.name,
+                  bookName: context.zh(book.name),
+                  kind: BookSourceKind.audio,
                   width: coverWidth,
                   height: coverHeight,
                 ),
                 _ => ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                   child: DefaultBookCover(
-                    bookName: book.name,
+                    bookName: context.zh(book.name),
                     kind: BookSourceKind.audio,
                   ),
                 ),

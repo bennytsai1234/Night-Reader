@@ -536,7 +536,9 @@ class _BookshelfPageState extends State<BookshelfPage>
     };
     final books = [for (final url in shownUrls) ?known[url]];
     _shownBooks = {for (final book in books) book.bookUrl: book};
-    ShelfTrial.setShelfOrder([for (final book in books) context.zh(book.name)]);
+    ShelfTrial.setShelfOrder([
+      for (final book in books) (context.zh(book.name), book.bookKind),
+    ]);
     // 載入失敗時已有的書照常顯示；只有什麼都沒有時才換成錯誤頁。
     if (books.isEmpty && provider.loadErrorMessage != null) {
       return Padding(
@@ -967,9 +969,11 @@ class _BookshelfPageState extends State<BookshelfPage>
     // 建一塊時（[CoverReveal.paced]）建清單那一格每一列只建佔位，跟書卡一起
     // 輪到時才建。
     return CoverRevealSlot(
-      placeholder: const SizedBox(
+      placeholder: SizedBox(
         height:
-            BookshelfListCard.coverHeight + AppSpacing.md * 2 + AppSpacing.sm,
+            BookshelfListCard.coverHeight +
+            AppSpacing.md * 2 +
+            (merged ? 0 : AppSpacing.sm),
       ),
       child: BookshelfMotionItem(
         id: shown.bookUrl,

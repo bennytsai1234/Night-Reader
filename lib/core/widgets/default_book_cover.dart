@@ -43,7 +43,8 @@ class DefaultBookCover extends StatelessWidget {
   final BookSourceKind kind;
 
   /// 把 [bookName] 的預設封面畫成 [width]×[height] 像素的 PNG，給 App 以外
-  /// 的地方用（系統播放資訊的封面，一律畫夜空）。
+  /// 的地方用（系統播放資訊的封面）：一律畫夜空的中間那個顏色，不跟著書架
+  /// 順序變，存起來的圖才不會和書架對不上。
   static Future<Uint8List> renderPng(
     String bookName, {
     required int width,
@@ -54,7 +55,7 @@ class DefaultBookCover extends StatelessWidget {
     _SkyPainter(
       bookName,
       kind,
-      position: ShelfTrial.positionOf(bookName),
+      position: null,
       day: false,
     ).paint(Canvas(recorder), Size(width.toDouble(), height.toDouble()));
     final picture = recorder.endRecording();
@@ -76,7 +77,7 @@ class DefaultBookCover extends StatelessWidget {
     painter: _SkyPainter(
       bookName,
       kind,
-      position: ShelfTrial.positionOf(bookName),
+      position: ShelfTrial.positionOf(bookName, kind),
       day: Theme.of(context).brightness == Brightness.light,
     ),
     size: Size.infinite,

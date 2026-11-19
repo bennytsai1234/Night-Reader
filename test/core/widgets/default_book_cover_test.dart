@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/rendering.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
@@ -17,7 +17,11 @@ void main() {
           child: SizedBox(
             width: 60,
             height: 84,
-            child: DefaultBookCover(bookName: '詭秘之主', kind: kind),
+            // 深色畫夜空、淺色畫白天；這裡驗證夜空。
+            child: Theme(
+              data: ThemeData(brightness: Brightness.dark),
+              child: DefaultBookCover(bookName: '詭秘之主', kind: kind),
+            ),
           ),
         ),
       ),

@@ -155,7 +155,8 @@ class NowPlayingArtwork {
     final file = File(
       p.join(
         (await _directory()).path,
-        'night_sky_${kind.name}_${_hash(bookName)}.png',
+        // 預設封面 2026-11-19 換成月亮與山固定的天空，檔名跟著換，舊圖不再沿用。
+        'night_sky_v2_${kind.name}_${_hash(bookName)}.png',
       ),
     );
     if (await file.exists() && await file.length() > 0) return file;
