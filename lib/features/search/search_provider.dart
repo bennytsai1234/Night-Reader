@@ -678,6 +678,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 條件在這時定下，照使用者現在選的（[_conditions]）。傳回給
   /// [SearchRun.start] 的號碼。
   int _beginSearch(String searchKey, SearchScope scope) {
+    // 上一次選的分組沒有書源、頁首改寫了實際搜的範圍：沒換過範圍就照頁首的
+    // 搜，選的也換成它（同 Legado 改掉範圍；不寫回偏好）。
+    if ((_run.scopeAsked, _run.conditions?.scope)
+        case (final asked?, final shown?) when asked == scope.toString()) {
+      final adopted = SearchScope(shown);
+      if (_searchScope.toString() == asked) _searchScope = adopted;
+      scope = adopted;
+    }
     _leaveBackground();
     final ticket = _run.begin(searchKey, _conditions(scope));
     _resetCovers();
@@ -717,6 +725,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     final background = _background;
     if (background != null) {
       if (!background.isFinished) return;
+      // 沒有重試得了的書源就不收掉背景那件。
+      final sources = await _run.retryableSources();
+      if (_disposed || _background != background || sources.isEmpty) return;
       _leaveBackground(next: SearchRun.copyOf(_run));
     }
     await _run.retryFailed();

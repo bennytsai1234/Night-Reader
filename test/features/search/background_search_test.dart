@@ -51,8 +51,22 @@ class _OtherJob implements BackgroundJob {
 
 /// 向書源搜尋的那一步：每個書源送出時記下，等測試決定回什麼；取消時照
 /// Dio 丟出取消。
+/// 存搜尋紀錄要等 [gate]：新的一次搜尋停在開始前那段空檔。
+class _GatedKeywordDao extends SearchKeywordDao {
+  _GatedKeywordDao(super.db);
+
+  Completer<void> gate = Completer<void>();
+
+  @override
+  Future<void> saveKeyword(String word) async {
+    await gate.future;
+    return super.saveKeyword(word);
+  }
+}
+
 class _Loader {
   final List<String> sent = [];
+  final List<String> cancelled = [];
   final Map<String, Completer<List<SearchBook>>> _pending = {};
 
   Future<List<SearchBook>> call(
@@ -65,6 +79,7 @@ class _Loader {
     final completer = Completer<List<SearchBook>>();
     _pending[name] = completer;
     cancelToken?.whenCancel.then((error) {
+      cancelled.add(name);
       if (!completer.isCompleted) completer.completeError(error);
     });
     return completer.future;
@@ -261,7 +276,7 @@ void main() {
     await settle();
     expect(loader2.sent, ['丙']);
     loader2.answer('丙');
-    await settle();
+    await until(() => run.isFinished);
     expect(run.isFinished, isTrue);
     expect(names(reopened), unorderedEquals(['甲書', '丙書']));
     expect(reopened.completedSources, 3);
@@ -635,6 +650,81 @@ void main() {
     expect(names(resumed), unorderedEquals(['甲書', '丙書']));
   });
 
+  test('a new search stops the one before it while it is still saving its '
+      'keyword', () async {
+    final keywords = _GatedKeywordDao(db);
+    GetIt.instance
+      ..unregister<SearchKeywordDao>()
+      ..registerSingleton<SearchKeywordDao>(keywords);
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    keywords.gate.complete();
+    await until(() => loader.sent.length == 3);
+
+    keywords.gate = Completer<void>();
+    unawaited(provider.search('other'));
+    await settle();
+    // 舊的那次已經取消：之後才回來的結果與範圍進不到新的這次。
+    expect(loader.cancelled, ['甲', '乙', '丙']);
+    keywords.gate.complete();
+    await until(() => loader.sent.length == 6);
+  });
+
+  test('a search whose failed sources were all disabled since leaves nothing '
+      'to retry', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    provider.moveToBackground();
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => background.current!.isFinished);
+    await disable('乙');
+
+    await provider.retryFailedSources();
+    expect(provider.sourceFailures, isEmpty);
+    expect(loader.sent, hasLength(3));
+    // 沒有書源可重試：背景那件不收掉。
+    expect(background.current, isNotNull);
+    provider.dispose();
+  });
+
+  test('a retry moved to the background keeps the failures of sources '
+      'disabled since out of its results file', () async {
+    final background = searches();
+    final loader = _Loader();
+    final provider = await page(background, loader);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..fail('丙');
+    await until(() => !provider.isSearching);
+    await disable('乙');
+    unawaited(provider.retryFailedSources());
+    await until(() => loader.sent.length == 4);
+    expect(loader.sent.last, '丙');
+    provider.moveToBackground();
+    provider.dispose();
+    loader.answer('丙');
+    await until(() => background.current!.isFinished);
+
+    final restarted = searches();
+    await restarted.restore();
+    final reopened = await page(restarted, _Loader(), resume: true);
+    addTearDown(reopened.dispose);
+    await settle();
+    expect(names(reopened), unorderedEquals(['甲書', '丙書']));
+    expect(reopened.sourceFailures, isEmpty);
+  });
+
   test('retrying skips failed sources disabled since', () async {
     final loader = _Loader();
     final provider = await page(searches(), loader);
@@ -673,6 +763,17 @@ void main() {
       unawaited(provider.search('night'));
       await until(() => loader.sent.length == 2);
       expect(loader.sent, ['乙', '丙']);
+      expect(provider.searchScope.isAll, isTrue);
+
+      // 頁首寫的是全部：分組又有書源了，下一次照樣搜全部（同 Legado 改掉範圍）。
+      final dao = GetIt.instance<BookSourceDao>();
+      await dao.upsert(
+        (await dao.getByUrl('https://甲.example'))!..enabled = true,
+      );
+      loader.sent.clear();
+      unawaited(provider.search('other'));
+      await until(() => loader.sent.length == 3);
+      expect(loader.sent, unorderedEquals(['甲', '乙', '丙']));
       expect(provider.searchScope.isAll, isTrue);
     });
 

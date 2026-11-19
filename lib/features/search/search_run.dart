@@ -101,6 +101,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _model = _newModel();
     key = other.key;
     conditions = other.conditions;
+    scopeAsked = other.scopeAsked;
     results = other.results;
     failures.addAll(other.failures);
     _searched.addAll(other._searched);
@@ -188,8 +189,11 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
   /// 送出搜尋後、引擎真正開始前（存歷史、讀書源清單）就先進入搜尋中，這段
   /// 空檔才不會閃出空狀態，也擋住重複送出。傳回給 [start] 的號碼。
   int begin(String key, SearchConditions conditions) {
+    // 上一次馬上停：存歷史這段空檔裡它回來的結果與範圍不算進這一次。
+    _model.cancelSearch();
     this.key = key;
     this.conditions = conditions;
+    scopeAsked = null;
     results = const [];
     failures.clear();
     _searched.clear();
@@ -252,28 +256,47 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     );
   }
 
+  /// 「重試失敗」重試得了的書源：照網址讀現在的書源（同接著搜暫停的搜尋）。
+  /// 失敗之後刪掉、停用的略過，它們的失敗從畫面與結果檔一起拿掉；全部略過
+  /// 時沒有失敗可列，「重試失敗」跟著不在。
+  Future<List<BookSource>> retryableSources() async {
+    final enabled = {
+      for (final source in await getIt<BookSourceDao>().getEnabled())
+        if (source.isSearchEnabledByRuntime) source.bookSourceUrl: source,
+    };
+    if (_disposed) return const [];
+    final skipped = {
+      for (final failure in failures)
+        if (!enabled.containsKey(failure.source.bookSourceUrl))
+          failure.source.bookSourceUrl,
+    };
+    if (skipped.isNotEmpty) {
+      failures.removeWhere((f) => skipped.contains(f.source.bookSourceUrl));
+      skipped.forEach(_failedNotes.remove);
+      failed = failures.length;
+      notifyListeners();
+    }
+    return [
+      for (final failure in failures) enabled[failure.source.bookSourceUrl]!,
+    ];
+  }
+
   Future<void> retryFailed() async {
-    if (key.isEmpty || failures.isEmpty || isSearching || _retrying) return;
+    if (key.isEmpty || failures.isEmpty || isSearching) return;
+    final ticket = _ticket;
+    final sources = await retryableSources();
+    // 讀書源的時候開始了新的一次或另一次重試，這次就不重試。
+    if (_disposed || ticket != _ticket || isSearching || sources.isEmpty) {
+      return;
+    }
+    final existing = List<SearchBook>.from(results);
+    failures.clear();
+    _failuresBefore = const [];
+    _doneBefore = 0;
+    _startAttempt();
+    notifyListeners();
     _retrying = true;
     try {
-      // 照現在的書源重試：失敗之後刪掉、停用的略過（同接著搜暫停的搜尋）。
-      final ticket = _ticket;
-      final enabled = {
-        for (final source in await getIt<BookSourceDao>().getEnabled())
-          if (source.isSearchEnabledByRuntime) source.bookSourceUrl: source,
-      };
-      // 讀書源的時候開始了新的一次，這次就不重試。
-      if (_disposed || ticket != _ticket) return;
-      final sources = [
-        for (final failure in failures) ?enabled[failure.source.bookSourceUrl],
-      ];
-      if (sources.isEmpty) return;
-      final existing = List<SearchBook>.from(results);
-      failures.clear();
-      _failuresBefore = const [];
-      _doneBefore = 0;
-      _startAttempt();
-      notifyListeners();
       await _track(
         _model.searchSources(
           key: key,
@@ -383,10 +406,14 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
 
   bool get isPaused => _model.isPaused;
 
+  /// 範圍被引擎改掉之前選的那個（[_narrowScope]）；沒改過是 null。
+  String? scopeAsked;
+
   /// 實際搜的範圍記進條件：頁首照它（照 Legado，分組清掉了就寫清掉後的）。
   void _narrowScope(String scope) {
     final c = conditions;
     if (c == null) return;
+    scopeAsked ??= c.scope;
     conditions = (
       kind: c.kind,
       byKind: c.byKind,
