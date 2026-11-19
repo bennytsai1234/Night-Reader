@@ -221,6 +221,28 @@ void main() {
     expect(provider.isMutationBusy, isFalse);
   });
 
+  test('an import whose reload is overtaken by a background reload keeps the '
+      'list busy until the newer reload is out', () async {
+    // 只寫進去、不另外讀清單的匯入：卡住的讀都是書源管理自己的。
+    final importer = _GatedImport(dao, mergeSkipped: true)..gate.complete();
+    final provider = await loaded(importService: importer);
+
+    dao.hold = true;
+    final importing = provider.importSources([_source('https://new.example')]);
+    await _until(() => dao.held.length == 1);
+    final background = provider.loadSources(showLoading: false);
+    await _until(() => dao.held.length == 2);
+
+    dao.held[0].complete();
+    await importing;
+    expect(provider.isMutationBusy, isTrue);
+
+    dao.held[1].complete();
+    await background;
+    expect(provider.totalSourceCount, 4);
+    expect(provider.isMutationBusy, isFalse);
+  });
+
   test('an import whose own merge was skipped merges in its reload', () async {
     final merge = _GatedMerge(dao)..gate.complete();
     final importer = _GatedImport(dao, mergeSkipped: true)..gate.complete();
