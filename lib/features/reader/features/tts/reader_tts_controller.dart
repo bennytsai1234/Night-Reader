@@ -30,6 +30,9 @@ abstract class ReaderTtsEngine extends ChangeNotifier {
   /// 每念完一段送出一次。
   Stream<void> get completions;
 
+  /// 念一段沒念出來時送出一次（引擎沒開好、不收這句、念的途中出錯）。
+  Stream<void> get failures;
+
   Future<void> speak(String text);
   Future<void> stop();
   Future<void> setRate(double value);
@@ -62,6 +65,9 @@ class ReaderSystemTtsEngine extends ReaderTtsEngine {
 
   @override
   Stream<void> get completions => _service.completions;
+
+  @override
+  Stream<void> get failures => _service.failures;
 
   @override
   Future<void> speak(String text) => _service.speak(text);
@@ -102,6 +108,7 @@ class ReaderTtsController extends ChangeNotifier
     _completionSubscription = _tts.completions.listen(
       (_) => _handleSpeechCompleted(),
     );
+    _failureSubscription = _tts.failures.listen((_) => _handleSpeechFailed());
   }
 
   final ReaderRuntime runtime;
@@ -109,6 +116,7 @@ class ReaderTtsController extends ChangeNotifier
   final bool _ownsTtsEngine;
   final SystemPlayback _playback;
   late final StreamSubscription<void> _completionSubscription;
+  late final StreamSubscription<void> _failureSubscription;
 
   /// 念過的章節顯示的章名（含繁簡轉換與替換規則），系統播放資訊的標題用。
   final Map<int, String> _chapterTitles = <int, String>{};
@@ -265,7 +273,7 @@ class ReaderTtsController extends ChangeNotifier
     }
   }
 
-  /// 念 [speaking] 那一句。引擎出錯時記下來、停下，不卡在朗讀中。
+  /// 念 [speaking] 那一句。
   Future<void> _speak(_Speaking speaking) async {
     _state = speaking;
     try {
@@ -279,13 +287,18 @@ class ReaderTtsController extends ChangeNotifier
           context: ErrorDescription('speaking a TTS segment'),
         ),
       );
-      if (_isCurrent(speaking)) {
-        _state = const _Idle();
-        notifyListeners();
-      }
+      _handleSpeechFailed();
       return;
     }
     if (_isCurrent(speaking)) notifyListeners();
+  }
+
+  /// 引擎沒念出這一句：停在這句、說一聲，播放鍵從這句重試；不留在朗讀中
+  /// 卻沒有聲音。只在念一句時算數。
+  void _handleSpeechFailed() {
+    if (_disposed || _state is! _Speaking) return;
+    _pause();
+    runtime.emitUserNotice('朗讀引擎出錯，已暫停');
   }
 
   /// 念完一段只在念一句時算數：載入中、暫停後引擎補報的念完不理。
@@ -548,6 +561,7 @@ class ReaderTtsController extends ChangeNotifier
     _state = const _Idle();
     _playback.release(this);
     unawaited(_completionSubscription.cancel());
+    unawaited(_failureSubscription.cancel());
     _tts.removeListener(_handleTtsChanged);
     unawaited(_tts.stop());
     if (_ownsTtsEngine) _tts.dispose();

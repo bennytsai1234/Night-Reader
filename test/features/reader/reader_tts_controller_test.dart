@@ -135,6 +135,7 @@ class _OtherOwner implements PlaybackOwner {
 class _FakeTtsEngine extends ReaderTtsEngine {
   final StreamController<void> _completions =
       StreamController<void>.broadcast();
+  final StreamController<void> _failures = StreamController<void>.broadcast();
   final List<String> spoken = <String>[];
 
   /// 有值時，下一次停止等第一個完成才停好（引擎回覆得慢）。
@@ -161,6 +162,9 @@ class _FakeTtsEngine extends ReaderTtsEngine {
   Stream<void> get completions => _completions.stream;
 
   @override
+  Stream<void> get failures => _failures.stream;
+
+  @override
   Future<void> speak(String text) async {
     spoken.add(text);
     _text = text;
@@ -181,6 +185,13 @@ class _FakeTtsEngine extends ReaderTtsEngine {
     _text = '';
     _playing = false;
     _completions.add(null);
+  }
+
+  /// 引擎沒念出目前這句（出錯、不收）。
+  void fail() {
+    _text = '';
+    _playing = false;
+    _failures.add(null);
   }
 
   @override
@@ -664,6 +675,36 @@ void main() {
         expect(engine.spoken, ['甲。', '乙。']);
       },
     );
+  });
+
+  group('when the engine cannot speak', () {
+    test('reading pauses on that sentence and says so', () async {
+      await open({0: '甲。乙。'});
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await pumpEventQueue();
+
+      engine.fail();
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(tts.currentHighlight?.sentenceStart, 2);
+      expect(system.playing, isFalse);
+      expect(runtime.takeUserNotice()?.message, '朗讀引擎出錯，已暫停');
+
+      await tts.toggle();
+      expect(engine.spoken, ['甲。', '乙。', '乙。']);
+    });
+
+    test('a failure reported after pausing changes nothing', () async {
+      await open({0: '甲。乙。'});
+      await tts.startFromVisibleLocation();
+      tts.onPause();
+
+      engine.fail();
+      await pumpEventQueue();
+      expect(tts.phase, ReaderTtsPhase.paused);
+      expect(runtime.takeUserNotice(), isNull);
+    });
   });
 
   group('ending from the panel', () {
