@@ -381,15 +381,7 @@ class SourceChecker {
         const _IssueData(
           stage: 'search',
           message: '搜尋連結規則為空',
-          health: SourceRuntimeHealth(
-            category: SourceHealthCategory.searchBroken,
-            label: searchBrokenSourceGroupTag,
-            description: '搜尋規則已失效',
-            allowsSearch: false,
-            allowsReading: true,
-            cleanupCandidate: false,
-            quarantined: false,
-          ),
+          health: _searchRuleBrokenHealth,
         ),
       );
       return;
@@ -563,15 +555,7 @@ class SourceChecker {
           const _IssueData(
             stage: 'discovery',
             message: '發現規則為空或沒有可用入口',
-            health: SourceRuntimeHealth(
-              category: SourceHealthCategory.discoveryBroken,
-              label: discoveryBrokenSourceGroupTag,
-              description: '發現規則已失效',
-              allowsSearch: true,
-              allowsReading: true,
-              cleanupCandidate: false,
-              quarantined: false,
-            ),
+            health: _discoveryBrokenHealth,
           ),
         );
         return;
@@ -590,15 +574,7 @@ class SourceChecker {
           const _IssueData(
             stage: 'discovery',
             message: '發現頁沒有結果',
-            health: SourceRuntimeHealth(
-              category: SourceHealthCategory.discoveryBroken,
-              label: discoveryBrokenSourceGroupTag,
-              description: '發現規則已失效',
-              allowsSearch: true,
-              allowsReading: true,
-              cleanupCandidate: false,
-              quarantined: false,
-            ),
+            health: _discoveryBrokenHealth,
           ),
         );
         return;
@@ -705,15 +681,7 @@ class SourceChecker {
 
     if (readableChapters.isEmpty) {
       final health = _looksLikeDownloadOnly(book, readableChapters)
-          ? const SourceRuntimeHealth(
-              category: SourceHealthCategory.downloadOnly,
-              label: downloadOnlySourceGroupTag,
-              description: '來源只提供下載，不提供線上正文閱讀',
-              allowsSearch: false,
-              allowsReading: false,
-              cleanupCandidate: true,
-              quarantined: false,
-            )
+          ? _downloadOnlyHealth
           : _tocHealthFor(mode);
       final message = health.category == SourceHealthCategory.downloadOnly
           ? '來源為下載站，不提供線上目錄'
@@ -737,15 +705,7 @@ class SourceChecker {
         const _IssueData(
           stage: 'toc',
           message: '來源為下載站，不提供線上正文',
-          health: SourceRuntimeHealth(
-            category: SourceHealthCategory.downloadOnly,
-            label: downloadOnlySourceGroupTag,
-            description: '來源只提供下載，不提供線上正文閱讀',
-            allowsSearch: false,
-            allowsReading: false,
-            cleanupCandidate: true,
-            quarantined: false,
-          ),
+          health: _downloadOnlyHealth,
         ),
       );
       return;
@@ -1263,127 +1223,10 @@ class SourceChecker {
       );
     }
 
-    if (mode == _CheckMode.discovery) {
-      if (stage.endsWith('detail')) {
-        return _IssueData(
-          stage: stage,
-          message: message,
-          health: const SourceRuntimeHealth(
-            category: SourceHealthCategory.discoveryDetailBroken,
-            label: discoveryDetailBrokenSourceGroupTag,
-            description: '發現書籍詳情失效',
-            allowsSearch: true,
-            allowsReading: true,
-            cleanupCandidate: false,
-            quarantined: false,
-          ),
-        );
-      }
-      if (stage.endsWith('toc')) {
-        return _IssueData(
-          stage: stage,
-          message: message,
-          health: const SourceRuntimeHealth(
-            category: SourceHealthCategory.discoveryTocBroken,
-            label: discoveryTocBrokenSourceGroupTag,
-            description: '發現書籍目錄失效',
-            allowsSearch: true,
-            allowsReading: true,
-            cleanupCandidate: false,
-            quarantined: false,
-          ),
-        );
-      }
-      if (stage.endsWith('content')) {
-        return _IssueData(
-          stage: stage,
-          message: message,
-          health: const SourceRuntimeHealth(
-            category: SourceHealthCategory.discoveryContentBroken,
-            label: discoveryContentBrokenSourceGroupTag,
-            description: '發現書籍正文失效',
-            allowsSearch: true,
-            allowsReading: true,
-            cleanupCandidate: false,
-            quarantined: false,
-          ),
-        );
-      }
-      return _IssueData(
-        stage: stage,
-        message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.discoveryBroken,
-          label: discoveryBrokenSourceGroupTag,
-          description: '發現規則已失效',
-          allowsSearch: true,
-          allowsReading: true,
-          cleanupCandidate: false,
-          quarantined: false,
-        ),
-      );
-    }
-
-    if (stage == 'search') {
-      return _IssueData(
-        stage: stage,
-        message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.searchBroken,
-          label: searchBrokenSourceGroupTag,
-          description: '搜尋規則已失效',
-          allowsSearch: false,
-          allowsReading: true,
-          cleanupCandidate: false,
-          quarantined: false,
-        ),
-      );
-    }
-
-    if (stage.endsWith('detail')) {
-      return _IssueData(
-        stage: stage,
-        message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.detailBroken,
-          label: detailBrokenSourceGroupTag,
-          description: '詳情頁無法正常解析',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: false,
-          quarantined: true,
-        ),
-      );
-    }
-
-    if (stage.endsWith('toc')) {
-      return _IssueData(
-        stage: stage,
-        message: message,
-        health: const SourceRuntimeHealth(
-          category: SourceHealthCategory.tocBroken,
-          label: tocBrokenSourceGroupTag,
-          description: '目錄抓取失敗或沒有可閱讀章節',
-          allowsSearch: false,
-          allowsReading: false,
-          cleanupCandidate: false,
-          quarantined: true,
-        ),
-      );
-    }
-
     return _IssueData(
       stage: stage,
       message: message,
-      health: const SourceRuntimeHealth(
-        category: SourceHealthCategory.contentBroken,
-        label: contentBrokenSourceGroupTag,
-        description: '正文抓取失敗或無法閱讀',
-        allowsSearch: false,
-        allowsReading: false,
-        cleanupCandidate: false,
-        quarantined: true,
-      ),
+      health: _brokenHealthFor(mode, stage),
     );
   }
 
@@ -1452,74 +1295,135 @@ class SourceChecker {
 String _stageFor(_CheckMode mode, String detailStage) =>
     mode == _CheckMode.search ? detailStage : 'discovery:$detailStage';
 
-SourceRuntimeHealth _detailHealthFor(_CheckMode mode) {
-  if (mode == _CheckMode.search) {
-    return const SourceRuntimeHealth(
-      category: SourceHealthCategory.detailBroken,
-      label: detailBrokenSourceGroupTag,
-      description: '詳情頁無法正常解析',
-      allowsSearch: false,
-      allowsReading: false,
-      cleanupCandidate: false,
-      quarantined: true,
-    );
+/// 抓取出錯、又不是網站、登入、驗證或逾時的問題時，照出錯的那一段
+/// （[stage]）算哪一種失效。搜尋到的書打不開會隔離書源；發現到的書打不開
+/// 只標發現失效，搜尋與閱讀照常。
+SourceRuntimeHealth _brokenHealthFor(_CheckMode mode, String stage) {
+  if (mode == _CheckMode.discovery) {
+    if (stage.endsWith('detail')) return _discoveryDetailBrokenHealth;
+    if (stage.endsWith('toc')) return _discoveryTocBrokenHealth;
+    if (stage.endsWith('content')) return _discoveryContentBrokenHealth;
+    return _discoveryBrokenHealth;
   }
-  return const SourceRuntimeHealth(
-    category: SourceHealthCategory.discoveryDetailBroken,
-    label: discoveryDetailBrokenSourceGroupTag,
-    description: '發現書籍詳情失效',
-    allowsSearch: true,
-    allowsReading: true,
-    cleanupCandidate: false,
-    quarantined: false,
-  );
+  if (stage == 'search') return _searchRuleBrokenHealth;
+  if (stage.endsWith('detail')) return _detailBrokenHealth;
+  if (stage.endsWith('toc')) return _tocBrokenHealth;
+  return _contentFetchFailedHealth;
 }
 
-SourceRuntimeHealth _tocHealthFor(_CheckMode mode) {
-  if (mode == _CheckMode.search) {
-    return const SourceRuntimeHealth(
-      category: SourceHealthCategory.tocBroken,
-      label: tocBrokenSourceGroupTag,
-      description: '目錄抓取失敗或沒有可閱讀章節',
-      allowsSearch: false,
-      allowsReading: false,
-      cleanupCandidate: false,
-      quarantined: true,
-    );
-  }
-  return const SourceRuntimeHealth(
-    category: SourceHealthCategory.discoveryTocBroken,
-    label: discoveryTocBrokenSourceGroupTag,
-    description: '發現書籍目錄失效',
-    allowsSearch: true,
-    allowsReading: true,
-    cleanupCandidate: false,
-    quarantined: false,
-  );
-}
+SourceRuntimeHealth _detailHealthFor(_CheckMode mode) =>
+    mode == _CheckMode.search
+    ? _detailBrokenHealth
+    : _discoveryDetailBrokenHealth;
 
-SourceRuntimeHealth _contentHealthFor(_CheckMode mode) {
-  if (mode == _CheckMode.search) {
-    return const SourceRuntimeHealth(
-      category: SourceHealthCategory.contentBroken,
-      label: contentBrokenSourceGroupTag,
-      description: '正文內容過短或為空',
-      allowsSearch: false,
-      allowsReading: false,
-      cleanupCandidate: false,
-      quarantined: true,
-    );
-  }
-  return const SourceRuntimeHealth(
-    category: SourceHealthCategory.discoveryContentBroken,
-    label: discoveryContentBrokenSourceGroupTag,
-    description: '發現書籍正文失效',
-    allowsSearch: true,
-    allowsReading: true,
-    cleanupCandidate: false,
-    quarantined: false,
-  );
-}
+SourceRuntimeHealth _tocHealthFor(_CheckMode mode) =>
+    mode == _CheckMode.search ? _tocBrokenHealth : _discoveryTocBrokenHealth;
+
+/// 正文抓得到、內容卻過短或是空的（抓取出錯是 [_contentFetchFailedHealth]）。
+SourceRuntimeHealth _contentHealthFor(_CheckMode mode) =>
+    mode == _CheckMode.search
+    ? _contentTooShortHealth
+    : _discoveryContentBrokenHealth;
+
+const _searchRuleBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.searchBroken,
+  label: searchBrokenSourceGroupTag,
+  description: '搜尋規則已失效',
+  allowsSearch: false,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
+const _discoveryBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.discoveryBroken,
+  label: discoveryBrokenSourceGroupTag,
+  description: '發現規則已失效',
+  allowsSearch: true,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
+const _discoveryDetailBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.discoveryDetailBroken,
+  label: discoveryDetailBrokenSourceGroupTag,
+  description: '發現書籍詳情失效',
+  allowsSearch: true,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
+const _discoveryTocBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.discoveryTocBroken,
+  label: discoveryTocBrokenSourceGroupTag,
+  description: '發現書籍目錄失效',
+  allowsSearch: true,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
+const _discoveryContentBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.discoveryContentBroken,
+  label: discoveryContentBrokenSourceGroupTag,
+  description: '發現書籍正文失效',
+  allowsSearch: true,
+  allowsReading: true,
+  cleanupCandidate: false,
+  quarantined: false,
+);
+
+const _detailBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.detailBroken,
+  label: detailBrokenSourceGroupTag,
+  description: '詳情頁無法正常解析',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
+const _tocBrokenHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.tocBroken,
+  label: tocBrokenSourceGroupTag,
+  description: '目錄抓取失敗或沒有可閱讀章節',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
+const _contentFetchFailedHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.contentBroken,
+  label: contentBrokenSourceGroupTag,
+  description: '正文抓取失敗或無法閱讀',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
+const _contentTooShortHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.contentBroken,
+  label: contentBrokenSourceGroupTag,
+  description: '正文內容過短或為空',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
+const _downloadOnlyHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.downloadOnly,
+  label: downloadOnlySourceGroupTag,
+  description: '來源只提供下載，不提供線上正文閱讀',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: true,
+  quarantined: false,
+);
 
 _IssueData _paidChapterIssue(_CheckMode mode, BookChapter chapter) {
   final title = _compactChapterTitle(chapter.title);
