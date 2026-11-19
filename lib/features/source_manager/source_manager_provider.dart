@@ -391,8 +391,18 @@ class SourceManagerProvider with ChangeNotifier {
   final Set<String> _pendingSourceMutations = <String>{};
 
   /// 正在併重複書源（ADR 0062）：在讀清單裡做，會和第一次讀、重讀同時成立，
-  /// 所以不是 [_work] 的一個階段。這段時間其他改書源的動作等它。
+  /// 所以不是 [_work] 的一個階段。這段時間其他改書源的動作等它，別的讀清單
+  /// 等它併完再讀。
   Future<int>? _merging;
+
+  /// 併完過幾次：讀清單時用來看讀的期間有沒有合併跑完。
+  int _mergesDone = 0;
+
+  Future<int> _merge(List<BookSource> sources) =>
+      _merging = _mergeDuplicates(sources).whenComplete(() {
+        _merging = null;
+        _mergesDone++;
+      });
 
   /// 最新一次讀清單收尾時的序號；和 [_loadGeneration] 不同就是最新一次還在讀。
   int _settledGeneration = 0;
@@ -705,26 +715,30 @@ class SourceManagerProvider with ChangeNotifier {
       _work = _ListWork.reloading;
       notifyListeners();
     }
+    bool stale() => _disposed || generation != _loadGeneration;
     try {
+      var mergesSeen = _mergesDone;
       var loadedSources = await _dao.getAllPart();
-      if (_disposed || generation != _loadGeneration) return;
+      if (stale()) return;
+      // 讀的期間有合併在跑或跑完了：讀到的可能是併之前的清單，等它併完
+      // 重讀，直到讀的期間沒有合併。合併出錯由開始併的那一次記。
+      while (_merging != null || _mergesDone != mergesSeen) {
+        await _merging?.then<void>((_) {}, onError: (Object _) {});
+        if (stale()) return;
+        mergesSeen = _mergesDone;
+        loadedSources = await _dao.getAllPart();
+        if (stale()) return;
+      }
       // 重複書源每次讀清單都併（ADR 0062），書源管理自己在改書源時除外
       // （[_canMerge]）；校驗、修復這類批次工作在跑時由
       // [mergeDuplicateSources] 擋下，等它們做完重讀時再併。
-      if (_merging case final running?) {
-        // 另一次讀清單正在併：等它併完再讀，不放出併之前的清單。併出錯由
-        // 那一次報。
-        await running.then<void>((_) {}, onError: (Object _) {});
-        if (_disposed || generation != _loadGeneration) return;
-        loadedSources = await _dao.getAllPart();
-        if (_disposed || generation != _loadGeneration) return;
-      } else if (_canMerge && duplicateSourceGroups(loadedSources).isNotEmpty) {
-        final merging = _merging = _mergeDuplicates(loadedSources);
+      if (_canMerge && duplicateSourceGroups(loadedSources).isNotEmpty) {
         final int merged;
         try {
-          merged = await merging;
-        } finally {
-          _merging = null;
+          merged = await _merge(loadedSources);
+        } catch (error, stackTrace) {
+          AppLog.e('併重複書源失敗', error: error, stackTrace: stackTrace);
+          rethrow;
         }
         if (_disposed) return;
         if (merged > 0) {

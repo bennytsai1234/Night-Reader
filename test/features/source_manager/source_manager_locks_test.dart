@@ -338,4 +338,54 @@ void main() {
     );
     expect(merge.calls, 1);
   });
+
+  test('a reload that waited for a merge also merges duplicates that came '
+      'in meanwhile', () async {
+    await dao.upsert(_source('https://a.example#copy', order: 3));
+    final merge = _GatedMerge(dao);
+    final provider = SourceManagerProvider(
+      entrance: Future<void>.value(),
+      mergeDuplicates: merge.call,
+    );
+    addTearDown(provider.dispose);
+    await merge.started.future;
+
+    // 併網站甲的時候，同步又帶進網站乙的重複書源、重讀。
+    await dao.upsert(_source('https://b.example#copy', order: 4));
+    final reload = provider.loadSources(showLoading: false);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    merge.gate.complete();
+    await reload;
+    await _until(() => !provider.isLoading);
+    expect(provider.totalSourceCount, 3);
+    expect(await dao.getByUrl('https://b.example#copy'), isNull);
+  });
+
+  test(
+    'a list read while a merge ran but returned after it is not shown',
+    () async {
+      final merge = _GatedMerge(dao);
+      final provider = await loaded(mergeDuplicates: merge.call);
+      await dao.upsert(_source('https://a.example#copy', order: 3));
+
+      final merging = provider.loadSources(showLoading: false);
+      await merge.started.future;
+      // 併的途中讀到併之前的清單，併完才回來。
+      dao.hold = true;
+      final reload = provider.loadSources(showLoading: false);
+      await _until(() => dao.held.length == 1);
+      dao.hold = false;
+      merge.gate.complete();
+      await merging;
+      dao.held.single.complete();
+      await reload;
+
+      expect(provider.totalSourceCount, 3);
+      expect(
+        provider.allSources.map((s) => s.bookSourceUrl),
+        isNot(contains('https://a.example#copy')),
+      );
+    },
+  );
 }
