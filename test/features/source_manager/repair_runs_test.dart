@@ -575,6 +575,117 @@ void main() {
     run.dispose();
   });
 
+  group('ending while the pause is still settling', () {
+    /// AI 回覆要等 [gate] 才停得下來：按了暫停、還沒停好的那一段看得到。
+    AiRepairSession slowToStop(Completer<void> gate) => AiRepairSession(
+      source: _s('one'),
+      service: _service,
+      check: (source, _) async => SourceCheckIsolateResult(
+        stage: 'content',
+        message: '正文為空',
+        isHealthy: false,
+        updatedSourceJson: source.toJson(),
+        logs: const [],
+      ),
+      probe: (_, _, {start}) async =>
+          const SourceProbeReport(logs: [], requests: []),
+      ask: (_, token) async {
+        await gate.future;
+        throw DioException.requestCancelled(
+          requestOptions: RequestOptions(),
+          reason: token.cancelError?.message ?? '',
+        );
+      },
+      apply: (_, _) async {},
+      secrets: (_) async => const {},
+      backups: AiRepairBackups(),
+    );
+
+    testWidgets('a single repair page shows pausing, then ending, then done; '
+        'the notification says the same', (tester) async {
+      final gate = Completer<void>();
+      final file = _MemoryFile();
+      final run = SingleRepairRun(
+        slowToStop(gate),
+        progress: file,
+        work: work,
+        navigator: () => null,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: run.page(),
+        ),
+      );
+      run.start();
+      for (var i = 0; i < 20 && run.session.job.steps.length < 3; i++) {
+        await tester.runAsync(_flush);
+      }
+      await tester.pump();
+      expect(find.text('暫停'), findsOneWidget);
+      expect(find.text('結束'), findsOneWidget);
+
+      run.pauseNow();
+      await tester.pump();
+      expect(run.status.text, '正在暫停…');
+      expect(run.status.actions, isEmpty);
+      expect(find.text('正在暫停…'), findsOneWidget);
+      expect(find.text('結束'), findsOneWidget, reason: '正在暫停時還能按結束');
+
+      await run.end();
+      await tester.pump();
+      expect(run.status.text, '正在結束…');
+      expect(find.text('正在結束…'), findsOneWidget);
+
+      gate.complete();
+      for (var i = 0; i < 40 && !run.isFinished; i++) {
+        await tester.runAsync(_flush);
+      }
+      await _settle(tester);
+      expect(run.isFinished, isTrue, reason: '結束蓋過暫停');
+      expect(run.isPaused, isFalse);
+      expect(run.session.job.explanation, '已結束，書源沒有改。');
+      expect(file.closed, isTrue);
+      expect(work.isBusy, isFalse);
+      expect(find.text('完成'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(_flush);
+      run
+        ..disposeWork()
+        ..dispose();
+    });
+
+    test('a batch ends rather than pauses, and the notification says '
+        'ending', () async {
+      final gate = Completer<void>();
+      final file = _MemoryFile();
+      final run = BatchRepairRun(
+        _batch(gate: gate),
+        title: '修復異常書源',
+        progress: file,
+        work: work,
+        navigator: () => null,
+      );
+      run.start();
+      await _flush();
+      run.pauseNow();
+      expect(run.status.text, '正在暫停…');
+
+      await run.end();
+      expect(run.status.text, '正在結束…');
+      gate.complete();
+      await run.batch.completion;
+      await _flush();
+      await _flush();
+
+      expect(run.isFinished, isTrue);
+      expect(run.isPaused, isFalse);
+      expect(file.closed, isTrue);
+      expect(work.isBusy, isFalse);
+      expect(platform.calls.last, 'hide');
+    });
+  });
+
   group('pausing a repair', () {
     test('a batch paused during the recheck frees the slot, keeps its save '
         'and continues as a new batch', () async {
