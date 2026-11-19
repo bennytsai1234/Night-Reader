@@ -1581,20 +1581,44 @@ void main() {
   testWidgets('speech follow scrolls to laid-out text below the screen', (
     tester,
   ) async {
-    await pumpReader(tester);
-    final position = scrollPosition(tester);
-    final start = position.pixels;
-    // 第 0 章第 40 段：已經排好、在畫面下方。
+    // 第 0 章第 40 段：已經排好、在畫面下方。朗讀高亮標在同一段，看它在
+    // 畫面上的位置。
     final offset = _chapter(0).content!.indexOf('第 0 章第 40 段');
+    await pumpReader(
+      tester,
+      ttsHighlight: ReaderTtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: offset,
+        sentenceEnd: offset + 4,
+      ),
+    );
+    await tester.pump(SkeletonReveal.defaultDuration);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byType(LoadingVeil), findsNothing);
+    List<LineBox> boxes() => tester
+        .widget<TtsHighlightOverlay>(find.byType(TtsHighlightOverlay))
+        .sentence;
+    expect(boxes(), isNotEmpty, reason: '跟隨前那一段已經排好');
+    expect(boxes().first.top, greaterThan(_viewport.height), reason: '在畫面下方');
+
     final followed = viewport.ensureCharRangeVisible!(
       chapterIndex: 0,
       startCharOffset: offset,
       endCharOffset: offset + 4,
     );
-    await settle(tester);
+    for (var frame = 0; frame < 40; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byType(LoadingVeil),
+        findsNothing,
+        reason: '排好的範圍裡不蓋紙（第 $frame 幀）',
+      );
+    }
     expect(await followed, isTrue);
-    expect(position.pixels, greaterThan(start + _viewport.height));
-    expect(find.byType(LoadingVeil), findsNothing, reason: '排好的範圍裡不蓋紙');
+    final after = boxes();
+    expect(after, isNotEmpty);
+    expect(after.first.top, greaterThanOrEqualTo(0));
+    expect(after.last.bottom, lessThanOrEqualTo(_viewport.height));
   });
 
   testWidgets('paging into a paid chapter jumps past it', (tester) async {

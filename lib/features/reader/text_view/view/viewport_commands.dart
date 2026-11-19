@@ -152,7 +152,8 @@ final class ViewportCommands {
   /// 使用者正在拖動或甩動：捲動歸使用者。
   final bool Function() _userScrolling;
 
-  /// 停住捲動（[settle]）前：還沒量的位置與排著的命令作廢。
+  /// 停住捲動（[ReaderViewportController.settleScroll]）前：還沒量的位置與排著
+  /// 的命令作廢。
   final VoidCallback _onStop;
 
   /// 捲完、停住：量位置、補排版、存進度。

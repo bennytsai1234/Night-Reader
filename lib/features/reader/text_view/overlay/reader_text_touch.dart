@@ -38,7 +38,7 @@ final class ReaderTextTouch {
   final DocumentIndex _documentIndex;
   final ReaderMarkGeometry _marks;
 
-  /// 目前的捲動位置；還沒有捲動時是 null。
+  /// 目前的捲動位置；捲動還沒接上時是還原要停的位置，兩者都沒有時是 null。
   final double? Function() _scrollOffset;
 
   /// 長按的觸感回饋與打開插圖大圖用。
