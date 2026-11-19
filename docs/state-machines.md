@@ -16,7 +16,8 @@
 | 同步 | `_running`、`_again`、`_fullPending`、`_cancelled`（另有 `_progressFirst`、`_authorizingGoogleDrive` 留成旗標） | `SyncPhase`（閒著、同步進度、全面同步、停下中）與排著的下一輪，收在跑著的那一段 `_SyncRun`；全面同步交回 `FullSyncResult` | 排著全面同步卻沒在跑；進度輪裡記著取消；閒著時還留著要插隊的進度；進度框收掉後那一行和那一輪的結果對不上 | 1 件（見下方） | 7 件（見下方） | #461 |
 | 搜尋 | 4 處共 15 個，頁面另拼 5 個組合（見下方） | 一次搜尋的 `_Phase`；頁面讀的 `SearchStage`；搜尋頁怎麼看著背景那件的 `_Attachment`；換源不換 | 存紀錄中又在重試；重試中的旗標留到下一次搜尋；接回等進場又算看著 | 4 件（見下方） | 4 件，另審查找到 1 件（見下方） | #462 |
 | 骨架呼吸 | `_hold`、`_waiting`、`_restFrom`、`_still`、`_restarted`（另有 `_allowed`、`_visible`、`_usingShared`、`SkeletonRest._resting` 留著，見下方） | `_BreathStage`：等開始、呼吸（從哪一輪起、是不是從最深起）、收住中、收住了；跟著共用呼吸的骨架照抄這一個值 | 等開始又收住了；收住了卻沒有收住的起點；等開 App 呼吸時底下的收住照樣在變 | 3 件（見下方） | 3 件，都碰不到（見下方） | #466 |
-| 閱讀器正文捲動 | `_initialRestoreCompleted`、`_textWaitsForBreath`、`_pendingReveal`、`_revealTimer`、`_dragging`、`_sawUserScroll`（`_rebuildQueued`、`_captureFramePending` 留成旗標）；`PumpState` 兩邊各寫 | 正文的 `_TextStage`（排版中、等掀紙、在畫面上）；手指的 `_FingerScroll`（沒有、在盡頭往外拉、拖動、甩動）；排版預算只照進行中的那次還原或手指算 | 沒排好卻在等呼吸收住；拖動中卻不算手指；被取代的還原改到接手那次的預算 | 2 件（見下方） | 1 件（見下方） | 待開 |
+| 閱讀器正文捲動 | `_initialRestoreCompleted`、`_textWaitsForBreath`、`_pendingReveal`、`_revealTimer`、`_dragging`、`_sawUserScroll`（`_rebuildQueued`、`_captureFramePending` 留成旗標）；`PumpState` 兩邊各寫 | 正文的 `_TextStage`（排版中、等掀紙、在畫面上）；手指的 `_FingerScroll`（沒有、在盡頭往外拉、拖動、甩動）；排版預算只照進行中的那次還原或手指算 | 沒排好卻在等呼吸收住；拖動中卻不算手指；被取代的還原改到接手那次的預算 | 2 件（見下方） | 1 件（見下方） | #468 |
+| 紙 | `_settling`、`_breathTimer`、`_skeletonSweep`（`_sweep`、`_usingBreath` 留著） | `_BreathPlan`（照常、停著等、收住）；骨架由左而右照動畫方向算 | 收住了還排著呼吸的計時；骨架在淡掉卻還記著由左而右 | 0 件 | 0 件 | 待開 |
 
 ## 各狀態機
 
