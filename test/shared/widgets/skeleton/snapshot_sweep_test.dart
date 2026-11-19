@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -150,6 +151,53 @@ void main() {
         return data;
       });
       return bytes!.getUint8((50 * 400 + x) * 4);
+    }
+
+    /// [body] 裡建的圖，畫面拆掉後都要放掉。
+    Future<void> expectNoImageLeft(
+      WidgetTester tester,
+      Future<void> Function() body,
+    ) async {
+      final open = <ui.Image>{};
+      ui.Image.onCreate = open.add;
+      ui.Image.onDispose = open.remove;
+      addTearDown(() {
+        ui.Image.onCreate = null;
+        ui.Image.onDispose = null;
+      });
+      await body();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(open, isEmpty, reason: '拍下的圖都放掉了');
+    }
+
+    for (final viaPlay in [false, true]) {
+      testWidgets('ending the round from the change right after the before '
+          'picture (${viaPlay ? 'play' : 'capture'}) shows the real screen '
+          'and lets go of the picture', (tester) async {
+        await pumpScreen(tester);
+        await expectNoImageLeft(tester, () async {
+          var done = false;
+          void change() {
+            setColor(() => color = Colors.white);
+            controller.finish();
+          }
+
+          final future = viaPlay
+              ? controller.play(duration: duration, change: change)
+              : controller.capture(change: change, restore: () {});
+          unawaited(future.then((_) => done = true));
+          for (var i = 0; i < 4; i++) {
+            await tester.pump(frame);
+          }
+          expect(done, isTrue);
+          expect(controller.captured, isFalse);
+          expect(controller.playing, isFalse);
+          await tester.tapAt(const Offset(200, 50));
+          expect(taps, 1, reason: '真的畫面照常點得到');
+          expect(await redAt(tester, 200), 255);
+        });
+      });
     }
 
     testWidgets('pictures taken first leave the real screen on and take '

@@ -247,6 +247,8 @@ class _SnapshotSweepState extends State<SnapshotSweep>
         onMissing: _end,
         then: () {
           restore();
+          // restore 裡可能結束或換掉了這一輪。
+          if (!_current(round)) return;
           _enter(round, _Stage.captured);
           _afterFrame(() {
             if (!_current(round)) return;
@@ -352,9 +354,11 @@ class _SnapshotSweepState extends State<SnapshotSweep>
           return;
         }
         // 換成換好的樣子；這一格（與拍「之後」之前的每一格）螢幕上蓋著
-        // 「之前」，底下重建得再久也看不出來。
-        change();
+        // 「之前」，底下重建得再久也看不出來。圖先交給這一輪：change 裡
+        // 結束或換掉這一輪時由 [_end] 放掉。
         round.before = before;
+        change();
+        if (!_current(round)) return;
         _enter(round, _Stage.holding);
         _afterFrame(() => _captureAfter(round, then));
       }),
