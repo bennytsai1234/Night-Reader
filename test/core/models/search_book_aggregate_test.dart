@@ -66,6 +66,19 @@ void main() {
     expect(card.intro, '簡介');
   });
 
+  test('the card keeps the longest intro, not a placeholder from the chosen '
+      'source', () {
+    // 2026-11-18 實跑：代表來源的簡介是「...」，同一本 68 個書源裡別的有完整簡介。
+    final card = SearchBook.aggregate([
+      book('a', latest: '第2章', intro: '穿越到金庸的世界，一路收服群芳'),
+      book('b', latest: '第3章', intro: '...'),
+      book('c', latest: '第1章', intro: '穿越'),
+    ]);
+
+    expect(card.origin, 'b');
+    expect(card.intro, '穿越到金庸的世界，一路收服群芳');
+  });
+
   test('a chosen source without an author keeps the card the same book', () {
     // 缺作者的來源併進唯一作者的分組後，最新章節較新而被選成代表；卡片的
     // 身分不能因此從「夜讀＋作者」變成「夜讀＋空白」，否則固定順序時它會

@@ -21,7 +21,14 @@ class FakeAudioEngine implements AudioEngine {
   final _completed = StreamController<void>.broadcast(sync: true);
   final _errors = StreamController<Object>.broadcast(sync: true);
 
+  final _opens = StreamController<void>.broadcast(sync: true);
+
   final List<(Uri, Duration)> opened = [];
+
+  /// 下一次開檔。換集要先看這一集下載了沒（真的讀檔案系統），花的時間不是
+  /// 固定幾輪事件佇列：等換集開好的測試等它（CI 上等 20 輪不夠，2026-11-19）。
+  /// 要在觸發換集之前先拿。
+  Future<void> get nextOpen => _opens.stream.first;
   Map<String, String> lastHeaders = const {};
   double lastSpeed = 1;
 
@@ -54,6 +61,7 @@ class FakeAudioEngine implements AudioEngine {
     Duration start = Duration.zero,
   }) async {
     opened.add((uri, start));
+    _opens.add(null);
     lastHeaders = headers;
     position = start;
     duration = const Duration(minutes: 20);

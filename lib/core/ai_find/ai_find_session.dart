@@ -456,6 +456,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   final Map<String, _Found> _books = {};
   final Map<String, String> _idByIdentity = {};
+  final Map<String, String> _idByUrl = {};
 
   /// 搜過的關鍵字：結果與那次搜尋實際的情況（送了幾個書源、花多久），接著
   /// 拿下一批時不再搜一次。編號在給 AI 看到時才給：一次搜尋常有上萬本，
@@ -564,7 +565,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
           );
         }
         _books[id] = found;
-        _idByIdentity[_identity(book)] = id;
+        _index(id, book);
       }
     }
     if (json['exploreSources'] case final List<Object?> sources) {
@@ -591,6 +592,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   void restart(int attempt, String why) {
     _books.clear();
     _idByIdentity.clear();
+    _idByUrl.clear();
     _searches.clear();
     _exploreSources = null;
     _categories.clear();
@@ -704,7 +706,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   // ---------- 工具 ----------
 
   Future<AgentResult> _search(AiFindSearch command) async {
-    final label = '搜尋「${command.keyword}」${_kindLabel(command.kind)}';
+    final filter = command.filter;
+    final label =
+        '搜尋「${command.keyword}」${_kindLabel(command.kind)}'
+        '${filter == null ? '' : '，篩「$filter」'}';
     _say('$label…');
     final cacheKey = '${command.kind.name}\u0000${command.keyword}';
     // 存的是搜尋本身：同一則回覆裡同樣的搜尋一起開始時，第二個等第一個。
@@ -718,18 +723,58 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       _say('$label，出錯', replacing: '$label…');
       rethrow;
     }
-    final books = search.books;
+    var books = search.books;
+    var tiers = search.tiers;
+    var heading =
+        '# 搜尋「${command.keyword}」（${_kindLabel(command.kind)}，${search.facts}）';
+    if (filter != null) {
+      final groups = aiFindFilterGroups(filter);
+      final kept = [
+        for (final (i, book) in books.indexed)
+          if (_matches(book, groups)) i,
+      ];
+      heading += '，篩選「$filter」：${books.length} 本裡符合 ${kept.length} 本';
+      // 書名不含關鍵字、沒列給 AI 的那些裡有幾本也符合：只記進紀錄，量過再定
+      // 要不要也篩它們（2026-11-15 定只給完全相符與部分相符）。
+      final others = search.others.where((b) => _matches(b, groups)).length;
+      if (search.others.isNotEmpty) {
+        s.log.note(
+          '書名與作者不含「${command.keyword}」的 ${search.others.length} 本裡另有 $others 本符合篩選（沒列出）',
+        );
+      }
+      books = [for (final i in kept) books[i]];
+      tiers = [for (final i in kept) tiers[i]];
+    }
     _say('$label，找到 ${books.length} 本', replacing: '$label…');
     final text = _bookPage(
-      '# 搜尋「${command.keyword}」（${_kindLabel(command.kind)}，${search.facts}）',
+      heading,
       books,
       command.page,
-      empty: '沒有搜到書',
-      tiers: search.tiers,
+      empty: filter == null ? '沒有搜到書' : '沒有符合的書',
+      tiers: tiers,
     );
     s.log.note(_head(text));
     return AgentToolResult(text);
   }
+
+  /// [book] 的書名、作者、分類與標籤、簡介裡，[groups] 的每一組都有其中一個詞
+  /// （繁簡、全半形、大小寫都不分）。
+  static bool _matches(SearchBook book, List<List<String>> groups) {
+    final text = _matchText(
+      [
+        book.name,
+        book.author ?? '',
+        book.kind ?? '',
+        aiFindPlainText(book.intro ?? ''),
+      ].join(' '),
+    );
+    return groups.every(
+      (words) => words.any((word) => text.contains(_matchText(word))),
+    );
+  }
+
+  static String _matchText(String? text) =>
+      ChineseUtils.t2s(StringUtils.fullToHalf(text ?? '').toLowerCase());
 
   Future<_Search> _runSearch(AiFindSearch command) =>
       // 計時從輪到它開始：排隊等的時間不算這次搜尋花的。
@@ -744,16 +789,21 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         // 關鍵字、回固定書單的書源給的，「咒術迴戰」682 本裡有 458 本。
         final books = <SearchBook>[];
         final tiers = <int>[];
+        final others = <SearchBook>[];
         for (final (i, book) in result.books.indexed) {
           final tier = i < result.tiers.length ? result.tiers[i] : 2;
-          if (tier > 1) continue;
+          if (tier > 1) {
+            others.add(book);
+            continue;
+          }
           books.add(book);
           tiers.add(tier);
         }
-        final dropped = result.books.length - books.length;
+        final dropped = others.length;
         return (
           books: books,
           tiers: tiers,
+          others: others,
           facts:
               '送了 ${result.sources} 個書源'
               '${result.failed > 0 ? '，${result.failed} 個出錯或逾時' : ''}'
@@ -811,8 +861,12 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     final last = command.chapter == aiFindLastChapter;
     final which = last ? '最後一章' : '第 ${command.chapter} 章';
     _say('讀《${found.book.name}》$which');
-    found.readTried = true;
-    if (last) found.lastTried = true;
+    // 只讀最後一章不算讀過正文：深入要從開頭看文筆與節奏。
+    if (last) {
+      found.lastTried = true;
+    } else {
+      found.readTried = true;
+    }
     final AiFindChapter chapter;
     try {
       chapter = await _library.chapter(found.book, command.chapter, _cancel);
@@ -820,6 +874,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
       return AgentToolResult('# ${found.id} $which讀不到：${error.message}');
     }
     if (chapter.number == chapter.total) found.lastTried = true;
+    if (chapter.total == 1) found.readTried = true;
     final text = chapter.text;
     final from = command.from.clamp(0, text.length);
     final to = (from + aiFindReadLength).clamp(0, text.length);
@@ -913,8 +968,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     _say('看書架與閱讀紀錄');
     final entries = await _library.shelf();
     String line(AiFindShelfEntry e) {
+      final category = aiFindPlainText(e.category ?? '')
+          .replaceAll(RegExp(r'\s+'), ' ');
       final parts = [
         [
+          if (e.book case final book?) _register(book).id,
           e.name,
           e.author.isEmpty ? '作者不明' : e.author,
           if (e.kind case final kind?)
@@ -925,6 +983,8 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
           '讀到第 ${e.chapterIndex}／${e.chapterTotal} 章'
         else if (e.chapter != null)
           '讀到 ${e.chapter}',
+        if (category.isNotEmpty) '分類：$category',
+        if (_introHead(e.intro) case final intro?) '簡介：$intro',
       ];
       return parts.join('｜');
     }
@@ -1006,19 +1066,53 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 
   // ---------- 輔助 ----------
 
-  /// 同一本（同類、同名、同作者）拿同一個編號，之後看過的詳情也算數。
+  /// 同一本（同類、同名、同作者，或同一個書源的同一個網址）拿同一個編號，
+  /// 之後看過的詳情也算數。再遇到時把這次的書源補進去、簡介取長的：書架先
+  /// 登記的那本只有一個書源，搜尋到的同一本常有幾十個（Codex 審查）。主要
+  /// 書源不換，點開推薦還是先登記的那本（書架上的就是書架那本）。
   _Found _register(SearchBook book) {
     // 書名、作者照搜尋頁合併同一本的寫法正規化（繁簡、全半形、空白、大小寫）：
     // 不同搜尋各挑的代表來源寫法不一樣時，同一本才不會拿兩個編號、被推薦兩次
-    // （Codex 審查）。
-    final identity = _identity(book);
-    final existing = _idByIdentity[identity];
-    if (existing != null) return _books[existing]!;
+    // （Codex 審查）。書架的書有時沒寫作者，再照網址認。
+    final existing = _idByIdentity[_identity(book)] ?? _idByUrl[_urlKey(book)];
+    if (existing != null) {
+      final found = _books[existing]!;
+      _absorb(found.book, book);
+      _index(existing, book);
+      return found;
+    }
     final id = 'b${_books.length + 1}';
     final found = _Found(id, book);
     _books[id] = found;
-    _idByIdentity[identity] = id;
+    _index(id, book);
     return found;
+  }
+
+  void _index(String id, SearchBook book) {
+    _idByIdentity[_identity(book)] = id;
+    if (book.bookUrl.isNotEmpty) _idByUrl[_urlKey(book)] = id;
+  }
+
+  static String _urlKey(SearchBook book) =>
+      '${book.bookKind.name}\u0000${book.origin}\u0000${book.bookUrl}';
+
+  /// [card] 補上同一本的 [other] 的書源，缺的欄位照它補，簡介取長的。
+  static void _absorb(SearchBook card, SearchBook other) {
+    if (identical(card, other)) return;
+    final labels = other.sourceLabels;
+    for (final (i, origin) in other.origins.indexed) {
+      if (card.origins.contains(origin)) continue;
+      card.addOrigin(origin, name: labels[i] == origin ? null : labels[i]);
+    }
+    String? filled(String? value) =>
+        (value ?? '').trim().isEmpty ? null : value;
+    card.author = filled(card.author) ?? other.author;
+    card.kind = filled(card.kind) ?? other.kind;
+    card.wordCount = filled(card.wordCount) ?? other.wordCount;
+    card.coverUrl = filled(card.coverUrl) ?? other.coverUrl;
+    if ((other.intro ?? '').trim().length > (card.intro ?? '').trim().length) {
+      card.intro = other.intro;
+    }
   }
 
   static String _identity(SearchBook book) =>
@@ -1074,7 +1168,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
         '${lines.join('\n')}';
   }
 
-  static String _bookLine(_Found found) {
+  String _bookLine(_Found found) {
     final b = found.book;
     // 欄位裡的換行與連續空白合成一個空格：書源規則抓到的字串有時帶換行，
     // 一本一行的格式就斷了（2026-11-15 實跑：「完结\n{{$..shortName」）。
@@ -1095,9 +1189,11 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
     ].join('｜');
   }
 
-  /// 書卡上簡介的開頭：清成一行純文字，最多 [_introLength] 字。
-  static String? _introHead(String? intro) {
-    final text = aiFindPlainText(intro ?? '').replaceAll(RegExp(r'\s+'), ' ');
+  /// 書卡上簡介的開頭：清成一行純文字，最多 [_introLength] 字。先遮秘密再截：
+  /// 秘密截在中間的話，殘段比對不到。
+  String? _introHead(String? intro) {
+    final text = aiFindPlainText(redact(intro ?? ''))
+        .replaceAll(RegExp(r'\s+'), ' ');
     if (text.isEmpty) return null;
     return text.length <= _introLength
         ? text
@@ -1109,7 +1205,7 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
   static const int _introLength = 60;
 
   AgentResult _unknownBook(String id) =>
-      AgentToolResult('# 沒有編號 $id 的書：編號在搜尋或發現頁的結果裡');
+      AgentToolResult('# 沒有編號 $id 的書：編號在搜尋、發現頁與書架的結果裡');
 
   static String _kindLabel(BookSourceKind kind) => switch (kind) {
     BookSourceKind.comic => '漫畫',
@@ -1153,4 +1249,10 @@ final class _FindAgent implements AgentTask<AiFindCommand> {
 }
 
 /// 一次搜尋記下的結果：書、搜尋頁的分段與那次實際的情況。
-typedef _Search = ({List<SearchBook> books, List<int> tiers, String facts});
+/// [others] 是書名與作者都不含關鍵字、不列給 AI 的那些（篩選時記進紀錄）。
+typedef _Search = ({
+  List<SearchBook> books,
+  List<int> tiers,
+  List<SearchBook> others,
+  String facts,
+});

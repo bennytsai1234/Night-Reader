@@ -17,6 +17,7 @@ import 'package:night_reader/core/models/ai_find_record.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 
 SearchBook _book(String name, {String author = '作者', int type = 0}) =>
     SearchBook(
@@ -131,11 +132,17 @@ class _Library implements AiFindLibrary {
         )
       : null;
 
+  /// 給了時書架上是這一本（有書源、有分類與簡介），不然是沒有書源的詭秘之主。
+  SearchBook? shelfBook;
+
+  /// 書架那本的簡介（沒給時是固定的一句）。
+  String? shelfIntro;
+
   @override
   Future<List<AiFindShelfEntry>> shelf() async => [
     (
-      name: '詭秘之主',
-      author: '烏賊',
+      name: shelfBook?.name ?? '詭秘之主',
+      author: shelfBook?.author ?? '烏賊',
       kind: BookSourceKind.novel,
       onShelf: true,
       local: false,
@@ -143,6 +150,9 @@ class _Library implements AiFindLibrary {
       chapter: '第100章',
       chapterIndex: 100,
       chapterTotal: 1400,
+      category: shelfBook == null ? null : '都市,後宮',
+      intro: shelfBook == null ? null : shelfIntro ?? '穿越後的豔遇人生',
+      book: shelfBook,
     ),
   ];
 }
@@ -652,6 +662,183 @@ void main() {
     ]);
     expect(lines.first, contains('另有 1 本書名與作者都不含這個詞，沒列出'));
     expect(lines[2], endsWith('｜簡介：咒術迴戰 的簡介'));
+  });
+
+  test('a filter keeps the searched books whose name, category or intro has '
+      'every group, in simplified or traditional, without searching again', () {
+    // App 裡搜尋開始前就載好字典（SearchModel）；這裡只給比對用到的字。
+    ChineseUtils.initializeFromDictionaryData(['', '', '', '後\t后\n宮\t宫\n']);
+    SearchBook withIntro(String name, String intro, {String? kind}) =>
+        _book(name)
+          ..intro = intro
+          ..kind = kind;
+    final library = _Library({
+      '穿越': [
+        withIntro('穿越射鵰', '郭靖的兄弟', kind: '武俠,後宮'),
+        withIntro('穿越之偷香', '回到金庸的世界，一路后宫'),
+        withIntro('穿越金庸', '一心練武，無女主'),
+        withIntro('穿越末世', '末世求生，後宮'),
+      ],
+    })..tierOf = {'穿越射鵰': 0};
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越', 'filter': '後宮 金庸|射鵰'}),
+        ('search', {'keyword': '穿越', 'filter': '星際'}),
+      ]),
+    ]);
+    return session(library, ai).start().then((_) {
+      final results = ai.toolResults(2);
+      final lines = results.first.split('\n');
+      expect(lines.first, contains('篩選「後宮 金庸|射鵰」：4 本裡符合 2 本'));
+      expect(lines.sublist(1), [
+        '## 完全相符',
+        startsWith('b1｜穿越射鵰｜'),
+        '## 部分相符',
+        startsWith('b2｜穿越之偷香｜'),
+      ]);
+      expect(results.last, contains('篩選「星際」：4 本裡符合 0 本'));
+      expect(
+        library.calls.where((call) => call.startsWith('search')),
+        hasLength(1),
+        reason: '換篩選詞用同一次搜尋的結果',
+      );
+    });
+  });
+
+  test('the same search with another filter is not the same call', () {
+    AiToolCall call(Map<String, Object?> args) =>
+        (id: 'c', name: 'search', arguments: jsonEncode(args));
+    expect(
+      readAiFindCall(call({'keyword': '穿越', 'filter': '後宮'})).key,
+      isNot(readAiFindCall(call({'keyword': '穿越', 'filter': '金庸'})).key),
+    );
+    expect(
+      readAiFindCall(call({'keyword': '穿越', 'filter': ' | '})).key,
+      readAiFindCall(call({'keyword': '穿越'})).key,
+      reason: '沒有一個詞的篩選詞當沒給',
+    );
+  });
+
+  test('filter groups split on spaces, commas and 、; words in a group on '
+      'a half or full width bar', () {
+    expect(aiFindFilterGroups('後宮　金庸|射鵰、ABC｜銀河'), [
+      ['後宮'],
+      ['金庸', '射鵰'],
+      ['ABC', '銀河'],
+    ]);
+    expect(aiFindFilterGroups('|｜'), isEmpty);
+  });
+
+  test('the shelf tells each book its category and the start of its intro, '
+      'and a shelf book with a source gets a number to look at and '
+      'recommend', () async {
+    final library = _Library({})
+      ..shelfBook = _book('偷香高手', author: '小刀')
+      ..detailIntro = '穿越到金庸的世界';
+    final ai = _Ai([
+      _calls([('shelf', {})]),
+      _calls([
+        ('detail', {'book': 'b1'}),
+        ('read', {'book': 'b1'}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '在你書架上'},
+            ],
+            'summary': '照書架',
+          },
+        ),
+      ]),
+    ]);
+    final find = session(library, ai, count: 1);
+    await find.start();
+    final shelf = ai.toolResults(2).single;
+    expect(
+      shelf,
+      contains(
+        'b1｜偷香高手｜小刀｜小說｜讀了 2.0 小時｜讀到第 100／1400 章｜'
+        '分類：都市,後宮｜簡介：穿越後的豔遇人生',
+      ),
+    );
+    expect(library.calls, containsAll(['detail 偷香高手', 'chapter 偷香高手 1']));
+    expect(find.picks.single.book.name, '偷香高手');
+  });
+
+  test('a book on the shelf found again by a search keeps its number and '
+      'takes the sources and the longer intro the search found, even when '
+      'the shelf has no author', () async {
+    ChineseUtils.initializeFromDictionaryData(['', '', '', '']);
+    final found = _book('偷香高手', author: '六如和尚')
+      ..intro = '主角變成宋青書，金庸十四本小說的大亂世'
+      ..addOrigin('https://b.test', name: 'B 站');
+    final library = _Library({
+      '偷香': [found],
+    })..shelfBook = _book('偷香高手', author: '');
+    final ai = _Ai([
+      _calls([('shelf', {})]),
+      _calls([
+        ('search', {'keyword': '偷香', 'filter': '金庸'}),
+      ]),
+    ]);
+    await session(library, ai).start();
+    final search = ai.toolResults(3).single;
+    expect(search, contains('符合 1 本'));
+    expect(search, contains('b1｜偷香高手｜六如和尚'), reason: '同一個網址，作者補上');
+    expect(search, contains('2 個書源'));
+    expect(search, contains('金庸十四本'));
+    expect(search, isNot(contains('b2')));
+  });
+
+  test('a secret in a shelf intro is masked before the intro is cut, so no '
+      'piece of it is left', () async {
+    const secret = 'token-abc-123456';
+    final library = _Library({})
+      ..shelfBook = _book('偷香高手')
+      ..shelfIntro = '${'穿' * 55}$secret 之後的故事'
+      ..secrets.add(secret);
+    final ai = _Ai([
+      _calls([('shelf', {})]),
+    ]);
+    await session(library, ai).start();
+    final shelf = ai.toolResults(2).single;
+    expect(shelf, isNot(contains('token-abc')));
+    expect(shelf, contains(aiRepairRedacted));
+  });
+
+  test('deep: reading only the last chapter of a longer novel is not '
+      'reading it', () async {
+    final ai = _Ai([
+      _calls([
+        ('search', {'keyword': '穿越'}),
+      ]),
+      _calls([
+        ('detail', {'book': 'b1'}),
+        ('read', {'book': 'b1', 'chapter': -1}),
+      ]),
+      _calls([
+        (
+          'submit',
+          {
+            'books': [
+              {'book': 'b1', 'reason': '獵魔'},
+            ],
+            'summary': '先交',
+          },
+        ),
+      ]),
+    ]);
+    await session(
+      _Library({
+        '穿越': [_book('獵魔人')],
+      }),
+      ai,
+      depth: AiFindDepth.deep,
+      count: 1,
+    ).start();
+    expect(ai.toolResults(4).single, contains('b1《獵魔人》：還沒讀過正文'));
   });
 
   test('a submit before a detail in the same reply is judged before that '

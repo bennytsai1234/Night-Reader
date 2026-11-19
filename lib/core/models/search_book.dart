@@ -60,8 +60,9 @@ class SearchBook implements RuleDataInterface {
   /// 永久污染，故這裡複製出全新的 representative 物件再累計 origins）。
   ///
   /// representative 決定點進去、加入書架預設的來源（[origin]）與卡片上的
-  /// 最新章節，見 [_pickRepresentative]。它缺的封面、簡介、分類與字數從
-  /// 群組裡其他來源補上。
+  /// 最新章節，見 [_pickRepresentative]。它缺的封面、分類與字數從群組裡
+  /// 其他來源補上；簡介取群組裡最長的那份：代表來源的簡介常只有「...」或
+  /// 一兩個字，同一本在別的書源有完整的（2026-11-18，AI 找書照簡介篩書）。
   static SearchBook aggregate(List<SearchBook> group) {
     if (group.isEmpty) {
       throw ArgumentError.value(group, 'group', 'aggregate 需要非空群組');
@@ -74,7 +75,9 @@ class SearchBook implements RuleDataInterface {
       // 作者，見 searchResultIdentity）跟著分組，不會因為換代表就變成另一本。
       card.author = _filled(card.author) ?? book.author;
       card.coverUrl = _filled(card.coverUrl) ?? book.coverUrl;
-      card.intro = _filled(card.intro) ?? book.intro;
+      if ((book.intro ?? '').trim().length > (card.intro ?? '').trim().length) {
+        card.intro = book.intro;
+      }
       card.kind = _filled(card.kind) ?? book.kind;
       card.wordCount = _filled(card.wordCount) ?? book.wordCount;
     }

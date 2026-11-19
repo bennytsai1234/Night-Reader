@@ -32,6 +32,14 @@
       ]
     },
     {
+      "id": "shelf-transmigration",
+      "description": "穿越爽文",
+      "depth": "normal",
+      "shelf": [
+        { "name": "偷香高手", "author": "六如和尚", "kind": "novel", "readSeconds": 180000 }
+      ]
+    },
+    {
       "id": "comic-shonen",
       "description": "熱血的少年漫畫，打鬥多一點",
       "depth": "normal"
