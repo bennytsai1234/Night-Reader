@@ -181,6 +181,16 @@ void main() {
     },
   );
 
+  // 更新時間是規則這一版的時間，校驗只標結果（同 Legado；匯入預覽靠它分新舊）。
+  test('a check keeps when the rules were changed', () async {
+    final (_, checked) = await _check(
+      _FakeBookSourceService(),
+      source: _source()..lastUpdateTime = 1000,
+    );
+
+    expect(checked.lastUpdateTime, 1000);
+  });
+
   test('an empty search marks search broken, still readable', () async {
     final (result, checked) = await _check(
       _FakeBookSourceService(search: () async => const <SearchBook>[]),

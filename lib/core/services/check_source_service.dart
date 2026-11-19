@@ -777,10 +777,7 @@ class CheckSourceService extends ChangeNotifier {
     if (!force && _shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
     source.removeInvalidGroups();
     source.removeErrorComment();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    source
-      ..lastUpdateTime = now
-      ..lastCheckTime = now;
+    source.lastCheckTime = DateTime.now().millisecondsSinceEpoch;
 
     final seenCategories = <SourceHealthCategory>{};
     for (final nextHealth in <SourceRuntimeHealth>[health, ...extraHealths]) {

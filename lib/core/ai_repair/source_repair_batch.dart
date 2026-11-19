@@ -837,9 +837,7 @@ Future<void> markAiUnfixable(BookSource source, String? reason) async {
       ..addHealthGroups(upstreamHealth(unstableSourceGroupTag))
       ..addErrorComment('AI：網站不穩定，無法修復');
   }
-  current
-    ..addGroup(aiUnfixableSourceGroupTag)
-    ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+  current.addGroup(aiUnfixableSourceGroupTag);
   await dao.upsert(current);
 }
 
@@ -853,13 +851,12 @@ Future<void> markSiteGone(BookSource source, String detail) async {
     ..removeInvalidGroups()
     ..removeErrorComment()
     ..addHealthGroups(upstreamHealth(siteBrokenSourceGroupTag))
-    ..addErrorComment('網站: $detail')
-    ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+    ..addErrorComment('網站: $detail');
   await dao.upsert(current);
 }
 
 /// 網站搬到 [movedTo]（`https://www.new.com`）：書源網址換開頭，規則裡寫死的
-/// 舊網域也換成新的。名稱、分組與註解照舊。
+/// 舊網域也換成新的，規則改了就記下時間。名稱、分組與註解照舊。
 BookSource movedSource(BookSource source, String movedTo) {
   final from = Uri.parse(siteOrigin(source.bookSourceUrl)!).host;
   final to = Uri.parse(movedTo).host;
@@ -882,7 +879,8 @@ BookSource movedSource(BookSource source, String movedTo) {
     ),
   ) as Map<String, dynamic>..addAll(keep);
   return BookSource.fromJson(moved)
-    ..bookSourceUrl = siteMovedUrl(source.bookSourceUrl, movedTo);
+    ..bookSourceUrl = siteMovedUrl(source.bookSourceUrl, movedTo)
+    ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
 }
 
 /// [text] 裡完整的網域 [from] 換成 [to]：前後不能接著網域的字，`old.com`

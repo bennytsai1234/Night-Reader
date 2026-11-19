@@ -287,7 +287,6 @@ class SourceChecker {
   Future<SourceCheckIsolateResult> _run() async {
     _source.removeInvalidGroups();
     _source.removeErrorComment();
-    _source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
 
     _log('⇒ 正在校驗 [${_source.bookSourceName}] ...');
 

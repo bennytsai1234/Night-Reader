@@ -165,4 +165,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(chosen, [novel, updated]);
   });
+
+  testWidgets('匯入預覽：檔案裡比這台舊的預設不匯入，打開才覆蓋', (tester) async {
+    final updated = BookSource(bookSourceUrl: 'https://new.test');
+    final older = BookSource(bookSourceUrl: 'https://old.test');
+    List<BookSource>? chosen;
+    await open(tester, (context) async {
+      chosen = await showImportPreviewSheet(
+        context,
+        ImportPreviewResult(
+          newSources: const [],
+          updatedSources: [updated],
+          olderSources: [older],
+          unchangedSources: const [],
+        ),
+      );
+    });
+    expect(find.text('匯入 2 個書源'), findsOneWidget);
+    expect(find.text('匯入 1 個'), findsOneWidget);
+
+    await tester.tap(find.text('換成檔案裡較舊的 1 個'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('匯入 2 個'));
+    await tester.pumpAndSettle();
+    expect(chosen, [updated, older]);
+  });
 }

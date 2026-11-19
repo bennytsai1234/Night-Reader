@@ -7,28 +7,33 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 class ImportPreviewResult {
   final List<BookSource> newSources;
+
+  /// 檔案裡比這台新的（更新時間較晚）：預設覆蓋。
   final List<BookSource> updatedSources;
+
+  /// 檔案裡比這台舊的：這台的多半是改過或修好的，預設不覆蓋。
+  final List<BookSource> olderSources;
   final List<BookSource> unchangedSources;
   final List<BookSource> unsupportedSources;
 
   ImportPreviewResult({
     required this.newSources,
     required this.updatedSources,
+    this.olderSources = const <BookSource>[],
     required this.unchangedSources,
     this.unsupportedSources = const <BookSource>[],
   });
 
   int get total =>
-      newSources.length + updatedSources.length + unchangedSources.length;
-
-  int get importableTotal =>
-      newSources.length + updatedSources.length + unchangedSources.length;
-
-  int get unsupportedCount => unsupportedSources.length;
+      newSources.length +
+      updatedSources.length +
+      olderSources.length +
+      unchangedSources.length;
 }
 
 /// 匯入前的底部面板：新增、覆蓋已有的各一個開關，漫畫源、有聲源各一個，
-/// 預設都開著，關掉的不匯入（ADR 0051）；無變化與不支援的數量寫在卡片下方。
+/// 預設都開著，關掉的不匯入（ADR 0051）；檔案裡比這台舊的另一個開關，預設
+/// 關著（同 Legado 不預先勾「已有」）。無變化與不支援的數量寫在卡片下方。
 /// 回傳確認匯入的書源；關掉面板時回傳 null。
 Future<List<BookSource>?> showImportPreviewSheet(
   BuildContext context,
@@ -36,9 +41,14 @@ Future<List<BookSource>?> showImportPreviewSheet(
 ) {
   var importNew = true;
   var importUpdated = true;
+  var importOlder = false;
   var importComic = true;
   var importAudio = true;
-  final incoming = [...preview.newSources, ...preview.updatedSources];
+  final incoming = [
+    ...preview.newSources,
+    ...preview.updatedSources,
+    ...preview.olderSources,
+  ];
   final comicCount = incoming
       .where((s) => s.sourceKind == BookSourceKind.comic)
       .length;
@@ -53,6 +63,7 @@ Future<List<BookSource>?> showImportPreviewSheet(
   List<BookSource> chosen() => [
     if (importNew) ...preview.newSources,
     if (importUpdated) ...preview.updatedSources,
+    if (importOlder) ...preview.olderSources,
   ].where(keptKind).toList();
   return AppBottomSheet.showCustom<List<BookSource>>(
     context: context,
@@ -61,7 +72,7 @@ Future<List<BookSource>?> showImportPreviewSheet(
       builder: (sheetContext, setState) {
         final p = preview;
         final selectedCount = chosen().length;
-        final nothing = p.newSources.isEmpty && p.updatedSources.isEmpty;
+        final nothing = incoming.isEmpty;
         // 卡片下方的附註只放數量：跳過的與以停用狀態匯入的。
         final footer = [
           if (p.unchangedSources.isNotEmpty)
@@ -97,6 +108,12 @@ Future<List<BookSource>?> showImportPreviewSheet(
                     title: '覆蓋已有的 ${p.updatedSources.length} 個',
                     value: importUpdated,
                     onChanged: (v) => setState(() => importUpdated = v),
+                  ),
+                if (p.olderSources.isNotEmpty)
+                  GroupedSwitchRow(
+                    title: '換成檔案裡較舊的 ${p.olderSources.length} 個',
+                    value: importOlder,
+                    onChanged: (v) => setState(() => importOlder = v),
                   ),
               ],
             ),

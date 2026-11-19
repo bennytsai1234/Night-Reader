@@ -1564,7 +1564,9 @@ Future<bool> restoreAiRepair(
     await store.remove(sourceUrl);
     return false;
   }
-  final previous = BookSource.fromJson(json);
+  // 換回改前的規則也是改了一版：記下時間，匯入預覽才認得這是新的一版。
+  final previous = BookSource.fromJson(json)
+    ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
   await BookSourceService().saveEditedSource(
     previous,
     previousUrl: previous.bookSourceUrl == sourceUrl ? null : sourceUrl,
