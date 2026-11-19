@@ -29,9 +29,10 @@ void main() {
       expect(offline.health.label, isNot(siteBrokenSourceGroupTag));
     });
 
-    test('整段逾時：校驗超時，說明照逾時寫的', () {
+    test('整段逾時：校驗超時，說明一律是同一句', () {
       final issue = classify(TimeoutException('搜尋檢查超時：超過 20 秒'));
       expect(issue.stage, 'timeout');
+      expect(issue.message, '校驗超時或來源響應過慢');
       expect(issue.health.label, timeoutSourceGroupTag);
     });
 
@@ -69,6 +70,14 @@ void main() {
         expect(discovered.health.quarantined, isFalse, reason: stage);
         expect(discovered.health.allowsSearch, isTrue, reason: stage);
       }
+    });
+
+    test('搜尋到的書正文：抓取出錯和抓到過短的說明不同', () {
+      expect(
+        classify(Exception('解析失敗'), stage: 'content').health.description,
+        '正文抓取失敗或無法閱讀',
+      );
+      expect(contentHealthFor(CheckMode.search).description, '正文內容過短或為空');
     });
 
     test('搜尋本身出錯：搜尋失效，閱讀照常', () {
@@ -110,6 +119,14 @@ void main() {
       expect(
         hasTerminalIssue([issue('toc', '下載站', downloadOnlyHealth)]),
         isTrue,
+        reason: '該清理',
+      );
+      expect(
+        hasTerminalIssue([
+          issue('detail', '詳情頁返回空資料', detailHealthFor(CheckMode.search)),
+        ]),
+        isTrue,
+        reason: '會隔離',
       );
     });
   });

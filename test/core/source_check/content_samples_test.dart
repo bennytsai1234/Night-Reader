@@ -50,6 +50,20 @@ void main() {
       expect(sharedSentences(ad, ad), isNotNull);
     });
 
+    test('兩邊各有一半是同樣的句子才算', () {
+      const shared = '甲乙丙丁戊。';
+      expect(
+        sharedSentences('$shared己庚辛壬癸。', '$shared子丑寅卯辰。'),
+        isNotNull,
+        reason: '兩邊都剛好一半',
+      );
+      expect(
+        sharedSentences(shared, '$shared子丑寅卯辰。巳午未申酉。'),
+        isNull,
+        reason: '只有短的那邊一半以上',
+      );
+    });
+
     test('不同的正文不算，只共用一句作者的話也不算', () {
       const note = '求月票。';
       final a = '$note${List.filled(20, '主角走進城裡。').join()}';
@@ -58,10 +72,25 @@ void main() {
     });
   });
 
-  test('目錄或第一章的網址是下載檔，就是下載站', () {
-    Book at(String url, {String origin = 'source'}) =>
-        Book(bookUrl: url, origin: origin);
+  test('書、目錄或第一章的網址是下載檔，就是下載站', () {
+    Book at(String url, {String origin = 'source', String tocUrl = ''}) =>
+        Book(bookUrl: url, origin: origin, tocUrl: tocUrl);
     expect(looksLikeDownloadOnly(at('https://x/book.zip'), const []), isTrue);
+    expect(
+      looksLikeDownloadOnly(
+        at('https://x/book/1', tocUrl: 'https://x/download/1'),
+        const [],
+      ),
+      isTrue,
+      reason: '目錄網址',
+    );
+    expect(
+      looksLikeDownloadOnly(at('https://x/book/1'), [
+        BookChapter(url: 'https://x/1.txt', title: '全本', bookUrl: 'b'),
+      ]),
+      isTrue,
+      reason: '第一章的網址',
+    );
     expect(
       looksLikeDownloadOnly(at('https://x/book/1'), [chapter(0)]),
       isFalse,
