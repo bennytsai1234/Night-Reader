@@ -9,7 +9,6 @@ import 'package:night_reader/core/models/book/book_chapter.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton/skeleton_reveal.dart';
-import 'package:night_reader/features/reader/features/illustration/reader_illustration_viewer.dart';
 import 'package:night_reader/features/reader/features/settings/reader_highlight_style.dart';
 import 'package:night_reader/features/reader/features/tts/reader_tts_highlight.dart';
 import 'package:night_reader/features/reader/layout/reader_style_preferences.dart';
@@ -35,7 +34,7 @@ import 'overlay/reader_skeleton_page.dart';
 import 'overlay/reader_unavailable_message.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/reader_text_selection_layer.dart';
-import 'paragraph/paragraph_cache.dart' show IllustrationPaint;
+import 'overlay/reader_text_touch.dart';
 import 'pipeline/layout_disk_cache.dart';
 import 'pipeline/layout_pipeline.dart';
 import 'progress/progress_calculator.dart';
@@ -43,7 +42,6 @@ import 'pump/budget_governor.dart';
 import '../use_cases/coordinators/reader_chapter_navigation_resolver.dart';
 import 'text/chapter_text_window.dart';
 import 'text/text_preprocessor.dart';
-import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
 import 'view/reader_scroll_controller.dart';
 import 'view/reader_scroll_view.dart';
@@ -153,8 +151,6 @@ class ReaderTextView extends StatefulWidget {
 
 class _ReaderTextViewState extends State<ReaderTextView>
     with TickerProviderStateMixin {
-  static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
-  static const double _minimumViewportMovement = 0.01;
   static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
   final GlobalKey _centerKey = GlobalKey(debugLabel: 'text-view-center-sliver');
   final MeasurementStore _measurementStore = MeasurementStore();
@@ -162,7 +158,6 @@ class _ReaderTextViewState extends State<ReaderTextView>
     centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
   );
   final BudgetGovernor _governor = BudgetGovernor();
-  final ViewportCommandQueue _commands = ViewportCommandQueue();
   final ReaderScrollPhysics _physics = const ReaderScrollPhysics();
   late ChapterTextWindow _chapterRepo;
   late final AdmissionController _admission;
@@ -173,7 +168,6 @@ class _ReaderTextViewState extends State<ReaderTextView>
   late LayoutPipeline _pipeline;
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
   ReaderScrollController? _scrollController;
-  PageTurn? _pageTurn;
   Size _viewportSize = Size.zero;
 
   /// 書籤記號、標註與朗讀高亮的行框，照目前這一代排版管線算。
@@ -250,12 +244,20 @@ class _ReaderTextViewState extends State<ReaderTextView>
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
-  final SelectionService _selection = SelectionService();
-  final WordSegmenter _wordSegmenter = const WordSegmenter();
 
-  /// 每次長按或取消都換號；選詞要等原生斷詞回來，期間若已取消或又長按
-  /// 別處，舊結果作廢。
-  int _selectionRequest = 0;
+  /// 點擊、長按與選字（[ReaderTextTouch]）。
+  late final ReaderTextTouch _touch = ReaderTextTouch(
+    pipeline: () => _pipeline,
+    documentIndex: _documentIndex,
+    marks: _marks,
+    scrollOffset: _effectiveScrollOffset,
+    context: () => context,
+    mounted: () => mounted,
+    selectionAllowed: () => widget.textSelectionEnabled && !_controlsVisible,
+    highlights: () => widget.highlights?.value,
+    onHighlightTap: () => widget.onHighlightTap,
+    onContentTapUp: () => widget.onContentTapUp,
+  );
 
   @override
   void initState() {
@@ -353,14 +355,14 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (oldWidget.runtime != widget.runtime ||
         !widget.textSelectionEnabled ||
         _controlsVisible) {
-      _clearSelection();
+      _touch.clear();
     }
   }
 
   bool get _controlsVisible => widget.controlsVisible?.value ?? false;
 
   void _onControlsVisibleChanged() {
-    if (_controlsVisible) _clearSelection();
+    if (_controlsVisible) _touch.clear();
   }
 
   /// 離開閱讀器時記下目前這一頁。在 [dispose] 時正文的捲動位置已經拆掉，
@@ -383,7 +385,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     unawaited(_chapterRepo.dispose());
     _admission.dispose();
     _scrollController?.dispose();
-    _selection.dispose();
+    _touch.dispose();
     _revealTimer?.cancel();
     _veil.dispose();
     super.dispose();
@@ -780,7 +782,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
       if (!_dragging && notification.dragDetails != null) {
         _dragging = true;
         _sawUserScroll = true;
-        _clearSelection();
+        _touch.clear();
         _runtimeLocationRevision += 1;
         widget.runtime.cancelJumpForUserScroll();
         _pipeline.onScrollStateChanged(PumpState.dragging);
@@ -813,12 +815,10 @@ class _ReaderTextViewState extends State<ReaderTextView>
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return;
     final position = controller.position;
-    if (position.pixels >=
-        position.maxScrollExtent - _minimumViewportMovement) {
+    if (position.pixels >= position.maxScrollExtent - minimumViewportMovement) {
       _retryUnavailableFrontier(forward: true);
     }
-    if (position.pixels <=
-        position.minScrollExtent + _minimumViewportMovement) {
+    if (position.pixels <= position.minScrollExtent + minimumViewportMovement) {
       _retryUnavailableFrontier(forward: false);
     }
   }
@@ -889,42 +889,6 @@ class _ReaderTextViewState extends State<ReaderTextView>
     await widget.runtime.saveProgress(immediate: true);
   }
 
-  Future<bool> _ensurePageDistanceAvailable({
-    required bool forward,
-    required double distance,
-    required bool Function() isCurrent,
-  }) async {
-    if (!isCurrent() ||
-        distance <= 0 ||
-        !(_scrollController?.hasClients ?? false)) {
-      return false;
-    }
-    final geometryRevision = _documentIndex.revisionNumber;
-    final pixels = _scrollController!.position.pixels;
-    final target = pixels + (forward ? distance : -distance);
-    final top = math.min(pixels, target);
-    final bottom = math.max(pixels, target) + _viewportSize.height;
-    final pipeline = _pipeline;
-    while (isCurrent()) {
-      pipeline.requestWindow(top, bottom);
-      if (pipeline.windowReady(top, bottom)) {
-        if (_documentIndex.revisionNumber != geometryRevision) {
-          await _nextFrame();
-        }
-        return isCurrent();
-      }
-      final wait = await pipeline.waitForProgress(isCurrent);
-      switch (wait) {
-        case MaterializationWait.progressed:
-          continue;
-        case MaterializationWait.frontierUnavailable:
-        case MaterializationWait.cancelled:
-          return false;
-      }
-    }
-    return false;
-  }
-
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
     if (!mounted || timings.isEmpty) return;
     _governor.recordFrameTimings(timings);
@@ -982,7 +946,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     if (!_paper.claimForJump(jump, textShown: _initialRestoreCompleted)) {
       return;
     }
-    _clearSelection();
+    _touch.clear();
     _coverText();
   }
 
@@ -1247,15 +1211,35 @@ class _ReaderTextViewState extends State<ReaderTextView>
     ).progressForLocation(location, chapterLength: blocks.displayText.length);
   }
 
+  /// 翻頁、自動捲動、朗讀跟隨與停住捲動（[ViewportCommands]）。
+  late final ViewportCommands _viewportCommands = ViewportCommands(
+    scroll: () => _scrollController,
+    pipeline: () => _pipeline,
+    documentIndex: _documentIndex,
+    admission: _admission,
+    viewportHeight: () => _viewportSize.height,
+    scrollOffset: _effectiveScrollOffset,
+    runtime: () => widget.runtime,
+    isResident: (chapter) => _chapterRepo.isResident(chapter),
+    pageTurnOverlap: () => widget.pageTurnOverlap,
+    pageTurnDuration: () => widget.pageTurnDuration,
+    captureOwner: _captureCommandOwner,
+    userScrolling: () => _sawUserScroll,
+    onStop: () => _runtimeLocationRevision += 1,
+    onSettled: _handleScrollSettled,
+    onScrolled: () {
+      _scheduleMotionCapture();
+      _reconcileVisibleWindow();
+    },
+    onUnreachable: _retryUnavailableFrontier,
+    restoreAt: (location, isCurrent) =>
+        _restoreCore(location, isCurrent: isCurrent),
+  );
+
   void _attachController() {
+    _viewportCommands.attach(widget.viewportController);
     widget.viewportController
-      ?..scrollBy = _scrollBy
-      ..continuousScrollBy = _continuousScrollBy
-      ..moveToNextPage = _moveToNextPage
-      ..moveToPrevPage = _moveToPrevPage
-      ..settleScroll = _settleScroll
-      ..ensureCharRangeVisible = _ensureCharRangeVisible
-      ..dismissSelection = _dismissSelection
+      ?..dismissSelection = _touch.dismiss
       ..isTextCovered = _isTextCovered;
   }
 
@@ -1263,30 +1247,16 @@ class _ReaderTextViewState extends State<ReaderTextView>
 
   void _detachController(ReaderViewportController? controller) {
     if (controller == null) return;
-    if (controller.scrollBy == _scrollBy) controller.scrollBy = null;
-    if (controller.continuousScrollBy == _continuousScrollBy) {
-      controller.continuousScrollBy = null;
-    }
-    if (controller.moveToNextPage == _moveToNextPage) {
-      controller.moveToNextPage = null;
-    }
-    if (controller.moveToPrevPage == _moveToPrevPage) {
-      controller.moveToPrevPage = null;
-    }
-    if (controller.settleScroll == _settleScroll) {
-      controller.settleScroll = null;
-    }
-    if (controller.dismissSelection == _dismissSelection) {
+    _viewportCommands.detach(controller);
+    if (controller.dismissSelection == _touch.dismiss) {
       controller.dismissSelection = null;
-    }
-    if (controller.ensureCharRangeVisible == _ensureCharRangeVisible) {
-      controller.ensureCharRangeVisible = null;
     }
     if (controller.isTextCovered == _isTextCovered) {
       controller.isTextCovered = null;
     }
   }
 
+  /// 收到命令那一刻記下這個命令還算不算數（[ViewportCommands]）。
   bool Function() _captureCommandOwner() {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
@@ -1312,437 +1282,6 @@ class _ReaderTextViewState extends State<ReaderTextView>
         // 等跳章正文時紙下的正文歸那次跳章：翻頁、自動捲動與朗讀跟隨都
         // 不能移動它，跳章結束後再來。
         !_paper.holdsTextForJump;
-  }
-
-  Future<bool> _enqueueCommand(Future<bool> Function(bool Function()) command) {
-    final current = _captureCommandOwner();
-    return _commands.enqueue(
-      isCurrent: current,
-      command: () => command(current),
-    );
-  }
-
-  Future<bool> _scrollBy(double delta) =>
-      _enqueueCommand((current) => _scrollByNow(delta, current));
-
-  Future<bool> _continuousScrollBy(double delta) =>
-      _enqueueCommand((current) => _continuousScrollByNow(delta, current));
-
-  Future<bool> _moveToNextPage() => _movePage(forward: true);
-
-  Future<bool> _moveToPrevPage() => _movePage(forward: false);
-
-  /// 同方向的翻頁動畫還在跑時，這一下直接把目標再往後推一頁、從目前
-  /// 位置接著捲，不等前一下停下來；推不了（正文還沒排好）才排隊。
-  /// 翻頁後面已經有排隊的命令（例如反方向的一下）時也排隊，照點擊順序
-  /// 執行。
-  Future<bool> _movePage({required bool forward}) {
-    final turn = _pageTurn;
-    if (turn != null &&
-        turn.forward == forward &&
-        _commands.queued <= 1 &&
-        turn.isCurrent() &&
-        _extendPageTurn(turn)) {
-      return turn.finished.future;
-    }
-    return _enqueueCommand(
-      (current) => _movePageNow(forward: forward, isCurrent: current),
-    );
-  }
-
-  Future<void> _settleScroll() async {
-    // 使用者正在拖動或甩動時捲動歸使用者：停在這裡會打斷手勢，
-    // 手勢結束時也會自行儲存位置。
-    if (_sawUserScroll) return;
-    _runtimeLocationRevision += 1;
-    final controller = _scrollController;
-    if (controller != null && controller.hasClients) {
-      final pixels = controller.position.pixels;
-      controller.position.jumpTo(pixels);
-    }
-    await _handleScrollSettled();
-  }
-
-  bool _jumpBy(double delta) {
-    final controller = _scrollController;
-    if (controller == null || !controller.hasClients || delta == 0) {
-      return false;
-    }
-    final position = controller.position;
-    final before = position.pixels;
-    final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target = (before + delta)
-        .clamp(position.minScrollExtent, max)
-        .toDouble();
-    if ((target - before).abs() < _minimumViewportMovement) return false;
-    position.jumpTo(target);
-    return true;
-  }
-
-  Future<bool> _scrollByNow(double delta, bool Function() isCurrent) async {
-    if (!isCurrent() || !_jumpBy(delta)) return false;
-    await _handleScrollSettled();
-    return isCurrent();
-  }
-
-  Future<bool> _continuousScrollByNow(
-    double delta,
-    bool Function() isCurrent,
-  ) async {
-    if (!isCurrent() || !_jumpBy(delta)) return false;
-    _scheduleMotionCapture();
-    _reconcileVisibleWindow();
-    return isCurrent();
-  }
-
-  double? _pageTurnDistance() {
-    final style = widget.runtime.state.layoutSpec.style;
-    return pageTurnDistance(
-      viewportHeight: _viewportSize.height,
-      overlapLines: widget.pageTurnOverlap,
-      lineExtent: style.fontSize * style.effectiveLineHeight,
-    );
-  }
-
-  /// 把進行中的翻頁再推一頁。只在新目標之前的正文已經排好、而且在目前
-  /// 捲動範圍內時才推，否則回傳 false 讓這一下排隊。
-  bool _extendPageTurn(PageTurn turn) {
-    final controller = _scrollController;
-    final distance = _pageTurnDistance();
-    if (controller == null || !controller.hasClients || distance == null) {
-      return false;
-    }
-    final position = controller.position;
-    if (!position.isPageTurning) return false;
-    final target = turn.target + (turn.forward ? distance : -distance);
-    if (target < position.minScrollExtent ||
-        target > position.maxScrollExtent) {
-      return false;
-    }
-    final top = math.min(position.pixels, target);
-    final bottom = math.max(position.pixels, target) + _viewportSize.height;
-    _pipeline.requestWindow(top, bottom);
-    if (!_pipeline.windowReady(top, bottom)) return false;
-    turn
-      ..target = target
-      ..requestedDistance += distance
-      ..animation = position.animatePageTo(
-        target,
-        duration: widget.pageTurnDuration,
-        curve: Curves.easeOutCubic,
-      );
-    return true;
-  }
-
-  Future<bool> _movePageNow({
-    required bool forward,
-    required bool Function() isCurrent,
-  }) async {
-    if (!isCurrent()) return false;
-    final distance = _pageTurnDistance();
-    if (distance == null) return false;
-    final controller = _scrollController;
-    if (controller == null || !controller.hasClients) return false;
-
-    final reachable = await _ensurePageDistanceAvailable(
-      forward: forward,
-      distance: distance,
-      isCurrent: isCurrent,
-    );
-    if (!isCurrent() || !controller.hasClients) return false;
-    if (!reachable) {
-      _retryUnavailableFrontier(forward: forward);
-      return false;
-    }
-
-    final position = controller.position;
-    final before = position.pixels;
-    final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target = (before + (forward ? distance : -distance))
-        .clamp(position.minScrollExtent, max)
-        .toDouble();
-    if ((target - before).abs() < _minimumViewportMovement) {
-      _emitBookBoundaryNotice(forward: forward);
-      return false;
-    }
-
-    final turn = PageTurn(
-      forward: forward,
-      target: target,
-      requestedDistance: distance,
-      isCurrent: isCurrent,
-    );
-    _pageTurn = turn;
-    try {
-      turn.animation = position.animatePageTo(
-        target,
-        duration: widget.pageTurnDuration,
-        curve: Curves.easeOutCubic,
-      );
-      // 連點會換掉 turn.animation；等到最後一段動畫結束才算翻完。
-      while (true) {
-        final animation = turn.animation;
-        await animation;
-        if (!isCurrent()) return turn.finish(false);
-        if (identical(animation, turn.animation)) break;
-      }
-      _pageTurn = null;
-      // 沒停在目標上代表手指拖動接手了；位置歸使用者，由拖動結束時儲存。
-      if (!controller.hasClients ||
-          (position.pixels - turn.target).abs() >= _minimumViewportMovement) {
-        return turn.finish(false);
-      }
-      await _handleScrollSettled();
-      if (!isCurrent() || !controller.hasClients) return turn.finish(false);
-      final atBookBoundary = forward
-          ? _admission.atForwardBookBoundary
-          : _admission.atBackwardBookBoundary;
-      return turn.finish(
-        isPageMoveComplete(
-          requestedDistance: turn.requestedDistance,
-          actualDistance: (position.pixels - before).abs(),
-          atBookBoundary: atBookBoundary,
-        ),
-      );
-    } catch (_) {
-      turn.finish(false);
-      rethrow;
-    } finally {
-      if (identical(_pageTurn, turn)) _pageTurn = null;
-    }
-  }
-
-  void _emitBookBoundaryNotice({required bool forward}) {
-    final controller = _scrollController;
-    if (controller == null || !controller.hasClients) return;
-    final position = controller.position;
-    final atExtent = forward
-        ? position.pixels >= position.maxScrollExtent - _minimumViewportMovement
-        : position.pixels <=
-              position.minScrollExtent + _minimumViewportMovement;
-    final atBookBoundary = forward
-        ? _admission.atForwardBookBoundary
-        : _admission.atBackwardBookBoundary;
-    if (!atExtent || !atBookBoundary) return;
-    widget.runtime.emitUserNotice(forward ? '已到書尾' : '已到書首');
-  }
-
-  Future<bool> _ensureCharRangeVisibleNow({
-    required int chapterIndex,
-    required int startCharOffset,
-    required int endCharOffset,
-    required bool Function() isCurrent,
-  }) async {
-    final runtime = widget.runtime;
-    if (!isCurrent() || runtime.chapterCount <= 0) return false;
-    final safeChapter = chapterIndex.clamp(0, runtime.chapterCount - 1).toInt();
-    if (!_chapterRepo.isResident(safeChapter)) {
-      final ok = await _restoreCore(
-        ReaderLocation(
-          chapterIndex: safeChapter,
-          charOffset: math.min(startCharOffset, endCharOffset),
-        ),
-        isCurrent: isCurrent,
-      );
-      if (ok && isCurrent()) await _handleScrollSettled();
-      return ok && isCurrent();
-    }
-    final pipeline = _pipeline;
-    final blocks = await pipeline.ensureChapter(
-      safeChapter,
-      priority: LayoutTaskPriority.anchor,
-    );
-    if (blocks == null || !isCurrent()) return false;
-    final start = math.min(startCharOffset, endCharOffset);
-    final end = math.max(startCharOffset, endCharOffset);
-    final anchorKey = blocks.blockForCharOffset(start).key;
-    if (_documentIndex.topOf(anchorKey) == null) {
-      final ok = await _restoreCore(
-        ReaderLocation(chapterIndex: safeChapter, charOffset: start),
-        isCurrent: isCurrent,
-      );
-      if (ok && isCurrent()) await _handleScrollSettled();
-      return ok && isCurrent();
-    }
-    final leases = await pipeline.retainRange(blocks, start, end, isCurrent);
-    try {
-      if (!isCurrent()) return false;
-      final rect = pipeline.geometry.rangeRect(blocks, start, end);
-      final offset = _effectiveScrollOffset();
-      if (rect == null || offset == null) return false;
-      final height = _viewportSize.height;
-      final topPadding = math.min(80.0, height * 0.14);
-      final bottomPadding = math.min(120.0, height * 0.20);
-      final preferredTopInset = math.min(180.0, height * 0.32);
-      final comfortBottom = offset + math.min(220.0, height * 0.46);
-      final visibleTop = offset + topPadding;
-      final visibleBottom = offset + height - bottomPadding;
-      final safelyVisible =
-          rect.top >= visibleTop && rect.bottom <= visibleBottom;
-      if (safelyVisible && rect.top <= comfortBottom) return true;
-      final preferredTarget = rect.top - preferredTopInset;
-      final minTarget = rect.bottom - height + bottomPadding;
-      final maxTarget = rect.top - topPadding;
-      final target = minTarget <= maxTarget
-          ? preferredTarget.clamp(minTarget, maxTarget).toDouble()
-          : minTarget;
-      final controller = _scrollController;
-      if (controller == null || !controller.hasClients) return false;
-      final position = controller.position;
-      final bounded = target
-          .clamp(
-            math.min(position.minScrollExtent, position.pixels),
-            math.max(position.maxScrollExtent, position.pixels),
-          )
-          .toDouble();
-      await position.animateTo(
-        bounded,
-        duration: _viewportMotionDuration,
-        curve: Curves.easeOutCubic,
-      );
-      if (!isCurrent()) return false;
-      await _handleScrollSettled();
-      return isCurrent();
-    } finally {
-      for (final lease in leases) {
-        lease.release();
-      }
-    }
-  }
-
-  /// 拖把手時 viewport 座標 [point] 在選取段落內最近的游標位置。
-  int? _selectionCaretAt(ReaderTextSelection selection, Offset point) {
-    final scrollOffset = _effectiveScrollOffset();
-    if (scrollOffset == null) return null;
-    return _pipeline.geometry.caretAt(
-      selection,
-      point.translate(0, scrollOffset),
-    );
-  }
-
-  List<LineBox> _selectionBoxes(ReaderTextSelection selection) {
-    if (!_pipeline.geometry.isSelectionCurrent(selection)) {
-      // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && identical(_selection.selection, selection)) {
-          _clearSelection();
-        }
-      });
-      return const <LineBox>[];
-    }
-    return _marks.lineBoxes(
-      selection.chapterIndex,
-      selection.range.start,
-      selection.range.end,
-    );
-  }
-
-  /// 文件座標 [point] 上的插圖（落在圖上才算）；沒有時回傳 null。
-  IllustrationPaint? _illustrationAt(Offset point) {
-    final key = _documentIndex.blockAtOffset(point.dy);
-    if (key == null) return null;
-    final blocks = _pipeline.blocksOf(key.chapterIndex);
-    if (blocks == null ||
-        key.blockIndex >= blocks.blocks.length ||
-        !blocks.blocks[key.blockIndex].isIllustration) {
-      return null;
-    }
-    final top = _documentIndex.topOf(key);
-    final paint = _pipeline.paragraphCache
-        .acquireEntry(key, _pipeline.epoch)
-        ?.illustration;
-    if (top == null || paint == null) return null;
-    final rect = paint.box.rect.shift(
-      Offset(_pipeline.layoutSpec.textPaddingLeft, top),
-    );
-    return rect.contains(point) ? paint : null;
-  }
-
-  Future<void> _handleLongPressStart(LongPressStartDetails details) async {
-    final request = ++_selectionRequest;
-    final scrollOffset = _effectiveScrollOffset();
-    // 長按插圖打開大圖，不選字（ADR 0050）。
-    final illustration = scrollOffset == null
-        ? null
-        : _illustrationAt(details.localPosition.translate(0, scrollOffset));
-    if (illustration != null) {
-      _selection.clear();
-      unawaited(Feedback.forLongPress(context));
-      unawaited(
-        Navigator.of(context)
-            .push(ReaderIllustrationViewer.route(illustration.path)),
-      );
-      return;
-    }
-    final hit = scrollOffset == null
-        ? null
-        : _pipeline.geometry.glyphAt(
-            details.localPosition.translate(0, scrollOffset),
-          );
-    if (hit == null) {
-      _selection.clear();
-      return;
-    }
-    unawaited(Feedback.forLongPress(context));
-    final epoch = _pipeline.epoch;
-    final paragraphText = hit.blocks.displayText.substring(
-      hit.paragraph.start,
-      hit.paragraph.end,
-    );
-    final word = await _wordSegmenter.wordAt(
-      paragraphText,
-      hit.offset - hit.paragraph.start,
-    );
-    if (!mounted ||
-        request != _selectionRequest ||
-        !widget.textSelectionEnabled ||
-        _controlsVisible ||
-        epoch != _pipeline.epoch ||
-        !identical(_pipeline.blocksOf(hit.blocks.chapterIndex), hit.blocks)) {
-      return;
-    }
-    _selection.select(
-      ReaderTextSelection(
-        blocks: hit.blocks,
-        epoch: epoch,
-        paragraph: hit.paragraph,
-        range: ChapterTextRange(
-          hit.paragraph.start + word.start,
-          hit.paragraph.start + word.end,
-        ),
-      ),
-    );
-  }
-
-  void _clearSelection() {
-    _selectionRequest += 1;
-    _selection.clear();
-  }
-
-  bool _dismissSelection() {
-    if (!_selection.active) return false;
-    _clearSelection();
-    return true;
-  }
-
-  void _handleContentTapUp(TapUpDetails details) {
-    // 選取中點正文只取消選取，不觸發翻頁或叫出選單。
-    if (_selection.active) {
-      _clearSelection();
-      return;
-    }
-    // 點到已畫的標註：打開那個標註，不翻頁、不叫選單。
-    if (widget.onHighlightTap case final onHighlightTap?) {
-      final id = _marks.highlightAt(
-        widget.highlights?.value,
-        details.localPosition,
-      );
-      if (id != null) {
-        onHighlightTap(id);
-        return;
-      }
-    }
-    widget.onContentTapUp?.call(details);
   }
 
   void _scheduleRebuild() {
@@ -1803,7 +1342,7 @@ class _ReaderTextViewState extends State<ReaderTextView>
     _veil.cover(skeleton: false, fade: true);
     if (!wasHolding) {
       // 紙從這一幀開始畫在正文上、攔下觸控。
-      _clearSelection();
+      _touch.clear();
       _holdScrollUnderVeil();
       _scheduleRebuild();
     }
@@ -2030,10 +1569,10 @@ class _ReaderTextViewState extends State<ReaderTextView>
         return ColoredBox(
           color: widget.backgroundColor,
           child: ReaderTextSelectionLayer(
-            selection: _selection,
+            selection: _touch.selection,
             repaint: controller,
-            boxesFor: _selectionBoxes,
-            caretAt: _selectionCaretAt,
+            boxesFor: _touch.boxesFor,
+            caretAt: _touch.caretAt,
             onHide: widget.onHideText == null
                 ? null
                 : (selection) => widget.onHideText!(selection.inParagraph),
@@ -2051,14 +1590,15 @@ class _ReaderTextViewState extends State<ReaderTextView>
               (controlsVisible, child) => ReaderPointerTapLayer(
                 onTapUp: widget.onContentTapUp == null || controlsVisible
                     ? null
-                    : _handleContentTapUp,
+                    : _touch.handleTapUp,
                 suppressTapAtPointerDown: _isUserFlingInProgress,
                 child: GestureDetector(
                   onLongPressStart:
                       widget.textSelectionEnabled &&
                           !controlsVisible &&
                           !_veilHoldsText
-                      ? (details) => unawaited(_handleLongPressStart(details))
+                      ? (details) =>
+                            unawaited(_touch.handleLongPressStart(details))
                       : null,
                   child: child,
                 ),
@@ -2085,17 +1625,4 @@ class _ReaderTextViewState extends State<ReaderTextView>
       child: child,
     );
   }
-
-  Future<bool> _ensureCharRangeVisible({
-    required int chapterIndex,
-    required int startCharOffset,
-    required int endCharOffset,
-  }) => _enqueueCommand(
-    (current) => _ensureCharRangeVisibleNow(
-      chapterIndex: chapterIndex,
-      startCharOffset: startCharOffset,
-      endCharOffset: endCharOffset,
-      isCurrent: current,
-    ),
-  );
 }
