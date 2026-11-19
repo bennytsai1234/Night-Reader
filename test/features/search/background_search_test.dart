@@ -783,8 +783,16 @@ void main() {
     expect(provider.failedSources, 1);
     expect(provider.searchedSourceCount, 3);
 
+    // 讀好重試得了的書源、引擎還沒開始（等繁簡字典）時就是搜尋中：不在這
+    // 段空檔先閃回結果工具列與頁首「搜尋」。
+    final seen = <bool>[];
+    void record() => seen.add(provider.isSearching);
+    provider.addListener(record);
     unawaited(provider.retryFailedSources());
     await until(() => loader.sent.length == 4);
+    provider.removeListener(record);
+    expect(seen, isNotEmpty);
+    expect(seen, everyElement(isTrue));
     expect(provider.isSearching, isTrue);
     expect(provider.searchedSourceCount, 3);
     loader.fail('乙');
