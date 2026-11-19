@@ -133,9 +133,6 @@ class _AppTransitionState extends State<_AppTransition>
   final _Trip _top = _Trip();
   final _Trip _under = _Trip();
 
-  /// 這一頁最近一次在 offstage 的那一幀（推入的第一幀，見 [_Trip]）。
-  Duration? _offstageFrame;
-
   late final HorizontalDragGestureRecognizer _drag;
 
   /// 手指放開後把頁面送完（或彈回）的那一段（[_Settling]）；進度直接寫回
@@ -399,22 +396,25 @@ class _AppTransitionState extends State<_AppTransition>
         child: widget.child,
       ),
       builder: (context, child) {
-        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子。
+        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子；被手勢
+        // 拖過的那一趟，手勢結束後也照跟手的樣子走完（[_Following]）。
         final gesturing = _route.popGestureInProgress;
+        final topFollows = _top.follows(gesturing: gesturing);
+        final underFollows = _under.follows(gesturing: gesturing);
         final size = MediaQuery.sizeOf(context);
         final background = Theme.of(context).scaffoldBackgroundColor;
         // 關閉動畫時照樣包同一串元件、停在整頁，手勢開始時頁面不會被搬動。
-        if (still && !gesturing) {
+        if (still && !topFollows && !underFollows) {
           return const UnderPose().wrap(
             const TopPose().wrap(child!, size),
             background,
           );
         }
         if (_route.offstage) {
-          _offstageFrame = SchedulerBinding.instance.currentFrameTimeStamp;
+          _top.offstage(SchedulerBinding.instance.currentFrameTimeStamp);
         }
         final origin = TransitionOrigin.of(_route);
-        final top = gesturing
+        final top = topFollows
             ? TopPose.follow(
                 widget.transition,
                 widget.animation.value,
@@ -423,11 +423,11 @@ class _AppTransitionState extends State<_AppTransition>
               )
             : TopPose.of(
                 widget.transition,
-                trip: _top.of(widget.animation, offstageFrame: _offstageFrame),
+                trip: _top.of(widget.animation),
                 size: size,
                 origin: origin,
               );
-        final under = gesturing
+        final under = underFollows
             ? UnderPose.follow(
                 widget.transition,
                 widget.secondaryAnimation.value,
@@ -505,43 +505,51 @@ class _Trip {
   _TripPhase _phase = const _NoTrip();
 
   void update(AnimationStatus status) {
-    if (!status.isAnimating) {
-      _phase = const _NoTrip();
-    } else if (_phase is _NoTrip) {
-      _phase = _AtStart(closing: status == AnimationStatus.reverse);
+    switch (_phase) {
+      case _ when !status.isAnimating:
+        _phase = const _NoTrip();
+      // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是「已播
+      // 完」，這一趟從下一幀才看得到；照底下那頁同樣的方式從 offstage 那一幀
+      // 起算，兩頁才會同步。
+      case _NoTrip(:final offstageFrame):
+        _phase = _AtStart(
+          closing: status == AnimationStatus.reverse,
+          firstFrame: offstageFrame,
+        );
+      case _Moving() || _Following():
     }
   }
 
-  /// [offstageFrame] 是這一頁最近一次在 offstage 的那一幀（只有剛推入的
-  /// 新頁有）。
-  TripTime of(Animation<double> animation, {Duration? offstageFrame}) {
+  /// 這一頁在 offstage 的那一幀（推入的第一幀）；下一趟從這一幀起算。
+  void offstage(Duration frame) {
+    if (_phase is _NoTrip) _phase = _NoTrip(offstageFrame: frame);
+  }
+
+  /// 這一幀照跟手的樣子畫：Navigator 在手勢中，或這一趟被手勢拖過。手勢
+  /// 會改路由的進度，被拖過的路由手勢結束時常停在半途（被別的頁蓋住、或
+  /// 系統取消），這一趟剩下的部分換成換頁動畫的樣子會跳一下。
+  bool follows({required bool gesturing}) {
+    if (gesturing && _phase is _Moving) _phase = const _Following();
+    return gesturing || _phase is _Following;
+  }
+
+  TripTime of(Animation<double> animation) {
     final closing = switch (_phase) {
-      _NoTrip() => animation.status == AnimationStatus.reverse,
+      _NoTrip() || _Following() => animation.status == AnimationStatus.reverse,
       _Moving(:final closing) => closing,
     };
     final time = closing ? 1 - animation.value : animation.value;
-    return (closing: closing, time: _pace(time, offstageFrame));
+    return (closing: closing, time: _pace(time));
   }
 
-  double _pace(double time, Duration? offstageFrame) {
+  double _pace(double time) {
     final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
     switch (_phase) {
-      case _NoTrip() || _OnRouteClock():
+      case _NoTrip() || _OnRouteClock() || _Following():
         return time;
       case _AtStart(:final closing, firstFrame: null):
+        // 不是從起點開始的一趟不調整。
         if (time > 0) {
-          // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是
-          // 「已播完」，這一趟從第二幀才看得到；照底下那頁同樣的方式從這一幀
-          // 起算，兩頁才會同步。
-          if (offstageFrame != null && offstageFrame != stamp) {
-            _phase = _CatchingUp(
-              closing: closing,
-              firstFrame: offstageFrame,
-              resume: time,
-            );
-            return 0;
-          }
-          // 不是從起點開始的一趟不調整。
           _phase = _OnRouteClock(closing: closing);
           return time;
         }
@@ -554,7 +562,7 @@ class _Trip {
           firstFrame: firstFrame,
           resume: time,
         );
-        return _pace(time, offstageFrame);
+        return _pace(time);
       case _CatchingUp(:final firstFrame, :final resume):
         if (stamp == firstFrame) return 0;
         if (resume >= 1) return time;
@@ -568,9 +576,12 @@ sealed class _TripPhase {
   const _TripPhase();
 }
 
-/// 路由沒在換頁：照路由的進度。
+/// 路由沒在換頁：照路由的進度。[offstageFrame] 是這一幀新頁在 offstage
+/// （推入的第一幀），下一趟從它起算。
 final class _NoTrip extends _TripPhase {
-  const _NoTrip();
+  const _NoTrip({this.offstageFrame});
+
+  final Duration? offstageFrame;
 }
 
 /// 路由正在換頁；[closing] 是這一趟一開始的方向，中途反向也沿用。
@@ -604,4 +615,10 @@ final class _CatchingUp extends _Moving {
 /// 不是從起點開始的一趟（中途接手）：照路由的時間。
 final class _OnRouteClock extends _Moving {
   const _OnRouteClock({required super.closing});
+}
+
+/// 這一趟有一幀是跟著手勢畫的：剩下的部分也照跟手的樣子、和路由的進度成
+/// 正比，路由停下才結束。
+final class _Following extends _TripPhase {
+  const _Following();
 }

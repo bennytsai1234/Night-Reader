@@ -629,6 +629,61 @@ void main() {
       );
     }
 
+    for (final transition in AppPageTransition.values) {
+      testWidgets('${transition.name}: a page pushed mid-drag makes no page '
+          'jump until this page is whole again', (tester) async {
+        await pumpApp(tester, transition);
+        await tester.tapAt(card.center);
+        await push(tester);
+        final page = tester.element(find.text('新頁'));
+        final gesture = await holdDrag(tester);
+        const frame = Duration(milliseconds: 8);
+        // 每一格記下看得到的每一頁的樣子。
+        final frames = <Map<String, List<double>>>[];
+        void record() => frames.add({
+          for (final text in ['主頁', '新頁', '第三頁'])
+            if (find.text(text).evaluate().isNotEmpty)
+              text: poseOf(tester, text),
+        });
+        Future<void> pumpFrames(int count) async {
+          for (var i = 0; i < count; i++) {
+            await tester.pump(frame);
+            record();
+          }
+        }
+
+        Navigator.push(
+          page,
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Center(child: Text('第三頁'))),
+          ),
+        );
+        await pumpFrames(6);
+        // 第三頁還在推入時放開：被蓋住，停在半途。
+        await gesture.up();
+        await pumpFrames(80);
+        Navigator.pop(tester.element(find.text('第三頁')));
+        await pumpFrames(140);
+        expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+
+        // 每一頁相鄰兩格的差都在正常換頁一格走得到的範圍內：停著與被帶著
+        // 動的兩頁一格最多約 45，第三頁自己推入、返回時最多約 105（展開）；
+        // 改前新頁一跳 80–1500。
+        const limits = {'主頁': 60.0, '新頁': 60.0, '第三頁': 120.0};
+        for (var i = 1; i < frames.length; i++) {
+          for (final MapEntry(key: text, value: now) in frames[i].entries) {
+            final before = frames[i - 1][text];
+            if (before == null) continue;
+            expect(
+              distance(before, now),
+              lessThan(limits[text]!),
+              reason: '$text 第 $i 格',
+            );
+          }
+        }
+      });
+    }
+
     testWidgets('closing the page in code mid-drag ends the gesture', (
       tester,
     ) async {
