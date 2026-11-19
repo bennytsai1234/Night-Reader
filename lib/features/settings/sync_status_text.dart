@@ -28,6 +28,7 @@ String syncKindLabel(String name) => switch (name) {
   'bookshelf' => '書架',
   'bookmarks' => '書籤',
   'highlights' => '標註',
+  'aiFinds' => '過去的找書',
   'read_stats' => '閱讀統計',
   'settings' => '設定',
   'login_cache' || 'login_cookies' || 'login_cookie_jar' => '登入資料',
