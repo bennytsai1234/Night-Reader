@@ -60,14 +60,33 @@ class GroupedSection extends StatelessWidget {
   /// 組上方間距；清單第一組可傳較小值。
   final double topGap;
 
+  /// 分隔線的左縮排：沒有覆寫時，有任一列帶列首圖示就從文字起點開始。
+  double get _indent =>
+      separatorIndent ??
+      (children.any(groupedRowHasLeading)
+          ? AppGrouped.separatorIndentWithIcon
+          : AppGrouped.rowPadding);
+
+  /// 同一組換上 [children] 與 [headerTrailing]（進場把列與組標題右側的按鈕
+  /// 各包一層排隊時用），其他設定照舊。包了一層的列看不出有沒有列首圖示，
+  /// 分隔線縮排先照原本的列算好。
+  GroupedSection withRows(List<Widget> children, {Widget? headerTrailing}) =>
+      GroupedSection(
+        key: key,
+        header: header,
+        headerTrailing: headerTrailing,
+        footer: footer,
+        separatorIndent: _indent,
+        margin: margin,
+        topGap: topGap,
+        translateHeader: translateHeader,
+        children: children,
+      );
+
   @override
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);
-    final indent =
-        separatorIndent ??
-        (children.any(groupedRowHasLeading)
-            ? AppGrouped.separatorIndentWithIcon
-            : AppGrouped.rowPadding);
+    final indent = _indent;
     final rows = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) rows.add(InsetSeparator(indent: indent));
@@ -557,24 +576,13 @@ class _GroupedListSlot extends StatelessWidget {
         child: item,
       );
     }
-    return GroupedSection(
-      key: item.key,
-      header: item.header,
+    return item.withRows(
+      _rows(item.children, rows),
       // 組標題右側的按鈕（「恢復預設」）也排隊，不和卡片外框擠在同一格。
       headerTrailing: switch (item.headerTrailing) {
         final trailing? => CoverRevealSlot(wait: visible > 0, child: trailing),
         null => null,
       },
-      footer: item.footer,
-      // 列包了一層，自動判斷列首圖示看不到列本身，先照原本的列算好。
-      separatorIndent:
-          item.separatorIndent ??
-          (item.children.any(groupedRowHasLeading)
-              ? AppGrouped.separatorIndentWithIcon
-              : AppGrouped.rowPadding),
-      margin: item.margin,
-      topGap: item.topGap,
-      children: _rows(item.children, rows),
     );
   }
 
