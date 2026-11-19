@@ -203,6 +203,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _failuresBefore = const [];
     _unmerged = false;
     _choosing = true;
+    _retrying = false;
     isSearching = true;
     completed = 0;
     total = 0;
@@ -294,6 +295,7 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
     _failuresBefore = const [];
     _doneBefore = 0;
     _startAttempt();
+    final attempt = _attempt;
     notifyListeners();
     _retrying = true;
     try {
@@ -306,7 +308,8 @@ class SearchRun extends ChangeNotifier implements SearchModelCallback {
         ),
       );
     } finally {
-      _retrying = false;
+      // 取消了還沒回來的書源可能晚很久才結束：這時已經是別的一次，不動它的。
+      if (identical(_attempt, attempt)) _retrying = false;
     }
   }
 

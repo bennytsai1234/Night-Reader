@@ -65,6 +65,8 @@ class _GatedKeywordDao extends SearchKeywordDao {
 }
 
 class _Loader {
+  /// 這些書源不理會取消（網站卡住、規則跑不完），要測試回了才回。
+  final Set<String> ignoresCancel = {};
   final List<String> sent = [];
   final List<String> cancelled = [];
   final Map<String, Completer<List<SearchBook>>> _pending = {};
@@ -80,6 +82,7 @@ class _Loader {
     _pending[name] = completer;
     cancelToken?.whenCancel.then((error) {
       cancelled.add(name);
+      if (ignoresCancel.contains(name)) return;
       if (!completer.isCompleted) completer.completeError(error);
     });
     return completer.future;
@@ -746,6 +749,35 @@ void main() {
     await until(() => !provider.isSearching);
     expect(provider.failedSources, 1);
     expect(provider.searchedSourceCount, 3);
+  });
+
+  test('a new search started while a retry has not come back counts its own '
+      'sources', () async {
+    final loader = _Loader();
+    final provider = await page(searches(), loader);
+    addTearDown(provider.dispose);
+    unawaited(provider.search('night'));
+    await until(() => loader.sent.length == 3);
+    loader
+      ..answer('甲')
+      ..fail('乙')
+      ..answer('丙');
+    await until(() => !provider.isSearching);
+    expect(provider.searchedSourceCount, 3);
+
+    // 重試的乙卡住、不理會取消，這時改搜甲一個書源。
+    loader.ignoresCancel.add('乙');
+    unawaited(provider.retryFailedSources());
+    await until(() => loader.sent.length == 4);
+    final source = (await GetIt.instance<BookSourceDao>().getByUrl(
+      'https://甲.example',
+    ))!;
+    unawaited(provider.searchInSource(source, 'other'));
+    await until(() => loader.sent.length == 5);
+    loader.fail('甲');
+    await until(() => !provider.isSearching);
+    expect(provider.failedSources, 1);
+    expect(provider.searchedSourceCount, 1);
   });
 
   test('a search whose failed sources were all disabled since leaves nothing '
