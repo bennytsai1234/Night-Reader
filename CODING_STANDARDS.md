@@ -7,6 +7,7 @@
 - 名字說它是什麼：類別、檔案與資料夾照它做的事或讀者看得到的功能命名，用 `GLOSSARY.md` 的詞，一個詞對到一個地方。第幾版、怎麼做出來的、新舊（`V2`、`hybrid`、`new`、`legacy`）留給 git 歷史；`helper`、`utils`、`manager` 換成具體說法。
 - 檔名是主要類別名稱的小寫寫法（`LoginWall` 放 `login_wall.dart`）；檔裡刻意放一組同類的東西時，檔名說那一組（`app_tables.dart`）。CI 跑 `dart run tool/file_names.dart` 檢查，刻意的例外加進它的看過清單並寫一句理由。
 - `lib/core/` 放沒有畫面的，畫面放 `lib/features/`，多個功能共用的元件與主題放 `lib/shared/`；同一件事在 `core/` 與 `features/` 各有一部分時，是刻意分成資料與畫面兩層。
+- 搬檔或改檔名的提交只動位置、檔名與跟著改的 import，改類別名稱與內容放下一個提交：內容幾乎沒變，git 才認得是同一個檔，`git log --follow` 追得到搬家前的歷史。測試跟著 `lib/` 搬，文件裡寫到的路徑一起改。
 
 ## 測試
 
